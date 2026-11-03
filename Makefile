@@ -26,7 +26,7 @@ CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign 
 LDFLAGS = -noixemul
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c src/log.c
+SRCS = src/main.c src/gfx.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c src/log.c src/debug.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
 TARGET     = AmigaMCE

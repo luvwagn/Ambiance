@@ -60,9 +60,10 @@ static char msg[80];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
+static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
-enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_MODE0 = 16 /* + SM_* */ };
+enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
@@ -297,6 +298,9 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     sprintf(line, "MP3: %s", caps.mp3_mhi ? "MHI driver" : caps.mp3_mpega ? "mpega.library" : "none");
     text_line(p, line);
+    text_line(p, "");
+    sprintf(line, "Debug log: %s", amce_log_path() ? amce_log_path() : "off");
+    text_line(p, line);
 }
 
 /* ------------------------------------------------------------ settings */
@@ -322,16 +326,29 @@ static void load_screen_mode(void)
         screen_mode = m;
 }
 
-static void save_screen_mode(void)
+static void save_setting(const char *var, const char *value)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
     me->pr_WindowPtr = (APTR)-1;
     ensure_dir("ENV:AmigaMCE");
     ensure_dir("ENVARC:AmigaMCE");
-    SetVar((CONST_STRPTR)MODE_VAR, (CONST_STRPTR)gfx_mode_key(screen_mode), -1,
-           GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+    SetVar((CONST_STRPTR)var, (CONST_STRPTR)value, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
     me->pr_WindowPtr = oldwin;
+}
+
+static void save_screen_mode(void)
+{
+    save_setting(MODE_VAR, gfx_mode_key(screen_mode));
+}
+
+#define DEBUG_VAR "AmigaMCE/Debug"
+
+static void load_debug(void)
+{
+    char buf[8];
+    debug_on = GetVar((CONST_STRPTR)DEBUG_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+               buf[0] == '1';
 }
 
 static struct Item *action_item(struct Page *p, const char *label, const char *tag, UBYTE act)
@@ -347,6 +364,7 @@ static void build_settings(struct Page *p)
     char tag[64];
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     action_item(p, "Screen mode", tag, ACT_SCREENMODES);
+    action_item(p, "Debug (CPU, memory, log)", debug_on ? "[x]" : "[ ]", ACT_DEBUG);
 }
 
 static void build_screenmodes(struct Page *p)
@@ -502,16 +520,66 @@ static void clock_text(char *buf)
     }
 }
 
+/* Left edge of the clock's part of the header (room for the widest date). */
+static WORD clock_left(void)
+{
+    return g.w - 8 * g.sx - gfx_textlen(&g, "Wed 30 Sep  00:00") - 4 * g.sx;
+}
+
 static void draw_clock(void)
 {
     char buf[40];
     WORD tw;
     clock_text(buf);
-    gfx_fill(&g, g.w / 2, 0, g.w - 1, 23, PEN_BAR);
+    gfx_fill(&g, clock_left(), 0, g.w - 1, 23, PEN_BAR);
     if (!buf[0])
         return;
     tw = gfx_textlen(&g, buf);
     gfx_text(&g, g.w - 8 * g.sx - tw, (24 - g.font_h) / 2, buf, PEN_TEXT, 0);
+}
+
+/* Debug readout between the logo and the clock: the longest form that fits. */
+static LONG cpu_load = -1;
+
+static void draw_status(void)
+{
+    WORD x0 = 6 * g.sx + (g.layout == LAYOUT_HIRES ? logo_hi_w : logo_lo_w) + 10 * g.sx;
+    WORD x1 = clock_left() - 6 * g.sx;
+    char cpu[16], forms[3][64];
+    ULONG chip, used;
+    int i;
+    if (x1 <= x0)
+        return;
+    gfx_fill(&g, x0, 0, x1, 23, PEN_BAR);
+    if (!debug_on)
+        return;
+    used = dbg_mem_used(&chip);
+    if (cpu_load < 0)
+        amce_strlcpy(cpu, "--", sizeof(cpu));
+    else
+        sprintf(cpu, "%ld%%", (long)cpu_load);
+    sprintf(forms[0], "CPU %s   RAM %luK  (chip %luK)", cpu,
+            (unsigned long)(used >> 10), (unsigned long)(chip >> 10));
+    sprintf(forms[1], "CPU %s  RAM %luK", cpu, (unsigned long)(used >> 10));
+    sprintf(forms[2], "%s %luK", cpu, (unsigned long)(used >> 10));
+    for (i = 0; i < 3; i++)
+        if (gfx_textlen(&g, forms[i]) <= x1 - x0 || i == 2) {
+            gfx_text(&g, x0, (24 - g.font_h) / 2, forms[i], PEN_ACCENT, x1 - x0);
+            break;
+        }
+}
+
+static void set_debug(BOOL on)
+{
+    debug_on = on;
+    if (on) {
+        dbg_cpu_start();
+        amce_log_open(TRUE);
+    } else {
+        dbg_cpu_stop();
+        amce_log_close();
+    }
+    cpu_load = -1;
 }
 
 static void draw_header(void)
@@ -519,6 +587,7 @@ static void draw_header(void)
     gfx_fill(&g, 0, 0, g.w - 1, 23, PEN_BAR);
     gfx_fill(&g, 0, 24, g.w - 1, 24, PEN_RULE);
     gfx_logo(&g, 6 * g.sx, 4);
+    draw_status();
     draw_clock();
 }
 
@@ -794,6 +863,8 @@ static void launch(const char *base)
     }
     /* Give the game every byte of chip RAM we can. */
     amce_log("launch", base);
+    if (debug_on)
+        dbg_cpu_stop();
     gfx_close(&g);
     con = Open((CONST_STRPTR)"CON:0/0/640/200/AmigaMCE/AUTO/CLOSE", MODE_OLDFILE);
     if (con) {
@@ -803,6 +874,9 @@ static void launch(const char *base)
         Close(con);
     }
     DeleteFile((CONST_STRPTR)script);
+    if (debug_on)
+        dbg_cpu_start();
+    cpu_load = -1;
     if (!gfx_open(&g, &caps, screen_mode)) {
         running = FALSE;
         return;
@@ -934,6 +1008,22 @@ static void apply_screen_mode(int sm)
         set_msg("Could not open that screen mode");
 }
 
+static void toggle_debug(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    set_debug(!debug_on);
+    save_setting(DEBUG_VAR, debug_on ? "1" : "0");
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel;
+        draw_list_rows(p);
+    }
+    draw_status();
+}
+
 static void act_action(struct Item *it)
 {
     if (it->action == ACT_SCREENMODES)
@@ -942,6 +1032,8 @@ static void act_action(struct Item *it)
         open_sysinfo();
     else if (it->action == ACT_CREDITS)
         open_credits();
+    else if (it->action == ACT_DEBUG)
+        toggle_debug();
     else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
         apply_screen_mode(it->action - ACT_MODE0);
 }
@@ -1224,7 +1316,9 @@ int main(void)
         rc = 20;
         goto out;
     }
-    amce_log_open();
+    dbg_mem_baseline();
+    load_debug();
+    amce_log_open(debug_on);
     DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
     DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
     LowLevelBase = OpenLibrary((CONST_STRPTR)"lowlevel.library", 40);
@@ -1261,6 +1355,8 @@ int main(void)
         SendIO((struct IORequest *)treq);
     }
 
+    if (debug_on)
+        dbg_cpu_start();
     menu_sel = 0;
     build_root(menu[0]);
     draw_all();
@@ -1288,6 +1384,10 @@ int main(void)
                     DateStamp(&ds);
                     if (ds.ds_Minute != last_minute)
                         draw_clock();
+                    if (debug_on) {
+                        cpu_load = dbg_cpu_sample();
+                        draw_status();
+                    }
                 }
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
@@ -1318,6 +1418,7 @@ int main(void)
 
 out:
     amce_log("quitting", "");
+    dbg_cpu_stop();
     if (timer_open) {
         if (!CheckIO((struct IORequest *)treq))
             AbortIO((struct IORequest *)treq);

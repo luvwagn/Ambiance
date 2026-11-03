@@ -167,7 +167,15 @@ enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };
 
 /* ---------------------------------------------------------------- log */
-void amce_log_open(void);           /* only if PROGDIR:AmigaMCE.debug exists */
+void amce_log_open(BOOL force);     /* force, or PROGDIR:AmigaMCE.debug exists */
+const char *amce_log_path(void);    /* where it is going, or NULL when off */
+
+/* ---------------------------------------------------------------- debug */
+BOOL  dbg_cpu_start(void);
+void  dbg_cpu_stop(void);
+LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
+void  dbg_mem_baseline(void);
+ULONG dbg_mem_used(ULONG *chip);
 void amce_log(const char *what, const char *detail);
 void amce_log_close(void);
 

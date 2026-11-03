@@ -46,6 +46,10 @@ Copy the AmigaMCE drawer to your hard drive. Keep the Fonts drawer next
 to the program. If AGS is set to boot straight into its menu, quit AGS
 to Workbench first, then double-click AmigaMCE.
 
+Settings > Debug shows the system CPU load and AmigaMCE's memory use in
+the header, and writes a timing log to AmigaMCE.log next to the program
+(or RAM:AmigaMCE.log if that drawer is read-only).
+
 The screen mode is saved as ENVARC:AmigaMCE/ScreenMode. If a mode does
 not suit your display, delete that file to go back to Automatic.
 
