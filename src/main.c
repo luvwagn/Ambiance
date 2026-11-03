@@ -1126,6 +1126,20 @@ static BOOL hold_active(void)
     return hold.dir != 0;
 }
 
+/* Is this raw key physically down right now? Asked of the keyboard itself
+ * (lowlevel.library QueryKeys), not inferred from messages, which can be
+ * late or queued behind repeats. Without lowlevel, assume yes. */
+static BOOL key_is_down(UWORD rawkey)
+{
+    struct KeyQuery kq;
+    if (!LowLevelBase)
+        return TRUE;
+    kq.kq_KeyCode = rawkey;
+    kq.kq_Pressed = FALSE;
+    QueryKeys(&kq, 1);
+    return kq.kq_Pressed;
+}
+
 /* Once per frame while held. */
 static void hold_tick(void)
 {
@@ -1133,8 +1147,9 @@ static void hold_tick(void)
     LONG rate, remaining, ramp;
     if (!hold.dir)
         return;
-    if (focus != FOCUS_CONTENT || !p) {
-        hold_stop();
+    if (focus != FOCUS_CONTENT || !p ||
+        (!hold.joy && !key_is_down(hold.dir < 0 ? 0x4C : 0x4D))) {
+        hold_stop();                        /* let go: stop now, whatever is queued */
         return;
     }
     if (++hold.frames < HOLD_DELAY)
@@ -1161,6 +1176,8 @@ static void hold_tick(void)
         remaining = tb_remaining(&p->tb, hold.dir);
         if (remaining <= 0)
             return;
+        if ((p->tb.target - p->tb.pos) * hold.dir > 4 * p->tb.line_h)
+            return;                         /* never run far ahead of the screen */
         if (px > 1 + remaining / 8)
             px = 1 + remaining / 8;
         tb_scroll_by(&p->tb, hold.dir * px);
@@ -1342,8 +1359,10 @@ static void handle_key(struct IntuiMessage *im)
             if (shift) {
                 act_move(dir * page);
             } else if (im->Qualifier & IEQUALIFIER_REPEAT) {
-                if (!hold_active())
-                    act_move(dir);  /* main menu: the keyboard's own repeat */
+                /* main menu: the keyboard's own repeat, but not stale ones
+                 * still queued after the key was let go */
+                if (!hold_active() && key_is_down(code))
+                    act_move(dir);
             } else {
                 act_move(dir);
                 if (focus == FOCUS_CONTENT)
@@ -1361,8 +1380,11 @@ static void handle_key(struct IntuiMessage *im)
     /* IDCMP_VANILLAKEY */
     if (im->Qualifier & IEQUALIFIER_NUMERICPAD) {
         switch (code) {
-        case '8': disarm(); act_move(-1); return;    /* keypad: the keyboard's repeat */
-        case '2': disarm(); act_move(1); return;
+        case '8': case '2':                          /* keypad: the keyboard's repeat */
+            disarm();
+            if (!(im->Qualifier & IEQUALIFIER_REPEAT) || key_is_down(code == '8' ? 0x3E : 0x1E))
+                act_move(code == '8' ? -1 : 1);
+            return;
         case '4': disarm(); if (focus == FOCUS_CONTENT) act_back(); return;
         case '6': case '5': disarm(); act_open(FALSE); return;
         case '9': disarm(); act_move(-page); return;
