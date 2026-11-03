@@ -853,14 +853,22 @@ static void ov_slice(WORD y0, WORD y1, BOOL hl)
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
 
-/* Repaint the rows the letter covers (with or without it). */
-static void ov_repaint(struct Page *p)
+/* Repaint the rows the letter covers (with or without it). The letter is
+ * a layer fixed on screen, but scrolling the list copies the rows on
+ * screen, letter pixels included: after a shift of k rows (k > 0 moved
+ * them up) its pixels also sit in the k rows beyond it, which are
+ * repainted too so no copy of the letter is left behind. */
+static void ov_repaint(struct Page *p, LONG k)
 {
     WORD r, r0, r1, vis = list_visible(), col = mark_column(&p->list);
     if (!ov.h)
         return;
     r0 = (ov.y - g.list_top) / g.list_row_h;
     r1 = (ov.y + ov.h - 1 - g.list_top) / g.list_row_h;
+    if (k > 0)
+        r0 -= (WORD)k;
+    else
+        r1 -= (WORD)k;
     for (r = r0 < 0 ? 0 : r0; r <= r1 && r < vis; r++)
         if (p->top + r < p->list.count)
             draw_list_row(p, p->top + r, col);
@@ -874,7 +882,7 @@ static void ov_show(struct Page *p)
     ov.on = TRUE;
     ov.page = p;
     ov.linger = 0;
-    ov_repaint(p);
+    ov_repaint(p, 0);
 }
 
 static void ov_hide(void)
@@ -883,7 +891,7 @@ static void ov_hide(void)
     BOOL was = ov.on;
     ov.on = FALSE;
     if (was && p && p == cur() && p->type == PT_LIST && g.win)
-        ov_repaint(p);
+        ov_repaint(p, 0);
 }
 
 /* One row of the list in its slot, background and all. Rows are painted
@@ -1189,7 +1197,7 @@ static void act_move(LONG d)
             draw_title(p);
             draw_list_move(p, old, old_top);
             if (ov.on && ov.page == p && p->top != old_top)
-                ov_repaint(p);      /* the shift moved the letter with the rows */
+                ov_repaint(p, p->top - old_top);  /* undo the shift's copy of the letter */
         }
     } else {
         tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
