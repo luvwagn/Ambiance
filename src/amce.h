@@ -40,8 +40,8 @@ const char *caps_release_name(UWORD version);
 enum {
     PEN_BG = 0, PEN_BAR, PEN_RULE, PEN_TEXT, PEN_DIM, PEN_WHITE, PEN_HL,
     PEN_SELDIM, PEN_ACCENT, PEN_KEYCAP, PEN_FAINT,
-    PEN_LOGO0 = 16,      /* 16..23 extra logo shades */
-    NUM_UI_PENS = 32
+    NUM_UI_PENS = 16,    /* AmigaMCE's pens are 0-15; 16-31 keep the screen's colours */
+    POINTER_PEN0 = 17    /* 17-19: the mouse pointer's colours, from the user's prefs */
 };
 
 /* ---------------------------------------------------------------- gfx */

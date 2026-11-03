@@ -206,10 +206,14 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);
     g->pens_shared = FALSE;
     if (g->depth == 8) {
-        /* Keep the UI pens for ourselves; 32..255 stay free for datatypes. */
+        /* Keep the UI pens 0-15 for ourselves, and hold the pointer's pens
+         * 17-19 without touching their colours, so a picture's datatype
+         * never repaints the mouse pointer. The rest stay free for it. */
         for (i = 0; i < NUM_UI_PENS; i++)
             ObtainPen(g->scr->ViewPort.ColorMap, i, ui_palette32[1 + i * 3],
                       ui_palette32[2 + i * 3], ui_palette32[3 + i * 3], PEN_EXCLUSIVE);
+        for (i = POINTER_PEN0; i < POINTER_PEN0 + 3; i++)
+            ObtainPen(g->scr->ViewPort.ColorMap, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
         g->pens_shared = TRUE;
     }
 
@@ -266,9 +270,12 @@ void gfx_close(struct Gfx *g)
     }
     if (g->scr) {
         BOOL ok;
-        if (g->pens_shared)
+        if (g->pens_shared) {
             for (i = 0; i < NUM_UI_PENS; i++)
                 ReleasePen(g->scr->ViewPort.ColorMap, i);
+            for (i = POINTER_PEN0; i < POINTER_PEN0 + 3; i++)
+                ReleasePen(g->scr->ViewPort.ColorMap, i);
+        }
         amce_log("CloseScreen", "");
         ok = CloseScreen(g->scr);
         amce_log("CloseScreen returned", ok ? "TRUE" : "FALSE (windows still open)");

@@ -43,14 +43,11 @@ def ocs(c):
     return tuple(round(v / 17) * 17 for v in c)
 
 
-EXTRA = [ocs(c) for c in [
-    mix(BG, WHITE, 1 / 3), mix(BG, WHITE, 2 / 3), mix(BG, BLUE, 0.5), mix(BLUE, WHITE, 0.5),
-    mix(BG, ORANGE, 1 / 3), mix(BG, ORANGE, 2 / 3), mix(ORANGE, NAVY, 1 / 3), mix(ORANGE, NAVY, 2 / 3),
-]]
-PALETTE = UI + EXTRA                       # 24 entries; pens 24..31 spare
-while len(PALETTE) < 32:
-    PALETTE.append((0, 0, 0))
-LOGO_PENS = [1, 5, 6, 8, 0] + list(range(16, 24))   # pens a logo pixel may use
+# Only pens 0-15 are AmigaMCE's. Pens 16-31 keep the screen's own colours:
+# 17-19 are the mouse pointer's, set by Intuition from the user's pointer
+# preferences, so the pointer stays the default Amiga one.
+PALETTE = UI                               # 16 entries
+LOGO_PENS = [1, 5, 6, 8, 0]                # pens a logo pixel may use
 
 # ------------------------------------------------------------ logo
 # Rendered at the screen's real pixel size with crisp (non-smoothed) edges:
