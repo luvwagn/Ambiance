@@ -6,9 +6,16 @@
  * whole system the classic way: a task at the lowest priority (-128)
  * counts in a loop and only ever runs when nothing else wants the CPU.
  * Load is how far its count per second falls below the highest count seen
- * so far (the self-calibrating "fully idle" rate). AmigaMCE is the
- * foreground program, so it is most of what this shows. The task runs
- * only while the overlay is on, and is stopped while a game runs.
+ * so far (the self-calibrating "fully idle" rate). The task runs only
+ * while the overlay is on, and is stopped while a game runs.
+ *
+ * That system figure includes anything that slows the machine down, and
+ * under an emulator set to "fastest possible" CPU speed, a heavier
+ * chipset display (8 bitplanes, hires, interlace) leaves the emulated CPU
+ * fewer cycles, which the idle task also reads as load. So the app's own
+ * share is measured as well, directly: the timer's E-clock is read around
+ * every point where AmigaMCE sleeps (Wait, WaitTOF), and the time spent
+ * outside those is AmigaMCE's own work.
  *
  * Memory. AmigaMCE's own use is its code (the loaded segments) plus the
  * memory that has left the free pool since it started, chip shown apart.
@@ -19,8 +26,12 @@
 
 #include <exec/tasks.h>
 #include <dos/dosextens.h>
+#include <devices/timer.h>
 #include <proto/exec.h>
+#include <proto/timer.h>
 #include <clib/alib_protos.h>
+
+struct Device *TimerBase;       /* set from the open timer request */
 
 static volatile ULONG idle_count;
 static volatile BOOL idle_quit;
@@ -83,6 +94,55 @@ LONG dbg_cpu_sample(void)
     if (!best_rate)
         return 100;
     return 100 - (LONG)((rate / 64) * 100 / (best_rate / 64 + 1));
+}
+
+/* ---- the app's own CPU share, from E-clock time spent outside sleeps */
+static struct EClockVal idle_from, sample_from;
+static ULONG idle_acc;
+static BOOL sleeping, sampled;
+
+void dbg_set_timer(struct Device *timer)
+{
+    TimerBase = timer;
+}
+
+void dbg_sleep_begin(void)
+{
+    if (!TimerBase)
+        return;
+    ReadEClock(&idle_from);
+    sleeping = TRUE;
+}
+
+void dbg_sleep_end(void)
+{
+    struct EClockVal now;
+    if (!TimerBase || !sleeping)
+        return;
+    ReadEClock(&now);
+    idle_acc += now.ev_lo - idle_from.ev_lo;
+    sleeping = FALSE;
+}
+
+/* Percent of the time since the last call that AmigaMCE was not asleep,
+ * or -1 on the first call. */
+LONG dbg_app_sample(void)
+{
+    struct EClockVal now;
+    ULONG span, busy;
+    LONG r = -1;
+    if (!TimerBase)
+        return -1;
+    ReadEClock(&now);
+    if (sampled) {
+        span = now.ev_lo - sample_from.ev_lo;
+        busy = span > idle_acc ? span - idle_acc : 0;
+        r = span ? (LONG)((busy / 64) * 100 / (span / 64 + 1)) : 0;
+    }
+    sample_from = now;
+    idle_acc = 0;
+    sampled = TRUE;
+    return r;
 }
 
 void dbg_mem_baseline(void)

@@ -639,13 +639,13 @@ static void draw_clock(void)
 }
 
 /* Debug readout between the logo and the clock: the longest form that fits. */
-static LONG cpu_load = -1;
+static LONG cpu_load = -1, app_load = -1;
 
 static void draw_status(void)
 {
     WORD x0 = 6 * g.sx + (g.layout == LAYOUT_HIRES ? logo_hi_w : logo_lo_w) + 10 * g.sx;
     WORD x1 = clock_left() - 6 * g.sx;
-    char cpu[16], forms[3][64];
+    char cpu[16], app[16], forms[3][96];
     ULONG chip, used;
     int i;
     if (x1 <= x0)
@@ -658,10 +658,15 @@ static void draw_status(void)
         amce_strlcpy(cpu, "--", sizeof(cpu));
     else
         sprintf(cpu, "%ld%%", (long)cpu_load);
-    sprintf(forms[0], "CPU %s   RAM %luK  (chip %luK)", cpu,
+    if (app_load < 0)
+        amce_strlcpy(app, "--", sizeof(app));
+    else
+        sprintf(app, "%ld%%", (long)app_load);
+    /* CPU = whole system (idle-task meter); app = AmigaMCE's own share */
+    sprintf(forms[0], "CPU %s  app %s   RAM %luK  (chip %luK)", cpu, app,
             (unsigned long)(used >> 10), (unsigned long)(chip >> 10));
-    sprintf(forms[1], "CPU %s  RAM %luK", cpu, (unsigned long)(used >> 10));
-    sprintf(forms[2], "%s %luK", cpu, (unsigned long)(used >> 10));
+    sprintf(forms[1], "CPU %s  app %s  RAM %luK", cpu, app, (unsigned long)(used >> 10));
+    sprintf(forms[2], "%s/%s %luK", cpu, app, (unsigned long)(used >> 10));
     for (i = 0; i < 3; i++)
         if (gfx_textlen(&g, forms[i]) <= x1 - x0 || i == 2) {
             gfx_text(&g, x0, (24 - g.font_h) / 2, forms[i], PEN_ACCENT, x1 - x0);
@@ -679,7 +684,7 @@ static void set_debug(BOOL on)
         dbg_cpu_stop();
         amce_log_close();
     }
-    cpu_load = -1;
+    cpu_load = app_load = -1;
 }
 
 static void draw_header(void)
@@ -1731,6 +1736,7 @@ static void handle_key(struct IntuiMessage *im)
 
 /* Joystick in port 2 via lowlevel.library, polled on the 40 ms tick. */
 static ULONG joy_last, joy_hold;
+static BOOL joy_present;        /* a joystick or pad answered on port 2 */
 
 static void joy_poll(void)
 {
@@ -1740,7 +1746,8 @@ static void joy_poll(void)
     if (!LowLevelBase)
         return;
     st = ReadJoyPort(1);
-    if ((st & JP_TYPE_MASK) == JP_TYPE_NOTAVAIL || (st & JP_TYPE_MASK) == JP_TYPE_MOUSE)
+    joy_present = (st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR;
+    if (!joy_present)
         return;
     dir = st & dirmask;
     btn = st & btnmask;
@@ -1805,7 +1812,7 @@ int main(void)
     struct MsgPort *tport = NULL;
     struct timerequest *treq = NULL;
     BOOL timer_open = FALSE;
-    ULONG ticks = 0;
+    ULONG ticks = 0, ms_acc = 0, tick_us = 40000;
     int rc = 0;
 
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
@@ -1854,6 +1861,7 @@ int main(void)
     treq = tport ? (struct timerequest *)CreateIORequest(tport, sizeof(*treq)) : NULL;
     if (treq && !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)treq, 0)) {
         timer_open = TRUE;
+        dbg_set_timer(treq->tr_node.io_Device);
         treq->tr_node.io_Command = TR_ADDREQUEST;
         treq->tr_time.tv_secs = 0;
         treq->tr_time.tv_micro = 40000;
@@ -1877,13 +1885,21 @@ int main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        ULONG sig = ((atb && tb_animating(atb)) || hold_active()) ? SetSignal(0, mask) & mask
-                                                                   : Wait(mask);
+        BOOL busy = (atb && tb_animating(atb)) || hold_active();
+        ULONG sig;
+        if (busy) {
+            sig = SetSignal(0, mask) & mask;
+        } else {
+            dbg_sleep_begin();
+            sig = Wait(mask);
+            dbg_sleep_end();
+        }
         if (sig & SIGBREAKF_CTRL_C)
             break;
         if (sig & tsig) {
             if (GetMsg(tport)) {
                 ticks++;
+                ms_acc += tick_us / 1000;
                 joy_poll();
                 /* the letter lingers ~0.5 s after the glide ends */
                 if (ov.on && !hold_active()) {
@@ -1892,20 +1908,25 @@ int main(void)
                     else if (--ov.linger == 0)
                         ov_hide();
                 }
-                if (ticks % 25 == 0 && g.win) {
+                if (ms_acc >= 1000 && g.win) {
                     struct DateStamp ds;
+                    ms_acc -= 1000;
                     DateStamp(&ds);
                     if (ds.ds_Minute != last_minute)
                         draw_clock();
                     if (debug_on) {
                         cpu_load = dbg_cpu_sample();
+                        app_load = dbg_app_sample();
                         draw_status();
                     }
                 }
+                /* 25 a second for a joystick or a fading letter; otherwise
+                 * 5 a second, which still notices a joystick plugged in. */
+                tick_us = (joy_present || ov.on) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
-                    treq->tr_time.tv_micro = 40000;
+                    treq->tr_time.tv_micro = tick_us;
                     SendIO((struct IORequest *)treq);
                 }
             }
@@ -1926,7 +1947,9 @@ int main(void)
             }
         }
         if (g.win && (hold_active() || ((atb = cur_tb()) && tb_animating(atb)))) {
+            dbg_sleep_begin();
             WaitTOF();
+            dbg_sleep_end();
             hold_tick();
             if ((atb = cur_tb()) && tb_animating(atb))
                 tb_step(&g, atb);

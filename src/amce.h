@@ -185,6 +185,10 @@ const char *amce_log_path(void);    /* where it is going, or NULL when off */
 BOOL  dbg_cpu_start(void);
 void  dbg_cpu_stop(void);
 LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
+void  dbg_set_timer(struct Device *timer);
+void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
+void  dbg_sleep_end(void);
+LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at first */
 void  dbg_mem_baseline(void);
 ULONG dbg_mem_used(ULONG *chip);
 void amce_log(const char *what, const char *detail);
