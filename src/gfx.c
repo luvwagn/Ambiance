@@ -24,6 +24,7 @@ extern struct Library *DiskfontBase, *DataTypesBase;
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
 static void cache_art(struct Gfx *g);
+static UWORD logo_rows(const struct Gfx *g);
 
 static void layout_metrics(struct Gfx *g)
 {
@@ -222,9 +223,9 @@ void gfx_close(struct Gfx *g)
     int i;
     gfx_picture_free(g);
     WaitBlit();
-    if (g->logo_bm) {
-        FreeBitMap(g->logo_bm);
-        g->logo_bm = NULL;
+    if (g->logo_masks) {
+        FreeMem(g->logo_masks, (ULONG)g->logo_npens * logo_rows(g) * g->logo_bpr);
+        g->logo_masks = NULL;
     }
     if (g->icon_masks) {
         FreeMem(g->icon_masks, (ULONG)ICON_COUNT * 16 * g->icon_bpr);
@@ -291,12 +292,14 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw
     Text(g->rp, (CONST_STRPTR)s, n);
 }
 
-/* The logo and icons go through the same blitter / RTG path as all other
- * drawing. Plotting them pixel by pixel from the CPU (WritePixel) left
- * them missing on RTG screens, where the card's own fills of the header
- * and menu rows landed after the CPU's pixels. The logo is rendered once
- * per screen (with fills) into a bitmap in the screen's format and blitted
- * from there. */
+/* The logo and icons are stamped with BltTemplate: one-pen masks drawn
+ * straight onto the screen, the same path as text. Plotting them with
+ * WritePixel lost them on RTG screens (the card's fills of the header and
+ * menu rows landed afterwards), and so did a cached off-screen bitmap
+ * under Amiberry's uaegfx, where short fills into RTG off-screen memory
+ * went missing. The logo becomes one mask per pen it uses (pens never
+ * overlap, so no pixel is drawn twice); the bar pen is skipped because the
+ * header is already that colour. */
 static void logo_art(const struct Gfx *g, const UBYTE **px, UWORD *w, UWORD *h)
 {
     BOOL hi = g->layout == LAYOUT_HIRES;
@@ -305,32 +308,39 @@ static void logo_art(const struct Gfx *g, const UBYTE **px, UWORD *w, UWORD *h)
     *h = hi ? logo_hi_h : logo_lo_h;
 }
 
+static UWORD logo_rows(const struct Gfx *g)
+{
+    return g->layout == LAYOUT_HIRES ? logo_hi_h : logo_lo_h;
+}
+
 static void cache_art(struct Gfx *g)
 {
     const UBYTE *px;
-    UWORD w, h, i, j;
-    ULONG size;
+    UWORD w, h, i, j, k;
+    ULONG size, n;
 
     logo_art(g, &px, &w, &h);
-    g->logo_bm = AllocBitMap(w, h, g->depth, BMF_CLEAR, g->rp->BitMap);
-    if (g->logo_bm) {
-        struct RastPort rp;
-        InitRastPort(&rp);
-        rp.BitMap = g->logo_bm;
-        /* One RectFill per run of same-pen pixels. Fills are the one
-         * primitive every RTG system accelerates: WriteChunkyPixels into an
-         * RTG off-screen bitmap left it empty under Amiberry's uaegfx. */
-        for (j = 0; j < h; j++)
-            for (i = 0; i < w;) {
-                UBYTE pen = px[j * w + i];
-                UWORD e = i + 1;
-                while (e < w && px[j * w + e] == pen)
-                    e++;
-                SetAPen(&rp, pen);
-                RectFill(&rp, i, j, e - 1, j);
-                i = e;
-            }
+    g->logo_npens = 0;
+    for (n = 0; n < (ULONG)w * h; n++) {
+        UBYTE pen = px[n];
+        if (pen == PEN_BAR)
+            continue;
+        for (k = 0; k < g->logo_npens && g->logo_pens[k] != pen; k++)
+            ;
+        if (k == g->logo_npens && k < sizeof(g->logo_pens))
+            g->logo_pens[g->logo_npens++] = pen;
     }
+    g->logo_bpr = ((w + 15) / 16) * 2;
+    size = (ULONG)g->logo_npens * h * g->logo_bpr;
+    g->logo_masks = size ? AllocMem(size, MEMF_CHIP | MEMF_CLEAR) : NULL;
+    if (g->logo_masks)
+        for (k = 0; k < g->logo_npens; k++) {
+            UBYTE *m = g->logo_masks + (ULONG)k * h * g->logo_bpr;
+            for (j = 0; j < h; j++)
+                for (i = 0; i < w; i++)
+                    if (px[j * w + i] == g->logo_pens[k])
+                        m[j * g->logo_bpr + (i >> 3)] |= 0x80 >> (i & 7);
+        }
 
     /* BltTemplate reads its source with the blitter: chip RAM, even rows. */
     g->icon_bpr = g->sx == 2 ? 4 : 2;
@@ -343,10 +353,16 @@ static void cache_art(struct Gfx *g)
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
 {
     const UBYTE *px;
-    UWORD w, h;
+    UWORD w, h, k;
     logo_art(g, &px, &w, &h);
-    if (g->logo_bm)
-        BltBitMapRastPort(g->logo_bm, 0, 0, g->rp, x, y, w, h, 0xC0);
+    if (!g->logo_masks)
+        return;
+    SetDrMd(g->rp, JAM1);
+    for (k = 0; k < g->logo_npens; k++) {
+        SetAPen(g->rp, g->logo_pens[k]);
+        BltTemplate((PLANEPTR)(g->logo_masks + (ULONG)k * h * g->logo_bpr), 0, g->logo_bpr,
+                    g->rp, x, y, w, h);
+    }
 }
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen)
