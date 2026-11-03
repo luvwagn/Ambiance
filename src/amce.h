@@ -107,6 +107,7 @@ struct Item {
     UBYTE  kind;
     UBYTE  action;
     UBYTE  mark;        /* MARK_*: folders get MARK_ARROW automatically */
+    UWORD  width;       /* label width in pixels once drawn (0 = not yet measured) */
 };
 
 struct ItemList {
@@ -186,6 +187,7 @@ BOOL  dbg_cpu_start(void);
 void  dbg_cpu_stop(void);
 LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
 void  dbg_set_timer(struct Device *timer);
+ULONG time_ms(void);                /* E-clock milliseconds, 0 without a timer */
 void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
 void  dbg_sleep_end(void);
 LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at first */

@@ -765,10 +765,14 @@ static void draw_title_count(struct Page *p)
     x = right - tw;
     if (count_left >= 0 && count_left < x)
         gfx_fill(&g, count_left, 28, x - 1, 28 + g.font_h - 1, PEN_BG);
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);           /* pens 0 and 4 only */
     SetDrMd(g.rp, JAM2);
     SetBPen(g.rp, PEN_BG);
     gfx_text(&g, x, 28, count, PEN_DIM, 0);
     SetDrMd(g.rp, JAM1);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
     count_left = x;
 }
 
@@ -1007,6 +1011,11 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     WORD lx = g.pane_x + col;
     BOOL sel = idx == p->sel;
     UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
+    /* Every list pen is below 8 and planes 3+ are clear in the list (the
+     * pane is cleared on all planes when the page is drawn), so on native
+     * screens only planes 0-2 are written: 3/8 of the blitter work. */
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, g.pane_x - 2 * g.sx, y, g.w - 1, y + g.list_row_h - 1,
              !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
     if (ov.on && ov.page == p)
@@ -1020,6 +1029,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         right -= tagw + 8 * g.sx;
     }
     gfx_text(&g, lx, ty, it->label, fg, right - lx);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
 }
 
 static void draw_list_rows(struct Page *p)
@@ -1042,9 +1053,33 @@ static void draw_list_rows(struct Page *p)
  * planes 0-2 (every list pen is below 8 and rows are painted with
  * RectFill, so planes 3+ are zero there). RTG: the same blit, unmasked;
  * the RTG system handles the overlap and accelerates it. */
+/* Right edge of what rows top..top+vis-1 have painted outside the bar:
+ * the copy need go no further, since everything right of it is background
+ * in every row. Label widths are measured once per entry and kept. */
+static WORD rows_right(struct Page *p, LONG top, WORD col)
+{
+    WORD vis = list_visible(), r, right = g.pane_x;
+    for (r = 0; r < vis && top + r < p->list.count; r++) {
+        struct Item *it = &p->list.items[top + r];
+        WORD e;
+        if (it->kind == IT_ACTION && it->path[0])
+            return g.w - 1;                 /* right-aligned values: the whole row */
+        if (!it->width)
+            it->width = gfx_textlen(&g, it->label) + 1;
+        e = g.pane_x + col + it->width;
+        if (e > right)
+            right = e;
+    }
+    if (ov.on && ov.page == p && ov.x + ov.w > right)
+        right = ov.x + ov.w;                /* the big letter, if shown */
+    return right < g.w - 1 ? right : g.w - 1;
+}
+
+static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
+
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
-    WORD x0 = g.pane_x - 2 * g.sx, x1 = g.w - 1;
+    WORD x0 = g.pane_x - 2 * g.sx, x1 = copy_right > x0 ? copy_right : g.w - 1;
     struct BitMap *bm = g.rp->BitMap;
     if (n <= 0 || src == dst)
         return;
@@ -1086,6 +1121,7 @@ static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
         draw_list_rows(p);
         return;
     }
+    copy_right = rows_right(p, old_top, col);   /* text extent of the rows being moved */
     r_old = old_sel - old_top;              /* the bar's screen row before the move */
     if (r_old < 0 || r_old >= vis)
         r_old = -1;
@@ -1459,16 +1495,16 @@ static void act_action(struct Item *it)
  * this itself, one step per video frame at most, from key-down until
  * key-up (the keyboard's own repeat is fixed at about 10 a second), and
  * eases off near the end so it settles on the last entry. */
-#define HOLD_DELAY   18     /* frames before the glide starts (~0.36 s on PAL) */
-#define HOLD_RAMP   100     /* frames to reach full speed (2 s) */
+#define HOLD_DELAY  360     /* ms before the glide starts */
+#define HOLD_RAMP  2000     /* ms to reach full speed */
 #define LIST_MIN      8     /* entries per second when the glide starts */
 #define LIST_MAX     50     /* entries per second at full speed on a small screen */
-#define FRAME_RATE   50
+#define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
     LONG  dir;              /* -1 up, +1 down, 0 not held */
-    ULONG frames;
-    LONG  acc;
+    ULONG held_ms, last_ms; /* time held so far, clock at the last tick */
+    LONG  acc;              /* entries (x1000) or pixels (x1000) owed */
     BOOL  joy;              /* held on the joystick rather than the keyboard */
     BOOL  letters;          /* show the letter overlay once the glide starts */
 } hold;
@@ -1476,7 +1512,8 @@ static struct {
 static void hold_start(LONG dir, BOOL joy)
 {
     hold.dir = dir;
-    hold.frames = 0;
+    hold.held_ms = 0;
+    hold.last_ms = time_ms();
     hold.acc = 0;
     hold.joy = joy;
     hold.letters = cur() && ov_eligible(cur());
@@ -1510,7 +1547,7 @@ static BOOL key_is_down(UWORD rawkey)
 static void hold_tick(void)
 {
     struct Page *p = cur();
-    LONG rate, remaining, ramp;
+    LONG rate, remaining, ramp, elapsed;
     if (!hold.dir)
         return;
     if (focus != FOCUS_CONTENT || !p ||
@@ -1518,11 +1555,21 @@ static void hold_tick(void)
         hold_stop();                        /* let go: stop now, whatever is queued */
         return;
     }
-    if (++hold.frames < HOLD_DELAY)
-        return;
-    ramp = hold.frames - HOLD_DELAY;
-    if (ramp > HOLD_RAMP)
-        ramp = HOLD_RAMP;
+    {
+        /* Speed is set by the clock, not by how often this runs: if drawing
+         * overruns a frame, the next step makes up the distance. */
+        ULONG now = time_ms(), dt = now ? now - hold.last_ms : FRAME_MS;
+        if (dt > 100)
+            dt = 100;
+        hold.last_ms = now;
+        hold.held_ms += dt;
+        if (hold.held_ms < HOLD_DELAY)
+            return;
+        ramp = hold.held_ms - HOLD_DELAY;
+        if (ramp > HOLD_RAMP)
+            ramp = HOLD_RAMP;
+        elapsed = dt;
+    }
     if (p->type == PT_LIST) {
         if (hold.letters && !(ov.on && ov.page == p))
             ov_show(p);
@@ -1542,15 +1589,18 @@ static void hold_tick(void)
             rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
             if (rate > 6 + remaining * 4)   /* ease in: 46/s at 10 left ... 10/s at 1 */
                 rate = 6 + remaining * 4;
-            hold.acc += rate;
-            n = hold.acc / FRAME_RATE;
+            hold.acc += rate * elapsed;     /* entries x 1000 */
+            n = hold.acc / 1000;
             if (n > 0) {
-                hold.acc -= n * FRAME_RATE;
+                hold.acc -= n * 1000;
                 act_move(hold.dir * (n < remaining ? n : remaining));
             }
         }
     } else if (p->tb.open) {
-        LONG px = 2 + 10 * ramp / HOLD_RAMP;  /* 100 to 600 pixels a second */
+        LONG px;
+        hold.acc += (100 + 500 * ramp / HOLD_RAMP) * elapsed;  /* 100 to 600 px/s, x1000 */
+        px = hold.acc / 1000;
+        hold.acc -= px * 1000;
         remaining = tb_remaining(&p->tb, hold.dir);
         if (remaining <= 0)
             return;

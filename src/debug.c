@@ -106,6 +106,22 @@ void dbg_set_timer(struct Device *timer)
     TimerBase = timer;
 }
 
+/* Milliseconds from the E-clock (wraps after ~49 days; differences are
+ * what matter). 0 if the timer is not open. */
+ULONG time_ms(void)
+{
+    struct EClockVal ev;
+    ULONG hz, khz;
+    if (!TimerBase)
+        return 0;
+    hz = ReadEClock(&ev);
+    khz = hz / 1000;
+    if (!khz)
+        return 0;
+    /* (hi:lo) / khz without 64-bit division: hi * (2^32 / khz) + lo / khz */
+    return ev.ev_hi * (0xFFFFFFFFUL / khz) + ev.ev_lo / khz;
+}
+
 void dbg_sleep_begin(void)
 {
     if (!TimerBase)
