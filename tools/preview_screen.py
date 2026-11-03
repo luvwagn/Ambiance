@@ -176,7 +176,7 @@ def wrap(s, text, maxw):
 def about(s, pane_x, pane_w, sx, y0, footer_y, scroll, pens):
     """Mirror of src/textbox.c: text box, then the scroll bar beside it."""
     TEXT, DIM, WHITE, RULE, TRACK = pens
-    s.text(pane_x, 28, "About", WHITE)
+    s.text(pane_x, 28, "About > Credits", WHITE)
     s.fill(pane_x, 41, pane_x + pane_w - 1, 41, RULE)
     tbw = pane_w - 7 * sx
     lines = []

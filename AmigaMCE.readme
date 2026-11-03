@@ -22,13 +22,14 @@ Features in this release
 - Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,
   640x200/256 hires, 640x400/512 hires laced (AGA), 800x600 RTG, or
   Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
-- Smooth-scrolling, flicker-free text pages (fact sheets, Settings,
-  About) with a scroll bar when the text is longer than the page.
+- Smooth-scrolling, flicker-free text pages (fact sheets, Credits,
+  System information) with a scroll bar when the text is longer than the page.
 - Hires artwork drawn on the real hires grid: sharper logo and icons.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Mods, Videos, Pictures, Music and Internet Radio are listed but arrive
-in a later version.
+in a later version. About holds the credits and a System information
+page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 
 Controls
 --------

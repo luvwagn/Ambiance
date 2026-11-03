@@ -62,7 +62,7 @@ static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 
 /* IT_ACTION codes (struct Item.action) */
-enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_MODE0 = 16 /* + SM_* */ };
+enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
@@ -229,8 +229,7 @@ static void found_line(struct Page *p, const char *what, const char *path)
 static void build_sysinfo(struct Page *p)
 {
     char line[160];
-    text_line(p, "Settings arrive in a later version.");
-    text_line(p, "This build found:");
+    text_line(p, "Found when AmigaMCE started:");
     text_line(p, "");
     sprintf(line, "Machine type: %s", caps.emulator ? "emulator (UAE family)" : "real Amiga");
     text_line(p, line);
@@ -338,7 +337,6 @@ static void build_settings(struct Page *p)
     char tag[64];
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     action_item(p, "Screen mode", tag, ACT_SCREENMODES);
-    action_item(p, "System information", "", ACT_SYSINFO);
 }
 
 static void build_screenmodes(struct Page *p)
@@ -359,7 +357,13 @@ static void build_screenmodes(struct Page *p)
     }
 }
 
-static void build_about(struct Page *p)
+static void build_about_menu(struct Page *p)
+{
+    action_item(p, "Credits", "AmigaMCE " AMCE_VERSION, ACT_CREDITS);
+    action_item(p, "System information", "", ACT_SYSINFO);
+}
+
+static void build_credits(struct Page *p)
 {
     char line[96];
     sprintf(line, "AmigaMCE %s", AMCE_VERSION);
@@ -433,8 +437,8 @@ static void build_root(int mod)
             build_settings(p);
         break;
     case MOD_ABOUT:
-        if ((p = page_push(PT_TEXT, "About")))
-            build_about(p);
+        if ((p = page_push(PT_LIST, "About")))
+            build_about_menu(p);
         break;
     }
 }
@@ -844,6 +848,16 @@ static void open_screenmodes(void)
     draw_footer();
 }
 
+static void open_credits(void)
+{
+    struct Page *p = page_push(PT_TEXT, "Credits");
+    if (!p)
+        return;
+    build_credits(p);
+    draw_pane(TRUE);
+    draw_footer();
+}
+
 static void open_sysinfo(void)
 {
     struct Page *p = page_push(PT_TEXT, "System information");
@@ -908,6 +922,8 @@ static void act_action(struct Item *it)
         open_screenmodes();
     else if (it->action == ACT_SYSINFO)
         open_sysinfo();
+    else if (it->action == ACT_CREDITS)
+        open_credits();
     else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
         apply_screen_mode(it->action - ACT_MODE0);
 }
