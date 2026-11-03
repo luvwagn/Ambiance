@@ -3,13 +3,17 @@
 
 Usage: python3 tools/mkart.py <Rubik-Bold.ttf> <out art.c>
 
-The logo is drawn with anti-aliasing at 8x, scaled down to the screen's real
-pixel grid and snapped to fixed palette pens, then stored as chunky pen
-indices. Icons are 1-bit 16x16 masks drawn in the current text colour.
+The lowres logo is drawn crisp at the screen's real pixel size and snapped
+to fixed palette pens; the hires logo is redrawn from the same shapes on the
+hires grid (see logo_hires). Both are stored as chunky pen indices. Icons
+are 1-bit masks drawn in the current text colour: 16x16 hand-drawn for
+lowres, 32x16 drawn from vector shapes for hires (tools/hiicons.py).
 """
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
+
+import hiicons
 
 # ------------------------------------------------------------ palette (pens)
 UI = [
@@ -84,12 +88,58 @@ def logo(ttf, h=16, size_a=14, size_m=11):
     img = img.crop((0, 0, x + tw + 6, h))
     lo = snap(img)
     w = img.width
-    hi = []
-    for y in range(h):
-        for xx in range(w):
-            pen = lo[y * w + xx]
-            hi += [pen, pen]
-    return (w, h, lo), (w * 2, h, hi)
+    return (w, h, lo), logo_hires(ttf, w, h, size_a, size_m)
+
+
+# The hires logo is redrawn from the same vector shapes on the real hires
+# grid (twice as many columns), not column-doubled. Each layer is drawn
+# anti-aliased on a fine canvas, averaged down to whole hires pixels and
+# thresholded at 50% coverage, so edges stay crisp but fall on half-lowres
+# positions: smoother curves and truer stems, same size on screen.
+S = 8   # canvas units per lowres pixel, both axes
+
+
+def layer_mask(w, h, draw_fn):
+    big = Image.new("L", (w * S, h * S), 0)
+    draw_fn(ImageDraw.Draw(big))
+    small = big.resize((w * 2, h), Image.BOX)
+    return [v >= 128 for v in small.get_flattened_data()] if hasattr(small, "get_flattened_data") \
+        else [v >= 128 for v in small.getdata()]
+
+
+def logo_hires(ttf, w, h, size_a, size_m):
+    fa = ImageFont.truetype(ttf, size_a * S)
+    fm = ImageFont.truetype(ttf, size_m * S)
+    fa_lo = ImageFont.truetype(ttf, size_a)
+    fm_lo = ImageFont.truetype(ttf, size_m)
+    probe = ImageDraw.Draw(Image.new("RGB", (4, 4)))
+    x_badge = 17 + int(probe.textlength("Amiga", font=fa_lo)) + 3
+    tw = int(probe.textlength("MCE", font=fm_lo))
+
+    def box(d):
+        d.rounded_rectangle([0, 1 * S, 14 * S - 1, 15 * S - 1], radius=int(1.6 * S), fill=255)
+
+    def tri(d):
+        d.polygon([(4 * S, 4 * S), (10.5 * S, 8 * S), (4 * S, 12 * S)], fill=255)
+
+    def amiga(d):
+        d.text((17 * S, 13 * S), "Amiga", font=fa, fill=255, anchor="ls")
+
+    def badge(d):
+        d.rounded_rectangle([x_badge * S, 1 * S, (x_badge + tw + 6) * S - 1, 15 * S - 1],
+                            radius=int(1.2 * S), fill=255)
+
+    def mce(d):
+        d.text(((x_badge + 3) * S, 12 * S), "MCE", font=fm, fill=255, anchor="ls")
+
+    pens = [1] * (w * 2 * h)                # PEN_BAR background
+    for fn, pen in ((box, 6), (tri, 5), (amiga, 5), (badge, 8), (mce, 0)):
+        for i, on in enumerate(layer_mask(w, h, fn)):
+            if on:
+                pens[i] = pen
+    return (w * 2, h, pens)
+
+
 
 
 # ------------------------------------------------------------ icons
@@ -297,6 +347,9 @@ def main():
         fh.write("\nconst UWORD icons16[][16] = {\n")
         for rows in icons:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in rows) + " },\n")
+        fh.write("};\n\nconst ULONG icons32[][16] = {\n")
+        for fn in hiicons.ICONS:
+            fh.write("    { " + ", ".join(f"0x{v:08X}" for v in hiicons.render(fn)) + " },\n")
         fh.write("};\n\n/* LoadRGB32 table: count<<16|first, then R,G,B as 32-bit values, then 0 */\n")
         fh.write("const ULONG ui_palette32[] = {\n    " + pal[0] + ",\n")
         for i in range(1, len(pal) - 1, 3):

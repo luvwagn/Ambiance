@@ -107,10 +107,36 @@ LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);
 BOOL ags_screenshot_path(const char *base, char *out, LONG max);
 BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *script);
 
+/* ---------------------------------------------------------------- textbox */
+struct TextBox {
+    BOOL  open, first_white, dragging;
+    WORD  x, y, w, h;           /* text area on screen */
+    WORD  bar_x, bar_w;         /* scroll bar column; bar_w 0 when all text fits */
+    WORD  line_h, drag_off;
+    LONG  content_h;            /* pixels of text */
+    LONG  pos, target;          /* scroll offset in pixels, now and heading to */
+    LONG  drawn_pos, thumb_y, thumb_h;
+    const struct ItemList *lines;
+    struct BitMap *bm;          /* pre-rendered text, 3 planes */
+};
+
+BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
+             const struct ItemList *lines, BOOL first_white);
+void tb_close(struct TextBox *tb);
+void tb_draw(struct Gfx *g, struct TextBox *tb);
+BOOL tb_animating(const struct TextBox *tb);
+void tb_scroll_by(struct TextBox *tb, LONG dpx);
+void tb_step(struct Gfx *g, struct TextBox *tb);
+BOOL tb_mouse_down(struct TextBox *tb, WORD mx, WORD my);
+void tb_mouse_move(struct TextBox *tb, WORD my);
+void tb_mouse_up(struct TextBox *tb);
+void tb_refresh_bar(struct Gfx *g, struct TextBox *tb);
+
 /* ---------------------------------------------------------------- art */
 extern const UBYTE logo_lo[], logo_hi[];
 extern const UWORD logo_lo_w, logo_lo_h, logo_hi_w, logo_hi_h;
-extern const UWORD icons16[][16];
+extern const UWORD icons16[][16];   /* lowres, hand-drawn */
+extern const ULONG icons32[][16];   /* hires, from vector shapes */
 extern const ULONG ui_palette32[];
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };

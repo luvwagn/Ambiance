@@ -9,6 +9,7 @@ copy the drawer onto an AGS installation and double-click it.
 - Reads the AGS menu tree, fact sheets and screenshots directly; launches titles
   through their `.run` scripts and returns to AmigaMCE afterwards.
 - Pictures are decoded through the installed datatypes.
+- Text pages scroll smoothly without flicker, with a scroll bar when needed.
 - Keyboard, mouse and joystick/CD32 pad.
 
 Mods, Videos, Pictures, Music and Internet Radio are on the menu but not yet
@@ -39,7 +40,7 @@ Aminet.
 
     src/            program sources (main, gfx, ags, caps, art, util)
     tests/          vamos unit tests and a synthetic AGS tree
-    tools/          host-side generators for art, fonts, icons and previews
+    tools/          host-side generators for art (mkart, hiicons), fonts, icons and previews
     assets/         generated Amiga fonts, plus the source TTFs and their licences
     docs/           Workbench icons
 

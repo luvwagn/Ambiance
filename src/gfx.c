@@ -116,7 +116,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c)
                             WA_Width, g->w, WA_Height, g->h, WA_Backdrop, TRUE,
                             WA_Borderless, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
                             WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE,
-                            WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS,
+                            WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE,
                             TAG_END);
     if (!g->win) {
         CloseScreen(g->scr);
@@ -213,16 +213,17 @@ void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen)
     UWORD r, b;
     SetAPen(g->rp, pen);
     for (r = 0; r < 16; r++) {
-        UWORD bits = icons16[icon][r];
-        for (b = 0; b < 16; b++)
-            if (bits & (0x8000 >> b)) {
-                if (g->sx == 2) {
-                    WritePixel(g->rp, x + b * 2, y + r);
-                    WritePixel(g->rp, x + b * 2 + 1, y + r);
-                } else {
+        if (g->sx == 2) {
+            ULONG bits = icons32[icon][r];
+            for (b = 0; b < 32; b++)
+                if (bits & (0x80000000UL >> b))
                     WritePixel(g->rp, x + b, y + r);
-                }
-            }
+        } else {
+            UWORD bits = icons16[icon][r];
+            for (b = 0; b < 16; b++)
+                if (bits & (0x8000 >> b))
+                    WritePixel(g->rp, x + b, y + r);
+        }
     }
 }
 

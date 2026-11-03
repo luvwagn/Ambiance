@@ -1,0 +1,232 @@
+/*
+ * AmigaMCE - smooth-scrolling, flicker-free text box with a scroll bar
+ * Copyright (c) 2026 Brian King
+ *
+ * The text is rendered once into an off-screen bitmap. Scrolling then
+ * never clears or redraws on screen: each frame copies the visible window
+ * of that bitmap to the screen with one blit started right after the
+ * vertical blank, so the beam never sees a half-drawn box.
+ *
+ * Text pens are all below 8, so the box only ever uses bitplanes 0-2 (the
+ * box is cleared to pen 0 first, so planes 3+ stay zero). The bitmap has
+ * three planes and the blit is masked to them: on an 8-plane AGA screen
+ * that is 3/8 of the blitter time a full copy would need, which keeps a
+ * step well inside one frame.
+ */
+#include "amce.h"
+
+#include <string.h>
+#include <graphics/gfxbase.h>
+#include <proto/exec.h>
+#include <proto/graphics.h>
+
+extern struct GfxBase *GfxBase;
+
+#define TB_PLANES     3
+#define TB_PLANE_MASK 0x07
+#define TB_MAX_ROWS   2048      /* tallest pre-rendered text, in pixels */
+
+static LONG max_pos(const struct TextBox *tb)
+{
+    LONG m = tb->content_h - tb->h;
+    return m > 0 ? m : 0;
+}
+
+static LONG clamp_pos(const struct TextBox *tb, LONG v)
+{
+    LONG m = max_pos(tb);
+    return v < 0 ? 0 : v > m ? m : v;
+}
+
+void tb_close(struct TextBox *tb)
+{
+    if (tb->bm) {
+        WaitBlit();
+        FreeBitMap(tb->bm);
+    }
+    tb->bm = NULL;
+    tb->open = FALSE;
+}
+
+BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
+             const struct ItemList *lines, BOOL first_white)
+{
+    struct RastPort rp;
+    LONG i, rows;
+
+    tb_close(tb);
+    tb->x = x;
+    tb->y = y;
+    tb->w = w;
+    tb->h = h;
+    tb->line_h = g->font_h + 1;
+    tb->lines = lines;
+    tb->first_white = first_white;
+    tb->content_h = lines->count * tb->line_h;
+    if (tb->content_h > TB_MAX_ROWS)
+        tb->content_h = TB_MAX_ROWS - TB_MAX_ROWS % tb->line_h;
+    tb->bar_w = tb->content_h > h ? 3 * g->sx : 0;
+    tb->bar_x = x + w + 2 * g->sx;
+    tb->pos = clamp_pos(tb, tb->pos);
+    tb->target = clamp_pos(tb, tb->target);
+    tb->drawn_pos = -1;
+    tb->thumb_y = tb->thumb_h = -1;
+    tb->dragging = FALSE;
+    tb->open = TRUE;
+
+    rows = tb->content_h > h ? tb->content_h : h;
+    tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
+    if (!tb->bm)
+        return FALSE;   /* low on chip RAM: tb_draw falls back to direct text */
+
+    InitRastPort(&rp);
+    rp.BitMap = tb->bm;
+    SetFont(&rp, g->font);
+    SetDrMd(&rp, JAM1);
+    for (i = 0; i < lines->count && (i + 1) * tb->line_h <= tb->content_h; i++) {
+        const char *s = lines->items[i].label;
+        struct TextExtent te;
+        ULONG n = strlen(s);
+        if (!n)
+            continue;
+        n = TextFit(&rp, (CONST_STRPTR)s, n, &te, NULL, 1, w, g->font_h + 1);
+        if (!n)
+            continue;
+        SetAPen(&rp, (first_white && i == 0) ? PEN_WHITE : PEN_TEXT);
+        Move(&rp, 0, i * tb->line_h + g->baseline);
+        Text(&rp, (CONST_STRPTR)s, n);
+    }
+    return TRUE;
+}
+
+static void draw_bar(struct Gfx *g, struct TextBox *tb)
+{
+    LONG range = max_pos(tb), th, ty;
+    WORD x0 = tb->bar_x, x1 = tb->bar_x + tb->bar_w - 1, y0 = tb->y, y1 = tb->y + tb->h - 1;
+    if (!tb->bar_w)
+        return;
+    th = (LONG)tb->h * tb->h / tb->content_h;
+    if (th < 8)
+        th = 8;
+    ty = range ? (tb->h - th) * tb->pos / range : 0;
+    if (ty == tb->thumb_y && th == tb->thumb_h)
+        return;
+    tb->thumb_y = ty;
+    tb->thumb_h = th;
+    /* Three fills that never overlap: no pixel is drawn twice. */
+    gfx_fill(g, x0, y0, x1, y0 + ty - 1, PEN_KEYCAP);
+    gfx_fill(g, x0, y0 + ty, x1, y0 + ty + th - 1, (tb->dragging ? PEN_TEXT : PEN_DIM));
+    gfx_fill(g, x0, y0 + ty + th, x1, y1, PEN_KEYCAP);
+}
+
+static void blit_window(struct Gfx *g, struct TextBox *tb)
+{
+    struct Layer *l = g->win->WLayer;
+    LONG vis = tb->content_h - tb->pos;
+    if (vis > tb->h)
+        vis = tb->h;
+    LockLayerRom(l);
+    BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, vis,
+              0xC0, TB_PLANE_MASK, NULL);
+    UnlockLayerRom(l);
+    tb->drawn_pos = tb->pos;
+}
+
+/* Whole box, e.g. after the page opens or the screen comes back. */
+void tb_draw(struct Gfx *g, struct TextBox *tb)
+{
+    if (!tb->open)
+        return;
+    gfx_fill(g, tb->x, tb->y, tb->bar_x + 3 * g->sx - 1, tb->y + tb->h - 1, PEN_BG);
+    tb->thumb_y = tb->thumb_h = -1;
+    if (tb->bm) {
+        blit_window(g, tb);
+    } else {
+        /* Fallback without the bitmap: whole lines, drawn directly. */
+        LONG first = tb->pos / tb->line_h, r;
+        tb->pos = tb->target = first * tb->line_h;
+        for (r = 0; (r + 1) * tb->line_h <= tb->h && first + r < tb->lines->count; r++)
+            gfx_text(g, tb->x, tb->y + r * tb->line_h, tb->lines->items[first + r].label,
+                     (tb->first_white && first + r == 0) ? PEN_WHITE : PEN_TEXT, tb->w);
+        tb->drawn_pos = tb->pos;
+    }
+    draw_bar(g, tb);
+}
+
+BOOL tb_animating(const struct TextBox *tb)
+{
+    return tb->open && tb->pos != tb->target;
+}
+
+void tb_scroll_by(struct TextBox *tb, LONG dpx)
+{
+    if (tb->open)
+        tb->target = clamp_pos(tb, tb->target + dpx);
+}
+
+/* One animation frame: ease a quarter of the way to the target (at least
+ * one pixel), then show it. Call right after WaitTOF(). */
+void tb_step(struct Gfx *g, struct TextBox *tb)
+{
+    LONG d = tb->target - tb->pos, step;
+    if (!d)
+        return;
+    step = tb->dragging ? d : d / 4;    /* a drag follows the mouse directly */
+    if (!step)
+        step = d > 0 ? 1 : -1;
+    tb->pos += step;
+    if (!tb->bm) {
+        tb->pos = tb->target;
+        tb_draw(g, tb);
+        return;
+    }
+    blit_window(g, tb);
+    draw_bar(g, tb);
+}
+
+/* Mouse on the scroll bar. Returns TRUE when the click belonged to it. */
+BOOL tb_mouse_down(struct TextBox *tb, WORD mx, WORD my)
+{
+    WORD ry;
+    if (!tb->open || !tb->bar_w || mx < tb->bar_x - 2 || mx > tb->bar_x + tb->bar_w + 1 ||
+        my < tb->y || my >= tb->y + tb->h)
+        return FALSE;
+    ry = my - tb->y;
+    if (ry >= tb->thumb_y && ry < tb->thumb_y + tb->thumb_h) {
+        tb->dragging = TRUE;
+        tb->drag_off = ry - tb->thumb_y;
+        tb->thumb_y = -1;           /* repaint the thumb highlighted */
+    } else {
+        LONG page = tb->h - tb->line_h;
+        tb_scroll_by(tb, ry < tb->thumb_y ? -page : page);
+    }
+    return TRUE;
+}
+
+void tb_mouse_move(struct TextBox *tb, WORD my)
+{
+    LONG span = tb->h - tb->thumb_h, ty;
+    if (!tb->dragging || span <= 0)
+        return;
+    ty = my - tb->y - tb->drag_off;
+    if (ty < 0)
+        ty = 0;
+    if (ty > span)
+        ty = span;
+    tb->target = clamp_pos(tb, ty * max_pos(tb) / span);
+}
+
+void tb_mouse_up(struct TextBox *tb)
+{
+    if (tb->dragging) {
+        tb->dragging = FALSE;
+        tb->thumb_y = -1;           /* repaint the thumb normally */
+    }
+}
+
+/* Repaint a thumb whose highlight changed without the position moving. */
+void tb_refresh_bar(struct Gfx *g, struct TextBox *tb)
+{
+    if (tb->open)
+        draw_bar(g, tb);
+}

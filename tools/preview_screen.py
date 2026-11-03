@@ -2,6 +2,7 @@
 """Render the Home Screen on the host the way AmigaMCE draws it.
 
 Usage: python3 tools/preview_screen.py <art.c> <Fonts dir> <out.png> [lores|hires] [pal|ntsc]
+                                       [games|about] [scroll pixels]
 
 Mirrors the layout constants in src/gfx.c and src/main.c, decodes the real
 amce-pixel font files and parses the generated art.c, then scales the result
@@ -26,9 +27,11 @@ def parse_art(path):
     dims = {k: int(v) for k, v in re.findall(r"(logo_\w+_[wh]) = (\d+)", src)}
     icons_src = re.search(r"icons16\[\]\[16\] = \{(.*?)\};", src, re.S).group(1)
     icons = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{4})", grp)] for grp in re.findall(r"\{([^}]*)\}", icons_src)]
+    i32 = re.search(r"icons32\[\]\[16\] = \{(.*?)\};", src, re.S).group(1)
+    icons32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)] for grp in re.findall(r"\{([^}]*)\}", i32)]
     pal = arr("ui_palette32")[1:-1]
     palette = [(pal[i] >> 24, pal[i + 1] >> 24, pal[i + 2] >> 24) for i in range(0, len(pal), 3)]
-    return arr("logo_lo"), arr("logo_hi"), dims, icons, palette
+    return arr("logo_lo"), arr("logo_hi"), dims, icons, icons32, palette
 
 
 class Screen:
@@ -60,7 +63,9 @@ def main():
     art, fonts, out = sys.argv[1], sys.argv[2], sys.argv[3]
     mode = sys.argv[4] if len(sys.argv) > 4 else "hires"
     video = sys.argv[5] if len(sys.argv) > 5 else "pal"
-    logo_lo, logo_hi, dims, icons, pal = parse_art(art)
+    page = sys.argv[6] if len(sys.argv) > 6 else "games"
+    scroll = int(sys.argv[7]) if len(sys.argv) > 7 else 0
+    logo_lo, logo_hi, dims, icons, icons32, pal = parse_art(art)
     hires = mode == "hires"
     sx = 2 if hires else 1
     W, H = (640 if hires else 320), (256 if video == "pal" else 200)
@@ -72,7 +77,7 @@ def main():
     pane_x = menu_w + 6 * sx
     pane_w = W - pane_x - 4 * sx
     fh = 12
-    BG, BAR, RULE, TEXT, DIM, WHITE, HL, SELDIM, ACCENT = range(9)
+    BG, BAR, RULE, TEXT, DIM, WHITE, HL, SELDIM, ACCENT, KEYCAP = range(10)
 
     s.fill(0, 0, W - 1, H - 1, BG)
     s.fill(0, 0, W - 1, 23, BAR)
@@ -88,21 +93,102 @@ def main():
     s.text(W - 8 * sx - s.textlen(clock), (24 - fh) // 2, clock, TEXT)
 
     names = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"]
+    msel = 8 if page == "about" else 0
     for i, name in enumerate(names):
         y = top + i * row_h
-        sel = i == 0
+        sel = i == msel
         if sel:
             s.fill(0, y, menu_w - 1, y + row_h - 1, SELDIM)
         fg = WHITE if sel else TEXT
         for r in range(16):
-            bits = icons[i][r]
-            for b in range(16):
-                if bits & (0x8000 >> b):
-                    for k in range(sx):
-                        s.img.putpixel((3 * sx + b * sx + k, y + 1 + r), pal[fg])
+            if hires:
+                bits = icons32[i][r]
+                for b in range(32):
+                    if bits & (0x80000000 >> b):
+                        s.img.putpixel((3 * sx + b, y + 1 + r), pal[fg])
+            else:
+                bits = icons[i][r]
+                for b in range(16):
+                    if bits & (0x8000 >> b):
+                        s.img.putpixel((3 + b, y + 1 + r), pal[fg])
         s.text(23 * sx, y + (row_h - fh) // 2, name, fg, menu_w - 24 * sx)
     s.fill(menu_w + 2 * sx, 25, menu_w + 2 * sx, footer_y - 2, RULE)
 
+    if page == "about":
+        about(s, pane_x, pane_w, sx, list_top, footer_y, scroll, (TEXT, DIM, WHITE, RULE, KEYCAP))
+    else:
+        games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, (TEXT, DIM, WHITE, HL, RULE))
+    s.fill(0, footer_y - 1, W - 1, footer_y - 1, RULE)
+    s.fill(0, footer_y, W - 1, H - 1, BAR)
+    if page == "about":
+        hint = "Up/Down  scroll      Left/Esc  back" if hires else "Up/Down scroll  Esc back"
+    else:
+        hint = ("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back" if hires
+                else "Fire open  Ret play  Esc back")
+    s.text(6 * sx, footer_y + (12 - fh) // 2, hint, DIM, W - 12 * sx)
+
+    scale_x, scale_y = (3, 6) if hires else (6, 6)   # hires pixel is half as wide
+    s.img.resize((W * scale_x // 2, H * scale_y // 2), Image.NEAREST).save(out)
+    print("wrote", out)
+
+
+ABOUT = [("line", "AmigaMCE 0.1.1"), ("line", "Created by Brian King"), ("line", "(c) 2026 Brian King"),
+         ("line", ""),
+         ("para", "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
+                  "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
+                  "The amce-pixel fonts are Modified Versions of Pixelify Sans."),
+         ("line", ""), ("para", "Code: libnix C runtime (public domain)."), ("line", ""),
+         ("para", "Used if installed, not included, each under its own licence: Amiga Game "
+                  "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."),
+         ("line", ""),
+         ("para", "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
+                  "to their authors. Licence texts are in the Licences drawer.")]
+
+
+def wrap(s, text, maxw):
+    out, line = [], ""
+    for word in text.split():
+        trial = (line + " " + word) if line else word
+        if line and s.textlen(trial) > maxw:
+            out.append(line)
+            line = word
+        else:
+            line = trial
+    if line:
+        out.append(line)
+    return out
+
+
+def about(s, pane_x, pane_w, sx, y0, footer_y, scroll, pens):
+    """Mirror of src/textbox.c: text box, then the scroll bar beside it."""
+    TEXT, DIM, WHITE, RULE, KEYCAP = pens
+    s.text(pane_x, 28, "About", WHITE)
+    s.fill(pane_x, 41, pane_x + pane_w - 1, 41, RULE)
+    tbw = pane_w - 7 * sx
+    lines = []
+    for kind, t in ABOUT:
+        lines += [t] if kind == "line" else wrap(s, t, tbw)
+    lh, h = 13, footer_y - 2 - y0
+    content = len(lines) * lh
+    pos = max(0, min(scroll, content - h))
+    clip = Image.new("RGB", (tbw, h), s.pal[0])
+    sub = Screen(tbw, content + h, s.pal, s.font)
+    sub.img.paste(s.pal[0], (0, 0, tbw, content + h))   # bitmap cleared to pen 0
+    for i, t in enumerate(lines):
+        sub.text(0, i * lh, t, TEXT, tbw)
+    clip.paste(sub.img.crop((0, pos, tbw, pos + h)), (0, 0))
+    s.img.paste(clip, (pane_x, y0))
+    if content > h:
+        bx, bw = pane_x + tbw + 2 * sx, 3 * sx
+        th = max(8, h * h // content)
+        ty = (h - th) * pos // (content - h)
+        s.fill(bx, y0, bx + bw - 1, y0 + ty - 1, KEYCAP)
+        s.fill(bx, y0 + ty, bx + bw - 1, y0 + ty + th - 1, DIM)
+        s.fill(bx, y0 + ty + th, bx + bw - 1, y0 + h - 1, KEYCAP)
+
+
+def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):
+    TEXT, DIM, WHITE, HL, RULE = pens
     s.text(pane_x, 28, "Games", WHITE)
     s.text(pane_x + pane_w - s.textlen("2/16"), 28, "2/16", DIM)
     s.fill(pane_x, 41, pane_x + pane_w - 1, 41, RULE)
@@ -116,15 +202,6 @@ def main():
             s.fill(pane_x - 2 * sx, y, pane_x + pane_w - 1, y + list_row_h - 1, HL)
         s.text(pane_x, y + 1, label, WHITE if sel else TEXT, pane_w - 12 * sx)
         s.text(pane_x + pane_w - 7 * sx, y + 1, ">", WHITE if sel else DIM)
-    s.fill(0, footer_y - 1, W - 1, footer_y - 1, RULE)
-    s.fill(0, footer_y, W - 1, H - 1, BAR)
-    hint = ("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back" if hires
-            else "Fire open  Ret play  Esc back")
-    s.text(6 * sx, footer_y + (12 - fh) // 2, hint, DIM, W - 12 * sx)
-
-    scale_x, scale_y = (3, 6) if hires else (6, 6)   # hires pixel is half as wide
-    s.img.resize((W * scale_x // 2, H * scale_y // 2), Image.NEAREST).save(out)
-    print("wrote", out)
 
 
 if __name__ == "__main__":

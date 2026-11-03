@@ -45,6 +45,7 @@ struct Page {
     LONG sel, top;
     char base[256];
     WORD facts_y;
+    struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
 };
 
 static struct Gfx g;
@@ -82,6 +83,7 @@ static void page_pop(void)
     if (!depth)
         return;
     gfx_picture_free(&g);
+    tb_close(&pages[depth - 1].tb);
     list_free(&pages[--depth].list);
 }
 
@@ -96,11 +98,17 @@ static void text_line(struct Page *p, const char *s)
     list_add(&p->list, s, "", "", IT_TEXT);
 }
 
-/* Word-wrap a paragraph to the content pane width. */
+/* Text box width: the pane less room for the scroll bar (gap + bar + gap). */
+static WORD textbox_w(void)
+{
+    return g.pane_w - 7 * g.sx;
+}
+
+/* Word-wrap a paragraph to the text box width. */
 static void text_para(struct Page *p, const char *s)
 {
     char line[160], word[96];
-    WORD maxw = g.pane_w - 4 * g.sx;
+    WORD maxw = textbox_w();
     line[0] = 0;
     while (*s) {
         LONG n = 0;
@@ -531,17 +539,17 @@ static void draw_list_rows(struct Page *p)
     }
 }
 
-static void draw_text_lines(struct Page *p, WORD y0)
+/* (Re)build the page's text box below y0, keeping its scroll position. */
+static void open_textbox(struct Page *p, WORD y0)
 {
-    WORD lh = g.font_h + 1, vis = (g.footer_y - 2 - y0) / lh, r;
-    gfx_fill(&g, g.pane_x - 2 * g.sx, y0, g.w - 1, g.footer_y - 2, PEN_BG);
-    if (p->top > p->list.count - vis)
-        p->top = p->list.count - vis;
-    if (p->top < 0)
-        p->top = 0;
-    for (r = 0; r < vis && p->top + r < p->list.count; r++)
-        gfx_text(&g, g.pane_x, y0 + r * lh, p->list.items[p->top + r].label,
-                 (p->type == PT_DETAIL && p->top + r == 0) ? PEN_WHITE : PEN_TEXT, g.pane_w);
+    tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), g.footer_y - 2 - y0, &p->list,
+            p->type == PT_DETAIL);
+}
+
+static struct TextBox *cur_tb(void)
+{
+    struct Page *p = cur();
+    return (p && p->type != PT_LIST && p->tb.open) ? &p->tb : NULL;
 }
 
 static void draw_pane(BOOL full)
@@ -557,7 +565,9 @@ static void draw_pane(BOOL full)
         draw_list_rows(p);
         break;
     case PT_TEXT:
-        draw_text_lines(p, g.list_top);
+        if (full || !p->tb.open)
+            open_textbox(p, g.list_top);
+        tb_draw(&g, &p->tb);
         break;
     case PT_DETAIL:
         if (full) {
@@ -570,8 +580,9 @@ static void draw_pane(BOOL full)
                     p->facts_y = g.list_top + ph + 6;
                 set_msg(NULL);
             }
+            open_textbox(p, p->facts_y);
         }
-        draw_text_lines(p, p->facts_y);
+        tb_draw(&g, &p->tb);
         break;
     }
 }
@@ -698,10 +709,7 @@ static void act_move(LONG d)
         draw_title(p);
         draw_list_rows(p);
     } else {
-        p->top += d;
-        if (p->top < 0)
-            p->top = 0;
-        draw_text_lines(p, p->type == PT_DETAIL ? p->facts_y : g.list_top);
+        tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
     }
 }
 
@@ -791,6 +799,20 @@ static void handle_mouse(struct IntuiMessage *im)
     WORD x = im->MouseX, y = im->MouseY;
     BOOL dbl;
     LONG idx = -1;
+    struct TextBox *tb = cur_tb();
+    if (im->Class == IDCMP_MOUSEMOVE) {
+        if (tb)
+            tb_mouse_move(tb, y);
+        return;
+    }
+    if (im->Code == SELECTUP) {
+        if (tb && tb->dragging) {
+            tb_mouse_up(tb);
+            ReportMouse(FALSE, g.win);
+            tb_refresh_bar(&g, tb);
+        }
+        return;
+    }
     if (im->Code == MENUDOWN) {
         disarm();
         act_back();
@@ -799,6 +821,15 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Code != SELECTDOWN)
         return;
     disarm();
+    if (tb && tb_mouse_down(tb, x, y)) {
+        if (focus != FOCUS_CONTENT)
+            set_focus(FOCUS_CONTENT);
+        if (tb->dragging) {
+            ReportMouse(TRUE, g.win);
+            tb_refresh_bar(&g, tb);
+        }
+        return;
+    }
     if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h) {
         idx = (y - g.top) / g.row_h;
         dbl = idx + 1000 == last_click && DoubleClick(last_secs, last_mics, im->Seconds, im->Micros);
@@ -849,6 +880,8 @@ static void handle_key(struct IntuiMessage *im)
         case 0x4D: disarm(); act_move(shift ? page : 1); break;       /* cursor down */
         case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
         case 0x4F: disarm(); if (focus == FOCUS_CONTENT) act_back(); break; /* cursor left */
+        case 0x7A: disarm(); act_move(-3); break;                     /* wheel up (NM_WHEEL_UP) */
+        case 0x7B: disarm(); act_move(3); break;                      /* wheel down */
         }
         return;
     }
@@ -977,7 +1010,11 @@ int main(void)
     while (running) {
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
-        ULONG sig = Wait(wsig | tsig | SIGBREAKF_CTRL_C);
+        ULONG mask = wsig | tsig | SIGBREAKF_CTRL_C;
+        struct TextBox *atb = cur_tb();
+        /* While a text box glides, poll instead of sleeping; WaitTOF below
+         * paces the loop to one step per frame. */
+        ULONG sig = (atb && tb_animating(atb)) ? SetSignal(0, mask) & mask : Wait(mask);
         if (sig & SIGBREAKF_CTRL_C)
             break;
         if (sig & tsig) {
@@ -1003,13 +1040,17 @@ int main(void)
             while (g.win && (im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
                 struct IntuiMessage copy = *im;
                 ReplyMsg((struct Message *)im);
-                if (copy.Class == IDCMP_MOUSEBUTTONS)
+                if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
                     handle_mouse(&copy);
                 else if (copy.Class == IDCMP_RAWKEY || copy.Class == IDCMP_VANILLAKEY)
                     handle_key(&copy);
                 if (!g.win)
                     break;      /* a launch closed and reopened the window */
             }
+        }
+        if (g.win && (atb = cur_tb()) && tb_animating(atb)) {
+            WaitTOF();
+            tb_step(&g, atb);
         }
     }
 

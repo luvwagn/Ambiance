@@ -26,7 +26,7 @@ CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign 
 LDFLAGS = -noixemul
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/ags.c src/caps.c src/art.c src/util.c
+SRCS = src/main.c src/gfx.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
 TARGET     = AmigaMCE
@@ -96,6 +96,7 @@ preview: src/art.c $(FONT_FILES)
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-hires.png hires pal
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-lores.png lores pal
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-ntsc.png lores ntsc
+	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-about-hires.png hires pal about 0
 
 # ------------------------------------------------------------------ release
 lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(LICENCES)

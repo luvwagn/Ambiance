@@ -21,7 +21,10 @@ Features in this release
   Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
 - 640-wide hires layout on AGA and RTG, 320-wide lowres layout on
   OCS/ECS, PAL and NTSC. Never uses Extra Half-Brite.
-- Keyboard, mouse and joystick/CD32 pad control.
+- Smooth-scrolling, flicker-free text pages (fact sheets, Settings,
+  About) with a scroll bar when the text is longer than the page.
+- Hires artwork drawn on the real hires grid: sharper logo and icons.
+- Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Mods, Videos, Pictures, Music and Internet Radio are listed but arrive
 in a later version.
@@ -32,6 +35,7 @@ Controls
   Right/Fire   open             Return         play
   Left/Esc     back             Esc at menu    press twice to quit
   A-Z          jump to letter   Right mouse    back
+  Mouse wheel  scroll           Scroll bar     click to page, drag to scroll
 
 Installation
 ------------
