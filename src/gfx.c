@@ -295,7 +295,8 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw
  * drawing. Plotting them pixel by pixel from the CPU (WritePixel) left
  * them missing on RTG screens, where the card's own fills of the header
  * and menu rows landed after the CPU's pixels. The logo is rendered once
- * per screen into a bitmap in the screen's format and blitted from there. */
+ * per screen (with fills) into a bitmap in the screen's format and blitted
+ * from there. */
 static void logo_art(const struct Gfx *g, const UBYTE **px, UWORD *w, UWORD *h)
 {
     BOOL hi = g->layout == LAYOUT_HIRES;
@@ -316,15 +317,19 @@ static void cache_art(struct Gfx *g)
         struct RastPort rp;
         InitRastPort(&rp);
         rp.BitMap = g->logo_bm;
-        if (GfxBase->LibNode.lib_Version >= 40) {
-            WriteChunkyPixels(&rp, 0, 0, w - 1, h - 1, (UBYTE *)px, w);
-        } else {
-            for (j = 0; j < h; j++)
-                for (i = 0; i < w; i++) {
-                    SetAPen(&rp, px[j * w + i]);
-                    WritePixel(&rp, i, j);
-                }
-        }
+        /* One RectFill per run of same-pen pixels. Fills are the one
+         * primitive every RTG system accelerates: WriteChunkyPixels into an
+         * RTG off-screen bitmap left it empty under Amiberry's uaegfx. */
+        for (j = 0; j < h; j++)
+            for (i = 0; i < w;) {
+                UBYTE pen = px[j * w + i];
+                UWORD e = i + 1;
+                while (e < w && px[j * w + e] == pen)
+                    e++;
+                SetAPen(&rp, pen);
+                RectFill(&rp, i, j, e - 1, j);
+                i = e;
+            }
     }
 
     /* BltTemplate reads its source with the blitter: chip RAM, even rows. */
