@@ -11,6 +11,7 @@
 #include <devices/inputevent.h>
 #include <dos/dostags.h>
 #include <graphics/gfxbase.h>
+#include <graphics/displayinfo.h>
 #include <libraries/lowlevel.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -235,9 +236,24 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, "Chipset: %s%s, %s", caps.aga ? "AGA" : caps.ecs ? "ECS" : "OCS",
             caps.ehb ? " with EHB" : "", caps.pal ? "PAL" : "NTSC");
     text_line(p, line);
-    sprintf(line, "Layout: %s, %lu colours", g.layout == LAYOUT_HIRES ? "640-wide (hires)" : "lowres",
-            (unsigned long)(1UL << g.depth));
-    text_line(p, line);
+    {
+        /* Read the mode back from the open screen, not from what we asked for. */
+        struct NameInfo ni;
+        char mode[DISPLAYNAMELEN + 1];
+        ULONG id = GetVPModeID(&g.scr->ViewPort);
+        amce_strlcpy(mode, "unnamed mode", sizeof(mode));
+        if (id != (ULONG)INVALID_ID &&
+            GetDisplayInfoData(NULL, (UBYTE *)&ni, sizeof(ni), DTAG_NAME, id) > 0)
+            amce_strlcpy(mode, (char *)ni.Name, sizeof(mode));
+        sprintf(line, "Screen: %s", mode);
+        text_line(p, line);
+        sprintf(line, "  %lu x %lu, %lu colours, mode ID $%08lx",
+                (unsigned long)g.scr->Width, (unsigned long)g.scr->Height,
+                (unsigned long)(1UL << g.scr->RastPort.BitMap->Depth), (unsigned long)id);
+        text_line(p, line);
+        sprintf(line, "Layout: %s", g.layout == LAYOUT_HIRES ? "hires, artwork pixel-doubled" : "lowres");
+        text_line(p, line);
+    }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
     text_line(p, line);
     sprintf(line, "Free memory: %lu KB chip, %lu KB fast",
