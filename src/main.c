@@ -442,7 +442,7 @@ static void build_credits(struct Page *p)
                  "to their authors. Licence texts are in the Licences drawer.");
 }
 
-static void build_root(int mod)
+static void build_root_pages(int mod)
 {
     struct Page *p;
     pages_clear();
@@ -499,6 +499,83 @@ static void build_root(int mod)
             build_about_menu(p);
         break;
     }
+}
+
+/* ------------------------------------------------------------ section memory
+ * Each main-menu section remembers where the user was: for every list
+ * level, the highlighted entry (by position and by name) and the scroll
+ * position. Coming back to the section rebuilds that trail, reopening the
+ * folders on the way, so leaving Games on Top 200 and visiting Settings
+ * returns to Top 200 (or to the game inside it that was highlighted). An
+ * entry that has moved is found again by name; one that is gone leaves
+ * the highlight at the nearest position. Kept for this run only. */
+static struct {
+    int n;
+    struct { LONG sel, top; char label[64]; } lv[MAXDEPTH];
+} nav_mem[MOD_COUNT];
+static int shown_mod = -1;
+
+static void save_nav(void)
+{
+    int d, n = 0;
+    if (shown_mod < 0 || !depth)
+        return;
+    for (d = 0; d < depth && pages[d].type == PT_LIST; d++, n++) {
+        struct Page *p = &pages[d];
+        nav_mem[shown_mod].lv[n].sel = p->sel;
+        nav_mem[shown_mod].lv[n].top = p->top;
+        amce_strlcpy(nav_mem[shown_mod].lv[n].label,
+                     p->list.count ? p->list.items[p->sel].label : "", 64);
+    }
+    nav_mem[shown_mod].n = n;
+}
+
+/* Open a folder page without drawing (used while rebuilding the trail). */
+static BOOL push_dir_quiet(struct Item *it)
+{
+    struct Page *p = page_push(PT_LIST, it->label);
+    if (!p)
+        return FALSE;
+    if (ags_read_dir(it->path, &p->list, ags.adult[0] == '1') <= 0) {
+        page_pop();
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static void restore_nav(int mod)
+{
+    int lv;
+    for (lv = 0; lv < nav_mem[mod].n; lv++) {
+        struct Page *p = cur();
+        LONG sel = nav_mem[mod].lv[lv].sel, i;
+        const char *want = nav_mem[mod].lv[lv].label;
+        if (!p || p->type != PT_LIST || !p->list.count)
+            return;
+        if (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0) {
+            for (i = 0; i < p->list.count; i++)
+                if (strcmp(p->list.items[i].label, want) == 0)
+                    break;
+            sel = i < p->list.count ? i : (sel < p->list.count ? sel : p->list.count - 1);
+        }
+        p->sel = sel;
+        p->top = nav_mem[mod].lv[lv].top;
+        if (p->top > p->sel)
+            p->top = p->sel;
+        if (lv + 1 < nav_mem[mod].n) {
+            struct Item *it = &p->list.items[p->sel];
+            if (it->kind != IT_DIR || !push_dir_quiet(it))
+                return;
+        }
+    }
+}
+
+static void build_root(int mod)
+{
+    save_nav();                 /* the section being left */
+    build_root_pages(mod);
+    shown_mod = mod;
+    restore_nav(mod);
 }
 
 /* ------------------------------------------------------------ drawing */
