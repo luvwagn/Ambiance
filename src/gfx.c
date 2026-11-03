@@ -67,29 +67,101 @@ static void open_font(struct Gfx *g)
     }
 }
 
-BOOL gfx_open(struct Gfx *g, const struct Caps *c)
+/* ------------------------------------------------------------ modes */
+enum { K_LORES, K_HIRES, K_LACED, K_RTG };
+
+static const struct {
+    const char *key, *label;
+    UWORD w, h;
+    UBYTE kind, pal;
+} modes[SM_COUNT] = {
+    { "auto",       "Automatic",                 0,   0,   0,       0 },
+    { "ntsc-lores", "320 x 200  NTSC",           320, 200, K_LORES, 0 },
+    { "pal-lores",  "320 x 256  PAL",            320, 256, K_LORES, 1 },
+    { "ntsc-hires", "640 x 200  NTSC hires",     640, 200, K_HIRES, 0 },
+    { "pal-hires",  "640 x 256  PAL hires",      640, 256, K_HIRES, 1 },
+    { "ntsc-laced", "640 x 400  NTSC hires laced", 640, 400, K_LACED, 0 },
+    { "pal-laced",  "640 x 512  PAL hires laced",  640, 512, K_LACED, 1 },
+    { "rtg-800",    "800 x 600  RTG",            800, 600, K_RTG,   0 },
+};
+
+const char *gfx_mode_key(int sm) { return modes[sm].key; }
+const char *gfx_mode_label(int sm) { return modes[sm].label; }
+
+int gfx_mode_from_key(const char *key)
+{
+    int i;
+    for (i = 0; i < SM_COUNT; i++)
+        if (amce_stricmp(key, modes[i].key) == 0)
+            return i;
+    return -1;
+}
+
+static ULONG mode_id(int sm)
+{
+    ULONG mon = modes[sm].pal ? PAL_MONITOR_ID : NTSC_MONITOR_ID;
+    switch (modes[sm].kind) {
+    case K_LORES: return mon | LORES_KEY;
+    case K_HIRES: return mon | HIRES_KEY;
+    case K_LACED: return mon | HIRESLACE_KEY;
+    default:      return caps_find_rtg_mode(800, 600);
+    }
+}
+
+/* Why a mode cannot be used here, or NULL when it can. Hires modes need
+ * AGA: the UI and logo use 32 pens, more than ECS hires can show. */
+const char *gfx_mode_problem(const struct Caps *c, int sm)
+{
+    ULONG id;
+    if (sm == SM_AUTO)
+        return NULL;
+    if (modes[sm].kind == K_RTG && !c->rtg)
+        return "needs a graphics card";
+    if ((modes[sm].kind == K_HIRES || modes[sm].kind == K_LACED) && !c->aga)
+        return "needs AGA";
+    id = mode_id(sm);
+    if (id == (ULONG)INVALID_ID || ModeNotAvailable(id))
+        return "not available";
+    return NULL;
+}
+
+/* What "Automatic" means: hires on AGA, lowres otherwise, in the
+ * machine's own video standard, falling back to the other standard. */
+int gfx_mode_auto(const struct Caps *c)
+{
+    int first = c->aga ? (c->pal ? SM_PAL_HIRES : SM_NTSC_HIRES)
+                       : (c->pal ? SM_PAL_LORES : SM_NTSC_LORES);
+    int other = c->aga ? (c->pal ? SM_NTSC_HIRES : SM_PAL_HIRES)
+                       : (c->pal ? SM_NTSC_LORES : SM_PAL_LORES);
+    if (!gfx_mode_problem(c, first))
+        return first;
+    if (!gfx_mode_problem(c, other))
+        return other;
+    return first;
+}
+
+BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
 {
     static UWORD pens[] = { (UWORD)~0 };
-    ULONG mon = c->pal ? PAL_MONITOR_ID : NTSC_MONITOR_ID;
     ULONG mode;
     int i;
 
-    g->h = c->pal ? 256 : 200;
-    if (c->aga) {
+    if (sm == SM_AUTO || gfx_mode_problem(c, sm))
+        sm = gfx_mode_auto(c);
+    mode = mode_id(sm);
+    g->mode = sm;
+    g->w = modes[sm].w;
+    g->h = modes[sm].h;
+    if (modes[sm].kind == K_HIRES) {
         g->layout = LAYOUT_HIRES;
         g->sx = 2;
-        g->w = 640;
-        g->depth = 8;
-        mode = mon | HIRES_KEY;
     } else {
-        g->layout = LAYOUT_LORES;
+        g->layout = LAYOUT_LORES;   /* square pixels: lowres artwork 1:1 */
         g->sx = 1;
-        g->w = 320;
-        g->depth = 5;
-        mode = mon | LORES_KEY;
     }
-    if (ModeNotAvailable(mode))
-        mode = g->layout == LAYOUT_HIRES ? HIRES_KEY : LORES_KEY;
+    g->depth = c->aga || modes[sm].kind == K_RTG ? 8 : 5;
+    if (mode == (ULONG)INVALID_ID)
+        return FALSE;
     layout_metrics(g);
 
     g->scr = OpenScreenTags(NULL,
@@ -100,6 +172,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c)
                             SA_Draggable, FALSE, SA_Interleaved, TRUE, TAG_END);
     if (!g->scr)
         return FALSE;
+    g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
 
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);
     g->pens_shared = FALSE;
@@ -176,7 +249,7 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
     if (x1 < x0 || y1 < y0)
         return;
     SetAPen(g->rp, PEN_BG);
-    if (g->depth > 3) {
+    if (g->planar && g->depth > 3) {
         SetWriteMask(g->rp, 0xF8);
         RectFill(g->rp, x0, y0, x1, y1);
         SetWriteMask(g->rp, 0xFF);

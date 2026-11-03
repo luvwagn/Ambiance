@@ -7,6 +7,7 @@
 #include <exec/execbase.h>
 #include <graphics/gfxbase.h>
 #include <graphics/modeid.h>
+#include <graphics/displayinfo.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
@@ -80,6 +81,46 @@ const char *caps_release_name(UWORD v)
     }
 }
 
+/* RTG drivers (Picasso96, PrismRTG, CyberGraphX) add their modes to
+ * graphics.library's display database, so no RTG library is needed to find
+ * them: native chipset monitors all have IDs up to DblPAL, RTG ones above. */
+BOOL caps_mode_is_rtg(ULONG id)
+{
+    struct DisplayInfo di;
+    if ((id & MONITOR_ID_MASK) > DBLPAL_MONITOR_ID)
+        return TRUE;
+    return GetDisplayInfoData(NULL, (UBYTE *)&di, sizeof(di), DTAG_DISP, id) > 0 &&
+           (di.PropertyFlags & DIPF_IS_FOREIGN) != 0;
+}
+
+/* First available RTG mode with exactly this nominal size and an 8-bit
+ * palette (the UI uses pens), or INVALID_ID. */
+ULONG caps_find_rtg_mode(UWORD w, UWORD h)
+{
+    ULONG id = INVALID_ID;
+    while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID) {
+        struct DimensionInfo dim;
+        if (!caps_mode_is_rtg(id) || ModeNotAvailable(id))
+            continue;
+        if (GetDisplayInfoData(NULL, (UBYTE *)&dim, sizeof(dim), DTAG_DIMS, id) <= 0)
+            continue;
+        if (dim.MaxDepth == 8 &&
+            dim.Nominal.MaxX - dim.Nominal.MinX + 1 == w &&
+            dim.Nominal.MaxY - dim.Nominal.MinY + 1 == h)
+            return id;
+    }
+    return INVALID_ID;
+}
+
+static BOOL any_rtg_mode(void)
+{
+    ULONG id = INVALID_ID;
+    while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID)
+        if (caps_mode_is_rtg(id))
+            return TRUE;
+    return FALSE;
+}
+
 void caps_detect(struct Caps *c)
 {
     UWORD af = SysBase->AttnFlags;
@@ -100,7 +141,7 @@ void caps_detect(struct Caps *c)
 
     /* No "insert volume" requesters while probing. */
     me->pr_WindowPtr = (APTR)-1;
-    c->rtg = lib_present("cybergraphics.library", 40);
+    c->rtg = any_rtg_mode();
     c->net = lib_present("bsdsocket.library", 4);
     c->mp3_mpega = lib_present("mpega.library", 0);
     c->mp3_mhi = path_present("LIBS:MHI");

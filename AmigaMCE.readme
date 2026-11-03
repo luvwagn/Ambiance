@@ -19,8 +19,9 @@ Features in this release
   installed picture datatypes.
 - Launches titles through their AGS .run scripts, honouring the AGS
   Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
-- 640-wide hires layout on AGA and RTG, 320-wide lowres layout on
-  OCS/ECS, PAL and NTSC. Never uses Extra Half-Brite.
+- Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,
+  640x200/256 hires, 640x400/512 hires laced (AGA), 800x600 RTG, or
+  Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
 - Smooth-scrolling, flicker-free text pages (fact sheets, Settings,
   About) with a scroll bar when the text is longer than the page.
 - Hires artwork drawn on the real hires grid: sharper logo and icons.
@@ -42,6 +43,9 @@ Installation
 Copy the AmigaMCE drawer to your hard drive. Keep the Fonts drawer next
 to the program. If AGS is set to boot straight into its menu, quit AGS
 to Workbench first, then double-click AmigaMCE.
+
+The screen mode is saved as ENVARC:AmigaMCE/ScreenMode. If a mode does
+not suit your display, delete that file to go back to Automatic.
 
 Credits and licences
 --------------------

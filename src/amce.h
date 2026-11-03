@@ -32,6 +32,8 @@ struct Caps {
     ULONG chipfree, fastfree;
 };
 void caps_detect(struct Caps *c);
+BOOL caps_mode_is_rtg(ULONG id);
+ULONG caps_find_rtg_mode(UWORD w, UWORD h);
 const char *caps_release_name(UWORD version);
 
 /* ---------------------------------------------------------------- pens */
@@ -45,6 +47,12 @@ enum {
 /* ---------------------------------------------------------------- gfx */
 enum { LAYOUT_LORES = 0, LAYOUT_HIRES = 1 };
 
+/* Screen modes offered in Settings. LAYOUT_HIRES (hires artwork, two
+ * columns per design pixel) is for the tall-pixel 640x200/256 modes; the
+ * square-pixel modes (320 wide, 640 laced, RTG) use the lowres artwork 1:1. */
+enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
+       SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_800, SM_COUNT };
+
 struct Gfx {
     struct Screen   *scr;
     struct Window   *win;
@@ -57,9 +65,16 @@ struct Gfx {
     UWORD menu_w, top, row_h, list_top, list_row_h, footer_y, pane_x, pane_w;
     UWORD baseline, font_h;
     BOOL  pens_shared;  /* datatypes may remap into pens 32..255 */
+    BOOL  planar;       /* native planar bitmap (FALSE on RTG) */
+    BYTE  mode;         /* SM_* actually open, never SM_AUTO */
 };
 
-BOOL gfx_open(struct Gfx *g, const struct Caps *c);
+const char *gfx_mode_key(int sm);
+const char *gfx_mode_label(int sm);
+int  gfx_mode_from_key(const char *key);                 /* -1 if unknown */
+const char *gfx_mode_problem(const struct Caps *c, int sm);  /* NULL if usable */
+int  gfx_mode_auto(const struct Caps *c);
+BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);
 void gfx_close(struct Gfx *g);
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
@@ -114,6 +129,7 @@ struct TextBox {
     WORD  x, y, w, h;           /* text area on screen */
     WORD  bar_x, bar_w;         /* scroll bar column; bar_w 0 when all text fits */
     WORD  line_h, drag_off;
+    UBYTE mask;                 /* bitplanes the copy touches */
     LONG  content_h;            /* pixels of text */
     LONG  pos, target;          /* scroll offset in pixels, now and heading to */
     LONG  drawn_pos, thumb_y, thumb_h;

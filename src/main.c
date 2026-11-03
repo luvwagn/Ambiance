@@ -59,6 +59,10 @@ static BOOL running = TRUE, quit_armed;
 static char msg[80];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
+static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
+
+/* IT_ACTION codes (struct Item.action) */
+enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
@@ -259,7 +263,8 @@ static void build_sysinfo(struct Page *p)
                 (unsigned long)g.scr->Width, (unsigned long)g.scr->Height,
                 (unsigned long)(1UL << g.scr->RastPort.BitMap->Depth), (unsigned long)id);
         text_line(p, line);
-        sprintf(line, "Layout: %s", g.layout == LAYOUT_HIRES ? "hires, artwork pixel-doubled" : "lowres");
+        sprintf(line, "Artwork: %s", g.layout == LAYOUT_HIRES ? "hires (tall pixels)"
+                                                              : "lowres, 1:1 (square pixels)");
         text_line(p, line);
     }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
@@ -283,6 +288,75 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     sprintf(line, "MP3: %s", caps.mp3_mhi ? "MHI driver" : caps.mp3_mpega ? "mpega.library" : "none");
     text_line(p, line);
+}
+
+/* ------------------------------------------------------------ settings */
+#define MODE_VAR "AmigaMCE/ScreenMode"
+
+static void ensure_dir(const char *path)
+{
+    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    if (!l)
+        l = CreateDir((CONST_STRPTR)path);
+    if (l)
+        UnLock(l);
+}
+
+/* Remembered in ENV: and ENVARC: (AmigaMCE/ScreenMode), like AGS's own
+ * settings. Delete ENVARC:AmigaMCE/ScreenMode to go back to Automatic. */
+static void load_screen_mode(void)
+{
+    char buf[32];
+    int m;
+    if (GetVar((CONST_STRPTR)MODE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+        (m = gfx_mode_from_key(buf)) >= 0)
+        screen_mode = m;
+}
+
+static void save_screen_mode(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    ensure_dir("ENV:AmigaMCE");
+    ensure_dir("ENVARC:AmigaMCE");
+    SetVar((CONST_STRPTR)MODE_VAR, (CONST_STRPTR)gfx_mode_key(screen_mode), -1,
+           GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+    me->pr_WindowPtr = oldwin;
+}
+
+static struct Item *action_item(struct Page *p, const char *label, const char *tag, UBYTE act)
+{
+    struct Item *it = list_add(&p->list, label, tag, "", IT_ACTION);
+    if (it)
+        it->action = act;
+    return it;
+}
+
+static void build_settings(struct Page *p)
+{
+    char tag[64];
+    amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
+    action_item(p, "Screen mode", tag, ACT_SCREENMODES);
+    action_item(p, "System information", "", ACT_SYSINFO);
+}
+
+static void build_screenmodes(struct Page *p)
+{
+    int m;
+    for (m = 0; m < SM_COUNT; m++) {
+        char label[64];
+        const char *why = gfx_mode_problem(&caps, m);
+        if (m == SM_AUTO) {
+            amce_strlcpy(label, "Automatic: ", sizeof(label));
+            amce_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
+        } else {
+            amce_strlcpy(label, gfx_mode_label(m), sizeof(label));
+        }
+        action_item(p, label, m == screen_mode ? "current" : why ? why : "", ACT_MODE0 + m);
+        if (m == screen_mode)
+            p->sel = p->list.count - 1;
+    }
 }
 
 static void build_about(struct Page *p)
@@ -355,8 +429,8 @@ static void build_root(int mod)
             text_para(p, "Internet Radio arrives in a later version.");
         break;
     case MOD_SETTINGS:
-        if ((p = page_push(PT_TEXT, "Settings")))
-            build_sysinfo(p);
+        if ((p = page_push(PT_LIST, "Settings")))
+            build_settings(p);
         break;
     case MOD_ABOUT:
         if ((p = page_push(PT_TEXT, "About")))
@@ -451,7 +525,7 @@ static void draw_menu(void)
 static const char *hint_text(void)
 {
     struct Page *p = cur();
-    BOOL hi = g.layout == LAYOUT_HIRES;
+    BOOL hi = g.w >= 640;      /* room for the long hints */
     if (focus == FOCUS_MENU)
         return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
                   : "Fire open  Esc twice quit";
@@ -531,11 +605,25 @@ static void draw_list_rows(struct Page *p)
                      focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
             fg = PEN_WHITE;
         }
-        gfx_text(&g, g.pane_x, y + (g.list_row_h - g.font_h) / 2, it->label, fg,
-                 g.pane_w - 12 * g.sx);
-        if (it->kind == IT_DIR)
-            gfx_text(&g, g.pane_x + g.pane_w - 7 * g.sx, y + (g.list_row_h - g.font_h) / 2, ">",
-                     sel ? PEN_WHITE : PEN_DIM, 0);
+        {
+            WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w;
+            BOOL arrow = it->kind == IT_DIR ||
+                         (it->kind == IT_ACTION && it->action < ACT_MODE0);
+            WORD tagw = 0;
+            if (arrow) {
+                gfx_text(&g, right - 7 * g.sx, ty, ">", sel ? PEN_WHITE : PEN_DIM, 0);
+                right -= 12 * g.sx;
+            }
+            if (it->kind == IT_ACTION && it->path[0]) {
+                BOOL now = amce_stricmp(it->path, "current") == 0;
+                tagw = gfx_textlen(&g, it->path);
+                gfx_text(&g, right - tagw, ty, it->path,
+                         sel ? PEN_WHITE : now ? PEN_ACCENT : PEN_DIM, 0);
+                tagw += 8 * g.sx;
+            }
+            gfx_text(&g, g.pane_x, ty, it->label, fg,
+                     (arrow ? g.pane_w - 12 * g.sx : g.pane_w - 2 * g.sx) - tagw);
+        }
     }
 }
 
@@ -588,7 +676,7 @@ static void draw_pane(BOOL full)
     case PT_DETAIL:
         if (full) {
             char shot[300];
-            WORD ph = 85;
+            WORD ph = g.h >= 400 ? 170 : 85;
             p->facts_y = g.list_top;
             if (g.pens_shared && ags_screenshot_path(p->base, shot, sizeof(shot))) {
                 set_msg("Loading screenshot...");
@@ -693,7 +781,7 @@ static void launch(const char *base)
         Close(con);
     }
     DeleteFile((CONST_STRPTR)script);
-    if (!gfx_open(&g, &caps)) {
+    if (!gfx_open(&g, &caps, screen_mode)) {
         running = FALSE;
         return;
     }
@@ -746,6 +834,84 @@ static void act_wheel(LONG d, WORD x, WORD y)
     act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST) ? d * 3 : d);
 }
 
+static void open_screenmodes(void)
+{
+    struct Page *p = page_push(PT_LIST, "Screen mode");
+    if (!p)
+        return;
+    build_screenmodes(p);
+    draw_pane(TRUE);
+    draw_footer();
+}
+
+static void open_sysinfo(void)
+{
+    struct Page *p = page_push(PT_TEXT, "System information");
+    if (!p)
+        return;
+    build_sysinfo(p);
+    draw_pane(TRUE);
+    draw_footer();
+}
+
+/* Switch to another screen mode now and remember it. The screen is closed
+ * and reopened, so every page is rebuilt for the new layout; the user lands
+ * back on the Screen mode list with the new mode selected. */
+static void apply_screen_mode(int sm)
+{
+    int old = screen_mode, i;
+    const char *why = gfx_mode_problem(&caps, sm);
+    BOOL failed = FALSE;
+    if (why) {
+        char m[80];
+        amce_strlcpy(m, "That mode ", sizeof(m));
+        amce_strlcat(m, why, sizeof(m));
+        set_msg(m);
+        return;
+    }
+    if (sm == screen_mode)
+        return;
+    pages_clear();
+    gfx_close(&g);
+    screen_mode = sm;
+    if (!gfx_open(&g, &caps, sm)) {
+        failed = TRUE;
+        screen_mode = old;
+        if (!gfx_open(&g, &caps, old)) {
+            running = FALSE;
+            return;
+        }
+    } else {
+        save_screen_mode();
+    }
+    for (i = 0; i < nmenu; i++)
+        if (menu[i] == MOD_SETTINGS)
+            menu_sel = i;
+    build_root(MOD_SETTINGS);
+    if (cur())
+        cur()->sel = 0;
+    {
+        struct Page *p = page_push(PT_LIST, "Screen mode");
+        if (p)
+            build_screenmodes(p);
+    }
+    focus = FOCUS_CONTENT;
+    msg[0] = 0;
+    draw_all();
+    if (failed)
+        set_msg("Could not open that screen mode");
+}
+
+static void act_action(struct Item *it)
+{
+    if (it->action == ACT_SCREENMODES)
+        open_screenmodes();
+    else if (it->action == ACT_SYSINFO)
+        open_sysinfo();
+    else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
+        apply_screen_mode(it->action - ACT_MODE0);
+}
+
 static void act_open(BOOL play)
 {
     struct Page *p = cur();
@@ -760,6 +926,8 @@ static void act_open(BOOL play)
         struct Item *it = &p->list.items[p->sel];
         if (it->kind == IT_DIR)
             open_dir(it);
+        else if (it->kind == IT_ACTION)
+            act_action(it);
         else if (it->kind == IT_RUN) {
             if (play)
                 launch(it->path);
@@ -982,8 +1150,8 @@ static void joy_poll(void)
 static void build_menu(void)
 {
     /* Main menu order, top to bottom. */
-    static const int order[] = { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_MUSIC, MOD_PICTURES,
-                                 MOD_RADIO, MOD_VIDEOS, MOD_SETTINGS, MOD_ABOUT };
+    static const int order[] = { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_MUSIC, MOD_RADIO,
+                                 MOD_PICTURES, MOD_VIDEOS, MOD_SETTINGS, MOD_ABOUT };
     int i, m;
     nmenu = 0;
     for (i = 0; i < (int)(sizeof(order) / sizeof(order[0])); i++) {
@@ -1023,8 +1191,9 @@ int main(void)
     caps_detect(&caps);
     ags_init(&ags);
     build_menu();
+    load_screen_mode();
 
-    if (!gfx_open(&g, &caps)) {
+    if (!gfx_open(&g, &caps, screen_mode)) {
         say("AmigaMCE could not open its screen.\n");
         rc = 20;
         goto out;
@@ -1043,6 +1212,10 @@ int main(void)
     menu_sel = 0;
     build_root(menu[0]);
     draw_all();
+    if (screen_mode != SM_AUTO && g.mode != screen_mode) {
+        screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
+        set_msg("Saved screen mode not available here: using Automatic");
+    }
 
     while (running) {
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;

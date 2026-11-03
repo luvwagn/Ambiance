@@ -17,6 +17,9 @@
  * a pixel between planes. Keeping to pens 0-7 and clearing high planes
  * first means such in-between colours are always one of the dark UI pens,
  * never a stray bright one (pen 9 -> 0 used to pass through orange pen 8).
+ *
+ * On an RTG screen the bitmap is chunky: the text bitmap is then a friend
+ * of the screen's bitmap in the same format and the copy is unmasked.
  */
 #include "amce.h"
 
@@ -81,7 +84,13 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->open = TRUE;
 
     rows = tb->content_h > h ? tb->content_h : h;
-    tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
+    if (g->planar) {
+        tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
+        tb->mask = TB_PLANE_MASK;
+    } else {
+        tb->bm = AllocBitMap(w, rows, g->depth, BMF_CLEAR, g->rp->BitMap);
+        tb->mask = 0xFF;
+    }
     if (!tb->bm)
         return FALSE;   /* low on chip RAM: tb_draw falls back to direct text */
 
@@ -132,7 +141,7 @@ static void blit_window(struct Gfx *g, struct TextBox *tb)
      * a full-height copy also blanks whatever the box showed before. */
     LockLayerRom(l);
     BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, tb->h,
-              0xC0, TB_PLANE_MASK, NULL);
+              0xC0, tb->mask, NULL);
     UnlockLayerRom(l);
     tb->drawn_pos = tb->pos;
 }
@@ -149,7 +158,7 @@ void tb_draw(struct Gfx *g, struct TextBox *tb)
     if (tb->bm) {
         /* Planes 3+ to zero (a screenshot may have been here), then the
          * text, then the gap and bar column, all within planes 0-2. */
-        if (g->depth > TB_PLANES) {
+        if (g->planar && g->depth > TB_PLANES) {
             SetWriteMask(g->rp, 0xFF & ~TB_PLANE_MASK);
             gfx_fill(g, tb->x, tb->y, x1, y1, PEN_BG);
             SetWriteMask(g->rp, 0xFF);

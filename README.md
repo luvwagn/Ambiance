@@ -5,7 +5,8 @@ RetroArch and Windows Media Center. AmigaMCE is a drop-in companion to
 [Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector):
 copy the drawer onto an AGS installation and double-click it.
 
-- Kickstart 3.1 or newer; OCS/ECS (320-wide lowres) or AGA/RTG (640-wide hires).
+- Kickstart 3.1 or newer. Screen mode is chosen in Settings: 320x200/256
+  lowres, 640x200/256 hires and 640x400/512 laced on AGA, 800x600 on RTG.
 - Reads the AGS menu tree, fact sheets and screenshots directly; launches titles
   through their `.run` scripts and returns to AmigaMCE afterwards.
 - Pictures are decoded through the installed datatypes.

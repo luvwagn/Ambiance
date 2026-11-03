@@ -97,6 +97,8 @@ preview: src/art.c $(FONT_FILES)
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-lores.png lores pal
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-ntsc.png lores ntsc
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-about-hires.png hires pal about 0
+	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-laced.png laced pal games
+	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-rtg.png rtg pal games
 
 # ------------------------------------------------------------------ release
 lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(LICENCES)

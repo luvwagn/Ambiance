@@ -66,9 +66,13 @@ def main():
     page = sys.argv[6] if len(sys.argv) > 6 else "games"
     scroll = int(sys.argv[7]) if len(sys.argv) > 7 else 0
     logo_lo, logo_hi, dims, icons, icons32, pal = parse_art(art)
+    # hires: 640 wide, tall pixels, hires artwork. lores, laced and rtg have
+    # square pixels and use the lowres artwork 1:1 (laced/rtg: dense).
     hires = mode == "hires"
     sx = 2 if hires else 1
-    W, H = (640 if hires else 320), (256 if video == "pal" else 200)
+    W, H = {"hires": (640, 256), "lores": (320, 256), "laced": (640, 512), "rtg": (800, 600)}[mode]
+    if video == "ntsc" and mode != "rtg":
+        H = {256: 200, 512: 400}[H]
     fname = "amce-pixel-hi" if hires else "amce-pixel"
     font = parse_size_file(open(os.path.join(fonts, fname, "12"), "rb").read())
     s = Screen(W, H, pal, font)
@@ -94,7 +98,7 @@ def main():
 
     # module order in art.c (icon index) and the main menu order from build_menu()
     mods = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"]
-    names = ["Games", "Mods", "Demos", "Music", "Pictures", "Internet Radio", "Videos", "Settings", "About"]
+    names = ["Games", "Mods", "Demos", "Music", "Internet Radio", "Pictures", "Videos", "Settings", "About"]
     msel = names.index("About") if page == "about" else 0
     for i, name in enumerate(names):
         y = top + i * row_h
@@ -123,14 +127,15 @@ def main():
     s.fill(0, footer_y - 1, W - 1, footer_y - 1, RULE)
     s.fill(0, footer_y, W - 1, H - 1, BAR)
     if page == "about":
-        hint = "Up/Down  scroll      Left/Esc  back" if hires else "Up/Down scroll  Esc back"
+        hint = "Up/Down  scroll      Left/Esc  back" if W >= 640 else "Up/Down scroll  Esc back"
     else:
-        hint = ("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back" if hires
+        hint = ("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back" if W >= 640
                 else "Fire open  Ret play  Esc back")
     s.text(6 * sx, footer_y + (12 - fh) // 2, hint, DIM, W - 12 * sx)
 
-    scale_x, scale_y = (3, 6) if hires else (6, 6)   # hires pixel is half as wide
-    s.img.resize((W * scale_x // 2, H * scale_y // 2), Image.NEAREST).save(out)
+    # true aspect: a lowres pixel is 6x6 here, hires 3x6, laced 3x3, RTG 3x3
+    scale_x, scale_y = {"hires": (3, 6), "lores": (6, 6), "laced": (3, 3), "rtg": (3, 3)}[mode]
+    s.img.resize((W * scale_x // 2, H * scale_y // 2), Image.NEAREST).save(out)  # 1.5x for viewing
     print("wrote", out)
 
 
