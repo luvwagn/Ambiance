@@ -251,6 +251,15 @@ BOOL tb_animating(const struct TextBox *tb)
     return tb->open && tb->pos != tb->target;
 }
 
+/* Pixels still to scroll in direction dir (+1 down, -1 up) from where
+ * the box is heading. */
+LONG tb_remaining(const struct TextBox *tb, LONG dir)
+{
+    if (!tb->open)
+        return 0;
+    return dir > 0 ? max_pos(tb) - tb->target : tb->target;
+}
+
 void tb_scroll_by(struct TextBox *tb, LONG dpx)
 {
     if (tb->open)

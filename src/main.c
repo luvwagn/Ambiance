@@ -1060,6 +1060,34 @@ static void act_action(struct Item *it)
         apply_screen_mode(it->action - ACT_MODE0);
 }
 
+/* Holding a direction: the step grows the longer it is held, and shrinks
+ * again near the end of the list or text so it eases to a stop on the
+ * last entry rather than slamming into it. `held` counts the automatic
+ * repeats so far (0 for the first press). The short main menu always
+ * moves one entry. */
+static LONG accel_step(UWORD held)
+{
+    return held < 6 ? 1 : held < 12 ? 2 : held < 20 ? 4 : held < 30 ? 8 : held < 40 ? 16 : 32;
+}
+
+static void act_hold(LONG dir, UWORD held)
+{
+    struct Page *p = cur();
+    LONG step = accel_step(held), remaining = 0, cap;
+    if (focus != FOCUS_CONTENT || !p || step == 1) {
+        act_move(dir);
+        return;
+    }
+    if (p->type == PT_LIST)
+        remaining = dir > 0 ? p->list.count - 1 - p->sel : p->sel;
+    else if (p->tb.open)
+        remaining = tb_remaining(&p->tb, dir) / p->tb.line_h;
+    cap = remaining / 4;                /* a quarter of what is left: 8, 4, 2, 1... */
+    if (cap < 1)
+        cap = 1;
+    act_move(dir * (step < cap ? step : cap));
+}
+
 static void act_open(BOOL play)
 {
     struct Page *p = cur();
@@ -1215,6 +1243,20 @@ static void handle_mouse(struct IntuiMessage *im)
     last_mics = im->Micros;
 }
 
+/* Auto-repeats of the held key so far: the keyboard marks each repeat
+ * with IEQUALIFIER_REPEAT; a fresh press starts again at 0. */
+static UWORD key_held;
+
+static void hold_count(const struct IntuiMessage *im)
+{
+    if (im->Qualifier & IEQUALIFIER_REPEAT) {
+        if (key_held < 1000)
+            key_held++;
+    } else {
+        key_held = 0;
+    }
+}
+
 static void handle_key(struct IntuiMessage *im)
 {
     UWORD code = im->Code;
@@ -1225,8 +1267,16 @@ static void handle_key(struct IntuiMessage *im)
         if (code & IECODE_UP_PREFIX)
             return;
         switch (code) {
-        case 0x4C: disarm(); act_move(shift ? -page : -1); break;     /* cursor up */
-        case 0x4D: disarm(); act_move(shift ? page : 1); break;       /* cursor down */
+        case 0x4C: case 0x4D: {                                      /* cursor up / down */
+            LONG dir = code == 0x4C ? -1 : 1;
+            disarm();
+            hold_count(im);
+            if (shift)
+                act_move(dir * page);
+            else
+                act_hold(dir, key_held);
+            break;
+        }
         case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
         case 0x4F: disarm(); if (focus == FOCUS_CONTENT) act_back(); break; /* cursor left */
         case 0x7A: disarm(); act_wheel(-1, im->MouseX, im->MouseY); break; /* NM_WHEEL_UP */
@@ -1237,8 +1287,8 @@ static void handle_key(struct IntuiMessage *im)
     /* IDCMP_VANILLAKEY */
     if (im->Qualifier & IEQUALIFIER_NUMERICPAD) {
         switch (code) {
-        case '8': disarm(); act_move(-1); return;
-        case '2': disarm(); act_move(1); return;
+        case '8': disarm(); hold_count(im); act_hold(-1, key_held); return;
+        case '2': disarm(); hold_count(im); act_hold(1, key_held); return;
         case '4': disarm(); if (focus == FOCUS_CONTENT) act_back(); return;
         case '6': case '5': disarm(); act_open(FALSE); return;
         case '9': disarm(); act_move(-page); return;
@@ -1267,6 +1317,7 @@ static void joy_poll(void)
     const ULONG dirmask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT;
     const ULONG btnmask = JPF_BUTTON_RED | JPF_BUTTON_BLUE;
     ULONG st, dir, btn, newbtn, act = 0;
+    UWORD held;
     if (!LowLevelBase)
         return;
     st = ReadJoyPort(1);
@@ -1286,8 +1337,10 @@ static void joy_poll(void)
         joy_hold = 0;
     }
     joy_last = dir | btn;
-    if (act & JPF_JOY_UP) { disarm(); act_move(-1); }
-    else if (act & JPF_JOY_DOWN) { disarm(); act_move(1); }
+    /* repeats so far, on the same scale as keyboard auto-repeat */
+    held = joy_hold >= 8 ? (UWORD)((joy_hold - 8) / 3 + 1) : 0;
+    if (act & JPF_JOY_UP) { disarm(); act_hold(-1, held); }
+    else if (act & JPF_JOY_DOWN) { disarm(); act_hold(1, held); }
     else if (act & JPF_JOY_RIGHT) { disarm(); act_open(FALSE); }
     else if (act & JPF_JOY_LEFT) { disarm(); if (focus == FOCUS_CONTENT) act_back(); }
     if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
