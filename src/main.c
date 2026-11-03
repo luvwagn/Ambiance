@@ -1037,65 +1037,88 @@ static void draw_list_rows(struct Page *p)
              PEN_BG);
 }
 
-/* Move the visible rows up (k > 0) or down (k < 0) by k rows, by copying
- * what is already on screen. Native screens: one blit inside the screen
- * bitmap, masked to planes 0-2 (every list pen is below 8 and rows are
- * painted with RectFill, so planes 3+ are zero there). RTG: ScrollRaster,
- * which the card accelerates. */
-static void list_shift(LONG k)
+/* Copy n visible rows from screen row src to screen row dst, in place on
+ * screen. Native screens: a blit inside the screen bitmap, masked to
+ * planes 0-2 (every list pen is below 8 and rows are painted with
+ * RectFill, so planes 3+ are zero there). RTG: the same blit, unmasked;
+ * the RTG system handles the overlap and accelerates it. */
+static void blit_rows(LONG src, LONG dst, LONG n)
 {
-    WORD x0 = g.pane_x - 2 * g.sx, x1 = g.w - 1, y0 = g.list_top;
-    WORD rows_h = list_visible() * g.list_row_h, dy = (WORD)(k * g.list_row_h);
-    WORD keep = rows_h - (dy > 0 ? dy : -dy);
-    if (keep <= 0)
+    WORD x0 = g.pane_x - 2 * g.sx, x1 = g.w - 1;
+    struct BitMap *bm = g.rp->BitMap;
+    if (n <= 0 || src == dst)
         return;
-    if (g.planar) {
-        struct BitMap *bm = g.rp->BitMap;
-        LockLayerRom(g.win->WLayer);
-        if (dy > 0)
-            BltBitMap(bm, x0, y0 + dy, bm, x0, y0, x1 - x0 + 1, keep, 0xC0, 0x07, NULL);
-        else
-            BltBitMap(bm, x0, y0, bm, x0, y0 - dy, x1 - x0 + 1, keep, 0xC0, 0x07, NULL);
-        UnlockLayerRom(g.win->WLayer);
-    } else {
-        SetBPen(g.rp, PEN_BG);
-        ScrollRaster(g.rp, 0, dy, x0, y0, x1, y0 + rows_h - 1);
-    }
+    LockLayerRom(g.win->WLayer);
+    BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
+              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? 0x07 : 0xFF, NULL);
+    UnlockLayerRom(g.win->WLayer);
 }
 
 /* After the selection moved from old_sel (list top was old_top): repaint
  * just the old and new rows when the list did not scroll; when it scrolled
- * by less than a screenful, shift the rows on screen and paint only the
- * ones that came into view; otherwise repaint every row. */
+ * by less than a screenful, move the rows already on screen and paint only
+ * what changed; otherwise repaint every row.
+ *
+ * The highlighted row is never copied: the move is split around it. A
+ * copied highlight would sit one row away from the real one until that row
+ * was repainted, so the bar flickered across two rows. Instead the row the
+ * old selection moves into is painted plain, and the bar's own row is
+ * repainted in place (in the same colour, so a highlight pinned at the
+ * edge of the list never moves at all). */
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
     WORD vis = list_visible(), col;
-    LONG k, i, first, last;
+    LONG k, i, first, last, r_old, n_old;
     list_follow(p);
     k = p->top - old_top;
-    if ((k >= vis || -k >= vis) || p->list.count <= vis) {
+    col = mark_column(&p->list);
+    if (!k || p->list.count <= vis) {
         if (k)
             draw_list_rows(p);
         else {
-            col = mark_column(&p->list);
             if (old_sel >= p->top && old_sel < p->top + vis && old_sel < p->list.count)
                 draw_list_row(p, old_sel, col);
             draw_list_row(p, p->sel, col);
         }
         return;
     }
-    col = mark_column(&p->list);
-    if (k)
-        list_shift(k);
-    /* rows that scrolled into view */
-    first = k > 0 ? p->top + vis - k : p->top;
-    last = k > 0 ? p->top + vis - 1 : p->top - k - 1;
-    if (k)
-        for (i = first; i <= last && i < p->list.count; i++)
-            draw_list_row(p, i, col);
-    if (old_sel >= p->top && old_sel < p->top + vis && old_sel < p->list.count &&
-        !(k && old_sel >= first && old_sel <= last))
+    if (k >= vis || -k >= vis) {
+        draw_list_rows(p);
+        return;
+    }
+    r_old = old_sel - old_top;              /* the bar's screen row before the move */
+    if (r_old < 0 || r_old >= vis)
+        r_old = -1;
+    if (k > 0) {                            /* rows move up: dst row d <- src row d + k */
+        if (r_old < 0) {
+            blit_rows(k, 0, vis - k);
+        } else {
+            blit_rows(k, 0, r_old - k);                     /* rows above the bar */
+            blit_rows(r_old + 1, r_old + 1 - k, vis - 1 - r_old);   /* rows below it */
+        }
+        first = p->top + vis - k;
+        last = p->top + vis - 1;
+    } else {                                /* rows move down: dst row d <- src row d - |k| */
+        LONG m = -k;
+        if (r_old < 0) {
+            blit_rows(0, m, vis - m);
+        } else {
+            blit_rows(r_old + 1, r_old + 1 + m, vis - 1 - r_old - m);   /* below the bar */
+            blit_rows(0, m, r_old);                                     /* above it */
+        }
+        first = p->top;
+        last = p->top + m - 1;
+    }
+    /* Order matters: plain rows first, the new highlight last, so the old
+     * bar is gone before the new one appears (never two at once). */
+    n_old = old_sel - p->top;               /* the row the old selection moved into */
+    if (r_old >= 0 && n_old >= 0 && n_old < vis && old_sel < p->list.count && old_sel != p->sel)
         draw_list_row(p, old_sel, col);
+    if (r_old >= 0 && p->top + r_old < p->list.count && p->top + r_old != p->sel)
+        draw_list_row(p, p->top + r_old, col);     /* the row under the old bar */
+    for (i = first; i <= last && i < p->list.count; i++)   /* rows scrolled into view */
+        if (i != p->sel && i != p->top + r_old)
+            draw_list_row(p, i, col);
     draw_list_row(p, p->sel, col);
 }
 
