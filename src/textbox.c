@@ -18,8 +18,15 @@
  * first means such in-between colours are always one of the dark UI pens,
  * never a stray bright one (pen 9 -> 0 used to pass through orange pen 8).
  *
- * On an RTG screen the bitmap is chunky: the text bitmap is then a friend
- * of the screen's bitmap in the same format and the copy is unmasked.
+ * On an RTG screen there is no off-screen bitmap: the text is drawn
+ * straight onto the screen, clipped to the box by a layers clip region.
+ * Each scroll step moves what is already there with ScrollRaster (a
+ * screen-to-screen copy the card accelerates) and draws only the strip
+ * that scrolled into view. That keeps truecolor screens from holding a
+ * 32-bit copy of every page in graphics memory, and avoids off-screen RTG
+ * bitmaps, which lost short drawing operations under Amiberry's uaegfx.
+ * The same direct mode is the fallback when chip RAM for the bitmap runs
+ * out on a native screen.
  */
 #include "amce.h"
 
@@ -27,6 +34,8 @@
 #include <graphics/gfxbase.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
+#include <graphics/regions.h>
 
 extern struct GfxBase *GfxBase;
 
@@ -84,15 +93,12 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->open = TRUE;
 
     rows = tb->content_h > h ? tb->content_h : h;
-    if (g->planar) {
-        tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
-        tb->mask = TB_PLANE_MASK;
-    } else {
-        tb->bm = AllocBitMap(w, rows, g->depth, BMF_CLEAR, g->rp->BitMap);
-        tb->mask = 0xFF;
-    }
+    tb->mask = TB_PLANE_MASK;
+    if (!g->planar)
+        return TRUE;    /* RTG: drawn directly, see above */
+    tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
     if (!tb->bm)
-        return FALSE;   /* low on chip RAM: tb_draw falls back to direct text */
+        return FALSE;   /* low on chip RAM: drawn directly instead */
 
     InitRastPort(&rp);
     rp.BitMap = tb->bm;
@@ -146,6 +152,64 @@ static void blit_window(struct Gfx *g, struct TextBox *tb)
     tb->drawn_pos = tb->pos;
 }
 
+/* Direct mode: draw the text that belongs in screen rows sy0..sy1 of the
+ * box, clipped to them. Without a clip region (no memory for one) only
+ * lines that fit entirely are drawn, so nothing spills outside the box. */
+static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
+{
+    struct Rectangle r;
+    struct Region *rg, *old = NULL;
+    LONG i, top;
+    BOOL clipped = FALSE;
+
+    if (sy1 < sy0)
+        return;
+    r.MinX = tb->x;
+    r.MinY = sy0;
+    r.MaxX = tb->x + tb->w - 1;
+    r.MaxY = sy1;
+    if ((rg = NewRegion())) {
+        if (OrRectRegion(rg, &r)) {
+            old = InstallClipRegion(g->win->WLayer, rg);
+            clipped = TRUE;
+        }
+    }
+    gfx_fill(g, r.MinX, sy0, r.MaxX, sy1, PEN_BG);
+    for (i = (tb->pos + (sy0 - tb->y)) / tb->line_h; i < tb->lines->count; i++) {
+        top = tb->y + i * tb->line_h - tb->pos;
+        if (top > sy1)
+            break;
+        if (!clipped && (top < sy0 || top + tb->line_h - 1 > sy1))
+            continue;
+        gfx_text(g, tb->x, top, tb->lines->items[i].label,
+                 (tb->first_white && i == 0) ? PEN_WHITE : PEN_TEXT, tb->w);
+    }
+    if (clipped)
+        InstallClipRegion(g->win->WLayer, old);
+    if (rg)
+        DisposeRegion(rg);
+}
+
+/* Direct mode scroll: move what is on screen, draw the strip exposed. */
+static void scroll_direct(struct Gfx *g, struct TextBox *tb)
+{
+    LONG d = tb->pos - tb->drawn_pos;
+    WORD y1 = tb->y + tb->h - 1;
+    if (!d)
+        return;
+    if (d >= tb->h || -d >= tb->h || tb->drawn_pos < 0) {
+        draw_rows(g, tb, tb->y, y1);
+    } else {
+        SetBPen(g->rp, PEN_BG);
+        ScrollRaster(g->rp, 0, d, tb->x, tb->y, tb->x + tb->w - 1, y1);
+        if (d > 0)
+            draw_rows(g, tb, y1 - d + 1, y1);
+        else
+            draw_rows(g, tb, tb->y, tb->y - d - 1);
+    }
+    tb->drawn_pos = tb->pos;
+}
+
 /* Whole box, e.g. after the page opens or the screen comes back. Nothing
  * is blanked first: the new text is copied straight over the old. */
 void tb_draw(struct Gfx *g, struct TextBox *tb)
@@ -168,13 +232,15 @@ void tb_draw(struct Gfx *g, struct TextBox *tb)
         if (!tb->bar_w)
             gfx_fill(g, tb->bar_x, tb->y, x1, y1, PEN_BG);
     } else {
-        /* Fallback without the bitmap: whole lines, drawn directly. */
-        LONG first = tb->pos / tb->line_h, r;
-        gfx_fill_bg(g, tb->x, tb->y, x1, y1);
-        tb->pos = tb->target = first * tb->line_h;
-        for (r = 0; (r + 1) * tb->line_h <= tb->h && first + r < tb->lines->count; r++)
-            gfx_text(g, tb->x, tb->y + r * tb->line_h, tb->lines->items[first + r].label,
-                     (tb->first_white && first + r == 0) ? PEN_WHITE : PEN_TEXT, tb->w);
+        if (g->planar && g->depth > TB_PLANES) {
+            SetWriteMask(g->rp, 0xFF & ~TB_PLANE_MASK);
+            gfx_fill(g, tb->x, tb->y, x1, y1, PEN_BG);
+            SetWriteMask(g->rp, 0xFF);
+        }
+        draw_rows(g, tb, tb->y, y1);
+        gfx_fill(g, tb->x + tb->w, tb->y, tb->bar_x - 1, y1, PEN_BG);
+        if (!tb->bar_w)
+            gfx_fill(g, tb->bar_x, tb->y, x1, y1, PEN_BG);
         tb->drawn_pos = tb->pos;
     }
     draw_bar(g, tb);
@@ -202,12 +268,10 @@ void tb_step(struct Gfx *g, struct TextBox *tb)
     if (!step)
         step = d > 0 ? 1 : -1;
     tb->pos += step;
-    if (!tb->bm) {
-        tb->pos = tb->target;
-        tb_draw(g, tb);
-        return;
-    }
-    blit_window(g, tb);
+    if (tb->bm)
+        blit_window(g, tb);
+    else
+        scroll_direct(g, tb);
     draw_bar(g, tb);
 }
 

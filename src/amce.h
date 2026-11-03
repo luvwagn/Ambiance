@@ -33,7 +33,7 @@ struct Caps {
 };
 void caps_detect(struct Caps *c);
 BOOL caps_mode_is_rtg(ULONG id);
-ULONG caps_find_rtg_mode(UWORD w, UWORD h);
+ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth);   /* deepest first */
 const char *caps_release_name(UWORD version);
 
 /* ---------------------------------------------------------------- pens */
@@ -66,6 +66,7 @@ struct Gfx {
     UWORD baseline, font_h;
     BOOL  pens_shared;  /* datatypes may remap into pens 32..255 */
     BOOL  planar;       /* native planar bitmap (FALSE on RTG) */
+    BOOL  truecolor;    /* RTG 15/16/24/32-bit: no pen sharing needed for pictures */
     UBYTE *logo_masks;          /* one chip-RAM mask per logo pen, for BltTemplate */
     UBYTE logo_pens[8], logo_npens;
     UWORD logo_bpr;             /* bytes per logo mask row */
@@ -79,6 +80,7 @@ const char *gfx_mode_label(int sm);
 int  gfx_mode_from_key(const char *key);                 /* -1 if unknown */
 const char *gfx_mode_problem(const struct Caps *c, int sm);  /* NULL if usable */
 BOOL gfx_mode_is_rtg(int sm);
+UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel found */
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);
 void gfx_close(struct Gfx *g);

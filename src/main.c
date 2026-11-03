@@ -24,7 +24,7 @@ static const char version_tag[] __attribute__((used)) =
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase;
+struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 
 /* ------------------------------------------------------------ modules */
 enum { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_VIDEOS, MOD_PICTURES, MOD_MUSIC,
@@ -258,9 +258,19 @@ static void build_sysinfo(struct Page *p)
             amce_strlcpy(mode, (char *)ni.Name, sizeof(mode));
         sprintf(line, "Screen: %s", mode);
         text_line(p, line);
-        sprintf(line, "  %lu x %lu, %lu colours, mode ID $%08lx",
-                (unsigned long)g.scr->Width, (unsigned long)g.scr->Height,
-                (unsigned long)(1UL << g.scr->RastPort.BitMap->Depth), (unsigned long)id);
+        {
+            /* Bits per pixel from the bitmap itself: an RTG bitmap's Depth
+             * field is not reliable, GetBitMapAttr is. */
+            ULONG d = GetBitMapAttr(g.scr->RastPort.BitMap, BMA_DEPTH);
+            char colours[24];
+            if (d > 8)
+                sprintf(colours, "%lu-bit colour", (unsigned long)d);
+            else
+                sprintf(colours, "%lu colours", (unsigned long)(1UL << d));
+            sprintf(line, "  %lu x %lu, %s, mode ID $%08lx",
+                    (unsigned long)g.scr->Width, (unsigned long)g.scr->Height, colours,
+                    (unsigned long)id);
+        }
         text_line(p, line);
         sprintf(line, "Artwork: %s", g.layout == LAYOUT_HIRES ? "hires (tall pixels)"
                                                               : "lowres, 1:1 (square pixels)");
@@ -352,6 +362,11 @@ static void build_screenmodes(struct Page *p)
             amce_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
         } else {
             amce_strlcpy(label, gfx_mode_label(m), sizeof(label));
+            if (gfx_mode_is_rtg(m) && !why) {
+                char bits[16];
+                sprintf(bits, "  %lu-bit", (unsigned long)gfx_mode_depth(m));
+                amce_strlcat(label, bits, sizeof(label));
+            }
         }
         action_item(p, label, m == screen_mode ? "current" : why ? why : "", ACT_MODE0 + m);
         if (m == screen_mode)
@@ -684,7 +699,7 @@ static void draw_pane(BOOL full)
             char shot[300];
             WORD ph = g.h >= 400 ? 170 : 85;
             p->facts_y = g.list_top;
-            if (g.pens_shared && ags_screenshot_path(p->base, shot, sizeof(shot))) {
+            if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
                 set_msg("Loading screenshot...");
                 if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph))
                     p->facts_y = g.list_top + ph + 6;
@@ -1203,6 +1218,12 @@ int main(void)
         rc = 20;
         goto out;
     }
+    LayersBase = OpenLibrary((CONST_STRPTR)"layers.library", 39);
+    if (!LayersBase) {
+        say("AmigaMCE needs Kickstart 3.0 or newer.\n");
+        rc = 20;
+        goto out;
+    }
     amce_log_open();
     DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
     DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
@@ -1223,7 +1244,8 @@ int main(void)
         }
     }
 
-    if (!gfx_open(&g, &caps, screen_mode)) {
+    if (!gfx_open(&g, &caps, screen_mode) &&
+        (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO))) {
         say("AmigaMCE could not open its screen.\n");
         rc = 20;
         goto out;
@@ -1318,6 +1340,8 @@ out:
         CloseLibrary(DataTypesBase);
     if (DiskfontBase)
         CloseLibrary(DiskfontBase);
+    if (LayersBase)
+        CloseLibrary(LayersBase);
     if (GfxBase)
         CloseLibrary((struct Library *)GfxBase);
     amce_log("libraries closed, exiting", "");

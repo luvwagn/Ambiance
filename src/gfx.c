@@ -94,6 +94,14 @@ static const struct {
 
 const char *gfx_mode_key(int sm) { return modes[sm].key; }
 BOOL gfx_mode_is_rtg(int sm) { return modes[sm].kind == K_RTG; }
+
+UWORD gfx_mode_depth(int sm)
+{
+    UWORD d = 0;
+    if (modes[sm].kind == K_RTG)
+        caps_find_rtg_mode(modes[sm].w, modes[sm].h, &d);
+    return d;
+}
 const char *gfx_mode_label(int sm) { return modes[sm].label; }
 
 int gfx_mode_from_key(const char *key)
@@ -112,7 +120,7 @@ static ULONG mode_id(int sm)
     case K_LORES: return mon | LORES_KEY;
     case K_HIRES: return mon | HIRES_KEY;
     case K_LACED: return mon | HIRESLACE_KEY;
-    default:      return caps_find_rtg_mode(modes[sm].w, modes[sm].h);
+    default:      return caps_find_rtg_mode(modes[sm].w, modes[sm].h, NULL);
     }
 }
 
@@ -167,19 +175,31 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
         g->layout = LAYOUT_LORES;   /* square pixels: lowres artwork 1:1 */
         g->sx = 1;
     }
-    g->depth = c->aga || modes[sm].kind == K_RTG ? 8 : 5;
+    if (modes[sm].kind == K_RTG)
+        g->depth = gfx_mode_depth(sm);
+    else
+        g->depth = c->aga ? 8 : 5;
+    g->truecolor = g->depth > 8;
     if (mode == (ULONG)INVALID_ID)
         return FALSE;
     layout_metrics(g);
 
-    g->scr = OpenScreenTags(NULL,
-                            SA_Width, g->w, SA_Height, g->h, SA_Depth, g->depth,
-                            SA_DisplayID, mode, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
-                            SA_Type, CUSTOMSCREEN, SA_Title, (ULONG)"AmigaMCE",
-                            SA_Pens, (ULONG)pens, SA_SharePens, TRUE,
-                            SA_Draggable, FALSE, SA_Interleaved, TRUE, TAG_END);
-    if (!g->scr)
+    for (;;) {
+        g->scr = OpenScreenTags(NULL,
+                                SA_Width, g->w, SA_Height, g->h, SA_Depth, g->depth,
+                                SA_DisplayID, mode, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
+                                SA_Type, CUSTOMSCREEN, SA_Title, (ULONG)"AmigaMCE",
+                                SA_Pens, (ULONG)pens, SA_SharePens, TRUE,
+                                SA_Draggable, FALSE, SA_Interleaved, TRUE, TAG_END);
+        /* Some RTG drivers want depth 24 for their 32-bit modes. */
+        if (g->scr || g->depth != 32)
+            break;
+        g->depth = 24;
+    }
+    if (!g->scr) {
+        amce_log("OpenScreen failed", modes[sm].label);
         return FALSE;
+    }
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
     amce_log("screen open", modes[sm].label);
 
@@ -394,7 +414,7 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     ULONG sw, sh, sxe, dw, dh;
 
     gfx_picture_free(g);
-    if (!DataTypesBase || !g->pens_shared)
+    if (!DataTypesBase || !(g->pens_shared || g->truecolor))
         return FALSE;
     pic_obj = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
                           PDTA_Screen, (ULONG)g->scr, PDTA_Remap, TRUE,

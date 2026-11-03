@@ -93,23 +93,41 @@ BOOL caps_mode_is_rtg(ULONG id)
            (di.PropertyFlags & DIPF_IS_FOREIGN) != 0;
 }
 
-/* First available RTG mode with exactly this nominal size and an 8-bit
- * palette (the UI uses pens), or INVALID_ID. */
-ULONG caps_find_rtg_mode(UWORD w, UWORD h)
+/* The best available RTG mode with exactly this nominal size, or
+ * INVALID_ID. Truecolor is preferred, for pictures and video later on:
+ * 32-bit first (aligned longword pixels are the quickest to move), then
+ * 24-bit, then 15/16-bit, and an 8-bit palette mode only if that is all
+ * the card has. The UI still draws with pens; on a truecolor screen the
+ * RTG system turns each pen into the RGB loaded for it. */
+static UWORD depth_rank(UWORD d)
 {
-    ULONG id = INVALID_ID;
+    return d == 32 ? 4 : d == 24 ? 3 : (d == 16 || d == 15) ? 2 : d == 8 ? 1 : 0;
+}
+
+ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth)
+{
+    ULONG id = INVALID_ID, best = INVALID_ID;
+    UWORD best_rank = 0, best_depth = 0;
     while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID) {
         struct DimensionInfo dim;
+        UWORD r;
         if (!caps_mode_is_rtg(id) || ModeNotAvailable(id))
             continue;
         if (GetDisplayInfoData(NULL, (UBYTE *)&dim, sizeof(dim), DTAG_DIMS, id) <= 0)
             continue;
-        if (dim.MaxDepth == 8 &&
-            dim.Nominal.MaxX - dim.Nominal.MinX + 1 == w &&
-            dim.Nominal.MaxY - dim.Nominal.MinY + 1 == h)
-            return id;
+        if (dim.Nominal.MaxX - dim.Nominal.MinX + 1 != w ||
+            dim.Nominal.MaxY - dim.Nominal.MinY + 1 != h)
+            continue;
+        r = depth_rank(dim.MaxDepth);
+        if (r > best_rank) {
+            best = id;
+            best_rank = r;
+            best_depth = dim.MaxDepth;
+        }
     }
-    return INVALID_ID;
+    if (depth)
+        *depth = best_depth;
+    return best;
 }
 
 static BOOL any_rtg_mode(void)
