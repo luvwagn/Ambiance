@@ -41,7 +41,7 @@ FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt CREDITS.txt
 
-.PHONY: all clean test art fonts icons preview lha disk FORCE_VERSION
+.PHONY: all clean test check-formats art fonts icons preview lha disk FORCE_VERSION
 
 all: $(TARGET) lha disk
 
@@ -68,7 +68,14 @@ build/test_ags: tests/test_ags.c src/ags.c src/util.c src/amce.h
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/util.c
 
-test: build/test_ags
+# amiga.lib's sprintf is exec's RawDoFmt, where %d/%u/%x/%c read 16 bits.
+# Every numeric conversion must carry the l modifier with a long argument.
+check-formats:
+	@if grep -nE 'printf *\(.*%[-+ 0#]*[0-9]*(\.[0-9]+)?[diuxXc]' src/*.c; then \
+		echo "error: use %l with a long argument (RawDoFmt reads %d/%u/%x/%c as 16-bit)"; exit 1; fi
+	@echo "  CHECK formats ok"
+
+test: check-formats build/test_ags
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V T:$(abspath build/vt) test_ags
 

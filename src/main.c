@@ -219,13 +219,24 @@ static void build_sysinfo(struct Page *p)
     text_line(p, "Settings arrive in a later version.");
     text_line(p, "This build found:");
     text_line(p, "");
-    sprintf(line, "CPU: 680%02u, Kickstart %u", caps.cpu, caps.kick);
+    sprintf(line, "Machine type: %s", caps.emulator ? "emulator (UAE family)" : "real Amiga");
     text_line(p, line);
+    /* amiga.lib's sprintf is RawDoFmt: every number must be %l with a long. */
+    sprintf(line, "CPU: 680%02lu", (unsigned long)caps.cpu);
+    text_line(p, line);
+    sprintf(line, "Kickstart %s (%lu.%lu)", caps_release_name(caps.kick),
+            (unsigned long)caps.kick, (unsigned long)caps.kick_rev);
+    text_line(p, line);
+    if (caps.wb) {
+        sprintf(line, "Workbench %s (%lu.%lu)", caps_release_name(caps.wb),
+                (unsigned long)caps.wb, (unsigned long)caps.wb_rev);
+        text_line(p, line);
+    }
     sprintf(line, "Chipset: %s%s, %s", caps.aga ? "AGA" : caps.ecs ? "ECS" : "OCS",
             caps.ehb ? " with EHB" : "", caps.pal ? "PAL" : "NTSC");
     text_line(p, line);
-    sprintf(line, "Layout: %s, %u colours", g.layout == LAYOUT_HIRES ? "640-wide (hires)" : "lowres",
-            (unsigned)(1 << g.depth));
+    sprintf(line, "Layout: %s, %lu colours", g.layout == LAYOUT_HIRES ? "640-wide (hires)" : "lowres",
+            (unsigned long)(1UL << g.depth));
     text_line(p, line);
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
     text_line(p, line);
@@ -240,7 +251,7 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, "AGS: %s%s", ags.found ? "found" : "not found",
             ags.set_assigns ? " (assigns set by AmigaMCE)" : "");
     text_line(p, line);
-    sprintf(line, "Machine type (HW): %s", ags.hw[0] ? ags.hw : "not set");
+    sprintf(line, "AGS machine setting (HW): %s", ags.hw[0] ? ags.hw : "not set");
     text_line(p, line);
     sprintf(line, "Adult entries: %s", ags.adult[0] == '1' ? "shown" : "hidden");
     text_line(p, line);

@@ -25,11 +25,14 @@
 /* ---------------------------------------------------------------- caps */
 struct Caps {
     UWORD cpu;          /* 0, 10, 20, 30, 40, 60 */
-    UWORD kick;         /* exec version */
+    UWORD kick, kick_rev; /* ROM: exec version, SysBase->SoftVer */
+    UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega;
+    BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     ULONG chipfree, fastfree;
 };
 void caps_detect(struct Caps *c);
+const char *caps_release_name(UWORD version);
 
 /* ---------------------------------------------------------------- pens */
 enum {
