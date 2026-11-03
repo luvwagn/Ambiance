@@ -257,6 +257,25 @@ static void get_env(const char *name, char *buf, LONG max)
         buf[--n] = 0;
 }
 
+/* A path as an environment variable may hold it, made fit for Lock():
+ * AGS stores whdlsaves as "AGS:WHDSaves/" with the quotes (the Shell
+ * drops them when it expands $whdlsaves; Lock would not), and a trailing
+ * slash after a name is dropped too ("dir/" -> "dir", "Vol:" kept). */
+void ags_unquote_path(const char *in, char *out, LONG max)
+{
+    LONG n;
+    while (*in == ' ')
+        in++;
+    if (*in == '"')
+        in++;
+    amce_strlcpy(out, in, max);
+    n = strlen(out);
+    while (n > 0 && (out[n - 1] == '"' || out[n - 1] == ' '))
+        out[--n] = 0;
+    if (n > 1 && out[n - 1] == '/' && out[n - 2] != ':' && out[n - 2] != '/')
+        out[--n] = 0;
+}
+
 /* Find AGS. A normal install assigns AGS: on every boot (S:AGS-Stuff);
  * a portable install does not, so set up what WHDLoad:AGS would. */
 BOOL ags_init(struct Ags *a)
@@ -299,8 +318,12 @@ BOOL ags_init(struct Ags *a)
         assign_if_missing(a, "ST-00", "Media:ST-00");
         assign_if_missing(a, "Emulators", "Work:Emulators");
         assign_if_missing(a, "Premium", "Games:Premium");
-        get_env("whdlsaves", saves, sizeof(saves));
-        assign_if_missing(a, "WHDSaves", saves);
+        {
+            char raw[128];
+            get_env("whdlsaves", raw, sizeof(raw));
+            ags_unquote_path(raw, saves, sizeof(saves));
+            assign_if_missing(a, "WHDSaves", saves);
+        }
     }
     get_env("HW", a->hw, sizeof(a->hw));
     get_env("ADULT", a->adult, sizeof(a->adult));

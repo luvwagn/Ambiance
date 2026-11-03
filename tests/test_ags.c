@@ -30,6 +30,19 @@ int main(void)
     struct Ags a;
     LONG n, i;
 
+    /* whdlsaves as AGS stores it, and other shapes */
+    {
+        char u[64];
+        ags_unquote_path("\"AGS:WHDSaves/\"", u, sizeof(u));
+        check_str("unquote AGS whdlsaves", u, "AGS:WHDSaves");
+        ags_unquote_path("Work:Saves", u, sizeof(u));
+        check_str("unquote plain", u, "Work:Saves");
+        ags_unquote_path("\"WHDLoad:\"", u, sizeof(u));
+        check_str("unquote volume", u, "WHDLoad:");
+        ags_unquote_path("", u, sizeof(u));
+        check_str("unquote empty", u, "");
+    }
+
     ags_clean_name("+  Games - By Genre.ags", out, sizeof(out));
     check_str("clean +", out, "Games - By Genre");
     ags_clean_name("-  Demos - 0-Z.ags", out, sizeof(out));

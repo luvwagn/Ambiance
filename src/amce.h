@@ -133,6 +133,7 @@ void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);
 LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);
 BOOL ags_screenshot_path(const char *base, char *out, LONG max);
+void ags_unquote_path(const char *in, char *out, LONG max);
 BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *script);
 
 /* ---------------------------------------------------------------- textbox */
