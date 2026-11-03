@@ -95,6 +95,8 @@ void gfx_picture_free(struct Gfx *g);
 
 /* ---------------------------------------------------------------- ags */
 enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION };
+/* What the left-hand marker column shows for a row (struct Item.mark). */
+enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON };
 
 struct Item {
     char  *label;       /* what the user sees */
@@ -102,6 +104,7 @@ struct Item {
     char  *sortkey;
     UBYTE  kind;
     UBYTE  action;
+    UBYTE  mark;        /* MARK_*: folders get MARK_ARROW automatically */
 };
 
 struct ItemList {

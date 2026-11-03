@@ -214,8 +214,9 @@ def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):
         sel = r == 1
         if sel:
             s.fill(pane_x - 2 * sx, y, pane_x + pane_w - 1, y + list_row_h - 1, HL)
-        s.text(pane_x, y + 1, label, WHITE if sel else TEXT, pane_w - 12 * sx)
-        s.text(pane_x + pane_w - 7 * sx, y + 1, ">", WHITE if sel else DIM)
+        col = s.textlen(">") + 5 * sx            # marker column, as in draw_list_rows()
+        s.text(pane_x, y + 1, ">", WHITE if sel else DIM)
+        s.text(pane_x + col, y + 1, label, WHITE if sel else TEXT, pane_w - col - 2 * sx)
 
 
 if __name__ == "__main__":

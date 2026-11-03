@@ -351,11 +351,14 @@ static void load_debug(void)
                buf[0] == '1';
 }
 
-static struct Item *action_item(struct Page *p, const char *label, const char *tag, UBYTE act)
+static struct Item *action_item(struct Page *p, const char *label, const char *tag, UBYTE act,
+                                UBYTE mark)
 {
     struct Item *it = list_add(&p->list, label, tag, "", IT_ACTION);
-    if (it)
+    if (it) {
         it->action = act;
+        it->mark = mark;
+    }
     return it;
 }
 
@@ -363,8 +366,9 @@ static void build_settings(struct Page *p)
 {
     char tag[64];
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
-    action_item(p, "Screen mode", tag, ACT_SCREENMODES);
-    action_item(p, "Debug (CPU, memory, log)", debug_on ? "[x]" : "[ ]", ACT_DEBUG);
+    action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
+    action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
+                debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
 
 static void build_screenmodes(struct Page *p)
@@ -386,7 +390,8 @@ static void build_screenmodes(struct Page *p)
                 amce_strlcat(label, bits, sizeof(label));
             }
         }
-        action_item(p, label, m == screen_mode ? "current" : why ? why : "", ACT_MODE0 + m);
+        action_item(p, label, why ? why : "", ACT_MODE0 + m,
+                    m == screen_mode ? MARK_RADIO_ON : MARK_RADIO_OFF);
         if (m == screen_mode)
             p->sel = p->list.count - 1;
     }
@@ -394,8 +399,8 @@ static void build_screenmodes(struct Page *p)
 
 static void build_about_menu(struct Page *p)
 {
-    action_item(p, "Credits", "AmigaMCE " AMCE_VERSION, ACT_CREDITS);
-    action_item(p, "System information", "", ACT_SYSINFO);
+    action_item(p, "Credits", "AmigaMCE " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
+    action_item(p, "System information", "", ACT_SYSINFO, MARK_ARROW);
 }
 
 static void build_credits(struct Page *p)
@@ -672,9 +677,28 @@ static void draw_title(struct Page *p)
     gfx_fill(&g, g.pane_x, 41, g.pane_x + g.pane_w - 1, 41, PEN_RULE);
 }
 
+/* Row markers, drawn in a column on the left before each label. */
+static const char *mark_text[] = { "", ">", "[ ]", "[x]", "( )", "(*)" };
+
+/* Width of the marker column for this list: wide enough for its widest
+ * marker, so every label in the list starts at the same x; 0 if none. */
+static WORD mark_column(const struct ItemList *l)
+{
+    UBYTE seen[sizeof(mark_text) / sizeof(mark_text[0])];
+    WORD w = 0, mw;
+    LONG i;
+    memset(seen, 0, sizeof(seen));
+    for (i = 0; i < l->count; i++)      /* cheap scan; text widths measured once each */
+        seen[l->items[i].mark] = 1;
+    for (i = 1; i < (LONG)sizeof(seen); i++)
+        if (seen[i] && (mw = gfx_textlen(&g, mark_text[i])) > w)
+            w = mw;
+    return w ? w + 5 * g.sx : 0;
+}
+
 static void draw_list_rows(struct Page *p)
 {
-    WORD vis = list_visible(), r;
+    WORD vis = list_visible(), r, col = mark_column(&p->list);
     if (p->sel < p->top)
         p->top = p->sel;
     if (p->sel >= p->top + vis)
@@ -696,23 +720,17 @@ static void draw_list_rows(struct Page *p)
             fg = PEN_WHITE;
         }
         {
-            WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w;
-            BOOL arrow = it->kind == IT_DIR ||
-                         (it->kind == IT_ACTION && it->action < ACT_MODE0);
-            WORD tagw = 0;
-            if (arrow) {
-                gfx_text(&g, right - 7 * g.sx, ty, ">", sel ? PEN_WHITE : PEN_DIM, 0);
-                right -= 12 * g.sx;
-            }
+            WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - 2 * g.sx;
+            WORD lx = g.pane_x + col;
+            if (it->mark != MARK_NONE)
+                gfx_text(&g, g.pane_x, ty, mark_text[it->mark],
+                         sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, 0);
             if (it->kind == IT_ACTION && it->path[0]) {
-                BOOL now = amce_stricmp(it->path, "current") == 0;
-                tagw = gfx_textlen(&g, it->path);
-                gfx_text(&g, right - tagw, ty, it->path,
-                         sel ? PEN_WHITE : now ? PEN_ACCENT : PEN_DIM, 0);
-                tagw += 8 * g.sx;
+                WORD tagw = gfx_textlen(&g, it->path);
+                gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, 0);
+                right -= tagw + 8 * g.sx;
             }
-            gfx_text(&g, g.pane_x, ty, it->label, fg,
-                     (arrow ? g.pane_w - 12 * g.sx : g.pane_w - 2 * g.sx) - tagw);
+            gfx_text(&g, lx, ty, it->label, fg, right - lx);
         }
     }
 }

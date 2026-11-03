@@ -59,6 +59,7 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
     it->sortkey = pool_strdup(l->pool, sortkey ? sortkey : (label ? label : ""));
     it->kind = kind;
     it->action = 0;
+    it->mark = kind == IT_DIR ? MARK_ARROW : MARK_NONE;
     if (!it->label || !it->path || !it->sortkey)
         return NULL;
     l->count++;
