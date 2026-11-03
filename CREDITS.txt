@@ -1,0 +1,21 @@
+AmigaMCE credits
+================
+
+AmigaMCE (c) 2026 Brian King.
+
+Fonts
+-----
+The amce-pixel bitmap fonts are derived from Pixelify Sans,
+(c) The Pixelify Sans Project Authors, licensed under the SIL Open Font
+Licence 1.1 (see OFL-PixelifySans.txt). The derived fonts are released
+under the same licence.
+
+The AmigaMCE logo lettering is rendered from Rubik Bold,
+(c) The Rubik Project Authors, licensed under the SIL Open Font
+Licence 1.1 (see OFL-Rubik.txt).
+
+Trademarks
+----------
+Amiga is a trademark of Amiga Corporation. AGS (Amiga Game Selector),
+WHDLoad, Picasso96, ZZ9000 and other names are the property of their
+respective owners. AmigaMCE is not affiliated with any of them.

@@ -1,0 +1,49 @@
+Short:        Full-screen media centre launcher for AGS
+Author:       Brian King
+Uploader:     Brian King
+Type:         util/wb
+Version:      [VERSION]
+Requires:     Kickstart 3.1+, OCS/ECS/AGA or RTG
+Architecture: m68k-amigaos >= 3.1
+
+AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
+of Kodi, RetroArch and Windows Media Center. It is a drop-in companion to
+Amiga Game Selector (AGS): copy the AmigaMCE drawer anywhere on an AGS
+installation and double-click it.
+
+Features in this release
+------------------------
+- Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
+  with hierarchical categories, never one giant flat list.
+- Shows each title's AGS fact sheet and screenshot, decoded through the
+  installed picture datatypes.
+- Launches titles through their AGS .run scripts, honouring the AGS
+  Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
+- 640-wide hires layout on AGA and RTG, 320-wide lowres layout on
+  OCS/ECS, PAL and NTSC. Never uses Extra Half-Brite.
+- Keyboard, mouse and joystick/CD32 pad control.
+
+Mods, Videos, Pictures, Music and Internet Radio are listed but arrive
+in a later version.
+
+Controls
+--------
+  Up/Down      move             Shift+Up/Down  page
+  Right/Fire   open             Return         play
+  Left/Esc     back             Esc at menu    press twice to quit
+  A-Z          jump to letter   Right mouse    back
+
+Installation
+------------
+Copy the AmigaMCE drawer to your hard drive. Keep the Fonts drawer next
+to the program. If AGS is set to boot straight into its menu, quit AGS
+to Workbench first, then double-click AmigaMCE.
+
+Credits and licences
+--------------------
+AmigaMCE (c) 2026 Brian King.
+Pixelify Sans (c) The Pixelify Sans Project Authors, SIL Open Font
+Licence 1.1. Rubik (c) The Rubik Project Authors, SIL Open Font
+Licence 1.1. Full texts are in the Licences drawer.
+Amiga is a trademark of Amiga Corporation. Other trademarks belong to
+their owners.

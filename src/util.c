@@ -1,0 +1,44 @@
+/*
+ * AmigaMCE - small string helpers (no C library string locale dependence)
+ * Copyright (c) 2026 Brian King
+ */
+#include "amce.h"
+
+static UBYTE fold(UBYTE c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c + 32;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7)   /* Latin-1 upper case */
+        return c + 32;
+    return c;
+}
+
+int amce_stricmp(const char *a, const char *b)
+{
+    const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)b;
+    for (;;) {
+        UBYTE x = fold(*p++), y = fold(*q++);
+        if (x != y)
+            return (int)x - (int)y;
+        if (!x)
+            return 0;
+    }
+}
+
+void amce_strlcpy(char *d, const char *s, LONG n)
+{
+    if (n <= 0)
+        return;
+    while (--n > 0 && *s)
+        *d++ = *s++;
+    *d = 0;
+}
+
+void amce_strlcat(char *d, const char *s, LONG n)
+{
+    while (n > 0 && *d) {
+        d++;
+        n--;
+    }
+    amce_strlcpy(d, s, n);
+}

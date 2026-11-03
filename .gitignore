@@ -1,0 +1,6 @@
+/build/
+/AmigaMCE
+/amigamce-*.lha
+/amigamce-*.adf
+__pycache__/
+*.o

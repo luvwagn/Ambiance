@@ -1,0 +1,10 @@
+                  Test Game
+         Developed By Test Team
+             © 1992 Test Publisher
+
+ Genre : Action / Shooter / Horizontal
+ Players     : 1
+ Display Type: PAL
+ Language    : English
+ Chipset     : ECS
+ Hardware    : A500/600/2000/3000
