@@ -747,9 +747,34 @@ static void set_msg(const char *m)
     draw_footer();
 }
 
+/* The list's "n/total" at the right of the title row. Only this changes
+ * while a list scrolls, so it is redrawn alone: drawn with its background
+ * in one pass (JAM2) over the old digits, never cleared first, and only
+ * the sliver a shorter number leaves behind is cleared. Clearing the whole
+ * title row every step flickered on 8-plane screens. */
+static WORD count_left = -1;    /* left edge of the count drawn last */
+
+static void draw_title_count(struct Page *p)
+{
+    char count[24];
+    WORD right = g.pane_x + g.pane_w, tw, x;
+    if (p->type != PT_LIST || !p->list.count)
+        return;
+    sprintf(count, "%ld/%ld", (long)p->sel + 1, (long)p->list.count);
+    tw = gfx_textlen(&g, count);
+    x = right - tw;
+    if (count_left >= 0 && count_left < x)
+        gfx_fill(&g, count_left, 28, x - 1, 28 + g.font_h - 1, PEN_BG);
+    SetDrMd(g.rp, JAM2);
+    SetBPen(g.rp, PEN_BG);
+    gfx_text(&g, x, 28, count, PEN_DIM, 0);
+    SetDrMd(g.rp, JAM1);
+    count_left = x;
+}
+
 static void draw_title(struct Page *p)
 {
-    char t[160], count[24];
+    char t[160], widest[24];
     int i;
     WORD cw = 0;
     t[0] = 0;
@@ -758,12 +783,14 @@ static void draw_title(struct Page *p)
             amce_strlcat(t, " > ", sizeof(t));
         amce_strlcat(t, pages[i].title, sizeof(t));
     }
-    count[0] = 0;
     if (p->type == PT_LIST && p->list.count) {
-        sprintf(count, "%ld/%ld", (long)p->sel + 1, (long)p->list.count);
-        cw = gfx_textlen(&g, count);
+        /* room for the widest count this list can show, so a growing
+         * number never runs into the breadcrumb */
+        sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
+        cw = gfx_textlen(&g, widest);
     }
     gfx_fill(&g, g.pane_x - 2 * g.sx, 26, g.w - 1, 41, PEN_BG);
+    count_left = -1;
     /* show the end of a long breadcrumb */
     {
         const char *s = t;
@@ -772,8 +799,7 @@ static void draw_title(struct Page *p)
             s++;
         gfx_text(&g, g.pane_x, 28, s, PEN_WHITE, maxw);
     }
-    if (cw)
-        gfx_text(&g, g.pane_x + g.pane_w - cw, 28, count, PEN_DIM, 0);
+    draw_title_count(p);
     gfx_fill(&g, g.pane_x, 41, g.pane_x + g.pane_w - 1, 41, PEN_RULE);
 }
 
@@ -1270,7 +1296,7 @@ static void act_move(LONG d)
                 if (c && c != ov.letter)
                     ov_build(c);
             }
-            draw_title(p);
+            draw_title_count(p);    /* only the number changes */
             draw_list_move(p, old, old_top);
             if (ov.on && ov.page == p && p->top != old_top)
                 ov_repaint(p, p->top - old_top);  /* undo the shift's copy of the letter */
@@ -1577,7 +1603,7 @@ static void act_letter(char c)
         first[1] = 0;
         if (amce_stricmp(first, k) == 0) {
             p->sel = idx;
-            draw_title(p);
+            draw_title_count(p);
             draw_list_rows(p);
             return;
         }
@@ -1655,7 +1681,7 @@ static void handle_mouse(struct IntuiMessage *im)
                 set_focus(FOCUS_CONTENT);
             if (p->sel != idx) {
                 p->sel = idx;
-                draw_title(p);
+                draw_title_count(p);
                 draw_list_rows(p);
             }
             if (dbl)
