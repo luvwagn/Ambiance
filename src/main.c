@@ -287,9 +287,13 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, "Datatypes: %s", DataTypesBase ? "available" : "missing");
     text_line(p, line);
     text_line(p, "");
-    sprintf(line, "AGS: %s%s", ags.found ? "found" : "not found",
-            ags.set_assigns ? " (assigns set by AmigaMCE)" : "");
+    sprintf(line, "AGS: %s", ags.found ? "found" : "not found");
     text_line(p, line);
+    if (ags.added[0]) {
+        /* S:AGS-Stuff did not run at boot; AmigaMCE filled the gaps. */
+        text_line(p, "Assigns AmigaMCE added (AGS-Stuff did not run):");
+        text_para(p, ags.added);
+    }
     sprintf(line, "AGS machine setting (HW): %s", ags.hw[0] ? ags.hw : "not set");
     text_line(p, line);
     sprintf(line, "Adult entries: %s", ags.adult[0] == '1' ? "shown" : "hidden");

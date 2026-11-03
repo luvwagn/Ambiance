@@ -224,17 +224,28 @@ static BOOL exists(const char *path)
     return TRUE;
 }
 
-static void assign_if_missing(const char *name, const char *target)
+/* Assign name: to target unless name: already exists or target does not.
+ * Each assign made is noted in a->added for System information. */
+static void assign_if_missing(struct Ags *a, const char *name, const char *target)
 {
     char dev[40];
     BPTR l;
+    if (!target || !target[0])
+        return;
     amce_strlcpy(dev, name, sizeof(dev));
     amce_strlcat(dev, ":", sizeof(dev));
     if (exists(dev))
         return;
     l = Lock((CONST_STRPTR)target, SHARED_LOCK);
-    if (l && !AssignLock((CONST_STRPTR)name, l))
+    if (!l)
+        return;
+    if (!AssignLock((CONST_STRPTR)name, l)) {
         UnLock(l);
+        return;
+    }
+    if (a->added[0])
+        amce_strlcat(a->added, " ", sizeof(a->added));
+    amce_strlcat(a->added, dev, sizeof(a->added));
 }
 
 static void get_env(const char *name, char *buf, LONG max)
@@ -267,19 +278,29 @@ BOOL ags_init(struct Ags *a)
                 continue;
             if (AssignLock((CONST_STRPTR)"AGS", l)) {
                 a->found = a->set_assigns = TRUE;
+                amce_strlcpy(a->added, "AGS:", sizeof(a->added));
                 break;
             }
             UnLock(l);
         }
     }
     if (a->found) {
+        /* What S:AGS-Stuff assigns at boot (AGS 3), for systems where it
+         * did not run. Each only if missing and its target exists. */
+        char saves[128];
         amce_strlcpy(a->root, "AGS:", sizeof(a->root));
-        assign_if_missing("Scripts", "AGS:Scripts");
-        assign_if_missing("AGSOS", "AGS:OS");
+        assign_if_missing(a, "Scripts", "AGS:Scripts");
+        assign_if_missing(a, "AGSOS", "AGS:OS");
+        assign_if_missing(a, "Admin", "Scripts:Admin");
         if (exists("WHDLoad:")) {
-            assign_if_missing("WHD_Games", "WHDLoad:");
-            assign_if_missing("WHD_Demos", "WHDLoad:");
+            assign_if_missing(a, "WHD_Games", "WHDLoad:");
+            assign_if_missing(a, "WHD_Demos", "WHDLoad:");
         }
+        assign_if_missing(a, "ST-00", "Media:ST-00");
+        assign_if_missing(a, "Emulators", "Work:Emulators");
+        assign_if_missing(a, "Premium", "Games:Premium");
+        get_env("whdlsaves", saves, sizeof(saves));
+        assign_if_missing(a, "WHDSaves", saves);
     }
     get_env("HW", a->hw, sizeof(a->hw));
     get_env("ADULT", a->adult, sizeof(a->adult));

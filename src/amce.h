@@ -118,6 +118,7 @@ struct Ags {
     BOOL set_assigns;           /* we had to create AGS: ourselves */
     char root[256];             /* "AGS:" when present */
     char hw[16], adult[4], expertperm[4];
+    char added[160];            /* assigns AmigaMCE made because they were missing */
     struct ItemList top;            /* top-level .ags folders */
 };
 
