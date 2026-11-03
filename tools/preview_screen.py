@@ -241,16 +241,17 @@ def glide(s, pane_x, pane_w, sx, list_top, row_h, footer_y, pens):
     sc = max(2, min(16, rows_h * 2 // 5 // (bot - top + 1)))
     ow, oh = gw * sc, (bot - top + 1) * sc
     ox, oy = pane_x + pane_w * 9 // 10 - ow, list_top + (rows_h - oh) // 2
+    strip = pane_x + pane_w * 9 // 10 - (s.font["xsize"] + 1) * sc - 6 * sx
     sel = 6
-    for r, label in enumerate(GLIDE[:vis]):
+    for r, label in enumerate(GLIDE[:vis]):     # rows stop before the letter's strip
         y = list_top + r * row_h
         hl = r == sel
-        s.fill(pane_x - 2 * sx, y, s.w - 1, y + row_h - 1, HL if hl else 0)
-        for yy in range(max(y, oy), min(y + row_h, oy + oh)):
-            for xx in range(ow):
-                if g.getpixel((xx // sc, top + (yy - oy) // sc)):
-                    s.img.putpixel((ox + xx, yy), s.pal[SELDIM if hl else RULE])
-        s.text(pane_x, y + 1, label, WHITE if hl else TEXT, pane_w - 2 * sx)
+        s.fill(pane_x - 2 * sx, y, strip - 1, y + row_h - 1, HL if hl else 0)
+        s.text(pane_x, y + 1, label, WHITE if hl else TEXT, strip - pane_x - 4 * sx)
+    for yy in range(oh):                        # the letter, stamped once in its strip
+        for xx in range(ow):
+            if g.getpixel((xx // sc, top + yy // sc)):
+                s.img.putpixel((ox + xx, oy + yy), s.pal[DIM])
 
 
 def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):

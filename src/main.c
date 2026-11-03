@@ -70,6 +70,7 @@ static struct {
     ULONG size;
     UWORD bpr;
     WORD  x, y, w, h;
+    WORD  strip_x;          /* left edge of the letter's strip; rows stop before it */
     UWORD linger;           /* timer ticks left before hiding, 0 = not counting */
 } ov;
 static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
@@ -834,12 +835,16 @@ static BOOL list_follow(struct Page *p)
 
 /* ------------------------------------------------------------ letter overlay
  * While a long content list (mostly titles, not category folders) glides,
- * the first letter of the selected title is shown large, behind the rows
- * like a watermark: centred vertically in the list, its right edge 90% of
- * the way across. It is the UI font's own glyph blown up in whole pixels,
- * kept as a chip-RAM mask and stamped into each row as the row is painted,
- * in pens below 8 so the list's 3-plane blit scrolling still holds. It
- * goes away half a second after the key is let go. */
+ * the first letter of the selected title is shown large: centred vertically
+ * in the list, its right edge 90% of the way across. It is the UI font's
+ * own glyph blown up in whole pixels, kept as a chip-RAM mask.
+ *
+ * It is a layer of its own: while it shows, the right of the list from
+ * ov.strip_x on belongs to it alone. Rows are painted and scrolled only
+ * left of the strip (the highlight and very long titles stop at its edge),
+ * so scrolling never copies or repaints the letter; it is stamped once,
+ * and again only when it changes. When it goes, the rows are repainted at
+ * full width. It goes half a second after the key is let go. */
 /* (state is declared with the other globals, near the top) */
 
 static char ov_letter_of(const char *s)
@@ -942,42 +947,23 @@ static BOOL ov_build(char ch)
     ov.letter = ch;
     ov.x = g.pane_x + g.pane_w * 9 / 10 - ov.w;
     ov.y = g.list_top + (rows_h - ov.h) / 2;
+    /* the strip fits the widest letter, so it does not move as letters change */
+    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - (WORD)(f->tf_XSize + 1) * sc - 6 * g.sx;
+    if (ov.strip_x < g.pane_x + g.pane_w / 2)
+        ov.strip_x = g.pane_x + g.pane_w / 2;
     return TRUE;
 }
 
-/* The part of the letter inside screen rows y0..y1, stamped behind text. */
-static void ov_slice(WORD y0, WORD y1, BOOL hl)
+static void draw_list_rows(struct Page *p);
+
+/* Stamp the letter into its strip (nothing else is drawn there). */
+static void ov_stamp(void)
 {
-    WORD a = y0 > ov.y ? y0 : ov.y, b = y1 < ov.y + ov.h - 1 ? y1 : ov.y + ov.h - 1;
-    if (a > b || !ov.mask)
+    if (!ov.mask)
         return;
-    SetAPen(g.rp, hl ? PEN_SELDIM : PEN_RULE);
+    SetAPen(g.rp, PEN_DIM);
     SetDrMd(g.rp, JAM1);
-    BltTemplate((PLANEPTR)(ov.mask + (ULONG)(a - ov.y) * ov.bpr), 0, ov.bpr, g.rp, ov.x, a,
-                ov.w, b - a + 1);
-}
-
-static void draw_list_row(struct Page *p, LONG idx, WORD col);
-
-/* Repaint the rows the letter covers (with or without it). The letter is
- * a layer fixed on screen, but scrolling the list copies the rows on
- * screen, letter pixels included: after a shift of k rows (k > 0 moved
- * them up) its pixels also sit in the k rows beyond it, which are
- * repainted too so no copy of the letter is left behind. */
-static void ov_repaint(struct Page *p, LONG k)
-{
-    WORD r, r0, r1, vis = list_visible(), col = mark_column(&p->list);
-    if (!ov.h)
-        return;
-    r0 = (ov.y - g.list_top) / g.list_row_h;
-    r1 = (ov.y + ov.h - 1 - g.list_top) / g.list_row_h;
-    if (k > 0)
-        r0 -= (WORD)k;
-    else
-        r1 -= (WORD)k;
-    for (r = r0 < 0 ? 0 : r0; r <= r1 && r < vis; r++)
-        if (p->top + r < p->list.count)
-            draw_list_row(p, p->top + r, col);
+    BltTemplate((PLANEPTR)ov.mask, 0, ov.bpr, g.rp, ov.x, ov.y, ov.w, ov.h);
 }
 
 static void ov_show(struct Page *p)
@@ -988,7 +974,20 @@ static void ov_show(struct Page *p)
     ov.on = TRUE;
     ov.page = p;
     ov.linger = 0;
-    ov_repaint(p, 0);
+    /* hand the strip to the letter: clear it once, then stamp */
+    gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
+    ov_stamp();
+}
+
+/* A new letter (A -> D...): clear the old one's box, stamp the new one.
+ * Only the strip changes; the rows are not touched. */
+static void ov_relabel(char c)
+{
+    if (!ov.on || !c || c == ov.letter)
+        return;
+    gfx_fill(&g, ov.x, ov.y, ov.x + ov.w - 1, ov.y + ov.h - 1, PEN_BG);
+    if (ov_build(c))
+        ov_stamp();
 }
 
 static void ov_hide(void)
@@ -997,7 +996,7 @@ static void ov_hide(void)
     BOOL was = ov.on;
     ov.on = FALSE;
     if (was && p && p == cur() && p->type == PT_LIST && g.win)
-        ov_repaint(p, 0);
+        draw_list_rows(p);          /* rows at full width again, strip cleared */
 }
 
 /* One row of the list in its slot, background and all. Rows are painted
@@ -1009,6 +1008,9 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     WORD y = g.list_top + (idx - p->top) * g.list_row_h;
     WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - 2 * g.sx;
     WORD lx = g.pane_x + col;
+    WORD xr = (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1;  /* the letter's strip is off limits */
+    if (right > xr - 2 * g.sx)
+        right = xr - 2 * g.sx;
     BOOL sel = idx == p->sel;
     UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
@@ -1016,10 +1018,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
     if (g.planar)
         SetWriteMask(g.rp, 0x07);
-    gfx_fill(&g, g.pane_x - 2 * g.sx, y, g.w - 1, y + g.list_row_h - 1,
+    gfx_fill(&g, g.pane_x - 2 * g.sx, y, xr, y + g.list_row_h - 1,
              !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
-    if (ov.on && ov.page == p)
-        ov_slice(y, y + g.list_row_h - 1, sel && focus == FOCUS_CONTENT);
     if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - MARK_SIZE) / 2,
                  sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT);
@@ -1044,8 +1044,8 @@ static void draw_list_rows(struct Page *p)
     }
     for (r = 0; r < vis && p->top + r < p->list.count; r++)
         draw_list_row(p, p->top + r, col);
-    gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top + r * g.list_row_h, g.w - 1, g.footer_y - 2,
-             PEN_BG);
+    gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top + r * g.list_row_h,
+             (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1, g.footer_y - 2, PEN_BG);
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
@@ -1063,14 +1063,16 @@ static WORD rows_right(struct Page *p, LONG top, WORD col)
     for (r = 0; r < vis && top + r < p->list.count; r++) {
         struct Item *it = &p->list.items[top + r];
         WORD e;
-        if (it->kind == IT_ACTION && it->path[0])
-            return g.w - 1;                 /* right-aligned values: the whole row */
+        if (it->kind == IT_ACTION && it->path[0]) {
+            right = g.w - 1;                /* right-aligned values: the whole row */
+            break;
+        }
         e = g.pane_x + col + gfx_textlen(&g, it->label) + 1;
         if (e > right)
             right = e;
     }
-    if (ov.on && ov.page == p && ov.x + ov.w > right)
-        right = ov.x + ov.w;                /* the big letter, if shown */
+    if (ov.on && ov.page == p && right > ov.strip_x - 1)
+        right = ov.strip_x - 1;             /* the letter's strip is never copied */
     return right < g.w - 1 ? right : g.w - 1;
 }
 
@@ -1079,6 +1081,8 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
     WORD x0 = g.pane_x - 2 * g.sx, x1 = copy_right > x0 ? copy_right : g.w - 1;
+    if (ov.on && x1 > ov.strip_x - 1)
+        x1 = ov.strip_x - 1;                /* never into the letter's strip */
     struct BitMap *bm = g.rp->BitMap;
     if (n <= 0 || src == dst)
         return;
@@ -1349,15 +1353,10 @@ static void act_move(LONG d)
         {
             LONG old = p->sel, old_top = p->top;
             p->sel = s;
-            if (ov.on && ov.page == p) {
-                char c = ov_letter_of(p->list.items[s].label);
-                if (c && c != ov.letter)
-                    ov_build(c);
-            }
+            if (ov.on && ov.page == p)
+                ov_relabel(ov_letter_of(p->list.items[s].label));
             draw_title_count(p);    /* only the number changes */
             draw_list_move(p, old, old_top);
-            if (ov.on && ov.page == p && p->top != old_top)
-                ov_repaint(p, p->top - old_top);  /* undo the shift's copy of the letter */
         }
     } else {
         tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
