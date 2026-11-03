@@ -751,18 +751,66 @@ static void draw_list_rows(struct Page *p)
              PEN_BG);
 }
 
-/* After the selection moved from old_sel: repaint just the two rows when
- * the list did not scroll, otherwise every row (in place). */
-static void draw_list_move(struct Page *p, LONG old_sel)
+/* Move the visible rows up (k > 0) or down (k < 0) by k rows, by copying
+ * what is already on screen. Native screens: one blit inside the screen
+ * bitmap, masked to planes 0-2 (every list pen is below 8 and rows are
+ * painted with RectFill, so planes 3+ are zero there). RTG: ScrollRaster,
+ * which the card accelerates. */
+static void list_shift(LONG k)
 {
-    if (!list_follow(p) && old_sel >= p->top && old_sel < p->top + list_visible() &&
-        old_sel < p->list.count) {
-        WORD col = mark_column(&p->list);
-        draw_list_row(p, old_sel, col);
-        draw_list_row(p, p->sel, col);
+    WORD x0 = g.pane_x - 2 * g.sx, x1 = g.w - 1, y0 = g.list_top;
+    WORD rows_h = list_visible() * g.list_row_h, dy = (WORD)(k * g.list_row_h);
+    WORD keep = rows_h - (dy > 0 ? dy : -dy);
+    if (keep <= 0)
+        return;
+    if (g.planar) {
+        struct BitMap *bm = g.rp->BitMap;
+        LockLayerRom(g.win->WLayer);
+        if (dy > 0)
+            BltBitMap(bm, x0, y0 + dy, bm, x0, y0, x1 - x0 + 1, keep, 0xC0, 0x07, NULL);
+        else
+            BltBitMap(bm, x0, y0, bm, x0, y0 - dy, x1 - x0 + 1, keep, 0xC0, 0x07, NULL);
+        UnlockLayerRom(g.win->WLayer);
     } else {
-        draw_list_rows(p);
+        SetBPen(g.rp, PEN_BG);
+        ScrollRaster(g.rp, 0, dy, x0, y0, x1, y0 + rows_h - 1);
     }
+}
+
+/* After the selection moved from old_sel (list top was old_top): repaint
+ * just the old and new rows when the list did not scroll; when it scrolled
+ * by less than a screenful, shift the rows on screen and paint only the
+ * ones that came into view; otherwise repaint every row. */
+static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+{
+    WORD vis = list_visible(), col;
+    LONG k, i, first, last;
+    list_follow(p);
+    k = p->top - old_top;
+    if ((k >= vis || -k >= vis) || p->list.count <= vis) {
+        if (k)
+            draw_list_rows(p);
+        else {
+            col = mark_column(&p->list);
+            if (old_sel >= p->top && old_sel < p->top + vis && old_sel < p->list.count)
+                draw_list_row(p, old_sel, col);
+            draw_list_row(p, p->sel, col);
+        }
+        return;
+    }
+    col = mark_column(&p->list);
+    if (k)
+        list_shift(k);
+    /* rows that scrolled into view */
+    first = k > 0 ? p->top + vis - k : p->top;
+    last = k > 0 ? p->top + vis - 1 : p->top - k - 1;
+    if (k)
+        for (i = first; i <= last && i < p->list.count; i++)
+            draw_list_row(p, i, col);
+    if (old_sel >= p->top && old_sel < p->top + vis && old_sel < p->list.count &&
+        !(k && old_sel >= first && old_sel <= last))
+        draw_list_row(p, old_sel, col);
+    draw_list_row(p, p->sel, col);
 }
 
 /* (Re)build the page's text box below y0, keeping its scroll position. */
@@ -955,10 +1003,10 @@ static void act_move(LONG d)
         if (s < 0 || s == p->sel)
             return;
         {
-            LONG old = p->sel;
+            LONG old = p->sel, old_top = p->top;
             p->sel = s;
             draw_title(p);
-            draw_list_move(p, old);
+            draw_list_move(p, old, old_top);
         }
     } else {
         tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
@@ -1098,7 +1146,7 @@ static void act_action(struct Item *it)
 #define HOLD_DELAY   18     /* frames before the glide starts (~0.36 s on PAL) */
 #define HOLD_RAMP   100     /* frames to reach full speed (2 s) */
 #define LIST_MIN      8     /* entries per second when the glide starts */
-#define LIST_MAX     50     /* entries per second at full speed: one per frame */
+#define LIST_MAX     50     /* entries per second at full speed on a small screen */
 #define FRAME_RATE   50
 
 static struct {
@@ -1163,13 +1211,22 @@ static void hold_tick(void)
             hold_stop();
             return;
         }
-        rate = LIST_MIN + (LIST_MAX - LIST_MIN) * ramp / HOLD_RAMP;
-        if (rate > 6 + remaining * 4)       /* ease in: 46/s at 10 left ... 10/s at 1 */
-            rate = 6 + remaining * 4;
-        hold.acc += rate;
-        if (hold.acc >= FRAME_RATE) {
-            hold.acc -= FRAME_RATE;
-            act_move(hold.dir);
+        {
+            /* Full speed: one entry per frame, or three screenfuls a second
+             * on screens that show more rows; above one per frame the list
+             * moves several rows in a single frame, still drawn every frame. */
+            LONG top = LIST_MAX, three = 3 * list_visible(), n;
+            if (three > top)
+                top = three;
+            rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
+            if (rate > 6 + remaining * 4)   /* ease in: 46/s at 10 left ... 10/s at 1 */
+                rate = 6 + remaining * 4;
+            hold.acc += rate;
+            n = hold.acc / FRAME_RATE;
+            if (n > 0) {
+                hold.acc -= n * FRAME_RATE;
+                act_move(hold.dir * (n < remaining ? n : remaining));
+            }
         }
     } else if (p->tb.open) {
         LONG px = 2 + 10 * ramp / HOLD_RAMP;  /* 100 to 600 pixels a second */
