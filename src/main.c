@@ -713,12 +713,20 @@ static void act_move(LONG d)
     }
 }
 
-/* One wheel notch: one entry in the menu and in lists, three lines of text. */
-static void act_wheel(LONG d)
+/* One wheel notch scrolls whatever is under the pointer, as on other
+ * desktops: one entry in the menu and in lists, three lines of text.
+ * Scrolling the content pane also gives it the keyboard focus. Over the
+ * header or footer the notch goes to whatever has the focus. */
+static void act_wheel(LONG d, WORD x, WORD y)
 {
     struct Page *p = cur();
-    BOOL text = focus == FOCUS_CONTENT && p && p->type != PT_LIST;
-    act_move(text ? d * 3 : d);
+    BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
+    BOOL over_pane = x >= g.pane_x - 2 * g.sx && y >= g.top && y < g.footer_y - 1;
+    if (over_menu && focus != FOCUS_MENU)
+        set_focus(FOCUS_MENU);
+    else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
+        set_focus(FOCUS_CONTENT);
+    act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST) ? d * 3 : d);
 }
 
 static void act_open(BOOL play)
@@ -888,8 +896,8 @@ static void handle_key(struct IntuiMessage *im)
         case 0x4D: disarm(); act_move(shift ? page : 1); break;       /* cursor down */
         case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
         case 0x4F: disarm(); if (focus == FOCUS_CONTENT) act_back(); break; /* cursor left */
-        case 0x7A: disarm(); act_wheel(-1); break;                    /* wheel up (NM_WHEEL_UP) */
-        case 0x7B: disarm(); act_wheel(1); break;                     /* wheel down */
+        case 0x7A: disarm(); act_wheel(-1, im->MouseX, im->MouseY); break; /* NM_WHEEL_UP */
+        case 0x7B: disarm(); act_wheel(1, im->MouseX, im->MouseY); break;  /* NM_WHEEL_DOWN */
         }
         return;
     }
