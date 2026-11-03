@@ -700,42 +700,68 @@ static WORD mark_column(const struct ItemList *l)
     return w ? w + 5 * g.sx : 0;
 }
 
-static void draw_list_rows(struct Page *p)
+/* Keep the selection inside the visible rows; TRUE if the list scrolled. */
+static BOOL list_follow(struct Page *p)
 {
-    WORD vis = list_visible(), r, col = mark_column(&p->list);
+    WORD vis = list_visible();
+    LONG top = p->top;
     if (p->sel < p->top)
         p->top = p->sel;
     if (p->sel >= p->top + vis)
         p->top = p->sel - vis + 1;
-    gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
+    return p->top != top;
+}
+
+/* One row of the list in its slot, background and all. Rows are painted
+ * one by one over what was there, never after clearing the whole list,
+ * so fast scrolling does not flash. */
+static void draw_list_row(struct Page *p, LONG idx, WORD col)
+{
+    struct Item *it = &p->list.items[idx];
+    WORD y = g.list_top + (idx - p->top) * g.list_row_h;
+    WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - 2 * g.sx;
+    WORD lx = g.pane_x + col;
+    BOOL sel = idx == p->sel;
+    UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
+    gfx_fill(&g, g.pane_x - 2 * g.sx, y, g.w - 1, y + g.list_row_h - 1,
+             !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
+    if (it->mark != MARK_NONE)
+        gfx_text(&g, g.pane_x, ty, mark_text[it->mark],
+                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, 0);
+    if (it->kind == IT_ACTION && it->path[0]) {
+        WORD tagw = gfx_textlen(&g, it->path);
+        gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, 0);
+        right -= tagw + 8 * g.sx;
+    }
+    gfx_text(&g, lx, ty, it->label, fg, right - lx);
+}
+
+static void draw_list_rows(struct Page *p)
+{
+    WORD vis = list_visible(), r, col = mark_column(&p->list);
+    list_follow(p);
     if (!p->list.count) {
+        gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
         gfx_text(&g, g.pane_x, g.list_top + 2, "(empty)", PEN_DIM, 0);
         return;
     }
-    for (r = 0; r < vis && p->top + r < p->list.count; r++) {
-        LONG idx = p->top + r;
-        struct Item *it = &p->list.items[idx];
-        WORD y = g.list_top + r * g.list_row_h;
-        BOOL sel = idx == p->sel;
-        UBYTE fg = PEN_TEXT;
-        if (sel) {
-            gfx_fill(&g, g.pane_x - 2 * g.sx, y, g.pane_x + g.pane_w - 1, y + g.list_row_h - 1,
-                     focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
-            fg = PEN_WHITE;
-        }
-        {
-            WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - 2 * g.sx;
-            WORD lx = g.pane_x + col;
-            if (it->mark != MARK_NONE)
-                gfx_text(&g, g.pane_x, ty, mark_text[it->mark],
-                         sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, 0);
-            if (it->kind == IT_ACTION && it->path[0]) {
-                WORD tagw = gfx_textlen(&g, it->path);
-                gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, 0);
-                right -= tagw + 8 * g.sx;
-            }
-            gfx_text(&g, lx, ty, it->label, fg, right - lx);
-        }
+    for (r = 0; r < vis && p->top + r < p->list.count; r++)
+        draw_list_row(p, p->top + r, col);
+    gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top + r * g.list_row_h, g.w - 1, g.footer_y - 2,
+             PEN_BG);
+}
+
+/* After the selection moved from old_sel: repaint just the two rows when
+ * the list did not scroll, otherwise every row (in place). */
+static void draw_list_move(struct Page *p, LONG old_sel)
+{
+    if (!list_follow(p) && old_sel >= p->top && old_sel < p->top + list_visible() &&
+        old_sel < p->list.count) {
+        WORD col = mark_column(&p->list);
+        draw_list_row(p, old_sel, col);
+        draw_list_row(p, p->sel, col);
+    } else {
+        draw_list_rows(p);
     }
 }
 
@@ -928,9 +954,12 @@ static void act_move(LONG d)
             s = p->list.count - 1;
         if (s < 0 || s == p->sel)
             return;
-        p->sel = s;
-        draw_title(p);
-        draw_list_rows(p);
+        {
+            LONG old = p->sel;
+            p->sel = s;
+            draw_title(p);
+            draw_list_move(p, old);
+        }
     } else {
         tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
     }
@@ -1060,32 +1089,82 @@ static void act_action(struct Item *it)
         apply_screen_mode(it->action - ACT_MODE0);
 }
 
-/* Holding a direction: the step grows the longer it is held, and shrinks
- * again near the end of the list or text so it eases to a stop on the
- * last entry rather than slamming into it. `held` counts the automatic
- * repeats so far (0 for the first press). The short main menu always
- * moves one entry. */
-static LONG accel_step(UWORD held)
+/* Holding Up/Down in a list or text page scrolls faster the longer it is
+ * held, without skipping anything: lists still move one entry at a time,
+ * only more often, and text glides at a rising pixel speed. AmigaMCE paces
+ * this itself, one step per video frame at most, from key-down until
+ * key-up (the keyboard's own repeat is fixed at about 10 a second), and
+ * eases off near the end so it settles on the last entry. */
+#define HOLD_DELAY   18     /* frames before the glide starts (~0.36 s on PAL) */
+#define HOLD_RAMP   100     /* frames to reach full speed (2 s) */
+#define LIST_MIN      8     /* entries per second when the glide starts */
+#define LIST_MAX     50     /* entries per second at full speed: one per frame */
+#define FRAME_RATE   50
+
+static struct {
+    LONG  dir;              /* -1 up, +1 down, 0 not held */
+    ULONG frames;
+    LONG  acc;
+    BOOL  joy;              /* held on the joystick rather than the keyboard */
+} hold;
+
+static void hold_start(LONG dir, BOOL joy)
 {
-    return held < 6 ? 1 : held < 12 ? 2 : held < 20 ? 4 : held < 30 ? 8 : held < 40 ? 16 : 32;
+    hold.dir = dir;
+    hold.frames = 0;
+    hold.acc = 0;
+    hold.joy = joy;
 }
 
-static void act_hold(LONG dir, UWORD held)
+static void hold_stop(void)
+{
+    hold.dir = 0;
+}
+
+static BOOL hold_active(void)
+{
+    return hold.dir != 0;
+}
+
+/* Once per frame while held. */
+static void hold_tick(void)
 {
     struct Page *p = cur();
-    LONG step = accel_step(held), remaining = 0, cap;
-    if (focus != FOCUS_CONTENT || !p || step == 1) {
-        act_move(dir);
+    LONG rate, remaining, ramp;
+    if (!hold.dir)
+        return;
+    if (focus != FOCUS_CONTENT || !p) {
+        hold_stop();
         return;
     }
-    if (p->type == PT_LIST)
-        remaining = dir > 0 ? p->list.count - 1 - p->sel : p->sel;
-    else if (p->tb.open)
-        remaining = tb_remaining(&p->tb, dir) / p->tb.line_h;
-    cap = remaining / 4;                /* a quarter of what is left: 8, 4, 2, 1... */
-    if (cap < 1)
-        cap = 1;
-    act_move(dir * (step < cap ? step : cap));
+    if (++hold.frames < HOLD_DELAY)
+        return;
+    ramp = hold.frames - HOLD_DELAY;
+    if (ramp > HOLD_RAMP)
+        ramp = HOLD_RAMP;
+    if (p->type == PT_LIST) {
+        remaining = hold.dir > 0 ? p->list.count - 1 - p->sel : p->sel;
+        if (remaining <= 0) {
+            hold_stop();
+            return;
+        }
+        rate = LIST_MIN + (LIST_MAX - LIST_MIN) * ramp / HOLD_RAMP;
+        if (rate > 6 + remaining * 4)       /* ease in: 46/s at 10 left ... 10/s at 1 */
+            rate = 6 + remaining * 4;
+        hold.acc += rate;
+        if (hold.acc >= FRAME_RATE) {
+            hold.acc -= FRAME_RATE;
+            act_move(hold.dir);
+        }
+    } else if (p->tb.open) {
+        LONG px = 2 + 10 * ramp / HOLD_RAMP;  /* 100 to 600 pixels a second */
+        remaining = tb_remaining(&p->tb, hold.dir);
+        if (remaining <= 0)
+            return;
+        if (px > 1 + remaining / 8)
+            px = 1 + remaining / 8;
+        tb_scroll_by(&p->tb, hold.dir * px);
+    }
 }
 
 static void act_open(BOOL play)
@@ -1243,20 +1322,6 @@ static void handle_mouse(struct IntuiMessage *im)
     last_mics = im->Micros;
 }
 
-/* Auto-repeats of the held key so far: the keyboard marks each repeat
- * with IEQUALIFIER_REPEAT; a fresh press starts again at 0. */
-static UWORD key_held;
-
-static void hold_count(const struct IntuiMessage *im)
-{
-    if (im->Qualifier & IEQUALIFIER_REPEAT) {
-        if (key_held < 1000)
-            key_held++;
-    } else {
-        key_held = 0;
-    }
-}
-
 static void handle_key(struct IntuiMessage *im)
 {
     UWORD code = im->Code;
@@ -1264,17 +1329,26 @@ static void handle_key(struct IntuiMessage *im)
     LONG page = list_visible() - 1;
 
     if (im->Class == IDCMP_RAWKEY) {
-        if (code & IECODE_UP_PREFIX)
+        if (code & IECODE_UP_PREFIX) {
+            UWORD k = code & ~IECODE_UP_PREFIX;
+            if ((k == 0x4C || k == 0x4D) && hold.dir && !hold.joy)
+                hold_stop();
             return;
+        }
         switch (code) {
         case 0x4C: case 0x4D: {                                      /* cursor up / down */
             LONG dir = code == 0x4C ? -1 : 1;
             disarm();
-            hold_count(im);
-            if (shift)
+            if (shift) {
                 act_move(dir * page);
-            else
-                act_hold(dir, key_held);
+            } else if (im->Qualifier & IEQUALIFIER_REPEAT) {
+                if (!hold_active())
+                    act_move(dir);  /* main menu: the keyboard's own repeat */
+            } else {
+                act_move(dir);
+                if (focus == FOCUS_CONTENT)
+                    hold_start(dir, FALSE);
+            }
             break;
         }
         case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
@@ -1287,8 +1361,8 @@ static void handle_key(struct IntuiMessage *im)
     /* IDCMP_VANILLAKEY */
     if (im->Qualifier & IEQUALIFIER_NUMERICPAD) {
         switch (code) {
-        case '8': disarm(); hold_count(im); act_hold(-1, key_held); return;
-        case '2': disarm(); hold_count(im); act_hold(1, key_held); return;
+        case '8': disarm(); act_move(-1); return;    /* keypad: the keyboard's repeat */
+        case '2': disarm(); act_move(1); return;
         case '4': disarm(); if (focus == FOCUS_CONTENT) act_back(); return;
         case '6': case '5': disarm(); act_open(FALSE); return;
         case '9': disarm(); act_move(-page); return;
@@ -1317,7 +1391,6 @@ static void joy_poll(void)
     const ULONG dirmask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT;
     const ULONG btnmask = JPF_BUTTON_RED | JPF_BUTTON_BLUE;
     ULONG st, dir, btn, newbtn, act = 0;
-    UWORD held;
     if (!LowLevelBase)
         return;
     st = ReadJoyPort(1);
@@ -1330,17 +1403,28 @@ static void joy_poll(void)
         if (dir != (joy_last & dirmask)) {
             joy_hold = 0;
             act = dir;
+            if (hold.joy)
+                hold_stop();
         } else if (++joy_hold >= 8 && (joy_hold - 8) % 3 == 0) {
             act = dir;          /* repeat after ~320 ms, then every ~120 ms */
         }
     } else {
         joy_hold = 0;
+        if (hold.joy)
+            hold_stop();
     }
     joy_last = dir | btn;
-    /* repeats so far, on the same scale as keyboard auto-repeat */
-    held = joy_hold >= 8 ? (UWORD)((joy_hold - 8) / 3 + 1) : 0;
-    if (act & JPF_JOY_UP) { disarm(); act_hold(-1, held); }
-    else if (act & JPF_JOY_DOWN) { disarm(); act_hold(1, held); }
+    if (act & (JPF_JOY_UP | JPF_JOY_DOWN)) {
+        LONG d = (act & JPF_JOY_UP) ? -1 : 1;
+        disarm();
+        if (joy_hold == 0) {
+            act_move(d);        /* the press itself */
+            if (focus == FOCUS_CONTENT)
+                hold_start(d, TRUE);
+        } else if (!hold_active()) {
+            act_move(d);        /* main menu: plain repeat */
+        }
+    }
     else if (act & JPF_JOY_RIGHT) { disarm(); act_open(FALSE); }
     else if (act & JPF_JOY_LEFT) { disarm(); if (focus == FOCUS_CONTENT) act_back(); }
     if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
@@ -1447,7 +1531,8 @@ int main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        ULONG sig = (atb && tb_animating(atb)) ? SetSignal(0, mask) & mask : Wait(mask);
+        ULONG sig = ((atb && tb_animating(atb)) || hold_active()) ? SetSignal(0, mask) & mask
+                                                                   : Wait(mask);
         if (sig & SIGBREAKF_CTRL_C)
             break;
         if (sig & tsig) {
@@ -1477,7 +1562,9 @@ int main(void)
             while (g.win && (im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
                 struct IntuiMessage copy = *im;
                 ReplyMsg((struct Message *)im);
-                if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
+                if (copy.Class == IDCMP_INACTIVEWINDOW)
+                    hold_stop();    /* the key-up will not come to us */
+                else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
                     handle_mouse(&copy);
                 else if (copy.Class == IDCMP_RAWKEY || copy.Class == IDCMP_VANILLAKEY)
                     handle_key(&copy);
@@ -1485,9 +1572,11 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win && (atb = cur_tb()) && tb_animating(atb)) {
+        if (g.win && (hold_active() || ((atb = cur_tb()) && tb_animating(atb)))) {
             WaitTOF();
-            tb_step(&g, atb);
+            hold_tick();
+            if ((atb = cur_tb()) && tb_animating(atb))
+                tb_step(&g, atb);
         }
     }
 
