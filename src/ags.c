@@ -60,7 +60,6 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
     it->kind = kind;
     it->action = 0;
     it->mark = kind == IT_DIR ? MARK_ARROW : MARK_NONE;
-    it->width = 0;
     if (!it->label || !it->path || !it->sortkey)
         return NULL;
     l->count++;

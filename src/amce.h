@@ -107,7 +107,6 @@ struct Item {
     UBYTE  kind;
     UBYTE  action;
     UBYTE  mark;        /* MARK_*: folders get MARK_ARROW automatically */
-    UWORD  width;       /* label width in pixels once drawn (0 = not yet measured) */
 };
 
 struct ItemList {

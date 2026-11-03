@@ -1055,7 +1055,8 @@ static void draw_list_rows(struct Page *p)
  * the RTG system handles the overlap and accelerates it. */
 /* Right edge of what rows top..top+vis-1 have painted outside the bar:
  * the copy need go no further, since everything right of it is background
- * in every row. Label widths are measured once per entry and kept. */
+ * in every row. Measured each move (TextLength is cheap); list entries
+ * stay read-only here. */
 static WORD rows_right(struct Page *p, LONG top, WORD col)
 {
     WORD vis = list_visible(), r, right = g.pane_x;
@@ -1064,9 +1065,7 @@ static WORD rows_right(struct Page *p, LONG top, WORD col)
         WORD e;
         if (it->kind == IT_ACTION && it->path[0])
             return g.w - 1;                 /* right-aligned values: the whole row */
-        if (!it->width)
-            it->width = gfx_textlen(&g, it->label) + 1;
-        e = g.pane_x + col + it->width;
+        e = g.pane_x + col + gfx_textlen(&g, it->label) + 1;
         if (e > right)
             right = e;
     }
