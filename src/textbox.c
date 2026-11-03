@@ -7,11 +7,16 @@
  * of that bitmap to the screen with one blit started right after the
  * vertical blank, so the beam never sees a half-drawn box.
  *
- * Text pens are all below 8, so the box only ever uses bitplanes 0-2 (the
- * box is cleared to pen 0 first, so planes 3+ stay zero). The bitmap has
- * three planes and the blit is masked to them: on an 8-plane AGA screen
- * that is 3/8 of the blitter time a full copy would need, which keeps a
- * step well inside one frame.
+ * Everything in the box, text and scroll bar alike, uses pens below 8, so
+ * the box only ever needs bitplanes 0-2; planes 3+ are cleared once when
+ * the page appears. The bitmap has three planes and the blit is masked to
+ * them: on an 8-plane AGA screen that is 3/8 of the blitter time a full
+ * copy would need, which keeps a step well inside one frame.
+ *
+ * Planar fills and blits write one plane at a time, so the beam can catch
+ * a pixel between planes. Keeping to pens 0-7 and clearing high planes
+ * first means such in-between colours are always one of the dark UI pens,
+ * never a stray bright one (pen 9 -> 0 used to pass through orange pen 8).
  */
 #include "amce.h"
 
@@ -70,6 +75,7 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->pos = clamp_pos(tb, tb->pos);
     tb->target = clamp_pos(tb, tb->target);
     tb->drawn_pos = -1;
+    tb->drawn = FALSE;
     tb->thumb_y = tb->thumb_h = -1;
     tb->dragging = FALSE;
     tb->open = TRUE;
@@ -114,36 +120,48 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
     tb->thumb_y = ty;
     tb->thumb_h = th;
     /* Three fills that never overlap: no pixel is drawn twice. */
-    gfx_fill(g, x0, y0, x1, y0 + ty - 1, PEN_KEYCAP);
+    gfx_fill(g, x0, y0, x1, y0 + ty - 1, PEN_SELDIM);
     gfx_fill(g, x0, y0 + ty, x1, y0 + ty + th - 1, (tb->dragging ? PEN_TEXT : PEN_DIM));
-    gfx_fill(g, x0, y0 + ty + th, x1, y1, PEN_KEYCAP);
+    gfx_fill(g, x0, y0 + ty + th, x1, y1, PEN_SELDIM);
 }
 
 static void blit_window(struct Gfx *g, struct TextBox *tb)
 {
     struct Layer *l = g->win->WLayer;
-    LONG vis = tb->content_h - tb->pos;
-    if (vis > tb->h)
-        vis = tb->h;
+    /* The bitmap is at least h rows below pos (cleared past the text), so
+     * a full-height copy also blanks whatever the box showed before. */
     LockLayerRom(l);
-    BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, vis,
+    BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, tb->h,
               0xC0, TB_PLANE_MASK, NULL);
     UnlockLayerRom(l);
     tb->drawn_pos = tb->pos;
 }
 
-/* Whole box, e.g. after the page opens or the screen comes back. */
+/* Whole box, e.g. after the page opens or the screen comes back. Nothing
+ * is blanked first: the new text is copied straight over the old. */
 void tb_draw(struct Gfx *g, struct TextBox *tb)
 {
+    WORD x1 = tb->bar_x + 3 * g->sx - 1, y1 = tb->y + tb->h - 1;
     if (!tb->open)
         return;
-    gfx_fill(g, tb->x, tb->y, tb->bar_x + 3 * g->sx - 1, tb->y + tb->h - 1, PEN_BG);
     tb->thumb_y = tb->thumb_h = -1;
+    tb->drawn = TRUE;
     if (tb->bm) {
+        /* Planes 3+ to zero (a screenshot may have been here), then the
+         * text, then the gap and bar column, all within planes 0-2. */
+        if (g->depth > TB_PLANES) {
+            SetWriteMask(g->rp, 0xFF & ~TB_PLANE_MASK);
+            gfx_fill(g, tb->x, tb->y, x1, y1, PEN_BG);
+            SetWriteMask(g->rp, 0xFF);
+        }
         blit_window(g, tb);
+        gfx_fill(g, tb->x + tb->w, tb->y, tb->bar_x - 1, y1, PEN_BG);
+        if (!tb->bar_w)
+            gfx_fill(g, tb->bar_x, tb->y, x1, y1, PEN_BG);
     } else {
         /* Fallback without the bitmap: whole lines, drawn directly. */
         LONG first = tb->pos / tb->line_h, r;
+        gfx_fill_bg(g, tb->x, tb->y, x1, y1);
         tb->pos = tb->target = first * tb->line_h;
         for (r = 0; (r + 1) * tb->line_h <= tb->h && first + r < tb->lines->count; r++)
             gfx_text(g, tb->x, tb->y + r * tb->line_h, tb->lines->items[first + r].label,

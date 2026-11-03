@@ -168,6 +168,22 @@ void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
+/* Clear to the background, high planes first. A planar fill writes one
+ * plane at a time; clearing planes 3+ first means a pixel caught halfway
+ * shows one of the dark UI pens 0-7, not a stray colour such as pen 8. */
+void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    if (x1 < x0 || y1 < y0)
+        return;
+    SetAPen(g->rp, PEN_BG);
+    if (g->depth > 3) {
+        SetWriteMask(g->rp, 0xF8);
+        RectFill(g->rp, x0, y0, x1, y1);
+        SetWriteMask(g->rp, 0xFF);
+    }
+    RectFill(g->rp, x0, y0, x1, y1);
+}
+
 WORD gfx_textlen(struct Gfx *g, const char *s)
 {
     return TextLength(g->rp, (CONST_STRPTR)s, strlen(s));

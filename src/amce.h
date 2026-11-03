@@ -62,6 +62,7 @@ struct Gfx {
 BOOL gfx_open(struct Gfx *g, const struct Caps *c);
 void gfx_close(struct Gfx *g);
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
+void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw);
 WORD gfx_textlen(struct Gfx *g, const char *s);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
@@ -109,7 +110,7 @@ BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {
-    BOOL  open, first_white, dragging;
+    BOOL  open, first_white, dragging, drawn;
     WORD  x, y, w, h;           /* text area on screen */
     WORD  bar_x, bar_w;         /* scroll bar column; bar_w 0 when all text fits */
     WORD  line_h, drag_off;

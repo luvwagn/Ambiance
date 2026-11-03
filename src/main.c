@@ -557,17 +557,33 @@ static void draw_pane(BOOL full)
     struct Page *p = cur();
     if (!p)
         return;
-    if (full)
-        gfx_fill(&g, g.menu_w + 3 * g.sx, 25, g.w - 1, g.footer_y - 2, PEN_BG);
+    if (full) {
+        WORD px = g.menu_w + 3 * g.sx, pb = g.footer_y - 2;
+        if (p->type == PT_TEXT) {
+            /* Clear around the text box, not under it: tb_draw copies the
+             * new text straight over the old, so there is no blank frame. */
+            struct TextBox *tb = &p->tb;
+            WORD bx1;
+            open_textbox(p, g.list_top);
+            bx1 = tb->bar_x + 3 * g.sx - 1;
+            gfx_fill_bg(&g, px, 25, g.w - 1, tb->y - 1);
+            gfx_fill_bg(&g, px, tb->y, tb->x - 1, tb->y + tb->h - 1);
+            gfx_fill_bg(&g, bx1 + 1, tb->y, g.w - 1, tb->y + tb->h - 1);
+            gfx_fill_bg(&g, px, tb->y + tb->h, g.w - 1, pb);
+        } else {
+            gfx_fill_bg(&g, px, 25, g.w - 1, pb);
+        }
+    }
     draw_title(p);
     switch (p->type) {
     case PT_LIST:
         draw_list_rows(p);
         break;
     case PT_TEXT:
-        if (full || !p->tb.open)
+        if (!p->tb.open)
             open_textbox(p, g.list_top);
-        tb_draw(&g, &p->tb);
+        if (full || !p->tb.drawn)
+            tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
         break;
     case PT_DETAIL:
         if (full) {
@@ -582,7 +598,8 @@ static void draw_pane(BOOL full)
             }
             open_textbox(p, p->facts_y);
         }
-        tb_draw(&g, &p->tb);
+        if (full || !p->tb.drawn)
+            tb_draw(&g, &p->tb);
         break;
     }
 }
@@ -964,9 +981,13 @@ static void joy_poll(void)
 /* ------------------------------------------------------------ main */
 static void build_menu(void)
 {
-    int m;
+    /* Main menu order, top to bottom. */
+    static const int order[] = { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_MUSIC, MOD_PICTURES,
+                                 MOD_RADIO, MOD_VIDEOS, MOD_SETTINGS, MOD_ABOUT };
+    int i, m;
     nmenu = 0;
-    for (m = 0; m < MOD_COUNT; m++) {
+    for (i = 0; i < (int)(sizeof(order) / sizeof(order[0])); i++) {
+        m = order[i];
         if (m == MOD_RADIO && !(caps.net && (caps.mp3_mhi || caps.mp3_mpega)))
             continue;           /* needs a network stack and an MP3 path */
         menu[nmenu++] = m;

@@ -92,8 +92,10 @@ def main():
     clock = "Tue 03 Nov  00:05"
     s.text(W - 8 * sx - s.textlen(clock), (24 - fh) // 2, clock, TEXT)
 
-    names = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"]
-    msel = 8 if page == "about" else 0
+    # module order in art.c (icon index) and the main menu order from build_menu()
+    mods = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"]
+    names = ["Games", "Mods", "Demos", "Music", "Pictures", "Internet Radio", "Videos", "Settings", "About"]
+    msel = names.index("About") if page == "about" else 0
     for i, name in enumerate(names):
         y = top + i * row_h
         sel = i == msel
@@ -102,12 +104,12 @@ def main():
         fg = WHITE if sel else TEXT
         for r in range(16):
             if hires:
-                bits = icons32[i][r]
+                bits = icons32[mods.index(name)][r]
                 for b in range(32):
                     if bits & (0x80000000 >> b):
                         s.img.putpixel((3 * sx + b, y + 1 + r), pal[fg])
             else:
-                bits = icons[i][r]
+                bits = icons[mods.index(name)][r]
                 for b in range(16):
                     if bits & (0x8000 >> b):
                         s.img.putpixel((3 + b, y + 1 + r), pal[fg])
@@ -115,7 +117,7 @@ def main():
     s.fill(menu_w + 2 * sx, 25, menu_w + 2 * sx, footer_y - 2, RULE)
 
     if page == "about":
-        about(s, pane_x, pane_w, sx, list_top, footer_y, scroll, (TEXT, DIM, WHITE, RULE, KEYCAP))
+        about(s, pane_x, pane_w, sx, list_top, footer_y, scroll, (TEXT, DIM, WHITE, RULE, SELDIM))
     else:
         games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, (TEXT, DIM, WHITE, HL, RULE))
     s.fill(0, footer_y - 1, W - 1, footer_y - 1, RULE)
@@ -132,7 +134,14 @@ def main():
     print("wrote", out)
 
 
-ABOUT = [("line", "AmigaMCE 0.1.1"), ("line", "Created by Brian King"), ("line", "(c) 2026 Brian King"),
+def _version():
+    try:
+        return open(os.path.join(os.path.dirname(__file__), "..", "build", "version")).readline().strip()
+    except OSError:
+        return "0.0.0"
+
+
+ABOUT = [("line", "AmigaMCE " + _version()), ("line", "Created by Brian King"), ("line", "(c) 2026 Brian King"),
          ("line", ""),
          ("para", "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
                   "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
@@ -161,7 +170,7 @@ def wrap(s, text, maxw):
 
 def about(s, pane_x, pane_w, sx, y0, footer_y, scroll, pens):
     """Mirror of src/textbox.c: text box, then the scroll bar beside it."""
-    TEXT, DIM, WHITE, RULE, KEYCAP = pens
+    TEXT, DIM, WHITE, RULE, TRACK = pens
     s.text(pane_x, 28, "About", WHITE)
     s.fill(pane_x, 41, pane_x + pane_w - 1, 41, RULE)
     tbw = pane_w - 7 * sx
@@ -182,9 +191,9 @@ def about(s, pane_x, pane_w, sx, y0, footer_y, scroll, pens):
         bx, bw = pane_x + tbw + 2 * sx, 3 * sx
         th = max(8, h * h // content)
         ty = (h - th) * pos // (content - h)
-        s.fill(bx, y0, bx + bw - 1, y0 + ty - 1, KEYCAP)
+        s.fill(bx, y0, bx + bw - 1, y0 + ty - 1, TRACK)
         s.fill(bx, y0 + ty, bx + bw - 1, y0 + ty + th - 1, DIM)
-        s.fill(bx, y0 + ty + th, bx + bw - 1, y0 + h - 1, KEYCAP)
+        s.fill(bx, y0 + ty + th, bx + bw - 1, y0 + h - 1, TRACK)
 
 
 def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):
