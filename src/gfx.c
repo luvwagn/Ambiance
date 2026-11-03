@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <graphics/modeid.h>
+#include <graphics/gfxbase.h>
 #include <graphics/view.h>
 #include <datatypes/datatypes.h>
 #include <datatypes/datatypesclass.h>
@@ -17,9 +18,12 @@
 #include <proto/diskfont.h>
 #include <proto/datatypes.h>
 
+extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase;
 
 static Object *pic_obj;         /* datatype object of the picture on screen */
+
+static void cache_art(struct Gfx *g);
 
 static void layout_metrics(struct Gfx *g)
 {
@@ -199,6 +203,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     g->rp = g->win->RPort;
     SetDrMd(g->rp, JAM1);
     open_font(g);
+    cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
     return TRUE;
 }
@@ -216,6 +221,15 @@ void gfx_close(struct Gfx *g)
 {
     int i;
     gfx_picture_free(g);
+    WaitBlit();
+    if (g->logo_bm) {
+        FreeBitMap(g->logo_bm);
+        g->logo_bm = NULL;
+    }
+    if (g->icon_masks) {
+        FreeMem(g->icon_masks, (ULONG)ICON_COUNT * 16 * g->icon_bpr);
+        g->icon_masks = NULL;
+    }
     if (g->win) {
         CloseWindow(g->win);
         g->win = NULL;
@@ -277,43 +291,67 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw
     Text(g->rp, (CONST_STRPTR)s, n);
 }
 
+/* The logo and icons go through the same blitter / RTG path as all other
+ * drawing. Plotting them pixel by pixel from the CPU (WritePixel) left
+ * them missing on RTG screens, where the card's own fills of the header
+ * and menu rows landed after the CPU's pixels. The logo is rendered once
+ * per screen into a bitmap in the screen's format and blitted from there. */
+static void logo_art(const struct Gfx *g, const UBYTE **px, UWORD *w, UWORD *h)
+{
+    BOOL hi = g->layout == LAYOUT_HIRES;
+    *px = hi ? logo_hi : logo_lo;
+    *w = hi ? logo_hi_w : logo_lo_w;
+    *h = hi ? logo_hi_h : logo_lo_h;
+}
+
+static void cache_art(struct Gfx *g)
+{
+    const UBYTE *px;
+    UWORD w, h, i, j;
+    ULONG size;
+
+    logo_art(g, &px, &w, &h);
+    g->logo_bm = AllocBitMap(w, h, g->depth, BMF_CLEAR, g->rp->BitMap);
+    if (g->logo_bm) {
+        struct RastPort rp;
+        InitRastPort(&rp);
+        rp.BitMap = g->logo_bm;
+        if (GfxBase->LibNode.lib_Version >= 40) {
+            WriteChunkyPixels(&rp, 0, 0, w - 1, h - 1, (UBYTE *)px, w);
+        } else {
+            for (j = 0; j < h; j++)
+                for (i = 0; i < w; i++) {
+                    SetAPen(&rp, px[j * w + i]);
+                    WritePixel(&rp, i, j);
+                }
+        }
+    }
+
+    /* BltTemplate reads its source with the blitter: chip RAM, even rows. */
+    g->icon_bpr = g->sx == 2 ? 4 : 2;
+    size = (ULONG)ICON_COUNT * 16 * g->icon_bpr;
+    g->icon_masks = AllocMem(size, MEMF_CHIP);
+    if (g->icon_masks)
+        CopyMem(g->sx == 2 ? (APTR)icons32 : (APTR)icons16, g->icon_masks, size);
+}
+
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
 {
-    const UBYTE *px = g->layout == LAYOUT_HIRES ? logo_hi : logo_lo;
-    UWORD w = g->layout == LAYOUT_HIRES ? logo_hi_w : logo_lo_w;
-    UWORD h = g->layout == LAYOUT_HIRES ? logo_hi_h : logo_lo_h;
-    UWORD i, j;
-    UBYTE last = 255;
-    for (j = 0; j < h; j++)
-        for (i = 0; i < w; i++) {
-            UBYTE pen = px[j * w + i];
-            if (pen == PEN_BAR)
-                continue;               /* background already painted */
-            if (pen != last) {
-                SetAPen(g->rp, pen);
-                last = pen;
-            }
-            WritePixel(g->rp, x + i, y + j);
-        }
+    const UBYTE *px;
+    UWORD w, h;
+    logo_art(g, &px, &w, &h);
+    if (g->logo_bm)
+        BltBitMapRastPort(g->logo_bm, 0, 0, g->rp, x, y, w, h, 0xC0);
 }
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen)
 {
-    UWORD r, b;
+    if (!g->icon_masks)
+        return;
     SetAPen(g->rp, pen);
-    for (r = 0; r < 16; r++) {
-        if (g->sx == 2) {
-            ULONG bits = icons32[icon][r];
-            for (b = 0; b < 32; b++)
-                if (bits & (0x80000000UL >> b))
-                    WritePixel(g->rp, x + b, y + r);
-        } else {
-            UWORD bits = icons16[icon][r];
-            for (b = 0; b < 16; b++)
-                if (bits & (0x8000 >> b))
-                    WritePixel(g->rp, x + b, y + r);
-        }
-    }
+    SetDrMd(g->rp, JAM1);
+    BltTemplate((PLANEPTR)(g->icon_masks + (ULONG)icon * 16 * g->icon_bpr), 0, g->icon_bpr,
+                g->rp, x, y, 16 * g->sx, 16);
 }
 
 /* Decode a picture through the registered datatypes and draw it scaled to

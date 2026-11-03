@@ -66,6 +66,9 @@ struct Gfx {
     UWORD baseline, font_h;
     BOOL  pens_shared;  /* datatypes may remap into pens 32..255 */
     BOOL  planar;       /* native planar bitmap (FALSE on RTG) */
+    struct BitMap *logo_bm;     /* logo, rendered once in the screen's format */
+    UBYTE *icon_masks;          /* menu icon masks in chip RAM, for BltTemplate */
+    UWORD icon_bpr;             /* bytes per icon mask row: 2 lowres, 4 hires */
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
 };
 
