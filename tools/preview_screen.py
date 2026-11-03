@@ -81,7 +81,7 @@ def main():
     pane_x = menu_w + 6 * sx
     pane_w = W - pane_x - 4 * sx
     fh = 12
-    BG, BAR, RULE, TEXT, DIM, WHITE, HL, SELDIM, ACCENT, KEYCAP = range(10)
+    BG, BAR, RULE, TEXT, DIM, WHITE, HL, SELDIM, ACCENT, KEYCAP = range(10)  # noqa: F841
 
     s.fill(0, 0, W - 1, H - 1, BG)
     s.fill(0, 0, W - 1, 23, BAR)
@@ -122,6 +122,8 @@ def main():
 
     if page == "about":
         about(s, pane_x, pane_w, sx, list_top, footer_y, scroll, (TEXT, DIM, WHITE, RULE, SELDIM))
+    elif page == "glide":
+        glide(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, (TEXT, DIM, WHITE, HL, RULE, SELDIM))
     else:
         games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, (TEXT, DIM, WHITE, HL, RULE))
     s.fill(0, footer_y - 1, W - 1, footer_y - 1, RULE)
@@ -199,6 +201,38 @@ def about(s, pane_x, pane_w, sx, y0, footer_y, scroll, pens):
         s.fill(bx, y0, bx + bw - 1, y0 + ty - 1, TRACK)
         s.fill(bx, y0 + ty, bx + bw - 1, y0 + ty + th - 1, DIM)
         s.fill(bx, y0 + ty + th, bx + bw - 1, y0 + h - 1, TRACK)
+
+
+GLIDE = ["Daffy Duck", "Dalek Attack", "Damocles", "Dangerous Streets", "Dark Seed",
+         "Darkmere", "Day of the Tentacle", "Death Mask", "Defender of the Crown",
+         "Deluxe Galaga", "Desert Strike", "Deuteros", "Diggers", "Disposable Hero",
+         "Dizzy Collection", "Dragon's Lair", "Dune II", "Dungeon Master"]
+
+
+def glide(s, pane_x, pane_w, sx, list_top, row_h, footer_y, pens):
+    """Mirror of the letter overlay in src/main.c (ov_build / ov_slice)."""
+    TEXT, DIM, WHITE, HL, RULE, SELDIM = pens
+    s.text(pane_x, 28, "Games > By Genre > Strategy", WHITE)
+    s.fill(pane_x, 41, pane_x + pane_w - 1, 41, RULE)
+    vis = (footer_y - 2 - list_top) // row_h
+    rows_h = vis * row_h
+    g = render(s.font, "D")
+    ink = [y for y in range(g.height) if any(g.getpixel((x, y)) for x in range(g.width))]
+    cols = [x for x in range(g.width) if any(g.getpixel((x, y)) for y in range(g.height))]
+    top, bot, gw = ink[0], ink[-1], cols[-1] + 1
+    sc = max(2, min(16, rows_h * 2 // 5 // (bot - top + 1)))
+    ow, oh = gw * sc, (bot - top + 1) * sc
+    ox, oy = pane_x + pane_w * 9 // 10 - ow, list_top + (rows_h - oh) // 2
+    sel = 6
+    for r, label in enumerate(GLIDE[:vis]):
+        y = list_top + r * row_h
+        hl = r == sel
+        s.fill(pane_x - 2 * sx, y, s.w - 1, y + row_h - 1, HL if hl else 0)
+        for yy in range(max(y, oy), min(y + row_h, oy + oh)):
+            for xx in range(ow):
+                if g.getpixel((xx // sc, top + (yy - oy) // sc)):
+                    s.img.putpixel((ox + xx, yy), s.pal[SELDIM if hl else RULE])
+        s.text(pane_x, y + 1, label, WHITE if hl else TEXT, pane_w - 2 * sx)
 
 
 def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):

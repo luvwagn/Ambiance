@@ -99,6 +99,7 @@ preview: src/art.c $(FONT_FILES)
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-about-hires.png hires pal about 0
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-laced.png laced pal games
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-rtg.png rtg pal games
+	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-glide.png hires pal glide
 
 # ------------------------------------------------------------------ release
 lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(LICENCES)

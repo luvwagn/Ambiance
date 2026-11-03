@@ -60,6 +60,18 @@ static char msg[80];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
+
+/* Big-letter overlay on long content lists while they glide (see below). */
+static struct {
+    BOOL  on;
+    struct Page *page;
+    char  letter;
+    UBYTE *mask;
+    ULONG size;
+    UWORD bpr;
+    WORD  x, y, w, h;
+    UWORD linger;           /* timer ticks left before hiding, 0 = not counting */
+} ov;
 static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
@@ -70,6 +82,7 @@ static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
 
 static struct Page *page_push(UBYTE type, const char *title)
 {
+    ov.on = FALSE;
     struct Page *p;
     if (depth >= MAXDEPTH)
         return NULL;
@@ -85,6 +98,7 @@ static struct Page *page_push(UBYTE type, const char *title)
 
 static void page_pop(void)
 {
+    ov.on = FALSE;
     if (!depth)
         return;
     gfx_picture_free(&g);
@@ -712,6 +726,166 @@ static BOOL list_follow(struct Page *p)
     return p->top != top;
 }
 
+/* ------------------------------------------------------------ letter overlay
+ * While a long content list (mostly titles, not category folders) glides,
+ * the first letter of the selected title is shown large, behind the rows
+ * like a watermark: centred vertically in the list, its right edge 90% of
+ * the way across. It is the UI font's own glyph blown up in whole pixels,
+ * kept as a chip-RAM mask and stamped into each row as the row is painted,
+ * in pens below 8 so the list's 3-plane blit scrolling still holds. It
+ * goes away half a second after the key is let go. */
+/* (state is declared with the other globals, near the top) */
+
+static char ov_letter_of(const char *s)
+{
+    for (; *s; s++) {
+        UBYTE c = (UBYTE)*s;
+        if (c >= 'a' && c <= 'z')
+            return (char)(c - 32);
+        if ((c >= 'A' && c <= 'Z'))
+            return (char)c;
+        if (c >= '0' && c <= '9')
+            return '#';
+        if (c >= 0xC0)                      /* Latin-1 letters, upper-cased */
+            return (char)((c >= 0xE0 && c != 0xF7) ? c - 32 : c);
+    }
+    return 0;
+}
+
+/* Long and mostly titles: the kind of list the letter helps with. */
+static BOOL ov_eligible(const struct Page *p)
+{
+    LONG i, runs = 0;
+    if (p->type != PT_LIST || p->list.count <= list_visible())
+        return FALSE;
+    for (i = 0; i < p->list.count; i++)
+        if (p->list.items[i].kind == IT_RUN)
+            runs++;
+    return runs * 2 >= p->list.count;
+}
+
+static void ov_free(void)
+{
+    if (ov.mask)
+        FreeMem(ov.mask, ov.size);
+    ov.mask = NULL;
+    ov.on = FALSE;
+    ov.letter = 0;
+}
+
+/* Build the big mask for c from the font's own bitmap, scaled so the
+ * letter's ink is about 40% of the list's height. */
+static BOOL ov_build(char ch)
+{
+    struct TextFont *f = g.font;
+    const UBYTE *data;
+    ULONG lw;
+    UWORD off, gw, mod, x, yy, sy, sx2;
+    LONG idx;
+    WORD top = -1, bot = -1, sc, rows_h, inkh;
+    UBYTE c = (UBYTE)ch;
+    if (!f || !c)
+        return FALSE;
+    idx = (c < f->tf_LoChar || c > f->tf_HiChar) ? f->tf_HiChar - f->tf_LoChar + 1
+                                                   : c - f->tf_LoChar;
+    lw = ((ULONG *)f->tf_CharLoc)[idx];
+    off = (UWORD)(lw >> 16);
+    gw = (UWORD)lw;
+    data = (const UBYTE *)f->tf_CharData;
+    mod = f->tf_Modulo;
+    if (!gw)
+        return FALSE;
+#define FONTBIT(xx, yy2) (data[(yy2) * mod + ((off + (xx)) >> 3)] & (0x80 >> ((off + (xx)) & 7)))
+    for (yy = 0; yy < f->tf_YSize; yy++)
+        for (x = 0; x < gw; x++)
+            if (FONTBIT(x, yy)) {
+                if (top < 0)
+                    top = yy;
+                bot = yy;
+                break;
+            }
+    if (top < 0)
+        return FALSE;
+    inkh = bot - top + 1;
+    rows_h = list_visible() * g.list_row_h;
+    sc = rows_h * 2 / 5 / inkh;
+    if (sc < 2)
+        sc = 2;
+    if (sc > 16)
+        sc = 16;
+    if (ov.mask)
+        FreeMem(ov.mask, ov.size);
+    ov.w = gw * sc;
+    ov.h = inkh * sc;
+    ov.bpr = ((ov.w + 15) / 16) * 2;
+    ov.size = (ULONG)ov.bpr * ov.h;
+    ov.mask = AllocMem(ov.size, MEMF_CHIP | MEMF_CLEAR);   /* BltTemplate reads chip RAM */
+    if (!ov.mask)
+        return FALSE;
+    for (yy = top; yy <= (UWORD)bot; yy++)
+        for (x = 0; x < gw; x++)
+            if (FONTBIT(x, yy))
+                for (sy = 0; sy < sc; sy++) {
+                    UBYTE *row = ov.mask + (ULONG)((yy - top) * sc + sy) * ov.bpr;
+                    for (sx2 = 0; sx2 < sc; sx2++) {
+                        UWORD bx = x * sc + sx2;
+                        row[bx >> 3] |= 0x80 >> (bx & 7);
+                    }
+                }
+#undef FONTBIT
+    ov.letter = ch;
+    ov.x = g.pane_x + g.pane_w * 9 / 10 - ov.w;
+    ov.y = g.list_top + (rows_h - ov.h) / 2;
+    return TRUE;
+}
+
+/* The part of the letter inside screen rows y0..y1, stamped behind text. */
+static void ov_slice(WORD y0, WORD y1, BOOL hl)
+{
+    WORD a = y0 > ov.y ? y0 : ov.y, b = y1 < ov.y + ov.h - 1 ? y1 : ov.y + ov.h - 1;
+    if (a > b || !ov.mask)
+        return;
+    SetAPen(g.rp, hl ? PEN_SELDIM : PEN_RULE);
+    SetDrMd(g.rp, JAM1);
+    BltTemplate((PLANEPTR)(ov.mask + (ULONG)(a - ov.y) * ov.bpr), 0, ov.bpr, g.rp, ov.x, a,
+                ov.w, b - a + 1);
+}
+
+static void draw_list_row(struct Page *p, LONG idx, WORD col);
+
+/* Repaint the rows the letter covers (with or without it). */
+static void ov_repaint(struct Page *p)
+{
+    WORD r, r0, r1, vis = list_visible(), col = mark_column(&p->list);
+    if (!ov.h)
+        return;
+    r0 = (ov.y - g.list_top) / g.list_row_h;
+    r1 = (ov.y + ov.h - 1 - g.list_top) / g.list_row_h;
+    for (r = r0 < 0 ? 0 : r0; r <= r1 && r < vis; r++)
+        if (p->top + r < p->list.count)
+            draw_list_row(p, p->top + r, col);
+}
+
+static void ov_show(struct Page *p)
+{
+    char c = ov_letter_of(p->list.items[p->sel].label);
+    if (!c || !ov_build(c))
+        return;
+    ov.on = TRUE;
+    ov.page = p;
+    ov.linger = 0;
+    ov_repaint(p);
+}
+
+static void ov_hide(void)
+{
+    struct Page *p = ov.page;
+    BOOL was = ov.on;
+    ov.on = FALSE;
+    if (was && p && p == cur() && p->type == PT_LIST && g.win)
+        ov_repaint(p);
+}
+
 /* One row of the list in its slot, background and all. Rows are painted
  * one by one over what was there, never after clearing the whole list,
  * so fast scrolling does not flash. */
@@ -725,6 +899,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
     gfx_fill(&g, g.pane_x - 2 * g.sx, y, g.w - 1, y + g.list_row_h - 1,
              !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
+    if (ov.on && ov.page == p)
+        ov_slice(y, y + g.list_row_h - 1, sel && focus == FOCUS_CONTENT);
     if (it->mark != MARK_NONE)
         gfx_text(&g, g.pane_x, ty, mark_text[it->mark],
                  sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, 0);
@@ -1005,8 +1181,15 @@ static void act_move(LONG d)
         {
             LONG old = p->sel, old_top = p->top;
             p->sel = s;
+            if (ov.on && ov.page == p) {
+                char c = ov_letter_of(p->list.items[s].label);
+                if (c && c != ov.letter)
+                    ov_build(c);
+            }
             draw_title(p);
             draw_list_move(p, old, old_top);
+            if (ov.on && ov.page == p && p->top != old_top)
+                ov_repaint(p);      /* the shift moved the letter with the rows */
         }
     } else {
         tb_scroll_by(&p->tb, d * p->tb.line_h);   /* the main loop animates it */
@@ -1154,6 +1337,7 @@ static struct {
     ULONG frames;
     LONG  acc;
     BOOL  joy;              /* held on the joystick rather than the keyboard */
+    BOOL  letters;          /* show the letter overlay once the glide starts */
 } hold;
 
 static void hold_start(LONG dir, BOOL joy)
@@ -1162,6 +1346,7 @@ static void hold_start(LONG dir, BOOL joy)
     hold.frames = 0;
     hold.acc = 0;
     hold.joy = joy;
+    hold.letters = cur() && ov_eligible(cur());
 }
 
 static void hold_stop(void)
@@ -1206,6 +1391,9 @@ static void hold_tick(void)
     if (ramp > HOLD_RAMP)
         ramp = HOLD_RAMP;
     if (p->type == PT_LIST) {
+        if (hold.letters && !(ov.on && ov.page == p))
+            ov_show(p);
+        ov.linger = 0;
         remaining = hold.dir > 0 ? p->list.count - 1 - p->sel : p->sel;
         if (remaining <= 0) {
             hold_stop();
@@ -1618,6 +1806,13 @@ int main(void)
             if (GetMsg(tport)) {
                 ticks++;
                 joy_poll();
+                /* the letter lingers ~0.5 s after the glide ends */
+                if (ov.on && !hold_active()) {
+                    if (!ov.linger)
+                        ov.linger = 13;
+                    else if (--ov.linger == 0)
+                        ov_hide();
+                }
                 if (ticks % 25 == 0 && g.win) {
                     struct DateStamp ds;
                     DateStamp(&ds);
@@ -1662,6 +1857,7 @@ int main(void)
 out:
     amce_log("quitting", "");
     dbg_cpu_stop();
+    ov_free();
     if (timer_open) {
         if (!CheckIO((struct IORequest *)treq))
             AbortIO((struct IORequest *)treq);
