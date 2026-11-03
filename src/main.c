@@ -713,6 +713,14 @@ static void act_move(LONG d)
     }
 }
 
+/* One wheel notch: one entry in the menu and in lists, three lines of text. */
+static void act_wheel(LONG d)
+{
+    struct Page *p = cur();
+    BOOL text = focus == FOCUS_CONTENT && p && p->type != PT_LIST;
+    act_move(text ? d * 3 : d);
+}
+
 static void act_open(BOOL play)
 {
     struct Page *p = cur();
@@ -880,8 +888,8 @@ static void handle_key(struct IntuiMessage *im)
         case 0x4D: disarm(); act_move(shift ? page : 1); break;       /* cursor down */
         case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
         case 0x4F: disarm(); if (focus == FOCUS_CONTENT) act_back(); break; /* cursor left */
-        case 0x7A: disarm(); act_move(-3); break;                     /* wheel up (NM_WHEEL_UP) */
-        case 0x7B: disarm(); act_move(3); break;                      /* wheel down */
+        case 0x7A: disarm(); act_wheel(-1); break;                    /* wheel up (NM_WHEEL_UP) */
+        case 0x7B: disarm(); act_wheel(1); break;                     /* wheel down */
         }
         return;
     }
