@@ -260,6 +260,10 @@ void gfx_close(struct Gfx *g)
         FreeMem(g->icon_masks, (ULONG)ICON_COUNT * 16 * g->icon_bpr);
         g->icon_masks = NULL;
     }
+    if (g->mark_masks) {
+        FreeMem(g->mark_masks, (ULONG)MARK_RADIO_ON * MARK_SIZE * g->icon_bpr);
+        g->mark_masks = NULL;
+    }
     if (g->win) {
         amce_log("CloseWindow", "");
         CloseWindow(g->win);
@@ -384,6 +388,10 @@ static void cache_art(struct Gfx *g)
     g->icon_masks = AllocMem(size, MEMF_CHIP);
     if (g->icon_masks)
         CopyMem(g->sx == 2 ? (APTR)icons32 : (APTR)icons16, g->icon_masks, size);
+    size = (ULONG)(MARK_RADIO_ON) * MARK_SIZE * g->icon_bpr;
+    g->mark_masks = AllocMem(size, MEMF_CHIP);
+    if (g->mark_masks)
+        CopyMem(g->sx == 2 ? (APTR)marks32 : (APTR)marks16, g->mark_masks, size);
 }
 
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
@@ -399,6 +407,18 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
         BltTemplate((PLANEPTR)(g->logo_masks + (ULONG)k * h * g->logo_bpr), 0, g->logo_bpr,
                     g->rp, x, y, w, h);
     }
+}
+
+/* A list row marker (sub-menu chevron, checkbox, radio button): every one
+ * is MARK_SIZE design pixels square, so a state change never moves text. */
+void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE pen)
+{
+    if (!g->mark_masks || mark < MARK_ARROW || mark > MARK_RADIO_ON)
+        return;
+    SetAPen(g->rp, pen);
+    SetDrMd(g->rp, JAM1);
+    BltTemplate((PLANEPTR)(g->mark_masks + (ULONG)(mark - 1) * MARK_SIZE * g->icon_bpr), 0,
+                g->icon_bpr, g->rp, x, y, MARK_SIZE * g->sx, MARK_SIZE);
 }
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen)

@@ -14,6 +14,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 import hiicons
+import markicons
 
 # ------------------------------------------------------------ palette (pens)
 UI = [
@@ -347,6 +348,13 @@ def main():
         fh.write("};\n\nconst ULONG icons32[][16] = {\n")
         for fn in hiicons.ICONS:
             fh.write("    { " + ", ".join(f"0x{v:08X}" for v in hiicons.render(fn)) + " },\n")
+        fh.write("};\n\n/* List row markers (MARK_ARROW..MARK_RADIO_ON), 11 rows each */\n")
+        fh.write("const UWORD marks16[][11] = {\n")
+        for n in markicons.ORDER:
+            fh.write("    { " + ", ".join(f"0x{v:04X}" for v in markicons.lores(n)) + " },\n")
+        fh.write("};\n\nconst ULONG marks32[][11] = {\n")
+        for n in markicons.ORDER:
+            fh.write("    { " + ", ".join(f"0x{v:08X}" for v in markicons.hires(n)) + " },\n")
         fh.write("};\n\n/* LoadRGB32 table: count<<16|first, then R,G,B as 32-bit values, then 0 */\n")
         fh.write("const ULONG ui_palette32[] = {\n    " + pal[0] + ",\n")
         for i in range(1, len(pal) - 1, 3):

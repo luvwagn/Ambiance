@@ -695,23 +695,17 @@ static void draw_title(struct Page *p)
     gfx_fill(&g, g.pane_x, 41, g.pane_x + g.pane_w - 1, 41, PEN_RULE);
 }
 
-/* Row markers, drawn in a column on the left before each label. */
-static const char *mark_text[] = { "", ">", "[ ]", "[x]", "( )", "(*)" };
-
-/* Width of the marker column for this list: wide enough for its widest
- * marker, so every label in the list starts at the same x; 0 if none. */
+/* Row markers are icons (gfx_mark) in a column on the left before each
+ * label. The column is the same width whatever the markers' state, so
+ * ticking a box or picking a radio button never moves the text; lists
+ * without markers have no column. */
 static WORD mark_column(const struct ItemList *l)
 {
-    UBYTE seen[sizeof(mark_text) / sizeof(mark_text[0])];
-    WORD w = 0, mw;
     LONG i;
-    memset(seen, 0, sizeof(seen));
-    for (i = 0; i < l->count; i++)      /* cheap scan; text widths measured once each */
-        seen[l->items[i].mark] = 1;
-    for (i = 1; i < (LONG)sizeof(seen); i++)
-        if (seen[i] && (mw = gfx_textlen(&g, mark_text[i])) > w)
-            w = mw;
-    return w ? w + 5 * g.sx : 0;
+    for (i = 0; i < l->count; i++)
+        if (l->items[i].mark != MARK_NONE)
+            return (MARK_SIZE + 5) * g.sx;
+    return 0;
 }
 
 /* Keep the selection inside the visible rows; TRUE if the list scrolled. */
@@ -910,8 +904,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     if (ov.on && ov.page == p)
         ov_slice(y, y + g.list_row_h - 1, sel && focus == FOCUS_CONTENT);
     if (it->mark != MARK_NONE)
-        gfx_text(&g, g.pane_x, ty, mark_text[it->mark],
-                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, 0);
+        gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - MARK_SIZE) / 2,
+                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT);
     if (it->kind == IT_ACTION && it->path[0]) {
         WORD tagw = gfx_textlen(&g, it->path);
         gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, 0);

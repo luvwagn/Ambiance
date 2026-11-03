@@ -72,6 +72,7 @@ struct Gfx {
     UWORD logo_bpr;             /* bytes per logo mask row */
     UBYTE *icon_masks;          /* menu icon masks in chip RAM, for BltTemplate */
     UWORD icon_bpr;             /* bytes per icon mask row: 2 lowres, 4 hires */
+    UBYTE *mark_masks;          /* list row marker masks in chip RAM */
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
 };
 
@@ -90,6 +91,7 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw
 WORD gfx_textlen(struct Gfx *g, const char *s);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen);
+void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE pen);   /* MARK_* icon */
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h);
 void gfx_picture_free(struct Gfx *g);
 
@@ -168,6 +170,9 @@ extern const UBYTE logo_lo[], logo_hi[];
 extern const UWORD logo_lo_w, logo_lo_h, logo_hi_w, logo_hi_h;
 extern const UWORD icons16[][16];   /* lowres, hand-drawn */
 extern const ULONG icons32[][16];   /* hires, from vector shapes */
+extern const UWORD marks16[][11];   /* list row markers, lowres (MARK_ARROW..) */
+extern const ULONG marks32[][11];   /* list row markers, hires */
+#define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */
 extern const ULONG ui_palette32[];
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };

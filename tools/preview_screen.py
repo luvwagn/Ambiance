@@ -31,7 +31,25 @@ def parse_art(path):
     icons32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)] for grp in re.findall(r"\{([^}]*)\}", i32)]
     pal = arr("ui_palette32")[1:-1]
     palette = [(pal[i] >> 24, pal[i + 1] >> 24, pal[i + 2] >> 24) for i in range(0, len(pal), 3)]
+    global MARKS16, MARKS32
+    MARKS16 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{4})", grp)] for grp in
+               re.findall(r"\{([^}]*)\}", re.search(r"marks16\[\]\[11\] = \{(.*?)\};", src, re.S).group(1))]
+    MARKS32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)] for grp in
+               re.findall(r"\{([^}]*)\}", re.search(r"marks32\[\]\[11\] = \{(.*?)\};", src, re.S).group(1))]
     return arr("logo_lo"), arr("logo_hi"), dims, icons, icons32, palette
+
+
+MARKS16, MARKS32 = [], []
+
+
+def draw_mark(s, mark, x, y, pen, sx):
+    """Mirror of gfx_mark(): MARK_ARROW = 1 ... MARK_RADIO_ON = 5."""
+    rows = (MARKS32 if sx == 2 else MARKS16)[mark - 1]
+    width, top = 11 * sx, 1 << (31 if sx == 2 else 15)
+    for r, bits in enumerate(rows):
+        for b in range(width):
+            if bits & (top >> b):
+                s.img.putpixel((x + b, y + r), s.pal[pen])
 
 
 class Screen:
@@ -248,8 +266,8 @@ def games(s, pane_x, pane_w, sx, list_top, list_row_h, footer_y, pens):
         sel = r == 1
         if sel:
             s.fill(pane_x - 2 * sx, y, pane_x + pane_w - 1, y + list_row_h - 1, HL)
-        col = s.textlen(">") + 5 * sx            # marker column, as in draw_list_rows()
-        s.text(pane_x, y + 1, ">", WHITE if sel else DIM)
+        col = (11 + 5) * sx                      # fixed marker column, as in mark_column()
+        draw_mark(s, 1, pane_x, y + (list_row_h - 11) // 2, WHITE if sel else DIM, sx)
         s.text(pane_x + col, y + 1, label, WHITE if sel else TEXT, pane_w - col - 2 * sx)
 
 
