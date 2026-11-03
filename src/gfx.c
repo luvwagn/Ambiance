@@ -87,10 +87,13 @@ static const struct {
     { "pal-hires",  "640 x 256  PAL hires",      640, 256, K_HIRES, 1 },
     { "ntsc-laced", "640 x 400  NTSC hires laced", 640, 400, K_LACED, 0 },
     { "pal-laced",  "640 x 512  PAL hires laced",  640, 512, K_LACED, 1 },
+    { "rtg-640",    "640 x 480  RTG",            640, 480, K_RTG,   0 },
     { "rtg-800",    "800 x 600  RTG",            800, 600, K_RTG,   0 },
+    { "rtg-1024",   "1024 x 768  RTG",           1024, 768, K_RTG,  0 },
 };
 
 const char *gfx_mode_key(int sm) { return modes[sm].key; }
+BOOL gfx_mode_is_rtg(int sm) { return modes[sm].kind == K_RTG; }
 const char *gfx_mode_label(int sm) { return modes[sm].label; }
 
 int gfx_mode_from_key(const char *key)
@@ -109,7 +112,7 @@ static ULONG mode_id(int sm)
     case K_LORES: return mon | LORES_KEY;
     case K_HIRES: return mon | HIRES_KEY;
     case K_LACED: return mon | HIRESLACE_KEY;
-    default:      return caps_find_rtg_mode(800, 600);
+    default:      return caps_find_rtg_mode(modes[sm].w, modes[sm].h);
     }
 }
 
@@ -178,6 +181,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     if (!g->scr)
         return FALSE;
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
+    amce_log("screen open", modes[sm].label);
 
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);
     g->pens_shared = FALSE;
@@ -232,6 +236,7 @@ void gfx_close(struct Gfx *g)
         g->icon_masks = NULL;
     }
     if (g->win) {
+        amce_log("CloseWindow", "");
         CloseWindow(g->win);
         g->win = NULL;
     }
@@ -240,10 +245,13 @@ void gfx_close(struct Gfx *g)
         g->font = NULL;
     }
     if (g->scr) {
+        BOOL ok;
         if (g->pens_shared)
             for (i = 0; i < NUM_UI_PENS; i++)
                 ReleasePen(g->scr->ViewPort.ColorMap, i);
-        CloseScreen(g->scr);
+        amce_log("CloseScreen", "");
+        ok = CloseScreen(g->scr);
+        amce_log("CloseScreen returned", ok ? "TRUE" : "FALSE (windows still open)");
         g->scr = NULL;
     }
 }

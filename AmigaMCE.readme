@@ -20,7 +20,8 @@ Features in this release
 - Launches titles through their AGS .run scripts, honouring the AGS
   Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
 - Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,
-  640x200/256 hires, 640x400/512 hires laced (AGA), 800x600 RTG, or
+  640x200/256 hires, 640x400/512 hires laced (AGA), 640x480, 800x600
+  or 1024x768 RTG (when the card has them), or
   Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
 - Smooth-scrolling, flicker-free text pages (fact sheets, Credits,
   System information) with a scroll bar when the text is longer than the page.

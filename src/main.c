@@ -345,6 +345,8 @@ static void build_screenmodes(struct Page *p)
     for (m = 0; m < SM_COUNT; m++) {
         char label[64];
         const char *why = gfx_mode_problem(&caps, m);
+        if (why && gfx_mode_is_rtg(m) && m != screen_mode)
+            continue;           /* RTG sizes are listed only when the card has them */
         if (m == SM_AUTO) {
             amce_strlcpy(label, "Automatic: ", sizeof(label));
             amce_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
@@ -776,6 +778,7 @@ static void launch(const char *base)
         return;
     }
     /* Give the game every byte of chip RAM we can. */
+    amce_log("launch", base);
     gfx_close(&g);
     con = Open((CONST_STRPTR)"CON:0/0/640/200/AmigaMCE/AUTO/CLOSE", MODE_OLDFILE);
     if (con) {
@@ -1200,6 +1203,7 @@ int main(void)
         rc = 20;
         goto out;
     }
+    amce_log_open();
     DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
     DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
     LowLevelBase = OpenLibrary((CONST_STRPTR)"lowlevel.library", 40);
@@ -1208,6 +1212,16 @@ int main(void)
     ags_init(&ags);
     build_menu();
     load_screen_mode();
+    {
+        /* Which display the Workbench uses: a native <-> RTG switch on exit
+         * can be slow in some emulators and drivers. */
+        struct Screen *wb = LockPubScreen(NULL);
+        if (wb) {
+            ULONG id = GetVPModeID(&wb->ViewPort);
+            amce_log("Workbench screen", caps_mode_is_rtg(id) ? "RTG" : "native chipset");
+            UnlockPubScreen(NULL, wb);
+        }
+    }
 
     if (!gfx_open(&g, &caps, screen_mode)) {
         say("AmigaMCE could not open its screen.\n");
@@ -1281,6 +1295,7 @@ int main(void)
     }
 
 out:
+    amce_log("quitting", "");
     if (timer_open) {
         if (!CheckIO((struct IORequest *)treq))
             AbortIO((struct IORequest *)treq);
@@ -1291,8 +1306,11 @@ out:
         DeleteIORequest((struct IORequest *)treq);
     if (tport)
         DeleteMsgPort(tport);
+    amce_log("timer closed", "");
     pages_clear();
+    amce_log("pages freed", "");
     gfx_close(&g);
+    amce_log("screen closed", "");
     ags_free(&ags);
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
@@ -1302,6 +1320,8 @@ out:
         CloseLibrary(DiskfontBase);
     if (GfxBase)
         CloseLibrary((struct Library *)GfxBase);
+    amce_log("libraries closed, exiting", "");
+    amce_log_close();
     if (IntuitionBase)
         CloseLibrary((struct Library *)IntuitionBase);
     return rc;

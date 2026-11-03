@@ -6,7 +6,8 @@ RetroArch and Windows Media Center. AmigaMCE is a drop-in companion to
 copy the drawer onto an AGS installation and double-click it.
 
 - Kickstart 3.1 or newer. Screen mode is chosen in Settings: 320x200/256
-  lowres, 640x200/256 hires and 640x400/512 laced on AGA, 800x600 on RTG.
+  lowres, 640x200/256 hires and 640x400/512 laced on AGA, 640x480, 800x600
+  and 1024x768 on RTG.
 - Reads the AGS menu tree, fact sheets and screenshots directly; launches titles
   through their `.run` scripts and returns to AmigaMCE afterwards.
 - Pictures are decoded through the installed datatypes.

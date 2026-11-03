@@ -51,7 +51,7 @@ enum { LAYOUT_LORES = 0, LAYOUT_HIRES = 1 };
  * columns per design pixel) is for the tall-pixel 640x200/256 modes; the
  * square-pixel modes (320 wide, 640 laced, RTG) use the lowres artwork 1:1. */
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
-       SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_800, SM_COUNT };
+       SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024, SM_COUNT };
 
 struct Gfx {
     struct Screen   *scr;
@@ -78,6 +78,7 @@ const char *gfx_mode_key(int sm);
 const char *gfx_mode_label(int sm);
 int  gfx_mode_from_key(const char *key);                 /* -1 if unknown */
 const char *gfx_mode_problem(const struct Caps *c, int sm);  /* NULL if usable */
+BOOL gfx_mode_is_rtg(int sm);
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);
 void gfx_close(struct Gfx *g);
@@ -162,6 +163,11 @@ extern const ULONG icons32[][16];   /* hires, from vector shapes */
 extern const ULONG ui_palette32[];
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };
+
+/* ---------------------------------------------------------------- log */
+void amce_log_open(void);           /* only if PROGDIR:AmigaMCE.debug exists */
+void amce_log(const char *what, const char *detail);
+void amce_log_close(void);
 
 /* ---------------------------------------------------------------- util */
 int  amce_stricmp(const char *a, const char *b);
