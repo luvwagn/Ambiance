@@ -407,7 +407,7 @@ static void show_message(struct Gfx *g, const char *s)
 }
 
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
-               char *scale, LONG scalemax)
+               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped)
 {
     struct BitMapHeader *bmh = NULL;
     struct BitMap *src = NULL, *tmp;
@@ -421,18 +421,29 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     char msg[96];
 
     drop_picture(g);
-    if (!DataTypesBase)
+    if (!DataTypesBase) {
+        pic_dispose(pre);
         return FALSE;
-    sprintf(msg, "Loading %.80s", label);
-    show_message(g, msg);
+    }
+    if (!pre) {
+        sprintf(msg, "Loading %.80s", label);
+        show_message(g, msg);
+    }
 
-    /* direct: a picture that fits the colour table, not remapped */
-    if (clut && !is_jpeg(path)) {
-        o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                        PDTA_DestMode, PMODE_V43, TAG_END);
+    /* direct: a picture that fits the colour table, not remapped (pre: one
+     * the loader decoded ahead, unremapped on a colour-table screen) */
+    if (clut && (pre ? !pre_remapped : !is_jpeg(path))) {
+        if (pre) {
+            o = pre;
+            pre = NULL;
+        } else {
+            o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
+                            PDTA_DestMode, PMODE_V43, TAG_END);
+            if (o)
+                DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+        }
         if (o) {
             ULONG mode = 0, ncol = 0, *cregs = NULL;
-            DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
             GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_ModeID, (ULONG)&mode,
                        PDTA_CRegs, (ULONG)&cregs, PDTA_NumColors, (ULONG)&ncol, TAG_END);
             if (mode == (ULONG)INVALID_ID)
@@ -484,12 +495,21 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     /* remap: into the screen's free pens (or its true colour) */
     if (!direct) {
         bmh = NULL;
-        o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Screen, (ULONG)g->scr,
-                        PDTA_Remap, TRUE, PDTA_DestMode, PMODE_V43,
-                        OBP_Precision, PRECISION_IMAGE, PDTA_FreeSourceBitMap, TRUE, TAG_END);
-        if (!o || !DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE)) {
-            if (o)
+        if (pre && pre_remapped && !clut) {
+            o = pre;                        /* decoded ahead into true colour */
+            pre = NULL;
+        } else {
+            pic_dispose(pre);
+            pre = NULL;
+            o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Screen, (ULONG)g->scr,
+                            PDTA_Remap, TRUE, PDTA_DestMode, PMODE_V43,
+                            OBP_Precision, PRECISION_IMAGE, PDTA_FreeSourceBitMap, TRUE, TAG_END);
+            if (o && !DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE)) {
                 DisposeDTObject(o);
+                o = NULL;
+            }
+        }
+        if (!o) {
             sprintf(msg, "Could not show %.80s", label);
             show_message(g, msg);
             return FALSE;

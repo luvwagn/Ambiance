@@ -76,6 +76,7 @@ static struct Page *pv_page;        /* what the preview shows: page and entry */
 static LONG pv_sel;
 static BOOL pv_shown;               /* FALSE once the pane is cleared or left */
 static struct ItemList pv_list;     /* its wrapped lines */
+static struct LJob *pv_wait;        /* the loader job the pane waits for */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
@@ -105,6 +106,7 @@ static struct Page *page_push(UBYTE type, const char *title)
     ov.on = FALSE;
     tb_close(&pv_tb);
     pv_shown = FALSE;
+    pv_wait = NULL;
     if (focus == FOCUS_PREVIEW)
         focus = FOCUS_CONTENT;
     struct Page *p;
@@ -125,6 +127,7 @@ static void page_pop(void)
     ov.on = FALSE;
     tb_close(&pv_tb);
     pv_shown = FALSE;
+    pv_wait = NULL;
     if (focus == FOCUS_PREVIEW)
         focus = FOCUS_CONTENT;
     if (!depth)
@@ -1154,7 +1157,6 @@ static WORD list_xr(struct Page *p)
 static BOOL hold_active(void);
 static BOOL pv_pending;
 static ULONG pv_due;
-static char pv_lines[FACT_LINES][96];
 
 /* "12-Mar-1994" from a DateStamp's days. */
 static void date_text(LONG days, char *out)
@@ -1187,65 +1189,196 @@ static void pv_line(const char *s, WORD w)
         wrap_into(&pv_list, s, w);
 }
 
-/* A Pictures row: the picture (or a folder's first picture), then what it
- * is and, for a folder, what Fire and Right do there. */
-static void preview_pics(struct Page *p, WORD x0, WORD w, WORD max_y)
-{
-    struct Item *it = &p->list.items[p->sel];
-    char path[300], line[120];
-    const char *show = NULL;
-    WORD y = g.list_top, dh = 0;
-    LONG np = 0, nd = 0;
-    BOOL drawn = FALSE;
+/* ---- preview jobs: read by the loader (loader.c), the one shown and those
+ * next to it, so a steady pace of Down finds each entry ready. With memory
+ * to spare (PV_ROOMY), speed comes first: two entries ahead and one behind
+ * are read, and entries shown stay decoded for going back, up to PV_SLOTS.
+ * Short of memory, only the one shown and the next one ahead are kept. */
+#define PV_SLOTS 12
+#define PV_TIGHT 3
+static struct LJob *pv_slot[PV_SLOTS];
+static ULONG pv_clock;              /* cache order */
 
-    if (it->kind == IT_PIC) {
-        show = it->path;
-    } else if (!(it->flags & ITEM_DISABLED)) {
-        np = pics_scan(it->path, &nd, path, sizeof(path));
-        if (np > 0)
-            show = path;
+static BOOL pv_roomy(void)
+{
+    return AvailMem(MEMF_ANY) >= 3UL * 1024 * 1024 && AvailMem(MEMF_CHIP) >= 768UL * 1024;
+}
+static LONG pv_dir = 1;             /* the way the list last moved */
+
+/* What the pane shows for entry idx: a job type and its path, 0 if none. */
+static int pv_kind(struct Page *p, LONG idx, char *path, LONG max)
+{
+    struct Item *it;
+    if (idx < 0 || idx >= p->list.count)
+        return 0;
+    it = &p->list.items[idx];
+    if (p->pics) {
+        amce_strlcpy(path, it->path, max);
+        if (it->kind == IT_PIC)
+            return LJ_PICTURE;
+        if (it->kind == IT_DIR)
+            return LJ_PICFOLDER;
+        return 0;
     }
-    if (show && (g.pens_shared || g.truecolor) &&
-        gfx_picture(&g, show, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
+    if (it->kind != IT_RUN)
+        return 0;
+    item_path(it, path, max);
+    return LJ_ENTRY;
+}
+
+static void pv_free_slot(int i)
+{
+    struct LJob *j = pv_slot[i];
+    if (!j)
+        return;
+    if (j->busy)
+        ldr_wait(j);
+    pic_dispose(j->obj);
+    if (pv_wait == j)
+        pv_wait = NULL;
+    FreeVec(j);
+    pv_slot[i] = NULL;
+}
+
+/* Every job back and freed: before the screen closes or a game runs. */
+static void pv_flush(void)
+{
+    int i;
+    for (i = 0; i < PV_SLOTS; i++)
+        pv_free_slot(i);
+    pv_wait = NULL;
+}
+
+/* The job for (type, path): one already out or back, else a new one. NULL
+ * if every slot is busy (a read-ahead is then skipped). */
+static struct LJob *pv_request(int type, const char *path, BOOL ahead)
+{
+    int i, free_i = -1;
+    struct LJob *j;
+    int limit = pv_roomy() ? PV_SLOTS : PV_TIGHT, used = 0;
+    for (i = 0; i < PV_SLOTS; i++) {
+        j = pv_slot[i];
+        if (j && j->type == type && strcmp(j->path, path) == 0) {
+            if (!j->busy && (j->spent || !j->ran)) {
+                pv_free_slot(i);        /* its picture went to the screen, or it was
+                                         * skipped: read it again */
+                break;
+            }
+            j->cancel = FALSE;
+            j->stamp = ++pv_clock;
+            return j;
+        }
+    }
+    for (i = 0; i < PV_SLOTS; i++)
+        if (pv_slot[i])
+            used++;
+    for (i = 0; i < PV_SLOTS && free_i < 0 && used < limit; i++)
+        if (!pv_slot[i])
+            free_i = i;
+    while (free_i < 0) {
+        /* the longest unused one that is back */
+        int old = -1;
+        for (i = 0; i < PV_SLOTS; i++)
+            if (pv_slot[i] && !pv_slot[i]->busy && pv_slot[i] != pv_wait &&
+                (old < 0 || pv_slot[i]->stamp < pv_slot[old]->stamp))
+                old = i;
+        if (old < 0)
+            break;
+        pv_free_slot(old);
+        if (--used < limit)
+            free_i = old;
+    }
+    if (free_i < 0) {
+        /* every one is still out: a read-ahead waits its turn; the one
+         * asked for goes past the limit, and reads ahead not yet started
+         * are skipped so it comes sooner (never waited for here) */
+        if (ahead)
+            return NULL;
+        for (i = 0; i < PV_SLOTS; i++)
+            if (pv_slot[i] && pv_slot[i] != pv_wait)
+                pv_slot[i]->cancel = TRUE;
+        for (i = 0; i < PV_SLOTS && free_i < 0; i++)
+            if (!pv_slot[i])
+                free_i = i;
+        if (free_i < 0)
+            return NULL;
+    }
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return NULL;
+    j->type = type;
+    amce_strlcpy(j->path, path, sizeof(j->path));
+    j->scr = g.scr;
+    j->remap = g.truecolor;
+    j->want_pic = g.pens_shared || g.truecolor;
+    j->stamp = ++pv_clock;
+    pv_slot[free_i] = j;
+    ldr_submit(j);
+    return j;
+}
+
+static void pv_release(struct LJob *j)
+{
+    int i;
+    for (i = 0; i < PV_SLOTS; i++)
+        if (pv_slot[i] == j)
+            pv_free_slot(i);
+}
+
+/* Read the entries around this one ahead: the next one the way the list
+ * moves; with memory to spare, the one after it and the one behind too. */
+static void pv_read_ahead(struct Page *p)
+{
+    static const LONG near[] = { 1, 2, -1 };
+    char path[300];
+    int i, n = pv_roomy() ? 3 : 1;
+    for (i = 0; i < n; i++) {
+        int k = pv_kind(p, p->sel + near[i] * pv_dir, path, sizeof(path));
+        if (k && !pv_request(k, path, TRUE))
+            break;
+    }
+}
+
+/* The picture of a job at the top of the pane; the y below it. */
+static WORD pv_picture(struct LJob *j, WORD x0, WORD w, WORD max_y, BOOL *drawn)
+{
+    WORD y = g.list_top, dh = 0;
+    BOOL taken = FALSE;
+    *drawn = FALSE;
+    if (j->obj && gfx_picture_obj(&g, j->obj, j->remapped, x0, y, w, (max_y - y) / 2, TRUE, &dh,
+                                  &taken)) {
+        /* drawn straight over the old one (which keeps its colours until
+         * then); only what it does not cover is cleared afterwards */
         gfx_fill_bg(&g, x0, y, g.pic_x - 1, y + dh - 1);
         gfx_fill_bg(&g, g.pic_x + g.pic_w, y, g.w - 1, y + dh - 1);
         y += dh;
-        drawn = TRUE;
+        *drawn = TRUE;
     } else {
         gfx_picture_free(&g);
     }
+    if (taken) {
+        j->obj = NULL;                      /* the screen has it now (its pens) */
+        j->spent = TRUE;
+    }
     gfx_fill_bg(&g, x0, y, g.w - 1, max_y);
-    if (dh)
-        y += U(6);
+    return dh ? y + U(6) : y;
+}
 
-    if (pv_list.pool)
-        list_free(&pv_list);
-    if (!list_init(&pv_list))
-        return;
-    w -= U(7);
+/* A Pictures row: the picture (or a folder's first picture), then what it
+ * is and, for a folder, what Fire and Right do there. */
+static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
+{
+    char line[120];
     pv_line(it->label, w);
     if (it->kind == IT_PIC) {
-        struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
-        BPTR l = Lock((CONST_STRPTR)it->path, SHARED_LOCK);
-        LONG size = -1;
         char date[24];
-        date[0] = 0;
-        if (l && fib && Examine(l, fib)) {
-            size = fib->fib_Size;
-            date_text(fib->fib_Date.ds_Days, date);
-        }
-        if (l)
-            UnLock(l);
-        if (fib)
-            FreeDosObject(DOS_FIB, fib);
         if (drawn) {
             pic_describe(&g.pic, line, sizeof(line));
             pv_line(line, w);
         }
         sprintf(line, "%s", drawn && g.pic.fmt[0] ? g.pic.fmt : it->sortkey);
-        if (size >= 0) {
+        if (j->size >= 0) {
             char kb[24];
-            sprintf(kb, "  -  %ld KB", (long)((size + 1023) / 1024));
+            sprintf(kb, "  -  %ld KB", (long)((j->size + 1023) / 1024));
             amce_strlcat(line, kb, sizeof(line));
         }
         pv_line(line, w);
@@ -1258,90 +1391,121 @@ static void preview_pics(struct Page *p, WORD x0, WORD w, WORD max_y)
             if (line[0])
                 pv_line(line, w);
         }
-        if (date[0]) {
+        if (j->size >= 0) {
+            date_text(j->days, date);
             sprintf(line, "Changed %s", date);
             pv_line(line, w);
         }
-    } else if (it->flags & ITEM_DISABLED) {
+    } else if ((it->flags & ITEM_DISABLED) || (j->np <= 0 && j->nd == 0)) {
         pv_line("No pictures in this folder.", w);
-    } else if (nd == 0) {
-        sprintf(line, np == 1 ? "%ld picture" : "%ld pictures", (long)np);
+    } else if (j->nd == 0) {
+        sprintf(line, j->np == 1 ? "%ld picture" : "%ld pictures", (long)j->np);
         pv_line(line, w);
         pv_line("", w);
         pv_line("Fire: slideshow", w);
         pv_line("Right: open the folder", w);
     } else {
-        if (np > 0)
-            sprintf(line, "%ld folder%s, %ld picture%s", (long)nd, nd == 1 ? "" : "s",
-                    (long)np, np == 1 ? "" : "s");
+        if (j->np > 0)
+            sprintf(line, "%ld folder%s, %ld picture%s", (long)j->nd, j->nd == 1 ? "" : "s",
+                    (long)j->np, j->np == 1 ? "" : "s");
         else
-            sprintf(line, nd == 1 ? "%ld folder" : "%ld folders", (long)nd);
+            sprintf(line, j->nd == 1 ? "%ld folder" : "%ld folders", (long)j->nd);
         pv_line(line, w);
         pv_line("", w);
         pv_line("Fire or Right: open", w);
     }
-    if (!pv_list.count || max_y - y < g.font_h)
-        return;
-    pv_tb.pos = pv_tb.target = 0;
-    pv_tb.focused = focus == FOCUS_PREVIEW;
-    if (tb_open(&g, &pv_tb, x0, y, w, max_y - y + 1, &pv_list, TRUE))
-        tb_draw(&g, &pv_tb);
 }
 
+/* Draw the pane from a job that is back, then read the next one ahead. */
+static void preview_show(struct Page *p, struct LJob *j)
+{
+    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y;
+    BOOL drawn;
+    LONG i;
+    tb_close(&pv_tb);
+    y = pv_picture(j, x0, w, max_y, &drawn);
+    if (pv_list.pool)
+        list_free(&pv_list);
+    if (list_init(&pv_list)) {
+        if (p->pics) {
+            pv_pics_lines(&p->list.items[p->sel], j, drawn, w - U(7));
+        } else {
+            /* the whole fact sheet, in a text box with a scroll bar when it
+             * is longer than the room left (wheel or bar; Up/Down stay
+             * with the list) */
+            for (i = 0; i < j->nlines; i++)
+                pv_line(j->lines[i], w - U(7));
+        }
+        if (pv_list.count && max_y - y >= g.font_h) {
+            pv_tb.pos = pv_tb.target = 0;
+            pv_tb.focused = focus == FOCUS_PREVIEW;
+            if (tb_open(&g, &pv_tb, x0, y, w - U(7), max_y - y + 1, &pv_list, TRUE))
+                tb_draw(&g, &pv_tb);
+        }
+    }
+    if (!pv_roomy())
+        pv_release(j);                      /* short of memory: keep only what is ahead */
+    pv_read_ahead(p);
+}
+
+/* Preview the selected entry: at once if it was read ahead, else when the
+ * loader brings it (preview_arrived); the old one stays up meanwhile. */
 static void preview_draw(struct Page *p)
 {
-    WORD x0 = aside_x(), w = aside_width() - U(4), y = g.list_top, max_y = g.footer_y - 2, dh = 0;
-    struct Item *it;
-    char shot[300], base[300];
-    LONG n, i;
+    char path[300];
+    int k;
+    struct LJob *j;
     pv_pending = FALSE;
-    tb_close(&pv_tb);
     pv_page = p;
     pv_sel = p->sel;
     pv_shown = TRUE;
-    if (p->pics && p->list.count) {
-        preview_pics(p, x0, w, max_y);
-        return;
-    }
-    if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN) {
+    pv_wait = NULL;
+    k = p->list.count ? pv_kind(p, p->sel, path, sizeof(path)) : 0;
+    if (!k || !(j = pv_request(k, path, FALSE))) {
+        tb_close(&pv_tb);
         gfx_picture_free(&g);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+        gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         return;
     }
-    /* The new screenshot is drawn straight over the old one (gfx_picture
-     * keeps the old one's colours until then); only what it does not cover
-     * is cleared afterwards. */
-    item_path(it, base, sizeof(base));
-    if ((g.pens_shared || g.truecolor) && ags_screenshot_path(base, shot, sizeof(shot)) &&
-        gfx_picture(&g, shot, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
-        gfx_fill_bg(&g, x0, y, g.pic_x - 1, y + dh - 1);                 /* left of it */
-        gfx_fill_bg(&g, g.pic_x + g.pic_w, y, g.w - 1, y + dh - 1);      /* right of it */
-        y += dh;
-    } else {
-        gfx_picture_free(&g);
-    }
-    gfx_fill_bg(&g, x0, y, g.w - 1, max_y);                             /* below: the facts */
-    if (dh)
-        y += U(6);
-    /* the whole fact sheet, in a text box with a scroll bar when it is
-     * longer than the room left (wheel or bar; Up/Down stay with the list) */
-    if (pv_list.pool)
-        list_free(&pv_list);
-    if (!list_init(&pv_list))
+    if (j->done)
+        preview_show(p, j);
+    else
+        pv_wait = j;
+}
+
+/* Jobs came back from the loader. */
+static void preview_arrived(void)
+{
+    struct Page *p = cur();
+    struct LJob *j;
+    while (ldr_collect())
+        ;
+    if (!(j = pv_wait) || !j->done)
         return;
-    n = ags_read_txt(base, pv_lines, FACT_LINES);
-    for (i = 0; i < n; i++) {
-        if (!pv_lines[i][0])
-            list_add(&pv_list, "", "", "", IT_TEXT);
-        else
-            wrap_into(&pv_list, pv_lines[i], w - U(7));
-    }
-    if (!pv_list.count || max_y - y < g.font_h)
+    pv_wait = NULL;
+    if (!j->ran) {                          /* skipped (cancelled): ask again */
+        pv_release(j);
+        if (p && p == pv_page && p->sel == pv_sel && has_aside(p))
+            preview_draw(p);
         return;
-    pv_tb.pos = pv_tb.target = 0;
-    pv_tb.focused = focus == FOCUS_PREVIEW;
-    if (tb_open(&g, &pv_tb, x0, y, w - U(7), max_y - y + 1, &pv_list, TRUE))
-        tb_draw(&g, &pv_tb);
+    }
+    if (p && p == pv_page && p->sel == pv_sel && has_aside(p) && !pane_pending &&
+        !hold_active() && !ov.on)
+        preview_show(p, j);
+    else if (p) {
+        pv_shown = FALSE;                   /* moved on: preview again when it rests */
+        preview_touch(p);
+    }
+}
+
+/* Show the preview now, waiting for the loader if need be (Right into it). */
+static void preview_now(struct Page *p)
+{
+    preview_draw(p);
+    if (pv_wait) {
+        ldr_wait(pv_wait);
+        preview_arrived();
+    }
 }
 
 /* The selection changed (or the list was drawn): preview it once it rests. */
@@ -1901,6 +2065,8 @@ static void release_for_launch(void)
 {
     log_free("free before launch");
     save_nav();
+    pv_flush();                     /* the loader's jobs back, then the loader gone */
+    ldr_stop();
     pages_clear();                  /* lists, text boxes, the screenshot */
     tb_close(&pv_tb);
     if (pv_list.pool)
@@ -1918,6 +2084,7 @@ static void release_for_launch(void)
 static BOOL restore_after_launch(void)
 {
     open_extra_libs();
+    ldr_start();
     if (!gfx_open(&g, &caps, screen_mode, ui_style))
         return FALSE;
     if (focus == FOCUS_PREVIEW)
@@ -2006,12 +2173,67 @@ static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *p
                        : "Left/Right  previous/next    Fire  slideshow    Esc  back");
 }
 
+/* The next picture, decoded ahead by the loader while this one is looked
+ * at, so stepping on (or the slideshow) does not wait for the disk. On a
+ * colour-table screen it is decoded unremapped (it takes no pens: the
+ * picture on screen has them all); one that would need remapping there is
+ * left to view_show. */
+static struct LJob *vw_job;
+
+static void vw_drop(void)
+{
+    if (!vw_job)
+        return;
+    if (vw_job->busy)
+        ldr_wait(vw_job);
+    pic_dispose(vw_job->obj);
+    FreeVec(vw_job);
+    vw_job = NULL;
+}
+
+static void vw_ahead(const struct ItemList *l, LONG from, LONG dir)
+{
+    LONG i = view_step(l, from, dir);
+    if (i < 0 || i == from)
+        return;
+    if (vw_job && strcmp(vw_job->path, l->items[i].path) == 0)
+        return;                             /* already on its way */
+    if (vw_job && vw_job->busy)
+        return;                             /* one at a time */
+    vw_drop();
+    if (!(vw_job = AllocVec(sizeof(*vw_job), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    vw_job->type = LJ_PICTURE;
+    amce_strlcpy(vw_job->path, l->items[i].path, sizeof(vw_job->path));
+    vw_job->scr = g.truecolor ? g.scr : NULL;
+    vw_job->remap = g.truecolor;
+    vw_job->want_pic = TRUE;
+    ldr_submit(vw_job);
+}
+
+/* The picture read ahead for path, if it is: its object (now the caller's). */
+static APTR vw_take(const char *path, BOOL *remapped)
+{
+    APTR o = NULL;
+    if (vw_job && strcmp(vw_job->path, path) == 0) {
+        if (vw_job->busy)
+            ldr_wait(vw_job);               /* nearly there: sooner than starting over */
+        if (vw_job->ran) {
+            o = vw_job->obj;
+            *remapped = vw_job->remapped;
+            vw_job->obj = NULL;
+        }
+        vw_drop();
+    }
+    return o;
+}
+
 /* Show the pictures of l from entry idx; returns the last one shown. */
 static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
 {
     struct PicInfo pi;
     char scale[24];
-    LONG shown = -1, want = idx;
+    LONG shown = -1, want = idx, dir = 1;
     ULONG bar_until = 0, next_at = 0, jlast = 0;
     BOOL quit = FALSE, ok = FALSE, bar_due = TRUE;
 
@@ -2022,6 +2244,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     tb_close(&pv_tb);
     pv_shown = FALSE;
     pv_pending = FALSE;
+    pv_flush();                     /* the viewer takes the screen's colours over */
     if (!view_begin(&g)) {
         set_msg("Not enough memory for the viewer");
         return idx;
@@ -2034,8 +2257,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         BOOL toggle = FALSE, poke = FALSE;
         ULONG now;
         if (want != shown) {
-            ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale));
+            BOOL remapped = FALSE;
+            APTR pre = vw_take(l->items[want].path, &remapped);
+            ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale),
+                           pre, remapped);
             shown = want;
+            vw_ahead(l, shown, dir);
             next_at = time_ms() + SLIDE_MS;
             if (ok && bar_due) {
                 viewer_bar(l, shown, &pi, scale, slideshow);
@@ -2093,6 +2320,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         }
         if (step) {
             LONG i = shown, d = step > 0 ? 1 : -1, n = step > 0 ? step : -step;
+            dir = d;
             while (n-- > 0 && i >= 0)
                 i = view_step(l, i, d);
             if (i >= 0)
@@ -2100,6 +2328,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             bar_due = TRUE;
         } else if (slideshow && (LONG)(now - next_at) >= 0) {
             LONG i = view_step(l, shown, 1);
+            dir = 1;
             if (i >= 0)
                 want = i;
         }
@@ -2113,6 +2342,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         WaitTOF();
         dbg_sleep_end();
     }
+    vw_drop();
     view_end(&g);
     return shown >= 0 ? shown : idx;
 }
@@ -2175,6 +2405,8 @@ static void act_move(LONG d)
     }
     if (p->type == PT_LIST) {
         LONG s;
+        if (d)
+            pv_dir = d > 0 ? 1 : -1;
         if (p->ld && d > 0)
             page_load_until(p, p->sel + d + 2 * list_visible());
         s = p->sel + d;
@@ -2275,6 +2507,7 @@ static void apply_screen_mode(int sm)
     if (sm == screen_mode)
         return;
     pages_clear();
+    pv_flush();                     /* decoded for this screen */
     gfx_close(&g);
     screen_mode = sm;
     if (!gfx_open(&g, &caps, sm, ui_style)) {
@@ -2360,6 +2593,7 @@ static void apply_style(int st)
         return;
     }
     pages_clear();
+    pv_flush();                     /* decoded for this screen */
     gfx_close(&g);
     if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
         !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
@@ -2603,9 +2837,9 @@ static void act_right(void)
                 open_detail(&p->list.items[p->sel]);
             return;
         }
-        if (pv_pending || !pv_shown) {      /* not shown yet: show it now */
+        if (pv_pending || !pv_shown || pv_wait) {   /* not shown yet: show it now */
             ov.on = FALSE;
-            preview_draw(p);
+            preview_now(p);
         }
         if (pv_tb.open && pv_tb.bar_w)
             set_focus(FOCUS_PREVIEW);
@@ -2971,6 +3205,8 @@ int main(void)
     load_debug();
     amce_log_open(debug_on);
     open_extra_libs();
+    if (!ldr_start())
+        amce_log("loader", "could not start: reading in the UI");
 
     caps_detect(&caps);
     ags_init(&ags);
@@ -3022,7 +3258,8 @@ int main(void)
     while (running) {
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
-        ULONG mask = wsig | tsig | SIGBREAKF_CTRL_C;
+        ULONG lsig = ldr_sigmask();
+        ULONG mask = wsig | tsig | lsig | SIGBREAKF_CTRL_C;
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
@@ -3038,6 +3275,8 @@ int main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
+        if (sig & lsig)
+            preview_arrived();          /* the loader brought something */
         if (sig & tsig) {
             if (GetMsg(tport)) {
                 ms_acc += tick_us / 1000;
@@ -3087,8 +3326,16 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win)
+        if (g.win && cur() && cur()->ld) {
             load_tick();
+            /* the loader runs below us: let it have the rest of the frame */
+            if (ldr_out() && !(hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
+                               ((atb = cur_tb()) && tb_animating(atb)))) {
+                dbg_sleep_begin();
+                WaitTOF();
+                dbg_sleep_end();
+            }
+        }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();
@@ -3119,6 +3366,8 @@ out:
     if (tport)
         DeleteMsgPort(tport);
     amce_log("timer closed", "");
+    pv_flush();
+    ldr_stop();
     pages_clear();
     amce_log("pages freed", "");
     gfx_close(&g);

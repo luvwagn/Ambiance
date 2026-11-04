@@ -325,6 +325,16 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     return TRUE;
 }
 
+static UBYTE pic_pens[256];     /* pens the picture on screen holds (own remap) */
+static UWORD pic_npens;
+
+static void release_pens(struct Gfx *g, UBYTE *pens, UWORD n)
+{
+    UWORD i;
+    for (i = 0; i < n; i++)
+        ReleasePen(g->scr->ViewPort.ColorMap, pens[i]);
+}
+
 void gfx_picture_free(struct Gfx *g)
 {
     g->pic_w = g->pic_h = 0;
@@ -332,6 +342,9 @@ void gfx_picture_free(struct Gfx *g)
         DisposeDTObject(pic_obj);
         pic_obj = NULL;
     }
+    if (pic_npens && g->scr)
+        release_pens(g, pic_pens, pic_npens);
+    pic_npens = 0;
 }
 
 void gfx_close(struct Gfx *g)
@@ -735,45 +748,165 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
     amce_strlcpy(out, t, max);
 }
 
-/* Decode a picture through the registered datatypes and draw it scaled to
- * fit (w x h), keeping its aspect. Lowres pictures on a hires screen are
- * widened 2:1 so they keep their shape. */
-BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
-                 WORD *drawn_h)
+/* Decode a picture through the registered datatypes. remap: into scr's
+ * pens or true colour (the datatype allocates the pens). Without remap the
+ * picture keeps its own colour numbers and takes no pens; gfx_picture_obj
+ * maps them when it is drawn, so a picture decoded ahead (loader.c) never
+ * takes pens from the one on screen. A deeper picture than 8 bits can only
+ * be shown remapped; given scr, it is then remapped after all. Safe to
+ * call from the loader process. */
+APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                struct PicInfo *pi)
 {
     struct BitMapHeader *bmh = NULL;
-    struct BitMap *bm = NULL, *tmp;
+    Object *o;
+    if (!DataTypesBase)
+        return NULL;
+    if (remap)
+        o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
+                        PDTA_Screen, (ULONG)scr, PDTA_Remap, TRUE,
+                        PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
+                        TAG_END);
+    else
+        o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
+                        PDTA_DestMode, PMODE_V43, TAG_END);
+    if (!o)
+        return NULL;
+    if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
+        DisposeDTObject(o);
+        return NULL;
+    }
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+    if (!bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
+        DisposeDTObject(o);
+        return NULL;
+    }
+    if (!remap && bmh->bmh_Depth > 8) {
+        DisposeDTObject(o);
+        return scr ? pic_decode(path, scr, TRUE, remapped, pi) : NULL;
+    }
+    pic_info(o, bmh, pi);
+    *remapped = remap;
+    return o;
+}
+
+/* A picture decoded without remapping, as a bitmap like the screen's in
+ * pens obtained for its colours now (pens[], *npens: to release). */
+static struct BitMap *own_remap(struct Gfx *g, Object *o, ULONG sw, ULONG sh,
+                                UBYTE *pens, UWORD *npens)
+{
+    struct ColorMap *cm = g->scr->ViewPort.ColorMap;
+    ULONG *cregs = NULL, ncol = 0, mod = (sw + 15) & ~15UL, i;
+    struct BitMap *src = NULL, *bm, *row = NULL;
+    struct RastPort srp, trp;
+    struct pdtBlitPixelArray pbpa;
+    UBYTE *buf, map[256], used[256];
+    BOOL got = FALSE;
+    *npens = 0;
+    GetDTAttrs(o, PDTA_CRegs, (ULONG)&cregs, PDTA_NumColors, (ULONG)&ncol,
+               PDTA_BitMap, (ULONG)&src, TAG_END);
+    if (!cregs || !ncol)
+        return NULL;
+    if (ncol > 256)
+        ncol = 256;
+    if (!(buf = AllocVec(mod * sh, MEMF_ANY)))
+        return NULL;
+    pbpa.MethodID = PDTM_READPIXELARRAY;
+    pbpa.pbpa_PixelData = buf;
+    pbpa.pbpa_PixelFormat = PBPAFMT_LUT8;
+    pbpa.pbpa_PixelArrayMod = mod;
+    pbpa.pbpa_Left = 0;
+    pbpa.pbpa_Top = 0;
+    pbpa.pbpa_Width = sw;
+    pbpa.pbpa_Height = sh;
+    got = DoDTMethodA(o, NULL, NULL, (Msg)&pbpa) != 0;
+    if (!got && src && (row = AllocBitMap(sw, 1, GetBitMapAttr(src, BMA_DEPTH), 0, NULL))) {
+        InitRastPort(&srp);
+        srp.BitMap = src;
+        trp = srp;
+        trp.Layer = NULL;
+        trp.BitMap = row;
+        ReadPixelArray8(&srp, 0, 0, sw - 1, sh - 1, buf, &trp);
+        WaitBlit();
+        FreeBitMap(row);
+        row = NULL;
+        got = TRUE;
+    }
+    if (!got || !(bm = AllocBitMap(sw, sh, g->depth, BMF_CLEAR, g->rp->BitMap))) {
+        FreeVec(buf);
+        return NULL;
+    }
+    memset(used, 0, sizeof(used));
+    for (i = 0; i < mod * sh; i++)
+        used[buf[i]] = 1;
+    for (i = 0; i < 256; i++) {
+        map[i] = PEN_BG;
+        if (used[i] && i < ncol) {
+            LONG pen = ObtainBestPen(cm, cregs[i * 3], cregs[i * 3 + 1], cregs[i * 3 + 2],
+                                     OBP_Precision, PRECISION_IMAGE, TAG_END);
+            if (pen >= 0) {
+                map[i] = pen;
+                pens[(*npens)++] = pen;
+            }
+        }
+    }
+    for (i = 0; i < mod * sh; i++)
+        buf[i] = map[buf[i]];
+    InitRastPort(&srp);
+    srp.BitMap = bm;
+    if (GfxBase->LibNode.lib_Version >= 40) {
+        WriteChunkyPixels(&srp, 0, 0, sw - 1, sh - 1, buf, mod);
+    } else if ((row = AllocBitMap(sw, 1, g->depth, 0, bm))) {
+        trp = srp;
+        trp.BitMap = row;
+        WritePixelArray8(&srp, 0, 0, sw - 1, sh - 1, buf, &trp);
+        WaitBlit();
+        FreeBitMap(row);
+    }
+    FreeVec(buf);
+    return bm;
+}
+
+/* Draw a decoded picture (pic_decode) fitted into w x h at (x, y), centred
+ * across, keeping its aspect. Lowres pictures on a hires screen are
+ * widened 2:1 so they keep their shape. The caller keeps the object (it
+ * can be drawn again) unless *taken: one the datatype remapped into a
+ * colour table holds those pens, so it stays with the screen until the
+ * next picture replaces it. */
+BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
+                     BOOL whole, WORD *drawn_h, BOOL *taken)
+{
+    Object *o = obj;
+    struct BitMapHeader *bmh = NULL;
+    struct BitMap *bm = NULL, *tmp, *own = NULL;
     struct BitScaleArgs bsa;
     ULONG sw, sh, sxe, sye, dw, dh;
-    Object *o;
+    UBYTE pens[256];
+    UWORD npens = 0;
 
     /* The picture already on screen stays, pens and all, until the new one
-     * is drawn over it: the new one is remapped into other pens, so the old
-     * one never changes colour, and nothing is cleared first. On a planar
-     * screen clearing goes plane by plane, and the old picture showed
-     * through in the UI's colours meanwhile. */
-    if (!DataTypesBase || !(g->pens_shared || g->truecolor))
+     * is drawn over it: the new one is in other pens, so the old one never
+     * changes colour, and nothing is cleared first. On a planar screen
+     * clearing goes plane by plane, and the old picture showed through in
+     * the UI's colours meanwhile. */
+    *taken = FALSE;
+    if (!o || !(g->pens_shared || g->truecolor))
         return FALSE;
-    o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
-                    PDTA_Screen, (ULONG)g->scr, PDTA_Remap, TRUE,
-                    PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
-                    TAG_END);
-    if (!o)
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+    if (!bmh || !bmh->bmh_Width || !bmh->bmh_Height)
         return FALSE;
-    if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE)) {
-        DisposeDTObject(o);
-        return FALSE;
-    }
-    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_DestBitMap, (ULONG)&bm, TAG_END);
-    if (!bm)
-        GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_END);
-    if (!bm || !bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
-        DisposeDTObject(o);
-        return FALSE;
-    }
     sw = bmh->bmh_Width;
     sh = bmh->bmh_Height;
     pic_info(o, bmh, &g->pic);
+    if (remapped) {
+        GetDTAttrs(o, PDTA_DestBitMap, (ULONG)&bm, TAG_END);
+        if (!bm)
+            GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_END);
+    } else {
+        bm = own = own_remap(g, o, sw, sh, pens, &npens);
+    }
+    if (!bm)
+        return FALSE;
     /* A lowres picture on a tall-pixel hires screen: double its width to
      * keep its shape. */
     sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;
@@ -800,13 +933,11 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
             }
         }
     }
-    if (!dw || !dh) {
-        DisposeDTObject(o);
-        return FALSE;
-    }
-    tmp = AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap);
+    tmp = dw && dh ? AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap) : NULL;
     if (!tmp) {
-        DisposeDTObject(o);
+        if (own)
+            FreeBitMap(own);
+        release_pens(g, pens, npens);
         return FALSE;
     }
     memset(&bsa, 0, sizeof(bsa));
@@ -826,10 +957,41 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     WaitBlit();
     FreeBitMap(tmp);
     gfx_picture_free(g);                    /* now the old one's pens can go */
-    pic_obj = o;
+    if (own) {
+        FreeBitMap(own);
+        CopyMem(pens, pic_pens, npens);     /* its colours are in our pens now */
+        pic_npens = npens;
+    } else if (!g->truecolor) {
+        pic_obj = o;                        /* holds the pens it is drawn in */
+        *taken = TRUE;
+    }
     g->pic_x = x + (w - bsa.bsa_DestWidth) / 2;
     g->pic_y = y;
     g->pic_w = bsa.bsa_DestWidth;
     g->pic_h = bsa.bsa_DestHeight;
     return TRUE;
+}
+
+void pic_dispose(APTR obj)
+{
+    if (obj)
+        DisposeDTObject((Object *)obj);
+}
+
+BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
+                 WORD *drawn_h)
+{
+    struct PicInfo pi;
+    BOOL remapped = FALSE;
+    APTR o;
+    if (!(g->pens_shared || g->truecolor))
+        return FALSE;
+    BOOL taken, ok;
+    o = pic_decode(path, g->scr, g->truecolor, &remapped, &pi);
+    if (!o)
+        return FALSE;
+    ok = gfx_picture_obj(g, o, remapped, x, y, w, h, whole, drawn_h, &taken);
+    if (!taken)
+        DisposeDTObject((Object *)o);
+    return ok;
 }

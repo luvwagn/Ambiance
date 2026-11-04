@@ -19,6 +19,11 @@ Features in this release
   screens are read; the rest is read while you browse. All Games' 3,300
   entries take about 200 KB; should free memory fall below 256 KB, the
   list stops there (the footer says so) rather than use up the rest.
+- Fact sheets, screenshots and pictures are read by a second, lower-
+  priority process, so the list never waits for the disk; the entries
+  next to the one shown (and the viewer's next picture) are read ahead.
+  With memory to spare it reads further ahead and keeps what it has
+  shown; short of memory it keeps only the next one.
 - Shows each title's AGS fact sheet and screenshot, decoded through the
   installed picture datatypes. On screens 640 or more wide, game lists
   have a preview pane beside them: the selected game's screenshot and

@@ -164,13 +164,20 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
                  WORD *drawn_h);
 void gfx_picture_free(struct Gfx *g);
+/* The same in two halves: decoding (any process; remap FALSE takes no
+ * pens) and drawing what was decoded (the object stays the caller's, to
+ * draw again, unless *taken). */
+APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                struct PicInfo *pi);
+BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
+                     BOOL whole, WORD *drawn_h, BOOL *taken);
 /* The full-screen picture viewer, on AmigaMCE's own screen (view.c). On
  * 256-colour and native screens a picture gets the screen's whole palette
  * while it is shown, and the info bar takes its colours from the picture.
  * view_end leaves the screen black; redraw it, then view_restore. */
 BOOL view_begin(struct Gfx *g);
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
-               char *scale, LONG scalemax);
+               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped);   /* pre: decoded ahead */
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
 void view_bar_hide(struct Gfx *g);
 BOOL view_bar_shown(void);
@@ -262,6 +269,43 @@ LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot b
 /* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
+
+/* ---------------------------------------------------------------- loader */
+/* Work for the loader process (loader.c): a fact sheet and screenshot, a
+ * picture, or a folder of pictures (its first picture), read off the UI's
+ * back. The UI owns the job; it comes back marked done. */
+#define LJ_FACTS 24
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_QUIT };
+struct LJob {
+    struct Message msg;
+    UBYTE type;
+    volatile UBYTE cancel;      /* not wanted any more: skip it if not started */
+    UBYTE remap;                /* decode remapped into scr (true-colour screens) */
+    UBYTE want_pic;             /* decode the picture too */
+    volatile UBYTE busy, done;
+    UBYTE ran;                  /* the loader did it (not skipped) */
+    UBYTE spent;                /* its picture was handed to the screen: read again to reuse */
+    ULONG stamp;                /* last used (the UI's cache order) */
+    struct Screen *scr;
+    char path[300];             /* entry base, picture or folder */
+    /* results */
+    APTR obj;                   /* the decoded picture (gfx_picture_obj), or NULL */
+    BOOL remapped;
+    struct PicInfo info;
+    LONG nlines;                /* LJ_ENTRY: the fact sheet */
+    char lines[LJ_FACTS][96];
+    LONG size, days;            /* LJ_PICTURE: file size, date (DateStamp days) */
+    LONG np, nd;                /* LJ_PICFOLDER: pictures, folders; its first picture */
+    char first[300];
+};
+BOOL ldr_start(void);
+void ldr_stop(void);            /* no job may be out */
+void ldr_submit(struct LJob *j);
+struct LJob *ldr_collect(void); /* one that came back (now done), or NULL */
+void ldr_wait(struct LJob *j);  /* until j is back */
+ULONG ldr_sigmask(void);        /* signalled when one comes back */
+LONG ldr_out(void);             /* jobs out now */
+void pic_dispose(APTR obj);
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {
