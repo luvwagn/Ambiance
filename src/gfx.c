@@ -25,10 +25,11 @@
 #include <clib/alib_protos.h>
 #include <cybergraphx/cybergraphics.h>
 #include <proto/cybergraphics.h>
+#include <proto/layers.h>
 #include <stdio.h>
 
 extern struct GfxBase *GfxBase;
-extern struct Library *DiskfontBase, *DataTypesBase;
+extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase;
 struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
 
 static Object *pic_obj;         /* datatype object of the picture on screen */
@@ -332,6 +333,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
     blk_reserve(g);
+    gfx_dbuf_start(g);
     return TRUE;
 }
 
@@ -569,6 +571,7 @@ void gfx_picture_free(struct Gfx *g)
 void gfx_close(struct Gfx *g)
 {
     int i;
+    gfx_dbuf_stop(g);
     gfx_picture_free(g);
     blk_release(g);
     if (CyberGfxBase) {
@@ -1267,6 +1270,145 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
  * pictures, the other half for the next one (drawn while this one is
  * still up, in other pens). */
 ULONG gfx_draw_ms[3];   /* the last gfx_thumb: colours, pixels, copy to the screen */
+ULONG gfx_present_ms;   /* the last gfx_present: flip and copy */
+/* ---- double buffering (RTG screens; a prototype, PROGDIR:AmigaMCE.dbuf)
+ * Two buffers of the screen (AllocScreenBuffer): everything is drawn into
+ * the one not shown, through a RastPort of our own on it (g->rp), and
+ * gfx_present shows it at the next vertical blank (ChangeScreenBuffer):
+ * nothing is ever seen half drawn, scrolling does not tear. Then, once
+ * the other one is no longer shown ("safe to write"), what is now shown
+ * is copied into it in one blit, and drawing goes on there: the next
+ * frame's changes start from this frame's picture. */
+BOOL gfx_dbuf_wanted;
+static struct ScreenBuffer *dsb[2];
+static struct Layer_Info *dli[2];
+static struct Layer *dlay[2];       /* a layer on each: its RastPort clips to the
+                                     * screen, as the window's did */
+static struct MsgPort *dsafe;
+static int dback;               /* the buffer drawn into */
+static BOOL dsafe_due;          /* a "safe to write" message is still to come */
+static BOOL dbuf_on;
+static BOOL dirty;
+
+void gfx_dirty(void)
+{
+    dirty = TRUE;
+}
+
+BOOL gfx_dbuf_active(void)
+{
+    return dbuf_on;
+}
+
+static void dbuf_wait_safe(void)
+{
+    if (!dsafe_due)
+        return;
+    while (!GetMsg(dsafe))
+        WaitPort(dsafe);
+    dsafe_due = FALSE;
+}
+
+void gfx_dbuf_start(struct Gfx *g)
+{
+    int i;
+    if (dbuf_on || !gfx_dbuf_wanted || g->planar || !g->scr || !g->win)
+        return;
+    if (!(dsafe = CreateMsgPort()))
+        return;
+    dsb[0] = AllocScreenBuffer(g->scr, NULL, SB_SCREEN_BITMAP);
+    dsb[1] = dsb[0] ? AllocScreenBuffer(g->scr, NULL, SB_COPY_BITMAP) : NULL;
+    if (!dsb[1]) {
+        if (dsb[0])
+            FreeScreenBuffer(g->scr, dsb[0]);
+        dsb[0] = NULL;
+        DeleteMsgPort(dsafe);
+        dsafe = NULL;
+        amce_log("double buffering", "could not get a second buffer");
+        return;
+    }
+    for (i = 0; i < 2; i++) {
+        dsb[i]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = dsafe;
+        dsb[i]->sb_DBufInfo->dbi_DispMessage.mn_ReplyPort = NULL;
+        dli[i] = LayersBase ? NewLayerInfo() : NULL;
+        dlay[i] = dli[i] ? CreateUpfrontLayer(dli[i], dsb[i]->sb_BitMap, 0, 0, g->w - 1, g->h - 1,
+                                              LAYERSIMPLE, NULL) : NULL;
+        if (!dlay[i]) {
+            amce_log("double buffering", "could not make its layers");
+            dbuf_on = TRUE;                 /* so that stop undoes it all */
+            dback = 1;
+            gfx_dbuf_stop(g);
+            return;
+        }
+        SetFont(dlay[i]->rp, g->rp->Font);
+        SetDrMd(dlay[i]->rp, JAM1);
+    }
+    dback = 1;
+    dsafe_due = FALSE;
+    g->rp = dlay[1]->rp;                    /* a copy of what is shown (SB_COPY_BITMAP) */
+    dbuf_on = TRUE;
+    dirty = FALSE;
+    amce_log("double buffering", "on");
+}
+
+/* Show what was drawn, if anything was. */
+void gfx_present(struct Gfx *g)
+{
+    int front;
+    ULONG t0;
+    if (!dbuf_on || !dirty)
+        return;
+    dirty = FALSE;
+    WaitBlit();
+    t0 = time_ms();
+    while (!ChangeScreenBuffer(g->scr, dsb[dback]))
+        WaitTOF();                          /* the last change not done yet */
+    dsafe_due = TRUE;
+    front = dback;
+    dback ^= 1;
+    dbuf_wait_safe();                       /* the other no longer shown */
+    BltBitMap(dsb[front]->sb_BitMap, 0, 0, dsb[dback]->sb_BitMap, 0, 0, g->w, g->h, 0xC0, 0xFF,
+              NULL);
+    WaitBlit();
+    g->rp = dlay[dback]->rp;
+    gfx_present_ms = time_ms() - t0;
+}
+
+/* Back to drawing straight onto the screen (the viewer, closing). */
+void gfx_dbuf_stop(struct Gfx *g)
+{
+    int i;
+    if (!dbuf_on)
+        return;
+    if (dlay[0] && dlay[1])
+        gfx_present(g);
+    dbuf_wait_safe();
+    if (dback == 0) {
+        /* the copy is shown: the screen's own bitmap back, with the same */
+        BltBitMap(dsb[1]->sb_BitMap, 0, 0, dsb[0]->sb_BitMap, 0, 0, g->w, g->h, 0xC0, 0xFF, NULL);
+        WaitBlit();
+        while (!ChangeScreenBuffer(g->scr, dsb[0]))
+            WaitTOF();
+        dsafe_due = TRUE;
+        dbuf_wait_safe();
+    }
+    for (i = 0; i < 2; i++) {
+        if (dlay[i])
+            DeleteLayer(0, dlay[i]);
+        if (dli[i])
+            DisposeLayerInfo(dli[i]);
+        dlay[i] = NULL;
+        dli[i] = NULL;
+    }
+    FreeScreenBuffer(g->scr, dsb[1]);
+    FreeScreenBuffer(g->scr, dsb[0]);
+    dsb[0] = dsb[1] = NULL;
+    DeleteMsgPort(dsafe);
+    dsafe = NULL;
+    dbuf_on = FALSE;
+    g->rp = g->win->RPort;
+}
+
 
 /* Can this screen show thumbnails (gfx_thumb)? */
 BOOL gfx_thumbs(struct Gfx *g)

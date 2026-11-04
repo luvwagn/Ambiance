@@ -200,6 +200,15 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to max
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
 BOOL gfx_thumbs(struct Gfx *g);
+/* Double buffering (RTG; prototype: PROGDIR:AmigaMCE.dbuf): drawing goes
+ * into the buffer not shown; gfx_present shows it, if gfx_dirty was said. */
+extern BOOL gfx_dbuf_wanted;
+extern ULONG gfx_present_ms;
+void gfx_dbuf_start(struct Gfx *g);
+void gfx_dbuf_stop(struct Gfx *g);
+void gfx_present(struct Gfx *g);
+void gfx_dirty(void);
+BOOL gfx_dbuf_active(void);
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */

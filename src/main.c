@@ -408,9 +408,14 @@ static BOOL ui_wait(struct LJob *j)
             ui_aborted = TRUE;
             return FALSE;
         }
-        dbg_sleep_begin();
-        WaitTOF();
-        dbg_sleep_end();
+        if (gfx_dbuf_active()) {
+            gfx_dirty();
+            gfx_present(&g);                /* shows the spinner; paced by the flip */
+        } else {
+            dbg_sleep_begin();
+            WaitTOF();
+            dbg_sleep_end();
+        }
         busy_tick();
     }
     return TRUE;
@@ -3698,7 +3703,9 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     pv_shown = FALSE;
     pv_pending = FALSE;
     pv_flush();                     /* the viewer takes the screen's colours over */
+    gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     if (!view_begin(&g)) {
+        gfx_dbuf_start(&g);
         set_msg("Not enough memory for the viewer");
         return idx;
     }
@@ -3821,6 +3828,7 @@ static void viewer_done(void)
         pointer_hide();             /* hidden it was: hidden it stays */
     draw_all();
     view_restore(&g);
+    gfx_dbuf_start(&g);
 }
 
 static void view_from_page(struct Page *p)
@@ -4935,6 +4943,11 @@ static int app_main(void)
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
+        /* PROGDIR:AmigaMCE.dbuf: double buffering on RTG screens (prototype) */
+        if ((l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.dbuf", SHARED_LOCK))) {
+            UnLock(l);
+            gfx_dbuf_wanted = TRUE;
+        }
         l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.noloader", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l) {
@@ -5023,6 +5036,8 @@ static int app_main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
+        if (sig || busy)
+            gfx_dirty();                /* (prototype: anything may have been drawn) */
         if (sig & lsig)
             preview_arrived();          /* the loader brought something */
         if (sig & tsig) {
@@ -5087,9 +5102,13 @@ static int app_main(void)
         }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
-            dbg_sleep_begin();
-            WaitTOF();
-            dbg_sleep_end();
+            if (gfx_dbuf_active()) {
+                gfx_present(&g);        /* the flip paces the frame */
+            } else {
+                dbg_sleep_begin();
+                WaitTOF();
+                dbg_sleep_end();
+            }
             pane_tick();
             preview_tick();
             if (tb_animating(&pv_tb))
@@ -5097,6 +5116,8 @@ static int app_main(void)
             hold_tick();
             if ((atb = cur_tb()) && tb_animating(atb))
                 tb_step(&g, atb);
+        } else {
+            gfx_present(&g);            /* what this wake drew, shown */
         }
     }
 
