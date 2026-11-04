@@ -78,7 +78,8 @@ static struct {
 static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
-enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH,
+enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -399,16 +400,25 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
 static void build_settings(struct Page *p)
 {
     char tag[64];
-    BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
-    /* the style chosen is shown even where this screen cannot use it */
-    action_item(p, "Style: pixel", "", ACT_STYLE_PIXEL,
-                ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    action_item(p, "Style: smooth", can_smooth ? "" : "RTG 16-bit+ only", ACT_STYLE_SMOOTH,
-                ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    /* the style chosen, even where this screen cannot show it */
+    action_item(p, "Style", ui_style == STYLE_SMOOTH ? "Smooth" : "Pixel", ACT_STYLES, MARK_ARROW);
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+#define SETTINGS_STYLE_ROW 1    /* "Style" in build_settings */
+
+/* Settings > Style: radio buttons, like Screen mode. */
+static void build_styles(struct Page *p)
+{
+    BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
+    action_item(p, "Pixel", "", ACT_STYLE_PIXEL,
+                ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    action_item(p, "Smooth", can_smooth ? "" : "RTG 16-bit+ only", ACT_STYLE_SMOOTH,
+                ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    p->sel = ui_style == STYLE_SMOOTH ? 1 : 0;
 }
 
 static void build_screenmodes(struct Page *p)
@@ -1353,6 +1363,16 @@ static void open_screenmodes(void)
     draw_footer();
 }
 
+static void open_styles(void)
+{
+    struct Page *p = page_push(PT_LIST, "Style");
+    if (!p)
+        return;
+    build_styles(p);
+    draw_pane(TRUE);
+    draw_footer();
+}
+
 static void open_credits(void)
 {
     struct Page *p = page_push(PT_TEXT, "Credits");
@@ -1442,7 +1462,6 @@ static void toggle_debug(void)
 static void apply_style(int st)
 {
     struct Page *p = cur();
-    LONG sel = p ? p->sel : 0;
     int i;
     if (st == ui_style)
         return;
@@ -1450,12 +1469,20 @@ static void apply_style(int st)
     save_setting(STYLE_VAR, st == STYLE_SMOOTH ? "smooth" : "pixel");
     if ((st == STYLE_SMOOTH) == (g.style == STYLE_SMOOTH) ||
         (st == STYLE_SMOOTH && !gfx_style_possible(&caps, g.mode, STYLE_SMOOTH))) {
+        /* the look stays: just move the radio button, and update the
+         * Settings page underneath (its Style row shows the choice) */
         if (p && p->type == PT_LIST) {
             list_free(&p->list);
             list_init(&p->list);
-            build_settings(p);
-            p->sel = sel;
+            build_styles(p);
             draw_list_rows(p);
+        }
+        if (depth >= 2) {
+            struct Page *up = &pages[depth - 2];
+            list_free(&up->list);
+            list_init(&up->list);
+            build_settings(up);
+            up->sel = SETTINGS_STYLE_ROW;
         }
         if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
             set_msg("Smooth: on RTG screens of 16 bits or more");
@@ -1469,12 +1496,15 @@ static void apply_style(int st)
         running = FALSE;
         return;
     }
+    /* back where we were: Settings > Style, on the new choice */
     for (i = 0; i < nmenu; i++)
         if (menu[i] == MOD_SETTINGS)
             menu_sel = i;
     build_root(MOD_SETTINGS);
     if (cur())
-        cur()->sel = sel;
+        cur()->sel = SETTINGS_STYLE_ROW;
+    if ((p = page_push(PT_LIST, "Style")))
+        build_styles(p);
     focus = FOCUS_CONTENT;
     msg[0] = 0;
     draw_all();
@@ -1486,6 +1516,8 @@ static void act_action(struct Item *it)
 {
     if (it->action == ACT_SCREENMODES)
         open_screenmodes();
+    else if (it->action == ACT_STYLES)
+        open_styles();
     else if (it->action == ACT_SYSINFO)
         open_sysinfo();
     else if (it->action == ACT_CREDITS)
