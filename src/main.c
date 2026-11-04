@@ -1405,7 +1405,7 @@ static void build_about_menu(struct Page *p)
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
  * itself, never copied into AmigaMCE. The first of these that exists. */
-static const char *const ags_splash[] = { NULL };
+static const char *const ags_splash[] = { "AGS:Images/logo.iff", NULL };
 
 static void build_credits(struct Page *p)
 {
