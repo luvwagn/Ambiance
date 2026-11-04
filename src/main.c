@@ -1585,6 +1585,91 @@ static void open_detail(struct Item *it)
     draw_footer();
 }
 
+/* ------------------------------------------------------------ launching */
+/* Libraries AmigaMCE can do without while a game runs (closed then, so the
+ * system can unload them, picture datatypes and all). */
+static void open_extra_libs(void)
+{
+    if (!DiskfontBase)
+        DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
+    if (!DataTypesBase)
+        DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    if (!LowLevelBase)
+        LowLevelBase = OpenLibrary((CONST_STRPTR)"lowlevel.library", 40);
+}
+
+static void close_extra_libs(void)
+{
+    if (LowLevelBase)
+        CloseLibrary(LowLevelBase);
+    if (DataTypesBase)
+        CloseLibrary(DataTypesBase);
+    if (DiskfontBase)
+        CloseLibrary(DiskfontBase);
+    LowLevelBase = DataTypesBase = DiskfontBase = NULL;
+}
+
+/* Ask for more memory than there is: the system then unloads everything
+ * not in use (libraries, devices, fonts, datatypes) to try to find it. */
+static void flush_memory(void)
+{
+    int i;
+    for (i = 0; i < 2; i++) {
+        APTR p = AllocMem(0x7FFFFFF0UL, MEMF_PUBLIC);
+        if (p)
+            FreeMem(p, 0x7FFFFFF0UL);
+    }
+}
+
+static void log_free(const char *what)
+{
+    char buf[64];
+    sprintf(buf, "chip %luK, fast %luK", (unsigned long)(AvailMem(MEMF_CHIP) >> 10),
+            (unsigned long)(AvailMem(MEMF_FAST) >> 10));
+    amce_log(what, buf);
+}
+
+/* Before a game: everything AmigaMCE can rebuild goes. Where each section
+ * was is kept (nav_mem), so the same entry comes back afterwards. */
+static void release_for_launch(void)
+{
+    log_free("free before launch");
+    save_nav();
+    pages_clear();                  /* lists, text boxes, the screenshot */
+    tb_close(&pv_tb);
+    if (pv_list.pool)
+        list_free(&pv_list);
+    pv_shown = pv_pending = FALSE;
+    ov.on = FALSE;
+    ov.bl = NULL;
+    gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
+    close_extra_libs();
+    flush_memory();
+    log_free("free for the game");
+}
+
+/* After the game: reopen, and rebuild the section as it was. */
+static BOOL restore_after_launch(void)
+{
+    open_extra_libs();
+    if (!gfx_open(&g, &caps, screen_mode, ui_style))
+        return FALSE;
+    if (focus == FOCUS_PREVIEW)
+        focus = FOCUS_CONTENT;
+    pane_pending = FALSE;
+    /* the frame first, so there is something to see while folders load */
+    gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
+    draw_header();
+    draw_menu();
+    set_msg("Loading...");
+    build_root(menu[menu_sel]);
+    msg[0] = 0;
+    draw_all();
+    note_style();
+    log_free("free after the game");
+    return TRUE;
+}
+
 static void launch(const char *base)
 {
     static const char *script = "T:AmigaMCE-run";
@@ -1595,11 +1680,11 @@ static void launch(const char *base)
         set_msg("Could not write T:AmigaMCE-run");
         return;
     }
-    /* Give the game every byte of chip RAM we can. */
+    /* Give the game every byte we can. */
     amce_log("launch", base);
     if (debug_on)
         dbg_cpu_stop();
-    gfx_close(&g);
+    release_for_launch();
     con = Open((CONST_STRPTR)"CON:0/0/640/200/AmigaMCE/AUTO/CLOSE", MODE_OLDFILE);
     if (con) {
         SystemTags((CONST_STRPTR)"Execute T:AmigaMCE-run",
@@ -1611,12 +1696,8 @@ static void launch(const char *base)
     if (debug_on)
         dbg_cpu_start();
     cpu_load = -1;
-    if (!gfx_open(&g, &caps, screen_mode, ui_style)) {
+    if (!restore_after_launch())
         running = FALSE;
-        return;
-    }
-    draw_all();
-    note_style();
 }
 
 static void act_move(LONG d)
@@ -2367,9 +2448,7 @@ int main(void)
     dbg_mem_baseline();
     load_debug();
     amce_log_open(debug_on);
-    DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
-    DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
-    LowLevelBase = OpenLibrary((CONST_STRPTR)"lowlevel.library", 40);
+    open_extra_libs();
 
     caps_detect(&caps);
     ags_init(&ags);
