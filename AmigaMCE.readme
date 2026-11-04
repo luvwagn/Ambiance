@@ -16,7 +16,9 @@ Features in this release
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
   with hierarchical categories, never one giant flat list.
 - Shows each title's AGS fact sheet and screenshot, decoded through the
-  installed picture datatypes.
+  installed picture datatypes. On screens 640 or more wide, game lists
+  have a preview pane beside them: the selected game's screenshot and
+  its fact sheet (the key lines on 200/256-line screens).
 - Launches titles through their AGS .run scripts, honouring the AGS
   Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
 - Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,

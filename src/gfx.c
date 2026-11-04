@@ -707,7 +707,8 @@ void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD 
 /* Decode a picture through the registered datatypes and draw it scaled to
  * fit (w x h), keeping its aspect. Lowres pictures on a hires screen are
  * widened 2:1 so they keep their shape. */
-BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h)
+BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
+                 WORD *drawn_h)
 {
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL, *tmp;
@@ -739,12 +740,21 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     /* A lowres picture on a tall-pixel hires screen: double its width to
      * keep its shape. */
     sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;
-    /* fit (sw*sxe) x sh into w x h */
-    dw = w;
-    dh = (sh * w) / (sw * sxe);
-    if (dh > (ULONG)h) {
-        dh = h;
-        dw = (sw * sxe * h) / sh;
+    /* fit (sw*sxe) x sh into w x h: a whole scale if 1x fits, so pixels
+     * stay square-edged, else shrunk to fit */
+    {
+        ULONG kw = (ULONG)w / (sw * sxe), kh = (ULONG)h / sh, k = kw < kh ? kw : kh;
+        if (whole && k >= 1) {
+            dw = sw * sxe * k;
+            dh = sh * k;
+        } else {
+            dw = w;
+            dh = (sh * w) / (sw * sxe);
+            if (dh > (ULONG)h) {
+                dh = h;
+                dw = (sw * sxe * h) / sh;
+            }
+        }
     }
     if (!dw || !dh)
         return FALSE;
@@ -763,6 +773,8 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     BitMapScale(&bsa);
     BltBitMapRastPort(tmp, 0, 0, g->rp, x + (w - bsa.bsa_DestWidth) / 2, y,
                       bsa.bsa_DestWidth, bsa.bsa_DestHeight, 0xC0);
+    if (drawn_h)
+        *drawn_h = bsa.bsa_DestHeight;
     WaitBlit();
     FreeBitMap(tmp);
     return TRUE;

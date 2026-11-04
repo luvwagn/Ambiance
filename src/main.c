@@ -837,9 +837,12 @@ static void set_msg(const char *m)
  * title row every step flickered on 8-plane screens. */
 static WORD count_left = -1;    /* left edge of the count drawn last */
 
+static void preview_touch(struct Page *p);
+
 static void draw_title_count(struct Page *p)
 {
     char count[24];
+    preview_touch(p);
     WORD right = g.pane_x + g.pane_w, tw, x;
     if (p->type != PT_LIST || !p->list.count)
         return;
@@ -963,23 +966,19 @@ static BOOL ov_eligible(const struct Page *p)
     return runs * 2 >= p->list.count;
 }
 
-/* The letter column: on screens 640 or more wide, a long title list is
- * narrower and the index letter has the pane's right-hand side to itself,
- * with no border; the letter never covers a title, and rows never touch
- * the column. Lowres screens keep the full-width list with the letter
- * over its right side. Its width fits the widest letter. */
+/* The preview pane: on screens 640 or more wide, a list with games in it
+ * takes the left half of the pane, and the right half, with no border,
+ * shows the selected game: its screenshot and fact sheet (all of it on
+ * screens taller than 256 lines, the key lines on shorter ones). While a
+ * long list glides, the same space shows the index letter; rows never
+ * touch it, so neither ever covers a title. Lowres screens keep the
+ * full-width list, with the letter over its right side. */
 static WORD aside_w = -1;           /* -1: work out (after a screen opens) */
 
 static WORD aside_width(void)
 {
-    if (aside_w < 0) {
-        const struct BigLetter *bl = NULL;
-        if (g.w >= 640)
-            bl = gfx_bigletter(&g, 'W', list_visible() * g.list_row_h * 2 / 5);
-        aside_w = bl ? bl->cell_w + U(20) : 0;
-        if (aside_w > g.pane_w * 2 / 5)
-            aside_w = 0;                    /* too narrow a screen for one */
-    }
+    if (aside_w < 0)
+        aside_w = g.w >= 640 ? g.pane_w / 2 : 0;
     return aside_w;
 }
 
@@ -987,8 +986,16 @@ static BOOL has_aside(struct Page *p)
 {
     if (!p || p->type != PT_LIST)
         return FALSE;
-    if (!p->aside)
-        p->aside = (aside_width() > 0 && ov_eligible(p)) ? 2 : 1;
+    if (!p->aside) {
+        LONG i;
+        p->aside = 1;
+        if (aside_width() > 0)
+            for (i = 0; i < p->list.count; i++)
+                if (p->list.items[i].kind == IT_RUN) {
+                    p->aside = 2;
+                    break;
+                }
+    }
     return p->aside == 2;
 }
 
@@ -1006,6 +1013,116 @@ static WORD list_xr(struct Page *p)
     if (ov.on && ov.page == p)
         return ov.strip_x - 1;              /* lowres: the letter's strip is off limits */
     return g.w - 1;
+}
+
+/* ---- the preview of the selected game, drawn once the selection settles */
+#define PREVIEW_SETTLE 250
+static BOOL hold_active(void);
+static BOOL pv_pending;
+static ULONG pv_due;
+static char pv_lines[FACT_LINES][96];
+
+/* Fact sheet lines worth a glance on a short screen: the header (title,
+ * developer, year and publisher) and genre and players. */
+static BOOL key_fact(LONG i, const char *line, BOOL *in_header)
+{
+    if (!line[0]) {
+        *in_header = FALSE;
+        return FALSE;
+    }
+    if (*in_header || i == 0)
+        return TRUE;
+    return starts_nocase(line, "Genre", NULL) || starts_nocase(line, "Players", NULL);
+}
+
+/* Draw s word-wrapped from (x, *y) in width w, below max_y; FALSE when
+ * out of room. */
+static BOOL wrap_text(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen, int ts)
+{
+    char line[100];
+    while (*s) {
+        LONG n = strlen(s), fit = n, cut;
+        if (*y + g.font_h > max_y)
+            return FALSE;
+        if (fit > (LONG)sizeof(line) - 1)
+            fit = sizeof(line) - 1;
+        for (;;) {                          /* the longest start of s that fits */
+            amce_strlcpy(line, s, fit + 1);
+            if (fit <= 1 || gfx_textlen(&g, line, ts) <= w)
+                break;
+            fit--;
+        }
+        cut = fit;
+        if (fit < n) {                      /* break at a space if there is one */
+            LONG b = fit;
+            while (b > 0 && s[b] != ' ')
+                b--;
+            if (b > 0)
+                cut = b;
+        }
+        if (cut <= 0)
+            cut = 1;
+        amce_strlcpy(line, s, cut + 1);
+        gfx_text(&g, x, *y, line, pen, PEN_BG, 0, ts);
+        *y += g.font_h + U(1);
+        s += cut;
+        while (*s == ' ')
+            s++;
+    }
+    return TRUE;
+}
+
+static void preview_draw(struct Page *p)
+{
+    WORD x0 = aside_x(), w = aside_width() - U(4), y = g.list_top, max_y = g.footer_y - 2, dh = 0;
+    struct Item *it;
+    char shot[300];
+    LONG n, i;
+    BOOL in_header = TRUE, tall = g.h > 256;
+    pv_pending = FALSE;
+    gfx_picture_free(&g);
+    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+    if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN)
+        return;
+    if ((g.pens_shared || g.truecolor) && ags_screenshot_path(it->path, shot, sizeof(shot)) &&
+        gfx_picture(&g, shot, x0, y, w, (max_y - y) / 2, TRUE, &dh))
+        y += dh + U(6);
+    n = ags_read_txt(it->path, pv_lines, FACT_LINES);
+    for (i = 0; i < n; i++) {
+        BOOL key = key_fact(i, pv_lines[i], &in_header);
+        if (!tall && !key)
+            continue;
+        if (!pv_lines[i][0]) {
+            y += g.font_h / 2;              /* a blank line: half a line */
+            continue;
+        }
+        if (!wrap_text(x0, &y, w, max_y, pv_lines[i], i == 0 ? PEN_WHITE : PEN_TEXT,
+                       i == 0 ? TS_BOLD : TS_SMALL))
+            break;
+    }
+}
+
+/* The selection changed (or the list was drawn): preview it once it rests. */
+static void preview_touch(struct Page *p)
+{
+    if (!has_aside(p))
+        return;
+    pv_pending = TRUE;
+    pv_due = time_ms() + PREVIEW_SETTLE;
+}
+
+static void preview_tick(void)
+{
+    struct Page *p = cur();
+    if (!pv_pending)
+        return;
+    if (!p || !has_aside(p) || pane_pending) {
+        pv_pending = FALSE;
+        return;
+    }
+    if (hold_active() || ov.on || (LONG)(time_ms() - pv_due) < 0)
+        return;                             /* still moving, or the letter is up */
+    preview_draw(p);
 }
 
 static void ov_free(void)
@@ -1057,6 +1174,8 @@ static void ov_show(struct Page *p)
         return;
     ov.on = TRUE;
     ov.linger = 0;
+    if (has_aside(p))
+        gfx_picture_free(&g);       /* the preview gives way to the letter */
     /* hand the strip to the letter: clear it once, then stamp */
     gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
     ov_stamp();
@@ -1084,6 +1203,8 @@ static void ov_hide(void)
     if (has_aside(p)) {
         if (ov.bl)                  /* the column is the letter's alone: clear it */
             gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
+        preview_touch(p);           /* and the preview comes back */
+        pv_due = time_ms();
     } else {
         draw_list_rows(p);          /* rows at full width again, strip cleared */
     }
@@ -1301,14 +1422,15 @@ static void draw_pane(BOOL full)
     case PT_DETAIL:
         if (full) {
             char shot[300];
-            /* screenshot height: 85 design units; laced screens (1x, twice
-             * the lines) get twice that */
-            WORD ph = (g.k == 256 && g.h >= 400) ? 170 : U(85);
+            /* screenshot box: AGS's are 320 x 128 lowres, so 128 design
+             * lines shows them at their own size where the pane is wide
+             * enough (lowres); 85 elsewhere, twice that on laced screens */
+            WORD ph = g.w < 640 ? U(128) : (g.k == 256 && g.h >= 400) ? 170 : U(85), dh = 0;
             p->facts_y = g.list_top;
             if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
                 set_msg("Loading screenshot...");
-                if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph))
-                    p->facts_y = g.list_top + ph + U(6);
+                if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph, TRUE, &dh))
+                    p->facts_y = g.list_top + dh + U(6);
                 set_msg(NULL);
             }
             open_textbox(p, p->facts_y);
@@ -2252,7 +2374,7 @@ int main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending;
+        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending;
         ULONG sig;
         if (busy) {
             sig = SetSignal(0, mask) & mask;
@@ -2312,11 +2434,13 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win && (hold_active() || pane_pending || ((atb = cur_tb()) && tb_animating(atb)))) {
+        if (g.win && (hold_active() || pane_pending || pv_pending ||
+                      ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();
             WaitTOF();
             dbg_sleep_end();
             pane_tick();
+            preview_tick();
             hold_tick();
             if ((atb = cur_tb()) && tb_animating(atb))
                 tb_step(&g, atb);
