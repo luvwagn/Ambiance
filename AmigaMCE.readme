@@ -41,7 +41,8 @@ Features in this release
   system then unloads) and comes back on the same entry afterwards.
 - Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,
   640x200/256 hires, 640x400/512 hires laced (AGA), 640x480, 800x600
-  or 1024x768 RTG (when the card has them), or
+  or 1024x768 RTG (when the card has them; 8-bit when it can, for speed:
+  drawing and scrolling move a quarter of the bytes of 32-bit), or
   Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
 - Smooth-scrolling, flicker-free text pages (fact sheets, Credits,
   System information) with a scroll bar when the text is longer than the page.
@@ -49,8 +50,7 @@ Features in this release
 - Big RTG screens scale the whole layout up. Settings > Style chooses
   the look there: Pixel (the pixel artwork, 2x on 1024x768) or Smooth
   (anti-aliased text, icons and logo at exactly the screen's size:
-  1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; on 16-bit and
-  deeper RTG screens).
+  1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; RTG screens only).
 - Pictures: browses Media:Images (folders first, each picture with its
   format), with the selected picture or a folder's first picture in the
   preview pane. Letter folders (A-Z) are not shown as folders: their

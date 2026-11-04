@@ -2,7 +2,7 @@
  * AmigaMCE - smooth style: anti-aliased text, icons, markers and logo
  * Copyright (c) 2026 Brian King
  *
- * Used on RTG screens of 15 bits or more. Everything is pre-rendered by
+ * Used on RTG screens, 8-bit ones too. Everything is pre-rendered by
  * tools/mksmooth.py at the exact size this screen needs, from Rubik and the
  * vector icon shapes, into PROGDIR:Fonts/amce-smooth/<lines>; nothing is
  * scaled or rasterised here.
@@ -14,7 +14,10 @@
  * style's text, so it clips to the window like any other drawing and needs
  * no RTG library calls. The in-between pens are taken from 32 up as each
  * (foreground, background) pair is first used; on a truecolour screen a
- * pen is only a colour to draw with, so this costs nothing on screen.
+ * pen is only a colour to draw with, so this costs nothing on screen. On
+ * an 8-bit one the pens are the screen's own: SMOOTH_PENS of them, from
+ * 32 up, are held for this while the screen is open, and the rest stay
+ * free for pictures.
  *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
@@ -37,6 +40,7 @@
 #define PHASES      4           /* each glyph at 0, 1/4, 1/2, 3/4 of a pixel */
 #define FIRST_PEN   32          /* below: UI pens 0-15, the screen's 16-31 */
 #define MAX_TEXT_W  2048        /* widest text drawn in one go, in pixels */
+#define SMOOTH_PENS 96          /* 8-bit screens: pens held for the shades and the logo */
 
 struct Face {
     UWORD lo, hi;
@@ -67,6 +71,7 @@ struct Smooth {
     UBYTE used;                 /* bit n: mask n has pixels */
     UBYTE blend[NUM_UI_PENS][NUM_UI_PENS][SMOOTH_LEVELS];
     UWORD next_pen, last_pen;
+    UWORD held;                 /* 8-bit screens: pens FIRST_PEN.. held (ObtainPen) */
 };
 
 /* coverage 0..15 -> step 0..SMOOTH_LEVELS-1 */
@@ -218,10 +223,26 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
     memset(s->blend, 0, sizeof(s->blend));
     s->next_pen = FIRST_PEN;
     s->last_pen = count > 256 ? 255 : count ? count - 1 : 0;
+    s->held = 0;
+    if (!g->truecolor && cm) {
+        /* real pens: hold them, so pictures' pens never land on them */
+        while (s->held < SMOOTH_PENS && FIRST_PEN + s->held <= s->last_pen &&
+               (LONG)ObtainPen(cm, FIRST_PEN + s->held, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR) >= 0)
+            s->held++;
+        s->last_pen = FIRST_PEN + s->held - 1;
+        if (!s->held)
+            s->last_pen = 0;                /* none: shades fall to the nearest end */
+    }
 }
 
 void sm_detach(struct Smooth *s)
 {
+    if (s->g && s->g->scr && s->held) {
+        UWORD i;
+        for (i = 0; i < s->held; i++)
+            ReleasePen(s->g->scr->ViewPort.ColorMap, FIRST_PEN + i);
+    }
+    s->held = 0;
     if (s->scratch) {
         WaitBlit();
         FreeMem(s->scratch, s->scratch_size);

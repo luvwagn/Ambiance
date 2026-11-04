@@ -72,7 +72,7 @@ static char msg[80];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
-static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on deep RTG screens) */
+static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on RTG screens) */
 static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
 static struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
 static struct Page *pv_page;        /* what the preview shows: page and entry */
@@ -1360,7 +1360,7 @@ static void build_styles(struct Page *p)
     BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
     action_item(p, "Pixel", "", ACT_STYLE_PIXEL,
                 ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    action_item(p, "Smooth", can_smooth ? "" : "RTG 16-bit+ only", ACT_STYLE_SMOOTH,
+    action_item(p, "Smooth", can_smooth ? "" : "RTG only", ACT_STYLE_SMOOTH,
                 ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
     p->sel = ui_style == STYLE_SMOOTH ? 1 : 0;
 }
@@ -4008,7 +4008,7 @@ static void toggle_debug(void)
 }
 
 /* Settings > Style. Remembered either way; the screen is reopened only
- * when the look changes (smooth needs a 16-bit or deeper RTG screen). */
+ * when the look changes (smooth needs an RTG screen). */
 static void apply_style(int st)
 {
     struct Page *p = cur();

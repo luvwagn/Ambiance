@@ -206,7 +206,7 @@ BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
         return TRUE;
     if (smode == SM_AUTO || gfx_mode_problem(c, smode))
         smode = gfx_mode_auto(c);
-    if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) <= 8)
+    if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) < 8)
         return FALSE;
     sprintf(path, "PROGDIR:Fonts/amce-smooth/%lu", (unsigned long)modes[smode].h);
     me->pr_WindowPtr = (APTR)-1;
@@ -253,7 +253,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
             g->kint = 3;
     }
     g->k = (UWORD)g->kint << 8;
-    if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->truecolor &&
+    if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->depth >= 8 &&
         (g->sm = sm_load(g->h))) {
         g->style = STYLE_SMOOTH;
         g->k = sm_scale(g->sm);             /* as the file was rendered for */
@@ -345,9 +345,13 @@ static UWORD pic_npens;
  * blocks, so a new picture is drawn in one while the old one is still in
  * the other. */
 #define BLK_MAX  112            /* pens a block, at most */
-#define BLK_KEEP  64            /* free pens left for everyone else */
+#define BLK_KEEP  48            /* free pens left for everyone else */
+#define BLK_TWO   64            /* two blocks only if each gets this many */
 static UBYTE blk_pen[2][BLK_MAX];
 static UWORD blk_n;             /* pens in each block; 0: no blocks */
+static int blk_count;           /* 2, or 1 when pens are short (the smooth style's
+                                 * shades on an 8-bit screen): then the old picture
+                                 * is cleared before the new one takes the block */
 static ULONG blk_rgb[2][BLK_MAX];   /* each block's picture's colours, 0xRRGGBB */
 static UWORD blk_ncol[2];
 static int blk_on = -1;         /* the block of the picture on screen */
@@ -374,11 +378,16 @@ static void blk_reserve(struct Gfx *g)
     if (!g->pens_shared || g->truecolor || g->depth < 8 || !pe)
         return;
     n = ((LONG)pe->pe_NFree - BLK_KEEP) / 2;
+    blk_count = 2;
+    if (n < BLK_TWO) {
+        n = (LONG)pe->pe_NFree - BLK_KEEP;
+        blk_count = 1;
+    }
     if (n > BLK_MAX)
         n = BLK_MAX;
     if (n < 16)
         return;
-    for (b = 0; b < 2; b++)
+    for (b = 0; b < blk_count; b++)
         for (i = 0; i < n; i++) {
             got = ObtainPen(cm, -1, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
             if (got < 0) {
@@ -399,7 +408,7 @@ static void blk_release(struct Gfx *g)
 {
     int b, i;
     if (blk_n && g->scr)
-        for (b = 0; b < 2; b++)
+        for (b = 0; b < blk_count; b++)
             for (i = 0; i < blk_n; i++)
                 ReleasePen(g->scr->ViewPort.ColorMap, blk_pen[b][i]);
     blk_n = 0;
@@ -1349,8 +1358,15 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
             nused++;
     if (blk_n && nused <= blk_n) {
         /* into the free block (not the old picture's): its pens set to
-         * this one's colours before it is drawn */
-        blk = blk_on == 0 ? 1 : 0;
+         * this one's colours before it is drawn. With one block, the old
+         * picture goes first (it would change colour) */
+        blk = blk_count == 2 && blk_on == 0 ? 1 : 0;
+        if (blk == blk_on && g->pic_w) {
+            struct Beam b;
+            beam_init(g, &b);
+            clear_old(g, &b, x, y, x + w - 1, y + h - 1, 0, 0, 0, 0);
+            gfx_picture_free(g);
+        }
         blk_ncol[blk] = 0;
         for (i = 0; i < 256; i++) {
             map[i] = PEN_BG;

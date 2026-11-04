@@ -94,14 +94,13 @@ BOOL caps_mode_is_rtg(ULONG id)
 }
 
 /* The best available RTG mode with exactly this nominal size, or
- * INVALID_ID. Truecolor is preferred, for pictures and video later on:
- * 32-bit first (aligned longword pixels are the quickest to move), then
- * 24-bit, then 15/16-bit, and an 8-bit palette mode only if that is all
- * the card has. The UI still draws with pens; on a truecolor screen the
- * RTG system turns each pen into the RGB loaded for it. */
+ * INVALID_ID. The UI is 8-bit if the card has it: a quarter of the bytes
+ * of 32-bit to draw, scroll and clear, and pictures get pens of their own
+ * (a full-screen picture the whole palette). Else the deepest: 32-bit
+ * (aligned longword pixels are the quickest to move), 24, then 15/16. */
 static UWORD depth_rank(UWORD d)
 {
-    return d == 32 ? 4 : d == 24 ? 3 : (d == 16 || d == 15) ? 2 : d == 8 ? 1 : 0;
+    return d == 8 ? 5 : d == 32 ? 4 : d == 24 ? 3 : (d == 16 || d == 15) ? 2 : 0;
 }
 
 ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth)
