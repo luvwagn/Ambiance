@@ -1433,8 +1433,30 @@ LONG gfx_thumb_colours(struct Gfx *g)
 /* Draw a thumbnail (thumb.c) centred across in the w x h box at x, y, in
  * pens obtained now; the one on screen is replaced as by gfx_picture_obj.
  * pi: what the picture is (shown in the pane). */
+static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x,
+                       WORD y, WORD w, WORD h, WORD *drawn_h, struct BitMap **keep);
+
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h)
+{
+    return thumb_draw(g, t, pi, x, y, w, h, drawn_h, NULL);
+}
+
+/* A thumbnail as a bitmap like the screen's, in pens taken now as the
+ * picture on screen's (gfx_picture_free lets them go): for a text box to
+ * copy from as it scrolls. NULL: could not. FreeBitMap it after. */
+struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t)
+{
+    struct BitMap *bm = NULL;
+    struct PicInfo pi;
+    memset(&pi, 0, sizeof(pi));
+    if (!thumb_draw(g, t, &pi, 0, 0, g->w, g->h, NULL, &bm))
+        return NULL;
+    return bm;
+}
+
+static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x,
+                       WORD y, WORD w, WORD h, WORD *drawn_h, struct BitMap **keep)
 {
     struct ColorMap *cm;
     struct BitMap *tmp;
@@ -1460,11 +1482,18 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
             trp.BitMap = tmp;
             WriteLUTPixelArray(t->px, 0, 0, t->mod, &trp, (APTR)t->pal, 0, 0, t->w, t->h,
                                CTABFMT_XRGB8);
+            if (keep) {
+                *keep = tmp;                /* the caller's to copy from */
+                gfx_picture_free(g);
+                return TRUE;
+            }
             gfx_draw_ms[1] = time_ms() - t0;
             t0 = time_ms();
             BltBitMapRastPort(tmp, 0, 0, g->rp, nx, y, t->w, t->h, 0xC0);
             WaitBlit();
             FreeBitMap(tmp);
+        } else if (keep) {
+            return FALSE;
         } else {
             WriteLUTPixelArray(t->px, 0, 0, t->mod, g->rp, (APTR)t->pal, nx, y, t->w, t->h,
                                CTABFMT_XRGB8);
@@ -1541,19 +1570,25 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     gfx_draw_ms[1] = time_ms() - t_0;
     t_0 = time_ms();
     nx = x + (w - (WORD)t->w) / 2;
-    {
+    if (keep) {
+        *keep = tmp;                        /* the caller's to copy from */
+        tmp = NULL;
+    } else {
         struct Beam b;
         beam_init(g, &b);
         band_blit(g, &b, tmp, nx, y, t->w, t->h);
         clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, t->w, t->h);
     }
     gfx_draw_ms[2] = time_ms() - t_0;
-    FreeBitMap(tmp);
+    if (tmp)
+        FreeBitMap(tmp);
     gfx_picture_free(g);                    /* now the old one's pens can go */
     CopyMem(pens, pic_pens, npens);
     pic_npens = npens;
     if (blk >= 0)
         blk_on = blk;
+    if (keep)
+        return TRUE;                        /* its pens held; no place on screen */
     g->pic = *pi;
     g->pic_x = nx;
     g->pic_y = y;

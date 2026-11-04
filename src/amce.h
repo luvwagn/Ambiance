@@ -200,6 +200,7 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to max
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
 BOOL gfx_thumbs(struct Gfx *g);
+struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
 /* Double buffering (RTG; prototype: PROGDIR:AmigaMCE.dbuf): drawing goes
  * into the buffer not shown; gfx_present shows it, if gfx_dirty was said. */
 extern BOOL gfx_dbuf_wanted;
@@ -387,7 +388,10 @@ struct TextBox {
     LONG  pos, target;          /* scroll offset in pixels, now and heading to */
     LONG  drawn_pos, thumb_y, thumb_h;
     const struct ItemList *lines;
-    struct BitMap *bm;          /* pre-rendered text, 3 planes */
+    struct BitMap *bm;          /* pre-rendered text, 3 planes (all with a picture) */
+    struct BitMap *pic;         /* a picture under the text (the caller's; set it
+                                 * before tb_open), like the screen's, pic_w x pic_h */
+    WORD  pic_w, pic_h, pic_y;  /* pic_y: its top in the content (tb_open) */
 };
 
 BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,

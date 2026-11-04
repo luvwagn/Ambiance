@@ -18,6 +18,10 @@
  * first means such in-between colours are always one of the dark UI pens,
  * never a stray bright one (pen 9 -> 0 used to pass through orange pen 8).
  *
+ * A picture can follow the text (tb->pic, a bitmap like the screen's): it
+ * scrolls with it. The pre-rendered bitmap then has all the screen's
+ * planes (its pens are any), and the blit copies them all.
+ *
  * On an RTG screen there is no off-screen bitmap: the text is drawn
  * straight onto the screen, clipped to the box by a layers clip region.
  * Each scroll step moves what is already there with ScrollRaster (a
@@ -80,6 +84,10 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->lines = lines;
     tb->first_white = first_white;
     tb->content_h = lines->count * tb->line_h;
+    if (tb->pic) {
+        tb->pic_y = tb->content_h + tb->line_h / 2;     /* half a line's gap */
+        tb->content_h = tb->pic_y + tb->pic_h;
+    }
     if (g->planar && tb->content_h > TB_MAX_ROWS)     /* the bitmap's limit */
         tb->content_h = TB_MAX_ROWS - TB_MAX_ROWS % tb->line_h;
     tb->bar_w = tb->content_h > h ? GU(g, 5) : 0;
@@ -93,12 +101,19 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->open = TRUE;
 
     rows = tb->content_h > h ? tb->content_h : h;
-    tb->mask = TB_PLANE_MASK;
+    tb->mask = tb->pic ? 0xFF : TB_PLANE_MASK;
     if (!g->planar)
         return TRUE;    /* RTG: drawn directly, see above */
-    tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
-    if (!tb->bm)
+    tb->bm = AllocBitMap(w, rows, tb->pic ? g->depth : TB_PLANES, BMF_CLEAR, NULL);
+    if (!tb->bm) {
+        tb->mask = TB_PLANE_MASK;
         return FALSE;   /* low on chip RAM: drawn directly instead */
+    }
+    if (tb->pic && tb->pic_y + tb->pic_h <= rows) {
+        BltBitMap(tb->pic, 0, 0, tb->bm, (w - tb->pic_w) / 2, tb->pic_y, tb->pic_w, tb->pic_h,
+                  0xC0, 0xFF, NULL);
+        WaitBlit();
+    }
 
     InitRastPort(&rp);
     rp.BitMap = tb->bm;
@@ -143,7 +158,7 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
 
 static void blit_window(struct Gfx *g, struct TextBox *tb)
 {
-    struct Layer *l = g->win->WLayer;
+    struct Layer *l = g->rp->Layer;    /* the window's, or a double buffer's */
     /* The bitmap is at least h rows below pos (cleared past the text), so
      * a full-height copy also blanks whatever the box showed before. */
     LockLayerRom(l);
@@ -171,7 +186,7 @@ static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
     r.MaxY = sy1;
     if ((rg = NewRegion())) {
         if (OrRectRegion(rg, &r)) {
-            old = InstallClipRegion(g->win->WLayer, rg);
+            old = InstallClipRegion(g->rp->Layer, rg);
             clipped = TRUE;
         }
     }
@@ -185,8 +200,16 @@ static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
         gfx_text(g, tb->x, top, tb->lines->items[i].label,
                  (tb->first_white && i == 0) ? PEN_WHITE : PEN_TEXT, PEN_BG, tb->w, TS_BODY);
     }
+    if (tb->pic) {
+        /* the picture's rows in sy0..sy1 */
+        LONG ptop = tb->y + tb->pic_y - tb->pos, a = ptop > sy0 ? ptop : sy0,
+             z = ptop + tb->pic_h - 1 < sy1 ? ptop + tb->pic_h - 1 : sy1;
+        if (a <= z)
+            BltBitMapRastPort(tb->pic, 0, a - ptop, g->rp, tb->x + (tb->w - tb->pic_w) / 2, a,
+                              tb->pic_w, z - a + 1, 0xC0);
+    }
     if (clipped)
-        InstallClipRegion(g->win->WLayer, old);
+        InstallClipRegion(g->rp->Layer, old);
     if (rg)
         DisposeRegion(rg);
 }

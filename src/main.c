@@ -54,7 +54,9 @@ struct Page {
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
-    char pic[160];              /* PT_TEXT: a picture under the text ("" none) */
+    char pic[160];              /* PT_TEXT: a picture at the end of the text ("" none), */
+    struct BitMap *pic_bm;      /*   made for the screen when the page is first drawn */
+    WORD pic_w, pic_h;
 };
 
 #define PICS_ROOT "Media:Images"
@@ -136,6 +138,37 @@ static struct Page *page_push(UBYTE type, const char *title)
     return p;
 }
 
+static WORD textbox_w(void);
+
+/* A text page's picture (Page.pic), made for this screen: as wide as the
+ * text and no taller than the box, in pens of its own (gfx_thumb_bitmap). */
+static void page_picture(struct Page *p)
+{
+    WORD w = textbox_w(), h = g.footer_y - 2 - g.list_top;
+    struct PicInfo pi;
+    struct Thumb *t;
+    BOOL tall = gfx_mode_tall(g.mode);
+    if (!gfx_thumbs(&g))
+        return;
+    if (!(t = ilbm_thumb(p->pic, w, h, tall, TRUE, gfx_thumb_colours(&g), &pi))) {
+        BOOL remapped = FALSE;
+        APTR o = pic_decode(p->pic, NULL, FALSE, &remapped, &pi);
+        if (o) {
+            ULONG dw, dh;
+            pic_fit(pi.w, pi.h, tall, w, h, TRUE, &dw, &dh);
+            t = thumb_make(o, dw, dh, gfx_thumb_colours(&g));
+            pic_dispose(o);
+        }
+    }
+    if (!t)
+        return;
+    if ((p->pic_bm = gfx_thumb_bitmap(&g, t))) {
+        p->pic_w = t->w;
+        p->pic_h = t->h;
+    }
+    thumb_free(t);
+}
+
 static void page_pop(void)
 {
     ov.on = FALSE;
@@ -148,6 +181,11 @@ static void page_pop(void)
         return;
     gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
     tb_close(&pages[depth - 1].tb);
+    if (pages[depth - 1].pic_bm) {
+        WaitBlit();
+        FreeBitMap(pages[depth - 1].pic_bm);    /* its pens went with gfx_picture_clear */
+        pages[depth - 1].pic_bm = NULL;
+    }
     ch_free(pages[depth - 1].ch);
     pages[depth - 1].ch = NULL;
     list_free(&pages[--depth].list);
@@ -3081,10 +3119,10 @@ static void blit_rows(LONG src, LONG dst, LONG n)
     struct BitMap *bm = g.rp->BitMap;
     if (n <= 0 || src == dst)
         return;
-    LockLayerRom(g.win->WLayer);
+    LockLayerRom(g.rp->Layer);             /* the window's, or a double buffer's */
     BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
               x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? 0x07 : 0xFF, NULL);
-    UnlockLayerRom(g.win->WLayer);
+    UnlockLayerRom(g.rp->Layer);
 }
 
 /* After the selection moved from old_sel (list top was old_top): repaint
@@ -3218,24 +3256,14 @@ static void draw_pane(BOOL full)
         draw_list_rows(p);
         break;
     case PT_TEXT:
-        if (p->pic[0] && (g.pens_shared || g.truecolor)) {
-            /* the text, as tall as it needs (at most 3/5 of the pane), and
-             * a picture under it, as big as fits */
-            WORD avail = g.footer_y - 2 - g.list_top, line_h = g.font_h + U(1);
-            WORD th = (WORD)(p->list.count * line_h + U(2)), py, dh = 0;
-            if (th > avail * 3 / 5)
-                th = avail * 3 / 5;
-            if (!p->tb.open)
-                tb_open(&g, &p->tb, g.pane_x, g.list_top, textbox_w(), th, &p->list, FALSE);
-            if (full || !p->tb.drawn)
-                tb_draw(&g, &p->tb);
-            py = g.list_top + th + U(6);
-            if (full && py < g.footer_y - U(20))
-                gfx_picture(&g, p->pic, g.pane_x, py, g.pane_w, g.footer_y - 2 - py, TRUE, &dh);
-            break;
-        }
-        if (!p->tb.open)
+        if (!p->tb.open) {
+            if (p->pic[0] && !p->pic_bm)
+                page_picture(p);
+            p->tb.pic = p->pic_bm;          /* scrolls with the text, after it */
+            p->tb.pic_w = p->pic_w;
+            p->tb.pic_h = p->pic_h;
             open_textbox(p, g.list_top);
+        }
         if (full || !p->tb.drawn)
             tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
         break;
