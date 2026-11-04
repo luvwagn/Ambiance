@@ -1,0 +1,201 @@
+Title: Wrong code: register-asm inputs (a0/a1) dropped when a __mulsi3
+       libcall is sunk between their assignment and the asm
+       (-Os/-O2 -m68000 -mtune=68020-60)
+
+
+SUMMARY
+-------
+An inline OS call written the usual way (each argument is computed into a
+temporary, then copied into a register asm variable, then used by an asm
+statement) loses its a0 and a1 arguments. The multiply that computes the
+d0 argument is moved to after the a0/a1 assignments. On the 68000 that
+multiply becomes a call to __mulsi3, which clobbers a0/a1. GCC then treats
+the a0/a1 assignments as dead and deletes them, so the asm runs with
+whatever __mulsi3 left in a0/a1.
+
+The NDK's own <inline/exec.h> CopyMem() macro hits this: in a real program,
+CopyMem copied from UtilityBase onto the stack, and the following
+AllocPooled failed with "invalid memory pool".
+
+
+TOOLCHAIN
+---------
+m68k-amigaos-gcc (AmigaDev amiga13.4-g696db0d5f) 13.4.0b 20260811114005
+GNU assembler / ld (AmigaDev amiga13.4-g696db0d5f) 2.46.1
+Configured with: .../amiga-gcc-13.4/projects/gcc/configure
+  --prefix=/opt/amiga-13.4-20261029 --target=m68k-amigaos
+  --with-pkgversion='AmigaDev amiga13.4-g696db0d5f'
+  --with-bugurl=https://github.com/AmigaPorts/m68k-amigaos-gcc/issues
+  --enable-languages=c,c++,objc --enable-version-specific-runtime-libs
+  --disable-libssp --disable-nls --without-zstd --disable-shared
+Our CI uses the docker image stefanreinauer/amiga-gcc:gcc-v13.4 (same
+13.4 family). libnix: as shipped with that toolchain.
+
+
+MINIMAL REPRODUCTION (self-contained, no NDK headers needed)
+------------------------------------------------------------
+/* mini.c
+ * m68k-amigaos-gcc -Os -m68000 -mtune=68020-60 -S mini.c
+ */
+typedef unsigned long size_t;
+
+struct Entry { char *a, *b, *c; unsigned char k, x, m; unsigned short w; };  /* 18 bytes */
+struct Vec   { void *pool; struct Entry *items; long count, cap; };
+
+extern void *SysBase;
+
+/* CopyMem(a0 = source, a1 = dest, d0 = size), as in the NDK's inline/exec.h */
+static inline void copy_mem(void *source, void *dest, unsigned long size)
+{
+    register void *a6 __asm("a6") = SysBase;
+    register void *a0 __asm("a0") = source;
+    register void *a1 __asm("a1") = dest;
+    register unsigned long d0 __asm("d0") = size;
+    __asm volatile ("jsr a6@(-624:W)"
+                    : "+a" (a0), "+a" (a1), "+d" (d0)
+                    : "a" (a6)
+                    : "d1", "cc", "memory");
+}
+
+extern void *alloc(void *pool, unsigned long size);
+
+struct Entry *add(struct Vec *v, char *s)
+{
+    struct Entry *e;
+    if (v->count == v->cap) {
+        long ncap = v->cap ? v->cap * 2 : 64;
+        struct Entry *n = alloc(v->pool, ncap * sizeof(struct Entry));
+        if (!n)
+            return 0;
+        if (v->items)
+            copy_mem(v->items, n, v->count * sizeof(struct Entry));
+        v->items = n;
+        v->cap = ncap;
+    }
+    e = &v->items[v->count];
+    e->a = s;
+    v->count++;
+    return e;
+}
+/* end of mini.c */
+
+The same thing happens with the real NDK macros: replace copy_mem() with
+CopyMem() and alloc() with AllocPooled() from <proto/exec.h> (compile with
+-noixemul).
+
+
+GENERATED CODE (-Os -m68000 -mtune=68020-60), the CopyMem call
+---------------------------------------------------------------
+	tst.l 4(a2)          ; if (v->items)
+	jeq L5
+	move.l _SysBase,a6
+	pea 18.w
+	move.l 8(a2),-(sp)   ; v->count
+	jsr (a4)             ; a4 = ___mulsi3  ->  d0 = size (correct)
+	addq.l #8,sp
+#APP
+	jsr a6@(-624:W)      ; CopyMem: a0 and a1 are NEVER loaded
+#NO_APP
+
+Expected: a0 = v->items (from 4(a2)), a1 = n (held in a3), loaded after
+the __mulsi3 call. With -fno-tree-sink the output is correct:
+
+	move.l 4(a3),d3      ; items
+	pea 18.w
+	move.l 8(a3),-(sp)
+	jsr (a4)             ; ___mulsi3
+	addq.l #8,sp
+	tst.l d3
+	jeq L5
+	move.l _SysBase,a6
+	move.l d3,a0         ; source
+	move.l a2,a1         ; dest
+#APP
+	jsr a6@(-624:W)
+
+
+WHICH OPTIONS TRIGGER IT
+------------------------
+  -Os -m68000 -mtune=68020-60     WRONG
+  -O2 -m68000 -mtune=68020-60     WRONG
+  -O1 -m68000 -mtune=68020-60     ok
+  -Os -m68000                     ok (x*18 strength-reduced to shifts/adds)
+  -Os -m68000 -mtune=68020        ok
+  -Os -m68000 -mtune=68030        ok
+  -Os -m68020                     ok (muls.l inline, no libcall)
+
+  Adding -fno-tree-sink     -> correct code
+  Adding -fno-code-hoisting -> correct code
+
+-mtune=68020-60 makes the multiply look cheap, so x*18 is kept as a
+multiply. With -m68000 that multiply is expanded as a libcall to __mulsi3.
+A size that is a power of two (16-byte struct) becomes a shift and is
+not affected.
+
+
+WHERE IT GOES WRONG (from -fdump-tree-all)
+------------------------------------------
+1. PRE code hoisting (x.c.143t.pre) hoists "v->count * 18" out of the
+   "if (v->items)" block, because the same expression is used later for
+   &v->items[v->count]:
+
+     <bb 6>:  pretmp_50 = v->count;  _51 = (unsigned long) pretmp_50;
+              _52 = _51 * 18;
+              if (_6 != 0) goto <bb 7>
+     <bb 7>:  a6 = SysBase;  a0 = _6;  a1 = n_24;  d0 = _52;  __asm__ ...
+
+2. sink1 (x.c.144t.sink1) sinks it back:
+
+     Sinking _52 = _51 * 18;  from bb 6 to bb 7
+     Sinking _51 = (long unsigned int) pretmp_50;  from bb 6 to bb 7
+     Sinking pretmp_50 = v_21(D)->count;  from bb 6 to bb 7
+
+   It puts the statements right before their use, which is AFTER the
+   hard-register variable assignments:
+
+     <bb 7>:  pretmp_50 = v->count;  a6 = SysBase;  a0 = _6;  a1 = n_24;
+              _51 = (unsigned long) pretmp_50;
+              _52 = _51 * 18;            <-- becomes jsr ___mulsi3
+              d0 = _52;
+              __asm__ __volatile__("jsr a6@(-624:W)" ...);
+
+3. At expand, the multiply becomes the __mulsi3 libcall, which clobbers
+   a0/a1. The earlier sets of a0/a1 are then dead and are deleted.
+
+The source does what the GCC manual asks for local register variables:
+the operands are computed first (as inline-function parameters here, as
+__p____source/__p____dest/__p____size temporaries in the NDK macro). It is
+the sink pass that moves a libcall-producing expression back between the
+register variable assignments and the asm. The sink pass is generic GCC
+code, so this may also affect upstream GCC. These upstream reports look
+related:
+  - GCC PR 87984, "wrong code for local reg var input to asm"
+    (the same issue with TER; fixed in GCC 9)
+  - GCC PR 70184, "Explicit register variables holding function arguments
+    overwritten by conversion libcall"
+  - the 2026 gcc-patches series "On the road towards fixing local
+    register asm" (Stefan Schulze Frielinghaus)
+
+
+RUNTIME EVIDENCE
+----------------
+The same pattern, compiled in a real list-append function (18-byte
+entries, grown from 64 to 128), run under vamos:
+
+  CopyMem: source=006004 dest=005c08 len=000480
+     (source = UtilityBase, which libnix's __mulsi3 loads into a0;
+      dest = a stack address)
+  AllocPooled: invalid memory pool
+
+On real hardware and in the emulator, any list over 64 entries came back
+corrupted. Linking with -mcrt=nix13 (whose __mulsi3 does not use
+UtilityBase) changes the garbage but does not fix it: a0/a1 are still
+never loaded.
+
+
+WORKAROUNDS WE ARE USING
+------------------------
+- Keep array element sizes a power of two, so index * size is a shift.
+- A build check that scans the -S output for a jsr/bsr between the a6
+  load and an inline OS call.
+- -fno-tree-sink also avoids it in this test case.
