@@ -222,15 +222,43 @@ void ldr_submit_first(struct LJob *j)
     Signal(job_port->mp_SigTask, 1UL << job_port->mp_SigBit);
 }
 
+/* A job nobody waits for any more (ldr_orphan), back: freed with all it
+ * brought. */
+static void orphan_free(struct LJob *j)
+{
+    if (j->list.pool)
+        list_free(&j->list);
+    pic_dispose(j->obj);
+    FreeVec(j->buf);
+    FreeVec(j);
+}
+
+void ldr_orphan(struct LJob *j)
+{
+    if (!j)
+        return;
+    if (!j->busy) {
+        orphan_free(j);
+        return;
+    }
+    j->orphan = TRUE;
+    j->cancel = TRUE;                   /* if it has not started, it never will */
+}
+
 struct LJob *ldr_collect(void)
 {
-    struct LJob *j = reply_port ? (struct LJob *)GetMsg(reply_port) : NULL;
-    if (j) {
+    struct LJob *j;
+    while (reply_port && (j = (struct LJob *)GetMsg(reply_port))) {
         j->busy = FALSE;
         j->done = TRUE;
         out--;
+        if (j->orphan) {
+            orphan_free(j);
+            continue;
+        }
+        return j;
     }
-    return j;
+    return NULL;
 }
 
 LONG ldr_out(void)
@@ -265,6 +293,8 @@ void ldr_stop(void)
                         out--;
                     j->busy = FALSE;
                     j->done = TRUE;
+                    if (j->orphan)
+                        orphan_free(j);
                 }
             }
         }

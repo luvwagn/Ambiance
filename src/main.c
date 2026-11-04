@@ -257,12 +257,16 @@ static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
  * in the middle of the content pane; at the end the pane is drawn again
  * where it was (redraw), unless what comes next covers the screen. */
 static struct { int depth; BOOL on; ULONG since, last; UWORD phase; WORD cx, cy; } busy;
+static BOOL ui_aborted;             /* a wait in busy gave way to input */
+static ULONG ui_joy0;               /* the joystick when the busy began */
 
 static void busy_begin(void)
 {
     if (busy.depth++ == 0) {
         busy.on = FALSE;
         busy.since = time_ms();
+        ui_aborted = FALSE;
+        ui_joy0 = LowLevelBase ? ReadJoyPort(1) : 0;
     }
 }
 
@@ -309,39 +313,160 @@ static void busy_end(BOOL redraw)
     }
 }
 
-/* Wait for a loader job, the spinner turning meanwhile (when in busy). */
-static void ui_wait(struct LJob *j)
+/* Input that navigates is waiting (a key, a click, the wheel, the
+ * joystick moved or pressed): what keeps you waiting gives way to it. It
+ * stays queued, to be acted on; mouse moves and key releases meanwhile
+ * are let go. */
+static BOOL ui_input_waiting(void)
+{
+    struct MsgPort *mp = g.win ? g.win->UserPort : NULL;
+    if (mp)
+        for (;;) {
+            struct IntuiMessage *im;
+            BOOL nav;
+            Forbid();
+            im = (struct IntuiMessage *)mp->mp_MsgList.lh_Head;
+            if (!im->ExecMessage.mn_Node.ln_Succ)
+                im = NULL;
+            nav = im && ((im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX)) ||
+                         im->Class == IDCMP_VANILLAKEY ||
+                         (im->Class == IDCMP_MOUSEBUTTONS &&
+                          (im->Code == SELECTDOWN || im->Code == MENUDOWN)));
+            Permit();
+            if (!im)
+                break;
+            if (nav)
+                return TRUE;
+            if ((im = (struct IntuiMessage *)GetMsg(mp)))
+                ReplyMsg((struct Message *)im);
+        }
+    if (LowLevelBase) {
+        ULONG st = ReadJoyPort(1), mask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT |
+                                          JPF_BUTTON_RED | JPF_BUTTON_BLUE |
+                                          JPF_BUTTON_FORWARD | JPF_BUTTON_REVERSE;
+        if ((st & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL && (st & mask & ~ui_joy0))
+            return TRUE;
+        ui_joy0 &= st;                      /* let go of: a new press counts */
+    }
+    return FALSE;
+}
+
+/* Wait for a loader job, the spinner turning meanwhile. Inside a busy
+ * (navigation), input gives up the wait: FALSE, ui_aborted set, the job
+ * left to come back later. */
+static BOOL ui_wait(struct LJob *j)
 {
     while (j->busy) {
         while (ldr_collect())
             ;
         if (!j->busy)
             break;
+        if (busy.depth && (ui_aborted || ui_input_waiting())) {
+            ui_aborted = TRUE;
+            return FALSE;
+        }
         dbg_sleep_begin();
         WaitTOF();
         dbg_sleep_end();
         busy_tick();
     }
+    return TRUE;
 }
 
-/* Read a Pictures folder in the loader, waiting for it with the spinner. */
+/* ---- Pictures folders, read by the loader and kept for the session
+ * (with memory to spare): a folder seen before comes back at once while
+ * its date is unchanged. A read given up for input (ui_wait) goes on, and
+ * is taken up again if the same folder is asked for next. */
+#define PICS_KEEP 6
+static struct {
+    char path[300];
+    struct DateStamp date;
+    struct ItemList list;
+    ULONG stamp;
+} pkeep[PICS_KEEP];
+static ULONG pkeep_clock;
+static struct LJob *pics_job;       /* a folder being read */
+static ULONG pics_t0;
+
+static void pics_forget(void)
+{
+    int k;
+    for (k = 0; k < PICS_KEEP; k++)
+        if (pkeep[k].list.pool)
+            list_free(&pkeep[k].list);
+    if (pics_job) {
+        ldr_orphan(pics_job);
+        pics_job = NULL;
+    }
+}
+
+static void pics_copy(const struct ItemList *from, struct ItemList *out)
+{
+    LONG i;
+    for (i = 0; i < from->count; i++)
+        list_copy(out, &from->items[i], from->items[i].label);
+}
+
+/* Read a Pictures folder into out: from memory if it is kept and has not
+ * changed, else by the loader, the spinner turning. -2: given up for
+ * input (the read goes on), -1: cannot be read. */
 static LONG pics_read_ui(const char *dir, struct ItemList *out)
 {
-    struct LJob *j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR);
+    struct DateStamp ds;
+    BOOL dated = idx_date(dir, &ds);
+    struct LJob *j;
     LONG n;
-    if (!j)
-        return pics_read_dir(dir, out);
-    j->type = LJ_PICDIR;
-    amce_strlcpy(j->path, dir, sizeof(j->path));
-    ldr_submit_first(j);
-    ui_wait(j);
+    int k, slot = 0;
+    char m[80];
+    for (k = 0; k < PICS_KEEP; k++)
+        if (pkeep[k].list.pool && dated && !amce_stricmp(pkeep[k].path, dir) &&
+            !CompareDates(&ds, &pkeep[k].date)) {
+            list_free(out);
+            list_init(out);
+            pics_copy(&pkeep[k].list, out);
+            pkeep[k].stamp = ++pkeep_clock;
+            return out->count;
+        }
+    if (pics_job && strcmp(pics_job->path, dir) != 0) {
+        ldr_orphan(pics_job);               /* another folder's: not wanted now */
+        pics_job = NULL;
+    }
+    if (!pics_job) {
+        if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+            return pics_read_dir(dir, out);
+        j->type = LJ_PICDIR;
+        amce_strlcpy(j->path, dir, sizeof(j->path));
+        ldr_submit_first(j);
+        pics_job = j;
+        pics_t0 = time_ms();
+    }
+    j = pics_job;
+    if (!ui_wait(j))
+        return -2;
+    pics_job = NULL;
     n = j->ran ? j->np : -1;
+    sprintf(m, "%ld entries in %ld ms", (long)n, (long)(time_ms() - pics_t0));
+    amce_log("pictures read", m);
     if (n >= 0 && j->list.pool) {
         list_free(out);
-        *out = j->list;                     /* its pool is the page's now */
-    } else {
-        list_free(&j->list);
+        list_init(out);
+        pics_copy(&j->list, out);
+        if (dated && pv_roomy()) {          /* kept for the next visit */
+            for (k = 1; k < PICS_KEEP; k++)
+                if (!pkeep[k].list.pool ||
+                    (pkeep[slot].list.pool && pkeep[k].stamp < pkeep[slot].stamp))
+                    slot = k;
+            if (pkeep[slot].list.pool)
+                list_free(&pkeep[slot].list);
+            amce_strlcpy(pkeep[slot].path, dir, sizeof(pkeep[slot].path));
+            pkeep[slot].date = ds;
+            pkeep[slot].list = j->list;
+            pkeep[slot].stamp = ++pkeep_clock;
+            j->list.pool = NULL;
+        }
     }
+    if (j->list.pool)
+        list_free(&j->list);
     FreeVec(j);
     return n;
 }
@@ -367,16 +492,8 @@ static void ch_free(struct Chunks *ch)
     LONG k;
     if (!ch)
         return;
-    if (ch->job) {
-        ui_wait(ch->job);
-        list_free(&ch->job->list);
-        FreeVec(ch->job);
-    }
-    if (ch->wjob) {
-        ldr_wait(ch->wjob);
-        FreeVec(ch->wjob->buf);
-        FreeVec(ch->wjob);
-    }
+    ldr_orphan(ch->job);                    /* still out: freed when it comes back */
+    ldr_orphan(ch->wjob);                   /* (the index is still written) */
     for (k = 0; k < ch->n; k++)
         list_free(&ch->c[k].names);
     FreeVec(ch->c);
@@ -686,7 +803,8 @@ static BOOL ch_wait_one(struct Page *p, BOOL shown)
     ch_pump(p);
     if (!p->ch || !p->ch->job)
         return FALSE;
-    ui_wait(p->ch->job);
+    if (!ui_wait(p->ch->job))
+        return FALSE;                       /* given up for input: it comes later */
     ch_arrived(p, shown);
     return TRUE;
 }
@@ -708,14 +826,16 @@ static void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
     if ((k = ch_of(p->ch, idx)) < 0)
         return;
     if (p->ch->job && p->ch->job_k != k) {
-        ui_wait(p->ch->job);               /* the one already out first */
+        if (!ui_wait(p->ch->job))           /* the one already out first */
+            return;
         ch_arrived(p, shown);
     }
     if (!p->ch->c[k].held) {
         if (!p->ch->job)
             ch_send(p, k);
         if (p->ch->job) {
-            ui_wait(p->ch->job);
+            if (!ui_wait(p->ch->job))
+                return;
             ch_arrived(p, shown);
         }
     }
@@ -775,7 +895,11 @@ static BOOL ch_from_index(struct Page *p)
             ch->next = k;                   /* changed: read it now, from its folder */
             ch_send(p, k);
             if (ch->job) {
-                ui_wait(ch->job);
+                if (!ui_wait(ch->job)) {    /* given up for input: the page goes */
+                    ch->laying = FALSE;
+                    idx_free(&ix);
+                    return TRUE;
+                }
                 ch_arrived(p, FALSE);
             }
             if (c->first < 0) {             /* could not: nothing there */
@@ -845,12 +969,15 @@ static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
     idx_name(path, adult, ch->idx, sizeof(ch->idx));
     if (ch_from_index(p)) {
         /* every place laid out: read what the first screens show */
-        ch_wait_item(p, 0, FALSE);
-        if (p->list.count)
+        if (!ui_aborted)
+            ch_wait_item(p, 0, FALSE);
+        if (p->list.count && !ui_aborted)
             ch_wait_item(p, (p->list.count < first ? p->list.count : first) - 1, FALSE);
     } else {
         ch_wait_until(p, first, FALSE);     /* not drawn yet */
     }
+    if (ui_aborted)
+        return -2;                          /* given up for input */
     ch_pump(p);                             /* and on with the rest */
     return p->list.count;
 }
@@ -1276,7 +1403,10 @@ static void build_root_pages(int mod)
             LONG n;
             p->pics = 1;
             n = pics_read_ui(PICS_ROOT, &p->list);
-            if (n <= 0) {
+            if (n == -2) {
+                page_pop();                 /* given up for input: built when it settles */
+                page_push(PT_TEXT, "Pictures");
+            } else if (n <= 0) {
                 page_pop();
                 if ((p = page_push(PT_TEXT, "Pictures")))
                     text_para(p, n < 0 ? "No pictures found: AmigaMCE looks for them in "
@@ -2980,6 +3110,12 @@ static void pane_settle(void)
     busy_begin();                   /* a big section (Pictures) can take a while */
     build_root(menu[menu_sel]);
     draw_pane(TRUE);
+    if (ui_aborted) {
+        /* given up for input: built again once that input is dealt with
+         * and the menu rests (the read goes on meanwhile) */
+        pane_pending = TRUE;
+        pane_due = time_ms() + PANE_SETTLE;
+    }
     busy_end(FALSE);                /* drawn just now */
 }
 
@@ -3083,7 +3219,10 @@ static void open_dir_now(struct Item *it)
         n = pics_read_ui(it->path, &p->list);
         if (n <= 0) {
             page_pop();
-            set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
+            if (n == -2)
+                msg[0] = 0;                 /* given up for input */
+            else
+                set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
             return;
         }
         msg[0] = 0;
@@ -3094,7 +3233,10 @@ static void open_dir_now(struct Item *it)
     n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (ch_pump) */
     if (n <= 0) {
         page_pop();
-        set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
+        if (n == -2)
+            msg[0] = 0;                     /* given up for input */
+        else
+            set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
         return;
     }
     msg[0] = 0;
@@ -3169,6 +3311,7 @@ static void release_for_launch(void)
     log_free("free before launch");
     save_nav();
     pv_flush();                     /* the loader's jobs back, then the loader gone */
+    pics_forget();                  /* every byte for the game */
     ldr_stop();
     pages_clear();                  /* lists, text boxes, the screenshot */
     tb_close(&pv_tb);
@@ -3488,7 +3631,10 @@ static void folder_slideshow(struct Item *it)
     n = pics_read_ui(it->path, &l);
     busy_end(n <= 0);               /* the viewer covers the screen next */
     first = n > 0 ? view_step(&l, l.count - 1, 1) : -1;
-    if (first < 0) {
+    if (n == -2) {
+        msg[0] = 0;                 /* given up for input */
+        draw_footer();
+    } else if (first < 0) {
         set_msg("No pictures in that folder");
     } else {
         viewer_run(&l, first, TRUE);
@@ -4717,6 +4863,7 @@ out:
         DeleteMsgPort(tport);
     amce_log("timer closed", "");
     pv_flush();
+    pics_forget();
     ldr_stop();
     pages_clear();
     amce_log("pages freed", "");

@@ -282,6 +282,7 @@ struct LJob {
     UBYTE mode;                 /* LJ_SHOT: SHOT_* */
     volatile UBYTE busy, done;
     UBYTE ran;                  /* the loader did it (not skipped) */
+    UBYTE orphan;               /* nobody waits for it: freed when back (ldr_orphan) */
     UBYTE spent;                /* its picture was handed to the screen: read again to reuse */
     ULONG stamp;                /* last used (the UI's cache order) */
     struct Screen *scr;
@@ -309,6 +310,7 @@ void ldr_submit(struct LJob *j);
 void ldr_submit_first(struct LJob *j);  /* ahead of the queue (or moved there) */
 struct LJob *ldr_collect(void); /* one that came back (now done), or NULL */
 void ldr_wait(struct LJob *j);  /* until j is back */
+void ldr_orphan(struct LJob *j);    /* give it up: freed (results and all) when back */
 ULONG ldr_sigmask(void);        /* signalled when one comes back */
 LONG ldr_out(void);             /* jobs out now */
 void pic_dispose(APTR obj);
