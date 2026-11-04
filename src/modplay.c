@@ -26,6 +26,8 @@
 #include <exec/execbase.h>
 #include <devices/audio.h>
 #include <hardware/custom.h>
+#include <hardware/intbits.h>
+#include <hardware/adkbits.h>
 #include <hardware/dmabits.h>
 #include <hardware/cia.h>
 #include <resources/cia.h>
@@ -381,6 +383,27 @@ static void paula_quiet(void)
         CU->aud[i].ac_vol = 0;
 }
 
+/* Paula left as a quiet machine for whoever comes next: DMA off, the
+ * channels finished with their last word, volumes and data zero, no
+ * modulation, no audio interrupts waiting. Nothing points at our memory
+ * that matters: a channel whose DMA is off reads none. */
+static void paula_reset(void)
+{
+    int i;
+    CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+    for (i = 0; i < 4; i++)
+        CU->aud[i].ac_vol = 0;
+    wait_lines(3);                          /* the DMA's last fetches done */
+    for (i = 0; i < 4; i++) {
+        CU->aud[i].ac_dat = 0;              /* the output: 0, not its last sample */
+        CU->aud[i].ac_len = 1;
+        CU->aud[i].ac_per = 428;
+        CU->aud[i].ac_vol = 0;
+    }
+    CU->adkcon = 0x00FF;                    /* no channel modulates another */
+    CU->intreq = INTF_AUD0 | INTF_AUD1 | INTF_AUD2 | INTF_AUD3;
+}
+
 static BOOL audio_open(void)
 {
     static UBYTE all[] = { 0x0F };
@@ -406,6 +429,7 @@ static BOOL audio_open(void)
         return FALSE;
     }
     mp.audio_open = TRUE;
+    amce_log("music", "Paula's 4 channels, from audio.device (not AHI)");
     return TRUE;
 }
 
@@ -413,7 +437,7 @@ static void audio_close(void)
 {
     if (!mp.audio_open)
         return;
-    paula_quiet();
+    paula_reset();
     CloseDevice((struct IORequest *)mp.aio);
     DeleteIORequest((struct IORequest *)mp.aio);
     DeleteMsgPort(mp.port);
@@ -818,11 +842,16 @@ void mp_stop(void)
  * is quitting). */
 void mp_shutdown(void)
 {
+    BOOL had = mp.audio_open || mp.cia;
     mp_stop();
-    module_free();
+    timers_close();                         /* no interrupt left to run... */
+    if (mp.audio_open)
+        paula_reset();                      /* ...nor a channel playing... */
+    module_free();                          /* ...when the samples go */
     mx_close_library();
-    timers_close();
     audio_close();
+    if (had)
+        amce_log("music", "Paula and the CIA timers let go: DMA off, volumes 0");
     if (mp.silence) {
         FreeMem(mp.silence, 8);
         mp.silence = NULL;
