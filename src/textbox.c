@@ -94,8 +94,8 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
 
     rows = tb->content_h > h ? tb->content_h : h;
     tb->mask = TB_PLANE_MASK;
-    if (!g->planar)
-        return TRUE;    /* RTG: drawn directly, see above */
+    if (!g->planar || g->sm)
+        return TRUE;    /* RTG or smooth text: drawn directly, see above */
     tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
     if (!tb->bm)
         return FALSE;   /* low on chip RAM: drawn directly instead */

@@ -202,8 +202,12 @@ BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
         return TRUE;
     if (smode == SM_AUTO || gfx_mode_problem(c, smode))
         smode = gfx_mode_auto(c);
-    if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) <= 8)
+    if (modes[smode].kind == K_LACED) {
+        if (!c->aga)                        /* AGA's 256 colours: room for the shades */
+            return FALSE;
+    } else if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) <= 8) {
         return FALSE;
+    }
     sprintf(path, "PROGDIR:Fonts/amce-smooth/%lu", (unsigned long)modes[smode].h);
     me->pr_WindowPtr = (APTR)-1;
     l = Lock((CONST_STRPTR)path, SHARED_LOCK);
@@ -245,7 +249,9 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
             g->kint = 3;
     }
     g->k = (UWORD)g->kint << 8;
-    if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->truecolor &&
+    if (style == STYLE_SMOOTH &&
+        ((modes[smode].kind == K_RTG && g->truecolor) ||
+         (modes[smode].kind == K_LACED && g->depth == 8)) &&
         (g->sm = sm_load(g->h))) {
         g->style = STYLE_SMOOTH;
         g->k = sm_scale(g->sm);             /* as the file was rendered for */
@@ -274,6 +280,8 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         return FALSE;
     }
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
+    /* smooth shades use pens above 7, so then every plane is drawn */
+    g->ui_mask = (g->planar && !g->sm) ? 0x07 : 0xFF;
     amce_log("screen open", modes[smode].label);
     amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
 

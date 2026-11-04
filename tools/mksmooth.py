@@ -51,6 +51,8 @@ from mkart import UI    # noqa: E402
 LO, HI = 32, 255
 RTG_LINES = 384     # the screen height the design is scaled to fit as if it had
 LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
+# AGA hires laced (the smooth style's experiment there) draws the design 1:1
+NATIVE_K = {400: 256, 512: 256}
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
 CELL = 12           # design height of a text cell (the pixel font's)
@@ -226,7 +228,7 @@ def big_letters(ttf, ink_h):
 
 
 def build(ttf, H):
-    k256 = round(H * 256 / RTG_LINES)
+    k256 = NATIVE_K.get(H, round(H * 256 / RTG_LINES))
     k = k256 / 256
     cell_h, base = round(CELL * k), round(BASE * k)
     out = bytearray(b"AMSM")
@@ -272,13 +274,14 @@ def logo_file(ttf, scale):
 
 def main():
     ttf, outdir = sys.argv[1], sys.argv[2]
-    heights = [int(v) for v in sys.argv[3:]] or [480, 600, 768]
+    heights = [int(v) for v in sys.argv[3:]] or [400, 512, 480, 600, 768]
     os.makedirs(outdir, exist_ok=True)
     for H in heights:
         data = build(ttf, H)
         with open(os.path.join(outdir, str(H)), "wb") as fh:
             fh.write(data)
-        print(f"  SMOOTH {H} lines: scale {round(H * 256 / RTG_LINES) / 256:.2f}, {len(data)} bytes")
+        k256 = NATIVE_K.get(H, round(H * 256 / RTG_LINES))
+        print(f"  SMOOTH {H} lines: scale {k256 / 256:.2f}, {len(data)} bytes")
     for scale in (1, 2, 3):
         data = logo_file(ttf, scale)
         with open(os.path.join(outdir, f"logo{scale}"), "wb") as fh:

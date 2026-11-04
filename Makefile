@@ -41,7 +41,8 @@ DISK_TITLE = AmigaMCE
 FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
              assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36
 # Smooth style, one file per RTG screen height (tools/mksmooth.py)
-SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
+SMOOTH_FILES = assets/Fonts/amce-smooth/400 assets/Fonts/amce-smooth/512 \
+               assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/768 assets/Fonts/amce-smooth/logo1 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
@@ -110,7 +111,8 @@ fonts:
 	cp -R build/fontgen/FONTS/. assets/Fonts/
 
 smooth:
-	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768
+	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth \
+		400 512 480 600 768
 
 icons:
 	$(PYTHON) tools/mkicon.py docs
