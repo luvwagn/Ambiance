@@ -49,7 +49,8 @@ static BOOL read_rows(Object *o, UBYTE *buf, ULONG sw, ULONG top, ULONG n, BOOL 
 struct Thumb *thumb_new(ULONG dw, ULONG dh)
 {
     ULONG mod = (dw + 15) & ~15UL;
-    struct Thumb *t = AllocVec(sizeof(struct Thumb) + mod * dh, MEMF_ANY | MEMF_CLEAR);
+    struct Thumb *t = AllocVec(sizeof(struct Thumb) + mod * dh + 32, MEMF_ANY | MEMF_CLEAR);
+    /* + 32: gfx_chunky reads 32 pixels at a time, past a row's end */
     if (!t)
         return NULL;
     t->w = dw;

@@ -1207,17 +1207,25 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
 {
     struct RastPort rp, trp;
     struct BitMap *row;
-    if (g->planar && (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) && bm->Depth <= 8) {
-        ULONG y, x, bpr = bm->BytesPerRow, nb = (w + 7) >> 3, d = bm->Depth, k;
-        UBYTE planes[8];
+    if (g->planar && (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) && bm->Depth <= 8 &&
+        !(bm->BytesPerRow & 3) && bm->BytesPerRow >= ((w + 31) >> 5) << 2) {
+        /* 32 pixels a step, a long to each plane: a quarter of the writes
+         * to chip RAM, which is slow with the display fetching 8 planes.
+         * (buf has 32 bytes to spare past its end for the last step.) */
+        ULONG y, x, bpr = bm->BytesPerRow, nl = (w + 31) >> 5, d = bm->Depth, k, j;
+        UBYTE pl[4][8];
+        ULONG *dst[8];
         WaitBlit();                         /* nothing of the blitter's in it */
         for (y = 0; y < h; y++) {
             const UBYTE *c = buf + y * mod;
-            ULONG off = y * bpr;
-            for (x = 0; x < nb; x++, c += 8) {
-                c2p8(c, planes);
+            for (k = 0; k < d; k++)
+                dst[k] = (ULONG *)((UBYTE *)bm->Planes[k] + y * bpr);
+            for (x = 0; x < nl; x++, c += 32) {
+                for (j = 0; j < 4; j++)
+                    c2p8(c + 8 * j, pl[j]);
                 for (k = 0; k < d; k++)
-                    ((UBYTE *)bm->Planes[k])[off + x] = planes[k];
+                    *dst[k]++ = ((ULONG)pl[0][k] << 24) | ((ULONG)pl[1][k] << 16) |
+                                ((ULONG)pl[2][k] << 8) | pl[3][k];
             }
         }
         return;
@@ -1238,6 +1246,8 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
 /* How many colours a thumbnail made now may have: half the pens free to
  * pictures, the other half for the next one (drawn while this one is
  * still up, in other pens). */
+ULONG gfx_draw_ms[3];   /* the last gfx_thumb: colours, pixels, copy to the screen */
+
 /* Can this screen show thumbnails (gfx_thumb)? */
 BOOL gfx_thumbs(struct Gfx *g)
 {
@@ -1271,14 +1281,34 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     ULONG i, n;
     WORD nx;
     int blk = -1;
+    ULONG t_0;
     if (!t || !gfx_thumbs(g))
         return FALSE;
     if (g->truecolor) {
-        /* its colour numbers and their colours, written as they are */
+        /* its colour numbers and their colours, written as they are: off
+         * screen, then up in one blit (written straight to the screen it
+         * was seen going down, line by line) */
         struct Beam b;
+        ULONG t0 = time_ms();
         nx = x + (w - (WORD)t->w) / 2;
-        WriteLUTPixelArray(t->px, 0, 0, t->mod, g->rp, (APTR)t->pal, nx, y, t->w, t->h,
-                           CTABFMT_XRGB8);
+        if ((tmp = AllocBitMap(t->w, t->h, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                               g->rp->BitMap))) {
+            struct RastPort trp;
+            InitRastPort(&trp);
+            trp.BitMap = tmp;
+            WriteLUTPixelArray(t->px, 0, 0, t->mod, &trp, (APTR)t->pal, 0, 0, t->w, t->h,
+                               CTABFMT_XRGB8);
+            gfx_draw_ms[1] = time_ms() - t0;
+            t0 = time_ms();
+            BltBitMapRastPort(tmp, 0, 0, g->rp, nx, y, t->w, t->h, 0xC0);
+            WaitBlit();
+            FreeBitMap(tmp);
+        } else {
+            WriteLUTPixelArray(t->px, 0, 0, t->mod, g->rp, (APTR)t->pal, nx, y, t->w, t->h,
+                               CTABFMT_XRGB8);
+        }
+        gfx_draw_ms[0] = 0;
+        gfx_draw_ms[2] = time_ms() - t0;
         beam_init(g, &b);
         clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, t->w, t->h);
         gfx_picture_free(g);
@@ -1293,7 +1323,8 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     }
     n = (ULONG)t->mod * t->h;
     cm = g->scr->ViewPort.ColorMap;
-    if (!(buf = AllocVec(n, MEMF_ANY)))
+    t_0 = time_ms();
+    if (!(buf = AllocVec(n + 32, MEMF_ANY)))     /* + 32: gfx_chunky reads 32 at a time */
         return FALSE;
     if (!(tmp = AllocBitMap(t->w, t->h, g->depth, BMF_CLEAR, g->rp->BitMap))) {
         FreeVec(buf);
@@ -1334,8 +1365,12 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     }
     for (i = 0; i < n; i++)
         buf[i] = map[t->px[i]];
+    gfx_draw_ms[0] = time_ms() - t_0;
+    t_0 = time_ms();
     gfx_chunky(g, tmp, buf, t->w, t->h, t->mod);
     FreeVec(buf);
+    gfx_draw_ms[1] = time_ms() - t_0;
+    t_0 = time_ms();
     nx = x + (w - (WORD)t->w) / 2;
     {
         struct Beam b;
@@ -1343,6 +1378,7 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
         band_blit(g, &b, tmp, nx, y, t->w, t->h);
         clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, t->w, t->h);
     }
+    gfx_draw_ms[2] = time_ms() - t_0;
     FreeBitMap(tmp);
     gfx_picture_free(g);                    /* now the old one's pens can go */
     CopyMem(pens, pic_pens, npens);
