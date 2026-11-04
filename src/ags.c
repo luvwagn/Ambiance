@@ -223,6 +223,50 @@ LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult)
     return n;
 }
 
+/* An AGS letter-index folder: "A".."Z", a digit, "0-9" or "#". */
+static BOOL letter_folder(const char *label)
+{
+    UBYTE c = (UBYTE)label[0];
+    if (!c)
+        return FALSE;
+    if (!label[1])
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+               c == '#';
+    return amce_stricmp(label, "0-9") == 0;
+}
+
+/* A menu as AmigaMCE shows it: one whose sub-folders are all a letter
+ * index (AGA, Beta, NTSC... split A-Z) is one flat sorted list of their
+ * entries; any other (By Genre, By Publisher...) keeps its folders. */
+LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult)
+{
+    struct ItemList subs;
+    LONG i, dirs = 0;
+    BOOL flat = TRUE;
+    if (!list_init(&subs))
+        return -1;
+    if (read_entries(dir, &subs, adult) < 0) {
+        list_free(&subs);
+        return -1;
+    }
+    for (i = 0; i < subs.count; i++)
+        if (subs.items[i].kind == IT_DIR) {
+            dirs++;
+            if (!letter_folder(subs.items[i].label))
+                flat = FALSE;
+        }
+    for (i = 0; i < subs.count; i++) {
+        struct Item *it = &subs.items[i];
+        if (it->kind == IT_DIR && flat && dirs)
+            read_entries(it->path, out, adult);
+        else
+            list_add(out, it->label, it->path, it->sortkey, it->kind);
+    }
+    list_free(&subs);
+    list_sort(out);
+    return out->count;
+}
+
 /* A folder of folders (AGS's "Games - 0-Z": one per letter) as one list:
  * the entries of every sub-folder, and any of its own, sorted together. */
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)

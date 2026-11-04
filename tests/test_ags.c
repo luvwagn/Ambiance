@@ -94,6 +94,22 @@ int main(void)
     }
     list_free(&l);
 
+    /* a menu split A-Z opens flat; one with named folders keeps them */
+    list_init(&l);
+    n = ags_read_menu("AGS:+  Games - 0-Z.ags", &l, FALSE);
+    check_long("A-Z menu flat count", n, 3);
+    if (n == 3)
+        check_long("A-Z menu flat kind", l.items[0].kind, IT_RUN);
+    list_free(&l);
+    list_init(&l);
+    n = ags_read_menu("AGS:+  Games - By Genre.ags", &l, FALSE);
+    check_long("genre menu keeps folders", n, 1);
+    if (n == 1) {
+        check_str("genre folder", l.items[0].label, "Action FPS");
+        check_long("genre folder kind", l.items[0].kind, IT_DIR);
+    }
+    list_free(&l);
+
     /* Favourites: option entries in brackets hidden */
     list_init(&l);
     n = ags_read_dir("AGS:+  Favourites.ags", &l, FALSE);

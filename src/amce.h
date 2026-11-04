@@ -205,6 +205,7 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path, c
 void list_sort(struct ItemList *l);
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
+LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z folders merged */
 void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);
 LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);

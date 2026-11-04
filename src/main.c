@@ -616,7 +616,7 @@ static BOOL push_dir_quiet(struct Item *it)
     if (!p)
         return FALSE;
     if (((it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
-                                 : ags_read_dir(it->path, &p->list, ags.adult[0] == '1')) <= 0) {
+                                 : ags_read_menu(it->path, &p->list, ags.adult[0] == '1')) <= 0) {
         page_pop();
         return FALSE;
     }
@@ -1558,7 +1558,7 @@ static void open_dir(struct Item *it)
         return;
     }
     n = (it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
-                                : ags_read_dir(it->path, &p->list, ags.adult[0] == '1');
+                                : ags_read_menu(it->path, &p->list, ags.adult[0] == '1');
     if (n <= 0) {
         page_pop();
         set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
