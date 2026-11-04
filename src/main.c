@@ -6464,6 +6464,7 @@ static int app_main(void)
                     }
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                     nav_tick_1s();          /* the trail kept, once it rests */
+                    mp_tempo_check();
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
                 np_tick();                  /* the music: its page, the next module */

@@ -90,6 +90,8 @@ static struct {
     UBYTE bpm_set;
     UWORD master;                   /* 0-64 */
     ULONG level[4];                 /* the meters (UI side) */
+    volatile ULONG ticks;           /* the tempo interrupt's count, playing */
+    ULONG chk_t0, chk_n0, chk_said; /* mp_tempo_check's window */
 } mp;
 
 /* ------------------------------------------------------------ Paula */
@@ -198,6 +200,8 @@ static void tick_code(void)
     int i;
     if (!mp.running)
         return;
+    if (!mp.paused)
+        mp.ticks++;
     if (mp.engine == ENG_EAGLE) {
         if (!mp.paused)
             ep_tick();                      /* the player's own routine */
@@ -361,6 +365,45 @@ static void tick_run(BOOL on)
             CIAREG(mp.cia_base, R_CRB) =
                 (UBYTE)((CIAREG(mp.cia_base, R_CRB) & 0x80) | CIACRBF_LOAD | CIACRBF_START);
         }
+    }
+}
+
+/* Once a second or so: whether the tempo interrupt comes as often as it
+ * should (by the E-clock, the same clock its timer counts). Said in the
+ * log when it is more than 10% off, at most twice a minute. */
+void mp_tempo_check(void)
+{
+    ULONG now = time_ms(), n = mp.ticks, el, cnt, hz10, want, got;
+    if (!mp.running || mp.paused || mp.engine == ENG_MIX || !mp.have_tick) {
+        mp.chk_t0 = 0;
+        return;
+    }
+    if (!mp.chk_t0) {
+        mp.chk_t0 = now ? now : 1;
+        mp.chk_n0 = n;
+        return;
+    }
+    el = now - mp.chk_t0;
+    if (el < 5000)
+        return;
+    cnt = mp.engine == ENG_EAGLE ? mp.tick_cnt : tick_count(mp.bpm_set);
+    got = n - mp.chk_n0;
+    mp.chk_t0 = now ? now : 1;
+    mp.chk_n0 = n;
+    if (!cnt)
+        return;
+    hz10 = mp.eclock * 10 / cnt;            /* ticks a second, x10 */
+    want = el * hz10 / 10000;
+    if (!want || (got * 10 >= want * 9 && got * 10 <= want * 11))
+        return;
+    if (mp.chk_said && now - mp.chk_said < 30000)
+        return;
+    mp.chk_said = now ? now : 1;
+    {
+        char m[120];
+        sprintf(m, "the tempo interrupt came %ld times in %ld ms, not %ld (%ld%%)", (long)got,
+                (long)el, (long)want, (long)(got * 100 / want));
+        amce_log("music", m);
     }
 }
 

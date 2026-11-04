@@ -366,7 +366,8 @@ const char *mp_sample_name(int i, BOOL *used);
 ULONG mp_position_ms(int pos);
 void mp_status(struct MpStatus *s);     /* also lets the meters fall: call ~25 a second */
 BOOL mp_step(int d);
-BOOL mp_can_step(int d);                    /* back/on a position: FALSE if it cannot */
+BOOL mp_can_step(int d);
+void mp_tempo_check(void);   /* once a second: the tempo timer's rate, logged if off */                    /* back/on a position: FALSE if it cannot */
 void mp_subsongs(int *cur, int *n);
 BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
 const char *mp_author(void);
