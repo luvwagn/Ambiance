@@ -320,6 +320,11 @@ LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot b
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
 
+/* ---------------------------------------------------------------- unpack */
+/* Packed files (PowerPacker, XPK, ...) through xfdmaster.library (unpack.c). */
+UBYTE *unpack_read_whole(const char *path, ULONG *len);     /* AllocVec, NULL if not */
+UBYTE *unpack_buffer(UBYTE *buf, ULONG *len, char *packer, LONG pmax, const char **why);
+
 /* ---------------------------------------------------------------- mods */
 /* Folders of modules (mods.c): IT_DIR and IT_MOD rows. */
 LONG mods_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */

@@ -70,6 +70,7 @@ static struct {
     BYTE *smp, *silence;
     ULONG smp_size;
     char path[256];
+    char packer[40];                /* what it was packed with ("" none) */
     /* playing */
     volatile BOOL running, paused;
     volatile WORD seek_to;          /* -1, or a position to go to on the next tick */
@@ -459,6 +460,18 @@ static const char *packed_kind(const UBYTE *h, LONG n)
     return NULL;
 }
 
+/* Read n bytes at off, from the file (fh) or from memory (mem, mlen):
+ * what is not there stays as it was (zero). */
+static void src_read(BPTR fh, const UBYTE *mem, ULONG mlen, ULONG off, APTR dst, ULONG n)
+{
+    if (fh) {
+        Seek(fh, off, OFFSET_BEGINNING);
+        Read(fh, dst, n);
+    } else if (off < mlen) {
+        CopyMem((APTR)(mem + off), dst, off + n <= mlen ? n : mlen - off);
+    }
+}
+
 BOOL mp_load(const char *path, char *err, LONG errmax)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -468,10 +481,13 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     BPTR fh;
     int rc, chans;
     const char *why = NULL;
-    char m[300];
+    char m[300], packer[40];
+    UBYTE *mem = NULL;              /* the file unpacked, when it was packed */
+    ULONG mlen = 0;
     ULONG t0 = time_ms();
 
     err[0] = 0;
+    packer[0] = 0;
     mp_stop();
     module_free();
     me->pr_WindowPtr = (APTR)-1;
@@ -489,8 +505,29 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     if (got < (LONG)sizeof(head))
         memset(head + got, 0, sizeof(head) - got);
     rc = pt_layout(head, (ULONG)got, (ULONG)size, &mp.lay, &chans);
+    if (rc != PT_OK && rc != PT_ERR_CHANNELS) {
+        /* packed? unpacked whole (xfdmaster), then looked at again */
+        const char *uwhy = NULL;
+        Close(fh);
+        fh = 0;
+        if ((mem = unpack_read_whole(path, &mlen)))
+            mem = unpack_buffer(mem, &mlen, packer, sizeof(packer), &uwhy);
+        if (mem && packer[0]) {
+            got = mlen < sizeof(head) ? (LONG)mlen : (LONG)sizeof(head);
+            memset(head, 0, sizeof(head));
+            CopyMem(mem, head, got);
+            size = (LONG)mlen;
+            rc = pt_layout(head, (ULONG)got, mlen, &mp.lay, &chans);
+        }
+        if (uwhy) {
+            sprintf(m, "Packed with %s, but %s", packer[0] ? packer : "a packer", uwhy);
+            amce_strlcpy(err, m, errmax);
+            FreeVec(mem);
+            return FALSE;
+        }
+    }
     if (rc != PT_OK) {
-        const char *pk = packed_kind(head, got);
+        const char *pk = packer[0] ? NULL : packed_kind(head, got);
         if (pk)
             sprintf(m, "This file is %s: AmigaMCE plays ProTracker modules", pk);
         else if ((why = layout_problem(rc, chans)))
@@ -498,7 +535,9 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         else
             amce_strlcpy(m, "Not a ProTracker module AmigaMCE can play", sizeof(m));
         amce_strlcpy(err, m, errmax);
-        Close(fh);
+        if (fh)
+            Close(fh);
+        FreeVec(mem);
         return FALSE;
     }
     mp.hdr = AllocVec(mp.lay.hdr_len, MEMF_ANY);
@@ -510,7 +549,9 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     if (!mp.silence)
         mp.silence = AllocMem(8, MEMF_CHIP | MEMF_CLEAR);
     if (!mp.hdr || !mp.pat || !mp.smp || !mp.pt || !mp.times || !mp.silence) {
-        Close(fh);
+        if (fh)
+            Close(fh);
+        FreeVec(mem);
         if (!mp.smp && mp.hdr && mp.pat && mp.pt) {
             sprintf(m, "Not enough chip memory for its samples (%lu KB)",
                     (unsigned long)((mp.lay.smp_len + 1023) >> 10));
@@ -524,18 +565,22 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         return FALSE;
     }
     CopyMem(head, mp.hdr, mp.lay.hdr_len);
-    Seek(fh, mp.lay.hdr_len, OFFSET_BEGINNING);
-    Read(fh, mp.pat, mp.lay.pat_len);       /* short: the rest stays empty */
+    /* short: the rest stays empty (patterns) or silent (samples) */
+    src_read(fh, mem, mlen, mp.lay.hdr_len, mp.pat, mp.lay.pat_len);
     if (mp.lay.smp_len)
-        Read(fh, mp.smp, mp.lay.smp_len);   /* short: silence */
-    Close(fh);
+        src_read(fh, mem, mlen, mp.lay.hdr_len + mp.lay.pat_len, mp.smp, mp.lay.smp_len);
+    if (fh)
+        Close(fh);
+    FreeVec(mem);
     CacheClearU();
     pt_init(mp.pt, &mp.lay, mp.hdr, mp.pat, (pt_s8 *)mp.smp, (pt_s8 *)mp.silence);
     pt_measure(mp.pt, mp.times);
     amce_strlcpy(mp.path, path, sizeof(mp.path));
-    sprintf(m, "%s: \"%s\" %s, %lu positions, %lu patterns, %lu KB of samples, %lu:%02lu long "
+    amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+    sprintf(m, "%s: \"%s\" %s%s%s, %lu positions, %lu patterns, %lu KB of samples, %lu:%02lu long "
                "(read and measured in %ld ms)",
-            FilePart((STRPTR)path), mp.pt->title, mp.lay.tag, (unsigned long)mp.lay.songlen,
+            FilePart((STRPTR)path), mp.pt->title, mp.lay.tag, packer[0] ? ", unpacked from " : "",
+            packer, (unsigned long)mp.lay.songlen,
             (unsigned long)mp.lay.npat, (unsigned long)(mp.lay.smp_len >> 10),
             (unsigned long)(mp.times->total_ms / 60000), (unsigned long)(mp.times->total_ms / 1000 % 60),
             (long)(time_ms() - t0));
