@@ -58,6 +58,11 @@ static void run(struct LJob *j)
             j->obj = pic_decode(j->path, j->scr, j->remap, &j->remapped, &j->info);
         return;
     }
+    if (j->type == LJ_FOLDER) {
+        /* small puddles: a letter's names, kept apart so they can be let go */
+        j->np = list_init_puddle(&j->list, 2048) ? ags_read_dir(j->path, &j->list, j->adult) : -1;
+        return;
+    }
     if (j->type == LJ_PICFOLDER) {
         j->np = pics_scan(j->path, &j->nd, j->first, sizeof(j->first));
         if (j->np > 0 && j->want_pic && !j->cancel)

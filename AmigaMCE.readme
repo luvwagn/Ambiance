@@ -16,9 +16,12 @@ Features in this release
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
   with hierarchical categories, never one giant flat list.
 - Long lists (All Games, menus split A-Z) appear as soon as their first
-  screens are read; the rest is read while you browse. All Games' 3,300
-  entries take about 200 KB; should free memory fall below 256 KB, the
-  list stops there (the footer says so) rather than use up the rest.
+  screens are read; the loader reads the rest a letter at a time while
+  you browse. With memory to spare every letter stays in memory. Short
+  of memory, the letters furthest from where you are let their names go
+  (about 200 KB for All Games' 3,300 entries when all are kept) and are
+  read again ahead of you, the letter you are heading for first, so the
+  list never has to stop short.
 - Fact sheets, screenshots and pictures are read by a second, lower-
   priority process, so the list never waits for the disk; the entries
   next to the one shown (and the viewer's next picture) are read ahead.

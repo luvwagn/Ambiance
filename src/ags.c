@@ -13,14 +13,19 @@
 
 /* ------------------------------------------------------------ lists */
 
-BOOL list_init(struct ItemList *l)
+BOOL list_init_puddle(struct ItemList *l, ULONG puddle)
 {
     l->items = NULL;
     l->count = l->cap = 0;
     l->dir_src = NULL;
     l->dir_dst = NULL;
-    l->pool = CreatePool(MEMF_ANY, 8192, 4096);
+    l->pool = CreatePool(MEMF_ANY, puddle, puddle / 2);
     return l->pool != NULL;
+}
+
+BOOL list_init(struct ItemList *l)
+{
+    return list_init_puddle(l, 8192);
 }
 
 void list_free(struct ItemList *l)
@@ -43,15 +48,13 @@ static char *pool_strdup(APTR pool, const char *s)
     return d;
 }
 
-static struct Item *add_item(struct ItemList *l, const char *label, const char *path,
-                             char *shared_path, const char *sortkey, UBYTE kind)
+static BOOL grow(struct ItemList *l)
 {
-    struct Item *it;
     if (l->count == l->cap) {
         LONG ncap = l->cap ? l->cap * 2 : 64;
         struct Item *n = AllocPooled(l->pool, ncap * sizeof(struct Item));
         if (!n)
-            return NULL;
+            return FALSE;
         if (l->items) {
             CopyMem(l->items, n, l->count * sizeof(struct Item));
             FreePooled(l->pool, l->items, l->cap * sizeof(struct Item));
@@ -59,6 +62,31 @@ static struct Item *add_item(struct ItemList *l, const char *label, const char *
         l->items = n;
         l->cap = ncap;
     }
+    return TRUE;
+}
+
+struct Item *list_append(struct ItemList *l, const struct Item *src)
+{
+    if (!grow(l))
+        return NULL;
+    l->items[l->count] = *src;
+    return &l->items[l->count++];
+}
+
+void list_drop_items(struct ItemList *l)
+{
+    if (l->items)
+        FreePooled(l->pool, l->items, l->cap * sizeof(struct Item));
+    l->items = NULL;
+    l->count = l->cap = 0;
+}
+
+static struct Item *add_item(struct ItemList *l, const char *label, const char *path,
+                             char *shared_path, const char *sortkey, UBYTE kind)
+{
+    struct Item *it;
+    if (!grow(l))
+        return NULL;
     it = &l->items[l->count];
     it->label = pool_strdup(l->pool, label ? label : "");
     it->path = shared_path ? shared_path : pool_strdup(l->pool, path ? path : "");
@@ -307,6 +335,20 @@ static BOOL letter_folder(const char *label)
     return amce_stricmp(label, "0-9") == 0;
 }
 
+/* A folder's sub-folders are all a letter index (A-Z...): AmigaMCE shows
+ * their entries as one list. */
+BOOL ags_letter_menu(const struct ItemList *subs)
+{
+    LONG i, dirs = 0;
+    for (i = 0; i < subs->count; i++)
+        if (subs->items[i].kind == IT_DIR) {
+            dirs++;
+            if (!letter_folder(subs->items[i].label))
+                return FALSE;
+        }
+    return dirs > 0;
+}
+
 /* A menu as AmigaMCE shows it: one whose sub-folders are all a letter
  * index (AGA, Beta, NTSC... split A-Z) is one flat sorted list of their
  * entries; any other (By Genre, By Publisher...) keeps its folders. */
@@ -364,148 +406,6 @@ LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
     list_free(&subs);
     list_sort(out);
     return out->count;
-}
-
-/* ------------------------------------------------------------ loading in steps
- * A flat list (All Games, or a menu split A-Z) can hold thousands of
- * entries, three files each on disk. Read in steps instead: the letter
- * folders in order, so the list grows in sorted order (each folder's
- * entries are sorted as it completes) and can be shown, and used, as soon
- * as the first screens are in. */
-struct AgsLoad {
-    struct ItemList subs;           /* the letter folders, sorted */
-    LONG next;                      /* the next of them to open */
-    BPTR lock;                      /* the one being read, 0 between folders */
-    struct FileInfoBlock *fib;
-    LONG chunk;                     /* where its entries start in out */
-    BOOL adult, own;                /* own: the folder had entries of its own */
-    BOOL disorder;                  /* a folder's entries sorted before the last one's */
-    BOOL cut;                       /* stopped short: memory ran low */
-    char *dir;                      /* the folder being read, in out's pool */
-    char path[300];
-};
-
-void ags_load_free(struct AgsLoad *ld)
-{
-    if (!ld)
-        return;
-    if (ld->lock)
-        UnLock(ld->lock);
-    if (ld->fib)
-        FreeDosObject(DOS_FIB, ld->fib);
-    list_free(&ld->subs);
-    FreeVec(ld);
-}
-
-static BOOL is_flat_menu(const struct ItemList *subs)
-{
-    LONG i, dirs = 0;
-    for (i = 0; i < subs->count; i++)
-        if (subs->items[i].kind == IT_DIR) {
-            dirs++;
-            if (!letter_folder(subs->items[i].label))
-                return FALSE;
-        }
-    return dirs > 0;
-}
-
-LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat,
-                    struct AgsLoad **ldp)
-{
-    struct AgsLoad *ld = AllocVec(sizeof(*ld), MEMF_ANY | MEMF_CLEAR);
-    LONG i;
-    *ldp = NULL;
-    if (!ld)
-        return -1;
-    ld->adult = adult;
-    if (!list_init(&ld->subs) || !(ld->fib = AllocDosObject(DOS_FIB, NULL))) {
-        ags_load_free(ld);
-        return -1;
-    }
-    if (read_entries(dir, &ld->subs, adult) < 0) {
-        ags_load_free(ld);
-        return -1;
-    }
-    if (!flat && !is_flat_menu(&ld->subs)) {
-        /* a menu with named folders (By Genre...): small, shown as it is */
-        for (i = 0; i < ld->subs.count; i++)
-            list_copy(out, &ld->subs.items[i], ld->subs.items[i].label);
-        list_sort(out);
-        ags_load_free(ld);
-        return out->count;
-    }
-    list_sort(&ld->subs);
-    for (i = 0; i < ld->subs.count; i++)
-        if (ld->subs.items[i].kind != IT_DIR) {
-            struct Item *it = &ld->subs.items[i];
-            list_copy(out, it, it->label);
-            ld->own = TRUE;
-        }
-    *ldp = ld;
-    return out->count;
-}
-
-/* Reading stops short rather than take the last of the memory: what is
- * left is for screenshots, the picture viewer and the system. */
-#define LOAD_RESERVE (256 * 1024)
-
-BOOL ags_load_cut(const struct AgsLoad *ld)
-{
-    return ld && ld->cut;
-}
-
-BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget)
-{
-    if (ld->cut || AvailMem(MEMF_ANY) < LOAD_RESERVE) {
-        if (ld->lock) {
-            UnLock(ld->lock);
-            ld->lock = 0;
-            sort_range(out, ld->chunk, out->count - ld->chunk);
-        }
-        ld->cut = TRUE;
-        return FALSE;
-    }
-    while (budget > 0) {
-        if (!ld->lock) {
-            /* the next letter folder */
-            while (ld->next < ld->subs.count && ld->subs.items[ld->next].kind != IT_DIR)
-                ld->next++;
-            if (ld->next >= ld->subs.count) {
-                if (ld->own || ld->disorder)
-                    list_sort(out);     /* entries out of letter order: all of it */
-                return FALSE;
-            }
-            item_path(&ld->subs.items[ld->next], ld->path, sizeof(ld->path));
-            ld->lock = Lock((CONST_STRPTR)ld->path, SHARED_LOCK);
-            ld->chunk = out->count;
-            if (ld->lock && !(ld->dir = list_strdup(out, ld->path))) {
-                UnLock(ld->lock);
-                ld->lock = 0;
-            }
-            if (ld->lock && !Examine(ld->lock, ld->fib)) {
-                UnLock(ld->lock);
-                ld->lock = 0;
-            }
-            if (!ld->lock) {
-                ld->next++;
-                continue;
-            }
-        }
-        while (budget-- > 0) {
-            if (!ExNext(ld->lock, ld->fib)) {
-                UnLock(ld->lock);
-                ld->lock = 0;
-                sort_range(out, ld->chunk, out->count - ld->chunk);
-                if (ld->chunk > 0 && out->count > ld->chunk &&
-                    cmp_items(&out->items[ld->chunk - 1], &out->items[ld->chunk]) > 0)
-                    ld->disorder = TRUE;    /* filed under another letter */
-                ld->next++;
-                break;
-            }
-            add_entry(ld->dir, ld->fib, out, ld->adult);
-        }
-    }
-    return TRUE;
 }
 
 /* ------------------------------------------------------------ AGS */

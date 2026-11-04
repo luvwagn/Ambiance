@@ -39,6 +39,9 @@ enum { FOCUS_MENU, FOCUS_CONTENT,
 #define MAXDEPTH 12
 #define FACT_LINES 24
 
+struct Chunks;
+static void ch_free(struct Chunks *ch);
+
 struct Page {
     UBYTE type;
     char title[64];
@@ -49,7 +52,7 @@ struct Page {
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
-    struct AgsLoad *ld;         /* still being read (long AGS lists, see load_tick) */
+    struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
 };
 
@@ -134,8 +137,8 @@ static void page_pop(void)
         return;
     gfx_picture_free(&g);
     tb_close(&pages[depth - 1].tb);
-    ags_load_free(pages[depth - 1].ld);
-    pages[depth - 1].ld = NULL;
+    ch_free(pages[depth - 1].ch);
+    pages[depth - 1].ch = NULL;
     list_free(&pages[--depth].list);
 }
 
@@ -145,50 +148,347 @@ static void pages_clear(void)
         page_pop();
 }
 
-/* ---- long AGS lists, read in steps (ags_load_*): the first screens
- * before the list is shown, the rest while AmigaMCE waits for input, and
- * at once whatever a move, a page or a letter jump reaches for. */
-static void set_msg(const char *m);
+/* ---- long AGS lists (All Games, menus split A-Z), a letter at a time.
+ * Every entry has its place in the page's list from the moment its letter
+ * folder is first read, so positions and the count never change; its
+ * strings (name, path) live in that letter's own pool (struct Chunk). The
+ * letters are read in order by the loader process (loader.c), the first
+ * screens before the list is shown, the rest while it is used. With
+ * memory to spare every letter stays (speed first). Short of memory, the
+ * letters furthest from the selection let their strings go (ITEM_GONE:
+ * the rows show blank, the label is the letter) and are read again before
+ * they are reached: the ones on screen first, then the letters either
+ * side of the selection, the one the list is moving towards first. */
+#define CH_LOW   (512UL * 1024)     /* tight: drop letters below this much free */
+#define CH_FLOOR (128UL * 1024)     /* stop reading new ones below this */
+struct Chunk {
+    char path[256];                 /* the letter folder */
+    char letter[2];                 /* the label its rows show while gone */
+    LONG first, count;              /* its entries' place in the list (first -1: unread) */
+    struct ItemList names;          /* their strings, while held (pool) */
+    BOOL held;
+};
+struct Chunks {
+    LONG n, next;                   /* next: the next letter to read the first time */
+    struct Chunk *c;
+    struct LJob *job;               /* the one being read (one at a time) */
+    LONG job_k;
+    BOOL adult, own, disorder, dropped, frozen, cut;
+};
 
-static BOOL page_load_some(struct Page *p, LONG budget)
+static void set_msg(const char *m);
+static WORD list_visible(void);
+static void draw_list_rows(struct Page *p);
+static void draw_title(struct Page *p);
+static void draw_title_count(struct Page *p);
+static void preview_touch(struct Page *p);
+static BOOL pv_roomy(void);
+static LONG pv_dir;
+
+static BOOL ch_reading(const struct Page *p)
 {
-    if (!p->ld)
-        return FALSE;
-    if (!ags_load_step(p->ld, &p->list, budget)) {
-        BOOL cut = ags_load_cut(p->ld);
-        ags_load_free(p->ld);
-        p->ld = NULL;
-        if (cut) {
-            char m[80];
-            sprintf(m, "Low on memory: list stops at %ld entries", (long)p->list.count);
-            set_msg(m);
-        }
-        return FALSE;
+    return p->ch && !p->ch->cut && p->ch->next < p->ch->n;
+}
+
+static void ch_free(struct Chunks *ch)
+{
+    LONG k;
+    if (!ch)
+        return;
+    if (ch->job) {
+        ldr_wait(ch->job);
+        list_free(&ch->job->list);
+        FreeVec(ch->job);
     }
+    for (k = 0; k < ch->n; k++)
+        list_free(&ch->c[k].names);
+    FreeVec(ch->c);
+    FreeVec(ch);
+}
+
+/* The letter holding entry idx, -1 if none (own entries, not read yet). */
+static LONG ch_of(const struct Chunks *ch, LONG idx)
+{
+    LONG k;
+    for (k = 0; k < ch->n; k++)
+        if (ch->c[k].first >= 0 && idx >= ch->c[k].first && idx < ch->c[k].first + ch->c[k].count)
+            return k;
+    return -1;
+}
+
+/* Let a letter's strings go: its rows show blank until it is read again. */
+static void ch_drop(struct Page *p, LONG k)
+{
+    struct Chunk *c = &p->ch->c[k];
+    LONG i;
+    for (i = 0; i < c->count; i++) {
+        struct Item *it = &p->list.items[c->first + i];
+        it->label = c->letter;
+        it->sortkey = (char *)"";
+        it->path = c->path;
+        it->flags = (it->flags & ~ITEM_SPLIT) | ITEM_GONE;
+    }
+    list_free(&c->names);
+    c->held = FALSE;
+    p->ch->dropped = TRUE;
+}
+
+/* Short of memory: the letters furthest from the selection go, never one
+ * on screen or next to the selection's. */
+static void ch_trim(struct Page *p)
+{
+    struct Chunks *ch = p->ch;
+    LONG at, vis = list_visible();
+    if (!ch || ch->frozen || pv_roomy())
+        return;
+    at = ch_of(ch, p->sel);
+    while (AvailMem(MEMF_ANY) < CH_LOW) {
+        LONG k, far = -1, fd = -1;
+        for (k = 0; k < ch->n; k++) {
+            struct Chunk *c = &ch->c[k];
+            LONG d = at < 0 ? k : (k > at ? k - at : at - k);
+            if (!c->held || (at >= 0 && d <= 1) ||
+                (c->first < p->top + vis && c->first + c->count > p->top))
+                continue;
+            if (d > fd) {
+                fd = d;
+                far = k;
+            }
+        }
+        if (far < 0)
+            break;
+        ch_drop(p, far);
+    }
+}
+
+/* A letter's entries came back from the loader. */
+static void ch_take(struct Page *p, LONG k, struct ItemList *got)
+{
+    struct Chunks *ch = p->ch;
+    struct Chunk *c = &ch->c[k];
+    LONG i;
+    if (c->first < 0) {                     /* read the first time: their places */
+        c->first = p->list.count;
+        c->count = 0;
+        for (i = 0; i < got->count; i++)
+            if (list_append(&p->list, &got->items[i]))
+                c->count++;
+        if (c->first > 0 && c->count) {
+            const struct Item *a = &p->list.items[c->first - 1], *b = &p->list.items[c->first];
+            if (!(a->flags & ITEM_GONE) && amce_stricmp(a->sortkey, b->sortkey) > 0)
+                ch->disorder = TRUE;        /* filed under another letter */
+        }
+        ch->next = k + 1;
+    } else {                                /* read again: the strings back */
+        LONG n = got->count < c->count ? got->count : c->count;
+        for (i = 0; i < n; i++) {
+            struct Item *it = &p->list.items[c->first + i];
+            it->label = got->items[i].label;
+            it->sortkey = got->items[i].sortkey;
+            it->path = got->items[i].path;
+            it->flags = got->items[i].flags | (it->flags & ITEM_FLAT);
+        }
+    }
+    list_drop_items(got);                   /* only the strings are kept */
+    list_free(&c->names);
+    c->names = *got;
+    c->held = TRUE;
+    got->pool = NULL;
+    if (ch->next >= ch->n && (ch->own || ch->disorder) && !ch->dropped && !ch->frozen) {
+        /* all read, and not in order letter by letter: sort it whole (the
+         * letters no longer map to places, so none is let go from now) */
+        list_sort(&p->list);
+        ch->frozen = TRUE;
+    }
+}
+
+/* Send the loader for letter k. */
+static void ch_send(struct Page *p, LONG k)
+{
+    struct Chunks *ch = p->ch;
+    struct LJob *j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR);
+    if (!j)
+        return;
+    j->type = LJ_FOLDER;
+    j->adult = ch->adult;
+    amce_strlcpy(j->path, ch->c[k].path, sizeof(j->path));
+    ch->job = j;
+    ch->job_k = k;
+    ldr_submit(j);
+}
+
+/* What to read next, if anything: a letter on screen that was let go,
+ * then those either side of the selection (the way the list moves first),
+ * then the next one not read yet. */
+static void ch_pump(struct Page *p)
+{
+    struct Chunks *ch = p ? p->ch : NULL;
+    LONG k, at, vis;
+    if (!ch || ch->job)
+        return;
+    vis = list_visible();
+    if (ch->dropped && !ch->frozen) {
+        for (k = 0; k < ch->n; k++) {
+            struct Chunk *c = &ch->c[k];
+            if (c->first >= 0 && !c->held && c->first < p->top + vis && c->first + c->count > p->top) {
+                ch_send(p, k);
+                return;
+            }
+        }
+        if ((at = ch_of(ch, p->sel)) >= 0) {
+            LONG d = pv_dir >= 0 ? 1 : -1, s;
+            for (s = 0; s < 2; s++, d = -d)
+                if (at + d >= 0 && at + d < ch->n && ch->c[at + d].first >= 0 &&
+                    !ch->c[at + d].held && pv_roomy()) {
+                    ch_send(p, at + d);
+                    return;
+                }
+            /* tight: the next letter only if there is room for it */
+            k = at + (pv_dir >= 0 ? 1 : -1);
+            if (k >= 0 && k < ch->n && ch->c[k].first >= 0 && !ch->c[k].held &&
+                AvailMem(MEMF_ANY) >= CH_LOW) {
+                ch_send(p, k);
+                return;
+            }
+        }
+    }
+    if (ch->next < ch->n && !ch->cut) {
+        if (AvailMem(MEMF_ANY) < CH_FLOOR) {
+            char m[80];
+            ch_trim(p);
+            if (AvailMem(MEMF_ANY) < CH_FLOOR) {
+                ch->cut = TRUE;
+                sprintf(m, "Low on memory: list stops at %ld entries", (long)p->list.count);
+                set_msg(m);
+                return;
+            }
+        }
+        ch_send(p, ch->next);
+    }
+}
+
+/* The loader brought page p's letter. */
+static void ch_arrived(struct Page *p, BOOL shown)
+{
+    struct Chunks *ch = p->ch;
+    struct LJob *j = ch->job;
+    LONG k = ch->job_k, before = p->list.count, vis = list_visible();
+    BOOL was_reading = ch_reading(p), was_held = ch->c[k].held, frozen = ch->frozen;
+    ch->job = NULL;
+    if (j->ran && j->np >= 0) {
+        ch_take(p, k, &j->list);
+    } else if (ch->c[k].first < 0) {
+        ch->c[k].first = p->list.count;     /* unreadable: nothing in it */
+        ch->c[k].count = 0;
+        ch->next = k + 1;
+    }
+    list_free(&j->list);
+    FreeVec(j);
+    ch_trim(p);
+    if (shown) {
+        struct Chunk *c = &ch->c[k];
+        if (!was_reading || !ch_reading(p) || p->list.count != before)
+            draw_title_count(p);            /* the count (and the title, once complete) */
+        if (ch->frozen != frozen || before < p->top + vis ||
+            (!was_held && c->first < p->top + vis && c->first + c->count > p->top))
+            draw_list_rows(p);              /* rows that were empty or blank, or re-sorted */
+        if (p->sel >= c->first && p->sel < c->first + c->count)
+            preview_touch(p);
+    }
+    ch_pump(p);
+}
+
+/* Wait for the loader's letter to come back (the list must have it now).
+ * shown: the page is on screen, so draw what changes. */
+static BOOL ch_wait_one(struct Page *p, BOOL shown)
+{
+    ch_pump(p);
+    if (!p->ch || !p->ch->job)
+        return FALSE;
+    ldr_wait(p->ch->job);
+    ch_arrived(p, shown);
     return TRUE;
 }
 
-static void page_load_until(struct Page *p, LONG count)
+/* The list read at least to count entries (or as far as it goes). */
+static void ch_wait_until(struct Page *p, LONG count, BOOL shown)
 {
-    while (p->ld && p->list.count < count)
-        page_load_some(p, 64);
+    while (ch_reading(p) && p->list.count < count)
+        if (!ch_wait_one(p, shown))
+            break;
 }
 
-static void page_load_all(struct Page *p)
+/* Entry idx held (its letter read again if it was let go). */
+static void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
 {
-    while (p->ld)
-        page_load_some(p, 256);
+    LONG k;
+    if (!p->ch || idx >= p->list.count || !(p->list.items[idx].flags & ITEM_GONE))
+        return;
+    if ((k = ch_of(p->ch, idx)) < 0)
+        return;
+    if (p->ch->job && p->ch->job_k != k) {
+        ldr_wait(p->ch->job);               /* the one already out first */
+        ch_arrived(p, shown);
+    }
+    if (!p->ch->c[k].held) {
+        if (!p->ch->job)
+            ch_send(p, k);
+        if (p->ch->job) {
+            ldr_wait(p->ch->job);
+            ch_arrived(p, shown);
+        }
+    }
 }
 
-/* Open an AGS folder as a list page: in steps when it is a long flat one. */
+/* Open an AGS folder as a list page: a letter at a time when it is a
+ * long flat one (first: entries to have before it is shown). */
 static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
 {
+    struct ItemList subs;
+    struct Chunks *ch;
     char path[300];
-    LONG n = ags_load_start(item_path(it, path, sizeof(path)), &p->list, ags.adult[0] == '1',
-                            (it->flags & ITEM_FLAT) != 0, &p->ld);
-    if (n < 0)
-        return n;
-    page_load_until(p, first);
+    LONG n, i, k;
+    BOOL adult = ags.adult[0] == '1';
+    if (!list_init(&subs))
+        return -1;
+    n = ags_read_dir(item_path(it, path, sizeof(path)), &subs, adult);
+    if (n < 0) {
+        list_free(&subs);
+        return -1;
+    }
+    if (!(it->flags & ITEM_FLAT) && !ags_letter_menu(&subs)) {
+        for (i = 0; i < subs.count; i++)    /* a menu of named folders: as it is */
+            list_copy(&p->list, &subs.items[i], subs.items[i].label);
+        list_free(&subs);
+        return p->list.count;
+    }
+    for (i = 0, n = 0; i < subs.count; i++)
+        if (subs.items[i].kind == IT_DIR)
+            n++;
+    ch = AllocVec(sizeof(*ch), MEMF_ANY | MEMF_CLEAR);
+    if (!ch || (n && !(ch->c = AllocVec(n * sizeof(struct Chunk), MEMF_ANY | MEMF_CLEAR)))) {
+        FreeVec(ch);
+        list_free(&subs);
+        return -1;
+    }
+    ch->n = n;
+    ch->adult = adult;
+    for (i = 0, k = 0; i < subs.count; i++) {
+        struct Item *s = &subs.items[i];
+        if (s->kind != IT_DIR) {
+            list_copy(&p->list, s, s->label);   /* its own entries */
+            ch->own = TRUE;
+            continue;
+        }
+        item_path(s, ch->c[k].path, sizeof(ch->c[k].path));
+        ch->c[k].letter[0] = s->label[0];
+        ch->c[k].first = -1;
+        k++;
+    }
+    list_free(&subs);
+    p->ch = ch;
+    ch_wait_until(p, first, FALSE);         /* not drawn yet */
+    ch_pump(p);                             /* and on with the rest */
     return p->list.count;
 }
 
@@ -707,9 +1007,10 @@ static void restore_nav(int mod)
         if (!p || p->type != PT_LIST || !p->list.count)
             return;
         /* a list still loading: read up to the remembered entry, no further */
-        page_load_until(p, sel + 2 * list_visible());
-        if (p->ld && (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0))
-            page_load_all(p);
+        ch_wait_until(p, sel + 2 * list_visible(), FALSE);
+        ch_wait_item(p, sel < p->list.count ? sel : p->list.count - 1, FALSE);
+        if (ch_reading(p) && (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0))
+            ch_wait_until(p, 0x7FFFFFFF, FALSE);
         if (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0) {
             for (i = 0; i < p->list.count; i++)
                 if (strcmp(p->list.items[i].label, want) == 0)
@@ -968,9 +1269,10 @@ static void draw_title_count(struct Page *p)
 {
     char count[24];
     preview_touch(p);
+    ch_pump(p);                             /* letters around the selection, ahead */
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
         draw_footer();              /* the hints follow the selection */
-    if (p->title_wide && !p->ld) {
+    if (p->title_wide && !ch_reading(p)) {
         draw_title(p);              /* fully read: the breadcrumb gets its room back */
         return;
     }
@@ -1004,8 +1306,8 @@ static void draw_title(struct Page *p)
     if (p->type == PT_LIST && p->list.count) {
         /* room for the widest count this list can show, so a growing
          * number never runs into the breadcrumb */
-        p->title_wide = p->ld != NULL;
-        if (p->ld)
+        p->title_wide = ch_reading(p);
+        if (p->title_wide)
             strcpy(widest, "88888/88888");      /* still growing */
         else
             sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
@@ -1212,6 +1514,8 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max)
     if (idx < 0 || idx >= p->list.count)
         return 0;
     it = &p->list.items[idx];
+    if (it->flags & ITEM_GONE)
+        return 0;                           /* not held now: previewed once read again */
     if (p->pics) {
         amce_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC)
@@ -1473,13 +1777,17 @@ static void preview_draw(struct Page *p)
         pv_wait = j;
 }
 
-/* Jobs came back from the loader. */
+/* Jobs came back from the loader: letters of long lists, previews. */
 static void preview_arrived(void)
 {
     struct Page *p = cur();
     struct LJob *j;
+    int d;
     while (ldr_collect())
         ;
+    for (d = 0; d < depth; d++)
+        if (pages[d].ch && pages[d].ch->job && pages[d].ch->job->done)
+            ch_arrived(&pages[d], &pages[d] == p);
     if (!(j = pv_wait) || !j->done)
         return;
     pv_wait = NULL;
@@ -1496,6 +1804,18 @@ static void preview_arrived(void)
         pv_shown = FALSE;                   /* moved on: preview again when it rests */
         preview_touch(p);
     }
+}
+
+/* A job back but not dealt with (collected while waiting for another). */
+static BOOL loader_due(void)
+{
+    int d;
+    if (pv_wait && pv_wait->done)
+        return TRUE;
+    for (d = 0; d < depth; d++)
+        if (pages[d].ch && pages[d].ch->job && pages[d].ch->job->done)
+            return TRUE;
+    return FALSE;
 }
 
 /* Show the preview now, waiting for the loader if need be (Right into it). */
@@ -1641,6 +1961,11 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     if (g.planar)
         SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
+    if (it->flags & ITEM_GONE) {            /* its letter is being read again */
+        if (g.planar)
+            SetWriteMask(g.rp, 0xFF);
+        return;
+    }
     if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
                  off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
@@ -1988,7 +2313,7 @@ static void open_dir(struct Item *it)
         draw_footer();
         return;
     }
-    n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (load_tick) */
+    n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (ch_pump) */
     if (n <= 0) {
         page_pop();
         set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
@@ -2407,8 +2732,8 @@ static void act_move(LONG d)
         LONG s;
         if (d)
             pv_dir = d > 0 ? 1 : -1;
-        if (p->ld && d > 0)
-            page_load_until(p, p->sel + d + 2 * list_visible());
+        if (d > 0 && ch_reading(p) && p->sel + d >= p->list.count)
+            ch_wait_until(p, p->sel + d + 1, TRUE);    /* outran the reading: wait for it */
         s = p->sel + d;
         if (s < 0)
             s = 0;
@@ -2733,9 +3058,9 @@ static void hold_tick(void)
         if (hold.letters && !(ov.on && ov.page == p))
             ov_show(p);
         ov.linger = 0;
-        if (hold.dir > 0 && p->ld)
-            page_load_until(p, p->sel + 4 * list_visible() + 32);
         remaining = hold.dir > 0 ? p->list.count - 1 - p->sel : p->sel;
+        if (remaining <= 0 && hold.dir > 0 && ch_reading(p))
+            return;                         /* the end of what is read: it is coming */
         if (remaining <= 0) {
             hold_stop();
             return;
@@ -2795,7 +3120,9 @@ static void act_open(BOOL play)
     if (!p)
         return;
     if (p->type == PT_LIST && p->list.count) {
-        struct Item *it = &p->list.items[p->sel];
+        struct Item *it;
+        ch_wait_item(p, p->sel, TRUE);      /* its letter, if it was let go */
+        it = &p->list.items[p->sel];
         if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
             folder_slideshow(it);   /* Fire plays a folder of pictures */
         else if (it->kind == IT_PIC)
@@ -2823,6 +3150,8 @@ static void act_right(void)
     p = cur();
     if (focus == FOCUS_PREVIEW)
         return;
+    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count)
+        ch_wait_item(p, p->sel, TRUE);
     if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
         p->list.items[p->sel].kind == IT_DIR) {
         open_dir(&p->list.items[p->sel]);   /* Right goes inside, never plays */
@@ -2886,10 +3215,11 @@ static void act_letter(char c)
     k[1] = 0;
     /* still loading: read on until the letter turns up after the
      * selection (or the list is complete, then wrap round as usual) */
-    for (i = p->sel + 1; p->ld || i < p->list.count; i++) {
+    for (i = p->sel + 1; ch_reading(p) || i < p->list.count; i++) {
         char first[2];
         if (i >= p->list.count) {
-            page_load_some(p, 64);
+            if (!ch_wait_one(p, TRUE))
+                break;
             i--;
             continue;
         }
@@ -3001,7 +3331,9 @@ static void handle_mouse(struct IntuiMessage *im)
                 draw_list_rows(p);
             }
             if (dbl) {
-                struct Item *it = &p->list.items[idx];
+                struct Item *it;
+                ch_wait_item(p, idx, TRUE);
+                it = &p->list.items[idx];
                 if (it->kind == IT_DIR)
                     open_dir(it);           /* a double-click goes inside a folder */
                 else
@@ -3132,31 +3464,6 @@ static void joy_poll(void)
     if (newbtn & JPF_BUTTON_BLUE) { disarm(); act_back(); }
 }
 
-/* Read more of a long list while nothing else is happening: ~20 ms at a
- * time between looks at the input (a few ms a frame while a list glides),
- * so the list stays usable while it grows. */
-static void load_tick(void)
-{
-    struct Page *p = cur();
-    LONG before, vis;
-    ULONG t0;
-    if (!p || !p->ld || pane_pending)
-        return;
-    before = p->list.count;
-    t0 = time_ms();
-    while (page_load_some(p, 16) && (LONG)(time_ms() - t0) < (hold_active() ? 4 : 20))
-        ;
-    vis = list_visible();
-    if (p->list.count == before && p->ld)
-        return;
-    if (!p->ld && p->title_wide)
-        draw_title(p);              /* done: also the full count */
-    else
-        draw_title_count(p);
-    if (before < p->top + vis || !p->ld)
-        draw_list_rows(p);          /* rows that were empty, or a final re-sort */
-}
-
 /* ------------------------------------------------------------ main */
 static void build_menu(void)
 {
@@ -3205,8 +3512,23 @@ int main(void)
     load_debug();
     amce_log_open(debug_on);
     open_extra_libs();
-    if (!ldr_start())
-        amce_log("loader", "could not start: reading in the UI");
+    {
+        /* PROGDIR:AmigaMCE.noloader: do the reading in the UI (to compare) */
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.noloader", SHARED_LOCK);
+        me->pr_WindowPtr = oldwin;
+        if (l) {
+            UnLock(l);
+            amce_log("loader", "off (AmigaMCE.noloader)");
+        } else if (ldr_start()) {
+            amce_log("loader", "started");
+        } else {
+            amce_log("loader", "could not start: reading in the UI");
+        }
+    }
 
     caps_detect(&caps);
     ags_init(&ags);
@@ -3264,8 +3586,10 @@ int main(void)
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
         BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
-                    tb_animating(&pv_tb) || (cur() && cur()->ld);
+                    tb_animating(&pv_tb);
         ULONG sig;
+        if (loader_due())
+            preview_arrived();
         if (busy) {
             sig = SetSignal(0, mask) & mask;
         } else {
@@ -3324,16 +3648,6 @@ int main(void)
                     handle_key(&copy);
                 if (!g.win)
                     break;      /* a launch closed and reopened the window */
-            }
-        }
-        if (g.win && cur() && cur()->ld) {
-            load_tick();
-            /* the loader runs below us: let it have the rest of the frame */
-            if (ldr_out() && !(hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
-                               ((atb = cur_tb()) && tb_animating(atb)))) {
-                dbg_sleep_begin();
-                WaitTOF();
-                dbg_sleep_end();
             }
         }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||

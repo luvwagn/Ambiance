@@ -175,28 +175,37 @@ int main(void)
         list_free(&l);
     }
 
-    /* Reading in steps gives the same list as all at once */
+    /* Lists held a letter at a time: a letter's entries copied as they
+     * are, their strings kept in the letter's own (small) pool */
     {
-        static const char *dirs[] = { "AGS:+  Games - 0-Z.ags", "AGS:" };
-        LONG d;
-        for (d = 0; d < 2; d++) {
-            struct ItemList whole, steps;
-            struct AgsLoad *ld;
-            LONG n1, n2;
-            list_init(&whole);
-            list_init(&steps);
-            n1 = d == 0 ? ags_read_dir_flat(dirs[d], &whole, FALSE) : ags_read_menu(dirs[d], &whole, FALSE);
-            n2 = ags_load_start(dirs[d], &steps, FALSE, d == 0, &ld);
-            while (ld && ags_load_step(ld, &steps, 1))
-                ;
-            ags_load_free(ld);
-            n2 = steps.count;
-            check_long("steps count", n2, n1);
-            for (i = 0; i < n1 && i < n2; i++)
-                check_str("steps order", steps.items[i].label, whole.items[i].label);
-            list_free(&whole);
-            list_free(&steps);
+        struct ItemList subs, letter, whole;
+        list_init(&subs);
+        list_init(&whole);
+        n = ags_read_dir("AGS:+  Games - 0-Z.ags", &subs, FALSE);
+        check_long("letter menu", ags_letter_menu(&subs), 1);
+        for (i = 0; i < subs.count; i++) {
+            item_path(&subs.items[i], tmp, sizeof(tmp));
+            list_init_puddle(&letter, 2048);
+            ags_read_dir(tmp, &letter, FALSE);
+            {
+                LONG k;
+                for (k = 0; k < letter.count; k++)
+                    list_append(&whole, &letter.items[k]);
+            }
+            list_drop_items(&letter);
+            check_long("dropped entries", letter.count, 0);
+            if (i == 0)
+                check_str("appended path", item_path(&whole.items[whole.count - 1], tmp, sizeof(tmp)),
+                          "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
+            /* the strings outlive the entries (the pool goes with the test) */
         }
+        check_long("letters appended", whole.count, 3);
+        list_free(&whole);
+        list_free(&subs);
+        list_init(&subs);
+        ags_read_dir("AGS:", &subs, FALSE);
+        check_long("not a letter menu", ags_letter_menu(&subs), 0);
+        list_free(&subs);
     }
 
     /* Pictures: folders first, tags, playable / greyed folders; letter

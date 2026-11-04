@@ -206,6 +206,8 @@ struct Item {
 #define ITEM_FLAT     2 /* a folder of folders opened as one list (All Games) */
 #define ITEM_SPLIT    4 /* AGS entry: path is its folder (shared), sortkey its file
                          * name; item_path() gives the whole path */
+#define ITEM_GONE     8 /* its letter's names were dropped to save memory (the
+                         * label is the letter): read again before use */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading
@@ -234,28 +236,19 @@ struct Ags {
 BOOL ags_init(struct Ags *a);
 void ags_free(struct Ags *a);
 BOOL list_init(struct ItemList *l);
+BOOL list_init_puddle(struct ItemList *l, ULONG puddle);   /* small lists: less slack */
 void list_free(struct ItemList *l);
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *sortkey, UBYTE kind);
 void list_sort(struct ItemList *l);
 char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
+struct Item *list_append(struct ItemList *l, const struct Item *src);   /* as it is */
+void list_drop_items(struct ItemList *l);   /* free the entries, keep the strings */
 struct Item *list_copy(struct ItemList *l, const struct Item *it, const char *label);
 char *item_path(const struct Item *it, char *out, LONG max);    /* an entry's whole path: out */
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
 LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z folders merged */
-/* The same, read in steps (flat: as ags_read_dir_flat, else ags_read_menu).
- * Returns the entries so far (-1: unreadable); *ld is NULL when the list
- * is complete, else ags_load_step reads up to budget more directory
- * entries a call, returning FALSE once done (then ags_load_free). Entries
- * are appended in letter-folder order, sorted within each folder; the
- * final step sorts the whole list if that order was not already right.
- * Reading stops short (ags_load_cut) when free memory falls below 256 KB. */
-struct AgsLoad;
-LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat,
-                    struct AgsLoad **ld);
-BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget);
-BOOL ags_load_cut(const struct AgsLoad *ld);   /* it stopped short: memory ran low */
-void ags_load_free(struct AgsLoad *ld);
+BOOL ags_letter_menu(const struct ItemList *subs);   /* its folders are all A-Z... */
 void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);
 LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);
@@ -272,10 +265,10 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
 
 /* ---------------------------------------------------------------- loader */
 /* Work for the loader process (loader.c): a fact sheet and screenshot, a
- * picture, or a folder of pictures (its first picture), read off the UI's
- * back. The UI owns the job; it comes back marked done. */
+ * picture, a folder of pictures (its first picture) or an AGS folder's
+ * entries, read off the UI's back. The UI owns the job; it comes back marked done. */
 #define LJ_FACTS 24
-enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_QUIT };
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_FOLDER, LJ_QUIT };
 struct LJob {
     struct Message msg;
     UBYTE type;
@@ -297,6 +290,8 @@ struct LJob {
     LONG size, days;            /* LJ_PICTURE: file size, date (DateStamp days) */
     LONG np, nd;                /* LJ_PICFOLDER: pictures, folders; its first picture */
     char first[300];
+    UBYTE adult;                /* LJ_FOLDER: an AGS folder's entries, sorted, into */
+    struct ItemList list;       /* list (its pool then the caller's); np: count, -1 */
 };
 BOOL ldr_start(void);
 void ldr_stop(void);            /* no job may be out */
