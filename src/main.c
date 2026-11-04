@@ -4050,6 +4050,7 @@ static void disarm(void)
 
 /* ------------------------------------------------------------ input */
 static ULONG last_secs, last_mics;
+static BOOL click_opened;           /* the last click opened something (one click) */
 static LONG last_click = -1;
 
 /* Dragging a list's thumb: the list follows, the selection kept in view. */
@@ -4156,6 +4157,17 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Code != SELECTDOWN)
         return;
     disarm();
+    if (click_opened) {
+        /* a single click opened something: the second click of a habitual
+         * double-click is not a click on what opened */
+        click_opened = FALSE;
+        if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros)) {
+            last_secs = im->Seconds;
+            last_mics = im->Micros;
+            last_click = -1;
+            return;
+        }
+    }
     if (gut_click(x, y))
         return;
     if (tb && tb_mouse_down(tb, x, y)) {
@@ -4171,8 +4183,11 @@ static void handle_mouse(struct IntuiMessage *im)
         if (focus != FOCUS_MENU)
             set_focus(FOCUS_MENU);
         menu_select_now(idx, TRUE);
-        if (dbl)
-            act_open(FALSE);
+        (void)dbl;
+        if (focus == FOCUS_MENU && cur() && (cur()->type != PT_LIST || cur()->list.count)) {
+            act_open(FALSE);                /* a section is not played: one click goes in */
+            click_opened = TRUE;
+        }
     } else if (x >= g.pane_x - U(2) && y >= g.list_top && y < g.footer_y - 1) {
         struct Page *p = cur();
         if (!p)
@@ -4195,14 +4210,24 @@ static void handle_mouse(struct IntuiMessage *im)
                 draw_title_count(p);
                 draw_list_rows(p);
             }
-            if (dbl) {
-                struct Item *it;
-                ch_wait_item(p, idx, TRUE);
-                it = &p->list.items[idx];
-                if (it->kind == IT_DIR)
-                    open_dir(it);           /* a double-click goes inside a folder */
-                else
-                    act_open(FALSE);
+            {
+                /* one click opens what cannot be played (a folder, a
+                 * setting); what can (a game, a picture, a folder that
+                 * plays as a slideshow) is selected, and a double-click
+                 * plays it (a folder: goes inside) */
+                struct Item *it = &p->list.items[idx];
+                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC ||
+                                (it->kind == IT_DIR && it->mark == MARK_PLAY);
+                if (dbl || !playable) {
+                    ch_wait_item(p, idx, TRUE);
+                    it = &p->list.items[idx];
+                    if (!playable)
+                        click_opened = TRUE;
+                    if (it->kind == IT_DIR)
+                        open_dir(it);
+                    else
+                        act_open(FALSE);
+                }
             }
         } else {
             set_focus(FOCUS_CONTENT);
