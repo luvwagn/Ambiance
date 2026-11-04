@@ -22,11 +22,13 @@ full); AmigaMCE blends them between the text colour and the background with
 in-between pens. The logo is a palette image; index 255 is transparent.
 
 File layout (big-endian), written to <out dir>/<H>:
-  "AMSM", u16 version (2), u16 k (scale x 256), u16 cell_h, u16 baseline
+  "AMSM", u16 version (3), u16 k (scale x 256), u16 cell_h, u16 baseline
   u16 nfaces (3), then per face:
       u16 lo, u16 hi, then per glyph lo..hi:
-          u8 advance, s8 xoff, s8 yoff (from the cell top), u8 w, u8 h, u8 0, u32 offset
-      u32 bytes, then the face's coverage data (each glyph byte aligned)
+          u16 advance (1/16 px), s8 xoff, s8 yoff (from the cell top), u8 w, u8 h,
+          u32 offset: PHASES coverage maps of w x h, for the glyph placed at
+          0, 1/4, 1/2 and 3/4 of a pixel, each byte aligned
+      u32 bytes, then the face's coverage data
   u16 icon size, u16 count, then count icons (each byte aligned)
   u16 mark size, u16 count, then count markers (each byte aligned)
   u16 logo w, u16 logo h, u16 colours, colours x (r, g, b), w x h indices
@@ -72,28 +74,48 @@ def cov(img):
     return [min(15, (v * 15 + 127) // 255) for v in data]
 
 
+SS = 8              # oversampling: glyphs are drawn 8x and averaged down
+PHASES = 4          # quarter-pixel horizontal positions each glyph is stored at
+
+
 def face(ttf, size, wght, k, cell_h, base):
-    font = ImageFont.truetype(ttf, max(1, round(size * k)))
+    """Glyphs drawn unhinted (from 8x oversampling) at each quarter-pixel
+    position, so text can be laid out at fractional advances: no snapped,
+    uneven gaps at small sizes. Advances are in 1/16 pixel."""
+    font = ImageFont.truetype(ttf, max(1, round(size * k * SS)))
     font.set_variation_by_axes([wght])
     glyphs, blob = [], bytearray()
     pad = cell_h
     for c in range(LO, HI + 1):
         ch = bytes([c]).decode("latin-1")
-        adv = round(font.getlength(ch)) if c not in range(0x7F, 0xA0) else 0
-        if c in range(0x7F, 0xA0) or c in (32, 160):
-            glyphs.append((min(255, adv), 0, 0, 0, 0, 0))
+        if c in range(0x7F, 0xA0):
+            glyphs.append((0, 0, 0, 0, 0, 0))
             continue
-        img = Image.new("L", (adv + 2 * pad, cell_h + 2 * pad), 0)
-        ImageDraw.Draw(img).text((pad, pad + base), ch, font=font, fill=255, anchor="ls")
-        box = img.point(lambda v: 255 if v >= 9 else 0).getbbox()   # ignore sub-1/16 fringes
-        if not box:
-            glyphs.append((min(255, adv), 0, 0, 0, 0, 0))
+        adv = font.getlength(ch) / SS
+        adv16 = round(adv * 16)
+        if c in (32, 160):
+            glyphs.append((adv16, 0, 0, 0, 0, 0))
             continue
-        x0, y0, x1, y1 = box
-        g = img.crop(box)
+        W, H = int(adv) + 2 * pad + 2, cell_h + 2 * pad
+        phases = []
+        for p in range(PHASES):
+            big = Image.new("L", (W * SS, H * SS), 0)
+            ImageDraw.Draw(big).text(((pad + p / PHASES) * SS, (pad + base) * SS), ch,
+                                     font=font, fill=255, anchor="ls")
+            phases.append(big.resize((W, H), Image.BOX))
+        boxes = [im.point(lambda v: 255 if v >= 9 else 0).getbbox() for im in phases]
+        boxes = [bx for bx in boxes if bx]
+        if not boxes:
+            glyphs.append((adv16, 0, 0, 0, 0, 0))
+            continue
+        x0 = min(bx[0] for bx in boxes)
+        y0 = min(bx[1] for bx in boxes)
+        x1 = max(bx[2] for bx in boxes)
+        y1 = max(bx[3] for bx in boxes)
         off = len(blob)
-        blob += nibbles(cov(g))
-        glyphs.append((min(255, adv), x0 - pad, y0 - pad, x1 - x0, y1 - y0, off))
+        for im in phases:                   # each phase byte aligned, same box
+            blob += nibbles(cov(im.crop((x0, y0, x1, y1))))
+        glyphs.append((adv16, x0 - pad, y0 - pad, x1 - x0, y1 - y0, off))
     return glyphs, bytes(blob)
 
 
@@ -208,12 +230,12 @@ def build(ttf, H):
     k = k256 / 256
     cell_h, base = round(CELL * k), round(BASE * k)
     out = bytearray(b"AMSM")
-    out += struct.pack(">HHHHH", 2, k256, cell_h, base, len(FACES))
+    out += struct.pack(">HHHHH", 3, k256, cell_h, base, len(FACES))
     for size, wght in FACES:
         glyphs, blob = face(ttf, size, wght, k, cell_h, base)
         out += struct.pack(">HH", LO, HI)
-        for adv, xo, yo, w, h, off in glyphs:
-            out += struct.pack(">BbbBBBI", adv, xo, yo, w, h, 0, off)
+        for adv16, xo, yo, w, h, off in glyphs:
+            out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
         out += struct.pack(">I", len(blob)) + blob
     n = round(16 * k)
     out += struct.pack(">HH", n, len(ICONS))

@@ -29,7 +29,12 @@
 #include <proto/graphics.h>
 
 #define NFACES      3
-#define GLYPH_BYTES 10
+#define GLYPH_BYTES 10          /* u16 advance (1/16 px), s8 xoff, s8 yoff, u8 w, u8 h, u32 offset */
+#define G_X 2
+#define G_Y 3
+#define G_W 4
+#define G_H 5
+#define PHASES      4           /* each glyph at 0, 1/4, 1/2, 3/4 of a pixel */
 #define FIRST_PEN   32          /* below: UI pens 0-15, the screen's 16-31 */
 #define MAX_TEXT_W  2048        /* widest text drawn in one go, in pixels */
 
@@ -84,7 +89,7 @@ static BOOL parse(struct Smooth *s)
 {
     const UBYTE *p = s->data, *end = s->data + s->size;
     int f;
-    if (s->size < 14 || memcmp(p, "AMSM", 4) || rd16(p + 4) != 2 || rd16(p + 12) != NFACES)
+    if (s->size < 14 || memcmp(p, "AMSM", 4) || rd16(p + 4) != 3 || rd16(p + 12) != NFACES)
         return FALSE;
     s->k = rd16(p + 6);
     s->cell_h = rd16(p + 8);
@@ -113,7 +118,7 @@ static BOOL parse(struct Smooth *s)
             return FALSE;
         fc->widest_cap = 0;
         for (c = 'A'; c <= 'Z'; c++) {
-            UBYTE w = fc->gl[(c - fc->lo) * GLYPH_BYTES + 3];
+            UBYTE w = fc->gl[(c - fc->lo) * GLYPH_BYTES + G_W];
             if (w > fc->widest_cap)
                 fc->widest_cap = w;
         }
@@ -365,13 +370,17 @@ static const UBYTE *glyph(const struct Face *f, UBYTE c)
     return f->gl + (ULONG)(c - f->lo) * GLYPH_BYTES;
 }
 
+/* Text is laid out in 1/16 pixels, each glyph drawn from the stored
+ * quarter-pixel position nearest its true one. */
+static UWORD adv16(const UBYTE *G) { return rd16(G); }
+
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face)
 {
     const struct Face *f = &s->face[face < NFACES ? face : 0];
-    WORD w = 0;
+    ULONG w16 = 0;
     while (n-- > 0)
-        w += glyph(f, (UBYTE)*str++)[0];
-    return w;
+        w16 += adv16(glyph(f, (UBYTE)*str++));
+    return (WORD)((w16 + 8) >> 4);
 }
 
 /* How many characters of str fit in maxw pixels. */
@@ -379,10 +388,10 @@ LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw)
 {
     const struct Face *f = &s->face[face < NFACES ? face : 0];
     LONG i;
-    WORD w = 0;
+    ULONG w16 = 0;
     for (i = 0; i < n; i++) {
-        w += glyph(f, (UBYTE)str[i])[0];
-        if (w > maxw)
+        w16 += adv16(glyph(f, (UBYTE)str[i]));
+        if ((WORD)((w16 + 8) >> 4) > maxw)
             break;
     }
     return i;
@@ -392,37 +401,45 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
              int face, UBYTE fg, UBYTE bg, BOOL opaque)
 {
     const struct Face *f = &s->face[face < NFACES ? face : 0];
-    WORD pen = 0, minx = 0, maxx = 0, miny = 0, maxy = s->cell_h;
+    ULONG pen16 = 0;
+    WORD minx = 0, maxx = 0, miny = 0, maxy = s->cell_h;
     LONG i;
     if (n <= 0)
         return;
     /* the box every glyph's ink falls in (accents may rise above the cell) */
     for (i = 0; i < n; i++) {
         const UBYTE *G = glyph(f, (UBYTE)str[i]);
-        WORD gx = pen + (BYTE)G[1], gy = (BYTE)G[2];
-        if (G[3]) {
+        ULONG q = (pen16 + 2) >> 2;             /* in quarter pixels */
+        WORD gx = (WORD)(q >> 2) + (BYTE)G[G_X], gy = (BYTE)G[G_Y];
+        if (G[G_W]) {
             if (gx < minx)
                 minx = gx;
-            if (gx + G[3] > maxx)
-                maxx = gx + G[3];
+            if (gx + G[G_W] > maxx)
+                maxx = gx + G[G_W];
             if (gy < miny)
                 miny = gy;
-            if (gy + G[4] > maxy)
-                maxy = gy + G[4];
+            if (gy + G[G_H] > maxy)
+                maxy = gy + G[G_H];
         }
-        pen += G[0];
+        pen16 += adv16(G);
     }
-    if (opaque && pen > maxx)
-        maxx = pen;
+    if (opaque && (WORD)((pen16 + 8) >> 4) > maxx)
+        maxx = (WORD)((pen16 + 8) >> 4);
     if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny))
         return;
-    pen = 0;
+    pen16 = 0;
     for (i = 0; i < n; i++) {
         const UBYTE *G = glyph(f, (UBYTE)str[i]);
-        if (G[3])
-            masks_put(s, f->blob + rd32(G + 6), G[3], G[4], pen + (BYTE)G[1] - minx,
-                      (BYTE)G[2] - miny);
-        pen += G[0];
+        ULONG q = (pen16 + 2) >> 2;
+        UWORD w = G[G_W], h = G[G_H];
+        if (w) {
+            UWORD bytes = (UWORD)(((ULONG)w * h + 1) >> 1), ph = (UWORD)(q & 3);
+            const UBYTE *d = f->blob + rd32(G + 6);
+            while (ph--)
+                d += bytes;
+            masks_put(s, d, w, h, (WORD)(q >> 2) + (BYTE)G[G_X] - minx, (BYTE)G[G_Y] - miny);
+        }
+        pen16 += adv16(G);
     }
     masks_end(s, g, x + minx, y + miny, maxx - minx, maxy - miny, fg, bg, opaque);
 }

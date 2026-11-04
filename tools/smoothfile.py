@@ -27,7 +27,7 @@ class Smooth:
             p += 4
             gl = []
             for _c in range(lo, hi + 1):
-                gl.append(struct.unpack_from(">BbbBBBI", data, p))
+                gl.append(struct.unpack_from(">HbbBBI", data, p))     # adv in 1/16 px
                 p += 10
             n = struct.unpack_from(">I", data, p)[0]
             p += 4
@@ -56,7 +56,7 @@ class Smooth:
         return gl[c - lo], blob
 
     def textlen(self, s, face=0):
-        return sum(self.glyph(face, c)[0][0] for c in s.encode("latin-1", "replace"))
+        return (sum(self.glyph(face, c)[0][0] for c in s.encode("latin-1", "replace")) + 8) >> 4
 
     @staticmethod
     def level(v):
@@ -68,14 +68,19 @@ class Smooth:
             img.putpixel((x, y), tuple(round(bg[i] + (fg[i] - bg[i]) * t) for i in range(3)))
 
     def text(self, img, x, y, s, fg, bg, face=0):
+        """As sm_text: pen in 1/16 px, each glyph from its nearest quarter-pixel phase."""
+        pen16 = 0
         for c in s.encode("latin-1", "replace"):
-            (adv, xo, yo, w, h, _z, off), blob = self.glyph(face, c)
-            vals = _unpack(blob, off, w * h)
-            for j in range(h):
-                for i in range(w):
-                    self._plot(img, x + xo + i, y + yo + j, self.level(vals[j * w + i]), fg, bg)
-            x += adv
-        return x
+            (adv16, xo, yo, w, h, off), blob = self.glyph(face, c)
+            q = (pen16 + 2) >> 2
+            if w:
+                vals = _unpack(blob, off + (q & 3) * ((w * h + 1) // 2), w * h)
+                gx = x + (q >> 2) + xo
+                for j in range(h):
+                    for i in range(w):
+                        self._plot(img, gx + i, y + yo + j, self.level(vals[j * w + i]), fg, bg)
+            pen16 += adv16
+        return x + ((pen16 + 8) >> 4)
 
     def icon(self, img, i, x, y, fg, bg):
         n = self.icon_n
