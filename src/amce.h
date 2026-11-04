@@ -47,13 +47,16 @@ enum {
 /* ---------------------------------------------------------------- gfx */
 /* The layout is designed for a 256-line screen, in design units. A screen
  * draws it k/256 times larger: 1x on every native mode (640x200/256 hires
- * looks like hires laced, on tall pixels), and on RTG
- *   pixel style:  a whole factor, lines / 256 (800x600 2x, 1024x768 3x),
- *                 the pixel artwork enlarged in whole pixels;
- *   smooth style: exactly lines / 256, anti-aliased text, icons and logo
+ * looks like hires laced, on tall pixels), and on RTG, sized as if the
+ * screen had RTG_LINES lines:
+ *   pixel style:  a whole factor, lines / RTG_LINES rounded down
+ *                 (1024x768 2x, smaller 1x), the pixel art in whole pixels;
+ *   smooth style: exactly lines / RTG_LINES (1024x768 2x, 800x600 1.56x,
+ *                 640x480 1.25x), anti-aliased text, icons and logo
  *                 pre-rendered for that size (Fonts/amce-smooth/<lines>),
  *                 on 15/16/24/32-bit screens only. */
 enum { STYLE_PIXEL, STYLE_SMOOTH };
+#define RTG_LINES 384           /* keep in step with tools/mksmooth.py */
 
 /* Text faces (gfx_text, gfx_textlen). Pixel style has one font for all. */
 enum { TS_BODY, TS_BOLD, TS_SMALL, TS_FACES,
@@ -143,6 +146,7 @@ void sm_mark(struct Smooth *s, struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg
 UWORD sm_icon_px(const struct Smooth *s);
 UWORD sm_mark_px(const struct Smooth *s);
 UWORD sm_cell_h(const struct Smooth *s);
+UWORD sm_scale(const struct Smooth *s);                 /* x 256 */
 UWORD sm_baseline(const struct Smooth *s);
 BOOL sm_logo(struct Smooth *s, struct Gfx *g);      /* fills g->logo_* masks and pens */
 BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl);

@@ -3,8 +3,10 @@
 
 Usage: python3 tools/mksmooth.py <Rubik-VF.ttf> <out dir> [heights...]
 
-The layout is designed for a 256-line screen; a screen of H lines draws it
-H/256 times larger. For each H this pre-renders, at exactly that size and
+The layout is designed for a 256-line screen. An RTG screen of H lines draws
+it H/RTG_LINES times larger (RTG_LINES = 384: a 1024x768 screen shows it at
+2x, like a 384-line screen would). For each H this pre-renders, at exactly
+that size and
 with anti-aliased edges:
 
   - three text faces from Rubik: body (regular), bold (medium, for the menu
@@ -18,7 +20,7 @@ full); AmigaMCE blends them between the text colour and the background with
 in-between pens. The logo is a palette image; index 255 is transparent.
 
 File layout (big-endian), written to <out dir>/<H>:
-  "AMSM", u16 version (1), u16 k (= H: scale x 256), u16 cell_h, u16 baseline
+  "AMSM", u16 version (1), u16 k (scale x 256), u16 cell_h, u16 baseline
   u16 nfaces (3), then per face:
       u16 lo, u16 hi, then per glyph lo..hi:
           u8 advance, s8 xoff, s8 yoff (from the cell top), u8 w, u8 h, u8 0, u32 offset
@@ -39,6 +41,7 @@ import markicons    # noqa: E402
 from mkart import UI    # noqa: E402
 
 LO, HI = 32, 255
+RTG_LINES = 384     # the screen height the design is scaled to fit as if it had
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
 CELL = 12           # design height of a text cell (the pixel font's)
@@ -140,10 +143,11 @@ def logo(ttf, k):
 
 
 def build(ttf, H):
-    k = H / 256
+    k256 = round(H * 256 / RTG_LINES)
+    k = k256 / 256
     cell_h, base = round(CELL * k), round(BASE * k)
     out = bytearray(b"AMSM")
-    out += struct.pack(">HHHHH", 1, H, cell_h, base, len(FACES))
+    out += struct.pack(">HHHHH", 1, k256, cell_h, base, len(FACES))
     for size, wght in FACES:
         glyphs, blob = face(ttf, size, wght, k, cell_h, base)
         out += struct.pack(">HH", LO, HI)
@@ -175,7 +179,7 @@ def main():
         data = build(ttf, H)
         with open(os.path.join(outdir, str(H)), "wb") as fh:
             fh.write(data)
-        print(f"  SMOOTH {H} lines: scale {H / 256:.2f}, {len(data)} bytes")
+        print(f"  SMOOTH {H} lines: scale {round(H * 256 / RTG_LINES) / 256:.2f}, {len(data)} bytes")
 
 
 if __name__ == "__main__":

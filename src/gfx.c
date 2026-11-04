@@ -237,7 +237,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     g->style = STYLE_PIXEL;
     g->sm = NULL;
     if (modes[smode].kind == K_RTG) {
-        g->kint = g->h / 256;
+        g->kint = g->h / RTG_LINES;
         if (g->kint < 1)
             g->kint = 1;
         if (g->kint > 3)
@@ -247,7 +247,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->truecolor &&
         (g->sm = sm_load(g->h))) {
         g->style = STYLE_SMOOTH;
-        g->k = g->h;                        /* lines / 256, x 256 */
+        g->k = sm_scale(g->sm);             /* as the file was rendered for */
     }
     layout_metrics(g);
 

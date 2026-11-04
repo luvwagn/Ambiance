@@ -27,9 +27,10 @@ Features in this release
   System information) with a scroll bar when the text is longer than the page.
 - Hires screens (laced or not) use a dense layout: more of each list fits.
 - Big RTG screens scale the whole layout up. Settings > Style chooses
-  the look there: Pixel (the pixel artwork, 2x on 800x600 and 3x on
-  1024x768) or Smooth (anti-aliased text, icons and logo at exactly the
-  screen's size, on 16-bit and deeper RTG screens).
+  the look there: Pixel (the pixel artwork, 2x on 1024x768) or Smooth
+  (anti-aliased text, icons and logo at exactly the screen's size:
+  1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; on 16-bit and
+  deeper RTG screens).
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Mods, Videos, Pictures, Music and Radio are listed but arrive

@@ -242,8 +242,8 @@ def main():
     glyph_path, outdir = sys.argv[1], sys.argv[2]
     glyphs = load_glyphs(glyph_path)
     results = {}
-    # amce-pixel at 1x, 2x and 3x: the pixel style on 256-, 512- and
-    # 768-line layouts (RTG 800x600 and 1024x768 draw 2x and 3x).
+    # amce-pixel at 1x, 2x and 3x: the pixel style at whole factors (RTG
+    # 1024x768 draws 2x; 3x is there for taller RTG screens).
     name = "amce-pixel"
     fdir = os.path.join(outdir, "FONTS", name)
     os.makedirs(fdir, exist_ok=True)

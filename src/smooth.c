@@ -214,6 +214,7 @@ void sm_detach(struct Smooth *s)
 UWORD sm_icon_px(const struct Smooth *s) { return s->icon_n; }
 UWORD sm_mark_px(const struct Smooth *s) { return s->mark_n; }
 UWORD sm_cell_h(const struct Smooth *s) { return s->cell_h; }
+UWORD sm_scale(const struct Smooth *s) { return s->k; }
 UWORD sm_baseline(const struct Smooth *s) { return s->base; }
 
 /* ------------------------------------------------------------ pens */
