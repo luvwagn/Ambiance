@@ -4177,8 +4177,9 @@ static void act_action(struct Item *it)
 #define HOLD_RAMP  1200     /* ms to reach cruising speed */
 #define HOLD_BOOST 2000     /* further ms to reach top speed */
 #define LIST_MIN     12     /* entries per second when the glide starts */
-#define MENU_MIN     20     /* ...in a short list (a menu: two screens or less), */
-#define MENU_MAX     30     /* rising to this; never eased below MENU_MIN */
+#define MENU_MIN     35     /* ...in a short list (a menu: two screens or less), */
+#define MENU_MAX     50     /* rising to this over MENU_RAMP (a row a frame); */
+#define MENU_RAMP   500     /* never eased */
 #define LIST_MAX    100     /* cruising entries per second on a small screen */
 #define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
 #define LIST_BOOST    4     /* top speed, as a multiple of cruising speed, */
@@ -4346,7 +4347,8 @@ static void hold_tick(void)
                  * the start, as a fast key repeat would give; the slow
                  * start and the easing at the end are for long lists, and
                  * a short one was all start and end */
-                rate = MENU_MIN + (MENU_MAX - MENU_MIN) * ramp / HOLD_RAMP;
+                rate = MENU_MIN + (MENU_MAX - MENU_MIN) *
+                       (glide < MENU_RAMP ? glide : MENU_RAMP) / MENU_RAMP;
             else if (glide < HOLD_RAMP)
                 rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
             else {
