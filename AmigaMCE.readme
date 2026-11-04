@@ -88,6 +88,8 @@ Controls
   Long lists show a scroll bar at their right edge while the mouse is in
   use, and small arrows there (more above, more below) while a joystick
   or pad is: moving the mouse or using the joystick switches between them.
+  The mouse pointer and the scroll bar go when the mouse rests for 1.5 s,
+  or as soon as a key or the joystick is used; moving it brings them back.
 
   Pictures     Fire/Return views a picture or plays a folder marked with
                the play arrow as a slideshow; Right or a double-click

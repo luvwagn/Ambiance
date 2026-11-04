@@ -2065,7 +2065,8 @@ static WORD aside_x(void)
 static struct { BOOL drag; WORD off; } gut;
 static BOOL bar_up;                 /* mouse mode: the bar is showing (the mouse moved lately) */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
-#define BAR_HIDE 1500               /* ms the mouse rests before the bar goes */
+#define BAR_HIDE 1500               /* ms the mouse rests before the bar and the
+                                     * pointer go */
 
 static WORD list_visible(void);
 
@@ -4941,6 +4942,7 @@ static int app_main(void)
     if (treq && !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)treq, 0)) {
         timer_open = TRUE;
         dbg_set_timer(treq->tr_node.io_Device);
+        mouse_last = time_ms();             /* the pointer stays a while at first */
         treq->tr_node.io_Command = TR_ADDREQUEST;
         treq->tr_time.tv_secs = 0;
         treq->tr_time.tv_micro = 40000;
@@ -5007,6 +5009,9 @@ static int app_main(void)
                     }
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                if (g.win && ptr_hidden != g.win && !gut.drag &&
+                    (LONG)(time_ms() - mouse_last) >= BAR_HIDE)
+                    pointer_hide();         /* the mouse at rest: the pointer goes */
                 if (bar_up && !gut.drag && (LONG)(time_ms() - mouse_last) >= BAR_HIDE) {
                     bar_up = FALSE;         /* the mouse at rest: the bar goes */
                     if (cur() && cur()->type == PT_LIST && !pane_pending)
