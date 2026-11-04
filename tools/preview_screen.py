@@ -174,7 +174,7 @@ def _version():
         return "0.0.0"
 
 
-ABOUT = [("line", "AmigaMCE " + _version()), ("line", "Created by Brian King"), ("line", "(c) 2026 Brian King"),
+ABOUT = [("line", "AmigaMCE " + _version()), ("line", "(c) 2026 Brian King"),
          ("line", ""),
          ("para", "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
                   "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
