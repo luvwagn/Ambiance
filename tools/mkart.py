@@ -310,13 +310,20 @@ ICON_ORDER = ["games", "mods", "demos", "videos", "pictures", "music", "radio", 
 
 
 def icon(name):
-    rows = []
-    for line in ICON_ART[name]:
+    """16x16 icon as row bitmasks, centred horizontally on its drawn pixels
+    so the menu's icons line up on one axis whatever their width (an odd
+    width leans half a pixel left)."""
+    lines = ICON_ART[name]
+    for line in lines:
         assert len(line) == 16, (name, line)
+    cols = [x for x in range(16) if any(line[x] == "#" for line in lines)]
+    shift = (16 - (cols[-1] - cols[0] + 1)) // 2 - cols[0] if cols else 0
+    rows = []
+    for line in lines:
         v = 0
         for x, ch in enumerate(line):
             if ch == "#":
-                v |= 0x8000 >> x
+                v |= 0x8000 >> (x + shift)
         rows.append(v)
     return rows
 
