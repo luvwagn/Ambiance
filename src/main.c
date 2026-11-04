@@ -2036,11 +2036,14 @@ static void crumb_go(int level)
  * label. The column is the same width whatever the markers' state, so
  * ticking a box or picking a radio button never moves the text; lists
  * without markers have no column. */
-static WORD mark_column(const struct ItemList *l)
+static WORD mark_column(const struct Page *p)
 {
+    const struct ItemList *l = &p->list;
     LONG i;
+    if (p->mods)
+        return U(MARK_SIZE + 5);    /* music lists: room for the playing bars, always */
     for (i = 0; i < l->count; i++)
-        if (l->items[i].mark != MARK_NONE)
+        if (l->items[i].mark != MARK_NONE || l->items[i].kind == IT_MOD)
             return U(MARK_SIZE + 5);
     return 0;
 }
@@ -3025,7 +3028,7 @@ static void draw_gutter(struct Page *p)
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
 static void draw_menu_row(int i);
-static WORD mark_column(const struct ItemList *l);
+static WORD mark_column(const struct Page *p);
 
 /* Move the soft highlight: to screen row `row` of the list, or to main
  * menu entry `menu_i` (-1: neither). */
@@ -3040,7 +3043,7 @@ static void hover_set(WORD row, WORD menu_i)
     if (pane_pending)
         return;
     if (p && p->type == PT_LIST) {
-        WORD col = mark_column(&p->list);
+        WORD col = mark_column(p);
         if (old_row >= 0 && p->top + old_row < p->list.count)
             draw_list_row(p, p->top + old_row, col);
         if (row >= 0 && p->top + row < p->list.count)
@@ -3111,7 +3114,7 @@ static void set_mouse_mode(BOOL on)
 
 static void draw_list_rows(struct Page *p)
 {
-    WORD vis = list_visible(), r, col = mark_column(&p->list);
+    WORD vis = list_visible(), r, col = mark_column(p);
     list_follow(p);
     if (!p->list.count) {
         gfx_fill(&g, g.pane_x - U(2), g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
@@ -3190,7 +3193,7 @@ static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
         if (hover_row >= 0 && p == cur()) {
             /* the copy took the soft highlight along with its row: back
              * under the pointer, gone from where it went */
-            WORD vis = list_visible(), col = mark_column(&p->list), moved = hover_row - (WORD)(p->top - old_top);
+            WORD vis = list_visible(), col = mark_column(p), moved = hover_row - (WORD)(p->top - old_top);
             if (moved >= 0 && moved < vis && p->top + moved < p->list.count)
                 draw_list_row(p, p->top + moved, col);
             if (p->top + hover_row < p->list.count)
@@ -3205,7 +3208,7 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
     LONG k, i, first, last, r_old, n_old;
     list_follow(p);
     k = p->top - old_top;
-    col = mark_column(&p->list);
+    col = mark_column(p);
     if (!k || p->list.count <= vis) {
         if (k)
             draw_list_rows(p);
