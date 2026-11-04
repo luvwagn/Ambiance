@@ -10,8 +10,10 @@ made CopyMem copy from UtilityBase onto the stack when list entries were
 
 The pattern in the compiler's assembly: a load into a6, then a jsr/bsr to
 anything other than a6@(...), then the #APP block of the OS call, with no
-reload of a6 in between. Usage: check_syscalls.py file.s ...  (exit 1 if
-any are found)
+reload of a6 in between, all in one straight run of code (no label or
+branch between them: GCC 13.4's bug was within one basic block, and a
+base GCC keeps in a6 across earlier code, a6 being preserved by calls, is
+harmless). Usage: check_syscalls.py file.s ...  (exit 1 if any are found)
 """
 import re
 import sys
@@ -20,6 +22,7 @@ LOAD_A6 = re.compile(r"^\s+move(a)?\.l\s+[^,]+,a6\s*$")
 CALL = re.compile(r"^\s+(jsr|jbsr|bsr)\s+(\S+)")
 APP = re.compile(r"^#APP")
 LABEL = re.compile(r"^[A-Za-z_.$][\w.$]*:")
+BRANCH = re.compile(r"^\s+(j(?!sr)[a-z]+|b(?!sr)[a-z]{1,3}|db[a-z]+)\s")   # jeq, jra, bne, dbra...
 
 
 def scan(path):
@@ -29,9 +32,14 @@ def scan(path):
     armed = None            # line number of the last a6 load
     calls = []
     for i, line in enumerate(lines):
-        if LABEL.match(line) and not line.startswith("L"):
-            func = line.rstrip(":")
+        if LABEL.match(line):
+            if not line.startswith("L"):
+                func = line.rstrip(":")
+            armed, calls = None, []         # a new basic block
+            continue
+        if BRANCH.match(line):
             armed, calls = None, []
+            continue
         if LOAD_A6.match(line):
             armed, calls = i, []
             continue

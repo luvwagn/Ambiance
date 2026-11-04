@@ -45,12 +45,21 @@ enum {
 };
 
 /* ---------------------------------------------------------------- gfx */
-enum { LAYOUT_LORES = 0, LAYOUT_HIRES = 1 };
+/* The layout is designed for a 256-line screen, in design units. A screen
+ * draws it k/256 times larger: 1x on every native mode (640x200/256 hires
+ * looks like hires laced, on tall pixels), and on RTG
+ *   pixel style:  a whole factor, lines / 256 (800x600 2x, 1024x768 3x),
+ *                 the pixel artwork enlarged in whole pixels;
+ *   smooth style: exactly lines / 256, anti-aliased text, icons and logo
+ *                 pre-rendered for that size (Fonts/amce-smooth/<lines>),
+ *                 on 15/16/24/32-bit screens only. */
+enum { STYLE_PIXEL, STYLE_SMOOTH };
 
-/* Screen modes offered in Settings. All of them draw the lowres artwork
- * 1:1 (LAYOUT_LORES), so 640x200/256 hires looks like hires laced, only
- * on tall pixels. LAYOUT_HIRES (hires artwork, two columns per design
- * pixel) is not used at the moment. */
+/* Text faces (gfx_text, gfx_textlen). Pixel style has one font for all. */
+enum { TS_BODY, TS_BOLD, TS_SMALL, TS_FACES,
+       TS_OPAQUE = 0x10 };  /* also fill the background behind the text */
+
+/* Screen modes offered in Settings. */
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
        SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024, SM_COUNT };
 
@@ -61,20 +70,37 @@ struct Gfx {
     struct TextFont *font;
     BOOL  font_is_ours;
     UWORD w, h, depth;
-    UBYTE layout;       /* LAYOUT_LORES or LAYOUT_HIRES */
-    UBYTE sx;           /* 1 lowres, 2 hires: horizontal pixels per design pixel */
+    UWORD k;            /* layout scale x 256: GU(g, design units) = pixels */
+    UBYTE kint;         /* whole factor the pixel artwork is enlarged by */
+    UBYTE style;        /* STYLE_* in use (smooth may fall back to pixel) */
+    struct Smooth *sm;  /* smooth-style artwork, NULL in pixel style */
     UWORD menu_w, top, row_h, list_top, list_row_h, footer_y, pane_x, pane_w;
     UWORD baseline, font_h;
+    UWORD icon_px, mark_px;     /* menu icon and row marker size on screen */
+    UWORD logo_w, logo_h;
     BOOL  pens_shared;  /* datatypes may remap into pens 32..255 */
     BOOL  planar;       /* native planar bitmap (FALSE on RTG) */
     BOOL  truecolor;    /* RTG 15/16/24/32-bit: no pen sharing needed for pictures */
     UBYTE *logo_masks;          /* one chip-RAM mask per logo pen, for BltTemplate */
-    UBYTE logo_pens[8], logo_npens;
+    UBYTE logo_pens[32], logo_npens;
     UWORD logo_bpr;             /* bytes per logo mask row */
-    UBYTE *icon_masks;          /* menu icon masks in chip RAM, for BltTemplate */
-    UWORD icon_bpr;             /* bytes per icon mask row: 2 lowres, 4 hires */
-    UBYTE *mark_masks;          /* list row marker masks in chip RAM */
+    UBYTE *icon_masks;          /* pixel style: menu icon masks in chip RAM */
+    UWORD icon_bpr, mark_bpr;   /* bytes per icon / marker mask row */
+    UBYTE *mark_masks;          /* pixel style: list row marker masks */
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
+};
+
+/* Design units to pixels on this screen. */
+#define GU(g, v) ((WORD)(((LONG)(v) * (g)->k + 128) >> 8))
+
+/* A big letter for the list's letter overlay: one mask (pixel style) or
+ * one per coverage step (smooth), in chip RAM for BltTemplate. */
+struct BigLetter {
+    UBYTE *mask;
+    ULONG size;
+    UWORD w, h, bpr;
+    UWORD cell_w;               /* the widest letter at this size */
+    UBYTE nlev;                 /* masks: 1, or SMOOTH_LEVELS - 1 */
 };
 
 const char *gfx_mode_key(int sm);
@@ -85,16 +111,42 @@ BOOL gfx_mode_is_rtg(int sm);
 BOOL  gfx_mode_tall(int sm);                             /* 640x200/256: tall pixels */
 UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel found */
 int  gfx_mode_auto(const struct Caps *c);
-BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);
+BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm, int style);
+BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_close(struct Gfx *g);
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
-void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw);
-WORD gfx_textlen(struct Gfx *g, const char *s);
+/* Text in a cell font_h tall at y; bg is what it is drawn over (smooth
+ * edges blend into it). maxw > 0 cuts it to fit; ts is TS_* (| TS_OPAQUE). */
+void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts);
+WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
-void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen);
-void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE pen);   /* MARK_* icon */
+void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
+void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
+BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl);
+void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE fg, UBYTE bg);
+void gfx_bigletter_free(struct BigLetter *bl);
+
+/* ---------------------------------------------------------------- smooth */
+#define SMOOTH_LEVELS 8         /* coverage steps: 0 none .. 7 full colour */
+struct Smooth *sm_load(UWORD lines);    /* PROGDIR:Fonts/amce-smooth/<lines> */
+void sm_free(struct Smooth *s);
+void sm_attach(struct Smooth *s, struct Gfx *g);    /* screen open: pens, metrics */
+void sm_detach(struct Smooth *s);
+WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face);
+LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw);
+void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, LONG n,
+             int face, UBYTE fg, UBYTE bg, BOOL opaque);
+void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
+void sm_mark(struct Smooth *s, struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg);
+UWORD sm_icon_px(const struct Smooth *s);
+UWORD sm_mark_px(const struct Smooth *s);
+UWORD sm_cell_h(const struct Smooth *s);
+UWORD sm_baseline(const struct Smooth *s);
+BOOL sm_logo(struct Smooth *s, struct Gfx *g);      /* fills g->logo_* masks and pens */
+BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl);
+UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h);
 void gfx_picture_free(struct Gfx *g);
 
@@ -176,12 +228,10 @@ void tb_mouse_up(struct TextBox *tb);
 void tb_refresh_bar(struct Gfx *g, struct TextBox *tb);
 
 /* ---------------------------------------------------------------- art */
-extern const UBYTE logo_lo[], logo_hi[];
-extern const UWORD logo_lo_w, logo_lo_h, logo_hi_w, logo_hi_h;
-extern const UWORD icons16[][16];   /* lowres, hand-drawn */
-extern const ULONG icons32[][16];   /* hires, from vector shapes */
-extern const UWORD marks16[][11];   /* list row markers, lowres (MARK_ARROW..) */
-extern const ULONG marks32[][11];   /* list row markers, hires */
+extern const UBYTE logo_lo[];
+extern const UWORD logo_lo_w, logo_lo_h;
+extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
+extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */
 extern const ULONG ui_palette32[];
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,

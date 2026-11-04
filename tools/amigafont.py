@@ -58,18 +58,20 @@ def load_glyphs(path):
     return glyphs
 
 
-def build_variant(glyphs, hires):
-    """Return dict with TextFont fields and byte arrays."""
-    xs = 2 if hires else 1
+def build_variant(glyphs, hires, scale=1):
+    """Return dict with TextFont fields and byte arrays. scale enlarges the
+    whole font by a whole factor, every pixel a scale x scale block (the
+    pixel style on big RTG screens); hires doubles columns only."""
+    xs = (2 if hires else 1) * scale
     inked = [g for g in glyphs.values() if g]
     top = min(t for t, r in inked)
     bottom = max(t + len(r) for t, r in inked)
     top = min(top, NOTDEF[0])
-    ysize = bottom - top
-    baseline = -1 - top          # row index of the last row above the baseline
+    ysize = (bottom - top) * scale
+    baseline = (-top) * scale - 1    # row index of the last row above the baseline
 
     def scaled(rows):
-        return ["".join(ch * xs for ch in r) for r in rows]
+        return [line for r in rows for line in ["".join(ch * xs for ch in r)] * scale]
 
     entries = []  # (rows padded to ysize, width, space, kern)
     for c in range(LO, HI + 1):
@@ -84,17 +86,17 @@ def build_variant(glyphs, hires):
         w = max(len(r) for r in rows)
         rows = [r.ljust(w, ".") for r in rows]
         full = ["." * w] * (gtop - top) + rows
-        full += ["." * w] * (ysize - len(full))
+        full += ["." * w] * (ysize // scale - len(full))
         full = scaled(full)
         width = w * xs
-        space = width + GAP          # hires: doubled glyph, single hires-pixel gap
+        space = width + GAP * scale  # hires: doubled glyph, single hires-pixel gap
         entries.append((full, width, space, 0))
     # not-defined glyph, appended after HI as the Amiga expects
     ntop, nrows = NOTDEF
     full = ["....."] * (ntop - top) + nrows
-    full += ["....."] * (ysize - len(full))
+    full += ["....."] * (ysize // scale - len(full))
     full = scaled(full)
-    entries.append((full, 5 * xs, 5 * xs + GAP, 0))
+    entries.append((full, 5 * xs, 5 * xs + GAP * scale, 0))
 
     total_bits = sum(e[1] for e in entries)
     modulo = ((total_bits + 15) // 16) * 2
@@ -164,11 +166,16 @@ def size_file(name, v):
     return bytes(out)
 
 
-def contents_file(dirname, ysize):
+def contents_file(dirname, ysizes):
+    """FontContentsHeader listing every size of the font."""
     FPF_DISKFONT, FPF_PROPORTIONAL, FPF_DESIGNED = 0x02, 0x20, 0x40
-    entry = f"{dirname}/{ysize}".encode("latin-1").ljust(256, b"\0")
-    entry += struct.pack(">HBB", ysize, 0, FPF_DISKFONT | FPF_PROPORTIONAL | FPF_DESIGNED)
-    return struct.pack(">HH", 0x0F00, 1) + entry
+    if isinstance(ysizes, int):
+        ysizes = [ysizes]
+    out = struct.pack(">HH", 0x0F00, len(ysizes))
+    for ysize in ysizes:
+        entry = f"{dirname}/{ysize}".encode("latin-1").ljust(256, b"\0")
+        out += entry + struct.pack(">HBB", ysize, 0, FPF_DISKFONT | FPF_PROPORTIONAL | FPF_DESIGNED)
+    return out
 
 
 # --- decoder, used only to check the files we wrote ---------------------------
@@ -235,16 +242,21 @@ def main():
     glyph_path, outdir = sys.argv[1], sys.argv[2]
     glyphs = load_glyphs(glyph_path)
     results = {}
-    for name, hires in (("amce-pixel", False), ("amce-pixel-hi", True)):
-        v = build_variant(glyphs, hires)
-        fdir = os.path.join(outdir, "FONTS", name)
-        os.makedirs(fdir, exist_ok=True)
+    # amce-pixel at 1x, 2x and 3x: the pixel style on 256-, 512- and
+    # 768-line layouts (RTG 800x600 and 1024x768 draw 2x and 3x).
+    name = "amce-pixel"
+    fdir = os.path.join(outdir, "FONTS", name)
+    os.makedirs(fdir, exist_ok=True)
+    sizes = []
+    for scale in (1, 2, 3):
+        v = build_variant(glyphs, False, scale)
         data = size_file(name + ".font", v)
         with open(os.path.join(fdir, str(v["ysize"])), "wb") as fh:
             fh.write(data)
-        with open(os.path.join(outdir, "FONTS", name + ".font"), "wb") as fh:
-            fh.write(contents_file(name, v["ysize"]))
-        results[name] = (parse_size_file(data), v, len(data))
+        sizes.append(v["ysize"])
+        results[f"{name}/{v['ysize']}"] = (parse_size_file(data), v, len(data))
+    with open(os.path.join(outdir, "FONTS", name + ".font"), "wb") as fh:
+        fh.write(contents_file(name, sizes))
     for name, (font, v, n) in results.items():
         print(f"{name}: ysize {font['ysize']} baseline {font['baseline']} xsize {font['xsize']} "
               f"modulo {font['modulo']} chars {font['lo']}-{font['hi']} file {n} bytes")

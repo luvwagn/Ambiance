@@ -27,16 +27,19 @@ def parse_art(path):
     dims = {k: int(v) for k, v in re.findall(r"(logo_\w+_[wh]) = (\d+)", src)}
     icons_src = re.search(r"icons16\[\]\[16\] = \{(.*?)\};", src, re.S).group(1)
     icons = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{4})", grp)] for grp in re.findall(r"\{([^}]*)\}", icons_src)]
-    i32 = re.search(r"icons32\[\]\[16\] = \{(.*?)\};", src, re.S).group(1)
-    icons32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)] for grp in re.findall(r"\{([^}]*)\}", i32)]
+    i32 = re.search(r"icons32\[\]\[16\] = \{(.*?)\};", src, re.S)    # no longer generated
+    icons32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)]
+               for grp in re.findall(r"\{([^}]*)\}", i32.group(1))] if i32 else []
     pal = arr("ui_palette32")[1:-1]
     palette = [(pal[i] >> 24, pal[i + 1] >> 24, pal[i + 2] >> 24) for i in range(0, len(pal), 3)]
     global MARKS16, MARKS32
     MARKS16 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{4})", grp)] for grp in
                re.findall(r"\{([^}]*)\}", re.search(r"marks16\[\]\[11\] = \{(.*?)\};", src, re.S).group(1))]
+    m32 = re.search(r"marks32\[\]\[11\] = \{(.*?)\};", src, re.S)
     MARKS32 = [[int(v, 16) for v in re.findall(r"0x([0-9A-F]{8})", grp)] for grp in
-               re.findall(r"\{([^}]*)\}", re.search(r"marks32\[\]\[11\] = \{(.*?)\};", src, re.S).group(1))]
-    return arr("logo_lo"), arr("logo_hi"), dims, icons, icons32, palette
+               re.findall(r"\{([^}]*)\}", m32.group(1))] if m32 else []
+    logo_hi = arr("logo_hi") if "logo_hi[]" in src else []
+    return arr("logo_lo"), logo_hi, dims, icons, icons32, palette
 
 
 MARKS16, MARKS32 = [], []

@@ -76,14 +76,14 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->y = y;
     tb->w = w;
     tb->h = h;
-    tb->line_h = g->font_h + 1;
+    tb->line_h = g->font_h + GU(g, 1);
     tb->lines = lines;
     tb->first_white = first_white;
     tb->content_h = lines->count * tb->line_h;
-    if (tb->content_h > TB_MAX_ROWS)
+    if (g->planar && tb->content_h > TB_MAX_ROWS)     /* the bitmap's limit */
         tb->content_h = TB_MAX_ROWS - TB_MAX_ROWS % tb->line_h;
-    tb->bar_w = tb->content_h > h ? 3 * g->sx : 0;
-    tb->bar_x = x + w + 2 * g->sx;
+    tb->bar_w = tb->content_h > h ? GU(g, 3) : 0;
+    tb->bar_x = x + w + GU(g, 2);
     tb->pos = clamp_pos(tb, tb->pos);
     tb->target = clamp_pos(tb, tb->target);
     tb->drawn_pos = -1;
@@ -127,8 +127,8 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
     if (!tb->bar_w)
         return;
     th = (LONG)tb->h * tb->h / tb->content_h;
-    if (th < 8)
-        th = 8;
+    if (th < GU(g, 8))
+        th = GU(g, 8);
     ty = range ? (tb->h - th) * tb->pos / range : 0;
     if (ty == tb->thumb_y && th == tb->thumb_h)
         return;
@@ -182,7 +182,7 @@ static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
         if (!clipped && (top < sy0 || top + tb->line_h - 1 > sy1))
             continue;
         gfx_text(g, tb->x, top, tb->lines->items[i].label,
-                 (tb->first_white && i == 0) ? PEN_WHITE : PEN_TEXT, tb->w);
+                 (tb->first_white && i == 0) ? PEN_WHITE : PEN_TEXT, PEN_BG, tb->w, TS_BODY);
     }
     if (clipped)
         InstallClipRegion(g->win->WLayer, old);
@@ -214,7 +214,7 @@ static void scroll_direct(struct Gfx *g, struct TextBox *tb)
  * is blanked first: the new text is copied straight over the old. */
 void tb_draw(struct Gfx *g, struct TextBox *tb)
 {
-    WORD x1 = tb->bar_x + 3 * g->sx - 1, y1 = tb->y + tb->h - 1;
+    WORD x1 = tb->bar_x + GU(g, 3) - 1, y1 = tb->y + tb->h - 1;
     if (!tb->open)
         return;
     tb->thumb_y = tb->thumb_h = -1;

@@ -1,6 +1,11 @@
 /*
- * AmigaMCE - screen, palette, font and drawing primitives (native chipset)
+ * AmigaMCE - screen, palette, font and drawing primitives
  * Copyright (c) 2026 Brian King
+ *
+ * Sizes are design units (a 256-line layout) times the screen's scale,
+ * GU(g, v); see amce.h. The pixel style enlarges its artwork and font by
+ * whole pixels; the smooth style draws pre-rendered anti-aliased art
+ * (smooth.c).
  */
 #include "amce.h"
 
@@ -17,6 +22,7 @@
 #include <proto/intuition.h>
 #include <proto/diskfont.h>
 #include <proto/datatypes.h>
+#include <stdio.h>
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase;
@@ -24,7 +30,6 @@ extern struct Library *DiskfontBase, *DataTypesBase;
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
 static void cache_art(struct Gfx *g);
-static UWORD logo_rows(const struct Gfx *g);
 
 /* Main menu labels, set by gfx_menu_labels(): the menu column is made just
  * wide enough for the longest one. */
@@ -39,33 +44,32 @@ void gfx_menu_labels(const char *const *labels, int n)
 
 static void set_menu_w(struct Gfx *g, UWORD w)
 {
-    UBYTE s = g->sx;
     g->menu_w = w;
-    g->pane_x = w + 6 * s;
-    g->pane_w = g->w - g->pane_x - 4 * s;
+    g->pane_x = w + GU(g, 6);
+    g->pane_w = g->w - g->pane_x - GU(g, 4);
 }
 
 static void layout_metrics(struct Gfx *g)
 {
-    set_menu_w(g, g->sx == 2 ? 144 : 76);   /* until the font is open */
-    g->top = 26;
-    g->row_h = 18;
-    g->list_top = 44;
-    g->list_row_h = 14;
-    g->footer_y = g->h - 12;
+    set_menu_w(g, GU(g, 76));               /* until the font is open */
+    g->top = GU(g, 26);
+    g->row_h = GU(g, 18);
+    g->list_top = GU(g, 44);
+    g->list_row_h = GU(g, 14);
+    g->footer_y = g->h - GU(g, 12);
 }
 
-/* Icon at 3, label at 23 (x sx), then a margin of 6 (x sx) after the
- * longest label. Measured in the screen's own font. */
+/* Icon at 3, label at 23, then a margin of 6 after the longest label,
+ * measured in the menu's own face. */
 static void fit_menu(struct Gfx *g)
 {
     WORD longest = 0, w;
     int i;
     for (i = 0; i < menu_nlabels; i++)
-        if ((w = gfx_textlen(g, menu_labels[i])) > longest)
+        if ((w = gfx_textlen(g, menu_labels[i], TS_BOLD)) > longest)
             longest = w;
     if (longest)
-        set_menu_w(g, 23 * g->sx + longest + 6 * g->sx);
+        set_menu_w(g, GU(g, 23) + longest + GU(g, 6));
 }
 
 static void open_font(struct Gfx *g)
@@ -77,9 +81,8 @@ static void open_font(struct Gfx *g)
     g->font = NULL;
     g->font_is_ours = FALSE;
     if (DiskfontBase) {
-        ta.ta_Name = (STRPTR)(g->layout == LAYOUT_HIRES ? "PROGDIR:Fonts/amce-pixel-hi.font"
-                                                        : "PROGDIR:Fonts/amce-pixel.font");
-        ta.ta_YSize = 12;
+        ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+        ta.ta_YSize = 12 * g->kint;         /* 12, 24 or 36: whole-pixel sizes */
         ta.ta_Style = FS_NORMAL;
         ta.ta_Flags = 0;
         me->pr_WindowPtr = (APTR)-1;
@@ -186,31 +189,66 @@ int gfx_mode_auto(const struct Caps *c)
     return first;
 }
 
-BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
+/* Can this screen mode show this style? Smooth needs a 15-bit or deeper
+ * RTG mode and its pre-rendered file. */
+BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
+{
+    char path[48];
+    BPTR l;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    if (style == STYLE_PIXEL)
+        return TRUE;
+    if (smode == SM_AUTO || gfx_mode_problem(c, smode))
+        smode = gfx_mode_auto(c);
+    if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) <= 8)
+        return FALSE;
+    sprintf(path, "PROGDIR:Fonts/amce-smooth/%lu", (unsigned long)modes[smode].h);
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    me->pr_WindowPtr = oldwin;
+    if (l)
+        UnLock(l);
+    return l != 0;
+}
+
+BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 {
     static UWORD pens[] = { (UWORD)~0 };
     ULONG mode;
     int i;
 
-    if (sm == SM_AUTO || gfx_mode_problem(c, sm))
-        sm = gfx_mode_auto(c);
-    mode = mode_id(sm);
-    g->mode = sm;
-    g->w = modes[sm].w;
-    g->h = modes[sm].h;
-    /* Every mode draws the lowres artwork 1:1, so native hires has the same
-     * layout and sizes as hires laced (on its tall pixels everything is
-     * half as wide, a denser screen). The two-columns-per-pixel hires
-     * artwork (LAYOUT_HIRES, sx 2) is kept for a possible option later. */
-    g->layout = LAYOUT_LORES;
-    g->sx = 1;
-    if (modes[sm].kind == K_RTG)
-        g->depth = gfx_mode_depth(sm);
+    if (smode == SM_AUTO || gfx_mode_problem(c, smode))
+        smode = gfx_mode_auto(c);
+    mode = mode_id(smode);
+    g->mode = smode;
+    g->w = modes[smode].w;
+    g->h = modes[smode].h;
+    if (modes[smode].kind == K_RTG)
+        g->depth = gfx_mode_depth(smode);
     else
         g->depth = c->aga ? 8 : 5;
     g->truecolor = g->depth > 8;
     if (mode == (ULONG)INVALID_ID)
         return FALSE;
+    /* Scale (see amce.h): native 1x; RTG a whole factor of its lines/256,
+     * or exactly lines/256 in the smooth style. */
+    g->kint = 1;
+    g->style = STYLE_PIXEL;
+    g->sm = NULL;
+    if (modes[smode].kind == K_RTG) {
+        g->kint = g->h / 256;
+        if (g->kint < 1)
+            g->kint = 1;
+        if (g->kint > 3)
+            g->kint = 3;
+    }
+    g->k = (UWORD)g->kint << 8;
+    if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->truecolor &&
+        (g->sm = sm_load(g->h))) {
+        g->style = STYLE_SMOOTH;
+        g->k = g->h;                        /* lines / 256, x 256 */
+    }
     layout_metrics(g);
 
     for (;;) {
@@ -219,18 +257,24 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
                                 SA_DisplayID, mode, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
                                 SA_Type, CUSTOMSCREEN, SA_Title, (ULONG)"AmigaMCE",
                                 SA_Pens, (ULONG)pens, SA_SharePens, TRUE,
-                                SA_Draggable, FALSE, SA_Interleaved, TRUE, TAG_END);
+                                SA_Draggable, FALSE, SA_Interleaved, TRUE,
+                                /* deep RTG: room for the smooth style's in-between pens */
+                                g->truecolor ? SA_ColorMapEntries : TAG_IGNORE, 256,
+                                TAG_END);
         /* Some RTG drivers want depth 24 for their 32-bit modes. */
         if (g->scr || g->depth != 32)
             break;
         g->depth = 24;
     }
     if (!g->scr) {
-        amce_log("OpenScreen failed", modes[sm].label);
+        amce_log("OpenScreen failed", modes[smode].label);
+        sm_free(g->sm);
+        g->sm = NULL;
         return FALSE;
     }
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
-    amce_log("screen open", modes[sm].label);
+    amce_log("screen open", modes[smode].label);
+    amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
 
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);
     g->pens_shared = FALSE;
@@ -257,11 +301,23 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     if (!g->win) {
         CloseScreen(g->scr);
         g->scr = NULL;
+        sm_free(g->sm);
+        g->sm = NULL;
         return FALSE;
     }
     g->rp = g->win->RPort;
     SetDrMd(g->rp, JAM1);
     open_font(g);
+    if (g->sm) {
+        sm_attach(g->sm, g);
+        g->font_h = sm_cell_h(g->sm);
+        g->baseline = sm_baseline(g->sm);
+        g->icon_px = sm_icon_px(g->sm);
+        g->mark_px = sm_mark_px(g->sm);
+    } else {
+        g->icon_px = 16 * g->kint;
+        g->mark_px = MARK_SIZE * g->kint;
+    }
     fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
@@ -283,16 +339,20 @@ void gfx_close(struct Gfx *g)
     gfx_picture_free(g);
     WaitBlit();
     if (g->logo_masks) {
-        FreeMem(g->logo_masks, (ULONG)g->logo_npens * logo_rows(g) * g->logo_bpr);
+        FreeMem(g->logo_masks, (ULONG)g->logo_npens * g->logo_h * g->logo_bpr);
         g->logo_masks = NULL;
     }
     if (g->icon_masks) {
-        FreeMem(g->icon_masks, (ULONG)ICON_COUNT * 16 * g->icon_bpr);
+        FreeMem(g->icon_masks, (ULONG)ICON_COUNT * g->icon_px * g->icon_bpr);
         g->icon_masks = NULL;
     }
     if (g->mark_masks) {
-        FreeMem(g->mark_masks, (ULONG)MARK_RADIO_ON * MARK_SIZE * g->icon_bpr);
+        FreeMem(g->mark_masks, (ULONG)MARK_RADIO_ON * g->mark_px * g->mark_bpr);
         g->mark_masks = NULL;
+    }
+    if (g->sm) {
+        sm_free(g->sm);
+        g->sm = NULL;
     }
     if (g->win) {
         amce_log("CloseWindow", "");
@@ -342,24 +402,54 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
-WORD gfx_textlen(struct Gfx *g, const char *s)
+WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 {
+    if (g->sm)
+        return sm_textlen(g->sm, s, strlen(s), ts & 0x0F);
     return TextLength(g->rp, (CONST_STRPTR)s, strlen(s));
 }
 
-void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw)
+void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts)
 {
     struct TextExtent te;
     ULONG n = strlen(s);
+    BOOL opaque = (ts & TS_OPAQUE) != 0;
+    int face = ts & 0x0F;
     if (!n)
         return;
+    if (g->sm) {
+        /* too long: as much as fits, then "..." */
+        if (maxw > 0 && sm_textlen(g->sm, s, n, face) > maxw) {
+            char buf[256];
+            WORD dots = sm_textlen(g->sm, "...", 3, face);
+            LONG k = maxw > dots ? sm_fit(g->sm, s, n, face, maxw - dots) : 0;
+            if (k > (LONG)sizeof(buf) - 4)
+                k = sizeof(buf) - 4;
+            while (k > 0 && s[k - 1] == ' ')
+                k--;
+            if (!k)
+                return;
+            memcpy(buf, s, k);
+            memcpy(buf + k, "...", 4);
+            sm_text(g->sm, g, x, y, buf, k + 3, face, fg, bg, opaque);
+        } else {
+            sm_text(g->sm, g, x, y, s, n, face, fg, bg, opaque);
+        }
+        return;
+    }
     if (maxw > 0)
         n = TextFit(g->rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, g->font_h + 1);
     if (!n)
         return;
-    SetAPen(g->rp, pen);
+    SetAPen(g->rp, fg);
+    if (opaque) {
+        SetBPen(g->rp, bg);
+        SetDrMd(g->rp, JAM2);
+    }
     Move(g->rp, x, y + g->baseline);
     Text(g->rp, (CONST_STRPTR)s, n);
+    if (opaque)
+        SetDrMd(g->rp, JAM1);
 }
 
 /* The logo and icons are stamped with BltTemplate: one-pen masks drawn
@@ -370,95 +460,213 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE pen, WORD maxw
  * went missing. The logo becomes one mask per pen it uses (pens never
  * overlap, so no pixel is drawn twice); the bar pen is skipped because the
  * header is already that colour. */
-static void logo_art(const struct Gfx *g, const UBYTE **px, UWORD *w, UWORD *h)
+/* Set the k x k block of design pixel (i, j) in a mask with bpr bytes a row. */
+static void put_block(UBYTE *m, UWORD bpr, UWORD i, UWORD j, UWORD k)
 {
-    BOOL hi = g->layout == LAYOUT_HIRES;
-    *px = hi ? logo_hi : logo_lo;
-    *w = hi ? logo_hi_w : logo_lo_w;
-    *h = hi ? logo_hi_h : logo_lo_h;
+    UWORD a, b;
+    for (b = 0; b < k; b++) {
+        UBYTE *row = m + (ULONG)(j * k + b) * bpr;
+        for (a = 0; a < k; a++) {
+            UWORD x = i * k + a;
+            row[x >> 3] |= 0x80 >> (x & 7);
+        }
+    }
 }
 
-static UWORD logo_rows(const struct Gfx *g)
+/* Masks of n one-word-a-row bitmaps (rows x 16 bits each), enlarged k
+ * times: count masks of (16k or less) x rows*k, bpr bytes a row. */
+static UBYTE *enlarge_words(const UWORD *src, UWORD count, UWORD rows, UWORD k, UWORD *bpr_out)
 {
-    return g->layout == LAYOUT_HIRES ? logo_hi_h : logo_lo_h;
+    UWORD bpr = ((16 * k + 15) >> 4) << 1, n, r, c;
+    ULONG one = (ULONG)rows * k * bpr;
+    UBYTE *m = AllocMem(one * count, MEMF_CHIP | MEMF_CLEAR);
+    *bpr_out = bpr;
+    if (!m)
+        return NULL;
+    for (n = 0; n < count; n++)
+        for (r = 0; r < rows; r++) {
+            UWORD bits = src[(ULONG)n * rows + r];
+            for (c = 0; c < 16; c++)
+                if (bits & (0x8000 >> c))
+                    put_block(m + one * n, bpr, c, r, k);
+        }
+    return m;
 }
 
+/* Pixel style: the logo (one mask per pen), menu icons and row markers,
+ * enlarged kint times. Smooth style: its own logo (smooth.c); icons and
+ * markers are drawn straight from its coverage maps. */
 static void cache_art(struct Gfx *g)
 {
-    const UBYTE *px;
-    UWORD w, h, i, j, k;
+    const UBYTE *px = logo_lo;
+    UWORD w = logo_lo_w, h = logo_lo_h, k = g->kint, i, j, p;
     ULONG size, n;
 
-    logo_art(g, &px, &w, &h);
+    if (g->sm) {
+        if (!sm_logo(g->sm, g))
+            g->logo_masks = NULL;
+        g->icon_masks = g->mark_masks = NULL;
+        return;
+    }
     g->logo_npens = 0;
     for (n = 0; n < (ULONG)w * h; n++) {
         UBYTE pen = px[n];
         if (pen == PEN_BAR)
             continue;
-        for (k = 0; k < g->logo_npens && g->logo_pens[k] != pen; k++)
+        for (p = 0; p < g->logo_npens && g->logo_pens[p] != pen; p++)
             ;
-        if (k == g->logo_npens && k < sizeof(g->logo_pens))
+        if (p == g->logo_npens && p < sizeof(g->logo_pens))
             g->logo_pens[g->logo_npens++] = pen;
     }
-    g->logo_bpr = ((w + 15) / 16) * 2;
-    size = (ULONG)g->logo_npens * h * g->logo_bpr;
+    g->logo_w = w * k;
+    g->logo_h = h * k;
+    g->logo_bpr = ((g->logo_w + 15) / 16) * 2;
+    size = (ULONG)g->logo_npens * g->logo_h * g->logo_bpr;
+    /* BltTemplate reads its source with the blitter: chip RAM, even rows. */
     g->logo_masks = size ? AllocMem(size, MEMF_CHIP | MEMF_CLEAR) : NULL;
     if (g->logo_masks)
-        for (k = 0; k < g->logo_npens; k++) {
-            UBYTE *m = g->logo_masks + (ULONG)k * h * g->logo_bpr;
+        for (p = 0; p < g->logo_npens; p++) {
+            UBYTE *m = g->logo_masks + (ULONG)p * g->logo_h * g->logo_bpr;
             for (j = 0; j < h; j++)
                 for (i = 0; i < w; i++)
-                    if (px[j * w + i] == g->logo_pens[k])
-                        m[j * g->logo_bpr + (i >> 3)] |= 0x80 >> (i & 7);
+                    if (px[j * w + i] == g->logo_pens[p])
+                        put_block(m, g->logo_bpr, i, j, k);
         }
-
-    /* BltTemplate reads its source with the blitter: chip RAM, even rows. */
-    g->icon_bpr = g->sx == 2 ? 4 : 2;
-    size = (ULONG)ICON_COUNT * 16 * g->icon_bpr;
-    g->icon_masks = AllocMem(size, MEMF_CHIP);
-    if (g->icon_masks)
-        CopyMem(g->sx == 2 ? (APTR)icons32 : (APTR)icons16, g->icon_masks, size);
-    size = (ULONG)(MARK_RADIO_ON) * MARK_SIZE * g->icon_bpr;
-    g->mark_masks = AllocMem(size, MEMF_CHIP);
-    if (g->mark_masks)
-        CopyMem(g->sx == 2 ? (APTR)marks32 : (APTR)marks16, g->mark_masks, size);
+    g->icon_masks = enlarge_words(&icons16[0][0], ICON_COUNT, 16, k, &g->icon_bpr);
+    g->mark_masks = enlarge_words(&marks16[0][0], MARK_RADIO_ON, MARK_SIZE, k, &g->mark_bpr);
 }
 
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
 {
-    const UBYTE *px;
-    UWORD w, h, k;
-    logo_art(g, &px, &w, &h);
+    UWORD p;
     if (!g->logo_masks)
         return;
     SetDrMd(g->rp, JAM1);
-    for (k = 0; k < g->logo_npens; k++) {
-        SetAPen(g->rp, g->logo_pens[k]);
-        BltTemplate((PLANEPTR)(g->logo_masks + (ULONG)k * h * g->logo_bpr), 0, g->logo_bpr,
-                    g->rp, x, y, w, h);
+    for (p = 0; p < g->logo_npens; p++) {
+        PLANEPTR m = (PLANEPTR)(g->logo_masks + (ULONG)p * g->logo_h * g->logo_bpr);
+        SetAPen(g->rp, g->logo_pens[p]);
+        BltTemplate(m, 0, g->logo_bpr, g->rp, x, y, g->logo_w, g->logo_h);
     }
 }
 
 /* A list row marker (sub-menu chevron, checkbox, radio button): every one
- * is MARK_SIZE design pixels square, so a state change never moves text. */
-void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE pen)
+ * is MARK_SIZE design units square, so a state change never moves text. */
+void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
-    if (!g->mark_masks || mark < MARK_ARROW || mark > MARK_RADIO_ON)
+    PLANEPTR m;
+    if (mark < MARK_ARROW || mark > MARK_RADIO_ON)
         return;
-    SetAPen(g->rp, pen);
+    if (g->sm) {
+        sm_mark(g->sm, g, mark, x, y, fg, bg);
+        return;
+    }
+    if (!g->mark_masks)
+        return;
+    m = (PLANEPTR)(g->mark_masks + (ULONG)(mark - 1) * g->mark_px * g->mark_bpr);
+    SetAPen(g->rp, fg);
     SetDrMd(g->rp, JAM1);
-    BltTemplate((PLANEPTR)(g->mark_masks + (ULONG)(mark - 1) * MARK_SIZE * g->icon_bpr), 0,
-                g->icon_bpr, g->rp, x, y, MARK_SIZE * g->sx, MARK_SIZE);
+    BltTemplate(m, 0, g->mark_bpr, g->rp, x, y, g->mark_px, g->mark_px);
 }
 
-void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE pen)
+void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
+    PLANEPTR m;
+    if (g->sm) {
+        sm_icon(g->sm, g, icon, x, y, fg, bg);
+        return;
+    }
     if (!g->icon_masks)
         return;
-    SetAPen(g->rp, pen);
+    m = (PLANEPTR)(g->icon_masks + (ULONG)icon * g->icon_px * g->icon_bpr);
+    SetAPen(g->rp, fg);
     SetDrMd(g->rp, JAM1);
-    BltTemplate((PLANEPTR)(g->icon_masks + (ULONG)icon * 16 * g->icon_bpr), 0, g->icon_bpr,
-                g->rp, x, y, 16 * g->sx, 16);
+    BltTemplate(m, 0, g->icon_bpr, g->rp, x, y, g->icon_px, g->icon_px);
+}
+
+/* ------------------------------------------------------------ big letter */
+/* The list overlay's letter, its ink about ink_h pixels tall. Pixel style:
+ * the UI font's own glyph blown up in whole pixels. Smooth: smooth.c. */
+BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
+{
+    struct TextFont *f = g->font;
+    const UBYTE *data;
+    ULONG lw;
+    UWORD off, gw, mod, x, yy;
+    LONG idx;
+    WORD top = -1, bot = -1, sc;
+    gfx_bigletter_free(bl);
+    if (!c)
+        return FALSE;
+    if (g->sm)
+        return sm_bigletter(g->sm, c, ink_h, bl);
+    if (!f)
+        return FALSE;
+    idx = (c < f->tf_LoChar || c > f->tf_HiChar) ? f->tf_HiChar - f->tf_LoChar + 1
+                                                   : c - f->tf_LoChar;
+    lw = ((ULONG *)f->tf_CharLoc)[idx];
+    off = (UWORD)(lw >> 16);
+    gw = (UWORD)lw;
+    data = (const UBYTE *)f->tf_CharData;
+    mod = f->tf_Modulo;
+    if (!gw)
+        return FALSE;
+#define FONTBIT(xx, yy2) (data[(ULONG)(yy2) * mod + ((off + (xx)) >> 3)] & (0x80 >> ((off + (xx)) & 7)))
+    for (yy = 0; yy < f->tf_YSize; yy++)
+        for (x = 0; x < gw; x++)
+            if (FONTBIT(x, yy)) {
+                if (top < 0)
+                    top = yy;
+                bot = yy;
+                break;
+            }
+    if (top < 0)
+        return FALSE;
+    sc = ink_h / (bot - top + 1);
+    if (sc < 2)
+        sc = 2;
+    if (sc > 16)
+        sc = 16;
+    bl->w = gw * sc;
+    bl->h = (bot - top + 1) * sc;
+    bl->bpr = ((bl->w + 15) / 16) * 2;
+    bl->size = (ULONG)bl->bpr * bl->h;
+    bl->nlev = 1;
+    bl->cell_w = (UWORD)(f->tf_XSize + 1) * sc;
+    bl->mask = AllocMem(bl->size, MEMF_CHIP | MEMF_CLEAR);
+    if (!bl->mask)
+        return FALSE;
+    for (yy = top; yy <= (UWORD)bot; yy++)
+        for (x = 0; x < gw; x++)
+            if (FONTBIT(x, yy))
+                put_block(bl->mask, bl->bpr, x, yy - top, sc);
+#undef FONTBIT
+    return TRUE;
+}
+
+void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y,
+                        UBYTE fg, UBYTE bg)
+{
+    UBYTE lv;
+    ULONG plane = (ULONG)bl->bpr * bl->h;
+    UBYTE *m = bl->mask;
+    if (!m)
+        return;
+    SetDrMd(g->rp, JAM1);
+    for (lv = 1; lv <= bl->nlev; lv++, m += plane) {
+        UBYTE pen = bl->nlev == 1 ? fg : sm_pen(g->sm, g, fg, bg, lv);
+        SetAPen(g->rp, pen);
+        BltTemplate((PLANEPTR)m, 0, bl->bpr, g->rp, x, y, bl->w, bl->h);
+    }
+}
+
+void gfx_bigletter_free(struct BigLetter *bl)
+{
+    if (bl->mask) {
+        WaitBlit();
+        FreeMem(bl->mask, bl->size);
+    }
+    bl->mask = NULL;
+    bl->w = bl->h = 0;
 }
 
 /* Decode a picture through the registered datatypes and draw it scaled to

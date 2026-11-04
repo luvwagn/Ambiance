@@ -4,7 +4,8 @@
 #   make            build AmigaMCE, the LHA archive and the ADF
 #   make test       run the AGS parser tests under vamos
 #   make art        regenerate src/art.c (logo, icons, palette)
-#   make fonts      regenerate the amce-pixel bitmap fonts
+#   make fonts      regenerate the amce-pixel bitmap fonts (12, 24, 36)
+#   make smooth     regenerate the smooth-style artwork for RTG screens
 #   make icons      regenerate the Workbench .info icons
 #   make preview    render true-aspect PNG previews of the Home Screen
 
@@ -26,7 +27,8 @@ CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign 
 LDFLAGS = -noixemul
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c src/log.c src/debug.c
+SRCS = src/main.c src/gfx.c src/smooth.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c \
+       src/log.c src/debug.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
 TARGET     = AmigaMCE
@@ -37,11 +39,14 @@ DISK       = amigamce-$(FULL_VERSION).adf
 DISK_TITLE = AmigaMCE
 
 FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
-             assets/Fonts/amce-pixel-hi.font assets/Fonts/amce-pixel-hi/12
+             assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36
+# Smooth style, one file per RTG screen height (tools/mksmooth.py)
+SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
+               assets/Fonts/amce-smooth/768
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt CREDITS.txt
 
-.PHONY: all clean test check-formats check-syscalls art fonts icons preview lha disk FORCE_VERSION
+.PHONY: all clean test check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
 
 all: $(TARGET) lha disk
 
@@ -103,6 +108,9 @@ fonts:
 	$(PYTHON) tools/amigafont.py build/fontgen/glyphs.json build/fontgen
 	cp -R build/fontgen/FONTS/. assets/Fonts/
 
+smooth:
+	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768
+
 icons:
 	$(PYTHON) tools/mkicon.py docs
 
@@ -116,15 +124,16 @@ preview: src/art.c $(FONT_FILES)
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-glide.png hires pal glide
 
 # ------------------------------------------------------------------ release
-lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(LICENCES)
+lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES)
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
-	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-pixel-hi $(LHA_DIR)/Licences
+	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Licences
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
-	@cp assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel-hi.font $(LHA_DIR)/Fonts/
-	@cp assets/Fonts/amce-pixel/12 $(LHA_DIR)/Fonts/amce-pixel/
-	@cp assets/Fonts/amce-pixel-hi/12 $(LHA_DIR)/Fonts/amce-pixel-hi/
+	@cp assets/Fonts/amce-pixel.font $(LHA_DIR)/Fonts/
+	@cp assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36 \
+		$(LHA_DIR)/Fonts/amce-pixel/
+	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \
 		AmigaMCE.readme > $(LHA_DIR)/readme.txt
@@ -147,11 +156,12 @@ disk: lha
 	@xdftool $(DISK) write docs/readme.info readme.txt.info
 	@xdftool $(DISK) makedir Fonts
 	@xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel.font Fonts/amce-pixel.font
-	@xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel-hi.font Fonts/amce-pixel-hi.font
 	@xdftool $(DISK) makedir Fonts/amce-pixel
-	@xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel/12 Fonts/amce-pixel/12
-	@xdftool $(DISK) makedir Fonts/amce-pixel-hi
-	@xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel-hi/12 Fonts/amce-pixel-hi/12
+	@set -e; for f in 12 24 36; do \
+		xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel/$$f Fonts/amce-pixel/$$f; done
+	@xdftool $(DISK) makedir Fonts/amce-smooth
+	@set -e; for f in $(notdir $(SMOOTH_FILES)); do \
+		xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-smooth/$$f Fonts/amce-smooth/$$f; done
 	@xdftool $(DISK) makedir Licences
 	@set -e; for f in $(notdir $(LICENCES)); do \
 		xdftool $(DISK) write $(LHA_DIR)/Licences/$$f Licences/$$f; done

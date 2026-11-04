@@ -60,23 +60,26 @@ static char msg[80];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
+static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on deep RTG screens) */
+
+/* Design units (a 256-line layout) to pixels on this screen. */
+#define U(v) GU(&g, v)
 
 /* Big-letter overlay on long content lists while they glide (see below). */
 static struct {
     BOOL  on;
     struct Page *page;
     char  letter;
-    UBYTE *mask;
-    ULONG size;
-    UWORD bpr;
-    WORD  x, y, w, h;
+    struct BigLetter bl;
+    WORD  x, y;
     WORD  strip_x;          /* left edge of the letter's strip; rows stop before it */
     UWORD linger;           /* timer ticks left before hiding, 0 = not counting */
 } ov;
 static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
-enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_MODE0 = 16 /* + SM_* */ };
+enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH,
+       ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
@@ -121,7 +124,7 @@ static void text_line(struct Page *p, const char *s)
 /* Text box width: the pane less room for the scroll bar (gap + bar + gap). */
 static WORD textbox_w(void)
 {
-    return g.pane_w - 7 * g.sx;
+    return g.pane_w - U(7);
 }
 
 /* Word-wrap a paragraph to the text box width. */
@@ -144,7 +147,7 @@ static void text_para(struct Page *p, const char *s)
         if (tryline[0])
             amce_strlcat(tryline, " ", sizeof(tryline));
         amce_strlcat(tryline, word, sizeof(tryline));
-        if (line[0] && gfx_textlen(&g, tryline) > maxw) {
+        if (line[0] && gfx_textlen(&g, tryline, TS_BODY) > maxw) {
             text_line(p, line);
             amce_strlcpy(line, word, sizeof(line));
         } else {
@@ -288,9 +291,12 @@ static void build_sysinfo(struct Page *p)
                     (unsigned long)id);
         }
         text_line(p, line);
-        sprintf(line, "Artwork: %s", g.layout == LAYOUT_HIRES ? "hires (tall pixels)" :
-                                     gfx_mode_tall(g.mode) ? "lowres, 1:1 (tall pixels: dense)"
-                                                           : "lowres, 1:1 (square pixels)");
+        if (g.style == STYLE_SMOOTH)
+            sprintf(line, "Style: smooth, %lu.%02lux", (unsigned long)(g.k >> 8),
+                    (unsigned long)(((g.k & 255) * 100 + 128) >> 8));
+        else
+            sprintf(line, "Style: pixel, %lux%s", (unsigned long)g.kint,
+                    gfx_mode_tall(g.mode) ? " (tall pixels: dense)" : "");
         text_line(p, line);
     }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
@@ -363,6 +369,14 @@ static void save_screen_mode(void)
 }
 
 #define DEBUG_VAR "AmigaMCE/Debug"
+#define STYLE_VAR "AmigaMCE/Style"
+
+static void load_style(void)
+{
+    char buf[16];
+    if (GetVar((CONST_STRPTR)STYLE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        ui_style = amce_stricmp(buf, "smooth") == 0 ? STYLE_SMOOTH : STYLE_PIXEL;
+}
 
 static void load_debug(void)
 {
@@ -385,8 +399,14 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
 static void build_settings(struct Page *p)
 {
     char tag[64];
+    BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
+    /* the style chosen is shown even where this screen cannot use it */
+    action_item(p, "Style: pixel", "", ACT_STYLE_PIXEL,
+                ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    action_item(p, "Style: smooth", can_smooth ? "" : "RTG 16-bit+ only", ACT_STYLE_SMOOTH,
+                ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -625,7 +645,7 @@ static void clock_text(char *buf)
 /* Left edge of the clock's part of the header (room for the widest date). */
 static WORD clock_left(void)
 {
-    return g.w - 8 * g.sx - gfx_textlen(&g, "Wed 30 Sep  00:00") - 4 * g.sx;
+    return g.w - U(8) - gfx_textlen(&g, "Wed 30 Sep  00:00", TS_SMALL) - U(4);
 }
 
 static void draw_clock(void)
@@ -633,11 +653,11 @@ static void draw_clock(void)
     char buf[40];
     WORD tw;
     clock_text(buf);
-    gfx_fill(&g, clock_left(), 0, g.w - 1, 23, PEN_BAR);
+    gfx_fill(&g, clock_left(), 0, g.w - 1, U(24) - 1, PEN_BAR);
     if (!buf[0])
         return;
-    tw = gfx_textlen(&g, buf);
-    gfx_text(&g, g.w - 8 * g.sx - tw, (24 - g.font_h) / 2, buf, PEN_TEXT, 0);
+    tw = gfx_textlen(&g, buf, TS_SMALL);
+    gfx_text(&g, g.w - U(8) - tw, (U(24) - g.font_h) / 2, buf, PEN_TEXT, PEN_BAR, 0, TS_SMALL);
 }
 
 /* Debug readout between the logo and the clock: the longest form that fits. */
@@ -645,14 +665,14 @@ static LONG cpu_load = -1, app_load = -1;
 
 static void draw_status(void)
 {
-    WORD x0 = 6 * g.sx + (g.layout == LAYOUT_HIRES ? logo_hi_w : logo_lo_w) + 10 * g.sx;
-    WORD x1 = clock_left() - 6 * g.sx;
+    WORD x0 = U(6) + g.logo_w + U(10);
+    WORD x1 = clock_left() - U(6);
     char cpu[16], app[16], forms[3][96];
     ULONG chip, used;
     int i;
     if (x1 <= x0)
         return;
-    gfx_fill(&g, x0, 0, x1, 23, PEN_BAR);
+    gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
     if (!debug_on)
         return;
     used = dbg_mem_used(&chip);
@@ -670,8 +690,8 @@ static void draw_status(void)
     sprintf(forms[1], "CPU %s  app %s  RAM %luK", cpu, app, (unsigned long)(used >> 10));
     sprintf(forms[2], "%s/%s %luK", cpu, app, (unsigned long)(used >> 10));
     for (i = 0; i < 3; i++)
-        if (gfx_textlen(&g, forms[i]) <= x1 - x0 || i == 2) {
-            gfx_text(&g, x0, (24 - g.font_h) / 2, forms[i], PEN_ACCENT, x1 - x0);
+        if (gfx_textlen(&g, forms[i], TS_SMALL) <= x1 - x0 || i == 2) {
+            gfx_text(&g, x0, (U(24) - g.font_h) / 2, forms[i], PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL);
             break;
         }
 }
@@ -691,9 +711,9 @@ static void set_debug(BOOL on)
 
 static void draw_header(void)
 {
-    gfx_fill(&g, 0, 0, g.w - 1, 23, PEN_BAR);
-    gfx_fill(&g, 0, 24, g.w - 1, 24, PEN_RULE);
-    gfx_logo(&g, 6 * g.sx, 4);
+    gfx_fill(&g, 0, 0, g.w - 1, U(24) - 1, PEN_BAR);
+    gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
+    gfx_logo(&g, U(6), (U(24) - g.logo_h) / 2);
     draw_status();
     draw_clock();
 }
@@ -703,26 +723,28 @@ static void draw_menu_row(int i)
     WORD y = g.top + i * g.row_h;
     BOOL sel = i == menu_sel;
     UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) : PEN_BG;
-    UBYTE fg = sel && focus == FOCUS_MENU ? PEN_WHITE : PEN_TEXT;
+    UBYTE fg = PEN_WHITE;       /* the menu stands out like the list headers */
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
-    gfx_icon(&g, menu[i], 3 * g.sx, y + 1, fg);
-    gfx_text(&g, 23 * g.sx, y + (g.row_h - g.font_h) / 2, mod_names[menu[i]], fg,
-             g.menu_w - 24 * g.sx);
+    gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
+    gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, mod_names[menu[i]], fg, bg,
+             g.menu_w - U(24), TS_BOLD);
 }
 
 static void draw_menu(void)
 {
     int i;
-    gfx_fill(&g, 0, 25, g.menu_w + 2 * g.sx, g.footer_y - 2, PEN_BG);
+    gfx_fill(&g, 0, U(25), g.menu_w + U(2), g.footer_y - 2, PEN_BG);
     for (i = 0; i < nmenu; i++)
         draw_menu_row(i);
-    gfx_fill(&g, g.menu_w + 2 * g.sx, 25, g.menu_w + 2 * g.sx, g.footer_y - 2, PEN_RULE);
+    gfx_fill(&g, g.menu_w + U(2), U(25), g.menu_w + U(3) - 1, g.footer_y - 2, PEN_RULE);
 }
 
 static const char *hint_text(void)
 {
     struct Page *p = cur();
-    BOOL hi = g.w >= 640;      /* room for the long hints */
+    /* the long hints when the widest of them fits */
+    BOOL hi = gfx_textlen(&g, "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back",
+                          TS_SMALL) <= g.w - U(12);
     if (focus == FOCUS_MENU)
         return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
                   : "Fire open  Esc twice quit";
@@ -737,10 +759,10 @@ static const char *hint_text(void)
 
 static void draw_footer(void)
 {
-    gfx_fill(&g, 0, g.footer_y - 1, g.w - 1, g.footer_y - 1, PEN_RULE);
+    gfx_fill(&g, 0, g.footer_y - U(1), g.w - 1, g.footer_y - 1, PEN_RULE);
     gfx_fill(&g, 0, g.footer_y, g.w - 1, g.h - 1, PEN_BAR);
-    gfx_text(&g, 6 * g.sx, g.footer_y + (12 - g.font_h) / 2, msg[0] ? msg : hint_text(),
-             msg[0] ? PEN_ACCENT : PEN_DIM, g.w - 12 * g.sx);
+    gfx_text(&g, U(6), g.footer_y + (g.h - g.footer_y - g.font_h) / 2, msg[0] ? msg : hint_text(),
+             msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12), TS_SMALL);
 }
 
 static void set_msg(const char *m)
@@ -763,16 +785,13 @@ static void draw_title_count(struct Page *p)
     if (p->type != PT_LIST || !p->list.count)
         return;
     sprintf(count, "%ld/%ld", (long)p->sel + 1, (long)p->list.count);
-    tw = gfx_textlen(&g, count);
+    tw = gfx_textlen(&g, count, TS_SMALL);
     x = right - tw;
     if (count_left >= 0 && count_left < x)
-        gfx_fill(&g, count_left, 28, x - 1, 28 + g.font_h - 1, PEN_BG);
+        gfx_fill(&g, count_left, U(28), x - 1, U(28) + g.font_h - 1, PEN_BG);
     if (g.planar)
         SetWriteMask(g.rp, 0x07);           /* pens 0 and 4 only */
-    SetDrMd(g.rp, JAM2);
-    SetBPen(g.rp, PEN_BG);
-    gfx_text(&g, x, 28, count, PEN_DIM, 0);
-    SetDrMd(g.rp, JAM1);
+    gfx_text(&g, x, U(28), count, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
     count_left = x;
@@ -793,20 +812,20 @@ static void draw_title(struct Page *p)
         /* room for the widest count this list can show, so a growing
          * number never runs into the breadcrumb */
         sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
-        cw = gfx_textlen(&g, widest);
+        cw = gfx_textlen(&g, widest, TS_SMALL);
     }
-    gfx_fill(&g, g.pane_x - 2 * g.sx, 26, g.w - 1, 41, PEN_BG);
+    gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
     count_left = -1;
     /* show the end of a long breadcrumb */
     {
         const char *s = t;
-        WORD maxw = g.pane_w - cw - 8 * g.sx;
-        while (*s && gfx_textlen(&g, s) > maxw)
+        WORD maxw = g.pane_w - cw - U(8);
+        while (*s && gfx_textlen(&g, s, TS_BOLD) > maxw)
             s++;
-        gfx_text(&g, g.pane_x, 28, s, PEN_WHITE, maxw);
+        gfx_text(&g, g.pane_x, U(28), s, PEN_WHITE, PEN_BG, maxw, TS_BOLD);
     }
     draw_title_count(p);
-    gfx_fill(&g, g.pane_x, 41, g.pane_x + g.pane_w - 1, 41, PEN_RULE);
+    gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
 }
 
 /* Row markers are icons (gfx_mark) in a column on the left before each
@@ -818,7 +837,7 @@ static WORD mark_column(const struct ItemList *l)
     LONG i;
     for (i = 0; i < l->count; i++)
         if (l->items[i].mark != MARK_NONE)
-            return (MARK_SIZE + 5) * g.sx;
+            return U(MARK_SIZE + 5);
     return 0;
 }
 
@@ -878,93 +897,35 @@ static BOOL ov_eligible(const struct Page *p)
 
 static void ov_free(void)
 {
-    if (ov.mask)
-        FreeMem(ov.mask, ov.size);
-    ov.mask = NULL;
+    gfx_bigletter_free(&ov.bl);
     ov.on = FALSE;
     ov.letter = 0;
 }
 
-/* Build the big mask for c from the font's own bitmap, scaled so the
- * letter's ink is about 40% of the list's height. */
+/* Build the big letter for c, its ink about 40% of the list's height
+ * (gfx_bigletter: the font's glyph in whole pixels, or smooth). */
 static BOOL ov_build(char ch)
 {
-    struct TextFont *f = g.font;
-    const UBYTE *data;
-    ULONG lw;
-    UWORD off, gw, mod, x, yy, sy, sx2;
-    LONG idx;
-    WORD top = -1, bot = -1, sc, rows_h, inkh;
-    UBYTE c = (UBYTE)ch;
-    if (!f || !c)
+    WORD rows_h = list_visible() * g.list_row_h;
+    if (!gfx_bigletter(&g, (UBYTE)ch, rows_h * 2 / 5, &ov.bl))
         return FALSE;
-    idx = (c < f->tf_LoChar || c > f->tf_HiChar) ? f->tf_HiChar - f->tf_LoChar + 1
-                                                   : c - f->tf_LoChar;
-    lw = ((ULONG *)f->tf_CharLoc)[idx];
-    off = (UWORD)(lw >> 16);
-    gw = (UWORD)lw;
-    data = (const UBYTE *)f->tf_CharData;
-    mod = f->tf_Modulo;
-    if (!gw)
-        return FALSE;
-#define FONTBIT(xx, yy2) (data[(yy2) * mod + ((off + (xx)) >> 3)] & (0x80 >> ((off + (xx)) & 7)))
-    for (yy = 0; yy < f->tf_YSize; yy++)
-        for (x = 0; x < gw; x++)
-            if (FONTBIT(x, yy)) {
-                if (top < 0)
-                    top = yy;
-                bot = yy;
-                break;
-            }
-    if (top < 0)
-        return FALSE;
-    inkh = bot - top + 1;
-    rows_h = list_visible() * g.list_row_h;
-    sc = rows_h * 2 / 5 / inkh;
-    if (sc < 2)
-        sc = 2;
-    if (sc > 16)
-        sc = 16;
-    if (ov.mask)
-        FreeMem(ov.mask, ov.size);
-    ov.w = gw * sc;
-    ov.h = inkh * sc;
-    ov.bpr = ((ov.w + 15) / 16) * 2;
-    ov.size = (ULONG)ov.bpr * ov.h;
-    ov.mask = AllocMem(ov.size, MEMF_CHIP | MEMF_CLEAR);   /* BltTemplate reads chip RAM */
-    if (!ov.mask)
-        return FALSE;
-    for (yy = top; yy <= (UWORD)bot; yy++)
-        for (x = 0; x < gw; x++)
-            if (FONTBIT(x, yy))
-                for (sy = 0; sy < sc; sy++) {
-                    UBYTE *row = ov.mask + (ULONG)((yy - top) * sc + sy) * ov.bpr;
-                    for (sx2 = 0; sx2 < sc; sx2++) {
-                        UWORD bx = x * sc + sx2;
-                        row[bx >> 3] |= 0x80 >> (bx & 7);
-                    }
-                }
-#undef FONTBIT
     ov.letter = ch;
-    ov.x = g.pane_x + g.pane_w * 9 / 10 - ov.w;
-    ov.y = g.list_top + (rows_h - ov.h) / 2;
+    ov.x = g.pane_x + g.pane_w * 9 / 10 - ov.bl.w;
+    ov.y = g.list_top + (rows_h - ov.bl.h) / 2;
     /* the strip fits the widest letter, so it does not move as letters change */
-    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - (WORD)(f->tf_XSize + 1) * sc - 6 * g.sx;
+    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - ov.bl.cell_w - U(6);
     if (ov.strip_x < g.pane_x + g.pane_w / 2)
         ov.strip_x = g.pane_x + g.pane_w / 2;
     return TRUE;
 }
+
 
 static void draw_list_rows(struct Page *p);
 
 /* Stamp the letter into its strip (nothing else is drawn there). */
 static void ov_stamp(void)
 {
-    if (!ov.mask)
-        return;
-    SetAPen(g.rp, PEN_DIM);
-    SetDrMd(g.rp, JAM1);
-    BltTemplate((PLANEPTR)ov.mask, 0, ov.bpr, g.rp, ov.x, ov.y, ov.w, ov.h);
+    gfx_bigletter_draw(&g, &ov.bl, ov.x, ov.y, PEN_DIM, PEN_BG);
 }
 
 static void ov_show(struct Page *p)
@@ -986,7 +947,7 @@ static void ov_relabel(char c)
 {
     if (!ov.on || !c || c == ov.letter)
         return;
-    gfx_fill(&g, ov.x, ov.y, ov.x + ov.w - 1, ov.y + ov.h - 1, PEN_BG);
+    gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl.w - 1, ov.y + ov.bl.h - 1, PEN_BG);
     if (ov_build(c))
         ov_stamp();
 }
@@ -1007,29 +968,29 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     struct Item *it = &p->list.items[idx];
     WORD y = g.list_top + (idx - p->top) * g.list_row_h;
-    WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - 2 * g.sx;
+    WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
     WORD lx = g.pane_x + col;
     WORD xr = (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1;  /* the letter's strip is off limits */
-    if (right > xr - 2 * g.sx)
-        right = xr - 2 * g.sx;
+    if (right > xr - U(2))
+        right = xr - U(2);
     BOOL sel = idx == p->sel;
     UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
+    UBYTE bg = !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM;
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
      * pane is cleared on all planes when the page is drawn), so on native
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
     if (g.planar)
         SetWriteMask(g.rp, 0x07);
-    gfx_fill(&g, g.pane_x - 2 * g.sx, y, xr, y + g.list_row_h - 1,
-             !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM);
+    gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
     if (it->mark != MARK_NONE)
-        gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - MARK_SIZE) / 2,
-                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT);
+        gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
+                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     if (it->kind == IT_ACTION && it->path[0]) {
-        WORD tagw = gfx_textlen(&g, it->path);
-        gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, 0);
-        right -= tagw + 8 * g.sx;
+        WORD tagw = gfx_textlen(&g, it->path, TS_SMALL);
+        gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, bg, 0, TS_SMALL);
+        right -= tagw + U(8);
     }
-    gfx_text(&g, lx, ty, it->label, fg, right - lx);
+    gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
 }
@@ -1039,13 +1000,13 @@ static void draw_list_rows(struct Page *p)
     WORD vis = list_visible(), r, col = mark_column(&p->list);
     list_follow(p);
     if (!p->list.count) {
-        gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
-        gfx_text(&g, g.pane_x, g.list_top + 2, "(empty)", PEN_DIM, 0);
+        gfx_fill(&g, g.pane_x - U(2), g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
+        gfx_text(&g, g.pane_x, g.list_top + U(2), "(empty)", PEN_DIM, PEN_BG, 0, TS_BODY);
         return;
     }
     for (r = 0; r < vis && p->top + r < p->list.count; r++)
         draw_list_row(p, p->top + r, col);
-    gfx_fill(&g, g.pane_x - 2 * g.sx, g.list_top + r * g.list_row_h,
+    gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h,
              (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1, g.footer_y - 2, PEN_BG);
 }
 
@@ -1068,7 +1029,7 @@ static WORD rows_right(struct Page *p, LONG top, WORD col)
             right = g.w - 1;                /* right-aligned values: the whole row */
             break;
         }
-        e = g.pane_x + col + gfx_textlen(&g, it->label) + 1;
+        e = g.pane_x + col + gfx_textlen(&g, it->label, TS_BODY) + U(1);
         if (e > right)
             right = e;
     }
@@ -1081,7 +1042,7 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
-    WORD x0 = g.pane_x - 2 * g.sx, x1 = copy_right > x0 ? copy_right : g.w - 1;
+    WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : g.w - 1;
     if (ov.on && x1 > ov.strip_x - 1)
         x1 = ov.strip_x - 1;                /* never into the letter's strip */
     struct BitMap *bm = g.rp->BitMap;
@@ -1181,20 +1142,20 @@ static void draw_pane(BOOL full)
     if (!p)
         return;
     if (full) {
-        WORD px = g.menu_w + 3 * g.sx, pb = g.footer_y - 2;
+        WORD px = g.menu_w + U(3), pb = g.footer_y - 2;
         if (p->type == PT_TEXT) {
             /* Clear around the text box, not under it: tb_draw copies the
              * new text straight over the old, so there is no blank frame. */
             struct TextBox *tb = &p->tb;
             WORD bx1;
             open_textbox(p, g.list_top);
-            bx1 = tb->bar_x + 3 * g.sx - 1;
-            gfx_fill_bg(&g, px, 25, g.w - 1, tb->y - 1);
+            bx1 = tb->bar_x + U(3) - 1;
+            gfx_fill_bg(&g, px, U(25), g.w - 1, tb->y - 1);
             gfx_fill_bg(&g, px, tb->y, tb->x - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, bx1 + 1, tb->y, g.w - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, px, tb->y + tb->h, g.w - 1, pb);
         } else {
-            gfx_fill_bg(&g, px, 25, g.w - 1, pb);
+            gfx_fill_bg(&g, px, U(25), g.w - 1, pb);
         }
     }
     draw_title(p);
@@ -1211,12 +1172,14 @@ static void draw_pane(BOOL full)
     case PT_DETAIL:
         if (full) {
             char shot[300];
-            WORD ph = g.h >= 400 ? 170 : 85;
+            /* screenshot height: 85 design units; laced screens (1x, twice
+             * the lines) get twice that */
+            WORD ph = (g.k == 256 && g.h >= 400) ? 170 : U(85);
             p->facts_y = g.list_top;
             if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
                 set_msg("Loading screenshot...");
                 if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph))
-                    p->facts_y = g.list_top + ph + 6;
+                    p->facts_y = g.list_top + ph + U(6);
                 set_msg(NULL);
             }
             open_textbox(p, p->facts_y);
@@ -1322,7 +1285,7 @@ static void launch(const char *base)
     if (debug_on)
         dbg_cpu_start();
     cpu_load = -1;
-    if (!gfx_open(&g, &caps, screen_mode)) {
+    if (!gfx_open(&g, &caps, screen_mode, ui_style)) {
         running = FALSE;
         return;
     }
@@ -1372,7 +1335,7 @@ static void act_wheel(LONG d, WORD x, WORD y)
 {
     struct Page *p = cur();
     BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
-    BOOL over_pane = x >= g.pane_x - 2 * g.sx && y >= g.top && y < g.footer_y - 1;
+    BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
     if (over_menu && focus != FOCUS_MENU)
         set_focus(FOCUS_MENU);
     else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
@@ -1430,10 +1393,10 @@ static void apply_screen_mode(int sm)
     pages_clear();
     gfx_close(&g);
     screen_mode = sm;
-    if (!gfx_open(&g, &caps, sm)) {
+    if (!gfx_open(&g, &caps, sm, ui_style)) {
         failed = TRUE;
         screen_mode = old;
-        if (!gfx_open(&g, &caps, old)) {
+        if (!gfx_open(&g, &caps, old, ui_style)) {
             running = FALSE;
             return;
         }
@@ -1474,6 +1437,51 @@ static void toggle_debug(void)
     draw_status();
 }
 
+/* Settings > Style. Remembered either way; the screen is reopened only
+ * when the look changes (smooth needs a 16-bit or deeper RTG screen). */
+static void apply_style(int st)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    int i;
+    if (st == ui_style)
+        return;
+    ui_style = st;
+    save_setting(STYLE_VAR, st == STYLE_SMOOTH ? "smooth" : "pixel");
+    if ((st == STYLE_SMOOTH) == (g.style == STYLE_SMOOTH) ||
+        (st == STYLE_SMOOTH && !gfx_style_possible(&caps, g.mode, STYLE_SMOOTH))) {
+        if (p && p->type == PT_LIST) {
+            list_free(&p->list);
+            list_init(&p->list);
+            build_settings(p);
+            p->sel = sel;
+            draw_list_rows(p);
+        }
+        if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
+            set_msg("Smooth: on RTG screens of 16 bits or more");
+        return;
+    }
+    pages_clear();
+    gfx_close(&g);
+    if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
+        !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
+        !gfx_open(&g, &caps, SM_AUTO, STYLE_PIXEL)) {
+        running = FALSE;
+        return;
+    }
+    for (i = 0; i < nmenu; i++)
+        if (menu[i] == MOD_SETTINGS)
+            menu_sel = i;
+    build_root(MOD_SETTINGS);
+    if (cur())
+        cur()->sel = sel;
+    focus = FOCUS_CONTENT;
+    msg[0] = 0;
+    draw_all();
+    if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
+        set_msg("Smooth style files missing (Fonts/amce-smooth)");
+}
+
 static void act_action(struct Item *it)
 {
     if (it->action == ACT_SCREENMODES)
@@ -1484,6 +1492,10 @@ static void act_action(struct Item *it)
         open_credits();
     else if (it->action == ACT_DEBUG)
         toggle_debug();
+    else if (it->action == ACT_STYLE_PIXEL)
+        apply_style(STYLE_PIXEL);
+    else if (it->action == ACT_STYLE_SMOOTH)
+        apply_style(STYLE_SMOOTH);
     else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
         apply_screen_mode(it->action - ACT_MODE0);
 }
@@ -1752,7 +1764,7 @@ static void handle_mouse(struct IntuiMessage *im)
         menu_select(idx);
         if (dbl)
             act_open(FALSE);
-    } else if (x >= g.pane_x - 2 * g.sx && y >= g.list_top && y < g.footer_y - 1) {
+    } else if (x >= g.pane_x - U(2) && y >= g.list_top && y < g.footer_y - 1) {
         struct Page *p = cur();
         if (!p)
             return;
@@ -1950,6 +1962,7 @@ int main(void)
     ags_init(&ags);
     build_menu();
     load_screen_mode();
+    load_style();
     {
         /* Which display the Workbench uses: a native <-> RTG switch on exit
          * can be slow in some emulators and drivers. */
@@ -1962,8 +1975,8 @@ int main(void)
     }
 
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
-    if (!gfx_open(&g, &caps, screen_mode) &&
-        (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO))) {
+    if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
+        (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO, ui_style))) {
         say("AmigaMCE could not open its screen.\n");
         rc = 20;
         goto out;
