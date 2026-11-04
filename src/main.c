@@ -3474,7 +3474,7 @@ static void np_button(int i)
     BOOL lit = i == np.flash || i == np.rep;    /* just pressed, or held */
     BOOL ring = np_focus_shown() && i == np.btn;
     BOOL hov = mouse_mode && i == np.hov;       /* the mouse over it */
-    UBYTE bg = lit ? PEN_HL : hov ? PEN_RULE : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
+    UBYTE bg = lit ? PEN_HL : hov ? PEN_SELDIM : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
     WORD gh = h * 5 / 10, gw, cx, gy, t;
     if (i == NB_VDOWN || i == NB_VUP) {
