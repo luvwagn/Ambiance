@@ -118,8 +118,11 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
 
+static void nav_moved(void);
+
 static struct Page *page_push(UBYTE type, const char *title)
 {
+    nav_moved();
     ov.on = FALSE;
     tb_close(&pv_tb);
     pv_shown = FALSE;
@@ -1571,25 +1574,57 @@ static void build_root_pages(int mod)
  * returns to Top 200 (or to the game inside it that was highlighted). An
  * entry that has moved is found again by name; one that is gone leaves
  * the highlight at the nearest position. Kept for this run only. */
-static struct {
+struct NavTrail {
     int n;
     struct { LONG sel, top; char label[64]; } lv[MAXDEPTH];
-} nav_mem[MOD_COUNT];
+};
+static struct NavTrail nav_mem[MOD_COUNT];
 static int shown_mod = -1;
+
+/* The trail of the pages shown now (zeroed first: compared byte by byte). */
+static void trail_now(struct NavTrail *t)
+{
+    int d, n = 0;
+    memset(t, 0, sizeof(*t));
+    for (d = 0; d < depth && pages[d].type == PT_LIST; d++, n++) {
+        struct Page *p = &pages[d];
+        t->lv[n].sel = p->sel;
+        t->lv[n].top = p->top;
+        amce_strlcpy(t->lv[n].label, p->list.count ? p->list.items[p->sel].label : "", 64);
+    }
+    t->n = n;
+}
 
 static void save_nav(void)
 {
-    int d, n = 0;
     if (shown_mod < 0 || !depth)
         return;
-    for (d = 0; d < depth && pages[d].type == PT_LIST; d++, n++) {
-        struct Page *p = &pages[d];
-        nav_mem[shown_mod].lv[n].sel = p->sel;
-        nav_mem[shown_mod].lv[n].top = p->top;
-        amce_strlcpy(nav_mem[shown_mod].lv[n].label,
-                     p->list.count ? p->list.items[p->sel].label : "", 64);
-    }
-    nav_mem[shown_mod].n = n;
+    trail_now(&nav_mem[shown_mod]);
+}
+
+/* Quitting takes Back after Back (out to the menu, then Esc twice), which
+ * would leave nothing of the trail to remember. So the first Back of a
+ * run of them notes where the user was; anything else (a move, opening
+ * something, a click) forgets it. Quitting at the end of the run
+ * remembers that place. */
+static struct {
+    BOOL on;
+    int mod;
+    struct NavTrail t;
+} nav_snap;
+
+static void nav_back_begin(int f)
+{
+    if (nav_snap.on || shown_mod < 0 || !depth || f == FOCUS_MENU)
+        return;
+    nav_snap.on = TRUE;
+    nav_snap.mod = shown_mod;
+    trail_now(&nav_snap.t);
+}
+
+static void nav_moved(void)
+{
+    nav_snap.on = FALSE;
 }
 
 /* Open a folder page without drawing (used while rebuilding the trail). */
@@ -1655,6 +1690,180 @@ static void restore_nav(int mod)
                 return;
         }
     }
+}
+
+/* The trail kept across runs too: written when AmigaMCE quits (and
+ * before a game starts, in case it never comes back), read when it
+ * starts. A text file, one line each:
+ *   AmigaMCE navigation 1
+ *   at <section>\t<menu|list>        where the user was, and in which pane
+ *   section <section>\t<levels>      then, for each level of that trail,
+ *   <sel>\t<top>\t<label>
+ * Sections by name, so a new menu order keeps working. */
+#define NAV_FILE "ENVARC:AmigaMCE/Nav"
+#define NAV_MAX  16384
+
+static int mod_by_name(const char *s, LONG n)
+{
+    int m;
+    for (m = 0; m < MOD_COUNT; m++)
+        if (mod_names[m] && (LONG)strlen(mod_names[m]) == n && !strncmp(mod_names[m], s, n))
+            return m;
+    return -1;
+}
+
+static void nav_store(BOOL quitting)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    char line[120];
+    BPTR fh;
+    int m, l, at;
+    BOOL in_list;
+    if (depth)
+        save_nav();                 /* the section shown now */
+    at = nmenu ? menu[menu_sel] : -1;
+    in_list = !(focus == FOCUS_MENU || pane_pending || at != shown_mod);
+    if (quitting && nav_snap.on) {  /* where the run of Backs began */
+        nav_mem[nav_snap.mod] = nav_snap.t;
+        at = nav_snap.mod;
+        in_list = TRUE;
+    }
+    me->pr_WindowPtr = (APTR)-1;
+    ensure_dir("ENVARC:AmigaMCE");
+    fh = Open((CONST_STRPTR)NAV_FILE, MODE_NEWFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return;
+    FPuts(fh, (CONST_STRPTR)"AmigaMCE navigation 1\n");
+    if (at >= 0) {
+        sprintf(line, "at %s\t%s\n", mod_names[at], in_list ? "list" : "menu");
+        FPuts(fh, (CONST_STRPTR)line);
+    }
+    for (m = 0; m < MOD_COUNT; m++) {
+        if (!nav_mem[m].n || !mod_names[m])
+            continue;
+        sprintf(line, "section %s\t%ld\n", mod_names[m], (long)nav_mem[m].n);
+        FPuts(fh, (CONST_STRPTR)line);
+        for (l = 0; l < nav_mem[m].n; l++) {
+            sprintf(line, "%ld\t%ld\t", (long)nav_mem[m].lv[l].sel, (long)nav_mem[m].lv[l].top);
+            FPuts(fh, (CONST_STRPTR)line);
+            FPuts(fh, (CONST_STRPTR)nav_mem[m].lv[l].label);
+            FPuts(fh, (CONST_STRPTR)"\n");
+        }
+    }
+    Close(fh);
+}
+
+static LONG nav_num(const char *s)
+{
+    LONG v = 0;
+    while (*s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    return v;
+}
+
+/* Written again a few seconds after the trail last changed (so it is
+ * kept even when the machine is switched off rather than quit). */
+static ULONG nav_sum_seen, nav_sum_written;
+static int nav_quiet;
+
+static ULONG nav_sum(void)
+{
+    struct NavTrail t;
+    const UBYTE *b = (const UBYTE *)&t;
+    ULONG h = 2166136261UL, i;
+    trail_now(&t);
+    for (i = 0; i < sizeof(t); i++)
+        h = (h ^ b[i]) * 16777619UL;
+    h = (h ^ (ULONG)(nmenu ? menu[menu_sel] : 0)) * 16777619UL;
+    return (h ^ (ULONG)(focus == FOCUS_MENU)) * 16777619UL;
+}
+
+static void nav_tick_1s(void)
+{
+    ULONG s;
+    if (!depth || pane_pending)
+        return;
+    s = nav_sum();
+    if (s != nav_sum_seen) {
+        nav_sum_seen = s;
+        nav_quiet = 0;
+        return;
+    }
+    if (s != nav_sum_written && ++nav_quiet >= 3) {
+        nav_store(FALSE);
+        nav_sum_written = s;
+    }
+}
+
+/* The next line of buf (from *pos), its end made 0; NULL at the end. */
+static char *nav_line(char *buf, LONG len, LONG *pos)
+{
+    char *s;
+    LONG i;
+    if (*pos >= len)
+        return NULL;
+    s = buf + *pos;
+    for (i = *pos; i < len && buf[i] != '\n'; i++)
+        ;
+    buf[i] = 0;
+    *pos = i + 1;
+    return s;
+}
+
+/* The trail of the last run into nav_mem; *at its section (-1 none),
+ * *in_list whether the list (not the menu) had the focus. */
+static void nav_load(int *at, BOOL *in_list)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    char *buf, *s, *t;
+    LONG len, pos = 0;
+    BPTR fh;
+    int m = -1, left = 0;
+    *at = -1;
+    *in_list = FALSE;
+    me->pr_WindowPtr = (APTR)-1;
+    fh = Open((CONST_STRPTR)NAV_FILE, MODE_OLDFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return;
+    buf = AllocVec(NAV_MAX + 1, MEMF_ANY);
+    len = buf ? Read(fh, buf, NAV_MAX) : -1;
+    Close(fh);
+    if (len <= 0) {
+        if (buf)
+            FreeVec(buf);
+        return;
+    }
+    buf[len] = 0;
+    s = nav_line(buf, len, &pos);
+    if (!s || strcmp(s, "AmigaMCE navigation 1") != 0) {
+        FreeVec(buf);
+        return;                     /* not one this AmigaMCE knows */
+    }
+    while ((s = nav_line(buf, len, &pos))) {
+        if (!strncmp(s, "at ", 3) && (t = strchr(s + 3, '\t'))) {
+            *at = mod_by_name(s + 3, t - (s + 3));
+            *in_list = !strcmp(t + 1, "list");
+        } else if (!strncmp(s, "section ", 8) && (t = strchr(s + 8, '\t'))) {
+            m = mod_by_name(s + 8, t - (s + 8));
+            left = (int)nav_num(t + 1);
+            if (m >= 0)
+                nav_mem[m].n = 0;
+            if (left > MAXDEPTH)
+                left = MAXDEPTH;
+        } else if (m >= 0 && left > 0 && (t = strchr(s, '\t')) && strchr(t + 1, '\t')) {
+            int n = nav_mem[m].n;
+            nav_mem[m].lv[n].sel = nav_num(s);
+            nav_mem[m].lv[n].top = nav_num(t + 1);
+            amce_strlcpy(nav_mem[m].lv[n].label, strchr(t + 1, '\t') + 1, 64);
+            nav_mem[m].n = n + 1;
+            left--;
+        }
+    }
+    FreeVec(buf);
 }
 
 static void build_root(int mod)
@@ -4399,6 +4608,7 @@ static void pane_preview(BOOL first)
 static void menu_select_now(int i, BOOL now)
 {
     int old = menu_sel;
+    nav_moved();
     if (i < 0 || i >= nmenu || i == old)
         return;
     menu_sel = i;
@@ -4631,6 +4841,7 @@ static void launch(const char *base)
     }
     /* Give the game every byte we can. */
     amce_log("launch", base);
+    nav_store(FALSE);               /* should it not come back */
     if (debug_on)
         dbg_cpu_stop();
     release_for_launch();
@@ -4951,6 +5162,7 @@ static void folder_slideshow(struct Item *it)
 static void act_move(LONG d)
 {
     struct Page *p = cur();
+    nav_moved();
     if (focus == FOCUS_MENU) {
         LONG i = menu_sel + d;
         if (i < 0)
@@ -5562,6 +5774,7 @@ static void act_right(void)
 static void act_back(void)
 {
     pane_settle();
+    nav_back_begin(focus);
     if (focus == FOCUS_PREVIEW) {   /* out of the details pane, back to the list */
         set_focus(FOCUS_CONTENT);
         return;
@@ -5596,6 +5809,7 @@ static void act_letter(char c)
 static void act_letter_now(char c)
 {
     struct Page *p;
+    nav_moved();
     pane_settle();
     p = cur();
     LONG i, n;
@@ -5782,6 +5996,7 @@ static void handle_mouse(struct IntuiMessage *im)
     }
     if (im->Code != SELECTDOWN)
         return;
+    nav_moved();
     disarm();
     if (click_opened) {
         /* a single click opened something: the second click of a habitual
@@ -6173,8 +6388,24 @@ static int app_main(void)
 
     if (debug_on)
         dbg_cpu_start();
-    menu_sel = 0;
-    build_root(menu[0]);
+    {
+        /* where the last run left off: its section, its trail, its pane */
+        int at, i;
+        BOOL in_list;
+        nav_load(&at, &in_list);
+        menu_sel = 0;
+        for (i = 0; i < nmenu; i++)
+            if (menu[i] == at)
+                menu_sel = i;
+        build_root(menu[menu_sel]);
+        if (in_list && menu[menu_sel] == at && cur() &&
+            (cur()->type != PT_LIST || cur()->list.count))
+            focus = FOCUS_CONTENT;
+        if (at >= 0)
+            amce_log("navigation", in_list ? "back where the last run left off (in the list)"
+                                            : "back where the last run left off (in the menu)");
+        nav_sum_seen = nav_sum_written = nav_sum();
+    }
     draw_all();
     if (screen_mode != SM_AUTO && g.mode != screen_mode) {
         screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
@@ -6232,6 +6463,7 @@ static int app_main(void)
                         draw_status();
                     }
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
+                    nav_tick_1s();          /* the trail kept, once it rests */
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
                 np_tick();                  /* the music: its page, the next module */
@@ -6302,6 +6534,8 @@ out:
         amce_log("previews", m);
     }
     amce_log("quitting", "");
+    if (depth)
+        nav_store(TRUE);            /* where to start next time */
     dbg_cpu_stop();
     ov_free();
     if (timer_open) {
