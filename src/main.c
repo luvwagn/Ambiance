@@ -2044,8 +2044,8 @@ static WORD list_xr(struct Page *p)
 }
 
 /* ---- the preview of the selected game, drawn once the selection settles */
-#define PREVIEW_SETTLE 250     /* ms the selection rests before its preview is read */
-#define PREVIEW_READY   60     /* ...or drawn, if it was read ahead already */
+#define PREVIEW_SETTLE 100     /* ms the selection rests before its preview is read */
+#define PREVIEW_READY   30     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
 static BOOL pv_pending;
 static ULONG pv_due;
@@ -2398,9 +2398,10 @@ static void pv_draw_picture(void)
     if (j && j->thumb) {
         char m[200];
         ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
-        sprintf(m, "%.80s, %lu x %lu, depth %lu: decoded in %lu ms, made %lu x %lu, %lu colours, in %lu ms",
+        sprintf(m, "%.80s, %lu x %lu, depth %lu: %s in %lu ms, made %lu x %lu, %lu colours, in %lu ms",
                 FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
-                (unsigned long)j->info.depth, (unsigned long)j->ms_decode,
+                (unsigned long)j->info.depth, j->own ? "read by AmigaMCE" : "decoded",
+                (unsigned long)j->ms_decode,
                 (unsigned long)j->thumb->w, (unsigned long)j->thumb->h,
                 (unsigned long)j->thumb->ncol, (unsigned long)j->ms_thumb);
         amce_log("preview", m);

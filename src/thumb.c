@@ -46,7 +46,7 @@ static BOOL read_rows(Object *o, UBYTE *buf, ULONG sw, ULONG top, ULONG n, BOOL 
     return DoMethodA(o, (Msg)&pbpa) != 0;
 }
 
-static struct Thumb *thumb_alloc(ULONG dw, ULONG dh)
+struct Thumb *thumb_new(ULONG dw, ULONG dh)
 {
     ULONG mod = (dw + 15) & ~15UL;
     struct Thumb *t = AllocVec(sizeof(struct Thumb) + mod * dh, MEMF_ANY | MEMF_CLEAR);
@@ -72,7 +72,7 @@ static struct Thumb *exact(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
     UBYTE *row;
     ULONG x, y, sy, last = ~0UL;
     UWORD *xs;
-    if (!(t = thumb_alloc(dw, dh)))
+    if (!(t = thumb_new(dw, dh)))
         return NULL;
     row = AllocVec(sw, MEMF_ANY);
     xs = AllocVec(dw * sizeof(UWORD), MEMF_ANY);
@@ -305,7 +305,7 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
         }
     }
 
-    if ((nb = median_cut(hist, box, maxcol)) <= 0 || !(t = thumb_alloc(dw, dh)))
+    if ((nb = median_cut(hist, box, maxcol)) <= 0 || !(t = thumb_new(dw, dh)))
         goto out;
     for (i = 0; i < nb; i++)
         t->pal[i] = box_colour(hist, &box[i], lut, i);
@@ -329,7 +329,7 @@ out:
 
 /* A thumbnail with more colours in use than maxcol: given maxcol of its
  * own. FALSE: no memory. */
-static BOOL reduce(struct Thumb *t, LONG maxcol)
+BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
 {
     UBYTE used[256], *lut;
     UWORD *cells;
@@ -435,7 +435,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
          * then cut down, if need be, on the small picture (far quicker
          * than averaging the big one, read through its colour table) */
         struct Thumb *t = exact(o, sw, sh, dw, dh, rgb, n);
-        if (t && !reduce(t, maxcol)) {
+        if (t && !thumb_reduce(t, maxcol)) {
             thumb_free(t);
             t = NULL;
         }

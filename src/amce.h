@@ -188,6 +188,13 @@ struct Thumb {
 };
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
 void thumb_free(struct Thumb *t);
+struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
+BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */
+/* An IFF ILBM read by AmigaMCE itself (ilbm.c), straight into a thumbnail
+ * for a w x h box (pic_fit): no datatype. NULL: not an ILBM it reads (HAM,
+ * deep, PBM...) or no memory; try the datatype then. */
+struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                         struct PicInfo *pi);
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
@@ -322,6 +329,7 @@ struct LJob {
                                  *   has more colours than maxcol + 1), */
     struct Thumb *thumb;        /*   obj then NULL */
     ULONG ms_decode, ms_thumb;  /* how long each took */
+    UBYTE own;                  /* read by ilbm.c, not a datatype */
     BOOL remapped;
     struct PicInfo info;
     LONG nlines;                /* LJ_ENTRY: the fact sheet (np: 1 if it has a screenshot) */

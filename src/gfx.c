@@ -1272,9 +1272,16 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     struct PicInfo pi;
     BOOL remapped = FALSE;
     APTR o;
+    struct Thumb *t;
+    BOOL taken, ok;
     if (!(g->pens_shared || g->truecolor))
         return FALSE;
-    BOOL taken, ok;
+    if (!g->truecolor &&
+        (t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi))) {
+        ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM: no datatype */
+        thumb_free(t);
+        return ok;
+    }
     o = pic_decode(path, g->scr, g->truecolor, &remapped, &pi);
     if (!o)
         return FALSE;
