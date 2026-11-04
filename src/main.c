@@ -1415,9 +1415,6 @@ static void build_credits(struct Page *p)
     text_line(p, line);
     text_line(p, "(c) 2026 Brian King");
     text_line(p, "");
-    text_para(p, "This front-end would not be possible without the immense efforts of Paul Vince "
-                 "and Amiga Game Selector.");
-    text_line(p, "");
     text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
                  "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
                  "The amce-pixel fonts are Modified Versions of Pixelify Sans.");
@@ -1429,6 +1426,9 @@ static void build_credits(struct Page *p)
     text_line(p, "");
     text_para(p, "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer.");
+    text_line(p, "");
+    text_para(p, "This front-end would not be possible without the immense efforts of Paul Vince "
+                 "and Amiga Game Selector.");
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
