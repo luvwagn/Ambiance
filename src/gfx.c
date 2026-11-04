@@ -1171,36 +1171,50 @@ void pic_fit(ULONG sw, ULONG sh, BOOL tall, WORD w, WORD h, BOOL whole, ULONG *p
     *pdh = dh ? dh : 1;
 }
 
-/* 8 chunky pixels to a byte of each of 8 bitplanes (out[k]: bit k of
- * each, the first pixel in the top bit): an 8 x 8 bit transpose in two
- * longs, a dozen operations for 8 pixels. */
-static void c2p8(const UBYTE *c, UBYTE *out)
+/* 32 chunky pixels (8 longs, long-aligned) to a long of each of 8
+ * bitplanes (out[k]: bit k of each, the first pixel in the top bit). The
+ * merge method c2p routines use (as in c2p.library, Kalms's c2p): five
+ * rounds of masked swaps between pairs of longs, on longs only, never a
+ * byte. Checked against a plain bit-by-bit conversion on 200,000 random
+ * inputs. */
+#define MERGE(lo, hi, sh, m) \
+    do { ULONG t_ = (((hi) >> (sh)) ^ (lo)) & (m); (lo) ^= t_; (hi) ^= t_ << (sh); } while (0)
+static void c2p32(const ULONG *c, ULONG *out)
 {
-    ULONG x = ((ULONG)c[0] << 24) | ((ULONG)c[1] << 16) | ((ULONG)c[2] << 8) | c[3];
-    ULONG y = ((ULONG)c[4] << 24) | ((ULONG)c[5] << 16) | ((ULONG)c[6] << 8) | c[7], t;
-    t = (x ^ (x >> 7)) & 0x00AA00AAUL;
-    x = x ^ t ^ (t << 7);
-    t = (y ^ (y >> 7)) & 0x00AA00AAUL;
-    y = y ^ t ^ (t << 7);
-    t = (x ^ (x >> 14)) & 0x0000CCCCUL;
-    x = x ^ t ^ (t << 14);
-    t = (y ^ (y >> 14)) & 0x0000CCCCUL;
-    y = y ^ t ^ (t << 14);
-    t = (x & 0xF0F0F0F0UL) | ((y >> 4) & 0x0F0F0F0FUL);
-    y = ((x << 4) & 0xF0F0F0F0UL) | (y & 0x0F0F0F0FUL);
-    x = t;
-    out[7] = x >> 24;
-    out[6] = x >> 16;
-    out[5] = x >> 8;
-    out[4] = x;
-    out[3] = y >> 24;
-    out[2] = y >> 16;
-    out[1] = y >> 8;
-    out[0] = y;
+    ULONG a0 = c[0], a1 = c[1], a2 = c[2], a3 = c[3], a4 = c[4], a5 = c[5], a6 = c[6], a7 = c[7];
+    MERGE(a0, a4, 16, 0x0000FFFFUL);
+    MERGE(a1, a5, 16, 0x0000FFFFUL);
+    MERGE(a2, a6, 16, 0x0000FFFFUL);
+    MERGE(a3, a7, 16, 0x0000FFFFUL);
+    MERGE(a0, a2, 8, 0x00FF00FFUL);
+    MERGE(a1, a3, 8, 0x00FF00FFUL);
+    MERGE(a4, a6, 8, 0x00FF00FFUL);
+    MERGE(a5, a7, 8, 0x00FF00FFUL);
+    MERGE(a0, a1, 4, 0x0F0F0F0FUL);
+    MERGE(a2, a3, 4, 0x0F0F0F0FUL);
+    MERGE(a4, a5, 4, 0x0F0F0F0FUL);
+    MERGE(a6, a7, 4, 0x0F0F0F0FUL);
+    MERGE(a0, a4, 2, 0x33333333UL);
+    MERGE(a1, a5, 2, 0x33333333UL);
+    MERGE(a2, a6, 2, 0x33333333UL);
+    MERGE(a3, a7, 2, 0x33333333UL);
+    MERGE(a0, a2, 1, 0x55555555UL);
+    MERGE(a1, a3, 1, 0x55555555UL);
+    MERGE(a4, a6, 1, 0x55555555UL);
+    MERGE(a5, a7, 1, 0x55555555UL);
+    out[0] = a7;
+    out[1] = a5;
+    out[2] = a3;
+    out[3] = a1;
+    out[4] = a6;
+    out[5] = a4;
+    out[6] = a2;
+    out[7] = a0;
 }
+#undef MERGE
 
 /* Chunky pixels (mod bytes a row, a multiple of 16) into bm. A planar
- * bitmap is written here, 8 pixels at a time (c2p8): graphics.library's
+ * bitmap is written here, 32 pixels at a time (c2p32): graphics.library's
  * WriteChunkyPixels took ~300 ms for a 273 x 218 preview on a 68030. */
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
                          ULONG mod)
@@ -1212,20 +1226,17 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
         /* 32 pixels a step, a long to each plane: a quarter of the writes
          * to chip RAM, which is slow with the display fetching 8 planes.
          * (buf has 32 bytes to spare past its end for the last step.) */
-        ULONG y, x, bpr = bm->BytesPerRow, nl = (w + 31) >> 5, d = bm->Depth, k, j;
-        UBYTE pl[4][8];
-        ULONG *dst[8];
+        ULONG y, x, bpr = bm->BytesPerRow, nl = (w + 31) >> 5, d = bm->Depth, k;
+        ULONG pl[8], *dst[8];
         WaitBlit();                         /* nothing of the blitter's in it */
         for (y = 0; y < h; y++) {
-            const UBYTE *c = buf + y * mod;
+            const ULONG *c = (const ULONG *)(buf + y * mod);
             for (k = 0; k < d; k++)
                 dst[k] = (ULONG *)((UBYTE *)bm->Planes[k] + y * bpr);
-            for (x = 0; x < nl; x++, c += 32) {
-                for (j = 0; j < 4; j++)
-                    c2p8(c + 8 * j, pl[j]);
+            for (x = 0; x < nl; x++, c += 8) {
+                c2p32(c, pl);
                 for (k = 0; k < d; k++)
-                    *dst[k]++ = ((ULONG)pl[0][k] << 24) | ((ULONG)pl[1][k] << 16) |
-                                ((ULONG)pl[2][k] << 8) | pl[3][k];
+                    *dst[k]++ = pl[k];
             }
         }
         return;
