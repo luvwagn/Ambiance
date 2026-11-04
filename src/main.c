@@ -200,6 +200,148 @@ static void preview_touch(struct Page *p);
 static BOOL pv_roomy(void);
 static LONG pv_dir;
 
+/* ---- the spinner: eight round dots on a circle, the bright one going
+ * round with a fading tail, and "Loading..." under it. In the details pane
+ * while its picture comes, and over the content pane for any navigation
+ * that keeps you waiting (busy_*), after SPIN_AFTER ms. */
+#define SPIN_AFTER 200
+#define SPIN_FRAME  80              /* ms a step */
+
+static BOOL has_aside(struct Page *p);
+static WORD aside_x(void);
+static void draw_pane(BOOL full);
+
+/* The spinner's size around its centre: dots ring (rx, ry) and dot radius. */
+static void spin_metrics(WORD *ring, WORD *ringy, WORD *r, WORD *ry)
+{
+    WORD sy = gfx_mode_tall(g.mode) ? 2 : 1;    /* tall pixels: half as many down */
+    *r = U(3);
+    *ring = U(12);
+    if (*r < 2)
+        *r = 2;
+    if (sy == 2 && *r < 4) {
+        *r = 4;                                 /* rows enough to look round, */
+        *ring = *ring * 4 / 3;                  /* and room for them on the ring */
+    }
+    *ry = (*r + sy - 1) / sy;
+    *ringy = *ring / sy;
+}
+
+/* The spinner centred on (cx, cy) at a step; first: with its label (the
+ * caller has cleared the area). */
+static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
+{
+    static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
+                                   PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
+    /* the dots' places on a circle of radius 12 design pixels */
+    static const BYTE dx[8] = { 0, 8, 12, 8, 0, -8, -12, -8 };
+    static const BYTE dy[8] = { -12, -8, 0, 8, 12, 8, 0, -8 };
+    WORD ring, ringy, r, ry, i, sy = gfx_mode_tall(g.mode) ? 2 : 1;
+    spin_metrics(&ring, &ringy, &r, &ry);
+    if (first) {
+        WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
+        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
+    }
+    gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
+    for (i = 0; i < 8; i++)
+        gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
+                pens[(phase - i) & 7], PEN_BG);   /* the tail behind */
+}
+
+/* Navigation that may keep you waiting: busy_begin ... busy_end around it,
+ * waits inside it through ui_wait. After SPIN_AFTER ms the spinner turns
+ * in the middle of the content pane; at the end the pane is drawn again
+ * where it was (redraw), unless what comes next covers the screen. */
+static struct { int depth; BOOL on; ULONG since, last; UWORD phase; WORD cx, cy; } busy;
+
+static void busy_begin(void)
+{
+    if (busy.depth++ == 0) {
+        busy.on = FALSE;
+        busy.since = time_ms();
+    }
+}
+
+static void busy_tick(void)
+{
+    struct Page *p = cur();
+    ULONG now = time_ms();
+    if (!busy.depth || !g.win)
+        return;
+    if (!busy.on) {
+        WORD ring, ringy, r, ry, x1;
+        if ((LONG)(now - busy.since) < SPIN_AFTER)
+            return;
+        spin_metrics(&ring, &ringy, &r, &ry);
+        x1 = p && has_aside(p) ? aside_x() - U(6) : g.pane_x + g.pane_w;
+        busy.cx = (g.pane_x + x1) / 2;
+        busy.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
+        {
+            WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL), hw = ring + r + U(4);
+            if (tw / 2 + U(4) > hw)
+                hw = tw / 2 + U(4);
+            gfx_fill(&g, busy.cx - hw, busy.cy - ringy - ry - U(4), busy.cx + hw,
+                     busy.cy + ringy + ry + U(8) + g.font_h, PEN_BG);
+        }
+        busy.on = TRUE;
+        busy.phase = 0;
+        busy.last = now;
+        spin_draw(busy.cx, busy.cy, 0, TRUE);
+        return;
+    }
+    if ((LONG)(now - busy.last) >= SPIN_FRAME) {
+        busy.last = now;
+        busy.phase = (busy.phase + 1) & 7;
+        spin_draw(busy.cx, busy.cy, busy.phase, FALSE);
+    }
+}
+
+static void busy_end(BOOL redraw)
+{
+    if (busy.depth && --busy.depth == 0 && busy.on) {
+        busy.on = FALSE;
+        if (redraw && g.win && cur())
+            draw_pane(TRUE);                /* where the spinner was */
+    }
+}
+
+/* Wait for a loader job, the spinner turning meanwhile (when in busy). */
+static void ui_wait(struct LJob *j)
+{
+    while (j->busy) {
+        while (ldr_collect())
+            ;
+        if (!j->busy)
+            break;
+        dbg_sleep_begin();
+        WaitTOF();
+        dbg_sleep_end();
+        busy_tick();
+    }
+}
+
+/* Read a Pictures folder in the loader, waiting for it with the spinner. */
+static LONG pics_read_ui(const char *dir, struct ItemList *out)
+{
+    struct LJob *j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR);
+    LONG n;
+    if (!j)
+        return pics_read_dir(dir, out);
+    j->type = LJ_PICDIR;
+    amce_strlcpy(j->path, dir, sizeof(j->path));
+    ldr_submit_first(j);
+    ui_wait(j);
+    n = j->ran ? j->np : -1;
+    if (n >= 0 && j->list.pool) {
+        list_free(out);
+        *out = j->list;                     /* its pool is the page's now */
+    } else {
+        list_free(&j->list);
+    }
+    FreeVec(j);
+    return n;
+}
+
 /* Letters still to be read the first time: the count is still growing
  * (only when there was no index cache for it). */
 static BOOL ch_reading(const struct Page *p)
@@ -222,7 +364,7 @@ static void ch_free(struct Chunks *ch)
     if (!ch)
         return;
     if (ch->job) {
-        ldr_wait(ch->job);
+        ui_wait(ch->job);
         list_free(&ch->job->list);
         FreeVec(ch->job);
     }
@@ -540,7 +682,7 @@ static BOOL ch_wait_one(struct Page *p, BOOL shown)
     ch_pump(p);
     if (!p->ch || !p->ch->job)
         return FALSE;
-    ldr_wait(p->ch->job);
+    ui_wait(p->ch->job);
     ch_arrived(p, shown);
     return TRUE;
 }
@@ -562,14 +704,14 @@ static void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
     if ((k = ch_of(p->ch, idx)) < 0)
         return;
     if (p->ch->job && p->ch->job_k != k) {
-        ldr_wait(p->ch->job);               /* the one already out first */
+        ui_wait(p->ch->job);               /* the one already out first */
         ch_arrived(p, shown);
     }
     if (!p->ch->c[k].held) {
         if (!p->ch->job)
             ch_send(p, k);
         if (p->ch->job) {
-            ldr_wait(p->ch->job);
+            ui_wait(p->ch->job);
             ch_arrived(p, shown);
         }
     }
@@ -629,7 +771,7 @@ static BOOL ch_from_index(struct Page *p)
             ch->next = k;                   /* changed: read it now, from its folder */
             ch_send(p, k);
             if (ch->job) {
-                ldr_wait(ch->job);
+                ui_wait(ch->job);
                 ch_arrived(p, FALSE);
             }
             if (c->first < 0) {             /* could not: nothing there */
@@ -1129,7 +1271,7 @@ static void build_root_pages(int mod)
         if ((p = page_push(PT_LIST, "Pictures"))) {
             LONG n;
             p->pics = 1;
-            n = pics_read_dir(PICS_ROOT, &p->list);
+            n = pics_read_ui(PICS_ROOT, &p->list);
             if (n <= 0) {
                 page_pop();
                 if ((p = page_push(PT_TEXT, "Pictures")))
@@ -1199,7 +1341,7 @@ static BOOL push_dir_quiet(struct Item *it)
         return FALSE;
     if (pics) {
         p->pics = 1;
-        if (pics_read_dir(it->path, &p->list) <= 0) {
+        if (pics_read_ui(it->path, &p->list) <= 0) {
             page_pop();
             return FALSE;
         }
@@ -1670,6 +1812,9 @@ static WORD aside_x(void)
  * arrows; the keyboard leaves it as it is. */
 #define GUT_W U(7)                  /* the column: gap, bar, gap */
 static struct { BOOL drag; WORD off; } gut;
+static BOOL bar_up;                 /* mouse mode: the bar is showing (the mouse moved lately) */
+static ULONG mouse_last;            /* when the mouse last moved or clicked */
+#define BAR_HIDE 1500               /* ms the mouse rests before the bar goes */
 
 static WORD list_visible(void);
 
@@ -1743,7 +1888,7 @@ static void pv_line(const char *s, WORD w)
  * jobs. Short of memory, only the one shown and the next one ahead. */
 #define PV_SLOTS 12
 #define PV_TIGHT 4
-#define PV_SPIN_AFTER 250           /* ms without its picture before the spinner */
+#define PV_SPIN_AFTER SPIN_AFTER    /* ms without its picture before the spinner */
 static struct LJob *pv_slot[PV_SLOTS];
 static ULONG pv_clock;              /* cache order */
 static BOOL pv_text_drawn, pv_pic_drawn, pv_has_box, pv_spin_on;
@@ -1972,36 +2117,13 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
     }
 }
 
-/* The spinner in the picture's place: eight round dots on a circle, the
- * bright one going round with a fading tail, and "Loading..." under it. */
+/* The spinner in the picture's place (its place cleared the first time). */
 static void pv_spinner(BOOL first)
 {
-    static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
-                                   PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
-    /* the dots' places on a circle of radius 12 design pixels */
-    static const BYTE dx[8] = { 0, 8, 12, 8, 0, -8, -12, -8 };
-    static const BYTE dy[8] = { -12, -8, 0, 8, 12, 8, 0, -8 };
     WORD x0 = aside_x(), w = aside_width() - U(4);
-    WORD cx = x0 + w / 2, cy = pv_box_y + pv_box_h / 2 - U(8), r = U(3), ring = U(12), i;
-    WORD sy = gfx_mode_tall(g.mode) ? 2 : 1;    /* tall pixels: half as many down */
-    WORD ry, ringy;
-    if (r < 2)
-        r = 2;
-    if (sy == 2 && r < 4) {
-        r = 4;                                  /* rows enough to look round, */
-        ring = ring * 4 / 3;                    /* and room for them on the ring */
-    }
-    ry = (r + sy - 1) / sy;
-    ringy = ring / sy;
-    if (first) {
-        WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
+    if (first)
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
-    }
-    gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
-    for (i = 0; i < 8; i++)
-        gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
-                pens[(pv_spin_phase - i) & 7], PEN_BG);
+    spin_draw(x0 + w / 2, pv_box_y + pv_box_h / 2 - U(8), pv_spin_phase, first);
 }
 
 /* The timer: turn the spinner while the picture is not there yet. */
@@ -2432,8 +2554,11 @@ static void draw_gutter(struct Page *p)
     gut_geom(p, &bx0, &bx1, &ty, &th);
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
     if (mouse_mode) {
-        gfx_fill(&g, bx0, y0, bx1, y1, PEN_FAINT);              /* the track */
-        gfx_fill(&g, bx0, ty, bx1, ty + th - 1, gut.drag ? PEN_TEXT : PEN_DIM);
+        if (bar_up || gut.drag) {
+            gfx_fill(&g, bx0, y0, bx1, y1, PEN_RULE);           /* the track */
+            gfx_fill(&g, bx0, ty, bx1, ty + th - 1, gut.drag ? PEN_WHITE : PEN_TEXT);
+        }
+        /* the mouse at rest: no bar (the count at the top right says where) */
     } else {
         /* arrows: more above, more below */
         WORD ax = (bx0 + bx1) / 2, ah = U(3), i;
@@ -2750,8 +2875,10 @@ static void pane_settle(void)
     if (!pane_pending)
         return;
     pane_pending = FALSE;
+    busy_begin();                   /* a big section (Pictures) can take a while */
     build_root(menu[menu_sel]);
     draw_pane(TRUE);
+    busy_end(FALSE);                /* drawn just now */
 }
 
 /* Up/Down (or keypad 8/2) still held? */
@@ -2824,7 +2951,17 @@ static void set_focus(int f)
     draw_footer();
 }
 
+static void open_dir_now(struct Item *it);
+
+/* Open a folder: the spinner if it keeps you waiting. */
 static void open_dir(struct Item *it)
+{
+    busy_begin();
+    open_dir_now(it);
+    busy_end(TRUE);
+}
+
+static void open_dir_now(struct Item *it)
 {
     struct Page *p;
     LONG n;
@@ -2841,7 +2978,7 @@ static void open_dir(struct Item *it)
     }
     if (pics) {
         p->pics = 1;
-        n = pics_read_dir(it->path, &p->list);
+        n = pics_read_ui(it->path, &p->list);
         if (n <= 0) {
             page_pop();
             set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
@@ -2959,7 +3096,9 @@ static BOOL restore_after_launch(void)
     draw_header();
     draw_menu();
     set_msg("Loading...");
+    busy_begin();
     build_root(menu[menu_sel]);
+    busy_end(FALSE);                /* all drawn next */
     msg[0] = 0;
     draw_all();
     note_style();
@@ -3238,7 +3377,9 @@ static void folder_slideshow(struct Item *it)
     if (!list_init(&l))
         return;
     set_msg("Loading...");
-    n = pics_read_dir(it->path, &l);
+    busy_begin();
+    n = pics_read_ui(it->path, &l);
+    busy_end(n <= 0);               /* the viewer covers the screen next */
     first = n > 0 ? view_step(&l, l.count - 1, 1) : -1;
     if (first < 0) {
         set_msg("No pictures in that folder");
@@ -3271,8 +3412,11 @@ static void act_move(LONG d)
         LONG s;
         if (d)
             pv_dir = d > 0 ? 1 : -1;
-        if (d > 0 && ch_reading(p) && p->sel + d >= p->list.count)
+        if (d > 0 && ch_reading(p) && p->sel + d >= p->list.count) {
+            busy_begin();
             ch_wait_until(p, p->sel + d + 1, TRUE);    /* outran the reading: wait for it */
+            busy_end(TRUE);
+        }
         s = p->sel + d;
         if (s < 0)
             s = 0;
@@ -3300,6 +3444,8 @@ static void act_move(LONG d)
 static void act_wheel(LONG d, WORD x, WORD y)
 {
     set_mouse_mode(TRUE);
+    mouse_last = time_ms();
+    bar_up = TRUE;                  /* the wheel shows the bar too (drawn with the move) */
     struct Page *p = cur();
     BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
     BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
@@ -3734,7 +3880,9 @@ static void act_open(BOOL play)
         return;
     if (p->type == PT_LIST && p->list.count) {
         struct Item *it;
+        busy_begin();
         ch_wait_item(p, p->sel, TRUE);      /* its letter, if it was let go */
+        busy_end(TRUE);
         it = &p->list.items[p->sel];
         if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
             folder_slideshow(it);   /* Fire plays a folder of pictures */
@@ -3763,8 +3911,11 @@ static void act_right(void)
     p = cur();
     if (focus == FOCUS_PREVIEW)
         return;
-    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count)
+    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count) {
+        busy_begin();
         ch_wait_item(p, p->sel, TRUE);
+        busy_end(TRUE);
+    }
     if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
         p->list.items[p->sel].kind == IT_DIR) {
         open_dir(&p->list.items[p->sel]);   /* Right goes inside, never plays */
@@ -3815,7 +3966,16 @@ static void act_back(void)
     }
 }
 
+static void act_letter_now(char c);
+
 static void act_letter(char c)
+{
+    busy_begin();                   /* a letter not read yet can take a while */
+    act_letter_now(c);
+    busy_end(TRUE);
+}
+
+static void act_letter_now(char c)
 {
     struct Page *p;
     pane_settle();
@@ -3869,8 +4029,11 @@ static void act_letter_step(LONG dir)
     p = cur();
     if (focus != FOCUS_CONTENT || !p || p->type != PT_LIST || !p->list.count)
         return;
-    if (dir > 0 && ch_reading(p) && letter_step(p, p->sel, 1) == p->sel)
+    if (dir > 0 && ch_reading(p) && letter_step(p, p->sel, 1) == p->sel) {
+        busy_begin();
         ch_wait_until(p, p->list.count + 1, TRUE);  /* the next letter is not read yet */
+        busy_end(TRUE);
+    }
     if ((to = letter_step(p, p->sel, dir)) != p->sel) {
         pv_dir = dir;
         act_move(to - p->sel);
@@ -3958,6 +4121,12 @@ static void handle_mouse(struct IntuiMessage *im)
     if (!tb && pv_tb.open)
         tb = &pv_tb;                /* the preview pane's fact sheet */
     set_mouse_mode(TRUE);                   /* the mouse is in use: scroll bars */
+    mouse_last = time_ms();
+    if (!bar_up) {
+        bar_up = TRUE;
+        if (cur() && cur()->type == PT_LIST && !pane_pending)
+            draw_gutter(cur());
+    }
     if (im->Class == IDCMP_MOUSEMOVE) {
         if (gut.drag)
             gut_drag_to(y);
@@ -4327,6 +4496,11 @@ int main(void)
                     }
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                if (bar_up && !gut.drag && (LONG)(time_ms() - mouse_last) >= BAR_HIDE) {
+                    bar_up = FALSE;         /* the mouse at rest: the bar goes */
+                    if (cur() && cur()->type == PT_LIST && !pane_pending)
+                        draw_gutter(cur());
+                }
                 /* 25 a second for a joystick or a fading letter, 12 for the
                  * spinner; otherwise 5 a second, which still notices a
                  * joystick plugged in. */

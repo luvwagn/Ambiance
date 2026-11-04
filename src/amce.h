@@ -271,7 +271,7 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
  * picture, a folder of pictures (its first picture) or an AGS folder's
  * entries, read off the UI's back. The UI owns the job; it comes back marked done. */
 #define LJ_FACTS 24
-enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_SHOT, LJ_FOLDER, LJ_WRITE, LJ_QUIT };
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_SHOT, LJ_FOLDER, LJ_PICDIR, LJ_WRITE, LJ_QUIT };
 enum { SHOT_AGS = 1, SHOT_FILE, SHOT_FOLDER };  /* LJ_SHOT: path is an entry base, a picture, a folder */
 struct LJob {
     struct Message msg;
@@ -295,7 +295,8 @@ struct LJob {
     LONG size, days;            /* LJ_PICTURE: file size, date (DateStamp days) */
     LONG np, nd;                /* LJ_PICFOLDER: pictures, folders; its first picture */
     char first[300];
-    UBYTE adult;                /* LJ_FOLDER: an AGS folder's entries, sorted, into */
+    UBYTE adult;                /* LJ_FOLDER: an AGS folder's entries, sorted, into
+                                 * list (LJ_PICDIR: a Pictures folder's, pics.c) */
     struct ItemList list;       /* list (its pool then the caller's); np: count, -1 */
     char cache[300];            /*   from the index cache when cache[0] (off, len), */
     ULONG off, len;             /*   else from the folder, and its date: */

@@ -101,6 +101,10 @@ static void run(struct LJob *j)
         j->np = ags_read_dir(j->path, &j->list, j->adult);
         return;
     }
+    if (j->type == LJ_PICDIR) {
+        j->np = list_init(&j->list) ? pics_read_dir(j->path, &j->list) : -1;
+        return;
+    }
     if (j->type == LJ_WRITE) {
         j->np = idx_save(j->path, j->buf, j->len) ? 1 : -1;
     }
