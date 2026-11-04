@@ -50,15 +50,23 @@ const char *amce_log_path(void)
 void amce_log(const char *what, const char *detail)
 {
     struct DateStamp ds;
-    char line[200];
+    char stamp[48];
     if (!logfh)
         return;
     DateStamp(&ds);
-    /* amiga.lib sprintf is RawDoFmt: every number is %l with a long */
-    sprintf(line, "%02ld:%02ld:%02ld.%02ld  %s%s%s\n",
-            (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60, (long)ds.ds_Tick / 50,
-            (long)(ds.ds_Tick % 50) * 2, what, detail[0] ? ": " : "", detail);
-    FPuts(logfh, (CONST_STRPTR)line);
+    /* amiga.lib sprintf is RawDoFmt: every number is %l with a long. Only
+     * the time stamp is formatted into a buffer; the text is written as it
+     * is, however long (a line once overran a 200-byte buffer here and
+     * crashed AmigaMCE with #80000003). */
+    sprintf(stamp, "%02ld:%02ld:%02ld.%02ld  ", (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60,
+            (long)ds.ds_Tick / 50, (long)(ds.ds_Tick % 50) * 2);
+    FPuts(logfh, (CONST_STRPTR)stamp);
+    FPuts(logfh, (CONST_STRPTR)what);
+    if (detail[0]) {
+        FPuts(logfh, (CONST_STRPTR)": ");
+        FPuts(logfh, (CONST_STRPTR)detail);
+    }
+    FPuts(logfh, (CONST_STRPTR)"\n");
     Flush(logfh);
 }
 

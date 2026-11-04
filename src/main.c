@@ -3561,7 +3561,7 @@ static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct P
         if (vw_job->busy)
             ldr_wait(vw_job);               /* nearly there: sooner than starting over */
         if (vw_job->ran) {
-            char m[200];
+            char m[300];
             o = vw_job->obj;
             *remapped = vw_job->remapped;
             *t = vw_job->thumb;
@@ -3620,7 +3620,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale),
                            pre, remapped, pre_t, &pre_i);
             {
-                char m[200];
+                char m[300];
                 sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s, %s.datatype", l->items[want].label,
                         (unsigned long)pi.w, (unsigned long)pi.h, (unsigned long)pi.depth,
                         (unsigned long)(time_ms() - t0),
