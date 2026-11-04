@@ -234,6 +234,7 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
     ULONG *sum = NULL, *hist = NULL, x, y, rmax;
     struct Box *box = NULL;
     LONG nb, i;
+    ULONG last_n = 0, rec = 0;
     BOOL deep = rgb == NULL;
 
     rmax = (sh + dh - 1) / dh + 1;
@@ -296,8 +297,12 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
         for (x = 0; x < dw; x++) {
             ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1;
             LONG d = (LONG)bayer[y & 3][x & 3] / 2 - 4, v[3];
+            if (n != last_n) {
+                last_n = n;                 /* a multiply, not a divide, per pixel */
+                rec = 65536UL / n + 1;
+            }
             for (i = 0; i < 3; i++) {
-                v[i] = (LONG)(s[i] / n) + d;
+                v[i] = (LONG)((s[i] * rec) >> 16) + d;
                 v[i] = v[i] < 0 ? 0 : v[i] > 255 ? 31 : v[i] >> 3;
             }
             c[x] = CELL(v[0], v[1], v[2]);

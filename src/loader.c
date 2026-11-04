@@ -29,7 +29,11 @@
 /* Two loader processes: one for pictures (decoding a big JPEG takes
  * seconds on a 68020), one for everything else (folders, fact sheets),
  * so a listing or a fact sheet never waits behind a picture being
- * decoded. The picture one runs below the other. */
+ * decoded. Each runs a job the UI waits for (ldr_submit_first) at
+ * PRI_URGENT, and reading ahead below that: the other one's reading ahead
+ * (All Games' letters, the next pictures) never holds up what is wanted
+ * now. The picture one reads ahead lowest. */
+#define PRI_URGENT (-1)
 enum { W_QUICK, W_PICS, WORKERS };
 static struct Worker {
     struct MsgPort *port;           /* its own, made by it */
@@ -37,8 +41,8 @@ static struct Worker {
     const char *name;
     LONG pri;
 } workers[WORKERS] = {
-    { NULL, NULL, "AmigaMCE loader", -1 },
-    { NULL, NULL, "AmigaMCE pictures", -2 },
+    { NULL, NULL, "AmigaMCE loader", -2 },
+    { NULL, NULL, "AmigaMCE pictures", -3 },
 };
 static struct Worker *starting;     /* the one being started (its process reads it) */
 static struct MsgPort *reply_port;  /* ours */
@@ -193,6 +197,8 @@ static void loader_main(void)
                 return;
             }
             if (!j->cancel) {
+                SetTaskPri((struct Task *)FindTask(NULL), j->urgent ? PRI_URGENT : w->pri);
+                j->t_begun = time_ms();
                 run(j);
                 j->ran = TRUE;
             }
@@ -247,6 +253,8 @@ void ldr_submit(struct LJob *j)
 {
     j->done = FALSE;
     j->ran = FALSE;
+    j->urgent = FALSE;
+    j->t_sent = time_ms();
     if (!running) {
         run(j);                         /* no loader: now, here */
         j->ran = j->done = TRUE;
@@ -272,18 +280,25 @@ void ldr_submit_first(struct LJob *j)
     }
     job_port = worker_for(j)->port;
     if (j->busy) {
+        BOOL queued = FALSE;
+        j->urgent = TRUE;
         Forbid();
         for (n = job_port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ)
             if (n == &j->msg.mn_Node) {
                 Remove(n);
                 AddHead(&job_port->mp_MsgList, n);
+                queued = TRUE;
                 break;
             }
+        if (!queued && !j->done && worker_for(j)->task)
+            SetTaskPri(worker_for(j)->task, PRI_URGENT);   /* begun: hurry it */
         Permit();
         return;
     }
     j->done = FALSE;
     j->ran = FALSE;
+    j->urgent = TRUE;
+    j->t_sent = time_ms();
     j->busy = TRUE;
     out++;
     j->msg.mn_ReplyPort = reply_port;

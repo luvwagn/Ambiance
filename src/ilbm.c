@@ -97,6 +97,49 @@ static BOOL unpack(const UBYTE **pp, const UBYTE *e, UBYTE *out, ULONG n, BOOL p
     return TRUE;
 }
 
+/* Bitplane bytes to chunky pixels, 8 at a time: for a byte of plane 0,
+ * its 8 pixels as two longs, a 1 in the low bit of each pixel's byte
+ * that is set (shifted up for the other planes). */
+static ULONG c2p[256][2];
+static BOOL c2p_ready;
+
+static void c2p_init(void)
+{
+    ULONG b, j;
+    if (c2p_ready)
+        return;
+    for (b = 0; b < 256; b++) {
+        ULONG hi = 0, lo = 0;
+        for (j = 0; j < 4; j++) {
+            if (b & (0x80 >> j))
+                hi |= 1UL << (24 - 8 * j);
+            if (b & (0x08 >> j))
+                lo |= 1UL << (24 - 8 * j);
+        }
+        c2p[b][0] = hi;
+        c2p[b][1] = lo;
+    }
+    c2p_ready = TRUE;
+}
+
+/* A row of bitplanes (rb bytes each) as chunky pixels into out (rb * 8
+ * bytes, long-aligned). */
+static void row_chunky(const UBYTE *row, ULONG rb, UBYTE planes, ULONG *out)
+{
+    ULONG i, k;
+    memset(out, 0, rb * 8);
+    for (k = 0; k < planes; k++, row += rb) {
+        ULONG *o = out;
+        for (i = 0; i < rb; i++, o += 2) {
+            UBYTE b = row[i];
+            if (b) {
+                o[0] |= c2p[b][0] << k;
+                o[1] |= c2p[b][1] << k;
+            }
+        }
+    }
+}
+
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi)
 {
@@ -105,7 +148,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     ULONG len = 0, cmaplen = 0, bodylen = 0, camg = 0, sw, sh, dw, dh, rb, np, x, y, sy, i, n;
     UBYTE planes, masking, comp;
     UWORD *xoff = NULL;
-    UBYTE *xbit = NULL;
+    ULONG *chunky = NULL;
     struct Thumb *t = NULL;
 
     if (!(file = read_file(path, &len)))
@@ -176,33 +219,32 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     np = planes + (masking == 1 ? 1 : 0);
     row = AllocVec(rb * np, MEMF_ANY);
     xoff = AllocVec(dw * sizeof(UWORD), MEMF_ANY);
-    xbit = AllocVec(dw, MEMF_ANY);
-    if (!row || !xoff || !xbit) {
+    chunky = AllocVec(rb * 8, MEMF_ANY);
+    if (!row || !xoff || !chunky) {
         thumb_free(t);
         t = NULL;
         goto out;
     }
-    for (x = 0; x < dw; x++) {
-        ULONG sx = (x * sw + sw / 2) / dw;
-        xoff[x] = sx >> 3;
-        xbit[x] = 0x80 >> (sx & 7);
-    }
+    c2p_init();
+    for (x = 0; x < dw; x++)
+        xoff[x] = (x * sw + sw / 2) / dw;
     p = body;
     e = body + bodylen;
     for (sy = 0, y = 0; sy < sh && y < dh; sy++) {
         if (!unpack(&p, e, row, rb * np, comp == 1))
             break;                          /* cut short: the rest stays colour 0 */
-        while (y < dh && (y * sh + sh / 2) / dh == sy) {
-            UBYTE *d = t->px + y * t->mod;
-            for (x = 0; x < dw; x++) {
-                const UBYTE *q = row + xoff[x];
-                UBYTE b = xbit[x], v = 0, k;
-                for (k = 0; k < planes; k++, q += rb)
-                    if (*q & b)
-                        v |= 1 << k;
-                d[x] = v;
-            }
-            y++;
+        if (y < dh && (y * sh + sh / 2) / dh == sy) {
+            const UBYTE *c = (const UBYTE *)chunky;
+            row_chunky(row, rb, planes, chunky);
+            do {
+                UBYTE *d = t->px + y * t->mod;
+                if (dw == sw)
+                    CopyMem((APTR)c, d, dw);
+                else
+                    for (x = 0; x < dw; x++)
+                        d[x] = c[xoff[x]];
+                y++;
+            } while (y < dh && (y * sh + sh / 2) / dh == sy);
         }
     }
     if (!thumb_reduce(t, maxcol)) {
@@ -218,7 +260,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
 out:
     FreeVec(row);
     FreeVec(xoff);
-    FreeVec(xbit);
+    FreeVec(chunky);
     FreeVec(file);
     return t;
 }

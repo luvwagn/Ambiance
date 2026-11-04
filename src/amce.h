@@ -333,6 +333,8 @@ struct LJob {
     struct Thumb *thumb;        /*   obj then NULL */
     ULONG ms_decode, ms_thumb;  /* how long each took */
     UBYTE own;                  /* read by ilbm.c, not a datatype */
+    UBYTE urgent;               /* the UI waits for it: run above the read-ahead */
+    ULONG t_sent, t_begun;      /* when it was sent, when the loader began it */
     BOOL remapped;
     struct PicInfo info;
     LONG nlines;                /* LJ_ENTRY: the fact sheet (np: 1 if it has a screenshot) */

@@ -2442,14 +2442,22 @@ static void pv_draw_picture(void)
     struct LJob *j = pv_sj;
     BOOL taken = FALSE, ok = FALSE;
     if (j && j->thumb) {
-        char m[200];
+        char m[300];
+        ULONG t0 = time_ms(), now;
         ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
-        sprintf(m, "%.80s, %lu x %lu, depth %lu: %s in %lu ms, made %lu x %lu, %lu colours, in %lu ms",
+        now = time_ms();
+        /* where the time went: waiting for the loader, reading, making,
+         * drawing; and in all since the selection came to rest */
+        sprintf(m, "%.60s, %lu x %lu, depth %lu: %s%lu ms to start, %s in %lu ms, "
+                   "made %lu x %lu, %lu colours, in %lu ms, drawn in %lu ms; "
+                   "shown %lu ms after the move",
                 FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
-                (unsigned long)j->info.depth, j->own ? "read by AmigaMCE" : "decoded",
-                (unsigned long)j->ms_decode,
-                (unsigned long)j->thumb->w, (unsigned long)j->thumb->h,
-                (unsigned long)j->thumb->ncol, (unsigned long)j->ms_thumb);
+                (unsigned long)j->info.depth, j->urgent ? "" : "read ahead, ",
+                (unsigned long)(j->t_begun - j->t_sent), j->own ? "read by AmigaMCE" : "decoded",
+                (unsigned long)j->ms_decode, (unsigned long)j->thumb->w,
+                (unsigned long)j->thumb->h, (unsigned long)j->thumb->ncol,
+                (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
+                (unsigned long)(now - pv_since));
         amce_log("preview", m);
     } else if (j && j->obj) {
         ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
