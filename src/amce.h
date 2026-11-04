@@ -270,13 +270,15 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
  * picture, a folder of pictures (its first picture) or an AGS folder's
  * entries, read off the UI's back. The UI owns the job; it comes back marked done. */
 #define LJ_FACTS 24
-enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_FOLDER, LJ_WRITE, LJ_QUIT };
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_SHOT, LJ_FOLDER, LJ_WRITE, LJ_QUIT };
+enum { SHOT_AGS = 1, SHOT_FILE, SHOT_FOLDER };  /* LJ_SHOT: path is an entry base, a picture, a folder */
 struct LJob {
     struct Message msg;
     UBYTE type;
     volatile UBYTE cancel;      /* not wanted any more: skip it if not started */
     UBYTE remap;                /* decode remapped into scr (true-colour screens) */
     UBYTE want_pic;             /* decode the picture too */
+    UBYTE mode;                 /* LJ_SHOT: SHOT_* */
     volatile UBYTE busy, done;
     UBYTE ran;                  /* the loader did it (not skipped) */
     UBYTE spent;                /* its picture was handed to the screen: read again to reuse */
@@ -287,7 +289,7 @@ struct LJob {
     APTR obj;                   /* the decoded picture (gfx_picture_obj), or NULL */
     BOOL remapped;
     struct PicInfo info;
-    LONG nlines;                /* LJ_ENTRY: the fact sheet */
+    LONG nlines;                /* LJ_ENTRY: the fact sheet (np: 1 if it has a screenshot) */
     char lines[LJ_FACTS][96];
     LONG size, days;            /* LJ_PICTURE: file size, date (DateStamp days) */
     LONG np, nd;                /* LJ_PICFOLDER: pictures, folders; its first picture */
@@ -302,6 +304,7 @@ struct LJob {
 BOOL ldr_start(void);
 void ldr_stop(void);            /* no job may be out */
 void ldr_submit(struct LJob *j);
+void ldr_submit_first(struct LJob *j);  /* ahead of the queue (or moved there) */
 struct LJob *ldr_collect(void); /* one that came back (now done), or NULL */
 void ldr_wait(struct LJob *j);  /* until j is back */
 ULONG ldr_sigmask(void);        /* signalled when one comes back */

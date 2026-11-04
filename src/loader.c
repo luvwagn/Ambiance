@@ -38,8 +38,28 @@ static void run(struct LJob *j)
     if (j->type == LJ_ENTRY) {
         char shot[300];
         j->nlines = ags_read_txt(j->path, j->lines, LJ_FACTS);
-        if (j->want_pic && !j->cancel && ags_screenshot_path(j->path, shot, sizeof(shot)))
+        j->np = ags_screenshot_path(j->path, shot, sizeof(shot));  /* has one (LJ_SHOT) */
+        if (j->want_pic && !j->cancel && j->np)
             j->obj = pic_decode(shot, j->scr, j->remap, &j->remapped, &j->info);
+        return;
+    }
+    if (j->type == LJ_SHOT) {
+        /* the picture alone: an entry's screenshot, a picture, or a
+         * folder's first picture (its text is a job of its own) */
+        char shot[300];
+        const char *src = j->path;
+        LONG nd;
+        if (j->mode == SHOT_AGS) {
+            if (!ags_screenshot_path(j->path, shot, sizeof(shot)))
+                return;
+            src = shot;
+        } else if (j->mode == SHOT_FOLDER) {
+            if (pics_scan(j->path, &nd, shot, sizeof(shot)) <= 0)
+                return;
+            src = shot;
+        }
+        if (!j->cancel)
+            j->obj = pic_decode(src, j->scr, j->remap, &j->remapped, &j->info);
         return;
     }
     if (j->type == LJ_PICTURE) {
@@ -161,6 +181,40 @@ void ldr_submit(struct LJob *j)
     j->msg.mn_ReplyPort = reply_port;
     j->msg.mn_Length = sizeof(*j);
     PutMsg(job_port, &j->msg);
+}
+
+/* As ldr_submit, but ahead of every job not started yet: what the UI is
+ * waiting to show goes before what it reads ahead. Also for a job already
+ * sent: it moves to the front if it has not been started. */
+void ldr_submit_first(struct LJob *j)
+{
+    struct Node *n;
+    if (!running) {
+        ldr_submit(j);
+        return;
+    }
+    if (j->busy) {
+        Forbid();
+        for (n = job_port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ)
+            if (n == &j->msg.mn_Node) {
+                Remove(n);
+                AddHead(&job_port->mp_MsgList, n);
+                break;
+            }
+        Permit();
+        return;
+    }
+    j->done = FALSE;
+    j->ran = FALSE;
+    j->busy = TRUE;
+    out++;
+    j->msg.mn_ReplyPort = reply_port;
+    j->msg.mn_Length = sizeof(*j);
+    j->msg.mn_Node.ln_Type = NT_MESSAGE;
+    Forbid();
+    AddHead(&job_port->mp_MsgList, &j->msg.mn_Node);
+    Permit();
+    Signal(job_port->mp_SigTask, 1UL << job_port->mp_SigBit);
 }
 
 struct LJob *ldr_collect(void)
