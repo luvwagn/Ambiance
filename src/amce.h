@@ -128,6 +128,7 @@ void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_close(struct Gfx *g);
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
+void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /* filled circle */
 /* Text in a cell font_h tall at y; bg is what it is drawn over (smooth
  * edges blend into it). maxw > 0 cuts it to fit; ts is TS_* (| TS_OPAQUE). */
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts);

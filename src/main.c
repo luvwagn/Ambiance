@@ -1943,27 +1943,27 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
     }
 }
 
-/* The spinner in the picture's place: eight dots round a circle, the
- * bright one going round, and "Loading..." under it. */
+/* The spinner in the picture's place: eight round dots on a circle, the
+ * bright one going round with a fading tail, and "Loading..." under it. */
 static void pv_spinner(BOOL first)
 {
     static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
                                    PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
-    /* the dots' places on a circle of radius 10, x and y */
-    static const BYTE dx[8] = { 0, 7, 10, 7, 0, -7, -10, -7 };
-    static const BYTE dy[8] = { -10, -7, 0, 7, 10, 7, 0, -7 };
+    /* the dots' places on a circle of radius 12 design pixels */
+    static const BYTE dx[8] = { 0, 8, 12, 8, 0, -8, -12, -8 };
+    static const BYTE dy[8] = { -12, -8, 0, 8, 12, 8, 0, -8 };
     WORD x0 = aside_x(), w = aside_width() - U(4);
-    WORD cx = x0 + w / 2, cy = pv_box_y + pv_box_h / 2 - U(8), r = U(2), i;
+    WORD cx = x0 + w / 2, cy = pv_box_y + pv_box_h / 2 - U(8), r = U(3), ring = U(12), i;
+    if (r < 2)
+        r = 2;
     if (first) {
         WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-        gfx_text(&g, cx - tw / 2, cy + U(16), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
+        gfx_text(&g, cx - tw / 2, cy + ring + r + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
     }
-    gfx_fill(&g, cx - U(10) - r, cy - U(10) - r, cx + U(10) + r, cy + U(10) + r, PEN_BG);
-    for (i = 0; i < 8; i++) {
-        WORD x = cx + U(dx[i]), y = cy + U(dy[i]);
-        gfx_fill(&g, x - r, y - r, x + r, y + r, pens[(i - pv_spin_phase) & 7]);
-    }
+    gfx_fill(&g, cx - ring - r, cy - ring - r, cx + ring + r, cy + ring + r, PEN_BG);
+    for (i = 0; i < 8; i++)
+        gfx_dot(&g, cx + U(dx[i]), cy + U(dy[i]), r, pens[(pv_spin_phase - i) & 7], PEN_BG);   /* the tail behind */
 }
 
 /* The timer: turn the spinner while the picture is not there yet. */
