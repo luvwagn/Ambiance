@@ -112,7 +112,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_NOWPLAYING,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1344,6 +1344,7 @@ static void save_screen_mode(void)
 #define DEBUG_VAR "AmigaMCE/Debug"
 #define STYLE_VAR "AmigaMCE/Style"
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
+#define DBUF_VAR  "AmigaMCE/DoubleBuffer"
 
 /* Settings > Jump scrolling: held Up/Down in a very long list goes a
  * letter at a time once past cruising speed (off: it glides on). */
@@ -1376,6 +1377,26 @@ static void load_jump(void)
     char buf[8];
     jump_scroll = GetVar((CONST_STRPTR)JUMP_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                   buf[0] == '1';
+}
+
+/* Settings > Double buffering (RTG screens): on, by the setting; without
+ * one, the old way (PROGDIR:AmigaMCE.dbuf there). */
+static void load_dbuf(void)
+{
+    char buf[8];
+    if (GetVar((CONST_STRPTR)DBUF_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
+        gfx_dbuf_wanted = buf[0] == '1';
+    } else {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.dbuf", SHARED_LOCK);
+        me->pr_WindowPtr = oldwin;
+        if (l)
+            UnLock(l);
+        gfx_dbuf_wanted = l != 0;
+    }
 }
 
 static void load_debug(void)
@@ -1412,6 +1433,9 @@ static void build_settings(struct Page *p)
     }
     action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if ((it = action_item(p, "Double buffering", g.planar ? "RTG only" : "", ACT_DBUF,
+                          gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF)) && g.planar)
+        it->flags |= ITEM_DISABLED;     /* native screens draw straight on */
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -1940,12 +1964,13 @@ static LONG cpu_load = -1, app_load = -1;
 /* What the readout shows now, so a second that changes nothing redraws
  * nothing. Cleared when the header is drawn afresh. */
 static char status_shown[96];
+static ULONG fps_shown, fps_flips0;     /* flips in the last second; the count then */
 
 static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
     WORD x1 = clock_left() - U(6);
-    char cpu[16], app[16], forms[3][96];
+    char cpu[16], app[16], fps[16], forms[3][96];
     const char *show = "";
     ULONG chip, used;
     int i;
@@ -1966,11 +1991,15 @@ static void draw_status(void)
         amce_strlcpy(app, "--", sizeof(app));
     else
         sprintf(app, "%ld%%", (long)app_load);
+    /* double buffered: the flips of the last second */
+    fps[0] = 0;
+    if (gfx_dbuf_active())
+        sprintf(fps, "%ld FPS  ", (long)fps_shown);
     /* CPU = whole system (idle-task meter); app = AmigaMCE's own share */
-    sprintf(forms[0], "CPU %s  app %s   RAM %luK  (chip %luK)", cpu, app,
+    sprintf(forms[0], "%sCPU %s  app %s   RAM %luK  (chip %luK)", fps, cpu, app,
             (unsigned long)(used >> 10), (unsigned long)(chip >> 10));
-    sprintf(forms[1], "CPU %s  app %s  RAM %luK", cpu, app, (unsigned long)(used >> 10));
-    sprintf(forms[2], "%s/%s %luK", cpu, app, (unsigned long)(used >> 10));
+    sprintf(forms[1], "%sCPU %s  app %s  RAM %luK", fps, cpu, app, (unsigned long)(used >> 10));
+    sprintf(forms[2], "%s%s/%s %luK", fps, cpu, app, (unsigned long)(used >> 10));
     for (i = 0; i < 3; i++)
         if (gfx_textlen(&g, forms[i], TS_SMALL) <= x1 - x0 || i == 2) {
             show = forms[i];
@@ -5348,6 +5377,28 @@ static void toggle_jump(void)
     }
 }
 
+static void toggle_dbuf(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    if (g.planar)
+        return;
+    gfx_dbuf_wanted = !gfx_dbuf_wanted;
+    save_setting(DBUF_VAR, gfx_dbuf_wanted ? "1" : "0");
+    if (gfx_dbuf_wanted)
+        gfx_dbuf_start(&g);
+    else
+        gfx_dbuf_stop(&g);
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel;
+    }
+    status_shown[0] = 0;
+    draw_all();
+}
+
 static void toggle_debug(void)
 {
     struct Page *p = cur();
@@ -5437,6 +5488,8 @@ static void act_action(struct Item *it)
         toggle_debug();
     else if (it->action == ACT_JUMP)
         toggle_jump();
+    else if (it->action == ACT_DBUF)
+        toggle_dbuf();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_STYLE_PIXEL)
@@ -6318,6 +6371,7 @@ static int app_main(void)
     }
     dbg_mem_baseline();
     load_debug();
+    load_dbuf();
     load_jump();
     amce_log_open(debug_on);
     open_extra_libs();
@@ -6327,11 +6381,6 @@ static int app_main(void)
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
-        /* PROGDIR:AmigaMCE.dbuf: double buffering on RTG screens (prototype) */
-        if ((l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.dbuf", SHARED_LOCK))) {
-            UnLock(l);
-            gfx_dbuf_wanted = TRUE;
-        }
         l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.noloader", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l) {
@@ -6458,6 +6507,8 @@ static int app_main(void)
                     if (ds.ds_Minute != last_minute)
                         draw_clock();
                     if (debug_on) {
+                        fps_shown = gfx_flips - fps_flips0;
+                        fps_flips0 = gfx_flips;
                         cpu_load = dbg_cpu_sample();
                         app_load = dbg_app_sample();
                         draw_status();

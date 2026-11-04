@@ -1373,6 +1373,7 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
  * pictures, the other half for the next one (drawn while this one is
  * still up, in other pens). */
 ULONG gfx_draw_ms[3];   /* the last gfx_thumb: colours, pixels, copy to the screen */
+ULONG gfx_flips;        /* gfx_present's flips, ever (the debug readout's FPS) */
 ULONG gfx_present_ms;   /* the last gfx_present: flip and copy */
 /* ---- double buffering (RTG screens; a prototype, PROGDIR:AmigaMCE.dbuf)
  * Two buffers of the screen (AllocScreenBuffer): everything is drawn into
@@ -1475,6 +1476,7 @@ BOOL gfx_present(struct Gfx *g)
     WaitBlit();
     g->rp = dlay[dback]->rp;
     gfx_present_ms = time_ms() - t0;
+    gfx_flips++;
     return TRUE;
 }
 

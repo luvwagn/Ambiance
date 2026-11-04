@@ -209,6 +209,7 @@ struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see g
  * into the buffer not shown; gfx_present shows it, if gfx_dirty was said. */
 extern BOOL gfx_dbuf_wanted;
 extern ULONG gfx_present_ms;
+extern ULONG gfx_flips;
 void gfx_dbuf_start(struct Gfx *g);
 void gfx_dbuf_stop(struct Gfx *g);
 BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
