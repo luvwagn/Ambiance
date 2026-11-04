@@ -242,6 +242,8 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path, c
 void list_sort(struct ItemList *l);
 char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
 struct Item *list_append(struct ItemList *l, const struct Item *src);   /* as it is */
+struct Item *list_add_split(struct ItemList *l, const char *label, char *dir,
+                            const char *name, UBYTE kind);  /* ITEM_SPLIT; dir in l's pool */
 void list_drop_items(struct ItemList *l);   /* free the entries, keep the strings */
 struct Item *list_copy(struct ItemList *l, const struct Item *it, const char *label);
 char *item_path(const struct Item *it, char *out, LONG max);    /* an entry's whole path: out */
@@ -268,7 +270,7 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
  * picture, a folder of pictures (its first picture) or an AGS folder's
  * entries, read off the UI's back. The UI owns the job; it comes back marked done. */
 #define LJ_FACTS 24
-enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_FOLDER, LJ_QUIT };
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_FOLDER, LJ_WRITE, LJ_QUIT };
 struct LJob {
     struct Message msg;
     UBYTE type;
@@ -292,6 +294,10 @@ struct LJob {
     char first[300];
     UBYTE adult;                /* LJ_FOLDER: an AGS folder's entries, sorted, into */
     struct ItemList list;       /* list (its pool then the caller's); np: count, -1 */
+    char cache[300];            /*   from the index cache when cache[0] (off, len), */
+    ULONG off, len;             /*   else from the folder, and its date: */
+    struct DateStamp date;
+    APTR buf;                   /* LJ_WRITE: len bytes into the file path */
 };
 BOOL ldr_start(void);
 void ldr_stop(void);            /* no job may be out */
@@ -357,6 +363,35 @@ void  dbg_mem_baseline(void);
 ULONG dbg_mem_used(ULONG *chip);
 void amce_log(const char *what, const char *detail);
 void amce_log_close(void);
+
+/* ---------------------------------------------------------------- index */
+/* The index cache of long lists (index.c). */
+struct IdxLetter {
+    struct DateStamp date;      /* its folder's date when it was read */
+    LONG  count;
+    ULONG off, len;             /* its block in the file; len 0: only the count */
+    char  name[56];             /* its folder's name */
+};
+struct Idx { LONG n; struct IdxLetter *l; };
+struct IdxOut { UBYTE *buf; LONG len, cap, n; };
+void idx_name(const char *menu, BOOL adult, char *out, LONG max);   /* its file */
+BOOL idx_date(const char *dir, struct DateStamp *ds);
+BOOL idx_load(const char *file, struct Idx *ix);    /* the table only */
+void idx_free(struct Idx *ix);
+LONG idx_read_block(const char *file, ULONG off, ULONG len, const char *dir,
+                    struct ItemList *out);          /* a letter's entries; -1 on error */
+BOOL idx_begin(struct IdxOut *o, LONG letters);
+BOOL idx_letter(struct IdxOut *o, LONG k, const struct DateStamp *date, const char *name,
+                LONG count, const struct Item *items, const UBYTE *block, ULONG blen);
+void idx_abandon(struct IdxOut *o);
+BOOL idx_save(const char *file, const UBYTE *buf, LONG len);
+UBYTE *idx_block(const char *file, ULONG off, ULONG len);  /* FreeVec it */
+
+/* ---------------------------------------------------------------- dirscan */
+/* Every entry of dir, a buffer full per file-system call (ExAll); fn is
+ * given each name and whether it is a folder. -1 if dir cannot be read. */
+typedef void (*DirFn)(void *ctx, const char *name, BOOL isdir);
+LONG dir_scan(const char *dir, DirFn fn, void *ctx);
 
 /* ---------------------------------------------------------------- util */
 int  amce_stricmp(const char *a, const char *b);

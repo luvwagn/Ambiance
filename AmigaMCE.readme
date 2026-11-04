@@ -15,13 +15,16 @@ Features in this release
 ------------------------
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
   with hierarchical categories, never one giant flat list.
-- Long lists (All Games, menus split A-Z) appear as soon as their first
-  screens are read; the loader reads the rest a letter at a time while
-  you browse. With memory to spare every letter stays in memory. Short
-  of memory, the letters furthest from where you are let their names go
-  (about 200 KB for All Games' 3,300 entries when all are kept) and are
-  read again ahead of you, the letter you are heading for first, so the
-  list never has to stop short.
+- Long lists (All Games, menus split A-Z) are read once and kept in an
+  index in the Cache drawer next to the program. After that they open at
+  once with their full count; only letter folders that have changed
+  (games added or removed) are read again. The first time, the list
+  appears as soon as its first screens are read and its count shows
+  "..." while the rest is counted. Folders are read a buffer at a time
+  (ExAll). With memory to spare every letter stays in memory; short of
+  memory, the letters furthest from where you are let their names go and
+  are read again ahead of you, so the list never has to stop short.
+  Deleting the Cache drawer is always safe.
 - Fact sheets, screenshots and pictures are read by a second, lower-
   priority process, so the list never waits for the disk; the entries
   next to the one shown (and the viewer's next picture) are read ahead.

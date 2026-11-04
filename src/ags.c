@@ -113,8 +113,8 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
  * entry of that folder) and its file name; the full path is put together
  * when needed (item_path). A path for each of All Games' 3,000-odd
  * entries would cost ~160 KB. */
-static struct Item *list_add_split(struct ItemList *l, const char *label, char *dir,
-                                   const char *name, UBYTE kind)
+struct Item *list_add_split(struct ItemList *l, const char *label, char *dir,
+                            const char *name, UBYTE kind)
 {
     return add_item(l, label, NULL, dir, name, kind);
 }
@@ -261,13 +261,11 @@ static BOOL contains_nocase(const char *hay, const char *needle)
 
 /* One directory entry of an AGS folder: added to out if it is a menu
  * (.ags folder) or an entry (.run). TRUE if added. */
-static BOOL add_entry(char *dir, const struct FileInfoBlock *fib, struct ItemList *out,
-                      BOOL adult)
+static BOOL add_entry(char *dir, const char *name, BOOL isdir, struct ItemList *out, BOOL adult)
 {
-    const char *name = (const char *)fib->fib_FileName;
     char clean[128];
     UBYTE kind;
-    if (fib->fib_DirEntryType > 0) {
+    if (isdir) {
         if (!ends_with(name, ".ags"))
             return FALSE;               /* .agz = hidden by AGS; other drawers are data */
         kind = IT_DIR;
@@ -284,34 +282,32 @@ static BOOL add_entry(char *dir, const struct FileInfoBlock *fib, struct ItemLis
     return list_add_split(out, clean, dir, name, kind) != NULL;
 }
 
+struct entries_ctx {
+    char *dir;
+    struct ItemList *out;
+    BOOL adult;
+    LONG n;
+};
+
+static void entry_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct entries_ctx *c = ctx;
+    if (add_entry(c->dir, name, isdir, c->out, c->adult))
+        c->n++;
+}
+
 /* Add the entries of one AGS folder to out, unsorted. */
 static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
 {
-    struct FileInfoBlock *fib;
-    BPTR lock;
-    LONG n = 0;
-    char *shared;
-
-    lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
-    if (!lock)
+    struct entries_ctx c;
+    c.out = out;
+    c.adult = adult;
+    c.n = 0;
+    if (!(c.dir = list_strdup(out, dir)))
         return -1;
-    if (!(shared = list_strdup(out, dir))) {
-        UnLock(lock);
+    if (dir_scan(dir, entry_cb, &c) < 0)
         return -1;
-    }
-    fib = AllocDosObject(DOS_FIB, NULL);
-    if (!fib) {
-        UnLock(lock);
-        return -1;
-    }
-    if (Examine(lock, fib)) {
-        while (ExNext(lock, fib))
-            if (add_entry(shared, fib, out, adult))
-                n++;
-    }
-    FreeDosObject(DOS_FIB, fib);
-    UnLock(lock);
-    return n;
+    return c.n;
 }
 
 /* The entries of one AGS folder, sorted. -1 if it cannot be read. */

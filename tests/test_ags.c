@@ -208,6 +208,47 @@ int main(void)
         list_free(&subs);
     }
 
+    /* The index cache: written, read back letter by letter */
+    {
+        struct ItemList a, back;
+        struct IdxOut o;
+        struct Idx ix;
+        struct DateStamp ds;
+        LONG got;
+        list_init(&a);
+        list_init(&back);
+        n = ags_read_dir("AGS:+  Games - 0-Z.ags/A.ags", &a, FALSE);
+        check_long("idx source", n, 2);
+        check_long("idx date", idx_date("AGS:+  Games - 0-Z.ags/A.ags", &ds), 1);
+        check_long("idx begin", idx_begin(&o, 2), 1);
+        check_long("idx letter A", idx_letter(&o, 0, &ds, "A.ags", a.count, a.items, NULL, 0), 1);
+        check_long("idx letter B", idx_letter(&o, 1, &ds, "B.ags", 7, NULL, NULL, 0), 1);
+        check_long("idx save", idx_save("T:test.idx", o.buf, o.len), 1);
+        idx_abandon(&o);
+        check_long("idx load", idx_load("T:test.idx", &ix), 1);
+        check_long("idx letters", ix.n, 2);
+        if (ix.n == 2) {
+            check_str("idx name", ix.l[0].name, "A.ags");
+            check_long("idx count A", ix.l[0].count, 2);
+            check_long("idx count B", ix.l[1].count, 7);
+            check_long("idx B names", ix.l[1].len, 0);
+            check_long("idx same date", CompareDates(&ix.l[0].date, &ds), 0);
+            got = idx_read_block("T:test.idx", ix.l[0].off, ix.l[0].len,
+                                 "AGS:+  Games - 0-Z.ags/A.ags", &back);
+            check_long("idx read", got, 2);
+            for (i = 0; i < got && i < a.count; i++) {
+                check_str("idx label", back.items[i].label, a.items[i].label);
+                check_str("idx path", item_path(&back.items[i], tmp, sizeof(tmp)),
+                          item_path(&a.items[i], out, sizeof(out)));
+                check_long("idx kind", back.items[i].kind, a.items[i].kind);
+            }
+        }
+        idx_free(&ix);
+        check_long("idx missing", idx_load("T:none.idx", &ix), 0);
+        list_free(&a);
+        list_free(&back);
+    }
+
     /* Pictures: folders first, tags, playable / greyed folders; letter
      * folders (A, Mixed/B) merged into their parent's list */
     {

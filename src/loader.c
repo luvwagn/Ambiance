@@ -60,8 +60,29 @@ static void run(struct LJob *j)
     }
     if (j->type == LJ_FOLDER) {
         /* small puddles: a letter's names, kept apart so they can be let go */
-        j->np = list_init_puddle(&j->list, 2048) ? ags_read_dir(j->path, &j->list, j->adult) : -1;
+        if (!list_init_puddle(&j->list, 2048)) {
+            j->np = -1;
+            return;
+        }
+        j->np = -1;
+        if (j->cache[0]) {
+            j->np = idx_read_block(j->cache, j->off, j->len, j->path, &j->list);
+            if (j->np >= 0) {
+                list_sort(&j->list);
+                return;
+            }
+            list_free(&j->list);        /* the cache let us down: the folder, then */
+            j->cache[0] = 0;
+            if (!list_init_puddle(&j->list, 2048))
+                return;
+        }
+        if (!idx_date(j->path, &j->date))
+            memset(&j->date, 0, sizeof(j->date));
+        j->np = ags_read_dir(j->path, &j->list, j->adult);
         return;
+    }
+    if (j->type == LJ_WRITE) {
+        j->np = idx_save(j->path, j->buf, j->len) ? 1 : -1;
     }
     if (j->type == LJ_PICFOLDER) {
         j->np = pics_scan(j->path, &j->nd, j->first, sizeof(j->first));

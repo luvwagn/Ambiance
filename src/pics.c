@@ -112,44 +112,47 @@ static BOOL letter_dir(const char *name)
 
 /* Count dir's pictures (with those of its letter folders) and its other
  * folders; *first: the path of its first picture by name. */
+struct scan_ctx {
+    const char *dir;
+    LONG *ndirs, npics, firstmax;
+    char *first;
+    BOOL top;
+};
+
+static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top);
+
+static void scan_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct scan_ctx *c = ctx;
+    char path[300];
+    if (isdir) {
+        if (c->top && letter_dir(name)) {
+            LONG n;
+            join_path(path, sizeof(path), c->dir, name);
+            n = scan(path, c->ndirs, c->first, c->firstmax, FALSE);
+            if (n > 0)
+                c->npics += n;
+        } else if (c->ndirs) {
+            (*c->ndirs)++;
+        }
+    } else if (entry_format(c->dir, name)) {
+        c->npics++;
+        if (c->first && c->firstmax &&
+            (!c->first[0] || amce_stricmp(name, (const char *)FilePart((STRPTR)c->first)) < 0))
+            join_path(c->first, c->firstmax, c->dir, name);
+    }
+}
+
 static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top)
 {
-    struct FileInfoBlock *fib;
-    BPTR lock;
-    LONG npics = 0;
-    lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
-    if (!lock)
-        return -1;
-    fib = AllocDosObject(DOS_FIB, NULL);
-    if (!fib) {
-        UnLock(lock);
-        return -1;
-    }
-    if (Examine(lock, fib)) {
-        while (ExNext(lock, fib)) {
-            const char *name = (const char *)fib->fib_FileName;
-            char path[300];
-            if (fib->fib_DirEntryType > 0) {
-                if (top && letter_dir(name)) {
-                    LONG n;
-                    join_path(path, sizeof(path), dir, name);
-                    n = scan(path, ndirs, first, firstmax, FALSE);
-                    if (n > 0)
-                        npics += n;
-                } else if (ndirs) {
-                    (*ndirs)++;
-                }
-            } else if (entry_format(dir, name)) {
-                npics++;
-                if (first && firstmax &&
-                    (!first[0] || amce_stricmp(name, (const char *)FilePart((STRPTR)first)) < 0))
-                    join_path(first, firstmax, dir, name);
-            }
-        }
-    }
-    FreeDosObject(DOS_FIB, fib);
-    UnLock(lock);
-    return npics;
+    struct scan_ctx c;
+    c.dir = dir;
+    c.ndirs = ndirs;
+    c.npics = 0;
+    c.first = first;
+    c.firstmax = firstmax;
+    c.top = top;
+    return dir_scan(dir, scan_cb, &c) < 0 ? -1 : c.npics;
 }
 
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
@@ -167,33 +170,37 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
 
 /* Add dir's folders and pictures to out, unsorted; a letter folder's
  * entries instead of the folder itself. */
+struct collect_ctx {
+    const char *dir;
+    struct ItemList *out;
+    BOOL top;
+};
+
+static void collect(const char *dir, struct ItemList *out, BOOL top);
+
+static void collect_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct collect_ctx *c = ctx;
+    char path[300], key[140];
+    if (!isdir && !entry_format(c->dir, name))
+        return;
+    join_path(path, sizeof(path), c->dir, name);
+    if (isdir && c->top && letter_dir(name)) {
+        collect(path, c->out, FALSE);
+        return;
+    }
+    key[0] = isdir ? '0' : '1';             /* folders first */
+    amce_strlcpy(key + 1, name, sizeof(key) - 1);
+    list_add(c->out, name, path, key, isdir ? IT_DIR : IT_PIC);
+}
+
 static void collect(const char *dir, struct ItemList *out, BOOL top)
 {
-    struct FileInfoBlock *fib;
-    BPTR lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
-    char path[300], key[140];
-    if (!lock)
-        return;
-    fib = AllocDosObject(DOS_FIB, NULL);
-    if (fib && Examine(lock, fib)) {
-        while (ExNext(lock, fib)) {
-            const char *name = (const char *)fib->fib_FileName;
-            BOOL isdir = fib->fib_DirEntryType > 0;
-            if (!isdir && !entry_format(dir, name))
-                continue;
-            join_path(path, sizeof(path), dir, name);
-            if (isdir && top && letter_dir(name)) {
-                collect(path, out, FALSE);
-                continue;
-            }
-            key[0] = isdir ? '0' : '1';         /* folders first */
-            amce_strlcpy(key + 1, name, sizeof(key) - 1);
-            list_add(out, name, path, key, isdir ? IT_DIR : IT_PIC);
-        }
-    }
-    if (fib)
-        FreeDosObject(DOS_FIB, fib);
-    UnLock(lock);
+    struct collect_ctx c;
+    c.dir = dir;
+    c.out = out;
+    c.top = top;
+    dir_scan(dir, collect_cb, &c);
 }
 
 static LONG read_dir(const char *dir, struct ItemList *out)

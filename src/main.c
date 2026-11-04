@@ -167,13 +167,22 @@ struct Chunk {
     LONG first, count;              /* its entries' place in the list (first -1: unread) */
     struct ItemList names;          /* their strings, while held (pool) */
     BOOL held;
+    struct DateStamp date;          /* its folder's, when read (for the index cache) */
+    BOOL cached;                    /* its entries are in the index file, at: */
+    ULONG coff, clen;
+    ULONG noff, nlen;               /* where the file being written puts them */
 };
 struct Chunks {
     LONG n, next;                   /* next: the next letter to read the first time */
     struct Chunk *c;
     struct LJob *job;               /* the one being read (one at a time) */
     LONG job_k;
+    struct LJob *wjob;              /* the index file being written */
+    char idx[48];                   /* the index file (index.c) */
     BOOL adult, own, disorder, dropped, frozen, cut;
+    BOOL laying;                    /* being laid out: nothing read on the side */
+    BOOL dirty;                     /* a letter was read from its folder: save the index */
+    ULONG t0;                       /* when it was opened (log) */
 };
 
 static void set_msg(const char *m);
@@ -185,9 +194,20 @@ static void preview_touch(struct Page *p);
 static BOOL pv_roomy(void);
 static LONG pv_dir;
 
+/* Letters still to be read the first time: the count is still growing
+ * (only when there was no index cache for it). */
 static BOOL ch_reading(const struct Page *p)
 {
     return p->ch && !p->ch->cut && p->ch->next < p->ch->n;
+}
+
+static BOOL ch_all_held(const struct Chunks *ch)
+{
+    LONG k;
+    for (k = 0; k < ch->n; k++)
+        if (ch->c[k].first >= 0 && ch->c[k].count && !ch->c[k].held)
+            return FALSE;
+    return TRUE;
 }
 
 static void ch_free(struct Chunks *ch)
@@ -199,6 +219,11 @@ static void ch_free(struct Chunks *ch)
         ldr_wait(ch->job);
         list_free(&ch->job->list);
         FreeVec(ch->job);
+    }
+    if (ch->wjob) {
+        ldr_wait(ch->wjob);
+        FreeVec(ch->wjob->buf);
+        FreeVec(ch->wjob);
     }
     for (k = 0; k < ch->n; k++)
         list_free(&ch->c[k].names);
@@ -261,6 +286,8 @@ static void ch_trim(struct Page *p)
     }
 }
 
+static void ch_save(struct Page *p);
+
 /* A letter's entries came back from the loader. */
 static void ch_take(struct Page *p, LONG k, struct ItemList *got)
 {
@@ -279,13 +306,15 @@ static void ch_take(struct Page *p, LONG k, struct ItemList *got)
                 ch->disorder = TRUE;        /* filed under another letter */
         }
         ch->next = k + 1;
-    } else {                                /* read again: the strings back */
+    } else {                                /* read again (or from the index): the strings */
         LONG n = got->count < c->count ? got->count : c->count;
         for (i = 0; i < n; i++) {
             struct Item *it = &p->list.items[c->first + i];
             it->label = got->items[i].label;
             it->sortkey = got->items[i].sortkey;
             it->path = got->items[i].path;
+            it->kind = got->items[i].kind;
+            it->mark = got->items[i].mark;
             it->flags = got->items[i].flags | (it->flags & ITEM_FLAT);
         }
     }
@@ -294,9 +323,11 @@ static void ch_take(struct Page *p, LONG k, struct ItemList *got)
     c->names = *got;
     c->held = TRUE;
     got->pool = NULL;
-    if (ch->next >= ch->n && (ch->own || ch->disorder) && !ch->dropped && !ch->frozen) {
+    if (ch->next >= ch->n && (ch->own || ch->disorder) && ch_all_held(ch) && !ch->frozen) {
         /* all read, and not in order letter by letter: sort it whole (the
-         * letters no longer map to places, so none is let go from now) */
+         * letters no longer map to places, so none is let go from now;
+         * the index is saved first, while they still do) */
+        ch_save(p);
         list_sort(&p->list);
         ch->frozen = TRUE;
     }
@@ -312,42 +343,47 @@ static void ch_send(struct Page *p, LONG k)
     j->type = LJ_FOLDER;
     j->adult = ch->adult;
     amce_strlcpy(j->path, ch->c[k].path, sizeof(j->path));
+    if (ch->c[k].cached) {                  /* from the index file: one read */
+        amce_strlcpy(j->cache, ch->idx, sizeof(j->cache));
+        j->off = ch->c[k].coff;
+        j->len = ch->c[k].clen;
+    }
     ch->job = j;
     ch->job_k = k;
     ldr_submit(j);
 }
 
-/* What to read next, if anything: a letter on screen that was let go,
- * then those either side of the selection (the way the list moves first),
- * then the next one not read yet. */
+/* What to read next, if anything: a letter on screen not held (let go,
+ * or laid out from the index and not read yet), then those either side of
+ * the selection, the way the list moves first, then the next one not read
+ * at all; with memory to spare, then every other one, nearest first. */
 static void ch_pump(struct Page *p)
 {
     struct Chunks *ch = p ? p->ch : NULL;
     LONG k, at, vis;
-    if (!ch || ch->job)
+    BOOL roomy;
+    if (!ch || ch->job || ch->laying || ch->frozen)
         return;
     vis = list_visible();
-    if (ch->dropped && !ch->frozen) {
-        for (k = 0; k < ch->n; k++) {
-            struct Chunk *c = &ch->c[k];
-            if (c->first >= 0 && !c->held && c->first < p->top + vis && c->first + c->count > p->top) {
-                ch_send(p, k);
-                return;
-            }
+    roomy = pv_roomy();
+    for (k = 0; k < ch->n; k++) {
+        struct Chunk *c = &ch->c[k];
+        if (c->first >= 0 && c->count && !c->held && c->first < p->top + vis &&
+            c->first + c->count > p->top) {
+            ch_send(p, k);
+            return;
         }
-        if ((at = ch_of(ch, p->sel)) >= 0) {
-            LONG d = pv_dir >= 0 ? 1 : -1, s;
-            for (s = 0; s < 2; s++, d = -d)
-                if (at + d >= 0 && at + d < ch->n && ch->c[at + d].first >= 0 &&
-                    !ch->c[at + d].held && pv_roomy()) {
-                    ch_send(p, at + d);
-                    return;
-                }
-            /* tight: the next letter only if there is room for it */
-            k = at + (pv_dir >= 0 ? 1 : -1);
-            if (k >= 0 && k < ch->n && ch->c[k].first >= 0 && !ch->c[k].held &&
-                AvailMem(MEMF_ANY) >= CH_LOW) {
-                ch_send(p, k);
+    }
+    if ((at = ch_of(ch, p->sel)) >= 0) {
+        LONG d = pv_dir >= 0 ? 1 : -1, s;
+        for (s = 0; s < 2; s++, d = -d) {
+            struct Chunk *c;
+            if (at + d < 0 || at + d >= ch->n)
+                continue;
+            c = &ch->c[at + d];
+            if (c->first >= 0 && c->count && !c->held &&
+                (roomy || (s == 0 && AvailMem(MEMF_ANY) >= CH_LOW))) {
+                ch_send(p, at + d);
                 return;
             }
         }
@@ -364,7 +400,90 @@ static void ch_pump(struct Page *p)
             }
         }
         ch_send(p, ch->next);
+        return;
     }
+    if (roomy) {
+        LONG best = -1, bd = 0;
+        if (at < 0)
+            at = 0;
+        for (k = 0; k < ch->n; k++) {
+            struct Chunk *c = &ch->c[k];
+            LONG d = k > at ? k - at : at - k;
+            if (c->first >= 0 && c->count && !c->held && (best < 0 || d < bd)) {
+                best = k;
+                bd = d;
+            }
+        }
+        if (best >= 0)
+            ch_send(p, best);
+    }
+}
+
+/* Save the index of a list read whole (some letter from its folder): each
+ * letter's date and count, and its entries where they are to be had (held,
+ * or carried over from the old file). Written by the loader. */
+static void ch_save(struct Page *p)
+{
+    struct Chunks *ch = p->ch;
+    struct IdxOut o;
+    struct LJob *j;
+    LONG k;
+    if (!ch->dirty || ch->wjob || ch->frozen || ch->next < ch->n || ch->cut || !ch->n)
+        return;
+    if (!idx_begin(&o, ch->n))
+        return;
+    for (k = 0; k < ch->n; k++) {
+        struct Chunk *c = &ch->c[k];
+        const char *name = FilePart((STRPTR)c->path);
+        BOOL ok;
+        LONG before = o.len;
+        if (c->held) {
+            ok = idx_letter(&o, k, &c->date, name, c->count, &p->list.items[c->first], NULL, 0);
+        } else if (c->cached) {
+            UBYTE *b = idx_block(ch->idx, c->coff, c->clen);
+            ok = idx_letter(&o, k, &c->date, name, c->count, NULL, b, b ? c->clen : 0);
+            FreeVec(b);
+        } else {
+            ok = idx_letter(&o, k, &c->date, name, c->count, NULL, NULL, 0);
+        }
+        if (!ok) {
+            idx_abandon(&o);
+            return;
+        }
+        c->noff = o.len > before ? before : 0;
+        c->nlen = o.len - before;
+    }
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        idx_abandon(&o);
+        return;
+    }
+    j->type = LJ_WRITE;
+    amce_strlcpy(j->path, ch->idx, sizeof(j->path));
+    j->buf = o.buf;
+    j->len = o.len;
+    for (k = 0; k < ch->n; k++)
+        ch->c[k].cached = FALSE;            /* the file is being replaced: not until it is */
+    ch->dirty = FALSE;
+    ch->wjob = j;
+    ldr_submit(j);
+}
+
+/* The index file is written: letters read from it now come from there. */
+static void ch_saved(struct Page *p)
+{
+    struct Chunks *ch = p->ch;
+    struct LJob *j = ch->wjob;
+    LONG k;
+    ch->wjob = NULL;
+    if (j->ran && j->np > 0)
+        for (k = 0; k < ch->n; k++) {
+            ch->c[k].coff = ch->c[k].noff;
+            ch->c[k].clen = ch->c[k].nlen;
+            ch->c[k].cached = ch->c[k].nlen > 0;
+        }
+    amce_log("index cache", j->ran && j->np > 0 ? "saved" : "could not be saved");
+    FreeVec(j->buf);
+    FreeVec(j);
 }
 
 /* The loader brought page p's letter. */
@@ -375,6 +494,10 @@ static void ch_arrived(struct Page *p, BOOL shown)
     LONG k = ch->job_k, before = p->list.count, vis = list_visible();
     BOOL was_reading = ch_reading(p), was_held = ch->c[k].held, frozen = ch->frozen;
     ch->job = NULL;
+    if (j->ran && j->np >= 0 && !j->cache[0]) {
+        ch->c[k].date = j->date;            /* read from its folder: the index is out of date */
+        ch->dirty = TRUE;
+    }
     if (j->ran && j->np >= 0) {
         ch_take(p, k, &j->list);
     } else if (ch->c[k].first < 0) {
@@ -384,6 +507,12 @@ static void ch_arrived(struct Page *p, BOOL shown)
     }
     list_free(&j->list);
     FreeVec(j);
+    if (was_reading && !ch_reading(p) && !ch->laying) {
+        char m[64];
+        sprintf(m, "%ld entries in %ld ms", (long)p->list.count, (long)(time_ms() - ch->t0));
+        amce_log("list read", m);
+    }
+    ch_save(p);                             /* complete: keep its index (before letting go) */
     ch_trim(p);
     if (shown) {
         struct Chunk *c = &ch->c[k];
@@ -440,6 +569,79 @@ static void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
     }
 }
 
+/* Lay a list out from its index file: every letter whose folder has not
+ * changed gets its places at once (blank until its entries are read, from
+ * the file), so the count is the whole list's from the start; a letter
+ * that has changed is read from its folder now. FALSE if there is no
+ * index for this list (or it is not this list's any more). */
+static BOOL ch_from_index(struct Page *p)
+{
+    struct Chunks *ch = p->ch;
+    struct Idx ix;
+    LONG k, i, fresh = 0;
+    char m[64];
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    if (!idx_load(ch->idx, &ix)) {
+        me->pr_WindowPtr = oldwin;
+        return FALSE;
+    }
+    me->pr_WindowPtr = oldwin;
+    if (ix.n != ch->n) {
+        idx_free(&ix);
+        return FALSE;
+    }
+    for (k = 0; k < ch->n; k++)
+        if (amce_stricmp(ix.l[k].name, (const char *)FilePart((STRPTR)ch->c[k].path)) != 0) {
+            idx_free(&ix);
+            return FALSE;
+        }
+    ch->laying = TRUE;
+    for (k = 0; k < ch->n; k++) {
+        struct Chunk *c = &ch->c[k];
+        struct DateStamp ds;
+        if (idx_date(c->path, &ds) && !CompareDates(&ds, &ix.l[k].date)) {
+            struct Item ph;
+            memset(&ph, 0, sizeof(ph));
+            ph.label = c->letter;
+            ph.sortkey = (char *)"";
+            ph.path = c->path;
+            ph.kind = IT_RUN;
+            ph.flags = ITEM_GONE;
+            c->date = ix.l[k].date;
+            c->first = p->list.count;
+            c->count = 0;
+            for (i = 0; i < ix.l[k].count; i++)
+                if (list_append(&p->list, &ph))
+                    c->count++;
+            c->coff = ix.l[k].off;
+            c->clen = ix.l[k].len;
+            c->cached = c->clen > 0;
+            ch->next = k + 1;
+        } else {
+            ch->next = k;                   /* changed: read it now, from its folder */
+            ch_send(p, k);
+            if (ch->job) {
+                ldr_wait(ch->job);
+                ch_arrived(p, FALSE);
+            }
+            if (c->first < 0) {             /* could not: nothing there */
+                c->first = p->list.count;
+                c->count = 0;
+            }
+            ch->next = k + 1;
+            fresh++;
+        }
+    }
+    ch->laying = FALSE;
+    idx_free(&ix);
+    sprintf(m, "%ld entries, %ld letters changed, %ld ms", (long)p->list.count, (long)fresh,
+            (long)(time_ms() - ch->t0));
+    amce_log("list from index", m);
+    return TRUE;
+}
+
 /* Open an AGS folder as a list page: a letter at a time when it is a
  * long flat one (first: entries to have before it is shown). */
 static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
@@ -487,7 +689,16 @@ static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
     }
     list_free(&subs);
     p->ch = ch;
-    ch_wait_until(p, first, FALSE);         /* not drawn yet */
+    ch->t0 = time_ms();
+    idx_name(path, adult, ch->idx, sizeof(ch->idx));
+    if (ch_from_index(p)) {
+        /* every place laid out: read what the first screens show */
+        ch_wait_item(p, 0, FALSE);
+        if (p->list.count)
+            ch_wait_item(p, (p->list.count < first ? p->list.count : first) - 1, FALSE);
+    } else {
+        ch_wait_until(p, first, FALSE);     /* not drawn yet */
+    }
     ch_pump(p);                             /* and on with the rest */
     return p->list.count;
 }
@@ -1279,7 +1490,8 @@ static void draw_title_count(struct Page *p)
     WORD right = g.pane_x + g.pane_w, tw, x;
     if (p->type != PT_LIST || !p->list.count)
         return;
-    sprintf(count, "%ld/%ld", (long)p->sel + 1, (long)p->list.count);
+    sprintf(count, ch_reading(p) ? "%ld/%ld..." : "%ld/%ld", (long)p->sel + 1,
+            (long)p->list.count);   /* "...": still counting (no index yet) */
     tw = gfx_textlen(&g, count, TS_SMALL);
     x = right - tw;
     if (count_left >= 0 && count_left < x)
@@ -1308,7 +1520,7 @@ static void draw_title(struct Page *p)
          * number never runs into the breadcrumb */
         p->title_wide = ch_reading(p);
         if (p->title_wide)
-            strcpy(widest, "88888/88888");      /* still growing */
+            strcpy(widest, "88888/88888...");   /* still growing */
         else
             sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
         cw = gfx_textlen(&g, widest, TS_SMALL);
@@ -1785,9 +1997,12 @@ static void preview_arrived(void)
     int d;
     while (ldr_collect())
         ;
-    for (d = 0; d < depth; d++)
+    for (d = 0; d < depth; d++) {
+        if (pages[d].ch && pages[d].ch->wjob && pages[d].ch->wjob->done)
+            ch_saved(&pages[d]);
         if (pages[d].ch && pages[d].ch->job && pages[d].ch->job->done)
             ch_arrived(&pages[d], &pages[d] == p);
+    }
     if (!(j = pv_wait) || !j->done)
         return;
     pv_wait = NULL;
@@ -1813,7 +2028,8 @@ static BOOL loader_due(void)
     if (pv_wait && pv_wait->done)
         return TRUE;
     for (d = 0; d < depth; d++)
-        if (pages[d].ch && pages[d].ch->job && pages[d].ch->job->done)
+        if (pages[d].ch && ((pages[d].ch->job && pages[d].ch->job->done) ||
+                            (pages[d].ch->wjob && pages[d].ch->wjob->done)))
             return TRUE;
     return FALSE;
 }
