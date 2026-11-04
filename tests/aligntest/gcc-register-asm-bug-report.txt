@@ -3,6 +3,23 @@ Title: Wrong code: register-asm inputs (a0/a1) dropped when a __mulsi3
        (-Os/-O2 -m68000 -mtune=68020-60)
 
 
+STATUS: FIXED IN 16.2-rc23 (affects the 13.4 toolchain)
+--------------------------------------------------------
+Tested with m68k-amigaos-gcc (AmigaDev 16.2-rc23) 16.2.1b 20261010182711,
+the x86_64-linux release archive:
+  - mini.c and mini_var.c (below) give correct code at every option set
+    that fails on 13.4. In GIMPLE the multiply now sits before the
+    a6/a0/a1/d0 assignments, and the asm gets "move.l d3,a0 /
+    move.l a3,a1" after the __mulsi3 call.
+  - The runtime test (300 entries x 20 rounds, 16/18/20-byte entries)
+    built with 16.2-rc23 passes under vamos. The same source built with
+    13.4 stops with "AllocPooled: invalid memory pool".
+Note: 16.2 also strength-reduces x*18 into shifts at -mtune=68020-60, so
+mini.c alone no longer reaches the libcall. mini_var.c forces the libcall
+and is the better regression test. Consider whether a backport to the
+13.x branch is worthwhile, and adding mini_var.c to the testsuite.
+
+
 SUMMARY
 -------
 An inline OS call written the usual way (each argument is computed into a
@@ -78,6 +95,20 @@ struct Entry *add(struct Vec *v, char *s)
     return e;
 }
 /* end of mini.c */
+
+VARIANT mini_var.c: the element size is a runtime value, so the multiply
+is always a __mulsi3 call on the 68000. Change these lines of mini.c:
+
+  struct Vec   { void *pool; char *items; long count, cap, esize; };
+  ...
+        char *n = alloc(v->pool, ncap * v->esize);
+  ...
+            copy_mem(v->items, n, v->count * v->esize);
+  ...
+    e = (struct Entry *)(v->items + v->count * v->esize);
+
+On 13.4 this one fails WITHOUT -mtune as well:
+  -Os -m68000  WRONG     -O2 -m68000  WRONG     -O1 -m68000  ok
 
 The same thing happens with the real NDK macros: replace copy_mem() with
 CopyMem() and alloc() with AllocPooled() from <proto/exec.h> (compile with
