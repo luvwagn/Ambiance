@@ -22,6 +22,7 @@
 #include <string.h>
 #include <dos/dostags.h>
 #include <dos/dosextens.h>
+#include <graphics/modeid.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 
@@ -56,6 +57,34 @@ static struct Worker *worker_for(const struct LJob *j)
     return &workers[W_QUICK];
 }
 
+/* Decode picture src for job j. With tw (a colour-table screen), it is
+ * decoded as it is and made small in colours of its own (thumb.c): the
+ * pane's picture always, the viewer's one only when its colours do not
+ * fit the screen's (else it is shown in them, register for register). */
+static void decode(struct LJob *j, const char *src)
+{
+    ULONG t0 = time_ms(), dw, dh;
+    j->obj = pic_decode(src, j->tw ? NULL : j->scr, j->remap, &j->remapped, &j->info);
+    j->ms_decode = time_ms() - t0;
+    if (!j->obj || !j->tw || j->remapped || j->cancel)
+        return;
+    if (j->viewfit) {
+        if (j->info.depth <= 8 && !(j->info.mode & HAM_KEY) &&
+            (1UL << j->info.depth) <= (ULONG)j->maxcol + 1)
+            return;                     /* fits as it is */
+        view_fit(j->tw, j->th, j->tall, &j->info, &dw, &dh, NULL, 0);
+    } else {
+        pic_fit(j->info.w, j->info.h, j->tall, j->tw, j->th, TRUE, &dw, &dh);
+    }
+    t0 = time_ms();
+    j->thumb = thumb_make(j->obj, dw, dh, j->maxcol);
+    j->ms_thumb = time_ms() - t0;
+    if (j->thumb || (!j->viewfit && j->info.depth > 8)) {
+        pic_dispose(j->obj);            /* a deep one is no use to the pane without */
+        j->obj = NULL;
+    }
+}
+
 static void run(struct LJob *j)
 {
     BPTR l;
@@ -64,7 +93,7 @@ static void run(struct LJob *j)
         j->nlines = ags_read_txt(j->path, j->lines, LJ_FACTS);
         j->np = ags_screenshot_path(j->path, shot, sizeof(shot));  /* has one (LJ_SHOT) */
         if (j->want_pic && !j->cancel && j->np)
-            j->obj = pic_decode(shot, j->scr, j->remap, &j->remapped, &j->info);
+            decode(j, shot);
         return;
     }
     if (j->type == LJ_SHOT) {
@@ -83,7 +112,7 @@ static void run(struct LJob *j)
             src = shot;
         }
         if (!j->cancel)
-            j->obj = pic_decode(src, j->scr, j->remap, &j->remapped, &j->info);
+            decode(j, src);
         return;
     }
     if (j->type == LJ_PICTURE) {
@@ -99,7 +128,7 @@ static void run(struct LJob *j)
         if (fib)
             FreeDosObject(DOS_FIB, fib);
         if (j->want_pic && !j->cancel)
-            j->obj = pic_decode(j->path, j->scr, j->remap, &j->remapped, &j->info);
+            decode(j, j->path);
         return;
     }
     if (j->type == LJ_FOLDER) {
@@ -135,7 +164,7 @@ static void run(struct LJob *j)
     if (j->type == LJ_PICFOLDER) {
         j->np = pics_scan(j->path, &j->nd, j->first, sizeof(j->first));
         if (j->np > 0 && j->want_pic && !j->cancel)
-            j->obj = pic_decode(j->first, j->scr, j->remap, &j->remapped, &j->info);
+            decode(j, j->first);
     }
 }
 
@@ -267,6 +296,7 @@ static void orphan_free(struct LJob *j)
     if (j->list.pool)
         list_free(&j->list);
     pic_dispose(j->obj);
+    thumb_free(j->thumb);
     FreeVec(j->buf);
     FreeVec(j);
 }

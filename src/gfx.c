@@ -924,8 +924,9 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
  * picture keeps its own colour numbers and takes no pens; gfx_picture_obj
  * maps them when it is drawn, so a picture decoded ahead (loader.c) never
  * takes pens from the one on screen. A deeper picture than 8 bits can only
- * be shown remapped; given scr, it is then remapped after all. Safe to
- * call from the loader process. */
+ * be drawn remapped; given scr, it is then remapped after all; without, it
+ * is kept as it is, for thumb_make (thumb.c). Safe to call from the loader
+ * process. */
 APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                 struct PicInfo *pi)
 {
@@ -952,9 +953,9 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
         DisposeDTObject(o);
         return NULL;
     }
-    if (!remap && bmh->bmh_Depth > 8) {
+    if (!remap && bmh->bmh_Depth > 8 && scr) {
         DisposeDTObject(o);
-        return scr ? pic_decode(path, scr, TRUE, remapped, pi) : NULL;
+        return pic_decode(path, scr, TRUE, remapped, pi);
     }
     pic_info(o, bmh, pi);
     *remapped = remap;
@@ -1041,6 +1042,137 @@ static struct BitMap *own_remap(struct Gfx *g, Object *o, ULONG sw, ULONG sh,
     return bm;
 }
 
+/* The size a sw x sh picture is drawn at in a w x h box (tall: on a
+ * tall-pixel screen). */
+void pic_fit(ULONG sw, ULONG sh, BOOL tall, WORD w, WORD h, BOOL whole, ULONG *pdw, ULONG *pdh)
+{
+    ULONG sxe, sye, ew, eh, kw, kh, k, dw, dh;
+    /* A lowres picture on a tall-pixel hires screen: double its width to
+     * keep its shape. */
+    sxe = (tall && sw <= 384) ? 2 : 1;
+    /* AGS's screenshots are 320 x 128: every other line of a 320 x 256
+     * screen. Anything 2.5:1 or wider is taken as such and shown twice as
+     * tall, the shape of the screen it came from. */
+    sye = sw * 2 >= sh * 5 ? 2 : 1;
+    if (sxe == 2 && sye == 2)
+        sxe = sye = 1;                      /* the same shape, half the size */
+    /* fit (sw*sxe) x (sh*sye) into w x h: a whole scale if 1x fits, so
+     * pixels stay square-edged, else shrunk to fit */
+    ew = sw * sxe;
+    eh = sh * sye;
+    kw = (ULONG)w / ew;
+    kh = (ULONG)h / eh;
+    k = kw < kh ? kw : kh;
+    if (whole && k >= 1) {
+        dw = ew * k;
+        dh = eh * k;
+    } else {
+        dw = w;
+        dh = (eh * w) / ew;
+        if (dh > (ULONG)h) {
+            dh = h;
+            dw = (ew * h) / eh;
+        }
+    }
+    *pdw = dw ? dw : 1;
+    *pdh = dh ? dh : 1;
+}
+
+/* Chunky pixels (mod bytes a row, a multiple of 16) into bm. */
+void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
+                         ULONG mod)
+{
+    struct RastPort rp, trp;
+    struct BitMap *row;
+    InitRastPort(&rp);
+    rp.BitMap = bm;
+    if (GfxBase->LibNode.lib_Version >= 40) {
+        WriteChunkyPixels(&rp, 0, 0, w - 1, h - 1, buf, mod);
+    } else if ((row = AllocBitMap(w, 1, g->depth, 0, bm))) {
+        trp = rp;
+        trp.BitMap = row;
+        WritePixelArray8(&rp, 0, 0, w - 1, h - 1, buf, &trp);
+        WaitBlit();
+        FreeBitMap(row);
+    }
+}
+
+/* How many colours a thumbnail made now may have: half the pens free to
+ * pictures, the other half for the next one (drawn while this one is
+ * still up, in other pens). */
+LONG gfx_thumb_colours(struct Gfx *g)
+{
+    struct PaletteExtra *pe = g->scr ? g->scr->ViewPort.ColorMap->PalExtra : NULL;
+    LONG all = g->depth >= 8 ? 256 : 1L << g->depth;
+    LONG n = ((pe ? (LONG)pe->pe_NFree : all / 2) + pic_npens) / 2;
+    if (n > all)
+        n = all;
+    return n < 16 ? 16 : n;
+}
+
+/* Draw a thumbnail (thumb.c) centred across in the w x h box at x, y, in
+ * pens obtained now; the one on screen is replaced as by gfx_picture_obj.
+ * pi: what the picture is (shown in the pane). */
+BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
+               WORD w, WORD h, WORD *drawn_h)
+{
+    struct ColorMap *cm;
+    struct BitMap *tmp;
+    UBYTE *buf, map[256], used[256], pens[256];
+    UWORD npens = 0;
+    ULONG i, n;
+    WORD nx;
+    if (!t || !g->pens_shared || g->truecolor)
+        return FALSE;
+    n = (ULONG)t->mod * t->h;
+    cm = g->scr->ViewPort.ColorMap;
+    if (!(buf = AllocVec(n, MEMF_ANY)))
+        return FALSE;
+    if (!(tmp = AllocBitMap(t->w, t->h, g->depth, BMF_CLEAR, g->rp->BitMap))) {
+        FreeVec(buf);
+        return FALSE;
+    }
+    memset(used, 0, sizeof(used));
+    for (i = 0; i < n; i++)
+        used[t->px[i]] = 1;
+    for (i = 0; i < 256; i++) {
+        map[i] = PEN_BG;
+        if (used[i] && i < t->ncol) {
+            ULONG c = t->pal[i];
+            LONG pen = ObtainBestPen(cm, ((c >> 16) & 255) * 0x01010101UL,
+                                     ((c >> 8) & 255) * 0x01010101UL, (c & 255) * 0x01010101UL,
+                                     OBP_Precision, PRECISION_IMAGE, TAG_END);
+            if (pen >= 0) {
+                map[i] = pen;
+                pens[npens++] = pen;
+            }
+        }
+    }
+    for (i = 0; i < n; i++)
+        buf[i] = map[t->px[i]];
+    gfx_chunky(g, tmp, buf, t->w, t->h, t->mod);
+    FreeVec(buf);
+    nx = x + (w - (WORD)t->w) / 2;
+    {
+        struct Beam b;
+        beam_init(g, &b);
+        band_blit(g, &b, tmp, nx, y, t->w, t->h);
+        clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, t->w, t->h);
+    }
+    FreeBitMap(tmp);
+    gfx_picture_free(g);                    /* now the old one's pens can go */
+    CopyMem(pens, pic_pens, npens);
+    pic_npens = npens;
+    g->pic = *pi;
+    g->pic_x = nx;
+    g->pic_y = y;
+    g->pic_w = t->w;
+    g->pic_h = t->h;
+    if (drawn_h)
+        *drawn_h = t->h;
+    return TRUE;
+}
+
 /* Draw a decoded picture (pic_decode) fitted into w x h at (x, y), centred
  * across, keeping its aspect. Lowres pictures on a hires screen are
  * widened 2:1 so they keep their shape. The caller keeps the object (it
@@ -1054,7 +1186,7 @@ BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WOR
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL, *tmp, *own = NULL;
     struct BitScaleArgs bsa;
-    ULONG sw, sh, sxe, sye, dw, dh;
+    ULONG sw, sh, dw, dh;
     UBYTE pens[256];
     UWORD npens = 0;
 
@@ -1081,32 +1213,7 @@ BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WOR
     }
     if (!bm)
         return FALSE;
-    /* A lowres picture on a tall-pixel hires screen: double its width to
-     * keep its shape. */
-    sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;
-    /* AGS's screenshots are 320 x 128: every other line of a 320 x 256
-     * screen. Anything 2.5:1 or wider is taken as such and shown twice as
-     * tall, the shape of the screen it came from. */
-    sye = sw * 2 >= sh * 5 ? 2 : 1;
-    if (sxe == 2 && sye == 2)
-        sxe = sye = 1;                      /* the same shape, half the size */
-    /* fit (sw*sxe) x (sh*sye) into w x h: a whole scale if 1x fits, so
-     * pixels stay square-edged, else shrunk to fit */
-    {
-        ULONG ew = sw * sxe, eh = sh * sye;
-        ULONG kw = (ULONG)w / ew, kh = (ULONG)h / eh, k = kw < kh ? kw : kh;
-        if (whole && k >= 1) {
-            dw = ew * k;
-            dh = eh * k;
-        } else {
-            dw = w;
-            dh = (eh * w) / ew;
-            if (dh > (ULONG)h) {
-                dh = h;
-                dw = (ew * h) / eh;
-            }
-        }
-    }
+    pic_fit(sw, sh, gfx_mode_tall(g->mode), w, h, whole, &dw, &dh);
     tmp = dw && dh ? AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap) : NULL;
     if (!tmp) {
         if (own)

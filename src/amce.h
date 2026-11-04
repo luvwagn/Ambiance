@@ -175,13 +175,37 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
                 struct PicInfo *pi);
 BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
                      BOOL whole, WORD *drawn_h, BOOL *taken);
+/* The size a sw x sh picture is drawn at in a w x h box (tall: the
+ * screen has tall pixels; whole: a whole scale when 1x fits). */
+void pic_fit(ULONG sw, ULONG sh, BOOL tall, WORD w, WORD h, BOOL whole, ULONG *dw, ULONG *dh);
+/* A picture made small, in colours of its own (thumb.c): colour numbers
+ * and their colours, no pens. Made in any process, drawn by gfx_thumb. */
+struct Thumb {
+    UWORD w, h, mod;            /* mod: bytes a row of px (w rounded up to 16) */
+    UWORD ncol;
+    ULONG pal[256];             /* 0xRRGGBB */
+    UBYTE *px;
+};
+struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
+void thumb_free(struct Thumb *t);
+LONG gfx_thumb_colours(struct Gfx *g);
+void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
+BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
+               WORD w, WORD h, WORD *drawn_h);
 /* The full-screen picture viewer, on AmigaMCE's own screen (view.c). On
  * 256-colour and native screens a picture gets the screen's whole palette
  * while it is shown, and the info bar takes its colours from the picture.
  * view_end leaves the screen black; redraw it, then view_restore. */
 BOOL view_begin(struct Gfx *g);
+/* pre: decoded ahead; or pre_thumb (made ahead for the screen, given
+ * up to view_show), pre_info: what it is */
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
-               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped);   /* pre: decoded ahead */
+               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
+               struct Thumb *pre_thumb, const struct PicInfo *pre_info);
+/* The size a picture is shown at full screen (gw x gh, tall pixels), and
+ * its scale as text (scale may be NULL). */
+void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw, ULONG *dh,
+              char *scale, LONG max);
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
 void view_bar_hide(struct Gfx *g);
 BOOL view_bar_shown(void);
@@ -292,6 +316,12 @@ struct LJob {
     char path[300];             /* entry base, picture or folder */
     /* results */
     APTR obj;                   /* the decoded picture (gfx_picture_obj), or NULL */
+    UWORD tw, th, maxcol;       /* LJ_SHOT on a colour-table screen: made into a */
+    UBYTE tall, viewfit;        /*   thumbnail for a tw x th box (pic_fit; viewfit:
+                                 *   the viewer's screen, view_fit, and only if it
+                                 *   has more colours than maxcol + 1), */
+    struct Thumb *thumb;        /*   obj then NULL */
+    ULONG ms_decode, ms_thumb;  /* how long each took */
     BOOL remapped;
     struct PicInfo info;
     LONG nlines;                /* LJ_ENTRY: the fact sheet (np: 1 if it has a screenshot) */

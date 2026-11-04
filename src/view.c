@@ -9,9 +9,13 @@
  *   direct: a picture with no more colours than the screen (ILBM, GIF,
  *           most PNG) is shown in its own colours, register for register,
  *           not remapped at all: exactly as drawn;
- *   remap:  a deeper one (JPEG, true-colour PNG, HAM on a non-HAM screen)
- *           is remapped by its datatype into every pen but pen 0, which
- *           stays black for the border.
+ *   own:    a deeper one (JPEG, true-colour PNG, HAM on a non-HAM screen)
+ *           is made the size it is shown and given the best colours of
+ *           its own for every register but 0, which stays black for the
+ *           border (thumb.c: shrunk first, so far quicker than having the
+ *           datatype remap it at full size);
+ *   remap:  if that cannot be done (memory), the datatype remaps it into
+ *           every pen but pen 0.
  *
  * The info bar then uses the picture's own darkest and lightest colours,
  * so it takes none away from it. Pictures fade in and out through black,
@@ -283,9 +287,10 @@ static ULONG gcd(ULONG a, ULONG b)
     return a ? a : 1;
 }
 
-static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, char *scale, LONG max)
+void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw, ULONG *dh,
+              char *scale, LONG max)
 {
-    ULONG wu, hu, swu = 1, shu = gfx_mode_tall(g->mode) ? 2 : 1, bx, by, c, k, ew, eh;
+    ULONG wu, hu, swu = 1, shu = tall ? 2 : 1, bx, by, c, k, ew, eh;
     char t[24];
     src_units(pi, &wu, &hu);
     bx = wu * shu;
@@ -295,9 +300,9 @@ static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, c
     by /= c;
     ew = (ULONG)pi->w * bx;
     eh = (ULONG)pi->h * by;
-    k = g->w / ew;
-    if (g->h / eh < k)
-        k = g->h / eh;
+    k = gw / ew;
+    if (gh / eh < k)
+        k = gh / eh;
     if (k >= 1) {
         *dw = ew * k;
         *dh = eh * k;
@@ -306,11 +311,11 @@ static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, c
         else
             sprintf(t, "%lu x %lu", bx * k, by * k);
     } else {
-        *dw = g->w;
-        *dh = eh * g->w / ew;
-        if (*dh > g->h) {
-            *dh = g->h;
-            *dw = ew * g->h / eh;
+        *dw = gw;
+        *dh = eh * gw / ew;
+        if (*dh > gh) {
+            *dh = gh;
+            *dw = ew * gh / eh;
         }
         sprintf(t, "%lu%%", *dw * 100 / (ULONG)pi->w);
     }
@@ -318,7 +323,13 @@ static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, c
         *dw = 1;
     if (!*dh)
         *dh = 1;
-    amce_strlcpy(scale, t, max);
+    if (scale)
+        amce_strlcpy(scale, t, max);
+}
+
+static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, char *scale, LONG max)
+{
+    view_fit(g->w, g->h, gfx_mode_tall(g->mode), pi, dw, dh, scale, max);
 }
 
 /* ---- showing a picture */
@@ -387,12 +398,6 @@ static struct BitMap *direct_bitmap(struct Gfx *g, Object *o, ULONG sw, ULONG sh
     return bm;
 }
 
-static BOOL is_jpeg(const char *path)
-{
-    const char *f = pics_format(path);
-    return f && strcmp(f, "JPEG") == 0;
-}
-
 static void show_message(struct Gfx *g, const char *s)
 {
     if (clut) {
@@ -408,13 +413,15 @@ static void show_message(struct Gfx *g, const char *s)
 }
 
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
-               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped)
+               char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
+               struct Thumb *pre_thumb, const struct PicInfo *pre_info)
 {
     struct BitMapHeader *bmh = NULL;
     struct BitMap *src = NULL, *tmp;
     struct BitScaleArgs bsa;
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
-    BOOL direct = FALSE, own_src = FALSE;
+    BOOL direct = FALSE, own_src = FALSE, made = FALSE;
+    Object *deep = NULL;                    /* decoded, for the own route */
     ULONG *target = NULL, sw, sh, dw, dh;
     UBYTE pens[256];
     LONG npens = 0, i;
@@ -426,14 +433,18 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         pic_dispose(pre);
         return FALSE;
     }
-    if (!pre) {
+    if (pre_thumb && !clut) {
+        thumb_free(pre_thumb);
+        pre_thumb = NULL;
+    }
+    if (!pre && !pre_thumb) {
         sprintf(msg, "Loading %.80s", label);
         show_message(g, msg);
     }
 
     /* direct: a picture that fits the colour table, not remapped (pre: one
      * the loader decoded ahead, unremapped on a colour-table screen) */
-    if (clut && (pre ? !pre_remapped : !is_jpeg(path))) {
+    if (clut && !pre_thumb && (!pre || !pre_remapped)) {
         if (pre) {
             o = pre;
             pre = NULL;
@@ -487,11 +498,62 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
                 if (src && own_src)
                     FreeBitMap(src);
                 src = NULL;
-                DisposeDTObject(o);
+                own_src = FALSE;
+                deep = o;                   /* for the own route */
                 o = NULL;
             }
         }
     }
+
+    /* own: its own colours at the size it is shown */
+    if (!direct && (deep || pre_thumb)) {
+        struct Thumb *t = NULL;
+        bmh = NULL;
+        if (deep)
+            GetDTAttrs(deep, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+        if (pre_thumb || (bmh && bmh->bmh_Width && bmh->bmh_Height)) {
+            if (pre_thumb) {
+                *pi = *pre_info;
+                fit(g, pi, &dw, &dh, scale, scalemax);
+                t = pre_thumb;              /* made ahead, by the loader */
+                pre_thumb = NULL;
+                dw = t->w;
+                dh = t->h;
+            } else {
+                pic_info(deep, bmh, pi);
+                fit(g, pi, &dw, &dh, scale, scalemax);
+                t = thumb_make(deep, dw, dh, ncolors - 1);
+            }
+            if (t &&
+                (target = AllocVec(ncolors * 3 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) &&
+                (src = AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap))) {
+                ULONG n = (ULONG)t->mod * t->h;
+                for (i = 0; i < t->ncol; i++) {
+                    ULONG c = t->pal[i];
+                    target[(i + 1) * 3] = ((c >> 16) & 255) * 0x01010101UL;
+                    target[(i + 1) * 3 + 1] = ((c >> 8) & 255) * 0x01010101UL;
+                    target[(i + 1) * 3 + 2] = (c & 255) * 0x01010101UL;
+                    pens[npens++] = i + 1;
+                }
+                for (i = 0; i < (LONG)n; i++)
+                    t->px[i]++;             /* register 0 is the border's */
+                gfx_chunky(g, src, t->px, dw, dh, t->mod);
+                own_src = TRUE;
+                pen_border = 0;
+                sw = dw;
+                sh = dh;
+                direct = made = TRUE;
+            } else {
+                FreeVec(target);
+                target = NULL;
+            }
+            thumb_free(t);
+        }
+        if (deep)
+            DisposeDTObject(deep);
+        deep = NULL;
+    }
+    thumb_free(pre_thumb);                  /* not used (cannot be) */
 
     /* remap: into the screen's free pens (or its true colour) */
     if (!direct) {
@@ -546,8 +608,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         }
     }
 
-    fit(g, pi, &dw, &dh, scale, scalemax);
-    tmp = AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap);
+    if (!made)
+        fit(g, pi, &dw, &dh, scale, scalemax);
+    tmp = made ? src : AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap);
     if (!tmp) {
         if (own_src)
             FreeBitMap(src);
@@ -559,6 +622,8 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         return FALSE;
     }
     memset(&bsa, 0, sizeof(bsa));
+    bsa.bsa_DestWidth = dw;
+    bsa.bsa_DestHeight = dh;
     bsa.bsa_SrcWidth = sw;
     bsa.bsa_SrcHeight = sh;
     bsa.bsa_XSrcFactor = sw;
@@ -567,7 +632,10 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     bsa.bsa_YDestFactor = dh;
     bsa.bsa_SrcBitMap = src;
     bsa.bsa_DestBitMap = tmp;
-    BitMapScale(&bsa);
+    if (made)
+        own_src = FALSE;                    /* already its size: tmp is it */
+    else
+        BitMapScale(&bsa);
 
     if (clut) {
         all_black(g);                       /* drawn unseen, then faded in */
@@ -590,7 +658,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     if (own_src)
         FreeBitMap(src);
     FreeVec(target);
-    if (direct) {
+    if (direct && o) {
         DisposeDTObject(o);                 /* its colours are in ours now */
         o = NULL;
     }

@@ -2145,6 +2145,7 @@ static void pv_free_slot(int i)
     if (j->busy)
         ldr_wait(j);
     pic_dispose(j->obj);
+    thumb_free(j->thumb);
     if (pv_tj == j)
         pv_tj = NULL;
     if (pv_sj == j)
@@ -2228,6 +2229,13 @@ static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahea
     j->scr = g.scr;
     j->remap = g.truecolor;
     j->want_pic = FALSE;                    /* pictures are LJ_SHOT jobs of their own */
+    if (type == LJ_SHOT && g.pens_shared && !g.truecolor) {
+        /* made small in the loader, in colours of its own (thumb.c) */
+        j->tw = aside_width() - U(4);
+        j->th = pv_box_h;
+        j->tall = gfx_mode_tall(g.mode);
+        j->maxcol = gfx_thumb_colours(&g);
+    }
     j->stamp = ++pv_clock;
     pv_slot[free_i] = j;
     if (first)
@@ -2386,9 +2394,20 @@ static void pv_draw_picture(void)
 {
     WORD x0 = aside_x(), w = aside_width() - U(4), dh = 0;
     struct LJob *j = pv_sj;
-    BOOL taken = FALSE;
-    if (j && j->obj && gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE,
-                                       &dh, &taken)) {
+    BOOL taken = FALSE, ok = FALSE;
+    if (j && j->thumb) {
+        char m[200];
+        ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
+        sprintf(m, "%.80s, %lu x %lu, depth %lu: decoded in %lu ms, made %lu x %lu, %lu colours, in %lu ms",
+                FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
+                (unsigned long)j->info.depth, (unsigned long)j->ms_decode,
+                (unsigned long)j->thumb->w, (unsigned long)j->thumb->h,
+                (unsigned long)j->thumb->ncol, (unsigned long)j->ms_thumb);
+        amce_log("preview", m);
+    } else if (j && j->obj) {
+        ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
+    }
+    if (ok) {
         gfx_fill_bg(&g, x0, pv_box_y, g.pic_x - 1, pv_box_y + dh - 1);
         gfx_fill_bg(&g, g.pic_x + g.pic_w, pv_box_y, g.w - 1, pv_box_y + dh - 1);
         if (dh < pv_box_h)
@@ -3436,6 +3455,7 @@ static void vw_drop(void)
     if (vw_job->busy)
         ldr_wait(vw_job);
     pic_dispose(vw_job->obj);
+    thumb_free(vw_job->thumb);
     FreeVec(vw_job);
     vw_job = NULL;
 }
@@ -3457,20 +3477,43 @@ static void vw_ahead(const struct ItemList *l, LONG from, LONG dir)
     vw_job->scr = g.truecolor ? g.scr : NULL;
     vw_job->remap = g.truecolor;
     vw_job->want_pic = TRUE;
+    if (!g.truecolor) {
+        /* one with more colours than the screen: made ready for it */
+        vw_job->tw = g.w;
+        vw_job->th = g.h;
+        vw_job->tall = gfx_mode_tall(g.mode);
+        vw_job->viewfit = TRUE;
+        vw_job->maxcol = (1 << (g.depth > 8 ? 8 : g.depth)) - 1;
+    }
     ldr_submit(vw_job);
 }
 
-/* The picture read ahead for path, if it is: its object (now the caller's). */
-static APTR vw_take(const char *path, BOOL *remapped)
+/* The picture read ahead for path, if it is: its object, or what was
+ * made of it for the screen, and what it is (now the caller's). */
+static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct PicInfo *info)
 {
     APTR o = NULL;
+    *t = NULL;
     if (vw_job && strcmp(vw_job->path, path) == 0) {
         if (vw_job->busy)
             ldr_wait(vw_job);               /* nearly there: sooner than starting over */
         if (vw_job->ran) {
+            char m[200];
             o = vw_job->obj;
             *remapped = vw_job->remapped;
+            *t = vw_job->thumb;
+            *info = vw_job->info;
             vw_job->obj = NULL;
+            vw_job->thumb = NULL;
+            if (*t) {
+                sprintf(m, "%.80s, %lu x %lu, depth %lu: decoded in %lu ms, made %lu x %lu, "
+                           "%lu colours, in %lu ms",
+                        FilePart((STRPTR)path), (unsigned long)info->w, (unsigned long)info->h,
+                        (unsigned long)info->depth, (unsigned long)vw_job->ms_decode,
+                        (unsigned long)(*t)->w, (unsigned long)(*t)->h,
+                        (unsigned long)(*t)->ncol, (unsigned long)vw_job->ms_thumb);
+                amce_log("viewer, read ahead", m);
+            }
         }
         vw_drop();
     }
@@ -3480,7 +3523,7 @@ static APTR vw_take(const char *path, BOOL *remapped)
 /* Show the pictures of l from entry idx; returns the last one shown. */
 static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
 {
-    struct PicInfo pi;
+    struct PicInfo pi = { 0 };
     char scale[24];
     LONG shown = -1, want = idx, dir = 1;
     ULONG bar_until = 0, next_at = 0, jlast = 0;
@@ -3507,9 +3550,20 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         ULONG now;
         if (want != shown) {
             BOOL remapped = FALSE;
-            APTR pre = vw_take(l->items[want].path, &remapped);
+            struct Thumb *pre_t;
+            struct PicInfo pre_i;
+            APTR pre = vw_take(l->items[want].path, &remapped, &pre_t, &pre_i);
+            ULONG t0 = time_ms();
             ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale),
-                           pre, remapped);
+                           pre, remapped, pre_t, &pre_i);
+            {
+                char m[200];
+                sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s", l->items[want].label,
+                        (unsigned long)pi.w, (unsigned long)pi.h, (unsigned long)pi.depth,
+                        (unsigned long)(time_ms() - t0),
+                        pre || pre_t ? " (read ahead)" : "");
+                amce_log("viewer", m);
+            }
             shown = want;
             vw_ahead(l, shown, dir);
             next_at = time_ms() + SLIDE_MS;
