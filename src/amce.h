@@ -84,6 +84,7 @@ BOOL gfx_mode_is_rtg(int sm);
 UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel found */
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);
+void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_close(struct Gfx *g);
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);

@@ -14,7 +14,7 @@ copy the drawer onto an AGS installation and double-click it.
 - Text pages scroll smoothly without flicker, with a scroll bar when needed.
 - Keyboard, mouse and joystick/CD32 pad.
 
-Mods, Videos, Pictures, Music and Internet Radio are on the menu but not yet
+Mods, Videos, Pictures, Music and Radio are on the menu but not yet
 implemented.
 
 ## Building

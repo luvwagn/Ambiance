@@ -94,7 +94,9 @@ def main():
     fname = "amce-pixel-hi" if hires else "amce-pixel"
     font = parse_size_file(open(os.path.join(fonts, fname, "12"), "rb").read())
     s = Screen(W, H, pal, font)
-    menu_w = 200 if hires else 104
+    # menu column fits the longest label (src/gfx.c fit_menu)
+    labels = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"]
+    menu_w = 23 * sx + max(s.textlen(n) for n in labels) + 6 * sx
     top, row_h, list_top, list_row_h, footer_y = 26, 18, 44, 14, H - 12
     pane_x = menu_w + 6 * sx
     pane_w = W - pane_x - 4 * sx
@@ -115,8 +117,8 @@ def main():
     s.text(W - 8 * sx - s.textlen(clock), (24 - fh) // 2, clock, TEXT)
 
     # module order in art.c (icon index) and the main menu order from build_menu()
-    mods = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"]
-    names = ["Games", "Mods", "Demos", "Music", "Internet Radio", "Pictures", "Videos", "Settings", "About"]
+    mods = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"]
+    names = ["Games", "Mods", "Demos", "Music", "Radio", "Pictures", "Videos", "Settings", "About"]
     msel = names.index("About") if page == "about" else 0
     for i, name in enumerate(names):
         y = top + i * row_h

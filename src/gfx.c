@@ -26,17 +26,46 @@ static Object *pic_obj;         /* datatype object of the picture on screen */
 static void cache_art(struct Gfx *g);
 static UWORD logo_rows(const struct Gfx *g);
 
-static void layout_metrics(struct Gfx *g)
+/* Main menu labels, set by gfx_menu_labels(): the menu column is made just
+ * wide enough for the longest one. */
+static const char *const *menu_labels;
+static int menu_nlabels;
+
+void gfx_menu_labels(const char *const *labels, int n)
+{
+    menu_labels = labels;
+    menu_nlabels = n;
+}
+
+static void set_menu_w(struct Gfx *g, UWORD w)
 {
     UBYTE s = g->sx;
-    g->menu_w = s == 2 ? 200 : 104;
+    g->menu_w = w;
+    g->pane_x = w + 6 * s;
+    g->pane_w = g->w - g->pane_x - 4 * s;
+}
+
+static void layout_metrics(struct Gfx *g)
+{
+    set_menu_w(g, g->sx == 2 ? 144 : 76);   /* until the font is open */
     g->top = 26;
     g->row_h = 18;
-    g->pane_x = g->menu_w + 6 * s;
-    g->pane_w = g->w - g->pane_x - 4 * s;
     g->list_top = 44;
     g->list_row_h = 14;
     g->footer_y = g->h - 12;
+}
+
+/* Icon at 3, label at 23 (x sx), then a margin of 6 (x sx) after the
+ * longest label. Measured in the screen's own font. */
+static void fit_menu(struct Gfx *g)
+{
+    WORD longest = 0, w;
+    int i;
+    for (i = 0; i < menu_nlabels; i++)
+        if ((w = gfx_textlen(g, menu_labels[i])) > longest)
+            longest = w;
+    if (longest)
+        set_menu_w(g, 23 * g->sx + longest + 6 * g->sx);
 }
 
 static void open_font(struct Gfx *g)
@@ -233,6 +262,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     g->rp = g->win->RPort;
     SetDrMd(g->rp, JAM1);
     open_font(g);
+    fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
     return TRUE;

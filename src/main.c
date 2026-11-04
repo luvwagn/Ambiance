@@ -30,7 +30,7 @@ struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 enum { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_VIDEOS, MOD_PICTURES, MOD_MUSIC,
        MOD_RADIO, MOD_SETTINGS, MOD_ABOUT, MOD_COUNT };
 static const char *mod_names[MOD_COUNT] = {
-    "Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Internet Radio", "Settings", "About"
+    "Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"
 };
 
 enum { PT_LIST, PT_TEXT, PT_DETAIL };
@@ -488,8 +488,8 @@ static void build_root_pages(int mod)
         }
         break;
     case MOD_RADIO:
-        if ((p = page_push(PT_TEXT, "Internet Radio")))
-            text_para(p, "Internet Radio arrives in a later version.");
+        if ((p = page_push(PT_TEXT, "Radio")))
+            text_para(p, "Radio arrives in a later version.");
         break;
     case MOD_SETTINGS:
         if ((p = page_push(PT_LIST, "Settings")))
@@ -1960,6 +1960,7 @@ int main(void)
         }
     }
 
+    gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
     if (!gfx_open(&g, &caps, screen_mode) &&
         (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO))) {
         say("AmigaMCE could not open its screen.\n");
