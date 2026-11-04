@@ -165,6 +165,9 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
                  WORD *drawn_h);
 void gfx_picture_free(struct Gfx *g);
+/* The picture on screen cleared (as far as it is inside x0,y0..x1,y1),
+ * then its pens let go; without a flash on planar screens. */
+void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 /* The same in two halves: decoding (any process; remap FALSE takes no
  * pens) and drawing what was decoded (the object stays the caller's, to
  * draw again, unless *taken). */

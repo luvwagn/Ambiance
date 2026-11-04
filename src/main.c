@@ -145,7 +145,7 @@ static void page_pop(void)
         focus = FOCUS_CONTENT;
     if (!depth)
         return;
-    gfx_picture_free(&g);
+    gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
     tb_close(&pages[depth - 1].tb);
     ch_free(pages[depth - 1].ch);
     pages[depth - 1].ch = NULL;
@@ -2394,7 +2394,7 @@ static void pv_draw_picture(void)
         if (dh < pv_box_h)
             gfx_fill_bg(&g, x0, pv_box_y + dh, g.w - 1, pv_box_y + pv_box_h - 1);
     } else {
-        gfx_picture_free(&g);
+        gfx_picture_clear(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
     }
     if (taken) {
@@ -2427,7 +2427,7 @@ static void pv_progress(struct Page *p)
             if (pv_sj)
                 pv_sj->cancel = TRUE;
             pv_sj = NULL;
-            gfx_picture_free(&g);
+            gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         }
         pv_draw_text(p);
         pv_text_drawn = TRUE;
@@ -2481,7 +2481,7 @@ static void preview_draw(struct Page *p)
     }
     if (!pv_tj) {
         tb_close(&pv_tb);
-        gfx_picture_free(&g);
+        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
         return;
     }
@@ -2491,7 +2491,7 @@ static void preview_draw(struct Page *p)
         pv_waited++;
     if (!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) {
         /* not all here: nothing of the entry before stays up meanwhile */
-        gfx_picture_free(&g);
+        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, pv_tj->done ? g.list_top + pv_box_h - 1 : max_y);
     }
     pv_progress(p);
@@ -2574,7 +2574,7 @@ static void preview_touch(struct Page *p)
     if (settle != PREVIEW_READY && pv_shown && pv_page == p && !hold_active() && !ov.on) {
         /* not read yet: the entry before goes now, not when this one comes */
         tb_close(&pv_tb);
-        gfx_picture_free(&g);
+        gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         pv_shown = FALSE;
         pv_tj = pv_sj = NULL;
@@ -2648,7 +2648,7 @@ static void ov_show(struct Page *p)
     ov.on = TRUE;
     ov.linger = 0;
     if (has_aside(p)) {
-        gfx_picture_free(&g);       /* the preview gives way to the letter */
+        gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
         tb_close(&pv_tb);
         pv_shown = FALSE;
     }

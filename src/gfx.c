@@ -337,6 +337,129 @@ static void release_pens(struct Gfx *g, UBYTE *pens, UWORD n)
         ReleasePen(g->scr->ViewPort.ColorMap, pens[i]);
 }
 
+/* ---- changing a picture on a planar screen without a flash.
+ * The blitter changes a planar screen a plane at a time, and a picture
+ * there is seen half changed: its pixels' pen numbers are partly old and
+ * partly new (or cleared), so for a frame they are other pens' colours, the
+ * UI's, other pictures'. So a picture is drawn or cleared in bands of rows,
+ * each band while the beam is not showing it nor about to: it goes from
+ * the old picture to the new in one step, as the screen sees it. */
+#define BAND_ROWS 8
+#define BAND_LEAD 40            /* lines the beam may come in a band's time */
+
+struct Beam {
+    BOOL on;                    /* planar: worth timing */
+    WORD top;                   /* the beam's line for row 0 */
+    UBYTE lace, dbl;            /* rows per line halved; lines per row doubled */
+};
+
+static void beam_init(struct Gfx *g, struct Beam *b)
+{
+    struct ViewPort *vp = &g->scr->ViewPort;
+    struct DisplayInfo di;
+    ULONG id;
+    b->on = g->planar && g->depth > 1 && GfxBase->ActiView;
+    if (!b->on)
+        return;
+    id = GetVPModeID(vp);
+    b->lace = (vp->Modes & LACE) ? 1 : 0;
+    b->dbl = id != (ULONG)INVALID_ID &&
+             GetDisplayInfoData(NULL, (UBYTE *)&di, sizeof(di), DTAG_DISP, id) &&
+             (di.PropertyFlags & DIPF_IS_SCANDBL) ? 1 : 0;
+    b->top = GfxBase->ActiView->DyOffset + ((vp->DyOffset >> b->lace) << b->dbl);
+}
+
+static LONG beam_line(const struct Beam *b, WORD row)
+{
+    return b->top + (((LONG)row >> b->lace) << b->dbl);
+}
+
+/* Wait until the beam is clear of rows r0..r1 for a band's time. */
+static void beam_wait(const struct Beam *b, WORD r0, WORD r1)
+{
+    LONG l0 = beam_line(b, r0) - BAND_LEAD, l1 = beam_line(b, r1) + 2, v;
+    ULONG n = 0;
+    if (!b->on)
+        return;
+    do
+        v = VBeamPos();
+    while (v >= l0 && v <= l1 && ++n < 200000);     /* never for ever */
+}
+
+/* Fill x0,y0..x1,y1 with the background, band by band. */
+static void band_fill(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    WORD r, r1;
+    if (x1 < x0 || y1 < y0)
+        return;
+    SetAPen(g->rp, PEN_BG);
+    SetWriteMask(g->rp, 0xFF);
+    for (r = y0; r <= y1; r = r1 + 1) {
+        r1 = b->on && r + BAND_ROWS - 1 < y1 ? r + BAND_ROWS - 1 : y1;
+        beam_wait(b, r, r1);
+        RectFill(g->rp, x0, r, x1, r1);
+        WaitBlit();
+    }
+}
+
+/* Copy bm (w x h) to x, y on the screen, band by band. */
+static void band_blit(struct Gfx *g, const struct Beam *b, struct BitMap *bm, WORD x, WORD y,
+                      WORD w, WORD h)
+{
+    WORD r, n;
+    for (r = 0; r < h; r += n) {
+        n = b->on && h - r > BAND_ROWS ? BAND_ROWS : h - r;
+        beam_wait(b, y + r, y + r + n - 1);
+        BltBitMapRastPort(bm, 0, r, g->rp, x, y + r, w, n, 0xC0);
+        WaitBlit();
+    }
+}
+
+/* The parts of the picture on screen inside x0,y0..x1,y1 and outside the
+ * rectangle nx,ny,nw,nh (nw 0: none) cleared. */
+static void clear_old(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WORD x1, WORD y1,
+                      WORD nx, WORD ny, WORD nw, WORD nh)
+{
+    WORD ox0 = g->pic_x, oy0 = g->pic_y, ox1 = g->pic_x + g->pic_w - 1,
+         oy1 = g->pic_y + g->pic_h - 1, ny1, nx1;
+    if (!g->pic_w || !g->pic_h)
+        return;
+    if (ox0 < x0) ox0 = x0;
+    if (oy0 < y0) oy0 = y0;
+    if (ox1 > x1) ox1 = x1;
+    if (oy1 > y1) oy1 = y1;
+    if (ox1 < ox0 || oy1 < oy0)
+        return;
+    if (!nw || !nh) {
+        band_fill(g, b, ox0, oy0, ox1, oy1);
+        return;
+    }
+    ny1 = ny + nh - 1;
+    nx1 = nx + nw - 1;
+    band_fill(g, b, ox0, oy0, ox1, (ny - 1 < oy1 ? ny - 1 : oy1));          /* above */
+    {
+        WORD a = ny > oy0 ? ny : oy0, z = ny1 < oy1 ? ny1 : oy1;
+        if (a <= z) {
+            band_fill(g, b, ox0, a, (nx - 1 < ox1 ? nx - 1 : ox1), z);     /* left */
+            band_fill(g, b, (nx1 + 1 > ox0 ? nx1 + 1 : ox0), a, ox1, z);  /* right */
+        }
+    }
+    band_fill(g, b, ox0, (ny1 + 1 > oy0 ? ny1 + 1 : oy0), ox1, oy1);        /* below */
+}
+
+/* Clear the picture on screen (as far as it is inside x0,y0..x1,y1),
+ * then let its pens go: in that order, so it never shows in pens given to
+ * another picture meanwhile. */
+void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    struct Beam b;
+    if (g->pic_w && g->scr) {
+        beam_init(g, &b);
+        clear_old(g, &b, x0, y0, x1, y1, 0, 0, 0, 0);
+    }
+    gfx_picture_free(g);
+}
+
 void gfx_picture_free(struct Gfx *g)
 {
     g->pic_w = g->pic_h = 0;
@@ -937,9 +1060,9 @@ BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WOR
 
     /* The picture already on screen stays, pens and all, until the new one
      * is drawn over it: the new one is in other pens, so the old one never
-     * changes colour, and nothing is cleared first. On a planar screen
-     * clearing goes plane by plane, and the old picture showed through in
-     * the UI's colours meanwhile. */
+     * changes colour, and nothing is cleared first. Drawn band by band
+     * with the beam (band_blit): a planar screen changes plane by plane,
+     * and a half-drawn picture flashes in other pens' colours. */
     *taken = FALSE;
     if (!o || !(g->pens_shared || g->truecolor))
         return FALSE;
@@ -1001,11 +1124,18 @@ BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WOR
     bsa.bsa_SrcBitMap = bm;
     bsa.bsa_DestBitMap = tmp;
     BitMapScale(&bsa);
-    BltBitMapRastPort(tmp, 0, 0, g->rp, x + (w - bsa.bsa_DestWidth) / 2, y,
-                      bsa.bsa_DestWidth, bsa.bsa_DestHeight, 0xC0);
+    WaitBlit();
+    {
+        struct Beam b;
+        WORD nx = x + (w - bsa.bsa_DestWidth) / 2;
+        beam_init(g, &b);
+        band_blit(g, &b, tmp, nx, y, bsa.bsa_DestWidth, bsa.bsa_DestHeight);
+        /* what the new one does not cover of the old, within the box */
+        clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, bsa.bsa_DestWidth,
+                  bsa.bsa_DestHeight);
+    }
     if (drawn_h)
         *drawn_h = bsa.bsa_DestHeight;
-    WaitBlit();
     FreeBitMap(tmp);
     gfx_picture_free(g);                    /* now the old one's pens can go */
     if (own) {
