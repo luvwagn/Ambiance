@@ -145,12 +145,14 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES
 	@echo "Created $(LHA_NAME)"
 
 # A data floppy carrying the release archive and its readme: unpack the
-# archive to a hard drive (lha x DF0:amigamce-<version>.lha). Not bootable.
+# archive to a hard drive (lha x DF0:amigamce.lha). Not bootable. The
+# archive is plain amigamce.lha on the disk: with its version the name can
+# pass the 30 characters a file name may have there.
 disk: lha
 	@echo "  DISK  $(DISK)"
 	@rm -f $(DISK)
 	@xdftool $(DISK) format "$(DISK_TITLE)"
-	@xdftool $(DISK) write $(LHA_NAME) $(LHA_NAME)
+	@xdftool $(DISK) write $(LHA_NAME) amigamce.lha
 	@xdftool $(DISK) write $(LHA_DIR)/readme.txt readme.txt
 	@xdftool $(DISK) write docs/readme.info readme.txt.info
 	@xdftool $(DISK) write docs/Disk.info Disk.info
