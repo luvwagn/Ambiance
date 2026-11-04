@@ -25,7 +25,7 @@ Features in this release
   Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
 - Smooth-scrolling, flicker-free text pages (fact sheets, Credits,
   System information) with a scroll bar when the text is longer than the page.
-- Hires artwork drawn on the real hires grid: sharper logo and icons.
+- Hires screens (laced or not) use a dense layout: more of each list fits.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Mods, Videos, Pictures, Music and Radio are listed but arrive

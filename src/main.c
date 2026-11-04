@@ -288,8 +288,9 @@ static void build_sysinfo(struct Page *p)
                     (unsigned long)id);
         }
         text_line(p, line);
-        sprintf(line, "Artwork: %s", g.layout == LAYOUT_HIRES ? "hires (tall pixels)"
-                                                              : "lowres, 1:1 (square pixels)");
+        sprintf(line, "Artwork: %s", g.layout == LAYOUT_HIRES ? "hires (tall pixels)" :
+                                     gfx_mode_tall(g.mode) ? "lowres, 1:1 (tall pixels: dense)"
+                                                           : "lowres, 1:1 (square pixels)");
         text_line(p, line);
     }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");

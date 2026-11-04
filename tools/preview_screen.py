@@ -84,14 +84,17 @@ def main():
     page = sys.argv[6] if len(sys.argv) > 6 else "games"
     scroll = int(sys.argv[7]) if len(sys.argv) > 7 else 0
     logo_lo, logo_hi, dims, icons, icons32, pal = parse_art(art)
-    # hires: 640 wide, tall pixels, hires artwork. lores, laced and rtg have
+    # hires: 640 wide, tall pixels. lores, laced and rtg have
     # square pixels and use the lowres artwork 1:1 (laced/rtg: dense).
     hires = mode == "hires"
-    sx = 2 if hires else 1
+    # Every mode now draws the lowres artwork 1:1 (src/gfx.c), hires too;
+    # set hiart to preview the unused two-columns-per-pixel hires artwork.
+    hiart = False
+    sx = 2 if hiart else 1
     W, H = {"hires": (640, 256), "lores": (320, 256), "laced": (640, 512), "rtg": (800, 600)}[mode]
     if video == "ntsc" and mode != "rtg":
         H = {256: 200, 512: 400}[H]
-    fname = "amce-pixel-hi" if hires else "amce-pixel"
+    fname = "amce-pixel-hi" if hiart else "amce-pixel"
     font = parse_size_file(open(os.path.join(fonts, fname, "12"), "rb").read())
     s = Screen(W, H, pal, font)
     # menu column fits the longest label (src/gfx.c fit_menu)
@@ -106,8 +109,8 @@ def main():
     s.fill(0, 0, W - 1, H - 1, BG)
     s.fill(0, 0, W - 1, 23, BAR)
     s.fill(0, 24, W - 1, 24, RULE)
-    lw, lh = (dims["logo_hi_w"], dims["logo_hi_h"]) if hires else (dims["logo_lo_w"], dims["logo_lo_h"])
-    logo = logo_hi if hires else logo_lo
+    lw, lh = (dims["logo_hi_w"], dims["logo_hi_h"]) if hiart else (dims["logo_lo_w"], dims["logo_lo_h"])
+    logo = logo_hi if hiart else logo_lo
     for j in range(lh):
         for i in range(lw):
             pen = logo[j * lw + i]
@@ -127,7 +130,7 @@ def main():
             s.fill(0, y, menu_w - 1, y + row_h - 1, SELDIM)
         fg = WHITE if sel else TEXT
         for r in range(16):
-            if hires:
+            if hiart:
                 bits = icons32[mods.index(name)][r]
                 for b in range(32):
                     if bits & (0x80000000 >> b):

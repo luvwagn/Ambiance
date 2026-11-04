@@ -47,9 +47,10 @@ enum {
 /* ---------------------------------------------------------------- gfx */
 enum { LAYOUT_LORES = 0, LAYOUT_HIRES = 1 };
 
-/* Screen modes offered in Settings. LAYOUT_HIRES (hires artwork, two
- * columns per design pixel) is for the tall-pixel 640x200/256 modes; the
- * square-pixel modes (320 wide, 640 laced, RTG) use the lowres artwork 1:1. */
+/* Screen modes offered in Settings. All of them draw the lowres artwork
+ * 1:1 (LAYOUT_LORES), so 640x200/256 hires looks like hires laced, only
+ * on tall pixels. LAYOUT_HIRES (hires artwork, two columns per design
+ * pixel) is not used at the moment. */
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
        SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024, SM_COUNT };
 
@@ -81,6 +82,7 @@ const char *gfx_mode_label(int sm);
 int  gfx_mode_from_key(const char *key);                 /* -1 if unknown */
 const char *gfx_mode_problem(const struct Caps *c, int sm);  /* NULL if usable */
 BOOL gfx_mode_is_rtg(int sm);
+BOOL  gfx_mode_tall(int sm);                             /* 640x200/256: tall pixels */
 UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel found */
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm);

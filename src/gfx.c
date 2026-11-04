@@ -123,6 +123,7 @@ static const struct {
 
 const char *gfx_mode_key(int sm) { return modes[sm].key; }
 BOOL gfx_mode_is_rtg(int sm) { return modes[sm].kind == K_RTG; }
+BOOL gfx_mode_tall(int sm) { return modes[sm].kind == K_HIRES; }
 
 UWORD gfx_mode_depth(int sm)
 {
@@ -197,13 +198,12 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm)
     g->mode = sm;
     g->w = modes[sm].w;
     g->h = modes[sm].h;
-    if (modes[sm].kind == K_HIRES) {
-        g->layout = LAYOUT_HIRES;
-        g->sx = 2;
-    } else {
-        g->layout = LAYOUT_LORES;   /* square pixels: lowres artwork 1:1 */
-        g->sx = 1;
-    }
+    /* Every mode draws the lowres artwork 1:1, so native hires has the same
+     * layout and sizes as hires laced (on its tall pixels everything is
+     * half as wide, a denser screen). The two-columns-per-pixel hires
+     * artwork (LAYOUT_HIRES, sx 2) is kept for a possible option later. */
+    g->layout = LAYOUT_LORES;
+    g->sx = 1;
     if (modes[sm].kind == K_RTG)
         g->depth = gfx_mode_depth(sm);
     else
@@ -493,7 +493,9 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     }
     sw = bmh->bmh_Width;
     sh = bmh->bmh_Height;
-    sxe = (g->sx == 2 && sw <= 384) ? 2 : 1;
+    /* A lowres picture on a tall-pixel hires screen: double its width to
+     * keep its shape. */
+    sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;
     /* fit (sw*sxe) x sh into w x h */
     dw = w;
     dh = (sh * w) / (sw * sxe);
