@@ -140,6 +140,129 @@ def logo_hires(ttf, w, h, size_a, size_m):
 
 
 
+# ------------------------------------------------------------ pixel logo
+# Hand-drawn: 2-pixel stems on one grid, a symmetric play arrow. Pens:
+# 1 bar (left undrawn), 0 navy, 5 white, 6 blue, 8 orange.
+LOGO_GLYPHS = {   # rows from the top of the text area; '#' = ink
+ "A": (3, [".######.",
+           "##....##",
+           "##....##",
+           "##....##",
+           "########",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##"]),
+ "m": (6, ["#########.",
+           "##..##..##",
+           "##..##..##",
+           "##..##..##",
+           "##..##..##",
+           "##..##..##",
+           "##..##..##"]),
+ "i": (3, ["##", "##", "..", "##", "##", "##", "##", "##", "##", "##"]),
+ "g": (6, [".#######",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##",
+           ".#######",
+           "......##",
+           "##....##",
+           ".######."]),
+ "a": (6, [".######.",
+           "......##",
+           "......##",
+           ".#######",
+           "##....##",
+           "##....##",
+           ".#######"]),
+ "M": (4, ["##......##",
+           "###....###",
+           "####..####",
+           "##.####.##",
+           "##..##..##",
+           "##......##",
+           "##......##",
+           "##......##"]),
+ "C": (4, [".######",
+           "##.....",
+           "##.....",
+           "##.....",
+           "##.....",
+           "##.....",
+           "##.....",
+           ".######"]),
+ "E": (4, ["######",
+           "##....",
+           "##....",
+           "#####.",
+           "##....",
+           "##....",
+           "##....",
+           "######"]),
+}
+LP_BAR, LP_NAVY, LP_WHITE, LP_BLUE, LP_ORANGE = 1, 0, 5, 6, 8
+LOGO_H = 16
+
+
+def pixel_logo():
+    """The logo as pixel art, 16 rows: the native screens' logo (a font
+    rasterised this small came out jagged and uneven)."""
+    cols = []                   # list of columns, each H pens
+    def blank(n, pen=LP_BAR):
+        for _ in range(n):
+            cols.append([pen] * LOGO_H)
+    # play box: 14 wide, rows 1..14, corners rounded, triangle centred
+    # 10 rows, one step a row, nudged right of centre (a triangle's weight
+    # sits left of its middle)
+    tri = {3 + i: (5, 5 + w - 1) for i, w in enumerate([2, 3, 4, 5, 6, 6, 5, 4, 3, 2])}
+    for x in range(14):
+        c = [LP_BAR] * LOGO_H
+        for y in range(1, 15):
+            corner = (x in (0, 13)) and (y in (1, 14))
+            if not corner:
+                c[y] = LP_BLUE
+            if y in tri and tri[y][0] <= x <= tri[y][1]:
+                c[y] = LP_WHITE
+        cols.append(c)
+    blank(4)
+    def word(text, fg, bg, gap):
+        for k, ch in enumerate(text):
+            top, rows = LOGO_GLYPHS[ch]
+            w = len(rows[0])
+            for x in range(w):
+                c = [bg] * LOGO_H
+                for j, r in enumerate(rows):
+                    if r[x] == "#":
+                        c[top + j] = fg
+                cols.append(c)
+            if k < len(text) - 1:
+                for _ in range(gap):
+                    cols.append([bg] * LOGO_H)
+    word("Amiga", LP_WHITE, LP_BAR, 2)
+    blank(4)
+    start = len(cols)
+    for _ in range(3):
+        cols.append([LP_BAR] + [LP_ORANGE] * 14 + [LP_BAR])
+    word("MCE", LP_NAVY, LP_BAR, 2)
+    for _ in range(3):
+        cols.append([LP_BAR] + [LP_ORANGE] * 14 + [LP_BAR])
+    # the badge: orange behind the letters, rows 1..14, corners rounded
+    for x in range(start, len(cols)):
+        for y in range(1, 15):
+            if cols[x][y] == LP_BAR:
+                cols[x][y] = LP_ORANGE
+        for y in (0, 15):
+            cols[x][y] = LP_BAR
+    cols[start][1] = cols[start][14] = LP_BAR
+    cols[-1][1] = cols[-1][14] = LP_BAR
+    w = len(cols)
+    return w, LOGO_H, [cols[x][y] for y in range(LOGO_H) for x in range(w)]
+
+
 # ------------------------------------------------------------ icons
 # Hand-drawn 16x16 pixel art, one string per row ('#' = ink).
 ICON_ART = {
@@ -337,7 +460,7 @@ def c_bytes(name, data, per=24):
 
 def main():
     ttf, out = sys.argv[1], sys.argv[2]
-    (lw, lh, lo), _hires = logo(ttf)
+    lw, lh, lo = pixel_logo()
     pal = [f"0x{(len(PALETTE)) << 16:08X}"]
     for (r, g, b) in PALETTE:
         pal += [f"0x{r * 0x01010101:08X}", f"0x{g * 0x01010101:08X}", f"0x{b * 0x01010101:08X}"]
