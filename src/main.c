@@ -2844,7 +2844,20 @@ static void ov_bm_free(void)
 
 /* A new letter (A -> D...): the old one's box cleared, the new one
  * stamped. Only the strip changes; the rows are not touched. */
+static ULONG ov_ms, ov_n;           /* time in ov_relabel during a glide (log) */
+static void ov_relabel_(char c);
 static void ov_relabel(char c)
+{
+    ULONG t0 = time_ms();
+    char was = ov.letter;
+    ov_relabel_(c);
+    if (ov.letter != was) {
+        ov_ms += time_ms() - t0;
+        ov_n++;
+    }
+}
+
+static void ov_relabel_(char c)
 {
     const struct BigLetter *old = ov.bl;
     WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
@@ -4226,6 +4239,8 @@ static struct {
     LONG  from;             /* the selection when the key went down (log) */
     ULONG worst;            /* the longest frame meanwhile (log) */
     LONG  slow;             /* frames over 40 ms meanwhile (log) */
+    ULONG present_ms, move_ms;  /* time flipping, and moving the list (log) */
+    ULONG t_down;           /* the clock at key-down (log: the time it really took) */
 } hold;
 
 /* Long titled lists, held past cruising: a whole letter a step. Shorter
@@ -4248,17 +4263,24 @@ static void hold_start(LONG dir, BOOL joy)
     hold.from = cur() ? cur()->sel : 0;
     hold.worst = 0;
     hold.slow = 0;
+    hold.present_ms = hold.move_ms = 0;
+    hold.t_down = time_ms();
+    ov_ms = ov_n = 0;
 }
 
 static void hold_stop(void)
 {
     struct Page *p = cur();
     if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
-        char m[120];
+        char m[200];
         LONG moved = p->sel - hold.from;
-        sprintf(m, "%ld entries in %ld ms, longest frame %ld ms, %ld frames over 40 ms",
-                (long)(moved < 0 ? -moved : moved), (long)hold.held_ms, (long)hold.worst,
-                (long)hold.slow);
+        sprintf(m, "%ld entries in %ld ms (%ld by the clock), longest frame %ld ms, "
+                   "%ld frames over 40 ms; "
+                   "moving the list %ld ms, flipping %ld ms, %ld letters in %ld ms",
+                (long)(moved < 0 ? -moved : moved), (long)hold.held_ms,
+                (long)(time_ms() - hold.t_down), (long)hold.worst, (long)hold.slow,
+                (long)hold.move_ms, (long)hold.present_ms, (long)ov_n,
+                (long)ov_ms);
         amce_log("glide", m);
     }
     hold.dir = 0;
@@ -4404,8 +4426,10 @@ static void hold_tick(void)
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
             if (n > 0) {
+                ULONG t0 = time_ms();
                 hold.acc -= n * 1000;
                 act_move(hold.dir * (n < remaining ? n : remaining));
+                hold.move_ms += time_ms() - t0;
             }
         }
     } else if (focus == FOCUS_PREVIEW || p->tb.open) {
@@ -5179,7 +5203,11 @@ static int app_main(void)
         }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
-            if (!gfx_present(&g)) {     /* a flip paces the frame, or else */
+            ULONG tp = time_ms();
+            BOOL flipped = gfx_present(&g);
+            if (hold.dir && flipped)
+                hold.present_ms += time_ms() - tp;
+            if (!flipped) {             /* a flip paces the frame, or else */
                 dbg_sleep_begin();
                 WaitTOF();
                 dbg_sleep_end();
