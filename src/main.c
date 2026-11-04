@@ -1492,11 +1492,18 @@ static void act_action(struct Item *it)
  * only more often, and text glides at a rising pixel speed. AmigaMCE paces
  * this itself, one step per video frame at most, from key-down until
  * key-up (the keyboard's own repeat is fixed at about 10 a second), and
- * eases off near the end so it settles on the last entry. */
-#define HOLD_DELAY  360     /* ms before the glide starts */
-#define HOLD_RAMP  2000     /* ms to reach full speed */
-#define LIST_MIN      8     /* entries per second when the glide starts */
-#define LIST_MAX     50     /* entries per second at full speed on a small screen */
+ * eases off near the end so it settles on the last entry.
+ *
+ * Lists speed up in two stages: to cruising speed over HOLD_RAMP, then,
+ * still held, on up to LIST_BOOST times that over HOLD_BOOST, for very
+ * long lists (the big letter shows where the list is meanwhile). */
+#define HOLD_DELAY  250     /* ms before the glide starts */
+#define HOLD_RAMP  1200     /* ms to reach cruising speed */
+#define HOLD_BOOST 3000     /* further ms to reach top speed */
+#define LIST_MIN     12     /* entries per second when the glide starts */
+#define LIST_MAX    100     /* cruising entries per second on a small screen */
+#define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
+#define LIST_BOOST    4     /* top speed, as a multiple of cruising speed */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
@@ -1545,7 +1552,7 @@ static BOOL key_is_down(UWORD rawkey)
 static void hold_tick(void)
 {
     struct Page *p = cur();
-    LONG rate, remaining, ramp, elapsed;
+    LONG rate, remaining, ramp, elapsed, glide;
     if (!hold.dir)
         return;
     if (focus != FOCUS_CONTENT || !p ||
@@ -1563,9 +1570,8 @@ static void hold_tick(void)
         hold.held_ms += dt;
         if (hold.held_ms < HOLD_DELAY)
             return;
-        ramp = hold.held_ms - HOLD_DELAY;
-        if (ramp > HOLD_RAMP)
-            ramp = HOLD_RAMP;
+        glide = hold.held_ms - HOLD_DELAY;
+        ramp = glide > HOLD_RAMP ? HOLD_RAMP : glide;
         elapsed = dt;
     }
     if (p->type == PT_LIST) {
@@ -1578,14 +1584,21 @@ static void hold_tick(void)
             return;
         }
         {
-            /* Full speed: one entry per frame, or three screenfuls a second
-             * on screens that show more rows; above one per frame the list
+            /* Cruising: two entries a frame, or six screenfuls a second on
+             * screens that show more rows; above one per frame the list
              * moves several rows in a single frame, still drawn every frame. */
-            LONG top = LIST_MAX, three = 3 * list_visible(), n;
-            if (three > top)
-                top = three;
-            rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
-            if (rate > 6 + remaining * 4)   /* ease in: 46/s at 10 left ... 10/s at 1 */
+            LONG top = LIST_MAX, screens = LIST_SCREENS * list_visible(), n;
+            if (screens > top)
+                top = screens;
+            if (glide < HOLD_RAMP)
+                rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
+            else {
+                LONG b = glide - HOLD_RAMP;
+                if (b > HOLD_BOOST)
+                    b = HOLD_BOOST;
+                rate = top + top * (LIST_BOOST - 1) * b / HOLD_BOOST;
+            }
+            if (rate > 6 + remaining * 4)   /* ease in: 406/s at 100 left ... 10/s at 1 */
                 rate = 6 + remaining * 4;
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
