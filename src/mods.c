@@ -2,13 +2,14 @@
  * AmigaMCE - Mods: folders of music modules
  * Copyright (c) 2026 Brian King
  *
- * A Mods list holds folders (IT_DIR) and modules (IT_MOD), folders first,
- * each part sorted by name. A module is known by its name, as the Amiga
- * names them: "mod.Title" (ProTracker's own way), "Title.mod", or the
- * other trackers' ".nst"/".stk"/".m15"; a name with no dot at all is
- * looked inside (the ProTracker tag at byte 1080). Its label drops the
- * "mod." or ".mod". Whether it really is one AmigaMCE can play is found
- * out when it is played (modplay.c says why not).
+ * A Mods list holds folders (IT_DIR) and music files (IT_MOD), folders
+ * first, each part sorted by name. With EaglePlayer's players AmigaMCE
+ * plays hundreds of formats, named every which way ("MED.title",
+ * "title.mod", "mdat.title", "TFMX.title", no suffix at all), so every file
+ * is listed but icons, texts, archives, pictures and the files that go
+ * with another (TFMX's smpl., StarTrekker's .nt). Whether one plays is found
+ * out when it is played (modplay.c says why not). The label drops the
+ * format's prefix or suffix when it is one of the usual ones.
  */
 #include "amce.h"
 
@@ -23,24 +24,53 @@ static BOOL ends_with(const char *s, const char *ext)
     return n > k && amce_stricmp(s + n - k, ext) == 0;
 }
 
-static BOOL starts_mod(const char *s)
+/* Formats' names, as file name prefixes and suffixes. */
+static const char *const kinds[] = {
+    "mod", "med", "mmd0", "mmd1", "mmd2", "mmd3", "omed", "nst", "stk", "m15", "ust",
+    "mdat", "tfmx", "fc", "fc13", "fc14", "smod", "bp", "bp3", "sndmon", "dw", "dwold",
+    "hip", "hipc", "hip7", "rh", "rho", "ahx", "thx", "okt", "okta", "sfx", "digi", "dbm",
+    "dbm0", "jam", "jc", "sa", "sonic", "dm", "dm2", "dmu", "mug", "mug2", "ps", "pt",
+    "p61", "p61a", "the", "tme", "ims", "emod", "ftm", "fp", "sng", "ss", "symmod", "sym",
+    "xm", "s3m", "it", "mtm", "669", "ult", "far", "stm", "mo3", "aon", "aon4", "aon8",
+    "ml", "sid", "psid", "mus", "cus", "cust", "custom", "spl", "tw", "dl", "jmf", "riff",
+    NULL
+};
+
+static BOOL is_kind(const char *s, LONG n)
 {
-    return (s[0] == 'm' || s[0] == 'M') && (s[1] == 'o' || s[1] == 'O') &&
-           (s[2] == 'd' || s[2] == 'D') && s[3] == '.' && s[4];
+    int i;
+    for (i = 0; kinds[i]; i++)
+        if ((LONG)strlen(kinds[i]) == n) {
+            LONG k;
+            for (k = 0; k < n && (s[k] | 0x20) == kinds[i][k]; k++)
+                ;
+            if (k == n)
+                return TRUE;
+        }
+    return FALSE;
 }
 
-/* The label shown for a module's file name. */
+/* The label shown for a music file's name: its format's prefix
+ * ("MED.") and suffix (".mod") left off. */
 void mods_label(const char *name, char *out, LONG max)
 {
+    const char *dot = strchr(name, '.'), *last;
     LONG n;
-    if (starts_mod(name))
-        name += 4;
+    if (dot && dot[1] && is_kind(name, dot - name))
+        name = dot + 1;
     amce_strlcpy(out, name, max);
     n = strlen(out);
-    if (n > 4 && (ends_with(out, ".mod") || ends_with(out, ".nst") || ends_with(out, ".stk") ||
-                  ends_with(out, ".m15")))
-        out[n - 4] = 0;
+    last = strrchr(out, '.');
+    if (last && last != out && is_kind(last + 1, n - (last + 1 - out)))
+        out[last - out] = 0;
 }
+
+/* Not music: what else lives in module folders. */
+static const char *const not_music[] = {
+    ".info", ".txt", ".doc", ".readme", ".guide", ".nfo", ".diz", ".lha", ".lzh", ".lzx",
+    ".zip", ".gz", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".pcx", ".nt", ".as", ".ins",
+    ".exe", ".rexx", ".py", ".html", ".htm", ".pdf", NULL
+};
 
 static void join_path(char *out, LONG max, const char *dir, const char *name)
 {
@@ -52,31 +82,21 @@ static void join_path(char *out, LONG max, const char *dir, const char *name)
     amce_strlcat(out, name, max);
 }
 
-/* A file with no dot in its name: a ProTracker module inside? */
-static BOOL sniff(const char *path)
-{
-    UBYTE b[4];
-    BOOL yes = FALSE;
-    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
-    if (!fh)
-        return FALSE;
-    if (Seek(fh, 1080, OFFSET_BEGINNING) >= 0 && Read(fh, b, 4) == 4)
-        yes = !memcmp(b, "M.K.", 4) || !memcmp(b, "M!K!", 4) || !memcmp(b, "FLT4", 4) ||
-              !memcmp(b, "4CHN", 4) || !memcmp(b, "M&K!", 4);
-    Close(fh);
-    return yes;
-}
-
 BOOL mods_is_module(const char *dir, const char *name)
 {
-    char path[300];
-    if (starts_mod(name) || ends_with(name, ".mod") || ends_with(name, ".nst") ||
-        ends_with(name, ".stk") || ends_with(name, ".m15"))
-        return !ends_with(name, ".info");
-    if (strchr(name, '.'))
+    int i;
+    (void)dir;
+    if (name[0] == '.')
         return FALSE;
-    join_path(path, sizeof(path), dir, name);
-    return sniff(path);
+    for (i = 0; not_music[i]; i++)
+        if (ends_with(name, not_music[i]))
+            return FALSE;
+    /* the second file of a pair (mdat. plays, smpl. is its samples) */
+    if (!amce_stricmp(name, "smpl") || (strlen(name) > 5 && !memcmp(name, "smpl.", 5)) ||
+        (strlen(name) > 5 && !memcmp(name, "SMPL.", 5)) || ends_with(name, ".smpl") ||
+        ends_with(name, ".ssd") || ends_with(name, ".instr"))
+        return FALSE;
+    return TRUE;
 }
 
 struct collect_ctx {

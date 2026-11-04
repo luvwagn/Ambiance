@@ -3356,6 +3356,7 @@ static void set_focus(int f);
  * only what changed, and (double-buffered) without a flip. */
 #define MODS_ROOT  "ST-00:Modules"
 #define MODS_MENU  "AGS:Mods"
+#define MODS_SID   "ST-00:C64Music"
 #define VOL_STEP   4
 
 enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_VDOWN, NB_VUP, NB_COUNT };
@@ -3555,10 +3556,16 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
     np.s_row = st->row;
     time_text(st->elapsed_ms, a);
     time_text(st->total_ms, b);
-    sprintf(t, "%s / %s", a, b);
+    if (st->total_ms)
+        sprintf(t, "%s / %s", a, b);
+    else
+        strcpy(t, a);                       /* its length is not known */
     if (st->songlen)
-        sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
-                (long)st->songlen, (long)st->pattern, (long)st->row);
+        if (st->pattern >= 0)
+            sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+                    (long)st->songlen, (long)st->pattern, (long)st->row);
+        else
+            sprintf(pos, "Position %ld of %ld", (long)st->order + 1, (long)st->songlen);
     else
         pos[0] = 0;
     lw = gfx_textlen(&g, t, TS_BODY);
@@ -3630,17 +3637,32 @@ static void np_draw(BOOL full)
         while (*t == ' ')
             t++;
         gfx_text(&g, np.x0, np.title_y, t[0] ? t : label, PEN_WHITE, PEN_BG, np.w, TS_BOLD);
-        if (np.list.pool && np.idx >= 0 && np.list.count > 1)
-            sprintf(info, "%s   %s   %ld of %ld in %s", FilePart((STRPTR)mp_path()), mp_tag(),
-                    (long)np.idx + 1, (long)np.list.count, np.folder);
-        else
+        {
+            /* the file, what plays it (or its kind), the subsong, where in the folder */
+            int sub, subs;
+            char part[80];
+            mp_subsongs(&sub, &subs);
             sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
+            if (mp_author()[0]) {
+                sprintf(part, "   by %s", mp_author());
+                amce_strlcat(info, part, sizeof(info));
+            }
+            if (subs > 1) {
+                sprintf(part, "   subsong %ld of %ld", (long)sub, (long)subs);
+                amce_strlcat(info, part, sizeof(info));
+            }
+            if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
+                sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+                amce_strlcat(info, part, sizeof(info));
+                amce_strlcat(info, np.folder, sizeof(info));
+            }
+        }
         gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG, np.w, TS_SMALL);
         /* the sample names, in two columns where they fit */
         {
             WORD lh = g.font_h + U(1), cols = np.w >= U(300) ? 2 : 1, cw = np.w / cols;
             WORD rows = (g.footer_y - 2 - np.samples_y - lh) / lh, n = 0, k;
-            if (rows > 0) {
+            if (rows > 0 && mp_samples() > 0) {
                 gfx_text(&g, np.x0, np.samples_y, "Samples", PEN_DIM, PEN_BG, 0, TS_BOLD);
                 for (k = 0; k < mp_samples() && n < rows * cols; k++) {
                     BOOL used;
@@ -3760,6 +3782,15 @@ static void np_volume(int d)
         np_update();
 }
 
+/* The page drawn again (another song of the module). */
+static void np_redraw_all(void)
+{
+    if (np_on()) {
+        draw_pane(TRUE);
+        draw_footer();
+    }
+}
+
 static void np_press(int b)
 {
     char err[100];
@@ -3769,7 +3800,15 @@ static void np_press(int b)
         if (mp_loaded()) {
             struct MpStatus st;
             mp_status(&st);
-            if (st.elapsed_ms > 4000 || np.idx <= 0) {
+            if (st.elapsed_ms > 4000) {
+                mp_rewind();
+                break;
+            }
+            if (mp_subsong_step(-1)) {      /* a module of several songs: the one before */
+                np_redraw_all();
+                return;
+            }
+            if (np.idx <= 0) {
                 mp_rewind();
                 break;
             }
@@ -3777,16 +3816,18 @@ static void np_press(int b)
         np_skip(-1);
         return;
     case NB_NEXT:
+        if (mp_subsong_step(1)) {           /* its next song first */
+            np.ended_seen = FALSE;
+            np_redraw_all();
+            return;
+        }
         if (!np_skip(1))
             set_msg("That was the last module in the folder");
         return;
     case NB_BACK:
     case NB_FWD:
-        if (mp_loaded()) {
-            struct MpStatus st;
-            mp_status(&st);
-            mp_seek(st.order + (b == NB_FWD ? 1 : -1));
-        }
+        if (mp_loaded() && !mp_step(b == NB_FWD ? 1 : -1))
+            set_msg("This module cannot be moved through");
         break;
     case NB_PLAY:
         if (!mp_loaded()) {
@@ -3868,6 +3909,11 @@ static void np_tick(void)
 {
     if (mp_running() && mp_ended() && !np.ended_seen) {
         np.ended_seen = TRUE;
+        if (mp_subsong_step(1)) {           /* a module of several songs: the next */
+            np.ended_seen = FALSE;
+            np_redraw_all();
+            return;
+        }
         if (!np_skip(1)) {
             mp_stop();                      /* the folder played through */
             np_mark_lists(TRUE);
@@ -3912,6 +3958,8 @@ static BOOL np_click(WORD x, WORD y)
         ULONG want;
         int pos, best = 0;
         mp_status(&st);
+        if (!st.total_ms)
+            return TRUE;                    /* its length is not known */
         want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.w * 100;
         for (pos = 0; pos < st.songlen; pos++) {
             ULONG at = mp_position_ms(pos);
@@ -3942,14 +3990,15 @@ static BOOL dir_exists(const char *path)
 static void build_mods_root(void)
 {
     struct Page *p;
-    BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU);
+    BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU), sid = dir_exists(MODS_SID);
     if (!mods && !menu_music && !mp_loaded()) {
         if ((p = page_push(PT_TEXT, "Mods"))) {
             text_para(p, "No modules found. AmigaMCE looks for them in " MODS_ROOT
                          " and in " MODS_MENU " (AGS's menu music).");
             text_line(p, "");
-            text_para(p, "It plays ProTracker modules (M.K. and other 4-channel ones, and "
-                         "old 15-sample Soundtracker ones) itself, on the Amiga's own sound.");
+            text_para(p, "It plays ProTracker modules itself, and hundreds of other formats "
+                         "(OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and "
+                         "DeliTracker's players, all on the Amiga's own sound.");
         }
         return;
     }
@@ -3969,6 +4018,8 @@ static void build_mods_root(void)
     }
     if (mods)
         list_add(&p->list, "Modules", MODS_ROOT, "", IT_DIR);
+    if (sid)
+        list_add(&p->list, "C64 music", MODS_SID, "", IT_DIR);
     if (menu_music)
         list_add(&p->list, "Menu music", MODS_MENU, "", IT_DIR);
 }

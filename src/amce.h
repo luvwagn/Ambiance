@@ -338,6 +338,7 @@ struct MpStatus {
     ULONG elapsed_ms, total_ms;
     UBYTE level[4];             /* the channel meters, 0-64 */
     UBYTE sample[4];            /* the sample each channel last started (1-31) */
+    WORD sub, subs;             /* subsong (1..) of how many */
     BOOL running, paused;
 };
 BOOL mp_load(const char *path, char *err, LONG errmax);   /* stops what plays */
@@ -361,6 +362,35 @@ int  mp_samples(void);
 const char *mp_sample_name(int i, BOOL *used);
 ULONG mp_position_ms(int pos);
 void mp_status(struct MpStatus *s);     /* also lets the meters fall: call ~25 a second */
+BOOL mp_step(int d);                    /* back/on a position: FALSE if it cannot */
+void mp_subsongs(int *cur, int *n);
+BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
+const char *mp_author(void);
+void mp_tick_count(UWORD c);            /* eagle.c: the timer, in CIA counts */
+void mp_tick_run(BOOL on);
+
+/* EaglePlayer and DeliTracker players, hosted (eagle.c, eaglehost.s). */
+struct EpInfo {
+    const char *player, *song, *author;
+    WORD sub, subs;             /* 1..subs */
+    WORD sub_raw, sub_min, sub_max;
+    WORD pos, poslen, row;      /* -1: not known */
+};
+LONG ep_players(void);
+BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax);  /* mod: AllocVec, taken */
+BOOL ep_start(UWORD *count);    /* TRUE: AmigaMCE's timer calls ep_tick, every *count */
+void ep_tick(void);
+void ep_stop(void);
+void ep_pause(BOOL on);
+void ep_unload(void);
+BOOL ep_loaded(void);
+BOOL ep_own_timer(void);
+BOOL ep_song_ended(void);
+void ep_set_volume(int v);
+BOOL ep_step_position(int d);
+BOOL ep_subsong(int n);
+void ep_info(struct EpInfo *in);
+void ep_levels(UBYTE *hit, UBYTE *vol);
 
 /* ---------------------------------------------------------------- loader */
 /* Work for the loader process (loader.c): a fact sheet and screenshot, a

@@ -49,7 +49,9 @@ extern struct ExecBase *SysBase;
 #define R_CRB  0xF00
 #define CIAREG(base, r) (*(volatile UBYTE *)((base) + (r)))
 
-#define GAP_US 550          /* each of the two gaps in starting a note */
+#define GAP_US 550
+
+enum { ENG_NONE, ENG_PT, ENG_EAGLE };          /* each of the two gaps in starting a note */
 
 static struct {
     /* the hardware */
@@ -71,6 +73,9 @@ static struct {
     ULONG smp_size;
     char path[256];
     char packer[40];                /* what it was packed with ("" none) */
+    UBYTE engine;                   /* ENG_*: what plays it */
+    UWORD tick_cnt;                 /* an EaglePlayer player's timer (CIA count) */
+    ULONG ep_t0, ep_played;         /* ...and its time played, by the clock */
     /* playing */
     volatile BOOL running, paused;
     volatile WORD seek_to;          /* -1, or a position to go to on the next tick */
@@ -187,7 +192,14 @@ static void tick_code(void)
 {
     struct Pt *pt = mp.pt;
     int i;
-    if (!mp.running || !pt)
+    if (!mp.running)
+        return;
+    if (mp.engine == ENG_EAGLE) {
+        if (!mp.paused)
+            ep_tick();                      /* the player's own routine */
+        return;
+    }
+    if (!pt)
         return;
     if (mp.phase) {
         /* the last note start not finished (a very fast tempo): finish it */
@@ -334,18 +346,31 @@ static void tick_run(BOOL on)
     if (mp.tick_bit == CIAICRB_TA) {
         CIAREG(mp.cia_base, R_CRA) = (UBYTE)(CIAREG(mp.cia_base, R_CRA) & 0xC0);
         if (on) {
-            tick_latch(tick_count(mp.bpm_set));
+            tick_latch(mp.engine == ENG_EAGLE ? mp.tick_cnt : tick_count(mp.bpm_set));
             CIAREG(mp.cia_base, R_CRA) =
                 (UBYTE)((CIAREG(mp.cia_base, R_CRA) & 0xC0) | CIACRAF_LOAD | CIACRAF_START);
         }
     } else {
         CIAREG(mp.cia_base, R_CRB) = (UBYTE)(CIAREG(mp.cia_base, R_CRB) & 0x80);
         if (on) {
-            tick_latch(tick_count(mp.bpm_set));
+            tick_latch(mp.engine == ENG_EAGLE ? mp.tick_cnt : tick_count(mp.bpm_set));
             CIAREG(mp.cia_base, R_CRB) =
                 (UBYTE)((CIAREG(mp.cia_base, R_CRB) & 0x80) | CIACRBF_LOAD | CIACRBF_START);
         }
     }
+}
+
+/* For EaglePlayer players: their timer (callable from the interrupt). */
+void mp_tick_count(UWORD c)
+{
+    mp.tick_cnt = c;
+    if (mp.have_tick && mp.running)
+        tick_latch(c);
+}
+
+void mp_tick_run(BOOL on)
+{
+    tick_run(on);
 }
 
 static void paula_quiet(void)
@@ -400,6 +425,9 @@ static void audio_close(void)
 /* ------------------------------------------------------------ the module */
 static void module_free(void)
 {
+    if (mp.engine == ENG_EAGLE)
+        ep_unload();
+    mp.engine = ENG_NONE;
     if (mp.pt) {
         FreeVec(mp.pt);
         mp.pt = NULL;
@@ -527,17 +555,39 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         }
     }
     if (rc != PT_OK) {
+        /* not ProTracker: EaglePlayer's players (eagle.c), given the file */
+        char eerr[100];
         const char *pk = packer[0] ? NULL : packed_kind(head, got);
-        if (pk)
-            sprintf(m, "This file is %s: AmigaMCE plays ProTracker modules", pk);
-        else if ((why = layout_problem(rc, chans)))
-            amce_strlcpy(m, why, sizeof(m));
-        else
-            amce_strlcpy(m, "Not a ProTracker module AmigaMCE can play", sizeof(m));
-        amce_strlcpy(err, m, errmax);
         if (fh)
             Close(fh);
-        FreeVec(mem);
+        fh = 0;
+        if (!mem && (mem = unpack_read_whole(path, &mlen))) {
+            const char *uwhy = NULL;
+            mem = unpack_buffer(mem, &mlen, packer, sizeof(packer), &uwhy);
+        }
+        eerr[0] = 0;
+        if (mem) {
+            if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
+                mp.engine = ENG_EAGLE;
+                amce_strlcpy(mp.path, path, sizeof(mp.path));
+                amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                sprintf(m, "%s: by an EaglePlayer player%s%s (found in %ld ms)",
+                        FilePart((STRPTR)path), packer[0] ? ", unpacked from " : "", packer,
+                        (long)(time_ms() - t0));
+                amce_log("music", m);
+                return TRUE;
+            }
+            mem = NULL;                     /* ep_load has freed it */
+        }
+        if ((why = layout_problem(rc, chans)))
+            amce_strlcpy(m, why, sizeof(m));
+        else if (pk && !eerr[0])
+            sprintf(m, "This file is %s, which AmigaMCE cannot play", pk);
+        else if (eerr[0])
+            amce_strlcpy(m, eerr, sizeof(m));
+        else
+            amce_strlcpy(m, "Not a module AmigaMCE can play", sizeof(m));
+        amce_strlcpy(err, m, errmax);
         return FALSE;
     }
     mp.hdr = AllocVec(mp.lay.hdr_len, MEMF_ANY);
@@ -575,6 +625,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     CacheClearU();
     pt_init(mp.pt, &mp.lay, mp.hdr, mp.pat, (pt_s8 *)mp.smp, (pt_s8 *)mp.silence);
     pt_measure(mp.pt, mp.times);
+    mp.engine = ENG_PT;
     amce_strlcpy(mp.path, path, sizeof(mp.path));
     amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
     sprintf(m, "%s: \"%s\" %s%s%s, %lu positions, %lu patterns, %lu KB of samples, %lu:%02lu long "
@@ -589,9 +640,38 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
 }
 
 /* ------------------------------------------------------------ playing */
+static BOOL play_eagle(char *err, LONG errmax)
+{
+    UWORD cnt = 0;
+    BOOL tick;
+    if (ep_own_timer()) {
+        timers_close();                     /* it takes a CIA timer of its own */
+    } else if (!mp.cia && !timers_open()) {
+        amce_strlcpy(err, "No CIA timer free to play music with", errmax);
+        return FALSE;
+    }
+    Disable();
+    mp.running = FALSE;
+    Enable();
+    tick_run(FALSE);
+    paula_quiet();
+    mp.paused = FALSE;
+    mp.finished = FALSE;
+    mp.fin_left = -1;
+    tick = ep_start(&cnt);
+    mp.ep_t0 = time_ms();
+    mp.ep_played = 0;
+    mp.running = TRUE;
+    if (tick) {
+        mp.tick_cnt = cnt;
+        tick_run(TRUE);
+    }
+    return TRUE;
+}
+
 BOOL mp_play(char *err, LONG errmax)
 {
-    if (!mp.pt) {
+    if (!mp_loaded()) {
         amce_strlcpy(err, "No module loaded", errmax);
         return FALSE;
     }
@@ -601,6 +681,8 @@ BOOL mp_play(char *err, LONG errmax)
         amce_strlcpy(err, "The audio channels are in use by another program", errmax);
         return FALSE;
     }
+    if (mp.engine == ENG_EAGLE)
+        return play_eagle(err, errmax);
     if (!mp.cia && !timers_open()) {
         amce_strlcpy(err, "No CIA timer free to play music with", errmax);
         audio_close();
@@ -629,6 +711,16 @@ BOOL mp_play(char *err, LONG errmax)
 /* From the start of the song again (stopped, or playing on). */
 void mp_rewind(void)
 {
+    if (mp.engine == ENG_EAGLE) {
+        struct EpInfo in;
+        ep_info(&in);
+        if (mp.running) {
+            ep_subsong(in.sub_raw);         /* the subsong again, from its start */
+            mp.ep_t0 = time_ms();
+            mp.ep_played = 0;
+        }
+        return;
+    }
     mp_seek(0);
 }
 
@@ -641,9 +733,12 @@ void mp_stop(void)
     mp.phase = 0;
     Enable();
     tick_run(FALSE);
+    if (mp.engine == ENG_EAGLE)
+        ep_stop();
     paula_quiet();
     mp.fin_left = -1;
     mp.finished = FALSE;
+    mp.ep_played = 0;
     if (mp.pt) {
         pt_restart(mp.pt, 0, 6, 125);
         mp.pt->elapsed_us = 0;
@@ -655,9 +750,9 @@ void mp_stop(void)
 void mp_shutdown(void)
 {
     mp_stop();
+    module_free();
     timers_close();
     audio_close();
-    module_free();
     if (mp.silence) {
         FreeMem(mp.silence, 8);
         mp.silence = NULL;
@@ -667,9 +762,17 @@ void mp_shutdown(void)
 void mp_pause(BOOL on)
 {
     int i;
-    if (!mp.running)
+    if (!mp.running || on == mp.paused)
         return;
     mp.paused = on;
+    if (mp.engine == ENG_EAGLE) {
+        if (on)
+            mp.ep_played += time_ms() - mp.ep_t0;
+        else
+            mp.ep_t0 = time_ms();
+        ep_pause(on);
+        return;
+    }
     for (i = 0; i < 4; i++)
         CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
 }
@@ -696,6 +799,44 @@ void mp_seek(int pos)
     }
 }
 
+/* Back or on a position (d -1, +1): FALSE if this module cannot. */
+BOOL mp_step(int d)
+{
+    if (mp.engine == ENG_EAGLE)
+        return mp.running && ep_step_position(d);
+    if (!mp.pt)
+        return FALSE;
+    mp_seek(mp.pt->order + d);
+    return TRUE;
+}
+
+/* Subsongs (players that have them): *cur 1.., *n. */
+void mp_subsongs(int *cur, int *n)
+{
+    struct EpInfo in;
+    *cur = *n = 1;
+    if (mp.engine != ENG_EAGLE)
+        return;
+    ep_info(&in);
+    *cur = in.sub;
+    *n = in.subs;
+}
+
+/* The next or previous subsong (d +1, -1): FALSE if there is none. */
+BOOL mp_subsong_step(int d)
+{
+    struct EpInfo in;
+    if (mp.engine != ENG_EAGLE || !mp.running)
+        return FALSE;
+    ep_info(&in);
+    if (!ep_subsong(in.sub_raw + d))
+        return FALSE;
+    mp.ep_t0 = time_ms();
+    mp.ep_played = 0;
+    mp.paused = FALSE;
+    return TRUE;
+}
+
 void mp_set_volume(int v)
 {
     int i;
@@ -704,24 +845,71 @@ void mp_set_volume(int v)
     if (v > 64)
         v = 64;
     mp.master = (UWORD)v;
+    if (mp.engine == ENG_EAGLE) {
+        ep_set_volume(v);
+        return;
+    }
     if (mp.running && mp.pt)
         for (i = 0; i < 4; i++)
             CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
 }
 
 int mp_volume(void) { return mp.master ? mp.master : 64; }
-BOOL mp_loaded(void) { return mp.pt != NULL; }
+BOOL mp_loaded(void) { return mp.engine != ENG_NONE; }
 BOOL mp_playing(void) { return mp.running && !mp.paused; }
 BOOL mp_paused(void) { return mp.running && mp.paused; }
 BOOL mp_running(void) { return mp.running; }
-BOOL mp_ended(void) { return mp.pt && mp.finished; }
+BOOL mp_ended(void)
+{
+    if (mp.engine == ENG_EAGLE)
+        return mp.running && ep_song_ended();
+    return mp.pt && mp.finished;
+}
 const char *mp_path(void) { return mp.path; }
+
+static void meters(struct MpStatus *s, const UBYTE *hit, const UBYTE *vol)
+{
+    int i;
+    for (i = 0; i < 4; i++) {
+        /* each note's start lifts its meter; it falls away between */
+        ULONG h = hit[i] ? vol[i] : 0;
+        if (h && mp.running && !mp.paused) {
+            if (h > 64)
+                h = 64;
+            h = h * mp_volume() / 64;
+            if (h * 256 > mp.level[i])
+                mp.level[i] = h * 256;
+        }
+        s->level[i] = (UBYTE)(mp.level[i] >> 8);
+        mp.level[i] = mp.level[i] * 13 / 16;
+    }
+}
 
 void mp_status(struct MpStatus *s)
 {
     struct Pt *pt = mp.pt;
+    UBYTE hit[4], vol[4];
     int i;
     memset(s, 0, sizeof(*s));
+    s->running = mp.running;
+    s->paused = mp.paused;
+    if (mp.engine == ENG_EAGLE) {
+        struct EpInfo in;
+        UBYTE mask;
+        ep_info(&in);
+        s->order = in.pos >= 0 ? in.pos : 0;
+        s->row = in.row >= 0 ? in.row : 0;
+        s->songlen = in.pos >= 0 ? in.poslen : 0;
+        s->pattern = -1;
+        s->elapsed_ms = mp.ep_played + (mp.running && !mp.paused ? time_ms() - mp.ep_t0 : 0);
+        s->sub = in.sub;
+        s->subs = in.subs;
+        ep_levels(&mask, vol);
+        for (i = 0; i < 4; i++)
+            hit[i] = (mask >> i) & 1;
+        meters(s, hit, vol);
+        return;
+    }
     if (!pt)
         return;
     s->order = pt->order;
@@ -732,27 +920,49 @@ void mp_status(struct MpStatus *s)
     s->bpm = pt->bpm;
     s->elapsed_ms = pt->elapsed_us / 1000;
     s->total_ms = mp.times ? mp.times->total_ms : 0;
+    s->sub = s->subs = 1;
     if (s->elapsed_ms > s->total_ms && s->total_ms)
         s->elapsed_ms = s->total_ms;        /* playing on past the end (looped) */
     for (i = 0; i < 4; i++) {
-        /* each note's start lifts its meter; it falls away between */
-        ULONG hit = pt->hit[i];
+        vol[i] = pt->hit[i];
+        hit[i] = pt->hit[i] != 0;
         pt->hit[i] = 0;
-        if (hit && mp.running && !mp.paused) {
-            hit = hit * mp_volume() / 64;
-            if (hit * 256 > mp.level[i])
-                mp.level[i] = hit * 256;
-        }
-        s->level[i] = (UBYTE)(mp.level[i] >> 8);
-        mp.level[i] = mp.level[i] * 13 / 16;
         s->sample[i] = pt->ch[i].n_sample;
     }
-    s->running = mp.running;
-    s->paused = mp.paused;
+    meters(s, hit, vol);
 }
 
-const char *mp_title(void) { return mp.pt ? mp.pt->title : ""; }
-const char *mp_tag(void) { return mp.pt ? mp.lay.tag : ""; }
+const char *mp_title(void)
+{
+    if (mp.engine == ENG_EAGLE) {
+        struct EpInfo in;
+        ep_info(&in);
+        return in.song ? in.song : "";
+    }
+    return mp.pt ? mp.pt->title : "";
+}
+
+/* What it is: the ProTracker tag ("M.K."), or the player's name. */
+const char *mp_tag(void)
+{
+    if (mp.engine == ENG_EAGLE) {
+        struct EpInfo in;
+        ep_info(&in);
+        return in.player ? in.player : "";
+    }
+    return mp.pt ? mp.lay.tag : "";
+}
+
+const char *mp_author(void)
+{
+    if (mp.engine == ENG_EAGLE) {
+        struct EpInfo in;
+        ep_info(&in);
+        return in.author ? in.author : "";
+    }
+    return "";
+}
+
 int mp_samples(void) { return mp.pt ? mp.pt->nsmp : 0; }
 
 /* Sample i's name (and whether it has sound). */
