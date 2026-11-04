@@ -1656,14 +1656,37 @@ static WORD aside_x(void)
     return g.pane_x + g.pane_w - aside_width();
 }
 
+/* ---- a long list's column at its right edge: with the mouse in use, a
+ * scroll bar (click above or below the thumb to page, drag the thumb);
+ * otherwise (joystick, pad), arrows where there is more above or below.
+ * The mouse moving or clicking switches to the bar, the joystick to the
+ * arrows; the keyboard leaves it as it is. */
+#define GUT_W U(7)                  /* the column: gap, bar, gap */
+static BOOL mouse_mode;             /* the mouse was used last */
+static struct { BOOL drag; WORD off; } gut;
+
+static WORD list_visible(void);
+
+static BOOL list_overflows(struct Page *p)
+{
+    return p && p->type == PT_LIST && p->list.count > list_visible();
+}
+
+/* The right edge of a list's area, its column included. */
+static WORD list_edge(struct Page *p)
+{
+    return has_aside(p) ? aside_x() - U(6) - 1 : g.w - 1;
+}
+
 /* Last x a list row may paint. */
 static WORD list_xr(struct Page *p)
 {
-    if (has_aside(p))
-        return aside_x() - U(6) - 1;
-    if (ov.on && ov.page == p)
-        return ov.strip_x - 1;              /* lowres: the letter's strip is off limits */
-    return g.w - 1;
+    WORD e = list_edge(p);
+    if (list_overflows(p))
+        e -= GUT_W;                         /* the column */
+    if (!has_aside(p) && ov.on && ov.page == p && e > ov.strip_x - 1)
+        e = ov.strip_x - 1;                 /* lowres: the letter's strip is off limits */
+    return e;
 }
 
 /* ---- the preview of the selected game, drawn once the selection settles */
@@ -2378,6 +2401,55 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         SetWriteMask(g.rp, 0xFF);
 }
 
+/* The bar's place and its thumb's. */
+static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
+{
+    LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
+    *bx0 = list_edge(p) - GUT_W + 1 + U(2);
+    *bx1 = *bx0 + U(3) - 1;
+    t = h * vis / n;
+    if (t < U(10))
+        t = U(10);
+    if (t > h)
+        t = h;
+    *th = (WORD)t;
+    *ty = g.list_top + (WORD)(n > vis ? (h - t) * p->top / (n - vis) : 0);
+}
+
+static void draw_gutter(struct Page *p)
+{
+    WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
+    LONG vis = list_visible();
+    if (!list_overflows(p) || (!has_aside(p) && ov.on && ov.page == p))
+        return;                             /* no column, or under the letter's strip */
+    gut_geom(p, &bx0, &bx1, &ty, &th);
+    gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
+    if (mouse_mode) {
+        gfx_fill(&g, bx0, y0, bx1, y1, PEN_FAINT);              /* the track */
+        gfx_fill(&g, bx0, ty, bx1, ty + th - 1, gut.drag ? PEN_TEXT : PEN_DIM);
+    } else {
+        /* arrows: more above, more below */
+        WORD ax = (bx0 + bx1) / 2, ah = U(3), i;
+        for (i = 0; i < ah; i++) {
+            WORD half = (i * U(3)) / ah;
+            if (p->top > 0)
+                gfx_fill(&g, ax - half, y0 + U(1) + i, ax + half, y0 + U(1) + i, PEN_DIM);
+            if (p->top + vis < p->list.count)
+                gfx_fill(&g, ax - half, y1 - U(1) - i, ax + half, y1 - U(1) - i, PEN_DIM);
+        }
+    }
+}
+
+static void set_mouse_mode(BOOL on)
+{
+    struct Page *p = cur();
+    if (on == mouse_mode)
+        return;
+    mouse_mode = on;
+    if (p && p->type == PT_LIST && !pane_pending)
+        draw_gutter(p);
+}
+
 static void draw_list_rows(struct Page *p)
 {
     WORD vis = list_visible(), r, col = mark_column(&p->list);
@@ -2390,6 +2462,7 @@ static void draw_list_rows(struct Page *p)
     for (r = 0; r < vis && p->top + r < p->list.count; r++)
         draw_list_row(p, p->top + r, col);
     gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
+    draw_gutter(p);
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
@@ -2447,7 +2520,16 @@ static void blit_rows(LONG src, LONG dst, LONG n)
  * old selection moves into is painted plain, and the bar's own row is
  * repainted in place (in the same colour, so a highlight pinned at the
  * edge of the list never moves at all). */
+static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
+
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+{
+    draw_list_move2(p, old_sel, old_top);
+    if (p->top != old_top)
+        draw_gutter(p);                     /* the thumb or the arrows */
+}
+
+static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
 {
     WORD vis = list_visible(), col;
     LONG k, i, first, last, r_old, n_old;
@@ -3153,6 +3235,7 @@ static void act_move(LONG d)
  * header or footer the notch goes to whatever has the focus. */
 static void act_wheel(LONG d, WORD x, WORD y)
 {
+    set_mouse_mode(TRUE);
     struct Page *p = cur();
     BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
     BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
@@ -3742,6 +3825,63 @@ static void disarm(void)
 static ULONG last_secs, last_mics;
 static LONG last_click = -1;
 
+/* Dragging a list's thumb: the list follows, the selection kept in view. */
+static void gut_drag_to(WORD my)
+{
+    struct Page *p = cur();
+    WORD bx0, bx1, ty, th;
+    LONG vis = list_visible(), span, pos, top;
+    if (!list_overflows(p)) {
+        gut.drag = FALSE;
+        return;
+    }
+    gut_geom(p, &bx0, &bx1, &ty, &th);
+    span = (g.footer_y - 2 - g.list_top + 1) - th;
+    if (span <= 0)
+        return;
+    pos = my - gut.off - g.list_top;
+    if (pos < 0)
+        pos = 0;
+    if (pos > span)
+        pos = span;
+    top = pos * (p->list.count - vis) / span;
+    if (top == p->top)
+        return;
+    p->top = top;
+    if (p->sel < top)
+        p->sel = top;
+    if (p->sel > top + vis - 1)
+        p->sel = top + vis - 1;
+    if (ov.on && ov.page == p)
+        ov_relabel(ov_letter_of(p->list.items[p->sel].label));
+    draw_title_count(p);
+    draw_list_rows(p);
+}
+
+/* A click in a long list's column: on the thumb, drag it; above or below
+ * it, a page up or down. FALSE if the click was not there. */
+static BOOL gut_click(WORD x, WORD y)
+{
+    struct Page *p = cur();
+    WORD bx0, bx1, ty, th;
+    LONG vis = list_visible();
+    if (!list_overflows(p) || y < g.list_top || y > g.footer_y - 2 ||
+        x <= list_edge(p) - GUT_W || x > list_edge(p) ||
+        (!has_aside(p) && ov.on && ov.page == p))
+        return FALSE;
+    gut_geom(p, &bx0, &bx1, &ty, &th);
+    if (focus != FOCUS_CONTENT)
+        set_focus(FOCUS_CONTENT);
+    if (y >= ty && y < ty + th) {
+        gut.drag = TRUE;
+        gut.off = y - ty;
+        draw_gutter(p);
+    } else {
+        act_move(y < ty ? -(vis - 1) : vis - 1);
+    }
+    return TRUE;
+}
+
 static void handle_mouse(struct IntuiMessage *im)
 {
     WORD x = im->MouseX, y = im->MouseY;
@@ -3753,15 +3893,22 @@ static void handle_mouse(struct IntuiMessage *im)
     tb = cur_tb();
     if (!tb && pv_tb.open)
         tb = &pv_tb;                /* the preview pane's fact sheet */
+    set_mouse_mode(TRUE);                   /* the mouse is in use: scroll bars */
     if (im->Class == IDCMP_MOUSEMOVE) {
-        if (tb)
+        if (gut.drag)
+            gut_drag_to(y);
+        else if (tb)
             tb_mouse_move(tb, y);
         return;
     }
     if (im->Code == SELECTUP) {
+        if (gut.drag) {
+            gut.drag = FALSE;
+            if (cur())
+                draw_gutter(cur());
+        }
         if (tb && tb->dragging) {
             tb_mouse_up(tb);
-            ReportMouse(FALSE, g.win);
             tb_refresh_bar(&g, tb);
         }
         return;
@@ -3774,12 +3921,12 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Code != SELECTDOWN)
         return;
     disarm();
+    if (gut_click(x, y))
+        return;
     if (tb && tb_mouse_down(tb, x, y)) {
         set_focus(tb == &pv_tb ? FOCUS_PREVIEW : FOCUS_CONTENT);
-        if (tb->dragging) {
-            ReportMouse(TRUE, g.win);
+        if (tb->dragging)
             tb_refresh_bar(&g, tb);
-        }
         return;
     }
     if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h) {
@@ -3931,6 +4078,8 @@ static void joy_poll(void)
             hold_stop();
     }
     joy_last = dir | btn;
+    if (act || newbtn)
+        set_mouse_mode(FALSE);              /* the joystick in use: arrows, not bars */
     if (act & (JPF_JOY_UP | JPF_JOY_DOWN)) {
         LONG d = (act & JPF_JOY_UP) ? -1 : 1;
         disarm();

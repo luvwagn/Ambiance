@@ -80,6 +80,10 @@ Controls
                (A, B, C...): let go on the letter shown
   Mouse wheel  scroll           Scroll bar     click to page, drag to scroll
 
+  Long lists show a scroll bar at their right edge while the mouse is in
+  use, and small arrows there (more above, more below) while a joystick
+  or pad is: moving the mouse or using the joystick switches between them.
+
   Pictures     Fire/Return views a picture or plays a folder marked with
                the play arrow as a slideshow; Right or a double-click
                opens a folder.

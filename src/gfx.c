@@ -296,6 +296,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
                             WA_Width, g->w, WA_Height, g->h, WA_Backdrop, TRUE,
                             WA_Borderless, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
                             WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE,
+                            WA_ReportMouse, TRUE,     /* moves tell the mouse is in use */
                             WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE |
                                       IDCMP_INACTIVEWINDOW,
                             TAG_END);
