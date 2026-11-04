@@ -111,7 +111,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1339,6 +1339,11 @@ static void save_screen_mode(void)
 
 #define DEBUG_VAR "AmigaMCE/Debug"
 #define STYLE_VAR "AmigaMCE/Style"
+#define JUMP_VAR  "AmigaMCE/JumpScroll"
+
+/* Settings > Jump scrolling: held Up/Down in a very long list goes a
+ * letter at a time once past cruising speed (off: it glides on). */
+static BOOL jump_scroll;
 
 static void set_msg(const char *m);
 
@@ -1360,6 +1365,13 @@ static void load_style(void)
     char buf[16];
     if (GetVar((CONST_STRPTR)STYLE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         ui_style = amce_stricmp(buf, "smooth") == 0 ? STYLE_SMOOTH : STYLE_PIXEL;
+}
+
+static void load_jump(void)
+{
+    char buf[8];
+    jump_scroll = GetVar((CONST_STRPTR)JUMP_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+                  buf[0] == '1';
 }
 
 static void load_debug(void)
@@ -1394,6 +1406,8 @@ static void build_settings(struct Page *p)
     } else if ((it = action_item(p, "Style", "Pixel", ACT_STYLES, MARK_ARROW))) {
         it->flags |= ITEM_DISABLED;
     }
+    action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
+                jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -4066,6 +4080,21 @@ static void apply_screen_mode(int sm)
         note_style();
 }
 
+static void toggle_jump(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    jump_scroll = !jump_scroll;
+    save_setting(JUMP_VAR, jump_scroll ? "1" : "0");
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel;
+        draw_list_rows(p);
+    }
+}
+
 static void toggle_debug(void)
 {
     struct Page *p = cur();
@@ -4153,6 +4182,8 @@ static void act_action(struct Item *it)
         open_credits();
     else if (it->action == ACT_DEBUG)
         toggle_debug();
+    else if (it->action == ACT_JUMP)
+        toggle_jump();
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -4314,7 +4345,8 @@ static void hold_tick(void)
             hold_stop();
             return;
         }
-        if (glide >= HOLD_RAMP && hold.letters && p->list.count >= LETTER_MIN_LIST) {
+        if (jump_scroll && glide >= HOLD_RAMP && hold.letters &&
+            p->list.count >= LETTER_MIN_LIST) {
             /* past cruising in a long titled list: a letter a step (let go,
              * and the selection is on the first entry of the letter shown) */
             LONG b = glide - HOLD_RAMP, lps, to;
@@ -4973,6 +5005,7 @@ static int app_main(void)
     }
     dbg_mem_baseline();
     load_debug();
+    load_jump();
     amce_log_open(debug_on);
     open_extra_libs();
     {
