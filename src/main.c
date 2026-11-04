@@ -1433,7 +1433,7 @@ static void build_root_pages(int mod)
         break;
     case MOD_MODS:
         if ((p = page_push(PT_TEXT, "Mods"))) {
-            text_para(p, "Module playback arrives in version 0.2.");
+            text_para(p, "Module playback arrives in a later version.");
             text_line(p, "");
             found_line(p, "Modules", "ST-00:Modules");
             found_line(p, "Menu music", "AGS:Mods");
