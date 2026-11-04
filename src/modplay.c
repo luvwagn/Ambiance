@@ -34,6 +34,8 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/cia.h>
+#include <devices/timer.h>
+#include <proto/timer.h>
 
 #include "ptcore.h"
 
@@ -91,7 +93,13 @@ static struct {
     UWORD master;                   /* 0-64 */
     ULONG level[4];                 /* the meters (UI side) */
     volatile ULONG ticks;           /* the tempo interrupt's count, playing */
-    ULONG chk_t0, chk_n0, chk_said; /* mp_tempo_check's window */
+    volatile ULONG caught;          /* ticks played to catch up (missed interrupts) */
+    ULONG chk_t0, chk_n0, chk_c0, chk_said; /* mp_tempo_check's window */
+    BOOL chk_first;                 /* the first check of a song: always logged */
+    /* tick_owed's anchor: the E-clock (low 32 bits) and the ticks played
+     * since then, at the count cnt */
+    BOOL anc_on;
+    ULONG anc_e, anc_done, anc_cnt;
 } mp;
 
 /* ------------------------------------------------------------ Paula */
@@ -194,14 +202,62 @@ static void gap_code(void)
     }
 }
 
+/* How many ticks this interrupt should play: by the E-clock, the ticks
+ * due since the anchor less those played. Normally 1; more when
+ * interrupts were missed or came late (RTG screens under some emulators
+ * lose CIA-B's), so the tempo stays right whatever happens to them. */
+static UWORD tick_owed(void)
+{
+    struct EClockVal ev;
+    ULONG cnt = mp.engine == ENG_EAGLE ? mp.tick_cnt : tick_count(mp.bpm_set), el, due;
+    UWORD n = 1;
+    if (!TimerBase || !cnt || mp.paused || mp.finished) {
+        mp.anc_on = FALSE;
+        return 1;
+    }
+    ReadEClock(&ev);
+    if (!mp.anc_on || cnt != mp.anc_cnt) {
+        mp.anc_on = TRUE;                   /* from here (a new tempo, a resume...) */
+        mp.anc_e = ev.ev_lo;
+        mp.anc_done = 0;
+        mp.anc_cnt = cnt;
+        return 1;
+    }
+    el = ev.ev_lo - mp.anc_e;
+    due = el / cnt;
+    mp.anc_done++;                          /* this one */
+    if (due > mp.anc_done) {
+        n = (UWORD)(due - mp.anc_done + 1);
+        if (n > 4) {
+            n = 4;                          /* a long stall: not all at once */
+            mp.anc_on = FALSE;
+        }
+        mp.anc_done += n - 1;
+        mp.caught += n - 1;
+    } else if (mp.anc_done > due + 2 || el > 0x40000000UL) {
+        mp.anc_on = FALSE;                  /* drifted, or a long while: anew */
+    }
+    return n;
+}
+
+static void tick_one(void);
+
 static void tick_code(void)
 {
-    struct Pt *pt = mp.pt;
-    int i;
+    UWORD n;
     if (!mp.running)
         return;
     if (!mp.paused)
         mp.ticks++;
+    n = tick_owed();
+    while (n--)
+        tick_one();
+}
+
+static void tick_one(void)
+{
+    struct Pt *pt = mp.pt;
+    int i;
     if (mp.engine == ENG_EAGLE) {
         if (!mp.paused)
             ep_tick();                      /* the player's own routine */
@@ -373,7 +429,7 @@ static void tick_run(BOOL on)
  * log when it is more than 10% off, at most twice a minute. */
 void mp_tempo_check(void)
 {
-    ULONG now = time_ms(), n = mp.ticks, el, cnt, hz10, want, got;
+    ULONG now = time_ms(), n = mp.ticks, el, cnt, hz10, want, got, caught;
     if (!mp.running || mp.paused || mp.engine == ENG_MIX || !mp.have_tick) {
         mp.chk_t0 = 0;
         return;
@@ -381,6 +437,7 @@ void mp_tempo_check(void)
     if (!mp.chk_t0) {
         mp.chk_t0 = now ? now : 1;
         mp.chk_n0 = n;
+        mp.chk_c0 = mp.caught;
         return;
     }
     el = now - mp.chk_t0;
@@ -388,21 +445,26 @@ void mp_tempo_check(void)
         return;
     cnt = mp.engine == ENG_EAGLE ? mp.tick_cnt : tick_count(mp.bpm_set);
     got = n - mp.chk_n0;
+    caught = mp.caught - mp.chk_c0;
     mp.chk_t0 = now ? now : 1;
     mp.chk_n0 = n;
+    mp.chk_c0 = mp.caught;
     if (!cnt)
         return;
     hz10 = mp.eclock * 10 / cnt;            /* ticks a second, x10 */
     want = el * hz10 / 10000;
-    if (!want || (got * 10 >= want * 9 && got * 10 <= want * 11))
+    if (!want)
         return;
-    if (mp.chk_said && now - mp.chk_said < 30000)
+    if (!mp.chk_first && got * 10 >= want * 9 && got * 10 <= want * 11)
         return;
+    if (!mp.chk_first && mp.chk_said && now - mp.chk_said < 30000)
+        return;
+    mp.chk_first = FALSE;
     mp.chk_said = now ? now : 1;
     {
-        char m[120];
-        sprintf(m, "the tempo interrupt came %ld times in %ld ms, not %ld (%ld%%)", (long)got,
-                (long)el, (long)want, (long)(got * 100 / want));
+        char m[160];
+        sprintf(m, "the tempo interrupt came %ld times in %ld ms, of %ld (%ld%%); %ld ticks caught up",
+                (long)got, (long)el, (long)want, (long)(got * 100 / want), (long)caught);
         amce_log("music", m);
     }
 }
@@ -795,6 +857,9 @@ BOOL mp_play(char *err, LONG errmax)
         amce_strlcpy(err, "No module loaded", errmax);
         return FALSE;
     }
+    mp.anc_on = FALSE;                      /* the tempo anchored anew */
+    mp.chk_t0 = 0;                          /* its check from the start, */
+    mp.chk_first = TRUE;                    /* logged once whatever it finds */
     if (!vol_set)
         mp.master = 64;
     if (!audio_open()) {
