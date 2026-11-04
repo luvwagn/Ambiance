@@ -61,9 +61,19 @@ Features in this release
   native and 256-colour screens a picture gets the whole palette while it
   is shown, its own colours exactly when it has no more than the screen
   can show, and the info bar is drawn in the picture's own colours.
+- Mods: ProTracker modules from ST-00:Modules and AGS:Mods (AGS's menu
+  music), played by AmigaMCE itself on the Amiga's own sound, timed by a
+  CIA timer so the music never waits for the screen. 4-channel modules
+  (M.K., M!K!, FLT4, 4CHN...) and old 15-sample Soundtracker ones play,
+  with ProTracker 2.3's effects and quirks. The Now Playing page shows
+  the time played, the position, a meter for each channel and the
+  module's sample names, with buttons for previous, back, play/pause,
+  stop, forward, next and volume. The music plays on while you browse,
+  and the next module in the folder follows at a song's end; it stops
+  when a game starts.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
-Mods, Videos, Music and Radio are listed but arrive in a later
+Videos, Music and Radio are listed but arrive in a later
 version. About holds the credits and a System information
 page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 
@@ -98,6 +108,13 @@ Controls
   Viewer       Left/Right (or a click) previous/next, Fire/Return/Space
                slideshow on/off (5 seconds a picture), Esc or the right
                mouse button back.
+  Mods         Fire/Return plays a module (a double-click with the
+               mouse) and opens Now Playing.
+  Now Playing  Left/Right choose a button, Fire presses it; Up/Down (or
+               the wheel) volume; Space play/pause; S stop; N/P (or the
+               CD32 shoulders) next/previous module; , and . back/forward
+               a position; a click on the bar jumps there. Esc goes back
+               to the list, the music playing on.
 
 Installation
 ------------

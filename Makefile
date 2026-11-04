@@ -27,7 +27,7 @@ CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign 
 LDFLAGS = -noixemul
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c \
+SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
@@ -47,7 +47,7 @@ SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt CREDITS.txt
 
-.PHONY: all clean test check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
+.PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
 
 all: $(TARGET) lha disk
 
@@ -95,9 +95,22 @@ check-syscalls: $(SRCS) src/amce.h
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
 
-test: check-formats check-syscalls build/test_ags
+test: check-formats check-syscalls build/test_ags test-replayer
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V T:$(abspath build/vt) test_ags
+
+# The ProTracker replayer on the build machine: a generated module played
+# through a model of Paula; its length and its four channels checked.
+HOSTCC ?= cc
+build/pt_host: tests/pt_host.c src/ptcore.c src/ptcore.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/pt_host.c src/ptcore.c
+
+test-replayer: build/pt_host
+	@$(PYTHON) -I tests/mkmod.py build/test.mod
+	@build/pt_host build/test.mod - > build/test-replayer.txt
+	@grep -q "length 0:19.440" build/test-replayer.txt && grep -q "channels heard 1111" build/test-replayer.txt \
+		&& echo "  CHECK replayer ok" || (cat build/test-replayer.txt; echo "replayer test failed"; exit 1)
 
 # ------------------------------------------------------------------ assets
 art:

@@ -33,7 +33,7 @@ static const char *mod_names[MOD_COUNT] = {
     "Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"
 };
 
-enum { PT_LIST, PT_TEXT, PT_DETAIL };
+enum { PT_LIST, PT_TEXT, PT_DETAIL, PT_PLAYER };
 enum { FOCUS_MENU, FOCUS_CONTENT,
        FOCUS_PREVIEW };     /* the preview pane's fact sheet: Up/Down scroll it */
 #define MAXDEPTH 12
@@ -52,6 +52,7 @@ struct Page {
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
+    UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
     char pic[160];              /* PT_TEXT: a picture at the end of the text ("" none), */
@@ -111,7 +112,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_NOWPLAYING,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1496,6 +1497,9 @@ static void build_credits(struct Page *p)
     }
 }
 
+static void build_mods_root(void);
+static void np_mark_lists(void);
+
 static void build_root_pages(int mod)
 {
     struct Page *p;
@@ -1511,12 +1515,7 @@ static void build_root_pages(int mod)
             no_ags_text(p);
         break;
     case MOD_MODS:
-        if ((p = page_push(PT_TEXT, "Mods"))) {
-            text_para(p, "Module playback arrives in a later version.");
-            text_line(p, "");
-            found_line(p, "Modules", "ST-00:Modules");
-            found_line(p, "Menu music", "AGS:Mods");
-        }
+        build_mods_root();
         break;
     case MOD_VIDEOS:
         if ((p = page_push(PT_TEXT, "Videos"))) {
@@ -1596,10 +1595,19 @@ static void save_nav(void)
 /* Open a folder page without drawing (used while rebuilding the trail). */
 static BOOL push_dir_quiet(struct Item *it)
 {
-    BOOL pics = cur() && cur()->pics;
+    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods;
     struct Page *p = page_push(PT_LIST, it->label);
     if (!p)
         return FALSE;
+    if (mods) {
+        p->mods = 1;
+        if (mods_read_dir(it->path, &p->list) <= 0) {
+            page_pop();
+            return FALSE;
+        }
+        np_mark_lists();
+        return TRUE;
+    }
     if (pics) {
         p->pics = 1;
         if (pics_read_ui(it->path, &p->list) <= 0) {
@@ -1855,6 +1863,12 @@ static const char *hint_text(void)
     if (p && p->type == PT_DETAIL)
         return hi ? "Fire/Return  play      Up/Down  scroll      Left/Esc  back"
                   : "Fire play  Esc back";
+    if (p && p->type == PT_PLAYER)
+        return hi ? "Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back"
+                  : "Fire press  Up/Dn vol  Esc back";
+    if (p && p->type == PT_LIST && p->mods && p->list.count &&
+        p->list.items[p->sel].kind == IT_MOD)
+        return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
     return hi ? "Up/Down  scroll      Left/Esc  back" : "Up/Down scroll  Esc back";
 }
 
@@ -3244,6 +3258,8 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
 }
 
 /* (Re)build the page's text box below y0, keeping its scroll position. */
+static void np_draw(BOOL full);
+
 static void open_textbox(struct Page *p, WORD y0)
 {
     tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), g.footer_y - 2 - y0, &p->list,
@@ -3276,8 +3292,8 @@ static void draw_pane(BOOL full)
             gfx_fill_bg(&g, px, tb->y, tb->x - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, bx1 + 1, tb->y, g.w - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, px, tb->y + tb->h, g.w - 1, pb);
-        } else {
-            gfx_fill_bg(&g, px, U(25), g.w - 1, pb);
+        } else if (p->type != PT_PLAYER) {
+            gfx_fill_bg(&g, px, U(25), g.w - 1, pb);  /* the player clears its own */
         }
     }
     draw_title(p);
@@ -3296,6 +3312,9 @@ static void draw_pane(BOOL full)
         }
         if (full || !p->tb.drawn)
             tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
+        break;
+    case PT_PLAYER:
+        np_draw(full);
         break;
     case PT_DETAIL:
         if (full) {
@@ -3317,6 +3336,638 @@ static void draw_pane(BOOL full)
             tb_draw(&g, &p->tb);
         break;
     }
+}
+
+static void set_focus(int f);
+
+/* ------------------------------------------------------------ music
+ * Mods: the folders of modules (mods.c) and the Now Playing page
+ * (PT_PLAYER), the music itself on Paula (modplay.c). The music plays on
+ * wherever AmigaMCE goes, until it is stopped or a game starts; at the end
+ * of a song the next module in its folder follows.
+ *
+ * The page: the module's title, what it is, a bar of the time played, the
+ * four channels' meters with the sample each is playing, the buttons
+ * (previous, back a position, play/pause, stop, forward a position, next,
+ * quieter, louder) and the module's sample names, where trackers left their
+ * messages. Left/Right choose a button and Fire presses it; Up/Down change
+ * the volume; Space plays and pauses; the CD32 pad's shoulders and N/P skip
+ * modules. While it is shown it is brought up to date 25 times a second,
+ * only what changed, and (double-buffered) without a flip. */
+#define MODS_ROOT  "ST-00:Modules"
+#define MODS_MENU  "AGS:Mods"
+#define VOL_STEP   4
+
+enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_VDOWN, NB_VUP, NB_COUNT };
+
+static struct {
+    struct ItemList list;       /* the playlist: the modules of the folder played from */
+    LONG idx;                   /* the one loaded */
+    char folder[64];
+    int btn;                    /* the button chosen with the keyboard or joystick */
+    BOOL ended_seen;            /* the song's end acted on */
+    /* where things are on the page */
+    WORD x0, w, title_y, info_y, prog_y, prog_h, time_y, meter_y, meter_h, name_w;
+    WORD bx[NB_COUNT], by, bw, bh, vol_x, samples_y;
+    /* what is drawn there now: only changes are drawn again */
+    LONG s_ms, s_total, s_order, s_row, s_fill;
+    WORD s_level[4];
+    UBYTE s_sample[4];
+    int s_state, s_vol, s_btn;
+    BOOL s_focus;
+} np = { .idx = -1, .btn = NB_PLAY };
+
+static BOOL np_on(void)
+{
+    struct Page *p = pane_pending ? NULL : cur();
+    return p && p->type == PT_PLAYER;
+}
+
+/* The page is up and something on it moves. */
+static BOOL np_live(void)
+{
+    return np_on() && mp_running();
+}
+
+static void time_text(ULONG ms, char *out)
+{
+    ULONG s = ms / 1000;
+    sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
+}
+
+/* A triangle w x h pointing right (dir 1) or left (-1), row by row. */
+static void np_tri(WORD x, WORD y, WORD w, WORD h, int dir, UBYTE pen)
+{
+    WORD r, half = (h - 1) / 2;
+    for (r = 0; r < h; r++) {
+        WORD d = r <= half ? r : h - 1 - r;
+        WORD len = (WORD)(((LONG)w * (d + 1) + half) / (half + 1));
+        if (len > w)
+            len = w;
+        if (len < 1)
+            len = 1;
+        if (dir > 0)
+            gfx_fill(&g, x, y + r, x + len - 1, y + r, pen);
+        else
+            gfx_fill(&g, x + w - len, y + r, x + w - 1, y + r, pen);
+    }
+}
+
+static int np_state(void)
+{
+    return !mp_loaded() ? 0 : mp_playing() ? 1 : mp_paused() ? 2 : 3;
+}
+
+static void np_button(int i)
+{
+    BOOL sel = focus == FOCUS_CONTENT && i == np.btn;
+    UBYTE bg = sel ? PEN_HL : PEN_BAR, fg = sel ? PEN_WHITE : PEN_TEXT;
+    WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
+    WORD gh = h * 5 / 10, gw, cx, gy, t;
+    if (i == NB_VDOWN || i == NB_VUP) {
+        if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
+            fg = sel ? PEN_TEXT : PEN_DIM;
+    }
+    if (gh < 5)
+        gh = 5;
+    gw = gh * 3 / 4;                        /* a triangle's width */
+    if (gfx_mode_tall(g.mode))
+        gw = gw * 2;                        /* tall pixels: as wide on screen */
+    cx = x + w / 2;
+    gy = y + (h - gh) / 2;
+    t = U(2) > 1 ? U(2) : 1;                /* a bar's thickness */
+    gfx_fill(&g, x, y, x + w - 1, y + h - 1, bg);
+    switch (i) {
+    case NB_PREV:
+        gfx_fill(&g, cx - gw / 2 - t, gy, cx - gw / 2 - 1, gy + gh - 1, fg);
+        np_tri(cx - gw / 2, gy, gw, gh, -1, fg);
+        break;
+    case NB_NEXT:
+        np_tri(cx - gw / 2, gy, gw, gh, 1, fg);
+        gfx_fill(&g, cx - gw / 2 + gw, gy, cx - gw / 2 + gw + t - 1, gy + gh - 1, fg);
+        break;
+    case NB_BACK:
+        np_tri(cx - gw, gy, gw, gh, -1, fg);
+        np_tri(cx, gy, gw, gh, -1, fg);
+        break;
+    case NB_FWD:
+        np_tri(cx - gw, gy, gw, gh, 1, fg);
+        np_tri(cx, gy, gw, gh, 1, fg);
+        break;
+    case NB_PLAY:
+        if (mp_playing()) {                 /* pause */
+            WORD bw = gw / 3 > 1 ? gw / 3 : 2;
+            gfx_fill(&g, cx - bw - bw / 2, gy, cx - bw / 2 - 1, gy + gh - 1, fg);
+            gfx_fill(&g, cx + bw / 2 + (bw & 1), gy, cx + bw + bw / 2 + (bw & 1) - 1, gy + gh - 1, fg);
+        } else {
+            np_tri(cx - gw / 2, gy, gw, gh, 1, fg);
+        }
+        break;
+    case NB_STOP: {
+        WORD sw = gh * 4 / 5, sh = sw;
+        if (gfx_mode_tall(g.mode))
+            sw *= 2;
+        gfx_fill(&g, cx - sw / 2, y + (h - sh) / 2, cx - sw / 2 + sw - 1, y + (h - sh) / 2 + sh - 1, fg);
+        break;
+    }
+    case NB_VDOWN:
+    case NB_VUP: {
+        WORD lw = gw * 4 / 3, ly = y + h / 2 - t / 2;
+        gfx_fill(&g, cx - lw / 2, ly, cx - lw / 2 + lw - 1, ly + t - 1, fg);
+        if (i == NB_VUP) {
+            WORD lh = gh * 4 / 5;
+            if (gfx_mode_tall(g.mode))
+                lh = lh * 2 / 3;
+            gfx_fill(&g, cx - t / 2, y + (h - lh) / 2, cx - t / 2 + t - 1, y + (h - lh) / 2 + lh - 1, fg);
+        }
+        break;
+    }
+    }
+}
+
+static void np_volume_text(void)
+{
+    char m[24];
+    WORD x = np.vol_x, y = np.by + (np.bh - g.font_h) / 2, end = np.x0 + np.w - 1;
+    if (x < 0)
+        return;
+    sprintf(m, "Volume %ld%%", (long)(mp_volume() * 100 / 64));
+    gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
+    x += gfx_textlen(&g, m, TS_SMALL);
+    if (x <= end)
+        gfx_fill(&g, x, y, end, y + g.font_h - 1, PEN_BG);
+}
+
+static void np_layout(void)
+{
+    WORD row = g.font_h + U(3), gap = U(3), vt, i, avail;
+    np.x0 = g.pane_x;
+    np.w = g.pane_w - U(2);
+    np.title_y = g.list_top + U(2);
+    np.info_y = np.title_y + row + U(1);
+    np.prog_y = np.info_y + row + U(5);
+    np.prog_h = U(4) > 2 ? U(4) : 2;
+    np.time_y = np.prog_y + np.prog_h + U(4);
+    np.meter_y = np.time_y + row + U(6);
+    np.meter_h = g.font_h + U(2);
+    np.name_w = np.w * 2 / 5;
+    np.by = np.meter_y + 4 * (np.meter_h + U(2)) + U(6);
+    np.bh = g.font_h + U(8);
+    vt = gfx_textlen(&g, "Volume 100%", TS_SMALL) + U(6);
+    avail = np.w - vt;
+    np.bw = (avail - (NB_COUNT - 1) * gap) / NB_COUNT;
+    np.vol_x = np.x0 + np.w - vt + U(6);
+    if (np.bw < U(14)) {                    /* narrow: the buttons take the row */
+        np.bw = (np.w - (NB_COUNT - 1) * gap) / NB_COUNT;
+        np.vol_x = -1;
+    }
+    if (np.bw > U(26))
+        np.bw = U(26);
+    for (i = 0; i < NB_COUNT; i++)
+        np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_VDOWN ? gap * 2 : 0);
+    if (np.vol_x >= 0)
+        np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
+    np.samples_y = np.by + np.bh + U(8);
+}
+
+/* The time, the bar and the position: only what changed. */
+static void np_draw_progress(BOOL full, const struct MpStatus *st)
+{
+    char t[64], a[24], b[24], pos[96];
+    WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, lw, rw;
+    LONG fill = st->total_ms ? (LONG)((ULONG)np.w * (st->elapsed_ms / 100) /
+                                      ((st->total_ms + 99) / 100)) : 0;
+    if (fill > np.w)
+        fill = np.w;
+    if (full || fill != np.s_fill) {
+        if (fill > 0)
+            gfx_fill(&g, x, np.prog_y, x + fill - 1, np.prog_y + np.prog_h - 1, PEN_ACCENT);
+        if (fill < np.w)
+            gfx_fill(&g, x + fill, np.prog_y, end, np.prog_y + np.prog_h - 1, PEN_RULE);
+        np.s_fill = fill;
+    }
+    if (!full && st->elapsed_ms / 1000 == (ULONG)np.s_ms / 1000 && st->order == np.s_order &&
+        st->row == np.s_row && (LONG)st->total_ms == np.s_total)
+        return;
+    np.s_ms = st->elapsed_ms;
+    np.s_total = st->total_ms;
+    np.s_order = st->order;
+    np.s_row = st->row;
+    time_text(st->elapsed_ms, a);
+    time_text(st->total_ms, b);
+    sprintf(t, "%s / %s", a, b);
+    if (st->songlen)
+        sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+                (long)st->songlen, (long)st->pattern, (long)st->row);
+    else
+        pos[0] = 0;
+    lw = gfx_textlen(&g, t, TS_BODY);
+    rw = gfx_textlen(&g, pos, TS_SMALL);
+    if (lw + U(8) + rw > np.w) {            /* narrow: the short form */
+        sprintf(pos, "%ld/%ld  %02ld", (long)st->order + 1, (long)st->songlen, (long)st->row);
+        rw = gfx_textlen(&g, pos, TS_SMALL);
+        if (lw + U(8) + rw > np.w)
+            pos[0] = 0, rw = 0;
+    }
+    gfx_text(&g, x, y, t, PEN_TEXT, PEN_BG, 0, TS_BODY | TS_OPAQUE);
+    if (x + lw <= end - rw)
+        gfx_fill(&g, x + lw, y, end - rw, y + g.font_h - 1, PEN_BG);
+    if (rw)
+        gfx_text(&g, end - rw + 1, y, pos, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
+}
+
+static void np_draw_meters(BOOL full, const struct MpStatus *st)
+{
+    int i;
+    WORD bx = np.x0 + np.name_w + U(4), bw = np.x0 + np.w - bx, bh = np.meter_h - U(4);
+    if (bh < 2)
+        bh = 2;
+    for (i = 0; i < 4; i++) {
+        WORD y = np.meter_y + i * (np.meter_h + U(2)), by = y + (np.meter_h - bh) / 2;
+        WORD lit = (WORD)((LONG)bw * st->level[i] / 64);
+        if (full || st->sample[i] != np.s_sample[i]) {
+            char name[40];
+            BOOL used;
+            const char *sn = st->sample[i] ? mp_sample_name(st->sample[i] - 1, &used) : "";
+            if (st->sample[i])
+                sprintf(name, "%ld  %s", (long)st->sample[i], sn);
+            else
+                name[0] = 0;
+            gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
+            if (name[0])
+                gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2, name, PEN_DIM, PEN_BG,
+                         np.name_w, TS_SMALL);
+            np.s_sample[i] = st->sample[i];
+        }
+        if (full || lit != np.s_level[i]) {
+            if (lit > 0)
+                gfx_fill(&g, bx, by, bx + lit - 1, by + bh - 1, i == 0 || i == 3 ? PEN_ACCENT : PEN_HL);
+            if (lit < bw)
+                gfx_fill(&g, bx + lit, by, bx + bw - 1, by + bh - 1, PEN_RULE);
+            np.s_level[i] = lit;
+        }
+    }
+}
+
+static void np_draw(BOOL full)
+{
+    struct MpStatus st;
+    char info[160];
+    int i;
+    mp_status(&st);
+    if (!np.w)
+        full = TRUE;                        /* not laid out yet */
+    if (full) {
+        const char *t = mp_title();
+        char label[120];
+        np_layout();
+        gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+        if (!mp_loaded()) {
+            gfx_text(&g, np.x0, np.title_y, "Nothing playing", PEN_DIM, PEN_BG, np.w, TS_BOLD);
+            return;
+        }
+        mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
+        while (*t == ' ')
+            t++;
+        gfx_text(&g, np.x0, np.title_y, t[0] ? t : label, PEN_WHITE, PEN_BG, np.w, TS_BOLD);
+        if (np.list.pool && np.idx >= 0 && np.list.count > 1)
+            sprintf(info, "%s   %s   %ld of %ld in %s", FilePart((STRPTR)mp_path()), mp_tag(),
+                    (long)np.idx + 1, (long)np.list.count, np.folder);
+        else
+            sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
+        gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+        /* the sample names, in two columns where they fit */
+        {
+            WORD lh = g.font_h + U(1), cols = np.w >= U(300) ? 2 : 1, cw = np.w / cols;
+            WORD rows = (g.footer_y - 2 - np.samples_y - lh) / lh, n = 0, k;
+            if (rows > 0) {
+                gfx_text(&g, np.x0, np.samples_y, "Samples", PEN_DIM, PEN_BG, 0, TS_BOLD);
+                for (k = 0; k < mp_samples() && n < rows * cols; k++) {
+                    BOOL used;
+                    const char *sn = mp_sample_name(k, &used);
+                    char line[40];
+                    if (!sn[0] && !used)
+                        continue;
+                    sprintf(line, "%2ld  %s", (long)k + 1, sn);
+                    gfx_text(&g, np.x0 + (n / rows) * cw, np.samples_y + lh + (n % rows) * lh, line,
+                             used ? PEN_TEXT : PEN_DIM, PEN_BG, cw - U(6), TS_SMALL);
+                    n++;
+                }
+            }
+        }
+    }
+    if (!mp_loaded())
+        return;
+    np_draw_progress(full, &st);
+    np_draw_meters(full, &st);
+    {
+        int state = np_state();
+        BOOL foc = focus == FOCUS_CONTENT;
+        for (i = 0; i < NB_COUNT; i++)
+            if (full || (i == NB_PLAY && state != np.s_state) ||
+                ((i == np.btn || i == np.s_btn) && (np.btn != np.s_btn || foc != np.s_focus)) ||
+                ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol))
+                np_button(i);
+        if (full || mp_volume() != np.s_vol)
+            np_volume_text();
+        np.s_state = state;
+        np.s_btn = np.btn;
+        np.s_focus = foc;
+        np.s_vol = mp_volume();
+    }
+}
+
+/* Brought up to date (the timer tick): drawn into the hidden buffer and
+ * copied up, no flip. */
+static void np_update(void)
+{
+    BOOL was = gfx_quiet_begin();
+    np_draw(FALSE);
+    gfx_quiet_end(&g, was, g.pane_x - U(2), np.prog_y, g.w - 1, np.by + np.bh);
+}
+
+/* The playing module marked in any Mods list open. */
+static void np_mark_lists(void)
+{
+    int d;
+    LONG i;
+    const char *now = mp_loaded() ? mp_path() : "";
+    for (d = 0; d < depth; d++) {
+        struct Page *p = &pages[d];
+        if (p->type != PT_LIST || !p->mods)
+            continue;
+        for (i = 0; i < p->list.count; i++) {
+            struct Item *it = &p->list.items[i];
+            if (it->kind == IT_MOD)
+                it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAY : MARK_NONE;
+        }
+    }
+}
+
+/* Load playlist entry idx and play it; FALSE (and why, in msg) if not. */
+static BOOL np_start(LONG idx)
+{
+    char err[100];
+    struct Item *it;
+    if (!np.list.pool || idx < 0 || idx >= np.list.count)
+        return FALSE;
+    it = &np.list.items[idx];
+    busy_begin();
+    if (!mp_load(it->path, err, sizeof(err))) {
+        busy_end(TRUE);
+        np.idx = idx;
+        set_msg(err);
+        np_mark_lists();
+        return FALSE;
+    }
+    busy_end(TRUE);
+    np.idx = idx;
+    np.ended_seen = FALSE;
+    if (!mp_play(err, sizeof(err))) {
+        set_msg(err);
+        np_mark_lists();
+        return FALSE;
+    }
+    np_mark_lists();
+    return TRUE;
+}
+
+/* Another module of the playlist (d: +1 next, -1 previous), passing over
+ * any that cannot be played. */
+static BOOL np_skip(int d)
+{
+    LONG i, tries;
+    if (!np.list.pool || !np.list.count)
+        return FALSE;
+    for (i = np.idx + d, tries = 0; i >= 0 && i < np.list.count && tries < 8; i += d, tries++)
+        if (np_start(i)) {
+            if (np_on()) {
+                draw_pane(TRUE);
+                draw_footer();
+            }
+            return TRUE;
+        }
+    return FALSE;
+}
+
+static void np_volume(int d)
+{
+    mp_set_volume(mp_volume() + d);
+    if (np_on())
+        np_update();
+}
+
+static void np_press(int b)
+{
+    char err[100];
+    switch (b) {
+    case NB_PREV:
+        /* a few seconds in: back to its start, as players do; else the one before */
+        if (mp_loaded()) {
+            struct MpStatus st;
+            mp_status(&st);
+            if (st.elapsed_ms > 4000 || np.idx <= 0) {
+                mp_rewind();
+                break;
+            }
+        }
+        np_skip(-1);
+        return;
+    case NB_NEXT:
+        if (!np_skip(1))
+            set_msg("That was the last module in the folder");
+        return;
+    case NB_BACK:
+    case NB_FWD:
+        if (mp_loaded()) {
+            struct MpStatus st;
+            mp_status(&st);
+            mp_seek(st.order + (b == NB_FWD ? 1 : -1));
+        }
+        break;
+    case NB_PLAY:
+        if (!mp_loaded()) {
+            if (np.idx >= 0)
+                np_start(np.idx);
+        } else if (mp_playing()) {
+            mp_pause(TRUE);
+        } else if (mp_paused()) {
+            mp_pause(FALSE);
+        } else if (!mp_play(err, sizeof(err))) {
+            set_msg(err);
+        }
+        break;
+    case NB_STOP:
+        mp_stop();
+        break;
+    case NB_VDOWN:
+        np_volume(-VOL_STEP);
+        return;
+    case NB_VUP:
+        np_volume(VOL_STEP);
+        return;
+    }
+    if (np_on())
+        np_update();
+}
+
+static void np_open_page(void)
+{
+    struct Page *p;
+    if (np_on())
+        return;
+    if (!(p = page_push(PT_PLAYER, "Now playing")))
+        return;
+    np.btn = NB_PLAY;
+    if (focus != FOCUS_CONTENT) {
+        focus = FOCUS_CONTENT;              /* drawn below, all of it */
+        draw_menu_row(menu_sel);
+    }
+    draw_pane(TRUE);
+    draw_footer();
+}
+
+/* Fire on a module in a Mods list: the folder's modules become the
+ * playlist and this one plays (or, if it is the one playing, its page). */
+static void mods_play_item(struct Page *p)
+{
+    LONG i;
+    struct Item *sel = &p->list.items[p->sel];
+    if (mp_loaded() && mp_running() && !amce_stricmp(mp_path(), sel->path)) {
+        np_open_page();
+        return;
+    }
+    if (np.list.pool)
+        list_free(&np.list);
+    list_init(&np.list);
+    np.idx = -1;
+    amce_strlcpy(np.folder, p->title, sizeof(np.folder));
+    for (i = 0; i < p->list.count; i++) {
+        struct Item *it = &p->list.items[i];
+        if (it->kind != IT_MOD)
+            continue;
+        if (i == p->sel)
+            np.idx = np.list.count;
+        list_copy(&np.list, it, it->label);
+    }
+    if (np.idx < 0)
+        return;
+    if (np_start(np.idx))
+        np_open_page();
+    else {
+        draw_list_rows(p);
+        draw_footer();
+    }
+}
+
+/* The timer tick: the next module at a song's end, the page kept up. */
+static void np_tick(void)
+{
+    if (mp_running() && mp_ended() && !np.ended_seen) {
+        np.ended_seen = TRUE;
+        if (!np_skip(1)) {
+            mp_stop();                      /* the folder played through */
+            np_mark_lists();
+        }
+        if (np_on())
+            np_update();
+        return;
+    }
+    if (np_on())
+        np_update();
+}
+
+/* Left/Right on the page: the buttons. FALSE: Left past the first (back). */
+static BOOL np_lr(int d)
+{
+    if (!np_on() || focus != FOCUS_CONTENT)
+        return FALSE;
+    if (d < 0 && np.btn == 0)
+        return FALSE;
+    if (d > 0 && np.btn == NB_COUNT - 1)
+        return TRUE;
+    np.btn += d;
+    np_update();
+    return TRUE;
+}
+
+static BOOL np_click(WORD x, WORD y)
+{
+    int i;
+    if (!np_on() || !mp_loaded())
+        return FALSE;
+    if (y >= np.by && y < np.by + np.bh)
+        for (i = 0; i < NB_COUNT; i++)
+            if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
+                np.btn = i;
+                np_press(i);
+                return TRUE;
+            }
+    /* the bar (and the line under it): to that part of the song */
+    if (y >= np.prog_y - U(3) && y < np.time_y && x >= np.x0 && x < np.x0 + np.w) {
+        struct MpStatus st;
+        ULONG want;
+        int pos, best = 0;
+        mp_status(&st);
+        want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.w * 100;
+        for (pos = 0; pos < st.songlen; pos++) {
+            ULONG at = mp_position_ms(pos);
+            if (at != 0xFFFFFFFFUL && at <= want && at >= mp_position_ms(best))
+                best = pos;
+        }
+        mp_seek(best);
+        np_update();
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* The Mods section: what is playing, then the folders of modules. */
+static BOOL dir_exists(const char *path)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    me->pr_WindowPtr = old;
+    if (l)
+        UnLock(l);
+    return l != 0;
+}
+
+static void build_mods_root(void)
+{
+    struct Page *p;
+    BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU);
+    if (!mods && !menu_music && !mp_loaded()) {
+        if ((p = page_push(PT_TEXT, "Mods"))) {
+            text_para(p, "No modules found. AmigaMCE looks for them in " MODS_ROOT
+                         " and in " MODS_MENU " (AGS's menu music).");
+            text_line(p, "");
+            text_para(p, "It plays ProTracker modules (M.K. and other 4-channel ones, and "
+                         "old 15-sample Soundtracker ones) itself, on the Amiga's own sound.");
+        }
+        return;
+    }
+    if (!(p = page_push(PT_LIST, "Mods")))
+        return;
+    p->mods = 1;
+    if (mp_loaded()) {
+        const char *t = mp_title();
+        char label[120];
+        while (*t == ' ')
+            t++;
+        if (!t[0]) {
+            mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
+            t = label;
+        }
+        action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAY);
+    }
+    if (mods)
+        list_add(&p->list, "Modules", MODS_ROOT, "", IT_DIR);
+    if (menu_music)
+        list_add(&p->list, "Menu music", MODS_MENU, "", IT_DIR);
 }
 
 static void pane_settle(void);
@@ -3444,7 +4095,7 @@ static void open_dir_now(struct Item *it)
 {
     struct Page *p;
     LONG n;
-    BOOL pics = cur() && cur()->pics;
+    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods;
     if (pics && (it->flags & ITEM_DISABLED)) {
         set_msg("No pictures in that folder");
         return;
@@ -3466,6 +4117,20 @@ static void open_dir_now(struct Item *it)
                 set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
             return;
         }
+        msg[0] = 0;
+        draw_pane(TRUE);
+        draw_footer();
+        return;
+    }
+    if (mods) {
+        p->mods = 1;
+        n = mods_read_dir(it->path, &p->list);
+        if (n <= 0) {
+            page_pop();
+            set_msg(n < 0 ? "Could not open that folder" : "That folder has no modules");
+            return;
+        }
+        np_mark_lists();
         msg[0] = 0;
         draw_pane(TRUE);
         draw_footer();
@@ -3550,6 +4215,10 @@ static void log_free(const char *what)
 static void release_for_launch(void)
 {
     log_free("free before launch");
+    if (mp_loaded())
+        amce_log("music", "stopped for the game");
+    mp_shutdown();                  /* the game gets Paula and the CIA timers */
+    np_mark_lists();
     save_nav();
     pv_flush();                     /* the loader's jobs back, then the loader gone */
     pics_forget();                  /* every byte for the game */
@@ -3942,6 +4611,10 @@ static void act_move(LONG d)
         tb_scroll_by(&pv_tb, d * pv_tb.line_h);     /* the main loop animates it */
         return;
     }
+    if (p->type == PT_PLAYER) {
+        np_volume(d < 0 ? VOL_STEP : -VOL_STEP);   /* Up: louder */
+        return;
+    }
     if (p->type == PT_LIST) {
         LONG s;
         if (d)
@@ -3991,7 +4664,7 @@ static void act_wheel(LONG d, WORD x, WORD y)
         set_focus(FOCUS_MENU);
     else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
         set_focus(FOCUS_CONTENT);
-    act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST) ? d * 3 : d);
+    act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST && p->type != PT_PLAYER) ? d * 3 : d);
 }
 
 static void open_screenmodes(void)
@@ -4197,6 +4870,8 @@ static void act_action(struct Item *it)
         toggle_debug();
     else if (it->action == ACT_JUMP)
         toggle_jump();
+    else if (it->action == ACT_NOWPLAYING)
+        np_open_page();
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -4468,7 +5143,9 @@ static void act_open(BOOL play)
         ch_wait_item(p, p->sel, TRUE);      /* its letter, if it was let go */
         busy_end(TRUE);
         it = &p->list.items[p->sel];
-        if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
+        if (it->kind == IT_MOD)
+            mods_play_item(p);      /* the music, and its page */
+        else if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
             folder_slideshow(it);   /* Fire plays a folder of pictures */
         else if (it->kind == IT_PIC)
             view_from_page(p);
@@ -4482,6 +5159,8 @@ static void act_open(BOOL play)
         }
     } else if (p->type == PT_DETAIL) {
         launch(p->base);
+    } else if (p->type == PT_PLAYER) {
+        np_press(np.btn);
     }
 }
 
@@ -4611,6 +5290,10 @@ static void act_letter_step(LONG dir)
     LONG to;
     pane_settle();
     p = cur();
+    if (focus == FOCUS_CONTENT && np_on()) {
+        np_press(dir > 0 ? NB_NEXT : NB_PREV);  /* the music: next / previous module */
+        return;
+    }
     if (focus != FOCUS_CONTENT || !p || p->type != PT_LIST || !p->list.count)
         return;
     if (dir > 0 && ch_reading(p) && letter_step(p, p->sel, 1) == p->sel) {
@@ -4809,7 +5492,7 @@ static void handle_mouse(struct IntuiMessage *im)
                  * plays as a slideshow) is selected, and a double-click
                  * plays it (a folder: goes inside) */
                 struct Item *it = &p->list.items[idx];
-                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC ||
+                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);
@@ -4824,6 +5507,7 @@ static void handle_mouse(struct IntuiMessage *im)
             }
         } else {
             set_focus(FOCUS_CONTENT);
+            np_click(x, y);                 /* the player's buttons and bar */
         }
     }
     last_secs = im->Seconds;
@@ -4865,8 +5549,8 @@ static void handle_key(struct IntuiMessage *im)
             }
             break;
         }
-        case 0x4E: disarm(); act_right(); break;                      /* cursor right */
-        case 0x4F: disarm(); if (focus != FOCUS_MENU) act_back(); break; /* cursor left */
+        case 0x4E: disarm(); if (!np_lr(1)) act_right(); break;      /* cursor right */
+        case 0x4F: disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); break; /* left */
         case 0x7A: disarm(); act_wheel(-1, im->MouseX, im->MouseY); break; /* NM_WHEEL_UP */
         case 0x7B: disarm(); act_wheel(1, im->MouseX, im->MouseY); break;  /* NM_WHEEL_DOWN */
         }
@@ -4880,14 +5564,29 @@ static void handle_key(struct IntuiMessage *im)
             if (!(im->Qualifier & IEQUALIFIER_REPEAT) || key_is_down(code == '8' ? 0x3E : 0x1E))
                 act_move(code == '8' ? -1 : 1);
             return;
-        case '4': disarm(); if (focus != FOCUS_MENU) act_back(); return;
-        case '6': disarm(); act_right(); return;
+        case '4': disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); return;
+        case '6': disarm(); if (!np_lr(1)) act_right(); return;
         case '5': disarm(); act_open(FALSE); return;
         case '9': disarm(); act_move(-page); return;
         case '3': disarm(); act_move(page); return;
         case 13: disarm(); act_open(TRUE); return;
         }
         return;
+    }
+    if (focus == FOCUS_CONTENT && np_on()) {
+        /* the music's own keys */
+        switch (code) {
+        case ' ': disarm(); np_press(NB_PLAY); return;
+        case '+': case '=': disarm(); np_press(NB_VUP); return;
+        case '-': case '_': disarm(); np_press(NB_VDOWN); return;
+        case 'n': case 'N': case '>': disarm(); np_press(NB_NEXT); return;
+        case 'p': case 'P': case '<': disarm(); np_press(NB_PREV); return;
+        case 's': case 'S': disarm(); np_press(NB_STOP); return;
+        case ',': disarm(); np_press(NB_BACK); return;
+        case '.': disarm(); np_press(NB_FWD); return;
+        }
+        if (code != 27 && code != 8 && code != 13)
+            return;                 /* no letters to jump to here */
     }
     switch (code) {
     case 27: act_back(); return;                 /* Esc: Back, twice at the menu quits */
@@ -4950,8 +5649,8 @@ static void joy_poll(void)
             act_move(d);        /* main menu: plain repeat */
         }
     }
-    else if (act & JPF_JOY_RIGHT) { disarm(); act_right(); }
-    else if (act & JPF_JOY_LEFT) { disarm(); if (focus != FOCUS_MENU) act_back(); }
+    else if (act & JPF_JOY_RIGHT) { disarm(); if (!np_lr(1)) act_right(); }
+    else if (act & JPF_JOY_LEFT) { disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); }
     if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
     /* CD32 pad shoulder buttons: the next / previous letter in a list */
     if (newbtn & JPF_BUTTON_FORWARD) { disarm(); act_letter_step(1); }
@@ -5165,6 +5864,7 @@ static int app_main(void)
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                np_tick();                  /* the music: its page, the next module */
                 if (g.win && ptr_hidden != g.win && !gut.drag &&
                     (LONG)(time_ms() - mouse_last) >= BAR_HIDE)
                     pointer_hide();         /* the mouse at rest: the pointer goes */
@@ -5177,7 +5877,7 @@ static int app_main(void)
                  * spinner (each step, every 80 ms, then comes on time);
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
-                tick_us = (joy_present || ov.on || pv_spinning()) ? 40000 : 200000;
+                tick_us = (joy_present || ov.on || pv_spinning() || np_live()) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
@@ -5249,6 +5949,9 @@ out:
     ldr_stop();
     pages_clear();
     amce_log("pages freed", "");
+    mp_shutdown();
+    if (np.list.pool)
+        list_free(&np.list);
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();

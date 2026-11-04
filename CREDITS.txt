@@ -14,6 +14,11 @@ The AmigaMCE logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).
 
+Music
+-----
+The module replayer follows the ProTracker 2.3D play routine; its period
+table is the one from the ProTracker 2.1A play routine.
+
 Trademarks
 ----------
 Amiga is a trademark of Amiga Corporation. AGS (Amiga Game Selector),

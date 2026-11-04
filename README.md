@@ -15,9 +15,13 @@ copy the drawer onto an AGS installation and double-click it.
   pictures full screen on AmigaMCE's own screen (no mode switch), in the
   picture's own palette on native and 256-colour screens.
 - Text pages scroll smoothly without flicker, with a scroll bar when needed.
+- Mods: ProTracker modules (4-channel, and 15-sample Soundtracker ones)
+  from `ST-00:Modules` and `AGS:Mods`, played by AmigaMCE's own replayer
+  (`src/ptcore.c`, after the ProTracker 2.3D play routine) on Paula,
+  timed by a CIA-B timer interrupt, with a Now Playing page.
 - Keyboard, mouse and joystick/CD32 pad.
 
-Mods, Videos, Music and Radio are on the menu but not yet implemented.
+Videos, Music and Radio are on the menu but not yet implemented.
 
 ## Building
 

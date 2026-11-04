@@ -243,7 +243,7 @@ struct BitMapHeader;
 void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* o: a datatype */
 
 /* ---------------------------------------------------------------- ags */
-enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC };
+enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD };
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */ };
@@ -319,6 +319,43 @@ LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot b
 /* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
+
+/* ---------------------------------------------------------------- mods */
+/* Folders of modules (mods.c): IT_DIR and IT_MOD rows. */
+LONG mods_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
+BOOL mods_is_module(const char *dir, const char *name);
+void mods_label(const char *name, char *out, LONG max);
+
+/* Playing them (modplay.c, ptcore.c): ProTracker modules on Paula, timed
+ * by a CIA timer interrupt. Errors come back as text for the user. */
+struct MpStatus {
+    WORD order, row, songlen, pattern, speed, bpm;
+    ULONG elapsed_ms, total_ms;
+    UBYTE level[4];             /* the channel meters, 0-64 */
+    UBYTE sample[4];            /* the sample each channel last started (1-31) */
+    BOOL running, paused;
+};
+BOOL mp_load(const char *path, char *err, LONG errmax);   /* stops what plays */
+BOOL mp_play(char *err, LONG errmax);   /* from where it is (the start once loaded) */
+void mp_pause(BOOL on);
+void mp_stop(void);                     /* stopped, back at the start */
+void mp_rewind(void);
+void mp_seek(int pos);                  /* to a position in the song */
+void mp_shutdown(void);                 /* hardware and module let go */
+void mp_set_volume(int v);              /* 0-64 */
+int  mp_volume(void);
+BOOL mp_loaded(void);
+BOOL mp_playing(void);
+BOOL mp_paused(void);
+BOOL mp_running(void);                  /* playing or paused */
+BOOL mp_ended(void);                    /* the song has come round (or F00) */
+const char *mp_path(void);
+const char *mp_title(void);
+const char *mp_tag(void);               /* "M.K.", "ST15"... */
+int  mp_samples(void);
+const char *mp_sample_name(int i, BOOL *used);
+ULONG mp_position_ms(int pos);
+void mp_status(struct MpStatus *s);     /* also lets the meters fall: call ~25 a second */
 
 /* ---------------------------------------------------------------- loader */
 /* Work for the loader process (loader.c): a fact sheet and screenshot, a
