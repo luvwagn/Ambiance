@@ -92,8 +92,16 @@ struct Smooth {
     UWORD cmod;                 /* bytes a row of cbuf (a multiple of 16) */
 };
 
-/* coverage 0..15 -> step 0..SMOOTH_LEVELS-1 */
-static const UBYTE step_of[16] = { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7 };
+/* coverage 0..15 -> step 0..SMOOTH_LEVELS-1, with some contrast: the
+ * faintest fringe (under a fifth covered) left out, the nearly full
+ * (over four fifths) made full, linear between. Crisper than the plain
+ * ramp, which looked too soft, and still smooth. */
+static const UBYTE step_of[16] = { 0, 0, 0, 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 7, 7, 7 };
+
+/* Each glyph starts on a whole pixel (its stems on whole pixels, not
+ * spread over two at half strength); the advances are still kept in
+ * sixteenths, so the spacing stays true over a line. */
+#define SNAP_Q(pen16) ((((pen16) + 8) >> 4) << 2)  /* quarter pixels, phase 0 */
 
 static UWORD rd16(const UBYTE *p) { return (UWORD)((p[0] << 8) | p[1]); }
 static ULONG rd32(const UBYTE *p)
@@ -585,7 +593,7 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
     /* the box every glyph's ink falls in (accents may rise above the cell) */
     for (i = 0; i < n; i++) {
         const UBYTE *G = glyph(f, (UBYTE)str[i]);
-        ULONG q = (pen16 + 2) >> 2;             /* in quarter pixels */
+        ULONG q = SNAP_Q(pen16);                /* in quarter pixels */
         WORD gx = (WORD)(q >> 2) + (BYTE)G[G_X], gy = (BYTE)G[G_Y];
         if (G[G_W]) {
             if (gx < minx)
@@ -606,7 +614,7 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
     pen16 = 0;
     for (i = 0; i < n; i++) {
         const UBYTE *G = glyph(f, (UBYTE)str[i]);
-        ULONG q = (pen16 + 2) >> 2;
+        ULONG q = SNAP_Q(pen16);
         UWORD w = G[G_W], h = G[G_H];
         if (w) {
             UWORD bytes = (UWORD)(((ULONG)w * h + 1) >> 1), ph = (UWORD)(q & 3);
