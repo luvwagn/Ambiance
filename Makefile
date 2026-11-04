@@ -1,7 +1,7 @@
 # AmigaMCE Makefile for GCC (m68k-amigaos), modelled on xSysInfo
 # Copyright (c) 2026 Brian King
 #
-#   make            build AmigaMCE, the LHA archive and the ADF
+#   make            build AmigaMCE, the LHA archive and the ADF (holding the LHA)
 #   make test       run the AGS parser tests under vamos
 #   make art        regenerate src/art.c (logo, icons, palette)
 #   make fonts      regenerate the amce-pixel bitmap fonts (12, 24, 36)
@@ -143,31 +143,16 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES
 	@cd build/lha && lha aqo5 $(LHA_OPTS) ../../$(LHA_NAME) AmigaMCE AmigaMCE.info
 	@echo "Created $(LHA_NAME)"
 
-# A bootable floppy: works from DF0: on a booted system, or boots straight
-# into AmigaMCE (no AGS menu then, so it shows the media modules only).
+# A data floppy carrying the release archive and its readme: unpack the
+# archive to a hard drive (lha x DF0:amigamce-<version>.lha). Not bootable.
 disk: lha
 	@echo "  DISK  $(DISK)"
 	@rm -f $(DISK)
 	@xdftool $(DISK) format "$(DISK_TITLE)"
-	@xdftool $(DISK) write $(LHA_DIR)/AmigaMCE AmigaMCE
-	@xdftool $(DISK) write docs/AmigaMCE.info AmigaMCE.info
-	@xdftool $(DISK) write docs/Disk.info Disk.info
+	@xdftool $(DISK) write $(LHA_NAME) $(LHA_NAME)
 	@xdftool $(DISK) write $(LHA_DIR)/readme.txt readme.txt
 	@xdftool $(DISK) write docs/readme.info readme.txt.info
-	@xdftool $(DISK) makedir Fonts
-	@xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel.font Fonts/amce-pixel.font
-	@xdftool $(DISK) makedir Fonts/amce-pixel
-	@set -e; for f in 12 24 36; do \
-		xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-pixel/$$f Fonts/amce-pixel/$$f; done
-	@xdftool $(DISK) makedir Fonts/amce-smooth
-	@set -e; for f in $(notdir $(SMOOTH_FILES)); do \
-		xdftool $(DISK) write $(LHA_DIR)/Fonts/amce-smooth/$$f Fonts/amce-smooth/$$f; done
-	@xdftool $(DISK) makedir Licences
-	@set -e; for f in $(notdir $(LICENCES)); do \
-		xdftool $(DISK) write $(LHA_DIR)/Licences/$$f Licences/$$f; done
-	@xdftool $(DISK) makedir S
-	@xdftool $(DISK) write Startup-Sequence S/Startup-Sequence
-	@xdftool $(DISK) boot install
+	@xdftool $(DISK) write docs/Disk.info Disk.info
 	@xdftool $(DISK) info
 
 clean:

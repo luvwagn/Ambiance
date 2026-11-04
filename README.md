@@ -31,7 +31,7 @@ inline OS call when a multiply helper call ends up between them (see
 
 | Target         | Result                                                    |
 |----------------|-----------------------------------------------------------|
-| `make`         | `AmigaMCE`, `amigamce-<version>.lha`, `amigamce-<version>.adf` |
+| `make`         | `AmigaMCE`, `amigamce-<version>.lha`, `amigamce-<version>.adf` (a data disk holding the LHA) |
 | `make test`    | AGS parser tests, run under vamos                         |
 | `make preview` | True-aspect PNG previews of the Home Screen in `build/`   |
 | `make art`     | Regenerates `src/art.c` (logo, menu icons, palette)       |
