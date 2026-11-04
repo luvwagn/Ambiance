@@ -61,16 +61,21 @@ Features in this release
   native and 256-colour screens a picture gets the whole palette while it
   is shown, its own colours exactly when it has no more than the screen
   can show, and the info bar is drawn in the picture's own colours.
-- Mods: ProTracker modules from ST-00:Modules and AGS:Mods (AGS's menu
-  music), played by AmigaMCE itself on the Amiga's own sound, timed by a
-  CIA timer so the music never waits for the screen. 4-channel modules
-  (M.K., M!K!, FLT4, 4CHN...) and old 15-sample Soundtracker ones play,
-  with ProTracker 2.3's effects and quirks. The Now Playing page shows
-  the time played, the position, a meter for each channel and the
-  module's sample names, with buttons for previous, back, play/pause,
-  stop, forward, next and volume. The music plays on while you browse,
-  and the next module in the folder follows at a song's end; it stops
-  when a game starts.
+- Mods: music modules from ST-00:Modules, ST-00:C64Music and AGS:Mods
+  (AGS's menu music), all played inside AmigaMCE on the Amiga's own sound:
+  ProTracker modules by its own replayer (ProTracker 2.3's effects and
+  quirks, timed by a CIA timer so the music never waits for the screen);
+  hundreds of other formats (OctaMED, TFMX, Future Composer, Hippel,
+  Hubbard, AHX, SID...) by EaglePlayer's and DeliTracker's players where
+  they are installed (AGS has them), hosted by AmigaMCE; and XM, S3M, IT,
+  MTM, 669 and 6/8-channel MODs mixed by modplug.library on a 68020 or
+  better. Packed files (PowerPacker, XPK...) are unpacked with
+  xfdmaster.library. The Now Playing page shows the time played, the
+  position, a meter for each channel and the module's sample names, with
+  buttons for previous, back, play/pause, stop, forward, next and volume;
+  modules with several songs step through them. The music plays on while
+  you browse, the next module in the folder follows at a song's end, and
+  it stops when a game starts.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Videos, Music and Radio are listed but arrive in a later

@@ -366,6 +366,27 @@ BOOL mp_step(int d);                    /* back/on a position: FALSE if it canno
 void mp_subsongs(int *cur, int *n);
 BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
 const char *mp_author(void);
+BOOL mp_seek_ms(ULONG ms);              /* mixed modules only */
+
+/* Modules mixed by modplug.library, streamed to Paula (mixplay.c). */
+BOOL mx_available(void);
+BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax);  /* mod taken */
+BOOL mx_start(UWORD master, char *err, LONG errmax);
+void mx_stop(void);
+void mx_pause(BOOL on);
+void mx_volume(int v);
+BOOL mx_ended(void);
+void mx_seek_ms(ULONG ms);
+BOOL mx_step(int d);
+void mx_rewind(void);
+void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r);
+BOOL mx_loaded(void);
+void mx_unload(void);
+const char *mx_title(void);
+const char *mx_kind(void);
+int mx_names(void);
+const char *mx_name(int i);
+void mx_close_library(void);
 void mp_tick_count(UWORD c);            /* eagle.c: the timer, in CIA counts */
 void mp_tick_run(BOOL on);
 

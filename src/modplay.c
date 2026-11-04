@@ -51,7 +51,7 @@ extern struct ExecBase *SysBase;
 
 #define GAP_US 550
 
-enum { ENG_NONE, ENG_PT, ENG_EAGLE };          /* each of the two gaps in starting a note */
+enum { ENG_NONE, ENG_PT, ENG_EAGLE, ENG_MIX };          /* each of the two gaps in starting a note */
 
 static struct {
     /* the hardware */
@@ -427,6 +427,8 @@ static void module_free(void)
 {
     if (mp.engine == ENG_EAGLE)
         ep_unload();
+    if (mp.engine == ENG_MIX)
+        mx_unload();
     mp.engine = ENG_NONE;
     if (mp.pt) {
         FreeVec(mp.pt);
@@ -463,6 +465,29 @@ static const char *layout_problem(int rc, int channels)
     default:
         return NULL;
     }
+}
+
+/* A format of the PC's trackers: mixed (mixplay.c) rather than tried on
+ * the EaglePlayer players first. */
+static BOOL pc_format(const UBYTE *h, ULONG n)
+{
+    if (n >= 17 && !memcmp(h, "Extended Module: ", 17))
+        return TRUE;                        /* XM */
+    if (n >= 48 && !memcmp(h + 44, "SCRM", 4))
+        return TRUE;                        /* S3M */
+    if (n >= 4 && !memcmp(h, "IMPM", 4))
+        return TRUE;                        /* IT */
+    if (n >= 3 && !memcmp(h, "MTM", 3))
+        return TRUE;
+    if (n >= 2 && (!memcmp(h, "if", 2) || !memcmp(h, "JN", 2)))
+        return TRUE;                        /* 669 */
+    if (n >= 14 && !memcmp(h, "MAS_UTrack_V00", 14))
+        return TRUE;                        /* ULT */
+    if (n >= 28 && !memcmp(h + 20, "!Scream!", 8))
+        return TRUE;                        /* STM */
+    if (n >= 4 && !memcmp(h, "FAR\xFE", 4))
+        return TRUE;
+    return FALSE;
 }
 
 /* What a file that is not a module seems to be, for the message. */
@@ -566,8 +591,25 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             mem = unpack_buffer(mem, &mlen, packer, sizeof(packer), &uwhy);
         }
         eerr[0] = 0;
+        if (mem && (rc == PT_ERR_CHANNELS || pc_format(mem, mlen))) {
+            /* a format of the PC's trackers (or more than 4 channels): mixed */
+            UBYTE *copy = AllocVec(mlen + 16, MEMF_ANY);
+            if (copy)
+                CopyMem(mem, copy, mlen);
+            if (copy && mx_load(path, copy, mlen, eerr, sizeof(eerr))) {
+                FreeVec(mem);
+                mp.engine = ENG_MIX;
+                amce_strlcpy(mp.path, path, sizeof(mp.path));
+                amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                return TRUE;
+            }
+        }
         if (mem) {
+            UBYTE *copy = mx_available() ? AllocVec(mlen + 16, MEMF_ANY) : NULL;
+            if (copy)
+                CopyMem(mem, copy, mlen);   /* for the mixer, if no player knows it */
             if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
+                FreeVec(copy);
                 mp.engine = ENG_EAGLE;
                 amce_strlcpy(mp.path, path, sizeof(mp.path));
                 amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
@@ -578,6 +620,15 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                 return TRUE;
             }
             mem = NULL;                     /* ep_load has freed it */
+            if (copy) {
+                char xerr[100];
+                if (mx_load(path, copy, mlen, xerr, sizeof(xerr))) {
+                    mp.engine = ENG_MIX;
+                    amce_strlcpy(mp.path, path, sizeof(mp.path));
+                    amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                    return TRUE;
+                }
+            }
         }
         if ((why = layout_problem(rc, chans)))
             amce_strlcpy(m, why, sizeof(m));
@@ -683,6 +734,16 @@ BOOL mp_play(char *err, LONG errmax)
     }
     if (mp.engine == ENG_EAGLE)
         return play_eagle(err, errmax);
+    if (mp.engine == ENG_MIX) {
+        if (mp.finished)
+            mx_rewind();
+        mp.finished = FALSE;
+        mp.paused = FALSE;
+        if (!mx_start(mp.master, err, errmax))
+            return FALSE;
+        mp.running = TRUE;
+        return TRUE;
+    }
     if (!mp.cia && !timers_open()) {
         amce_strlcpy(err, "No CIA timer free to play music with", errmax);
         audio_close();
@@ -721,6 +782,10 @@ void mp_rewind(void)
         }
         return;
     }
+    if (mp.engine == ENG_MIX) {
+        mx_rewind();
+        return;
+    }
     mp_seek(0);
 }
 
@@ -735,6 +800,10 @@ void mp_stop(void)
     tick_run(FALSE);
     if (mp.engine == ENG_EAGLE)
         ep_stop();
+    if (mp.engine == ENG_MIX) {
+        mx_stop();
+        mx_rewind();
+    }
     paula_quiet();
     mp.fin_left = -1;
     mp.finished = FALSE;
@@ -751,6 +820,7 @@ void mp_shutdown(void)
 {
     mp_stop();
     module_free();
+    mx_close_library();
     timers_close();
     audio_close();
     if (mp.silence) {
@@ -771,6 +841,10 @@ void mp_pause(BOOL on)
         else
             mp.ep_t0 = time_ms();
         ep_pause(on);
+        return;
+    }
+    if (mp.engine == ENG_MIX) {
+        mx_pause(on);
         return;
     }
     for (i = 0; i < 4; i++)
@@ -804,6 +878,8 @@ BOOL mp_step(int d)
 {
     if (mp.engine == ENG_EAGLE)
         return mp.running && ep_step_position(d);
+    if (mp.engine == ENG_MIX)
+        return mx_step(d);
     if (!mp.pt)
         return FALSE;
     mp_seek(mp.pt->order + d);
@@ -849,6 +925,10 @@ void mp_set_volume(int v)
         ep_set_volume(v);
         return;
     }
+    if (mp.engine == ENG_MIX) {
+        mx_volume(v);
+        return;
+    }
     if (mp.running && mp.pt)
         for (i = 0; i < 4; i++)
             CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
@@ -863,6 +943,11 @@ BOOL mp_ended(void)
 {
     if (mp.engine == ENG_EAGLE)
         return mp.running && ep_song_ended();
+    if (mp.engine == ENG_MIX) {
+        if (mp.running && mx_ended())
+            mp.finished = TRUE;
+        return mp.finished;
+    }
     return mp.pt && mp.finished;
 }
 const char *mp_path(void) { return mp.path; }
@@ -910,6 +995,17 @@ void mp_status(struct MpStatus *s)
         meters(s, hit, vol);
         return;
     }
+    if (mp.engine == ENG_MIX) {
+        UBYTE l, r;
+        mx_status(s, &l, &r);
+        s->sub = s->subs = 1;
+        hit[0] = hit[3] = l != 0;
+        hit[1] = hit[2] = r != 0;
+        vol[0] = vol[3] = (UBYTE)(l / 2);
+        vol[1] = vol[2] = (UBYTE)(r / 2);
+        meters(s, hit, vol);
+        return;
+    }
     if (!pt)
         return;
     s->order = pt->order;
@@ -939,6 +1035,8 @@ const char *mp_title(void)
         ep_info(&in);
         return in.song ? in.song : "";
     }
+    if (mp.engine == ENG_MIX)
+        return mx_title();
     return mp.pt ? mp.pt->title : "";
 }
 
@@ -950,6 +1048,8 @@ const char *mp_tag(void)
         ep_info(&in);
         return in.player ? in.player : "";
     }
+    if (mp.engine == ENG_MIX)
+        return mx_kind();
     return mp.pt ? mp.lay.tag : "";
 }
 
@@ -963,17 +1063,37 @@ const char *mp_author(void)
     return "";
 }
 
-int mp_samples(void) { return mp.pt ? mp.pt->nsmp : 0; }
+int mp_samples(void)
+{
+    if (mp.engine == ENG_MIX)
+        return mx_names();
+    return mp.pt ? mp.pt->nsmp : 0;
+}
 
 /* Sample i's name (and whether it has sound). */
 const char *mp_sample_name(int i, BOOL *used)
 {
+    if (mp.engine == ENG_MIX) {
+        const char *n = mx_name(i);
+        *used = n[0] != 0;
+        return n;
+    }
     if (!mp.pt || i < 0 || i >= mp.pt->nsmp) {
         *used = FALSE;
         return "";
     }
     *used = mp.pt->smp[i].len > 1;
     return mp.pt->smp[i].name;
+}
+
+/* To a time in the song (modules mixed): FALSE if this module cannot. */
+BOOL mp_seek_ms(ULONG ms)
+{
+    if (mp.engine != ENG_MIX)
+        return FALSE;
+    mx_seek_ms(ms);
+    mp.finished = FALSE;
+    return TRUE;
 }
 
 /* Where each position starts in the song, in ms (0xFFFFFFFF: never). */

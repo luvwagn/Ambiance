@@ -3560,18 +3560,23 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         sprintf(t, "%s / %s", a, b);
     else
         strcpy(t, a);                       /* its length is not known */
-    if (st->songlen)
-        if (st->pattern >= 0)
-            sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
-                    (long)st->songlen, (long)st->pattern, (long)st->row);
-        else
-            sprintf(pos, "Position %ld of %ld", (long)st->order + 1, (long)st->songlen);
+    if (st->songlen && st->pattern >= 0)
+        sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+                (long)st->songlen, (long)st->pattern, (long)st->row);
+    else if (st->songlen)
+        sprintf(pos, "Position %ld of %ld", (long)st->order + 1, (long)st->songlen);
+    else if (st->pattern >= 0 && mp_running())
+        sprintf(pos, "Position %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+                (long)st->pattern, (long)st->row);     /* mixed: its length in positions unknown */
     else
         pos[0] = 0;
     lw = gfx_textlen(&g, t, TS_BODY);
     rw = gfx_textlen(&g, pos, TS_SMALL);
     if (lw + U(8) + rw > np.w) {            /* narrow: the short form */
-        sprintf(pos, "%ld/%ld  %02ld", (long)st->order + 1, (long)st->songlen, (long)st->row);
+        if (st->songlen)
+            sprintf(pos, "%ld/%ld  %02ld", (long)st->order + 1, (long)st->songlen, (long)st->row);
+        else
+            sprintf(pos, "%ld  %02ld", (long)st->order + 1, (long)st->row);
         rw = gfx_textlen(&g, pos, TS_SMALL);
         if (lw + U(8) + rw > np.w)
             pos[0] = 0, rw = 0;
@@ -3961,6 +3966,10 @@ static BOOL np_click(WORD x, WORD y)
         if (!st.total_ms)
             return TRUE;                    /* its length is not known */
         want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.w * 100;
+        if (mp_seek_ms(want)) {             /* mixed modules: to the time itself */
+            np_update();
+            return TRUE;
+        }
         for (pos = 0; pos < st.songlen; pos++) {
             ULONG at = mp_position_ms(pos);
             if (at != 0xFFFFFFFFUL && at <= want && at >= mp_position_ms(best))
