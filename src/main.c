@@ -372,6 +372,21 @@ static void save_screen_mode(void)
 #define DEBUG_VAR "AmigaMCE/Debug"
 #define STYLE_VAR "AmigaMCE/Style"
 
+static void set_msg(const char *m);
+
+/* Smooth chosen, the screen could show it, but its file would not load
+ * (missing, or from another AmigaMCE version): say so, rather than
+ * quietly drawing the pixel style. TRUE when it said something. */
+static BOOL note_style(void)
+{
+    if (ui_style == STYLE_SMOOTH && g.style != STYLE_SMOOTH &&
+        gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
+        set_msg("Smooth: Fonts/amce-smooth does not match this AmigaMCE");
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void load_style(void)
 {
     char buf[16];
@@ -1321,6 +1336,7 @@ static void launch(const char *base)
         return;
     }
     draw_all();
+    note_style();
 }
 
 static void act_move(LONG d)
@@ -1465,6 +1481,8 @@ static void apply_screen_mode(int sm)
     draw_all();
     if (failed)
         set_msg("Could not open that screen mode");
+    else
+        note_style();
 }
 
 static void toggle_debug(void)
@@ -1534,8 +1552,7 @@ static void apply_style(int st)
     focus = FOCUS_CONTENT;
     msg[0] = 0;
     draw_all();
-    if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
-        set_msg("Smooth style files missing (Fonts/amce-smooth)");
+    note_style();
 }
 
 static void act_action(struct Item *it)
@@ -2064,6 +2081,8 @@ int main(void)
     if (screen_mode != SM_AUTO && g.mode != screen_mode) {
         screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
         set_msg("Saved screen mode not available here: using Automatic");
+    } else {
+        note_style();
     }
 
     while (running) {
