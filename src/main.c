@@ -46,6 +46,7 @@ struct Page {
     char base[256];
     WORD facts_y;
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
+    UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
 };
 
 static struct Gfx g;
@@ -962,6 +963,51 @@ static BOOL ov_eligible(const struct Page *p)
     return runs * 2 >= p->list.count;
 }
 
+/* The letter column: on screens 640 or more wide, a long title list is
+ * narrower and the index letter has the pane's right-hand side to itself,
+ * with no border; the letter never covers a title, and rows never touch
+ * the column. Lowres screens keep the full-width list with the letter
+ * over its right side. Its width fits the widest letter. */
+static WORD aside_w = -1;           /* -1: work out (after a screen opens) */
+
+static WORD aside_width(void)
+{
+    if (aside_w < 0) {
+        const struct BigLetter *bl = NULL;
+        if (g.w >= 640)
+            bl = gfx_bigletter(&g, 'W', list_visible() * g.list_row_h * 2 / 5);
+        aside_w = bl ? bl->cell_w + U(20) : 0;
+        if (aside_w > g.pane_w * 2 / 5)
+            aside_w = 0;                    /* too narrow a screen for one */
+    }
+    return aside_w;
+}
+
+static BOOL has_aside(struct Page *p)
+{
+    if (!p || p->type != PT_LIST)
+        return FALSE;
+    if (!p->aside)
+        p->aside = (aside_width() > 0 && ov_eligible(p)) ? 2 : 1;
+    return p->aside == 2;
+}
+
+/* Left edge of the letter column. */
+static WORD aside_x(void)
+{
+    return g.pane_x + g.pane_w - aside_width();
+}
+
+/* Last x a list row may paint. */
+static WORD list_xr(struct Page *p)
+{
+    if (has_aside(p))
+        return aside_x() - U(6) - 1;
+    if (ov.on && ov.page == p)
+        return ov.strip_x - 1;              /* lowres: the letter's strip is off limits */
+    return g.w - 1;
+}
+
 static void ov_free(void)
 {
     ov.bl = NULL;
@@ -979,8 +1025,14 @@ static BOOL ov_build(char ch)
         return FALSE;
     ov.bl = bl;
     ov.letter = ch;
-    ov.x = g.pane_x + g.pane_w * 9 / 10 - bl->w;
     ov.y = g.list_top + (rows_h - bl->h) / 2;
+    if (has_aside(ov.page)) {
+        /* centred in the letter column */
+        ov.strip_x = aside_x();
+        ov.x = ov.strip_x + (aside_width() - bl->w) / 2;
+        return TRUE;
+    }
+    ov.x = g.pane_x + g.pane_w * 9 / 10 - bl->w;
     /* the strip fits the widest letter, so it does not move as letters change */
     ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - bl->cell_w - U(6);
     if (ov.strip_x < g.pane_x + g.pane_w / 2)
@@ -1000,10 +1052,10 @@ static void ov_stamp(void)
 static void ov_show(struct Page *p)
 {
     char c = ov_letter_of(p->list.items[p->sel].label);
+    ov.page = p;
     if (!c || !ov_build(c))
         return;
     ov.on = TRUE;
-    ov.page = p;
     ov.linger = 0;
     /* hand the strip to the letter: clear it once, then stamp */
     gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
@@ -1027,8 +1079,14 @@ static void ov_hide(void)
     struct Page *p = ov.page;
     BOOL was = ov.on;
     ov.on = FALSE;
-    if (was && p && p == cur() && p->type == PT_LIST && g.win)
+    if (!was || !p || p != cur() || p->type != PT_LIST || !g.win)
+        return;
+    if (has_aside(p)) {
+        if (ov.bl)                  /* the column is the letter's alone: clear it */
+            gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
+    } else {
         draw_list_rows(p);          /* rows at full width again, strip cleared */
+    }
 }
 
 /* One row of the list in its slot, background and all. Rows are painted
@@ -1040,7 +1098,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     WORD y = g.list_top + (idx - p->top) * g.list_row_h;
     WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
     WORD lx = g.pane_x + col;
-    WORD xr = (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1;  /* the letter's strip is off limits */
+    WORD xr = list_xr(p);                   /* never into the letter's space */
     if (right > xr - U(2))
         right = xr - U(2);
     BOOL sel = idx == p->sel;
@@ -1078,8 +1136,7 @@ static void draw_list_rows(struct Page *p)
     }
     for (r = 0; r < vis && p->top + r < p->list.count; r++)
         draw_list_row(p, p->top + r, col);
-    gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h,
-             (ov.on && ov.page == p) ? ov.strip_x - 1 : g.w - 1, g.footer_y - 2, PEN_BG);
+    gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
@@ -1105,16 +1162,16 @@ static WORD rows_right(struct Page *p, LONG top, WORD col)
         if (e > right)
             right = e;
     }
-    if (ov.on && ov.page == p && right > ov.strip_x - 1)
-        right = ov.strip_x - 1;             /* the letter's strip is never copied */
-    return right < g.w - 1 ? right : g.w - 1;
+    if (right > list_xr(p))
+        right = list_xr(p);                 /* the letter's space is never copied */
+    return right;
 }
 
 static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
-    WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : g.w - 1;
+    WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
     if (ov.on && x1 > ov.strip_x - 1)
         x1 = ov.strip_x - 1;                /* never into the letter's strip */
     struct BitMap *bm = g.rp->BitMap;
@@ -1266,6 +1323,7 @@ static void pane_settle(void);
 
 static void draw_all(void)
 {
+    aside_w = -1;               /* the screen may be new: work the column out again */
     pane_settle();
     gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
     draw_header();
@@ -1949,6 +2007,8 @@ static void handle_mouse(struct IntuiMessage *im)
         if (!p)
             return;
         if (p->type == PT_LIST) {
+            if (x > list_xr(p))
+                return;                     /* the letter column */
             idx = p->top + (y - g.list_top) / g.list_row_h;
             if (idx >= p->list.count)
                 return;
