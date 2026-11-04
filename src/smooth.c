@@ -15,9 +15,9 @@
  * no RTG library calls. The in-between pens are taken from 32 up as each
  * (foreground, background) pair is first used; on a truecolour screen a
  * pen is only a colour to draw with, so this costs nothing on screen. On
- * an 8-bit one the pens are the screen's own: SMOOTH_PENS of them, from
- * 32 up, are held for this while the screen is open, and the rest stay
- * free for pictures.
+ * an 8-bit one the pens are the screen's own: each shade takes a free pen
+ * of its own (ObtainPen) when it is first drawn, only those really used,
+ * and lets them go when the screen closes. The log says how many.
  *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
@@ -40,7 +40,6 @@
 #define PHASES      4           /* each glyph at 0, 1/4, 1/2, 3/4 of a pixel */
 #define FIRST_PEN   32          /* below: UI pens 0-15, the screen's 16-31 */
 #define MAX_TEXT_W  2048        /* widest text drawn in one go, in pixels */
-#define SMOOTH_PENS 96          /* 8-bit screens: pens held for the shades and the logo */
 
 struct Face {
     UWORD lo, hi;
@@ -71,7 +70,8 @@ struct Smooth {
     UBYTE used;                 /* bit n: mask n has pixels */
     UBYTE blend[NUM_UI_PENS][NUM_UI_PENS][SMOOTH_LEVELS];
     UWORD next_pen, last_pen;
-    UWORD held;                 /* 8-bit screens: pens FIRST_PEN.. held (ObtainPen) */
+    UBYTE got[256];             /* 8-bit screens: the pens obtained, */
+    UWORD ngot;                 /*   to let go */
 };
 
 /* coverage 0..15 -> step 0..SMOOTH_LEVELS-1 */
@@ -223,26 +223,25 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
     memset(s->blend, 0, sizeof(s->blend));
     s->next_pen = FIRST_PEN;
     s->last_pen = count > 256 ? 255 : count ? count - 1 : 0;
-    s->held = 0;
-    if (!g->truecolor && cm) {
-        /* real pens: hold them, so pictures' pens never land on them */
-        while (s->held < SMOOTH_PENS && FIRST_PEN + s->held <= s->last_pen &&
-               (LONG)ObtainPen(cm, FIRST_PEN + s->held, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR) >= 0)
-            s->held++;
-        s->last_pen = FIRST_PEN + s->held - 1;
-        if (!s->held)
-            s->last_pen = 0;                /* none: shades fall to the nearest end */
-    }
+    s->ngot = 0;
+}
+
+UWORD sm_pens_used(const struct Smooth *s)
+{
+    return s->g && !s->g->truecolor ? s->ngot : s->next_pen - FIRST_PEN;
 }
 
 void sm_detach(struct Smooth *s)
 {
-    if (s->g && s->g->scr && s->held) {
+    if (s->g && s->g->scr && s->ngot) {
         UWORD i;
-        for (i = 0; i < s->held; i++)
-            ReleasePen(s->g->scr->ViewPort.ColorMap, FIRST_PEN + i);
+        char m[48];
+        sprintf(m, "%lu pens for its shades and logo", (unsigned long)s->ngot);
+        amce_log("smooth style", m);
+        for (i = 0; i < s->ngot; i++)
+            ReleasePen(s->g->scr->ViewPort.ColorMap, s->got[i]);
     }
-    s->held = 0;
+    s->ngot = 0;
     if (s->scratch) {
         WaitBlit();
         FreeMem(s->scratch, s->scratch_size);
@@ -267,7 +266,21 @@ static ULONG ui_rgb(UBYTE pen, int c)
 static UBYTE alloc_rgb(struct Smooth *s, ULONG r, ULONG gg, ULONG b)
 {
     UBYTE pen;
-    if (!s->g || s->next_pen > s->last_pen)
+    if (!s->g)
+        return 0;
+    if (!s->g->truecolor) {
+        /* a real pen: any free one, held while the screen is open */
+        LONG p;
+        if (s->ngot >= sizeof(s->got))
+            return 0;
+        p = (LONG)ObtainPen(s->g->scr->ViewPort.ColorMap, -1, r * 0x01010101UL,
+                                 gg * 0x01010101UL, b * 0x01010101UL, PEN_EXCLUSIVE);
+        if (p <= 0)
+            return 0;                       /* none left: the nearest end */
+        s->got[s->ngot++] = (UBYTE)p;
+        return (UBYTE)p;
+    }
+    if (s->next_pen > s->last_pen)
         return 0;
     pen = (UBYTE)s->next_pen++;
     SetRGB32(&s->g->scr->ViewPort, pen, r * 0x01010101UL, gg * 0x01010101UL, b * 0x01010101UL);

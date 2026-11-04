@@ -1264,6 +1264,11 @@ static void build_sysinfo(struct Page *p)
             sprintf(line, "Style: pixel, %lux%s", (unsigned long)g.kint,
                     gfx_mode_tall(g.mode) ? " (tall pixels: dense)" : "");
         text_line(p, line);
+        if (g.sm && !g.truecolor) {
+            sprintf(line, "  its shades and logo: %lu pens so far",
+                    (unsigned long)sm_pens_used(g.sm));
+            text_line(p, line);
+        }
     }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
     text_line(p, line);
