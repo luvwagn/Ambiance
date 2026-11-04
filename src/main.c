@@ -1667,7 +1667,8 @@ static WORD list_xr(struct Page *p)
 }
 
 /* ---- the preview of the selected game, drawn once the selection settles */
-#define PREVIEW_SETTLE 250
+#define PREVIEW_SETTLE 250     /* ms the selection rests before its preview is read */
+#define PREVIEW_READY   60     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
 static BOOL pv_pending;
 static ULONG pv_due;
@@ -1717,7 +1718,8 @@ static BOOL pv_roomy(void)
 {
     return AvailMem(MEMF_ANY) >= 3UL * 1024 * 1024 && AvailMem(MEMF_CHIP) >= 768UL * 1024;
 }
-static LONG pv_dir = 1;             /* the way the list last moved */
+static LONG pv_dir = 1;
+static LONG pv_ready, pv_waited;    /* previews found read ahead, or waited for (log) */             /* the way the list last moved */
 
 /* What the pane shows for entry idx: a job type and its path, 0 if none. */
 static int pv_kind(struct Page *p, LONG idx, char *path, LONG max)
@@ -1983,10 +1985,13 @@ static void preview_draw(struct Page *p)
         gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         return;
     }
-    if (j->done)
+    if (j->done) {
+        pv_ready++;
         preview_show(p, j);
-    else
+    } else {
+        pv_waited++;
         pv_wait = j;
+    }
 }
 
 /* Jobs came back from the loader: letters of long lists, previews. */
@@ -2047,10 +2052,21 @@ static void preview_now(struct Page *p)
 /* The selection changed (or the list was drawn): preview it once it rests. */
 static void preview_touch(struct Page *p)
 {
+    char path[300];
+    int k, i;
+    ULONG settle = PREVIEW_SETTLE;
     if (!has_aside(p) || (pv_shown && pv_page == p && pv_sel == p->sel))
         return;                             /* already showing this one */
+    /* read ahead and back already: drawing it is only a copy, so sooner */
+    if ((k = pv_kind(p, p->sel, path, sizeof(path))))
+        for (i = 0; i < PV_SLOTS; i++)
+            if (pv_slot[i] && pv_slot[i]->done && pv_slot[i]->ran && !pv_slot[i]->spent &&
+                pv_slot[i]->type == k && strcmp(pv_slot[i]->path, path) == 0) {
+                settle = PREVIEW_READY;
+                break;
+            }
     pv_pending = TRUE;
-    pv_due = time_ms() + PREVIEW_SETTLE;
+    pv_due = time_ms() + settle;
 }
 
 static void preview_tick(void)
@@ -3976,6 +3992,11 @@ int main(void)
     }
 
 out:
+    {
+        char m[64];
+        sprintf(m, "%ld read ahead, %ld waited for", (long)pv_ready, (long)pv_waited);
+        amce_log("previews", m);
+    }
     amce_log("quitting", "");
     dbg_cpu_stop();
     ov_free();
