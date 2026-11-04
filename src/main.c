@@ -5091,6 +5091,8 @@ static int app_main(void)
                     struct DateStamp ds;
                     ms_acc -= 1000;
                     DateStamp(&ds);
+                    /* the header, shown without a flip (gfx_quiet_*) */
+                    BOOL was = gfx_quiet_begin();
                     if (ds.ds_Minute != last_minute)
                         draw_clock();
                     if (debug_on) {
@@ -5098,6 +5100,7 @@ static int app_main(void)
                         app_load = dbg_app_sample();
                         draw_status();
                     }
+                    gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
                 if (g.win && ptr_hidden != g.win && !gut.drag &&

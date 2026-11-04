@@ -1443,6 +1443,29 @@ BOOL gfx_present(struct Gfx *g)
     return TRUE;
 }
 
+/* A small update that needs no flip (the header's clock, the debug
+ * readout): drawn into the hidden buffer as usual between these two, then
+ * copied straight into the shown one. A flip shows the mouse pointer again
+ * on some RTG systems (a software pointer), a blink a second otherwise. */
+BOOL gfx_quiet_begin(void)
+{
+    return dirty;
+}
+
+void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    (void)g;
+    if (!dbuf_on)
+        return;
+    if (x1 >= x0 && y1 >= y0) {
+        WaitBlit();
+        BltBitMap(dsb[dback]->sb_BitMap, x0, y0, dsb[dback ^ 1]->sb_BitMap, x0, y0, x1 - x0 + 1,
+                  y1 - y0 + 1, 0xC0, 0xFF, NULL);
+        WaitBlit();
+    }
+    dirty = was;
+}
+
 /* Back to drawing straight onto the screen (the viewer, closing). */
 void gfx_dbuf_stop(struct Gfx *g)
 {

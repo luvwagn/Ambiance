@@ -212,6 +212,8 @@ void gfx_dbuf_stop(struct Gfx *g);
 BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
 void gfx_dirty(void);
 BOOL gfx_dbuf_active(void);
+BOOL gfx_quiet_begin(void);     /* around a small update shown without a flip */
+void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
