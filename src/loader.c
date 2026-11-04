@@ -25,13 +25,36 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 
-static struct MsgPort *job_port;    /* the loader's, made by the loader */
+/* Two loader processes: one for pictures (decoding a big JPEG takes
+ * seconds on a 68020), one for everything else (folders, fact sheets),
+ * so a listing or a fact sheet never waits behind a picture being
+ * decoded. The picture one runs below the other. */
+enum { W_QUICK, W_PICS, WORKERS };
+static struct Worker {
+    struct MsgPort *port;           /* its own, made by it */
+    struct Task *task;
+    const char *name;
+    LONG pri;
+} workers[WORKERS] = {
+    { NULL, NULL, "AmigaMCE loader", -1 },
+    { NULL, NULL, "AmigaMCE pictures", -2 },
+};
+static struct Worker *starting;     /* the one being started (its process reads it) */
 static struct MsgPort *reply_port;  /* ours */
 static struct Task *parent;
 static BYTE start_sig = -1;
 static BOOL running;
-struct Task *ldr_task;              /* the loader process (log: which task a guru names) */
+struct Task *ldr_task, *ldr_task2;  /* the processes (log: which task a guru names) */
 static LONG out;                    /* jobs sent and not back */
+
+/* Which process does job j: pictures to the picture one. */
+static struct Worker *worker_for(const struct LJob *j)
+{
+    if (j->type == LJ_SHOT || (j->want_pic && (j->type == LJ_PICTURE || j->type == LJ_ENTRY ||
+                                               j->type == LJ_PICFOLDER)))
+        return &workers[W_PICS];
+    return &workers[W_QUICK];
+}
 
 static void run(struct LJob *j)
 {
@@ -118,8 +141,9 @@ static void run(struct LJob *j)
 
 static void loader_main(void)
 {
+    struct Worker *w = starting;
     struct MsgPort *port = CreateMsgPort();
-    job_port = port;
+    w->port = port;
     Signal(parent, 1UL << start_sig);
     if (!port)
         return;
@@ -142,6 +166,22 @@ static void loader_main(void)
     }
 }
 
+static BOOL start_worker(struct Worker *w)
+{
+    w->port = NULL;
+    starting = w;
+    SetSignal(0, 1UL << start_sig);
+    if (!(w->task = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)loader_main,
+                                                      NP_Name, (ULONG)w->name,
+                                                      NP_StackSize, 32768, NP_Priority, w->pri,
+                                                      NP_WindowPtr, (ULONG)-1, TAG_END)))
+        return FALSE;
+    Wait(1UL << start_sig);
+    return w->port != NULL;
+}
+
+static void stop_worker(struct Worker *w);
+
 BOOL ldr_start(void)
 {
     if (running)
@@ -151,19 +191,15 @@ BOOL ldr_start(void)
         return FALSE;
     if ((start_sig = AllocSignal(-1)) < 0)
         return FALSE;
-    SetSignal(0, 1UL << start_sig);
-    job_port = NULL;
-    if (!(ldr_task = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)loader_main, NP_Name, (ULONG)"AmigaMCE loader",
-                           NP_StackSize, 32768, NP_Priority, -1,
-                           NP_WindowPtr, (ULONG)-1, TAG_END))) {
-        FreeSignal(start_sig);
-        start_sig = -1;
-        return FALSE;
+    running = start_worker(&workers[W_QUICK]);
+    if (running && !start_worker(&workers[W_PICS])) {
+        stop_worker(&workers[W_QUICK]);
+        running = FALSE;
     }
-    Wait(1UL << start_sig);
     FreeSignal(start_sig);
     start_sig = -1;
-    running = job_port != NULL;
+    ldr_task = workers[W_QUICK].task;
+    ldr_task2 = workers[W_PICS].task;
     return running;
 }
 
@@ -185,7 +221,7 @@ void ldr_submit(struct LJob *j)
     out++;
     j->msg.mn_ReplyPort = reply_port;
     j->msg.mn_Length = sizeof(*j);
-    PutMsg(job_port, &j->msg);
+    PutMsg(worker_for(j)->port, &j->msg);
 }
 
 /* As ldr_submit, but ahead of every job not started yet: what the UI is
@@ -194,10 +230,12 @@ void ldr_submit(struct LJob *j)
 void ldr_submit_first(struct LJob *j)
 {
     struct Node *n;
+    struct MsgPort *job_port;
     if (!running) {
         ldr_submit(j);
         return;
     }
+    job_port = worker_for(j)->port;
     if (j->busy) {
         Forbid();
         for (n = job_port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ)
@@ -275,31 +313,38 @@ void ldr_wait(struct LJob *j)
     }
 }
 
-void ldr_stop(void)
+static void stop_worker(struct Worker *w)
 {
     static struct LJob quit;            /* static: a job is too big for the stack */
-    if (running) {
-        memset(&quit, 0, sizeof(quit));
-        quit.type = LJ_QUIT;
-        quit.msg.mn_ReplyPort = reply_port;
-        quit.msg.mn_Length = sizeof(quit);
-        PutMsg(job_port, &quit.msg);
-        while (!quit.done) {
-            WaitPort(reply_port);
-            {
-                struct LJob *j;
-                while ((j = (struct LJob *)GetMsg(reply_port))) {
-                    if (j != &quit)
-                        out--;
-                    j->busy = FALSE;
-                    j->done = TRUE;
-                    if (j->orphan)
-                        orphan_free(j);
-                }
-            }
+    if (!w->port)
+        return;
+    memset(&quit, 0, sizeof(quit));
+    quit.type = LJ_QUIT;
+    quit.msg.mn_ReplyPort = reply_port;
+    quit.msg.mn_Length = sizeof(quit);
+    PutMsg(w->port, &quit.msg);
+    while (!quit.done) {
+        struct LJob *j;
+        WaitPort(reply_port);
+        while ((j = (struct LJob *)GetMsg(reply_port))) {
+            if (j != &quit)
+                out--;
+            j->busy = FALSE;
+            j->done = TRUE;
+            if (j->orphan)
+                orphan_free(j);
         }
+    }
+    w->port = NULL;
+    w->task = NULL;
+}
+
+void ldr_stop(void)
+{
+    if (running) {
+        stop_worker(&workers[W_PICS]);
+        stop_worker(&workers[W_QUICK]);
         running = FALSE;
-        job_port = NULL;
     }
     if (reply_port) {
         DeleteMsgPort(reply_port);
