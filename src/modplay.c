@@ -148,6 +148,8 @@ static void wait_lines(int n)
     }
 }
 
+static BOOL vol_set;                /* a volume chosen (0 is one) */
+
 /* ------------------------------------------------------------ timers */
 static UWORD tick_count(UBYTE bpm)
 {
@@ -750,7 +752,7 @@ BOOL mp_play(char *err, LONG errmax)
         amce_strlcpy(err, "No module loaded", errmax);
         return FALSE;
     }
-    if (!mp.master)
+    if (!vol_set)
         mp.master = 64;
     if (!audio_open()) {
         amce_strlcpy(err, "The audio channels are in use by another program", errmax);
@@ -945,6 +947,7 @@ BOOL mp_subsong_step(int d)
 void mp_set_volume(int v)
 {
     int i;
+    vol_set = TRUE;
     if (v < 0)
         v = 0;
     if (v > 64)
@@ -963,7 +966,7 @@ void mp_set_volume(int v)
             CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
 }
 
-int mp_volume(void) { return mp.master ? mp.master : 64; }
+int mp_volume(void) { return vol_set ? mp.master : 64; }
 BOOL mp_loaded(void) { return mp.engine != ENG_NONE; }
 BOOL mp_playing(void) { return mp.running && !mp.paused; }
 BOOL mp_paused(void) { return mp.running && mp.paused; }

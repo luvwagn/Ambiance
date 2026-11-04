@@ -3381,15 +3381,31 @@ static struct {
     BOOL s_focus;
     int flash;                  /* the button just pressed (-1 none): lit briefly */
     ULONG flash_until;
-} np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1 };
+    int hov, s_hov;             /* what the mouse is over: a button, NB_SLIDER, -1 */
+    int rep, rep_src, s_rep;    /* the button held down, repeating (-1 none) */
+    ULONG rep_next;
+    BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
+    WORD sl_x0, sl_x1;
+} np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
+         .rep = -1, .s_rep = -1 };
 
-#define FLASH_MS 80                 /* how long a pressed button stays lit */
+#define NB_SLIDER  NB_COUNT         /* np.hov: the slider */
+#define FLASH_MS   80               /* how long a pressed button stays lit */
+#define REP_DELAY  400              /* a button held: it repeats after this, */
+#define REP_EVERY  100              /* then this often */
+enum { REP_MOUSE, REP_JOY };
 
-/* The button Fire presses (chosen with Left/Right, or under the mouse)
- * has a yellow rounded frame. */
+/* The button Fire presses (chosen with Left/Right) has a yellow rounded
+ * frame; with the mouse there is none: what it is over lights up instead. */
 static BOOL np_focus_shown(void)
 {
-    return focus == FOCUS_CONTENT;
+    return focus == FOCUS_CONTENT && !mouse_mode;
+}
+
+/* Held down, these press again and again. */
+static BOOL np_repeats(int b)
+{
+    return b == NB_BACK || b == NB_FWD || b == NB_VDOWN || b == NB_VUP;
 }
 
 /* A rounded frame t thick just inside x,y w x h (or, solid, the corners
@@ -3404,16 +3420,12 @@ static void np_round(WORD x, WORD y, WORD w, WORD h, WORD t, UBYTE pen, BOOL fra
         gfx_fill(&g, x + w - t, y + h - t, x + w - 1, y + h - 1, pen);
         return;
     }
-    /* the edges run on to meet the corners' squares side by side (not
-     * just touching at a point), leaving only the outer t x t cut off */
+    /* four edges; the corners (t x t) are left out: slightly rounded */
+    (void)r;
     gfx_fill(&g, x + t, y, x + w - 1 - t, y + t - 1, pen);             /* top */
     gfx_fill(&g, x + t, y + h - t, x + w - 1 - t, y + h - 1, pen);     /* bottom */
     gfx_fill(&g, x, y + t, x + t - 1, y + h - 1 - t, pen);             /* left */
     gfx_fill(&g, x + w - t, y + t, x + w - 1, y + h - 1 - t, pen);     /* right */
-    gfx_fill(&g, x + t, y + t, x + r - 1, y + r - 1, pen);             /* the corners */
-    gfx_fill(&g, x + w - r, y + t, x + w - 1 - t, y + r - 1, pen);
-    gfx_fill(&g, x + t, y + h - r, x + r - 1, y + h - 1 - t, pen);
-    gfx_fill(&g, x + w - r, y + h - r, x + w - 1 - t, y + h - 1 - t, pen);
 }
 
 static BOOL np_on(void)
@@ -3459,9 +3471,10 @@ static int np_state(void)
 
 static void np_button(int i)
 {
-    BOOL lit = i == np.flash;               /* just pressed */
+    BOOL lit = i == np.flash || i == np.rep;    /* just pressed, or held */
     BOOL ring = np_focus_shown() && i == np.btn;
-    UBYTE bg = lit ? PEN_HL : PEN_BAR, fg = lit ? PEN_WHITE : PEN_TEXT;
+    BOOL hov = mouse_mode && i == np.hov;       /* the mouse over it */
+    UBYTE bg = lit ? PEN_HL : hov ? PEN_RULE : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
     WORD gh = h * 5 / 10, gw, cx, gy, t;
     if (i == NB_VDOWN || i == NB_VUP) {
@@ -3541,6 +3554,53 @@ static void np_volume_text(void)
         gfx_fill(&g, x, y, end, y + g.font_h - 1, PEN_BG);
 }
 
+/* The volume slider: -----*----- between - and +. */
+static WORD np_knob_w(void)
+{
+    WORD k = U(3) > 2 ? U(3) : 2;
+    return gfx_mode_tall(g.mode) ? k * 2 : k;
+}
+
+static WORD np_knob_x(int v)
+{
+    return np.sl_x0 + (WORD)((LONG)(np.sl_x1 - np.sl_x0 + 1 - np_knob_w()) * v / 64);
+}
+
+static BOOL np_slider_hot(void)
+{
+    return np.sl_drag || (mouse_mode && np.hov == NB_SLIDER);
+}
+
+static void np_slider(void)
+{
+    WORD y = np.by, h = np.bh, kw = np_knob_w(), kx, th, ty, kh;
+    BOOL hot = np_slider_hot();
+    if (!np.sl_on)
+        return;
+    kx = np_knob_x(mp_volume());
+    th = U(2) > 1 ? U(2) : 1;
+    ty = y + (h - th) / 2;
+    kh = h * 6 / 10;
+    gfx_fill(&g, np.sl_x0, y, np.sl_x1, y + h - 1, PEN_BG);
+    if (kx > np.sl_x0)                      /* the part up to the volume */
+        gfx_fill(&g, np.sl_x0, ty, kx - 1, ty + th - 1, hot ? PEN_TEXT : PEN_DIM);
+    if (kx + kw <= np.sl_x1)                /* the rest */
+        gfx_fill(&g, kx + kw, ty, np.sl_x1, ty + th - 1, PEN_RULE);
+    gfx_fill(&g, kx, y + (h - kh) / 2, kx + kw - 1, y + (h - kh) / 2 + kh - 1,
+             hot ? PEN_WHITE : PEN_TEXT);
+}
+
+/* The volume for a point on the slider. */
+static int np_slider_vol(WORD x)
+{
+    WORD span = np.sl_x1 - np.sl_x0 + 1 - np_knob_w();
+    LONG v;
+    if (span < 1)
+        return mp_volume();
+    v = ((LONG)(x - np.sl_x0 - np_knob_w() / 2) * 64 + span / 2) / span;
+    return v < 0 ? 0 : v > 64 ? 64 : (int)v;
+}
+
 static void np_layout(void)
 {
     WORD row = g.font_h + U(3), gap = U(3), vt, i, avail;
@@ -3566,8 +3626,24 @@ static void np_layout(void)
     }
     if (np.bw > U(26))
         np.bw = U(26);
-    for (i = 0; i < NB_COUNT; i++)
+    for (i = 0; i <= NB_VDOWN; i++)
         np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_VDOWN ? gap * 2 : 0);
+    {
+        /* room enough: a slider between - and + */
+        WORD at = np.bx[NB_VDOWN] + np.bw + gap;
+        WORD room = np.x0 + np.w - at - np.bw - (np.vol_x >= 0 ? vt : 0) - gap;
+        np.sl_on = room >= U(40);
+        if (np.sl_on) {
+            if (room > U(120))
+                room = U(120);
+            np.sl_x0 = at + U(2);
+            np.sl_x1 = at + room - 1 - U(2);
+            np.bx[NB_VUP] = at + room + gap;
+        } else {
+            np.bx[NB_VUP] = at;
+        }
+        np.sl_drag = FALSE;
+    }
     if (np.vol_x >= 0)
         np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
     np.samples_y = np.by + np.bh + U(8);
@@ -3731,21 +3807,28 @@ static void np_draw(BOOL full)
     np_draw_meters(full, &st);
     {
         int state = np_state();
-        BOOL foc = np_focus_shown();
+        BOOL foc = np_focus_shown(), hot = np_slider_hot();
         if (np.flash >= 0 && (LONG)(time_ms() - np.flash_until) >= 0)
             np.flash = -1;                  /* its moment is over */
         for (i = 0; i < NB_COUNT; i++)
-            if (full || (i == NB_PLAY && state != np.s_state) ||
-                ((i == np.btn || i == np.s_btn) && (np.btn != np.s_btn || foc != np.s_focus)) ||
+            if (full || foc != np.s_focus || (i == NB_PLAY && state != np.s_state) ||
+                ((i == np.btn || i == np.s_btn) && np.btn != np.s_btn) ||
+                ((i == np.hov || i == np.s_hov) && np.hov != np.s_hov) ||
                 ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
+                ((i == np.rep || i == np.s_rep) && np.rep != np.s_rep) ||
                 ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol))
                 np_button(i);
+        if (full || mp_volume() != np.s_vol || hot != np.s_slhot)
+            np_slider();
         if (full || mp_volume() != np.s_vol)
             np_volume_text();
         np.s_state = state;
         np.s_btn = np.btn;
+        np.s_hov = np.hov;
         np.s_flash = np.flash;
+        np.s_rep = np.rep;
         np.s_focus = foc;
+        np.s_slhot = hot;
         np.s_vol = mp_volume();
     }
 }
@@ -4010,8 +4093,58 @@ static void np_eq_tick(void)
 }
 
 /* The timer tick: the next module at a song's end, the page kept up. */
+static int np_button_at(WORD x, WORD y)
+{
+    int i;
+    if (y < np.by || y >= np.by + np.bh)
+        return -1;
+    for (i = 0; i < NB_COUNT; i++)
+        if (x >= np.bx[i] && x < np.bx[i] + np.bw)
+            return i;
+    if (np.sl_on && x >= np.sl_x0 - U(2) && x <= np.sl_x1 + U(2))
+        return NB_SLIDER;
+    return -1;
+}
+
+static void np_rep_start(int b, int src)
+{
+    if (!np_repeats(b))
+        return;
+    np.rep = b;
+    np.rep_src = src;
+    np.rep_next = time_ms() + REP_DELAY;
+}
+
+static void np_rep_stop(void)
+{
+    if (np.rep < 0)
+        return;
+    np.rep = -1;
+    if (np_on())
+        np_update();
+}
+
+/* A button held down: pressed again, every REP_EVERY ms (the mouse's
+ * only while the pointer is still on it). */
+static void np_repeat(void)
+{
+    if (np.rep < 0)
+        return;
+    if (!np_on() || !mp_loaded()) {
+        np.rep = -1;
+        return;
+    }
+    if ((LONG)(time_ms() - np.rep_next) < 0)
+        return;
+    np.rep_next = time_ms() + REP_EVERY;
+    if (np.rep_src == REP_MOUSE && g.win && np_button_at(g.win->MouseX, g.win->MouseY) != np.rep)
+        return;
+    np_press(np.rep);
+}
+
 static void np_tick(void)
 {
+    np_repeat();
     np_eq_tick();
     if (mp_running() && mp_ended() && !np.ended_seen) {
         np.ended_seen = TRUE;
@@ -4046,20 +4179,36 @@ static BOOL np_lr(int d)
     return TRUE;
 }
 
-/* The mouse over a button: the frame follows it. */
+/* The mouse over a button or the slider: it lights up (dragging the
+ * slider: the volume follows). */
 static void np_hover(WORD x, WORD y)
 {
-    int i;
-    if (!np_on() || !mp_loaded() || y < np.by || y >= np.by + np.bh)
+    int h;
+    if (!np_on() || !mp_loaded())
         return;
-    for (i = 0; i < NB_COUNT; i++)
-        if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
-            if (i != np.btn) {
-                np.btn = i;
-                np_update();
-            }
-            return;
-        }
+    if (np.sl_drag) {
+        int v = np_slider_vol(x);
+        if (v != mp_volume())
+            np_volume(v - mp_volume());
+        return;
+    }
+    h = np_button_at(x, y);
+    if (h != np.hov) {
+        np.hov = h;
+        np_update();
+    }
+}
+
+/* The mouse button let go: no more repeating or dragging. */
+static void np_mouse_up(void)
+{
+    if (np.rep >= 0 && np.rep_src == REP_MOUSE)
+        np_rep_stop();
+    if (np.sl_drag) {
+        np.sl_drag = FALSE;
+        if (np_on())
+            np_update();
+    }
 }
 
 static BOOL np_click(WORD x, WORD y)
@@ -4067,13 +4216,19 @@ static BOOL np_click(WORD x, WORD y)
     int i;
     if (!np_on() || !mp_loaded())
         return FALSE;
-    if (y >= np.by && y < np.by + np.bh)
-        for (i = 0; i < NB_COUNT; i++)
-            if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
-                np.btn = i;                 /* the frame is on it already (hover) */
-                np_press(i);
-                return TRUE;
-            }
+    i = np_button_at(x, y);
+    if (i == NB_SLIDER) {                   /* to that volume, and drag from there */
+        np.sl_drag = TRUE;
+        np.hov = NB_SLIDER;
+        np_volume(np_slider_vol(x) - mp_volume());
+        return TRUE;
+    }
+    if (i >= 0) {
+        np.btn = i;                         /* the keys carry on from here */
+        np_press(i);
+        np_rep_start(i, REP_MOUSE);
+        return TRUE;
+    }
     /* the bar (and the line under it): to that part of the song */
     if (y >= np.prog_y - U(3) && y < np.time_y && x >= np.x0 && x < np.x0 + np.w) {
         struct MpStatus st;
@@ -5588,6 +5743,7 @@ static void handle_mouse(struct IntuiMessage *im)
         return;
     }
     if (im->Code == SELECTUP) {
+        np_mouse_up();
         if (gut.drag) {
             gut.drag = FALSE;
             if (cur())
@@ -5833,7 +5989,14 @@ static void joy_poll(void)
     }
     else if (act & JPF_JOY_RIGHT) { disarm(); if (!np_lr(1)) act_right(); }
     else if (act & JPF_JOY_LEFT) { disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); }
-    if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
+    if (newbtn & JPF_BUTTON_RED) {
+        disarm();
+        act_open(FALSE);
+        if (np_on() && focus == FOCUS_CONTENT)
+            np_rep_start(np.btn, REP_JOY);  /* held: it repeats */
+    }
+    if (np.rep >= 0 && np.rep_src == REP_JOY && !(btn & JPF_BUTTON_RED))
+        np_rep_stop();
     /* CD32 pad shoulder buttons: the next / previous letter in a list */
     if (newbtn & JPF_BUTTON_FORWARD) { disarm(); act_letter_step(1); }
     if (newbtn & JPF_BUTTON_REVERSE) { disarm(); act_letter_step(-1); }
@@ -6059,7 +6222,7 @@ static int app_main(void)
                  * spinner (each step, every 80 ms, then comes on time);
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
-                tick_us = (joy_present || ov.on || pv_spinning() || np_live() || np.flash >= 0 ||
+                tick_us = (joy_present || ov.on || pv_spinning() || np_live() || np.flash >= 0 || np.rep >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
