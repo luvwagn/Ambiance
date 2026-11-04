@@ -4202,10 +4202,10 @@ static void act_action(struct Item *it)
  * Lists speed up in two stages: to cruising speed over HOLD_RAMP, then,
  * still held, on up to LIST_BOOST times that over HOLD_BOOST, or for a
  * long list as fast as crosses all of it in LIST_SWEEP (All Games' 3,600
- * entries: about 1,200 a second), the big letter showing where it is. */
+ * entries: about 1,800 a second), the big letter showing where it is. */
 #define HOLD_DELAY  250     /* ms before the glide starts */
-#define HOLD_RAMP  1200     /* ms to reach cruising speed */
-#define HOLD_BOOST 2000     /* further ms to reach top speed */
+#define HOLD_RAMP   800     /* ms to reach cruising speed */
+#define HOLD_BOOST 1200     /* further ms to reach top speed */
 #define LIST_MIN     12     /* entries per second when the glide starts */
 #define MENU_MIN     35     /* ...in a short list (a menu: two screens or less), */
 #define MENU_MAX     50     /* rising to this over MENU_RAMP (a row a frame); */
@@ -4213,7 +4213,7 @@ static void act_action(struct Item *it)
 #define LIST_MAX    100     /* cruising entries per second on a small screen */
 #define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
 #define LIST_BOOST    4     /* top speed, as a multiple of cruising speed, */
-#define LIST_SWEEP 3000     /* ...or the whole list in this many ms, if faster */
+#define LIST_SWEEP 2000     /* ...or the whole list in this many ms, if faster */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
@@ -4225,6 +4225,7 @@ static struct {
     LONG  lacc;             /* letters (x1000) owed, letter by letter */
     LONG  from;             /* the selection when the key went down (log) */
     ULONG worst;            /* the longest frame meanwhile (log) */
+    LONG  slow;             /* frames over 40 ms meanwhile (log) */
 } hold;
 
 /* Long titled lists, held past cruising: a whole letter a step. Shorter
@@ -4246,16 +4247,18 @@ static void hold_start(LONG dir, BOOL joy)
     hold.letters = cur() && ov_eligible(cur());
     hold.from = cur() ? cur()->sel : 0;
     hold.worst = 0;
+    hold.slow = 0;
 }
 
 static void hold_stop(void)
 {
     struct Page *p = cur();
     if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
-        char m[80];
+        char m[120];
         LONG moved = p->sel - hold.from;
-        sprintf(m, "%ld entries in %ld ms, longest frame %ld ms", (long)(moved < 0 ? -moved : moved),
-                (long)hold.held_ms, (long)hold.worst);
+        sprintf(m, "%ld entries in %ld ms, longest frame %ld ms, %ld frames over 40 ms",
+                (long)(moved < 0 ? -moved : moved), (long)hold.held_ms, (long)hold.worst,
+                (long)hold.slow);
         amce_log("glide", m);
     }
     hold.dir = 0;
@@ -4324,6 +4327,8 @@ static void hold_tick(void)
         ULONG now = time_ms(), dt = now ? now - hold.last_ms : FRAME_MS;
         if (dt > hold.worst)
             hold.worst = dt;
+        if (dt > 40)
+            hold.slow++;
         if (dt > 250)
             dt = 250;               /* a slow frame is made up for, a stall is not */
         hold.last_ms = now;
