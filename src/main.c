@@ -61,6 +61,7 @@ static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on deep RTG screens) */
+static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
@@ -695,18 +696,26 @@ static void draw_clock(void)
 /* Debug readout between the logo and the clock: the longest form that fits. */
 static LONG cpu_load = -1, app_load = -1;
 
+/* What the readout shows now, so a second that changes nothing redraws
+ * nothing. Cleared when the header is drawn afresh. */
+static char status_shown[96];
+
 static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
     WORD x1 = clock_left() - U(6);
     char cpu[16], app[16], forms[3][96];
+    const char *show = "";
     ULONG chip, used;
     int i;
     if (x1 <= x0)
         return;
-    gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
-    if (!debug_on)
+    if (!debug_on) {
+        if (status_shown[0])
+            gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
+        status_shown[0] = 0;
         return;
+    }
     used = dbg_mem_used(&chip);
     if (cpu_load < 0)
         amce_strlcpy(cpu, "--", sizeof(cpu));
@@ -723,9 +732,14 @@ static void draw_status(void)
     sprintf(forms[2], "%s/%s %luK", cpu, app, (unsigned long)(used >> 10));
     for (i = 0; i < 3; i++)
         if (gfx_textlen(&g, forms[i], TS_SMALL) <= x1 - x0 || i == 2) {
-            gfx_text(&g, x0, (U(24) - g.font_h) / 2, forms[i], PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL);
+            show = forms[i];
             break;
         }
+    if (status_shown[0] && strcmp(show, status_shown) == 0)
+        return;                             /* unchanged: leave it be */
+    gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
+    gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL);
+    amce_strlcpy(status_shown, show, sizeof(status_shown));
 }
 
 static void set_debug(BOOL on)
@@ -745,6 +759,7 @@ static void draw_header(void)
 {
     gfx_fill(&g, 0, 0, g.w - 1, U(24) - 1, PEN_BAR);
     gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
+    status_shown[0] = 0;                    /* the readout was just cleared */
     gfx_logo(&g, U(6), (U(24) - g.logo_h) / 2);
     draw_status();
     draw_clock();
@@ -756,10 +771,16 @@ static void draw_menu_row(int i)
     BOOL sel = i == menu_sel;
     UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) : PEN_BG;
     UBYTE fg = PEN_WHITE;       /* the menu stands out like the list headers */
+    /* the menu's pens are all below 8 and its planes 3+ are clear, so on
+     * native screens only planes 0-2 are written: 3/8 of the work */
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
     gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
     gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, mod_names[menu[i]], fg, bg,
              g.menu_w - U(24), TS_BOLD);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
 }
 
 static void draw_menu(void)
@@ -1178,7 +1199,7 @@ static void open_textbox(struct Page *p, WORD y0)
 
 static struct TextBox *cur_tb(void)
 {
-    struct Page *p = cur();
+    struct Page *p = pane_pending ? NULL : cur();   /* a stale section is not shown */
     return (p && p->type != PT_LIST && p->tb.open) ? &p->tb : NULL;
 }
 
@@ -1236,8 +1257,11 @@ static void draw_pane(BOOL full)
     }
 }
 
+static void pane_settle(void);
+
 static void draw_all(void)
 {
+    pane_settle();
     gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
     draw_header();
     draw_menu();
@@ -1246,7 +1270,56 @@ static void draw_all(void)
 }
 
 /* ------------------------------------------------------------ actions */
-static void menu_select(int i)
+/* Moving through the main menu only moves the highlight and shows the
+ * section's name: the section itself (reading AGS folders from disk,
+ * drawing the whole pane) is built once the selection settles, PANE_SETTLE
+ * ms after the last move with no Up/Down held, or as soon as anything else
+ * needs it (pane_settle). While pane_pending, pages[] still hold the
+ * section shown before. */
+#define PANE_SETTLE 180
+static BOOL key_is_down(UWORD rawkey);
+static ULONG pane_due;
+
+static void pane_settle(void)
+{
+    if (!pane_pending)
+        return;
+    pane_pending = FALSE;
+    build_root(menu[menu_sel]);
+    draw_pane(TRUE);
+}
+
+/* Up/Down (or keypad 8/2) still held? */
+static BOOL menu_key_held(void)
+{
+    return key_is_down(0x4C) || key_is_down(0x4D) || key_is_down(0x3E) || key_is_down(0x1E);
+}
+
+static void pane_tick(void)
+{
+    ULONG now;
+    if (!pane_pending)
+        return;
+    now = time_ms();
+    if (LowLevelBase && menu_key_held())
+        pane_due = now + PANE_SETTLE;
+    else if ((LONG)(now - pane_due) >= 0)
+        pane_settle();
+}
+
+/* The pane while the selection is moving: blank, with the section's name. */
+static void pane_preview(BOOL first)
+{
+    if (first)
+        gfx_fill_bg(&g, g.menu_w + U(3), U(25), g.w - 1, g.footer_y - 2);
+    else
+        gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
+    gfx_text(&g, g.pane_x, U(28), mod_names[menu[menu_sel]], PEN_WHITE, PEN_BG, g.pane_w, TS_BOLD);
+    gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
+}
+
+/* now: build the section straight away (a click), not once it settles */
+static void menu_select_now(int i, BOOL now)
 {
     int old = menu_sel;
     if (i < 0 || i >= nmenu || i == old)
@@ -1254,12 +1327,25 @@ static void menu_select(int i)
     menu_sel = i;
     draw_menu_row(old);
     draw_menu_row(i);
-    build_root(menu[i]);
-    draw_pane(TRUE);
+    if (now || !time_ms()) {
+        pane_pending = TRUE;
+        pane_settle();
+        return;
+    }
+    ov.on = FALSE;
+    pane_preview(!pane_pending);
+    pane_pending = TRUE;
+    pane_due = time_ms() + PANE_SETTLE;
+}
+
+static void menu_select(int i)
+{
+    menu_select_now(i, FALSE);
 }
 
 static void set_focus(int f)
 {
+    pane_settle();
     if (focus == f)
         return;
     focus = f;
@@ -1718,7 +1804,9 @@ static void hold_tick(void)
 
 static void act_open(BOOL play)
 {
-    struct Page *p = cur();
+    struct Page *p;
+    pane_settle();
+    p = cur();
     if (focus == FOCUS_MENU) {
         if (p && (p->type != PT_LIST || p->list.count))
             set_focus(FOCUS_CONTENT);
@@ -1745,6 +1833,7 @@ static void act_open(BOOL play)
 
 static void act_back(void)
 {
+    pane_settle();
     if (focus == FOCUS_MENU) {
         if (quit_armed) {
             running = FALSE;
@@ -1765,7 +1854,9 @@ static void act_back(void)
 
 static void act_letter(char c)
 {
-    struct Page *p = cur();
+    struct Page *p;
+    pane_settle();
+    p = cur();
     LONG i, n;
     char k[2];
     if (focus != FOCUS_CONTENT || !p || p->type != PT_LIST || !p->list.count)
@@ -1804,7 +1895,10 @@ static void handle_mouse(struct IntuiMessage *im)
     WORD x = im->MouseX, y = im->MouseY;
     BOOL dbl;
     LONG idx = -1;
-    struct TextBox *tb = cur_tb();
+    struct TextBox *tb;
+    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
+        pane_settle();              /* a click outside the menu acts on the section */
+    tb = cur_tb();
     if (im->Class == IDCMP_MOUSEMOVE) {
         if (tb)
             tb_mouse_move(tb, y);
@@ -1841,7 +1935,7 @@ static void handle_mouse(struct IntuiMessage *im)
         last_click = idx + 1000;
         if (focus != FOCUS_MENU)
             set_focus(FOCUS_MENU);
-        menu_select(idx);
+        menu_select_now(idx, TRUE);
         if (dbl)
             act_open(FALSE);
     } else if (x >= g.pane_x - U(2) && y >= g.list_top && y < g.footer_y - 1) {
@@ -2092,7 +2186,7 @@ int main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = (atb && tb_animating(atb)) || hold_active();
+        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending;
         ULONG sig;
         if (busy) {
             sig = SetSignal(0, mask) & mask;
@@ -2152,10 +2246,11 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win && (hold_active() || ((atb = cur_tb()) && tb_animating(atb)))) {
+        if (g.win && (hold_active() || pane_pending || ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();
             WaitTOF();
             dbg_sleep_end();
+            pane_tick();
             hold_tick();
             if ((atb = cur_tb()) && tb_animating(atb))
                 tb_step(&g, atb);
