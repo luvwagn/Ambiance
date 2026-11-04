@@ -3404,10 +3404,12 @@ static void np_round(WORD x, WORD y, WORD w, WORD h, WORD t, UBYTE pen, BOOL fra
         gfx_fill(&g, x + w - t, y + h - t, x + w - 1, y + h - 1, pen);
         return;
     }
-    gfx_fill(&g, x + r, y, x + w - 1 - r, y + t - 1, pen);             /* top */
-    gfx_fill(&g, x + r, y + h - t, x + w - 1 - r, y + h - 1, pen);     /* bottom */
-    gfx_fill(&g, x, y + r, x + t - 1, y + h - 1 - r, pen);             /* left */
-    gfx_fill(&g, x + w - t, y + r, x + w - 1, y + h - 1 - r, pen);     /* right */
+    /* the edges run on to meet the corners' squares side by side (not
+     * just touching at a point), leaving only the outer t x t cut off */
+    gfx_fill(&g, x + t, y, x + w - 1 - t, y + t - 1, pen);             /* top */
+    gfx_fill(&g, x + t, y + h - t, x + w - 1 - t, y + h - 1, pen);     /* bottom */
+    gfx_fill(&g, x, y + t, x + t - 1, y + h - 1 - t, pen);             /* left */
+    gfx_fill(&g, x + w - t, y + t, x + w - 1, y + h - 1 - t, pen);     /* right */
     gfx_fill(&g, x + t, y + t, x + r - 1, y + r - 1, pen);             /* the corners */
     gfx_fill(&g, x + w - r, y + t, x + w - 1 - t, y + r - 1, pen);
     gfx_fill(&g, x + t, y + h - r, x + r - 1, y + h - 1 - t, pen);
