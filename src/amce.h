@@ -127,6 +127,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm, int style);
 BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_close(struct Gfx *g);
+BOOL gfx_restyle(struct Gfx *g, int style);    /* same screen, new style (gfx.c) */
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /* filled circle */

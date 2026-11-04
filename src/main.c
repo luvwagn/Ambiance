@@ -4112,21 +4112,15 @@ static void apply_style(int st)
             up->sel = SETTINGS_STYLE_ROW;
         }
         if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
-            set_msg("Smooth: on RTG screens of 16 bits or more");
+            set_msg("Smooth: on RTG screens only");
         return;
     }
+    /* the same screen, its look made again (no mode switch) */
     pages_clear();
-    pv_flush();                     /* decoded for this screen */
-    ptr_hidden = NULL;              /* a new window comes with its pointer */
+    pv_flush();
     spin_free();
     ov_bm_free();
-    gfx_close(&g);
-    if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
-        !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
-        !gfx_open(&g, &caps, SM_AUTO, STYLE_PIXEL)) {
-        running = FALSE;
-        return;
-    }
+    BOOL restyled = gfx_restyle(&g, ui_style);
     /* back where we were: Settings > Style, on the new choice */
     for (i = 0; i < nmenu; i++)
         if (menu[i] == MOD_SETTINGS)
@@ -4140,13 +4134,15 @@ static void apply_style(int st)
     msg[0] = 0;
     draw_all();
     note_style();
+    if (!restyled)
+        set_msg("The smooth style's files could not be loaded");
 }
 
 static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
         if (it->action == ACT_STYLES)
-            set_msg("Style: Smooth needs an RTG screen of 16 bits or more");
+            set_msg("Style: Smooth needs an RTG screen");
         return;
     }
     if (it->action == ACT_SCREENMODES)

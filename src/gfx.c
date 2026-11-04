@@ -569,16 +569,10 @@ void gfx_picture_free(struct Gfx *g)
     pic_npens = 0;
 }
 
-void gfx_close(struct Gfx *g)
+/* The artwork, fonts and smooth style a screen was opened with, let go
+ * (the screen itself stays). */
+static void style_free(struct Gfx *g)
 {
-    int i;
-    gfx_dbuf_stop(g);
-    gfx_picture_free(g);
-    blk_release(g);
-    if (CyberGfxBase) {
-        CloseLibrary(CyberGfxBase);
-        CyberGfxBase = NULL;
-    }
     WaitBlit();
     if (g->logo_masks) {
         FreeMem(g->logo_masks, (ULONG)g->logo_npens * g->logo_h * g->logo_bpr);
@@ -597,6 +591,68 @@ void gfx_close(struct Gfx *g)
         sm_free(g->sm);
         g->sm = NULL;
     }
+}
+
+/* Change the style (pixel, smooth) on the screen that is open: its
+ * artwork, fonts and layout are made again, the screen and window stay
+ * (no mode switch, no flash). FALSE: smooth could not be loaded; the pixel
+ * style is set instead. The caller draws everything again. */
+BOOL gfx_restyle(struct Gfx *g, int style)
+{
+    BOOL ok = TRUE;
+    BOOL dbuf = gfx_dbuf_active();
+    if (!g->scr || !g->win)
+        return FALSE;
+    gfx_dbuf_stop(g);                       /* the font goes on the window's RastPort */
+    gfx_picture_free(g);
+    style_free(g);
+    if (g->font) {
+        CloseFont(g->font);
+        g->font = NULL;
+    }
+    g->k = (UWORD)g->kint << 8;
+    g->style = STYLE_PIXEL;
+    if (style == STYLE_SMOOTH && modes[g->mode].kind == K_RTG && g->depth >= 8) {
+        if ((g->sm = sm_load(g->h))) {
+            g->style = STYLE_SMOOTH;
+            g->k = sm_scale(g->sm);
+        } else {
+            ok = FALSE;
+        }
+    }
+    layout_metrics(g);
+    SetDrMd(g->rp, JAM1);
+    open_font(g);
+    if (g->sm) {
+        sm_attach(g->sm, g);
+        g->font_h = sm_cell_h(g->sm);
+        g->baseline = sm_baseline(g->sm);
+        g->icon_px = sm_icon_px(g->sm);
+        g->mark_px = sm_mark_px(g->sm);
+    } else {
+        g->icon_px = 16 * g->kint;
+        g->mark_px = MARK_SIZE * g->kint;
+    }
+    fit_menu(g);
+    cache_art(g);
+    gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
+    amce_log("style", g->style == STYLE_SMOOTH ? "smooth (same screen)" : "pixel (same screen)");
+    if (dbuf)
+        gfx_dbuf_start(g);
+    return ok;
+}
+
+void gfx_close(struct Gfx *g)
+{
+    int i;
+    gfx_dbuf_stop(g);
+    gfx_picture_free(g);
+    blk_release(g);
+    if (CyberGfxBase) {
+        CloseLibrary(CyberGfxBase);
+        CyberGfxBase = NULL;
+    }
+    style_free(g);
     if (g->win) {
         amce_log("CloseWindow", "");
         CloseWindow(g->win);
