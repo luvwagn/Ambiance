@@ -109,6 +109,13 @@ struct Item {
     UBYTE  mark;        /* MARK_*: folders get MARK_ARROW automatically */
 };
 
+/* Keep struct Item a power of two in size: then count * sizeof is a shift.
+ * At 18 bytes it became a __mulsi3 call that GCC moved between loading
+ * CopyMem's registers and the call, so CopyMem got garbage (see
+ * tools/check_syscalls.py). This line fails to compile otherwise. */
+typedef char amce_item_size_is_power_of_two
+    [(sizeof(struct Item) & (sizeof(struct Item) - 1)) == 0 ? 1 : -1];
+
 struct ItemList {
     APTR          pool;
     struct Item  *items;

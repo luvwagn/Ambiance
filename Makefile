@@ -41,7 +41,7 @@ FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt CREDITS.txt
 
-.PHONY: all clean test check-formats art fonts icons preview lha disk FORCE_VERSION
+.PHONY: all clean test check-formats check-syscalls art fonts icons preview lha disk FORCE_VERSION
 
 all: $(TARGET) lha disk
 
@@ -75,7 +75,19 @@ check-formats:
 		echo "error: use %l with a long argument (RawDoFmt reads %d/%u/%x/%c as 16-bit)"; exit 1; fi
 	@echo "  CHECK formats ok"
 
-test: check-formats build/test_ags
+# GCC can move a helper call (__mulsi3 for a 32-bit multiply on the 68000,
+# strlen...) between loading an inline OS call's register arguments and the
+# call, which then gets clobbered arguments: with 18-byte list entries
+# CopyMem copied from UtilityBase onto the stack. Scan the generated code.
+ASM_DIR = build/asm
+check-syscalls: $(SRCS) src/amce.h
+	@mkdir -p $(ASM_DIR)
+	@set -e; for f in $(SRCS); do \
+		$(CC) $(CFLAGS) -S -o $(ASM_DIR)/$$(basename $$f .c).s $$f; done
+	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
+	@echo "  CHECK OS-call arguments ok"
+
+test: check-formats check-syscalls build/test_ags
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V T:$(abspath build/vt) test_ags
 
