@@ -197,6 +197,27 @@ static LONG median_cut(const ULONG *hist, struct Box *box, LONG maxcol)
     return nb;
 }
 
+/* A box's colour (the average of its cells), its cells' colour in lut. */
+static ULONG box_colour(const ULONG *hist, const struct Box *bx, UBYTE *lut, LONG i)
+{
+    ULONG r, g, b, sr = 0, sg = 0, sb = 0, n = 0;
+    for (r = bx->lo[0]; r <= bx->hi[0]; r++)
+        for (g = bx->lo[1]; g <= bx->hi[1]; g++)
+            for (b = bx->lo[2]; b <= bx->hi[2]; b++) {
+                ULONG cell = CELL(r, g, b), h = hist[cell];
+                if (h) {
+                    lut[cell] = i;
+                    sr += h * ((r << 3) | (r >> 2));
+                    sg += h * ((g << 3) | (g >> 2));
+                    sb += h * ((b << 3) | (b >> 2));
+                    n += h;
+                }
+            }
+    if (!n)
+        n = 1;
+    return ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
+}
+
 static const UBYTE bayer[4][4] = {
     { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 }
 };
@@ -286,25 +307,8 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
 
     if ((nb = median_cut(hist, box, maxcol)) <= 0 || !(t = thumb_alloc(dw, dh)))
         goto out;
-    for (i = 0; i < nb; i++) {
-        ULONG r, g, b, sr = 0, sg = 0, sb = 0, n = 0;
-        struct Box *bx = &box[i];
-        for (r = bx->lo[0]; r <= bx->hi[0]; r++)
-            for (g = bx->lo[1]; g <= bx->hi[1]; g++)
-                for (b = bx->lo[2]; b <= bx->hi[2]; b++) {
-                    ULONG cell = CELL(r, g, b), h = hist[cell];
-                    if (h) {
-                        lut[cell] = i;
-                        sr += h * ((r << 3) | (r >> 2));
-                        sg += h * ((g << 3) | (g >> 2));
-                        sb += h * ((b << 3) | (b >> 2));
-                        n += h;
-                    }
-                }
-        if (!n)
-            n = 1;
-        t->pal[i] = ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
-    }
+    for (i = 0; i < nb; i++)
+        t->pal[i] = box_colour(hist, &box[i], lut, i);
     t->ncol = nb;
     for (y = 0; y < dh; y++) {
         UBYTE *d = t->px + y * t->mod;
@@ -321,6 +325,71 @@ out:
     FreeVec(lut);
     FreeVec(box);
     return t;
+}
+
+/* A thumbnail with more colours in use than maxcol: given maxcol of its
+ * own. FALSE: no memory. */
+static BOOL reduce(struct Thumb *t, LONG maxcol)
+{
+    UBYTE used[256], *lut;
+    UWORD *cells;
+    ULONG *hist, x, y, nused = 0, i;
+    struct Box *box;
+    LONG nb;
+    ULONG pal[256];
+    memset(used, 0, sizeof(used));
+    for (y = 0; y < t->h; y++) {
+        const UBYTE *p = t->px + y * t->mod;
+        for (x = 0; x < t->w; x++)
+            used[p[x]] = 1;
+    }
+    for (i = 0; i < 256; i++)
+        nused += used[i];
+    if (nused <= (ULONG)maxcol)
+        return TRUE;                        /* only those get pens (gfx_thumb) */
+    cells = AllocVec((ULONG)t->w * t->h * sizeof(UWORD), MEMF_ANY);
+    hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
+    lut = AllocVec(32768, MEMF_ANY);
+    box = AllocVec(256 * sizeof(struct Box), MEMF_ANY);
+    if (!cells || !hist || !lut || !box) {
+        FreeVec(cells);
+        FreeVec(hist);
+        FreeVec(lut);
+        FreeVec(box);
+        return FALSE;
+    }
+    for (y = 0; y < t->h; y++) {
+        const UBYTE *p = t->px + y * t->mod;
+        UWORD *c = cells + y * t->w;
+        for (x = 0; x < t->w; x++) {
+            ULONG v = t->pal[p[x]];
+            LONG d = (LONG)bayer[y & 3][x & 3] / 2 - 4, r, g, b;
+            r = (LONG)((v >> 16) & 255) + d;
+            g = (LONG)((v >> 8) & 255) + d;
+            b = (LONG)(v & 255) + d;
+            r = r < 0 ? 0 : r > 255 ? 31 : r >> 3;
+            g = g < 0 ? 0 : g > 255 ? 31 : g >> 3;
+            b = b < 0 ? 0 : b > 255 ? 31 : b >> 3;
+            c[x] = CELL(r, g, b);
+            hist[c[x]]++;
+        }
+    }
+    nb = median_cut(hist, box, maxcol);
+    for (i = 0; i < (ULONG)nb; i++)
+        pal[i] = box_colour(hist, &box[i], lut, i);
+    for (y = 0; y < t->h; y++) {
+        UBYTE *p = t->px + y * t->mod;
+        const UWORD *c = cells + y * t->w;
+        for (x = 0; x < t->w; x++)
+            p[x] = lut[c[x]];
+    }
+    CopyMem(pal, t->pal, nb * sizeof(ULONG));
+    t->ncol = nb;
+    FreeVec(cells);
+    FreeVec(hist);
+    FreeVec(lut);
+    FreeVec(box);
+    return TRUE;
 }
 
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
@@ -361,7 +430,15 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
             rgb[32 + i] = (rgb[i] >> 1) & 0x7F7F7F;
         n = 64;
     }
-    if (n <= (ULONG)maxcol)
-        return exact(o, sw, sh, dw, dh, rgb, n);
-    return quantise(o, sw, sh, dw, dh, rgb, maxcol);
+    {
+        /* picked pixel for pixel, as it fits or not: its colours are
+         * then cut down, if need be, on the small picture (far quicker
+         * than averaging the big one, read through its colour table) */
+        struct Thumb *t = exact(o, sw, sh, dw, dh, rgb, n);
+        if (t && !reduce(t, maxcol)) {
+            thumb_free(t);
+            t = NULL;
+        }
+        return t;
+    }
 }
