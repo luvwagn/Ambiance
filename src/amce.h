@@ -91,6 +91,7 @@ struct Gfx {
     UWORD icon_bpr, mark_bpr;   /* bytes per icon / marker mask row */
     UBYTE *mark_masks;          /* pixel style: list row marker masks */
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
+    WORD  pic_x, pic_y, pic_w, pic_h;   /* the picture on screen (pic_w 0: none) */
 };
 
 /* Design units to pixels on this screen. */

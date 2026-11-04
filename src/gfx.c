@@ -327,7 +327,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 
 void gfx_picture_free(struct Gfx *g)
 {
-    (void)g;
+    g->pic_w = g->pic_h = 0;
     if (pic_obj) {
         DisposeDTObject(pic_obj);
         pic_obj = NULL;
@@ -714,25 +714,30 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     struct BitMap *bm = NULL, *tmp;
     struct BitScaleArgs bsa;
     ULONG sw, sh, sxe, dw, dh;
+    Object *o;
 
-    gfx_picture_free(g);
+    /* The picture already on screen stays, pens and all, until the new one
+     * is drawn over it: the new one is remapped into other pens, so the old
+     * one never changes colour, and nothing is cleared first. On a planar
+     * screen clearing goes plane by plane, and the old picture showed
+     * through in the UI's colours meanwhile. */
     if (!DataTypesBase || !(g->pens_shared || g->truecolor))
         return FALSE;
-    pic_obj = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
-                          PDTA_Screen, (ULONG)g->scr, PDTA_Remap, TRUE,
-                          PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
-                          TAG_END);
-    if (!pic_obj)
+    o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
+                    PDTA_Screen, (ULONG)g->scr, PDTA_Remap, TRUE,
+                    PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
+                    TAG_END);
+    if (!o)
         return FALSE;
-    if (!DoDTMethod(pic_obj, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE)) {
-        gfx_picture_free(g);
+    if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE)) {
+        DisposeDTObject(o);
         return FALSE;
     }
-    GetDTAttrs(pic_obj, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_DestBitMap, (ULONG)&bm, TAG_END);
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_DestBitMap, (ULONG)&bm, TAG_END);
     if (!bm)
-        GetDTAttrs(pic_obj, PDTA_BitMap, (ULONG)&bm, TAG_END);
+        GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_END);
     if (!bm || !bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
-        gfx_picture_free(g);
+        DisposeDTObject(o);
         return FALSE;
     }
     sw = bmh->bmh_Width;
@@ -756,11 +761,15 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
             }
         }
     }
-    if (!dw || !dh)
+    if (!dw || !dh) {
+        DisposeDTObject(o);
         return FALSE;
+    }
     tmp = AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap);
-    if (!tmp)
+    if (!tmp) {
+        DisposeDTObject(o);
         return FALSE;
+    }
     memset(&bsa, 0, sizeof(bsa));
     bsa.bsa_SrcWidth = sw;
     bsa.bsa_SrcHeight = sh;
@@ -777,5 +786,11 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
         *drawn_h = bsa.bsa_DestHeight;
     WaitBlit();
     FreeBitMap(tmp);
+    gfx_picture_free(g);                    /* now the old one's pens can go */
+    pic_obj = o;
+    g->pic_x = x + (w - bsa.bsa_DestWidth) / 2;
+    g->pic_y = y;
+    g->pic_w = bsa.bsa_DestWidth;
+    g->pic_h = bsa.bsa_DestHeight;
     return TRUE;
 }

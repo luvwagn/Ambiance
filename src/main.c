@@ -1080,13 +1080,25 @@ static void preview_draw(struct Page *p)
     LONG n, i;
     BOOL in_header = TRUE, tall = g.h > 256;
     pv_pending = FALSE;
-    gfx_picture_free(&g);
-    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
-    if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN)
+    if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN) {
+        gfx_picture_free(&g);
+        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
         return;
+    }
+    /* The new screenshot is drawn straight over the old one (gfx_picture
+     * keeps the old one's colours until then); only what it does not cover
+     * is cleared afterwards. */
     if ((g.pens_shared || g.truecolor) && ags_screenshot_path(it->path, shot, sizeof(shot)) &&
-        gfx_picture(&g, shot, x0, y, w, (max_y - y) / 2, TRUE, &dh))
-        y += dh + U(6);
+        gfx_picture(&g, shot, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
+        gfx_fill_bg(&g, x0, y, g.pic_x - 1, y + dh - 1);                 /* left of it */
+        gfx_fill_bg(&g, g.pic_x + g.pic_w, y, g.w - 1, y + dh - 1);      /* right of it */
+        y += dh;
+    } else {
+        gfx_picture_free(&g);
+    }
+    gfx_fill_bg(&g, x0, y, g.w - 1, max_y);                             /* below: the facts */
+    if (dh)
+        y += U(6);
     n = ags_read_txt(it->path, pv_lines, FACT_LINES);
     for (i = 0; i < n; i++) {
         BOOL key = key_fact(i, pv_lines[i], &in_header);
