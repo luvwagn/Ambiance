@@ -53,8 +53,6 @@ enum {
  *                 (1024x768 2x, smaller 1x), the pixel art in whole pixels;
  *   smooth style: exactly lines / RTG_LINES (1024x768 2x, 800x600 1.56x,
  *                 640x480 1.25x), anti-aliased text, icons and logo
- *                 (also, as an experiment, on AGA hires laced at 1x, with
- *                 fewer shades and its pens obtained from the screen)
  *                 pre-rendered for that size (Fonts/amce-smooth/<lines>),
  *                 on 15/16/24/32-bit screens only. */
 enum { STYLE_PIXEL, STYLE_SMOOTH };
@@ -86,8 +84,6 @@ struct Gfx {
     BOOL  pens_shared;  /* datatypes may remap into pens 32..255 */
     BOOL  planar;       /* native planar bitmap (FALSE on RTG) */
     BOOL  truecolor;    /* RTG 15/16/24/32-bit: no pen sharing needed for pictures */
-    UBYTE ui_mask;      /* planes the UI's drawing may keep to: 0x07 (its pens are
-                         * 0-7) on native pixel screens, else 0xFF */
     UBYTE *logo_masks;          /* one chip-RAM mask per logo pen, for BltTemplate */
     UBYTE logo_pens[32], logo_npens;
     UWORD logo_bpr;             /* bytes per logo mask row */

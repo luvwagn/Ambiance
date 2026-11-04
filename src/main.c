@@ -443,7 +443,7 @@ static void build_styles(struct Page *p)
     BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
     action_item(p, "Pixel", "", ACT_STYLE_PIXEL,
                 ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    action_item(p, "Smooth", can_smooth ? "" : "RTG 16-bit+ / AGA laced", ACT_STYLE_SMOOTH,
+    action_item(p, "Smooth", can_smooth ? "" : "RTG 16-bit+ only", ACT_STYLE_SMOOTH,
                 ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
     p->sel = ui_style == STYLE_SMOOTH ? 1 : 0;
 }
@@ -778,13 +778,13 @@ static void draw_menu_row(int i)
     UBYTE fg = PEN_WHITE;       /* the menu stands out like the list headers */
     /* the menu's pens are all below 8 and its planes 3+ are clear, so on
      * native screens only planes 0-2 are written: 3/8 of the work */
-    if (g.ui_mask != 0xFF)
-        SetWriteMask(g.rp, g.ui_mask);
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
     gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
     gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, mod_names[menu[i]], fg, bg,
              g.menu_w - U(24), TS_BOLD);
-    if (g.ui_mask != 0xFF)
+    if (g.planar)
         SetWriteMask(g.rp, 0xFF);
 }
 
@@ -847,10 +847,10 @@ static void draw_title_count(struct Page *p)
     x = right - tw;
     if (count_left >= 0 && count_left < x)
         gfx_fill(&g, count_left, U(28), x - 1, U(28) + g.font_h - 1, PEN_BG);
-    if (g.ui_mask != 0xFF)
-        SetWriteMask(g.rp, g.ui_mask);           /* pens 0 and 4 only */
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);           /* pens 0 and 4 only */
     gfx_text(&g, x, U(28), count, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
-    if (g.ui_mask != 0xFF)
+    if (g.planar)
         SetWriteMask(g.rp, 0xFF);
     count_left = x;
 }
@@ -1050,8 +1050,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
      * pane is cleared on all planes when the page is drawn), so on native
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
-    if (g.ui_mask != 0xFF)
-        SetWriteMask(g.rp, g.ui_mask);
+    if (g.planar)
+        SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
     if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
@@ -1063,7 +1063,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         right -= tagw + U(8);
     }
     gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
-    if (g.ui_mask != 0xFF)
+    if (g.planar)
         SetWriteMask(g.rp, 0xFF);
 }
 
@@ -1122,7 +1122,7 @@ static void blit_rows(LONG src, LONG dst, LONG n)
         return;
     LockLayerRom(g.win->WLayer);
     BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
-              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.ui_mask, NULL);
+              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? 0x07 : 0xFF, NULL);
     UnlockLayerRom(g.win->WLayer);
 }
 
@@ -1621,7 +1621,7 @@ static void apply_style(int st)
             up->sel = SETTINGS_STYLE_ROW;
         }
         if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
-            set_msg("Smooth: on 16-bit+ RTG or AGA hires laced screens");
+            set_msg("Smooth: on RTG screens of 16 bits or more");
         return;
     }
     pages_clear();
@@ -1651,7 +1651,7 @@ static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
         if (it->action == ACT_STYLES)
-            set_msg("Style: Smooth needs 16-bit+ RTG or AGA hires laced");
+            set_msg("Style: Smooth needs an RTG screen of 16 bits or more");
         return;
     }
     if (it->action == ACT_SCREENMODES)

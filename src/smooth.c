@@ -18,12 +18,6 @@
  *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
- *
- * Experiment: AGA hires laced (8 planes, 256 colours). There the shades are
- * fewer (3 steps, so at most 3 stamps a text) and every in-between pen is
- * obtained from the screen's colour map (ObtainPen), so a screenshot's
- * datatype, which shares the other pens, never takes or recolours one;
- * at most NATIVE_PENS of them, leaving the rest for pictures.
  */
 #include "amce.h"
 
@@ -43,8 +37,6 @@
 #define PHASES      4           /* each glyph at 0, 1/4, 1/2, 3/4 of a pixel */
 #define FIRST_PEN   32          /* below: UI pens 0-15, the screen's 16-31 */
 #define MAX_TEXT_W  2048        /* widest text drawn in one go, in pixels */
-#define NATIVE_STEPS 3          /* coverage steps on a native screen (RTG: 7) */
-#define NATIVE_PENS  96         /* pens the smooth style may take there */
 
 struct Face {
     UWORD lo, hi;
@@ -75,12 +67,10 @@ struct Smooth {
     UBYTE used;                 /* bit n: mask n has pixels */
     UBYTE blend[NUM_UI_PENS][NUM_UI_PENS][SMOOTH_LEVELS];
     UWORD next_pen, last_pen;
-    UBYTE steps;                /* coverage steps drawn: 7 (RTG) or NATIVE_STEPS */
-    UBYTE step_of[16];          /* coverage 0..15 -> step 0..steps */
-    BOOL  native;               /* pens obtained from a shared colour map */
-    UWORD nobtained;
-    UBYTE obtained[NATIVE_PENS];
 };
+
+/* coverage 0..15 -> step 0..SMOOTH_LEVELS-1 */
+static const UBYTE step_of[16] = { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7 };
 
 static UWORD rd16(const UBYTE *p) { return (UWORD)((p[0] << 8) | p[1]); }
 static ULONG rd32(const UBYTE *p)
@@ -224,27 +214,14 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
 {
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
     UWORD count = cm ? cm->Count : 0;
-    int v;
     s->g = g;
     memset(s->blend, 0, sizeof(s->blend));
     s->next_pen = FIRST_PEN;
     s->last_pen = count > 256 ? 255 : count ? count - 1 : 0;
-    s->native = !g->truecolor;
-    s->nobtained = 0;
-    s->steps = s->native ? NATIVE_STEPS : SMOOTH_LEVELS - 1;
-    for (v = 0; v < 16; v++)
-        s->step_of[v] = (UBYTE)((v * s->steps + 7) / 15);
 }
 
 void sm_detach(struct Smooth *s)
 {
-    if (s->g && s->g->scr && s->nobtained) {
-        struct ColorMap *cm = s->g->scr->ViewPort.ColorMap;
-        UWORD i;
-        for (i = 0; i < s->nobtained; i++)
-            ReleasePen(cm, s->obtained[i]);
-    }
-    s->nobtained = 0;
     if (s->scratch) {
         WaitBlit();
         FreeMem(s->scratch, s->scratch_size);
@@ -269,24 +246,7 @@ static ULONG ui_rgb(UBYTE pen, int c)
 static UBYTE alloc_rgb(struct Smooth *s, ULONG r, ULONG gg, ULONG b)
 {
     UBYTE pen;
-    if (!s->g)
-        return 0;
-    if (s->native) {
-        /* a free pen of the shared map, ours alone until the screen closes */
-        LONG p;
-        if (s->nobtained >= NATIVE_PENS)
-            return 0;
-        p = ObtainPen(s->g->scr->ViewPort.ColorMap, (ULONG)-1, r * 0x01010101UL,
-                      gg * 0x01010101UL, b * 0x01010101UL, PEN_EXCLUSIVE);
-        if (p < NUM_UI_PENS || p > 255) {
-            if (p >= 0)
-                ReleasePen(s->g->scr->ViewPort.ColorMap, p);
-            return 0;
-        }
-        s->obtained[s->nobtained++] = (UBYTE)p;
-        return (UBYTE)p;
-    }
-    if (s->next_pen > s->last_pen)
+    if (!s->g || s->next_pen > s->last_pen)
         return 0;
     pen = (UBYTE)s->next_pen++;
     SetRGB32(&s->g->scr->ViewPort, pen, r * 0x01010101UL, gg * 0x01010101UL, b * 0x01010101UL);
@@ -302,20 +262,20 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
     (void)g;
     if (lv == 0)
         return bg;
-    if (lv >= s->steps || fg == bg)
+    if (lv >= SMOOTH_LEVELS - 1 || fg == bg)
         return fg;
     if (fg >= NUM_UI_PENS || bg >= NUM_UI_PENS)
-        return lv * 2 >= s->steps ? fg : bg;
+        return lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg;
     slot = &s->blend[fg][bg][lv];
     if (*slot)
         return *slot;
     for (c = 0; c < 3; c++) {
         LONG a = (LONG)ui_rgb(bg, c), d = (LONG)ui_rgb(fg, c) - a;
-        rgb[c] = (ULONG)(a + d * lv / s->steps);
+        rgb[c] = (ULONG)(a + d * lv / (SMOOTH_LEVELS - 1));
     }
     pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
     if (!pen)                               /* out of pens: nearest end */
-        return lv * 2 >= s->steps ? fg : bg;
+        return lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg;
     *slot = pen;
     return pen;
 }
@@ -359,7 +319,7 @@ static void masks_put(struct Smooth *s, const UBYTE *d, UWORD w, UWORD h, WORD x
     UBYTE used = s->used;
     for (j = 0; j < h; j++, roff += bpr) {
         for (i = 0; i < w; i++, n++) {
-            UBYTE lv = s->step_of[nib(d, n)];
+            UBYTE lv = step_of[nib(d, n)];
             if (lv) {
                 UWORD bx = x + i;
                 s->pl[lv][roff + (bx >> 3)] |= 0x80 >> (bx & 7);
@@ -385,7 +345,7 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         for (j = 0; j < h; j++, roff += s->bpr) {
             for (i = 0; i < nb; i++) {
                 UBYTE b = 0;
-                for (lv = 1; lv <= s->steps; lv++)
+                for (lv = 1; lv < SMOOTH_LEVELS; lv++)
                     b |= s->pl[lv][roff + i];
                 s->pl[0][roff + i] = (UBYTE)~b & (i == nb - 1 ? last : 0xFF);
             }
@@ -393,7 +353,7 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         SetAPen(rp, bg);
         BltTemplate((PLANEPTR)s->pl[0], 0, s->bpr, rp, x, y, w, h);
     }
-    for (lv = 1; lv <= s->steps; lv++)
+    for (lv = 1; lv < SMOOTH_LEVELS; lv++)
         if (s->used & (1 << lv)) {
             UBYTE pen = sm_pen(s, g, fg, bg, lv);
             PLANEPTR m = (PLANEPTR)s->pl[lv];
