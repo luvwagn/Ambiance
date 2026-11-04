@@ -38,6 +38,7 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/datatypes.h>
+#include <clib/alib_protos.h>
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DataTypesBase;
@@ -373,7 +374,7 @@ static struct BitMap *direct_bitmap(struct Gfx *g, Object *o, ULONG sw, ULONG sh
     pbpa.pbpa_Top = 0;
     pbpa.pbpa_Width = sw;
     pbpa.pbpa_Height = sh;
-    if (!DoDTMethodA(o, NULL, NULL, (Msg)&pbpa)) {
+    if (!DoMethodA(o, (Msg)&pbpa)) {       /* not DoDTMethodA: see gfx.c own_remap */
         FreeVec(buf);
         FreeBitMap(bm);
         return NULL;

@@ -30,6 +30,7 @@ static struct MsgPort *reply_port;  /* ours */
 static struct Task *parent;
 static BYTE start_sig = -1;
 static BOOL running;
+struct Task *ldr_task;              /* the loader process (log: which task a guru names) */
 static LONG out;                    /* jobs sent and not back */
 
 static void run(struct LJob *j)
@@ -152,9 +153,9 @@ BOOL ldr_start(void)
         return FALSE;
     SetSignal(0, 1UL << start_sig);
     job_port = NULL;
-    if (!CreateNewProcTags(NP_Entry, (ULONG)loader_main, NP_Name, (ULONG)"AmigaMCE loader",
+    if (!(ldr_task = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)loader_main, NP_Name, (ULONG)"AmigaMCE loader",
                            NP_StackSize, 32768, NP_Priority, -1,
-                           NP_WindowPtr, (ULONG)-1, TAG_END)) {
+                           NP_WindowPtr, (ULONG)-1, TAG_END))) {
         FreeSignal(start_sig);
         start_sig = -1;
         return FALSE;

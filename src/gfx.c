@@ -22,6 +22,7 @@
 #include <proto/intuition.h>
 #include <proto/diskfont.h>
 #include <proto/datatypes.h>
+#include <clib/alib_protos.h>
 #include <stdio.h>
 
 extern struct GfxBase *GfxBase;
@@ -866,7 +867,10 @@ static struct BitMap *own_remap(struct Gfx *g, Object *o, ULONG sw, ULONG sh,
     pbpa.pbpa_Top = 0;
     pbpa.pbpa_Width = sw;
     pbpa.pbpa_Height = sh;
-    got = DoDTMethodA(o, NULL, NULL, (Msg)&pbpa) != 0;
+    /* DoMethodA, not DoDTMethodA: that goes through DoGadgetMethodA, which
+     * puts a GadgetInfo (NULL here) in every message's second longword --
+     * here the pixel buffer's address, so the pixels went to address 0 */
+    got = DoMethodA(o, (Msg)&pbpa) != 0;
     if (!got && src && (row = AllocBitMap(sw, 1, GetBitMapAttr(src, BMA_DEPTH), 0, NULL))) {
         InitRastPort(&srp);
         srp.BitMap = src;

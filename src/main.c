@@ -4503,7 +4503,11 @@ int main(void)
             UnLock(l);
             amce_log("loader", "off (AmigaMCE.noloader)");
         } else if (ldr_start()) {
-            amce_log("loader", "started");
+            extern struct Task *ldr_task;
+            char m[64];
+            sprintf(m, "started (tasks: AmigaMCE %08lx, loader %08lx)", (unsigned long)FindTask(NULL),
+                    (unsigned long)ldr_task);
+            amce_log("loader", m);
         } else {
             amce_log("loader", "could not start: reading in the UI");
         }
