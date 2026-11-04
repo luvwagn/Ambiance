@@ -4058,8 +4058,11 @@ static struct {
     ULONG worst;            /* the longest frame meanwhile (log) */
 } hold;
 
-/* Long titled lists, held past cruising: a whole letter a step. */
-#define LETTER_MIN_LIST 200 /* entries a list needs for that */
+/* Long titled lists, held past cruising: a whole letter a step. Shorter
+ * ones glide on smoothly, the big letter going by: one of 1,000 entries
+ * is crossed in about 4 s that way (top speed, LIST_BOOST x cruising),
+ * and a letter at a time would skip most of it. */
+#define LETTER_MIN_LIST 1000    /* entries a list needs for that */
 #define LETTERS_MIN   4     /* letters a second to begin with, */
 #define LETTERS_MAX  12     /* rising to this over HOLD_BOOST */
 
