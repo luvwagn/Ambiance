@@ -71,6 +71,7 @@ struct PicInfo {
     UWORD w, h, depth;          /* depth > 8: true colour */
     ULONG mode;                 /* its display mode ID (HAM, EHB, hires...) */
     char  fmt[16];              /* the datatype's name: "ILBM", "GIF"... */
+    char  cls[24];              /* the class that read it: "warpjpeg"... ("" ilbm.c) */
 };
 struct Gfx {
     struct Screen   *scr;

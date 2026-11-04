@@ -2450,14 +2450,15 @@ static void pv_draw_picture(void)
          * drawing; and in all since the selection came to rest */
         sprintf(m, "%.60s, %lu x %lu, depth %lu: %s%lu ms to start, %s in %lu ms, "
                    "made %lu x %lu, %lu colours, in %lu ms, drawn in %lu ms; "
-                   "shown %lu ms after the move",
+                   "shown %lu ms after the move%s%s%s",
                 FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
                 (unsigned long)j->info.depth, j->urgent ? "" : "read ahead, ",
                 (unsigned long)(j->t_begun - j->t_sent), j->own ? "read by AmigaMCE" : "decoded",
                 (unsigned long)j->ms_decode, (unsigned long)j->thumb->w,
                 (unsigned long)j->thumb->h, (unsigned long)j->thumb->ncol,
                 (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
-                (unsigned long)(now - pv_since));
+                (unsigned long)(now - pv_since), j->info.cls[0] ? " (" : "",
+                j->info.cls, j->info.cls[0] ? ".datatype)" : "");
         amce_log("preview", m);
     } else if (j && j->obj) {
         ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
@@ -3614,10 +3615,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                            pre, remapped, pre_t, &pre_i);
             {
                 char m[200];
-                sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s", l->items[want].label,
+                sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s, %s.datatype", l->items[want].label,
                         (unsigned long)pi.w, (unsigned long)pi.h, (unsigned long)pi.depth,
                         (unsigned long)(time_ms() - t0),
-                        pre || pre_t ? " (read ahead)" : "");
+                        pre || pre_t ? " (read ahead)" : "", pi.cls[0] ? pi.cls : "?");
                 amce_log("viewer", m);
             }
             shown = want;

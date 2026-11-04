@@ -257,6 +257,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     pi->depth = planes;
     pi->mode = camg;
     strcpy(pi->fmt, "ILBM");
+    pi->cls[0] = 0;
 out:
     FreeVec(row);
     FreeVec(xoff);

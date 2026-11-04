@@ -907,8 +907,11 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi)
     GetDTAttrs(o, PDTA_ModeID, (ULONG)&mode, DTA_DataType, (ULONG)&dtn, TAG_END);
     pi->mode = mode == (ULONG)INVALID_ID ? 0 : mode;
     pi->fmt[0] = 0;
+    pi->cls[0] = 0;
     if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_Name)
         amce_strlcpy(pi->fmt, (const char *)dtn->dtn_Header->dth_Name, sizeof(pi->fmt));
+    if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_BaseName)
+        amce_strlcpy(pi->cls, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(pi->cls));
 }
 
 void pic_describe(const struct PicInfo *pi, char *out, LONG max)
