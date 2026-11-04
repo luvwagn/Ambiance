@@ -63,6 +63,8 @@ static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on deep RTG screens) */
 static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
+static struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
+static struct ItemList pv_list;     /* its wrapped lines */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
@@ -90,6 +92,7 @@ static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
 static struct Page *page_push(UBYTE type, const char *title)
 {
     ov.on = FALSE;
+    tb_close(&pv_tb);
     struct Page *p;
     if (depth >= MAXDEPTH)
         return NULL;
@@ -106,6 +109,7 @@ static struct Page *page_push(UBYTE type, const char *title)
 static void page_pop(void)
 {
     ov.on = FALSE;
+    tb_close(&pv_tb);
     if (!depth)
         return;
     gfx_picture_free(&g);
@@ -130,11 +134,10 @@ static WORD textbox_w(void)
     return g.pane_w - U(7);
 }
 
-/* Word-wrap a paragraph to the text box width. */
-static void text_para(struct Page *p, const char *s)
+/* Word-wrap a paragraph into l, maxw pixels wide. */
+static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
 {
     char line[160], word[96];
-    WORD maxw = textbox_w();
     line[0] = 0;
     while (*s) {
         LONG n = 0;
@@ -151,14 +154,20 @@ static void text_para(struct Page *p, const char *s)
             amce_strlcat(tryline, " ", sizeof(tryline));
         amce_strlcat(tryline, word, sizeof(tryline));
         if (line[0] && gfx_textlen(&g, tryline, TS_BODY) > maxw) {
-            text_line(p, line);
+            list_add(l, line, "", "", IT_TEXT);
             amce_strlcpy(line, word, sizeof(line));
         } else {
             amce_strlcpy(line, tryline, sizeof(line));
         }
     }
     if (line[0])
-        text_line(p, line);
+        list_add(l, line, "", "", IT_TEXT);
+}
+
+/* Word-wrap a paragraph to the text box width. */
+static void text_para(struct Page *p, const char *s)
+{
+    wrap_into(&p->list, s, textbox_w());
 }
 
 /* ------------------------------------------------------------ AGS views */
@@ -1022,64 +1031,14 @@ static BOOL pv_pending;
 static ULONG pv_due;
 static char pv_lines[FACT_LINES][96];
 
-/* Fact sheet lines worth a glance on a short screen: the header (title,
- * developer, year and publisher) and genre and players. */
-static BOOL key_fact(LONG i, const char *line, BOOL *in_header)
-{
-    if (!line[0]) {
-        *in_header = FALSE;
-        return FALSE;
-    }
-    if (*in_header || i == 0)
-        return TRUE;
-    return starts_nocase(line, "Genre", NULL) || starts_nocase(line, "Players", NULL);
-}
-
-/* Draw s word-wrapped from (x, *y) in width w, below max_y; FALSE when
- * out of room. */
-static BOOL wrap_text(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen, int ts)
-{
-    char line[100];
-    while (*s) {
-        LONG n = strlen(s), fit = n, cut;
-        if (*y + g.font_h > max_y)
-            return FALSE;
-        if (fit > (LONG)sizeof(line) - 1)
-            fit = sizeof(line) - 1;
-        for (;;) {                          /* the longest start of s that fits */
-            amce_strlcpy(line, s, fit + 1);
-            if (fit <= 1 || gfx_textlen(&g, line, ts) <= w)
-                break;
-            fit--;
-        }
-        cut = fit;
-        if (fit < n) {                      /* break at a space if there is one */
-            LONG b = fit;
-            while (b > 0 && s[b] != ' ')
-                b--;
-            if (b > 0)
-                cut = b;
-        }
-        if (cut <= 0)
-            cut = 1;
-        amce_strlcpy(line, s, cut + 1);
-        gfx_text(&g, x, *y, line, pen, PEN_BG, 0, ts);
-        *y += g.font_h + U(1);
-        s += cut;
-        while (*s == ' ')
-            s++;
-    }
-    return TRUE;
-}
-
 static void preview_draw(struct Page *p)
 {
     WORD x0 = aside_x(), w = aside_width() - U(4), y = g.list_top, max_y = g.footer_y - 2, dh = 0;
     struct Item *it;
     char shot[300];
     LONG n, i;
-    BOOL in_header = TRUE, tall = g.h > 256;
     pv_pending = FALSE;
+    tb_close(&pv_tb);
     if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN) {
         gfx_picture_free(&g);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
@@ -1099,19 +1058,24 @@ static void preview_draw(struct Page *p)
     gfx_fill_bg(&g, x0, y, g.w - 1, max_y);                             /* below: the facts */
     if (dh)
         y += U(6);
+    /* the whole fact sheet, in a text box with a scroll bar when it is
+     * longer than the room left (wheel or bar; Up/Down stay with the list) */
+    if (pv_list.pool)
+        list_free(&pv_list);
+    if (!list_init(&pv_list))
+        return;
     n = ags_read_txt(it->path, pv_lines, FACT_LINES);
     for (i = 0; i < n; i++) {
-        BOOL key = key_fact(i, pv_lines[i], &in_header);
-        if (!tall && !key)
-            continue;
-        if (!pv_lines[i][0]) {
-            y += g.font_h / 2;              /* a blank line: half a line */
-            continue;
-        }
-        if (!wrap_text(x0, &y, w, max_y, pv_lines[i], i == 0 ? PEN_WHITE : PEN_TEXT,
-                       i == 0 ? TS_BOLD : TS_SMALL))
-            break;
+        if (!pv_lines[i][0])
+            list_add(&pv_list, "", "", "", IT_TEXT);
+        else
+            wrap_into(&pv_list, pv_lines[i], w - U(7));
     }
+    if (!pv_list.count || max_y - y < g.font_h)
+        return;
+    pv_tb.pos = pv_tb.target = 0;
+    if (tb_open(&g, &pv_tb, x0, y, w - U(7), max_y - y + 1, &pv_list, TRUE))
+        tb_draw(&g, &pv_tb);
 }
 
 /* The selection changed (or the list was drawn): preview it once it rests. */
@@ -1186,8 +1150,10 @@ static void ov_show(struct Page *p)
         return;
     ov.on = TRUE;
     ov.linger = 0;
-    if (has_aside(p))
+    if (has_aside(p)) {
         gfx_picture_free(&g);       /* the preview gives way to the letter */
+        tb_close(&pv_tb);
+    }
     /* hand the strip to the letter: clear it once, then stamp */
     gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
     ov_stamp();
@@ -1667,6 +1633,10 @@ static void act_wheel(LONG d, WORD x, WORD y)
     struct Page *p = cur();
     BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
     BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
+    if (over_pane && pv_tb.open && p && has_aside(p) && x >= aside_x()) {
+        tb_scroll_by(&pv_tb, d * 3 * pv_tb.line_h);     /* the preview's fact sheet */
+        return;
+    }
     if (over_menu && focus != FOCUS_MENU)
         set_focus(FOCUS_MENU);
     else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
@@ -2097,6 +2067,8 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
         pane_settle();              /* a click outside the menu acts on the section */
     tb = cur_tb();
+    if (!tb && pv_tb.open)
+        tb = &pv_tb;                /* the preview pane's fact sheet */
     if (im->Class == IDCMP_MOUSEMOVE) {
         if (tb)
             tb_mouse_move(tb, y);
@@ -2386,7 +2358,8 @@ int main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending;
+        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
+                    tb_animating(&pv_tb);
         ULONG sig;
         if (busy) {
             sig = SetSignal(0, mask) & mask;
@@ -2446,13 +2419,15 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win && (hold_active() || pane_pending || pv_pending ||
+        if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();
             WaitTOF();
             dbg_sleep_end();
             pane_tick();
             preview_tick();
+            if (tb_animating(&pv_tb))
+                tb_step(&g, &pv_tb);
             hold_tick();
             if ((atb = cur_tb()) && tb_animating(atb))
                 tb_step(&g, atb);

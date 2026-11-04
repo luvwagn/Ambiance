@@ -713,7 +713,7 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL, *tmp;
     struct BitScaleArgs bsa;
-    ULONG sw, sh, sxe, dw, dh;
+    ULONG sw, sh, sxe, sye, dw, dh;
     Object *o;
 
     /* The picture already on screen stays, pens and all, until the new one
@@ -745,19 +745,26 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     /* A lowres picture on a tall-pixel hires screen: double its width to
      * keep its shape. */
     sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;
-    /* fit (sw*sxe) x sh into w x h: a whole scale if 1x fits, so pixels
-     * stay square-edged, else shrunk to fit */
+    /* AGS's screenshots are 320 x 128: every other line of a 320 x 256
+     * screen. Anything 2.5:1 or wider is taken as such and shown twice as
+     * tall, the shape of the screen it came from. */
+    sye = sw * 2 >= sh * 5 ? 2 : 1;
+    if (sxe == 2 && sye == 2)
+        sxe = sye = 1;                      /* the same shape, half the size */
+    /* fit (sw*sxe) x (sh*sye) into w x h: a whole scale if 1x fits, so
+     * pixels stay square-edged, else shrunk to fit */
     {
-        ULONG kw = (ULONG)w / (sw * sxe), kh = (ULONG)h / sh, k = kw < kh ? kw : kh;
+        ULONG ew = sw * sxe, eh = sh * sye;
+        ULONG kw = (ULONG)w / ew, kh = (ULONG)h / eh, k = kw < kh ? kw : kh;
         if (whole && k >= 1) {
-            dw = sw * sxe * k;
-            dh = sh * k;
+            dw = ew * k;
+            dh = eh * k;
         } else {
             dw = w;
-            dh = (sh * w) / (sw * sxe);
+            dh = (eh * w) / ew;
             if (dh > (ULONG)h) {
                 dh = h;
-                dw = (sw * sxe * h) / sh;
+                dw = (ew * h) / eh;
             }
         }
     }
