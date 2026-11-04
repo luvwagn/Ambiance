@@ -138,6 +138,8 @@ WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
+extern UBYTE gfx_eq_frame;      /* MARK_PLAYING's bars: the frame of their dance */
+extern BOOL gfx_eq_still;       /*   and still (paused, stopped) */
 const struct BigLetter *gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h);  /* NULL: none */
 void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE pen);
 
@@ -246,7 +248,8 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* 
 enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD };
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
-       MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */ };
+       MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
+       MARK_PLAYING /* the music playing now: dancing bars, drawn (not a bitmap) */ };
 
 struct Item {
     char  *label;       /* what the user sees */

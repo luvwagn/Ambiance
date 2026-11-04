@@ -909,10 +909,43 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
 
 /* A list row marker (sub-menu chevron, checkbox, radio button): every one
  * is MARK_SIZE design units square, so a state change never moves text. */
+/* MARK_PLAYING: four bars, a level meter dancing (frames of heights, in
+ * the marker's 11 design units), low and still when the music is paused. */
+UBYTE gfx_eq_frame;
+BOOL gfx_eq_still;
+
+static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
+{
+    static const UBYTE dance[8][4] = {
+        { 4, 9, 6, 10 }, { 7, 5, 9, 6 }, { 10, 7, 4, 8 }, { 6, 10, 7, 4 },
+        { 8, 4, 10, 7 }, { 5, 8, 6, 11 }, { 9, 6, 8, 4 }, { 6, 11, 5, 9 }
+    };
+    static const UBYTE still[4] = { 3, 5, 4, 6 };
+    WORD n = g->mark_px, bw = n * 2 / 11, gap, i, left;
+    const UBYTE *h = gfx_eq_still ? still : dance[gfx_eq_frame & 7];
+    if (bw < 1)
+        bw = 1;
+    gap = (n - 4 * bw) / 3;
+    if (gap < 1)
+        gap = 1;
+    left = x + (n - (4 * bw + 3 * gap)) / 2;
+    gfx_fill(g, x, y, x + n - 1, y + n - 1, bg);
+    for (i = 0; i < 4; i++) {
+        WORD bh = (WORD)((LONG)n * h[i] / 11), bx = left + i * (bw + gap);
+        if (bh < 1)
+            bh = 1;
+        gfx_fill(g, bx, y + n - bh, bx + bw - 1, y + n - 1, fg);
+    }
+}
+
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     dirty = TRUE;
     PLANEPTR m;
+    if (mark == MARK_PLAYING) {
+        eq_bars(g, x, y, fg, bg);
+        return;
+    }
     if (mark < MARK_ARROW || mark > MARK_PLAY)
         return;
     if (g->sm) {

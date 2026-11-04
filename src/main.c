@@ -3727,7 +3727,8 @@ static void np_mark_lists(BOOL redraw)
         for (i = 0; i < p->list.count; i++) {
             struct Item *it = &p->list.items[i];
             if (it->kind == IT_MOD)
-                it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAY : MARK_NONE;
+                it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAYING
+                                                                                : MARK_NONE;
         }
     }
     if (redraw && !pane_pending && cur() && cur()->type == PT_LIST && cur()->mods)
@@ -3909,9 +3910,61 @@ static void mods_play_item(struct Page *p)
     }
 }
 
+/* A Mods list on screen with the playing module in it. */
+static BOOL np_list_on(void)
+{
+    struct Page *p = pane_pending ? NULL : cur();
+    return p && p->type == PT_LIST && p->mods && mp_loaded();
+}
+
+/* The bars by the playing module (and Now playing) drawn again: the next
+ * frame of their dance, or still. Just the markers, without a flip. */
+static void np_eq_redraw(void)
+{
+    struct Page *p = cur();
+    LONG i, end;
+    if (!np_list_on())
+        return;
+    end = p->top + list_visible();
+    if (end > p->list.count)
+        end = p->list.count;
+    for (i = p->top; i < end; i++) {
+        struct Item *it = &p->list.items[i];
+        WORD y;
+        BOOL sel, was;
+        UBYTE bg;
+        if (it->mark != MARK_PLAYING)
+            continue;
+        y = g.list_top + (i - p->top) * g.list_row_h + (g.list_row_h - g.mark_px) / 2;
+        sel = i == p->sel;
+        bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM)
+                 : mouse_mode && i - p->top == hover_row ? PEN_RULE : PEN_BG;
+        was = gfx_quiet_begin();
+        gfx_mark(&g, MARK_PLAYING, g.pane_x, y, sel ? PEN_WHITE : PEN_TEXT, bg);
+        gfx_quiet_end(&g, was, g.pane_x, y, g.pane_x + g.mark_px - 1, y + g.mark_px - 1);
+    }
+}
+
+/* The bars' dance: a frame every 120 ms while the music plays. */
+static void np_eq_tick(void)
+{
+    static ULONG last;
+    BOOL still = !mp_playing();
+    ULONG now = time_ms();
+    if (still != gfx_eq_still) {
+        gfx_eq_still = still;
+        np_eq_redraw();
+    } else if (!still && now - last >= 120) {
+        last = now;
+        gfx_eq_frame++;
+        np_eq_redraw();
+    }
+}
+
 /* The timer tick: the next module at a song's end, the page kept up. */
 static void np_tick(void)
 {
+    np_eq_tick();
     if (mp_running() && mp_ended() && !np.ended_seen) {
         np.ended_seen = TRUE;
         if (mp_subsong_step(1)) {           /* a module of several songs: the next */
@@ -4023,7 +4076,7 @@ static void build_mods_root(void)
             mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
             t = label;
         }
-        action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAY);
+        action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAYING);
     }
     if (mods)
         list_add(&p->list, "Modules", MODS_ROOT, "", IT_DIR);
@@ -5940,7 +5993,8 @@ static int app_main(void)
                  * spinner (each step, every 80 ms, then comes on time);
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
-                tick_us = (joy_present || ov.on || pv_spinning() || np_live()) ? 40000 : 200000;
+                tick_us = (joy_present || ov.on || pv_spinning() || np_live() ||
+                           (np_list_on() && mp_playing())) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
