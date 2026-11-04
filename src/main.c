@@ -1954,16 +1954,25 @@ static void pv_spinner(BOOL first)
     static const BYTE dy[8] = { -12, -8, 0, 8, 12, 8, 0, -8 };
     WORD x0 = aside_x(), w = aside_width() - U(4);
     WORD cx = x0 + w / 2, cy = pv_box_y + pv_box_h / 2 - U(8), r = U(3), ring = U(12), i;
+    WORD sy = gfx_mode_tall(g.mode) ? 2 : 1;    /* tall pixels: half as many down */
+    WORD ry, ringy;
     if (r < 2)
         r = 2;
+    if (sy == 2 && r < 4) {
+        r = 4;                                  /* rows enough to look round, */
+        ring = ring * 4 / 3;                    /* and room for them on the ring */
+    }
+    ry = (r + sy - 1) / sy;
+    ringy = ring / sy;
     if (first) {
         WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-        gfx_text(&g, cx - tw / 2, cy + ring + r + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
+        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
     }
-    gfx_fill(&g, cx - ring - r, cy - ring - r, cx + ring + r, cy + ring + r, PEN_BG);
+    gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
     for (i = 0; i < 8; i++)
-        gfx_dot(&g, cx + U(dx[i]), cy + U(dy[i]), r, pens[(pv_spin_phase - i) & 7], PEN_BG);   /* the tail behind */
+        gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
+                pens[(pv_spin_phase - i) & 7], PEN_BG);
 }
 
 /* The timer: turn the spinner while the picture is not there yet. */

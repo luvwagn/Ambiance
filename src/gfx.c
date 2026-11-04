@@ -404,35 +404,42 @@ void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
 /* Clear to the background, high planes first. A planar fill writes one
  * plane at a time; clearing planes 3+ first means a pixel caught halfway
  * shows one of the dark UI pens 0-7, not a stray colour such as pen 8. */
-/* A filled circle of radius r (pixels) centred on (cx, cy), over bg. In
- * the smooth style its edge is anti-aliased (4 x 4 samples a pixel, in
- * the text's blend pens); in the pixel style it is whole pixels. */
+/* A filled circle of radius r (pixels across) centred on (cx, cy), over
+ * bg: round on the monitor, so half as many pixels tall on a screen with
+ * tall pixels (640 x 200/256). In the smooth style its edge is
+ * anti-aliased (4 x 4 samples a pixel, in the text's blend pens); in the
+ * pixel style it is whole pixels. */
 void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
 {
-    LONG rr = (LONG)r * r * 64;             /* r squared, in eighths of a pixel */
-    WORD x, y;
+    LONG rx8, ry8, lim;                     /* radii in eighths of a pixel */
+    WORD x, y, ry;
     if (r < 1)
         r = 1;
+    rx8 = 8L * r;
+    ry8 = gfx_mode_tall(g->mode) ? 4L * r : 8L * r;
+    ry = (WORD)((ry8 + 7) / 8);
+    lim = rx8 * rx8 * ry8 * ry8;
+#define INSIDE(px, py) ((px) * (px) * ry8 * ry8 + (py) * (py) * rx8 * rx8 <= lim)
     SetWriteMask(g->rp, 0xFF);
     if (!g->sm) {
         /* whole pixels: a run per row, inside if the pixel's centre is */
         SetAPen(g->rp, pen);
-        for (y = -r; y < r; y++) {
+        for (y = -ry; y < ry; y++) {
             LONG py = 8 * y + 4, half = 0;
-            while ((8 * half + 4) * (8 * half + 4) + py * py <= rr)
+            while (half < r && INSIDE(8 * half + 4, py))
                 half++;
             if (half)
                 RectFill(g->rp, cx - half, cy + y, cx + half - 1, cy + y);
         }
         return;
     }
-    for (y = -r; y < r; y++)
+    for (y = -ry; y < ry; y++)
         for (x = -r; x < r; x++) {
             int i, j, n = 0;
             for (j = 0; j < 4; j++)
                 for (i = 0; i < 4; i++) {
                     LONG px = 8 * x + 2 * i + 1, py = 8 * y + 2 * j + 1;
-                    if (px * px + py * py <= rr)
+                    if (INSIDE(px, py))
                         n++;
                 }
             if (n) {
@@ -440,6 +447,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
                 WritePixel(g->rp, cx + x, cy + y);
             }
         }
+#undef INSIDE
 }
 
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
