@@ -214,6 +214,8 @@ BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
     return l != 0;
 }
 
+static void blk_reserve(struct Gfx *g);
+
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 {
     static UWORD pens[] = { (UWORD)~0 };
@@ -324,11 +326,160 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
+    blk_reserve(g);
     return TRUE;
 }
 
 static UBYTE pic_pens[256];     /* pens the picture on screen holds (own remap) */
 static UWORD pic_npens;
+
+/* ---- the preview's two blocks of pens (256-colour screens).
+ * As AGS does, the preview's colours go straight into pens kept for it,
+ * not matched one by one to free pens (ObtainBestPen, a scan of the whole
+ * palette per colour: most of the 0.5 s a preview took to draw). Two
+ * blocks, so a new picture is drawn in one while the old one is still in
+ * the other. And since its colours are its own, a picture fades: drawn
+ * in the background's colour (unseen), its block's colours then brought
+ * up over a few frames; and down again when the selection moves on, so
+ * the old picture never stands next to the new entry's text. */
+#define BLK_MAX  112            /* pens a block, at most */
+#define BLK_KEEP  64            /* free pens left for everyone else */
+#define FADE_MS   80            /* a fade: 4 frames */
+static UBYTE blk_pen[2][BLK_MAX];
+static UWORD blk_n;             /* pens in each block; 0: no blocks */
+static ULONG blk_rgb[2][BLK_MAX];   /* each block's picture's colours, 0xRRGGBB */
+static UWORD blk_ncol[2];
+static int blk_on = -1;         /* the block of the picture on screen */
+static ULONG blk_bg;            /* the background's colour, 0xRRGGBB */
+static struct {
+    BOOL on;
+    UWORD from, to;             /* levels, 0 (background) .. 256 (its colours) */
+    ULONG t0;
+} fade[2];
+static UWORD blk_level[2];
+
+static void blk_set(struct Gfx *g, int b, UWORD level)
+{
+    struct ViewPort *vp = &g->scr->ViewPort;
+    LONG br = (blk_bg >> 16) & 255, bgg = (blk_bg >> 8) & 255, bb = blk_bg & 255;
+    UWORD i;
+    for (i = 0; i < blk_ncol[b]; i++) {
+        ULONG c = blk_rgb[b][i];
+        LONG r = br + ((((LONG)(c >> 16) & 255) - br) * level >> 8);
+        LONG gg = bgg + ((((LONG)(c >> 8) & 255) - bgg) * level >> 8);
+        LONG bl = bb + ((((LONG)c & 255) - bb) * level >> 8);
+        SetRGB32(vp, blk_pen[b][i], (ULONG)r * 0x01010101UL, (ULONG)gg * 0x01010101UL,
+                 (ULONG)bl * 0x01010101UL);
+    }
+    blk_level[b] = level;
+}
+
+static void blk_reserve(struct Gfx *g)
+{
+    struct ColorMap *cm = g->scr->ViewPort.ColorMap;
+    struct PaletteExtra *pe = cm->PalExtra;
+    ULONG rgb[3];
+    LONG n, i, b, got;
+    blk_n = 0;
+    blk_on = -1;
+    fade[0].on = fade[1].on = FALSE;
+    if (!g->pens_shared || g->truecolor || g->depth < 8 || !pe)
+        return;
+    n = ((LONG)pe->pe_NFree - BLK_KEEP) / 2;
+    if (n > BLK_MAX)
+        n = BLK_MAX;
+    if (n < 16)
+        return;
+    for (b = 0; b < 2; b++)
+        for (i = 0; i < n; i++) {
+            got = ObtainPen(cm, -1, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
+            if (got < 0) {
+                /* fewer than hoped: give them all back, share pens as before */
+                while (--i >= 0)
+                    ReleasePen(cm, blk_pen[b][i]);
+                while (--b >= 0)
+                    for (i = 0; i < n; i++)
+                        ReleasePen(cm, blk_pen[b][i]);
+                return;
+            }
+            blk_pen[b][i] = (UBYTE)got;
+        }
+    GetRGB32(cm, PEN_BG, 1, rgb);
+    blk_bg = ((rgb[0] >> 24) << 16) | ((rgb[1] >> 24) << 8) | (rgb[2] >> 24);
+    blk_n = n;
+}
+
+static void blk_release(struct Gfx *g)
+{
+    int b, i;
+    if (blk_n && g->scr)
+        for (b = 0; b < 2; b++)
+            for (i = 0; i < blk_n; i++)
+                ReleasePen(g->scr->ViewPort.ColorMap, blk_pen[b][i]);
+    blk_n = 0;
+    blk_on = -1;
+    fade[0].on = fade[1].on = FALSE;
+}
+
+static void fade_start(int b, UWORD to)
+{
+    fade[b].on = TRUE;
+    fade[b].from = blk_level[b];
+    fade[b].to = to;
+    fade[b].t0 = time_ms();
+}
+
+/* Step the fades by the clock; TRUE while one is under way. */
+BOOL gfx_fade_tick(struct Gfx *g)
+{
+    int b;
+    BOOL any = FALSE;
+    for (b = 0; b < 2; b++) {
+        ULONG t;
+        LONG lv;
+        if (!fade[b].on)
+            continue;
+        t = time_ms() - fade[b].t0;
+        if (t >= FADE_MS || !time_ms()) {
+            lv = fade[b].to;
+            fade[b].on = FALSE;
+        } else {
+            lv = fade[b].from + ((LONG)fade[b].to - (LONG)fade[b].from) * (LONG)t / FADE_MS;
+            any = TRUE;
+        }
+        if ((UWORD)lv != blk_level[b])
+            blk_set(g, b, (UWORD)lv);
+    }
+    return any;
+}
+
+BOOL gfx_fading(void)
+{
+    return fade[0].on || fade[1].on;
+}
+
+/* The picture on screen faded out (begun now; gfx_fade_tick goes on with
+ * it). FALSE if it has no block (cleared as before instead). */
+BOOL gfx_picture_fade_out(struct Gfx *g)
+{
+    if (blk_on < 0 || !g->pic_w)
+        return FALSE;
+    if (blk_level[blk_on] && !(fade[blk_on].on && fade[blk_on].to == 0))
+        fade_start(blk_on, 0);
+    return TRUE;
+}
+
+/* Until the picture on screen has faded out (at most FADE_MS). */
+static void fade_out_now(struct Gfx *g)
+{
+    if (blk_on < 0 || !g->pic_w || !blk_level[blk_on])
+        return;
+    gfx_picture_fade_out(g);
+    while (fade[blk_on].on) {
+        WaitTOF();
+        gfx_fade_tick(g);
+    }
+}
 
 static void release_pens(struct Gfx *g, UBYTE *pens, UWORD n)
 {
@@ -462,6 +613,7 @@ void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 {
     struct Beam b;
     if (g->pic_w && g->scr) {
+        fade_out_now(g);                    /* faded, then cleared */
         beam_init(g, &b);
         clear_old(g, &b, x0, y0, x1, y1, 0, 0, 0, 0);
     }
@@ -471,6 +623,8 @@ void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 void gfx_picture_free(struct Gfx *g)
 {
     g->pic_w = g->pic_h = 0;
+    blk_on = -1;                            /* its block is free for the next */
+    fade[0].on = fade[1].on = FALSE;
     if (pic_obj) {
         DisposeDTObject(pic_obj);
         pic_obj = NULL;
@@ -484,6 +638,7 @@ void gfx_close(struct Gfx *g)
 {
     int i;
     gfx_picture_free(g);
+    blk_release(g);
     WaitBlit();
     if (g->logo_masks) {
         FreeMem(g->logo_masks, (ULONG)g->logo_npens * g->logo_h * g->logo_bpr);
@@ -1116,6 +1271,8 @@ LONG gfx_thumb_colours(struct Gfx *g)
     struct PaletteExtra *pe = g->scr ? g->scr->ViewPort.ColorMap->PalExtra : NULL;
     LONG all = g->depth >= 8 ? 256 : 1L << g->depth;
     LONG n = ((pe ? (LONG)pe->pe_NFree : all / 2) + pic_npens) / 2;
+    if (blk_n)
+        return blk_n;                       /* a block's worth */
     if (n > all)
         n = all;
     return n < 16 ? 16 : n;
@@ -1130,9 +1287,10 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     struct ColorMap *cm;
     struct BitMap *tmp;
     UBYTE *buf, map[256], used[256], pens[256];
-    UWORD npens = 0;
+    UWORD npens = 0, nused = 0;
     ULONG i, n;
     WORD nx;
+    int blk = -1;
     if (!t || !g->pens_shared || g->truecolor)
         return FALSE;
     n = (ULONG)t->mod * t->h;
@@ -1146,7 +1304,26 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     memset(used, 0, sizeof(used));
     for (i = 0; i < n; i++)
         used[t->px[i]] = 1;
-    for (i = 0; i < 256; i++) {
+    for (i = 0; i < 256; i++)
+        if (used[i] && i < t->ncol)
+            nused++;
+    if (blk_n && nused <= blk_n) {
+        /* into the free block, its pens set to the background's colour
+         * first: drawn unseen, then faded in (the old one faded out) */
+        fade_out_now(g);
+        blk = blk_on == 0 ? 1 : 0;
+        fade[blk].on = FALSE;
+        blk_ncol[blk] = 0;
+        for (i = 0; i < 256; i++) {
+            map[i] = PEN_BG;
+            if (used[i] && i < t->ncol) {
+                blk_rgb[blk][blk_ncol[blk]] = t->pal[i];
+                map[i] = blk_pen[blk][blk_ncol[blk]++];
+            }
+        }
+        blk_set(g, blk, 0);
+    }
+    for (i = 0; i < 256 && blk < 0; i++) {
         map[i] = PEN_BG;
         if (used[i] && i < t->ncol) {
             ULONG c = t->pal[i];
@@ -1174,6 +1351,10 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     gfx_picture_free(g);                    /* now the old one's pens can go */
     CopyMem(pens, pic_pens, npens);
     pic_npens = npens;
+    if (blk >= 0) {
+        blk_on = blk;
+        fade_start(blk, 256);               /* up over the next frames (gfx_fade_tick) */
+    }
     g->pic = *pi;
     g->pic_x = nx;
     g->pic_y = y;

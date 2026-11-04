@@ -200,6 +200,12 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to max
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
 LONG gfx_thumb_colours(struct Gfx *g);
+/* The preview's fades (256-colour screens, gfx_thumb): step them once a
+ * frame while gfx_fading(); fade the picture on screen out (FALSE: it
+ * cannot fade, clear it instead). */
+BOOL gfx_fade_tick(struct Gfx *g);
+BOOL gfx_fading(void);
+BOOL gfx_picture_fade_out(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h);

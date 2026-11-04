@@ -2652,13 +2652,22 @@ static void preview_touch(struct Page *p)
         if (found >= want)
             settle = PREVIEW_READY;
     }
-    if (settle != PREVIEW_READY && pv_shown && pv_page == p && !hold_active() && !ov.on) {
-        /* not read yet: the entry before goes now, not when this one comes */
-        tb_close(&pv_tb);
-        gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-        gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-        pv_shown = FALSE;
-        pv_tj = pv_sj = NULL;
+    if (pv_shown && pv_page == p && !hold_active() && !ov.on) {
+        /* the entry before's picture fades out now, not when this one's
+         * comes (it never stands next to this one's text) */
+        BOOL fading = gfx_picture_fade_out(&g);
+        if (settle != PREVIEW_READY) {
+            /* not read yet: its text goes now too */
+            tb_close(&pv_tb);
+            if (fading && pv_has_box) {
+                gfx_fill_bg(&g, aside_x(), pv_box_y + pv_box_h, g.w - 1, g.footer_y - 2);
+            } else {
+                gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+                gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+            }
+            pv_shown = FALSE;
+            pv_tj = pv_sj = NULL;
+        }
     }
     pv_pending = TRUE;
     pv_since = time_ms();
@@ -4896,10 +4905,12 @@ static int app_main(void)
             UnLock(l);
             amce_log("loader", "off (AmigaMCE.noloader)");
         } else if (ldr_start()) {
-            extern struct Task *ldr_task, *ldr_task2;
-            char m[96];
-            sprintf(m, "started (tasks: AmigaMCE %08lx, loader %08lx, pictures %08lx)",
-                    (unsigned long)FindTask(NULL), (unsigned long)ldr_task, (unsigned long)ldr_task2);
+            extern struct Task *ldr_task, *ldr_task2, *ldr_task3;
+            char m[128];
+            sprintf(m, "started (tasks: AmigaMCE %08lx, loader %08lx, pictures %08lx, "
+                       "picture now %08lx)",
+                    (unsigned long)FindTask(NULL), (unsigned long)ldr_task, (unsigned long)ldr_task2,
+                    (unsigned long)ldr_task3);
             amce_log("loader", m);
         } else {
             amce_log("loader", "could not start: reading in the UI");
@@ -4962,7 +4973,7 @@ static int app_main(void)
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
         BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
-                    tb_animating(&pv_tb);
+                    tb_animating(&pv_tb) || gfx_fading();
         ULONG sig;
         if (loader_due())
             preview_arrived();
@@ -5035,10 +5046,11 @@ static int app_main(void)
             }
         }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
-                      ((atb = cur_tb()) && tb_animating(atb)))) {
+                      gfx_fading() || ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();
             WaitTOF();
             dbg_sleep_end();
+            gfx_fade_tick(&g);              /* the preview fading in or out */
             pane_tick();
             preview_tick();
             if (tb_animating(&pv_tb))

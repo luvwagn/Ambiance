@@ -32,9 +32,14 @@
  * decoded. Each runs a job the UI waits for (ldr_submit_first) at
  * PRI_URGENT, and reading ahead below that: the other one's reading ahead
  * (All Games' letters, the next pictures) never holds up what is wanted
- * now. The picture one reads ahead lowest. */
+ * now. The picture one reads ahead lowest.
+ *
+ * A picture the UI waits for goes to a third process of its own (W_NOW):
+ * a picture being read ahead cannot be stopped once begun (a JPEG takes
+ * seconds), and the one wanted now no longer waits for it to end. At
+ * PRI_URGENT it simply runs, the reading ahead paused below it. */
 #define PRI_URGENT (-1)
-enum { W_QUICK, W_PICS, WORKERS };
+enum { W_QUICK, W_PICS, W_NOW, WORKERS };
 static struct Worker {
     struct MsgPort *port;           /* its own, made by it */
     struct Task *task;
@@ -43,21 +48,29 @@ static struct Worker {
 } workers[WORKERS] = {
     { NULL, NULL, "AmigaMCE loader", -2 },
     { NULL, NULL, "AmigaMCE pictures", -3 },
+    { NULL, NULL, "AmigaMCE picture now", PRI_URGENT },
 };
 static struct Worker *starting;     /* the one being started (its process reads it) */
 static struct MsgPort *reply_port;  /* ours */
 static struct Task *parent;
 static BYTE start_sig = -1;
 static BOOL running;
-struct Task *ldr_task, *ldr_task2;  /* the processes (log: which task a guru names) */
+struct Task *ldr_task, *ldr_task2, *ldr_task3;     /* the processes (log: which task
+                                                     * a guru names) */
 static LONG out;                    /* jobs sent and not back */
 
-/* Which process does job j: pictures to the picture one. */
+/* Which process does job j: pictures to a picture one, the one wanted
+ * now (urgent) to its own. */
+static BOOL is_picture(const struct LJob *j)
+{
+    return j->type == LJ_SHOT || (j->want_pic && (j->type == LJ_PICTURE || j->type == LJ_ENTRY ||
+                                                  j->type == LJ_PICFOLDER));
+}
+
 static struct Worker *worker_for(const struct LJob *j)
 {
-    if (j->type == LJ_SHOT || (j->want_pic && (j->type == LJ_PICTURE || j->type == LJ_ENTRY ||
-                                               j->type == LJ_PICFOLDER)))
-        return &workers[W_PICS];
+    if (is_picture(j))
+        return &workers[j->urgent ? W_NOW : W_PICS];
     return &workers[W_QUICK];
 }
 
@@ -232,15 +245,21 @@ BOOL ldr_start(void)
         return FALSE;
     if ((start_sig = AllocSignal(-1)) < 0)
         return FALSE;
-    running = start_worker(&workers[W_QUICK]);
-    if (running && !start_worker(&workers[W_PICS])) {
-        stop_worker(&workers[W_QUICK]);
-        running = FALSE;
+    {
+        int i;
+        running = TRUE;
+        for (i = 0; i < WORKERS && running; i++)
+            if (!start_worker(&workers[i])) {
+                while (--i >= 0)
+                    stop_worker(&workers[i]);
+                running = FALSE;
+            }
     }
     FreeSignal(start_sig);
     start_sig = -1;
     ldr_task = workers[W_QUICK].task;
     ldr_task2 = workers[W_PICS].task;
+    ldr_task3 = workers[W_NOW].task;
     return running;
 }
 
@@ -278,26 +297,33 @@ void ldr_submit_first(struct LJob *j)
         ldr_submit(j);
         return;
     }
-    job_port = worker_for(j)->port;
     if (j->busy) {
+        /* sent already: to the front of the queue of the process for what
+         * is wanted now, or, begun, hurried where it is */
+        struct Worker *was = worker_for(j), *now;
         BOOL queued = FALSE;
-        j->urgent = TRUE;
         Forbid();
-        for (n = job_port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        for (n = was->port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ)
             if (n == &j->msg.mn_Node) {
                 Remove(n);
-                AddHead(&job_port->mp_MsgList, n);
                 queued = TRUE;
                 break;
             }
-        if (!queued && !j->done && worker_for(j)->task)
-            SetTaskPri(worker_for(j)->task, PRI_URGENT);   /* begun: hurry it */
+        j->urgent = TRUE;
+        now = worker_for(j);
+        if (queued) {
+            AddHead(&now->port->mp_MsgList, &j->msg.mn_Node);
+            Signal(now->port->mp_SigTask, 1UL << now->port->mp_SigBit);
+        } else if (!j->done && was->task) {
+            SetTaskPri(was->task, PRI_URGENT);  /* begun: hurry it */
+        }
         Permit();
         return;
     }
+    j->urgent = TRUE;
+    job_port = worker_for(j)->port;
     j->done = FALSE;
     j->ran = FALSE;
-    j->urgent = TRUE;
     j->t_sent = time_ms();
     j->busy = TRUE;
     out++;
@@ -393,8 +419,9 @@ static void stop_worker(struct Worker *w)
 void ldr_stop(void)
 {
     if (running) {
-        stop_worker(&workers[W_PICS]);
-        stop_worker(&workers[W_QUICK]);
+        int i;
+        for (i = WORKERS - 1; i >= 0; i--)
+            stop_worker(&workers[i]);
         running = FALSE;
     }
     if (reply_port) {
