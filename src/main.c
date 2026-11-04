@@ -505,7 +505,6 @@ static void build_credits(struct Page *p)
     char line[96];
     sprintf(line, "AmigaMCE %s", AMCE_VERSION);
     text_line(p, line);
-    text_line(p, "Created by Brian King");
     text_line(p, "(c) 2026 Brian King");
     text_line(p, "");
     text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
