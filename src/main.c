@@ -1032,7 +1032,7 @@ static void text_line(struct Page *p, const char *s)
 /* Text box width: the pane less room for the scroll bar (gap + bar + gap). */
 static WORD textbox_w(void)
 {
-    return g.pane_w - U(7);
+    return g.pane_w - U(9);
 }
 
 /* Word-wrap a paragraph into l, maxw pixels wide. */
@@ -2061,7 +2061,7 @@ static WORD aside_x(void)
  * otherwise (joystick, pad), arrows where there is more above or below.
  * The mouse moving or clicking switches to the bar, the joystick to the
  * arrows; the keyboard leaves it as it is. */
-#define GUT_W U(7)                  /* the column: gap, bar, gap */
+#define GUT_W U(9)                  /* the column: gap, bar, gap */
 static struct { BOOL drag; WORD off; } gut;
 static BOOL bar_up;                 /* mouse mode: the bar is showing (the mouse moved lately) */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
@@ -2428,16 +2428,16 @@ static void pv_draw_text(struct Page *p)
     if (!list_init(&pv_list))
         return;
     if (p->pics)
-        pv_pics_lines(&p->list.items[p->sel], j, pv_pic_drawn && g.pic_w, w - U(7));
+        pv_pics_lines(&p->list.items[p->sel], j, pv_pic_drawn && g.pic_w, w - U(9));
     else
         /* the whole fact sheet, in a text box with a scroll bar when it is
          * longer than the room left (wheel or bar; Up/Down stay with the list) */
         for (i = 0; i < j->nlines; i++)
-            pv_line(j->lines[i], w - U(7));
+            pv_line(j->lines[i], w - U(9));
     if (pv_list.count && max_y - y >= g.font_h) {
         pv_tb.pos = pv_tb.target = 0;
         pv_tb.focused = focus == FOCUS_PREVIEW;
-        if (tb_open(&g, &pv_tb, x0, y, w - U(7), max_y - y + 1, &pv_list, TRUE))
+        if (tb_open(&g, &pv_tb, x0, y, w - U(9), max_y - y + 1, &pv_list, TRUE))
             tb_draw(&g, &pv_tb);
     }
 }
@@ -2876,7 +2876,7 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 {
     LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
     *bx0 = list_edge(p) - GUT_W + 1 + U(2);
-    *bx1 = *bx0 + U(3) - 1;
+    *bx1 = *bx0 + U(5) - 1;
     t = h * vis / n;
     if (t < U(10))
         t = U(10);

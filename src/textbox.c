@@ -82,7 +82,7 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->content_h = lines->count * tb->line_h;
     if (g->planar && tb->content_h > TB_MAX_ROWS)     /* the bitmap's limit */
         tb->content_h = TB_MAX_ROWS - TB_MAX_ROWS % tb->line_h;
-    tb->bar_w = tb->content_h > h ? GU(g, 3) : 0;
+    tb->bar_w = tb->content_h > h ? GU(g, 5) : 0;
     tb->bar_x = x + w + GU(g, 2);
     tb->pos = clamp_pos(tb, tb->pos);
     tb->target = clamp_pos(tb, tb->target);
