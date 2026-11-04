@@ -361,6 +361,8 @@ void ldr_orphan(struct LJob *j);    /* give it up: freed (results and all) when 
 ULONG ldr_sigmask(void);        /* signalled when one comes back */
 LONG ldr_out(void);             /* jobs out now */
 void pic_dispose(APTR obj);
+/* System Information: which datatype reads each picture format (a line each). */
+void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx);
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {

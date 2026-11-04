@@ -1162,6 +1162,11 @@ static void found_line(struct Page *p, const char *what, const char *path)
     text_line(p, line);
 }
 
+static void dt_line(void *ctx, const char *s)
+{
+    text_line((struct Page *)ctx, s);
+}
+
 static void build_sysinfo(struct Page *p)
 {
     char line[160];
@@ -1223,8 +1228,9 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     sprintf(line, "Font: %s", g.font_is_ours ? "amce-pixel (bundled)" : "topaz 8 (fallback)");
     text_line(p, line);
-    sprintf(line, "Datatypes: %s", DataTypesBase ? "available" : "missing");
-    text_line(p, line);
+    text_line(p, "");
+    text_line(p, "Datatypes (which one reads each picture format):");
+    pic_datatypes(dt_line, p);
     text_line(p, "");
     sprintf(line, "AGS: %s", ags.found ? "found" : "not found");
     text_line(p, line);

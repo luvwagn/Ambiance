@@ -1301,3 +1301,87 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
         DisposeDTObject((Object *)o);
     return ok;
 }
+
+/* ---- which datatype reads each picture format (System Information).
+ * datatypes.library is asked about a tiny file of each format, written to
+ * T: and deleted again: the descriptor it picks, and the class behind it
+ * (with its version), are what AmigaMCE will get for such a picture. */
+static const UBYTE s_ilbm[] = { 'F','O','R','M', 0,0,0,46, 'I','L','B','M',
+    'B','M','H','D', 0,0,0,20, 0,1, 0,1, 0,0, 0,0, 1, 0, 0, 0, 0,0, 10, 11, 0,1, 0,1,
+    'C','M','A','P', 0,0,0,6, 0,0,0, 255,255,255, 'B','O','D','Y', 0,0,0,2, 0,0 };
+static const UBYTE s_gif[] = { 'G','I','F','8','9','a', 1,0, 1,0, 0x80, 0, 0,
+    0,0,0, 255,255,255, ',', 0,0, 0,0, 1,0, 1,0, 0, 2, 2, 0x44, 1, 0, ';' };
+static const UBYTE s_jpeg[] = { 0xFF,0xD8, 0xFF,0xE0, 0,16, 'J','F','I','F',0, 1,1, 0, 0,1, 0,1,
+    0,0, 0xFF,0xD9 };
+static const UBYTE s_png[] = { 0x89,'P','N','G',13,10,26,10, 0,0,0,13, 'I','H','D','R',
+    0,0,0,1, 0,0,0,1, 8, 2, 0, 0, 0, 0x90,0x77,0x53,0xDE, 0,0,0,0, 'I','E','N','D',
+    0xAE,0x42,0x60,0x82 };
+static const UBYTE s_bmp[] = { 'B','M', 58,0,0,0, 0,0,0,0, 54,0,0,0, 40,0,0,0, 1,0,0,0, 1,0,0,0,
+    1,0, 24,0, 0,0,0,0, 4,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 255,255,255,0 };
+static const UBYTE s_pcx[] = { 10, 5, 1, 8, 0,0, 0,0, 0,0, 0,0, 72,0, 72,0 };
+static const UBYTE s_tga[] = { 0, 0, 2, 0,0, 0,0, 0, 0,0, 0,0, 1,0, 1,0, 24, 0, 255,255,255 };
+
+void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
+{
+    static const struct { const char *fmt, *ext; const UBYTE *data; UWORD len; } s[] = {
+        { "ILBM", "iff", s_ilbm, sizeof(s_ilbm) }, { "GIF", "gif", s_gif, sizeof(s_gif) },
+        { "JPEG", "jpg", s_jpeg, sizeof(s_jpeg) }, { "PNG", "png", s_png, sizeof(s_png) },
+        { "BMP", "bmp", s_bmp, sizeof(s_bmp) }, { "PCX", "pcx", s_pcx, sizeof(s_pcx) },
+        { "TGA", "tga", s_tga, sizeof(s_tga) },
+    };
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    struct Library *lib;
+    char line[160], file[40];
+    LONG i;
+    if (!DataTypesBase) {
+        out(ctx, "datatypes.library: missing (only IFF ILBM pictures can be shown)");
+        return;
+    }
+    sprintf(line, "datatypes.library %lu.%lu", (unsigned long)DataTypesBase->lib_Version,
+            (unsigned long)DataTypesBase->lib_Revision);
+    if ((lib = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 0))) {
+        sprintf(line + strlen(line), ", picture.datatype %lu.%lu",
+                (unsigned long)lib->lib_Version, (unsigned long)lib->lib_Revision);
+        CloseLibrary(lib);
+    }
+    out(ctx, line);
+    me->pr_WindowPtr = (APTR)-1;
+    for (i = 0; i < (LONG)(sizeof(s) / sizeof(s[0])); i++) {
+        BPTR fh, l;
+        struct DataType *dtn = NULL;
+        sprintf(file, "T:AmigaMCE-probe.%s", s[i].ext);
+        if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
+            Write(fh, (APTR)s[i].data, s[i].len);
+            Close(fh);
+        }
+        if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+            dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+            UnLock(l);
+        }
+        DeleteFile((CONST_STRPTR)file);
+        if (!dtn || !dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != GID_PICTURE) {
+            sprintf(line, "  %s: no datatype", s[i].fmt);
+        } else {
+            const struct DataTypeHeader *h = dtn->dtn_Header;
+            char cls[64];
+            const char *base = h->dth_BaseName ? (const char *)h->dth_BaseName : "?";
+            sprintf(cls, "datatypes/%.40s.datatype", base);
+            if ((lib = OpenLibrary((CONST_STRPTR)cls, 0))) {
+                sprintf(line, "  %s: %.40s.datatype %lu.%lu (descriptor %.30s)", s[i].fmt, base,
+                        (unsigned long)lib->lib_Version, (unsigned long)lib->lib_Revision,
+                        h->dth_Name ? (const char *)h->dth_Name : "?");
+                CloseLibrary(lib);
+            } else {
+                sprintf(line, "  %s: %.40s.datatype, not found (descriptor %.30s)", s[i].fmt, base,
+                        h->dth_Name ? (const char *)h->dth_Name : "?");
+            }
+        }
+        if (dtn)
+            ReleaseDataType(dtn);
+        if (i == 0)
+            amce_strlcat(line, "; previews read by AmigaMCE", sizeof(line));
+        out(ctx, line);
+    }
+    me->pr_WindowPtr = oldwin;
+}
