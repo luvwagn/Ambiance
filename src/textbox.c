@@ -158,6 +158,7 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
 
 static void blit_window(struct Gfx *g, struct TextBox *tb)
 {
+    gfx_dirty();
     struct Layer *l = g->rp->Layer;    /* the window's, or a double buffer's */
     /* The bitmap is at least h rows below pos (cleared past the text), so
      * a full-height copy also blanks whatever the box showed before. */
@@ -173,6 +174,7 @@ static void blit_window(struct Gfx *g, struct TextBox *tb)
  * lines that fit entirely are drawn, so nothing spills outside the box. */
 static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
 {
+    gfx_dirty();
     struct Rectangle r;
     struct Region *rg, *old = NULL;
     LONG i, top;
@@ -217,6 +219,7 @@ static void draw_rows(struct Gfx *g, struct TextBox *tb, WORD sy0, WORD sy1)
 /* Direct mode scroll: move what is on screen, draw the strip exposed. */
 static void scroll_direct(struct Gfx *g, struct TextBox *tb)
 {
+    gfx_dirty();
     LONG d = tb->pos - tb->drawn_pos;
     WORD y1 = tb->y + tb->h - 1;
     if (!d)

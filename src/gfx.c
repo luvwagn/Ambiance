@@ -31,6 +31,7 @@
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase;
 struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
+static BOOL dirty;              /* drawn since the last gfx_present (double buffering) */
 
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
@@ -477,6 +478,7 @@ static void beam_wait(const struct Beam *b, WORD r0, WORD r1)
 /* Fill x0,y0..x1,y1 with the background, band by band. */
 static void band_fill(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    dirty = TRUE;
     WORD r, r1;
     if (x1 < x0 || y1 < y0)
         return;
@@ -494,6 +496,7 @@ static void band_fill(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WOR
 static void band_blit(struct Gfx *g, const struct Beam *b, struct BitMap *bm, WORD x, WORD y,
                       WORD w, WORD h)
 {
+    dirty = TRUE;
     WORD r, n;
     for (r = 0; r < h; r += n) {
         n = b->on && h - r > BAND_ROWS ? BAND_ROWS : h - r;
@@ -679,6 +682,7 @@ void gfx_close(struct Gfx *g)
 
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
 {
+    dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
     SetAPen(g->rp, pen);
@@ -695,6 +699,7 @@ void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
  * pixel style it is whole pixels. */
 void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
 {
+    dirty = TRUE;
     LONG rx8, ry8, lim;                     /* radii in eighths of a pixel */
     WORD x, y, ry;
     if (r < 1)
@@ -736,6 +741,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
 
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
     SetAPen(g->rp, PEN_BG);
@@ -756,6 +762,7 @@ WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts)
 {
+    dirty = TRUE;
     struct TextExtent te;
     ULONG n = strlen(s);
     BOOL opaque = (ts & TS_OPAQUE) != 0;
@@ -888,6 +895,7 @@ icons:
 
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
 {
+    dirty = TRUE;
     UWORD p;
     if (!g->logo_masks)
         return;
@@ -903,6 +911,7 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
  * is MARK_SIZE design units square, so a state change never moves text. */
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
+    dirty = TRUE;
     PLANEPTR m;
     if (mark < MARK_ARROW || mark > MARK_PLAY)
         return;
@@ -920,6 +929,7 @@ void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
+    dirty = TRUE;
     PLANEPTR m;
     if (g->sm) {
         sm_icon(g->sm, g, icon, x, y, fg, bg);
@@ -1040,6 +1050,7 @@ const struct BigLetter *gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h)
  * smooth style its edges are not worth a stamp per shade. */
 void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE pen)
 {
+    dirty = TRUE;
     if (!bl || !bl->mask)
         return;
     SetDrMd(g->rp, JAM1);
@@ -1345,7 +1356,6 @@ static struct MsgPort *dsafe;
 static int dback;               /* the buffer drawn into */
 static BOOL dsafe_due;          /* a "safe to write" message is still to come */
 static BOOL dbuf_on;
-static BOOL dirty;
 
 void gfx_dirty(void)
 {
@@ -1408,13 +1418,14 @@ void gfx_dbuf_start(struct Gfx *g)
     amce_log("double buffering", "on");
 }
 
-/* Show what was drawn, if anything was. */
-void gfx_present(struct Gfx *g)
+/* Show what was drawn, if anything was: TRUE if it flipped (which waited
+ * for the vertical blank). */
+BOOL gfx_present(struct Gfx *g)
 {
     int front;
     ULONG t0;
     if (!dbuf_on || !dirty)
-        return;
+        return FALSE;
     dirty = FALSE;
     WaitBlit();
     t0 = time_ms();
@@ -1429,6 +1440,7 @@ void gfx_present(struct Gfx *g)
     WaitBlit();
     g->rp = dlay[dback]->rp;
     gfx_present_ms = time_ms() - t0;
+    return TRUE;
 }
 
 /* Back to drawing straight onto the screen (the viewer, closing). */
@@ -1665,6 +1677,7 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
 BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
                      BOOL whole, WORD *drawn_h, BOOL *taken)
 {
+    dirty = TRUE;
     Object *o = obj;
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL, *tmp, *own = NULL;

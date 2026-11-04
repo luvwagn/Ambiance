@@ -369,6 +369,7 @@ static void masks_put(struct Smooth *s, const UBYTE *d, UWORD w, UWORD h, WORD x
 static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, UWORD h,
                       UBYTE fg, UBYTE bg, BOOL opaque)
 {
+    gfx_dirty();
     struct RastPort *rp = g->rp;
     UBYTE lv;
     SetDrMd(rp, JAM1);

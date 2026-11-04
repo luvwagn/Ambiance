@@ -446,10 +446,7 @@ static BOOL ui_wait(struct LJob *j)
             ui_aborted = TRUE;
             return FALSE;
         }
-        if (gfx_dbuf_active()) {
-            gfx_dirty();
-            gfx_present(&g);                /* shows the spinner; paced by the flip */
-        } else {
+        if (!gfx_present(&g)) {             /* shows the spinner; the flip paces it */
             dbg_sleep_begin();
             WaitTOF();
             dbg_sleep_end();
@@ -3124,6 +3121,7 @@ static void blit_rows(LONG src, LONG dst, LONG n)
     struct BitMap *bm = g.rp->BitMap;
     if (n <= 0 || src == dst)
         return;
+    gfx_dirty();
     LockLayerRom(g.rp->Layer);             /* the window's, or a double buffer's */
     BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
               x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? 0x07 : 0xFF, NULL);
@@ -5076,8 +5074,6 @@ static int app_main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
-        if (sig || busy)
-            gfx_dirty();                /* (prototype: anything may have been drawn) */
         if (sig & lsig)
             preview_arrived();          /* the loader brought something */
         if (sig & tsig) {
@@ -5142,9 +5138,7 @@ static int app_main(void)
         }
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
-            if (gfx_dbuf_active()) {
-                gfx_present(&g);        /* the flip paces the frame */
-            } else {
+            if (!gfx_present(&g)) {     /* a flip paces the frame, or else */
                 dbg_sleep_begin();
                 WaitTOF();
                 dbg_sleep_end();

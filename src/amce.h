@@ -209,7 +209,7 @@ extern BOOL gfx_dbuf_wanted;
 extern ULONG gfx_present_ms;
 void gfx_dbuf_start(struct Gfx *g);
 void gfx_dbuf_stop(struct Gfx *g);
-void gfx_present(struct Gfx *g);
+BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
 void gfx_dirty(void);
 BOOL gfx_dbuf_active(void);
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
