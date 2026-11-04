@@ -27,7 +27,7 @@ CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign 
 LDFLAGS = -noixemul
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/smooth.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c \
+SRCS = src/main.c src/gfx.c src/view.c src/pics.c src/smooth.c src/textbox.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
@@ -70,9 +70,9 @@ $(TARGET): $(OBJS)
 	@wc -c < "$@" | awk '{printf "$@ successfully compiled (%s bytes)\n", $$1}'
 
 # ------------------------------------------------------------------ tests
-build/test_ags: tests/test_ags.c src/ags.c src/util.c src/amce.h
+build/test_ags: tests/test_ags.c src/ags.c src/pics.c src/util.c src/amce.h
 	@echo "  CC    $@"
-	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/util.c
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/pics.c src/util.c
 
 # amiga.lib's sprintf is exec's RawDoFmt, where %d/%u/%x/%c read 16 bits.
 # Every numeric conversion must carry the l modifier with a long argument.
@@ -97,7 +97,7 @@ check-syscalls: $(SRCS) src/amce.h
 
 test: check-formats check-syscalls build/test_ags
 	@rm -rf build/vt && mkdir -p build/vt
-	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V T:$(abspath build/vt) test_ags
+	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V T:$(abspath build/vt) test_ags
 
 # ------------------------------------------------------------------ assets
 art:

@@ -10,12 +10,14 @@ copy the drawer onto an AGS installation and double-click it.
   and 1024x768 on RTG.
 - Reads the AGS menu tree, fact sheets and screenshots directly; launches titles
   through their `.run` scripts and returns to AmigaMCE afterwards.
-- Pictures are decoded through the installed datatypes.
+- Pictures are decoded through the installed datatypes. The Pictures
+  section browses `Media:Images`, plays folders as slideshows and shows
+  pictures full screen on AmigaMCE's own screen (no mode switch), in the
+  picture's own palette on native and 256-colour screens.
 - Text pages scroll smoothly without flicker, with a scroll bar when needed.
 - Keyboard, mouse and joystick/CD32 pad.
 
-Mods, Videos, Pictures, Music and Radio are on the menu but not yet
-implemented.
+Mods, Videos, Music and Radio are on the menu but not yet implemented.
 
 ## Building
 
@@ -32,7 +34,7 @@ inline OS call when a multiply helper call ends up between them (see
 | Target         | Result                                                    |
 |----------------|-----------------------------------------------------------|
 | `make`         | `AmigaMCE`, `amigamce-<version>.lha`, `amigamce-<version>.adf` (a data disk holding the LHA) |
-| `make test`    | AGS parser tests, run under vamos                         |
+| `make test`    | AGS and Pictures folder reader tests, run under vamos      |
 | `make preview` | True-aspect PNG previews of the Home Screen in `build/`   |
 | `make art`     | Regenerates `src/art.c` (logo, menu icons, palette)       |
 | `make fonts`   | Regenerates the `amce-pixel` bitmap fonts from Pixelify Sans |

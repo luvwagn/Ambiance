@@ -48,7 +48,12 @@ struct Page {
     WORD facts_y;
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
+    UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
 };
+
+#define PICS_ROOT "Media:Images"
+#define SLIDE_MS  5000          /* slideshow: each picture this long */
+#define BAR_MS    3000          /* the viewer's info bar, after a change */
 
 static struct Gfx g;
 static struct Caps caps;
@@ -550,10 +555,16 @@ static void build_root_pages(int mod)
         }
         break;
     case MOD_PICTURES:
-        if ((p = page_push(PT_TEXT, "Pictures"))) {
-            text_para(p, "The picture viewer arrives in a later version.");
-            text_line(p, "");
-            found_line(p, "Pictures", "Media:Images");
+        if ((p = page_push(PT_LIST, "Pictures"))) {
+            LONG n;
+            p->pics = 1;
+            n = pics_read_dir(PICS_ROOT, &p->list);
+            if (n <= 0) {
+                page_pop();
+                if ((p = page_push(PT_TEXT, "Pictures")))
+                    text_para(p, n < 0 ? "No pictures found: AmigaMCE looks for them in "
+                                         PICS_ROOT "." : PICS_ROOT " has no pictures in it.");
+            }
         }
         break;
     case MOD_MUSIC:
@@ -611,9 +622,18 @@ static void save_nav(void)
 /* Open a folder page without drawing (used while rebuilding the trail). */
 static BOOL push_dir_quiet(struct Item *it)
 {
+    BOOL pics = cur() && cur()->pics;
     struct Page *p = page_push(PT_LIST, it->label);
     if (!p)
         return FALSE;
+    if (pics) {
+        p->pics = 1;
+        if (pics_read_dir(it->path, &p->list) <= 0) {
+            page_pop();
+            return FALSE;
+        }
+        return TRUE;
+    }
     if (((it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
                                  : ags_read_menu(it->path, &p->list, ags.adult[0] == '1')) <= 0) {
         page_pop();
@@ -827,9 +847,24 @@ static const char *hint_text(void)
     if (focus == FOCUS_MENU)
         return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
                   : "Fire open  Esc twice quit";
+    if (focus == FOCUS_PREVIEW && p && p->pics)
+        return hi ? "Up/Down  scroll      Fire/Return  view      Left/Esc  back"
+                  : "Fire view  Esc back";
     if (focus == FOCUS_PREVIEW)
         return hi ? "Up/Down  scroll      Fire/Return  play      Left/Esc  back"
                   : "Fire play  Esc back";
+    if (p && p->type == PT_LIST && p->pics && p->list.count) {
+        /* Fire plays what can be played (a picture, a folder of them);
+         * Right goes inside */
+        const struct Item *it = &p->list.items[p->sel];
+        if (it->kind == IT_PIC)
+            return hi ? "Up/Down  move    Fire/Return  view    Left/Esc  back"
+                      : "Fire view  Esc back";
+        if (it->mark == MARK_PLAY)
+            return hi ? "Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back"
+                      : "Fire show  Right open";
+        return hi ? "Up/Down  move    Fire/Right  open    Left/Esc  back" : "Fire open  Esc back";
+    }
     if (p && p->type == PT_LIST && has_aside(p))
         return hi ? "Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back"
                   : "Fire play  Esc back";
@@ -842,8 +877,11 @@ static const char *hint_text(void)
     return hi ? "Up/Down  scroll      Left/Esc  back" : "Up/Down scroll  Esc back";
 }
 
+static const char *hint_shown;      /* the hint in the footer now */
+
 static void draw_footer(void)
 {
+    hint_shown = msg[0] ? NULL : hint_text();
     gfx_fill(&g, 0, g.footer_y - U(1), g.w - 1, g.footer_y - 1, PEN_RULE);
     gfx_fill(&g, 0, g.footer_y, g.w - 1, g.h - 1, PEN_BAR);
     gfx_text(&g, U(6), g.footer_y + (g.h - g.footer_y - g.font_h) / 2, msg[0] ? msg : hint_text(),
@@ -869,6 +907,8 @@ static void draw_title_count(struct Page *p)
 {
     char count[24];
     preview_touch(p);
+    if (!msg[0] && hint_shown && hint_text() != hint_shown)
+        draw_footer();              /* the hints follow the selection */
     WORD right = g.pane_x + g.pane_w, tw, x;
     if (p->type != PT_LIST || !p->list.count)
         return;
@@ -987,7 +1027,7 @@ static BOOL ov_eligible(const struct Page *p)
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
     for (i = 0; i < p->list.count; i++)
-        if (p->list.items[i].kind == IT_RUN)
+        if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC)
             runs++;
     return runs * 2 >= p->list.count;
 }
@@ -1015,7 +1055,9 @@ static BOOL has_aside(struct Page *p)
     if (!p->aside) {
         LONG i;
         p->aside = 1;
-        if (aside_width() > 0)
+        if (p->pics && aside_width() > 0)
+            p->aside = 2;           /* pictures and folders both preview */
+        else if (aside_width() > 0)
             for (i = 0; i < p->list.count; i++)
                 if (p->list.items[i].kind == IT_RUN) {
                     p->aside = 2;
@@ -1048,6 +1090,145 @@ static BOOL pv_pending;
 static ULONG pv_due;
 static char pv_lines[FACT_LINES][96];
 
+/* "12-Mar-1994" from a DateStamp's days. */
+static void date_text(LONG days, char *out)
+{
+    static const char *mon[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    static const UBYTE mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    LONG y = 1978, m = 0;
+    for (;;) {
+        LONG yd = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
+        if (days < yd)
+            break;
+        days -= yd;
+        y++;
+    }
+    for (m = 0; m < 11; m++) {
+        LONG md = mdays[m] + (m == 1 && y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+        if (days < md)
+            break;
+        days -= md;
+    }
+    sprintf(out, "%ld-%s-%ld", (long)days + 1, mon[m], (long)y);
+}
+
+static void pv_line(const char *s, WORD w)
+{
+    if (!s[0])
+        list_add(&pv_list, "", "", "", IT_TEXT);
+    else
+        wrap_into(&pv_list, s, w);
+}
+
+/* A Pictures row: the picture (or a folder's first picture), then what it
+ * is and, for a folder, what Fire and Right do there. */
+static void preview_pics(struct Page *p, WORD x0, WORD w, WORD max_y)
+{
+    struct Item *it = &p->list.items[p->sel];
+    char path[300], first[108], line[120];
+    const char *show = NULL;
+    WORD y = g.list_top, dh = 0;
+    LONG np = 0, nd = 0;
+    BOOL drawn = FALSE;
+
+    if (it->kind == IT_PIC) {
+        show = it->path;
+    } else if (!(it->flags & ITEM_DISABLED)) {
+        np = pics_scan(it->path, &nd, first, sizeof(first));
+        if (np > 0) {
+            LONG n;
+            amce_strlcpy(path, it->path, sizeof(path));
+            n = strlen(path);
+            if (n && path[n - 1] != ':' && path[n - 1] != '/')
+                amce_strlcat(path, "/", sizeof(path));
+            amce_strlcat(path, first, sizeof(path));
+            show = path;
+        }
+    }
+    if (show && (g.pens_shared || g.truecolor) &&
+        gfx_picture(&g, show, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
+        gfx_fill_bg(&g, x0, y, g.pic_x - 1, y + dh - 1);
+        gfx_fill_bg(&g, g.pic_x + g.pic_w, y, g.w - 1, y + dh - 1);
+        y += dh;
+        drawn = TRUE;
+    } else {
+        gfx_picture_free(&g);
+    }
+    gfx_fill_bg(&g, x0, y, g.w - 1, max_y);
+    if (dh)
+        y += U(6);
+
+    if (pv_list.pool)
+        list_free(&pv_list);
+    if (!list_init(&pv_list))
+        return;
+    w -= U(7);
+    pv_line(it->label, w);
+    if (it->kind == IT_PIC) {
+        struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+        BPTR l = Lock((CONST_STRPTR)it->path, SHARED_LOCK);
+        LONG size = -1;
+        char date[24];
+        date[0] = 0;
+        if (l && fib && Examine(l, fib)) {
+            size = fib->fib_Size;
+            date_text(fib->fib_Date.ds_Days, date);
+        }
+        if (l)
+            UnLock(l);
+        if (fib)
+            FreeDosObject(DOS_FIB, fib);
+        if (drawn) {
+            pic_describe(&g.pic, line, sizeof(line));
+            pv_line(line, w);
+        }
+        sprintf(line, "%s", drawn && g.pic.fmt[0] ? g.pic.fmt : it->sortkey);
+        if (size >= 0) {
+            char kb[24];
+            sprintf(kb, "  -  %ld KB", (long)((size + 1023) / 1024));
+            amce_strlcat(line, kb, sizeof(line));
+        }
+        pv_line(line, w);
+        pv_line("", w);
+        {
+            const char *e = strrchr(it->path, '/');
+            if (!e)
+                e = strchr(it->path, ':');
+            amce_strlcpy(line, it->path, e ? (LONG)(e - it->path) + 1 + (*e == ':') : (LONG)sizeof(line));
+            if (line[0])
+                pv_line(line, w);
+        }
+        if (date[0]) {
+            sprintf(line, "Changed %s", date);
+            pv_line(line, w);
+        }
+    } else if (it->flags & ITEM_DISABLED) {
+        pv_line("No pictures in this folder.", w);
+    } else if (nd == 0) {
+        sprintf(line, np == 1 ? "%ld picture" : "%ld pictures", (long)np);
+        pv_line(line, w);
+        pv_line("", w);
+        pv_line("Fire: slideshow", w);
+        pv_line("Right: open the folder", w);
+    } else {
+        if (np > 0)
+            sprintf(line, "%ld folder%s, %ld picture%s", (long)nd, nd == 1 ? "" : "s",
+                    (long)np, np == 1 ? "" : "s");
+        else
+            sprintf(line, nd == 1 ? "%ld folder" : "%ld folders", (long)nd);
+        pv_line(line, w);
+        pv_line("", w);
+        pv_line("Fire or Right: open", w);
+    }
+    if (!pv_list.count || max_y - y < g.font_h)
+        return;
+    pv_tb.pos = pv_tb.target = 0;
+    pv_tb.focused = focus == FOCUS_PREVIEW;
+    if (tb_open(&g, &pv_tb, x0, y, w, max_y - y + 1, &pv_list, TRUE))
+        tb_draw(&g, &pv_tb);
+}
+
 static void preview_draw(struct Page *p)
 {
     WORD x0 = aside_x(), w = aside_width() - U(4), y = g.list_top, max_y = g.footer_y - 2, dh = 0;
@@ -1059,6 +1240,10 @@ static void preview_draw(struct Page *p)
     pv_page = p;
     pv_sel = p->sel;
     pv_shown = TRUE;
+    if (p->pics && p->list.count) {
+        preview_pics(p, x0, w, max_y);
+        return;
+    }
     if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN) {
         gfx_picture_free(&g);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
@@ -1235,11 +1420,16 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
                  off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
-    if (it->kind == IT_ACTION && it->path[0]) {
-        WORD tagw = gfx_textlen(&g, it->path, TS_SMALL);
-        gfx_text(&g, right - tagw, ty, it->path, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
-                 TS_SMALL);
-        right -= tagw + U(8);
+    {
+        /* the tag at the right: a setting's value; a picture's format or
+         * a playable folder's picture count (pics.c keeps it in sortkey) */
+        const char *tag = it->kind == IT_ACTION ? it->path : p->pics ? it->sortkey : "";
+        if (tag[0]) {
+            WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
+            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
+                     TS_SMALL);
+            right -= tagw + U(8);
+        }
     }
     gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
     if (g.planar)
@@ -1550,10 +1740,28 @@ static void open_dir(struct Item *it)
 {
     struct Page *p;
     LONG n;
+    BOOL pics = cur() && cur()->pics;
+    if (pics && (it->flags & ITEM_DISABLED)) {
+        set_msg("No pictures in that folder");
+        return;
+    }
     set_msg("Loading...");
     p = page_push(PT_LIST, it->label);
     if (!p) {
         set_msg("Too many levels open");
+        return;
+    }
+    if (pics) {
+        p->pics = 1;
+        n = pics_read_dir(it->path, &p->list);
+        if (n <= 0) {
+            page_pop();
+            set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
+            return;
+        }
+        msg[0] = 0;
+        draw_pane(TRUE);
+        draw_footer();
         return;
     }
     n = (it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
@@ -1697,6 +1905,195 @@ static void launch(const char *base)
     cpu_load = -1;
     if (!restore_after_launch())
         running = FALSE;
+}
+
+/* ------------------------------------------------------------ picture viewer
+ * Full screen on AmigaMCE's own screen (view.c). Left/Right (or Up/Down,
+ * the joystick, a click) step through the pictures of the list, Fire,
+ * Return or Space start and pause the slideshow, Esc, Backspace, the right
+ * mouse button or the second fire button go back. The info bar shows for
+ * a few seconds after each change; in a slideshow only when asked. Keys
+ * pressed while a picture loads are taken together, so holding Right
+ * skips ahead instead of loading every picture on the way. */
+static void hold_stop(void);
+
+static LONG view_step(const struct ItemList *l, LONG i, LONG d)
+{
+    LONG n = l->count, k;
+    for (k = 0; k < n; k++) {
+        i = (i + d + n) % n;
+        if (l->items[i].kind == IT_PIC)
+            return i;
+    }
+    return -1;
+}
+
+static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *pi,
+                       const char *scale, BOOL slideshow)
+{
+    char detail[120], desc[64];
+    LONG k, pos = 0, n = 0;
+    for (k = 0; k < l->count; k++)
+        if (l->items[k].kind == IT_PIC) {
+            n++;
+            if (k == i)
+                pos = n;
+        }
+    pic_describe(pi, desc, sizeof(desc));
+    sprintf(detail, "%ld/%ld   %s   %s%s", (long)pos, (long)n, desc, scale,
+            slideshow ? "   Slideshow" : "");
+    view_bar(&g, l->items[i].label, detail,
+             slideshow ? "Left/Right  previous/next    Fire  pause    Esc  back"
+                       : "Left/Right  previous/next    Fire  slideshow    Esc  back");
+}
+
+/* Show the pictures of l from entry idx; returns the last one shown. */
+static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
+{
+    struct PicInfo pi;
+    char scale[24];
+    LONG shown = -1, want = idx;
+    ULONG bar_until = 0, next_at = 0, jlast = 0;
+    BOOL quit = FALSE, ok = FALSE, bar_due = TRUE;
+
+    if (idx < 0 || idx >= l->count || l->items[idx].kind != IT_PIC)
+        return idx;
+    hold_stop();
+    ov.on = FALSE;
+    tb_close(&pv_tb);
+    pv_shown = FALSE;
+    pv_pending = FALSE;
+    if (!view_begin(&g)) {
+        set_msg("Not enough memory for the viewer");
+        return idx;
+    }
+    if (LowLevelBase)
+        jlast = ReadJoyPort(1);
+    while (!quit) {
+        struct IntuiMessage *im;
+        LONG step = 0;
+        BOOL toggle = FALSE, poke = FALSE;
+        ULONG now;
+        if (want != shown) {
+            ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale));
+            shown = want;
+            next_at = time_ms() + SLIDE_MS;
+            if (ok && bar_due) {
+                viewer_bar(l, shown, &pi, scale, slideshow);
+                bar_until = time_ms() + BAR_MS;
+            }
+            bar_due = !slideshow;
+        }
+        while ((im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
+            ULONG cl = im->Class;
+            UWORD code = im->Code;
+            ReplyMsg((struct Message *)im);
+            if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
+                switch (code) {
+                case 0x4F: case 0x4C: step--; break;            /* left, up */
+                case 0x4E: case 0x4D: step++; break;            /* right, down */
+                case 0x43: case 0x44: toggle = !toggle; break;  /* enter, return */
+                case 0x45: case 0x41: quit = TRUE; break;       /* esc, backspace */
+                default: poke = TRUE; break;
+                }
+            } else if (cl == IDCMP_VANILLAKEY) {
+                if (code == 27 || code == 8)
+                    quit = TRUE;
+                else if (code == 13 || code == ' ')
+                    toggle = !toggle;
+                else
+                    poke = TRUE;
+            } else if (cl == IDCMP_MOUSEBUTTONS) {
+                if (code == SELECTDOWN)
+                    step++;
+                else if (code == MENUDOWN)
+                    quit = TRUE;
+            }
+        }
+        if (LowLevelBase) {
+            ULONG st = ReadJoyPort(1), pressed = st & ~jlast;
+            if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
+                if (pressed & (JPF_JOY_LEFT | JPF_JOY_UP))
+                    step--;
+                if (pressed & (JPF_JOY_RIGHT | JPF_JOY_DOWN))
+                    step++;
+                if (pressed & JPF_BUTTON_RED)
+                    toggle = !toggle;
+                if (pressed & JPF_BUTTON_BLUE)
+                    quit = TRUE;
+            }
+            jlast = st;
+        }
+        if (quit)
+            break;
+        now = time_ms();
+        if (toggle) {
+            slideshow = !slideshow;
+            next_at = now + SLIDE_MS;
+            poke = TRUE;
+        }
+        if (step) {
+            LONG i = shown, d = step > 0 ? 1 : -1, n = step > 0 ? step : -step;
+            while (n-- > 0 && i >= 0)
+                i = view_step(l, i, d);
+            if (i >= 0)
+                want = i;
+            bar_due = TRUE;
+        } else if (slideshow && (LONG)(now - next_at) >= 0) {
+            LONG i = view_step(l, shown, 1);
+            if (i >= 0)
+                want = i;
+        }
+        if (poke && want == shown && ok) {
+            viewer_bar(l, shown, &pi, scale, slideshow);
+            bar_until = now + BAR_MS;
+        }
+        if (view_bar_shown() && ok && (LONG)(now - bar_until) >= 0)
+            view_bar_hide(&g);
+        dbg_sleep_begin();
+        WaitTOF();
+        dbg_sleep_end();
+    }
+    view_end(&g);
+    return shown >= 0 ? shown : idx;
+}
+
+/* Back from the viewer: the UI again, its colours faded back in. */
+static void viewer_done(void)
+{
+    msg[0] = 0;
+    draw_all();
+    view_restore(&g);
+}
+
+static void view_from_page(struct Page *p)
+{
+    LONG vis = list_visible(), last = viewer_run(&p->list, p->sel, FALSE);
+    p->sel = last;
+    if (p->sel < p->top)
+        p->top = p->sel;
+    if (p->sel >= p->top + vis)
+        p->top = p->sel - vis + 1;
+    viewer_done();
+}
+
+/* Fire on a folder of pictures: its slideshow, from the first picture. */
+static void folder_slideshow(struct Item *it)
+{
+    struct ItemList l;
+    LONG n, first;
+    if (!list_init(&l))
+        return;
+    set_msg("Loading...");
+    n = pics_read_dir(it->path, &l);
+    first = n > 0 ? view_step(&l, l.count - 1, 1) : -1;
+    if (first < 0) {
+        set_msg("No pictures in that folder");
+    } else {
+        viewer_run(&l, first, TRUE);
+        viewer_done();
+    }
+    list_free(&l);
 }
 
 static void act_move(LONG d)
@@ -2101,7 +2498,11 @@ static void act_open(BOOL play)
         return;
     if (p->type == PT_LIST && p->list.count) {
         struct Item *it = &p->list.items[p->sel];
-        if (it->kind == IT_DIR)
+        if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
+            folder_slideshow(it);   /* Fire plays a folder of pictures */
+        else if (it->kind == IT_PIC)
+            view_from_page(p);
+        else if (it->kind == IT_DIR)
             open_dir(it);
         else if (it->kind == IT_ACTION)
             act_action(it);
@@ -2123,9 +2524,17 @@ static void act_right(void)
     if (focus == FOCUS_PREVIEW)
         return;
     if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
-        p->list.items[p->sel].kind == IT_RUN) {
+        p->list.items[p->sel].kind == IT_DIR) {
+        open_dir(&p->list.items[p->sel]);   /* Right goes inside, never plays */
+        return;
+    }
+    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
+        (p->list.items[p->sel].kind == IT_RUN || p->list.items[p->sel].kind == IT_PIC)) {
         if (!has_aside(p)) {
-            open_detail(&p->list.items[p->sel]);
+            if (p->list.items[p->sel].kind == IT_PIC)
+                view_from_page(p);          /* lowres: no pane to look into */
+            else
+                open_detail(&p->list.items[p->sel]);
             return;
         }
         if (pv_pending || !pv_shown) {      /* not shown yet: show it now */
@@ -2273,8 +2682,13 @@ static void handle_mouse(struct IntuiMessage *im)
                 draw_title_count(p);
                 draw_list_rows(p);
             }
-            if (dbl)
-                act_open(FALSE);
+            if (dbl) {
+                struct Item *it = &p->list.items[idx];
+                if (it->kind == IT_DIR)
+                    open_dir(it);           /* a double-click goes inside a folder */
+                else
+                    act_open(FALSE);
+            }
         } else {
             set_focus(FOCUS_CONTENT);
         }

@@ -348,7 +348,7 @@ void gfx_close(struct Gfx *g)
         g->icon_masks = NULL;
     }
     if (g->mark_masks) {
-        FreeMem(g->mark_masks, (ULONG)MARK_RADIO_ON * g->mark_px * g->mark_bpr);
+        FreeMem(g->mark_masks, (ULONG)MARK_PLAY * g->mark_px * g->mark_bpr);
         g->mark_masks = NULL;
     }
     letters_free();
@@ -540,7 +540,7 @@ static void cache_art(struct Gfx *g)
         }
 icons:
     g->icon_masks = enlarge_words(&icons16[0][0], ICON_COUNT, 16, k, &g->icon_bpr);
-    g->mark_masks = enlarge_words(&marks16[0][0], MARK_RADIO_ON, MARK_SIZE, k, &g->mark_bpr);
+    g->mark_masks = enlarge_words(&marks16[0][0], MARK_PLAY, MARK_SIZE, k, &g->mark_bpr);
 }
 
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
@@ -561,7 +561,7 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     PLANEPTR m;
-    if (mark < MARK_ARROW || mark > MARK_RADIO_ON)
+    if (mark < MARK_ARROW || mark > MARK_PLAY)
         return;
     if (g->sm) {
         sm_mark(g->sm, g, mark, x, y, fg, bg);
@@ -704,6 +704,37 @@ void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD 
     BltTemplate((PLANEPTR)bl->mask, 0, bl->bpr, g->rp, x, y, bl->w, bl->h);
 }
 
+/* What the datatype object o holds. */
+void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi)
+{
+    struct DataType *dtn = NULL;
+    ULONG mode = 0;
+    pi->w = bmh->bmh_Width;
+    pi->h = bmh->bmh_Height;
+    pi->depth = bmh->bmh_Depth;
+    GetDTAttrs(o, PDTA_ModeID, (ULONG)&mode, DTA_DataType, (ULONG)&dtn, TAG_END);
+    pi->mode = mode == (ULONG)INVALID_ID ? 0 : mode;
+    pi->fmt[0] = 0;
+    if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_Name)
+        amce_strlcpy(pi->fmt, (const char *)dtn->dtn_Header->dth_Name, sizeof(pi->fmt));
+}
+
+void pic_describe(const struct PicInfo *pi, char *out, LONG max)
+{
+    char c[24];
+    if (pi->mode & HAM_KEY)
+        sprintf(c, "HAM%lu", (unsigned long)pi->depth);
+    else if (pi->depth > 8)
+        strcpy(c, "true colour");
+    else if ((pi->mode & EXTRAHALFBRITE_KEY) && pi->depth == 6)
+        strcpy(c, "64 colours, EHB");
+    else
+        sprintf(c, "%lu colours", 1UL << pi->depth);
+    char t[64];
+    sprintf(t, "%lu x %lu, %s", (unsigned long)pi->w, (unsigned long)pi->h, c);
+    amce_strlcpy(out, t, max);
+}
+
 /* Decode a picture through the registered datatypes and draw it scaled to
  * fit (w x h), keeping its aspect. Lowres pictures on a hires screen are
  * widened 2:1 so they keep their shape. */
@@ -742,6 +773,7 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     }
     sw = bmh->bmh_Width;
     sh = bmh->bmh_Height;
+    pic_info(o, bmh, &g->pic);
     /* A lowres picture on a tall-pixel hires screen: double its width to
      * keep its shape. */
     sxe = (gfx_mode_tall(g->mode) && sw <= 384) ? 2 : 1;

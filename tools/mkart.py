@@ -473,7 +473,7 @@ def main():
         fh.write("\nconst UWORD icons16[][16] = {\n")
         for rows in icons:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in rows) + " },\n")
-        fh.write("};\n\n/* List row markers (MARK_ARROW..MARK_RADIO_ON), 11 rows each */\n")
+        fh.write("};\n\n/* List row markers (MARK_ARROW..MARK_PLAY), 11 rows each */\n")
         fh.write("const UWORD marks16[][11] = {\n")
         for n in markicons.ORDER:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in markicons.lores(n)) + " },\n")

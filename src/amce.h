@@ -66,6 +66,12 @@ enum { TS_BODY, TS_BOLD, TS_SMALL, TS_FACES,
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
        SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024, SM_COUNT };
 
+/* What a decoded picture is (gfx_picture, view_show). */
+struct PicInfo {
+    UWORD w, h, depth;          /* depth > 8: true colour */
+    ULONG mode;                 /* its display mode ID (HAM, EHB, hires...) */
+    char  fmt[16];              /* the datatype's name: "ILBM", "GIF"... */
+};
 struct Gfx {
     struct Screen   *scr;
     struct Window   *win;
@@ -92,6 +98,7 @@ struct Gfx {
     UBYTE *mark_masks;          /* pixel style: list row marker masks */
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
     WORD  pic_x, pic_y, pic_w, pic_h;   /* the picture on screen (pic_w 0: none) */
+    struct PicInfo pic;         /* and what it is */
 };
 
 /* Design units to pixels on this screen. */
@@ -157,11 +164,27 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
                  WORD *drawn_h);
 void gfx_picture_free(struct Gfx *g);
+/* The full-screen picture viewer, on AmigaMCE's own screen (view.c). On
+ * 256-colour and native screens a picture gets the screen's whole palette
+ * while it is shown, and the info bar takes its colours from the picture.
+ * view_end leaves the screen black; redraw it, then view_restore. */
+BOOL view_begin(struct Gfx *g);
+BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
+               char *scale, LONG scalemax);
+void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
+void view_bar_hide(struct Gfx *g);
+BOOL view_bar_shown(void);
+void view_end(struct Gfx *g);
+void view_restore(struct Gfx *g);
+void pic_describe(const struct PicInfo *pi, char *out, LONG max);   /* "320 x 256, 32 colours" */
+struct BitMapHeader;
+void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* o: a datatype */
 
 /* ---------------------------------------------------------------- ags */
-enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION };
+enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC };
 /* What the left-hand marker column shows for a row (struct Item.mark). */
-enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON };
+enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
+       MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */ };
 
 struct Item {
     char  *label;       /* what the user sees */
@@ -203,6 +226,7 @@ BOOL list_init(struct ItemList *l);
 void list_free(struct ItemList *l);
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *sortkey, UBYTE kind);
 void list_sort(struct ItemList *l);
+char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
 LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z folders merged */
@@ -212,6 +236,12 @@ LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);
 BOOL ags_screenshot_path(const char *base, char *out, LONG max);
 void ags_unquote_path(const char *in, char *out, LONG max);
 BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *script);
+
+/* ---------------------------------------------------------------- pictures */
+const char *pics_format(const char *name);              /* "GIF".. by name, NULL if none */
+LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
+/* Pictures and folders in dir (-1: unreadable); first: its first picture by name. */
+LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {

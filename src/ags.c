@@ -67,6 +67,11 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
     return it;
 }
 
+char *list_strdup(struct ItemList *l, const char *s)
+{
+    return pool_strdup(l->pool, s);
+}
+
 static int cmp_items(const void *a, const void *b)
 {
     return amce_stricmp(((const struct Item *)a)->sortkey, ((const struct Item *)b)->sortkey);

@@ -156,6 +156,46 @@ int main(void)
         check_long("permanent expert kept", strstr(buf, "Set Expert 0") == NULL, 1);
     }
 
+    /* Pictures: folders first, tags, playable / greyed folders */
+    {
+        static const char *want[] = { "A", "Art", "Empty", "Mixed", "Top.JPG" };
+        char first[64];
+        LONG nd;
+        list_init(&l);
+        n = pics_read_dir("Images:", &l);
+        check_long("pics count", n, 5);
+        for (i = 0; i < l.count && i < 5; i++)
+            check_str("pics order", l.items[i].label, want[i]);
+        if (l.count == 5) {
+            check_long("pics A playable", l.items[0].mark, MARK_PLAY);
+            check_str("pics A count", l.items[0].sortkey, "4");
+            check_long("pics Art opens", l.items[1].mark, MARK_ARROW);
+            check_long("pics Empty greyed", l.items[2].flags & ITEM_DISABLED, ITEM_DISABLED);
+            check_long("pics Mixed opens", l.items[3].mark, MARK_ARROW);
+            check_long("pics Mixed not greyed", l.items[3].flags & ITEM_DISABLED, 0);
+            check_long("pics file kind", l.items[4].kind, IT_PIC);
+            check_str("pics file tag", l.items[4].sortkey, "JPEG");
+            check_str("pics file path", l.items[4].path, "Images:Top.JPG");
+        }
+        list_free(&l);
+        list_init(&l);
+        n = pics_read_dir("Images:A", &l);
+        check_long("pics A entries", n, 4);
+        if (n == 4) {
+            check_str("pics A first", l.items[0].label, "Agony.png");
+            check_str("pics sniffed", l.items[3].label, "NoExtGif");
+            check_str("pics sniffed tag", l.items[3].sortkey, "GIF");
+            check_str("pics A path", l.items[0].path, "Images:A/Agony.png");
+        }
+        list_free(&l);
+        n = pics_scan("Images:Mixed", &nd, first, sizeof(first));
+        check_long("scan Mixed pics", n, 1);
+        check_long("scan Mixed dirs", nd, 1);
+        check_str("scan Mixed first", first, "one.lbm");
+        check_long("scan missing", pics_scan("Images:Nope", &nd, NULL, 0), -1);
+        check_long("missing volume", pics_read_dir("NoSuchVolume:Images", &l), -1);
+    }
+
     Printf(failures ? "%ld FAILED\n" : "all tests passed\n", (LONG)failures);
     return failures ? 10 : 0;
 }

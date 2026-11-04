@@ -36,10 +36,19 @@ Features in this release
   (anti-aliased text, icons and logo at exactly the screen's size:
   1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; on 16-bit and
   deeper RTG screens).
+- Pictures: browses Media:Images (folders first, each picture with its
+  format), with the selected picture or a folder's first picture in the
+  preview pane. A folder that holds only pictures is marked with a play
+  arrow: Fire plays it as a slideshow, Right opens it. The viewer shows
+  pictures full screen on AmigaMCE's own screen, so the display never
+  changes mode, at a whole scale that keeps their pixels' shape. On
+  native and 256-colour screens a picture gets the whole palette while it
+  is shown, its own colours exactly when it has no more than the screen
+  can show, and the info bar is drawn in the picture's own colours.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
-Mods, Videos, Pictures, Music and Radio are listed but arrive
-in a later version. About holds the credits and a System information
+Mods, Videos, Music and Radio are listed but arrive in a later
+version. About holds the credits and a System information
 page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 
 Controls
@@ -51,6 +60,13 @@ Controls
   Left/Esc     back             Esc at menu    press twice to quit
   A-Z          jump to letter   Right mouse    back
   Mouse wheel  scroll           Scroll bar     click to page, drag to scroll
+
+  Pictures     Fire/Return views a picture or plays a folder marked with
+               the play arrow as a slideshow; Right or a double-click
+               opens a folder.
+  Viewer       Left/Right (or a click) previous/next, Fire/Return/Space
+               slideshow on/off (5 seconds a picture), Esc or the right
+               mouse button back.
 
 Installation
 ------------

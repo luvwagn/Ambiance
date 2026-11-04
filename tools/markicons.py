@@ -1,6 +1,7 @@
 """Row-marker icons for lists: sub-menu chevron, checkbox off/on, radio
-off/on. All 11 rows tall and 11 design pixels wide, so a marker never
-changes the layout when it changes state.
+off/on, and play (a folder Fire plays as a slideshow). All 11 rows tall
+and 11 design pixels wide, so a marker never changes the layout when it
+changes state.
 
 Lowres: hand-drawn below ('#' = ink). Hires (22 x 11, tall pixels): drawn
 from vector shapes on the hires grid and thresholded at 50% coverage, like
@@ -9,7 +10,7 @@ tools/hiicons.py, so curves and the tick use half-pixel steps.
 from PIL import Image, ImageDraw
 
 SIZE = 11
-ORDER = ["arrow", "check_off", "check_on", "radio_off", "radio_on"]   # MARK_ARROW.. MARK_RADIO_ON
+ORDER = ["arrow", "check_off", "check_on", "radio_off", "radio_on", "play"]   # MARK_ARROW.. MARK_PLAY
 
 LORES = {
     "arrow": [
@@ -64,6 +65,19 @@ LORES = {
         "..#.....#..",
         "...#####...",
     ],
+    "play": [
+        "...........",
+        "..#........",
+        "..##.......",
+        "..###......",
+        "..####.....",
+        "..#####....",
+        "..####.....",
+        "..###......",
+        "..##.......",
+        "..#........",
+        "...........",
+    ],
     "radio_on": [
         "...#####...",
         "..#.....#..",
@@ -89,6 +103,9 @@ def _p(x, y):
 def _hires_draw(name, d):
     if name == "arrow":
         d.line([_p(2.6, 1.4), _p(7.6, 5.5), _p(2.6, 9.6)], fill=255, width=int(1.5 * S), joint="curve")
+        return
+    if name == "play":
+        d.polygon([_p(2.2, 0.9), _p(8.6, 5.5), _p(2.2, 10.1)], fill=255)
         return
     if name.startswith("check"):
         d.rectangle([0, 0, SIZE * S - 1, SIZE * S - 1], fill=255)
