@@ -2738,16 +2738,68 @@ static void ov_show(struct Page *p)
     ov_stamp();
 }
 
-/* A new letter (A -> D...): clear the old one's box, stamp the new one.
- * Only the strip changes; the rows are not touched. */
+/* Changing letters off screen: the old letter's box and the new one's,
+ * cleared and the new letter stamped there, then copied up in one go with
+ * the beam (gfx_blit_beam). Cleared and stamped on the screen, the letter
+ * flickered: a smooth glide changes it nearly every frame. */
+static struct BitMap *ov_bm;
+static WORD ov_bw, ov_bh;
+
+static void ov_bm_free(void)
+{
+    if (ov_bm) {
+        WaitBlit();
+        FreeBitMap(ov_bm);
+        ov_bm = NULL;
+    }
+}
+
+/* A new letter (A -> D...): the old one's box cleared, the new one
+ * stamped. Only the strip changes; the rows are not touched. */
 static void ov_relabel(char c)
 {
+    const struct BigLetter *old = ov.bl;
+    WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
     if (!ov.on || !c || c == ov.letter)
         return;
-    if (ov.bl)
-        gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
-    if (ov_build(c))
+    if (!ov_build(c)) {
+        if (old)
+            gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
+        return;
+    }
+    x0 = ov.x;
+    y0 = ov.y;
+    x1 = ov.x + ov.bl->w - 1;
+    y1 = ov.y + ov.bl->h - 1;
+    if (old) {
+        if (ox < x0) x0 = ox;
+        if (oy < y0) y0 = oy;
+        if (ox + old->w - 1 > x1) x1 = ox + old->w - 1;
+        if (oy + old->h - 1 > y1) y1 = oy + old->h - 1;
+    }
+    w = x1 - x0 + 1;
+    h = y1 - y0 + 1;
+    if (!ov_bm || ov_bw < w || ov_bh < h) {
+        WORD nw = ov_bm && ov_bw > w ? ov_bw : w, nh = ov_bm && ov_bh > h ? ov_bh : h;
+        ov_bm_free();
+        ov_bm = AllocBitMap(nw, nh, g.depth, BMF_CLEAR, g.rp->BitMap);
+        ov_bw = nw;
+        ov_bh = nh;
+    }
+    if (ov_bm) {
+        struct RastPort orp, *screen_rp = g.rp;
+        InitRastPort(&orp);
+        orp.BitMap = ov_bm;
+        g.rp = &orp;                        /* drawn off screen */
+        gfx_fill(&g, 0, 0, w - 1, h - 1, PEN_BG);
+        gfx_bigletter_draw(&g, ov.bl, ov.x - x0, ov.y - y0, PEN_DIM);
+        g.rp = screen_rp;
+        gfx_blit_beam(&g, ov_bm, x0, y0, w, h);
+    } else {
+        if (old)
+            gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
         ov_stamp();
+    }
 }
 
 static void ov_hide(void)
@@ -3403,6 +3455,7 @@ static void release_for_launch(void)
     ov.bl = NULL;
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
+    ov_bm_free();
     gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
     close_extra_libs();
     flush_memory();
@@ -3891,6 +3944,7 @@ static void apply_screen_mode(int sm)
     pv_flush();                     /* decoded for this screen */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
+    ov_bm_free();
     gfx_close(&g);
     screen_mode = sm;
     if (!gfx_open(&g, &caps, sm, ui_style)) {
@@ -3979,6 +4033,7 @@ static void apply_style(int st)
     pv_flush();                     /* decoded for this screen */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
+    ov_bm_free();
     gfx_close(&g);
     if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
         !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
@@ -5021,6 +5076,7 @@ out:
     amce_log("pages freed", "");
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
+    ov_bm_free();
     gfx_close(&g);
     amce_log("screen closed", "");
     if (ptr_blank)
