@@ -15,7 +15,7 @@
  * no RTG library calls. The in-between pens are taken from 32 up as each
  * (foreground, background) pair is first used; on a truecolour screen a
  * pen is only a colour to draw with, so this costs nothing on screen. On
- * an 8-bit one the pens are the screen's own: each shade takes a free pen
+ * an 8-bit one the pens are the screen's own: each shade takes a free pen (3 shades a colour pair there, not 6)
  * of its own (ObtainPen) when it is first drawn, only those really used,
  * and lets them go when the screen closes. The log says how many.
  *
@@ -380,12 +380,25 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
         return fg;
     if (fg >= NUM_UI_PENS || bg >= NUM_UI_PENS)
         return lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg;
-    slot = &s->blend[fg][bg][lv];
-    if (*slot)
-        return *slot;
-    for (c = 0; c < 3; c++) {
-        LONG a = (LONG)ui_rgb(bg, c), d = (LONG)ui_rgb(fg, c) - a;
-        rgb[c] = (ULONG)(a + d * lv / (SMOOTH_LEVELS - 1));
+    if (s->g && !s->g->truecolor) {
+        /* 8-bit: pens are scarce, so 3 shades a pair, not 6 (1/4, 1/2 and
+         * 3/4 of the way: steps 1-2, 3-4, 5-6) */
+        UBYTE q = (UBYTE)((lv + 1) / 2);
+        slot = &s->blend[fg][bg][q];
+        if (*slot)
+            return *slot;
+        for (c = 0; c < 3; c++) {
+            LONG a = (LONG)ui_rgb(bg, c), d = (LONG)ui_rgb(fg, c) - a;
+            rgb[c] = (ULONG)(a + d * q / 4);
+        }
+    } else {
+        slot = &s->blend[fg][bg][lv];
+        if (*slot)
+            return *slot;
+        for (c = 0; c < 3; c++) {
+            LONG a = (LONG)ui_rgb(bg, c), d = (LONG)ui_rgb(fg, c) - a;
+            rgb[c] = (ULONG)(a + d * lv / (SMOOTH_LEVELS - 1));
+        }
     }
     pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
     if (!pen) {                             /* out of pens: the nearest colour */

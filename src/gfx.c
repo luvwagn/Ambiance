@@ -348,10 +348,10 @@ static UWORD pic_npens;
  * blocks, so a new picture is drawn in one while the old one is still in
  * the other. */
 #define BLK_MAX  112            /* pens a block, at most */
-#define BLK_KEEP 108            /* free pens left for everyone else (the smooth
+#define BLK_KEEP  56            /* free pens left for everyone else (the smooth
                                  * style's shades, taken as they are first drawn:
-                                 * 6 a colour pair, and some 15 pairs are used;
-                                 * with 48 the menu's highlight ran out) */
+                                 * 3 a colour pair on 8-bit screens, some 15
+                                 * pairs used) */
 #define BLK_TWO   64            /* two blocks only if each gets this many */
 static UBYTE blk_pen[2][BLK_MAX];
 static UWORD blk_n;             /* pens in each block; 0: no blocks */
