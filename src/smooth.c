@@ -81,6 +81,9 @@ struct Smooth {
     UBYTE used;                 /* bit n: mask n has pixels */
     UBYTE blend[NUM_UI_PENS][NUM_UI_PENS][SMOOTH_LEVELS];
     UWORD next_pen, last_pen;
+    BOOL ran_out;               /* said so in the log */
+    UWORD held_low;             /* ...of them below FIRST_PEN, kept unused */
+    ULONG got_rgb[256];         /* ...and their colours, 0xRRGGBB */
     UBYTE got[256];             /* 8-bit screens: the pens obtained, */
     UWORD ngot;                 /*   to let go */
     BOOL chunky;                /* RTG: one WriteChunkyPixels a box */
@@ -239,6 +242,8 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
     s->next_pen = FIRST_PEN;
     s->last_pen = count > 256 ? 255 : count ? count - 1 : 0;
     s->ngot = 0;
+    s->held_low = 0;
+    s->ran_out = FALSE;
     s->chunky = FALSE;
     if (!g->planar && GfxBase->LibNode.lib_Version >= 40) {
         struct Process *me = (struct Process *)FindTask(NULL);
@@ -263,8 +268,9 @@ void sm_detach(struct Smooth *s)
 {
     if (s->g && s->g->scr && s->ngot) {
         UWORD i;
-        char m[48];
-        sprintf(m, "%lu pens for its shades and logo", (unsigned long)s->ngot);
+        char m[80];
+        sprintf(m, "%lu pens for its shades and logo (%lu below 32 kept unused)",
+                (unsigned long)(s->ngot - s->held_low), (unsigned long)s->held_low);
         amce_log("smooth style", m);
         for (i = 0; i < s->ngot; i++)
             ReleasePen(s->g->scr->ViewPort.ColorMap, s->got[i]);
@@ -301,21 +307,63 @@ static UBYTE alloc_rgb(struct Smooth *s, ULONG r, ULONG gg, ULONG b)
     if (!s->g)
         return 0;
     if (!s->g->truecolor) {
-        /* a real pen: any free one, held while the screen is open */
-        LONG p;
-        if (s->ngot >= sizeof(s->got))
-            return 0;
-        p = (LONG)ObtainPen(s->g->scr->ViewPort.ColorMap, -1, r * 0x01010101UL,
-                                 gg * 0x01010101UL, b * 0x01010101UL, PEN_EXCLUSIVE);
-        if (p <= 0)
-            return 0;                       /* none left: the nearest end */
-        s->got[s->ngot++] = (UBYTE)p;
-        return (UBYTE)p;
+        /* a real pen: any free one from 32 up, held while the screen is
+         * open. The UI's own pens (0-15) and the pointer's (16-31) are not
+         * obtained by anyone (the screen shares its pens), so ObtainPen
+         * can hand them out; a shade there was changed back under the
+         * text whenever the palette or the pointer was set again. Those
+         * are kept (so they are not offered again) but not used. */
+        for (;;) {
+            LONG p;
+            if (s->ngot >= sizeof(s->got))
+                return 0;
+            p = (LONG)ObtainPen(s->g->scr->ViewPort.ColorMap, -1, r * 0x01010101UL,
+                                     gg * 0x01010101UL, b * 0x01010101UL, PEN_EXCLUSIVE);
+            if (p < 0)
+                return 0;                   /* none left: the nearest end */
+            s->got_rgb[s->ngot] = p >= FIRST_PEN ? (r << 16) | (gg << 8) | b : 0xFFFFFFFFUL;
+            s->got[s->ngot++] = (UBYTE)p;
+            if (p >= FIRST_PEN)
+                return (UBYTE)p;
+            s->held_low++;
+        }
     }
     if (s->next_pen > s->last_pen)
         return 0;
     pen = (UBYTE)s->next_pen++;
     SetRGB32(&s->g->scr->ViewPort, pen, r * 0x01010101UL, gg * 0x01010101UL, b * 0x01010101UL);
+    return pen;
+}
+
+/* Out of pens: the nearest colour among the UI's and the shades' pens
+ * (much softer than the nearest end of the ramp). */
+static UBYTE nearest_pen(struct Smooth *s, ULONG r, ULONG gg, ULONG b, UBYTE fallback)
+{
+    ULONG best = 0xFFFFFFFFUL;
+    UBYTE pen = fallback;
+    UWORD i;
+    for (i = 0; i < NUM_UI_PENS + s->ngot; i++) {
+        ULONG c, d;
+        LONG dr, dg, db;
+        UBYTE p;
+        if (i < NUM_UI_PENS) {
+            p = (UBYTE)i;
+            c = (ui_rgb(p, 0) << 16) | (ui_rgb(p, 1) << 8) | ui_rgb(p, 2);
+        } else {
+            p = s->got[i - NUM_UI_PENS];
+            c = s->got_rgb[i - NUM_UI_PENS];
+            if (c == 0xFFFFFFFFUL)
+                continue;
+        }
+        dr = (LONG)((c >> 16) & 255) - (LONG)r;
+        dg = (LONG)((c >> 8) & 255) - (LONG)gg;
+        db = (LONG)(c & 255) - (LONG)b;
+        d = (ULONG)(dr * dr * 3 + dg * dg * 4 + db * db * 2);
+        if (d < best) {
+            best = d;
+            pen = p;
+        }
+    }
     return pen;
 }
 
@@ -340,8 +388,15 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
         rgb[c] = (ULONG)(a + d * lv / (SMOOTH_LEVELS - 1));
     }
     pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
-    if (!pen)                               /* out of pens: nearest end */
-        return lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg;
+    if (!pen) {                             /* out of pens: the nearest colour */
+        pen = s->g && !s->g->truecolor
+                  ? nearest_pen(s, rgb[0], rgb[1], rgb[2], lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg)
+                  : (lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg);
+        if (!s->ran_out) {
+            s->ran_out = TRUE;
+            amce_log("smooth style", "out of pens for shades: the nearest colours used");
+        }
+    }
     *slot = pen;
     return pen;
 }
