@@ -4772,7 +4772,36 @@ static void say(const char *s)
         FPuts(out, (CONST_STRPTR)s);
 }
 
+static int app_main(void);
+
+/* Picture datatypes decode on the stack of whoever asks, and the viewer
+ * asks from this task: WarpJPEG needs far more than the 4 KB a Workbench
+ * icon or a plain CLI gives (an overflow crashed with #80000003). So
+ * AmigaMCE runs on a stack of its own, MAIN_STACK bytes, whatever it was
+ * started with. Statics, not locals: the stack moves under them. */
+#define MAIN_STACK (128UL * 1024)
+static struct StackSwapStruct main_sss;
+static APTR main_stack;
+static int main_rc;
+
 int main(void)
+{
+    struct Task *me = FindTask(NULL);
+    if ((ULONG)me->tc_SPUpper - (ULONG)me->tc_SPLower >= MAIN_STACK)
+        return app_main();
+    if (!(main_stack = AllocVec(MAIN_STACK, MEMF_ANY)))
+        return app_main();
+    main_sss.stk_Lower = main_stack;
+    main_sss.stk_Upper = (ULONG)main_stack + MAIN_STACK;
+    main_sss.stk_Pointer = (APTR)main_sss.stk_Upper;
+    StackSwap(&main_sss);
+    main_rc = app_main();
+    StackSwap(&main_sss);
+    FreeVec(main_stack);
+    return main_rc;
+}
+
+static int app_main(void)
 {
     struct MsgPort *tport = NULL;
     struct timerequest *treq = NULL;

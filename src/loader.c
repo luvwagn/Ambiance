@@ -214,7 +214,7 @@ static BOOL start_worker(struct Worker *w)
     SetSignal(0, 1UL << start_sig);
     if (!(w->task = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)loader_main,
                                                       NP_Name, (ULONG)w->name,
-                                                      NP_StackSize, 32768, NP_Priority, w->pri,
+                                                      NP_StackSize, 65536, NP_Priority, w->pri,
                                                       NP_WindowPtr, (ULONG)-1, TAG_END)))
         return FALSE;
     Wait(1UL << start_sig);
