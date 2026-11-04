@@ -3190,15 +3190,17 @@ static void act_action(struct Item *it)
  * eases off near the end so it settles on the last entry.
  *
  * Lists speed up in two stages: to cruising speed over HOLD_RAMP, then,
- * still held, on up to LIST_BOOST times that over HOLD_BOOST, for very
- * long lists (the big letter shows where the list is meanwhile). */
+ * still held, on up to LIST_BOOST times that over HOLD_BOOST, or for a
+ * long list as fast as crosses all of it in LIST_SWEEP (All Games' 3,600
+ * entries: about 1,200 a second), the big letter showing where it is. */
 #define HOLD_DELAY  250     /* ms before the glide starts */
 #define HOLD_RAMP  1200     /* ms to reach cruising speed */
-#define HOLD_BOOST 3000     /* further ms to reach top speed */
+#define HOLD_BOOST 2000     /* further ms to reach top speed */
 #define LIST_MIN     12     /* entries per second when the glide starts */
 #define LIST_MAX    100     /* cruising entries per second on a small screen */
 #define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
-#define LIST_BOOST    4     /* top speed, as a multiple of cruising speed */
+#define LIST_BOOST    4     /* top speed, as a multiple of cruising speed, */
+#define LIST_SWEEP 3000     /* ...or the whole list in this many ms, if faster */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
@@ -3291,10 +3293,16 @@ static void hold_tick(void)
             if (glide < HOLD_RAMP)
                 rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
             else {
-                LONG b = glide - HOLD_RAMP;
+                /* top speed: four times cruising, or for a long list (whose
+                 * length is known from the start when it has an index)
+                 * fast enough to cross all of it in LIST_SWEEP ms */
+                LONG b = glide - HOLD_RAMP, peak = top * LIST_BOOST,
+                     sweep = p->list.count * 1000 / LIST_SWEEP;
+                if (sweep > peak)
+                    peak = sweep;
                 if (b > HOLD_BOOST)
                     b = HOLD_BOOST;
-                rate = top + top * (LIST_BOOST - 1) * b / HOLD_BOOST;
+                rate = top + (peak - top) * b / HOLD_BOOST;
             }
             if (rate > 6 + remaining * 4)   /* ease in: 406/s at 100 left ... 10/s at 1 */
                 rate = 6 + remaining * 4;
