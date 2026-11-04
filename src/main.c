@@ -4215,10 +4215,10 @@ static void act_action(struct Item *it)
  * Lists speed up in two stages: to cruising speed over HOLD_RAMP, then,
  * still held, on up to LIST_BOOST times that over HOLD_BOOST, or for a
  * long list as fast as crosses all of it in LIST_SWEEP (All Games' 3,600
- * entries: about 1,800 a second), the big letter showing where it is. */
+ * entries: about 3,600 a second; top to bottom in about 2.4 s), the big letter showing where it is. */
 #define HOLD_DELAY  250     /* ms before the glide starts */
-#define HOLD_RAMP   800     /* ms to reach cruising speed */
-#define HOLD_BOOST 1200     /* further ms to reach top speed */
+#define HOLD_RAMP   500     /* ms to reach cruising speed */
+#define HOLD_BOOST  600     /* further ms to reach top speed */
 #define LIST_MIN     12     /* entries per second when the glide starts */
 #define MENU_MIN     35     /* ...in a short list (a menu: two screens or less), */
 #define MENU_MAX     50     /* rising to this over MENU_RAMP (a row a frame); */
@@ -4226,7 +4226,7 @@ static void act_action(struct Item *it)
 #define LIST_MAX    100     /* cruising entries per second on a small screen */
 #define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
 #define LIST_BOOST    4     /* top speed, as a multiple of cruising speed, */
-#define LIST_SWEEP 2000     /* ...or the whole list in this many ms, if faster */
+#define LIST_SWEEP 1000     /* ...or the whole list in this many ms, if faster */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
@@ -4421,8 +4421,8 @@ static void hold_tick(void)
                     b = HOLD_BOOST;
                 rate = top + (peak - top) * b / HOLD_BOOST;
             }
-            if (!menu && rate > 6 + remaining * 4)   /* ease in: 406/s at 100 left ... 10/s at 1 */
-                rate = 6 + remaining * 4;
+            if (!menu && rate > 10 + remaining * 10) /* ease in: 1010/s at 100 left ... 20/s at 1 */
+                rate = 10 + remaining * 10;
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
             if (n > 0) {

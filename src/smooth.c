@@ -26,8 +26,9 @@
  * pen, the uncovered ones the background) and written in one
  * WriteChunkyPixels. The background pixels are written too, so the text
  * is always drawn as if opaque over its own box: the callers draw it on
- * the flat colour they name as its background. PROGDIR:AmigaMCE.masktext
- * keeps the mask path on RTG too (for comparison).
+ * the flat colour they name as its background. It was no faster in
+ * practice (the glide's time was its speed curve, not drawing) and the
+ * text looked worse, so it is only used with PROGDIR:AmigaMCE.chunkytext.
  *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
@@ -244,11 +245,11 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
-        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.masktext", SHARED_LOCK);
+        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.chunkytext", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l)
             UnLock(l);
-        s->chunky = !l;
+        s->chunky = l != 0;
     }
     amce_log("smooth style", s->chunky ? "text drawn as chunky pixels" : "text drawn with masks");
 }
