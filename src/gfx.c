@@ -23,10 +23,13 @@
 #include <proto/diskfont.h>
 #include <proto/datatypes.h>
 #include <clib/alib_protos.h>
+#include <cybergraphx/cybergraphics.h>
+#include <proto/cybergraphics.h>
 #include <stdio.h>
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase;
+struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
 
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
@@ -235,6 +238,8 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     g->truecolor = g->depth > 8;
     if (mode == (ULONG)INVALID_ID)
         return FALSE;
+    if (g->truecolor && !CyberGfxBase)
+        CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     /* Scale (see amce.h): native 1x; RTG a whole factor of its lines/256,
      * or exactly lines/256 in the smooth style. */
     g->kint = 1;
@@ -557,6 +562,10 @@ void gfx_close(struct Gfx *g)
     int i;
     gfx_picture_free(g);
     blk_release(g);
+    if (CyberGfxBase) {
+        CloseLibrary(CyberGfxBase);
+        CyberGfxBase = NULL;
+    }
     WaitBlit();
     if (g->logo_masks) {
         FreeMem(g->logo_masks, (ULONG)g->logo_npens * g->logo_h * g->logo_bpr);
@@ -1162,12 +1171,57 @@ void pic_fit(ULONG sw, ULONG sh, BOOL tall, WORD w, WORD h, BOOL whole, ULONG *p
     *pdh = dh ? dh : 1;
 }
 
-/* Chunky pixels (mod bytes a row, a multiple of 16) into bm. */
+/* 8 chunky pixels to a byte of each of 8 bitplanes (out[k]: bit k of
+ * each, the first pixel in the top bit): an 8 x 8 bit transpose in two
+ * longs, a dozen operations for 8 pixels. */
+static void c2p8(const UBYTE *c, UBYTE *out)
+{
+    ULONG x = ((ULONG)c[0] << 24) | ((ULONG)c[1] << 16) | ((ULONG)c[2] << 8) | c[3];
+    ULONG y = ((ULONG)c[4] << 24) | ((ULONG)c[5] << 16) | ((ULONG)c[6] << 8) | c[7], t;
+    t = (x ^ (x >> 7)) & 0x00AA00AAUL;
+    x = x ^ t ^ (t << 7);
+    t = (y ^ (y >> 7)) & 0x00AA00AAUL;
+    y = y ^ t ^ (t << 7);
+    t = (x ^ (x >> 14)) & 0x0000CCCCUL;
+    x = x ^ t ^ (t << 14);
+    t = (y ^ (y >> 14)) & 0x0000CCCCUL;
+    y = y ^ t ^ (t << 14);
+    t = (x & 0xF0F0F0F0UL) | ((y >> 4) & 0x0F0F0F0FUL);
+    y = ((x << 4) & 0xF0F0F0F0UL) | (y & 0x0F0F0F0FUL);
+    x = t;
+    out[7] = x >> 24;
+    out[6] = x >> 16;
+    out[5] = x >> 8;
+    out[4] = x;
+    out[3] = y >> 24;
+    out[2] = y >> 16;
+    out[1] = y >> 8;
+    out[0] = y;
+}
+
+/* Chunky pixels (mod bytes a row, a multiple of 16) into bm. A planar
+ * bitmap is written here, 8 pixels at a time (c2p8): graphics.library's
+ * WriteChunkyPixels took ~300 ms for a 273 x 218 preview on a 68030. */
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
                          ULONG mod)
 {
     struct RastPort rp, trp;
     struct BitMap *row;
+    if (g->planar && (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) && bm->Depth <= 8) {
+        ULONG y, x, bpr = bm->BytesPerRow, nb = (w + 7) >> 3, d = bm->Depth, k;
+        UBYTE planes[8];
+        WaitBlit();                         /* nothing of the blitter's in it */
+        for (y = 0; y < h; y++) {
+            const UBYTE *c = buf + y * mod;
+            ULONG off = y * bpr;
+            for (x = 0; x < nb; x++, c += 8) {
+                c2p8(c, planes);
+                for (k = 0; k < d; k++)
+                    ((UBYTE *)bm->Planes[k])[off + x] = planes[k];
+            }
+        }
+        return;
+    }
     InitRastPort(&rp);
     rp.BitMap = bm;
     if (GfxBase->LibNode.lib_Version >= 40) {
@@ -1184,11 +1238,19 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
 /* How many colours a thumbnail made now may have: half the pens free to
  * pictures, the other half for the next one (drawn while this one is
  * still up, in other pens). */
+/* Can this screen show thumbnails (gfx_thumb)? */
+BOOL gfx_thumbs(struct Gfx *g)
+{
+    return g->truecolor ? CyberGfxBase != NULL : g->pens_shared;
+}
+
 LONG gfx_thumb_colours(struct Gfx *g)
 {
     struct PaletteExtra *pe = g->scr ? g->scr->ViewPort.ColorMap->PalExtra : NULL;
     LONG all = g->depth >= 8 ? 256 : 1L << g->depth;
     LONG n = ((pe ? (LONG)pe->pe_NFree : all / 2) + pic_npens) / 2;
+    if (g->truecolor)
+        return 256;                         /* any colours: no pens */
     if (blk_n)
         return blk_n;                       /* a block's worth */
     if (n > all)
@@ -1209,8 +1271,26 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
     ULONG i, n;
     WORD nx;
     int blk = -1;
-    if (!t || !g->pens_shared || g->truecolor)
+    if (!t || !gfx_thumbs(g))
         return FALSE;
+    if (g->truecolor) {
+        /* its colour numbers and their colours, written as they are */
+        struct Beam b;
+        nx = x + (w - (WORD)t->w) / 2;
+        WriteLUTPixelArray(t->px, 0, 0, t->mod, g->rp, (APTR)t->pal, nx, y, t->w, t->h,
+                           CTABFMT_XRGB8);
+        beam_init(g, &b);
+        clear_old(g, &b, x, y, x + w - 1, y + h - 1, nx, y, t->w, t->h);
+        gfx_picture_free(g);
+        g->pic = *pi;
+        g->pic_x = nx;
+        g->pic_y = y;
+        g->pic_w = t->w;
+        g->pic_h = t->h;
+        if (drawn_h)
+            *drawn_h = t->h;
+        return TRUE;
+    }
     n = (ULONG)t->mod * t->h;
     cm = g->scr->ViewPort.ColorMap;
     if (!(buf = AllocVec(n, MEMF_ANY)))
@@ -1382,7 +1462,7 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     BOOL taken, ok;
     if (!(g->pens_shared || g->truecolor))
         return FALSE;
-    if (!g->truecolor &&
+    if (gfx_thumbs(g) &&
         (t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi))) {
         ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM: no datatype */
         thumb_free(t);

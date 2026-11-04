@@ -2279,8 +2279,9 @@ static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahea
     j->scr = g.scr;
     j->remap = g.truecolor;
     j->want_pic = FALSE;                    /* pictures are LJ_SHOT jobs of their own */
-    if (type == LJ_SHOT && g.pens_shared && !g.truecolor) {
+    if (type == LJ_SHOT && gfx_thumbs(&g)) {
         /* made small in the loader, in colours of its own (thumb.c) */
+        j->remap = FALSE;
         j->tw = aside_width() - U(4);
         j->th = pv_box_h;
         j->tall = gfx_mode_tall(g.mode);
