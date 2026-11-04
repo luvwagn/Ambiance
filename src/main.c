@@ -1653,17 +1653,18 @@ static void draw_title_count(struct Page *p)
     count_left = x;
 }
 
+/* The breadcrumb: each level's title, the earlier ones links back to
+ * their level (a click, or hover in mouse mode, as list rows). A long
+ * one loses its first levels to "...". crumb[]: where each is drawn. */
+static struct { WORD x0, x1; } crumb[MAXDEPTH];
+static int crumb_first;             /* the first level shown (before it: "...") */
+static int crumb_hover = -1;        /* the level under the pointer, -1 none */
+
 static void draw_title(struct Page *p)
 {
-    char t[160], widest[24];
+    char widest[24];
     int i;
-    WORD cw = 0;
-    t[0] = 0;
-    for (i = 0; i < depth; i++) {
-        if (i)
-            amce_strlcat(t, " > ", sizeof(t));
-        amce_strlcat(t, pages[i].title, sizeof(t));
-    }
+    WORD cw = 0, maxw, x, sep = gfx_textlen(&g, " > ", TS_BOLD), dots;
     if (p->type == PT_LIST && p->list.count) {
         /* room for the widest count this list can show, so a growing
          * number never runs into the breadcrumb */
@@ -1676,16 +1677,84 @@ static void draw_title(struct Page *p)
     }
     gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
     count_left = -1;
-    /* show the end of a long breadcrumb */
+    maxw = g.pane_w - cw - U(8);
+    dots = gfx_textlen(&g, "...", TS_BOLD) + sep;
+    /* the levels that fit, the last ones first */
     {
-        const char *s = t;
-        WORD maxw = g.pane_w - cw - U(8);
-        while (*s && gfx_textlen(&g, s, TS_BOLD) > maxw)
-            s++;
-        gfx_text(&g, g.pane_x, U(28), s, PEN_WHITE, PEN_BG, maxw, TS_BOLD);
+        WORD total = 0;
+        crumb_first = depth - 1;
+        total = gfx_textlen(&g, pages[depth - 1].title, TS_BOLD);
+        while (crumb_first > 0) {
+            WORD w = gfx_textlen(&g, pages[crumb_first - 1].title, TS_BOLD) + sep;
+            if (total + w + (crumb_first > 1 ? dots : 0) > maxw)
+                break;
+            total += w;
+            crumb_first--;
+        }
+    }
+    x = g.pane_x;
+    if (crumb_first > 0) {
+        gfx_text(&g, x, U(28), "...", PEN_DIM, PEN_BG, 0, TS_BOLD);
+        x += gfx_textlen(&g, "...", TS_BOLD);
+        gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD);
+        x += sep;
+    }
+    for (i = 0; i < depth; i++) {
+        crumb[i].x0 = crumb[i].x1 = -1;
+        if (i < crumb_first)
+            continue;
+        {
+            BOOL last = i == depth - 1, hov = !last && i == crumb_hover && mouse_mode;
+            WORD w = gfx_textlen(&g, pages[i].title, TS_BOLD), room = g.pane_x + maxw - x;
+            UBYTE bg = hov ? PEN_RULE : PEN_BG;
+            if (room <= 0)
+                break;
+            if (w > room)
+                w = room;
+            if (hov)
+                gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
+            gfx_text(&g, x, U(28), pages[i].title, last ? PEN_WHITE : PEN_TEXT, bg, room, TS_BOLD);
+            crumb[i].x0 = x;
+            crumb[i].x1 = x + w - 1;
+            x += w;
+            if (!last) {
+                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD);
+                x += sep;
+            }
+        }
     }
     draw_title_count(p);
     gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
+}
+
+/* The breadcrumb level at (x, y), -1 if none (the current level is not a link). */
+static int crumb_at(WORD x, WORD y)
+{
+    int i;
+    if (y < U(26) || y >= U(41))
+        return -1;
+    for (i = crumb_first; i < depth - 1; i++)
+        if (crumb[i].x0 >= 0 && x >= crumb[i].x0 - U(2) && x <= crumb[i].x1 + U(2))
+            return i;
+    return -1;
+}
+
+static void pane_settle(void);
+
+/* Back to level i of the breadcrumb (0: the section's top). */
+static void crumb_go(int level)
+{
+    if (level < 0 || level >= depth - 1)
+        return;
+    pane_settle();
+    while (depth > level + 1)
+        page_pop();
+    crumb_hover = -1;
+    if (focus != FOCUS_CONTENT)
+        focus = FOCUS_CONTENT;
+    draw_menu();
+    draw_pane(TRUE);
+    draw_footer();
 }
 
 /* Row markers are icons (gfx_mark) in a column on the left before each
@@ -2606,6 +2675,12 @@ static void hover_at(WORD x, WORD y)
 {
     struct Page *p = cur();
     WORD row = -1, mi = -1;
+    int c = p && !pane_pending ? crumb_at(x, y) : -1;
+    if (c != crumb_hover) {
+        crumb_hover = c;
+        if (p && !pane_pending)
+            draw_title(p);                  /* the link under the pointer, lit */
+    }
     if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h)
         mi = (y - g.top) / g.row_h;
     else if (p && p->type == PT_LIST && x >= g.pane_x - U(2) && x <= list_xr(p) &&
@@ -4170,6 +4245,14 @@ static void handle_mouse(struct IntuiMessage *im)
     }
     if (gut_click(x, y))
         return;
+    {
+        int c = crumb_at(x, y);
+        if (c >= 0) {
+            crumb_go(c);                    /* a breadcrumb link: back to that level */
+            click_opened = TRUE;
+            return;
+        }
+    }
     if (tb && tb_mouse_down(tb, x, y)) {
         set_focus(tb == &pv_tb ? FOCUS_PREVIEW : FOCUS_CONTENT);
         if (tb->dragging)

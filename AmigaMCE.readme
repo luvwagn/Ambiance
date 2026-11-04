@@ -73,6 +73,8 @@ Controls
   Fire/Return  play a game, open a folder or setting
   Mouse        one click opens a folder, a setting or a section; a game
                or picture is selected by one click, played by two
+               the breadcrumb above a list (Games > All Games...) links
+               back to each level
   Right        open a folder; on a game, into its details pane when
                that scrolls (lowres: the game's own page)
   Left/Esc     back             Esc at menu    press twice to quit
