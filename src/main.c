@@ -54,6 +54,7 @@ struct Page {
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
+    char pic[160];              /* PT_TEXT: a picture under the text ("" none) */
 };
 
 #define PICS_ROOT "Media:Images"
@@ -1397,12 +1398,20 @@ static void build_about_menu(struct Page *p)
     action_item(p, "System information", "", ACT_SYSINFO, MARK_ARROW);
 }
 
+/* AGS's splash screen, shown under the Credits: read from the AGS install
+ * itself, never copied into AmigaMCE. The first of these that exists. */
+static const char *const ags_splash[] = { NULL };
+
 static void build_credits(struct Page *p)
 {
     char line[96];
+    int i;
     sprintf(line, "AmigaMCE %s", AMCE_VERSION);
     text_line(p, line);
     text_line(p, "(c) 2026 Brian King");
+    text_line(p, "");
+    text_para(p, "This front-end would not be possible without the immense efforts of Paul Vince "
+                 "and Amiga Game Selector.");
     text_line(p, "");
     text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
                  "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
@@ -1415,6 +1424,17 @@ static void build_credits(struct Page *p)
     text_line(p, "");
     text_para(p, "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer.");
+    for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)ags_splash[i], SHARED_LOCK))) {
+            UnLock(l);
+            amce_strlcpy(p->pic, ags_splash[i], sizeof(p->pic));
+        }
+        me->pr_WindowPtr = old;
+    }
 }
 
 static void build_root_pages(int mod)
@@ -3193,6 +3213,22 @@ static void draw_pane(BOOL full)
         draw_list_rows(p);
         break;
     case PT_TEXT:
+        if (p->pic[0] && (g.pens_shared || g.truecolor)) {
+            /* the text, as tall as it needs (at most 3/5 of the pane), and
+             * a picture under it, as big as fits */
+            WORD avail = g.footer_y - 2 - g.list_top, line_h = g.font_h + U(1);
+            WORD th = (WORD)(p->list.count * line_h + U(2)), py, dh = 0;
+            if (th > avail * 3 / 5)
+                th = avail * 3 / 5;
+            if (!p->tb.open)
+                tb_open(&g, &p->tb, g.pane_x, g.list_top, textbox_w(), th, &p->list, FALSE);
+            if (full || !p->tb.drawn)
+                tb_draw(&g, &p->tb);
+            py = g.list_top + th + U(6);
+            if (full && py < g.footer_y - U(20))
+                gfx_picture(&g, p->pic, g.pane_x, py, g.pane_w, g.footer_y - 2 - py, TRUE, &dh);
+            break;
+        }
         if (!p->tb.open)
             open_textbox(p, g.list_top);
         if (full || !p->tb.drawn)
