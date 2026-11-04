@@ -175,6 +175,38 @@ def glowicon(normal, selected):
     return b"FORM" + struct.pack(">I", len(body)) + body
 
 
+def disk_glow():
+    """46 x 46: a 3.5" floppy (dark body, metal shutter, white label) with
+    the logo on its label: the play badge and the orange MCE box."""
+    from PIL import ImageFont
+    font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts-src", "Rubik-Bold.ttf")
+    out = []
+    for light in (False, True):
+        ss = 8
+        big = Image.new("RGBA", (46 * ss, 46 * ss), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        body = (0x3A, 0x40, 0x4E) if not light else (0x50, 0x58, 0x6A)
+        d.rounded_rectangle([3 * ss, 3 * ss, 43 * ss - 1, 43 * ss - 1], radius=2 * ss, fill=body)
+        d.polygon([(38 * ss, 3 * ss), (43 * ss, 8 * ss), (43 * ss, 3 * ss)], fill=(0, 0, 0, 0))
+        # the shutter, its window
+        d.rectangle([13 * ss, 3 * ss, 33 * ss, 16 * ss], fill=(0xB8, 0xBE, 0xC8))
+        d.rectangle([26 * ss, 5 * ss, 30 * ss, 14 * ss], fill=(0x30, 0x34, 0x3C))
+        # the label
+        d.rounded_rectangle([8 * ss, 21 * ss, 38 * ss, 41 * ss], radius=1 * ss, fill=(0xF4, 0xF4, 0xF0))
+        img = big.resize((46, 46), Image.LANCZOS)
+        logo = badge(14, sx=12 / 14, sy=12 / 14, light=light)
+        img.alpha_composite(logo, (9, 25))
+        # MCE in an orange box, as in the logo
+        txt = Image.new("RGBA", (16 * ss, 11 * ss), (0, 0, 0, 0))
+        td = ImageDraw.Draw(txt)
+        td.rounded_rectangle([0, 0, 16 * ss - 1, 11 * ss - 1], radius=1.5 * ss, fill=(0xFF, 0xAA, 0x00))
+        f = ImageFont.truetype(font_path, 8 * ss)
+        td.text((8 * ss, 5.6 * ss), "MCE", font=f, fill=(0x00, 0x11, 0x33), anchor="mm")
+        img.alpha_composite(txt.resize((16, 11), Image.LANCZOS), (22, 25))
+        out.append(img)
+    return out
+
+
 def tool_glow():
     """46 x 46: the badge, 42 x 42, centred; selected, lighter (Workbench
     adds its own glow)."""
@@ -223,11 +255,11 @@ DISK_ART = [
     ".kbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbk.",
     ".kbbbbbkkkkkkkkkkkkkkkkkkkkkkkkkkkkbbbbbk.",
     ".kbbbbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwwwbbwwwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwwwbbbbwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwwwbbbbbbwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwwwbbbbwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwwwbbwwwwwwwwwwwwwwwwwwwkbbbbbk.",
+    ".kbbbbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbbbbk.",
+    ".kbbbbbkwwbbwbbbbwkkwkkwkwwwwkwwwwkbbbbbk.",
+    ".kbbbbbkwwbbwwwbbwkwkwkwkwwwwkkkwwkbbbbbk.",
+    ".kbbbbbkwwbbwbbbbwkwwwkwkwwwwkwwwwkbbbbbk.",
+    ".kbbbbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbbbbk.",
     ".kbbbbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbbbbk.",
     ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
     "..........................................",
@@ -334,7 +366,8 @@ def main():
         "AmigaMCE.info": diskobject(WBTOOL, badge_art(), stack=32768,
                                     tooltypes=["DONOTWAIT"], glow=glowicon(*tool_glow())),
         "drawer.info": diskobject(WBDRAWER, DRAWER_ART),
-        "Disk.info": diskobject(WBDISK, DISK_ART, default_tool="SYS:System/DiskCopy"),
+        "Disk.info": diskobject(WBDISK, DISK_ART, default_tool="SYS:System/DiskCopy",
+                                glow=glowicon(*disk_glow())),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
     }
     for name, data in files.items():
