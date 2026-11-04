@@ -1498,7 +1498,7 @@ static void build_credits(struct Page *p)
 }
 
 static void build_mods_root(void);
-static void np_mark_lists(void);
+static void np_mark_lists(BOOL redraw);
 
 static void build_root_pages(int mod)
 {
@@ -1605,7 +1605,7 @@ static BOOL push_dir_quiet(struct Item *it)
             page_pop();
             return FALSE;
         }
-        np_mark_lists();
+        np_mark_lists(FALSE);
         return TRUE;
     }
     if (pics) {
@@ -3514,11 +3514,11 @@ static void np_layout(void)
     np.by = np.meter_y + 4 * (np.meter_h + U(2)) + U(6);
     np.bh = g.font_h + U(8);
     vt = gfx_textlen(&g, "Volume 100%", TS_SMALL) + U(6);
-    avail = np.w - vt;
-    np.bw = (avail - (NB_COUNT - 1) * gap) / NB_COUNT;
-    np.vol_x = np.x0 + np.w - vt + U(6);
+    avail = np.w - vt;                      /* buttons, gaps, and two more before volume */
+    np.bw = (avail - (NB_COUNT + 1) * gap) / NB_COUNT;
+    np.vol_x = 0;
     if (np.bw < U(14)) {                    /* narrow: the buttons take the row */
-        np.bw = (np.w - (NB_COUNT - 1) * gap) / NB_COUNT;
+        np.bw = (np.w - (NB_COUNT + 1) * gap) / NB_COUNT;
         np.vol_x = -1;
     }
     if (np.bw > U(26))
@@ -3612,7 +3612,7 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
 static void np_draw(BOOL full)
 {
     struct MpStatus st;
-    char info[160];
+    char info[320];
     int i;
     mp_status(&st);
     if (!np.w)
@@ -3686,8 +3686,9 @@ static void np_update(void)
     gfx_quiet_end(&g, was, g.pane_x - U(2), np.prog_y, g.w - 1, np.by + np.bh);
 }
 
-/* The playing module marked in any Mods list open. */
-static void np_mark_lists(void)
+/* The playing module marked in any Mods list open (redraw: and the list
+ * on screen drawn again, when the music moved on by itself). */
+static void np_mark_lists(BOOL redraw)
 {
     int d;
     LONG i;
@@ -3702,6 +3703,8 @@ static void np_mark_lists(void)
                 it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAY : MARK_NONE;
         }
     }
+    if (redraw && !pane_pending && cur() && cur()->type == PT_LIST && cur()->mods)
+        draw_list_rows(cur());
 }
 
 /* Load playlist entry idx and play it; FALSE (and why, in msg) if not. */
@@ -3717,7 +3720,7 @@ static BOOL np_start(LONG idx)
         busy_end(TRUE);
         np.idx = idx;
         set_msg(err);
-        np_mark_lists();
+        np_mark_lists(TRUE);
         return FALSE;
     }
     busy_end(TRUE);
@@ -3725,10 +3728,10 @@ static BOOL np_start(LONG idx)
     np.ended_seen = FALSE;
     if (!mp_play(err, sizeof(err))) {
         set_msg(err);
-        np_mark_lists();
+        np_mark_lists(TRUE);
         return FALSE;
     }
-    np_mark_lists();
+    np_mark_lists(TRUE);
     return TRUE;
 }
 
@@ -3867,7 +3870,7 @@ static void np_tick(void)
         np.ended_seen = TRUE;
         if (!np_skip(1)) {
             mp_stop();                      /* the folder played through */
-            np_mark_lists();
+            np_mark_lists(TRUE);
         }
         if (np_on())
             np_update();
@@ -4130,7 +4133,7 @@ static void open_dir_now(struct Item *it)
             set_msg(n < 0 ? "Could not open that folder" : "That folder has no modules");
             return;
         }
-        np_mark_lists();
+        np_mark_lists(FALSE);
         msg[0] = 0;
         draw_pane(TRUE);
         draw_footer();
@@ -4218,7 +4221,7 @@ static void release_for_launch(void)
     if (mp_loaded())
         amce_log("music", "stopped for the game");
     mp_shutdown();                  /* the game gets Paula and the CIA timers */
-    np_mark_lists();
+    np_mark_lists(FALSE);
     save_nav();
     pv_flush();                     /* the loader's jobs back, then the loader gone */
     pics_forget();                  /* every byte for the game */
