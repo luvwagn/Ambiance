@@ -3100,6 +3100,9 @@ static void pointer_show(void)
     ptr_hidden = NULL;
 }
 
+static BOOL np_on(void);
+static void np_update(void);
+
 static void set_mouse_mode(BOOL on)
 {
     struct Page *p = cur();
@@ -3110,6 +3113,8 @@ static void set_mouse_mode(BOOL on)
         draw_gutter(p);
     if (!on)
         hover_set(-1, -1);                  /* the joystick: no pointer to follow */
+    if (np_on())
+        np_update();                        /* the yellow frame, or the mouse's light */
 }
 
 static void draw_list_rows(struct Page *p)
@@ -5870,8 +5875,10 @@ static void handle_mouse(struct IntuiMessage *im)
 static void handle_key(struct IntuiMessage *im)
 {
     UWORD code = im->Code;
-    if (im->Class == IDCMP_VANILLAKEY)
+    if (im->Class == IDCMP_VANILLAKEY) {
         pointer_hide();
+        set_mouse_mode(FALSE);              /* the keyboard in use */
+    }
     BOOL shift = (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
     LONG page = list_visible() - 1;
 
@@ -5882,8 +5889,11 @@ static void handle_key(struct IntuiMessage *im)
                 hold_stop();
             return;
         }
-        if (code != 0x7A && code != 0x7B)
+        if (code != 0x7A && code != 0x7B) {
             pointer_hide();                 /* the keyboard in use (the wheel is the mouse) */
+            if (code < 0x60 || code > 0x67)
+                set_mouse_mode(FALSE);      /* (not Shift, Ctrl, Alt, Amiga alone) */
+        }
         switch (code) {
         case 0x4C: case 0x4D: {                                      /* cursor up / down */
             LONG dir = code == 0x4C ? -1 : 1;
