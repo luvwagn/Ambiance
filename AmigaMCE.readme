@@ -15,6 +15,8 @@ Features in this release
 ------------------------
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
   with hierarchical categories, never one giant flat list.
+- Long lists (All Games, menus split A-Z) appear as soon as their first
+  screens are read; the rest is read while you browse.
 - Shows each title's AGS fact sheet and screenshot, decoded through the
   installed picture datatypes. On screens 640 or more wide, game lists
   have a preview pane beside them: the selected game's screenshot and
@@ -38,7 +40,8 @@ Features in this release
   deeper RTG screens).
 - Pictures: browses Media:Images (folders first, each picture with its
   format), with the selected picture or a folder's first picture in the
-  preview pane. A folder that holds only pictures is marked with a play
+  preview pane. Letter folders (A-Z) are not shown as folders: their
+  pictures are listed with the rest, as in Games. A folder that holds only pictures is marked with a play
   arrow: Fire plays it as a slideshow, Right opens it. The viewer shows
   pictures full screen on AmigaMCE's own screen, so the display never
   changes mode, at a whole scale that keeps their pixels' shape. On

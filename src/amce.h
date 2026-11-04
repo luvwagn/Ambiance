@@ -230,6 +230,17 @@ char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free 
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
 LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z folders merged */
+/* The same, read in steps (flat: as ags_read_dir_flat, else ags_read_menu).
+ * Returns the entries so far (-1: unreadable); *ld is NULL when the list
+ * is complete, else ags_load_step reads up to budget more directory
+ * entries a call, returning FALSE once done (then ags_load_free). Entries
+ * are appended in letter-folder order, sorted within each folder; the
+ * final step sorts the whole list if that order was not already right. */
+struct AgsLoad;
+LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat,
+                    struct AgsLoad **ld);
+BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget);
+void ags_load_free(struct AgsLoad *ld);
 void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);
 LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);
@@ -240,7 +251,8 @@ BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *
 /* ---------------------------------------------------------------- pictures */
 const char *pics_format(const char *name);              /* "GIF".. by name, NULL if none */
 LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
-/* Pictures and folders in dir (-1: unreadable); first: its first picture by name. */
+/* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
+ * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
 
 /* ---------------------------------------------------------------- textbox */

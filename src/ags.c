@@ -79,16 +79,16 @@ static int cmp_items(const void *a, const void *b)
 
 /* Small insertion-merge sort to avoid pulling in qsort's recursion depth on
  * a 4 KB stack: a bottom-up merge sort with a temporary pooled buffer. */
-void list_sort(struct ItemList *l)
+static void sort_range(struct ItemList *l, LONG first, LONG n)
 {
     struct Item *tmp, *src, *dst;
-    LONG n = l->count, width, i;
+    LONG width, i;
     if (n < 2)
         return;
     tmp = AllocPooled(l->pool, n * sizeof(struct Item));
     if (!tmp)
         return;
-    src = l->items;
+    src = l->items + first;
     dst = tmp;
     for (width = 1; width < n; width *= 2) {
         for (i = 0; i < n; i += 2 * width) {
@@ -103,8 +103,14 @@ void list_sort(struct ItemList *l)
         }
         { struct Item *t = src; src = dst; dst = t; }
     }
-    if (src != l->items)
-        CopyMem(src, l->items, n * sizeof(struct Item));
+    if (src != l->items + first)
+        CopyMem(src, l->items + first, n * sizeof(struct Item));
+    FreePooled(l->pool, tmp, n * sizeof(struct Item));
+}
+
+void list_sort(struct ItemList *l)
+{
+    sort_range(l, 0, l->count);
 }
 
 /* ------------------------------------------------------------ names */
@@ -172,13 +178,39 @@ static void join_path(char *out, LONG max, const char *dir, const char *name)
     amce_strlcat(out, name, max);
 }
 
-/* Read one AGS menu folder: .ags subfolders and .run entries. */
+/* One directory entry of an AGS folder: added to out if it is a menu
+ * (.ags folder) or an entry (.run). TRUE if added. */
+static BOOL add_entry(const char *dir, const struct FileInfoBlock *fib, struct ItemList *out,
+                      BOOL adult)
+{
+    const char *name = (const char *)fib->fib_FileName;
+    char clean[128], path[300];
+    UBYTE kind;
+    if (fib->fib_DirEntryType > 0) {
+        if (!ends_with(name, ".ags"))
+            return FALSE;               /* .agz = hidden by AGS; other drawers are data */
+        kind = IT_DIR;
+    } else {
+        if (!ends_with(name, ".run"))
+            return FALSE;               /* .txt/.iff are read with their entry; .rub = disabled */
+        kind = IT_RUN;
+    }
+    ags_clean_name(name, clean, sizeof(clean));
+    if (ags_is_separator(clean) || clean[0] == '[')
+        return FALSE;                   /* AGS's own option entries */
+    if (!adult && contains_nocase(clean, "adult"))
+        return FALSE;
+    join_path(path, sizeof(path), dir, name);
+    if (kind == IT_RUN)
+        path[strlen(path) - 4] = 0;     /* keep the base; .run/.txt/.iff hang off it */
+    return list_add(out, clean, path, name, kind) != NULL;
+}
+
 /* Add the entries of one AGS folder to out, unsorted. */
 static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
 {
     struct FileInfoBlock *fib;
     BPTR lock;
-    char clean[128], path[300];
     LONG n = 0;
 
     lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
@@ -190,29 +222,9 @@ static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
         return -1;
     }
     if (Examine(lock, fib)) {
-        while (ExNext(lock, fib)) {
-            const char *name = (const char *)fib->fib_FileName;
-            UBYTE kind;
-            if (fib->fib_DirEntryType > 0) {
-                if (!ends_with(name, ".ags"))
-                    continue;           /* .agz = hidden by AGS; other drawers are data */
-                kind = IT_DIR;
-            } else {
-                if (!ends_with(name, ".run"))
-                    continue;           /* .txt/.iff are read with their entry; .rub = disabled */
-                kind = IT_RUN;
-            }
-            ags_clean_name(name, clean, sizeof(clean));
-            if (ags_is_separator(clean) || clean[0] == '[')
-                continue;               /* AGS's own option entries */
-            if (!adult && contains_nocase(clean, "adult"))
-                continue;
-            join_path(path, sizeof(path), dir, name);
-            if (kind == IT_RUN)
-                path[strlen(path) - 4] = 0;  /* keep the base; .run/.txt/.iff hang off it */
-            if (list_add(out, clean, path, name, kind))
+        while (ExNext(lock, fib))
+            if (add_entry(dir, fib, out, adult))
                 n++;
-        }
     }
     FreeDosObject(DOS_FIB, fib);
     UnLock(lock);
@@ -295,6 +307,123 @@ LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
     list_free(&subs);
     list_sort(out);
     return out->count;
+}
+
+/* ------------------------------------------------------------ loading in steps
+ * A flat list (All Games, or a menu split A-Z) can hold thousands of
+ * entries, three files each on disk. Read in steps instead: the letter
+ * folders in order, so the list grows in sorted order (each folder's
+ * entries are sorted as it completes) and can be shown, and used, as soon
+ * as the first screens are in. */
+struct AgsLoad {
+    struct ItemList subs;           /* the letter folders, sorted */
+    LONG next;                      /* the next of them to open */
+    BPTR lock;                      /* the one being read, 0 between folders */
+    struct FileInfoBlock *fib;
+    LONG chunk;                     /* where its entries start in out */
+    BOOL adult, own;                /* own: the folder had entries of its own */
+    BOOL disorder;                  /* a folder's entries sorted before the last one's */
+};
+
+void ags_load_free(struct AgsLoad *ld)
+{
+    if (!ld)
+        return;
+    if (ld->lock)
+        UnLock(ld->lock);
+    if (ld->fib)
+        FreeDosObject(DOS_FIB, ld->fib);
+    list_free(&ld->subs);
+    FreeVec(ld);
+}
+
+static BOOL is_flat_menu(const struct ItemList *subs)
+{
+    LONG i, dirs = 0;
+    for (i = 0; i < subs->count; i++)
+        if (subs->items[i].kind == IT_DIR) {
+            dirs++;
+            if (!letter_folder(subs->items[i].label))
+                return FALSE;
+        }
+    return dirs > 0;
+}
+
+LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat,
+                    struct AgsLoad **ldp)
+{
+    struct AgsLoad *ld = AllocVec(sizeof(*ld), MEMF_ANY | MEMF_CLEAR);
+    LONG i;
+    *ldp = NULL;
+    if (!ld)
+        return -1;
+    ld->adult = adult;
+    if (!list_init(&ld->subs) || !(ld->fib = AllocDosObject(DOS_FIB, NULL))) {
+        ags_load_free(ld);
+        return -1;
+    }
+    if (read_entries(dir, &ld->subs, adult) < 0) {
+        ags_load_free(ld);
+        return -1;
+    }
+    if (!flat && !is_flat_menu(&ld->subs)) {
+        /* a menu with named folders (By Genre...): small, shown as it is */
+        for (i = 0; i < ld->subs.count; i++)
+            list_add(out, ld->subs.items[i].label, ld->subs.items[i].path,
+                     ld->subs.items[i].sortkey, ld->subs.items[i].kind);
+        list_sort(out);
+        ags_load_free(ld);
+        return out->count;
+    }
+    list_sort(&ld->subs);
+    for (i = 0; i < ld->subs.count; i++)
+        if (ld->subs.items[i].kind != IT_DIR) {
+            struct Item *it = &ld->subs.items[i];
+            list_add(out, it->label, it->path, it->sortkey, it->kind);
+            ld->own = TRUE;
+        }
+    *ldp = ld;
+    return out->count;
+}
+
+BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget)
+{
+    while (budget > 0) {
+        if (!ld->lock) {
+            /* the next letter folder */
+            while (ld->next < ld->subs.count && ld->subs.items[ld->next].kind != IT_DIR)
+                ld->next++;
+            if (ld->next >= ld->subs.count) {
+                if (ld->own || ld->disorder)
+                    list_sort(out);     /* entries out of letter order: all of it */
+                return FALSE;
+            }
+            ld->lock = Lock((CONST_STRPTR)ld->subs.items[ld->next].path, SHARED_LOCK);
+            ld->chunk = out->count;
+            if (ld->lock && !Examine(ld->lock, ld->fib)) {
+                UnLock(ld->lock);
+                ld->lock = 0;
+            }
+            if (!ld->lock) {
+                ld->next++;
+                continue;
+            }
+        }
+        while (budget-- > 0) {
+            if (!ExNext(ld->lock, ld->fib)) {
+                UnLock(ld->lock);
+                ld->lock = 0;
+                sort_range(out, ld->chunk, out->count - ld->chunk);
+                if (ld->chunk > 0 && out->count > ld->chunk &&
+                    cmp_items(&out->items[ld->chunk - 1], &out->items[ld->chunk]) > 0)
+                    ld->disorder = TRUE;    /* filed under another letter */
+                ld->next++;
+                break;
+            }
+            add_entry(ld->subs.items[ld->next].path, ld->fib, out, ld->adult);
+        }
+    }
+    return TRUE;
 }
 
 /* ------------------------------------------------------------ AGS */

@@ -49,6 +49,8 @@ struct Page {
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
+    struct AgsLoad *ld;         /* still being read (long AGS lists, see load_tick) */
+    UBYTE title_wide;           /* title drawn with room for a growing count */
 };
 
 #define PICS_ROOT "Media:Images"
@@ -129,6 +131,8 @@ static void page_pop(void)
         return;
     gfx_picture_free(&g);
     tb_close(&pages[depth - 1].tb);
+    ags_load_free(pages[depth - 1].ld);
+    pages[depth - 1].ld = NULL;
     list_free(&pages[--depth].list);
 }
 
@@ -136,6 +140,44 @@ static void pages_clear(void)
 {
     while (depth)
         page_pop();
+}
+
+/* ---- long AGS lists, read in steps (ags_load_*): the first screens
+ * before the list is shown, the rest while AmigaMCE waits for input, and
+ * at once whatever a move, a page or a letter jump reaches for. */
+static BOOL page_load_some(struct Page *p, LONG budget)
+{
+    if (!p->ld)
+        return FALSE;
+    if (!ags_load_step(p->ld, &p->list, budget)) {
+        ags_load_free(p->ld);
+        p->ld = NULL;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static void page_load_until(struct Page *p, LONG count)
+{
+    while (p->ld && p->list.count < count)
+        page_load_some(p, 64);
+}
+
+static void page_load_all(struct Page *p)
+{
+    while (p->ld)
+        page_load_some(p, 256);
+}
+
+/* Open an AGS folder as a list page: in steps when it is a long flat one. */
+static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
+{
+    LONG n = ags_load_start(it->path, &p->list, ags.adult[0] == '1',
+                            (it->flags & ITEM_FLAT) != 0, &p->ld);
+    if (n < 0)
+        return n;
+    page_load_until(p, first);
+    return p->list.count;
 }
 
 static void text_line(struct Page *p, const char *s)
@@ -634,13 +676,14 @@ static BOOL push_dir_quiet(struct Item *it)
         }
         return TRUE;
     }
-    if (((it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
-                                 : ags_read_menu(it->path, &p->list, ags.adult[0] == '1')) <= 0) {
+    if (page_read_ags(p, it, 1) <= 0) {
         page_pop();
         return FALSE;
     }
-    return TRUE;
+    return TRUE;                    /* restore_nav reads on to the remembered entry */
 }
+
+static WORD list_visible(void);
 
 static void restore_nav(int mod)
 {
@@ -651,6 +694,10 @@ static void restore_nav(int mod)
         const char *want = nav_mem[mod].lv[lv].label;
         if (!p || p->type != PT_LIST || !p->list.count)
             return;
+        /* a list still loading: read up to the remembered entry, no further */
+        page_load_until(p, sel + 2 * list_visible());
+        if (p->ld && (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0))
+            page_load_all(p);
         if (sel >= p->list.count || strcmp(p->list.items[sel].label, want) != 0) {
             for (i = 0; i < p->list.count; i++)
                 if (strcmp(p->list.items[i].label, want) == 0)
@@ -903,12 +950,18 @@ static WORD count_left = -1;    /* left edge of the count drawn last */
 
 static void preview_touch(struct Page *p);
 
+static void draw_title(struct Page *p);
+
 static void draw_title_count(struct Page *p)
 {
     char count[24];
     preview_touch(p);
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
         draw_footer();              /* the hints follow the selection */
+    if (p->title_wide && !p->ld) {
+        draw_title(p);              /* fully read: the breadcrumb gets its room back */
+        return;
+    }
     WORD right = g.pane_x + g.pane_w, tw, x;
     if (p->type != PT_LIST || !p->list.count)
         return;
@@ -939,7 +992,11 @@ static void draw_title(struct Page *p)
     if (p->type == PT_LIST && p->list.count) {
         /* room for the widest count this list can show, so a growing
          * number never runs into the breadcrumb */
-        sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
+        p->title_wide = p->ld != NULL;
+        if (p->ld)
+            strcpy(widest, "88888/88888");      /* still growing */
+        else
+            sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
         cw = gfx_textlen(&g, widest, TS_SMALL);
     }
     gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
@@ -1126,7 +1183,7 @@ static void pv_line(const char *s, WORD w)
 static void preview_pics(struct Page *p, WORD x0, WORD w, WORD max_y)
 {
     struct Item *it = &p->list.items[p->sel];
-    char path[300], first[108], line[120];
+    char path[300], line[120];
     const char *show = NULL;
     WORD y = g.list_top, dh = 0;
     LONG np = 0, nd = 0;
@@ -1135,16 +1192,9 @@ static void preview_pics(struct Page *p, WORD x0, WORD w, WORD max_y)
     if (it->kind == IT_PIC) {
         show = it->path;
     } else if (!(it->flags & ITEM_DISABLED)) {
-        np = pics_scan(it->path, &nd, first, sizeof(first));
-        if (np > 0) {
-            LONG n;
-            amce_strlcpy(path, it->path, sizeof(path));
-            n = strlen(path);
-            if (n && path[n - 1] != ':' && path[n - 1] != '/')
-                amce_strlcat(path, "/", sizeof(path));
-            amce_strlcat(path, first, sizeof(path));
+        np = pics_scan(it->path, &nd, path, sizeof(path));
+        if (np > 0)
             show = path;
-        }
     }
     if (show && (g.pens_shared || g.truecolor) &&
         gfx_picture(&g, show, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
@@ -1764,8 +1814,7 @@ static void open_dir(struct Item *it)
         draw_footer();
         return;
     }
-    n = (it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
-                                : ags_read_menu(it->path, &p->list, ags.adult[0] == '1');
+    n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (load_tick) */
     if (n <= 0) {
         page_pop();
         set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
@@ -2115,7 +2164,10 @@ static void act_move(LONG d)
         return;
     }
     if (p->type == PT_LIST) {
-        LONG s = p->sel + d;
+        LONG s;
+        if (p->ld && d > 0)
+            page_load_until(p, p->sel + d + 2 * list_visible());
+        s = p->sel + d;
         if (s < 0)
             s = 0;
         if (s >= p->list.count)
@@ -2437,6 +2489,8 @@ static void hold_tick(void)
         if (hold.letters && !(ov.on && ov.page == p))
             ov_show(p);
         ov.linger = 0;
+        if (hold.dir > 0 && p->ld)
+            page_load_until(p, p->sel + 4 * list_visible() + 32);
         remaining = hold.dir > 0 ? p->list.count - 1 - p->sel : p->sel;
         if (remaining <= 0) {
             hold_stop();
@@ -2584,6 +2638,24 @@ static void act_letter(char c)
         return;
     k[0] = c;
     k[1] = 0;
+    /* still loading: read on until the letter turns up after the
+     * selection (or the list is complete, then wrap round as usual) */
+    for (i = p->sel + 1; p->ld || i < p->list.count; i++) {
+        char first[2];
+        if (i >= p->list.count) {
+            page_load_some(p, 64);
+            i--;
+            continue;
+        }
+        first[0] = p->list.items[i].label[0];
+        first[1] = 0;
+        if (amce_stricmp(first, k) == 0) {
+            p->sel = i;
+            draw_title_count(p);
+            draw_list_rows(p);
+            return;
+        }
+    }
     n = p->list.count;
     for (i = 1; i <= n; i++) {
         LONG idx = (p->sel + i) % n;
@@ -2814,6 +2886,31 @@ static void joy_poll(void)
     if (newbtn & JPF_BUTTON_BLUE) { disarm(); act_back(); }
 }
 
+/* Read more of a long list while nothing else is happening: ~20 ms at a
+ * time between looks at the input (a few ms a frame while a list glides),
+ * so the list stays usable while it grows. */
+static void load_tick(void)
+{
+    struct Page *p = cur();
+    LONG before, vis;
+    ULONG t0;
+    if (!p || !p->ld || pane_pending)
+        return;
+    before = p->list.count;
+    t0 = time_ms();
+    while (page_load_some(p, 16) && (LONG)(time_ms() - t0) < (hold_active() ? 4 : 20))
+        ;
+    vis = list_visible();
+    if (p->list.count == before && p->ld)
+        return;
+    if (!p->ld && p->title_wide)
+        draw_title(p);              /* done: also the full count */
+    else
+        draw_title_count(p);
+    if (before < p->top + vis || !p->ld)
+        draw_list_rows(p);          /* rows that were empty, or a final re-sort */
+}
+
 /* ------------------------------------------------------------ main */
 static void build_menu(void)
 {
@@ -2918,7 +3015,7 @@ int main(void)
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
         BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
-                    tb_animating(&pv_tb);
+                    tb_animating(&pv_tb) || (cur() && cur()->ld);
         ULONG sig;
         if (busy) {
             sig = SetSignal(0, mask) & mask;
@@ -2978,6 +3075,8 @@ int main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
+        if (g.win)
+            load_tick();
         if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                       ((atb = cur_tb()) && tb_animating(atb)))) {
             dbg_sleep_begin();

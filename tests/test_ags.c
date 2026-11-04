@@ -156,44 +156,75 @@ int main(void)
         check_long("permanent expert kept", strstr(buf, "Set Expert 0") == NULL, 1);
     }
 
-    /* Pictures: folders first, tags, playable / greyed folders */
+    /* Reading in steps gives the same list as all at once */
     {
-        static const char *want[] = { "A", "Art", "Empty", "Mixed", "Top.JPG" };
-        char first[64];
+        static const char *dirs[] = { "AGS:+  Games - 0-Z.ags", "AGS:" };
+        LONG d;
+        for (d = 0; d < 2; d++) {
+            struct ItemList whole, steps;
+            struct AgsLoad *ld;
+            LONG n1, n2;
+            list_init(&whole);
+            list_init(&steps);
+            n1 = d == 0 ? ags_read_dir_flat(dirs[d], &whole, FALSE) : ags_read_menu(dirs[d], &whole, FALSE);
+            n2 = ags_load_start(dirs[d], &steps, FALSE, d == 0, &ld);
+            while (ld && ags_load_step(ld, &steps, 1))
+                ;
+            ags_load_free(ld);
+            n2 = steps.count;
+            check_long("steps count", n2, n1);
+            for (i = 0; i < n1 && i < n2; i++)
+                check_str("steps order", steps.items[i].label, whole.items[i].label);
+            list_free(&whole);
+            list_free(&steps);
+        }
+    }
+
+    /* Pictures: folders first, tags, playable / greyed folders; letter
+     * folders (A, Mixed/B) merged into their parent's list */
+    {
+        static const char *want[] = { "Art", "Empty", "Mixed", "Slides", "Agony.png",
+                                      "Alien.iff", "Banshee.gif", "NoExtGif", "Top.JPG" };
+        char first[160];
         LONG nd;
         list_init(&l);
         n = pics_read_dir("Images:", &l);
-        check_long("pics count", n, 5);
-        for (i = 0; i < l.count && i < 5; i++)
+        check_long("pics count", n, 9);
+        for (i = 0; i < l.count && i < 9; i++)
             check_str("pics order", l.items[i].label, want[i]);
-        if (l.count == 5) {
-            check_long("pics A playable", l.items[0].mark, MARK_PLAY);
-            check_str("pics A count", l.items[0].sortkey, "4");
-            check_long("pics Art opens", l.items[1].mark, MARK_ARROW);
-            check_long("pics Empty greyed", l.items[2].flags & ITEM_DISABLED, ITEM_DISABLED);
-            check_long("pics Mixed opens", l.items[3].mark, MARK_ARROW);
-            check_long("pics Mixed not greyed", l.items[3].flags & ITEM_DISABLED, 0);
-            check_long("pics file kind", l.items[4].kind, IT_PIC);
-            check_str("pics file tag", l.items[4].sortkey, "JPEG");
-            check_str("pics file path", l.items[4].path, "Images:Top.JPG");
+        if (l.count == 9) {
+            check_long("pics Art opens", l.items[0].mark, MARK_ARROW);
+            check_long("pics Empty greyed", l.items[1].flags & ITEM_DISABLED, ITEM_DISABLED);
+            check_long("pics Mixed opens", l.items[2].mark, MARK_ARROW);
+            check_long("pics Mixed not greyed", l.items[2].flags & ITEM_DISABLED, 0);
+            check_long("pics Slides playable", l.items[3].mark, MARK_PLAY);
+            check_str("pics Slides count", l.items[3].sortkey, "2");
+            check_str("pics merged path", l.items[4].path, "Images:A/Agony.png");
+            check_str("pics sniffed tag", l.items[7].sortkey, "GIF");
+            check_long("pics file kind", l.items[8].kind, IT_PIC);
+            check_str("pics file tag", l.items[8].sortkey, "JPEG");
+            check_str("pics file path", l.items[8].path, "Images:Top.JPG");
         }
         list_free(&l);
         list_init(&l);
-        n = pics_read_dir("Images:A", &l);
-        check_long("pics A entries", n, 4);
-        if (n == 4) {
-            check_str("pics A first", l.items[0].label, "Agony.png");
-            check_str("pics sniffed", l.items[3].label, "NoExtGif");
-            check_str("pics sniffed tag", l.items[3].sortkey, "GIF");
-            check_str("pics A path", l.items[0].path, "Images:A/Agony.png");
+        n = pics_read_dir("Images:Mixed", &l);
+        check_long("pics Mixed entries", n, 3);
+        if (n == 3) {
+            check_str("pics Mixed sub", l.items[0].label, "Sub");
+            check_str("pics Mixed merged", l.items[1].label, "Bee.gif");
+            check_str("pics Mixed own", l.items[2].label, "one.lbm");
         }
         list_free(&l);
         n = pics_scan("Images:Mixed", &nd, first, sizeof(first));
-        check_long("scan Mixed pics", n, 1);
+        check_long("scan Mixed pics", n, 2);
         check_long("scan Mixed dirs", nd, 1);
-        check_str("scan Mixed first", first, "one.lbm");
+        check_str("scan Mixed first", first, "Images:Mixed/B/Bee.gif");
+        check_long("scan root pics", pics_scan("Images:", &nd, NULL, 0), 5);
+        check_long("scan root dirs", nd, 4);
         check_long("scan missing", pics_scan("Images:Nope", &nd, NULL, 0), -1);
+        list_init(&l);
         check_long("missing volume", pics_read_dir("NoSuchVolume:Images", &l), -1);
+        list_free(&l);
     }
 
     Printf(failures ? "%ld FAILED\n" : "all tests passed\n", (LONG)failures);
