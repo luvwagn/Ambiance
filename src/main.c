@@ -3209,7 +3209,15 @@ static struct {
     LONG  acc;              /* entries (x1000) or pixels (x1000) owed */
     BOOL  joy;              /* held on the joystick rather than the keyboard */
     BOOL  letters;          /* show the letter overlay once the glide starts */
+    LONG  lacc;             /* letters (x1000) owed, letter by letter */
+    LONG  from;             /* the selection when the key went down (log) */
+    ULONG worst;            /* the longest frame meanwhile (log) */
 } hold;
+
+/* Long titled lists, held past cruising: a whole letter a step. */
+#define LETTER_MIN_LIST 200 /* entries a list needs for that */
+#define LETTERS_MIN   4     /* letters a second to begin with, */
+#define LETTERS_MAX  12     /* rising to this over HOLD_BOOST */
 
 static void hold_start(LONG dir, BOOL joy)
 {
@@ -3217,13 +3225,49 @@ static void hold_start(LONG dir, BOOL joy)
     hold.held_ms = 0;
     hold.last_ms = time_ms();
     hold.acc = 0;
+    hold.lacc = 0;
     hold.joy = joy;
     hold.letters = cur() && ov_eligible(cur());
+    hold.from = cur() ? cur()->sel : 0;
+    hold.worst = 0;
 }
 
 static void hold_stop(void)
 {
+    struct Page *p = cur();
+    if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
+        char m[80];
+        LONG moved = p->sel - hold.from;
+        sprintf(m, "%ld entries in %ld ms, longest frame %ld ms", (long)(moved < 0 ? -moved : moved),
+                (long)hold.held_ms, (long)hold.worst);
+        amce_log("glide", m);
+    }
     hold.dir = 0;
+}
+
+/* The first entry of the next letter (dir > 0), or of this letter, or the
+ * one before if already there (dir < 0); from itself if there is none. */
+static LONG letter_step(struct Page *p, LONG from, LONG dir)
+{
+    const struct Item *it = p->list.items;
+    LONG i = from, n = p->list.count;
+    char c = ov_letter_of(it[from].label);
+    if (dir > 0) {
+        while (i < n && ov_letter_of(it[i].label) == c)
+            i++;
+        return i < n ? i : from;
+    }
+    if (i > 0 && ov_letter_of(it[i - 1].label) == c) {
+        while (i > 0 && ov_letter_of(it[i - 1].label) == c)
+            i--;
+        return i;
+    }
+    if (i == 0)
+        return from;
+    c = ov_letter_of(it[--i].label);
+    while (i > 0 && ov_letter_of(it[i - 1].label) == c)
+        i--;
+    return i;
 }
 
 static BOOL hold_active(void)
@@ -3262,8 +3306,10 @@ static void hold_tick(void)
         /* Speed is set by the clock, not by how often this runs: if drawing
          * overruns a frame, the next step makes up the distance. */
         ULONG now = time_ms(), dt = now ? now - hold.last_ms : FRAME_MS;
-        if (dt > 100)
-            dt = 100;
+        if (dt > hold.worst)
+            hold.worst = dt;
+        if (dt > 250)
+            dt = 250;               /* a slow frame is made up for, a stall is not */
         hold.last_ms = now;
         hold.held_ms += dt;
         if (hold.held_ms < HOLD_DELAY)
@@ -3282,6 +3328,25 @@ static void hold_tick(void)
         if (remaining <= 0) {
             hold_stop();
             return;
+        }
+        if (glide >= HOLD_RAMP && hold.letters && p->list.count >= LETTER_MIN_LIST) {
+            /* past cruising in a long titled list: a letter a step (let go,
+             * and the selection is on the first entry of the letter shown) */
+            LONG b = glide - HOLD_RAMP, lps, to;
+            if (b > HOLD_BOOST)
+                b = HOLD_BOOST;
+            lps = LETTERS_MIN + (LETTERS_MAX - LETTERS_MIN) * b / HOLD_BOOST;
+            hold.lacc += lps * elapsed;
+            if (hold.lacc < 1000)
+                return;
+            hold.lacc -= 1000;
+            if (hold.lacc > 1000)
+                hold.lacc = 1000;               /* never more than one owed */
+            if ((to = letter_step(p, p->sel, hold.dir)) != p->sel) {
+                act_move(to - p->sel);
+                return;
+            }
+            /* no letter further: on to the end entry by entry */
         }
         {
             /* Cruising: two entries a frame, or six screenfuls a second on
@@ -3471,6 +3536,23 @@ static void act_letter(char c)
     }
 }
 
+/* The next letter's first entry (or this letter's, then the one before). */
+static void act_letter_step(LONG dir)
+{
+    struct Page *p;
+    LONG to;
+    pane_settle();
+    p = cur();
+    if (focus != FOCUS_CONTENT || !p || p->type != PT_LIST || !p->list.count)
+        return;
+    if (dir > 0 && ch_reading(p) && letter_step(p, p->sel, 1) == p->sel)
+        ch_wait_until(p, p->list.count + 1, TRUE);  /* the next letter is not read yet */
+    if ((to = letter_step(p, p->sel, dir)) != p->sel) {
+        pv_dir = dir;
+        act_move(to - p->sel);
+    }
+}
+
 static void disarm(void)
 {
     if (quit_armed || msg[0]) {
@@ -3645,7 +3727,8 @@ static BOOL joy_present;        /* a joystick or pad answered on port 2 */
 static void joy_poll(void)
 {
     const ULONG dirmask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT;
-    const ULONG btnmask = JPF_BUTTON_RED | JPF_BUTTON_BLUE;
+    const ULONG btnmask = JPF_BUTTON_RED | JPF_BUTTON_BLUE | JPF_BUTTON_FORWARD |
+                          JPF_BUTTON_REVERSE;
     ULONG st, dir, btn, newbtn, act = 0;
     if (!LowLevelBase)
         return;
@@ -3685,6 +3768,9 @@ static void joy_poll(void)
     else if (act & JPF_JOY_RIGHT) { disarm(); act_right(); }
     else if (act & JPF_JOY_LEFT) { disarm(); if (focus != FOCUS_MENU) act_back(); }
     if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
+    /* CD32 pad shoulder buttons: the next / previous letter in a list */
+    if (newbtn & JPF_BUTTON_FORWARD) { disarm(); act_letter_step(1); }
+    if (newbtn & JPF_BUTTON_REVERSE) { disarm(); act_letter_step(-1); }
     if (newbtn & JPF_BUTTON_BLUE) { disarm(); act_back(); }
 }
 

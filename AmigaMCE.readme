@@ -75,6 +75,9 @@ Controls
                that scrolls (lowres: the game's own page)
   Left/Esc     back             Esc at menu    press twice to quit
   A-Z          jump to letter   Right mouse    back
+  CD32 pad     shoulder buttons: next / previous letter
+  Held Up/Down in a long list speeds up, then steps a letter at a time
+               (A, B, C...): let go on the letter shown
   Mouse wheel  scroll           Scroll bar     click to page, drag to scroll
 
   Pictures     Fire/Return views a picture or plays a folder marked with
