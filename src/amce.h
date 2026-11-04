@@ -197,6 +197,8 @@ struct Item {
 };
 #define ITEM_DISABLED 1 /* shown greyed out, cannot be opened */
 #define ITEM_FLAT     2 /* a folder of folders opened as one list (All Games) */
+#define ITEM_SPLIT    4 /* AGS entry: path is its folder (shared), sortkey its file
+                         * name; item_path() gives the whole path */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading
@@ -209,6 +211,8 @@ struct ItemList {
     APTR          pool;
     struct Item  *items;
     LONG          count, cap;
+    const char   *dir_src;      /* list_copy: last folder string copied, */
+    char         *dir_dst;      /* and its copy in this pool */
 };
 
 struct Ags {
@@ -227,6 +231,8 @@ void list_free(struct ItemList *l);
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *sortkey, UBYTE kind);
 void list_sort(struct ItemList *l);
 char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
+struct Item *list_copy(struct ItemList *l, const struct Item *it, const char *label);
+char *item_path(const struct Item *it, char *out, LONG max);    /* an entry's whole path: out */
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
 LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
 LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z folders merged */
@@ -235,11 +241,13 @@ LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult);  /* A-Z f
  * is complete, else ags_load_step reads up to budget more directory
  * entries a call, returning FALSE once done (then ags_load_free). Entries
  * are appended in letter-folder order, sorted within each folder; the
- * final step sorts the whole list if that order was not already right. */
+ * final step sorts the whole list if that order was not already right.
+ * Reading stops short (ags_load_cut) when free memory falls below 256 KB. */
 struct AgsLoad;
 LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat,
                     struct AgsLoad **ld);
 BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget);
+BOOL ags_load_cut(const struct AgsLoad *ld);   /* it stopped short: memory ran low */
 void ags_load_free(struct AgsLoad *ld);
 void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);

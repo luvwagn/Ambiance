@@ -145,13 +145,21 @@ static void pages_clear(void)
 /* ---- long AGS lists, read in steps (ags_load_*): the first screens
  * before the list is shown, the rest while AmigaMCE waits for input, and
  * at once whatever a move, a page or a letter jump reaches for. */
+static void set_msg(const char *m);
+
 static BOOL page_load_some(struct Page *p, LONG budget)
 {
     if (!p->ld)
         return FALSE;
     if (!ags_load_step(p->ld, &p->list, budget)) {
+        BOOL cut = ags_load_cut(p->ld);
         ags_load_free(p->ld);
         p->ld = NULL;
+        if (cut) {
+            char m[80];
+            sprintf(m, "Low on memory: list stops at %ld entries", (long)p->list.count);
+            set_msg(m);
+        }
         return FALSE;
     }
     return TRUE;
@@ -172,7 +180,8 @@ static void page_load_all(struct Page *p)
 /* Open an AGS folder as a list page: in steps when it is a long flat one. */
 static LONG page_read_ags(struct Page *p, const struct Item *it, LONG first)
 {
-    LONG n = ags_load_start(it->path, &p->list, ags.adult[0] == '1',
+    char path[300];
+    LONG n = ags_load_start(item_path(it, path, sizeof(path)), &p->list, ags.adult[0] == '1',
                             (it->flags & ITEM_FLAT) != 0, &p->ld);
     if (n < 0)
         return n;
@@ -287,7 +296,7 @@ static void build_ags_root(struct Page *p, int mod)
             if (it->kind != IT_DIR)
                 continue;
             if (classify(it->label, label, sizeof(label), &prio) == mod && prio == want) {
-                struct Item *n = list_add(&p->list, label, it->path, it->sortkey, IT_DIR);
+                struct Item *n = list_copy(&p->list, it, label);
                 if (n && prio == 1)
                     n->flags |= ITEM_FLAT;      /* Games/Demos - 0-Z */
             }
@@ -1283,7 +1292,7 @@ static void preview_draw(struct Page *p)
 {
     WORD x0 = aside_x(), w = aside_width() - U(4), y = g.list_top, max_y = g.footer_y - 2, dh = 0;
     struct Item *it;
-    char shot[300];
+    char shot[300], base[300];
     LONG n, i;
     pv_pending = FALSE;
     tb_close(&pv_tb);
@@ -1302,7 +1311,8 @@ static void preview_draw(struct Page *p)
     /* The new screenshot is drawn straight over the old one (gfx_picture
      * keeps the old one's colours until then); only what it does not cover
      * is cleared afterwards. */
-    if ((g.pens_shared || g.truecolor) && ags_screenshot_path(it->path, shot, sizeof(shot)) &&
+    item_path(it, base, sizeof(base));
+    if ((g.pens_shared || g.truecolor) && ags_screenshot_path(base, shot, sizeof(shot)) &&
         gfx_picture(&g, shot, x0, y, w, (max_y - y) / 2, TRUE, &dh)) {
         gfx_fill_bg(&g, x0, y, g.pic_x - 1, y + dh - 1);                 /* left of it */
         gfx_fill_bg(&g, g.pic_x + g.pic_w, y, g.w - 1, y + dh - 1);      /* right of it */
@@ -1319,7 +1329,7 @@ static void preview_draw(struct Page *p)
         list_free(&pv_list);
     if (!list_init(&pv_list))
         return;
-    n = ags_read_txt(it->path, pv_lines, FACT_LINES);
+    n = ags_read_txt(base, pv_lines, FACT_LINES);
     for (i = 0; i < n; i++) {
         if (!pv_lines[i][0])
             list_add(&pv_list, "", "", "", IT_TEXT);
@@ -1831,8 +1841,8 @@ static void open_detail(struct Item *it)
     LONG n, i;
     if (!p)
         return;
-    amce_strlcpy(p->base, it->path, sizeof(p->base));
-    n = ags_read_txt(it->path, fact_buf, FACT_LINES);
+    item_path(it, p->base, sizeof(p->base));
+    n = ags_read_txt(p->base, fact_buf, FACT_LINES);
     if (!n)
         text_line(p, it->label);
     for (i = 0; i < n; i++)
@@ -2560,8 +2570,10 @@ static void act_open(BOOL play)
             open_dir(it);
         else if (it->kind == IT_ACTION)
             act_action(it);
-        else if (it->kind == IT_RUN)
-            launch(it->path);       /* Fire, Return, Space, double-click */
+        else if (it->kind == IT_RUN) {
+            char base[300];
+            launch(item_path(it, base, sizeof(base)));  /* Fire, Return, Space, double-click */
+        }
     } else if (p->type == PT_DETAIL) {
         launch(p->base);
     }

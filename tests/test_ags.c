@@ -24,7 +24,7 @@ static void check_long(const char *what, LONG got, LONG want)
 
 int main(void)
 {
-    char out[128];
+    char out[128], tmp[300];
     struct ItemList l;
     char lines[24][96];
     struct Ags a;
@@ -62,7 +62,7 @@ int main(void)
     n = ags_read_dir("AGS:", &l, FALSE);
     Printf("top level (%ld):\n", n);
     for (i = 0; i < l.count; i++)
-        Printf("  [%s] -> %s\n", (ULONG)l.items[i].label, (ULONG)l.items[i].path);
+        Printf("  [%s] -> %s\n", (ULONG)l.items[i].label, (ULONG)item_path(&l.items[i], tmp, sizeof(tmp)));
     check_long("top count, adult hidden", n, 8);  /* Welcome and Options are filtered by the menu, not the reader */
     list_free(&l);
 
@@ -77,7 +77,7 @@ int main(void)
     check_long("A.ags count", n, 2);
     if (n == 2) {
         check_str("A.ags first", l.items[0].label, "Another");
-        check_str("A.ags second path", l.items[1].path, "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
+        check_str("A.ags second path", item_path(&l.items[1], tmp, sizeof(tmp)), "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
         check_long("A.ags kind", l.items[1].kind, IT_RUN);
     }
     list_free(&l);
@@ -89,7 +89,7 @@ int main(void)
     if (n == 3) {
         check_str("0-Z flat first", l.items[0].label, "Another");
         check_str("0-Z flat second", l.items[1].label, "Banshee");
-        check_str("0-Z flat third path", l.items[2].path, "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
+        check_str("0-Z flat third path", item_path(&l.items[2], tmp, sizeof(tmp)), "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
         check_long("0-Z flat kind", l.items[1].kind, IT_RUN);
     }
     list_free(&l);
@@ -154,6 +154,25 @@ int main(void)
             Close(fh);
         buf[len > 0 ? len : 0] = 0;
         check_long("permanent expert kept", strstr(buf, "Set Expert 0") == NULL, 1);
+    }
+
+    /* Entries share their folder's path string; copies keep that */
+    {
+        struct ItemList c;
+        list_init(&l);
+        list_init(&c);
+        n = ags_read_dir("AGS:+  Games - 0-Z.ags/A.ags", &l, FALSE);
+        if (n >= 2) {
+            check_long("shared folder", l.items[0].path == l.items[1].path, 1);
+            list_copy(&c, &l.items[1], "Copy");
+            list_copy(&c, &l.items[0], "Copy 2");
+            check_str("copy path", item_path(&c.items[0], tmp, sizeof(tmp)),
+                      "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
+            check_long("copy shares", c.items[0].path == c.items[1].path, 1);
+            check_long("copy own pool", c.items[0].path != l.items[0].path, 1);
+        }
+        list_free(&c);
+        list_free(&l);
     }
 
     /* Reading in steps gives the same list as all at once */

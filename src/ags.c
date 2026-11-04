@@ -17,6 +17,8 @@ BOOL list_init(struct ItemList *l)
 {
     l->items = NULL;
     l->count = l->cap = 0;
+    l->dir_src = NULL;
+    l->dir_dst = NULL;
     l->pool = CreatePool(MEMF_ANY, 8192, 4096);
     return l->pool != NULL;
 }
@@ -28,6 +30,8 @@ void list_free(struct ItemList *l)
     l->pool = NULL;
     l->items = NULL;
     l->count = l->cap = 0;
+    l->dir_src = NULL;
+    l->dir_dst = NULL;
 }
 
 static char *pool_strdup(APTR pool, const char *s)
@@ -39,8 +43,8 @@ static char *pool_strdup(APTR pool, const char *s)
     return d;
 }
 
-struct Item *list_add(struct ItemList *l, const char *label, const char *path,
-                      const char *sortkey, UBYTE kind)
+static struct Item *add_item(struct ItemList *l, const char *label, const char *path,
+                             char *shared_path, const char *sortkey, UBYTE kind)
 {
     struct Item *it;
     if (l->count == l->cap) {
@@ -48,14 +52,16 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
         struct Item *n = AllocPooled(l->pool, ncap * sizeof(struct Item));
         if (!n)
             return NULL;
-        if (l->items)
+        if (l->items) {
             CopyMem(l->items, n, l->count * sizeof(struct Item));
-        l->items = n;           /* old block stays in the pool until list_free */
+            FreePooled(l->pool, l->items, l->cap * sizeof(struct Item));
+        }
+        l->items = n;
         l->cap = ncap;
     }
     it = &l->items[l->count];
     it->label = pool_strdup(l->pool, label ? label : "");
-    it->path = pool_strdup(l->pool, path ? path : "");
+    it->path = shared_path ? shared_path : pool_strdup(l->pool, path ? path : "");
     it->sortkey = pool_strdup(l->pool, sortkey ? sortkey : (label ? label : ""));
     it->kind = kind;
     it->action = 0;
@@ -63,8 +69,65 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
     it->flags = 0;
     if (!it->label || !it->path || !it->sortkey)
         return NULL;
+    if (shared_path)
+        it->flags = ITEM_SPLIT;
     l->count++;
     return it;
+}
+
+struct Item *list_add(struct ItemList *l, const char *label, const char *path,
+                      const char *sortkey, UBYTE kind)
+{
+    return add_item(l, label, path, NULL, sortkey, kind);
+}
+
+/* An AGS entry: its folder (dir, a string in l's pool shared by every
+ * entry of that folder) and its file name; the full path is put together
+ * when needed (item_path). A path for each of All Games' 3,000-odd
+ * entries would cost ~160 KB. */
+static struct Item *list_add_split(struct ItemList *l, const char *label, char *dir,
+                                   const char *name, UBYTE kind)
+{
+    return add_item(l, label, NULL, dir, name, kind);
+}
+
+char *item_path(const struct Item *it, char *out, LONG max)
+{
+    LONG n;
+    if (!(it->flags & ITEM_SPLIT)) {
+        amce_strlcpy(out, it->path, max);
+        return out;
+    }
+    amce_strlcpy(out, it->path, max);
+    n = strlen(out);
+    if (n && out[n - 1] != ':' && out[n - 1] != '/')
+        amce_strlcat(out, "/", max);
+    amce_strlcat(out, it->sortkey, max);
+    n = strlen(out);
+    if (it->kind == IT_RUN && n > 4)
+        out[n - 4] = 0;                 /* the base: .run/.txt/.iff hang off it */
+    return out;
+}
+
+/* A copy of it in l, under label. */
+struct Item *list_copy(struct ItemList *l, const struct Item *it, const char *label)
+{
+    struct Item *n;
+    if (!(it->flags & ITEM_SPLIT))
+        n = list_add(l, label, it->path, it->sortkey, it->kind);
+    else {
+        if (!l->dir_dst || strcmp(l->dir_dst, it->path) != 0) {    /* one copy per folder */
+            l->dir_dst = pool_strdup(l->pool, it->path);
+            l->dir_src = it->path;
+        }
+        n = l->dir_dst ? list_add_split(l, label, l->dir_dst, it->sortkey, it->kind) : NULL;
+    }
+    if (n) {
+        n->flags = it->flags;
+        n->mark = it->mark;
+        n->action = it->action;
+    }
+    return n;
 }
 
 char *list_strdup(struct ItemList *l, const char *s)
@@ -168,23 +231,13 @@ static BOOL contains_nocase(const char *hay, const char *needle)
     return FALSE;
 }
 
-static void join_path(char *out, LONG max, const char *dir, const char *name)
-{
-    LONG n;
-    amce_strlcpy(out, dir, max);
-    n = strlen(out);
-    if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
-}
-
 /* One directory entry of an AGS folder: added to out if it is a menu
  * (.ags folder) or an entry (.run). TRUE if added. */
-static BOOL add_entry(const char *dir, const struct FileInfoBlock *fib, struct ItemList *out,
+static BOOL add_entry(char *dir, const struct FileInfoBlock *fib, struct ItemList *out,
                       BOOL adult)
 {
     const char *name = (const char *)fib->fib_FileName;
-    char clean[128], path[300];
+    char clean[128];
     UBYTE kind;
     if (fib->fib_DirEntryType > 0) {
         if (!ends_with(name, ".ags"))
@@ -200,10 +253,7 @@ static BOOL add_entry(const char *dir, const struct FileInfoBlock *fib, struct I
         return FALSE;                   /* AGS's own option entries */
     if (!adult && contains_nocase(clean, "adult"))
         return FALSE;
-    join_path(path, sizeof(path), dir, name);
-    if (kind == IT_RUN)
-        path[strlen(path) - 4] = 0;     /* keep the base; .run/.txt/.iff hang off it */
-    return list_add(out, clean, path, name, kind) != NULL;
+    return list_add_split(out, clean, dir, name, kind) != NULL;
 }
 
 /* Add the entries of one AGS folder to out, unsorted. */
@@ -212,10 +262,15 @@ static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
     struct FileInfoBlock *fib;
     BPTR lock;
     LONG n = 0;
+    char *shared;
 
     lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
     if (!lock)
         return -1;
+    if (!(shared = list_strdup(out, dir))) {
+        UnLock(lock);
+        return -1;
+    }
     fib = AllocDosObject(DOS_FIB, NULL);
     if (!fib) {
         UnLock(lock);
@@ -223,7 +278,7 @@ static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
     }
     if (Examine(lock, fib)) {
         while (ExNext(lock, fib))
-            if (add_entry(dir, fib, out, adult))
+            if (add_entry(shared, fib, out, adult))
                 n++;
     }
     FreeDosObject(DOS_FIB, fib);
@@ -259,6 +314,7 @@ LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult)
 {
     struct ItemList subs;
     LONG i, dirs = 0;
+    char path[300];
     BOOL flat = TRUE;
     if (!list_init(&subs))
         return -1;
@@ -275,9 +331,9 @@ LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult)
     for (i = 0; i < subs.count; i++) {
         struct Item *it = &subs.items[i];
         if (it->kind == IT_DIR && flat && dirs)
-            read_entries(it->path, out, adult);
+            read_entries(item_path(it, path, sizeof(path)), out, adult);
         else
-            list_add(out, it->label, it->path, it->sortkey, it->kind);
+            list_copy(out, it, it->label);
     }
     list_free(&subs);
     list_sort(out);
@@ -290,6 +346,7 @@ LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
 {
     struct ItemList subs;
     LONG i, n;
+    char path[300];
     if (!list_init(&subs))
         return -1;
     n = read_entries(dir, &subs, adult);
@@ -300,9 +357,9 @@ LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
     for (i = 0; i < subs.count; i++) {
         struct Item *it = &subs.items[i];
         if (it->kind == IT_DIR)
-            read_entries(it->path, out, adult);
+            read_entries(item_path(it, path, sizeof(path)), out, adult);
         else
-            list_add(out, it->label, it->path, it->sortkey, it->kind);
+            list_copy(out, it, it->label);
     }
     list_free(&subs);
     list_sort(out);
@@ -323,6 +380,9 @@ struct AgsLoad {
     LONG chunk;                     /* where its entries start in out */
     BOOL adult, own;                /* own: the folder had entries of its own */
     BOOL disorder;                  /* a folder's entries sorted before the last one's */
+    BOOL cut;                       /* stopped short: memory ran low */
+    char *dir;                      /* the folder being read, in out's pool */
+    char path[300];
 };
 
 void ags_load_free(struct AgsLoad *ld)
@@ -369,8 +429,7 @@ LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat
     if (!flat && !is_flat_menu(&ld->subs)) {
         /* a menu with named folders (By Genre...): small, shown as it is */
         for (i = 0; i < ld->subs.count; i++)
-            list_add(out, ld->subs.items[i].label, ld->subs.items[i].path,
-                     ld->subs.items[i].sortkey, ld->subs.items[i].kind);
+            list_copy(out, &ld->subs.items[i], ld->subs.items[i].label);
         list_sort(out);
         ags_load_free(ld);
         return out->count;
@@ -379,15 +438,33 @@ LONG ags_load_start(const char *dir, struct ItemList *out, BOOL adult, BOOL flat
     for (i = 0; i < ld->subs.count; i++)
         if (ld->subs.items[i].kind != IT_DIR) {
             struct Item *it = &ld->subs.items[i];
-            list_add(out, it->label, it->path, it->sortkey, it->kind);
+            list_copy(out, it, it->label);
             ld->own = TRUE;
         }
     *ldp = ld;
     return out->count;
 }
 
+/* Reading stops short rather than take the last of the memory: what is
+ * left is for screenshots, the picture viewer and the system. */
+#define LOAD_RESERVE (256 * 1024)
+
+BOOL ags_load_cut(const struct AgsLoad *ld)
+{
+    return ld && ld->cut;
+}
+
 BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget)
 {
+    if (ld->cut || AvailMem(MEMF_ANY) < LOAD_RESERVE) {
+        if (ld->lock) {
+            UnLock(ld->lock);
+            ld->lock = 0;
+            sort_range(out, ld->chunk, out->count - ld->chunk);
+        }
+        ld->cut = TRUE;
+        return FALSE;
+    }
     while (budget > 0) {
         if (!ld->lock) {
             /* the next letter folder */
@@ -398,8 +475,13 @@ BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget)
                     list_sort(out);     /* entries out of letter order: all of it */
                 return FALSE;
             }
-            ld->lock = Lock((CONST_STRPTR)ld->subs.items[ld->next].path, SHARED_LOCK);
+            item_path(&ld->subs.items[ld->next], ld->path, sizeof(ld->path));
+            ld->lock = Lock((CONST_STRPTR)ld->path, SHARED_LOCK);
             ld->chunk = out->count;
+            if (ld->lock && !(ld->dir = list_strdup(out, ld->path))) {
+                UnLock(ld->lock);
+                ld->lock = 0;
+            }
             if (ld->lock && !Examine(ld->lock, ld->fib)) {
                 UnLock(ld->lock);
                 ld->lock = 0;
@@ -420,7 +502,7 @@ BOOL ags_load_step(struct AgsLoad *ld, struct ItemList *out, LONG budget)
                 ld->next++;
                 break;
             }
-            add_entry(ld->subs.items[ld->next].path, ld->fib, out, ld->adult);
+            add_entry(ld->dir, ld->fib, out, ld->adult);
         }
     }
     return TRUE;

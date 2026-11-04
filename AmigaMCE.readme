@@ -16,7 +16,9 @@ Features in this release
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
   with hierarchical categories, never one giant flat list.
 - Long lists (All Games, menus split A-Z) appear as soon as their first
-  screens are read; the rest is read while you browse.
+  screens are read; the rest is read while you browse. All Games' 3,300
+  entries take about 200 KB; should free memory fall below 256 KB, the
+  list stops there (the footer says so) rather than use up the rest.
 - Shows each title's AGS fact sheet and screenshot, decoded through the
   installed picture datatypes. On screens 640 or more wide, game lists
   have a preview pane beside them: the selected game's screenshot and
