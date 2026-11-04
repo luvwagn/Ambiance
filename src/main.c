@@ -3374,9 +3374,20 @@ static struct {
     LONG s_ms, s_total, s_order, s_row, s_fill;
     WORD s_level[4];
     UBYTE s_sample[4];
-    int s_state, s_vol, s_btn;
+    int s_state, s_vol, s_btn, s_flash;
     BOOL s_focus;
-} np = { .idx = -1, .btn = NB_PLAY };
+    int flash;                  /* the button just pressed (-1 none): lit briefly */
+    ULONG flash_until;
+} np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1 };
+
+#define FLASH_MS 160                /* how long a pressed button stays lit */
+
+/* The button chosen with the keyboard or joystick is outlined (Fire
+ * presses it); not while the mouse is in use. */
+static BOOL np_focus_shown(void)
+{
+    return focus == FOCUS_CONTENT && !mouse_mode;
+}
 
 static BOOL np_on(void)
 {
@@ -3421,13 +3432,14 @@ static int np_state(void)
 
 static void np_button(int i)
 {
-    BOOL sel = focus == FOCUS_CONTENT && i == np.btn;
-    UBYTE bg = sel ? PEN_HL : PEN_BAR, fg = sel ? PEN_WHITE : PEN_TEXT;
+    BOOL lit = i == np.flash;               /* just pressed */
+    BOOL ring = !lit && np_focus_shown() && i == np.btn;
+    UBYTE bg = lit ? PEN_HL : PEN_BAR, fg = lit ? PEN_WHITE : PEN_TEXT;
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
     WORD gh = h * 5 / 10, gw, cx, gy, t;
     if (i == NB_VDOWN || i == NB_VUP) {
         if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
-            fg = sel ? PEN_TEXT : PEN_DIM;
+            fg = lit ? PEN_TEXT : PEN_DIM;
     }
     if (gh < 5)
         gh = 5;
@@ -3483,6 +3495,14 @@ static void np_button(int i)
         }
         break;
     }
+    }
+    if (ring) {
+        /* the keyboard's/joystick's choice: an outline */
+        WORD r = U(1) > 0 ? U(1) : 1;
+        gfx_fill(&g, x, y, x + w - 1, y + r - 1, PEN_HL);
+        gfx_fill(&g, x, y + h - r, x + w - 1, y + h - 1, PEN_HL);
+        gfx_fill(&g, x, y, x + r - 1, y + h - 1, PEN_HL);
+        gfx_fill(&g, x + w - r, y, x + w - 1, y + h - 1, PEN_HL);
     }
 }
 
@@ -3689,16 +3709,20 @@ static void np_draw(BOOL full)
     np_draw_meters(full, &st);
     {
         int state = np_state();
-        BOOL foc = focus == FOCUS_CONTENT;
+        BOOL foc = np_focus_shown();
+        if (np.flash >= 0 && (LONG)(time_ms() - np.flash_until) >= 0)
+            np.flash = -1;                  /* its moment is over */
         for (i = 0; i < NB_COUNT; i++)
             if (full || (i == NB_PLAY && state != np.s_state) ||
                 ((i == np.btn || i == np.s_btn) && (np.btn != np.s_btn || foc != np.s_focus)) ||
+                ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
                 ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol))
                 np_button(i);
         if (full || mp_volume() != np.s_vol)
             np_volume_text();
         np.s_state = state;
         np.s_btn = np.btn;
+        np.s_flash = np.flash;
         np.s_focus = foc;
         np.s_vol = mp_volume();
     }
@@ -3800,6 +3824,8 @@ static void np_redraw_all(void)
 static void np_press(int b)
 {
     char err[100];
+    np.flash = b;                           /* lit for a moment, however pressed */
+    np.flash_until = time_ms() + FLASH_MS;
     switch (b) {
     case NB_PREV:
         /* a few seconds in: back to its start, as players do; else the one before */
@@ -4006,8 +4032,7 @@ static BOOL np_click(WORD x, WORD y)
     if (y >= np.by && y < np.by + np.bh)
         for (i = 0; i < NB_COUNT; i++)
             if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
-                np.btn = i;
-                np_press(i);
+                np_press(i);                /* the keyboard's choice stays as it was */
                 return TRUE;
             }
     /* the bar (and the line under it): to that part of the song */
@@ -4728,7 +4753,7 @@ static void act_move(LONG d)
         return;
     }
     if (p->type == PT_PLAYER) {
-        np_volume(d < 0 ? VOL_STEP : -VOL_STEP);   /* Up: louder */
+        np_press(d < 0 ? NB_VUP : NB_VDOWN);       /* Up: louder */
         return;
     }
     if (p->type == PT_LIST) {
@@ -5993,7 +6018,7 @@ static int app_main(void)
                  * spinner (each step, every 80 ms, then comes on time);
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
-                tick_us = (joy_present || ov.on || pv_spinning() || np_live() ||
+                tick_us = (joy_present || ov.on || pv_spinning() || np_live() || np.flash >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
