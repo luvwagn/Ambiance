@@ -50,6 +50,8 @@ struct Smooth {
     ULONG icon_bytes, mark_bytes;
     UWORD logo_w, logo_h, logo_nc;
     const UBYTE *logo_pal, *logo_idx;
+    UWORD nletters, letter_cell_w;
+    const UBYTE *letter[27];    /* A-Z, '#': u16 w, h, u32 bytes, runs */
     /* while a screen is open */
     struct Gfx *g;
     UBYTE *scratch;             /* chip RAM: SMOOTH_LEVELS masks */
@@ -82,7 +84,7 @@ static BOOL parse(struct Smooth *s)
 {
     const UBYTE *p = s->data, *end = s->data + s->size;
     int f;
-    if (s->size < 14 || memcmp(p, "AMSM", 4) || rd16(p + 4) != 1 || rd16(p + 12) != NFACES)
+    if (s->size < 14 || memcmp(p, "AMSM", 4) || rd16(p + 4) != 2 || rd16(p + 12) != NFACES)
         return FALSE;
     s->k = rd16(p + 6);
     s->cell_h = rd16(p + 8);
@@ -142,6 +144,19 @@ static BOOL parse(struct Smooth *s)
     p += 3 * (ULONG)s->logo_nc;
     s->logo_idx = p;
     p += (ULONG)s->logo_w * s->logo_h;
+    if (p + 4 > end)
+        return FALSE;
+    s->nletters = rd16(p);
+    s->letter_cell_w = rd16(p + 2);
+    p += 4;
+    if (s->nletters != 27)
+        return FALSE;
+    for (f = 0; f < 27; f++) {
+        if (p + 8 > end)
+            return FALSE;
+        s->letter[f] = p;
+        p += 8 + rd32(p + 4);
+    }
     return p <= end && s->icon_cnt >= ICON_COUNT && s->mark_cnt >= MARK_RADIO_ON &&
            s->logo_nc <= 32;
 }
@@ -478,81 +493,62 @@ BOOL sm_logo(struct Smooth *s, struct Gfx *g)
 }
 
 /* ------------------------------------------------------------ big letter */
-/* The letter overlay's letter: the bold face's glyph, enlarged with
- * bilinear filtering so its ink is ink_h pixels tall, one mask per
- * coverage step. 16 x 16-bit multiplies only (the 68000 has those). */
+/* Set bits x0..x1-1 of a mask row. */
+static void set_bits(UBYTE *row, UWORD x0, UWORD x1)
+{
+    while (x0 < x1 && (x0 & 7)) {
+        row[x0 >> 3] |= 0x80 >> (x0 & 7);
+        x0++;
+    }
+    if (x1 - x0 >= 8) {
+        memset(row + (x0 >> 3), 0xFF, (x1 - x0) >> 3);
+        x0 += (x1 - x0) & ~7;
+    }
+    while (x0 < x1) {
+        row[x0 >> 3] |= 0x80 >> (x0 & 7);
+        x0++;
+    }
+}
+
+/* The letter overlay's letter (A-Z or '#'), pre-rendered by mksmooth.py at
+ * the size the overlay uses on this screen, as one mask: unpacking its
+ * runs is all the work here. ink_h is what the caller wants; the file's
+ * own size is used (it was made for this screen). */
 BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl)
 {
-    static UBYTE lv_of[241];            /* bilinear value 0..240 -> step */
-    const struct Face *f = &s->face[TS_BOLD];
-    const UBYTE *G = glyph(f, c), *d = f->blob + rd32(G + 6);
-    UWORD gw = G[3], gh = G[4], ow, oh, ox, oy, sc;    /* sc: scale x 64 */
-    ULONG plane;
-    WORD *col;
-    UBYTE *pl[SMOOTH_LEVELS];
-    int i;
-    if (!gw || !gh || ink_h <= 0)
+    const UBYTE *L, *r;
+    UWORD w, h, y;
+    ULONG roff;
+    (void)ink_h;
+    if (c >= 'A' && c <= 'Z')
+        L = s->letter[c - 'A'];
+    else if (c == '#')
+        L = s->letter[26];
+    else
         return FALSE;
-    if (!lv_of[240])
-        for (i = 0; i <= 240; i++)
-            lv_of[i] = (UBYTE)((i * (SMOOTH_LEVELS - 1) + 120) / 240);
-    sc = (UWORD)(((ULONG)ink_h << 6) / gh);
-    if (sc < 128)
-        sc = 128;
-    if (sc > 64 * 16)
-        sc = 64 * 16;
-    ow = (UWORD)(((ULONG)gw * sc) >> 6);
-    oh = (UWORD)(((ULONG)gh * sc) >> 6);
-    bl->bpr = ((ow + 15) >> 4) << 1;
-    plane = (ULONG)bl->bpr * oh;
-    bl->size = plane * (SMOOTH_LEVELS - 1);
+    w = rd16(L);
+    h = rd16(L + 2);
+    r = L + 8;
+    if (!w || !h)
+        return FALSE;
+    bl->bpr = ((w + 15) >> 4) << 1;
+    bl->size = (ULONG)bl->bpr * h;
     bl->mask = AllocMem(bl->size, MEMF_CHIP | MEMF_CLEAR);
     if (!bl->mask)
         return FALSE;
-    col = AllocVec((ULONG)ow * sizeof(WORD), MEMF_ANY);
-    if (!col) {
-        FreeMem(bl->mask, bl->size);
-        bl->mask = NULL;
-        return FALSE;
-    }
-    /* source column of each output column, in 1/64 pixels (divides once) */
-    for (ox = 0; ox < ow; ox++)
-        col[ox] = (WORD)((((ULONG)ox << 6) + 32) * 64 / sc) - 32;
-    pl[0] = NULL;
-    for (i = 1; i < SMOOTH_LEVELS; i++)
-        pl[i] = bl->mask + plane * (i - 1);
-    bl->w = ow;
-    bl->h = oh;
-    bl->nlev = SMOOTH_LEVELS - 1;
-    bl->cell_w = (UWORD)(((ULONG)f->widest_cap * sc) >> 6);
-    for (oy = 0; oy < oh; oy++) {
-        /* source position in 1/64 pixels, centred on the output pixel */
-        WORD sy = (WORD)((((ULONG)oy << 6) + 32) * 64 / sc) - 32;
-        WORD y0 = sy >> 6;
-        UWORD fy = sy & 63;
-        ULONG roff = (ULONG)oy * bl->bpr;
-        /* source rows y0 and y0 + 1 (-1: outside the glyph) */
-        LONG r0 = (y0 >= 0 && y0 < (WORD)gh) ? (LONG)y0 * gw : -1;
-        LONG r1 = (y0 + 1 >= 0 && y0 + 1 < (WORD)gh) ? (LONG)(y0 + 1) * gw : -1;
-        for (ox = 0; ox < ow; ox++) {
-            WORD sx = col[ox];
-            WORD x0 = sx >> 6;
-            UWORD fx = sx & 63, v00, v10, v01, v11, top, bot, v;
-            UBYTE lv;
-#define COV(xx, r) (((r) < 0 || (xx) < 0 || (xx) >= (WORD)gw) ? 0 : nib(d, (ULONG)((r) + (xx))))
-            v00 = COV(x0, r0);
-            v10 = COV(x0 + 1, r0);
-            v01 = COV(x0, r1);
-            v11 = COV(x0 + 1, r1);
-#undef COV
-            top = (UWORD)(v00 * (UWORD)(64 - fx) + v10 * fx);      /* 0..960 */
-            bot = (UWORD)(v01 * (UWORD)(64 - fx) + v11 * fx);
-            v = (UWORD)(((ULONG)top * (UWORD)(64 - fy) + (ULONG)bot * fy) >> 8);   /* 0..240 */
-            lv = lv_of[v];
-            if (lv)
-                pl[lv][roff + (ox >> 3)] |= 0x80 >> (ox & 7);
+    bl->w = w;
+    bl->h = h;
+    bl->cell_w = s->letter_cell_w;
+    for (y = 0, roff = 0; y < h; y++, roff += bl->bpr) {
+        UWORD x = 0;
+        BOOL on = FALSE;
+        while (x < w) {
+            UWORD n = *r++;
+            if (on && n)
+                set_bits(bl->mask + roff, x, x + n > w ? w : x + n);
+            x += n;
+            on = !on;
         }
     }
-    FreeVec(col);
     return TRUE;
 }

@@ -30,6 +30,7 @@ extern struct Library *DiskfontBase, *DataTypesBase;
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
 static void cache_art(struct Gfx *g);
+static void letters_free(void);
 
 /* Main menu labels, set by gfx_menu_labels(): the menu column is made just
  * wide enough for the longest one. */
@@ -350,6 +351,7 @@ void gfx_close(struct Gfx *g)
         FreeMem(g->mark_masks, (ULONG)MARK_RADIO_ON * g->mark_px * g->mark_bpr);
         g->mark_masks = NULL;
     }
+    letters_free();
     if (g->sm) {
         sm_free(g->sm);
         g->sm = NULL;
@@ -584,9 +586,36 @@ void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 }
 
 /* ------------------------------------------------------------ big letter */
-/* The list overlay's letter, its ink about ink_h pixels tall. Pixel style:
- * the UI font's own glyph blown up in whole pixels. Smooth: smooth.c. */
-BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
+/* The overlay's letters: A-Z and '#' (accented capitals file under their
+ * base letter), built on first use at the size asked and kept until the
+ * screen closes or the size changes. */
+#define LETTERS (26 + 1)
+static struct BigLetter letters[LETTERS];
+static WORD letters_ink;
+
+static int letter_slot(UBYTE c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c == '#')
+        return 26;
+    return -1;
+}
+
+static void letters_free(void)
+{
+    int i;
+    WaitBlit();
+    for (i = 0; i < LETTERS; i++) {
+        if (letters[i].mask)
+            FreeMem(letters[i].mask, letters[i].size);
+        letters[i].mask = NULL;
+    }
+    letters_ink = 0;
+}
+
+/* Pixel style: the UI font's own glyph blown up in whole pixels. */
+static BOOL pixel_letter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
 {
     struct TextFont *f = g->font;
     const UBYTE *data;
@@ -594,11 +623,6 @@ BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
     UWORD off, gw, mod, x, yy;
     LONG idx;
     WORD top = -1, bot = -1, sc;
-    gfx_bigletter_free(bl);
-    if (!c)
-        return FALSE;
-    if (g->sm)
-        return sm_bigletter(g->sm, c, ink_h, bl);
     if (!f)
         return FALSE;
     idx = (c < f->tf_LoChar || c > f->tf_HiChar) ? f->tf_HiChar - f->tf_LoChar + 1
@@ -630,7 +654,6 @@ BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
     bl->h = (bot - top + 1) * sc;
     bl->bpr = ((bl->w + 15) / 16) * 2;
     bl->size = (ULONG)bl->bpr * bl->h;
-    bl->nlev = 1;
     bl->cell_w = (UWORD)(f->tf_XSize + 1) * sc;
     bl->mask = AllocMem(bl->size, MEMF_CHIP | MEMF_CLEAR);
     if (!bl->mask)
@@ -643,30 +666,37 @@ BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl)
     return TRUE;
 }
 
-void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y,
-                        UBYTE fg, UBYTE bg)
+const struct BigLetter *gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h)
 {
-    UBYTE lv;
-    ULONG plane = (ULONG)bl->bpr * bl->h;
-    UBYTE *m = bl->mask;
-    if (!m)
-        return;
-    SetDrMd(g->rp, JAM1);
-    for (lv = 1; lv <= bl->nlev; lv++, m += plane) {
-        UBYTE pen = bl->nlev == 1 ? fg : sm_pen(g->sm, g, fg, bg, lv);
-        SetAPen(g->rp, pen);
-        BltTemplate((PLANEPTR)m, 0, bl->bpr, g->rp, x, y, bl->w, bl->h);
+    int i = letter_slot(c);
+    struct BigLetter *bl;
+    BOOL ok;
+    if (i < 0 || ink_h <= 0)
+        return NULL;
+    if (ink_h != letters_ink) {
+        letters_free();
+        letters_ink = ink_h;
     }
+    bl = &letters[i];
+    if (bl->mask)
+        return bl;
+    ok = g->sm ? sm_bigletter(g->sm, c, ink_h, bl) : pixel_letter(g, c, ink_h, bl);
+    if (!ok && bl->mask) {
+        FreeMem(bl->mask, bl->size);
+        bl->mask = NULL;
+    }
+    return bl->mask ? bl : NULL;
 }
 
-void gfx_bigletter_free(struct BigLetter *bl)
+/* One stamp: the overlay is a faint letter behind the list, so even in the
+ * smooth style its edges are not worth a stamp per shade. */
+void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE pen)
 {
-    if (bl->mask) {
-        WaitBlit();
-        FreeMem(bl->mask, bl->size);
-    }
-    bl->mask = NULL;
-    bl->w = bl->h = 0;
+    if (!bl || !bl->mask)
+        return;
+    SetDrMd(g->rp, JAM1);
+    SetAPen(g->rp, pen);
+    BltTemplate((PLANEPTR)bl->mask, 0, bl->bpr, g->rp, x, y, bl->w, bl->h);
 }
 
 /* Decode a picture through the registered datatypes and draw it scaled to

@@ -14,13 +14,15 @@ with anti-aliased edges:
   - the nine menu icons (vector shapes of tools/hiicons.py)
   - the five list row markers (vector shapes of tools/markicons.py)
   - the logo, in full colour, reduced to a small palette
+  - the list overlay's big letters A-Z and '#', drawn from the outlines at
+    exactly the size the overlay uses on this screen, one bit a pixel
 
 Glyphs, icons and markers are coverage maps, 4 bits a pixel (0 = none, 15 =
 full); AmigaMCE blends them between the text colour and the background with
 in-between pens. The logo is a palette image; index 255 is transparent.
 
 File layout (big-endian), written to <out dir>/<H>:
-  "AMSM", u16 version (1), u16 k (scale x 256), u16 cell_h, u16 baseline
+  "AMSM", u16 version (2), u16 k (scale x 256), u16 cell_h, u16 baseline
   u16 nfaces (3), then per face:
       u16 lo, u16 hi, then per glyph lo..hi:
           u8 advance, s8 xoff, s8 yoff (from the cell top), u8 w, u8 h, u8 0, u32 offset
@@ -28,6 +30,10 @@ File layout (big-endian), written to <out dir>/<H>:
   u16 icon size, u16 count, then count icons (each byte aligned)
   u16 mark size, u16 count, then count markers (each byte aligned)
   u16 logo w, u16 logo h, u16 colours, colours x (r, g, b), w x h indices
+  u16 letters (27: A-Z, #), u16 cell_w (widest), then per letter:
+      u16 w, u16 h, u32 bytes, then each row as run lengths (u8),
+      alternately clear and set, starting with clear, summing to w; a run
+      over 255 is written 255, 0, rest
 """
 import os
 import struct
@@ -42,6 +48,7 @@ from mkart import UI    # noqa: E402
 
 LO, HI = 32, 255
 RTG_LINES = 384     # the screen height the design is scaled to fit as if it had
+LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
 CELL = 12           # design height of a text cell (the pixel font's)
@@ -142,12 +149,66 @@ def logo(ttf, k):
     return w, h, [colours[v] for v in used], bytes(idx)
 
 
+def gu(v, k256):
+    """GU() of amce.h: design units to pixels."""
+    return (v * k256 + 128) >> 8
+
+
+def overlay_ink(H, k256):
+    """The overlay letter's ink height, as main.c's ov_build works it out:
+    2/5 of the list's visible rows."""
+    list_top, row_h = gu(44, k256), gu(14, k256)
+    footer_y = H - gu(12, k256)
+    vis = (footer_y - 2 - list_top) // row_h
+    return vis * row_h * 2 // 5
+
+
+def big_letters(ttf, ink_h):
+    """The overlay letters, ink ink_h tall for a capital, thresholded at half
+    coverage: [(w, h, rows of runs)], widest w."""
+    def font(size):
+        ft = ImageFont.truetype(ttf, size)
+        ft.set_variation_by_axes([FACES[1][1]])        # the bold face
+        return ft
+    probe = font(200)
+    cap = probe.getbbox("H", anchor="ls")
+    size = max(8, round(200 * ink_h / (cap[3] - cap[1])))
+    ft = font(size)
+    out = []
+    for ch in LETTERS:
+        pad = size
+        img = Image.new("L", (size * 2 + pad, size * 2 + pad), 0)
+        ImageDraw.Draw(img).text((pad // 2, size + pad // 2), ch, font=ft, fill=255, anchor="ls")
+        bits = img.point(lambda v: 255 if v >= 128 else 0)
+        box = bits.getbbox()
+        bits = bits.crop(box)
+        w, h = bits.size
+        data = bits.get_flattened_data() if hasattr(bits, "get_flattened_data") else bits.getdata()
+        data = list(data)
+        rows = []
+        for y in range(h):
+            runs, x, on = [], 0, False
+            while x < w:
+                n = 0
+                while x < w and (data[y * w + x] != 0) == on:
+                    n += 1
+                    x += 1
+                while n > 255:
+                    runs += [255, 0]
+                    n -= 255
+                runs.append(n)
+                on = not on
+            rows.append(runs)
+        out.append((w, h, rows))
+    return out, max(w for w, h, r in out)
+
+
 def build(ttf, H):
     k256 = round(H * 256 / RTG_LINES)
     k = k256 / 256
     cell_h, base = round(CELL * k), round(BASE * k)
     out = bytearray(b"AMSM")
-    out += struct.pack(">HHHHH", 1, k256, cell_h, base, len(FACES))
+    out += struct.pack(">HHHHH", 2, k256, cell_h, base, len(FACES))
     for size, wght in FACES:
         glyphs, blob = face(ttf, size, wght, k, cell_h, base)
         out += struct.pack(">HH", LO, HI)
@@ -168,6 +229,11 @@ def build(ttf, H):
     for c in pal:
         out += bytes(c)
     out += idx
+    letters, cell_w = big_letters(ttf, overlay_ink(H, k256))
+    out += struct.pack(">HH", len(letters), cell_w)
+    for w, h, rows in letters:
+        data = bytes(v for runs in rows for v in runs)
+        out += struct.pack(">HHI", w, h, len(data)) + data
     return bytes(out)
 
 

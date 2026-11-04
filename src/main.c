@@ -70,7 +70,7 @@ static struct {
     BOOL  on;
     struct Page *page;
     char  letter;
-    struct BigLetter bl;
+    const struct BigLetter *bl;     /* gfx.c owns it */
     WORD  x, y;
     WORD  strip_x;          /* left edge of the letter's strip; rows stop before it */
     UWORD linger;           /* timer ticks left before hiding, 0 = not counting */
@@ -887,8 +887,17 @@ static char ov_letter_of(const char *s)
             return (char)c;
         if (c >= '0' && c <= '9')
             return '#';
-        if (c >= 0xC0)                      /* Latin-1 letters, upper-cased */
-            return (char)((c >= 0xE0 && c != 0xF7) ? c - 32 : c);
+        if (c >= 0xC0 && c != 0xD7 && c != 0xF7) {
+            /* Latin-1 letters file under their base letter: É under E */
+            static const char base[] = "AAAAAAACEEEEIIIIDNOOOOO.OUUUUYTS";
+            if (c == 0xFF)
+                return 'Y';                 /* y with diaeresis */
+            if (c >= 0xE0)
+                c -= 32;
+            if (c == 0xDF)
+                return 'S';
+            return base[c - 0xC0] != '.' ? base[c - 0xC0] : 0;
+        }
     }
     return 0;
 }
@@ -907,7 +916,7 @@ static BOOL ov_eligible(const struct Page *p)
 
 static void ov_free(void)
 {
-    gfx_bigletter_free(&ov.bl);
+    ov.bl = NULL;
     ov.on = FALSE;
     ov.letter = 0;
 }
@@ -917,13 +926,15 @@ static void ov_free(void)
 static BOOL ov_build(char ch)
 {
     WORD rows_h = list_visible() * g.list_row_h;
-    if (!gfx_bigletter(&g, (UBYTE)ch, rows_h * 2 / 5, &ov.bl))
+    const struct BigLetter *bl = gfx_bigletter(&g, (UBYTE)ch, rows_h * 2 / 5);
+    if (!bl)
         return FALSE;
+    ov.bl = bl;
     ov.letter = ch;
-    ov.x = g.pane_x + g.pane_w * 9 / 10 - ov.bl.w;
-    ov.y = g.list_top + (rows_h - ov.bl.h) / 2;
+    ov.x = g.pane_x + g.pane_w * 9 / 10 - bl->w;
+    ov.y = g.list_top + (rows_h - bl->h) / 2;
     /* the strip fits the widest letter, so it does not move as letters change */
-    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - ov.bl.cell_w - U(6);
+    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - bl->cell_w - U(6);
     if (ov.strip_x < g.pane_x + g.pane_w / 2)
         ov.strip_x = g.pane_x + g.pane_w / 2;
     return TRUE;
@@ -935,7 +946,7 @@ static void draw_list_rows(struct Page *p);
 /* Stamp the letter into its strip (nothing else is drawn there). */
 static void ov_stamp(void)
 {
-    gfx_bigletter_draw(&g, &ov.bl, ov.x, ov.y, PEN_DIM, PEN_BG);
+    gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
 }
 
 static void ov_show(struct Page *p)
@@ -957,7 +968,8 @@ static void ov_relabel(char c)
 {
     if (!ov.on || !c || c == ov.letter)
         return;
-    gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl.w - 1, ov.y + ov.bl.h - 1, PEN_BG);
+    if (ov.bl)
+        gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
     if (ov_build(c))
         ov_stamp();
 }

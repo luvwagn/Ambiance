@@ -96,14 +96,14 @@ struct Gfx {
 /* Design units to pixels on this screen. */
 #define GU(g, v) ((WORD)(((LONG)(v) * (g)->k + 128) >> 8))
 
-/* A big letter for the list's letter overlay: one mask (pixel style) or
- * one per coverage step (smooth), in chip RAM for BltTemplate. */
+/* A big letter for the list's letter overlay: one mask in chip RAM for
+ * BltTemplate. Built once per letter and size, kept until the screen
+ * closes (gfx_bigletter), so scrolling never rebuilds one it has shown. */
 struct BigLetter {
     UBYTE *mask;
     ULONG size;
     UWORD w, h, bpr;
     UWORD cell_w;               /* the widest letter at this size */
-    UBYTE nlev;                 /* masks: 1, or SMOOTH_LEVELS - 1 */
 };
 
 const char *gfx_mode_key(int sm);
@@ -127,9 +127,8 @@ WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
-BOOL gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h, struct BigLetter *bl);
-void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE fg, UBYTE bg);
-void gfx_bigletter_free(struct BigLetter *bl);
+const struct BigLetter *gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h);  /* NULL: none */
+void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE pen);
 
 /* ---------------------------------------------------------------- smooth */
 #define SMOOTH_LEVELS 8         /* coverage steps: 0 none .. 7 full colour */
