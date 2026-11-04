@@ -1909,7 +1909,7 @@ int main(void)
     struct MsgPort *tport = NULL;
     struct timerequest *treq = NULL;
     BOOL timer_open = FALSE;
-    ULONG ticks = 0, ms_acc = 0, tick_us = 40000;
+    ULONG ms_acc = 0, tick_us = 40000;
     int rc = 0;
 
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
@@ -1995,7 +1995,6 @@ int main(void)
             break;
         if (sig & tsig) {
             if (GetMsg(tport)) {
-                ticks++;
                 ms_acc += tick_us / 1000;
                 joy_poll();
                 /* the letter lingers ~0.5 s after the glide ends */

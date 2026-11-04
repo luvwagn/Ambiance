@@ -19,11 +19,15 @@ implemented.
 
 ## Building
 
-Builds with the `m68k-amigaos-gcc` 13.4 toolchain, the same one used by
-[xSysInfo](https://github.com/reinauer/xSysInfo). The quickest way is its
-container:
+Builds with the `m68k-amigaos-gcc` 16.2 toolchain (16.2-rc23 or later).
+The quickest way is the
+[amiga-gcc container](https://github.com/reinauer/container-amiga-gcc):
 
-    docker run --rm -v $PWD:/src -w /src stefanreinauer/amiga-gcc:gcc-v13.4 make
+    docker run --rm -v $PWD:/src -w /src stefanreinauer/amiga-gcc:16.2-rc23 make
+
+GCC 13.4 is not recommended: it can drop the register arguments of an
+inline OS call when a multiply helper call ends up between them (see
+`tests/aligntest/gcc-register-asm-bug-report.txt`).
 
 | Target         | Result                                                    |
 |----------------|-----------------------------------------------------------|

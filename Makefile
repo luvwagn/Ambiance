@@ -75,10 +75,12 @@ check-formats:
 		echo "error: use %l with a long argument (RawDoFmt reads %d/%u/%x/%c as 16-bit)"; exit 1; fi
 	@echo "  CHECK formats ok"
 
-# GCC can move a helper call (__mulsi3 for a 32-bit multiply on the 68000,
-# strlen...) between loading an inline OS call's register arguments and the
-# call, which then gets clobbered arguments: with 18-byte list entries
-# CopyMem copied from UtilityBase onto the stack. Scan the generated code.
+# GCC 13.4 could move a helper call (__mulsi3 for a 32-bit multiply on the
+# 68000) between loading an inline OS call's register arguments and the
+# call, which then got clobbered arguments: with 18-byte list entries
+# CopyMem copied from UtilityBase onto the stack. Fixed in GCC 16.2-rc23
+# (see tests/aligntest/gcc-register-asm-bug-report.txt); the scan of the
+# generated code stays as a guard against a regression.
 ASM_DIR = build/asm
 check-syscalls: $(SRCS) src/amce.h
 	@mkdir -p $(ASM_DIR)
