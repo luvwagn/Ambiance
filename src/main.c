@@ -209,7 +209,7 @@ static LONG pv_dir;
  * while its picture comes, and over the content pane for any navigation
  * that keeps you waiting (busy_*), after SPIN_AFTER ms. */
 #define SPIN_AFTER 200
-#define SPIN_FRAME  80              /* ms a step */
+#define SPIN_FRAME  80              /* ms a step: a turn in 0.64 s */
 
 static BOOL has_aside(struct Page *p);
 static WORD aside_x(void);
@@ -231,6 +231,28 @@ static void spin_metrics(WORD *ring, WORD *ringy, WORD *r, WORD *ry)
     *ringy = *ring / sy;
 }
 
+/* Each step is drawn off screen, then copied up in one go with the beam
+ * (gfx_blit_beam): cleared and drawn dot by dot on the screen, it was
+ * seen half done, a flicker. */
+static struct BitMap *spin_bm;
+static WORD spin_bw, spin_bh;
+
+static void spin_free(void)
+{
+    if (spin_bm) {
+        WaitBlit();
+        FreeBitMap(spin_bm);
+        spin_bm = NULL;
+    }
+}
+
+/* The step the spinner is at, since: one every SPIN_FRAME ms, so it
+ * turns evenly however often it is asked. */
+static UWORD spin_phase(ULONG since)
+{
+    return (UWORD)(((time_ms() - since) / SPIN_FRAME) & 7);
+}
+
 /* The spinner centred on (cx, cy) at a step; first: with its label (the
  * caller has cleared the area). */
 static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
@@ -246,10 +268,31 @@ static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
         WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
         gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
     }
-    gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
-    for (i = 0; i < 8; i++)
-        gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
-                pens[(phase - i) & 7], PEN_BG);   /* the tail behind */
+    {
+        WORD x0 = cx - ring - r, y0 = cy - ringy - ry;
+        WORD w = 2 * (ring + r) + 1, h = 2 * (ringy + ry) + 1;
+        struct RastPort orp, *screen_rp = g.rp;
+        if (!spin_bm || spin_bw != w || spin_bh != h) {
+            spin_free();
+            spin_bm = AllocBitMap(w, h, g.depth, BMF_CLEAR, g.rp->BitMap);
+            spin_bw = w;
+            spin_bh = h;
+        }
+        if (spin_bm) {
+            InitRastPort(&orp);
+            orp.BitMap = spin_bm;
+            g.rp = &orp;                    /* drawn off screen */
+            cx -= x0;
+            cy -= y0;
+        }
+        gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
+        for (i = 0; i < 8; i++)
+            gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
+                    pens[(phase - i) & 7], PEN_BG);   /* the tail behind */
+        g.rp = screen_rp;
+        if (spin_bm)
+            gfx_blit_beam(&g, spin_bm, x0, y0, w, h);
+    }
 }
 
 /* Navigation that may keep you waiting: busy_begin ... busy_end around it,
@@ -297,9 +340,8 @@ static void busy_tick(void)
         spin_draw(busy.cx, busy.cy, 0, TRUE);
         return;
     }
-    if ((LONG)(now - busy.last) >= SPIN_FRAME) {
-        busy.last = now;
-        busy.phase = (busy.phase + 1) & 7;
+    if (spin_phase(busy.last) != busy.phase) {
+        busy.phase = spin_phase(busy.last);
         spin_draw(busy.cx, busy.cy, busy.phase, FALSE);
     }
 }
@@ -2098,6 +2140,7 @@ static BOOL pv_text_drawn, pv_pic_drawn, pv_has_box, pv_spin_on;
 static WORD pv_box_y, pv_box_h;     /* where the picture goes */
 static ULONG pv_since;              /* when the selection moved to what the pane shows */
 static UWORD pv_spin_phase;
+static ULONG pv_spin_since;         /* when it began turning */
 
 static BOOL pv_roomy(void)
 {
@@ -2349,11 +2392,14 @@ static void pv_spin_tick(void)
             return;
         pv_spin_on = TRUE;
         pv_spin_phase = 0;
+        pv_spin_since = time_ms();
         pv_spinner(TRUE);
         return;
     }
-    pv_spin_phase = (pv_spin_phase + 1) & 7;
-    pv_spinner(FALSE);
+    if (spin_phase(pv_spin_since) != pv_spin_phase) {
+        pv_spin_phase = spin_phase(pv_spin_since);
+        pv_spinner(FALSE);
+    }
 }
 
 static BOOL pv_spinning(void)
@@ -3341,6 +3387,7 @@ static void release_for_launch(void)
     ov.on = FALSE;
     ov.bl = NULL;
     ptr_hidden = NULL;              /* a new window comes with its pointer */
+    spin_free();
     gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
     close_extra_libs();
     flush_memory();
@@ -3828,6 +3875,7 @@ static void apply_screen_mode(int sm)
     pages_clear();
     pv_flush();                     /* decoded for this screen */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
+    spin_free();
     gfx_close(&g);
     screen_mode = sm;
     if (!gfx_open(&g, &caps, sm, ui_style)) {
@@ -3915,6 +3963,7 @@ static void apply_style(int st)
     pages_clear();
     pv_flush();                     /* decoded for this screen */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
+    spin_free();
     gfx_close(&g);
     if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
         !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
@@ -4855,10 +4904,11 @@ int main(void)
                     if (cur() && cur()->type == PT_LIST && !pane_pending)
                         draw_gutter(cur());
                 }
-                /* 25 a second for a joystick or a fading letter, 12 for the
-                 * spinner; otherwise 5 a second, which still notices a
-                 * joystick plugged in. */
-                tick_us = (joy_present || ov.on) ? 40000 : pv_spinning() ? 80000 : 200000;
+                /* 25 a second for a joystick, a fading letter or the
+                 * spinner (each step, every 80 ms, then comes on time);
+                 * otherwise 5 a second, which still notices a joystick
+                 * plugged in. */
+                tick_us = (joy_present || ov.on || pv_spinning()) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
@@ -4923,6 +4973,7 @@ out:
     pages_clear();
     amce_log("pages freed", "");
     ptr_hidden = NULL;              /* a new window comes with its pointer */
+    spin_free();
     gfx_close(&g);
     amce_log("screen closed", "");
     if (ptr_blank)

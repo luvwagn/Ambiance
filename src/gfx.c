@@ -447,6 +447,14 @@ static void clear_old(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WOR
     band_fill(g, b, ox0, (ny1 + 1 > oy0 ? ny1 + 1 : oy0), ox1, oy1);        /* below */
 }
 
+/* Copy bm (w x h) to x, y on the screen without a half-drawn frame. */
+void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WORD h)
+{
+    struct Beam b;
+    beam_init(g, &b);
+    band_blit(g, &b, bm, x, y, w, h);
+}
+
 /* Clear the picture on screen (as far as it is inside x0,y0..x1,y1),
  * then let its pens go: in that order, so it never shows in pens given to
  * another picture meanwhile. */

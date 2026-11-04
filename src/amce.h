@@ -168,6 +168,9 @@ void gfx_picture_free(struct Gfx *g);
 /* The picture on screen cleared (as far as it is inside x0,y0..x1,y1),
  * then its pens let go; without a flash on planar screens. */
 void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
+/* bm (w x h, like the screen's) to x, y, band by band with the beam: no
+ * half-drawn frame is seen on a planar screen. */
+void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WORD h);
 /* The same in two halves: decoding (any process; remap FALSE takes no
  * pens) and drawing what was decoded (the object stays the caller's, to
  * draw again, unless *taken). */
