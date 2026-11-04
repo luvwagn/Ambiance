@@ -510,6 +510,10 @@ static void cache_art(struct Gfx *g)
         g->icon_masks = g->mark_masks = NULL;
         return;
     }
+    /* a deep RTG screen shows the smooth logo in the pixel style too */
+    g->logo_masks = NULL;
+    if (g->truecolor && sm_logo_file(g, k))
+        goto icons;
     g->logo_npens = 0;
     for (n = 0; n < (ULONG)w * h; n++) {
         UBYTE pen = px[n];
@@ -534,6 +538,7 @@ static void cache_art(struct Gfx *g)
                     if (px[j * w + i] == g->logo_pens[p])
                         put_block(m, g->logo_bpr, i, j, k);
         }
+icons:
     g->icon_masks = enlarge_words(&icons16[0][0], ICON_COUNT, 16, k, &g->icon_bpr);
     g->mark_masks = enlarge_words(&marks16[0][0], MARK_RADIO_ON, MARK_SIZE, k, &g->mark_bpr);
 }

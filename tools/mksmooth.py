@@ -54,7 +54,7 @@ LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
 CELL = 12           # design height of a text cell (the pixel font's)
-BASE = 9.6          # design baseline, from the cell top
+BASE = 9.0          # design baseline, from the cell top (the pixel font's)
 ICONS = hiicons.ICONS
 MARKS = markicons.ORDER
 BAR, WHITE, HL, ACCENT, NAVY = UI[1], UI[5], UI[6], UI[8], UI[0]
@@ -259,6 +259,17 @@ def build(ttf, H):
     return bytes(out)
 
 
+def logo_file(ttf, scale):
+    """The smooth logo alone at a whole scale, for the pixel style on deep
+    RTG screens: "AMLG", u16 version (1), u16 w, u16 h, u16 colours,
+    colours x (r, g, b), w x h indices (255 transparent)."""
+    w, h, pal, idx = logo(ttf, scale)
+    out = bytearray(b"AMLG") + struct.pack(">HHHH", 1, w, h, len(pal))
+    for c in pal:
+        out += bytes(c)
+    return bytes(out + idx)
+
+
 def main():
     ttf, outdir = sys.argv[1], sys.argv[2]
     heights = [int(v) for v in sys.argv[3:]] or [480, 600, 768]
@@ -268,6 +279,11 @@ def main():
         with open(os.path.join(outdir, str(H)), "wb") as fh:
             fh.write(data)
         print(f"  SMOOTH {H} lines: scale {round(H * 256 / RTG_LINES) / 256:.2f}, {len(data)} bytes")
+    for scale in (1, 2, 3):
+        data = logo_file(ttf, scale)
+        with open(os.path.join(outdir, f"logo{scale}"), "wb") as fh:
+            fh.write(data)
+        print(f"  SMOOTH logo at {scale}x: {len(data)} bytes")
 
 
 if __name__ == "__main__":

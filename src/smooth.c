@@ -482,31 +482,85 @@ static UBYTE nearest_ui_pen(const UBYTE *rgb)
     return best;
 }
 
-BOOL sm_logo(struct Smooth *s, struct Gfx *g)
+/* Logo masks (one per colour) from a palette image; pens[] has a pen
+ * for each colour. */
+static BOOL logo_masks(struct Gfx *g, UWORD w, UWORD h, UWORD nc, const UBYTE *idx,
+                       const UBYTE *pens)
 {
-    UWORD w = s->logo_w, h = s->logo_h, i, j, c;
-    UWORD bpr = ((w + 15) >> 4) << 1;
-    ULONG size = (ULONG)s->logo_nc * h * bpr;
+    UWORD i, j, c, bpr = ((w + 15) >> 4) << 1;
+    ULONG size = (ULONG)nc * h * bpr;
     UBYTE *m;
-    if (!size || !(m = AllocMem(size, MEMF_CHIP | MEMF_CLEAR)))
+    if (!size || nc > sizeof(g->logo_pens) || !(m = AllocMem(size, MEMF_CHIP | MEMF_CLEAR)))
         return FALSE;
-    for (c = 0; c < s->logo_nc; c++) {
-        const UBYTE *rgb = s->logo_pal + 3 * c;
-        UBYTE pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
-        g->logo_pens[c] = pen ? pen : nearest_ui_pen(rgb);
-    }
+    for (c = 0; c < nc; c++)
+        g->logo_pens[c] = pens[c];
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++) {
-            UBYTE v = s->logo_idx[(ULONG)j * w + i];
-            if (v < s->logo_nc)
+            UBYTE v = idx[(ULONG)j * w + i];
+            if (v < nc)
                 m[((ULONG)v * h + j) * bpr + (i >> 3)] |= 0x80 >> (i & 7);
         }
     g->logo_masks = m;
-    g->logo_npens = (UBYTE)s->logo_nc;
+    g->logo_npens = (UBYTE)nc;
     g->logo_bpr = bpr;
     g->logo_w = w;
     g->logo_h = h;
     return TRUE;
+}
+
+BOOL sm_logo(struct Smooth *s, struct Gfx *g)
+{
+    UBYTE pens[32];
+    UWORD c;
+    if (s->logo_nc > 32)
+        return FALSE;
+    for (c = 0; c < s->logo_nc; c++) {
+        const UBYTE *rgb = s->logo_pal + 3 * c;
+        UBYTE pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
+        pens[c] = pen ? pen : nearest_ui_pen(rgb);
+    }
+    return logo_masks(g, s->logo_w, s->logo_h, s->logo_nc, s->logo_idx, pens);
+}
+
+/* The pixel style on a deep RTG screen: the smooth logo at its whole scale
+ * (PROGDIR:Fonts/amce-smooth/logo<scale>), its colours in pens 32 up. */
+BOOL sm_logo_file(struct Gfx *g, UWORD scale)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    struct ColorMap *cm = g->scr->ViewPort.ColorMap;
+    UBYTE *data = NULL, pens[32];
+    char path[48];
+    BPTR fh;
+    LONG size;
+    BOOL ok = FALSE;
+    sprintf(path, "PROGDIR:Fonts/amce-smooth/logo%lu", (unsigned long)scale);
+    me->pr_WindowPtr = (APTR)-1;
+    fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return FALSE;
+    Seek(fh, 0, OFFSET_END);
+    size = Seek(fh, 0, OFFSET_BEGINNING);
+    if (size > 12 && (data = AllocVec(size, MEMF_ANY)) && Read(fh, data, size) == size &&
+        !memcmp(data, "AMLG", 4) && rd16(data + 4) == 1) {
+        UWORD w = rd16(data + 6), h = rd16(data + 8), nc = rd16(data + 10), c;
+        const UBYTE *pal = data + 12, *idx = pal + 3 * (ULONG)nc;
+        if (nc <= 32 && idx + (ULONG)w * h <= data + size &&
+            cm && cm->Count >= FIRST_PEN + nc) {
+            for (c = 0; c < nc; c++) {
+                const UBYTE *rgb = pal + 3 * c;
+                pens[c] = (UBYTE)(FIRST_PEN + c);
+                SetRGB32(&g->scr->ViewPort, FIRST_PEN + c, rgb[0] * 0x01010101UL,
+                         rgb[1] * 0x01010101UL, rgb[2] * 0x01010101UL);
+            }
+            ok = logo_masks(g, w, h, nc, idx, pens);
+        }
+    }
+    if (data)
+        FreeVec(data);
+    Close(fh);
+    return ok;
 }
 
 /* ------------------------------------------------------------ big letter */
