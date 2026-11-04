@@ -80,6 +80,12 @@ static LONG pv_sel;
 static BOOL pv_shown;               /* FALSE once the pane is cleared or left */
 static struct ItemList pv_list;     /* its wrapped lines */
 static struct LJob *pv_tj, *pv_sj;  /* the text and picture the pane shows or waits for */
+static BOOL mouse_mode;             /* the mouse was used last */
+/* Mouse mode: the row under the pointer, highlighted softly (PEN_RULE;
+ * the selection stays where it is until a click). Kept as a place on
+ * screen, so a list scrolling under a still pointer stays right. */
+static WORD hover_row = -1;         /* content list: screen row, -1 none */
+static WORD hover_menu = -1;        /* main menu: entry, -1 none */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
@@ -1384,7 +1390,8 @@ static void draw_menu_row(int i)
 {
     WORD y = g.top + i * g.row_h;
     BOOL sel = i == menu_sel;
-    UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) : PEN_BG;
+    UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) :
+               i == hover_menu && mouse_mode ? PEN_RULE : PEN_BG;
     UBYTE fg = PEN_WHITE;       /* the menu stands out like the list headers */
     /* the menu's pens are all below 8 and its planes 3+ are clear, so on
      * native screens only planes 0-2 are written: 3/8 of the work */
@@ -1662,7 +1669,6 @@ static WORD aside_x(void)
  * The mouse moving or clicking switches to the bar, the joystick to the
  * arrows; the keyboard leaves it as it is. */
 #define GUT_W U(7)                  /* the column: gap, bar, gap */
-static BOOL mouse_mode;             /* the mouse was used last */
 static struct { BOOL drag; WORD off; } gut;
 
 static WORD list_visible(void);
@@ -2370,7 +2376,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     BOOL sel = idx == p->sel;
     BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
     UBYTE fg = off ? PEN_DIM : sel ? PEN_WHITE : PEN_TEXT;
-    UBYTE bg = !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM;
+    UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
+               mouse_mode && idx - p->top == hover_row && p == cur() ? PEN_RULE : PEN_BG;
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
      * pane is cleared on all planes when the page is drawn), so on native
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
@@ -2440,6 +2447,51 @@ static void draw_gutter(struct Page *p)
     }
 }
 
+static void draw_list_row(struct Page *p, LONG idx, WORD col);
+static void draw_menu_row(int i);
+static WORD mark_column(const struct ItemList *l);
+
+/* Move the soft highlight: to screen row `row` of the list, or to main
+ * menu entry `menu_i` (-1: neither). */
+static void hover_set(WORD row, WORD menu_i)
+{
+    struct Page *p = cur();
+    WORD old_row = hover_row, old_menu = hover_menu;
+    if (row == hover_row && menu_i == hover_menu)
+        return;
+    hover_row = row;
+    hover_menu = menu_i;
+    if (pane_pending)
+        return;
+    if (p && p->type == PT_LIST) {
+        WORD col = mark_column(&p->list);
+        if (old_row >= 0 && p->top + old_row < p->list.count)
+            draw_list_row(p, p->top + old_row, col);
+        if (row >= 0 && p->top + row < p->list.count)
+            draw_list_row(p, p->top + row, col);
+    }
+    if (old_menu >= 0 && old_menu < nmenu)
+        draw_menu_row(old_menu);
+    if (menu_i >= 0 && menu_i < nmenu)
+        draw_menu_row(menu_i);
+}
+
+/* The pointer at (x, y): which row, if any, is under it. */
+static void hover_at(WORD x, WORD y)
+{
+    struct Page *p = cur();
+    WORD row = -1, mi = -1;
+    if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h)
+        mi = (y - g.top) / g.row_h;
+    else if (p && p->type == PT_LIST && x >= g.pane_x - U(2) && x <= list_xr(p) &&
+             y >= g.list_top && y < g.list_top + list_visible() * g.list_row_h) {
+        row = (y - g.list_top) / g.list_row_h;
+        if (p->top + row >= p->list.count)
+            row = -1;
+    }
+    hover_set(row, mi);
+}
+
 static void set_mouse_mode(BOOL on)
 {
     struct Page *p = cur();
@@ -2448,6 +2500,8 @@ static void set_mouse_mode(BOOL on)
     mouse_mode = on;
     if (p && p->type == PT_LIST && !pane_pending)
         draw_gutter(p);
+    if (!on)
+        hover_set(-1, -1);                  /* the joystick: no pointer to follow */
 }
 
 static void draw_list_rows(struct Page *p)
@@ -2525,8 +2579,18 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
     draw_list_move2(p, old_sel, old_top);
-    if (p->top != old_top)
+    if (p->top != old_top) {
         draw_gutter(p);                     /* the thumb or the arrows */
+        if (hover_row >= 0 && p == cur()) {
+            /* the copy took the soft highlight along with its row: back
+             * under the pointer, gone from where it went */
+            WORD vis = list_visible(), col = mark_column(&p->list), moved = hover_row - (WORD)(p->top - old_top);
+            if (moved >= 0 && moved < vis && p->top + moved < p->list.count)
+                draw_list_row(p, p->top + moved, col);
+            if (p->top + hover_row < p->list.count)
+                draw_list_row(p, p->top + hover_row, col);
+        }
+    }
 }
 
 static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
@@ -3897,8 +3961,10 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Class == IDCMP_MOUSEMOVE) {
         if (gut.drag)
             gut_drag_to(y);
-        else if (tb)
+        else if (tb && tb->dragging)
             tb_mouse_move(tb, y);
+        else
+            hover_at(x, y);
         return;
     }
     if (im->Code == SELECTUP) {
