@@ -19,6 +19,16 @@
  * of its own (ObtainPen) when it is first drawn, only those really used,
  * and lets them go when the screen closes. The log says how many.
  *
+ * On a chunky (RTG) screen the masks are not used: each BltTemplate is a
+ * pass over the whole box in software there, up to eight of them for a
+ * line of text, and a full list redraw took 100-120 ms on a 68030. The
+ * box is built as pen numbers instead (each pixel its coverage step's
+ * pen, the uncovered ones the background) and written in one
+ * WriteChunkyPixels. The background pixels are written too, so the text
+ * is always drawn as if opaque over its own box: the callers draw it on
+ * the flat colour they name as its background. PROGDIR:AmigaMCE.masktext
+ * keeps the mask path on RTG too (for comparison).
+ *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
  */
@@ -72,6 +82,10 @@ struct Smooth {
     UWORD next_pen, last_pen;
     UBYTE got[256];             /* 8-bit screens: the pens obtained, */
     UWORD ngot;                 /*   to let go */
+    BOOL chunky;                /* RTG: one WriteChunkyPixels a box */
+    UBYTE *cbuf;                /* its pixels: a step, then a pen, each */
+    ULONG cbuf_size;
+    UWORD cmod;                 /* bytes a row of cbuf (a multiple of 16) */
 };
 
 /* coverage 0..15 -> step 0..SMOOTH_LEVELS-1 */
@@ -224,6 +238,19 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
     s->next_pen = FIRST_PEN;
     s->last_pen = count > 256 ? 255 : count ? count - 1 : 0;
     s->ngot = 0;
+    s->chunky = FALSE;
+    if (!g->planar && GfxBase->LibNode.lib_Version >= 40) {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.masktext", SHARED_LOCK);
+        me->pr_WindowPtr = oldwin;
+        if (l)
+            UnLock(l);
+        s->chunky = !l;
+    }
+    amce_log("smooth style", s->chunky ? "text drawn as chunky pixels" : "text drawn with masks");
 }
 
 UWORD sm_pens_used(const struct Smooth *s)
@@ -248,6 +275,10 @@ void sm_detach(struct Smooth *s)
     }
     s->scratch = NULL;
     s->scratch_size = 0;
+    if (s->cbuf)
+        FreeVec(s->cbuf);
+    s->cbuf = NULL;
+    s->cbuf_size = 0;
     s->g = NULL;
 }
 
@@ -319,6 +350,21 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
 static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h)
 {
     ULONG need;
+    if (s->chunky) {
+        s->cmod = (w + 15) & ~15;
+        need = (ULONG)s->cmod * h;
+        if (need > s->cbuf_size) {
+            if (s->cbuf)
+                FreeVec(s->cbuf);
+            s->cbuf_size = 0;
+            if (!(s->cbuf = AllocVec(need, MEMF_ANY)))
+                return FALSE;
+            s->cbuf_size = need;
+        }
+        memset(s->cbuf, 0, need);
+        s->used = 0;
+        return TRUE;
+    }
     s->bpr = ((w + 15) >> 4) << 1;
     s->plane = (ULONG)s->bpr * h;
     need = s->plane * SMOOTH_LEVELS;
@@ -351,6 +397,20 @@ static void masks_put(struct Smooth *s, const UBYTE *d, UWORD w, UWORD h, WORD x
     UWORD i, j, bpr = s->bpr;
     ULONG n = 0, roff = (ULONG)y * bpr;
     UBYTE used = s->used;
+    if (s->chunky) {
+        UBYTE *row = s->cbuf + (ULONG)y * s->cmod + x;
+        for (j = 0; j < h; j++, row += s->cmod) {
+            for (i = 0; i < w; i++, n++) {
+                UBYTE lv = step_of[nib(d, n)];
+                if (lv > row[i]) {          /* glyphs that touch: the more ink */
+                    row[i] = lv;
+                    used |= 1 << lv;
+                }
+            }
+        }
+        s->used = used;
+        return;
+    }
     for (j = 0; j < h; j++, roff += bpr) {
         for (i = 0; i < w; i++, n++) {
             UBYTE lv = step_of[nib(d, n)];
@@ -372,6 +432,18 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
     gfx_dirty();
     struct RastPort *rp = g->rp;
     UBYTE lv;
+    if (s->chunky) {
+        /* each step to its pen, then the box in one write */
+        UBYTE pen[SMOOTH_LEVELS], *c = s->cbuf;
+        ULONG k, n = (ULONG)s->cmod * h;
+        pen[0] = bg;
+        for (lv = 1; lv < SMOOTH_LEVELS; lv++)
+            pen[lv] = (s->used & (1 << lv)) ? sm_pen(s, g, fg, bg, lv) : bg;
+        for (k = 0; k < n; k++)
+            c[k] = pen[c[k]];
+        WriteChunkyPixels(rp, x, y, x + w - 1, y + h - 1, s->cbuf, s->cmod);
+        return;
+    }
     SetDrMd(rp, JAM1);
     if (opaque) {
         UBYTE last = (w & 7) ? (UBYTE)(0xFF << (8 - (w & 7))) : 0xFF;
