@@ -168,7 +168,8 @@ static void join_path(char *out, LONG max, const char *dir, const char *name)
 }
 
 /* Read one AGS menu folder: .ags subfolders and .run entries. */
-LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult)
+/* Add the entries of one AGS folder to out, unsorted. */
+static LONG read_entries(const char *dir, struct ItemList *out, BOOL adult)
 {
     struct FileInfoBlock *fib;
     BPTR lock;
@@ -210,8 +211,41 @@ LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult)
     }
     FreeDosObject(DOS_FIB, fib);
     UnLock(lock);
-    list_sort(out);
     return n;
+}
+
+/* The entries of one AGS folder, sorted. -1 if it cannot be read. */
+LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult)
+{
+    LONG n = read_entries(dir, out, adult);
+    if (n >= 0)
+        list_sort(out);
+    return n;
+}
+
+/* A folder of folders (AGS's "Games - 0-Z": one per letter) as one list:
+ * the entries of every sub-folder, and any of its own, sorted together. */
+LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
+{
+    struct ItemList subs;
+    LONG i, n;
+    if (!list_init(&subs))
+        return -1;
+    n = read_entries(dir, &subs, adult);
+    if (n < 0) {
+        list_free(&subs);
+        return -1;
+    }
+    for (i = 0; i < subs.count; i++) {
+        struct Item *it = &subs.items[i];
+        if (it->kind == IT_DIR)
+            read_entries(it->path, out, adult);
+        else
+            list_add(out, it->label, it->path, it->sortkey, it->kind);
+    }
+    list_free(&subs);
+    list_sort(out);
+    return out->count;
 }
 
 /* ------------------------------------------------------------ AGS */

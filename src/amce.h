@@ -173,6 +173,7 @@ struct Item {
     UBYTE  flags;       /* ITEM_* */
 };
 #define ITEM_DISABLED 1 /* shown greyed out, cannot be opened */
+#define ITEM_FLAT     2 /* a folder of folders opened as one list (All Games) */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading
@@ -203,6 +204,7 @@ void list_free(struct ItemList *l);
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *sortkey, UBYTE kind);
 void list_sort(struct ItemList *l);
 LONG ags_read_dir(const char *dir, struct ItemList *out, BOOL adult);
+LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult);   /* folders merged */
 void ags_clean_name(const char *raw, char *out, LONG max);
 BOOL ags_is_separator(const char *clean);
 LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines);

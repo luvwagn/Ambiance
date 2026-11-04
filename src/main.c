@@ -188,7 +188,8 @@ static int classify(const char *label, char *out, LONG max, int *prio)
     if (starts_nocase(label, "Games - ", &rest) || starts_nocase(label, "Demos - ", &rest)) {
         int mod = (label[0] == 'G' || label[0] == 'g') ? MOD_GAMES : MOD_DEMOS;
         if (amce_stricmp(rest, "0-Z") == 0) {
-            amce_strlcpy(out, "All A-Z", max);
+            /* one list of every title (ITEM_FLAT), not a folder per letter */
+            amce_strlcpy(out, mod == MOD_GAMES ? "All Games" : "All Demos", max);
             *prio = 1;
         } else {
             amce_strlcpy(out, rest, max);
@@ -218,8 +219,11 @@ static void build_ags_root(struct Page *p, int mod)
             struct Item *it = &ags.top.items[i];
             if (it->kind != IT_DIR)
                 continue;
-            if (classify(it->label, label, sizeof(label), &prio) == mod && prio == want)
-                list_add(&p->list, label, it->path, it->sortkey, IT_DIR);
+            if (classify(it->label, label, sizeof(label), &prio) == mod && prio == want) {
+                struct Item *n = list_add(&p->list, label, it->path, it->sortkey, IT_DIR);
+                if (n && prio == 1)
+                    n->flags |= ITEM_FLAT;      /* Games/Demos - 0-Z */
+            }
         }
 }
 
@@ -591,7 +595,8 @@ static BOOL push_dir_quiet(struct Item *it)
     struct Page *p = page_push(PT_LIST, it->label);
     if (!p)
         return FALSE;
-    if (ags_read_dir(it->path, &p->list, ags.adult[0] == '1') <= 0) {
+    if (((it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
+                                 : ags_read_dir(it->path, &p->list, ags.adult[0] == '1')) <= 0) {
         page_pop();
         return FALSE;
     }
@@ -1364,7 +1369,8 @@ static void open_dir(struct Item *it)
         set_msg("Too many levels open");
         return;
     }
-    n = ags_read_dir(it->path, &p->list, ags.adult[0] == '1');
+    n = (it->flags & ITEM_FLAT) ? ags_read_dir_flat(it->path, &p->list, ags.adult[0] == '1')
+                                : ags_read_dir(it->path, &p->list, ags.adult[0] == '1');
     if (n <= 0) {
         page_pop();
         set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");

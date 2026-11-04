@@ -82,6 +82,18 @@ int main(void)
     }
     list_free(&l);
 
+    /* All Games: the letter folders as one sorted list */
+    list_init(&l);
+    n = ags_read_dir_flat("AGS:+  Games - 0-Z.ags", &l, FALSE);
+    check_long("0-Z flat count", n, 3);
+    if (n == 3) {
+        check_str("0-Z flat first", l.items[0].label, "Another");
+        check_str("0-Z flat second", l.items[1].label, "Banshee");
+        check_str("0-Z flat third path", l.items[2].path, "AGS:+  Games - 0-Z.ags/A.ags/Test Game");
+        check_long("0-Z flat kind", l.items[1].kind, IT_RUN);
+    }
+    list_free(&l);
+
     /* Favourites: option entries in brackets hidden */
     list_init(&l);
     n = ags_read_dir("AGS:+  Favourites.ags", &l, FALSE);
