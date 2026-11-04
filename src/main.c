@@ -86,6 +86,10 @@ static BOOL mouse_mode;             /* the mouse was used last */
  * screen, so a list scrolling under a still pointer stays right. */
 static WORD hover_row = -1;         /* content list: screen row, -1 none */
 static WORD hover_menu = -1;        /* main menu: entry, -1 none */
+/* The keyboard or joystick moving: the pointer hides (an empty sprite)
+ * and so does its highlight, until the mouse moves. */
+static struct Window *ptr_hidden;   /* the window whose pointer is hidden, or NULL */
+static UWORD *ptr_blank;            /* the empty pointer (chip RAM) */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
@@ -2692,6 +2696,29 @@ static void hover_at(WORD x, WORD y)
     hover_set(row, mi);
 }
 
+static void pointer_hide(void)
+{
+    if (!g.win || ptr_hidden == g.win)
+        return;
+    if (!ptr_blank && !(ptr_blank = AllocMem(6 * sizeof(UWORD), MEMF_CHIP | MEMF_CLEAR)))
+        return;
+    SetPointer(g.win, ptr_blank, 1, 16, 0, 0);
+    ptr_hidden = g.win;
+    hover_set(-1, -1);                      /* nothing under a pointer not there */
+    if (crumb_hover >= 0) {
+        crumb_hover = -1;
+        if (cur() && !pane_pending)
+            draw_title(cur());
+    }
+}
+
+static void pointer_show(void)
+{
+    if (g.win && ptr_hidden == g.win)
+        ClearPointer(g.win);
+    ptr_hidden = NULL;
+}
+
 static void set_mouse_mode(BOOL on)
 {
     struct Page *p = cur();
@@ -3150,6 +3177,7 @@ static void release_for_launch(void)
     pv_shown = pv_pending = FALSE;
     ov.on = FALSE;
     ov.bl = NULL;
+    ptr_hidden = NULL;              /* a new window comes with its pointer */
     gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
     close_extra_libs();
     flush_memory();
@@ -3428,7 +3456,11 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
 /* Back from the viewer: the UI again, its colours faded back in. */
 static void viewer_done(void)
 {
+    BOOL hidden = ptr_hidden != NULL;
     msg[0] = 0;
+    ptr_hidden = NULL;              /* the viewer put the pointer back */
+    if (hidden)
+        pointer_hide();             /* hidden it was: hidden it stays */
     draw_all();
     view_restore(&g);
 }
@@ -3594,6 +3626,7 @@ static void apply_screen_mode(int sm)
         return;
     pages_clear();
     pv_flush();                     /* decoded for this screen */
+    ptr_hidden = NULL;              /* a new window comes with its pointer */
     gfx_close(&g);
     screen_mode = sm;
     if (!gfx_open(&g, &caps, sm, ui_style)) {
@@ -3680,6 +3713,7 @@ static void apply_style(int st)
     }
     pages_clear();
     pv_flush();                     /* decoded for this screen */
+    ptr_hidden = NULL;              /* a new window comes with its pointer */
     gfx_close(&g);
     if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
         !gfx_open(&g, &caps, screen_mode, STYLE_PIXEL) &&
@@ -4197,6 +4231,7 @@ static void handle_mouse(struct IntuiMessage *im)
     if (!tb && pv_tb.open)
         tb = &pv_tb;                /* the preview pane's fact sheet */
     set_mouse_mode(TRUE);                   /* the mouse is in use: scroll bars */
+    pointer_show();
     mouse_last = time_ms();
     if (!bar_up) {
         bar_up = TRUE;
@@ -4323,6 +4358,8 @@ static void handle_mouse(struct IntuiMessage *im)
 static void handle_key(struct IntuiMessage *im)
 {
     UWORD code = im->Code;
+    if (im->Class == IDCMP_VANILLAKEY)
+        pointer_hide();
     BOOL shift = (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
     LONG page = list_visible() - 1;
 
@@ -4333,6 +4370,8 @@ static void handle_key(struct IntuiMessage *im)
                 hold_stop();
             return;
         }
+        if (code != 0x7A && code != 0x7B)
+            pointer_hide();                 /* the keyboard in use (the wheel is the mouse) */
         switch (code) {
         case 0x4C: case 0x4D: {                                      /* cursor up / down */
             LONG dir = code == 0x4C ? -1 : 1;
@@ -4421,8 +4460,10 @@ static void joy_poll(void)
             hold_stop();
     }
     joy_last = dir | btn;
-    if (act || newbtn)
+    if (act || newbtn) {
         set_mouse_mode(FALSE);              /* the joystick in use: arrows, not bars */
+        pointer_hide();
+    }
     if (act & (JPF_JOY_UP | JPF_JOY_DOWN)) {
         LONG d = (act & JPF_JOY_UP) ? -1 : 1;
         disarm();
@@ -4679,8 +4720,11 @@ out:
     ldr_stop();
     pages_clear();
     amce_log("pages freed", "");
+    ptr_hidden = NULL;              /* a new window comes with its pointer */
     gfx_close(&g);
     amce_log("screen closed", "");
+    if (ptr_blank)
+        FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
