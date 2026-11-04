@@ -144,16 +144,16 @@ def logo_hires(ttf, w, h, size_a, size_m):
 # Hand-drawn: 2-pixel stems on one grid, a symmetric play arrow. Pens:
 # 1 bar (left undrawn), 0 navy, 5 white, 6 blue, 8 orange.
 LOGO_GLYPHS = {   # rows from the top of the text area; '#' = ink
- "A": (3, ["....##....",       # pointed, like the font's
-           "...####...",
-           "..##..##..",
-           "..##..##..",
-           ".##....##.",
-           ".##....##.",
-           ".########.",
-           "##......##",
-           "##......##",
-           "##......##"]),
+ "A": (3, ["...###...",        # pointed, like the font's
+           "...###...",
+           "..##.##..",
+           "..##.##..",
+           ".##...##.",
+           ".##...##.",
+           ".#######.",
+           "##.....##",
+           "##.....##",
+           "##.....##"]),
  "m": (6, ["#########.",
            "##..##..##",
            "##..##..##",
