@@ -165,7 +165,9 @@ struct Item {
     UBYTE  kind;
     UBYTE  action;
     UBYTE  mark;        /* MARK_*: folders get MARK_ARROW automatically */
+    UBYTE  flags;       /* ITEM_* */
 };
+#define ITEM_DISABLED 1 /* shown greyed out, cannot be opened */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading

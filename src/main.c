@@ -401,9 +401,16 @@ static void build_settings(struct Page *p)
 {
     char tag[64];
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
+    struct Item *it;
     action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
-    /* the style chosen, even where this screen cannot show it */
-    action_item(p, "Style", ui_style == STYLE_SMOOTH ? "Smooth" : "Pixel", ACT_STYLES, MARK_ARROW);
+    /* Style: greyed out, showing Pixel, where this screen can only be pixel
+     * (native modes, 8-bit RTG) */
+    if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
+        action_item(p, "Style", ui_style == STYLE_SMOOTH ? "Smooth" : "Pixel", ACT_STYLES,
+                    MARK_ARROW);
+    } else if ((it = action_item(p, "Style", "Pixel", ACT_STYLES, MARK_ARROW))) {
+        it->flags |= ITEM_DISABLED;
+    }
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -996,7 +1003,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     if (right > xr - U(2))
         right = xr - U(2);
     BOOL sel = idx == p->sel;
-    UBYTE fg = sel ? PEN_WHITE : PEN_TEXT;
+    BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
+    UBYTE fg = off ? PEN_DIM : sel ? PEN_WHITE : PEN_TEXT;
     UBYTE bg = !sel ? PEN_BG : focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM;
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
      * pane is cleared on all planes when the page is drawn), so on native
@@ -1006,10 +1014,11 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
     if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
-                 sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
+                 off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     if (it->kind == IT_ACTION && it->path[0]) {
         WORD tagw = gfx_textlen(&g, it->path, TS_SMALL);
-        gfx_text(&g, right - tagw, ty, it->path, sel ? PEN_WHITE : PEN_DIM, bg, 0, TS_SMALL);
+        gfx_text(&g, right - tagw, ty, it->path, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
+                 TS_SMALL);
         right -= tagw + U(8);
     }
     gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
@@ -1434,6 +1443,11 @@ static void apply_screen_mode(int sm)
         }
     } else {
         save_screen_mode();
+        /* a screen that can only be pixel: the style goes back to Pixel */
+        if (ui_style == STYLE_SMOOTH && !gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
+            ui_style = STYLE_PIXEL;
+            save_setting(STYLE_VAR, "pixel");
+        }
     }
     for (i = 0; i < nmenu; i++)
         if (menu[i] == MOD_SETTINGS)
@@ -1526,6 +1540,11 @@ static void apply_style(int st)
 
 static void act_action(struct Item *it)
 {
+    if (it->flags & ITEM_DISABLED) {
+        if (it->action == ACT_STYLES)
+            set_msg("Style: Smooth needs an RTG screen of 16 bits or more");
+        return;
+    }
     if (it->action == ACT_SCREENMODES)
         open_screenmodes();
     else if (it->action == ACT_STYLES)
