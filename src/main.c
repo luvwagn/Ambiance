@@ -3377,7 +3377,7 @@ static struct {
     LONG s_ms, s_total, s_order, s_row, s_fill;
     WORD s_level[4];
     UBYTE s_sample[4];
-    int s_state, s_vol, s_btn, s_flash;
+    int s_state, s_vol, s_btn, s_flash, s_steps;
     BOOL s_focus;
     int flash;                  /* the button just pressed (-1 none): lit briefly */
     ULONG flash_until;
@@ -3405,7 +3405,9 @@ static BOOL np_focus_shown(void)
 /* Held down, these press again and again. */
 static BOOL np_repeats(int b)
 {
-    return b == NB_BACK || b == NB_FWD || b == NB_VDOWN || b == NB_VUP;
+    if (b == NB_BACK || b == NB_FWD)
+        return mp_can_step(b == NB_FWD ? 1 : -1);
+    return b == NB_VDOWN || b == NB_VUP;
 }
 
 /* A rounded frame t thick just inside x,y w x h (or, solid, the corners
@@ -3480,6 +3482,10 @@ static void np_button(int i)
     if (i == NB_VDOWN || i == NB_VUP) {
         if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
             fg = lit ? PEN_TEXT : PEN_DIM;
+    }
+    if ((i == NB_BACK || i == NB_FWD) && !mp_can_step(i == NB_FWD ? 1 : -1)) {
+        bg = PEN_BAR;                       /* not for this module: greyed, never lit */
+        fg = PEN_RULE;
     }
     if (gh < 5)
         gh = 5;
@@ -3807,6 +3813,7 @@ static void np_draw(BOOL full)
     np_draw_meters(full, &st);
     {
         int state = np_state();
+        int steps = (mp_can_step(-1) ? 1 : 0) | (mp_can_step(1) ? 2 : 0);
         BOOL foc = np_focus_shown(), hot = np_slider_hot();
         if (np.flash >= 0 && (LONG)(time_ms() - np.flash_until) >= 0)
             np.flash = -1;                  /* its moment is over */
@@ -3816,13 +3823,15 @@ static void np_draw(BOOL full)
                 ((i == np.hov || i == np.s_hov) && np.hov != np.s_hov) ||
                 ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
                 ((i == np.rep || i == np.s_rep) && np.rep != np.s_rep) ||
-                ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol))
+                ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol) ||
+                ((i == NB_BACK || i == NB_FWD) && steps != np.s_steps))
                 np_button(i);
         if (full || mp_volume() != np.s_vol || hot != np.s_slhot)
             np_slider();
         if (full || mp_volume() != np.s_vol)
             np_volume_text();
         np.s_state = state;
+        np.s_steps = steps;
         np.s_btn = np.btn;
         np.s_hov = np.hov;
         np.s_flash = np.flash;
@@ -3963,6 +3972,12 @@ static void np_press(int b)
         return;
     case NB_BACK:
     case NB_FWD:
+        if (!mp_can_step(b == NB_FWD ? 1 : -1)) {
+            np.flash = -1;                  /* greyed out: no flash, nothing done */
+            if (np.rep == b)
+                np.rep = -1;
+            break;
+        }
         if (mp_loaded() && !mp_step(b == NB_FWD ? 1 : -1))
             set_msg("This module cannot be moved through");
         break;

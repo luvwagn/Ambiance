@@ -1030,6 +1030,12 @@ BOOL ep_step_position(int d)
     return TRUE;
 }
 
+/* Whether the player can move through its song (d +1, -1). */
+BOOL ep_can_step(int d)
+{
+    return ep.h && (d > 0 ? ep.f_nextpatt : ep.f_prevpatt) != NULL;
+}
+
 /* Another subsong (from its first: min). FALSE if out of range. */
 BOOL ep_subsong(int n)
 {

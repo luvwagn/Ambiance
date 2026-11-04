@@ -905,6 +905,16 @@ void mp_seek(int pos)
 }
 
 /* Back or on a position (d -1, +1): FALSE if this module cannot. */
+/* Whether mp_step(d) can move through this module now. */
+BOOL mp_can_step(int d)
+{
+    if (mp.engine == ENG_EAGLE)
+        return mp.running && ep_can_step(d);
+    if (mp.engine == ENG_MIX)
+        return mx_can_step();
+    return mp.pt != NULL;
+}
+
 BOOL mp_step(int d)
 {
     if (mp.engine == ENG_EAGLE)

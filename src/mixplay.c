@@ -400,6 +400,11 @@ void mx_seek_ms(ULONG ms)
     ReleaseSemaphore(&mx.lock);
 }
 
+BOOL mx_can_step(void)
+{
+    return mx.file != NULL;
+}
+
 BOOL mx_step(int d)
 {
     LONG o;

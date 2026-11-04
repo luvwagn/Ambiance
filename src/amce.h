@@ -365,7 +365,8 @@ int  mp_samples(void);
 const char *mp_sample_name(int i, BOOL *used);
 ULONG mp_position_ms(int pos);
 void mp_status(struct MpStatus *s);     /* also lets the meters fall: call ~25 a second */
-BOOL mp_step(int d);                    /* back/on a position: FALSE if it cannot */
+BOOL mp_step(int d);
+BOOL mp_can_step(int d);                    /* back/on a position: FALSE if it cannot */
 void mp_subsongs(int *cur, int *n);
 BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
 const char *mp_author(void);
@@ -381,6 +382,7 @@ void mx_volume(int v);
 BOOL mx_ended(void);
 void mx_seek_ms(ULONG ms);
 BOOL mx_step(int d);
+BOOL mx_can_step(void);
 void mx_rewind(void);
 void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r);
 BOOL mx_loaded(void);
@@ -412,6 +414,7 @@ BOOL ep_own_timer(void);
 BOOL ep_song_ended(void);
 void ep_set_volume(int v);
 BOOL ep_step_position(int d);
+BOOL ep_can_step(int d);
 BOOL ep_subsong(int n);
 void ep_info(struct EpInfo *in);
 void ep_levels(UBYTE *hit, UBYTE *vol);
