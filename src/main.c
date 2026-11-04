@@ -3380,13 +3380,35 @@ static struct {
     ULONG flash_until;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1 };
 
-#define FLASH_MS 160                /* how long a pressed button stays lit */
+#define FLASH_MS 80                 /* how long a pressed button stays lit */
 
-/* The button chosen with the keyboard or joystick is outlined (Fire
- * presses it); not while the mouse is in use. */
+/* The button Fire presses (chosen with Left/Right, or under the mouse)
+ * has a yellow rounded frame. */
 static BOOL np_focus_shown(void)
 {
-    return focus == FOCUS_CONTENT && !mouse_mode;
+    return focus == FOCUS_CONTENT;
+}
+
+/* A rounded frame t thick just inside x,y w x h (or, solid, the corners
+ * the rounding takes off the button). */
+static void np_round(WORD x, WORD y, WORD w, WORD h, WORD t, UBYTE pen, BOOL frame)
+{
+    WORD r = t * 2;                         /* the corners' size */
+    if (!frame) {
+        gfx_fill(&g, x, y, x + t - 1, y + t - 1, pen);
+        gfx_fill(&g, x + w - t, y, x + w - 1, y + t - 1, pen);
+        gfx_fill(&g, x, y + h - t, x + t - 1, y + h - 1, pen);
+        gfx_fill(&g, x + w - t, y + h - t, x + w - 1, y + h - 1, pen);
+        return;
+    }
+    gfx_fill(&g, x + r, y, x + w - 1 - r, y + t - 1, pen);             /* top */
+    gfx_fill(&g, x + r, y + h - t, x + w - 1 - r, y + h - 1, pen);     /* bottom */
+    gfx_fill(&g, x, y + r, x + t - 1, y + h - 1 - r, pen);             /* left */
+    gfx_fill(&g, x + w - t, y + r, x + w - 1, y + h - 1 - r, pen);     /* right */
+    gfx_fill(&g, x + t, y + t, x + r - 1, y + r - 1, pen);             /* the corners */
+    gfx_fill(&g, x + w - r, y + t, x + w - 1 - t, y + r - 1, pen);
+    gfx_fill(&g, x + t, y + h - r, x + r - 1, y + h - 1 - t, pen);
+    gfx_fill(&g, x + w - r, y + h - r, x + w - 1 - t, y + h - 1 - t, pen);
 }
 
 static BOOL np_on(void)
@@ -3433,7 +3455,7 @@ static int np_state(void)
 static void np_button(int i)
 {
     BOOL lit = i == np.flash;               /* just pressed */
-    BOOL ring = !lit && np_focus_shown() && i == np.btn;
+    BOOL ring = np_focus_shown() && i == np.btn;
     UBYTE bg = lit ? PEN_HL : PEN_BAR, fg = lit ? PEN_WHITE : PEN_TEXT;
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
     WORD gh = h * 5 / 10, gw, cx, gy, t;
@@ -3450,6 +3472,7 @@ static void np_button(int i)
     gy = y + (h - gh) / 2;
     t = U(2) > 1 ? U(2) : 1;                /* a bar's thickness */
     gfx_fill(&g, x, y, x + w - 1, y + h - 1, bg);
+    np_round(x, y, w, h, t, PEN_BG, FALSE);   /* rounded */
     switch (i) {
     case NB_PREV:
         gfx_fill(&g, cx - gw / 2 - t, gy, cx - gw / 2 - 1, gy + gh - 1, fg);
@@ -3496,14 +3519,8 @@ static void np_button(int i)
         break;
     }
     }
-    if (ring) {
-        /* the keyboard's/joystick's choice: an outline */
-        WORD r = U(1) > 0 ? U(1) : 1;
-        gfx_fill(&g, x, y, x + w - 1, y + r - 1, PEN_HL);
-        gfx_fill(&g, x, y + h - r, x + w - 1, y + h - 1, PEN_HL);
-        gfx_fill(&g, x, y, x + r - 1, y + h - 1, PEN_HL);
-        gfx_fill(&g, x + w - r, y, x + w - 1, y + h - 1, PEN_HL);
-    }
+    if (ring)
+        np_round(x, y, w, h, t, PEN_YELLOW, TRUE);  /* what Fire presses */
 }
 
 static void np_volume_text(void)
@@ -4024,6 +4041,22 @@ static BOOL np_lr(int d)
     return TRUE;
 }
 
+/* The mouse over a button: the frame follows it. */
+static void np_hover(WORD x, WORD y)
+{
+    int i;
+    if (!np_on() || !mp_loaded() || y < np.by || y >= np.by + np.bh)
+        return;
+    for (i = 0; i < NB_COUNT; i++)
+        if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
+            if (i != np.btn) {
+                np.btn = i;
+                np_update();
+            }
+            return;
+        }
+}
+
 static BOOL np_click(WORD x, WORD y)
 {
     int i;
@@ -4032,7 +4065,8 @@ static BOOL np_click(WORD x, WORD y)
     if (y >= np.by && y < np.by + np.bh)
         for (i = 0; i < NB_COUNT; i++)
             if (x >= np.bx[i] && x < np.bx[i] + np.bw) {
-                np_press(i);                /* the keyboard's choice stays as it was */
+                np.btn = i;                 /* the frame is on it already (hover) */
+                np_press(i);
                 return TRUE;
             }
     /* the bar (and the line under it): to that part of the song */
@@ -5542,8 +5576,10 @@ static void handle_mouse(struct IntuiMessage *im)
             gut_drag_to(y);
         else if (tb && tb->dragging)
             tb_mouse_move(tb, y);
-        else
+        else {
             hover_at(x, y);
+            np_hover(x, y);
+        }
         return;
     }
     if (im->Code == SELECTUP) {
