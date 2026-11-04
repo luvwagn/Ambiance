@@ -34,7 +34,8 @@ static const char *mod_names[MOD_COUNT] = {
 };
 
 enum { PT_LIST, PT_TEXT, PT_DETAIL };
-enum { FOCUS_MENU, FOCUS_CONTENT };
+enum { FOCUS_MENU, FOCUS_CONTENT,
+       FOCUS_PREVIEW };     /* the preview pane's fact sheet: Up/Down scroll it */
 #define MAXDEPTH 12
 #define FACT_LINES 24
 
@@ -64,6 +65,9 @@ static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on deep RTG screens) */
 static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
 static struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
+static struct Page *pv_page;        /* what the preview shows: page and entry */
+static LONG pv_sel;
+static BOOL pv_shown;               /* FALSE once the pane is cleared or left */
 static struct ItemList pv_list;     /* its wrapped lines */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
@@ -93,6 +97,9 @@ static struct Page *page_push(UBYTE type, const char *title)
 {
     ov.on = FALSE;
     tb_close(&pv_tb);
+    pv_shown = FALSE;
+    if (focus == FOCUS_PREVIEW)
+        focus = FOCUS_CONTENT;
     struct Page *p;
     if (depth >= MAXDEPTH)
         return NULL;
@@ -110,6 +117,9 @@ static void page_pop(void)
 {
     ov.on = FALSE;
     tb_close(&pv_tb);
+    pv_shown = FALSE;
+    if (focus == FOCUS_PREVIEW)
+        focus = FOCUS_CONTENT;
     if (!depth)
         return;
     gfx_picture_free(&g);
@@ -807,6 +817,8 @@ static void draw_menu(void)
     gfx_fill(&g, g.menu_w + U(2), U(25), g.menu_w + U(3) - 1, g.footer_y - 2, PEN_RULE);
 }
 
+static BOOL has_aside(struct Page *p);
+
 static const char *hint_text(void)
 {
     struct Page *p = cur();
@@ -816,6 +828,12 @@ static const char *hint_text(void)
     if (focus == FOCUS_MENU)
         return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
                   : "Fire open  Esc twice quit";
+    if (focus == FOCUS_PREVIEW)
+        return hi ? "Up/Down  scroll      Fire/Return  play      Left/Esc  back"
+                  : "Fire play  Esc back";
+    if (p && p->type == PT_LIST && has_aside(p))
+        return hi ? "Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back"
+                  : "Fire play  Esc back";
     if (p && p->type == PT_LIST)
         return hi ? "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back"
                   : "Fire open  Ret play  Esc back";
@@ -1039,6 +1057,9 @@ static void preview_draw(struct Page *p)
     LONG n, i;
     pv_pending = FALSE;
     tb_close(&pv_tb);
+    pv_page = p;
+    pv_sel = p->sel;
+    pv_shown = TRUE;
     if (!p->list.count || (it = &p->list.items[p->sel])->kind != IT_RUN) {
         gfx_picture_free(&g);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
@@ -1074,6 +1095,7 @@ static void preview_draw(struct Page *p)
     if (!pv_list.count || max_y - y < g.font_h)
         return;
     pv_tb.pos = pv_tb.target = 0;
+    pv_tb.focused = focus == FOCUS_PREVIEW;
     if (tb_open(&g, &pv_tb, x0, y, w - U(7), max_y - y + 1, &pv_list, TRUE))
         tb_draw(&g, &pv_tb);
 }
@@ -1081,8 +1103,8 @@ static void preview_draw(struct Page *p)
 /* The selection changed (or the list was drawn): preview it once it rests. */
 static void preview_touch(struct Page *p)
 {
-    if (!has_aside(p))
-        return;
+    if (!has_aside(p) || (pv_shown && pv_page == p && pv_sel == p->sel))
+        return;                             /* already showing this one */
     pv_pending = TRUE;
     pv_due = time_ms() + PREVIEW_SETTLE;
 }
@@ -1153,6 +1175,7 @@ static void ov_show(struct Page *p)
     if (has_aside(p)) {
         gfx_picture_free(&g);       /* the preview gives way to the letter */
         tb_close(&pv_tb);
+        pv_shown = FALSE;
     }
     /* hand the strip to the letter: clear it once, then stamp */
     gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
@@ -1370,6 +1393,8 @@ static void draw_pane(BOOL full)
     if (!p)
         return;
     if (full) {
+        pv_shown = FALSE;           /* the pane is cleared: preview again */
+        tb_close(&pv_tb);
         WORD px = g.menu_w + U(3), pb = g.footer_y - 2;
         if (p->type == PT_TEXT) {
             /* Clear around the text box, not under it: tb_draw copies the
@@ -1512,6 +1537,11 @@ static void set_focus(int f)
     if (focus == f)
         return;
     focus = f;
+    pv_tb.focused = f == FOCUS_PREVIEW;
+    if (pv_tb.open) {
+        pv_tb.thumb_y = -1;         /* repaint the thumb: brighter while focused */
+        tb_refresh_bar(&g, &pv_tb);
+    }
     draw_menu_row(menu_sel);
     draw_pane(FALSE);
     draw_footer();
@@ -1603,6 +1633,10 @@ static void act_move(LONG d)
     }
     if (!p)
         return;
+    if (focus == FOCUS_PREVIEW) {
+        tb_scroll_by(&pv_tb, d * pv_tb.line_h);     /* the main loop animates it */
+        return;
+    }
     if (p->type == PT_LIST) {
         LONG s = p->sel + d;
         if (s < 0)
@@ -1902,7 +1936,8 @@ static void hold_tick(void)
     LONG rate, remaining, ramp, elapsed, glide;
     if (!hold.dir)
         return;
-    if (focus != FOCUS_CONTENT || !p ||
+    if ((focus != FOCUS_CONTENT && focus != FOCUS_PREVIEW) || !p ||
+        (focus == FOCUS_PREVIEW && !pv_tb.open) ||
         (!hold.joy && !key_is_down(hold.dir < 0 ? 0x4C : 0x4D))) {
         hold_stop();                        /* let go: stop now, whatever is queued */
         return;
@@ -1921,7 +1956,7 @@ static void hold_tick(void)
         ramp = glide > HOLD_RAMP ? HOLD_RAMP : glide;
         elapsed = dt;
     }
-    if (p->type == PT_LIST) {
+    if (p->type == PT_LIST && focus != FOCUS_PREVIEW) {
         if (hold.letters && !(ov.on && ov.page == p))
             ov_show(p);
         ov.linger = 0;
@@ -1954,25 +1989,27 @@ static void hold_tick(void)
                 act_move(hold.dir * (n < remaining ? n : remaining));
             }
         }
-    } else if (p->tb.open) {
+    } else if (focus == FOCUS_PREVIEW || p->tb.open) {
+        struct TextBox *tb = focus == FOCUS_PREVIEW ? &pv_tb : &p->tb;
         LONG px;
         hold.acc += (100 + 500 * ramp / HOLD_RAMP) * elapsed;  /* 100 to 600 px/s, x1000 */
         px = hold.acc / 1000;
         hold.acc -= px * 1000;
-        remaining = tb_remaining(&p->tb, hold.dir);
+        remaining = tb_remaining(tb, hold.dir);
         if (remaining <= 0)
             return;
-        if ((p->tb.target - p->tb.pos) * hold.dir > 4 * p->tb.line_h)
+        if ((tb->target - tb->pos) * hold.dir > 4 * tb->line_h)
             return;                         /* never run far ahead of the screen */
         if (px > 1 + remaining / 8)
             px = 1 + remaining / 8;
-        tb_scroll_by(&p->tb, hold.dir * px);
+        tb_scroll_by(tb, hold.dir * px);
     }
 }
 
 static void act_open(BOOL play)
 {
     struct Page *p;
+    (void)play;                     /* Return and Fire both play a game now */
     pane_settle();
     p = cur();
     if (focus == FOCUS_MENU) {
@@ -1988,20 +2025,47 @@ static void act_open(BOOL play)
             open_dir(it);
         else if (it->kind == IT_ACTION)
             act_action(it);
-        else if (it->kind == IT_RUN) {
-            if (play)
-                launch(it->path);
-            else
-                open_detail(it);
-        }
+        else if (it->kind == IT_RUN)
+            launch(it->path);       /* Fire, Return, Space, double-click */
     } else if (p->type == PT_DETAIL) {
         launch(p->base);
     }
 }
 
+/* Right: on a game, into the details pane when its fact sheet scrolls
+ * (nothing otherwise); lowres, with no pane, opens the game's own page.
+ * Anywhere else Right opens, as Fire does. */
+static void act_right(void)
+{
+    struct Page *p;
+    pane_settle();
+    p = cur();
+    if (focus == FOCUS_PREVIEW)
+        return;
+    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
+        p->list.items[p->sel].kind == IT_RUN) {
+        if (!has_aside(p)) {
+            open_detail(&p->list.items[p->sel]);
+            return;
+        }
+        if (pv_pending || !pv_shown) {      /* not shown yet: show it now */
+            ov.on = FALSE;
+            preview_draw(p);
+        }
+        if (pv_tb.open && pv_tb.bar_w)
+            set_focus(FOCUS_PREVIEW);
+        return;
+    }
+    act_open(FALSE);
+}
+
 static void act_back(void)
 {
     pane_settle();
+    if (focus == FOCUS_PREVIEW) {   /* out of the details pane, back to the list */
+        set_focus(FOCUS_CONTENT);
+        return;
+    }
     if (focus == FOCUS_MENU) {
         if (quit_armed) {
             running = FALSE;
@@ -2091,8 +2155,7 @@ static void handle_mouse(struct IntuiMessage *im)
         return;
     disarm();
     if (tb && tb_mouse_down(tb, x, y)) {
-        if (focus != FOCUS_CONTENT)
-            set_focus(FOCUS_CONTENT);
+        set_focus(tb == &pv_tb ? FOCUS_PREVIEW : FOCUS_CONTENT);
         if (tb->dragging) {
             ReportMouse(TRUE, g.win);
             tb_refresh_bar(&g, tb);
@@ -2113,8 +2176,11 @@ static void handle_mouse(struct IntuiMessage *im)
         if (!p)
             return;
         if (p->type == PT_LIST) {
-            if (x > list_xr(p))
-                return;                     /* the letter column */
+            if (x > list_xr(p)) {           /* the details pane */
+                if (pv_tb.open && pv_tb.bar_w && x >= aside_x())
+                    set_focus(FOCUS_PREVIEW);
+                return;
+            }
             idx = p->top + (y - g.list_top) / g.list_row_h;
             if (idx >= p->list.count)
                 return;
@@ -2163,13 +2229,13 @@ static void handle_key(struct IntuiMessage *im)
                     act_move(dir);
             } else {
                 act_move(dir);
-                if (focus == FOCUS_CONTENT)
+                if (focus != FOCUS_MENU)
                     hold_start(dir, FALSE);
             }
             break;
         }
-        case 0x4E: disarm(); act_open(FALSE); break;                  /* cursor right */
-        case 0x4F: disarm(); if (focus == FOCUS_CONTENT) act_back(); break; /* cursor left */
+        case 0x4E: disarm(); act_right(); break;                      /* cursor right */
+        case 0x4F: disarm(); if (focus != FOCUS_MENU) act_back(); break; /* cursor left */
         case 0x7A: disarm(); act_wheel(-1, im->MouseX, im->MouseY); break; /* NM_WHEEL_UP */
         case 0x7B: disarm(); act_wheel(1, im->MouseX, im->MouseY); break;  /* NM_WHEEL_DOWN */
         }
@@ -2183,8 +2249,9 @@ static void handle_key(struct IntuiMessage *im)
             if (!(im->Qualifier & IEQUALIFIER_REPEAT) || key_is_down(code == '8' ? 0x3E : 0x1E))
                 act_move(code == '8' ? -1 : 1);
             return;
-        case '4': disarm(); if (focus == FOCUS_CONTENT) act_back(); return;
-        case '6': case '5': disarm(); act_open(FALSE); return;
+        case '4': disarm(); if (focus != FOCUS_MENU) act_back(); return;
+        case '6': disarm(); act_right(); return;
+        case '5': disarm(); act_open(FALSE); return;
         case '9': disarm(); act_move(-page); return;
         case '3': disarm(); act_move(page); return;
         case 13: disarm(); act_open(TRUE); return;
@@ -2241,14 +2308,14 @@ static void joy_poll(void)
         disarm();
         if (joy_hold == 0) {
             act_move(d);        /* the press itself */
-            if (focus == FOCUS_CONTENT)
+            if (focus != FOCUS_MENU)
                 hold_start(d, TRUE);
         } else if (!hold_active()) {
             act_move(d);        /* main menu: plain repeat */
         }
     }
-    else if (act & JPF_JOY_RIGHT) { disarm(); act_open(FALSE); }
-    else if (act & JPF_JOY_LEFT) { disarm(); if (focus == FOCUS_CONTENT) act_back(); }
+    else if (act & JPF_JOY_RIGHT) { disarm(); act_right(); }
+    else if (act & JPF_JOY_LEFT) { disarm(); if (focus != FOCUS_MENU) act_back(); }
     if (newbtn & JPF_BUTTON_RED) { disarm(); act_open(FALSE); }
     if (newbtn & JPF_BUTTON_BLUE) { disarm(); act_back(); }
 }

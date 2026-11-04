@@ -215,6 +215,7 @@ BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {
     BOOL  open, first_white, dragging, drawn;
+    BOOL  focused;              /* the keyboard scrolls it: thumb shown brighter */
     WORD  x, y, w, h;           /* text area on screen */
     WORD  bar_x, bar_w;         /* scroll bar column; bar_w 0 when all text fits */
     WORD  line_h, drag_off;

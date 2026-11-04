@@ -42,7 +42,9 @@ page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 Controls
 --------
   Up/Down      move             Shift+Up/Down  page
-  Right/Fire   open             Return         play
+  Fire/Return  play a game, open a folder or setting (or double-click)
+  Right        open a folder; on a game, into its details pane when
+               that scrolls (lowres: the game's own page)
   Left/Esc     back             Esc at menu    press twice to quit
   A-Z          jump to letter   Right mouse    back
   Mouse wheel  scroll           Scroll bar     click to page, drag to scroll

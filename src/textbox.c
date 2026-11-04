@@ -136,7 +136,8 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
     tb->thumb_h = th;
     /* Three fills that never overlap: no pixel is drawn twice. */
     gfx_fill(g, x0, y0, x1, y0 + ty - 1, PEN_SELDIM);
-    gfx_fill(g, x0, y0 + ty, x1, y0 + ty + th - 1, (tb->dragging ? PEN_TEXT : PEN_DIM));
+    gfx_fill(g, x0, y0 + ty, x1, y0 + ty + th - 1,
+             (tb->dragging || tb->focused) ? PEN_TEXT : PEN_DIM);
     gfx_fill(g, x0, y0 + ty + th, x1, y1, PEN_SELDIM);
 }
 
