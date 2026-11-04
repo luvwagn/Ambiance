@@ -124,7 +124,7 @@ def main():
 
     # module order in art.c (icon index) and the main menu order from build_menu()
     mods = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"]
-    names = ["Games", "Mods", "Demos", "Music", "Radio", "Pictures", "Videos", "Settings", "About"]
+    names = ["Games", "Demos", "Mods", "Music", "Radio", "Pictures", "Videos", "Settings", "About"]
     msel = names.index("About") if page == "about" else 0
     for i, name in enumerate(names):
         y = top + i * row_h

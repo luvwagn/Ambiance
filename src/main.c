@@ -2404,7 +2404,7 @@ static void joy_poll(void)
 static void build_menu(void)
 {
     /* Main menu order, top to bottom. */
-    static const int order[] = { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_MUSIC, MOD_RADIO,
+    static const int order[] = { MOD_GAMES, MOD_DEMOS, MOD_MODS, MOD_MUSIC, MOD_RADIO,
                                  MOD_PICTURES, MOD_VIDEOS, MOD_SETTINGS, MOD_ABOUT };
     int i, m;
     nmenu = 0;
