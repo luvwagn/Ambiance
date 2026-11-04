@@ -222,6 +222,8 @@ WBDISK, WBDRAWER, WBTOOL, WBPROJECT = 1, 2, 3, 4
 NO_ICON_POSITION = 0x80000000
 
 # 4-colour pixel art: '.' grey (0), 'k' black (1), 'w' white (2), 'b' blue (3).
+# Drawn for hires Workbench, where a row is twice as tall as a pixel is
+# wide: 34 x 16 is a floppy's own shape there.
 # The tool icon is drawn from the logo's play badge instead (badge_art).
 DRAWER_ART = [
     "..........................................",
@@ -245,24 +247,24 @@ DRAWER_ART = [
 ]
 
 DISK_ART = [
-    "..........................................",
-    ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk..",
-    ".kbbbbbbbkwwwwwwwwwwwwwwwwwwwkbbbbbbbbbbk.",
-    ".kbbbbbbbkwwwwwwwwwwwwkkkwwwwkbbbbbbbbbbk.",
-    ".kbbbbbbbkwwwwwwwwwwwwkkkwwwwkbbbbbbbbbbk.",
-    ".kbbbbbbbkwwwwwwwwwwwwwwwwwwwkbbbbbbbbbbk.",
-    ".kbbbbbbbbkkkkkkkkkkkkkkkkkkkbbbbbbbbbbbk.",
-    ".kbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbk.",
-    ".kbbbbbkkkkkkkkkkkkkkkkkkkkkkkkkkkkbbbbbk.",
-    ".kbbbbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kbbbbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbbbbk.",
-    ".kbbbbbkwwbbwbbbbwkkwkkwkwwwwkwwwwkbbbbbk.",
-    ".kbbbbbkwwbbwwwbbwkwkwkwkwwwwkkkwwkbbbbbk.",
-    ".kbbbbbkwwbbwbbbbwkwwwkwkwwwwkwwwwkbbbbbk.",
-    ".kbbbbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbbbbk.",
-    ".kbbbbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbbbbk.",
-    ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
-    "..........................................",
+    "....................................",
+    ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk..",
+    ".kbbbbkwwwwwwwwwwwwwwwkbbbbbbbbbbbk.",
+    ".kbbbbkwwwwwwwwwwkkkwwkbbbbbbbbbbbk.",
+    ".kbbbbkwwwwwwwwwwkkkwwkbbbbbbbbbbbk.",
+    ".kbbbbkwwwwwwwwwwwwwwwkbbbbbbbbbbbk.",
+    ".kbbbbbkkkkkkkkkkkkkkkbbbbbbbbbbbbk.",
+    ".kbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbk.",
+    ".kbbkkkkkkkkkkkkkkkkkkkkkkkkkkkkbbk.",
+    ".kbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbk.",
+    ".kbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbk.",
+    ".kbbkwwbbwbbbbwkkwkkwkwwwwkwwwwkbbk.",
+    ".kbbkwwbbwwwbbwkwkwkwkwwwwkkkwwkbbk.",
+    ".kbbkwwbbwbbbbwkwwwkwkwwwwkwwwwkbbk.",
+    ".kbbkwwwbbbbbwwkwwwkwwkkkwkkkkwkbbk.",
+    ".kbbkwwwwwwwwwwwwwwwwwwwwwwwwwwkbbk.",
+    ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
+    "....................................",
 ]
 
 README_ART = [
