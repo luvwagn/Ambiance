@@ -345,6 +345,41 @@ static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
     }
 }
 
+/* A Radio list waiting for radio-browser.info: the spinner turns in the
+ * middle of its (empty) pane until the answer comes; Back gives it up.
+ * rsp.on: drawn since the pane was (draw_pane starts it anew). */
+static struct { BOOL on; ULONG since; UWORD phase; WORD cx, cy; } rsp;
+
+static BOOL radio_waiting(void)
+{
+    struct Page *p = cur();
+    return p && p->type == PT_LIST && p->radio && p->net_seq && !pane_pending &&
+           focus != FOCUS_MENU;
+}
+
+static void radio_spin(void)
+{
+    if (!radio_waiting() || !g.win) {
+        rsp.on = FALSE;
+        return;
+    }
+    if (!rsp.on) {
+        WORD ring, ringy, r, ry;
+        spin_metrics(&ring, &ringy, &r, &ry);
+        rsp.cx = g.pane_x + g.pane_w / 2;
+        rsp.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
+        rsp.on = TRUE;
+        rsp.since = time_ms();
+        rsp.phase = 0;
+        spin_draw(rsp.cx, rsp.cy, 0, TRUE);    /* the pane under it is clear */
+        return;
+    }
+    if (spin_phase(rsp.since) != rsp.phase) {
+        rsp.phase = spin_phase(rsp.since);
+        spin_draw(rsp.cx, rsp.cy, rsp.phase, FALSE);
+    }
+}
+
 /* Navigation that may keep you waiting: busy_begin ... busy_end around it,
  * waits inside it through ui_wait. After SPIN_AFTER ms the spinner turns
  * in the middle of the content pane; at the end the pane is drawn again
@@ -3387,6 +3422,11 @@ static void draw_list_rows(struct Page *p)
     list_follow(p);
     if (!p->list.count) {
         gfx_fill(&g, g.pane_x - U(2), g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
+        if (p->radio && p->net_seq) {
+            rsp.on = FALSE;
+            radio_spin();           /* still asking: the spinner, not "(empty)" */
+            return;
+        }
         gfx_text(&g, g.pane_x, g.list_top + U(2), "(empty)", PEN_DIM, PEN_BG, 0, TS_BODY);
         return;
     }
@@ -3571,7 +3611,7 @@ static void draw_pane(BOOL full)
     draw_title(p);
     switch (p->type) {
     case PT_LIST:
-        draw_list_rows(p);
+        draw_list_rows(p);          /* (a Radio list still asking: its spinner) */
         break;
     case PT_TEXT:
         if (!p->tb.open) {
@@ -5648,7 +5688,7 @@ static void radio_open(struct Item *it)
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
     rq = j;
-    amce_strlcpy(msg, "Asking radio-browser.info...", sizeof(msg));
+    amce_strlcpy(msg, "Asking radio-browser.info...  Esc to give up", sizeof(msg));
     draw_pane(TRUE);
     draw_footer();
     net_submit(j);
@@ -6765,6 +6805,7 @@ static int app_main(void)
                     mp_tempo_check();
                 }
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                radio_spin();               /* a Radio list's, likewise */
                 np_tick();                  /* the music: its page, the next module */
                 if (g.win && ptr_hidden != g.win && !gut.drag &&
                     (LONG)(time_ms() - mouse_last) >= BAR_HIDE)
@@ -6778,7 +6819,8 @@ static int app_main(void)
                  * spinner (each step, every 80 ms, then comes on time);
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
-                tick_us = (joy_present || ov.on || pv_spinning() || np_live() || np.flash >= 0 || np.rep >= 0 ||
+                tick_us = (joy_present || ov.on || pv_spinning() || radio_waiting() || np_live() ||
+                           np.flash >= 0 || np.rep >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 : 200000;
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
