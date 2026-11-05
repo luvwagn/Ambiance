@@ -19,8 +19,12 @@
  * never a stray bright one (pen 9 -> 0 used to pass through orange pen 8).
  *
  * A picture can follow the text (tb->pic, a bitmap like the screen's): it
- * scrolls with it. The pre-rendered bitmap then has all the screen's
- * planes (its pens are any), and the blit copies them all.
+ * scrolls with it. The text's bitmap stays three planes; the picture is
+ * blitted on its own, all planes, over just the rows of it in view, and
+ * the text is not blitted over it (a full-depth copy of the whole box each
+ * frame took longer than a frame on an 8-plane laced screen: the picture
+ * was caught half copied, and the CPU waited on the blitter). Where the
+ * picture was and is no longer, its high planes are cleared.
  *
  * On an RTG screen there is no off-screen bitmap: the text is drawn
  * straight onto the screen, clipped to the box by a layers clip region.
@@ -101,21 +105,14 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->open = TRUE;
 
     rows = tb->content_h > h ? tb->content_h : h;
-    tb->mask = tb->pic ? 0xFF : TB_PLANE_MASK;
+    tb->mask = TB_PLANE_MASK;
+    tb->pic_a = 1;
+    tb->pic_z = 0;                          /* none on screen yet */
     if (!g->planar)
         return TRUE;    /* RTG: drawn directly, see above */
-    tb->bm = AllocBitMap(w, rows, tb->pic ? g->depth : TB_PLANES, BMF_CLEAR, NULL);
-    if (!tb->bm) {
-        tb->mask = TB_PLANE_MASK;
-        if (tb->pic)
-            amce_log("text box", "no chip memory for it with its picture: drawn directly");
+    tb->bm = AllocBitMap(w, rows, TB_PLANES, BMF_CLEAR, NULL);
+    if (!tb->bm)
         return FALSE;   /* low on chip RAM: drawn directly instead */
-    }
-    if (tb->pic && tb->pic_y + tb->pic_h <= rows) {
-        BltBitMap(tb->pic, 0, 0, tb->bm, (w - tb->pic_w) / 2, tb->pic_y, tb->pic_w, tb->pic_h,
-                  0xC0, 0xFF, NULL);
-        WaitBlit();
-    }
 
     InitRastPort(&rp);
     rp.BitMap = tb->bm;
@@ -158,15 +155,59 @@ static void draw_bar(struct Gfx *g, struct TextBox *tb)
     gfx_fill(g, x0, y0 + ty + th, x1, y1, PEN_SELDIM);
 }
 
+/* Rows sy0..sy1, columns sx0..sx1 of the box from the text's bitmap. */
+static void blit_text(struct Gfx *g, struct TextBox *tb, WORD sx0, WORD sx1, WORD sy0, WORD sy1)
+{
+    if (sx1 < sx0 || sy1 < sy0)
+        return;
+    BltBitMap(tb->bm, sx0 - tb->x, tb->pos + (sy0 - tb->y), g->rp->BitMap, sx0, sy0,
+              sx1 - sx0 + 1, sy1 - sy0 + 1, 0xC0, tb->mask, NULL);
+}
+
 static void blit_window(struct Gfx *g, struct TextBox *tb)
 {
     gfx_dirty();
     struct Layer *l = g->rp->Layer;    /* the window's, or a double buffer's */
-    /* The bitmap is at least h rows below pos (cleared past the text), so
-     * a full-height copy also blanks whatever the box showed before. */
+    WORD y0 = tb->y, y1 = tb->y + tb->h - 1, x0 = tb->x, x1 = tb->x + tb->w - 1;
     LockLayerRom(l);
-    BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, tb->h,
-              0xC0, tb->mask, NULL);
+    if (!tb->pic) {
+        /* The bitmap is at least h rows below pos (cleared past the text),
+         * so a full-height copy also blanks whatever the box showed before. */
+        BltBitMap(tb->bm, 0, tb->pos, g->rp->BitMap, tb->x, tb->y, tb->w, tb->h,
+                  0xC0, tb->mask, NULL);
+    } else {
+        LONG ptop = tb->y + tb->pic_y - tb->pos;
+        WORD a = ptop > y0 ? (WORD)ptop : y0;
+        WORD z = ptop + tb->pic_h - 1 < y1 ? (WORD)(ptop + tb->pic_h - 1) : y1;
+        WORD px0 = tb->x + (tb->w - tb->pic_w) / 2, px1 = px0 + tb->pic_w - 1;
+        if (a > z) {
+            blit_text(g, tb, x0, x1, y0, y1);           /* the picture out of view */
+        } else {
+            blit_text(g, tb, x0, x1, y0, a - 1);        /* above it */
+            blit_text(g, tb, x0, x1, z + 1, y1);        /* below it */
+            blit_text(g, tb, x0, px0 - 1, a, z);        /* beside it */
+            blit_text(g, tb, px1 + 1, x1, a, z);
+            BltBitMap(tb->pic, 0, a - ptop, g->rp->BitMap, px0, a, tb->pic_w, z - a + 1, 0xC0,
+                      0xFF, NULL);
+        }
+        /* the picture's high planes cleared where it was and is no longer */
+        if (tb->pic_a <= tb->pic_z) {
+            WORD oa = tb->pic_a, oz = tb->pic_z;
+            SetWriteMask(g->rp, 0xFF & ~TB_PLANE_MASK);
+            SetAPen(g->rp, PEN_BG);
+            if (a > z) {
+                RectFill(g->rp, px0, oa, px1, oz);
+            } else {
+                if (oa < a)
+                    RectFill(g->rp, px0, oa, px1, (oz < a - 1 ? oz : a - 1));
+                if (oz > z)
+                    RectFill(g->rp, px0, (oa > z + 1 ? oa : z + 1), px1, oz);
+            }
+            SetWriteMask(g->rp, 0xFF);
+        }
+        tb->pic_a = a;
+        tb->pic_z = z;
+    }
     UnlockLayerRom(l);
     tb->drawn_pos = tb->pos;
 }
@@ -256,6 +297,8 @@ void tb_draw(struct Gfx *g, struct TextBox *tb)
             gfx_fill(g, tb->x, tb->y, x1, y1, PEN_BG);
             SetWriteMask(g->rp, 0xFF);
         }
+        tb->pic_a = 1;
+        tb->pic_z = 0;                      /* its high planes cleared with the rest */
         blit_window(g, tb);
         gfx_fill(g, tb->x + tb->w, tb->y, tb->bar_x - 1, y1, PEN_BG);
         if (!tb->bar_w)

@@ -523,6 +523,7 @@ struct TextBox {
     struct BitMap *pic;         /* a picture under the text (the caller's; set it
                                  * before tb_open), like the screen's, pic_w x pic_h */
     WORD  pic_w, pic_h, pic_y;  /* pic_y: its top in the content (tb_open) */
+    WORD  pic_a, pic_z;         /* the screen rows it covers now (pic_a > pic_z: none) */
 };
 
 BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
