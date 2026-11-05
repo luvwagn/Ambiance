@@ -3215,6 +3215,13 @@ static void pv_draw_picture(void)
                 (unsigned long)(now - pv_since), j->info.cls[0] ? " (" : "",
                 j->info.cls, j->info.cls[0] ? ".datatype)" : "");
         amce_log("preview", m);
+        if (j->ms_parts[0] + j->ms_parts[1] + j->ms_parts[2] + j->ms_parts[3]) {
+            sprintf(m, "made in: reading the picture %lu ms, counting its colours %lu, "
+                       "choosing %lu, mapping %lu",
+                    (unsigned long)j->ms_parts[0], (unsigned long)j->ms_parts[1],
+                    (unsigned long)j->ms_parts[2], (unsigned long)j->ms_parts[3]);
+            amce_log("preview", m);
+        }
     } else if (j && j->obj) {
         ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
     }

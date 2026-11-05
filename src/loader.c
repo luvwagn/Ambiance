@@ -102,6 +102,7 @@ static void decode(struct LJob *j, const char *src)
     t0 = time_ms();
     j->thumb = thumb_make(j->obj, dw, dh, j->maxcol);
     j->ms_thumb = time_ms() - t0;
+    thumb_times(&j->ms_parts[0], &j->ms_parts[1], &j->ms_parts[2], &j->ms_parts[3]);
     if (j->thumb || (!j->viewfit && j->info.depth > 8)) {
         pic_dispose(j->obj);            /* a deep one is no use to the pane without */
         j->obj = NULL;

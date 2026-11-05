@@ -215,6 +215,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: c
 void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */
+void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the last one made */
 /* An IFF ILBM read by AmigaMCE itself (ilbm.c), straight into a thumbnail
  * for a w x h box (pic_fit): no datatype. NULL: not an ILBM it reads (HAM,
  * deep, PBM...) or no memory; try the datatype then. */
@@ -502,6 +503,7 @@ struct LJob {
                                  *   has more colours than maxcol + 1), */
     struct Thumb *thumb;        /*   obj then NULL */
     ULONG ms_decode, ms_thumb;  /* how long each took */
+    ULONG ms_parts[4];          /* ...the thumbnail's: reading, counting, choosing, mapping */
     UBYTE own;                  /* read by ilbm.c, not a datatype */
     UBYTE urgent;               /* the UI waits for it: run above the read-ahead */
     ULONG t_sent, t_begun;      /* when it was sent, when the loader began it */

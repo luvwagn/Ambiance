@@ -105,36 +105,42 @@ static struct Thumb *exact(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
     return t;
 }
 
-/* ---- median cut on a 15-bit histogram */
+/* ---- median cut on a 15-bit histogram, over the cells in use
+ *
+ * The colours a cover uses are a few thousand of the histogram's 32768
+ * cells. They are listed as they are first counted (occ), and a box is a
+ * run of that list: shrinking, splitting and averaging a box go through
+ * its cells in use only, not every cell of its volume (a 68030 spent most
+ * of a cover's time there). */
 struct Box {
     UBYTE lo[3], hi[3];
-    ULONG n;
+    UWORD a, z;                 /* its cells: occ[a .. z-1] */
+    ULONG n;                    /* the pixels in them */
 };
 
 #define CELL(r, g, b) (((ULONG)(r) << 10) | ((ULONG)(g) << 5) | (b))
+#define COMP(c, ax) ((ax) == 0 ? (c) >> 10 : (ax) == 1 ? ((c) >> 5) & 31 : (c) & 31)
 
-static void box_shrink(const ULONG *hist, struct Box *bx)
+static void box_shrink(const ULONG *hist, const UWORD *occ, struct Box *bx)
 {
-    UBYTE lo[3] = { 31, 31, 31 }, hi[3] = { 0, 0, 0 };
-    ULONG r, g, b, n = 0;
-    for (r = bx->lo[0]; r <= bx->hi[0]; r++)
-        for (g = bx->lo[1]; g <= bx->hi[1]; g++) {
-            const ULONG *h = hist + CELL(r, g, 0);
-            for (b = bx->lo[2]; b <= bx->hi[2]; b++)
-                if (h[b]) {
-                    n += h[b];
-                    if (r < lo[0]) lo[0] = r;
-                    if (r > hi[0]) hi[0] = r;
-                    if (g < lo[1]) lo[1] = g;
-                    if (g > hi[1]) hi[1] = g;
-                    if (b < lo[2]) lo[2] = b;
-                    if (b > hi[2]) hi[2] = b;
-                }
-        }
+    UBYTE lo0 = 31, lo1 = 31, lo2 = 31, hi0 = 0, hi1 = 0, hi2 = 0;
+    ULONG n = 0;
+    UWORD i;
+    for (i = bx->a; i < bx->z; i++) {
+        UWORD c = occ[i];
+        UBYTE r = c >> 10, g = (c >> 5) & 31, b = c & 31;
+        n += hist[c];
+        if (r < lo0) lo0 = r;
+        if (r > hi0) hi0 = r;
+        if (g < lo1) lo1 = g;
+        if (g > hi1) hi1 = g;
+        if (b < lo2) lo2 = b;
+        if (b > hi2) hi2 = b;
+    }
     bx->n = n;
     if (n) {
-        memcpy(bx->lo, lo, 3);
-        memcpy(bx->hi, hi, 3);
+        bx->lo[0] = lo0; bx->lo[1] = lo1; bx->lo[2] = lo2;
+        bx->hi[0] = hi0; bx->hi[1] = hi1; bx->hi[2] = hi2;
     }
 }
 
@@ -147,18 +153,22 @@ static int longest(const struct Box *bx)
     return a;
 }
 
-/* Split boxes until there are maxcol, or none can be split. */
-static LONG median_cut(const ULONG *hist, struct Box *box, LONG maxcol)
+/* Split boxes until there are maxcol, or none can be split. occ (nocc
+ * cells in use) is reordered so each box's cells stay a run; tmp is room
+ * for nocc more. */
+static LONG median_cut(const ULONG *hist, UWORD *occ, UWORD *tmp, UWORD nocc, struct Box *box,
+                       LONG maxcol)
 {
     LONG nb = 1, i;
-    box[0].lo[0] = box[0].lo[1] = box[0].lo[2] = 0;
-    box[0].hi[0] = box[0].hi[1] = box[0].hi[2] = 31;
-    box_shrink(hist, &box[0]);
+    box[0].a = 0;
+    box[0].z = nocc;
+    box_shrink(hist, occ, &box[0]);
     if (!box[0].n)
         return 0;
     while (nb < maxcol) {
-        ULONG best = 0, cnt[32], cum, r, g, b;
+        ULONG best = 0, cnt[32], cum;
         LONG pick = -1, a, m;
+        UWORD w, h, k;
         struct Box *s, *t;
         for (i = 0; i < nb; i++) {
             int ax = longest(&box[i]);
@@ -173,13 +183,8 @@ static LONG median_cut(const ULONG *hist, struct Box *box, LONG maxcol)
         s = &box[pick];
         a = longest(s);
         memset(cnt, 0, sizeof(cnt));
-        for (r = s->lo[0]; r <= s->hi[0]; r++)
-            for (g = s->lo[1]; g <= s->hi[1]; g++)
-                for (b = s->lo[2]; b <= s->hi[2]; b++) {
-                    ULONG c = hist[CELL(r, g, b)];
-                    if (c)
-                        cnt[a == 0 ? r : a == 1 ? g : b] += c;
-                }
+        for (k = s->a; k < s->z; k++)
+            cnt[COMP(occ[k], a)] += hist[occ[k]];
         cum = 0;
         for (m = s->lo[a]; m < s->hi[a]; m++) {
             cum += cnt[m];
@@ -188,32 +193,42 @@ static LONG median_cut(const ULONG *hist, struct Box *box, LONG maxcol)
         }
         if (m >= s->hi[a])
             m = s->hi[a] - 1;
+        /* the run parted: up to m first, the rest after */
+        w = s->a;
+        h = 0;
+        for (k = s->a; k < s->z; k++) {
+            UWORD c = occ[k];
+            if ((LONG)COMP(c, a) <= m)
+                occ[w++] = c;
+            else
+                tmp[h++] = c;
+        }
+        CopyMem(tmp, occ + w, (ULONG)h * sizeof(UWORD));
         t = &box[nb++];
         *t = *s;
-        s->hi[a] = m;
-        t->lo[a] = m + 1;
-        box_shrink(hist, s);
-        box_shrink(hist, t);
+        s->z = w;
+        t->a = w;
+        box_shrink(hist, occ, s);
+        box_shrink(hist, occ, t);
     }
     return nb;
 }
 
 /* A box's colour (the average of its cells), its cells' colour in lut. */
-static ULONG box_colour(const ULONG *hist, const struct Box *bx, UBYTE *lut, LONG i)
+static ULONG box_colour(const ULONG *hist, const UWORD *occ, const struct Box *bx, UBYTE *lut,
+                        LONG i)
 {
-    ULONG r, g, b, sr = 0, sg = 0, sb = 0, n = 0;
-    for (r = bx->lo[0]; r <= bx->hi[0]; r++)
-        for (g = bx->lo[1]; g <= bx->hi[1]; g++)
-            for (b = bx->lo[2]; b <= bx->hi[2]; b++) {
-                ULONG cell = CELL(r, g, b), h = hist[cell];
-                if (h) {
-                    lut[cell] = i;
-                    sr += h * ((r << 3) | (r >> 2));
-                    sg += h * ((g << 3) | (g >> 2));
-                    sb += h * ((b << 3) | (b >> 2));
-                    n += h;
-                }
-            }
+    ULONG sr = 0, sg = 0, sb = 0, n = 0;
+    UWORD k;
+    for (k = bx->a; k < bx->z; k++) {
+        UWORD c = occ[k];
+        ULONG h = hist[c], r = c >> 10, g = (c >> 5) & 31, b = c & 31;
+        lut[c] = i;
+        sr += h * ((r << 3) | (r >> 2));
+        sg += h * ((g << 3) | (g >> 2));
+        sb += h * ((b << 3) | (b >> 2));
+        n += h;
+    }
     if (!n)
         n = 1;
     return ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
@@ -223,6 +238,35 @@ static const UBYTE bayer[4][4] = {
     { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 }
 };
 
+/* A gun plus its dither (0..7, bayer / 2) to 5 bits: q5[v + d], once
+ * per gun, not a compare and a shift (the dither centred: - 4). */
+static UBYTE q5[256 + 8];
+static void q5_init(void)
+{
+    static BOOL done;
+    LONG i;
+    if (done)
+        return;
+    for (i = 0; i < 256 + 8; i++) {
+        LONG v = i - 4;
+        q5[i] = v < 0 ? 0 : v > 255 ? 31 : v >> 3;
+    }
+    done = TRUE;
+}
+
+/* Where a picture's time went, the last one made (thumb_times). */
+static ULONG tm_read, tm_cells, tm_cut, tm_map;
+
+void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map)
+{
+    *read = tm_read;
+    *cells = tm_cells;
+    *cut = tm_cut;
+    *map = tm_map;
+}
+
+#define ROWS_AT_ONCE 16         /* a picture as big as its thumbnail: read this many rows a call */
+
 /* Averaged down, then maxcol colours of its own. rgb: the colour table of
  * a colour-table picture (read as LUT8), NULL for a deep one (read as
  * RGB). */
@@ -231,97 +275,135 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
 {
     struct Thumb *t = NULL;
     UBYTE *rows = NULL, *lut = NULL;
-    UWORD *cells = NULL, *xb = NULL;
-    ULONG *sum = NULL, *hist = NULL, x, y, rmax;
+    UWORD *cells = NULL, *xb = NULL, *occ = NULL, *tmp = NULL, nocc = 0;
+    ULONG *sum = NULL, *hist = NULL, x, y, rmax, nmax, t0, t1;
     struct Box *box = NULL;
     LONG nb, i;
     ULONG last_n = 0, rec = 0;
-    BOOL deep = rgb == NULL;
+    BOOL deep = rgb == NULL, same = deep && sw == dw && sh == dh;
 
+    q5_init();
+    t0 = time_ms();
     rmax = (sh + dh - 1) / dh + 1;
+    if (same)
+        rmax = ROWS_AT_ONCE;
+    nmax = dw * dh < 32768 ? dw * dh : 32768;   /* cells that can be in use */
     rows = AllocVec(sw * rmax * (deep ? 3 : 1) + (deep ? 0 : sw * 3), MEMF_ANY);
     cells = AllocVec(dw * dh * sizeof(UWORD), MEMF_ANY);
     xb = AllocVec((dw + 1) * sizeof(UWORD), MEMF_ANY);
     sum = AllocVec(dw * 4 * sizeof(ULONG), MEMF_ANY);
     hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     lut = AllocVec(32768, MEMF_ANY);
+    occ = AllocVec(nmax * sizeof(UWORD), MEMF_ANY);
+    tmp = AllocVec(nmax * sizeof(UWORD), MEMF_ANY);
     box = AllocVec(256 * sizeof(struct Box), MEMF_ANY);
-    if (!rows || !cells || !xb || !sum || !hist || !lut || !box)
+    if (!rows || !cells || !xb || !sum || !hist || !lut || !occ || !tmp || !box)
         goto out;
     for (x = 0; x <= dw; x++)
         xb[x] = x * sw / dw;
 
-    /* each small pixel: the average of the big ones it covers (one big
-     * one, picked, when enlarging) */
-    for (y = 0; y < dh; y++) {
-        ULONG sy0 = y * sh / dh, sy1 = (y + 1) * sh / dh, r;
-        UWORD *c = cells + y * dw;
-        if (sy1 <= sy0)
-            sy1 = sy0 + 1;
-        if (sy1 > sh)
-            sy1 = sh;
-        if (sy1 - sy0 > rmax)
-            sy1 = sy0 + rmax;
-        if (!read_rows(o, rows, sw, sy0, sy1 - sy0, deep))
-            goto out;
-        memset(sum, 0, dw * 4 * sizeof(ULONG));
-        for (r = 0; r < sy1 - sy0; r++) {
-            const UBYTE *p;
-            if (deep) {
-                p = rows + r * sw * 3;
-            } else {
-                /* colour numbers to colours, into the spare row at the end */
-                const UBYTE *s = rows + r * sw;
-                UBYTE *q = rows + sw * rmax;
-                ULONG k;
-                for (k = 0; k < sw; k++) {
-                    ULONG v = rgb[s[k]];
-                    *q++ = v >> 16;
-                    *q++ = v >> 8;
-                    *q++ = v;
+    if (same) {
+        /* the size it is shown at (a Plex cover, asked for so): each
+         * pixel its own cell, no averaging; rows read many at a time */
+        for (y = 0; y < dh; y += rmax) {
+            ULONG k = dh - y < rmax ? dh - y : rmax, r;
+            t1 = time_ms();
+            if (!read_rows(o, rows, sw, y, k, TRUE))
+                goto out;
+            tm_read += time_ms() - t1;
+            for (r = 0; r < k; r++) {
+                const UBYTE *p = rows + r * sw * 3, *bay = bayer[(y + r) & 3];
+                UWORD *c = cells + (y + r) * dw;
+                for (x = 0; x < dw; x++, p += 3) {
+                    UBYTE d = bay[x & 3] >> 1;
+                    UWORD v = ((UWORD)q5[p[0] + d] << 10) | ((UWORD)q5[p[1] + d] << 5) | q5[p[2] + d];
+                    c[x] = v;
+                    if (!hist[v]++)
+                        occ[nocc++] = v;
                 }
-                p = rows + sw * rmax;
+            }
+        }
+    } else {
+        /* each small pixel: the average of the big ones it covers (one
+         * big one, picked, when enlarging) */
+        for (y = 0; y < dh; y++) {
+            ULONG sy0 = y * sh / dh, sy1 = (y + 1) * sh / dh, r;
+            UWORD *c = cells + y * dw;
+            if (sy1 <= sy0)
+                sy1 = sy0 + 1;
+            if (sy1 > sh)
+                sy1 = sh;
+            if (sy1 - sy0 > rmax)
+                sy1 = sy0 + rmax;
+            t1 = time_ms();
+            if (!read_rows(o, rows, sw, sy0, sy1 - sy0, deep))
+                goto out;
+            tm_read += time_ms() - t1;
+            memset(sum, 0, dw * 4 * sizeof(ULONG));
+            for (r = 0; r < sy1 - sy0; r++) {
+                const UBYTE *p;
+                if (deep) {
+                    p = rows + r * sw * 3;
+                } else {
+                    /* colour numbers to colours, into the spare row at the end */
+                    const UBYTE *s = rows + r * sw;
+                    UBYTE *q = rows + sw * rmax;
+                    ULONG k;
+                    for (k = 0; k < sw; k++) {
+                        ULONG v = rgb[s[k]];
+                        *q++ = v >> 16;
+                        *q++ = v >> 8;
+                        *q++ = v;
+                    }
+                    p = rows + sw * rmax;
+                }
+                for (x = 0; x < dw; x++) {
+                    ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
+                    const UBYTE *q = p + k * 3;
+                    if (e <= k)
+                        e = k + 1;
+                    for (; k < e; k++, q += 3) {
+                        s[0] += q[0];
+                        s[1] += q[1];
+                        s[2] += q[2];
+                    }
+                    s[3] += e - xb[x] > 0 ? e - xb[x] : 1;
+                }
             }
             for (x = 0; x < dw; x++) {
-                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
-                const UBYTE *q = p + k * 3;
-                if (e <= k)
-                    e = k + 1;
-                for (; k < e; k++, q += 3) {
-                    s[0] += q[0];
-                    s[1] += q[1];
-                    s[2] += q[2];
+                ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1;
+                UBYTE d = bayer[y & 3][x & 3] >> 1;
+                UWORD v;
+                if (n != last_n) {
+                    last_n = n;             /* a multiply, not a divide, per pixel */
+                    rec = 65536UL / n + 1;
                 }
-                s[3] += e - xb[x] > 0 ? e - xb[x] : 1;
+                v = ((UWORD)q5[((s[0] * rec) >> 16 > 255 ? 255 : (s[0] * rec) >> 16) + d] << 10) |
+                    ((UWORD)q5[((s[1] * rec) >> 16 > 255 ? 255 : (s[1] * rec) >> 16) + d] << 5) |
+                    q5[((s[2] * rec) >> 16 > 255 ? 255 : (s[2] * rec) >> 16) + d];
+                c[x] = v;
+                if (!hist[v]++)
+                    occ[nocc++] = v;
             }
-        }
-        for (x = 0; x < dw; x++) {
-            ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1;
-            LONG d = (LONG)bayer[y & 3][x & 3] / 2 - 4, v[3];
-            if (n != last_n) {
-                last_n = n;                 /* a multiply, not a divide, per pixel */
-                rec = 65536UL / n + 1;
-            }
-            for (i = 0; i < 3; i++) {
-                v[i] = (LONG)((s[i] * rec) >> 16) + d;
-                v[i] = v[i] < 0 ? 0 : v[i] > 255 ? 31 : v[i] >> 3;
-            }
-            c[x] = CELL(v[0], v[1], v[2]);
-            hist[c[x]]++;
         }
     }
+    tm_cells = time_ms() - t0 - tm_read;
 
-    if ((nb = median_cut(hist, box, maxcol)) <= 0 || !(t = thumb_new(dw, dh)))
+    t1 = time_ms();
+    if ((nb = median_cut(hist, occ, tmp, nocc, box, maxcol)) <= 0 || !(t = thumb_new(dw, dh)))
         goto out;
     for (i = 0; i < nb; i++)
-        t->pal[i] = box_colour(hist, &box[i], lut, i);
+        t->pal[i] = box_colour(hist, occ, &box[i], lut, i);
     t->ncol = nb;
+    tm_cut = time_ms() - t1;
+    t1 = time_ms();
     for (y = 0; y < dh; y++) {
         UBYTE *d = t->px + y * t->mod;
         const UWORD *c = cells + y * dw;
         for (x = 0; x < dw; x++)
             d[x] = lut[c[x]];
     }
+    tm_map = time_ms() - t1;
 out:
     FreeVec(rows);
     FreeVec(cells);
@@ -329,6 +411,8 @@ out:
     FreeVec(sum);
     FreeVec(hist);
     FreeVec(lut);
+    FreeVec(occ);
+    FreeVec(tmp);
     FreeVec(box);
     return t;
 }
@@ -338,11 +422,12 @@ out:
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
 {
     UBYTE used[256], *lut;
-    UWORD *cells;
-    ULONG *hist, x, y, nused = 0, i;
+    UWORD *cells, *occ, *tmp, nocc = 0;
+    ULONG *hist, x, y, nused = 0, i, nmax = (ULONG)t->w * t->h < 32768 ? (ULONG)t->w * t->h : 32768;
     struct Box *box;
     LONG nb;
     ULONG pal[256];
+    q5_init();
     memset(used, 0, sizeof(used));
     for (y = 0; y < t->h; y++) {
         const UBYTE *p = t->px + y * t->mod;
@@ -357,11 +442,15 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
     hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     lut = AllocVec(32768, MEMF_ANY);
     box = AllocVec(256 * sizeof(struct Box), MEMF_ANY);
-    if (!cells || !hist || !lut || !box) {
+    occ = AllocVec(nmax * sizeof(UWORD), MEMF_ANY);
+    tmp = AllocVec(nmax * sizeof(UWORD), MEMF_ANY);
+    if (!cells || !hist || !lut || !box || !occ || !tmp) {
         FreeVec(cells);
         FreeVec(hist);
         FreeVec(lut);
         FreeVec(box);
+        FreeVec(occ);
+        FreeVec(tmp);
         return FALSE;
     }
     for (y = 0; y < t->h; y++) {
@@ -377,12 +466,13 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
             g = g < 0 ? 0 : g > 255 ? 31 : g >> 3;
             b = b < 0 ? 0 : b > 255 ? 31 : b >> 3;
             c[x] = CELL(r, g, b);
-            hist[c[x]]++;
+            if (!hist[c[x]]++)
+                occ[nocc++] = c[x];
         }
     }
-    nb = median_cut(hist, box, maxcol);
+    nb = median_cut(hist, occ, tmp, nocc, box, maxcol);
     for (i = 0; i < (ULONG)nb; i++)
-        pal[i] = box_colour(hist, &box[i], lut, i);
+        pal[i] = box_colour(hist, occ, &box[i], lut, i);
     for (y = 0; y < t->h; y++) {
         UBYTE *p = t->px + y * t->mod;
         const UWORD *c = cells + y * t->w;
@@ -395,6 +485,8 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
     FreeVec(hist);
     FreeVec(lut);
     FreeVec(box);
+    FreeVec(occ);
+    FreeVec(tmp);
     return TRUE;
 }
 
@@ -405,6 +497,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
     ULONG *cregs = NULL, ncol = 0, mode = 0, sw, sh, i, n;
     ULONG rgb[256];
     BOOL deep;
+    tm_read = tm_cells = tm_cut = tm_map = 0;
     if (!o || !dw || !dh)
         return NULL;
     if (maxcol > 256)
