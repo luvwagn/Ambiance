@@ -5475,14 +5475,16 @@ static void np_mark_lists(BOOL redraw)
                 it->mark = now[0] && mp_is_track() && !strcmp(key, plex_now) ? MARK_PLAYING
                                                                              : MARK_NONE;
             } else if (it->kind == IT_PLEXDIR && p->plex &&
-                       (it->mark == MARK_NONE || it->mark == MARK_PLAYING)) {
-                /* the album (or artist) the playing track is of */
+                       !strncmp(it->path, "/library/metadata/", 18)) {
+                /* an artist or album: the playing bars where the track
+                 * playing is of it, its arrow otherwise (other rows, such
+                 * as Other libraries, keep theirs) */
                 char key[300];
                 radio_field(it, 0, key, sizeof(key));
-                it->mark = now[0] && mp_is_track() && key[0] &&
+                it->mark = now[0] && mp_is_track() &&
                            ((plex_now_in[0][0] && !strcmp(key, plex_now_in[0])) ||
                             (plex_now_in[1][0] && !strcmp(key, plex_now_in[1])))
-                           ? MARK_PLAYING : MARK_NONE;
+                           ? MARK_PLAYING : MARK_ARROW;
             }
         }
     }
