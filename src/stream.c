@@ -107,7 +107,7 @@ typedef char access_size_check[sizeof(MPEGA_ACCESS) == 16 ? 1 : -1];
 /* ---------------------------------------------------------- the state */
 static struct {
     /* set before the process starts, then its */
-    char url[1024];                 /* a Plex conversion's is long */
+    char url[2048];                 /* a Plex conversion's is long */
     struct Process *proc;
     volatile BOOL quit;
     volatile BYTE sig;              /* the process's: Paula wants a half */
@@ -141,6 +141,9 @@ static struct {
     BOOL finite;                    /* a track: its end is the end, not a failure */
     ULONG mp3_bytes;                /* MP3 given to the decoder: its average bitrate */
     ULONG range_from;               /* a track from this byte on (a seek; 0 all of it) */
+    ULONG skip_ms;                  /* a conversion from this time on (a seek): asked of
+                                     * the server (its offset), else frames passed over */
+    BOOL skipping;                  /* the server would not: passed over here */
     volatile BOOL eof;              /* a track's last byte read */
 } st;
 
@@ -438,13 +441,31 @@ static LONG num(const char *s)
     return v;
 }
 
+/* A seek's "&offset=" taken out of url: FALSE if it had none. */
+static BOOL no_offset;              /* this server refused one: not asked again */
+static BOOL drop_offset(char *url)
+{
+    char *o = strstr(url, "&offset="), *e;
+    if (!o)
+        return FALSE;
+    e = strchr(o + 1, '&');
+    if (e)
+        memmove(o, e, strlen(e) + 1);
+    else
+        *o = 0;
+    return TRUE;
+}
+
 /* Connected to the stream (redirects and playlists followed). */
 static BOOL open_stream(void)
 {
-    char url[1024], host[96], path[1024], req[1400], hdr[2048], v[160], range[40];
+    static char url[2048], path[2048], req[2600];
+    char host[96], hdr[2048], v[160], range[40];
     UWORD port;
     int hop;
     amce_strlcpy(url, st.url, sizeof(url));
+    if (st.skip_ms && no_offset && drop_offset(url))
+        st.skipping = TRUE;
     for (hop = 0; hop < 4; hop++) {
         LONG status;
         if (!amce_strnicmp(url, "https:", 6)) {
@@ -488,6 +509,16 @@ static BOOL open_stream(void)
             CloseSocket(st.sock);
             st.sock = -1;
             amce_strlcpy(url, v, sizeof(url));
+            continue;
+        }
+        if (status == 400 && st.skip_ms && !st.skipping && drop_offset(url)) {
+            /* the server would not start its conversion part way in: from
+             * the start, the frames before the time passed over here */
+            CloseSocket(st.sock);
+            st.sock = -1;
+            st.skipping = no_offset = TRUE;
+            amce_log("track", "the server would not start part way in: seeking by reading");
+            hop--;
             continue;
         }
         if (status != 200 && !(status == 206 && st.range_from)) {
@@ -664,6 +695,79 @@ static BOOL skip_id3(void)
     return TRUE;
 }
 
+/* MP3 frames read past, without decoding, to st.skip_ms in (a seek the
+ * server would not start at): their headers say their length and time. */
+static BOOL skip_to(void)
+{
+    static const UBYTE kb[2][3][15] = {
+        { /* MPEG 1: layers I, II, III (kbit/s; I's halved, 255 the top ones) */
+          { 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224 },
+          { 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 255, 255, 255 },
+          { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 255, 255 } },
+        { /* MPEG 2 and 2.5 */
+          { 0, 16, 24, 28, 32, 40, 48, 56, 64, 72, 80, 88, 96, 112, 128 },
+          { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 },
+          { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 } },
+    };
+    static const LONG rates[4][3] = {
+        { 11025, 12000, 8000 }, { 0, 0, 0 }, { 22050, 24000, 16000 }, { 44100, 48000, 32000 } };
+    ULONG done = 0, want = 0;
+    LONG freq = 0;
+    while (!st.quit) {
+        const UBYTE *b;
+        UBYTE ver, layer, bri, sri, m2;
+        ULONG kbps, len, samples;
+        while (st.nb_len - st.nb_pos < 4)
+            if (!net_more())
+                return FALSE;
+        b = st.nb + st.nb_pos;
+        ver = (b[1] >> 3) & 3;
+        layer = (b[1] >> 1) & 3;            /* 3 I, 2 II, 1 III */
+        bri = b[2] >> 4;
+        sri = (b[2] >> 2) & 3;
+        if (b[0] != 0xFF || (b[1] & 0xE0) != 0xE0 || ver == 1 || !layer || bri == 15 || !bri ||
+            sri == 3) {
+            st.nb_pos++;                    /* not a frame's start: on a byte */
+            continue;
+        }
+        m2 = ver != 3;
+        kbps = kb[m2][3 - layer][bri];
+        if (kbps == 255)
+            kbps = layer == 2 ? (bri == 12 ? 256 : bri == 13 ? 320 : 384)
+                              : (bri == 13 ? 256 : 320);
+        if (layer == 3)
+            kbps *= 2;
+        if (!freq) {
+            freq = rates[ver][sri];
+            want = (st.skip_ms / 1000) * (ULONG)freq + (st.skip_ms % 1000) * (ULONG)freq / 1000;
+        }
+        if (layer == 3) {
+            len = (12 * kbps * 1000 / rates[ver][sri] + ((b[2] >> 1) & 1)) * 4;
+            samples = 384;
+        } else {
+            ULONG k = layer == 1 && m2 ? 72 : 144;
+            len = k * kbps * 1000 / rates[ver][sri] + ((b[2] >> 1) & 1);
+            samples = layer == 1 && m2 ? 576 : 1152;
+        }
+        if (done + samples > want)
+            return TRUE;                    /* this frame holds the time: from here */
+        done += samples;
+        while (len) {
+            ULONG k = st.nb_len - st.nb_pos;
+            if (!k) {
+                if (!net_more())
+                    return FALSE;
+                continue;
+            }
+            if (k > len)
+                k = len;
+            st.nb_pos += k;
+            len -= k;
+        }
+    }
+    return FALSE;
+}
+
 /* The sample rate of the stream's first MP3 frame (bytes read ahead for
  * it, as far as the first title block), 0 if none is found. */
 static LONG first_frame_freq(void)
@@ -775,6 +879,10 @@ static void radio_main(void)
         fail(st.err[0] ? st.err : "The track ended before its music began");
         goto out;
     }
+    if (st.skipping && !skip_to()) {
+        fail(st.err[0] ? st.err : "The track ended before that time");
+        goto out;
+    }
     st.state = ST_BUFFERING;
     memset(&hook, 0, sizeof(hook));
     hook.h_Entry = (HOOKFUNC)(APTR)hook_func;
@@ -855,12 +963,14 @@ out:
 }
 
 /* ---------------------------------------------------------- the UI's */
-BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from, char *err,
-              LONG errmax)
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
+              ULONG skip_ms, char *err, LONG errmax)
 {
     st_stop();
     st.finite = finite;
     st.range_from = range_from;
+    st.skip_ms = skip_ms;
+    st.skipping = FALSE;
     st.eof = FALSE;
     memset(&st.err, 0, sizeof(st.err));
     st.name[0] = st.genre[0] = st.title[0] = 0;

@@ -3830,7 +3830,11 @@ static void draw_list_rows(struct Page *p)
     WORD vis = list_visible(), r, col = mark_column(p);
     list_follow(p);
     if (!p->list.count) {
-        gfx_fill(&g, g.pane_x - U(2), g.list_top, g.w - 1, g.footer_y - 2, PEN_BG);
+        /* the list's own place: beside it a pane (an album's cover, kept)
+         * is the preview's to clear; filled over, the cover flashed in the
+         * UI's colours and was gone while still counted as shown */
+        gfx_fill(&g, g.pane_x - U(2), g.list_top, has_aside(p) ? aside_x() - 1 : g.w - 1,
+                 g.footer_y - 2, PEN_BG);
         if (p->radio && p->net_seq) {
             rsp.on = FALSE;
             radio_spin();           /* still asking: the spinner, not "(empty)" */
@@ -4183,6 +4187,7 @@ static struct {
     BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
     WORD sl_x0, sl_x1;
     int s_meters;               /* level meters drawn (4, 2, 1) */
+    int rows;                   /* ...and laid out for: the page as tall as they need */
     ULONG s_rseq;               /* a station: its title and state drawn */
     int s_rstate;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
@@ -4419,7 +4424,8 @@ static void np_layout(void)
     np.meter_y = np.info_y + row + U(6);
     np.meter_h = g.font_h + U(2);
     np.name_w = np.w * 2 / 5;
-    np.time_y = np.meter_y + 4 * (np.meter_h + U(2)) + U(4);
+    np.rows = mp_loaded() ? mp_meter_count() : 4;
+    np.time_y = np.meter_y + np.rows * (np.meter_h + U(2)) + U(4);
     np.prog_h = U(4) > 2 ? U(4) : 2;
     np.prog_y = np.time_y + (g.font_h - np.prog_h) / 2;
     np.bar_w = np.w - gfx_textlen(&g, "88:88 / 88:88", TS_BODY) - U(10);
@@ -4552,11 +4558,13 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
         bh = 2;
     if (n != np.s_meters) {
         /* fewer meters than last time (stereo, mono): the rest cleared */
-        gfx_fill(&g, np.x0, np.meter_y, np.x0 + np.w - 1, np.meter_y + 4 * (np.meter_h + U(2)) - 1,
-                 PEN_BG);
+        gfx_fill(&g, np.x0, np.meter_y, np.x0 + np.w - 1,
+                 np.meter_y + np.rows * (np.meter_h + U(2)) - 1, PEN_BG);
         np.s_meters = n;
         full = TRUE;
     }
+    if (n > np.rows)
+        n = np.rows;                        /* laid out for fewer: np_update lays it out again */
     for (i = 0; i < n; i++) {
         WORD y = np.meter_y + i * (np.meter_h + U(2)), by = y + (np.meter_h - bh) / 2;
         WORD lit = (WORD)((LONG)bw * st->level[i] / 64);
@@ -4845,7 +4853,14 @@ controls:
  * copied up, no flip. */
 static void np_update(void)
 {
-    BOOL was = gfx_quiet_begin();
+    BOOL was;
+    if (np.w && mp_loaded() && mp_meter_count() != np.rows) {
+        /* the sound has more or fewer channels than the page was laid out
+         * for (a station found to be mono): laid out again, as tall as needed */
+        np_draw(TRUE);
+        return;
+    }
+    was = gfx_quiet_begin();
     np_draw(FALSE);
     gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.pos_y + g.font_h);
 }
@@ -4903,7 +4918,7 @@ static BOOL np_start(LONG idx)
             return FALSE;
         }
     } else if (it->kind == IT_PLEXTRACK) {
-        char url[1024], by[200], album[100], ms[16];
+        char url[2048], by[200], album[100], ms[16];
         BOOL ok_track;
         if (it->flags & ITEM_DISABLED) {
             busy_end(TRUE);
@@ -5011,7 +5026,7 @@ static void np_seek_track(ULONG ms, ULONG delay)
 {
     struct MpStatus st;
     struct Item *it;
-    char url[1024], by[200], album[100], err[100];
+    char url[2048], by[200], album[100], err[100];
     if (!mp_is_track() || !np.list.pool || np.idx < 0 || np.idx >= np.list.count)
         return;
     mp_status(&st);

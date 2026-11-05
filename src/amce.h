@@ -412,8 +412,8 @@ struct StInfo {
     ULONG avg_kbps;                 /* the bitrate on average (3 s on), 0 not yet */
     UBYTE peak_l, peak_r;
 };
-BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from, char *err,
-              LONG errmax);
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
+              ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);
 void st_pause(BOOL on);
 void st_volume(int v);

@@ -75,7 +75,7 @@ static struct {
     UBYTE *hdr, *pat;
     BYTE *smp, *silence;
     ULONG smp_size;
-    char path[1024];
+    char path[2048];
     char rname[96], rtag[24];       /* a station's name and format ("128k") */
     UWORD rcpu;
     BOOL rtrack;                    /* not a station: a track (a Plex server's), with an end */
@@ -880,7 +880,8 @@ BOOL mp_play(char *err, LONG errmax)
     if (mp.engine == ENG_RADIO) {
         mp.finished = FALSE;
         mp.paused = FALSE;
-        if (!st_start(mp.path, mp.master, mp.rcpu, mp.rtrack, mp.rrange, err, errmax))
+        if (!st_start(mp.path, mp.master, mp.rcpu, mp.rtrack, mp.rrange,
+                      mp.rtrack && !mp.rrange ? mp.rbase_ms : 0, err, errmax))
             return FALSE;
         mp.running = TRUE;
         return TRUE;
@@ -1337,8 +1338,12 @@ int mp_meter_count(void)
 {
     if (mp.engine == ENG_MIX)
         return 2;
-    if (mp.engine == ENG_RADIO)
-        return st_channels() == 1 ? 1 : 2;
+    if (mp.engine == ENG_RADIO) {
+        int c = st_channels();
+        if (!c)                             /* not decoding yet: what it will be */
+            c = mp.rcpu < 40 ? 1 : 2;       /*   (a 68030's decoder makes mono) */
+        return c == 1 ? 1 : 2;
+    }
     return 4;
 }
 const char *mp_stream_name(void) { return mp.rname; }
