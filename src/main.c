@@ -1657,6 +1657,19 @@ static char plex_now[300];      /* the Plex track playing: its file's key (lists
 static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
 static struct NetJob *plex_dj;
 static void plex_ask_rate(const char *key);
+/* Pictures of the server's (an album's cover): asked for (art_fetch), kept
+ * in RAM: (plex_art), then made for their place by the loader */
+enum { ART_NP, ART_PV, ART_KINDS };
+static struct NetJob *art_nj[ART_KINDS];
+static char art_want[ART_KINDS][120];
+static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
+static void art_ready(int kind, const char *file);
+static struct LJob *np_aj;          /* Now playing's cover, made for its square */
+static BOOL np_art_drawn;
+static void np_art_draw(void);
+static void np_art_free(void);
+static void np_art_start(const struct Item *it);
+static void plex_pv_draw(struct Page *p);
 static void plex_refetch(struct Page *p, const char *key);
 static ULONG strtoul_(const char *s)
 {
@@ -2614,6 +2627,17 @@ static BOOL has_aside(struct Page *p)
         return FALSE;
     if (p->style_pv)
         return aside_width() > 0;
+    if (p->plex && p->radio) {
+        /* artists and albums: the details pane (worked out each time: the
+         * list comes after the page) */
+        LONG i;
+        if (aside_width() <= 0)
+            return FALSE;
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t'))
+                return TRUE;
+        return FALSE;
+    }
     if (!p->aside) {
         LONG i;
         p->aside = 1;
@@ -2790,6 +2814,7 @@ static void pv_flush(void)
     for (i = 0; i < PV_SLOTS; i++)
         pv_free_slot(i);
     pv_tj = pv_sj = NULL;
+    np_art_free();                          /* Now playing's cover too */
 }
 
 /* The pane's jobs let go without waiting for them, for the viewer: one
@@ -3209,6 +3234,10 @@ static void preview_draw(struct Page *p)
     pv_tj = pv_sj = NULL;
     pv_text_drawn = pv_pic_drawn = pv_spin_on = FALSE;
     tb_close(&pv_tb);
+    if (p->plex) {
+        plex_pv_draw(p);                    /* the server's details (plex_pv_draw) */
+        return;
+    }
     k = p->list.count ? pv_kind(p, p->sel, path, sizeof(path), &shot) : 0;
     if (!pv_pictures())
         shot = 0;
@@ -3260,6 +3289,8 @@ static void preview_arrived(void)
         if (pages[d].ch && pages[d].ch->job && pages[d].ch->job->done)
             ch_arrived(&pages[d], &pages[d] == p);
     }
+    if (np_aj && np_aj->done && !np_art_drawn)
+        np_art_draw();                      /* Now playing's cover is made */
     if (!pv_tj && !pv_sj)
         return;
     if (!((pv_tj && pv_tj->done && !pv_text_drawn) || (pv_sj && pv_sj->done && !pv_pic_drawn) ||
@@ -4102,6 +4133,7 @@ static struct {
     /* where things are on the page */
     WORD x0, w, title_y, info_y, prog_y, prog_h, time_y, meter_y, meter_h, name_w;
     WORD bx[NB_COUNT], by, bw, bh, vol_x, samples_y;
+    WORD art_x, art_y, art_s;               /* a Plex track's cover: its square (0 none) */
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
     WORD s_level[4];
@@ -4385,6 +4417,18 @@ static void np_layout(void)
     if (np.vol_x >= 0)
         np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
     np.samples_y = np.by + np.bh + U(8);
+    np.art_s = 0;
+    if (mp_is_track()) {
+        /* the cover: a square at the right of the track's lines */
+        WORD s = g.footer_y - 2 - np.samples_y - U(2);
+        if (s > np.w * 2 / 5)
+            s = np.w * 2 / 5;
+        if (s >= U(40)) {
+            np.art_s = s;
+            np.art_x = np.x0 + np.w - s;
+            np.art_y = np.samples_y;
+        }
+    }
 }
 
 /* The time, the bar and the position: only what changed. */
@@ -4524,15 +4568,16 @@ static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 /* label, then value at the column after the longest label (Playback). */
 static void np_pair(WORD y, const char *label, const char *value)
 {
-    WORD col = gfx_textlen(&g, "Playback", TS_SMALL) + U(8), x1 = np.x0 + np.w, w;
+    WORD col = gfx_textlen(&g, "Playback", TS_SMALL) + U(8), w;
+    WORD tw = np.art_s ? np.w - np.art_s - U(8) : np.w, x1 = np.x0 + tw;
     gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
     w = gfx_textlen(&g, label, TS_SMALL);
     if (w < col)
         gfx_fill(&g, np.x0 + w, y, np.x0 + col - 1, y + g.font_h - 1, PEN_BG);
     w = gfx_textlen(&g, value, TS_SMALL);
-    if (w > np.w - col)
-        w = np.w - col;
-    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, np.w - col, TS_SMALL | TS_OPAQUE);
+    if (w > tw - col)
+        w = tw - col;
+    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, tw - col, TS_SMALL | TS_OPAQUE);
     if (np.x0 + col + w < x1)
         gfx_fill(&g, np.x0 + col + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
 }
@@ -4605,8 +4650,9 @@ static void np_draw_station(void)
         else
             np_pair(y, "Playback", "");
         y += lh;
-        if (y <= bottom)
-            gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);
+        if (y <= bottom)                    /* the cover's square left alone */
+            gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
+                     PEN_BG);
         return;
     }
     np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE, TS_BOLD);
@@ -4660,6 +4706,9 @@ static void np_draw(BOOL full)
         const char *t = mp_title();
         char label[120];
         np_layout();
+        if (g.pic_w)                        /* a cover there: cleared, then its pens go */
+            gfx_picture_clear(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+        np_art_drawn = FALSE;
         gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
         if (!mp_loaded()) {
             gfx_text(&g, np.x0, np.title_y, "Nothing playing", PEN_DIM, PEN_BG, np.w, TS_BOLD);
@@ -4667,6 +4716,7 @@ static void np_draw(BOOL full)
         }
         if (mp_is_stream()) {
             np_draw_station();
+            np_art_draw();
             goto controls;
         }
         mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
@@ -4857,6 +4907,7 @@ static BOOL np_start(LONG idx)
             set_msg(err);
             return FALSE;
         }
+        np_art_start(it);                   /* its cover, when it comes */
     } else if (!mp_load(it->path, err, sizeof(err))) {
         busy_end(TRUE);
         np.idx = idx;
@@ -6477,6 +6528,19 @@ static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
     int d;
+    for (d = 0; d < ART_KINDS; d++)
+        if (j == art_nj[d]) {
+            /* a picture of the server's: kept in RAM:, then shown */
+            art_nj[d] = NULL;
+            if (j->body && j->status == 200 && plex_art_save(art_want[d], j->body, j->len))
+                art_ready(d, art_want[d]);
+            else
+                amce_log("plex: picture", j->err[0] ? j->err : "not sent");
+            if (j->body)
+                FreeVec(j->body);
+            FreeVec(j);
+            return;
+        }
     if (j == plex_dj || (j->orphan && j->seq == 0)) {
         /* a Plex track's own answer: its sample rate, for Now playing */
         if (j == plex_dj) {
@@ -6726,6 +6790,215 @@ static void plex_ask_rate(const char *key)
         radio_done(j);
 }
 
+/* The server's picture thumb made w x h, for kind: TRUE, and its file in
+ * file, when it is kept already; else asked for (whatever kind asked for
+ * before given up), and art_ready comes when it is here. */
+static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
+{
+    struct NetJob *j;
+    char req[400];
+    if (art_nj[kind]) {
+        net_cancel(art_nj[kind]);
+        art_nj[kind]->orphan = TRUE;        /* freed when it comes back */
+        art_nj[kind]->seq = 0;
+        art_nj[kind] = NULL;
+    }
+    file[0] = 0;
+    if (!thumb[0] || !plex.host[0] || w < 8 || h < 8)
+        return FALSE;
+    if (plex_art(thumb, w, h, req, sizeof(req), file, 120))
+        return TRUE;
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    amce_strlcpy(j->path, req, sizeof(j->path));
+    j->seq = 0;
+    amce_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
+    art_nj[kind] = j;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+    return FALSE;
+}
+
+/* Now playing's cover let go (another track, the page gone, the screen). */
+static void np_art_free(void)
+{
+    struct LJob *j = np_aj;
+    np_aj = NULL;
+    np_art_drawn = FALSE;
+    if (!j)
+        return;
+    if (j->busy && !g.truecolor) {
+        ldr_orphan(j);                      /* holds no pens: freed when it ends */
+        return;
+    }
+    if (j->busy)
+        ldr_wait(j);
+    pic_dispose(j->obj);
+    thumb_free(j->thumb);
+    FreeVec(j);
+}
+
+/* The cover's file to the loader, made for the square. */
+static void np_art_load(const char *file)
+{
+    struct LJob *j;
+    np_art_free();
+    if (!np.art_s || !pv_pictures() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    j->type = LJ_SHOT;
+    j->mode = SHOT_FILE;
+    amce_strlcpy(j->path, file, sizeof(j->path));
+    j->scr = g.scr;
+    j->remap = g.truecolor;
+    j->want_pic = FALSE;
+    if (gfx_thumbs(&g)) {
+        j->remap = FALSE;
+        j->tw = j->th = np.art_s;
+        j->tall = gfx_mode_tall(g.mode);
+        j->maxcol = gfx_thumb_colours(&g);
+    }
+    np_aj = j;
+    ldr_submit_first(j);
+}
+
+/* The cover in its square, when it is made. */
+static void np_art_draw(void)
+{
+    WORD dh = 0;
+    BOOL taken = FALSE;
+    if (!np_aj || !np_aj->done || !np_on() || !mp_is_track() || !np.art_s || np_art_drawn)
+        return;
+    if (np_aj->thumb)
+        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_s, &dh);
+    else if (np_aj->obj && gfx_picture_obj(&g, np_aj->obj, np_aj->remapped, np.art_x, np.art_y,
+                                           np.art_s, np.art_s, TRUE, &dh, &taken) && taken)
+        np_aj->obj = NULL;                  /* the screen has it (its pens) */
+    np_art_drawn = TRUE;
+}
+
+/* A Plex track starting: its cover asked for (or loaded, if kept). */
+static void np_art_start(const struct Item *it)
+{
+    char thumb[160], file[120];
+    np_art_free();
+    radio_field(it, 9, thumb, sizeof(thumb));
+    np_layout();                            /* the square's size */
+    if (np.art_s && art_fetch(ART_NP, thumb, np.art_s, np.art_s, file))
+        np_art_load(file);
+}
+
+/* ---- the details pane of a Plex list (artists, albums): the picture
+ * above (the server's, made for the place), the details below */
+static void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen)
+{
+    char line[160];
+    WORD lh = g.font_h + U(1);
+    while (*s && *y + g.font_h - 1 <= max_y) {
+        LONG n = 0, fit = 0;
+        while (s[n] && n < (LONG)sizeof(line) - 1) {
+            LONG e = n;
+            while (s[e] && s[e] != ' ' && e < (LONG)sizeof(line) - 1)
+                e++;
+            memcpy(line, s, e);
+            line[e] = 0;
+            if (gfx_textlen(&g, line, TS_SMALL) > w && fit)
+                break;
+            fit = e;
+            n = e;
+            if (s[n] == ' ')
+                n++;
+            if (gfx_textlen(&g, line, TS_SMALL) > w)
+                break;                      /* one word longer than the line: cut */
+        }
+        if (!fit)
+            fit = n ? n : 1;
+        memcpy(line, s, fit);
+        line[fit] = 0;
+        gfx_text(&g, x, *y, line, pen, PEN_BG, w, TS_SMALL);
+        *y += lh;
+        s += fit;
+        while (*s == ' ')
+            s++;
+    }
+}
+
+static void plex_pv_draw(struct Page *p)
+{
+    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y;
+    struct Item *it = p->list.count ? &p->list.items[p->sel] : NULL;
+    char thumb[160], year[8], by[100], count[24], studio[60], summary[300], line[200], file[120];
+    gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
+    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+    pv_has_box = FALSE;
+    pv_text_drawn = TRUE;
+    if (!it || it->kind != IT_PLEXDIR)
+        return;
+    radio_field(it, 2, thumb, sizeof(thumb));
+    radio_field(it, 3, year, sizeof(year));
+    radio_field(it, 4, by, sizeof(by));
+    radio_field(it, 5, count, sizeof(count));
+    radio_field(it, 6, studio, sizeof(studio));
+    radio_field(it, 7, summary, sizeof(summary));
+    pv_box_y = g.list_top;
+    pv_box_h = (max_y - g.list_top) / 2;
+    if (pv_box_h > w)
+        pv_box_h = w;                       /* covers are square */
+    y = g.list_top;
+    if (thumb[0] && pv_pictures()) {
+        pv_has_box = TRUE;
+        y = pv_box_y + pv_box_h + U(4);
+        if (art_fetch(ART_PV, thumb, w, pv_box_h, file))
+            pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+    }
+    gfx_text(&g, x0, y, it->label, PEN_WHITE, PEN_BG, w, TS_BOLD);
+    y += g.font_h + U(2);
+    if (by[0]) {
+        gfx_text(&g, x0, y, by, PEN_TEXT, PEN_BG, w, TS_SMALL);
+        y += g.font_h + U(1);
+    }
+    line[0] = 0;
+    if (year[0])
+        amce_strlcat(line, year, sizeof(line));
+    if (count[0]) {
+        amce_strlcat(line, line[0] ? "   " : "", sizeof(line));
+        amce_strlcat(line, count, sizeof(line));
+    }
+    if (studio[0]) {
+        amce_strlcat(line, line[0] ? "   " : "", sizeof(line));
+        amce_strlcat(line, studio, sizeof(line));
+    }
+    if (line[0]) {
+        gfx_text(&g, x0, y, line, PEN_DIM, PEN_BG, w, TS_SMALL);
+        y += g.font_h + U(1);
+    }
+    if (summary[0]) {
+        y += U(3);
+        pv_wrap(x0, &y, w, max_y, summary, PEN_DIM);
+    }
+    if (pv_sj && pv_sj->done)
+        pv_progress(p);
+}
+
+/* A picture of the server's is here (kept in file). */
+static void art_ready(int kind, const char *file)
+{
+    struct Page *p = cur();
+    if (kind == ART_NP) {
+        if (mp_is_track())
+            np_art_load(file);
+        return;
+    }
+    if (p && p->plex && p == pv_page && p->sel == pv_sel && pv_shown && !pv_sj && pv_has_box &&
+        !pane_pending) {
+        pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+        if (pv_sj && pv_sj->done)
+            pv_progress(p);
+    }
+}
+
 /* A server found: kept as the one to use, and its libraries shown. */
 static void plex_choose(struct Item *it)
 {
@@ -6787,11 +7060,12 @@ static void plex_help(void)
     if (!p)
         return;
     text_para(p, "AmigaMCE plays music from a Plex Media Server on your network: its "
-                 "music libraries, by artist and album, played on the Amiga's own sound "
-                 "(mpega.library). The server converts each track to an MP3 of 22 kHz "
-                 "(mono for a 68030, stereo for a 68040/060), half the decoding of a CD's "
-                 "44.1 kHz; Settings > Plex: convert music to 22 kHz off plays MP3 files as "
-                 "they are stored (other formats are converted either way).");
+                 "music libraries, by artist and album, with their covers, played on the "
+                 "Amiga's own sound (mpega.library). The server makes each track for this "
+                 "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
+                 "and a fast one gets MP3 files as stored. Settings > Plex: sound made for "
+                 "this Amiga off plays MP3 files as stored (other formats are converted "
+                 "either way); Settings > Plex turns it all off.");
     text_line(p, "");
     text_para(p, "Finding a server: Music > Find a Plex server asks the network (Plex's GDM); "
                  "choose one and it is kept. Or set its address from the Shell: "

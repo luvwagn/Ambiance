@@ -91,12 +91,14 @@ Features in this release
   mpega.library: mono at 22 kHz on a 68030, stereo up to 28 kHz on a
   68040/060. Needs a running TCP/IP stack. HTTPS streams do not play yet.
 - Music: a Plex Media Server's music, on your network: its music
-  libraries by artist, album or recently added, their tracks played on
-  Now playing (title, artist, album, time played of its length), an
-  album playing through. The server converts each track to a 22 kHz MP3
-  (mono for a 68030, stereo for a 68040/060), half the decoding of
-  44.1 kHz and any format it has; Settings > Plex: convert music to
-  22 kHz off plays MP3 files as stored. Music > Find a Plex server finds servers on the network
+  libraries by artist, album or recently added (artists and albums
+  with their pictures and details beside the list), their tracks played
+  on Now playing with the cover (title, artist, album, time played of
+  its length; the file, what Plex sends, what plays), an album playing
+  through. The server makes each track for this Amiga: 22 kHz mono MP3
+  for a 68020/030, 24 kHz stereo for a 68040/060, MP3 files as stored
+  for a fast one; any format it has. Settings > Plex turns it on or off,
+  chooses the server, and whether the sound is made for this Amiga. Music > Find a Plex server finds servers on the network
   (Plex's GDM); a server that asks for a sign-in token takes it from
   ENVARC:AmigaMCE/PlexToken (Music > About Plex says how). Plain HTTP on
   the home network: no AmiSSL needed.

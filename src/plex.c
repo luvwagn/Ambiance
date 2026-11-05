@@ -318,13 +318,14 @@ struct fill {
     BOOL track;
     int track_depth;
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
+    char t_thumb[160];
     ULONG t_ms, t_kbps, t_ch, t_rate;
     BOOL full;
 };
 
 static void flush_track(struct fill *x)
 {
-    char path[900], tag[24];
+    char path[1100], tag[24];
     struct Item *it;
     if (!x->track)
         return;
@@ -333,9 +334,9 @@ static void flush_track(struct fill *x)
         x->skipped++;
         return;
     }
-    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu", x->t_part, x->t_codec,
+    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu\t%s", x->t_part, x->t_codec,
             (unsigned long)x->t_ms, x->t_by, x->t_album, x->t_key, (unsigned long)x->t_kbps,
-            (unsigned long)x->t_ch, (unsigned long)x->t_rate);
+            (unsigned long)x->t_ch, (unsigned long)x->t_rate, x->t_thumb);
     dur_text(x->t_ms, tag);
     if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
                         IT_PLEXTRACK))) {
@@ -392,6 +393,10 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         x->t_codec[0] = x->t_part[0] = 0;
         amce_strlcpy(x->t_key, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "",
                      sizeof(x->t_key));
+        v = xml_attr(a, n, "parentThumb");      /* the album's cover, else its own */
+        if (!v || !v[0])
+            v = xml_attr(a, n, "thumb");
+        amce_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
         x->t_ms = num(xml_attr(a, n, "duration"));
         x->t_kbps = x->t_ch = x->t_rate = 0;
         return 1;
@@ -447,13 +452,19 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         {
             /* what the details pane shows of it: after the key, by tabs */
             static char more[700];
-            char type[16], thumb[160], year[8], by[100], count[12], studio[60], summary[300];
+            char type[16], thumb[160], year[8], by[100], count[24], studio[60], summary[300];
             text(xml_attr(a, n, "type"), type, sizeof(type));
             amce_strlcpy(thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
                          sizeof(thumb));
             text(xml_attr(a, n, "year"), year, sizeof(year));
             text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
-            text(xml_attr(a, n, "leafCount"), count, sizeof(count));
+            count[0] = 0;
+            if (!strcmp(type, "artist") && num(xml_attr(a, n, "childCount")))
+                sprintf(count, num(xml_attr(a, n, "childCount")) == 1 ? "%lu album" : "%lu albums",
+                        (unsigned long)num(xml_attr(a, n, "childCount")));
+            else if (num(xml_attr(a, n, "leafCount")))
+                sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? "%lu track" : "%lu tracks",
+                        (unsigned long)num(xml_attr(a, n, "leafCount")));
             text(xml_attr(a, n, "studio"), studio, sizeof(studio));
             text(xml_attr(a, n, "summary"), summary, sizeof(summary));
             sprintf(more, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s", type, thumb, year, by, count, studio,
@@ -536,6 +547,57 @@ ULONG plex_stream_rate(UBYTE *body, ULONG len)
     ULONG r = 0;
     xml_scan((char *)body, len, rate_el, &r);
     return r;
+}
+
+/* A picture of the server's (thumb: its key for it, an album's cover)
+ * made w x h by the server (its photo transcoder: JPEG, scaled there, so
+ * the Amiga decodes no more than it shows): the request into req, the
+ * file it is kept in (RAM:, by the key and size) into file. TRUE if that
+ * file is there already. */
+BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax)
+{
+    char enc[400], n[96];
+    ULONG hash = 5381;
+    const char *s;
+    BPTR l;
+    for (s = thumb; *s; s++)
+        hash = hash * 33 + (UBYTE)*s;
+    if ((l = Lock((CONST_STRPTR)"RAM:AmigaMCE-art", SHARED_LOCK)))
+        UnLock(l);
+    else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
+        UnLock(l);
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld.jpg", (unsigned long)hash, (long)w, (long)h);
+    (void)fmax;
+    url_encode(thumb, enc, sizeof(enc));
+    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=1&upscale=1&url=", (long)w,
+            (long)h);
+    {
+        char k[520];
+        amce_strlcpy(k, n, sizeof(k));
+        amce_strlcat(k, enc, sizeof(k));
+        plex_request(k, req, rmax);
+    }
+    if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+        UnLock(l);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* A picture the server sent (plex_art) kept in file. */
+BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len)
+{
+    BPTR fh = Open((CONST_STRPTR)file, MODE_NEWFILE);
+    LONG w;
+    if (!fh)
+        return FALSE;
+    w = Write(fh, (APTR)body, len);
+    Close(fh);
+    if (w != (LONG)len) {
+        DeleteFile((CONST_STRPTR)file);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 /* Why a track cannot play (a greyed one). */

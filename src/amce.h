@@ -682,6 +682,8 @@ LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
 const char *plex_why(const struct Item *it);
 ULONG plex_stream_rate(UBYTE *body, ULONG len);
+BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax);
+BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);
 
