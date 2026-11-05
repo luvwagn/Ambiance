@@ -209,10 +209,14 @@ static BOOL has_aside(struct Page *p);
 static WORD aside_x(void);
 static void radio_stop(void);
 
+static void plex_pos_save(const struct Page *p);
+
 static void page_pop(void)
 {
-    if (depth)
+    if (depth) {
         radio_page_gone(&pages[depth - 1]);     /* its request, if out, given up */
+        plex_pos_save(&pages[depth - 1]);       /* a Plex list: where it was left */
+    }
     ov.on = FALSE;
     tb_close(&pv_tb);
     pv_shown = FALSE;
@@ -6141,11 +6145,117 @@ static void np_shortcut(struct Page *p)
     action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAYING);
 }
 
+/* A library's long list (Artists, Albums, Recently added): a Now playing
+ * row first while something plays, as Music's own page has. */
+static BOOL plex_lib_list(const struct Page *p)
+{
+    return p && p->type == PT_LIST && p->plex && p->radio &&
+           !strncmp(p->base, "/library/sections/", 18);
+}
+
+/* Its Now playing row made as playback is now (added, taken out, or its
+ * title changed); the selection stays on the entry it was on. */
+static void plex_shortcut_fix(struct Page *p)
+{
+    struct Item *it;
+    const char *t;
+    BOOL has, playing = mp_loaded();
+    if (!plex_lib_list(p) || !p->list.pool)
+        return;
+    it = p->list.count ? &p->list.items[0] : NULL;
+    has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
+    t = !playing ? "" : mp_is_stream() ? mp_stream_name() : mp_title();
+    if (has && playing && !strcmp(it->path, t))
+        return;                             /* as it is */
+    {
+        LONG row = p->sel - p->top, e = p->sel - (has ? 1 : 0), ns;
+        BOOL added = FALSE;
+        if (has)
+            list_drop_first(&p->list);
+        if (playing && (it = list_add_first(&p->list, "Now playing", t, "", IT_ACTION))) {
+            it->action = ACT_NOWPLAYING;
+            it->mark = MARK_PLAYING;
+            added = TRUE;
+        }
+        ns = e < 0 ? 0 : e + (added ? 1 : 0);   /* the entry it was on, where it is now */
+        if (ns >= p->list.count)
+            ns = p->list.count ? p->list.count - 1 : 0;
+        p->sel = ns;
+        p->top = ns - row;
+        if (p->top < 0)
+            p->top = 0;
+        if (p->top > ns)
+            p->top = ns;
+    }
+}
+
+/* Where each of the last few Plex lists was left (its key, the entry and
+ * its row on screen): opened again, it comes back there. */
+#define PLEX_POS_KEPT 8
+static struct { char key[120]; char label[96]; LONG sel, row; } plex_pos[PLEX_POS_KEPT];
+static int plex_pos_next;
+
+static void plex_pos_save(const struct Page *p)
+{
+    if (p->type != PT_LIST)
+        return;
+    int i, k = -1;
+    if (!p->plex || !p->radio || !p->base[0] || p->base[0] == '#' || p->sel < 0 ||
+        p->sel >= p->list.count)
+        return;
+    for (i = 0; i < PLEX_POS_KEPT; i++)
+        if (!strcmp(plex_pos[i].key, p->base))
+            k = i;
+    if (k < 0) {
+        k = plex_pos_next;
+        plex_pos_next = (plex_pos_next + 1) % PLEX_POS_KEPT;
+    }
+    amce_strlcpy(plex_pos[k].key, p->base, sizeof(plex_pos[k].key));
+    amce_strlcpy(plex_pos[k].label, p->list.items[p->sel].label, sizeof(plex_pos[k].label));
+    plex_pos[k].sel = p->sel;
+    plex_pos[k].row = p->sel - p->top;
+}
+
+static void plex_pos_restore(struct Page *p)
+{
+    int i;
+    LONG s = -1, k;
+    if (p->sel > 0)
+        return;                             /* moved already, while it came */
+    for (i = 0; i < PLEX_POS_KEPT; i++)
+        if (plex_pos[i].key[0] && !strcmp(plex_pos[i].key, p->base))
+            break;
+    if (i == PLEX_POS_KEPT)
+        return;
+    /* by name, from where it was (the list may have changed, or gained a
+     * Now playing row) */
+    for (k = 0; k < 3 && s < 0; k++) {
+        LONG at = plex_pos[i].sel + (k == 0 ? 0 : k == 1 ? 1 : -1);
+        if (at >= 0 && at < p->list.count && !strcmp(p->list.items[at].label, plex_pos[i].label))
+            s = at;
+    }
+    for (k = 0; k < p->list.count && s < 0; k++)
+        if (!strcmp(p->list.items[k].label, plex_pos[i].label))
+            s = k;
+    if (s < 0)
+        return;
+    p->sel = s;
+    p->top = s - plex_pos[i].row;
+    if (p->top < 0)
+        p->top = 0;
+    if (p->top > s)
+        p->top = s;
+}
+
 /* Back on the Mods or Radio page: its Now playing row as playback is now
  * (it may have started, stopped or changed since the page was made). */
 static void np_shortcut_sync(void)
 {
     struct Page *p = cur();
+    if (plex_lib_list(p)) {
+        plex_shortcut_fix(p);
+        return;
+    }
     struct Item *it;
     char want[120], sel[96];
     BOOL has, playing = mp_loaded();
@@ -7415,6 +7525,8 @@ static void radio_done(struct NetJob *j)
         }
         amce_log("plex", m);
         np_mark_lists(FALSE);               /* what plays, marked in the new list too */
+        plex_shortcut_fix(p);               /* a library's list: Now playing first */
+        plex_pos_restore(p);                /* back where it was left */
         if (p == cur() && !pane_pending) {
             msg[0] = 0;
             draw_pane(TRUE);

@@ -109,6 +109,28 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path,
     return add_item(l, label, path, NULL, sortkey, kind);
 }
 
+/* The same, put first (the others one down). */
+struct Item *list_add_first(struct ItemList *l, const char *label, const char *path,
+                            const char *sortkey, UBYTE kind)
+{
+    struct Item t;
+    if (!add_item(l, label, path, NULL, sortkey, kind))
+        return NULL;
+    t = l->items[l->count - 1];
+    memmove(&l->items[1], &l->items[0], (l->count - 1) * sizeof(struct Item));
+    l->items[0] = t;
+    return &l->items[0];
+}
+
+/* The first entry taken out (its strings stay in the pool till it goes). */
+void list_drop_first(struct ItemList *l)
+{
+    if (!l->count)
+        return;
+    memmove(&l->items[0], &l->items[1], (l->count - 1) * sizeof(struct Item));
+    l->count--;
+}
+
 /* An AGS entry: its folder (dir, a string in l's pool shared by every
  * entry of that folder) and its file name; the full path is put together
  * when needed (item_path). A path for each of All Games' 3,000-odd

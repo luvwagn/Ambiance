@@ -317,6 +317,9 @@ BOOL list_init(struct ItemList *l);
 BOOL list_init_puddle(struct ItemList *l, ULONG puddle);   /* small lists: less slack */
 void list_free(struct ItemList *l);
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *sortkey, UBYTE kind);
+struct Item *list_add_first(struct ItemList *l, const char *label, const char *path,
+                            const char *sortkey, UBYTE kind);
+void list_drop_first(struct ItemList *l);
 void list_sort(struct ItemList *l);
 char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
 struct Item *list_append(struct ItemList *l, const struct Item *src);   /* as it is */
