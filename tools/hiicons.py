@@ -51,13 +51,13 @@ def mods(d):
 
 
 def demos(d):
-    cx, cy, ro, ri = 8, 8.6, 7.6, 3.1
-    pts = []
-    for k in range(10):
-        a = -math.pi / 2 + k * math.pi / 5
-        r = ro if k % 2 == 0 else ri
-        pts.append(P(cx + r * math.cos(a), cy + r * math.sin(a)))
-    d.polygon(pts, fill=255)
+    # a wireframe cube, the demo effect of them all
+    f, b = (1.5, 5.5, 10.5, 14.5), (5.5, 1.5, 14.5, 10.5)
+    for x0, y0, x1, y1 in (f, b):
+        d.rectangle([P(x0, y0), P(x1, y1)], outline=255, width=int(1.0 * S))
+    for (ax, ay), (bx, by) in (((f[0], f[1]), (b[0], b[1])), ((f[2], f[1]), (b[2], b[1])),
+                               ((f[0], f[3]), (b[0], b[3])), ((f[2], f[3]), (b[2], b[3]))):
+        line(d, ax, ay, bx, by, 1.0)
 
 
 def videos(d):
@@ -77,11 +77,10 @@ def pictures(d):
 
 
 def music(d):
-    d.ellipse([P(1.6, 10.6), P(6.2, 14.2)], fill=255)
-    d.ellipse([P(8.6, 9.6), P(13.2, 13.2)], fill=255)
-    box(d, 5.0, 2.5, 6.2, 12.5)
-    box(d, 12.0, 1.5, 13.2, 11.5)
-    d.polygon([P(5.0, 2.5), P(13.2, 1.0), P(13.2, 3.4), P(5.0, 4.9)], fill=255)
+    # headphones: the band, and an ear cup each side
+    d.arc([P(1.6, 2.2), P(14.4, 16.0)], 180, 360, fill=255, width=int(1.2 * S))
+    d.rounded_rectangle([P(1.0, 8.6), P(4.8, 15.0)], radius=1.0 * S, fill=255)
+    d.rounded_rectangle([P(11.2, 8.6), P(15.0, 15.0)], radius=1.0 * S, fill=255)
 
 
 def radio(d):
@@ -93,16 +92,10 @@ def radio(d):
 
 
 def settings(d):
-    cx, cy = 8, 8
-    disc(d, cx, cy, 5.5)
-    for k in range(8):
-        a = k * math.pi / 4
-        ca, sa = math.cos(a), math.sin(a)
-        hw, r0, r1 = 1.55, 4.5, 7.4
-        pts = [(cx + r0 * ca - hw * sa, cy + r0 * sa + hw * ca), (cx + r1 * ca - hw * sa, cy + r1 * sa + hw * ca),
-               (cx + r1 * ca + hw * sa, cy + r1 * sa - hw * ca), (cx + r0 * ca + hw * sa, cy + r0 * sa - hw * ca)]
-        d.polygon([P(*q) for q in pts], fill=255)
-    disc(d, cx, cy, 2.4, fill=0)
+    # three mixer sliders, their knobs at different places
+    for y, kx in ((3.5, 4.5), (7.5, 10.5), (11.5, 7.5)):
+        box(d, 0.5, y - 0.5, 15.0, y + 0.5)
+        d.rounded_rectangle([P(kx - 1.1, y - 1.7), P(kx + 1.1, y + 1.7)], radius=0.4 * S, fill=255)
 
 
 def about(d):
