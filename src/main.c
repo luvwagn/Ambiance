@@ -1688,6 +1688,7 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown);
 static BOOL plex_text_kept(struct Page *p);
 static BOOL plex_keeps(struct Page *p, LONG idx);
 static BOOL plex_movable(struct Page *p, LONG idx);
+static BOOL plex_take(struct Page *p);
 static WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
 static void np_soft_redraw(void);
@@ -4126,6 +4127,8 @@ static void draw_pane(BOOL full)
         } else if (p->type != PT_PLAYER) {          /* the player clears its own */
             gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
             gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
+            if (g.pic_w && p->type == PT_LIST && p->plex && has_aside(p) && !plex_keeps(p, p->sel))
+                plex_take(p);   /* back from Now playing: its cover into the pane, now */
             if (g.pic_w && p->type == PT_LIST && has_aside(p) && g.pic_x >= aside_x() &&
                 g.pic_y >= U(42)) {
                 /* a picture in the preview's place: left there, for the
@@ -7303,6 +7306,20 @@ static BOOL plex_movable(struct Page *p, LONG idx)
         return FALSE;
     plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
     return !strcmp(file, pv_onscr.key) && g.pic_w <= aside_width() - U(4) && g.pic_h <= s;
+}
+
+/* The cover on screen moved into the pane (plex_movable), not drawn again:
+ * TRUE if it was. */
+static BOOL plex_take(struct Page *p)
+{
+    struct Item src;
+    char thumb[160], req[400], file[120];
+    WORD s = plex_art_side();
+    if (!plex_movable(p, p->sel) || !plex_pv_src(p, p->sel, &src))
+        return FALSE;
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+    return pic_take(file, aside_x(), g.list_top, aside_width() - U(4), s);
 }
 
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
