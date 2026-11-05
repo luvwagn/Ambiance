@@ -81,14 +81,31 @@ static void fit_menu(struct Gfx *g)
 
 static BOOL laced(const struct Gfx *g);
 
-/* The pixel style's scale (amce.h): RTG a whole factor; the laced screens
- * (640 x 400/512) 1.5x, with their own font (amce-crisp, 18 high: Rubik
- * drawn crisp at 14 px), as the 12 at 1x was small there. Pixelify Sans
- * is only clean at its own size and whole multiples. */
-#define CRISP_SIZE 18
-static UWORD pixel_k(const struct Gfx *g)
+/* The pixel style's scale (amce.h): RTG a whole factor of its lines/256;
+ * the laced screens (640 x 400/512) the size of the font chosen for them
+ * (Settings > Style), whose line height over 12 sets the layout. Pixelify
+ * Sans is only clean at its own size and whole multiples (24: the artwork
+ * doubled too); Galmuri is a pixel font drawn at each of its sizes, so it
+ * is clean at 16 and 21 lines, between them. */
+const struct LacedFont gfx_laced_fonts[LFONT_COUNT] = {
+    { "Pixelify Sans 12", "amce-pixel.font", 12, 1 },
+    { "Pixelify Sans 24", "amce-pixel.font", 24, 2 },
+    { "Galmuri11", "amce-galmuri11.font", 16, 1 },
+    { "Galmuri11 Bold", "amce-galmuri11b.font", 16, 1 },
+    { "Galmuri14", "amce-galmuri14.font", 21, 1 },
+    { "Galmuri14 Bold", "amce-galmuri14b.font", 21, 1 },
+};
+int gfx_laced_font = LFONT_DEFAULT;
+
+static void pixel_scale(struct Gfx *g)
 {
-    return laced(g) ? (CRISP_SIZE << 8) / 12 : (UWORD)g->kint << 8;
+    if (laced(g)) {
+        const struct LacedFont *f = &gfx_laced_fonts[gfx_laced_font];
+        g->kint = f->kint;
+        g->k = (UWORD)(((ULONG)f->ysize << 8) / 12);
+    } else {
+        g->k = (UWORD)g->kint << 8;
+    }
 }
 
 static void open_font(struct Gfx *g)
@@ -104,12 +121,19 @@ static void open_font(struct Gfx *g)
         ta.ta_Flags = FPF_DESIGNED;         /* never a size blown up by diskfont */
         me->pr_WindowPtr = (APTR)-1;
         if (laced(g)) {
-            ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-crisp.font";
-            ta.ta_YSize = CRISP_SIZE;
+            const struct LacedFont *f = &gfx_laced_fonts[gfx_laced_font];
+            char name[64];
+            amce_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
+            amce_strlcat(name, f->file, sizeof(name));
+            ta.ta_Name = (STRPTR)name;
+            ta.ta_YSize = f->ysize;
             if (!(g->font = OpenDiskFont(&ta)) && g->k != 256) {
-                g->k = 256;                 /* an older Fonts drawer: the 12 at 1x */
+                g->k = 256;                 /* not in the Fonts drawer: the 12 at 1x */
+                g->kint = 1;
                 layout_metrics(g);
             }
+            if (g->font)
+                amce_log("laced font", f->name);
         }
         if (!g->font) {
             ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
@@ -157,6 +181,11 @@ static const struct {
 static BOOL laced(const struct Gfx *g)
 {
     return g->mode >= 0 && g->mode < SM_COUNT && laced_kind(g->mode);
+}
+
+BOOL gfx_laced(int sm)
+{
+    return sm >= 0 && sm < SM_COUNT && laced_kind(sm);
 }
 
 const char *gfx_mode_key(int sm) { return modes[sm].key; }
@@ -282,7 +311,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         if (g->kint > 3)
             g->kint = 3;
     }
-    g->k = pixel_k(g);
+    pixel_scale(g);
     if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->depth >= 8 &&
         (g->sm = sm_load(g->h))) {
         g->style = STYLE_SMOOTH;
@@ -643,7 +672,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
         CloseFont(g->font);
         g->font = NULL;
     }
-    g->k = pixel_k(g);
+    pixel_scale(g);
     g->style = STYLE_PIXEL;
     if (style == STYLE_SMOOTH && modes[g->mode].kind == K_RTG && g->depth >= 8) {
         if ((g->sm = sm_load(g->h))) {

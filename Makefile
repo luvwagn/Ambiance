@@ -4,7 +4,7 @@
 #   make            build AmigaMCE, the LHA archive and the ADF (holding the LHA)
 #   make test       run the AGS parser tests under vamos
 #   make art        regenerate src/art.c (logo, icons, palette)
-#   make fonts      regenerate the amce-pixel bitmap fonts (12, 24, 36)
+#   make fonts      regenerate the bitmap fonts (amce-pixel 12/24/36, Galmuri)
 #   make smooth     regenerate the smooth-style artwork for RTG screens
 #   make icons      regenerate the Workbench .info icons
 #   make preview    render true-aspect PNG previews of the Home Screen
@@ -40,14 +40,18 @@ DISK       = amigamce-$(FULL_VERSION).adf
 DISK_TITLE = AmigaMCE
 
 FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
-             assets/Fonts/amce-crisp.font assets/Fonts/amce-crisp/18 \
              assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36
+# The laced screens' Galmuri fonts (tools/mkbdf.py): name and line height
+GALMURI    = amce-galmuri11:16 amce-galmuri11b:16 amce-galmuri14:21 amce-galmuri14b:21
+FONT_FILES += $(foreach f,$(GALMURI),assets/Fonts/$(word 1,$(subst :, ,$(f))).font \
+              assets/Fonts/$(subst :,/,$(f)))
 # Smooth style, one file per RTG screen height (tools/mksmooth.py)
 SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/768 assets/Fonts/amce-smooth/logo1 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
-LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt CREDITS.txt
+LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
+             assets/fonts-src/OFL-Galmuri.txt CREDITS.txt
 
 .PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
 
@@ -135,8 +139,11 @@ fonts:
 	@mkdir -p build/fontgen
 	$(PYTHON) tools/extract.py assets/fonts-src/PixelifySans-Regular.ttf build/fontgen/glyphs.json
 	$(PYTHON) tools/amigafont.py build/fontgen/glyphs.json build/fontgen
-	$(PYTHON) tools/mkcrisp.py assets/fonts-src/Rubik-VF.ttf build/fontgen/FONTS 14 450
 	cp -R build/fontgen/FONTS/. assets/Fonts/
+	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri11-latin1.bdf assets/Fonts amce-galmuri11
+	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri11-Bold-latin1.bdf assets/Fonts amce-galmuri11b
+	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri14-latin1.bdf assets/Fonts amce-galmuri14
+	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri14-latin1.bdf assets/Fonts amce-galmuri14b --bold
 
 smooth:
 	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768
@@ -157,14 +164,15 @@ preview: src/art.c $(FONT_FILES)
 lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES)
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
-	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-crisp $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Licences
+	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Licences
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
 	@cp assets/Fonts/amce-pixel.font $(LHA_DIR)/Fonts/
 	@cp assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36 \
 		$(LHA_DIR)/Fonts/amce-pixel/
-	@cp assets/Fonts/amce-crisp.font $(LHA_DIR)/Fonts/
-	@cp assets/Fonts/amce-crisp/18 $(LHA_DIR)/Fonts/amce-crisp/
+	@for f in $(GALMURI); do n=$${f%%:*}; mkdir -p $(LHA_DIR)/Fonts/$$n; \
+		cp assets/Fonts/$$n.font $(LHA_DIR)/Fonts/; \
+		cp assets/Fonts/$$n/$${f##*:} $(LHA_DIR)/Fonts/$$n/; done
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \

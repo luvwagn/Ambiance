@@ -10,6 +10,12 @@ The amce-pixel bitmap fonts are derived from Pixelify Sans,
 Licence 1.1 (see OFL-PixelifySans.txt). The derived fonts are released
 under the same licence.
 
+The amce-galmuri bitmap fonts (for laced screens) are converted from
+Galmuri11, Galmuri11 Bold and Galmuri14, (c) 2019-2025 Lee Minseo,
+licensed under the SIL Open Font Licence 1.1 (see OFL-Galmuri.txt).
+amce-galmuri14b is Galmuri14 thickened by a pixel. The converted fonts
+are released under the same licence.
+
 The AmigaMCE logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).

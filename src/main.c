@@ -116,7 +116,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1403,6 +1403,7 @@ static void save_screen_mode(void)
 
 #define DEBUG_VAR "AmigaMCE/Debug"
 #define STYLE_VAR "AmigaMCE/Style"
+#define LFONT_VAR "AmigaMCE/LacedFont"
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
 #define HTTPS_VAR "AmigaMCE/RadioHTTPS"
@@ -1432,9 +1433,14 @@ static BOOL note_style(void)
 
 static void load_style(void)
 {
-    char buf[16];
+    char buf[32];
+    int i;
     if (GetVar((CONST_STRPTR)STYLE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         ui_style = amce_stricmp(buf, "smooth") == 0 ? STYLE_SMOOTH : STYLE_PIXEL;
+    if (GetVar((CONST_STRPTR)LFONT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        for (i = 0; i < LFONT_COUNT; i++)
+            if (!amce_stricmp(buf, gfx_laced_fonts[i].name))
+                gfx_laced_font = i;
 }
 
 static void load_jump(void)
@@ -1495,9 +1501,11 @@ static void build_settings(struct Page *p)
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     struct Item *it;
     action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
-    /* Style: greyed out, showing Pixel, where this screen can only be pixel
-     * (native modes, 8-bit RTG) */
-    if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
+    /* Style: the font on a laced screen; greyed out, showing Pixel, where
+     * this screen can only be pixel (other native modes, 8-bit RTG) */
+    if (gfx_laced(g.mode)) {
+        action_item(p, "Style", gfx_laced_fonts[gfx_laced_font].name, ACT_STYLES, MARK_ARROW);
+    } else if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
         action_item(p, "Style", ui_style == STYLE_SMOOTH ? "Smooth" : "Pixel", ACT_STYLES,
                     MARK_ARROW);
     } else if ((it = action_item(p, "Style", "Pixel", ACT_STYLES, MARK_ARROW))) {
@@ -1518,10 +1526,20 @@ static void build_settings(struct Page *p)
 
 #define SETTINGS_STYLE_ROW 1    /* "Style" in build_settings */
 
-/* Settings > Style: radio buttons, like Screen mode. */
+/* Settings > Style: radio buttons, like Screen mode. On a laced screen,
+ * the fonts it can use. */
 static void build_styles(struct Page *p)
 {
-    BOOL can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
+    BOOL can_smooth;
+    int i;
+    if (gfx_laced(g.mode)) {
+        for (i = 0; i < LFONT_COUNT; i++)
+            action_item(p, gfx_laced_fonts[i].name, "", ACT_LFONT0 + i,
+                        i == gfx_laced_font ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        p->sel = gfx_laced_font;
+        return;
+    }
+    can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
     action_item(p, "Pixel", "", ACT_STYLE_PIXEL,
                 ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
     action_item(p, "Smooth", can_smooth ? "" : "RTG only", ACT_STYLE_SMOOTH,
@@ -5703,6 +5721,33 @@ static void toggle_debug(void)
     draw_status();
 }
 
+/* The same screen, its look made again (no mode switch), and back
+ * where we were: Settings > Style, on the new choice. */
+static void restyle(void)
+{
+    struct Page *p;
+    int i;
+    pages_clear();
+    pv_flush();
+    spin_free();
+    ov_bm_free();
+    BOOL restyled = gfx_restyle(&g, ui_style);
+    for (i = 0; i < nmenu; i++)
+        if (menu[i] == MOD_SETTINGS)
+            menu_sel = i;
+    build_root(MOD_SETTINGS);
+    if (cur())
+        cur()->sel = SETTINGS_STYLE_ROW;
+    if ((p = page_push(PT_LIST, "Style")))
+        build_styles(p);
+    focus = FOCUS_CONTENT;
+    msg[0] = 0;
+    draw_all();
+    note_style();
+    if (!restyled)
+        set_msg("The smooth style's files could not be loaded");
+}
+
 /* Settings > Style. Remembered either way; the screen is reopened only
  * when the look changes (smooth needs an RTG screen). */
 static void apply_style(int st)
@@ -5734,27 +5779,17 @@ static void apply_style(int st)
             set_msg("Smooth: on RTG screens only");
         return;
     }
-    /* the same screen, its look made again (no mode switch) */
-    pages_clear();
-    pv_flush();
-    spin_free();
-    ov_bm_free();
-    BOOL restyled = gfx_restyle(&g, ui_style);
-    /* back where we were: Settings > Style, on the new choice */
-    for (i = 0; i < nmenu; i++)
-        if (menu[i] == MOD_SETTINGS)
-            menu_sel = i;
-    build_root(MOD_SETTINGS);
-    if (cur())
-        cur()->sel = SETTINGS_STYLE_ROW;
-    if ((p = page_push(PT_LIST, "Style")))
-        build_styles(p);
-    focus = FOCUS_CONTENT;
-    msg[0] = 0;
-    draw_all();
-    note_style();
-    if (!restyled)
-        set_msg("The smooth style's files could not be loaded");
+    restyle();
+}
+
+/* Settings > Style on a laced screen: its font, and the layout with it. */
+static void apply_laced_font(int i)
+{
+    if (i == gfx_laced_font)
+        return;
+    gfx_laced_font = i;
+    save_setting(LFONT_VAR, gfx_laced_fonts[i].name);
+    restyle();
 }
 
 /* ------------------------------------------------------------ radio
@@ -5978,6 +6013,8 @@ static void act_action(struct Item *it)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
         apply_style(STYLE_SMOOTH);
+    else if (it->action >= ACT_LFONT0 && it->action <= ACT_LFONT_END)
+        apply_laced_font(it->action - ACT_LFONT0);
     else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
         apply_screen_mode(it->action - ACT_MODE0);
 }

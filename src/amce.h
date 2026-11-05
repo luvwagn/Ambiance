@@ -56,6 +56,19 @@ enum {
  *                 pre-rendered for that size (Fonts/amce-smooth/<lines>),
  *                 on 15/16/24/32-bit screens only. */
 enum { STYLE_PIXEL, STYLE_SMOOTH };
+
+/* The fonts the laced native screens (640 x 400/512) can use, Settings >
+ * Style there (gfx.c). */
+struct LacedFont {
+    const char *name;   /* as Settings shows it, and as it is saved */
+    const char *file;   /* in PROGDIR:Fonts */
+    UBYTE ysize;        /* its line height: the layout is ysize/12 */
+    UBYTE kint;         /* the artwork enlarged this many times */
+};
+#define LFONT_COUNT   6
+#define LFONT_DEFAULT 2 /* Galmuri11 */
+extern const struct LacedFont gfx_laced_fonts[LFONT_COUNT];
+extern int gfx_laced_font;          /* set before gfx_open / gfx_restyle */
 #define RTG_LINES 384           /* keep in step with tools/mksmooth.py */
 
 /* Text faces (gfx_text, gfx_textlen). Pixel style has one font for all. */
@@ -124,6 +137,7 @@ BOOL  gfx_mode_tall(int sm);                             /* 640x200/256: tall pi
 UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel found */
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm, int style);
+BOOL gfx_laced(int smode);
 BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_close(struct Gfx *g);

@@ -50,7 +50,7 @@ inline OS call when a multiply helper call ends up between them (see
 | `make test`    | AGS and Pictures folder reader tests, run under vamos      |
 | `make preview` | True-aspect PNG previews of the Home Screen in `build/`   |
 | `make art`     | Regenerates `src/art.c` (logo, menu icons, palette)       |
-| `make fonts`   | Regenerates the `amce-pixel` bitmap fonts from Pixelify Sans |
+| `make fonts`   | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri's BDFs |
 | `make icons`   | Regenerates the Workbench icons in `docs/`                |
 
 The version comes from `git describe --tags`; tag `vX.Y.Z` to release.
@@ -71,7 +71,7 @@ Aminet.
 
 ## Credits
 
-AmigaMCE © 2026 Brian King. Fonts: Pixelify Sans and Rubik, both under the
+AmigaMCE © 2026 Brian King. Fonts: Pixelify Sans, Galmuri and Rubik, all under the
 SIL Open Font Licence 1.1 (see `assets/fonts-src/`). Amiga is a trademark of
 Amiga Corporation.
 

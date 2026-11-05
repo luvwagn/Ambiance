@@ -44,9 +44,15 @@ Features in this release
   or 1024x768 RTG (when the card has them; 8-bit when it can, for speed:
   drawing and scrolling move a quarter of the bytes of 32-bit), or
   Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
-- Smooth-scrolling, flicker-free text pages (fact sheets, Credits,
-  System information) with a scroll bar when the text is longer than the page.
+- Flicker-free text pages (fact sheets, Credits, System information)
+  with a scroll bar when the text is longer than the page. They glide on
+  RTG screens; on native screens, and for short text, they move straight
+  to the next line.
 - Hires screens (laced or not) use a dense layout: more of each list fits.
+- Laced screens (640x400/512): Settings > Style chooses their font, and
+  the layout grows with it: Pixelify Sans 12 or 24 (24 doubles the
+  artwork too), Galmuri11 (the default), Galmuri11 Bold, Galmuri14 or
+  Galmuri14 Bold. Galmuri is a pixel font drawn at each size.
 - Big RTG screens scale the whole layout up. Settings > Style chooses
   the look there: Pixel (the pixel artwork, 2x on 1024x768) or Smooth
   (anti-aliased text, icons and logo at exactly the screen's size:
@@ -140,8 +146,9 @@ Settings > Debug shows the system CPU load and AmigaMCE's memory use in
 the header, and writes a timing log to AmigaMCE.log next to the program
 (or RAM:AmigaMCE.log if that drawer is read-only).
 
-The screen mode is saved as ENVARC:AmigaMCE/ScreenMode and the style
-as ENVARC:AmigaMCE/Style. Keep the Fonts drawer complete: Fonts/amce-smooth
+The screen mode is saved as ENVARC:AmigaMCE/ScreenMode, the style
+as ENVARC:AmigaMCE/Style and the laced screens' font as
+ENVARC:AmigaMCE/LacedFont. Keep the Fonts drawer complete: Fonts/amce-smooth
 holds the smooth style for each RTG screen height. If a mode does
 not suit your display, delete ENVARC:AmigaMCE/ScreenMode to go back
 to Automatic.
@@ -150,6 +157,7 @@ Credits and licences
 --------------------
 AmigaMCE (c) 2026 Brian King.
 Pixelify Sans (c) The Pixelify Sans Project Authors, SIL Open Font
+Licence 1.1. Galmuri (c) 2019-2025 Lee Minseo, SIL Open Font
 Licence 1.1. Rubik (c) The Rubik Project Authors, SIL Open Font
 Licence 1.1. Full texts are in the Licences drawer.
 Amiga is a trademark of Amiga Corporation. Other trademarks belong to
