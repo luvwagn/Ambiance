@@ -75,7 +75,7 @@ static struct {
     UBYTE *hdr, *pat;
     BYTE *smp, *silence;
     ULONG smp_size;
-    char path[256];
+    char path[1024];
     char rname[96], rtag[24];       /* a station's name and format ("128k") */
     UWORD rcpu;
     BOOL rtrack;                    /* not a station: a track (a Plex server's), with an end */

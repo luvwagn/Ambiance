@@ -119,7 +119,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1529,6 +1529,8 @@ static void build_settings(struct Page *p)
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    action_item(p, "Plex: convert music to 22 kHz", "", ACT_PLEXCONV,
+                plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, "Double buffering", "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
@@ -1639,6 +1641,7 @@ static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
 static void build_radio_root(struct Page *p);
 static void build_music_root(struct Page *p);
+static char plex_now[300];      /* the Plex track playing: its file's key (lists mark it so) */
 
 static void build_root_pages(int mod)
 {
@@ -4710,10 +4713,11 @@ static void np_mark_lists(BOOL redraw)
                 it->mark = now[0] && mp_is_stream() && !strcmp(url, now) ? MARK_PLAYING
                                                                          : MARK_NONE;
             } else if (it->kind == IT_PLEXTRACK) {
-                char url[256];
-                plex_track_url(it, url, sizeof(url));
-                it->mark = now[0] && mp_is_track() && !strcmp(url, now) ? MARK_PLAYING
-                                                                        : MARK_NONE;
+                /* by its file's key: a conversion's URL differs each time */
+                char key[300];
+                radio_field(it, 0, key, sizeof(key));
+                it->mark = now[0] && mp_is_track() && !strcmp(key, plex_now) ? MARK_PLAYING
+                                                                             : MARK_NONE;
             }
         }
     }
@@ -4740,7 +4744,7 @@ static BOOL np_start(LONG idx)
             return FALSE;
         }
     } else if (it->kind == IT_PLEXTRACK) {
-        char url[256], by[200], album[100], ms[16];
+        char url[1024], by[200], album[100], ms[16];
         BOOL ok_track;
         if (it->flags & ITEM_DISABLED) {
             busy_end(TRUE);
@@ -4748,7 +4752,8 @@ static BOOL np_start(LONG idx)
             set_msg(plex_why(it));
             return FALSE;
         }
-        plex_track_url(it, url, sizeof(url));
+        plex_track_url(it, caps.cpu, url, sizeof(url));
+        radio_field(it, 0, plex_now, sizeof(plex_now));
         radio_field(it, 2, ms, sizeof(ms));
         radio_field(it, 3, by, sizeof(by));
         radio_field(it, 4, album, sizeof(album));
@@ -6153,6 +6158,23 @@ static void toggle_jump(void)
     }
 }
 
+/* Settings > Plex: convert music to 22 kHz: every track the server's
+ * conversion (half the decoding of a 44.1 kHz file), or MP3s as stored
+ * (other formats are converted either way). The next track it applies to. */
+static void toggle_plex_convert(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    plex_set_convert(!plex.convert);
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel;
+        draw_list_rows(p);
+    }
+}
+
 static void toggle_https(void)
 {
     struct Page *p = cur();
@@ -6547,9 +6569,11 @@ static void plex_help(void)
     if (!p)
         return;
     text_para(p, "AmigaMCE plays music from a Plex Media Server on your network: its "
-                 "music libraries, by artist and album, their MP3 tracks played on the "
-                 "Amiga's own sound (mpega.library). Other formats are listed greyed out: "
-                 "Plex would have to convert them, which comes later.");
+                 "music libraries, by artist and album, played on the Amiga's own sound "
+                 "(mpega.library). The server converts each track to an MP3 of 22 kHz "
+                 "(mono for a 68030, stereo for a 68040/060), half the decoding of a CD's "
+                 "44.1 kHz; Settings > Plex: convert music to 22 kHz off plays MP3 files as "
+                 "they are stored (other formats are converted either way).");
     text_line(p, "");
     text_para(p, "Finding a server: Music > Find a Plex server asks the network (Plex's GDM); "
                  "choose one and it is kept. Or set its address from the Shell: "
@@ -6641,6 +6665,8 @@ static void act_action(struct Item *it)
         toggle_dbuf();
     else if (it->action == ACT_HTTPS)
         toggle_https();
+    else if (it->action == ACT_PLEXCONV)
+        toggle_plex_convert();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)

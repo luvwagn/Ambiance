@@ -661,12 +661,15 @@ struct PlexConf {
     char host[64];              /* "" none chosen */
     UWORD port;
     char name[64], token[64], cid[40];
+    BOOL convert;               /* every track converted to 22 kHz by the server */
 };
 extern struct PlexConf plex;
 void plex_load(void);
 void plex_set_server(const char *host, UWORD port, const char *name);
 void plex_request(const char *key, char *out, LONG max);
-void plex_track_url(const struct Item *it, char *out, LONG max);
+void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max);
+BOOL plex_converts(const struct Item *it);
+void plex_set_convert(BOOL on);
 void plex_section_menu(const char *sec, struct ItemList *l);
 LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);

@@ -107,7 +107,7 @@ typedef char access_size_check[sizeof(MPEGA_ACCESS) == 16 ? 1 : -1];
 /* ---------------------------------------------------------- the state */
 static struct {
     /* set before the process starts, then its */
-    char url[256];
+    char url[1024];                 /* a Plex conversion's is long */
     struct Process *proc;
     volatile BOOL quit;
     volatile BYTE sig;              /* the process's: Paula wants a half */
@@ -439,7 +439,7 @@ static LONG num(const char *s)
 /* Connected to the stream (redirects and playlists followed). */
 static BOOL open_stream(void)
 {
-    char url[256], host[96], path[256], req[600], hdr[2048], v[160];
+    char url[1024], host[96], path[1024], req[1400], hdr[2048], v[160];
     UWORD port;
     int hop;
     amce_strlcpy(url, st.url, sizeof(url));
@@ -474,7 +474,8 @@ static BOOL open_stream(void)
             }
         }
         if (!(status = read_headers(hdr, sizeof(hdr)))) {
-            fail(st.err[0] ? st.err : "The station sent no answer we understand");
+            fail(st.err[0] ? st.err : st.finite ? "The server sent no answer we understand"
+                                    : "The station sent no answer we understand");
             return FALSE;
         }
         if (status >= 300 && status < 400 && header(hdr, "Location", v, sizeof(v))) {
@@ -484,7 +485,7 @@ static BOOL open_stream(void)
             continue;
         }
         if (status != 200) {
-            sprintf(v, "The station answered %ld", (long)status);
+            sprintf(v, "%s answered %ld", st.finite ? "The server" : "The station", (long)status);
             fail(v);
             return FALSE;
         }
@@ -523,7 +524,7 @@ static BOOL open_stream(void)
                 continue;
             }
             if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet")) {
-                sprintf(req, "The station sends %s, not MP3", v);
+                sprintf(req, "%s sends %s, not MP3", st.finite ? "The server" : "The station", v);
                 fail(req);
                 return FALSE;
             }

@@ -17,7 +17,17 @@
  * list (path: the server's key for it, "@<n>" a music library's own menu,
  * "#gdm" the servers found), IT_PLEXTRACK rows are tracks, IT_PLEXSRV rows
  * servers found. A track's path: its file's key, then, after tabs, its
- * codec, length in ms, artist, album (radio_field picks one out).
+ * codec, length in ms, artist, album and its own key (radio_field picks
+ * one out).
+ *
+ * A track plays as stored (an MP3 file) or converted by the server
+ * (Plex's universal transcoder, progressive MP3 over plain HTTP): all of
+ * them when Settings > Plex: convert music is on (the default), the ones
+ * not MP3 always. Converted to 22050 Hz at most, so the Amiga decodes half
+ * the samples of a 44.1 kHz file: mono at 64 kbit/s for a 68030 or less
+ * (it decodes mono anyway), stereo at 96 kbit/s for a 68040/060. Plex
+ * picks a profile by the client's platform and device: without them it
+ * answers 400.
  */
 #include "amce.h"
 #include "plexxml.h"
@@ -33,9 +43,11 @@
 #define NAME_VAR   "AmigaMCE/PlexName"
 #define TOKEN_VAR  "AmigaMCE/PlexToken"
 #define CID_VAR    "AmigaMCE/PlexClient"
+#define CONV_VAR   "AmigaMCE/PlexConvert"
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
+static ULONG sessions;          /* conversions asked for: each its own session */
 
 static void get_var(const char *name, char *out, LONG max)
 {
@@ -89,6 +101,8 @@ void plex_load(void)
     get_var(NAME_VAR, plex.name, sizeof(plex.name));
     get_var(TOKEN_VAR, plex.token, sizeof(plex.token));
     get_var(CID_VAR, plex.cid, sizeof(plex.cid));
+    get_var(CONV_VAR, v, sizeof(v));
+    plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
     if (!plex.cid[0]) {
         /* who this AmigaMCE is, to the server: made up once, then kept */
         ULONG a = time_ms() ^ (ULONG)FindTask(NULL), b = (ULONG)AvailMem(MEMF_ANY) * 2654435761UL;
@@ -125,15 +139,65 @@ void plex_request(const char *key, char *out, LONG max)
     amce_strlcat(out, n, max);
 }
 
-/* A track's file as a URL to play (out max bytes). */
-void plex_track_url(const struct Item *it, char *out, LONG max)
+void plex_set_convert(BOOL on)
 {
-    char key[300], port[12];
-    radio_field(it, 0, key, sizeof(key));
+    plex.convert = on;
+    set_var(CONV_VAR, on ? "on" : "off");
+}
+
+/* A track is played converted by the server (see the top). */
+BOOL plex_converts(const struct Item *it)
+{
+    char codec[16], key[160];
+    radio_field(it, 1, codec, sizeof(codec));
+    radio_field(it, 5, key, sizeof(key));
+    return key[0] && (plex.convert || amce_stricmp(codec, "mp3"));
+}
+
+/* A track as a URL to play (out max bytes): its file, or the server's
+ * conversion of it (cpu: 20, 30, 40, 60, which it is made for). */
+void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
+{
+    char key[300], port[12], enc[400], n[160];
+    BOOL mono = cpu < 40;
     sprintf(port, ":%lu", (unsigned long)plex.port);
     amce_strlcpy(out, "http://", max);
     amce_strlcat(out, plex.host, max);
     amce_strlcat(out, port, max);
+    if (plex_converts(it)) {
+        radio_field(it, 5, key, sizeof(key));
+        url_encode(key, enc, sizeof(enc));
+        amce_strlcat(out, "/music/:/transcode/universal/start.mp3?path=", max);
+        amce_strlcat(out, enc, max);
+        sprintf(n, "&mediaIndex=0&partIndex=0&protocol=http&directPlay=0&directStream=0"
+                   "&hasMDE=1&download=0&musicBitrate=%ld", (long)(mono ? 64 : 96));
+        amce_strlcat(out, n, max);
+        sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
+        amce_strlcat(out, n, max);
+        amce_strlcat(out, "&X-Plex-Session-Identifier=", max);
+        amce_strlcat(out, n + 9, max);
+        amce_strlcat(out, "&X-Plex-Client-Identifier=", max);
+        amce_strlcat(out, plex.cid, max);
+        amce_strlcat(out, "&X-Plex-Product=AmigaMCE&X-Plex-Version=" AMCE_VERSION
+                          "&X-Plex-Platform=Generic&X-Plex-Platform-Version=3"
+                          "&X-Plex-Device=Amiga&X-Plex-Model=Amiga"
+                          "&X-Plex-Client-Profile-Extra="
+                          "add-transcode-target(type%3DmusicProfile%26context%3Dstreaming"
+                          "%26protocol%3Dhttp%26container%3Dmp3%26audioCodec%3Dmp3)"
+                          "%2Badd-limitation(scope%3DaudioCodec%26scopeName%3Dmp3"
+                          "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D22050)",
+                    max);
+        if (mono)
+            amce_strlcat(out, "%2Badd-limitation(scope%3DaudioCodec%26scopeName%3Dmp3"
+                              "%26type%3DupperBound%26name%3Daudio.channels%26value%3D1)",
+                         max);
+        if (plex.token[0]) {
+            amce_strlcat(out, "&X-Plex-Token=", max);
+            amce_strlcat(out, plex.token, max);
+        }
+        return;
+    }
+    radio_field(it, 0, key, sizeof(key));
     amce_strlcat(out, key, max);
     if (plex.token[0]) {
         amce_strlcat(out, strchr(key, '?') ? "&" : "?", max);
@@ -194,14 +258,14 @@ struct fill {
     /* a track, while its Media and Part come */
     BOOL track;
     int track_depth;
-    char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300];
+    char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
     ULONG t_ms;
     BOOL full;
 };
 
 static void flush_track(struct fill *x)
 {
-    char path[700], tag[24];
+    char path[900], tag[24];
     struct Item *it;
     if (!x->track)
         return;
@@ -210,16 +274,16 @@ static void flush_track(struct fill *x)
         x->skipped++;
         return;
     }
-    sprintf(path, "%s\t%s\t%lu\t%s\t%s", x->t_part, x->t_codec, (unsigned long)x->t_ms, x->t_by,
-            x->t_album);
+    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s", x->t_part, x->t_codec, (unsigned long)x->t_ms,
+            x->t_by, x->t_album, x->t_key);
     dur_text(x->t_ms, tag);
     if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
                         IT_PLEXTRACK))) {
         x->full = TRUE;
         return;
     }
-    if (amce_stricmp(x->t_codec, "mp3"))
-        it->flags |= ITEM_DISABLED;         /* not MP3: not playable yet (see plex_why) */
+    if (amce_stricmp(x->t_codec, "mp3") && !x->t_key[0])
+        it->flags |= ITEM_DISABLED;         /* not MP3, and no key to convert it by */
     x->added++;
 }
 
@@ -258,6 +322,8 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             text(xml_attr(a, n, "grandparentTitle"), x->t_by, sizeof(x->t_by));
         text(xml_attr(a, n, "parentTitle"), x->t_album, sizeof(x->t_album));
         x->t_codec[0] = x->t_part[0] = 0;
+        amce_strlcpy(x->t_key, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "",
+                     sizeof(x->t_key));
         x->t_ms = num(xml_attr(a, n, "duration"));
         return 1;
     }
@@ -374,7 +440,7 @@ const char *plex_why(const struct Item *it)
     static char m[80];
     char codec[16];
     radio_field(it, 1, codec, sizeof(codec));
-    sprintf(m, "%s: only MP3 plays for now (Plex would have to convert it)",
+    sprintf(m, "%s: not MP3, and the server gave no way to convert it",
             codec[0] ? codec : "That format");
     return m;
 }

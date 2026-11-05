@@ -31,8 +31,10 @@ copy the drawer onto an AGS installation and double-click it.
 - Music: a Plex Media Server's music (`src/plex.c`; its XML read by
   `src/plexxml.c`, which the host tests build), asked over plain HTTP by
   the network process, servers found by GDM (UDP to 239.0.0.250:32414);
-  MP3 tracks played by the radio's player with an end (`src/stream.c`,
-  their ID3v2 tag read past). The token from ENVARC:AmigaMCE/PlexToken.
+  tracks played by the radio's player with an end (`src/stream.c`, an
+  ID3v2 tag read past): converted by Plex's universal transcoder to a
+  progressive 22 kHz MP3 (it needs the client's platform and device, or
+  answers 400), or MP3 files as stored. The token from ENVARC:AmigaMCE/PlexToken.
 - Keyboard, mouse and joystick/CD32 pad.
 
 Videos is on the menu but not yet implemented.
