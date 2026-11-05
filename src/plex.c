@@ -27,9 +27,7 @@
  * the samples of a 44.1 kHz file: mono at 64 kbit/s for a 68030 or less
  * (it decodes mono anyway), stereo at 96 kbit/s for a 68040/060. Plex
  * picks a profile by the client's platform and device: without them it
- * answers 400. The limits are on the music codec (scope musicCodec, as in
- * Plex's own profiles' MusicCodec): on audioCodec they were let pass, and
- * a 44.1 kHz stereo MP3 came back.
+ * answers 400.
  */
 #include "amce.h"
 #include "plexxml.h"
@@ -186,11 +184,11 @@ void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
                           "&X-Plex-Client-Profile-Extra="
                           "add-transcode-target(type%3DmusicProfile%26context%3Dstreaming"
                           "%26protocol%3Dhttp%26container%3Dmp3%26audioCodec%3Dmp3)"
-                          "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3D*"
+                          "%2Badd-limitation(scope%3DaudioCodec%26scopeName%3Dmp3"
                           "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D22050)",
                     max);
         if (mono)
-            amce_strlcat(out, "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3D*"
+            amce_strlcat(out, "%2Badd-limitation(scope%3DaudioCodec%26scopeName%3Dmp3"
                               "%26type%3DupperBound%26name%3Daudio.channels%26value%3D1)",
                          max);
         if (plex.token[0]) {
