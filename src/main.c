@@ -4682,9 +4682,9 @@ static void np_draw_station(void)
                 TS_BOLD);
         amce_strlcpy(info, mp_track_by(), sizeof(info));
         if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-            sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+            /* the album is named already: only where in it */
+            sprintf(part, "   Track %ld of %ld", (long)np.idx + 1, (long)np.list.count);
             amce_strlcat(info, part, sizeof(info));
-            amce_strlcat(info, np.folder, sizeof(info));
         }
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
