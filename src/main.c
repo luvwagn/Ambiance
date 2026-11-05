@@ -190,6 +190,8 @@ static void page_picture(struct Page *p, WORD w, WORD h)
 
 static void radio_page_gone(struct Page *p);
 static void style_preview_free(void);
+static BOOL has_aside(struct Page *p);
+static WORD aside_x(void);
 static void radio_stop(void);
 
 static void page_pop(void)
@@ -213,7 +215,11 @@ static void page_pop(void)
                     p->pic_y + p->pic_h - 1);   /*   left, it would show in the next page's */
         p->pic_y = -1;
     }
-    gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
+    /* the preview's picture stays for the page under, which may show it
+     * again (its folder's); draw_pane or the preview clears it if not */
+    if (!(depth >= 2 && g.pic_w && !pages[depth - 1].pic_bm && has_aside(&pages[depth - 2]) &&
+          g.pic_x >= aside_x()))
+        gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
     tb_close(&pages[depth - 1].tb);
     if (pages[depth - 1].pic_bm) {
         WaitBlit();
@@ -3005,6 +3011,51 @@ static void pv_draw_text(struct Page *p)
     }
 }
 
+/* What the picture place shows now: the file (a folder's: its first
+ * picture) and the place, so an entry that shows the same picture in the
+ * same place (a folder, then its first picture inside it; and back) keeps
+ * it on screen: not cleared, read or drawn again. */
+static struct { char key[300]; WORD x, y, w, h; } pv_onscr;
+
+/* The picture file a preview of path (shot: SHOT_*) shows, into key ("":
+ * not known yet, a folder not scanned). */
+static void pv_shot_key(UBYTE shot, const char *path, char *key)
+{
+    int i;
+    key[0] = 0;
+    if (shot == SHOT_FILE) {
+        amce_strlcpy(key, path, 300);
+    } else if (shot == SHOT_AGS) {
+        key[0] = 1;                         /* an entry's screenshot: never a file's key */
+        amce_strlcpy(key + 1, path, 299);
+    } else if (shot == SHOT_FOLDER) {
+        for (i = 0; i < PV_SLOTS; i++) {
+            struct LJob *j = pv_slot[i];
+            if (j && j->done && j->first[0] && !strcmp(j->path, path) &&
+                (j->type == LJ_PICFOLDER || (j->type == LJ_SHOT && j->mode == SHOT_FOLDER))) {
+                amce_strlcpy(key, j->first, 300);
+                return;
+            }
+        }
+    }
+}
+
+/* Entry idx of p would show the picture on screen now, where it is. */
+static BOOL pv_keeps(struct Page *p, LONG idx)
+{
+    char path[300], key[300];
+    UBYTE shot;
+    WORD max_y = g.footer_y - 2;
+    if (!g.pic_w || !pv_onscr.key[0] || !has_aside(p) || !pv_pictures() ||
+        !pv_kind(p, idx, path, sizeof(path), &shot) || !shot)
+        return FALSE;
+    pv_shot_key(shot, path, key);
+    return key[0] && !strcmp(key, pv_onscr.key) && pv_onscr.x == aside_x() &&
+           pv_onscr.y == g.list_top && pv_onscr.w == aside_width() - U(4) &&
+           pv_onscr.h == (max_y - g.list_top) / 2 && g.pic_x >= aside_x() &&
+           g.pic_y >= g.list_top && g.pic_y + g.pic_h <= g.list_top + pv_onscr.h;
+}
+
 /* The picture in its place, the rest of the place cleared. */
 static void pv_draw_picture(void)
 {
@@ -3035,6 +3086,17 @@ static void pv_draw_picture(void)
         amce_log("preview", m);
     } else if (j && j->obj) {
         ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
+    }
+    pv_onscr.key[0] = 0;
+    if (ok && j) {
+        if (j->mode == SHOT_FOLDER)
+            amce_strlcpy(pv_onscr.key, j->first, sizeof(pv_onscr.key));
+        else
+            pv_shot_key(j->mode, j->path, pv_onscr.key);
+        pv_onscr.x = x0;
+        pv_onscr.y = pv_box_y;
+        pv_onscr.w = w;
+        pv_onscr.h = pv_box_h;
     }
     if (ok) {
         gfx_fill_bg(&g, x0, pv_box_y, g.pic_x - 1, pv_box_y + dh - 1);
@@ -3106,6 +3168,7 @@ static void preview_draw(struct Page *p)
     char path[300];
     UBYTE shot;
     int k;
+    BOOL keep;
     WORD x0 = aside_x(), max_y = g.footer_y - 2;
     pv_pending = FALSE;
     pv_page = p;
@@ -3120,13 +3183,16 @@ static void preview_draw(struct Page *p)
     pv_box_y = g.list_top;
     pv_box_h = (max_y - g.list_top) / 2;
     pv_has_box = shot != 0;
+    keep = shot && pv_keeps(p, p->sel);     /* the picture on screen is this one's */
     if (!pv_since)
         pv_since = time_ms();
     if (k) {
-        if (shot)
+        if (shot && !keep)
             pv_sj = pv_request(LJ_SHOT, shot, path, FALSE, TRUE);
         pv_tj = pv_request(k, 0, path, FALSE, TRUE);   /* last in: first out */
     }
+    if (keep && pv_tj)
+        pv_pic_drawn = TRUE;
     if (!pv_tj) {
         tb_close(&pv_tb);
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
@@ -3137,7 +3203,10 @@ static void preview_draw(struct Page *p)
         pv_ready++;
     else
         pv_waited++;
-    if (!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) {
+    if (keep) {
+        if (!pv_tj->done)                   /* the picture stays; the text place cleared */
+            gfx_fill_bg(&g, x0, pv_box_y + pv_box_h, g.w - 1, max_y);
+    } else if (!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) {
         /* not all here: nothing of the entry before stays up meanwhile */
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, pv_tj->done ? g.list_top + pv_box_h - 1 : max_y);
@@ -3294,7 +3363,11 @@ static void preview_touch(struct Page *p)
         if (found >= want)
             settle = PREVIEW_READY;
     }
-    if (pv_shown && pv_page == p && !hold_active() && !ov.on) {
+    if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel))
+        /* a page just shown (opened, or back to it): a picture left from
+         * the page before goes now, unless it is this entry's too */
+        gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+    if (pv_shown && pv_page == p && !hold_active() && !ov.on && !pv_keeps(p, p->sel)) {
         /* the entry before's picture goes now, not when this one's comes:
          * it never stands next to this one's text */
         gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
@@ -3909,7 +3982,22 @@ static void draw_pane(BOOL full)
         } else if (p->type != PT_PLAYER) {          /* the player clears its own */
             gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
             gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
-            gfx_fill_bg(&g, px, U(42), g.w - 1, pb);
+            if (g.pic_w && p->type == PT_LIST && has_aside(p) && g.pic_x >= aside_x() &&
+                g.pic_y >= U(42)) {
+                /* a picture in the preview's place: left there, for the
+                 * preview to keep (the same one) or clear; filled over, it
+                 * flashed in the UI's colours plane by plane */
+                WORD ax = aside_x(), py1 = g.pic_y + g.pic_h - 1;
+                gfx_fill_bg(&g, px, U(42), ax - 1, pb);
+                gfx_fill_bg(&g, ax, U(42), g.w - 1, g.pic_y - 1);
+                gfx_fill_bg(&g, ax, g.pic_y, g.pic_x - 1, py1);
+                gfx_fill_bg(&g, g.pic_x + g.pic_w, g.pic_y, g.w - 1, py1);
+                gfx_fill_bg(&g, ax, py1 + 1, g.w - 1, pb);
+            } else {
+                if (g.pic_w)                /* cleared first, then its pens go */
+                    gfx_picture_clear(&g, px, U(42), g.w - 1, pb);
+                gfx_fill_bg(&g, px, U(42), g.w - 1, pb);
+            }
         }
     }
     draw_title(p);
@@ -5143,6 +5231,8 @@ static void draw_all(void)
     aside_w = -1;               /* the screen may be new: work the column out again */
     pane_settle();
     gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
+    if (g.pic_w)
+        gfx_picture_free(&g);   /* filled over just now: its pens go too */
     draw_header();
     draw_menu();
     draw_pane(TRUE);
@@ -5200,7 +5290,10 @@ static void pane_preview(BOOL first)
 {
     const char *t = mod_names[menu[menu_sel]];
     if (first) {
-        /* all but the title band (title_band_rest) */
+        /* all but the title band (title_band_rest); a picture cleared
+         * first, then its pens let go (filled over, it flashed) */
+        if (g.pic_w)
+            gfx_picture_clear(&g, g.menu_w + U(3), U(25), g.w - 1, g.footer_y - 2);
         gfx_fill_bg(&g, g.menu_w + U(3), U(25), g.w - 1, U(26) - 1);
         gfx_fill_bg(&g, g.menu_w + U(3), U(26), g.pane_x - U(2) - 1, U(42) - 1);
         gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);

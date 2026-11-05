@@ -133,6 +133,7 @@ static void run(struct LJob *j)
             if (pics_scan(j->path, &nd, shot, sizeof(shot)) <= 0)
                 return;
             src = shot;
+            amce_strlcpy(j->first, shot, sizeof(j->first));    /* which picture it shows */
         }
         if (!j->cancel)
             decode(j, src);
