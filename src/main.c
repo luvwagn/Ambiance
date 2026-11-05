@@ -58,8 +58,7 @@ struct Page {
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
-    UBYTE plex_set;             /* Settings > Plex */
-    UBYTE sound_set;            /* Settings > Sound */
+    UBYTE setp;                 /* a Settings page: SETP_* */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
@@ -124,6 +123,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
+       ACT_GENSET, ACT_NETSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1436,6 +1436,49 @@ static void save_screen_mode(void)
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
 #define HTTPS_VAR "AmigaMCE/RadioHTTPS"
+#define NETIF_VAR "AmigaMCE/NetInterface"
+
+/* Settings > Networking > the interface to go out from: its name ("" the
+ * stack's choice); the stack's list as last asked. */
+static char net_if[20];
+static struct NetIf nics[8];
+static int nnic;
+static ULONG nic_in_use;
+
+static void ip_text(ULONG ip, char *out)
+{
+    const UBYTE *b = (const UBYTE *)&ip;   /* in network order: a.b.c.d as it is */
+    sprintf(out, "%lu.%lu.%lu.%lu", (unsigned long)b[0], (unsigned long)b[1],
+            (unsigned long)b[2], (unsigned long)b[3]);
+}
+
+/* The interface chosen, as the stack lists it now: connections go out from
+ * its address (none found, or not up: the stack's choice). */
+static void net_if_apply(void)
+{
+    int i;
+    ULONG ip = 0;
+    char m[80];
+    nnic = caps.net ? net_interfaces(nics, 8, plex.host, &nic_in_use) : -1;
+    for (i = 0; i < nnic && net_if[0]; i++)
+        if (!strcmp(nics[i].name, net_if) && nics[i].up)
+            ip = nics[i].ip;
+    net_bind_to(ip);
+    if (net_if[0]) {
+        sprintf(m, "%s: %s", net_if, ip ? "connections go out from it" : "not up: the stack's choice");
+        amce_log("network interface", m);
+    }
+}
+
+static void load_net_if(void)
+{
+    char buf[20];
+    net_if[0] = 0;
+    if (GetVar((CONST_STRPTR)NETIF_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        amce_strlcpy(net_if, buf, sizeof(net_if));
+    if (net_if[0] && caps.net)
+        net_if_apply();
+}
 
 /* Settings > Allow HTTPS streams: Radio lists https: stations too (off by
  * default; only with AmiSSL installed, which plays them). */
@@ -1524,6 +1567,10 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
     return it;
 }
 
+enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SOUND, SETP_NET, SETP_PLEX };
+static void build_general_settings(struct Page *p);
+static void build_net_settings(struct Page *p);
+
 static void build_settings(struct Page *p)
 {
     char tag[64];
@@ -1540,22 +1587,75 @@ static void build_settings(struct Page *p)
     } else if ((it = action_item(p, "Style", "Pixel", ACT_STYLES, MARK_ARROW))) {
         it->flags |= ITEM_DISABLED;
     }
-    action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
-                jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
-                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
-        !caps.amissl)
-        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    if (!g.planar)                      /* native screens draw straight on: not offered */
+        action_item(p, "Double buffering", "", ACT_DBUF,
+                    gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    action_item(p, "General", "", ACT_GENSET, MARK_ARROW);
     action_item(p, "Sound", caps.ahi ? "Paula (AHI later)" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, "Networking", !caps.net ? "no TCP/IP stack" : net_if[0] ? net_if : "",
+                ACT_NETSET, MARK_ARROW);
     if (caps.net)                       /* Plex (plex.c): only with networking */
         action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
                                : plex.host[0] ? plex.host : "On, no server chosen",
                     ACT_PLEXSET, MARK_ARROW);
-    if (!g.planar)                      /* native screens draw straight on: not offered */
-        action_item(p, "Double buffering", "", ACT_DBUF,
-                    gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    p->setp = SETP_ROOT;
+}
+
+/* Settings > General. */
+static void build_general_settings(struct Page *p)
+{
+    p->setp = SETP_GENERAL;
+    action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
+                jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+/* Settings > Networking: HTTPS, and the interface connections go out from
+ * (the one in use shown; a choice where the stack lists more). */
+static void build_net_settings(struct Page *p)
+{
+    struct Item *it;
+    char label[64], tag[64], ip[20];
+    int i, using = -1;
+    p->setp = SETP_NET;
+    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
+                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
+        !caps.amissl)
+        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    if (!caps.net) {
+        list_add(&p->list, "No TCP/IP stack running", "", "", IT_TEXT);
+        return;
+    }
+    nnic = net_interfaces(nics, 8, plex.host, &nic_in_use);
+    for (i = 0; i < nnic; i++)
+        if (nic_in_use && nics[i].ip == nic_in_use)
+            using = i;
+    ip_text(nic_in_use, ip);
+    if (using >= 0)
+        sprintf(label, "In use: %.19s, %s", nics[using].name, ip);
+    else if (nic_in_use)
+        sprintf(label, "In use: %s", ip);
+    else
+        strcpy(label, "In use: not known");
+    list_add(&p->list, label, "", "", IT_TEXT);
+    action_item(p, "Automatic (the stack's choice)", "", ACT_NICAUTO,
+                net_if[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    for (i = 0; i < nnic && i < 8; i++) {
+        struct NetIf *f = &nics[i];
+        ip_text(f->ip, ip);
+        sprintf(label, "%.19s  %s", f->name, f->ip ? ip : "no address");
+        if (f->dev[0])
+            sprintf(tag, "%s, %.39s unit %ld", f->up ? "up" : "down", f->dev, (long)f->unit);
+        else
+            strcpy(tag, f->up ? "up" : "down");
+        if ((it = action_item(p, label, tag, ACT_NIC0 + i,
+                              !strcmp(net_if, f->name) ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+            (!f->up || !f->ip))
+            it->flags |= ITEM_DISABLED;
+    }
+    if (nnic < 0)
+        list_add(&p->list, "This TCP/IP stack does not list its interfaces", "", "", IT_TEXT);
 }
 
 #define SETTINGS_STYLE_ROW 1    /* "Style" in build_settings */
@@ -1564,7 +1664,8 @@ static void build_settings(struct Page *p)
 static void build_plex_settings(struct Page *p)
 {
     struct Item *it;
-    p->plex_set = 1;
+    BOOL fast;
+    p->setp = SETP_PLEX;
     action_item(p, "Plex", "", ACT_PLEXON, plex.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
     if (!plex.on)
         return;
@@ -1572,16 +1673,23 @@ static void build_plex_settings(struct Page *p)
                        "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
                                             : "none chosen", IT_PLEXDIR)))
         it->mark = MARK_ARROW;
+    /* the server's conversion: a choice only where the Amiga is fast enough
+     * to decode the files as stored (plex_tier: how fast it really is, not
+     * only its CPU); on others always on */
+    fast = plex_tier() >= 2;
+    if ((it = action_item(p, "Request lower quality audio", fast ? "" : "needed on this Amiga",
+                          ACT_PLEXCONV, plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
+        !fast)
+        it->flags |= ITEM_DISABLED;
 }
 
-/* Settings > Sound: what plays the sound, what decodes MP3, and what is
- * asked of a Plex server. Paula and mpega.library are all there is yet;
+/* Settings > Sound: what plays the sound and what decodes MP3. Paula and mpega.library are all there is yet;
  * AHI and MHI are shown, greyed, when installed (they come later, and
  * with AHI other rates than Paula's). */
 static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
-    p->sound_set = 1;
+    p->setp = SETP_SOUND;
     action_item(p, "Paula (audio.device)", "4 channels, up to 28 kHz", ACT_SND_PAULA,
                 MARK_RADIO_ON);
     if ((it = action_item(p, "AHI", caps.ahi ? "installed: comes later" : "not installed",
@@ -1594,24 +1702,13 @@ static void build_sound_settings(struct Page *p)
     if ((it = action_item(p, "MP3: MHI", caps.mp3_mhi ? "installed: comes later" : "not installed",
                           ACT_SND_MHI, MARK_RADIO_OFF)))
         it->flags |= ITEM_DISABLED;
-    if (caps.net) {
-        /* Plex's conversion: a choice only where the Amiga is fast enough
-         * to decode the files as stored (plex_tier: how fast it really is,
-         * not only its CPU); on others always on */
-        BOOL fast = plex_tier() >= 2;
-        if ((it = action_item(p, "Request lower quality audio",
-                              fast ? "Plex" : "Plex: needed on this Amiga", ACT_PLEXCONV,
-                              plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
-            !fast)
-            it->flags |= ITEM_DISABLED;
-    }
 }
 
 static void draw_footer(void);
 static void draw_list_rows(struct Page *p);
 
-/* A Plex setting changed: its page built again (the selection kept), and
- * Settings under it, whose Plex row says what is chosen. */
+/* A setting changed: the Settings pages open built again (the selections
+ * kept): Settings itself says what is chosen in its rows. */
 static void plex_settings_again(BOOL full)
 {
     struct Page *p = cur();
@@ -1620,16 +1717,17 @@ static void plex_settings_again(BOOL full)
     for (d = 0; d < depth; d++) {
         struct Page *q = &pages[d];
         LONG qs = q->sel;
-        if (q->type != PT_LIST || (!q->plex_set && !q->sound_set && strcmp(q->title, "Settings")))
+        if (q->type != PT_LIST || !q->setp)
             continue;
         list_free(&q->list);
         list_init(&q->list);
-        if (q->plex_set)
-            build_plex_settings(q);
-        else if (q->sound_set)
-            build_sound_settings(q);
-        else
-            build_settings(q);
+        switch (q->setp) {
+        case SETP_PLEX: build_plex_settings(q); break;
+        case SETP_SOUND: build_sound_settings(q); break;
+        case SETP_NET: build_net_settings(q); break;
+        case SETP_GENERAL: build_general_settings(q); break;
+        default: build_settings(q); break;
+        }
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
     }
     if (!p || p->type != PT_LIST)
@@ -6604,13 +6702,9 @@ static void toggle_jump(void)
     LONG sel = p ? p->sel : 0;
     jump_scroll = !jump_scroll;
     save_setting(JUMP_VAR, jump_scroll ? "1" : "0");
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel;
-        draw_list_rows(p);
-    }
+    (void)p;
+    (void)sel;
+    plex_settings_again(FALSE);
 }
 
 /* Settings > Plex: Music's Plex rows, and its asking, on or off. */
@@ -6620,7 +6714,7 @@ static void toggle_plex_on(void)
     plex_settings_again(TRUE);              /* rows come and go */
 }
 
-/* Settings > Sound > Request lower quality audio: every track the server's
+/* Settings > Plex > Request lower quality audio: every track the server's
  * conversion, made for this Amiga (22 kHz mono on a 68030: a fraction of
  * the decoding of a 44.1 kHz stereo file), or MP3s as stored (other
  * formats are converted either way). The next track it applies to. */
@@ -6630,6 +6724,29 @@ static void toggle_plex_convert(void)
         return;                             /* greyed: always on here */
     plex_set_convert(!plex.convert);
     plex_settings_again(FALSE);
+}
+
+static void open_settings_page(const char *title, void (*build)(struct Page *))
+{
+    struct Page *p = page_push(PT_LIST, title);
+    if (!p)
+        return;
+    build(p);
+    draw_pane(TRUE);
+    draw_footer();
+}
+
+/* Settings > Networking: an interface chosen (i < 0: the stack's choice). */
+static void choose_nic(int i)
+{
+    if (i >= 0 && (i >= nnic || !nics[i].up || !nics[i].ip))
+        return;
+    amce_strlcpy(net_if, i < 0 ? "" : nics[i].name, sizeof(net_if));
+    save_setting(NETIF_VAR, net_if);
+    net_bind_to(i < 0 ? 0 : nics[i].ip);
+    plex_settings_again(FALSE);
+    set_msg(i < 0 ? "Connections: the stack's choice of interface"
+                  : "Connections go out from this interface");
 }
 
 static void open_sound_settings(void)
@@ -6660,13 +6777,9 @@ static void toggle_https(void)
         return;
     radio_https = !radio_https;
     save_setting(HTTPS_VAR, radio_https ? "1" : "0");
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel;
-        draw_list_rows(p);
-    }
+    (void)p;
+    (void)sel;
+    plex_settings_again(FALSE);
 }
 
 static void toggle_dbuf(void)
@@ -6681,12 +6794,9 @@ static void toggle_dbuf(void)
         gfx_dbuf_start(&g);
     else
         gfx_dbuf_stop(&g);
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel;
-    }
+    (void)p;
+    (void)sel;
+    plex_settings_again(FALSE);
     status_shown[0] = 0;
     draw_all();
 }
@@ -6697,13 +6807,9 @@ static void toggle_debug(void)
     LONG sel = p ? p->sel : 0;
     set_debug(!debug_on);
     save_setting(DEBUG_VAR, debug_on ? "1" : "0");
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel;
-        draw_list_rows(p);
-    }
+    (void)p;
+    (void)sel;
+    plex_settings_again(FALSE);
     draw_status();
 }
 
@@ -7609,7 +7715,7 @@ static void plex_help(void)
                  "Amiga's own sound (mpega.library). The server makes each track for this "
                  "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
                  "and 24 kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
-                 "turning off Settings > Sound > Request lower quality audio plays MP3 files "
+                 "turning off Settings > Plex > Request lower quality audio plays MP3 files "
                  "as stored (other formats are converted either way); Settings > Plex > Plex "
                  "turns it all off.");
     text_line(p, "");
@@ -7687,6 +7793,8 @@ static void act_action(struct Item *it)
             set_msg("Style: Smooth needs an RTG screen");
         else if (it->action == ACT_PLEXCONV)
             set_msg("This Amiga plays Plex's lower quality: the files as stored are too much");
+        else if (it->action >= ACT_NIC0 && it->action <= ACT_NIC_END)
+            set_msg("That interface is not up");
         else if (it->action == ACT_SND_AHI)
             set_msg(caps.ahi ? "AHI: coming in a later version" : "AHI is not installed");
         else if (it->action == ACT_SND_MHI)
@@ -7719,6 +7827,14 @@ static void act_action(struct Item *it)
         open_plex_settings();
     else if (it->action == ACT_SOUNDSET)
         open_sound_settings();
+    else if (it->action == ACT_GENSET)
+        open_settings_page("General", build_general_settings);
+    else if (it->action == ACT_NETSET)
+        open_settings_page("Networking", build_net_settings);
+    else if (it->action == ACT_NICAUTO)
+        choose_nic(-1);
+    else if (it->action >= ACT_NIC0 && it->action <= ACT_NIC_END)
+        choose_nic(it->action - ACT_NIC0);
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)
@@ -8682,6 +8798,7 @@ static int app_main(void)
 
     caps_detect(&caps);
     plex_load(caps.cpu);            /* after: it needs the CPU */
+    load_net_if();                  /* after: the interface's address, toward the server */
     ags_init(&ags);
     build_menu();
     load_screen_mode();

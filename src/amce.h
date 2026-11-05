@@ -653,6 +653,19 @@ void net_stop(void);            /* waits for jobs out (cancel them first) */
 void net_submit(struct NetJob *j);
 struct NetJob *net_collect(void);
 void net_cancel(struct NetJob *j);
+/* The network interfaces (Settings > Networking): the stack's own list
+ * (Roadshow's interface API, else SIOCGIFCONF), without loopback. */
+struct NetIf {
+    char  name[20];
+    char  dev[40];              /* its SANA-II device (Roadshow), "" not known */
+    LONG  unit;
+    ULONG ip;                   /* 0: no address yet */
+    BOOL  up;
+};
+int net_interfaces(struct NetIf *out, int max, const char *toward, ULONG *in_use);
+                                /* -1: the stack lists none; in_use: the address used
+                                 * toward that host (a UDP connect: nothing is sent) */
+void net_bind_to(ULONG ip);     /* connections from this address; 0 the stack's choice */
 ULONG net_sigmask(void);
 
 /* radio.c: radio-browser.info's lists into pages */
