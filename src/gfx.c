@@ -1450,22 +1450,42 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
 {
     struct RastPort rp, trp;
     struct BitMap *row;
+    /* a plane's row: BytesPerRow, or in an interleaved bitmap (the
+     * screen's friends are) the step from one plane to the next, as
+     * BytesPerRow is then all the planes' rows together */
+    ULONG pw = bm->BytesPerRow;
+    if (bm->Depth > 1 && bm->Planes[1] > bm->Planes[0] &&
+        (ULONG)(bm->Planes[1] - bm->Planes[0]) < pw)
+        pw = bm->Planes[1] - bm->Planes[0];
     if (g->planar && (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) && bm->Depth <= 8 &&
-        !(bm->BytesPerRow & 3) && bm->BytesPerRow >= ((w + 31) >> 5) << 2) {
+        !(bm->BytesPerRow & 1) && !(pw & 1) && pw >= ((w + 15) >> 4) << 1) {
         /* 32 pixels a step, a long to each plane: a quarter of the writes
          * to chip RAM, which is slow with the display fetching 8 planes.
-         * (buf has 32 bytes to spare past its end for the last step.) */
+         * (buf has 32 bytes to spare past its end for the last step.) The
+         * last step of a row writes only what the plane's row has room
+         * for: a width that is not a multiple of 32 (168, say) left its
+         * last word on the next plane's first 16 pixels, noise down the
+         * picture's left edge. */
         ULONG y, x, bpr = bm->BytesPerRow, nl = (w + 31) >> 5, d = bm->Depth, k;
-        ULONG pl[8], *dst[8];
+        BOOL half = pw < nl * 4;            /* room for a word, not a long, at the end */
+        ULONG pl[8];
+        UWORD *dst[8];
         WaitBlit();                         /* nothing of the blitter's in it */
         for (y = 0; y < h; y++) {
             const ULONG *c = (const ULONG *)(buf + y * mod);
             for (k = 0; k < d; k++)
-                dst[k] = (ULONG *)((UBYTE *)bm->Planes[k] + y * bpr);
+                dst[k] = (UWORD *)((UBYTE *)bm->Planes[k] + y * bpr);
             for (x = 0; x < nl; x++, c += 8) {
                 c2p32(c, pl);
-                for (k = 0; k < d; k++)
-                    *dst[k]++ = pl[k];
+                if (half && x == nl - 1) {
+                    for (k = 0; k < d; k++)
+                        *dst[k] = (UWORD)(pl[k] >> 16);
+                } else {
+                    for (k = 0; k < d; k++) {
+                        *(ULONG *)dst[k] = pl[k];
+                        dst[k] += 2;
+                    }
+                }
             }
         }
         return;
