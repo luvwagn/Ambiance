@@ -3631,6 +3631,9 @@ static void draw_text_picture(struct Page *p)
     WORD box_h = text_box_h(p, g.list_top, &lines);
     if (!p->pic[0])
         return;
+    /* a rule under the text, as the title has one over it */
+    gfx_fill(&g, g.pane_x, g.list_top + box_h + U(3), g.pane_x + g.pane_w - 1,
+             g.list_top + box_h + U(4) - 1, PEN_RULE);
     y = g.list_top + box_h + U(8);
     if (p->note && lines) {
         struct ItemList l;
