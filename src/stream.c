@@ -808,12 +808,17 @@ static void radio_main(void)
     if (st.dec_freq > 28867 || st.dec_freq < 4000)
         st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;
     {
-        char m[360];
+        /* named by its station, else its URL without the query: a Plex
+         * track's carries the sign-in token, which stays out of the log */
+        char m[360], u[200], *q;
+        amce_strlcpy(u, st.url, sizeof(u));
+        if ((q = strchr(u, '?')))
+            *q = 0;
         sprintf(m, "%s: MP3 %ld kbit/s %ld Hz %s, decoded at %ld Hz %s (quality %ld)",
-                st.name[0] ? st.name : st.url, (long)st.bitrate, (long)st.freq,
+                st.name[0] && !st.finite ? st.name : u, (long)st.bitrate, (long)st.freq,
                 st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
                 st.dec_channels == 2 ? "stereo" : "mono", (long)ms->dec_quality);
-        amce_log("radio", m);
+        amce_log(st.finite ? "track" : "radio", m);
     }
     decode_loop(ms);
 out:
