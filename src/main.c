@@ -4758,22 +4758,37 @@ static BOOL np_repeats(int b)
 
 /* A rounded frame t thick just inside x,y w x h (or, solid, the corners
  * the rounding takes off the button). */
-static void np_round(WORD x, WORD y, WORD w, WORD h, WORD t, UBYTE pen, BOOL frame)
+/* A rounded rectangle filled: its corners a quarter ellipse of rx pixels
+ * across and ry rows down (on a screen of tall pixels ry is half rx, so
+ * they look round). */
+static WORD isqrt_round(LONG v)
 {
-    WORD r = t * 2;                         /* the corners' size */
-    if (!frame) {
-        gfx_fill(&g, x, y, x + t - 1, y + t - 1, pen);
-        gfx_fill(&g, x + w - t, y, x + w - 1, y + t - 1, pen);
-        gfx_fill(&g, x, y + h - t, x + t - 1, y + h - 1, pen);
-        gfx_fill(&g, x + w - t, y + h - t, x + w - 1, y + h - 1, pen);
+    LONG r = 0;
+    while ((r + 1) * (r + 1) <= v)
+        r++;
+    return (WORD)(v - r * r > r ? r + 1 : r);  /* to the nearer */
+}
+
+static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
+{
+    WORD k;
+    if (w <= 0 || h <= 0)
         return;
+    if (ry * 2 > h)
+        ry = h / 2;
+    for (k = 0; k < ry; k++) {
+        /* row k from the top (and from the bottom): its inset */
+        LONG dy = (LONG)(ry - k) * rx;      /* in x units: rows scaled to rx */
+        WORD in = rx - isqrt_round((LONG)rx * rx - (dy / ry) * (dy / ry));
+        if (in < 0)
+            in = 0;
+        if (in * 2 >= w)
+            in = (w - 1) / 2;
+        gfx_fill(&g, x + in, y + k, x + w - 1 - in, y + k, pen);
+        gfx_fill(&g, x + in, y + h - 1 - k, x + w - 1 - in, y + h - 1 - k, pen);
     }
-    /* four edges; the corners (t x t) are left out: slightly rounded */
-    (void)r;
-    gfx_fill(&g, x + t, y, x + w - 1 - t, y + t - 1, pen);             /* top */
-    gfx_fill(&g, x + t, y + h - t, x + w - 1 - t, y + h - 1, pen);     /* bottom */
-    gfx_fill(&g, x, y + t, x + t - 1, y + h - 1 - t, pen);             /* left */
-    gfx_fill(&g, x + w - t, y + t, x + w - 1, y + h - 1 - t, pen);     /* right */
+    if (h - 2 * ry > 0)
+        gfx_fill(&g, x, y + ry, x + w - 1, y + h - 1 - ry, pen);
 }
 
 static BOOL np_on(void)
@@ -4795,16 +4810,15 @@ static void time_text(ULONG ms, char *out)
 }
 
 /* A triangle w x h pointing right (dir 1) or left (-1), row by row. */
-static void np_tri(WORD x, WORD y, WORD w, WORD h, int dir, UBYTE pen)
+/* A triangle pointing right (dir > 0) or left, h rows (odd: one row for
+ * its tip), each row sx pixels wider than the last to the middle: clean
+ * 45-degree edges in pixels, as wide as it is tall on screen (sx 2 where
+ * pixels are tall). Its width: (h + 1) / 2 * sx. */
+static void np_tri(WORD x, WORD y, WORD h, WORD sx, int dir, UBYTE pen)
 {
-    WORD r, half = (h - 1) / 2;
+    WORD r, w = (h + 1) / 2 * sx;
     for (r = 0; r < h; r++) {
-        WORD d = r <= half ? r : h - 1 - r;
-        WORD len = (WORD)(((LONG)w * (d + 1) + half) / (half + 1));
-        if (len > w)
-            len = w;
-        if (len < 1)
-            len = 1;
+        WORD d = r < h - 1 - r ? r : h - 1 - r, len = (d + 1) * sx;
         if (dir > 0)
             gfx_fill(&g, x, y + r, x + len - 1, y + r, pen);
         else
@@ -4824,7 +4838,9 @@ static void np_button(int i)
     BOOL hov = mouse_mode && i == np.hov;       /* the mouse over it */
     UBYTE bg = lit ? PEN_HL : hov ? PEN_SELDIM : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
-    WORD gh = h * 5 / 10, gw, cx, gy, t;
+    BOOL tall = gfx_mode_tall(g.mode);
+    WORD sx = tall ? 2 : 1;                     /* pixels across for one down, to look square */
+    WORD gh, tw, cx, cy, gy, t, rx, ry;
     if (i == NB_VDOWN || i == NB_VUP) {
         if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
             fg = lit ? PEN_TEXT : PEN_DIM;
@@ -4833,64 +4849,77 @@ static void np_button(int i)
         bg = PEN_BAR;                       /* not for this module: greyed, never lit */
         fg = PEN_RULE;
     }
-    if (gh < 5)
-        gh = 5;
-    gw = gh * 3 / 4;                        /* a triangle's width */
-    if (gfx_mode_tall(g.mode))
-        gw = gw * 2;                        /* tall pixels: as wide on screen */
+    /* the glyph: an odd number of rows, about half the button, so each
+     * triangle has a one-row tip; everything else measured from it */
+    gh = (h * 3 / 5) | 1;
+    if (gh < 7)
+        gh = 7;
+    tw = (gh + 1) / 2 * sx;                 /* a triangle's width */
+    t = gh / 5 > 2 ? gh / 5 : 2;            /* a bar's thickness, in rows */
     cx = x + w / 2;
-    gy = y + (h - gh) / 2;
-    t = U(2) > 1 ? U(2) : 1;                /* a bar's thickness */
-    gfx_fill(&g, x, y, x + w - 1, y + h - 1, bg);
-    np_round(x, y, w, h, t, PEN_BG, FALSE);   /* rounded */
+    cy = y + h / 2;
+    gy = cy - gh / 2;
+    /* the button: rounded by about a fifth of its height; the focus ring
+     * (yellow) is its outer t rows, the face inside it */
+    ry = h / 5 > 2 ? h / 5 : 2;
+    if (tall)
+        ry = ry / 2 > 1 ? ry / 2 : 1;
+    rx = tall ? ry * 2 : ry;
+    gfx_fill(&g, x, y, x + w - 1, y + h - 1, PEN_BG);
+    if (ring) {
+        WORD ft = U(2) > 1 ? U(2) : 1, fx = ft * sx;
+        np_rrect(x, y, w, h, rx, ry, PEN_YELLOW);
+        np_rrect(x + fx, y + ft, w - 2 * fx, h - 2 * ft, rx > fx ? rx - fx : 1,
+                 ry > ft ? ry - ft : 1, bg);
+    } else {
+        np_rrect(x, y, w, h, rx, ry, bg);
+    }
     switch (i) {
-    case NB_PREV:
-        gfx_fill(&g, cx - gw / 2 - t, gy, cx - gw / 2 - 1, gy + gh - 1, fg);
-        np_tri(cx - gw / 2, gy, gw, gh, -1, fg);
+    case NB_PREV: {
+        WORD bw = t * sx, x0 = cx - (bw + tw) / 2;
+        gfx_fill(&g, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
+        np_tri(x0 + bw, gy, gh, sx, -1, fg);
         break;
-    case NB_NEXT:
-        np_tri(cx - gw / 2, gy, gw, gh, 1, fg);
-        gfx_fill(&g, cx - gw / 2 + gw, gy, cx - gw / 2 + gw + t - 1, gy + gh - 1, fg);
+    }
+    case NB_NEXT: {
+        WORD bw = t * sx, x0 = cx - (bw + tw) / 2;
+        np_tri(x0, gy, gh, sx, 1, fg);
+        gfx_fill(&g, x0 + tw, gy, x0 + tw + bw - 1, gy + gh - 1, fg);
         break;
+    }
     case NB_BACK:
-        np_tri(cx - gw, gy, gw, gh, -1, fg);
-        np_tri(cx, gy, gw, gh, -1, fg);
+        np_tri(cx - tw, gy, gh, sx, -1, fg);
+        np_tri(cx, gy, gh, sx, -1, fg);
         break;
     case NB_FWD:
-        np_tri(cx - gw, gy, gw, gh, 1, fg);
-        np_tri(cx, gy, gw, gh, 1, fg);
+        np_tri(cx - tw, gy, gh, sx, 1, fg);
+        np_tri(cx, gy, gh, sx, 1, fg);
         break;
     case NB_PLAY:
-        if (mp_playing()) {                 /* pause */
-            WORD bw = gw / 3 > 1 ? gw / 3 : 2;
-            gfx_fill(&g, cx - bw - bw / 2, gy, cx - bw / 2 - 1, gy + gh - 1, fg);
-            gfx_fill(&g, cx + bw / 2 + (bw & 1), gy, cx + bw + bw / 2 + (bw & 1) - 1, gy + gh - 1, fg);
+        if (mp_playing()) {
+            /* pause: two bars, a bar's width apart, as wide in all as a
+             * triangle is */
+            WORD bw = gh / 3 * sx, x0 = cx - (bw * 3) / 2;
+            gfx_fill(&g, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
+            gfx_fill(&g, x0 + bw * 2, gy, x0 + bw * 3 - 1, gy + gh - 1, fg);
         } else {
-            np_tri(cx - gw / 2, gy, gw, gh, 1, fg);
+            np_tri(cx - tw / 2, gy, gh, sx, 1, fg);
         }
         break;
     case NB_STOP: {
-        WORD sw = gh * 4 / 5, sh = sw;
-        if (gfx_mode_tall(g.mode))
-            sw *= 2;
-        gfx_fill(&g, cx - sw / 2, y + (h - sh) / 2, cx - sw / 2 + sw - 1, y + (h - sh) / 2 + sh - 1, fg);
+        WORD sh = gh - 2, sw = sh * sx;     /* a square, a little under the triangles */
+        gfx_fill(&g, cx - sw / 2, cy - sh / 2, cx - sw / 2 + sw - 1, cy - sh / 2 + sh - 1, fg);
         break;
     }
     case NB_VDOWN:
     case NB_VUP: {
-        WORD lw = gw * 4 / 3, ly = y + h / 2 - t / 2;
-        gfx_fill(&g, cx - lw / 2, ly, cx - lw / 2 + lw - 1, ly + t - 1, fg);
-        if (i == NB_VUP) {
-            WORD lh = gh * 4 / 5;
-            if (gfx_mode_tall(g.mode))
-                lh = lh * 2 / 3;
-            gfx_fill(&g, cx - t / 2, y + (h - lh) / 2, cx - t / 2 + t - 1, y + (h - lh) / 2 + lh - 1, fg);
-        }
+        WORD len = gh, lw = len * sx, th = t > 2 ? t - 1 : 2, tx = th * sx;
+        gfx_fill(&g, cx - lw / 2, cy - th / 2, cx - lw / 2 + lw - 1, cy - th / 2 + th - 1, fg);
+        if (i == NB_VUP)
+            gfx_fill(&g, cx - tx / 2, cy - len / 2, cx - tx / 2 + tx - 1, cy - len / 2 + len - 1, fg);
         break;
     }
     }
-    if (ring)
-        np_round(x, y, w, h, t, PEN_YELLOW, TRUE);  /* what Fire presses */
 }
 
 static void np_volume_text(void)

@@ -576,7 +576,12 @@ static BOOL audio_open(void)
         return FALSE;
     }
     mp.audio_open = TRUE;
-    amce_log("music", "Paula's 4 channels, from audio.device (not AHI)");
+    {
+        static BOOL said;
+        if (!said)
+            amce_log("music", "Paula's 4 channels, from audio.device (not AHI); given back on Stop");
+        said = TRUE;
+    }
     return TRUE;
 }
 
@@ -999,6 +1004,10 @@ void mp_stop(void)
         pt_restart(mp.pt, 0, 6, 125);
         mp.pt->elapsed_us = 0;
     }
+    /* stopped: the channels and the CIA timer given back, for other
+     * programs (the Amiga multitasks); Play takes them again */
+    timers_close();
+    audio_close();
 }
 
 /* Let go of the hardware and the module (a game is starting, or AmigaMCE
