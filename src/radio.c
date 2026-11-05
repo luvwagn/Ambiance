@@ -23,6 +23,21 @@
 
 #define STATIONS_MAX 200
 
+/* Settings > Networking > Radio: the highest bitrate listed (kbit/s; 0 any),
+ * and this Amiga's country (ISO 3166-1, "" not known), first in Countries. */
+static UWORD max_kbps;
+static char home_cc[4];
+
+void radio_set_max_kbps(UWORD kbps)
+{
+    max_kbps = kbps;
+}
+
+void radio_set_home(const char *iso)
+{
+    amce_strlcpy(home_cc, iso ? iso : "", sizeof(home_cc));
+}
+
 /* The request for a query (an IT_NET item's path) into out. */
 void radio_request(const char *query, BOOL https, char *out, LONG max)
 {
@@ -33,12 +48,17 @@ void radio_request(const char *query, BOOL https, char *out, LONG max)
         amce_strlcpy(out, "/csv/countries?order=stationcount&reverse=true&hidebroken=true",
                      max);
     } else {
-        char n[16];
+        char n[32];
         sprintf(n, "%ld", (long)STATIONS_MAX);
         amce_strlcpy(out, "/csv/stations/search?codec=MP3&hidebroken=true&limit=", max);
         amce_strlcat(out, n, max);
         if (!https)
             amce_strlcat(out, "&is_https=false", max);
+        if (max_kbps) {
+            /* asked of the server, so the list is the 200 best that fit */
+            sprintf(n, "&bitrateMax=%lu", (unsigned long)max_kbps);
+            amce_strlcat(out, n, max);
+        }
         if (query[0]) {
             amce_strlcat(out, "&", max);
             amce_strlcat(out, query, max);
@@ -80,7 +100,7 @@ static int station_row(struct fill *x, char **f, int n)
     LONG i, br = num(col(f, n, x->c_bitrate));
     if (!url[0])
         url = col(f, n, x->c_url);
-    if (num(col(f, n, x->c_hls)) || amce_stricmp(codec, "MP3") ||
+    if (num(col(f, n, x->c_hls)) || amce_stricmp(codec, "MP3") || (max_kbps && br > max_kbps) ||
         !(is_scheme(url, "http://") || (x->https && is_scheme(url, "https://")))) {
         x->skipped++;
         return 1;
@@ -181,6 +201,30 @@ LONG radio_fill(const char *query, UBYTE *body, ULONG len, struct ItemList *l, B
         *skipped = x.skipped;
     if (x.header || x.c_name < 0)
         return -1;
+    if (x.countries && l->count > 1) {
+        /* A to Z (the server's order is by size), this Amiga's own first */
+        char want[24];
+        LONG i, k, home = -1;
+        struct Item t;
+        for (i = 1; i < l->count; i++) {
+            t = l->items[i];
+            for (k = i; k > 0 && amce_stricmp(l->items[k - 1].label, t.label) > 0; k--)
+                l->items[k] = l->items[k - 1];
+            l->items[k] = t;
+        }
+        if (home_cc[0]) {
+            sprintf(want, "countrycode=%s&", home_cc);
+            for (i = 0; i < l->count && home < 0; i++)
+                if (!amce_strnicmp(l->items[i].path, want, strlen(want)))
+                    home = i;
+        }
+        if (home > 0) {
+            t = l->items[home];
+            for (k = home; k > 0; k--)
+                l->items[k] = l->items[k - 1];
+            l->items[0] = t;
+        }
+    }
     return l->count;
 }
 

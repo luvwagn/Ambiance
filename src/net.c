@@ -70,13 +70,28 @@ static void set_err(struct NetJob *j, const char *s)
         amce_strlcpy(j->err, s, sizeof(j->err));
 }
 
+/* Settings > Networking > Radio > Station list server: the one asked
+ * first ("" any, at random), set by the main task; the list is made again
+ * when it changes (pref_seq). */
+static char api_pref[64];
+static volatile ULONG pref_seq;
+static ULONG pref_seen;
+
+void net_radio_server(const char *name)
+{
+    amce_strlcpy(api_pref, name ? name : "", sizeof(api_pref));
+    pref_seq++;
+}
+
 static BOOL find_api(struct NetJob *j)
 {
     struct hostent *h;
     int i, n = 0;
     ULONG seed = time_ms();
-    if (api.n)
+    if (api.n && pref_seen == pref_seq)
         return TRUE;
+    pref_seen = pref_seq;
+    api.n = 0;
     if (!(h = gethostbyname((STRPTR)API_ALL)) || h->h_length != 4) {
         set_err(j, "radio-browser.info could not be found (DNS)");
         return FALSE;
@@ -102,6 +117,27 @@ static BOOL find_api(struct NetJob *j)
         if (k < 24 || amce_stricmp(nm + k - 23, ".api.radio-browser.info"))
             nm = API_ALL;
         amce_strlcpy(api.name[i], nm, sizeof(api.name[i]));
+    }
+    if (api_pref[0] && n) {
+        /* the one chosen first, the rest after it should it fail; not among
+         * them (a name gone from the list): looked up itself */
+        int k;
+        for (k = 0; k < n && amce_stricmp(api.name[k], api_pref); k++)
+            ;
+        if (k == n && (h = gethostbyname((STRPTR)api_pref)) && h->h_length == 4) {
+            k = n < MAX_HOSTS ? n++ : n - 1;
+            memcpy(&api.addr[k], h->h_addr_list[0], 4);
+            amce_strlcpy(api.name[k], api_pref, sizeof(api.name[k]));
+        }
+        if (k < n && k > 0) {
+            ULONG a = api.addr[k];
+            char nm[64];
+            amce_strlcpy(nm, api.name[k], sizeof(nm));
+            memmove(&api.addr[1], &api.addr[0], k * sizeof(ULONG));
+            memmove(api.name[1], api.name[0], k * sizeof(api.name[0]));
+            api.addr[0] = a;
+            amce_strlcpy(api.name[0], nm, sizeof(api.name[0]));
+        }
     }
     api.n = n;
     api.next = 0;
@@ -837,5 +873,70 @@ int net_interfaces(struct NetIf *out, int max, const char *toward, ULONG *in_use
         }
     }
     CloseLibrary(SocketBase);
+    return n;
+}
+
+/* The station-list servers, for Settings > Networking > Radio: the
+ * addresses of all.api.radio-browser.info, each named (reverse lookup) and
+ * timed connecting (ms; -1 no answer within a second and a half). From the
+ * main task, as net_interfaces. */
+int net_radio_mirrors(struct NetMirror *out, int max)
+{
+    struct Library *SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
+    struct hostent *h;
+    ULONG addr[MAX_HOSTS];
+    int i, n = 0;
+    if (!SocketBase)
+        return -1;
+    if (!(h = gethostbyname((STRPTR)API_ALL)) || h->h_length != 4) {
+        CloseLibrary(SocketBase);
+        return -1;
+    }
+    for (i = 0; h->h_addr_list[i] && n < MAX_HOSTS && n < max; i++)
+        memcpy(&addr[n++], h->h_addr_list[i], 4);
+    for (i = 0; i < n; i++) {
+        struct NetMirror *m = &out[i];
+        struct hostent *r = gethostbyaddr((STRPTR)&addr[i], 4, AF_INET);
+        const char *nm = r && r->h_name ? (const char *)r->h_name : "";
+        LONG k = strlen(nm), s, one = 1;
+        memset(m, 0, sizeof(*m));
+        m->addr = addr[i];
+        m->ms = -1;
+        if (k < 24 || amce_stricmp(nm + k - 23, ".api.radio-browser.info"))
+            nm = "";                        /* no name of its own: left out below */
+        amce_strlcpy(m->name, nm, sizeof(m->name));
+        if ((s = socket(AF_INET, SOCK_STREAM, 0)) >= 0) {
+            struct sockaddr_in sa;
+            ULONG t0 = time_ms();
+            IoctlSocket(s, FIONBIO, (char *)&one);
+            memset(&sa, 0, sizeof(sa));
+            sa.sin_len = sizeof(sa);
+            sa.sin_family = AF_INET;
+            sa.sin_port = 80;
+            memcpy(&sa.sin_addr, &addr[i], 4);
+            if (connect(s, (struct sockaddr *)&sa, sizeof(sa)) == 0 || Errno() == EINPROGRESS) {
+                fd_set fs;
+                struct timeval tv;
+                LONG e = 0, el = sizeof(e);
+                FD_ZERO(&fs);
+                FD_SET(s, &fs);
+                tv.tv_secs = 1;
+                tv.tv_micro = 500000;
+                if (WaitSelect(s + 1, NULL, &fs, NULL, &tv, NULL) > 0 &&
+                    getsockopt(s, SOL_SOCKET, SO_ERROR, &e, &el) == 0 && !e)
+                    m->ms = (LONG)(time_ms() - t0);
+            }
+            CloseSocket(s);
+        }
+    }
+    CloseLibrary(SocketBase);
+    {
+        /* the nameless dropped (the API is asked by name) */
+        int k = 0;
+        for (i = 0; i < n; i++)
+            if (out[i].name[0])
+                out[k++] = out[i];
+        n = k;
+    }
     return n;
 }

@@ -53,8 +53,14 @@ static struct Library *MPEGABase;
 #define CU ((volatile struct Custom *)0xDFF000)
 #define PAULA_CLOCK 3546895UL       /* PAL */
 #define HALF        2048            /* samples in each half of Paula's buffer */
-#define FIFO_N      65536UL         /* samples of each channel decoded ahead (a power of 2) */
-#define PREBUFFER_MS 1200           /* in the FIFO before Paula starts */
+/* The FIFO: samples of each channel decoded ahead (a power of 2), and how
+ * long in it before Paula starts: Settings > Networking > Stream buffer
+ * (short, normal, long; st_set_buffer). At 22050 Hz the FIFO holds 1.5,
+ * 3 or 6 seconds. */
+static const ULONG fifo_sizes[3] = { 32768UL, 65536UL, 131072UL };
+static const ULONG prebuf_ms[3] = { 600, 1200, 3000 };
+static int buf_level = 1;
+#define FIFO_N      st.fifo_n
 #define NETBUF      8192
 #define CONNECT_S   10
 #define READ_S      15
@@ -124,6 +130,7 @@ static struct {
     LONG bitrate, freq, channels, dec_freq, dec_channels;
     /* the FIFO: decoded samples, 8-bit, left and right (mono: left only) */
     BYTE *fl, *fr;
+    ULONG fifo_n;                   /* their size (FIFO_N) */
     volatile ULONG f_in, f_out;     /* written, played (they run on) */
     volatile ULONG underruns;
     /* Paula */
@@ -802,7 +809,7 @@ static void decode_loop(MPEGA_STREAM *ms)
 {
     static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
     WORD *pcm[2];
-    ULONG prebuf = (ULONG)st.dec_freq * PREBUFFER_MS / 1000;
+    ULONG prebuf = (ULONG)st.dec_freq * prebuf_ms[buf_level] / 1000;
     pcm[0] = pcm0;
     pcm[1] = pcm1;
     if (prebuf > FIFO_N / 2)
@@ -963,6 +970,13 @@ out:
 }
 
 /* ---------------------------------------------------------- the UI's */
+/* Settings > Networking > Stream buffer: 0 short, 1 normal, 2 long (the
+ * next stream started). */
+void st_set_buffer(int level)
+{
+    buf_level = level < 0 ? 0 : level > 2 ? 2 : level;
+}
+
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
               ULONG skip_ms, char *err, LONG errmax)
 {
@@ -983,6 +997,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.master = master;
     st.sig = -1;
     amce_strlcpy(st.url, url, sizeof(st.url));
+    st.fifo_n = fifo_sizes[buf_level];
     st.nb = AllocVec(NETBUF + 1, MEMF_ANY);
     st.fl = AllocVec(FIFO_N, MEMF_ANY | MEMF_CLEAR);
     st.fr = AllocVec(FIFO_N, MEMF_ANY | MEMF_CLEAR);

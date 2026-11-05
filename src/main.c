@@ -18,6 +18,7 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/lowlevel.h>
+#include <proto/locale.h>
 
 static const char version_tag[] __attribute__((used)) =
     "$VER: AmigaMCE " AMCE_VERSION " (" AMCE_DATE ")";
@@ -123,7 +124,10 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
-       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
+       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
+       ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
+       ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
+       ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1470,6 +1474,130 @@ static void net_if_apply(void)
     }
 }
 
+static ULONG strtoul_(const char *s);
+
+/* ---- Settings > Networking > Radio, and the stream buffer */
+#define RKBPS_VAR "AmigaMCE/RadioMaxKbps"   /* "" automatic, a number, "any" */
+#define RSRV_VAR  "AmigaMCE/RadioServer"    /* "" automatic, "fastest:<name>", "<name>" */
+#define BUF_VAR   "AmigaMCE/StreamBuffer"   /* short, normal, long */
+
+static const UWORD rkbps_choice[6] = { 0xFFFF, 64, 96, 128, 192, 0 }; /* automatic .. any */
+static int rkbps_sel;               /* 0 automatic */
+static int buf_sel = 1;             /* normal */
+static char rsrv[80];               /* as kept */
+static struct NetMirror mirrors[8];
+static int nmirror = -2;            /* -2 not asked yet, -1 could not be */
+static const char *const buf_names[3] = { "Short", "Normal", "Long" };
+static const char *const buf_notes[3] = { "starts in 0.6 s", "1.2 s",
+                                          "3 s, more held against dropouts" };
+
+/* Automatic: by how fast this Amiga is (plex_tier). Paula plays no more
+ * than 28 kHz, and the decoder is told to make what it can play, so a
+ * 68030 copes with 128k stations; above that is work for nothing. */
+static UWORD rkbps_auto(void)
+{
+    int t = plex_tier();
+    return t == 0 ? 128 : t == 1 ? 192 : 0;
+}
+
+static UWORD rkbps_now(void)
+{
+    return rkbps_sel == 0 ? rkbps_auto() : rkbps_choice[rkbps_sel];
+}
+
+static void rkbps_text(UWORD k, char *out)
+{
+    if (k)
+        sprintf(out, "%luk", (unsigned long)k);
+    else
+        strcpy(out, "any");
+}
+
+/* A server's short name: de1 for de1.api.radio-browser.info. */
+static void mirror_short(const char *name, char *out, LONG max)
+{
+    char *d;
+    amce_strlcpy(out, name, max);
+    if ((d = strchr(out, '.')))
+        *d = 0;
+}
+
+static void rsrv_apply(void)
+{
+    const char *n = rsrv;
+    if (!strncmp(n, "fastest:", 8))
+        n += 8;
+    net_radio_server(n);
+}
+
+/* This Amiga's country, by its Locale prefs' telephone code (the country
+ * names there are each in their own language): its ISO code, "" not known. */
+static const char *home_country(void)
+{
+    static const struct { UWORD tel; char iso[3]; } t[] = {
+        { 1, "US" }, { 7, "RU" }, { 20, "EG" }, { 27, "ZA" }, { 30, "GR" }, { 31, "NL" },
+        { 32, "BE" }, { 33, "FR" }, { 34, "ES" }, { 36, "HU" }, { 39, "IT" }, { 40, "RO" },
+        { 41, "CH" }, { 43, "AT" }, { 44, "GB" }, { 45, "DK" }, { 46, "SE" }, { 47, "NO" },
+        { 48, "PL" }, { 49, "DE" }, { 51, "PE" }, { 52, "MX" }, { 54, "AR" }, { 55, "BR" },
+        { 56, "CL" }, { 57, "CO" }, { 58, "VE" }, { 60, "MY" }, { 61, "AU" }, { 62, "ID" },
+        { 63, "PH" }, { 64, "NZ" }, { 65, "SG" }, { 66, "TH" }, { 81, "JP" }, { 82, "KR" },
+        { 84, "VN" }, { 86, "CN" }, { 90, "TR" }, { 91, "IN" }, { 92, "PK" }, { 98, "IR" },
+        { 351, "PT" }, { 352, "LU" }, { 353, "IE" }, { 354, "IS" }, { 356, "MT" },
+        { 357, "CY" }, { 358, "FI" }, { 359, "BG" }, { 370, "LT" }, { 371, "LV" },
+        { 372, "EE" }, { 380, "UA" }, { 381, "RS" }, { 385, "HR" }, { 386, "SI" },
+        { 387, "BA" }, { 420, "CZ" }, { 421, "SK" }, { 852, "HK" }, { 886, "TW" },
+        { 972, "IL" },
+    };
+    static char iso[3];
+    struct Library *LocaleBase = OpenLibrary((CONST_STRPTR)"locale.library", 38);
+    ULONG tel = 0;
+    UWORD i;
+    iso[0] = 0;
+    if (LocaleBase) {
+        struct Locale *l = OpenLocale(NULL);
+        if (l) {
+            tel = l->loc_TelephoneCode;
+            CloseLocale(l);
+        }
+        CloseLibrary(LocaleBase);
+    }
+    for (i = 0; i < sizeof(t) / sizeof(t[0]); i++)
+        if (t[i].tel == tel)
+            amce_strlcpy(iso, t[i].iso, sizeof(iso));
+    return iso;
+}
+
+static void load_radio_settings(void)
+{
+    char buf[80], m[160];
+    int i;
+    rkbps_sel = 0;
+    if (GetVar((CONST_STRPTR)RKBPS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
+        if (!amce_stricmp(buf, "any"))
+            rkbps_sel = 5;
+        for (i = 1; i < 5; i++)
+            if ((UWORD)strtoul_(buf) == rkbps_choice[i])
+                rkbps_sel = i;
+    }
+    buf_sel = 1;
+    if (GetVar((CONST_STRPTR)BUF_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        for (i = 0; i < 3; i++)
+            if (!amce_stricmp(buf, buf_names[i]))
+                buf_sel = i;
+    st_set_buffer(buf_sel);
+    rsrv[0] = 0;
+    if (GetVar((CONST_STRPTR)RSRV_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        amce_strlcpy(rsrv, buf, sizeof(rsrv));
+    rsrv_apply();
+    radio_set_max_kbps(rkbps_now());
+    radio_set_home(home_country());
+    rkbps_text(rkbps_now(), buf);
+    sprintf(m, "stations up to %.8s, buffer %s, list server %.60s, country %s", buf,
+            buf_names[buf_sel], rsrv[0] ? rsrv : "automatic",
+            home_country()[0] ? home_country() : "not known");
+    amce_log("radio", m);
+}
+
 static void load_net_if(void)
 {
     char buf[20];
@@ -1567,7 +1695,12 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
     return it;
 }
 
-enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC };
+enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
+       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV };
+static void build_radio_settings(struct Page *p);
+static void build_rkbps_settings(struct Page *p);
+static void build_buf_settings(struct Page *p);
+static void build_rsrv_settings(struct Page *p);
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 static void build_nic_settings(struct Page *p);
@@ -1644,17 +1777,18 @@ static void build_net_settings(struct Page *p)
     struct Item *it;
     char tag[64], use[40];
     p->setp = SETP_NET;
-    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
-                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
-        !caps.amissl)
-        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    (void)it;
     if (!caps.net) {
         list_add(&p->list, "No TCP/IP stack running", "", "", IT_TEXT);
         return;
     }
+    rkbps_text(rkbps_now(), use);
+    sprintf(tag, "stations up to %s", use);
+    action_item(p, "Radio", tag, ACT_RADIOSET, MARK_ARROW);
     action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
                            : plex.host[0] ? plex.host : "On, no server chosen",
                 ACT_PLEXSET, MARK_ARROW);
+    action_item(p, "Stream buffer", buf_names[buf_sel], ACT_BUFSET, MARK_ARROW);
     nic_in_use_text(use);
     if (net_if[0])
         sprintf(tag, "%.40s", use[0] ? use : net_if);
@@ -1691,6 +1825,114 @@ static void build_nic_settings(struct Page *p)
     }
     if (nnic < 0)
         list_add(&p->list, "This TCP/IP stack does not list its interfaces", "", "", IT_TEXT);
+}
+
+/* Settings > Networking > Radio: HTTPS, the highest bitrate listed, and
+ * the server the station lists come from. */
+static void build_radio_settings(struct Page *p)
+{
+    struct Item *it;
+    char tag[80], k[16], nm[64];
+    p->setp = SETP_RADIO;
+    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
+                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
+        !caps.amissl)
+        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    rkbps_text(rkbps_now(), k);
+    if (rkbps_sel == 0)
+        sprintf(tag, "Automatic: %s", k);
+    else
+        strcpy(tag, k);
+    action_item(p, "Highest station bitrate", tag, ACT_RKBPSSET, MARK_ARROW);
+    if (!rsrv[0]) {
+        strcpy(tag, "Automatic");
+    } else if (!strncmp(rsrv, "fastest:", 8)) {
+        mirror_short(rsrv + 8, nm, sizeof(nm));
+        sprintf(tag, "Fastest: %s", nm);
+    } else {
+        mirror_short(rsrv, tag, sizeof(tag));
+    }
+    action_item(p, "Station list server", tag, ACT_RSRVSET, MARK_ARROW);
+}
+
+static void build_rkbps_settings(struct Page *p)
+{
+    char tag[40], k[16];
+    int i;
+    p->setp = SETP_RKBPS;
+    rkbps_text(rkbps_auto(), k);
+    sprintf(tag, "for this Amiga: %s", k);
+    action_item(p, "Automatic", tag, ACT_RKBPS0, rkbps_sel == 0 ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    for (i = 1; i < 6; i++) {
+        char label[24];
+        if (rkbps_choice[i])
+            sprintf(label, "Up to %lu kbit/s", (unsigned long)rkbps_choice[i]);
+        else
+            strcpy(label, "Any");
+        action_item(p, label, "", ACT_RKBPS0 + i,
+                    rkbps_sel == i ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    }
+    p->sel = rkbps_sel;
+}
+
+static void build_buf_settings(struct Page *p)
+{
+    int i;
+    p->setp = SETP_BUF;
+    for (i = 0; i < 3; i++)
+        action_item(p, buf_names[i], buf_notes[i], ACT_BUF0 + i,
+                    buf_sel == i ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    p->sel = buf_sel;
+}
+
+/* The fastest of the servers as timed (-1: none answered). */
+static int mirror_fastest(void)
+{
+    int i, best = -1;
+    for (i = 0; i < nmirror; i++)
+        if (mirrors[i].ms >= 0 && (best < 0 || mirrors[i].ms < mirrors[best].ms))
+            best = i;
+    return best;
+}
+
+static void build_rsrv_settings(struct Page *p)
+{
+    char tag[64], nm[64];
+    int i, f;
+    BOOL fast = !strncmp(rsrv, "fastest:", 8);
+    p->setp = SETP_RSRV;
+    action_item(p, "Automatic", "one at random, as radio-browser.info asks", ACT_RSRVAUTO,
+                rsrv[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    if (nmirror < 0) {
+        action_item(p, "Fastest", "", ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        list_add(&p->list, "radio-browser.info's servers could not be found", "", "", IT_TEXT);
+        return;
+    }
+    f = mirror_fastest();
+    if (f >= 0) {
+        mirror_short(mirrors[f].name, nm, sizeof(nm));
+        sprintf(tag, "now %.30s, %ld ms", nm, (long)mirrors[f].ms);
+    } else {
+        strcpy(tag, "none answered");
+    }
+    action_item(p, "Fastest", tag, ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    if (!rsrv[0])
+        p->sel = 0;
+    else if (fast)
+        p->sel = 1;
+    for (i = 0; i < nmirror; i++) {
+        struct Item *it;
+        if (mirrors[i].ms >= 0)
+            sprintf(tag, "%ld ms", (long)mirrors[i].ms);
+        else
+            strcpy(tag, "no answer");
+        mirror_short(mirrors[i].name, nm, sizeof(nm));
+        it = action_item(p, nm, tag, ACT_RSRV0 + i,
+                         !fast && !amce_stricmp(rsrv, mirrors[i].name) ? MARK_RADIO_ON
+                                                                       : MARK_RADIO_OFF);
+        if (it && !fast && !amce_stricmp(rsrv, mirrors[i].name))
+            p->sel = p->list.count - 1;
+    }
 }
 
 #define SETTINGS_SCREEN_ROW 1   /* "Screen" in build_settings */
@@ -1764,6 +2006,10 @@ static void settings_rebuild(void)
         case SETP_GENERAL: build_general_settings(q); break;
         case SETP_SCREEN: build_screen_settings(q); break;
         case SETP_NIC: build_nic_settings(q); break;
+        case SETP_RADIO: build_radio_settings(q); break;
+        case SETP_RKBPS: build_rkbps_settings(q); break;
+        case SETP_BUF: build_buf_settings(q); break;
+        case SETP_RSRV: build_rsrv_settings(q); break;
         default: build_settings(q); break;
         }
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
@@ -7883,6 +8129,61 @@ static void act_action(struct Item *it)
         open_settings_page("Screen", build_screen_settings);
     else if (it->action == ACT_NICSET)
         open_settings_page("Network interface", build_nic_settings);
+    else if (it->action == ACT_RADIOSET)
+        open_settings_page("Radio", build_radio_settings);
+    else if (it->action == ACT_RKBPSSET)
+        open_settings_page("Highest station bitrate", build_rkbps_settings);
+    else if (it->action == ACT_BUFSET)
+        open_settings_page("Stream buffer", build_buf_settings);
+    else if (it->action == ACT_RSRVSET) {
+        /* the servers asked for and timed now: a few seconds at most */
+        set_msg("Asking radio-browser.info for its servers...");
+        busy_begin();
+        nmirror = net_radio_mirrors(mirrors, 8);
+        busy_end(FALSE);
+        set_msg(NULL);
+        open_settings_page("Station list server", build_rsrv_settings);
+    } else if (it->action >= ACT_RKBPS0 && it->action <= ACT_RKBPS_END) {
+        char k[16];
+        rkbps_sel = it->action - ACT_RKBPS0;
+        if (rkbps_sel == 0)
+            save_setting(RKBPS_VAR, "");
+        else if (rkbps_sel == 5)
+            save_setting(RKBPS_VAR, "any");
+        else {
+            sprintf(k, "%lu", (unsigned long)rkbps_choice[rkbps_sel]);
+            save_setting(RKBPS_VAR, k);
+        }
+        radio_set_max_kbps(rkbps_now());
+        plex_settings_again(FALSE);
+        set_msg("Station lists opened from now on");
+    } else if (it->action >= ACT_BUF0 && it->action <= ACT_BUF_END) {
+        buf_sel = it->action - ACT_BUF0;
+        save_setting(BUF_VAR, buf_names[buf_sel]);
+        st_set_buffer(buf_sel);
+        plex_settings_again(FALSE);
+        set_msg("The next station or track started");
+    } else if (it->action == ACT_RSRVAUTO || it->action == ACT_RSRVFAST ||
+               (it->action >= ACT_RSRV0 && it->action <= ACT_RSRV_END)) {
+        if (it->action == ACT_RSRVAUTO) {
+            rsrv[0] = 0;
+        } else if (it->action == ACT_RSRVFAST) {
+            int f = mirror_fastest();
+            if (f < 0) {
+                set_msg("None of the servers answered: Automatic kept");
+                return;
+            }
+            sprintf(rsrv, "fastest:%.60s", mirrors[f].name);
+        } else {
+            int i = it->action - ACT_RSRV0;
+            if (i >= nmirror)
+                return;
+            amce_strlcpy(rsrv, mirrors[i].name, sizeof(rsrv));
+        }
+        save_setting(RSRV_VAR, rsrv);
+        rsrv_apply();
+        plex_settings_again(FALSE);
+    }
     else if (it->action == ACT_NETSET)
         open_settings_page("Networking", build_net_settings);
     else if (it->action == ACT_NICAUTO)
@@ -8853,6 +9154,7 @@ static int app_main(void)
     caps_detect(&caps);
     plex_load(caps.cpu);            /* after: it needs the CPU */
     load_net_if();                  /* after: the interface's address, toward the server */
+    load_radio_settings();
     ags_init(&ags);
     build_menu();
     load_screen_mode();

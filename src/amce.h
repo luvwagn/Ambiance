@@ -414,6 +414,7 @@ struct StInfo {
     ULONG avg_kbps;                 /* the bitrate on average (3 s on), 0 not yet */
     UBYTE peak_l, peak_r;
 };
+void st_set_buffer(int level);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
               ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);
@@ -665,6 +666,9 @@ struct NetIf {
 int net_interfaces(struct NetIf *out, int max, const char *toward, ULONG *in_use);
                                 /* -1: the stack lists none; in_use: the address used
                                  * toward that host (a UDP connect: nothing is sent) */
+struct NetMirror { char name[64]; ULONG addr; LONG ms; };
+int net_radio_mirrors(struct NetMirror *out, int max);  /* -1: not found (DNS) */
+void net_radio_server(const char *name);    /* the station-list server asked first; "" any */
 void net_bind_to(ULONG ip);     /* connections from this address; 0 the stack's choice */
 ULONG net_sigmask(void);
 
@@ -672,6 +676,8 @@ ULONG net_sigmask(void);
 #define RADIO_TAGS      "#tags"
 #define RADIO_COUNTRIES "#countries"
 void radio_request(const char *query, BOOL https, char *out, LONG max);
+void radio_set_max_kbps(UWORD kbps);    /* the highest bitrate listed; 0 any */
+void radio_set_home(const char *iso);   /* this Amiga's country, first in Countries */
 LONG radio_fill(const char *query, UBYTE *body, ULONG len, struct ItemList *l, BOOL https,
                 LONG *skipped);
 char *radio_field(const struct Item *it, int i, char *out, LONG max);
