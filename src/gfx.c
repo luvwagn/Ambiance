@@ -82,11 +82,13 @@ static void fit_menu(struct Gfx *g)
 static BOOL laced(const struct Gfx *g);
 
 /* The pixel style's scale (amce.h): RTG a whole factor; the laced screens
- * (640 x 400/512) a quarter more than 1x, with their own font (15), as
- * the 12 at 1x was small there. */
+ * (640 x 400/512) 1.5x, with their own font (amce-crisp, 18 high: Rubik
+ * drawn crisp at 14 px), as the 12 at 1x was small there. Pixelify Sans
+ * is only clean at its own size and whole multiples. */
+#define CRISP_SIZE 18
 static UWORD pixel_k(const struct Gfx *g)
 {
-    return laced(g) ? 320 : (UWORD)g->kint << 8;
+    return laced(g) ? (CRISP_SIZE << 8) / 12 : (UWORD)g->kint << 8;
 }
 
 static void open_font(struct Gfx *g)
@@ -98,14 +100,20 @@ static void open_font(struct Gfx *g)
     g->font = NULL;
     g->font_is_ours = FALSE;
     if (DiskfontBase) {
-        ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
-        ta.ta_YSize = laced(g) ? 15 : 12 * g->kint;  /* 12, 24 or 36: whole-pixel sizes */
         ta.ta_Style = FS_NORMAL;
         ta.ta_Flags = FPF_DESIGNED;         /* never a size blown up by diskfont */
         me->pr_WindowPtr = (APTR)-1;
-        g->font = OpenDiskFont(&ta);
-        if (!g->font && laced(g)) {
-            ta.ta_YSize = 12;               /* an older Fonts drawer: no 15 */
+        if (laced(g)) {
+            ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-crisp.font";
+            ta.ta_YSize = CRISP_SIZE;
+            if (!(g->font = OpenDiskFont(&ta)) && g->k != 256) {
+                g->k = 256;                 /* an older Fonts drawer: the 12 at 1x */
+                layout_metrics(g);
+            }
+        }
+        if (!g->font) {
+            ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+            ta.ta_YSize = 12 * g->kint;     /* 12, 24 or 36: whole-pixel sizes */
             g->font = OpenDiskFont(&ta);
         }
         me->pr_WindowPtr = oldwin;

@@ -57,9 +57,10 @@ struct Page {
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
-    char pic[160];              /* PT_TEXT: a picture at the end of the text ("" none), */
-    struct BitMap *pic_bm;      /*   made for the screen when the page is first drawn */
-    WORD pic_w, pic_h;
+    char pic[160];              /* PT_TEXT: a picture under the text box ("" none), */
+    struct BitMap *pic_bm;      /*   made for the screen when the page is first drawn, */
+    WORD pic_w, pic_h;          /*   as large as fits there */
+    const char *note;           /*   and a line or two above it (fixed, not scrolled) */
 };
 
 #define PICS_ROOT "Media:Images"
@@ -148,9 +149,8 @@ static WORD textbox_w(void);
 
 /* A text page's picture (Page.pic), made for this screen: as wide as the
  * text and no taller than the box, in pens of its own (gfx_thumb_bitmap). */
-static void page_picture(struct Page *p)
+static void page_picture(struct Page *p, WORD w, WORD h)
 {
-    WORD w = textbox_w(), h = g.footer_y - 2 - g.list_top;
     struct PicInfo pi;
     struct Thumb *t;
     BOOL tall = gfx_mode_tall(g.mode);
@@ -158,12 +158,12 @@ static void page_picture(struct Page *p)
         amce_log("page picture", "this screen shows no pictures");
         return;
     }
-    if (!(t = ilbm_thumb(p->pic, w, h, tall, TRUE, gfx_thumb_colours(&g), &pi))) {
+    if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi))) {
         BOOL remapped = FALSE;
         APTR o = pic_decode(p->pic, NULL, FALSE, &remapped, &pi);
         if (o) {
             ULONG dw, dh;
-            pic_fit(pi.w, pi.h, tall, w, h, TRUE, &dw, &dh);
+            pic_fit(pi.w, pi.h, tall, w, h, FALSE, &dw, &dh);    /* smaller or larger: to fit */
             t = thumb_make(o, dw, dh, gfx_thumb_colours(&g));
             pic_dispose(o);
         }
@@ -1575,9 +1575,8 @@ static void build_credits(struct Page *p)
     text_line(p, "");
     text_para(p, "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer.");
-    text_line(p, "");
-    text_para(p, "This front-end would not be possible without the immense efforts of Paul Vince "
-                 "and Amiga Game Selector.");
+    p->note = "This front-end would not be possible without the immense efforts of Paul Vince "
+              "and Amiga Game Selector.";
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
@@ -1588,6 +1587,11 @@ static void build_credits(struct Page *p)
             amce_strlcpy(p->pic, ags_splash[i], sizeof(p->pic));
         }
         me->pr_WindowPtr = old;
+    }
+    if (!p->pic[0]) {                       /* no AGS logo: the thanks with the text */
+        text_line(p, "");
+        text_para(p, p->note);
+        p->note = NULL;
     }
 }
 
@@ -3585,18 +3589,63 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
 /* (Re)build the page's text box below y0, keeping its scroll position. */
 static void np_draw(BOOL full);
 
+/* A text page with a picture (the credits): the text scrolls in a box at
+ * the top; under it, fixed, the note and the picture, as large as fits in
+ * up to two fifths of the pane. The box's height (the picture made first,
+ * at its size). */
+static WORD text_box_h(struct Page *p, WORD y0, WORD *note_lines)
+{
+    WORD avail = g.footer_y - 2 - y0, lh = g.font_h + U(1), note_h = 0, ph;
+    *note_lines = 0;
+    if (p->type != PT_TEXT || !p->pic[0])
+        return avail;
+    if (p->note) {
+        struct ItemList l;
+        if (list_init(&l)) {
+            wrap_into(&l, p->note, textbox_w());
+            *note_lines = (WORD)l.count;
+            list_free(&l);
+        }
+        note_h = *note_lines * lh + U(4);
+    }
+    ph = avail * 2 / 5 - note_h;
+    if (ph < U(20))
+        return avail - note_h - U(8);       /* no room for the picture: the note alone */
+    if (!p->pic_bm)
+        page_picture(p, textbox_w(), ph);
+    return avail - note_h - (p->pic_bm ? p->pic_h : 0) - U(8);
+}
+
 static void open_textbox(struct Page *p, WORD y0)
 {
-    /* its picture (the credits' AGS logo) first: the box is laid out with
-     * it after the text (it was left out when the full draw opened the box
-     * before the picture was read) */
-    if (p->pic[0] && !p->pic_bm)
-        page_picture(p);
-    p->tb.pic = p->pic_bm;
-    p->tb.pic_w = p->pic_w;
-    p->tb.pic_h = p->pic_h;
-    tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), g.footer_y - 2 - y0, &p->list,
+    WORD lines;
+    p->tb.pic = NULL;                       /* the picture is under the box, not in it */
+    tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), text_box_h(p, y0, &lines), &p->list,
             p->type == PT_DETAIL);
+}
+
+/* The note and the picture under a text page's box. */
+static void draw_text_picture(struct Page *p)
+{
+    WORD lines, lh = g.font_h + U(1), y, i;
+    WORD box_h = text_box_h(p, g.list_top, &lines);
+    if (!p->pic[0])
+        return;
+    y = g.list_top + box_h + U(8);
+    if (p->note && lines) {
+        struct ItemList l;
+        if (list_init(&l)) {
+            wrap_into(&l, p->note, textbox_w());
+            for (i = 0; i < l.count; i++)
+                gfx_text(&g, g.pane_x, y + i * lh, l.items[i].label, PEN_DIM, PEN_BG, textbox_w(),
+                         TS_BODY);
+            list_free(&l);
+        }
+        y += lines * lh + U(4);
+    }
+    if (p->pic_bm && y + p->pic_h <= g.footer_y - 2)
+        BltBitMapRastPort(p->pic_bm, 0, 0, g.rp, g.pane_x + (textbox_w() - p->pic_w) / 2, y,
+                          p->pic_w, p->pic_h, 0xC0);
 }
 
 static struct TextBox *cur_tb(void)
@@ -3636,9 +3685,11 @@ static void draw_pane(BOOL full)
         break;
     case PT_TEXT:
         if (!p->tb.open)
-            open_textbox(p, g.list_top);    /* its picture scrolls with the text, after it */
+            open_textbox(p, g.list_top);
         if (full || !p->tb.drawn)
             tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
+        if (full)
+            draw_text_picture(p);   /* the credits' AGS logo, under the box */
         break;
     case PT_PLAYER:
         np_draw(full);
