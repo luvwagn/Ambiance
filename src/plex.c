@@ -31,7 +31,7 @@
  *   2: a fast one (a quick 060, an emulated or accelerated 68k): 24000 Hz
  *      stereo, 160 kbit/s.
  * Paula plays up to about 28 kHz, so nothing asks for more than 24 kHz.
- * Settings > Plex > Request lower quality audio (on unless turned off;
+ * Settings > Networking > Plex > Request lower quality audio (on unless turned off;
  * offered on a fast Amiga only, always on otherwise) off: MP3s as stored,
  * decoded to Paula's rate (others converted either way). Plex
  * picks a profile by the client's platform and device: without them it

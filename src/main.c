@@ -123,7 +123,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
-       ACT_GENSET, ACT_NETSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
+       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1567,15 +1567,30 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
     return it;
 }
 
-enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SOUND, SETP_NET, SETP_PLEX };
+enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX };
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 
+/* Settings: General, Screen, Sound, Networking (Plex inside it, as it
+ * needs the network). */
 static void build_settings(struct Page *p)
 {
+    p->setp = SETP_ROOT;
+    action_item(p, "General", "", ACT_GENSET, MARK_ARROW);
+    action_item(p, "Screen", gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
+    action_item(p, "Sound", caps.ahi ? "Paula (AHI later)" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, "Networking", !caps.net ? "no TCP/IP stack" : net_if[0] ? net_if : "",
+                ACT_NETSET, MARK_ARROW);
+}
+
+/* Settings > Screen: the mode, the style (its font on a laced screen), and
+ * double buffering where it is offered. */
+static void build_screen_settings(struct Page *p)
+{
     char tag[64];
-    amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     struct Item *it;
+    p->setp = SETP_SCREEN;
+    amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
     action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
     /* Style: the font on a laced screen; greyed out, showing Pixel, where
      * this screen can only be pixel (other native modes, 8-bit RTG) */
@@ -1590,15 +1605,6 @@ static void build_settings(struct Page *p)
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, "Double buffering", "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    action_item(p, "General", "", ACT_GENSET, MARK_ARROW);
-    action_item(p, "Sound", caps.ahi ? "Paula (AHI later)" : "Paula", ACT_SOUNDSET, MARK_ARROW);
-    action_item(p, "Networking", !caps.net ? "no TCP/IP stack" : net_if[0] ? net_if : "",
-                ACT_NETSET, MARK_ARROW);
-    if (caps.net)                       /* Plex (plex.c): only with networking */
-        action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
-                               : plex.host[0] ? plex.host : "On, no server chosen",
-                    ACT_PLEXSET, MARK_ARROW);
-    p->setp = SETP_ROOT;
 }
 
 /* Settings > General. */
@@ -1627,6 +1633,9 @@ static void build_net_settings(struct Page *p)
         list_add(&p->list, "No TCP/IP stack running", "", "", IT_TEXT);
         return;
     }
+    action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
+                           : plex.host[0] ? plex.host : "On, no server chosen",
+                ACT_PLEXSET, MARK_ARROW);
     nnic = net_interfaces(nics, 8, plex.host, &nic_in_use);
     for (i = 0; i < nnic; i++)
         if (nic_in_use && nics[i].ip == nic_in_use)
@@ -1658,7 +1667,9 @@ static void build_net_settings(struct Page *p)
         list_add(&p->list, "This TCP/IP stack does not list its interfaces", "", "", IT_TEXT);
 }
 
-#define SETTINGS_STYLE_ROW 1    /* "Style" in build_settings */
+#define SETTINGS_SCREEN_ROW 1   /* "Screen" in build_settings */
+#define SCREEN_STYLE_ROW 1      /* "Style" in build_screen_settings */
+static void build_screen_settings(struct Page *p);
 
 /* Settings > Plex: on or off, the server, and how the music is asked for. */
 static void build_plex_settings(struct Page *p)
@@ -1709,10 +1720,9 @@ static void draw_list_rows(struct Page *p);
 
 /* A setting changed: the Settings pages open built again (the selections
  * kept): Settings itself says what is chosen in its rows. */
-static void plex_settings_again(BOOL full)
+/* Every Settings page open built again, each keeping its selection. */
+static void settings_rebuild(void)
 {
-    struct Page *p = cur();
-    LONG sel = p ? p->sel : 0;
     int d;
     for (d = 0; d < depth; d++) {
         struct Page *q = &pages[d];
@@ -1726,10 +1736,18 @@ static void plex_settings_again(BOOL full)
         case SETP_SOUND: build_sound_settings(q); break;
         case SETP_NET: build_net_settings(q); break;
         case SETP_GENERAL: build_general_settings(q); break;
+        case SETP_SCREEN: build_screen_settings(q); break;
         default: build_settings(q); break;
         }
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
     }
+}
+
+static void plex_settings_again(BOOL full)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    settings_rebuild();
     if (!p || p->type != PT_LIST)
         return;
     p->sel = sel < p->list.count ? sel : p->list.count - 1;
@@ -6681,10 +6699,15 @@ static void apply_screen_mode(int sm)
             menu_sel = i;
     build_root(MOD_SETTINGS);
     if (cur())
-        cur()->sel = 0;
+        cur()->sel = SETTINGS_SCREEN_ROW;
     {
-        struct Page *p = page_push(PT_LIST, "Screen mode");
-        if (p)
+        /* back where it was chosen: Settings > Screen > Screen mode */
+        struct Page *p = page_push(PT_LIST, "Screen");
+        if (p) {
+            build_screen_settings(p);
+            p->sel = 0;
+        }
+        if ((p = page_push(PT_LIST, "Screen mode")))
             build_screenmodes(p);
     }
     focus = FOCUS_CONTENT;
@@ -6714,7 +6737,7 @@ static void toggle_plex_on(void)
     plex_settings_again(TRUE);              /* rows come and go */
 }
 
-/* Settings > Plex > Request lower quality audio: every track the server's
+/* Settings > Networking > Plex > Request lower quality audio: every track the server's
  * conversion, made for this Amiga (22 kHz mono on a 68030: a fraction of
  * the decoding of a 44.1 kHz stereo file), or MP3s as stored (other
  * formats are converted either way). The next track it applies to. */
@@ -6829,7 +6852,11 @@ static void restyle(void)
             menu_sel = i;
     build_root(MOD_SETTINGS);
     if (cur())
-        cur()->sel = SETTINGS_STYLE_ROW;
+        cur()->sel = SETTINGS_SCREEN_ROW;
+    if ((p = page_push(PT_LIST, "Screen"))) {
+        build_screen_settings(p);
+        p->sel = SCREEN_STYLE_ROW;
+    }
     if ((p = page_push(PT_LIST, "Style")))
         build_styles(p);
     focus = FOCUS_CONTENT;
@@ -6859,13 +6886,7 @@ static void apply_style(int st)
             build_styles(p);
             draw_list_rows(p);
         }
-        if (depth >= 2) {
-            struct Page *up = &pages[depth - 2];
-            list_free(&up->list);
-            list_init(&up->list);
-            build_settings(up);
-            up->sel = SETTINGS_STYLE_ROW;
-        }
+        settings_rebuild();         /* Screen's Style row shows the choice */
         if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
             set_msg("Smooth: on RTG screens only");
         return;
@@ -6909,7 +6930,7 @@ static void build_music_root(struct Page *p)
         return;
     }
     if (!plex.on) {
-        list_add(&p->list, "Plex is turned off (Settings > Plex)", "", "", IT_TEXT);
+        list_add(&p->list, "Plex is turned off (Settings > Networking > Plex)", "", "", IT_TEXT);
         return;
     }
     if (plex.host[0] && plex.library[0]) {
@@ -6926,7 +6947,7 @@ static void build_music_root(struct Page *p)
             it->mark = MARK_ARROW;
     } else {
         /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
-        list_add(&p->list, "No Plex server chosen: Settings > Plex server", "", "", IT_TEXT);
+        list_add(&p->list, "No Plex server chosen: Settings > Networking > Plex", "", "", IT_TEXT);
     }
 }
 
@@ -7162,7 +7183,7 @@ static void radio_open(struct Item *it)
         return;
     }
     if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
-        set_msg("No Plex server chosen: Settings > Plex server");
+        set_msg("No Plex server chosen: Settings > Networking > Plex");
         return;
     }
     if (rq) {                               /* one out at a time: the last given up */
@@ -7715,12 +7736,12 @@ static void plex_help(void)
                  "Amiga's own sound (mpega.library). The server makes each track for this "
                  "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
                  "and 24 kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
-                 "turning off Settings > Plex > Request lower quality audio plays MP3 files "
-                 "as stored (other formats are converted either way); Settings > Plex > Plex "
-                 "turns it all off.");
+                 "turning off Settings > Networking > Plex > Request lower quality audio "
+                 "plays MP3 files as stored (other formats are converted either way); "
+                 "Settings > Networking > Plex > Plex turns it all off.");
     text_line(p, "");
-    text_para(p, "Finding a server: Settings > Plex > Plex server asks the network (Plex's GDM); "
-                 "choose one and it is kept. Or set its address from the Shell: "
+    text_para(p, "Finding a server: Settings > Networking > Plex > Plex server asks the "
+                 "network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: "
                  "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400");
     text_line(p, "");
     text_para(p, "Signing in: a server asks for its owner's token. Find it in Plex Web (an "
@@ -7829,6 +7850,8 @@ static void act_action(struct Item *it)
         open_sound_settings();
     else if (it->action == ACT_GENSET)
         open_settings_page("General", build_general_settings);
+    else if (it->action == ACT_SCREENSET)
+        open_settings_page("Screen", build_screen_settings);
     else if (it->action == ACT_NETSET)
         open_settings_page("Networking", build_net_settings);
     else if (it->action == ACT_NICAUTO)

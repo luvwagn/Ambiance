@@ -49,11 +49,11 @@ Features in this release
   RTG screens; on native screens, and for short text, they move straight
   to the next line.
 - Hires screens (laced or not) use a dense layout: more of each list fits.
-- Laced screens (640x400/512): Settings > Style chooses their font, and
+- Laced screens (640x400/512): Settings > Screen > Style chooses their font, and
   the layout grows with it: Pixelify Sans 12 or 24 (24 doubles the
   artwork too), Galmuri11 (the default), Galmuri11 Bold, Galmuri14 or
   Galmuri14 Bold. Galmuri is a pixel font drawn at each size.
-- Big RTG screens scale the whole layout up. Settings > Style chooses
+- Big RTG screens scale the whole layout up. Settings > Screen > Style chooses
   the look there: Pixel (the pixel artwork, 2x on 1024x768) or Smooth
   (anti-aliased text, icons and logo at exactly the screen's size:
   1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; RTG screens only).
@@ -97,7 +97,7 @@ Features in this release
   its length; the file, what Plex sends, what plays), an album playing
   through. The server makes each track for this Amiga: 22 kHz mono MP3
   for a 68020/030, 24 kHz stereo for a 68040/060, MP3 files as stored
-  for a fast one; any format it has. Settings > Plex turns it on or off,
+  for a fast one; any format it has. Settings > Networking > Plex turns it on or off,
   chooses the server (those found on the network, by Plex's GDM), and
   whether the sound is made for this Amiga. A server that asks for a
   sign-in token takes it from ENVARC:AmigaMCE/PlexToken (About > Plex in
@@ -120,7 +120,7 @@ Controls
   Left/Esc     back             Esc at menu    press twice to quit
   A-Z          jump to letter   Right mouse    back
   CD32 pad     shoulder buttons: next / previous letter
-  Held Up/Down in a list speeds up smoothly. With Settings > Jump
+  Held Up/Down in a list speeds up smoothly. With Settings > General > Jump
                scrolling on, a very long one (1,000 entries or more, like
                All Games) then steps a letter at a time (A, B, C...): let go
                on the letter shown
@@ -154,7 +154,7 @@ to the program. From the floppy (ADF), unpack the archive on it, e.g.
 which makes the AmigaMCE drawer there. If AGS is set to boot straight into its menu, quit AGS
 to Workbench first, then double-click AmigaMCE.
 
-Settings > Debug shows the system CPU load and AmigaMCE's memory use in
+Settings > General > Debug shows the system CPU load and AmigaMCE's memory use in
 the header, and writes a timing log to AmigaMCE.log next to the program
 (or RAM:AmigaMCE.log if that drawer is read-only).
 
