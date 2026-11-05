@@ -4358,25 +4358,39 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
 
 /* A station's page: its name; what plays now; what it is and how it is
  * played (in the place of a module's samples). */
+/* A line of the page drawn over what was there (opaque, the rest of the
+ * line filled): drawn again unchanged, nothing on screen changes. */
+static void np_line(WORD y, const char *s, UBYTE fg, int ts)
+{
+    WORD x1 = np.x0 + np.w, w = gfx_textlen(&g, s, ts);
+    if (w > np.w)
+        w = np.w;
+    gfx_text(&g, np.x0, y, s, fg, PEN_BG, np.w, ts | TS_OPAQUE);
+    if (np.x0 + w < x1)
+        gfx_fill(&g, np.x0 + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
+}
+
+/* A station's part of the page: what it is, and what is on air. Its
+ * state and title change while it plays (connecting, buffering, a new
+ * song), so it is drawn line by line over itself, never cleared first. */
 static void np_draw_station(void)
 {
     struct StInfo in;
     char info[320], part[160];
     const char *now = st_title();
-    WORD lh = g.font_h + U(1), y = np.samples_y;
+    WORD lh = g.font_h + U(1), y = np.samples_y, bottom = g.footer_y - 2;
     st_info(&in);
-    gfx_text(&g, np.x0, np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE,
-             PEN_BG, np.w, TS_BOLD);
+    np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE, TS_BOLD);
     sprintf(info, "Radio   %s", mp_tag());
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
         sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
         amce_strlcat(info, part, sizeof(info));
         amce_strlcat(info, np.folder, sizeof(info));
     }
-    gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG, np.w, TS_SMALL);
-    if (y + lh * 5 > g.footer_y - 2)
+    np_line(np.info_y, info, PEN_DIM, TS_SMALL);
+    if (y + lh * 5 > bottom)
         return;
-    gfx_text(&g, np.x0, y, "On air", PEN_DIM, PEN_BG, 0, TS_BOLD);
+    np_line(y, "On air", PEN_DIM, TS_BOLD);
     y += lh;
     if (!mp_running())
         now = st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped";
@@ -4386,19 +4400,23 @@ static void np_draw_station(void)
         now = "Buffering...";
     else if (!now[0])
         now = "(the station does not say)";
-    gfx_text(&g, np.x0, y, now, PEN_TEXT, PEN_BG, np.w, TS_SMALL);
+    np_line(y, now, PEN_TEXT, TS_SMALL);
+    gfx_fill(&g, np.x0, y + g.font_h, np.x0 + np.w - 1, y + lh * 2 - 1, PEN_BG);
     y += lh * 2;
     if (in.name[0] || in.genre[0]) {
         sprintf(part, "%s%s%s", in.name, in.name[0] && in.genre[0] ? "   " : "", in.genre);
-        gfx_text(&g, np.x0, y, part, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+        np_line(y, part, PEN_DIM, TS_SMALL);
         y += lh;
     }
-    if (in.dec_freq && y + lh <= g.footer_y - 2) {
+    if (in.dec_freq && y + lh <= bottom) {
         sprintf(part, "MP3 %ld kbit/s, %ld Hz %s; played at %ld Hz %s", (long)in.bitrate,
                 (long)in.freq, in.channels == 2 ? "stereo" : "mono", (long)in.dec_freq,
                 in.dec_channels == 2 ? "stereo" : "mono");
-        gfx_text(&g, np.x0, y, part, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+        np_line(y, part, PEN_DIM, TS_SMALL);
+        y += lh;
     }
+    if (y <= bottom)
+        gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);   /* lines there before */
 }
 
 static void np_draw(BOOL full)
@@ -4863,7 +4881,18 @@ static void np_tick(void)
         if (st_title_seq() != np.s_rseq || state != np.s_rstate) {
             np.s_rseq = st_title_seq();
             np.s_rstate = state;
-            np_redraw_all();                /* what plays, or its state, changed */
+            if (np_on() && (!np.w || !mp_loaded())) {
+                np_redraw_all();            /* stopped: "Nothing playing" */
+            } else if (np_on()) {
+                /* what plays, or its state, changed: its lines over themselves,
+                 * and the controls (a full redraw flashed the page each time) */
+                BOOL was = gfx_quiet_begin();
+                np_draw_station();
+                gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+                np_update();
+                if (!msg[0] && hint_shown && hint_text() != hint_shown)
+                    draw_footer();
+            }
             return;
         }
     }
