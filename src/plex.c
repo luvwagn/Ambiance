@@ -22,11 +22,16 @@
  * in a track's own answer, plex_stream_rate, not in an album's).
  *
  * A track plays as stored (an MP3 file) or converted by the server
- * (Plex's universal transcoder, progressive MP3 over plain HTTP): all of
- * them when Settings > Plex: convert music is on (the default), the ones
- * not MP3 always. Converted to 22050 Hz at most, so the Amiga decodes half
- * the samples of a 44.1 kHz file: mono at 64 kbit/s for a 68030 or less
- * (it decodes mono anyway), stereo at 96 kbit/s for a 68040/060. Plex
+ * (Plex's universal transcoder, progressive MP3 over plain HTTP), made for
+ * what this Amiga can decode (plex_tier: its CPU, and how fast it really
+ * is, a short timed loop the first time):
+ *   0: a 68020/030: 22050 Hz mono, 64 kbit/s (the floor: never less)
+ *   1: a 68040/060: 24000 Hz stereo, 112 kbit/s
+ *   2: a fast one (a quick 060, an emulated or accelerated 68k): MP3 files
+ *      as stored (decoded to Paula's rate), others 24000 Hz stereo 160k.
+ * Paula plays up to about 28 kHz, so nothing asks for more than 24 kHz.
+ * Settings > Plex: sound made for this Amiga off: MP3s as stored (others
+ * converted either way). Plex
  * picks a profile by the client's platform and device: without them it
  * answers 400. The limits are on the music codec (scope musicCodec, as in
  * Plex's own profiles' MusicCodec, scopeName mp3): on audioCodec they were
@@ -47,6 +52,7 @@
 #define TOKEN_VAR  "AmigaMCE/PlexToken"
 #define CID_VAR    "AmigaMCE/PlexClient"
 #define CONV_VAR   "AmigaMCE/PlexConvert"
+#define ON_VAR     "AmigaMCE/Plex"
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
@@ -96,9 +102,10 @@ static void take_server(const char *s)
         plex.port = (UWORD)p;
 }
 
-void plex_load(void)
+void plex_load(UWORD cpu)
 {
     char v[96];
+    plex.cpu = cpu;
     get_var(SERVER_VAR, v, sizeof(v));
     take_server(v);
     get_var(NAME_VAR, plex.name, sizeof(plex.name));
@@ -106,6 +113,8 @@ void plex_load(void)
     get_var(CID_VAR, plex.cid, sizeof(plex.cid));
     get_var(CONV_VAR, v, sizeof(v));
     plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
+    get_var(ON_VAR, v, sizeof(v));
+    plex.on = amce_stricmp(v, "off") != 0;
     if (!plex.cid[0]) {
         /* who this AmigaMCE is, to the server: made up once, then kept */
         ULONG a = time_ms() ^ (ULONG)FindTask(NULL), b = (ULONG)AvailMem(MEMF_ANY) * 2654435761UL;
@@ -142,10 +151,49 @@ void plex_request(const char *key, char *out, LONG max)
     amce_strlcat(out, n, max);
 }
 
+void plex_set_on(BOOL on)
+{
+    plex.on = on;
+    set_var(ON_VAR, on ? "on" : "off");
+}
+
 void plex_set_convert(BOOL on)
 {
     plex.convert = on;
     set_var(CONV_VAR, on ? "on" : "off");
+}
+
+/* How much this Amiga can decode (see the top): its CPU, and a timed
+ * loop of multiplies (thousands a second: a 14 MHz 68030 about 250, a
+ * 50 MHz 68060 about 12000, Emu68 far more). */
+int plex_tier(void)
+{
+    static int tier = -1;
+    if (tier < 0) {
+        static volatile ULONG sink __attribute__((unused));
+        ULONG t0 = time_ms(), n = 0, x = 1, i, speed;
+        char m[80];
+        while (time_ms() - t0 < 100 && n < 100000) {
+            for (i = 0; i < 1000; i++)
+                x = x * 1103515245UL + 12345;
+            n++;
+        }
+        sink = x;
+        speed = n * 10;                     /* thousands a second */
+        tier = (plex.cpu >= 40 || speed >= 2000) ? 1 : 0;
+        if (speed >= 8000)
+            tier = 2;
+        sprintf(m, "%lu thousand multiplies a second, a 680%02ld: tier %ld", (unsigned long)speed,
+                (long)plex.cpu, (long)tier);
+        amce_log("plex: this Amiga", m);
+    }
+    return tier;
+}
+
+/* The CPU the decoder is told of (stream.c): a fast tier as a 68060. */
+UWORD plex_decoder_cpu(void)
+{
+    return plex_tier() >= 2 && plex.cpu < 60 ? 60 : plex.cpu;
 }
 
 /* A track is played converted by the server (see the top). */
@@ -154,7 +202,11 @@ BOOL plex_converts(const struct Item *it)
     char codec[16], key[160];
     radio_field(it, 1, codec, sizeof(codec));
     radio_field(it, 5, key, sizeof(key));
-    return key[0] && (plex.convert || amce_stricmp(codec, "mp3"));
+    if (!key[0])
+        return FALSE;
+    if (amce_stricmp(codec, "mp3"))
+        return TRUE;                        /* the Amiga plays MP3 only */
+    return plex.convert && plex_tier() < 2;
 }
 
 /* A track as a URL to play (out max bytes): its file, or the server's
@@ -162,7 +214,9 @@ BOOL plex_converts(const struct Item *it)
 void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
 {
     char key[300], port[12], enc[400], n[160];
-    BOOL mono = cpu < 40;
+    int tier = plex_tier();
+    BOOL mono = tier == 0;
+    (void)cpu;
     sprintf(port, ":%lu", (unsigned long)plex.port);
     amce_strlcpy(out, "http://", max);
     amce_strlcat(out, plex.host, max);
@@ -173,7 +227,8 @@ void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
         amce_strlcat(out, "/music/:/transcode/universal/start.mp3?path=", max);
         amce_strlcat(out, enc, max);
         sprintf(n, "&mediaIndex=0&partIndex=0&protocol=http&directPlay=0&directStream=0"
-                   "&hasMDE=1&download=0&musicBitrate=%ld", (long)(mono ? 64 : 96));
+                   "&hasMDE=1&download=0&musicBitrate=%ld",
+                (long)(tier == 0 ? 64 : tier == 1 ? 112 : 160));
         amce_strlcat(out, n, max);
         sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
         amce_strlcat(out, n, max);
@@ -188,8 +243,9 @@ void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
                           "add-transcode-target(type%3DmusicProfile%26context%3Dstreaming"
                           "%26protocol%3Dhttp%26container%3Dmp3%26audioCodec%3Dmp3)"
                           "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
-                          "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D22050)",
+                          "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D",
                     max);
+        amce_strlcat(out, mono ? "22050)" : "24000)", max);
         if (mono)
             amce_strlcat(out, "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
                               "%26type%3DupperBound%26name%3Daudio.channels%26value%3D1)",
@@ -294,7 +350,7 @@ static void flush_track(struct fill *x)
 static int element(void *ctx, const char *name, char **a, int n, int depth)
 {
     struct fill *x = ctx;
-    char title[160], key[300], tag[24];
+    char title[160], key[1000], tag[24];
     const char *v;
     if (x->full)
         return 0;
@@ -388,6 +444,22 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             amce_strlcpy(tag, v, sizeof(tag));
         else if ((v = xml_attr(a, n, "leafCount")) && num(v))
             sprintf(tag, num(v) == 1 ? "%lu track" : "%lu tracks", (unsigned long)num(v));
+        {
+            /* what the details pane shows of it: after the key, by tabs */
+            static char more[700];
+            char type[16], thumb[160], year[8], by[100], count[12], studio[60], summary[300];
+            text(xml_attr(a, n, "type"), type, sizeof(type));
+            amce_strlcpy(thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
+                         sizeof(thumb));
+            text(xml_attr(a, n, "year"), year, sizeof(year));
+            text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
+            text(xml_attr(a, n, "leafCount"), count, sizeof(count));
+            text(xml_attr(a, n, "studio"), studio, sizeof(studio));
+            text(xml_attr(a, n, "summary"), summary, sizeof(summary));
+            sprintf(more, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s", type, thumb, year, by, count, studio,
+                    summary);
+            amce_strlcat(key, more, sizeof(key));
+        }
     }
     {
         struct Item *it = list_add(x->l, title[0] ? title : "(no name)", key, tag, IT_PLEXDIR);

@@ -119,7 +119,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1529,8 +1529,18 @@ static void build_settings(struct Page *p)
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
-    action_item(p, "Plex: convert music to 22 kHz", "", ACT_PLEXCONV,
-                plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if (caps.net) {
+        /* Plex (plex.c): only with networking */
+        action_item(p, "Plex", "", ACT_PLEXON, plex.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
+        if (plex.on) {
+            if ((it = list_add(&p->list, "Plex server",
+                               "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
+                                                    : "none chosen", IT_PLEXDIR)))
+                it->mark = MARK_ARROW;
+            action_item(p, "Plex: sound made for this Amiga", "", ACT_PLEXCONV,
+                        plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
+        }
+    }
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, "Double buffering", "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
@@ -1647,6 +1657,7 @@ static char plex_now[300];      /* the Plex track playing: its file's key (lists
 static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
 static struct NetJob *plex_dj;
 static void plex_ask_rate(const char *key);
+static void plex_refetch(struct Page *p, const char *key);
 static ULONG strtoul_(const char *s)
 {
     ULONG v = 0;
@@ -2575,8 +2586,9 @@ static BOOL ov_eligible(const struct Page *p)
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
     for (i = 0; i < p->list.count; i++)
-        if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC)
-            runs++;
+        if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
+            p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_PLEXDIR)
+            runs++;                         /* lists in title order (not a track list's) */
     return runs * 2 >= p->list.count;
 }
 
@@ -3605,7 +3617,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
-        const char *tag = it->kind == IT_ACTION ? it->path : (p->pics || p->radio) ? it->sortkey : "";
+        const char *tag = it->kind == IT_ACTION ? it->path : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
             gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
@@ -4836,7 +4848,8 @@ static BOOL np_start(LONG idx)
             const char *d = ms;
             while (*d >= '0' && *d <= '9')
                 v = v * 10 + (*d++ - '0');
-            ok_track = mp_load_track(url, it->label, by, "MP3", v, caps.cpu, err, sizeof(err));
+            ok_track = mp_load_track(url, it->label, by, "MP3", v, plex_decoder_cpu(), err,
+                                     sizeof(err));
         }
         if (!ok_track) {
             busy_end(TRUE);
@@ -6239,6 +6252,22 @@ static void toggle_jump(void)
     }
 }
 
+/* Settings > Plex: Music's Plex rows, and its asking, on or off. */
+static void toggle_plex_on(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    plex_set_on(!plex.on);
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel < p->list.count ? sel : p->list.count - 1;
+        draw_pane(TRUE);
+        draw_footer();
+    }
+}
+
 /* Settings > Plex: convert music to 22 kHz: every track the server's
  * conversion (half the decoding of a 44.1 kHz file), or MP3s as stored
  * (other formats are converted either way). The next track it applies to. */
@@ -6402,6 +6431,14 @@ static void build_music_root(struct Page *p)
     char label[96];
     p->plex = 1;
     np_shortcut(p);
+    if (!caps.net) {
+        list_add(&p->list, "No TCP/IP stack running: Plex needs networking", "", "", IT_TEXT);
+        return;
+    }
+    if (!plex.on) {
+        list_add(&p->list, "Plex is turned off (Settings > Plex)", "", "", IT_TEXT);
+        return;
+    }
     if (plex.host[0]) {
         sprintf(label, "Plex: %s", plex.name[0] ? plex.name : plex.host);
         if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
@@ -6469,6 +6506,26 @@ static void radio_done(struct NetJob *j)
         if (j->body)
             n = servers ? plex_fill_servers(j->body, j->len, &p->list)
                         : plex_fill(p->base, j->body, j->len, &p->list, &total);
+        if (n == 1 && !servers && p->list.items[0].kind == IT_PLEXDIR && strstr(p->base, "/children")) {
+            /* an artist with one album and nothing loose: the album itself */
+            char type[16];
+            struct Item *a = &p->list.items[0];
+            radio_field(a, 1, type, sizeof(type));
+            if (!strcmp(type, "album")) {
+                char key[300], title[96];
+                radio_field(a, 0, key, sizeof(key));
+                sprintf(title, "%.44s - %.44s", p->title, a->label);
+                amce_strlcpy(p->title, title, sizeof(p->title));
+                list_free(&p->list);
+                list_init(&p->list);
+                amce_log("plex: one album", key);
+                plex_refetch(p, key);
+                if (j->body)
+                    FreeVec(j->body);
+                FreeVec(j);
+                return;
+            }
+        }
         if (!j->body || n <= 0) {
             const char *why = !j->body && strstr(j->err, " 401")
                               ? "The server wants a sign-in token: see Music > About Plex"
@@ -6600,13 +6657,14 @@ static void radio_open(struct Item *it)
     amce_strlcpy(p->base, it->path, sizeof(p->base));
     if (it->kind == IT_PLEXDIR) {
         p->plex = 1;
-        if (!strcmp(it->path, "#gdm")) {
+        radio_field(it, 0, p->base, sizeof(p->base));  /* its key; the rest is its details */
+        if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
             amce_strlcpy(msg, "Looking for Plex servers...  Esc to give up", sizeof(msg));
         } else {
             amce_strlcpy(j->host, plex.host, sizeof(j->host));
             j->port = plex.port;
-            plex_request(it->path, j->path, sizeof(j->path));
+            plex_request(p->base, j->path, sizeof(j->path));
             sprintf(msg, "Asking %.40s...  Esc to give up", plex.name[0] ? plex.name : plex.host);
         }
     } else {
@@ -6620,6 +6678,28 @@ static void radio_open(struct Item *it)
     draw_footer();
     net_submit(j);
     if (j->done && !j->busy)                /* the process could not start: no answer to wait for */
+        radio_done(j);
+}
+
+/* A Plex page asked again, for key (an artist's one album, say). */
+static void plex_refetch(struct Page *p, const char *key)
+{
+    struct NetJob *j;
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amce_strlcpy(p->base, key, sizeof(p->base));
+    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    plex_request(key, j->path, sizeof(j->path));
+    j->seq = ++rq_seq;
+    p->net_seq = j->seq;
+    rq = j;
+    if (p == cur() && !pane_pending) {
+        draw_pane(TRUE);
+        draw_footer();
+    }
+    net_submit(j);
+    if (j->done && !j->busy)
         radio_done(j);
 }
 
@@ -6667,6 +6747,24 @@ static void plex_choose(struct Item *it)
     }
     plex_set_server(host, port, name);
     amce_log("plex: server chosen", hp);
+    if (depth >= 2 && menu_sel >= 0 && menu[menu_sel] == MOD_SETTINGS) {
+        /* chosen in Settings: back there, the row naming it */
+        struct Page *up;
+        LONG sel;
+        page_pop();
+        up = cur();
+        sel = up ? up->sel : 0;
+        if (up && up->type == PT_LIST) {
+            list_free(&up->list);
+            list_init(&up->list);
+            build_settings(up);
+            up->sel = sel < up->list.count ? sel : 0;
+        }
+        draw_pane(TRUE);
+        draw_footer();
+        set_msg("Plex server chosen");
+        return;
+    }
     if (depth >= 2 && pages[depth - 2].plex && depth == 2) {
         /* Music's own list: its Plex row now names this server */
         struct Page *up = &pages[depth - 2];
@@ -6787,6 +6885,8 @@ static void act_action(struct Item *it)
         toggle_https();
     else if (it->action == ACT_PLEXCONV)
         toggle_plex_convert();
+    else if (it->action == ACT_PLEXON)
+        toggle_plex_on();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)
@@ -6823,6 +6923,8 @@ static void act_action(struct Item *it)
 #define LIST_SCREENS  6     /* ...or this many screenfuls a second, if more */
 #define LIST_BOOST    4     /* top speed, as a multiple of cruising speed, */
 #define LIST_SWEEP 1000     /* ...or the whole list in this many ms, if faster */
+#define LIST_CROSS_CRUISE 4000  /* cruising never crosses a whole list faster */
+#define LIST_CROSS_PEAK   2000  /* nor top speed (both: a row a frame at the least) */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 
 static struct {
@@ -6993,9 +7095,17 @@ static void hold_tick(void)
              * screens that show more rows; above one per frame the list
              * moves several rows in a single frame, still drawn every frame. */
             LONG top = LIST_MAX, screens = LIST_SCREENS * list_visible(), n;
+            LONG cruise_cap = p->list.count * 1000 / LIST_CROSS_CRUISE;
             BOOL menu = p->list.count <= 2 * list_visible();
             if (screens > top)
                 top = screens;
+            /* a shorter list (111 artists) is not crossed in a blink: cruising
+             * takes LIST_CROSS_CRUISE ms over all of it, but never under a
+             * row a frame */
+            if (cruise_cap < MENU_MAX)
+                cruise_cap = MENU_MAX;
+            if (top > cruise_cap)
+                top = cruise_cap;
             if (menu)
                 /* a short list (Games' own menu): a steady menu pace from
                  * the start, as a fast key repeat would give; the slow
@@ -7013,6 +7123,11 @@ static void hold_tick(void)
                      sweep = p->list.count * 1000 / LIST_SWEEP;
                 if (sweep > peak)
                     peak = sweep;
+                if (p->list.count < LETTER_MIN_LIST &&
+                    peak > p->list.count * 1000 / LIST_CROSS_PEAK)
+                    peak = p->list.count * 1000 / LIST_CROSS_PEAK;    /* not too fast, short */
+                if (peak < top)
+                    peak = top;
                 if (b > HOLD_BOOST)
                     b = HOLD_BOOST;
                 rate = top + (peak - top) * b / HOLD_BOOST;
@@ -7706,7 +7821,6 @@ static int app_main(void)
     load_debug();
     load_dbuf();
     load_https();
-    plex_load();
     load_jump();
     amce_log_open(debug_on);
     open_extra_libs();
@@ -7735,6 +7849,7 @@ static int app_main(void)
     }
 
     caps_detect(&caps);
+    plex_load(caps.cpu);            /* after: it needs the CPU */
     ags_init(&ags);
     build_menu();
     load_screen_mode();
