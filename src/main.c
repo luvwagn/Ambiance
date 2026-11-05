@@ -2151,6 +2151,10 @@ static const char *hint_text(void)
                       : "Fire show  Right open";
         return hi ? "Up/Down  move    Fire/Right  open    Left/Esc  back" : "Fire open  Esc back";
     }
+    if (p && p->type == PT_LIST && p->radio && p->list.count &&
+        p->list.items[p->sel].kind == IT_STATION)
+        return hi ? "Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back"
+                  : "Fire play  Right info";
     if (p && p->type == PT_LIST && p->radio)
         return hi ? "Up/Down  move    Right/Fire  open    Left/Esc  back" : "Fire open  Esc back";
     if (p && p->type == PT_LIST && has_aside(p))
@@ -2339,7 +2343,7 @@ static WORD mark_column(const struct Page *p)
 {
     const struct ItemList *l = &p->list;
     LONG i;
-    if (p->mods)
+    if (p->mods || p->radio)
         return U(MARK_SIZE + 5);    /* music lists: room for the playing bars, always */
     for (i = 0; i < l->count; i++)
         if (l->items[i].mark != MARK_NONE || l->items[i].kind == IT_MOD)
@@ -3695,6 +3699,8 @@ static struct {
     ULONG rep_next;
     BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
     WORD sl_x0, sl_x1;
+    ULONG s_rseq;               /* a station: its title and state drawn */
+    int s_rstate;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
          .rep = -1, .s_rep = -1 };
 
@@ -4003,9 +4009,24 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
                 (long)st->pattern, (long)st->row);     /* mixed: its length in positions unknown */
     else
         pos[0] = 0;
+    if (mp_is_stream() && mp_running()) {
+        struct StInfo in;
+        st_info(&in);
+        if (in.state == ST_PLAYING) {
+            sprintf(pos, "Buffered %ld.%ld s", (long)(in.buffer_ms / 1000),
+                    (long)(in.buffer_ms % 1000 / 100));
+            if (in.underruns) {
+                sprintf(a, "   dropouts %ld", (long)in.underruns);
+                amce_strlcat(pos, a, sizeof(pos));
+            }
+        } else {
+            amce_strlcpy(pos, in.state == ST_CONNECTING ? "Connecting..." :
+                              in.state == ST_BUFFERING ? "Buffering..." : "", sizeof(pos));
+        }
+    }
     lw = gfx_textlen(&g, t, TS_BODY);
     rw = gfx_textlen(&g, pos, TS_SMALL);
-    if (lw + U(8) + rw > np.w) {            /* narrow: the short form */
+    if (lw + U(8) + rw > np.w && !mp_is_stream()) {    /* narrow: the short form */
         if (st->songlen)
             sprintf(pos, "%ld/%ld  %02ld", (long)st->order + 1, (long)st->songlen, (long)st->row);
         else
@@ -4054,6 +4075,51 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
     }
 }
 
+/* A station's page: its name; what plays now; what it is and how it is
+ * played (in the place of a module's samples). */
+static void np_draw_station(void)
+{
+    struct StInfo in;
+    char info[320], part[160];
+    const char *now = st_title();
+    WORD lh = g.font_h + U(1), y = np.samples_y;
+    st_info(&in);
+    gfx_text(&g, np.x0, np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE,
+             PEN_BG, np.w, TS_BOLD);
+    sprintf(info, "Radio   %s", mp_tag());
+    if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
+        sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+        amce_strlcat(info, part, sizeof(info));
+        amce_strlcat(info, np.folder, sizeof(info));
+    }
+    gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+    if (y + lh * 5 > g.footer_y - 2)
+        return;
+    gfx_text(&g, np.x0, y, "On air", PEN_DIM, PEN_BG, 0, TS_BOLD);
+    y += lh;
+    if (!mp_running())
+        now = st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped";
+    else if (in.state == ST_CONNECTING)
+        now = "Connecting...";
+    else if (in.state == ST_BUFFERING)
+        now = "Buffering...";
+    else if (!now[0])
+        now = "(the station does not say)";
+    gfx_text(&g, np.x0, y, now, PEN_TEXT, PEN_BG, np.w, TS_SMALL);
+    y += lh * 2;
+    if (in.name[0] || in.genre[0]) {
+        sprintf(part, "%s%s%s", in.name, in.name[0] && in.genre[0] ? "   " : "", in.genre);
+        gfx_text(&g, np.x0, y, part, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+        y += lh;
+    }
+    if (in.dec_freq && y + lh <= g.footer_y - 2) {
+        sprintf(part, "MP3 %ld kbit/s, %ld Hz %s; played at %ld Hz %s", (long)in.bitrate,
+                (long)in.freq, in.channels == 2 ? "stereo" : "mono", (long)in.dec_freq,
+                in.dec_channels == 2 ? "stereo" : "mono");
+        gfx_text(&g, np.x0, y, part, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+    }
+}
+
 static void np_draw(BOOL full)
 {
     struct MpStatus st;
@@ -4070,6 +4136,10 @@ static void np_draw(BOOL full)
         if (!mp_loaded()) {
             gfx_text(&g, np.x0, np.title_y, "Nothing playing", PEN_DIM, PEN_BG, np.w, TS_BOLD);
             return;
+        }
+        if (mp_is_stream()) {
+            np_draw_station();
+            goto controls;
         }
         mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
         while (*t == ' ')
@@ -4116,6 +4186,7 @@ static void np_draw(BOOL full)
             }
         }
     }
+controls:
     if (!mp_loaded())
         return;
     np_draw_progress(full, &st);
@@ -4169,16 +4240,22 @@ static void np_mark_lists(BOOL redraw)
     const char *now = mp_loaded() ? mp_path() : "";
     for (d = 0; d < depth; d++) {
         struct Page *p = &pages[d];
-        if (p->type != PT_LIST || !p->mods)
+        if (p->type != PT_LIST || (!p->mods && !p->radio))
             continue;
         for (i = 0; i < p->list.count; i++) {
             struct Item *it = &p->list.items[i];
             if (it->kind == IT_MOD)
                 it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAYING
                                                                                 : MARK_NONE;
+            else if (it->kind == IT_STATION) {
+                char url[256];
+                radio_field(it, 0, url, sizeof(url));
+                it->mark = now[0] && mp_is_stream() && !strcmp(url, now) ? MARK_PLAYING
+                                                                         : MARK_NONE;
+            }
         }
     }
-    if (redraw && !pane_pending && cur() && cur()->type == PT_LIST && cur()->mods)
+    if (redraw && !pane_pending && cur() && cur()->type == PT_LIST && (cur()->mods || cur()->radio))
         draw_list_rows(cur());
 }
 
@@ -4191,7 +4268,16 @@ static BOOL np_start(LONG idx)
         return FALSE;
     it = &np.list.items[idx];
     busy_begin();
-    if (!mp_load(it->path, err, sizeof(err))) {
+    if (it->kind == IT_STATION) {
+        char url[256];
+        radio_field(it, 0, url, sizeof(url));
+        if (!mp_load_stream(url, it->label, it->sortkey, caps.cpu, err, sizeof(err))) {
+            busy_end(TRUE);
+            np.idx = idx;
+            set_msg(err);
+            return FALSE;
+        }
+    } else if (!mp_load(it->path, err, sizeof(err))) {
         busy_end(TRUE);
         np.idx = idx;
         set_msg(err);
@@ -4251,6 +4337,10 @@ static void np_press(int b)
     np.flash_until = time_ms() + FLASH_MS;
     switch (b) {
     case NB_PREV:
+        if (mp_is_stream()) {               /* live: the station before */
+            np_skip(-1);
+            return;
+        }
         /* a few seconds in: back to its start, as players do; else the one before */
         if (mp_loaded()) {
             struct MpStatus st;
@@ -4277,7 +4367,8 @@ static void np_press(int b)
             return;
         }
         if (!np_skip(1))
-            set_msg("That was the last module in the folder");
+            set_msg(mp_is_stream() ? "That was the last station in the list"
+                                   : "That was the last module in the folder");
         return;
     case NB_BACK:
     case NB_FWD:
@@ -4338,7 +4429,8 @@ static void mods_play_item(struct Page *p)
 {
     LONG i;
     struct Item *sel = &p->list.items[p->sel];
-    if (mp_loaded() && mp_running() && !amce_stricmp(mp_path(), sel->path)) {
+    UBYTE kind = sel->kind;                 /* IT_MOD, or IT_STATION (a Radio list) */
+    if (mp_loaded() && mp_running() && sel->mark == MARK_PLAYING) {
         np_open_page();
         return;
     }
@@ -4349,7 +4441,7 @@ static void mods_play_item(struct Page *p)
     amce_strlcpy(np.folder, p->title, sizeof(np.folder));
     for (i = 0; i < p->list.count; i++) {
         struct Item *it = &p->list.items[i];
-        if (it->kind != IT_MOD)
+        if (it->kind != kind)
             continue;
         if (i == p->sel)
             np.idx = np.list.count;
@@ -4369,7 +4461,7 @@ static void mods_play_item(struct Page *p)
 static BOOL np_list_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
-    return p && p->type == PT_LIST && p->mods && mp_loaded();
+    return p && p->type == PT_LIST && (p->mods || p->radio) && mp_loaded();
 }
 
 /* The bars by the playing module (and Now playing) drawn again: the next
@@ -4470,6 +4562,26 @@ static void np_tick(void)
 {
     np_repeat();
     np_eq_tick();
+    if (mp_is_stream()) {
+        int state = mp_running() ? st_state() : -1;
+        if (mp_running() && mp_ended()) {
+            /* a station gone quiet: said why, not the next one */
+            char why[100];
+            amce_strlcpy(why, st_error()[0] ? st_error() : "The station stopped sending",
+                         sizeof(why));
+            mp_stop();
+            np_mark_lists(TRUE);
+            set_msg(why);
+            amce_log("radio", why);
+            state = -1;
+        }
+        if (st_title_seq() != np.s_rseq || state != np.s_rstate) {
+            np.s_rseq = st_title_seq();
+            np.s_rstate = state;
+            np_redraw_all();                /* what plays, or its state, changed */
+            return;
+        }
+    }
     if (mp_running() && mp_ended() && !np.ended_seen) {
         np.ended_seen = TRUE;
         if (mp_subsong_step(1)) {           /* a module of several songs: the next */
@@ -5740,8 +5852,7 @@ static void radio_station(struct Item *it)
     sprintf(f, "Stream:   %s", line);
     text_para(p, f);
     text_line(p, "");
-    text_para(p, "Playing stations arrives in the next step: this page shows what "
-                 "radio-browser.info knows of it.");
+    text_para(p, "Fire on the station in its list plays it.");
     draw_pane(TRUE);
     draw_footer();
 }
@@ -6055,7 +6166,7 @@ static void act_open(BOOL play)
         else if (it->kind == IT_NET)
             radio_open(it);         /* another list, from radio-browser.info */
         else if (it->kind == IT_STATION)
-            radio_station(it);
+            mods_play_item(p);      /* the station, on Now playing */
         else if (it->kind == IT_RUN) {
             char base[300];
             launch(item_path(it, base, sizeof(base)));  /* Fire, Return, Space, double-click */
@@ -6085,6 +6196,11 @@ static void act_right(void)
     if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
         p->list.items[p->sel].kind == IT_DIR) {
         open_dir(&p->list.items[p->sel]);   /* Right goes inside, never plays */
+        return;
+    }
+    if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&
+        p->list.items[p->sel].kind == IT_STATION) {
+        radio_station(&p->list.items[p->sel]);  /* Right: about it; Fire plays it */
         return;
     }
     if (focus == FOCUS_CONTENT && p && p->type == PT_LIST && p->list.count &&

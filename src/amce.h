@@ -372,7 +372,31 @@ void mp_tempo_check(void);   /* once a second: the tempo timer's rate, logged if
 void mp_subsongs(int *cur, int *n);
 BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
 const char *mp_author(void);
-BOOL mp_seek_ms(ULONG ms);              /* mixed modules only */
+BOOL mp_seek_ms(ULONG ms);
+/* a station (radio.c's item): its stream played (stream.c) as an engine */
+BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
+                    LONG errmax);
+BOOL mp_is_stream(void);
+const char *mp_stream_name(void);
+
+/* stream.c: internet radio, MP3 over HTTP decoded by mpega.library */
+enum { ST_ENDED, ST_CONNECTING, ST_BUFFERING, ST_PLAYING, ST_FAILED };
+struct StInfo {
+    int state;
+    const char *name, *genre;       /* what the station calls itself (icy-name, icy-genre) */
+    LONG bitrate, freq, channels, dec_freq, dec_channels;
+    ULONG buffer_ms, played_ms, underruns;
+    UBYTE peak_l, peak_r;
+};
+BOOL st_start(const char *url, UWORD master, UWORD cpu, char *err, LONG errmax);
+void st_stop(void);
+void st_pause(BOOL on);
+void st_volume(int v);
+int st_state(void);
+const char *st_error(void);
+const char *st_title(void);         /* what plays now (ICY StreamTitle) */
+ULONG st_title_seq(void);
+void st_info(struct StInfo *i);              /* mixed modules only */
 
 /* Modules mixed by modplug.library, streamed to Paula (mixplay.c). */
 BOOL mx_available(void);

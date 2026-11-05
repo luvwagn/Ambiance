@@ -55,7 +55,7 @@ extern struct ExecBase *SysBase;
 
 #define GAP_US 550
 
-enum { ENG_NONE, ENG_PT, ENG_EAGLE, ENG_MIX };          /* each of the two gaps in starting a note */
+enum { ENG_NONE, ENG_PT, ENG_EAGLE, ENG_MIX, ENG_RADIO };          /* each of the two gaps in starting a note */
 
 static struct {
     /* the hardware */
@@ -76,6 +76,8 @@ static struct {
     BYTE *smp, *silence;
     ULONG smp_size;
     char path[256];
+    char rname[96], rtag[24];       /* a station's name and format ("128k") */
+    UWORD rcpu;
     char packer[40];                /* what it was packed with ("" none) */
     UBYTE engine;                   /* ENG_*: what plays it */
     UWORD tick_cnt;                 /* an EaglePlayer player's timer (CIA count) */
@@ -430,7 +432,8 @@ static void tick_run(BOOL on)
 void mp_tempo_check(void)
 {
     ULONG now = time_ms(), n = mp.ticks, el, cnt, hz10, want, got, caught;
-    if (!mp.running || mp.paused || mp.engine == ENG_MIX || !mp.have_tick) {
+    if (!mp.running || mp.paused || mp.engine == ENG_MIX || mp.engine == ENG_RADIO ||
+        !mp.have_tick) {
         mp.chk_t0 = 0;
         return;
     }
@@ -560,6 +563,8 @@ static void module_free(void)
         ep_unload();
     if (mp.engine == ENG_MIX)
         mx_unload();
+    if (mp.engine == ENG_RADIO)
+        st_stop();
     mp.engine = ENG_NONE;
     if (mp.pt) {
         FreeVec(mp.pt);
@@ -868,6 +873,14 @@ BOOL mp_play(char *err, LONG errmax)
     }
     if (mp.engine == ENG_EAGLE)
         return play_eagle(err, errmax);
+    if (mp.engine == ENG_RADIO) {
+        mp.finished = FALSE;
+        mp.paused = FALSE;
+        if (!st_start(mp.path, mp.master, mp.rcpu, err, errmax))
+            return FALSE;
+        mp.running = TRUE;
+        return TRUE;
+    }
     if (mp.engine == ENG_MIX) {
         if (mp.finished)
             mx_rewind();
@@ -938,6 +951,8 @@ void mp_stop(void)
         mx_stop();
         mx_rewind();
     }
+    if (mp.engine == ENG_RADIO)
+        st_stop();
     paula_quiet();
     mp.fin_left = -1;
     mp.finished = FALSE;
@@ -986,6 +1001,10 @@ void mp_pause(BOOL on)
         mx_pause(on);
         return;
     }
+    if (mp.engine == ENG_RADIO) {
+        st_pause(on);                       /* live: it plays on, unheard */
+        return;
+    }
     for (i = 0; i < 4; i++)
         CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
 }
@@ -1020,6 +1039,8 @@ BOOL mp_can_step(int d)
         return mp.running && ep_can_step(d);
     if (mp.engine == ENG_MIX)
         return mx_can_step();
+    if (mp.engine == ENG_RADIO)
+        return FALSE;                       /* live */
     return mp.pt != NULL;
 }
 
@@ -1029,6 +1050,8 @@ BOOL mp_step(int d)
         return mp.running && ep_step_position(d);
     if (mp.engine == ENG_MIX)
         return mx_step(d);
+    if (mp.engine == ENG_RADIO)
+        return FALSE;
     if (!mp.pt)
         return FALSE;
     mp_seek(mp.pt->order + d);
@@ -1079,6 +1102,10 @@ void mp_set_volume(int v)
         mx_volume(v);
         return;
     }
+    if (mp.engine == ENG_RADIO) {
+        st_volume(v);
+        return;
+    }
     if (mp.running && mp.pt)
         for (i = 0; i < 4; i++)
             CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
@@ -1098,6 +1125,8 @@ BOOL mp_ended(void)
             mp.finished = TRUE;
         return mp.finished;
     }
+    if (mp.engine == ENG_RADIO)
+        return mp.running && (st_state() == ST_ENDED || st_state() == ST_FAILED);
     return mp.pt && mp.finished;
 }
 const char *mp_path(void) { return mp.path; }
@@ -1145,6 +1174,18 @@ void mp_status(struct MpStatus *s)
         meters(s, hit, vol);
         return;
     }
+    if (mp.engine == ENG_RADIO) {
+        struct StInfo in;
+        st_info(&in);
+        s->elapsed_ms = mp.running ? in.played_ms : 0;
+        s->sub = s->subs = 1;
+        hit[0] = hit[3] = in.peak_l != 0;
+        hit[1] = hit[2] = in.peak_r != 0;
+        vol[0] = vol[3] = (UBYTE)(in.peak_l / 2);
+        vol[1] = vol[2] = (UBYTE)(in.peak_r / 2);
+        meters(s, hit, vol);
+        return;
+    }
     if (mp.engine == ENG_MIX) {
         UBYTE l, r;
         mx_status(s, &l, &r);
@@ -1187,6 +1228,8 @@ const char *mp_title(void)
     }
     if (mp.engine == ENG_MIX)
         return mx_title();
+    if (mp.engine == ENG_RADIO)
+        return mp.rname;
     return mp.pt ? mp.pt->title : "";
 }
 
@@ -1200,6 +1243,8 @@ const char *mp_tag(void)
     }
     if (mp.engine == ENG_MIX)
         return mx_kind();
+    if (mp.engine == ENG_RADIO)
+        return mp.rtag;
     return mp.pt ? mp.lay.tag : "";
 }
 
@@ -1235,6 +1280,28 @@ const char *mp_sample_name(int i, BOOL *used)
     *used = mp.pt->smp[i].len > 1;
     return mp.pt->smp[i].name;
 }
+
+/* A station: nothing to load (its stream is opened when it plays). */
+BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
+                    LONG errmax)
+{
+    err[0] = 0;
+    mp_stop();
+    module_free();
+    if (amce_strnicmp(url, "http", 4)) {
+        amce_strlcpy(err, "Not a station's address", errmax);
+        return FALSE;
+    }
+    mp.engine = ENG_RADIO;
+    mp.rcpu = cpu;
+    amce_strlcpy(mp.path, url, sizeof(mp.path));
+    amce_strlcpy(mp.rname, name, sizeof(mp.rname));
+    amce_strlcpy(mp.rtag, tag, sizeof(mp.rtag));
+    return TRUE;
+}
+
+BOOL mp_is_stream(void) { return mp.engine == ENG_RADIO; }
+const char *mp_stream_name(void) { return mp.rname; }
 
 /* To a time in the song (modules mixed): FALSE if this module cannot. */
 BOOL mp_seek_ms(ULONG ms)

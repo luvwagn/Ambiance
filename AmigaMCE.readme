@@ -76,12 +76,14 @@ Features in this release
   modules with several songs step through them. The music plays on while
   you browse, the next module in the folder follows at a song's end, and
   it stops when a game starts.
-- Radio (in progress): internet radio stations browsed on the Amiga
-  from radio-browser.info (top voted, most listened to, trending,
-  chiptune, demoscene, by genre, by country), only those an Amiga can
-  play: MP3, working, plain http: unless Settings allows HTTPS streams
-  (with AmiSSL). Needs a running TCP/IP stack and mpega.library or MHI.
-  Playing a station comes next.
+- Radio: internet radio stations browsed on the Amiga from
+  radio-browser.info (top voted, most listened to, trending, chiptune,
+  demoscene, by genre, by country), only those an Amiga can play: MP3,
+  working, plain http: unless Settings allows HTTPS streams (with
+  AmiSSL). Fire plays a station on Now playing, with what it is playing
+  (its ICY titles); Right shows what is known of it. MP3 is decoded by
+  mpega.library: mono at 22 kHz on a 68030, stereo up to 28 kHz on a
+  68040/060. Needs a running TCP/IP stack. HTTPS streams do not play yet.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Videos and Music are listed but arrive in a later version. About holds the credits and a System information

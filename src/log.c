@@ -10,11 +10,14 @@
 
 #include <stdio.h>
 #include <dos/dos.h>
+#include <exec/semaphores.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 
 static BPTR logfh;
 static const char *logpath;
+static struct SignalSemaphore loglock;  /* the radio process logs too */
+static BOOL lock_ready;
 
 /* Opens the log when Debug is on in Settings (force) or the file
  * AmigaMCE.debug sits next to the program. It goes to PROGDIR, or to RAM:
@@ -28,6 +31,10 @@ void amce_log_open(BOOL force)
     int i;
     if (logfh)
         return;
+    if (!lock_ready) {
+        InitSemaphore(&loglock);
+        lock_ready = TRUE;
+    }
     me->pr_WindowPtr = (APTR)-1;
     if (!force && (l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.debug", SHARED_LOCK))) {
         UnLock(l);
@@ -51,8 +58,9 @@ void amce_log(const char *what, const char *detail)
 {
     struct DateStamp ds;
     char stamp[48];
-    if (!logfh)
+    if (!logfh || !lock_ready)
         return;
+    ObtainSemaphore(&loglock);
     DateStamp(&ds);
     /* amiga.lib sprintf is RawDoFmt: every number is %l with a long. Only
      * the time stamp is formatted into a buffer; the text is written as it
@@ -68,6 +76,7 @@ void amce_log(const char *what, const char *detail)
     }
     FPuts(logfh, (CONST_STRPTR)"\n");
     Flush(logfh);
+    ReleaseSemaphore(&loglock);
 }
 
 void amce_log_close(void)
