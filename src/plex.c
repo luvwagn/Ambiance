@@ -163,6 +163,11 @@ void plex_request(const char *key, char *out, LONG max)
     }
     sprintf(n, "&X-Plex-Container-Start=0&X-Plex-Container-Size=%ld", (long)LIST_MAX);
     amce_strlcat(out, n, max);
+    if (strstr(key, "/all?type="))
+        /* a library's artists or albums: without their biographies and
+         * reviews (over 1.5 MB for 900 artists, seconds to read on a
+         * 68030); the one shown is asked for its own (plex_summary) */
+        amce_strlcat(out, "&excludeFields=summary", max);
 }
 
 /* The music library Music opens on (key; count: the server's music
@@ -554,6 +559,29 @@ LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG
     if (total)
         *total = x.total;
     return x.added;
+}
+
+static int summary_el(void *ctx, const char *name, char **a, int n, int depth)
+{
+    const char **out = ctx;
+    const char *v;
+    if (depth == 1 && (v = xml_attr(a, n, "summary"))) {
+        *out = v;
+        return 0;
+    }
+    return depth < 1 || strcmp(name, "Directory");  /* the first one only */
+}
+
+/* An artist's or album's own answer (/library/metadata/<n>): its
+ * summary (a biography, a review) into out. FALSE: none. */
+BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max)
+{
+    const char *v = NULL;
+    out[0] = 0;
+    xml_scan((char *)body, len, summary_el, &v);
+    if (v)
+        text(v, out, max);
+    return out[0] != 0;
 }
 
 /* The servers GDM found (net.c: "address\tport\tname" lines) into l. */

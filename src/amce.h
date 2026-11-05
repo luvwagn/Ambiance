@@ -649,6 +649,13 @@ struct NetJob {
     UBYTE *body;                /* AllocVec'd, 0-terminated, len bytes; NULL on error */
     ULONG len, ms;
     char server[64];            /* the server that answered */
+    /* a Plex list (parse set): read into list in the network process, so
+     * the UI goes on (its spinner turning) meanwhile; radio_done takes it */
+    UBYTE parse, parsed;
+    char pkey[300];             /* the key it was asked by */
+    struct ItemList list;
+    LONG n, total;              /* entries read (-1 not Plex's XML), the server's total */
+    ULONG ms_read;
 };
 BOOL net_start(void);
 void net_stop(void);            /* waits for jobs out (cancel them first) */
@@ -707,6 +714,7 @@ void plex_set_library(const char *key, UWORD count);
 int plex_tier(void);
 UWORD plex_decoder_cpu(void);
 void plex_section_menu(const char *sec, struct ItemList *l);
+BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max);  /* an item's own answer */
 LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
 const char *plex_why(const struct Item *it);

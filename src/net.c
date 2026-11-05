@@ -637,6 +637,14 @@ static void net_main(void)
             }
             if (!j->cancel)
                 run(j);
+            if (j->parse && j->body && !j->cancel && list_init(&j->list)) {
+                /* a Plex list read here, not in the UI (net priority -1:
+                 * it takes the time the UI leaves) */
+                ULONG t0 = time_ms();
+                j->n = plex_fill(j->pkey, j->body, j->len, &j->list, &j->total);
+                j->ms_read = time_ms() - t0;
+                j->parsed = TRUE;
+            }
             ReplyMsg(&j->msg);
         }
     }

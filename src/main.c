@@ -2146,6 +2146,8 @@ static char plex_now_in[2][48]; /* ...its album's and artist's keys (their rows 
  * when an album's answer did not have it (plex_dj) */
 static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
 static struct NetJob *plex_dj;
+static struct NetJob *plex_sj;      /* an artist's or album's summary asked for (plex_sum_ask) */
+static void plex_sum_came(struct NetJob *j);
 static void plex_ask_rate(const char *key);
 /* Pictures of the server's (an album's cover): asked for (art_fetch), kept
  * in RAM: (plex_art), then made for their place by the loader */
@@ -7301,6 +7303,14 @@ static void radio_done(struct NetJob *j)
             FreeVec(j);
             return;
         }
+    if (j == plex_sj) {
+        /* an artist's or album's own answer: its summary */
+        plex_sum_came(j);
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+        return;
+    }
     if (j == plex_dj || (j->orphan && j->seq == 0)) {
         /* a Plex track's own answer: its sample rate, for Now playing */
         if (j == plex_dj) {
@@ -7327,9 +7337,17 @@ static void radio_done(struct NetJob *j)
         char m[200];
         BOOL servers = !strcmp(p->base, "#gdm");
         p->net_seq = 0;
-        if (j->body)
+        if (j->parsed) {
+            /* read already, in the network process: its list is the page's */
+            list_free(&p->list);
+            p->list = j->list;
+            j->parsed = FALSE;
+            n = j->n;
+            total = j->total;
+        } else if (j->body) {
             n = servers ? plex_fill_servers(j->body, j->len, &p->list)
                         : plex_fill(p->base, j->body, j->len, &p->list, &total);
+        }
         if (n == 1 && !strcmp(p->base, "/library/sections") && p->list.items[0].path[0] == '@') {
             /* one music library: its menu (Artists, Albums...) on this page,
              * not a "Music" folder inside Music */
@@ -7388,8 +7406,9 @@ static void radio_done(struct NetJob *j)
             if (servers)
                 sprintf(m, "%s: %ld found in %ld ms", p->title, (long)n, (long)j->ms);
             else
-                sprintf(m, "%s: %ld listed of %ld, from %s in %ld ms", p->title, (long)n,
-                        (long)total, j->server, (long)j->ms);
+                sprintf(m, "%s: %ld listed of %ld, %lu KB from %s in %ld ms, read in %lu ms",
+                        p->title, (long)n, (long)total, (unsigned long)((j->len + 512) >> 10),
+                        j->server, (long)j->ms, (unsigned long)j->ms_read);
             if (!servers && total > n)
                 list_add(&p->list, "(more than AmigaMCE shows at once: the first listed)", "", "",
                          IT_TEXT);
@@ -7427,6 +7446,8 @@ static void radio_done(struct NetJob *j)
             draw_footer();
         }
     }
+    if (j->parsed)
+        list_free(&j->list);                /* its page gone meanwhile */
     if (j->body)
         FreeVec(j->body);
     FreeVec(j);
@@ -7528,6 +7549,8 @@ static void radio_open(struct Item *it)
             amce_strlcpy(j->host, plex.host, sizeof(j->host));
             j->port = plex.port;
             plex_request(p->base, j->path, sizeof(j->path));
+            j->parse = 1;                   /* read in the network process */
+            amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
             sprintf(msg, "Asking %.40s...  Esc to give up", plex.name[0] ? plex.name : plex.host);
         }
     } else {
@@ -7574,6 +7597,8 @@ static void plex_refetch(struct Page *p, const char *key)
     amce_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
     plex_request(key, j->path, sizeof(j->path));
+    j->parse = 1;
+    amce_strlcpy(j->pkey, key, sizeof(j->pkey));
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
     rq = j;
@@ -7833,6 +7858,100 @@ static BOOL plex_keeps(struct Page *p, LONG idx)
            pv_onscr.h == s;
 }
 
+/* ---- an artist's biography, an album's review: left out of a library's
+ * long lists (excludeFields), so asked for alone when the pane shows one,
+ * and kept for the last few shown */
+#define SUM_KEPT 8
+static struct { char key[120]; char text[300]; } sum_kept[SUM_KEPT];
+static int sum_next;
+static char sum_want[120];          /* its key */
+static WORD sum_y;                  /* where its text goes in the pane */
+
+/* The item's own key: /library/metadata/<n> (its list key without
+ * /children); FALSE where it has none (not an artist or album). */
+static BOOL sum_key(const struct Item *it, char *out, LONG max)
+{
+    char *c;
+    radio_field(it, 0, out, max);
+    if (strncmp(out, "/library/metadata/", 18))
+        return FALSE;
+    if ((c = strstr(out, "/children")))
+        *c = 0;
+    return TRUE;
+}
+
+static void plex_sum_find(const struct Item *it, char *out, LONG max)
+{
+    char k[120];
+    int i;
+    if (!sum_key(it, k, sizeof(k)))
+        return;
+    for (i = 0; i < SUM_KEPT; i++)
+        if (sum_kept[i].key[0] && !strcmp(sum_kept[i].key, k)) {
+            amce_strlcpy(out, sum_kept[i].text, max);
+            return;
+        }
+}
+
+static void plex_sum_ask(const struct Item *it, WORD y)
+{
+    struct NetJob *j;
+    char k[120];
+    int i;
+    if (!sum_key(it, k, sizeof(k)) || !plex.host[0])
+        return;
+    for (i = 0; i < SUM_KEPT; i++)
+        if (sum_kept[i].key[0] && !strcmp(sum_kept[i].key, k))
+            return;                         /* asked before: it has none */
+    if (plex_sj) {
+        if (!strcmp(sum_want, k)) {
+            sum_y = y;
+            return;                         /* on its way */
+        }
+        net_cancel(plex_sj);
+        plex_sj->orphan = TRUE;             /* freed when it comes back */
+        plex_sj->seq = 0;
+        plex_sj = NULL;
+    }
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    plex_request(k, j->path, sizeof(j->path));
+    amce_strlcpy(sum_want, k, sizeof(sum_want));
+    sum_y = y;
+    plex_sj = j;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+}
+
+/* Its answer: kept, and written in the pane if it still shows that one. */
+static void plex_sum_came(struct NetJob *j)
+{
+    struct Page *p = cur();
+    struct Item src;
+    char text[300], k[120];
+    int i = sum_next;
+    plex_sj = NULL;
+    text[0] = 0;
+    if (j->body && j->status == 200)
+        plex_summary(j->body, j->len, text, sizeof(text));
+    else if (!j->body)
+        return;                             /* not reached: asked again next time */
+    amce_strlcpy(sum_kept[i].key, sum_want, sizeof(sum_kept[i].key));
+    amce_strlcpy(sum_kept[i].text, text, sizeof(sum_kept[i].text));
+    sum_next = (sum_next + 1) % SUM_KEPT;
+    if (!text[0] || !p || !p->plex || p != pv_page || p->sel != pv_sel || !pv_shown ||
+        pane_pending || !plex_pv_src(p, p->sel, &src) || !sum_key(&src, k, sizeof(k)) ||
+        strcmp(k, sum_want))
+        return;
+    {
+        WORD y = sum_y + U(3), w = aside_width() - U(4);
+        pv_wrap(aside_x(), &y, w, g.footer_y - 2, text, PEN_DIM);
+    }
+}
+
 static BOOL plex_pv_key(struct Page *p, char *key)
 {
     struct Item src;
@@ -7934,6 +8053,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     radio_field(&src, 5, count, sizeof(count));
     radio_field(&src, 6, studio, sizeof(studio));
     radio_field(&src, 7, summary, sizeof(summary));
+    if (!summary[0])
+        plex_sum_find(&src, summary, sizeof(summary));  /* left out of a library's list */
     pv_box_y = g.list_top;
     pv_box_h = s;
     y = g.list_top;
@@ -7970,6 +8091,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     if (summary[0]) {
         y += U(3);
         pv_wrap(x0, &y, w, max_y, summary, PEN_DIM);
+    } else {
+        plex_sum_ask(&src, y);              /* asked for: written here when it comes */
     }
     if (pv_sj && pv_sj->done)
         pv_progress(p);
