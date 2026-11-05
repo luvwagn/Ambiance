@@ -59,6 +59,7 @@ struct Page {
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE plex_set;             /* Settings > Plex */
+    UBYTE sound_set;            /* Settings > Sound */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
@@ -122,8 +123,12 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET,
-       ACT_MODE0 = 16 /* + SM_* */ };
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
+       ACT_COUNT,
+       /* + SM_*: well past the rest (at 16 it had come to share numbers with
+        * Now playing, HTTPS and the Plex rows, as actions were added) */
+       ACT_MODE0 = 128 };
+typedef char act_mode0_clear[ACT_COUNT <= ACT_MODE0 && ACT_MODE0 + SM_COUNT <= 255 ? 1 : -1];
 
 /* ------------------------------------------------------------ pages */
 static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
@@ -1541,6 +1546,7 @@ static void build_settings(struct Page *p)
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
+    action_item(p, "Sound", caps.ahi ? "Paula (AHI later)" : "Paula", ACT_SOUNDSET, MARK_ARROW);
     if (caps.net)                       /* Plex (plex.c): only with networking */
         action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
                                : plex.host[0] ? plex.host : "On, no server chosen",
@@ -1566,8 +1572,39 @@ static void build_plex_settings(struct Page *p)
                        "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
                                             : "none chosen", IT_PLEXDIR)))
         it->mark = MARK_ARROW;
-    action_item(p, "Request lower quality audio", "", ACT_PLEXCONV,
-                plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+/* Settings > Sound: what plays the sound, what decodes MP3, and what is
+ * asked of a Plex server. Paula and mpega.library are all there is yet;
+ * AHI and MHI are shown, greyed, when installed (they come later, and
+ * with AHI other rates than Paula's). */
+static void build_sound_settings(struct Page *p)
+{
+    struct Item *it;
+    p->sound_set = 1;
+    action_item(p, "Paula (audio.device)", "4 channels, up to 28 kHz", ACT_SND_PAULA,
+                MARK_RADIO_ON);
+    if ((it = action_item(p, "AHI", caps.ahi ? "installed: comes later" : "not installed",
+                          ACT_SND_AHI, MARK_RADIO_OFF)))
+        it->flags |= ITEM_DISABLED;
+    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? "" : "not installed",
+                          ACT_SND_MPEGA, caps.mp3_mpega ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+        !caps.mp3_mpega)
+        it->flags |= ITEM_DISABLED;
+    if ((it = action_item(p, "MP3: MHI", caps.mp3_mhi ? "installed: comes later" : "not installed",
+                          ACT_SND_MHI, MARK_RADIO_OFF)))
+        it->flags |= ITEM_DISABLED;
+    if (caps.net) {
+        /* Plex's conversion: a choice only where the Amiga is fast enough
+         * to decode the files as stored (plex_tier: how fast it really is,
+         * not only its CPU); on others always on */
+        BOOL fast = plex_tier() >= 2;
+        if ((it = action_item(p, "Request lower quality audio",
+                              fast ? "Plex" : "Plex: needed on this Amiga", ACT_PLEXCONV,
+                              plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
+            !fast)
+            it->flags |= ITEM_DISABLED;
+    }
 }
 
 static void draw_footer(void);
@@ -1583,12 +1620,14 @@ static void plex_settings_again(BOOL full)
     for (d = 0; d < depth; d++) {
         struct Page *q = &pages[d];
         LONG qs = q->sel;
-        if (q->type != PT_LIST || (!q->plex_set && strcmp(q->title, "Settings")))
+        if (q->type != PT_LIST || (!q->plex_set && !q->sound_set && strcmp(q->title, "Settings")))
             continue;
         list_free(&q->list);
         list_init(&q->list);
         if (q->plex_set)
             build_plex_settings(q);
+        else if (q->sound_set)
+            build_sound_settings(q);
         else
             build_settings(q);
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
@@ -6581,14 +6620,26 @@ static void toggle_plex_on(void)
     plex_settings_again(TRUE);              /* rows come and go */
 }
 
-/* Settings > Plex > Request lower quality audio: every track the server's
+/* Settings > Sound > Request lower quality audio: every track the server's
  * conversion, made for this Amiga (22 kHz mono on a 68030: a fraction of
  * the decoding of a 44.1 kHz stereo file), or MP3s as stored (other
  * formats are converted either way). The next track it applies to. */
 static void toggle_plex_convert(void)
 {
+    if (plex_tier() < 2)
+        return;                             /* greyed: always on here */
     plex_set_convert(!plex.convert);
     plex_settings_again(FALSE);
+}
+
+static void open_sound_settings(void)
+{
+    struct Page *p = page_push(PT_LIST, "Sound");
+    if (!p)
+        return;
+    build_sound_settings(p);
+    draw_pane(TRUE);
+    draw_footer();
 }
 
 static void open_plex_settings(void)
@@ -7557,9 +7608,10 @@ static void plex_help(void)
                  "music libraries, by artist and album, with their covers, played on the "
                  "Amiga's own sound (mpega.library). The server makes each track for this "
                  "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
-                 "and 24 kHz stereo at a higher bitrate for a fast one. Turning off Settings > "
-                 "Plex > Request lower quality audio plays MP3 files as stored (other formats "
-                 "are converted either way); Settings > Plex > Plex turns it all off.");
+                 "and 24 kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
+                 "turning off Settings > Sound > Request lower quality audio plays MP3 files "
+                 "as stored (other formats are converted either way); Settings > Plex > Plex "
+                 "turns it all off.");
     text_line(p, "");
     text_para(p, "Finding a server: Settings > Plex > Plex server asks the network (Plex's GDM); "
                  "choose one and it is kept. Or set its address from the Shell: "
@@ -7633,6 +7685,14 @@ static void act_action(struct Item *it)
     if (it->flags & ITEM_DISABLED) {
         if (it->action == ACT_STYLES)
             set_msg("Style: Smooth needs an RTG screen");
+        else if (it->action == ACT_PLEXCONV)
+            set_msg("This Amiga plays Plex's lower quality: the files as stored are too much");
+        else if (it->action == ACT_SND_AHI)
+            set_msg(caps.ahi ? "AHI: coming in a later version" : "AHI is not installed");
+        else if (it->action == ACT_SND_MHI)
+            set_msg(caps.mp3_mhi ? "MHI: coming in a later version" : "MHI is not installed");
+        else if (it->action == ACT_SND_MPEGA)
+            set_msg("mpega.library is not installed: MP3s cannot be played");
         return;
     }
     if (it->action == ACT_SCREENMODES)
@@ -7657,6 +7717,8 @@ static void act_action(struct Item *it)
         toggle_plex_on();
     else if (it->action == ACT_PLEXSET)
         open_plex_settings();
+    else if (it->action == ACT_SOUNDSET)
+        open_sound_settings();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)

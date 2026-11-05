@@ -31,9 +31,9 @@
  *   2: a fast one (a quick 060, an emulated or accelerated 68k): 24000 Hz
  *      stereo, 160 kbit/s.
  * Paula plays up to about 28 kHz, so nothing asks for more than 24 kHz.
- * Settings > Plex > Request lower quality audio (on unless turned off)
- * off: MP3s as stored, decoded to Paula's rate (others converted either
- * way). Plex
+ * Settings > Sound > Request lower quality audio (on unless turned off;
+ * offered on a fast Amiga only, always on otherwise) off: MP3s as stored,
+ * decoded to Paula's rate (others converted either way). Plex
  * picks a profile by the client's platform and device: without them it
  * answers 400. The limits are on the music codec (scope musicCodec, as in
  * Plex's own profiles' MusicCodec, scopeName mp3): on audioCodec they were
@@ -246,7 +246,7 @@ BOOL plex_converts(const struct Item *it)
         return FALSE;
     if (amce_stricmp(codec, "mp3"))
         return TRUE;                        /* the Amiga plays MP3 only */
-    return plex.convert;
+    return plex.convert || plex_tier() < 2;     /* a slower Amiga: always converted */
 }
 
 /* A track as a URL to play (out max bytes): its file, or the server's
