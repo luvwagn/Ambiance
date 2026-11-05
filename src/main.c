@@ -2086,6 +2086,32 @@ static void draw_clock(void)
 
 /* Debug readout between the logo and the clock: the longest form that fits. */
 static LONG cpu_load = -1, app_load = -1;
+static ULONG loop_wakes;                /* the main loop's turns (Debug's log) */
+
+/* Debug: every 5 s the loads in the log, with where AmigaMCE is and how
+ * often its loop woke, so a load that follows a page can be traced. */
+static void dbg_load_log(void)
+{
+    static int n;
+    static ULONG wakes0;
+    static LONG cpu_sum, app_sum;
+    char m[200];
+    struct Page *p = cur();
+    if (cpu_load >= 0)
+        cpu_sum += cpu_load;
+    if (app_load >= 0)
+        app_sum += app_load;
+    if (++n < 5)
+        return;
+    sprintf(m, "system %ld%%, AmigaMCE %ld%%, %ld wakes/s; %s > %s%s%s", (long)(cpu_sum / n),
+            (long)(app_sum / n), (long)((loop_wakes - wakes0) / n), mod_names[menu[menu_sel]],
+            p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
+            mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
+    amce_log("load", m);
+    n = 0;
+    cpu_sum = app_sum = 0;
+    wakes0 = loop_wakes;
+}
 
 /* What the readout shows now, so a second that changes nothing redraws
  * nothing. Cleared when the header is drawn afresh. */
@@ -7213,6 +7239,7 @@ static int app_main(void)
 
     while (running) {
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
+        loop_wakes++;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
         ULONG lsig = ldr_sigmask();
         ULONG nsig = net_sigmask();
@@ -7263,6 +7290,7 @@ static int app_main(void)
                         cpu_load = dbg_cpu_sample();
                         app_load = dbg_app_sample();
                         draw_status();
+                        dbg_load_log();
                     }
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                     nav_tick_1s();          /* the trail kept, once it rests */
@@ -7285,7 +7313,8 @@ static int app_main(void)
                  * plugged in. */
                 tick_us = (joy_present || ov.on || pv_spinning() || radio_waiting() || np_live() ||
                            np.flash >= 0 || np.rep >= 0 ||
-                           (np_list_on() && mp_playing())) ? 40000 : 200000;
+                           (np_list_on() && mp_playing())) ? 40000 :
+                          mp_playing() ? 120000 : 200000;  /* the header's bars dance */
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
