@@ -52,3 +52,18 @@ picture its colours for the screen, `draw` remapping and putting it on screen.
 
 Draw times fall in two groups, about 230 ms and about 380 ms; the slower are probably
 with music playing.
+
+## PNG (0.4.1-44-g4e2c486, format=png asked for)
+
+Same machine, 2026-11-05 12:07. Three covers that are in the JPEG table too:
+
+| cover | JPEG decode ms | JPEG reduce ms | PNG decode ms | PNG reduce ms | PNG draw ms |
+|---|---:|---:|---:|---:|---:|
+| 24188B44 | 779, 822 | 834, 870 | 541 | 877 | 233 |
+| 9644C971 | 966, 567, 539 | 1612, 696, 773 | 437 | 792 | 243 |
+| 07FEABB5 | 1435, 1394 | 1312, 1580 | 476 | 791 | 233 |
+
+PNG decodes in 437-541 ms against JPEG's 539-1435 for the same covers: about a
+third faster on a plain cover, three times faster on a detailed one
+(07FEABB5), and steadier (PNG's time hardly depends on the picture). The reduce
+to 48 colours (about 790-880 ms) does not change and is now the larger part.
