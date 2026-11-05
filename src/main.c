@@ -3587,6 +3587,14 @@ static void np_draw(BOOL full);
 
 static void open_textbox(struct Page *p, WORD y0)
 {
+    /* its picture (the credits' AGS logo) first: the box is laid out with
+     * it after the text (it was left out when the full draw opened the box
+     * before the picture was read) */
+    if (p->pic[0] && !p->pic_bm)
+        page_picture(p);
+    p->tb.pic = p->pic_bm;
+    p->tb.pic_w = p->pic_w;
+    p->tb.pic_h = p->pic_h;
     tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), g.footer_y - 2 - y0, &p->list,
             p->type == PT_DETAIL);
 }
@@ -3627,14 +3635,8 @@ static void draw_pane(BOOL full)
         draw_list_rows(p);          /* (a Radio list still asking: its spinner) */
         break;
     case PT_TEXT:
-        if (!p->tb.open) {
-            if (p->pic[0] && !p->pic_bm)
-                page_picture(p);
-            p->tb.pic = p->pic_bm;          /* scrolls with the text, after it */
-            p->tb.pic_w = p->pic_w;
-            p->tb.pic_h = p->pic_h;
-            open_textbox(p, g.list_top);
-        }
+        if (!p->tb.open)
+            open_textbox(p, g.list_top);    /* its picture scrolls with the text, after it */
         if (full || !p->tb.drawn)
             tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
         break;
