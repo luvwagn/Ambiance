@@ -139,6 +139,7 @@ static struct {
     volatile UBYTE peak_l, peak_r;
     UWORD cpu;                      /* 20, 30, 40, 60: how much decoding it can do */
     BOOL finite;                    /* a track: its end is the end, not a failure */
+    ULONG mp3_bytes;                /* MP3 given to the decoder: its average bitrate */
     volatile BOOL eof;              /* a track's last byte read */
 } st;
 
@@ -576,8 +577,10 @@ static LONG stream_read(UBYTE *buf, LONG n)
             LONG have = 0;
             while (have < len) {
                 LONG k;
-                if (st.nb_pos >= st.nb_len && !net_more())
+                if (st.nb_pos >= st.nb_len && !net_more()) {
+                    st.mp3_bytes += got;
                     return got;
+                }
                 k = st.nb_len - st.nb_pos;
                 if (k > len - have)
                     k = len - have;
@@ -603,6 +606,7 @@ static LONG stream_read(UBYTE *buf, LONG n)
         if (st.metaint)
             st.meta_left -= take;
     }
+    st.mp3_bytes += got;
     return got;
 }
 
@@ -856,6 +860,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, 
     st.title_seq++;
     st.bitrate = st.freq = st.channels = st.dec_freq = st.dec_channels = 0;
     st.f_in = st.f_out = st.underruns = st.played = 0;
+    st.mp3_bytes = 0;
     st.peak_l = st.peak_r = 0;
     st.quit = st.started = st.paused = FALSE;
     st.master = master;
@@ -937,6 +942,15 @@ const char *st_error(void) { return st.err; }
 const char *st_title(void) { return st.title; }
 ULONG st_title_seq(void) { return st.title_seq; }
 
+/* The average bitrate (a VBR file's first frame, often all there is in
+ * its header, says little): bits a ms of what is decoded; 0 before 3 s. */
+ULONG st_avg_kbps(void)
+{
+    ULONG rate = st.dec_freq ? (ULONG)st.dec_freq : 1, f = st.f_in, b = st.mp3_bytes;
+    ULONG ms = (f / rate) * 1000 + (f % rate) * 1000 / rate;
+    return ms >= 3000 ? (b / ms) * 8 + ((b % ms) * 8) / ms : 0;
+}
+
 void st_info(struct StInfo *i)
 {
     ULONG rate = st.dec_freq ? (ULONG)st.dec_freq : 1;
@@ -952,6 +966,7 @@ void st_info(struct StInfo *i)
     i->buffer_ms = (ULONG)(have * 10 / rate) * 100;
     i->played_ms = (st.played / rate) * 1000 + (st.played % rate) * 1000 / rate;
     i->underruns = st.underruns;
+    i->avg_kbps = st_avg_kbps();
     i->peak_l = st.peak_l;
     i->peak_r = st.peak_r;
     st.peak_l = st.peak_l * 3 / 4;

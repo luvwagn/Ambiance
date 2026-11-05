@@ -408,6 +408,7 @@ struct StInfo {
     const char *name, *genre;       /* what the station calls itself (icy-name, icy-genre) */
     LONG bitrate, freq, channels, dec_freq, dec_channels;
     ULONG buffer_ms, played_ms, underruns;
+    ULONG avg_kbps;                 /* the bitrate on average (3 s on), 0 not yet */
     UBYTE peak_l, peak_r;
 };
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, LONG errmax);
@@ -419,7 +420,8 @@ int st_channels(void);
 const char *st_error(void);
 const char *st_title(void);         /* what plays now (ICY StreamTitle) */
 ULONG st_title_seq(void);
-void st_info(struct StInfo *i);              /* mixed modules only */
+void st_info(struct StInfo *i);
+ULONG st_avg_kbps(void);              /* mixed modules only */
 
 /* Modules mixed by modplug.library, streamed to Paula (mixplay.c). */
 BOOL mx_available(void);
@@ -674,6 +676,7 @@ void plex_section_menu(const char *sec, struct ItemList *l);
 LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
 const char *plex_why(const struct Item *it);
+ULONG plex_stream_rate(UBYTE *body, ULONG len);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);
 

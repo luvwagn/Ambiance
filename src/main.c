@@ -1642,6 +1642,18 @@ static void np_mark_lists(BOOL redraw);
 static void build_radio_root(struct Page *p);
 static void build_music_root(struct Page *p);
 static char plex_now[300];      /* the Plex track playing: its file's key (lists mark it so) */
+/* ...and its file as stored, for Now playing: the rate asked of the server
+ * when an album's answer did not have it (plex_dj) */
+static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
+static struct NetJob *plex_dj;
+static void plex_ask_rate(const char *key);
+static ULONG strtoul_(const char *s)
+{
+    ULONG v = 0;
+    while (*s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    return v;
+}
 
 static void build_root_pages(int mod)
 {
@@ -4497,6 +4509,47 @@ static void np_line(WORD y, const char *s, UBYTE fg, int ts)
         gfx_fill(&g, np.x0 + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
 }
 
+/* label, then value at the column after the longest label (Playback). */
+static void np_pair(WORD y, const char *label, const char *value)
+{
+    WORD col = gfx_textlen(&g, "Playback", TS_SMALL) + U(8), x1 = np.x0 + np.w, w;
+    gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
+    w = gfx_textlen(&g, label, TS_SMALL);
+    if (w < col)
+        gfx_fill(&g, np.x0 + w, y, np.x0 + col - 1, y + g.font_h - 1, PEN_BG);
+    w = gfx_textlen(&g, value, TS_SMALL);
+    if (w > np.w - col)
+        w = np.w - col;
+    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, np.w - col, TS_SMALL | TS_OPAQUE);
+    if (np.x0 + col + w < x1)
+        gfx_fill(&g, np.x0 + col + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
+}
+
+/* "MP3 320 kbit/s, 44100 Hz stereo", what of it is known. */
+static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kbps, ULONG rate,
+                          ULONG ch)
+{
+    char v[96], part[32], up[16];
+    int i;
+    for (i = 0; codec[i] && i < 15; i++)
+        up[i] = codec[i] >= 'a' && codec[i] <= 'z' ? codec[i] - 32 : codec[i];
+    up[i] = 0;
+    amce_strlcpy(v, up, sizeof(v));
+    if (kbps) {
+        sprintf(part, "%s%lu kbit/s", v[0] ? " " : "", (unsigned long)kbps);
+        amce_strlcat(v, part, sizeof(v));
+    }
+    if (rate) {
+        sprintf(part, "%s%lu Hz", v[0] ? ", " : "", (unsigned long)rate);
+        amce_strlcat(v, part, sizeof(v));
+    }
+    if (ch) {
+        sprintf(part, " %s", ch == 1 ? "mono" : ch == 2 ? "stereo" : "multichannel");
+        amce_strlcat(v, part, sizeof(v));
+    }
+    np_pair(y, label, v);
+}
+
 /* A station's part of the page: what it is, and what is on air. Its
  * state and title change while it plays (connecting, buffering, a new
  * song), so it is drawn line by line over itself, never cleared first. */
@@ -4520,22 +4573,25 @@ static void np_draw_station(void)
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
             return;
-        np_line(y, "Plex", PEN_DIM, TS_BOLD);
+        /* the file as stored, as the server sends it, as the Amiga plays it */
+        np_audio_line(y, "Original", plex_orig.codec, plex_orig.kbps, plex_orig.rate,
+                      plex_orig.ch);
         y += lh;
         if (!mp_running())
-            now = st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped";
+            np_pair(y, "Plex", st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped");
         else if (in.state == ST_CONNECTING)
-            now = "Connecting...";
+            np_pair(y, "Plex", "Connecting...");
         else if (in.state == ST_BUFFERING)
-            now = "Buffering...";
-        else if (in.dec_freq) {
-            sprintf(part, "MP3 %ld kbit/s, %ld Hz %s; played at %ld Hz %s", (long)in.bitrate,
-                    (long)in.freq, in.channels == 2 ? "stereo" : "mono", (long)in.dec_freq,
-                    in.dec_channels == 2 ? "stereo" : "mono");
-            now = part;
-        } else
-            now = "";
-        np_line(y, now, PEN_TEXT, TS_SMALL);
+            np_pair(y, "Plex", "Buffering...");
+        else if (!plex_orig.conv)
+            np_pair(y, "Plex", "sends the file as stored");
+        else
+            np_audio_line(y, "Plex", "MP3", in.avg_kbps, in.freq, in.channels);
+        y += lh;
+        if (mp_running() && in.dec_freq)
+            np_audio_line(y, "Playback", "", 0, in.dec_freq, in.dec_channels);
+        else
+            np_pair(y, "Playback", "");
         y += lh;
         if (y <= bottom)
             gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);
@@ -4754,6 +4810,20 @@ static BOOL np_start(LONG idx)
         }
         plex_track_url(it, caps.cpu, url, sizeof(url));
         radio_field(it, 0, plex_now, sizeof(plex_now));
+        {
+            char f[16], key[160];
+            radio_field(it, 1, plex_orig.codec, sizeof(plex_orig.codec));
+            radio_field(it, 6, f, sizeof(f));
+            plex_orig.kbps = f[0] ? strtoul_(f) : 0;
+            radio_field(it, 7, f, sizeof(f));
+            plex_orig.ch = f[0] ? strtoul_(f) : 0;
+            radio_field(it, 8, f, sizeof(f));
+            plex_orig.rate = f[0] ? strtoul_(f) : 0;
+            plex_orig.conv = plex_converts(it);
+            radio_field(it, 5, key, sizeof(key));
+            if (!plex_orig.rate && key[0])
+                plex_ask_rate(key);
+        }
         radio_field(it, 2, ms, sizeof(ms));
         radio_field(it, 3, by, sizeof(by));
         radio_field(it, 4, album, sizeof(album));
@@ -5064,6 +5134,17 @@ static void np_tick(void)
 {
     np_repeat();
     np_eq_tick();
+    if (mp_is_track() && mp_running() && np_on() && np.w) {
+        /* the average bitrate settling: its line again when it moves */
+        static ULONG shown;
+        ULONG k = st_avg_kbps();
+        if (k != shown && (k > shown + 1 || k + 1 < shown || !shown || !k)) {
+            BOOL was = gfx_quiet_begin();
+            shown = k;
+            np_draw_station();
+            gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+        }
+    }
     if (mp_is_track() && mp_running() && mp_ended()) {
         /* a track played to its end (or failed): the next in its list */
         BOOL failed = st_state() == ST_FAILED;
@@ -6359,6 +6440,22 @@ static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
     int d;
+    if (j == plex_dj || (j->orphan && j->seq == 0)) {
+        /* a Plex track's own answer: its sample rate, for Now playing */
+        if (j == plex_dj) {
+            plex_dj = NULL;
+            if (j->body && (plex_orig.rate = plex_stream_rate(j->body, j->len)) && np_on() &&
+                mp_is_track()) {
+                BOOL was = gfx_quiet_begin();
+                np_draw_station();
+                gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+            }
+        }
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+        return;
+    }
     if (j == rq)
         rq = NULL;
     for (d = 0; d < depth && !j->orphan; d++)
@@ -6523,6 +6620,29 @@ static void radio_open(struct Item *it)
     draw_footer();
     net_submit(j);
     if (j->done && !j->busy)                /* the process could not start: no answer to wait for */
+        radio_done(j);
+}
+
+/* A Plex track's sample rate, asked of the server (its own key): an
+ * album's answer has its bitrate and channels, not that. */
+static void plex_ask_rate(const char *key)
+{
+    struct NetJob *j;
+    if (plex_dj) {
+        net_cancel(plex_dj);
+        plex_dj->orphan = TRUE;             /* freed when it comes back */
+        plex_dj->seq = 0;
+        plex_dj = NULL;
+    }
+    if (!plex.host[0] || !net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    plex_request(key, j->path, sizeof(j->path));
+    j->seq = 0;
+    plex_dj = j;
+    net_submit(j);
+    if (j->done && !j->busy)
         radio_done(j);
 }
 

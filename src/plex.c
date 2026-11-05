@@ -17,8 +17,9 @@
  * list (path: the server's key for it, "@<n>" a music library's own menu,
  * "#gdm" the servers found), IT_PLEXTRACK rows are tracks, IT_PLEXSRV rows
  * servers found. A track's path: its file's key, then, after tabs, its
- * codec, length in ms, artist, album and its own key (radio_field picks
- * one out).
+ * codec, length in ms, artist, album, its own key, and the file's bitrate,
+ * channels and sample rate (radio_field picks one out; the rate is only
+ * in a track's own answer, plex_stream_rate, not in an album's).
  *
  * A track plays as stored (an MP3 file) or converted by the server
  * (Plex's universal transcoder, progressive MP3 over plain HTTP): all of
@@ -261,7 +262,7 @@ struct fill {
     BOOL track;
     int track_depth;
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
-    ULONG t_ms;
+    ULONG t_ms, t_kbps, t_ch, t_rate;
     BOOL full;
 };
 
@@ -276,8 +277,9 @@ static void flush_track(struct fill *x)
         x->skipped++;
         return;
     }
-    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s", x->t_part, x->t_codec, (unsigned long)x->t_ms,
-            x->t_by, x->t_album, x->t_key);
+    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu", x->t_part, x->t_codec,
+            (unsigned long)x->t_ms, x->t_by, x->t_album, x->t_key, (unsigned long)x->t_kbps,
+            (unsigned long)x->t_ch, (unsigned long)x->t_rate);
     dur_text(x->t_ms, tag);
     if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
                         IT_PLEXTRACK))) {
@@ -308,6 +310,14 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         text(xml_attr(a, n, "audioCodec"), x->t_codec, sizeof(x->t_codec));
         if (!x->t_ms)
             x->t_ms = num(xml_attr(a, n, "duration"));
+        x->t_kbps = num(xml_attr(a, n, "bitrate"));
+        x->t_ch = num(xml_attr(a, n, "audioChannels"));
+        return 1;
+    }
+    if (x->track && !strcmp(name, "Stream") && num(xml_attr(a, n, "streamType")) == 2) {
+        x->t_rate = num(xml_attr(a, n, "samplingRate"));
+        if (!x->t_ch)
+            x->t_ch = num(xml_attr(a, n, "channels"));
         return 1;
     }
     if (x->track && !strcmp(name, "Part")) {
@@ -327,6 +337,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         amce_strlcpy(x->t_key, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "",
                      sizeof(x->t_key));
         x->t_ms = num(xml_attr(a, n, "duration"));
+        x->t_kbps = x->t_ch = x->t_rate = 0;
         return 1;
     }
     if (strcmp(name, "Directory") || depth != 1)
@@ -434,6 +445,25 @@ LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l)
             n++;
     }
     return n;
+}
+
+static int rate_el(void *ctx, const char *name, char **a, int n, int depth)
+{
+    ULONG *r = ctx;
+    (void)depth;
+    if (!strcmp(name, "Stream") && num(xml_attr(a, n, "streamType")) == 2) {
+        *r = num(xml_attr(a, n, "samplingRate"));
+        return 0;
+    }
+    return 1;
+}
+
+/* A track's own answer (its key asked for): its audio's sample rate. */
+ULONG plex_stream_rate(UBYTE *body, ULONG len)
+{
+    ULONG r = 0;
+    xml_scan((char *)body, len, rate_el, &r);
+    return r;
 }
 
 /* Why a track cannot play (a greyed one). */
