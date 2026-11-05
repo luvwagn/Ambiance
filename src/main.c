@@ -123,7 +123,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
-       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
+       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1567,9 +1567,10 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
     return it;
 }
 
-enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX };
+enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC };
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
+static void build_nic_settings(struct Page *p);
 
 /* Settings: General, Screen, Sound, Networking (Plex inside it, as it
  * needs the network). */
@@ -1617,13 +1618,31 @@ static void build_general_settings(struct Page *p)
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
 
-/* Settings > Networking: HTTPS, and the interface connections go out from
- * (the one in use shown; a choice where the stack lists more). */
+/* The interface in use (the stack's list asked again): its name and
+ * address into out, as "eth0, 192.168.4.2"; "" not known. */
+static void nic_in_use_text(char *out)
+{
+    char ip[20];
+    int i;
+    out[0] = 0;
+    nnic = net_interfaces(nics, 8, plex.host, &nic_in_use);
+    if (!nic_in_use)
+        return;
+    ip_text(nic_in_use, ip);
+    for (i = 0; i < nnic; i++)
+        if (nics[i].ip == nic_in_use) {
+            sprintf(out, "%.19s, %s", nics[i].name, ip);
+            return;
+        }
+    strcpy(out, ip);
+}
+
+/* Settings > Networking: HTTPS, Plex, and the interface connections go out
+ * from (its own page, as Screen mode has: the one in use shown here). */
 static void build_net_settings(struct Page *p)
 {
     struct Item *it;
-    char label[64], tag[64], ip[20];
-    int i, using = -1;
+    char tag[64], use[40];
     p->setp = SETP_NET;
     if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
@@ -1636,19 +1655,24 @@ static void build_net_settings(struct Page *p)
     action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
                            : plex.host[0] ? plex.host : "On, no server chosen",
                 ACT_PLEXSET, MARK_ARROW);
-    nnic = net_interfaces(nics, 8, plex.host, &nic_in_use);
-    for (i = 0; i < nnic; i++)
-        if (nic_in_use && nics[i].ip == nic_in_use)
-            using = i;
-    ip_text(nic_in_use, ip);
-    if (using >= 0)
-        sprintf(label, "In use: %.19s, %s", nics[using].name, ip);
-    else if (nic_in_use)
-        sprintf(label, "In use: %s", ip);
+    nic_in_use_text(use);
+    if (net_if[0])
+        sprintf(tag, "%.40s", use[0] ? use : net_if);
     else
-        strcpy(label, "In use: not known");
-    list_add(&p->list, label, "", "", IT_TEXT);
-    action_item(p, "Automatic (the stack's choice)", "", ACT_NICAUTO,
+        sprintf(tag, use[0] ? "Automatic: %.40s" : "Automatic", use);
+    action_item(p, "Network interface", tag, ACT_NICSET, MARK_ARROW);
+}
+
+/* Settings > Networking > Network interface: Automatic (the stack's
+ * choice, the one it uses beside it) or one the stack lists. */
+static void build_nic_settings(struct Page *p)
+{
+    struct Item *it;
+    char label[64], tag[64], ip[20], use[40];
+    int i;
+    p->setp = SETP_NIC;
+    nic_in_use_text(use);
+    action_item(p, "Automatic (the stack's choice)", net_if[0] ? "" : use, ACT_NICAUTO,
                 net_if[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
     for (i = 0; i < nnic && i < 8; i++) {
         struct NetIf *f = &nics[i];
@@ -1662,6 +1686,8 @@ static void build_net_settings(struct Page *p)
                               !strcmp(net_if, f->name) ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
             (!f->up || !f->ip))
             it->flags |= ITEM_DISABLED;
+        if (!strcmp(net_if, f->name))
+            p->sel = p->list.count - 1;
     }
     if (nnic < 0)
         list_add(&p->list, "This TCP/IP stack does not list its interfaces", "", "", IT_TEXT);
@@ -1737,6 +1763,7 @@ static void settings_rebuild(void)
         case SETP_NET: build_net_settings(q); break;
         case SETP_GENERAL: build_general_settings(q); break;
         case SETP_SCREEN: build_screen_settings(q); break;
+        case SETP_NIC: build_nic_settings(q); break;
         default: build_settings(q); break;
         }
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
@@ -3908,6 +3935,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
     WORD lx = g.pane_x + col;
     WORD xr = list_xr(p);                   /* never into the letter's space */
+    if (it->kind == IT_TEXT && p->setp)
+        lx = g.pane_x;                      /* a Settings note: does nothing, so a heading */
     if (right > xr - U(2))
         right = xr - U(2);
     BOOL sel = idx == p->sel;
@@ -7852,6 +7881,8 @@ static void act_action(struct Item *it)
         open_settings_page("General", build_general_settings);
     else if (it->action == ACT_SCREENSET)
         open_settings_page("Screen", build_screen_settings);
+    else if (it->action == ACT_NICSET)
+        open_settings_page("Network interface", build_nic_settings);
     else if (it->action == ACT_NETSET)
         open_settings_page("Networking", build_net_settings);
     else if (it->action == ACT_NICAUTO)
