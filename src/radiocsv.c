@@ -129,7 +129,7 @@ void utf8_to_latin1(char *s)
             *o++ = '\'';
         else if (c == 0x201C || c == 0x201D || c == 0x2033)
             *o++ = '"';
-        else if (c == 0x2013 || c == 0x2014 || c == 0x2212)
+        else if ((c >= 0x2010 && c <= 0x2015) || c == 0x2212)
             *o++ = '-';
         else if (c == 0x2026) {
             *o++ = '.';                     /* fits: the source was 3 bytes */
