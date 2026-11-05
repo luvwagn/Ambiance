@@ -26,6 +26,13 @@
  * was caught half copied, and the CPU waited on the blitter). Where the
  * picture was and is no longer, its high planes are cleared.
  *
+ * Scrolling glides (eases to where it is heading) only where that is
+ * cheap and worth it: on an RTG screen, and for text more than a couple
+ * of boxes long. A native screen's copy is the blitter's, and on an
+ * 8-plane laced screen one copy of the box takes longer than a frame, so
+ * a glide kept the CPU waiting on the blitter the whole way; there, and
+ * for short text anywhere, a scroll goes straight to its place (jump).
+ *
  * On an RTG screen there is no off-screen bitmap: the text is drawn
  * straight onto the screen, clipped to the box by a layers clip region.
  * Each scroll step moves what is already there with ScrollRaster (a
@@ -95,6 +102,7 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     if (g->planar && tb->content_h > TB_MAX_ROWS)     /* the bitmap's limit */
         tb->content_h = TB_MAX_ROWS - TB_MAX_ROWS % tb->line_h;
     tb->bar_w = tb->content_h > h ? GU(g, 5) : 0;
+    tb->jump = g->planar || tb->content_h <= 3 * h;
     tb->bar_x = x + w + GU(g, 2);
     tb->pos = clamp_pos(tb, tb->pos);
     tb->target = clamp_pos(tb, tb->target);
@@ -339,13 +347,14 @@ void tb_scroll_by(struct TextBox *tb, LONG dpx)
 }
 
 /* One animation frame: ease a quarter of the way to the target (at least
- * one pixel), then show it. Call right after WaitTOF(). */
+ * one pixel; all of it when jumping or dragging), then show it. Call right
+ * after WaitTOF(). */
 void tb_step(struct Gfx *g, struct TextBox *tb)
 {
     LONG d = tb->target - tb->pos, step;
     if (!d)
         return;
-    step = tb->dragging ? d : d / 4;    /* a drag follows the mouse directly */
+    step = (tb->dragging || tb->jump) ? d : d / 4;  /* a drag follows the mouse */
     if (!step)
         step = d > 0 ? 1 : -1;
     tb->pos += step;

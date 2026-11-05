@@ -6212,6 +6212,21 @@ static void hold_tick(void)
     } else if (focus == FOCUS_PREVIEW || p->tb.open) {
         struct TextBox *tb = focus == FOCUS_PREVIEW ? &pv_tb : &p->tb;
         LONG px;
+        if (tb->jump) {
+            /* a line at a time, 10 to 30 lines a second: each a copy of the box */
+            LONG n;
+            hold.acc += (10 + 20 * ramp / HOLD_RAMP) * elapsed;
+            n = hold.acc / 1000;
+            hold.acc -= n * 1000;
+            if (n <= 0)
+                return;
+            if (tb_remaining(tb, hold.dir) <= 0) {
+                hold_stop();
+                return;
+            }
+            tb_scroll_by(tb, hold.dir * n * tb->line_h);
+            return;
+        }
         hold.acc += (100 + 500 * ramp / HOLD_RAMP) * elapsed;  /* 100 to 600 px/s, x1000 */
         px = hold.acc / 1000;
         hold.acc -= px * 1000;

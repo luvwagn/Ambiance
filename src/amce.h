@@ -511,6 +511,7 @@ void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx);
 struct TextBox {
     BOOL  open, first_white, dragging, drawn;
     BOOL  focused;              /* the keyboard scrolls it: thumb shown brighter */
+    BOOL  jump;                 /* scrolls go straight there, no glide (tb_open) */
     WORD  x, y, w, h;           /* text area on screen */
     WORD  bar_x, bar_w;         /* scroll bar column; bar_w 0 when all text fits */
     WORD  line_h, drag_off;
