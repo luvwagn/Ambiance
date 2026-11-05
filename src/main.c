@@ -4812,6 +4812,7 @@ static void np_draw(BOOL full)
         const char *t = mp_title();
         char label[120];
         np_layout();
+        plex_shown[0] = 0;                  /* the pane's details: gone under this page */
         if (mp_is_track() && np.art_s && pic_take(np_art_file, np.art_x, np.art_y, np.art_s,
                                                   np.art_s)) {
             /* the cover on screen already (the album's pane): moved into
@@ -7343,7 +7344,10 @@ static BOOL plex_take(struct Page *p)
         return FALSE;
     radio_field(&src, 2, thumb, sizeof(thumb));
     plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
-    return pic_take(file, aside_x(), g.list_top, aside_width() - U(4), s);
+    if (!pic_take(file, aside_x(), g.list_top, aside_width() - U(4), s))
+        return FALSE;
+    plex_shown[0] = 0;          /* what was under it is another page's: the text written again */
+    return TRUE;
 }
 
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
