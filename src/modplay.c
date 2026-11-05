@@ -80,6 +80,7 @@ static struct {
     UWORD rcpu;
     BOOL rtrack;                    /* not a station: a track (a Plex server's), with an end */
     ULONG rtotal_ms;                /*   and its length (0 not known) */
+    ULONG rbase_ms, rrange;         /*   played from here (a seek: its time, its byte) */
     char rby[96];                   /*   its artist and album */
     char packer[40];                /* what it was packed with ("" none) */
     UBYTE engine;                   /* ENG_*: what plays it */
@@ -879,7 +880,7 @@ BOOL mp_play(char *err, LONG errmax)
     if (mp.engine == ENG_RADIO) {
         mp.finished = FALSE;
         mp.paused = FALSE;
-        if (!st_start(mp.path, mp.master, mp.rcpu, mp.rtrack, err, errmax))
+        if (!st_start(mp.path, mp.master, mp.rcpu, mp.rtrack, mp.rrange, err, errmax))
             return FALSE;
         mp.running = TRUE;
         return TRUE;
@@ -1043,7 +1044,7 @@ BOOL mp_can_step(int d)
     if (mp.engine == ENG_MIX)
         return mx_can_step();
     if (mp.engine == ENG_RADIO)
-        return FALSE;                       /* live */
+        return mp.rtrack && mp.rtotal_ms;   /* a track (a seek: AmigaMCE asks again); live, no */
     return mp.pt != NULL;
 }
 
@@ -1180,7 +1181,7 @@ void mp_status(struct MpStatus *s)
     if (mp.engine == ENG_RADIO) {
         struct StInfo in;
         st_info(&in);
-        s->elapsed_ms = mp.running ? in.played_ms : 0;
+        s->elapsed_ms = mp.running ? in.played_ms + mp.rbase_ms : mp.rbase_ms;
         s->total_ms = mp.rtrack ? mp.rtotal_ms : 0;
         if (s->total_ms && s->elapsed_ms > s->total_ms)
             s->elapsed_ms = s->total_ms;
@@ -1302,6 +1303,7 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
     mp.rcpu = cpu;
     mp.rtrack = FALSE;
     mp.rtotal_ms = 0;
+    mp.rbase_ms = mp.rrange = 0;
     mp.rby[0] = 0;
     amce_strlcpy(mp.path, url, sizeof(mp.path));
     amce_strlcpy(mp.rname, name, sizeof(mp.rname));
@@ -1312,12 +1314,15 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
 /* A track on a server (Plex): an MP3 file over HTTP, played as a station
  * is, but with an end and a length; by: its artist and album. */
 BOOL mp_load_track(const char *url, const char *title, const char *by, const char *tag,
-                   ULONG total_ms, UWORD cpu, char *err, LONG errmax)
+                   ULONG total_ms, UWORD cpu, ULONG from_ms, ULONG range_from, char *err,
+                   LONG errmax)
 {
     if (!mp_load_stream(url, title, tag, cpu, err, errmax))
         return FALSE;
     mp.rtrack = TRUE;
     mp.rtotal_ms = total_ms;
+    mp.rbase_ms = from_ms;
+    mp.rrange = range_from;
     amce_strlcpy(mp.rby, by, sizeof(mp.rby));
     return TRUE;
 }

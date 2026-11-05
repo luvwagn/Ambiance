@@ -395,7 +395,8 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
                     LONG errmax);
 BOOL mp_is_stream(void);            /* a station, or a track (also mp_is_track) */
 BOOL mp_load_track(const char *url, const char *title, const char *by, const char *tag,
-                   ULONG total_ms, UWORD cpu, char *err, LONG errmax);
+                   ULONG total_ms, UWORD cpu, ULONG from_ms, ULONG range_from, char *err,
+                   LONG errmax);
 BOOL mp_is_track(void);
 const char *mp_track_by(void);
 int mp_meter_count(void);           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
@@ -411,7 +412,8 @@ struct StInfo {
     ULONG avg_kbps;                 /* the bitrate on average (3 s on), 0 not yet */
     UBYTE peak_l, peak_r;
 };
-BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, LONG errmax);
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from, char *err,
+              LONG errmax);
 void st_stop(void);
 void st_pause(BOOL on);
 void st_volume(int v);
@@ -673,7 +675,8 @@ extern struct PlexConf plex;
 void plex_load(UWORD cpu);
 void plex_set_server(const char *host, UWORD port, const char *name);
 void plex_request(const char *key, char *out, LONG max);
-void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max);
+void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, LONG max);
+ULONG plex_track_byte(const struct Item *it, ULONG from_ms);
 BOOL plex_converts(const struct Item *it);
 void plex_set_convert(BOOL on);
 void plex_set_on(BOOL on);

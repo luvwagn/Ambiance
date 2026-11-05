@@ -219,6 +219,21 @@ UWORD plex_decoder_cpu(void)
     return plex_tier() >= 2 && plex.cpu < 60 ? 60 : plex.cpu;
 }
 
+/* Where in a track's file (stored, not converted) from_ms is: its size in
+ * proportion (an MP3's bitrate is near enough even), 0 not known. */
+ULONG plex_track_byte(const struct Item *it, ULONG from_ms)
+{
+    char f[16];
+    ULONG size, total;
+    radio_field(it, 10, f, sizeof(f));
+    size = num(f);
+    radio_field(it, 2, f, sizeof(f));
+    total = num(f);
+    if (!size || !total || from_ms >= total)
+        return 0;
+    return (size / 1000) * (from_ms / 10) / (total / 10000);
+}
+
 /* A track is played converted by the server (see the top). */
 BOOL plex_converts(const struct Item *it)
 {
@@ -234,7 +249,7 @@ BOOL plex_converts(const struct Item *it)
 
 /* A track as a URL to play (out max bytes): its file, or the server's
  * conversion of it (cpu: 20, 30, 40, 60, which it is made for). */
-void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
+void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, LONG max)
 {
     char key[300], port[12], enc[400], n[160];
     int tier = plex_tier();
@@ -253,6 +268,10 @@ void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max)
                    "&hasMDE=1&download=0&musicBitrate=%ld",
                 (long)(tier == 0 ? 64 : tier == 1 ? 112 : 160));
         amce_strlcat(out, n, max);
+        if (from_ms) {
+            sprintf(n, "&offset=%lu", (unsigned long)(from_ms / 1000));    /* a seek */
+            amce_strlcat(out, n, max);
+        }
         sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
         amce_strlcat(out, n, max);
         amce_strlcat(out, "&X-Plex-Session-Identifier=", max);
@@ -342,7 +361,7 @@ struct fill {
     int track_depth;
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
     char t_thumb[160];
-    ULONG t_ms, t_kbps, t_ch, t_rate;
+    ULONG t_ms, t_kbps, t_ch, t_rate, t_size;
     BOOL full;
 };
 
@@ -357,9 +376,10 @@ static void flush_track(struct fill *x)
         x->skipped++;
         return;
     }
-    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu\t%s", x->t_part, x->t_codec,
+    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu\t%s\t%lu", x->t_part, x->t_codec,
             (unsigned long)x->t_ms, x->t_by, x->t_album, x->t_key, (unsigned long)x->t_kbps,
-            (unsigned long)x->t_ch, (unsigned long)x->t_rate, x->t_thumb);
+            (unsigned long)x->t_ch, (unsigned long)x->t_rate, x->t_thumb,
+            (unsigned long)x->t_size);
     dur_text(x->t_ms, tag);
     if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
                         IT_PLEXTRACK))) {
@@ -401,8 +421,10 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         return 1;
     }
     if (x->track && !strcmp(name, "Part")) {
-        if (!x->t_part[0] && (v = xml_attr(a, n, "key")))
+        if (!x->t_part[0] && (v = xml_attr(a, n, "key"))) {
             amce_strlcpy(x->t_part, v, sizeof(x->t_part));
+            x->t_size = num(xml_attr(a, n, "size"));
+        }
         return 1;
     }
     if (!strcmp(name, "Track")) {
@@ -421,7 +443,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             v = xml_attr(a, n, "thumb");
         amce_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
         x->t_ms = num(xml_attr(a, n, "duration"));
-        x->t_kbps = x->t_ch = x->t_rate = 0;
+        x->t_kbps = x->t_ch = x->t_rate = x->t_size = 0;
         return 1;
     }
     if (strcmp(name, "Directory") || depth != 1)

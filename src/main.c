@@ -153,6 +153,8 @@ static struct Page *page_push(UBYTE type, const char *title)
 }
 
 static WORD textbox_w(void);
+static BOOL has_aside(struct Page *p);
+static WORD aside_x(void);
 
 /* A text page's picture (Page.pic), made for this screen: as wide as the
  * text and no taller than the box, in pens of its own (gfx_thumb_bitmap). */
@@ -399,6 +401,8 @@ static void radio_spin(void)
         WORD ring, ringy, r, ry;
         spin_metrics(&ring, &ringy, &r, &ry);
         rsp.cx = g.pane_x + g.pane_w / 2;
+        if (has_aside(cur()))               /* the list's half: never over the pane's picture */
+            rsp.cx = g.pane_x + (aside_x() - g.pane_x) / 2;
         rsp.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
         rsp.on = TRUE;
         rsp.since = time_ms();
@@ -1677,6 +1681,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown);
 static BOOL plex_keeps(struct Page *p, LONG idx);
 static WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
+static void np_soft_redraw(void);
+static void np_seek_track(ULONG ms, ULONG delay);
 static void music_root_again(void);
 static ULONG strtoul_(const char *s)
 {
@@ -4159,6 +4165,10 @@ static struct {
     WORD x0, w, title_y, info_y, prog_y, prog_h, time_y, meter_y, meter_h, name_w;
     WORD bx[NB_COUNT], by, bw, bh, vol_x, samples_y;
     WORD art_x, art_y, art_s;               /* a Plex track's cover: its square (0 none) */
+    WORD bar_w, pos_y;                      /* the bar's width (the time right of it); the
+                                             * position line, under the buttons */
+    LONG seek_to;                           /* a track's seek waiting (ms, -1 none) */
+    ULONG seek_due;
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
     WORD s_level[4];
@@ -4403,13 +4413,17 @@ static void np_layout(void)
     np.w = g.pane_w - U(2);
     np.title_y = g.list_top + U(2);
     np.info_y = np.title_y + row + U(1);
-    np.prog_y = np.info_y + row + U(5);
-    np.prog_h = U(4) > 2 ? U(4) : 2;
-    np.time_y = np.prog_y + np.prog_h + U(4);
-    np.meter_y = np.time_y + row + U(6);
+    /* the meters, then the bar with the time right of it, directly above
+     * the buttons (back and forward next to where they move to), then
+     * the position line */
+    np.meter_y = np.info_y + row + U(6);
     np.meter_h = g.font_h + U(2);
     np.name_w = np.w * 2 / 5;
-    np.by = np.meter_y + 4 * (np.meter_h + U(2)) + U(6);
+    np.time_y = np.meter_y + 4 * (np.meter_h + U(2)) + U(4);
+    np.prog_h = U(4) > 2 ? U(4) : 2;
+    np.prog_y = np.time_y + (g.font_h - np.prog_h) / 2;
+    np.bar_w = np.w - gfx_textlen(&g, "88:88 / 88:88", TS_BODY) - U(10);
+    np.by = np.time_y + row + U(4);
     np.bh = g.font_h + U(8);
     vt = gfx_textlen(&g, "Volume 100%", TS_SMALL) + U(6);
     avail = np.w - vt;                      /* buttons, gaps, and two more before volume */
@@ -4441,7 +4455,8 @@ static void np_layout(void)
     }
     if (np.vol_x >= 0)
         np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
-    np.samples_y = np.by + np.bh + U(8);
+    np.pos_y = np.by + np.bh + U(5);
+    np.samples_y = np.pos_y + row + U(2);
     np.art_s = 0;
     if (mp_is_track()) {
         /* the cover: a square at the right of the track's lines */
@@ -4463,26 +4478,26 @@ static void np_layout(void)
 static void np_draw_progress(BOOL full, const struct MpStatus *st)
 {
     char t[64], a[24], b[24], pos[96];
-    WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, lw, rw;
-    LONG fill = st->total_ms ? (LONG)((ULONG)np.w * (st->elapsed_ms / 100) /
-                                      ((st->total_ms + 99) / 100)) : 0;
-    if (fill > np.w)
-        fill = np.w;
+    WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, bw = np.bar_w, lw, rw;
+    ULONG at = np.seek_due ? (ULONG)np.seek_to : st->elapsed_ms;   /* a seek: where to */
+    LONG fill = st->total_ms ? (LONG)((ULONG)bw * (at / 100) / ((st->total_ms + 99) / 100)) : 0;
+    if (fill > bw)
+        fill = bw;
     if (full || fill != np.s_fill) {
         if (fill > 0)
             gfx_fill(&g, x, np.prog_y, x + fill - 1, np.prog_y + np.prog_h - 1, PEN_ACCENT);
-        if (fill < np.w)
-            gfx_fill(&g, x + fill, np.prog_y, end, np.prog_y + np.prog_h - 1, PEN_RULE);
+        if (fill < bw)
+            gfx_fill(&g, x + fill, np.prog_y, x + bw - 1, np.prog_y + np.prog_h - 1, PEN_RULE);
         np.s_fill = fill;
     }
-    if (!full && st->elapsed_ms / 1000 == (ULONG)np.s_ms / 1000 && st->order == np.s_order &&
+    if (!full && at / 1000 == (ULONG)np.s_ms / 1000 && st->order == np.s_order &&
         st->row == np.s_row && (LONG)st->total_ms == np.s_total)
         return;
-    np.s_ms = st->elapsed_ms;
+    np.s_ms = at;
     np.s_total = st->total_ms;
     np.s_order = st->order;
     np.s_row = st->row;
-    time_text(st->elapsed_ms, a);
+    time_text(at, a);
     time_text(st->total_ms, b);
     if (st->total_ms)
         sprintf(t, "%s / %s", a, b);
@@ -4513,22 +4528,20 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
                               in.state == ST_BUFFERING ? "Buffering..." : "", sizeof(pos));
         }
     }
+    /* the time right of the bar, right-aligned */
     lw = gfx_textlen(&g, t, TS_BODY);
+    if (x + bw + U(4) <= end - lw)
+        gfx_fill(&g, x + bw, y, end - lw, y + g.font_h - 1, PEN_BG);
+    gfx_text(&g, end - lw + 1, y, t, np.seek_due ? PEN_WHITE : PEN_TEXT, PEN_BG, 0,
+             TS_BODY | TS_OPAQUE);
+    /* the position (or the buffer) on its own line under the buttons */
     rw = gfx_textlen(&g, pos, TS_SMALL);
-    if (lw + U(8) + rw > np.w && !mp_is_stream()) {    /* narrow: the short form */
-        if (st->songlen)
-            sprintf(pos, "%ld/%ld  %02ld", (long)st->order + 1, (long)st->songlen, (long)st->row);
-        else
-            sprintf(pos, "%ld  %02ld", (long)st->order + 1, (long)st->row);
-        rw = gfx_textlen(&g, pos, TS_SMALL);
-        if (lw + U(8) + rw > np.w)
-            pos[0] = 0, rw = 0;
-    }
-    gfx_text(&g, x, y, t, PEN_TEXT, PEN_BG, 0, TS_BODY | TS_OPAQUE);
-    if (x + lw <= end - rw)
-        gfx_fill(&g, x + lw, y, end - rw, y + g.font_h - 1, PEN_BG);
+    if (rw > np.w)
+        rw = np.w;
     if (rw)
-        gfx_text(&g, end - rw + 1, y, pos, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
+        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, np.w, TS_SMALL | TS_OPAQUE);
+    if (x + rw <= end)
+        gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
 }
 
 static void np_draw_meters(BOOL full, const struct MpStatus *st)
@@ -4834,7 +4847,7 @@ static void np_update(void)
 {
     BOOL was = gfx_quiet_begin();
     np_draw(FALSE);
-    gfx_quiet_end(&g, was, g.pane_x - U(2), np.prog_y, g.w - 1, np.by + np.bh);
+    gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.pos_y + g.font_h);
 }
 
 /* The playing module marked in any Mods list open (redraw: and the list
@@ -4898,7 +4911,7 @@ static BOOL np_start(LONG idx)
             set_msg(plex_why(it));
             return FALSE;
         }
-        plex_track_url(it, caps.cpu, url, sizeof(url));
+        plex_track_url(it, caps.cpu, 0, url, sizeof(url));
         radio_field(it, 0, plex_now, sizeof(plex_now));
         {
             char f[16], key[160];
@@ -4926,7 +4939,7 @@ static BOOL np_start(LONG idx)
             const char *d = ms;
             while (*d >= '0' && *d <= '9')
                 v = v * 10 + (*d++ - '0');
-            ok_track = mp_load_track(url, it->label, by, "MP3", v, plex_decoder_cpu(), err,
+            ok_track = mp_load_track(url, it->label, by, "MP3", v, plex_decoder_cpu(), 0, 0, err,
                                      sizeof(err));
         }
         if (!ok_track) {
@@ -4946,6 +4959,7 @@ static BOOL np_start(LONG idx)
     busy_end(TRUE);
     np.idx = idx;
     np.ended_seen = FALSE;
+    np.seek_due = 0;
     if (!mp_play(err, sizeof(err))) {
         set_msg(err);
         np_mark_lists(TRUE);
@@ -4962,15 +4976,73 @@ static BOOL np_skip(int d)
     LONG i, tries;
     if (!np.list.pool || !np.list.count)
         return FALSE;
+    BOOL was_track = mp_is_track();
     for (i = np.idx + d, tries = 0; i >= 0 && i < np.list.count && tries < 8; i += d, tries++)
         if (np_start(i)) {
-            if (np_on()) {
+            if (np_on() && was_track && mp_is_track() && np.w)
+                np_soft_redraw();           /* track to track: what changed, over itself */
+            else if (np_on()) {
                 draw_pane(TRUE);
                 draw_footer();
             }
             return TRUE;
         }
     return FALSE;
+}
+
+/* A track's page brought up to date without clearing it: its lines drawn
+ * over themselves, the controls, the bar and time; its cover stays until
+ * the next one is made (or goes, if it has none). */
+static void np_soft_redraw(void)
+{
+    BOOL was = gfx_quiet_begin();
+    np_draw_station();
+    gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+    np.s_state = -99;                       /* the buttons: all looked at again */
+    np_update();
+    if (!msg[0] && hint_shown && hint_text() != hint_shown)
+        draw_footer();
+}
+
+/* A track from ms on (a seek): asked of the server again from there (a
+ * conversion from that time, a stored file from that byte); delay > 0
+ * waits that long first, as Back and Forward held keep moving the time. */
+static void np_seek_track(ULONG ms, ULONG delay)
+{
+    struct MpStatus st;
+    struct Item *it;
+    char url[1024], by[200], album[100], err[100];
+    if (!mp_is_track() || !np.list.pool || np.idx < 0 || np.idx >= np.list.count)
+        return;
+    mp_status(&st);
+    if (st.total_ms && ms + 1000 > st.total_ms)
+        ms = st.total_ms > 1000 ? st.total_ms - 1000 : 0;
+    if (delay) {
+        np.seek_to = ms;
+        np.seek_due = time_ms() + delay;
+        if (!np.seek_due)
+            np.seek_due = 1;
+        if (np_on())
+            np_update();                    /* the bar and time show where to */
+        return;
+    }
+    np.seek_due = 0;
+    it = &np.list.items[np.idx];
+    plex_track_url(it, caps.cpu, ms, url, sizeof(url));
+    radio_field(it, 3, by, sizeof(by));
+    radio_field(it, 4, album, sizeof(album));
+    if (album[0]) {
+        amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
+        amce_strlcat(by, album, sizeof(by));
+    }
+    if (!mp_load_track(url, it->label, by, "MP3", st.total_ms, plex_decoder_cpu(), ms,
+                       plex_converts(it) ? 0 : plex_track_byte(it, ms), err, sizeof(err)) ||
+        !mp_play(err, sizeof(err))) {
+        set_msg(err);
+        return;
+    }
+    if (np_on() && np.w)
+        np_soft_redraw();
 }
 
 static void np_volume(int d)
@@ -5036,6 +5108,16 @@ static void np_press(int b)
             np.flash = -1;                  /* greyed out: no flash, nothing done */
             if (np.rep == b)
                 np.rep = -1;
+            break;
+        }
+        if (mp_is_track()) {
+            /* 10 s a press (held: on and on), asked for once it rests */
+            struct MpStatus st;
+            LONG at;
+            mp_status(&st);
+            at = np.seek_due ? np.seek_to : (LONG)st.elapsed_ms;
+            at += b == NB_FWD ? 10000 : -10000;
+            np_seek_track(at < 0 ? 0 : (ULONG)at, 450);
             break;
         }
         if (mp_loaded() && !mp_step(b == NB_FWD ? 1 : -1))
@@ -5224,6 +5306,8 @@ static void np_repeat(void)
 
 static void np_tick(void)
 {
+    if (np.seek_due && (LONG)(time_ms() - np.seek_due) >= 0)
+        np_seek_track((ULONG)np.seek_to, 0);    /* Back/Forward rested: from there */
     np_repeat();
     np_eq_tick();
     if (mp_is_track() && mp_running() && np_on() && np.w) {
@@ -5370,14 +5454,19 @@ static BOOL np_click(WORD x, WORD y)
         return TRUE;
     }
     /* the bar (and the line under it): to that part of the song */
-    if (y >= np.prog_y - U(3) && y < np.time_y && x >= np.x0 && x < np.x0 + np.w) {
+    if (y >= np.time_y - U(2) && y < np.time_y + g.font_h + U(2) && x >= np.x0 &&
+        x < np.x0 + np.bar_w) {
         struct MpStatus st;
         ULONG want;
         int pos, best = 0;
         mp_status(&st);
         if (!st.total_ms)
             return TRUE;                    /* its length is not known */
-        want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.w * 100;
+        want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.bar_w * 100;
+        if (mp_is_track()) {
+            np_seek_track(want, 0);         /* a track: from there, at once */
+            return TRUE;
+        }
         if (mp_seek_ms(want)) {             /* mixed modules: to the time itself */
             np_update();
             return TRUE;
@@ -6964,8 +7053,17 @@ static void np_art_draw(void)
     BOOL taken = FALSE;
     if (!np_aj || !np_aj->done || !np_on() || !mp_is_track() || !np.art_s || np_art_drawn)
         return;
-    if (np_aj->thumb)
-        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_s, &dh);
+    if (np_aj->thumb &&
+        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_s, &dh)) {
+        /* the square around a cover not square (the one before may show there) */
+        if (g.pic_x > np.art_x)
+            gfx_fill_bg(&g, np.art_x, np.art_y, g.pic_x - 1, np.art_y + np.art_s - 1);
+        if (g.pic_x + g.pic_w < np.art_x + np.art_s)
+            gfx_fill_bg(&g, g.pic_x + g.pic_w, np.art_y, np.art_x + np.art_s - 1,
+                        np.art_y + np.art_s - 1);
+        if (dh < np.art_s)
+            gfx_fill_bg(&g, g.pic_x, np.art_y + dh, g.pic_x + g.pic_w - 1, np.art_y + np.art_s - 1);
+    }
     else if (np_aj->obj && gfx_picture_obj(&g, np_aj->obj, np_aj->remapped, np.art_x, np.art_y,
                                            np.art_s, np.art_s, TRUE, &dh, &taken) && taken)
         np_aj->obj = NULL;                  /* the screen has it (its pens) */
@@ -6975,10 +7073,17 @@ static void np_art_draw(void)
 /* A Plex track starting: its cover asked for (or loaded, if kept). */
 static void np_art_start(const struct Item *it)
 {
+    static char shown[160];
     char thumb[160], file[120];
-    np_art_free();
     radio_field(it, 9, thumb, sizeof(thumb));
+    if (np_aj && !strcmp(thumb, shown))
+        return;                             /* the same album: its cover stays as it is */
+    amce_strlcpy(shown, thumb, sizeof(shown));
+    np_art_free();
     np_layout();                            /* the square's size */
+    if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
+        gfx_picture_clear(&g, np.art_x, np.art_y, np.art_x + np.art_s - 1,
+                          np.art_y + np.art_s - 1);
     if (np.art_s && art_fetch(ART_NP, thumb, np.art_s, np.art_s, file))
         np_art_load(file);
 }

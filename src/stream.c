@@ -140,6 +140,7 @@ static struct {
     UWORD cpu;                      /* 20, 30, 40, 60: how much decoding it can do */
     BOOL finite;                    /* a track: its end is the end, not a failure */
     ULONG mp3_bytes;                /* MP3 given to the decoder: its average bitrate */
+    ULONG range_from;               /* a track from this byte on (a seek; 0 all of it) */
     volatile BOOL eof;              /* a track's last byte read */
 } st;
 
@@ -440,7 +441,7 @@ static LONG num(const char *s)
 /* Connected to the stream (redirects and playlists followed). */
 static BOOL open_stream(void)
 {
-    char url[1024], host[96], path[1024], req[1400], hdr[2048], v[160];
+    char url[1024], host[96], path[1024], req[1400], hdr[2048], v[160], range[40];
     UWORD port;
     int hop;
     amce_strlcpy(url, st.url, sizeof(url));
@@ -457,10 +458,14 @@ static BOOL open_stream(void)
         st.state = ST_CONNECTING;
         if ((st.sock = connect_to(host, port)) < 0)
             return FALSE;
+        if (st.range_from)
+            sprintf(range, "Range: bytes=%lu-\r\n", (unsigned long)st.range_from);
+        else
+            range[0] = 0;
         sprintf(req,
                 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
-                "\r\nAccept: */*\r\n%sConnection: close\r\n\r\n",
-                path, host, st.finite ? "" : "Icy-MetaData: 1\r\n");
+                "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
+                path, host, st.finite ? "" : "Icy-MetaData: 1\r\n", range);
         {
             LONG left = strlen(req), off = 0;
             while (left > 0) {
@@ -485,7 +490,7 @@ static BOOL open_stream(void)
             amce_strlcpy(url, v, sizeof(url));
             continue;
         }
-        if (status != 200) {
+        if (status != 200 && !(status == 206 && st.range_from)) {
             sprintf(v, "%s answered %ld", st.finite ? "The server" : "The station", (long)status);
             fail(v);
             return FALSE;
@@ -850,10 +855,12 @@ out:
 }
 
 /* ---------------------------------------------------------- the UI's */
-BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, LONG errmax)
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from, char *err,
+              LONG errmax)
 {
     st_stop();
     st.finite = finite;
+    st.range_from = range_from;
     st.eof = FALSE;
     memset(&st.err, 0, sizeof(st.err));
     st.name[0] = st.genre[0] = st.title[0] = 0;
