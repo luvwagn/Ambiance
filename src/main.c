@@ -2272,6 +2272,26 @@ static void preview_touch(struct Page *p);
 
 static void draw_title(struct Page *p);
 
+/* The title band (U(26) to the rule at U(41)) is never cleared whole
+ * before it is drawn: the text goes on opaque, over what was there, and
+ * only the rows above and below it and the ends of its line are filled.
+ * Drawn again unchanged, nothing on screen changes; a clear and then the
+ * text flashed the title on every redraw (a section built after the menu
+ * settled drew it twice). Text runs from x0 to x1 (exclusive); the line's
+ * ends either side are filled. */
+static void title_band_rest(WORD x0, WORD x1, WORD right_from)
+{
+    WORD ty0 = U(28), ty1 = U(28) + g.font_h - 1, l = g.pane_x - U(2);
+    if (ty0 > U(26))
+        gfx_fill(&g, l, U(26), g.w - 1, ty0 - 1, PEN_BG);
+    if (ty1 + 1 <= U(41) - 1)
+        gfx_fill(&g, l, ty1 + 1, g.w - 1, U(41) - 1, PEN_BG);
+    if (x0 > l)
+        gfx_fill(&g, l, ty0, x0 - 1, ty1, PEN_BG);
+    if (x1 < right_from)
+        gfx_fill(&g, x1, ty0, right_from - 1, ty1, PEN_BG);
+}
+
 static void draw_title_count(struct Page *p)
 {
     char count[24];
@@ -2322,7 +2342,6 @@ static void draw_title(struct Page *p)
             sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
         cw = gfx_textlen(&g, widest, TS_SMALL);
     }
-    gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
     count_left = -1;
     maxw = g.pane_w - cw - U(8);
     dots = gfx_textlen(&g, "...", TS_BOLD) + sep;
@@ -2341,9 +2360,9 @@ static void draw_title(struct Page *p)
     }
     x = g.pane_x;
     if (crumb_first > 0) {
-        gfx_text(&g, x, U(28), "...", PEN_DIM, PEN_BG, 0, TS_BOLD);
+        gfx_text(&g, x, U(28), "...", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
         x += gfx_textlen(&g, "...", TS_BOLD);
-        gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD);
+        gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
         x += sep;
     }
     for (i = 0; i < depth; i++) {
@@ -2360,15 +2379,31 @@ static void draw_title(struct Page *p)
                 w = room;
             if (hov)
                 gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-            gfx_text(&g, x, U(28), pages[i].title, last ? PEN_WHITE : PEN_TEXT, bg, room, TS_BOLD);
+            gfx_text(&g, x, U(28), pages[i].title, last ? PEN_WHITE : PEN_TEXT, bg, room,
+                     TS_BOLD | TS_OPAQUE);
             crumb[i].x0 = x;
             crumb[i].x1 = x + w - 1;
             x += w;
             if (!last) {
-                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD);
+                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
                 x += sep;
             }
         }
+    }
+    {
+        /* the rest of the band; the count (draw_title_count) keeps its place */
+        WORD right = g.w;
+        if (p->type == PT_LIST && p->list.count) {
+            char count[24];
+            sprintf(count, ch_reading(p) ? "%ld/%ld..." : "%ld/%ld", (long)p->sel + 1,
+                    (long)p->list.count);
+            right = g.pane_x + g.pane_w - gfx_textlen(&g, count, TS_SMALL);
+            count_left = right;
+            if (g.pane_x + g.pane_w < g.w)
+                gfx_fill(&g, g.pane_x + g.pane_w, U(28), g.w - 1, U(28) + g.font_h - 1,
+                         PEN_BG);
+        }
+        title_band_rest(g.pane_x, x, right);
     }
     draw_title_count(p);
     gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
@@ -3808,12 +3843,16 @@ static void draw_pane(BOOL full)
             WORD bx1;
             open_textbox(p, g.list_top);
             bx1 = tb->bar_x + U(3) - 1;
-            gfx_fill_bg(&g, px, U(25), g.w - 1, tb->y - 1);
+            gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
+            gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
+            gfx_fill_bg(&g, px, U(42), g.w - 1, tb->y - 1);
             gfx_fill_bg(&g, px, tb->y, tb->x - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, bx1 + 1, tb->y, g.w - 1, tb->y + tb->h - 1);
             gfx_fill_bg(&g, px, tb->y + tb->h, g.w - 1, pb);
-        } else if (p->type != PT_PLAYER) {
-            gfx_fill_bg(&g, px, U(25), g.w - 1, pb);  /* the player clears its own */
+        } else if (p->type != PT_PLAYER) {          /* the player clears its own */
+            gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
+            gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
+            gfx_fill_bg(&g, px, U(42), g.w - 1, pb);
         }
     }
     draw_title(p);
@@ -5073,11 +5112,15 @@ static void pane_tick(void)
 /* The pane while the selection is moving: blank, with the section's name. */
 static void pane_preview(BOOL first)
 {
-    if (first)
-        gfx_fill_bg(&g, g.menu_w + U(3), U(25), g.w - 1, g.footer_y - 2);
-    else
-        gfx_fill(&g, g.pane_x - U(2), U(26), g.w - 1, U(42) - 1, PEN_BG);
-    gfx_text(&g, g.pane_x, U(28), mod_names[menu[menu_sel]], PEN_WHITE, PEN_BG, g.pane_w, TS_BOLD);
+    const char *t = mod_names[menu[menu_sel]];
+    if (first) {
+        /* all but the title band (title_band_rest) */
+        gfx_fill_bg(&g, g.menu_w + U(3), U(25), g.w - 1, U(26) - 1);
+        gfx_fill_bg(&g, g.menu_w + U(3), U(26), g.pane_x - U(2) - 1, U(42) - 1);
+        gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+    }
+    gfx_text(&g, g.pane_x, U(28), t, PEN_WHITE, PEN_BG, g.pane_w, TS_BOLD | TS_OPAQUE);
+    title_band_rest(g.pane_x, g.pane_x + gfx_textlen(&g, t, TS_BOLD), g.w);
     gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
 }
 
