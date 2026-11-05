@@ -28,11 +28,12 @@
  * is, a short timed loop the first time):
  *   0: a 68020/030: 22050 Hz mono, 64 kbit/s (the floor: never less)
  *   1: a 68040/060: 24000 Hz stereo, 112 kbit/s
- *   2: a fast one (a quick 060, an emulated or accelerated 68k): MP3 files
- *      as stored (decoded to Paula's rate), others 24000 Hz stereo 160k.
+ *   2: a fast one (a quick 060, an emulated or accelerated 68k): 24000 Hz
+ *      stereo, 160 kbit/s.
  * Paula plays up to about 28 kHz, so nothing asks for more than 24 kHz.
- * Settings > Plex: sound made for this Amiga off: MP3s as stored (others
- * converted either way). Plex
+ * Settings > Plex > Request lower quality audio (on unless turned off)
+ * off: MP3s as stored, decoded to Paula's rate (others converted either
+ * way). Plex
  * picks a profile by the client's platform and device: without them it
  * answers 400. The limits are on the music codec (scope musicCodec, as in
  * Plex's own profiles' MusicCodec, scopeName mp3): on audioCodec they were
@@ -52,7 +53,7 @@
 #define NAME_VAR   "AmigaMCE/PlexName"
 #define TOKEN_VAR  "AmigaMCE/PlexToken"
 #define CID_VAR    "AmigaMCE/PlexClient"
-#define CONV_VAR   "AmigaMCE/PlexConvert"
+#define CONV_VAR   "AmigaMCE/PlexLowAudio"     /* was PlexConvert: on again by default */
 #define ON_VAR     "AmigaMCE/Plex"
 #define LIB_VAR    "AmigaMCE/PlexLibrary"
 #define LIST_MAX   1000         /* entries asked for at once */
@@ -245,7 +246,7 @@ BOOL plex_converts(const struct Item *it)
         return FALSE;
     if (amce_stricmp(codec, "mp3"))
         return TRUE;                        /* the Amiga plays MP3 only */
-    return plex.convert && plex_tier() < 2;
+    return plex.convert;
 }
 
 /* A track as a URL to play (out max bytes): its file, or the server's
@@ -616,10 +617,12 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
         UnLock(l);
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
         UnLock(l);
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld.png", (unsigned long)hash, (long)w, (long)h);
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.png", (unsigned long)hash, (long)w, (long)h);
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));
-    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=1&upscale=1&format=png&url=",
+    /* minSize=0: within w x h, so never bigger than it is shown (a tall
+     * cover came 160 x 279, read and averaged down to 91 x 160) */
+    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=0&upscale=1&format=png&url=",
             (long)w, (long)h);
     {
         char k[520];

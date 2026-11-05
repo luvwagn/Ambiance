@@ -67,3 +67,23 @@ PNG decodes in 437-541 ms against JPEG's 539-1435 for the same covers: about a
 third faster on a plain cover, three times faster on a detailed one
 (07FEABB5), and steadier (PNG's time hardly depends on the picture). The reduce
 to 48 colours (about 790-880 ms) does not change and is now the larger part.
+
+## PNG, colours chosen over the cells in use (0.4.1-46-gedf7d72)
+
+Same machine, 2026-11-05 12:17. `made` is the whole of making the thumbnail;
+after it, the log's split of it.
+
+| cover | got | decode ms | made ms | reading | counting | choosing | mapping |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 9644C971 | 160x160 | 447 | 111 | 7 | 74 | 16 | 12 |
+| 07FEABB5 | 160x160 | 530 | 186 | 8 | 91 | 73 | 13 |
+| 946B37E8 | 161x160 | 907 | 467 | 14 | 198 | 182 | 73 |
+| 4CB889D6 | 160x279 to 91x160 | 1375 | 1036 | 25 | 829 | 174 | 7 |
+
+A cover at the size shown now takes 111-186 ms to make, against 790-880
+before: decode plus make about 560-720 ms, against 1.3-1.7 s as PNG with the
+old reduction, 1.6-2.8 s as JPEG. 946B37E8 was made with music playing (its
+draw, 388 ms, is the slower group), so everything about it took about twice as
+long. 4CB889D6, a tall cover, came 160 x 279 (minSize=1 makes the shorter side
+160) and was averaged down: from 0.4.1-47 covers are asked for within the
+square (minSize=0), so they come at the size shown.

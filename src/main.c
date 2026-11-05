@@ -58,6 +58,7 @@ struct Page {
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
+    UBYTE plex_set;             /* Settings > Plex */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
@@ -121,7 +122,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1540,18 +1541,10 @@ static void build_settings(struct Page *p)
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
-    if (caps.net) {
-        /* Plex (plex.c): only with networking */
-        action_item(p, "Plex", "", ACT_PLEXON, plex.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
-        if (plex.on) {
-            if ((it = list_add(&p->list, "Plex server",
-                               "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
-                                                    : "none chosen", IT_PLEXDIR)))
-                it->mark = MARK_ARROW;
-            action_item(p, "Plex: sound made for this Amiga", "", ACT_PLEXCONV,
-                        plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
-        }
-    }
+    if (caps.net)                       /* Plex (plex.c): only with networking */
+        action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
+                               : plex.host[0] ? plex.host : "On, no server chosen",
+                    ACT_PLEXSET, MARK_ARROW);
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, "Double buffering", "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
@@ -1560,6 +1553,56 @@ static void build_settings(struct Page *p)
 }
 
 #define SETTINGS_STYLE_ROW 1    /* "Style" in build_settings */
+
+/* Settings > Plex: on or off, the server, and how the music is asked for. */
+static void build_plex_settings(struct Page *p)
+{
+    struct Item *it;
+    p->plex_set = 1;
+    action_item(p, "Plex", "", ACT_PLEXON, plex.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if (!plex.on)
+        return;
+    if ((it = list_add(&p->list, "Plex server",
+                       "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
+                                            : "none chosen", IT_PLEXDIR)))
+        it->mark = MARK_ARROW;
+    action_item(p, "Request lower quality audio", "", ACT_PLEXCONV,
+                plex.convert ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+static void draw_footer(void);
+static void draw_list_rows(struct Page *p);
+
+/* A Plex setting changed: its page built again (the selection kept), and
+ * Settings under it, whose Plex row says what is chosen. */
+static void plex_settings_again(BOOL full)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    int d;
+    for (d = 0; d < depth; d++) {
+        struct Page *q = &pages[d];
+        LONG qs = q->sel;
+        if (q->type != PT_LIST || (!q->plex_set && strcmp(q->title, "Settings")))
+            continue;
+        list_free(&q->list);
+        list_init(&q->list);
+        if (q->plex_set)
+            build_plex_settings(q);
+        else
+            build_settings(q);
+        q->sel = qs < q->list.count ? qs : q->list.count - 1;
+    }
+    if (!p || p->type != PT_LIST)
+        return;
+    p->sel = sel < p->list.count ? sel : p->list.count - 1;
+    if (full) {
+        draw_pane(TRUE);
+        draw_footer();
+    } else {
+        draw_list_rows(p);
+    }
+}
 
 /* Settings > Style: radio buttons, like Screen mode. On a laced screen,
  * the fonts it can use. */
@@ -6534,34 +6577,28 @@ static void toggle_jump(void)
 /* Settings > Plex: Music's Plex rows, and its asking, on or off. */
 static void toggle_plex_on(void)
 {
-    struct Page *p = cur();
-    LONG sel = p ? p->sel : 0;
     plex_set_on(!plex.on);
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel < p->list.count ? sel : p->list.count - 1;
-        draw_pane(TRUE);
-        draw_footer();
-    }
+    plex_settings_again(TRUE);              /* rows come and go */
 }
 
-/* Settings > Plex: convert music to 22 kHz: every track the server's
- * conversion (half the decoding of a 44.1 kHz file), or MP3s as stored
- * (other formats are converted either way). The next track it applies to. */
+/* Settings > Plex > Request lower quality audio: every track the server's
+ * conversion, made for this Amiga (22 kHz mono on a 68030: a fraction of
+ * the decoding of a 44.1 kHz stereo file), or MP3s as stored (other
+ * formats are converted either way). The next track it applies to. */
 static void toggle_plex_convert(void)
 {
-    struct Page *p = cur();
-    LONG sel = p ? p->sel : 0;
     plex_set_convert(!plex.convert);
-    if (p && p->type == PT_LIST) {
-        list_free(&p->list);
-        list_init(&p->list);
-        build_settings(p);
-        p->sel = sel;
-        draw_list_rows(p);
-    }
+    plex_settings_again(FALSE);
+}
+
+static void open_plex_settings(void)
+{
+    struct Page *p = page_push(PT_LIST, "Plex");
+    if (!p)
+        return;
+    build_plex_settings(p);
+    draw_pane(TRUE);
+    draw_footer();
 }
 
 static void toggle_https(void)
@@ -7489,20 +7526,9 @@ static void plex_choose(struct Item *it)
     plex_set_server(host, port, name);
     amce_log("plex: server chosen", hp);
     if (depth >= 2 && menu_sel >= 0 && menu[menu_sel] == MOD_SETTINGS) {
-        /* chosen in Settings: back there, the row naming it */
-        struct Page *up;
-        LONG sel;
+        /* chosen in Settings > Plex: back there, the row naming it */
         page_pop();
-        up = cur();
-        sel = up ? up->sel : 0;
-        if (up && up->type == PT_LIST) {
-            list_free(&up->list);
-            list_init(&up->list);
-            build_settings(up);
-            up->sel = sel < up->list.count ? sel : 0;
-        }
-        draw_pane(TRUE);
-        draw_footer();
+        plex_settings_again(TRUE);
         set_msg("Plex server chosen");
         return;
     }
@@ -7531,11 +7557,11 @@ static void plex_help(void)
                  "music libraries, by artist and album, with their covers, played on the "
                  "Amiga's own sound (mpega.library). The server makes each track for this "
                  "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
-                 "and a fast one gets MP3 files as stored. Settings > Plex: sound made for "
-                 "this Amiga off plays MP3 files as stored (other formats are converted "
-                 "either way); Settings > Plex turns it all off.");
+                 "and 24 kHz stereo at a higher bitrate for a fast one. Turning off Settings > "
+                 "Plex > Request lower quality audio plays MP3 files as stored (other formats "
+                 "are converted either way); Settings > Plex > Plex turns it all off.");
     text_line(p, "");
-    text_para(p, "Finding a server: Settings > Plex server asks the network (Plex's GDM); "
+    text_para(p, "Finding a server: Settings > Plex > Plex server asks the network (Plex's GDM); "
                  "choose one and it is kept. Or set its address from the Shell: "
                  "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400");
     text_line(p, "");
@@ -7629,6 +7655,8 @@ static void act_action(struct Item *it)
         toggle_plex_convert();
     else if (it->action == ACT_PLEXON)
         toggle_plex_on();
+    else if (it->action == ACT_PLEXSET)
+        open_plex_settings();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)
