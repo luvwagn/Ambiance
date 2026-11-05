@@ -1,0 +1,12 @@
+tests/fixtures/AGS2/      Welcome To AGS!.ags
+tests/fixtures/AGS2/ -------------------------.ags
+tests/fixtures/AGS2/+  Emulators.ags
+tests/fixtures/AGS2/+  Games - Adult.ags
+tests/fixtures/AGS2/+  Games - By Genre.ags/Action FPS.ags
+tests/fixtures/AGS2/+  My Programs.agz
+tests/fixtures/AGS2/-  -----------------------.ags
+tests/fixtures/AGS2/-  Demos - 0-Z.ags/A.ags
+tests/fixtures/AGS2/-  Disk Magazines.ags
+tests/fixtures/AGS2/Mods
+tests/fixtures/AGS2/OS/C
+tests/fixtures/AGS2/Scripts
