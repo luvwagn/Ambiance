@@ -4619,12 +4619,12 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
         WORD y = np.meter_y + i * (np.meter_h + U(2)), by = y + (np.meter_h - bh) / 2;
         WORD lit = (WORD)((LONG)bw * st->level[i] / 64);
         if (n < 4) {
-            /* a channel of the sound, not of Paula: Left, Right (or none for mono) */
+            /* a channel of the sound, not of Paula: Left and Right, or Mono */
             if (full) {
                 gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
-                if (n == 2)
-                    gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2, i ? "Right" : "Left",
-                             PEN_DIM, PEN_BG, np.name_w, TS_SMALL);
+                gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2,
+                         n == 1 ? "Mono" : i ? "Right" : "Left", PEN_DIM, PEN_BG, np.name_w,
+                         TS_SMALL);
             }
         } else if (full || st->sample[i] != np.s_sample[i]) {
             char name[40];
