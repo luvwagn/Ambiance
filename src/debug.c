@@ -37,7 +37,7 @@ static volatile ULONG idle_count;
 static volatile BOOL idle_quit;
 static struct Task *idle_task, *parent;
 static BYTE done_sig = -1;
-static ULONG last_count, best_rate;
+static ULONG last_count, best_rate, last_ms;
 static ULONG base_chip, base_fast;
 
 static void idle_entry(void)
@@ -84,9 +84,13 @@ void dbg_cpu_stop(void)
  * second to compare with. The calibration survives stop/start. */
 LONG dbg_cpu_sample(void)
 {
-    ULONG now = idle_count, rate = now - last_count;
-    BOOL first = last_count == 0;
+    ULONG now = idle_count, diff = now - last_count, ms = time_ms(), el = ms - last_ms, rate;
+    BOOL first = last_count == 0 || !last_ms || !el;
     last_count = now;
+    last_ms = ms;
+    /* counts per real second: the caller's "second" can run long when the
+     * CPU is busy, and a longer one counted more and read as less load */
+    rate = first ? 0 : (diff / el) * 1000 + ((diff % el) * 1000) / el;
     if (!idle_task || first)
         return -1;
     if (rate > best_rate)

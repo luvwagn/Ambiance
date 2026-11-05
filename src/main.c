@@ -7155,7 +7155,7 @@ static int app_main(void)
     struct MsgPort *tport = NULL;
     struct timerequest *treq = NULL;
     BOOL timer_open = FALSE;
-    ULONG ms_acc = 0, tick_us = 40000;
+    ULONG next_sec = 0, tick_us = 40000;
     int rc = 0;
 
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
@@ -7296,7 +7296,6 @@ static int app_main(void)
             radio_collect();            /* radio-browser.info answered */
         if (sig & tsig) {
             if (GetMsg(tport)) {
-                ms_acc += tick_us / 1000;
                 joy_poll();
                 /* the letter lingers ~0.5 s after the glide ends */
                 if (ov.on && !hold_active()) {
@@ -7305,9 +7304,14 @@ static int app_main(void)
                     else if (--ov.linger == 0)
                         ov_hide();
                 }
-                if (ms_acc >= 1000 && g.win) {
+                /* once a second by the clock, not by counting ticks: a tick
+                 * comes late when the CPU is busy (a station decoding), and
+                 * counted ticks made the "second" two or three long */
+                if (g.win && (!next_sec || (LONG)(time_ms() - next_sec) >= 0)) {
+                    ULONG now_ms = time_ms();
+                    next_sec = (next_sec && (LONG)(now_ms - next_sec) < 1000) ? next_sec + 1000
+                                                                              : now_ms + 1000;
                     struct DateStamp ds;
-                    ms_acc -= 1000;
                     DateStamp(&ds);
                     /* the header, shown without a flip (gfx_quiet_*) */
                     BOOL was = gfx_quiet_begin();
