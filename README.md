@@ -47,6 +47,10 @@ inline OS call when a multiply helper call ends up between them (see
 | `make icons`   | Regenerates the Workbench icons in `docs/`                |
 
 The version comes from `git describe --tags`; tag `vX.Y.Z` to release.
+The minor number counts the libraries: it goes up by one (0.4, 0.5, ...)
+each time a new library view joins the menu (Mods brought 0.4). Fixes and
+smaller features between those are the builds after the tag
+(`0.4.0-12-gabcdef`), or a patch tag (`v0.4.1`) when one is released.
 Pushing a `v*` tag builds a draft GitHub release; publishing it uploads to
 Aminet.
 
