@@ -2219,12 +2219,22 @@ static void draw_menu(void)
 
 static BOOL has_aside(struct Page *p);
 
+/* A section that is only a note for now (Videos, Music): nothing in it
+ * to go to, so the menu keeps the focus. */
+static BOOL section_inert(void)
+{
+    int m = menu_sel >= 0 && menu_sel < nmenu ? menu[menu_sel] : -1;
+    return depth <= 1 && (m == MOD_VIDEOS || m == MOD_MUSIC);
+}
+
 static const char *hint_text(void)
 {
     struct Page *p = cur();
     /* the long hints when the widest of them fits */
     BOOL hi = gfx_textlen(&g, "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back",
                           TS_SMALL) <= g.w - U(12);
+    if (focus == FOCUS_MENU && section_inert())
+        return hi ? "Up/Down  choose      Esc twice  quit" : "Esc twice quit";
     if (focus == FOCUS_MENU)
         return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
                   : "Fire open  Esc twice quit";
@@ -5208,7 +5218,7 @@ static void menu_select(int i)
 static void set_focus(int f)
 {
     pane_settle();
-    if (focus == f)
+    if (focus == f || (f == FOCUS_CONTENT && section_inert()))
         return;
     focus = f;
     pv_tb.focused = f == FOCUS_PREVIEW;
@@ -5805,6 +5815,8 @@ static void act_wheel(LONG d, WORD x, WORD y)
     }
     if (over_menu && focus != FOCUS_MENU)
         set_focus(FOCUS_MENU);
+    else if (over_pane && section_inert())
+        return;                     /* nothing there to scroll */
     else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
         set_focus(FOCUS_CONTENT);
     act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST && p->type != PT_PLAYER) ? d * 3 : d);
@@ -7251,7 +7263,7 @@ static int app_main(void)
                 menu_sel = i;
         build_root(menu[menu_sel]);
         if (in_list && menu[menu_sel] == at && cur() &&
-            (cur()->type != PT_LIST || cur()->list.count))
+            (cur()->type != PT_LIST || cur()->list.count) && !section_inert())
             focus = FOCUS_CONTENT;
         if (at >= 0)
             amce_log("navigation", in_list ? "back where the last run left off (in the list)"
