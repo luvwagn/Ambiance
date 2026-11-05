@@ -4942,7 +4942,7 @@ static void np_mark_lists(BOOL redraw)
     const char *now = mp_loaded() ? mp_path() : "";
     for (d = 0; d < depth; d++) {
         struct Page *p = &pages[d];
-        if (p->type != PT_LIST || (!p->mods && !p->radio))
+        if (p->type != PT_LIST || (!p->mods && !p->radio && !p->plex))
             continue;
         for (i = 0; i < p->list.count; i++) {
             struct Item *it = &p->list.items[i];
@@ -4960,7 +4960,8 @@ static void np_mark_lists(BOOL redraw)
                 radio_field(it, 0, key, sizeof(key));
                 it->mark = now[0] && mp_is_track() && !strcmp(key, plex_now) ? MARK_PLAYING
                                                                              : MARK_NONE;
-            } else if (it->kind == IT_PLEXDIR && p->plex) {
+            } else if (it->kind == IT_PLEXDIR && p->plex &&
+                       (it->mark == MARK_NONE || it->mark == MARK_PLAYING)) {
                 /* the album (or artist) the playing track is of */
                 char key[300];
                 radio_field(it, 0, key, sizeof(key));
@@ -4971,7 +4972,8 @@ static void np_mark_lists(BOOL redraw)
             }
         }
     }
-    if (redraw && !pane_pending && cur() && cur()->type == PT_LIST && (cur()->mods || cur()->radio))
+    if (redraw && !pane_pending && cur() && cur()->type == PT_LIST &&
+        (cur()->mods || cur()->radio || cur()->plex))
         draw_list_rows(cur());
 }
 
@@ -5305,7 +5307,7 @@ static void mods_play_item(struct Page *p)
 static BOOL np_list_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
-    return p && p->type == PT_LIST && (p->mods || p->radio) && mp_loaded();
+    return p && p->type == PT_LIST && (p->mods || p->radio || p->plex) && mp_loaded();
 }
 
 /* The bars by the playing module (and Now playing) drawn again: the next
