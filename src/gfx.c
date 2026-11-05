@@ -1035,6 +1035,63 @@ void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
     BltTemplate(m, 0, g->icon_bpr, g->rp, x, y, g->icon_px, g->icon_px);
 }
 
+/* A menu icon px pixels square, in the pixel style: the screen's mask
+ * enlarged or reduced by whole pixels (Settings > Style's preview, for a
+ * font whose artwork is another size). */
+void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px)
+{
+    UBYTE *src, *buf;
+    WORD bpr = ((px + 15) >> 4) << 1, r, c, sc;
+    ULONG size = (ULONG)bpr * px;
+    if (g->sm || !g->icon_masks || px <= 0)
+        return;
+    if (px == g->icon_px) {
+        gfx_icon(g, icon, x, y, fg, PEN_BG);
+        return;
+    }
+    if (!(buf = AllocMem(size, MEMF_CHIP | MEMF_CLEAR)))
+        return;
+    src = g->icon_masks + (ULONG)icon * g->icon_px * g->icon_bpr;
+    for (r = 0; r < px; r++) {
+        const UBYTE *s = src + (ULONG)(r * g->icon_px / px) * g->icon_bpr;
+        for (c = 0; c < px; c++) {
+            sc = c * g->icon_px / px;
+            if (s[sc >> 3] & (0x80 >> (sc & 7)))
+                buf[r * bpr + (c >> 3)] |= 0x80 >> (c & 7);
+        }
+    }
+    dirty = TRUE;
+    SetAPen(g->rp, fg);
+    SetDrMd(g->rp, JAM1);
+    BltTemplate((PLANEPTR)buf, 0, bpr, g->rp, x, y, px, px);
+    WaitBlit();
+    FreeMem(buf, size);
+}
+
+/* Laced font i (gfx_laced_fonts), opened on its own: NULL if it is not in
+ * the Fonts drawer. Close it with CloseFont. */
+struct TextFont *gfx_open_laced_font(int i)
+{
+    const struct LacedFont *f = &gfx_laced_fonts[i];
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    struct TextAttr ta;
+    struct TextFont *tf = NULL;
+    char name[64];
+    if (!DiskfontBase)
+        return NULL;
+    amce_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
+    amce_strlcat(name, f->file, sizeof(name));
+    ta.ta_Name = (STRPTR)name;
+    ta.ta_YSize = f->ysize;
+    ta.ta_Style = FS_NORMAL;
+    ta.ta_Flags = FPF_DESIGNED;
+    me->pr_WindowPtr = (APTR)-1;
+    tf = OpenDiskFont(&ta);
+    me->pr_WindowPtr = oldwin;
+    return tf;
+}
+
 /* ------------------------------------------------------------ big letter */
 /* The overlay's letters: A-Z and '#' (accented capitals file under their
  * base letter), built on first use at the size asked and kept until the

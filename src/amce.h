@@ -151,6 +151,8 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
+void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px);
+struct TextFont *gfx_open_laced_font(int i);
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
 extern UBYTE gfx_eq_frame;      /* MARK_PLAYING's bars: the frame of their dance */
 extern BOOL gfx_eq_still;       /*   and still (paused, stopped) */

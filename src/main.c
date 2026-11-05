@@ -51,6 +51,8 @@ struct Page {
     WORD facts_y;
     struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
+    UBYTE style_pv;             /* Settings > Style on a laced screen: the aside shows
+                                 * the Home menu in the selected font */
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
@@ -187,6 +189,7 @@ static void page_picture(struct Page *p, WORD w, WORD h)
 }
 
 static void radio_page_gone(struct Page *p);
+static void style_preview_free(void);
 static void radio_stop(void);
 
 static void page_pop(void)
@@ -201,6 +204,8 @@ static void page_pop(void)
         focus = FOCUS_CONTENT;
     if (!depth)
         return;
+    if (pages[depth - 1].style_pv)
+        style_preview_free();
     if (pages[depth - 1].pic_bm && pages[depth - 1].pic_y >= 0) {
         struct Page *p = &pages[depth - 1];
         WaitBlit();                             /* the logo gone while its pens are its own: */
@@ -1533,6 +1538,7 @@ static void build_styles(struct Page *p)
     BOOL can_smooth;
     int i;
     if (gfx_laced(g.mode)) {
+        p->style_pv = 1;
         for (i = 0; i < LFONT_COUNT; i++)
             action_item(p, gfx_laced_fonts[i].name, "", ACT_LFONT0 + i,
                         i == gfx_laced_font ? MARK_RADIO_ON : MARK_RADIO_OFF);
@@ -2045,6 +2051,27 @@ static WORD clock_left(void)
     return g.w - U(8) - gfx_textlen(&g, "Wed 30 Sep  00:00", TS_SMALL) - U(4);
 }
 
+/* While music plays, its dancing bars in the header, left of the clock:
+ * a sign from anywhere that something is playing. */
+static BOOL hdr_np_on;
+
+static void hdr_np_draw(BOOL quiet)
+{
+    WORD n = g.mark_px, x = clock_left() - n - U(2), y = (U(24) - n) / 2;
+    BOOL on = mp_loaded(), was = FALSE;
+    if (!on && !hdr_np_on)
+        return;
+    if (quiet)
+        was = gfx_quiet_begin();
+    if (on)
+        gfx_mark(&g, MARK_PLAYING, x, y, PEN_TEXT, PEN_BAR);
+    else
+        gfx_fill(&g, x, y, x + n - 1, y + n - 1, PEN_BAR);
+    if (quiet)
+        gfx_quiet_end(&g, was, x, y, x + n - 1, y + n - 1);
+    hdr_np_on = on;
+}
+
 static void draw_clock(void)
 {
     char buf[40];
@@ -2068,7 +2095,7 @@ static ULONG fps_shown, fps_flips0;     /* flips in the last second; the count t
 static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
-    WORD x1 = clock_left() - U(6);
+    WORD x1 = clock_left() - g.mark_px - U(8);  /* the playing bars' place kept */
     char cpu[16], app[16], fps[16], forms[3][96];
     const char *show = "";
     ULONG chip, used;
@@ -2130,6 +2157,8 @@ static void draw_header(void)
     gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
     status_shown[0] = 0;                    /* the readout was just cleared */
     gfx_logo(&g, U(6), (U(24) - g.logo_h) / 2);
+    hdr_np_on = FALSE;                      /* the header was just cleared */
+    hdr_np_draw(FALSE);
     draw_status();
     draw_clock();
 }
@@ -2474,6 +2503,8 @@ static BOOL has_aside(struct Page *p)
 {
     if (!p || p->type != PT_LIST)
         return FALSE;
+    if (p->style_pv)
+        return aside_width() > 0;
     if (!p->aside) {
         LONG i;
         p->aside = 1;
@@ -3076,6 +3107,77 @@ static void preview_now(struct Page *p)
 }
 
 /* The selection changed (or the list was drawn): preview it once it rests. */
+/* ---- Settings > Style on a laced screen: beside the list of fonts, the
+ * Home menu as it would look in the one selected, at its own size (its
+ * row height, margins and icons scaled as the layout would be). */
+static struct TextFont *spv_font;   /* the font previewed, open */
+static int spv_idx = -1;
+
+static void style_preview_free(void)
+{
+    if (spv_font)
+        CloseFont(spv_font);
+    spv_font = NULL;
+    spv_idx = -1;
+}
+
+static void style_preview(struct Page *p)
+{
+    WORD x0 = aside_x(), x1 = g.w - 1, y0 = g.list_top, y1 = g.footer_y - 2;
+    const struct LacedFont *lf;
+    struct TextFont *f;
+    struct TextExtent te;
+    LONG k, longest = 0, w, rh, mw, ipx, y, i, n;
+#define SU(v) ((WORD)(((LONG)(v) * k + 128) >> 8))
+    pv_page = p;
+    pv_sel = p->sel;
+    pv_shown = TRUE;
+    pv_pending = FALSE;
+    gfx_fill_bg(&g, x0, y0, x1, y1);
+    if (p->sel < 0 || p->sel >= LFONT_COUNT)
+        return;
+    lf = &gfx_laced_fonts[p->sel];
+    if (spv_idx != p->sel) {
+        if (spv_font)
+            CloseFont(spv_font);
+        spv_font = gfx_open_laced_font(p->sel);
+        spv_idx = p->sel;
+    }
+    if (!(f = spv_font)) {
+        gfx_text(&g, x0, y0, "Not in the Fonts drawer", PEN_DIM, PEN_BG, x1 - x0, TS_BODY);
+        return;
+    }
+    k = ((LONG)lf->ysize << 8) / 12;
+    rh = SU(18);
+    ipx = 16 * lf->kint;
+    SetFont(g.rp, f);
+    for (i = 0; i < nmenu; i++)
+        if ((w = TextLength(g.rp, (CONST_STRPTR)mod_names[menu[i]],
+                            strlen(mod_names[menu[i]]))) > longest)
+            longest = w;
+    mw = SU(23) + longest + SU(6);
+    if (mw > x1 - x0 - SU(3))
+        mw = x1 - x0 - SU(3);
+    for (i = 0, y = y0; i < nmenu && y + rh - 1 <= y1; i++, y += rh) {
+        UBYTE bg = i == menu_sel ? PEN_HL : PEN_BG;
+        const char *s = mod_names[menu[i]];
+        gfx_fill(&g, x0, y, x0 + mw - 1, y + rh - 1, bg);
+        gfx_icon_sized(&g, menu[i], x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
+        SetFont(g.rp, f);
+        n = TextFit(g.rp, (CONST_STRPTR)s, strlen(s), &te, NULL, 1, mw - SU(24),
+                    f->tf_YSize + 1);
+        SetAPen(g.rp, PEN_WHITE);
+        SetDrMd(g.rp, JAM1);
+        Move(g.rp, x0 + SU(23), y + (rh - f->tf_YSize) / 2 + f->tf_Baseline);
+        if (n > 0)
+            Text(g.rp, (CONST_STRPTR)s, n);
+    }
+    if (y > y0)
+        gfx_fill(&g, x0 + mw + SU(2), y0, x0 + mw + SU(3) - 1, y - 1, PEN_RULE);
+    SetFont(g.rp, g.font);
+#undef SU
+}
+
 static void preview_touch(struct Page *p)
 {
     char path[300];
@@ -3084,6 +3186,10 @@ static void preview_touch(struct Page *p)
     ULONG settle = PREVIEW_SETTLE;
     if (!has_aside(p) || (pv_shown && pv_page == p && pv_sel == p->sel))
         return;                             /* already showing this one */
+    if (p->style_pv) {
+        style_preview(p);                   /* no reading: drawn at once */
+        return;
+    }
     /* read ahead and back already: drawing it is only a copy, so sooner */
     if ((k = pv_kind(p, p->sel, path, sizeof(path), &shot))) {
         want = shot && pv_pictures() ? 2 : 1;
@@ -4611,10 +4717,14 @@ static void np_eq_tick(void)
     if (still != gfx_eq_still) {
         gfx_eq_still = still;
         np_eq_redraw();
+        hdr_np_draw(TRUE);
     } else if (!still && now - last >= 120) {
         last = now;
         gfx_eq_frame++;
         np_eq_redraw();
+        hdr_np_draw(TRUE);
+    } else if (mp_loaded() != hdr_np_on) {
+        hdr_np_draw(TRUE);                  /* started or stopped */
     }
 }
 
@@ -4814,6 +4924,66 @@ static BOOL dir_exists(const char *path)
     return l != 0;
 }
 
+/* "Now playing" at the top of the Mods and Radio pages while something
+ * plays (a module or a station), its tag the title or the station. */
+static void np_shortcut(struct Page *p)
+{
+    const char *t;
+    char label[120];
+    if (!mp_loaded())
+        return;
+    if (mp_is_stream()) {
+        t = mp_stream_name();
+    } else {
+        t = mp_title();
+        while (*t == ' ')
+            t++;
+        if (!t[0]) {
+            mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
+            t = label;
+        }
+    }
+    action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAYING);
+}
+
+/* Back on the Mods or Radio page: its Now playing row as playback is now
+ * (it may have started, stopped or changed since the page was made). */
+static void np_shortcut_sync(void)
+{
+    struct Page *p = cur();
+    struct Item *it;
+    char want[120], sel[96];
+    BOOL has, playing = mp_loaded();
+    LONG i;
+    if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio))
+        return;
+    it = p->list.count ? &p->list.items[0] : NULL;
+    has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
+    want[0] = 0;
+    if (playing)
+        amce_strlcpy(want, mp_is_stream() ? mp_stream_name() : mp_title(), sizeof(want));
+    if (has == playing && (!has || !strcmp(it->path, want) || !mp_is_stream()))
+        return;                             /* as it is: nothing to do */
+    sel[0] = 0;
+    if (p->sel >= 0 && p->sel < p->list.count)
+        amce_strlcpy(sel, p->list.items[p->sel].label, sizeof(sel));
+    if (p->radio) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_radio_root(p);
+    } else {
+        build_root_pages(MOD_MODS);         /* the root again, as when first opened */
+        p = cur();
+        if (!p)
+            return;
+    }
+    p->sel = 0;
+    for (i = 0; i < p->list.count; i++)
+        if (!strcmp(p->list.items[i].label, sel))
+            p->sel = i;
+    p->top = 0;
+}
+
 static void build_mods_root(void)
 {
     struct Page *p;
@@ -4832,17 +5002,7 @@ static void build_mods_root(void)
     if (!(p = page_push(PT_LIST, "Mods")))
         return;
     p->mods = 1;
-    if (mp_loaded()) {
-        const char *t = mp_title();
-        char label[120];
-        while (*t == ' ')
-            t++;
-        if (!t[0]) {
-            mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
-            t = label;
-        }
-        action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAYING);
-    }
+    np_shortcut(p);
     if (mods)
         list_add(&p->list, "Modules", MODS_ROOT, "", IT_DIR);
     if (sid)
@@ -5818,6 +5978,7 @@ static void build_radio_root(struct Page *p)
     };
     int i;
     p->radio = 1;
+    np_shortcut(p);
     for (i = 0; i < (int)(sizeof(ways) / sizeof(ways[0])); i++) {
         struct Item *it = list_add(&p->list, ways[i].label, ways[i].query, "", IT_NET);
         if (it)
@@ -6385,6 +6546,7 @@ static void act_back(void)
     }
     if (depth > 1) {
         page_pop();
+        np_shortcut_sync();
         draw_pane(TRUE);
         draw_footer();
     } else {
