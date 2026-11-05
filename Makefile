@@ -135,7 +135,7 @@ fonts:
 	@mkdir -p build/fontgen
 	$(PYTHON) tools/extract.py assets/fonts-src/PixelifySans-Regular.ttf build/fontgen/glyphs.json
 	$(PYTHON) tools/amigafont.py build/fontgen/glyphs.json build/fontgen
-	$(PYTHON) tools/mkcrisp.py assets/fonts-src/Rubik-VF.ttf build/fontgen/FONTS 14 400
+	$(PYTHON) tools/mkcrisp.py assets/fonts-src/Rubik-VF.ttf build/fontgen/FONTS 14 450
 	cp -R build/fontgen/FONTS/. assets/Fonts/
 
 smooth:

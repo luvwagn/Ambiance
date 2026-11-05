@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from amigafont import contents_file, size_file, parse_size_file  # noqa: E402
 
 LO, HI = 32, 255
+SPACE_MIN = 5
 CODES = [c for c in range(LO, HI + 1) if not 127 <= c < 160]
 
 
@@ -29,11 +30,16 @@ def raster(font, ch):
     d = ImageDraw.Draw(img)
     d.fontmode = "1"
     d.text((pen, base), ch, font=font, fill=255, anchor="ls")
-    adv = int(round(font.getlength(ch)))
+    exact = font.getlength(ch)
     box = img.getbbox()
     if box is None:
-        return None, adv
+        return None, int(round(exact))
     x0, y0, x1, y1 = box
+    # the advance from the ink: its bearing, its width, then what is left of
+    # the font's advance rounded (at least a pixel). Rounding the advance on
+    # its own leaves the gaps between letters uneven (12.6 and 8.6 round up,
+    # 8.0 does not), and on a 1-bit font every pixel of gap shows.
+    adv = (x0 - pen) + (x1 - x0) + max(1, int(round(exact - (x1 - pen))))
     rows = ["".join("#" if img.getpixel((x, y)) else "." for x in range(x0, x1)) for y in range(y0, y1)]
     return (y0 - base, x0 - pen, rows), adv
 
@@ -59,14 +65,16 @@ def main():
     for c in range(LO, HI + 1):
         g, adv = glyphs.get(c, (None, 0))
         if not g:
-            entries.append(([], 0, adv, 0))
+            entries.append(([], 0, max(adv, SPACE_MIN) if c in (32, 160) else adv, 0))
             continue
         gt, left, rows = g
         w = max(len(r) for r in rows)
         rows = [r.ljust(w, ".") for r in rows]
         full = ["." * w] * (gt - top) + rows
         full += ["." * w] * (ysize - len(full))
-        entries.append((full, w, adv, left))
+        # the Amiga moves the pen by charKern, draws, then by charSpace: the
+        # advance is their sum, so charSpace is the advance less the bearing
+        entries.append((full, w, adv - left, left))
     # the not-defined glyph: a box from the cap height to the baseline
     n_adv = entries[ord("n") - LO][2]
     box_w = max(n_adv - 2, 3)

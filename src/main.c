@@ -59,7 +59,8 @@ struct Page {
     UBYTE title_wide;           /* title drawn with room for a growing count */
     char pic[160];              /* PT_TEXT: a picture under the text box ("" none), */
     struct BitMap *pic_bm;      /*   made for the screen when the page is first drawn, */
-    WORD pic_w, pic_h;          /*   as large as fits there */
+    WORD pic_w, pic_h;          /*   as large as fits there, */
+    WORD pic_x, pic_y;          /*   drawn there (pic_y < 0: not drawn) */
     const char *note;           /*   and a line or two above it (fixed, not scrolled) */
 };
 
@@ -137,6 +138,7 @@ static struct Page *page_push(UBYTE type, const char *title)
         return NULL;
     p = &pages[depth];
     memset(p, 0, sizeof(*p));
+    p->pic_y = -1;
     if (!list_init(&p->list))
         return NULL;
     p->type = type;
@@ -199,6 +201,13 @@ static void page_pop(void)
         focus = FOCUS_CONTENT;
     if (!depth)
         return;
+    if (pages[depth - 1].pic_bm && pages[depth - 1].pic_y >= 0) {
+        struct Page *p = &pages[depth - 1];
+        WaitBlit();                             /* the logo gone while its pens are its own: */
+        gfx_fill_bg(&g, p->pic_x, p->pic_y, p->pic_x + p->pic_w - 1,
+                    p->pic_y + p->pic_h - 1);   /*   left, it would show in the next page's */
+        p->pic_y = -1;
+    }
     gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
     tb_close(&pages[depth - 1].tb);
     if (pages[depth - 1].pic_bm) {
@@ -3646,9 +3655,11 @@ static void draw_text_picture(struct Page *p)
         }
         y += lines * lh + U(4);
     }
-    if (p->pic_bm && y + p->pic_h <= g.footer_y - 2)
-        BltBitMapRastPort(p->pic_bm, 0, 0, g.rp, g.pane_x + (textbox_w() - p->pic_w) / 2, y,
-                          p->pic_w, p->pic_h, 0xC0);
+    if (p->pic_bm && y + p->pic_h <= g.footer_y - 2) {
+        p->pic_x = g.pane_x + (textbox_w() - p->pic_w) / 2;
+        p->pic_y = y;
+        BltBitMapRastPort(p->pic_bm, 0, 0, g.rp, p->pic_x, p->pic_y, p->pic_w, p->pic_h, 0xC0);
+    }
 }
 
 static struct TextBox *cur_tb(void)
