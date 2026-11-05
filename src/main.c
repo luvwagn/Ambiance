@@ -467,10 +467,15 @@ static void busy_tick(void)
     }
 }
 
+/* The Plex details on screen under the cover (their entry's name and
+ * cover), or "" when that part of the pane was cleared. */
+static char plex_shown[260];
+
 static void busy_end(BOOL redraw)
 {
     if (busy.depth && --busy.depth == 0 && busy.on) {
         busy.on = FALSE;
+        plex_shown[0] = 0;                  /* the spinner may have been over them */
         if (redraw && g.win && cur())
             draw_pane(TRUE);                /* where the spinner was */
     }
@@ -1678,6 +1683,7 @@ static void np_art_draw(void);
 static void np_art_free(void);
 static void np_art_start(const struct Item *it);
 static void plex_pv_draw(struct Page *p, BOOL was_shown);
+static BOOL plex_text_kept(struct Page *p);
 static BOOL plex_keeps(struct Page *p, LONG idx);
 static WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
@@ -4086,11 +4092,15 @@ static void draw_pane(BOOL full)
                  * preview to keep (the same one) or clear; filled over, it
                  * flashed in the UI's colours plane by plane */
                 WORD ax = aside_x(), py1 = g.pic_y + g.pic_h - 1;
+                BOOL text = plex_text_kept(p);  /* an album's details: the same, left */
                 gfx_fill_bg(&g, px, U(42), ax - 1, pb);
                 gfx_fill_bg(&g, ax, U(42), g.w - 1, g.pic_y - 1);
                 gfx_fill_bg(&g, ax, g.pic_y, g.pic_x - 1, py1);
                 gfx_fill_bg(&g, g.pic_x + g.pic_w, g.pic_y, g.w - 1, py1);
-                gfx_fill_bg(&g, ax, py1 + 1, g.w - 1, pb);
+                if (!text) {
+                    gfx_fill_bg(&g, ax, py1 + 1, g.w - 1, pb);
+                    plex_shown[0] = 0;
+                }
             } else {
                 if (g.pic_w)                /* cleared first, then its pens go */
                     gfx_picture_clear(&g, px, U(42), g.w - 1, pb);
@@ -7184,9 +7194,29 @@ static BOOL plex_keeps(struct Page *p, LONG idx)
            pv_onscr.h == s;
 }
 
+static BOOL plex_pv_key(struct Page *p, char *key)
+{
+    struct Item src;
+    char thumb[160];
+    if (!plex_pv_src(p, p->sel, &src))
+        return FALSE;
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    sprintf(key, "%.90s\t%.160s", src.label, thumb);
+    return TRUE;
+}
+
+/* The details on screen are this page's too (into an album from its
+ * entry, or back): left as they are, cover and text. */
+static BOOL plex_text_kept(struct Page *p)
+{
+    char key[260];
+    return p->plex && plex_shown[0] && plex_keeps(p, p->sel) && plex_pv_key(p, key) &&
+           !strcmp(key, plex_shown);
+}
+
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
 {
-    static char last[260];
+    char *last = plex_shown;
     WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y, s = plex_art_side();
     struct Item src;
     char thumb[160], year[8], by[100], count[24], studio[60], summary[300], line[200], file[120];
@@ -7200,6 +7230,7 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
         last[0] = 0;
         return;
     }
+    (void)was_shown;
     radio_field(&src, 2, thumb, sizeof(thumb));
     sprintf(key, "%.90s\t%.160s", src.label, thumb);
     if (keep) {
@@ -7207,14 +7238,14 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
         pv_pic_drawn = TRUE;
         pv_box_y = g.list_top;
         pv_box_h = s;
-        if (was_shown && !strcmp(key, last))
+        if (!strcmp(key, last))
             return;                         /* the same album's: nothing changes */
         gfx_fill_bg(&g, x0, g.list_top + s, g.w - 1, max_y);
     } else {
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
     }
-    amce_strlcpy(last, key, sizeof(last));
+    amce_strlcpy(last, key, sizeof(plex_shown));
     radio_field(&src, 3, year, sizeof(year));
     radio_field(&src, 4, by, sizeof(by));
     radio_field(&src, 5, count, sizeof(count));
