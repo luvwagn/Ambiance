@@ -78,6 +78,9 @@ static struct {
     char path[256];
     char rname[96], rtag[24];       /* a station's name and format ("128k") */
     UWORD rcpu;
+    BOOL rtrack;                    /* not a station: a track (a Plex server's), with an end */
+    ULONG rtotal_ms;                /*   and its length (0 not known) */
+    char rby[96];                   /*   its artist and album */
     char packer[40];                /* what it was packed with ("" none) */
     UBYTE engine;                   /* ENG_*: what plays it */
     UWORD tick_cnt;                 /* an EaglePlayer player's timer (CIA count) */
@@ -876,7 +879,7 @@ BOOL mp_play(char *err, LONG errmax)
     if (mp.engine == ENG_RADIO) {
         mp.finished = FALSE;
         mp.paused = FALSE;
-        if (!st_start(mp.path, mp.master, mp.rcpu, err, errmax))
+        if (!st_start(mp.path, mp.master, mp.rcpu, mp.rtrack, err, errmax))
             return FALSE;
         mp.running = TRUE;
         return TRUE;
@@ -1178,6 +1181,9 @@ void mp_status(struct MpStatus *s)
         struct StInfo in;
         st_info(&in);
         s->elapsed_ms = mp.running ? in.played_ms : 0;
+        s->total_ms = mp.rtrack ? mp.rtotal_ms : 0;
+        if (s->total_ms && s->elapsed_ms > s->total_ms)
+            s->elapsed_ms = s->total_ms;
         s->sub = s->subs = 1;
         hit[0] = hit[3] = in.peak_l != 0;
         hit[1] = hit[2] = in.peak_r != 0;
@@ -1294,13 +1300,31 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
     }
     mp.engine = ENG_RADIO;
     mp.rcpu = cpu;
+    mp.rtrack = FALSE;
+    mp.rtotal_ms = 0;
+    mp.rby[0] = 0;
     amce_strlcpy(mp.path, url, sizeof(mp.path));
     amce_strlcpy(mp.rname, name, sizeof(mp.rname));
     amce_strlcpy(mp.rtag, tag, sizeof(mp.rtag));
     return TRUE;
 }
 
+/* A track on a server (Plex): an MP3 file over HTTP, played as a station
+ * is, but with an end and a length; by: its artist and album. */
+BOOL mp_load_track(const char *url, const char *title, const char *by, const char *tag,
+                   ULONG total_ms, UWORD cpu, char *err, LONG errmax)
+{
+    if (!mp_load_stream(url, title, tag, cpu, err, errmax))
+        return FALSE;
+    mp.rtrack = TRUE;
+    mp.rtotal_ms = total_ms;
+    amce_strlcpy(mp.rby, by, sizeof(mp.rby));
+    return TRUE;
+}
+
 BOOL mp_is_stream(void) { return mp.engine == ENG_RADIO; }
+BOOL mp_is_track(void) { return mp.engine == ENG_RADIO && mp.rtrack; }
+const char *mp_track_by(void) { return mp.rby; }
 
 /* The level meters Now playing shows: a module on Paula's four channels
  * has one each; what is mixed or decoded, one for each of its channels. */

@@ -56,6 +56,7 @@ struct Page {
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
+    UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
@@ -118,7 +119,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -1637,6 +1638,7 @@ static void build_credits(struct Page *p)
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
 static void build_radio_root(struct Page *p);
+static void build_music_root(struct Page *p);
 
 static void build_root_pages(int mod)
 {
@@ -1679,12 +1681,8 @@ static void build_root_pages(int mod)
         }
         break;
     case MOD_MUSIC:
-        if ((p = page_push(PT_TEXT, "Music"))) {
-            text_para(p, "Music playback arrives in a later version.");
-            text_line(p, "");
-            text_line(p, caps.mp3_mhi ? "MP3 decoding: MHI driver found" :
-                         caps.mp3_mpega ? "MP3 decoding: mpega.library found" : "MP3 decoding: none found");
-        }
+        if ((p = page_push(PT_LIST, "Music")))
+            build_music_root(p);
         break;
     case MOD_RADIO:
         if ((p = page_push(PT_LIST, "Radio")))
@@ -2225,12 +2223,12 @@ static void draw_menu(void)
 
 static BOOL has_aside(struct Page *p);
 
-/* A section that is only a note for now (Videos, Music): nothing in it
+/* A section that is only a note for now (Videos): nothing in it
  * to go to, so the menu keeps the focus. */
 static BOOL section_inert(void)
 {
     int m = menu_sel >= 0 && menu_sel < nmenu ? menu[menu_sel] : -1;
-    return depth <= 1 && (m == MOD_VIDEOS || m == MOD_MUSIC);
+    return depth <= 1 && m == MOD_VIDEOS;
 }
 
 static const char *hint_text(void)
@@ -2262,6 +2260,13 @@ static const char *hint_text(void)
                       : "Fire show  Right open";
         return hi ? "Up/Down  move    Fire/Right  open    Left/Esc  back" : "Fire open  Esc back";
     }
+    if (p && p->type == PT_LIST && p->plex && p->list.count &&
+        p->list.items[p->sel].kind == IT_PLEXTRACK)
+        return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
+    if (p && p->type == PT_LIST && p->plex && p->list.count &&
+        p->list.items[p->sel].kind == IT_PLEXSRV)
+        return hi ? "Up/Down  move    Fire  use this server    Left/Esc  back"
+                  : "Fire use it  Esc back";
     if (p && p->type == PT_LIST && p->radio && p->list.count &&
         p->list.items[p->sel].kind == IT_STATION)
         return hi ? "Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back"
@@ -4499,6 +4504,40 @@ static void np_draw_station(void)
     const char *now = st_title();
     WORD lh = g.font_h + U(1), y = np.samples_y, bottom = g.footer_y - 2;
     st_info(&in);
+    if (mp_is_track()) {
+        /* a Plex track: its title, artist and album, where in the list, how it plays */
+        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "(no title)", PEN_WHITE,
+                TS_BOLD);
+        amce_strlcpy(info, mp_track_by(), sizeof(info));
+        if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
+            sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+            amce_strlcat(info, part, sizeof(info));
+            amce_strlcat(info, np.folder, sizeof(info));
+        }
+        np_line(np.info_y, info, PEN_DIM, TS_SMALL);
+        if (y + lh * 3 > bottom)
+            return;
+        np_line(y, "Plex", PEN_DIM, TS_BOLD);
+        y += lh;
+        if (!mp_running())
+            now = st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped";
+        else if (in.state == ST_CONNECTING)
+            now = "Connecting...";
+        else if (in.state == ST_BUFFERING)
+            now = "Buffering...";
+        else if (in.dec_freq) {
+            sprintf(part, "MP3 %ld kbit/s, %ld Hz %s; played at %ld Hz %s", (long)in.bitrate,
+                    (long)in.freq, in.channels == 2 ? "stereo" : "mono", (long)in.dec_freq,
+                    in.dec_channels == 2 ? "stereo" : "mono");
+            now = part;
+        } else
+            now = "";
+        np_line(y, now, PEN_TEXT, TS_SMALL);
+        y += lh;
+        if (y <= bottom)
+            gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);
+        return;
+    }
     np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE, TS_BOLD);
     sprintf(info, "Radio   %s", mp_tag());
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
@@ -4670,6 +4709,11 @@ static void np_mark_lists(BOOL redraw)
                 radio_field(it, 0, url, sizeof(url));
                 it->mark = now[0] && mp_is_stream() && !strcmp(url, now) ? MARK_PLAYING
                                                                          : MARK_NONE;
+            } else if (it->kind == IT_PLEXTRACK) {
+                char url[256];
+                plex_track_url(it, url, sizeof(url));
+                it->mark = now[0] && mp_is_track() && !strcmp(url, now) ? MARK_PLAYING
+                                                                        : MARK_NONE;
             }
         }
     }
@@ -4690,6 +4734,36 @@ static BOOL np_start(LONG idx)
         char url[256];
         radio_field(it, 0, url, sizeof(url));
         if (!mp_load_stream(url, it->label, it->sortkey, caps.cpu, err, sizeof(err))) {
+            busy_end(TRUE);
+            np.idx = idx;
+            set_msg(err);
+            return FALSE;
+        }
+    } else if (it->kind == IT_PLEXTRACK) {
+        char url[256], by[200], album[100], ms[16];
+        BOOL ok_track;
+        if (it->flags & ITEM_DISABLED) {
+            busy_end(TRUE);
+            np.idx = idx;
+            set_msg(plex_why(it));
+            return FALSE;
+        }
+        plex_track_url(it, url, sizeof(url));
+        radio_field(it, 2, ms, sizeof(ms));
+        radio_field(it, 3, by, sizeof(by));
+        radio_field(it, 4, album, sizeof(album));
+        if (album[0]) {
+            amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
+            amce_strlcat(by, album, sizeof(by));
+        }
+        {
+            ULONG v = 0;
+            const char *d = ms;
+            while (*d >= '0' && *d <= '9')
+                v = v * 10 + (*d++ - '0');
+            ok_track = mp_load_track(url, it->label, by, "MP3", v, caps.cpu, err, sizeof(err));
+        }
+        if (!ok_track) {
             busy_end(TRUE);
             np.idx = idx;
             set_msg(err);
@@ -4785,8 +4859,9 @@ static void np_press(int b)
             return;
         }
         if (!np_skip(1))
-            set_msg(mp_is_stream() ? "That was the last station in the list"
-                                   : "That was the last module in the folder");
+            set_msg(mp_is_track() ? "That was the last track"
+                    : mp_is_stream() ? "That was the last station in the list"
+                                     : "That was the last module in the folder");
         return;
     case NB_BACK:
     case NB_FWD:
@@ -4984,6 +5059,24 @@ static void np_tick(void)
 {
     np_repeat();
     np_eq_tick();
+    if (mp_is_track() && mp_running() && mp_ended()) {
+        /* a track played to its end (or failed): the next in its list */
+        BOOL failed = st_state() == ST_FAILED;
+        char why[100];
+        amce_strlcpy(why, st_error(), sizeof(why));
+        if (failed) {
+            amce_log("plex", why[0] ? why : "the track failed");
+            set_msg(why[0] ? why : "That track could not be played");
+        }
+        if (!np_skip(1)) {
+            mp_stop();
+            np_mark_lists(TRUE);
+            if (np_on())
+                np_redraw_all();
+        }
+        np.s_rstate = -2;
+        return;
+    }
     if (mp_is_stream()) {
         int state = mp_running() ? st_state() : -1;
         if (mp_running() && mp_ended()) {
@@ -5168,7 +5261,7 @@ static void np_shortcut_sync(void)
     char want[120], sel[96];
     BOOL has, playing = mp_loaded();
     LONG i;
-    if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio))
+    if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio || p->plex))
         return;
     it = p->list.count ? &p->list.items[0] : NULL;
     has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
@@ -5180,10 +5273,13 @@ static void np_shortcut_sync(void)
     sel[0] = 0;
     if (p->sel >= 0 && p->sel < p->list.count)
         amce_strlcpy(sel, p->list.items[p->sel].label, sizeof(sel));
-    if (p->radio) {
+    if (p->radio || p->plex) {
         list_free(&p->list);
         list_init(&p->list);
-        build_radio_root(p);
+        if (p->plex)
+            build_music_root(p);
+        else
+            build_radio_root(p);
     } else {
         build_root_pages(MOD_MODS);         /* the root again, as when first opened */
         p = cur();
@@ -6196,6 +6292,25 @@ static void apply_laced_font(int i)
 static struct NetJob *rq;           /* the request out, or NULL */
 static ULONG rq_seq;
 
+/* Music: a Plex server's music (plex.c); the server chosen, or found. */
+static void build_music_root(struct Page *p)
+{
+    struct Item *it;
+    char label[96];
+    p->plex = 1;
+    np_shortcut(p);
+    if (plex.host[0]) {
+        sprintf(label, "Plex: %s", plex.name[0] ? plex.name : plex.host);
+        if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
+            it->mark = MARK_ARROW;
+    }
+    if ((it = list_add(&p->list, plex.host[0] ? "Plex servers on this network" :
+                                                "Find a Plex server on this network",
+                       "#gdm", "", IT_PLEXDIR)))
+        it->mark = MARK_ARROW;
+    action_item(p, "About Plex in AmigaMCE", "", ACT_PLEXHELP, MARK_ARROW);
+}
+
 static void build_radio_root(struct Page *p)
 {
     static const struct { const char *label, *query; } ways[] = {
@@ -6227,7 +6342,40 @@ static void radio_done(struct NetJob *j)
     for (d = 0; d < depth && !j->orphan; d++)
         if (pages[d].radio && pages[d].net_seq == j->seq)
             p = &pages[d];
-    if (p) {
+    if (p && p->plex) {
+        LONG n = 0, total = 0;
+        char m[200];
+        BOOL servers = !strcmp(p->base, "#gdm");
+        p->net_seq = 0;
+        if (j->body)
+            n = servers ? plex_fill_servers(j->body, j->len, &p->list)
+                        : plex_fill(p->base, j->body, j->len, &p->list, &total);
+        if (!j->body || n <= 0) {
+            const char *why = !j->body && strstr(j->err, " 401")
+                              ? "The server wants a sign-in token: see Music > About Plex"
+                              : !j->body ? j->err
+                              : n < 0 ? "The server answered with something unexpected"
+                              : !strcmp(p->base, "/library/sections") ? "No music libraries there"
+                                                                     : "Nothing here";
+            list_add(&p->list, why[0] ? why : "Could not reach the Plex server", "", "", IT_TEXT);
+            sprintf(m, "%s: %s", p->title, why);
+        } else {
+            if (servers)
+                sprintf(m, "%s: %ld found in %ld ms", p->title, (long)n, (long)j->ms);
+            else
+                sprintf(m, "%s: %ld listed of %ld, from %s in %ld ms", p->title, (long)n,
+                        (long)total, j->server, (long)j->ms);
+            if (!servers && total > n)
+                list_add(&p->list, "(more than AmigaMCE shows at once: the first listed)", "", "",
+                         IT_TEXT);
+        }
+        amce_log("plex", m);
+        if (p == cur() && !pane_pending) {
+            msg[0] = 0;
+            draw_pane(TRUE);
+            draw_footer();
+        }
+    } else if (p) {
         LONG n = 0, skipped = 0;
         char m[160];
         p->net_seq = 0;
@@ -6298,6 +6446,23 @@ static void radio_open(struct Item *it)
     struct NetJob *j;
     if (it->flags & ITEM_DISABLED)
         return;
+    if (it->kind == IT_PLEXDIR && it->path[0] == '@') {
+        /* a music library: its own menu, nothing to ask yet */
+        if (!(p = page_push(PT_LIST, it->label))) {
+            set_msg("Too many levels open");
+            return;
+        }
+        p->plex = 1;
+        p->radio = 1;
+        plex_section_menu(it->path + 1, &p->list);
+        draw_pane(TRUE);
+        draw_footer();
+        return;
+    }
+    if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
+        set_msg("No Plex server chosen: Music > Find a Plex server");
+        return;
+    }
     if (rq) {                               /* one out at a time: the last given up */
         net_cancel(rq);
         rq->orphan = TRUE;
@@ -6314,16 +6479,94 @@ static void radio_open(struct Item *it)
     }
     p->radio = 1;
     amce_strlcpy(p->base, it->path, sizeof(p->base));
-    radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
+    if (it->kind == IT_PLEXDIR) {
+        p->plex = 1;
+        if (!strcmp(it->path, "#gdm")) {
+            j->gdm = 1;
+            amce_strlcpy(msg, "Looking for Plex servers...  Esc to give up", sizeof(msg));
+        } else {
+            amce_strlcpy(j->host, plex.host, sizeof(j->host));
+            j->port = plex.port;
+            plex_request(it->path, j->path, sizeof(j->path));
+            sprintf(msg, "Asking %.40s...  Esc to give up", plex.name[0] ? plex.name : plex.host);
+        }
+    } else {
+        radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
+        amce_strlcpy(msg, "Asking radio-browser.info...  Esc to give up", sizeof(msg));
+    }
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
     rq = j;
-    amce_strlcpy(msg, "Asking radio-browser.info...  Esc to give up", sizeof(msg));
     draw_pane(TRUE);
     draw_footer();
     net_submit(j);
     if (j->done && !j->busy)                /* the process could not start: no answer to wait for */
         radio_done(j);
+}
+
+/* A server found: kept as the one to use, and its libraries shown. */
+static void plex_choose(struct Item *it)
+{
+    char hp[120], name[96], host[64];
+    struct Item tmp;
+    char *c;
+    UWORD port = 32400;
+    radio_field(it, 0, hp, sizeof(hp));
+    radio_field(it, 1, name, sizeof(name));
+    amce_strlcpy(host, hp, sizeof(host));
+    if ((c = strchr(host, ':'))) {
+        LONG v = 0;
+        const char *d = c + 1;
+        *c = 0;
+        while (*d >= '0' && *d <= '9')
+            v = v * 10 + (*d++ - '0');
+        if (v > 0 && v < 65536)
+            port = (UWORD)v;
+    }
+    plex_set_server(host, port, name);
+    amce_log("plex: server chosen", hp);
+    if (depth >= 2 && pages[depth - 2].plex && depth == 2) {
+        /* Music's own list: its Plex row now names this server */
+        struct Page *up = &pages[depth - 2];
+        list_free(&up->list);
+        list_init(&up->list);
+        build_music_root(up);
+    }
+    memset(&tmp, 0, sizeof(tmp));
+    tmp.label = name[0] ? name : host;
+    tmp.path = (char *)"/library/sections";
+    tmp.kind = IT_PLEXDIR;
+    radio_open(&tmp);
+}
+
+/* Music > About Plex: what it plays, and how to connect. */
+static void plex_help(void)
+{
+    struct Page *p = page_push(PT_TEXT, "About Plex");
+    char line[200];
+    if (!p)
+        return;
+    text_para(p, "AmigaMCE plays music from a Plex Media Server on your network: its "
+                 "music libraries, by artist and album, their MP3 tracks played on the "
+                 "Amiga's own sound (mpega.library). Other formats are listed greyed out: "
+                 "Plex would have to convert them, which comes later.");
+    text_line(p, "");
+    text_para(p, "Finding a server: Music > Find a Plex server asks the network (Plex's GDM); "
+                 "choose one and it is kept. Or set its address from the Shell: "
+                 "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400");
+    text_line(p, "");
+    text_para(p, "Signing in: a server asks for its owner's token. Find it in Plex Web (an "
+                 "item's Get Info > View XML: the X-Plex-Token in the address) and set it from "
+                 "the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv "
+                 "needs HTTPS (AmiSSL) and comes later.");
+    text_line(p, "");
+    sprintf(line, "Server: %s", plex.host[0] ? plex.host : "none chosen");
+    text_line(p, line);
+    text_line(p, plex.token[0] ? "Token: set" : "Token: not set");
+    text_line(p, caps.mp3_mpega ? "MP3 decoding: mpega.library found"
+                                : "MP3 decoding: mpega.library not found");
+    draw_pane(TRUE);
+    draw_footer();
 }
 
 /* A station's page: what radio-browser.info says of it. */
@@ -6400,6 +6643,8 @@ static void act_action(struct Item *it)
         toggle_https();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
+    else if (it->action == ACT_PLEXHELP)
+        plex_help();
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -6698,10 +6943,17 @@ static void act_open(BOOL play)
             open_dir(it);
         else if (it->kind == IT_ACTION)
             act_action(it);
-        else if (it->kind == IT_NET)
-            radio_open(it);         /* another list, from radio-browser.info */
+        else if (it->kind == IT_NET || it->kind == IT_PLEXDIR)
+            radio_open(it);         /* another list, from radio-browser.info or Plex */
         else if (it->kind == IT_STATION)
             mods_play_item(p);      /* the station, on Now playing */
+        else if (it->kind == IT_PLEXTRACK) {
+            if (it->flags & ITEM_DISABLED)
+                set_msg(plex_why(it));
+            else
+                mods_play_item(p);  /* the album (or list) its playlist */
+        } else if (it->kind == IT_PLEXSRV)
+            plex_choose(it);
         else if (it->kind == IT_RUN) {
             char base[300];
             launch(item_path(it, base, sizeof(base)));  /* Fire, Return, Space, double-click */
@@ -7308,6 +7560,7 @@ static int app_main(void)
     load_debug();
     load_dbuf();
     load_https();
+    plex_load();
     load_jump();
     amce_log_open(debug_on);
     open_extra_libs();

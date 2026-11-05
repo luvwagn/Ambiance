@@ -16,6 +16,11 @@
  * is reported. Every wait has a timeout, and a job given up by the UI
  * (cancel) stops at the next one.
  *
+ * A Plex server is asked the same way (host and port given). Plex servers
+ * are also looked for (a gdm job): GDM, Plex's own discovery, a UDP
+ * "M-SEARCH * HTTP/1.0" to 239.0.0.250 (and the broadcast address) port
+ * 32414; each server answers from its address with its Name and Port.
+ *
  * The radio-browser.info API is found as its documentation asks: the
  * addresses of all.api.radio-browser.info, one chosen at random, its name
  * by reverse lookup (the Host the server answers to); a server that fails
@@ -330,6 +335,126 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
     return TRUE;
 }
 
+/* host's address: a dotted quad as it is, a name looked up. */
+static BOOL resolve(const char *host, ULONG *addr)
+{
+    struct hostent *h;
+    ULONG a = inet_addr((STRPTR)host);
+    if (a != 0xFFFFFFFFUL) {
+        *addr = a;
+        return TRUE;
+    }
+    if (!(h = gethostbyname((STRPTR)host)) || h->h_length != 4)
+        return FALSE;
+    memcpy(addr, h->h_addr_list[0], 4);
+    return TRUE;
+}
+
+/* GDM: Plex servers on this network, as "address\tport\tname" lines. */
+#define GDM_PORT 32414
+#define GDM_MS   2500           /* how long answers are waited for */
+static void gdm(struct NetJob *j)
+{
+    static const char q[] = "M-SEARCH * HTTP/1.0";
+    static const ULONG to[2] = { 0xEF0000FAUL, 0xFFFFFFFFUL };  /* 239.0.0.250, broadcast */
+    struct sockaddr_in sa;
+    LONG s, one = 1, i;
+    ULONG seen[16], deadline;
+    int nseen = 0;
+    UBYTE *out;
+    ULONG len = 0, cap = 4096;
+    char buf[1025];
+    if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        set_err(j, "No socket (is the TCP/IP stack running?)");
+        return;
+    }
+    if (!(out = AllocVec(cap + 1, MEMF_ANY | MEMF_CLEAR))) {
+        CloseSocket(s);
+        set_err(j, "Not enough memory");
+        return;
+    }
+    setsockopt(s, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
+    IoctlSocket(s, FIONBIO, (char *)&one);
+    for (i = 0; i < 2; i++) {
+        memset(&sa, 0, sizeof(sa));
+        sa.sin_len = sizeof(sa);
+        sa.sin_family = AF_INET;
+        sa.sin_port = GDM_PORT;             /* big-endian already */
+        memcpy(&sa.sin_addr, &to[i], 4);
+        sendto(s, (APTR)q, sizeof(q) - 1, 0, (struct sockaddr *)&sa, sizeof(sa));
+    }
+    deadline = time_ms() + GDM_MS;
+    while ((LONG)(time_ms() - deadline) < 0) {
+        struct sockaddr_in from;
+        LONG fl = sizeof(from), r;
+        int w = wait_sock(j, s, FALSE, 1);
+        ULONG addr;
+        char name[80], port[12], line[128];
+        const UBYTE *ab;
+        if (w < 0)
+            break;
+        if (w == 0)
+            continue;
+        r = recvfrom(s, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &fl);
+        if (r <= 0)
+            continue;
+        buf[r] = 0;
+        if (!strstr(buf, "200 OK"))
+            continue;
+        memcpy(&addr, &from.sin_addr, 4);
+        for (i = 0; i < nseen && seen[i] != addr; i++)
+            ;
+        if (i < nseen || nseen >= 16)
+            continue;                       /* answered twice (multicast and broadcast) */
+        seen[nseen++] = addr;
+        name[0] = 0;
+        amce_strlcpy(port, "32400", sizeof(port));
+        {
+            char *p = buf;
+            while (p && *p) {
+                char *e = strchr(p, '\n'), *v;
+                if (e)
+                    *e = 0;
+                if ((v = strchr(p, ':'))) {
+                    char *t = v + 1, *z;
+                    *v = 0;
+                    while (*t == ' ')
+                        t++;
+                    for (z = t + strlen(t); z > t && (z[-1] == '\r' || z[-1] == ' '); z--)
+                        ;
+                    *z = 0;
+                    if (!amce_stricmp(p, "Name"))
+                        amce_strlcpy(name, t, sizeof(name));
+                    else if (!amce_stricmp(p, "Port"))
+                        amce_strlcpy(port, t, sizeof(port));
+                }
+                p = e ? e + 1 : NULL;
+            }
+        }
+        ab = (const UBYTE *)&addr;
+        sprintf(line, "%lu.%lu.%lu.%lu\t%s\t%s\n", (unsigned long)ab[0], (unsigned long)ab[1],
+                (unsigned long)ab[2], (unsigned long)ab[3], port, name);
+        if (len + strlen(line) < cap) {
+            strcpy((char *)out + len, line);
+            len += strlen(line);
+        }
+    }
+    CloseSocket(s);
+    if (j->cancel) {
+        FreeVec(out);
+        set_err(j, "Cancelled");
+        return;
+    }
+    if (!len) {
+        FreeVec(out);
+        set_err(j, "No Plex server answered on this network");
+        return;
+    }
+    j->body = out;
+    j->len = len;
+    j->status = 200;
+}
+
 static void run(struct NetJob *j)
 {
     char host[80], path[400], loc[400];
@@ -346,6 +471,11 @@ static void run(struct NetJob *j)
         set_err(j, "No TCP/IP stack is running (bsdsocket.library)");
         return;
     }
+    if (j->gdm) {
+        gdm(j);
+        j->ms = time_ms() - t0;
+        return;
+    }
     amce_strlcpy(path, j->path, sizeof(path));
     for (hop = 0; hop <= REDIRECTS; hop++) {
         tries = 1;
@@ -360,14 +490,12 @@ static void run(struct NetJob *j)
                 amce_strlcpy(host, api.name[api.next], sizeof(host));
                 port_no = 80;
             } else if (hop == 0) {
-                struct hostent *h;
                 amce_strlcpy(host, j->host, sizeof(host));
                 port_no = j->port ? j->port : 80;
-                if (!(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
+                if (!resolve(host, &addr)) {
                     set_err(j, "That server could not be found (DNS)");
                     return;
                 }
-                memcpy(&addr, h->h_addr_list[0], 4);
             }
             j->err[0] = 0;
             if (fetch(j, addr, host, port_no, path))

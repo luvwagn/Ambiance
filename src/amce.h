@@ -262,7 +262,8 @@ struct BitMapHeader;
 void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* o: a datatype */
 
 /* ---------------------------------------------------------------- ags */
-enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION };
+enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION,
+       IT_PLEXDIR, IT_PLEXTRACK, IT_PLEXSRV };   /* Plex (plex.c) */
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
@@ -392,7 +393,11 @@ BOOL mp_seek_ms(ULONG ms);
 /* a station (radio.c's item): its stream played (stream.c) as an engine */
 BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
                     LONG errmax);
-BOOL mp_is_stream(void);
+BOOL mp_is_stream(void);            /* a station, or a track (also mp_is_track) */
+BOOL mp_load_track(const char *url, const char *title, const char *by, const char *tag,
+                   ULONG total_ms, UWORD cpu, char *err, LONG errmax);
+BOOL mp_is_track(void);
+const char *mp_track_by(void);
 int mp_meter_count(void);           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
 const char *mp_stream_name(void);
 
@@ -405,7 +410,7 @@ struct StInfo {
     ULONG buffer_ms, played_ms, underruns;
     UBYTE peak_l, peak_r;
 };
-BOOL st_start(const char *url, UWORD master, UWORD cpu, char *err, LONG errmax);
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, LONG errmax);
 void st_stop(void);
 void st_pause(BOOL on);
 void st_volume(int v);
@@ -624,6 +629,7 @@ struct NetJob {
     struct Message msg;
     volatile UBYTE cancel;      /* given up: it stops at its next wait */
     UBYTE busy, done, quit, orphan;
+    UBYTE gdm;                  /* not a request: Plex servers looked for on the network */
     UWORD port;                 /* 0: 80 */
     char host[80];              /* "" the radio-browser.info API (found by DNS) */
     char path[400];
@@ -649,6 +655,22 @@ void radio_request(const char *query, BOOL https, char *out, LONG max);
 LONG radio_fill(const char *query, UBYTE *body, ULONG len, struct ItemList *l, BOOL https,
                 LONG *skipped);
 char *radio_field(const struct Item *it, int i, char *out, LONG max);
+
+/* plex.c: a Plex Media Server's music */
+struct PlexConf {
+    char host[64];              /* "" none chosen */
+    UWORD port;
+    char name[64], token[64], cid[40];
+};
+extern struct PlexConf plex;
+void plex_load(void);
+void plex_set_server(const char *host, UWORD port, const char *name);
+void plex_request(const char *key, char *out, LONG max);
+void plex_track_url(const struct Item *it, char *out, LONG max);
+void plex_section_menu(const char *sec, struct ItemList *l);
+LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
+LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
+const char *plex_why(const struct Item *it);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);
 

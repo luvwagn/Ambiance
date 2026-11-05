@@ -28,9 +28,14 @@ copy the drawer onto an AGS installation and double-click it.
   stream read with its ICY titles, decoded by mpega.library through a
   bitstream hook, played on Paula from a double buffer). HTTPS streams do
   not play yet.
+- Music: a Plex Media Server's music (`src/plex.c`; its XML read by
+  `src/plexxml.c`, which the host tests build), asked over plain HTTP by
+  the network process, servers found by GDM (UDP to 239.0.0.250:32414);
+  MP3 tracks played by the radio's player with an end (`src/stream.c`,
+  their ID3v2 tag read past). The token from ENVARC:AmigaMCE/PlexToken.
 - Keyboard, mouse and joystick/CD32 pad.
 
-Videos and Music are on the menu but not yet implemented.
+Videos is on the menu but not yet implemented.
 
 ## Building
 

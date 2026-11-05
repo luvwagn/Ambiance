@@ -19,6 +19,11 @@
  * never more than Paula plays (28 kHz). Playing starts once a second or
  * so is in the FIFO, so the network's hiccups go unheard.
  *
+ * A track (a Plex server's MP3 file, st_start's finite) is the same, with
+ * an end: the connection closing after its last byte is that end, not a
+ * failure, and what is in the FIFO plays out. Its ID3v2 tag (up to a
+ * picture of the cover, often hundreds of KB) is read past first.
+ *
  * The process has its own bsdsocket.library (each process opens its own);
  * net.c's SocketBase is the network process's, so this file names its own
  * base for the library's inline calls.
@@ -133,6 +138,8 @@ static struct {
     volatile ULONG played;          /* samples Paula has been given */
     volatile UBYTE peak_l, peak_r;
     UWORD cpu;                      /* 20, 30, 40, 60: how much decoding it can do */
+    BOOL finite;                    /* a track: its end is the end, not a failure */
+    volatile BOOL eof;              /* a track's last byte read */
 } st;
 
 /* ---------------------------------------------------------- Paula */
@@ -301,9 +308,13 @@ static LONG connect_to(const char *host, UWORD port)
     struct hostent *h;
     struct sockaddr_in sa;
     LONG s, one = 1, e = 0, el = sizeof(e);
-    if (!(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
-        fail("The station's server could not be found (DNS)");
-        return -1;
+    ULONG a = inet_addr((STRPTR)host);
+    if (a == 0xFFFFFFFFUL) {
+        if (!(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
+            fail("The station's server could not be found (DNS)");
+            return -1;
+        }
+        memcpy(&a, h->h_addr_list[0], 4);
     }
     if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         fail("No socket (is the TCP/IP stack running?)");
@@ -314,7 +325,7 @@ static LONG connect_to(const char *host, UWORD port)
     sa.sin_len = sizeof(sa);
     sa.sin_family = AF_INET;
     sa.sin_port = port;
-    memcpy(&sa.sin_addr, h->h_addr_list[0], 4);
+    memcpy(&sa.sin_addr, &a, 4);
     if (connect(s, (struct sockaddr *)&sa, sizeof(sa)) < 0 && Errno() != EINPROGRESS) {
         CloseSocket(s);
         fail("The station refused the connection");
@@ -351,7 +362,10 @@ static BOOL net_more(void)
         if (r < 0 && Errno() == EWOULDBLOCK)
             continue;
         if (r <= 0) {
-            fail("The station closed the stream");
+            if (st.finite && r == 0)
+                st.eof = TRUE;              /* a track: all of it read */
+            else
+                fail(st.finite ? "The server stopped sending" : "The station closed the stream");
             return FALSE;
         }
         st.nb_len += r;
@@ -444,8 +458,8 @@ static BOOL open_stream(void)
             return FALSE;
         sprintf(req,
                 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
-                "\r\nAccept: */*\r\nIcy-MetaData: 1\r\nConnection: close\r\n\r\n",
-                path, host);
+                "\r\nAccept: */*\r\n%sConnection: close\r\n\r\n",
+                path, host, st.finite ? "" : "Icy-MetaData: 1\r\n");
         {
             LONG left = strlen(req), off = 0;
             while (left > 0) {
@@ -611,6 +625,35 @@ static ULONG hook_func(register struct Hook *h __asm("a0"), register MPEGA_ACCES
     return (ULONG)-1;
 }
 
+/* A track's ID3v2 tag (its header says how long) read past. */
+static BOOL skip_id3(void)
+{
+    ULONG left;
+    while (st.nb_len - st.nb_pos < 10)
+        if (!net_more())
+            return FALSE;
+    {
+        const UBYTE *b = st.nb + st.nb_pos;
+        if (b[0] != 'I' || b[1] != 'D' || b[2] != '3')
+            return TRUE;
+        left = 10 + (((ULONG)b[6] & 0x7F) << 21 | ((ULONG)b[7] & 0x7F) << 14 |
+                     ((ULONG)b[8] & 0x7F) << 7 | ((ULONG)b[9] & 0x7F)) + ((b[5] & 0x10) ? 10 : 0);
+    }
+    while (left) {
+        ULONG k = st.nb_len - st.nb_pos;
+        if (!k) {
+            if (!net_more())
+                return FALSE;
+            continue;
+        }
+        if (k > left)
+            k = left;
+        st.nb_pos += k;
+        left -= k;
+    }
+    return TRUE;
+}
+
 /* The sample rate of the stream's first MP3 frame (bytes read ahead for
  * it, as far as the first title block), 0 if none is found. */
 static LONG first_frame_freq(void)
@@ -663,6 +706,13 @@ static void decode_loop(MPEGA_STREAM *ms)
         }
         n = MPEGA_decode_frame(ms, pcm);
         if (n < 0) {
+            if (st.eof) {
+                if (!st.started && st.f_in != st.f_out) {
+                    st.state = ST_PLAYING;  /* shorter than the prebuffer: it plays now */
+                    paula_start();
+                }
+                break;                      /* a track's end: what is left plays out */
+            }
             if (n == -2)                    /* a bad frame: the next one */
                 continue;
             fail(st.err[0] ? st.err : "The stream could not be decoded");
@@ -711,6 +761,10 @@ static void radio_main(void)
     }
     if (!open_stream())
         goto out;
+    if (st.finite && !skip_id3()) {
+        fail(st.err[0] ? st.err : "The track ended before its music began");
+        goto out;
+    }
     st.state = ST_BUFFERING;
     memset(&hook, 0, sizeof(hook));
     hook.h_Entry = (HOOKFUNC)(APTR)hook_func;
@@ -786,9 +840,11 @@ out:
 }
 
 /* ---------------------------------------------------------- the UI's */
-BOOL st_start(const char *url, UWORD master, UWORD cpu, char *err, LONG errmax)
+BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, char *err, LONG errmax)
 {
     st_stop();
+    st.finite = finite;
+    st.eof = FALSE;
     memset(&st.err, 0, sizeof(st.err));
     st.name[0] = st.genre[0] = st.title[0] = 0;
     st.title_seq++;

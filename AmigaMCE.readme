@@ -90,9 +90,17 @@ Features in this release
   (its ICY titles); Right shows what is known of it. MP3 is decoded by
   mpega.library: mono at 22 kHz on a 68030, stereo up to 28 kHz on a
   68040/060. Needs a running TCP/IP stack. HTTPS streams do not play yet.
+- Music: a Plex Media Server's music, on your network: its music
+  libraries by artist, album or recently added, and their MP3 tracks
+  played on Now playing (title, artist, album, time played of its
+  length), an album playing through. Other formats are listed greyed
+  out for now. Music > Find a Plex server finds servers on the network
+  (Plex's GDM); a server that asks for a sign-in token takes it from
+  ENVARC:AmigaMCE/PlexToken (Music > About Plex says how). Plain HTTP on
+  the home network: no AmiSSL needed.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
-Videos and Music are listed but arrive in a later version. About holds the credits and a System information
+Videos is listed but arrives in a later version. About holds the credits and a System information
 page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 
 Controls
