@@ -53,9 +53,11 @@
 #define CID_VAR    "AmigaMCE/PlexClient"
 #define CONV_VAR   "AmigaMCE/PlexConvert"
 #define ON_VAR     "AmigaMCE/Plex"
+#define LIB_VAR    "AmigaMCE/PlexLibrary"
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
+static ULONG num(const char *s);
 static ULONG sessions;          /* conversions asked for: each its own session */
 
 static void get_var(const char *name, char *out, LONG max)
@@ -115,6 +117,15 @@ void plex_load(UWORD cpu)
     plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
     get_var(ON_VAR, v, sizeof(v));
     plex.on = amce_stricmp(v, "off") != 0;
+    get_var(LIB_VAR, v, sizeof(v));         /* "<key> <count>" */
+    {
+        char *sp = strchr(v, ' ');
+        if (sp) {
+            *sp = 0;
+            plex.libraries = (UWORD)num(sp + 1);
+        }
+        amce_strlcpy(plex.library, v, sizeof(plex.library));
+    }
     if (!plex.cid[0]) {
         /* who this AmigaMCE is, to the server: made up once, then kept */
         ULONG a = time_ms() ^ (ULONG)FindTask(NULL), b = (ULONG)AvailMem(MEMF_ANY) * 2654435761UL;
@@ -131,6 +142,7 @@ void plex_set_server(const char *host, UWORD port, const char *name)
     set_var(SERVER_VAR, v);
     amce_strlcpy(plex.name, name[0] ? name : host, sizeof(plex.name));
     set_var(NAME_VAR, plex.name);
+    plex_set_library("", 0);                /* another server: its libraries not known */
 }
 
 /* The request for key (a path on the server) into out: who asks, its
@@ -149,6 +161,17 @@ void plex_request(const char *key, char *out, LONG max)
     }
     sprintf(n, "&X-Plex-Container-Start=0&X-Plex-Container-Size=%ld", (long)LIST_MAX);
     amce_strlcat(out, n, max);
+}
+
+/* The music library Music opens on (key; count: the server's music
+ * libraries, more than one: Music offers the others too). */
+void plex_set_library(const char *key, UWORD count)
+{
+    char v[40];
+    amce_strlcpy(plex.library, key, sizeof(plex.library));
+    plex.libraries = count;
+    sprintf(v, "%s %lu", key, (unsigned long)count);
+    set_var(LIB_VAR, v);
 }
 
 void plex_set_on(BOOL on)

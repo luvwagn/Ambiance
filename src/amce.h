@@ -666,6 +666,8 @@ struct PlexConf {
     BOOL convert;               /* every track converted for this Amiga by the server */
     BOOL on;                    /* Settings > Plex */
     UWORD cpu;                  /* caps.cpu (plex_load) */
+    char library[16];           /* the music library used ("" not known yet) */
+    UWORD libraries;            /*   of how many on the server */
 };
 extern struct PlexConf plex;
 void plex_load(UWORD cpu);
@@ -675,6 +677,7 @@ void plex_track_url(const struct Item *it, UWORD cpu, char *out, LONG max);
 BOOL plex_converts(const struct Item *it);
 void plex_set_convert(BOOL on);
 void plex_set_on(BOOL on);
+void plex_set_library(const char *key, UWORD count);
 int plex_tier(void);
 UWORD plex_decoder_cpu(void);
 void plex_section_menu(const char *sec, struct ItemList *l);

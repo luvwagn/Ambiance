@@ -57,6 +57,8 @@ struct Page {
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
+    char plex_label[96];        /* a Plex album's page: the album (its details pane) */
+    char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
@@ -1671,8 +1673,11 @@ static BOOL np_art_drawn;
 static void np_art_draw(void);
 static void np_art_free(void);
 static void np_art_start(const struct Item *it);
-static void plex_pv_draw(struct Page *p);
+static void plex_pv_draw(struct Page *p, BOOL was_shown);
+static BOOL plex_keeps(struct Page *p, LONG idx);
+static WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
+static void music_root_again(void);
 static ULONG strtoul_(const char *s)
 {
     ULONG v = 0;
@@ -2635,6 +2640,8 @@ static BOOL has_aside(struct Page *p)
         LONG i;
         if (aside_width() <= 0)
             return FALSE;
+        if (p->plex_meta[0])
+            return TRUE;                    /* an album's tracks: the album beside them */
         for (i = 0; i < p->list.count; i++)
             if (p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t'))
                 return TRUE;
@@ -2699,6 +2706,7 @@ static WORD list_xr(struct Page *p)
 
 /* ---- the preview of the selected game, drawn once the selection settles */
 #define PREVIEW_SETTLE 100     /* ms the selection rests before its preview is read */
+#define PLEX_SETTLE    350     /* ...a Plex entry's: its picture asked for, then decoded */
 #define PREVIEW_READY   30     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
 static BOOL pv_pending;
@@ -2848,6 +2856,14 @@ static BOOL pv_current(const struct LJob *j)
 /* The job for (type, mode, path): one already out or back, else a new one.
  * NULL if every slot is busy (a read-ahead is then skipped). first: the
  * pane waits for it, so it goes ahead of the loader's queue. */
+/* Colours a picture may have (0: as many as the screen gives): fewer for a
+ * Plex cover on a slower Amiga, less to reduce and to set. */
+static int pv_colour_cap;
+static int plex_colours(void)
+{
+    return plex_tier() == 0 ? 48 : plex_tier() == 1 ? 64 : 0;
+}
+
 static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahead, BOOL first)
 {
     int i, free_i = -1;
@@ -2913,6 +2929,8 @@ static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahea
         j->th = pv_box_h;
         j->tall = gfx_mode_tall(g.mode);
         j->maxcol = gfx_thumb_colours(&g);
+        if (pv_colour_cap && j->maxcol > pv_colour_cap)
+            j->maxcol = pv_colour_cap;
     }
     j->stamp = ++pv_clock;
     pv_slot[free_i] = j;
@@ -3105,6 +3123,8 @@ static BOOL pv_keeps(struct Page *p, LONG idx)
     char path[300], key[300];
     UBYTE shot;
     WORD max_y = g.footer_y - 2;
+    if (p->plex)
+        return has_aside(p) && plex_keeps(p, idx);
     if (!g.pic_w || !pv_onscr.key[0] || !has_aside(p) || !pv_pictures() ||
         !pv_kind(p, idx, path, sizeof(path), &shot) || !shot)
         return FALSE;
@@ -3229,6 +3249,7 @@ static void preview_draw(struct Page *p)
     int k;
     BOOL keep;
     WORD x0 = aside_x(), max_y = g.footer_y - 2;
+    BOOL was_shown = pv_shown && pv_page == p;
     pv_pending = FALSE;
     pv_page = p;
     pv_sel = p->sel;
@@ -3237,7 +3258,7 @@ static void preview_draw(struct Page *p)
     pv_text_drawn = pv_pic_drawn = pv_spin_on = FALSE;
     tb_close(&pv_tb);
     if (p->plex) {
-        plex_pv_draw(p);                    /* the server's details (plex_pv_draw) */
+        plex_pv_draw(p, was_shown);         /* the server's details (plex_pv_draw) */
         return;
     }
     k = p->list.count ? pv_kind(p, p->sel, path, sizeof(path), &shot) : 0;
@@ -3416,6 +3437,8 @@ static void preview_touch(struct Page *p)
         style_preview(p);                   /* no reading: drawn at once */
         return;
     }
+    if (p->plex)
+        settle = PLEX_SETTLE;               /* its picture is asked of the server: rest first */
     /* read ahead and back already: drawing it is only a copy, so sooner */
     if ((k = pv_kind(p, p->sel, path, sizeof(path), &shot))) {
         want = shot && pv_pictures() ? 2 : 1;
@@ -4423,8 +4446,11 @@ static void np_layout(void)
     if (mp_is_track()) {
         /* the cover: a square at the right of the track's lines */
         WORD s = g.footer_y - 2 - np.samples_y - U(2);
+        WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
         if (s > np.w * 2 / 5)
             s = np.w * 2 / 5;
+        if (s > cap)
+            s = cap;                        /* less to decode on a slower Amiga */
         if (s >= U(40)) {
             np.art_s = s;
             np.art_x = np.x0 + np.w - s;
@@ -6492,7 +6518,15 @@ static void build_music_root(struct Page *p)
         list_add(&p->list, "Plex is turned off (Settings > Plex)", "", "", IT_TEXT);
         return;
     }
-    if (plex.host[0]) {
+    if (plex.host[0] && plex.library[0]) {
+        /* the library known: its Artists, Albums, Recently added here */
+        plex_section_menu(plex.library, &p->list);
+        if (plex.libraries > 1) {
+            sprintf(label, "Other libraries on %s", plex.name[0] ? plex.name : plex.host);
+            if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
+                it->mark = MARK_ARROW;
+        }
+    } else if (plex.host[0]) {
         sprintf(label, "Plex: %s", plex.name[0] ? plex.name : plex.host);
         if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
@@ -6578,6 +6612,8 @@ static void radio_done(struct NetJob *j)
             list_free(&p->list);
             list_init(&p->list);
             plex_section_menu(sec + 1, &p->list);
+            plex_set_library(sec + 1, 1);
+            music_root_again();
             amce_strlcpy(p->base, "@", sizeof(p->base));
             sprintf(m, "%s: one music library, %s", p->title, sec + 1);
             amce_log("plex", m);
@@ -6599,6 +6635,8 @@ static void radio_done(struct NetJob *j)
             if (!strcmp(type, "album")) {
                 char key[300], title[96];
                 radio_field(a, 0, key, sizeof(key));
+                amce_strlcpy(p->plex_label, a->label, sizeof(p->plex_label));
+                amce_strlcpy(p->plex_meta, a->path, sizeof(p->plex_meta));
                 sprintf(title, "%.44s - %.44s", p->title, a->label);
                 amce_strlcpy(p->title, title, sizeof(p->title));
                 list_free(&p->list);
@@ -6708,7 +6746,15 @@ static void radio_open(struct Item *it)
     if (it->flags & ITEM_DISABLED)
         return;
     if (it->kind == IT_PLEXDIR && it->path[0] == '@') {
-        /* a music library: its own menu, nothing to ask yet */
+        /* a music library: its own menu, nothing to ask yet; and the one
+         * Music opens on from now */
+        LONG libs = 0, i;
+        struct Page *up = cur();
+        for (i = 0; up && i < up->list.count; i++)
+            if (up->list.items[i].kind == IT_PLEXDIR && up->list.items[i].path[0] == '@')
+                libs++;
+        plex_set_library(it->path + 1, (UWORD)(libs ? libs : 1));
+        music_root_again();
         if (!(p = page_push(PT_LIST, it->label))) {
             set_msg("Too many levels open");
             return;
@@ -6743,6 +6789,11 @@ static void radio_open(struct Item *it)
     if (it->kind == IT_PLEXDIR) {
         p->plex = 1;
         radio_field(it, 0, p->base, sizeof(p->base));  /* its key; the rest is its details */
+        if (strstr(it->path, "\talbum\t")) {
+            /* an album: its details stay beside its tracks */
+            amce_strlcpy(p->plex_label, it->label, sizeof(p->plex_label));
+            amce_strlcpy(p->plex_meta, it->path, sizeof(p->plex_meta));
+        }
         if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
             amce_strlcpy(msg, "Looking for Plex servers...  Esc to give up", sizeof(msg));
@@ -6764,6 +6815,25 @@ static void radio_open(struct Item *it)
     net_submit(j);
     if (j->done && !j->busy)                /* the process could not start: no answer to wait for */
         radio_done(j);
+}
+
+/* Music's own list made again (its library now known), where it is. */
+static void music_root_again(void)
+{
+    struct Page *r = &pages[0];
+    LONG sel;
+    if (depth < 1 || !r->plex || r->radio || r->type != PT_LIST)
+        return;
+    sel = r->sel;
+    list_free(&r->list);
+    list_init(&r->list);
+    build_music_root(r);
+    r->sel = sel < r->list.count ? sel : 0;
+    r->top = 0;
+    if (r == cur() && !pane_pending) {
+        draw_pane(TRUE);
+        draw_footer();
+    }
 }
 
 /* A Plex page asked again, for key (an artist's one album, say). */
@@ -6880,6 +6950,8 @@ static void np_art_load(const char *file)
         j->tw = j->th = np.art_s;
         j->tall = gfx_mode_tall(g.mode);
         j->maxcol = gfx_thumb_colours(&g);
+        if (plex_colours() && j->maxcol > plex_colours())
+            j->maxcol = plex_colours();
     }
     np_aj = j;
     ldr_submit_first(j);
@@ -6946,35 +7018,101 @@ static void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pe
     }
 }
 
-static void plex_pv_draw(struct Page *p)
+/* What a Plex page's details pane shows for entry idx: the entry (an
+ * artist, an album) or, on an album's own page, the album. */
+static BOOL plex_pv_src(struct Page *p, LONG idx, struct Item *out)
 {
-    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y;
-    struct Item *it = p->list.count ? &p->list.items[p->sel] : NULL;
+    memset(out, 0, sizeof(*out));
+    if (idx >= 0 && idx < p->list.count && p->list.items[idx].kind == IT_PLEXDIR &&
+        strchr(p->list.items[idx].path, '\t')) {
+        *out = p->list.items[idx];
+        return TRUE;
+    }
+    if (p->plex_meta[0]) {
+        out->label = p->plex_label;
+        out->path = p->plex_meta;
+        out->kind = IT_PLEXDIR;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* The cover's square: as much of the pane's top half as fits, less on a
+ * slower Amiga (a 68030 decodes and reduces each pixel of a JPEG: 160
+ * pixels a side is half the work of 220). */
+static WORD plex_art_side(void)
+{
+    WORD w = aside_width() - U(4), h = (g.footer_y - 2 - g.list_top) / 2, s = w < h ? w : h;
+    WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
+    return s > cap ? cap : s;
+}
+
+/* Entry idx shows the picture on screen now, where it is (an album's
+ * tracks all show its cover: kept, not drawn again). */
+static BOOL plex_keeps(struct Page *p, LONG idx)
+{
+    struct Item src;
+    char thumb[160], req[400], file[120];
+    WORD s = plex_art_side();
+    if (!g.pic_w || !pv_onscr.key[0] || !plex_pv_src(p, idx, &src))
+        return FALSE;
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    if (!thumb[0])
+        return FALSE;
+    plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+    return !strcmp(file, pv_onscr.key) && pv_onscr.x == aside_x() && pv_onscr.y == g.list_top &&
+           pv_onscr.h == s;
+}
+
+static void plex_pv_draw(struct Page *p, BOOL was_shown)
+{
+    static char last[260];
+    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y, s = plex_art_side();
+    struct Item src;
     char thumb[160], year[8], by[100], count[24], studio[60], summary[300], line[200], file[120];
-    gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+    char key[260];
+    BOOL keep = plex_keeps(p, p->sel);
     pv_has_box = FALSE;
     pv_text_drawn = TRUE;
-    if (!it || it->kind != IT_PLEXDIR)
+    if (!plex_pv_src(p, p->sel, &src)) {
+        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
+        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+        last[0] = 0;
         return;
-    radio_field(it, 2, thumb, sizeof(thumb));
-    radio_field(it, 3, year, sizeof(year));
-    radio_field(it, 4, by, sizeof(by));
-    radio_field(it, 5, count, sizeof(count));
-    radio_field(it, 6, studio, sizeof(studio));
-    radio_field(it, 7, summary, sizeof(summary));
+    }
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    sprintf(key, "%.90s\t%.160s", src.label, thumb);
+    if (keep) {
+        pv_has_box = TRUE;
+        pv_pic_drawn = TRUE;
+        pv_box_y = g.list_top;
+        pv_box_h = s;
+        if (was_shown && !strcmp(key, last))
+            return;                         /* the same album's: nothing changes */
+        gfx_fill_bg(&g, x0, g.list_top + s, g.w - 1, max_y);
+    } else {
+        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
+        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+    }
+    amce_strlcpy(last, key, sizeof(last));
+    radio_field(&src, 3, year, sizeof(year));
+    radio_field(&src, 4, by, sizeof(by));
+    radio_field(&src, 5, count, sizeof(count));
+    radio_field(&src, 6, studio, sizeof(studio));
+    radio_field(&src, 7, summary, sizeof(summary));
     pv_box_y = g.list_top;
-    pv_box_h = (max_y - g.list_top) / 2;
-    if (pv_box_h > w)
-        pv_box_h = w;                       /* covers are square */
+    pv_box_h = s;
     y = g.list_top;
     if (thumb[0] && pv_pictures()) {
         pv_has_box = TRUE;
         y = pv_box_y + pv_box_h + U(4);
-        if (art_fetch(ART_PV, thumb, w, pv_box_h, file))
+        if (!keep && art_fetch(ART_PV, thumb, s, s, file)) {
+            pv_colour_cap = plex_colours();
             pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+            pv_colour_cap = 0;
+        }
     }
-    gfx_text(&g, x0, y, it->label, PEN_WHITE, PEN_BG, w, TS_BOLD);
+    gfx_text(&g, x0, y, src.label, PEN_WHITE, PEN_BG, w, TS_BOLD);
     y += g.font_h + U(2);
     if (by[0]) {
         gfx_text(&g, x0, y, by, PEN_TEXT, PEN_BG, w, TS_SMALL);
@@ -7014,7 +7152,9 @@ static void art_ready(int kind, const char *file)
     }
     if (p && p->plex && p == pv_page && p->sel == pv_sel && pv_shown && !pv_sj && pv_has_box &&
         !pane_pending) {
+        pv_colour_cap = plex_colours();
         pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+        pv_colour_cap = 0;
         if (pv_sj && pv_sj->done)
             pv_progress(p);
     }
