@@ -605,6 +605,35 @@ void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WOR
     band_blit(g, &b, bm, x, y, w, h);
 }
 
+/* The picture on screen moved to x, y: copied there, what is left of its
+ * old place cleared; its pens stay its own, so nothing is decoded or
+ * remapped again. FALSE (and left as it was) if it cannot be. */
+BOOL gfx_picture_move(struct Gfx *g, WORD x, WORD y)
+{
+    struct BitMap *tmp;
+    struct Beam b;
+    WORD w = g->pic_w, h = g->pic_h;
+    if (!w || !h || !g->scr || !g->rp)
+        return FALSE;
+    if (x == g->pic_x && y == g->pic_y)
+        return TRUE;
+    if (x < 0 || y < 0 || x + w > g->w || y + h > g->h)
+        return FALSE;
+    if (!(tmp = AllocBitMap(w, h, g->depth, 0, g->rp->BitMap)))
+        return FALSE;
+    WaitBlit();
+    BltBitMap(g->rp->BitMap, g->pic_x, g->pic_y, tmp, 0, 0, w, h, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    beam_init(g, &b);
+    band_blit(g, &b, tmp, x, y, w, h);
+    clear_old(g, &b, 0, 0, g->w - 1, g->h - 1, x, y, w, h);
+    WaitBlit();
+    FreeBitMap(tmp);
+    g->pic_x = x;
+    g->pic_y = y;
+    return TRUE;
+}
+
 /* Clear the picture on screen (as far as it is inside x0,y0..x1,y1),
  * then let its pens go: in that order, so it never shows in pens given to
  * another picture meanwhile. */

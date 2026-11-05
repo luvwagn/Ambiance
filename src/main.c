@@ -1682,9 +1682,12 @@ static BOOL np_art_drawn;
 static void np_art_draw(void);
 static void np_art_free(void);
 static void np_art_start(const struct Item *it);
+static void np_art_load(const char *file);
+static WORD plex_art_side(void);
 static void plex_pv_draw(struct Page *p, BOOL was_shown);
 static BOOL plex_text_kept(struct Page *p);
 static BOOL plex_keeps(struct Page *p, LONG idx);
+static BOOL plex_movable(struct Page *p, LONG idx);
 static WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
 static void np_soft_redraw(void);
@@ -3106,6 +3109,41 @@ static void pv_draw_text(struct Page *p)
  * it on screen: not cleared, read or drawn again. */
 static struct { char key[300]; WORD x, y, w, h; } pv_onscr;
 
+/* The picture on screen is file's: moved into the box x, y, w x h (centred
+ * across, at its top), as it would be drawn there, and counted as there.
+ * A cover going from an album's pane to Now playing and back: copied
+ * across, not asked for, decoded and remapped again. */
+static BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
+{
+    if (!file[0] || !g.pic_w || strcmp(file, pv_onscr.key) || g.pic_w > w || g.pic_h > h)
+        return FALSE;
+    if (!gfx_picture_move(&g, x + (w - g.pic_w) / 2, y))
+        return FALSE;
+    if (pv_onscr.x != x || pv_onscr.y != y)
+        amce_log("preview", "the cover on screen moved across, not read again");
+    pv_onscr.x = x;
+    pv_onscr.y = y;
+    pv_onscr.w = w;
+    pv_onscr.h = h;
+    return TRUE;
+}
+
+/* x0,y0..x1,y1 cleared but for the picture on screen. */
+static void fill_around_pic(WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    WORD px1 = g.pic_x + g.pic_w - 1, py1 = g.pic_y + g.pic_h - 1;
+    if (g.pic_y > y0)
+        gfx_fill_bg(&g, x0, y0, x1, g.pic_y - 1);
+    if (g.pic_x > x0)
+        gfx_fill_bg(&g, x0, g.pic_y, g.pic_x - 1, py1);
+    if (px1 < x1)
+        gfx_fill_bg(&g, px1 + 1, g.pic_y, x1, py1);
+    if (py1 < y1)
+        gfx_fill_bg(&g, x0, py1 + 1, x1, y1);
+}
+
+static char np_art_file[120];       /* the cover Now playing shows (or will) */
+
 /* The picture file a preview of path (shot: SHOT_*) shows, into key ("":
  * not known yet, a folder not scanned). */
 static void pv_shot_key(UBYTE shot, const char *path, char *key)
@@ -3463,7 +3501,9 @@ static void preview_touch(struct Page *p)
         if (found >= want)
             settle = PREVIEW_READY;
     }
-    if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel))
+    if (!pv_shown && p->plex && plex_movable(p, p->sel))
+        settle = PREVIEW_READY;             /* its cover is on screen: only moved */
+    else if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel))
         /* a page just shown (opened, or back to it): a picture left from
          * the page before goes now, unless it is this entry's too */
         gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
@@ -4765,10 +4805,20 @@ static void np_draw(BOOL full)
         const char *t = mp_title();
         char label[120];
         np_layout();
-        if (g.pic_w)                        /* a cover there: cleared, then its pens go */
-            gfx_picture_clear(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
-        np_art_drawn = FALSE;
-        gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+        if (mp_is_track() && np.art_s && pic_take(np_art_file, np.art_x, np.art_y, np.art_s,
+                                                  np.art_s)) {
+            /* the cover on screen already (the album's pane): moved into
+             * its square, the rest cleared around it */
+            fill_around_pic(g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+            np_art_drawn = TRUE;
+        } else {
+            if (g.pic_w)                    /* a cover there: cleared, then its pens go */
+                gfx_picture_clear(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+            np_art_drawn = FALSE;
+            gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
+            if (mp_is_track() && np.art_s && !np_aj && np_art_file[0] && !art_nj[ART_NP])
+                np_art_load(np_art_file);   /* left to the pane, and gone from it since */
+        }
         if (!mp_loaded()) {
             gfx_text(&g, np.x0, np.title_y, "Nothing playing", PEN_DIM, PEN_BG, np.w, TS_BOLD);
             return;
@@ -7061,7 +7111,7 @@ static void np_art_load(const char *file)
     j->want_pic = FALSE;
     if (gfx_thumbs(&g)) {
         j->remap = FALSE;
-        j->tw = j->th = np.art_s;
+        j->tw = j->th = plex_art_side() <= np.art_s ? plex_art_side() : np.art_s;
         j->tall = gfx_mode_tall(g.mode);
         j->maxcol = gfx_thumb_colours(&g);
         if (plex_colours() && j->maxcol > plex_colours())
@@ -7092,6 +7142,13 @@ static void np_art_draw(void)
     else if (np_aj->obj && gfx_picture_obj(&g, np_aj->obj, np_aj->remapped, np.art_x, np.art_y,
                                            np.art_s, np.art_s, TRUE, &dh, &taken) && taken)
         np_aj->obj = NULL;                  /* the screen has it (its pens) */
+    if (g.pic_w) {
+        /* what is on screen, and where: the album's pane takes it back */
+        amce_strlcpy(pv_onscr.key, np_aj->path, sizeof(pv_onscr.key));
+        pv_onscr.x = np.art_x;
+        pv_onscr.y = np.art_y;
+        pv_onscr.w = pv_onscr.h = np.art_s;
+    }
     np_art_drawn = TRUE;
 }
 
@@ -7100,17 +7157,35 @@ static void np_art_start(const struct Item *it)
 {
     static char shown[160];
     char thumb[160], file[120];
+    WORD s;
     radio_field(it, 9, thumb, sizeof(thumb));
-    if (np_aj && !strcmp(thumb, shown))
+    if (!strcmp(thumb, shown) && thumb[0] &&
+        (np_aj || art_nj[ART_NP] || (g.pic_w && !strcmp(np_art_file, pv_onscr.key))))
         return;                             /* the same album: its cover stays as it is */
     amce_strlcpy(shown, thumb, sizeof(shown));
     np_art_free();
+    np_art_file[0] = 0;
     np_layout();                            /* the square's size */
     if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
         gfx_picture_clear(&g, np.art_x, np.art_y, np.art_x + np.art_s - 1,
                           np.art_y + np.art_s - 1);
-    if (np.art_s && art_fetch(ART_NP, thumb, np.art_s, np.art_s, file))
+    if (!np.art_s)
+        return;
+    /* the pane's size where it fits: the same file, and the same picture,
+     * which can then go across as it is (pic_take) */
+    s = plex_art_side() <= np.art_s ? plex_art_side() : np.art_s;
+    if (art_fetch(ART_NP, thumb, s, s, file)) {
+        amce_strlcpy(np_art_file, file, sizeof(np_art_file));
+        if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_s)) {
+            np_art_drawn = TRUE;            /* the one on screen: moved */
+            return;
+        }
+        if (!np_on() && g.pic_w && !strcmp(file, pv_onscr.key))
+            return;                         /* in the pane: taken when the page opens */
         np_art_load(file);
+    } else {
+        amce_strlcpy(np_art_file, file, sizeof(np_art_file));     /* asked for: art_ready */
+    }
 }
 
 /* ---- the details pane of a Plex list (artists, albums): the picture
@@ -7214,6 +7289,22 @@ static BOOL plex_text_kept(struct Page *p)
            !strcmp(key, plex_shown);
 }
 
+/* The picture on screen (anywhere: Now playing's square) is the one entry
+ * idx shows, and fits the pane: plex_pv_draw moves it rather than clear it. */
+static BOOL plex_movable(struct Page *p, LONG idx)
+{
+    struct Item src;
+    char thumb[160], req[400], file[120];
+    WORD s = plex_art_side();
+    if (!g.pic_w || !pv_onscr.key[0] || !pv_pictures() || !plex_pv_src(p, idx, &src))
+        return FALSE;
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    if (!thumb[0])
+        return FALSE;
+    plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+    return !strcmp(file, pv_onscr.key) && g.pic_w <= aside_width() - U(4) && g.pic_h <= s;
+}
+
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
 {
     char *last = plex_shown;
@@ -7233,6 +7324,17 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     (void)was_shown;
     radio_field(&src, 2, thumb, sizeof(thumb));
     sprintf(key, "%.90s\t%.160s", src.label, thumb);
+    if (!keep && thumb[0] && pv_pictures() && g.pic_w) {
+        /* the cover on screen elsewhere (back from Now playing): moved
+         * here as it is, the pane cleared around it */
+        char req[400];
+        plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+        if (pic_take(file, x0, g.list_top, w, s)) {
+            fill_around_pic(x0, g.list_top, g.w - 1, max_y);
+            last[0] = 0;                    /* the text below it: written again */
+            keep = TRUE;
+        }
+    }
     if (keep) {
         pv_has_box = TRUE;
         pv_pic_drawn = TRUE;
