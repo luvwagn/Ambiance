@@ -36,7 +36,7 @@ SPACE_ADV = 3          # word space, lowres pixels
 GAP = 1                # gap after every glyph, lowres pixels
 
 
-def load_glyphs(path):
+def load_glyphs(path, overrides=True):
     raw = json.load(open(path))
     glyphs = {}
     for c in range(LO, HI + 1):
@@ -45,6 +45,8 @@ def load_glyphs(path):
             glyphs[c] = (g["top"], g["rows"])
         else:
             glyphs[c] = None
+    if not overrides:
+        return glyphs       # the hand-drawn ones are for the native size
     for ch, g in OVERRIDES.items():
         glyphs[ord(ch)] = g
     # The uppercase C override also applies to accented forms built on C.
@@ -58,7 +60,36 @@ def load_glyphs(path):
     return glyphs
 
 
-def build_variant(glyphs, hires, scale=1):
+def scale_glyphs(glyphs, num, den):
+    """Every glyph num/den times as large in whole pixels: destination row d
+    takes source row d * den // num, counted from the font's top (so every
+    glyph doubles the same rows); columns as below."""
+    inked = [g for g in glyphs.values() if g]
+    origin = min(min(t for t, r in inked), NOTDEF[0])
+    out = {}
+    for c, g in glyphs.items():
+        if not g:
+            out[c] = g
+            continue
+        top, rows = g
+        w = max(len(r) for r in rows)
+        rows = [r.ljust(w, ".") for r in rows]
+        r0, r1 = top - origin, top - origin + len(rows)        # source rows, from the top
+        d0, d1 = -(-r0 * num // den), -(-r1 * num // den)      # the destination rows they cover
+        # columns: narrow glyphs (1-3 wide: l, i, punctuation) as they are,
+        # wider ones a column more each 4, an inner one doubled, so stems
+        # stay one pixel and both sides alike
+        dw = w * num // den if w > 3 else w
+        new = []
+        for d in range(d0, d1):
+            src = rows[d * den // num - r0]
+            new.append("".join(src[(x * w + dw // 2) // dw] for x in range(dw)))
+        d_base = -(-(-origin) * num // den)     # the first destination row of the baseline's
+        out[c] = (d0 - d_base, new)
+    return out
+
+
+def build_variant(glyphs, hires, scale=1, space=SPACE_ADV):
     """Return dict with TextFont fields and byte arrays. scale enlarges the
     whole font by a whole factor, every pixel a scale x scale block (the
     pixel style on big RTG screens); hires doubles columns only."""
@@ -77,7 +108,7 @@ def build_variant(glyphs, hires, scale=1):
     for c in range(LO, HI + 1):
         g = glyphs[c]
         if c in (32, 160):
-            entries.append(([], 0, SPACE_ADV * xs + (0 if not hires else -1), 0))
+            entries.append(([], 0, space * xs + (0 if not hires else -1), 0))
             continue
         if g is None:
             entries.append(([], 0, 0, 0))
@@ -240,6 +271,7 @@ def render(font, text, scale_x=1):
 
 def main():
     glyph_path, outdir = sys.argv[1], sys.argv[2]
+    laced_path = sys.argv[3] if len(sys.argv) > 3 else None
     glyphs = load_glyphs(glyph_path)
     results = {}
     # amce-pixel at 1x, 2x and 3x: the pixel style at whole factors (RTG
@@ -254,6 +286,18 @@ def main():
         with open(os.path.join(fdir, str(v["ysize"])), "wb") as fh:
             fh.write(data)
         sizes.append(v["ysize"])
+        results[f"{name}/{v['ysize']}"] = (parse_size_file(data), v, len(data))
+    if laced_path:
+        # the laced screens' size (640 x 400/512): the 12's glyphs (hand
+        # fixes and all) at 1.25x, every fourth row and column doubled at
+        # the same places in every glyph, so the strokes stay even.
+        # (Pixelify Sans rasterised at 13.6 px lost C, Z, 2 and 5.)
+        v = build_variant(scale_glyphs(glyphs, 5, 4), False, 1, space=4)
+        data = size_file(name + ".font", v)
+        with open(os.path.join(fdir, str(v["ysize"])), "wb") as fh:
+            fh.write(data)
+        sizes.append(v["ysize"])
+        sizes.sort()
         results[f"{name}/{v['ysize']}"] = (parse_size_file(data), v, len(data))
     with open(os.path.join(outdir, "FONTS", name + ".font"), "wb") as fh:
         fh.write(contents_file(name, sizes))

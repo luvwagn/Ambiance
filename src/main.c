@@ -154,8 +154,10 @@ static void page_picture(struct Page *p)
     struct PicInfo pi;
     struct Thumb *t;
     BOOL tall = gfx_mode_tall(g.mode);
-    if (!gfx_thumbs(&g))
+    if (!gfx_thumbs(&g)) {
+        amce_log("page picture", "this screen shows no pictures");
         return;
+    }
     if (!(t = ilbm_thumb(p->pic, w, h, tall, TRUE, gfx_thumb_colours(&g), &pi))) {
         BOOL remapped = FALSE;
         APTR o = pic_decode(p->pic, NULL, FALSE, &remapped, &pi);
@@ -166,11 +168,18 @@ static void page_picture(struct Page *p)
             pic_dispose(o);
         }
     }
-    if (!t)
+    if (!t) {
+        amce_log("page picture: could not be read", p->pic);
         return;
+    }
     if ((p->pic_bm = gfx_thumb_bitmap(&g, t))) {
+        char m[200];
         p->pic_w = t->w;
         p->pic_h = t->h;
+        sprintf(m, "%s, %ld x %ld", p->pic, (long)t->w, (long)t->h);
+        amce_log("page picture", m);
+    } else {
+        amce_log("page picture: no memory for its bitmap", p->pic);
     }
     thumb_free(t);
 }
@@ -1491,9 +1500,9 @@ static void build_settings(struct Page *p)
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
-    if ((it = action_item(p, "Double buffering", g.planar ? "RTG only" : "", ACT_DBUF,
-                          gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF)) && g.planar)
-        it->flags |= ITEM_DISABLED;     /* native screens draw straight on */
+    if (!g.planar)                      /* native screens draw straight on: not offered */
+        action_item(p, "Double buffering", "", ACT_DBUF,
+                    gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -3699,6 +3708,7 @@ static struct {
     ULONG rep_next;
     BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
     WORD sl_x0, sl_x1;
+    int s_meters;               /* level meters drawn (4, 2, 1) */
     ULONG s_rseq;               /* a station: its title and state drawn */
     int s_rstate;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
@@ -4044,14 +4054,29 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
 
 static void np_draw_meters(BOOL full, const struct MpStatus *st)
 {
-    int i;
+    int i, n = mp_meter_count();
     WORD bx = np.x0 + np.name_w + U(4), bw = np.x0 + np.w - bx, bh = np.meter_h - U(4);
     if (bh < 2)
         bh = 2;
-    for (i = 0; i < 4; i++) {
+    if (n != np.s_meters) {
+        /* fewer meters than last time (stereo, mono): the rest cleared */
+        gfx_fill(&g, np.x0, np.meter_y, np.x0 + np.w - 1, np.meter_y + 4 * (np.meter_h + U(2)) - 1,
+                 PEN_BG);
+        np.s_meters = n;
+        full = TRUE;
+    }
+    for (i = 0; i < n; i++) {
         WORD y = np.meter_y + i * (np.meter_h + U(2)), by = y + (np.meter_h - bh) / 2;
         WORD lit = (WORD)((LONG)bw * st->level[i] / 64);
-        if (full || st->sample[i] != np.s_sample[i]) {
+        if (n < 4) {
+            /* a channel of the sound, not of Paula: Left, Right (or none for mono) */
+            if (full) {
+                gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
+                if (n == 2)
+                    gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2, i ? "Right" : "Left",
+                             PEN_DIM, PEN_BG, np.name_w, TS_SMALL);
+            }
+        } else if (full || st->sample[i] != np.s_sample[i]) {
             char name[40];
             BOOL used;
             const char *sn = st->sample[i] ? mp_sample_name(st->sample[i] - 1, &used) : "";

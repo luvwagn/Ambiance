@@ -377,6 +377,7 @@ BOOL mp_seek_ms(ULONG ms);
 BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
                     LONG errmax);
 BOOL mp_is_stream(void);
+int mp_meter_count(void);           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
 const char *mp_stream_name(void);
 
 /* stream.c: internet radio, MP3 over HTTP decoded by mpega.library */
@@ -393,6 +394,7 @@ void st_stop(void);
 void st_pause(BOOL on);
 void st_volume(int v);
 int st_state(void);
+int st_channels(void);
 const char *st_error(void);
 const char *st_title(void);         /* what plays now (ICY StreamTitle) */
 ULONG st_title_seq(void);

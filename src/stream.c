@@ -719,7 +719,7 @@ static void radio_main(void)
     {
         /* what the CPU can decode in time, and never more than Paula plays */
         WORD q = st.cpu >= 40 ? 1 : 0, mono = st.cpu < 40, div = 1;
-        LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 22050 : 11025;
+        LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = first_frame_freq();
         MPEGA_LAYER *ls[2];
         int k;
@@ -866,6 +866,9 @@ void st_volume(int v)
         CU->aud[1].ac_vol = st.master;
     }
 }
+
+/* Channels decoded (1 mono, 2 stereo), 0 not known yet. */
+int st_channels(void) { return st.dec_channels; }
 
 int st_state(void) { return st.proc || st.state == ST_FAILED ? st.state : ST_ENDED; }
 const char *st_error(void) { return st.err; }

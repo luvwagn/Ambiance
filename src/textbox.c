@@ -107,6 +107,8 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     tb->bm = AllocBitMap(w, rows, tb->pic ? g->depth : TB_PLANES, BMF_CLEAR, NULL);
     if (!tb->bm) {
         tb->mask = TB_PLANE_MASK;
+        if (tb->pic)
+            amce_log("text box", "no chip memory for it with its picture: drawn directly");
         return FALSE;   /* low on chip RAM: drawn directly instead */
     }
     if (tb->pic && tb->pic_y + tb->pic_h <= rows) {

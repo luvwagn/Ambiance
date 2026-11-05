@@ -1301,6 +1301,17 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
 }
 
 BOOL mp_is_stream(void) { return mp.engine == ENG_RADIO; }
+
+/* The level meters Now playing shows: a module on Paula's four channels
+ * has one each; what is mixed or decoded, one for each of its channels. */
+int mp_meter_count(void)
+{
+    if (mp.engine == ENG_MIX)
+        return 2;
+    if (mp.engine == ENG_RADIO)
+        return st_channels() == 1 ? 1 : 2;
+    return 4;
+}
 const char *mp_stream_name(void) { return mp.rname; }
 
 /* To a time in the song (modules mixed): FALSE if this module cannot. */

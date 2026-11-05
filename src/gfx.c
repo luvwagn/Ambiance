@@ -79,6 +79,16 @@ static void fit_menu(struct Gfx *g)
         set_menu_w(g, GU(g, 23) + longest + GU(g, 6));
 }
 
+static BOOL laced(const struct Gfx *g);
+
+/* The pixel style's scale (amce.h): RTG a whole factor; the laced screens
+ * (640 x 400/512) a quarter more than 1x, with their own font (15), as
+ * the 12 at 1x was small there. */
+static UWORD pixel_k(const struct Gfx *g)
+{
+    return laced(g) ? 320 : (UWORD)g->kint << 8;
+}
+
 static void open_font(struct Gfx *g)
 {
     struct TextAttr ta;
@@ -89,11 +99,15 @@ static void open_font(struct Gfx *g)
     g->font_is_ours = FALSE;
     if (DiskfontBase) {
         ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
-        ta.ta_YSize = 12 * g->kint;         /* 12, 24 or 36: whole-pixel sizes */
+        ta.ta_YSize = laced(g) ? 15 : 12 * g->kint;  /* 12, 24 or 36: whole-pixel sizes */
         ta.ta_Style = FS_NORMAL;
-        ta.ta_Flags = 0;
+        ta.ta_Flags = FPF_DESIGNED;         /* never a size blown up by diskfont */
         me->pr_WindowPtr = (APTR)-1;
         g->font = OpenDiskFont(&ta);
+        if (!g->font && laced(g)) {
+            ta.ta_YSize = 12;               /* an older Fonts drawer: no 15 */
+            g->font = OpenDiskFont(&ta);
+        }
         me->pr_WindowPtr = oldwin;
         g->font_is_ours = g->font != NULL;
     }
@@ -113,6 +127,7 @@ static void open_font(struct Gfx *g)
 
 /* ------------------------------------------------------------ modes */
 enum { K_LORES, K_HIRES, K_LACED, K_RTG };
+#define laced_kind(sm) (modes[sm].kind == K_LACED)
 
 static const struct {
     const char *key, *label;
@@ -130,6 +145,11 @@ static const struct {
     { "rtg-800",    "800 x 600  RTG",            800, 600, K_RTG,   0 },
     { "rtg-1024",   "1024 x 768  RTG",           1024, 768, K_RTG,  0 },
 };
+
+static BOOL laced(const struct Gfx *g)
+{
+    return g->mode >= 0 && g->mode < SM_COUNT && laced_kind(g->mode);
+}
 
 const char *gfx_mode_key(int sm) { return modes[sm].key; }
 BOOL gfx_mode_is_rtg(int sm) { return modes[sm].kind == K_RTG; }
@@ -254,7 +274,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         if (g->kint > 3)
             g->kint = 3;
     }
-    g->k = (UWORD)g->kint << 8;
+    g->k = pixel_k(g);
     if (style == STYLE_SMOOTH && modes[smode].kind == K_RTG && g->depth >= 8 &&
         (g->sm = sm_load(g->h))) {
         g->style = STYLE_SMOOTH;
@@ -615,7 +635,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
         CloseFont(g->font);
         g->font = NULL;
     }
-    g->k = (UWORD)g->kint << 8;
+    g->k = pixel_k(g);
     g->style = STYLE_PIXEL;
     if (style == STYLE_SMOOTH && modes[g->mode].kind == K_RTG && g->depth >= 8) {
         if ((g->sm = sm_load(g->h))) {

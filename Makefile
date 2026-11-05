@@ -39,7 +39,7 @@ LHA_OPTS  ?=
 DISK       = amigamce-$(FULL_VERSION).adf
 DISK_TITLE = AmigaMCE
 
-FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
+FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/15 \
              assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36
 # Smooth style, one file per RTG screen height (tools/mksmooth.py)
 SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
@@ -133,7 +133,7 @@ art:
 fonts:
 	@mkdir -p build/fontgen
 	$(PYTHON) tools/extract.py assets/fonts-src/PixelifySans-Regular.ttf build/fontgen/glyphs.json
-	$(PYTHON) tools/amigafont.py build/fontgen/glyphs.json build/fontgen
+	$(PYTHON) tools/amigafont.py build/fontgen/glyphs.json build/fontgen laced
 	cp -R build/fontgen/FONTS/. assets/Fonts/
 
 smooth:
@@ -159,7 +159,7 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
 	@cp assets/Fonts/amce-pixel.font $(LHA_DIR)/Fonts/
-	@cp assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36 \
+	@cp assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/15 assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36 \
 		$(LHA_DIR)/Fonts/amce-pixel/
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/

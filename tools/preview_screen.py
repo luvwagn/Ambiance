@@ -98,15 +98,19 @@ def main():
     if video == "ntsc" and mode != "rtg":
         H = {256: 200, 512: 400}[H]
     fname = "amce-pixel-hi" if hiart else "amce-pixel"
-    font = parse_size_file(open(os.path.join(fonts, fname, "12"), "rb").read())
+    # laced screens: 1.25x the layout and their own font (src/gfx.c pixel_k)
+    k = 1.25 if mode == "laced" and os.environ.get("OLD_LACED") is None else 1.0
+    def GU(v):
+        return (int(v * k * 256) + 128) >> 8
+    font = parse_size_file(open(os.path.join(fonts, fname, "15" if k > 1 else "12"), "rb").read())
     s = Screen(W, H, pal, font)
     # menu column fits the longest label (src/gfx.c fit_menu)
     labels = ["Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"]
-    menu_w = 23 * sx + max(s.textlen(n) for n in labels) + 6 * sx
-    top, row_h, list_top, list_row_h, footer_y = 26, 18, 44, 14, H - 12
+    menu_w = GU(23) * sx + max(s.textlen(n) for n in labels) + GU(6) * sx
+    top, row_h, list_top, list_row_h, footer_y = GU(26), GU(18), GU(44), GU(14), H - GU(12)
     pane_x = menu_w + 6 * sx
     pane_w = W - pane_x - 4 * sx
-    fh = 12
+    fh = font["ysize"]
     BG, BAR, RULE, TEXT, DIM, WHITE, HL, SELDIM, ACCENT, KEYCAP = range(10)  # noqa: F841
 
     s.fill(0, 0, W - 1, H - 1, BG)
