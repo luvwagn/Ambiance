@@ -1586,13 +1586,18 @@ static void load_radio_settings(void)
                 buf_sel = i;
     st_set_buffer(buf_sel);
     rsrv[0] = 0;
+    /* the bitrate is set as each list is asked for (radio_list_kbps): its
+     * Automatic times this Amiga (plex_tier), which needs the timer, not
+     * open yet here */
     if (GetVar((CONST_STRPTR)RSRV_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         amce_strlcpy(rsrv, buf, sizeof(rsrv));
     rsrv_apply();
-    radio_set_max_kbps(rkbps_now());
     radio_set_home(home_country());
-    rkbps_text(rkbps_now(), buf);
-    sprintf(m, "stations up to %.8s, buffer %s, list server %.60s, country %s", buf,
+    if (rkbps_sel)
+        rkbps_text(rkbps_choice[rkbps_sel], buf);
+    else
+        strcpy(buf, "automatic");
+    sprintf(m, "stations up to %.9s, buffer %s, list server %.60s, country %s", buf,
             buf_names[buf_sel], rsrv[0] ? rsrv : "automatic",
             home_country()[0] ? home_country() : "not known");
     amce_log("radio", m);
@@ -7495,6 +7500,7 @@ static void radio_open(struct Item *it)
             sprintf(msg, "Asking %.40s...  Esc to give up", plex.name[0] ? plex.name : plex.host);
         }
     } else {
+        radio_set_max_kbps(rkbps_now());
         radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
         amce_strlcpy(msg, "Asking radio-browser.info...  Esc to give up", sizeof(msg));
     }

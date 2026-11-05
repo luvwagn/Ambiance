@@ -194,6 +194,8 @@ void plex_set_convert(BOOL on)
 int plex_tier(void)
 {
     static int tier = -1;
+    if (tier < 0 && !time_ms())
+        return plex.cpu >= 40 ? 1 : 0;      /* no timer yet: by the CPU, not kept */
     if (tier < 0) {
         static volatile ULONG sink __attribute__((unused));
         ULONG t0 = time_ms(), n = 0, x = 1, i, speed;
