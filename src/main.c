@@ -2754,6 +2754,27 @@ static void pv_flush(void)
     pv_tj = pv_sj = NULL;
 }
 
+/* The pane's jobs let go without waiting for them, for the viewer: one
+ * still out is orphaned (one not begun never runs, one begun is freed
+ * when it ends), where it holds nothing of the screen's (a colour-table
+ * screen: decoded unremapped, no pens). Waiting, as pv_flush does, could
+ * take minutes: every preview queued ran first, each a JPEG of seconds,
+ * and a station playing takes half the CPU. */
+static void pv_let_go(void)
+{
+    int i;
+    for (i = 0; i < PV_SLOTS; i++) {
+        struct LJob *j = pv_slot[i];
+        if (j && j->busy && !g.truecolor) {
+            ldr_orphan(j);
+            pv_slot[i] = NULL;
+        } else {
+            pv_free_slot(i);
+        }
+    }
+    pv_tj = pv_sj = NULL;
+}
+
 static BOOL pv_current(const struct LJob *j)
 {
     return j == pv_tj || j == pv_sj;
@@ -5497,6 +5518,11 @@ static void vw_drop(void)
 {
     if (!vw_job)
         return;
+    if (vw_job->busy && !vw_job->scr) {
+        ldr_orphan(vw_job);                 /* holds no pens: freed when it ends */
+        vw_job = NULL;
+        return;
+    }
     if (vw_job->busy)
         ldr_wait(vw_job);
     pic_dispose(vw_job->obj);
@@ -5540,8 +5566,10 @@ static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct P
     APTR o = NULL;
     *t = NULL;
     if (vw_job && strcmp(vw_job->path, path) == 0) {
-        if (vw_job->busy)
+        if (vw_job->busy) {
+            ldr_submit_first(vw_job);       /* wanted now: hurried, or to the front */
             ldr_wait(vw_job);               /* nearly there: sooner than starting over */
+        }
         if (vw_job->ran) {
             char m[300];
             o = vw_job->obj;
@@ -5581,7 +5609,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     tb_close(&pv_tb);
     pv_shown = FALSE;
     pv_pending = FALSE;
-    pv_flush();                     /* the viewer takes the screen's colours over */
+    pv_let_go();                    /* the viewer takes the screen's colours over */
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     if (!view_begin(&g)) {
         gfx_dbuf_start(&g);
