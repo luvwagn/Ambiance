@@ -98,10 +98,10 @@ Features in this release
   through. The server makes each track for this Amiga: 22 kHz mono MP3
   for a 68020/030, 24 kHz stereo for a 68040/060, MP3 files as stored
   for a fast one; any format it has. Settings > Plex turns it on or off,
-  chooses the server, and whether the sound is made for this Amiga. Music > Find a Plex server finds servers on the network
-  (Plex's GDM); a server that asks for a sign-in token takes it from
-  ENVARC:AmigaMCE/PlexToken (Music > About Plex says how). Plain HTTP on
-  the home network: no AmiSSL needed.
+  chooses the server (those found on the network, by Plex's GDM), and
+  whether the sound is made for this Amiga. A server that asks for a
+  sign-in token takes it from ENVARC:AmigaMCE/PlexToken (About > Plex in
+  AmigaMCE says how). Plain HTTP on the home network: no AmiSSL needed.
 - Keyboard, mouse (including wheel) and joystick/CD32 pad control.
 
 Videos is listed but arrives in a later version. About holds the credits and a System information

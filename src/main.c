@@ -1602,6 +1602,8 @@ static void build_about_menu(struct Page *p)
 {
     action_item(p, "Credits", "AmigaMCE " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
     action_item(p, "System information", "", ACT_SYSINFO, MARK_ARROW);
+    if (caps.net)
+        action_item(p, "Plex in AmigaMCE", "", ACT_PLEXHELP, MARK_ARROW);
 }
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
@@ -6494,12 +6496,10 @@ static void build_music_root(struct Page *p)
         sprintf(label, "Plex: %s", plex.name[0] ? plex.name : plex.host);
         if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
+    } else {
+        /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
+        list_add(&p->list, "No Plex server chosen: Settings > Plex server", "", "", IT_TEXT);
     }
-    if ((it = list_add(&p->list, plex.host[0] ? "Plex servers on this network" :
-                                                "Find a Plex server on this network",
-                       "#gdm", "", IT_PLEXDIR)))
-        it->mark = MARK_ARROW;
-    action_item(p, "About Plex in AmigaMCE", "", ACT_PLEXHELP, MARK_ARROW);
 }
 
 static void build_radio_root(struct Page *p)
@@ -6570,6 +6570,27 @@ static void radio_done(struct NetJob *j)
         if (j->body)
             n = servers ? plex_fill_servers(j->body, j->len, &p->list)
                         : plex_fill(p->base, j->body, j->len, &p->list, &total);
+        if (n == 1 && !strcmp(p->base, "/library/sections") && p->list.items[0].path[0] == '@') {
+            /* one music library: its menu (Artists, Albums...) on this page,
+             * not a "Music" folder inside Music */
+            char sec[32];
+            radio_field(&p->list.items[0], 0, sec, sizeof(sec));
+            list_free(&p->list);
+            list_init(&p->list);
+            plex_section_menu(sec + 1, &p->list);
+            amce_strlcpy(p->base, "@", sizeof(p->base));
+            sprintf(m, "%s: one music library, %s", p->title, sec + 1);
+            amce_log("plex", m);
+            if (p == cur() && !pane_pending) {
+                msg[0] = 0;
+                draw_pane(TRUE);
+                draw_footer();
+            }
+            if (j->body)
+                FreeVec(j->body);
+            FreeVec(j);
+            return;
+        }
         if (n == 1 && !servers && p->list.items[0].kind == IT_PLEXDIR && strstr(p->base, "/children")) {
             /* an artist with one album and nothing loose: the album itself */
             char type[16];
@@ -6592,7 +6613,7 @@ static void radio_done(struct NetJob *j)
         }
         if (!j->body || n <= 0) {
             const char *why = !j->body && strstr(j->err, " 401")
-                              ? "The server wants a sign-in token: see Music > About Plex"
+                              ? "The server wants a sign-in token: see About > Plex in AmigaMCE"
                               : !j->body ? j->err
                               : n < 0 ? "The server answered with something unexpected"
                               : !strcmp(p->base, "/library/sections") ? "No music libraries there"
@@ -6700,7 +6721,7 @@ static void radio_open(struct Item *it)
         return;
     }
     if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
-        set_msg("No Plex server chosen: Music > Find a Plex server");
+        set_msg("No Plex server chosen: Settings > Plex server");
         return;
     }
     if (rq) {                               /* one out at a time: the last given up */
@@ -7052,10 +7073,10 @@ static void plex_choose(struct Item *it)
     radio_open(&tmp);
 }
 
-/* Music > About Plex: what it plays, and how to connect. */
+/* About > Plex in AmigaMCE: what it plays, and how to connect. */
 static void plex_help(void)
 {
-    struct Page *p = page_push(PT_TEXT, "About Plex");
+    struct Page *p = page_push(PT_TEXT, "Plex in AmigaMCE");
     char line[200];
     if (!p)
         return;
@@ -7067,7 +7088,7 @@ static void plex_help(void)
                  "this Amiga off plays MP3 files as stored (other formats are converted "
                  "either way); Settings > Plex turns it all off.");
     text_line(p, "");
-    text_para(p, "Finding a server: Music > Find a Plex server asks the network (Plex's GDM); "
+    text_para(p, "Finding a server: Settings > Plex server asks the network (Plex's GDM); "
                  "choose one and it is kept. Or set its address from the Shell: "
                  "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400");
     text_line(p, "");
