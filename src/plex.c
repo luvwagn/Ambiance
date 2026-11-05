@@ -18,8 +18,9 @@
  * "#gdm" the servers found), IT_PLEXTRACK rows are tracks, IT_PLEXSRV rows
  * servers found. A track's path: its file's key, then, after tabs, its
  * codec, length in ms, artist, album, its own key, and the file's bitrate,
- * channels and sample rate (radio_field picks one out; the rate is only
- * in a track's own answer, plex_stream_rate, not in an album's).
+ * channels and sample rate, the cover's key, the file's size, and its
+ * album's and artist's rating keys (radio_field picks one out; the rate is
+ * only in a track's own answer, plex_stream_rate, not in an album's).
  *
  * A track plays as stored (an MP3 file) or converted by the server
  * (Plex's universal transcoder, progressive MP3 over plain HTTP), made for
@@ -360,7 +361,7 @@ struct fill {
     BOOL track;
     int track_depth;
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
-    char t_thumb[160];
+    char t_thumb[160], t_album_rk[16], t_artist_rk[16];
     ULONG t_ms, t_kbps, t_ch, t_rate, t_size;
     BOOL full;
 };
@@ -376,10 +377,10 @@ static void flush_track(struct fill *x)
         x->skipped++;
         return;
     }
-    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu\t%s\t%lu", x->t_part, x->t_codec,
-            (unsigned long)x->t_ms, x->t_by, x->t_album, x->t_key, (unsigned long)x->t_kbps,
-            (unsigned long)x->t_ch, (unsigned long)x->t_rate, x->t_thumb,
-            (unsigned long)x->t_size);
+    sprintf(path, "%s\t%s\t%lu\t%s\t%s\t%s\t%lu\t%lu\t%lu\t%s\t%lu\t%s\t%s", x->t_part,
+            x->t_codec, (unsigned long)x->t_ms, x->t_by, x->t_album, x->t_key,
+            (unsigned long)x->t_kbps, (unsigned long)x->t_ch, (unsigned long)x->t_rate,
+            x->t_thumb, (unsigned long)x->t_size, x->t_album_rk, x->t_artist_rk);
     dur_text(x->t_ms, tag);
     if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
                         IT_PLEXTRACK))) {
@@ -442,6 +443,9 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         if (!v || !v[0])
             v = xml_attr(a, n, "thumb");
         amce_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
+        /* its album and artist, so their rows can show it playing */
+        text(xml_attr(a, n, "parentRatingKey"), x->t_album_rk, sizeof(x->t_album_rk));
+        text(xml_attr(a, n, "grandparentRatingKey"), x->t_artist_rk, sizeof(x->t_artist_rk));
         x->t_ms = num(xml_attr(a, n, "duration"));
         x->t_kbps = x->t_ch = x->t_rate = x->t_size = 0;
         return 1;

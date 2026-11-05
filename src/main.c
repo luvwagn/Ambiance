@@ -1665,6 +1665,7 @@ static void np_mark_lists(BOOL redraw);
 static void build_radio_root(struct Page *p);
 static void build_music_root(struct Page *p);
 static char plex_now[300];      /* the Plex track playing: its file's key (lists mark it so) */
+static char plex_now_in[2][48]; /* ...its album's and artist's keys (their rows marked too) */
 /* ...and its file as stored, for Now playing: the rate asked of the server
  * when an album's answer did not have it (plex_dj) */
 static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
@@ -4105,6 +4106,7 @@ static struct TextBox *cur_tb(void)
 static void draw_pane(BOOL full)
 {
     struct Page *p = cur();
+    BOOL took = FALSE;                      /* a cover moved into the pane: its text now too */
     if (!p)
         return;
     if (full) {
@@ -4128,7 +4130,7 @@ static void draw_pane(BOOL full)
             gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
             gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
             if (g.pic_w && p->type == PT_LIST && p->plex && has_aside(p) && !plex_keeps(p, p->sel))
-                plex_take(p);   /* back from Now playing: its cover into the pane, now */
+                took = plex_take(p);    /* back from Now playing: its cover into the pane, now */
             if (g.pic_w && p->type == PT_LIST && has_aside(p) && g.pic_x >= aside_x() &&
                 g.pic_y >= U(42)) {
                 /* a picture in the preview's place: left there, for the
@@ -4155,6 +4157,8 @@ static void draw_pane(BOOL full)
     switch (p->type) {
     case PT_LIST:
         draw_list_rows(p);          /* (a Radio list still asking: its spinner) */
+        if (took)
+            preview_draw(p);        /* its details with it, not when the pane settles */
         break;
     case PT_TEXT:
         if (!p->tb.open)
@@ -4955,6 +4959,14 @@ static void np_mark_lists(BOOL redraw)
                 radio_field(it, 0, key, sizeof(key));
                 it->mark = now[0] && mp_is_track() && !strcmp(key, plex_now) ? MARK_PLAYING
                                                                              : MARK_NONE;
+            } else if (it->kind == IT_PLEXDIR && p->plex) {
+                /* the album (or artist) the playing track is of */
+                char key[300];
+                radio_field(it, 0, key, sizeof(key));
+                it->mark = now[0] && mp_is_track() && key[0] &&
+                           ((plex_now_in[0][0] && !strcmp(key, plex_now_in[0])) ||
+                            (plex_now_in[1][0] && !strcmp(key, plex_now_in[1])))
+                           ? MARK_PLAYING : MARK_NONE;
             }
         }
     }
@@ -4991,6 +5003,17 @@ static BOOL np_start(LONG idx)
         }
         plex_track_url(it, caps.cpu, 0, url, sizeof(url));
         radio_field(it, 0, plex_now, sizeof(plex_now));
+        {
+            char rk[16];
+            int k;
+            for (k = 0; k < 2; k++) {
+                radio_field(it, 11 + k, rk, sizeof(rk));
+                if (rk[0])
+                    sprintf(plex_now_in[k], "/library/metadata/%s/children", rk);
+                else
+                    plex_now_in[k][0] = 0;
+            }
+        }
         {
             char f[16], key[160];
             radio_field(it, 1, plex_orig.codec, sizeof(plex_orig.codec));
@@ -6836,6 +6859,7 @@ static void radio_done(struct NetJob *j)
                          IT_TEXT);
         }
         amce_log("plex", m);
+        np_mark_lists(FALSE);               /* what plays, marked in the new list too */
         if (p == cur() && !pane_pending) {
             msg[0] = 0;
             draw_pane(TRUE);
