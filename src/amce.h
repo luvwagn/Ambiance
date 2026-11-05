@@ -27,7 +27,7 @@ struct Caps {
     UWORD cpu;          /* 0, 10, 20, 30, 40, 60 */
     UWORD kick, kick_rev; /* ROM: exec version, SysBase->SoftVer */
     UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
-    BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega;
+    BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl;
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     ULONG chipfree, fastfree;
 };
@@ -246,7 +246,7 @@ struct BitMapHeader;
 void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* o: a datatype */
 
 /* ---------------------------------------------------------------- ags */
-enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD };
+enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION };
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
@@ -571,6 +571,40 @@ LONG dir_scan(const char *dir, DirFn fn, void *ctx);
 
 /* ---------------------------------------------------------------- util */
 int  amce_stricmp(const char *a, const char *b);
+int  amce_strnicmp(const char *a, const char *b, LONG n);
+
+/* ---------------------------------------------------------------- network
+ * net.c: a process of its own does HTTP requests (bsdsocket.library);
+ * the UI sends a job and collects it when its signal comes. */
+struct NetJob {
+    struct Message msg;
+    volatile UBYTE cancel;      /* given up: it stops at its next wait */
+    UBYTE busy, done, quit, orphan;
+    UWORD port;                 /* 0: 80 */
+    char host[80];              /* "" the radio-browser.info API (found by DNS) */
+    char path[400];
+    ULONG seq;                  /* the UI's, to know whose answer it is */
+    /* results */
+    LONG status;                /* HTTP status (200), 0 none */
+    char err[96];               /* why not, "" if fine */
+    UBYTE *body;                /* AllocVec'd, 0-terminated, len bytes; NULL on error */
+    ULONG len, ms;
+    char server[64];            /* the server that answered */
+};
+BOOL net_start(void);
+void net_stop(void);            /* waits for jobs out (cancel them first) */
+void net_submit(struct NetJob *j);
+struct NetJob *net_collect(void);
+void net_cancel(struct NetJob *j);
+ULONG net_sigmask(void);
+
+/* radio.c: radio-browser.info's lists into pages */
+#define RADIO_TAGS      "#tags"
+#define RADIO_COUNTRIES "#countries"
+void radio_request(const char *query, BOOL https, char *out, LONG max);
+LONG radio_fill(const char *query, UBYTE *body, ULONG len, struct ItemList *l, BOOL https,
+                LONG *skipped);
+char *radio_field(const struct Item *it, int i, char *out, LONG max);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);
 

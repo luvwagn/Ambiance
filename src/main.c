@@ -53,6 +53,8 @@ struct Page {
     UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
     UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
+    UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
+    ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
     char pic[160];              /* PT_TEXT: a picture at the end of the text ("" none), */
@@ -112,7 +114,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS,
        ACT_MODE0 = 16 /* + SM_* */ };
 
 /* ------------------------------------------------------------ pages */
@@ -173,8 +175,13 @@ static void page_picture(struct Page *p)
     thumb_free(t);
 }
 
+static void radio_page_gone(struct Page *p);
+static void radio_stop(void);
+
 static void page_pop(void)
 {
+    if (depth)
+        radio_page_gone(&pages[depth - 1]);     /* its request, if out, given up */
     ov.on = FALSE;
     tb_close(&pv_tb);
     pv_shown = FALSE;
@@ -1345,6 +1352,11 @@ static void save_screen_mode(void)
 #define STYLE_VAR "AmigaMCE/Style"
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
+#define HTTPS_VAR "AmigaMCE/RadioHTTPS"
+
+/* Settings > Allow HTTPS streams: Radio lists https: stations too (off by
+ * default; only with AmiSSL installed, which plays them). */
+static BOOL radio_https;
 
 /* Settings > Jump scrolling: held Up/Down in a very long list goes a
  * letter at a time once past cruising speed (off: it glides on). */
@@ -1399,6 +1411,13 @@ static void load_dbuf(void)
     }
 }
 
+static void load_https(void)
+{
+    char buf[8];
+    radio_https = GetVar((CONST_STRPTR)HTTPS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+                  buf[0] == '1';
+}
+
 static void load_debug(void)
 {
     char buf[8];
@@ -1433,6 +1452,10 @@ static void build_settings(struct Page *p)
     }
     action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
+                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
+        !caps.amissl)
+        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
     if ((it = action_item(p, "Double buffering", g.planar ? "RTG only" : "", ACT_DBUF,
                           gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF)) && g.planar)
         it->flags |= ITEM_DISABLED;     /* native screens draw straight on */
@@ -1526,6 +1549,7 @@ static void build_credits(struct Page *p)
 
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
+static void build_radio_root(struct Page *p);
 
 static void build_root_pages(int mod)
 {
@@ -1576,8 +1600,8 @@ static void build_root_pages(int mod)
         }
         break;
     case MOD_RADIO:
-        if ((p = page_push(PT_TEXT, "Radio")))
-            text_para(p, "Radio arrives in a later version.");
+        if ((p = page_push(PT_LIST, "Radio")))
+            build_radio_root(p);
         break;
     case MOD_SETTINGS:
         if ((p = page_push(PT_LIST, "Settings")))
@@ -2092,6 +2116,8 @@ static const char *hint_text(void)
                       : "Fire show  Right open";
         return hi ? "Up/Down  move    Fire/Right  open    Left/Esc  back" : "Fire open  Esc back";
     }
+    if (p && p->type == PT_LIST && p->radio)
+        return hi ? "Up/Down  move    Right/Fire  open    Left/Esc  back" : "Fire open  Esc back";
     if (p && p->type == PT_LIST && has_aside(p))
         return hi ? "Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back"
                   : "Fire play  Esc back";
@@ -3209,7 +3235,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
-        const char *tag = it->kind == IT_ACTION ? it->path : p->pics ? it->sortkey : "";
+        const char *tag = it->kind == IT_ACTION ? it->path : (p->pics || p->radio) ? it->sortkey : "";
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
             gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
@@ -4871,6 +4897,7 @@ static void launch(const char *base)
     /* Give the game every byte we can. */
     amce_log("launch", base);
     nav_store(FALSE);               /* should it not come back */
+    radio_stop();                   /* no network process under a game */
     if (debug_on)
         dbg_cpu_stop();
     release_for_launch();
@@ -5377,6 +5404,23 @@ static void toggle_jump(void)
     }
 }
 
+static void toggle_https(void)
+{
+    struct Page *p = cur();
+    LONG sel = p ? p->sel : 0;
+    if (!caps.amissl)
+        return;
+    radio_https = !radio_https;
+    save_setting(HTTPS_VAR, radio_https ? "1" : "0");
+    if (p && p->type == PT_LIST) {
+        list_free(&p->list);
+        list_init(&p->list);
+        build_settings(p);
+        p->sel = sel;
+        draw_list_rows(p);
+    }
+}
+
 static void toggle_dbuf(void)
 {
     struct Page *p = cur();
@@ -5469,6 +5513,199 @@ static void apply_style(int st)
         set_msg("The smooth style's files could not be loaded");
 }
 
+/* ------------------------------------------------------------ radio
+ * Radio: lists of stations from radio-browser.info (radio.c, asked by the
+ * network process, net.c). The root lists ways in: the stations most
+ * voted for, most listened to, trending, two scene favourites, and by
+ * genre or country (lists themselves). Opening one pushes its page at
+ * once, empty, and asks; the answer fills it when it comes, while the UI
+ * goes on (Back gives the request up). One request is out at a time: a
+ * new one gives the last up. A station opens a page about it.
+ *
+ * Only stations an Amiga can play are listed: MP3, working, no HLS, and
+ * https: ones only when Settings allows HTTPS (with AmiSSL). */
+static struct NetJob *rq;           /* the request out, or NULL */
+static ULONG rq_seq;
+
+static void build_radio_root(struct Page *p)
+{
+    static const struct { const char *label, *query; } ways[] = {
+        { "Top voted", "order=votes&reverse=true" },
+        { "Most listened to", "order=clickcount&reverse=true" },
+        { "Trending", "order=clicktrend&reverse=true" },
+        { "Chiptune", "tag=chiptune&tagExact=true&order=votes&reverse=true" },
+        { "Demoscene", "tag=demoscene&tagExact=true&order=votes&reverse=true" },
+        { "Genres", RADIO_TAGS },
+        { "Countries", RADIO_COUNTRIES },
+    };
+    int i;
+    p->radio = 1;
+    for (i = 0; i < (int)(sizeof(ways) / sizeof(ways[0])); i++) {
+        struct Item *it = list_add(&p->list, ways[i].label, ways[i].query, "", IT_NET);
+        if (it)
+            it->mark = MARK_ARROW;
+    }
+}
+
+/* The answer to j into the page that asked, if it is still open. */
+static void radio_done(struct NetJob *j)
+{
+    struct Page *p = NULL;
+    int d;
+    if (j == rq)
+        rq = NULL;
+    for (d = 0; d < depth && !j->orphan; d++)
+        if (pages[d].radio && pages[d].net_seq == j->seq)
+            p = &pages[d];
+    if (p) {
+        LONG n = 0, skipped = 0;
+        char m[160];
+        p->net_seq = 0;
+        if (j->body)
+            n = radio_fill(p->base, j->body, j->len, &p->list, radio_https, &skipped);
+        if (!j->body || n <= 0) {
+            const char *why = !j->body ? j->err
+                              : n < 0 ? "radio-browser.info answered with something unexpected"
+                              : p->base[0] == '#' ? "Nothing listed"
+                                                  : "No stations here that AmigaMCE can play";
+            list_add(&p->list, why[0] ? why : "Could not reach radio-browser.info", "", "",
+                     IT_TEXT);
+            sprintf(m, "%s: %s", p->title, why);
+            amce_log("radio", m);
+        } else {
+            sprintf(m, "%s: %ld listed, %ld left out, from %s in %ld ms", p->title, (long)n,
+                    (long)skipped, j->server, (long)j->ms);
+            amce_log("radio", m);
+        }
+        if (p == cur() && !pane_pending) {
+            msg[0] = 0;
+            draw_pane(TRUE);
+            draw_footer();
+        }
+    }
+    if (j->body)
+        FreeVec(j->body);
+    FreeVec(j);
+}
+
+static void radio_collect(void)
+{
+    struct NetJob *j;
+    while ((j = net_collect()))
+        radio_done(j);
+}
+
+/* A page closing: its request, if still out, is given up. */
+static void radio_page_gone(struct Page *p)
+{
+    if (p->radio && p->net_seq && rq && rq->seq == p->net_seq) {
+        net_cancel(rq);
+        rq->orphan = TRUE;                  /* freed when it comes back */
+        rq = NULL;
+        msg[0] = 0;
+    }
+    p->net_seq = 0;
+}
+
+/* Every request given up and the network process stopped (quitting, or a
+ * game starting). */
+static void radio_stop(void)
+{
+    int d;
+    if (rq) {
+        net_cancel(rq);
+        rq->orphan = TRUE;
+        rq = NULL;
+    }
+    for (d = 0; d < depth; d++)
+        pages[d].net_seq = 0;
+    net_stop();
+}
+
+static void radio_open(struct Item *it)
+{
+    struct Page *p;
+    struct NetJob *j;
+    if (it->flags & ITEM_DISABLED)
+        return;
+    if (rq) {                               /* one out at a time: the last given up */
+        net_cancel(rq);
+        rq->orphan = TRUE;
+        rq = NULL;
+    }
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg("Not enough memory");
+        return;
+    }
+    if (!(p = page_push(PT_LIST, it->label))) {
+        FreeVec(j);
+        set_msg("Too many levels open");
+        return;
+    }
+    p->radio = 1;
+    amce_strlcpy(p->base, it->path, sizeof(p->base));
+    radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
+    j->seq = ++rq_seq;
+    p->net_seq = j->seq;
+    rq = j;
+    amce_strlcpy(msg, "Asking radio-browser.info...", sizeof(msg));
+    draw_pane(TRUE);
+    draw_footer();
+    net_submit(j);
+    if (j->done && !j->busy)                /* the process could not start: no answer to wait for */
+        radio_done(j);
+}
+
+/* A station's page: what radio-browser.info says of it. */
+static void radio_station(struct Item *it)
+{
+    struct Page *p = page_push(PT_TEXT, it->label);
+    char f[640], line[600];
+    LONG br;
+    if (!p)
+        return;
+    radio_field(it, 6, f, sizeof(f));
+    br = 0;
+    {
+        const char *s = f;
+        while (*s >= '0' && *s <= '9')
+            br = br * 10 + (*s++ - '0');
+    }
+    radio_field(it, 5, line, sizeof(line));
+    if (br > 0) {
+        sprintf(f, "%s, %ld kbit/s", line, (long)br);
+        amce_strlcpy(line, f, sizeof(line));
+    }
+    sprintf(f, "Format:   %s", line);
+    text_line(p, f);
+    radio_field(it, 1, line, sizeof(line));
+    if (line[0]) {
+        sprintf(f, "Country:  %s", line);
+        text_line(p, f);
+    }
+    radio_field(it, 4, line, sizeof(line));
+    sprintf(f, "Votes:    %s", line[0] ? line : "0");
+    text_line(p, f);
+    radio_field(it, 2, line, sizeof(line));
+    if (line[0]) {
+        sprintf(f, "Tags:     %s", line);
+        text_para(p, f);
+    }
+    radio_field(it, 3, line, sizeof(line));
+    if (line[0]) {
+        sprintf(f, "Homepage: %s", line);
+        text_para(p, f);
+    }
+    radio_field(it, 0, line, sizeof(line));
+    sprintf(f, "Stream:   %s", line);
+    text_para(p, f);
+    text_line(p, "");
+    text_para(p, "Playing stations arrives in the next step: this page shows what "
+                 "radio-browser.info knows of it.");
+    draw_pane(TRUE);
+    draw_footer();
+}
+
 static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
@@ -5490,6 +5727,8 @@ static void act_action(struct Item *it)
         toggle_jump();
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
+    else if (it->action == ACT_HTTPS)
+        toggle_https();
     else if (it->action == ACT_NOWPLAYING)
         np_open_page();
     else if (it->action == ACT_STYLE_PIXEL)
@@ -5773,6 +6012,10 @@ static void act_open(BOOL play)
             open_dir(it);
         else if (it->kind == IT_ACTION)
             act_action(it);
+        else if (it->kind == IT_NET)
+            radio_open(it);         /* another list, from radio-browser.info */
+        else if (it->kind == IT_STATION)
+            radio_station(it);
         else if (it->kind == IT_RUN) {
             char base[300];
             launch(item_path(it, base, sizeof(base)));  /* Fire, Return, Space, double-click */
@@ -6372,6 +6615,7 @@ static int app_main(void)
     dbg_mem_baseline();
     load_debug();
     load_dbuf();
+    load_https();
     load_jump();
     amce_log_open(debug_on);
     open_extra_libs();
@@ -6467,7 +6711,8 @@ static int app_main(void)
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
         ULONG lsig = ldr_sigmask();
-        ULONG mask = wsig | tsig | lsig | SIGBREAKF_CTRL_C;
+        ULONG nsig = net_sigmask();
+        ULONG mask = wsig | tsig | lsig | nsig | SIGBREAKF_CTRL_C;
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
@@ -6487,6 +6732,8 @@ static int app_main(void)
             break;
         if (sig & lsig)
             preview_arrived();          /* the loader brought something */
+        if (sig & nsig)
+            radio_collect();            /* radio-browser.info answered */
         if (sig & tsig) {
             if (GetMsg(tport)) {
                 ms_acc += tick_us / 1000;
@@ -6586,6 +6833,7 @@ out:
         amce_log("previews", m);
     }
     amce_log("quitting", "");
+    radio_stop();
     if (depth)
         nav_store(TRUE);            /* where to start next time */
     dbg_cpu_stop();

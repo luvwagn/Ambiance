@@ -162,6 +162,7 @@ void caps_detect(struct Caps *c)
     c->net = lib_present("bsdsocket.library", 4);
     c->mp3_mpega = lib_present("mpega.library", 0);
     c->mp3_mhi = path_present("LIBS:MHI");
+    c->amissl = lib_present("amisslmaster.library", 0);  /* AmiSSL: HTTPS streams */
     {
         struct Library *v = OpenLibrary((CONST_STRPTR)"version.library", 0);
         c->wb = c->wb_rev = 0;

@@ -49,6 +49,9 @@ licence:
 
 Packed modules are unpacked with xfdmaster.library, where it is installed.
 
+Radio's station lists come from radio-browser.info, a free directory of
+internet radio stations kept by its community (https://www.radio-browser.info).
+
 Trademarks
 ----------
 Amiga is a trademark of Amiga Corporation. AGS (Amiga Game Selector),

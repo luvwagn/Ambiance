@@ -25,6 +25,19 @@ int amce_stricmp(const char *a, const char *b)
     }
 }
 
+int amce_strnicmp(const char *a, const char *b, LONG n)
+{
+    const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)b;
+    while (n-- > 0) {
+        UBYTE x = fold(*p++), y = fold(*q++);
+        if (x != y)
+            return (int)x - (int)y;
+        if (!x)
+            return 0;
+    }
+    return 0;
+}
+
 void amce_strlcpy(char *d, const char *s, LONG n)
 {
     if (n <= 0)

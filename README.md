@@ -21,9 +21,13 @@ copy the drawer onto an AGS installation and double-click it.
   hosted in AmigaMCE (`src/eagle.c`, `src/eaglehost.s`); XM/S3M/IT and
   multichannel MODs mixed by modplug.library and streamed to Paula
   (`src/mixplay.c`); packed files unpacked with xfdmaster.library.
+- Radio (in progress): stations browsed on the Amiga from radio-browser.info
+  (`src/radio.c`, CSV over plain HTTP from a network process, `src/net.c`),
+  filtered to what an Amiga can play (MP3, working, http: unless Settings >
+  Allow HTTPS streams, which needs AmiSSL). Playback comes next.
 - Keyboard, mouse and joystick/CD32 pad.
 
-Videos, Music and Radio are on the menu but not yet implemented.
+Videos and Music are on the menu but not yet implemented.
 
 ## Building
 
