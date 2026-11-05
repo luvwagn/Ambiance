@@ -599,8 +599,9 @@ ULONG plex_stream_rate(UBYTE *body, ULONG len)
 }
 
 /* A picture of the server's (thumb: its key for it, an album's cover)
- * made w x h by the server (its photo transcoder: JPEG, scaled there, so
- * the Amiga decodes no more than it shows): the request into req, the
+ * made w x h by the server (its photo transcoder: PNG, scaled there, so
+ * the Amiga decodes no more than it shows; PNG for its cheaper decode than
+ * JPEG's, notes/cover-decode-times.md): the request into req, the
  * file it is kept in (RAM:, by the key and size) into file. TRUE if that
  * file is there already. */
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax)
@@ -615,11 +616,11 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
         UnLock(l);
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
         UnLock(l);
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld.jpg", (unsigned long)hash, (long)w, (long)h);
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld.png", (unsigned long)hash, (long)w, (long)h);
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));
-    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=1&upscale=1&url=", (long)w,
-            (long)h);
+    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=1&upscale=1&format=png&url=",
+            (long)w, (long)h);
     {
         char k[520];
         amce_strlcpy(k, n, sizeof(k));
