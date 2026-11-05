@@ -512,22 +512,32 @@ static void paula_quiet(void)
     }
 }
 
-/* Once a second: nothing playing, yet audio DMA on (none of ours should
- * be): said in the log, once a run, and Paula quietened. */
+/* Once a second, nothing playing: what Paula is doing, said in the log
+ * when it changes (audio DMA, audio interrupts enabled and waiting,
+ * modulation), so a sound heard after Stop can be put to something. The
+ * channels are quietened only while they are ours (audio.device); given
+ * back, they are another program's to use. */
 void mp_paula_check(void)
 {
-    static BOOL said;
-    UWORD on = CU->dmaconr & 0x0F;
-    if (mp.running || !on || !mp.audio_open)
-        return;                             /* playing, quiet, or the channels not ours */
-    if (!said) {
-        char m[80];
-        sprintf(m, "audio DMA on with nothing playing (channels %lx, engine %ld): turned off",
-                (unsigned long)on, (long)mp.engine);
-        amce_log("music", m);
-        said = TRUE;
+    static ULONG last = 0xFFFFFFFFUL;
+    UWORD dma = CU->dmaconr & 0x0F, ien = (CU->intenar >> 7) & 0x0F;
+    UWORD irq = (CU->intreqr >> 7) & 0x0F, adk = CU->adkconr & 0xFF;
+    ULONG now = ((ULONG)dma << 24) | ((ULONG)ien << 16) | ((ULONG)irq << 8) | adk;
+    if (mp.running) {
+        last = 0xFFFFFFFFUL;                /* playing: said again after the next stop */
+        return;
     }
-    paula_quiet();
+    if (now != last) {
+        char m[160];
+        sprintf(m, "stopped; Paula: audio DMA %lx, audio interrupts on %lx, waiting %lx, "
+                   "modulation %lx; channels %s",
+                (unsigned long)dma, (unsigned long)ien, (unsigned long)irq, (unsigned long)adk,
+                mp.audio_open ? "ours" : "given back");
+        amce_log("music", m);
+        last = now;
+    }
+    if (dma && mp.audio_open)
+        paula_quiet();
 }
 
 /* Paula left as a quiet machine for whoever comes next: DMA off, the

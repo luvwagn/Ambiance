@@ -1761,7 +1761,7 @@ static void build_general_settings(struct Page *p)
 }
 
 /* The interface in use (the stack's list asked again): its name and
- * address into out, as "eth0, 192.168.4.2"; "" not known. */
+ * address into out, as "eth0, 192.168.1.10"; "" not known. */
 static void nic_in_use_text(char *out)
 {
     char ip[20];
