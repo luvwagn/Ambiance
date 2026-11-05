@@ -5753,7 +5753,6 @@ static void restyle(void)
 static void apply_style(int st)
 {
     struct Page *p = cur();
-    int i;
     if (st == ui_style)
         return;
     ui_style = st;
