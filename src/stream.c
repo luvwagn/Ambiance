@@ -1031,6 +1031,7 @@ void st_stop(void)
     if (st.started)
         paula_stop();
     if (st.chip) {
+        Delay(1);                           /* Paula's last fetches from it done */
         FreeMem(st.chip, HALF * 4);
         st.chip = NULL;
     }

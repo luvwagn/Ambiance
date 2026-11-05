@@ -292,6 +292,8 @@ void mx_stop(void)
         return;
     CU->intena = INTF_AUD0;
     CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+    CU->aud[0].ac_vol = 0;
+    CU->aud[1].ac_vol = 0;
     CU->intreq = INTF_AUD0;
     if (mx.int_set) {
         SetIntVector(INTB_AUD0, mx.old_aint);
@@ -303,6 +305,7 @@ void mx_stop(void)
         while (mx.proc)
             Delay(1);
     }
+    Delay(1);                               /* Paula's last fetches from the buffer done */
     mx.running = FALSE;
     if (mx.chip) {
         FreeMem(mx.chip, HALF * 4);

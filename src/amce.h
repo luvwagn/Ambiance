@@ -401,7 +401,8 @@ BOOL mp_load_track(const char *url, const char *title, const char *by, const cha
                    LONG errmax);
 BOOL mp_is_track(void);
 const char *mp_track_by(void);
-int mp_meter_count(void);           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
+int mp_meter_count(void);
+void mp_paula_check(void);          /* once a second: audio DMA left on while stopped */           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
 const char *mp_stream_name(void);
 
 /* stream.c: internet radio, MP3 over HTTP decoded by mpega.library */

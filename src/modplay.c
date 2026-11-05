@@ -489,12 +489,45 @@ void mp_tick_run(BOOL on)
     tick_run(on);
 }
 
+/* Stopped: DMA off, volumes 0, and each channel pointed at a word of
+ * silence of our own, its length one. A channel left pointing at a buffer
+ * that has been freed (a stream's, the mixer's) would play whatever chip
+ * memory comes to be there, pictures and all, should its DMA come on. */
+static UWORD *quiet_word;           /* chip: a few words of 0 */
+
 static void paula_quiet(void)
 {
     int i;
-    CU->dmacon = 0x0F;
+    CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
     for (i = 0; i < 4; i++)
         CU->aud[i].ac_vol = 0;
+    if (!quiet_word)
+        quiet_word = AllocMem(8, MEMF_CHIP | MEMF_CLEAR);
+    wait_lines(3);                          /* the DMA's last fetches done */
+    for (i = 0; i < 4; i++) {
+        if (quiet_word)
+            CU->aud[i].ac_ptr = quiet_word;
+        CU->aud[i].ac_len = 1;
+        CU->aud[i].ac_dat = 0;
+    }
+}
+
+/* Once a second: nothing playing, yet audio DMA on (none of ours should
+ * be): said in the log, once a run, and Paula quietened. */
+void mp_paula_check(void)
+{
+    static BOOL said;
+    UWORD on = CU->dmaconr & 0x0F;
+    if (mp.running || !on || !mp.audio_open)
+        return;                             /* playing, quiet, or the channels not ours */
+    if (!said) {
+        char m[80];
+        sprintf(m, "audio DMA on with nothing playing (channels %lx, engine %ld): turned off",
+                (unsigned long)on, (long)mp.engine);
+        amce_log("music", m);
+        said = TRUE;
+    }
+    paula_quiet();
 }
 
 /* Paula left as a quiet machine for whoever comes next: DMA off, the
@@ -985,6 +1018,10 @@ void mp_shutdown(void)
     if (mp.silence) {
         FreeMem(mp.silence, 8);
         mp.silence = NULL;
+    }
+    if (quiet_word) {
+        FreeMem(quiet_word, 8);
+        quiet_word = NULL;
     }
 }
 
