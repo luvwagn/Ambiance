@@ -42,12 +42,12 @@ def games(d):
 
 
 def mods(d):
-    rrect_outline(d, 2, 1, 14, 15, 1)
-    # text lines on whole rows, words split by a one-hires-pixel-pair gap
-    for y, words in ((3, ((4, 7), (8, 12))), (5, ((4, 9.5), (10.5, 12))), (7, ((4, 6.5), (7.5, 12))),
-                     (9, ((4, 10), (11, 12))), (11, ((4, 7.5), (8.5, 10.5)))):
-        for a, b in words:
-            box(d, a, y, b, y + 1)
+    # two beamed quavers: a tune
+    d.ellipse([P(1.2, 10.2), P(6.4, 14.2)], fill=255)
+    d.ellipse([P(8.8, 9.2), P(14.0, 13.2)], fill=255)
+    box(d, 5.2, 2.8, 6.4, 12.4)
+    box(d, 12.8, 1.8, 14.0, 11.4)
+    d.polygon([P(5.2, 2.8), P(14.0, 1.0), P(14.0, 3.8), P(5.2, 5.6)], fill=255)
 
 
 def demos(d):
