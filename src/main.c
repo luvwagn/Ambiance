@@ -1382,7 +1382,7 @@ static void build_sysinfo(struct Page *p)
     }
     sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
     text_line(p, line);
-    sprintf(line, "Free memory: %lu KB chip, %lu KB fast",
+    sprintf(line, "Free memory: %luKB chip, %luKB fast",
             (unsigned long)(caps.chipfree >> 10), (unsigned long)(caps.fastfree >> 10));
     text_line(p, line);
     sprintf(line, "Font: %s", g.font_is_ours ? "amce-pixel (bundled)" : "topaz 8 (fallback)");
@@ -1504,8 +1504,8 @@ static char rsrv[80];               /* as kept */
 static struct NetMirror mirrors[8];
 static int nmirror = -2;            /* -2 not asked yet, -1 could not be */
 static const char *const buf_names[3] = { "Short", "Normal", "Long" };
-static const char *const buf_notes[3] = { "starts in 0.6 s", "1.2 s",
-                                          "3 s, more held against dropouts" };
+static const char *const buf_notes[3] = { "starts in 0.6s", "1.2s",
+                                          "3s, more held against dropouts" };
 
 /* Automatic: by how fast this Amiga is (plex_tier). Paula plays no more
  * than 28 kHz, and the decoder is told to make what it can play, so a
@@ -2010,7 +2010,7 @@ static void build_rkbps_settings(struct Page *p)
     for (i = 1; i < 6; i++) {
         char label[24];
         if (rkbps_choice[i])
-            sprintf(label, "Up to %lu kbit/s", (unsigned long)rkbps_choice[i]);
+            sprintf(label, "Up to %lukbps", (unsigned long)rkbps_choice[i]);
         else
             strcpy(label, "Any");
         action_item(p, label, "", ACT_RKBPS0 + i,
@@ -2113,7 +2113,7 @@ static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
     p->setp = SETP_SOUND;
-    action_item(p, "Paula (audio.device)", "4 channels, up to 28 kHz, 8-bit", ACT_SND_PAULA,
+    action_item(p, "Paula (audio.device)", "4 channels, up to 28kHz, 8-bit", ACT_SND_PAULA,
                 sound_ahi ? MARK_RADIO_OFF : MARK_RADIO_ON);
     if ((it = action_item(p, "AHI: radio, Plex, music files",
                           caps.ahi ? "16-bit, its Preferences' mode" : "not installed",
@@ -3750,7 +3750,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         sprintf(line, "%s", drawn && g.pic.fmt[0] ? g.pic.fmt : it->sortkey);
         if (j->size >= 0) {
             char kb[24];
-            sprintf(kb, "  -  %ld KB", (long)((j->size + 1023) / 1024));
+            sprintf(kb, "  -  %ldKB", (long)((j->size + 1023) / 1024));
             amce_strlcat(line, kb, sizeof(line));
         }
         pv_line(line, w);
@@ -5384,7 +5384,7 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         struct StInfo in;
         st_info(&in);
         if (in.state == ST_PLAYING) {
-            sprintf(pos, "Buffered %ld.%ld s", (long)(in.buffer_ms / 1000),
+            sprintf(pos, "Buffered %ld.%lds", (long)(in.buffer_ms / 1000),
                     (long)(in.buffer_ms % 1000 / 100));
             if (in.underruns) {
                 sprintf(a, "   dropouts %ld", (long)in.underruns);
@@ -5492,7 +5492,7 @@ static void np_pair(WORD y, const char *label, const char *value)
         gfx_fill(&g, np.x0 + col + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
 }
 
-/* "MP3 320 kbit/s, 44100 Hz stereo", what of it is known. */
+/* "MP3 320kbps, 44100Hz stereo", what of it is known. */
 static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kbps, ULONG rate,
                           ULONG ch)
 {
@@ -5503,11 +5503,11 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
     up[i] = 0;
     amce_strlcpy(v, up, sizeof(v));
     if (kbps) {
-        sprintf(part, "%s%lu kbit/s", v[0] ? " " : "", (unsigned long)kbps);
+        sprintf(part, "%s%lukbps", v[0] ? " " : "", (unsigned long)kbps);
         amce_strlcat(v, part, sizeof(v));
     }
     if (rate) {
-        sprintf(part, "%s%lu Hz", v[0] ? ", " : "", (unsigned long)rate);
+        sprintf(part, "%s%luHz", v[0] ? ", " : "", (unsigned long)rate);
         amce_strlcat(v, part, sizeof(v));
     }
     if (ch) {
@@ -5517,13 +5517,17 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
     np_pair(y, label, v);
 }
 
-/* How it plays: through Paula (8-bit) or AHI (16-bit), at what rate. */
+/* How it plays: through Paula (8-bit), AHI (16-bit) or MHI; its rate and
+ * channels only where they are not the source's. */
 static void np_playback_line(WORD y, const struct StInfo *in)
 {
     char v[64];
-    sprintf(v, "%s, %lu Hz %s", in->mhi ? "MHI (decoded and played by it)"
-                                : in->ahi ? "AHI 16-bit" : "Paula 8-bit",
-            (unsigned long)in->dec_freq, in->dec_channels == 1 ? "mono" : "stereo");
+    amce_strlcpy(v, in->mhi ? "MHI (decoded and played by it)" : in->ahi ? "AHI 16-bit"
+                                                                          : "Paula 8-bit",
+                 sizeof(v));
+    if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels))
+        sprintf(v + strlen(v), ", %luHz %s", (unsigned long)in->dec_freq,
+                in->dec_channels == 1 ? "mono" : "stereo");
     np_pair(y, "Playback", v);
 }
 
@@ -5638,9 +5642,12 @@ static void np_draw_station(void)
         y += lh;
     }
     if (in.dec_freq && y + lh <= bottom) {
-        sprintf(part, "MP3 %ld kbit/s, %ld Hz %s; played at %ld Hz %s", (long)in.bitrate,
-                (long)in.freq, in.channels == 2 ? "stereo" : "mono", (long)in.dec_freq,
-                in.dec_channels == 2 ? "stereo" : "mono");
+        sprintf(part, "MP3 %ldkbps, %ldHz %s", (long)in.bitrate, (long)in.freq,
+                in.channels == 2 ? "stereo" : "mono");
+        if (in.dec_freq != in.freq || in.dec_channels != in.channels)
+            sprintf(part + strlen(part), "; played at %ldHz %s", (long)in.dec_freq,
+                    in.dec_channels == 2 ? "stereo" : "mono");
+        amce_strlcat(part, in.mhi ? ", by MHI" : in.ahi ? ", AHI" : "", sizeof(part));
         np_line(y, part, PEN_DIM, TS_SMALL);
         y += lh;
     }
@@ -9135,8 +9142,8 @@ static void plex_help(void)
     text_para(p, "AmigaMCE plays music from a Plex Media Server on your network: its "
                  "music libraries, by artist and album, with their covers, played on the "
                  "Amiga's own sound (mpega.library). The server makes each track for this "
-                 "Amiga: a 22 kHz mono MP3 for a 68020/030, 24 kHz stereo for a 68040/060, "
-                 "and 24 kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
+                 "Amiga: a 22kHz mono MP3 for a 68020/030, 24kHz stereo for a 68040/060, "
+                 "and 24kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
                  "turning off Settings > Networking > Plex > Request lower quality audio "
                  "plays MP3 files as stored (other formats are converted either way); "
                  "Settings > Networking > Plex > Plex turns it all off.");
@@ -9176,7 +9183,7 @@ static void radio_station(struct Item *it)
     }
     radio_field(it, 5, line, sizeof(line));
     if (br > 0) {
-        sprintf(f, "%s, %ld kbit/s", line, (long)br);
+        sprintf(f, "%s, %ldkbps", line, (long)br);
         amce_strlcpy(line, f, sizeof(line));
     }
     sprintf(f, "Format:   %s", line);

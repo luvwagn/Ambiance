@@ -1502,6 +1502,7 @@ static struct {
     LONG skip;                      /* the rest of the frame (its main data) */
     ULONG spf, rate;
     volatile ULONG t0, paused_ms, pause_at;     /* t0: playing since (0 not yet) */
+    volatile ULONG bytes_in;        /* MP3 queued, all told */
 } mh;
 
 static ULONG mh_bits(const UBYTE *b, ULONG *pos, int n)
@@ -1594,6 +1595,14 @@ static void mh_scan(const UBYTE *b, LONG n)
         mh.skip = flen > need ? flen - need : 0;
         mh.hlen = 0;
     }
+}
+
+/* How long MHI has played, by the clock (its pauses not counted). */
+static ULONG mh_ms(void)
+{
+    if (!mh.t0)
+        return 0;
+    return (mh.pause_at ? mh.pause_at : time_ms()) - mh.t0 - mh.paused_ms;
 }
 
 /* The levels of the frame playing now (the UI's, for its meters). */
@@ -1691,6 +1700,7 @@ static void mhi_play(LONG freq)
             }
             len[i] = n;
             mh_scan(buf[i], n);             /* its levels, for the meters */
+            mh.bytes_in += n;
             MHIQueueBuffer(h, buf[i], n);
             queued[i] = TRUE;
             nq++;
@@ -2060,6 +2070,14 @@ void st_info(struct StInfo *i)
     i->avg_kbps = st_avg_kbps();
     i->ahi = st.ahi;
     i->mhi = st.mhi;
+    if (st.mhi && st.started && st.bitrate > 0) {
+        /* MHI: played by the clock, held: what is queued beyond that */
+        ULONG queued = (mh.bytes_in / (ULONG)st.bitrate) * 8, played = mh_ms();
+        if (played > queued)
+            played = queued;
+        i->buffer_ms = queued - played;
+        i->played_ms = played;
+    }
     if (st.mhi && st.started) {
         UBYTE l, r;
         mh_peaks(&l, &r);                   /* read off the MP3: none come back */

@@ -675,9 +675,9 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
         amce_strlcpy(lines[n++], t, 96);
     sprintf(t, "%s", si->fmt);
     if (si->kbps)
-        sprintf(t + strlen(t), " %lu kbit/s", (unsigned long)si->kbps);
+        sprintf(t + strlen(t), " %lukbps", (unsigned long)si->kbps);
     if (si->rate)
-        sprintf(t + strlen(t), ", %lu Hz", (unsigned long)si->rate);
+        sprintf(t + strlen(t), ", %luHz", (unsigned long)si->rate);
     if (si->channels)
         sprintf(t + strlen(t), " %s", si->channels == 1 ? "mono" : si->channels == 2 ? "stereo"
                                                                                    : "multi");
@@ -686,10 +686,10 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
     amce_strlcpy(lines[n++], t, 96);
     if (n < max) {
         if (si->size >= 1048576)
-            sprintf(lines[n++], "%lu.%lu MB", (unsigned long)(si->size >> 20),
+            sprintf(lines[n++], "%lu.%luMB", (unsigned long)(si->size >> 20),
                     (unsigned long)((si->size & 0xFFFFF) * 10 >> 20));
         else
-            sprintf(lines[n++], "%lu KB", (unsigned long)((si->size + 512) >> 10));
+            sprintf(lines[n++], "%luKB", (unsigned long)((si->size + 512) >> 10));
     }
     if (si->genre[0] && n < max)
         amce_strlcpy(lines[n++], si->genre, 96);
