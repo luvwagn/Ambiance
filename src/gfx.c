@@ -1168,17 +1168,31 @@ void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 
 /* A cycle gadget's glyph (an arrow round a circle, as on Intuition's
  * cycle gadgets) in a box px square: drawn as fills of whole runs, so the
- * same in every style. */
+ * same in every style. 10 x 9 cells: the circle open at the lower right,
+ * its arrowhead a triangle pointing down on the right.
+ *   ..####....
+ *   .#....#...
+ *   #......#..
+ *   #....#####
+ *   #.....###.
+ *   #......#..
+ *   #.........
+ *   .#....#...
+ *   ..####.... */
+#define CYC_W 10
+#define CYC_H 9
 void gfx_cycle_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE pen)
 {
-    static const UBYTE rows[9] = { 0x3C, 0x42, 0x87, 0x82, 0x80, 0x80, 0x81, 0x42, 0x3C };
-    WORD cs = px / 9 > 0 ? px / 9 : 1, r, c, x0 = x + (px - 8 * cs) / 2, y0 = y + (px - 9 * cs) / 2;
-    for (r = 0; r < 9; r++)
-        for (c = 0; c < 8; c++) {
+    static const UWORD rows[CYC_H] = { 0x0F0, 0x108, 0x204, 0x21F, 0x20E, 0x204, 0x200, 0x108,
+                                       0x0F0 };
+    WORD cs = px / CYC_W > 0 ? px / CYC_W : 1, r, c;
+    WORD x0 = x + (px - CYC_W * cs) / 2, y0 = y + (px - CYC_H * cs) / 2;
+    for (r = 0; r < CYC_H; r++)
+        for (c = 0; c < CYC_W; c++) {
             WORD e;
-            if (!(rows[r] & (0x80 >> c)))
+            if (!(rows[r] & (0x200 >> c)))
                 continue;
-            for (e = c; e + 1 < 8 && (rows[r] & (0x80 >> (e + 1))); e++)
+            for (e = c; e + 1 < CYC_W && (rows[r] & (0x200 >> (e + 1))); e++)
                 ;
             gfx_fill(g, x0 + c * cs, y0 + r * cs, x0 + (e + 1) * cs - 1, y0 + (r + 1) * cs - 1, pen);
             c = e;

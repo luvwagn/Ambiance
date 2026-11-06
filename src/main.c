@@ -2417,10 +2417,37 @@ static void settings_rebuild(void)
     }
 }
 
+static void draw_list_row(struct Page *p, LONG idx, WORD col);
+static WORD mark_column(const struct Page *p);
+
+/* What a row shows (its words, value, mark, greying), to tell a row that
+ * changed from one that did not. */
+static ULONG row_sig(const struct Item *it)
+{
+    ULONG h = 2166136261UL;
+    const char *s;
+    for (s = it->label; *s; s++)
+        h = (h ^ (UBYTE)*s) * 16777619UL;
+    h = (h ^ 0xFF) * 16777619UL;
+    if (it->kind == IT_ACTION)
+        for (s = it->path; *s; s++)
+            h = (h ^ (UBYTE)*s) * 16777619UL;
+    return (h ^ ((ULONG)it->mark << 8 | it->flags)) * 16777619UL;
+}
+
 static void plex_settings_again(BOOL full)
 {
     struct Page *p = cur();
-    LONG sel = p ? p->sel : 0;
+    LONG sel = p ? p->sel : 0, top = p ? p->top : 0, count = 0, i;
+    ULONG sig[48];
+    int nsig = 0;
+    if (p && p->type == PT_LIST && p->list.pool) {
+        /* the rows on screen as they are: after the rebuild only those
+         * that changed are drawn again (all of them flickered) */
+        count = p->list.count;
+        for (i = 0; i < list_visible() && i < 48 && top + i < count; i++)
+            sig[nsig++] = row_sig(&p->list.items[top + i]);
+    }
     settings_rebuild();
     if (!p || p->type != PT_LIST)
         return;
@@ -2429,8 +2456,16 @@ static void plex_settings_again(BOOL full)
     if (full) {
         draw_pane(TRUE);
         draw_footer();
-    } else {
+    } else if (p->list.count != count || p->top != top || !nsig) {
         draw_list_rows(p);
+    } else {
+        WORD col = mark_column(p);
+        for (i = 0; i < list_visible() && top + i < p->list.count; i++)
+            if (i >= nsig || row_sig(&p->list.items[top + i]) != sig[i] || top + i == sel ||
+                top + i == p->sel)
+                draw_list_row(p, top + i, col);
+        if (p->sel != sel)
+            draw_title_count(p);
     }
 }
 
