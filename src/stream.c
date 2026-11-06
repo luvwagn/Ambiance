@@ -680,9 +680,6 @@ static BOOL drop_offset(char *url)
         memmove(o, e, strlen(e) + 1);
     else
         *o = 0;
-    /* another session too: the one refused is not asked for again */
-    for (o = url; (o = strstr(o, "=amce")); o += 5)
-        o[4] = 'r';
     return TRUE;
 }
 

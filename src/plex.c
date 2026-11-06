@@ -64,6 +64,7 @@ static char photo_libs[400];
 static ULONG num(const char *s);
 static ULONG sessions;          /* conversions asked for: each its own session */
 static char last_session[64];   /* the conversion asked for last: stopped before the next */
+static char last_item[160];     /* its track: asked for again (a seek), the same session */
 
 static void get_var(const char *name, char *out, LONG max)
 {
@@ -324,8 +325,15 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
                     plex.token[0] ? "&X-Plex-Token=" : "", plex.token);
             st_set_stop_url(stop);
         }
-        sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
-        amce_strlcpy(last_session, n + 9, sizeof(last_session));
+        if (last_session[0] && !strcmp(last_item, key)) {
+            /* the same track again (a seek): its session again, as Plex's
+             * own players do; another session for it is refused (400) */
+            sprintf(n, "&session=%s", last_session);
+        } else {
+            sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
+            amce_strlcpy(last_session, n + 9, sizeof(last_session));
+        }
+        amce_strlcpy(last_item, key, sizeof(last_item));
         amce_strlcat(out, n, max);
         amce_strlcat(out, "&X-Plex-Session-Identifier=", max);
         amce_strlcat(out, n + 9, max);
