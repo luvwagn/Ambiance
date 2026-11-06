@@ -9727,6 +9727,26 @@ static void disarm(void)
 
 /* ------------------------------------------------------------ input */
 static ULONG last_secs, last_mics;
+static ULONG last_ms;                       /* our own clock at the last click */
+
+/* A double-click: Intuition's test on the events' times, or (should those
+ * times be off: after a slideshow they were) our own clock's, within the
+ * same time Intuition allows (its Preferences, read once). */
+static BOOL dbl_click(const struct IntuiMessage *im)
+{
+    static ULONG dc_ms;
+    if (!dc_ms) {
+        struct Preferences pr;
+        dc_ms = 500;
+        if (GetPrefs(&pr, sizeof(pr)))
+            dc_ms = pr.DoubleClick.tv_secs * 1000 + pr.DoubleClick.tv_micro / 1000;
+        if (dc_ms < 200 || dc_ms > 3000)
+            dc_ms = 500;
+    }
+    if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros))
+        return TRUE;
+    return last_ms && time_ms() - last_ms <= dc_ms;
+}
 static BOOL click_opened;           /* the last click opened something (one click) */
 static LONG last_click = -1;
 static WORD last_x = -100, last_y = -100;   /* where the last click was */
@@ -9839,14 +9859,16 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Code != SELECTDOWN)
         return;
     if (debug_on) {
-        char m[160];
+        char m[320];
         struct Page *dp = cur();
-        sprintf(m, "at %ld,%ld; page %.40s, type %ld, %ld rows from y %ld, %ld high, list to x %ld; "
-                   "focus %ld; opened %ld; last %ld",
+        sprintf(m, "at %ld,%ld; page %.30s, type %ld, %ld rows from y %ld, %ld high, list to x %ld; "
+                   "focus %ld; opened %ld; last %ld; time %lu.%06lu (last %lu.%06lu, %lu ms ago)",
                 (long)x, (long)y, dp ? dp->title : "-", dp ? (long)dp->type : -1L,
                 dp ? (long)dp->list.count : 0L, (long)g.list_top, (long)g.list_row_h,
                 dp && dp->type == PT_LIST ? (long)list_xr(dp) : -1L, (long)focus,
-                (long)click_opened, (long)last_click);
+                (long)click_opened, (long)last_click, (unsigned long)im->Seconds,
+                (unsigned long)im->Micros, (unsigned long)last_secs, (unsigned long)last_mics,
+                (unsigned long)(time_ms() - last_ms));
         amce_log("click", m);
     }
     nav_moved();
@@ -9855,10 +9877,11 @@ static void handle_mouse(struct IntuiMessage *im)
         /* a single click opened something: the second click of a habitual
          * double-click is not a click on what opened */
         click_opened = FALSE;
-        if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros) &&
+        if (dbl_click(im) &&
             x - last_x <= U(6) && last_x - x <= U(6) && y - last_y <= U(6) &&
             last_y - y <= U(6)) {           /* on the same spot: the habit's second half */
             last_secs = im->Seconds;
+    last_ms = time_ms();
             last_mics = im->Micros;
             last_click = -1;
             return;
@@ -9882,7 +9905,7 @@ static void handle_mouse(struct IntuiMessage *im)
     }
     if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h) {
         idx = (y - g.top) / g.row_h;
-        dbl = idx + 1000 == last_click && DoubleClick(last_secs, last_mics, im->Seconds, im->Micros);
+        dbl = idx + 1000 == last_click && dbl_click(im);
         last_click = idx + 1000;
         if (focus != FOCUS_MENU)
             set_focus(FOCUS_MENU);
@@ -9904,9 +9927,10 @@ static void handle_mouse(struct IntuiMessage *im)
                 /* a double-click on the pane plays (opens) what it shows:
                  * the entry selected, as a double-click on its row would */
                 dbl = !on_bar && p->sel + 100000 == last_click &&
-                      DoubleClick(last_secs, last_mics, im->Seconds, im->Micros);
+                      dbl_click(im);
                 last_click = p->sel + 100000;
                 last_secs = im->Seconds;
+    last_ms = time_ms();
                 last_mics = im->Micros;
                 last_x = x;
                 last_y = y;
@@ -9926,7 +9950,7 @@ static void handle_mouse(struct IntuiMessage *im)
             idx = p->top + (y - g.list_top) / g.list_row_h;
             if (idx >= p->list.count)
                 return;
-            dbl = idx == last_click && DoubleClick(last_secs, last_mics, im->Seconds, im->Micros);
+            dbl = idx == last_click && dbl_click(im);
             last_click = idx;
             if (focus != FOCUS_CONTENT)
                 set_focus(FOCUS_CONTENT);
@@ -9967,6 +9991,7 @@ static void handle_mouse(struct IntuiMessage *im)
         }
     }
     last_secs = im->Seconds;
+    last_ms = time_ms();
     last_mics = im->Micros;
     last_x = x;
     last_y = y;
