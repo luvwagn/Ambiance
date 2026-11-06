@@ -1,7 +1,6 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nederlands
 ## codeset 0
-;
 MSG_4E6387ED
 Niet genoeg geheugen
 ; Not enough memory
@@ -239,6 +238,42 @@ Muziekmappen
 MSG_1A73DB9B
 Taal
 ; Language
+MSG_1B9AE0BB
+Engels
+; English
+MSG_11100833
+Duits
+; German
+MSG_7CBD6CA5
+Frans
+; French
+MSG_7039952B
+Italiaans
+; Italian
+MSG_3819825B
+Spaans
+; Spanish
+MSG_5605543E
+Zweeds
+; Swedish
+MSG_71231814
+Fins
+; Finnish
+MSG_003478B8
+Deens
+; Danish
+MSG_233CA44B
+Noors
+; Norwegian
+MSG_3297E9D1
+Nederlands
+; Dutch
+MSG_66D67D5C
+Portugees
+; Portuguese
+MSG_140C2E0A
+Japans
+; Japanese
 MSG_73C73B18
 Als de Workbench
 ; As Workbench

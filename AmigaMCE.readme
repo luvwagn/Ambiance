@@ -133,10 +133,12 @@ double-click AmigaMCE.
 Languages
 ---------
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português and Japanese (Nihongo, in its own
-characters). AmigaMCE speaks your Workbench's language
-(Locale prefs) when its catalog is installed; Settings > General >
-Language chooses another. The translations are new: corrections are
+Norsk, Nederlands, Português and Japanese. AmigaMCE speaks your
+Workbench's language (Locale prefs) when its catalog is installed;
+Settings > General > Language chooses another. Workbench 3.x has no
+Japanese locale, so Japanese is only ever chosen there: AmigaMCE draws
+it with its own glyphs (Fonts/amce-cjk), needing nothing from the
+system. The translations are new: corrections are
 welcome (catalogs/*.ct in the source, FlexCat's format).
 
 

@@ -1,7 +1,6 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language italiano
 ## codeset 0
-;
 MSG_4E6387ED
 Memoria insufficiente
 ; Not enough memory
@@ -239,6 +238,42 @@ Cartelle musicali
 MSG_1A73DB9B
 Lingua
 ; Language
+MSG_1B9AE0BB
+Inglese
+; English
+MSG_11100833
+Tedesco
+; German
+MSG_7CBD6CA5
+Francese
+; French
+MSG_7039952B
+Italiano
+; Italian
+MSG_3819825B
+Spagnolo
+; Spanish
+MSG_5605543E
+Svedese
+; Swedish
+MSG_71231814
+Finlandese
+; Finnish
+MSG_003478B8
+Danese
+; Danish
+MSG_233CA44B
+Norvegese
+; Norwegian
+MSG_3297E9D1
+Olandese
+; Dutch
+MSG_66D67D5C
+Portoghese
+; Portuguese
+MSG_140C2E0A
+Giapponese
+; Japanese
 MSG_73C73B18
 Come il Workbench
 ; As Workbench

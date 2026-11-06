@@ -1,7 +1,6 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language svenska
 ## codeset 0
-;
 MSG_4E6387ED
 Inte tillräckligt med minne
 ; Not enough memory
@@ -239,6 +238,42 @@ Musikmappar
 MSG_1A73DB9B
 Språk
 ; Language
+MSG_1B9AE0BB
+Engelska
+; English
+MSG_11100833
+Tyska
+; German
+MSG_7CBD6CA5
+Franska
+; French
+MSG_7039952B
+Italienska
+; Italian
+MSG_3819825B
+Spanska
+; Spanish
+MSG_5605543E
+Svenska
+; Swedish
+MSG_71231814
+Finska
+; Finnish
+MSG_003478B8
+Danska
+; Danish
+MSG_233CA44B
+Norska
+; Norwegian
+MSG_3297E9D1
+Nederländska
+; Dutch
+MSG_66D67D5C
+Portugisiska
+; Portuguese
+MSG_140C2E0A
+Japanska
+; Japanese
 MSG_73C73B18
 Som Workbench
 ; As Workbench

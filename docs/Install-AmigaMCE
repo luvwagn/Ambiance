@@ -5,6 +5,9 @@
 ; English is built into the program. Each language is a catalog in
 ; AmigaMCE/Catalogs; AmigaMCE knows a catalog by the language written in
 ; it, so its drawer's name (francais, espanol) does not matter.
+; Japanese is never ticked to begin with: Workbench 3.x has no Japanese
+; locale. It is chosen in AmigaMCE (Settings > General > Language), whose
+; own glyphs draw it.
 ;
 ; This file is Latin-1 (Français, Español, Português).
 
@@ -33,8 +36,6 @@
 (if (= @language "norsk") (set #def 128))
 (if (= @language "nederlands") (set #def 256))
 (if (= @language "português") (set #def 512))
-(if (= @language "nihongo") (set #def 1024))
-(if (= @language "japanese") (set #def 1024))
 
 (set #langs
   (askoptions

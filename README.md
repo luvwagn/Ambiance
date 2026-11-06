@@ -115,11 +115,13 @@ languages): unpack it on a hard drive, for example
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português and 日本語 (Japanese: its catalog's language is
-`nihongo`, and a Workbench set to `japanese` finds it too). AmigaMCE follows the Workbench's language
-(Locale prefs) when its catalog is installed; Settings › General ›
-Language picks another, and is greyed out showing the one in use when no
-other is installed.
+Norsk, Nederlands, Português and 日本語 (Japanese). AmigaMCE follows the
+Workbench's language (Locale prefs) when its catalog is installed;
+Settings › General › Language picks another, and is greyed out showing the
+one in use when no other is installed. Workbench 3.x has no Japanese
+locale, so Japanese is only ever picked there (its catalog's language is
+`nihongo`, a name of AmigaMCE's own); AmigaMCE draws it with its own glyph
+packs and needs nothing from the system for it.
 
 Text in the source is written in English as `_("...")`, or `N_("...")` in a
 table. A string's catalog ID is a hash of its English, so nothing else

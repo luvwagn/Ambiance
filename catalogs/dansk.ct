@@ -1,7 +1,6 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language dansk
 ## codeset 0
-;
 MSG_4E6387ED
 Ikke nok hukommelse
 ; Not enough memory
@@ -239,6 +238,42 @@ Musikmapper
 MSG_1A73DB9B
 Sprog
 ; Language
+MSG_1B9AE0BB
+Engelsk
+; English
+MSG_11100833
+Tysk
+; German
+MSG_7CBD6CA5
+Fransk
+; French
+MSG_7039952B
+Italiensk
+; Italian
+MSG_3819825B
+Spansk
+; Spanish
+MSG_5605543E
+Svensk
+; Swedish
+MSG_71231814
+Finsk
+; Finnish
+MSG_003478B8
+Dansk
+; Danish
+MSG_233CA44B
+Norsk
+; Norwegian
+MSG_3297E9D1
+Nederlandsk
+; Dutch
+MSG_66D67D5C
+Portugisisk
+; Portuguese
+MSG_140C2E0A
+Japansk
+; Japanese
 MSG_73C73B18
 Som Workbench
 ; As Workbench

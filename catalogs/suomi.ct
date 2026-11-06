@@ -1,7 +1,6 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language suomi
 ## codeset 0
-;
 MSG_4E6387ED
 Muisti ei riitä
 ; Not enough memory
@@ -239,6 +238,42 @@ Musiikkikansiot
 MSG_1A73DB9B
 Kieli
 ; Language
+MSG_1B9AE0BB
+Englanti
+; English
+MSG_11100833
+Saksa
+; German
+MSG_7CBD6CA5
+Ranska
+; French
+MSG_7039952B
+Italia
+; Italian
+MSG_3819825B
+Espanja
+; Spanish
+MSG_5605543E
+Ruotsi
+; Swedish
+MSG_71231814
+Suomi
+; Finnish
+MSG_003478B8
+Tanska
+; Danish
+MSG_233CA44B
+Norja
+; Norwegian
+MSG_3297E9D1
+Hollanti
+; Dutch
+MSG_66D67D5C
+Portugali
+; Portuguese
+MSG_140C2E0A
+Japani
+; Japanese
 MSG_73C73B18
 Kuten Workbench
 ; As Workbench

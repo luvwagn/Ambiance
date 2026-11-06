@@ -1930,14 +1930,47 @@ static void lang_name(const char *lang, char *out)
         strcpy(out, "English");
         return;
     }
-    if (!amce_stricmp(lang, "nihongo") || !amce_stricmp(lang, "japanese")) {
-        /* "Nihongo" in its own characters (cjk.c's three bytes each) */
+    if (!amce_stricmp(lang, "nihongo")) {
+        /* the Japanese catalog's own name for its language, which no
+         * Workbench 3.x has: "Nihongo" in its own characters (cjk.c's
+         * three bytes each) */
         strcpy(out, "\214\267\245\214\274\254\221\252\236");
         return;
     }
     amce_strlcpy(out, lang, 32);
     if ((UBYTE)out[0] >= 'a' && (UBYTE)out[0] <= 'z')
         out[0] -= 32;
+}
+
+/* A language's name in the language shown ("deutsch": German, or
+ * Allemand in French), "" for one AmigaMCE does not know. */
+static const char *lang_here(const char *lang)
+{
+    static const char *const names[][2] = {
+        { "english", N_("English") }, { "deutsch", N_("German") },
+        { "fran\347ais", N_("French") }, { "italiano", N_("Italian") },
+        { "espa\361ol", N_("Spanish") }, { "svenska", N_("Swedish") },
+        { "suomi", N_("Finnish") }, { "dansk", N_("Danish") },
+        { "norsk", N_("Norwegian") }, { "nederlands", N_("Dutch") },
+        { "portugu\352s", N_("Portuguese") }, { "nihongo", N_("Japanese") },
+    };
+    unsigned i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        if (!amce_stricmp(lang, names[i][0]))
+            return _(names[i][1]);
+    return "";
+}
+
+/* A row of the language list: the language by its own name, which its
+ * readers find whatever is shown now, and beside it its name in the
+ * language shown, where that differs. */
+static void lang_row(struct Page *p, const char *lang, int action, BOOL on)
+{
+    char own[32];
+    const char *here = lang_here(lang);
+    lang_name(lang, own);
+    action_item(p, own, amce_stricmp(own, here) ? here : "", action,
+                on ? MARK_RADIO_ON : MARK_RADIO_OFF);
 }
 
 /* Settings > General > Language. */
@@ -1949,13 +1982,9 @@ static void build_lang_settings(struct Page *p)
     amce_lang_scan();                   /* a catalog put in meanwhile is here too */
     lang_name(amce_lang_wb(), t);
     action_item(p, _("As Workbench"), t, ACT_LANGWB, !lang_set[0] ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    action_item(p, "English", "", ACT_LANGEN,
-                !amce_stricmp(lang_set, "english") ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    for (i = 0; i < amce_lang_count() && i < 16; i++) {
-        lang_name(amce_lang_name(i), t);
-        action_item(p, t, "", ACT_LANG0 + i,
-                    !amce_stricmp(lang_set, amce_lang_name(i)) ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    }
+    lang_row(p, "english", ACT_LANGEN, !amce_stricmp(lang_set, "english"));
+    for (i = 0; i < amce_lang_count() && i < 16; i++)
+        lang_row(p, amce_lang_name(i), ACT_LANG0 + i, !amce_stricmp(lang_set, amce_lang_name(i)));
 }
 
 /* Settings: General, Screen, Sound, Networking (Plex inside it, as it
