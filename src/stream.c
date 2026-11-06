@@ -1503,6 +1503,7 @@ static struct {
     ULONG spf, rate;
     volatile ULONG t0, paused_ms, pause_at;     /* t0: playing since (0 not yet) */
     volatile ULONG bytes_in;        /* MP3 queued, all told */
+    ULONG gtop;                     /* the loudest gain lately, x 256, falling slowly */
 } mh;
 
 static ULONG mh_bits(const UBYTE *b, ULONG *pos, int n)
@@ -1515,15 +1516,20 @@ static ULONG mh_bits(const UBYTE *b, ULONG *pos, int n)
     return v;
 }
 
-/* A granule's gain as a meter's level (0-128): 0 for silence. Measured
- * (LAME, 128 kbit/s): a full scale sine near 132, each 6 dB down about 4
- * less; 40 steps (some 60 dB) span the meter. */
+/* A granule's gain as a meter's level (0-128): 0 for silence. Each 6 dB
+ * down is about 4 less (measured, LAME); where full scale lies depends on
+ * the encoder and its bitrate, so it is the loudest gain lately (falling a
+ * step in some two seconds): that near the top, 40 steps (some 60 dB)
+ * below it at the bottom. */
 static UBYTE mh_level(ULONG gain, ULONG big)
 {
     LONG v;
     if (!big)
         return 0;
-    v = 128 + ((LONG)gain - 134) * 128 / 40;
+    if (gain * 256 > mh.gtop)
+        mh.gtop += (gain * 256 - mh.gtop) / 16;     /* risen to over some frames: not
+                                                     * by one odd one (the encoder's first) */
+    v = 120 + ((LONG)gain - (LONG)(mh.gtop >> 8)) * 128 / 40;
     return (UBYTE)(v < 0 ? 0 : v > 128 ? 128 : v);
 }
 
@@ -1587,6 +1593,8 @@ static void mh_scan(const UBYTE *b, LONG n)
                 lv[0] = lv[1];
             lv[1] = lv[0];
         }
+        if (mh.gtop > 100 * 256)
+            mh.gtop -= 3;                   /* about a step each 2 s (38 frames a second) */
         mh.l[mh.frames & (MH_RING - 1)] = lv[0];
         mh.r[mh.frames & (MH_RING - 1)] = mono ? lv[0] : lv[1];
         mh.frames++;
