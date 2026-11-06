@@ -5641,11 +5641,23 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
                          np.name_w, TS_SMALL);
             np.s_sample[i] = st->sample[i];
         }
-        if (full || lit != np.s_level[i]) {
+        if (full) {
             if (lit > 0)
                 gfx_fill(&g, bx, by, bx + lit - 1, by + bh - 1, i == 0 || i == 3 ? PEN_ACCENT : PEN_HL);
             if (lit < bw)
                 gfx_fill(&g, bx + lit, by, bx + bw - 1, by + bh - 1, PEN_RULE);
+            np.s_level[i] = lit;
+        } else if (lit != np.s_level[i]) {
+            /* only the change: 25 times a second a whole bar, each one
+             * across most of the screen, was most of Now playing's time */
+            WORD old = np.s_level[i];
+            if (old < 0 || old > bw)
+                old = lit > 0 ? 0 : bw;
+            if (lit > old)
+                gfx_fill(&g, bx + old, by, bx + lit - 1, by + bh - 1,
+                         i == 0 || i == 3 ? PEN_ACCENT : PEN_HL);
+            else
+                gfx_fill(&g, bx + lit, by, bx + old - 1, by + bh - 1, PEN_RULE);
             np.s_level[i] = lit;
         }
     }
@@ -10157,6 +10169,14 @@ static void hold_tick(void)
                 rate = 10 + remaining * 10;
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
+            if (!menu && n > 1 && n > remaining / 4) {
+                /* a frame takes 100-200 ms on a big native screen: by speed
+                 * alone the easing was crossed in one, so a step is also at
+                 * most a quarter of what is left, and the end is seen
+                 * coming: a few screens, slower, then a row at a time */
+                n = remaining / 4 > 1 ? remaining / 4 : 1;
+                hold.acc = n * 1000;
+            }
             if (n > 0) {
                 ULONG t0 = time_ms();
                 hold.acc -= n * 1000;
