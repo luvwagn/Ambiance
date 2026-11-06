@@ -64,6 +64,7 @@ struct Page {
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
+    UBYTE photos;               /* a Plex photo library's (Pictures): albums, IT_PLEXPHOTO */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
@@ -133,6 +134,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_MUSICSET, ACT_MUSICASSIGN, ACT_MUSICADD, ACT_MUSICDIR0, ACT_MUSICDIR_END = ACT_MUSICDIR0 + 7,
+       ACT_PLEXSLIDES,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -2267,7 +2269,7 @@ static void plex_sum_came(struct NetJob *j);
 static void plex_ask_rate(const char *key);
 /* Pictures of the server's (an album's cover): asked for (art_fetch), kept
  * in RAM: (plex_art), then made for their place by the loader */
-enum { ART_NP, ART_PV, ART_KINDS };
+enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_KINDS };   /* VW: the viewer's photo, and its next */
 static struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
 static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
@@ -2289,6 +2291,10 @@ static void plex_refetch(struct Page *p, const char *key);
 static void np_soft_redraw(void);
 static void np_seek_track(ULONG ms, ULONG delay);
 static void music_root_again(void);
+static void pictures_root_again(void);
+static int pictures_plex_rows(struct Page *p);
+static void radio_collect(void);
+static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow);
 static ULONG strtoul_(const char *s)
 {
     ULONG v = 0;
@@ -2329,11 +2335,16 @@ static void build_root_pages(int mod)
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
                 page_push(PT_TEXT, "Pictures");
-            } else if (n <= 0) {
+            } else if (n <= 0 && !(caps.net && plex.on && plex.host[0])) {
                 page_pop();
                 if ((p = page_push(PT_TEXT, "Pictures")))
                     text_para(p, n < 0 ? "No pictures found: AmigaMCE looks for them in "
                                          PICS_ROOT "." : PICS_ROOT " has no pictures in it.");
+            } else {
+                if (n <= 0)
+                    list_add(&p->list, n < 0 ? "No " PICS_ROOT " here" : PICS_ROOT " is empty",
+                             "", "", IT_TEXT);
+                pictures_plex_rows(p);      /* the server's photo libraries first */
             }
         }
         break;
@@ -2930,6 +2941,9 @@ static const char *hint_text(void)
         p->list.items[p->sel].kind == IT_PLEXTRACK)
         return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
     if (p && p->type == PT_LIST && p->plex && p->list.count &&
+        p->list.items[p->sel].kind == IT_PLEXPHOTO)
+        return hi ? "Up/Down  move    Fire/Return  view    Left/Esc  back" : "Fire view  Esc back";
+    if (p && p->type == PT_LIST && p->plex && p->list.count &&
         p->list.items[p->sel].kind == IT_PLEXSRV)
         return hi ? "Up/Down  move    Fire  use this server    Left/Esc  back"
                   : "Fire use it  Esc back";
@@ -3264,7 +3278,8 @@ static BOOL has_aside(struct Page *p)
         if (p->plex_meta[0])
             return TRUE;                    /* an album's tracks: the album beside them */
         for (i = 0; i < p->list.count; i++)
-            if (p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t'))
+            if ((p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t')) ||
+                p->list.items[i].kind == IT_PLEXPHOTO)
                 return TRUE;
         return FALSE;
     }
@@ -6346,7 +6361,7 @@ static void np_shortcut(struct Page *p)
  * row first while something plays, as Music's own page has. */
 static BOOL plex_lib_list(const struct Page *p)
 {
-    return p && p->type == PT_LIST && p->plex && p->radio &&
+    return p && p->type == PT_LIST && p->plex && p->radio && !p->photos &&
            !strncmp(p->base, "/library/sections/", 18);
 }
 
@@ -6994,13 +7009,89 @@ static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct P
     return o;
 }
 
+/* ---- Plex photos in the viewer (vw_remote): l's entries are IT_PIC, path
+ * the file the photo is kept in (RAM:, plex_art), sortkey its picture's
+ * key on the server. Each is asked of the server when wanted (ART_VW),
+ * the next while one is looked at (ART_VWNEXT), made for the screen there
+ * (PNG); the files of those left behind are deleted (they are big). */
+static BOOL vw_remote, vw_failed;
+static const struct ItemList *vw_list;
+static LONG vw_cur = -1, vw_dir = 1;
+#define VW_KEEP 4
+static char vw_kept[VW_KEEP][120];
+static int vw_kept_next;
+
+/* The size a photo is asked for: the screen's, in square pixels (hires
+ * pixels are twice as tall as wide: twice the lines, halved here). */
+static void vw_photo_size(WORD *w, WORD *h)
+{
+    *w = g.w;
+    *h = gfx_mode_tall(g.mode) ? g.h * 2 : g.h;
+}
+
+static void vw_keep(const char *file)
+{
+    int i;
+    for (i = 0; i < VW_KEEP; i++)
+        if (!strcmp(vw_kept[i], file))
+            return;
+    if (vw_kept[vw_kept_next][0])
+        DeleteFile((CONST_STRPTR)vw_kept[vw_kept_next]);  /* the oldest: well behind */
+    amce_strlcpy(vw_kept[vw_kept_next], file, sizeof(vw_kept[0]));
+    vw_kept_next = (vw_kept_next + 1) % VW_KEEP;
+}
+
+static void vw_forget(void)
+{
+    int i, k;
+    for (k = ART_VW; k <= ART_VWNEXT; k++)
+        if (art_nj[k]) {
+            net_cancel(art_nj[k]);
+            art_nj[k]->orphan = TRUE;       /* freed when it comes back */
+            art_nj[k]->seq = 0;
+            art_nj[k] = NULL;
+        }
+    for (i = 0; i < VW_KEEP; i++) {
+        if (vw_kept[i][0])
+            DeleteFile((CONST_STRPTR)vw_kept[i]);
+        vw_kept[i][0] = 0;
+    }
+    vw_kept_next = 0;
+}
+
+/* Photo i's file is here: TRUE; else asked for as kind (unless on its way). */
+static BOOL vw_fetch(const struct ItemList *l, LONG i, int kind)
+{
+    const struct Item *it = &l->items[i];
+    char file[120];
+    WORD w, h;
+    BPTR lk;
+    int k;
+    if ((lk = Lock((CONST_STRPTR)it->path, SHARED_LOCK))) {
+        UnLock(lk);
+        vw_keep(it->path);
+        return TRUE;
+    }
+    for (k = ART_VW; k <= ART_VWNEXT; k++)
+        if (art_nj[k] && !strcmp(art_want[k], it->path))
+            return FALSE;                   /* asked for already */
+    vw_photo_size(&w, &h);
+    if (art_fetch(kind, it->sortkey, w, h, file)) {
+        vw_keep(file);
+        return TRUE;
+    }
+    if (!art_nj[kind] && kind == ART_VW)
+        vw_failed = TRUE;                   /* could not even be asked */
+    return FALSE;
+}
+
 /* Show the pictures of l from entry idx; returns the last one shown. */
 static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
 {
     struct PicInfo pi = { 0 };
     char scale[24];
-    LONG shown = -1, want = idx, dir = 1;
-    ULONG bar_until = 0, next_at = 0, jlast = 0;
+    LONG shown = -1, want = idx, dir = 1, asked = -1, fails = 0;
+    ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0;
     BOOL quit = FALSE, ok = FALSE, bar_due = TRUE;
 
     if (idx < 0 || idx >= l->count || l->items[idx].kind != IT_PIC)
@@ -7024,6 +7115,39 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         LONG step = 0;
         BOOL toggle = FALSE, poke = FALSE;
         ULONG now;
+        if (vw_remote) {
+            radio_collect();                /* the server's photos, as they come */
+            if (want != shown && !vw_fetch(l, want, ART_VW)) {
+                if (vw_failed) {
+                    /* not sent: said so, and on to the next */
+                    LONG nx = view_step(l, want, dir);
+                    char d[80];
+                    vw_failed = FALSE;
+                    asked = -1;
+                    sprintf(d, "not sent by %.50s", plex.name[0] ? plex.name : plex.host);
+                    view_bar(&g, l->items[want].label, d, "Esc  back");
+                    bar_until = time_ms() + BAR_MS;
+                    if (++fails >= 3 || nx < 0 || nx == want || (shown < 0 && nx == idx)) {
+                        Delay(50);          /* read, then back to the list */
+                        quit = TRUE;
+                        break;
+                    }
+                    want = nx;
+                } else if (asked != want) {
+                    asked = want;
+                    wait_from = time_ms();
+                    if (shown < 0 || !slideshow) {
+                        view_bar(&g, l->items[want].label, "Loading from Plex...", "Esc  back");
+                        bar_until = time_ms() + 3600000;   /* till it comes */
+                    }
+                } else if (slideshow && shown >= 0 && !view_bar_shown() &&
+                           time_ms() - wait_from > 1500) {
+                    view_bar(&g, l->items[want].label, "Loading from Plex...", "Esc  back");
+                    bar_until = time_ms() + 3600000;
+                }
+                goto input;                 /* keys meanwhile: another one, or back */
+            }
+        }
         if (want != shown) {
             BOOL remapped = FALSE;
             struct Thumb *pre_t;
@@ -7041,7 +7165,18 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 amce_log("viewer", m);
             }
             shown = want;
-            vw_ahead(l, shown, dir);
+            asked = -1;
+            fails = 0;
+            if (vw_remote) {
+                /* the next asked for now; decoded ahead once it is here */
+                LONG nx = view_step(l, shown, dir);
+                vw_cur = shown;
+                vw_dir = dir;
+                if (nx >= 0 && nx != shown && vw_fetch(l, nx, ART_VWNEXT))
+                    vw_ahead(l, shown, dir);
+            } else {
+                vw_ahead(l, shown, dir);
+            }
             next_at = time_ms() + SLIDE_MS;
             if (ok && bar_due) {
                 viewer_bar(l, shown, &pi, scale, slideshow);
@@ -7049,6 +7184,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             }
             bar_due = !slideshow;
         }
+    input:
         while ((im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
             ULONG cl = im->Class;
             UWORD code = im->Code;
@@ -7147,6 +7283,57 @@ static void view_from_page(struct Page *p)
         p->top = p->sel;
     if (p->sel >= p->top + vis)
         p->top = p->sel - vis + 1;
+    viewer_done();
+}
+
+/* A Plex page's photos in the viewer, from entry idx (-1: the first, as a
+ * slideshow); the page's selection follows the last one shown. */
+static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow)
+{
+    struct ItemList l;
+    char thumb[160], req[400], file[120], m[80];
+    LONG i, first = -1, last, k, vis = list_visible();
+    WORD w, h;
+    if (!plex.host[0] || !list_init(&l))
+        return;
+    vw_photo_size(&w, &h);
+    for (i = 0; i < p->list.count; i++) {
+        struct Item *it = &p->list.items[i];
+        if (it->kind != IT_PLEXPHOTO)
+            continue;
+        radio_field(it, 2, thumb, sizeof(thumb));
+        plex_art(thumb, w, h, req, sizeof(req), file, sizeof(file));
+        if (i == idx || (idx < 0 && first < 0))
+            first = l.count;
+        list_add(&l, it->label, file, thumb, IT_PIC);
+    }
+    if (first < 0) {
+        list_free(&l);
+        return;
+    }
+    sprintf(m, "%ld photos, asked for at %ld x %ld", (long)l.count, (long)w, (long)h);
+    amce_log("plex: viewer", m);
+    vw_remote = TRUE;
+    vw_failed = FALSE;
+    vw_list = &l;
+    vw_cur = -1;
+    vw_dir = 1;
+    last = viewer_run(&l, first, slideshow);
+    vw_forget();
+    vw_remote = FALSE;
+    vw_list = NULL;
+    vw_cur = -1;
+    /* the page on the photo last shown */
+    for (i = 0, k = 0; i < p->list.count; i++)
+        if (p->list.items[i].kind == IT_PLEXPHOTO && k++ == last) {
+            p->sel = i;
+            break;
+        }
+    if (p->sel < p->top)
+        p->top = p->sel;
+    if (p->sel >= p->top + vis)
+        p->top = p->sel - vis + 1;
+    list_free(&l);
     viewer_done();
 }
 
@@ -7645,10 +7832,15 @@ static void radio_done(struct NetJob *j)
         if (j == art_nj[d]) {
             /* a picture of the server's: kept in RAM:, then shown */
             art_nj[d] = NULL;
-            if (j->body && j->status == 200 && plex_art_save(art_want[d], j->body, j->len))
+            if (j->body && j->status == 200 && plex_art_save(art_want[d], j->body, j->len)) {
                 art_ready(d, art_want[d]);
-            else
-                amce_log("plex: picture", j->err[0] ? j->err : "not sent");
+            } else {
+                char m[80];
+                sprintf(m, "not sent (%ld)%s%.40s", (long)j->status, j->err[0] ? ": " : "", j->err);
+                amce_log("plex: picture", m);
+                if (d == ART_VW)
+                    vw_failed = TRUE;       /* the viewer goes on without it */
+            }
             if (j->body)
                 FreeVec(j->body);
             FreeVec(j);
@@ -7698,6 +7890,35 @@ static void radio_done(struct NetJob *j)
         } else if (j->body) {
             n = servers ? plex_fill_servers(j->body, j->len, &p->list)
                         : plex_fill(p->base, j->body, j->len, &p->list, &total);
+        }
+        if (n > 0 && plex_photo_sections(p->base)) {
+            /* Pictures' photo libraries: kept, Pictures' rows made of them;
+             * just one: its photos and albums here */
+            char v[400], line[160], sec[64];
+            LONG i;
+            v[0] = 0;
+            for (i = 0; i < p->list.count && i < 6; i++) {
+                struct Item *a = &p->list.items[i];
+                if (a->kind != IT_PLEXDIR)
+                    continue;
+                sprintf(line, "%s%.60s\t%.80s", v[0] ? "\n" : "", a->path, a->label);
+                amce_strlcat(v, line, sizeof(v));
+            }
+            plex_set_photo_libs(v);
+            pictures_root_again();
+            if (n == 1) {
+                amce_strlcpy(sec, p->list.items[0].path, sizeof(sec));
+                amce_strlcpy(p->title, p->list.items[0].label, sizeof(p->title));
+                list_free(&p->list);
+                list_init(&p->list);
+                sprintf(m, "photos: one photo library, %s", sec);
+                amce_log("plex", m);
+                plex_refetch(p, sec);
+                if (j->body)
+                    FreeVec(j->body);
+                FreeVec(j);
+                return;
+            }
         }
         if (n == 1 && !strcmp(p->base, "/library/sections") && p->list.items[0].path[0] == '@') {
             /* one music library: its menu (Artists, Albums...) on this page,
@@ -7750,7 +7971,8 @@ static void radio_done(struct NetJob *j)
                               : !j->body ? j->err
                               : n < 0 ? "The server answered with something unexpected"
                               : !strcmp(p->base, "/library/sections") ? "No music libraries there"
-                                                                     : "Nothing here";
+                              : plex_photo_sections(p->base) ? "No photo libraries there"
+                                                             : "Nothing here";
             list_add(&p->list, why[0] ? why : "Could not reach the Plex server", "", "", IT_TEXT);
             sprintf(m, "%s: %s", p->title, why);
         } else {
@@ -7763,6 +7985,23 @@ static void radio_done(struct NetJob *j)
             if (!servers && total > n)
                 list_add(&p->list, "(more than AmigaMCE shows at once: the first listed)", "", "",
                          IT_TEXT);
+            if (p->photos) {
+                /* photos here: a slideshow of them, first */
+                LONG i, k = 0;
+                char label[48];
+                struct Item *a;
+                for (i = 0; i < p->list.count; i++)
+                    if (p->list.items[i].kind == IT_PLEXPHOTO)
+                        k++;
+                if (k == 1)
+                    strcpy(label, "Show the photo");
+                else
+                    sprintf(label, "Slideshow of these %ld photos", (long)k);
+                if (k && (a = list_add_first(&p->list, label, "", "", IT_ACTION))) {
+                    a->action = ACT_PLEXSLIDES;
+                    a->mark = MARK_PLAY;
+                }
+            }
         }
         amce_log("plex", m);
         np_mark_lists(FALSE);               /* what plays, marked in the new list too */
@@ -7844,6 +8083,7 @@ static void radio_open(struct Item *it)
 {
     struct Page *p;
     struct NetJob *j;
+    BOOL photos;
     if (it->flags & ITEM_DISABLED)
         return;
     if (it->kind == IT_PLEXDIR && it->path[0] == '@') {
@@ -7871,6 +8111,7 @@ static void radio_open(struct Item *it)
         set_msg("No Plex server chosen: Settings > Networking > Plex");
         return;
     }
+    photos = cur() && (cur()->photos || cur()->pics);  /* Pictures' Plex pages */
     if (rq) {                               /* one out at a time: the last given up */
         net_cancel(rq);
         rq->orphan = TRUE;
@@ -7889,6 +8130,7 @@ static void radio_open(struct Item *it)
     amce_strlcpy(p->base, it->path, sizeof(p->base));
     if (it->kind == IT_PLEXDIR) {
         p->plex = 1;
+        p->photos = photos;
         radio_field(it, 0, p->base, sizeof(p->base));  /* its key; the rest is its details */
         if (strstr(it->path, "\talbum\t")) {
             /* an album: its details stay beside its tracks */
@@ -7938,6 +8180,63 @@ static void music_root_again(void)
         draw_pane(TRUE);
         draw_footer();
     }
+}
+
+/* Pictures' Plex rows, put first: each photo library of the server as
+ * last listed, or (none listed yet) the server, to list them. */
+static int pictures_plex_rows(struct Page *p)
+{
+    char lines[400], label[120], *l, *e, *t;
+    char keys[6][64], titles[6][96];
+    struct Item *it;
+    int n = 0, i;
+    if (!caps.net || !plex.on || !plex.host[0])
+        return 0;
+    amce_strlcpy(lines, plex_photo_libs(), sizeof(lines));
+    for (l = lines; *l && n < 6; l = e) {
+        e = strchr(l, '\n');
+        if (e)
+            *e++ = 0;
+        else
+            e = l + strlen(l);
+        if (!(t = strchr(l, '\t')))
+            continue;
+        *t++ = 0;
+        amce_strlcpy(keys[n], l, sizeof(keys[n]));
+        amce_strlcpy(titles[n], t, sizeof(titles[n]));
+        n++;
+    }
+    if (!n) {
+        sprintf(label, "Plex photos on %.80s", plex.name[0] ? plex.name : plex.host);
+        if ((it = list_add_first(&p->list, label, "/library/sections?photos=1", "", IT_PLEXDIR)))
+            it->mark = MARK_ARROW;
+        return 1;
+    }
+    for (i = n - 1; i >= 0; i--) {
+        sprintf(label, "Plex: %.100s", titles[i]);
+        if ((it = list_add_first(&p->list, label, keys[i], "", IT_PLEXDIR)))
+            it->mark = MARK_ARROW;
+    }
+    return n;
+}
+
+/* Pictures' own list made again (the server's photo libraries now known). */
+static void pictures_root_again(void)
+{
+    struct Page *r = &pages[0];
+    LONG sel, n;
+    if (depth < 1 || shown_mod != MOD_PICTURES || r->type != PT_LIST || !r->pics)
+        return;
+    sel = r->sel;
+    list_free(&r->list);
+    list_init(&r->list);
+    n = pics_read_ui(PICS_ROOT, &r->list);
+    if (n <= 0 && n != -2)
+        list_add(&r->list, n < 0 ? "No " PICS_ROOT " here" : PICS_ROOT " is empty", "", "",
+                 IT_TEXT);
+    pictures_plex_rows(r);
+    r->sel = sel < r->list.count ? sel : 0;
+    r->top = 0;
 }
 
 /* A Plex page asked again, for key (an artist's one album, say). */
@@ -8173,8 +8472,9 @@ static void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pe
 static BOOL plex_pv_src(struct Page *p, LONG idx, struct Item *out)
 {
     memset(out, 0, sizeof(*out));
-    if (idx >= 0 && idx < p->list.count && p->list.items[idx].kind == IT_PLEXDIR &&
-        strchr(p->list.items[idx].path, '\t')) {
+    if (idx >= 0 && idx < p->list.count &&
+        ((p->list.items[idx].kind == IT_PLEXDIR && strchr(p->list.items[idx].path, '\t')) ||
+         p->list.items[idx].kind == IT_PLEXPHOTO)) {
         *out = p->list.items[idx];
         return TRUE;
     }
@@ -8361,6 +8661,24 @@ static BOOL plex_take(struct Page *p)
     return TRUE;
 }
 
+/* Photos' pictures for the pane, kept in RAM: for the last few only (a
+ * library of thousands would fill it); albums' covers stay, as Music's. */
+#define PV_PHOTOS_KEPT 12
+static char pv_photo_file[PV_PHOTOS_KEPT][120];
+static int pv_photo_next;
+
+static void pv_photo_keep(const char *file)
+{
+    int i;
+    for (i = 0; i < PV_PHOTOS_KEPT; i++)
+        if (!strcmp(pv_photo_file[i], file))
+            return;
+    if (pv_photo_file[pv_photo_next][0])
+        DeleteFile((CONST_STRPTR)pv_photo_file[pv_photo_next]);
+    amce_strlcpy(pv_photo_file[pv_photo_next], file, sizeof(pv_photo_file[0]));
+    pv_photo_next = (pv_photo_next + 1) % PV_PHOTOS_KEPT;
+}
+
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
 {
     char *last = plex_shown;
@@ -8369,6 +8687,7 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     char thumb[160], year[8], by[100], count[24], studio[60], summary[300], line[200], file[120];
     char key[260];
     BOOL keep = plex_keeps(p, p->sel);
+    file[0] = 0;
     pv_has_box = FALSE;
     pv_text_drawn = TRUE;
     if (!plex_pv_src(p, p->sel, &src)) {
@@ -8422,6 +8741,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
             pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
             pv_colour_cap = 0;
         }
+        if (src.kind == IT_PLEXPHOTO && file[0])
+            pv_photo_keep(file);            /* deleted when a dozen more have come */
     }
     gfx_text(&g, x0, y, src.label, PEN_WHITE, PEN_BG, w, TS_BOLD);
     y += g.font_h + U(2);
@@ -8458,6 +8779,12 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
 static void art_ready(int kind, const char *file)
 {
     struct Page *p = cur();
+    if (kind == ART_VW || kind == ART_VWNEXT) {
+        vw_keep(file);
+        if (kind == ART_VWNEXT && vw_list && vw_cur >= 0)
+            vw_ahead(vw_list, vw_cur, vw_dir);  /* decoded ahead now it is here */
+        return;
+    }
     if (kind == ART_NP) {
         if (mp_is_track())
             np_art_load(file);
@@ -8765,6 +9092,8 @@ static void act_action(struct Item *it)
     }
     else if (it->action == ACT_NETSET)
         open_settings_page("Networking", build_net_settings);
+    else if (it->action == ACT_PLEXSLIDES && cur())
+        plex_photo_view(cur(), -1, TRUE);
     else if (it->action == ACT_MUSICSET) {
         music_rm = -1;
         open_settings_page("Music folders", build_music_settings);
@@ -9125,7 +9454,9 @@ static void act_open(BOOL play)
                 set_msg(plex_why(it));
             else
                 mods_play_item(p);  /* the album (or list) its playlist */
-        } else if (it->kind == IT_PLEXSRV)
+        } else if (it->kind == IT_PLEXPHOTO)
+            plex_photo_view(p, p->sel, FALSE);  /* full screen, the others a step away */
+        else if (it->kind == IT_PLEXSRV)
             plex_choose(it);
         else if (it->kind == IT_RUN) {
             char base[300];
@@ -9479,7 +9810,7 @@ static void handle_mouse(struct IntuiMessage *im)
                  * plays it (a folder: goes inside) */
                 struct Item *it = &p->list.items[idx];
                 BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
-                                it->kind == IT_SONG ||
+                                it->kind == IT_SONG || it->kind == IT_PLEXPHOTO ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);

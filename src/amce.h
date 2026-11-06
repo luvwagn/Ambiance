@@ -267,7 +267,8 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* 
 /* ---------------------------------------------------------------- ags */
 enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION,
        IT_PLEXDIR, IT_PLEXTRACK, IT_PLEXSRV,      /* Plex (plex.c) */
-       IT_SONG };                                 /* a music file here: MP3, FLAC (mods.c) */
+       IT_SONG,                                   /* a music file here: MP3, FLAC (mods.c) */
+       IT_PLEXPHOTO };                            /* a photo of a Plex photo library */
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
@@ -721,6 +722,9 @@ BOOL plex_converts(const struct Item *it);
 void plex_set_convert(BOOL on);
 void plex_set_on(BOOL on);
 void plex_set_library(const char *key, UWORD count);
+const char *plex_photo_libs(void);
+void plex_set_photo_libs(const char *v);
+BOOL plex_photo_sections(const char *key);
 int plex_tier(void);
 UWORD plex_decoder_cpu(void);
 void plex_section_menu(const char *sec, struct ItemList *l);

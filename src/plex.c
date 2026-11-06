@@ -56,9 +56,11 @@
 #define CONV_VAR   "AmigaMCE/PlexLowAudio"     /* was PlexConvert: on again by default */
 #define ON_VAR     "AmigaMCE/Plex"
 #define LIB_VAR    "AmigaMCE/PlexLibrary"
+#define PHOTO_VAR  "AmigaMCE/PlexPhotos"    /* its photo libraries: "key\ttitle" lines */
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
+static char photo_libs[400];
 static ULONG num(const char *s);
 static ULONG sessions;          /* conversions asked for: each its own session */
 
@@ -119,6 +121,9 @@ void plex_load(UWORD cpu)
     plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
     get_var(ON_VAR, v, sizeof(v));
     plex.on = amce_stricmp(v, "off") != 0;
+    if (GetVar((CONST_STRPTR)PHOTO_VAR, (STRPTR)photo_libs, sizeof(photo_libs),
+               GVF_GLOBAL_ONLY) < 0)
+        photo_libs[0] = 0;
     get_var(LIB_VAR, v, sizeof(v));         /* "<key> <count>" */
     {
         char *sp = strchr(v, ' ');
@@ -145,6 +150,26 @@ void plex_set_server(const char *host, UWORD port, const char *name)
     amce_strlcpy(plex.name, name[0] ? name : host, sizeof(plex.name));
     set_var(NAME_VAR, plex.name);
     plex_set_library("", 0);                /* another server: its libraries not known */
+    plex_set_photo_libs("");
+}
+
+/* The server's photo libraries as last listed ("key\ttitle" lines; ""
+ * not listed yet): Pictures shows each. */
+const char *plex_photo_libs(void)
+{
+    return photo_libs;
+}
+
+void plex_set_photo_libs(const char *v)
+{
+    amce_strlcpy(photo_libs, v, sizeof(photo_libs));
+    set_var(PHOTO_VAR, photo_libs);
+}
+
+/* The libraries' list asked for Pictures (its photo libraries), not Music. */
+BOOL plex_photo_sections(const char *key)
+{
+    return !strncmp(key, "/library/sections?", 18) && strstr(key, "photos=1") != NULL;
 }
 
 /* The request for key (a path on the server) into out: who asks, its
@@ -368,7 +393,7 @@ static void text(const char *in, char *out, LONG max)
 struct fill {
     struct ItemList *l;
     const char *base;           /* the request's key: relative keys are under it */
-    BOOL sections, albums_all;
+    BOOL sections, albums_all, photos;
     LONG total, skipped, added;
     /* a track, while its Media and Part come */
     BOOL track;
@@ -376,8 +401,40 @@ struct fill {
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
     char t_thumb[160], t_album_rk[16], t_artist_rk[16];
     ULONG t_ms, t_kbps, t_ch, t_rate, t_size;
+    /* a photo, while its Media and Part come */
+    BOOL ph;
+    int ph_depth;
+    char ph_title[128], ph_thumb[160], ph_part[300], ph_date[16], ph_summary[300];
+    ULONG ph_w, ph_h;
     BOOL full;
 };
+
+/* A photo (Photo, in a photo library): its key (the file as stored), then
+ * by tabs as a folder's details are, so the pane shows it: "photo", its
+ * picture's key, "" (no year: the date has it), size, date, "", summary. */
+static void flush_photo(struct fill *x)
+{
+    char path[1100], dims[32];
+    struct Item *it;
+    if (!x->ph)
+        return;
+    x->ph = FALSE;
+    if (!x->ph_thumb[0] && !x->ph_part[0]) {
+        x->skipped++;
+        return;
+    }
+    dims[0] = 0;
+    if (x->ph_w && x->ph_h)
+        sprintf(dims, "%lu x %lu", (unsigned long)x->ph_w, (unsigned long)x->ph_h);
+    sprintf(path, "%s\tphoto\t%s\t\t%s\t%s\t\t%s", x->ph_part[0] ? x->ph_part : "-",
+            x->ph_thumb[0] ? x->ph_thumb : x->ph_part, dims, x->ph_date, x->ph_summary);
+    if (!(it = list_add(x->l, x->ph_title[0] ? x->ph_title : "(no title)", path, x->ph_date,
+                        IT_PLEXPHOTO))) {
+        x->full = TRUE;
+        return;
+    }
+    x->added++;
+}
 
 static void flush_track(struct fill *x)
 {
@@ -415,6 +472,32 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         return 0;
     if (x->track && depth <= x->track_depth)
         flush_track(x);                     /* a sibling: the track before is complete */
+    if (x->ph && depth <= x->ph_depth)
+        flush_photo(x);
+    if (x->ph && !strcmp(name, "Media")) {
+        x->ph_w = num(xml_attr(a, n, "width"));
+        x->ph_h = num(xml_attr(a, n, "height"));
+        return 1;
+    }
+    if (x->ph && !strcmp(name, "Part")) {
+        if (!x->ph_part[0] && (v = xml_attr(a, n, "key")))
+            amce_strlcpy(x->ph_part, v, sizeof(x->ph_part));
+        return 1;
+    }
+    if (!strcmp(name, "Photo") && depth == 1) {
+        x->ph = TRUE;
+        x->ph_depth = depth;
+        text(xml_attr(a, n, "title"), x->ph_title, sizeof(x->ph_title));
+        amce_strlcpy(x->ph_thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
+                     sizeof(x->ph_thumb));
+        text(xml_attr(a, n, "originallyAvailableAt"), x->ph_date, sizeof(x->ph_date));
+        if (!x->ph_date[0])
+            text(xml_attr(a, n, "year"), x->ph_date, sizeof(x->ph_date));
+        text(xml_attr(a, n, "summary"), x->ph_summary, sizeof(x->ph_summary));
+        x->ph_part[0] = 0;
+        x->ph_w = x->ph_h = 0;
+        return 1;
+    }
     if (!strcmp(name, "MediaContainer")) {
         x->total = num(xml_attr(a, n, "totalSize"));
         if (!x->total)
@@ -468,7 +551,17 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         return 1;
     /* a folder of the server's: a library, an artist, an album */
     v = xml_attr(a, n, "type");
-    if (x->sections) {
+    if (x->sections && x->photos) {
+        /* Pictures' libraries: the photo ones, each opened at its top */
+        if (!v || strcmp(v, "photo")) {
+            x->skipped++;
+            return 1;
+        }
+        text(xml_attr(a, n, "title"), title, sizeof(title));
+        sprintf(key, "/library/sections/%.40s/all",
+                xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "");
+        tag[0] = 0;
+    } else if (x->sections) {
         /* the libraries: only music ones, each its own menu (@<key>) */
         if (!v || strcmp(v, "artist")) {
             x->skipped++;
@@ -480,6 +573,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         tag[0] = 0;
     } else {
         const char *k = xml_attr(a, n, "key");
+        BOOL photo = v && !strcmp(v, "photo");     /* an album of a photo library */
         if (!k) {
             x->skipped++;
             return 1;
@@ -510,6 +604,10 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         tag[0] = 0;
         if ((v = xml_attr(a, n, "year")))
             amce_strlcpy(tag, v, sizeof(tag));
+        else if (photo && (v = xml_attr(a, n, "leafCount")) && num(v))
+            sprintf(tag, num(v) == 1 ? "%lu photo" : "%lu photos", (unsigned long)num(v));
+        else if (photo && (v = xml_attr(a, n, "childCount")) && num(v))
+            sprintf(tag, num(v) == 1 ? "%lu item" : "%lu items", (unsigned long)num(v));
         else if ((v = xml_attr(a, n, "leafCount")) && num(v))
             sprintf(tag, num(v) == 1 ? "%lu track" : "%lu tracks", (unsigned long)num(v));
         {
@@ -525,6 +623,8 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             if (!strcmp(type, "artist") && num(xml_attr(a, n, "childCount")))
                 sprintf(count, num(xml_attr(a, n, "childCount")) == 1 ? "%lu album" : "%lu albums",
                         (unsigned long)num(xml_attr(a, n, "childCount")));
+            else if (!strcmp(type, "photo"))
+                amce_strlcpy(count, tag, sizeof(count));    /* photos, or items */
             else if (num(xml_attr(a, n, "leafCount")))
                 sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? "%lu track" : "%lu tracks",
                         (unsigned long)num(xml_attr(a, n, "leafCount")));
@@ -556,12 +656,14 @@ LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG
     memset(&x, 0, sizeof(x));
     x.l = l;
     x.base = key;
-    x.sections = !strcmp(key, "/library/sections");
+    x.sections = !strcmp(key, "/library/sections") || plex_photo_sections(key);
+    x.photos = plex_photo_sections(key);
     x.albums_all = strstr(key, "type=9") != NULL;
     if (len < 16 || !strstr((char *)body, "<MediaContainer"))
         return -1;
     xml_scan((char *)body, len, element, &x);
     flush_track(&x);
+    flush_photo(&x);
     if (total)
         *total = x.total;
     return x.added;
@@ -647,19 +749,24 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
     ULONG hash = 5381;
     const char *s;
     BPTR l;
+    BOOL jpg;
     for (s = thumb; *s; s++)
         hash = hash * 33 + (UBYTE)*s;
     if ((l = Lock((CONST_STRPTR)"RAM:AmigaMCE-art", SHARED_LOCK)))
         UnLock(l);
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
         UnLock(l);
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.png", (unsigned long)hash, (long)w, (long)h);
+    /* bigger than a 640 x 512 screen (a photo on RTG): JPEG, a tenth of a
+     * PNG's size (a 1024 x 768 PNG of a photo is past what is read, 2 MB) */
+    jpg = (LONG)w * h > 640L * 512;
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.%s", (unsigned long)hash, (long)w, (long)h,
+            jpg ? "jpg" : "png");
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));
     /* minSize=0: within w x h, so never bigger than it is shown (a tall
      * cover came 160 x 279, read and averaged down to 91 x 160) */
-    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=0&upscale=1&format=png&url=",
-            (long)w, (long)h);
+    sprintf(n, "/photo/:/transcode?width=%ld&height=%ld&minSize=0&upscale=1&format=%s&url=",
+            (long)w, (long)h, jpg ? "jpeg" : "png");
     {
         char k[520];
         amce_strlcpy(k, n, sizeof(k));

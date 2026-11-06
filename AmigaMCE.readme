@@ -8,8 +8,9 @@ Architecture: m68k-amigaos >= 3.1.0
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi and Windows Media Center: games and demos from Amiga Game Selector
-(AGS), tracker music, internet radio, the music on your Plex server and
-your pictures, all in one place, driven by keyboard, mouse or joystick.
+(AGS), tracker music, internet radio, the music and photos on your Plex
+server and your pictures, all in one place, driven by keyboard, mouse or
+joystick.
 
 It is a drop-in companion to AGS 3: copy the AmigaMCE drawer anywhere on
 an AGS installation and double-click it. Everything plays inside AmigaMCE,
@@ -77,6 +78,11 @@ Pictures
   shows pictures full screen on AmigaMCE's own screen (no mode switch) and
   plays folders as slideshows, in the pictures' own colours where the
   screen allows. Pictures are decoded by the installed datatypes.
+- Plex photos: the photo libraries of your Plex server at the top of
+  Pictures, albums and photos with a preview beside the list, full
+  screen and as slideshows. The server makes each photo the size of the
+  screen (PNG, JPEG above 640x512); the next is fetched while one is
+  shown, and a slideshow waits for a slow one rather than skip it.
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
@@ -163,7 +169,8 @@ Setting up Plex
 2. If the server asks for a sign-in, set your Plex token from the Shell:
      SetEnv SAVE AmigaMCE/PlexToken <token>
    About > Plex in AmigaMCE says where to find it.
-3. Your music libraries appear under Music.
+3. Your music libraries appear under Music, photo libraries at the top
+   of Pictures.
 
 
 Not there yet
@@ -176,7 +183,8 @@ Not there yet
 
 History
 -------
-next   Music files: MP3 and FLAC from the MUSIC: assign and Music
+0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
+       Music files: MP3 and FLAC from the MUSIC: assign and Music
        folders; FLAC from Plex as stored (flacdec.library); 68020+.
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and

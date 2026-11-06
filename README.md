@@ -2,7 +2,7 @@
 
 **A fast, full-screen media centre for the Amiga.** Games and demos from
 [Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector),
-tracker music, internet radio, your Plex music library and your pictures,
+tracker music, internet radio, your Plex music and photo libraries and your pictures,
 all in one place, driven by keyboard, mouse or joystick, in the spirit of
 Kodi and Windows Media Center.
 
@@ -65,6 +65,12 @@ of the Amiga to how fast it really is.
   shows pictures full screen on AmigaMCE's own screen (no mode switch), and
   plays folders as slideshows. Pictures are decoded by the installed
   datatypes and shown in their own colours where the screen allows it.
+- **Plex photos:** the photo libraries of your Plex server, at the top of
+  Pictures: albums and photos with a preview beside the list, each photo
+  full screen and slideshows. The server makes each photo the size of the
+  screen (PNG; JPEG above 640x512), so the Amiga decodes no more than it
+  shows; the next one is fetched while you look at this one, and a
+  slideshow waits for a slow one rather than skipping it.
 
 ### Screens and looks
 
@@ -119,7 +125,8 @@ playing.
 2. If your server asks for a sign-in, give AmigaMCE your Plex token from the
    Shell: `SetEnv SAVE AmigaMCE/PlexToken <token>`. About > Plex in AmigaMCE
    explains where to find it.
-3. Your music libraries appear under Music.
+3. Your music libraries appear under Music, your photo libraries at the
+   top of Pictures.
 
 ## Settings
 
@@ -170,7 +177,7 @@ Every push to `main` is built and tested by GitHub Actions.
 
 The version comes from `git describe --tags`. The minor number counts the
 library views: it goes up by one each time a new one joins the menu (Mods
-brought 0.4, Music from a Plex server 0.5). Builds between tags are named
+brought 0.4, Music from a Plex server 0.5, Plex photos 0.6). Builds between tags are named
 after the last one (`0.5.0-12-gabcdef`); a patch release gets its own tag
 (`v0.5.1`).
 
