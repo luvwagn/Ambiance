@@ -2978,8 +2978,8 @@ static void dbg_load_log(void)
 static const char *scr_why;
 static void scr_watch(void)
 {
-    static char last[400];
-    char m[400], cols[80];
+    static char last[600];
+    char m[600], cols[80], dsp[200];
     struct Screen *front = IntuitionBase->FirstScreen;
     UWORD dma = *(volatile UWORD *)0xDFF002;    /* DMACONR */
     struct Page *p = cur();
@@ -3007,6 +3007,19 @@ static void scr_watch(void)
                     for (x = k ? g.pane_x : 0; x < (k ? g.pane_x + g.pane_w / 2 : g.w); x += 2)
                         if (ReadPixel(g.rp, x, ys[k]) != PEN_BG)
                             ink[k]++;
+        /* the display itself: whose View is loaded, our ViewPort hidden or
+         * not, its copper lists there, and chip RAM (copper lists are made
+         * in it: without room, a screen can show no bitplanes) */
+        {
+            struct View *av = GfxBase->ActiView;
+            struct ViewPort *vp = g.scr ? &g.scr->ViewPort : NULL;
+            sprintf(dsp, "view %s, viewport %s%s, copper %s/%s",
+                    av == &IntuitionBase->ViewLord ? "Intuition's" : av ? "ANOTHER" : "NONE",
+                    vp && (vp->Modes & VP_HIDE) ? "HIDDEN" : "shown",
+                    vp && !vp->DspIns ? ", NO DISPLAY INSTRUCTIONS" : "",
+                    av && av->LOFCprList ? "long" : "NO LONG",
+                    av && av->SHFCprList ? "short" : "no short");
+        }
         sprintf(m, "front %s%.30s, display DMA %s, colours %s, screen at %ld,%ld scrolled %ld,%ld, "
                    "ink: header %s, row 1 %s, middle %s%s",
                 front == g.scr ? "ours" : "another: ",
@@ -3019,8 +3032,13 @@ static void scr_watch(void)
                 p && p->type == PT_LIST && p->list.count && p->top >= p->list.count
                     ? ", LIST PAST ITS END" : "");
     }
+    amce_strlcat(m, "; ", sizeof(m));
+    amce_strlcat(m, dsp, sizeof(m));
     if (strcmp(m, last) || scr_why) {
         amce_strlcpy(last, m, sizeof(last));
+        sprintf(m + strlen(m), "; chip free %luK (largest %luK)",
+                (unsigned long)(AvailMem(MEMF_CHIP) >> 10),
+                (unsigned long)(AvailMem(MEMF_CHIP | MEMF_LARGEST) >> 10));
         if (scr_why)
             sprintf(m + strlen(m), " (on %s)", scr_why);
         scr_why = NULL;
