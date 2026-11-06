@@ -92,6 +92,10 @@ Pictures
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
   and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic.
+- Japanese, Chinese and Korean names (from Plex, stations and song
+  tags) are shown in their own characters on laced and RTG screens, at
+  12 or 15 pixels; the smaller screens show [JP], [KO] or [CJK] in their
+  place.
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.
@@ -193,7 +197,8 @@ History
        AHI output and MHI MP3 decoding for radio, Plex and music files.
        Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
        assign and Music folders, with tags and covers; FLAC from Plex
-       as stored (flacdec.library); 68020+.
+       as stored (flacdec.library); 68020+. Japanese, Chinese and
+       Korean names in their own characters.
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and
        stream buffer settings; network interface choice; Countries A to Z
@@ -212,8 +217,8 @@ is not included: get it from Aminet, util/libs/flacdec, in its own
 unchanged archive.
 
 Fonts: Pixelify Sans (c) The Pixelify Sans Project Authors, Galmuri
-(c) 2019-2025 Lee Minseo and Rubik (c) The Rubik Project Authors, all
-under the SIL Open Font Licence 1.1; the full texts are in the Licences
+(c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf and Rubik
+(c) The Rubik Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in the Licences
 drawer. Radio's station lists come from radio-browser.info.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other

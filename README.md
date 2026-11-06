@@ -174,6 +174,7 @@ inline OS call when a multiply helper call ends up between them (see
 | `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
 | `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
+| `python3 tools/mkcjk.py <galmuri-dist> <ark-pixel-font> assets/Fonts/amce-cjk` | Regenerates the Japanese, Chinese and Korean glyph packs from Galmuri's BDFs and Ark Pixel Font's 12px glyphs |
 | `make icons` | Regenerates the Workbench icons in `docs/` |
 
 Every push to `main` is built and tested by GitHub Actions.
@@ -202,7 +203,7 @@ attached. Publishing that release uploads it to Aminet.
 
 AmigaMCE © 2026 Brian King, under the [MIT licence](LICENSE).
 
-The fonts (Pixelify Sans, Galmuri and Rubik, and the Amiga fonts made from
+The fonts (Pixelify Sans, Galmuri, Ark Pixel Font and Rubik, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT
 licence; see `assets/fonts-src/`. The EaglePlayer host follows HippoPlayer's
 (MIT, © 2017 Kari-Pekka Koljonen). FLAC is decoded by flacdec.library

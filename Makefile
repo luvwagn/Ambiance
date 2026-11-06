@@ -31,7 +31,7 @@ LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c \
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c \
        src/cpucheck.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o
 VASM ?= vasmm68k_mot
@@ -53,9 +53,11 @@ FONT_FILES += $(foreach f,$(GALMURI),assets/Fonts/$(word 1,$(subst :, ,$(f))).fo
 SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/768 assets/Fonts/amce-smooth/logo1 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
+# Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel)
+CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
-             assets/fonts-src/OFL-Galmuri.txt CREDITS.txt LICENSE
+             assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt CREDITS.txt LICENSE
 
 .PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
 
@@ -188,10 +190,11 @@ preview: src/art.c $(FONT_FILES)
 	$(PYTHON) tools/preview_screen.py src/art.c assets/Fonts build/preview-glide.png hires pal glide
 
 # ------------------------------------------------------------------ release
-lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES)
+lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES)
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
-	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Licences
+	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Fonts/amce-cjk \
+		$(LHA_DIR)/Licences
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
 	@cp assets/Fonts/amce-pixel.font $(LHA_DIR)/Fonts/
@@ -201,6 +204,7 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES
 		cp assets/Fonts/$$n.font $(LHA_DIR)/Fonts/; \
 		cp assets/Fonts/$$n/$${f##*:} $(LHA_DIR)/Fonts/$$n/; done
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
+	@cp $(CJK_FILES) $(LHA_DIR)/Fonts/amce-cjk/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \
 		AmigaMCE.readme > $(LHA_DIR)/readme.txt
@@ -217,7 +221,7 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) $(FONT_FILES) $(SMOOTH_FILES) $(LICENCES
 disk: lha
 	@echo "  DISK  $(DISK)"
 	@rm -f $(DISK)
-	@xdftool $(DISK) format "$(DISK_TITLE)"
+	@xdftool $(DISK) format "$(DISK_TITLE)" ffs
 	@xdftool $(DISK) write $(LHA_NAME) amigamce.lha
 	@xdftool $(DISK) write $(LHA_DIR)/readme.txt readme.txt
 	@xdftool $(DISK) write docs/readme.info readme.txt.info

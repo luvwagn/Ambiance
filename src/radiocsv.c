@@ -89,7 +89,19 @@ int csv_col(char **hdr, int n, const char *name)
     return -1;
 }
 
-/* UTF-8 to Latin-1, in place (it only gets shorter). */
+/* Japanese, Chinese and Korean characters AmigaMCE keeps (cjk.c draws
+ * them; keep in step with tools/mkcjk.py's RANGES). */
+static int cjk_wanted(unsigned long c)
+{
+    return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3000 && c <= 0x30FF) ||
+           (c >= 0x3130 && c <= 0x318F) || (c >= 0x31F0 && c <= 0x31FF) ||
+           (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF) ||
+           (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFFEF);
+}
+
+/* UTF-8 to Latin-1, in place (it only gets shorter). Japanese, Chinese
+ * and Korean characters stay, as three bytes no Latin-1 text has (cjk.c);
+ * their UTF-8 is three bytes too. */
 void utf8_to_latin1(char *s)
 {
     unsigned char *p = (unsigned char *)s, *o = (unsigned char *)s;
@@ -125,6 +137,11 @@ void utf8_to_latin1(char *s)
         }
         if (c >= 0xA0 && c <= 0xFF)
             *o++ = (unsigned char)c;
+        else if (cjk_wanted(c)) {
+            *o++ = (unsigned char)(0x80 | (c >> 11));
+            *o++ = (unsigned char)(0xA0 | ((c >> 6) & 31));
+            *o++ = (unsigned char)(0x80 | (c & 63));
+        }
         else if (c == 0x2018 || c == 0x2019 || c == 0x2032)
             *o++ = '\'';
         else if (c == 0x201C || c == 0x201D || c == 0x2033)

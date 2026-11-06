@@ -1194,7 +1194,9 @@ static WORD textbox_w(void)
     return g.pane_w - U(9);
 }
 
-/* Word-wrap a paragraph into l, maxw pixels wide. */
+/* Word-wrap a paragraph into l, maxw pixels wide. A Japanese, Chinese or
+ * Korean character is a word of its own, joined without a space (their
+ * text has none to break at). */
 static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
 {
     char line[160], word[96];
@@ -1202,15 +1204,25 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
     while (*s) {
         LONG n = 0;
         char tryline[256];
+        ULONG cp;
+        BOOL spaced = FALSE;
+        int k;
         while (*s == ' ')
-            s++;
-        while (*s && *s != ' ' && n < (LONG)sizeof(word) - 1)
-            word[n++] = *s++;
+            s++, spaced = TRUE;
+        if ((k = cjk_dec((const UBYTE *)s, strlen(s), &cp))) {
+            memcpy(word, s, k);
+            n = k;
+            s += k;
+        } else {
+            while (*s && *s != ' ' && n < (LONG)sizeof(word) - 1 &&
+                   !(n && cjk_dec((const UBYTE *)s, strlen(s), &cp)))
+                word[n++] = *s++;
+        }
         word[n] = 0;
         if (!n)
             break;
         amce_strlcpy(tryline, line, sizeof(tryline));
-        if (tryline[0])
+        if (tryline[0] && spaced)
             amce_strlcat(tryline, " ", sizeof(tryline));
         amce_strlcat(tryline, word, sizeof(tryline));
         if (line[0] && gfx_textlen(&g, tryline, TS_BODY) > maxw) {
@@ -3403,6 +3415,8 @@ static char ov_letter_of(const char *s)
 {
     for (; *s; s++) {
         UBYTE c = (UBYTE)*s;
+        if (c >= 0x80 && c <= 0x9F)
+            return 0;                       /* Japanese, Chinese, Korean: no letter */
         if (c >= 'a' && c <= 'z')
             return (char)(c - 32);
         if ((c >= 'A' && c <= 'Z'))

@@ -149,6 +149,21 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /*
  * edges blend into it). maxw > 0 cuts it to fit; ts is TS_* (| TS_OPAQUE). */
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts);
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
+void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, UBYTE fg,
+                 WORD maxw);
+
+/* cjk.c: Japanese, Chinese and Korean text, kept in strings as three bytes
+ * a character (see there), drawn from glyph packs or shown as a tag */
+int cjk_dec(const UBYTE *s, ULONG n, ULONG *cp);
+BOOL cjk_any(const char *s, ULONG n);
+ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max);
+void cjk_open(struct Gfx *g);
+void cjk_close(void);
+BOOL cjk_tags(void);
+WORD cjk_textlen(struct Gfx *g, struct RastPort *rp, const char *s, ULONG n, int face);
+ULONG cjk_fit(struct Gfx *g, struct RastPort *rp, const char *s, ULONG n, int face, WORD maxw);
+WORD cjk_text(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, ULONG n,
+              UBYTE fg, UBYTE bg, BOOL opaque, int face, WORD maxw);
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
 void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px);

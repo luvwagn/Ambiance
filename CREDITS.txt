@@ -17,6 +17,12 @@ licensed under the SIL Open Font Licence 1.1 (see OFL-Galmuri.txt).
 amce-galmuri14b is Galmuri14 thickened by a pixel. The converted fonts
 are released under the same licence.
 
+Japanese, Chinese and Korean names are drawn from glyphs copied from
+Galmuri11 and Galmuri14 (above) and, for the Chinese characters Galmuri
+has not, Ark Pixel Font 12px, (c) 2021 TakWolf, licensed under the SIL
+Open Font Licence 1.1 (see OFL-ArkPixel.txt). The glyph packs in
+Fonts/amce-cjk are released under the same licence.
+
 The AmigaMCE logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).

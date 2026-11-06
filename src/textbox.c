@@ -128,16 +128,10 @@ BOOL tb_open(struct Gfx *g, struct TextBox *tb, WORD x, WORD y, WORD w, WORD h,
     SetDrMd(&rp, JAM1);
     for (i = 0; i < lines->count && (i + 1) * tb->line_h <= tb->content_h; i++) {
         const char *s = lines->items[i].label;
-        struct TextExtent te;
-        ULONG n = strlen(s);
-        if (!n)
+        if (!s[0])
             continue;
-        n = TextFit(&rp, (CONST_STRPTR)s, n, &te, NULL, 1, w, g->font_h + 1);
-        if (!n)
-            continue;
-        SetAPen(&rp, (first_white && i == 0) ? PEN_WHITE : PEN_TEXT);
-        Move(&rp, 0, i * tb->line_h + g->baseline);
-        Text(&rp, (CONST_STRPTR)s, n);
+        gfx_text_rp(g, &rp, 0, i * tb->line_h, s, (first_white && i == 0) ? PEN_WHITE : PEN_TEXT,
+                    w);
     }
     return TRUE;
 }

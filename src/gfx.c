@@ -387,6 +387,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         g->icon_px = 16 * g->kint;
         g->mark_px = MARK_SIZE * g->kint;
     }
+    cjk_open(g);
     fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
@@ -736,6 +737,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
         g->icon_px = 16 * g->kint;
         g->mark_px = MARK_SIZE * g->kint;
     }
+    cjk_open(g);
     fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
@@ -748,6 +750,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
 void gfx_close(struct Gfx *g)
 {
     int i;
+    cjk_close();
     gfx_dbuf_stop(g);
     gfx_picture_free(g);
     blk_release(g);
@@ -855,9 +858,44 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 {
+    ULONG n = strlen(s);
+    if (cjk_any(s, n)) {
+        /* Japanese, Chinese, Korean: their glyphs, or a tag (cjk.c) */
+        if (cjk_tags()) {
+            char buf[300];
+            cjk_tagged(s, n, buf, sizeof(buf));
+            return gfx_textlen(g, buf, ts);
+        }
+        return cjk_textlen(g, g->rp, s, n, ts & 0x0F);
+    }
     if (g->sm)
-        return sm_textlen(g->sm, s, strlen(s), ts & 0x0F);
-    return TextLength(g->rp, (CONST_STRPTR)s, strlen(s));
+        return sm_textlen(g->sm, s, n, ts & 0x0F);
+    return TextLength(g->rp, (CONST_STRPTR)s, n);
+}
+
+/* Text into a RastPort of its own (a text box's bitmap), JAM1, its line's
+ * top at y: as gfx_text, Far East characters too. */
+void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, UBYTE fg,
+                 WORD maxw)
+{
+    struct TextExtent te;
+    ULONG n = strlen(s);
+    char buf[300];
+    if (n && cjk_any(s, n)) {
+        if (!cjk_tags()) {
+            cjk_text(g, rp, x, y, s, n, fg, 0, FALSE, TS_BODY, maxw);
+            return;
+        }
+        n = cjk_tagged(s, n, buf, sizeof(buf));
+        s = buf;
+    }
+    if (maxw > 0)
+        n = TextFit(rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, g->font_h + 1);
+    if (!n)
+        return;
+    SetAPen(rp, fg);
+    Move(rp, x, y + g->baseline);
+    Text(rp, (CONST_STRPTR)s, n);
 }
 
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts)
@@ -867,8 +905,31 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
     ULONG n = strlen(s);
     BOOL opaque = (ts & TS_OPAQUE) != 0;
     int face = ts & 0x0F;
+    char tagged[300];
     if (!n)
         return;
+    if (cjk_any(s, n)) {
+        /* Japanese, Chinese, Korean: their glyphs, or a tag (cjk.c) */
+        if (cjk_tags()) {
+            n = cjk_tagged(s, n, tagged, sizeof(tagged));
+            s = tagged;
+        } else {
+            if (g->sm && maxw > 0 && cjk_textlen(g, g->rp, s, n, face) > maxw) {
+                /* too long: as much as fits, then "..." */
+                WORD dots = sm_textlen(g->sm, "...", 3, face), w;
+                ULONG k = maxw > dots ? cjk_fit(g, g->rp, s, n, face, maxw - dots) : 0;
+                while (k > 0 && s[k - 1] == ' ')
+                    k--;
+                if (!k)
+                    return;
+                w = cjk_text(g, g->rp, x, y, s, k, fg, bg, opaque, face, 0);
+                sm_text(g->sm, g, x + w, y, "...", 3, face, fg, bg, opaque);
+                return;
+            }
+            cjk_text(g, g->rp, x, y, s, n, fg, bg, opaque, face, maxw);
+            return;
+        }
+    }
     if (g->sm) {
         /* too long: as much as fits, then "..." */
         if (maxw > 0 && sm_textlen(g->sm, s, n, face) > maxw) {
