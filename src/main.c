@@ -1877,46 +1877,7 @@ static void build_nic_settings(struct Page *p);
 /* ---- the language: the Workbench's (Locale prefs), English, or one
  * whose catalog is in PROGDIR:Catalogs (lang.c) */
 #define LANG_VAR "AmigaMCE/Language"    /* "" the Workbench's, "english", or a language */
-#define MAX_LANGS 16
 static char lang_set[32];
-static char langs[MAX_LANGS][32];
-static int nlangs;
-
-/* The catalogs there: each language's drawer with AmigaMCE.catalog in it. */
-static void langs_find(void)
-{
-    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
-    BPTR l;
-    nlangs = 0;
-    if (!fib)
-        return;
-    if ((l = Lock((CONST_STRPTR) "PROGDIR:Catalogs", SHARED_LOCK))) {
-        if (Examine(l, fib))
-            while (ExNext(l, fib) && nlangs < MAX_LANGS) {
-                char path[80];
-                BPTR c;
-                if (fib->fib_DirEntryType <= 0 || strlen((char *)fib->fib_FileName) >= 32)
-                    continue;
-                sprintf(path, "PROGDIR:Catalogs/%.31s/AmigaMCE.catalog", (char *)fib->fib_FileName);
-                if ((c = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
-                    UnLock(c);
-                    amce_strlcpy(langs[nlangs++], (char *)fib->fib_FileName, 32);
-                }
-                {
-                    /* what the drawer is called, byte by byte where not ASCII
-                     * (an emulator's host folder can name it otherwise) */
-                    char m[160], *o = m;
-                    const UBYTE *q = (const UBYTE *)fib->fib_FileName;
-                    for (; *q && o < m + 100; q++)
-                        o += *q < 0x80 ? sprintf(o, "%c", *q) : sprintf(o, "<%02lx>", (unsigned long)*q);
-                    sprintf(o, ": %s", c ? "a catalog" : "no AmigaMCE.catalog in it");
-                    amce_log("language drawer", m);
-                }
-            }
-        UnLock(l);
-    }
-    FreeDosObject(DOS_FIB, fib);
-}
 
 /* A language's name as it calls itself ("deutsch": Deutsch). */
 static void lang_name(const char *lang, char *out)
@@ -1930,34 +1891,21 @@ static void lang_name(const char *lang, char *out)
         out[0] -= 32;
 }
 
-/* The Workbench's first language (Locale prefs), "" none. */
-static const char *wb_language(void)
-{
-    static char l[32];
-    struct Locale *loc;
-    l[0] = 0;
-    if (LocaleBase && (loc = OpenLocale(NULL))) {
-        if (loc->loc_PrefLanguages[0])
-            amce_strlcpy(l, (const char *)loc->loc_PrefLanguages[0], sizeof(l));
-        CloseLocale(loc);
-    }
-    return l;
-}
-
 /* Settings > General > Language. */
 static void build_lang_settings(struct Page *p)
 {
     char t[32];
     int i;
     p->setp = SETP_LANG;
-    lang_name(wb_language(), t);
+    amce_lang_scan();                   /* a catalog put in meanwhile is here too */
+    lang_name(amce_lang_wb(), t);
     action_item(p, _("As Workbench"), t, ACT_LANGWB, !lang_set[0] ? MARK_RADIO_ON : MARK_RADIO_OFF);
     action_item(p, "English", "", ACT_LANGEN,
                 !amce_stricmp(lang_set, "english") ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    for (i = 0; i < nlangs; i++) {
-        lang_name(langs[i], t);
+    for (i = 0; i < amce_lang_count() && i < 16; i++) {
+        lang_name(amce_lang_name(i), t);
         action_item(p, t, "", ACT_LANG0 + i,
-                    !amce_stricmp(lang_set, langs[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
+                    !amce_stricmp(lang_set, amce_lang_name(i)) ? MARK_RADIO_ON : MARK_RADIO_OFF);
     }
 }
 
@@ -2003,10 +1951,11 @@ static void build_general_settings(struct Page *p)
     char t[32];
     struct Item *it;
     p->setp = SETP_GENERAL;
+    amce_lang_scan();                   /* a catalog put in meanwhile counts */
     lang_name(amce_lang_now(), t);
     /* only a choice with a catalog besides English: else just what is used */
-    if ((it = action_item(p, _("Language"), t, ACT_LANGSET, nlangs ? MARK_ARROW : MARK_NONE)) &&
-        !nlangs)
+    if ((it = action_item(p, _("Language"), t, ACT_LANGSET,
+                          amce_lang_count() ? MARK_ARROW : MARK_NONE)) && !amce_lang_count())
         it->flags |= ITEM_DISABLED;
     action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
@@ -9789,9 +9738,9 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_LANGSET)
         open_settings_page(_("Language"), build_lang_settings);
     else if (it->action == ACT_LANGWB || it->action == ACT_LANGEN ||
-             (it->action >= ACT_LANG0 && it->action < ACT_LANG0 + nlangs))
+             (it->action >= ACT_LANG0 && it->action < ACT_LANG0 + amce_lang_count()))
         choose_language(it->action == ACT_LANGWB ? "" : it->action == ACT_LANGEN
-                        ? "english" : langs[it->action - ACT_LANG0]);
+                        ? "english" : amce_lang_name(it->action - ACT_LANG0));
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
     else if (it->action == ACT_HTTPS)
@@ -10929,7 +10878,7 @@ static int app_main(void)
         char buf[32];
         if (GetVar((CONST_STRPTR)LANG_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             amce_strlcpy(lang_set, buf, sizeof(lang_set));
-        langs_find();
+        amce_lang_scan();
         amce_lang_open(lang_set);
     }
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);

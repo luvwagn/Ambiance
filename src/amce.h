@@ -160,6 +160,10 @@ const char *amce_tr(const char *s);
 ULONG amce_tr_id(const char *s);
 #define _(s) amce_tr(s)
 #define N_(s) (s)
+void amce_lang_scan(void);
+int amce_lang_count(void);
+const char *amce_lang_name(int i);
+const char *amce_lang_wb(void);
 void amce_lang_open(const char *lang);
 void amce_lang_close(void);
 void amce_lang_quit(void);

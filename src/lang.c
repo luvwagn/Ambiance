@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - translations (locale.library catalogs)
+ * AmigaMCE - translations (catalogs)
  * Copyright (c) 2026 Brian King
  *
  * Text the user sees is written in English in the source, as _("...")
@@ -10,19 +10,39 @@
  * Catalogs/<language>/AmigaMCE.catalog. A string with no translation, or
  * no catalog at all, is the English itself.
  *
- * The catalog is the Workbench's language (Locale prefs), or the one
- * chosen in Settings > General. Lookups go through a small cache by the
- * string's address: the English is a literal, at one address for good.
+ * The catalogs are locale.library's (IFF CTLG), but read here: each found
+ * in PROGDIR:Catalogs or LOCALE:Catalogs is known by the language written
+ * in it (its LANG chunk), not by its drawer's name, which a host folder
+ * shared with an emulator can spell otherwise ("français"). The one used
+ * is the Workbench's first language that has one (Locale prefs), or the
+ * one chosen in Settings > General. Its strings are kept sorted by ID and
+ * found by a binary search, behind a small cache by the English's address
+ * (a literal, at one address for good).
  */
 #include "amce.h"
 
 #include <string.h>
+#include <stdio.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 #include <proto/locale.h>
 #include <libraries/locale.h>
 
 struct LocaleBase *LocaleBase;
-static struct Catalog *cat;
+
+#define MAX_CATS 16
+static struct {
+    char lang[32];
+    char path[120];
+} cats[MAX_CATS];
+static int ncats;
+
+static UBYTE *cat_buf;          /* the catalog in use, whole */
+static ULONG cat_size;
+static ULONG *cat_ids;          /* its strings' IDs, sorted, */
+static const char **cat_strs;   /* and the strings */
+static ULONG cat_n;
+static char cat_lang[32];
 
 #define TR_CACHE 512
 static struct {
@@ -38,37 +58,224 @@ ULONG amce_tr_id(const char *s)
     return h & 0x7FFFFFFFUL;
 }
 
+static const char *lookup(ULONG id)
+{
+    LONG lo = 0, hi = (LONG)cat_n - 1;
+    while (lo <= hi) {
+        LONG mid = (lo + hi) >> 1;
+        if (cat_ids[mid] == id)
+            return cat_strs[mid];
+        if (cat_ids[mid] < id)
+            lo = mid + 1;
+        else
+            hi = mid - 1;
+    }
+    return NULL;
+}
+
 const char *amce_tr(const char *s)
 {
     ULONG k;
-    if (!cat || !s || !*s)
+    const char *t;
+    if (!cat_n || !s || !*s)
         return s;
     k = ((ULONG)s >> 1) & (TR_CACHE - 1);
     /* the network and radio processes ask too: one at a time at the cache */
     Forbid();
     if (cache[k].en != s) {
         cache[k].en = s;
-        cache[k].tr = (const char *)GetCatalogStr(cat, (LONG)amce_tr_id(s), (STRPTR)s);
+        cache[k].tr = (t = lookup(amce_tr_id(s))) ? t : s;
     }
     s = cache[k].tr;
     Permit();
     return s;
 }
 
-/* The catalog for lang (an Amiga language name: "deutsch"), or the
- * Workbench's (NULL or ""), or none ("english"). */
+static ULONG be32(const UBYTE *p)
+{
+    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
+}
+
+/* The language written in a catalog file (its LANG chunk), into lang. */
+static BOOL cat_language(const char *path, char *lang)
+{
+    UBYTE b[256];
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG n, i;
+    lang[0] = 0;
+    if (!fh)
+        return FALSE;
+    n = Read(fh, b, sizeof(b));
+    Close(fh);
+    if (n < 20 || memcmp(b, "FORM", 4) || memcmp(b + 8, "CTLG", 4))
+        return FALSE;
+    for (i = 12; i + 8 <= n;) {
+        ULONG len = be32(b + i + 4);
+        if (!memcmp(b + i, "LANG", 4)) {
+            ULONG k;
+            for (k = 0; k < len && k < 31 && i + 8 + (LONG)k < n && b[i + 8 + k]; k++)
+                lang[k] = (char)b[i + 8 + k];
+            lang[k] = 0;
+            return lang[0] != 0;
+        }
+        i += 8 + len + (len & 1);
+    }
+    return FALSE;
+}
+
+static void scan_dir(const char *dir)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BPTR l;
+    if (!fib)
+        return;
+    if ((l = Lock((CONST_STRPTR)dir, SHARED_LOCK))) {
+        if (Examine(l, fib))
+            while (ExNext(l, fib) && ncats < MAX_CATS) {
+                char path[120], lang[32];
+                int i;
+                if (fib->fib_DirEntryType <= 0)
+                    continue;
+                sprintf(path, "%s/%.40s/AmigaMCE.catalog", dir, (char *)fib->fib_FileName);
+                if (!cat_language(path, lang))
+                    continue;
+                for (i = 0; i < ncats && amce_stricmp(cats[i].lang, lang); i++)
+                    ;
+                if (i < ncats)
+                    continue;                   /* PROGDIR's first */
+                amce_strlcpy(cats[ncats].lang, lang, sizeof(cats[0].lang));
+                amce_strlcpy(cats[ncats].path, path, sizeof(cats[0].path));
+                ncats++;
+            }
+        UnLock(l);
+    }
+    FreeDosObject(DOS_FIB, fib);
+}
+
+/* The catalogs there are, by their languages. */
+void amce_lang_scan(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;            /* no LOCALE: is no requester */
+    ncats = 0;
+    scan_dir("PROGDIR:Catalogs");
+    scan_dir("LOCALE:Catalogs");
+    me->pr_WindowPtr = old;
+}
+
+int amce_lang_count(void)
+{
+    return ncats;
+}
+
+const char *amce_lang_name(int i)
+{
+    return i >= 0 && i < ncats ? cats[i].lang : "";
+}
+
+/* The Workbench's languages (Locale prefs), first first: n of them. */
+static int wb_languages(char out[][32], int max)
+{
+    struct Locale *loc;
+    int n = 0;
+    if (!LocaleBase &&
+        !(LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR) "locale.library", 38)))
+        return 0;
+    if ((loc = OpenLocale(NULL))) {
+        for (; n < max && n < 10 && loc->loc_PrefLanguages[n]; n++)
+            amce_strlcpy(out[n], (const char *)loc->loc_PrefLanguages[n], 32);
+        CloseLocale(loc);
+    }
+    return n;
+}
+
+const char *amce_lang_wb(void)
+{
+    static char l[4][32];
+    return wb_languages(l, 4) ? l[0] : "";
+}
+
+static BOOL load(int k)
+{
+    BPTR fh;
+    ULONG i, n = 0, cap;
+    if (!(fh = Open((CONST_STRPTR)cats[k].path, MODE_OLDFILE)))
+        return FALSE;
+    Seek(fh, 0, OFFSET_END);
+    cat_size = (ULONG)Seek(fh, 0, OFFSET_BEGINNING);
+    if (cat_size < 20 || cat_size > 400000 || !(cat_buf = AllocVec(cat_size + 1, MEMF_ANY)) ||
+        Read(fh, cat_buf, cat_size) != (LONG)cat_size) {
+        Close(fh);
+        amce_lang_close();
+        return FALSE;
+    }
+    Close(fh);
+    /* the STRS chunk: ID, length (its NUL counted as written), the string,
+     * padded to 4 */
+    for (i = 12; i + 8 <= cat_size;) {
+        ULONG len = be32(cat_buf + i + 4);
+        if (!memcmp(cat_buf + i, "STRS", 4) && i + 8 + len <= cat_size) {
+            UBYTE *p = cat_buf + i + 8, *e = p + len;
+            cap = len / 12 + 1;
+            cat_ids = AllocVec(cap * sizeof(ULONG), MEMF_ANY);
+            cat_strs = AllocVec(cap * sizeof(char *), MEMF_ANY);
+            if (!cat_ids || !cat_strs) {
+                amce_lang_close();
+                return FALSE;
+            }
+            while (p + 8 <= e && n < cap) {
+                ULONG id = be32(p), sl = be32(p + 4), j;
+                const char *s = (const char *)(p + 8);
+                if (p + 8 + sl > e)
+                    break;
+                /* kept in ID order (written so, but any order is read) */
+                for (j = n; j > 0 && cat_ids[j - 1] > id; j--) {
+                    cat_ids[j] = cat_ids[j - 1];
+                    cat_strs[j] = cat_strs[j - 1];
+                }
+                cat_ids[j] = id;
+                cat_strs[j] = s;
+                n++;
+                p += 8 + ((sl + 3) & ~3UL);
+            }
+            break;
+        }
+        i += 8 + len + (len & 1);
+    }
+    cat_n = n;
+    amce_strlcpy(cat_lang, cats[k].lang, sizeof(cat_lang));
+    return n > 0;
+}
+
+/* The catalog for lang (a language as Locale names it: "deutsch"), or the
+ * Workbench's first that has one (NULL or ""), or none ("english"). */
 void amce_lang_open(const char *lang)
 {
-    char m[80];
+    char m[200];
+    int i, k = -1;
     amce_lang_close();
-    if (!LocaleBase && !(LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR) "locale.library", 38)))
+    if (lang && !amce_stricmp(lang, "english")) {
+        amce_log("language", "English, as chosen");
         return;
-    if (lang && !strcmp(lang, "english"))
-        return;
-    cat = OpenCatalog(NULL, (STRPTR) "AmigaMCE.catalog", OC_BuiltInLanguage, (ULONG) "english",
-                      lang && *lang ? OC_Language : TAG_IGNORE, (ULONG)lang, TAG_END);
-    if (cat) {
-        amce_strlcpy(m, (const char *)cat->cat_Language, sizeof(m));
+    }
+    if (lang && *lang) {
+        for (i = 0; i < ncats && k < 0; i++)
+            if (!amce_stricmp(cats[i].lang, lang))
+                k = i;
+    } else {
+        char wb[10][32];
+        int n = wb_languages(wb, 10), j;
+        for (j = 0; j < n && k < 0; j++) {
+            if (!amce_stricmp(wb[j], "english"))
+                break;                      /* English comes first there */
+            for (i = 0; i < ncats && k < 0; i++)
+                if (!amce_stricmp(cats[i].lang, wb[j]))
+                    k = i;
+        }
+    }
+    if (k >= 0 && load(k)) {
+        sprintf(m, "%.31s (%lu strings, %.100s)", cat_lang, (unsigned long)cat_n, cats[k].path);
         amce_log("language", m);
     } else {
         amce_log("language", lang && *lang ? "no catalog for it: English" : "English");
@@ -77,9 +284,17 @@ void amce_lang_open(const char *lang)
 
 void amce_lang_close(void)
 {
-    if (cat && LocaleBase)
-        CloseCatalog(cat);
-    cat = NULL;
+    if (cat_ids)
+        FreeVec(cat_ids);
+    if (cat_strs)
+        FreeVec(cat_strs);
+    if (cat_buf)
+        FreeVec(cat_buf);
+    cat_ids = NULL;
+    cat_strs = NULL;
+    cat_buf = NULL;
+    cat_n = 0;
+    cat_lang[0] = 0;
     memset(cache, 0, sizeof(cache));
 }
 
@@ -91,8 +306,8 @@ void amce_lang_quit(void)
     LocaleBase = NULL;
 }
 
-/* The catalog's language (its name as Locale knows it), "" if English. */
+/* The catalog's language, "" if English. */
 const char *amce_lang_now(void)
 {
-    return cat ? (const char *)cat->cat_Language : "";
+    return cat_n ? cat_lang : "";
 }
