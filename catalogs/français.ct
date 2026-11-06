@@ -208,6 +208,12 @@ MSG_0065B852
 MSG_2DA81BF2
 Lisse : Fonts/amce-smooth ne correspond pas à cet AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Pas de spectre avec MHI : il joue le MP3 lui-même
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Pas de spectre : ce lecteur ne dit pas ce qu'il joue
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 Général
 ; General
@@ -392,6 +398,9 @@ Demander un son de qualité réduite
 MSG_720ED4F6
 nécessaire sur cet Amiga
 ; needed on this Amiga
+MSG_116FD231
+Sortie du son
+; Sound output
 MSG_1DE950F6
 4 voies, jusqu'à 28kHz, 8 bits
 ; 4 channels, up to 28kHz, 8-bit
@@ -404,12 +413,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 non installé
 ; not installed
+MSG_2DA3A6A5
+Décodeur MP3
+; MP3 decoder
 MSG_7AFA07FD
 décodé ici
 ; decoded here
 MSG_22FBBBB2
 décode et joue
 ; decodes and plays
+MSG_0D2B8103
+Décodeur FLAC
+; FLAC decoder
 MSG_441A0CA1
 installé
 ; installed
@@ -425,6 +440,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 aucun pour l'instant
 ; none yet
+MSG_6BED289B
+Fichiers musicaux
+; Music files
 MSG_47E8C75F
 Utiliser l'assignation MUSIC:
 ; Use the MUSIC: assign
@@ -1394,6 +1412,9 @@ Vumètres
 MSG_72FB1A0A
 Spectre
 ; Spectrum
+MSG_476F7877
+En pause : la musique a besoin du processeur
+; Paused: the music needs the CPU
 MSG_5966858A
 Mono
 ; Mono

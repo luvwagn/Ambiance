@@ -206,6 +206,12 @@ MSG_0065B852
 MSG_2DA81BF2
 Myk: Fonts/amce-smooth passer ikke til denne AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Ikke spektrum med MHI: den spiller MP3-en selv
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Ikke spektrum: spilleren sier ikke hva den spiller
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 Generelt
 ; General
@@ -391,6 +397,9 @@ Be om lyd i lavere kvalitet
 MSG_720ED4F6
 nødvendig på denne Amigaen
 ; needed on this Amiga
+MSG_116FD231
+Lydutgang
+; Sound output
 MSG_1DE950F6
 4 kanaler, opptil 28kHz, 8 bit
 ; 4 channels, up to 28kHz, 8-bit
@@ -403,12 +412,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 ikke installert
 ; not installed
+MSG_2DA3A6A5
+MP3-dekoder
+; MP3 decoder
 MSG_7AFA07FD
 dekodes her
 ; decoded here
 MSG_22FBBBB2
 dekoder og spiller
 ; decodes and plays
+MSG_0D2B8103
+FLAC-dekoder
+; FLAC decoder
 MSG_441A0CA1
 installert
 ; installed
@@ -424,6 +439,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 ingen ennå
 ; none yet
+MSG_6BED289B
+Musikkfiler
+; Music files
 MSG_47E8C75F
 Bruk tilordningen MUSIC:
 ; Use the MUSIC: assign
@@ -1389,6 +1407,9 @@ Nivåmålere
 MSG_72FB1A0A
 Spektrum
 ; Spectrum
+MSG_476F7877
+Satt på pause: musikken trenger CPU-en
+; Paused: the music needs the CPU
 MSG_5966858A
 Mono
 ; Mono

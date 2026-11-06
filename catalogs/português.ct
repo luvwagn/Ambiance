@@ -206,6 +206,12 @@ MSG_0065B852
 MSG_2DA81BF2
 Suave: Fonts/amce-smooth não corresponde a este AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Sem espetro com MHI: ele toca o MP3 sozinho
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Sem espetro: este leitor não diz o que toca
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 Geral
 ; General
@@ -391,6 +397,9 @@ Pedir áudio de menor qualidade
 MSG_720ED4F6
 necessário neste Amiga
 ; needed on this Amiga
+MSG_116FD231
+Saída de som
+; Sound output
 MSG_1DE950F6
 4 canais, até 28kHz, 8 bits
 ; 4 channels, up to 28kHz, 8-bit
@@ -403,12 +412,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 não instalado
 ; not installed
+MSG_2DA3A6A5
+Descodificador MP3
+; MP3 decoder
 MSG_7AFA07FD
 descodificado aqui
 ; decoded here
 MSG_22FBBBB2
 descodifica e toca
 ; decodes and plays
+MSG_0D2B8103
+Descodificador FLAC
+; FLAC decoder
 MSG_441A0CA1
 instalado
 ; installed
@@ -424,6 +439,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 nenhum ainda
 ; none yet
+MSG_6BED289B
+Ficheiros de música
+; Music files
 MSG_47E8C75F
 Usar a atribuição MUSIC:
 ; Use the MUSIC: assign
@@ -1390,6 +1408,9 @@ Medidores de nível
 MSG_72FB1A0A
 Espectro
 ; Spectrum
+MSG_476F7877
+Em pausa: a música precisa do CPU
+; Paused: the music needs the CPU
 MSG_5966858A
 Mono
 ; Mono

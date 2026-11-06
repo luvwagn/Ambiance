@@ -206,6 +206,12 @@ MSG_0065B852
 MSG_2DA81BF2
 Pehmeä: Fonts/amce-smooth ei sovi tähän AmigaMCE:hen
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Ei spektriä MHI:llä: se soittaa MP3:n itse
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Ei spektriä: soitin ei kerro, mitä se soittaa
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 Yleiset
 ; General
@@ -391,6 +397,9 @@ Pyydä heikompilaatuista ääntä
 MSG_720ED4F6
 tarpeen tällä Amigalla
 ; needed on this Amiga
+MSG_116FD231
+Äänen ulostulo
+; Sound output
 MSG_1DE950F6
 4 kanavaa, enintään 28kHz, 8 bittiä
 ; 4 channels, up to 28kHz, 8-bit
@@ -403,12 +412,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 ei asennettu
 ; not installed
+MSG_2DA3A6A5
+MP3-dekooderi
+; MP3 decoder
 MSG_7AFA07FD
 puretaan täällä
 ; decoded here
 MSG_22FBBBB2
 purkaa ja soittaa
 ; decodes and plays
+MSG_0D2B8103
+FLAC-dekooderi
+; FLAC decoder
 MSG_441A0CA1
 asennettu
 ; installed
@@ -424,6 +439,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 ei vielä yhtään
 ; none yet
+MSG_6BED289B
+Musiikkitiedostot
+; Music files
 MSG_47E8C75F
 Käytä MUSIC:-liitosta
 ; Use the MUSIC: assign
@@ -1389,6 +1407,9 @@ Tasomittarit
 MSG_72FB1A0A
 Spektri
 ; Spectrum
+MSG_476F7877
+Tauolla: musiikki tarvitsee suoritinta
+; Paused: the music needs the CPU
 MSG_5966858A
 Mono
 ; Mono

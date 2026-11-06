@@ -107,6 +107,7 @@ static struct {
     struct EpVoice epv[4];          /* an EaglePlayer player's voices (mp_status) */
     UBYTE ep_trig;
     BOOL ep_voices;                 /* ...it says where its samples are */
+    ULONG serial;                   /* counts what has been loaded (the visualizations) */
     volatile ULONG ticks;           /* the tempo interrupt's count, playing */
     volatile ULONG caught;          /* ticks played to catch up (missed interrupts) */
     ULONG chk_t0, chk_n0, chk_c0, chk_said; /* mp_tempo_check's window */
@@ -636,6 +637,7 @@ static void module_free(void)
     if (mp.engine == ENG_RADIO)
         st_stop();
     mp.engine = ENG_NONE;
+    mp.serial++;
     mp.vtrig = mp.ep_trig = 0;
     mp.ep_voices = FALSE;
     memset(mp.vf, 0, sizeof(mp.vf));
@@ -1429,6 +1431,11 @@ const char *mp_track_by(void) { return mp.rby; }
  * has one each; what is mixed or decoded, one for each of its channels. */
 /* ------------------------------------------------------------ the visualizations */
 #define PAULA_HZ 3546895UL          /* PAL: a period's rate is this / period */
+ULONG mp_serial(void)
+{
+    return mp.serial;
+}
+
 UWORD mp_vis_have(void)
 {
     if (!mp_loaded())

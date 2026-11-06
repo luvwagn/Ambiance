@@ -321,6 +321,7 @@ struct Item {
     UBYTE  flags;       /* ITEM_* */
 };
 #define ITEM_DISABLED 1 /* shown greyed out, cannot be opened */
+#define ITEM_HEAD    16 /* a Settings page's heading over a group: not selectable */
 #define ITEM_FLAT     2 /* a folder of folders opened as one list (All Games) */
 #define ITEM_SPLIT    4 /* AGS entry: path is its folder (shared), sortkey its file
                          * name; item_path() gives the whole path */
@@ -492,6 +493,7 @@ struct VisFeed {
     ULONG rate;                     /* pcm's rate */
 };
 UWORD mp_vis_have(void);            /* VF_*: what mp_vis_feed could fill now */
+ULONG mp_serial(void);              /* changes with each module, track or station */
 void mp_vis_feed(struct VisFeed *f, UWORD want);
 
 struct VisCtx {                     /* where a visualization draws */
@@ -502,7 +504,8 @@ struct VisCtx {                     /* where a visualization draws */
 };
 enum { VIS_METERS, VIS_SPECTRUM, VIS_COUNT };
 const char *vis_name(int v);        /* N_(): translate where shown */
-void vis_select(int v);
+void vis_select(int v);             /* (also lifts a pause for load) */
+BOOL vis_paused(void);              /* paused: the music needed the CPU */
 int  vis_selected(void);
 int  vis_active(void);              /* the one drawn: the selected, or the meters */
 int  vis_rows(void);                /* rows the active one wants (0: the meters' own) */

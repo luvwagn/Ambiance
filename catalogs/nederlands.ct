@@ -206,6 +206,12 @@ MSG_0065B852
 MSG_2DA81BF2
 Zacht: Fonts/amce-smooth past niet bij deze AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Geen spectrum met MHI: die speelt de MP3 zelf
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Geen spectrum: deze speler zegt niet wat hij speelt
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 Algemeen
 ; General
@@ -391,6 +397,9 @@ Audio van lagere kwaliteit vragen
 MSG_720ED4F6
 nodig op deze Amiga
 ; needed on this Amiga
+MSG_116FD231
+Geluidsuitvoer
+; Sound output
 MSG_1DE950F6
 4 kanalen, tot 28kHz, 8 bits
 ; 4 channels, up to 28kHz, 8-bit
@@ -403,12 +412,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 niet geïnstalleerd
 ; not installed
+MSG_2DA3A6A5
+MP3-decoder
+; MP3 decoder
 MSG_7AFA07FD
 hier gedecodeerd
 ; decoded here
 MSG_22FBBBB2
 decodeert en speelt
 ; decodes and plays
+MSG_0D2B8103
+FLAC-decoder
+; FLAC decoder
 MSG_441A0CA1
 geïnstalleerd
 ; installed
@@ -424,6 +439,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 nog geen
 ; none yet
+MSG_6BED289B
+Muziekbestanden
+; Music files
 MSG_47E8C75F
 De toewijzing MUSIC: gebruiken
 ; Use the MUSIC: assign
@@ -1388,6 +1406,9 @@ Niveaumeters
 ; Level meters
 MSG_72FB1A0A
 ; Spectrum
+MSG_476F7877
+Gepauzeerd: de muziek heeft de CPU nodig
+; Paused: the music needs the CPU
 MSG_5966858A
 Mono
 ; Mono

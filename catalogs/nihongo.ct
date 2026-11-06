@@ -208,6 +208,12 @@ MSG_0065B852
 MSG_2DA81BF2
 スムーズ: Fonts/amce-smoothがこのAmigaMCEと合いません
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+MHIではスペクトルなし: MHIがMP3を自分で再生します
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+スペクトルなし: このプレーヤーは再生内容を伝えません
+; No spectrum: this player does not say what it plays
 MSG_5561FD0B
 全般
 ; General
@@ -394,6 +400,9 @@ MSG_5F6445D0
 MSG_720ED4F6
 このAmigaには必要
 ; needed on this Amiga
+MSG_116FD231
+サウンド出力
+; Sound output
 MSG_1DE950F6
 4チャンネル、28kHzまで、8ビット
 ; 4 channels, up to 28kHz, 8-bit
@@ -406,12 +415,18 @@ MSG_1AB0857C
 MSG_7EF1200C
 未インストール
 ; not installed
+MSG_2DA3A6A5
+MP3デコーダー
+; MP3 decoder
 MSG_7AFA07FD
 ここでデコード
 ; decoded here
 MSG_22FBBBB2
 デコードして再生
 ; decodes and plays
+MSG_0D2B8103
+FLACデコーダー
+; FLAC decoder
 MSG_441A0CA1
 インストール済み
 ; installed
@@ -427,6 +442,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 まだなし
 ; none yet
+MSG_6BED289B
+音楽ファイル
+; Music files
 MSG_47E8C75F
 MUSIC:アサインを使う
 ; Use the MUSIC: assign
@@ -1399,6 +1417,9 @@ MSG_54706675
 MSG_72FB1A0A
 スペクトル
 ; Spectrum
+MSG_476F7877
+一時停止中: 音楽にCPUが必要です
+; Paused: the music needs the CPU
 MSG_5966858A
 モノラル
 ; Mono

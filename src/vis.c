@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <proto/exec.h>
+#include <proto/graphics.h>
 
 void hfft_window(WORD *re, const WORD *sine);         /* hfft.s */
 void hfft_fft(WORD *re, WORD *im, const WORD *sine);
@@ -27,6 +28,11 @@ void hfft_fft(WORD *re, WORD *im, const WORD *sine);
 #define VU(c, v) GU((c)->g, v)
 
 static int sel = VIS_METERS;    /* the one chosen */
+static struct {
+    WORD level[4];              /* the meters' bar lengths drawn */
+    UBYTE sample[4];            /* the sample names shown */
+    int n;                      /* meters drawn (4, 2, 1) */
+} mt;
 static int drawn = -1;          /* the one drawn last */
 
 static const char *const names[VIS_COUNT] = { N_("Level meters"), N_("Spectrum") };
@@ -36,9 +42,37 @@ const char *vis_name(int v)
     return v >= 0 && v < VIS_COUNT ? names[v] : names[0];
 }
 
+/* Too much for this Amiga: while the music plays, Now playing should be
+ * drawn 25 times a second; where it gets fewer than 8 for 4 seconds the
+ * CPU is short (a decoder on a slow Amiga), and the visualization stops
+ * for the rest of the module, track or station, a note in its place, so
+ * the music keeps what CPU there is. V, or choosing one again, tries it
+ * again. */
+#define LOAD_WINDOW 2000        /* ms */
+#define LOAD_MIN_FPS 8
+static struct {
+    ULONG t0, serial;
+    UWORD frames, slow;
+    BOOL paused, noted;
+} ld;
+
+static void load_reset(void)
+{
+    ld.t0 = time_ms();
+    ld.frames = ld.slow = 0;
+    ld.paused = ld.noted = FALSE;
+}
+
+BOOL vis_paused(void)
+{
+    return ld.paused;
+}
+
 void vis_select(int v)
 {
     sel = v >= 0 && v < VIS_COUNT ? v : VIS_METERS;
+    load_reset();
+    drawn = -1;
 }
 
 int vis_selected(void)
@@ -63,12 +97,51 @@ static WORD area_h(const struct VisCtx *c)
     return c->rows * c->row_h + (c->rows - 1) * c->gap;
 }
 
+/* FALSE: draw as usual. TRUE: paused, its note drawn in the place. */
+static BOOL load_check(const struct VisCtx *c, BOOL full)
+{
+    ULONG now = time_ms();
+    if (mp_serial() != ld.serial) {
+        ld.serial = mp_serial();    /* another piece: tried again */
+        load_reset();
+    }
+    if (!ld.paused) {
+        if (!mp_running() || mp_paused()) {
+            ld.t0 = now;            /* not playing: nothing to measure */
+            ld.frames = 0;
+            return FALSE;
+        }
+        ld.frames++;
+        if (now - ld.t0 >= LOAD_WINDOW) {
+            ULONG fps = (ULONG)ld.frames * 1000 / (now - ld.t0);
+            ld.slow = fps < LOAD_MIN_FPS ? ld.slow + 1 : 0;
+            if (ld.slow >= 2) {
+                char m[64];
+                sprintf(m, "paused: %lu frames a second while playing", (unsigned long)fps);
+                amce_log("visualisation", m);
+                ld.paused = TRUE;
+                full = TRUE;
+            }
+            ld.t0 = now;
+            ld.frames = 0;
+        }
+        if (!ld.paused)
+            return FALSE;
+    }
+    if (full || !ld.noted) {
+        WORD h = area_h(c);
+        const char *t = _("Paused: the music needs the CPU");
+        gfx_fill(c->g, c->x, c->y, c->x + c->w - 1, c->y + h - 1, PEN_BG);
+        gfx_text(c->g, c->x + (c->w - gfx_textlen(c->g, t, TS_SMALL)) / 2,
+                 c->y + (h - c->g->font_h) / 2, t, PEN_DIM, PEN_BG, c->w, TS_SMALL);
+        ld.noted = TRUE;
+        mt.n = 0;
+        drawn = -1;                 /* drawn whole when it runs again */
+    }
+    return TRUE;
+}
+
 /* ------------------------------------------------------------ the level meters */
-static struct {
-    WORD level[4];              /* bar lengths drawn */
-    UBYTE sample[4];            /* the sample names shown */
-    int n;                      /* meters drawn (4, 2, 1) */
-} mt;
 
 static void meters_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full)
 {
@@ -223,9 +296,15 @@ static void loudness(UBYTE *lev)
     int i, k;
     for (i = 0; i < BINS; i++) {
         ULONG m = (ULONG)((LONG)sp.re[i] * sp.re[i]) + (ULONG)((LONG)sp.im[i] * sp.im[i]);
-        for (k = 0; k < LEVELS && m > sp.loud[k]; k++)
-            ;
-        lev[i] = (UBYTE)k;
+        int lo = 0, hi = LEVELS;        /* the steps below m: halved 6 times, not 64 looks */
+        while (lo < hi) {
+            k = (lo + hi) >> 1;
+            if (m > sp.loud[k])
+                lo = k + 1;
+            else
+                hi = k;
+        }
+        lev[i] = (UBYTE)lo;
     }
 }
 
@@ -233,13 +312,14 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
 {
     struct Gfx *g = c->g;
     UBYTE lev[BINS];
-    WORD h = area_h(c), bottom = c->y + h - 1, nb, per, bw, gap, x0, fall;
+    /* inset as the meters' bars are in their rows: the same height drawn */
+    WORD h = area_h(c) - 2 * VU(c, 2), bottom = c->y + VU(c, 2) + h - 1, nb, per, bw, gap, x0, fall;
     ULONG t0 = time_ms();
     int i, j;
     if (!sp_start())
         return;
     if (full) {
-        gfx_fill(g, c->x, c->y, c->x + c->w - 1, bottom, PEN_BG);
+        gfx_fill(g, c->x, c->y, c->x + c->w - 1, c->y + area_h(c) - 1, PEN_BG);
         memset(sp.shown, 0, sizeof(sp.shown));
     }
     mp_vis_feed(&sp.feed, VF_VOICES | VF_PCM);
@@ -255,9 +335,9 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
     loudness(lev);
     sp.ms += time_ms() - t0;
     sp.frames++;
-    /* 64 bars where they get 5 pixels each, else 32 or 16 (a gap between
-     * them from 4 pixels on), each the loudest of its bins */
-    nb = c->w >= BINS * 5 ? BINS : c->w >= BINS / 2 * 4 ? BINS / 2 : BINS / 4;
+    /* 32 bars, or 16 where narrow (a gap between them from 4 pixels on),
+     * each the loudest of its bins: each bar a fill a frame, so not 64 */
+    nb = c->w >= BINS / 2 * 4 ? BINS / 2 : BINS / 4;
     per = BINS / nb;
     bw = c->w / nb;
     gap = bw >= 4 ? 1 : 0;
@@ -265,6 +345,8 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
     fall = h / 16 > 1 ? h / 16 : 1;         /* the bars fall away, a little a frame */
     if (bw - gap < 1)
         return;
+    if (g->planar)
+        SetWriteMask(g->rp, 0x0F);      /* pens 0 and 8 only: half an AGA screen's planes */
     for (i = 0; i < nb; i++) {
         UBYTE l = 0;
         WORD want, old = sp.shown[i], x = x0 + i * bw;
@@ -280,12 +362,16 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
             gfx_fill(g, x, bottom - old + 1, x + bw - gap - 1, bottom - want, PEN_BG);
         sp.shown[i] = want;
     }
+    if (g->planar)
+        SetWriteMask(g->rp, 0xFF);
 }
 
 /* ------------------------------------------------------------ the plug-ins' host */
 void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full)
 {
     int a = vis_active();
+    if (load_check(c, full))
+        return;
     if (a != drawn) {
         /* another one from now: its place cleared, drawn whole */
         gfx_fill(c->g, c->x, c->y, c->x + c->w - 1, c->y + area_h(c) - 1, PEN_BG);

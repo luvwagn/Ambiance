@@ -1866,6 +1866,11 @@ static void next_visual(void)
 {
     vis_select((vis_selected() + 1) % VIS_COUNT);
     save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum" : "meters");
+    if (vis_selected() != vis_active() && mp_loaded())
+        set_msg(mp_is_stream() ? _("No spectrum under MHI: it plays the MP3 itself")
+                               : _("No spectrum: this player does not say what it plays"));
+    else
+        set_msg(_(vis_name(vis_selected())));
     if (np_on())
         np_draw(TRUE);                  /* laid out again: the spectrum is 4 rows tall */
 }
@@ -1920,6 +1925,34 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
         it->mark = mark;
     }
     return it;
+}
+
+/* A heading over a group of rows (one choice of several in each): shown
+ * dim at the left, passed over by the cursor. */
+static void heading_item(struct Page *p, const char *label)
+{
+    struct Item *it = list_add(&p->list, label, "", "", IT_TEXT);
+    if (it)
+        it->flags |= ITEM_HEAD;
+}
+
+static BOOL is_heading(struct Page *p, LONG i)
+{
+    return i >= 0 && i < p->list.count && (p->list.items[i].flags & ITEM_HEAD);
+}
+
+/* The selection off a heading: on to the next row in direction d, else
+ * back the other way. */
+static void sel_off_heading(struct Page *p, LONG d)
+{
+    LONG s = p->sel;
+    while (is_heading(p, s))
+        s += d;
+    if (s < 0 || s >= p->list.count)
+        for (s = p->sel; is_heading(p, s); s -= d)
+            ;
+    if (s >= 0 && s < p->list.count)
+        p->sel = s;
 }
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
@@ -2281,12 +2314,16 @@ static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
     p->setp = SETP_SOUND;
+    /* two choices of one each (where the sound goes, what decodes MP3),
+     * so each under its own heading, or their radio buttons read as one */
+    heading_item(p, _("Sound output"));
     action_item(p, "Paula (audio.device)", _("4 channels, up to 28kHz, 8-bit"), ACT_SND_PAULA,
                 sound_ahi ? MARK_RADIO_OFF : MARK_RADIO_ON);
     if ((it = action_item(p, _("AHI: radio, Plex, music files"),
                           caps.ahi ? _("16-bit, its Preferences' mode") : _("not installed"),
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
+    heading_item(p, _("MP3 decoder"));
     if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? _("decoded here") : _("not installed"),
                           ACT_SND_MPEGA, !mhi_sel[0] && caps.mp3_mpega ? MARK_RADIO_ON
                                                                      : MARK_RADIO_OFF)) &&
@@ -2306,6 +2343,7 @@ static void build_sound_settings(struct Page *p)
         }
     }
     /* FLAC: Plex's tracks as stored, where the Amiga is fast enough */
+    heading_item(p, _("FLAC decoder"));
     if ((it = action_item(p, "FLAC: flacdec.library",
                           caps.flacdec ? _("installed") : _("not installed (Aminet: util/libs/flacdec)"),
                           ACT_SND_FLAC, caps.flacdec ? MARK_CHECK_ON : MARK_CHECK_OFF)))
@@ -2318,6 +2356,7 @@ static void build_sound_settings(struct Page *p)
             sprintf(tag, n == 1 ? _("%ld place") : _("%ld places"), (long)n);
         else
             strcpy(tag, _("none yet"));
+        heading_item(p, _("Music files"));
         if ((it = action_item(p, _("Music folders"), tag, ACT_MUSICSET, MARK_NONE)))
             it->mark = MARK_ARROW;
     }
@@ -2374,6 +2413,7 @@ static void settings_rebuild(void)
         if (q->setp < (int)(sizeof(setp_titles) / sizeof(setp_titles[0])))
             amce_strlcpy(q->title, _(setp_titles[q->setp]), sizeof(q->title));
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
+        sel_off_heading(q, 1);
     }
 }
 
@@ -2385,6 +2425,7 @@ static void plex_settings_again(BOOL full)
     if (!p || p->type != PT_LIST)
         return;
     p->sel = sel < p->list.count ? sel : p->list.count - 1;
+    sel_off_heading(p, 1);
     if (full) {
         draw_pane(TRUE);
         draw_footer();
@@ -4799,9 +4840,10 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         right = xr - U(2);
     BOOL sel = idx == p->sel;
     BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
-    UBYTE fg = off ? PEN_DIM : sel ? PEN_WHITE : PEN_TEXT;
+    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : sel ? PEN_WHITE : PEN_TEXT;
     UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
-               mouse_mode && idx - p->top == hover_row && p == cur() ? PEN_RULE : PEN_BG;
+               mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
+               ? PEN_RULE : PEN_BG;
     /* Every list pen is below 8 and planes 3+ are clear in the list (the
      * pane is cleared on all planes when the page is drawn), so on native
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
@@ -8046,6 +8088,10 @@ static void act_move(LONG d)
             s = 0;
         if (s >= p->list.count)
             s = p->list.count - 1;
+        while (is_heading(p, s) && s + (d < 0 ? -1 : 1) >= 0 && s + (d < 0 ? -1 : 1) < p->list.count)
+            s += d < 0 ? -1 : 1;            /* over a heading */
+        if (is_heading(p, s))
+            s = p->sel;                     /* a heading at the end: stay */
         if (s < 0 || s == p->sel)
             return;
         {
@@ -8225,6 +8271,7 @@ static void open_settings_page(const char *title, void (*build)(struct Page *))
     if (!p)
         return;
     build(p);
+    sel_off_heading(p, 1);
     draw_pane(TRUE);
     draw_footer();
 }
@@ -10796,6 +10843,8 @@ static void handle_mouse(struct IntuiMessage *im)
                 return;
             dbl = idx == last_click && dbl_click(im);
             last_click = idx;
+            if (is_heading(p, idx))
+                return;                     /* a heading: nothing to choose */
             if (focus != FOCUS_CONTENT)
                 set_focus(FOCUS_CONTENT);
             if (p->sel != idx) {
