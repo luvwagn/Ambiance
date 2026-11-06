@@ -1105,6 +1105,8 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
  * the marker's 11 design units), low and still when the music is paused. */
 UBYTE gfx_eq_frame;
 BOOL gfx_eq_still;
+UBYTE gfx_eq_kind;
+UBYTE gfx_eq_lev[4];
 
 static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
@@ -1114,7 +1116,19 @@ static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
     };
     static const UBYTE still[4] = { 3, 5, 4, 6 };
     WORD n = g->mark_px, bw = n * 2 / 11, gap, i, left;
-    const UBYTE *h = gfx_eq_still ? still : dance[gfx_eq_frame & 7];
+    const UBYTE *h = gfx_eq_still ? still : gfx_eq_kind == 1 ? gfx_eq_lev : dance[gfx_eq_frame & 7];
+    if (gfx_eq_kind == 2 && !gfx_eq_still) {
+        /* the meters': left and right, two bars across, from the left */
+        WORD th = n * 3 / 11 > 1 ? n * 3 / 11 : 1, y0 = y + n * 2 / 11, y1 = y + n * 6 / 11;
+        gfx_fill(g, x, y, x + n - 1, y + n - 1, bg);
+        for (i = 0; i < 2; i++) {
+            WORD len = (WORD)((LONG)n * gfx_eq_lev[i] / 11), yy = i ? y1 : y0;
+            if (len < 1)
+                len = 1;
+            gfx_fill(g, x, yy, x + len - 1, yy + th - 1, fg);
+        }
+        return;
+    }
     if (bw < 1)
         bw = 1;
     gap = (n - 4 * bw) / 3;
@@ -1150,6 +1164,25 @@ void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
     SetAPen(g->rp, fg);
     SetDrMd(g->rp, JAM1);
     BltTemplate(m, 0, g->mark_bpr, g->rp, x, y, g->mark_px, g->mark_px);
+}
+
+/* A cycle gadget's glyph (an arrow round a circle, as on Intuition's
+ * cycle gadgets) in a box px square: drawn as fills of whole runs, so the
+ * same in every style. */
+void gfx_cycle_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE pen)
+{
+    static const UBYTE rows[9] = { 0x3C, 0x42, 0x87, 0x82, 0x80, 0x80, 0x81, 0x42, 0x3C };
+    WORD cs = px / 9 > 0 ? px / 9 : 1, r, c, x0 = x + (px - 8 * cs) / 2, y0 = y + (px - 9 * cs) / 2;
+    for (r = 0; r < 9; r++)
+        for (c = 0; c < 8; c++) {
+            WORD e;
+            if (!(rows[r] & (0x80 >> c)))
+                continue;
+            for (e = c; e + 1 < 8 && (rows[r] & (0x80 >> (e + 1))); e++)
+                ;
+            gfx_fill(g, x0 + c * cs, y0 + r * cs, x0 + (e + 1) * cs - 1, y0 + (r + 1) * cs - 1, pen);
+            c = e;
+        }
 }
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)

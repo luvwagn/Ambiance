@@ -32,6 +32,8 @@ static struct {
     WORD level[4];              /* the meters' bar lengths drawn */
     UBYTE sample[4];            /* the sample names shown */
     int n;                      /* meters drawn (4, 2, 1) */
+    UBYTE last[4];              /* the levels last drawn (0-64), for the marker */
+    ULONG last_t;
 } mt;
 static int drawn = -1;          /* the one drawn last */
 
@@ -147,6 +149,8 @@ static void meters_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL 
 {
     struct Gfx *g = c->g;
     int i, n = mp_meter_count();
+    memcpy(mt.last, st->level, 4);
+    mt.last_t = time_ms();
     WORD bx = c->x + c->label_w + VU(c, 4), bw = c->x + c->w - bx, bh = c->row_h - VU(c, 4);
     if (bh < 2)
         bh = 2;
@@ -221,6 +225,8 @@ static struct {
     struct VisFeed feed;
     WORD shown[BINS];           /* bar heights drawn, in pixels */
     ULONG frames, ms;           /* timing (Debug's load line) */
+    UBYTE lev[BINS];            /* the last analysis's loudness, 0-64 */
+    ULONG lev_t;                /* ...when */
 } sp;
 
 static BOOL sp_start(void)
@@ -308,20 +314,12 @@ static void loudness(UBYTE *lev)
     }
 }
 
-static void spectrum_draw(const struct VisCtx *c, BOOL full)
+/* The sound now, analysed: each bin's loudness in sp.lev. */
+static BOOL sp_analyse(void)
 {
-    struct Gfx *g = c->g;
-    UBYTE lev[BINS];
-    /* inset as the meters' bars are in their rows: the same height drawn */
-    WORD h = area_h(c) - 2 * VU(c, 2), bottom = c->y + VU(c, 2) + h - 1, nb, per, bw, gap, x0, fall;
     ULONG t0 = time_ms();
-    int i, j;
     if (!sp_start())
-        return;
-    if (full) {
-        gfx_fill(g, c->x, c->y, c->x + c->w - 1, c->y + area_h(c) - 1, PEN_BG);
-        memset(sp.shown, 0, sizeof(sp.shown));
-    }
+        return FALSE;
     mp_vis_feed(&sp.feed, VF_VOICES | VF_PCM);
     if (sp.feed.have & VF_VOICES) {
         mix_voices(&sp.feed);
@@ -332,9 +330,26 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
     }
     hfft_window(sp.re, sp.sine);
     hfft_fft(sp.re, sp.im, sp.sine);
-    loudness(lev);
-    sp.ms += time_ms() - t0;
+    loudness(sp.lev);
+    sp.lev_t = time_ms();
+    sp.ms += sp.lev_t - t0;
     sp.frames++;
+    return TRUE;
+}
+
+static void spectrum_draw(const struct VisCtx *c, BOOL full)
+{
+    struct Gfx *g = c->g;
+    const UBYTE *lev = sp.lev;
+    /* inset as the meters' bars are in their rows: the same height drawn */
+    WORD h = area_h(c) - 2 * VU(c, 2), bottom = c->y + VU(c, 2) + h - 1, nb, per, bw, gap, x0, fall;
+    int i, j;
+    if (!sp_analyse())
+        return;
+    if (full) {
+        gfx_fill(g, c->x, c->y, c->x + c->w - 1, c->y + area_h(c) - 1, PEN_BG);
+        memset(sp.shown, 0, sizeof(sp.shown));
+    }
     /* 32 bars, or 16 where narrow (a gap between them from 4 pixels on),
      * each the loudest of its bins: each bar a fill a frame, so not 64 */
     nb = c->w >= BINS / 2 * 4 ? BINS / 2 : BINS / 4;
@@ -364,6 +379,47 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
     }
     if (g->planar)
         SetWriteMask(g->rp, 0xFF);
+}
+
+/* ------------------------------------------------------------ the playing marker */
+/* MARK_PLAYING (the header's, a list's playing row) as the visualization
+ * shown: four of the spectrum's bands, or the meters' left and right.
+ * From what Now playing drew last if that is fresh; otherwise measured
+ * here (the marker moves every 120 ms). lev: 0-11 each. */
+int vis_marker(UBYTE *lev)
+{
+    ULONG now = time_ms();
+    int a = vis_active(), i;
+    if (a == VIS_SPECTRUM) {
+        static const UBYTE band[5] = { 1, 3, 7, 17, BINS };  /* low to high, wider as they go */
+        if (now - sp.lev_t > 200 && !sp_analyse())
+            return -1;
+        for (i = 0; i < 4; i++) {
+            UBYTE m = 0;
+            int b;
+            for (b = band[i]; b < band[i + 1]; b++)
+                if (sp.lev[b] > m)
+                    m = sp.lev[b];
+            lev[i] = (UBYTE)(m * 11 / LEVELS);
+        }
+        return VIS_SPECTRUM;
+    }
+    if (now - mt.last_t > 200) {
+        struct MpStatus st;
+        mp_status(&st);                     /* Now playing not shown: measured here */
+        memcpy(mt.last, st.level, 4);
+        mt.last_t = now;
+    }
+    {
+        int n = mp_meter_count();
+        /* Paula's left is voices 0 and 3, its right 1 and 2 */
+        UBYTE l = n >= 4 ? (mt.last[0] > mt.last[3] ? mt.last[0] : mt.last[3]) : mt.last[0];
+        UBYTE r = n >= 4 ? (mt.last[1] > mt.last[2] ? mt.last[1] : mt.last[2])
+                         : n == 2 ? mt.last[1] : mt.last[0];
+        lev[0] = (UBYTE)(l * 11 / 64);
+        lev[1] = (UBYTE)(r * 11 / 64);
+    }
+    return VIS_METERS;
 }
 
 /* ------------------------------------------------------------ the plug-ins' host */

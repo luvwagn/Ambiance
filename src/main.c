@@ -2075,7 +2075,7 @@ static void build_screen_settings(struct Page *p)
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_NONE);
+    action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
 }
 
 /* Settings > General. */
@@ -4855,7 +4855,10 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
             SetWriteMask(g.rp, 0xFF);
         return;
     }
-    if (it->mark != MARK_NONE)
+    if (it->mark == MARK_CYCLE)
+        gfx_cycle_glyph(&g, g.pane_x, y + (g.list_row_h - g.mark_px) / 2, g.mark_px,
+                        sel ? PEN_WHITE : PEN_TEXT);
+    else if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
                  off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     {
@@ -5394,6 +5397,8 @@ static struct {
     BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
     WORD sl_x0, sl_x1;
     int rows;                   /* the meters' rows laid out for: the page as tall as they need */
+    WORD cyc_x0, cyc_x1, cyc_y0, cyc_y1;    /* the visualization's cycle gadget (V) */
+    BOOL cyc_label;             /* ...with its name (not on lowres: the glyph alone) */
     ULONG s_rseq;               /* a station: its title and state drawn */
     int s_rstate;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
@@ -5816,6 +5821,8 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
      * of the cover where it comes down beside the controls */
     if (np.art_s && np.art_y <= np.pos_y)
         end = np.art_x - U(8) - 1;
+    if (np.cyc_x0 && end > np.cyc_x0 - U(6) - 1)
+        end = np.cyc_x0 - U(6) - 1;         /* the cycle gadget's room */
     rw = gfx_textlen(&g, pos, TS_SMALL);
     if (rw > end - x + 1)
         rw = end - x + 1;
@@ -5823,6 +5830,48 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, rw, TS_SMALL | TS_OPAQUE);
     if (x + rw <= end)
         gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
+}
+
+/* The visualization's cycle gadget, as Intuition's: its glyph, and the one
+ * chosen, at the right of the position line (left of a cover beside it).
+ * A click, or V, goes to the next. On lowres the glyph alone. */
+static void np_cycle_layout(void)
+{
+    WORD box = g.font_h, right = np.x0 + np.w - 1, w, nw = 0;
+    int i;
+    if (np.art_s && np.art_y <= np.pos_y + g.font_h)
+        right = np.art_x - U(8) - 1;
+    np.cyc_label = g.w > 320;
+    for (i = 0; np.cyc_label && i < VIS_COUNT; i++) {
+        WORD t = gfx_textlen(&g, _(vis_name(i)), TS_SMALL);
+        if (t > nw)
+            nw = t;
+    }
+    w = U(3) + box + U(3) + (np.cyc_label ? U(3) + 1 + U(4) + nw + U(4) : 0);
+    np.cyc_x1 = right;
+    np.cyc_x0 = right - w + 1;
+    np.cyc_y0 = np.pos_y - U(1);
+    np.cyc_y1 = np.pos_y + g.font_h;
+}
+
+static void np_draw_cycle(void)
+{
+    WORD x0 = np.cyc_x0, x1 = np.cyc_x1, y0 = np.cyc_y0, y1 = np.cyc_y1, box = g.font_h;
+    BOOL on = vis_selected() == vis_active();     /* chosen, but not shown: dim */
+    if (x1 - x0 < box)
+        return;
+    gfx_fill(&g, x0, y0, x1, y1, PEN_BG);
+    gfx_fill(&g, x0, y0, x1, y0, PEN_RULE);
+    gfx_fill(&g, x0, y1, x1, y1, PEN_RULE);
+    gfx_fill(&g, x0, y0, x0, y1, PEN_RULE);
+    gfx_fill(&g, x1, y0, x1, y1, PEN_RULE);
+    gfx_cycle_glyph(&g, x0 + U(3), y0 + (y1 - y0 + 1 - box) / 2, box, PEN_TEXT);
+    if (np.cyc_label) {
+        WORD sx = x0 + U(3) + box + U(3);
+        gfx_fill(&g, sx, y0 + U(2), sx, y1 - U(2), PEN_RULE);
+        gfx_text(&g, sx + 1 + U(4), np.pos_y, _(vis_name(vis_selected())), on ? PEN_TEXT : PEN_DIM,
+                 PEN_BG, x1 - U(3) - (sx + 1 + U(4)), TS_SMALL);
+    }
 }
 
 /* The meters' place: the visualization chosen (vis.c), the level meters
@@ -6066,6 +6115,7 @@ static void np_draw(BOOL full)
         const char *t = mp_title();
         char label[120];
         np_layout();
+        np_cycle_layout();
         plex_shown[0] = 0;                  /* the pane's details: gone under this page */
         if (mp_is_track() && np.art_s && pic_take(np_art_file, np.art_x, np.art_y, np.art_s,
                                                   np.art_h)) {
@@ -6140,6 +6190,8 @@ controls:
         return;
     np_draw_progress(full, &st);
     np_draw_meters(full, &st);
+    if (full)
+        np_draw_cycle();
     {
         int state = np_state();
         int steps = (mp_can_step(-1) ? 1 : 0) | (mp_can_step(1) ? 2 : 0);
@@ -6710,8 +6762,13 @@ static void np_eq_tick(void)
         np_eq_redraw();
         hdr_np_draw(TRUE);
     } else if (!still && now - last >= 120) {
+        int k;
         last = now;
         gfx_eq_frame++;
+        /* as the visualization shown moves (not while it is paused for
+         * the CPU's sake: the dance then) */
+        k = vis_paused() ? -1 : vis_marker(gfx_eq_lev);
+        gfx_eq_kind = (UBYTE)(k == VIS_SPECTRUM ? 1 : k == VIS_METERS ? 2 : 0);
         np_eq_redraw();
         hdr_np_draw(TRUE);
     } else if (mp_loaded() != hdr_np_on) {
@@ -6917,6 +6974,10 @@ static BOOL np_click(WORD x, WORD y)
     int i;
     if (!np_on() || !mp_loaded())
         return FALSE;
+    if (x >= np.cyc_x0 && x <= np.cyc_x1 && y >= np.cyc_y0 && y <= np.cyc_y1 && np.cyc_x1 > np.cyc_x0) {
+        next_visual();                      /* the cycle gadget */
+        return TRUE;
+    }
     i = np_button_at(x, y);
     if (i == NB_SLIDER) {                   /* to that volume, and drag from there */
         np.sl_drag = TRUE;
