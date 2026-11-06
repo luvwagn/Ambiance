@@ -71,6 +71,7 @@ struct Page {
     UBYTE photos;               /* a Plex photo library's (Pictures): albums, IT_PLEXPHOTO */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
+    ULONG more_seq;             /*   a long list's part out (not waited for: it shows) */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
     UBYTE title_wide;           /* title drawn with room for a growing count */
     char pic[160];              /* PT_TEXT: a picture under the text box ("" none), */
@@ -8222,7 +8223,7 @@ static void plex_more_ask(struct Page *p)
         amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
     }
     j->seq = ++rq_seq;
-    p->net_seq = j->seq;
+    p->more_seq = j->seq;
     rq_more = j;
     net_submit(j);
 }
@@ -8309,12 +8310,12 @@ static void radio_done(struct NetJob *j)
     if (j == rq_more)
         rq_more = NULL;
     for (d = 0; d < depth && !j->orphan; d++)
-        if (pages[d].radio && pages[d].net_seq == j->seq)
+        if (pages[d].radio && (pages[d].net_seq == j->seq || pages[d].more_seq == j->seq))
             p = &pages[d];
     if (p && p->plex && j->start) {
         /* a long list's letters, or a part of it: its placeholders filled */
         char m[120];
-        p->net_seq = 0;
+        p->more_seq = 0;
         if (j->start < 0) {
             plex_letters_came(p, j);
         } else if (j->parsed) {
@@ -8543,7 +8544,7 @@ static void radio_collect(void)
 /* A page closing: its request, if still out, is given up. */
 static void radio_page_gone(struct Page *p)
 {
-    if (p->radio && p->net_seq && rq_more && rq_more->seq == p->net_seq) {
+    if (p->radio && p->more_seq && rq_more && rq_more->seq == p->more_seq) {
         net_cancel(rq_more);
         rq_more->orphan = TRUE;
         rq_more = NULL;
@@ -8555,6 +8556,7 @@ static void radio_page_gone(struct Page *p)
         msg[0] = 0;
     }
     p->net_seq = 0;
+    p->more_seq = 0;
 }
 
 /* Every request given up and the network process stopped (quitting, or a
@@ -8573,7 +8575,7 @@ static void radio_stop(void)
         rq_more = NULL;
     }
     for (d = 0; d < depth; d++)
-        pages[d].net_seq = 0;
+        pages[d].net_seq = pages[d].more_seq = 0;
     net_stop();
 }
 

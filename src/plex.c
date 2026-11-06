@@ -419,6 +419,21 @@ static void text(const char *in, char *out, LONG max)
     squeeze_spaces(out);
 }
 
+/* A summary: Plex's are Markdown, its escapes ("R\&B", "\*NSYNC") off. */
+static void summary_text(const char *in, char *out, LONG max)
+{
+    char *r, *w;
+    amce_strlcpy(out, in ? in : "", max);
+    utf8_to_latin1(out);
+    for (r = w = out; *r; r++) {
+        if (r[0] == '\\' && r[1] && strchr("\\`*_{}[]()#+-.!&<>|~", r[1]))
+            r++;
+        *w++ = *r;
+    }
+    *w = 0;
+    squeeze_spaces(out);
+}
+
 struct fill {
     struct ItemList *l;
     const char *base;           /* the request's key: relative keys are under it */
@@ -522,7 +537,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         text(xml_attr(a, n, "originallyAvailableAt"), x->ph_date, sizeof(x->ph_date));
         if (!x->ph_date[0])
             text(xml_attr(a, n, "year"), x->ph_date, sizeof(x->ph_date));
-        text(xml_attr(a, n, "summary"), x->ph_summary, sizeof(x->ph_summary));
+        summary_text(xml_attr(a, n, "summary"), x->ph_summary, sizeof(x->ph_summary));
         x->ph_part[0] = 0;
         x->ph_w = x->ph_h = 0;
         return 1;
@@ -658,7 +673,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
                 sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? "%lu track" : "%lu tracks",
                         (unsigned long)num(xml_attr(a, n, "leafCount")));
             text(xml_attr(a, n, "studio"), studio, sizeof(studio));
-            text(xml_attr(a, n, "summary"), summary, sizeof(summary));
+            summary_text(xml_attr(a, n, "summary"), summary, sizeof(summary));
             sprintf(more, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s", type, thumb, year, by, count, studio,
                     summary);
             amce_strlcat(key, more, sizeof(key));
@@ -717,7 +732,7 @@ BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max)
     out[0] = 0;
     xml_scan((char *)body, len, summary_el, &v);
     if (v)
-        text(v, out, max);
+        summary_text(v, out, max);
     return out[0] != 0;
 }
 
