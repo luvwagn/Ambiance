@@ -9838,6 +9838,17 @@ static void handle_mouse(struct IntuiMessage *im)
     }
     if (im->Code != SELECTDOWN)
         return;
+    if (debug_on) {
+        char m[160];
+        struct Page *dp = cur();
+        sprintf(m, "at %ld,%ld; page %.40s, type %ld, %ld rows from y %ld, %ld high, list to x %ld; "
+                   "focus %ld; opened %ld; last %ld",
+                (long)x, (long)y, dp ? dp->title : "-", dp ? (long)dp->type : -1L,
+                dp ? (long)dp->list.count : 0L, (long)g.list_top, (long)g.list_row_h,
+                dp && dp->type == PT_LIST ? (long)list_xr(dp) : -1L, (long)focus,
+                (long)click_opened, (long)last_click);
+        amce_log("click", m);
+    }
     nav_moved();
     disarm();
     if (click_opened) {
@@ -9933,10 +9944,11 @@ static void handle_mouse(struct IntuiMessage *im)
                 BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
                                 it->kind == IT_SONG || it->kind == IT_PLEXPHOTO ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
-                if (dbl && debug_on) {
-                    char m[140];
-                    sprintf(m, "%.100s (kind %ld)", it->label, (long)it->kind);
-                    amce_log("click: double", m);
+                if (debug_on) {
+                    char m[160];
+                    sprintf(m, "row %ld: %.80s (kind %ld), %s, %s", (long)idx, it->label,
+                            (long)it->kind, playable ? "playable" : "opens", dbl ? "double" : "single");
+                    amce_log("click", m);
                 }
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);
