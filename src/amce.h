@@ -701,6 +701,7 @@ struct NetJob {
     char pkey[300];             /* the key it was asked by */
     struct ItemList list;
     LONG n, total;              /* entries read (-1 not Plex's XML), the server's total */
+    LONG start;                 /* a long list's later part: from this entry (0 its first) */
     ULONG ms_read;
 };
 BOOL net_start(void);
@@ -753,6 +754,7 @@ extern struct PlexConf plex;
 void plex_load(UWORD cpu);
 void plex_set_server(const char *host, UWORD port, const char *name);
 void plex_request(const char *key, char *out, LONG max);
+void plex_request_from(const char *key, LONG start, char *out, LONG max);
 void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, LONG max);
 ULONG plex_track_byte(const struct Item *it, ULONG from_ms);
 BOOL plex_converts(const struct Item *it);

@@ -64,6 +64,7 @@ struct Page {
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
+    LONG plex_more, plex_total; /* a long Plex list: the server's entries read, its total */
     UBYTE photos;               /* a Plex photo library's (Pictures): albums, IT_PLEXPHOTO */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
@@ -8094,6 +8095,29 @@ static void build_radio_root(struct Page *p)
 }
 
 /* The answer to j into the page that asked, if it is still open. */
+/* A long Plex list's next part, asked for while the first is looked at
+ * (rq_more: not the one request rq, so opening an entry meanwhile does
+ * not give it up), with memory to spare for it. */
+static struct NetJob *rq_more;
+
+static void plex_more_ask(struct Page *p)
+{
+    struct NetJob *j;
+    if (rq_more || p->plex_more <= 0 || p->plex_more >= p->plex_total ||
+        AvailMem(MEMF_ANY) < 1500000UL || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    plex_request_from(p->base, p->plex_more, j->path, sizeof(j->path));
+    j->parse = 1;
+    j->start = p->plex_more;
+    amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
+    j->seq = ++rq_seq;
+    p->net_seq = j->seq;
+    rq_more = j;
+    net_submit(j);
+}
+
 static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
@@ -8142,9 +8166,41 @@ static void radio_done(struct NetJob *j)
     }
     if (j == rq)
         rq = NULL;
+    if (j == rq_more)
+        rq_more = NULL;
     for (d = 0; d < depth && !j->orphan; d++)
         if (pages[d].radio && pages[d].net_seq == j->seq)
             p = &pages[d];
+    if (p && p->plex && j->start) {
+        /* a long list's next part: on its end, the count bigger; the next */
+        LONG i, n = j->parsed ? j->n : 0;
+        char m[120];
+        p->net_seq = 0;
+        if (j->parsed) {
+            for (i = 0; i < j->list.count; i++)
+                list_copy(&p->list, &j->list.items[i], j->list.items[i].label);
+            list_free(&j->list);
+            j->parsed = FALSE;
+        }
+        if (n > 0) {
+            p->plex_more += n;
+            sprintf(m, "%s: %ld more, %ld of %ld now, in %ld ms", p->title, (long)n,
+                    (long)p->plex_more, (long)p->plex_total, (long)j->ms);
+            amce_log("plex", m);
+            np_mark_lists(FALSE);
+            if (p == cur() && !pane_pending) {
+                draw_title_count(p);
+                draw_list_rows(p);          /* the scroll bar's size, rows past the end */
+            }
+            plex_more_ask(p);
+        } else {
+            p->plex_more = 0;               /* no more come: as far as it got */
+        }
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+        return;
+    }
     if (p && p->plex) {
         LONG n = 0, total = 0;
         char m[200];
@@ -8252,9 +8308,13 @@ static void radio_done(struct NetJob *j)
                 sprintf(m, "%s: %ld listed of %ld, %lu KB from %s in %ld ms, read in %lu ms",
                         p->title, (long)n, (long)total, (unsigned long)((j->len + 512) >> 10),
                         j->server, (long)j->ms, (unsigned long)j->ms_read);
-            if (!servers && total > n)
-                list_add(&p->list, "(more than AmigaMCE shows at once: the first listed)", "", "",
-                         IT_TEXT);
+            p->plex_more = 0;
+            if (!servers && total > n) {
+                /* the rest asked for now, part by part, while this is looked at */
+                p->plex_more = n;
+                p->plex_total = total;
+                plex_more_ask(p);
+            }
             if (p->photos) {
                 /* photos here: a slideshow of them, first */
                 LONG i, k = 0;
@@ -8325,6 +8385,11 @@ static void radio_collect(void)
 /* A page closing: its request, if still out, is given up. */
 static void radio_page_gone(struct Page *p)
 {
+    if (p->radio && p->net_seq && rq_more && rq_more->seq == p->net_seq) {
+        net_cancel(rq_more);
+        rq_more->orphan = TRUE;
+        rq_more = NULL;
+    }
     if (p->radio && p->net_seq && rq && rq->seq == p->net_seq) {
         net_cancel(rq);
         rq->orphan = TRUE;                  /* freed when it comes back */
@@ -8343,6 +8408,11 @@ static void radio_stop(void)
         net_cancel(rq);
         rq->orphan = TRUE;
         rq = NULL;
+    }
+    if (rq_more) {
+        net_cancel(rq_more);
+        rq_more->orphan = TRUE;
+        rq_more = NULL;
     }
     for (d = 0; d < depth; d++)
         pages[d].net_seq = 0;

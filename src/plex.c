@@ -178,6 +178,12 @@ BOOL plex_photo_sections(const char *key)
  * token, and (lists) how many entries. */
 void plex_request(const char *key, char *out, LONG max)
 {
+    plex_request_from(key, 0, out, max);
+}
+
+/* The same, from entry start on (a long list's next part). */
+void plex_request_from(const char *key, LONG start, char *out, LONG max)
+{
     char n[64];
     amce_strlcpy(out, key, max);
     amce_strlcat(out, strchr(key, '?') ? "&" : "?", max);
@@ -188,7 +194,8 @@ void plex_request(const char *key, char *out, LONG max)
         amce_strlcat(out, "&X-Plex-Token=", max);
         amce_strlcat(out, plex.token, max);
     }
-    sprintf(n, "&X-Plex-Container-Start=0&X-Plex-Container-Size=%ld", (long)LIST_MAX);
+    sprintf(n, "&X-Plex-Container-Start=%ld&X-Plex-Container-Size=%ld", (long)start,
+            (long)LIST_MAX);
     amce_strlcat(out, n, max);
     if (strstr(key, "/all?type="))
         /* a library's artists or albums: without their biographies and
