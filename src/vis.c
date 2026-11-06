@@ -226,6 +226,17 @@ static void meters_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL 
 #define CH_BYTES 256            /* a voice's sample bytes copied (SAMPLE_LENGTH) */
 #define MIX_HZ   8000           /* the voices mixed at this rate (calcSampleStep) */
 #define LEVELS   64
+/* What of HippoPlayer's 64 loudness steps (1.4 dB each, 89 dB in all) the
+ * bars show. All 64, as HippoPlayer does, made a quiet lead-in nearly as
+ * tall as the tune: a voice at volume 8 of 64 reached half height, at
+ * volume 1 a third. Measured through this FFT (a sine at one bin): the
+ * four voices at full volume come to step 55, one voice 46, volume 16 38,
+ * 8 34, 4 29, 1 21 - each halving about 4 steps. The bars now span steps
+ * SP_FLOOR to SP_TOP, some 33 dB: the full tune at the top, one voice at
+ * full volume three quarters, volume 8 a quarter, volume 2 nothing, as
+ * the level meters would have it. */
+#define SP_FLOOR 28
+#define SP_TOP   52
 
 static struct {
     APTR mem;
@@ -379,7 +390,8 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
         for (j = 0; j < per; j++)
             if (lev[i * per + j] > l)
                 l = lev[i * per + j];
-        want = (WORD)((LONG)l * h / LEVELS);
+        want = l <= SP_FLOOR ? 0 : l >= SP_TOP ? h
+             : (WORD)((LONG)(l - SP_FLOOR) * h / (SP_TOP - SP_FLOOR));
         if (want < old - fall)
             want = old - fall;
         if (want > old)
@@ -411,7 +423,8 @@ int vis_marker(UBYTE *lev)
             for (b = band[i]; b < band[i + 1]; b++)
                 if (sp.lev[b] > m)
                     m = sp.lev[b];
-            lev[i] = (UBYTE)(m * 11 / LEVELS);
+            lev[i] = (UBYTE)(m <= SP_FLOOR ? 0 : m >= SP_TOP ? 11
+                                 : (m - SP_FLOOR) * 11 / (SP_TOP - SP_FLOOR));
         }
         return VIS_SPECTRUM;
     }
