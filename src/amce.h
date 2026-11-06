@@ -327,7 +327,8 @@ struct Item *list_add_first(struct ItemList *l, const char *label, const char *p
 void list_drop_first(struct ItemList *l);
 void list_sort(struct ItemList *l);
 char *list_strdup(struct ItemList *l, const char *s);   /* kept until list_free */
-struct Item *list_append(struct ItemList *l, const struct Item *src);   /* as it is */
+struct Item *list_append(struct ItemList *l, const struct Item *src);
+BOOL list_set(struct ItemList *l, LONG idx, const struct Item *src);   /* as it is */
 struct Item *list_add_split(struct ItemList *l, const char *label, char *dir,
                             const char *name, UBYTE kind);  /* ITEM_SPLIT; dir in l's pool */
 void list_drop_items(struct ItemList *l);   /* free the entries, keep the strings */

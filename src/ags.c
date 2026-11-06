@@ -122,6 +122,25 @@ struct Item *list_add_first(struct ItemList *l, const char *label, const char *p
     return &l->items[0];
 }
 
+/* Entry idx made a copy of src (its strings into l's pool): a placeholder
+ * filled in. FALSE: no memory. */
+BOOL list_set(struct ItemList *l, LONG idx, const struct Item *src)
+{
+    struct Item *it = &l->items[idx];
+    char *a = pool_strdup(l->pool, src->label), *b = pool_strdup(l->pool, src->path);
+    char *c = pool_strdup(l->pool, src->sortkey);
+    if (!a || !b || !c)
+        return FALSE;
+    it->label = a;
+    it->path = b;
+    it->sortkey = c;
+    it->kind = src->kind;
+    it->action = src->action;
+    it->mark = src->mark;
+    it->flags = src->flags & ~ITEM_SPLIT;
+    return TRUE;
+}
+
 /* The first entry taken out (its strings stay in the pool till it goes). */
 void list_drop_first(struct ItemList *l)
 {

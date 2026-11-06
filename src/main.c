@@ -64,7 +64,10 @@ struct Page {
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
-    LONG plex_more, plex_total; /* a long Plex list: the server's entries read, its total */
+    LONG plex_more, plex_total; /* a long Plex list: its parts read (count), its total */
+    ULONG plex_parts[4];        /* which parts of PLEX_PART entries are read (a bit each) */
+    BOOL plex_letters;          /* its first characters asked for (placeholders labelled) */
+    LONG plex_n0;               /* entries of its first part shown (some may be left out) */
     UBYTE photos;               /* a Plex photo library's (Pictures): albums, IT_PLEXPHOTO */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
@@ -5499,9 +5502,24 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
 {
     char v[96], part[32], up[16];
     int i;
-    for (i = 0; codec[i] && i < 15; i++)
-        up[i] = codec[i] >= 'a' && codec[i] <= 'z' ? codec[i] - 32 : codec[i];
-    up[i] = 0;
+    {
+        /* Plex's codec names (audioCodec) as people know them */
+        static const char *const names[][2] = {
+            { "wmalossless", "WMA Lossless" }, { "wmapro", "WMA Pro" }, { "wmav2", "WMA" },
+            { "wma", "WMA" }, { "alac", "Apple Lossless" }, { "aac", "AAC" },
+            { "vorbis", "Ogg Vorbis" }, { "opus", "Opus" }, { "ac3", "AC-3" },
+            { "eac3", "E-AC-3" }, { "dca", "DTS" }, { "pcm", "PCM" }, { "aiff", "AIFF" },
+            { "ape", "Monkey's Audio" }, { "wavpack", "WavPack" }, { NULL, NULL } };
+        up[0] = 0;
+        for (i = 0; names[i][0]; i++)
+            if (!amce_stricmp(codec, names[i][0]))
+                amce_strlcpy(up, names[i][1], sizeof(up));
+        if (!up[0]) {
+            for (i = 0; codec[i] && i < 15; i++)
+                up[i] = codec[i] >= 'a' && codec[i] <= 'z' ? codec[i] - 32 : codec[i];
+            up[i] = 0;
+        }
+    }
     amce_strlcpy(v, up, sizeof(v));
     if (kbps) {
         sprintf(part, "%s%lukbps", v[0] ? " " : "", (unsigned long)kbps);
@@ -8095,27 +8113,121 @@ static void build_radio_root(struct Page *p)
 }
 
 /* The answer to j into the page that asked, if it is still open. */
-/* A long Plex list's next part, asked for while the first is looked at
- * (rq_more: not the one request rq, so opening an entry meanwhile does
- * not give it up), with memory to spare for it. */
+/* ---- long Plex lists: the server's first PLEX_PART entries come first;
+ * the rest are placeholders (ITEM_GONE, labelled with their first letter
+ * once the server says where each letter starts, so typing one jumps
+ * there), read part by part: all of it in turn with memory to spare,
+ * else only the parts shown or selected, as they are needed. One request
+ * at a time (rq_more), not the page's own (rq): opening an entry meanwhile
+ * does not give it up. */
+#define PLEX_PART  1000
+#define PLEX_PARTS 128
 static struct NetJob *rq_more;
+
+/* Rows above the server's entries (Now playing, a slideshow). */
+static LONG plex_lead(struct Page *p)
+{
+    LONG i;
+    for (i = 0; i < p->list.count && i < 3 && p->list.items[i].kind == IT_ACTION; i++)
+        ;
+    return i;
+}
+
+static BOOL plex_part_read(struct Page *p, LONG k)
+{
+    return k < 0 || k >= PLEX_PARTS || (p->plex_parts[k >> 5] & (1UL << (k & 31)));
+}
+
+/* The part to read next: with memory to spare the first not read; else
+ * one the list shows or has selected (none: nothing yet). -1 none. */
+static LONG plex_part_wanted(struct Page *p)
+{
+    LONG lead = plex_lead(p), parts = (p->plex_total + PLEX_PART - 1) / PLEX_PART, k;
+    if (parts > PLEX_PARTS)
+        parts = PLEX_PARTS;
+    if (AvailMem(MEMF_ANY) > 3000000UL) {
+        for (k = 0; k < parts; k++)
+            if (!plex_part_read(p, k))
+                return k;
+        return -1;
+    }
+    {
+        LONG idx[3], i;
+        idx[0] = p->sel;
+        idx[1] = p->top;
+        idx[2] = p->top + list_visible();
+        for (i = 0; i < 3; i++) {
+            k = idx[i] - lead < p->plex_n0 ? 0
+                : (idx[i] - lead - p->plex_n0 + PLEX_PART) / PLEX_PART;
+            if (idx[i] >= lead && k < parts && !plex_part_read(p, k))
+                return k;
+        }
+    }
+    return -1;
+}
 
 static void plex_more_ask(struct Page *p)
 {
     struct NetJob *j;
-    if (rq_more || p->plex_more <= 0 || p->plex_more >= p->plex_total ||
-        AvailMem(MEMF_ANY) < 1500000UL || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+    LONG k = -1;
+    char key[300], *q;
+    if (rq_more || !p->plex_total || AvailMem(MEMF_ANY) < 400000UL)
+        return;
+    if (p->plex_letters && (k = plex_part_wanted(p)) < 0)
+        return;
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
     amce_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
-    plex_request_from(p->base, p->plex_more, j->path, sizeof(j->path));
-    j->parse = 1;
-    j->start = p->plex_more;
-    amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
+    if (!p->plex_letters) {
+        /* first: where each letter starts (/firstCharacter, the list's type) */
+        amce_strlcpy(key, p->base, sizeof(key));
+        if ((q = strstr(key, "/all")))
+            memmove(q + 15, q + 4, strlen(q + 4) + 1), memcpy(q, "/firstCharacter", 15);
+        plex_request(key, j->path, sizeof(j->path));
+        j->start = -1;
+        p->plex_letters = TRUE;
+    } else {
+        plex_request_from(p->base, k * PLEX_PART, j->path, sizeof(j->path));
+        j->parse = 1;
+        j->start = k * PLEX_PART + 1;       /* +1: never 0, which is a first part */
+        amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
+    }
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
     rq_more = j;
     net_submit(j);
+}
+
+/* The server's first characters (/firstCharacter: Directory title, size,
+ * in the list's order): the placeholders labelled with them. */
+static void plex_letters_came(struct Page *p, struct NetJob *j)
+{
+    static char letters[40][2];
+    LONG lead = plex_lead(p), at = 0, i;
+    const char *s = (const char *)j->body, *e = s ? s + j->len : NULL;
+    if (!s)
+        return;
+    while ((s = strstr(s, "<Directory")) && s < e) {
+        const char *t = strstr(s, " title=\""), *z = strstr(s, " size=\""), *end = strchr(s, '>');
+        LONG n = 0;
+        UBYTE c;
+        if (!t || !z || !end || t > end || z > end)
+            break;
+        for (z += 7; *z >= '0' && *z <= '9'; z++)
+            n = n * 10 + (*z - '0');
+        c = (UBYTE)t[8];
+        c = c >= 'a' && c <= 'z' ? c - 32 : c;
+        i = c >= 'A' && c <= 'Z' ? c - 'A' + 1 : 0;
+        letters[i][0] = i ? (char)c : '#';
+        letters[i][1] = 0;
+        for (; n > 0 && at < p->plex_total; n--, at++) {
+            LONG li = lead + p->plex_n0 + at - PLEX_PART;   /* the server's entry at */
+            if (at >= PLEX_PART && li < p->list.count && (p->list.items[li].flags & ITEM_GONE))
+                p->list.items[li].label = letters[i];
+        }
+        s = end;
+    }
 }
 
 static void radio_done(struct NetJob *j)
@@ -8172,33 +8284,36 @@ static void radio_done(struct NetJob *j)
         if (pages[d].radio && pages[d].net_seq == j->seq)
             p = &pages[d];
     if (p && p->plex && j->start) {
-        /* a long list's next part: on its end, the count bigger; the next */
-        LONG i, n = j->parsed ? j->n : 0;
+        /* a long list's letters, or a part of it: its placeholders filled */
         char m[120];
         p->net_seq = 0;
-        if (j->parsed) {
-            for (i = 0; i < j->list.count; i++)
-                list_copy(&p->list, &j->list.items[i], j->list.items[i].label);
+        if (j->start < 0) {
+            plex_letters_came(p, j);
+        } else if (j->parsed) {
+            LONG k = (j->start - 1) / PLEX_PART, i, n = 0;
+            LONG at = plex_lead(p) + p->plex_n0 + (j->start - 1 - PLEX_PART);
+            for (i = 0; i < j->list.count && at + i < p->list.count; i++)
+                if ((p->list.items[at + i].flags & ITEM_GONE) &&
+                    list_set(&p->list, at + i, &j->list.items[i]))
+                    n++;
             list_free(&j->list);
             j->parsed = FALSE;
-        }
-        if (n > 0) {
-            p->plex_more += n;
-            sprintf(m, "%s: %ld more, %ld of %ld now, in %ld ms", p->title, (long)n,
-                    (long)p->plex_more, (long)p->plex_total, (long)j->ms);
+            if (k < PLEX_PARTS)
+                p->plex_parts[k >> 5] |= 1UL << (k & 31);
+            p->plex_more++;
+            sprintf(m, "%.40s: part %ld read (%ld entries from %ld), in %ld ms", p->title,
+                    (long)k + 1, (long)n, (long)j->start - 1, (long)j->ms);
             amce_log("plex", m);
             np_mark_lists(FALSE);
             if (p == cur() && !pane_pending) {
                 draw_title_count(p);
-                draw_list_rows(p);          /* the scroll bar's size, rows past the end */
+                draw_list_rows(p);
             }
-            plex_more_ask(p);
-        } else {
-            p->plex_more = 0;               /* no more come: as far as it got */
         }
         if (j->body)
             FreeVec(j->body);
         FreeVec(j);
+        plex_more_ask(p);
         return;
     }
     if (p && p->plex) {
@@ -8309,10 +8424,25 @@ static void radio_done(struct NetJob *j)
                         p->title, (long)n, (long)total, (unsigned long)((j->len + 512) >> 10),
                         j->server, (long)j->ms, (unsigned long)j->ms_read);
             p->plex_more = 0;
-            if (!servers && total > n) {
-                /* the rest asked for now, part by part, while this is looked at */
-                p->plex_more = n;
-                p->plex_total = total;
+            p->plex_total = 0;
+            p->plex_letters = FALSE;
+            memset(p->plex_parts, 0, sizeof(p->plex_parts));
+            if (!servers && total > PLEX_PART && n > 0) {
+                /* the rest: placeholders, the server's letters asked for
+                 * now, then its parts (plex_more_ask) */
+                struct Item ph;
+                LONG i, lead = p->list.count - n;
+                if (list_add(&p->list, "", "", "", IT_PLEXDIR)) {
+                    p->list.items[p->list.count - 1].flags |= ITEM_GONE;
+                    p->list.items[p->list.count - 1].mark = MARK_NONE;
+                    ph = p->list.items[p->list.count - 1];
+                    for (i = PLEX_PART + 1; i < total && list_append(&p->list, &ph); i++)
+                        ;
+                }
+                p->plex_n0 = n;
+                p->plex_total = PLEX_PART + (p->list.count - lead - n);
+                p->plex_parts[0] = 1;
+                p->plex_more = 1;
                 plex_more_ask(p);
             }
             if (p->photos) {
@@ -8426,6 +8556,10 @@ static void radio_open(struct Item *it)
     BOOL photos;
     if (it->flags & ITEM_DISABLED)
         return;
+    if (it->flags & ITEM_GONE) {
+        set_msg("Still being read from the server: a moment");
+        return;
+    }
     if (it->kind == IT_PLEXDIR && it->path[0] == '@') {
         /* a music library: its own menu, nothing to ask yet; and the one
          * Music opens on from now */
@@ -10690,6 +10824,8 @@ static int app_main(void)
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                if (!rq_more && cur() && cur()->plex && cur()->plex_letters && !pane_pending)
+                    plex_more_ask(cur());   /* a long list's part now shown, if not read */
                 radio_spin();               /* a Radio list's, likewise */
                 np_tick();                  /* the music: its page, the next module */
                 if (g.win && ptr_hidden != g.win && !gut.drag &&
