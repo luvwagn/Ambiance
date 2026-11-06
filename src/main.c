@@ -4873,10 +4873,21 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
+    LONG vis = list_visible();
     if (ov.on && x1 > ov.strip_x - 1)
         x1 = ov.strip_x - 1;                /* never into the letter's strip */
     struct BitMap *bm = g.rp->BitMap;
-    if (n <= 0 || src == dst)
+    /* The copy goes straight to the screen's bitmap, which clips nothing:
+     * never outside the list's rows. Rows copied past them once went past
+     * the bitmap's end, into chip RAM after it (the display's copper list:
+     * a blank screen, after gliding to a list's end and back). */
+    if (src < 0 || dst < 0)
+        return;
+    if (src + n > vis)
+        n = vis - src;
+    if (dst + n > vis)
+        n = vis - dst;
+    if (n <= 0 || src == dst || x1 < x0)
         return;
     gfx_dirty();
     LockLayerRom(g.rp->Layer);             /* the window's, or a double buffer's */
@@ -4955,7 +4966,10 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
             blit_rows(0, m, vis - m);
         } else {
             blit_rows(r_old + 1, r_old + 1 + m, vis - 1 - r_old - m);   /* below the bar */
-            blit_rows(0, m, r_old);                                     /* above it */
+            /* above it: only as many as land inside the list (the bar on
+             * the bottom row, at a list's end: r_old rows would land m - 1
+             * rows past it) */
+            blit_rows(0, m, r_old < vis - m ? r_old : vis - m);
         }
         first = p->top;
         last = p->top + m - 1;
