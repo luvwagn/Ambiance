@@ -33,12 +33,14 @@
 (if (= @language "norsk") (set #def 128))
 (if (= @language "nederlands") (set #def 256))
 (if (= @language "português") (set #def 512))
+(if (= @language "nihongo") (set #def 1024))
+(if (= @language "japanese") (set #def 1024))
 
 (set #langs
   (askoptions
     (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
     (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
-    (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português")
+    (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)")
     (default #def)
   )
 )
@@ -88,6 +90,7 @@
 (if (IN #langs 7) ((set #drawer "norsk") (P_LANG)))
 (if (IN #langs 8) ((set #drawer "nederlands") (P_LANG)))
 (if (IN #langs 9) ((set #drawer "portugues") (P_LANG)))
+(if (IN #langs 10) ((set #drawer "nihongo") (P_LANG)))
 (complete 100)
 
 (exit "AmigaMCE is installed. Double-click it in its drawer to start; if AGS boots straight into its own menu, quit to Workbench first.")

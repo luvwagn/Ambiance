@@ -133,7 +133,8 @@ double-click AmigaMCE.
 Languages
 ---------
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands and Português. AmigaMCE speaks your Workbench's language
+Norsk, Nederlands, Português and Japanese (Nihongo, in its own
+characters). AmigaMCE speaks your Workbench's language
 (Locale prefs) when its catalog is installed; Settings > General >
 Language chooses another. The translations are new: corrections are
 welcome (catalogs/*.ct in the source, FlexCat's format).
@@ -211,8 +212,9 @@ History
        Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
        assign and Music folders, with tags and covers; FLAC from Plex
        as stored (flacdec.library); 68020+. Japanese, Chinese and
-       Korean names in their own characters. In ten languages besides
-       English, with an installer; a narrower menu on lowres screens.
+       Korean names in their own characters. In eleven languages besides
+       English (Japanese among them), with an installer; a narrower
+       menu on lowres screens.
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and
        stream buffer settings; network interface choice; Countries A to Z

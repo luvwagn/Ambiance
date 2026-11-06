@@ -115,7 +115,8 @@ languages): unpack it on a hard drive, for example
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands and Português. AmigaMCE follows the Workbench's language
+Norsk, Nederlands, Português and 日本語 (Japanese: its catalog's language is
+`nihongo`, and a Workbench set to `japanese` finds it too). AmigaMCE follows the Workbench's language
 (Locale prefs) when its catalog is installed; Settings › General ›
 Language picks another, and is greyed out showing the one in use when no
 other is installed.
@@ -126,7 +127,10 @@ needs numbering. `catalogs/` holds `AmigaMCE.cd`, made from the source,
 and one `.ct` per language in FlexCat's format, kept in UTF-8. Catalogs
 are read by AmigaMCE itself and known by the language written in them, so
 their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
-Chinese and Korean text can go in a catalog too.
+Chinese and Korean text can go in a catalog too, drawn from the glyph packs
+in `Fonts/amce-cjk`; in Japanese the clock and file dates are written year,
+month, day, and wrapped text keeps 、。」 and small kana off the start of a
+line.
 
 | Command | What it does |
 |---|---|
