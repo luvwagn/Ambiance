@@ -3,8 +3,8 @@ Author:       Brian King
 Uploader:     Brian King
 Type:         util/wb
 Version:      [VERSION]
-Requires:     Kickstart 3.1+; TCP/IP and mpega.library for radio/Plex
-Architecture: m68k-amigaos >= 3.1
+Requires:     68020+, Kickstart 3.1+; TCP/IP, mpega.library for radio/Plex
+Architecture: m68k-amigaos >= 3.1.0
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi and Windows Media Center: games and demos from Amiga Game Selector
@@ -82,8 +82,7 @@ Screens
 
 Requirements
 ------------
-- Kickstart 3.1 or later, any 68k CPU. A 68020 or better is needed for
-  mixed modules (XM, S3M, IT) and recommended for radio and Plex.
+- Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG.
 - Amiga Game Selector 3 for Games and Demos (found through AGS:).
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library) and
   mpega.library.

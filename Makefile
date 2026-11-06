@@ -22,13 +22,17 @@ CC     = m68k-amigaos-gcc
 STRIP  = m68k-amigaos-strip
 PYTHON ?= python3
 
-CFLAGS  = -Os -m68000 -mtune=68020-60 -noixemul -Wall -Wextra -Wno-pointer-sign \
+# A 68020 or better (its libraries from the toolchain's m68020-60
+# multilib); src/cpucheck.c alone is built for the 68000, to say so there.
+CPU     = -m68020-60
+CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
-LDFLAGS = -noixemul
+LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c \
+       src/cpucheck.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o
 VASM ?= vasmm68k_mot
 
@@ -68,6 +72,11 @@ build/eaglehost.o: src/eaglehost.s
 	@mkdir -p build
 	@echo "  ASM   $@"
 	@$(VASM) -Fhunk -m68000 -quiet -o $@ $<
+
+build/cpucheck.o: src/cpucheck.c
+	@mkdir -p build
+	@echo "  CC    $@ (68000)"
+	@$(CC) $(filter-out $(CPU),$(CFLAGS)) -m68000 -c -o $@ $<
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"

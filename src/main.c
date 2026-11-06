@@ -9356,9 +9356,14 @@ static struct StackSwapStruct main_sss;
 static APTR main_stack;
 static int main_rc;
 
+int amce_cpu_ok(void);              /* cpucheck.c: built for the 68000 */
+
 int main(void)
 {
-    struct Task *me = FindTask(NULL);
+    struct Task *me;
+    if (!amce_cpu_ok())
+        return 20;                          /* a 68000/010: said in a requester */
+    me = FindTask(NULL);
     if ((ULONG)me->tc_SPUpper - (ULONG)me->tc_SPLower >= MAIN_STACK)
         return app_main();
     if (!(main_stack = AllocVec(MAIN_STACK, MEMF_ANY)))

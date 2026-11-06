@@ -10,9 +10,9 @@ AmigaMCE is a drop-in companion to AGS 3: copy its drawer onto an AGS
 installation and double-click it. Everything plays inside AmigaMCE, on the
 Amiga's own screen and sound; it never switches you out to another program.
 
-It runs on Kickstart 3.1 and up, from a plain A1200 with a 68020 to an
-accelerated or RTG machine, and scales what it asks of the Amiga to how fast
-it really is.
+It runs on Kickstart 3.1 and up with a 68020 or better, from a plain A1200
+to an accelerated or RTG machine, on OCS, ECS or AGA, and scales what it asks
+of the Amiga to how fast it really is.
 
 ## What it does
 
@@ -73,7 +73,7 @@ it really is.
 
 | | |
 |---|---|
-| **Needed** | Kickstart 3.1 or later, any 68k CPU. A 68020 or better is needed for mixed modules and recommended for radio and Plex |
+| **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
 | **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign) |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) and mpega.library |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AmiSSL to list HTTPS radio stations |
@@ -140,7 +140,8 @@ the program, which is the first thing to look at if something misbehaves.
 ## Building
 
 AmigaMCE builds with the `m68k-amigaos-gcc` 16.2 toolchain (16.2-rc23 or
-later). The quickest way is the
+later), for the 68020 and up (`-m68020-60`); `src/cpucheck.c` alone is built
+for the 68000, so a 68000 or 68010 gets a requester saying so. The quickest way is the
 [amiga-gcc container](https://github.com/reinauer/container-amiga-gcc):
 
     docker run --rm -v $PWD:/src -w /src stefanreinauer/amiga-gcc:16.2-rc23 make
