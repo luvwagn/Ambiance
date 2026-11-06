@@ -2972,9 +2972,13 @@ static void dbg_load_log(void)
     wakes0 = loop_wakes;
 }
 
-/* Once a second: the screen's state, logged when it changes (a blank
- * screen while a long list glided, unexplained): which screen is in front,
- * the display's DMA, the UI's colours, and a list drawn past its end. */
+/* Once a second: the screen's state, logged when it changes: which screen
+ * is in front, the display's DMA, the UI's colours, the copper lists, and
+ * what the screen really shows (pixels read back). Made to find a blank
+ * screen after gliding to a long list's end and back (blit_rows wrote past
+ * the screen's bitmap); built only with -DAMCE_SCREEN_WATCH, should the
+ * like come back. */
+#ifdef AMCE_SCREEN_WATCH
 static const char *scr_why;
 static void scr_watch(void)
 {
@@ -3057,6 +3061,16 @@ static void scr_watch_now(const char *why)
     scr_why = why;
     scr_watch();
 }
+#else
+static void scr_watch(void)
+{
+}
+
+static void scr_watch_now(const char *why)
+{
+    (void)why;
+}
+#endif
 
 /* What the readout shows now, so a second that changes nothing redraws
  * nothing. Cleared when the header is drawn afresh. */
