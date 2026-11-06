@@ -58,11 +58,16 @@ Music (Plex)
 - Servers are found on the network by Plex's own discovery (GDM).
 
 Music (files)
-- MP3 and FLAC files on this Amiga, under Music beside Plex: the MUSIC:
-  assign, if there is one, and up to eight folders chosen in Settings >
-  Sound > Music folders. Folders open as lists; Fire plays a file with
-  the rest of its folder as the playlist, with seeking. FLAC needs
-  flacdec.library; a 68020/030 plays it in mono at about 22 kHz.
+- MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
+  Plex: the MUSIC: assign, if there is one, and up to eight folders chosen
+  in Settings > Sound > Music folders. Only folders with music somewhere
+  inside are listed. Fire plays a file with the rest of its folder as
+  the playlist, with seeking. FLAC needs flacdec.library; a 68020/030
+  plays it in mono at about 22 kHz.
+- Beside the list: the file's title, artist, album and year (ID3 tags,
+  FLAC's comments, AIFF and 8SVX names), its format and length, and its
+  cover: the folder's cover file (cover, folder or front .png or .jpg) or
+  the picture inside the file. Now Playing shows them too.
 
 Now Playing
 - Title, artist, album and cover, a level meter per channel (labelled for
@@ -184,8 +189,9 @@ Not there yet
 History
 -------
 0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
-       Music files: MP3 and FLAC from the MUSIC: assign and Music
-       folders; FLAC from Plex as stored (flacdec.library); 68020+.
+       Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
+       assign and Music folders, with tags and covers; FLAC from Plex
+       as stored (flacdec.library); 68020+.
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and
        stream buffer settings; network interface choice; Countries A to Z

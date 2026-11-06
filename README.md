@@ -50,10 +50,14 @@ of the Amiga to how fast it really is.
   68020/030, 24 kHz stereo on a 68040/060 or faster; a fast Amiga with
   flacdec.library plays MP3 and FLAC tracks as stored. Plain HTTP on your
   own network, so no AmiSSL is needed.
-- **Music files:** MP3 and FLAC files on the Amiga itself, under Music next
-  to Plex: the `MUSIC:` assign if you have one, and up to eight folders
-  chosen in Settings > Sound > Music folders. A folder's files play in
-  order, with seeking.
+- **Music files:** MP3, FLAC, WAV, AIFF and 8SVX files on the Amiga
+  itself, under Music next to Plex: the `MUSIC:` assign if you have one,
+  and up to eight folders chosen in Settings > Sound > Music folders. Only
+  folders with music somewhere inside are listed. Beside the list: the
+  file's tags (ID3, FLAC's Vorbis comments, AIFF and 8SVX names), format,
+  length and cover (the folder's cover file, or the picture inside the
+  file), which Now Playing shows too. A folder's files play in order, with
+  seeking.
 - **Now Playing:** title, artist, album and cover; a level meter per channel;
   a position bar you can click to seek; previous, back, play/pause, stop,
   forward, next and volume. The music plays on while you browse, and the

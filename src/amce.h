@@ -356,8 +356,32 @@ UBYTE *unpack_buffer(UBYTE *buf, ULONG *len, char *packer, LONG pmax, const char
 
 /* ---------------------------------------------------------------- mods */
 /* Folders of modules (mods.c): IT_DIR and IT_MOD rows. */
-LONG songs_read_dir(const char *dir, struct ItemList *out);  /* MP3 and FLAC files */
+LONG songs_read_dir(const char *dir, struct ItemList *out);  /* folders with music, music files */
 const char *song_format(const char *path);
+void songs_can_play(BOOL mp3, BOOL flac);   /* what the lists show (caps) */
+BOOL song_name_ok(const char *name);        /* a music file's name, of a kind played */
+/* songinfo.c: what a music file holds */
+struct SongInfo {
+    char title[100], artist[100], band[100], album[100], year[12], track[12], genre[40];
+    char fmt[8];                /* MP3, FLAC, WAV, AIFF, 8SVX */
+    ULONG rate, channels, bits, kbps, ms, size;
+    BOOL art;                   /* a picture: its folder's or its own */
+};
+enum { PCM_WAV = 1, PCM_AIFF, PCM_8SVX };
+struct PcmFmt {
+    UBYTE kind;
+    BOOL big, signed8, svx_stereo;  /* big-endian; 8-bit signed; 8SVX's two halves */
+    ULONG rate, frames, off, bytes;  /* samples: from off, bytes long */
+    UWORD channels, bits, align;
+};
+BOOL pcm_header(const UBYTE *b, LONG n, struct PcmFmt *f);
+BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BOOL extract);
+BOOL song_folder_art(const char *dir, char *out, LONG max);
+int song_lines(const char *path, const struct SongInfo *si, char lines[][96], int max);
+int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG artmax,
+                   BOOL extract);
+int song_details(const char *path, char lines[][96], int max, char *art, LONG artmax);
+BOOL song_art_of(const char *path, char *art, LONG artmax, BOOL extract);
 LONG mods_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
 BOOL mods_is_module(const char *dir, const char *name);
 void mods_label(const char *name, char *out, LONG max);
@@ -491,8 +515,10 @@ void ep_levels(UBYTE *hit, UBYTE *vol);
  * picture, a folder of pictures (its first picture) or an AGS folder's
  * entries, read off the UI's back. The UI owns the job; it comes back marked done. */
 #define LJ_FACTS 24
-enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_SHOT, LJ_FOLDER, LJ_PICDIR, LJ_WRITE, LJ_QUIT };
-enum { SHOT_AGS = 1, SHOT_FILE, SHOT_FOLDER };  /* LJ_SHOT: path is an entry base, a picture, a folder */
+enum { LJ_ENTRY = 1, LJ_PICTURE, LJ_PICFOLDER, LJ_SHOT, LJ_FOLDER, LJ_PICDIR, LJ_WRITE, LJ_SONG,
+       LJ_QUIT };              /* LJ_SONG: a music file's (or folder's) details, picture in first */
+enum { SHOT_AGS = 1, SHOT_FILE, SHOT_FOLDER, SHOT_SONG };  /* LJ_SHOT: path is an entry base, a
+                                 * picture, a folder, a music file or folder (its picture) */
 struct LJob {
     struct Message msg;
     UBYTE type;

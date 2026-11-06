@@ -141,20 +141,109 @@ LONG mods_read_dir(const char *dir, struct ItemList *out)
     return out->count;
 }
 
-/* ---- Music's own files (Settings > Sound > Music folders): folders and
- * the MP3 and FLAC files in them, folders first, by name. */
-static BOOL is_song(const char *name)
+/* ---- Music's own files (Settings > Sound > Music folders): folders with
+ * music somewhere inside, and the files AmigaMCE plays (MP3 with
+ * mpega.library, FLAC with flacdec.library, WAV, AIFF and 8SVX always),
+ * folders first, by name. */
+static BOOL can_mp3 = TRUE, can_flac = TRUE;
+
+void songs_can_play(BOOL mp3, BOOL flac)
 {
-    return name[0] != '.' && (ends_with(name, ".mp3") || ends_with(name, ".flac"));
+    can_mp3 = mp3;
+    can_flac = flac;
+}
+
+BOOL song_name_ok(const char *name)
+{
+    if (name[0] == '.')
+        return FALSE;
+    return (can_mp3 && ends_with(name, ".mp3")) || (can_flac && ends_with(name, ".flac")) ||
+           ends_with(name, ".wav") || ends_with(name, ".aif") || ends_with(name, ".aiff") ||
+           ends_with(name, ".aifc") || ends_with(name, ".8svx") || ends_with(name, ".svx");
+}
+
+/* ---- whether a folder has music in it, anywhere below: looked through
+ * (a few levels down; in a very large tree it is taken to have), and the
+ * answer kept for the session */
+#define HAS_KEPT   96
+#define HAS_DEPTH  4
+#define HAS_BUDGET 1500             /* entries looked at, at most */
+static struct { ULONG hash; BOOL yes; } has_kept[HAS_KEPT];
+static int has_next;
+
+struct has_ctx {
+    BOOL found;
+    LONG seen, ndirs;
+    char dirs[16][108];             /* the first folders inside, to look in next */
+};
+
+static void has_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct has_ctx *c = ctx;
+    c->seen++;
+    if (c->found)
+        return;
+    if (!isdir) {
+        if (song_name_ok(name))
+            c->found = TRUE;
+    } else if (c->ndirs < 16 && strlen(name) < sizeof(c->dirs[0])) {
+        strcpy(c->dirs[c->ndirs++], name);
+    }
+}
+
+static BOOL has_music(const char *dir, int depth, LONG *budget)
+{
+    struct has_ctx *c;
+    BOOL yes = FALSE;
+    LONG i;
+    if (depth > HAS_DEPTH || *budget <= 0)
+        return *budget <= 0;                /* too big to look through: shown */
+    if (!(c = AllocVec(sizeof(*c), MEMF_ANY | MEMF_CLEAR)))
+        return TRUE;
+    if (dir_scan(dir, has_cb, c) < 0) {
+        FreeVec(c);
+        return FALSE;
+    }
+    *budget -= c->seen;
+    yes = c->found;
+    for (i = 0; !yes && i < c->ndirs; i++) {
+        char sub[300];
+        join_path(sub, sizeof(sub), dir, c->dirs[i]);
+        yes = has_music(sub, depth + 1, budget);
+    }
+    FreeVec(c);
+    return yes;
+}
+
+static BOOL has_music_kept(const char *dir)
+{
+    ULONG h = 5381;
+    const char *s;
+    LONG budget = HAS_BUDGET;
+    int i;
+    BOOL yes;
+    for (s = dir; *s; s++)
+        h = h * 33 + (UBYTE)(*s | 0x20);
+    h = h * 2 + (can_flac ? 1 : 0);
+    for (i = 0; i < HAS_KEPT; i++)
+        if (has_kept[i].hash == h)
+            return has_kept[i].yes;
+    yes = has_music(dir, 1, &budget);
+    has_kept[has_next].hash = h;
+    has_kept[has_next].yes = yes;
+    has_next = (has_next + 1) % HAS_KEPT;
+    return yes;
 }
 
 static void song_cb(void *ctx, const char *name, BOOL isdir)
 {
     struct collect_ctx *c = ctx;
     char path[300], key[140], label[120], *dot;
-    if (!isdir && !is_song(name))
+    if (!isdir && !song_name_ok(name))
         return;
     join_path(path, sizeof(path), c->dir, name);
+    if (isdir && !has_music_kept(path))
+        return;                             /* no music anywhere in it */
     amce_strlcpy(label, name, sizeof(label));
     if (!isdir && (dot = strrchr(label, '.')))
         *dot = 0;                           /* the name without .mp3, .flac */
@@ -164,7 +253,8 @@ static void song_cb(void *ctx, const char *name, BOOL isdir)
         c->mods++;
 }
 
-/* dir's folders and music files into out, sorted; -1 if it cannot be read. */
+/* dir's folders with music and its music files into out, sorted; -1 if it
+ * cannot be read. */
 LONG songs_read_dir(const char *dir, struct ItemList *out)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -186,5 +276,8 @@ LONG songs_read_dir(const char *dir, struct ItemList *out)
 /* A music file's format, for Now Playing: "FLAC", "MP3". */
 const char *song_format(const char *path)
 {
-    return ends_with(path, ".flac") ? "FLAC" : "MP3";
+    return ends_with(path, ".flac") ? "FLAC" : ends_with(path, ".wav") ? "WAV"
+           : ends_with(path, ".8svx") || ends_with(path, ".svx") ? "8SVX"
+           : ends_with(path, ".aif") || ends_with(path, ".aiff") || ends_with(path, ".aifc")
+             ? "AIFF" : "MP3";
 }

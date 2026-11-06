@@ -1022,9 +1022,17 @@ static ULONG flac_io(register struct Hook *h __asm("a0"), register struct FLACDe
     return (ULONG)-1;
 }
 
+/* Frames (of ch 16-bit samples) from a decoder: FLAC's, or a PCM file's. */
+typedef LONG (*FrameFn)(APTR ctx, WORD *buf, LONG frames);
+
+static LONG flac_frames(APTR dec, WORD *buf, LONG frames)
+{
+    return FLACDecRead(dec, buf, frames);
+}
+
 /* Decoded frames into the FIFO, Paula started once the prebuffer is in,
  * till the end (or a stop). */
-static void flac_loop(APTR dec, UWORD ch, UWORD div, BOOL mono)
+static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
 {
     static WORD buf[1024 * 8];              /* frames of up to 8 channels */
     LONG frames = 8192 / (ch ? ch : 1), acc_l = 0, acc_r = 0;
@@ -1044,7 +1052,7 @@ static void flac_loop(APTR dec, UWORD ch, UWORD div, BOOL mono)
                 fill_half(st.want);
             continue;
         }
-        n = FLACDecRead(dec, buf, frames);
+        n = rd(dec, buf, frames);
         if (n <= 0) {
             if (st.err[0] && !st.eof) {
                 fail(st.err);
@@ -1136,12 +1144,116 @@ static void flac_play(void)
         amce_log("track", m);
     }
     st.state = ST_BUFFERING;
-    flac_loop(dec, info.fdi_Channels, div, mono);
+    pcm_loop(flac_frames, dec, info.fdi_Channels, div, mono);
 out:
     if (dec)
         FLACDecClose(dec);
     CloseLibrary(FLACDecBase);
     FLACDecBase = NULL;
+}
+
+/* ---- WAV, AIFF and 8SVX (music files here): their samples as they are
+ * stored, made 16-bit frames for pcm_loop */
+static struct PcmFmt pf;
+static ULONG pcm_left;                      /* bytes of samples still to come */
+
+static LONG pcm_frames(APTR ctx, WORD *buf, LONG frames)
+{
+    static UBYTE raw[1024 * 8 * 3];
+    LONG want = frames * pf.align, got, i, n, k;
+    (void)ctx;
+    if (want > (LONG)sizeof(raw))
+        want = sizeof(raw) - sizeof(raw) % pf.align;
+    if ((ULONG)want > pcm_left)
+        want = (LONG)(pcm_left - pcm_left % pf.align);
+    if (want <= 0)
+        return 0;
+    got = stream_read(raw, want);
+    got -= got % pf.align;
+    pcm_left -= got;
+    n = got / (pf.bits / 8);                /* samples */
+    for (i = 0, k = 0; i < n; i++) {
+        if (pf.bits == 8) {
+            buf[i] = (WORD)((pf.signed8 ? (BYTE)raw[i] : (BYTE)(raw[i] ^ 0x80)) << 8);
+        } else if (pf.bits == 16) {
+            buf[i] = pf.big ? (WORD)(raw[k] << 8 | raw[k + 1]) : (WORD)(raw[k + 1] << 8 | raw[k]);
+            k += 2;
+        } else {
+            buf[i] = pf.big ? (WORD)(raw[k] << 8 | raw[k + 1]) : (WORD)(raw[k + 2] << 8 | raw[k + 1]);
+            k += 3;                         /* 24-bit: its top 16 */
+        }
+    }
+    return got / pf.align;
+}
+
+static BOOL is_pcm(void)
+{
+    while (st.nb_len - st.nb_pos < 12)
+        if (!net_more())
+            return FALSE;
+    return (!memcmp(st.nb + st.nb_pos, "RIFF", 4) && !memcmp(st.nb + st.nb_pos + 8, "WAVE", 4)) ||
+           (!memcmp(st.nb + st.nb_pos, "FORM", 4) &&
+            (!memcmp(st.nb + st.nb_pos + 8, "AIFF", 4) ||
+             !memcmp(st.nb + st.nb_pos + 8, "AIFC", 4) ||
+             !memcmp(st.nb + st.nb_pos + 8, "8SVX", 4)));
+}
+
+/* A WAV, AIFF or 8SVX file here, start to end (from st.skip_ms in). */
+static void pcm_play(void)
+{
+    static UBYTE hdr[8192];
+    LONG n = stream_read(hdr, sizeof(hdr));
+    ULONG start;
+    UWORD div = 1;
+    BOOL mono;
+    LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 16000;
+    if (!st.fh) {
+        fail("Only music files on this Amiga play as WAV, AIFF or 8SVX");
+        return;
+    }
+    if (!pcm_header(hdr, n, &pf)) {
+        fail("Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)");
+        return;
+    }
+    if (st.clen && pf.off + pf.bytes > st.clen) {
+        pf.bytes = st.clen > pf.off ? st.clen - pf.off : 0;
+        pf.frames = pf.bytes / pf.align;    /* a WAV written as it streamed: to its end */
+    }
+    while (div < 8 && (LONG)(pf.rate / div) > fmax)
+        div *= 2;                           /* 44.1 kHz: 22050 */
+    mono = pf.channels == 1 || st.cpu < 30;
+    st.freq = pf.rate;
+    st.channels = pf.channels;
+    st.dec_freq = pf.rate / div;
+    st.dec_channels = mono ? 1 : 2;
+    st.len_ms = (pf.frames / pf.rate) * 1000 + (pf.frames % pf.rate) * 1000 / pf.rate;
+    start = pf.off;
+    pcm_left = pf.bytes;
+    if (st.skip_ms) {
+        ULONG fr = (st.skip_ms / 1000) * pf.rate + (st.skip_ms % 1000) * pf.rate / 1000;
+        ULONG by = fr * pf.align;
+        if (by < pcm_left) {
+            start += by;
+            pcm_left -= by;
+        }
+    }
+    /* from its first sample (or the time asked for), not the header's end */
+    if (Seek(st.fh, start, OFFSET_BEGINNING) < 0) {
+        fail("The file could not be read");
+        return;
+    }
+    st.nb_pos = st.nb_len = 0;
+    st.eof = FALSE;
+    {
+        char m[200];
+        sprintf(m, "%s: %s %ld Hz %ld-bit, %ld channel%s, played at %ld Hz %s",
+                FilePart((STRPTR)st.url), pf.kind == PCM_WAV ? "WAV" : pf.kind == PCM_AIFF ? "AIFF"
+                : "8SVX", (long)pf.rate, (long)pf.bits, (long)pf.channels,
+                pf.channels == 1 ? "" : "s", (long)st.dec_freq, mono ? "mono" : "stereo");
+        amce_log("track", m);
+    }
+    st.state = ST_BUFFERING;
+    pcm_loop(pcm_frames, NULL, pf.channels, div, mono);
 }
 
 static void radio_main(void)
@@ -1168,6 +1280,10 @@ static void radio_main(void)
     }
     if (st.finite && is_flac()) {
         flac_play();                        /* a FLAC file, as stored */
+        goto out;
+    }
+    if (st.local && is_pcm()) {
+        pcm_play();                         /* WAV, AIFF, 8SVX: as stored */
         goto out;
     }
     if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {

@@ -2251,6 +2251,7 @@ static void build_credits(struct Page *p)
 
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
+static BOOL np_local_art;           /* the music file playing has a picture */
 /* A track playing from a file on this Amiga (Music folders), not a server. */
 static BOOL np_local(void)
 {
@@ -3286,8 +3287,8 @@ static BOOL has_aside(struct Page *p)
     if (!p->aside) {
         LONG i;
         p->aside = 1;
-        if (p->pics && aside_width() > 0)
-            p->aside = 2;           /* pictures and folders both preview */
+        if ((p->pics || (p->songs && !p->plex)) && aside_width() > 0)
+            p->aside = 2;           /* pictures and folders (music files) both preview */
         else if (aside_width() > 0)
             for (i = 0; i < p->list.count; i++)
                 if (p->list.items[i].kind == IT_RUN) {
@@ -3416,6 +3417,14 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     it = &p->list.items[idx];
     if (it->flags & ITEM_GONE)
         return 0;                           /* not held now: previewed once read again */
+    if (p->songs && !p->plex) {
+        /* a music file or folder: its details, and its picture */
+        if (it->kind != IT_SONG && it->kind != IT_DIR)
+            return 0;
+        amce_strlcpy(path, it->path, max);
+        *shot = SHOT_SONG;
+        return LJ_SONG;
+    }
     if (p->pics) {
         amce_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC) {
@@ -3776,11 +3785,12 @@ static void pv_shot_key(UBYTE shot, const char *path, char *key)
     } else if (shot == SHOT_AGS) {
         key[0] = 1;                         /* an entry's screenshot: never a file's key */
         amce_strlcpy(key + 1, path, 299);
-    } else if (shot == SHOT_FOLDER) {
+    } else if (shot == SHOT_FOLDER || shot == SHOT_SONG) {
         for (i = 0; i < PV_SLOTS; i++) {
             struct LJob *j = pv_slot[i];
             if (j && j->done && j->first[0] && !strcmp(j->path, path) &&
-                (j->type == LJ_PICFOLDER || (j->type == LJ_SHOT && j->mode == SHOT_FOLDER))) {
+                (j->type == LJ_PICFOLDER || j->type == LJ_SONG ||
+                 (j->type == LJ_SHOT && j->mode == shot))) {
                 amce_strlcpy(key, j->first, 300);
                 return;
             }
@@ -3846,7 +3856,7 @@ static void pv_draw_picture(void)
     }
     pv_onscr.key[0] = 0;
     if (ok && j) {
-        if (j->mode == SHOT_FOLDER)
+        if (j->mode == SHOT_FOLDER || j->mode == SHOT_SONG)
             amce_strlcpy(pv_onscr.key, j->first, sizeof(pv_onscr.key));
         else
             pv_shot_key(j->mode, j->path, pv_onscr.key);
@@ -5178,7 +5188,7 @@ static void np_layout(void)
     np.pos_y = np.by + np.bh + U(5);
     np.samples_y = np.pos_y + row + U(2);
     np.art_s = 0;
-    if (mp_is_track() && !np_local()) {
+    if (mp_is_track() && (!np_local() || np_local_art)) {
         /* the cover: a square at the right of the track's lines */
         WORD s = g.footer_y - 2 - np.samples_y - U(2);
         WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
@@ -5409,8 +5419,9 @@ static void np_draw_station(void)
         else
             np_pair(y, "Playback", "");
         y += lh;
-        if (y <= bottom)
-            gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);
+        if (y <= bottom)                    /* the picture's square left alone */
+            gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
+                     PEN_BG);
         return;
     }
     if (mp_is_track()) {
@@ -5764,9 +5775,23 @@ static BOOL np_start(LONG idx)
         }
         np_art_start(it);                   /* its cover, when it comes */
     } else if (it->kind == IT_SONG) {
-        /* a music file on this Amiga: played as a Plex track is, from the file */
-        if (!mp_load_track(it->path, it->label, np.folder, song_format(it->path), 0,
-                           plex_decoder_cpu(), 0, 0, err, sizeof(err))) {
+        /* a music file on this Amiga: played as a Plex track is, from the
+         * file; its tags name it, its picture (folder's or its own) shows */
+        static struct SongInfo si;
+        char by[220], art[300];
+        song_info(it->path, &si, art, sizeof(art), TRUE);
+        if (si.artist[0] || si.band[0] || si.album[0]) {
+            amce_strlcpy(by, si.artist[0] ? si.artist : si.band, sizeof(by));
+            if (si.album[0]) {
+                amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
+                amce_strlcat(by, si.album, sizeof(by));
+            }
+        } else {
+            amce_strlcpy(by, np.folder, sizeof(by));
+        }
+        if (!mp_load_track(it->path, si.title[0] ? si.title : it->label, by,
+                           song_format(it->path), 0, plex_decoder_cpu(), 0, 0, err,
+                           sizeof(err))) {
             busy_end(TRUE);
             np.idx = idx;
             set_msg(err);
@@ -5774,7 +5799,17 @@ static BOOL np_start(LONG idx)
         }
         plex_now[0] = 0;
         plex_now_in[0][0] = plex_now_in[1][0] = 0;
-        np_art_start(NULL);                 /* no cover: the last one goes */
+        np_local_art = FALSE;
+        np_art_start(NULL);                 /* the last cover goes */
+        if (art[0]) {
+            np_local_art = TRUE;
+            np_layout();                    /* its square */
+            amce_strlcpy(np_art_file, art, sizeof(np_art_file));
+            if (np.art_s && !(np_on() && pic_take(art, np.art_x, np.art_y, np.art_s, np.art_s)))
+                np_art_load(art);
+            else if (np.art_s)
+                np_art_drawn = TRUE;        /* the pane's: moved across */
+        }
     } else if (!mp_load(it->path, err, sizeof(err))) {
         busy_end(TRUE);
         np.idx = idx;
@@ -5857,10 +5892,13 @@ static void np_seek_track(ULONG ms, ULONG delay)
     if (it->kind == IT_SONG) {
         /* a file: FLAC finds the time itself; an MP3 from about its byte */
         ULONG at = 0, size = st_size();
-        BOOL flac = !strcmp(song_format(it->path), "FLAC");
-        if (!flac && st.total_ms && size)
+        BOOL mp3 = !strcmp(song_format(it->path), "MP3");  /* FLAC, PCM: by time */
+        if (mp3 && st.total_ms && size)
             at = (ULONG)(((unsigned long long)size * ms) / st.total_ms);
-        if (!mp_load_track(it->path, it->label, np.folder, song_format(it->path), st.total_ms,
+        char title[120];
+        amce_strlcpy(title, mp_stream_name(), sizeof(title));  /* its tags' names, kept */
+        amce_strlcpy(by, mp_track_by(), sizeof(by));
+        if (!mp_load_track(it->path, title, by, song_format(it->path), st.total_ms,
                            plex_decoder_cpu(), ms, at, err, sizeof(err)) ||
             !mp_play(err, sizeof(err)))
             set_msg(err);
@@ -10101,6 +10139,7 @@ static int app_main(void)
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     load_music_dirs();
+    songs_can_play(caps.mp3_mpega, caps.flacdec);   /* what music lists show */
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);

@@ -135,6 +135,12 @@ static void run(struct LJob *j)
                 return;
             src = shot;
             amce_strlcpy(j->first, shot, sizeof(j->first));    /* which picture it shows */
+        } else if (j->mode == SHOT_SONG) {
+            /* a music file's picture (its folder's, or copied out of it) */
+            if (!song_art_of(j->path, shot, sizeof(shot), TRUE))
+                return;
+            src = shot;
+            amce_strlcpy(j->first, shot, sizeof(j->first));
         }
         if (!j->cancel)
             decode(j, src);
@@ -177,6 +183,15 @@ static void run(struct LJob *j)
         if (!idx_date(j->path, &j->date))
             memset(&j->date, 0, sizeof(j->date));
         j->np = ags_read_dir(j->path, &j->list, j->adult);
+        return;
+    }
+    if (j->type == LJ_SONG) {
+        /* a music file's details, or a folder's; np: it has a picture,
+         * first: which (not copied out here: the picture's job does that) */
+        char art[300];
+        j->nlines = song_details(j->path, j->lines, LJ_FACTS, art, sizeof(art));
+        j->np = art[0] ? 1 : 0;
+        amce_strlcpy(j->first, art, sizeof(j->first));
         return;
     }
     if (j->type == LJ_PICDIR) {

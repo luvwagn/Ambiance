@@ -31,7 +31,7 @@ LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c \
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c \
        src/cpucheck.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o
 VASM ?= vasmm68k_mot
@@ -94,6 +94,10 @@ build/test_ags: tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c 
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c
 
+build/test_songs: tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/amce.h
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c
+
 # amiga.lib's sprintf is exec's RawDoFmt, where %d/%u/%x/%c read 16 bits.
 # Every numeric conversion must carry the l modifier with a long argument.
 check-formats:
@@ -115,11 +119,15 @@ check-syscalls: $(SRCS) src/amce.h
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
 
-test: check-formats check-syscalls build/test_ags test-replayer test-radio test-plex
+test: check-formats check-syscalls build/test_ags build/test_songs test-replayer test-radio test-plex
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V T:$(abspath build/vt) test_ags
+	@rm -rf build/songs build/ram && mkdir -p build/ram
+	@$(PYTHON) -I tests/mksongs.py build/songs
+	@cd build && vamos -V Songs:$(abspath build/songs) -V RAM:$(abspath build/ram) test_songs > test-songs.txt \
+		&& echo "  CHECK music files ok" || (cat test-songs.txt; exit 1)
 
 # The ProTracker replayer on the build machine: a generated module played
 # through a model of Paula; its length and its four channels checked.
@@ -217,5 +225,5 @@ disk: lha
 	@xdftool $(DISK) info
 
 clean:
-	rm -rf build/*.o build/lha build/vt build/test_ags $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha amigamce-*.adf
