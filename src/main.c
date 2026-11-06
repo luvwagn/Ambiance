@@ -4987,6 +4987,7 @@ static struct {
     WORD x0, w, title_y, info_y, prog_y, prog_h, time_y, meter_y, meter_h, name_w;
     WORD bx[NB_COUNT], by, bw, bh, vol_x, samples_y;
     WORD art_x, art_y, art_s;               /* a Plex track's cover: its square (0 none) */
+    WORD art_h;                             /* its rows (half on hires: tall pixels) */
     WORD bar_w, pos_y;                      /* the bar's width (the time right of it); the
                                              * position line, under the buttons */
     LONG seek_to;                           /* a track's seek waiting (ms, -1 none) */
@@ -5209,6 +5210,8 @@ static void np_volume_text(void)
     WORD x = np.vol_x, y = np.by + (np.bh - g.font_h) / 2, end = np.x0 + np.w - 1;
     if (x < 0)
         return;
+    if (np.art_s && np.art_y <= np.by + np.bh)
+        end = np.art_x - U(8) - 1;          /* the cover beside it */
     sprintf(m, "Volume %ld%%", (long)(mp_volume() * 100 / 64));
     gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
     x += gfx_textlen(&g, m, TS_SMALL);
@@ -5303,9 +5306,12 @@ static void np_layout(void)
     }
     if (np.bw > U(26))
         np.bw = U(26);
-    /* no taller than wide (lowres's narrow buttons), but the icon's room */
-    if (np.bh > np.bw && !gfx_mode_tall(g.mode))
+    /* no taller than wide (lowres's narrow buttons; hires's pixels are
+     * twice as tall: half the rows), but the icon's room */
+    if (!gfx_mode_tall(g.mode) && np.bh > np.bw)
         np.bh = np.bw > g.font_h + U(3) ? np.bw : g.font_h + U(3);
+    else if (gfx_mode_tall(g.mode) && np.bh * 2 > np.bw)
+        np.bh = np.bw / 2 > g.font_h + U(2) ? np.bw / 2 : g.font_h + U(2);
     for (i = 0; i <= NB_VDOWN; i++)
         np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_VDOWN ? gap * 2 : 0);
     {
@@ -5328,19 +5334,32 @@ static void np_layout(void)
         np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
     np.pos_y = np.by + np.bh + U(5);
     np.samples_y = np.pos_y + row + U(2);
-    np.art_s = 0;
+    np.art_s = np.art_h = 0;
     if (mp_is_track() && (np_local() ? np_local_art : np_art_want) && pv_pictures()) {
-        /* the cover: a square at the right of the track's lines */
-        WORD s = g.footer_y - 2 - np.samples_y - U(2);
+        /* the cover, a square to the eye at the right: below the controls,
+         * beside the track's lines; or, where the controls leave more room
+         * at their right, from their row down. Its width s, its rows s
+         * (half on hires, whose pixels are twice as tall) */
+        WORD per = gfx_mode_tall(g.mode) ? 2 : 1;
         WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
-        if (s > np.w * 2 / 5)
-            s = np.w * 2 / 5;
-        if (s > cap)
-            s = cap;                        /* less to decode on a slower Amiga */
-        if (s >= U(40)) {
-            np.art_s = s;
-            np.art_x = np.x0 + np.w - s;
-            np.art_y = np.samples_y;
+        WORD sa = (g.footer_y - 2 - np.samples_y - U(2)) * per, sb, right, y = np.samples_y;
+        if (sa > np.w * 2 / 5)
+            sa = np.w * 2 / 5;
+        right = (np.vol_x >= 0 ? np.vol_x + vt : np.bx[NB_VUP] + np.bw) + U(10);
+        sb = np.x0 + np.w - right;
+        if (sb > (g.footer_y - 2 - np.by - U(2)) * per)
+            sb = (g.footer_y - 2 - np.by - U(2)) * per;
+        if (sb > sa) {
+            sa = sb;
+            y = np.by;
+        }
+        if (sa > cap)
+            sa = cap;                       /* less to decode on a slower Amiga */
+        if (sa >= U(40)) {
+            np.art_s = sa;
+            np.art_h = sa / per;
+            np.art_x = np.x0 + np.w - sa;
+            np.art_y = y;
         }
     }
 }
@@ -5405,12 +5424,15 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         gfx_fill(&g, x + bw, y, end - lw, y + g.font_h - 1, PEN_BG);
     gfx_text(&g, end - lw + 1, y, t, np.seek_due ? PEN_WHITE : PEN_TEXT, PEN_BG, 0,
              TS_BODY | TS_OPAQUE);
-    /* the position (or the buffer) on its own line under the buttons */
+    /* the position (or the buffer) on its own line under the buttons; left
+     * of the cover where it comes down beside the controls */
+    if (np.art_s && np.art_y <= np.pos_y)
+        end = np.art_x - U(8) - 1;
     rw = gfx_textlen(&g, pos, TS_SMALL);
-    if (rw > np.w)
-        rw = np.w;
+    if (rw > end - x + 1)
+        rw = end - x + 1;
     if (rw)
-        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, np.w, TS_SMALL | TS_OPAQUE);
+        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, rw, TS_SMALL | TS_OPAQUE);
     if (x + rw <= end)
         gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
 }
@@ -5692,7 +5714,7 @@ static void np_draw(BOOL full)
         np_layout();
         plex_shown[0] = 0;                  /* the pane's details: gone under this page */
         if (mp_is_track() && np.art_s && pic_take(np_art_file, np.art_x, np.art_y, np.art_s,
-                                                  np.art_s)) {
+                                                  np.art_h)) {
             /* the cover on screen already (the album's pane): moved into
              * its square, the rest cleared around it */
             fill_around_pic(g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
@@ -5808,7 +5830,13 @@ static void np_update(void)
     }
     was = gfx_quiet_begin();
     np_draw(FALSE);
-    gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.pos_y + g.font_h);
+    if (np.art_s && np.art_y <= np.pos_y + g.font_h) {
+        /* the cover beside the controls: what is above it, then left of it */
+        gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.art_y - 1);
+        gfx_quiet_end(&g, was, g.pane_x - U(2), np.art_y, np.art_x - 1, np.pos_y + g.font_h);
+    } else {
+        gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.pos_y + g.font_h);
+    }
 }
 
 /* The playing module marked in any Mods list open (redraw: and the list
@@ -6000,7 +6028,7 @@ static BOOL np_start_now(LONG idx)
             np_local_art = TRUE;
             np_layout();                    /* its square */
             amce_strlcpy(np_art_file, art, sizeof(np_art_file));
-            if (np.art_s && !(np_on() && pic_take(art, np.art_x, np.art_y, np.art_s, np.art_s)))
+            if (np.art_s && !(np_on() && pic_take(art, np.art_x, np.art_y, np.art_s, np.art_h)))
                 np_art_load(art);
             else if (np.art_s)
                 np_art_drawn = TRUE;        /* the pane's: moved across */
@@ -8867,25 +8895,26 @@ static void np_art_draw(void)
     if (!np_aj || !np_aj->done || !np_on() || !mp_is_track() || !np.art_s || np_art_drawn)
         return;
     if (np_aj->thumb &&
-        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_s, &dh)) {
+        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_h, &dh)) {
         /* the square around a cover not square (the one before may show there) */
         if (g.pic_x > np.art_x)
-            gfx_fill_bg(&g, np.art_x, np.art_y, g.pic_x - 1, np.art_y + np.art_s - 1);
+            gfx_fill_bg(&g, np.art_x, np.art_y, g.pic_x - 1, np.art_y + np.art_h - 1);
         if (g.pic_x + g.pic_w < np.art_x + np.art_s)
             gfx_fill_bg(&g, g.pic_x + g.pic_w, np.art_y, np.art_x + np.art_s - 1,
-                        np.art_y + np.art_s - 1);
-        if (dh < np.art_s)
-            gfx_fill_bg(&g, g.pic_x, np.art_y + dh, g.pic_x + g.pic_w - 1, np.art_y + np.art_s - 1);
+                        np.art_y + np.art_h - 1);
+        if (dh < np.art_h)
+            gfx_fill_bg(&g, g.pic_x, np.art_y + dh, g.pic_x + g.pic_w - 1, np.art_y + np.art_h - 1);
     }
     else if (np_aj->obj && gfx_picture_obj(&g, np_aj->obj, np_aj->remapped, np.art_x, np.art_y,
-                                           np.art_s, np.art_s, TRUE, &dh, &taken) && taken)
+                                           np.art_s, np.art_h, TRUE, &dh, &taken) && taken)
         np_aj->obj = NULL;                  /* the screen has it (its pens) */
     if (g.pic_w) {
         /* what is on screen, and where: the album's pane takes it back */
         amce_strlcpy(pv_onscr.key, np_aj->path, sizeof(pv_onscr.key));
         pv_onscr.x = np.art_x;
         pv_onscr.y = np.art_y;
-        pv_onscr.w = pv_onscr.h = np.art_s;
+        pv_onscr.w = np.art_s;
+        pv_onscr.h = np.art_h;
     }
     np_art_drawn = TRUE;
 }
@@ -8910,7 +8939,7 @@ static void np_art_start(const struct Item *it)
     np_layout();                            /* the square's size */
     if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
         gfx_picture_clear(&g, np.art_x, np.art_y, np.art_x + np.art_s - 1,
-                          np.art_y + np.art_s - 1);
+                          np.art_y + np.art_h - 1);
     if (!np.art_s)
         return;
     /* the pane's size where it fits: the same file, and the same picture,
@@ -8918,7 +8947,7 @@ static void np_art_start(const struct Item *it)
     s = np_art_size();
     if (art_fetch(ART_NP, thumb, s, s, file)) {
         amce_strlcpy(np_art_file, file, sizeof(np_art_file));
-        if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_s)) {
+        if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_h)) {
             np_art_drawn = TRUE;            /* the one on screen: moved */
             return;
         }
