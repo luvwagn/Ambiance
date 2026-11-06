@@ -3163,6 +3163,46 @@ static void draw_title(struct Page *p)
         }
     }
     x = g.pane_x;
+    if (p->type == PT_PLAYER && depth > 2) {
+        /* Now playing: its section, "..." (the list it came from: what is
+         * playing is on the page below, not spelt out twice), and itself */
+        static const char *const dots_s = "...";
+        int lv[3];
+        const char *txt[3];
+        int k;
+        lv[0] = 0;
+        txt[0] = pages[0].title;
+        lv[1] = depth - 2;
+        txt[1] = dots_s;
+        lv[2] = depth - 1;
+        txt[2] = pages[depth - 1].title;
+        for (i = 0; i < depth; i++)
+            crumb[i].x0 = crumb[i].x1 = -1;
+        for (k = 0; k < 3; k++) {
+            BOOL last = k == 2, hov = !last && lv[k] == crumb_hover && mouse_mode;
+            WORD w = gfx_textlen(&g, txt[k], TS_BOLD), room = g.pane_x + maxw - x;
+            if (room <= 0)
+                break;
+            if (w > room)
+                w = room;
+            if (hov)
+                gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
+            gfx_text(&g, x, U(28), txt[k], last ? PEN_WHITE : PEN_TEXT, hov ? PEN_RULE : PEN_BG,
+                     room, TS_BOLD | TS_OPAQUE);
+            crumb[lv[k]].x0 = x;
+            crumb[lv[k]].x1 = x + w - 1;
+            x += w;
+            if (!last) {
+                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
+                x += sep;
+            }
+        }
+        crumb_first = 0;
+        title_band_rest(g.pane_x, x, g.w);
+        draw_title_count(p);
+        gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
+        return;
+    }
     if (crumb_first > 0) {
         gfx_text(&g, x, U(28), "...", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
         x += gfx_textlen(&g, "...", TS_BOLD);
@@ -8527,6 +8567,15 @@ static void np_art_free(void)
     FreeVec(j);
 }
 
+/* The size Now Playing's cover is asked for and made: the details pane's
+ * where it fits (the same file, moved across as it is), else its square's
+ * own (no pane, on lowres: 0 there). */
+static WORD np_art_size(void)
+{
+    WORD s = plex_art_side();
+    return s >= 8 && s <= np.art_s ? s : np.art_s;
+}
+
 /* The cover's file to the loader, made for the square. */
 static void np_art_load(const char *file)
 {
@@ -8542,7 +8591,7 @@ static void np_art_load(const char *file)
     j->want_pic = FALSE;
     if (gfx_thumbs(&g)) {
         j->remap = FALSE;
-        j->tw = j->th = plex_art_side() <= np.art_s ? plex_art_side() : np.art_s;
+        j->tw = j->th = np_art_size();
         j->tall = gfx_mode_tall(g.mode);
         j->maxcol = gfx_thumb_colours(&g);
         if (plex_colours() && j->maxcol > plex_colours())
@@ -8608,8 +8657,7 @@ static void np_art_start(const struct Item *it)
         return;
     /* the pane's size where it fits: the same file, and the same picture,
      * which can then go across as it is (pic_take) */
-    s = plex_art_side();                    /* no details pane (lowres): 0 */
-    s = s >= 8 && s <= np.art_s ? s : np.art_s;
+    s = np_art_size();
     if (art_fetch(ART_NP, thumb, s, s, file)) {
         amce_strlcpy(np_art_file, file, sizeof(np_art_file));
         if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_s)) {
