@@ -134,7 +134,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_SND_FLAC, ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1516,6 +1516,7 @@ static void save_screen_mode(void)
 #define DEBUG_VAR "AmigaMCE/Debug"
 #define STYLE_VAR "AmigaMCE/Style"
 #define LFONT_VAR "AmigaMCE/LacedFont"
+#define RFONT_VAR "AmigaMCE/RTGFont"    /* RTG's pixel style: a font of gfx_laced_fonts */
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
 #define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters" or "spectrum" */
@@ -1848,6 +1849,10 @@ static void load_style(void)
         for (i = 0; i < LFONT_COUNT; i++)
             if (!amce_stricmp(buf, gfx_laced_fonts[i].name))
                 gfx_laced_font = i;
+    if (GetVar((CONST_STRPTR)RFONT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        for (i = 0; i < LFONT_COUNT; i++)
+            if (!amce_stricmp(buf, gfx_laced_fonts[i].name))
+                gfx_rtg_font = i;
 }
 
 /* Settings > Screen > Visualisation: the level meters or the
@@ -2069,6 +2074,11 @@ static void build_screen_settings(struct Page *p)
      * this screen can only be pixel (other native modes, 8-bit RTG) */
     if (gfx_laced(g.mode)) {
         action_item(p, _("Style"), gfx_laced_fonts[gfx_laced_font].name, ACT_STYLES, MARK_ARROW);
+    } else if (gfx_mode_is_rtg(g.mode)) {
+        /* RTG: Smooth, or the pixel style's font */
+        action_item(p, _("Style"), g.style == STYLE_SMOOTH ? _("Smooth")
+                                   : gfx_laced_fonts[gfx_rtg_font_shown(g.h)].name,
+                    ACT_STYLES, MARK_ARROW);
     } else if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
         action_item(p, _("Style"), ui_style == STYLE_SMOOTH ? _("Smooth") : _("Pixel"), ACT_STYLES,
                     MARK_ARROW);
@@ -2487,6 +2497,29 @@ static void build_styles(struct Page *p)
         return;
     }
     can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
+    if (gfx_mode_is_rtg(g.mode)) {
+        /* RTG: the pixel fonts whose layout fits the screen (Pixelify Sans
+         * at its whole factor until one is chosen), and Smooth */
+        int shown = gfx_rtg_font_shown(g.h);
+        struct Item *it;
+        p->sel = -1;
+        for (i = 0; i < LFONT_COUNT; i++) {
+            BOOL on = g.style != STYLE_SMOOTH && i == shown;
+            if (!gfx_font_fits(i, g.h))
+                continue;
+            action_item(p, gfx_laced_fonts[i].name, "", ACT_RFONT0 + i,
+                        on ? MARK_RADIO_ON : MARK_RADIO_OFF);
+            if (on)
+                p->sel = p->list.count - 1;
+        }
+        if ((it = action_item(p, _("Smooth"), "", ACT_STYLE_SMOOTH,
+                              g.style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+            !can_smooth)
+            it->flags |= ITEM_DISABLED;     /* (an 8-bit screen) */
+        if (g.style == STYLE_SMOOTH || p->sel < 0)
+            p->sel = p->list.count - 1;
+        return;
+    }
     action_item(p, _("Pixel"), "", ACT_STYLE_PIXEL,
                 ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
     action_item(p, _("Smooth"), can_smooth ? "" : _("RTG only"), ACT_STYLE_SMOOTH,
@@ -8697,6 +8730,21 @@ static void apply_style(int st)
     restyle();
 }
 
+/* Settings > Style on an RTG screen: a pixel font (and the pixel style,
+ * if it was Smooth), and the layout with it. */
+static void apply_rtg_font(int i)
+{
+    if (i == gfx_rtg_font_shown(g.h) && g.style != STYLE_SMOOTH)
+        return;
+    gfx_rtg_font = i;
+    save_setting(RFONT_VAR, gfx_laced_fonts[i].name);
+    if (ui_style != STYLE_PIXEL) {
+        ui_style = STYLE_PIXEL;
+        save_setting(STYLE_VAR, "pixel");
+    }
+    restyle();
+}
+
 /* Settings > Style on a laced screen: its font, and the layout with it. */
 static void apply_laced_font(int i)
 {
@@ -10388,6 +10436,8 @@ static void act_action(struct Item *it)
         apply_style(STYLE_SMOOTH);
     else if (it->action >= ACT_LFONT0 && it->action <= ACT_LFONT_END)
         apply_laced_font(it->action - ACT_LFONT0);
+    else if (it->action >= ACT_RFONT0 && it->action <= ACT_RFONT_END)
+        apply_rtg_font(it->action - ACT_RFONT0);
     else if (it->action >= ACT_MODE0 && it->action < ACT_MODE0 + SM_COUNT)
         apply_screen_mode(it->action - ACT_MODE0);
 }

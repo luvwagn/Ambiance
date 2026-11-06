@@ -177,7 +177,9 @@ Settings
 --------
   General      Jump scrolling (very long lists step a letter at a time),
                Debug
-  Screen       Screen mode, Style, Double buffering (RTG), Visualisation
+  Screen       Screen mode, Style (a laced or RTG screen: the font, those
+               whose layout fits; RTG: or Smooth), Double buffering
+               (RTG), Visualisation
                (Now Playing's level meters, or HippoPlayer's spectrum
                analyser; under MHI the meters)
   Sound        Paula, or AHI (16-bit) for radio, Plex and music files;

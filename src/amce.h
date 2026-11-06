@@ -69,6 +69,9 @@ struct LacedFont {
 #define LFONT_DEFAULT 2 /* Galmuri11 */
 extern const struct LacedFont gfx_laced_fonts[LFONT_COUNT];
 extern int gfx_laced_font;          /* set before gfx_open / gfx_restyle */
+extern int gfx_rtg_font;            /* RTG's pixel style: one of them, -1 the whole factor */
+BOOL gfx_font_fits(int i, WORD lines);
+int gfx_rtg_font_shown(WORD lines);
 #define RTG_LINES 384           /* keep in step with tools/mksmooth.py */
 
 /* Text faces (gfx_text, gfx_textlen). Pixel style has one font for all. */

@@ -126,11 +126,48 @@ const struct LacedFont gfx_laced_fonts[LFONT_COUNT] = {
     { "Galmuri14 Bold", "amce-galmuri14b.font", 21, 1 },
 };
 int gfx_laced_font = LFONT_DEFAULT;
+int gfx_rtg_font = -1;              /* RTG, pixel style: -1 Pixelify at its whole factor */
+
+static BOOL rtg_kind(const struct Gfx *g);
+
+/* The layout with font i is 256 design lines at its ysize/12: room for it. */
+BOOL gfx_font_fits(int i, WORD lines)
+{
+    return i >= 0 && i < LFONT_COUNT && 256L * gfx_laced_fonts[i].ysize / 12 <= lines;
+}
+
+/* The one an RTG screen of these lines uses in the pixel style: the one
+ * chosen if it fits, else Pixelify Sans at the whole factor (12 or 24). */
+int gfx_rtg_font_shown(WORD lines)
+{
+    if (gfx_font_fits(gfx_rtg_font, lines))
+        return gfx_rtg_font;
+    return lines / RTG_LINES >= 2 ? 1 : 0;
+}
+
+/* The pixel style's font where the screen has a choice (laced, RTG). */
+static const struct LacedFont *chosen_font(const struct Gfx *g)
+{
+    if (laced(g))
+        return &gfx_laced_fonts[gfx_laced_font];
+    if (rtg_kind(g) && g->style == STYLE_PIXEL && gfx_rtg_font >= 0 &&
+        gfx_font_fits(gfx_rtg_font, g->h))
+        return &gfx_laced_fonts[gfx_rtg_font];
+    return NULL;
+}
 
 static void pixel_scale(struct Gfx *g)
 {
-    if (laced(g)) {
-        const struct LacedFont *f = &gfx_laced_fonts[gfx_laced_font];
+    const struct LacedFont *f = chosen_font(g);
+    if (rtg_kind(g)) {
+        /* the whole factor again (a font chosen before may have set it) */
+        g->kint = g->h / RTG_LINES;
+        if (g->kint < 1)
+            g->kint = 1;
+        if (g->kint > 3)
+            g->kint = 3;
+    }
+    if (f) {
         g->kint = f->kint;
         g->k = (UWORD)(((ULONG)f->ysize << 8) / 12);
     } else {
@@ -150,8 +187,8 @@ static void open_font(struct Gfx *g)
         ta.ta_Style = FS_NORMAL;
         ta.ta_Flags = FPF_DESIGNED;         /* never a size blown up by diskfont */
         me->pr_WindowPtr = (APTR)-1;
-        if (laced(g)) {
-            const struct LacedFont *f = &gfx_laced_fonts[gfx_laced_font];
+        if (chosen_font(g)) {
+            const struct LacedFont *f = chosen_font(g);
             char name[64];
             amce_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
             amce_strlcat(name, f->file, sizeof(name));
@@ -163,7 +200,7 @@ static void open_font(struct Gfx *g)
                 layout_metrics(g);
             }
             if (g->font)
-                amce_log("laced font", f->name);
+                amce_log(laced(g) ? "laced font" : "rtg font", f->name);
         }
         if (!g->font) {
             ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
@@ -211,6 +248,11 @@ static const struct {
 static BOOL laced(const struct Gfx *g)
 {
     return g->mode >= 0 && g->mode < SM_COUNT && laced_kind(g->mode);
+}
+
+static BOOL rtg_kind(const struct Gfx *g)
+{
+    return g->mode >= 0 && g->mode < SM_COUNT && modes[g->mode].kind == K_RTG;
 }
 
 BOOL gfx_laced(int sm)
@@ -744,8 +786,8 @@ BOOL gfx_restyle(struct Gfx *g, int style)
         CloseFont(g->font);
         g->font = NULL;
     }
+    g->style = STYLE_PIXEL;                 /* (pixel_scale asks: the pixel style's font) */
     pixel_scale(g);
-    g->style = STYLE_PIXEL;
     if (style == STYLE_SMOOTH && modes[g->mode].kind == K_RTG && g->depth >= 8) {
         if ((g->sm = sm_load(g->h))) {
             g->style = STYLE_SMOOTH;
