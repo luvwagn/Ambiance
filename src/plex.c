@@ -234,6 +234,9 @@ ULONG plex_track_byte(const struct Item *it, ULONG from_ms)
 {
     char f[16];
     ULONG size, total;
+    radio_field(it, 1, f, sizeof(f));
+    if (amce_stricmp(f, "mp3"))
+        return 0;                           /* FLAC: seeks by its frames, from the start */
     radio_field(it, 10, f, sizeof(f));
     size = num(f);
     radio_field(it, 2, f, sizeof(f));
@@ -251,8 +254,8 @@ BOOL plex_converts(const struct Item *it)
     radio_field(it, 5, key, sizeof(key));
     if (!key[0])
         return FALSE;
-    if (amce_stricmp(codec, "mp3"))
-        return TRUE;                        /* the Amiga plays MP3 only */
+    if (amce_stricmp(codec, "mp3") && !(plex.flac && !amce_stricmp(codec, "flac")))
+        return TRUE;                        /* MP3, and FLAC with flacdec.library, as stored */
     return plex.convert || plex_tier() < 2;     /* a slower Amiga: always converted */
 }
 
@@ -395,8 +398,9 @@ static void flush_track(struct fill *x)
         x->full = TRUE;
         return;
     }
-    if (amce_stricmp(x->t_codec, "mp3") && !x->t_key[0])
-        it->flags |= ITEM_DISABLED;         /* not MP3, and no key to convert it by */
+    if (amce_stricmp(x->t_codec, "mp3") && !(plex.flac && !amce_stricmp(x->t_codec, "flac")) &&
+        !x->t_key[0])
+        it->flags |= ITEM_DISABLED;         /* not playable as stored, and no key to convert it by */
     x->added++;
 }
 

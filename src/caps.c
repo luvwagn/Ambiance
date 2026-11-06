@@ -163,6 +163,7 @@ void caps_detect(struct Caps *c)
     c->mp3_mpega = lib_present("mpega.library", 0);
     c->mp3_mhi = path_present("LIBS:MHI");
     c->ahi = path_present("DEVS:ahi.device");      /* AHI: Settings > Sound, later */
+    c->flacdec = lib_present("flacdec.library", 1);  /* FLAC tracks as stored (Plex) */
     c->amissl = lib_present("amisslmaster.library", 0);  /* AmiSSL: HTTPS streams */
     {
         struct Library *v = OpenLibrary((CONST_STRPTR)"version.library", 0);

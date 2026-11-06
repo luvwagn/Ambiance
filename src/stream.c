@@ -108,6 +108,34 @@ typedef struct {
     LP2(42, LONG, MPEGA_decode_frame, MPEGA_STREAM *, s, a0, WORD **, p, a1, , MPEGABase)
 
 typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
+
+/* ---------------------------------------------------------- flacdec.library
+ * Renaud Schweingruber's FLAC decoder (dr_flac by David Reid, its loops in
+ * 68020 assembler), on Aminet as util/libs/flacdec. Its archive goes
+ * about unchanged only, so its interface is declared here from its
+ * documentation: decoders read through a hook of ours (A0 the hook, A2 the
+ * decoder, A1 the message), and give 16-bit frames, channels interleaved. */
+static struct Library *FLACDecBase;
+struct FLACDecInfo {
+    ULONG fdi_SampleRate;
+    UWORD fdi_Channels, fdi_BitsPerSample;
+    ULONG fdi_TotalFramesHi, fdi_TotalFramesLo;
+    ULONG fdi_Reserved[4];
+};
+struct FLACDecIO {
+    ULONG fio_Method;
+    APTR fio_Buffer;
+    LONG fio_Length, fio_Mode;
+};
+#define FDIO_READ 1
+#define FDIO_SEEK 2
+#define FDIO_TELL 3
+#define FLACDecOpen(h, i) \
+    LP2(30, APTR, FLACDecOpen, struct Hook *, h, a0, struct FLACDecInfo *, i, a1, , FLACDecBase)
+#define FLACDecClose(d) LP1NR(42, FLACDecClose, APTR, d, a0, , FLACDecBase)
+#define FLACDecRead(d, b, n) \
+    LP3(48, LONG, FLACDecRead, APTR, d, a0, WORD *, b, a1, LONG, n, d0, , FLACDecBase)
+#define FLACDecSeek(d, f) LP2(54, BOOL, FLACDecSeek, APTR, d, a0, ULONG, f, d0, , FLACDecBase)
 typedef char access_size_check[sizeof(MPEGA_ACCESS) == 16 ? 1 : -1];
 
 /* ---------------------------------------------------------- the state */
@@ -148,6 +176,8 @@ static struct {
     BOOL finite;                    /* a track: its end is the end, not a failure */
     ULONG mp3_bytes;                /* MP3 given to the decoder: its average bitrate */
     ULONG range_from;               /* a track from this byte on (a seek; 0 all of it) */
+    ULONG clen;                     /* a track's whole length in bytes, 0 not known */
+    ULONG fpos;                     /* FLAC: where in the file the decoder has read to */
     ULONG skip_ms;                  /* a conversion from this time on (a seek): asked of
                                      * the server (its offset), else frames passed over */
     BOOL skipping;                  /* the server would not: passed over here */
@@ -545,6 +575,7 @@ static BOOL open_stream(void)
         }
         if (header(hdr, "icy-br", v, sizeof(v)))
             st.bitrate = num(v);
+        st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? num(v) + st.range_from : 0;
         st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? num(v) : 0;
         st.meta_left = st.metaint;
         if (header(hdr, "Content-Type", v, sizeof(v))) {
@@ -567,7 +598,8 @@ static BOOL open_stream(void)
                 st.sock = -1;
                 continue;
             }
-            if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet")) {
+            if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet") &&
+                !(st.finite && strstr(v, "flac"))) {
                 sprintf(req, "%s sends %s, not MP3", st.finite ? "The server" : "The station", v);
                 fail(req);
                 return FALSE;
@@ -860,6 +892,215 @@ static void decode_loop(MPEGA_STREAM *ms)
     }
 }
 
+/* ---------------------------------------------------------- FLAC
+ * A track stored as FLAC (Plex, played as stored on a fast Amiga): read
+ * through flacdec's hook from the connection, decoded to 16 bits, then
+ * brought to what Paula plays: every div frames averaged into one (a 44.1
+ * kHz file at 22050), mixed to mono where the CPU wants that, 8 bits. */
+
+/* The stream starts with FLAC's own mark. */
+static BOOL is_flac(void)
+{
+    while (st.nb_len - st.nb_pos < 4)
+        if (!net_more())
+            return FALSE;
+    return !memcmp(st.nb + st.nb_pos, "fLaC", 4);
+}
+
+/* Bytes passed over (a seek forward a little way, or flacdec skipping
+ * metadata): read and dropped. */
+static BOOL flac_skip(ULONG n)
+{
+    while (n) {
+        ULONG k = st.nb_len - st.nb_pos;
+        if (!k) {
+            if (!net_more())
+                return FALSE;
+            continue;
+        }
+        if (k > n)
+            k = n;
+        st.nb_pos += k;
+        st.fpos += k;
+        n -= k;
+    }
+    return TRUE;
+}
+
+/* flacdec's I/O hook: the file as it comes, seeks forward read past, a
+ * seek anywhere else asked of the server again from there (Range). */
+static ULONG flac_io(register struct Hook *h __asm("a0"), register struct FLACDecIO *m __asm("a1"),
+                     register APTR dec __asm("a2"))
+{
+    (void)h;
+    (void)dec;
+    switch (m->fio_Method) {
+    case FDIO_READ: {
+        LONG got = stream_read(m->fio_Buffer, m->fio_Length);
+        st.fpos += got;
+        if (!got && st.err[0] && !st.eof)
+            return (ULONG)-1;
+        return (ULONG)got;
+    }
+    case FDIO_TELL:
+        return st.fpos;
+    case FDIO_SEEK: {
+        LONG to = m->fio_Length;
+        if (m->fio_Mode == OFFSET_CURRENT)
+            to += (LONG)st.fpos;
+        else if (m->fio_Mode == OFFSET_END) {
+            if (!st.clen)
+                return FALSE;               /* its length not known */
+            to += (LONG)st.clen;
+        }
+        if (to < 0 || (st.clen && (ULONG)to > st.clen))
+            return FALSE;
+        if ((ULONG)to == st.fpos)
+            return TRUE;
+        if ((ULONG)to > st.fpos && (ULONG)to - st.fpos <= 65536UL) {
+            st.eof = FALSE;
+            return flac_skip((ULONG)to - st.fpos);
+        }
+        /* far, or back: the file asked for again from there */
+        {
+            UBYTE was = st.state;
+            if (st.sock >= 0)
+                CloseSocket(st.sock);
+            st.sock = -1;
+            st.nb_pos = st.nb_len = 0;
+            st.eof = FALSE;
+            st.err[0] = 0;
+            st.range_from = (ULONG)to;
+            if (!open_stream())
+                return FALSE;
+            st.state = was;                 /* still playing, for the UI */
+            st.fpos = (ULONG)to;
+            return TRUE;
+        }
+    }
+    }
+    return (ULONG)-1;
+}
+
+/* Decoded frames into the FIFO, Paula started once the prebuffer is in,
+ * till the end (or a stop). */
+static void flac_loop(APTR dec, UWORD ch, UWORD div, BOOL mono)
+{
+    static WORD buf[1024 * 8];              /* frames of up to 8 channels */
+    LONG frames = 8192 / (ch ? ch : 1), acc_l = 0, acc_r = 0;
+    UWORD acc_n = 0;
+    ULONG prebuf = (ULONG)st.dec_freq * prebuf_ms[buf_level] / 1000;
+    if (frames > 1024)
+        frames = 1024;
+    if (prebuf > FIFO_N / 2)
+        prebuf = FIFO_N / 2;
+    while (!st.quit) {
+        LONG n, i;
+        ULONG o;
+        serve();
+        if (st.f_in - st.f_out > FIFO_N - (ULONG)frames) {
+            ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+            if (got & (1UL << st.sig))
+                fill_half(st.want);
+            continue;
+        }
+        n = FLACDecRead(dec, buf, frames);
+        if (n <= 0) {
+            if (st.err[0] && !st.eof) {
+                fail(st.err);
+                break;
+            }
+            if (!st.started && st.f_in != st.f_out) {
+                st.state = ST_PLAYING;      /* shorter than the prebuffer: it plays now */
+                paula_start();
+            }
+            break;                          /* the end: what is left plays out */
+        }
+        o = st.f_in;
+        for (i = 0; i < n; i++) {
+            const WORD *f = buf + i * ch;
+            acc_l += f[0];
+            acc_r += ch > 1 ? f[1] : f[0];
+            if (++acc_n < div)
+                continue;
+            if (mono) {
+                st.fl[o & (FIFO_N - 1)] = (BYTE)(((acc_l + acc_r) / (2 * (LONG)div)) >> 8);
+            } else {
+                st.fl[o & (FIFO_N - 1)] = (BYTE)((acc_l / (LONG)div) >> 8);
+                st.fr[o & (FIFO_N - 1)] = (BYTE)((acc_r / (LONG)div) >> 8);
+            }
+            o++;
+            acc_l = acc_r = 0;
+            acc_n = 0;
+        }
+        st.f_in = o;
+        if (!st.started && st.f_in - st.f_out >= prebuf) {
+            st.state = ST_PLAYING;
+            paula_start();
+        }
+    }
+    while (!st.quit && st.started && st.f_in != st.f_out) {
+        ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+        if (got & SIGBREAKF_CTRL_C)
+            break;
+        fill_half(st.want);
+    }
+}
+
+/* A FLAC track, start to end (from st.skip_ms in, for a seek). */
+static void flac_play(void)
+{
+    static struct Hook fh;
+    struct FLACDecInfo info;
+    APTR dec;
+    UWORD div = 1;
+    BOOL mono;
+    LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
+    if (!(FLACDecBase = OpenLibrary((CONST_STRPTR)"flacdec.library", 1))) {
+        fail("flacdec.library is needed to play FLAC (Aminet: util/libs/flacdec)");
+        return;
+    }
+    memset(&fh, 0, sizeof(fh));
+    fh.h_Entry = (HOOKFUNC)(APTR)flac_io;
+    memset(&info, 0, sizeof(info));
+    st.fpos = st.range_from;
+    if (!(dec = FLACDecOpen(&fh, &info))) {
+        fail(st.err[0] ? st.err : "The track is not FLAC that flacdec.library can decode");
+        goto out;
+    }
+    while (div < 8 && (LONG)(info.fdi_SampleRate / div) > fmax)
+        div *= 2;                           /* 44.1 kHz: 22050, 96 kHz: 24000 */
+    mono = st.cpu < 40 || info.fdi_Channels == 1;
+    st.freq = info.fdi_SampleRate;
+    st.channels = info.fdi_Channels;
+    st.dec_freq = info.fdi_SampleRate / div;
+    st.dec_channels = mono ? 1 : 2;
+    if (st.skip_ms) {
+        ULONG r = info.fdi_SampleRate;
+        ULONG frame = (st.skip_ms / 1000) * r + (st.skip_ms % 1000) * r / 1000;
+        if (!FLACDecSeek(dec, frame))
+            amce_log("track", "FLAC: could not seek there; from the start");
+    }
+    {
+        char m[360], u[200], *q;
+        amce_strlcpy(u, st.url, sizeof(u));
+        if ((q = strchr(u, '?')))
+            *q = 0;
+        sprintf(m, "%s: FLAC %ld Hz %ld-bit, %ld channel%s, decoded at %ld Hz %s",
+                u, (long)info.fdi_SampleRate, (long)info.fdi_BitsPerSample,
+                (long)info.fdi_Channels, info.fdi_Channels == 1 ? "" : "s", (long)st.dec_freq,
+                mono ? "mono" : "stereo");
+        amce_log("track", m);
+    }
+    st.state = ST_BUFFERING;
+    flac_loop(dec, info.fdi_Channels, div, mono);
+out:
+    if (dec)
+        FLACDecClose(dec);
+    CloseLibrary(FLACDecBase);
+    FLACDecBase = NULL;
+}
+
 static void radio_main(void)
 {
     MPEGA_STREAM *ms = NULL;
@@ -876,14 +1117,18 @@ static void radio_main(void)
         fail("No TCP/IP stack is running (bsdsocket.library)");
         goto out;
     }
-    if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
-        fail("mpega.library is needed to play MP3");
-        goto out;
-    }
     if (!open_stream())
         goto out;
     if (st.finite && !skip_id3()) {
         fail(st.err[0] ? st.err : "The track ended before its music began");
+        goto out;
+    }
+    if (st.finite && is_flac()) {
+        flac_play();                        /* a FLAC file, as stored */
+        goto out;
+    }
+    if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
+        fail("mpega.library is needed to play MP3");
         goto out;
     }
     if (st.skipping && !skip_to()) {

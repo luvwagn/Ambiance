@@ -124,7 +124,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
-       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
+       ACT_SND_FLAC, ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
@@ -1989,6 +1989,11 @@ static void build_sound_settings(struct Page *p)
         it->flags |= ITEM_DISABLED;
     if ((it = action_item(p, "MP3: MHI", caps.mp3_mhi ? "installed: comes later" : "not installed",
                           ACT_SND_MHI, MARK_RADIO_OFF)))
+        it->flags |= ITEM_DISABLED;
+    /* FLAC: Plex's tracks as stored, where the Amiga is fast enough */
+    if ((it = action_item(p, "FLAC: flacdec.library",
+                          caps.flacdec ? "installed" : "not installed (Aminet: util/libs/flacdec)",
+                          ACT_SND_FLAC, caps.flacdec ? MARK_CHECK_ON : MARK_CHECK_OFF)))
         it->flags |= ITEM_DISABLED;
 }
 
@@ -5501,6 +5506,21 @@ static void np_mark_lists(BOOL redraw)
         draw_list_rows(cur());
 }
 
+/* What a Plex track plays as: MP3 when the server converts it, else its
+ * own format (MP3, FLAC). */
+static const char *plex_tag(const struct Item *it)
+{
+    static char t[16];
+    char *c;
+    if (plex_converts(it))
+        return "MP3";
+    radio_field(it, 1, t, sizeof(t));
+    for (c = t; *c; c++)
+        if (*c >= 'a' && *c <= 'z')
+            *c -= 32;
+    return t[0] ? t : "MP3";
+}
+
 /* Load playlist entry idx and play it; FALSE (and why, in msg) if not. */
 static BOOL np_start(LONG idx)
 {
@@ -5567,7 +5587,7 @@ static BOOL np_start(LONG idx)
             const char *d = ms;
             while (*d >= '0' && *d <= '9')
                 v = v * 10 + (*d++ - '0');
-            ok_track = mp_load_track(url, it->label, by, "MP3", v, plex_decoder_cpu(), 0, 0, err,
+            ok_track = mp_load_track(url, it->label, by, plex_tag(it), v, plex_decoder_cpu(), 0, 0, err,
                                      sizeof(err));
         }
         if (!ok_track) {
@@ -5663,7 +5683,7 @@ static void np_seek_track(ULONG ms, ULONG delay)
         amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
         amce_strlcat(by, album, sizeof(by));
     }
-    if (!mp_load_track(url, it->label, by, "MP3", st.total_ms, plex_decoder_cpu(), ms,
+    if (!mp_load_track(url, it->label, by, plex_tag(it), st.total_ms, plex_decoder_cpu(), ms,
                        plex_converts(it) ? 0 : plex_track_byte(it, ms), err, sizeof(err)) ||
         !mp_play(err, sizeof(err))) {
         set_msg(err);
@@ -8369,6 +8389,9 @@ static void act_action(struct Item *it)
             set_msg(caps.ahi ? "AHI: coming in a later version" : "AHI is not installed");
         else if (it->action == ACT_SND_MHI)
             set_msg(caps.mp3_mhi ? "MHI: coming in a later version" : "MHI is not installed");
+        else if (it->action == ACT_SND_FLAC)
+            set_msg(caps.flacdec ? "FLAC: Plex's FLAC tracks play as stored on a fast Amiga"
+                                 : "Install flacdec.library (Aminet: util/libs/flacdec) for FLAC");
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         return;
@@ -9432,6 +9455,7 @@ static int app_main(void)
 
     caps_detect(&caps);
     plex_load(caps.cpu);            /* after: it needs the CPU */
+    plex.flac = caps.flacdec;
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);

@@ -27,7 +27,7 @@ struct Caps {
     UWORD cpu;          /* 0, 10, 20, 30, 40, 60 */
     UWORD kick, kick_rev; /* ROM: exec version, SysBase->SoftVer */
     UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
-    BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi;
+    BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     ULONG chipfree, fastfree;
 };
@@ -701,6 +701,7 @@ struct PlexConf {
     BOOL convert;               /* every track converted for this Amiga by the server */
     BOOL on;                    /* Settings > Plex */
     UWORD cpu;                  /* caps.cpu (plex_load) */
+    BOOL flac;                  /* flacdec.library installed: FLAC plays as stored too */
     char library[16];           /* the music library used ("" not known yet) */
     UWORD libraries;            /*   of how many on the server */
 };
