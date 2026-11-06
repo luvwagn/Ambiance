@@ -597,6 +597,18 @@ static void clear_old(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WOR
     band_fill(g, b, ox0, (ny1 + 1 > oy0 ? ny1 + 1 : oy0), ox1, oy1);        /* below */
 }
 
+/* x0,y0..x1,y1 filled with the background without a half-cleared frame:
+ * all planes at once, band by band behind the beam (gfx_fill_bg clears the
+ * upper planes first, and a picture shows garbled until the rest go). */
+void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    struct Beam b;
+    if (!g->scr)
+        return;
+    beam_init(g, &b);
+    band_fill(g, &b, x0, y0, x1, y1);
+}
+
 /* Copy bm (w x h) to x, y on the screen without a half-drawn frame. */
 void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WORD h)
 {

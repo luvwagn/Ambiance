@@ -193,6 +193,7 @@ BOOL gfx_picture_move(struct Gfx *g, WORD x, WORD y);   /* pens kept */
 /* bm (w x h, like the screen's) to x, y, band by band with the beam: no
  * half-drawn frame is seen on a planar screen. */
 void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WORD h);
+void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 /* The same in two halves: decoding (any process; remap FALSE takes no
  * pens) and drawing what was decoded (the object stays the caller's, to
  * draw again, unless *taken). */

@@ -235,8 +235,10 @@ static void page_pop(void)
     if (pages[depth - 1].pic_bm && pages[depth - 1].pic_y >= 0) {
         struct Page *p = &pages[depth - 1];
         WaitBlit();                             /* the logo gone while its pens are its own: */
-        gfx_fill_bg(&g, p->pic_x, p->pic_y, p->pic_x + p->pic_w - 1,
-                    p->pic_y + p->pic_h - 1);   /*   left, it would show in the next page's */
+        gfx_clear_beam(&g, p->pic_x, p->pic_y, p->pic_x + p->pic_w - 1,
+                       p->pic_y + p->pic_h - 1);    /* left, it would show in the next
+                                                     * page's; all its planes together,
+                                                     * behind the beam, not garbled */
         p->pic_y = -1;
     }
     /* the preview's picture stays for the page under, which may show it
@@ -4704,7 +4706,7 @@ static void draw_text_picture(struct Page *p)
     if (p->pic_bm && y + p->pic_h <= g.footer_y - 2) {
         p->pic_x = g.pane_x + (textbox_w() - p->pic_w) / 2;
         p->pic_y = y;
-        BltBitMapRastPort(p->pic_bm, 0, 0, g.rp, p->pic_x, p->pic_y, p->pic_w, p->pic_h, 0xC0);
+        gfx_blit_beam(&g, p->pic_bm, p->pic_x, p->pic_y, p->pic_w, p->pic_h);
     }
 }
 
