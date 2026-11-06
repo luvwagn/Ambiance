@@ -10726,7 +10726,7 @@ static void hold_tick(void)
                  * all but hit the end). First braking, as a car does:
                  * the speed that stops in what is left, sqrt(2 a d), with
                  * a deceleration that stops from this speed in LIST_BRAKE
-                 * ms (All Artists' 2,450 at full speed: from some 850
+                 * ms (All Artists' 2,450 at full speed: from some 800
                  * entries out); then the last screens eased, LIST_EASE
                  * entries a second per entry left (20 left: 110 a second,
                  * 1 left: 15), the end seen coming for about half a second. */
