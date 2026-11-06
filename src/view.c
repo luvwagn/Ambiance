@@ -62,6 +62,9 @@ static UBYTE pen_bg, pen_fg, pen_dim, pen_border;
 static BOOL has_pic;            /* a picture is up */
 static struct BitMap *bar_bm;   /* what the bar covers */
 static WORD bar_y, bar_h;
+static WORD spin_x = -1;            /* the bar's spinner: its centre (-1: none) */
+static struct BitMap *spin_bm;      /* what the corner spinner covers */
+static WORD spin_cx, spin_cy, spin_s;
 
 /* ---- colours */
 static void load_table(struct Gfx *g, const ULONG *rgb, ULONG scale)
@@ -209,6 +212,7 @@ BOOL view_bar_shown(void)
 
 void view_bar_hide(struct Gfx *g)
 {
+    spin_x = -1;
     if (!bar_bm)
         return;
     BltBitMapRastPort(bar_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);
@@ -253,6 +257,80 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
     }
     if (hw && x + hw <= g->w - GU(g, 6))
         gfx_text(g, g->w - GU(g, 6) - hw, ty, hint, dim, bg, 0, TS_SMALL);
+    /* the spinner's place, if one turns: left of the hint, after the text */
+    spin_x = g->w - GU(g, 6) - (hw ? hw + GU(g, 10) : 0) - bar_h / 2;
+    if (spin_x - bar_h / 2 < x)
+        spin_x = -1;
+}
+
+/* Eight dots round (cx, cy), radius r, the one at phase lit and larger. */
+static void spin_dots(struct Gfx *g, WORD cx, WORD cy, WORD r, UWORD phase, UBYTE fg, UBYTE dim)
+{
+    static const BYTE dx[8] = { 0, 70, 100, 70, 0, -70, -100, -70 };
+    static const BYTE dy[8] = { -100, -70, 0, 70, 100, 70, 0, -70 };
+    WORD d = r / 4 > 1 ? r / 4 : 1, i;
+    for (i = 0; i < 8; i++) {
+        WORD x = cx + dx[i] * r / 100, y = cy + dy[i] * r / 100;
+        BOOL lit = i == (phase & 7);
+        WORD h = lit ? d : (d > 1 ? d - 1 : 0);
+        SetAPen(g->rp, lit ? fg : dim);
+        RectFill(g->rp, x - h, y - h, x + h, y + h);
+    }
+}
+
+static void bar_pens(UBYTE *bg, UBYTE *fg, UBYTE *dim)
+{
+    *bg = clut ? pen_bg : PEN_BAR;
+    *fg = clut ? pen_fg : PEN_WHITE;
+    *dim = clut ? pen_dim : PEN_TEXT;
+    if (clut && !has_pic) {
+        *bg = 0;
+        *fg = *dim = ncolors - 1;
+    }
+}
+
+/* A turning spinner while the next picture comes: in the bar when it is
+ * up, else small in the bottom right corner, over the picture shown (put
+ * back by view_spin_hide), so a slideshow's picture stays in view. */
+void view_spin(struct Gfx *g, UWORD phase)
+{
+    UBYTE bg, fg, dim;
+    bar_pens(&bg, &fg, &dim);
+    SetWriteMask(g->rp, 0xFF);
+    if (bar_bm || (!has_pic && spin_x >= 0 && bar_h)) {
+        WORD r = bar_h / 3;
+        if (spin_x < 0)
+            return;
+        SetAPen(g->rp, bg);
+        RectFill(g->rp, spin_x - r - 2, bar_y + 2, spin_x + r + 2, bar_y + bar_h - 1);
+        spin_dots(g, spin_x, bar_y + bar_h / 2, r, phase, fg, dim);
+        return;
+    }
+    if (!spin_bm) {
+        spin_s = g->font_h + GU(g, 4);
+        spin_cx = g->w - GU(g, 6) - spin_s / 2;
+        spin_cy = g->h - GU(g, 4) - spin_s / 2;
+        if (!(spin_bm = AllocBitMap(spin_s, spin_s, g->depth, 0, g->rp->BitMap)))
+            return;
+        BltBitMap(g->rp->BitMap, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_bm, 0, 0,
+                  spin_s, spin_s, 0xC0, 0xFF, NULL);
+    }
+    SetAPen(g->rp, bg);
+    RectFill(g->rp, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_cx - spin_s / 2 + spin_s - 1,
+             spin_cy - spin_s / 2 + spin_s - 1);
+    spin_dots(g, spin_cx, spin_cy, spin_s * 3 / 8, phase, fg, dim);
+}
+
+/* The corner spinner gone, what it covered put back. */
+void view_spin_hide(struct Gfx *g)
+{
+    if (!spin_bm)
+        return;
+    BltBitMapRastPort(spin_bm, 0, 0, g->rp, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_s,
+                      spin_s, 0xC0);
+    WaitBlit();
+    FreeBitMap(spin_bm);
+    spin_bm = NULL;
 }
 
 /* ---- scale */
@@ -412,6 +490,16 @@ static void show_message(struct Gfx *g, const char *s)
     }
 }
 
+/* What the spinners cover: worth nothing once a new picture comes. */
+static void spin_forget(void)
+{
+    if (spin_bm) {
+        WaitBlit();
+        FreeBitMap(spin_bm);
+        spin_bm = NULL;
+    }
+}
+
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
                char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
                struct Thumb *pre_thumb, const struct PicInfo *pre_info)
@@ -428,6 +516,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     Object *o = NULL;
     char msg[96];
 
+    spin_forget();
     drop_picture(g);
     if (!DataTypesBase) {
         pic_dispose(pre);
@@ -672,6 +761,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
 void view_end(struct Gfx *g)
 {
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
+    view_spin_hide(g);
     view_bar_hide(g);
     if (clut && has_pic)
         fade(g, shown, FALSE);

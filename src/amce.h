@@ -257,6 +257,8 @@ void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw
               char *scale, LONG max);
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
 void view_bar_hide(struct Gfx *g);
+void view_spin(struct Gfx *g, UWORD phase);    /* the next picture coming: in the bar, or a corner */
+void view_spin_hide(struct Gfx *g);
 BOOL view_bar_shown(void);
 void view_end(struct Gfx *g);
 void view_restore(struct Gfx *g);

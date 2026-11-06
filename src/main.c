@@ -6998,20 +6998,13 @@ static void vw_drop(void)
     vw_job = NULL;
 }
 
-static void vw_ahead(const struct ItemList *l, LONG from, LONG dir)
+/* The loader asked to decode path for the viewer (first: wanted now). */
+static void vw_start(const char *path, BOOL first)
 {
-    LONG i = view_step(l, from, dir);
-    if (i < 0 || i == from)
-        return;
-    if (vw_job && strcmp(vw_job->path, l->items[i].path) == 0)
-        return;                             /* already on its way */
-    if (vw_job && vw_job->busy)
-        return;                             /* one at a time */
-    vw_drop();
     if (!(vw_job = AllocVec(sizeof(*vw_job), MEMF_ANY | MEMF_CLEAR)))
         return;
     vw_job->type = LJ_PICTURE;
-    amce_strlcpy(vw_job->path, l->items[i].path, sizeof(vw_job->path));
+    amce_strlcpy(vw_job->path, path, sizeof(vw_job->path));
     vw_job->scr = g.truecolor ? g.scr : NULL;
     vw_job->remap = g.truecolor;
     vw_job->want_pic = TRUE;
@@ -7023,7 +7016,23 @@ static void vw_ahead(const struct ItemList *l, LONG from, LONG dir)
         vw_job->viewfit = TRUE;
         vw_job->maxcol = (1 << (g.depth > 8 ? 8 : g.depth)) - 1;
     }
-    ldr_submit(vw_job);
+    if (first)
+        ldr_submit_first(vw_job);
+    else
+        ldr_submit(vw_job);
+}
+
+static void vw_ahead(const struct ItemList *l, LONG from, LONG dir)
+{
+    LONG i = view_step(l, from, dir);
+    if (i < 0 || i == from)
+        return;
+    if (vw_job && strcmp(vw_job->path, l->items[i].path) == 0)
+        return;                             /* already on its way */
+    if (vw_job && vw_job->busy)
+        return;                             /* one at a time */
+    vw_drop();
+    vw_start(l->items[i].path, FALSE);
 }
 
 /* The picture read ahead for path, if it is: its object, or what was
@@ -7142,8 +7151,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     struct PicInfo pi = { 0 };
     char scale[24];
     LONG shown = -1, want = idx, dir = 1, asked = -1, fails = 0;
-    ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0;
-    BOOL quit = FALSE, ok = FALSE, bar_due = TRUE;
+    ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0, spin_tick = 0;
+    BOOL quit = FALSE, ok = FALSE, bar_due = TRUE, loading_bar = FALSE;
 
     if (idx < 0 || idx >= l->count || l->items[idx].kind != IT_PIC)
         return idx;
@@ -7166,36 +7175,58 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         LONG step = 0;
         BOOL toggle = FALSE, poke = FALSE;
         ULONG now;
-        if (vw_remote) {
+        while (ldr_collect())
+            ;                               /* the loader's jobs back: marked done */
+        if (vw_remote)
             radio_collect();                /* the server's photos, as they come */
-            if (want != shown && !vw_fetch(l, want, ART_VW)) {
-                if (vw_failed) {
-                    /* not sent: said so, and on to the next */
-                    LONG nx = view_step(l, want, dir);
-                    char d[80];
-                    vw_failed = FALSE;
-                    asked = -1;
-                    sprintf(d, "not sent by %.50s", plex.name[0] ? plex.name : plex.host);
-                    view_bar(&g, l->items[want].label, d, "Esc  back");
-                    bar_until = time_ms() + BAR_MS;
-                    if (++fails >= 3 || nx < 0 || nx == want || (shown < 0 && nx == idx)) {
-                        Delay(50);          /* read, then back to the list */
-                        quit = TRUE;
-                        break;
-                    }
-                    want = nx;
-                } else if (asked != want) {
+        if (want != shown) {
+            BOOL here = TRUE;
+            if (vw_remote && !(here = vw_fetch(l, want, ART_VW)) && vw_failed) {
+                /* not sent: said so, and on to the next */
+                LONG nx = view_step(l, want, dir);
+                char d[80];
+                vw_failed = FALSE;
+                asked = -1;
+                loading_bar = FALSE;
+                view_spin_hide(&g);
+                sprintf(d, "not sent by %.50s", plex.name[0] ? plex.name : plex.host);
+                view_bar(&g, l->items[want].label, d, "Esc  back");
+                bar_until = time_ms() + BAR_MS;
+                if (++fails >= 3 || nx < 0 || nx == want || (shown < 0 && nx == idx)) {
+                    Delay(50);              /* read, then back to the list */
+                    quit = TRUE;
+                    break;
+                }
+                want = nx;
+                goto input;
+            }
+            if (here) {
+                /* not read ahead: decoded by the loader now, while the
+                 * spinner turns and keys are still taken */
+                const char *path = l->items[want].path;
+                if (!vw_job || strcmp(vw_job->path, path)) {
+                    vw_drop();
+                    vw_start(path, TRUE);
+                }
+                here = !vw_job || !vw_job->busy;   /* no job: view_show reads it */
+            }
+            if (!here) {
+                if (asked != want) {
                     asked = want;
                     wait_from = time_ms();
-                    if (shown < 0 || !slideshow) {
-                        view_bar(&g, l->items[want].label, "Loading from Plex...", "Esc  back");
-                        bar_until = time_ms() + 3600000;   /* till it comes */
-                    }
-                } else if (slideshow && shown >= 0 && !view_bar_shown() &&
-                           time_ms() - wait_from > 1500) {
-                    view_bar(&g, l->items[want].label, "Loading from Plex...", "Esc  back");
-                    bar_until = time_ms() + 3600000;
+                    loading_bar = FALSE;
                 }
+                if (!loading_bar && (shown < 0 || !slideshow)) {
+                    /* the bar says what comes; a slideshow's picture stays
+                     * in view, the spinner small in its corner */
+                    view_spin_hide(&g);
+                    view_bar(&g, l->items[want].label,
+                             vw_remote ? "Loading from Plex..." : "Loading...", "Esc  back");
+                    bar_until = time_ms() + 3600000;   /* till it comes */
+                    loading_bar = TRUE;
+                }
+                if (time_ms() - wait_from > 300)
+                    view_spin(&g, (UWORD)(spin_tick++ / 4));
                 goto input;                 /* keys meanwhile: another one, or back */
             }
         }
@@ -7218,6 +7249,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             shown = want;
             asked = -1;
             fails = 0;
+            loading_bar = FALSE;
             if (vw_remote) {
                 /* the next asked for now; decoded ahead once it is here */
                 LONG nx = view_step(l, shown, dir);
