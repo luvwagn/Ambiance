@@ -2879,6 +2879,42 @@ static void dbg_load_log(void)
     wakes0 = loop_wakes;
 }
 
+/* Once a second: the screen's state, logged when it changes (a blank
+ * screen while a long list glided, unexplained): which screen is in front,
+ * the display's DMA, the UI's colours, and a list drawn past its end. */
+static void scr_watch(void)
+{
+    static char last[200];
+    char m[200], cols[40];
+    struct Screen *front = IntuitionBase->FirstScreen;
+    UWORD dma = *(volatile UWORD *)0xDFF002;    /* DMACONR */
+    struct Page *p = cur();
+    ULONG rgb[3 * 4];
+    int i;
+    cols[0] = 0;
+    if (g.scr) {
+        GetRGB32(g.scr->ViewPort.ColorMap, 0, 4, rgb);
+        for (i = 0; i < 4; i++)
+            sprintf(cols + strlen(cols), "%s%02lx%02lx%02lx", i ? " " : "",
+                    (unsigned long)(rgb[i * 3] >> 24), (unsigned long)(rgb[i * 3 + 1] >> 24),
+                    (unsigned long)(rgb[i * 3 + 2] >> 24));
+    }
+    sprintf(m, "front %s%.30s, display DMA %s, colours %s%s",
+            front == g.scr ? "ours" : "another: ",
+            front == g.scr ? "" : front && front->Title ? (const char *)front->Title : "(untitled)",
+            (dma & 0x0300) == 0x0300 ? "on" : "OFF", cols,
+            p && p->type == PT_LIST && p->list.count && p->top >= p->list.count ? ", LIST PAST ITS END"
+                                                                                 : "");
+    if (strcmp(m, last)) {
+        amce_strlcpy(last, m, sizeof(last));
+        if (p && p->type == PT_LIST)
+            sprintf(m + strlen(m), "; %.30s: sel %ld top %ld of %ld%s%s", p->title, (long)p->sel,
+                    (long)p->top, (long)p->list.count, ov.on ? ", letter up" : "",
+                    pane_pending ? ", pane pending" : "");
+        amce_log("screen", m);
+    }
+}
+
 /* What the readout shows now, so a second that changes nothing redraws
  * nothing. Cleared when the header is drawn afresh. */
 static char status_shown[96];
@@ -9769,11 +9805,12 @@ static void hold_stop(void)
         LONG moved = p->sel - hold.from;
         sprintf(m, "%ld entries in %ld ms (%ld by the clock), longest frame %ld ms, "
                    "%ld frames over 40 ms; "
-                   "moving the list %ld ms, flipping %ld ms, %ld letters in %ld ms",
+                   "moving the list %ld ms, flipping %ld ms, %ld letters in %ld ms; "
+                   "now %ld, top %ld of %ld",
                 (long)(moved < 0 ? -moved : moved), (long)hold.held_ms,
                 (long)(time_ms() - hold.t_down), (long)hold.worst, (long)hold.slow,
                 (long)hold.move_ms, (long)hold.present_ms, (long)ov_n,
-                (long)ov_ms);
+                (long)ov_ms, (long)p->sel, (long)p->top, (long)p->list.count);
         amce_log("glide", m);
     }
     hold.dir = 0;
@@ -10851,6 +10888,7 @@ static int app_main(void)
                     }
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                     nav_tick_1s();          /* the trail kept, once it rests */
+                    scr_watch();            /* a screen gone blank: why (log) */
                     mp_tempo_check();
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */

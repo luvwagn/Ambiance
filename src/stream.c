@@ -1567,7 +1567,11 @@ static ULONG mh_bits(const UBYTE *b, ULONG *pos, int n)
  * down is about 4 less (measured, LAME); where full scale lies depends on
  * the encoder and its bitrate, so it is the loudest gain lately (falling a
  * step in some two seconds): that near the top, 40 steps (some 60 dB)
- * below it at the bottom. */
+ * below it at the bottom. It starts at, and never falls below, a loud
+ * track's (pink noise at -6 dB is some 167, at -40 dB 140, LAME 160kbps):
+ * a quiet lead-in shows as quiet, not as the loudest yet. */
+#define MH_GTOP_START 168
+#define MH_GTOP_FLOOR 160
 static UBYTE mh_level(ULONG gain, ULONG big)
 {
     LONG v;
@@ -1640,7 +1644,7 @@ static void mh_scan(const UBYTE *b, LONG n)
                 lv[0] = lv[1];
             lv[1] = lv[0];
         }
-        if (mh.gtop > 100 * 256)
+        if (mh.gtop > MH_GTOP_FLOOR * 256)
             mh.gtop -= 3;                   /* about a step each 2 s (38 frames a second) */
         mh.l[mh.frames & (MH_RING - 1)] = lv[0];
         mh.r[mh.frames & (MH_RING - 1)] = mono ? lv[0] : lv[1];
@@ -1735,6 +1739,7 @@ static void mhi_play(LONG freq)
         amce_log(st.finite ? "track" : "radio", m);
     }
     memset(&mh, 0, sizeof(mh));
+    mh.gtop = MH_GTOP_START * 256;
     st.state = ST_BUFFERING;
     while (!st.quit) {
         APTR e;
