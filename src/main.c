@@ -2107,13 +2107,15 @@ static void build_credits(struct Page *p)
     int i;
     sprintf(line, "AmigaMCE %s", AMCE_VERSION);
     text_line(p, line);
-    text_line(p, "(c) 2026 Brian King");
+    text_line(p, "(c) 2026 Brian King, under the MIT licence");
     text_line(p, "");
-    text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, and Rubik "
-                 "(c) 2015 The Rubik Project Authors, both under the SIL Open Font License 1.1. "
-                 "The amce-pixel fonts are Modified Versions of Pixelify Sans.");
+    text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
+                 "(c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all "
+                 "under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are "
+                 "Modified Versions of Pixelify Sans and Galmuri.");
     text_line(p, "");
-    text_para(p, "Code: libnix C runtime (public domain).");
+    text_para(p, "Code: libnix C runtime (public domain). The EaglePlayer host follows "
+                 "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).");
     text_line(p, "");
     text_para(p, "Used if installed, not included, each under its own licence: Amiga Game "
                  "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.");

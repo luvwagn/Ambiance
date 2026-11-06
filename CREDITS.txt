@@ -1,7 +1,8 @@
 AmigaMCE credits
 ================
 
-AmigaMCE (c) 2026 Brian King.
+AmigaMCE (c) 2026 Brian King, released under the MIT licence (LICENSE).
+The fonts below keep their own licence, the SIL Open Font Licence 1.1.
 
 Fonts
 -----

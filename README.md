@@ -79,8 +79,8 @@ Aminet.
 
 ## Credits
 
-AmigaMCE © 2026 Brian King. Fonts: Pixelify Sans, Galmuri and Rubik, all under the
-SIL Open Font Licence 1.1 (see `assets/fonts-src/`). Amiga is a trademark of
-Amiga Corporation.
-
-AmigaMCE's own licence has not been chosen yet.
+AmigaMCE © 2026 Brian King, under the MIT licence (see `LICENSE`). Fonts:
+Pixelify Sans, Galmuri and Rubik, all under the SIL Open Font Licence 1.1 (see
+`assets/fonts-src/`); they are not covered by the MIT licence. The EaglePlayer
+host follows HippoPlayer's (MIT, © 2017 Kari-Pekka Koljonen); `CREDITS.txt`
+has the details. Amiga is a trademark of Amiga Corporation.

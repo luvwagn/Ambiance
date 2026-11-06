@@ -51,7 +51,7 @@ SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
-             assets/fonts-src/OFL-Galmuri.txt CREDITS.txt
+             assets/fonts-src/OFL-Galmuri.txt CREDITS.txt LICENSE
 
 .PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha disk FORCE_VERSION
 
