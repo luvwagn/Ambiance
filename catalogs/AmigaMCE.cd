@@ -33,9 +33,6 @@ MSG_3665BBE3 (912636899//)
 ; gfx.c:1346 main.c:1383
 MSG_0F6E4D56 (258886998//)
 %lu colours
-; lang.c:5 lang.c:6
-MSG_0AC31C19 (180558873//)
-...
 ; main.c:37
 MSG_73F99D3C (1945738556//)
 Games
@@ -719,7 +716,7 @@ MSG_0769BADE (124369630//)
 MP3 %ldkbps, %s %s
 ; main.c:5886
 MSG_4670620E (1181770254//)
-; played at %s %s
+\x3B played at %s %s
 ; main.c:5888
 MSG_5CD70C3C (1557597244//)
 , by MHI

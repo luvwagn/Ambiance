@@ -61,8 +61,9 @@ def c_unescape(s):
 
 def ct_escape(s):
     """For a .cd/.ct line: FlexCat's escapes."""
-    return (s.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t")
-            .replace("\x1b", "\\e"))
+    s = (s.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t")
+         .replace("\x1b", "\\e"))
+    return "\\x3B" + s[1:] if s.startswith(";") else s     # not a comment line
 
 
 def ct_unescape(s):
@@ -93,6 +94,9 @@ def scan_src(srcdir):
         if not fn.endswith(".c"):
             continue
         text = open(os.path.join(srcdir, fn), encoding="latin-1").read()
+        # comments out (their newlines kept, for the line numbers)
+        text = re.sub(r"/\*.*?\*/", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text,
+                      flags=re.S)
         for m in MARK.finditer(text):
             en = "".join(c_unescape(x) for x in LIT.findall(m.group(1)))
             i = fnv(en.encode("latin-1"))
