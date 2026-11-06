@@ -5978,6 +5978,14 @@ static void np_pair(WORD y, const char *label, const char *value)
     if (w > tw - col)
         w = tw - col;
     gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, tw - col, TS_SMALL | TS_OPAQUE);
+    /* cleared to the cover's edge, or the line's end where the cover is
+     * not beside it: the line drawn before the cover came (a new album's,
+     * the page not laid out again) went that far, and its end stayed in
+     * the gap before the cover */
+    if (np.art_s && y < np.art_y + np.art_h && y + g.font_h > np.art_y)
+        x1 = np.art_x;
+    else
+        x1 = np.x0 + np.w;
     if (np.x0 + col + w < x1)
         gfx_fill(&g, np.x0 + col + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
 }
@@ -9471,6 +9479,8 @@ static void np_art_start(const struct Item *it)
                           np.art_y + np.art_h - 1);
     if (!np.art_s)
         return;
+    if (np_on())                            /* the gap before it: lines drawn wider before */
+        gfx_fill(&g, np.art_x - U(8), np.art_y, np.art_x - 1, np.art_y + np.art_h - 1, PEN_BG);
     /* the pane's size where it fits: the same file, and the same picture,
      * which can then go across as it is (pic_take) */
     s = np_art_size();
