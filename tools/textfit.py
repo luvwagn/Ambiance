@@ -10,7 +10,8 @@ layout_metrics and fit_menu, main.c's footer hints):
   - the menu column: its widest label, and what the pane loses to it
   - the footer hints: the long set is used when its widest fits, else the
     short set, each of which must then fit
-  - one-line text wider than the pane (paragraphs wrap, so are not checked)
+  - one-line text wider than the pane (paragraphs wrap, so are not checked),
+    or for a status message (set_msg, errors) wider than the screen
 Glyphs are measured as TextLength does: each character's kern + space.
 """
 import os
@@ -82,6 +83,28 @@ def U(v, k):
     return (v * k + 128) >> 8
 
 
+def status_strings(srcdir):
+    """English strings shown in the footer's status line (set_msg, an error
+    passed on to it): those have the screen's width, not the pane's."""
+    out = set()
+    lit = catalog.LIT
+    for fn in sorted(os.listdir(srcdir)):
+        if not fn.endswith(".c"):
+            continue
+        lines = open(os.path.join(srcdir, fn), encoding="latin-1").read().split("\n")
+        for i, l in enumerate(lines):
+            ctx = " ".join(lines[max(0, i - 2):i + 1])
+            if not any(k in ctx for k in ("set_msg(", "err,", "errmax", "fail(", "why",
+                                           "st.err", "amce_strlcpy(m,", "sprintf(m,")):
+                continue
+            for m in catalog.MARK.finditer(l):
+                out.add("".join(catalog.c_unescape(x) for x in lit.findall(m.group(1))))
+    return out
+
+
+STATUS = set()
+
+
 def check(lang, tr, cd_en, fonts_dir):
     def t(en):
         name = "MSG_%08X" % catalog.fnv(en.encode("latin-1"))
@@ -114,14 +137,18 @@ def check(lang, tr, cd_en, fonts_dir):
             if any(en in pair for pair in HINT_PAIRS) or en == HINT_WIDEST:
                 continue
             ws, we = font.width(s), font.width(en)
-            if ws > pane and we <= pane_en:
-                out.append("%s: %d px, pane %d: \"%s\" (English %d)" % (sname, ws, pane, s, we))
+            room_s = w - U(12, k) if en in STATUS else pane
+            room_e = w - U(12, k) if en in STATUS else pane_en
+            if ws > room_s and we <= room_e:
+                out.append("%s: %d px, %s %d: \"%s\" (English %d)" %
+                           (sname, ws, "status line" if en in STATUS else "pane", room_s, s, we))
     return out
 
 
 def main():
     catdir, fonts_dir = sys.argv[1:3]
     want = sys.argv[3:]
+    STATUS.update(status_strings(os.path.join(os.path.dirname(os.path.abspath(catdir)), "src")))
     cd = catalog.read_cd(os.path.join(catdir, "AmigaMCE.cd"))
     total = 0
     for fn in sorted(os.listdir(catdir)):
