@@ -3536,6 +3536,24 @@ static struct { WORD x0, x1; } crumb[MAXDEPTH];
 static int crumb_first;             /* the first level shown (before it: "...") */
 static int crumb_hover = -1;        /* the level under the pointer, -1 none */
 
+/* Where the music playing was started: its section (MOD_*), the rows
+ * chosen down to its list, and that list's title. Now playing opened from
+ * another section is a page on its own there, "Now playing" and where it
+ * is from, a link that goes there; Esc goes back where you were. */
+#define CRUMB_SRC MAXDEPTH          /* crumb_at/crumb_hover: that link */
+static int np_src = -1;
+static char np_trail[MAXDEPTH][64];
+static int np_trail_n;
+static char np_src_list[64];
+static WORD np_src_x0 = -1, np_src_x1 = -1;
+static void np_goto_source(void);
+
+static BOOL np_away(void)
+{
+    return np_src >= 0 && menu_sel >= 0 && menu_sel < nmenu && np_src != menu[menu_sel] &&
+           mp_loaded();
+}
+
 static void draw_title(struct Page *p)
 {
     char widest[24];
@@ -3568,6 +3586,47 @@ static void draw_title(struct Page *p)
         }
     }
     x = g.pane_x;
+    np_src_x0 = np_src_x1 = -1;
+    if (p->type == PT_PLAYER && np_away()) {
+        /* Now playing from another section: itself, then where it is from
+         * (a link there), not this section's path, which it is not part of */
+        char from[140];
+        BOOL hov = crumb_hover == CRUMB_SRC && mouse_mode;
+        WORD w, room;
+        for (i = 0; i < depth; i++)
+            crumb[i].x0 = crumb[i].x1 = -1;
+        crumb_first = 0;
+        w = gfx_textlen(&g, p->title, TS_BOLD);
+        gfx_text(&g, x, U(28), p->title, PEN_WHITE, PEN_BG, maxw, TS_BOLD | TS_OPAQUE);
+        x += w < maxw ? w : maxw;
+        amce_strlcpy(from, _(mod_names[np_src]), sizeof(from));
+        if (np_src_list[0] && strcmp(np_src_list, from)) {
+            amce_strlcat(from, " > ", sizeof(from));
+            amce_strlcat(from, np_src_list, sizeof(from));
+        }
+        room = g.pane_x + maxw - x - sep;
+        if (room > 0) {
+            gfx_text(&g, x, U(28), "  \267  ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
+            x += gfx_textlen(&g, "  \267  ", TS_BOLD);
+            room = g.pane_x + maxw - x;
+            w = gfx_textlen(&g, from, TS_BOLD);
+            if (w > room)
+                w = room;
+            if (w > 0) {
+                if (hov)
+                    gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
+                gfx_text(&g, x, U(28), from, PEN_TEXT, hov ? PEN_RULE : PEN_BG, room,
+                         TS_BOLD | TS_OPAQUE);
+                np_src_x0 = x;
+                np_src_x1 = x + w - 1;
+                x += w;
+            }
+        }
+        title_band_rest(g.pane_x, x, g.w);
+        draw_title_count(p);
+        gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
+        return;
+    }
     if (p->type == PT_PLAYER && depth > 2) {
         /* Now playing: its section, "..." (the list it came from: what is
          * playing is on the page below, not spelt out twice), and itself */
@@ -3664,6 +3723,8 @@ static int crumb_at(WORD x, WORD y)
     int i;
     if (y < U(26) || y >= U(41))
         return -1;
+    if (np_src_x0 >= 0 && x >= np_src_x0 - U(2) && x <= np_src_x1 + U(2))
+        return CRUMB_SRC;
     for (i = crumb_first; i < depth - 1; i++)
         if (crumb[i].x0 >= 0 && x >= crumb[i].x0 - U(2) && x <= crumb[i].x1 + U(2))
             return i;
@@ -3675,6 +3736,11 @@ static void pane_settle(void);
 /* Back to level i of the breadcrumb (0: the section's top). */
 static void crumb_go(int level)
 {
+    if (level == CRUMB_SRC) {
+        crumb_hover = -1;
+        np_goto_source();                   /* Now playing's: where it is from */
+        return;
+    }
     if (level < 0 || level >= depth - 1)
         return;
     pane_settle();
@@ -6764,6 +6830,19 @@ static void mods_play_item(struct Page *p)
     list_init(&np.list);
     np.idx = -1;
     amce_strlcpy(np.folder, p->title, sizeof(np.folder));
+    {
+        /* where this was started, for Now playing opened from elsewhere */
+        int d;
+        np_src = menu_sel >= 0 && menu_sel < nmenu ? menu[menu_sel] : -1;
+        np_trail_n = 0;
+        for (d = 0; d < depth - 1; d++) {
+            struct Page *q = &pages[d];
+            if (q->type != PT_LIST || q->sel < 0 || q->sel >= q->list.count)
+                break;
+            amce_strlcpy(np_trail[np_trail_n++], q->list.items[q->sel].label, sizeof(np_trail[0]));
+        }
+        amce_strlcpy(np_src_list, depth > 1 ? p->title : "", sizeof(np_src_list));
+    }
     for (i = 0; i < p->list.count; i++) {
         struct Item *it = &p->list.items[i];
         if (it->kind != kind)
@@ -6785,6 +6864,56 @@ static void mods_play_item(struct Page *p)
         draw_pane(TRUE);                    /* its marks, and where a spinner was */
         draw_footer();
     }
+}
+
+/* Now playing's link to where the music is from: that section, and down
+ * its folders as they were chosen, as far as they open at once (Mods' and
+ * Music's own folders; a Plex or Radio list is asked of the network, so
+ * the way stops at its section), the playing entry selected. */
+static void open_dir_now(struct Item *it);
+static void draw_all(void);
+static void menu_select_now(int i, BOOL now);
+
+static void np_goto_source(void)
+{
+    int i, k;
+    if (np_src < 0)
+        return;
+    for (i = 0; i < nmenu && menu[i] != np_src; i++)
+        ;
+    if (i >= nmenu)
+        return;
+    busy_begin();
+    menu_select_now(i, TRUE);               /* its section's top, built now */
+    for (k = 0; k < np_trail_n; k++) {
+        struct Page *p = cur();
+        LONG j;
+        if (!p || p->type != PT_LIST)
+            break;
+        for (j = 0; j < p->list.count; j++)
+            if (p->list.items[j].kind == IT_DIR && !strcmp(p->list.items[j].label, np_trail[k]))
+                break;
+        if (j >= p->list.count)
+            break;                          /* not a folder that opens at once */
+        p->sel = j;
+        open_dir_now(&p->list.items[j]);
+        if (cur() == p)
+            break;                          /* it did not open */
+    }
+    {
+        struct Page *p = cur();
+        LONG j;
+        for (j = 0; p && p->type == PT_LIST && j < p->list.count; j++)
+            if (p->list.items[j].mark == MARK_PLAYING) {
+                p->sel = j;
+                p->top = j - list_visible() / 2 > 0 ? j - list_visible() / 2 : 0;
+                break;
+            }
+    }
+    busy_end(TRUE);
+    msg[0] = 0;
+    focus = FOCUS_CONTENT;
+    draw_all();
 }
 
 /* A Mods list on screen with the playing module in it. */
@@ -11108,6 +11237,7 @@ static void handle_key(struct IntuiMessage *im)
         case 'p': case 'P': case '<': disarm(); np_press(NB_PREV); return;
         case 's': case 'S': disarm(); np_press(NB_STOP); return;
         case 'v': case 'V': disarm(); next_visual(); return;
+        case 'g': case 'G': disarm(); if (np_away()) np_goto_source(); return;
         case ',': disarm(); np_press(NB_BACK); return;
         case '.': disarm(); np_press(NB_FWD); return;
         }

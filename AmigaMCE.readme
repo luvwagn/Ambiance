@@ -166,7 +166,10 @@ Controls
                jumps there; V, or the cycle gadget at the meters' top
                right, the level meters or the spectrum (the playing
                marker in the header and lists follows it; greyed where
-               the music allows the meters only, as under MHI). Esc goes back, the
+               the music allows the meters only, as under MHI). Opened
+               from another section (a module's page from Music), its
+               title says where the music is from: a click there, or G,
+               goes to that folder; Esc goes back where you were. Esc goes back, the
                music playing on.
 
 
