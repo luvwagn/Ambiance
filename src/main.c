@@ -2327,6 +2327,7 @@ static void build_credits(struct Page *p)
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
 static BOOL np_local_art;           /* the music file playing has a picture */
+static BOOL np_art_want;            /* the Plex track playing has a cover */
 /* A track playing from a file on this Amiga (Music folders), not a server. */
 static BOOL np_local(void)
 {
@@ -5270,7 +5271,7 @@ static void np_layout(void)
     np.pos_y = np.by + np.bh + U(5);
     np.samples_y = np.pos_y + row + U(2);
     np.art_s = 0;
-    if (mp_is_track() && (!np_local() || np_local_art)) {
+    if (mp_is_track() && (np_local() ? np_local_art : np_art_want) && pv_pictures()) {
         /* the cover: a square at the right of the track's lines */
         WORD s = g.footer_y - 2 - np.samples_y - U(2);
         WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
@@ -8598,6 +8599,7 @@ static void np_art_start(const struct Item *it)
     amce_strlcpy(shown, thumb, sizeof(shown));
     np_art_free();
     np_art_file[0] = 0;
+    np_art_want = thumb[0] != 0;            /* a cover to show: its square kept */
     np_layout();                            /* the square's size */
     if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
         gfx_picture_clear(&g, np.art_x, np.art_y, np.art_x + np.art_s - 1,
@@ -8606,7 +8608,8 @@ static void np_art_start(const struct Item *it)
         return;
     /* the pane's size where it fits: the same file, and the same picture,
      * which can then go across as it is (pic_take) */
-    s = plex_art_side() <= np.art_s ? plex_art_side() : np.art_s;
+    s = plex_art_side();                    /* no details pane (lowres): 0 */
+    s = s >= 8 && s <= np.art_s ? s : np.art_s;
     if (art_fetch(ART_NP, thumb, s, s, file)) {
         amce_strlcpy(np_art_file, file, sizeof(np_art_file));
         if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_s)) {
