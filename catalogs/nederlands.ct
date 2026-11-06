@@ -1,0 +1,1353 @@
+## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
+## language nederlands
+## codeset 0
+;
+MSG_4E6387ED
+Niet genoeg geheugen
+; Not enough memory
+MSG_1592F849
+Geen enkele speler van AmigaMCE kent deze module
+; No player AmigaMCE has knows this module
+MSG_3EE87411
+Geen module die AmigaMCE kan afspelen, en er zijn geen EaglePlayer-spelers gevonden
+; Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_62F4807B
+%s kon de andere bestanden van de module niet laden
+; %s could not load the module's other files
+MSG_4E20BD99
+%s kon deze module niet starten
+; %s could not start this module
+MSG_647DD404
+vereist een grafische kaart
+; needs a graphics card
+MSG_2B7EBD1D
+vereist AGA
+; needs AGA
+MSG_550E04D5
+niet beschikbaar
+; not available
+MSG_30386F8F
+ware kleuren
+; true colour
+MSG_3665BBE3
+64 kleuren, EHB
+; 64 colours, EHB
+MSG_0F6E4D56
+%lu kleuren
+; %lu colours
+MSG_73F99D3C
+Spellen
+; Games
+MSG_5D4E86F0
+Mods
+; Mods
+MSG_0F955E3F
+Demo's
+; Demos
+MSG_63609FED
+Video's
+; Videos
+MSG_0D70FEAE
+Afbeeldingen
+; Pictures
+MSG_584A1D74
+Muziek
+; Music
+MSG_5675F954
+Radio
+; Radio
+MSG_4B058728
+Instellingen
+; Settings
+MSG_58E096DE
+Over
+; About
+MSG_17B11033
+Laden...
+; Loading...
+MSG_542CAAAC
+Weinig geheugen: lijst stopt bij %ld items
+; Low on memory: list stops at %ld entries
+MSG_7C46D36F
+Alle spellen
+; All Games
+MSG_7E40EC70
+Alle demo's
+; All Demos
+MSG_4D9D0161
+Amiga Game Selector is niet gevonden.
+; Amiga Game Selector was not found.
+MSG_017A1274
+AmigaMCE zoekt de toewijzing AGS:, daarna een lade AGS2 naast de eigen lade en in WHDLoad:. Installeer AmigaMCE op een AGS 3-systeem, of start AGS één keer zodat de toewijzingen bestaan.
+; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_64FF7B9F
+gevonden
+; found
+MSG_40A7AEDA
+niet gevonden
+; not found
+MSG_0C290F2C
+Gevonden toen AmigaMCE startte:
+; Found when AmigaMCE started:
+MSG_6C041D54
+Type machine: %s
+; Machine type: %s
+MSG_26E752CC
+emulator (UAE-familie)
+; emulator (UAE family)
+MSG_6FE54AD0
+echte Amiga
+; real Amiga
+MSG_0C26D003
+Chipset: %s%s, %s
+; Chipset: %s%s, %s
+MSG_55012A6E
+ met EHB
+;  with EHB
+MSG_4540315A
+naamloze modus
+; unnamed mode
+MSG_49947ED3
+Scherm: %s
+; Screen: %s
+MSG_2C6DC5BF
+%lu-bits kleur
+; %lu-bit colour
+MSG_67DA4F80
+  %lu x %lu, %s, modus-ID $%08lx
+;   %lu x %lu, %s, mode ID $%08lx
+MSG_3096D6FE
+Stijl: zacht, %lu.%02lux
+; Style: smooth, %lu.%02lux
+MSG_2D957250
+Stijl: pixel, %lux%s
+; Style: pixel, %lux%s
+MSG_402F4AD3
+ (hoge pixels: dicht)
+;  (tall pixels: dense)
+MSG_321FCB8C
+  tinten en logo: tot nu toe %lu pennen
+;   its shades and logo: %lu pens so far
+MSG_77468FB6
+Grafische kaart (RTG): %s
+; Graphics card (RTG): %s
+MSG_4E9F3590
+ja
+; yes
+MSG_62366FFA
+nee
+; no
+MSG_25AF384C
+Vrij geheugen: %luKB chip, %luKB fast
+; Free memory: %luKB chip, %luKB fast
+MSG_2E02D31A
+Lettertype: %s
+; Font: %s
+MSG_7F759611
+amce-pixel (meegeleverd)
+; amce-pixel (bundled)
+MSG_27934164
+topaz 8 (reserve)
+; topaz 8 (fallback)
+MSG_6F035CA3
+Datatypes (welke elk beeldformaat leest):
+; Datatypes (which one reads each picture format):
+MSG_336DE098
+; AGS: %s
+MSG_4FE02B8B
+Toewijzingen toegevoegd door AmigaMCE (AGS-Stuff is niet uitgevoerd):
+; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_38F75BEF
+Machine-instelling van AGS (HW): %s
+; AGS machine setting (HW): %s
+MSG_7FA35E26
+niet ingesteld
+; not set
+MSG_1ACE6AF5
+Items voor volwassenen: %s
+; Adult entries: %s
+MSG_4E294716
+getoond
+; shown
+MSG_7618F139
+verborgen
+; hidden
+MSG_320E5353
+Netwerkstack: %s
+; Network stack: %s
+MSG_147EB74C
+actief
+; running
+MSG_2DA7AFDB
+geen
+; none
+MSG_1358A393
+; MP3: %s
+MSG_197B8973
+MHI-stuurprogramma
+; MHI driver
+MSG_5FDDDD75
+Kort
+; Short
+MSG_58DE2772
+Normaal
+; Normal
+MSG_45939473
+Lang
+; Long
+MSG_43BC9D28
+start in 0,6 s
+; starts in 0.6s
+MSG_720CF4AD
+1,2 s
+; 1.2s
+MSG_0065B852
+3 s, meer buffer tegen haperingen
+; 3s, more held against dropouts
+MSG_2DA81BF2
+Zacht: Fonts/amce-smooth past niet bij deze AmigaMCE
+; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_5561FD0B
+Algemeen
+; General
+MSG_1BD8C631
+Scherm
+; Screen
+MSG_33CA9A34
+Geluid
+; Sound
+MSG_1917381B
+Netwerk
+; Networking
+MSG_30B474E4
+; Plex
+MSG_6C2261DE
+Netwerkinterface
+; Network interface
+MSG_23140C4E
+Hoogste bitrate van zenders
+; Highest station bitrate
+MSG_360055B5
+Streambuffer
+; Stream buffer
+MSG_18162AC4
+Server voor zenderlijsten
+; Station list server
+MSG_4DAC8901
+Muziekmappen
+; Music folders
+MSG_1A73DB9B
+Taal
+; Language
+MSG_73C73B18
+Als de Workbench
+; As Workbench
+MSG_2D0EBF47
+geen TCP/IP-stack
+; no TCP/IP stack
+MSG_1624E3CC
+Schermmodus
+; Screen mode
+MSG_5467EC76
+Stijl
+; Style
+MSG_4A02D9CF
+Zacht
+; Smooth
+MSG_2AB32B77
+Pixel
+; Pixel
+MSG_63678BEE
+Dubbele buffer
+; Double buffering
+MSG_52325DD8
+Springend scrollen (per letter)
+; Jump scrolling (by letter)
+MSG_71E19418
+Foutopsporing (CPU, geheugen, log)
+; Debug (CPU, memory, log)
+MSG_4393028C
+Er draait geen TCP/IP-stack
+; No TCP/IP stack running
+MSG_4C151C1E
+zenders tot %s
+; stations up to %s
+MSG_0DC6B4AA
+Uit
+; Off
+MSG_424097EC
+Aan, geen server gekozen
+; On, no server chosen
+MSG_33774386
+Automatisch: %.40s
+; Automatic: %.40s
+MSG_616A6784
+Automatisch
+; Automatic
+MSG_3FCAC913
+Automatisch (keuze van de stack)
+; Automatic (the stack's choice)
+MSG_690CE026
+geen adres
+; no address
+MSG_589EC060
+%s, %.39s eenheid %ld
+; %s, %.39s unit %ld
+MSG_43430B20
+actief
+; up
+MSG_3DB9B915
+inactief
+; down
+MSG_450E2AE8
+Deze TCP/IP-stack toont zijn interfaces niet
+; This TCP/IP stack does not list its interfaces
+MSG_604E4CF2
+HTTPS-streams toestaan
+; Allow HTTPS streams
+MSG_30C0E827
+vereist AmiSSL
+; needs AmiSSL
+MSG_185E3E26
+Automatisch: %s
+; Automatic: %s
+MSG_557E4FAB
+Snelste: %s
+; Fastest: %s
+MSG_50FCFDDF
+voor deze Amiga: %s
+; for this Amiga: %s
+MSG_33C1DFF1
+Tot %lukbps
+; Up to %lukbps
+MSG_0EB61AED
+Elke
+; Any
+MSG_024A57E9
+een willekeurige, zoals radio-browser.info vraagt
+; one at random, as radio-browser.info asks
+MSG_4C1FEAD9
+Snelste
+; Fastest
+MSG_7016D0E0
+De servers van radio-browser.info zijn niet gevonden
+; radio-browser.info's servers could not be found
+MSG_3E7F369F
+nu %.30s, %ld ms
+; now %.30s, %ld ms
+MSG_62CD57D2
+geen antwoordde
+; none answered
+MSG_1B68D598
+geen antwoord
+; no answer
+MSG_3F3927CF
+Plex-server
+; Plex server
+MSG_23B63BC7
+geen gekozen
+; none chosen
+MSG_5F6445D0
+Audio van lagere kwaliteit vragen
+; Request lower quality audio
+MSG_720ED4F6
+nodig op deze Amiga
+; needed on this Amiga
+MSG_1DE950F6
+4 kanalen, tot 28kHz, 8 bits
+; 4 channels, up to 28kHz, 8-bit
+MSG_6CB6532B
+AHI: radio, Plex, muziekbestanden
+; AHI: radio, Plex, music files
+MSG_1AB0857C
+16 bits, de modus uit de voorkeuren
+; 16-bit, its Preferences' mode
+MSG_7EF1200C
+niet geïnstalleerd
+; not installed
+MSG_7AFA07FD
+hier gedecodeerd
+; decoded here
+MSG_22FBBBB2
+decodeert en speelt
+; decodes and plays
+MSG_441A0CA1
+geïnstalleerd
+; installed
+MSG_3DEA7C01
+niet geïnstalleerd (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_4DEE1DD3
+%ld plek
+; %ld place
+MSG_4DD8A2E0
+%ld plekken
+; %ld places
+MSG_4A20BCD9
+nog geen
+; none yet
+MSG_47E8C75F
+De toewijzing MUSIC: gebruiken
+; Use the MUSIC: assign
+MSG_4AE004BD
+toegewezen
+; assigned
+MSG_5D2E5EC2
+nu niet toegewezen
+; not assigned now
+MSG_68FF039F
+Nogmaals vuur: verwijderen
+; Fire again: remove
+MSG_30B1BFB1
+Een map toevoegen...
+; Add a folder...
+MSG_4ACE7BF4
+hoogstens acht
+; eight at most
+MSG_50BCAC0E
+alleen RTG
+; RTG only
+MSG_4D914B4E
+Automatisch:
+; Automatic: 
+MSG_0F9ADE75
+Met dank aan
+; Credits
+MSG_589D7E42
+Systeeminformatie
+; System information
+MSG_345099C5
+Plex in AmigaMCE
+; Plex in AmigaMCE
+MSG_718F9B3E
+(c) 2026 Brian King, onder de MIT-licentie
+; (c) 2026 Brian King, under the MIT licence
+MSG_36BA6F5C
+Lettertypen: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo en Rubik (c) 2015 The Rubik Project Authors, alle onder de SIL Open Font License 1.1. De lettertypen amce-pixel en amce-galmuri zijn gewijzigde versies (Modified Versions) van Pixelify Sans en Galmuri.
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_2B3D5B66
+Code: C-bibliotheek libnix (publiek domein). De EaglePlayer-host volgt die van HippoPlayer (MIT-licentie, (c) 2017 Kari-Pekka Koljonen).
+; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_321AE26A
+Gebruikt als ze geïnstalleerd zijn, niet meegeleverd, elk onder een eigen licentie: Amiga Game Selector, WHDLoad, AHI, MHI-stuurprogramma's, mpega.library, datatypes.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_64ED99F8
+FLAC: flacdec.library (c) 2026 Renaud Schweingruber, met dr_flac van David Reid (publiek domein of MIT-0), gebruikt als het geïnstalleerd is, niet meegeleverd. Het mag vrij gebruikt en doorgegeven worden in het eigen ongewijzigde archief (Aminet: util/libs/flacdec).
+; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
+MSG_56CB434E
+Amiga is een handelsmerk van de eigenaar. Spellen, demo's, muziek en afbeeldingen zijn van hun makers. De licentieteksten staan in de lade Licences.
+; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
+MSG_302861BB
+Deze interface was niet mogelijk geweest zonder het enorme werk van Paul Vince en Amiga Game Selector.
+; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_69CE1669
+Video afspelen komt in een latere versie.
+; Video playback arrives in a later version.
+MSG_47318A8A
+Animaties
+; Animations
+MSG_29C163F7
+Geen afbeeldingen gevonden: AmigaMCE zoekt ze in %s.
+; No pictures found: AmigaMCE looks for them in %s.
+MSG_6A91D3DF
+%s bevat geen afbeeldingen.
+; %s has no pictures in it.
+MSG_40EDAFB4
+Geen %s hier
+; No %s here
+MSG_190B5576
+%s is leeg
+; %s is empty
+MSG_42D8D701
+Zo
+; Sun
+MSG_4EA382E1
+Ma
+; Mon
+MSG_7AB4F425
+Di
+; Tue
+MSG_74645757
+Wo
+; Wed
+MSG_0699308C
+Do
+; Thu
+MSG_2663FBE8
+Vr
+; Fri
+MSG_38A72A77
+Za
+; Sat
+MSG_46F2CEAE
+Jan
+; Jan
+MSG_278D4B82
+Feb
+; Feb
+MSG_42A7ED2B
+Mrt
+; Mar
+MSG_03F51DF2
+Apr
+; Apr
+MSG_3BA7E226
+Mei
+; May
+MSG_46C131E2
+Jun
+; Jun
+MSG_44C12EBC
+Jul
+; Jul
+MSG_20EE8FD4
+Aug
+; Aug
+MSG_2CB1A4EF
+Sep
+; Sep
+MSG_11D1F3E9
+Okt
+; Oct
+MSG_0A3DC404
+Nov
+; Nov
+MSG_275E7A73
+Dec
+; Dec
+MSG_3705878B
+Op/Neer  bewegen    Rechts/Vuur  openen    Return  spelen    Links/Esc  terug
+; Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
+MSG_56178B52
+Op/Neer  kiezen      Esc tweemaal  stoppen
+; Up/Down  choose      Esc twice  quit
+MSG_11D91495
+Esc 2x stopt
+; Esc twice quit
+MSG_4B5CD1EF
+Op/Neer  kiezen      Rechts/Vuur  openen      Esc tweemaal  stoppen
+; Up/Down  choose      Right/Fire  open      Esc twice  quit
+MSG_3804081F
+Vuur openen  Esc 2x stoppen
+; Fire open  Esc twice quit
+MSG_2BD6BD72
+Op/Neer  scrollen      Vuur/Return  bekijken      Links/Esc  terug
+; Up/Down  scroll      Fire/Return  view      Left/Esc  back
+MSG_4F05244A
+Vuur bekijken  Esc terug
+; Fire view  Esc back
+MSG_0E23C285
+Op/Neer  scrollen      Vuur/Return  spelen      Links/Esc  terug
+; Up/Down  scroll      Fire/Return  play      Left/Esc  back
+MSG_67E35425
+Vuur spelen  Esc terug
+; Fire play  Esc back
+MSG_169BF20A
+Op/Neer  bewegen    Vuur/Return  bekijken    Links/Esc  terug
+; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6DAF7CE6
+Op/Neer  bewegen    Vuur  diavoorstelling    Rechts  openen    Links/Esc  terug
+; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
+MSG_1F838A3C
+Vuur dia's  Rechts openen
+; Fire show  Right open
+MSG_11F23D61
+Op/Neer  bewegen    Vuur/Rechts  openen    Links/Esc  terug
+; Up/Down  move    Fire/Right  open    Left/Esc  back
+MSG_41738E8F
+Vuur openen  Esc terug
+; Fire open  Esc back
+MSG_6C808185
+Op/Neer  bewegen    Vuur/Return  spelen    Links/Esc  terug
+; Up/Down  move    Fire/Return  play    Left/Esc  back
+MSG_59045BF0
+Op/Neer  bewegen    Vuur  deze server gebruiken    Links/Esc  terug
+; Up/Down  move    Fire  use this server    Left/Esc  back
+MSG_481DF333
+Vuur gebruiken  Esc terug
+; Fire use it  Esc back
+MSG_29E8EF53
+Op/Neer  bewegen    Vuur/Return  spelen    Rechts  info    Links/Esc  terug
+; Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
+MSG_463F7CE7
+Vuur spelen  Rechts info
+; Fire play  Right info
+MSG_1710A7DF
+Op/Neer  bewegen    Rechts/Vuur  openen    Links/Esc  terug
+; Up/Down  move    Right/Fire  open    Left/Esc  back
+MSG_341D99F5
+Op/Neer  bewegen    Rechts  details    Vuur/Return  spelen    Links/Esc  terug
+; Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
+MSG_0B4D231C
+Vuur openen  Ret spelen  Esc terug
+; Fire open  Ret play  Esc back
+MSG_3EBC8DC1
+Vuur/Return  spelen      Op/Neer  scrollen      Links/Esc  terug
+; Fire/Return  play      Up/Down  scroll      Left/Esc  back
+MSG_6F2C1751
+Links/Rechts  kiezen    Vuur  drukken    Op/Neer  volume    Spatie  pauze    Esc  terug
+; Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
+MSG_4372AA87
+Vuur drukken  Op/Neer vol  Esc terug
+; Fire press  Up/Dn vol  Esc back
+MSG_2B8E61B8
+Op/Neer  scrollen      Links/Esc  terug
+; Up/Down  scroll      Left/Esc  back
+MSG_642000D2
+Op/Neer scrollen  Esc terug
+; Up/Down scroll  Esc back
+MSG_79CC558D
+Gewijzigd %s
+; Changed %s
+MSG_79550836
+Geen afbeeldingen in deze map.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld afbeelding
+; %ld picture
+MSG_6A487423
+%ld afbeeldingen
+; %ld pictures
+MSG_52C18255
+Vuur: diavoorstelling
+; Fire: slideshow
+MSG_178CD224
+Rechts: de map openen
+; Right: open the folder
+MSG_412F4EA4
+%ld map
+; %ld folder
+MSG_74791C75
+%ld mappen
+; %ld folders
+MSG_15840E5E
+Vuur of Rechts: openen
+; Fire or Right: open
+MSG_6E4CA1B5
+Niet in de lade Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(leeg)
+; (empty)
+MSG_0ECC2045
+Schermafdruk laden...
+; Loading screenshot...
+MSG_65C00D26
+Volume %ld%%
+; Volume %ld%%
+MSG_17251C33
+Volume 100%
+; Volume 100%
+MSG_3827BF33
+Positie %ld van %ld   Patroon %ld   Rij %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Positie %ld van %ld
+; Position %ld of %ld
+MSG_5F643207
+Positie %ld   Patroon %ld   Rij %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Gebufferd %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   haperingen %ld
+;    dropouts %ld
+MSG_44D22F83
+Verbinden...
+; Connecting...
+MSG_6038FAB1
+Bufferen...
+; Buffering...
+MSG_5966858A
+Mono
+; Mono
+MSG_1E9E9F85
+Rechts
+; Right
+MSG_12773890
+Links
+; Left
+MSG_4D72110C
+Weergave
+; Playback
+MSG_6E6C1A7A
+MHI (gedecodeerd en gespeeld door MHI)
+; MHI (decoded and played by it)
+MSG_7A38DB91
+(zonder titel)
+; (no title)
+MSG_3CB15829
+   Nummer %ld van %ld
+;    Track %ld of %ld
+MSG_2B183663
+Bestand
+; File
+MSG_7FB0FF72
+Formaat
+; Format
+MSG_063F19EE
+Gestopt
+; Stopped
+MSG_170FF847
+Lezen...
+; Reading...
+MSG_22FE7692
+Origineel
+; Original
+MSG_504BD8C0
+stuurt het bestand zoals het is
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld van %ld in
+;    %ld of %ld in 
+MSG_0A088884
+In de lucht
+; On air
+MSG_44471F44
+(de zender zegt het niet)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B gespeeld op %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, door MHI
+; , by MHI
+MSG_716687B8
+Er speelt niets
+; Nothing playing
+MSG_085A357E
+   door %s
+;    by %s
+MSG_47760A7D
+   subnummer %ld van %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Samples
+; Samples
+MSG_61B4DC81
+Dat was het laatste nummer
+; That was the last track
+MSG_2208340A
+Dat was de laatste zender in de lijst
+; That was the last station in the list
+MSG_3652522E
+Dat was de laatste module in de map
+; That was the last module in the folder
+MSG_1CAF7095
+In deze module kan niet gespoeld worden
+; This module cannot be moved through
+MSG_6AA26665
+Speelt nu
+; Now playing
+MSG_0BBA80CF
+Dat nummer kon niet gespeeld worden
+; That track could not be played
+MSG_052FF533
+Het nummer kon daar niet starten
+; The track could not be started there
+MSG_369379DB
+De zender is gestopt met uitzenden
+; The station stopped sending
+MSG_3F318CD7
+Geen modules gevonden. AmigaMCE zoekt ze in %s en in %s (de menumuziek van AGS).
+; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_6870F104
+Het speelt zelf ProTracker-modules, en honderden andere formaten (OctaMED, TFMX, Future Composer, SID...) met de spelers van EaglePlayer en DeliTracker, alles op het eigen geluid van de Amiga.
+; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_674C644A
+Modules
+; Modules
+MSG_1B1E85CB
+C64-muziek
+; C64 music
+MSG_7F6215F5
+Menumuziek
+; Menu music
+MSG_1361020B
+Geen afbeeldingen in die map
+; No pictures in that folder
+MSG_46C7288D
+Te veel niveaus open
+; Too many levels open
+MSG_5116954E
+Die map kon niet geopend worden
+; Could not open that folder
+MSG_6FF9045E
+Die map bevat geen afbeeldingen
+; That folder has no pictures
+MSG_4F992A62
+Geen MP3- of FLAC-bestanden in die map
+; No MP3 or FLAC files in that folder
+MSG_15E6DCFA
+Die map bevat geen modules
+; That folder has no modules
+MSG_6D9550B1
+Dat menu kon niet geopend worden
+; Could not open that menu
+MSG_3030A110
+Dat menu is leeg
+; That menu is empty
+MSG_74066526
+T:AmigaMCE-run kon niet geschreven worden
+; Could not write T:AmigaMCE-run
+MSG_0C682AC4
+; %ld/%ld   %s   %s%s
+MSG_2D43D301
+   Diavoorstelling
+;    Slideshow
+MSG_359B5B48
+Links/Rechts  vorige/volgende    Vuur  pauze    Esc  terug
+; Left/Right  previous/next    Fire  pause    Esc  back
+MSG_7ED0D392
+Links/Rechts  vorige/volgende    Vuur  diavoorstelling    Esc  terug
+; Left/Right  previous/next    Fire  slideshow    Esc  back
+MSG_152E3E65
+Niet genoeg geheugen voor de viewer
+; Not enough memory for the viewer
+MSG_21238256
+niet gestuurd door %.50s
+; not sent by %.50s
+MSG_74BBD86D
+Esc  terug
+; Esc  back
+MSG_00FED3FC
+Laden vanaf Plex...
+; Loading from Plex...
+MSG_5123470D
+Die modus %.60s
+; That mode %.60s
+MSG_2EF5225D
+Die schermmodus kon niet geopend worden
+; Could not open that screen mode
+MSG_4C560A92
+Verbindingen: de interface die de stack kiest
+; Connections: the stack's choice of interface
+MSG_247B55C3
+Verbindingen gaan via deze interface
+; Connections go out from this interface
+MSG_61C33E78
+De bestanden van de zachte stijl konden niet geladen worden
+; The smooth style's files could not be loaded
+MSG_38B5BCC0
+Zacht: alleen op RTG-schermen
+; Smooth: on RTG screens only
+MSG_5D86BD77
+Muziekbestanden (MUSIC:)
+; Music files (MUSIC:)
+MSG_47B3C622
+Muziekbestanden: %.100s
+; Music files: %.100s
+MSG_46D8C4D9
+Muziekbestanden: Instellingen > Geluid > Muziekmappen
+; Music files: Settings > Sound > Music folders
+MSG_75470054
+Er draait geen TCP/IP-stack: Plex heeft netwerk nodig
+; No TCP/IP stack running: Plex needs networking
+MSG_05BF19DC
+Plex staat uit (Instellingen > Netwerk > Plex)
+; Plex is turned off (Settings > Networking > Plex)
+MSG_370F28B1
+Andere bibliotheken op %s
+; Other libraries on %s
+MSG_5CB8F506
+; Plex: %s
+MSG_3D6359D0
+Geen Plex-server gekozen: Instellingen > Netwerk > Plex
+; No Plex server chosen: Settings > Networking > Plex
+MSG_12991ED4
+Meeste stemmen
+; Top voted
+MSG_59DBAEB1
+Meest beluisterd
+; Most listened to
+MSG_47B6B3B8
+Trending
+; Trending
+MSG_7CA786A9
+; Chiptune
+MSG_00D1A496
+; Demoscene
+MSG_65D70EE9
+Genres
+; Genres
+MSG_2062DC6D
+Landen
+; Countries
+MSG_7B170497
+De server wil een aanmeldtoken: zie Over > Plex in AmigaMCE
+; The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_229E5121
+De server antwoordde iets onverwachts
+; The server answered with something unexpected
+MSG_49CF76D8
+Daar zijn geen muziekbibliotheken
+; No music libraries there
+MSG_3EEA8333
+Daar zijn geen fotobibliotheken
+; No photo libraries there
+MSG_027BDF10
+Hier is niets
+; Nothing here
+MSG_07C4F203
+De Plex-server was niet bereikbaar
+; Could not reach the Plex server
+MSG_1CFE72A3
+Foto tonen
+; Show the photo
+MSG_4FD7ED09
+Diavoorstelling van deze %ld foto's
+; Slideshow of these %ld photos
+MSG_7BB6085B
+Niets in de lijst
+; Nothing listed
+MSG_46D7374C
+Hier zijn geen zenders die AmigaMCE kan spelen
+; No stations here that AmigaMCE can play
+MSG_1BED60DF
+Wordt nog van de server gelezen: een moment
+; Still being read from the server: a moment
+MSG_7F58E800
+Plex-servers zoeken...  Esc om te stoppen
+; Looking for Plex servers...  Esc to give up
+MSG_13C1CD18
+%.40s vragen...  Esc om te stoppen
+; Asking %.40s...  Esc to give up
+MSG_04730DAC
+radio-browser.info vragen...  Esc om te stoppen
+; Asking radio-browser.info...  Esc to give up
+MSG_497165DA
+Plex-foto's: Plex staat uit (Instellingen > Netwerk > Plex)
+; Plex photos: Plex is turned off (Settings > Networking > Plex)
+MSG_6273A841
+Plex-foto's: kies een server (Instellingen > Netwerk > Plex)
+; Plex photos: choose a server (Settings > Networking > Plex)
+MSG_276888E6
+Plex-foto's op %.80s
+; Plex photos on %.80s
+MSG_62B4E865
+; Plex: %.100s
+MSG_2550824B
+Plex-server gekozen
+; Plex server chosen
+MSG_35BE063F
+AmigaMCE speelt muziek van een Plex Media Server in je netwerk: de muziekbibliotheken, per artiest en album, met hoezen. De server maakt van elk nummer een MP3 die deze Amiga kan spelen: 22kHz mono voor een 68020/030, 24kHz stereo voor een 68040/060, meer voor een snelle, en de beste kwaliteit wanneer een MHI-stuurprogramma MP3 decodeert (Instellingen > Geluid). Op een snelle Amiga, of met MHI, speelt Instellingen > Netwerk > Plex > Audio van lagere kwaliteit vragen (uitgezet) MP3-bestanden zoals ze zijn, en op een snelle Amiga ook FLAC-bestanden waar flacdec.library geïnstalleerd is; andere formaten worden altijd omgezet. Instellingen > Netwerk > Plex > Plex zet alles uit.
+; AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_2FBD9CB6
+Een server vinden: Instellingen > Netwerk > Plex > Plex-server vraagt het netwerk (de GDM van Plex); kies er een en die wordt onthouden. Of stel het adres in vanuit de Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+MSG_6A05B8D3
+Aanmelden: een server vraagt om het token van de eigenaar. Je vindt het in Plex Web (bij een item Info > XML bekijken: de X-Plex-Token in het adres) en stelt het in vanuit de Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Aanmelden bij plex.tv vereist HTTPS (AmiSSL) en komt later.
+; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
+MSG_7445FC0C
+Server: %s
+; Server: %s
+MSG_6D54C528
+Token: ingesteld
+; Token: set
+MSG_59B6EDB9
+Token: niet ingesteld
+; Token: not set
+MSG_0B620CC7
+MP3: gedecodeerd door het MHI-stuurprogramma %.40s
+; MP3: decoded by the MHI driver %.40s
+MSG_1133EF71
+MP3: gedecodeerd door mpega.library
+; MP3: decoded by mpega.library
+MSG_04F04DC5
+MP3: geen decoder (mpega.library of MHI)
+; MP3: no decoder (mpega.library or MHI)
+MSG_6FC4AC95
+FLAC: omgezet naar MP3 (flacdec.library is niet geïnstalleerd)
+; FLAC: converted to MP3 (flacdec.library is not installed)
+MSG_226669D7
+FLAC: omgezet naar MP3 (te traag om hier te decoderen)
+; FLAC: converted to MP3 (too slow to decode here)
+MSG_3521D30E
+FLAC: omgezet naar MP3 (lagere kwaliteit staat aan)
+; FLAC: converted to MP3 (lower quality audio is on)
+MSG_2B51B45B
+FLAC: gespeeld zoals het is, door flacdec.library
+; FLAC: played as stored, by flacdec.library
+MSG_586857BF
+Geluid: AHI, 16 bits
+; Sound: AHI, 16-bit
+MSG_0F2AADBB
+Geluid: Paula, 8 bits
+; Sound: Paula, 8-bit
+MSG_5353700C
+Formaat:  %s
+; Format:   %s
+MSG_4B7B9DA5
+Land:     %s
+; Country:  %s
+MSG_1399F81C
+Stemmen:  %s
+; Votes:    %s
+MSG_55E8E50A
+Tags:     %s
+; Tags:     %s
+MSG_64C287CF
+Website:  %s
+; Homepage: %s
+MSG_5A5309D7
+Stream:   %s
+; Stream:   %s
+MSG_18A292C0
+Vuur op de zender in de lijst speelt hem.
+; Fire on the station in its list plays it.
+MSG_510F21FD
+Hoogstens acht muziekmappen: haal er eerst een weg
+; Eight music folders at most: take one out first
+MSG_5143C289
+Een map met MP3- of FLAC-bestanden
+; A folder of MP3 or FLAC files
+MSG_1DC3AA14
+Toevoegen
+; Add
+MSG_2B8275A5
+Die map is niet gevonden
+; That folder could not be found
+MSG_6F975CF8
+Die map staat al in Muziek
+; That folder is in Music already
+MSG_5B08757B
+Map toegevoegd: de muziek staat onder Muziek
+; Folder added: its music is under Music
+MSG_2C2767AF
+Stijl: Zacht vereist een RTG-scherm
+; Style: Smooth needs an RTG screen
+MSG_14386364
+Deze Amiga speelt de lagere kwaliteit van Plex: de originele bestanden zijn te zwaar
+; This Amiga plays Plex's lower quality: the files as stored are too much
+MSG_5CBCDB5D
+Die interface is niet actief
+; That interface is not up
+MSG_646AFCF3
+MHI is niet geïnstalleerd (de stuurprogramma's in LIBS:MHI)
+; MHI is not installed (its drivers in LIBS:MHI)
+MSG_5561B1F7
+FLAC: muziekbestanden, en Plex-nummers zoals ze zijn op een snelle Amiga
+; FLAC: music files, and Plex's tracks as stored on a fast Amiga
+MSG_34836301
+Installeer flacdec.library (Aminet: util/libs/flacdec) voor FLAC
+; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
+MSG_7AE98FE6
+Zenderlijsten die vanaf nu geopend worden
+; Station lists opened from now on
+MSG_5AA18328
+De volgende zender of het volgende nummer is gestart
+; The next station or track started
+MSG_415E54B9
+Geen van de servers antwoordde: Automatisch blijft
+; None of the servers answered: Automatic kept
+MSG_7800A723
+MP3 gedecodeerd door MHI: radio, Plex (in de beste kwaliteit) en bestanden
+; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_605E617D
+MP3 hier gedecodeerd door mpega.library
+; MP3 decoded here by mpega.library
+MSG_59AEDDD1
+AHI vanaf het volgende nummer of de volgende zender; modules blijven op Paula
+; AHI from the next track or station on; modules stay on Paula
+MSG_06B72AB3
+AHI: radio, Plex en muziekbestanden; modules blijven op Paula
+; AHI: radio, Plex and music files; modules stay on Paula
+MSG_4975E21A
+Paula speelt alles
+; Paula plays everything
+MSG_57C64449
+Muziek toont MUSIC: wanneer het is toegewezen
+; Music lists MUSIC: when it is assigned
+MSG_0BC8BC2B
+Muziek laat MUSIC: weg
+; Music leaves MUSIC: out
+MSG_34772BBE
+Nogmaals vuur om deze map uit Muziek te halen (de bestanden blijven)
+; Fire again to take this folder out of Music (its files stay)
+MSG_4BA4B0A8
+Map uit Muziek gehaald
+; Folder taken out of Music
+MSG_746B08BF
+Druk nogmaals op Esc om AmigaMCE te stoppen
+; Press Esc again to quit AmigaMCE
+MSG_16ABF123
+AmigaMCE vereist Kickstart 3.0 of nieuwer.\n
+; AmigaMCE needs Kickstart 3.0 or newer.\n
+MSG_43383FA3
+AmigaMCE kon zijn scherm niet openen.\n
+; AmigaMCE could not open its screen.\n
+MSG_3D0CDD4E
+De opgeslagen schermmodus is hier niet beschikbaar: Automatisch wordt gebruikt
+; Saved screen mode not available here: using Automatic
+MSG_1767B111
+Deze module vereist een 68020 of beter om gemengd te worden
+; This module needs a 68020 or better to be mixed
+MSG_3DD51BC4
+Niet genoeg geheugen om deze module te mengen
+; Not enough memory to mix this module
+MSG_69F7300F
+Geen module die AmigaMCE kan spelen
+; Not a module AmigaMCE can play
+MSG_3F4BE355
+De mixer kon niet starten
+; Could not start the mixer
+MSG_5537D534
+Het modulebestand is afgekapt
+; The module file is cut short
+MSG_6E9632F2
+Modules met %ld kanalen vragen meer dan de vier van Paula
+; %ld-channel modules need more than Paula's four
+MSG_0B3B1D28
+ingepakt met PowerPacker
+; packed with PowerPacker
+MSG_074FA98E
+ingepakt met XPK
+; packed with XPK
+MSG_3E5C3646
+ingepakt met Pack-Ice
+; packed with Pack-Ice
+MSG_2570FA54
+een MED/OctaMED-module
+; a MED/OctaMED module
+MSG_090E157E
+een FastTracker 2-module (XM)
+; a FastTracker 2 module (XM)
+MSG_4BC0A0C8
+een Scream Tracker 3-module (S3M)
+; a Scream Tracker 3 module (S3M)
+MSG_41529869
+een Impulse Tracker-module (IT)
+; an Impulse Tracker module (IT)
+MSG_451A18EF
+een AHX-module
+; an AHX module
+MSG_177C7924
+Het modulebestand kon niet geopend worden
+; Could not open the module file
+MSG_57FD81FC
+Ingepakt met %s, maar %s
+; Packed with %s, but %s
+MSG_59FF2336
+een inpakker
+; a packer
+MSG_0CB7D3B5
+Dit bestand is %s, dat AmigaMCE niet kan spelen
+; This file is %s, which AmigaMCE cannot play
+MSG_3575C0BB
+Niet genoeg chipgeheugen voor de samples (%lu KB)
+; Not enough chip memory for its samples (%lu KB)
+MSG_686FC405
+Niet genoeg geheugen voor die module
+; Not enough memory for that module
+MSG_00592588
+Geen CIA-timer vrij om muziek te spelen
+; No CIA timer free to play music with
+MSG_1CC1D05F
+Geen module geladen
+; No module loaded
+MSG_748B0D26
+De geluidskanalen worden door een ander programma gebruikt
+; The audio channels are in use by another program
+MSG_2AC2E3CB
+Geen adres van een zender
+; Not a station's address
+MSG_34D70E8E
+Geen socket (draait de TCP/IP-stack?)
+; No socket (is the TCP/IP stack running?)
+MSG_6A2F5761
+De verbinding werd geweigerd
+; The connection was refused
+MSG_262B09BC
+Geannuleerd
+; Cancelled
+MSG_4641030F
+De server antwoordde niet
+; The server did not answer
+MSG_2ACCD57C
+De server antwoordt niet meer
+; The server stopped answering
+MSG_05C477DC
+Geen Plex-server antwoordde in dit netwerk
+; No Plex server answered on this network
+MSG_4A212D5E
+Die server is niet gevonden (DNS)
+; That server could not be found (DNS)
+MSG_68C8EB43
+De server antwoordt alleen via HTTPS
+; The server only answers over HTTPS
+MSG_563B6546
+De server stuurde ons naar een plek waar we niet heen kunnen
+; The server sent us somewhere we cannot follow
+MSG_515157E5
+De server antwoordde %ld
+; The server answered %ld
+MSG_64F654D3
+Het netwerkproces kon niet starten
+; The network process could not start
+MSG_441552F7
+Artiesten
+; Artists
+MSG_5C7535ED
+Albums
+; Albums
+MSG_5BBD0EC3
+Onlangs toegevoegd
+; Recently added
+MSG_201D2C97
+%lu foto
+; %lu photo
+MSG_71EDAAEC
+%lu foto's
+; %lu photos
+MSG_7C81E0F2
+%lu item
+; %lu item
+MSG_01746B13
+%lu items
+; %lu items
+MSG_4C50B8D0
+%lu nummer
+; %lu track
+MSG_4612A899
+%lu nummers
+; %lu tracks
+MSG_4E1664E0
+%lu album
+; %lu album
+MSG_00405369
+%lu albums
+; %lu albums
+MSG_0D3B3C12
+(zonder naam)
+; (no name)
+MSG_7EE6D283
+%s: geen MP3, en de server gaf geen manier om het om te zetten
+; %s: not MP3, and the server gave no way to convert it
+MSG_6BBD2577
+Dat formaat
+; That format
+MSG_134FDFA5
+Nummer %.10s
+; Track %.10s   
+MSG_7286EE6A
+; mono
+MSG_4C87A64D
+; stereo
+MSG_43D67FB2
+meerkanaals
+; multi
+MSG_379F025B
+1 muziekbestand
+; 1 music file
+MSG_0A57AE24
+%ld muziekbestanden
+; %ld music files
+MSG_4BE4B028
+%s%ld map
+; %s%ld folder
+MSG_54019F41
+%s%ld mappen
+; %s%ld folders
+MSG_07A36F34
+Kon niet gelezen worden
+; Could not be read
+MSG_523F6D57
+AHI kon niet geopend worden (de voorkeuren: een modus?)
+; AHI could not be opened (its Preferences: a mode?)
+MSG_59B9295C
+De server van de zender is niet gevonden (DNS)
+; The station's server could not be found (DNS)
+MSG_3708365D
+De zender weigerde de verbinding
+; The station refused the connection
+MSG_7D8C9876
+De zender antwoordde niet
+; The station did not answer
+MSG_2A3F28C9
+Het bestand kon niet gelezen worden
+; The file could not be read
+MSG_4375E450
+De server is gestopt met sturen
+; The server stopped sending
+MSG_2919BAF1
+De zender heeft de stream gesloten
+; The station closed the stream
+MSG_0761145C
+Het bestand kon niet geopend worden
+; The file could not be opened
+MSG_2D2A3CF1
+Deze zender streamt alleen via HTTPS, wat AmigaMCE nog niet kan spelen
+; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_103190A0
+AmigaMCE kan het adres van deze zender niet volgen
+; The station's address is not one AmigaMCE can follow
+MSG_65B74193
+%s antwoordde %ld
+; %s answered %ld
+MSG_4163EE37
+De server
+; The server
+MSG_3B0705F8
+De zender
+; The station
+MSG_37840EF9
+De afspeellijst van de zender heeft geen stream die AmigaMCE kan spelen
+; The station's playlist has no stream AmigaMCE can play
+MSG_47FA6F71
+%s stuurt %s, geen MP3
+; %s sends %s, not MP3
+MSG_53CE943A
+De zender stuurde ons te vaak door
+; The station sent us on too many times
+MSG_5B0AAE77
+De stream kon niet gedecodeerd worden
+; The stream could not be decoded
+MSG_10039953
+Alleen muziekbestanden op deze Amiga spelen als WAV, AIFF of 8SVX
+; Only music files on this Amiga play as WAV, AIFF or 8SVX
+MSG_3E5CE903
+Geen soort WAV, AIFF of 8SVX die AmigaMCE speelt (gecomprimeerd?)
+; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_52A6DB2B
+Het MHI-stuurprogramma kon niet geopend worden (Instellingen > Geluid)
+; The MHI driver could not be opened (Settings > Sound)
+MSG_74E4B952
+De decoder van het MHI-stuurprogramma is in gebruik, of ontbreekt
+; The MHI driver's decoder is in use, or not there
+MSG_166B781B
+Niet genoeg geheugen voor de buffers van MHI
+; Not enough memory for MHI's buffers
+MSG_03D74A28
+Geen signaal vrij
+; No signal free
+MSG_2F19A1CE
+Het nummer eindigde voordat de muziek begon
+; The track ended before its music began
+MSG_755A0080
+Het nummer eindigde voor dat moment
+; The track ended before that time
+MSG_1186B14C
+De stream lijkt niet op MP3
+; The stream does not look like MP3
+MSG_3AC77067
+Niet genoeg geheugen om een zender te spelen
+; Not enough memory to play a station
+MSG_41C55AEA
+Het radioproces kon niet starten
+; Could not start the radio process
+MSG_6A5609A3
+%.80s laden
+; Loading %.80s
+MSG_02281E0C
+Kon %.80s niet tonen
+; Could not show %.80s
+MSG_158F4FA3
+Niet genoeg geheugen voor %.70s
+; Not enough memory for %.70s
