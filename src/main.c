@@ -9897,8 +9897,8 @@ static int app_main(void)
                     gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
                     nav_tick_1s();          /* the trail kept, once it rests */
                     mp_tempo_check();
-                    mp_paula_check();
                 }
+                mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */
                 radio_spin();               /* a Radio list's, likewise */
                 np_tick();                  /* the music: its page, the next module */

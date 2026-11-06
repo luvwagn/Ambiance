@@ -194,8 +194,10 @@ void plex_set_convert(BOOL on)
 }
 
 /* How much this Amiga can decode (see the top): its CPU, and a timed
- * loop of multiplies (thousands a second: a 14 MHz 68030 about 250, a
- * 50 MHz 68060 about 12000, Emu68 far more). */
+ * loop of multiplies (thousands a second). Built for the 68020 they are
+ * MULU.L, about 15 times what the 68000 build's library calls managed (an
+ * emulated 68030 here: 530-790 then, 9660 now), so the marks are 15 times
+ * theirs: 30000 for tier 1, 120000 for tier 2 (68060 class and Emu68). */
 int plex_tier(void)
 {
     static int tier = -1;
@@ -212,8 +214,8 @@ int plex_tier(void)
         }
         sink = x;
         speed = n * 10;                     /* thousands a second */
-        tier = (plex.cpu >= 40 || speed >= 2000) ? 1 : 0;
-        if (speed >= 8000)
+        tier = (plex.cpu >= 40 || speed >= 30000) ? 1 : 0;
+        if (speed >= 120000)
             tier = 2;
         sprintf(m, "%lu thousand multiplies a second, a 680%02ld: tier %ld", (unsigned long)speed,
                 (long)plex.cpu, (long)tier);
