@@ -21,6 +21,7 @@ import re
 import struct
 import sys
 import time
+import unicodedata
 
 LANGS = ["deutsch", "français", "italiano", "español", "svenska", "suomi", "dansk", "norsk",
          "nederlands", "português"]
@@ -255,7 +256,11 @@ def cmd_build(catdir, outdir, langs):
         form = b"CTLG" + chunk(b"FVER", cstr4(ver.encode("latin-1"))) + \
             chunk(b"LANG", cstr4(lang.encode("latin-1"))) + \
             chunk(b"CSET", struct.pack(">L", 0) + b"\0" * 28) + chunk(b"STRS", strs)
-        d = os.path.join(outdir.encode(), lang.encode("latin-1"))
+        # the drawer's name in ASCII ("francais"): AmigaMCE knows a catalog by
+        # the language in its LANG chunk, and an ASCII name survives any
+        # file system (an emulator's host folder spelled "français" otherwise)
+        ascii_name = unicodedata.normalize("NFKD", lang).encode("ascii", "ignore").decode()
+        d = os.path.join(outdir.encode(), ascii_name.encode())
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, b"AmigaMCE.catalog"), "wb") as fh:
             fh.write(b"FORM" + struct.pack(">L", len(form)) + form)

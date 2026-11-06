@@ -101,13 +101,39 @@ Paula.
 
 ## Installing
 
-1. Copy the `AmigaMCE` drawer from the archive to your hard drive. Keep its
-   `Fonts` drawer next to the program.
+1. Double-click `Install-AmigaMCE` in the archive. It asks where AmigaMCE
+   should go and which languages to install (your Workbench's is ticked).
+   Or copy the `AmigaMCE` drawer to your hard drive yourself, all languages
+   included; keep its `Fonts` drawer next to the program.
 2. If AGS boots straight into its own menu, quit AGS to Workbench first.
 3. Double-click AmigaMCE.
 
-From the ADF, unpack the archive on it first, for example
+The ADF carries an English-only archive (there is no room for the
+languages): unpack it on a hard drive, for example
 `lha x DF0:amigamce.lha Work:`.
+
+## Languages
+
+English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
+Norsk, Nederlands and Português. AmigaMCE follows the Workbench's language
+(Locale prefs) when its catalog is installed; Settings › General ›
+Language picks another, and is greyed out showing the one in use when no
+other is installed.
+
+Text in the source is written in English as `_("...")`, or `N_("...")` in a
+table. A string's catalog ID is a hash of its English, so nothing else
+needs numbering. `catalogs/` holds `AmigaMCE.cd`, made from the source,
+and one `.ct` per language in FlexCat's format, kept in UTF-8. Catalogs
+are read by AmigaMCE itself and known by the language written in them, so
+their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
+Chinese and Korean text can go in a catalog too.
+
+| Command | What it does |
+|---|---|
+| `python3 tools/catalog.py scan src catalogs` | After changing `_()` strings: the `.cd` again, and each `.ct` given the new strings untranslated |
+| `python3 tools/catalog.py check catalogs` | How much of each language is translated |
+| `make catalogs` | Builds `build/catalogs/<language>/AmigaMCE.catalog`, refusing a translation whose `%` formats differ from its English |
+| `python3 tools/textfit.py catalogs assets/Fonts` | Measures each translation in AmigaMCE's fonts on 320×256, 640×256 and 640×512: the menu column, the footer hints, text wider than the pane |
 
 ## Using it
 
@@ -170,7 +196,7 @@ inline OS call when a multiply helper call ends up between them (see
 
 | Target | Result |
 |---|---|
-| `make` | `AmigaMCE`, `amigamce-<version>.lha` and `amigamce-<version>.adf` (a data disk holding the archive) |
+| `make` | `AmigaMCE`, `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) and `amigamce-<version>.adf` (a data disk holding the English-only archive) |
 | `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
 | `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
@@ -196,7 +222,8 @@ attached. Publishing that release uploads it to Aminet.
     tests/          vamos and host tests, and a synthetic AGS tree
     tools/          host-side generators for the art, fonts and icons
     assets/         the Amiga fonts, their sources and their licences
-    docs/           Workbench icons
+    docs/           Workbench icons and the Installer script
+    catalogs/       the translations (AmigaMCE.cd and a .ct per language)
     notes/          measurements kept for later work
 
 ## Licence and credits

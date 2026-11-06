@@ -10,6 +10,8 @@ Writes:
   drawer.info     drawer icon for the AmigaMCE drawer in the LHA
   Disk.info       disk icon for the ADF
   readme.info     project icon for readme.txt (default tool SYS:Utilities/MultiView)
+  install.info    project icon for the Installer script (default tool Installer,
+                  found on the Workbench's path: C: or SYS:Utilities)
 
 The format is the DiskObject file layout from workbench/workbench.h:
 DiskObject (78 bytes), optional OldDrawerData (56 bytes), the Image
@@ -371,6 +373,9 @@ def main():
         "Disk.info": diskobject(WBDISK, DISK_ART, default_tool="SYS:System/DiskCopy",
                                 glow=glowicon(*disk_glow())),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
+        "install.info": diskobject(WBPROJECT, badge_art(), default_tool="Installer", stack=16384,
+                                   tooltypes=["APPNAME=AmigaMCE", "MINUSER=AVERAGE"],
+                                   glow=glowicon(*tool_glow())),
     }
     for name, data in files.items():
         with open(os.path.join(outdir, name), "wb") as fh:

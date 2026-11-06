@@ -1,0 +1,93 @@
+; $VER: Install-AmigaMCE 1.0 (06.11.2026)
+;
+; Installer script for AmigaMCE: the program with its fonts and licences,
+; and the languages chosen, the Workbench's own ticked to begin with.
+; English is built into the program. Each language is a catalog in
+; AmigaMCE/Catalogs; AmigaMCE knows a catalog by the language written in
+; it, so its drawer's name (francais, espanol) does not matter.
+;
+; This file is Latin-1 (Français, Español, Português).
+
+(set @app-name "AmigaMCE")
+(welcome "Welcome to AmigaMCE, a media centre for AGS.\n\nThis installs AmigaMCE and the languages you choose. Settings on an earlier installation are kept.")
+
+(set #where
+  (askdir
+    (prompt "Where should AmigaMCE go?\n\nA drawer called AmigaMCE is made there, or brought up to date if it is there already.")
+    (help @askdir-help)
+    (default @default-dest)
+  )
+)
+(set #dest (tackon #where "AmigaMCE"))
+(set @default-dest #dest)
+
+; the Workbench's language, ticked
+(set #def 0)
+(if (= @language "deutsch") (set #def 1))
+(if (= @language "français") (set #def 2))
+(if (= @language "italiano") (set #def 4))
+(if (= @language "español") (set #def 8))
+(if (= @language "svenska") (set #def 16))
+(if (= @language "suomi") (set #def 32))
+(if (= @language "dansk") (set #def 64))
+(if (= @language "norsk") (set #def 128))
+(if (= @language "nederlands") (set #def 256))
+(if (= @language "português") (set #def 512))
+
+(set #langs
+  (askoptions
+    (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
+    (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
+    (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português")
+    (default #def)
+  )
+)
+
+(if (= (exists #dest) 0)
+  (makedir #dest (prompt "Making the AmigaMCE drawer") (help @makedir-help))
+)
+(copyfiles
+  (prompt "Copying AmigaMCE")
+  (help @copyfiles-help)
+  (source "AmigaMCE.info")
+  (dest #where)
+)
+(complete 10)
+(copyfiles
+  (prompt "Copying AmigaMCE, its fonts and licences")
+  (help @copyfiles-help)
+  (source "AmigaMCE")
+  (dest #dest)
+  (pattern "~(Catalogs)")
+  (infos)
+)
+(complete 80)
+
+; one language's catalog: #drawer set first (procedures with arguments
+; need a newer Installer than some Workbenches have)
+(procedure P_LANG
+  (set #to (tackon #dest (tackon "Catalogs" #drawer)))
+  (if (= (exists #cats) 0) (makedir #cats))
+  (if (= (exists #to) 0) (makedir #to))
+  (copyfiles
+    (prompt "Copying a language")
+    (help @copyfiles-help)
+    (source (tackon "AmigaMCE/Catalogs" #drawer))
+    (dest #to)
+    (all)
+  )
+)
+(set #cats (tackon #dest "Catalogs"))
+(if (IN #langs 0) ((set #drawer "deutsch") (P_LANG)))
+(if (IN #langs 1) ((set #drawer "francais") (P_LANG)))
+(if (IN #langs 2) ((set #drawer "italiano") (P_LANG)))
+(if (IN #langs 3) ((set #drawer "espanol") (P_LANG)))
+(if (IN #langs 4) ((set #drawer "svenska") (P_LANG)))
+(if (IN #langs 5) ((set #drawer "suomi") (P_LANG)))
+(if (IN #langs 6) ((set #drawer "dansk") (P_LANG)))
+(if (IN #langs 7) ((set #drawer "norsk") (P_LANG)))
+(if (IN #langs 8) ((set #drawer "nederlands") (P_LANG)))
+(if (IN #langs 9) ((set #drawer "portugues") (P_LANG)))
+(complete 100)
+
+(exit "AmigaMCE is installed. Double-click it in its drawer to start; if AGS boots straight into its own menu, quit to Workbench first.")
