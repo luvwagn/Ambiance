@@ -5444,6 +5444,7 @@ static struct {
          .rep = -1, .s_rep = -1 };
 
 #define NB_SLIDER  NB_COUNT         /* np.hov: the slider */
+#define NB_CYCLE   (NB_COUNT + 1)   /* np.hov: the visualization's cycle gadget */
 #define FLASH_MS   80               /* how long a pressed button stays lit */
 #define REP_DELAY  400              /* a button held: it repeats after this, */
 #define REP_EVERY  100              /* then this often */
@@ -5894,23 +5895,26 @@ static void np_draw_cycle(void)
 {
     WORD x0 = np.cyc_x0, x1 = np.cyc_x1, y0 = np.cyc_y0, y1 = np.cyc_y1, box = g.font_h;
     WORD ry = gfx_mode_tall(g.mode) ? 1 : 2;
-    UBYTE fg;
+    UBYTE fg, bg;
+    BOOL hov;
     if (x1 - x0 < box)
         return;
     /* greyed where this music allows one only (the spectrum under MHI):
      * its name then the one drawn */
     np.cyc_off = !vis_available(VIS_SPECTRUM);
-    fg = np.cyc_off ? PEN_RULE : PEN_TEXT;
+    hov = mouse_mode && np.hov == NB_CYCLE && !np.cyc_off;
+    fg = np.cyc_off ? PEN_RULE : hov ? PEN_WHITE : PEN_TEXT;
+    bg = hov ? PEN_SELDIM : PEN_BAR;        /* the mouse over it, as over a button */
     /* a button's face (np_button): rounded, the bar's colour, its glyph
      * and words in the buttons' */
     gfx_fill(&g, x0, y0, x1, y1, PEN_BG);
-    np_rrect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, 2, ry, PEN_BAR);
+    np_rrect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, 2, ry, bg);
     gfx_cycle_glyph(&g, x0 + U(3), y0 + (y1 - y0 + 1 - box) / 2, box, fg);
     if (np.cyc_label) {
         WORD sx = x0 + U(3) + box + U(3);
         gfx_fill(&g, sx, y0 + U(2), sx, y1 - U(2), PEN_RULE);
         gfx_text(&g, sx + 1 + U(4), np.info_y,
-                 _(vis_name(np.cyc_off ? vis_active() : vis_selected())), fg, PEN_BAR,
+                 _(vis_name(np.cyc_off ? vis_active() : vis_selected())), fg, bg,
                  x1 - U(3) - (sx + 1 + U(4)), TS_SMALL);
     }
 }
@@ -7010,8 +7014,18 @@ static void np_hover(WORD x, WORD y)
         return;
     }
     h = np_button_at(x, y);
+    if (np.cyc_x1 > np.cyc_x0 && x >= np.cyc_x0 && x <= np.cyc_x1 && y >= np.cyc_y0 &&
+        y <= np.cyc_y1)
+        h = NB_CYCLE;
     if (h != np.hov) {
+        BOOL cyc = h == NB_CYCLE || np.hov == NB_CYCLE;
         np.hov = h;
+        if (cyc) {
+            /* the gadget is above the part np_update draws: on its own */
+            BOOL was = gfx_quiet_begin();
+            np_draw_cycle();
+            gfx_quiet_end(&g, was, np.cyc_x0, np.cyc_y0, np.cyc_x1, np.cyc_y1);
+        }
         np_update();
     }
 }
