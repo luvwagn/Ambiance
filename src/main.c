@@ -10187,12 +10187,12 @@ static void hold_tick(void)
                 rate = 10 + remaining * 10;
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
-            if (!menu && n > 1 && n > remaining / 4) {
+            if (!menu && n > 1 && n > remaining / 2) {
                 /* a frame takes 100-200 ms on a big native screen: by speed
                  * alone the easing was crossed in one, so a step is also at
-                 * most a quarter of what is left, and the end is seen
-                 * coming: a few screens, slower, then a row at a time */
-                n = remaining / 4 > 1 ? remaining / 4 : 1;
+                 * most half of what is left, and the end is seen coming in
+                 * some ten frames, slowing (a quarter took three seconds) */
+                n = remaining / 2 > 1 ? remaining / 2 : 1;
                 hold.acc = n * 1000;
             }
             if (n > 0) {
