@@ -93,9 +93,8 @@ Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
   and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic.
 - Japanese, Chinese and Korean names (from Plex, stations and song
-  tags) are shown in their own characters on laced and RTG screens, at
-  12 or 15 pixels; the smaller screens show [JP], [KO] or [CJK] in their
-  place.
+  tags) are shown in their own characters, at 12 or 15 pixels (without
+  Fonts/amce-cjk, as [JP], [KO] or [CJK]).
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.

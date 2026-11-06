@@ -22,8 +22,8 @@
  * a one-pen mask stamped with BltTemplate, as the logo and icons are.
  * A pack's index (its code points and advances) is read when first
  * needed; its glyphs too if memory is plentiful, else on demand into a
- * small cache. On screens under 400 lines (12-pixel text on tall or few
- * pixels) a tag stands for each run instead: [JP], [KO] or [CJK].
+ * small cache. Without the packs a tag stands for each run instead: [JP],
+ * [KO] or [CJK].
  */
 #include "amce.h"
 
@@ -267,8 +267,13 @@ static const UWORD *glyph_rows(int pk, LONG gi)
 
 void cjk_open(struct Gfx *g)
 {
+    BPTR l;
     nchain = 0;
-    tags = g->h < 400;
+    /* every screen's text is 12 pixels or more: the characters fit (tall
+     * on 640 x 200/256, as its letters are); tags only without the packs */
+    tags = !(l = Lock((STRPTR) "PROGDIR:Fonts/amce-cjk/12", ACCESS_READ));
+    if (l)
+        UnLock(l);
     if (tags)
         return;
     if (g->font_h >= 20)
