@@ -1360,7 +1360,7 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi)
 
 void pic_describe(const struct PicInfo *pi, char *out, LONG max)
 {
-    char c[24];
+    char c[64];
     if (pi->mode & HAM_KEY)
         sprintf(c, "HAM%lu", (unsigned long)pi->depth);
     else if (pi->depth > 8)
@@ -1369,7 +1369,7 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
         strcpy(c, _("64 colours, EHB"));
     else
         sprintf(c, _("%lu colours"), 1UL << pi->depth);
-    char t[64];
+    char t[96];
     sprintf(t, "%lu x %lu, %s", (unsigned long)pi->w, (unsigned long)pi->h, c);
     amce_strlcpy(out, t, max);
 }

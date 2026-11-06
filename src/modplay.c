@@ -643,7 +643,7 @@ static void module_free(void)
 
 static const char *layout_problem(int rc, int channels)
 {
-    static char m[64];
+    static char m[128];
     switch (rc) {
     case PT_ERR_SHORT:
         return _("The module file is cut short");

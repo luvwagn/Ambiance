@@ -599,7 +599,7 @@ static void run(struct NetJob *j)
         break;
     }
     if (j->body && j->status != 200) {
-        char m[64];
+        char m[96];
         sprintf(m, _("The server answered %ld"), (long)j->status);
         set_err(j, m);
         FreeVec(j->body);

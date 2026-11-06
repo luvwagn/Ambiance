@@ -24,7 +24,7 @@ import time
 import unicodedata
 
 LANGS = ["deutsch", "français", "italiano", "español", "svenska", "suomi", "dansk", "norsk",
-         "nederlands", "português"]
+         "nederlands", "português", "nihongo"]
 
 
 def fnv(b):
@@ -248,6 +248,11 @@ def cmd_build(catdir, outdir, langs):
                 b = amiga_bytes(t)
             except ValueError as e:
                 print("%s %s: %s" % (lang, name, e))
+                bad += 1
+                continue
+            if len(b) > 2 * len(cd[name].encode("latin-1")) + 16:
+                # src/lang.c would show the English: buffers allow no more
+                print("%s %s: %d bytes, more than twice the English's and 16" % (lang, name, len(b)))
                 bad += 1
                 continue
             body = b + b"\0"

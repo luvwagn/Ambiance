@@ -12,7 +12,8 @@ layout_metrics and fit_menu, main.c's footer hints):
     short set, each of which must then fit
   - one-line text wider than the pane (paragraphs wrap, so are not checked),
     or for a status message (set_msg, errors) wider than the screen
-Glyphs are measured as TextLength does: each character's kern + space.
+Glyphs are measured as TextLength does: each character's kern + space; Far
+East characters at their advance in the glyph pack (Fonts/amce-cjk/12).
 """
 import os
 import struct
@@ -60,7 +61,11 @@ class Font:
     def width(self, s):
         f = self.f
         w = 0
-        for ch in s.encode("latin-1", "replace"):
+        for u in s:
+            if ord(u) > 255 and ord(u) in CJK:
+                w += CJK[ord(u)]                # cjk.c: the pack's advance
+                continue
+            ch = u.encode("latin-1", "replace")[0]
             i = ch - f["lo"] if f["lo"] <= ch <= f["hi"] else self.n - 1
             if f["cs"]:
                 w += self._i16(f["cs"], i)
@@ -70,6 +75,16 @@ class Font:
                 w += self._i16(f["ck"], i)
         return w
 
+
+def read_pack(path):
+    """{code point: advance} of a Far East glyph pack (tools/mkcjk.py)."""
+    d = open(path, "rb").read()
+    n = struct.unpack(">L", d[10:14])[0]
+    codes = struct.unpack(">%dH" % n, d[14:14 + 2 * n])
+    return dict(zip(codes, d[14 + 2 * n:14 + 3 * n]))
+
+
+CJK = {}        # the 12 pack: all three screens' fonts are under 20 pixels
 
 SCREENS = [
     # name, width, font, k (design units: x * k / 256)
@@ -148,6 +163,7 @@ def check(lang, tr, cd_en, fonts_dir):
 def main():
     catdir, fonts_dir = sys.argv[1:3]
     want = sys.argv[3:]
+    CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "12")))
     STATUS.update(status_strings(os.path.join(os.path.dirname(os.path.abspath(catdir)), "src")))
     cd = catalog.read_cd(os.path.join(catdir, "AmigaMCE.cd"))
     total = 0

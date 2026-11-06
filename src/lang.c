@@ -84,7 +84,13 @@ const char *amce_tr(const char *s)
     Forbid();
     if (cache[k].en != s) {
         cache[k].en = s;
-        cache[k].tr = (t = lookup(amce_tr_id(s))) ? t : s;
+        t = lookup(amce_tr_id(s));
+        /* at most twice its English and 16 bytes more: what the buffers
+         * text is formatted into are sized for (a Japanese character is
+         * three bytes); a longer one is left in English */
+        if (t && strlen(t) > 2 * strlen(s) + 16)
+            t = NULL;
+        cache[k].tr = t ? t : s;
     }
     s = cache[k].tr;
     Permit();
@@ -260,6 +266,23 @@ static BOOL load(int k)
     return n > 0;
 }
 
+/* Two names for one language: Japanese is "nihongo" in AmigaMCE's
+ * catalog, and may be "japanese" in a Workbench's Locale prefs. */
+static BOOL same_lang(const char *a, const char *b)
+{
+    static const char *const ja[] = { "nihongo", "japanese" };
+    int i, x = -1, y = -1;
+    if (!amce_stricmp(a, b))
+        return TRUE;
+    for (i = 0; i < 2; i++) {
+        if (!amce_stricmp(a, ja[i]))
+            x = i;
+        if (!amce_stricmp(b, ja[i]))
+            y = i;
+    }
+    return x >= 0 && y >= 0;
+}
+
 /* The catalog for lang (a language as Locale names it: "deutsch"), or the
  * Workbench's first that has one (NULL or ""), or none ("english"). */
 void amce_lang_open(const char *lang)
@@ -273,7 +296,7 @@ void amce_lang_open(const char *lang)
     }
     if (lang && *lang) {
         for (i = 0; i < ncats && k < 0; i++)
-            if (!amce_stricmp(cats[i].lang, lang))
+            if (same_lang(cats[i].lang, lang))
                 k = i;
     } else {
         char wb[10][32];
@@ -282,7 +305,7 @@ void amce_lang_open(const char *lang)
             if (!amce_stricmp(wb[j], "english"))
                 break;                      /* English comes first there */
             for (i = 0; i < ncats && k < 0; i++)
-                if (!amce_stricmp(cats[i].lang, wb[j]))
+                if (same_lang(cats[i].lang, wb[j]))
                     k = i;
         }
     }

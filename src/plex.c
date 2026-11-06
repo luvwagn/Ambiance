@@ -846,7 +846,7 @@ BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len)
 /* Why a track cannot play (a greyed one). */
 const char *plex_why(const struct Item *it)
 {
-    static char m[80];
+    static char m[200];
     char codec[16];
     radio_field(it, 1, codec, sizeof(codec));
     sprintf(m, _("%s: not MP3, and the server gave no way to convert it"),

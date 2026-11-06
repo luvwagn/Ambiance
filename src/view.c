@@ -514,7 +514,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     UBYTE pens[256];
     LONG npens = 0, i;
     Object *o = NULL;
-    char msg[96];
+    char msg[160];
 
     spin_forget();
     drop_picture(g);

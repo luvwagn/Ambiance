@@ -94,7 +94,7 @@ static int depth;
 static int menu[MOD_COUNT], nmenu, menu_sel;
 static int focus = FOCUS_MENU;
 static BOOL running = TRUE, quit_armed;
-static char msg[80];
+static char msg[160];
 static char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
@@ -862,7 +862,7 @@ static void ch_pump(struct Page *p)
     }
     if (ch->next < ch->n && !ch->cut) {
         if (AvailMem(MEMF_ANY) < CH_FLOOR) {
-            char m[80];
+            char m[160];
             ch_trim(p);
             if (AvailMem(MEMF_ANY) < CH_FLOOR) {
                 ch->cut = TRUE;
@@ -1198,16 +1198,39 @@ static WORD textbox_w(void)
     return (w < g.pane_w ? w : g.pane_w) - U(9);
 }
 
+/* Marks a Japanese or Chinese line does not begin with: commas, full
+ * stops, closing brackets, the long vowel mark, small kana (kinsoku). */
+static BOOL no_line_start(ULONG c)
+{
+    static const UWORD marks[] = { 0x3001, 0x3002, 0x3009, 0x300B, 0x300D, 0x300F, 0x3011,
+                                   0x3015, 0x30FC, 0x30FB, 0xFF01, 0xFF09, 0xFF0C, 0xFF0E,
+                                   0xFF1A, 0xFF1B, 0xFF1F, 0xFF3D, 0xFF5D, 0x309D, 0x309E,
+                                   0x30FD, 0x30FE, 0x3005 };
+    static const UWORD small_kana[] = { 0x3041, 0x3043, 0x3045, 0x3047, 0x3049, 0x3063, 0x3083,
+                                        0x3085, 0x3087, 0x308E, 0x30A1, 0x30A3, 0x30A5, 0x30A7,
+                                        0x30A9, 0x30C3, 0x30E3, 0x30E5, 0x30E7, 0x30EE, 0x30F5,
+                                        0x30F6 };
+    unsigned i;
+    for (i = 0; i < sizeof(marks) / sizeof(marks[0]); i++)
+        if (c == marks[i])
+            return TRUE;
+    for (i = 0; i < sizeof(small_kana) / sizeof(small_kana[0]); i++)
+        if (c == small_kana[i])
+            return TRUE;
+    return FALSE;
+}
+
 /* Word-wrap a paragraph into l, maxw pixels wide. A Japanese, Chinese or
  * Korean character is a word of its own, joined without a space (their
  * text has none to break at). */
 static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
 {
-    char line[160], word[96];
+    char line[256], word[96];
+    LONG last = 0;                      /* where line's last word begins */
     line[0] = 0;
     while (*s) {
         LONG n = 0;
-        char tryline[256];
+        char tryline[352];
         ULONG cp;
         BOOL spaced = FALSE;
         int k;
@@ -1230,9 +1253,28 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
             amce_strlcat(tryline, " ", sizeof(tryline));
         amce_strlcat(tryline, word, sizeof(tryline));
         if (line[0] && gfx_textlen(&g, tryline, TS_BODY) > maxw) {
+            /* a mark that may not begin a line takes the character
+             * before it along (kinsoku): a closing bracket or stop right
+             * after Far East text, Latin or not */
+            if (!spaced && last > 0 && cjk_any(line, strlen(line)) &&
+                (strchr(")]},.:;!?", word[0]) ||
+                 (n == 3 && cjk_dec((const UBYTE *)word, 3, &cp) && no_line_start(cp)))) {
+                char carry[96];
+                amce_strlcpy(carry, line + last, sizeof(carry));
+                line[last] = 0;
+                while (last > 0 && line[last - 1] == ' ')
+                    line[--last] = 0;
+                list_add(l, line, "", "", IT_TEXT);
+                amce_strlcpy(line, carry, sizeof(line));
+                amce_strlcat(line, word, sizeof(line));
+                last = 0;
+                continue;
+            }
             list_add(l, line, "", "", IT_TEXT);
             amce_strlcpy(line, word, sizeof(line));
+            last = 0;
         } else {
+            last = strlen(tryline) - n;
             amce_strlcpy(line, tryline, sizeof(line));
         }
     }
@@ -1344,7 +1386,7 @@ static void dt_line(void *ctx, const char *s)
 
 static void build_sysinfo(struct Page *p)
 {
-    char line[160];
+    char line[200];
     text_line(p, _("Found when AmigaMCE started:"));
     text_line(p, "");
     sprintf(line, _("Machine type: %s"), caps.emulator ? _("emulator (UAE family)") : _("real Amiga"));
@@ -1378,7 +1420,7 @@ static void build_sysinfo(struct Page *p)
             /* Bits per pixel from the bitmap itself: an RTG bitmap's Depth
              * field is not reliable, GetBitMapAttr is. */
             ULONG d = GetBitMapAttr(g.scr->RastPort.BitMap, BMA_DEPTH);
-            char colours[24];
+            char colours[64];
             if (d > 8)
                 sprintf(colours, _("%lu-bit colour"), (unsigned long)d);
             else
@@ -1888,6 +1930,11 @@ static void lang_name(const char *lang, char *out)
         strcpy(out, "English");
         return;
     }
+    if (!amce_stricmp(lang, "nihongo") || !amce_stricmp(lang, "japanese")) {
+        /* "Nihongo" in its own characters (cjk.c's three bytes each) */
+        strcpy(out, "\214\267\245\214\274\254\221\252\236");
+        return;
+    }
     amce_strlcpy(out, lang, 32);
     if ((UBYTE)out[0] >= 'a' && (UBYTE)out[0] <= 'z')
         out[0] -= 32;
@@ -1989,7 +2036,7 @@ static void nic_in_use_text(char *out)
 static void build_net_settings(struct Page *p)
 {
     struct Item *it;
-    char tag[64], use[40];
+    char tag[96], use[40];
     p->setp = SETP_NET;
     (void)it;
     if (!caps.net) {
@@ -2016,7 +2063,7 @@ static void build_net_settings(struct Page *p)
 static void build_nic_settings(struct Page *p)
 {
     struct Item *it;
-    char label[64], tag[64], ip[20], use[40];
+    char label[64], tag[128], ip[20], use[40];
     int i;
     p->setp = SETP_NIC;
     nic_in_use_text(use);
@@ -2071,14 +2118,14 @@ static void build_radio_settings(struct Page *p)
 
 static void build_rkbps_settings(struct Page *p)
 {
-    char tag[40], k[16];
+    char tag[96], k[16];
     int i;
     p->setp = SETP_RKBPS;
     rkbps_text(rkbps_auto(), k);
     sprintf(tag, _("for this Amiga: %s"), k);
     action_item(p, _("Automatic"), tag, ACT_RKBPS0, rkbps_sel == 0 ? MARK_RADIO_ON : MARK_RADIO_OFF);
     for (i = 1; i < 6; i++) {
-        char label[24];
+        char label[64];
         if (rkbps_choice[i])
             sprintf(label, _("Up to %lukbps"), (unsigned long)rkbps_choice[i]);
         else
@@ -2111,7 +2158,7 @@ static int mirror_fastest(void)
 
 static void build_rsrv_settings(struct Page *p)
 {
-    char tag[64], nm[64];
+    char tag[112], nm[64];
     int i, f;
     BOOL fast = !strncmp(rsrv, "fastest:", 8);
     p->setp = SETP_RSRV;
@@ -2855,6 +2902,13 @@ static const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr
                                         N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"),
                                         N_("Nov"), N_("Dec") };
 
+/* Dates the Japanese way round (year, month, day), the month and day as
+ * numbers. */
+static BOOL date_ymd(void)
+{
+    return !strcmp(amce_lang_iso(), "ja");
+}
+
 static void clock_text(char *buf)
 {
     static const UBYTE md[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -2883,8 +2937,13 @@ static void clock_text(char *buf)
             days -= mlen;
             m++;
         }
-        sprintf(buf, "%s %02ld %s  %02ld:%02ld", _(day_abbr[wday]), (long)days + 1, _(mon_abbr[m]),
-                (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60);
+        if (date_ymd())         /* "11 gatsu 06 nichi (kin)": the month first */
+            sprintf(buf, "%ld\214\274\210%02ld\214\267\245(%s)  %02ld:%02ld", (long)m + 1,
+                    (long)days + 1, _(day_abbr[wday]), (long)ds.ds_Minute / 60,
+                    (long)ds.ds_Minute % 60);
+        else
+            sprintf(buf, "%s %02ld %s  %02ld:%02ld", _(day_abbr[wday]), (long)days + 1,
+                    _(mon_abbr[m]), (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60);
     }
 }
 
@@ -2894,6 +2953,10 @@ static WORD clock_left(void)
     /* the widest day and month in this language */
     WORD dw = 0, mw = 0, w;
     int i;
+    if (date_ymd())
+        return g.w - U(8) -
+               gfx_textlen(&g, "12\214\274\21030\214\267\245(\214\274\210)  00:00", TS_SMALL) -
+               U(4);
     for (i = 0; i < 7; i++)
         if ((w = gfx_textlen(&g, _(day_abbr[i]), TS_SMALL)) > dw)
             dw = w;
@@ -3669,7 +3732,7 @@ static BOOL hold_active(void);
 static BOOL pv_pending;
 static ULONG pv_due;
 
-/* "12-Mar-1994" from a DateStamp's days. */
+/* "12-Mar-1994" from a DateStamp's days ("1994-03-12" in Japanese). */
 static void date_text(LONG days, char *out)
 {
     static const UBYTE mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -3687,7 +3750,10 @@ static void date_text(LONG days, char *out)
             break;
         days -= md;
     }
-    sprintf(out, "%ld-%s-%ld", (long)days + 1, _(mon_abbr[m]), (long)y);
+    if (date_ymd())
+        sprintf(out, "%ld-%02ld-%02ld", (long)y, (long)m + 1, (long)days + 1);
+    else
+        sprintf(out, "%ld-%s-%ld", (long)days + 1, _(mon_abbr[m]), (long)y);
 }
 
 static void pv_line(const char *s, WORD w)
@@ -3941,7 +4007,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
     char line[120];
     pv_line(it->label, w);
     if (it->kind == IT_PIC) {
-        char date[24];
+        char date[32];
         if (drawn) {
             pic_describe(&g.pic, line, sizeof(line));
             pv_line(line, w);
@@ -4375,6 +4441,14 @@ static void style_preview_free(void)
     spv_idx = -1;
 }
 
+/* A menu label for the preview: the font shown has no Far East
+ * characters, so a Japanese label is shown in English there. */
+static const char *spv_label(int mod)
+{
+    const char *s = _(mod_names[mod]);
+    return cjk_any(s, strlen(s)) ? mod_names[mod] : s;
+}
+
 static void style_preview(struct Page *p)
 {
     WORD x0 = aside_x(), x1 = g.w - 1, y0 = g.list_top, y1 = g.footer_y - 2;
@@ -4406,15 +4480,15 @@ static void style_preview(struct Page *p)
     ipx = 16 * lf->kint;
     SetFont(g.rp, f);
     for (i = 0; i < nmenu; i++)
-        if ((w = TextLength(g.rp, (CONST_STRPTR)_(mod_names[menu[i]]),
-                            strlen(_(mod_names[menu[i]])))) > longest)
+        if ((w = TextLength(g.rp, (CONST_STRPTR)spv_label(menu[i]),
+                            strlen(spv_label(menu[i])))) > longest)
             longest = w;
     mw = SU(23) + longest + SU(6);
     if (mw > x1 - x0 - SU(3))
         mw = x1 - x0 - SU(3);
     for (i = 0, y = y0; i < nmenu && y + rh - 1 <= y1; i++, y += rh) {
         UBYTE bg = i == menu_sel ? PEN_HL : PEN_BG;
-        const char *s = _(mod_names[menu[i]]);
+        const char *s = spv_label(menu[i]);
         gfx_fill(&g, x0, y, x0 + mw - 1, y + rh - 1, bg);
         gfx_icon_sized(&g, menu[i], x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
         SetFont(g.rp, f);
@@ -5418,7 +5492,7 @@ static void np_button(int i)
 
 static void np_volume_text(void)
 {
-    char m[24];
+    char m[64];
     WORD x = np.vol_x, y = np.by + (np.bh - g.font_h) / 2, end = np.x0 + np.w - 1;
     if (x < 0)
         return;
@@ -5579,7 +5653,7 @@ static void np_layout(void)
 /* The time, the bar and the position: only what changed. */
 static void np_draw_progress(BOOL full, const struct MpStatus *st)
 {
-    char t[64], a[24], b[24], pos[96];
+    char t[160], a[64], b[24], pos[160];
     WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, bw = np.bar_w, lw, rw;
     ULONG at = np.seek_due ? (ULONG)np.seek_to : st->elapsed_ms;   /* a seek: where to */
     LONG fill = st->total_ms ? (LONG)((ULONG)bw * (at / 100) / ((st->total_ms + 99) / 100)) : 0;
@@ -5967,7 +6041,7 @@ static void np_draw(BOOL full)
         {
             /* the file, what plays it (or its kind), the subsong, where in the folder */
             int sub, subs;
-            char part[80];
+            char part[160];
             mp_subsongs(&sub, &subs);
             sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
             if (mp_author()[0]) {
@@ -7019,7 +7093,7 @@ static void build_mods_root(void)
     BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU), sid = dir_exists(MODS_SID);
     if (!mods && !menu_music && !mp_loaded()) {
         if ((p = page_push(PT_TEXT, _("Mods")))) {
-            char t[200];
+            char t[400];
             sprintf(t, _("No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu "
                          "music)."), MODS_ROOT, MODS_MENU);
             text_para(p, t);
@@ -7434,7 +7508,7 @@ static LONG view_step(const struct ItemList *l, LONG i, LONG d)
 static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *pi,
                        const char *scale, BOOL slideshow)
 {
-    char detail[120], desc[64];
+    char detail[200], desc[64];
     LONG k, pos = 0, n = 0;
     for (k = 0; k < l->count; k++)
         if (l->items[k].kind == IT_PIC) {
@@ -7660,7 +7734,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             if (vw_remote && !(here = vw_fetch(l, want, ART_VW)) && vw_failed) {
                 /* not sent: said so, and on to the next */
                 LONG nx = view_step(l, want, dir);
-                char d[80];
+                char d[128];
                 vw_failed = FALSE;
                 asked = -1;
                 loading_bar = FALSE;
@@ -8046,7 +8120,7 @@ static void apply_screen_mode(int sm)
     const char *why = gfx_mode_problem(&caps, sm);
     BOOL failed = FALSE;
     if (why) {
-        char m[80];
+        char m[128];
         sprintf(m, _("That mode %.60s"), why);
         set_msg(m);
         return;
@@ -8328,7 +8402,7 @@ static void music_file_rows(struct Page *p)
         n++;
     }
     for (i = 0; i < nmusic_dirs; i++) {
-        char label[120];
+        char label[180];
         const char *f = (const char *)FilePart((STRPTR)music_dirs[i]);
         sprintf(label, _("Music files: %.100s"), f[0] ? f : music_dirs[i]);
         if ((it = list_add(&p->list, label, music_dirs[i], "", IT_DIR))) {
@@ -8343,7 +8417,7 @@ static void music_file_rows(struct Page *p)
 static void build_music_root(struct Page *p)
 {
     struct Item *it;
-    char label[96];
+    char label[128];
     p->plex = 1;
     np_shortcut(p);
     if (!caps.net) {
@@ -8732,7 +8806,7 @@ static void radio_done(struct NetJob *j)
             if (p->photos) {
                 /* photos here: a slideshow of them, first */
                 LONG i, k = 0;
-                char label[48];
+                char label[96];
                 struct Item *a;
                 for (i = 0; i < p->list.count; i++)
                     if (p->list.items[i].kind == IT_PLEXPHOTO)
@@ -8945,7 +9019,7 @@ static void music_root_again(void)
  * last listed, or (none listed yet) the server, to list them. */
 static int pictures_plex_rows(struct Page *p)
 {
-    char lines[400], label[120], *l, *e, *t;
+    char lines[400], label[160], *l, *e, *t;
     char keys[6][64], titles[6][96];
     struct Item *it;
     int n = 0, i;
