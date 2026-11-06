@@ -1902,6 +1902,16 @@ static void langs_find(void)
                     UnLock(c);
                     amce_strlcpy(langs[nlangs++], (char *)fib->fib_FileName, 32);
                 }
+                {
+                    /* what the drawer is called, byte by byte where not ASCII
+                     * (an emulator's host folder can name it otherwise) */
+                    char m[160], *o = m;
+                    const UBYTE *q = (const UBYTE *)fib->fib_FileName;
+                    for (; *q && o < m + 100; q++)
+                        o += *q < 0x80 ? sprintf(o, "%c", *q) : sprintf(o, "<%02lx>", (unsigned long)*q);
+                    sprintf(o, ": %s", c ? "a catalog" : "no AmigaMCE.catalog in it");
+                    amce_log("language drawer", m);
+                }
             }
         UnLock(l);
     }
