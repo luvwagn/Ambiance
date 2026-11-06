@@ -1,0 +1,1353 @@
+## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
+## language suomi
+## codeset 0
+;
+MSG_4E6387ED
+Muisti ei riitä
+; Not enough memory
+MSG_1592F849
+Mikään AmigaMCE:n soittimista ei tunne tätä moduulia
+; No player AmigaMCE has knows this module
+MSG_3EE87411
+AmigaMCE ei osaa soittaa tätä moduulia, eikä EaglePlayer-soittimia löytynyt
+; Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_62F4807B
+%s ei voinut ladata moduulin muita tiedostoja
+; %s could not load the module's other files
+MSG_4E20BD99
+%s ei voinut käynnistää tätä moduulia
+; %s could not start this module
+MSG_647DD404
+vaatii näytönohjaimen
+; needs a graphics card
+MSG_2B7EBD1D
+vaatii AGA:n
+; needs AGA
+MSG_550E04D5
+ei käytettävissä
+; not available
+MSG_30386F8F
+täysvärit
+; true colour
+MSG_3665BBE3
+64 väriä, EHB
+; 64 colours, EHB
+MSG_0F6E4D56
+%lu väriä
+; %lu colours
+MSG_73F99D3C
+Pelit
+; Games
+MSG_5D4E86F0
+Modit
+; Mods
+MSG_0F955E3F
+Demot
+; Demos
+MSG_63609FED
+Videot
+; Videos
+MSG_0D70FEAE
+Kuvat
+; Pictures
+MSG_584A1D74
+Musiikki
+; Music
+MSG_5675F954
+Radio
+; Radio
+MSG_4B058728
+Asetukset
+; Settings
+MSG_58E096DE
+Tietoja
+; About
+MSG_17B11033
+Ladataan...
+; Loading...
+MSG_542CAAAC
+Muisti vähissä: lista loppuu %ld kohtaan
+; Low on memory: list stops at %ld entries
+MSG_7C46D36F
+Kaikki pelit
+; All Games
+MSG_7E40EC70
+Kaikki demot
+; All Demos
+MSG_4D9D0161
+Amiga Game Selectoria ei löytynyt.
+; Amiga Game Selector was not found.
+MSG_017A1274
+AmigaMCE etsii AGS:-liitosta, sitten AGS2-laatikkoa omansa vierestä ja WHDLoad:ista. Asenna AmigaMCE AGS 3 -järjestelmään tai käynnistä AGS kerran, jotta sen liitokset ovat olemassa.
+; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_64FF7B9F
+löytyi
+; found
+MSG_40A7AEDA
+ei löytynyt
+; not found
+MSG_0C290F2C
+Löytyi AmigaMCE:n käynnistyessä:
+; Found when AmigaMCE started:
+MSG_6C041D54
+Konetyyppi: %s
+; Machine type: %s
+MSG_26E752CC
+emulaattori (UAE-perhe)
+; emulator (UAE family)
+MSG_6FE54AD0
+oikea Amiga
+; real Amiga
+MSG_0C26D003
+Piirisarja: %s%s, %s
+; Chipset: %s%s, %s
+MSG_55012A6E
+ ja EHB
+;  with EHB
+MSG_4540315A
+nimetön tila
+; unnamed mode
+MSG_49947ED3
+Näyttö: %s
+; Screen: %s
+MSG_2C6DC5BF
+%lu-bittinen väri
+; %lu-bit colour
+MSG_67DA4F80
+  %lu x %lu, %s, tilan tunnus $%08lx
+;   %lu x %lu, %s, mode ID $%08lx
+MSG_3096D6FE
+Tyyli: pehmeä, %lu.%02lux
+; Style: smooth, %lu.%02lux
+MSG_2D957250
+Tyyli: pikseli, %lux%s
+; Style: pixel, %lux%s
+MSG_402F4AD3
+ (korkeat pikselit: tiheä)
+;  (tall pixels: dense)
+MSG_321FCB8C
+  sen sävyt ja logo: tähän mennessä %lu kynää
+;   its shades and logo: %lu pens so far
+MSG_77468FB6
+Näytönohjain (RTG): %s
+; Graphics card (RTG): %s
+MSG_4E9F3590
+kyllä
+; yes
+MSG_62366FFA
+ei
+; no
+MSG_25AF384C
+Vapaa muisti: %luKB chip, %luKB fast
+; Free memory: %luKB chip, %luKB fast
+MSG_2E02D31A
+Fontti: %s
+; Font: %s
+MSG_7F759611
+amce-pixel (mukana)
+; amce-pixel (bundled)
+MSG_27934164
+topaz 8 (varalla)
+; topaz 8 (fallback)
+MSG_6F035CA3
+Datatyypit (mikä lukee kunkin kuvamuodon):
+; Datatypes (which one reads each picture format):
+MSG_336DE098
+; AGS: %s
+MSG_4FE02B8B
+AmigaMCE:n lisäämät liitokset (AGS-Stuff ei ollut käynnissä):
+; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_38F75BEF
+AGS:n konevalinta (HW): %s
+; AGS machine setting (HW): %s
+MSG_7FA35E26
+ei asetettu
+; not set
+MSG_1ACE6AF5
+Aikuisille tarkoitetut: %s
+; Adult entries: %s
+MSG_4E294716
+näytetään
+; shown
+MSG_7618F139
+piilotettu
+; hidden
+MSG_320E5353
+Verkkopino: %s
+; Network stack: %s
+MSG_147EB74C
+käynnissä
+; running
+MSG_2DA7AFDB
+ei mitään
+; none
+MSG_1358A393
+; MP3: %s
+MSG_197B8973
+MHI-ajuri
+; MHI driver
+MSG_5FDDDD75
+Lyhyt
+; Short
+MSG_58DE2772
+Normaali
+; Normal
+MSG_45939473
+Pitkä
+; Long
+MSG_43BC9D28
+alkaa 0,6 s:ssa
+; starts in 0.6s
+MSG_720CF4AD
+1,2 s
+; 1.2s
+MSG_0065B852
+3 s, enemmän varalla katkoja vastaan
+; 3s, more held against dropouts
+MSG_2DA81BF2
+Pehmeä: Fonts/amce-smooth ei sovi tähän AmigaMCE:hen
+; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_5561FD0B
+Yleiset
+; General
+MSG_1BD8C631
+Näyttö
+; Screen
+MSG_33CA9A34
+Ääni
+; Sound
+MSG_1917381B
+Verkko
+; Networking
+MSG_30B474E4
+; Plex
+MSG_6C2261DE
+Verkkoliitäntä
+; Network interface
+MSG_23140C4E
+Asemien suurin bittinopeus
+; Highest station bitrate
+MSG_360055B5
+Virran puskuri
+; Stream buffer
+MSG_18162AC4
+Asemaluetteloiden palvelin
+; Station list server
+MSG_4DAC8901
+Musiikkikansiot
+; Music folders
+MSG_1A73DB9B
+Kieli
+; Language
+MSG_73C73B18
+Kuten Workbench
+; As Workbench
+MSG_2D0EBF47
+ei TCP/IP-pinoa
+; no TCP/IP stack
+MSG_1624E3CC
+Näyttötila
+; Screen mode
+MSG_5467EC76
+Tyyli
+; Style
+MSG_4A02D9CF
+Pehmeä
+; Smooth
+MSG_2AB32B77
+Pikseli
+; Pixel
+MSG_63678BEE
+Kaksoispuskurointi
+; Double buffering
+MSG_52325DD8
+Hyppivä vieritys (kirjaimittain)
+; Jump scrolling (by letter)
+MSG_71E19418
+Vianetsintä (CPU, muisti, loki)
+; Debug (CPU, memory, log)
+MSG_4393028C
+TCP/IP-pinoa ei ole käynnissä
+; No TCP/IP stack running
+MSG_4C151C1E
+asemat %s asti
+; stations up to %s
+MSG_0DC6B4AA
+Pois
+; Off
+MSG_424097EC
+Päällä, palvelinta ei valittu
+; On, no server chosen
+MSG_33774386
+Automaattinen: %.40s
+; Automatic: %.40s
+MSG_616A6784
+Automaattinen
+; Automatic
+MSG_3FCAC913
+Automaattinen (pinon valinta)
+; Automatic (the stack's choice)
+MSG_690CE026
+ei osoitetta
+; no address
+MSG_589EC060
+%s, %.39s yksikkö %ld
+; %s, %.39s unit %ld
+MSG_43430B20
+ylhäällä
+; up
+MSG_3DB9B915
+alhaalla
+; down
+MSG_450E2AE8
+Tämä TCP/IP-pino ei luettele liitäntöjään
+; This TCP/IP stack does not list its interfaces
+MSG_604E4CF2
+Salli HTTPS-virrat
+; Allow HTTPS streams
+MSG_30C0E827
+vaatii AmiSSL:n
+; needs AmiSSL
+MSG_185E3E26
+Automaattinen: %s
+; Automatic: %s
+MSG_557E4FAB
+Nopein: %s
+; Fastest: %s
+MSG_50FCFDDF
+tälle Amigalle: %s
+; for this Amiga: %s
+MSG_33C1DFF1
+Enintään %lukbps
+; Up to %lukbps
+MSG_0EB61AED
+Mikä tahansa
+; Any
+MSG_024A57E9
+yksi satunnaisesti, kuten radio-browser.info pyytää
+; one at random, as radio-browser.info asks
+MSG_4C1FEAD9
+Nopein
+; Fastest
+MSG_7016D0E0
+radio-browser.info:n palvelimia ei löytynyt
+; radio-browser.info's servers could not be found
+MSG_3E7F369F
+nyt %.30s, %ld ms
+; now %.30s, %ld ms
+MSG_62CD57D2
+kukaan ei vastannut
+; none answered
+MSG_1B68D598
+ei vastausta
+; no answer
+MSG_3F3927CF
+Plex-palvelin
+; Plex server
+MSG_23B63BC7
+ei valittu
+; none chosen
+MSG_5F6445D0
+Pyydä heikompilaatuista ääntä
+; Request lower quality audio
+MSG_720ED4F6
+tarpeen tällä Amigalla
+; needed on this Amiga
+MSG_1DE950F6
+4 kanavaa, enintään 28kHz, 8 bittiä
+; 4 channels, up to 28kHz, 8-bit
+MSG_6CB6532B
+AHI: radio, Plex, musiikkitiedostot
+; AHI: radio, Plex, music files
+MSG_1AB0857C
+16 bittiä, sen asetusten tila
+; 16-bit, its Preferences' mode
+MSG_7EF1200C
+ei asennettu
+; not installed
+MSG_7AFA07FD
+puretaan täällä
+; decoded here
+MSG_22FBBBB2
+purkaa ja soittaa
+; decodes and plays
+MSG_441A0CA1
+asennettu
+; installed
+MSG_3DEA7C01
+ei asennettu (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_4DEE1DD3
+%ld paikka
+; %ld place
+MSG_4DD8A2E0
+%ld paikkaa
+; %ld places
+MSG_4A20BCD9
+ei vielä yhtään
+; none yet
+MSG_47E8C75F
+Käytä MUSIC:-liitosta
+; Use the MUSIC: assign
+MSG_4AE004BD
+liitetty
+; assigned
+MSG_5D2E5EC2
+ei liitetty nyt
+; not assigned now
+MSG_68FF039F
+Tulita uudelleen: poista
+; Fire again: remove
+MSG_30B1BFB1
+Lisää kansio...
+; Add a folder...
+MSG_4ACE7BF4
+enintään kahdeksan
+; eight at most
+MSG_50BCAC0E
+vain RTG
+; RTG only
+MSG_4D914B4E
+Automaattinen:
+; Automatic: 
+MSG_0F9ADE75
+Kiitokset
+; Credits
+MSG_589D7E42
+Järjestelmätiedot
+; System information
+MSG_345099C5
+Plex AmigaMCE:ssä
+; Plex in AmigaMCE
+MSG_718F9B3E
+(c) 2026 Brian King, MIT-lisenssillä
+; (c) 2026 Brian King, under the MIT licence
+MSG_36BA6F5C
+Fontit: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo ja Rubik (c) 2015 The Rubik Project Authors, kaikki SIL Open Font License 1.1 -lisenssillä. Fontit amce-pixel ja amce-galmuri ovat Pixelify Sansin ja Galmurin muokattuja versioita (Modified Versions).
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_2B3D5B66
+Koodi: libnix C -ajonaikainen kirjasto (vapaa). EaglePlayer-isäntä seuraa HippoPlayerin isäntää (MIT-lisenssi, (c) 2017 Kari-Pekka Koljonen).
+; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_321AE26A
+Käytetään, jos asennettu, ei mukana, kukin omalla lisenssillään: Amiga Game Selector, WHDLoad, AHI, MHI-ajurit, mpega.library, datatyypit.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_64ED99F8
+FLAC: flacdec.library (c) 2026 Renaud Schweingruber, mukana David Reidin dr_flac (vapaa tai MIT-0), käytetään, jos asennettu, ei mukana. Sitä saa käyttää ja levittää vapaasti omassa muuttamattomassa arkistossaan (Aminet: util/libs/flacdec).
+; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
+MSG_56CB434E
+Amiga on omistajansa tavaramerkki. Pelit, demot, musiikki ja kuvat kuuluvat tekijöilleen. Lisenssitekstit ovat Licences-laatikossa.
+; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
+MSG_302861BB
+Tämä käyttöliittymä ei olisi mahdollinen ilman Paul Vincen ja Amiga Game Selectorin valtavaa työtä.
+; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_69CE1669
+Videotoisto tulee myöhemmässä versiossa.
+; Video playback arrives in a later version.
+MSG_47318A8A
+Animaatiot
+; Animations
+MSG_29C163F7
+Kuvia ei löytynyt: AmigaMCE etsii niitä paikasta %s.
+; No pictures found: AmigaMCE looks for them in %s.
+MSG_6A91D3DF
+Paikassa %s ei ole kuvia.
+; %s has no pictures in it.
+MSG_40EDAFB4
+Ei %s:ta täällä
+; No %s here
+MSG_190B5576
+%s on tyhjä
+; %s is empty
+MSG_42D8D701
+Su
+; Sun
+MSG_4EA382E1
+Ma
+; Mon
+MSG_7AB4F425
+Ti
+; Tue
+MSG_74645757
+Ke
+; Wed
+MSG_0699308C
+To
+; Thu
+MSG_2663FBE8
+Pe
+; Fri
+MSG_38A72A77
+La
+; Sat
+MSG_46F2CEAE
+Tam
+; Jan
+MSG_278D4B82
+Hel
+; Feb
+MSG_42A7ED2B
+Maa
+; Mar
+MSG_03F51DF2
+Huh
+; Apr
+MSG_3BA7E226
+Tou
+; May
+MSG_46C131E2
+Kes
+; Jun
+MSG_44C12EBC
+Hei
+; Jul
+MSG_20EE8FD4
+Elo
+; Aug
+MSG_2CB1A4EF
+Syy
+; Sep
+MSG_11D1F3E9
+Lok
+; Oct
+MSG_0A3DC404
+Mar
+; Nov
+MSG_275E7A73
+Jou
+; Dec
+MSG_3705878B
+Ylös/Alas  siirrä    Oikea/Tuli  avaa    Return  soita    Vasen/Esc  takaisin
+; Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
+MSG_56178B52
+Ylös/Alas  valitse      Esc kahdesti  lopeta
+; Up/Down  choose      Esc twice  quit
+MSG_11D91495
+Esc 2 kertaa lopettaa
+; Esc twice quit
+MSG_4B5CD1EF
+Ylös/Alas  valitse      Oikea/Tuli  avaa      Esc kahdesti  lopeta
+; Up/Down  choose      Right/Fire  open      Esc twice  quit
+MSG_3804081F
+Tuli avaa  Esc 2x lopettaa
+; Fire open  Esc twice quit
+MSG_2BD6BD72
+Ylös/Alas  vieritä      Tuli/Return  katso      Vasen/Esc  takaisin
+; Up/Down  scroll      Fire/Return  view      Left/Esc  back
+MSG_4F05244A
+Tuli katso  Esc takaisin
+; Fire view  Esc back
+MSG_0E23C285
+Ylös/Alas  vieritä      Tuli/Return  soita      Vasen/Esc  takaisin
+; Up/Down  scroll      Fire/Return  play      Left/Esc  back
+MSG_67E35425
+Tuli soita  Esc takaisin
+; Fire play  Esc back
+MSG_169BF20A
+Ylös/Alas  siirrä    Tuli/Return  katso    Vasen/Esc  takaisin
+; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6DAF7CE6
+Ylös/Alas  siirrä    Tuli  kuvaesitys    Oikea  avaa    Vasen/Esc  takaisin
+; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
+MSG_1F838A3C
+Tuli esitys  Oikea avaa
+; Fire show  Right open
+MSG_11F23D61
+Ylös/Alas  siirrä    Tuli/Oikea  avaa    Vasen/Esc  takaisin
+; Up/Down  move    Fire/Right  open    Left/Esc  back
+MSG_41738E8F
+Tuli avaa  Esc takaisin
+; Fire open  Esc back
+MSG_6C808185
+Ylös/Alas  siirrä    Tuli/Return  soita    Vasen/Esc  takaisin
+; Up/Down  move    Fire/Return  play    Left/Esc  back
+MSG_59045BF0
+Ylös/Alas  siirrä    Tuli  käytä tätä palvelinta    Vasen/Esc  takaisin
+; Up/Down  move    Fire  use this server    Left/Esc  back
+MSG_481DF333
+Tuli käytä  Esc takaisin
+; Fire use it  Esc back
+MSG_29E8EF53
+Ylös/Alas  siirrä    Tuli/Return  soita    Oikea  tietoja    Vasen/Esc  takaisin
+; Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
+MSG_463F7CE7
+Tuli soita  Oikea tiedot
+; Fire play  Right info
+MSG_1710A7DF
+Ylös/Alas  siirrä    Oikea/Tuli  avaa    Vasen/Esc  takaisin
+; Up/Down  move    Right/Fire  open    Left/Esc  back
+MSG_341D99F5
+Ylös/Alas  siirrä    Oikea  tiedot    Tuli/Return  soita    Vasen/Esc  takaisin
+; Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
+MSG_0B4D231C
+Tuli avaa  Ret soita  Esc takaisin
+; Fire open  Ret play  Esc back
+MSG_3EBC8DC1
+Tuli/Return  soita      Ylös/Alas  vieritä      Vasen/Esc  takaisin
+; Fire/Return  play      Up/Down  scroll      Left/Esc  back
+MSG_6F2C1751
+Vasen/Oikea  valitse    Tuli  paina    Ylös/Alas  äänenvoimakkuus    Väli  tauko    Esc  takaisin
+; Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
+MSG_4372AA87
+Tuli paina  Ylös/Alas ääni  Esc takaisin
+; Fire press  Up/Dn vol  Esc back
+MSG_2B8E61B8
+Ylös/Alas  vieritä      Vasen/Esc  takaisin
+; Up/Down  scroll      Left/Esc  back
+MSG_642000D2
+Ylös/Alas vieritä  Esc takaisin
+; Up/Down scroll  Esc back
+MSG_79CC558D
+Muutettu %s
+; Changed %s
+MSG_79550836
+Tässä kansiossa ei ole kuvia.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld kuva
+; %ld picture
+MSG_6A487423
+%ld kuvaa
+; %ld pictures
+MSG_52C18255
+Tuli: kuvaesitys
+; Fire: slideshow
+MSG_178CD224
+Oikea: avaa kansio
+; Right: open the folder
+MSG_412F4EA4
+%ld kansio
+; %ld folder
+MSG_74791C75
+%ld kansiota
+; %ld folders
+MSG_15840E5E
+Tuli tai Oikea: avaa
+; Fire or Right: open
+MSG_6E4CA1B5
+Ei Fonts-laatikossa
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(tyhjä)
+; (empty)
+MSG_0ECC2045
+Ladataan kuvakaappausta...
+; Loading screenshot...
+MSG_65C00D26
+Äänenvoimakkuus %ld%%
+; Volume %ld%%
+MSG_17251C33
+Äänenvoimakkuus 100%
+; Volume 100%
+MSG_3827BF33
+Kohta %ld/%ld   Kuvio %ld   Rivi %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Kohta %ld/%ld
+; Position %ld of %ld
+MSG_5F643207
+Kohta %ld   Kuvio %ld   Rivi %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Puskurissa %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   katkoja %ld
+;    dropouts %ld
+MSG_44D22F83
+Yhdistetään...
+; Connecting...
+MSG_6038FAB1
+Puskuroidaan...
+; Buffering...
+MSG_5966858A
+Mono
+; Mono
+MSG_1E9E9F85
+Oikea
+; Right
+MSG_12773890
+Vasen
+; Left
+MSG_4D72110C
+Toisto
+; Playback
+MSG_6E6C1A7A
+MHI (sen purkama ja soittama)
+; MHI (decoded and played by it)
+MSG_7A38DB91
+(nimetön)
+; (no title)
+MSG_3CB15829
+   Kappale %ld/%ld
+;    Track %ld of %ld
+MSG_2B183663
+Tiedosto
+; File
+MSG_7FB0FF72
+Muoto
+; Format
+MSG_063F19EE
+Pysäytetty
+; Stopped
+MSG_170FF847
+Luetaan...
+; Reading...
+MSG_22FE7692
+Alkuperäinen
+; Original
+MSG_504BD8C0
+lähettää tiedoston sellaisenaan
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld/%ld kohteessa
+;    %ld of %ld in 
+MSG_0A088884
+Lähetyksessä
+; On air
+MSG_44471F44
+(asema ei kerro)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B soitettu %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, MHI:llä
+; , by MHI
+MSG_716687B8
+Mitään ei soiteta
+; Nothing playing
+MSG_085A357E
+   tekijä %s
+;    by %s
+MSG_47760A7D
+   alikappale %ld/%ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Näytteet
+; Samples
+MSG_61B4DC81
+Se oli viimeinen kappale
+; That was the last track
+MSG_2208340A
+Se oli listan viimeinen asema
+; That was the last station in the list
+MSG_3652522E
+Se oli kansion viimeinen moduuli
+; That was the last module in the folder
+MSG_1CAF7095
+Tässä moduulissa ei voi siirtyä
+; This module cannot be moved through
+MSG_6AA26665
+Nyt soi
+; Now playing
+MSG_0BBA80CF
+Kappaletta ei voitu soittaa
+; That track could not be played
+MSG_052FF533
+Kappaletta ei voitu aloittaa siitä
+; The track could not be started there
+MSG_369379DB
+Asema lopetti lähettämisen
+; The station stopped sending
+MSG_3F318CD7
+Moduuleja ei löytynyt. AmigaMCE etsii niitä paikoista %s ja %s (AGS:n valikkomusiikki).
+; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_6870F104
+Se soittaa ProTracker-moduulit itse ja satoja muita muotoja (OctaMED, TFMX, Future Composer, SID...) EaglePlayerin ja DeliTrackerin soittimilla, kaikki Amigan omalla äänellä.
+; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_674C644A
+Moduulit
+; Modules
+MSG_1B1E85CB
+C64-musiikki
+; C64 music
+MSG_7F6215F5
+Valikkomusiikki
+; Menu music
+MSG_1361020B
+Siinä kansiossa ei ole kuvia
+; No pictures in that folder
+MSG_46C7288D
+Liian monta tasoa auki
+; Too many levels open
+MSG_5116954E
+Kansiota ei voitu avata
+; Could not open that folder
+MSG_6FF9045E
+Kansiossa ei ole kuvia
+; That folder has no pictures
+MSG_4F992A62
+Kansiossa ei ole MP3- tai FLAC-tiedostoja
+; No MP3 or FLAC files in that folder
+MSG_15E6DCFA
+Kansiossa ei ole moduuleja
+; That folder has no modules
+MSG_6D9550B1
+Valikkoa ei voitu avata
+; Could not open that menu
+MSG_3030A110
+Valikko on tyhjä
+; That menu is empty
+MSG_74066526
+T:AmigaMCE-run-tiedostoa ei voitu kirjoittaa
+; Could not write T:AmigaMCE-run
+MSG_0C682AC4
+; %ld/%ld   %s   %s%s
+MSG_2D43D301
+   Kuvaesitys
+;    Slideshow
+MSG_359B5B48
+Vasen/Oikea  edellinen/seuraava    Tuli  tauko    Esc  takaisin
+; Left/Right  previous/next    Fire  pause    Esc  back
+MSG_7ED0D392
+Vasen/Oikea  edellinen/seuraava    Tuli  kuvaesitys    Esc  takaisin
+; Left/Right  previous/next    Fire  slideshow    Esc  back
+MSG_152E3E65
+Muisti ei riitä kuvankatseluun
+; Not enough memory for the viewer
+MSG_21238256
+%.50s ei lähettänyt
+; not sent by %.50s
+MSG_74BBD86D
+Esc  takaisin
+; Esc  back
+MSG_00FED3FC
+Ladataan Plexistä...
+; Loading from Plex...
+MSG_5123470D
+Se tila %.60s
+; That mode %.60s
+MSG_2EF5225D
+Näyttötilaa ei voitu avata
+; Could not open that screen mode
+MSG_4C560A92
+Yhteydet: pinon valitsema liitäntä
+; Connections: the stack's choice of interface
+MSG_247B55C3
+Yhteydet lähtevät tästä liitännästä
+; Connections go out from this interface
+MSG_61C33E78
+Pehmeän tyylin tiedostoja ei voitu ladata
+; The smooth style's files could not be loaded
+MSG_38B5BCC0
+Pehmeä: vain RTG-näytöillä
+; Smooth: on RTG screens only
+MSG_5D86BD77
+Musiikkitiedostot (MUSIC:)
+; Music files (MUSIC:)
+MSG_47B3C622
+Musiikkitiedostot: %.100s
+; Music files: %.100s
+MSG_46D8C4D9
+Musiikkitiedostot: Asetukset > Ääni > Musiikkikansiot
+; Music files: Settings > Sound > Music folders
+MSG_75470054
+TCP/IP-pinoa ei ole käynnissä: Plex tarvitsee verkon
+; No TCP/IP stack running: Plex needs networking
+MSG_05BF19DC
+Plex on pois päältä (Asetukset > Verkko > Plex)
+; Plex is turned off (Settings > Networking > Plex)
+MSG_370F28B1
+Muut kirjastot palvelimella %s
+; Other libraries on %s
+MSG_5CB8F506
+; Plex: %s
+MSG_3D6359D0
+Plex-palvelinta ei valittu: Asetukset > Verkko > Plex
+; No Plex server chosen: Settings > Networking > Plex
+MSG_12991ED4
+Eniten ääniä
+; Top voted
+MSG_59DBAEB1
+Kuunnelluimmat
+; Most listened to
+MSG_47B6B3B8
+Nousussa
+; Trending
+MSG_7CA786A9
+; Chiptune
+MSG_00D1A496
+; Demoscene
+MSG_65D70EE9
+Tyylilajit
+; Genres
+MSG_2062DC6D
+Maat
+; Countries
+MSG_7B170497
+Palvelin vaatii kirjautumistunnuksen: katso Tietoja > Plex AmigaMCE:ssä
+; The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_229E5121
+Palvelin vastasi jotain odottamatonta
+; The server answered with something unexpected
+MSG_49CF76D8
+Siellä ei ole musiikkikirjastoja
+; No music libraries there
+MSG_3EEA8333
+Siellä ei ole kuvakirjastoja
+; No photo libraries there
+MSG_027BDF10
+Täällä ei ole mitään
+; Nothing here
+MSG_07C4F203
+Plex-palvelimeen ei saatu yhteyttä
+; Could not reach the Plex server
+MSG_1CFE72A3
+Näytä kuva
+; Show the photo
+MSG_4FD7ED09
+Kuvaesitys näistä %ld kuvasta
+; Slideshow of these %ld photos
+MSG_7BB6085B
+Ei mitään listassa
+; Nothing listed
+MSG_46D7374C
+Täällä ei ole asemia, joita AmigaMCE osaa soittaa
+; No stations here that AmigaMCE can play
+MSG_1BED60DF
+Luetaan vielä palvelimelta: hetki
+; Still being read from the server: a moment
+MSG_7F58E800
+Etsitään Plex-palvelimia...  Esc lopettaa
+; Looking for Plex servers...  Esc to give up
+MSG_13C1CD18
+Kysytään palvelimelta %.40s...  Esc lopettaa
+; Asking %.40s...  Esc to give up
+MSG_04730DAC
+Kysytään radio-browser.infolta...  Esc lopettaa
+; Asking radio-browser.info...  Esc to give up
+MSG_497165DA
+Plex-kuvat: Plex on pois päältä (Asetukset > Verkko > Plex)
+; Plex photos: Plex is turned off (Settings > Networking > Plex)
+MSG_6273A841
+Plex-kuvat: valitse palvelin (Asetukset > Verkko > Plex)
+; Plex photos: choose a server (Settings > Networking > Plex)
+MSG_276888E6
+Plex-kuvat palvelimella %.80s
+; Plex photos on %.80s
+MSG_62B4E865
+; Plex: %.100s
+MSG_2550824B
+Plex-palvelin valittu
+; Plex server chosen
+MSG_35BE063F
+AmigaMCE soittaa musiikkia verkkosi Plex Media Serveriltä: sen musiikkikirjastot artistin ja albumin mukaan, kansikuvineen. Palvelin tekee jokaisesta kappaleesta MP3:n, jonka tämä Amiga osaa soittaa: 22kHz mono 68020/030:lle, 24kHz stereo 68040/060:lle, enemmän nopealle, ja parhaan laatunsa, kun MHI-ajuri purkaa MP3:n (Asetukset > Ääni). Nopealla Amigalla tai MHI:n kanssa, kun Asetukset > Verkko > Plex > Pyydä heikompilaatuista ääntä on pois päältä, MP3-tiedostot soitetaan sellaisenaan, ja nopealla Amigalla myös FLAC-tiedostot, jos flacdec.library on asennettu; muut muodot muunnetaan aina. Asetukset > Verkko > Plex > Plex kytkee kaiken pois.
+; AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_2FBD9CB6
+Palvelimen löytäminen: Asetukset > Verkko > Plex > Plex-palvelin kysyy verkolta (Plexin GDM); valitse yksi, niin se muistetaan. Tai aseta sen osoite Shellistä: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+MSG_6A05B8D3
+Kirjautuminen: palvelin pyytää omistajansa tunnusta. Löydät sen Plex Webistä (kohteen Tiedot > Näytä XML: X-Plex-Token osoitteessa) ja asetat sen Shellistä: SetEnv SAVE AmigaMCE/PlexToken <token>. Kirjautuminen plex.tv:hen vaatii HTTPS:n (AmiSSL) ja tulee myöhemmin.
+; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
+MSG_7445FC0C
+Palvelin: %s
+; Server: %s
+MSG_6D54C528
+Tunnus: asetettu
+; Token: set
+MSG_59B6EDB9
+Tunnus: ei asetettu
+; Token: not set
+MSG_0B620CC7
+MP3: purkaa MHI-ajuri %.40s
+; MP3: decoded by the MHI driver %.40s
+MSG_1133EF71
+MP3: purkaa mpega.library
+; MP3: decoded by mpega.library
+MSG_04F04DC5
+MP3: ei purkajaa (mpega.library tai MHI)
+; MP3: no decoder (mpega.library or MHI)
+MSG_6FC4AC95
+FLAC: muunnetaan MP3:ksi (flacdec.library ei ole asennettu)
+; FLAC: converted to MP3 (flacdec.library is not installed)
+MSG_226669D7
+FLAC: muunnetaan MP3:ksi (liian hidas purkamaan täällä)
+; FLAC: converted to MP3 (too slow to decode here)
+MSG_3521D30E
+FLAC: muunnetaan MP3:ksi (heikompi laatu on päällä)
+; FLAC: converted to MP3 (lower quality audio is on)
+MSG_2B51B45B
+FLAC: soitetaan sellaisenaan, flacdec.library
+; FLAC: played as stored, by flacdec.library
+MSG_586857BF
+Ääni: AHI, 16 bittiä
+; Sound: AHI, 16-bit
+MSG_0F2AADBB
+Ääni: Paula, 8 bittiä
+; Sound: Paula, 8-bit
+MSG_5353700C
+Muoto:    %s
+; Format:   %s
+MSG_4B7B9DA5
+Maa:      %s
+; Country:  %s
+MSG_1399F81C
+Ääniä:    %s
+; Votes:    %s
+MSG_55E8E50A
+Tagit:    %s
+; Tags:     %s
+MSG_64C287CF
+Kotisivu: %s
+; Homepage: %s
+MSG_5A5309D7
+Virta:    %s
+; Stream:   %s
+MSG_18A292C0
+Tuli asemaan sen listassa soittaa sen.
+; Fire on the station in its list plays it.
+MSG_510F21FD
+Enintään kahdeksan musiikkikansiota: poista ensin yksi
+; Eight music folders at most: take one out first
+MSG_5143C289
+Kansio, jossa on MP3- tai FLAC-tiedostoja
+; A folder of MP3 or FLAC files
+MSG_1DC3AA14
+Lisää
+; Add
+MSG_2B8275A5
+Kansiota ei löytynyt
+; That folder could not be found
+MSG_6F975CF8
+Kansio on jo Musiikissa
+; That folder is in Music already
+MSG_5B08757B
+Kansio lisätty: sen musiikki on Musiikin alla
+; Folder added: its music is under Music
+MSG_2C2767AF
+Tyyli: Pehmeä vaatii RTG-näytön
+; Style: Smooth needs an RTG screen
+MSG_14386364
+Tämä Amiga soittaa Plexin heikompaa laatua: alkuperäiset tiedostot ovat liikaa
+; This Amiga plays Plex's lower quality: the files as stored are too much
+MSG_5CBCDB5D
+Liitäntä ei ole ylhäällä
+; That interface is not up
+MSG_646AFCF3
+MHI:tä ei ole asennettu (sen ajurit LIBS:MHI:ssä)
+; MHI is not installed (its drivers in LIBS:MHI)
+MSG_5561B1F7
+FLAC: musiikkitiedostot, ja Plexin kappaleet sellaisenaan nopealla Amigalla
+; FLAC: music files, and Plex's tracks as stored on a fast Amiga
+MSG_34836301
+Asenna flacdec.library (Aminet: util/libs/flacdec) FLACia varten
+; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
+MSG_7AE98FE6
+Tästä lähtien avatut asemaluettelot
+; Station lists opened from now on
+MSG_5AA18328
+Seuraava asema tai kappale alkoi
+; The next station or track started
+MSG_415E54B9
+Mikään palvelin ei vastannut: Automaattinen pysyy
+; None of the servers answered: Automatic kept
+MSG_7800A723
+MP3:n purkaa MHI: radio, Plex (parhaalla laadulla) ja tiedostot
+; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_605E617D
+MP3:n purkaa täällä mpega.library
+; MP3 decoded here by mpega.library
+MSG_59AEDDD1
+AHI seuraavasta kappaleesta tai asemasta; moduulit pysyvät Paulalla
+; AHI from the next track or station on; modules stay on Paula
+MSG_06B72AB3
+AHI: radio, Plex ja musiikkitiedostot; moduulit pysyvät Paulalla
+; AHI: radio, Plex and music files; modules stay on Paula
+MSG_4975E21A
+Paula soittaa kaiken
+; Paula plays everything
+MSG_57C64449
+Musiikki näyttää MUSIC:in, kun se on liitetty
+; Music lists MUSIC: when it is assigned
+MSG_0BC8BC2B
+Musiikki jättää MUSIC:in pois
+; Music leaves MUSIC: out
+MSG_34772BBE
+Tulita uudelleen poistaaksesi kansion Musiikista (sen tiedostot jäävät)
+; Fire again to take this folder out of Music (its files stay)
+MSG_4BA4B0A8
+Kansio poistettu Musiikista
+; Folder taken out of Music
+MSG_746B08BF
+Paina Esc uudelleen lopettaaksesi AmigaMCE:n
+; Press Esc again to quit AmigaMCE
+MSG_16ABF123
+AmigaMCE vaatii Kickstart 3.0:n tai uudemman.\n
+; AmigaMCE needs Kickstart 3.0 or newer.\n
+MSG_43383FA3
+AmigaMCE ei voinut avata näyttöään.\n
+; AmigaMCE could not open its screen.\n
+MSG_3D0CDD4E
+Tallennettu näyttötila ei ole käytettävissä täällä: käytetään Automaattista
+; Saved screen mode not available here: using Automatic
+MSG_1767B111
+Tämä moduuli vaatii 68020:n tai paremman miksaukseen
+; This module needs a 68020 or better to be mixed
+MSG_3DD51BC4
+Muisti ei riitä tämän moduulin miksaamiseen
+; Not enough memory to mix this module
+MSG_69F7300F
+AmigaMCE ei osaa soittaa tätä moduulia
+; Not a module AmigaMCE can play
+MSG_3F4BE355
+Mikseriä ei voitu käynnistää
+; Could not start the mixer
+MSG_5537D534
+Moduulitiedosto on katkennut
+; The module file is cut short
+MSG_6E9632F2
+%ld-kanavaiset moduulit vaativat enemmän kuin Paulan neljä
+; %ld-channel modules need more than Paula's four
+MSG_0B3B1D28
+pakattu PowerPackerilla
+; packed with PowerPacker
+MSG_074FA98E
+pakattu XPK:lla
+; packed with XPK
+MSG_3E5C3646
+pakattu Pack-Icellä
+; packed with Pack-Ice
+MSG_2570FA54
+MED/OctaMED-moduuli
+; a MED/OctaMED module
+MSG_090E157E
+FastTracker 2 -moduuli (XM)
+; a FastTracker 2 module (XM)
+MSG_4BC0A0C8
+Scream Tracker 3 -moduuli (S3M)
+; a Scream Tracker 3 module (S3M)
+MSG_41529869
+Impulse Tracker -moduuli (IT)
+; an Impulse Tracker module (IT)
+MSG_451A18EF
+AHX-moduuli
+; an AHX module
+MSG_177C7924
+Moduulitiedostoa ei voitu avata
+; Could not open the module file
+MSG_57FD81FC
+Pakattu: %s, mutta %s
+; Packed with %s, but %s
+MSG_59FF2336
+pakkaaja
+; a packer
+MSG_0CB7D3B5
+Tämä tiedosto on %s, jota AmigaMCE ei osaa soittaa
+; This file is %s, which AmigaMCE cannot play
+MSG_3575C0BB
+Chip-muisti ei riitä sen näytteille (%lu KB)
+; Not enough chip memory for its samples (%lu KB)
+MSG_686FC405
+Muisti ei riitä tälle moduulille
+; Not enough memory for that module
+MSG_00592588
+Vapaata CIA-ajastinta ei ole musiikin soittoon
+; No CIA timer free to play music with
+MSG_1CC1D05F
+Moduulia ei ole ladattu
+; No module loaded
+MSG_748B0D26
+Toinen ohjelma käyttää äänikanavia
+; The audio channels are in use by another program
+MSG_2AC2E3CB
+Ei aseman osoite
+; Not a station's address
+MSG_34D70E8E
+Ei socketia (onko TCP/IP-pino käynnissä?)
+; No socket (is the TCP/IP stack running?)
+MSG_6A2F5761
+Yhteys hylättiin
+; The connection was refused
+MSG_262B09BC
+Peruttu
+; Cancelled
+MSG_4641030F
+Palvelin ei vastannut
+; The server did not answer
+MSG_2ACCD57C
+Palvelin lakkasi vastaamasta
+; The server stopped answering
+MSG_05C477DC
+Mikään Plex-palvelin ei vastannut tässä verkossa
+; No Plex server answered on this network
+MSG_4A212D5E
+Palvelinta ei löytynyt (DNS)
+; That server could not be found (DNS)
+MSG_68C8EB43
+Palvelin vastaa vain HTTPS:llä
+; The server only answers over HTTPS
+MSG_563B6546
+Palvelin ohjasi meidät paikkaan, jonne emme voi seurata
+; The server sent us somewhere we cannot follow
+MSG_515157E5
+Palvelin vastasi %ld
+; The server answered %ld
+MSG_64F654D3
+Verkkoprosessia ei voitu käynnistää
+; The network process could not start
+MSG_441552F7
+Artistit
+; Artists
+MSG_5C7535ED
+Albumit
+; Albums
+MSG_5BBD0EC3
+Äskettäin lisätyt
+; Recently added
+MSG_201D2C97
+%lu kuva
+; %lu photo
+MSG_71EDAAEC
+%lu kuvaa
+; %lu photos
+MSG_7C81E0F2
+%lu kohde
+; %lu item
+MSG_01746B13
+%lu kohdetta
+; %lu items
+MSG_4C50B8D0
+%lu kappale
+; %lu track
+MSG_4612A899
+%lu kappaletta
+; %lu tracks
+MSG_4E1664E0
+%lu albumi
+; %lu album
+MSG_00405369
+%lu albumia
+; %lu albums
+MSG_0D3B3C12
+(nimetön)
+; (no name)
+MSG_7EE6D283
+%s: ei MP3, eikä palvelin tarjonnut tapaa muuntaa sitä
+; %s: not MP3, and the server gave no way to convert it
+MSG_6BBD2577
+Se muoto
+; That format
+MSG_134FDFA5
+Kappale %.10s
+; Track %.10s   
+MSG_7286EE6A
+; mono
+MSG_4C87A64D
+; stereo
+MSG_43D67FB2
+monikanava
+; multi
+MSG_379F025B
+1 musiikkitiedosto
+; 1 music file
+MSG_0A57AE24
+%ld musiikkitiedostoa
+; %ld music files
+MSG_4BE4B028
+%s%ld kansio
+; %s%ld folder
+MSG_54019F41
+%s%ld kansiota
+; %s%ld folders
+MSG_07A36F34
+Ei voitu lukea
+; Could not be read
+MSG_523F6D57
+AHI:ta ei voitu avata (sen asetukset: tila?)
+; AHI could not be opened (its Preferences: a mode?)
+MSG_59B9295C
+Aseman palvelinta ei löytynyt (DNS)
+; The station's server could not be found (DNS)
+MSG_3708365D
+Asema hylkäsi yhteyden
+; The station refused the connection
+MSG_7D8C9876
+Asema ei vastannut
+; The station did not answer
+MSG_2A3F28C9
+Tiedostoa ei voitu lukea
+; The file could not be read
+MSG_4375E450
+Palvelin lakkasi lähettämästä
+; The server stopped sending
+MSG_2919BAF1
+Asema sulki virran
+; The station closed the stream
+MSG_0761145C
+Tiedostoa ei voitu avata
+; The file could not be opened
+MSG_2D2A3CF1
+Tämä asema lähettää vain HTTPS:llä, jota AmigaMCE ei vielä osaa soittaa
+; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_103190A0
+AmigaMCE ei voi seurata tämän aseman osoitetta
+; The station's address is not one AmigaMCE can follow
+MSG_65B74193
+%s vastasi %ld
+; %s answered %ld
+MSG_4163EE37
+Palvelin
+; The server
+MSG_3B0705F8
+Asema
+; The station
+MSG_37840EF9
+Aseman soittolistassa ei ole virtaa, jota AmigaMCE osaa soittaa
+; The station's playlist has no stream AmigaMCE can play
+MSG_47FA6F71
+%s lähettää %s, ei MP3
+; %s sends %s, not MP3
+MSG_53CE943A
+Asema ohjasi meitä eteenpäin liian monta kertaa
+; The station sent us on too many times
+MSG_5B0AAE77
+Virtaa ei voitu purkaa
+; The stream could not be decoded
+MSG_10039953
+Vain tämän Amigan musiikkitiedostot soivat WAV-, AIFF- tai 8SVX-muodossa
+; Only music files on this Amiga play as WAV, AIFF or 8SVX
+MSG_3E5CE903
+Ei sellainen WAV, AIFF tai 8SVX, jota AmigaMCE soittaa (pakattu?)
+; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_52A6DB2B
+MHI-ajuria ei voitu avata (Asetukset > Ääni)
+; The MHI driver could not be opened (Settings > Sound)
+MSG_74E4B952
+MHI-ajurin purkaja on käytössä tai puuttuu
+; The MHI driver's decoder is in use, or not there
+MSG_166B781B
+Muisti ei riitä MHI:n puskureille
+; Not enough memory for MHI's buffers
+MSG_03D74A28
+Ei vapaata signaalia
+; No signal free
+MSG_2F19A1CE
+Kappale loppui ennen kuin sen musiikki alkoi
+; The track ended before its music began
+MSG_755A0080
+Kappale loppui ennen sitä kohtaa
+; The track ended before that time
+MSG_1186B14C
+Virta ei näytä MP3:lta
+; The stream does not look like MP3
+MSG_3AC77067
+Muisti ei riitä aseman soittamiseen
+; Not enough memory to play a station
+MSG_41C55AEA
+Radioprosessia ei voitu käynnistää
+; Could not start the radio process
+MSG_6A5609A3
+Ladataan %.80s
+; Loading %.80s
+MSG_02281E0C
+Ei voitu näyttää %.80s
+; Could not show %.80s
+MSG_158F4FA3
+Muisti ei riitä: %.70s
+; Not enough memory for %.70s
