@@ -527,7 +527,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         pre_thumb = NULL;
     }
     if (!pre && !pre_thumb) {
-        sprintf(msg, "Loading %.80s", label);
+        sprintf(msg, _("Loading %.80s"), label);
         show_message(g, msg);
     }
 
@@ -662,7 +662,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             }
         }
         if (!o) {
-            sprintf(msg, "Could not show %.80s", label);
+            sprintf(msg, _("Could not show %.80s"), label);
             show_message(g, msg);
             return FALSE;
         }
@@ -671,7 +671,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             GetDTAttrs(o, PDTA_BitMap, (ULONG)&src, TAG_END);
         if (!src || !bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
             DisposeDTObject(o);
-            sprintf(msg, "Could not show %.80s", label);
+            sprintf(msg, _("Could not show %.80s"), label);
             show_message(g, msg);
             return FALSE;
         }
@@ -706,7 +706,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         if (o)
             DisposeDTObject(o);
         FreeVec(target);
-        sprintf(msg, "Not enough memory for %.70s", label);
+        sprintf(msg, _("Not enough memory for %.70s"), label);
         show_message(g, msg);
         return FALSE;
     }

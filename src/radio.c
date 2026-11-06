@@ -115,7 +115,7 @@ static int station_row(struct fill *x, char **f, int n)
     utf8_to_latin1(name);
     squeeze_spaces(name);
     if (!name[0])
-        amce_strlcpy(name, "(no name)", sizeof(name));
+        amce_strlcpy(name, _("(no name)"), sizeof(name));
     amce_strlcpy(tags, col(f, n, x->c_tags), sizeof(tags));
     utf8_to_latin1(tags);
     squeeze_spaces(tags);

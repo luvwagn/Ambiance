@@ -16,6 +16,13 @@ static void check(const char *what, int ok)
         fails++;
 }
 
+/* lang.c logs which language it opened: not needed here */
+void amce_log(const char *what, const char *detail)
+{
+    (void)what;
+    (void)detail;
+}
+
 int main(void)
 {
     struct SongInfo si;

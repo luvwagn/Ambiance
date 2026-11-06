@@ -667,7 +667,7 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
     lines[n++][0] = 0;
     t[0] = 0;
     if (si->track[0])
-        sprintf(t, "Track %.10s   ", si->track);
+        sprintf(t, _("Track %.10s   "), si->track);
     if (si->ms)
         sprintf(t + strlen(t), "%lu:%02lu", (unsigned long)(si->ms / 60000),
                 (unsigned long)(si->ms / 1000 % 60));
@@ -681,8 +681,8 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
         sprintf(t + strlen(t), ", %s", fmt_khz(si->rate, k));
     }
     if (si->channels)
-        sprintf(t + strlen(t), " %s", si->channels == 1 ? "mono" : si->channels == 2 ? "stereo"
-                                                                                   : "multi");
+        sprintf(t + strlen(t), " %s", si->channels == 1 ? _("mono") : si->channels == 2 ? _("stereo")
+                                                                                     : _("multi"));
     if (si->bits && strcmp(si->fmt, "MP3"))
         sprintf(t + strlen(t), ", %lu-bit", (unsigned long)si->bits);
     amce_strlcpy(lines[n++], t, 96);
@@ -736,12 +736,12 @@ int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG a
     amce_strlcpy(lines[n++], FilePart((STRPTR)dir), 96);
     lines[n][0] = 0;
     if (c.files == 1)
-        strcpy(lines[n], "1 music file");
+        strcpy(lines[n], _("1 music file"));
     else if (c.files)
-        sprintf(lines[n], "%ld music files", (long)c.files);
+        sprintf(lines[n], _("%ld music files"), (long)c.files);
     if (c.dirs)
-        sprintf(lines[n] + strlen(lines[n]), "%s%ld folder%s", c.files ? ", " : "",
-                (long)c.dirs, c.dirs == 1 ? "" : "s");
+        sprintf(lines[n] + strlen(lines[n]), c.dirs == 1 ? _("%s%ld folder") : _("%s%ld folders"),
+                c.files ? ", " : "", (long)c.dirs);
     n++;
     if (art && !song_folder_art(dir, art, artmax) && c.files) {
         struct SongInfo si;
@@ -783,7 +783,7 @@ int song_details(const char *path, char lines[][96], int max, char *art, LONG ar
     if (is_dir(path))
         return song_dir_lines(path, lines, max, art, artmax, FALSE);
     if (!song_info(path, &si, art, artmax, FALSE)) {
-        amce_strlcpy(lines[0], "Could not be read", 96);
+        amce_strlcpy(lines[0], _("Could not be read"), 96);
         return 1;
     }
     return song_lines(path, &si, lines, max);

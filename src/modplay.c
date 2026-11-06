@@ -646,9 +646,9 @@ static const char *layout_problem(int rc, int channels)
     static char m[64];
     switch (rc) {
     case PT_ERR_SHORT:
-        return "The module file is cut short";
+        return _("The module file is cut short");
     case PT_ERR_CHANNELS:
-        sprintf(m, "%ld-channel modules need more than Paula's four", (long)channels);
+        sprintf(m, _("%ld-channel modules need more than Paula's four"), (long)channels);
         return m;
     default:
         return NULL;
@@ -682,22 +682,22 @@ static BOOL pc_format(const UBYTE *h, ULONG n)
 static const char *packed_kind(const UBYTE *h, LONG n)
 {
     if (n >= 4 && !memcmp(h, "PP20", 4))
-        return "packed with PowerPacker";
+        return _("packed with PowerPacker");
     if (n >= 4 && !memcmp(h, "XPKF", 4))
-        return "packed with XPK";
+        return _("packed with XPK");
     if (n >= 4 && (!memcmp(h, "ICE!", 4) || !memcmp(h, "Ice!", 4)))
-        return "packed with Pack-Ice";
+        return _("packed with Pack-Ice");
     if (n >= 4 && (!memcmp(h, "MMD0", 4) || !memcmp(h, "MMD1", 4) || !memcmp(h, "MMD2", 4) ||
                    !memcmp(h, "MMD3", 4)))
-        return "a MED/OctaMED module";
+        return _("a MED/OctaMED module");
     if (n >= 17 && !memcmp(h, "Extended Module: ", 17))
-        return "a FastTracker 2 module (XM)";
+        return _("a FastTracker 2 module (XM)");
     if (n >= 48 && !memcmp(h + 44, "SCRM", 4))
-        return "a Scream Tracker 3 module (S3M)";
+        return _("a Scream Tracker 3 module (S3M)");
     if (n >= 4 && !memcmp(h, "IMPM", 4))
-        return "an Impulse Tracker module (IT)";
+        return _("an Impulse Tracker module (IT)");
     if (n >= 4 && !memcmp(h, "THX", 3))
-        return "an AHX module";
+        return _("an AHX module");
     return NULL;
 }
 
@@ -735,7 +735,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh) {
-        amce_strlcpy(err, "Could not open the module file", errmax);
+        amce_strlcpy(err, _("Could not open the module file"), errmax);
         return FALSE;
     }
     Seek(fh, 0, OFFSET_END);
@@ -761,7 +761,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             rc = pt_layout(head, (ULONG)got, mlen, &mp.lay, &chans);
         }
         if (uwhy) {
-            sprintf(m, "Packed with %s, but %s", packer[0] ? packer : "a packer", uwhy);
+            sprintf(m, _("Packed with %s, but %s"), packer[0] ? packer : _("a packer"), uwhy);
             amce_strlcpy(err, m, errmax);
             FreeVec(mem);
             return FALSE;
@@ -821,11 +821,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         if ((why = layout_problem(rc, chans)))
             amce_strlcpy(m, why, sizeof(m));
         else if (pk && !eerr[0])
-            sprintf(m, "This file is %s, which AmigaMCE cannot play", pk);
+            sprintf(m, _("This file is %s, which AmigaMCE cannot play"), pk);
         else if (eerr[0])
             amce_strlcpy(m, eerr, sizeof(m));
         else
-            amce_strlcpy(m, "Not a module AmigaMCE can play", sizeof(m));
+            amce_strlcpy(m, _("Not a module AmigaMCE can play"), sizeof(m));
         amce_strlcpy(err, m, errmax);
         return FALSE;
     }
@@ -842,11 +842,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             Close(fh);
         FreeVec(mem);
         if (!mp.smp && mp.hdr && mp.pat && mp.pt) {
-            sprintf(m, "Not enough chip memory for its samples (%lu KB)",
+            sprintf(m, _("Not enough chip memory for its samples (%lu KB)"),
                     (unsigned long)((mp.lay.smp_len + 1023) >> 10));
             amce_strlcpy(err, m, errmax);
         } else {
-            amce_strlcpy(err, "Not enough memory for that module", errmax);
+            amce_strlcpy(err, _("Not enough memory for that module"), errmax);
         }
         if (!mp.smp)
             mp.smp_size = 0;
@@ -886,7 +886,7 @@ static BOOL play_eagle(char *err, LONG errmax)
     if (ep_own_timer()) {
         timers_close();                     /* it takes a CIA timer of its own */
     } else if (!mp.cia && !timers_open()) {
-        amce_strlcpy(err, "No CIA timer free to play music with", errmax);
+        amce_strlcpy(err, _("No CIA timer free to play music with"), errmax);
         return FALSE;
     }
     Disable();
@@ -911,7 +911,7 @@ static BOOL play_eagle(char *err, LONG errmax)
 BOOL mp_play(char *err, LONG errmax)
 {
     if (!mp_loaded()) {
-        amce_strlcpy(err, "No module loaded", errmax);
+        amce_strlcpy(err, _("No module loaded"), errmax);
         return FALSE;
     }
     mp.anc_on = FALSE;                      /* the tempo anchored anew */
@@ -924,7 +924,7 @@ BOOL mp_play(char *err, LONG errmax)
         /* through AHI, or MP3 by MHI: Paula's channels are theirs to take */
         audio_close();
     } else if (!audio_open()) {
-        amce_strlcpy(err, "The audio channels are in use by another program", errmax);
+        amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
         return FALSE;
     }
     if (mp.engine == ENG_EAGLE)
@@ -949,7 +949,7 @@ BOOL mp_play(char *err, LONG errmax)
         return TRUE;
     }
     if (!mp.cia && !timers_open()) {
-        amce_strlcpy(err, "No CIA timer free to play music with", errmax);
+        amce_strlcpy(err, _("No CIA timer free to play music with"), errmax);
         audio_close();
         return FALSE;
     }
@@ -1358,7 +1358,7 @@ static BOOL load_stream(const char *url, const char *name, const char *tag, UWOR
     mp_stop();
     module_free();
     if (!file && amce_strnicmp(url, "http", 4)) {
-        amce_strlcpy(err, "Not a station's address", errmax);
+        amce_strlcpy(err, _("Not a station's address"), errmax);
         return FALSE;
     }
     mp.engine = ENG_RADIO;

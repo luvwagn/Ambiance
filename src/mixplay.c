@@ -232,7 +232,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         FreeVec(mod);
         amce_strlcpy(err, (SysBase->AttnFlags & AFF_68020)
                               ? "This module needs modplug.library, which is not installed"
-                              : "This module needs a 68020 or better to be mixed",
+                              : _("This module needs a 68020 or better to be mixed"),
                      errmax);
         return FALSE;
     }
@@ -242,7 +242,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     }
     if (!(mx.handle = MP_Init())) {
         FreeVec(mod);
-        amce_strlcpy(err, "Not enough memory to mix this module", errmax);
+        amce_strlcpy(err, _("Not enough memory to mix this module"), errmax);
         return FALSE;
     }
     settings();
@@ -251,7 +251,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     if (!mx.file) {
         MP_Exit(mx.handle);
         mx.handle = NULL;
-        amce_strlcpy(err, "Not a module AmigaMCE can play", errmax);
+        amce_strlcpy(err, _("Not a module AmigaMCE can play"), errmax);
         return FALSE;
     }
     mx.title[0] = 0;
@@ -328,7 +328,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     mx.tmp = AllocVec(HALF * 2, MEMF_ANY);
     if (!mx.chip || !mx.tmp) {
         mx_stop();
-        amce_strlcpy(err, "Not enough memory to mix this module", errmax);
+        amce_strlcpy(err, _("Not enough memory to mix this module"), errmax);
         return FALSE;
     }
     mx.quit = mx.ended = mx.paused = FALSE;
@@ -338,7 +338,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
                                 NP_Priority, 5, NP_StackSize, 32768, TAG_DONE);
     if (!mx.proc) {
         mx_stop();
-        amce_strlcpy(err, "Could not start the mixer", errmax);
+        amce_strlcpy(err, _("Could not start the mixer"), errmax);
         return FALSE;
     }
     for (i = 0; i < 50 && mx.sig < 0; i++)

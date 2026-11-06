@@ -379,16 +379,16 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
 void plex_section_menu(const char *sec, struct ItemList *l)
 {
     static const struct { const char *label, *fmt; } rows[] = {
-        { "Artists", "/library/sections/%s/all?type=8&sort=titleSort" },
-        { "Albums", "/library/sections/%s/all?type=9&sort=titleSort" },
-        { "Recently added", "/library/sections/%s/recentlyAdded" },
+        { N_("Artists"), "/library/sections/%s/all?type=8&sort=titleSort" },
+        { N_("Albums"), "/library/sections/%s/all?type=9&sort=titleSort" },
+        { N_("Recently added"), "/library/sections/%s/recentlyAdded" },
     };
     char k[160];
     int i;
     for (i = 0; i < 3; i++) {
         struct Item *it;
         sprintf(k, rows[i].fmt, sec);
-        if ((it = list_add(l, rows[i].label, k, "", IT_PLEXDIR)))
+        if ((it = list_add(l, _(rows[i].label), k, "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
     }
 }
@@ -472,7 +472,7 @@ static void flush_photo(struct fill *x)
         sprintf(dims, "%lu x %lu", (unsigned long)x->ph_w, (unsigned long)x->ph_h);
     sprintf(path, "%s\tphoto\t%s\t\t%s\t%s\t\t%s", x->ph_part[0] ? x->ph_part : "-",
             x->ph_thumb[0] ? x->ph_thumb : x->ph_part, dims, x->ph_date, x->ph_summary);
-    if (!(it = list_add(x->l, x->ph_title[0] ? x->ph_title : "(no title)", path, x->ph_date,
+    if (!(it = list_add(x->l, x->ph_title[0] ? x->ph_title : _("(no title)"), path, x->ph_date,
                         IT_PLEXPHOTO))) {
         x->full = TRUE;
         return;
@@ -496,7 +496,7 @@ static void flush_track(struct fill *x)
             (unsigned long)x->t_kbps, (unsigned long)x->t_ch, (unsigned long)x->t_rate,
             x->t_thumb, (unsigned long)x->t_size, x->t_album_rk, x->t_artist_rk);
     dur_text(x->t_ms, tag);
-    if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : "(no title)", path, tag,
+    if (!(it = list_add(x->l, x->t_title[0] ? x->t_title : _("(no title)"), path, tag,
                         IT_PLEXTRACK))) {
         x->full = TRUE;
         return;
@@ -649,11 +649,11 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         if ((v = xml_attr(a, n, "year")))
             amce_strlcpy(tag, v, sizeof(tag));
         else if (photo && (v = xml_attr(a, n, "leafCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? "%lu photo" : "%lu photos", (unsigned long)num(v));
+            sprintf(tag, num(v) == 1 ? _("%lu photo") : _("%lu photos"), (unsigned long)num(v));
         else if (photo && (v = xml_attr(a, n, "childCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? "%lu item" : "%lu items", (unsigned long)num(v));
+            sprintf(tag, num(v) == 1 ? _("%lu item") : _("%lu items"), (unsigned long)num(v));
         else if ((v = xml_attr(a, n, "leafCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? "%lu track" : "%lu tracks", (unsigned long)num(v));
+            sprintf(tag, num(v) == 1 ? _("%lu track") : _("%lu tracks"), (unsigned long)num(v));
         {
             /* what the details pane shows of it: after the key, by tabs */
             static char more[700];
@@ -665,12 +665,12 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
             count[0] = 0;
             if (!strcmp(type, "artist") && num(xml_attr(a, n, "childCount")))
-                sprintf(count, num(xml_attr(a, n, "childCount")) == 1 ? "%lu album" : "%lu albums",
+                sprintf(count, num(xml_attr(a, n, "childCount")) == 1 ? _("%lu album") : _("%lu albums"),
                         (unsigned long)num(xml_attr(a, n, "childCount")));
             else if (!strcmp(type, "photo"))
                 amce_strlcpy(count, tag, sizeof(count));    /* photos, or items */
             else if (num(xml_attr(a, n, "leafCount")))
-                sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? "%lu track" : "%lu tracks",
+                sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? _("%lu track") : _("%lu tracks"),
                         (unsigned long)num(xml_attr(a, n, "leafCount")));
             text(xml_attr(a, n, "studio"), studio, sizeof(studio));
             summary_text(xml_attr(a, n, "summary"), summary, sizeof(summary));
@@ -680,7 +680,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         }
     }
     {
-        struct Item *it = list_add(x->l, title[0] ? title : "(no name)", key, tag, IT_PLEXDIR);
+        struct Item *it = list_add(x->l, title[0] ? title : _("(no name)"), key, tag, IT_PLEXDIR);
         if (!it) {
             x->full = TRUE;
             return 0;
@@ -846,7 +846,7 @@ const char *plex_why(const struct Item *it)
     static char m[80];
     char codec[16];
     radio_field(it, 1, codec, sizeof(codec));
-    sprintf(m, "%s: not MP3, and the server gave no way to convert it",
-            codec[0] ? codec : "That format");
+    sprintf(m, _("%s: not MP3, and the server gave no way to convert it"),
+            codec[0] ? codec : _("That format"));
     return m;
 }

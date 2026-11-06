@@ -196,7 +196,7 @@ static LONG open_conn(struct NetJob *j, ULONG addr, UWORD port_no)
     struct sockaddr_in sa;
     LONG s, one = 1, e = 0, el = sizeof(e);
     if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        set_err(j, "No socket (is the TCP/IP stack running?)");
+        set_err(j, _("No socket (is the TCP/IP stack running?)"));
         return -1;
     }
     IoctlSocket(s, FIONBIO, (char *)&one);
@@ -208,13 +208,13 @@ static LONG open_conn(struct NetJob *j, ULONG addr, UWORD port_no)
     memcpy(&sa.sin_addr, &addr, 4);
     if (connect(s, (struct sockaddr *)&sa, sizeof(sa)) < 0 && Errno() != EINPROGRESS) {
         CloseSocket(s);
-        set_err(j, "The connection was refused");
+        set_err(j, _("The connection was refused"));
         return -1;
     }
     if (wait_sock(j, s, TRUE, CONNECT_S) <= 0 ||
         getsockopt(s, SOL_SOCKET, SO_ERROR, &e, &el) < 0 || e) {
         CloseSocket(s);
-        set_err(j, j->cancel ? "Cancelled" : "The server did not answer");
+        set_err(j, j->cancel ? _("Cancelled") : _("The server did not answer"));
         return -1;
     }
     return s;
@@ -241,7 +241,7 @@ static BOOL read_all(struct NetJob *j, LONG s)
     ULONG cap = 32768, len = 0;
     UBYTE *b = AllocVec(cap + 1, MEMF_ANY);
     if (!b) {
-        set_err(j, "Not enough memory");
+        set_err(j, _("Not enough memory"));
         return FALSE;
     }
     for (;;) {
@@ -249,7 +249,7 @@ static BOOL read_all(struct NetJob *j, LONG s)
         int w = wait_sock(j, s, FALSE, READ_S);
         if (w <= 0) {
             FreeVec(b);
-            set_err(j, w < 0 ? "Cancelled" : "The server stopped answering");
+            set_err(j, w < 0 ? _("Cancelled") : _("The server stopped answering"));
             return FALSE;
         }
         if (len == cap) {
@@ -258,7 +258,7 @@ static BOOL read_all(struct NetJob *j, LONG s)
                 break;                      /* enough: the rest is cut off */
             if (!(nb = AllocVec(cap * 2 + 1, MEMF_ANY))) {
                 FreeVec(b);
-                set_err(j, "Not enough memory");
+                set_err(j, _("Not enough memory"));
                 return FALSE;
             }
             CopyMem(b, nb, len);
@@ -430,12 +430,12 @@ static void gdm(struct NetJob *j)
     ULONG len = 0, cap = 4096;
     char buf[1025];
     if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        set_err(j, "No socket (is the TCP/IP stack running?)");
+        set_err(j, _("No socket (is the TCP/IP stack running?)"));
         return;
     }
     if (!(out = AllocVec(cap + 1, MEMF_ANY | MEMF_CLEAR))) {
         CloseSocket(s);
-        set_err(j, "Not enough memory");
+        set_err(j, _("Not enough memory"));
         return;
     }
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
@@ -508,12 +508,12 @@ static void gdm(struct NetJob *j)
     CloseSocket(s);
     if (j->cancel) {
         FreeVec(out);
-        set_err(j, "Cancelled");
+        set_err(j, _("Cancelled"));
         return;
     }
     if (!len) {
         FreeVec(out);
-        set_err(j, "No Plex server answered on this network");
+        set_err(j, _("No Plex server answered on this network"));
         return;
     }
     j->body = out;
@@ -559,7 +559,7 @@ static void run(struct NetJob *j)
                 amce_strlcpy(host, j->host, sizeof(host));
                 port_no = j->port ? j->port : 80;
                 if (!resolve(host, &addr)) {
-                    set_err(j, "That server could not be found (DNS)");
+                    set_err(j, _("That server could not be found (DNS)"));
                     return;
                 }
             }
@@ -584,12 +584,12 @@ static void run(struct NetJob *j)
                 continue;
             }
             if (!amce_strnicmp(loc, "https:", 6)) {
-                set_err(j, "The server only answers over HTTPS");
+                set_err(j, _("The server only answers over HTTPS"));
                 return;
             }
             if (!split_url(loc, host, sizeof(host), &port_no, path, sizeof(path)) ||
                 !(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
-                set_err(j, "The server sent us somewhere we cannot follow");
+                set_err(j, _("The server sent us somewhere we cannot follow"));
                 return;
             }
             memcpy(&addr, h->h_addr_list[0], 4);
@@ -600,7 +600,7 @@ static void run(struct NetJob *j)
     }
     if (j->body && j->status != 200) {
         char m[64];
-        sprintf(m, "The server answered %ld", (long)j->status);
+        sprintf(m, _("The server answered %ld"), (long)j->status);
         set_err(j, m);
         FreeVec(j->body);
         j->body = NULL;
@@ -689,7 +689,7 @@ void net_submit(struct NetJob *j)
         j->busy = FALSE;
         j->done = TRUE;
         j->body = NULL;
-        amce_strlcpy(j->err, "The network process could not start", sizeof(j->err));
+        amce_strlcpy(j->err, _("The network process could not start"), sizeof(j->err));
         return;
     }
     out++;

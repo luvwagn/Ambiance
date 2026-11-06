@@ -140,6 +140,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm, int style);
 BOOL gfx_laced(int smode);
 BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
+void gfx_menu_refit(struct Gfx *g);
 void gfx_close(struct Gfx *g);
 BOOL gfx_restyle(struct Gfx *g, int style);    /* same screen, new style (gfx.c) */
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
@@ -151,6 +152,18 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
 void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, UBYTE fg,
                  WORD maxw);
+
+/* lang.c: translations. _("English") is its translation in the catalog
+ * open (the Workbench's language, or Settings'), or itself; N_() marks a
+ * string in a table for tools/catalog.py, translated where it is used. */
+const char *amce_tr(const char *s);
+ULONG amce_tr_id(const char *s);
+#define _(s) amce_tr(s)
+#define N_(s) (s)
+void amce_lang_open(const char *lang);
+void amce_lang_close(void);
+void amce_lang_quit(void);
+const char *amce_lang_now(void);
 
 /* cjk.c: Japanese, Chinese and Korean text, kept in strings as three bytes
  * a character (see there), drawn from glyph packs or shown as a tag */

@@ -805,16 +805,16 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
             FreeMem(mod, asize);
         else
             FreeVec(mod);
-        amce_strlcpy(err, "Not enough memory", errmax);
+        amce_strlcpy(err, _("Not enough memory"), errmax);
         return FALSE;
     }
     eh_songend = 0;
     if (!find_player(ep.h, found, sizeof(found))) {
         host_free(ep.h);
         ep.h = NULL;
-        amce_strlcpy(err, ncands ? "No player AmigaMCE has knows this module"
-                                 : "Not a module AmigaMCE can play, and no EaglePlayer "
-                                   "players were found",
+        amce_strlcpy(err, ncands ? _("No player AmigaMCE has knows this module")
+                                 : _("Not a module AmigaMCE can play, and no EaglePlayer "
+                                     "players were found"),
                      errmax);
         return FALSE;
     }
@@ -831,7 +831,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         ep.pinfo = (UBYTE *)eh_a0;
     }
     if (has_tag(ep.tags, DTP_ExtLoad) && call(DTP_ExtLoad) != 0) {
-        sprintf(m, "%s could not load the module's other files", ep.name);
+        sprintf(m, _("%s could not load the module's other files"), ep.name);
         amce_strlcpy(err, m, errmax);
         ep_unload();
         return FALSE;
@@ -841,7 +841,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         ep.ups = (UBYTE *)eh_a0;
     }
     if (call(DTP_InitPlayer) != 0) {
-        sprintf(m, "%s could not start this module", ep.name);
+        sprintf(m, _("%s could not start this module"), ep.name);
         amce_strlcpy(err, m, errmax);
         /* nothing to end: the player did not start */
         UnLoadSeg(ep.seg);

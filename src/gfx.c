@@ -73,10 +73,16 @@ static void fit_menu(struct Gfx *g)
     WORD longest = 0, w;
     int i;
     for (i = 0; i < menu_nlabels; i++)
-        if ((w = gfx_textlen(g, menu_labels[i], TS_BOLD)) > longest)
+        if ((w = gfx_textlen(g, _(menu_labels[i]), TS_BOLD)) > longest)
             longest = w;
     if (longest)
         set_menu_w(g, GU(g, 23) + longest + GU(g, 6));
+}
+
+/* The menu column fitted again (its labels' language changed). */
+void gfx_menu_refit(struct Gfx *g)
+{
+    fit_menu(g);
 }
 
 static BOOL laced(const struct Gfx *g);
@@ -229,12 +235,12 @@ const char *gfx_mode_problem(const struct Caps *c, int sm)
     if (sm == SM_AUTO)
         return NULL;
     if (modes[sm].kind == K_RTG && !c->rtg)
-        return "needs a graphics card";
+        return _("needs a graphics card");
     if ((modes[sm].kind == K_HIRES || modes[sm].kind == K_LACED) && !c->aga)
-        return "needs AGA";
+        return _("needs AGA");
     id = mode_id(sm);
     if (id == (ULONG)INVALID_ID || ModeNotAvailable(id))
-        return "not available";
+        return _("not available");
     return NULL;
 }
 
@@ -1333,11 +1339,11 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
     if (pi->mode & HAM_KEY)
         sprintf(c, "HAM%lu", (unsigned long)pi->depth);
     else if (pi->depth > 8)
-        strcpy(c, "true colour");
+        strcpy(c, _("true colour"));
     else if ((pi->mode & EXTRAHALFBRITE_KEY) && pi->depth == 6)
-        strcpy(c, "64 colours, EHB");
+        strcpy(c, _("64 colours, EHB"));
     else
-        sprintf(c, "%lu colours", 1UL << pi->depth);
+        sprintf(c, _("%lu colours"), 1UL << pi->depth);
     char t[64];
     sprintf(t, "%lu x %lu, %s", (unsigned long)pi->w, (unsigned long)pi->h, c);
     amce_strlcpy(out, t, max);

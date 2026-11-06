@@ -34,7 +34,8 @@ struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 enum { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_VIDEOS, MOD_PICTURES, MOD_MUSIC,
        MOD_RADIO, MOD_SETTINGS, MOD_ABOUT, MOD_COUNT };
 static const char *mod_names[MOD_COUNT] = {
-    "Games", "Mods", "Demos", "Videos", "Pictures", "Music", "Radio", "Settings", "About"
+    N_("Games"), N_("Mods"), N_("Demos"), N_("Videos"), N_("Pictures"), N_("Music"), N_("Radio"),
+    N_("Settings"), N_("About")
 };
 
 enum { PT_LIST, PT_TEXT, PT_DETAIL, PT_PLAYER };
@@ -139,7 +140,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
        ACT_MUSICSET, ACT_MUSICASSIGN, ACT_MUSICADD, ACT_MUSICDIR0, ACT_MUSICDIR_END = ACT_MUSICDIR0 + 7,
-       ACT_PLEXSLIDES,
+       ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -377,8 +378,9 @@ static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
     WORD ring, ringy, r, ry, i, sy = gfx_mode_tall(g.mode) ? 2 : 1;
     spin_metrics(&ring, &ringy, &r, &ry);
     if (first) {
-        WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL);
-        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), "Loading...", PEN_DIM, PEN_BG, 0, TS_SMALL);
+        WORD tw = gfx_textlen(&g, _("Loading..."), TS_SMALL);
+        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), _("Loading..."), PEN_DIM, PEN_BG, 0,
+                 TS_SMALL);
     }
     {
         WORD x0 = cx - ring - r, y0 = cy - ringy - ry;
@@ -477,7 +479,7 @@ static void busy_tick(void)
         busy.cx = (g.pane_x + x1) / 2;
         busy.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
         {
-            WORD tw = gfx_textlen(&g, "Loading...", TS_SMALL), hw = ring + r + U(4);
+            WORD tw = gfx_textlen(&g, _("Loading..."), TS_SMALL), hw = ring + r + U(4);
             if (tw / 2 + U(4) > hw)
                 hw = tw / 2 + U(4);
             gfx_fill(&g, busy.cx - hw, busy.cy - ringy - ry - U(4), busy.cx + hw,
@@ -864,7 +866,7 @@ static void ch_pump(struct Page *p)
             ch_trim(p);
             if (AvailMem(MEMF_ANY) < CH_FLOOR) {
                 ch->cut = TRUE;
-                sprintf(m, "Low on memory: list stops at %ld entries", (long)p->list.count);
+                sprintf(m, _("Low on memory: list stops at %ld entries"), (long)p->list.count);
                 set_msg(m);
                 return;
             }
@@ -1271,7 +1273,7 @@ static int classify(const char *label, char *out, LONG max, int *prio)
         int mod = (label[0] == 'G' || label[0] == 'g') ? MOD_GAMES : MOD_DEMOS;
         if (amce_stricmp(rest, "0-Z") == 0) {
             /* one list of every title (ITEM_FLAT), not a folder per letter */
-            amce_strlcpy(out, mod == MOD_GAMES ? "All Games" : "All Demos", max);
+            amce_strlcpy(out, mod == MOD_GAMES ? _("All Games") : _("All Demos"), max);
             *prio = 1;
         } else {
             amce_strlcpy(out, rest, max);
@@ -1311,11 +1313,11 @@ static void build_ags_root(struct Page *p, int mod)
 
 static void no_ags_text(struct Page *p)
 {
-    text_line(p, "Amiga Game Selector was not found.");
+    text_line(p, _("Amiga Game Selector was not found."));
     text_line(p, "");
-    text_para(p, "AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
+    text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
-                 "so its assigns exist.");
+                 "so its assigns exist."));
 }
 
 static void found_line(struct Page *p, const char *what, const char *path)
@@ -1329,7 +1331,7 @@ static void found_line(struct Page *p, const char *what, const char *path)
     me->pr_WindowPtr = old;
     if (l)
         UnLock(l);
-    sprintf(line, "%s: %s (%s)", what, path, l ? "found" : "not found");
+    sprintf(line, "%s: %s (%s)", what, path, l ? _("found") : _("not found"));
     text_line(p, line);
 }
 
@@ -1341,9 +1343,9 @@ static void dt_line(void *ctx, const char *s)
 static void build_sysinfo(struct Page *p)
 {
     char line[160];
-    text_line(p, "Found when AmigaMCE started:");
+    text_line(p, _("Found when AmigaMCE started:"));
     text_line(p, "");
-    sprintf(line, "Machine type: %s", caps.emulator ? "emulator (UAE family)" : "real Amiga");
+    sprintf(line, _("Machine type: %s"), caps.emulator ? _("emulator (UAE family)") : _("real Amiga"));
     text_line(p, line);
     /* amiga.lib's sprintf is RawDoFmt: every number must be %l with a long. */
     sprintf(line, "CPU: 680%02lu", (unsigned long)caps.cpu);
@@ -1356,19 +1358,19 @@ static void build_sysinfo(struct Page *p)
                 (unsigned long)caps.wb, (unsigned long)caps.wb_rev);
         text_line(p, line);
     }
-    sprintf(line, "Chipset: %s%s, %s", caps.aga ? "AGA" : caps.ecs ? "ECS" : "OCS",
-            caps.ehb ? " with EHB" : "", caps.pal ? "PAL" : "NTSC");
+    sprintf(line, _("Chipset: %s%s, %s"), caps.aga ? "AGA" : caps.ecs ? "ECS" : "OCS",
+            caps.ehb ? _(" with EHB") : "", caps.pal ? "PAL" : "NTSC");
     text_line(p, line);
     {
         /* Read the mode back from the open screen, not from what we asked for. */
         struct NameInfo ni;
         char mode[DISPLAYNAMELEN + 1];
         ULONG id = GetVPModeID(&g.scr->ViewPort);
-        amce_strlcpy(mode, "unnamed mode", sizeof(mode));
+        amce_strlcpy(mode, _("unnamed mode"), sizeof(mode));
         if (id != (ULONG)INVALID_ID &&
             GetDisplayInfoData(NULL, (UBYTE *)&ni, sizeof(ni), DTAG_NAME, id) > 0)
             amce_strlcpy(mode, (char *)ni.Name, sizeof(mode));
-        sprintf(line, "Screen: %s", mode);
+        sprintf(line, _("Screen: %s"), mode);
         text_line(p, line);
         {
             /* Bits per pixel from the bitmap itself: an RTG bitmap's Depth
@@ -1376,52 +1378,52 @@ static void build_sysinfo(struct Page *p)
             ULONG d = GetBitMapAttr(g.scr->RastPort.BitMap, BMA_DEPTH);
             char colours[24];
             if (d > 8)
-                sprintf(colours, "%lu-bit colour", (unsigned long)d);
+                sprintf(colours, _("%lu-bit colour"), (unsigned long)d);
             else
-                sprintf(colours, "%lu colours", (unsigned long)(1UL << d));
-            sprintf(line, "  %lu x %lu, %s, mode ID $%08lx",
+                sprintf(colours, _("%lu colours"), (unsigned long)(1UL << d));
+            sprintf(line, _("  %lu x %lu, %s, mode ID $%08lx"),
                     (unsigned long)g.scr->Width, (unsigned long)g.scr->Height, colours,
                     (unsigned long)id);
         }
         text_line(p, line);
         if (g.style == STYLE_SMOOTH)
-            sprintf(line, "Style: smooth, %lu.%02lux", (unsigned long)(g.k >> 8),
+            sprintf(line, _("Style: smooth, %lu.%02lux"), (unsigned long)(g.k >> 8),
                     (unsigned long)(((g.k & 255) * 100 + 128) >> 8));
         else
-            sprintf(line, "Style: pixel, %lux%s", (unsigned long)g.kint,
-                    gfx_mode_tall(g.mode) ? " (tall pixels: dense)" : "");
+            sprintf(line, _("Style: pixel, %lux%s"), (unsigned long)g.kint,
+                    gfx_mode_tall(g.mode) ? _(" (tall pixels: dense)") : "");
         text_line(p, line);
         if (g.sm && !g.truecolor) {
-            sprintf(line, "  its shades and logo: %lu pens so far",
+            sprintf(line, _("  its shades and logo: %lu pens so far"),
                     (unsigned long)sm_pens_used(g.sm));
             text_line(p, line);
         }
     }
-    sprintf(line, "Graphics card (RTG): %s", caps.rtg ? "yes" : "no");
+    sprintf(line, _("Graphics card (RTG): %s"), caps.rtg ? _("yes") : _("no"));
     text_line(p, line);
-    sprintf(line, "Free memory: %luKB chip, %luKB fast",
+    sprintf(line, _("Free memory: %luKB chip, %luKB fast"),
             (unsigned long)(caps.chipfree >> 10), (unsigned long)(caps.fastfree >> 10));
     text_line(p, line);
-    sprintf(line, "Font: %s", g.font_is_ours ? "amce-pixel (bundled)" : "topaz 8 (fallback)");
+    sprintf(line, _("Font: %s"), g.font_is_ours ? _("amce-pixel (bundled)") : _("topaz 8 (fallback)"));
     text_line(p, line);
     text_line(p, "");
-    text_line(p, "Datatypes (which one reads each picture format):");
+    text_line(p, _("Datatypes (which one reads each picture format):"));
     pic_datatypes(dt_line, p);
     text_line(p, "");
-    sprintf(line, "AGS: %s", ags.found ? "found" : "not found");
+    sprintf(line, _("AGS: %s"), ags.found ? _("found") : _("not found"));
     text_line(p, line);
     if (ags.added[0]) {
         /* S:AGS-Stuff did not run at boot; AmigaMCE filled the gaps. */
-        text_line(p, "Assigns AmigaMCE added (AGS-Stuff did not run):");
+        text_line(p, _("Assigns AmigaMCE added (AGS-Stuff did not run):"));
         text_para(p, ags.added);
     }
-    sprintf(line, "AGS machine setting (HW): %s", ags.hw[0] ? ags.hw : "not set");
+    sprintf(line, _("AGS machine setting (HW): %s"), ags.hw[0] ? ags.hw : _("not set"));
     text_line(p, line);
-    sprintf(line, "Adult entries: %s", ags.adult[0] == '1' ? "shown" : "hidden");
+    sprintf(line, _("Adult entries: %s"), ags.adult[0] == '1' ? _("shown") : _("hidden"));
     text_line(p, line);
-    sprintf(line, "Network stack: %s", caps.net ? "running" : "none");
+    sprintf(line, _("Network stack: %s"), caps.net ? _("running") : _("none"));
     text_line(p, line);
-    sprintf(line, "MP3: %s", caps.mp3_mhi ? "MHI driver" : caps.mp3_mpega ? "mpega.library" : "none");
+    sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver") : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
     text_line(p, "");
     sprintf(line, "Debug log: %s", amce_log_path() ? amce_log_path() : "off");
@@ -1520,9 +1522,9 @@ static int buf_sel = 1;             /* normal */
 static char rsrv[80];               /* as kept */
 static struct NetMirror mirrors[8];
 static int nmirror = -2;            /* -2 not asked yet, -1 could not be */
-static const char *const buf_names[3] = { "Short", "Normal", "Long" };
-static const char *const buf_notes[3] = { "starts in 0.6s", "1.2s",
-                                          "3s, more held against dropouts" };
+static const char *const buf_names[3] = { N_("Short"), N_("Normal"), N_("Long") };
+static const char *const buf_notes[3] = { N_("starts in 0.6s"), N_("1.2s"),
+                                          N_("3s, more held against dropouts") };
 
 /* Automatic: by how fast this Amiga is (plex_tier). Paula plays no more
  * than 28 kHz, and the decoder is told to make what it can play, so a
@@ -1785,7 +1787,7 @@ static BOOL note_style(void)
 {
     if (ui_style == STYLE_SMOOTH && g.style != STYLE_SMOOTH &&
         gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
-        set_msg("Smooth: Fonts/amce-smooth does not match this AmigaMCE");
+        set_msg(_("Smooth: Fonts/amce-smooth does not match this AmigaMCE"));
         return TRUE;
     }
     return FALSE;
@@ -1856,7 +1858,13 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
 }
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
-       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_MUSIC };
+       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_MUSIC, SETP_LANG };
+/* Each Settings page's title, by SETP_* (made again in another language) */
+static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Screen"),
+    N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
+    N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
+    N_("Music folders"), N_("Language") };
+static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
 static void build_buf_settings(struct Page *p);
@@ -1866,15 +1874,92 @@ static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 static void build_nic_settings(struct Page *p);
 
+/* ---- the language: the Workbench's (Locale prefs), English, or one
+ * whose catalog is in PROGDIR:Catalogs (lang.c) */
+#define LANG_VAR "AmigaMCE/Language"    /* "" the Workbench's, "english", or a language */
+#define MAX_LANGS 16
+static char lang_set[32];
+static char langs[MAX_LANGS][32];
+static int nlangs;
+
+/* The catalogs there: each language's drawer with AmigaMCE.catalog in it. */
+static void langs_find(void)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BPTR l;
+    nlangs = 0;
+    if (!fib)
+        return;
+    if ((l = Lock((CONST_STRPTR) "PROGDIR:Catalogs", SHARED_LOCK))) {
+        if (Examine(l, fib))
+            while (ExNext(l, fib) && nlangs < MAX_LANGS) {
+                char path[80];
+                BPTR c;
+                if (fib->fib_DirEntryType <= 0 || strlen((char *)fib->fib_FileName) >= 32)
+                    continue;
+                sprintf(path, "PROGDIR:Catalogs/%.31s/AmigaMCE.catalog", (char *)fib->fib_FileName);
+                if ((c = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
+                    UnLock(c);
+                    amce_strlcpy(langs[nlangs++], (char *)fib->fib_FileName, 32);
+                }
+            }
+        UnLock(l);
+    }
+    FreeDosObject(DOS_FIB, fib);
+}
+
+/* A language's name as it calls itself ("deutsch": Deutsch). */
+static void lang_name(const char *lang, char *out)
+{
+    if (!lang || !lang[0] || !amce_stricmp(lang, "english")) {
+        strcpy(out, "English");
+        return;
+    }
+    amce_strlcpy(out, lang, 32);
+    if ((UBYTE)out[0] >= 'a' && (UBYTE)out[0] <= 'z')
+        out[0] -= 32;
+}
+
+/* The Workbench's first language (Locale prefs), "" none. */
+static const char *wb_language(void)
+{
+    static char l[32];
+    struct Locale *loc;
+    l[0] = 0;
+    if (LocaleBase && (loc = OpenLocale(NULL))) {
+        if (loc->loc_PrefLanguages[0])
+            amce_strlcpy(l, (const char *)loc->loc_PrefLanguages[0], sizeof(l));
+        CloseLocale(loc);
+    }
+    return l;
+}
+
+/* Settings > General > Language. */
+static void build_lang_settings(struct Page *p)
+{
+    char t[32];
+    int i;
+    p->setp = SETP_LANG;
+    lang_name(wb_language(), t);
+    action_item(p, _("As Workbench"), t, ACT_LANGWB, !lang_set[0] ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    action_item(p, "English", "", ACT_LANGEN,
+                !amce_stricmp(lang_set, "english") ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    for (i = 0; i < nlangs; i++) {
+        lang_name(langs[i], t);
+        action_item(p, t, "", ACT_LANG0 + i,
+                    !amce_stricmp(lang_set, langs[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    }
+}
+
 /* Settings: General, Screen, Sound, Networking (Plex inside it, as it
  * needs the network). */
 static void build_settings(struct Page *p)
 {
     p->setp = SETP_ROOT;
-    action_item(p, "General", "", ACT_GENSET, MARK_ARROW);
-    action_item(p, "Screen", gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
-    action_item(p, "Sound", sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
-    action_item(p, "Networking", !caps.net ? "no TCP/IP stack" : net_if[0] ? net_if : "",
+    action_item(p, _("General"), "", ACT_GENSET, MARK_ARROW);
+    action_item(p, _("Screen"), gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
+    action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
                 ACT_NETSET, MARK_ARROW);
 }
 
@@ -1886,29 +1971,36 @@ static void build_screen_settings(struct Page *p)
     struct Item *it;
     p->setp = SETP_SCREEN;
     amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
-    action_item(p, "Screen mode", tag, ACT_SCREENMODES, MARK_ARROW);
+    action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
     /* Style: the font on a laced screen; greyed out, showing Pixel, where
      * this screen can only be pixel (other native modes, 8-bit RTG) */
     if (gfx_laced(g.mode)) {
-        action_item(p, "Style", gfx_laced_fonts[gfx_laced_font].name, ACT_STYLES, MARK_ARROW);
+        action_item(p, _("Style"), gfx_laced_fonts[gfx_laced_font].name, ACT_STYLES, MARK_ARROW);
     } else if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
-        action_item(p, "Style", ui_style == STYLE_SMOOTH ? "Smooth" : "Pixel", ACT_STYLES,
+        action_item(p, _("Style"), ui_style == STYLE_SMOOTH ? _("Smooth") : _("Pixel"), ACT_STYLES,
                     MARK_ARROW);
-    } else if ((it = action_item(p, "Style", "Pixel", ACT_STYLES, MARK_ARROW))) {
+    } else if ((it = action_item(p, _("Style"), _("Pixel"), ACT_STYLES, MARK_ARROW))) {
         it->flags |= ITEM_DISABLED;
     }
     if (!g.planar)                      /* native screens draw straight on: not offered */
-        action_item(p, "Double buffering", "", ACT_DBUF,
+        action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
 
 /* Settings > General. */
 static void build_general_settings(struct Page *p)
 {
+    char t[32];
+    struct Item *it;
     p->setp = SETP_GENERAL;
-    action_item(p, "Jump scrolling (by letter)", "", ACT_JUMP,
+    lang_name(amce_lang_now(), t);
+    /* only a choice with a catalog besides English: else just what is used */
+    if ((it = action_item(p, _("Language"), t, ACT_LANGSET, nlangs ? MARK_ARROW : MARK_NONE)) &&
+        !nlangs)
+        it->flags |= ITEM_DISABLED;
+    action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    action_item(p, "Debug (CPU, memory, log)", "", ACT_DEBUG,
+    action_item(p, _("Debug (CPU, memory, log)"), "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
 
@@ -1940,22 +2032,22 @@ static void build_net_settings(struct Page *p)
     p->setp = SETP_NET;
     (void)it;
     if (!caps.net) {
-        list_add(&p->list, "No TCP/IP stack running", "", "", IT_TEXT);
+        list_add(&p->list, _("No TCP/IP stack running"), "", "", IT_TEXT);
         return;
     }
     rkbps_text(rkbps_now(), use);
-    sprintf(tag, "stations up to %s", use);
-    action_item(p, "Radio", tag, ACT_RADIOSET, MARK_ARROW);
-    action_item(p, "Plex", !plex.on ? "Off" : plex.name[0] ? plex.name
-                           : plex.host[0] ? plex.host : "On, no server chosen",
+    sprintf(tag, _("stations up to %s"), use);
+    action_item(p, _("Radio"), tag, ACT_RADIOSET, MARK_ARROW);
+    action_item(p, "Plex", !plex.on ? _("Off") : plex.name[0] ? plex.name
+                           : plex.host[0] ? plex.host : _("On, no server chosen"),
                 ACT_PLEXSET, MARK_ARROW);
-    action_item(p, "Stream buffer", buf_names[buf_sel], ACT_BUFSET, MARK_ARROW);
+    action_item(p, _("Stream buffer"), _(buf_names[buf_sel]), ACT_BUFSET, MARK_ARROW);
     nic_in_use_text(use);
     if (net_if[0])
         sprintf(tag, "%.40s", use[0] ? use : net_if);
     else
-        sprintf(tag, use[0] ? "Automatic: %.40s" : "Automatic", use);
-    action_item(p, "Network interface", tag, ACT_NICSET, MARK_ARROW);
+        sprintf(tag, use[0] ? _("Automatic: %.40s") : _("Automatic"), use);
+    action_item(p, _("Network interface"), tag, ACT_NICSET, MARK_ARROW);
 }
 
 /* Settings > Networking > Network interface: Automatic (the stack's
@@ -1967,14 +2059,14 @@ static void build_nic_settings(struct Page *p)
     int i;
     p->setp = SETP_NIC;
     nic_in_use_text(use);
-    action_item(p, "Automatic (the stack's choice)", net_if[0] ? "" : use, ACT_NICAUTO,
+    action_item(p, _("Automatic (the stack's choice)"), net_if[0] ? "" : use, ACT_NICAUTO,
                 net_if[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
     for (i = 0; i < nnic && i < 8; i++) {
         struct NetIf *f = &nics[i];
         ip_text(f->ip, ip);
-        sprintf(label, "%.19s  %s", f->name, f->ip ? ip : "no address");
+        sprintf(label, "%.19s  %s", f->name, f->ip ? ip : _("no address"));
         if (f->dev[0])
-            sprintf(tag, "%s, %.39s unit %ld", f->up ? "up" : "down", f->dev, (long)f->unit);
+            sprintf(tag, _("%s, %.39s unit %ld"), f->up ? _("up") : _("down"), f->dev, (long)f->unit);
         else
             strcpy(tag, f->up ? "up" : "down");
         if ((it = action_item(p, label, tag, ACT_NIC0 + i,
@@ -1985,7 +2077,7 @@ static void build_nic_settings(struct Page *p)
             p->sel = p->list.count - 1;
     }
     if (nnic < 0)
-        list_add(&p->list, "This TCP/IP stack does not list its interfaces", "", "", IT_TEXT);
+        list_add(&p->list, _("This TCP/IP stack does not list its interfaces"), "", "", IT_TEXT);
 }
 
 /* Settings > Networking > Radio: HTTPS, the highest bitrate listed, and
@@ -1995,25 +2087,25 @@ static void build_radio_settings(struct Page *p)
     struct Item *it;
     char tag[80], k[16], nm[64];
     p->setp = SETP_RADIO;
-    if ((it = action_item(p, "Allow HTTPS streams", caps.amissl ? "" : "needs AmiSSL", ACT_HTTPS,
+    if ((it = action_item(p, _("Allow HTTPS streams"), caps.amissl ? "" : _("needs AmiSSL"), ACT_HTTPS,
                           radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !caps.amissl)
         it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
     rkbps_text(rkbps_now(), k);
     if (rkbps_sel == 0)
-        sprintf(tag, "Automatic: %s", k);
+        sprintf(tag, _("Automatic: %s"), k);
     else
         strcpy(tag, k);
-    action_item(p, "Highest station bitrate", tag, ACT_RKBPSSET, MARK_ARROW);
+    action_item(p, _("Highest station bitrate"), tag, ACT_RKBPSSET, MARK_ARROW);
     if (!rsrv[0]) {
-        strcpy(tag, "Automatic");
+        strcpy(tag, _("Automatic"));
     } else if (!strncmp(rsrv, "fastest:", 8)) {
         mirror_short(rsrv + 8, nm, sizeof(nm));
-        sprintf(tag, "Fastest: %s", nm);
+        sprintf(tag, _("Fastest: %s"), nm);
     } else {
         mirror_short(rsrv, tag, sizeof(tag));
     }
-    action_item(p, "Station list server", tag, ACT_RSRVSET, MARK_ARROW);
+    action_item(p, _("Station list server"), tag, ACT_RSRVSET, MARK_ARROW);
 }
 
 static void build_rkbps_settings(struct Page *p)
@@ -2022,14 +2114,14 @@ static void build_rkbps_settings(struct Page *p)
     int i;
     p->setp = SETP_RKBPS;
     rkbps_text(rkbps_auto(), k);
-    sprintf(tag, "for this Amiga: %s", k);
-    action_item(p, "Automatic", tag, ACT_RKBPS0, rkbps_sel == 0 ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    sprintf(tag, _("for this Amiga: %s"), k);
+    action_item(p, _("Automatic"), tag, ACT_RKBPS0, rkbps_sel == 0 ? MARK_RADIO_ON : MARK_RADIO_OFF);
     for (i = 1; i < 6; i++) {
         char label[24];
         if (rkbps_choice[i])
-            sprintf(label, "Up to %lukbps", (unsigned long)rkbps_choice[i]);
+            sprintf(label, _("Up to %lukbps"), (unsigned long)rkbps_choice[i]);
         else
-            strcpy(label, "Any");
+            strcpy(label, _("Any"));
         action_item(p, label, "", ACT_RKBPS0 + i,
                     rkbps_sel == i ? MARK_RADIO_ON : MARK_RADIO_OFF);
     }
@@ -2041,7 +2133,7 @@ static void build_buf_settings(struct Page *p)
     int i;
     p->setp = SETP_BUF;
     for (i = 0; i < 3; i++)
-        action_item(p, buf_names[i], buf_notes[i], ACT_BUF0 + i,
+        action_item(p, _(buf_names[i]), _(buf_notes[i]), ACT_BUF0 + i,
                     buf_sel == i ? MARK_RADIO_ON : MARK_RADIO_OFF);
     p->sel = buf_sel;
 }
@@ -2062,21 +2154,21 @@ static void build_rsrv_settings(struct Page *p)
     int i, f;
     BOOL fast = !strncmp(rsrv, "fastest:", 8);
     p->setp = SETP_RSRV;
-    action_item(p, "Automatic", "one at random, as radio-browser.info asks", ACT_RSRVAUTO,
+    action_item(p, _("Automatic"), _("one at random, as radio-browser.info asks"), ACT_RSRVAUTO,
                 rsrv[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
     if (nmirror < 0) {
-        action_item(p, "Fastest", "", ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
-        list_add(&p->list, "radio-browser.info's servers could not be found", "", "", IT_TEXT);
+        action_item(p, _("Fastest"), "", ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        list_add(&p->list, _("radio-browser.info's servers could not be found"), "", "", IT_TEXT);
         return;
     }
     f = mirror_fastest();
     if (f >= 0) {
         mirror_short(mirrors[f].name, nm, sizeof(nm));
-        sprintf(tag, "now %.30s, %ld ms", nm, (long)mirrors[f].ms);
+        sprintf(tag, _("now %.30s, %ld ms"), nm, (long)mirrors[f].ms);
     } else {
-        strcpy(tag, "none answered");
+        strcpy(tag, _("none answered"));
     }
-    action_item(p, "Fastest", tag, ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    action_item(p, _("Fastest"), tag, ACT_RSRVFAST, fast ? MARK_RADIO_ON : MARK_RADIO_OFF);
     if (!rsrv[0])
         p->sel = 0;
     else if (fast)
@@ -2086,7 +2178,7 @@ static void build_rsrv_settings(struct Page *p)
         if (mirrors[i].ms >= 0)
             sprintf(tag, "%ld ms", (long)mirrors[i].ms);
         else
-            strcpy(tag, "no answer");
+            strcpy(tag, _("no answer"));
         mirror_short(mirrors[i].name, nm, sizeof(nm));
         it = action_item(p, nm, tag, ACT_RSRV0 + i,
                          !fast && !amce_stricmp(rsrv, mirrors[i].name) ? MARK_RADIO_ON
@@ -2109,15 +2201,15 @@ static void build_plex_settings(struct Page *p)
     action_item(p, "Plex", "", ACT_PLEXON, plex.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
     if (!plex.on)
         return;
-    if ((it = list_add(&p->list, "Plex server",
+    if ((it = list_add(&p->list, _("Plex server"),
                        "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
-                                            : "none chosen", IT_PLEXDIR)))
+                                            : _("none chosen"), IT_PLEXDIR)))
         it->mark = MARK_ARROW;
     /* the server's conversion: a choice only where the Amiga is fast enough
      * to decode the files as stored (plex_tier: how fast it really is, not
      * only its CPU); on others always on */
     fast = plex_tier() >= 2 || plex.mhi;   /* MHI decodes MP3, however fast the Amiga */
-    if ((it = action_item(p, "Request lower quality audio", fast ? "" : "needed on this Amiga",
+    if ((it = action_item(p, _("Request lower quality audio"), fast ? "" : _("needed on this Amiga"),
                           ACT_PLEXCONV, plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !fast)
         it->flags |= ITEM_DISABLED;
@@ -2130,13 +2222,13 @@ static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
     p->setp = SETP_SOUND;
-    action_item(p, "Paula (audio.device)", "4 channels, up to 28kHz, 8-bit", ACT_SND_PAULA,
+    action_item(p, "Paula (audio.device)", _("4 channels, up to 28kHz, 8-bit"), ACT_SND_PAULA,
                 sound_ahi ? MARK_RADIO_OFF : MARK_RADIO_ON);
-    if ((it = action_item(p, "AHI: radio, Plex, music files",
-                          caps.ahi ? "16-bit, its Preferences' mode" : "not installed",
+    if ((it = action_item(p, _("AHI: radio, Plex, music files"),
+                          caps.ahi ? _("16-bit, its Preferences' mode") : _("not installed"),
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
-    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? "decoded here" : "not installed",
+    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? _("decoded here") : _("not installed"),
                           ACT_SND_MPEGA, !mhi_sel[0] && caps.mp3_mpega ? MARK_RADIO_ON
                                                                      : MARK_RADIO_OFF)) &&
         !caps.mp3_mpega)
@@ -2144,19 +2236,19 @@ static void build_sound_settings(struct Page *p)
     {
         /* MHI: each driver in LIBS:MHI, decoding (and playing) MP3 itself */
         int i;
-        if (!nmhi && (it = action_item(p, "MP3: MHI", "not installed", ACT_SND_MHI,
+        if (!nmhi && (it = action_item(p, "MP3: MHI", _("not installed"), ACT_SND_MHI,
                                        MARK_RADIO_OFF)))
             it->flags |= ITEM_DISABLED;
         for (i = 0; i < nmhi; i++) {
             char label[64];
             sprintf(label, "MP3: MHI, %.40s", mhi_names[i]);
-            action_item(p, label, "decodes and plays", ACT_SND_MHI0 + i,
+            action_item(p, label, _("decodes and plays"), ACT_SND_MHI0 + i,
                         !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
         }
     }
     /* FLAC: Plex's tracks as stored, where the Amiga is fast enough */
     if ((it = action_item(p, "FLAC: flacdec.library",
-                          caps.flacdec ? "installed" : "not installed (Aminet: util/libs/flacdec)",
+                          caps.flacdec ? _("installed") : _("not installed (Aminet: util/libs/flacdec)"),
                           ACT_SND_FLAC, caps.flacdec ? MARK_CHECK_ON : MARK_CHECK_OFF)))
         it->flags |= ITEM_DISABLED;
     {
@@ -2164,10 +2256,10 @@ static void build_sound_settings(struct Page *p)
         char tag[48];
         int n = nmusic_dirs + (music_assign && music_assign_there() ? 1 : 0);
         if (n)
-            sprintf(tag, "%ld place%s", (long)n, n == 1 ? "" : "s");
+            sprintf(tag, n == 1 ? _("%ld place") : _("%ld places"), (long)n);
         else
-            strcpy(tag, "none yet");
-        if ((it = action_item(p, "Music folders", tag, ACT_MUSICSET, MARK_NONE)))
+            strcpy(tag, _("none yet"));
+        if ((it = action_item(p, _("Music folders"), tag, ACT_MUSICSET, MARK_NONE)))
             it->mark = MARK_ARROW;
     }
 }
@@ -2180,12 +2272,12 @@ static void build_music_settings(struct Page *p)
 {
     int i;
     p->setp = SETP_MUSIC;
-    action_item(p, "Use the MUSIC: assign", music_assign_there() ? "assigned" : "not assigned now",
+    action_item(p, _("Use the MUSIC: assign"), music_assign_there() ? _("assigned") : _("not assigned now"),
                 ACT_MUSICASSIGN, music_assign ? MARK_CHECK_ON : MARK_CHECK_OFF);
     for (i = 0; i < nmusic_dirs; i++)
-        action_item(p, music_dirs[i], music_rm == i ? "Fire again: remove" : "",
+        action_item(p, music_dirs[i], music_rm == i ? _("Fire again: remove") : "",
                     ACT_MUSICDIR0 + i, MARK_NONE);
-    action_item(p, "Add a folder...", nmusic_dirs < MUSIC_DIRS ? "" : "eight at most",
+    action_item(p, _("Add a folder..."), nmusic_dirs < MUSIC_DIRS ? "" : _("eight at most"),
                 ACT_MUSICADD, MARK_NONE);
 }
 
@@ -2217,8 +2309,11 @@ static void settings_rebuild(void)
         case SETP_BUF: build_buf_settings(q); break;
         case SETP_RSRV: build_rsrv_settings(q); break;
         case SETP_MUSIC: build_music_settings(q); break;
+        case SETP_LANG: build_lang_settings(q); break;
         default: build_settings(q); break;
         }
+        if (q->setp < (int)(sizeof(setp_titles) / sizeof(setp_titles[0])))
+            amce_strlcpy(q->title, _(setp_titles[q->setp]), sizeof(q->title));
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
     }
 }
@@ -2254,9 +2349,9 @@ static void build_styles(struct Page *p)
         return;
     }
     can_smooth = gfx_style_possible(&caps, g.mode, STYLE_SMOOTH);
-    action_item(p, "Pixel", "", ACT_STYLE_PIXEL,
+    action_item(p, _("Pixel"), "", ACT_STYLE_PIXEL,
                 ui_style == STYLE_PIXEL ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    action_item(p, "Smooth", can_smooth ? "" : "RTG only", ACT_STYLE_SMOOTH,
+    action_item(p, _("Smooth"), can_smooth ? "" : _("RTG only"), ACT_STYLE_SMOOTH,
                 ui_style == STYLE_SMOOTH ? MARK_RADIO_ON : MARK_RADIO_OFF);
     p->sel = ui_style == STYLE_SMOOTH ? 1 : 0;
 }
@@ -2270,7 +2365,7 @@ static void build_screenmodes(struct Page *p)
         if (why && gfx_mode_is_rtg(m) && m != screen_mode)
             continue;           /* RTG sizes are listed only when the card has them */
         if (m == SM_AUTO) {
-            amce_strlcpy(label, "Automatic: ", sizeof(label));
+            amce_strlcpy(label, _("Automatic: "), sizeof(label));
             amce_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
         } else {
             amce_strlcpy(label, gfx_mode_label(m), sizeof(label));
@@ -2289,10 +2384,10 @@ static void build_screenmodes(struct Page *p)
 
 static void build_about_menu(struct Page *p)
 {
-    action_item(p, "Credits", "AmigaMCE " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
-    action_item(p, "System information", "", ACT_SYSINFO, MARK_ARROW);
+    action_item(p, _("Credits"), "AmigaMCE " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
+    action_item(p, _("System information"), "", ACT_SYSINFO, MARK_ARROW);
     if (caps.net)
-        action_item(p, "Plex in AmigaMCE", "", ACT_PLEXHELP, MARK_ARROW);
+        action_item(p, _("Plex in AmigaMCE"), "", ACT_PLEXHELP, MARK_ARROW);
 }
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
@@ -2305,27 +2400,27 @@ static void build_credits(struct Page *p)
     int i;
     sprintf(line, "AmigaMCE %s", AMCE_VERSION);
     text_line(p, line);
-    text_line(p, "(c) 2026 Brian King, under the MIT licence");
+    text_line(p, _("(c) 2026 Brian King, under the MIT licence"));
     text_line(p, "");
-    text_para(p, "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
+    text_para(p, _("Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
                  "(c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all "
                  "under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are "
-                 "Modified Versions of Pixelify Sans and Galmuri.");
+                 "Modified Versions of Pixelify Sans and Galmuri."));
     text_line(p, "");
-    text_para(p, "Code: libnix C runtime (public domain). The EaglePlayer host follows "
-                 "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).");
+    text_para(p, _("Code: libnix C runtime (public domain). The EaglePlayer host follows "
+                 "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen)."));
     text_line(p, "");
-    text_para(p, "Used if installed, not included, each under its own licence: Amiga Game "
-                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.");
+    text_para(p, _("Used if installed, not included, each under its own licence: Amiga Game "
+                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."));
     text_line(p, "");
-    text_para(p, "FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David "
+    text_para(p, _("FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David "
                  "Reid (public domain or MIT-0), used if installed, not included. It is free to "
-                 "use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).");
+                 "use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec)."));
     text_line(p, "");
-    text_para(p, "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
-                 "to their authors. Licence texts are in the Licences drawer.");
-    p->note = "This front-end would not be possible without the immense efforts of Paul Vince "
-              "and Amiga Game Selector.";
+    text_para(p, _("Amiga is a trademark of its owner. Games, demos, music and pictures belong "
+                 "to their authors. Licence texts are in the Licences drawer."));
+    p->note = _("This front-end would not be possible without the immense efforts of Paul Vince "
+              "and Amiga Game Selector.");
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
@@ -2408,57 +2503,62 @@ static void build_root_pages(int mod)
     case MOD_GAMES:
     case MOD_DEMOS:
         if (ags.found) {
-            p = page_push(PT_LIST, mod_names[mod]);
+            p = page_push(PT_LIST, _(mod_names[mod]));
             if (p)
                 build_ags_root(p, mod);
-        } else if ((p = page_push(PT_TEXT, mod_names[mod])))
+        } else if ((p = page_push(PT_TEXT, _(mod_names[mod]))))
             no_ags_text(p);
         break;
     case MOD_MODS:
         build_mods_root();
         break;
     case MOD_VIDEOS:
-        if ((p = page_push(PT_TEXT, "Videos"))) {
-            text_para(p, "Video playback arrives in a later version.");
+        if ((p = page_push(PT_TEXT, _("Videos")))) {
+            text_para(p, _("Video playback arrives in a later version."));
             text_line(p, "");
-            found_line(p, "Animations", "Media:Animations");
+            found_line(p, _("Animations"), "Media:Animations");
         }
         break;
     case MOD_PICTURES:
-        if ((p = page_push(PT_LIST, "Pictures"))) {
+        if ((p = page_push(PT_LIST, _("Pictures")))) {
             LONG n;
             p->pics = 1;
             n = pics_read_ui(PICS_ROOT, &p->list);
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
-                page_push(PT_TEXT, "Pictures");
+                page_push(PT_TEXT, _("Pictures"));
             } else if (n <= 0 && !(caps.net && plex.on && plex.host[0])) {
                 page_pop();
-                if ((p = page_push(PT_TEXT, "Pictures")))
-                    text_para(p, n < 0 ? "No pictures found: AmigaMCE looks for them in "
-                                         PICS_ROOT "." : PICS_ROOT " has no pictures in it.");
+                if ((p = page_push(PT_TEXT, _("Pictures")))) {
+                    char t[160];
+                    sprintf(t, n < 0 ? _("No pictures found: AmigaMCE looks for them in %s.")
+                                     : _("%s has no pictures in it."), PICS_ROOT);
+                    text_para(p, t);
+                }
             } else {
-                if (n <= 0)
-                    list_add(&p->list, n < 0 ? "No " PICS_ROOT " here" : PICS_ROOT " is empty",
-                             "", "", IT_TEXT);
+                if (n <= 0) {
+                    char t[80];
+                    sprintf(t, n < 0 ? _("No %s here") : _("%s is empty"), PICS_ROOT);
+                    list_add(&p->list, t, "", "", IT_TEXT);
+                }
                 pictures_plex_rows(p);      /* the server's photo libraries first */
             }
         }
         break;
     case MOD_MUSIC:
-        if ((p = page_push(PT_LIST, "Music")))
+        if ((p = page_push(PT_LIST, _("Music"))))
             build_music_root(p);
         break;
     case MOD_RADIO:
-        if ((p = page_push(PT_LIST, "Radio")))
+        if ((p = page_push(PT_LIST, _("Radio"))))
             build_radio_root(p);
         break;
     case MOD_SETTINGS:
-        if ((p = page_push(PT_LIST, "Settings")))
+        if ((p = page_push(PT_LIST, _("Settings"))))
             build_settings(p);
         break;
     case MOD_ABOUT:
-        if ((p = page_push(PT_LIST, "About")))
+        if ((p = page_push(PT_LIST, _("About"))))
             build_about_menu(p);
         break;
     }
@@ -2787,11 +2887,15 @@ static WORD list_visible(void)
     return (g.footer_y - 2 - g.list_top) / g.list_row_h;
 }
 
+/* Days and months, short (the clock, file dates), translated where used. */
+static const char *const day_abbr[] = { N_("Sun"), N_("Mon"), N_("Tue"), N_("Wed"), N_("Thu"),
+                                        N_("Fri"), N_("Sat") };
+static const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"),
+                                        N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"),
+                                        N_("Nov"), N_("Dec") };
+
 static void clock_text(char *buf)
 {
-    static const char *wd[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-    static const char *mn[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     static const UBYTE md[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     struct DateStamp ds;
     LONG days, y = 1978, m = 0;
@@ -2818,7 +2922,7 @@ static void clock_text(char *buf)
             days -= mlen;
             m++;
         }
-        sprintf(buf, "%s %02ld %s  %02ld:%02ld", wd[wday], (long)days + 1, mn[m],
+        sprintf(buf, "%s %02ld %s  %02ld:%02ld", _(day_abbr[wday]), (long)days + 1, _(mon_abbr[m]),
                 (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60);
     }
 }
@@ -2826,7 +2930,16 @@ static void clock_text(char *buf)
 /* Left edge of the clock's part of the header (room for the widest date). */
 static WORD clock_left(void)
 {
-    return g.w - U(8) - gfx_textlen(&g, "Wed 30 Sep  00:00", TS_SMALL) - U(4);
+    /* the widest day and month in this language */
+    WORD dw = 0, mw = 0, w;
+    int i;
+    for (i = 0; i < 7; i++)
+        if ((w = gfx_textlen(&g, _(day_abbr[i]), TS_SMALL)) > dw)
+            dw = w;
+    for (i = 0; i < 12; i++)
+        if ((w = gfx_textlen(&g, _(mon_abbr[i]), TS_SMALL)) > mw)
+            mw = w;
+    return g.w - U(8) - dw - mw - gfx_textlen(&g, " 30   00:00", TS_SMALL) - U(4);
 }
 
 /* While music plays, its dancing bars in the header, left of the clock:
@@ -3046,7 +3159,7 @@ static void draw_menu_row(int i)
         SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
     gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
-    gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, mod_names[menu[i]], fg, bg,
+    gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, _(mod_names[menu[i]]), fg, bg,
              g.menu_w - U(24), TS_BOLD);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
@@ -3075,63 +3188,63 @@ static const char *hint_text(void)
 {
     struct Page *p = cur();
     /* the long hints when the widest of them fits */
-    BOOL hi = gfx_textlen(&g, "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back",
+    BOOL hi = gfx_textlen(&g, _("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back"),
                           TS_SMALL) <= g.w - U(12);
     if (focus == FOCUS_MENU && section_inert())
-        return hi ? "Up/Down  choose      Esc twice  quit" : "Esc twice quit";
+        return hi ? _("Up/Down  choose      Esc twice  quit") : _("Esc twice quit");
     if (focus == FOCUS_MENU)
-        return hi ? "Up/Down  choose      Right/Fire  open      Esc twice  quit"
-                  : "Fire open  Esc twice quit";
+        return hi ? _("Up/Down  choose      Right/Fire  open      Esc twice  quit")
+                  : _("Fire open  Esc twice quit");
     if (focus == FOCUS_PREVIEW && p && p->pics)
-        return hi ? "Up/Down  scroll      Fire/Return  view      Left/Esc  back"
-                  : "Fire view  Esc back";
+        return hi ? _("Up/Down  scroll      Fire/Return  view      Left/Esc  back")
+                  : _("Fire view  Esc back");
     if (focus == FOCUS_PREVIEW)
-        return hi ? "Up/Down  scroll      Fire/Return  play      Left/Esc  back"
-                  : "Fire play  Esc back";
+        return hi ? _("Up/Down  scroll      Fire/Return  play      Left/Esc  back")
+                  : _("Fire play  Esc back");
     if (p && p->type == PT_LIST && p->pics && p->list.count) {
         /* Fire plays what can be played (a picture, a folder of them);
          * Right goes inside */
         const struct Item *it = &p->list.items[p->sel];
         if (it->kind == IT_PIC)
-            return hi ? "Up/Down  move    Fire/Return  view    Left/Esc  back"
-                      : "Fire view  Esc back";
+            return hi ? _("Up/Down  move    Fire/Return  view    Left/Esc  back")
+                      : _("Fire view  Esc back");
         if (it->mark == MARK_PLAY)
-            return hi ? "Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back"
-                      : "Fire show  Right open";
-        return hi ? "Up/Down  move    Fire/Right  open    Left/Esc  back" : "Fire open  Esc back";
+            return hi ? _("Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back")
+                      : _("Fire show  Right open");
+        return hi ? _("Up/Down  move    Fire/Right  open    Left/Esc  back") : _("Fire open  Esc back");
     }
     if (p && p->type == PT_LIST && p->plex && p->list.count &&
         p->list.items[p->sel].kind == IT_PLEXTRACK)
-        return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
+        return hi ? _("Up/Down  move    Fire/Return  play    Left/Esc  back") : _("Fire play  Esc back");
     if (p && p->type == PT_LIST && p->plex && p->list.count &&
         p->list.items[p->sel].kind == IT_PLEXPHOTO)
-        return hi ? "Up/Down  move    Fire/Return  view    Left/Esc  back" : "Fire view  Esc back";
+        return hi ? _("Up/Down  move    Fire/Return  view    Left/Esc  back") : _("Fire view  Esc back");
     if (p && p->type == PT_LIST && p->plex && p->list.count &&
         p->list.items[p->sel].kind == IT_PLEXSRV)
-        return hi ? "Up/Down  move    Fire  use this server    Left/Esc  back"
-                  : "Fire use it  Esc back";
+        return hi ? _("Up/Down  move    Fire  use this server    Left/Esc  back")
+                  : _("Fire use it  Esc back");
     if (p && p->type == PT_LIST && p->radio && p->list.count &&
         p->list.items[p->sel].kind == IT_STATION)
-        return hi ? "Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back"
-                  : "Fire play  Right info";
+        return hi ? _("Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back")
+                  : _("Fire play  Right info");
     if (p && p->type == PT_LIST && p->radio)
-        return hi ? "Up/Down  move    Right/Fire  open    Left/Esc  back" : "Fire open  Esc back";
+        return hi ? _("Up/Down  move    Right/Fire  open    Left/Esc  back") : _("Fire open  Esc back");
     if (p && p->type == PT_LIST && has_aside(p))
-        return hi ? "Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back"
-                  : "Fire play  Esc back";
+        return hi ? _("Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back")
+                  : _("Fire play  Esc back");
     if (p && p->type == PT_LIST)
-        return hi ? "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back"
-                  : "Fire open  Ret play  Esc back";
+        return hi ? _("Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back")
+                  : _("Fire open  Ret play  Esc back");
     if (p && p->type == PT_DETAIL)
-        return hi ? "Fire/Return  play      Up/Down  scroll      Left/Esc  back"
-                  : "Fire play  Esc back";
+        return hi ? _("Fire/Return  play      Up/Down  scroll      Left/Esc  back")
+                  : _("Fire play  Esc back");
     if (p && p->type == PT_PLAYER)
-        return hi ? "Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back"
-                  : "Fire press  Up/Dn vol  Esc back";
+        return hi ? _("Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back")
+                  : _("Fire press  Up/Dn vol  Esc back");
     if (p && p->type == PT_LIST && (p->mods || p->songs) && p->list.count &&
         (p->list.items[p->sel].kind == IT_MOD || p->list.items[p->sel].kind == IT_SONG))
-        return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
-    return hi ? "Up/Down  scroll      Left/Esc  back" : "Up/Down scroll  Esc back";
+        return hi ? _("Up/Down  move    Fire/Return  play    Left/Esc  back") : _("Fire play  Esc back");
+    return hi ? _("Up/Down  scroll      Left/Esc  back") : _("Up/Down scroll  Esc back");
 }
 
 static const char *hint_shown;      /* the hint in the footer now */
@@ -3556,8 +3669,6 @@ static ULONG pv_due;
 /* "12-Mar-1994" from a DateStamp's days. */
 static void date_text(LONG days, char *out)
 {
-    static const char *mon[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     static const UBYTE mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     LONG y = 1978, m = 0;
     for (;;) {
@@ -3573,7 +3684,7 @@ static void date_text(LONG days, char *out)
             break;
         days -= md;
     }
-    sprintf(out, "%ld-%s-%ld", (long)days + 1, mon[m], (long)y);
+    sprintf(out, "%ld-%s-%ld", (long)days + 1, _(mon_abbr[m]), (long)y);
 }
 
 static void pv_line(const char *s, WORD w)
@@ -3850,26 +3961,27 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         }
         if (j->size >= 0) {
             date_text(j->days, date);
-            sprintf(line, "Changed %s", date);
+            sprintf(line, _("Changed %s"), date);
             pv_line(line, w);
         }
     } else if ((it->flags & ITEM_DISABLED) || (j->np <= 0 && j->nd == 0)) {
-        pv_line("No pictures in this folder.", w);
+        pv_line(_("No pictures in this folder."), w);
     } else if (j->nd == 0) {
-        sprintf(line, j->np == 1 ? "%ld picture" : "%ld pictures", (long)j->np);
+        sprintf(line, j->np == 1 ? _("%ld picture") : _("%ld pictures"), (long)j->np);
         pv_line(line, w);
         pv_line("", w);
-        pv_line("Fire: slideshow", w);
-        pv_line("Right: open the folder", w);
+        pv_line(_("Fire: slideshow"), w);
+        pv_line(_("Right: open the folder"), w);
     } else {
-        if (j->np > 0)
-            sprintf(line, "%ld folder%s, %ld picture%s", (long)j->nd, j->nd == 1 ? "" : "s",
-                    (long)j->np, j->np == 1 ? "" : "s");
-        else
-            sprintf(line, j->nd == 1 ? "%ld folder" : "%ld folders", (long)j->nd);
+        sprintf(line, j->nd == 1 ? _("%ld folder") : _("%ld folders"), (long)j->nd);
+        if (j->np > 0) {
+            strcat(line, ", ");
+            sprintf(line + strlen(line), j->np == 1 ? _("%ld picture") : _("%ld pictures"),
+                    (long)j->np);
+        }
         pv_line(line, w);
         pv_line("", w);
-        pv_line("Fire or Right: open", w);
+        pv_line(_("Fire or Right: open"), w);
     }
 }
 
@@ -4283,7 +4395,7 @@ static void style_preview(struct Page *p)
         spv_idx = p->sel;
     }
     if (!(f = spv_font)) {
-        gfx_text(&g, x0, y0, "Not in the Fonts drawer", PEN_DIM, PEN_BG, x1 - x0, TS_BODY);
+        gfx_text(&g, x0, y0, _("Not in the Fonts drawer"), PEN_DIM, PEN_BG, x1 - x0, TS_BODY);
         return;
     }
     k = ((LONG)lf->ysize << 8) / 12;
@@ -4291,15 +4403,15 @@ static void style_preview(struct Page *p)
     ipx = 16 * lf->kint;
     SetFont(g.rp, f);
     for (i = 0; i < nmenu; i++)
-        if ((w = TextLength(g.rp, (CONST_STRPTR)mod_names[menu[i]],
-                            strlen(mod_names[menu[i]]))) > longest)
+        if ((w = TextLength(g.rp, (CONST_STRPTR)_(mod_names[menu[i]]),
+                            strlen(_(mod_names[menu[i]])))) > longest)
             longest = w;
     mw = SU(23) + longest + SU(6);
     if (mw > x1 - x0 - SU(3))
         mw = x1 - x0 - SU(3);
     for (i = 0, y = y0; i < nmenu && y + rh - 1 <= y1; i++, y += rh) {
         UBYTE bg = i == menu_sel ? PEN_HL : PEN_BG;
-        const char *s = mod_names[menu[i]];
+        const char *s = _(mod_names[menu[i]]);
         gfx_fill(&g, x0, y, x0 + mw - 1, y + rh - 1, bg);
         gfx_icon_sized(&g, menu[i], x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
         SetFont(g.rp, f);
@@ -4730,7 +4842,7 @@ static void draw_list_rows(struct Page *p)
             radio_spin();           /* still asking: the spinner, not "(empty)" */
             return;
         }
-        gfx_text(&g, g.pane_x, g.list_top + U(2), "(empty)", PEN_DIM, PEN_BG, 0, TS_BODY);
+        gfx_text(&g, g.pane_x, g.list_top + U(2), _("(empty)"), PEN_DIM, PEN_BG, 0, TS_BODY);
         return;
     }
     for (r = 0; r < vis && p->top + r < p->list.count; r++)
@@ -5022,7 +5134,7 @@ static void draw_pane(BOOL full)
             WORD ph = g.w < 640 ? U(128) : (g.k == 256 && g.h >= 400) ? 170 : U(85), dh = 0;
             p->facts_y = g.list_top;
             if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
-                set_msg("Loading screenshot...");
+                set_msg(_("Loading screenshot..."));
                 if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph, TRUE, &dh))
                     p->facts_y = g.list_top + dh + U(6);
                 set_msg(NULL);
@@ -5293,7 +5405,7 @@ static void np_volume_text(void)
         return;
     if (np.art_s && np.art_y <= np.by + np.bh)
         end = np.art_x - U(8) - 1;          /* the cover beside it */
-    sprintf(m, "Volume %ld%%", (long)(mp_volume() * 100 / 64));
+    sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
     gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
     x += gfx_textlen(&g, m, TS_SMALL);
     if (x <= end)
@@ -5377,7 +5489,7 @@ static void np_layout(void)
     np.bar_w = np.w - gfx_textlen(&g, "88:88 / 88:88", TS_BODY) - U(10);
     np.by = np.time_y + row + U(4);
     np.bh = g.font_h + U(8);
-    vt = gfx_textlen(&g, "Volume 100%", TS_SMALL) + U(6);
+    vt = gfx_textlen(&g, _("Volume 100%"), TS_SMALL) + U(6);
     avail = np.w - vt;                      /* buttons, gaps, and two more before volume */
     np.bw = (avail - (NB_COUNT + 1) * gap) / NB_COUNT;
     np.vol_x = 0;
@@ -5475,12 +5587,12 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
     else
         strcpy(t, a);                       /* its length is not known */
     if (st->songlen && st->pattern >= 0)
-        sprintf(pos, "Position %ld of %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+        sprintf(pos, _("Position %ld of %ld   Pattern %ld   Row %ld"), (long)st->order + 1,
                 (long)st->songlen, (long)st->pattern, (long)st->row);
     else if (st->songlen)
-        sprintf(pos, "Position %ld of %ld", (long)st->order + 1, (long)st->songlen);
+        sprintf(pos, _("Position %ld of %ld"), (long)st->order + 1, (long)st->songlen);
     else if (st->pattern >= 0 && mp_running())
-        sprintf(pos, "Position %ld   Pattern %ld   Row %ld", (long)st->order + 1,
+        sprintf(pos, _("Position %ld   Pattern %ld   Row %ld"), (long)st->order + 1,
                 (long)st->pattern, (long)st->row);     /* mixed: its length in positions unknown */
     else
         pos[0] = 0;
@@ -5488,15 +5600,15 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         struct StInfo in;
         st_info(&in);
         if (in.state == ST_PLAYING) {
-            sprintf(pos, "Buffered %ld.%lds", (long)(in.buffer_ms / 1000),
+            sprintf(pos, _("Buffered %ld.%lds"), (long)(in.buffer_ms / 1000),
                     (long)(in.buffer_ms % 1000 / 100));
             if (in.underruns) {
-                sprintf(a, "   dropouts %ld", (long)in.underruns);
+                sprintf(a, _("   dropouts %ld"), (long)in.underruns);
                 amce_strlcat(pos, a, sizeof(pos));
             }
         } else {
-            amce_strlcpy(pos, in.state == ST_CONNECTING ? "Connecting..." :
-                              in.state == ST_BUFFERING ? "Buffering..." : "", sizeof(pos));
+            amce_strlcpy(pos, in.state == ST_CONNECTING ? _("Connecting...") :
+                              in.state == ST_BUFFERING ? _("Buffering...") : "", sizeof(pos));
         }
     }
     /* the time right of the bar, right-aligned */
@@ -5541,7 +5653,7 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
             if (full) {
                 gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
                 gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2,
-                         n == 1 ? "Mono" : i ? "Right" : "Left", PEN_DIM, PEN_BG, np.name_w,
+                         n == 1 ? _("Mono") : i ? _("Right") : _("Left"), PEN_DIM, PEN_BG, np.name_w,
                          TS_SMALL);
             }
         } else if (full || st->sample[i] != np.s_sample[i]) {
@@ -5585,7 +5697,7 @@ static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 /* label, then value at the column after the longest label (Playback). */
 static void np_pair(WORD y, const char *label, const char *value)
 {
-    WORD col = gfx_textlen(&g, "Playback", TS_SMALL) + U(8), w;
+    WORD col = gfx_textlen(&g, _("Playback"), TS_SMALL) + U(8), w;
     WORD tw = np.art_s ? np.w - np.art_s - U(8) : np.w, x1 = np.x0 + tw;
     gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
     w = gfx_textlen(&g, label, TS_SMALL);
@@ -5645,7 +5757,7 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
 static void np_playback_line(WORD y, const struct StInfo *in)
 {
     char v[64];
-    amce_strlcpy(v, in->mhi ? "MHI (decoded and played by it)" : in->ahi ? "AHI 16-bit"
+    amce_strlcpy(v, in->mhi ? _("MHI (decoded and played by it)") : in->ahi ? "AHI 16-bit"
                                                                           : "Paula 8-bit",
                  sizeof(v));
     if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels)) {
@@ -5653,7 +5765,7 @@ static void np_playback_line(WORD y, const struct StInfo *in)
         sprintf(v + strlen(v), ", %s %s", fmt_khz(in->dec_freq, k),
                 in->dec_channels == 1 ? "mono" : "stereo");
     }
-    np_pair(y, "Playback", v);
+    np_pair(y, _("Playback"), v);
 }
 
 /* A station's part of the page: what it is, and what is on air. Its
@@ -5669,31 +5781,31 @@ static void np_draw_station(void)
     if (np_local()) {
         /* a music file: its name, folder, where in it, what it is, how it plays */
         ULONG len = st_length_ms(), kbps = in.bitrate;
-        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "(no title)", PEN_WHITE,
+        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
                 TS_BOLD);
         amce_strlcpy(info, mp_track_by(), sizeof(info));
         if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-            sprintf(part, "   Track %ld of %ld", (long)np.idx + 1, (long)np.list.count);
+            sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
             amce_strlcat(info, part, sizeof(info));
         }
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
             return;
-        np_pair(y, "File", FilePart((STRPTR)mp_path()));
+        np_pair(y, _("File"), FilePart((STRPTR)mp_path()));
         y += lh;
         if (!kbps && len >= 1000 && st_size())
             kbps = st_size() / (len / 8);   /* FLAC: bytes / (ms / 8) = kbit/s */
         if (!mp_running())
-            np_pair(y, "Format", st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped");
+            np_pair(y, _("Format"), st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped"));
         else if (!in.freq)
-            np_pair(y, "Format", "Reading...");
+            np_pair(y, _("Format"), _("Reading..."));
         else
-            np_audio_line(y, "Format", mp_tag(), kbps, in.freq, in.channels);
+            np_audio_line(y, _("Format"), mp_tag(), kbps, in.freq, in.channels);
         y += lh;
         if (mp_running() && in.dec_freq)
             np_playback_line(y, &in);
         else
-            np_pair(y, "Playback", "");
+            np_pair(y, _("Playback"), "");
         y += lh;
         if (y <= bottom)                    /* the picture's square left alone */
             gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
@@ -5702,62 +5814,62 @@ static void np_draw_station(void)
     }
     if (mp_is_track()) {
         /* a Plex track: its title, artist and album, where in the list, how it plays */
-        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "(no title)", PEN_WHITE,
+        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
                 TS_BOLD);
         amce_strlcpy(info, mp_track_by(), sizeof(info));
         if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
             /* the album is named already: only where in it */
-            sprintf(part, "   Track %ld of %ld", (long)np.idx + 1, (long)np.list.count);
+            sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
             amce_strlcat(info, part, sizeof(info));
         }
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
             return;
         /* the file as stored, as the server sends it, as the Amiga plays it */
-        np_audio_line(y, "Original", plex_orig.codec, plex_orig.kbps, plex_orig.rate,
+        np_audio_line(y, _("Original"), plex_orig.codec, plex_orig.kbps, plex_orig.rate,
                       plex_orig.ch);
         y += lh;
         if (!mp_running())
-            np_pair(y, "Plex", st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped");
+            np_pair(y, "Plex", st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped"));
         else if (in.state == ST_CONNECTING)
-            np_pair(y, "Plex", "Connecting...");
+            np_pair(y, "Plex", _("Connecting..."));
         else if (in.state == ST_BUFFERING)
-            np_pair(y, "Plex", "Buffering...");
+            np_pair(y, "Plex", _("Buffering..."));
         else if (!plex_orig.conv)
-            np_pair(y, "Plex", "sends the file as stored");
+            np_pair(y, "Plex", _("sends the file as stored"));
         else
             np_audio_line(y, "Plex", "MP3", in.avg_kbps, in.freq, in.channels);
         y += lh;
         if (mp_running() && in.dec_freq)
             np_playback_line(y, &in);
         else
-            np_pair(y, "Playback", "");
+            np_pair(y, _("Playback"), "");
         y += lh;
         if (y <= bottom)                    /* the cover's square left alone */
             gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
                      PEN_BG);
         return;
     }
-    np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "Radio", PEN_WHITE, TS_BOLD);
-    sprintf(info, "Radio   %s", mp_tag());
+    np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("Radio"), PEN_WHITE, TS_BOLD);
+    sprintf(info, _("Radio   %s"), mp_tag());
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-        sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+        sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
         amce_strlcat(info, part, sizeof(info));
         amce_strlcat(info, np.folder, sizeof(info));
     }
     np_line(np.info_y, info, PEN_DIM, TS_SMALL);
     if (y + lh * 5 > bottom)
         return;
-    np_line(y, "On air", PEN_DIM, TS_BOLD);
+    np_line(y, _("On air"), PEN_DIM, TS_BOLD);
     y += lh;
     if (!mp_running())
-        now = st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped";
+        now = st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped");
     else if (in.state == ST_CONNECTING)
-        now = "Connecting...";
+        now = _("Connecting...");
     else if (in.state == ST_BUFFERING)
-        now = "Buffering...";
+        now = _("Buffering...");
     else if (!now[0])
-        now = "(the station does not say)";
+        now = _("(the station does not say)");
     np_line(y, now, PEN_TEXT, TS_SMALL);
     gfx_fill(&g, np.x0, y + g.font_h, np.x0 + np.w - 1, y + lh * 2 - 1, PEN_BG);
     y += lh * 2;
@@ -5768,12 +5880,12 @@ static void np_draw_station(void)
     }
     if (in.dec_freq && y + lh <= bottom) {
         char k[16];
-        sprintf(part, "MP3 %ldkbps, %s %s", (long)in.bitrate, fmt_khz(in.freq, k),
+        sprintf(part, _("MP3 %ldkbps, %s %s"), (long)in.bitrate, fmt_khz(in.freq, k),
                 in.channels == 2 ? "stereo" : "mono");
         if (in.dec_freq != in.freq || in.dec_channels != in.channels)
-            sprintf(part + strlen(part), "; played at %s %s", fmt_khz(in.dec_freq, k),
+            sprintf(part + strlen(part), _("; played at %s %s"), fmt_khz(in.dec_freq, k),
                     in.dec_channels == 2 ? "stereo" : "mono");
-        amce_strlcat(part, in.mhi ? ", by MHI" : in.ahi ? ", AHI" : "", sizeof(part));
+        amce_strlcat(part, in.mhi ? _(", by MHI") : in.ahi ? ", AHI" : "", sizeof(part));
         np_line(y, part, PEN_DIM, TS_SMALL);
         y += lh;
     }
@@ -5809,7 +5921,7 @@ static void np_draw(BOOL full)
                 np_art_load(np_art_file);   /* left to the pane, and gone from it since */
         }
         if (!mp_loaded()) {
-            gfx_text(&g, np.x0, np.title_y, "Nothing playing", PEN_DIM, PEN_BG, np.w, TS_BOLD);
+            gfx_text(&g, np.x0, np.title_y, _("Nothing playing"), PEN_DIM, PEN_BG, np.w, TS_BOLD);
             return;
         }
         if (mp_is_stream()) {
@@ -5828,15 +5940,15 @@ static void np_draw(BOOL full)
             mp_subsongs(&sub, &subs);
             sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
             if (mp_author()[0]) {
-                sprintf(part, "   by %s", mp_author());
+                sprintf(part, _("   by %s"), mp_author());
                 amce_strlcat(info, part, sizeof(info));
             }
             if (subs > 1) {
-                sprintf(part, "   subsong %ld of %ld", (long)sub, (long)subs);
+                sprintf(part, _("   subsong %ld of %ld"), (long)sub, (long)subs);
                 amce_strlcat(info, part, sizeof(info));
             }
             if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-                sprintf(part, "   %ld of %ld in ", (long)np.idx + 1, (long)np.list.count);
+                sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
                 amce_strlcat(info, part, sizeof(info));
                 amce_strlcat(info, np.folder, sizeof(info));
             }
@@ -5847,7 +5959,7 @@ static void np_draw(BOOL full)
             WORD lh = g.font_h + U(1), cols = np.w >= U(300) ? 2 : 1, cw = np.w / cols;
             WORD rows = (g.footer_y - 2 - np.samples_y - lh) / lh, n = 0, k;
             if (rows > 0 && mp_samples() > 0) {
-                gfx_text(&g, np.x0, np.samples_y, "Samples", PEN_DIM, PEN_BG, 0, TS_BOLD);
+                gfx_text(&g, np.x0, np.samples_y, _("Samples"), PEN_DIM, PEN_BG, 0, TS_BOLD);
                 for (k = 0; k < mp_samples() && n < rows * cols; k++) {
                     BOOL used;
                     const char *sn = mp_sample_name(k, &used);
@@ -6283,9 +6395,9 @@ static void np_press(int b)
             return;
         }
         if (!np_skip(1))
-            set_msg(mp_is_track() ? "That was the last track"
-                    : mp_is_stream() ? "That was the last station in the list"
-                                     : "That was the last module in the folder");
+            set_msg(mp_is_track() ? _("That was the last track")
+                    : mp_is_stream() ? _("That was the last station in the list")
+                                     : _("That was the last module in the folder"));
         return;
     case NB_BACK:
     case NB_FWD:
@@ -6306,7 +6418,7 @@ static void np_press(int b)
             break;
         }
         if (mp_loaded() && !mp_step(b == NB_FWD ? 1 : -1))
-            set_msg("This module cannot be moved through");
+            set_msg(_("This module cannot be moved through"));
         break;
     case NB_PLAY:
         if (!mp_loaded()) {
@@ -6341,7 +6453,7 @@ static void np_open_page(void)
     struct Page *p;
     if (np_on())
         return;
-    if (!(p = page_push(PT_PLAYER, "Now playing")))
+    if (!(p = page_push(PT_PLAYER, _("Now playing"))))
         return;
     np.btn = NB_PLAY;
     if (focus != FOCUS_CONTENT) {
@@ -6520,7 +6632,7 @@ static void np_tick(void)
         amce_strlcpy(why, st_error(), sizeof(why));
         if (failed) {
             amce_log("plex", why[0] ? why : "the track failed");
-            set_msg(why[0] ? why : "That track could not be played");
+            set_msg(why[0] ? why : _("That track could not be played"));
         }
         if (failed && np.seeked) {
             /* a seek the server would not do: the track stays, stopped,
@@ -6528,7 +6640,7 @@ static void np_tick(void)
             np.seeked = FALSE;
             mp_stop();
             np_mark_lists(TRUE);
-            set_msg(why[0] ? why : "The track could not be started there");
+            set_msg(why[0] ? why : _("The track could not be started there"));
             if (np_on())
                 np_redraw_all();
             np.s_rstate = -2;
@@ -6548,7 +6660,7 @@ static void np_tick(void)
         if (mp_running() && mp_ended()) {
             /* a station gone quiet: said why, not the next one */
             char why[100];
-            amce_strlcpy(why, st_error()[0] ? st_error() : "The station stopped sending",
+            amce_strlcpy(why, st_error()[0] ? st_error() : _("The station stopped sending"),
                          sizeof(why));
             mp_stop();
             np_mark_lists(TRUE);
@@ -6720,7 +6832,7 @@ static void np_shortcut(struct Page *p)
             t = label;
         }
     }
-    action_item(p, "Now playing", t, ACT_NOWPLAYING, MARK_PLAYING);
+    action_item(p, _("Now playing"), t, ACT_NOWPLAYING, MARK_PLAYING);
 }
 
 /* A library's long list (Artists, Albums, Recently added): a Now playing
@@ -6750,7 +6862,7 @@ static void plex_shortcut_fix(struct Page *p)
         BOOL added = FALSE;
         if (has)
             list_drop_first(&p->list);
-        if (playing && (it = list_add_first(&p->list, "Now playing", t, "", IT_ACTION))) {
+        if (playing && (it = list_add_first(&p->list, _("Now playing"), t, "", IT_ACTION))) {
             it->action = ACT_NOWPLAYING;
             it->mark = MARK_PLAYING;
             added = TRUE;
@@ -6875,26 +6987,28 @@ static void build_mods_root(void)
     struct Page *p;
     BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU), sid = dir_exists(MODS_SID);
     if (!mods && !menu_music && !mp_loaded()) {
-        if ((p = page_push(PT_TEXT, "Mods"))) {
-            text_para(p, "No modules found. AmigaMCE looks for them in " MODS_ROOT
-                         " and in " MODS_MENU " (AGS's menu music).");
+        if ((p = page_push(PT_TEXT, _("Mods")))) {
+            char t[200];
+            sprintf(t, _("No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu "
+                         "music)."), MODS_ROOT, MODS_MENU);
+            text_para(p, t);
             text_line(p, "");
-            text_para(p, "It plays ProTracker modules itself, and hundreds of other formats "
+            text_para(p, _("It plays ProTracker modules itself, and hundreds of other formats "
                          "(OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and "
-                         "DeliTracker's players, all on the Amiga's own sound.");
+                         "DeliTracker's players, all on the Amiga's own sound."));
         }
         return;
     }
-    if (!(p = page_push(PT_LIST, "Mods")))
+    if (!(p = page_push(PT_LIST, _("Mods"))))
         return;
     p->mods = 1;
     np_shortcut(p);
     if (mods)
-        list_add(&p->list, "Modules", MODS_ROOT, "", IT_DIR);
+        list_add(&p->list, _("Modules"), MODS_ROOT, "", IT_DIR);
     if (sid)
-        list_add(&p->list, "C64 music", MODS_SID, "", IT_DIR);
+        list_add(&p->list, _("C64 music"), MODS_SID, "", IT_DIR);
     if (menu_music)
-        list_add(&p->list, "Menu music", MODS_MENU, "", IT_DIR);
+        list_add(&p->list, _("Menu music"), MODS_MENU, "", IT_DIR);
 }
 
 static void pane_settle(void);
@@ -6961,7 +7075,7 @@ static void pane_tick(void)
 /* The pane while the selection is moving: blank, with the section's name. */
 static void pane_preview(BOOL first)
 {
-    const char *t = mod_names[menu[menu_sel]];
+    const char *t = _(mod_names[menu[menu_sel]]);
     if (first) {
         /* all but the title band (title_band_rest); a picture cleared
          * first, then its pens let go (filled over, it flashed) */
@@ -7034,13 +7148,13 @@ static void open_dir_now(struct Item *it)
     LONG n;
     BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods, songs = cur() && cur()->songs;
     if (pics && (it->flags & ITEM_DISABLED)) {
-        set_msg("No pictures in that folder");
+        set_msg(_("No pictures in that folder"));
         return;
     }
-    set_msg("Loading...");
+    set_msg(_("Loading..."));
     p = page_push(PT_LIST, it->label);
     if (!p) {
-        set_msg("Too many levels open");
+        set_msg(_("Too many levels open"));
         return;
     }
     if (pics) {
@@ -7051,7 +7165,7 @@ static void open_dir_now(struct Item *it)
             if (n == -2)
                 msg[0] = 0;                 /* given up for input */
             else
-                set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
+                set_msg(n < 0 ? _("Could not open that folder") : _("That folder has no pictures"));
             return;
         }
         msg[0] = 0;
@@ -7064,7 +7178,7 @@ static void open_dir_now(struct Item *it)
         n = songs_read_dir(it->path, &p->list);
         if (n <= 0) {
             page_pop();
-            set_msg(n < 0 ? "Could not open that folder" : "No MP3 or FLAC files in that folder");
+            set_msg(n < 0 ? _("Could not open that folder") : _("No MP3 or FLAC files in that folder"));
             return;
         }
         np_mark_lists(FALSE);
@@ -7078,7 +7192,7 @@ static void open_dir_now(struct Item *it)
         n = mods_read_dir(it->path, &p->list);
         if (n <= 0) {
             page_pop();
-            set_msg(n < 0 ? "Could not open that folder" : "That folder has no modules");
+            set_msg(n < 0 ? _("Could not open that folder") : _("That folder has no modules"));
             return;
         }
         np_mark_lists(FALSE);
@@ -7093,7 +7207,7 @@ static void open_dir_now(struct Item *it)
         if (n == -2)
             msg[0] = 0;                     /* given up for input */
         else
-            set_msg(n < 0 ? "Could not open that menu" : "That menu is empty");
+            set_msg(n < 0 ? _("Could not open that menu") : _("That menu is empty"));
         return;
     }
     msg[0] = 0;
@@ -7206,7 +7320,7 @@ static BOOL restore_after_launch(void)
     gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
     draw_header();
     draw_menu();
-    set_msg("Loading...");
+    set_msg(_("Loading..."));
     busy_begin();
     build_root(menu[menu_sel]);
     busy_end(FALSE);                /* all drawn next */
@@ -7224,7 +7338,7 @@ static void launch(const char *base)
     if (!ags.found)
         return;
     if (!ags_write_launch_script(&ags, base, script)) {
-        set_msg("Could not write T:AmigaMCE-run");
+        set_msg(_("Could not write T:AmigaMCE-run"));
         return;
     }
     /* Give the game every byte we can. */
@@ -7282,11 +7396,11 @@ static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *p
                 pos = n;
         }
     pic_describe(pi, desc, sizeof(desc));
-    sprintf(detail, "%ld/%ld   %s   %s%s", (long)pos, (long)n, desc, scale,
-            slideshow ? "   Slideshow" : "");
+    sprintf(detail, _("%ld/%ld   %s   %s%s"), (long)pos, (long)n, desc, scale,
+            slideshow ? _("   Slideshow") : "");
     view_bar(&g, l->items[i].label, detail,
-             slideshow ? "Left/Right  previous/next    Fire  pause    Esc  back"
-                       : "Left/Right  previous/next    Fire  slideshow    Esc  back");
+             slideshow ? _("Left/Right  previous/next    Fire  pause    Esc  back")
+                       : _("Left/Right  previous/next    Fire  slideshow    Esc  back"));
 }
 
 /* The next picture, decoded ahead by the loader while this one is looked
@@ -7480,7 +7594,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     if (!view_begin(&g)) {
         gfx_dbuf_start(&g);
-        set_msg("Not enough memory for the viewer");
+        set_msg(_("Not enough memory for the viewer"));
         return idx;
     }
     if (LowLevelBase)
@@ -7504,8 +7618,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 asked = -1;
                 loading_bar = FALSE;
                 view_spin_hide(&g);
-                sprintf(d, "not sent by %.50s", plex.name[0] ? plex.name : plex.host);
-                view_bar(&g, l->items[want].label, d, "Esc  back");
+                sprintf(d, _("not sent by %.50s"), plex.name[0] ? plex.name : plex.host);
+                view_bar(&g, l->items[want].label, d, _("Esc  back"));
                 bar_until = time_ms() + BAR_MS;
                 if (++fails >= 3 || nx < 0 || nx == want || (shown < 0 && nx == idx)) {
                     Delay(50);              /* read, then back to the list */
@@ -7536,7 +7650,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                      * in view, the spinner small in its corner */
                     view_spin_hide(&g);
                     view_bar(&g, l->items[want].label,
-                             vw_remote ? "Loading from Plex..." : "Loading...", "Esc  back");
+                             vw_remote ? _("Loading from Plex...") : _("Loading..."), _("Esc  back"));
                     bar_until = time_ms() + 3600000;   /* till it comes */
                     loading_bar = TRUE;
                 }
@@ -7742,7 +7856,7 @@ static void folder_slideshow(struct Item *it)
     LONG n, first;
     if (!list_init(&l))
         return;
-    set_msg("Loading...");
+    set_msg(_("Loading..."));
     busy_begin();
     n = pics_read_ui(it->path, &l);
     busy_end(n <= 0);               /* the viewer covers the screen next */
@@ -7751,7 +7865,7 @@ static void folder_slideshow(struct Item *it)
         msg[0] = 0;                 /* given up for input */
         draw_footer();
     } else if (first < 0) {
-        set_msg("No pictures in that folder");
+        set_msg(_("No pictures in that folder"));
     } else {
         viewer_run(&l, first, TRUE);
         viewer_done();
@@ -7838,7 +7952,7 @@ static void act_wheel(LONG d, WORD x, WORD y)
 
 static void open_screenmodes(void)
 {
-    struct Page *p = page_push(PT_LIST, "Screen mode");
+    struct Page *p = page_push(PT_LIST, _("Screen mode"));
     if (!p)
         return;
     build_screenmodes(p);
@@ -7848,7 +7962,7 @@ static void open_screenmodes(void)
 
 static void open_styles(void)
 {
-    struct Page *p = page_push(PT_LIST, "Style");
+    struct Page *p = page_push(PT_LIST, _("Style"));
     if (!p)
         return;
     build_styles(p);
@@ -7858,7 +7972,7 @@ static void open_styles(void)
 
 static void open_credits(void)
 {
-    struct Page *p = page_push(PT_TEXT, "Credits");
+    struct Page *p = page_push(PT_TEXT, _("Credits"));
     if (!p)
         return;
     build_credits(p);
@@ -7868,7 +7982,7 @@ static void open_credits(void)
 
 static void open_sysinfo(void)
 {
-    struct Page *p = page_push(PT_TEXT, "System information");
+    struct Page *p = page_push(PT_TEXT, _("System information"));
     if (!p)
         return;
     build_sysinfo(p);
@@ -7886,8 +8000,7 @@ static void apply_screen_mode(int sm)
     BOOL failed = FALSE;
     if (why) {
         char m[80];
-        amce_strlcpy(m, "That mode ", sizeof(m));
-        amce_strlcat(m, why, sizeof(m));
+        sprintf(m, _("That mode %.60s"), why);
         set_msg(m);
         return;
     }
@@ -7923,19 +8036,19 @@ static void apply_screen_mode(int sm)
         cur()->sel = SETTINGS_SCREEN_ROW;
     {
         /* back where it was chosen: Settings > Screen > Screen mode */
-        struct Page *p = page_push(PT_LIST, "Screen");
+        struct Page *p = page_push(PT_LIST, _("Screen"));
         if (p) {
             build_screen_settings(p);
             p->sel = 0;
         }
-        if ((p = page_push(PT_LIST, "Screen mode")))
+        if ((p = page_push(PT_LIST, _("Screen mode"))))
             build_screenmodes(p);
     }
     focus = FOCUS_CONTENT;
     msg[0] = 0;
     draw_all();
     if (failed)
-        set_msg("Could not open that screen mode");
+        set_msg(_("Could not open that screen mode"));
     else
         note_style();
 }
@@ -7980,6 +8093,21 @@ static void open_settings_page(const char *title, void (*build)(struct Page *))
     draw_footer();
 }
 
+/* Settings > General > Language: one chosen, kept, and everything shown
+ * again in it (the menu column fitted to its words). */
+static void choose_language(const char *lang)
+{
+    char t[32];
+    amce_strlcpy(lang_set, lang, sizeof(lang_set));
+    save_setting(LANG_VAR, lang_set);
+    amce_lang_open(lang_set);
+    gfx_menu_refit(&g);
+    settings_rebuild();
+    draw_all();
+    lang_name(amce_lang_now(), t);
+    set_msg(t);
+}
+
 /* Settings > Networking: an interface chosen (i < 0: the stack's choice). */
 static void choose_nic(int i)
 {
@@ -7989,13 +8117,13 @@ static void choose_nic(int i)
     save_setting(NETIF_VAR, net_if);
     net_bind_to(i < 0 ? 0 : nics[i].ip);
     plex_settings_again(FALSE);
-    set_msg(i < 0 ? "Connections: the stack's choice of interface"
-                  : "Connections go out from this interface");
+    set_msg(i < 0 ? _("Connections: the stack's choice of interface")
+                  : _("Connections go out from this interface"));
 }
 
 static void open_sound_settings(void)
 {
-    struct Page *p = page_push(PT_LIST, "Sound");
+    struct Page *p = page_push(PT_LIST, _("Sound"));
     if (!p)
         return;
     build_sound_settings(p);
@@ -8005,7 +8133,7 @@ static void open_sound_settings(void)
 
 static void open_plex_settings(void)
 {
-    struct Page *p = page_push(PT_LIST, "Plex");
+    struct Page *p = page_push(PT_LIST, _("Plex"));
     if (!p)
         return;
     build_plex_settings(p);
@@ -8074,18 +8202,18 @@ static void restyle(void)
     build_root(MOD_SETTINGS);
     if (cur())
         cur()->sel = SETTINGS_SCREEN_ROW;
-    if ((p = page_push(PT_LIST, "Screen"))) {
+    if ((p = page_push(PT_LIST, _("Screen")))) {
         build_screen_settings(p);
         p->sel = SCREEN_STYLE_ROW;
     }
-    if ((p = page_push(PT_LIST, "Style")))
+    if ((p = page_push(PT_LIST, _("Style"))))
         build_styles(p);
     focus = FOCUS_CONTENT;
     msg[0] = 0;
     draw_all();
     note_style();
     if (!restyled)
-        set_msg("The smooth style's files could not be loaded");
+        set_msg(_("The smooth style's files could not be loaded"));
 }
 
 /* Settings > Style. Remembered either way; the screen is reopened only
@@ -8109,7 +8237,7 @@ static void apply_style(int st)
         }
         settings_rebuild();         /* Screen's Style row shows the choice */
         if (st == STYLE_SMOOTH && g.style != STYLE_SMOOTH)
-            set_msg("Smooth: on RTG screens only");
+            set_msg(_("Smooth: on RTG screens only"));
         return;
     }
     restyle();
@@ -8148,21 +8276,21 @@ static void music_file_rows(struct Page *p)
     int i, n = 0;
     p->songs = 1;
     if (music_assign && music_assign_there() &&
-        (it = list_add(&p->list, "Music files (MUSIC:)", "MUSIC:", "", IT_DIR))) {
+        (it = list_add(&p->list, _("Music files (MUSIC:)"), "MUSIC:", "", IT_DIR))) {
         it->mark = MARK_ARROW;
         n++;
     }
     for (i = 0; i < nmusic_dirs; i++) {
         char label[120];
         const char *f = (const char *)FilePart((STRPTR)music_dirs[i]);
-        sprintf(label, "Music files: %.100s", f[0] ? f : music_dirs[i]);
+        sprintf(label, _("Music files: %.100s"), f[0] ? f : music_dirs[i]);
         if ((it = list_add(&p->list, label, music_dirs[i], "", IT_DIR))) {
             it->mark = MARK_ARROW;
             n++;
         }
     }
     if (!n)
-        list_add(&p->list, "Music files: Settings > Sound > Music folders", "", "", IT_TEXT);
+        list_add(&p->list, _("Music files: Settings > Sound > Music folders"), "", "", IT_TEXT);
 }
 
 static void build_music_root(struct Page *p)
@@ -8172,12 +8300,12 @@ static void build_music_root(struct Page *p)
     p->plex = 1;
     np_shortcut(p);
     if (!caps.net) {
-        list_add(&p->list, "No TCP/IP stack running: Plex needs networking", "", "", IT_TEXT);
+        list_add(&p->list, _("No TCP/IP stack running: Plex needs networking"), "", "", IT_TEXT);
         music_file_rows(p);
         return;
     }
     if (!plex.on) {
-        list_add(&p->list, "Plex is turned off (Settings > Networking > Plex)", "", "", IT_TEXT);
+        list_add(&p->list, _("Plex is turned off (Settings > Networking > Plex)"), "", "", IT_TEXT);
         music_file_rows(p);
         return;
     }
@@ -8185,17 +8313,17 @@ static void build_music_root(struct Page *p)
         /* the library known: its Artists, Albums, Recently added here */
         plex_section_menu(plex.library, &p->list);
         if (plex.libraries > 1) {
-            sprintf(label, "Other libraries on %s", plex.name[0] ? plex.name : plex.host);
+            sprintf(label, _("Other libraries on %s"), plex.name[0] ? plex.name : plex.host);
             if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
                 it->mark = MARK_ARROW;
         }
     } else if (plex.host[0]) {
-        sprintf(label, "Plex: %s", plex.name[0] ? plex.name : plex.host);
+        sprintf(label, _("Plex: %s"), plex.name[0] ? plex.name : plex.host);
         if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
     } else {
         /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
-        list_add(&p->list, "No Plex server chosen: Settings > Networking > Plex", "", "", IT_TEXT);
+        list_add(&p->list, _("No Plex server chosen: Settings > Networking > Plex"), "", "", IT_TEXT);
     }
     music_file_rows(p);
 }
@@ -8203,19 +8331,19 @@ static void build_music_root(struct Page *p)
 static void build_radio_root(struct Page *p)
 {
     static const struct { const char *label, *query; } ways[] = {
-        { "Top voted", "order=votes&reverse=true" },
-        { "Most listened to", "order=clickcount&reverse=true" },
-        { "Trending", "order=clicktrend&reverse=true" },
-        { "Chiptune", "tag=chiptune&tagExact=true&order=votes&reverse=true" },
-        { "Demoscene", "tag=demoscene&tagExact=true&order=votes&reverse=true" },
-        { "Genres", RADIO_TAGS },
-        { "Countries", RADIO_COUNTRIES },
+        { N_("Top voted"), "order=votes&reverse=true" },
+        { N_("Most listened to"), "order=clickcount&reverse=true" },
+        { N_("Trending"), "order=clicktrend&reverse=true" },
+        { N_("Chiptune"), "tag=chiptune&tagExact=true&order=votes&reverse=true" },
+        { N_("Demoscene"), "tag=demoscene&tagExact=true&order=votes&reverse=true" },
+        { N_("Genres"), RADIO_TAGS },
+        { N_("Countries"), RADIO_COUNTRIES },
     };
     int i;
     p->radio = 1;
     np_shortcut(p);
     for (i = 0; i < (int)(sizeof(ways) / sizeof(ways[0])); i++) {
-        struct Item *it = list_add(&p->list, ways[i].label, ways[i].query, "", IT_NET);
+        struct Item *it = list_add(&p->list, _(ways[i].label), ways[i].query, "", IT_NET);
         if (it)
             it->mark = MARK_ARROW;
     }
@@ -8517,13 +8645,13 @@ static void radio_done(struct NetJob *j)
         }
         if (!j->body || n <= 0) {
             const char *why = !j->body && strstr(j->err, " 401")
-                              ? "The server wants a sign-in token: see About > Plex in AmigaMCE"
+                              ? _("The server wants a sign-in token: see About > Plex in AmigaMCE")
                               : !j->body ? j->err
-                              : n < 0 ? "The server answered with something unexpected"
-                              : !strcmp(p->base, "/library/sections") ? "No music libraries there"
-                              : plex_photo_sections(p->base) ? "No photo libraries there"
-                                                             : "Nothing here";
-            list_add(&p->list, why[0] ? why : "Could not reach the Plex server", "", "", IT_TEXT);
+                              : n < 0 ? _("The server answered with something unexpected")
+                              : !strcmp(p->base, "/library/sections") ? _("No music libraries there")
+                              : plex_photo_sections(p->base) ? _("No photo libraries there")
+                                                             : _("Nothing here");
+            list_add(&p->list, why[0] ? why : _("Could not reach the Plex server"), "", "", IT_TEXT);
             sprintf(m, "%s: %s", p->title, why);
         } else {
             if (servers)
@@ -8563,9 +8691,9 @@ static void radio_done(struct NetJob *j)
                     if (p->list.items[i].kind == IT_PLEXPHOTO)
                         k++;
                 if (k == 1)
-                    strcpy(label, "Show the photo");
+                    strcpy(label, _("Show the photo"));
                 else
-                    sprintf(label, "Slideshow of these %ld photos", (long)k);
+                    sprintf(label, _("Slideshow of these %ld photos"), (long)k);
                 if (k && (a = list_add_first(&p->list, label, "", "", IT_ACTION))) {
                     a->action = ACT_PLEXSLIDES;
                     a->mark = MARK_PLAY;
@@ -8590,8 +8718,8 @@ static void radio_done(struct NetJob *j)
         if (!j->body || n <= 0) {
             const char *why = !j->body ? j->err
                               : n < 0 ? "radio-browser.info answered with something unexpected"
-                              : p->base[0] == '#' ? "Nothing listed"
-                                                  : "No stations here that AmigaMCE can play";
+                              : p->base[0] == '#' ? _("Nothing listed")
+                                                  : _("No stations here that AmigaMCE can play");
             list_add(&p->list, why[0] ? why : "Could not reach radio-browser.info", "", "",
                      IT_TEXT);
             sprintf(m, "%s: %s", p->title, why);
@@ -8667,7 +8795,7 @@ static void radio_open(struct Item *it)
     if (it->flags & ITEM_DISABLED)
         return;
     if (it->flags & ITEM_GONE) {
-        set_msg("Still being read from the server: a moment");
+        set_msg(_("Still being read from the server: a moment"));
         return;
     }
     if (it->kind == IT_PLEXDIR && it->path[0] == '@') {
@@ -8681,7 +8809,7 @@ static void radio_open(struct Item *it)
         plex_set_library(it->path + 1, (UWORD)(libs ? libs : 1));
         music_root_again();
         if (!(p = page_push(PT_LIST, it->label))) {
-            set_msg("Too many levels open");
+            set_msg(_("Too many levels open"));
             return;
         }
         p->plex = 1;
@@ -8692,7 +8820,7 @@ static void radio_open(struct Item *it)
         return;
     }
     if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
-        set_msg("No Plex server chosen: Settings > Networking > Plex");
+        set_msg(_("No Plex server chosen: Settings > Networking > Plex"));
         return;
     }
     photos = cur() && (cur()->photos || cur()->pics);  /* Pictures' Plex pages */
@@ -8702,12 +8830,12 @@ static void radio_open(struct Item *it)
         rq = NULL;
     }
     if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
-        set_msg("Not enough memory");
+        set_msg(_("Not enough memory"));
         return;
     }
     if (!(p = page_push(PT_LIST, it->label))) {
         FreeVec(j);
-        set_msg("Too many levels open");
+        set_msg(_("Too many levels open"));
         return;
     }
     p->radio = 1;
@@ -8723,19 +8851,19 @@ static void radio_open(struct Item *it)
         }
         if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
-            amce_strlcpy(msg, "Looking for Plex servers...  Esc to give up", sizeof(msg));
+            amce_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
         } else {
             amce_strlcpy(j->host, plex.host, sizeof(j->host));
             j->port = plex.port;
             plex_request(p->base, j->path, sizeof(j->path));
             j->parse = 1;                   /* read in the network process */
             amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
-            sprintf(msg, "Asking %.40s...  Esc to give up", plex.name[0] ? plex.name : plex.host);
+            sprintf(msg, _("Asking %.40s...  Esc to give up"), plex.name[0] ? plex.name : plex.host);
         }
     } else {
         radio_set_max_kbps(rkbps_now());
         radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
-        amce_strlcpy(msg, "Asking radio-browser.info...  Esc to give up", sizeof(msg));
+        amce_strlcpy(msg, _("Asking radio-browser.info...  Esc to give up"), sizeof(msg));
     }
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
@@ -8778,8 +8906,8 @@ static int pictures_plex_rows(struct Page *p)
         amce_log("pictures: no Plex rows", !caps.net ? "no TCP/IP stack" : !plex.on
                                            ? "Plex is turned off" : "no Plex server chosen");
         if (caps.net && (it = list_add_first(&p->list, !plex.on
-                                             ? "Plex photos: Plex is turned off (Settings > Networking > Plex)"
-                                             : "Plex photos: choose a server (Settings > Networking > Plex)",
+                                             ? _("Plex photos: Plex is turned off (Settings > Networking > Plex)")
+                                             : _("Plex photos: choose a server (Settings > Networking > Plex)"),
                                              "", "", IT_TEXT)))
             it->flags |= ITEM_DISABLED;
         return 0;
@@ -8805,13 +8933,13 @@ static int pictures_plex_rows(struct Page *p)
         amce_log("pictures: Plex rows", m);
     }
     if (!n) {
-        sprintf(label, "Plex photos on %.80s", plex.name[0] ? plex.name : plex.host);
+        sprintf(label, _("Plex photos on %.80s"), plex.name[0] ? plex.name : plex.host);
         if ((it = list_add_first(&p->list, label, "/library/sections?photos=1", "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
         return 1;
     }
     for (i = n - 1; i >= 0; i--) {
-        sprintf(label, "Plex: %.100s", titles[i]);
+        sprintf(label, _("Plex: %.100s"), titles[i]);
         if ((it = list_add_first(&p->list, label, keys[i], "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
     }
@@ -8829,9 +8957,11 @@ static void pictures_root_again(void)
     list_free(&r->list);
     list_init(&r->list);
     n = pics_read_ui(PICS_ROOT, &r->list);
-    if (n <= 0 && n != -2)
-        list_add(&r->list, n < 0 ? "No " PICS_ROOT " here" : PICS_ROOT " is empty", "", "",
-                 IT_TEXT);
+    if (n <= 0 && n != -2) {
+        char t[80];
+        sprintf(t, n < 0 ? _("No %s here") : _("%s is empty"), PICS_ROOT);
+        list_add(&r->list, t, "", "", IT_TEXT);
+    }
     pictures_plex_rows(r);
     r->sel = sel < r->list.count ? sel : 0;
     r->top = 0;
@@ -9434,7 +9564,7 @@ static void plex_choose(struct Item *it)
         /* chosen in Settings > Plex: back there, the row naming it */
         page_pop();
         plex_settings_again(TRUE);
-        set_msg("Plex server chosen");
+        set_msg(_("Plex server chosen"));
         return;
     }
     if (depth >= 2 && pages[depth - 2].plex && depth == 2) {
@@ -9454,33 +9584,53 @@ static void plex_choose(struct Item *it)
 /* About > Plex in AmigaMCE: what it plays, and how to connect. */
 static void plex_help(void)
 {
-    struct Page *p = page_push(PT_TEXT, "Plex in AmigaMCE");
+    struct Page *p = page_push(PT_TEXT, _("Plex in AmigaMCE"));
     char line[200];
     if (!p)
         return;
-    text_para(p, "AmigaMCE plays music from a Plex Media Server on your network: its "
-                 "music libraries, by artist and album, with their covers, played on the "
-                 "Amiga's own sound (mpega.library). The server makes each track for this "
-                 "Amiga: a 22kHz mono MP3 for a 68020/030, 24kHz stereo for a 68040/060, "
-                 "and 24kHz stereo at a higher bitrate for a fast one. On a fast Amiga, "
-                 "turning off Settings > Networking > Plex > Request lower quality audio "
-                 "plays MP3 files as stored (other formats are converted either way); "
-                 "Settings > Networking > Plex > Plex turns it all off.");
+    text_para(p, _("AmigaMCE plays music from a Plex Media Server on your network: its "
+                   "music libraries, by artist and album, with their covers. The server makes "
+                   "each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz "
+                   "stereo for a 68040/060, more for a fast one, and its best quality when an "
+                   "MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, "
+                   "turning off Settings > Networking > Plex > Request lower quality audio "
+                   "plays MP3 files as stored, and on a fast Amiga FLAC files too where "
+                   "flacdec.library is installed; other formats are converted either way. "
+                   "Settings > Networking > "
+                   "Plex > Plex turns it all off."));
     text_line(p, "");
-    text_para(p, "Finding a server: Settings > Networking > Plex > Plex server asks the "
+    text_para(p, _("Finding a server: Settings > Networking > Plex > Plex server asks the "
                  "network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: "
-                 "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400");
+                 "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400"));
     text_line(p, "");
-    text_para(p, "Signing in: a server asks for its owner's token. Find it in Plex Web (an "
+    text_para(p, _("Signing in: a server asks for its owner's token. Find it in Plex Web (an "
                  "item's Get Info > View XML: the X-Plex-Token in the address) and set it from "
                  "the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv "
-                 "needs HTTPS (AmiSSL) and comes later.");
+                 "needs HTTPS (AmiSSL) and comes later."));
     text_line(p, "");
-    sprintf(line, "Server: %s", plex.host[0] ? plex.host : "none chosen");
+    sprintf(line, _("Server: %s"), plex.host[0] ? plex.host : _("none chosen"));
     text_line(p, line);
-    text_line(p, plex.token[0] ? "Token: set" : "Token: not set");
-    text_line(p, caps.mp3_mpega ? "MP3 decoding: mpega.library found"
-                                : "MP3 decoding: mpega.library not found");
+    text_line(p, plex.token[0] ? _("Token: set") : _("Token: not set"));
+    {
+        /* what plays the tracks here: MP3, FLAC, and what they come out of */
+        int i;
+        const char *mp3 = NULL;
+        for (i = 0; i < nmhi && !mp3; i++)
+            if (mhi_sel[0] && !strcmp(mhi_sel, mhi_names[i]))
+                mp3 = mhi_names[i];
+        if (mp3)
+            sprintf(line, _("MP3: decoded by the MHI driver %.40s"), mp3);
+        else
+            amce_strlcpy(line, caps.mp3_mpega ? _("MP3: decoded by mpega.library")
+                                              : _("MP3: no decoder (mpega.library or MHI)"),
+                         sizeof(line));
+        text_line(p, line);
+        text_line(p, !caps.flacdec ? _("FLAC: converted to MP3 (flacdec.library is not installed)")
+                     : plex_tier() < 2 ? _("FLAC: converted to MP3 (too slow to decode here)")
+                     : plex.convert ? _("FLAC: converted to MP3 (lower quality audio is on)")
+                     : _("FLAC: played as stored, by flacdec.library"));
+        text_line(p, sound_ahi ? _("Sound: AHI, 16-bit") : _("Sound: Paula, 8-bit"));
+    }
     draw_pane(TRUE);
     draw_footer();
 }
@@ -9505,31 +9655,31 @@ static void radio_station(struct Item *it)
         sprintf(f, "%s, %ldkbps", line, (long)br);
         amce_strlcpy(line, f, sizeof(line));
     }
-    sprintf(f, "Format:   %s", line);
+    sprintf(f, _("Format:   %s"), line);
     text_line(p, f);
     radio_field(it, 1, line, sizeof(line));
     if (line[0]) {
-        sprintf(f, "Country:  %s", line);
+        sprintf(f, _("Country:  %s"), line);
         text_line(p, f);
     }
     radio_field(it, 4, line, sizeof(line));
-    sprintf(f, "Votes:    %s", line[0] ? line : "0");
+    sprintf(f, _("Votes:    %s"), line[0] ? line : "0");
     text_line(p, f);
     radio_field(it, 2, line, sizeof(line));
     if (line[0]) {
-        sprintf(f, "Tags:     %s", line);
+        sprintf(f, _("Tags:     %s"), line);
         text_para(p, f);
     }
     radio_field(it, 3, line, sizeof(line));
     if (line[0]) {
-        sprintf(f, "Homepage: %s", line);
+        sprintf(f, _("Homepage: %s"), line);
         text_para(p, f);
     }
     radio_field(it, 0, line, sizeof(line));
-    sprintf(f, "Stream:   %s", line);
+    sprintf(f, _("Stream:   %s"), line);
     text_para(p, f);
     text_line(p, "");
-    text_para(p, "Fire on the station in its list plays it.");
+    text_para(p, _("Fire on the station in its list plays it."));
     draw_pane(TRUE);
     draw_footer();
 }
@@ -9543,7 +9693,7 @@ static void music_add_folder(void)
     BOOL db, got = FALSE;
     int i;
     if (nmusic_dirs >= MUSIC_DIRS) {
-        set_msg("Eight music folders at most: take one out first");
+        set_msg(_("Eight music folders at most: take one out first"));
         return;
     }
     if (!AslBase && !(AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38))) {
@@ -9555,7 +9705,7 @@ static void music_add_folder(void)
         gfx_dbuf_stop(&g);                  /* the requester draws on the screen shown */
     fr = (struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest, ASLFR_Window, (ULONG)g.win, ASLFR_SleepWindow, TRUE,
-        ASLFR_TitleText, (ULONG)"A folder of MP3 or FLAC files", ASLFR_PositiveText, (ULONG)"Add",
+        ASLFR_TitleText, (ULONG)_("A folder of MP3 or FLAC files"), ASLFR_PositiveText, (ULONG)_("Add"),
         ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
         (ULONG)(nmusic_dirs ? music_dirs[nmusic_dirs - 1] : "SYS:"), TAG_DONE);
     if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
@@ -9570,7 +9720,7 @@ static void music_add_folder(void)
         }
         me->pr_WindowPtr = old;
         if (!got)
-            set_msg("That folder could not be found");
+            set_msg(_("That folder could not be found"));
     }
     if (fr)
         FreeAslRequest(fr);
@@ -9581,14 +9731,14 @@ static void music_add_folder(void)
             if (!amce_stricmp(music_dirs[i], path))
                 break;
         if (i < nmusic_dirs) {
-            set_msg("That folder is in Music already");
+            set_msg(_("That folder is in Music already"));
         } else {
             amce_strlcpy(music_dirs[nmusic_dirs++], path, sizeof(music_dirs[0]));
             save_music_dirs();
             settings_rebuild();
             if (cur() && cur()->setp == SETP_MUSIC)
                 cur()->sel = nmusic_dirs;   /* on the folder added */
-            set_msg("Folder added: its music is under Music");
+            set_msg(_("Folder added: its music is under Music"));
         }
     }
     draw_all();                             /* where the requester was */
@@ -9598,18 +9748,18 @@ static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
         if (it->action == ACT_STYLES)
-            set_msg("Style: Smooth needs an RTG screen");
+            set_msg(_("Style: Smooth needs an RTG screen"));
         else if (it->action == ACT_PLEXCONV)
-            set_msg("This Amiga plays Plex's lower quality: the files as stored are too much");
+            set_msg(_("This Amiga plays Plex's lower quality: the files as stored are too much"));
         else if (it->action >= ACT_NIC0 && it->action <= ACT_NIC_END)
-            set_msg("That interface is not up");
+            set_msg(_("That interface is not up"));
         else if (it->action == ACT_SND_AHI)
             set_msg("AHI is not installed (DEVS:ahi.device)");
         else if (it->action == ACT_SND_MHI)
-            set_msg("MHI is not installed (its drivers in LIBS:MHI)");
+            set_msg(_("MHI is not installed (its drivers in LIBS:MHI)"));
         else if (it->action == ACT_SND_FLAC)
-            set_msg(caps.flacdec ? "FLAC: music files, and Plex's tracks as stored on a fast Amiga"
-                                 : "Install flacdec.library (Aminet: util/libs/flacdec) for FLAC");
+            set_msg(caps.flacdec ? _("FLAC: music files, and Plex's tracks as stored on a fast Amiga")
+                                 : _("Install flacdec.library (Aminet: util/libs/flacdec) for FLAC"));
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         return;
@@ -9626,6 +9776,12 @@ static void act_action(struct Item *it)
         toggle_debug();
     else if (it->action == ACT_JUMP)
         toggle_jump();
+    else if (it->action == ACT_LANGSET)
+        open_settings_page(_("Language"), build_lang_settings);
+    else if (it->action == ACT_LANGWB || it->action == ACT_LANGEN ||
+             (it->action >= ACT_LANG0 && it->action < ACT_LANG0 + nlangs))
+        choose_language(it->action == ACT_LANGWB ? "" : it->action == ACT_LANGEN
+                        ? "english" : langs[it->action - ACT_LANG0]);
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
     else if (it->action == ACT_HTTPS)
@@ -9639,17 +9795,17 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_SOUNDSET)
         open_sound_settings();
     else if (it->action == ACT_GENSET)
-        open_settings_page("General", build_general_settings);
+        open_settings_page(_("General"), build_general_settings);
     else if (it->action == ACT_SCREENSET)
-        open_settings_page("Screen", build_screen_settings);
+        open_settings_page(_("Screen"), build_screen_settings);
     else if (it->action == ACT_NICSET)
-        open_settings_page("Network interface", build_nic_settings);
+        open_settings_page(_("Network interface"), build_nic_settings);
     else if (it->action == ACT_RADIOSET)
-        open_settings_page("Radio", build_radio_settings);
+        open_settings_page(_("Radio"), build_radio_settings);
     else if (it->action == ACT_RKBPSSET)
-        open_settings_page("Highest station bitrate", build_rkbps_settings);
+        open_settings_page(_("Highest station bitrate"), build_rkbps_settings);
     else if (it->action == ACT_BUFSET)
-        open_settings_page("Stream buffer", build_buf_settings);
+        open_settings_page(_("Stream buffer"), build_buf_settings);
     else if (it->action == ACT_RSRVSET) {
         /* the servers asked for and timed now: a few seconds at most */
         set_msg("Asking radio-browser.info for its servers...");
@@ -9657,7 +9813,7 @@ static void act_action(struct Item *it)
         nmirror = net_radio_mirrors(mirrors, 8);
         busy_end(FALSE);
         set_msg(NULL);
-        open_settings_page("Station list server", build_rsrv_settings);
+        open_settings_page(_("Station list server"), build_rsrv_settings);
     } else if (it->action >= ACT_RKBPS0 && it->action <= ACT_RKBPS_END) {
         char k[16];
         rkbps_sel = it->action - ACT_RKBPS0;
@@ -9671,13 +9827,13 @@ static void act_action(struct Item *it)
         }
         radio_set_max_kbps(rkbps_now());
         plex_settings_again(FALSE);
-        set_msg("Station lists opened from now on");
+        set_msg(_("Station lists opened from now on"));
     } else if (it->action >= ACT_BUF0 && it->action <= ACT_BUF_END) {
         buf_sel = it->action - ACT_BUF0;
         save_setting(BUF_VAR, buf_names[buf_sel]);
         st_set_buffer(buf_sel);
         plex_settings_again(FALSE);
-        set_msg("The next station or track started");
+        set_msg(_("The next station or track started"));
     } else if (it->action == ACT_RSRVAUTO || it->action == ACT_RSRVFAST ||
                (it->action >= ACT_RSRV0 && it->action <= ACT_RSRV_END)) {
         if (it->action == ACT_RSRVAUTO) {
@@ -9685,7 +9841,7 @@ static void act_action(struct Item *it)
         } else if (it->action == ACT_RSRVFAST) {
             int f = mirror_fastest();
             if (f < 0) {
-                set_msg("None of the servers answered: Automatic kept");
+                set_msg(_("None of the servers answered: Automatic kept"));
                 return;
             }
             sprintf(rsrv, "fastest:%.60s", mirrors[f].name);
@@ -9700,7 +9856,7 @@ static void act_action(struct Item *it)
         plex_settings_again(FALSE);
     }
     else if (it->action == ACT_NETSET)
-        open_settings_page("Networking", build_net_settings);
+        open_settings_page(_("Networking"), build_net_settings);
     else if (it->action == ACT_PLEXSLIDES && cur())
         plex_photo_view(cur(), -1, TRUE);
     else if (it->action == ACT_SND_MPEGA ||
@@ -9712,8 +9868,8 @@ static void act_action(struct Item *it)
             mhi_apply();
             plex_settings_again(FALSE);
         }
-        set_msg(d[0] ? "MP3 decoded by MHI: radio, Plex (at its best quality) and files"
-                     : "MP3 decoded here by mpega.library");
+        set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
+                     : _("MP3 decoded here by mpega.library"));
     }
     else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI) {
         BOOL on = it->action == ACT_SND_AHI;
@@ -9724,19 +9880,19 @@ static void act_action(struct Item *it)
             plex_settings_again(FALSE);
         }
         set_msg(on ? (mp_loaded() && mp_is_stream() && mp_running()
-                      ? "AHI from the next track or station on; modules stay on Paula"
-                      : "AHI: radio, Plex and music files; modules stay on Paula")
-                   : "Paula plays everything");
+                      ? _("AHI from the next track or station on; modules stay on Paula")
+                      : _("AHI: radio, Plex and music files; modules stay on Paula"))
+                   : _("Paula plays everything"));
     }
     else if (it->action == ACT_MUSICSET) {
         music_rm = -1;
-        open_settings_page("Music folders", build_music_settings);
+        open_settings_page(_("Music folders"), build_music_settings);
     } else if (it->action == ACT_MUSICASSIGN) {
         music_assign = !music_assign;
         save_setting(MUSICASSIGN_VAR, music_assign ? "" : "off");
         music_rm = -1;
         plex_settings_again(FALSE);
-        set_msg(music_assign ? "Music lists MUSIC: when it is assigned" : "Music leaves MUSIC: out");
+        set_msg(music_assign ? _("Music lists MUSIC: when it is assigned") : _("Music leaves MUSIC: out"));
     } else if (it->action == ACT_MUSICADD) {
         music_rm = -1;
         music_add_folder();
@@ -9747,7 +9903,7 @@ static void act_action(struct Item *it)
         if (music_rm != i) {
             music_rm = i;
             plex_settings_again(FALSE);
-            set_msg("Fire again to take this folder out of Music (its files stay)");
+            set_msg(_("Fire again to take this folder out of Music (its files stay)"));
             return;
         }
         for (; i < nmusic_dirs - 1; i++)
@@ -9756,7 +9912,7 @@ static void act_action(struct Item *it)
         music_rm = -1;
         save_music_dirs();
         plex_settings_again(FALSE);
-        set_msg("Folder taken out of Music");
+        set_msg(_("Folder taken out of Music"));
     }
     else if (it->action == ACT_NICAUTO)
         choose_nic(-1);
@@ -10165,7 +10321,7 @@ static void act_back(void)
             return;
         }
         quit_armed = TRUE;
-        set_msg("Press Esc again to quit AmigaMCE");
+        set_msg(_("Press Esc again to quit AmigaMCE"));
         return;
     }
     if (depth > 1) {
@@ -10758,16 +10914,24 @@ static int app_main(void)
     ULONG next_sec = 0, tick_us = 40000;
     int rc = 0;
 
+    {
+        /* the language first: everything said from here on is in it */
+        char buf[32];
+        if (GetVar((CONST_STRPTR)LANG_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            amce_strlcpy(lang_set, buf, sizeof(lang_set));
+        langs_find();
+        amce_lang_open(lang_set);
+    }
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 39);
     if (!IntuitionBase || !GfxBase) {
-        say("AmigaMCE needs Kickstart 3.0 or newer.\n");
+        say(_("AmigaMCE needs Kickstart 3.0 or newer.\n"));
         rc = 20;
         goto out;
     }
     LayersBase = OpenLibrary((CONST_STRPTR)"layers.library", 39);
     if (!LayersBase) {
-        say("AmigaMCE needs Kickstart 3.0 or newer.\n");
+        say(_("AmigaMCE needs Kickstart 3.0 or newer.\n"));
         rc = 20;
         goto out;
     }
@@ -10828,7 +10992,7 @@ static int app_main(void)
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
     if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
         (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO, ui_style))) {
-        say("AmigaMCE could not open its screen.\n");
+        say(_("AmigaMCE could not open its screen.\n"));
         rc = 20;
         goto out;
     }
@@ -10868,7 +11032,7 @@ static int app_main(void)
     draw_all();
     if (screen_mode != SM_AUTO && g.mode != screen_mode) {
         screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
-        set_msg("Saved screen mode not available here: using Automatic");
+        set_msg(_("Saved screen mode not available here: using Automatic"));
     } else {
         note_style();
     }
@@ -11056,6 +11220,7 @@ out:
         CloseLibrary(LayersBase);
     if (GfxBase)
         CloseLibrary((struct Library *)GfxBase);
+    amce_lang_quit();
     amce_log("libraries closed, exiting", "");
     amce_log_close();
     if (IntuitionBase)

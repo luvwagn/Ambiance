@@ -420,7 +420,7 @@ static void out_start(void)
         if (!ahi_start()) {
             ahi_stop();
             if (!st.err[0])
-                amce_strlcpy(st.err, "AHI could not be opened (its Preferences: a mode?)",
+                amce_strlcpy(st.err, _("AHI could not be opened (its Preferences: a mode?)"),
                              sizeof(st.err));
             st.state = ST_FAILED;
             st.quit = TRUE;
@@ -531,13 +531,13 @@ static LONG connect_to(const char *host, UWORD port)
     ULONG a = inet_addr((STRPTR)host);
     if (a == 0xFFFFFFFFUL) {
         if (!(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
-            fail("The station's server could not be found (DNS)");
+            fail(_("The station's server could not be found (DNS)"));
             return -1;
         }
         memcpy(&a, h->h_addr_list[0], 4);
     }
     if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        fail("No socket (is the TCP/IP stack running?)");
+        fail(_("No socket (is the TCP/IP stack running?)"));
         return -1;
     }
     IoctlSocket(s, FIONBIO, (char *)&one);
@@ -548,13 +548,13 @@ static LONG connect_to(const char *host, UWORD port)
     memcpy(&sa.sin_addr, &a, 4);
     if (connect(s, (struct sockaddr *)&sa, sizeof(sa)) < 0 && Errno() != EINPROGRESS) {
         CloseSocket(s);
-        fail("The station refused the connection");
+        fail(_("The station refused the connection"));
         return -1;
     }
     if (wait_sock(s, TRUE, CONNECT_S) <= 0 ||
         getsockopt(s, SOL_SOCKET, SO_ERROR, &e, &el) < 0 || e) {
         CloseSocket(s);
-        fail(st.quit ? "Stopped" : "The station did not answer");
+        fail(st.quit ? _("Stopped") : _("The station did not answer"));
         return -1;
     }
     return s;
@@ -578,7 +578,7 @@ static BOOL net_more(void)
             if (r == 0)
                 st.eof = TRUE;              /* the file's end */
             else
-                fail("The file could not be read");
+                fail(_("The file could not be read"));
             return FALSE;
         }
         st.nb_len += r;
@@ -587,7 +587,7 @@ static BOOL net_more(void)
     for (;;) {
         int w = wait_sock(st.sock, FALSE, READ_S);
         if (w <= 0) {
-            fail(w < 0 ? "Stopped" : "The station stopped sending");
+            fail(w < 0 ? _("Stopped") : _("The station stopped sending"));
             return FALSE;
         }
         r = recv(st.sock, st.nb + st.nb_len, NETBUF - st.nb_len, 0);
@@ -597,7 +597,7 @@ static BOOL net_more(void)
             if (st.finite && r == 0)
                 st.eof = TRUE;              /* a track: all of it read */
             else
-                fail(st.finite ? "The server stopped sending" : "The station closed the stream");
+                fail(st.finite ? _("The server stopped sending") : _("The station closed the stream"));
             return FALSE;
         }
         st.nb_len += r;
@@ -767,7 +767,7 @@ static BOOL open_stream(void)
         if (st.fh)
             Close(st.fh);
         if (!(st.fh = Open((CONST_STRPTR)url, MODE_OLDFILE))) {
-            fail("The file could not be opened");
+            fail(_("The file could not be opened"));
             return FALSE;
         }
         Seek(st.fh, 0, OFFSET_END);
@@ -786,11 +786,11 @@ static BOOL open_stream(void)
     for (hop = 0; hop < 4; hop++) {
         LONG status;
         if (!amce_strnicmp(url, "https:", 6)) {
-            fail("This station only streams over HTTPS, which AmigaMCE cannot play yet");
+            fail(_("This station only streams over HTTPS, which AmigaMCE cannot play yet"));
             return FALSE;
         }
         if (!split_url(url, host, sizeof(host), &port, path, sizeof(path))) {
-            fail("The station's address is not one AmigaMCE can follow");
+            fail(_("The station's address is not one AmigaMCE can follow"));
             return FALSE;
         }
         st.state = ST_CONNECTING;
@@ -841,7 +841,7 @@ static BOOL open_stream(void)
             continue;
         }
         if (status != 200 && !(status == 206 && st.range_from)) {
-            sprintf(v, "%s answered %ld", st.finite ? "The server" : "The station", (long)status);
+            sprintf(v, _("%s answered %ld"), st.finite ? _("The server") : _("The station"), (long)status);
             fail(v);
             return FALSE;
         }
@@ -871,7 +871,7 @@ static BOOL open_stream(void)
                 st.err[0] = 0;
                 st.nb[st.nb_len] = 0;
                 if (!(p = strstr((char *)st.nb + st.nb_pos, "http://"))) {
-                    fail("The station's playlist has no stream AmigaMCE can play");
+                    fail(_("The station's playlist has no stream AmigaMCE can play"));
                     return FALSE;
                 }
                 for (e = p; *e && *e != '\r' && *e != '\n'; e++)
@@ -884,14 +884,14 @@ static BOOL open_stream(void)
             }
             if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet") &&
                 !(st.finite && strstr(v, "flac"))) {
-                sprintf(req, "%s sends %s, not MP3", st.finite ? "The server" : "The station", v);
+                sprintf(req, _("%s sends %s, not MP3"), st.finite ? _("The server") : _("The station"), v);
                 fail(req);
                 return FALSE;
             }
         }
         return TRUE;
     }
-    fail("The station sent us on too many times");
+    fail(_("The station sent us on too many times"));
     return FALSE;
 }
 
@@ -1152,7 +1152,7 @@ static void decode_loop(MPEGA_STREAM *ms)
             }
             if (n == -2)                    /* a bad frame: the next one */
                 continue;
-            fail(st.err[0] ? st.err : "The stream could not be decoded");
+            fail(st.err[0] ? st.err : _("The stream could not be decoded"));
             break;
         }
         o = st.f_in;
@@ -1461,11 +1461,11 @@ static void pcm_play(void)
     BOOL mono;
     LONG fmax = st.cpu >= 40 ? (st.ahi ? 48000 : 28000) : st.cpu >= 30 ? 24000 : 16000;
     if (!st.fh) {
-        fail("Only music files on this Amiga play as WAV, AIFF or 8SVX");
+        fail(_("Only music files on this Amiga play as WAV, AIFF or 8SVX"));
         return;
     }
     if (!pcm_header(hdr, n, &pf)) {
-        fail("Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)");
+        fail(_("Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)"));
         return;
     }
     if (st.clen && pf.off + pf.bytes > st.clen) {
@@ -1492,7 +1492,7 @@ static void pcm_play(void)
     }
     /* from its first sample (or the time asked for), not the header's end */
     if (Seek(st.fh, start, OFFSET_BEGINNING) < 0) {
-        fail("The file could not be read");
+        fail(_("The file could not be read"));
         return;
     }
     st.nb_pos = st.nb_len = 0;
@@ -1711,16 +1711,16 @@ static void mhi_play(LONG freq)
         queued[i] = FALSE;
     }
     if (!(MHIBase = OpenLibrary((CONST_STRPTR)mhi_driver, 0))) {
-        fail("The MHI driver could not be opened (Settings > Sound)");
+        fail(_("The MHI driver could not be opened (Settings > Sound)"));
         return;
     }
     if (!(h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig))) {
-        fail("The MHI driver's decoder is in use, or not there");
+        fail(_("The MHI driver's decoder is in use, or not there"));
         goto done;
     }
     for (i = 0; i < MHI_BUFS; i++)
         if (!(buf[i] = AllocVec(MHI_BUFSZ, MEMF_PUBLIC))) {
-            fail("Not enough memory for MHI's buffers");
+            fail(_("Not enough memory for MHI's buffers"));
             goto done;
         }
     mp3_first_frame(&kbps, &ch);
@@ -1853,7 +1853,7 @@ static void radio_main(void)
     st.sig = s;
     st.sock = -1;
     if (s < 0) {
-        fail("No signal free");
+        fail(_("No signal free"));
         goto out;
     }
     if (!st.local && !(st_SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) {
@@ -1863,7 +1863,7 @@ static void radio_main(void)
     if (!open_stream())
         goto out;
     if (st.finite && !skip_id3()) {
-        fail(st.err[0] ? st.err : "The track ended before its music began");
+        fail(st.err[0] ? st.err : _("The track ended before its music began"));
         goto out;
     }
     if (st.finite && is_flac()) {
@@ -1879,11 +1879,11 @@ static void radio_main(void)
         LONG f;
         st.mhi = TRUE;
         if (st.skipping && !skip_to()) {
-            fail(st.err[0] ? st.err : "The track ended before that time");
+            fail(st.err[0] ? st.err : _("The track ended before that time"));
             goto out;
         }
         if (!(f = first_frame_freq())) {
-            fail(st.err[0] ? st.err : "The stream does not look like MP3");
+            fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
             goto out;
         }
         mhi_play(f);
@@ -1894,7 +1894,7 @@ static void radio_main(void)
         goto out;
     }
     if (st.skipping && !skip_to()) {
-        fail(st.err[0] ? st.err : "The track ended before that time");
+        fail(st.err[0] ? st.err : _("The track ended before that time"));
         goto out;
     }
     st.state = ST_BUFFERING;
@@ -1911,7 +1911,7 @@ static void radio_main(void)
         MPEGA_LAYER *ls[2];
         int k;
         if (!f) {
-            fail(st.err[0] ? st.err : "The stream does not look like MP3");
+            fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
             goto out;
         }
         while (div < 4 && f / div > fmax)
@@ -2023,7 +2023,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.chip = AllocMem(HALF * 4, MEMF_CHIP | MEMF_CLEAR);
     if (!st.nb || !st.fl || !st.fr || !st.chip) {
         st_stop();
-        amce_strlcpy(err, "Not enough memory to play a station", errmax);
+        amce_strlcpy(err, _("Not enough memory to play a station"), errmax);
         return FALSE;
     }
     st.state = ST_CONNECTING;
@@ -2033,7 +2033,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
                                 TAG_DONE);
     if (!st.proc) {
         st_stop();
-        amce_strlcpy(err, "Could not start the radio process", errmax);
+        amce_strlcpy(err, _("Could not start the radio process"), errmax);
         return FALSE;
     }
     return TRUE;

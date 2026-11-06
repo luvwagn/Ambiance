@@ -31,7 +31,7 @@ LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c \
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/cpucheck.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o
 VASM ?= vasmm68k_mot
@@ -96,9 +96,9 @@ build/test_ags: tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c 
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c
 
-build/test_songs: tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/amce.h
+build/test_songs: tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c src/amce.h
 	@echo "  CC    $@"
-	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c
 
 # amiga.lib's sprintf is exec's RawDoFmt, where %d/%u/%x/%c read 16 bits.
 # Every numeric conversion must carry the l modifier with a long argument.
