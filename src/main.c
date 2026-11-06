@@ -2882,37 +2882,67 @@ static void dbg_load_log(void)
 /* Once a second: the screen's state, logged when it changes (a blank
  * screen while a long list glided, unexplained): which screen is in front,
  * the display's DMA, the UI's colours, and a list drawn past its end. */
+static const char *scr_why;
 static void scr_watch(void)
 {
-    static char last[200];
-    char m[200], cols[40];
+    static char last[400];
+    char m[400], cols[80];
     struct Screen *front = IntuitionBase->FirstScreen;
     UWORD dma = *(volatile UWORD *)0xDFF002;    /* DMACONR */
     struct Page *p = cur();
-    ULONG rgb[3 * 4];
+    ULONG rgb[3 * 8];
     int i;
     cols[0] = 0;
     if (g.scr) {
-        GetRGB32(g.scr->ViewPort.ColorMap, 0, 4, rgb);
-        for (i = 0; i < 4; i++)
+        GetRGB32(g.scr->ViewPort.ColorMap, 0, 8, rgb);
+        for (i = 0; i < 8; i++)
             sprintf(cols + strlen(cols), "%s%02lx%02lx%02lx", i ? " " : "",
                     (unsigned long)(rgb[i * 3] >> 24), (unsigned long)(rgb[i * 3 + 1] >> 24),
                     (unsigned long)(rgb[i * 3 + 2] >> 24));
     }
-    sprintf(m, "front %s%.30s, display DMA %s, colours %s%s",
-            front == g.scr ? "ours" : "another: ",
-            front == g.scr ? "" : front && front->Title ? (const char *)front->Title : "(untitled)",
-            (dma & 0x0300) == 0x0300 ? "on" : "OFF", cols,
-            p && p->type == PT_LIST && p->list.count && p->top >= p->list.count ? ", LIST PAST ITS END"
-                                                                                 : "");
-    if (strcmp(m, last)) {
+    /* what the screen really shows: pixels not the background along a line
+     * through the header, the first row's text and the middle row's */
+    {
+        LONG ink[3] = { 0, 0, 0 };
+        WORD ys[3], x, k;
+        ys[0] = U(12);
+        ys[1] = g.list_top + g.list_row_h / 2;
+        ys[2] = g.list_top + (list_visible() / 2) * g.list_row_h + g.list_row_h / 2;
+        if (g.win && g.rp)
+            for (k = 0; k < 3; k++)
+                if (ys[k] >= 0 && ys[k] < g.h)
+                    for (x = k ? g.pane_x : 0; x < (k ? g.pane_x + g.pane_w / 2 : g.w); x += 2)
+                        if (ReadPixel(g.rp, x, ys[k]) != PEN_BG)
+                            ink[k]++;
+        sprintf(m, "front %s%.30s, display DMA %s, colours %s, screen at %ld,%ld scrolled %ld,%ld, "
+                   "ink: header %s, row 1 %s, middle %s%s",
+                front == g.scr ? "ours" : "another: ",
+                front == g.scr ? "" : front && front->Title ? (const char *)front->Title : "(untitled)",
+                (dma & 0x0300) == 0x0300 ? "on" : "OFF", cols,
+                g.scr ? (long)g.scr->LeftEdge : 0L, g.scr ? (long)g.scr->TopEdge : 0L,
+                g.scr && g.scr->ViewPort.RasInfo ? (long)g.scr->ViewPort.RasInfo->RxOffset : 0L,
+                g.scr && g.scr->ViewPort.RasInfo ? (long)g.scr->ViewPort.RasInfo->RyOffset : 0L,
+                ink[0] ? "yes" : "NONE", ink[1] ? "yes" : "NONE", ink[2] ? "yes" : "NONE",
+                p && p->type == PT_LIST && p->list.count && p->top >= p->list.count
+                    ? ", LIST PAST ITS END" : "");
+    }
+    if (strcmp(m, last) || scr_why) {
         amce_strlcpy(last, m, sizeof(last));
+        if (scr_why)
+            sprintf(m + strlen(m), " (on %s)", scr_why);
+        scr_why = NULL;
         if (p && p->type == PT_LIST)
             sprintf(m + strlen(m), "; %.30s: sel %ld top %ld of %ld%s%s", p->title, (long)p->sel,
                     (long)p->top, (long)p->list.count, ov.on ? ", letter up" : "",
                     pane_pending ? ", pane pending" : "");
         amce_log("screen", m);
     }
+}
+
+static void scr_watch_now(const char *why)
+{
+    scr_why = why;
+    scr_watch();
 }
 
 /* What the readout shows now, so a second that changes nothing redraws
@@ -9797,6 +9827,7 @@ static void hold_start(LONG dir, BOOL joy)
     ov_ms = ov_n = 0;
 }
 
+static void scr_watch_now(const char *why);
 static void hold_stop(void)
 {
     struct Page *p = cur();
@@ -9812,6 +9843,7 @@ static void hold_stop(void)
                 (long)hold.move_ms, (long)hold.present_ms, (long)ov_n,
                 (long)ov_ms, (long)p->sel, (long)p->top, (long)p->list.count);
         amce_log("glide", m);
+        scr_watch_now("the glide's end");
     }
     hold.dir = 0;
 }
@@ -10571,7 +10603,7 @@ static void handle_key(struct IntuiMessage *im)
             return;                 /* no letters to jump to here */
     }
     switch (code) {
-    case 27: act_back(); return;                 /* Esc: Back, twice at the menu quits */
+    case 27: scr_watch_now("Esc"); act_back(); return;   /* Esc: Back, twice at the menu quits */
     case 8: disarm(); act_back(); return;        /* Backspace */
     case 13: disarm(); act_open(TRUE); return;   /* Return: play */
     case ' ': disarm(); act_open(FALSE); return;
