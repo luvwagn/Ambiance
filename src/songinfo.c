@@ -426,6 +426,45 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
     }
 }
 
+/* ID3's genres by number ("(12)", "12"): the first 80, ID3v1's own. */
+static const char *const genres[80] = {
+    "Blues", "Classic Rock", "Country", "Dance", "Disco", "Funk", "Grunge", "Hip-Hop", "Jazz",
+    "Metal", "New Age", "Oldies", "Other", "Pop", "R&B", "Rap", "Reggae", "Rock", "Techno",
+    "Industrial", "Alternative", "Ska", "Death Metal", "Pranks", "Soundtrack", "Euro-Techno",
+    "Ambient", "Trip-Hop", "Vocal", "Jazz+Funk", "Fusion", "Trance", "Classical", "Instrumental",
+    "Acid", "House", "Game", "Sound Clip", "Gospel", "Noise", "Alternative Rock", "Bass", "Soul",
+    "Punk", "Space", "Meditative", "Instrumental Pop", "Instrumental Rock", "Ethnic", "Gothic",
+    "Darkwave", "Techno-Industrial", "Electronic", "Pop-Folk", "Eurodance", "Dream",
+    "Southern Rock", "Comedy", "Cult", "Gangsta", "Top 40", "Christian Rap", "Pop/Funk", "Jungle",
+    "Native American", "Cabaret", "New Wave", "Psychedelic", "Rave", "Showtunes", "Trailer",
+    "Lo-Fi", "Tribal", "Acid Punk", "Acid Jazz", "Polka", "Retro", "Musical", "Rock & Roll",
+    "Hard Rock"
+};
+
+static void genre_name(char *g, LONG max)
+{
+    const char *s = g;
+    ULONG v = 0;
+    BOOL paren = *s == '(';
+    if (paren)
+        s++;
+    if (*s < '0' || *s > '9')
+        return;
+    while (*s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    if (paren && *s == ')')
+        s++;
+    if (*s && *s != ' ') {
+        if (paren)
+            memmove(g, s, strlen(s) + 1);   /* "(12)Other": the name after it */
+        return;
+    }
+    if (v < 80)
+        amce_strlcpy(g, genres[v], max);
+    else
+        g[0] = 0;
+}
+
 /* ---- pictures */
 static BOOL exists(const char *path)
 {
@@ -592,6 +631,8 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
             art_out(fh, path, si, &a, art, artmax, extract);
     }
     si->art = art && art[0];
+    if (si->genre[0])
+        genre_name(si->genre, sizeof(si->genre));     /* "(12)": Other */
     Close(fh);
     me->pr_WindowPtr = old;
     return TRUE;
