@@ -143,7 +143,10 @@ static void scan_dir(const char *dir)
                     char m[160], *o = m;
                     const UBYTE *q = (const UBYTE *)fib->fib_FileName;
                     for (; *q && o < m + 100; q++)
-                        o += *q < 0x80 ? sprintf(o, "%c", *q) : sprintf(o, "<%02lx>", (unsigned long)*q);
+                        if (*q < 0x80)
+                            *o++ = (char)*q;
+                        else
+                            o += sprintf(o, "<%02lx>", (unsigned long)*q);
                     strcpy(o, ": no catalog read from it");
                     amce_log("language drawer", m);
                     continue;
