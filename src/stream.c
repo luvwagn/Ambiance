@@ -211,6 +211,7 @@ static struct {
     volatile BOOL eof;              /* a track's last byte read */
     BOOL ahi;                       /* played through AHI (16-bit), not Paula */
     BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
+    BOOL flac;                      /* decoded here by flacdec.library */
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
 } st;
 
@@ -1407,6 +1408,7 @@ static void flac_play(void)
                     (info.fdi_TotalFramesLo % info.fdi_SampleRate) * 1000 / info.fdi_SampleRate;
     st.dec_freq = info.fdi_SampleRate / div;
     st.dec_channels = mono ? 1 : 2;
+    st.flac = TRUE;
     if (st.skip_ms) {
         ULONG r = info.fdi_SampleRate;
         ULONG frame = (st.skip_ms / 1000) * r + (st.skip_ms % 1000) * r / 1000;
@@ -2035,6 +2037,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.title_seq++;
     st.bitrate = st.freq = st.channels = st.dec_freq = st.dec_channels = 0;
     st.f_in = st.f_out = st.underruns = st.played = 0;
+    st.flac = FALSE;
     st.mp3_bytes = 0;
     st.peak_l = st.peak_r = 0;
     st.quit = st.started = st.paused = FALSE;
@@ -2221,6 +2224,7 @@ void st_info(struct StInfo *i)
     i->avg_kbps = st_avg_kbps();
     i->ahi = st.ahi;
     i->mhi = st.mhi;
+    i->flac = st.flac;
     if (st.mhi && st.started) {
         /* MHI: played by the clock, held: what is queued beyond that */
         ULONG queued = mh_queued_ms(), played = mh_ms();

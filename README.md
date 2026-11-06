@@ -91,7 +91,7 @@ of the Amiga to how fast it really is.
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
 | **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign) |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
-| **For MP3 and FLAC** | mpega.library for MP3; [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060) |
+| **For MP3 and FLAC** | mpega.library for MP3; [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AmiSSL to list HTTPS radio stations |
 
 Radio, Plex and music files can play through AHI (16-bit, at AHI's own
@@ -173,7 +173,7 @@ playing.
 |---|---|
 | General | Jump scrolling (very long lists step a letter at a time), Debug |
 | Screen | Screen mode, Style (fonts and looks), Double buffering (RTG) |
-| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver; FLAC by flacdec.library; Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
+| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver; Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
 | Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and

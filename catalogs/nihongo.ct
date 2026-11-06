@@ -187,6 +187,21 @@ MP3: %s
 MSG_197B8973
 MHIドライバー
 ; MHI driver
+MSG_578E3365
+FLAC: %s
+; FLAC: %s
+MSG_3DEA7C01
+未インストール (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_0CC9EBEF
+flacdec.library、ここでは遅すぎ
+; flacdec.library, too slow here
+MSG_55B725DE
+flacdec.library、十分に高速
+; flacdec.library, fast enough
+MSG_748668C9
+  Plex: ここではFLACをMP3に変換
+;   Plex: FLAC converted to MP3 here
 MSG_5FDDDD75
 短い
 ; Short
@@ -424,15 +439,6 @@ MSG_7AFA07FD
 MSG_22FBBBB2
 デコードして再生
 ; decodes and plays
-MSG_0D2B8103
-FLACデコーダー
-; FLAC decoder
-MSG_441A0CA1
-インストール済み
-; installed
-MSG_3DEA7C01
-未インストール (Aminet: util/libs/flacdec)
-; not installed (Aminet: util/libs/flacdec)
 MSG_4DEE1DD3
 %ld箇所
 ; %ld place
@@ -799,6 +805,12 @@ MSG_1CAF7095
 MSG_6AA26665
 再生中
 ; Now playing
+MSG_7DDFAD41
+このAmigaはFLACには遅すぎます
+; This Amiga is too slow to decode FLAC smoothly
+MSG_0D65D8B7
+FLACには遅すぎます: 低音質のオーディオを要求
+; Too slow for FLAC: try Request lower quality audio
 MSG_0BBA80CF
 そのトラックは再生できませんでした
 ; That track could not be played
@@ -1090,12 +1102,6 @@ MSG_5CBCDB5D
 MSG_646AFCF3
 MHI未インストール (ドライバーはLIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_5561B1F7
-FLAC: 音楽ファイルと、速いAmigaでは保存されたままのPlexのトラック
-; FLAC: music files, and Plex's tracks as stored on a fast Amiga
-MSG_34836301
-FLAC: flacdec.libraryを導入 (Aminet: util/libs/flacdec)
-; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
 MSG_7AE98FE6
 今後開く局リストに適用
 ; Station lists opened from now on

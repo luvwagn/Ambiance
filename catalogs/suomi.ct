@@ -185,6 +185,20 @@ MSG_1358A393
 MSG_197B8973
 MHI-ajuri
 ; MHI driver
+MSG_578E3365
+; FLAC: %s
+MSG_3DEA7C01
+ei asennettu (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_0CC9EBEF
+flacdec.library, täällä liian hidas
+; flacdec.library, too slow here
+MSG_55B725DE
+flacdec.library, riittävän nopea
+; flacdec.library, fast enough
+MSG_748668C9
+  Plex: FLAC muunnetaan täällä MP3:ksi
+;   Plex: FLAC converted to MP3 here
 MSG_5FDDDD75
 Lyhyt
 ; Short
@@ -421,15 +435,6 @@ puretaan täällä
 MSG_22FBBBB2
 purkaa ja soittaa
 ; decodes and plays
-MSG_0D2B8103
-FLAC-dekooderi
-; FLAC decoder
-MSG_441A0CA1
-asennettu
-; installed
-MSG_3DEA7C01
-ei asennettu (Aminet: util/libs/flacdec)
-; not installed (Aminet: util/libs/flacdec)
 MSG_4DEE1DD3
 %ld paikka
 ; %ld place
@@ -796,6 +801,12 @@ Tässä moduulissa ei voi siirtyä
 MSG_6AA26665
 Nyt soi
 ; Now playing
+MSG_7DDFAD41
+Tämä Amiga on liian hidas FLACille
+; This Amiga is too slow to decode FLAC smoothly
+MSG_0D65D8B7
+Liian hidas FLACille: Pyydä heikompilaatuista ääntä
+; Too slow for FLAC: try Request lower quality audio
 MSG_0BBA80CF
 Kappaletta ei voitu soittaa
 ; That track could not be played
@@ -1082,12 +1093,6 @@ Liitäntä ei ole ylhäällä
 MSG_646AFCF3
 MHI:tä ei ole asennettu (sen ajurit LIBS:MHI:ssä)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_5561B1F7
-FLAC: musiikkitiedostot, ja Plexin kappaleet sellaisenaan nopealla Amigalla
-; FLAC: music files, and Plex's tracks as stored on a fast Amiga
-MSG_34836301
-Asenna flacdec.library (Aminet: util/libs/flacdec) FLACia varten
-; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
 MSG_7AE98FE6
 Tästä lähtien avatut asemaluettelot
 ; Station lists opened from now on

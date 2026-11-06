@@ -538,6 +538,7 @@ struct StInfo {
     UBYTE peak_l, peak_r;
     BOOL ahi;                       /* played through AHI, not Paula */
     BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
+    BOOL flac;                      /* FLAC, decoded here by flacdec.library */
 };
 void st_set_buffer(int level);
 void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */

@@ -135,7 +135,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
-       ACT_SND_FLAC, ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
+       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
@@ -1469,6 +1469,14 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver") : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
+    /* FLAC: the library, and whether this Amiga decodes it in time (measured
+     * at each start: the same system image on a slow and a fast Amiga) */
+    sprintf(line, _("FLAC: %s"), !caps.flacdec ? _("not installed (Aminet: util/libs/flacdec)")
+                                 : plex_tier() < 2 ? _("flacdec.library, too slow here")
+                                 : _("flacdec.library, fast enough"));
+    text_line(p, line);
+    if (caps.flacdec && plex_tier() < 2)
+        text_line(p, _("  Plex: FLAC converted to MP3 here"));
     text_line(p, "");
     sprintf(line, "Debug log: %s", amce_log_path() ? amce_log_path() : "off");
     text_line(p, line);
@@ -2355,15 +2363,10 @@ static void build_sound_settings(struct Page *p)
                         !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
         }
     }
-    /* FLAC: Plex's tracks as stored, where the Amiga is fast enough. Not
-     * a choice (flacdec.library is the only decoder, used when it is
-     * there), so no check box: a greyed one read as a setting that
-     * could never be changed. Greyed only when it is missing. */
-    heading_item(p, _("FLAC decoder"));
-    if ((it = action_item(p, "FLAC: flacdec.library",
-                          caps.flacdec ? _("installed") : _("not installed (Aminet: util/libs/flacdec)"),
-                          ACT_SND_FLAC, MARK_NONE)) && !caps.flacdec)
-        it->flags |= ITEM_DISABLED;
+    /* FLAC has nothing to choose: flacdec.library is used where it is
+     * installed, and whether this Amiga is fast enough is measured at
+     * each start (plex_tier), so one system image suits a slow Amiga
+     * and a fast one. What it found is in About > System information. */
     {
         /* where Music finds the MP3 and FLAC files on this Amiga */
         char tag[48];
@@ -7062,6 +7065,26 @@ static void np_repeat(void)
     np_press(np.rep);
 }
 
+/* Once a second: a FLAC track decoded here that keeps running dry (the
+ * sound out of data again and again, a few seconds in) - this Amiga is too
+ * slow for it. Said once a track on the status line, instead of a silent
+ * stutter: a music file has no other way to play; for a Plex track the
+ * server's conversion is. */
+static void flac_slow_check(void)
+{
+    static ULONG told = (ULONG)-1;
+    struct StInfo in;
+    if (!mp_running() || !mp_is_track() || mp_serial() == told)
+        return;
+    st_info(&in);
+    if (!in.flac || in.state != ST_PLAYING || in.underruns < 3 || in.played_ms < 3000)
+        return;
+    told = mp_serial();
+    amce_log("track", "FLAC: dropouts - this Amiga cannot decode it in time");
+    set_msg(np_local() ? _("This Amiga is too slow to decode FLAC smoothly")
+                       : _("Too slow for FLAC: try Request lower quality audio"));
+}
+
 static void np_tick(void)
 {
     if (np.seek_due && (LONG)(time_ms() - np.seek_due) >= 0)
@@ -10264,8 +10287,6 @@ static void act_action(struct Item *it)
             set_msg("AHI is not installed (DEVS:ahi.device)");
         else if (it->action == ACT_SND_MHI)
             set_msg(_("MHI is not installed (its drivers in LIBS:MHI)"));
-        else if (it->action == ACT_SND_FLAC)
-            set_msg(_("Install flacdec.library (Aminet: util/libs/flacdec) for FLAC"));
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         return;
@@ -10369,8 +10390,6 @@ static void act_action(struct Item *it)
         open_settings_page(_("Networking"), build_net_settings);
     else if (it->action == ACT_PLEXSLIDES && cur())
         plex_photo_view(cur(), -1, TRUE);
-    else if (it->action == ACT_SND_FLAC)
-        set_msg(_("FLAC: music files, and Plex's tracks as stored on a fast Amiga"));
     else if (it->action == ACT_SND_MPEGA ||
              (it->action >= ACT_SND_MHI0 && it->action <= ACT_SND_MHI_END)) {
         const char *d = it->action == ACT_SND_MPEGA ? "" : mhi_names[it->action - ACT_SND_MHI0];
@@ -11628,6 +11647,7 @@ static int app_main(void)
                     nav_tick_1s();          /* the trail kept, once it rests */
                     scr_watch();            /* a screen gone blank: why (log) */
                     mp_tempo_check();
+                    flac_slow_check();      /* a FLAC track running dry: said once */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */

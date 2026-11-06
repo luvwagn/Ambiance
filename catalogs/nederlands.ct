@@ -185,6 +185,20 @@ MSG_1358A393
 MSG_197B8973
 MHI-stuurprogramma
 ; MHI driver
+MSG_578E3365
+; FLAC: %s
+MSG_3DEA7C01
+niet geïnstalleerd (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_0CC9EBEF
+flacdec.library, hier te traag
+; flacdec.library, too slow here
+MSG_55B725DE
+flacdec.library, snel genoeg
+; flacdec.library, fast enough
+MSG_748668C9
+  Plex: FLAC hier omgezet naar MP3
+;   Plex: FLAC converted to MP3 here
 MSG_5FDDDD75
 Kort
 ; Short
@@ -421,15 +435,6 @@ hier gedecodeerd
 MSG_22FBBBB2
 decodeert en speelt
 ; decodes and plays
-MSG_0D2B8103
-FLAC-decoder
-; FLAC decoder
-MSG_441A0CA1
-geïnstalleerd
-; installed
-MSG_3DEA7C01
-niet geïnstalleerd (Aminet: util/libs/flacdec)
-; not installed (Aminet: util/libs/flacdec)
 MSG_4DEE1DD3
 %ld plek
 ; %ld place
@@ -796,6 +801,12 @@ In deze module kan niet gespoeld worden
 MSG_6AA26665
 Speelt nu
 ; Now playing
+MSG_7DDFAD41
+Deze Amiga is te traag voor FLAC
+; This Amiga is too slow to decode FLAC smoothly
+MSG_0D65D8B7
+Te traag voor FLAC: Audio van lagere kwaliteit vragen
+; Too slow for FLAC: try Request lower quality audio
 MSG_0BBA80CF
 Dat nummer kon niet gespeeld worden
 ; That track could not be played
@@ -1082,12 +1093,6 @@ Die interface is niet actief
 MSG_646AFCF3
 MHI is niet geïnstalleerd (de stuurprogramma's in LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_5561B1F7
-FLAC: muziekbestanden, en Plex-nummers zoals ze zijn op een snelle Amiga
-; FLAC: music files, and Plex's tracks as stored on a fast Amiga
-MSG_34836301
-Installeer flacdec.library (Aminet: util/libs/flacdec) voor FLAC
-; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
 MSG_7AE98FE6
 Zenderlijsten die vanaf nu geopend worden
 ; Station lists opened from now on
