@@ -1,178 +1,187 @@
-Short:        Full-screen media centre launcher for AGS
+Short:        Full-screen media centre for AGS
 Author:       Brian King
 Uploader:     Brian King
 Type:         util/wb
 Version:      [VERSION]
-Requires:     Kickstart 3.1+, OCS/ECS/AGA or RTG
+Requires:     Kickstart 3.1+; TCP/IP and mpega.library for radio/Plex
 Architecture: m68k-amigaos >= 3.1
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
-of Kodi, RetroArch and Windows Media Center. It is a drop-in companion to
-Amiga Game Selector (AGS): copy the AmigaMCE drawer anywhere on an AGS
-installation and double-click it.
+of Kodi and Windows Media Center: games and demos from Amiga Game Selector
+(AGS), tracker music, internet radio, the music on your Plex server and
+your pictures, all in one place, driven by keyboard, mouse or joystick.
 
-Features in this release
-------------------------
-- Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites)
-  with hierarchical categories, never one giant flat list.
-- Long lists (All Games, menus split A-Z) are read once and kept in an
-  index in the Cache drawer next to the program. After that they open at
-  once with their full count; only letter folders that have changed
-  (games added or removed) are read again. The first time, the list
-  appears as soon as its first screens are read and its count shows
-  "..." while the rest is counted. Folders are read a buffer at a time
-  (ExAll). With memory to spare every letter stays in memory; short of
-  memory, the letters furthest from where you are let their names go and
-  are read again ahead of you, so the list never has to stop short.
-  Deleting the Cache drawer is always safe.
-- Fact sheets, screenshots and pictures are read by a second, lower-
-  priority process, so the list never waits for the disk; the entries
-  next to the one shown (and the viewer's next picture) are read ahead.
-  With memory to spare it reads further ahead and keeps what it has
-  shown; short of memory it keeps only the next one.
-- Shows each title's AGS fact sheet and screenshot, decoded through the
-  installed picture datatypes. On screens 640 or more wide, game lists
-  have a preview pane beside them: the selected game's screenshot and
-  its fact sheet (the key lines on 200/256-line screens).
-- Launches titles through their AGS .run scripts, honouring the AGS
-  Expert, ExpertPerm and Adult settings, then returns to AmigaMCE.
-  While a game runs AmigaMCE frees everything it can (its screen, lists,
-  fonts and artwork, and the libraries it does not need, which the
-  system then unloads) and comes back on the same entry afterwards.
-- Screen mode chosen in Settings: 320x200 NTSC, 320x256 PAL,
-  640x200/256 hires, 640x400/512 hires laced (AGA), 640x480, 800x600
-  or 1024x768 RTG (when the card has them; 8-bit when it can, for speed:
-  drawing and scrolling move a quarter of the bytes of 32-bit), or
-  Automatic (hires on AGA, lowres otherwise). Never uses Extra Half-Brite.
-- Flicker-free text pages (fact sheets, Credits, System information)
-  with a scroll bar when the text is longer than the page. They glide on
-  RTG screens; on native screens, and for short text, they move straight
-  to the next line.
-- Hires screens (laced or not) use a dense layout: more of each list fits.
-- Laced screens (640x400/512): Settings > Screen > Style chooses their font, and
-  the layout grows with it: Pixelify Sans 12 or 24 (24 doubles the
-  artwork too), Galmuri11 (the default), Galmuri11 Bold, Galmuri14 or
-  Galmuri14 Bold. Galmuri is a pixel font drawn at each size.
-- Big RTG screens scale the whole layout up. Settings > Screen > Style chooses
-  the look there: Pixel (the pixel artwork, 2x on 1024x768) or Smooth
-  (anti-aliased text, icons and logo at exactly the screen's size:
-  1.25x on 640x480, 1.56x on 800x600, 2x on 1024x768; RTG screens only).
-- Pictures: browses Media:Images (folders first, each picture with its
-  format), with the selected picture or a folder's first picture in the
-  preview pane. Letter folders (A-Z) are not shown as folders: their
-  pictures are listed with the rest, as in Games. A folder that holds only pictures is marked with a play
-  arrow: Fire plays it as a slideshow, Right opens it. The viewer shows
-  pictures full screen on AmigaMCE's own screen, so the display never
-  changes mode, at a whole scale that keeps their pixels' shape. On
-  native and 256-colour screens a picture gets the whole palette while it
-  is shown, its own colours exactly when it has no more than the screen
-  can show, and the info bar is drawn in the picture's own colours.
-- Mods: music modules from ST-00:Modules, ST-00:C64Music and AGS:Mods
-  (AGS's menu music), all played inside AmigaMCE on the Amiga's own sound:
-  ProTracker modules by its own replayer (ProTracker 2.3's effects and
-  quirks, timed by a CIA timer so the music never waits for the screen);
-  hundreds of other formats (OctaMED, TFMX, Future Composer, Hippel,
-  Hubbard, AHX, SID...) by EaglePlayer's and DeliTracker's players where
-  they are installed (AGS has them), hosted by AmigaMCE; and XM, S3M, IT,
-  MTM, 669 and 6/8-channel MODs mixed by modplug.library on a 68020 or
-  better. Packed files (PowerPacker, XPK...) are unpacked with
-  xfdmaster.library. The Now Playing page shows the time played, the
-  position, a meter for each channel and the module's sample names, with
-  buttons for previous, back, play/pause, stop, forward, next and volume;
-  modules with several songs step through them. The music plays on while
-  you browse, the next module in the folder follows at a song's end, and
-  it stops when a game starts.
-- Radio: internet radio stations browsed on the Amiga from
-  radio-browser.info (top voted, most listened to, trending, chiptune,
-  demoscene, by genre, by country), only those an Amiga can play: MP3,
-  working, plain http: unless Settings allows HTTPS streams (with
-  AmiSSL). Fire plays a station on Now playing, with what it is playing
-  (its ICY titles); Right shows what is known of it. MP3 is decoded by
-  mpega.library: mono at 22 kHz on a 68030, stereo up to 28 kHz on a
-  68040/060. Needs a running TCP/IP stack. HTTPS streams do not play yet.
-- Music: a Plex Media Server's music, on your network: its music
-  libraries by artist, album or recently added (artists and albums
-  with their pictures and details beside the list), their tracks played
-  on Now playing with the cover (title, artist, album, time played of
-  its length; the file, what Plex sends, what plays), an album playing
-  through. The server makes each track for this Amiga: 22 kHz mono MP3
-  for a 68020/030, 24 kHz stereo for a 68040/060, MP3 files as stored
-  for a fast one; any format it has. Settings > Networking > Plex turns it on or off,
-  chooses the server (those found on the network, by Plex's GDM), and
-  whether the sound is made for this Amiga. A server that asks for a
-  sign-in token takes it from ENVARC:AmigaMCE/PlexToken (About > Plex in
-  AmigaMCE says how). Plain HTTP on the home network: no AmiSSL needed.
-- Keyboard, mouse (including wheel) and joystick/CD32 pad control.
+It is a drop-in companion to AGS 3: copy the AmigaMCE drawer anywhere on
+an AGS installation and double-click it. Everything plays inside AmigaMCE,
+on its own screen and the Amiga's own sound.
 
-Videos is listed but arrives in a later version. About holds the credits and a System information
-page showing what AmigaMCE detected (CPU, Kickstart, chipset, screen).
 
-Controls
+Features
 --------
-  Up/Down      move             Shift+Up/Down  page
-  Fire/Return  play a game, open a folder or setting
-  Mouse        one click opens a folder, a setting or a section; a game
-               or picture is selected by one click, played by two
-               the breadcrumb above a list (Games > All Games...) links
-               back to each level
-  Right        open a folder; on a game, into its details pane when
-               that scrolls (lowres: the game's own page)
-  Left/Esc     back             Esc at menu    press twice to quit
-  A-Z          jump to letter   Right mouse    back
-  CD32 pad     shoulder buttons: next / previous letter
-  Held Up/Down in a list speeds up smoothly. With Settings > General > Jump
-               scrolling on, a very long one (1,000 entries or more, like
-               All Games) then steps a letter at a time (A, B, C...): let go
-               on the letter shown
-  Mouse wheel  scroll           Scroll bar     click to page, drag to scroll
+Games and demos
+- Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites) by
+  category, never as one giant flat list. On screens 640 or more wide the
+  selected title's screenshot and fact sheet sit in a pane beside it.
+- Launches titles through their AGS .run scripts, honouring the AGS
+  Expert, ExpertPerm and Adult settings. While a game runs AmigaMCE frees
+  everything it can, and comes back on the same entry afterwards.
+- Long lists (All Games, menus split A-Z) are kept in an index in the
+  Cache drawer, so they open at once; only letters that changed are read
+  again. Deleting the Cache drawer is always safe. Screenshots and fact
+  sheets are read by a second process, so the list never waits for disk.
 
-  Long lists show a scroll bar at their right edge while the mouse is in
-  use, and small arrows there (more above, more below) while a joystick
-  or pad is: moving the mouse or using the joystick switches between them.
-  The mouse pointer and the scroll bar go when the mouse rests for 1.5 s,
-  or as soon as a key or the joystick is used; moving it brings them back.
+Mods
+- Modules from ST-00:Modules, ST-00:C64Music and AGS:Mods (AGS's menu
+  music). ProTracker modules play on AmigaMCE's own replayer, after the
+  ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
+  formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play
+  through EaglePlayer's and DeliTracker's players where they are
+  installed (AGS has them). XM, S3M, IT, MTM, 669 and 6/8-channel MODs
+  are mixed by modplug.library on a 68020 or better. Packed modules
+  (PowerPacker, XPK...) are unpacked with xfdmaster.library.
 
-  Pictures     Fire/Return views a picture or plays a folder marked with
-               the play arrow as a slideshow; Right or a double-click
-               opens a folder.
-  Viewer       Left/Right (or a click) previous/next, Fire/Return/Space
-               slideshow on/off (5 seconds a picture), Esc or the right
-               mouse button back.
-  Mods         Fire/Return plays a module (a double-click with the
-               mouse) and opens Now Playing.
-  Now Playing  Left/Right choose a button, Fire presses it; Up/Down (or
-               the wheel) volume; Space play/pause; S stop; N/P (or the
-               CD32 shoulders) next/previous module; , and . back/forward
-               a position; a click on the bar jumps there. Esc goes back
-               to the list, the music playing on.
+Radio
+- Internet radio from radio-browser.info: top voted, most listened to,
+  trending, chiptune, demoscene, by genre or by country (A to Z, your own
+  country first, from your Locale settings). Only stations an Amiga can
+  play are listed: MP3, working, and no higher in bitrate than this Amiga
+  copes with. Now Playing shows the song titles the station sends.
+
+Music (Plex)
+- The music libraries of a Plex Media Server on your network: by artist,
+  album or recently added, with covers and details beside the list.
+- Plex converts each track to an MP3 this Amiga can decode: 22 kHz mono
+  on a 68020/030, 24 kHz stereo on a 68040/060, at a higher bitrate on a
+  fast one. Plain HTTP on your own network: no AmiSSL needed.
+- Servers are found on the network by Plex's own discovery (GDM).
+
+Now Playing
+- Title, artist, album and cover, a level meter per channel (labelled for
+  modules by their samples), a position bar you can click to seek, and
+  buttons for previous, back, play/pause, stop, forward, next and volume.
+- The music plays on while you browse; the lists you came from mark what
+  is playing, and a Now playing row at their top brings you back to it.
+- Stop gives Paula and its timer back to the system, so other programs
+  can play sound.
+
+Pictures
+- Browses Media:Images with a preview of the picture or folder selected,
+  shows pictures full screen on AmigaMCE's own screen (no mode switch) and
+  plays folders as slideshows, in the pictures' own colours where the
+  screen allows. Pictures are decoded by the installed datatypes.
+
+Screens
+- 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
+  and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic.
+- Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
+  RTG screens scale the layout up, in a pixel look or a smooth,
+  anti-aliased one. Never uses Extra Half-Brite.
+- Flicker-free scrolling lists and text pages, with a scroll bar for the
+  mouse and arrows for the joystick.
+
+
+Requirements
+------------
+- Kickstart 3.1 or later, any 68k CPU. A 68020 or better is needed for
+  mixed modules (XM, S3M, IT) and recommended for radio and Plex.
+- Amiga Game Selector 3 for Games and Demos (found through AGS:).
+- For Radio and Plex: a running TCP/IP stack (bsdsocket.library) and
+  mpega.library.
+- Optional: EaglePlayer/DeliTracker players, modplug.library and
+  xfdmaster.library for more module formats; picture datatypes; AmiSSL
+  to list HTTPS radio stations.
+
 
 Installation
 ------------
-Copy the AmigaMCE drawer to your hard drive. Keep the Fonts drawer next
-to the program. From the floppy (ADF), unpack the archive on it, e.g.
+Copy the AmigaMCE drawer to your hard drive and keep its Fonts drawer next
+to the program. From the ADF, unpack the archive on it first, for example
+
   lha x DF0:amigamce.lha Work:
-which makes the AmigaMCE drawer there. If AGS is set to boot straight into its menu, quit AGS
-to Workbench first, then double-click AmigaMCE.
 
-Settings > General > Debug shows the system CPU load and AmigaMCE's memory use in
-the header, and writes a timing log to AmigaMCE.log next to the program
-(or RAM:AmigaMCE.log if that drawer is read-only).
+If AGS boots straight into its own menu, quit AGS to Workbench first, then
+double-click AmigaMCE.
 
-The screen mode is saved as ENVARC:AmigaMCE/ScreenMode, the style
-as ENVARC:AmigaMCE/Style and the laced screens' font as
-ENVARC:AmigaMCE/LacedFont. Keep the Fonts drawer complete: Fonts/amce-smooth
-holds the smooth style for each RTG screen height. If a mode does
-not suit your display, delete ENVARC:AmigaMCE/ScreenMode to go back
-to Automatic.
+
+Controls
+--------
+  Up/Down      move (held: faster)   Shift+Up/Down  page
+  Fire/Return  play a game, module, station or track; open a folder
+  Right        open a folder; on a game, its details
+  Left/Esc     back                  Esc at menu    press twice to quit
+  A-Z          jump to letter        Right mouse    back
+  Mouse        one click opens a folder or setting; a game or picture is
+               selected by one click and played by two. The path above a
+               list (Games > All Games...) links back to each level
+  Mouse wheel  scroll                Scroll bar     click to page, drag
+  CD32 pad     shoulder buttons: next / previous letter
+
+  Pictures     Fire views a picture or plays a folder marked with the
+               play arrow as a slideshow. In the viewer, Left/Right
+               previous/next, Fire or Space slideshow on/off, Esc back.
+  Now Playing  Left/Right choose a button, Fire presses it; Space
+               play/pause; S stop; N/P next/previous; , and . back and
+               forward; Up/Down or the wheel volume; a click on the bar
+               jumps there. Esc goes back, the music playing on.
+
+
+Settings
+--------
+  General      Jump scrolling (very long lists step a letter at a time),
+               Debug
+  Screen       Screen mode, Style, Double buffering (RTG)
+  Sound        what plays the sound and decodes MP3 (Paula and
+               mpega.library in this version)
+  Networking   Radio: HTTPS stations, the highest bitrate listed, which
+                 radio-browser.info server the lists come from
+               Plex: on or off, the server, lower quality audio
+               Stream buffer: short, normal or long
+               Network interface: which one connections go out from
+
+Settings are saved in ENVARC:AmigaMCE/. If a screen mode does not suit
+your display, delete ENVARC:AmigaMCE/ScreenMode to go back to Automatic.
+
+Debug shows the CPU load and memory use in the header and writes a timing
+log to AmigaMCE.log next to the program (RAM:AmigaMCE.log if that drawer
+is read-only).
+
+
+Setting up Plex
+---------------
+1. Settings > Networking > Plex: turn Plex on, then choose your server
+   under Plex server (servers on the network are found for you).
+2. If the server asks for a sign-in, set your Plex token from the Shell:
+     SetEnv SAVE AmigaMCE/PlexToken <token>
+   About > Plex in AmigaMCE says where to find it.
+3. Your music libraries appear under Music.
+
+
+Not there yet
+-------------
+- Videos is on the menu but arrives in a later version.
+- HTTPS radio streams are listed (with AmiSSL) but do not play yet.
+- AHI and MHI are shown in Settings > Sound but not used yet.
+- Signing in through plex.tv needs HTTPS: the token is set by hand.
+
+
+History
+-------
+0.5.0  Music from a Plex Media Server; Settings in pages (General,
+       Screen, Sound, Networking); radio bitrate limit, list server and
+       stream buffer settings; network interface choice; Countries A to Z
+       with your own first; Now Playing seeking, covers and new buttons.
+
 
 Credits and licences
 --------------------
 AmigaMCE (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
 Its EaglePlayer host follows HippoPlayer's (MIT, (c) 2017 Kari-Pekka
 Koljonen; see Licences/CREDITS.txt).
-Pixelify Sans (c) The Pixelify Sans Project Authors, SIL Open Font
-Licence 1.1. Galmuri (c) 2019-2025 Lee Minseo, SIL Open Font
-Licence 1.1. Rubik (c) The Rubik Project Authors, SIL Open Font
-Licence 1.1. Full texts are in the Licences drawer.
-Amiga is a trademark of Amiga Corporation. Other trademarks belong to
-their owners.
+
+Fonts: Pixelify Sans (c) The Pixelify Sans Project Authors, Galmuri
+(c) 2019-2025 Lee Minseo and Rubik (c) The Rubik Project Authors, all
+under the SIL Open Font Licence 1.1; the full texts are in the Licences
+drawer. Radio's station lists come from radio-browser.info.
+
+Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
+names belong to their owners; AmigaMCE is not affiliated with any of them.
