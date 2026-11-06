@@ -163,9 +163,10 @@ Controls
   Now Playing  Left/Right choose a button, Fire presses it; Space
                play/pause; S stop; N/P next/previous; , and . back and
                forward; Up/Down or the wheel volume; a click on the bar
-               jumps there; V, or the cycle gadget under the buttons,
-               the level meters or the spectrum (the playing marker in
-               the header and lists follows it). Esc goes back, the
+               jumps there; V, or the cycle gadget at the meters' top
+               right, the level meters or the spectrum (the playing
+               marker in the header and lists follows it; greyed where
+               the music allows the meters only, as under MHI). Esc goes back, the
                music playing on.
 
 

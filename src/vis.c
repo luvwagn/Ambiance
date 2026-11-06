@@ -89,9 +89,20 @@ int vis_active(void)
     return VIS_METERS;
 }
 
+/* The playing engine can give what v needs. */
+BOOL vis_available(int v)
+{
+    if (v == VIS_SPECTRUM)
+        return (mp_vis_have() & (VF_VOICES | VF_PCM)) != 0;
+    return v == VIS_METERS;
+}
+
+/* Every visualization takes the meters' place as it is (4 rows for
+ * Paula's voices, 2 for a stream's left and right): switching between
+ * them draws that place only, never the page. */
 int vis_rows(void)
 {
-    return vis_active() == VIS_SPECTRUM ? 4 : 0;
+    return 0;
 }
 
 static WORD area_h(const struct VisCtx *c)

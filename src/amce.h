@@ -513,6 +513,7 @@ void vis_select(int v);             /* (also lifts a pause for load) */
 BOOL vis_paused(void);              /* paused: the music needed the CPU */
 int  vis_selected(void);
 int  vis_active(void);              /* the one drawn: the selected, or the meters */
+BOOL vis_available(int v);          /* the music playing can give what it needs */
 int  vis_rows(void);                /* rows the active one wants (0: the meters' own) */
 void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full);
 void vis_stop(void);                /* its memory back (a game, quitting) */

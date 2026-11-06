@@ -1862,17 +1862,20 @@ static void load_visual(void)
 static void np_draw(BOOL full);
 static BOOL np_on(void);
 
+static void np_visual_changed(void);
+
 static void next_visual(void)
 {
-    vis_select((vis_selected() + 1) % VIS_COUNT);
-    save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum" : "meters");
-    if (vis_selected() != vis_active() && mp_loaded())
+    if (mp_loaded() && !vis_available(VIS_SPECTRUM)) {
+        /* this music allows the meters only: the gadget is greyed */
         set_msg(mp_is_stream() ? _("No spectrum under MHI: it plays the MP3 itself")
                                : _("No spectrum: this player does not say what it plays"));
-    else
-        set_msg(_(vis_name(vis_selected())));
-    if (np_on())
-        np_draw(TRUE);                  /* laid out again: the spectrum is 4 rows tall */
+        return;
+    }
+    vis_select((vis_selected() + 1) % VIS_COUNT);
+    save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum" : "meters");
+    set_msg(_(vis_name(vis_selected())));
+    np_visual_changed();
 }
 
 static void load_jump(void)
@@ -5433,6 +5436,7 @@ static struct {
     WORD sl_x0, sl_x1;
     int rows;                   /* the meters' rows laid out for: the page as tall as they need */
     WORD cyc_x0, cyc_x1, cyc_y0, cyc_y1;    /* the visualization's cycle gadget (V) */
+    BOOL cyc_off;               /* ...greyed: one only can be drawn for this music (MHI) */
     BOOL cyc_label;             /* ...with its name (not on lowres: the glyph alone) */
     ULONG s_rseq;               /* a station: its title and state drawn */
     int s_rstate;
@@ -5856,8 +5860,6 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
      * of the cover where it comes down beside the controls */
     if (np.art_s && np.art_y <= np.pos_y)
         end = np.art_x - U(8) - 1;
-    if (np.cyc_x0 && end > np.cyc_x0 - U(6) - 1)
-        end = np.cyc_x0 - U(6) - 1;         /* the cycle gadget's room */
     rw = gfx_textlen(&g, pos, TS_SMALL);
     if (rw > end - x + 1)
         rw = end - x + 1;
@@ -5868,14 +5870,13 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
 }
 
 /* The visualization's cycle gadget, as Intuition's: its glyph, and the one
- * chosen, at the right of the position line (left of a cover beside it).
- * A click, or V, goes to the next. On lowres the glyph alone. */
+ * chosen, at the top right of the meters' place (the end of the line
+ * above it), drawn as the buttons are. A click, or V, goes to the next.
+ * On lowres the glyph alone. */
 static void np_cycle_layout(void)
 {
     WORD box = g.font_h, right = np.x0 + np.w - 1, w, nw = 0;
     int i;
-    if (np.art_s && np.art_y <= np.pos_y + g.font_h)
-        right = np.art_x - U(8) - 1;
     np.cyc_label = g.w > 320;
     for (i = 0; np.cyc_label && i < VIS_COUNT; i++) {
         WORD t = gfx_textlen(&g, _(vis_name(i)), TS_SMALL);
@@ -5885,27 +5886,46 @@ static void np_cycle_layout(void)
     w = U(3) + box + U(3) + (np.cyc_label ? U(3) + 1 + U(4) + nw + U(4) : 0);
     np.cyc_x1 = right;
     np.cyc_x0 = right - w + 1;
-    np.cyc_y0 = np.pos_y - U(1);
-    np.cyc_y1 = np.pos_y + g.font_h;
+    np.cyc_y0 = np.info_y - U(1);
+    np.cyc_y1 = np.info_y + g.font_h;
 }
 
 static void np_draw_cycle(void)
 {
     WORD x0 = np.cyc_x0, x1 = np.cyc_x1, y0 = np.cyc_y0, y1 = np.cyc_y1, box = g.font_h;
-    BOOL on = vis_selected() == vis_active();     /* chosen, but not shown: dim */
+    WORD ry = gfx_mode_tall(g.mode) ? 1 : 2;
+    UBYTE fg;
     if (x1 - x0 < box)
         return;
+    /* greyed where this music allows one only (the spectrum under MHI):
+     * its name then the one drawn */
+    np.cyc_off = !vis_available(VIS_SPECTRUM);
+    fg = np.cyc_off ? PEN_RULE : PEN_TEXT;
+    /* a button's face (np_button): rounded, the bar's colour, its glyph
+     * and words in the buttons' */
     gfx_fill(&g, x0, y0, x1, y1, PEN_BG);
-    gfx_fill(&g, x0, y0, x1, y0, PEN_RULE);
-    gfx_fill(&g, x0, y1, x1, y1, PEN_RULE);
-    gfx_fill(&g, x0, y0, x0, y1, PEN_RULE);
-    gfx_fill(&g, x1, y0, x1, y1, PEN_RULE);
-    gfx_cycle_glyph(&g, x0 + U(3), y0 + (y1 - y0 + 1 - box) / 2, box, PEN_TEXT);
+    np_rrect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, 2, ry, PEN_BAR);
+    gfx_cycle_glyph(&g, x0 + U(3), y0 + (y1 - y0 + 1 - box) / 2, box, fg);
     if (np.cyc_label) {
         WORD sx = x0 + U(3) + box + U(3);
         gfx_fill(&g, sx, y0 + U(2), sx, y1 - U(2), PEN_RULE);
-        gfx_text(&g, sx + 1 + U(4), np.pos_y, _(vis_name(vis_selected())), on ? PEN_TEXT : PEN_DIM,
-                 PEN_BG, x1 - U(3) - (sx + 1 + U(4)), TS_SMALL);
+        gfx_text(&g, sx + 1 + U(4), np.info_y,
+                 _(vis_name(np.cyc_off ? vis_active() : vis_selected())), fg, PEN_BAR,
+                 x1 - U(3) - (sx + 1 + U(4)), TS_SMALL);
+    }
+}
+
+/* Another visualization chosen: the same place, the other one in it; that
+ * and the gadget drawn, not the page. */
+static void np_visual_changed(void)
+{
+    if (np_on() && np.w && np.cyc_x1 > np.cyc_x0) {
+        BOOL was = gfx_quiet_begin();
+        np_draw_cycle();
+        gfx_quiet_end(&g, was, np.cyc_x0, np.cyc_y0, np.cyc_x1, np.cyc_y1);
+        np_update();
+    } else if (np_on()) {
+        np_draw(TRUE);
     }
 }
 
@@ -5932,9 +5952,11 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
 static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 {
     WORD x1 = np.x0 + np.w, w = gfx_textlen(&g, s, ts);
-    if (w > np.w)
-        w = np.w;
-    gfx_text(&g, np.x0, y, s, fg, PEN_BG, np.w, ts | TS_OPAQUE);
+    if (y == np.info_y && np.cyc_x0 > np.x0)
+        x1 = np.cyc_x0 - U(6);              /* the cycle gadget at its end */
+    if (w > x1 - np.x0)
+        w = x1 - np.x0;
+    gfx_text(&g, np.x0, y, s, fg, PEN_BG, x1 - np.x0, ts | TS_OPAQUE);
     if (np.x0 + w < x1)
         gfx_fill(&g, np.x0 + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
 }
@@ -6199,7 +6221,8 @@ static void np_draw(BOOL full)
                 amce_strlcat(info, np.folder, sizeof(info));
             }
         }
-        gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG, np.w, TS_SMALL);
+        gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG,
+                 np.cyc_x0 > np.x0 ? np.cyc_x0 - U(6) - np.x0 : np.w, TS_SMALL);
         /* the sample names, in two columns where they fit */
         {
             WORD lh = g.font_h + U(1), cols = np.w >= U(300) ? 2 : 1, cw = np.w / cols;
@@ -6263,7 +6286,8 @@ controls:
 static void np_update(void)
 {
     BOOL was;
-    if (np.w && mp_loaded() && np_meter_rows() != np.rows) {
+    if (np.w && mp_loaded() && (np_meter_rows() != np.rows ||
+                                (np.cyc_x1 > np.cyc_x0 && np.cyc_off == vis_available(VIS_SPECTRUM)))) {
         /* the sound has more or fewer channels than the page was laid out
          * for (a station found to be mono): laid out again, as tall as needed */
         np_draw(TRUE);
