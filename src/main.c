@@ -11525,22 +11525,38 @@ static int app_main(void)
     load_screen_mode();
     load_style();
     {
-        /* Which display the Workbench uses: a native <-> RTG switch on exit
-         * can be slow in some emulators and drivers. */
+        /* Which display the Workbench uses: Automatic follows it onto the
+         * graphics card (gfx_mode_auto), and a native <-> RTG switch on
+         * exit can be slow in some emulators and drivers. */
         struct Screen *wb = LockPubScreen(NULL);
         if (wb) {
             ULONG id = GetVPModeID(&wb->ViewPort);
-            amce_log("Workbench screen", caps_mode_is_rtg(id) ? "RTG" : "native chipset");
+            char m[64];
+            caps.wb_rtg = caps_mode_is_rtg(id);
+            caps.wb_w = wb->Width;
+            caps.wb_h = wb->Height;
+            sprintf(m, "%s, %lu x %lu", caps.wb_rtg ? "RTG" : "native chipset",
+                    (unsigned long)caps.wb_w, (unsigned long)caps.wb_h);
+            amce_log("Workbench screen", m);
             UnlockPubScreen(NULL, wb);
         }
     }
 
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
-    if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
-        (screen_mode == SM_AUTO || !gfx_open(&g, &caps, SM_AUTO, ui_style))) {
-        say(_("AmigaMCE could not open its screen.\n"));
-        rc = 20;
-        goto out;
+    {
+        BOOL opened = gfx_open(&g, &caps, screen_mode, ui_style) ||
+                      (screen_mode != SM_AUTO && gfx_open(&g, &caps, SM_AUTO, ui_style));
+        if (!opened && caps.wb_rtg) {
+            /* Automatic on the card would not open: the chipset's, as before */
+            amce_log("screen", "the graphics card's mode would not open: a native one");
+            caps.wb_rtg = FALSE;
+            opened = gfx_open(&g, &caps, SM_AUTO, ui_style);
+        }
+        if (!opened) {
+            say(_("AmigaMCE could not open its screen.\n"));
+            rc = 20;
+            goto out;
+        }
     }
 
     tport = CreateMsgPort();

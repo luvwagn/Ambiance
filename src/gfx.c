@@ -310,10 +310,23 @@ const char *gfx_mode_problem(const struct Caps *c, int sm)
     return NULL;
 }
 
-/* What "Automatic" means: hires on AGA, lowres otherwise, in the
- * machine's own video standard, falling back to the other standard. */
+/* What "Automatic" means. Workbench on the graphics card: the card too,
+ * the largest of AmigaMCE's RTG sizes that fits the Workbench's screen
+ * (a 1920 x 1080 Workbench: 1024 x 768), 640 x 480 if it is smaller than
+ * all of them - no switch between the card and the chipset on start and
+ * exit. Otherwise hires on AGA, lowres before it, in the machine's own
+ * video standard, falling back to the other standard. */
 int gfx_mode_auto(const struct Caps *c)
 {
+    if (c->wb_rtg && c->rtg) {
+        int m, best = -1;
+        for (m = SM_RTG_640; m <= SM_RTG_1024; m++)
+            if (!gfx_mode_problem(c, m) && (best < 0 ||
+                (modes[m].w <= c->wb_w && modes[m].h <= c->wb_h)))
+                best = m;
+        if (best >= 0)
+            return best;
+    }
     int first = c->aga ? (c->pal ? SM_PAL_HIRES : SM_NTSC_HIRES)
                        : (c->pal ? SM_PAL_LORES : SM_NTSC_LORES);
     int other = c->aga ? (c->pal ? SM_NTSC_HIRES : SM_PAL_HIRES)

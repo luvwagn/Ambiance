@@ -91,7 +91,9 @@ Pictures
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
-  and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic.
+  and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic: the
+  graphics card when the Workbench is on it (the largest of those sizes
+  that fits the Workbench's screen), else hires on AGA, lowres before it.
 - Japanese, Chinese and Korean names (from Plex, stations and song
   tags) are shown in their own characters, at 12 or 15 pixels (without
   Fonts/amce-cjk, as [JP], [KO] or [CJK]).

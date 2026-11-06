@@ -29,6 +29,8 @@ struct Caps {
     UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
+    BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
+    UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
     ULONG chipfree, fastfree;
 };
 void caps_detect(struct Caps *c);
