@@ -10490,6 +10490,8 @@ static void act_action(struct Item *it)
 #define LIST_CROSS_CRUISE 4000  /* cruising never crosses a whole list faster */
 #define LIST_CROSS_PEAK   2000  /* nor top speed (both: a row a frame at the least) */
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
+#define LIST_BRAKE  700     /* ms to brake from full speed to a stop at the end, */
+#define LIST_EASE     5     /* ...and the last screens: entries a second per entry left */
 
 static struct {
     LONG  dir;              /* -1 up, +1 down, 0 not held */
@@ -10574,6 +10576,24 @@ static LONG letter_step(struct Page *p, LONG from, LONG dir)
     while (i > 0 && ov_letter_of(it[i - 1].label) == c)
         i--;
     return i;
+}
+
+/* The whole square root of n (n < 2^31): braking needs the speed that
+ * stops in a distance, sqrt(2 a d). */
+static LONG isqrt(ULONG n)
+{
+    ULONG x = 0, b = 1UL << 30;
+    while (b > n)
+        b >>= 2;
+    while (b) {
+        if (n >= x + b) {
+            n -= x + b;
+            x = (x >> 1) + b;
+        } else
+            x >>= 1;
+        b >>= 2;
+    }
+    return (LONG)x;
 }
 
 static BOOL hold_active(void)
@@ -10699,8 +10719,26 @@ static void hold_tick(void)
                     b = HOLD_BOOST;
                 rate = top + (peak - top) * b / HOLD_BOOST;
             }
-            if (!menu && rate > 10 + remaining * 10) /* ease in: 1010/s at 100 left ... 20/s at 1 */
-                rate = 10 + remaining * 10;
+            if (!menu) {
+                /* Slowing for the end, by the clock (not by frames: a fast
+                 * Amiga draws a frame in 20-30 ms, and a rule per frame
+                 * slowed it only in the last tenth of a second - the list
+                 * all but hit the end). First braking, as a car does:
+                 * the speed that stops in what is left, sqrt(2 a d), with
+                 * a deceleration that stops from this speed in LIST_BRAKE
+                 * ms (All Artists' 2,450 at full speed: from some 850
+                 * entries out); then the last screens eased, LIST_EASE
+                 * entries a second per entry left (20 left: 110 a second,
+                 * 1 left: 15), the end seen coming for about half a second. */
+                LONG a = (rate > top ? rate : top) * 1000 / LIST_BRAKE, stop;
+                stop = isqrt((ULONG)(2 * a) * (ULONG)remaining);
+                if (stop < 1)
+                    stop = 1;
+                if (rate > stop)
+                    rate = stop;
+                if (rate > 10 + remaining * LIST_EASE)
+                    rate = 10 + remaining * LIST_EASE;
+            }
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
             if (!menu && n > 1 && n > remaining / 2) {
