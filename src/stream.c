@@ -51,6 +51,25 @@
 #include <sys/filio.h>
 
 struct Library *st_SocketBase;      /* the radio process's */
+
+/* Time the radio process spends asleep, all told (Debug's load line says
+ * how busy it is: st_busy_sample) */
+static volatile ULONG slept_ms;
+
+static ULONG st_wait(ULONG mask)
+{
+    ULONG t = time_ms(), r = Wait(mask);
+    slept_ms += time_ms() - t;
+    return r;
+}
+
+static void st_delay(LONG ticks)
+{
+    ULONG t = time_ms();
+    Delay(ticks);
+    slept_ms += time_ms() - t;
+}
+
 static struct Library *MPEGABase;
 
 #define CU ((volatile struct Custom *)0xDFF000)
@@ -483,7 +502,11 @@ static int wait_sock(LONG s, BOOL wr, LONG secs)
         FD_SET(s, &fs);
         tv.tv_sec = 0;
         tv.tv_usec = 200000;
-        r = WaitSelect(s + 1, wr ? NULL : &fs, wr ? &fs : NULL, NULL, &tv, &sigs);
+        {
+            ULONG t = time_ms();
+            r = WaitSelect(s + 1, wr ? NULL : &fs, wr ? &fs : NULL, NULL, &tv, &sigs);
+            slept_ms += time_ms() - t;
+        }
         if (sigs & (1UL << st.sig))
             SetSignal(1UL << st.sig, 1UL << st.sig);    /* serve() takes it */
         serve();
@@ -1136,7 +1159,7 @@ static void decode_loop(MPEGA_STREAM *ms)
         serve();
         if (st.f_in - st.f_out > FIFO_N - MPEGA_PCM_SIZE) {
             /* full: wait for Paula to take some */
-            ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+            ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
             if (got & (1UL << st.sig))
                 out_take();
             continue;
@@ -1169,7 +1192,7 @@ static void decode_loop(MPEGA_STREAM *ms)
     }
     /* what is left in the FIFO played out, unless stopping */
     while (!st.quit && st.started && st.f_in != st.f_out) {
-        ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+        ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
         if (got & SIGBREAKF_CTRL_C)
             break;
         out_take();
@@ -1300,7 +1323,7 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
         ULONG o;
         serve();
         if (st.f_in - st.f_out > FIFO_N - (ULONG)frames) {
-            ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+            ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
             if (got & (1UL << st.sig))
                 out_take();
             continue;
@@ -1341,7 +1364,7 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
         }
     }
     while (!st.quit && st.started && st.f_in != st.f_out) {
-        ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+        ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
         if (got & SIGBREAKF_CTRL_C)
             break;
         out_take();
@@ -1828,7 +1851,7 @@ static void mhi_play(LONG freq)
             if (got & SIGBREAKF_CTRL_C)
                 break;
             if (!(got & (1UL << st.sig)))
-                Delay(5);
+                st_delay(5);
         }
     }
 done:
@@ -2167,4 +2190,18 @@ void st_info(struct StInfo *i)
     i->peak_r = st.peak_r;
     st.peak_l = st.peak_l * 3 / 4;
     st.peak_r = st.peak_r * 3 / 4;
+}
+
+/* How busy the radio process was since the last call, in percent of the
+ * time (-1 not running): for Debug's load line. */
+LONG st_busy_sample(void)
+{
+    static ULONG t0, s0;
+    ULONG now = time_ms(), sl = slept_ms, el = now - t0, z = sl - s0;
+    LONG r = -1;
+    if (t0 && el && st.started)
+        r = z >= el ? 0 : (LONG)((el - z) * 100 / el);
+    t0 = now;
+    s0 = sl;
+    return r;
 }

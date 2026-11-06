@@ -2955,10 +2955,17 @@ static void dbg_load_log(void)
         app_sum += app_load;
     if (++n < 5)
         return;
-    sprintf(m, "system %ld%%, AmigaMCE %ld%%, %ld wakes/s; %s > %s%s%s", (long)(cpu_sum / n),
-            (long)(app_sum / n), (long)((loop_wakes - wakes0) / n), mod_names[menu[menu_sel]],
-            p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
-            mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
+    {
+        LONG rb = st_busy_sample();
+        char rp[48];
+        rp[0] = 0;
+        if (rb >= 0)
+            sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
+        sprintf(m, "system %ld%%, AmigaMCE %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
+                (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),
+                mod_names[menu[menu_sel]], p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
+                mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
+    }
     amce_log("load", m);
     n = 0;
     cpu_sum = app_sum = 0;
