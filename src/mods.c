@@ -140,3 +140,51 @@ LONG mods_read_dir(const char *dir, struct ItemList *out)
     list_sort(out);
     return out->count;
 }
+
+/* ---- Music's own files (Settings > Sound > Music folders): folders and
+ * the MP3 and FLAC files in them, folders first, by name. */
+static BOOL is_song(const char *name)
+{
+    return name[0] != '.' && (ends_with(name, ".mp3") || ends_with(name, ".flac"));
+}
+
+static void song_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct collect_ctx *c = ctx;
+    char path[300], key[140], label[120], *dot;
+    if (!isdir && !is_song(name))
+        return;
+    join_path(path, sizeof(path), c->dir, name);
+    amce_strlcpy(label, name, sizeof(label));
+    if (!isdir && (dot = strrchr(label, '.')))
+        *dot = 0;                           /* the name without .mp3, .flac */
+    key[0] = isdir ? '0' : '1';
+    amce_strlcpy(key + 1, label, sizeof(key) - 1);
+    if (list_add(c->out, label, path, key, isdir ? IT_DIR : IT_SONG) && !isdir)
+        c->mods++;
+}
+
+/* dir's folders and music files into out, sorted; -1 if it cannot be read. */
+LONG songs_read_dir(const char *dir, struct ItemList *out)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    struct collect_ctx c;
+    LONG n;
+    me->pr_WindowPtr = (APTR)-1;
+    c.dir = dir;
+    c.out = out;
+    c.mods = 0;
+    n = dir_scan(dir, song_cb, &c);
+    me->pr_WindowPtr = old;
+    if (n < 0)
+        return -1;
+    list_sort(out);
+    return out->count;
+}
+
+/* A music file's format, for Now Playing: "FLAC", "MP3". */
+const char *song_format(const char *path)
+{
+    return ends_with(path, ".flac") ? "FLAC" : "MP3";
+}

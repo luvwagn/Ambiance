@@ -56,6 +56,15 @@ licence:
 
 Packed modules are unpacked with xfdmaster.library, where it is installed.
 
+MP3 is decoded by mpega.library, and FLAC (Plex tracks as stored, and the
+files in Music folders) by flacdec.library, where they are installed; they
+are not part of AmigaMCE and are not included in its archive.
+flacdec.library is (c) 2026 Renaud Schweingruber, "free to use and to
+redistribute in this unchanged archive" (Aminet: util/libs/flacdec). It
+contains dr_flac by David Reid, public domain or MIT-0
+(https://github.com/mackron/dr_libs). AmigaMCE uses only its published
+interface (five functions) and carries none of its files.
+
 Radio's station lists come from radio-browser.info, a free directory of
 internet radio stations kept by its community (https://www.radio-browser.info).
 

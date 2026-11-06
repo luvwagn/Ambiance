@@ -177,6 +177,9 @@ static struct {
     ULONG mp3_bytes;                /* MP3 given to the decoder: its average bitrate */
     ULONG range_from;               /* a track from this byte on (a seek; 0 all of it) */
     ULONG clen;                     /* a track's whole length in bytes, 0 not known */
+    BPTR fh;                        /* a music file on this Amiga (local): read, not received */
+    BOOL local;
+    ULONG len_ms;                   /* a track's length as the stream says it, 0 not known */
     ULONG fpos;                     /* FLAC: where in the file the decoder has read to */
     ULONG skip_ms;                  /* a conversion from this time on (a seek): asked of
                                      * the server (its offset), else frames passed over */
@@ -394,6 +397,18 @@ static BOOL net_more(void)
         st.nb_len -= st.nb_pos;
         st.nb_pos = 0;
     }
+    if (st.fh) {
+        r = Read(st.fh, st.nb + st.nb_len, NETBUF - st.nb_len);
+        if (r <= 0) {
+            if (r == 0)
+                st.eof = TRUE;              /* the file's end */
+            else
+                fail("The file could not be read");
+            return FALSE;
+        }
+        st.nb_len += r;
+        return TRUE;
+    }
     for (;;) {
         int w = wait_sock(st.sock, FALSE, READ_S);
         if (w <= 0) {
@@ -501,6 +516,22 @@ static BOOL open_stream(void)
     UWORD port;
     int hop;
     amce_strlcpy(url, st.url, sizeof(url));
+    if (st.local) {
+        /* a music file on this Amiga: opened, from range_from on */
+        LONG size;
+        if (st.fh)
+            Close(st.fh);
+        if (!(st.fh = Open((CONST_STRPTR)url, MODE_OLDFILE))) {
+            fail("The file could not be opened");
+            return FALSE;
+        }
+        Seek(st.fh, 0, OFFSET_END);
+        size = Seek(st.fh, st.range_from, OFFSET_BEGINNING);
+        st.clen = size > 0 ? (ULONG)size : 0;
+        st.metaint = st.meta_left = 0;
+        st.nb_pos = st.nb_len = 0;
+        return TRUE;
+    }
     if (st.skip_ms && no_offset && drop_offset(url))
         st.skipping = TRUE;
     for (hop = 0; hop < 4; hop++) {
@@ -961,6 +992,15 @@ static ULONG flac_io(register struct Hook *h __asm("a0"), register struct FLACDe
             st.eof = FALSE;
             return flac_skip((ULONG)to - st.fpos);
         }
+        if (st.fh) {
+            /* a file here: moved in it */
+            if (Seek(st.fh, to, OFFSET_BEGINNING) < 0)
+                return FALSE;
+            st.nb_pos = st.nb_len = 0;
+            st.eof = FALSE;
+            st.fpos = (ULONG)to;
+            return TRUE;
+        }
         /* far, or back: the file asked for again from there */
         {
             UBYTE was = st.state;
@@ -1073,6 +1113,9 @@ static void flac_play(void)
     mono = st.cpu < 40 || info.fdi_Channels == 1;
     st.freq = info.fdi_SampleRate;
     st.channels = info.fdi_Channels;
+    if (info.fdi_SampleRate && !info.fdi_TotalFramesHi)
+        st.len_ms = (info.fdi_TotalFramesLo / info.fdi_SampleRate) * 1000 +
+                    (info.fdi_TotalFramesLo % info.fdi_SampleRate) * 1000 / info.fdi_SampleRate;
     st.dec_freq = info.fdi_SampleRate / div;
     st.dec_channels = mono ? 1 : 2;
     if (st.skip_ms) {
@@ -1113,7 +1156,7 @@ static void radio_main(void)
         fail("No signal free");
         goto out;
     }
-    if (!(st_SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) {
+    if (!st.local && !(st_SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) {
         fail("No TCP/IP stack is running (bsdsocket.library)");
         goto out;
     }
@@ -1175,6 +1218,8 @@ static void radio_main(void)
     st.dec_channels = ms->dec_channels;
     if (!st.bitrate)
         st.bitrate = ms->bitrate;
+    if (st.local && st.clen && st.bitrate > 0)
+        st.len_ms = (st.clen / (ULONG)st.bitrate) * 8;  /* bytes / (kbit/s / 8) = ms */
     if (st.dec_freq > 28867 || st.dec_freq < 4000)
         st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;
     {
@@ -1199,6 +1244,10 @@ out:
     if (st.sock >= 0)
         CloseSocket(st.sock);
     st.sock = -1;
+    if (st.fh) {
+        Close(st.fh);
+        st.fh = 0;
+    }
     if (MPEGABase)
         CloseLibrary(MPEGABase);
     MPEGABase = NULL;
@@ -1229,6 +1278,9 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.finite = finite;
     st.range_from = range_from;
     st.skip_ms = skip_ms;
+    st.local = finite && amce_strnicmp(url, "http://", 7) && amce_strnicmp(url, "https://", 8);
+    st.fh = 0;
+    st.len_ms = 0;
     st.skipping = FALSE;
     st.eof = FALSE;
     memset(&st.err, 0, sizeof(st.err));
@@ -1311,6 +1363,11 @@ void st_volume(int v)
         CU->aud[1].ac_vol = st.master;
     }
 }
+
+/* A track's length as its stream says (FLAC's frames, a file's size at
+ * its bitrate), 0 not known; its size in bytes. */
+ULONG st_length_ms(void) { return st.len_ms; }
+ULONG st_size(void) { return st.clen; }
 
 /* Channels decoded (1 mono, 2 stereo), 0 not known yet. */
 int st_channels(void) { return st.dec_channels; }

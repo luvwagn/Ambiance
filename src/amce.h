@@ -265,7 +265,8 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* 
 
 /* ---------------------------------------------------------------- ags */
 enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION,
-       IT_PLEXDIR, IT_PLEXTRACK, IT_PLEXSRV };   /* Plex (plex.c) */
+       IT_PLEXDIR, IT_PLEXTRACK, IT_PLEXSRV,      /* Plex (plex.c) */
+       IT_SONG };                                 /* a music file here: MP3, FLAC (mods.c) */
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
@@ -353,6 +354,8 @@ UBYTE *unpack_buffer(UBYTE *buf, ULONG *len, char *packer, LONG pmax, const char
 
 /* ---------------------------------------------------------------- mods */
 /* Folders of modules (mods.c): IT_DIR and IT_MOD rows. */
+LONG songs_read_dir(const char *dir, struct ItemList *out);  /* MP3 and FLAC files */
+const char *song_format(const char *path);
 LONG mods_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
 BOOL mods_is_module(const char *dir, const char *name);
 void mods_label(const char *name, char *out, LONG max);
@@ -419,6 +422,8 @@ struct StInfo {
     UBYTE peak_l, peak_r;
 };
 void st_set_buffer(int level);      /* 0 short, 1 normal, 2 long: the next stream */
+ULONG st_length_ms(void);           /* a track's length as its stream says, 0 not known */
+ULONG st_size(void);                /* ...its size in bytes, 0 not known */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
               ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);

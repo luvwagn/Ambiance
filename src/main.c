@@ -19,11 +19,14 @@
 #include <proto/intuition.h>
 #include <proto/lowlevel.h>
 #include <proto/locale.h>
+#include <proto/asl.h>
+#include <libraries/asl.h>
 
 static const char version_tag[] __attribute__((used)) =
     "$VER: AmigaMCE " AMCE_VERSION " (" AMCE_DATE ")";
 
 struct IntuitionBase *IntuitionBase;
+struct Library *AslBase;            /* opened for Settings > Music folders' requester */
 struct GfxBase *GfxBase;
 struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 
@@ -60,6 +63,7 @@ struct Page {
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
+    UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
     char plex_meta[720];
     ULONG net_seq;              /*   its request out (base: the query), 0 none */
     struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
@@ -128,6 +132,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
+       ACT_MUSICSET, ACT_MUSICASSIGN, ACT_MUSICADD, ACT_MUSICDIR0, ACT_MUSICDIR_END = ACT_MUSICDIR0 + 7,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1607,6 +1612,65 @@ static void load_radio_settings(void)
     amce_log("radio", m);
 }
 
+/* ---- Music's own files: the folders they are in (Settings > Sound >
+ * Music folders), and the MUSIC: assign, used when it is there unless
+ * turned off */
+#define MUSICDIRS_VAR   "AmigaMCE/MusicFolders"     /* one a line */
+#define MUSICASSIGN_VAR "AmigaMCE/MusicAssign"      /* "off": MUSIC: not used */
+#define MUSIC_DIRS 8
+static char music_dirs[MUSIC_DIRS][160];
+static int nmusic_dirs;
+static BOOL music_assign = TRUE;
+
+static void load_music_dirs(void)
+{
+    static char buf[MUSIC_DIRS * 162];
+    char *p, *e;
+    nmusic_dirs = 0;
+    music_assign = !(GetVar((CONST_STRPTR)MUSICASSIGN_VAR, (STRPTR)buf, 8, GVF_GLOBAL_ONLY) > 0 &&
+                     !amce_stricmp(buf, "off"));
+    if (GetVar((CONST_STRPTR)MUSICDIRS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) <= 0)
+        return;
+    for (p = buf; *p && nmusic_dirs < MUSIC_DIRS; p = e) {
+        LONG n;
+        e = strchr(p, '\n');
+        n = e ? e - p : (LONG)strlen(p);
+        if (n > 0 && n < (LONG)sizeof(music_dirs[0])) {
+            memcpy(music_dirs[nmusic_dirs], p, n);
+            music_dirs[nmusic_dirs++][n] = 0;
+        }
+        e = e ? e + 1 : p + n;
+    }
+}
+
+static void save_music_dirs(void)
+{
+    static char buf[MUSIC_DIRS * 162];
+    int i;
+    buf[0] = 0;
+    for (i = 0; i < nmusic_dirs; i++) {
+        if (i)
+            amce_strlcat(buf, "\n", sizeof(buf));
+        amce_strlcat(buf, music_dirs[i], sizeof(buf));
+    }
+    save_setting(MUSICDIRS_VAR, buf);
+}
+
+/* MUSIC: is assigned (no requester asking for it if not). */
+static BOOL music_assign_there(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock((CONST_STRPTR)"MUSIC:", SHARED_LOCK);
+    me->pr_WindowPtr = old;
+    if (!l)
+        return FALSE;
+    UnLock(l);
+    return TRUE;
+}
+
 static void load_net_if(void)
 {
     char buf[20];
@@ -1705,11 +1769,12 @@ static struct Item *action_item(struct Page *p, const char *label, const char *t
 }
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
-       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV };
+       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_MUSIC };
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
 static void build_buf_settings(struct Page *p);
 static void build_rsrv_settings(struct Page *p);
+static void build_music_settings(struct Page *p);
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 static void build_nic_settings(struct Page *p);
@@ -1995,6 +2060,34 @@ static void build_sound_settings(struct Page *p)
                           caps.flacdec ? "installed" : "not installed (Aminet: util/libs/flacdec)",
                           ACT_SND_FLAC, caps.flacdec ? MARK_CHECK_ON : MARK_CHECK_OFF)))
         it->flags |= ITEM_DISABLED;
+    {
+        /* where Music finds the MP3 and FLAC files on this Amiga */
+        char tag[48];
+        int n = nmusic_dirs + (music_assign && music_assign_there() ? 1 : 0);
+        if (n)
+            sprintf(tag, "%ld place%s", (long)n, n == 1 ? "" : "s");
+        else
+            strcpy(tag, "none yet");
+        if ((it = action_item(p, "Music folders", tag, ACT_MUSICSET, MARK_NONE)))
+            it->mark = MARK_ARROW;
+    }
+}
+
+/* Settings > Sound > Music folders: the MUSIC: assign (on or off) and the
+ * folders added; Fire twice on a folder takes it out. */
+static int music_rm = -1;           /* the folder Fire was pressed on once */
+
+static void build_music_settings(struct Page *p)
+{
+    int i;
+    p->setp = SETP_MUSIC;
+    action_item(p, "Use the MUSIC: assign", music_assign_there() ? "assigned" : "not assigned now",
+                ACT_MUSICASSIGN, music_assign ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    for (i = 0; i < nmusic_dirs; i++)
+        action_item(p, music_dirs[i], music_rm == i ? "Fire again: remove" : "",
+                    ACT_MUSICDIR0 + i, MARK_NONE);
+    action_item(p, "Add a folder...", nmusic_dirs < MUSIC_DIRS ? "" : "eight at most",
+                ACT_MUSICADD, MARK_NONE);
 }
 
 static void draw_footer(void);
@@ -2024,6 +2117,7 @@ static void settings_rebuild(void)
         case SETP_RKBPS: build_rkbps_settings(q); break;
         case SETP_BUF: build_buf_settings(q); break;
         case SETP_RSRV: build_rsrv_settings(q); break;
+        case SETP_MUSIC: build_music_settings(q); break;
         default: build_settings(q); break;
         }
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
@@ -2125,6 +2219,10 @@ static void build_credits(struct Page *p)
     text_para(p, "Used if installed, not included, each under its own licence: Amiga Game "
                  "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.");
     text_line(p, "");
+    text_para(p, "FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David "
+                 "Reid (public domain or MIT-0), used if installed, not included. It is free to "
+                 "use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).");
+    text_line(p, "");
     text_para(p, "Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer.");
     p->note = "This front-end would not be possible without the immense efforts of Paul Vince "
@@ -2149,6 +2247,11 @@ static void build_credits(struct Page *p)
 
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
+/* A track playing from a file on this Amiga (Music folders), not a server. */
+static BOOL np_local(void)
+{
+    return mp_is_track() && mp_path()[0] && amce_strnicmp(mp_path(), "http", 4);
+}
 static void build_radio_root(struct Page *p);
 static void build_music_root(struct Page *p);
 static char plex_now[300];      /* the Plex track playing: its file's key (lists mark it so) */
@@ -2315,10 +2418,19 @@ static void nav_moved(void)
 /* Open a folder page without drawing (used while rebuilding the trail). */
 static BOOL push_dir_quiet(struct Item *it)
 {
-    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods;
+    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods, songs = cur() && cur()->songs;
     struct Page *p = page_push(PT_LIST, it->label);
     if (!p)
         return FALSE;
+    if (songs) {
+        p->songs = 1;
+        if (songs_read_dir(it->path, &p->list) <= 0) {
+            page_pop();
+            return FALSE;
+        }
+        np_mark_lists(FALSE);
+        return TRUE;
+    }
     if (mods) {
         p->mods = 1;
         if (mods_read_dir(it->path, &p->list) <= 0) {
@@ -2837,8 +2949,8 @@ static const char *hint_text(void)
     if (p && p->type == PT_PLAYER)
         return hi ? "Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back"
                   : "Fire press  Up/Dn vol  Esc back";
-    if (p && p->type == PT_LIST && p->mods && p->list.count &&
-        p->list.items[p->sel].kind == IT_MOD)
+    if (p && p->type == PT_LIST && (p->mods || p->songs) && p->list.count &&
+        (p->list.items[p->sel].kind == IT_MOD || p->list.items[p->sel].kind == IT_SONG))
         return hi ? "Up/Down  move    Fire/Return  play    Left/Esc  back" : "Fire play  Esc back";
     return hi ? "Up/Down  scroll      Left/Esc  back" : "Up/Down scroll  Esc back";
 }
@@ -3046,7 +3158,7 @@ static WORD mark_column(const struct Page *p)
 {
     const struct ItemList *l = &p->list;
     LONG i;
-    if (p->mods || p->radio)
+    if (p->mods || p->radio || p->songs)
         return U(MARK_SIZE + 5);    /* music lists: room for the playing bars, always */
     for (i = 0; i < l->count; i++)
         if (l->items[i].mark != MARK_NONE || l->items[i].kind == IT_MOD)
@@ -3113,7 +3225,8 @@ static BOOL ov_eligible(const struct Page *p)
         return FALSE;
     for (i = 0; i < p->list.count; i++)
         if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
-            p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_PLEXDIR)
+            p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
+            p->list.items[i].kind == IT_PLEXDIR)
             runs++;                         /* lists in title order (not a track list's) */
     return runs * 2 >= p->list.count;
 }
@@ -5048,7 +5161,7 @@ static void np_layout(void)
     np.pos_y = np.by + np.bh + U(5);
     np.samples_y = np.pos_y + row + U(2);
     np.art_s = 0;
-    if (mp_is_track()) {
+    if (mp_is_track() && !np_local()) {
         /* the cover: a square at the right of the track's lines */
         WORD s = g.footer_y - 2 - np.samples_y - U(2);
         WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
@@ -5250,6 +5363,39 @@ static void np_draw_station(void)
     const char *now = st_title();
     WORD lh = g.font_h + U(1), y = np.samples_y, bottom = g.footer_y - 2;
     st_info(&in);
+    if (np_local()) {
+        /* a music file: its name, folder, where in it, what it is, how it plays */
+        ULONG len = st_length_ms(), kbps = in.bitrate;
+        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "(no title)", PEN_WHITE,
+                TS_BOLD);
+        amce_strlcpy(info, mp_track_by(), sizeof(info));
+        if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
+            sprintf(part, "   Track %ld of %ld", (long)np.idx + 1, (long)np.list.count);
+            amce_strlcat(info, part, sizeof(info));
+        }
+        np_line(np.info_y, info, PEN_DIM, TS_SMALL);
+        if (y + lh * 3 > bottom)
+            return;
+        np_pair(y, "File", FilePart((STRPTR)mp_path()));
+        y += lh;
+        if (!kbps && len >= 1000 && st_size())
+            kbps = st_size() / (len / 8);   /* FLAC: bytes / (ms / 8) = kbit/s */
+        if (!mp_running())
+            np_pair(y, "Format", st_state() == ST_FAILED && st_error()[0] ? st_error() : "Stopped");
+        else if (!in.freq)
+            np_pair(y, "Format", "Reading...");
+        else
+            np_audio_line(y, "Format", mp_tag(), kbps, in.freq, in.channels);
+        y += lh;
+        if (mp_running() && in.dec_freq)
+            np_audio_line(y, "Playback", "", 0, in.dec_freq, in.dec_channels);
+        else
+            np_pair(y, "Playback", "");
+        y += lh;
+        if (y <= bottom)
+            gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);
+        return;
+    }
     if (mp_is_track()) {
         /* a Plex track: its title, artist and album, where in the list, how it plays */
         np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : "(no title)", PEN_WHITE,
@@ -5469,11 +5615,14 @@ static void np_mark_lists(BOOL redraw)
     const char *now = mp_loaded() ? mp_path() : "";
     for (d = 0; d < depth; d++) {
         struct Page *p = &pages[d];
-        if (p->type != PT_LIST || (!p->mods && !p->radio && !p->plex))
+        if (p->type != PT_LIST || (!p->mods && !p->radio && !p->plex && !p->songs))
             continue;
         for (i = 0; i < p->list.count; i++) {
             struct Item *it = &p->list.items[i];
-            if (it->kind == IT_MOD)
+            if (it->kind == IT_SONG)
+                it->mark = now[0] && np_local() && it->path && !amce_stricmp(it->path, now)
+                           ? MARK_PLAYING : MARK_NONE;
+            else if (it->kind == IT_MOD)
                 it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAYING
                                                                                 : MARK_NONE;
             else if (it->kind == IT_STATION) {
@@ -5502,7 +5651,7 @@ static void np_mark_lists(BOOL redraw)
         }
     }
     if (redraw && !pane_pending && cur() && cur()->type == PT_LIST &&
-        (cur()->mods || cur()->radio || cur()->plex))
+        (cur()->mods || cur()->radio || cur()->plex || cur()->songs))
         draw_list_rows(cur());
 }
 
@@ -5597,6 +5746,18 @@ static BOOL np_start(LONG idx)
             return FALSE;
         }
         np_art_start(it);                   /* its cover, when it comes */
+    } else if (it->kind == IT_SONG) {
+        /* a music file on this Amiga: played as a Plex track is, from the file */
+        if (!mp_load_track(it->path, it->label, np.folder, song_format(it->path), 0,
+                           plex_decoder_cpu(), 0, 0, err, sizeof(err))) {
+            busy_end(TRUE);
+            np.idx = idx;
+            set_msg(err);
+            return FALSE;
+        }
+        plex_now[0] = 0;
+        plex_now_in[0][0] = plex_now_in[1][0] = 0;
+        np_art_start(NULL);                 /* no cover: the last one goes */
     } else if (!mp_load(it->path, err, sizeof(err))) {
         busy_end(TRUE);
         np.idx = idx;
@@ -5676,6 +5837,18 @@ static void np_seek_track(ULONG ms, ULONG delay)
     }
     np.seek_due = 0;
     it = &np.list.items[np.idx];
+    if (it->kind == IT_SONG) {
+        /* a file: FLAC finds the time itself; an MP3 from about its byte */
+        ULONG at = 0, size = st_size();
+        BOOL flac = !strcmp(song_format(it->path), "FLAC");
+        if (!flac && st.total_ms && size)
+            at = (ULONG)(((unsigned long long)size * ms) / st.total_ms);
+        if (!mp_load_track(it->path, it->label, np.folder, song_format(it->path), st.total_ms,
+                           plex_decoder_cpu(), ms, at, err, sizeof(err)) ||
+            !mp_play(err, sizeof(err)))
+            set_msg(err);
+        return;
+    }
     plex_track_url(it, caps.cpu, ms, url, sizeof(url));
     radio_field(it, 3, by, sizeof(by));
     radio_field(it, 4, album, sizeof(album));
@@ -5851,7 +6024,7 @@ static void mods_play_item(struct Page *p)
 static BOOL np_list_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
-    return p && p->type == PT_LIST && (p->mods || p->radio || p->plex) && mp_loaded();
+    return p && p->type == PT_LIST && (p->mods || p->radio || p->plex || p->songs) && mp_loaded();
 }
 
 /* The bars by the playing module (and Now playing) drawn again: the next
@@ -6282,7 +6455,7 @@ static void np_shortcut_sync(void)
     char want[120], sel[96];
     BOOL has, playing = mp_loaded();
     LONG i;
-    if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio || p->plex))
+    if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio || p->plex || p->songs))
         return;
     it = p->list.count ? &p->list.items[0] : NULL;
     has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
@@ -6476,7 +6649,7 @@ static void open_dir_now(struct Item *it)
 {
     struct Page *p;
     LONG n;
-    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods;
+    BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods, songs = cur() && cur()->songs;
     if (pics && (it->flags & ITEM_DISABLED)) {
         set_msg("No pictures in that folder");
         return;
@@ -6498,6 +6671,20 @@ static void open_dir_now(struct Item *it)
                 set_msg(n < 0 ? "Could not open that folder" : "That folder has no pictures");
             return;
         }
+        msg[0] = 0;
+        draw_pane(TRUE);
+        draw_footer();
+        return;
+    }
+    if (songs) {
+        p->songs = 1;
+        n = songs_read_dir(it->path, &p->list);
+        if (n <= 0) {
+            page_pop();
+            set_msg(n < 0 ? "Could not open that folder" : "No MP3 or FLAC files in that folder");
+            return;
+        }
+        np_mark_lists(FALSE);
         msg[0] = 0;
         draw_pane(TRUE);
         draw_footer();
@@ -6568,7 +6755,9 @@ static void close_extra_libs(void)
         CloseLibrary(DataTypesBase);
     if (DiskfontBase)
         CloseLibrary(DiskfontBase);
-    LowLevelBase = DataTypesBase = DiskfontBase = NULL;
+    if (AslBase)
+        CloseLibrary(AslBase);          /* opened again when wanted */
+    LowLevelBase = DataTypesBase = DiskfontBase = AslBase = NULL;
 }
 
 /* Ask for more memory than there is: the system then unloads everything
@@ -7364,6 +7553,31 @@ static struct NetJob *rq;           /* the request out, or NULL */
 static ULONG rq_seq;
 
 /* Music: a Plex server's music (plex.c); the server chosen, or found. */
+/* Music's own files on its first page: the MUSIC: assign and each music
+ * folder, opened as folders of MP3 and FLAC files. */
+static void music_file_rows(struct Page *p)
+{
+    struct Item *it;
+    int i, n = 0;
+    p->songs = 1;
+    if (music_assign && music_assign_there() &&
+        (it = list_add(&p->list, "Music files (MUSIC:)", "MUSIC:", "", IT_DIR))) {
+        it->mark = MARK_ARROW;
+        n++;
+    }
+    for (i = 0; i < nmusic_dirs; i++) {
+        char label[120];
+        const char *f = (const char *)FilePart((STRPTR)music_dirs[i]);
+        sprintf(label, "Music files: %.100s", f[0] ? f : music_dirs[i]);
+        if ((it = list_add(&p->list, label, music_dirs[i], "", IT_DIR))) {
+            it->mark = MARK_ARROW;
+            n++;
+        }
+    }
+    if (!n)
+        list_add(&p->list, "Music files: Settings > Sound > Music folders", "", "", IT_TEXT);
+}
+
 static void build_music_root(struct Page *p)
 {
     struct Item *it;
@@ -7372,10 +7586,12 @@ static void build_music_root(struct Page *p)
     np_shortcut(p);
     if (!caps.net) {
         list_add(&p->list, "No TCP/IP stack running: Plex needs networking", "", "", IT_TEXT);
+        music_file_rows(p);
         return;
     }
     if (!plex.on) {
         list_add(&p->list, "Plex is turned off (Settings > Networking > Plex)", "", "", IT_TEXT);
+        music_file_rows(p);
         return;
     }
     if (plex.host[0] && plex.library[0]) {
@@ -7394,6 +7610,7 @@ static void build_music_root(struct Page *p)
         /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
         list_add(&p->list, "No Plex server chosen: Settings > Networking > Plex", "", "", IT_TEXT);
     }
+    music_file_rows(p);
 }
 
 static void build_radio_root(struct Page *p)
@@ -7881,7 +8098,10 @@ static void np_art_start(const struct Item *it)
     static char shown[160];
     char thumb[160], file[120];
     WORD s;
-    radio_field(it, 9, thumb, sizeof(thumb));
+    if (it)
+        radio_field(it, 9, thumb, sizeof(thumb));
+    else
+        thumb[0] = 0;
     if (!strcmp(thumb, shown) && thumb[0] &&
         (np_aj || art_nj[ART_NP] || (g.pic_w && !strcmp(np_art_file, pv_onscr.key))))
         return;                             /* the same album: its cover stays as it is */
@@ -8376,6 +8596,66 @@ static void radio_station(struct Item *it)
     draw_footer();
 }
 
+/* Settings > Music folders > Add a folder: asl.library's requester, for
+ * folders only, on AmigaMCE's screen. */
+static void music_add_folder(void)
+{
+    struct FileRequester *fr;
+    char path[300];
+    BOOL db, got = FALSE;
+    int i;
+    if (nmusic_dirs >= MUSIC_DIRS) {
+        set_msg("Eight music folders at most: take one out first");
+        return;
+    }
+    if (!AslBase && !(AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38))) {
+        set_msg("asl.library (version 38) is needed to choose a folder");
+        return;
+    }
+    db = gfx_dbuf_active();
+    if (db)
+        gfx_dbuf_stop(&g);                  /* the requester draws on the screen shown */
+    fr = (struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest, ASLFR_Window, (ULONG)g.win, ASLFR_SleepWindow, TRUE,
+        ASLFR_TitleText, (ULONG)"A folder of MP3 or FLAC files", ASLFR_PositiveText, (ULONG)"Add",
+        ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
+        (ULONG)(nmusic_dirs ? music_dirs[nmusic_dirs - 1] : "SYS:"), TAG_DONE);
+    if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
+        /* made whole (a name typed may be relative to where AmigaMCE runs) */
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)fr->fr_Drawer, SHARED_LOCK))) {
+            got = NameFromLock(l, (STRPTR)path, sizeof(music_dirs[0]) - 1) != 0;
+            UnLock(l);
+        }
+        me->pr_WindowPtr = old;
+        if (!got)
+            set_msg("That folder could not be found");
+    }
+    if (fr)
+        FreeAslRequest(fr);
+    if (db)
+        gfx_dbuf_start(&g);
+    if (got) {
+        for (i = 0; i < nmusic_dirs; i++)
+            if (!amce_stricmp(music_dirs[i], path))
+                break;
+        if (i < nmusic_dirs) {
+            set_msg("That folder is in Music already");
+        } else {
+            amce_strlcpy(music_dirs[nmusic_dirs++], path, sizeof(music_dirs[0]));
+            save_music_dirs();
+            settings_rebuild();
+            if (cur() && cur()->setp == SETP_MUSIC)
+                cur()->sel = nmusic_dirs;   /* on the folder added */
+            set_msg("Folder added: its music is under Music");
+        }
+    }
+    draw_all();                             /* where the requester was */
+}
+
 static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
@@ -8390,7 +8670,7 @@ static void act_action(struct Item *it)
         else if (it->action == ACT_SND_MHI)
             set_msg(caps.mp3_mhi ? "MHI: coming in a later version" : "MHI is not installed");
         else if (it->action == ACT_SND_FLAC)
-            set_msg(caps.flacdec ? "FLAC: Plex's FLAC tracks play as stored on a fast Amiga"
+            set_msg(caps.flacdec ? "FLAC: music files, and Plex's tracks as stored on a fast Amiga"
                                  : "Install flacdec.library (Aminet: util/libs/flacdec) for FLAC");
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
@@ -8483,6 +8763,36 @@ static void act_action(struct Item *it)
     }
     else if (it->action == ACT_NETSET)
         open_settings_page("Networking", build_net_settings);
+    else if (it->action == ACT_MUSICSET) {
+        music_rm = -1;
+        open_settings_page("Music folders", build_music_settings);
+    } else if (it->action == ACT_MUSICASSIGN) {
+        music_assign = !music_assign;
+        save_setting(MUSICASSIGN_VAR, music_assign ? "" : "off");
+        music_rm = -1;
+        plex_settings_again(FALSE);
+        set_msg(music_assign ? "Music lists MUSIC: when it is assigned" : "Music leaves MUSIC: out");
+    } else if (it->action == ACT_MUSICADD) {
+        music_rm = -1;
+        music_add_folder();
+    } else if (it->action >= ACT_MUSICDIR0 && it->action <= ACT_MUSICDIR_END) {
+        int i = it->action - ACT_MUSICDIR0;
+        if (i >= nmusic_dirs)
+            return;
+        if (music_rm != i) {
+            music_rm = i;
+            plex_settings_again(FALSE);
+            set_msg("Fire again to take this folder out of Music (its files stay)");
+            return;
+        }
+        for (; i < nmusic_dirs - 1; i++)
+            strcpy(music_dirs[i], music_dirs[i + 1]);
+        nmusic_dirs--;
+        music_rm = -1;
+        save_music_dirs();
+        plex_settings_again(FALSE);
+        set_msg("Folder taken out of Music");
+    }
     else if (it->action == ACT_NICAUTO)
         choose_nic(-1);
     else if (it->action >= ACT_NIC0 && it->action <= ACT_NIC_END)
@@ -8794,7 +9104,7 @@ static void act_open(BOOL play)
         ch_wait_item(p, p->sel, TRUE);      /* its letter, if it was let go */
         busy_end(TRUE);
         it = &p->list.items[p->sel];
-        if (it->kind == IT_MOD)
+        if (it->kind == IT_MOD || it->kind == IT_SONG)
             mods_play_item(p);      /* the music, and its page */
         else if (p->pics && it->kind == IT_DIR && it->mark == MARK_PLAY)
             folder_slideshow(it);   /* Fire plays a folder of pictures */
@@ -9167,6 +9477,7 @@ static void handle_mouse(struct IntuiMessage *im)
                  * plays it (a folder: goes inside) */
                 struct Item *it = &p->list.items[idx];
                 BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
+                                it->kind == IT_SONG ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);
@@ -9456,6 +9767,7 @@ static int app_main(void)
     caps_detect(&caps);
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
+    load_music_dirs();
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);
@@ -9693,6 +10005,8 @@ out:
         CloseLibrary(LowLevelBase);
     if (DataTypesBase)
         CloseLibrary(DataTypesBase);
+    if (AslBase)
+        CloseLibrary(AslBase);
     if (DiskfontBase)
         CloseLibrary(DiskfontBase);
     if (LayersBase)

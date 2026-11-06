@@ -47,8 +47,13 @@ of the Amiga to how fast it really is.
   [Plex Media Server](https://www.plex.tv) on your network, by artist,
   album or recently added, with covers and details beside the list. Plex
   converts each track to an MP3 this Amiga can decode: 22 kHz mono on a
-  68020/030, 24 kHz stereo on a 68040/060 or faster. Plain HTTP on your own
-  network, so no AmiSSL is needed.
+  68020/030, 24 kHz stereo on a 68040/060 or faster; a fast Amiga with
+  flacdec.library plays MP3 and FLAC tracks as stored. Plain HTTP on your
+  own network, so no AmiSSL is needed.
+- **Music files:** MP3 and FLAC files on the Amiga itself, under Music next
+  to Plex: the `MUSIC:` assign if you have one, and up to eight folders
+  chosen in Settings > Sound > Music folders. A folder's files play in
+  order, with seeking.
 - **Now Playing:** title, artist, album and cover; a level meter per channel;
   a position bar you can click to seek; previous, back, play/pause, stop,
   forward, next and volume. The music plays on while you browse, and the
@@ -75,7 +80,8 @@ of the Amiga to how fast it really is.
 |---|---|
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
 | **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign) |
-| **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) and mpega.library |
+| **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
+| **For MP3 and FLAC** | mpega.library for MP3; [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060) |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AmiSSL to list HTTPS radio stations |
 
 AHI and MHI are detected and shown in Settings, but AmigaMCE plays through
@@ -121,7 +127,7 @@ playing.
 |---|---|
 | General | Jump scrolling (very long lists step a letter at a time), Debug |
 | Screen | Screen mode, Style (fonts and looks), Double buffering (RTG) |
-| Sound | What plays the sound and decodes MP3 (Paula and mpega.library for now) |
+| Sound | What plays the sound and decodes MP3 and FLAC (Paula, mpega.library and flacdec.library for now); Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
 | Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
@@ -187,8 +193,10 @@ AmigaMCE © 2026 Brian King, under the [MIT licence](LICENSE).
 The fonts (Pixelify Sans, Galmuri and Rubik, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT
 licence; see `assets/fonts-src/`. The EaglePlayer host follows HippoPlayer's
-(MIT, © 2017 Kari-Pekka Koljonen). [CREDITS.txt](CREDITS.txt) has the
-details.
+(MIT, © 2017 Kari-Pekka Koljonen). FLAC is decoded by flacdec.library
+(© 2026 Renaud Schweingruber, with dr_flac by David Reid, public domain or
+MIT-0) where it is installed; it is not included, as it may only be passed
+on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
 names belong to their owners; AmigaMCE is not affiliated with any of them.

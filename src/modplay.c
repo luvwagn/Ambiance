@@ -1101,7 +1101,7 @@ BOOL mp_can_step(int d)
     if (mp.engine == ENG_MIX)
         return mx_can_step();
     if (mp.engine == ENG_RADIO)
-        return mp.rtrack && mp.rtotal_ms;   /* a track (a seek: AmigaMCE asks again); live, no */
+        return mp.rtrack && (mp.rtotal_ms || st_length_ms());  /* a track; live, no */
     return mp.pt != NULL;
 }
 
@@ -1239,7 +1239,7 @@ void mp_status(struct MpStatus *s)
         struct StInfo in;
         st_info(&in);
         s->elapsed_ms = mp.running ? in.played_ms + mp.rbase_ms : mp.rbase_ms;
-        s->total_ms = mp.rtrack ? mp.rtotal_ms : 0;
+        s->total_ms = !mp.rtrack ? 0 : mp.rtotal_ms ? mp.rtotal_ms : st_length_ms();
         if (s->total_ms && s->elapsed_ms > s->total_ms)
             s->elapsed_ms = s->total_ms;
         s->sub = s->subs = 1;
@@ -1345,14 +1345,15 @@ const char *mp_sample_name(int i, BOOL *used)
     return mp.pt->smp[i].name;
 }
 
-/* A station: nothing to load (its stream is opened when it plays). */
-BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
-                    LONG errmax)
+/* A station: nothing to load (its stream is opened when it plays);
+ * file: a track may be a music file on this Amiga, not an address. */
+static BOOL load_stream(const char *url, const char *name, const char *tag, UWORD cpu,
+                        BOOL file, char *err, LONG errmax)
 {
     err[0] = 0;
     mp_stop();
     module_free();
-    if (amce_strnicmp(url, "http", 4)) {
+    if (!file && amce_strnicmp(url, "http", 4)) {
         amce_strlcpy(err, "Not a station's address", errmax);
         return FALSE;
     }
@@ -1368,13 +1369,19 @@ BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cp
     return TRUE;
 }
 
+BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
+                    LONG errmax)
+{
+    return load_stream(url, name, tag, cpu, FALSE, err, errmax);
+}
+
 /* A track on a server (Plex): an MP3 file over HTTP, played as a station
  * is, but with an end and a length; by: its artist and album. */
 BOOL mp_load_track(const char *url, const char *title, const char *by, const char *tag,
                    ULONG total_ms, UWORD cpu, ULONG from_ms, ULONG range_from, char *err,
                    LONG errmax)
 {
-    if (!mp_load_stream(url, title, tag, cpu, err, errmax))
+    if (!load_stream(url, title, tag, cpu, TRUE, err, errmax))
         return FALSE;
     mp.rtrack = TRUE;
     mp.rtotal_ms = total_ms;
