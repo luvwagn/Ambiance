@@ -122,8 +122,10 @@ an earlier installation. Or copy the AmigaMCE drawer to your hard drive
 yourself (all its languages come along), keeping its Fonts drawer next to
 the program.
 
-The floppy (ADF) carries an English-only archive: unpack it to a hard
-drive, for example
+The floppy (ADF) carries an English-only archive, without the larger of
+the two Far East glyph sets (Japanese, Chinese and Korean names are drawn
+at 12 pixels on every screen; the full archive has 15 for the biggest):
+unpack it to a hard drive, for example
 
   lha x DF0:amigamce.lha Work:
 
@@ -161,14 +163,17 @@ Controls
   Now Playing  Left/Right choose a button, Fire presses it; Space
                play/pause; S stop; N/P next/previous; , and . back and
                forward; Up/Down or the wheel volume; a click on the bar
-               jumps there. Esc goes back, the music playing on.
+               jumps there; V the level meters or the spectrum. Esc
+               goes back, the music playing on.
 
 
 Settings
 --------
   General      Jump scrolling (very long lists step a letter at a time),
                Debug
-  Screen       Screen mode, Style, Double buffering (RTG)
+  Screen       Screen mode, Style, Double buffering (RTG), Visualisation
+               (Now Playing's level meters, or HippoPlayer's spectrum
+               analyser; under MHI the meters)
   Sound        Paula, or AHI (16-bit) for radio, Plex and music files;
                MP3 by mpega.library or an MHI driver (which decodes
                and plays it itself); FLAC by flacdec.library;
@@ -216,7 +221,8 @@ History
        as stored (flacdec.library); 68020+. Japanese, Chinese and
        Korean names in their own characters. In eleven languages besides
        English (Japanese among them), with an installer; a narrower
-       menu on lowres screens.
+       menu on lowres screens. HippoPlayer's spectrum analyser on Now
+       Playing (V, or Settings > Screen > Visualisation).
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and
        stream buffer settings; network interface choice; Countries A to Z
@@ -226,8 +232,8 @@ History
 Credits and licences
 --------------------
 AmigaMCE (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
-Its EaglePlayer host follows HippoPlayer's (MIT, (c) 2017 Kari-Pekka
-Koljonen; see Licences/CREDITS.txt).
+Its EaglePlayer host follows HippoPlayer's, and its spectrum analyser is
+HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
 
 FLAC is decoded by flacdec.library (c) 2026 Renaud Schweingruber, with
 dr_flac by David Reid (public domain or MIT-0), where it is installed. It

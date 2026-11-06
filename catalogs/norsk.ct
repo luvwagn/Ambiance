@@ -295,6 +295,9 @@ Piksel
 MSG_63678BEE
 Dobbelbuffer
 ; Double buffering
+MSG_20B362A2
+Visualisering
+; Visualisation
 MSG_52325DD8
 Hoppende rulling (per bokstav)
 ; Jump scrolling (by letter)
@@ -463,6 +466,9 @@ Skrifter: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 
 MSG_2B3D5B66
 Kode: C-biblioteket libnix (fri bruk). EaglePlayer-verten følger HippoPlayer sin (MIT-lisens, (c) 2017 Kari-Pekka Koljonen).
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_3D495145
+Spektrumanalysator: HippoPlayers (MIT-lisens, (c) 2017 Kari-Pekka Koljonen), med Tom Roberts' FFT i fast komma (1989).
+; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
 MSG_321AE26A
 Brukes hvis de er installert, følger ikke med, hver under sin egen lisens: Amiga Game Selector, WHDLoad, AHI, MHI-drivere, mpega.library, datatyper.
 ; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
@@ -694,15 +700,6 @@ Kobler til...
 MSG_6038FAB1
 Bufrer...
 ; Buffering...
-MSG_5966858A
-Mono
-; Mono
-MSG_1E9E9F85
-Høyre
-; Right
-MSG_12773890
-Venstre
-; Left
 MSG_4D72110C
 Avspilling
 ; Playback
@@ -1386,3 +1383,18 @@ Kunne ikke vise %.80s
 MSG_158F4FA3
 Ikke nok minne til %.70s
 ; Not enough memory for %.70s
+MSG_54706675
+Nivåmålere
+; Level meters
+MSG_72FB1A0A
+Spektrum
+; Spectrum
+MSG_5966858A
+Mono
+; Mono
+MSG_1E9E9F85
+Høyre
+; Right
+MSG_12773890
+Venstre
+; Left

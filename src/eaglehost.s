@@ -41,6 +41,12 @@ AUD0			equ	$0a0
 	xref	_eh_songend
 	xref	_eh_hit
 	xref	_eh_vol
+	xref	_eh_adr
+	xref	_eh_plen
+	xref	_eh_per
+	xref	_eh_sadr
+	xref	_eh_slen
+	xref	_eh_trig
 
 	xdef	_eh_call
 	xdef	_eh_icall
@@ -201,24 +207,45 @@ _ehs_clearcache:
 	rts
 
 ;------------------------------------------------------------ Paula, for players
-; DMAMask(D0.w < 0: on, else off; D1 = channels)
+; DMAMask(D0.w < 0: on, else off; D1 = channels). Channels turned on
+; start a note: where they start is kept for the spectrum (eh_sadr,
+; eh_slen, eh_trig), the address and length poked last.
 enpp_dmamask:
-	movem.l	d0/d1,-(sp)
+	movem.l	d0-d2/a0-a1,-(sp)
 	and.w	#$000f,d1
 	tst.w	d0
 	bpl.b	.off
 	or.b	d1,_eh_hit
+	or.b	d1,_eh_trig
+	moveq	#0,d2
+.note:	btst	d2,d1
+	beq.b	.next
+	move.w	d2,d0
+	lsl.w	#2,d0
+	lea	_eh_adr,a0
+	lea	_eh_sadr,a1
+	move.l	0(a0,d0.w),0(a1,d0.w)
+	lsr.w	#1,d0
+	lea	_eh_plen,a0
+	lea	_eh_slen,a1
+	move.w	0(a0,d0.w),0(a1,d0.w)
+.next:	addq.w	#1,d2
+	cmp.w	#4,d2
+	bne.b	.note
 	or.w	#$8000,d1
 .off:	move.w	d1,CUSTOM+DMACON
 	bsr	_ehs_waitdma
-	movem.l	(sp)+,d0/d1
+	movem.l	(sp)+,d0-d2/a0-a1
 	rts
 
 ; PokeAdr(D0 = address, D1 = channel)
 enpp_pokeadr:
 	movem.l	d1/a0,-(sp)
 	and.w	#3,d1
-	lsl.w	#4,d1
+	lsl.w	#2,d1
+	lea	_eh_adr,a0
+	move.l	d0,0(a0,d1.w)
+	lsl.w	#2,d1
 	lea	CUSTOM+AUD0,a0
 	move.l	d0,0(a0,d1.w)
 	movem.l	(sp)+,d1/a0
@@ -228,11 +255,14 @@ enpp_pokeadr:
 enpp_pokelen:
 	movem.l	d0/d1/a0,-(sp)
 	and.w	#3,d1
-	lsl.w	#4,d1
 	tst.w	d0
 	bne.b	.some
 	moveq	#1,d0
-.some:	lea	CUSTOM+AUD0,a0
+.some:	add.w	d1,d1
+	lea	_eh_plen,a0
+	move.w	d0,0(a0,d1.w)
+	lsl.w	#3,d1
+	lea	CUSTOM+AUD0,a0
 	move.w	d0,4(a0,d1.w)
 	movem.l	(sp)+,d0/d1/a0
 	rts
@@ -241,7 +271,10 @@ enpp_pokelen:
 enpp_pokeper:
 	movem.l	d1/a0,-(sp)
 	and.w	#3,d1
-	lsl.w	#4,d1
+	add.w	d1,d1
+	lea	_eh_per,a0
+	move.w	d0,0(a0,d1.w)
+	lsl.w	#3,d1
 	lea	CUSTOM+AUD0,a0
 	move.w	d0,6(a0,d1.w)
 	movem.l	(sp)+,d1/a0

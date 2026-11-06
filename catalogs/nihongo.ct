@@ -298,6 +298,9 @@ MSG_2AB32B77
 MSG_63678BEE
 ダブルバッファリング
 ; Double buffering
+MSG_20B362A2
+ビジュアライザー
+; Visualisation
 MSG_52325DD8
 ジャンプスクロール (頭文字ごと)
 ; Jump scrolling (by letter)
@@ -466,6 +469,9 @@ MSG_36BA6F5C
 MSG_2B3D5B66
 コード: libnix Cランタイム (パブリックドメイン)。EaglePlayerのホストはHippoPlayerのものに倣っています (MITライセンス、(c) 2017 Kari-Pekka Koljonen)。
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_3D495145
+スペクトラムアナライザー: HippoPlayerのもの (MITライセンス、(c) 2017 Kari-Pekka Koljonen)、Tom Robertsの固定小数点FFT (1989) を使用。
+; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
 MSG_321AE26A
 インストールされていれば使用、同梱なし、それぞれ独自のライセンス: Amiga Game Selector、WHDLoad、AHI、MHIドライバー、mpega.library、データタイプ。
 ; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
@@ -697,15 +703,6 @@ MSG_44D22F83
 MSG_6038FAB1
 バッファリング中...
 ; Buffering...
-MSG_5966858A
-モノラル
-; Mono
-MSG_1E9E9F85
-右
-; Right
-MSG_12773890
-左
-; Left
 MSG_4D72110C
 再生
 ; Playback
@@ -1396,3 +1393,18 @@ MSG_02281E0C
 MSG_158F4FA3
 %.70sのためのメモリが足りません
 ; Not enough memory for %.70s
+MSG_54706675
+レベルメーター
+; Level meters
+MSG_72FB1A0A
+スペクトル
+; Spectrum
+MSG_5966858A
+モノラル
+; Mono
+MSG_1E9E9F85
+右
+; Right
+MSG_12773890
+左
+; Left

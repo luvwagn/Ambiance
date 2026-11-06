@@ -472,6 +472,45 @@ BOOL mp_load_track(const char *url, const char *title, const char *by, const cha
 BOOL mp_is_track(void);
 const char *mp_track_by(void);
 int mp_meter_count(void);
+
+/* Now Playing's visualizations (vis.c): plug-ins drawn in the meters'
+ * place, each from what the playing engine can tell (mp_vis_feed). */
+enum { VF_LEVELS = 1, VF_VOICES = 2, VF_PCM = 4 };
+#define VIS_PCM 128                 /* samples a PCM feed gives */
+struct VisVoice {                   /* a Paula voice where it plays now */
+    const BYTE *pos, *loop;         /* NULL: silent */
+    LONG left, replen;              /* bytes to the end, and of the loop */
+    UWORD period;
+    UBYTE vol;                      /* 0-64 */
+};
+struct VisFeed {
+    UWORD have;                     /* VF_*: what this engine can give */
+    const struct MpStatus *st;      /* the meters' levels and samples (VF_LEVELS) */
+    struct VisVoice voice[4];       /* VF_VOICES: Paula's four */
+    WORD pcm[VIS_PCM];              /* VF_PCM: the latest played, mono, about 8 kHz */
+    UWORD pcm_n;
+    ULONG rate;                     /* pcm's rate */
+};
+UWORD mp_vis_have(void);            /* VF_*: what mp_vis_feed could fill now */
+void mp_vis_feed(struct VisFeed *f, UWORD want);
+
+struct VisCtx {                     /* where a visualization draws */
+    struct Gfx *g;
+    WORD x, y, w;                   /* its left, top and width */
+    WORD row_h, rows, gap;          /* laid out in rows (the meters'), gap between */
+    WORD label_w;                   /* the meters' channel names, left */
+};
+enum { VIS_METERS, VIS_SPECTRUM, VIS_COUNT };
+const char *vis_name(int v);        /* N_(): translate where shown */
+void vis_select(int v);
+int  vis_selected(void);
+int  vis_active(void);              /* the one drawn: the selected, or the meters */
+int  vis_rows(void);                /* rows the active one wants (0: the meters' own) */
+void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full);
+void vis_stop(void);                /* its memory back (a game, quitting) */
+void vis_timing(ULONG *frames, ULONG *ms100);  /* spectrum frames, their time (0.1 ms) */
+void vis_tables(WORD *sine);        /* vistab.c: the FFT's sine (1024) */
+void vis_loud_table(ULONG *t);      /* ...and the 64 loudness steps */
 void mp_paula_check(void);          /* once a second: audio DMA left on while stopped */           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */
 const char *mp_stream_name(void);
 
@@ -493,6 +532,8 @@ BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
+BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
+UWORD st_pcm(WORD *out, UWORD n, ULONG *rate);  /* the last n played (spectrum), 0 none */
 ULONG st_length_ms(void);           /* a track's length as its stream says, 0 not known */
 ULONG st_size(void);                /* ...its size in bytes, 0 not known */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
@@ -521,6 +562,7 @@ BOOL mx_step(int d);
 BOOL mx_can_step(void);
 void mx_rewind(void);
 void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r);
+UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate);  /* the last n played (spectrum), 0 none */
 BOOL mx_loaded(void);
 void mx_unload(void);
 const char *mx_title(void);
@@ -553,7 +595,18 @@ BOOL ep_step_position(int d);
 BOOL ep_can_step(int d);
 BOOL ep_subsong(int n);
 void ep_info(struct EpInfo *in);
-void ep_levels(UBYTE *hit, UBYTE *vol);
+/* A Paula voice as an EaglePlayer player last set it (its UPS, or its
+ * PokeAdr/PokeLen/PokePer), for the spectrum: a note started (trig) at
+ * adr, len words, then its loop. */
+struct EpVoice {
+    const BYTE *adr, *loop;
+    UWORD len, replen, per;
+    UBYTE vol;
+};
+/* hit, vol: the meters'; v (or NULL): where the voices are, trig the ones
+ * whose notes started since the last call. FALSE: the player says nothing
+ * of where its samples are (no UPS, no PokeAdr). */
+BOOL ep_levels(UBYTE *hit, UBYTE *vol, struct EpVoice *v, UBYTE *trig);
 
 /* ---------------------------------------------------------------- loader */
 /* Work for the loader process (loader.c): a fact sheet and screenshot, a

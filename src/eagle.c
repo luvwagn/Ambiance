@@ -168,6 +168,12 @@ APTR eh_a0;
 volatile UBYTE eh_songend;      /* SongEnd called */
 volatile UBYTE eh_hit;          /* channels started (DMAMask) since last looked */
 volatile UBYTE eh_vol[4];       /* the volume each channel was last given (PokeVol) */
+/* the spectrum's: what PokeAdr, PokeLen and PokePer last set, and where
+ * each note began (DMAMask on: eh_trig) */
+volatile APTR eh_adr[4], eh_sadr[4];
+volatile UWORD eh_plen[4], eh_slen[4], eh_per[4];
+volatile UBYTE eh_trig;
+static BOOL eh_poked;           /* a PokeAdr seen: the player says where its samples are */
 
 /* ---- one module played */
 struct Host {
@@ -809,6 +815,15 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         return FALSE;
     }
     eh_songend = 0;
+    eh_trig = 0;
+    eh_poked = FALSE;
+    {
+        int i;
+        for (i = 0; i < 4; i++) {
+            eh_adr[i] = eh_sadr[i] = NULL;
+            eh_plen[i] = eh_slen[i] = eh_per[i] = 0;
+        }
+    }
     if (!find_player(ep.h, found, sizeof(found))) {
         host_free(ep.h);
         ep.h = NULL;
@@ -1078,22 +1093,60 @@ void ep_info(struct EpInfo *in)
     }
 }
 
-/* The meters: each channel's volume when it last started a note. */
-void ep_levels(UBYTE *hit, UBYTE *vol)
+/* The meters: each channel's volume when it last started a note. And
+ * for the spectrum (v): where each voice's sample is, as HippoPlayer
+ * follows them (puu016.s, scopeinterrupt): from the player's UPS where it
+ * fills one, else from what it pokes into Paula through AmigaMCE. */
+BOOL ep_levels(UBYTE *hit, UBYTE *vol, struct EpVoice *v, UBYTE *trig)
 {
     int i;
+    UBYTE t;
     *hit = eh_hit;
     eh_hit = 0;
-    for (i = 0; i < 4; i++)
+    Disable();
+    t = eh_trig;
+    eh_trig = 0;
+    if (v)
+        for (i = 0; i < 4; i++)
+            if (t & (1 << i)) {
+                v[i].adr = (const BYTE *)eh_sadr[i];
+                v[i].len = eh_slen[i];
+            }
+    Enable();
+    for (i = 0; i < 4; i++) {
         vol[i] = eh_vol[i];
+        if (eh_adr[i])
+            eh_poked = TRUE;
+        if (v && !ep.ups) {
+            v[i].loop = (const BYTE *)eh_adr[i];        /* what plays after the start */
+            v[i].replen = eh_plen[i];
+            v[i].per = eh_per[i];
+            v[i].vol = eh_vol[i];
+        }
+    }
     if (ep.ups) {
+        t = 0;
         for (i = 0; i < 4; i++) {
             UWORD per = W(ep.ups, UPS_PER(i));
             if (per) {
                 *hit |= (UBYTE)(1 << i);
                 vol[i] = (UBYTE)W(ep.ups, UPS_VOL(i));
                 W(ep.ups, UPS_PER(i)) = 0;
+                if (v) {
+                    t |= (UBYTE)(1 << i);
+                    v[i].adr = (const BYTE *)L(ep.ups, 18 * i);
+                    v[i].len = W(ep.ups, 4 + 18 * i);
+                    v[i].per = per;
+                    /* UPS_VoiceXRepeat: the sample plays once, then nothing */
+                    v[i].loop = W(ep.ups, 16 + 18 * i) ? NULL : v[i].adr;
+                    v[i].replen = W(ep.ups, 16 + 18 * i) ? 0 : v[i].len;
+                }
             }
+            if (v)
+                v[i].vol = (UBYTE)W(ep.ups, UPS_VOL(i));
         }
     }
+    if (trig)
+        *trig = t;
+    return ep.ups != NULL || eh_poked;
 }

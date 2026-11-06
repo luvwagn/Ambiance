@@ -134,7 +134,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_SND_FLAC, ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1518,6 +1518,7 @@ static void save_screen_mode(void)
 #define LFONT_VAR "AmigaMCE/LacedFont"
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
+#define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters" or "spectrum" */
 #define HTTPS_VAR "AmigaMCE/RadioHTTPS"
 #define NETIF_VAR "AmigaMCE/NetInterface"
 
@@ -1849,6 +1850,26 @@ static void load_style(void)
                 gfx_laced_font = i;
 }
 
+/* Settings > Screen > Visualisation: the level meters or the
+ * spectrum (vis.c); V on Now playing goes to the next. */
+static void load_visual(void)
+{
+    char buf[16];
+    if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM : VIS_METERS);
+}
+
+static void np_draw(BOOL full);
+static BOOL np_on(void);
+
+static void next_visual(void)
+{
+    vis_select((vis_selected() + 1) % VIS_COUNT);
+    save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum" : "meters");
+    if (np_on())
+        np_draw(TRUE);                  /* laid out again: the spectrum is 4 rows tall */
+}
+
 static void load_jump(void)
 {
     char buf[8];
@@ -2021,6 +2042,7 @@ static void build_screen_settings(struct Page *p)
     if (!g.planar)                      /* native screens draw straight on: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_NONE);
 }
 
 /* Settings > General. */
@@ -2446,6 +2468,9 @@ static void build_credits(struct Page *p)
     text_line(p, "");
     text_para(p, _("Code: libnix C runtime (public domain). The EaglePlayer host follows "
                  "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen)."));
+    text_line(p, "");
+    text_para(p, _("Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka "
+                   "Koljonen), with Tom Roberts' fixed-point FFT (1989)."));
     text_line(p, "");
     text_para(p, _("Used if installed, not included, each under its own licence: Amiga Game "
                  "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."));
@@ -3039,7 +3064,7 @@ static void dbg_load_log(void)
     static int n;
     static ULONG wakes0;
     static LONG cpu_sum, app_sum;
-    char m[200];
+    char m[300];
     struct Page *p = cur();
     if (cpu_load >= 0)
         cpu_sum += cpu_load;
@@ -3049,10 +3074,17 @@ static void dbg_load_log(void)
         return;
     {
         LONG rb = st_busy_sample();
-        char rp[48];
+        char rp[96];
         rp[0] = 0;
         if (rb >= 0)
             sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
+        {
+            ULONG fr, t;
+            vis_timing(&fr, &t);
+            if (fr)                     /* the spectrum's time a frame */
+                sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame", (long)(t / fr / 10),
+                        (long)(t / fr % 10));
+        }
         sprintf(m, "system %ld%%, AmigaMCE %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
                 (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),
                 mod_names[menu[menu_sel]], p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
@@ -5310,8 +5342,6 @@ static struct {
     ULONG seek_due;
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
-    WORD s_level[4];
-    UBYTE s_sample[4];
     int s_state, s_vol, s_btn, s_flash, s_steps;
     BOOL s_focus;
     int flash;                  /* the button just pressed (-1 none): lit briefly */
@@ -5321,8 +5351,7 @@ static struct {
     ULONG rep_next;
     BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
     WORD sl_x0, sl_x1;
-    int s_meters;               /* level meters drawn (4, 2, 1) */
-    int rows;                   /* ...and laid out for: the page as tall as they need */
+    int rows;                   /* the meters' rows laid out for: the page as tall as they need */
     ULONG s_rseq;               /* a station: its title and state drawn */
     int s_rstate;
 } np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
@@ -5588,6 +5617,8 @@ static int np_meter_rows(void)
 {
     if (!mp_loaded())
         return 4;
+    if (vis_rows())
+        return vis_rows();              /* the visualization's own (the spectrum: 4) */
     return mp_is_stream() ? 2 : mp_meter_count();
 }
 
@@ -5752,66 +5783,20 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
 }
 
+/* The meters' place: the visualization chosen (vis.c), the level meters
+ * where the engine cannot give what it needs. */
 static void np_draw_meters(BOOL full, const struct MpStatus *st)
 {
-    int i, n = mp_meter_count();
-    WORD bx = np.x0 + np.name_w + U(4), bw = np.x0 + np.w - bx, bh = np.meter_h - U(4);
-    if (bh < 2)
-        bh = 2;
-    if (n != np.s_meters) {
-        /* fewer meters than last time (stereo, mono): the rest cleared */
-        gfx_fill(&g, np.x0, np.meter_y, np.x0 + np.w - 1,
-                 np.meter_y + np.rows * (np.meter_h + U(2)) - 1, PEN_BG);
-        np.s_meters = n;
-        full = TRUE;
-    }
-    if (n > np.rows)
-        n = np.rows;                        /* laid out for fewer: np_update lays it out again */
-    for (i = 0; i < n; i++) {
-        WORD y = np.meter_y + i * (np.meter_h + U(2)), by = y + (np.meter_h - bh) / 2;
-        WORD lit = (WORD)((LONG)bw * st->level[i] / 64);
-        if (n < 4) {
-            /* a channel of the sound, not of Paula: Left and Right, or Mono */
-            if (full) {
-                gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
-                gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2,
-                         n == 1 ? _("Mono") : i ? _("Right") : _("Left"), PEN_DIM, PEN_BG, np.name_w,
-                         TS_SMALL);
-            }
-        } else if (full || st->sample[i] != np.s_sample[i]) {
-            char name[40];
-            BOOL used;
-            const char *sn = st->sample[i] ? mp_sample_name(st->sample[i] - 1, &used) : "";
-            if (st->sample[i])
-                sprintf(name, "%ld  %s", (long)st->sample[i], sn);
-            else
-                name[0] = 0;
-            gfx_fill(&g, np.x0, y, np.x0 + np.name_w + U(3), y + np.meter_h - 1, PEN_BG);
-            if (name[0])
-                gfx_text(&g, np.x0, y + (np.meter_h - g.font_h) / 2, name, PEN_DIM, PEN_BG,
-                         np.name_w, TS_SMALL);
-            np.s_sample[i] = st->sample[i];
-        }
-        if (full) {
-            if (lit > 0)
-                gfx_fill(&g, bx, by, bx + lit - 1, by + bh - 1, i == 0 || i == 3 ? PEN_ACCENT : PEN_HL);
-            if (lit < bw)
-                gfx_fill(&g, bx + lit, by, bx + bw - 1, by + bh - 1, PEN_RULE);
-            np.s_level[i] = lit;
-        } else if (lit != np.s_level[i]) {
-            /* only the change: 25 times a second a whole bar, each one
-             * across most of the screen, was most of Now playing's time */
-            WORD old = np.s_level[i];
-            if (old < 0 || old > bw)
-                old = lit > 0 ? 0 : bw;
-            if (lit > old)
-                gfx_fill(&g, bx + old, by, bx + lit - 1, by + bh - 1,
-                         i == 0 || i == 3 ? PEN_ACCENT : PEN_HL);
-            else
-                gfx_fill(&g, bx + lit, by, bx + old - 1, by + bh - 1, PEN_RULE);
-            np.s_level[i] = lit;
-        }
-    }
+    struct VisCtx c;
+    c.g = &g;
+    c.x = np.x0;
+    c.y = np.meter_y;
+    c.w = np.w;
+    c.row_h = np.meter_h;
+    c.rows = np.rows;
+    c.gap = U(2);
+    c.label_w = np.name_w;
+    vis_draw(&c, st, full);
 }
 
 /* A station's page: its name; what plays now; what it is and how it is
@@ -7450,6 +7435,7 @@ static void release_for_launch(void)
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();
+    vis_stop();                     /* the spectrum's tables */
     gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
     close_extra_libs();
     flush_memory();
@@ -9926,6 +9912,10 @@ static void act_action(struct Item *it)
         toggle_debug();
     else if (it->action == ACT_JUMP)
         toggle_jump();
+    else if (it->action == ACT_VISUAL) {
+        next_visual();
+        plex_settings_again(FALSE);
+    }
     else if (it->action == ACT_LANGSET)
         open_settings_page(_("Language"), build_lang_settings);
     else if (it->action == ACT_LANGWB || it->action == ACT_LANGEN ||
@@ -10924,6 +10914,7 @@ static void handle_key(struct IntuiMessage *im)
         case 'n': case 'N': case '>': disarm(); np_press(NB_NEXT); return;
         case 'p': case 'P': case '<': disarm(); np_press(NB_PREV); return;
         case 's': case 'S': disarm(); np_press(NB_STOP); return;
+        case 'v': case 'V': disarm(); next_visual(); return;
         case ',': disarm(); np_press(NB_BACK); return;
         case '.': disarm(); np_press(NB_FWD); return;
         }
@@ -11098,6 +11089,7 @@ static int app_main(void)
     load_dbuf();
     load_https();
     load_jump();
+    load_visual();
     amce_log_open(debug_on);
     open_extra_libs();
     {
@@ -11380,6 +11372,7 @@ out:
     if (GfxBase)
         CloseLibrary((struct Library *)GfxBase);
     amce_lang_quit();
+    vis_stop();
     amce_log("libraries closed, exiting", "");
     amce_log_close();
     if (IntuitionBase)

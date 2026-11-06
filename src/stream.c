@@ -193,6 +193,8 @@ static struct {
     BOOL int_set;
     UWORD master;
     volatile ULONG played;          /* samples Paula has been given */
+    volatile ULONG play_t;          /* when the buffer playing now began (spectrum) */
+    volatile UBYTE ahi_play;        /*   AHI: which of its two that is */
     volatile UBYTE peak_l, peak_r;
     UWORD cpu;                      /* 20, 30, 40, 60: how much decoding it can do */
     BOOL finite;                    /* a track: its end is the end, not a failure */
@@ -253,6 +255,7 @@ static void audio_code(void)
     UBYTE next;
     CU->intreq = INTF_AUD0;
     st.cur ^= 1;
+    st.play_t = time_ms();                  /* (ReadEClock: callable here) */
     next = (UBYTE)(st.cur ^ 1);
     CU->aud[0].ac_ptr = (UWORD *)(st.chip + next * HALF);
     CU->aud[1].ac_ptr = (UWORD *)(st.chip + (2 + next) * HALF);
@@ -370,6 +373,8 @@ static void ahi_serve(void)
     while ((m = GetMsg(ah.port))) {
         int k = m == (struct Message *)ah.io[0] ? 0 : 1;
         ah.busy[k] = FALSE;
+        st.ahi_play = (UBYTE)(k ^ 1);       /* the other plays now */
+        st.play_t = time_ms();
         if (st.started)
             ahi_send(k, ah.busy[k ^ 1] ? ah.io[k ^ 1] : NULL);
     }
@@ -2112,6 +2117,50 @@ void st_use_mhi(const char *driver)
 BOOL st_mhi(void)
 {
     return mhi_driver[0] != 0;
+}
+
+BOOL st_mhi_now(void)
+{
+    return st.mhi;
+}
+
+/* The spectrum's: the last n samples played, mono, every dec'th (about
+ * 8 kHz, as HippoPlayer's spectrum mixes modules), from the buffer Paula
+ * or AHI plays now, where it has got to by the clock. Scaled as
+ * HippoPlayer scales a sample player's bytes. 0: none to give. */
+UWORD st_pcm(WORD *out, UWORD n, ULONG *rate)
+{
+    ULONG r = st.dec_freq ? (ULONG)st.dec_freq : 22050, dec = (r + 4000) / 8000, at, k, len;
+    if (!st.started || st.mhi || st.paused || !st.chip)
+        return 0;
+    if (!dec)
+        dec = 1;
+    at = time_ms() - st.play_t;
+    if (at > 1000)
+        at = 1000;
+    at = at * r / 1000;
+    len = st.ahi ? AHI_FRAMES : HALF;
+    if (at > len)
+        at = len;
+    if (at < (ULONG)n * dec)
+        at = (ULONG)n * dec;
+    if (st.ahi) {
+        const WORD *b = ah.buf[st.ahi_play & 1];
+        if (!b)
+            return 0;
+        for (k = 0; k < n; k++) {
+            ULONG i = at - (n - k) * dec;
+            out[k] = (WORD)(((LONG)b[2 * i] + b[2 * i + 1]) >> 4);
+        }
+    } else {
+        const BYTE *l = st.chip + st.cur * HALF, *rr = st.chip + (2 + st.cur) * HALF;
+        for (k = 0; k < n; k++) {
+            ULONG i = at - (n - k) * dec;
+            out[k] = (WORD)(((WORD)l[i] + rr[i]) << 4);
+        }
+    }
+    *rate = r / dec;
+    return n;
 }
 
 void st_pause(BOOL on)

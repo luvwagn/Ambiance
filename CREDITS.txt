@@ -34,8 +34,10 @@ table is the one from the ProTracker 2.1A play routine.
 
 Other formats are played by EaglePlayer's and DeliTracker's player modules,
 where they are installed; they are not part of AmigaMCE. AmigaMCE's host for
-them (src/eagle.c, src/eaglehost.s) follows HippoPlayer's, under this
-licence:
+them (src/eagle.c, src/eaglehost.s) follows HippoPlayer's, and Now
+Playing's spectrum analyser is HippoPlayer's (src/vis.c; its FFT, src/hfft.s,
+is HippoPlayer's hippo_fft.s, Tom Roberts' fix_fft.c of 1989 in assembler),
+under this licence:
 
   MIT License
 

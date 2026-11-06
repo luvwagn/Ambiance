@@ -295,6 +295,9 @@ Pixel
 MSG_63678BEE
 Doppelpufferung
 ; Double buffering
+MSG_20B362A2
+Visualisierung
+; Visualisation
 MSG_52325DD8
 Sprungweises Blättern (nach Buchstabe)
 ; Jump scrolling (by letter)
@@ -463,6 +466,9 @@ Schriften: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c)
 MSG_2B3D5B66
 Code: libnix C-Laufzeit (gemeinfrei). Der EaglePlayer-Host folgt dem von HippoPlayer (MIT-Lizenz, (c) 2017 Kari-Pekka Koljonen).
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_3D495145
+Spektrumanalysator: der von HippoPlayer (MIT-Lizenz, (c) 2017 Kari-Pekka Koljonen), mit Tom Roberts' Festkomma-FFT (1989).
+; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
 MSG_321AE26A
 Genutzt, falls installiert, nicht enthalten, jeweils unter eigener Lizenz: Amiga Game Selector, WHDLoad, AHI, MHI-Treiber, mpega.library, Datatypes.
 ; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
@@ -694,15 +700,6 @@ Verbinde...
 MSG_6038FAB1
 Puffere...
 ; Buffering...
-MSG_5966858A
-Mono
-; Mono
-MSG_1E9E9F85
-Rechts
-; Right
-MSG_12773890
-Links
-; Left
 MSG_4D72110C
 Wiedergabe
 ; Playback
@@ -1386,3 +1383,18 @@ Konnte %.80s nicht zeigen
 MSG_158F4FA3
 Nicht genug Speicher für %.70s
 ; Not enough memory for %.70s
+MSG_54706675
+Pegelanzeigen
+; Level meters
+MSG_72FB1A0A
+Spektrum
+; Spectrum
+MSG_5966858A
+Mono
+; Mono
+MSG_1E9E9F85
+Rechts
+; Right
+MSG_12773890
+Links
+; Left

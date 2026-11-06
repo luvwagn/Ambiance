@@ -109,7 +109,8 @@ Paula.
 3. Double-click AmigaMCE.
 
 The ADF carries an English-only archive (there is no room for the
-languages): unpack it on a hard drive, for example
+languages, nor for the 15-pixel Far East glyphs: CJK names are drawn at
+12 pixels everywhere from it): unpack it on a hard drive, for example
 `lha x DF0:amigamce.lha Work:`.
 
 ## Languages
@@ -238,8 +239,9 @@ AmigaMCE © 2026 Brian King, under the [MIT licence](LICENSE).
 
 The fonts (Pixelify Sans, Galmuri, Ark Pixel Font and Rubik, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT
-licence; see `assets/fonts-src/`. The EaglePlayer host follows HippoPlayer's
-(MIT, © 2017 Kari-Pekka Koljonen). FLAC is decoded by flacdec.library
+licence; see `assets/fonts-src/`. The EaglePlayer host follows HippoPlayer's,
+and Now Playing's spectrum analyser is HippoPlayer's (`src/vis.c`, its FFT
+`src/hfft.s`; MIT, © 2017 Kari-Pekka Koljonen). FLAC is decoded by flacdec.library
 (© 2026 Renaud Schweingruber, with dr_flac by David Reid, public domain or
 MIT-0) where it is installed; it is not included, as it may only be passed
 on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.

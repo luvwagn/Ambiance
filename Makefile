@@ -32,8 +32,8 @@ LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
-       src/cpucheck.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o
+       src/vis.c src/vistab.c src/cpucheck.c
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -75,6 +75,12 @@ build/eaglehost.o: src/eaglehost.s
 	@echo "  ASM   $@"
 	@$(VASM) -Fhunk -m68000 -quiet -o $@ $<
 
+# HippoPlayer's FFT (the spectrum), as HippoPlayer assembles it
+build/hfft.o: src/hfft.s
+	@mkdir -p build
+	@echo "  ASM   $@"
+	@$(VASM) -Fhunk -m68000 -quiet -o $@ $<
+
 build/cpucheck.o: src/cpucheck.c
 	@mkdir -p build
 	@echo "  CC    $@ (68000)"
@@ -100,6 +106,10 @@ build/test_songs: tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pic
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c
 
+build/test_fft: tests/test_fft.c src/vistab.c build/hfft.o
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68020 -noixemul -Wall -o $@ tests/test_fft.c src/vistab.c build/hfft.o
+
 # amiga.lib's sprintf is exec's RawDoFmt, where %d/%u/%x/%c read 16 bits.
 # Every numeric conversion must carry the l modifier with a long argument.
 check-formats:
@@ -121,7 +131,7 @@ check-syscalls: $(SRCS) src/amce.h
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
 
-test: check-formats check-syscalls build/test_ags build/test_songs test-replayer test-radio test-plex
+test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -130,6 +140,10 @@ test: check-formats check-syscalls build/test_ags build/test_songs test-replayer
 	@$(PYTHON) -I tests/mksongs.py build/songs
 	@cd build && vamos -V Songs:$(abspath build/songs) -V RAM:$(abspath build/ram) test_songs > test-songs.txt \
 		&& echo "  CHECK music files ok" || (cat test-songs.txt; exit 1)
+	@cd build && vamos -C 68020 test_fft > test-fft.txt && grep -q "sine at 3: loudest 3 " test-fft.txt \
+		&& grep -q "sine at 10: loudest 10 " test-fft.txt && grep -q "sine at 31: loudest 31 " test-fft.txt \
+		&& grep -q "sine at 50: loudest 50 " test-fft.txt \
+		&& echo "  CHECK spectrum FFT ok" || (cat test-fft.txt; echo "FFT test failed"; exit 1)
 
 # The ProTracker replayer on the build machine: a generated module played
 # through a model of Paula; its length and its four channels checked.
@@ -231,6 +245,8 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp docs/readme.info $(LHA_DIR)/readme.txt.info
 	@cp docs/drawer.info build/lha/AmigaMCE.info
 	@rm -rf $(LHA_EN_DIR) && cp -R build/lha $(LHA_EN_DIR)
+	@# the floppy's has no room for the 15-pixel Far East glyphs: 12 everywhere
+	@rm -f $(LHA_EN_DIR)/AmigaMCE/Fonts/amce-cjk/15
 	@rm -f $(LHA_EN_NAME)
 	@cd $(LHA_EN_DIR) && lha aqo5 $(LHA_OPTS) ../../$(LHA_EN_NAME) AmigaMCE AmigaMCE.info
 	@mkdir -p $(LHA_DIR)/Catalogs

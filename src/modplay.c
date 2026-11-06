@@ -98,6 +98,15 @@ static struct {
     UBYTE bpm_set;
     UWORD master;                   /* 0-64 */
     ULONG level[4];                 /* the meters (UI side) */
+    /* the spectrum's view of Paula: the notes the tick started (ProTracker),
+     * then each voice followed from there by its period (UI side) */
+    volatile UBYTE vtrig;
+    struct { const BYTE *start, *loop; UWORD len, replen; } vnew[4];
+    struct { const BYTE *pos, *loop; LONG left, replen; } vf[4];
+    ULONG vf_t;
+    struct EpVoice epv[4];          /* an EaglePlayer player's voices (mp_status) */
+    UBYTE ep_trig;
+    BOOL ep_voices;                 /* ...it says where its samples are */
     volatile ULONG ticks;           /* the tempo interrupt's count, playing */
     volatile ULONG caught;          /* ticks played to catch up (missed interrupts) */
     ULONG chk_t0, chk_n0, chk_c0, chk_said; /* mp_tempo_check's window */
@@ -322,6 +331,15 @@ static void tick_one(void)
     }
     mp.dma_mask = pt->dmacontemp;
     if (mp.dma_mask) {
+        for (i = 0; i < 4; i++)
+            if (mp.dma_mask & (1 << i)) {
+                /* a note starts: for the spectrum, where its sample is */
+                mp.vnew[i].start = (const BYTE *)pt->ch[i].n_start;
+                mp.vnew[i].len = pt->ch[i].n_length;
+                mp.vnew[i].loop = (const BYTE *)pt->ch[i].n_loopstart;
+                mp.vnew[i].replen = pt->ch[i].n_replen;
+            }
+        mp.vtrig |= (UBYTE)mp.dma_mask;
         if (mp.have_gap) {
             mp.phase = 1;
             gap_start();
@@ -618,6 +636,10 @@ static void module_free(void)
     if (mp.engine == ENG_RADIO)
         st_stop();
     mp.engine = ENG_NONE;
+    mp.vtrig = mp.ep_trig = 0;
+    mp.ep_voices = FALSE;
+    memset(mp.vf, 0, sizeof(mp.vf));
+    memset(mp.epv, 0, sizeof(mp.epv));
     if (mp.pt) {
         FreeVec(mp.pt);
         mp.pt = NULL;
@@ -1233,7 +1255,11 @@ void mp_status(struct MpStatus *s)
         s->elapsed_ms = mp.ep_played + (mp.running && !mp.paused ? time_ms() - mp.ep_t0 : 0);
         s->sub = in.sub;
         s->subs = in.subs;
-        ep_levels(&mask, vol);
+        {
+            UBYTE t = 0;
+            mp.ep_voices = ep_levels(&mask, vol, mp.epv, &t);
+            mp.ep_trig |= t;
+        }
         for (i = 0; i < 4; i++)
             hit[i] = (mask >> i) & 1;
         meters(s, hit, vol);
@@ -1401,6 +1427,99 @@ const char *mp_track_by(void) { return mp.rby; }
 
 /* The level meters Now playing shows: a module on Paula's four channels
  * has one each; what is mixed or decoded, one for each of its channels. */
+/* ------------------------------------------------------------ the visualizations */
+#define PAULA_HZ 3546895UL          /* PAL: a period's rate is this / period */
+UWORD mp_vis_have(void)
+{
+    if (!mp_loaded())
+        return 0;
+    switch (mp.engine) {
+    case ENG_PT:
+        return VF_LEVELS | VF_VOICES;
+    case ENG_EAGLE:
+        return VF_LEVELS | (mp.ep_voices ? VF_VOICES : 0);
+    case ENG_MIX:
+        return VF_LEVELS | VF_PCM;
+    case ENG_RADIO:
+        return VF_LEVELS | (st_mhi_now() ? 0 : VF_PCM);
+    }
+    return 0;
+}
+
+/* Paula's voices where they play now, as HippoPlayer's scopes follow them
+ * (puu016.s: quadScopeSampleFollow): from each note's start, on by the
+ * bytes its period plays in the time gone by, then round its loop. */
+static void voices_follow(struct VisFeed *f)
+{
+    ULONG now = time_ms(), dt = now - mp.vf_t;
+    UBYTE trig;
+    int i;
+    if (dt > 1000)
+        dt = 1000;
+    mp.vf_t = now;
+    Disable();
+    if (mp.engine == ENG_PT) {
+        trig = mp.vtrig;
+        mp.vtrig = 0;
+        for (i = 0; i < 4; i++)
+            if (trig & (1 << i)) {
+                mp.vf[i].pos = mp.vnew[i].start;
+                mp.vf[i].left = (LONG)mp.vnew[i].len * 2;
+                mp.vf[i].loop = mp.vnew[i].loop;
+                mp.vf[i].replen = (LONG)mp.vnew[i].replen * 2;
+                trig &= (UBYTE)~(1 << i);
+            }
+    } else {
+        trig = mp.ep_trig;
+        mp.ep_trig = 0;
+        for (i = 0; i < 4; i++) {
+            if (trig & (1 << i)) {
+                mp.vf[i].pos = mp.epv[i].adr;
+                mp.vf[i].left = (LONG)mp.epv[i].len * 2;
+            }
+            mp.vf[i].loop = mp.epv[i].loop;
+            mp.vf[i].replen = (LONG)mp.epv[i].replen * 2;
+        }
+        trig = 0;
+    }
+    Enable();
+    for (i = 0; i < 4; i++) {
+        struct VisVoice *v = &f->voice[i];
+        UWORD per = mp.engine == ENG_PT ? mp.pt->hwper[i] : mp.epv[i].per;
+        UBYTE vol = mp.engine == ENG_PT ? mp.pt->hwvol[i] : mp.epv[i].vol;
+        if (mp.vf[i].pos && per >= 100 && mp.running && !mp.paused) {
+            LONG adv = (LONG)((PAULA_HZ / per) * dt / 1000);
+            if (adv < mp.vf[i].left) {
+                mp.vf[i].pos += adv;
+                mp.vf[i].left -= adv;
+            } else if (mp.vf[i].replen > 2 && mp.vf[i].loop) {
+                LONG over = (adv - mp.vf[i].left) % mp.vf[i].replen;
+                mp.vf[i].pos = mp.vf[i].loop + over;
+                mp.vf[i].left = mp.vf[i].replen - over;
+            } else {
+                mp.vf[i].pos = NULL;            /* played out: silent */
+            }
+        }
+        v->pos = mp.vf[i].pos;
+        v->left = mp.vf[i].left;
+        v->loop = mp.vf[i].replen > 2 ? mp.vf[i].loop : NULL;
+        v->replen = mp.vf[i].replen;
+        v->period = per;
+        v->vol = (UBYTE)(mp.paused || !mp.running ? 0 : vol > 64 ? 64 : vol);
+    }
+}
+
+void mp_vis_feed(struct VisFeed *f, UWORD want)
+{
+    f->have = mp_vis_have();
+    f->pcm_n = 0;
+    if ((want & f->have & VF_VOICES))
+        voices_follow(f);
+    if ((want & f->have & VF_PCM))
+        f->pcm_n = mp.engine == ENG_MIX ? mx_pcm(f->pcm, VIS_PCM, &f->rate)
+                                        : st_pcm(f->pcm, VIS_PCM, &f->rate);
+}
+
 int mp_meter_count(void)
 {
     if (mp.engine == ENG_MIX)

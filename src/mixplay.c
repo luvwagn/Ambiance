@@ -84,6 +84,7 @@ static struct {
     volatile BOOL quit, ended, running, paused;
     volatile ULONG mixed;           /* samples mixed (the time played) */
     volatile UBYTE peak_l, peak_r;
+    volatile ULONG play_t;          /* when the half playing now began (spectrum) */
     struct Interrupt aint;
     struct Interrupt *old_aint;
     BOOL int_set;
@@ -153,6 +154,7 @@ static void audio_code(void)
     UBYTE next;
     CU->intreq = INTF_AUD0;
     mx.cur ^= 1;
+    mx.play_t = time_ms();                  /* (ReadEClock: callable here) */
     next = (UBYTE)(mx.cur ^ 1);
     CU->aud[0].ac_ptr = (UWORD *)(mx.chip + next * HALF);
     CU->aud[1].ac_ptr = (UWORD *)(mx.chip + (2 + next) * HALF);
@@ -449,6 +451,34 @@ void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r)
 }
 
 BOOL mx_loaded(void) { return mx.file != NULL; }
+
+/* The spectrum's: the last n samples played, mono, about 8 kHz, from the
+ * half Paula plays now (as stream.c's st_pcm). 0: none. */
+UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
+{
+    ULONG dec = (mx.rate + 4000) / 8000, at, k;
+    const BYTE *l, *r;
+    if (!mx.file || !mx.running || mx.paused || !mx.chip || !mx.rate)
+        return 0;
+    if (!dec)
+        dec = 1;
+    at = time_ms() - mx.play_t;
+    if (at > 1000)
+        at = 1000;
+    at = at * mx.rate / 1000;
+    if (at > HALF)
+        at = HALF;
+    if (at < (ULONG)n * dec)
+        at = (ULONG)n * dec;
+    l = mx.chip + mx.cur * HALF;
+    r = mx.chip + (2 + mx.cur) * HALF;
+    for (k = 0; k < n; k++) {
+        ULONG i = at - (n - k) * dec;
+        out[k] = (WORD)(((WORD)l[i] + r[i]) << 4);
+    }
+    *rate = mx.rate / dec;
+    return n;
+}
 const char *mx_title(void) { return mx.title; }
 const char *mx_kind(void) { return mx.kind; }
 int mx_names(void) { return mx.nnames; }
