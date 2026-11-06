@@ -9697,6 +9697,7 @@ static void disarm(void)
 static ULONG last_secs, last_mics;
 static BOOL click_opened;           /* the last click opened something (one click) */
 static LONG last_click = -1;
+static WORD last_x = -100, last_y = -100;   /* where the last click was */
 
 /* Dragging a list's thumb: the list follows, the selection kept in view. */
 static void gut_drag_to(WORD my)
@@ -9811,7 +9812,9 @@ static void handle_mouse(struct IntuiMessage *im)
         /* a single click opened something: the second click of a habitual
          * double-click is not a click on what opened */
         click_opened = FALSE;
-        if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros)) {
+        if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros) &&
+            x - last_x <= U(6) && last_x - x <= U(6) && y - last_y <= U(6) &&
+            last_y - y <= U(6)) {           /* on the same spot: the habit's second half */
             last_secs = im->Seconds;
             last_mics = im->Micros;
             last_click = -1;
@@ -9852,8 +9855,29 @@ static void handle_mouse(struct IntuiMessage *im)
             return;
         if (p->type == PT_LIST) {
             if (x > list_xr(p)) {           /* the details pane */
+                BOOL on_bar = pv_tb.open && pv_tb.bar_w && x >= pv_tb.bar_x - 2;
                 if (pv_tb.open && pv_tb.bar_w && x >= aside_x())
                     set_focus(FOCUS_PREVIEW);
+                /* a double-click on the pane plays (opens) what it shows:
+                 * the entry selected, as a double-click on its row would */
+                dbl = !on_bar && p->sel + 100000 == last_click &&
+                      DoubleClick(last_secs, last_mics, im->Seconds, im->Micros);
+                last_click = p->sel + 100000;
+                last_secs = im->Seconds;
+                last_mics = im->Micros;
+                last_x = x;
+                last_y = y;
+                if (dbl && p->list.count && p->sel >= 0 && p->sel < p->list.count &&
+                    has_aside(p)) {
+                    struct Item *it = &p->list.items[p->sel];
+                    if (it->kind == IT_SONG || it->kind == IT_MOD || it->kind == IT_PIC ||
+                        it->kind == IT_RUN || it->kind == IT_PLEXTRACK || it->kind == IT_PLEXPHOTO) {
+                        if (debug_on)
+                            amce_log("click: double on the pane", it->label);
+                        set_focus(FOCUS_CONTENT);
+                        act_open(FALSE);
+                    }
+                }
                 return;
             }
             idx = p->top + (y - g.list_top) / g.list_row_h;
@@ -9900,6 +9924,8 @@ static void handle_mouse(struct IntuiMessage *im)
     }
     last_secs = im->Seconds;
     last_mics = im->Micros;
+    last_x = x;
+    last_y = y;
 }
 
 static void handle_key(struct IntuiMessage *im)
