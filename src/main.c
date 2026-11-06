@@ -10492,6 +10492,18 @@ static void act_action(struct Item *it)
 #define FRAME_MS     20     /* assumed frame time if there is no timer */
 #define LIST_BRAKE  700     /* ms to brake from full speed to a stop at the end, */
 #define LIST_EASE     5     /* ...and the last screens: entries a second per entry left */
+/* Let go of a list moving faster than it can be read, and it coasts on,
+ * as a flicked list does on a phone: slowing evenly to a stop in COAST_MS
+ * from the speed it had (All Artists at full speed: some 700 entries on),
+ * braking for the end as a held glide does. Slower than COAST_SCREENS
+ * screenfuls a second (the start of a glide, a short hold) it stops where
+ * it is, as before, and a menu never coasts. Any key, button or click
+ * stops a coast at once; Return, Fire or a click only stop it (a second
+ * one opens); Up/Down the same way carries on at the coasting speed. */
+#define COAST_MS    600     /* ms to coast to a stop from the speed let go at */
+#define COAST_SCREENS 3     /* screenfuls a second at the least to coast */
+#define COAST_MIN    40     /* ...and entries a second */
+#define COAST_STOP    8     /* entries a second: below this it has stopped */
 
 static struct {
     LONG  dir;              /* -1 up, +1 down, 0 not held */
@@ -10505,7 +10517,19 @@ static struct {
     LONG  slow;             /* frames over 40 ms meanwhile (log) */
     ULONG present_ms, move_ms;  /* time flipping, and moving the list (log) */
     ULONG t_down;           /* the clock at key-down (log: the time it really took) */
+    LONG  rate;             /* entries a second at the last step (0: not a list glide) */
+    BOOL  coast;            /* let go, still moving (COAST_MS) */
+    LONG  cdir, cv, cv0, cdec;  /* its direction, speed, starting speed, slowing per s */
+    LONG  cmoved;           /* entries it has gone (log) */
+    ULONG cstart;           /* the clock when it was let go (log) */
+    struct Page *cpage;     /* the list it coasts in */
 } hold;
+
+/* A coast stopped by Up/Down: the speed it had, for the new hold to go on
+ * at (taken only straight away, within COAST_CARRY ms) */
+#define COAST_CARRY 300
+static LONG carry_v, carry_dir;
+static ULONG carry_ms;
 
 /* Long titled lists, held past cruising: a whole letter a step. Shorter
  * ones glide on smoothly, the big letter going by: one of 1,000 entries
@@ -10515,6 +10539,7 @@ static struct {
 #define LETTERS_MIN   4     /* letters a second to begin with, */
 #define LETTERS_MAX  12     /* rising to this over HOLD_BOOST */
 
+static void hold_carry(LONG dir);
 static void hold_start(LONG dir, BOOL joy)
 {
     hold.dir = dir;
@@ -10529,13 +10554,25 @@ static void hold_start(LONG dir, BOOL joy)
     hold.slow = 0;
     hold.present_ms = hold.move_ms = 0;
     hold.t_down = time_ms();
+    hold.rate = 0;
+    hold.coast = FALSE;
     ov_ms = ov_n = 0;
+    hold_carry(dir);
 }
 
 static void scr_watch_now(const char *why);
 static void hold_stop(void)
 {
     struct Page *p = cur();
+    if (hold.coast) {
+        char m[120];
+        hold.coast = FALSE;
+        sprintf(m, "%ld entries in %ld ms from %ld a second; now %ld of %ld",
+                (long)hold.cmoved, (long)(time_ms() - hold.cstart), (long)hold.cv0,
+                p && p->type == PT_LIST ? (long)p->sel : -1L,
+                p && p->type == PT_LIST ? (long)p->list.count : -1L);
+        amce_log("coast", m);
+    }
     if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
         char m[200];
         LONG moved = p->sel - hold.from;
@@ -10596,9 +10633,168 @@ static LONG isqrt(ULONG n)
     return (LONG)x;
 }
 
+/* A held list's speed (entries a second) glide ms after the glide began,
+ * before slowing for the end; *top: its cruising speed, *menu: a short
+ * list (a steady menu pace, never eased, never coasting). */
+static LONG list_rate(struct Page *p, LONG glide, LONG *topp, BOOL *menup)
+{
+    /* Cruising: two entries a frame, or six screenfuls a second on
+     * screens that show more rows; above one per frame the list
+     * moves several rows in a single frame, still drawn every frame. */
+    LONG top = LIST_MAX, screens = LIST_SCREENS * list_visible(), rate;
+    LONG cruise_cap = p->list.count * 1000 / LIST_CROSS_CRUISE;
+    BOOL menu = p->list.count <= 2 * list_visible();
+    if (screens > top)
+        top = screens;
+    /* a shorter list (111 artists) is not crossed in a blink: cruising
+     * takes LIST_CROSS_CRUISE ms over all of it, but never under a
+     * row a frame */
+    if (cruise_cap < MENU_MAX)
+        cruise_cap = MENU_MAX;
+    if (top > cruise_cap)
+        top = cruise_cap;
+    if (menu)
+        /* a short list (Games' own menu): a steady menu pace from
+         * the start, as a fast key repeat would give; the slow
+         * start and the easing at the end are for long lists, and
+         * a short one was all start and end */
+        rate = MENU_MIN + (MENU_MAX - MENU_MIN) *
+               (glide < MENU_RAMP ? glide : MENU_RAMP) / MENU_RAMP;
+    else if (glide < HOLD_RAMP)
+        rate = LIST_MIN + (top - LIST_MIN) * glide / HOLD_RAMP;
+    else {
+        /* top speed: four times cruising, or for a long list (whose
+         * length is known from the start when it has an index)
+         * fast enough to cross all of it in LIST_SWEEP ms */
+        LONG b = glide - HOLD_RAMP, peak = top * LIST_BOOST,
+             sweep = p->list.count * 1000 / LIST_SWEEP;
+        if (sweep > peak)
+            peak = sweep;
+        if (p->list.count < LETTER_MIN_LIST &&
+            peak > p->list.count * 1000 / LIST_CROSS_PEAK)
+            peak = p->list.count * 1000 / LIST_CROSS_PEAK;    /* not too fast, short */
+        if (peak < top)
+            peak = top;
+        if (b > HOLD_BOOST)
+            b = HOLD_BOOST;
+        rate = top + (peak - top) * b / HOLD_BOOST;
+    }
+    *topp = top;
+    *menup = menu;
+    return rate;
+}
+
+/* Slowing for the end, by the clock (not by frames: a fast Amiga draws a
+ * frame in 20-30 ms, and a rule per frame slowed it only in the last
+ * tenth of a second - the list all but hit the end). First braking, as a
+ * car does: the speed that stops in what is left, sqrt(2 a d), with a
+ * deceleration that stops from speed `from' in LIST_BRAKE ms (All
+ * Artists' 2,450 at full speed: from some 800 entries out); then the last
+ * screens eased, LIST_EASE entries a second per entry left (20 left: 110
+ * a second, 1 left: 15), the end seen coming for about half a second. */
+static LONG end_cap(LONG rate, LONG from, LONG remaining)
+{
+    LONG a = from * 1000 / LIST_BRAKE, stop;
+    stop = isqrt((ULONG)(2 * a) * (ULONG)remaining);
+    if (stop < 1)
+        stop = 1;
+    if (rate > stop)
+        rate = stop;
+    if (rate > 10 + remaining * LIST_EASE)
+        rate = 10 + remaining * LIST_EASE;
+    return rate;
+}
+
+/* Up/Down pressed to stop a coast, the same way: the new hold goes on at
+ * the coasting speed, its clock set to where the glide reaches it. */
+static void hold_carry(LONG dir)
+{
+    struct Page *p = cur();
+    LONG v = carry_v, glide, top;
+    BOOL menu;
+    BOOL fresh = carry_dir == dir && (ULONG)(time_ms() - carry_ms) < COAST_CARRY;
+    carry_dir = 0;
+    if (!fresh || !p || p->type != PT_LIST)
+        return;
+    for (glide = 0; glide < HOLD_RAMP + HOLD_BOOST; glide += 20)
+        if (list_rate(p, glide, &top, &menu) >= v)
+            break;
+    hold.held_ms = HOLD_DELAY + glide;
+}
+
+/* Let go of a held list: a coast, if it was going fast enough. */
+static void hold_release(void)
+{
+    struct Page *p = cur();
+    LONG v = hold.rate, dir = hold.dir;
+    BOOL go = p && p->type == PT_LIST && focus == FOCUS_CONTENT && hold.held_ms > HOLD_DELAY &&
+              v >= COAST_MIN && v >= COAST_SCREENS * list_visible();
+    hold_stop();
+    if (!go)
+        return;
+    hold.coast = TRUE;
+    hold.cdir = dir;
+    hold.cv = hold.cv0 = v;
+    hold.cdec = v * 1000 / COAST_MS;
+    hold.cmoved = 0;
+    hold.cstart = hold.last_ms = time_ms();
+    hold.cpage = p;
+    hold.acc = 0;
+}
+
+/* Something pressed during a coast: it stops where it is. TRUE if one was
+ * going (a Return, Fire or click then only stops it). Its speed is kept a
+ * moment for Up/Down the same way to go on at (hold_start). */
+static BOOL coast_interrupt(void)
+{
+    if (!hold.coast)
+        return FALSE;
+    carry_v = hold.cv;
+    carry_dir = hold.cdir;
+    carry_ms = time_ms();
+    hold_stop();
+    return TRUE;
+}
+
+/* Once a frame while coasting. */
+static void coast_tick(void)
+{
+    struct Page *p = cur();
+    ULONG now = time_ms(), dt = now - hold.last_ms;
+    LONG remaining, rate, n;
+    if (dt > 250)
+        dt = 250;
+    hold.last_ms = now;
+    if (focus != FOCUS_CONTENT || !p || p != hold.cpage || p->type != PT_LIST) {
+        hold_stop();
+        return;
+    }
+    remaining = hold.cdir > 0 ? p->list.count - 1 - p->sel : p->sel;
+    hold.cv -= hold.cdec * (LONG)dt / 1000;
+    if (remaining <= 0 || hold.cv < COAST_STOP) {
+        hold_stop();
+        return;
+    }
+    ov.linger = 0;                          /* the letter stays while it moves */
+    rate = end_cap(hold.cv, hold.cv0, remaining);
+    hold.acc += rate * (LONG)dt;
+    n = hold.acc / 1000;
+    if (n > 1 && n > remaining / 2) {
+        n = remaining / 2 > 1 ? remaining / 2 : 1;
+        hold.acc = n * 1000;
+    }
+    if (n > 0) {
+        hold.acc -= n * 1000;
+        if (n > remaining)
+            n = remaining;
+        act_move(hold.cdir * n);
+        hold.cmoved += n;
+    }
+}
+
 static BOOL hold_active(void)
 {
-    return hold.dir != 0;
+    return hold.dir != 0 || hold.coast;     /* a coast is a glide too: previews wait */
 }
 
 /* Is this raw key physically down right now? Asked of the keyboard itself
@@ -10620,12 +10816,18 @@ static void hold_tick(void)
 {
     struct Page *p = cur();
     LONG rate, remaining, ramp, elapsed, glide;
-    if (!hold.dir)
+    if (!hold.dir) {
+        if (hold.coast)
+            coast_tick();
         return;
+    }
     if ((focus != FOCUS_CONTENT && focus != FOCUS_PREVIEW) || !p ||
-        (focus == FOCUS_PREVIEW && !pv_tb.open) ||
-        (!hold.joy && !key_is_down(hold.dir < 0 ? 0x4C : 0x4D))) {
-        hold_stop();                        /* let go: stop now, whatever is queued */
+        (focus == FOCUS_PREVIEW && !pv_tb.open)) {
+        hold_stop();
+        return;
+    }
+    if (!hold.joy && !key_is_down(hold.dir < 0 ? 0x4C : 0x4D)) {
+        hold_release();                     /* let go: stop now (whatever is queued), or coast */
         return;
     }
     {
@@ -10662,6 +10864,7 @@ static void hold_tick(void)
             /* past cruising in a long titled list: a letter a step (let go,
              * and the selection is on the first entry of the letter shown) */
             LONG b = glide - HOLD_RAMP, lps, to;
+            hold.rate = 0;                  /* let go: on the letter's first entry, no coast */
             if (b > HOLD_BOOST)
                 b = HOLD_BOOST;
             lps = LETTERS_MIN + (LETTERS_MAX - LETTERS_MIN) * b / HOLD_BOOST;
@@ -10678,67 +10881,12 @@ static void hold_tick(void)
             /* no letter further: on to the end entry by entry */
         }
         {
-            /* Cruising: two entries a frame, or six screenfuls a second on
-             * screens that show more rows; above one per frame the list
-             * moves several rows in a single frame, still drawn every frame. */
-            LONG top = LIST_MAX, screens = LIST_SCREENS * list_visible(), n;
-            LONG cruise_cap = p->list.count * 1000 / LIST_CROSS_CRUISE;
-            BOOL menu = p->list.count <= 2 * list_visible();
-            if (screens > top)
-                top = screens;
-            /* a shorter list (111 artists) is not crossed in a blink: cruising
-             * takes LIST_CROSS_CRUISE ms over all of it, but never under a
-             * row a frame */
-            if (cruise_cap < MENU_MAX)
-                cruise_cap = MENU_MAX;
-            if (top > cruise_cap)
-                top = cruise_cap;
-            if (menu)
-                /* a short list (Games' own menu): a steady menu pace from
-                 * the start, as a fast key repeat would give; the slow
-                 * start and the easing at the end are for long lists, and
-                 * a short one was all start and end */
-                rate = MENU_MIN + (MENU_MAX - MENU_MIN) *
-                       (glide < MENU_RAMP ? glide : MENU_RAMP) / MENU_RAMP;
-            else if (glide < HOLD_RAMP)
-                rate = LIST_MIN + (top - LIST_MIN) * ramp / HOLD_RAMP;
-            else {
-                /* top speed: four times cruising, or for a long list (whose
-                 * length is known from the start when it has an index)
-                 * fast enough to cross all of it in LIST_SWEEP ms */
-                LONG b = glide - HOLD_RAMP, peak = top * LIST_BOOST,
-                     sweep = p->list.count * 1000 / LIST_SWEEP;
-                if (sweep > peak)
-                    peak = sweep;
-                if (p->list.count < LETTER_MIN_LIST &&
-                    peak > p->list.count * 1000 / LIST_CROSS_PEAK)
-                    peak = p->list.count * 1000 / LIST_CROSS_PEAK;    /* not too fast, short */
-                if (peak < top)
-                    peak = top;
-                if (b > HOLD_BOOST)
-                    b = HOLD_BOOST;
-                rate = top + (peak - top) * b / HOLD_BOOST;
-            }
-            if (!menu) {
-                /* Slowing for the end, by the clock (not by frames: a fast
-                 * Amiga draws a frame in 20-30 ms, and a rule per frame
-                 * slowed it only in the last tenth of a second - the list
-                 * all but hit the end). First braking, as a car does:
-                 * the speed that stops in what is left, sqrt(2 a d), with
-                 * a deceleration that stops from this speed in LIST_BRAKE
-                 * ms (All Artists' 2,450 at full speed: from some 800
-                 * entries out); then the last screens eased, LIST_EASE
-                 * entries a second per entry left (20 left: 110 a second,
-                 * 1 left: 15), the end seen coming for about half a second. */
-                LONG a = (rate > top ? rate : top) * 1000 / LIST_BRAKE, stop;
-                stop = isqrt((ULONG)(2 * a) * (ULONG)remaining);
-                if (stop < 1)
-                    stop = 1;
-                if (rate > stop)
-                    rate = stop;
-                if (rate > 10 + remaining * LIST_EASE)
-                    rate = 10 + remaining * LIST_EASE;
-            }
+            LONG top, n;
+            BOOL menu;
+            rate = list_rate(p, glide, &top, &menu);
+            if (!menu)
+                rate = end_cap(rate, rate > top ? rate : top, remaining);
+            hold.rate = menu ? 0 : rate;    /* let go at this: a coast, if fast */
             hold.acc += rate * elapsed;     /* entries x 1000 */
             n = hold.acc / 1000;
             if (!menu && n > 1 && n > remaining / 2) {
@@ -11089,6 +11237,9 @@ static void handle_mouse(struct IntuiMessage *im)
     BOOL dbl;
     LONG idx = -1;
     struct TextBox *tb;
+    if (im->Class == IDCMP_MOUSEBUTTONS && (im->Code == SELECTDOWN || im->Code == MENUDOWN) &&
+        coast_interrupt())
+        return;                             /* a click during a coast only stops it */
     if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
         pane_settle();              /* a click outside the menu acts on the section */
     tb = cur_tb();
@@ -11288,9 +11439,13 @@ static void handle_key(struct IntuiMessage *im)
         if (code & IECODE_UP_PREFIX) {
             UWORD k = code & ~IECODE_UP_PREFIX;
             if ((k == 0x4C || k == 0x4D) && hold.dir && !hold.joy)
-                hold_stop();
+                hold_release();
             return;
         }
+        if ((code < 0x60 || code > 0x67) &&
+            !((im->Qualifier & IEQUALIFIER_REPEAT) && !key_is_down(code)))
+            coast_interrupt();              /* a key: a coast stops (not Shift and the like
+                                             * alone, nor the let-go key's stale repeats) */
         if (code != 0x7A && code != 0x7B) {
             pointer_hide();                 /* the keyboard in use (the wheel is the mouse) */
             if (code < 0x60 || code > 0x67)
@@ -11322,6 +11477,8 @@ static void handle_key(struct IntuiMessage *im)
         return;
     }
     /* IDCMP_VANILLAKEY */
+    if (coast_interrupt() && code == 13)
+        return;                             /* Return during a coast only stops it */
     if (im->Qualifier & IEQUALIFIER_NUMERICPAD) {
         switch (code) {
         case '8': case '2':                          /* keypad: the keyboard's repeat */
@@ -11390,17 +11547,19 @@ static void joy_poll(void)
         if (dir != (joy_last & dirmask)) {
             joy_hold = 0;
             act = dir;
-            if (hold.joy)
+            if (hold.joy && hold.dir)
                 hold_stop();
         } else if (++joy_hold >= 8 && (joy_hold - 8) % 3 == 0) {
             act = dir;          /* repeat after ~320 ms, then every ~120 ms */
         }
     } else {
         joy_hold = 0;
-        if (hold.joy)
-            hold_stop();
+        if (hold.joy && hold.dir)
+            hold_release();                 /* (not again each poll: a coast goes on) */
     }
     joy_last = dir | btn;
+    if ((act || newbtn) && coast_interrupt())
+        newbtn &= ~JPF_BUTTON_RED;          /* Fire during a coast only stops it */
     if (act || newbtn) {
         set_mouse_mode(FALSE);              /* the joystick in use: arrows, not bars */
         pointer_hide();
