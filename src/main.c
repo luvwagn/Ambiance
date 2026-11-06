@@ -2355,11 +2355,14 @@ static void build_sound_settings(struct Page *p)
                         !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
         }
     }
-    /* FLAC: Plex's tracks as stored, where the Amiga is fast enough */
+    /* FLAC: Plex's tracks as stored, where the Amiga is fast enough. Not
+     * a choice (flacdec.library is the only decoder, used when it is
+     * there), so no check box: a greyed one read as a setting that
+     * could never be changed. Greyed only when it is missing. */
     heading_item(p, _("FLAC decoder"));
     if ((it = action_item(p, "FLAC: flacdec.library",
                           caps.flacdec ? _("installed") : _("not installed (Aminet: util/libs/flacdec)"),
-                          ACT_SND_FLAC, caps.flacdec ? MARK_CHECK_ON : MARK_CHECK_OFF)))
+                          ACT_SND_FLAC, MARK_NONE)) && !caps.flacdec)
         it->flags |= ITEM_DISABLED;
     {
         /* where Music finds the MP3 and FLAC files on this Amiga */
@@ -10262,8 +10265,7 @@ static void act_action(struct Item *it)
         else if (it->action == ACT_SND_MHI)
             set_msg(_("MHI is not installed (its drivers in LIBS:MHI)"));
         else if (it->action == ACT_SND_FLAC)
-            set_msg(caps.flacdec ? _("FLAC: music files, and Plex's tracks as stored on a fast Amiga")
-                                 : _("Install flacdec.library (Aminet: util/libs/flacdec) for FLAC"));
+            set_msg(_("Install flacdec.library (Aminet: util/libs/flacdec) for FLAC"));
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         return;
@@ -10367,6 +10369,8 @@ static void act_action(struct Item *it)
         open_settings_page(_("Networking"), build_net_settings);
     else if (it->action == ACT_PLEXSLIDES && cur())
         plex_photo_view(cur(), -1, TRUE);
+    else if (it->action == ACT_SND_FLAC)
+        set_msg(_("FLAC: music files, and Plex's tracks as stored on a fast Amiga"));
     else if (it->action == ACT_SND_MPEGA ||
              (it->action >= ACT_SND_MHI0 && it->action <= ACT_SND_MHI_END)) {
         const char *d = it->action == ACT_SND_MPEGA ? "" : mhi_names[it->action - ACT_SND_MHI0];
