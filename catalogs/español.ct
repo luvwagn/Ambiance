@@ -1,0 +1,1354 @@
+## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
+## language español
+## codeset 0
+;
+MSG_4E6387ED
+No hay memoria suficiente
+; Not enough memory
+MSG_1592F849
+Ningún reproductor de AmigaMCE conoce este módulo
+; No player AmigaMCE has knows this module
+MSG_3EE87411
+No es un módulo que AmigaMCE pueda reproducir, y no se encontró ningún reproductor de EaglePlayer
+; Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_62F4807B
+%s no pudo cargar los demás archivos del módulo
+; %s could not load the module's other files
+MSG_4E20BD99
+%s no pudo iniciar este módulo
+; %s could not start this module
+MSG_647DD404
+necesita una tarjeta gráfica
+; needs a graphics card
+MSG_2B7EBD1D
+necesita AGA
+; needs AGA
+MSG_550E04D5
+no disponible
+; not available
+MSG_30386F8F
+color verdadero
+; true colour
+MSG_3665BBE3
+64 colores, EHB
+; 64 colours, EHB
+MSG_0F6E4D56
+%lu colores
+; %lu colours
+MSG_73F99D3C
+Juegos
+; Games
+MSG_5D4E86F0
+Mods
+; Mods
+MSG_0F955E3F
+Demos
+; Demos
+MSG_63609FED
+Vídeos
+; Videos
+MSG_0D70FEAE
+Imágenes
+; Pictures
+MSG_584A1D74
+Música
+; Music
+MSG_5675F954
+Radio
+; Radio
+MSG_4B058728
+Ajustes
+; Settings
+MSG_58E096DE
+Acerca de
+; About
+MSG_17B11033
+Cargando...
+; Loading...
+MSG_542CAAAC
+Poca memoria: la lista se detiene en %ld entradas
+; Low on memory: list stops at %ld entries
+MSG_7C46D36F
+Todos los juegos
+; All Games
+MSG_7E40EC70
+Todas las demos
+; All Demos
+MSG_4D9D0161
+No se encontró Amiga Game Selector.
+; Amiga Game Selector was not found.
+MSG_017A1274
+AmigaMCE busca la asignación AGS:, luego un cajón AGS2 junto al suyo y en WHDLoad:. Instala AmigaMCE en un sistema AGS 3, o inicia AGS una vez para que existan sus asignaciones.
+; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_64FF7B9F
+encontrado
+; found
+MSG_40A7AEDA
+no encontrado
+; not found
+MSG_0C290F2C
+Encontrado al iniciar AmigaMCE:
+; Found when AmigaMCE started:
+MSG_6C041D54
+Tipo de máquina: %s
+; Machine type: %s
+MSG_26E752CC
+emulador (familia UAE)
+; emulator (UAE family)
+MSG_6FE54AD0
+Amiga real
+; real Amiga
+MSG_0C26D003
+Chipset: %s%s, %s
+; Chipset: %s%s, %s
+MSG_55012A6E
+ con EHB
+;  with EHB
+MSG_4540315A
+modo sin nombre
+; unnamed mode
+MSG_49947ED3
+Pantalla: %s
+; Screen: %s
+MSG_2C6DC5BF
+color de %lu bits
+; %lu-bit colour
+MSG_67DA4F80
+  %lu x %lu, %s, ID de modo $%08lx
+;   %lu x %lu, %s, mode ID $%08lx
+MSG_3096D6FE
+Estilo: suave, %lu.%02lux
+; Style: smooth, %lu.%02lux
+MSG_2D957250
+Estilo: píxel, %lux%s
+; Style: pixel, %lux%s
+MSG_402F4AD3
+ (píxeles altos: denso)
+;  (tall pixels: dense)
+MSG_321FCB8C
+  sus tonos y logotipo: %lu plumas hasta ahora
+;   its shades and logo: %lu pens so far
+MSG_77468FB6
+Tarjeta gráfica (RTG): %s
+; Graphics card (RTG): %s
+MSG_4E9F3590
+sí
+; yes
+MSG_62366FFA
+no
+; no
+MSG_25AF384C
+Memoria libre: %luKB chip, %luKB fast
+; Free memory: %luKB chip, %luKB fast
+MSG_2E02D31A
+Fuente: %s
+; Font: %s
+MSG_7F759611
+amce-pixel (incluida)
+; amce-pixel (bundled)
+MSG_27934164
+topaz 8 (de reserva)
+; topaz 8 (fallback)
+MSG_6F035CA3
+Datatypes (cuál lee cada formato de imagen):
+; Datatypes (which one reads each picture format):
+MSG_336DE098
+; AGS: %s
+MSG_4FE02B8B
+Asignaciones añadidas por AmigaMCE (AGS-Stuff no se ejecutó):
+; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_38F75BEF
+Ajuste de máquina de AGS (HW): %s
+; AGS machine setting (HW): %s
+MSG_7FA35E26
+sin definir
+; not set
+MSG_1ACE6AF5
+Entradas para adultos: %s
+; Adult entries: %s
+MSG_4E294716
+mostradas
+; shown
+MSG_7618F139
+ocultas
+; hidden
+MSG_320E5353
+Pila de red: %s
+; Network stack: %s
+MSG_147EB74C
+activa
+; running
+MSG_2DA7AFDB
+ninguna
+; none
+MSG_1358A393
+; MP3: %s
+MSG_197B8973
+controlador MHI
+; MHI driver
+MSG_5FDDDD75
+Corto
+; Short
+MSG_58DE2772
+Normal
+; Normal
+MSG_45939473
+Largo
+; Long
+MSG_43BC9D28
+empieza en 0,6 s
+; starts in 0.6s
+MSG_720CF4AD
+1,2 s
+; 1.2s
+MSG_0065B852
+3 s, más reserva contra cortes
+; 3s, more held against dropouts
+MSG_2DA81BF2
+Suave: Fonts/amce-smooth no corresponde a este AmigaMCE
+; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_5561FD0B
+General
+; General
+MSG_1BD8C631
+Pantalla
+; Screen
+MSG_33CA9A34
+Sonido
+; Sound
+MSG_1917381B
+Red
+; Networking
+MSG_30B474E4
+; Plex
+MSG_6C2261DE
+Interfaz de red
+; Network interface
+MSG_23140C4E
+Tasa máxima de las emisoras
+; Highest station bitrate
+MSG_360055B5
+Búfer del flujo
+; Stream buffer
+MSG_18162AC4
+Servidor de listas de emisoras
+; Station list server
+MSG_4DAC8901
+Carpetas de música
+; Music folders
+MSG_1A73DB9B
+Idioma
+; Language
+MSG_73C73B18
+Como el Workbench
+; As Workbench
+MSG_2D0EBF47
+sin pila TCP/IP
+; no TCP/IP stack
+MSG_1624E3CC
+Modo de pantalla
+; Screen mode
+MSG_5467EC76
+Estilo
+; Style
+MSG_4A02D9CF
+Suave
+; Smooth
+MSG_2AB32B77
+Píxel
+; Pixel
+MSG_63678BEE
+Doble búfer
+; Double buffering
+MSG_52325DD8
+Desplazamiento a saltos (por letra)
+; Jump scrolling (by letter)
+MSG_71E19418
+Depuración (CPU, memoria, registro)
+; Debug (CPU, memory, log)
+MSG_4393028C
+No hay ninguna pila TCP/IP activa
+; No TCP/IP stack running
+MSG_4C151C1E
+emisoras hasta %s
+; stations up to %s
+MSG_0DC6B4AA
+Apagado
+; Off
+MSG_424097EC
+Encendido, sin servidor elegido
+; On, no server chosen
+MSG_33774386
+Automático: %.40s
+; Automatic: %.40s
+MSG_616A6784
+Automático
+; Automatic
+MSG_3FCAC913
+Automático (elección de la pila)
+; Automatic (the stack's choice)
+MSG_690CE026
+sin dirección
+; no address
+MSG_589EC060
+%s, %.39s unidad %ld
+; %s, %.39s unit %ld
+MSG_43430B20
+activa
+; up
+MSG_3DB9B915
+inactiva
+; down
+MSG_450E2AE8
+Esta pila TCP/IP no enumera sus interfaces
+; This TCP/IP stack does not list its interfaces
+MSG_604E4CF2
+Permitir flujos HTTPS
+; Allow HTTPS streams
+MSG_30C0E827
+necesita AmiSSL
+; needs AmiSSL
+MSG_185E3E26
+Automático: %s
+; Automatic: %s
+MSG_557E4FAB
+El más rápido: %s
+; Fastest: %s
+MSG_50FCFDDF
+para este Amiga: %s
+; for this Amiga: %s
+MSG_33C1DFF1
+Hasta %lukbps
+; Up to %lukbps
+MSG_0EB61AED
+Cualquiera
+; Any
+MSG_024A57E9
+uno al azar, como pide radio-browser.info
+; one at random, as radio-browser.info asks
+MSG_4C1FEAD9
+El más rápido
+; Fastest
+MSG_7016D0E0
+No se encontraron los servidores de radio-browser.info
+; radio-browser.info's servers could not be found
+MSG_3E7F369F
+ahora %.30s, %ld ms
+; now %.30s, %ld ms
+MSG_62CD57D2
+ninguno respondió
+; none answered
+MSG_1B68D598
+sin respuesta
+; no answer
+MSG_3F3927CF
+Servidor Plex
+; Plex server
+MSG_23B63BC7
+ninguno elegido
+; none chosen
+MSG_5F6445D0
+Pedir audio de menor calidad
+; Request lower quality audio
+MSG_720ED4F6
+necesario en este Amiga
+; needed on this Amiga
+MSG_1DE950F6
+4 canales, hasta 28kHz, 8 bits
+; 4 channels, up to 28kHz, 8-bit
+MSG_6CB6532B
+AHI: radio, Plex, archivos de música
+; AHI: radio, Plex, music files
+MSG_1AB0857C
+16 bits, el modo de sus Preferencias
+; 16-bit, its Preferences' mode
+MSG_7EF1200C
+no instalado
+; not installed
+MSG_7AFA07FD
+decodificado aquí
+; decoded here
+MSG_22FBBBB2
+decodifica y reproduce
+; decodes and plays
+MSG_441A0CA1
+instalado
+; installed
+MSG_3DEA7C01
+no instalado (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_4DEE1DD3
+%ld lugar
+; %ld place
+MSG_4DD8A2E0
+%ld lugares
+; %ld places
+MSG_4A20BCD9
+ninguno aún
+; none yet
+MSG_47E8C75F
+Usar la asignación MUSIC:
+; Use the MUSIC: assign
+MSG_4AE004BD
+asignada
+; assigned
+MSG_5D2E5EC2
+no asignada ahora
+; not assigned now
+MSG_68FF039F
+Disparo otra vez: quitar
+; Fire again: remove
+MSG_30B1BFB1
+Añadir una carpeta...
+; Add a folder...
+MSG_4ACE7BF4
+ocho como máximo
+; eight at most
+MSG_50BCAC0E
+solo RTG
+; RTG only
+MSG_4D914B4E
+Automático:
+; Automatic: 
+MSG_0F9ADE75
+Créditos
+; Credits
+MSG_589D7E42
+Información del sistema
+; System information
+MSG_345099C5
+Plex en AmigaMCE
+; Plex in AmigaMCE
+MSG_718F9B3E
+(c) 2026 Brian King, bajo la licencia MIT
+; (c) 2026 Brian King, under the MIT licence
+MSG_36BA6F5C
+Fuentes: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo y Rubik (c) 2015 The Rubik Project Authors, todas bajo la SIL Open Font License 1.1. Las fuentes amce-pixel y amce-galmuri son versiones modificadas (Modified Versions) de Pixelify Sans y Galmuri.
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_2B3D5B66
+Código: biblioteca C libnix (dominio público). El anfitrión de EaglePlayer sigue al de HippoPlayer (licencia MIT, (c) 2017 Kari-Pekka Koljonen).
+; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_321AE26A
+Se usan si están instalados, no incluidos, cada uno bajo su licencia: Amiga Game Selector, WHDLoad, AHI, controladores MHI, mpega.library, datatypes.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_64ED99F8
+FLAC: flacdec.library (c) 2026 Renaud Schweingruber, con dr_flac de David Reid (dominio público o MIT-0), se usa si está instalada, no incluida. Se puede usar y distribuir libremente en su propio archivo sin cambios (Aminet: util/libs/flacdec).
+; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
+MSG_56CB434E
+Amiga es una marca de su propietario. Los juegos, demos, música e imágenes pertenecen a sus autores. Los textos de las licencias están en el cajón Licences.
+; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
+MSG_302861BB
+Esta interfaz no sería posible sin el inmenso trabajo de Paul Vince y de Amiga Game Selector.
+; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_69CE1669
+La reproducción de vídeo llegará en una versión posterior.
+; Video playback arrives in a later version.
+MSG_47318A8A
+Animaciones
+; Animations
+MSG_29C163F7
+No se encontraron imágenes: AmigaMCE las busca en %s.
+; No pictures found: AmigaMCE looks for them in %s.
+MSG_6A91D3DF
+%s no contiene imágenes.
+; %s has no pictures in it.
+MSG_40EDAFB4
+No hay %s aquí
+; No %s here
+MSG_190B5576
+%s está vacío
+; %s is empty
+MSG_42D8D701
+Dom
+; Sun
+MSG_4EA382E1
+Lun
+; Mon
+MSG_7AB4F425
+Mar
+; Tue
+MSG_74645757
+Mié
+; Wed
+MSG_0699308C
+Jue
+; Thu
+MSG_2663FBE8
+Vie
+; Fri
+MSG_38A72A77
+Sáb
+; Sat
+MSG_46F2CEAE
+Ene
+; Jan
+MSG_278D4B82
+Feb
+; Feb
+MSG_42A7ED2B
+Mar
+; Mar
+MSG_03F51DF2
+Abr
+; Apr
+MSG_3BA7E226
+May
+; May
+MSG_46C131E2
+Jun
+; Jun
+MSG_44C12EBC
+Jul
+; Jul
+MSG_20EE8FD4
+Ago
+; Aug
+MSG_2CB1A4EF
+Sep
+; Sep
+MSG_11D1F3E9
+Oct
+; Oct
+MSG_0A3DC404
+Nov
+; Nov
+MSG_275E7A73
+Dic
+; Dec
+MSG_3705878B
+Arriba/Abajo  mover    Derecha/Disparo  abrir    Intro  tocar    Izquierda/Esc  atrás
+; Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
+MSG_56178B52
+Arriba/Abajo  elegir      Esc dos veces  salir
+; Up/Down  choose      Esc twice  quit
+MSG_11D91495
+Esc 2 veces sale
+; Esc twice quit
+MSG_4B5CD1EF
+Arriba/Abajo  elegir      Derecha/Disparo  abrir      Esc dos veces  salir
+; Up/Down  choose      Right/Fire  open      Esc twice  quit
+MSG_3804081F
+Disparo abrir  Esc 2x salir
+; Fire open  Esc twice quit
+MSG_2BD6BD72
+Arriba/Abajo  desplazar      Disparo/Intro  ver      Izquierda/Esc  atrás
+; Up/Down  scroll      Fire/Return  view      Left/Esc  back
+MSG_4F05244A
+Disparo ver  Esc atrás
+; Fire view  Esc back
+MSG_0E23C285
+Arriba/Abajo  desplazar      Disparo/Intro  tocar      Izquierda/Esc  atrás
+; Up/Down  scroll      Fire/Return  play      Left/Esc  back
+MSG_67E35425
+Disparo tocar  Esc atrás
+; Fire play  Esc back
+MSG_169BF20A
+Arriba/Abajo  mover    Disparo/Intro  ver    Izquierda/Esc  atrás
+; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6DAF7CE6
+Arriba/Abajo  mover    Disparo  pase    Derecha  abrir    Izquierda/Esc  atrás
+; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
+MSG_1F838A3C
+Disparo pase  Derecha abrir
+; Fire show  Right open
+MSG_11F23D61
+Arriba/Abajo  mover    Disparo/Derecha  abrir    Izquierda/Esc  atrás
+; Up/Down  move    Fire/Right  open    Left/Esc  back
+MSG_41738E8F
+Disparo abrir  Esc atrás
+; Fire open  Esc back
+MSG_6C808185
+Arriba/Abajo  mover    Disparo/Intro  tocar    Izquierda/Esc  atrás
+; Up/Down  move    Fire/Return  play    Left/Esc  back
+MSG_59045BF0
+Arriba/Abajo  mover    Disparo  usar este servidor    Izquierda/Esc  atrás
+; Up/Down  move    Fire  use this server    Left/Esc  back
+MSG_481DF333
+Disparo usar  Esc atrás
+; Fire use it  Esc back
+MSG_29E8EF53
+Arriba/Abajo  mover    Disparo/Intro  tocar    Derecha  info    Izquierda/Esc  atrás
+; Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
+MSG_463F7CE7
+Disparo tocar  Derecha info
+; Fire play  Right info
+MSG_1710A7DF
+Arriba/Abajo  mover    Derecha/Disparo  abrir    Izquierda/Esc  atrás
+; Up/Down  move    Right/Fire  open    Left/Esc  back
+MSG_341D99F5
+Arriba/Abajo  mover    Derecha  detalles    Disparo/Intro  tocar    Izquierda/Esc  atrás
+; Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
+MSG_0B4D231C
+Disparo abrir  Intro tocar  Esc atrás
+; Fire open  Ret play  Esc back
+MSG_3EBC8DC1
+Disparo/Intro  tocar      Arriba/Abajo  desplazar      Izquierda/Esc  atrás
+; Fire/Return  play      Up/Down  scroll      Left/Esc  back
+MSG_6F2C1751
+Izq/Der  elegir    Disparo  pulsar    Arriba/Abajo  volumen    Espacio  pausa    Esc  atrás
+; Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
+MSG_4372AA87
+Disparo pulsar  Arr/Ab vol  Esc atrás
+; Fire press  Up/Dn vol  Esc back
+MSG_2B8E61B8
+Arriba/Abajo  desplazar      Izquierda/Esc  atrás
+; Up/Down  scroll      Left/Esc  back
+MSG_642000D2
+Arriba/Abajo desplazar  Esc atrás
+; Up/Down scroll  Esc back
+MSG_79CC558D
+Modificado %s
+; Changed %s
+MSG_79550836
+No hay imágenes en esta carpeta.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld imagen
+; %ld picture
+MSG_6A487423
+%ld imágenes
+; %ld pictures
+MSG_52C18255
+Disparo: pase de imágenes
+; Fire: slideshow
+MSG_178CD224
+Derecha: abrir la carpeta
+; Right: open the folder
+MSG_412F4EA4
+%ld carpeta
+; %ld folder
+MSG_74791C75
+%ld carpetas
+; %ld folders
+MSG_15840E5E
+Disparo o Derecha: abrir
+; Fire or Right: open
+MSG_6E4CA1B5
+No está en el cajón Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(vacío)
+; (empty)
+MSG_0ECC2045
+Cargando captura...
+; Loading screenshot...
+MSG_65C00D26
+Volumen %ld%%
+; Volume %ld%%
+MSG_17251C33
+Volumen 100%
+; Volume 100%
+MSG_3827BF33
+Posición %ld de %ld   Patrón %ld   Fila %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Posición %ld de %ld
+; Position %ld of %ld
+MSG_5F643207
+Posición %ld   Patrón %ld   Fila %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+En búfer %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   cortes %ld
+;    dropouts %ld
+MSG_44D22F83
+Conectando...
+; Connecting...
+MSG_6038FAB1
+Cargando búfer...
+; Buffering...
+MSG_5966858A
+Mono
+; Mono
+MSG_1E9E9F85
+Derecho
+; Right
+MSG_12773890
+Izquierdo
+; Left
+MSG_4D72110C
+Reproducción
+; Playback
+MSG_6E6C1A7A
+MHI (lo decodifica y reproduce)
+; MHI (decoded and played by it)
+MSG_7A38DB91
+(sin título)
+; (no title)
+MSG_3CB15829
+   Pista %ld de %ld
+;    Track %ld of %ld
+MSG_2B183663
+Archivo
+; File
+MSG_7FB0FF72
+Formato
+; Format
+MSG_063F19EE
+Detenido
+; Stopped
+MSG_170FF847
+Leyendo...
+; Reading...
+MSG_22FE7692
+Original
+; Original
+MSG_504BD8C0
+envía el archivo tal cual
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld de %ld en
+;    %ld of %ld in 
+MSG_0A088884
+En antena
+; On air
+MSG_44471F44
+(la emisora no lo dice)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B reproducido a %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, por MHI
+; , by MHI
+MSG_716687B8
+No se reproduce nada
+; Nothing playing
+MSG_085A357E
+   de %s
+;    by %s
+MSG_47760A7D
+   subcanción %ld de %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Muestras
+; Samples
+MSG_61B4DC81
+Esa era la última pista
+; That was the last track
+MSG_2208340A
+Esa era la última emisora de la lista
+; That was the last station in the list
+MSG_3652522E
+Ese era el último módulo de la carpeta
+; That was the last module in the folder
+MSG_1CAF7095
+En este módulo no se puede avanzar ni retroceder
+; This module cannot be moved through
+MSG_6AA26665
+Reproduciendo
+; Now playing
+MSG_0BBA80CF
+No se pudo reproducir esa pista
+; That track could not be played
+MSG_052FF533
+La pista no pudo empezar ahí
+; The track could not be started there
+MSG_369379DB
+La emisora dejó de emitir
+; The station stopped sending
+MSG_3F318CD7
+No se encontraron módulos. AmigaMCE los busca en %s y en %s (la música de los menús de AGS).
+; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_6870F104
+Reproduce él mismo los módulos de ProTracker, y cientos de otros formatos (OctaMED, TFMX, Future Composer, SID...) con los reproductores de EaglePlayer y DeliTracker, todo con el sonido propio del Amiga.
+; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_674C644A
+Módulos
+; Modules
+MSG_1B1E85CB
+Música de C64
+; C64 music
+MSG_7F6215F5
+Música de menús
+; Menu music
+MSG_1361020B
+No hay imágenes en esa carpeta
+; No pictures in that folder
+MSG_46C7288D
+Demasiados niveles abiertos
+; Too many levels open
+MSG_5116954E
+No se pudo abrir esa carpeta
+; Could not open that folder
+MSG_6FF9045E
+Esa carpeta no tiene imágenes
+; That folder has no pictures
+MSG_4F992A62
+No hay archivos MP3 ni FLAC en esa carpeta
+; No MP3 or FLAC files in that folder
+MSG_15E6DCFA
+Esa carpeta no tiene módulos
+; That folder has no modules
+MSG_6D9550B1
+No se pudo abrir ese menú
+; Could not open that menu
+MSG_3030A110
+Ese menú está vacío
+; That menu is empty
+MSG_74066526
+No se pudo escribir T:AmigaMCE-run
+; Could not write T:AmigaMCE-run
+MSG_0C682AC4
+; %ld/%ld   %s   %s%s
+MSG_2D43D301
+   Pase de imágenes
+;    Slideshow
+MSG_359B5B48
+Izquierda/Derecha  anterior/siguiente    Disparo  pausa    Esc  atrás
+; Left/Right  previous/next    Fire  pause    Esc  back
+MSG_7ED0D392
+Izquierda/Derecha  anterior/siguiente    Disparo  pase    Esc  atrás
+; Left/Right  previous/next    Fire  slideshow    Esc  back
+MSG_152E3E65
+No hay memoria suficiente para el visor
+; Not enough memory for the viewer
+MSG_21238256
+no enviada por %.50s
+; not sent by %.50s
+MSG_74BBD86D
+Esc  atrás
+; Esc  back
+MSG_00FED3FC
+Cargando desde Plex...
+; Loading from Plex...
+MSG_5123470D
+Ese modo %.60s
+; That mode %.60s
+MSG_2EF5225D
+No se pudo abrir ese modo de pantalla
+; Could not open that screen mode
+MSG_4C560A92
+Conexiones: la interfaz que elija la pila
+; Connections: the stack's choice of interface
+MSG_247B55C3
+Las conexiones salen por esta interfaz
+; Connections go out from this interface
+MSG_61C33E78
+No se pudieron cargar los archivos del estilo suave
+; The smooth style's files could not be loaded
+MSG_38B5BCC0
+Suave: solo en pantallas RTG
+; Smooth: on RTG screens only
+MSG_5D86BD77
+Archivos de música (MUSIC:)
+; Music files (MUSIC:)
+MSG_47B3C622
+Archivos de música: %.100s
+; Music files: %.100s
+MSG_46D8C4D9
+Archivos de música: Ajustes > Sonido > Carpetas de música
+; Music files: Settings > Sound > Music folders
+MSG_75470054
+No hay pila TCP/IP activa: Plex necesita la red
+; No TCP/IP stack running: Plex needs networking
+MSG_05BF19DC
+Plex está apagado (Ajustes > Red > Plex)
+; Plex is turned off (Settings > Networking > Plex)
+MSG_370F28B1
+Otras bibliotecas en %s
+; Other libraries on %s
+MSG_5CB8F506
+; Plex: %s
+MSG_3D6359D0
+No se eligió servidor Plex: Ajustes > Red > Plex
+; No Plex server chosen: Settings > Networking > Plex
+MSG_12991ED4
+Más votadas
+; Top voted
+MSG_59DBAEB1
+Más escuchadas
+; Most listened to
+MSG_47B6B3B8
+Tendencias
+; Trending
+MSG_7CA786A9
+; Chiptune
+MSG_00D1A496
+; Demoscene
+MSG_65D70EE9
+Géneros
+; Genres
+MSG_2062DC6D
+Países
+; Countries
+MSG_7B170497
+El servidor pide un token de acceso: ver Acerca de > Plex en AmigaMCE
+; The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_229E5121
+El servidor respondió algo inesperado
+; The server answered with something unexpected
+MSG_49CF76D8
+No hay bibliotecas de música ahí
+; No music libraries there
+MSG_3EEA8333
+No hay bibliotecas de fotos ahí
+; No photo libraries there
+MSG_027BDF10
+Aquí no hay nada
+; Nothing here
+MSG_07C4F203
+No se pudo contactar con el servidor Plex
+; Could not reach the Plex server
+MSG_1CFE72A3
+Mostrar la foto
+; Show the photo
+MSG_4FD7ED09
+Pase de estas %ld fotos
+; Slideshow of these %ld photos
+MSG_7BB6085B
+Nada en la lista
+; Nothing listed
+MSG_46D7374C
+Aquí no hay emisoras que AmigaMCE pueda reproducir
+; No stations here that AmigaMCE can play
+MSG_1BED60DF
+Aún se está leyendo del servidor: un momento
+; Still being read from the server: a moment
+MSG_7F58E800
+Buscando servidores Plex...  Esc para abandonar
+; Looking for Plex servers...  Esc to give up
+MSG_13C1CD18
+Preguntando a %.40s...  Esc para abandonar
+; Asking %.40s...  Esc to give up
+MSG_04730DAC
+Preguntando a radio-browser.info...  Esc para abandonar
+; Asking radio-browser.info...  Esc to give up
+MSG_497165DA
+Fotos de Plex: Plex está apagado (Ajustes > Red > Plex)
+; Plex photos: Plex is turned off (Settings > Networking > Plex)
+MSG_6273A841
+Fotos de Plex: elige un servidor (Ajustes > Red > Plex)
+; Plex photos: choose a server (Settings > Networking > Plex)
+MSG_276888E6
+Fotos de Plex en %.80s
+; Plex photos on %.80s
+MSG_62B4E865
+; Plex: %.100s
+MSG_2550824B
+Servidor Plex elegido
+; Plex server chosen
+MSG_35BE063F
+AmigaMCE reproduce música de un Plex Media Server de tu red: sus bibliotecas de música, por artista y álbum, con sus portadas. El servidor convierte cada pista en un MP3 que este Amiga puede reproducir: 22kHz mono para un 68020/030, 24kHz estéreo para un 68040/060, más para uno rápido, y su mejor calidad cuando un controlador MHI decodifica el MP3 (Ajustes > Sonido). En un Amiga rápido, o con MHI, desactivar Ajustes > Red > Plex > Pedir audio de menor calidad reproduce los archivos MP3 tal cual, y en un Amiga rápido también los FLAC si flacdec.library está instalada; los demás formatos se convierten siempre. Ajustes > Red > Plex > Plex lo apaga todo.
+; AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_2FBD9CB6
+Encontrar un servidor: Ajustes > Red > Plex > Servidor Plex pregunta a la red (el GDM de Plex); elige uno y se recuerda. O fija su dirección desde el Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+MSG_6A05B8D3
+Acceso: un servidor pide el token de su dueño. Lo encuentras en Plex Web (Información > Ver XML de un elemento: el X-Plex-Token en la dirección) y lo fijas desde el Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Iniciar sesión en plex.tv necesita HTTPS (AmiSSL) y llegará más adelante.
+; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
+MSG_7445FC0C
+Servidor: %s
+; Server: %s
+MSG_6D54C528
+Token: fijado
+; Token: set
+MSG_59B6EDB9
+Token: sin fijar
+; Token: not set
+MSG_0B620CC7
+MP3: decodificado por el controlador MHI %.40s
+; MP3: decoded by the MHI driver %.40s
+MSG_1133EF71
+MP3: decodificado por mpega.library
+; MP3: decoded by mpega.library
+MSG_04F04DC5
+MP3: sin decodificador (mpega.library o MHI)
+; MP3: no decoder (mpega.library or MHI)
+MSG_6FC4AC95
+FLAC: convertido a MP3 (flacdec.library no está instalada)
+; FLAC: converted to MP3 (flacdec.library is not installed)
+MSG_226669D7
+FLAC: convertido a MP3 (demasiado lento para decodificarlo aquí)
+; FLAC: converted to MP3 (too slow to decode here)
+MSG_3521D30E
+FLAC: convertido a MP3 (la menor calidad está activa)
+; FLAC: converted to MP3 (lower quality audio is on)
+MSG_2B51B45B
+FLAC: reproducido tal cual, por flacdec.library
+; FLAC: played as stored, by flacdec.library
+MSG_586857BF
+Sonido: AHI, 16 bits
+; Sound: AHI, 16-bit
+MSG_0F2AADBB
+Sonido: Paula, 8 bits
+; Sound: Paula, 8-bit
+MSG_5353700C
+Formato:  %s
+; Format:   %s
+MSG_4B7B9DA5
+País:     %s
+; Country:  %s
+MSG_1399F81C
+Votos:    %s
+; Votes:    %s
+MSG_55E8E50A
+Etiquetas: %s
+; Tags:     %s
+MSG_64C287CF
+Web:      %s
+; Homepage: %s
+MSG_5A5309D7
+Flujo:    %s
+; Stream:   %s
+MSG_18A292C0
+Disparo sobre la emisora en su lista la reproduce.
+; Fire on the station in its list plays it.
+MSG_510F21FD
+Ocho carpetas de música como máximo: quita una antes
+; Eight music folders at most: take one out first
+MSG_5143C289
+Una carpeta de archivos MP3 o FLAC
+; A folder of MP3 or FLAC files
+MSG_1DC3AA14
+Añadir
+; Add
+MSG_2B8275A5
+No se encontró esa carpeta
+; That folder could not be found
+MSG_6F975CF8
+Esa carpeta ya está en Música
+; That folder is in Music already
+MSG_5B08757B
+Carpeta añadida: su música está en Música
+; Folder added: its music is under Music
+MSG_2C2767AF
+Estilo: Suave necesita una pantalla RTG
+; Style: Smooth needs an RTG screen
+MSG_14386364
+Este Amiga reproduce la menor calidad de Plex: los archivos originales son demasiado
+; This Amiga plays Plex's lower quality: the files as stored are too much
+MSG_5CBCDB5D
+Esa interfaz no está activa
+; That interface is not up
+MSG_646AFCF3
+MHI no está instalado (sus controladores en LIBS:MHI)
+; MHI is not installed (its drivers in LIBS:MHI)
+MSG_5561B1F7
+FLAC: archivos de música, y pistas de Plex tal cual en un Amiga rápido
+; FLAC: music files, and Plex's tracks as stored on a fast Amiga
+MSG_34836301
+Instala flacdec.library (Aminet: util/libs/flacdec) para FLAC
+; Install flacdec.library (Aminet: util/libs/flacdec) for FLAC
+MSG_7AE98FE6
+Listas de emisoras abiertas desde ahora
+; Station lists opened from now on
+MSG_5AA18328
+Empezó la siguiente emisora o pista
+; The next station or track started
+MSG_415E54B9
+Ningún servidor respondió: se mantiene Automático
+; None of the servers answered: Automatic kept
+MSG_7800A723
+MP3 decodificado por MHI: radio, Plex (en su mejor calidad) y archivos
+; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_605E617D
+MP3 decodificado aquí por mpega.library
+; MP3 decoded here by mpega.library
+MSG_59AEDDD1
+AHI desde la próxima pista o emisora; los módulos siguen en Paula
+; AHI from the next track or station on; modules stay on Paula
+MSG_06B72AB3
+AHI: radio, Plex y archivos de música; los módulos siguen en Paula
+; AHI: radio, Plex and music files; modules stay on Paula
+MSG_4975E21A
+Paula lo reproduce todo
+; Paula plays everything
+MSG_57C64449
+Música muestra MUSIC: cuando está asignada
+; Music lists MUSIC: when it is assigned
+MSG_0BC8BC2B
+Música deja fuera MUSIC:
+; Music leaves MUSIC: out
+MSG_34772BBE
+Disparo otra vez para quitar esta carpeta de Música (sus archivos se quedan)
+; Fire again to take this folder out of Music (its files stay)
+MSG_4BA4B0A8
+Carpeta quitada de Música
+; Folder taken out of Music
+MSG_746B08BF
+Pulsa Esc otra vez para salir de AmigaMCE
+; Press Esc again to quit AmigaMCE
+MSG_16ABF123
+AmigaMCE necesita Kickstart 3.0 o posterior.\n
+; AmigaMCE needs Kickstart 3.0 or newer.\n
+MSG_43383FA3
+AmigaMCE no pudo abrir su pantalla.\n
+; AmigaMCE could not open its screen.\n
+MSG_3D0CDD4E
+El modo de pantalla guardado no está disponible aquí: se usa Automático
+; Saved screen mode not available here: using Automatic
+MSG_1767B111
+Este módulo necesita un 68020 o superior para mezclarse
+; This module needs a 68020 or better to be mixed
+MSG_3DD51BC4
+No hay memoria suficiente para mezclar este módulo
+; Not enough memory to mix this module
+MSG_69F7300F
+No es un módulo que AmigaMCE pueda reproducir
+; Not a module AmigaMCE can play
+MSG_3F4BE355
+No se pudo iniciar el mezclador
+; Could not start the mixer
+MSG_5537D534
+El archivo del módulo está cortado
+; The module file is cut short
+MSG_6E9632F2
+Los módulos de %ld canales necesitan más que los cuatro de Paula
+; %ld-channel modules need more than Paula's four
+MSG_0B3B1D28
+comprimido con PowerPacker
+; packed with PowerPacker
+MSG_074FA98E
+comprimido con XPK
+; packed with XPK
+MSG_3E5C3646
+comprimido con Pack-Ice
+; packed with Pack-Ice
+MSG_2570FA54
+un módulo MED/OctaMED
+; a MED/OctaMED module
+MSG_090E157E
+un módulo FastTracker 2 (XM)
+; a FastTracker 2 module (XM)
+MSG_4BC0A0C8
+un módulo Scream Tracker 3 (S3M)
+; a Scream Tracker 3 module (S3M)
+MSG_41529869
+un módulo Impulse Tracker (IT)
+; an Impulse Tracker module (IT)
+MSG_451A18EF
+un módulo AHX
+; an AHX module
+MSG_177C7924
+No se pudo abrir el archivo del módulo
+; Could not open the module file
+MSG_57FD81FC
+Comprimido con %s, pero %s
+; Packed with %s, but %s
+MSG_59FF2336
+un compresor
+; a packer
+MSG_0CB7D3B5
+Este archivo es %s, que AmigaMCE no puede reproducir
+; This file is %s, which AmigaMCE cannot play
+MSG_3575C0BB
+No hay memoria chip suficiente para sus muestras (%lu KB)
+; Not enough chip memory for its samples (%lu KB)
+MSG_686FC405
+No hay memoria suficiente para ese módulo
+; Not enough memory for that module
+MSG_00592588
+No hay ningún temporizador CIA libre para la música
+; No CIA timer free to play music with
+MSG_1CC1D05F
+No hay ningún módulo cargado
+; No module loaded
+MSG_748B0D26
+Otro programa está usando los canales de audio
+; The audio channels are in use by another program
+MSG_2AC2E3CB
+No es la dirección de una emisora
+; Not a station's address
+MSG_34D70E8E
+Sin socket (¿está activa la pila TCP/IP?)
+; No socket (is the TCP/IP stack running?)
+MSG_6A2F5761
+Se rechazó la conexión
+; The connection was refused
+MSG_262B09BC
+Cancelado
+; Cancelled
+MSG_4641030F
+El servidor no respondió
+; The server did not answer
+MSG_2ACCD57C
+El servidor dejó de responder
+; The server stopped answering
+MSG_05C477DC
+Ningún servidor Plex respondió en esta red
+; No Plex server answered on this network
+MSG_4A212D5E
+No se encontró ese servidor (DNS)
+; That server could not be found (DNS)
+MSG_68C8EB43
+El servidor solo responde por HTTPS
+; The server only answers over HTTPS
+MSG_563B6546
+El servidor nos envió a donde no podemos seguir
+; The server sent us somewhere we cannot follow
+MSG_515157E5
+El servidor respondió %ld
+; The server answered %ld
+MSG_64F654D3
+No se pudo iniciar el proceso de red
+; The network process could not start
+MSG_441552F7
+Artistas
+; Artists
+MSG_5C7535ED
+Álbumes
+; Albums
+MSG_5BBD0EC3
+Añadidos recientemente
+; Recently added
+MSG_201D2C97
+%lu foto
+; %lu photo
+MSG_71EDAAEC
+%lu fotos
+; %lu photos
+MSG_7C81E0F2
+%lu elemento
+; %lu item
+MSG_01746B13
+%lu elementos
+; %lu items
+MSG_4C50B8D0
+%lu pista
+; %lu track
+MSG_4612A899
+%lu pistas
+; %lu tracks
+MSG_4E1664E0
+%lu álbum
+; %lu album
+MSG_00405369
+%lu álbumes
+; %lu albums
+MSG_0D3B3C12
+(sin nombre)
+; (no name)
+MSG_7EE6D283
+%s: no es MP3, y el servidor no dio forma de convertirlo
+; %s: not MP3, and the server gave no way to convert it
+MSG_6BBD2577
+Ese formato
+; That format
+MSG_134FDFA5
+Pista %.10s
+; Track %.10s   
+MSG_7286EE6A
+; mono
+MSG_4C87A64D
+estéreo
+; stereo
+MSG_43D67FB2
+multicanal
+; multi
+MSG_379F025B
+1 archivo de música
+; 1 music file
+MSG_0A57AE24
+%ld archivos de música
+; %ld music files
+MSG_4BE4B028
+%s%ld carpeta
+; %s%ld folder
+MSG_54019F41
+%s%ld carpetas
+; %s%ld folders
+MSG_07A36F34
+No se pudo leer
+; Could not be read
+MSG_523F6D57
+No se pudo abrir AHI (sus Preferencias: ¿un modo?)
+; AHI could not be opened (its Preferences: a mode?)
+MSG_59B9295C
+No se encontró el servidor de la emisora (DNS)
+; The station's server could not be found (DNS)
+MSG_3708365D
+La emisora rechazó la conexión
+; The station refused the connection
+MSG_7D8C9876
+La emisora no respondió
+; The station did not answer
+MSG_2A3F28C9
+No se pudo leer el archivo
+; The file could not be read
+MSG_4375E450
+El servidor dejó de emitir
+; The server stopped sending
+MSG_2919BAF1
+La emisora cerró el flujo
+; The station closed the stream
+MSG_0761145C
+No se pudo abrir el archivo
+; The file could not be opened
+MSG_2D2A3CF1
+Esta emisora solo emite por HTTPS, que AmigaMCE aún no puede reproducir
+; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_103190A0
+AmigaMCE no puede seguir la dirección de esta emisora
+; The station's address is not one AmigaMCE can follow
+MSG_65B74193
+%s respondió %ld
+; %s answered %ld
+MSG_4163EE37
+El servidor
+; The server
+MSG_3B0705F8
+La emisora
+; The station
+MSG_37840EF9
+La lista de reproducción de la emisora no tiene ningún flujo que AmigaMCE pueda reproducir
+; The station's playlist has no stream AmigaMCE can play
+MSG_47FA6F71
+%s envía %s, no MP3
+; %s sends %s, not MP3
+MSG_53CE943A
+La emisora nos redirigió demasiadas veces
+; The station sent us on too many times
+MSG_5B0AAE77
+No se pudo decodificar el flujo
+; The stream could not be decoded
+MSG_10039953
+Solo los archivos de música de este Amiga se reproducen como WAV, AIFF u 8SVX
+; Only music files on this Amiga play as WAV, AIFF or 8SVX
+MSG_3E5CE903
+No es un tipo de WAV, AIFF u 8SVX que AmigaMCE reproduzca (¿comprimido?)
+; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_52A6DB2B
+No se pudo abrir el controlador MHI (Ajustes > Sonido)
+; The MHI driver could not be opened (Settings > Sound)
+MSG_74E4B952
+El decodificador del controlador MHI está ocupado, o no existe
+; The MHI driver's decoder is in use, or not there
+MSG_166B781B
+No hay memoria suficiente para los búferes de MHI
+; Not enough memory for MHI's buffers
+MSG_03D74A28
+No hay ninguna señal libre
+; No signal free
+MSG_2F19A1CE
+La pista terminó antes de empezar su música
+; The track ended before its music began
+MSG_755A0080
+La pista terminó antes de ese momento
+; The track ended before that time
+MSG_1186B14C
+El flujo no parece MP3
+; The stream does not look like MP3
+MSG_3AC77067
+No hay memoria suficiente para reproducir una emisora
+; Not enough memory to play a station
+MSG_41C55AEA
+No se pudo iniciar el proceso de radio
+; Could not start the radio process
+MSG_6A5609A3
+Cargando %.80s
+; Loading %.80s
+MSG_02281E0C
+No se pudo mostrar %.80s
+; Could not show %.80s
+MSG_158F4FA3
+No hay memoria suficiente para %.70s
+; Not enough memory for %.70s
