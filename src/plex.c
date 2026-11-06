@@ -63,6 +63,7 @@ struct PlexConf plex;
 static char photo_libs[400];
 static ULONG num(const char *s);
 static ULONG sessions;          /* conversions asked for: each its own session */
+static char last_session[64];   /* the conversion asked for last: stopped before the next */
 
 static void get_var(const char *name, char *out, LONG max)
 {
@@ -313,7 +314,18 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
             sprintf(n, "&offset=%lu", (unsigned long)(from_ms / 1000));    /* a seek */
             amce_strlcat(out, n, max);
         }
+        if (last_session[0]) {
+            /* the one before stopped first (the stream process asks): Plex
+             * refuses another conversion of a track while one runs (400) */
+            char stop[600];
+            sprintf(stop, "http://%s:%lu/music/:/transcode/universal/stop?session=%s"
+                          "&X-Plex-Client-Identifier=%s%s%s", plex.host,
+                    (unsigned long)plex.port, last_session, plex.cid,
+                    plex.token[0] ? "&X-Plex-Token=" : "", plex.token);
+            st_set_stop_url(stop);
+        }
         sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
+        amce_strlcpy(last_session, n + 9, sizeof(last_session));
         amce_strlcat(out, n, max);
         amce_strlcat(out, "&X-Plex-Session-Identifier=", max);
         amce_strlcat(out, n + 9, max);

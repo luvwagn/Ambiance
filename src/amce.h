@@ -454,7 +454,8 @@ struct StInfo {
 void st_set_buffer(int level);
 void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */
 BOOL st_ahi(void);
-void st_use_mhi(const char *driver);       /* Settings > Sound: MP3 by MHI ("" mpega) */
+void st_use_mhi(const char *driver);
+void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 ULONG st_length_ms(void);           /* a track's length as its stream says, 0 not known */
 ULONG st_size(void);                /* ...its size in bytes, 0 not known */

@@ -712,6 +712,49 @@ static void log_refusal(LONG status)
     }
 }
 
+/* Asked first, before the stream (st_set_stop_url): Plex told to stop the
+ * conversion played before, or it refuses another of that track (400). */
+static char stop_url[1024];
+
+void st_set_stop_url(const char *url)
+{
+    amce_strlcpy(stop_url, url ? url : "", sizeof(stop_url));
+}
+
+/* A GET whose answer is not wanted, only that it was asked: quietly, a
+ * failure not the stream's. */
+static void ping_url(const char *url)
+{
+    static char path[1024], req[1300];
+    char host[96], hdr[512], m[80];
+    UWORD port;
+    LONG status = 0, left, off = 0;
+    if (!split_url(url, host, sizeof(host), &port, path, sizeof(path)))
+        return;
+    if ((st.sock = connect_to(host, port)) >= 0) {
+        sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+                     "\r\nConnection: close\r\n\r\n", path, host);
+        left = strlen(req);
+        while (left > 0) {
+            LONG w;
+            if (wait_sock(st.sock, TRUE, READ_S) <= 0 ||
+                (w = send(st.sock, (APTR)(req + off), left, 0)) <= 0)
+                break;
+            off += w;
+            left -= w;
+        }
+        if (left <= 0)
+            status = read_headers(hdr, sizeof(hdr));
+        CloseSocket(st.sock);
+        st.sock = -1;
+    }
+    sprintf(m, "the conversion before stopped: %ld", (long)status);
+    amce_log("plex", m);
+    st.err[0] = 0;                          /* its failure, if it failed, not the stream's */
+    st.state = ST_CONNECTING;
+    st.nb_pos = st.nb_len = 0;
+}
+
 /* Connected to the stream (redirects and playlists followed). */
 static BOOL open_stream(void)
 {
@@ -738,6 +781,10 @@ static BOOL open_stream(void)
     }
     if (st.skip_ms && no_offset && drop_offset(url))
         st.skipping = TRUE;
+    if (stop_url[0]) {
+        ping_url(stop_url);
+        stop_url[0] = 0;
+    }
     for (hop = 0; hop < 4; hop++) {
         LONG status;
         if (!amce_strnicmp(url, "https:", 6)) {
