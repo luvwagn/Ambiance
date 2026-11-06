@@ -5699,7 +5699,20 @@ static const char *plex_tag(const struct Item *it)
 }
 
 /* Load playlist entry idx and play it; FALSE (and why, in msg) if not. */
+static BOOL np_start_now(LONG idx);
+
 static BOOL np_start(LONG idx)
+{
+    BOOL ok = np_start_now(idx);
+    if (!ok && msg[0] && np.list.pool && idx >= 0 && idx < np.list.count) {
+        char m[220];
+        sprintf(m, "%.100s: %.100s", np.list.items[idx].label, msg);
+        amce_log("music: not played", m);
+    }
+    return ok;
+}
+
+static BOOL np_start_now(LONG idx)
 {
     char err[100];
     struct Item *it;
@@ -8228,8 +8241,16 @@ static int pictures_plex_rows(struct Page *p)
     char keys[6][64], titles[6][96];
     struct Item *it;
     int n = 0, i;
-    if (!caps.net || !plex.on || !plex.host[0])
+    if (!caps.net || !plex.on || !plex.host[0]) {
+        amce_log("pictures: no Plex rows", !caps.net ? "no TCP/IP stack" : !plex.on
+                                           ? "Plex is turned off" : "no Plex server chosen");
+        if (caps.net && (it = list_add_first(&p->list, !plex.on
+                                             ? "Plex photos: Plex is turned off (Settings > Networking > Plex)"
+                                             : "Plex photos: choose a server (Settings > Networking > Plex)",
+                                             "", "", IT_TEXT)))
+            it->flags |= ITEM_DISABLED;
         return 0;
+    }
     amce_strlcpy(lines, plex_photo_libs(), sizeof(lines));
     for (l = lines; *l && n < 6; l = e) {
         e = strchr(l, '\n');
@@ -8243,6 +8264,12 @@ static int pictures_plex_rows(struct Page *p)
         amce_strlcpy(keys[n], l, sizeof(keys[n]));
         amce_strlcpy(titles[n], t, sizeof(titles[n]));
         n++;
+    }
+    {
+        char m[120];
+        sprintf(m, "%ld photo librar%s known on %.60s", (long)n, n == 1 ? "y" : "ies",
+                plex.name[0] ? plex.name : plex.host);
+        amce_log("pictures: Plex rows", m);
     }
     if (!n) {
         sprintf(label, "Plex photos on %.80s", plex.name[0] ? plex.name : plex.host);
@@ -9850,6 +9877,11 @@ static void handle_mouse(struct IntuiMessage *im)
                 BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
                                 it->kind == IT_SONG || it->kind == IT_PLEXPHOTO ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
+                if (dbl && debug_on) {
+                    char m[140];
+                    sprintf(m, "%.100s (kind %ld)", it->label, (long)it->kind);
+                    amce_log("click: double", m);
+                }
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);
                     it = &p->list.items[idx];

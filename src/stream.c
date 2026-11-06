@@ -280,8 +280,11 @@ static void paula_stop(void)
 /* ---------------------------------------------------------- the network */
 static void fail(const char *why)
 {
-    if (!st.err[0])
+    if (!st.err[0]) {
         amce_strlcpy(st.err, why, sizeof(st.err));
+        if (st.local)
+            amce_log("track: not played", why);     /* a file here: why, for the log */
+    }
     st.state = ST_FAILED;
 }
 
