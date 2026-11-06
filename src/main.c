@@ -494,10 +494,13 @@ static void busy_tick(void)
  * cover), or "" when that part of the pane was cleared. */
 static char plex_shown[260];
 
+static BOOL busy_was_shown;         /* the last busy_end took a spinner off the screen */
+
 static void busy_end(BOOL redraw)
 {
     if (busy.depth && --busy.depth == 0 && busy.on) {
         busy.on = FALSE;
+        busy_was_shown = TRUE;
         plex_shown[0] = 0;                  /* the spinner may have been over them */
         if (redraw && g.win && cur())
             draw_pane(TRUE);                /* where the spinner was */
@@ -5256,6 +5259,16 @@ static int np_slider_vol(WORD x)
     return v < 0 ? 0 : v > 64 ? 64 : (int)v;
 }
 
+/* The meters' rows the page is laid out for: a stream's two always (a
+ * mono one's single meter in the first, the second left empty), so it
+ * does not change size when the sound turns out mono or stereo. */
+static int np_meter_rows(void)
+{
+    if (!mp_loaded())
+        return 4;
+    return mp_is_stream() ? 2 : mp_meter_count();
+}
+
 static void np_layout(void)
 {
     WORD row = g.font_h + U(3), gap = U(3), vt, i, avail;
@@ -5269,7 +5282,7 @@ static void np_layout(void)
     np.meter_y = np.info_y + row + U(6);
     np.meter_h = g.font_h + U(2);
     np.name_w = np.w * 2 / 5;
-    np.rows = mp_loaded() ? mp_meter_count() : 4;
+    np.rows = np_meter_rows();
     np.time_y = np.meter_y + np.rows * (np.meter_h + U(2)) + U(4);
     np.prog_h = U(4) > 2 ? U(4) : 2;
     np.prog_y = np.time_y + (g.font_h - np.prog_h) / 2;
@@ -5757,7 +5770,7 @@ controls:
 static void np_update(void)
 {
     BOOL was;
-    if (np.w && mp_loaded() && mp_meter_count() != np.rows) {
+    if (np.w && mp_loaded() && np_meter_rows() != np.rows) {
         /* the sound has more or fewer channels than the page was laid out
          * for (a station found to be mono): laid out again, as tall as needed */
         np_draw(TRUE);
@@ -5839,6 +5852,7 @@ static BOOL np_start(LONG idx)
 {
     BOOL ok;
     np.seeked = FALSE;                      /* a new track, from its start */
+    busy_was_shown = FALSE;
     ok = np_start_now(idx);
     if (!ok && msg[0] && np.list.pool && idx >= 0 && idx < np.list.count) {
         char m[220];
@@ -5848,6 +5862,8 @@ static BOOL np_start(LONG idx)
     return ok;
 }
 
+/* A track or station started; drawn by the caller, once (the page it is
+ * on, or Now Playing opening over it): nothing drawn here in between. */
 static BOOL np_start_now(LONG idx)
 {
     char err[100];
@@ -5860,7 +5876,7 @@ static BOOL np_start_now(LONG idx)
         char url[256];
         radio_field(it, 0, url, sizeof(url));
         if (!mp_load_stream(url, it->label, it->sortkey, caps.cpu, err, sizeof(err))) {
-            busy_end(TRUE);
+            busy_end(FALSE);
             np.idx = idx;
             set_msg(err);
             return FALSE;
@@ -5869,7 +5885,7 @@ static BOOL np_start_now(LONG idx)
         char url[2048], by[200], album[100], ms[16];
         BOOL ok_track;
         if (it->flags & ITEM_DISABLED) {
-            busy_end(TRUE);
+            busy_end(FALSE);
             np.idx = idx;
             set_msg(plex_why(it));
             return FALSE;
@@ -5917,7 +5933,7 @@ static BOOL np_start_now(LONG idx)
                                      sizeof(err));
         }
         if (!ok_track) {
-            busy_end(TRUE);
+            busy_end(FALSE);
             np.idx = idx;
             set_msg(err);
             return FALSE;
@@ -5941,7 +5957,7 @@ static BOOL np_start_now(LONG idx)
         if (!mp_load_track(it->path, si.title[0] ? si.title : it->label, by,
                            song_format(it->path), 0, plex_decoder_cpu(), 0, 0, err,
                            sizeof(err))) {
-            busy_end(TRUE);
+            busy_end(FALSE);
             np.idx = idx;
             set_msg(err);
             return FALSE;
@@ -5960,22 +5976,22 @@ static BOOL np_start_now(LONG idx)
                 np_art_drawn = TRUE;        /* the pane's: moved across */
         }
     } else if (!mp_load(it->path, err, sizeof(err))) {
-        busy_end(TRUE);
+        busy_end(FALSE);
         np.idx = idx;
         set_msg(err);
-        np_mark_lists(TRUE);
+        np_mark_lists(FALSE);
         return FALSE;
     }
-    busy_end(TRUE);
+    busy_end(FALSE);
     np.idx = idx;
     np.ended_seen = FALSE;
     np.seek_due = 0;
     if (!mp_play(err, sizeof(err))) {
         set_msg(err);
-        np_mark_lists(TRUE);
+        np_mark_lists(FALSE);
         return FALSE;
     }
-    np_mark_lists(TRUE);
+    np_mark_lists(FALSE);
     return TRUE;
 }
 
@@ -5989,11 +6005,15 @@ static BOOL np_skip(int d)
     BOOL was_track = mp_is_track();
     for (i = np.idx + d, tries = 0; i >= 0 && i < np.list.count && tries < 8; i += d, tries++)
         if (np_start(i)) {
-            if (np_on() && was_track && mp_is_track() && np.w)
+            if (np_on() && was_track && mp_is_track() && np.w && !busy_was_shown)
                 np_soft_redraw();           /* track to track: what changed, over itself */
             else if (np_on()) {
                 draw_pane(TRUE);
                 draw_footer();
+            } else {
+                np_mark_lists(TRUE);        /* the list on screen: its playing mark moves */
+                if (busy_was_shown)
+                    draw_pane(TRUE);        /* where the spinner was */
             }
             return TRUE;
         }
@@ -6151,8 +6171,10 @@ static void np_press(int b)
         break;
     case NB_PLAY:
         if (!mp_loaded()) {
-            if (np.idx >= 0)
-                np_start(np.idx);
+            if (np.idx >= 0 && np_start(np.idx) && np_on()) {
+                draw_pane(TRUE);            /* stopped, started again: the page as it plays */
+                draw_footer();
+            }
         } else if (mp_playing()) {
             mp_pause(TRUE);
         } else if (mp_paused()) {
@@ -6217,10 +6239,15 @@ static void mods_play_item(struct Page *p)
     }
     if (np.idx < 0)
         return;
-    if (np_start(np.idx))
-        np_open_page();
-    else {
-        draw_list_rows(p);
+    if (np_start(np.idx)) {
+        if (np_on()) {
+            draw_pane(TRUE);                /* started from Now Playing's own list */
+            draw_footer();
+        } else {
+            np_open_page();                 /* the one drawing: the list is not again */
+        }
+    } else {
+        draw_pane(TRUE);                    /* its marks, and where a spinner was */
         draw_footer();
     }
 }

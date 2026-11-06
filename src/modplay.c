@@ -1408,7 +1408,8 @@ int mp_meter_count(void)
     if (mp.engine == ENG_RADIO) {
         int c = st_channels();
         if (!c)                             /* not decoding yet: what it will be */
-            c = mp.rcpu < 40 ? 1 : 2;       /*   (a 68030's decoder makes mono) */
+            c = mp.rcpu < 40 && !(st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3")))
+                ? 1 : 2;                    /*   (a 68030's decoder makes mono; MHI not) */
         return c == 1 ? 1 : 2;
     }
     return 4;

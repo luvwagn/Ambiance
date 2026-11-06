@@ -1489,6 +1489,137 @@ static void mp3_first_frame(LONG *kbps, LONG *ch)
     }
 }
 
+/* MHI's meters: no samples come back from an MHI driver, so the levels
+ * are read off the MP3 itself as it is queued: each Layer III granule's
+ * global gain (how loud it is, near enough), kept by frame, and shown
+ * when that frame plays by the clock since playing began. */
+#define MH_RING 4096
+static struct {
+    UBYTE l[MH_RING], r[MH_RING];
+    volatile ULONG frames;          /* frames read */
+    UBYTE hdr[48];
+    int hlen;
+    LONG skip;                      /* the rest of the frame (its main data) */
+    ULONG spf, rate;
+    volatile ULONG t0, paused_ms, pause_at;     /* t0: playing since (0 not yet) */
+} mh;
+
+static ULONG mh_bits(const UBYTE *b, ULONG *pos, int n)
+{
+    ULONG v = 0;
+    while (n--) {
+        v = v << 1 | ((b[*pos >> 3] >> (7 - (*pos & 7))) & 1);
+        (*pos)++;
+    }
+    return v;
+}
+
+/* A granule's gain as a meter's level (0-128): 0 for silence. Measured
+ * (LAME, 128 kbit/s): a full scale sine near 132, each 6 dB down about 4
+ * less; 40 steps (some 60 dB) span the meter. */
+static UBYTE mh_level(ULONG gain, ULONG big)
+{
+    LONG v;
+    if (!big)
+        return 0;
+    v = 128 + ((LONG)gain - 134) * 128 / 40;
+    return (UBYTE)(v < 0 ? 0 : v > 128 ? 128 : v);
+}
+
+static void mh_scan(const UBYTE *b, LONG n)
+{
+    static const UWORD br[2][16] = {
+        { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 },
+        { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 } };
+    static const UWORD sr[3] = { 44100, 48000, 32000 };
+    LONG i = 0;
+    while (i < n) {
+        UBYTE *h = mh.hdr, ver, bri, sri, mono;
+        LONG need, flen;
+        ULONG rate, kbps, pos;
+        UBYTE lv[2] = { 0, 0 };
+        int gr, ch, ngr, nch;
+        if (mh.skip > 0) {
+            LONG k = mh.skip < n - i ? mh.skip : n - i;
+            i += k;
+            mh.skip -= k;
+            continue;
+        }
+        h[mh.hlen++] = b[i++];
+        if (mh.hlen < 4)
+            continue;
+        ver = (h[1] >> 3) & 3;
+        bri = h[2] >> 4;
+        sri = (h[2] >> 2) & 3;
+        if (h[0] != 0xFF || (h[1] & 0xE0) != 0xE0 || ver == 1 || ((h[1] >> 1) & 3) != 1 ||
+            !bri || bri == 15 || sri == 3) {
+            memmove(h, h + 1, --mh.hlen);   /* not a frame's start: on a byte */
+            continue;
+        }
+        mono = (h[3] >> 6) == 3;
+        need = 4 + ((h[1] & 1) ? 0 : 2) + (ver == 3 ? (mono ? 17 : 32) : (mono ? 9 : 17));
+        if (mh.hlen < need)
+            continue;
+        rate = sr[sri] >> (ver == 3 ? 0 : ver == 2 ? 1 : 2);
+        kbps = br[ver == 3 ? 0 : 1][bri];
+        flen = (LONG)((ver == 3 ? 144000UL : 72000UL) * kbps / rate) + ((h[2] >> 1) & 1);
+        /* the side information: each granule's and channel's gain */
+        pos = (ULONG)(4 + ((h[1] & 1) ? 0 : 2)) * 8;
+        nch = mono ? 1 : 2;
+        ngr = ver == 3 ? 2 : 1;
+        if (ver == 3)
+            pos += 9 + (mono ? 5 : 3) + 4 * nch;
+        else
+            pos += 8 + (mono ? 1 : 2);
+        for (gr = 0; gr < ngr; gr++)
+            for (ch = 0; ch < nch; ch++) {
+                ULONG p23 = mh_bits(h, &pos, 12), big = mh_bits(h, &pos, 9);
+                ULONG gain = mh_bits(h, &pos, 8);
+                UBYTE l = mh_level(gain, big | p23);
+                pos += ver == 3 ? 30 : 34;
+                if (l > lv[ch])
+                    lv[ch] = l;
+            }
+        if ((h[3] >> 6) == 1 && (h[3] & 0x20)) {
+            /* mid and side, not left and right: both meters the louder */
+            if (lv[1] > lv[0])
+                lv[0] = lv[1];
+            lv[1] = lv[0];
+        }
+        mh.l[mh.frames & (MH_RING - 1)] = lv[0];
+        mh.r[mh.frames & (MH_RING - 1)] = mono ? lv[0] : lv[1];
+        mh.frames++;
+        mh.rate = rate;
+        mh.spf = ver == 3 ? 1152 : 576;
+        mh.skip = flen > need ? flen - need : 0;
+        mh.hlen = 0;
+    }
+}
+
+/* The levels of the frame playing now (the UI's, for its meters). */
+static void mh_peaks(UBYTE *l, UBYTE *r)
+{
+    ULONG now = time_ms(), ms, f, k;
+    UBYTE a = 0, c = 0;
+    if (!mh.t0 || !mh.frames || !mh.rate || !mh.spf) {
+        *l = *r = 0;
+        return;
+    }
+    ms = (mh.pause_at ? mh.pause_at : now) - mh.t0 - mh.paused_ms;
+    f = (ms / 1000) * mh.rate / mh.spf + (ms % 1000) * mh.rate / (1000 * mh.spf);
+    if (f >= mh.frames)
+        f = mh.frames - 1;
+    for (k = 0; k < 3 && k <= f; k++) {     /* the last few: a meter, not a flicker */
+        UBYTE x = mh.l[(f - k) & (MH_RING - 1)], y = mh.r[(f - k) & (MH_RING - 1)];
+        if (x > a)
+            a = x;
+        if (y > c)
+            c = y;
+    }
+    *l = a;
+    *r = c;
+}
+
 static void mhi_play(LONG freq)
 {
     UBYTE *buf[MHI_BUFS];
@@ -1530,6 +1661,7 @@ static void mhi_play(LONG freq)
                 (const char *)FilePart((STRPTR)mhi_driver));
         amce_log(st.finite ? "track" : "radio", m);
     }
+    memset(&mh, 0, sizeof(mh));
     st.state = ST_BUFFERING;
     while (!st.quit) {
         APTR e;
@@ -1558,6 +1690,7 @@ static void mhi_play(LONG freq)
                 break;
             }
             len[i] = n;
+            mh_scan(buf[i], n);             /* its levels, for the meters */
             MHIQueueBuffer(h, buf[i], n);
             queued[i] = TRUE;
             nq++;
@@ -1572,16 +1705,22 @@ static void mhi_play(LONG freq)
         }
         if (!playing && nq && (nq == MHI_BUFS || ended)) {
             MHIPlay(h);
+            mh.t0 = time_ms();
             playing = TRUE;
             st.started = TRUE;
             st.state = ST_PLAYING;
         }
         if (playing && st.paused != paused) {
             paused = st.paused;
-            if (paused)
+            if (paused) {
                 MHIPause(h);
-            else
+                mh.pause_at = time_ms();
+            } else {
                 MHIPlay(h);
+                if (mh.pause_at)
+                    mh.paused_ms += time_ms() - mh.pause_at;
+                mh.pause_at = 0;
+            }
         }
         status = MHIGetStatus(h);
         if (playing && status == MHIF_OUT_OF_DATA) {
@@ -1921,6 +2060,12 @@ void st_info(struct StInfo *i)
     i->avg_kbps = st_avg_kbps();
     i->ahi = st.ahi;
     i->mhi = st.mhi;
+    if (st.mhi && st.started) {
+        UBYTE l, r;
+        mh_peaks(&l, &r);                   /* read off the MP3: none come back */
+        st.peak_l = l;
+        st.peak_r = r;
+    }
     i->peak_l = st.peak_l;
     i->peak_r = st.peak_r;
     st.peak_l = st.peak_l * 3 / 4;
