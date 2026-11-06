@@ -137,8 +137,17 @@ static void scan_dir(const char *dir)
                 if (fib->fib_DirEntryType <= 0)
                     continue;
                 sprintf(path, "%s/%.40s/AmigaMCE.catalog", dir, (char *)fib->fib_FileName);
-                if (!cat_language(path, lang))
+                if (!cat_language(path, lang)) {
+                    /* say what the drawer is called, byte by byte where not
+                     * ASCII (a host folder can name it otherwise) */
+                    char m[160], *o = m;
+                    const UBYTE *q = (const UBYTE *)fib->fib_FileName;
+                    for (; *q && o < m + 100; q++)
+                        o += *q < 0x80 ? sprintf(o, "%c", *q) : sprintf(o, "<%02lx>", (unsigned long)*q);
+                    strcpy(o, ": no catalog read from it");
+                    amce_log("language drawer", m);
                     continue;
+                }
                 for (i = 0; i < ncats && amce_stricmp(cats[i].lang, lang); i++)
                     ;
                 if (i < ncats)
