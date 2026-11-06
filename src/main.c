@@ -2985,6 +2985,8 @@ static void scr_watch(void)
     struct Page *p = cur();
     ULONG rgb[3 * 8];
     int i;
+    if (!amce_log_path())
+        return;                         /* no log: none of this work (pixels read back) */
     cols[0] = 0;
     if (g.scr) {
         GetRGB32(g.scr->ViewPort.ColorMap, 0, 8, rgb);
