@@ -323,3 +323,22 @@ const char *amce_lang_now(void)
 {
     return cat_n ? cat_lang : "";
 }
+
+/* The language shown, as an ISO 639-1 code ("de"): for servers that can
+ * answer in it (Plex's X-Plex-Language). */
+const char *amce_lang_iso(void)
+{
+    static const struct { const char *name, *iso; } map[] = {
+        { "deutsch", "de" }, { "fran\347ais", "fr" }, { "italiano", "it" },
+        { "espa\361ol", "es" }, { "svenska", "sv" }, { "suomi", "fi" }, { "dansk", "da" },
+        { "norsk", "nb" }, { "nederlands", "nl" }, { "portugu\352s", "pt" },
+        { "polski", "pl" }, { "nihongo", "ja" }, { "japanese", "ja" },
+    };
+    unsigned i;
+    if (!cat_n)
+        return "en";
+    for (i = 0; i < sizeof(map) / sizeof(map[0]); i++)
+        if (!amce_stricmp(cat_lang, map[i].name))
+            return map[i].iso;
+    return "en";
+}

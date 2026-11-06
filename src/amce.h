@@ -170,6 +170,7 @@ void amce_lang_open(const char *lang);
 void amce_lang_close(void);
 void amce_lang_quit(void);
 const char *amce_lang_now(void);
+const char *amce_lang_iso(void);
 
 /* cjk.c: Japanese, Chinese and Korean text, kept in strings as three bytes
  * a character (see there), drawn from glyph packs or shown as a tag */

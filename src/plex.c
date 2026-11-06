@@ -190,6 +190,9 @@ void plex_request_from(const char *key, LONG start, char *out, LONG max)
     amce_strlcat(out, "X-Plex-Product=AmigaMCE&X-Plex-Version=" AMCE_VERSION
                       "&X-Plex-Platform=AmigaOS&X-Plex-Client-Identifier=", max);
     amce_strlcat(out, plex.cid, max);
+    /* the language AmigaMCE shows: what the server makes itself, in it */
+    amce_strlcat(out, "&X-Plex-Language=", max);
+    amce_strlcat(out, amce_lang_iso(), max);
     if (plex.token[0]) {
         amce_strlcat(out, "&X-Plex-Token=", max);
         amce_strlcat(out, plex.token, max);
