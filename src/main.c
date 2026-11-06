@@ -5080,8 +5080,10 @@ static void np_button(int i)
     /* the glyph: an odd number of rows, about half the button, so each
      * triangle has a one-row tip; everything else measured from it */
     gh = (h * 3 / 5) | 1;
-    if (gh < 7)
-        gh = 7;
+    if (h <= 16)
+        gh = (h / 2) | 1;                   /* small (lowres): more room round it */
+    if (gh < (h <= 16 ? 5 : 7))
+        gh = h <= 16 ? 5 : 7;
     tw = (gh + 1) / 2 * sx;                 /* a triangle's width */
     t = gh / 5 > 2 ? gh / 5 : 2;            /* a bar's thickness, in rows */
     cx = x + w / 2;
@@ -5090,6 +5092,8 @@ static void np_button(int i)
     /* the button: rounded by about a fifth of its height; the focus ring
      * (yellow) is its outer t rows, the face inside it */
     ry = h / 5 > 2 ? h / 5 : 2;
+    if (h <= 16)
+        ry = 1;                             /* small: its corners' one pixel off, not steps */
     if (tall)
         ry = ry / 2 > 1 ? ry / 2 : 1;
     rx = tall ? ry * 2 : ry;
