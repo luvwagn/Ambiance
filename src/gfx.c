@@ -68,6 +68,9 @@ static void layout_metrics(struct Gfx *g)
 
 /* Icon at 3, label at 23, then a margin of 6 after the longest label,
  * measured in the menu's own face. */
+static UWORD menu_wide_w;       /* the column with its labels */
+static BOOL menu_narrow;        /* icons alone (gfx_menu_narrow) */
+
 static void fit_menu(struct Gfx *g)
 {
     WORD longest = 0, w;
@@ -76,13 +79,34 @@ static void fit_menu(struct Gfx *g)
         if ((w = gfx_textlen(g, _(menu_labels[i]), TS_BOLD)) > longest)
             longest = w;
     if (longest)
-        set_menu_w(g, GU(g, 23) + longest + GU(g, 6));
+        menu_wide_w = GU(g, 23) + longest + GU(g, 6);
+    else
+        menu_wide_w = g->menu_w;
+    set_menu_w(g, menu_narrow ? GU(g, 22) : menu_wide_w);
 }
 
 /* The menu column fitted again (its labels' language changed). */
 void gfx_menu_refit(struct Gfx *g)
 {
     fit_menu(g);
+}
+
+/* The menu column as icons alone (narrow), or with its labels: TRUE if
+ * that changed it (the caller lays out and draws everything again). */
+BOOL gfx_menu_narrow(struct Gfx *g, BOOL narrow)
+{
+    if (narrow == menu_narrow || !menu_wide_w)
+        return FALSE;
+    menu_narrow = narrow;
+    set_menu_w(g, narrow ? GU(g, 22) : menu_wide_w);
+    return TRUE;
+}
+
+/* The pane's width with the menu's labels shown: text is wrapped to it,
+ * so it still fits when the column widens again. */
+WORD gfx_pane_w_wide(struct Gfx *g)
+{
+    return menu_wide_w ? g->w - (menu_wide_w + GU(g, 6)) - GU(g, 4) : g->pane_w;
 }
 
 static BOOL laced(const struct Gfx *g);
@@ -756,6 +780,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
 void gfx_close(struct Gfx *g)
 {
     int i;
+    menu_narrow = FALSE;                    /* a new screen starts with its labels */
     cjk_close();
     gfx_dbuf_stop(g);
     gfx_picture_free(g);

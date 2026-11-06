@@ -1193,7 +1193,9 @@ static void text_line(struct Page *p, const char *s)
 /* Text box width: the pane less room for the scroll bar (gap + bar + gap). */
 static WORD textbox_w(void)
 {
-    return g.pane_w - U(9);
+    /* wrapped to the pane beside the menu's labels: it fits either way */
+    WORD w = gfx_pane_w_wide(&g);
+    return (w < g.pane_w ? w : g.pane_w) - U(9);
 }
 
 /* Word-wrap a paragraph into l, maxw pixels wide. A Japanese, Chinese or
@@ -3118,8 +3120,9 @@ static void draw_menu_row(int i)
         SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
     gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
-    gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, _(mod_names[menu[i]]), fg, bg,
-             g.menu_w - U(24), TS_BOLD);
+    if (g.menu_w > U(30))                   /* not icons alone (menu_layout) */
+        gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, _(mod_names[menu[i]]), fg, bg,
+                 g.menu_w - U(24), TS_BOLD);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
 }
@@ -4699,6 +4702,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col);
 static void draw_menu_row(int i);
 static WORD mark_column(const struct Page *p);
 
+static BOOL menu_layout(void);
+
 /* Move the soft highlight: to screen row `row` of the list, or to main
  * menu entry `menu_i` (-1: neither). */
 static void hover_set(WORD row, WORD menu_i)
@@ -4709,7 +4714,7 @@ static void hover_set(WORD row, WORD menu_i)
         return;
     hover_row = row;
     hover_menu = menu_i;
-    if (pane_pending)
+    if (pane_pending || menu_layout())
         return;
     if (p && p->type == PT_LIST) {
         WORD col = mark_column(p);
@@ -7075,6 +7080,20 @@ static void menu_select(int i)
     menu_select_now(i, FALSE);
 }
 
+/* On a lowres screen (320 wide) the menu column is its icons alone while
+ * the content has the focus: lists, Now playing and the rest get its
+ * room. The labels come back with the focus, or the pointer, on the menu;
+ * the breadcrumb and the highlighted icon say where you are meanwhile.
+ * TRUE if the layout changed (everything was drawn again). */
+static BOOL menu_layout(void)
+{
+    BOOL narrow = g.w <= 320 && focus != FOCUS_MENU && hover_menu < 0 && depth > 0;
+    if (!g.win || !gfx_menu_narrow(&g, narrow))
+        return FALSE;
+    draw_all();
+    return TRUE;
+}
+
 static void set_focus(int f)
 {
     pane_settle();
@@ -7082,6 +7101,8 @@ static void set_focus(int f)
         return;
     focus = f;
     pv_tb.focused = f == FOCUS_PREVIEW;
+    if (menu_layout())
+        return;
     if (pv_tb.open) {
         pv_tb.thumb_y = -1;         /* repaint the thumb: brighter while focused */
         tb_refresh_bar(&g, &pv_tb);
@@ -11011,6 +11032,7 @@ static int app_main(void)
         ULONG sig;
         if (loader_due())
             preview_arrived();
+        menu_layout();                  /* the focus moved by another way: the column follows */
         if (busy) {
             sig = SetSignal(0, mask) & mask;
         } else {
