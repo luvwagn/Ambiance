@@ -919,7 +919,11 @@ BOOL mp_play(char *err, LONG errmax)
     mp.chk_first = TRUE;                    /* logged once whatever it finds */
     if (!vol_set)
         mp.master = 64;
-    if (!audio_open()) {
+    if (mp.engine == ENG_RADIO &&
+        (st_ahi() || (st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3"))))) {
+        /* through AHI, or MP3 by MHI: Paula's channels are theirs to take */
+        audio_close();
+    } else if (!audio_open()) {
         amce_strlcpy(err, "The audio channels are in use by another program", errmax);
         return FALSE;
     }

@@ -149,8 +149,9 @@ Settings
   General      Jump scrolling (very long lists step a letter at a time),
                Debug
   Screen       Screen mode, Style, Double buffering (RTG)
-  Sound        what plays the sound and decodes MP3 and FLAC (Paula,
-               mpega.library and flacdec.library in this version);
+  Sound        Paula, or AHI (16-bit) for radio, Plex and music files;
+               MP3 by mpega.library or an MHI driver (which decodes
+               and plays it itself); FLAC by flacdec.library;
                Music folders: the MUSIC: assign on or off, folders
                added (Add a folder...) or taken out (Fire twice)
   Networking   Radio: HTTPS stations, the highest bitrate listed, which
@@ -182,13 +183,14 @@ Not there yet
 -------------
 - Videos is on the menu but arrives in a later version.
 - HTTPS radio streams are listed (with AmiSSL) but do not play yet.
-- AHI and MHI are shown in Settings > Sound but not used yet.
+- Modules play on Paula only; AHI for them comes later.
 - Signing in through plex.tv needs HTTPS: the token is set by hand.
 
 
 History
 -------
 0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
+       AHI output and MHI MP3 decoding for radio, Plex and music files.
        Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
        assign and Music folders, with tags and covers; FLAC from Plex
        as stored (flacdec.library); 68020+.

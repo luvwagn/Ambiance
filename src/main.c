@@ -128,7 +128,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_SND_FLAC, ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1675,6 +1675,69 @@ static BOOL music_assign_there(void)
     return TRUE;
 }
 
+/* Settings > Sound: what streams play through (AHI, where installed). */
+#define SOUND_VAR "AmigaMCE/SoundOutput"
+static BOOL sound_ahi;
+
+/* MHI: its drivers (the libraries in LIBS:MHI), and the one MP3 goes to ("":
+ * mpega.library), AmigaMCE/MP3Decoder. */
+#define MP3_VAR "AmigaMCE/MP3Decoder"
+static char mhi_names[6][48];
+static int nmhi;
+static char mhi_sel[48];
+
+static void mhi_cb(void *ctx, const char *name, BOOL isdir)
+{
+    LONG n = strlen(name);
+    (void)ctx;
+    if (!isdir && nmhi < 6 && n > 8 && n < 48 && !amce_stricmp(name + n - 8, ".library"))
+        strcpy(mhi_names[nmhi++], name);
+}
+
+/* The MHI driver chosen, to stream.c (its path) and Plex (any quality). */
+static void mhi_apply(void)
+{
+    char path[80];
+    if (mhi_sel[0]) {
+        sprintf(path, "LIBS:MHI/%.48s", mhi_sel);
+        st_use_mhi(path);
+    } else {
+        st_use_mhi("");
+    }
+    plex.mhi = mhi_sel[0] != 0;
+}
+
+static void load_sound_out(void)
+{
+    char v[48];
+    int i;
+    sound_ahi = caps.ahi && GetVar((CONST_STRPTR)SOUND_VAR, (STRPTR)v, sizeof(v),
+                                   GVF_GLOBAL_ONLY) > 0 && !amce_stricmp(v, "ahi");
+    st_use_ahi(sound_ahi);
+    nmhi = 0;
+    mhi_sel[0] = 0;
+    if (caps.mp3_mhi) {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        me->pr_WindowPtr = (APTR)-1;
+        dir_scan("LIBS:MHI", mhi_cb, NULL);
+        me->pr_WindowPtr = old;
+    }
+    if (GetVar((CONST_STRPTR)MP3_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+        for (i = 0; i < nmhi; i++)
+            if (!amce_stricmp(v, mhi_names[i]))
+                amce_strlcpy(mhi_sel, mhi_names[i], sizeof(mhi_sel));
+    if (!caps.mp3_mpega && !mhi_sel[0] && nmhi)
+        amce_strlcpy(mhi_sel, mhi_names[0], sizeof(mhi_sel));  /* no mpega: MHI it is */
+    mhi_apply();
+    {
+        char m[160];
+        sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI", sound_ahi ? "AHI" : "Paula",
+                mhi_sel[0] ? mhi_sel : "mpega.library", (long)nmhi, nmhi == 1 ? "" : "s");
+        amce_log("sound", m);
+    }
+}
+
 static void load_net_if(void)
 {
     char buf[20];
@@ -1790,7 +1853,7 @@ static void build_settings(struct Page *p)
     p->setp = SETP_ROOT;
     action_item(p, "General", "", ACT_GENSET, MARK_ARROW);
     action_item(p, "Screen", gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
-    action_item(p, "Sound", caps.ahi ? "Paula (AHI later)" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, "Sound", sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
     action_item(p, "Networking", !caps.net ? "no TCP/IP stack" : net_if[0] ? net_if : "",
                 ACT_NETSET, MARK_ARROW);
 }
@@ -2033,7 +2096,7 @@ static void build_plex_settings(struct Page *p)
     /* the server's conversion: a choice only where the Amiga is fast enough
      * to decode the files as stored (plex_tier: how fast it really is, not
      * only its CPU); on others always on */
-    fast = plex_tier() >= 2;
+    fast = plex_tier() >= 2 || plex.mhi;   /* MHI decodes MP3, however fast the Amiga */
     if ((it = action_item(p, "Request lower quality audio", fast ? "" : "needed on this Amiga",
                           ACT_PLEXCONV, plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !fast)
@@ -2047,18 +2110,30 @@ static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
     p->setp = SETP_SOUND;
-    action_item(p, "Paula (audio.device)", "4 channels, up to 28 kHz", ACT_SND_PAULA,
-                MARK_RADIO_ON);
-    if ((it = action_item(p, "AHI", caps.ahi ? "installed: comes later" : "not installed",
-                          ACT_SND_AHI, MARK_RADIO_OFF)))
+    action_item(p, "Paula (audio.device)", "4 channels, up to 28 kHz, 8-bit", ACT_SND_PAULA,
+                sound_ahi ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    if ((it = action_item(p, "AHI: radio, Plex, music files",
+                          caps.ahi ? "16-bit, its Preferences' mode" : "not installed",
+                          ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
-    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? "" : "not installed",
-                          ACT_SND_MPEGA, caps.mp3_mpega ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? "decoded here" : "not installed",
+                          ACT_SND_MPEGA, !mhi_sel[0] && caps.mp3_mpega ? MARK_RADIO_ON
+                                                                     : MARK_RADIO_OFF)) &&
         !caps.mp3_mpega)
         it->flags |= ITEM_DISABLED;
-    if ((it = action_item(p, "MP3: MHI", caps.mp3_mhi ? "installed: comes later" : "not installed",
-                          ACT_SND_MHI, MARK_RADIO_OFF)))
-        it->flags |= ITEM_DISABLED;
+    {
+        /* MHI: each driver in LIBS:MHI, decoding (and playing) MP3 itself */
+        int i;
+        if (!nmhi && (it = action_item(p, "MP3: MHI", "not installed", ACT_SND_MHI,
+                                       MARK_RADIO_OFF)))
+            it->flags |= ITEM_DISABLED;
+        for (i = 0; i < nmhi; i++) {
+            char label[64];
+            sprintf(label, "MP3: MHI, %.40s", mhi_names[i]);
+            action_item(p, label, "decodes and plays", ACT_SND_MHI0 + i,
+                        !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        }
+    }
     /* FLAC: Plex's tracks as stored, where the Amiga is fast enough */
     if ((it = action_item(p, "FLAC: flacdec.library",
                           caps.flacdec ? "installed" : "not installed (Aminet: util/libs/flacdec)",
@@ -5165,6 +5240,9 @@ static void np_layout(void)
     }
     if (np.bw > U(26))
         np.bw = U(26);
+    /* no taller than wide (lowres's narrow buttons), but the icon's room */
+    if (np.bh > np.bw && !gfx_mode_tall(g.mode))
+        np.bh = np.bw > g.font_h + U(3) ? np.bw : g.font_h + U(3);
     for (i = 0; i <= NB_VDOWN; i++)
         np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_VDOWN ? gap * 2 : 0);
     {
@@ -5380,6 +5458,16 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
     np_pair(y, label, v);
 }
 
+/* How it plays: through Paula (8-bit) or AHI (16-bit), at what rate. */
+static void np_playback_line(WORD y, const struct StInfo *in)
+{
+    char v[64];
+    sprintf(v, "%s, %lu Hz %s", in->mhi ? "MHI (decoded and played by it)"
+                                : in->ahi ? "AHI 16-bit" : "Paula 8-bit",
+            (unsigned long)in->dec_freq, in->dec_channels == 1 ? "mono" : "stereo");
+    np_pair(y, "Playback", v);
+}
+
 /* A station's part of the page: what it is, and what is on air. Its
  * state and title change while it plays (connecting, buffering, a new
  * song), so it is drawn line by line over itself, never cleared first. */
@@ -5415,7 +5503,7 @@ static void np_draw_station(void)
             np_audio_line(y, "Format", mp_tag(), kbps, in.freq, in.channels);
         y += lh;
         if (mp_running() && in.dec_freq)
-            np_audio_line(y, "Playback", "", 0, in.dec_freq, in.dec_channels);
+            np_playback_line(y, &in);
         else
             np_pair(y, "Playback", "");
         y += lh;
@@ -5453,7 +5541,7 @@ static void np_draw_station(void)
             np_audio_line(y, "Plex", "MP3", in.avg_kbps, in.freq, in.channels);
         y += lh;
         if (mp_running() && in.dec_freq)
-            np_audio_line(y, "Playback", "", 0, in.dec_freq, in.dec_channels);
+            np_playback_line(y, &in);
         else
             np_pair(y, "Playback", "");
         y += lh;
@@ -9092,9 +9180,9 @@ static void act_action(struct Item *it)
         else if (it->action >= ACT_NIC0 && it->action <= ACT_NIC_END)
             set_msg("That interface is not up");
         else if (it->action == ACT_SND_AHI)
-            set_msg(caps.ahi ? "AHI: coming in a later version" : "AHI is not installed");
+            set_msg("AHI is not installed (DEVS:ahi.device)");
         else if (it->action == ACT_SND_MHI)
-            set_msg(caps.mp3_mhi ? "MHI: coming in a later version" : "MHI is not installed");
+            set_msg("MHI is not installed (its drivers in LIBS:MHI)");
         else if (it->action == ACT_SND_FLAC)
             set_msg(caps.flacdec ? "FLAC: music files, and Plex's tracks as stored on a fast Amiga"
                                  : "Install flacdec.library (Aminet: util/libs/flacdec) for FLAC");
@@ -9191,6 +9279,31 @@ static void act_action(struct Item *it)
         open_settings_page("Networking", build_net_settings);
     else if (it->action == ACT_PLEXSLIDES && cur())
         plex_photo_view(cur(), -1, TRUE);
+    else if (it->action == ACT_SND_MPEGA ||
+             (it->action >= ACT_SND_MHI0 && it->action <= ACT_SND_MHI_END)) {
+        const char *d = it->action == ACT_SND_MPEGA ? "" : mhi_names[it->action - ACT_SND_MHI0];
+        if (amce_stricmp(d, mhi_sel)) {
+            amce_strlcpy(mhi_sel, d, sizeof(mhi_sel));
+            save_setting(MP3_VAR, d[0] ? d : "mpega");
+            mhi_apply();
+            plex_settings_again(FALSE);
+        }
+        set_msg(d[0] ? "MP3 decoded by MHI: radio, Plex (at its best quality) and files"
+                     : "MP3 decoded here by mpega.library");
+    }
+    else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI) {
+        BOOL on = it->action == ACT_SND_AHI;
+        if (on != sound_ahi) {
+            sound_ahi = on;
+            st_use_ahi(on);
+            save_setting(SOUND_VAR, on ? "ahi" : "paula");
+            plex_settings_again(FALSE);
+        }
+        set_msg(on ? (mp_loaded() && mp_is_stream() && mp_running()
+                      ? "AHI from the next track or station on; modules stay on Paula"
+                      : "AHI: radio, Plex and music files; modules stay on Paula")
+                   : "Paula plays everything");
+    }
     else if (it->action == ACT_MUSICSET) {
         music_rm = -1;
         open_settings_page("Music folders", build_music_settings);
@@ -10265,6 +10378,7 @@ static int app_main(void)
     caps_detect(&caps);
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
+    load_sound_out();
     load_music_dirs();
     songs_can_play(caps.mp3_mpega, caps.flacdec);   /* what music lists show */
     load_net_if();                  /* after: the interface's address, toward the server */

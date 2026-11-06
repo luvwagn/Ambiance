@@ -94,8 +94,10 @@ of the Amiga to how fast it really is.
 | **For MP3 and FLAC** | mpega.library for MP3; [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060) |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AmiSSL to list HTTPS radio stations |
 
-AHI and MHI are detected and shown in Settings, but AmigaMCE plays through
-Paula for now.
+Radio, Plex and music files can play through AHI (16-bit, at AHI's own
+mode and rate) instead of Paula, and their MP3 can be decoded and played by
+an MHI driver instead of mpega.library: Settings > Sound. Modules play on
+Paula.
 
 ## Installing
 
@@ -138,7 +140,7 @@ playing.
 |---|---|
 | General | Jump scrolling (very long lists step a letter at a time), Debug |
 | Screen | Screen mode, Style (fonts and looks), Double buffering (RTG) |
-| Sound | What plays the sound and decodes MP3 and FLAC (Paula, mpega.library and flacdec.library for now); Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
+| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver; FLAC by flacdec.library; Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
 | Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
@@ -149,8 +151,7 @@ the program, which is the first thing to look at if something misbehaves.
 
 - Videos is on the menu but arrives in a later version.
 - HTTPS radio streams are listed (with AmiSSL) but do not play yet.
-- AHI and MHI output are planned; with AHI, other sample rates than Paula's
-  become possible.
+- Modules play on Paula only; AHI for them comes later.
 - Plex sign-in through plex.tv needs HTTPS, so the token is set by hand for
   now.
 

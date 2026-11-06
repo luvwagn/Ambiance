@@ -448,8 +448,14 @@ struct StInfo {
     ULONG buffer_ms, played_ms, underruns;
     ULONG avg_kbps;                 /* the bitrate on average (3 s on), 0 not yet */
     UBYTE peak_l, peak_r;
+    BOOL ahi;                       /* played through AHI, not Paula */
+    BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
 };
-void st_set_buffer(int level);      /* 0 short, 1 normal, 2 long: the next stream */
+void st_set_buffer(int level);
+void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */
+BOOL st_ahi(void);
+void st_use_mhi(const char *driver);       /* Settings > Sound: MP3 by MHI ("" mpega) */
+BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 ULONG st_length_ms(void);           /* a track's length as its stream says, 0 not known */
 ULONG st_size(void);                /* ...its size in bytes, 0 not known */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
@@ -737,6 +743,7 @@ struct PlexConf {
     BOOL on;                    /* Settings > Plex */
     UWORD cpu;                  /* caps.cpu (plex_load) */
     BOOL flac;                  /* flacdec.library installed: FLAC plays as stored too */
+    BOOL mhi;                   /* MP3 by an MHI driver: no decoding here, any quality */
     char library[16];           /* the music library used ("" not known yet) */
     UWORD libraries;            /*   of how many on the server */
 };

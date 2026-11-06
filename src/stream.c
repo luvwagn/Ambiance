@@ -40,9 +40,12 @@
 #include <dos/dostags.h>
 #include <dos/dosextens.h>
 #include <utility/hooks.h>
+#include <devices/ahi.h>
+#include <libraries/mhi.h>
 #include <inline/macros.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/mhi.h>
 #define SocketBase st_SocketBase
 #include <proto/bsdsocket.h>
 #include <sys/filio.h>
@@ -156,8 +159,8 @@ static struct {
     char name[64], genre[48], title[128];
     volatile ULONG title_seq;
     LONG bitrate, freq, channels, dec_freq, dec_channels;
-    /* the FIFO: decoded samples, 8-bit, left and right (mono: left only) */
-    BYTE *fl, *fr;
+    /* the FIFO: decoded samples, 16-bit, left and right (mono: left only) */
+    WORD *fl, *fr;
     ULONG fifo_n;                   /* their size (FIFO_N) */
     volatile ULONG f_in, f_out;     /* written, played (they run on) */
     volatile ULONG underruns;
@@ -185,7 +188,13 @@ static struct {
                                      * the server (its offset), else frames passed over */
     BOOL skipping;                  /* the server would not: passed over here */
     volatile BOOL eof;              /* a track's last byte read */
+    BOOL ahi;                       /* played through AHI (16-bit), not Paula */
+    BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
 } st;
+
+static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
+static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
+struct Library *MHIBase;            /* the MHI driver's (the radio process's, while it plays) */
 
 /* ---------------------------------------------------------- Paula */
 /* A half of Paula's buffer from the FIFO (the process, when woken). */
@@ -196,7 +205,8 @@ static void fill_half(int half)
     UBYTE pl = 0, pr = 0;
     BOOL stereo = st.dec_channels == 2;
     for (i = 0; i < n; i++, o++) {
-        BYTE a = st.fl[o & (FIFO_N - 1)], b = stereo ? st.fr[o & (FIFO_N - 1)] : a;
+        BYTE a = (BYTE)(st.fl[o & (FIFO_N - 1)] >> 8);
+        BYTE b = stereo ? (BYTE)(st.fr[o & (FIFO_N - 1)] >> 8) : a;
         UBYTE aa = (UBYTE)(a < 0 ? -a : a), bb = (UBYTE)(b < 0 ? -b : b);
         l[i] = a;
         r[i] = b;
@@ -277,6 +287,165 @@ static void paula_stop(void)
     st.started = FALSE;
 }
 
+/* ---------------------------------------------------------- AHI
+ * Settings > Sound > AHI: ahi.device's default unit (its mode and rate
+ * chosen in AHI's Preferences), fed 16-bit stereo, two requests linked so
+ * one plays while the other is filled (the process's port: its replies
+ * wake it as Paula's interrupt does). */
+#define AHI_FRAMES 4096
+static struct {
+    struct MsgPort *port;
+    struct AHIRequest *io[2];
+    WORD *buf[2];
+    BOOL busy[2], open;
+    BYTE old_sig;
+} ah;
+
+/* Request k filled from the FIFO (silence when paused or short), and sent
+ * to follow link. */
+static void ahi_send(int k, struct AHIRequest *link)
+{
+    WORD *b = ah.buf[k];
+    ULONG have = st.paused ? 0 : st.f_in - st.f_out, n = have < AHI_FRAMES ? have : AHI_FRAMES;
+    ULONG i, o = st.f_out;
+    UWORD pl = 0, pr = 0;
+    BOOL stereo = st.dec_channels == 2;
+    for (i = 0; i < n; i++, o++) {
+        WORD a = st.fl[o & (FIFO_N - 1)], c = stereo ? st.fr[o & (FIFO_N - 1)] : a;
+        UWORD aa = (UWORD)(a < 0 ? -a : a), cc = (UWORD)(c < 0 ? -c : c);
+        b[2 * i] = a;
+        b[2 * i + 1] = c;
+        if (aa > pl)
+            pl = aa;
+        if (cc > pr)
+            pr = cc;
+    }
+    for (; i < AHI_FRAMES; i++)
+        b[2 * i] = b[2 * i + 1] = 0;
+    if (n < AHI_FRAMES && !st.paused && st.state == ST_PLAYING)
+        st.underruns++;
+    st.f_out += n;
+    st.played += n;
+    if ((pl >> 8) > st.peak_l)
+        st.peak_l = (UBYTE)(pl >> 8);
+    if ((pr >> 8) > st.peak_r)
+        st.peak_r = (UBYTE)(pr >> 8);
+    ah.io[k]->ahir_Std.io_Command = CMD_WRITE;
+    ah.io[k]->ahir_Std.io_Data = b;
+    ah.io[k]->ahir_Std.io_Length = AHI_FRAMES * 4;
+    ah.io[k]->ahir_Std.io_Offset = 0;
+    ah.io[k]->ahir_Frequency = st.dec_freq ? (ULONG)st.dec_freq : 22050;
+    ah.io[k]->ahir_Type = AHIST_S16S;
+    ah.io[k]->ahir_Volume = (Fixed)(((ULONG)st.master << 16) / 64);
+    ah.io[k]->ahir_Position = 0x8000;
+    ah.io[k]->ahir_Link = link;
+    SendIO((struct IORequest *)ah.io[k]);
+    ah.busy[k] = TRUE;
+}
+
+/* A request back: refilled and sent after the one still playing. */
+static void ahi_serve(void)
+{
+    struct Message *m;
+    while ((m = GetMsg(ah.port))) {
+        int k = m == (struct Message *)ah.io[0] ? 0 : 1;
+        ah.busy[k] = FALSE;
+        if (st.started)
+            ahi_send(k, ah.busy[k ^ 1] ? ah.io[k ^ 1] : NULL);
+    }
+}
+
+static BOOL ahi_start(void)
+{
+    int k;
+    if (!(ah.port = CreateMsgPort()))
+        return FALSE;
+    ah.io[0] = (struct AHIRequest *)CreateIORequest(ah.port, sizeof(struct AHIRequest));
+    ah.io[1] = AllocVec(sizeof(struct AHIRequest), MEMF_ANY | MEMF_PUBLIC);
+    ah.buf[0] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC);
+    ah.buf[1] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC);
+    if (!ah.io[0] || !ah.io[1] || !ah.buf[0] || !ah.buf[1])
+        return FALSE;
+    ah.io[0]->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ah.io[0], 0))
+        return FALSE;
+    ah.open = TRUE;
+    CopyMem(ah.io[0], ah.io[1], sizeof(struct AHIRequest));
+    ah.old_sig = st.sig;
+    st.sig = (BYTE)ah.port->mp_SigBit;      /* its replies wake the process */
+    st.started = TRUE;
+    for (k = 0; k < 2; k++)
+        ahi_send(k, k ? ah.io[0] : NULL);
+    {
+        char m[80];
+        sprintf(m, "AHI's default unit, %ld Hz 16-bit %s", (long)ah.io[0]->ahir_Frequency,
+                st.dec_channels == 1 ? "mono" : "stereo");
+        amce_log("sound", m);
+    }
+    return TRUE;
+}
+
+static void ahi_stop(void)
+{
+    int k;
+    st.started = FALSE;
+    for (k = 0; k < 2; k++)
+        if (ah.busy[k]) {
+            AbortIO((struct IORequest *)ah.io[k]);
+            WaitIO((struct IORequest *)ah.io[k]);
+            ah.busy[k] = FALSE;
+        }
+    if (ah.open) {
+        CloseDevice((struct IORequest *)ah.io[0]);
+        ah.open = FALSE;
+        st.sig = ah.old_sig;
+    }
+    if (ah.io[1])
+        FreeVec(ah.io[1]);
+    if (ah.io[0])
+        DeleteIORequest((struct IORequest *)ah.io[0]);
+    for (k = 0; k < 2; k++)
+        if (ah.buf[k])
+            FreeVec(ah.buf[k]);
+    if (ah.port)
+        DeleteMsgPort(ah.port);
+    memset(&ah, 0, sizeof(ah));
+}
+
+/* The output: Paula's or AHI's, started once the prebuffer is in. */
+static void out_start(void)
+{
+    if (st.ahi) {
+        if (!ahi_start()) {
+            ahi_stop();
+            if (!st.err[0])
+                amce_strlcpy(st.err, "AHI could not be opened (its Preferences: a mode?)",
+                             sizeof(st.err));
+            st.state = ST_FAILED;
+            st.quit = TRUE;
+        }
+        return;
+    }
+    paula_start();
+}
+
+static void out_stop(void)
+{
+    if (st.ahi)
+        ahi_stop();
+    else if (st.started)
+        paula_stop();
+}
+
+/* The output wants more: Paula a half, AHI a request back. */
+static void out_take(void)
+{
+    if (st.ahi)
+        ahi_serve();
+    else
+        fill_half(st.want);
+}
+
 /* ---------------------------------------------------------- the network */
 static void fail(const char *why)
 {
@@ -291,8 +460,10 @@ static void fail(const char *why)
 /* Paula wants a half: given it now (from wherever the process waits). */
 static void serve(void)
 {
+    if (st.mhi)
+        return;                             /* MHI's buffers: taken back in mhi_play */
     if (st.started && (SetSignal(0, 1UL << st.sig) & (1UL << st.sig)))
-        fill_half(st.want);
+        out_take();
 }
 
 /* Until s can be read or written (1), timed out (0), stopping (-1); Paula
@@ -303,7 +474,7 @@ static int wait_sock(LONG s, BOOL wr, LONG secs)
     for (;;) {
         fd_set fs;
         struct timeval tv;
-        ULONG sigs = (1UL << st.sig) | SIGBREAKF_CTRL_C;
+        ULONG sigs = (st.mhi ? 0 : 1UL << st.sig) | SIGBREAKF_CTRL_C;
         LONG r;
         if (st.quit)
             return -1;
@@ -888,7 +1059,7 @@ static void decode_loop(MPEGA_STREAM *ms)
             /* full: wait for Paula to take some */
             ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
             if (got & (1UL << st.sig))
-                fill_half(st.want);
+                out_take();
             continue;
         }
         n = MPEGA_decode_frame(ms, pcm);
@@ -896,7 +1067,7 @@ static void decode_loop(MPEGA_STREAM *ms)
             if (st.eof) {
                 if (!st.started && st.f_in != st.f_out) {
                     st.state = ST_PLAYING;  /* shorter than the prebuffer: it plays now */
-                    paula_start();
+                    out_start();
                 }
                 break;                      /* a track's end: what is left plays out */
             }
@@ -907,14 +1078,14 @@ static void decode_loop(MPEGA_STREAM *ms)
         }
         o = st.f_in;
         for (i = 0; i < n; i++, o++) {
-            st.fl[o & (FIFO_N - 1)] = (BYTE)(pcm0[i] >> 8);
+            st.fl[o & (FIFO_N - 1)] = pcm0[i];
             if (st.dec_channels == 2)
-                st.fr[o & (FIFO_N - 1)] = (BYTE)(pcm1[i] >> 8);
+                st.fr[o & (FIFO_N - 1)] = pcm1[i];
         }
         st.f_in = o;
         if (!st.started && st.f_in - st.f_out >= prebuf) {
             st.state = ST_PLAYING;
-            paula_start();
+            out_start();
         }
     }
     /* what is left in the FIFO played out, unless stopping */
@@ -922,7 +1093,7 @@ static void decode_loop(MPEGA_STREAM *ms)
         ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
         if (got & SIGBREAKF_CTRL_C)
             break;
-        fill_half(st.want);
+        out_take();
     }
 }
 
@@ -1052,7 +1223,7 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
         if (st.f_in - st.f_out > FIFO_N - (ULONG)frames) {
             ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
             if (got & (1UL << st.sig))
-                fill_half(st.want);
+                out_take();
             continue;
         }
         n = rd(dec, buf, frames);
@@ -1063,7 +1234,7 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
             }
             if (!st.started && st.f_in != st.f_out) {
                 st.state = ST_PLAYING;      /* shorter than the prebuffer: it plays now */
-                paula_start();
+                out_start();
             }
             break;                          /* the end: what is left plays out */
         }
@@ -1075,10 +1246,10 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
             if (++acc_n < div)
                 continue;
             if (mono) {
-                st.fl[o & (FIFO_N - 1)] = (BYTE)(((acc_l + acc_r) / (2 * (LONG)div)) >> 8);
+                st.fl[o & (FIFO_N - 1)] = (WORD)((acc_l + acc_r) / (2 * (LONG)div));
             } else {
-                st.fl[o & (FIFO_N - 1)] = (BYTE)((acc_l / (LONG)div) >> 8);
-                st.fr[o & (FIFO_N - 1)] = (BYTE)((acc_r / (LONG)div) >> 8);
+                st.fl[o & (FIFO_N - 1)] = (WORD)(acc_l / (LONG)div);
+                st.fr[o & (FIFO_N - 1)] = (WORD)(acc_r / (LONG)div);
             }
             o++;
             acc_l = acc_r = 0;
@@ -1087,14 +1258,14 @@ static void pcm_loop(FrameFn rd, APTR dec, UWORD ch, UWORD div, BOOL mono)
         st.f_in = o;
         if (!st.started && st.f_in - st.f_out >= prebuf) {
             st.state = ST_PLAYING;
-            paula_start();
+            out_start();
         }
     }
     while (!st.quit && st.started && st.f_in != st.f_out) {
         ULONG got = Wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
         if (got & SIGBREAKF_CTRL_C)
             break;
-        fill_half(st.want);
+        out_take();
     }
 }
 
@@ -1106,7 +1277,7 @@ static void flac_play(void)
     APTR dec;
     UWORD div = 1;
     BOOL mono;
-    LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
+    LONG fmax = st.cpu >= 40 ? (st.ahi ? 48000 : 28000) : st.cpu >= 30 ? 24000 : 12000;
     if (!(FLACDecBase = OpenLibrary((CONST_STRPTR)"flacdec.library", 1))) {
         fail("flacdec.library is needed to play FLAC (Aminet: util/libs/flacdec)");
         return;
@@ -1209,7 +1380,7 @@ static void pcm_play(void)
     ULONG start;
     UWORD div = 1;
     BOOL mono;
-    LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 16000;
+    LONG fmax = st.cpu >= 40 ? (st.ahi ? 48000 : 28000) : st.cpu >= 30 ? 24000 : 16000;
     if (!st.fh) {
         fail("Only music files on this Amiga play as WAV, AIFF or 8SVX");
         return;
@@ -1259,6 +1430,161 @@ static void pcm_play(void)
     pcm_loop(pcm_frames, NULL, pf.channels, div, mono);
 }
 
+/* ---------------------------------------------------------- MHI
+ * MP3 given as it comes to an MHI driver (Settings > Sound), which
+ * decodes and plays it itself (in hardware, or the emulator's): buffers
+ * queued, taken back when played (its signal), queued again. */
+#define MHI_BUFS  8
+#define MHI_BUFSZ 16384
+
+/* An MP3 frame's bitrate and channels, from the first one in the buffer. */
+static void mp3_first_frame(LONG *kbps, LONG *ch)
+{
+    static const UWORD br[2][16] = {
+        { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 },
+        { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 } };
+    LONG i, lim = st.nb_len - st.nb_pos;
+    *kbps = *ch = 0;
+    for (i = 0; i + 3 < lim; i++) {
+        const UBYTE *b = st.nb + st.nb_pos + i;
+        UBYTE ver = (b[1] >> 3) & 3, layer = (b[1] >> 1) & 3, bri = b[2] >> 4, sri = (b[2] >> 2) & 3;
+        if (b[0] == 0xFF && (b[1] & 0xE0) == 0xE0 && ver != 1 && layer == 1 && bri != 15 &&
+            bri && sri != 3) {
+            *kbps = br[ver == 3 ? 0 : 1][bri];
+            *ch = (b[3] >> 6) == 3 ? 1 : 2;
+            return;
+        }
+    }
+}
+
+static void mhi_play(LONG freq)
+{
+    UBYTE *buf[MHI_BUFS];
+    LONG len[MHI_BUFS], kbps = 0, ch = 0;
+    BOOL queued[MHI_BUFS], playing = FALSE, paused = FALSE, ended = FALSE;
+    ULONG played_bytes = 0;
+    UWORD vol = 0xFFFF;
+    APTR h = NULL;
+    int i, nq = 0;
+    for (i = 0; i < MHI_BUFS; i++) {
+        buf[i] = NULL;
+        queued[i] = FALSE;
+    }
+    if (!(MHIBase = OpenLibrary((CONST_STRPTR)mhi_driver, 0))) {
+        fail("The MHI driver could not be opened (Settings > Sound)");
+        return;
+    }
+    if (!(h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig))) {
+        fail("The MHI driver's decoder is in use, or not there");
+        goto done;
+    }
+    for (i = 0; i < MHI_BUFS; i++)
+        if (!(buf[i] = AllocVec(MHI_BUFSZ, MEMF_PUBLIC))) {
+            fail("Not enough memory for MHI's buffers");
+            goto done;
+        }
+    mp3_first_frame(&kbps, &ch);
+    if (!st.bitrate)
+        st.bitrate = kbps;
+    st.freq = st.dec_freq = freq;
+    st.channels = st.dec_channels = ch ? ch : 2;
+    if (st.local && st.clen && st.bitrate > 0)
+        st.len_ms = (st.clen / (ULONG)st.bitrate) * 8;
+    {
+        char m[200];
+        sprintf(m, "%.60s: MP3 %ld kbit/s %ld Hz %s, decoded and played by %.60s",
+                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                (long)st.bitrate, (long)freq, ch == 1 ? "mono" : "stereo",
+                (const char *)FilePart((STRPTR)mhi_driver));
+        amce_log(st.finite ? "track" : "radio", m);
+    }
+    st.state = ST_BUFFERING;
+    while (!st.quit) {
+        APTR e;
+        UBYTE status;
+        /* the buffers played, back */
+        while ((e = MHIGetEmpty(h))) {
+            for (i = 0; i < MHI_BUFS; i++)
+                if (queued[i] && buf[i] == e) {
+                    queued[i] = FALSE;
+                    played_bytes += len[i];
+                    nq--;
+                }
+        }
+        if (st.bitrate > 0) {
+            ULONG ms = played_bytes / ((ULONG)st.bitrate) * 8;  /* bytes / (kbit/s / 8) */
+            st.played = (ms / 1000) * (ULONG)freq + (ms % 1000) * (ULONG)freq / 1000;
+        }
+        /* and filled again, from the stream */
+        for (i = 0; i < MHI_BUFS && !ended && !st.quit; i++) {
+            LONG n;
+            if (queued[i])
+                continue;
+            n = stream_read(buf[i], MHI_BUFSZ);
+            if (n <= 0) {
+                ended = TRUE;
+                break;
+            }
+            len[i] = n;
+            MHIQueueBuffer(h, buf[i], n);
+            queued[i] = TRUE;
+            nq++;
+        }
+        if (ended && st.err[0] && !st.eof && !st.finite) {
+            fail(st.err);
+            break;
+        }
+        if (st.master != vol) {
+            vol = st.master;
+            MHISetParam(h, MHIP_VOLUME, (ULONG)vol * 100 / 64);
+        }
+        if (!playing && nq && (nq == MHI_BUFS || ended)) {
+            MHIPlay(h);
+            playing = TRUE;
+            st.started = TRUE;
+            st.state = ST_PLAYING;
+        }
+        if (playing && st.paused != paused) {
+            paused = st.paused;
+            if (paused)
+                MHIPause(h);
+            else
+                MHIPlay(h);
+        }
+        status = MHIGetStatus(h);
+        if (playing && status == MHIF_OUT_OF_DATA) {
+            if (ended && !nq)
+                break;                      /* all of it played */
+            if (nq && !paused) {
+                st.underruns++;
+                MHIPlay(h);                 /* more came: on again */
+            }
+        }
+        if (ended && !nq)
+            break;
+        if (nq == MHI_BUFS || ended) {
+            /* all queued: till one is played (its signal), looked at a
+             * tenth of a second on in any case (pause, volume, its status) */
+            ULONG got = SetSignal(0, (1UL << st.sig) | SIGBREAKF_CTRL_C);
+            if (got & SIGBREAKF_CTRL_C)
+                break;
+            if (!(got & (1UL << st.sig)))
+                Delay(5);
+        }
+    }
+done:
+    if (h) {
+        MHIStop(h);
+        MHIFreeDecoder(h);
+    }
+    st.started = FALSE;
+    for (i = 0; i < MHI_BUFS; i++)
+        if (buf[i])
+            FreeVec(buf[i]);
+    CloseLibrary(MHIBase);
+    MHIBase = NULL;
+}
+
 static void radio_main(void)
 {
     MPEGA_STREAM *ms = NULL;
@@ -1289,6 +1615,21 @@ static void radio_main(void)
         pcm_play();                         /* WAV, AIFF, 8SVX: as stored */
         goto out;
     }
+    if (mhi_driver[0]) {
+        /* MP3 by the MHI driver: from the first frame (or the time asked) */
+        LONG f;
+        st.mhi = TRUE;
+        if (st.skipping && !skip_to()) {
+            fail(st.err[0] ? st.err : "The track ended before that time");
+            goto out;
+        }
+        if (!(f = first_frame_freq())) {
+            fail(st.err[0] ? st.err : "The stream does not look like MP3");
+            goto out;
+        }
+        mhi_play(f);
+        goto out;
+    }
     if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
         fail("mpega.library is needed to play MP3");
         goto out;
@@ -1303,9 +1644,10 @@ static void radio_main(void)
     memset(&ctrl, 0, sizeof(ctrl));
     ctrl.bs_access = &hook;
     {
-        /* what the CPU can decode in time, and never more than Paula plays */
+        /* what the CPU can decode in time, and never more than Paula plays
+         * (with AHI, a 68060 class Amiga: the whole rate) */
         WORD q = st.cpu >= 40 ? 1 : 0, mono = st.cpu < 40, div = 1;
-        LONG fmax = st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
+        LONG fmax = st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = first_frame_freq();
         MPEGA_LAYER *ls[2];
         int k;
@@ -1339,8 +1681,8 @@ static void radio_main(void)
         st.bitrate = ms->bitrate;
     if (st.local && st.clen && st.bitrate > 0)
         st.len_ms = (st.clen / (ULONG)st.bitrate) * 8;  /* bytes / (kbit/s / 8) = ms */
-    if (st.dec_freq > 28867 || st.dec_freq < 4000)
-        st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;
+    if (!st.ahi && (st.dec_freq > 28867 || st.dec_freq < 4000))
+        st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;  /* Paula's limit */
     {
         /* named by its station, else its URL without the query: a Plex
          * track's carries the sign-in token, which stays out of the log */
@@ -1356,8 +1698,7 @@ static void radio_main(void)
     }
     decode_loop(ms);
 out:
-    if (st.started)
-        paula_stop();
+    out_stop();
     if (ms)
         MPEGA_close(ms);
     if (st.sock >= 0)
@@ -1412,11 +1753,13 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.quit = st.started = st.paused = FALSE;
     st.master = master;
     st.sig = -1;
+    st.ahi = use_ahi;
+    st.mhi = FALSE;                         /* set when it is MP3, and MHI is chosen */
     amce_strlcpy(st.url, url, sizeof(st.url));
     st.fifo_n = fifo_sizes[buf_level];
     st.nb = AllocVec(NETBUF + 1, MEMF_ANY);
-    st.fl = AllocVec(FIFO_N, MEMF_ANY | MEMF_CLEAR);
-    st.fr = AllocVec(FIFO_N, MEMF_ANY | MEMF_CLEAR);
+    st.fl = AllocVec(FIFO_N * 2, MEMF_ANY | MEMF_CLEAR);
+    st.fr = AllocVec(FIFO_N * 2, MEMF_ANY | MEMF_CLEAR);
     st.chip = AllocMem(HALF * 4, MEMF_CHIP | MEMF_CLEAR);
     if (!st.nb || !st.fl || !st.fr || !st.chip) {
         st_stop();
@@ -1444,8 +1787,8 @@ void st_stop(void)
         while (st.proc)
             Delay(1);                       /* it stops within a fifth of a second */
     }
-    if (st.started)
-        paula_stop();
+    if (st.started && !st.ahi)
+        paula_stop();                       /* AHI's: the process's own, stopped there */
     if (st.chip) {
         Delay(1);                           /* Paula's last fetches from it done */
         FreeMem(st.chip, HALF * 4);
@@ -1465,10 +1808,33 @@ void st_stop(void)
     }
 }
 
+/* Settings > Sound: AHI or Paula, for streams started from now on. */
+void st_use_ahi(BOOL on)
+{
+    use_ahi = on;
+}
+
+BOOL st_ahi(void)
+{
+    return use_ahi;
+}
+
+/* Settings > Sound: MP3 decoded by this MHI driver (a library's path; ""
+ * mpega.library), for streams started from now on. */
+void st_use_mhi(const char *driver)
+{
+    amce_strlcpy(mhi_driver, driver ? driver : "", sizeof(mhi_driver));
+}
+
+BOOL st_mhi(void)
+{
+    return mhi_driver[0] != 0;
+}
+
 void st_pause(BOOL on)
 {
     st.paused = on;
-    if (st.started) {
+    if (st.started && !st.ahi) {
         CU->aud[0].ac_vol = on ? 0 : st.master;
         CU->aud[1].ac_vol = on ? 0 : st.master;
     }
@@ -1476,8 +1842,8 @@ void st_pause(BOOL on)
 
 void st_volume(int v)
 {
-    st.master = (UWORD)v;
-    if (st.started && !st.paused) {
+    st.master = (UWORD)v;                   /* AHI: its next requests */
+    if (st.started && !st.paused && !st.ahi) {
         CU->aud[0].ac_vol = st.master;
         CU->aud[1].ac_vol = st.master;
     }
@@ -1521,6 +1887,8 @@ void st_info(struct StInfo *i)
     i->played_ms = (st.played / rate) * 1000 + (st.played % rate) * 1000 / rate;
     i->underruns = st.underruns;
     i->avg_kbps = st_avg_kbps();
+    i->ahi = st.ahi;
+    i->mhi = st.mhi;
     i->peak_l = st.peak_l;
     i->peak_r = st.peak_r;
     st.peak_l = st.peak_l * 3 / 4;

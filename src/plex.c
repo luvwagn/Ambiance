@@ -283,6 +283,8 @@ BOOL plex_converts(const struct Item *it)
         return FALSE;
     if (amce_stricmp(codec, "mp3") && !(plex.flac && !amce_stricmp(codec, "flac")))
         return TRUE;                        /* MP3, and FLAC with flacdec.library, as stored */
+    if (plex.mhi && !amce_stricmp(codec, "mp3"))
+        return plex.convert;                /* MHI decodes it, however fast the Amiga */
     return plex.convert || plex_tier() < 2;     /* a slower Amiga: always converted */
 }
 
@@ -291,7 +293,7 @@ BOOL plex_converts(const struct Item *it)
 void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, LONG max)
 {
     char key[300], port[12], enc[400], n[160];
-    int tier = plex_tier();
+    int tier = plex.mhi ? 3 : plex_tier();  /* MHI: what its driver plays */
     BOOL mono = tier == 0;
     (void)cpu;
     sprintf(port, ":%lu", (unsigned long)plex.port);
@@ -305,7 +307,7 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
         amce_strlcat(out, enc, max);
         sprintf(n, "&mediaIndex=0&partIndex=0&protocol=http&directPlay=0&directStream=0"
                    "&hasMDE=1&download=0&musicBitrate=%ld",
-                (long)(tier == 0 ? 64 : tier == 1 ? 112 : 160));
+                (long)(tier == 0 ? 64 : tier == 1 ? 112 : tier == 2 ? 160 : 256));
         amce_strlcat(out, n, max);
         if (from_ms) {
             sprintf(n, "&offset=%lu", (unsigned long)(from_ms / 1000));    /* a seek */
@@ -326,7 +328,7 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
                           "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
                           "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D",
                     max);
-        amce_strlcat(out, mono ? "22050)" : "24000)", max);
+        amce_strlcat(out, mono ? "22050)" : tier >= 3 ? "48000)" : "24000)", max);
         if (mono)
             amce_strlcat(out, "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
                               "%26type%3DupperBound%26name%3Daudio.channels%26value%3D1)",
