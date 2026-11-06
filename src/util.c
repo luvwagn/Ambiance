@@ -4,6 +4,8 @@
  */
 #include "amce.h"
 
+#include <stdio.h>
+
 static UBYTE fold(UBYTE c)
 {
     if (c >= 'A' && c <= 'Z')
@@ -54,4 +56,20 @@ void amce_strlcat(char *d, const char *s, LONG n)
         n--;
     }
     amce_strlcpy(d, s, n);
+}
+
+/* A sample rate as kHz, its decimals only as many as it has: 44100
+ * "44.1kHz", 22050 "22.05kHz", 48000 "48kHz", 8363 "8.363kHz". */
+const char *fmt_khz(ULONG hz, char *out)
+{
+    ULONG k = hz / 1000, f = hz % 1000;
+    if (!f)
+        sprintf(out, "%lukHz", (unsigned long)k);
+    else if (!(f % 100))
+        sprintf(out, "%lu.%lukHz", (unsigned long)k, (unsigned long)(f / 100));
+    else if (!(f % 10))
+        sprintf(out, "%lu.%02lukHz", (unsigned long)k, (unsigned long)(f / 10));
+    else
+        sprintf(out, "%lu.%03lukHz", (unsigned long)k, (unsigned long)f);
+    return out;
 }

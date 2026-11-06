@@ -641,6 +641,7 @@ LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at f
 void  dbg_mem_baseline(void);
 ULONG dbg_mem_used(ULONG *chip);
 void amce_log(const char *what, const char *detail);
+const char *fmt_khz(ULONG hz, char *out);    /* "44.1kHz" (out: 16 bytes) */
 void amce_log_close(void);
 
 /* ---------------------------------------------------------------- index */

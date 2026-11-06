@@ -676,8 +676,10 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
     sprintf(t, "%s", si->fmt);
     if (si->kbps)
         sprintf(t + strlen(t), " %lukbps", (unsigned long)si->kbps);
-    if (si->rate)
-        sprintf(t + strlen(t), ", %luHz", (unsigned long)si->rate);
+    if (si->rate) {
+        char k[16];
+        sprintf(t + strlen(t), ", %s", fmt_khz(si->rate, k));
+    }
     if (si->channels)
         sprintf(t + strlen(t), " %s", si->channels == 1 ? "mono" : si->channels == 2 ? "stereo"
                                                                                    : "multi");

@@ -5507,7 +5507,8 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
         amce_strlcat(v, part, sizeof(v));
     }
     if (rate) {
-        sprintf(part, "%s%luHz", v[0] ? ", " : "", (unsigned long)rate);
+        char k[16];
+        sprintf(part, "%s%s", v[0] ? ", " : "", fmt_khz(rate, k));
         amce_strlcat(v, part, sizeof(v));
     }
     if (ch) {
@@ -5525,9 +5526,11 @@ static void np_playback_line(WORD y, const struct StInfo *in)
     amce_strlcpy(v, in->mhi ? "MHI (decoded and played by it)" : in->ahi ? "AHI 16-bit"
                                                                           : "Paula 8-bit",
                  sizeof(v));
-    if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels))
-        sprintf(v + strlen(v), ", %luHz %s", (unsigned long)in->dec_freq,
+    if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels)) {
+        char k[16];
+        sprintf(v + strlen(v), ", %s %s", fmt_khz(in->dec_freq, k),
                 in->dec_channels == 1 ? "mono" : "stereo");
+    }
     np_pair(y, "Playback", v);
 }
 
@@ -5642,10 +5645,11 @@ static void np_draw_station(void)
         y += lh;
     }
     if (in.dec_freq && y + lh <= bottom) {
-        sprintf(part, "MP3 %ldkbps, %ldHz %s", (long)in.bitrate, (long)in.freq,
+        char k[16];
+        sprintf(part, "MP3 %ldkbps, %s %s", (long)in.bitrate, fmt_khz(in.freq, k),
                 in.channels == 2 ? "stereo" : "mono");
         if (in.dec_freq != in.freq || in.dec_channels != in.channels)
-            sprintf(part + strlen(part), "; played at %ldHz %s", (long)in.dec_freq,
+            sprintf(part + strlen(part), "; played at %s %s", fmt_khz(in.dec_freq, k),
                     in.dec_channels == 2 ? "stereo" : "mono");
         amce_strlcat(part, in.mhi ? ", by MHI" : in.ahi ? ", AHI" : "", sizeof(part));
         np_line(y, part, PEN_DIM, TS_SMALL);

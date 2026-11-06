@@ -190,6 +190,7 @@ static struct {
     volatile BOOL eof;              /* a track's last byte read */
     BOOL ahi;                       /* played through AHI (16-bit), not Paula */
     BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
+    BOOL icy_br;                    /* the station said its bitrate (icy-br) */
 } st;
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
@@ -857,8 +858,10 @@ static BOOL open_stream(void)
             squeeze_spaces(v);
             amce_strlcpy(st.genre, v, sizeof(st.genre));
         }
-        if (header(hdr, "icy-br", v, sizeof(v)))
+        if (header(hdr, "icy-br", v, sizeof(v))) {
             st.bitrate = num(v);
+            st.icy_br = TRUE;
+        }
         st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? num(v) + st.range_from : 0;
         st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? num(v) : 0;
         st.meta_left = st.metaint;
@@ -1652,6 +1655,15 @@ static void mh_scan(const UBYTE *b, LONG n)
     }
 }
 
+/* How long the frames queued play (their count, not their bytes: the
+ * first frame's bitrate, an Info frame's, can be far from the rest's). */
+static ULONG mh_queued_ms(void)
+{
+    if (!mh.rate || !mh.spf)
+        return 0;
+    return (ULONG)((unsigned long long)mh.frames * mh.spf * 1000 / mh.rate);
+}
+
 /* How long MHI has played, by the clock (its pauses not counted). */
 static ULONG mh_ms(void)
 {
@@ -1756,6 +1768,15 @@ static void mhi_play(LONG freq)
             len[i] = n;
             mh_scan(buf[i], n);             /* its levels, for the meters */
             mh.bytes_in += n;
+            if (mh.frames >= 40 && !st.icy_br) {
+                /* its bitrate from what it is, not its first frame */
+                ULONG ms = mh_queued_ms();
+                if (ms >= 1000) {
+                    st.bitrate = (LONG)((mh.bytes_in / ms) * 8 + (mh.bytes_in % ms) * 8 / ms);
+                    if (st.local && st.clen && st.bitrate > 0)
+                        st.len_ms = (st.clen / (ULONG)st.bitrate) * 8;
+                }
+            }
             MHIQueueBuffer(h, buf[i], n);
             queued[i] = TRUE;
             nq++;
@@ -1990,6 +2011,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.master = master;
     st.sig = -1;
     st.ahi = use_ahi;
+    st.icy_br = FALSE;
     st.mhi = FALSE;                         /* set when it is MP3, and MHI is chosen */
     amce_strlcpy(st.url, url, sizeof(st.url));
     st.fifo_n = fifo_sizes[buf_level];
@@ -2125,9 +2147,9 @@ void st_info(struct StInfo *i)
     i->avg_kbps = st_avg_kbps();
     i->ahi = st.ahi;
     i->mhi = st.mhi;
-    if (st.mhi && st.started && st.bitrate > 0) {
+    if (st.mhi && st.started) {
         /* MHI: played by the clock, held: what is queued beyond that */
-        ULONG queued = (mh.bytes_in / (ULONG)st.bitrate) * 8, played = mh_ms();
+        ULONG queued = mh_queued_ms(), played = mh_ms();
         if (played > queued)
             played = queued;
         i->buffer_ms = queued - played;
