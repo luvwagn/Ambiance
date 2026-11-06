@@ -679,7 +679,37 @@ static BOOL drop_offset(char *url)
         memmove(o, e, strlen(e) + 1);
     else
         *o = 0;
+    /* another session too: the one refused is not asked for again */
+    for (o = url; (o = strstr(o, "=amce")); o += 5)
+        o[4] = 'r';
     return TRUE;
+}
+
+/* What a refusal says (its first line or so of text), for the log. */
+static void log_refusal(LONG status)
+{
+    char m[200];
+    LONG n = st.nb_len - st.nb_pos, i, k = 0;
+    while (n < 120 && st.nb_len < NETBUF - 1 && net_more())
+        n = st.nb_len - st.nb_pos;
+    for (i = 0; i < n && k < (LONG)sizeof(m) - 1; i++) {
+        char c = (char)st.nb[st.nb_pos + i];
+        if (c == '<') {                     /* tags out */
+            while (i < n && st.nb[st.nb_pos + i] != '>')
+                i++;
+            if (k && m[k - 1] != ' ')
+                m[k++] = ' ';
+            continue;
+        }
+        m[k++] = c < ' ' ? ' ' : c;
+    }
+    m[k] = 0;
+    squeeze_spaces(m);
+    {
+        char t[240];
+        sprintf(t, "%ld: %.200s", (long)status, m[0] ? m : "(nothing said)");
+        amce_log("track: refused", t);
+    }
 }
 
 /* Connected to the stream (redirects and playlists followed). */
@@ -753,6 +783,8 @@ static BOOL open_stream(void)
             amce_strlcpy(url, v, sizeof(url));
             continue;
         }
+        if (status >= 400 && st.finite)
+            log_refusal(status);
         if (status == 400 && st.skip_ms && !st.skipping && drop_offset(url)) {
             /* the server would not start its conversion part way in: from
              * the start, the frames before the time passed over here */

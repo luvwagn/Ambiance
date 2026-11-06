@@ -4983,6 +4983,7 @@ static struct {
     WORD bar_w, pos_y;                      /* the bar's width (the time right of it); the
                                              * position line, under the buttons */
     LONG seek_to;                           /* a track's seek waiting (ms, -1 none) */
+    BOOL seeked;                            /* the track started again part way (a seek) */
     ULONG seek_due;
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
@@ -5836,7 +5837,9 @@ static BOOL np_start_now(LONG idx);
 
 static BOOL np_start(LONG idx)
 {
-    BOOL ok = np_start_now(idx);
+    BOOL ok;
+    np.seeked = FALSE;                      /* a new track, from its start */
+    ok = np_start_now(idx);
     if (!ok && msg[0] && np.list.pool && idx >= 0 && idx < np.list.count) {
         char m[220];
         sprintf(m, "%.100s: %.100s", np.list.items[idx].label, msg);
@@ -6034,6 +6037,7 @@ static void np_seek_track(ULONG ms, ULONG delay)
         return;
     }
     np.seek_due = 0;
+    np.seeked = TRUE;                       /* failing, it stays: not the next track */
     it = &np.list.items[np.idx];
     if (it->kind == IT_SONG) {
         /* a file: FLAC finds the time itself; an MP3 from about its byte */
@@ -6351,6 +6355,18 @@ static void np_tick(void)
         if (failed) {
             amce_log("plex", why[0] ? why : "the track failed");
             set_msg(why[0] ? why : "That track could not be played");
+        }
+        if (failed && np.seeked) {
+            /* a seek the server would not do: the track stays, stopped,
+             * rather than the next one starting */
+            np.seeked = FALSE;
+            mp_stop();
+            np_mark_lists(TRUE);
+            set_msg(why[0] ? why : "The track could not be started there");
+            if (np_on())
+                np_redraw_all();
+            np.s_rstate = -2;
+            return;
         }
         if (!np_skip(1)) {
             mp_stop();
