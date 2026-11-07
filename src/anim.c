@@ -27,8 +27,12 @@
  * 2) on the right (2). Up and Down set its volume, scaling each sound's
  * own (with AHI from the sound's next start).
  *
+ * Move the mouse and the controls come up over the bottom of the picture
+ * (restart, play or pause, stop, volume, the time, how far it has got);
+ * they go again a moment after it stops, and stay while it is paused.
+ *
  * Keys: Esc, Backspace, the right button or the pad's blue stop it; Space,
- * Return, the left button or fire pause it; Up and Down (the stick, the
+ * Return, the left button (not on the controls) or fire pause it; Up and Down (the stick, the
  * wheel) set the volume of what plays meanwhile, a station or a module,
  * as on Now playing. A short one (under 8 s) plays
  * again until stopped; a longer one goes back to the list at its end.
@@ -560,18 +564,245 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
     }
 }
 
+/* ---- the controls, over the bottom of the picture while the mouse moves
+ * (and while paused): restart, play or pause, stop, volume down and up,
+ * the time and the length, and how far it has got. They are drawn into
+ * the frame's own buffer, in its darkest and lightest colours, and what
+ * they cover is kept (save[k]) and put back before the next frame is
+ * decoded into that buffer, as the deltas build on what was there. */
+#define BAR_HIDE 2500           /* ms after the mouse stops, playing */
+enum { BT_RESTART, BT_PLAY, BT_STOP, BT_VDOWN, BT_VUP, BT_N };
+static struct {
+    BOOL on, ok;                /* shown; it can be (its memory and font) */
+    BOOL saved[2];              /* buffer k has it drawn, what it covers in save[k] */
+    struct BitMap *save[2];
+    struct RastPort rp;
+    struct TextFont *font;
+    WORD x0, x1, y, h, cw;      /* its place; a button's width */
+    WORD px0, px1;              /* the progress line */
+    UBYTE bg, fg, dim;
+    ULONG moved;                /* the clock when the mouse last moved */
+    ULONG opened;               /* ...and when the window opened */
+    ULONG total_ms, at_ms;
+    BOOL paused;
+} bar;
+
+/* Its pens: the darkest and the lightest of the colours it may use (HAM:
+ * the base ones; extra halfbrite: the first 32), one between for lines. */
+static void bar_pens(const ULONG *tab, ULONG ncol, ULONG camg, UBYTE depth)
+{
+    ULONG i, n = ncol, lo = 0xFFFFFFFF, hi = 0, best = 0xFFFFFFFF, l[256];
+    if (camg & HAM_KEY)
+        n = depth == 8 ? 64 : 16;
+    if (n > 256)
+        n = 256;
+    for (i = 0; i < n; i++) {
+        ULONG r = tab[1 + i * 3] >> 24, g = tab[2 + i * 3] >> 24, b = tab[3 + i * 3] >> 24;
+        l[i] = r * 3 + g * 6 + b;
+        if (l[i] < lo) {
+            lo = l[i];
+            bar.bg = (UBYTE)i;
+        }
+        if (l[i] >= hi) {
+            hi = l[i];
+            bar.fg = (UBYTE)i;
+        }
+    }
+    bar.dim = bar.fg;
+    for (i = 0; i < n; i++) {
+        ULONG d = l[i] > (lo + hi) / 2 ? l[i] - (lo + hi) / 2 : (lo + hi) / 2 - l[i];
+        if (i != bar.bg && d < best) {
+            best = d;
+            bar.dim = (UBYTE)i;
+        }
+    }
+}
+
+static void bar_setup(struct BitMap *friend, UWORD w, UWORD h, UBYTE depth, ULONG id,
+                      const struct Rectangle *clip, WORD left, WORD top)
+{
+    static struct TextAttr topaz8 = { (STRPTR)"topaz.font", 8, 0, 0 };
+    WORD vis_bottom = clip->MaxY - top + 1;
+    memset(&bar, 0, sizeof(bar));
+    if (!(bar.font = OpenFont(&topaz8)))
+        return;
+    bar.h = (id & LACE) ? 24 : 14;
+    bar.x0 = clip->MinX - left > 0 ? clip->MinX - left : 0;
+    bar.x1 = clip->MaxX - left < (WORD)w - 1 ? clip->MaxX - left : (WORD)w - 1;
+    bar.y = (vis_bottom < (WORD)h ? vis_bottom : (WORD)h) - bar.h;
+    if (bar.y < 0 || bar.x1 - bar.x0 < 160)
+        return;
+    bar.cw = bar.h + 4;
+    bar.opened = time_ms();
+    if (!(bar.save[0] = AllocBitMap(w, bar.h, depth, 0, friend)) ||
+        !(bar.save[1] = AllocBitMap(w, bar.h, depth, 0, friend)))
+        return;
+    InitRastPort(&bar.rp);
+    SetFont(&bar.rp, bar.font);
+    SetDrMd(&bar.rp, JAM1);
+    bar.ok = TRUE;
+}
+
+static void bar_cleanup(void)
+{
+    int k;
+    WaitBlit();
+    for (k = 0; k < 2; k++)
+        if (bar.save[k])
+            FreeBitMap(bar.save[k]);
+    if (bar.font)
+        CloseFont(bar.font);
+    memset(&bar, 0, sizeof(bar));
+}
+
+static void bar_icon(int b, WORD x, WORD y, WORD s)
+{
+    struct RastPort *rp = &bar.rp;
+    WORD cy = y + s / 2, i, t = s > 12 ? 2 : 1;
+    SetAPen(rp, bar.fg);
+    switch (b) {
+    case BT_RESTART:                        /* |< */
+        RectFill(rp, x + s / 6, y + s / 6, x + s / 6 + t, y + s - s / 6);
+        for (i = 0; i <= s / 3; i++) {
+            Move(rp, x + s / 6 + t + 2 + i, cy - i);
+            Draw(rp, x + s / 6 + t + 2 + i, cy + i);
+        }
+        break;
+    case BT_PLAY:
+        if (bar.paused)                     /* > */
+            for (i = 0; i <= s / 3; i++) {
+                Move(rp, x + s / 3 + i, y + s / 6 + i);
+                Draw(rp, x + s / 3 + i, y + s - s / 6 - i);
+            }
+        else {                              /* || */
+            RectFill(rp, x + s / 4, y + s / 6, x + s / 4 + t, y + s - s / 6);
+            RectFill(rp, x + s - s / 4 - t, y + s / 6, x + s - s / 4, y + s - s / 6);
+        }
+        break;
+    case BT_STOP:
+        RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
+        break;
+    case BT_VDOWN:
+    case BT_VUP:
+        RectFill(rp, x + s / 4, cy - t / 2, x + s - s / 4, cy - t / 2 + t - 1);
+        if (b == BT_VUP)
+            RectFill(rp, x + s / 2 - t / 2, y + s / 4, x + s / 2 - t / 2 + t - 1, y + s - s / 4);
+        break;
+    }
+}
+
+static void time_text(char *out, ULONG ms)
+{
+    ULONG s = ms / 1000;
+    sprintf(out, "%ld:%02ld", (long)(s / 60), (long)(s % 60));
+}
+
+/* Drawn into buffer k (what it covers kept first). */
+static void bar_put(struct BitMap *bm, int k)
+{
+    struct RastPort *rp = &bar.rp;
+    char t[48], a[12], b[12];
+    WORD x, s = bar.h - 4, ty;
+    int i;
+    if (!bar.on || !bar.ok)
+        return;
+    if (!bar.saved[k]) {
+        BltBitMap(bm, 0, bar.y, bar.save[k], 0, 0, bar.x1 + 1, bar.h, 0xC0, 0xFF, NULL);
+        bar.saved[k] = TRUE;
+    }
+    rp->BitMap = bm;
+    SetAPen(rp, bar.bg);
+    RectFill(rp, bar.x0, bar.y, bar.x1, bar.y + bar.h - 1);
+    SetAPen(rp, bar.dim);
+    RectFill(rp, bar.x0, bar.y, bar.x1, bar.y);
+    for (i = 0, x = bar.x0 + 4; i < BT_N; i++, x += bar.cw)
+        bar_icon(i, x + (bar.cw - s) / 2 - 2, bar.y + 2, s);
+    time_text(a, bar.at_ms);
+    if (bar.total_ms) {
+        time_text(b, bar.total_ms);
+        sprintf(t, "%s / %s  %ld%%", a, b, (long)(mp_volume() * 100 / 64));
+    } else
+        sprintf(t, "%s  %ld%%", a, (long)(mp_volume() * 100 / 64));
+    ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
+    x += 6;
+    SetAPen(rp, bar.fg);
+    Move(rp, x, ty);
+    Text(rp, (STRPTR)t, strlen(t));
+    x += TextLength(rp, (STRPTR)t, strlen(t)) + 8;
+    bar.px0 = x;
+    bar.px1 = bar.x1 - 6;
+    if (bar.px1 - bar.px0 > 16) {           /* how far: a line, filled so far */
+        WORD my = bar.y + bar.h / 2, fill = bar.px0;
+        if (bar.total_ms)
+            fill = bar.px0 + (WORD)((bar.at_ms > bar.total_ms ? bar.total_ms : bar.at_ms) *
+                                    (ULONG)(bar.px1 - bar.px0) / bar.total_ms);
+        SetAPen(rp, bar.dim);
+        RectFill(rp, bar.px0, my - 1, bar.px1, my);
+        SetAPen(rp, bar.fg);
+        if (fill > bar.px0)
+            RectFill(rp, bar.px0, my - 1, fill, my);
+        RectFill(rp, fill - 1, my - 3, fill + 1, my + 2);
+    }
+}
+
+/* What it covers back in buffer k. */
+static void bar_take(struct BitMap *bm, int k)
+{
+    if (!bar.saved[k])
+        return;
+    BltBitMap(bar.save[k], 0, 0, bm, 0, bar.y, bar.x1 + 1, bar.h, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    bar.saved[k] = FALSE;
+}
+
+/* The button at (x, y), -1 none (or not on the bar). */
+static int bar_hit(WORD x, WORD y)
+{
+    if (!bar.on || y < bar.y || y >= bar.y + bar.h || x < bar.x0 + 4)
+        return -1;
+    x = (x - bar.x0 - 4) / bar.cw;
+    return x < BT_N ? x : -1;
+}
+
+/* All the frames' time, a header each read (from where fh is, put back). */
+static ULONG anim_length(BPTR fh, ULONG first)
+{
+    LONG pos = Seek(fh, 0, OFFSET_CURRENT);
+    UBYTE h[52];
+    ULONG jif = first, frames = 0;
+    while (frames < 20000 && Read(fh, h, 12) == 12 && be32(h) == ID('F', 'O', 'R', 'M')) {
+        LONG len = be32(h + 4) - 4, got = 0;
+        if (len < 0)
+            break;
+        if (be32(h + 8) == ID('I', 'L', 'B', 'M')) {
+            frames++;
+            if ((got = Read(fh, h, len < (LONG)sizeof(h) ? len : (LONG)sizeof(h))) < 0)
+                break;
+            if (got >= 8 + 18 && be32(h) == ID('A', 'N', 'H', 'D'))
+                jif += be32(h + 8 + 14) ? be32(h + 8 + 14) : 1;
+        }
+        if (Seek(fh, len - got + (len & 1), OFFSET_CURRENT) < 0)
+            break;
+    }
+    Seek(fh, pos, OFFSET_BEGINNING);
+    return jif * 1000 / 60;
+}
+
 #define VOL_STEP    4           /* of 64, as Now playing's */
 #define VOL_DELAY 300           /* ms the stick is held before it repeats */
 #define VOL_REPEAT 100          /* ...and then a step every */
+
+static BOOL bar_redraw;         /* the controls to be drawn again (the volume changed) */
 
 static void volume(int d)
 {
     int v = mp_volume() + d;
     mp_set_volume(v < 0 ? 0 : v > 64 ? 64 : v);
+    bar_redraw = TRUE;
 }
 
-/* Input while it plays: 1 stop, 2 pause or go on, 0 nothing; the volume
- * set here. */
+/* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 0
+ * nothing; the volume set here, the mouse's moves noted (the controls). */
 static int input(struct Window *win, ULONG *jlast)
 {
     static ULONG held_since, held_step;
@@ -580,7 +811,10 @@ static int input(struct Window *win, ULONG *jlast)
     while ((im = (struct IntuiMessage *)GetMsg(win->UserPort))) {
         ULONG cl = im->Class;
         UWORD code = im->Code;
+        WORD mx = im->MouseX, my = im->MouseY;
         ReplyMsg((struct Message *)im);
+        if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS) && time_ms() - bar.opened > 500)
+            bar.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
         if (cl == IDCMP_RAWKEY) {
             if (code == 0x45 || code == 0x41 || code == 0x10)   /* Esc, Backspace, Q */
                 r = 1;
@@ -593,8 +827,19 @@ static int input(struct Window *win, ULONG *jlast)
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
-            else if (code == SELECTDOWN && !r)
-                r = 2;
+            else if (code == SELECTDOWN) {
+                int b = bar_hit(mx, my);
+                if (b == BT_RESTART)
+                    r = 3;
+                else if (b == BT_STOP)
+                    r = 1;
+                else if (b == BT_VDOWN)
+                    volume(-VOL_STEP);
+                else if (b == BT_VUP)
+                    volume(VOL_STEP);
+                else if ((b == BT_PLAY || !(bar.on && my >= bar.y)) && !r)
+                    r = 2;                  /* play/pause, or anywhere off the controls */
+            }
         }
     }
     if (LowLevelBase) {
@@ -728,13 +973,17 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax
     win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, 0, WA_Top, 0,
                          WA_Width, w, WA_Height, h, WA_Backdrop, TRUE, WA_Borderless, TRUE,
                          WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_SimpleRefresh, TRUE,
-                         WA_NoCareRefresh, TRUE,
-                         WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS, TAG_DONE);
+                         WA_NoCareRefresh, TRUE, WA_ReportMouse, TRUE,
+                         WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
     if (!win)
         goto nomem;
     SetPointer(win, blank, 1, 16, 0, 0);
     planes_of(sb[0]->sb_BitMap, w, h, depth, &pl[0]);
     planes_of(sb[1]->sb_BitMap, w, h, depth, &pl[1]);
+    bar_setup(sb[0]->sb_BitMap, w, h, depth, id, &clip, left, top);
+    bar_pens(tab, ncol, camg, depth);
+    bar.total_ms = anim_length(fh, 0);
+    bar_redraw = FALSE;
 
     sprintf(m, "%s: %lux%lux%lu, mode %08lx (CAMG %05lx), op %ld", FilePart((STRPTR)path),
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)id, (unsigned long)camg,
@@ -760,9 +1009,11 @@ restart:
     k = shown ^ (runs ? 1 : 0);
     safe_done(safe, safe_wait);
     animdec_body(f.body, f.bodylen, &pl[k], comp, masking);
+    bar.saved[k] = FALSE;                   /* all of it drawn anew */
     if (runs && f.cmap) {                   /* its first colours again */
         cmap_table(f.cmap, f.cmaplen, ncol, tab);
         LoadRGB32(&scr->ViewPort, tab);
+        bar_pens(tab, ncol, camg, depth);
     }
     if (runs) {
         while (!ChangeScreenBuffer(scr, sb[k]))
@@ -777,6 +1028,9 @@ restart:
         shown = 0;
     }
     WaitBlit();
+    bar.saved[k ^ 1] = FALSE;
+    bar.at_ms = 0;
+    bar_put(sb[k]->sb_BitMap, k);
     start_ms = t0 = time_ms();
     jif = f.anhd ? be32(f.anhd + 14) : 0;
     due = 0;
@@ -784,16 +1038,46 @@ restart:
     for (;;) {
         ULONG td, il, op, bits, dt;
         int r = input(win, &jlast);
+        BOOL want;
         if (r == 1) {
             quit = 1;
             break;
         }
+        if (r == 3 && Seek(fh, loop_pos, OFFSET_BEGINNING) >= 0 && read_frame(fh, &f, &readms) &&
+            f.body) {
+            if (snd_on) {                   /* from the start: its sounds too */
+                snd_quiet(2);
+                snd_quiet(3);
+            }
+            paused = FALSE;
+            bar.paused = FALSE;
+            runs++;
+            goto restart;
+        }
         if (r == 2) {
             paused = !paused;
+            bar_redraw = TRUE;
             if (paused && snd_on) {
                 snd_quiet(2);               /* sounds stop with the pictures */
                 snd_quiet(3);
             }
+        }
+        /* the controls: up while the mouse moves, and while paused */
+        bar.paused = paused;
+        want = bar.ok && (paused || (bar.moved && time_ms() - bar.moved < BAR_HIDE));
+        if (want != bar.on) {
+            bar.on = want;
+            if (want) {
+                ClearPointer(win);
+                bar_put(sb[shown]->sb_BitMap, shown);
+            } else {
+                SetPointer(win, blank, 1, 16, 0, 0);
+                bar_take(sb[shown]->sb_BitMap, shown);
+            }
+            bar_redraw = FALSE;
+        } else if (bar_redraw && bar.on) {
+            bar_put(sb[shown]->sb_BitMap, shown);
+            bar_redraw = FALSE;
         }
         if (snd_on)
             snd_tick();
@@ -811,9 +1095,14 @@ restart:
         k = shown ^ 1;                      /* the buffer not shown: two frames back */
         safe_done(safe, safe_wait);
         td = time_ms();
-        if (il == 1)                        /* this one changes the frame before */
-            BltBitMap(sb[shown]->sb_BitMap, 0, 0, sb[k]->sb_BitMap, 0, 0, w, h, 0xC0, 0xFF, NULL),
-                WaitBlit();
+        bar_take(sb[k]->sb_BitMap, k);      /* the frame as it was, under the controls */
+        if (il == 1) {                      /* this one changes the frame before */
+            BltBitMap(sb[shown]->sb_BitMap, 0, 0, sb[k]->sb_BitMap, 0, 0, w, h, 0xC0, 0xFF, NULL);
+            if (bar.saved[shown])           /* ...as it is under the controls */
+                BltBitMap(bar.save[shown], 0, 0, sb[k]->sb_BitMap, 0, bar.y, bar.x1 + 1, bar.h,
+                          0xC0, 0xFF, NULL);
+            WaitBlit();
+        }
         if (op == 0 && f.body)
             animdec_body(f.body, f.bodylen, &pl[k], comp, masking);
         else if (f.dlta && animdec_delta(f.dlta, f.dltalen, &pl[k], op, bits) == -2) {
@@ -827,6 +1116,8 @@ restart:
             worst = dt;
         /* its time: sixtieths of a second after the last (none: a frame) */
         due += (jif ? jif : 1) * 1000 / 60;
+        bar.at_ms = due;
+        bar_put(sb[k]->sb_BitMap, k);       /* the controls on it, if they are up */
         if ((LONG)(time_ms() - t0) > (LONG)due + 20)
             lates++;
         while ((LONG)(time_ms() - t0) < (LONG)due - 10)
@@ -834,6 +1125,7 @@ restart:
         if (f.cmap) {
             cmap_table(f.cmap, f.cmaplen, ncol, tab);
             LoadRGB32(&scr->ViewPort, tab);
+            bar_pens(tab, ncol, camg, depth);
         }
         while (!ChangeScreenBuffer(scr, sb[k]))
             WaitTOF();                      /* the last change not taken yet */
@@ -896,6 +1188,7 @@ out:
     FreeVec(tab);
     if (blank)
         FreeMem(blank, 6 * sizeof(UWORD));
+    bar_cleanup();
     snd_free();
     FreeVec(fbuf);
     fbuf = NULL;
