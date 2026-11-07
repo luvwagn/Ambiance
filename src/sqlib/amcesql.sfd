@@ -1,0 +1,22 @@
+==id $Id: amcesql.sfd,v 1.1 2026/11/07 $
+* amcesql.library: SQLite 3.34.0, read only, for AmigaMCE (beets music
+* libraries). Loaded only when one is set up: PROGDIR:Libs/amcesql.library.
+==base _AmceSqlBase
+==basetype struct Library *
+==libname amcesql.library
+==bias 30
+==public
+==include <exec/types.h>
+==version 1
+APTR SqlOpen(STRPTR path) (a0)
+VOID SqlClose(APTR db) (a0)
+APTR SqlPrepare(APTR db, STRPTR sql) (a0,a1)
+LONG SqlBindText(APTR stmt, LONG index, STRPTR text) (a0,d0,a1)
+LONG SqlStep(APTR stmt) (a0)
+LONG SqlColumns(APTR stmt) (a0)
+STRPTR SqlText(APTR stmt, LONG column) (a0,d0)
+LONG SqlInt(APTR stmt, LONG column) (a0,d0)
+VOID SqlFinalize(APTR stmt) (a0)
+STRPTR SqlError(APTR db) (a0)
+STRPTR SqlVersion() ()
+==end

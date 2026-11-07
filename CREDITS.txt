@@ -78,6 +78,13 @@ offers to install where they are missing or older (never on AGS):
     redistribute XFD, you have to keep all files together."
 So AmigaMCE's archive, with these in it, is not to be sold.
 
+Libs/amcesql.library, which reads beets music libraries, is AmigaMCE's own
+small wrapper (src/sqlib, MIT) around SQLite 3.34.0, linked from the
+libsqlite3.a of Steffen Gutmann's AmigaOS 3 port (Aminet: biz/dbase/
+sqlite-3.34.0.a-amiga). SQLite, by D. Richard Hipp and others, is in the
+public domain (Licences/SQLite.txt). AmigaMCE opens the library only when
+a beets library is set up.
+
 FLAC (Plex tracks as stored, and the files in Music folders) is decoded by
 flacdec.library where it is installed; it is not included in the archive.
 flacdec.library is (c) 2026 Renaud Schweingruber, "free to use and to

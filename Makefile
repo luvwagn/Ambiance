@@ -221,9 +221,23 @@ catalogs: build/catalogs/.built
 # Aminet's own archives, as they are there: modplug.library (public domain),
 # mpega.library and xfdmaster.library (free to pass on, not for profit,
 # all files together and unchanged)
+# amcesql.library: SQLite (Aminet's 68k libsqlite3.a) for beets libraries,
+# loaded by AmigaMCE only when one is set up (PROGDIR:Libs)
+SQLIB     = build/sqlib/amcesql.library
+SQLIB_CC  = $(CC) -O2 -m68020 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-array-bounds
+build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+	@mkdir -p build/sqlib
+	@echo "  CC    $<"
+	@$(SQLIB_CC) -Isrc/sqlib -c -o $@ $<
+$(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a extras/sqlite/sqlite3.h
+	@echo "  LD    $@"
+	@$(SQLIB_CC) -Isrc/sqlib -Iextras/sqlite -o $@.dbg build/sqlib/libinit.o src/sqlib/amcesql.c \
+		extras/sqlite/libsqlite3.a -lm -lamiga
+	@$(STRIP) -o $@ $@.dbg
+
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS)
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB)
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
 	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Fonts/amce-cjk \
@@ -239,6 +253,9 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(CJK_FILES) $(LHA_DIR)/Fonts/amce-cjk/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
+	@mkdir -p $(LHA_DIR)/Libs
+	@cp $(SQLIB) $(LHA_DIR)/Libs/
+	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \
 		AmigaMCE.readme > $(LHA_DIR)/readme.txt
 	@cp docs/readme.info $(LHA_DIR)/readme.txt.info
@@ -258,5 +275,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

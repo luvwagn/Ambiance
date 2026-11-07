@@ -1,0 +1,106 @@
+Short:        SQL database engine
+Author:       D. Richard Hipp, Steffen Gutmann
+Uploader:     Steffen Gutmann <muibase@yahoo.com>
+Type:         biz/dbase
+Version:      3.34.0-amiga
+Replaces:     sqlite-3.34.0-amiga.lha
+Architecture: m68k-amigaos >= 3.0.0; ppc-amigaos; ppc-morphos
+Homepage:     http://www.sqlite.org
+
+This is small update to sqlite-3.34.0-amiga with a fix for obtaining the 
+current date and time. The previous version was off by 8 years which is
+the difference between AmigaDos function DateStamp and Unix gettimeofday.
+Now 'select CURRENT_TIMESRAMP' returns the correct value.
+
+SQLite is a Self-contained, embeddable, zero-configuration SQL database
+engine. For information about SQLite, see the main README or check the
+site here: http://www.sqlite.org
+
+This is the Amiga version of sqlite-3.34.0 and can be considered stable.
+The regression tests either succeed without failure or reported errors can 
+be explained or document limitations of this version.  See below for a list
+of limitations in the Amiga version.
+
+There have been several attempts to port SQLite to AmigaOS.  Please browse
+Aminet for a list.  Several of the previous ports made use of the Posix/
+ixemul interface that provides a Unix-like emulation of what is needed by
+the SQLite low level file access.
+
+This port is different in that it only uses AmigaOS 3 native functions
+for implementing the OS interface.  The changes to the original version
+are in writing a custom Makefile for Amiga, implementing the OS module 
+for AmigaOS, adding some work-around for char to 64bit integer conversion
+bugs in the gcc-3.4.0 compiler, and making some other minor changes in 
+several files.  A complete diff of all changes can be found in the file 
+amiga-diff.txt.
+
+Note that this version fully supports 64bit integers.  This, however, 
+requires a compiler that supports 64bit integers and rules out, e.g. SAS-C.
+
+The os_amiga.c file contains an implementation of all necessary OS functions.
+This module was written by taking os_unix.c as a start, looking at os_win.c 
+sometimes to get an idea on how else things can be done, by careful reading 
+the autodocs of AmigaDOS, by testing some of the more advanced functions in 
+AmigaDOS 3.0+ (e.g. LockRecord which seems to be unimplemented on most 
+filesystems), and by running the regression tests and tweaking the code
+to ensure a correct implementation.  If you are interested, you can find 
+many comments in os_amiga.c, in particular about how to do the file locking.
+
+The library and the sqlite3 shell have been compiled for m68k-AmigaOS
+using gcc-3.4.0.  The compiled binaries can be found in build-m68k-amigaos.
+The binaries also contain the 'testfixture' program for running 
+the regression test suite.  As 'testfixture' needs a tcl interpreter, 
+I ported tcl-8.6.10 to AmigaOS using the ixemul library interface and 
+also compiled 'testfixture' against it.  Note that the sqlite3 shell and 
+libraries are compiled with the -noixemul switch and are thus are true 
+'Amiga-like' binaries.
+
+There are also AmigaOS 4 binaries under directory build-ppc-amigaos,
+MorphOS binaries under directory build-ppc-morphos, and i386 AROS binaries
+under directory build-i386-aros.
+
+The regression tests have been run for the AmigaOS 3 version (under UAE).
+Test results for MorphOS are also available and are similar 
+to the results on Amiga OS3 but haven't been fully analyzed yet.
+
+Limitations
+
+- No support for large files (LFS).  To the best of my knowledge files
+  under AmigaOS can be at most (2**31 - 1) bytes.  This limitation arises
+  from the LONG parameters in dos.library.
+  Compile switch -DSQLITE_DISABLE_LFS
+  (AOS4 and MorphOS introduce support for large files and implementation is
+  in progress).
+  
+- No byte-range-locking.  I tried several file systems (OFS, FFS) but they
+  do not seem to support the LockRecord/UnLockRecord calls (The RAM: disk
+  does support it and maybe SFS also has it implemented).  Therefore, the
+  default way of locking is by using (several) .lock files.  Read os_amiga.c
+  if you want to know more about this.
+
+- Truncate file by replace.  The dos.library/SetFileSize call is unsupported
+  by most file systems (OFS, FFS) and therefore truncating a file to a
+  target size doesn't work.  My workaround to this is to write a new file
+  of the target size and replace the files.  This does not always work
+  though if the file is still opened by another process/handle.  In this
+  case truncating fails which means that the 'VACUUM' command of sqlite
+  fails.  Use a file system that supports SetFileSize (try SFS) if you need
+  to rely on a proper functioning of the VACUUM command.
+
+- No load extensions.  On Amiga the shared loading of libraries works very
+  differently than on Unix, and thus, no attempt has been made to support it.
+
+- No WAL (Write-Ahead Logging) mode.
+
+- Several errors in unit tests remain.  See build-m68k-amigaos/test-out.txt
+  for a full list.  Most of the errors can be categorized into one of
+  rounding error on double, representation of double, stat on an open file,
+  ixemul vs. AmigaDOS paths, delete on an open file, or other unsupported
+  system functions (e.g. spawning a new process).
+
+  You can reproduce results by running 'testfixture ../test/veryquick.test'.
+  Prior to running this test, make sure the stack is at least 500kBytes large
+  as the tcl interpreter uses a lot of stack in recursive calls.
+
+Steffen Gutmann, 24.01.2021
+
