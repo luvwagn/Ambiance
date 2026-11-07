@@ -15,7 +15,9 @@
  * says how it went: frames a second wanted and got, the slowest frame.
  *
  * Keys: Esc, Backspace, the right button or the pad's blue stop it; Space,
- * Return, the left button or fire pause it. A short one (under 8 s) plays
+ * Return, the left button or fire pause it; Up and Down (the stick, the
+ * wheel) set the volume of what plays meanwhile, a station or a module,
+ * as on Now playing. A short one (under 8 s) plays
  * again until stopped; a longer one goes back to the list at its end.
  */
 #include "amce.h"
@@ -221,9 +223,21 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
     }
 }
 
-/* Input while it plays: 1 stop, 2 pause or go on, 0 nothing. */
+#define VOL_STEP    4           /* of 64, as Now playing's */
+#define VOL_DELAY 300           /* ms the stick is held before it repeats */
+#define VOL_REPEAT 100          /* ...and then a step every */
+
+static void volume(int d)
+{
+    int v = mp_volume() + d;
+    mp_set_volume(v < 0 ? 0 : v > 64 ? 64 : v);
+}
+
+/* Input while it plays: 1 stop, 2 pause or go on, 0 nothing; the volume
+ * set here. */
 static int input(struct Window *win, ULONG *jlast)
 {
+    static ULONG held_since, held_step;
     struct IntuiMessage *im;
     int r = 0;
     while ((im = (struct IntuiMessage *)GetMsg(win->UserPort))) {
@@ -235,6 +249,10 @@ static int input(struct Window *win, ULONG *jlast)
                 r = 1;
             else if ((code == 0x40 || code == 0x44 || code == 0x43) && !r)  /* Space, Return */
                 r = 2;
+            else if (code == 0x4C || code == 0x7A)  /* Up (held: it repeats), the wheel */
+                volume(VOL_STEP);
+            else if (code == 0x4D || code == 0x7B)
+                volume(-VOL_STEP);
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
@@ -249,6 +267,17 @@ static int input(struct Window *win, ULONG *jlast)
                 r = 1;
             else if ((pressed & (JPF_BUTTON_RED | JPF_BUTTON_PLAY)) && !r)
                 r = 2;
+            if (st & (JPF_JOY_UP | JPF_JOY_DOWN)) {
+                ULONG now = time_ms();
+                int d = st & JPF_JOY_UP ? VOL_STEP : -VOL_STEP;
+                if (pressed & (JPF_JOY_UP | JPF_JOY_DOWN)) {
+                    volume(d);
+                    held_since = held_step = now;
+                } else if (now - held_since >= VOL_DELAY && now - held_step >= VOL_REPEAT) {
+                    volume(d);
+                    held_step = now;
+                }
+            }
         }
         *jlast = st;
     }
