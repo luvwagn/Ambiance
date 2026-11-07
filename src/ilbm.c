@@ -17,6 +17,7 @@
  * the whole file. Its frames are counted on the way, a header each.
  */
 #include "amce.h"
+#include "animdec.h"
 
 #include <string.h>
 #include <proto/exec.h>
@@ -37,12 +38,11 @@ static UWORD be16(const UBYTE *p)
     return (UWORD)((p[0] << 8) | p[1]);
 }
 
-/* An ANIM's frames after the first, and their time: a few bytes of each
- * read, the rest passed by. */
-static void count_frames(BPTR fh, struct PicInfo *pi)
+/* An ANIM's frames from here on, and their time: a few bytes of each
+ * read, the rest passed by; frames and jiffies: those counted already. */
+static void count_frames(BPTR fh, struct PicInfo *pi, ULONG frames, ULONG jiffies)
 {
     UBYTE h[52];
-    ULONG frames = 1, jiffies = 0;
     while (frames < 20000 && Read(fh, h, 12) == 12 && be32(h) == ID('F', 'O', 'R', 'M')) {
         LONG len = be32(h + 4) - 4, got = 0;
         if (len < 0)
@@ -81,8 +81,8 @@ BOOL ilbm_is_anim(const char *path)
 }
 
 /* The whole file, if it is an ILBM (else NULL); of an ANIM, its first
- * frame (*anim set, its frames counted into pi). */
-static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo *pi)
+ * frame (*anim set; *afh: the file, open after it, to be closed). */
+static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo *pi, BPTR *afh)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
@@ -117,7 +117,8 @@ static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo
                 *len = size + 8;
                 if (size & 1)
                     Seek(fh, 1, OFFSET_CURRENT);
-                count_frames(fh, pi);
+                *afh = fh;                  /* the frames after it: ilbm_thumb */
+                return buf;
             }
         }
         Close(fh);
@@ -217,6 +218,142 @@ static void row_chunky(const UBYTE *row, ULONG rb, UBYTE planes, ULONG *out)
     }
 }
 
+/* ---- an ANIM's picture: its first frame, unless that is blank (one
+ * colour nearly all over: a black start, a title on black), then the
+ * frames after it decoded (animdec.c) until one is not, every few looked
+ * at, PICK_FRAMES or PICK_BYTES at the most: the least blank one seen. */
+#define PICK_FRAMES 150
+#define PICK_BYTES  (2UL << 20)
+#define PICK_EVERY  3
+#define PICK_BLANK  940             /* of 1000 points one colour: blank */
+
+/* How much of a frame (interleaved rows: rb bytes a plane) is one colour,
+ * of 1000: 40 x 30 points looked at. */
+static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULONG sh)
+{
+    static UWORD hist[256];
+    ULONG x, y, most = 0;
+    UBYTE k;
+    memset(hist, 0, sizeof(hist));
+    for (y = 0; y < 30; y++) {
+        const UBYTE *r = img + (y * sh / 30) * rb * planes;
+        for (x = 0; x < 40; x++) {
+            ULONG px = x * sw / 40, c = 0;
+            for (k = 0; k < planes; k++)
+                if (r[k * rb + (px >> 3)] & (0x80 >> (px & 7)))
+                    c |= 1UL << k;
+            if (++hist[c] > most)
+                most = hist[c];
+        }
+    }
+    return most * 1000 / 1200;
+}
+
+/* The frame to show, decoded into a new buffer of interleaved rows (the
+ * caller frees it); its colours into cm (*cml bytes) if a frame changed
+ * them. Frames read meanwhile counted into *frames and *jif. */
+static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULONG sh,
+                        UBYTE planes, UBYTE masking, UBYTE comp, UBYTE *cm, ULONG *cml,
+                        ULONG *frames, ULONG *jif)
+{
+    ULONG rb = ((sw + 15) >> 4) << 1, fsz = rb * planes * sh, best, got = 0, fl = 0;
+    UBYTE *a, *buf[2], *keep, *f = NULL, *cur = NULL, h[12];
+    static UBYTE cm_now[768];
+    ULONG cmn = *cml;
+    struct AnimPlanes pl[2];
+    int k, i;
+    LONG n;
+    if (!(a = AllocVec(fsz * 3, MEMF_ANY | MEMF_CLEAR))) {
+        if (!(a = AllocVec(fsz, MEMF_ANY | MEMF_CLEAR)))   /* the first frame alone */
+            return NULL;
+        keep = NULL;
+    } else
+        keep = a + 2 * fsz;
+    buf[0] = a;
+    buf[1] = a + fsz;
+    for (k = 0; k < 2; k++) {
+        for (i = 0; i < 8; i++)
+            pl[k].plane[i] = buf[k] + i * rb;
+        pl[k].stride = rb * planes;
+        pl[k].depth = planes;
+        pl[k].rb = rb;
+        pl[k].h = sh;
+    }
+    animdec_body(body, bodylen, &pl[0], comp, masking);
+    best = blank_score(buf[0], rb, planes, sw, sh);
+    if (best < PICK_BLANK || !keep)
+        return a;
+    CopyMem(buf[0], buf[1], fsz);
+    CopyMem(buf[0], keep, fsz);
+    CopyMem(cm, cm_now, cmn);
+    for (n = 1; n < PICK_FRAMES && got < PICK_BYTES; n++) {
+        const UBYTE *anhd = NULL, *dlta = NULL, *bd = NULL, *p, *e;
+        ULONG dl = 0, bl = 0, len, sc;
+        if (Read(fh, h, 12) != 12 || be32(h) != ID('F', 'O', 'R', 'M') || be32(h + 4) < 4)
+            break;
+        len = be32(h + 4) - 4;
+        if (be32(h + 8) != ID('I', 'L', 'B', 'M')) {
+            if (Seek(fh, len + (len & 1), OFFSET_CURRENT) < 0)
+                break;
+            n--;
+            continue;
+        }
+        if (len > fl) {
+            FreeVec(f);
+            if (!(f = AllocVec(fl = len + 1024, MEMF_ANY)))
+                break;
+        }
+        if (Read(fh, f, len) != (LONG)len)
+            break;
+        if (len & 1)
+            Seek(fh, 1, OFFSET_CURRENT);
+        got += len;
+        (*frames)++;
+        for (p = f, e = f + len; p + 8 <= e;) {
+            ULONG id = be32(p), cl = be32(p + 4);
+            if (cl > (ULONG)(e - p - 8))
+                cl = e - p - 8;
+            if (id == ID('A', 'N', 'H', 'D') && cl >= 24)
+                anhd = p + 8;
+            else if (id == ID('D', 'L', 'T', 'A')) {
+                dlta = p + 8;
+                dl = cl;
+            } else if (id == ID('B', 'O', 'D', 'Y')) {
+                bd = p + 8;
+                bl = cl;
+            } else if (id == ID('C', 'M', 'A', 'P') && cl >= 6) {
+                cmn = cl < sizeof(cm_now) ? cl : sizeof(cm_now);
+                CopyMem((APTR)(p + 8), cm_now, cmn);
+            }
+            p += 8 + ((cl + 1) & ~1UL);
+        }
+        if (anhd)
+            *jif += be32(anhd + 14);
+        k = n & 1;
+        if (anhd && anhd[18] == 1)          /* from the last frame, not two back */
+            CopyMem(buf[!k], buf[k], fsz);
+        if (anhd && anhd[0] == 0 && bd)
+            animdec_body(bd, bl, &pl[k], comp, masking);
+        else if (dlta && animdec_delta(dlta, dl, &pl[k], anhd ? anhd[0] : 5,
+                                       anhd ? be32(anhd + 20) : 0) == -2)
+            break;                          /* not one this knows: the best so far */
+        cur = buf[k];
+        if (n % PICK_EVERY)
+            continue;
+        if ((sc = blank_score(cur, rb, planes, sw, sh)) < best) {
+            best = sc;
+            CopyMem(cur, keep, fsz);
+            CopyMem(cm_now, cm, cmn);
+            *cml = cmn;
+            if (best < PICK_BLANK)
+                break;                      /* a good one */
+        }
+    }
+    FreeVec(f);
+    CopyMem(keep, a, fsz);
+    return a;
+}
+
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi)
 {
@@ -229,8 +366,11 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     struct Thumb *t = NULL;
     BOOL anim, ham;
     ULONG base[64];
+    BPTR afh = 0;
+    UBYTE *img = NULL;
+    static UBYTE cm[768];
 
-    if (!(file = read_file(path, &len, &anim, pi)))
+    if (!(file = read_file(path, &len, &anim, pi, &afh)))
         return NULL;
     /* the chunks */
     e = file + (be32(file + 4) + 8 < len ? be32(file + 4) + 8 : len);
@@ -264,6 +404,17 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     if (!sw || !sh || !planes || planes > 8 || comp > 1 || ((camg & CAMG_HAM) && !(anim && ham)) ||
         cmaplen < 6)
         goto out;
+    if (afh) {                              /* an ANIM: the frame worth showing, and the count */
+        ULONG frames = 1, jif = 0;
+        cmaplen = cmaplen < sizeof(cm) ? cmaplen : sizeof(cm);
+        CopyMem((APTR)cmap, cm, cmaplen);
+        img = anim_pick(afh, body, bodylen, sw, sh, planes, masking, comp, cm, &cmaplen, &frames,
+                        &jif);
+        cmap = cm;
+        count_frames(afh, pi, frames, jif);
+        Close(afh);
+        afh = 0;
+    }
 
     pic_fit(sw, sh, tall, w, h, whole, &dw, &dh);
     if (!(t = thumb_new(dw, dh)))
@@ -321,7 +472,9 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     p = body;
     e = body + bodylen;
     for (sy = 0, y = 0; sy < sh && y < dh; sy++) {
-        if (!unpack(&p, e, row, rb * np, comp == 1))
+        if (img)                            /* an ANIM's frame, decoded already */
+            CopyMem(img + sy * rb * planes, row, rb * planes);
+        else if (!unpack(&p, e, row, rb * np, comp == 1))
             break;                          /* cut short: the rest stays colour 0 */
         if (y < dh && (y * sh + sh / 2) / dh == sy) {
             const UBYTE *c = (const UBYTE *)chunky;
@@ -366,6 +519,9 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     strcpy(pi->fmt, anim ? "ANIM" : "ILBM");
     pi->cls[0] = 0;
 out:
+    if (afh)
+        Close(afh);
+    FreeVec(img);
     FreeVec(row);
     FreeVec(xoff);
     FreeVec(chunky);
