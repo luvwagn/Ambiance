@@ -10704,13 +10704,16 @@ static void act_action(struct Item *it)
 #define LIST_EASE     5     /* ...and the last screens: entries a second per entry left */
 /* Let go of a list moving faster than it can be read, and it coasts on,
  * as a flicked list does on a phone: slowing evenly to a stop in COAST_MS
- * from the speed it had (All Artists at full speed: some 700 entries on),
- * braking for the end as a held glide does. Slower than COAST_SCREENS
+ * from the speed it had, but no faster than COAST_FAST screenfuls a second
+ * (past that it is a blur, and the glide let go of near where it was
+ * wanted: from full speed it went 700 entries on), so it goes a screenful
+ * or two at the most, braking for the end as a held glide does. Slower than COAST_SCREENS
  * screenfuls a second (the start of a glide, a short hold) it stops where
  * it is, as before, and a menu never coasts. Any key, button or click
  * stops a coast at once; Return, Fire or a click only stop it (a second
  * one opens); Up/Down the same way carries on at the coasting speed. */
-#define COAST_MS    600     /* ms to coast to a stop from the speed let go at */
+#define COAST_MS    400     /* ms to coast to a stop from the speed let go at */
+#define COAST_FAST    8     /* screenfuls a second at the most to coast from */
 #define COAST_SCREENS 3     /* screenfuls a second at the least to coast */
 #define COAST_MIN    40     /* ...and entries a second */
 #define COAST_STOP    8     /* entries a second: below this it has stopped */
@@ -10942,6 +10945,8 @@ static void hold_release(void)
     hold_stop();
     if (!go)
         return;
+    if (v > COAST_FAST * list_visible())
+        v = COAST_FAST * list_visible();
     hold.coast = TRUE;
     hold.cdir = dir;
     hold.cv = hold.cv0 = v;
