@@ -1,4 +1,4 @@
-Short:        Full-screen media centre for AGS
+Short:        Full-screen media centre for the Amiga
 Author:       Brian King
 Uploader:     Brian King
 Type:         util/wb
@@ -12,9 +12,12 @@ of Kodi and Windows Media Center: games and demos from Amiga Game Selector
 server and your pictures, all in one place, driven by keyboard, mouse or
 joystick.
 
-It is a drop-in companion to AGS 3: copy the AmigaMCE drawer anywhere on
-an AGS installation and double-click it. Everything plays inside AmigaMCE,
-on its own screen and the Amiga's own sound.
+Copy the AmigaMCE drawer anywhere and double-click it. On an Amiga Game
+Selector 3 installation it is a drop-in companion: AGS's games and demos,
+its modules and its pictures are found by themselves. On any other Amiga,
+Settings > Folders says where your music, modules and pictures are.
+Everything plays inside AmigaMCE, on its own screen and the Amiga's own
+sound.
 
 
 Features
@@ -32,8 +35,9 @@ Games and demos
   sheets are read by a second process, so the list never waits for disk.
 
 Mods
-- Modules from ST-00:Modules, ST-00:C64Music and AGS:Mods (AGS's menu
-  music). ProTracker modules play on AmigaMCE's own replayer, after the
+- Modules from the MODS: assign and up to eight folders chosen in
+  Settings > Folders > Modules, and on AGS from ST-00:Modules,
+  ST-00:C64Music and AGS:Mods (its menu music). ProTracker modules play on AmigaMCE's own replayer, after the
   ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
   formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play
   through EaglePlayer's and DeliTracker's players where they are
@@ -60,7 +64,7 @@ Music (Plex)
 Music (files)
 - MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
   Plex: the MUSIC: assign, if there is one, and up to eight folders chosen
-  in Settings > Sound > Music folders. Only folders with music somewhere
+  in Settings > Folders > Music. Only folders with music somewhere
   inside are listed. Fire plays a file with the rest of its folder as
   the playlist, with seeking. FLAC needs flacdec.library; a 68020/030
   plays it in mono at about 22 kHz.
@@ -79,7 +83,9 @@ Now Playing
   can play sound.
 
 Pictures
-- Browses Media:Images with a preview of the picture or folder selected,
+- Browses the PICTURES: assign, up to eight folders chosen in Settings >
+  Folders > Pictures and AGS's Media:Images, with a preview of the picture
+  or folder selected,
   shows pictures full screen on AmigaMCE's own screen (no mode switch) and
   plays folders as slideshows, in the pictures' own colours where the
   screen allows. Pictures are decoded by the installed datatypes.
@@ -131,8 +137,8 @@ unpack it to a hard drive, for example
 
   lha x DF0:amigamce.lha Work:
 
-If AGS boots straight into its own menu, quit AGS to Workbench first, then
-double-click AmigaMCE.
+On AGS, if it boots straight into its own menu, quit AGS to Workbench
+first, then double-click AmigaMCE.
 
 Languages
 ---------
@@ -232,7 +238,12 @@ History
        Korean names in their own characters. In eleven languages besides
        English (Japanese among them), with an installer; a narrower
        menu on lowres screens. HippoPlayer's spectrum analyser on Now
-       Playing (V, or Settings > Screen > Visualisation).
+       Playing (V, or Settings > Screen > Visualisation). Settings >
+       Folders: the music, modules and pictures of an Amiga without AGS
+       (MUSIC:, MODS:, PICTURES: and up to eight folders each). Screen
+       mode Automatic follows a Workbench on a graphics card; RTG
+       screens choose their pixel font. Long lists brake for their end
+       and coast on when let go at speed.
 0.5.0  Music from a Plex Media Server; Settings in pages (General,
        Screen, Sound, Networking); radio bitrate limit, list server and
        stream buffer settings; network interface choice; Countries A to Z

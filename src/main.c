@@ -82,7 +82,6 @@ struct Page {
     const char *note;           /*   and a line or two above it (fixed, not scrolled) */
 };
 
-#define PICS_ROOT "Media:Images"
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
 #define BAR_MS    3000          /* the viewer's info bar, after a change */
 
@@ -139,7 +138,8 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
-       ACT_MUSICSET, ACT_MUSICASSIGN, ACT_MUSICADD, ACT_MUSICDIR0, ACT_MUSICDIR_END = ACT_MUSICDIR0 + 7,
+       ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 2, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
+       ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
@@ -1362,6 +1362,9 @@ static void no_ags_text(struct Page *p)
     text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));
+    text_line(p, "");
+    text_para(p, _("Music, Mods, Pictures and Radio work without it: Settings > Folders says "
+                 "where your music, modules and pictures are."));
 }
 
 static void found_line(struct Page *p, const char *what, const char *path)
@@ -1692,64 +1695,99 @@ static void load_radio_settings(void)
     amce_log("radio", m);
 }
 
-/* ---- Music's own files: the folders they are in (Settings > Sound >
- * Music folders), and the MUSIC: assign, used when it is there unless
- * turned off */
-#define MUSICDIRS_VAR   "AmigaMCE/MusicFolders"     /* one a line */
-#define MUSICASSIGN_VAR "AmigaMCE/MusicAssign"      /* "off": MUSIC: not used */
-#define MUSIC_DIRS 8
-static char music_dirs[MUSIC_DIRS][160];
-static int nmusic_dirs;
-static BOOL music_assign = TRUE;
+/* ---- Folders of music files, modules and pictures (Settings > Folders):
+ * each kind's assign (MUSIC:, MODS:, PICTURES:), used when it is there
+ * unless turned off, and up to FS_DIRS folders added. AGS's own places
+ * (ST-00:Modules, Media:Images...) are found by themselves as well, so on
+ * AGS there is nothing to set; on another Amiga an assign or a folder or
+ * two fills Mods and Pictures as they fill Music. */
+enum { FS_MUSIC, FS_MODS, FS_PICS, FS_COUNT };
+#define FS_DIRS 8
+static struct Folders {
+    const char *var, *avar;     /* the folders, one a line; "off": the assign left out */
+    const char *assign;         /* MUSIC: */
+    const char *name, *title;   /* N_: the kind (Settings > Folders' row), its page */
+    char dir[FS_DIRS][160];
+    int n;
+    BOOL use_assign;
+} fs[FS_COUNT] = {
+    { "AmigaMCE/MusicFolders", "AmigaMCE/MusicAssign", "MUSIC:", N_("Music"), N_("Music folders"),
+      { { 0 } }, 0, TRUE },
+    { "AmigaMCE/ModFolders", "AmigaMCE/ModAssign", "MODS:", N_("Modules"), N_("Module folders"),
+      { { 0 } }, 0, TRUE },
+    { "AmigaMCE/PictureFolders", "AmigaMCE/PictureAssign", "PICTURES:", N_("Pictures"),
+      N_("Picture folders"), { { 0 } }, 0, TRUE },
+};
+#define music_dirs (fs[FS_MUSIC].dir)
+#define nmusic_dirs (fs[FS_MUSIC].n)
+#define music_assign (fs[FS_MUSIC].use_assign)
+static int fs_page;             /* the kind Settings > Folders has open */
 
-static void load_music_dirs(void)
+static void load_folders(void)
 {
-    static char buf[MUSIC_DIRS * 162];
+    static char buf[FS_DIRS * 162];
     char *p, *e;
-    nmusic_dirs = 0;
-    music_assign = !(GetVar((CONST_STRPTR)MUSICASSIGN_VAR, (STRPTR)buf, 8, GVF_GLOBAL_ONLY) > 0 &&
-                     !amce_stricmp(buf, "off"));
-    if (GetVar((CONST_STRPTR)MUSICDIRS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) <= 0)
-        return;
-    for (p = buf; *p && nmusic_dirs < MUSIC_DIRS; p = e) {
-        LONG n;
-        e = strchr(p, '\n');
-        n = e ? e - p : (LONG)strlen(p);
-        if (n > 0 && n < (LONG)sizeof(music_dirs[0])) {
-            memcpy(music_dirs[nmusic_dirs], p, n);
-            music_dirs[nmusic_dirs++][n] = 0;
+    int k;
+    for (k = 0; k < FS_COUNT; k++) {
+        struct Folders *f = &fs[k];
+        f->n = 0;
+        f->use_assign = !(GetVar((CONST_STRPTR)f->avar, (STRPTR)buf, 8, GVF_GLOBAL_ONLY) > 0 &&
+                          !amce_stricmp(buf, "off"));
+        if (GetVar((CONST_STRPTR)f->var, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) <= 0)
+            continue;
+        for (p = buf; *p && f->n < FS_DIRS; p = e) {
+            LONG n;
+            e = strchr(p, '\n');
+            n = e ? e - p : (LONG)strlen(p);
+            if (n > 0 && n < (LONG)sizeof(f->dir[0])) {
+                memcpy(f->dir[f->n], p, n);
+                f->dir[f->n++][n] = 0;
+            }
+            e = e ? e + 1 : p + n;
         }
-        e = e ? e + 1 : p + n;
     }
 }
 
-static void save_music_dirs(void)
+static void save_folders(int k)
 {
-    static char buf[MUSIC_DIRS * 162];
+    static char buf[FS_DIRS * 162];
     int i;
     buf[0] = 0;
-    for (i = 0; i < nmusic_dirs; i++) {
+    for (i = 0; i < fs[k].n; i++) {
         if (i)
             amce_strlcat(buf, "\n", sizeof(buf));
-        amce_strlcat(buf, music_dirs[i], sizeof(buf));
+        amce_strlcat(buf, fs[k].dir[i], sizeof(buf));
     }
-    save_setting(MUSICDIRS_VAR, buf);
+    save_setting(fs[k].var, buf);
 }
 
-/* MUSIC: is assigned (no requester asking for it if not). */
-static BOOL music_assign_there(void)
+/* A drawer or assign is there (no requester asking for it if not). */
+static BOOL place_there(const char *path)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR old = me->pr_WindowPtr;
     BPTR l;
     me->pr_WindowPtr = (APTR)-1;
-    l = Lock((CONST_STRPTR)"MUSIC:", SHARED_LOCK);
+    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
     me->pr_WindowPtr = old;
     if (!l)
         return FALSE;
     UnLock(l);
     return TRUE;
 }
+
+/* The kind's assign, if it is to be used and is there now. */
+static BOOL fs_assign_used(int k)
+{
+    return fs[k].use_assign && place_there(fs[k].assign);
+}
+#define music_assign_there() place_there("MUSIC:")
+
+/* AGS's own places for modules and pictures: listed when they are there. */
+#define MODS_ROOT  "ST-00:Modules"
+#define MODS_MENU  "AGS:Mods"
+#define MODS_SID   "ST-00:C64Music"
+#define PICS_ROOT  "Media:Images"
 
 /* Settings > Sound: what streams play through (AHI, where installed). */
 #define SOUND_VAR "AmigaMCE/SoundOutput"
@@ -1972,18 +2010,17 @@ static void sel_off_heading(struct Page *p, LONG d)
 }
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
-       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_MUSIC, SETP_LANG };
+       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Screen"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
-    N_("Music folders"), N_("Language") };
+    N_("Folders"), N_("Language"), N_("Folders") };    /* SETP_FOLDSET: titled by its kind */
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
 static void build_buf_settings(struct Page *p);
 static void build_rsrv_settings(struct Page *p);
-static void build_music_settings(struct Page *p);
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 static void build_nic_settings(struct Page *p);
@@ -2065,6 +2102,7 @@ static void build_settings(struct Page *p)
     action_item(p, _("General"), "", ACT_GENSET, MARK_ARROW);
     action_item(p, _("Screen"), gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
     action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, _("Folders"), "", ACT_FOLDERS, MARK_ARROW);
     action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
                 ACT_NETSET, MARK_ARROW);
 }
@@ -2367,35 +2405,53 @@ static void build_sound_settings(struct Page *p)
      * installed, and whether this Amiga is fast enough is measured at
      * each start (plex_tier), so one system image suits a slow Amiga
      * and a fast one. What it found is in About > System information. */
-    {
-        /* where Music finds the MP3 and FLAC files on this Amiga */
+}
+
+/* How many places a kind is found in: its folders, its assign, and for
+ * modules and pictures AGS's own drawers that are there. */
+static int fs_places(int k)
+{
+    int n = fs[k].n + (fs_assign_used(k) ? 1 : 0);
+    if (k == FS_MODS)
+        n += place_there(MODS_ROOT) + place_there(MODS_SID) + place_there(MODS_MENU);
+    else if (k == FS_PICS)
+        n += place_there(PICS_ROOT);
+    return n;
+}
+
+/* Settings > Folders: where Music, Mods and Pictures find their files. */
+static void build_folders_settings(struct Page *p)
+{
+    int k;
+    p->setp = SETP_FOLDERS;
+    for (k = 0; k < FS_COUNT; k++) {
         char tag[48];
-        int n = nmusic_dirs + (music_assign && music_assign_there() ? 1 : 0);
+        int n = fs_places(k);
         if (n)
             sprintf(tag, n == 1 ? _("%ld place") : _("%ld places"), (long)n);
         else
             strcpy(tag, _("none yet"));
-        heading_item(p, _("Music files"));
-        if ((it = action_item(p, _("Music folders"), tag, ACT_MUSICSET, MARK_NONE)))
-            it->mark = MARK_ARROW;
+        action_item(p, _(fs[k].name), tag, ACT_FSSET0 + k, MARK_ARROW);
     }
 }
 
-/* Settings > Sound > Music folders: the MUSIC: assign (on or off) and the
- * folders added; Fire twice on a folder takes it out. */
-static int music_rm = -1;           /* the folder Fire was pressed on once */
+/* Settings > Folders > Music (Modules, Pictures): the kind's assign (on or
+ * off) and the folders added; Fire twice on a folder takes it out. AGS's
+ * own places are not listed: they are used whenever they are there. */
+static int fs_rm = -1;              /* the folder Fire was pressed on once */
 
-static void build_music_settings(struct Page *p)
+static void build_folder_settings(struct Page *p)
 {
+    struct Folders *f = &fs[fs_page];
+    char label[48];
     int i;
-    p->setp = SETP_MUSIC;
-    action_item(p, _("Use the MUSIC: assign"), music_assign_there() ? _("assigned") : _("not assigned now"),
-                ACT_MUSICASSIGN, music_assign ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    for (i = 0; i < nmusic_dirs; i++)
-        action_item(p, music_dirs[i], music_rm == i ? _("Fire again: remove") : "",
-                    ACT_MUSICDIR0 + i, MARK_NONE);
-    action_item(p, _("Add a folder..."), nmusic_dirs < MUSIC_DIRS ? "" : _("eight at most"),
-                ACT_MUSICADD, MARK_NONE);
+    p->setp = SETP_FOLDSET;
+    sprintf(label, _("Use the %s assign"), f->assign);
+    action_item(p, label, place_there(f->assign) ? _("assigned") : _("not assigned now"),
+                ACT_FSASSIGN, f->use_assign ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    for (i = 0; i < f->n; i++)
+        action_item(p, f->dir[i], fs_rm == i ? _("Fire again: remove") : "", ACT_FSDIR0 + i, MARK_NONE);
+    action_item(p, _("Add a folder..."), f->n < FS_DIRS ? "" : _("eight at most"), ACT_FSADD, MARK_NONE);
 }
 
 static void draw_footer(void);
@@ -2425,11 +2481,14 @@ static void settings_rebuild(void)
         case SETP_RKBPS: build_rkbps_settings(q); break;
         case SETP_BUF: build_buf_settings(q); break;
         case SETP_RSRV: build_rsrv_settings(q); break;
-        case SETP_MUSIC: build_music_settings(q); break;
+        case SETP_FOLDSET: build_folder_settings(q); break;
+        case SETP_FOLDERS: build_folders_settings(q); break;
         case SETP_LANG: build_lang_settings(q); break;
         default: build_settings(q); break;
         }
-        if (q->setp < (int)(sizeof(setp_titles) / sizeof(setp_titles[0])))
+        if (q->setp == SETP_FOLDSET)
+            amce_strlcpy(q->title, _(fs[fs_page].title), sizeof(q->title));
+        else if (q->setp < (int)(sizeof(setp_titles) / sizeof(setp_titles[0])))
             amce_strlcpy(q->title, _(setp_titles[q->setp]), sizeof(q->title));
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
         sel_off_heading(q, 1);
@@ -2675,6 +2734,48 @@ static ULONG strtoul_(const char *s)
     return v;
 }
 
+/* Pictures' first page: with one place to look (AGS's Media:Images, the
+ * PICTURES: assign or a folder of Settings > Folders > Pictures), its
+ * pictures and folders straight away, as before; with more, a row for
+ * each. What pics_read_ui gives (-2: being read), or -1 with *src NULL
+ * when there is nowhere to look; *src: the one place. */
+static LONG pics_root_fill(struct Page *p, const char **src)
+{
+    const char *at[FS_DIRS + 2];
+    int n = 0, i;
+    if (place_there(PICS_ROOT))
+        at[n++] = PICS_ROOT;
+    if (fs_assign_used(FS_PICS))
+        at[n++] = "PICTURES:";
+    for (i = 0; i < fs[FS_PICS].n; i++)
+        at[n++] = fs[FS_PICS].dir[i];
+    *src = n == 1 ? at[0] : NULL;
+    if (n == 0)
+        return -1;
+    if (n == 1)
+        return pics_read_ui(at[0], &p->list);
+    for (i = 0; i < n; i++) {
+        char label[180];
+        const char *f = (const char *)FilePart((STRPTR)at[i]);
+        sprintf(label, _("Pictures: %.100s"), f[0] ? f : at[i]);
+        list_add(&p->list, label, at[i], "", IT_DIR);
+    }
+    return n;
+}
+
+/* Pictures' first page with nothing of its own (the server's rows follow). */
+static void pics_root_empty(struct Page *p, LONG n, const char *src)
+{
+    char t[120];
+    if (n > 0)
+        return;
+    if (src)
+        sprintf(t, n < 0 ? _("No %s here") : _("%s is empty"), src);
+    else
+        strcpy(t, _("No pictures folder: Settings > Folders > Pictures"));
+    list_add(&p->list, t, "", "", IT_TEXT);
+}
+
 static void build_root_pages(int mod)
 {
     struct Page *p;
@@ -2702,25 +2803,27 @@ static void build_root_pages(int mod)
     case MOD_PICTURES:
         if ((p = page_push(PT_LIST, _("Pictures")))) {
             LONG n;
+            const char *src;
             p->pics = 1;
-            n = pics_read_ui(PICS_ROOT, &p->list);
+            n = pics_root_fill(p, &src);
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
                 page_push(PT_TEXT, _("Pictures"));
             } else if (n <= 0 && !(caps.net && plex.on && plex.host[0])) {
                 page_pop();
                 if ((p = page_push(PT_TEXT, _("Pictures")))) {
-                    char t[160];
-                    sprintf(t, n < 0 ? _("No pictures found: AmigaMCE looks for them in %s.")
-                                     : _("%s has no pictures in it."), PICS_ROOT);
+                    char t[240];
+                    if (src)
+                        sprintf(t, n < 0 ? _("No pictures found: AmigaMCE looks for them in %s.")
+                                         : _("%s has no pictures in it."), src);
+                    else
+                        sprintf(t, _("No pictures found. AmigaMCE looks for them in PICTURES:, in "
+                                     "the folders of Settings > Folders > Pictures, and on AGS in %s."),
+                                PICS_ROOT);
                     text_para(p, t);
                 }
             } else {
-                if (n <= 0) {
-                    char t[80];
-                    sprintf(t, n < 0 ? _("No %s here") : _("%s is empty"), PICS_ROOT);
-                    list_add(&p->list, t, "", "", IT_TEXT);
-                }
+                pics_root_empty(p, n, src);
                 pictures_plex_rows(p);      /* the server's photo libraries first */
             }
         }
@@ -5505,9 +5608,6 @@ static void set_focus(int f);
  * the volume; Space plays and pauses; the CD32 pad's shoulders and N/P skip
  * modules. While it is shown it is brought up to date 25 times a second,
  * only what changed, and (double-buffered) without a flip. */
-#define MODS_ROOT  "ST-00:Modules"
-#define MODS_MENU  "AGS:Mods"
-#define MODS_SID   "ST-00:C64Music"
 #define VOL_STEP   4
 
 enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_VDOWN, NB_VUP, NB_COUNT };
@@ -7473,15 +7573,20 @@ static void np_shortcut_sync(void)
     p->top = 0;
 }
 
+/* Mods' first page: AGS's modules, C64 music and menu music where they
+ * are, then MODS: and the folders of Settings > Folders > Modules. */
 static void build_mods_root(void)
 {
     struct Page *p;
     BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU), sid = dir_exists(MODS_SID);
-    if (!mods && !menu_music && !mp_loaded()) {
+    BOOL asg = fs_assign_used(FS_MODS);
+    int i;
+    if (!mods && !menu_music && !sid && !asg && !fs[FS_MODS].n && !mp_loaded()) {
         if ((p = page_push(PT_TEXT, _("Mods")))) {
             char t[400];
-            sprintf(t, _("No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu "
-                         "music)."), MODS_ROOT, MODS_MENU);
+            sprintf(t, _("No modules found. AmigaMCE looks for them in MODS:, in the folders of "
+                         "Settings > Folders > Modules, and on AGS in %s and %s (its menu music)."),
+                    MODS_ROOT, MODS_MENU);
             text_para(p, t);
             text_line(p, "");
             text_para(p, _("It plays ProTracker modules itself, and hundreds of other formats "
@@ -7500,6 +7605,14 @@ static void build_mods_root(void)
         list_add(&p->list, _("C64 music"), MODS_SID, "", IT_DIR);
     if (menu_music)
         list_add(&p->list, _("Menu music"), MODS_MENU, "", IT_DIR);
+    if (asg)
+        list_add(&p->list, _("Modules (MODS:)"), "MODS:", "", IT_DIR);
+    for (i = 0; i < fs[FS_MODS].n; i++) {
+        char label[180];
+        const char *f = (const char *)FilePart((STRPTR)fs[FS_MODS].dir[i]);
+        sprintf(label, _("Modules: %.100s"), f[0] ? f : fs[FS_MODS].dir[i]);
+        list_add(&p->list, label, fs[FS_MODS].dir[i], "", IT_DIR);
+    }
 }
 
 static void pane_settle(void);
@@ -8818,7 +8931,7 @@ static void music_file_rows(struct Page *p)
         }
     }
     if (!n)
-        list_add(&p->list, _("Music files: Settings > Sound > Music folders"), "", "", IT_TEXT);
+        list_add(&p->list, _("Music files: Settings > Folders > Music"), "", "", IT_TEXT);
 }
 
 static void build_music_root(struct Page *p)
@@ -9484,11 +9597,11 @@ static void pictures_root_again(void)
     sel = r->sel;
     list_free(&r->list);
     list_init(&r->list);
-    n = pics_read_ui(PICS_ROOT, &r->list);
-    if (n <= 0 && n != -2) {
-        char t[80];
-        sprintf(t, n < 0 ? _("No %s here") : _("%s is empty"), PICS_ROOT);
-        list_add(&r->list, t, "", "", IT_TEXT);
+    {
+        const char *src;
+        n = pics_root_fill(r, &src);
+        if (n != -2)
+            pics_root_empty(r, n, src);
     }
     pictures_plex_rows(r);
     r->sel = sel < r->list.count ? sel : 0;
@@ -10214,16 +10327,22 @@ static void radio_station(struct Item *it)
     draw_footer();
 }
 
-/* Settings > Music folders > Add a folder: asl.library's requester, for
- * folders only, on AmigaMCE's screen. */
-static void music_add_folder(void)
+/* Settings > Folders > (a kind) > Add a folder: asl.library's requester,
+ * for folders only, on AmigaMCE's screen. */
+static void folder_add(int k)
 {
+    static const char *const req[FS_COUNT] = { N_("A folder of MP3 or FLAC files"),
+        N_("A folder of modules"), N_("A folder of pictures") };
+    static const char *const added[FS_COUNT] = { N_("Folder added: its music is under Music"),
+        N_("Folder added: its modules are under Mods"),
+        N_("Folder added: its pictures are under Pictures") };
+    struct Folders *f = &fs[k];
     struct FileRequester *fr;
     char path[300];
     BOOL db, got = FALSE;
     int i;
-    if (nmusic_dirs >= MUSIC_DIRS) {
-        set_msg(_("Eight music folders at most: take one out first"));
+    if (f->n >= FS_DIRS) {
+        set_msg(_("Eight folders at most: take one out first"));
         return;
     }
     if (!AslBase && !(AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38))) {
@@ -10235,9 +10354,9 @@ static void music_add_folder(void)
         gfx_dbuf_stop(&g);                  /* the requester draws on the screen shown */
     fr = (struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest, ASLFR_Window, (ULONG)g.win, ASLFR_SleepWindow, TRUE,
-        ASLFR_TitleText, (ULONG)_("A folder of MP3 or FLAC files"), ASLFR_PositiveText, (ULONG)_("Add"),
+        ASLFR_TitleText, (ULONG)_(req[k]), ASLFR_PositiveText, (ULONG)_("Add"),
         ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
-        (ULONG)(nmusic_dirs ? music_dirs[nmusic_dirs - 1] : "SYS:"), TAG_DONE);
+        (ULONG)(f->n ? f->dir[f->n - 1] : "SYS:"), TAG_DONE);
     if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
         /* made whole (a name typed may be relative to where AmigaMCE runs) */
         struct Process *me = (struct Process *)FindTask(NULL);
@@ -10245,7 +10364,7 @@ static void music_add_folder(void)
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
         if ((l = Lock((CONST_STRPTR)fr->fr_Drawer, SHARED_LOCK))) {
-            got = NameFromLock(l, (STRPTR)path, sizeof(music_dirs[0]) - 1) != 0;
+            got = NameFromLock(l, (STRPTR)path, sizeof(f->dir[0]) - 1) != 0;
             UnLock(l);
         }
         me->pr_WindowPtr = old;
@@ -10257,18 +10376,18 @@ static void music_add_folder(void)
     if (db)
         gfx_dbuf_start(&g);
     if (got) {
-        for (i = 0; i < nmusic_dirs; i++)
-            if (!amce_stricmp(music_dirs[i], path))
+        for (i = 0; i < f->n; i++)
+            if (!amce_stricmp(f->dir[i], path))
                 break;
-        if (i < nmusic_dirs) {
-            set_msg(_("That folder is in Music already"));
+        if (i < f->n) {
+            set_msg(_("That folder is there already"));
         } else {
-            amce_strlcpy(music_dirs[nmusic_dirs++], path, sizeof(music_dirs[0]));
-            save_music_dirs();
+            amce_strlcpy(f->dir[f->n++], path, sizeof(f->dir[0]));
+            save_folders(k);
             settings_rebuild();
-            if (cur() && cur()->setp == SETP_MUSIC)
-                cur()->sel = nmusic_dirs;   /* on the folder added */
-            set_msg(_("Folder added: its music is under Music"));
+            if (cur() && cur()->setp == SETP_FOLDSET)
+                cur()->sel = f->n;          /* on the folder added */
+            set_msg(_(added[k]));
         }
     }
     draw_all();                             /* where the requester was */
@@ -10415,35 +10534,42 @@ static void act_action(struct Item *it)
                       : _("AHI: radio, Plex and music files; modules stay on Paula"))
                    : _("Paula plays everything"));
     }
-    else if (it->action == ACT_MUSICSET) {
-        music_rm = -1;
-        open_settings_page(_("Music folders"), build_music_settings);
-    } else if (it->action == ACT_MUSICASSIGN) {
-        music_assign = !music_assign;
-        save_setting(MUSICASSIGN_VAR, music_assign ? "" : "off");
-        music_rm = -1;
+    else if (it->action == ACT_FOLDERS)
+        open_settings_page(_("Folders"), build_folders_settings);
+    else if (it->action >= ACT_FSSET0 && it->action <= ACT_FSSET_END) {
+        fs_page = it->action - ACT_FSSET0;
+        fs_rm = -1;
+        open_settings_page(_(fs[fs_page].title), build_folder_settings);
+    } else if (it->action == ACT_FSASSIGN) {
+        struct Folders *f = &fs[fs_page];
+        char m[96];
+        f->use_assign = !f->use_assign;
+        save_setting(f->avar, f->use_assign ? "" : "off");
+        fs_rm = -1;
         plex_settings_again(FALSE);
-        set_msg(music_assign ? _("Music lists MUSIC: when it is assigned") : _("Music leaves MUSIC: out"));
-    } else if (it->action == ACT_MUSICADD) {
-        music_rm = -1;
-        music_add_folder();
-    } else if (it->action >= ACT_MUSICDIR0 && it->action <= ACT_MUSICDIR_END) {
-        int i = it->action - ACT_MUSICDIR0;
-        if (i >= nmusic_dirs)
+        sprintf(m, f->use_assign ? _("%s used when it is assigned") : _("%s left out"), f->assign);
+        set_msg(m);
+    } else if (it->action == ACT_FSADD) {
+        fs_rm = -1;
+        folder_add(fs_page);
+    } else if (it->action >= ACT_FSDIR0 && it->action <= ACT_FSDIR_END) {
+        struct Folders *f = &fs[fs_page];
+        int i = it->action - ACT_FSDIR0;
+        if (i >= f->n)
             return;
-        if (music_rm != i) {
-            music_rm = i;
+        if (fs_rm != i) {
+            fs_rm = i;
             plex_settings_again(FALSE);
-            set_msg(_("Fire again to take this folder out of Music (its files stay)"));
+            set_msg(_("Fire again to take this folder out (its files stay)"));
             return;
         }
-        for (; i < nmusic_dirs - 1; i++)
-            strcpy(music_dirs[i], music_dirs[i + 1]);
-        nmusic_dirs--;
-        music_rm = -1;
-        save_music_dirs();
+        for (; i < f->n - 1; i++)
+            strcpy(f->dir[i], f->dir[i + 1]);
+        f->n--;
+        fs_rm = -1;
+        save_folders(fs_page);
         plex_settings_again(FALSE);
-        set_msg(_("Folder taken out of Music"));
+        set_msg(_("Folder taken out"));
     }
     else if (it->action == ACT_NICAUTO)
         choose_nic(-1);
@@ -11713,7 +11839,7 @@ static int app_main(void)
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     load_sound_out();
-    load_music_dirs();
+    load_folders();
     songs_can_play(caps.mp3_mpega, caps.flacdec);   /* what music lists show */
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();

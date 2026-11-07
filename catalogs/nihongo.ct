@@ -79,6 +79,9 @@ Amiga Game Selectorが見つかりません。
 MSG_017A1274
 AmigaMCEはAGS:アサインを探し、次に自分のドロワーの隣とWHDLoad:にあるAGS2ドロワーを探します。AmigaMCEをAGS 3のシステムにインストールするか、アサインができるようにAGSを一度起動してください。
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_534B8F30
+音楽、MOD、画像、ラジオはなくても使えます: 設定 > フォルダーで音楽、モジュール、画像の場所を指定します。
+; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
 MSG_64FF7B9F
 あり
 ; found
@@ -220,6 +223,18 @@ MSG_720CF4AD
 MSG_0065B852
 3秒、途切れに強い
 ; 3s, more held against dropouts
+MSG_4DAC8901
+音楽フォルダー
+; Music folders
+MSG_674C644A
+モジュール
+; Modules
+MSG_7338A4A0
+モジュールフォルダー
+; Module folders
+MSG_045F3994
+画像フォルダー
+; Picture folders
 MSG_2DA81BF2
 スムーズ: Fonts/amce-smoothがこのAmigaMCEと合いません
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -256,9 +271,9 @@ MSG_360055B5
 MSG_18162AC4
 局リストのサーバー
 ; Station list server
-MSG_4DAC8901
-音楽フォルダー
-; Music folders
+MSG_542FED8A
+フォルダー
+; Folders
 MSG_1A73DB9B
 言語
 ; Language
@@ -448,12 +463,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 まだなし
 ; none yet
-MSG_6BED289B
-音楽ファイル
-; Music files
-MSG_47E8C75F
-MUSIC:アサインを使う
-; Use the MUSIC: assign
+MSG_765A3F9A
+%sアサインを使う
+; Use the %s assign
 MSG_4AE004BD
 アサイン済み
 ; assigned
@@ -508,6 +520,18 @@ Amigaはその所有者の商標です。ゲーム、デモ、音楽、画像は
 MSG_302861BB
 このフロントエンドは、Paul VinceとAmiga Game Selectorの多大な努力なしにはありえませんでした。
 ; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_07ED33C3
+画像: %.100s
+; Pictures: %.100s
+MSG_40EDAFB4
+ここに%sはありません
+; No %s here
+MSG_190B5576
+%sは空です
+; %s is empty
+MSG_1018D7F4
+画像フォルダーがありません: 設定 > フォルダー > 画像
+; No pictures folder: Settings > Folders > Pictures
 MSG_69CE1669
 ビデオ再生は今後対応します。
 ; Video playback arrives in a later version.
@@ -520,12 +544,9 @@ MSG_29C163F7
 MSG_6A91D3DF
 %sに画像がありません。
 ; %s has no pictures in it.
-MSG_40EDAFB4
-ここに%sはありません
-; No %s here
-MSG_190B5576
-%sは空です
-; %s is empty
+MSG_5DEE87BD
+画像が見つかりません。AmigaMCEはPICTURES:、設定 > フォルダー > 画像のフォルダー、AGSでは%sで探します。
+; No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
 MSG_42D8D701
 日
 ; Sun
@@ -820,21 +841,24 @@ MSG_052FF533
 MSG_369379DB
 局が送信を止めました
 ; The station stopped sending
-MSG_3F318CD7
-モジュールが見つかりません。AmigaMCEは%sと%s (AGSのメニュー音楽) で探します。
-; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_0D35346B
+モジュールが見つかりません。AmigaMCEはMODS:、設定 > フォルダー > モジュールのフォルダー、AGSでは%sと%s (メニュー音楽) で探します。
+; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 MSG_6870F104
 ProTrackerのモジュールは自分で再生し、他の何百もの形式 (OctaMED、TFMX、Future Composer、SID...) はEaglePlayerやDeliTrackerのプレーヤーで、すべてAmiga本来の音で再生します。
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
-MSG_674C644A
-モジュール
-; Modules
 MSG_1B1E85CB
 C64の音楽
 ; C64 music
 MSG_7F6215F5
 メニュー音楽
 ; Menu music
+MSG_0D90C4A2
+モジュール (MODS:)
+; Modules (MODS:)
+MSG_66E86F1F
+モジュール: %.100s
+; Modules: %.100s
 MSG_1361020B
 そのフォルダーに画像はありません
 ; No pictures in that folder
@@ -910,9 +934,9 @@ MSG_5D86BD77
 MSG_47B3C622
 音楽ファイル: %.100s
 ; Music files: %.100s
-MSG_46D8C4D9
-音楽: 設定 > サウンド > 音楽フォルダー
-; Music files: Settings > Sound > Music folders
+MSG_55DB9C3A
+音楽: 設定 > フォルダー > 音楽
+; Music files: Settings > Folders > Music
 MSG_75470054
 TCP/IPスタックが動いていません: Plexにはネットワークが必要です
 ; No TCP/IP stack running: Plex needs networking
@@ -1072,24 +1096,36 @@ MSG_5A5309D7
 MSG_18A292C0
 一覧で局にボタンを押すと再生します。
 ; Fire on the station in its list plays it.
-MSG_510F21FD
-音楽フォルダーは最大8つです: 先に1つ外してください
-; Eight music folders at most: take one out first
 MSG_5143C289
 MP3かFLACのファイルのフォルダー
 ; A folder of MP3 or FLAC files
+MSG_19FEBB54
+モジュールのフォルダー
+; A folder of modules
+MSG_20B552D8
+画像のフォルダー
+; A folder of pictures
+MSG_5B08757B
+フォルダーを追加: 音楽から聴けます
+; Folder added: its music is under Music
+MSG_182BFE5D
+フォルダーを追加: MODから聴けます
+; Folder added: its modules are under Mods
+MSG_082FF2F7
+フォルダーを追加: 画像から見られます
+; Folder added: its pictures are under Pictures
+MSG_0242E102
+フォルダーは最大8つです: 先に1つ外してください
+; Eight folders at most: take one out first
 MSG_1DC3AA14
 追加
 ; Add
 MSG_2B8275A5
 そのフォルダーが見つかりません
 ; That folder could not be found
-MSG_6F975CF8
-そのフォルダーはすでに音楽にあります
-; That folder is in Music already
-MSG_5B08757B
-フォルダーを追加: 音楽から聴けます
-; Folder added: its music is under Music
+MSG_692E7242
+そのフォルダーはすでにあります
+; That folder is there already
 MSG_2C2767AF
 スタイル: スムーズにはRTG画面が必要です
 ; Style: Smooth needs an RTG screen
@@ -1126,18 +1162,18 @@ AHI: ラジオ、Plex、音楽ファイル。MODはPaula
 MSG_4975E21A
 すべてPaulaで再生
 ; Paula plays everything
-MSG_57C64449
-アサインされていればMUSIC:を音楽に表示
-; Music lists MUSIC: when it is assigned
-MSG_0BC8BC2B
-MUSIC:を音楽に表示しない
-; Music leaves MUSIC: out
-MSG_34772BBE
-もう一度ボタンで音楽から外す (ファイルは残る)
-; Fire again to take this folder out of Music (its files stay)
-MSG_4BA4B0A8
-フォルダーを音楽から外しました
-; Folder taken out of Music
+MSG_0EE3FD77
+アサインされていれば%sを使う
+; %s used when it is assigned
+MSG_26D6BADA
+%sを使わない
+; %s left out
+MSG_719F5F36
+もう一度ボタンで外す (ファイルは残る)
+; Fire again to take this folder out (its files stay)
+MSG_4A2FC46E
+フォルダーを外しました
+; Folder taken out
 MSG_746B08BF
 もう一度EscでAmigaMCEを終了
 ; Press Esc again to quit AmigaMCE

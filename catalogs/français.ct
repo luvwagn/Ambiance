@@ -79,6 +79,9 @@ Amiga Game Selector est introuvable.
 MSG_017A1274
 AmigaMCE cherche l'assignation AGS:, puis un tiroir AGS2 à côté du sien et dans WHDLoad:. Installez AmigaMCE sur un système AGS 3, ou lancez AGS une fois pour que ses assignations existent.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_534B8F30
+Musique, Mods, Images et Radio marchent sans lui : Réglages > Dossiers dit où sont votre musique, vos modules et vos images.
+; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
 MSG_64FF7B9F
 trouvé
 ; found
@@ -220,6 +223,18 @@ MSG_720CF4AD
 MSG_0065B852
 3 s, plus de réserve contre les coupures
 ; 3s, more held against dropouts
+MSG_4DAC8901
+Dossiers de musique
+; Music folders
+MSG_674C644A
+Modules
+; Modules
+MSG_7338A4A0
+Dossiers de modules
+; Module folders
+MSG_045F3994
+Dossiers d'images
+; Picture folders
 MSG_2DA81BF2
 Lisse : Fonts/amce-smooth ne correspond pas à cet AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -255,9 +270,9 @@ Tampon du flux
 MSG_18162AC4
 Serveur des listes de stations
 ; Station list server
-MSG_4DAC8901
-Dossiers de musique
-; Music folders
+MSG_542FED8A
+Dossiers
+; Folders
 MSG_1A73DB9B
 Langue
 ; Language
@@ -446,12 +461,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 aucun pour l'instant
 ; none yet
-MSG_6BED289B
-Fichiers musicaux
-; Music files
-MSG_47E8C75F
-Utiliser l'assignation MUSIC:
-; Use the MUSIC: assign
+MSG_765A3F9A
+Utiliser l'assignation %s
+; Use the %s assign
 MSG_4AE004BD
 assignée
 ; assigned
@@ -506,6 +518,18 @@ Amiga est une marque de son propriétaire. Les jeux, démos, musiques et images 
 MSG_302861BB
 Cette interface n'existerait pas sans l'immense travail de Paul Vince et d'Amiga Game Selector.
 ; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_07ED33C3
+Images : %.100s
+; Pictures: %.100s
+MSG_40EDAFB4
+Pas de %s ici
+; No %s here
+MSG_190B5576
+%s est vide
+; %s is empty
+MSG_1018D7F4
+Aucun dossier d'images : Réglages > Dossiers > Images
+; No pictures folder: Settings > Folders > Pictures
 MSG_69CE1669
 La lecture vidéo arrivera dans une version ultérieure.
 ; Video playback arrives in a later version.
@@ -518,12 +542,9 @@ Aucune image trouvée : AmigaMCE les cherche dans %s.
 MSG_6A91D3DF
 %s ne contient aucune image.
 ; %s has no pictures in it.
-MSG_40EDAFB4
-Pas de %s ici
-; No %s here
-MSG_190B5576
-%s est vide
-; %s is empty
+MSG_5DEE87BD
+Aucune image trouvée. AmigaMCE les cherche dans PICTURES:, dans les dossiers de Réglages > Dossiers > Images et, avec AGS, dans %s.
+; No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
 MSG_42D8D701
 Dim
 ; Sun
@@ -818,21 +839,24 @@ La piste n'a pas pu démarrer à cet endroit
 MSG_369379DB
 La station a cessé d'émettre
 ; The station stopped sending
-MSG_3F318CD7
-Aucun module trouvé. AmigaMCE les cherche dans %s et dans %s (la musique des menus d'AGS).
-; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_0D35346B
+Aucun module trouvé. AmigaMCE les cherche dans MODS:, dans les dossiers de Réglages > Dossiers > Modules et, avec AGS, dans %s et %s (sa musique de menu).
+; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 MSG_6870F104
 Il joue lui-même les modules ProTracker, et des centaines d'autres formats (OctaMED, TFMX, Future Composer, SID...) avec les lecteurs d'EaglePlayer et de DeliTracker, le tout sur le son propre de l'Amiga.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
-MSG_674C644A
-Modules
-; Modules
 MSG_1B1E85CB
 Musique C64
 ; C64 music
 MSG_7F6215F5
 Musique des menus
 ; Menu music
+MSG_0D90C4A2
+Modules (MODS:)
+; Modules (MODS:)
+MSG_66E86F1F
+Modules : %.100s
+; Modules: %.100s
 MSG_1361020B
 Aucune image dans ce dossier
 ; No pictures in that folder
@@ -907,9 +931,9 @@ Fichiers musicaux (MUSIC:)
 MSG_47B3C622
 Fichiers musicaux : %.100s
 ; Music files: %.100s
-MSG_46D8C4D9
-Fichiers musicaux : Réglages > Son > Dossiers de musique
-; Music files: Settings > Sound > Music folders
+MSG_55DB9C3A
+Fichiers musicaux : Réglages > Dossiers > Musique
+; Music files: Settings > Folders > Music
 MSG_75470054
 Aucune pile TCP/IP active : Plex a besoin du réseau
 ; No TCP/IP stack running: Plex needs networking
@@ -1067,24 +1091,36 @@ Flux :    %s
 MSG_18A292C0
 Feu sur la station dans sa liste la joue.
 ; Fire on the station in its list plays it.
-MSG_510F21FD
-Huit dossiers de musique au plus : retirez-en un d'abord
-; Eight music folders at most: take one out first
 MSG_5143C289
 Un dossier de fichiers MP3 ou FLAC
 ; A folder of MP3 or FLAC files
+MSG_19FEBB54
+Un dossier de modules
+; A folder of modules
+MSG_20B552D8
+Un dossier d'images
+; A folder of pictures
+MSG_5B08757B
+Dossier ajouté : sa musique est dans Musique
+; Folder added: its music is under Music
+MSG_182BFE5D
+Dossier ajouté : ses modules sont dans Mods
+; Folder added: its modules are under Mods
+MSG_082FF2F7
+Dossier ajouté : ses images sont dans Images
+; Folder added: its pictures are under Pictures
+MSG_0242E102
+Huit dossiers au plus : retirez-en un d'abord
+; Eight folders at most: take one out first
 MSG_1DC3AA14
 Ajouter
 ; Add
 MSG_2B8275A5
 Ce dossier est introuvable
 ; That folder could not be found
-MSG_6F975CF8
-Ce dossier est déjà dans Musique
-; That folder is in Music already
-MSG_5B08757B
-Dossier ajouté : sa musique est dans Musique
-; Folder added: its music is under Music
+MSG_692E7242
+Ce dossier y est déjà
+; That folder is there already
 MSG_2C2767AF
 Style : Lisse nécessite un écran RTG
 ; Style: Smooth needs an RTG screen
@@ -1121,18 +1157,18 @@ AHI : radio, Plex et fichiers musicaux ; les modules restent sur Paula
 MSG_4975E21A
 Paula joue tout
 ; Paula plays everything
-MSG_57C64449
-Musique liste MUSIC: quand elle est assignée
-; Music lists MUSIC: when it is assigned
-MSG_0BC8BC2B
-Musique ignore MUSIC:
-; Music leaves MUSIC: out
-MSG_34772BBE
-Feu encore pour retirer ce dossier de Musique (ses fichiers restent)
-; Fire again to take this folder out of Music (its files stay)
-MSG_4BA4B0A8
-Dossier retiré de Musique
-; Folder taken out of Music
+MSG_0EE3FD77
+%s utilisée quand elle est assignée
+; %s used when it is assigned
+MSG_26D6BADA
+%s laissée de côté
+; %s left out
+MSG_719F5F36
+Feu encore pour retirer ce dossier (ses fichiers restent)
+; Fire again to take this folder out (its files stay)
+MSG_4A2FC46E
+Dossier retiré
+; Folder taken out
 MSG_746B08BF
 Appuyez encore sur Esc pour quitter AmigaMCE
 ; Press Esc again to quit AmigaMCE

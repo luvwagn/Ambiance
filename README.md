@@ -6,8 +6,10 @@ tracker music, internet radio, your Plex music and photo libraries and your pict
 all in one place, driven by keyboard, mouse or joystick, in the spirit of
 Kodi and Windows Media Center.
 
-AmigaMCE is a drop-in companion to AGS 3: copy its drawer onto an AGS
-installation and double-click it. Everything plays inside AmigaMCE, on the
+Copy its drawer anywhere and double-click it. On an AGS 3 installation it
+is a drop-in companion: AGS's games, demos, modules and pictures are found
+by themselves. On any other Amiga, Settings > Folders says where your
+music, modules and pictures are (games and demos need AGS). Everything plays inside AmigaMCE, on the
 Amiga's own screen and sound; it never switches you out to another program.
 
 It runs on Kickstart 3.1 and up with a 68020 or better, from a plain A1200
@@ -37,6 +39,8 @@ of the Amiga to how fast it really is.
   EaglePlayer and DeliTracker player modules where they are installed (AGS
   has them). XM, S3M, IT and multichannel MODs are mixed by modplug.library
   on a 68020 or better. Packed modules are unpacked with xfdmaster.library.
+  Modules come from the `MODS:` assign and the folders of Settings > Folders
+  > Modules, and on AGS from `ST-00:Modules`, `ST-00:C64Music` and `AGS:Mods`.
 - **Radio:** internet radio stations from
   [radio-browser.info](https://www.radio-browser.info), by top voted, most
   listened to, trending, chiptune, demoscene, genre or country (A to Z,
@@ -52,7 +56,7 @@ of the Amiga to how fast it really is.
   own network, so no AmiSSL is needed.
 - **Music files:** MP3, FLAC, WAV, AIFF and 8SVX files on the Amiga
   itself, under Music next to Plex: the `MUSIC:` assign if you have one,
-  and up to eight folders chosen in Settings > Sound > Music folders. Only
+  and up to eight folders chosen in Settings > Folders > Music. Only
   folders with music somewhere inside are listed. Beside the list: the
   file's tags (ID3, FLAC's Vorbis comments, AIFF and 8SVX names), format,
   length and cover (the folder's cover file, or the picture inside the
@@ -65,7 +69,8 @@ of the Amiga to how fast it really is.
 
 ### Pictures
 
-- Browses `Media:Images` with a preview of the selected picture or folder,
+- Browses the `PICTURES:` assign, the folders of Settings > Folders >
+  Pictures and AGS's `Media:Images`, with a preview of the selected picture or folder,
   shows pictures full screen on AmigaMCE's own screen (no mode switch), and
   plays folders as slideshows. Pictures are decoded by the installed
   datatypes and shown in their own colours where the screen allows it.
@@ -105,7 +110,7 @@ Paula.
    should go and which languages to install (your Workbench's is ticked).
    Or copy the `AmigaMCE` drawer to your hard drive yourself, all languages
    included; keep its `Fonts` drawer next to the program.
-2. If AGS boots straight into its own menu, quit AGS to Workbench first.
+2. On AGS, if it boots straight into its own menu, quit AGS to Workbench first.
 3. Double-click AmigaMCE.
 
 The ADF carries an English-only archive (there is no room for the
@@ -173,7 +178,8 @@ playing.
 |---|---|
 | General | Jump scrolling (very long lists step a letter at a time), Debug |
 | Screen | Screen mode, Style (fonts and looks), Double buffering (RTG) |
-| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver; Music folders (the `MUSIC:` assign on or off, folders to add or take out) |
+| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
+| Folders | Where Music, Mods and Pictures find their files: the `MUSIC:`, `MODS:` and `PICTURES:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and

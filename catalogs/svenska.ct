@@ -79,6 +79,9 @@ Amiga Game Selector hittades inte.
 MSG_017A1274
 AmigaMCE letar efter tilldelningen AGS:, sedan efter en låda AGS2 bredvid sin egen och i WHDLoad:. Installera AmigaMCE på ett AGS 3-system, eller starta AGS en gång så att dess tilldelningar finns.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_534B8F30
+Musik, Moduler, Bilder och Radio fungerar utan det: Inställningar > Mappar säger var din musik, dina moduler och bilder finns.
+; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
 MSG_64FF7B9F
 hittad
 ; found
@@ -217,6 +220,18 @@ MSG_720CF4AD
 MSG_0065B852
 3 s, mer i reserv mot avbrott
 ; 3s, more held against dropouts
+MSG_4DAC8901
+Musikmappar
+; Music folders
+MSG_674C644A
+Moduler
+; Modules
+MSG_7338A4A0
+Modulmappar
+; Module folders
+MSG_045F3994
+Bildmappar
+; Picture folders
 MSG_2DA81BF2
 Mjuk: Fonts/amce-smooth passar inte den här AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -252,9 +267,9 @@ Strömbuffert
 MSG_18162AC4
 Server för stationslistor
 ; Station list server
-MSG_4DAC8901
-Musikmappar
-; Music folders
+MSG_542FED8A
+Mappar
+; Folders
 MSG_1A73DB9B
 Språk
 ; Language
@@ -444,12 +459,9 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 inga ännu
 ; none yet
-MSG_6BED289B
-Musikfiler
-; Music files
-MSG_47E8C75F
-Använd tilldelningen MUSIC:
-; Use the MUSIC: assign
+MSG_765A3F9A
+Använd tilldelningen %s
+; Use the %s assign
 MSG_4AE004BD
 tilldelad
 ; assigned
@@ -504,6 +516,18 @@ Amiga är ett varumärke som tillhör sin ägare. Spel, demos, musik och bilder 
 MSG_302861BB
 Det här gränssnittet hade inte varit möjligt utan det enorma arbete som Paul Vince och Amiga Game Selector gjort.
 ; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_07ED33C3
+Bilder: %.100s
+; Pictures: %.100s
+MSG_40EDAFB4
+Ingen %s här
+; No %s here
+MSG_190B5576
+%s är tom
+; %s is empty
+MSG_1018D7F4
+Ingen bildmapp: Inställningar > Mappar > Bilder
+; No pictures folder: Settings > Folders > Pictures
 MSG_69CE1669
 Videouppspelning kommer i en senare version.
 ; Video playback arrives in a later version.
@@ -516,12 +540,9 @@ Inga bilder hittades: AmigaMCE letar efter dem i %s.
 MSG_6A91D3DF
 %s innehåller inga bilder.
 ; %s has no pictures in it.
-MSG_40EDAFB4
-Ingen %s här
-; No %s here
-MSG_190B5576
-%s är tom
-; %s is empty
+MSG_5DEE87BD
+Inga bilder hittades. AmigaMCE letar efter dem i PICTURES:, i mapparna under Inställningar > Mappar > Bilder och, med AGS, i %s.
+; No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
 MSG_42D8D701
 Sön
 ; Sun
@@ -816,21 +837,24 @@ Spåret kunde inte starta där
 MSG_369379DB
 Stationen slutade sända
 ; The station stopped sending
-MSG_3F318CD7
-Inga moduler hittades. AmigaMCE letar efter dem i %s och i %s (AGS menymusik).
-; No modules found. AmigaMCE looks for them in %s and in %s (AGS's menu music).
+MSG_0D35346B
+Inga moduler hittades. AmigaMCE letar efter dem i MODS:, i mapparna under Inställningar > Mappar > Moduler och, med AGS, i %s och %s (dess menymusik).
+; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 MSG_6870F104
 Den spelar ProTracker-moduler själv, och hundratals andra format (OctaMED, TFMX, Future Composer, SID...) med EaglePlayers och DeliTrackers spelare, allt med Amigans eget ljud.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
-MSG_674C644A
-Moduler
-; Modules
 MSG_1B1E85CB
 C64-musik
 ; C64 music
 MSG_7F6215F5
 Menymusik
 ; Menu music
+MSG_0D90C4A2
+Moduler (MODS:)
+; Modules (MODS:)
+MSG_66E86F1F
+Moduler: %.100s
+; Modules: %.100s
 MSG_1361020B
 Inga bilder i den mappen
 ; No pictures in that folder
@@ -905,9 +929,9 @@ Musikfiler (MUSIC:)
 MSG_47B3C622
 Musikfiler: %.100s
 ; Music files: %.100s
-MSG_46D8C4D9
-Musikfiler: Inställningar > Ljud > Musikmappar
-; Music files: Settings > Sound > Music folders
+MSG_55DB9C3A
+Musikfiler: Inställningar > Mappar > Musik
+; Music files: Settings > Folders > Music
 MSG_75470054
 Ingen TCP/IP-stack körs: Plex behöver nätverk
 ; No TCP/IP stack running: Plex needs networking
@@ -1063,24 +1087,36 @@ Ström:    %s
 MSG_18A292C0
 Avfyra på stationen i dess lista spelar den.
 ; Fire on the station in its list plays it.
-MSG_510F21FD
-Högst åtta musikmappar: ta bort en först
-; Eight music folders at most: take one out first
 MSG_5143C289
 En mapp med MP3- eller FLAC-filer
 ; A folder of MP3 or FLAC files
+MSG_19FEBB54
+En mapp med moduler
+; A folder of modules
+MSG_20B552D8
+En mapp med bilder
+; A folder of pictures
+MSG_5B08757B
+Mappen tillagd: dess musik finns under Musik
+; Folder added: its music is under Music
+MSG_182BFE5D
+Mappen tillagd: dess moduler finns under Moduler
+; Folder added: its modules are under Mods
+MSG_082FF2F7
+Mappen tillagd: dess bilder finns under Bilder
+; Folder added: its pictures are under Pictures
+MSG_0242E102
+Högst åtta mappar: ta bort en först
+; Eight folders at most: take one out first
 MSG_1DC3AA14
 Lägg till
 ; Add
 MSG_2B8275A5
 Mappen hittades inte
 ; That folder could not be found
-MSG_6F975CF8
-Mappen finns redan i Musik
-; That folder is in Music already
-MSG_5B08757B
-Mappen tillagd: dess musik finns under Musik
-; Folder added: its music is under Music
+MSG_692E7242
+Mappen finns redan
+; That folder is there already
 MSG_2C2767AF
 Stil: Mjuk kräver en RTG-skärm
 ; Style: Smooth needs an RTG screen
@@ -1117,18 +1153,18 @@ AHI: radio, Plex och musikfiler; moduler stannar på Paula
 MSG_4975E21A
 Paula spelar allt
 ; Paula plays everything
-MSG_57C64449
-Musik listar MUSIC: när den är tilldelad
-; Music lists MUSIC: when it is assigned
-MSG_0BC8BC2B
-Musik utelämnar MUSIC:
-; Music leaves MUSIC: out
-MSG_34772BBE
-Avfyra igen för att ta bort mappen från Musik (dess filer finns kvar)
-; Fire again to take this folder out of Music (its files stay)
-MSG_4BA4B0A8
-Mappen borttagen från Musik
-; Folder taken out of Music
+MSG_0EE3FD77
+%s används när den är tilldelad
+; %s used when it is assigned
+MSG_26D6BADA
+%s utelämnas
+; %s left out
+MSG_719F5F36
+Avfyra igen för att ta bort mappen (dess filer finns kvar)
+; Fire again to take this folder out (its files stay)
+MSG_4A2FC46E
+Mappen borttagen
+; Folder taken out
 MSG_746B08BF
 Tryck Esc igen för att avsluta AmigaMCE
 ; Press Esc again to quit AmigaMCE

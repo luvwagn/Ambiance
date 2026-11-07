@@ -1,4 +1,4 @@
-; $VER: Install-AmigaMCE 1.0 (06.11.2026)
+; $VER: Install-AmigaMCE 1.1 (06.11.2026)
 ;
 ; Installer script for AmigaMCE: the program with its fonts and licences,
 ; and the languages chosen, the Workbench's own ticked to begin with.
@@ -12,7 +12,7 @@
 ; This file is Latin-1 (Français, Español, Português).
 
 (set @app-name "AmigaMCE")
-(welcome "Welcome to AmigaMCE, a media centre for AGS.\n\nThis installs AmigaMCE and the languages you choose. Settings on an earlier installation are kept.")
+(welcome "Welcome to AmigaMCE, a media centre for the Amiga.\n\nThis installs AmigaMCE and the languages you choose. Settings on an earlier installation are kept.")
 
 (set #where
   (askdir
@@ -94,4 +94,4 @@
 (if (IN #langs 10) ((set #drawer "nihongo") (P_LANG)))
 (complete 100)
 
-(exit "AmigaMCE is installed. Double-click it in its drawer to start; if AGS boots straight into its own menu, quit to Workbench first.")
+(exit "AmigaMCE is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are.")
