@@ -1484,6 +1484,11 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     if (caps.flacdec && plex_tier() < 2)
         text_line(p, _("  Plex: FLAC converted to MP3 here"));
+    if (ep_installed())
+        sprintf(line, _("Module players: %ld (EaglePlayer, DeliTracker)"), (long)ep_players());
+    else
+        strcpy(line, _("Module players: none (Aminet: mus/play/Eagleplayer)"));
+    text_line(p, line);
     text_line(p, "");
     sprintf(line, "Debug log: %s", amce_log_path() ? amce_log_path() : "off");
     text_line(p, line);
@@ -7596,6 +7601,11 @@ static void build_mods_root(void)
             text_para(p, _("It plays ProTracker modules itself, and hundreds of other formats "
                          "(OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and "
                          "DeliTracker's players, all on the Amiga's own sound."));
+            if (!ep_installed()) {
+                text_line(p, "");
+                text_para(p, _("EaglePlayer was not found: for those formats, install it from "
+                             "Aminet (mus/play/Eagleplayer) with its own installer."));
+            }
         }
         return;
     }
@@ -7617,6 +7627,9 @@ static void build_mods_root(void)
         sprintf(label, _("Modules: %.100s"), f[0] ? f : fs[FS_MODS].dir[i]);
         list_add(&p->list, label, fs[FS_MODS].dir[i], "", IT_DIR);
     }
+    if (!ep_installed())
+        list_add(&p->list, _("More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)"),
+                 "", "", IT_TEXT);
 }
 
 static void pane_settle(void);

@@ -117,7 +117,9 @@ Requirements
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
 - For MP3: mpega.library (the installer offers it). For FLAC:
   flacdec.library (Aminet: util/libs/flacdec; on a 68060 its 68060 build).
-- Optional: EaglePlayer/DeliTracker players, modplug.library and
+- Optional: EaglePlayer's players (Aminet: mus/play/Eagleplayer, with its
+  own installer, which assigns Eagleplayer2:; AGS has them) or
+  DeliTracker's, modplug.library and
   xfdmaster.library for more module formats (the installer offers the
   two libraries); picture datatypes; AHI for sound through a sound card;
   AmiSSL to list HTTPS radio stations.

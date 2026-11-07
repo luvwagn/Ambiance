@@ -205,9 +205,16 @@ static struct {
 } ep;
 
 /* ---------------------------------------------------------- the players */
+/* Where players are: AmigaMCE's own drawer; EaglePlayer2:, the assign
+ * EaglePlayer's installer puts in S:User-Startup; then where AGS keeps it
+ * (Work:Eagleplayer) and where its archive unpacks without the installer
+ * (Eagleplayer_2.06, on Work: or SYS:); DeliTracker's likewise. A name
+ * found twice is played by the first. */
 static const char *const dirs[] = {
     "PROGDIR:Eagleplayers", "EaglePlayer2:Eagleplayers", "EaglePlayer:Eagleplayers",
-    "Work:Eagleplayer/Eagleplayers", "DeliTracker:DeliPlayers", "Work:DeliTracker_II/DeliPlayers",
+    "Work:Eagleplayer/Eagleplayers", "Work:Eagleplayer_2.06/Eagleplayers",
+    "SYS:Eagleplayer/Eagleplayers", "SYS:Eagleplayer_2.06/Eagleplayers",
+    "DeliTracker:DeliPlayers", "Work:DeliTracker_II/DeliPlayers", "Work:DeliTracker2/DeliPlayers",
     NULL
 };
 
@@ -273,6 +280,28 @@ LONG ep_players(void)
 {
     scan_players();
     return ncands;
+}
+
+/* Whether any of the players' drawers is there, without reading them (the
+ * list is read when a module first needs it). */
+BOOL ep_installed(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BOOL there = FALSE;
+    int d;
+    if (scanned)
+        return ncands > 0;
+    me->pr_WindowPtr = (APTR)-1;
+    for (d = 0; dirs[d] && !there; d++) {
+        BPTR l = Lock((CONST_STRPTR)dirs[d], SHARED_LOCK);
+        if (l) {
+            UnLock(l);
+            there = TRUE;
+        }
+    }
+    me->pr_WindowPtr = old;
+    return there;
 }
 
 /* ---- what played a kind of module before: "p:med" (prefix), "e:mod" */

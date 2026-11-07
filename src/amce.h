@@ -597,6 +597,7 @@ struct EpInfo {
     WORD pos, poslen, row;      /* -1: not known */
 };
 LONG ep_players(void);
+BOOL ep_installed(void);
 BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax);  /* mod: AllocVec, taken */
 BOOL ep_start(UWORD *count);    /* TRUE: AmigaMCE's timer calls ep_tick, every *count */
 void ep_tick(void);

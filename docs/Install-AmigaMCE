@@ -181,4 +181,12 @@
 )
 (complete 100)
 
-(exit "AmigaMCE is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are.")
+; EaglePlayer's players play hundreds of module formats; AGS has them, and
+; EaglePlayer's own installer makes the Eagleplayer2: assign AmigaMCE uses.
+(set #more "")
+(if (= (exists "AGS:" (noreq)) 0)
+  (if (= (exists "Eagleplayer2:" (noreq)) 0)
+    (set #more "\n\nFor module formats beyond ProTracker, XM, S3M and IT (OctaMED, TFMX, Future Composer...), install EaglePlayer from Aminet (mus/play/Eagleplayer) with its own installer.")
+  )
+)
+(exit (cat "AmigaMCE is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are." #more))

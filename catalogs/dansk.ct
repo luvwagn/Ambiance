@@ -205,6 +205,12 @@ flacdec.library, hurtig nok
 MSG_748668C9
   Plex: FLAC konverteres til MP3 her
 ;   Plex: FLAC converted to MP3 here
+MSG_72380C4A
+Modulafspillere: %ld (EaglePlayer, DeliTracker)
+; Module players: %ld (EaglePlayer, DeliTracker)
+MSG_4662E8D4
+Modulafspillere: ingen (Aminet: mus/play/Eagleplayer)
+; Module players: none (Aminet: mus/play/Eagleplayer)
 MSG_5FDDDD75
 Kort
 ; Short
@@ -846,6 +852,9 @@ Ingen moduler fundet. AmigaMCE leder efter dem i MODS:, i mapperne under Indstil
 MSG_6870F104
 Den afspiller ProTracker-moduler selv, og hundredvis af andre formater (OctaMED, TFMX, Future Composer, SID...) med EaglePlayers og DeliTrackers afspillere, alt med Amigaens egen lyd.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_2E3C8991
+EaglePlayer blev ikke fundet: til de formater skal du installere det fra Aminet (mus/play/Eagleplayer) med dets eget installationsprogram.
+; EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
 MSG_1B1E85CB
 C64-musik
 ; C64 music
@@ -858,6 +867,9 @@ Moduler (MODS:)
 MSG_66E86F1F
 Moduler: %.100s
 ; Modules: %.100s
+MSG_0B5B4D9C
+Flere formater: EaglePlayer, fra Aminet (mus/play/Eagleplayer)
+; More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 Ingen billeder i den mappe
 ; No pictures in that folder

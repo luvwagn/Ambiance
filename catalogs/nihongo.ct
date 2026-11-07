@@ -208,6 +208,12 @@ flacdec.library、十分に高速
 MSG_748668C9
   Plex: ここではFLACをMP3に変換
 ;   Plex: FLAC converted to MP3 here
+MSG_72380C4A
+モジュールプレーヤー: %ld (EaglePlayer、DeliTracker)
+; Module players: %ld (EaglePlayer, DeliTracker)
+MSG_4662E8D4
+モジュールプレーヤー: なし (Aminet: mus/play/Eagleplayer)
+; Module players: none (Aminet: mus/play/Eagleplayer)
 MSG_5FDDDD75
 短い
 ; Short
@@ -850,6 +856,9 @@ MSG_0D35346B
 MSG_6870F104
 ProTrackerのモジュールは自分で再生し、他の何百もの形式 (OctaMED、TFMX、Future Composer、SID...) はEaglePlayerやDeliTrackerのプレーヤーで、すべてAmiga本来の音で再生します。
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_2E3C8991
+EaglePlayerが見つかりません: これらの形式には、Aminet (mus/play/Eagleplayer) から専用のインストーラーで入れてください。
+; EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
 MSG_1B1E85CB
 C64の音楽
 ; C64 music
@@ -862,6 +871,9 @@ MSG_0D90C4A2
 MSG_66E86F1F
 モジュール: %.100s
 ; Modules: %.100s
+MSG_0B5B4D9C
+その他の形式: EaglePlayer、Aminetから (mus/play/Eagleplayer)
+; More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 そのフォルダーに画像はありません
 ; No pictures in that folder

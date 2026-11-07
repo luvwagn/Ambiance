@@ -205,6 +205,12 @@ flacdec.library, rápido o suficiente
 MSG_748668C9
   Plex: FLAC convertido em MP3 aqui
 ;   Plex: FLAC converted to MP3 here
+MSG_72380C4A
+Leitores de módulos: %ld (EaglePlayer, DeliTracker)
+; Module players: %ld (EaglePlayer, DeliTracker)
+MSG_4662E8D4
+Leitores de módulos: nenhum (Aminet: mus/play/Eagleplayer)
+; Module players: none (Aminet: mus/play/Eagleplayer)
 MSG_5FDDDD75
 Curto
 ; Short
@@ -846,6 +852,9 @@ Nenhum módulo encontrado. O AmigaMCE procura-os em MODS:, nas pastas de Defini�
 MSG_6870F104
 Toca ele próprio módulos ProTracker, e centenas de outros formatos (OctaMED, TFMX, Future Composer, SID...) com os leitores do EaglePlayer e do DeliTracker, tudo no som próprio do Amiga.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_2E3C8991
+O EaglePlayer não foi encontrado: para esses formatos, instale-o a partir do Aminet (mus/play/Eagleplayer) com o seu próprio instalador.
+; EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
 MSG_1B1E85CB
 Música do C64
 ; C64 music
@@ -858,6 +867,9 @@ Módulos (MODS:)
 MSG_66E86F1F
 Módulos: %.100s
 ; Modules: %.100s
+MSG_0B5B4D9C
+Mais formatos: EaglePlayer, do Aminet (mus/play/Eagleplayer)
+; More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 Não há imagens nessa pasta
 ; No pictures in that folder
