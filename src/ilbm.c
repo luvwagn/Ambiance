@@ -101,7 +101,12 @@ static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo
     if (Read(fh, head, 12) == 12 && be32(head) == ID('F', 'O', 'R', 'M') &&
         be32(head + 8) == ID('A', 'N', 'I', 'M')) {
         *anim = TRUE;                       /* its first frame: FORM ILBM */
-        if (Read(fh, head, 12) == 12 && be32(head) == ID('F', 'O', 'R', 'M') &&
+        /* its sounds first, if it has any (8SVX): passed by */
+        while (Read(fh, head, 12) == 12 && be32(head) == ID('F', 'O', 'R', 'M') &&
+               be32(head + 8) != ID('I', 'L', 'B', 'M') && (size = be32(head + 4)) >= 4 &&
+               Seek(fh, size - 4 + (size & 1), OFFSET_CURRENT) >= 0)
+            ;
+        if (be32(head) == ID('F', 'O', 'R', 'M') &&
             be32(head + 8) == ID('I', 'L', 'B', 'M') && (size = be32(head + 4)) >= 4 &&
             (ULONG)size <= ILBM_MAX && (buf = AllocVec(size + 8, MEMF_ANY))) {
             CopyMem(head, buf, 12);
