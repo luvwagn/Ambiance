@@ -7744,18 +7744,24 @@ static void menu_select(int i)
 
 /* The menu column sliding between its two widths, where drawing it is
  * quick (a whole menu in MENU_SLIDE_MAX ms or less: a fast Amiga, or a
- * modest screen): MENU_SLIDE ms, easing out, a frame at a time. Only the
- * column moves; what it uncovers is cleared, what it covers is drawn over,
- * and the caller then lays out and draws everything at the new width. Not
- * with double buffering (each frame would need a flip). */
-#define MENU_SLIDE     160
-#define MENU_SLIDE_MAX   8
+ * modest screen): MENU_SLIDE ms, easing out, a frame at a time. The
+ * content beside it moves with it (ScrollRaster: the card's blitter on
+ * RTG), so opening pushes the page right and closing pulls it back; then
+ * the caller lays everything out at the new width as before. Double
+ * buffered, each frame is shown with a flip; else at the vertical blank.
+ * A frame that takes over MENU_SLIDE_SLOW ms ends the slide there. */
+#define MENU_SLIDE      160
+#define MENU_SLIDE_MAX    8
+#define MENU_SLIDE_SLOW  40
 static void menu_slide(UWORD from, UWORD to)
 {
-    ULONG t0 = time_ms(), t;
+    ULONG t0 = time_ms(), t, tf;
     UWORD keep = g.menu_w, prev = from;
-    if (!t0 || menu_draw_ms > MENU_SLIDE_MAX || gfx_dbuf_active() || from == to)
+    WORD y0 = U(25), y1 = g.footer_y - 2;
+    int frames = 0;
+    if (!t0 || menu_draw_ms > MENU_SLIDE_MAX || from == to)
         return;
+    SetBPen(g.rp, PEN_BG);
     for (;;) {
         LONG f;
         UWORD w;
@@ -7765,16 +7771,33 @@ static void menu_slide(UWORD from, UWORD to)
         f = 1024 - (LONG)(t * 1024 / MENU_SLIDE);
         f = 1024 - f * f / 1024;            /* ease out: fast first, settling */
         w = (UWORD)((LONG)from + ((LONG)to - (LONG)from) * f / 1024);
-        if (w != prev) {
-            g.menu_w = w;                   /* the column alone: the rest keeps its place */
-            draw_menu();
-            if (w < prev)
-                gfx_fill(&g, w + U(3), U(25), prev + U(3) - 1, g.footer_y - 2, PEN_BG);
-            prev = w;
+        if (w == prev) {
+            WaitTOF();
+            continue;
         }
-        WaitTOF();
+        tf = time_ms();
+        SetBPen(g.rp, PEN_BG);
+        if (w > prev)                       /* opening: the page pushed right */
+            ScrollRaster(g.rp, -(WORD)(w - prev), 0, prev + U(3), y0, g.w - 1, y1);
+        else                                /* closing: pulled back left */
+            ScrollRaster(g.rp, (WORD)(prev - w), 0, w + U(3), y0, g.w - 1, y1);
+        g.menu_w = w;                       /* the column alone: the layout keeps its own */
+        draw_menu();
+        gfx_dirty();
+        prev = w;
+        frames++;
+        if (!gfx_present(&g))
+            WaitTOF();
+        if (time_ms() - tf > MENU_SLIDE_SLOW)
+            break;                          /* too slow here: straight to the end */
     }
     g.menu_w = keep;
+    {
+        char m[80];
+        sprintf(m, "%s in %ld frames, %ld ms (menu drawn in %ld ms)", to > from ? "opened" : "closed",
+                (long)frames, (long)(time_ms() - t0), (long)menu_draw_ms);
+        amce_log("menu slide", m);
+    }
 }
 
 /* The menu column is its icons alone while the content has the focus, on
