@@ -5248,17 +5248,40 @@ static void hover_set(WORD row, WORD menu_i)
     hover_menu = menu_i;
     if (pane_pending || menu_layout())
         return;
+    /* drawn and shown as a small update, no flip: a flip waits for the
+     * vertical blank, and the mouse's moves came quicker than that (the
+     * highlight followed it in jerks, AmigaMCE busy at 40%) */
     if (p && p->type == PT_LIST) {
-        WORD col = mark_column(p);
-        if (old_row >= 0 && p->top + old_row < p->list.count)
-            draw_list_row(p, p->top + old_row, col);
-        if (row >= 0 && p->top + row < p->list.count)
-            draw_list_row(p, p->top + row, col);
+        WORD col = mark_column(p), x0 = g.pane_x - U(4), x1 = list_xr(p) + U(2);
+        WORD r[2];
+        int i;
+        r[0] = old_row;
+        r[1] = row;
+        if (x0 < 0)
+            x0 = 0;
+        if (x1 > g.w - 1)
+            x1 = g.w - 1;
+        for (i = 0; i < 2; i++)
+            if (r[i] >= 0 && p->top + r[i] < p->list.count) {
+                WORD y0 = g.list_top + r[i] * g.list_row_h;
+                BOOL was = gfx_quiet_begin();
+                draw_list_row(p, p->top + r[i], col);
+                gfx_quiet_end(&g, was, x0, y0, x1, y0 + g.list_row_h - 1);
+            }
     }
-    if (old_menu >= 0 && old_menu < nmenu)
-        draw_menu_row(old_menu);
-    if (menu_i >= 0 && menu_i < nmenu)
-        draw_menu_row(menu_i);
+    {
+        WORD m[2];
+        int i;
+        m[0] = old_menu;
+        m[1] = menu_i;
+        for (i = 0; i < 2; i++)
+            if (m[i] >= 0 && m[i] < nmenu) {
+                WORD y0 = g.top + m[i] * g.row_h;
+                BOOL was = gfx_quiet_begin();
+                draw_menu_row(m[i]);
+                gfx_quiet_end(&g, was, 0, y0, g.menu_w + U(3), y0 + g.row_h - 1);
+            }
+    }
 }
 
 /* The pointer at (x, y): which row, if any, is under it. */
