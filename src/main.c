@@ -4126,6 +4126,8 @@ static WORD list_xr(struct Page *p)
 
 /* ---- the preview of the selected game, drawn once the selection settles */
 #define PREVIEW_SETTLE 100     /* ms the selection rests before its preview is read */
+static BOOL pv_clicked;         /* the selection made by a click (preview_touch) */
+static ULONG dc_time(void);
 #define PLEX_SETTLE    350     /* ...a Plex entry's: its picture asked for, then decoded */
 #define PREVIEW_READY   30     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
@@ -4940,6 +4942,11 @@ static void preview_touch(struct Page *p)
     }
     if (!pv_shown && p->plex && plex_movable(p, p->sel))
         settle = PREVIEW_READY;             /* its cover is on screen: only moved */
+    /* chosen by a click: not read until a second click could have come
+     * (reading a big file, the emulator's Amiga stops a moment, and a
+     * click made meanwhile is lost: double-clicks did nothing) */
+    if (pv_clicked && settle < dc_time())
+        settle = dc_time();
     else if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel))
         /* a page just shown (opened, or back to it): a picture left from
          * the page before goes now, unless it is this entry's too */
@@ -11541,7 +11548,8 @@ static ULONG last_ms;                       /* our own clock at the last click *
 /* A double-click: Intuition's test on the events' times, or (should those
  * times be off: after a slideshow they were) our own clock's, within the
  * same time Intuition allows (its Preferences, read once). */
-static BOOL dbl_click(const struct IntuiMessage *im)
+/* Preferences' double-click time, in ms. */
+static ULONG dc_time(void)
 {
     static ULONG dc_ms;
     if (!dc_ms) {
@@ -11552,9 +11560,14 @@ static BOOL dbl_click(const struct IntuiMessage *im)
         if (dc_ms < 200 || dc_ms > 3000)
             dc_ms = 500;
     }
+    return dc_ms;
+}
+
+static BOOL dbl_click(const struct IntuiMessage *im)
+{
     if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros))
         return TRUE;
-    return last_ms && time_ms() - last_ms <= dc_ms;
+    return last_ms && time_ms() - last_ms <= dc_time();
 }
 static BOOL click_opened;           /* the last click opened something (one click) */
 static LONG last_click = -1;
@@ -11773,8 +11786,10 @@ static void handle_mouse(struct IntuiMessage *im)
                 set_focus(FOCUS_CONTENT);
             if (p->sel != idx) {
                 p->sel = idx;
+                pv_clicked = TRUE;          /* its preview waits for a second click */
                 draw_title_count(p);
                 draw_list_rows(p);
+                pv_clicked = FALSE;
             }
             {
                 /* one click opens what cannot be played (a folder, a
