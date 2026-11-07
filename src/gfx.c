@@ -1811,6 +1811,11 @@ void gfx_dbuf_start(struct Gfx *g)
         amce_log("double buffering", "could not get a second buffer");
         return;
     }
+    /* the second a copy of what is shown, made here: SB_COPY_BITMAP is not
+     * always kept to (PrismRTG's came back empty: after the viewer, all
+     * drawn before this was missing until drawn again) */
+    BltBitMap(dsb[0]->sb_BitMap, 0, 0, dsb[1]->sb_BitMap, 0, 0, g->w, g->h, 0xC0, 0xFF, NULL);
+    WaitBlit();
     for (i = 0; i < 2; i++) {
         dsb[i]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = dsafe;
         dsb[i]->sb_DBufInfo->dbi_DispMessage.mn_ReplyPort = NULL;
