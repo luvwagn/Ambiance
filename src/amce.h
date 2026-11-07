@@ -888,6 +888,7 @@ LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
 const char *plex_why(const struct Item *it);
 ULONG plex_stream_rate(UBYTE *body, ULONG len);
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax);
+void plex_art_file(const char *thumb, WORD w, WORD h, char *file);  /* its file alone */
 BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);

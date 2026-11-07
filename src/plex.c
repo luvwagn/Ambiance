@@ -790,15 +790,23 @@ ULONG plex_stream_rate(UBYTE *body, ULONG len)
  * JPEG's, notes/cover-decode-times.md): the request into req, the
  * file it is kept in (RAM:, by the key and size) into file. TRUE if that
  * file is there already. */
+/* The file plex_art keeps a picture in, alone (a slideshow's thousands of
+ * photos are listed by it; each is asked for when it is shown). */
+void plex_art_file(const char *thumb, WORD w, WORD h, char *file)
+{
+    ULONG hash = 5381;
+    const char *s;
+    for (s = thumb; *s; s++)
+        hash = hash * 33 + (UBYTE)*s;
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.%s", (unsigned long)hash, (long)w, (long)h,
+            (LONG)w * h > 640L * 512 ? "jpg" : "png");
+}
+
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax)
 {
     char enc[400], n[96];
-    ULONG hash = 5381;
-    const char *s;
     BPTR l;
     BOOL jpg;
-    for (s = thumb; *s; s++)
-        hash = hash * 33 + (UBYTE)*s;
     if ((l = Lock((CONST_STRPTR)"RAM:AmigaMCE-art", SHARED_LOCK)))
         UnLock(l);
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
@@ -806,8 +814,7 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
     /* bigger than a 640 x 512 screen (a photo on RTG): JPEG, a tenth of a
      * PNG's size (a 1024 x 768 PNG of a photo is past what is read, 2 MB) */
     jpg = (LONG)w * h > 640L * 512;
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.%s", (unsigned long)hash, (long)w, (long)h,
-            jpg ? "jpg" : "png");
+    plex_art_file(thumb, w, h, file);
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));
     /* minSize=0: within w x h, so never bigger than it is shown (a tall

@@ -8585,32 +8585,62 @@ static void view_from_page(struct Page *p)
     viewer_done();
 }
 
+/* A photo page's "Slideshow of these N photos", counted again (the parts
+ * after the first come in while it is shown). */
+static void plex_slides_label(struct Page *p)
+{
+    LONG i, k = 0;
+    char label[96], *s;
+    struct Item *a = NULL;
+    for (i = 0; i < p->list.count; i++) {
+        struct Item *it = &p->list.items[i];
+        if (it->kind == IT_PLEXPHOTO)
+            k++;
+        else if (it->kind == IT_ACTION && it->action == ACT_PLEXSLIDES)
+            a = it;
+    }
+    if (!a || k < 2)
+        return;
+    sprintf(label, _("Slideshow of these %ld photos"), (long)k);
+    if (strcmp(a->label, label) && (s = list_strdup(&p->list, label)))
+        a->label = s;
+}
+
 /* A Plex page's photos in the viewer, from entry idx (-1: the first, as a
  * slideshow); the page's selection follows the last one shown. */
 static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow)
 {
     struct ItemList l;
-    char thumb[160], req[400], file[120], m[80];
+    char thumb[160], file[120], m[100];
     LONG i, first = -1, last, k, vis = list_visible();
+    ULONG t0 = time_ms();
     WORD w, h;
     if (!plex.host[0] || !list_init(&l))
         return;
     vw_photo_size(&w, &h);
+    busy_begin();                           /* thousands of photos: the spinner meanwhile */
     for (i = 0; i < p->list.count; i++) {
         struct Item *it = &p->list.items[i];
         if (it->kind != IT_PLEXPHOTO)
             continue;
         radio_field(it, 2, thumb, sizeof(thumb));
-        plex_art(thumb, w, h, req, sizeof(req), file, sizeof(file));
+        plex_art_file(thumb, w, h, file);  /* the request is made when it is fetched */
         if (i == idx || (idx < 0 && first < 0))
             first = l.count;
         list_add(&l, it->label, file, thumb, IT_PIC);
+        if (!(l.count & 63)) {
+            busy_tick();
+            gfx_present(&g);
+        }
     }
     if (first < 0) {
         list_free(&l);
+        busy_end(TRUE);
         return;
     }
-    sprintf(m, "%ld photos, asked for at %ld x %ld", (long)l.count, (long)w, (long)h);
+    busy_end(FALSE);                        /* the viewer covers it */
+    sprintf(m, "%ld photos, asked for at %ld x %ld, listed in %ld ms", (long)l.count, (long)w,
+            (long)h, (long)(time_ms() - t0));
     amce_log("plex: viewer", m);
     vw_remote = TRUE;
     vw_failed = FALSE;
@@ -9349,6 +9379,8 @@ static void radio_done(struct NetJob *j)
                     (long)k + 1, (long)n, (long)j->start - 1, (long)j->ms);
             amce_log("plex", m);
             np_mark_lists(FALSE);
+            if (p->photos)
+                plex_slides_label(p);       /* its count: these photos too */
             if (p == cur() && !pane_pending) {
                 draw_title_count(p);
                 draw_list_rows(p);
