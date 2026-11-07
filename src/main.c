@@ -11624,8 +11624,11 @@ static void handle_mouse(struct IntuiMessage *im)
     LONG idx = -1;
     struct TextBox *tb;
     if (im->Class == IDCMP_MOUSEBUTTONS && (im->Code == SELECTDOWN || im->Code == MENUDOWN) &&
-        coast_interrupt())
+        coast_interrupt()) {
+        if (debug_on)
+            amce_log("click", "it stopped a coast, and did nothing else");
         return;                             /* a click during a coast only stops it */
+    }
     if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
         pane_settle();              /* a click outside the menu acts on the section */
     tb = cur_tb();

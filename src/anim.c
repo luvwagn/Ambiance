@@ -1177,8 +1177,17 @@ out:
         CloseScreen(scr);
         if (g && g->scr)
             ScreenToFront(g->scr);
-        if (g && g->win)
+        if (g && g->win) {
+            /* AmigaMCE's window active again before going back to it: Intuition
+             * does it later, and until then a click only activates it (the
+             * first of a double-click lost: the next animation did not open) */
+            int i;
             ActivateWindow(g->win);
+            for (i = 0; i < 25 && !(g->win->Flags & WFLG_WINDOWACTIVE); i++)
+                WaitTOF();
+            if (!(g->win->Flags & WFLG_WINDOWACTIVE))
+                amce_log("anim", "AmigaMCE's window not active yet after half a second");
+        }
     }
     if (safe) {
         while (GetMsg(safe))
