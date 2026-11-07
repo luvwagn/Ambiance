@@ -76,6 +76,9 @@ Alle demo's
 MSG_4D9D0161
 Amiga Game Selector is niet gevonden.
 ; Amiga Game Selector was not found.
+MSG_3F233512
+Amiga Game Selector 3 (AGS) is een kant-en-klare verzameling WHDLoad-spellen en -demo's, met schermafbeeldingen en beschrijvingen. Als het is geïnstalleerd, staan ze hier en starten ze vanuit AmigaMCE.
+; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
 MSG_017A1274
 AmigaMCE zoekt de toewijzing AGS:, daarna een lade AGS2 naast de eigen lade en in WHDLoad:. Installeer AmigaMCE op een AGS 3-systeem, of start AGS één keer zodat de toewijzingen bestaan.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.

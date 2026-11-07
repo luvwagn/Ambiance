@@ -113,11 +113,6 @@ Paula.
 2. On AGS, if it boots straight into its own menu, quit AGS to Workbench first.
 3. Double-click AmigaMCE.
 
-The ADF carries an English-only archive (there is no room for the
-languages, nor for the 15-pixel Far East glyphs: CJK names are drawn at
-12 pixels everywhere from it): unpack it on a hard drive, for example
-`lha x DF0:amigamce.lha Work:`.
-
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
@@ -209,7 +204,7 @@ inline OS call when a multiply helper call ends up between them (see
 
 | Target | Result |
 |---|---|
-| `make` | `AmigaMCE`, `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) and `amigamce-<version>.adf` (a data disk holding the English-only archive) |
+| `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
 | `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
 | `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
@@ -226,7 +221,7 @@ brought 0.4, Music from a Plex server 0.5, Plex photos 0.6). Builds between tags
 after the last one (`0.5.0-12-gabcdef`); a patch release gets its own tag
 (`v0.5.1`).
 
-Pushing a `v*` tag builds a draft GitHub release with the archive and ADF
+Pushing a `v*` tag builds a draft GitHub release with the archive
 attached. Publishing that release uploads it to Aminet.
 
 ### Layout

@@ -33,7 +33,6 @@ jobs:
           name: release-artifacts
           path: |
             AmigaMCE
-            amigamce-*.adf
             amigamce-*.lha
           if-no-files-found: error
 
@@ -53,5 +52,4 @@ jobs:
         with:
           draft: true
           files: |
-            artifacts/amigamce-*.adf
             artifacts/amigamce-*.lha

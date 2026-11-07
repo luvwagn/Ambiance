@@ -1359,6 +1359,10 @@ static void no_ags_text(struct Page *p)
 {
     text_line(p, _("Amiga Game Selector was not found."));
     text_line(p, "");
+    text_para(p, _("Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and "
+                 "demos, with screenshots and descriptions. With it installed, they are listed "
+                 "here and start from AmigaMCE."));
+    text_line(p, "");
     text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));

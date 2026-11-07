@@ -7,7 +7,7 @@ Usage: python3 -I mkcjk.py <galmuri-dist> <ark-pixel-font> <outdir>
        Big5's common ones) from Ark Pixel 12px, simplified forms
   15   Galmuri14; what it lacks comes from 12
   (Galmuri11 Bold's own Hangul is left out: all of a name's characters in
-  one weight, and the release floppy has no room for it.)
+  one weight, and the archive kept small.)
   In 15 Hangul is KS X 1001's 2,350 syllables (nearly all that is
   ever written); the other 8,822 come from 12, at its size.
 

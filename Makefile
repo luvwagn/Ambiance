@@ -1,7 +1,7 @@
 # AmigaMCE Makefile for GCC (m68k-amigaos), modelled on xSysInfo
 # Copyright (c) 2026 Brian King
 #
-#   make            build AmigaMCE, the LHA archive and the ADF (holding the LHA)
+#   make            build AmigaMCE and the LHA archive (with its installer)
 #   make test       run the AGS parser tests under vamos
 #   make art        regenerate src/art.c (logo, icons, palette)
 #   make fonts      regenerate the bitmap fonts (amce-pixel 12/24/36, Galmuri)
@@ -40,8 +40,6 @@ TARGET     = AmigaMCE
 LHA_DIR    = build/lha/AmigaMCE
 LHA_NAME   = amigamce-$(FULL_VERSION).lha
 LHA_OPTS  ?=
-DISK       = amigamce-$(FULL_VERSION).adf
-DISK_TITLE = AmigaMCE
 
 FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
              assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36
@@ -55,13 +53,13 @@ SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
 # Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel)
 CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15
-ICONS      = docs/AmigaMCE.info docs/drawer.info docs/Disk.info docs/readme.info
+ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt CREDITS.txt LICENSE
 
-.PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha disk catalogs FORCE_VERSION
+.PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) lha disk
+all: $(TARGET) lha
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -219,10 +217,7 @@ catalogs: build/catalogs/.built
 
 # The release archive: the AmigaMCE drawer with every language in it, and
 # an Installer script beside it that copies the drawer and the languages
-# chosen (the Workbench's ticked). LHA_EN_NAME is the same without the
-# languages or the installer: the floppy's, as there is no room on it.
-LHA_EN_DIR  = build/lha-en
-LHA_EN_NAME = build/amigamce-en.lha
+# chosen (the Workbench's ticked).
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built
 	@echo "  LHA   $(LHA_NAME)"
@@ -244,11 +239,6 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 		AmigaMCE.readme > $(LHA_DIR)/readme.txt
 	@cp docs/readme.info $(LHA_DIR)/readme.txt.info
 	@cp docs/drawer.info build/lha/AmigaMCE.info
-	@rm -rf $(LHA_EN_DIR) && cp -R build/lha $(LHA_EN_DIR)
-	@# the floppy's has no room for the 15-pixel Far East glyphs: 12 everywhere
-	@rm -f $(LHA_EN_DIR)/AmigaMCE/Fonts/amce-cjk/15
-	@rm -f $(LHA_EN_NAME)
-	@cd $(LHA_EN_DIR) && lha aqo5 $(LHA_OPTS) ../../$(LHA_EN_NAME) AmigaMCE AmigaMCE.info
 	@mkdir -p $(LHA_DIR)/Catalogs
 	@cp -R build/catalogs/* $(LHA_DIR)/Catalogs/
 	@cp docs/Install-AmigaMCE build/lha/Install-AmigaMCE
@@ -256,23 +246,8 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@rm -f $(LHA_NAME)
 	@cd build/lha && lha aqo5 $(LHA_OPTS) ../../$(LHA_NAME) AmigaMCE AmigaMCE.info \
 		Install-AmigaMCE Install-AmigaMCE.info
-	@echo "Created $(LHA_NAME) (and, English only, $(LHA_EN_NAME) for the floppy)"
-
-# A data floppy carrying the English-only archive and its readme: unpack it
-# to a hard drive (lha x DF0:amigamce.lha). Not bootable. The archive is
-# plain amigamce.lha on the disk: with its version the name can pass the 30
-# characters a file name may have there. The languages are in the full
-# archive (Aminet's).
-disk: lha
-	@echo "  DISK  $(DISK)"
-	@rm -f $(DISK)
-	@xdftool $(DISK) format "$(DISK_TITLE)" ffs
-	@xdftool $(DISK) write $(LHA_EN_NAME) amigamce.lha
-	@xdftool $(DISK) write $(LHA_DIR)/readme.txt readme.txt
-	@xdftool $(DISK) write docs/readme.info readme.txt.info
-	@xdftool $(DISK) write docs/Disk.info Disk.info
-	@xdftool $(DISK) info
+	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/lha-en build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
-		amigamce-*.lha amigamce-*.adf
+	rm -rf build/*.o build/lha build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+		amigamce-*.lha

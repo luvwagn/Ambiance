@@ -19,7 +19,7 @@ jobs:
     - name: Mark git directory as safe
       run: git config --global --add safe.directory '*'
 
-    - name: Build program, LHA and ADF
+    - name: Build program and LHA
       run: make all
 
     - name: Run AGS parser tests
@@ -28,7 +28,6 @@ jobs:
     - name: Find release filenames
       id: files
       run: |
-        echo "adf=$(ls amigamce-*.adf)" >> $GITHUB_OUTPUT
         echo "lha=$(ls amigamce-*.lha)" >> $GITHUB_OUTPUT
 
     - name: Archive program
@@ -36,12 +35,6 @@ jobs:
       with:
         name: AmigaMCE Program
         path: AmigaMCE
-
-    - name: Archive ADF
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.files.outputs.adf }}
-        path: ${{ steps.files.outputs.adf }}
 
     - name: Archive LHA
       uses: actions/upload-artifact@v4

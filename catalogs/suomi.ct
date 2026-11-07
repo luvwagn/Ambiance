@@ -76,6 +76,9 @@ Kaikki demot
 MSG_4D9D0161
 Amiga Game Selectoria ei löytynyt.
 ; Amiga Game Selector was not found.
+MSG_3F233512
+Amiga Game Selector 3 (AGS) on valmis WHDLoad-pelien ja -demojen kokoelma kuvakaappauksineen ja kuvauksineen. Kun se on asennettu, ne näkyvät täällä ja käynnistyvät AmigaMCE:stä.
+; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
 MSG_017A1274
 AmigaMCE etsii AGS:-liitosta, sitten AGS2-laatikkoa omansa vierestä ja WHDLoad:ista. Asenna AmigaMCE AGS 3 -järjestelmään tai käynnistä AGS kerran, jotta sen liitokset ovat olemassa.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.

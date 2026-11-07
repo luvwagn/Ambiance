@@ -130,13 +130,6 @@ an earlier installation. Or copy the AmigaMCE drawer to your hard drive
 yourself (all its languages come along), keeping its Fonts drawer next to
 the program.
 
-The floppy (ADF) carries an English-only archive, without the larger of
-the two Far East glyph sets (Japanese, Chinese and Korean names are drawn
-at 12 pixels on every screen; the full archive has 15 for the biggest):
-unpack it to a hard drive, for example
-
-  lha x DF0:amigamce.lha Work:
-
 On AGS, if it boots straight into its own menu, quit AGS to Workbench
 first, then double-click AmigaMCE.
 
