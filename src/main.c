@@ -139,7 +139,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
-       ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 2, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
+       ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 3, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
        ACT_COUNT,
@@ -1368,23 +1368,8 @@ static void no_ags_text(struct Page *p)
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));
     text_line(p, "");
-    text_para(p, _("Music, Mods, Pictures and Radio work without it: Settings > Folders says "
-                 "where your music, modules and pictures are."));
-}
-
-static void found_line(struct Page *p, const char *what, const char *path)
-{
-    char line[160];
-    struct Process *me = (struct Process *)FindTask(NULL);
-    APTR old = me->pr_WindowPtr;
-    BPTR l;
-    me->pr_WindowPtr = (APTR)-1;
-    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
-    me->pr_WindowPtr = old;
-    if (l)
-        UnLock(l);
-    sprintf(line, "%s: %s (%s)", what, path, l ? _("found") : _("not found"));
-    text_line(p, line);
+    text_para(p, _("Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders "
+                 "says where your music, modules, pictures and animations are."));
 }
 
 static void dt_line(void *ctx, const char *s)
@@ -1705,13 +1690,13 @@ static void load_radio_settings(void)
     amce_log("radio", m);
 }
 
-/* ---- Folders of music files, modules and pictures (Settings > Folders):
- * each kind's assign (MUSIC:, MODS:, PICTURES:), used when it is there
+/* ---- Folders of music files, modules, pictures and animations (Settings >
+ * Folders): each kind's assign (MUSIC:, MODS:, PICTURES:, VIDEOS:), used when it is there
  * unless turned off, and up to FS_DIRS folders added. AGS's own places
  * (ST-00:Modules, Media:Images...) are found by themselves as well, so on
  * AGS there is nothing to set; on another Amiga an assign or a folder or
  * two fills Mods and Pictures as they fill Music. */
-enum { FS_MUSIC, FS_MODS, FS_PICS, FS_COUNT };
+enum { FS_MUSIC, FS_MODS, FS_PICS, FS_VIDEOS, FS_COUNT };
 #define FS_DIRS 8
 static struct Folders {
     const char *var, *avar;     /* the folders, one a line; "off": the assign left out */
@@ -1727,6 +1712,8 @@ static struct Folders {
       { { 0 } }, 0, TRUE },
     { "AmigaMCE/PictureFolders", "AmigaMCE/PictureAssign", "PICTURES:", N_("Pictures"),
       N_("Picture folders"), { { 0 } }, 0, TRUE },
+    { "AmigaMCE/VideoFolders", "AmigaMCE/VideoAssign", "VIDEOS:", N_("Videos"),
+      N_("Video folders"), { { 0 } }, 0, TRUE },
 };
 #define music_dirs (fs[FS_MUSIC].dir)
 #define nmusic_dirs (fs[FS_MUSIC].n)
@@ -1798,6 +1785,7 @@ static BOOL fs_assign_used(int k)
 #define MODS_MENU  "AGS:Mods"
 #define MODS_SID   "ST-00:C64Music"
 #define PICS_ROOT  "Media:Images"
+#define VIDS_ROOT  "Media:Animations"
 
 /* Settings > Sound: what streams play through (AHI, where installed). */
 #define SOUND_VAR "AmigaMCE/SoundOutput"
@@ -1911,7 +1899,7 @@ static void load_style(void)
                 gfx_rtg_font = i;
 }
 
-/* Settings > Screen > Visualisation: the level meters or the
+/* Settings > Display > Visualisation: the level meters or the
  * spectrum (vis.c); V on Now playing goes to the next. */
 static void load_visual(void)
 {
@@ -2022,7 +2010,7 @@ static void sel_off_heading(struct Page *p, LONG d)
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS };
 /* Each Settings page's title, by SETP_* (made again in another language) */
-static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Screen"),
+static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders") };    /* SETP_FOLDSET: titled by its kind */
@@ -2104,21 +2092,22 @@ static void build_lang_settings(struct Page *p)
         lang_row(p, amce_lang_name(i), ACT_LANG0 + i, !amce_stricmp(lang_set, amce_lang_name(i)));
 }
 
-/* Settings: General, Screen, Sound, Networking (Plex inside it, as it
- * needs the network). */
+/* Settings: General, Display, Sound, Folders, Networking (Plex inside it,
+ * as it needs the network). */
 static void build_settings(struct Page *p)
 {
     p->setp = SETP_ROOT;
     action_item(p, _("General"), "", ACT_GENSET, MARK_ARROW);
-    action_item(p, _("Screen"), gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
+    action_item(p, _("Display"), gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
     action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
     action_item(p, _("Folders"), "", ACT_FOLDERS, MARK_ARROW);
     action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
                 ACT_NETSET, MARK_ARROW);
 }
 
-/* Settings > Screen: the mode, the style (its font on a laced screen), and
- * double buffering where it is offered. */
+/* Settings > Display: the screen mode, the style (its font on a laced
+ * screen), double buffering where it is offered, the visualisation, and
+ * jump scrolling (how long lists move). */
 static void build_screen_settings(struct Page *p)
 {
     char tag[64];
@@ -2145,6 +2134,8 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
+    action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
+                jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
 
 /* Settings > General. */
@@ -2159,8 +2150,6 @@ static void build_general_settings(struct Page *p)
     if ((it = action_item(p, _("Language"), t, ACT_LANGSET,
                           amce_lang_count() ? MARK_ARROW : MARK_NONE)) && !amce_lang_count())
         it->flags |= ITEM_DISABLED;
-    action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
-                jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Debug (CPU, memory, log)"), "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
 }
@@ -2349,7 +2338,7 @@ static void build_rsrv_settings(struct Page *p)
     }
 }
 
-#define SETTINGS_SCREEN_ROW 1   /* "Screen" in build_settings */
+#define SETTINGS_SCREEN_ROW 1   /* "Display" in build_settings */
 #define SCREEN_STYLE_ROW 1      /* "Style" in build_screen_settings */
 static void build_screen_settings(struct Page *p);
 
@@ -2426,10 +2415,12 @@ static int fs_places(int k)
         n += place_there(MODS_ROOT) + place_there(MODS_SID) + place_there(MODS_MENU);
     else if (k == FS_PICS)
         n += place_there(PICS_ROOT);
+    else if (k == FS_VIDEOS)
+        n += place_there(VIDS_ROOT);
     return n;
 }
 
-/* Settings > Folders: where Music, Mods and Pictures find their files. */
+/* Settings > Folders: where Music, Mods, Pictures and Videos find their files. */
 static void build_folders_settings(struct Page *p)
 {
     int k;
@@ -2773,6 +2764,32 @@ static LONG pics_root_fill(struct Page *p, const char **src)
     return n;
 }
 
+/* Videos' first page, as Pictures': AGS's Media:Animations, the VIDEOS:
+ * assign and the folders of Settings > Folders > Videos. */
+static LONG vids_root_fill(struct Page *p, const char **src)
+{
+    const char *at[FS_DIRS + 2];
+    int n = 0, i;
+    if (place_there(VIDS_ROOT))
+        at[n++] = VIDS_ROOT;
+    if (fs_assign_used(FS_VIDEOS))
+        at[n++] = "VIDEOS:";
+    for (i = 0; i < fs[FS_VIDEOS].n; i++)
+        at[n++] = fs[FS_VIDEOS].dir[i];
+    *src = n == 1 ? at[0] : NULL;
+    if (n == 0)
+        return -1;
+    if (n == 1)
+        return pics_read_ui(at[0], &p->list);
+    for (i = 0; i < n; i++) {
+        char label[180];
+        const char *f = (const char *)FilePart((STRPTR)at[i]);
+        sprintf(label, _("Videos: %.100s"), f[0] ? f : at[i]);
+        list_add(&p->list, label, at[i], "", IT_DIR);
+    }
+    return n;
+}
+
 /* Pictures' first page with nothing of its own (the server's rows follow). */
 static void pics_root_empty(struct Page *p, LONG n, const char *src)
 {
@@ -2804,10 +2821,28 @@ static void build_root_pages(int mod)
         build_mods_root();
         break;
     case MOD_VIDEOS:
-        if ((p = page_push(PT_TEXT, _("Videos")))) {
-            text_para(p, _("Video playback arrives in a later version."));
-            text_line(p, "");
-            found_line(p, _("Animations"), "Media:Animations");
+        if ((p = page_push(PT_LIST, _("Videos")))) {
+            LONG n;
+            const char *src;
+            p->pics = 1;
+            n = vids_root_fill(p, &src);
+            if (n == -2) {
+                page_pop();                 /* given up for input: built when it settles */
+                page_push(PT_TEXT, _("Videos"));
+            } else if (n <= 0) {
+                page_pop();
+                if ((p = page_push(PT_TEXT, _("Videos")))) {
+                    char t[260];
+                    if (src)
+                        sprintf(t, n < 0 ? _("No animations found: AmigaMCE looks for them in %s.")
+                                         : _("%s has no animations in it."), src);
+                    else
+                        sprintf(t, _("No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, "
+                                     "the folders of Settings > Folders > Videos, and on AGS %s."),
+                                VIDS_ROOT);
+                    text_para(p, t);
+                }
+            }
         }
         break;
     case MOD_PICTURES:
@@ -3539,12 +3574,11 @@ static void draw_menu(void)
 
 static BOOL has_aside(struct Page *p);
 
-/* A section that is only a note for now (Videos): nothing in it
- * to go to, so the menu keeps the focus. */
+/* A section that is only a note (none now: Videos plays animations):
+ * nothing in it to go to, so the menu keeps the focus. */
 static BOOL section_inert(void)
 {
-    int m = menu_sel >= 0 && menu_sel < nmenu ? menu[menu_sel] : -1;
-    return depth <= 1 && m == MOD_VIDEOS;
+    return FALSE;
 }
 
 static const char *hint_text(void)
@@ -3571,6 +3605,9 @@ static const char *hint_text(void)
         if (it->kind == IT_PIC)
             return hi ? _("Up/Down  move    Fire/Return  view    Left/Esc  back")
                       : _("Fire view  Esc back");
+        if (it->kind == IT_ANIM)
+            return hi ? _("Up/Down  move    Fire/Return  play    Left/Esc  back")
+                      : _("Fire play  Esc back");
         if (it->mark == MARK_PLAY)
             return hi ? _("Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back")
                       : _("Fire show  Right open");
@@ -3988,7 +4025,7 @@ static BOOL ov_eligible(const struct Page *p)
         return FALSE;
     for (i = 0; i < p->list.count; i++)
         if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
-            p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
+            p->list.items[i].kind == IT_ANIM || p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
             p->list.items[i].kind == IT_PLEXDIR)
             runs++;                         /* lists in title order (not a track list's) */
     return runs * 2 >= p->list.count;
@@ -4174,8 +4211,8 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     }
     if (p->pics) {
         amce_strlcpy(path, it->path, max);
-        if (it->kind == IT_PIC) {
-            *shot = SHOT_FILE;
+        if (it->kind == IT_PIC || it->kind == IT_ANIM) {
+            *shot = SHOT_FILE;              /* an animation: its first frame */
             return LJ_PICTURE;
         }
         if (it->kind == IT_DIR) {
@@ -4369,10 +4406,16 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 {
     char line[120];
     pv_line(it->label, w);
-    if (it->kind == IT_PIC) {
+    if (it->kind == IT_PIC || it->kind == IT_ANIM) {
         char date[32];
         if (drawn) {
             pic_describe(&g.pic, line, sizeof(line));
+            pv_line(line, w);
+        }
+        if (it->kind == IT_ANIM && drawn && g.pic.frames) {
+            ULONG ds = (g.pic.ms + 50) / 100;
+            sprintf(line, _("%ld frames, %ld.%ld s"), (long)g.pic.frames, (long)(ds / 10),
+                    (long)(ds % 10));
             pv_line(line, w);
         }
         sprintf(line, "%s", drawn && g.pic.fmt[0] ? g.pic.fmt : it->sortkey);
@@ -8518,6 +8561,19 @@ static void viewer_done(void)
     gfx_dbuf_start(&g);
 }
 
+/* An animation of a Videos (or Pictures) list, played on a screen of its
+ * own in front of AmigaMCE's (anim.c), which comes back as it was. */
+static void anim_from_page(struct Page *p)
+{
+    char err[160];
+    const struct Item *it = &p->list.items[p->sel];
+    if (anim_play(&g, it->path, err, sizeof(err)) < 0 || err[0]) {
+        amce_log("anim", err);
+        set_msg(err);
+    }
+    draw_footer();
+}
+
 static void view_from_page(struct Page *p)
 {
     LONG vis = list_visible(), last = viewer_run(&p->list, p->sel, FALSE);
@@ -8770,8 +8826,8 @@ static void apply_screen_mode(int sm)
     if (cur())
         cur()->sel = SETTINGS_SCREEN_ROW;
     {
-        /* back where it was chosen: Settings > Screen > Screen mode */
-        struct Page *p = page_push(PT_LIST, _("Screen"));
+        /* back where it was chosen: Settings > Display > Screen mode */
+        struct Page *p = page_push(PT_LIST, _("Display"));
         if (p) {
             build_screen_settings(p);
             p->sel = 0;
@@ -8938,7 +8994,7 @@ static void restyle(void)
     build_root(MOD_SETTINGS);
     if (cur())
         cur()->sel = SETTINGS_SCREEN_ROW;
-    if ((p = page_push(PT_LIST, _("Screen")))) {
+    if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
         p->sel = SCREEN_STYLE_ROW;
     }
@@ -10442,10 +10498,11 @@ static void radio_station(struct Item *it)
 static void folder_add(int k)
 {
     static const char *const req[FS_COUNT] = { N_("A folder of MP3 or FLAC files"),
-        N_("A folder of modules"), N_("A folder of pictures") };
+        N_("A folder of modules"), N_("A folder of pictures"), N_("A folder of animations") };
     static const char *const added[FS_COUNT] = { N_("Folder added: its music is under Music"),
         N_("Folder added: its modules are under Mods"),
-        N_("Folder added: its pictures are under Pictures") };
+        N_("Folder added: its pictures are under Pictures"),
+        N_("Folder added: its animations are under Videos") };
     struct Folders *f = &fs[k];
     struct FileRequester *fr;
     char path[300];
@@ -10557,7 +10614,7 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_GENSET)
         open_settings_page(_("General"), build_general_settings);
     else if (it->action == ACT_SCREENSET)
-        open_settings_page(_("Screen"), build_screen_settings);
+        open_settings_page(_("Display"), build_screen_settings);
     else if (it->action == ACT_NICSET)
         open_settings_page(_("Network interface"), build_nic_settings);
     else if (it->action == ACT_RADIOSET)
@@ -11202,6 +11259,8 @@ static void act_open(BOOL play)
             folder_slideshow(it);   /* Fire plays a folder of pictures */
         else if (it->kind == IT_PIC)
             view_from_page(p);
+        else if (it->kind == IT_ANIM)
+            anim_from_page(p);
         else if (it->kind == IT_DIR)
             open_dir(it);
         else if (it->kind == IT_ACTION)
@@ -11605,7 +11664,7 @@ static void handle_mouse(struct IntuiMessage *im)
                     has_aside(p)) {
                     struct Item *it = &p->list.items[p->sel];
                     if (it->kind == IT_SONG || it->kind == IT_MOD || it->kind == IT_PIC ||
-                        it->kind == IT_RUN || it->kind == IT_PLEXTRACK || it->kind == IT_PLEXPHOTO) {
+                        it->kind == IT_ANIM || it->kind == IT_RUN || it->kind == IT_PLEXTRACK || it->kind == IT_PLEXPHOTO) {
                         if (debug_on)
                             amce_log("click: double on the pane", it->label);
                         set_focus(FOCUS_CONTENT);
@@ -11634,7 +11693,8 @@ static void handle_mouse(struct IntuiMessage *im)
                  * plays as a slideshow) is selected, and a double-click
                  * plays it (a folder: goes inside) */
                 struct Item *it = &p->list.items[idx];
-                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_MOD ||
+                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_ANIM ||
+                                it->kind == IT_MOD ||
                                 it->kind == IT_SONG || it->kind == IT_PLEXPHOTO ||
                                 (it->kind == IT_DIR && it->mark == MARK_PLAY);
                 if (debug_on) {

@@ -87,6 +87,8 @@ static void decode(struct LJob *j, const char *src)
         j->own = TRUE;
         return;
     }
+    if (ilbm_is_anim(src))
+        return;                         /* not to a datatype: it would read every frame */
     j->obj = pic_decode(src, j->tw ? NULL : j->scr, j->remap, &j->remapped, &j->info);
     j->ms_decode = time_ms() - t0;
     if (!j->obj || !j->tw || j->remapped || j->cancel)

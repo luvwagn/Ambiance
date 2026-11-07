@@ -90,6 +90,8 @@ struct PicInfo {
     ULONG mode;                 /* its display mode ID (HAM, EHB, hires...) */
     char  fmt[16];              /* the datatype's name: "ILBM", "GIF"... */
     char  cls[24];              /* the class that read it: "warpjpeg"... ("" ilbm.c) */
+    UWORD frames;               /* an IFF ANIM's frames (ilbm.c), 0 for a picture */
+    ULONG ms;                   /* ...and how long they play */
 };
 struct Gfx {
     struct Screen   *scr;
@@ -268,6 +270,9 @@ void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the las
  * deep, PBM...) or no memory; try the datatype then. */
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
+BOOL ilbm_is_anim(const char *path);    /* an IFF ANIM: its first frame only, never a datatype */
+/* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not */
+LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax);
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
 /* Double buffering (RTG; prototype: PROGDIR:AmigaMCE.dbuf): drawing goes
@@ -316,7 +321,8 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* 
 enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATION,
        IT_PLEXDIR, IT_PLEXTRACK, IT_PLEXSRV,      /* Plex (plex.c) */
        IT_SONG,                                   /* a music file here: MP3, FLAC (mods.c) */
-       IT_PLEXPHOTO };                            /* a photo of a Plex photo library */
+       IT_PLEXPHOTO,                              /* a photo of a Plex photo library */
+       IT_ANIM };                                 /* an IFF ANIM (Videos: anim.c) */
 /* What the left-hand marker column shows for a row (struct Item.mark). */
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,

@@ -2,7 +2,8 @@
  * AmigaMCE - Pictures: folders of picture files
  * Copyright (c) 2026 Brian King
  *
- * A Pictures list holds folders (IT_DIR) and picture files (IT_PIC),
+ * A Pictures list holds folders (IT_DIR), picture files (IT_PIC) and IFF
+ * ANIMs (IT_ANIM: Videos lists are these lists too, of animations),
  * folders first, each part sorted by name. Once sorted, an entry's sortkey
  * holds the tag shown at the right of its row: a picture's format ("GIF"),
  * or a playable folder's picture count. A folder with pictures and no
@@ -24,6 +25,7 @@ static const struct { const char *ext, *tag; } exts[] = {
     { "iff", "ILBM" }, { "ilbm", "ILBM" }, { "lbm", "ILBM" }, { "ham", "ILBM" },
     { "gif", "GIF" }, { "png", "PNG" }, { "jpg", "JPEG" }, { "jpeg", "JPEG" },
     { "jpe", "JPEG" }, { "bmp", "BMP" }, { "pcx", "PCX" }, { "tga", "TGA" },
+    { "anim", "ANIM" }, { "anm", "ANIM" },
 };
 
 /* The format a picture file's name says it is, NULL if none. */
@@ -54,6 +56,8 @@ static const char *sniff(const char *path)
         return NULL;
     if (!memcmp(b, "FORM", 4) && (!memcmp(b + 8, "ILBM", 4) || !memcmp(b + 8, "PBM ", 4)))
         return "ILBM";
+    if (!memcmp(b, "FORM", 4) && !memcmp(b + 8, "ANIM", 4))
+        return "ANIM";
     if (!memcmp(b, "GIF8", 4))
         return "GIF";
     if (b[0] == 0x89 && !memcmp(b + 1, "PNG", 3))
@@ -114,28 +118,36 @@ static BOOL letter_dir(const char *name)
  * folders; *first: the path of its first picture by name. */
 struct scan_ctx {
     const char *dir;
-    LONG *ndirs, npics, firstmax;
+    LONG *ndirs, npics, nanims, firstmax;
     char *first;
     BOOL top;
 };
 
-static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top);
+static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top,
+                 LONG *nanims);
 
 static void scan_cb(void *ctx, const char *name, BOOL isdir)
 {
     struct scan_ctx *c = ctx;
     char path[300];
+    const char *f;
     if (isdir) {
         if (c->top && letter_dir(name)) {
             LONG n;
+            LONG na = 0;
             join_path(path, sizeof(path), c->dir, name);
-            n = scan(path, c->ndirs, c->first, c->firstmax, FALSE);
+            n = scan(path, c->ndirs, c->first, c->firstmax, FALSE, &na);
             if (n > 0)
                 c->npics += n;
+            c->nanims += na;
         } else if (c->ndirs) {
             (*c->ndirs)++;
         }
-    } else if (entry_format(c->dir, name)) {
+    } else if ((f = entry_format(c->dir, name)) && !strcmp(f, "ANIM")) {
+        c->nanims++;                        /* played, not shown: not a slideshow's */
+        if (c->first && c->firstmax && !c->first[0] && !c->npics)
+            join_path(c->first, c->firstmax, c->dir, name);
+    } else if (f) {
         c->npics++;
         if (c->first && c->firstmax &&
             (!c->first[0] || amce_stricmp(name, (const char *)FilePart((STRPTR)c->first)) < 0))
@@ -143,16 +155,22 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
     }
 }
 
-static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top)
+static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top,
+                 LONG *nanims)
 {
     struct scan_ctx c;
+    LONG r;
     c.dir = dir;
     c.ndirs = ndirs;
     c.npics = 0;
+    c.nanims = 0;
     c.first = first;
     c.firstmax = firstmax;
     c.top = top;
-    return dir_scan(dir, scan_cb, &c) < 0 ? -1 : c.npics;
+    r = dir_scan(dir, scan_cb, &c) < 0 ? -1 : c.npics;
+    if (nanims)
+        *nanims = c.nanims;
+    return r;
 }
 
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
@@ -163,7 +181,7 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
         *ndirs = 0;
     if (first && firstmax)
         first[0] = 0;
-    n = scan(dir, ndirs, first, firstmax, TRUE);
+    n = scan(dir, ndirs, first, firstmax, TRUE, NULL);
     req_on(old);
     return n;
 }
@@ -182,7 +200,8 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
 {
     struct collect_ctx *c = ctx;
     char path[300], key[140];
-    if (!isdir && !entry_format(c->dir, name))
+    const char *f = isdir ? NULL : entry_format(c->dir, name);
+    if (!isdir && !f)
         return;
     join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
@@ -191,7 +210,7 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     }
     key[0] = isdir ? '0' : '1';             /* folders first */
     amce_strlcpy(key + 1, name, sizeof(key) - 1);
-    list_add(c->out, name, path, key, isdir ? IT_DIR : IT_PIC);
+    list_add(c->out, name, path, key, isdir ? IT_DIR : !strcmp(f, "ANIM") ? IT_ANIM : IT_PIC);
 }
 
 static void collect(const char *dir, struct ItemList *out, BOOL top)
@@ -216,13 +235,19 @@ static LONG read_dir(const char *dir, struct ItemList *out)
     /* now the tags (and what each folder holds) */
     for (i = 0; i < out->count; i++) {
         struct Item *it = &out->items[i];
-        if (it->kind == IT_PIC) {
+        if (it->kind == IT_PIC || it->kind == IT_ANIM) {
             const char *f = strchr(it->label, '.') ? pics_format(it->label) : sniff(it->path);
             it->sortkey = (char *)(f ? f : "");
         } else {
-            LONG nd = 0, np = scan(it->path, &nd, NULL, 0, TRUE);
+            LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na);
             it->sortkey = (char *)"";
-            if (np > 0 && nd == 0) {
+            if (na > 0 && np <= 0 && nd == 0) {
+                char num[12];                   /* animations: opened, one played at a time */
+                sprintf(num, "%ld", (long)na);
+                it->sortkey = list_strdup(out, num);
+                if (!it->sortkey)
+                    it->sortkey = (char *)"";
+            } else if (np > 0 && nd == 0) {
                 char num[12];
                 it->mark = MARK_PLAY;
                 sprintf(num, "%ld", (long)np);
