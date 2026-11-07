@@ -110,6 +110,7 @@ static BOOL mouse_mode;             /* the mouse was used last */
  * the selection stays where it is until a click). Kept as a place on
  * screen, so a list scrolling under a still pointer stays right. */
 static WORD hover_row = -1;         /* content list: screen row, -1 none */
+static BOOL hover_strip;            /* the pointer in the menu's column (menu_layout) */
 static WORD hover_menu = -1;        /* main menu: entry, -1 none */
 /* The keyboard or joystick moving: the pointer hides (an empty sprite)
  * and so does its highlight, until the mouse moves. */
@@ -5229,7 +5230,26 @@ static void hover_at(WORD x, WORD y)
         if (p->top + row >= p->list.count)
             row = -1;
     }
+    if ((x < g.menu_w + U(3) && y >= U(25) && y < g.footer_y) != hover_strip) {
+        hover_strip = !hover_strip;         /* the column stays open under the pointer */
+        if (row == hover_row && mi == hover_menu) {
+            if (!pane_pending)
+                menu_layout();
+            return;
+        }
+    }
     hover_set(row, mi);
+}
+
+/* The pointer gone (hidden, or the joystick used): the menu column may fold. */
+static void hover_none(void)
+{
+    BOOL was = hover_strip;
+    hover_strip = FALSE;
+    if (hover_row >= 0 || hover_menu >= 0)
+        hover_set(-1, -1);
+    else if (was && !pane_pending)
+        menu_layout();
 }
 
 static void pointer_hide(void)
@@ -5240,7 +5260,7 @@ static void pointer_hide(void)
         return;
     SetPointer(g.win, ptr_blank, 1, 16, 0, 0);
     ptr_hidden = g.win;
-    hover_set(-1, -1);                      /* nothing under a pointer not there */
+    hover_none();                           /* nothing under a pointer not there */
     if (crumb_hover >= 0) {
         crumb_hover = -1;
         if (cur() && !pane_pending)
@@ -5267,7 +5287,7 @@ static void set_mouse_mode(BOOL on)
     if (p && p->type == PT_LIST && !pane_pending)
         draw_gutter(p);
     if (!on)
-        hover_set(-1, -1);                  /* the joystick: no pointer to follow */
+        hover_none();                       /* the joystick: no pointer to follow */
     if (np_on())
         np_update();                        /* the yellow frame, or the mouse's light */
 }
@@ -7749,9 +7769,12 @@ static void menu_select(int i)
  * RTG), so opening pushes the page right and closing pulls it back; then
  * the caller lays everything out at the new width as before. Double
  * buffered, each frame is shown with a flip; else at the vertical blank.
+ * On a native (planar) screen moving the page is too much for the blitter
+ * (320 x 256 in 256 colours: 80 ms a frame), so there the column slides
+ * over the page, or back off it, which then moves once at the end.
  * A frame that takes over MENU_SLIDE_SLOW ms ends the slide there. */
 #define MENU_SLIDE      160
-#define MENU_SLIDE_MAX    8
+#define MENU_SLIDE_MAX   16
 #define MENU_SLIDE_SLOW  40
 static void menu_slide(UWORD from, UWORD to)
 {
@@ -7777,7 +7800,10 @@ static void menu_slide(UWORD from, UWORD to)
         }
         tf = time_ms();
         SetBPen(g.rp, PEN_BG);
-        if (w > prev)                       /* opening: the page pushed right */
+        if (g.planar) {
+            if (w < prev)                   /* the column's old edge, now page margin */
+                gfx_fill(&g, w + U(3), y0, prev + U(3), y1, PEN_BG);
+        } else if (w > prev)                /* opening: the page pushed right */
             ScrollRaster(g.rp, -(WORD)(w - prev), 0, prev + U(3), y0, g.w - 1, y1);
         else                                /* closing: pulled back left */
             ScrollRaster(g.rp, (WORD)(prev - w), 0, w + U(3), y0, g.w - 1, y1);
@@ -7808,7 +7834,7 @@ static void menu_slide(UWORD from, UWORD to)
  * again). */
 static BOOL menu_layout(void)
 {
-    BOOL narrow = focus != FOCUS_MENU && hover_menu < 0 && depth > 0;
+    BOOL narrow = focus != FOCUS_MENU && hover_menu < 0 && !hover_strip && depth > 0;
     if (!g.win || narrow == gfx_menu_is_narrow())
         return FALSE;
     menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
