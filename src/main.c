@@ -6854,11 +6854,12 @@ static void np_soft_redraw(void)
 /* A track from ms on (a seek): asked of the server again from there (a
  * conversion from that time, a stored file from that byte); delay > 0
  * waits that long first, as Back and Forward held keep moving the time. */
+static void np_track_from(LONG idx, ULONG ms, ULONG total, ULONG size, const char *title_was,
+                          const char *by_was);
+
 static void np_seek_track(ULONG ms, ULONG delay)
 {
     struct MpStatus st;
-    struct Item *it;
-    char url[2048], by[200], album[100], err[100];
     if (!mp_is_track() || !np.list.pool || np.idx < 0 || np.idx >= np.list.count)
         return;
     mp_status(&st);
@@ -6875,17 +6876,30 @@ static void np_seek_track(ULONG ms, ULONG delay)
     }
     np.seek_due = 0;
     np.seeked = TRUE;                       /* failing, it stays: not the next track */
-    it = &np.list.items[np.idx];
+    np_track_from(np.idx, ms, st.total_ms, st_size(), mp_stream_name(), mp_track_by());
+}
+
+/* Playlist track idx played from ms on, asked of the server (or the file
+ * read) from there: total, size, title and by as the track had them
+ * (a file's: its tags' names). */
+static void np_track_from(LONG idx, ULONG ms, ULONG total, ULONG size, const char *title_was,
+                          const char *by_was)
+{
+    struct Item *it;
+    char url[2048], by[200], album[100], err[100];
+    if (!np.list.pool || idx < 0 || idx >= np.list.count)
+        return;
+    it = &np.list.items[idx];
     if (it->kind == IT_SONG) {
         /* a file: FLAC finds the time itself; an MP3 from about its byte */
-        ULONG at = 0, size = st_size();
+        ULONG at = 0;
         BOOL mp3 = !strcmp(song_format(it->path), "MP3");  /* FLAC, PCM: by time */
-        if (mp3 && st.total_ms && size)
-            at = (ULONG)(((unsigned long long)size * ms) / st.total_ms);
         char title[120];
-        amce_strlcpy(title, mp_stream_name(), sizeof(title));  /* its tags' names, kept */
-        amce_strlcpy(by, mp_track_by(), sizeof(by));
-        if (!mp_load_track(it->path, title, by, song_format(it->path), st.total_ms,
+        if (mp3 && total && size)
+            at = (ULONG)(((unsigned long long)size * ms) / total);
+        amce_strlcpy(title, title_was, sizeof(title));      /* its tags' names, kept */
+        amce_strlcpy(by, by_was, sizeof(by));
+        if (!mp_load_track(it->path, title, by, song_format(it->path), total,
                            plex_decoder_cpu(), ms, at, err, sizeof(err)) ||
             !mp_play(err, sizeof(err)))
             set_msg(err);
@@ -6898,7 +6912,7 @@ static void np_seek_track(ULONG ms, ULONG delay)
         amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
         amce_strlcat(by, album, sizeof(by));
     }
-    if (!mp_load_track(url, it->label, by, plex_tag(it), st.total_ms, plex_decoder_cpu(), ms,
+    if (!mp_load_track(url, it->label, by, plex_tag(it), total, plex_decoder_cpu(), ms,
                        plex_converts(it) ? 0 : plex_track_byte(it, ms), err, sizeof(err)) ||
         !mp_play(err, sizeof(err))) {
         set_msg(err);
@@ -8571,11 +8585,45 @@ static void viewer_done(void)
  * own in front of AmigaMCE's (anim.c), which comes back as it was. */
 static void anim_from_page(struct Page *p)
 {
-    char err[160];
+    char err[160], title[120], by[200];
     const struct Item *it = &p->list.items[p->sel];
-    if (anim_play(&g, it->path, err, sizeof(err)) < 0 || err[0]) {
+    BOOL sound = anim_has_sound(it->path), stream = FALSE, track = FALSE, was_paused = FALSE;
+    BOOL module = FALSE;
+    LONG idx = np.idx;
+    struct MpStatus st;
+    ULONG size = 0;
+    /* with a sound of its own, what plays waits: a module paused; a station
+     * or a track stopped (paused, it would go on being read and decoded,
+     * unheard), played again afterwards, a track from where it was */
+    if (sound && mp_running()) {
+        if (mp_is_stream()) {
+            mp_status(&st);
+            track = mp_is_track();
+            was_paused = mp_paused();
+            size = st_size();
+            amce_strlcpy(title, mp_stream_name(), sizeof(title));
+            amce_strlcpy(by, mp_track_by(), sizeof(by));
+            mp_stop();
+            stream = TRUE;
+            amce_log("anim", track ? "the track stopped while it plays" : "the station stopped while it plays");
+        } else if (mp_playing()) {
+            mp_pause(TRUE);
+            module = TRUE;
+        }
+    }
+    if (anim_play(&g, it->path, sound_ahi, err, sizeof(err)) < 0 || err[0]) {
         amce_log("anim", err);
         set_msg(err);
+    }
+    if (module)
+        mp_pause(FALSE);
+    if (stream) {
+        if (track)
+            np_track_from(idx, st.elapsed_ms, st.total_ms, size, title, by);
+        else
+            np_start(idx);
+        if (was_paused)
+            mp_pause(TRUE);
     }
     draw_footer();
 }

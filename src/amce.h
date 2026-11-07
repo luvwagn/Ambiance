@@ -271,8 +271,10 @@ void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the las
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
 BOOL ilbm_is_anim(const char *path);    /* an IFF ANIM: its first frame only, never a datatype */
-/* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not */
-LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax);
+/* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not;
+ * its sound by AHI (ahi) or Paula's channels 2 and 3 */
+LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax);
+BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
 /* Double buffering (RTG; prototype: PROGDIR:AmigaMCE.dbuf): drawing goes

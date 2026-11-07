@@ -18,10 +18,14 @@
  * chunks in its frames, each saying "play sound n on these channels, at
  * this volume and rate, so many times" (or stop them). The samples go to
  * chip RAM when it opens, and each SCTL is acted on the moment its frame
- * is shown, so the sound keeps to the pictures. What plays meanwhile is
- * paused and lends Paula's channels 2 and 3 (mp_lend): a sound asked for
- * on the left (0, 3) plays on 3, on the right (1, 2) on 2. Up and Down
- * set its volume then, scaling each sound's own.
+ * is shown, so the sound keeps to the pictures. What played meanwhile
+ * waits (main.c: a module paused, a station or a track stopped and played
+ * again after). With AHI the sound output (Settings > Sound), the sounds
+ * go to ahi.device's default unit, a request for each side, panned; else
+ * the music player lends Paula's channels 2 and 3 (mp_lend). A sound asked
+ * for on the left (0, 3) plays on the left (Paula's 3), on the right (1,
+ * 2) on the right (2). Up and Down set its volume, scaling each sound's
+ * own (with AHI from the sound's next start).
  *
  * Keys: Esc, Backspace, the right button or the pad's blue stop it; Space,
  * Return, the left button or fire pause it; Up and Down (the stick, the
@@ -41,6 +45,7 @@
 #include <libraries/lowlevel.h>
 #include <hardware/custom.h>
 #include <hardware/dmabits.h>
+#include <devices/ahi.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
@@ -109,11 +114,96 @@ static UWORD ch_vol(int c)
     return (UWORD)((ULONG)ch[c].svol * mp_volume() / 64);
 }
 
+/* ---- by AHI: a request for each side (2 right, 3 left), sent again for
+ * each time round; AHI mixes them with whatever else uses it. */
+static BOOL snd_ahi;
+static struct MsgPort *ahi_port;
+static struct AHIRequest *ahi_dev, *ahi_io[4];
+static BOOL ahi_busy[4];
+static UWORD ahi_rate[4], ahi_done[4];
+
+static void ahi_close(void)
+{
+    int c;
+    for (c = 2; c < 4; c++) {
+        if (ahi_io[c] && ahi_busy[c]) {
+            AbortIO((struct IORequest *)ahi_io[c]);
+            WaitIO((struct IORequest *)ahi_io[c]);
+        }
+        ahi_busy[c] = FALSE;
+        FreeVec(ahi_io[c]);
+        ahi_io[c] = NULL;
+    }
+    if (ahi_dev) {
+        CloseDevice((struct IORequest *)ahi_dev);
+        DeleteIORequest((struct IORequest *)ahi_dev);
+        ahi_dev = NULL;
+    }
+    if (ahi_port)
+        DeleteMsgPort(ahi_port);
+    ahi_port = NULL;
+}
+
+static BOOL ahi_open(void)
+{
+    int c;
+    if (!(ahi_port = CreateMsgPort()) ||
+        !(ahi_dev = (struct AHIRequest *)CreateIORequest(ahi_port, sizeof(struct AHIRequest))))
+        goto fail;
+    ahi_dev->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ahi_dev, 0)) {
+        DeleteIORequest((struct IORequest *)ahi_dev);
+        ahi_dev = NULL;
+        goto fail;
+    }
+    for (c = 2; c < 4; c++) {
+        if (!(ahi_io[c] = AllocVec(sizeof(struct AHIRequest), MEMF_PUBLIC)))
+            goto fail;
+        CopyMem(ahi_dev, ahi_io[c], sizeof(struct AHIRequest));
+    }
+    return TRUE;
+fail:
+    ahi_close();
+    return FALSE;
+}
+
+static void ahi_send(int c)
+{
+    struct AHIRequest *io = ahi_io[c];
+    io->ahir_Std.io_Message.mn_Node.ln_Pri = 0;
+    io->ahir_Std.io_Command = CMD_WRITE;
+    io->ahir_Std.io_Data = ch[c].s->data;
+    io->ahir_Std.io_Length = ch[c].s->len;
+    io->ahir_Std.io_Offset = 0;
+    io->ahir_Frequency = ahi_rate[c];
+    io->ahir_Type = AHIST_M8S;
+    io->ahir_Volume = (Fixed)((ULONG)ch_vol(c) << 10);     /* 64: 1.0 */
+    io->ahir_Position = c == 3 ? 0 : 0x10000;               /* left, right */
+    io->ahir_Link = NULL;
+    SendIO((struct IORequest *)io);
+    ahi_busy[c] = TRUE;
+    ahi_done[c]++;
+}
+
+static void ahi_stop(int c)
+{
+    if (ahi_io[c] && ahi_busy[c]) {
+        AbortIO((struct IORequest *)ahi_io[c]);
+        WaitIO((struct IORequest *)ahi_io[c]);
+    }
+    ahi_busy[c] = FALSE;
+}
+
+/* ---- by Paula */
 static void snd_quiet(int c)
 {
+    ch[c].busy = FALSE;
+    if (snd_ahi) {
+        ahi_stop(c);
+        return;
+    }
     CU->dmacon = (UWORD)(1 << c);
     CU->aud[c].ac_vol = 0;
-    ch[c].busy = FALSE;
 }
 
 /* Sound s on channel c (2 or 3), times times (0: until stopped). */
@@ -125,8 +215,12 @@ static void snd_play(int c, const struct Sound *s, UWORD vol, UWORD times, UWORD
         per = 124;
     if (per > 65535)
         per = 65535;
-    CU->dmacon = (UWORD)(1 << c);
-    lines(2);                               /* stopped, so it starts from the beginning */
+    if (snd_ahi)
+        ahi_stop(c);
+    else {
+        CU->dmacon = (UWORD)(1 << c);
+        lines(2);                           /* stopped, so it starts from the beginning */
+    }
     ch[c].svol = (UWORD)((ULONG)vol * s->vol / 64);
     ch[c].s = s;
     ch[c].times = times;
@@ -134,6 +228,12 @@ static void snd_play(int c, const struct Sound *s, UWORD vol, UWORD times, UWORD
     ch[c].dur = (ULONG)s->len * 1000 / (rate ? rate : 8363);
     ch[c].busy = TRUE;
     ch[c].last = times == 1;
+    if (snd_ahi) {
+        ahi_rate[c] = rate ? rate : 8363;
+        ahi_done[c] = 0;
+        ahi_send(c);
+        return;
+    }
     CU->aud[c].ac_ptr = (UWORD *)s->data;
     CU->aud[c].ac_len = (UWORD)(s->len / 2);
     CU->aud[c].ac_per = (UWORD)per;
@@ -154,6 +254,17 @@ static void snd_tick(void)
     for (c = 2; c < 4; c++) {
         if (!ch[c].busy)
             continue;
+        if (snd_ahi) {                      /* a time round done: the next, or quiet */
+            if (ahi_busy[c] && CheckIO((struct IORequest *)ahi_io[c])) {
+                WaitIO((struct IORequest *)ahi_io[c]);
+                ahi_busy[c] = FALSE;
+                if (!ch[c].times || ahi_done[c] < ch[c].times)
+                    ahi_send(c);
+                else
+                    ch[c].busy = FALSE;
+            }
+            continue;
+        }
         CU->aud[c].ac_vol = ch_vol(c);
         if (!ch[c].last && ch[c].times &&
             now - ch[c].start >= ch[c].dur * (ch[c].times - 1)) {
@@ -258,7 +369,10 @@ static void snd_load(BPTR fh, ULONG len)
 static void snd_free(void)
 {
     int i;
-    if (snd_on) {
+    if (snd_on && snd_ahi) {
+        ahi_close();
+        snd_ahi = snd_on = FALSE;
+    } else if (snd_on) {
         snd_quiet(2);
         snd_quiet(3);
         lines(3);
@@ -507,7 +621,27 @@ static int input(struct Window *win, ULONG *jlast)
     return r;
 }
 
-LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax)
+/* 8SVX samples in it: the FORM after its header one (they come first). */
+BOOL anim_has_sound(const char *path)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    UBYTE h[24];
+    BOOL r = FALSE;
+    BPTR fh;
+    me->pr_WindowPtr = (APTR)-1;
+    fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return FALSE;
+    r = Read(fh, h, 24) == 24 && be32(h) == ID('F', 'O', 'R', 'M') &&
+        be32(h + 8) == ID('A', 'N', 'I', 'M') && be32(h + 12) == ID('F', 'O', 'R', 'M') &&
+        be32(h + 20) == ID('8', 'S', 'V', 'X');
+    Close(fh);
+    return r;
+}
+
+LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax)
 {
     BPTR fh;
     UBYTE head[12];
@@ -608,12 +742,16 @@ LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax)
     amce_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
-    if (nsnd) {                             /* its own sound: what plays is paused */
-        if ((silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR)) && mp_lend(TRUE))
+    if (nsnd) {                             /* its own sound (what played waits: main.c) */
+        if (ahi && ahi_open())
+            snd_ahi = snd_on = TRUE;
+        else if ((silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR)) && mp_lend(TRUE))
             snd_on = TRUE;
         sprintf(m, "%ld sounds; %s", (long)nsnd,
-                snd_on ? "Paula's channels 2 and 3 lent, what played paused"
-                       : "no channels to play them on (AHI's?)");
+                snd_ahi ? "by AHI's default unit"
+                : snd_on ? (ahi ? "AHI could not be opened: Paula's channels 2 and 3, lent"
+                                : "Paula's channels 2 and 3, lent")
+                         : "nothing to play them on (AHI has Paula?)");
         amce_log("anim", m);
     }
 
