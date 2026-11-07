@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nihongo
 ## codeset 0
+MSG_282FBBDC
+アニメーションを開けませんでした
+; The animation could not be opened
+MSG_3A04E1BB
+再生できるIFF ANIMではありません
+; Not an IFF ANIM this can play
+MSG_26BEC995
+このAmigaには合う画面モードがありません (%ld色、%s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+アニメーションはAmiga本来の画面で再生しますが、見つかりませんでした
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+ANIM-%ld圧縮には対応していません
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+アニメーションの画面のためのメモリが足りません
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 メモリが足りません
 ; Not enough memory
@@ -82,15 +100,9 @@ Amiga Game Selector 3 (AGS) は、スクリーンショットと説明付きのW
 MSG_017A1274
 AmigaMCEはAGS:アサインを探し、次に自分のドロワーの隣とWHDLoad:にあるAGS2ドロワーを探します。AmigaMCEをAGS 3のシステムにインストールするか、アサインができるようにAGSを一度起動してください。
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-音楽、MOD、画像、ラジオはなくても使えます: 設定 > フォルダーで音楽、モジュール、画像の場所を指定します。
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-あり
-; found
-MSG_40A7AEDA
-なし
-; not found
+MSG_5C6E1F8B
+音楽、MOD、画像、ビデオ、ラジオはなくても使えます: 設定 > フォルダーで音楽、モジュール、画像、アニメーションの場所を指定します。
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 AmigaMCE起動時に見つかったもの:
 ; Found when AmigaMCE started:
@@ -160,6 +172,12 @@ MSG_6F035CA3
 MSG_336DE098
 AGS: %s
 ; AGS: %s
+MSG_64FF7B9F
+あり
+; found
+MSG_40A7AEDA
+なし
+; not found
 MSG_4FE02B8B
 AmigaMCEが追加したアサイン (AGS-Stuffが実行されていません):
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -244,6 +262,9 @@ MSG_7338A4A0
 MSG_045F3994
 画像フォルダー
 ; Picture folders
+MSG_7B7A30D9
+ビデオフォルダー
+; Video folders
 MSG_2DA81BF2
 スムーズ: Fonts/amce-smoothがこのAmigaMCEと合いません
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -256,9 +277,9 @@ MSG_0B3A7E73
 MSG_5561FD0B
 全般
 ; General
-MSG_1BD8C631
-画面
-; Screen
+MSG_5A05D9B5
+表示
+; Display
 MSG_33CA9A34
 サウンド
 ; Sound
@@ -532,6 +553,9 @@ MSG_302861BB
 MSG_07ED33C3
 画像: %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+ビデオ: %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 ここに%sはありません
 ; No %s here
@@ -541,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 画像フォルダーがありません: 設定 > フォルダー > 画像
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-ビデオ再生は今後対応します。
-; Video playback arrives in a later version.
-MSG_47318A8A
-アニメーション
-; Animations
+MSG_247DBF4F
+アニメーションが見つかりません。AmigaMCEは%sで探します。
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+%sにアニメーションがありません。
+; %s has no animations in it.
+MSG_7D6C1643
+アニメーションが見つかりません。AmigaMCEはVIDEOS:、設定 > フォルダー > ビデオのフォルダー、AGSでは%sのIFF ANIMを再生します。
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 画像が見つかりません。AmigaMCEは%sで探します。
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -643,6 +670,9 @@ MSG_67E35425
 MSG_169BF20A
 上下 移動  ボタン/Return 表示  左/Esc 戻る
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+上下 移動  ボタン/Return 再生  左/Esc 戻る
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 上下 移動  ボタン スライド  右 開く  左/Esc 戻る
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -655,9 +685,6 @@ MSG_11F23D61
 MSG_41738E8F
 ボタン 開く  Esc 戻る
 ; Fire open  Esc back
-MSG_6C808185
-上下 移動  ボタン/Return 再生  左/Esc 戻る
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 上下 移動  ボタン このサーバーを使う  左/Esc 戻る
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -694,6 +721,9 @@ MSG_2B8E61B8
 MSG_642000D2
 上下 スクロール  Esc 戻る
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ldフレーム、%ld.%ld秒
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 %sを変更しました
 ; Changed %s
@@ -925,6 +955,9 @@ Esc 戻る
 MSG_00FED3FC
 Plexから読み込み中...
 ; Loading from Plex...
+MSG_4FD7ED09
+この%ld枚の写真のスライドショー
+; Slideshow of these %ld photos
 MSG_5123470D
 そのモード: %.60s
 ; That mode %.60s
@@ -1009,9 +1042,6 @@ Plexサーバーに接続できませんでした
 MSG_1CFE72A3
 写真を表示
 ; Show the photo
-MSG_4FD7ED09
-この%ld枚の写真のスライドショー
-; Slideshow of these %ld photos
 MSG_7BB6085B
 一覧に何もありません
 ; Nothing listed
@@ -1120,6 +1150,9 @@ MSG_19FEBB54
 MSG_20B552D8
 画像のフォルダー
 ; A folder of pictures
+MSG_1B002318
+アニメーションのフォルダー
+; A folder of animations
 MSG_5B08757B
 フォルダーを追加: 音楽から聴けます
 ; Folder added: its music is under Music
@@ -1129,6 +1162,9 @@ MSG_182BFE5D
 MSG_082FF2F7
 フォルダーを追加: 画像から見られます
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+フォルダーを追加: ビデオから見られます
+; Folder added: its animations are under Videos
 MSG_0242E102
 フォルダーは最大8つです: 先に1つ外してください
 ; Eight folders at most: take one out first
@@ -1273,6 +1309,9 @@ MSG_748B0D26
 MSG_2AC2E3CB
 局のアドレスではありません
 ; Not a station's address
+MSG_415987C0
+radio-browser.infoが見つかりません (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 ソケットなし (TCP/IPスタックは動作中?)
 ; No socket (is the TCP/IP stack running?)

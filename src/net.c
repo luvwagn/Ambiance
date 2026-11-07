@@ -93,7 +93,7 @@ static BOOL find_api(struct NetJob *j)
     pref_seen = pref_seq;
     api.n = 0;
     if (!(h = gethostbyname((STRPTR)API_ALL)) || h->h_length != 4) {
-        set_err(j, "radio-browser.info could not be found (DNS)");
+        set_err(j, _("radio-browser.info could not be found (DNS)"));
         return FALSE;
     }
     for (i = 0; h->h_addr_list[i] && n < MAX_HOSTS; i++)

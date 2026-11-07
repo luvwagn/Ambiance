@@ -95,6 +95,21 @@ Pictures
   screen (PNG, JPEG above 640x512); the next is fetched while one is
   shown, and a slideshow waits for a slow one rather than skip it.
 
+Videos
+- IFF ANIMs from the VIDEOS: assign, up to eight folders chosen in
+  Settings > Folders > Videos and AGS's Media:Animations, with a frame
+  of each beside the list (a later one when it starts blank), its size,
+  colours, frame count and length. Each plays on a screen in its own
+  display mode (HAM, extra halfbrite, interlace, overscan) as it was
+  made, read from the file a frame at a time, so the biggest play too:
+  ANIM-5, 7 and 8. Its own sound plays in step with the pictures, by
+  AHI if that is the sound output, else Paula; what was playing waits
+  (a station or a track is stopped, and goes on afterwards).
+- Moving the mouse brings up controls over the picture: from the start,
+  play/pause, stop, volume, the time and the length. Up/Down set the
+  volume; Esc or the right button stops; one under 8 seconds plays
+  again until stopped.
+
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
   and AGA; 640x480, 800x600 and 1024x768 on RTG, or Automatic: the
@@ -169,6 +184,9 @@ Controls
   Pictures     Fire views a picture or plays a folder marked with the
                play arrow as a slideshow. In the viewer, Left/Right
                previous/next, Fire or Space slideshow on/off, Esc back.
+  Videos       Fire plays an animation. Playing: Space, Fire or a click
+               pause; Up/Down or the wheel volume; Esc, Blue or the right
+               button stop; the mouse moved shows the controls.
   Now Playing  Left/Right choose a button, Fire presses it; Space
                play/pause; S stop; N/P next/previous; , and . back and
                forward; Up/Down or the wheel volume; a click on the bar
@@ -184,18 +202,20 @@ Controls
 
 Settings
 --------
-  General      Jump scrolling (very long lists step a letter at a time),
-               Debug
-  Screen       Screen mode, Style (a laced or RTG screen: the font, those
+  General      Language, Debug
+  Display      Screen mode, Style (a laced or RTG screen: the font, those
                whose layout fits; RTG: or Smooth), Double buffering
                (RTG), Visualisation
                (Now Playing's level meters, or HippoPlayer's spectrum
-               analyser; under MHI the meters)
+               analyser; under MHI the meters), Jump scrolling (very
+               long lists step a letter at a time)
   Sound        Paula, or AHI (16-bit) for radio, Plex and music files;
                MP3 by mpega.library or an MHI driver (which decodes
-               and plays it itself); FLAC by flacdec.library;
-               Music folders: the MUSIC: assign on or off, folders
-               added (Add a folder...) or taken out (Fire twice)
+               and plays it itself); FLAC by flacdec.library
+  Folders      Where Music, Mods, Pictures and Videos find their files:
+               the MUSIC:, MODS:, PICTURES: and VIDEOS: assigns on or
+               off, folders added (Add a folder...) or taken out (Fire
+               twice); AGS's own drawers are found by themselves
   Networking   Radio: HTTPS stations, the highest bitrate listed, which
                  radio-browser.info server the lists come from
                Plex: on or off, the server, lower quality audio
@@ -223,7 +243,9 @@ Setting up Plex
 
 Not there yet
 -------------
-- Videos is on the menu but arrives in a later version.
+- Videos plays IFF ANIMs; other video formats come later.
+- beets music libraries: amcesql.library (SQLite, read only) is in the
+  archive, browsing them comes later.
 - HTTPS radio streams are listed (with AmiSSL) but do not play yet.
 - Modules play on Paula only; AHI for them comes later.
 - Signing in through plex.tv needs HTTPS: the token is set by hand.
@@ -231,16 +253,25 @@ Not there yet
 
 History
 -------
+0.7.0  Videos: IFF ANIMs (ANIM-5, 7 and 8) from Media:Animations, VIDEOS:
+       and Videos folders, played on a screen in their own mode (HAM,
+       extra halfbrite, interlace, overscan) a frame at a time from the
+       file, their sound in step (AHI or Paula) while what played waits,
+       with controls over the picture when the mouse moves; a frame of
+       each beside the list. The menu folds to its icons on every screen,
+       sliding where drawing is quick, and stays open while the pointer is
+       in it. Settings > Screen is now Display, with Jump scrolling.
+       amcesql.library for reading beets libraries later. Faster Plex
+       slideshows; smoother hover highlights; coasting kept short.
 0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
        AHI output and MHI MP3 decoding for radio, Plex and music files.
        Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
        assign and Music folders, with tags and covers; FLAC from Plex
        as stored (flacdec.library); 68020+. Japanese, Chinese and
        Korean names in their own characters. In eleven languages besides
-       English (Japanese among them), with an installer; the menu
-       folds to its icons while you browse, sliding where drawing is
-       quick. HippoPlayer's spectrum analyser on Now
-       Playing (V, or Settings > Display > Visualisation). Settings >
+       English (Japanese among them), with an installer.
+       HippoPlayer's spectrum analyser on Now
+       Playing (V, or Settings > Screen > Visualisation). Settings >
        Folders: the music, modules and pictures of an Amiga without AGS
        (MUSIC:, MODS:, PICTURES: and up to eight folders each). Screen
        mode Automatic follows a Workbench on a graphics card; RTG

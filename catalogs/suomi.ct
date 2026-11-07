@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language suomi
 ## codeset 0
+MSG_282FBBDC
+Animaatiota ei voitu avata
+; The animation could not be opened
+MSG_3A04E1BB
+Ei toistettava IFF ANIM
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Tässä Amigassa ei ole sille näyttötilaa (%ld väriä, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Animaatiot toistetaan Amigan omilla näytöillä, eikä sellaista löytynyt
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+ANIM-%ld-pakkausta ei tueta
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+Muisti ei riitä animaation näytölle
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 Muisti ei riitä
 ; Not enough memory
@@ -80,17 +98,11 @@ MSG_3F233512
 Amiga Game Selector 3 (AGS) on valmis WHDLoad-pelien ja -demojen kokoelma kuvakaappauksineen ja kuvauksineen. Kun se on asennettu, ne näkyvät täällä ja käynnistyvät AmigaMCE:stä.
 ; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
 MSG_017A1274
-AmigaMCE etsii AGS:-liitosta, sitten AGS2-laatikkoa omansa vierestä ja WHDLoad:ista. Asenna AmigaMCE AGS 3 -järjestelmään tai käynnistä AGS kerran, jotta sen liitokset ovat olemassa.
+AmigaMCE etsii AGS:-liitosta, sitten AGS2-kansiota omansa vierestä ja WHDLoad:ista. Asenna AmigaMCE AGS 3 -järjestelmään tai käynnistä AGS kerran, jotta sen liitokset ovat olemassa.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-Musiikki, Modit, Kuvat ja Radio toimivat ilmankin: Asetukset > Kansiot kertoo, missä musiikkisi, moduulisi ja kuvasi ovat.
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-löytyi
-; found
-MSG_40A7AEDA
-ei löytynyt
-; not found
+MSG_5C6E1F8B
+Musiikki, Modit, Kuvat, Videot ja Radio toimivat ilmankin: Asetukset > Kansiot kertoo, missä musiikkisi, moduulisi, kuvasi ja animaatiosi ovat.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 Löytyi AmigaMCE:n käynnistyessä:
 ; Found when AmigaMCE started:
@@ -158,7 +170,14 @@ MSG_6F035CA3
 Datatyypit (mikä lukee kunkin kuvamuodon):
 ; Datatypes (which one reads each picture format):
 MSG_336DE098
+AGS: %s
 ; AGS: %s
+MSG_64FF7B9F
+löytyi
+; found
+MSG_40A7AEDA
+ei löytynyt
+; not found
 MSG_4FE02B8B
 AmigaMCE:n lisäämät liitokset (AGS-Stuff ei ollut käynnissä):
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -187,11 +206,13 @@ MSG_2DA7AFDB
 ei mitään
 ; none
 MSG_1358A393
+MP3: %s
 ; MP3: %s
 MSG_197B8973
 MHI-ajuri
 ; MHI driver
 MSG_578E3365
+FLAC: %s
 ; FLAC: %s
 MSG_3DEA7C01
 ei asennettu (Aminet: util/libs/flacdec)
@@ -241,6 +262,9 @@ Moduulikansiot
 MSG_045F3994
 Kuvakansiot
 ; Picture folders
+MSG_7B7A30D9
+Videokansiot
+; Video folders
 MSG_2DA81BF2
 Pehmeä: Fonts/amce-smooth ei sovi tähän AmigaMCE:hen
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -253,9 +277,9 @@ Ei spektriä: soitin ei kerro, mitä se soittaa
 MSG_5561FD0B
 Yleiset
 ; General
-MSG_1BD8C631
+MSG_5A05D9B5
 Näyttö
-; Screen
+; Display
 MSG_33CA9A34
 Ääni
 ; Sound
@@ -263,6 +287,7 @@ MSG_1917381B
 Verkko
 ; Networking
 MSG_30B474E4
+Plex
 ; Plex
 MSG_6C2261DE
 Verkkoliitäntä
@@ -271,7 +296,7 @@ MSG_23140C4E
 Asemien suurin bittinopeus
 ; Highest station bitrate
 MSG_360055B5
-Virran puskuri
+Striimin puskuri
 ; Stream buffer
 MSG_18162AC4
 Asemaluetteloiden palvelin
@@ -385,7 +410,7 @@ MSG_450E2AE8
 Tämä TCP/IP-pino ei luettele liitäntöjään
 ; This TCP/IP stack does not list its interfaces
 MSG_604E4CF2
-Salli HTTPS-virrat
+Salli HTTPS-striimit
 ; Allow HTTPS streams
 MSG_30C0E827
 vaatii AmiSSL:n
@@ -528,6 +553,9 @@ Tämä käyttöliittymä ei olisi mahdollinen ilman Paul Vincen ja Amiga Game Se
 MSG_07ED33C3
 Kuvat: %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+Videot: %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 Ei %s:ta täällä
 ; No %s here
@@ -537,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 Ei kuvakansiota: Asetukset > Kansiot > Kuvat
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-Videotoisto tulee myöhemmässä versiossa.
-; Video playback arrives in a later version.
-MSG_47318A8A
-Animaatiot
-; Animations
+MSG_247DBF4F
+Animaatioita ei löytynyt: AmigaMCE etsii niitä paikasta %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+Paikassa %s ei ole animaatioita.
+; %s has no animations in it.
+MSG_7D6C1643
+Animaatioita ei löytynyt. AmigaMCE toistaa IFF ANIM -tiedostoja VIDEOS:sta, kansioista kohdassa Asetukset > Kansiot > Videot ja AGS:n kanssa paikasta %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 Kuvia ei löytynyt: AmigaMCE etsii niitä paikasta %s.
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -639,6 +670,9 @@ Tuli soita  Esc takaisin
 MSG_169BF20A
 Ylös/Alas  siirrä    Tuli/Return  katso    Vasen/Esc  takaisin
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Ylös/Alas  siirrä    Tuli/Return  soita    Vasen/Esc  takaisin
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 Ylös/Alas  siirrä    Tuli  kuvaesitys    Oikea  avaa    Vasen/Esc  takaisin
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -651,9 +685,6 @@ Ylös/Alas  siirrä    Tuli/Oikea  avaa    Vasen/Esc  takaisin
 MSG_41738E8F
 Tuli avaa  Esc takaisin
 ; Fire open  Esc back
-MSG_6C808185
-Ylös/Alas  siirrä    Tuli/Return  soita    Vasen/Esc  takaisin
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 Ylös/Alas  siirrä    Tuli  käytä tätä palvelinta    Vasen/Esc  takaisin
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -690,6 +721,9 @@ Ylös/Alas  vieritä      Vasen/Esc  takaisin
 MSG_642000D2
 Ylös/Alas vieritä  Esc takaisin
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld kuvaa, %ld,%ld s
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 Muutettu %s
 ; Changed %s
@@ -850,7 +884,7 @@ MSG_0D35346B
 Moduuleja ei löytynyt. AmigaMCE etsii niitä MODS:sta, kansioista kohdassa Asetukset > Kansiot > Moduulit ja AGS:n kanssa paikoista %s ja %s (sen valikkomusiikki).
 ; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 MSG_6870F104
-Se soittaa ProTracker-moduulit itse ja satoja muita muotoja (OctaMED, TFMX, Future Composer, SID...) EaglePlayerin ja DeliTrackerin soittimilla, kaikki Amigan omalla äänellä.
+Se soittaa ProTracker-moduulit itse ja satoja muita muotoja (OctaMED, TFMX, Future Composer, SID...) EaglePlayerin ja DeliTrackerin soittimilla, kaikki Amigan omilla äänillä.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
 MSG_2E3C8991
 EaglePlayeria ei löytynyt: asenna se näitä muotoja varten Aminetista (mus/play/Eagleplayer) sen omalla asennusohjelmalla.
@@ -898,6 +932,7 @@ MSG_74066526
 T:AmigaMCE-run-tiedostoa ei voitu kirjoittaa
 ; Could not write T:AmigaMCE-run
 MSG_0C682AC4
+%ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
 MSG_2D43D301
    Kuvaesitys
@@ -920,6 +955,9 @@ Esc  takaisin
 MSG_00FED3FC
 Ladataan Plexistä...
 ; Loading from Plex...
+MSG_4FD7ED09
+Kuvaesitys näistä %ld kuvasta
+; Slideshow of these %ld photos
 MSG_5123470D
 Se tila %.60s
 ; That mode %.60s
@@ -957,6 +995,7 @@ MSG_370F28B1
 Muut kirjastot palvelimella %s
 ; Other libraries on %s
 MSG_5CB8F506
+Plex: %s
 ; Plex: %s
 MSG_3D6359D0
 Plex-palvelinta ei valittu: Asetukset > Verkko > Plex
@@ -971,8 +1010,10 @@ MSG_47B6B3B8
 Nousussa
 ; Trending
 MSG_7CA786A9
+Chiptune
 ; Chiptune
 MSG_00D1A496
+Demoskene
 ; Demoscene
 MSG_65D70EE9
 Tyylilajit
@@ -1001,9 +1042,6 @@ Plex-palvelimeen ei saatu yhteyttä
 MSG_1CFE72A3
 Näytä kuva
 ; Show the photo
-MSG_4FD7ED09
-Kuvaesitys näistä %ld kuvasta
-; Slideshow of these %ld photos
 MSG_7BB6085B
 Ei mitään listassa
 ; Nothing listed
@@ -1032,6 +1070,7 @@ MSG_276888E6
 Plex-kuvat palvelimella %.80s
 ; Plex photos on %.80s
 MSG_62B4E865
+Plex: %.100s
 ; Plex: %.100s
 MSG_2550824B
 Plex-palvelin valittu
@@ -1097,7 +1136,7 @@ MSG_64C287CF
 Kotisivu: %s
 ; Homepage: %s
 MSG_5A5309D7
-Virta:    %s
+Striimi:    %s
 ; Stream:   %s
 MSG_18A292C0
 Tuli asemaan sen listassa soittaa sen.
@@ -1111,6 +1150,9 @@ Kansio, jossa on moduuleja
 MSG_20B552D8
 Kansio, jossa on kuvia
 ; A folder of pictures
+MSG_1B002318
+Kansio, jossa on animaatioita
+; A folder of animations
 MSG_5B08757B
 Kansio lisätty: sen musiikki on Musiikin alla
 ; Folder added: its music is under Music
@@ -1120,6 +1162,9 @@ Kansio lisätty: sen moduulit ovat Modien alla
 MSG_082FF2F7
 Kansio lisätty: sen kuvat ovat Kuvien alla
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Kansio lisätty: sen animaatiot ovat Videoiden alla
+; Folder added: its animations are under Videos
 MSG_0242E102
 Enintään kahdeksan kansiota: poista ensin yksi
 ; Eight folders at most: take one out first
@@ -1264,6 +1309,9 @@ Toinen ohjelma käyttää äänikanavia
 MSG_2AC2E3CB
 Ei aseman osoite
 ; Not a station's address
+MSG_415987C0
+radio-browser.info ei löytynyt (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 Ei socketia (onko TCP/IP-pino käynnissä?)
 ; No socket (is the TCP/IP stack running?)
@@ -1343,8 +1391,10 @@ MSG_134FDFA5
 Kappale %.10s
 ; Track %.10s   
 MSG_7286EE6A
+mono
 ; mono
 MSG_4C87A64D
+stereo
 ; stereo
 MSG_43D67FB2
 monikanava
@@ -1383,7 +1433,7 @@ MSG_4375E450
 Palvelin lakkasi lähettämästä
 ; The server stopped sending
 MSG_2919BAF1
-Asema sulki virran
+Asema sulki striimin
 ; The station closed the stream
 MSG_0761145C
 Tiedostoa ei voitu avata
@@ -1404,7 +1454,7 @@ MSG_3B0705F8
 Asema
 ; The station
 MSG_37840EF9
-Aseman soittolistassa ei ole virtaa, jota AmigaMCE osaa soittaa
+Aseman soittolistassa ei ole striimiä, jota AmigaMCE osaa soittaa
 ; The station's playlist has no stream AmigaMCE can play
 MSG_47FA6F71
 %s lähettää %s, ei MP3
@@ -1413,7 +1463,7 @@ MSG_53CE943A
 Asema ohjasi meitä eteenpäin liian monta kertaa
 ; The station sent us on too many times
 MSG_5B0AAE77
-Virtaa ei voitu purkaa
+Striimiä ei voitu purkaa
 ; The stream could not be decoded
 MSG_10039953
 Vain tämän Amigan musiikkitiedostot soivat WAV-, AIFF- tai 8SVX-muodossa
@@ -1440,7 +1490,7 @@ MSG_755A0080
 Kappale loppui ennen sitä kohtaa
 ; The track ended before that time
 MSG_1186B14C
-Virta ei näytä MP3:lta
+Striimi ei näytä MP3:lta
 ; The stream does not look like MP3
 MSG_3AC77067
 Muisti ei riitä aseman soittamiseen

@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language français
 ## codeset 0
+MSG_282FBBDC
+L'animation n'a pas pu être ouverte
+; The animation could not be opened
+MSG_3A04E1BB
+Pas une IFF ANIM lisible
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Cet Amiga n'a pas de mode d'écran pour elle (%ld couleurs, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Les animations passent sur les écrans propres de l'Amiga, et aucun n'a été trouvé
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+La compression ANIM-%ld n'est pas prise en charge
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+Mémoire insuffisante pour l'écran de l'animation
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 Mémoire insuffisante
 ; Not enough memory
@@ -82,15 +100,9 @@ Amiga Game Selector 3 (AGS) est une collection toute prête de jeux et de démos
 MSG_017A1274
 AmigaMCE cherche l'assignation AGS:, puis un tiroir AGS2 à côté du sien et dans WHDLoad:. Installez AmigaMCE sur un système AGS 3, ou lancez AGS une fois pour que ses assignations existent.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-Musique, Mods, Images et Radio marchent sans lui : Réglages > Dossiers dit où sont votre musique, vos modules et vos images.
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-trouvé
-; found
-MSG_40A7AEDA
-introuvable
-; not found
+MSG_5C6E1F8B
+Musique, Mods, Images, Vidéos et Radio marchent sans lui : Réglages > Dossiers dit où sont votre musique, vos modules, vos images et vos animations.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 Trouvé au démarrage d'AmigaMCE :
 ; Found when AmigaMCE started:
@@ -160,6 +172,12 @@ Datatypes (celui qui lit chaque format d'image) :
 MSG_336DE098
 AGS : %s
 ; AGS: %s
+MSG_64FF7B9F
+trouvé
+; found
+MSG_40A7AEDA
+introuvable
+; not found
 MSG_4FE02B8B
 Assignations ajoutées par AmigaMCE (AGS-Stuff n'a pas tourné) :
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -244,6 +262,9 @@ Dossiers de modules
 MSG_045F3994
 Dossiers d'images
 ; Picture folders
+MSG_7B7A30D9
+Dossiers de vidéos
+; Video folders
 MSG_2DA81BF2
 Lisse : Fonts/amce-smooth ne correspond pas à cet AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -256,9 +277,9 @@ Pas de spectre : ce lecteur ne dit pas ce qu'il joue
 MSG_5561FD0B
 Général
 ; General
-MSG_1BD8C631
-Écran
-; Screen
+MSG_5A05D9B5
+Affichage
+; Display
 MSG_33CA9A34
 Son
 ; Sound
@@ -266,6 +287,7 @@ MSG_1917381B
 Réseau
 ; Networking
 MSG_30B474E4
+Plex
 ; Plex
 MSG_6C2261DE
 Interface réseau
@@ -343,6 +365,7 @@ MSG_63678BEE
 Double tampon
 ; Double buffering
 MSG_20B362A2
+Visualisation
 ; Visualisation
 MSG_52325DD8
 Défilement par lettre
@@ -530,6 +553,9 @@ Cette interface n'existerait pas sans l'immense travail de Paul Vince et d'Amiga
 MSG_07ED33C3
 Images : %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+Vidéos : %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 Pas de %s ici
 ; No %s here
@@ -539,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 Aucun dossier d'images : Réglages > Dossiers > Images
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-La lecture vidéo arrivera dans une version ultérieure.
-; Video playback arrives in a later version.
-MSG_47318A8A
-Animations
-; Animations
+MSG_247DBF4F
+Aucune animation trouvée : AmigaMCE les cherche dans %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+%s ne contient aucune animation.
+; %s has no animations in it.
+MSG_7D6C1643
+Aucune animation trouvée. AmigaMCE lit les IFF ANIM de VIDEOS:, des dossiers de Réglages > Dossiers > Vidéos et, avec AGS, de %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 Aucune image trouvée : AmigaMCE les cherche dans %s.
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -641,6 +670,9 @@ Feu jouer  Esc retour
 MSG_169BF20A
 Haut/Bas  bouger    Feu/Entrée  voir    Gauche/Esc  retour
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Haut/Bas  bouger    Feu/Entrée  jouer    Gauche/Esc  retour
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 Haut/Bas  bouger    Feu  diaporama    Droite  ouvrir    Gauche/Esc  retour
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -653,9 +685,6 @@ Haut/Bas  bouger    Feu/Droite  ouvrir    Gauche/Esc  retour
 MSG_41738E8F
 Feu ouvrir  Esc retour
 ; Fire open  Esc back
-MSG_6C808185
-Haut/Bas  bouger    Feu/Entrée  jouer    Gauche/Esc  retour
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 Haut/Bas  bouger    Feu  utiliser ce serveur    Gauche/Esc  retour
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -692,6 +721,9 @@ Haut/Bas  défiler      Gauche/Esc  retour
 MSG_642000D2
 Haut/Bas défiler  Esc retour
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld images, %ld,%ld s
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 Modifié le %s
 ; Changed %s
@@ -900,6 +932,7 @@ MSG_74066526
 Impossible d'écrire T:AmigaMCE-run
 ; Could not write T:AmigaMCE-run
 MSG_0C682AC4
+%ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
 MSG_2D43D301
    Diaporama
@@ -922,6 +955,9 @@ Esc  retour
 MSG_00FED3FC
 Chargement depuis Plex...
 ; Loading from Plex...
+MSG_4FD7ED09
+Diaporama de ces %ld photos
+; Slideshow of these %ld photos
 MSG_5123470D
 Ce mode %.60s
 ; That mode %.60s
@@ -974,8 +1010,10 @@ MSG_47B6B3B8
 Tendances
 ; Trending
 MSG_7CA786A9
+Chiptune
 ; Chiptune
 MSG_00D1A496
+Démoscène
 ; Demoscene
 MSG_65D70EE9
 Genres
@@ -1004,9 +1042,6 @@ Impossible de joindre le serveur Plex
 MSG_1CFE72A3
 Montrer la photo
 ; Show the photo
-MSG_4FD7ED09
-Diaporama de ces %ld photos
-; Slideshow of these %ld photos
 MSG_7BB6085B
 Rien dans la liste
 ; Nothing listed
@@ -1115,6 +1150,9 @@ Un dossier de modules
 MSG_20B552D8
 Un dossier d'images
 ; A folder of pictures
+MSG_1B002318
+Un dossier d'animations
+; A folder of animations
 MSG_5B08757B
 Dossier ajouté : sa musique est dans Musique
 ; Folder added: its music is under Music
@@ -1124,6 +1162,9 @@ Dossier ajouté : ses modules sont dans Mods
 MSG_082FF2F7
 Dossier ajouté : ses images sont dans Images
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Dossier ajouté : ses animations sont dans Vidéos
+; Folder added: its animations are under Videos
 MSG_0242E102
 Huit dossiers au plus : retirez-en un d'abord
 ; Eight folders at most: take one out first
@@ -1268,6 +1309,9 @@ Les voies audio sont utilisées par un autre programme
 MSG_2AC2E3CB
 Ce n'est pas l'adresse d'une station
 ; Not a station's address
+MSG_415987C0
+radio-browser.info introuvable (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 Pas de socket (la pile TCP/IP tourne-t-elle ?)
 ; No socket (is the TCP/IP stack running?)

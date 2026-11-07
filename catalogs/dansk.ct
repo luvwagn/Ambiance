@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language dansk
 ## codeset 0
+MSG_282FBBDC
+Animationen kunne ikke åbnes
+; The animation could not be opened
+MSG_3A04E1BB
+Ikke en IFF ANIM, der kan afspilles
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Denne Amiga har ingen skærmtilstand til den (%ld farver, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Animationer afspilles på Amigaens egne skærme, og ingen blev fundet
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+ANIM-%ld-komprimering understøttes ikke
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+Ikke nok hukommelse til animationens skærm
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 Ikke nok hukommelse
 ; Not enough memory
@@ -82,15 +100,9 @@ Amiga Game Selector 3 (AGS) er en færdig samling af WHDLoad-spil og -demoer med
 MSG_017A1274
 AmigaMCE leder efter tildelingen AGS:, derefter efter en skuffe AGS2 ved siden af sin egen og i WHDLoad:. Installér AmigaMCE på et AGS 3-system, eller start AGS én gang, så dets tildelinger findes.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-Musik, Moduler, Billeder og Radio virker uden: Indstillinger > Mapper fortæller, hvor din musik, dine moduler og billeder er.
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-fundet
-; found
-MSG_40A7AEDA
-ikke fundet
-; not found
+MSG_5C6E1F8B
+Musik, Moduler, Billeder, Video og Radio virker uden: Indstillinger > Mapper fortæller, hvor din musik, dine moduler, billeder og animationer er.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 Fundet, da AmigaMCE startede:
 ; Found when AmigaMCE started:
@@ -158,7 +170,14 @@ MSG_6F035CA3
 Datatyper (hvilken der læser hvert billedformat):
 ; Datatypes (which one reads each picture format):
 MSG_336DE098
+AGS: %s
 ; AGS: %s
+MSG_64FF7B9F
+fundet
+; found
+MSG_40A7AEDA
+ikke fundet
+; not found
 MSG_4FE02B8B
 Tildelinger tilføjet af AmigaMCE (AGS-Stuff kørte ikke):
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -187,11 +206,13 @@ MSG_2DA7AFDB
 ingen
 ; none
 MSG_1358A393
+MP3: %s
 ; MP3: %s
 MSG_197B8973
 MHI-driver
 ; MHI driver
 MSG_578E3365
+FLAC: %s
 ; FLAC: %s
 MSG_3DEA7C01
 ikke installeret (Aminet: util/libs/flacdec)
@@ -241,6 +262,9 @@ Modulmapper
 MSG_045F3994
 Billedmapper
 ; Picture folders
+MSG_7B7A30D9
+Videomapper
+; Video folders
 MSG_2DA81BF2
 Blød: Fonts/amce-smooth passer ikke til denne AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -253,9 +277,9 @@ Intet spektrum: afspilleren siger ikke, hvad den spiller
 MSG_5561FD0B
 Generelt
 ; General
-MSG_1BD8C631
-Skærm
-; Screen
+MSG_5A05D9B5
+Visning
+; Display
 MSG_33CA9A34
 Lyd
 ; Sound
@@ -263,6 +287,7 @@ MSG_1917381B
 Netværk
 ; Networking
 MSG_30B474E4
+Plex
 ; Plex
 MSG_6C2261DE
 Netværksinterface
@@ -528,6 +553,9 @@ Denne brugerflade ville ikke være mulig uden det enorme arbejde fra Paul Vince 
 MSG_07ED33C3
 Billeder: %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+Video: %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 Ingen %s her
 ; No %s here
@@ -537,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 Ingen billedmappe: Indstillinger > Mapper > Billeder
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-Videoafspilning kommer i en senere version.
-; Video playback arrives in a later version.
-MSG_47318A8A
-Animationer
-; Animations
+MSG_247DBF4F
+Ingen animationer fundet: AmigaMCE leder efter dem i %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+%s indeholder ingen animationer.
+; %s has no animations in it.
+MSG_7D6C1643
+Ingen animationer fundet. AmigaMCE afspiller IFF ANIM fra VIDEOS:, mapperne under Indstillinger > Mapper > Video og, med AGS, %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 Ingen billeder fundet: AmigaMCE leder efter dem i %s.
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -639,6 +670,9 @@ Skyd afspil  Esc tilbage
 MSG_169BF20A
 Op/Ned  flyt    Skyd/Retur  vis    Venstre/Esc  tilbage
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Op/Ned  flyt    Skyd/Retur  afspil    Venstre/Esc  tilbage
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 Op/Ned  flyt    Skyd  diasshow    Højre  åbn    Venstre/Esc  tilbage
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -651,9 +685,6 @@ Op/Ned  flyt    Skyd/Højre  åbn    Venstre/Esc  tilbage
 MSG_41738E8F
 Skyd åbn  Esc tilbage
 ; Fire open  Esc back
-MSG_6C808185
-Op/Ned  flyt    Skyd/Retur  afspil    Venstre/Esc  tilbage
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 Op/Ned  flyt    Skyd  brug denne server    Venstre/Esc  tilbage
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -690,6 +721,9 @@ Op/Ned  rul      Venstre/Esc  tilbage
 MSG_642000D2
 Op/Ned rul  Esc tilbage
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld billeder, %ld,%ld s
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 Ændret %s
 ; Changed %s
@@ -898,6 +932,7 @@ MSG_74066526
 T:AmigaMCE-run kunne ikke skrives
 ; Could not write T:AmigaMCE-run
 MSG_0C682AC4
+%ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
 MSG_2D43D301
    Diasshow
@@ -920,6 +955,9 @@ Esc  tilbage
 MSG_00FED3FC
 Indlæser fra Plex...
 ; Loading from Plex...
+MSG_4FD7ED09
+Diasshow af disse %ld fotos
+; Slideshow of these %ld photos
 MSG_5123470D
 Den tilstand %.60s
 ; That mode %.60s
@@ -957,6 +995,7 @@ MSG_370F28B1
 Andre biblioteker på %s
 ; Other libraries on %s
 MSG_5CB8F506
+Plex: %s
 ; Plex: %s
 MSG_3D6359D0
 Ingen Plex-server valgt: Indstillinger > Netværk > Plex
@@ -971,8 +1010,10 @@ MSG_47B6B3B8
 Populære nu
 ; Trending
 MSG_7CA786A9
+Chiptune
 ; Chiptune
 MSG_00D1A496
+Demoscene
 ; Demoscene
 MSG_65D70EE9
 Genrer
@@ -1001,9 +1042,6 @@ Plex-serveren kunne ikke nås
 MSG_1CFE72A3
 Vis fotoet
 ; Show the photo
-MSG_4FD7ED09
-Diasshow af disse %ld fotos
-; Slideshow of these %ld photos
 MSG_7BB6085B
 Intet på listen
 ; Nothing listed
@@ -1032,6 +1070,7 @@ MSG_276888E6
 Plex-fotos på %.80s
 ; Plex photos on %.80s
 MSG_62B4E865
+Plex: %.100s
 ; Plex: %.100s
 MSG_2550824B
 Plex-server valgt
@@ -1111,6 +1150,9 @@ En mappe med moduler
 MSG_20B552D8
 En mappe med billeder
 ; A folder of pictures
+MSG_1B002318
+En mappe med animationer
+; A folder of animations
 MSG_5B08757B
 Mappe tilføjet: dens musik ligger under Musik
 ; Folder added: its music is under Music
@@ -1120,6 +1162,9 @@ Mappe tilføjet: dens moduler ligger under Moduler
 MSG_082FF2F7
 Mappe tilføjet: dens billeder ligger under Billeder
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Mappe tilføjet: dens animationer ligger under Video
+; Folder added: its animations are under Videos
 MSG_0242E102
 Højst otte mapper: fjern en først
 ; Eight folders at most: take one out first
@@ -1264,6 +1309,9 @@ Lydkanalerne bruges af et andet program
 MSG_2AC2E3CB
 Ikke en stations adresse
 ; Not a station's address
+MSG_415987C0
+radio-browser.info blev ikke fundet (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 Ingen socket (kører TCP/IP-stakken?)
 ; No socket (is the TCP/IP stack running?)
@@ -1343,8 +1391,10 @@ MSG_134FDFA5
 Nummer %.10s
 ; Track %.10s   
 MSG_7286EE6A
+mono
 ; mono
 MSG_4C87A64D
+stereo
 ; stereo
 MSG_43D67FB2
 flerkanal

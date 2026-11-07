@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nederlands
 ## codeset 0
+MSG_282FBBDC
+De animatie kon niet worden geopend
+; The animation could not be opened
+MSG_3A04E1BB
+Geen IFF ANIM die kan worden afgespeeld
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Deze Amiga heeft er geen schermmodus voor (%ld kleuren, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Animaties spelen op de eigen schermen van de Amiga, en er werd er geen gevonden
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+ANIM-%ld-compressie wordt niet ondersteund
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+Niet genoeg geheugen voor het scherm van de animatie
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 Niet genoeg geheugen
 ; Not enough memory
@@ -82,15 +100,9 @@ Amiga Game Selector 3 (AGS) is een kant-en-klare verzameling WHDLoad-spellen en 
 MSG_017A1274
 AmigaMCE zoekt de toewijzing AGS:, daarna een lade AGS2 naast de eigen lade en in WHDLoad:. Installeer AmigaMCE op een AGS 3-systeem, of start AGS één keer zodat de toewijzingen bestaan.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-Muziek, Mods, Afbeeldingen en Radio werken zonder: Instellingen > Mappen zegt waar je muziek, modules en afbeeldingen staan.
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-gevonden
-; found
-MSG_40A7AEDA
-niet gevonden
-; not found
+MSG_5C6E1F8B
+Muziek, Mods, Afbeeldingen, Video's en Radio werken zonder: Instellingen > Mappen zegt waar je muziek, modules, afbeeldingen en animaties staan.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 Gevonden toen AmigaMCE startte:
 ; Found when AmigaMCE started:
@@ -158,7 +170,14 @@ MSG_6F035CA3
 Datatypes (welke elk beeldformaat leest):
 ; Datatypes (which one reads each picture format):
 MSG_336DE098
+AGS: %s
 ; AGS: %s
+MSG_64FF7B9F
+gevonden
+; found
+MSG_40A7AEDA
+niet gevonden
+; not found
 MSG_4FE02B8B
 Toewijzingen toegevoegd door AmigaMCE (AGS-Stuff is niet uitgevoerd):
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -187,11 +206,13 @@ MSG_2DA7AFDB
 geen
 ; none
 MSG_1358A393
+MP3: %s
 ; MP3: %s
 MSG_197B8973
 MHI-stuurprogramma
 ; MHI driver
 MSG_578E3365
+FLAC: %s
 ; FLAC: %s
 MSG_3DEA7C01
 niet geïnstalleerd (Aminet: util/libs/flacdec)
@@ -241,6 +262,9 @@ Modulemappen
 MSG_045F3994
 Afbeeldingsmappen
 ; Picture folders
+MSG_7B7A30D9
+Videomappen
+; Video folders
 MSG_2DA81BF2
 Zacht: Fonts/amce-smooth past niet bij deze AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -253,9 +277,9 @@ Geen spectrum: deze speler zegt niet wat hij speelt
 MSG_5561FD0B
 Algemeen
 ; General
-MSG_1BD8C631
-Scherm
-; Screen
+MSG_5A05D9B5
+Weergave
+; Display
 MSG_33CA9A34
 Geluid
 ; Sound
@@ -263,6 +287,7 @@ MSG_1917381B
 Netwerk
 ; Networking
 MSG_30B474E4
+Plex
 ; Plex
 MSG_6C2261DE
 Netwerkinterface
@@ -528,6 +553,9 @@ Deze interface was niet mogelijk geweest zonder het enorme werk van Paul Vince e
 MSG_07ED33C3
 Afbeeldingen: %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+Video's: %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 Geen %s hier
 ; No %s here
@@ -537,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 Geen afbeeldingsmap: Instellingen > Mappen > Afbeeldingen
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-Video afspelen komt in een latere versie.
-; Video playback arrives in a later version.
-MSG_47318A8A
-Animaties
-; Animations
+MSG_247DBF4F
+Geen animaties gevonden: AmigaMCE zoekt ze in %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+%s bevat geen animaties.
+; %s has no animations in it.
+MSG_7D6C1643
+Geen animaties gevonden. AmigaMCE speelt IFF ANIM's uit VIDEOS:, de mappen van Instellingen > Mappen > Video's en, met AGS, uit %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 Geen afbeeldingen gevonden: AmigaMCE zoekt ze in %s.
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -639,6 +670,9 @@ Vuur spelen  Esc terug
 MSG_169BF20A
 Op/Neer  bewegen    Vuur/Return  bekijken    Links/Esc  terug
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Op/Neer  bewegen    Vuur/Return  spelen    Links/Esc  terug
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 Op/Neer  bewegen    Vuur  diavoorstelling    Rechts  openen    Links/Esc  terug
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -651,9 +685,6 @@ Op/Neer  bewegen    Vuur/Rechts  openen    Links/Esc  terug
 MSG_41738E8F
 Vuur openen  Esc terug
 ; Fire open  Esc back
-MSG_6C808185
-Op/Neer  bewegen    Vuur/Return  spelen    Links/Esc  terug
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 Op/Neer  bewegen    Vuur  deze server gebruiken    Links/Esc  terug
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -690,6 +721,9 @@ Op/Neer  scrollen      Links/Esc  terug
 MSG_642000D2
 Op/Neer scrollen  Esc terug
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld beelden, %ld,%ld s
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 Gewijzigd %s
 ; Changed %s
@@ -898,6 +932,7 @@ MSG_74066526
 T:AmigaMCE-run kon niet geschreven worden
 ; Could not write T:AmigaMCE-run
 MSG_0C682AC4
+%ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
 MSG_2D43D301
    Diavoorstelling
@@ -920,6 +955,9 @@ Esc  terug
 MSG_00FED3FC
 Laden vanaf Plex...
 ; Loading from Plex...
+MSG_4FD7ED09
+Diavoorstelling van deze %ld foto's
+; Slideshow of these %ld photos
 MSG_5123470D
 Die modus %.60s
 ; That mode %.60s
@@ -957,6 +995,7 @@ MSG_370F28B1
 Andere bibliotheken op %s
 ; Other libraries on %s
 MSG_5CB8F506
+Plex: %s
 ; Plex: %s
 MSG_3D6359D0
 Geen Plex-server gekozen: Instellingen > Netwerk > Plex
@@ -971,8 +1010,10 @@ MSG_47B6B3B8
 Trending
 ; Trending
 MSG_7CA786A9
+Chiptune
 ; Chiptune
 MSG_00D1A496
+Demoscene
 ; Demoscene
 MSG_65D70EE9
 Genres
@@ -1001,9 +1042,6 @@ De Plex-server was niet bereikbaar
 MSG_1CFE72A3
 Foto tonen
 ; Show the photo
-MSG_4FD7ED09
-Diavoorstelling van deze %ld foto's
-; Slideshow of these %ld photos
 MSG_7BB6085B
 Niets in de lijst
 ; Nothing listed
@@ -1032,6 +1070,7 @@ MSG_276888E6
 Plex-foto's op %.80s
 ; Plex photos on %.80s
 MSG_62B4E865
+Plex: %.100s
 ; Plex: %.100s
 MSG_2550824B
 Plex-server gekozen
@@ -1111,6 +1150,9 @@ Een map met modules
 MSG_20B552D8
 Een map met afbeeldingen
 ; A folder of pictures
+MSG_1B002318
+Een map met animaties
+; A folder of animations
 MSG_5B08757B
 Map toegevoegd: de muziek staat onder Muziek
 ; Folder added: its music is under Music
@@ -1120,6 +1162,9 @@ Map toegevoegd: de modules staan onder Mods
 MSG_082FF2F7
 Map toegevoegd: de afbeeldingen staan onder Afbeeldingen
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Map toegevoegd: de animaties staan onder Video's
+; Folder added: its animations are under Videos
 MSG_0242E102
 Hoogstens acht mappen: haal er eerst een weg
 ; Eight folders at most: take one out first
@@ -1264,6 +1309,9 @@ De geluidskanalen worden door een ander programma gebruikt
 MSG_2AC2E3CB
 Geen adres van een zender
 ; Not a station's address
+MSG_415987C0
+radio-browser.info niet gevonden (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 Geen socket (draait de TCP/IP-stack?)
 ; No socket (is the TCP/IP stack running?)
@@ -1343,8 +1391,10 @@ MSG_134FDFA5
 Nummer %.10s
 ; Track %.10s   
 MSG_7286EE6A
+mono
 ; mono
 MSG_4C87A64D
+stereo
 ; stereo
 MSG_43D67FB2
 meerkanaals
@@ -1461,6 +1511,7 @@ MSG_54706675
 Niveaumeters
 ; Level meters
 MSG_72FB1A0A
+Spectrum
 ; Spectrum
 MSG_476F7877
 Gepauzeerd: de muziek heeft de CPU nodig

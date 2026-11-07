@@ -1,6 +1,24 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language italiano
 ## codeset 0
+MSG_282FBBDC
+Impossibile aprire l'animazione
+; The animation could not be opened
+MSG_3A04E1BB
+Non è una IFF ANIM riproducibile
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Questo Amiga non ha una modalità schermo adatta (%ld colori, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Le animazioni si riproducono sugli schermi propri dell'Amiga, e non ne è stato trovato nessuno
+; Animations play on the Amiga's own screens, and none was found
+MSG_2F1926C3
+La compressione ANIM-%ld non è supportata
+; ANIM-%ld compression is not supported
+MSG_2EE1D46F
+Memoria insufficiente per lo schermo dell'animazione
+; Not enough memory for the animation's screen
 MSG_4E6387ED
 Memoria insufficiente
 ; Not enough memory
@@ -82,15 +100,9 @@ Amiga Game Selector 3 (AGS) è una raccolta già pronta di giochi e demo WHDLoad
 MSG_017A1274
 AmigaMCE cerca l'assegnazione AGS:, poi un cassetto AGS2 accanto al proprio e in WHDLoad:. Installa AmigaMCE su un sistema AGS 3, oppure avvia AGS una volta perché le sue assegnazioni esistano.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_534B8F30
-Musica, Mod, Immagini e Radio funzionano anche senza: Impostazioni > Cartelle dice dove sono musica, moduli e immagini.
-; Music, Mods, Pictures and Radio work without it: Settings > Folders says where your music, modules and pictures are.
-MSG_64FF7B9F
-trovato
-; found
-MSG_40A7AEDA
-non trovato
-; not found
+MSG_5C6E1F8B
+Musica, Mod, Immagini, Video e Radio funzionano anche senza: Impostazioni > Cartelle dice dove sono musica, moduli, immagini e animazioni.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 MSG_0C290F2C
 Trovato all'avvio di AmigaMCE:
 ; Found when AmigaMCE started:
@@ -158,7 +170,14 @@ MSG_6F035CA3
 Datatype (quale legge ogni formato di immagine):
 ; Datatypes (which one reads each picture format):
 MSG_336DE098
+AGS: %s
 ; AGS: %s
+MSG_64FF7B9F
+trovato
+; found
+MSG_40A7AEDA
+non trovato
+; not found
 MSG_4FE02B8B
 Assegnazioni aggiunte da AmigaMCE (AGS-Stuff non è partito):
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
@@ -187,11 +206,13 @@ MSG_2DA7AFDB
 nessuno
 ; none
 MSG_1358A393
+MP3: %s
 ; MP3: %s
 MSG_197B8973
 driver MHI
 ; MHI driver
 MSG_578E3365
+FLAC: %s
 ; FLAC: %s
 MSG_3DEA7C01
 non installato (Aminet: util/libs/flacdec)
@@ -241,6 +262,9 @@ Cartelle dei moduli
 MSG_045F3994
 Cartelle delle immagini
 ; Picture folders
+MSG_7B7A30D9
+Cartelle dei video
+; Video folders
 MSG_2DA81BF2
 Morbido: Fonts/amce-smooth non corrisponde a questo AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
@@ -253,9 +277,9 @@ Niente spettro: questo player non dice cosa suona
 MSG_5561FD0B
 Generale
 ; General
-MSG_1BD8C631
+MSG_5A05D9B5
 Schermo
-; Screen
+; Display
 MSG_33CA9A34
 Audio
 ; Sound
@@ -263,6 +287,7 @@ MSG_1917381B
 Rete
 ; Networking
 MSG_30B474E4
+Plex
 ; Plex
 MSG_6C2261DE
 Interfaccia di rete
@@ -528,6 +553,9 @@ Questo front-end non sarebbe possibile senza l'immenso lavoro di Paul Vince e di
 MSG_07ED33C3
 Immagini: %.100s
 ; Pictures: %.100s
+MSG_749CDC88
+Video: %.100s
+; Videos: %.100s
 MSG_40EDAFB4
 Nessun %s qui
 ; No %s here
@@ -537,12 +565,15 @@ MSG_190B5576
 MSG_1018D7F4
 Nessuna cartella di immagini: Impostazioni > Cartelle > Immagini
 ; No pictures folder: Settings > Folders > Pictures
-MSG_69CE1669
-La riproduzione video arriverà in una versione successiva.
-; Video playback arrives in a later version.
-MSG_47318A8A
-Animazioni
-; Animations
+MSG_247DBF4F
+Nessuna animazione trovata: AmigaMCE le cerca in %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+%s non contiene animazioni.
+; %s has no animations in it.
+MSG_7D6C1643
+Nessuna animazione trovata. AmigaMCE riproduce IFF ANIM da VIDEOS:, dalle cartelle di Impostazioni > Cartelle > Video e, con AGS, da %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 MSG_29C163F7
 Nessuna immagine trovata: AmigaMCE le cerca in %s.
 ; No pictures found: AmigaMCE looks for them in %s.
@@ -639,6 +670,9 @@ Fuoco suona  Esc indietro
 MSG_169BF20A
 Su/Giù  muovi    Fuoco/Invio  guarda    Sinistra/Esc  indietro
 ; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Su/Giù  muovi    Fuoco/Invio  suona    Sinistra/Esc  indietro
+; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_6DAF7CE6
 Su/Giù  muovi    Fuoco  presentazione    Destra  apri    Sinistra/Esc  indietro
 ; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
@@ -651,9 +685,6 @@ Su/Giù  muovi    Fuoco/Destra  apri    Sinistra/Esc  indietro
 MSG_41738E8F
 Fuoco apri  Esc indietro
 ; Fire open  Esc back
-MSG_6C808185
-Su/Giù  muovi    Fuoco/Invio  suona    Sinistra/Esc  indietro
-; Up/Down  move    Fire/Return  play    Left/Esc  back
 MSG_59045BF0
 Su/Giù  muovi    Fuoco  usa questo server    Sinistra/Esc  indietro
 ; Up/Down  move    Fire  use this server    Left/Esc  back
@@ -690,6 +721,9 @@ Su/Giù  scorri      Sinistra/Esc  indietro
 MSG_642000D2
 Su/Giù scorri  Esc indietro
 ; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld fotogrammi, %ld,%ld s
+; %ld frames, %ld.%ld s
 MSG_79CC558D
 Modificato %s
 ; Changed %s
@@ -898,6 +932,7 @@ MSG_74066526
 Impossibile scrivere T:AmigaMCE-run
 ; Could not write T:AmigaMCE-run
 MSG_0C682AC4
+%ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
 MSG_2D43D301
    Presentazione
@@ -920,6 +955,9 @@ Esc  indietro
 MSG_00FED3FC
 Caricamento da Plex...
 ; Loading from Plex...
+MSG_4FD7ED09
+Presentazione di queste %ld foto
+; Slideshow of these %ld photos
 MSG_5123470D
 Quel modo %.60s
 ; That mode %.60s
@@ -957,6 +995,7 @@ MSG_370F28B1
 Altre librerie su %s
 ; Other libraries on %s
 MSG_5CB8F506
+Plex: %s
 ; Plex: %s
 MSG_3D6359D0
 Nessun server Plex scelto: Impostazioni > Rete > Plex
@@ -971,8 +1010,10 @@ MSG_47B6B3B8
 Di tendenza
 ; Trending
 MSG_7CA786A9
+Chiptune
 ; Chiptune
 MSG_00D1A496
+Demoscene
 ; Demoscene
 MSG_65D70EE9
 Generi
@@ -1001,9 +1042,6 @@ Impossibile raggiungere il server Plex
 MSG_1CFE72A3
 Mostra la foto
 ; Show the photo
-MSG_4FD7ED09
-Presentazione di queste %ld foto
-; Slideshow of these %ld photos
 MSG_7BB6085B
 Nessun elemento
 ; Nothing listed
@@ -1032,6 +1070,7 @@ MSG_276888E6
 Foto Plex su %.80s
 ; Plex photos on %.80s
 MSG_62B4E865
+Plex: %.100s
 ; Plex: %.100s
 MSG_2550824B
 Server Plex scelto
@@ -1111,6 +1150,9 @@ Una cartella di moduli
 MSG_20B552D8
 Una cartella di immagini
 ; A folder of pictures
+MSG_1B002318
+Una cartella di animazioni
+; A folder of animations
 MSG_5B08757B
 Cartella aggiunta: la sua musica è sotto Musica
 ; Folder added: its music is under Music
@@ -1120,6 +1162,9 @@ Cartella aggiunta: i suoi moduli sono sotto Mod
 MSG_082FF2F7
 Cartella aggiunta: le sue immagini sono sotto Immagini
 ; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Cartella aggiunta: le sue animazioni sono sotto Video
+; Folder added: its animations are under Videos
 MSG_0242E102
 Otto cartelle al massimo: toglierne una prima
 ; Eight folders at most: take one out first
@@ -1264,6 +1309,9 @@ I canali audio sono usati da un altro programma
 MSG_2AC2E3CB
 Non è l'indirizzo di una stazione
 ; Not a station's address
+MSG_415987C0
+radio-browser.info non trovato (DNS)
+; radio-browser.info could not be found (DNS)
 MSG_34D70E8E
 Nessun socket (lo stack TCP/IP è attivo?)
 ; No socket (is the TCP/IP stack running?)
@@ -1343,8 +1391,10 @@ MSG_134FDFA5
 Traccia %.10s
 ; Track %.10s   
 MSG_7286EE6A
+mono
 ; mono
 MSG_4C87A64D
+stereo
 ; stereo
 MSG_43D67FB2
 multicanale

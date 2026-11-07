@@ -81,6 +81,23 @@ of the Amiga to how fast it really is.
   shows; the next one is fetched while you look at this one, and a
   slideshow waits for a slow one rather than skipping it.
 
+### Videos
+
+- Plays IFF ANIMs (ANIM-5, 7 and 8) from the `VIDEOS:` assign, the folders
+  of Settings > Folders > Videos and AGS's `Media:Animations`, with a frame
+  of the selected one beside the list (a later one when it starts blank),
+  its size, colours, frame count and length.
+- Each plays on a screen in its own display mode (HAM, extra halfbrite,
+  interlace, overscan), read from the file a frame at a time and decoded
+  straight into the bitplanes, two buffers shown in turn; so a 28 MB one
+  plays on a 2 MB Amiga.
+- Its sound (8SVX samples and SCTL commands) plays in step with the
+  pictures, by AHI when that is the sound output, else on Paula; what was
+  playing waits meanwhile (a module paused, a station or a track stopped
+  and started again afterwards).
+- Moving the mouse brings up controls over the picture: from the start,
+  play/pause, stop, volume, the time and the length.
+
 ### Screens and looks
 
 - Native screens: 320x200/256 lowres, 640x200/256 hires and 640x400/512
@@ -171,10 +188,10 @@ playing.
 
 | Page | What it holds |
 |---|---|
-| General | Jump scrolling (very long lists step a letter at a time), Debug |
-| Screen | Screen mode, Style (fonts and looks), Double buffering (RTG) |
+| General | Language, Debug |
+| Display | Screen mode, Style (fonts and looks), Double buffering (RTG), Visualisation, Jump scrolling (very long lists step a letter at a time) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
-| Folders | Where Music, Mods and Pictures find their files: the `MUSIC:`, `MODS:` and `PICTURES:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
+| Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
@@ -183,7 +200,9 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
 
-- Videos is on the menu but arrives in a later version.
+- Videos plays IFF ANIMs; other video formats come later.
+- beets music libraries: `amcesql.library` (SQLite, read only, `src/sqlib`)
+  is built and in the archive; browsing them comes later.
 - HTTPS radio streams are listed (with AmiSSL) but do not play yet.
 - Modules play on Paula only; AHI for them comes later.
 - Plex sign-in through plex.tv needs HTTPS, so the token is set by hand for
@@ -217,7 +236,7 @@ Every push to `main` is built and tested by GitHub Actions.
 
 The version comes from `git describe --tags`. The minor number counts the
 library views: it goes up by one each time a new one joins the menu (Mods
-brought 0.4, Music from a Plex server 0.5, Plex photos 0.6). Builds between tags are named
+brought 0.4, Music from a Plex server 0.5, Plex photos 0.6, Videos 0.7). Builds between tags are named
 after the last one (`0.5.0-12-gabcdef`); a patch release gets its own tag
 (`v0.5.1`).
 
