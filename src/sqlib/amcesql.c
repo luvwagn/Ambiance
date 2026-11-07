@@ -15,6 +15,14 @@
  * the caller needs no SQLite headers. Rows come one at a time from
  * SqlStep; text columns stay valid until the next step or finalize.
  *
+ * Memory: the page cache is 256 KB where there is under 8 MB of fast RAM,
+ * 1 MB otherwise (SQLite's own is 2 MB), and sorting is done in memory
+ * (small: a list of names). Everything comes from exec through malloc
+ * below, counted (SqlMemory). SqlRelease gives back an open database's
+ * cache; closed, nothing is held but the library's code, which exec
+ * expunges as any library's: when memory runs short, or when AmigaMCE
+ * asks (RemLibrary) before a game or a module, with no opener left.
+ *
  * One AmigaMCE at a time: the library's data is shared by its openers
  * (libnix's libinit, not the per-opener libinitr: libsqlite3.a is not
  * base-relative), and SQLite is used from one process.
@@ -45,20 +53,26 @@ extern struct Library *MathIeeeDoubBasBase, *UtilityBase;
 
 /* ---- the C library pieces SQLite calls, the library's own: libnix's
  * need its startup, which a library does not run. Memory comes from
- * exec, a size kept in front for realloc. */
+ * exec, a size kept in front for realloc, and counted. */
+static ULONG mem_now, mem_peak;
+
 void *malloc(size_t n)
 {
     ULONG *p = AllocVec(n + 8, MEMF_ANY);
     if (!p)
         return NULL;
     p[0] = n;
+    if ((mem_now += n) > mem_peak)
+        mem_peak = mem_now;
     return p + 2;                           /* 8-byte aligned past the header */
 }
 
 void free(void *p)
 {
-    if (p)
+    if (p) {
+        mem_now -= ((ULONG *)p)[-2];
         FreeVec((ULONG *)p - 2);
+    }
 }
 
 void *realloc(void *p, size_t n)
@@ -204,6 +218,9 @@ APTR SqlOpen(STRPTR path)
         sqlite3_close(db);
         return NULL;
     }
+    sqlite3_exec(db, AvailMem(MEMF_FAST | MEMF_TOTAL) < 8L << 20 ?
+                 "PRAGMA cache_size=-256; PRAGMA temp_store=MEMORY" :
+                 "PRAGMA cache_size=-1024; PRAGMA temp_store=MEMORY", NULL, NULL, NULL);
     return db;
 }
 
@@ -263,6 +280,19 @@ STRPTR SqlVersion(void)
     return (STRPTR)sqlite3_libversion();
 }
 
+/* Bytes held now, or (peak) at the most so far. */
+ULONG SqlMemory(LONG peak)
+{
+    return peak ? mem_peak : mem_now;
+}
+
+/* An open database's cache given back (it fills again as it is read). */
+VOID SqlRelease(APTR db)
+{
+    if (db)
+        sqlite3_db_release_memory((sqlite3 *)db);
+}
+
 /* the jump table, in the .sfd's order (from bias 30) */
 ADDTABL_1(SqlOpen, a0);
 ADDTABL_1(SqlClose, a0);
@@ -275,4 +305,6 @@ ADDTABL_2(SqlInt, a0, d0);
 ADDTABL_1(SqlFinalize, a0);
 ADDTABL_1(SqlError, a0);
 ADDTABL_0(SqlVersion);
+ADDTABL_1(SqlMemory, d0);
+ADDTABL_1(SqlRelease, a0);
 ADDTABL_END();

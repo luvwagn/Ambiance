@@ -19,4 +19,6 @@ LONG SqlInt(APTR stmt, LONG column) (a0,d0)
 VOID SqlFinalize(APTR stmt) (a0)
 STRPTR SqlError(APTR db) (a0)
 STRPTR SqlVersion() ()
+ULONG SqlMemory(LONG peak) (d0)
+VOID SqlRelease(APTR db) (a0)
 ==end
