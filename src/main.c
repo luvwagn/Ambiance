@@ -8556,9 +8556,15 @@ static void viewer_done(void)
     ptr_hidden = NULL;              /* the viewer put the pointer back */
     if (hidden)
         pointer_hide();             /* hidden it was: hidden it stays */
-    draw_all();
-    view_restore(&g);
+    /* double buffered again first, then everything drawn into the buffer
+     * and shown with a flip: drawn onto the screen and then copied, it
+     * came back blank on PrismRTG (the copy made before the card had
+     * drawn it, it seems), only what was drawn later showing */
     gfx_dbuf_start(&g);
+    draw_all();
+    gfx_dirty();
+    gfx_present(&g);
+    view_restore(&g);
 }
 
 /* An animation of a Videos (or Pictures) list, played on a screen of its
