@@ -3522,13 +3522,18 @@ static void draw_menu_row(int i)
         SetWriteMask(g.rp, 0xFF);
 }
 
+static ULONG menu_draw_ms = 1000;           /* the last whole menu's drawing (menu_slide) */
+
 static void draw_menu(void)
 {
+    ULONG t0 = time_ms();
     int i;
     gfx_fill(&g, 0, U(25), g.menu_w + U(2), g.footer_y - 2, PEN_BG);
     for (i = 0; i < nmenu; i++)
         draw_menu_row(i);
     gfx_fill(&g, g.menu_w + U(2), U(25), g.menu_w + U(3) - 1, g.footer_y - 2, PEN_RULE);
+    if (t0)
+        menu_draw_ms = time_ms() - t0;
 }
 
 static BOOL has_aside(struct Page *p);
@@ -7737,15 +7742,54 @@ static void menu_select(int i)
     menu_select_now(i, FALSE);
 }
 
-/* On a lowres screen (320 wide) the menu column is its icons alone while
- * the content has the focus: lists, Now playing and the rest get its
- * room. The labels come back with the focus, or the pointer, on the menu;
- * the breadcrumb and the highlighted icon say where you are meanwhile.
- * TRUE if the layout changed (everything was drawn again). */
+/* The menu column sliding between its two widths, where drawing it is
+ * quick (a whole menu in MENU_SLIDE_MAX ms or less: a fast Amiga, or a
+ * modest screen): MENU_SLIDE ms, easing out, a frame at a time. Only the
+ * column moves; what it uncovers is cleared, what it covers is drawn over,
+ * and the caller then lays out and draws everything at the new width. Not
+ * with double buffering (each frame would need a flip). */
+#define MENU_SLIDE     160
+#define MENU_SLIDE_MAX   8
+static void menu_slide(UWORD from, UWORD to)
+{
+    ULONG t0 = time_ms(), t;
+    UWORD keep = g.menu_w, prev = from;
+    if (!t0 || menu_draw_ms > MENU_SLIDE_MAX || gfx_dbuf_active() || from == to)
+        return;
+    for (;;) {
+        LONG f;
+        UWORD w;
+        t = time_ms() - t0;
+        if (t >= MENU_SLIDE)
+            break;
+        f = 1024 - (LONG)(t * 1024 / MENU_SLIDE);
+        f = 1024 - f * f / 1024;            /* ease out: fast first, settling */
+        w = (UWORD)((LONG)from + ((LONG)to - (LONG)from) * f / 1024);
+        if (w != prev) {
+            g.menu_w = w;                   /* the column alone: the rest keeps its place */
+            draw_menu();
+            if (w < prev)
+                gfx_fill(&g, w + U(3), U(25), prev + U(3) - 1, g.footer_y - 2, PEN_BG);
+            prev = w;
+        }
+        WaitTOF();
+    }
+    g.menu_w = keep;
+}
+
+/* The menu column is its icons alone while the content has the focus, on
+ * every screen: lists, Now playing and the rest get its room. The labels
+ * come back with the focus, or the pointer, on the menu; the breadcrumb
+ * and the highlighted icon say where you are meanwhile. On the first page
+ * it keeps its labels. TRUE if the layout changed (everything was drawn
+ * again). */
 static BOOL menu_layout(void)
 {
-    BOOL narrow = g.w <= 320 && focus != FOCUS_MENU && hover_menu < 0 && depth > 0;
-    if (!g.win || !gfx_menu_narrow(&g, narrow))
+    BOOL narrow = focus != FOCUS_MENU && hover_menu < 0 && depth > 0;
+    if (!g.win || narrow == gfx_menu_is_narrow())
+        return FALSE;
+    menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
+    if (!gfx_menu_narrow(&g, narrow))
         return FALSE;
     draw_all();
     return TRUE;

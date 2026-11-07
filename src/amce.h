@@ -147,6 +147,8 @@ BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_menu_refit(struct Gfx *g);
 BOOL gfx_menu_narrow(struct Gfx *g, BOOL narrow);
+UWORD gfx_menu_width(struct Gfx *g, BOOL narrow);
+BOOL gfx_menu_is_narrow(void);
 WORD gfx_pane_w_wide(struct Gfx *g);
 void gfx_close(struct Gfx *g);
 BOOL gfx_restyle(struct Gfx *g, int style);    /* same screen, new style (gfx.c) */

@@ -106,6 +106,9 @@ Screens
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.
+- The menu folds to its icons while you browse, giving the lists and
+  Now Playing its room, and opens again with the focus or the pointer on
+  it; it slides open and shut where the Amiga draws it quickly.
 - Flicker-free scrolling lists and text pages, with a scroll bar for the
   mouse and arrows for the joystick.
 
@@ -234,8 +237,9 @@ History
        assign and Music folders, with tags and covers; FLAC from Plex
        as stored (flacdec.library); 68020+. Japanese, Chinese and
        Korean names in their own characters. In eleven languages besides
-       English (Japanese among them), with an installer; a narrower
-       menu on lowres screens. HippoPlayer's spectrum analyser on Now
+       English (Japanese among them), with an installer; the menu
+       folds to its icons while you browse, sliding where drawing is
+       quick. HippoPlayer's spectrum analyser on Now
        Playing (V, or Settings > Screen > Visualisation). Settings >
        Folders: the music, modules and pictures of an Amiga without AGS
        (MUSIC:, MODS:, PICTURES: and up to eight folders each). Screen

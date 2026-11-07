@@ -102,6 +102,18 @@ BOOL gfx_menu_narrow(struct Gfx *g, BOOL narrow)
     return TRUE;
 }
 
+/* The menu column's width as icons alone (narrow) or with its labels, and
+ * which it is now: for sliding from one to the other. */
+UWORD gfx_menu_width(struct Gfx *g, BOOL narrow)
+{
+    return narrow || !menu_wide_w ? GU(g, 22) : menu_wide_w;
+}
+
+BOOL gfx_menu_is_narrow(void)
+{
+    return menu_narrow;
+}
+
 /* The pane's width with the menu's labels shown: text is wrapped to it,
  * so it still fits when the column widens again. */
 WORD gfx_pane_w_wide(struct Gfx *g)
