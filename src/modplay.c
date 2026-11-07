@@ -1174,6 +1174,56 @@ BOOL mp_subsong_step(int d)
     return TRUE;
 }
 
+/* ---- Paula lent (an animation's sound, anim.c): what plays is paused,
+ * and channels 2 (right) and 3 (left) are the borrower's, quiet, until
+ * given back; then what played goes on. A module's replayer stops while
+ * paused; a station or a track mixed to 0 and 1 plays on there unheard
+ * (stream.c, mixplay.c), so 2 and 3 are free in every case. The volume
+ * meanwhile is only noted (the module's would set all four channels'). */
+static struct { BOOL on, opened, resume; } lend;
+
+static void lent_quiet(void)
+{
+    CU->dmacon = DMAF_AUD2 | DMAF_AUD3;
+    CU->aud[2].ac_vol = 0;
+    CU->aud[3].ac_vol = 0;
+    wait_lines(3);
+    CU->aud[2].ac_dat = 0;
+    CU->aud[3].ac_dat = 0;
+}
+
+BOOL mp_lend(BOOL on)
+{
+    if (on) {
+        if (lend.on)
+            return TRUE;
+        lend.resume = mp_playing();
+        if (lend.resume)
+            mp_pause(TRUE);
+        lend.opened = !mp.audio_open;
+        if (!audio_open()) {
+            if (lend.resume)
+                mp_pause(FALSE);
+            return FALSE;                   /* another has Paula (AHI's driver): no sound */
+        }
+        lend.on = TRUE;
+        CU->intena = INTF_AUD2 | INTF_AUD3;
+        CU->adkcon = 0x00EE;                /* nothing modulates 2 or 3, nor 1 them */
+        lent_quiet();
+        return TRUE;
+    }
+    if (!lend.on)
+        return FALSE;
+    lent_quiet();
+    lend.on = FALSE;
+    if (lend.opened && !mp.running)
+        audio_close();
+    if (lend.resume)
+        mp_pause(FALSE);
+    mp_set_volume(mp.master);               /* a change meanwhile, applied */
+    return TRUE;
+}
+
 void mp_set_volume(int v)
 {
     int i;
@@ -1183,6 +1233,8 @@ void mp_set_volume(int v)
     if (v > 64)
         v = 64;
     mp.master = (UWORD)v;
+    if (lend.on)
+        return;                             /* noted: applied when given back */
     if (mp.engine == ENG_EAGLE) {
         ep_set_volume(v);
         return;

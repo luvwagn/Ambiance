@@ -461,6 +461,7 @@ void mp_rewind(void);
 void mp_seek(int pos);                  /* to a position in the song */
 void mp_shutdown(void);                 /* hardware and module let go */
 void mp_set_volume(int v);              /* 0-64 */
+BOOL mp_lend(BOOL on);  /* Paula's channels 2 and 3 lent (an animation's sound), what plays paused */
 int  mp_volume(void);
 BOOL mp_loaded(void);
 BOOL mp_playing(void);

@@ -14,6 +14,15 @@
  * rest follow it, none skipped (a delta needs the frame before). The log
  * says how it went: frames a second wanted and got, the slowest frame.
  *
+ * Sound: an ANIM can carry 8SVX samples (before its first frame) and SCTL
+ * chunks in its frames, each saying "play sound n on these channels, at
+ * this volume and rate, so many times" (or stop them). The samples go to
+ * chip RAM when it opens, and each SCTL is acted on the moment its frame
+ * is shown, so the sound keeps to the pictures. What plays meanwhile is
+ * paused and lends Paula's channels 2 and 3 (mp_lend): a sound asked for
+ * on the left (0, 3) plays on 3, on the right (1, 2) on 2. Up and Down
+ * set its volume then, scaling each sound's own.
+ *
  * Keys: Esc, Backspace, the right button or the pad's blue stop it; Space,
  * Return, the left button or fire pause it; Up and Down (the stick, the
  * wheel) set the volume of what plays meanwhile, a station or a module,
@@ -30,6 +39,8 @@
 #include <graphics/displayinfo.h>
 #include <graphics/gfxbase.h>
 #include <libraries/lowlevel.h>
+#include <hardware/custom.h>
+#include <hardware/dmabits.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
@@ -53,11 +64,218 @@ static UWORD be16(const UBYTE *p)
 }
 
 /* One frame's FORM, as read */
+#define FRAME_SCTL 8
 struct Frame {
     const UBYTE *bmhd, *cmap, *body, *dlta, *anhd;
+    const UBYTE *sctl[FRAME_SCTL];  /* its sound commands, 16 bytes each */
     ULONG cmaplen, bodylen, dltalen, camg;
+    int nsctl;
     BOOL has_camg;
 };
+
+/* ---- sound */
+#define CU ((volatile struct Custom *)0xDFF000)
+#define SOUNDS 32
+static struct Sound {
+    UBYTE *data;                /* chip RAM */
+    ULONG len;                  /* bytes (even, 128 KB at the most: one Paula block) */
+    UWORD rate;                 /* samples a second (VHDR) */
+    UWORD vol;                  /* its own, 0-64 (VHDR's 1.0 = 64) */
+} snd[SOUNDS];
+static int nsnd;
+static UBYTE *silence;          /* a quiet word for a channel to rest on */
+static BOOL snd_on;             /* channels 2 and 3 lent (mp_lend) */
+static BOOL snd_read;           /* its sounds read (the first frame reached) */
+static struct {
+    BOOL busy, last;            /* sounding; on its last time round (silence queued) */
+    UWORD svol;                 /* SCTL's volume x the sound's (0-64) */
+    ULONG start, dur;           /* ms: started, one time through */
+    UWORD times;                /* times to play (0: until stopped) */
+    const struct Sound *s;
+} ch[4];
+
+static void lines(int n)
+{
+    while (n-- > 0) {
+        UBYTE v = CU->vhposr >> 8;
+        int guard = 2000;
+        while ((UBYTE)(CU->vhposr >> 8) == v && --guard)
+            ;
+    }
+}
+
+static UWORD ch_vol(int c)
+{
+    return (UWORD)((ULONG)ch[c].svol * mp_volume() / 64);
+}
+
+static void snd_quiet(int c)
+{
+    CU->dmacon = (UWORD)(1 << c);
+    CU->aud[c].ac_vol = 0;
+    ch[c].busy = FALSE;
+}
+
+/* Sound s on channel c (2 or 3), times times (0: until stopped). */
+static void snd_play(int c, const struct Sound *s, UWORD vol, UWORD times, UWORD rate)
+{
+    ULONG clock = SysBase->ex_EClockFrequency * 5;  /* Paula's: 3.55 MHz PAL, 3.58 NTSC */
+    ULONG per = rate ? clock / rate : 428;
+    if (per < 124)
+        per = 124;
+    if (per > 65535)
+        per = 65535;
+    CU->dmacon = (UWORD)(1 << c);
+    lines(2);                               /* stopped, so it starts from the beginning */
+    ch[c].svol = (UWORD)((ULONG)vol * s->vol / 64);
+    ch[c].s = s;
+    ch[c].times = times;
+    ch[c].start = time_ms();
+    ch[c].dur = (ULONG)s->len * 1000 / (rate ? rate : 8363);
+    ch[c].busy = TRUE;
+    ch[c].last = times == 1;
+    CU->aud[c].ac_ptr = (UWORD *)s->data;
+    CU->aud[c].ac_len = (UWORD)(s->len / 2);
+    CU->aud[c].ac_per = (UWORD)per;
+    CU->aud[c].ac_vol = ch_vol(c);
+    CU->dmacon = DMAF_SETCLR | (UWORD)(1 << c);
+    lines(1);                               /* taken: what follows it is set now */
+    if (ch[c].last) {
+        CU->aud[c].ac_ptr = (UWORD *)silence;
+        CU->aud[c].ac_len = 1;
+    }
+}
+
+/* Once a frame: repeats counted out, a change of volume followed. */
+static void snd_tick(void)
+{
+    int c;
+    ULONG now = time_ms();
+    for (c = 2; c < 4; c++) {
+        if (!ch[c].busy)
+            continue;
+        CU->aud[c].ac_vol = ch_vol(c);
+        if (!ch[c].last && ch[c].times &&
+            now - ch[c].start >= ch[c].dur * (ch[c].times - 1)) {
+            CU->aud[c].ac_ptr = (UWORD *)silence;   /* after this time round: quiet */
+            CU->aud[c].ac_len = 1;
+            ch[c].last = TRUE;
+        }
+        if (ch[c].last && now - ch[c].start > ch[c].dur * (ch[c].times ? ch[c].times : 1) + 100)
+            ch[c].busy = FALSE;             /* done: resting on the quiet word */
+    }
+}
+
+/* A frame's SCTL: 0 command (1 play, 2 stop), 1 volume, 2 sound (from 1),
+ * 4 times, 6 channels (bits 0-3), 8 rate (0: the sound's own), 10 flags. */
+static void snd_command(const UBYTE *sc)
+{
+    UWORD n = be16(sc + 2), times = be16(sc + 4), mask = be16(sc + 6), rate = be16(sc + 8);
+    BOOL left = (mask & 9) != 0, right = (mask & 6) != 0;
+    UWORD vol = sc[1] > 64 ? 64 : sc[1];
+    if (!snd_on)
+        return;
+    if (!left && !right)
+        left = right = TRUE;
+    if (sc[0] == 2) {
+        if (right)
+            snd_quiet(2);
+        if (left)
+            snd_quiet(3);
+        return;
+    }
+    if (sc[0] != 1 || n < 1 || n > nsnd || !snd[n - 1].data)
+        return;
+    if (right)
+        snd_play(2, &snd[n - 1], vol, times, rate ? rate : snd[n - 1].rate);
+    if (left)
+        snd_play(3, &snd[n - 1], vol, times, rate ? rate : snd[n - 1].rate);
+}
+
+/* A FORM 8SVX's sound (its first octave), len bytes after the type, from
+ * fh into chip RAM; Fibonacci-delta packed ones unpacked. */
+static void snd_load(BPTR fh, ULONG len)
+{
+    static const BYTE fib[16] = { -34, -21, -13, -8, -5, -3, -2, -1, 0, 1, 2, 3, 5, 8, 13, 21 };
+    UBYTE *b, *p, *e;
+    const UBYTE *vhdr = NULL, *body = NULL;
+    ULONG bl = 0, n;
+    struct Sound *s;
+    if (nsnd >= SOUNDS) {
+        Seek(fh, len + (len & 1), OFFSET_CURRENT);
+        return;
+    }
+    s = &snd[nsnd++];                       /* numbered as they come, read or not */
+    if (!(b = AllocVec(len, MEMF_ANY)) || Read(fh, b, len) != (LONG)len) {
+        FreeVec(b);
+        return;
+    }
+    if (len & 1)
+        Seek(fh, 1, OFFSET_CURRENT);
+    for (p = b, e = b + len; p + 8 <= e;) {
+        ULONG id = be32(p), cl = be32(p + 4);
+        if (cl > (ULONG)(e - p - 8))
+            cl = e - p - 8;
+        if (id == ID('V', 'H', 'D', 'R') && cl >= 20)
+            vhdr = p + 8;
+        else if (id == ID('B', 'O', 'D', 'Y')) {
+            body = p + 8;
+            bl = cl;
+        }
+        p += 8 + ((cl + 1) & ~1UL);
+    }
+    if (vhdr && body && bl > 2) {
+        ULONG oct = be32(vhdr) + be32(vhdr + 4);    /* one-shot and repeat parts */
+        BOOL packed = vhdr[15] == 1;
+        n = packed ? (bl - 2) * 2 : bl;
+        if (oct && oct < n)
+            n = oct;
+        n &= ~1UL;
+        if (n > 131070)
+            n = 131070;                     /* one Paula block */
+        if (n >= 2 && (s->data = AllocVec(n, MEMF_CHIP))) {
+            if (packed) {
+                BYTE x = (BYTE)body[1];
+                ULONG i;
+                for (i = 0; i < n; i++) {
+                    UBYTE c = body[2 + i / 2];
+                    x += fib[i & 1 ? c & 15 : c >> 4];
+                    s->data[i] = (UBYTE)x;
+                }
+            } else {
+                CopyMem((APTR)body, s->data, n);
+            }
+            s->len = n;
+            s->rate = be16(vhdr + 12);
+            s->vol = (UWORD)(be32(vhdr + 16) >> 10);    /* 1.0 (0x10000) = 64 */
+            if (!s->vol || s->vol > 64)
+                s->vol = 64;
+        }
+    }
+    FreeVec(b);
+}
+
+static void snd_free(void)
+{
+    int i;
+    if (snd_on) {
+        snd_quiet(2);
+        snd_quiet(3);
+        lines(3);
+        mp_lend(FALSE);
+        snd_on = FALSE;
+    }
+    for (i = 0; i < nsnd; i++) {
+        FreeVec(snd[i].data);
+        snd[i].data = NULL;
+    }
+    nsnd = 0;
+    snd_read = FALSE;
+    if (silence)
+        FreeMem(silence, 4);
+    silence = NULL;
+    memset(ch, 0, sizeof(ch));
+}
 
 static UBYTE *fbuf;             /* the frame being read */
 static ULONG fbuf_size;
@@ -78,7 +296,11 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
         len -= 4;
         if (be32(h + 8) == ID('I', 'L', 'B', 'M'))
             break;
-        if (Seek(fh, len + (len & 1), OFFSET_CURRENT) < 0)  /* sound and the like: passed */
+        if (be32(h + 8) == ID('8', 'S', 'V', 'X') && !snd_read && nsnd < SOUNDS) {
+            snd_load(fh, len);              /* a sound, before the first frame */
+            continue;
+        }
+        if (Seek(fh, len + (len & 1), OFFSET_CURRENT) < 0)  /* the rest: passed */
             return FALSE;
     }
     if (len > fbuf_size) {
@@ -115,7 +337,8 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
         } else if (id == ID('D', 'L', 'T', 'A')) {
             f->dlta = d;
             f->dltalen = cl;
-        }
+        } else if (id == ID('S', 'C', 'T', 'L') && cl >= 12 && f->nsctl < FRAME_SCTL)
+            f->sctl[f->nsctl++] = d;
         p = d + ((cl + 1) & ~1UL);
     }
     *readms += time_ms() - t0;
@@ -323,6 +546,7 @@ LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax)
         goto out;
     }
     loop_pos = 12;
+    snd_read = TRUE;                        /* playing again: they are not read again */
     w = be16(f.bmhd);
     h = be16(f.bmhd + 2);
     depth = f.bmhd[8];
@@ -384,6 +608,14 @@ LONG anim_play(struct Gfx *g, const char *path, char *err, LONG errmax)
     amce_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
+    if (nsnd) {                             /* its own sound: what plays is paused */
+        if ((silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR)) && mp_lend(TRUE))
+            snd_on = TRUE;
+        sprintf(m, "%ld sounds; %s", (long)nsnd,
+                snd_on ? "Paula's channels 2 and 3 lent, what played paused"
+                       : "no channels to play them on (AHI's?)");
+        amce_log("anim", m);
+    }
 
 restart:
     /* the first frame, into both buffers: the next changes the second */
@@ -418,8 +650,15 @@ restart:
             quit = 1;
             break;
         }
-        if (r == 2)
+        if (r == 2) {
             paused = !paused;
+            if (paused && snd_on) {
+                snd_quiet(2);               /* sounds stop with the pictures */
+                snd_quiet(3);
+            }
+        }
+        if (snd_on)
+            snd_tick();
         if (paused) {
             WaitTOF();
             t0 = time_ms() - due;           /* the clock stopped meanwhile */
@@ -462,6 +701,11 @@ restart:
             WaitTOF();                      /* the last change not taken yet */
         safe_wait[shown] = TRUE;
         shown = k;
+        {
+            int i;
+            for (i = 0; i < f.nsctl; i++)   /* its sounds, as it is shown */
+                snd_command(f.sctl[i]);
+        }
         n++;
     }
     runs++;
@@ -514,6 +758,7 @@ out:
     FreeVec(tab);
     if (blank)
         FreeMem(blank, 6 * sizeof(UWORD));
+    snd_free();
     FreeVec(fbuf);
     fbuf = NULL;
     fbuf_size = 0;
