@@ -62,11 +62,24 @@ under this licence:
   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-Packed modules are unpacked with xfdmaster.library, where it is installed.
+Packed modules are unpacked with xfdmaster.library, MP3 is decoded by
+mpega.library and XM, S3M and IT are mixed by modplug.library, where they
+are installed. They are not part of AmigaMCE. Its archive's Extras drawer
+holds their Aminet archives whole and unchanged, which the installer
+offers to install where they are missing or older (never on AGS):
+  modplug-68k: modplug.library 1.0 by Thomas Wenzel, a port of
+    libmodplug 0.8.9, which is in the public domain.
+  mpega_library: mpega.library 2.4, (c) 1997-99 Stephane Tavenard,
+    giftware: "may be distributed freely under the condition that no
+    profit is gained from its distribution, nor from any other program
+    distributed in the same package", all files together and unchanged.
+  xfdmaster: xfdmaster 1.38 (library 39.15), (c) Georg Hoermann and Dirk
+    Stoecker: "freely distributable for noncommercial use. If you
+    redistribute XFD, you have to keep all files together."
+So AmigaMCE's archive, with these in it, is not to be sold.
 
-MP3 is decoded by mpega.library, and FLAC (Plex tracks as stored, and the
-files in Music folders) by flacdec.library, where they are installed; they
-are not part of AmigaMCE and are not included in its archive.
+FLAC (Plex tracks as stored, and the files in Music folders) is decoded by
+flacdec.library where it is installed; it is not included in the archive.
 flacdec.library is (c) 2026 Renaud Schweingruber, "free to use and to
 redistribute in this unchanged archive" (Aminet: util/libs/flacdec). It
 contains dr_flac by David Reid, public domain or MIT-0

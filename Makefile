@@ -218,8 +218,12 @@ catalogs: build/catalogs/.built
 # The release archive: the AmigaMCE drawer with every language in it, and
 # an Installer script beside it that copies the drawer and the languages
 # chosen (the Workbench's ticked).
+# Aminet's own archives, as they are there: modplug.library (public domain),
+# mpega.library and xfdmaster.library (free to pass on, not for profit,
+# all files together and unchanged)
+EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS)
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
 	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Fonts/amce-cjk \
@@ -242,10 +246,15 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@mkdir -p $(LHA_DIR)/Catalogs
 	@cp -R build/catalogs/* $(LHA_DIR)/Catalogs/
 	@cp docs/Install-AmigaMCE build/lha/Install-AmigaMCE
+	@# Aminet's libraries for more of the music, each archive's files whole
+	@# and unchanged (their terms: kept together, not changed), for the
+	@# installer to offer where they are missing or older (never on AGS)
+	@mkdir -p build/lha/Extras
+	@for a in $(EXTRAS); do (cd build/lha/Extras && lha xq ../../../$$a); done
 	@cp docs/install.info build/lha/Install-AmigaMCE.info
 	@rm -f $(LHA_NAME)
 	@cd build/lha && lha aqo5 $(LHA_OPTS) ../../$(LHA_NAME) AmigaMCE AmigaMCE.info \
-		Install-AmigaMCE Install-AmigaMCE.info
+		Install-AmigaMCE Install-AmigaMCE.info Extras
 	@echo "Created $(LHA_NAME)"
 
 clean:

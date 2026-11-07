@@ -1,4 +1,4 @@
-; $VER: Install-AmigaMCE 1.1 (06.11.2026)
+; $VER: Install-AmigaMCE 1.2 (07.11.2026)
 ;
 ; Installer script for AmigaMCE: the program with its fonts and licences,
 ; and the languages chosen, the Workbench's own ticked to begin with.
@@ -8,6 +8,11 @@
 ; Japanese is never ticked to begin with: Workbench 3.x has no Japanese
 ; locale. It is chosen in AmigaMCE (Settings > General > Language), whose
 ; own glyphs draw it.
+;
+; Then, not on AGS (which has them): the libraries from Aminet in Extras,
+; offered where LIBS: has none or an older one. modplug.library (public
+; domain), mpega.library and xfdmaster.library with its decrunchers (free
+; to pass on, not for profit, each archive whole and unchanged).
 ;
 ; This file is Latin-1 (Français, Español, Português).
 
@@ -92,6 +97,88 @@
 (if (IN #langs 8) ((set #drawer "nederlands") (P_LANG)))
 (if (IN #langs 9) ((set #drawer "portugues") (P_LANG)))
 (if (IN #langs 10) ((set #drawer "nihongo") (P_LANG)))
+(complete 90)
+
+; ---- Libraries for more of the music, from Aminet (Extras) --------------
+; Not on AGS: it has them. Each offered ticked where LIBS: has none or an
+; older one; copylib never puts an older library over a newer one.
+(procedure P_VER
+  (set #v 0)
+  (if (exists #file (noreq)) (set #v (getversion #file)))
+)
+(procedure P_STATE
+  (set #st "installed, up to date")
+  (if (> #ours #v) (set #st "an older one installed"))
+  (if (= #v 0) (set #st "not installed"))
+)
+(if (= (exists "AGS:" (noreq)) 0)
+  (
+    (set #cpu (database "cpu"))
+    (set #mpsrc "Extras/mpega_library/libs/mpega020.library")
+    (if (= #cpu "68040") (set #mpsrc "Extras/mpega_library/libs/mpega040.library"))
+    (if (= #cpu "68060") (set #mpsrc "Extras/mpega_library/libs/mpega040.library"))
+
+    (set #file "Extras/modplug/usr/modplug.library") (P_VER) (set #ours #v)
+    (set #file "LIBS:modplug.library") (P_VER) (P_STATE)
+    (set #st0 #st) (set #need0 (> #ours #v))
+    (set #file #mpsrc) (P_VER) (set #ours #v)
+    (set #file "LIBS:mpega.library") (P_VER) (P_STATE)
+    (set #st1 #st) (set #need1 (> #ours #v))
+    (set #file "Extras/xfd_User/Libs/xfdmaster.library") (P_VER) (set #ours #v)
+    (set #file "LIBS:xfdmaster.library") (P_VER) (P_STATE)
+    (set #st2 #st) (set #need2 (> #ours #v))
+
+    (set #def 0)
+    (if #need0 (set #def (+ #def 1)))
+    (if #need1 (set #def (+ #def 2)))
+    (if #need2 (set #def (+ #def 4)))
+    (set #libs 0)
+    (if #def
+      (set #libs
+        (askoptions
+          (prompt "AmigaMCE plays more with these libraries from Aminet. Which should be installed in LIBS:? Those missing, or older than these, are ticked.")
+          (help "modplug.library (public domain) mixes XM, S3M, IT and multichannel MODs on a 68020 or better.\n\nmpega.library 2.4 (Stéphane Tavenard, giftware) decodes MP3 for radio, Plex and music files: its 68040 build on a 68040 or 68060, its 68020 build otherwise.\n\nxfdmaster.library 39.15 (Georg Hörmann, Dirk Stöcker) unpacks packed modules; its decrunchers go in LIBS:xfd, only those not there already.\n\nmpega and xfd are free to pass on but not for profit. Their archives are in this one's Extras drawer, whole and unchanged, with their own documents.")
+          (choices (cat "modplug.library: XM, S3M, IT (" #st0 ")")
+                   (cat "mpega.library: MP3 (" #st1 ")")
+                   (cat "xfdmaster.library: packed modules (" #st2 ")"))
+          (default #def)
+        )
+      )
+    )
+    (set #lic (tackon #dest "Licences"))
+    (if (IN #libs 0)
+      (
+        (copylib (prompt "Copying modplug.library") (help @copylib-help)
+                 (source "Extras/modplug/usr/modplug.library") (dest "LIBS:"))
+        (copyfiles (prompt "Copying modplug.library's licence") (help @copyfiles-help)
+                   (source "Extras/modplug/usr/COPYING") (dest #lic) (newname "modplug.library-COPYING.txt"))
+      )
+    )
+    (if (IN #libs 1)
+      (
+        (copylib (prompt "Copying mpega.library") (help @copylib-help)
+                 (source #mpsrc) (dest "LIBS:") (newname "mpega.library"))
+        (copyfiles (prompt "Copying mpega.library's terms") (help @copyfiles-help)
+                   (source "Extras/mpega_library/mpega_library.doc") (dest #lic))
+      )
+    )
+    (if (IN #libs 2)
+      (
+        (copylib (prompt "Copying xfdmaster.library") (help @copylib-help)
+                 (source "Extras/xfd_User/Libs/xfdmaster.library") (dest "LIBS:"))
+        (if (= (exists "LIBS:xfd" (noreq)) 0) (makedir "LIBS:xfd"))
+        (foreach "Extras/xfd_User/Libs/xfd" "~(.#?)"
+          (if (= (exists (tackon "LIBS:xfd" @each-name) (noreq)) 0)
+            (copyfiles (prompt "Copying a decruncher") (help @copyfiles-help)
+                       (source (tackon "Extras/xfd_User/Libs/xfd" @each-name)) (dest "LIBS:xfd") (nogauge))
+          )
+        )
+        (copyfiles (prompt "Copying xfd's terms") (help @copyfiles-help)
+                   (source "Extras/xfd_User/README") (dest #lic) (newname "xfdmaster.library-README.txt"))
+      )
+    )
+  )
+)
 (complete 100)
 
 (exit "AmigaMCE is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are.")

@@ -115,18 +115,21 @@ Requirements
 - Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG.
 - Amiga Game Selector 3 for Games and Demos (found through AGS:).
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
-- For MP3: mpega.library. For FLAC: flacdec.library (Aminet:
-  util/libs/flacdec; on a 68060 its 68060 build).
+- For MP3: mpega.library (the installer offers it). For FLAC:
+  flacdec.library (Aminet: util/libs/flacdec; on a 68060 its 68060 build).
 - Optional: EaglePlayer/DeliTracker players, modplug.library and
-  xfdmaster.library for more module formats; picture datatypes; AmiSSL
-  to list HTTPS radio stations.
+  xfdmaster.library for more module formats (the installer offers the
+  two libraries); picture datatypes; AHI for sound through a sound card;
+  AmiSSL to list HTTPS radio stations.
 
 
 Installation
 ------------
 Double-click Install-AmigaMCE: it asks where AmigaMCE should go and which
 languages to install, your Workbench's ticked, and keeps the settings of
-an earlier installation. Or copy the AmigaMCE drawer to your hard drive
+an earlier installation. Not on AGS (which has them), it then offers
+modplug.library, mpega.library and xfdmaster.library from Aminet, ticked
+where LIBS: has none or an older one; a newer one is never replaced. Or copy the AmigaMCE drawer to your hard drive
 yourself (all its languages come along), keeping its Fonts drawer next to
 the program.
 
@@ -248,6 +251,14 @@ Credits and licences
 AmigaMCE (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
 Its EaglePlayer host follows HippoPlayer's, and its spectrum analyser is
 HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
+
+The Extras drawer holds three Aminet archives, whole and unchanged, for
+the installer: modplug-68k (modplug.library 1.0, Thomas Wenzel's port of
+libmodplug, which is in the public domain), mpega_library (mpega.library
+2.4 (c) 1997-99 Stephane Tavenard, giftware) and xfdmaster (xfdmaster
+1.38, library 39.15, (c) Georg Hoermann and Dirk Stoecker). mpega and xfd
+are free to pass on but not for profit, their files together and
+unchanged: AmigaMCE with them may not be sold.
 
 FLAC is decoded by flacdec.library (c) 2026 Renaud Schweingruber, with
 dr_flac by David Reid (public domain or MIT-0), where it is installed. It
