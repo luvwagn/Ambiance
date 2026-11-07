@@ -764,12 +764,16 @@ static int bar_hit(WORD x, WORD y)
     return x < BT_N ? x : -1;
 }
 
-/* All the frames' time, a header each read (from where fh is, put back). */
-static ULONG anim_length(BPTR fh, ULONG first)
+/* All the frames' time: kept from before (ilbm.c), or a header each read
+ * (from where fh is, put back) and kept. */
+static ULONG anim_length(BPTR fh, const char *path, ULONG first)
 {
-    LONG pos = Seek(fh, 0, OFFSET_CURRENT);
+    LONG pos;
     UBYTE h[52];
-    ULONG jif = first, frames = 0;
+    ULONG jif = first, frames = 0, kf, kms;
+    if (anim_fact_get(fh, path, &kf, &kms))
+        return kms;
+    pos = Seek(fh, 0, OFFSET_CURRENT);
     while (frames < 20000 && Read(fh, h, 12) == 12 && be32(h) == ID('F', 'O', 'R', 'M')) {
         LONG len = be32(h + 4) - 4, got = 0;
         if (len < 0)
@@ -785,6 +789,7 @@ static ULONG anim_length(BPTR fh, ULONG first)
             break;
     }
     Seek(fh, pos, OFFSET_BEGINNING);
+    anim_fact_put(fh, path, frames + 1, jif * 1000 / 60);
     return jif * 1000 / 60;
 }
 
@@ -982,7 +987,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax
     planes_of(sb[1]->sb_BitMap, w, h, depth, &pl[1]);
     bar_setup(sb[0]->sb_BitMap, w, h, depth, id, &clip, left, top);
     bar_pens(tab, ncol, camg, depth);
-    bar.total_ms = anim_length(fh, 0);
+    bar.total_ms = anim_length(fh, path, 0);
     bar_redraw = FALSE;
 
     sprintf(m, "%s: %lux%lux%lu, mode %08lx (CAMG %05lx), op %ld", FilePart((STRPTR)path),

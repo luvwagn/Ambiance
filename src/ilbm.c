@@ -22,6 +22,8 @@
 #include <string.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <dos/dosextens.h>
+#include <exec/semaphores.h>
 
 #define ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (d))
 #define ILBM_MAX (4UL << 20)    /* larger files: the datatype */
@@ -38,6 +40,118 @@ static UWORD be16(const UBYTE *p)
     return (UWORD)((p[0] << 8) | p[1]);
 }
 
+/* ---- an ANIM's frame count and length, kept (PROGDIR:Cache/Animations)
+ * by its path, date and size: counting them walks every frame of the file
+ * (Reco_Main: 523 across 19 MB, half a second, and under an emulator the
+ * whole Amiga waits on it), so it is done once. The pane and the player
+ * both ask; two loader processes may at once (a semaphore). */
+#define AF_FILE "PROGDIR:Cache/Animations"
+#define AF_MAX  1024
+struct AnimFact {
+    ULONG hash, days, minute, tick, size, frames, ms;
+};
+static struct AnimFact *af;
+static LONG afn;
+static BOOL af_loaded, af_sem_ready;
+static struct SignalSemaphore af_sem;
+
+static void af_lock(void)
+{
+    Forbid();
+    if (!af_sem_ready) {
+        InitSemaphore(&af_sem);
+        af_sem_ready = TRUE;
+    }
+    Permit();
+    ObtainSemaphore(&af_sem);
+}
+
+static ULONG af_hash(const char *s)
+{
+    ULONG h = 2166136261UL;
+    for (; *s; s++)
+        h = (h ^ (UBYTE)(*s >= 'A' && *s <= 'Z' ? *s + 32 : *s)) * 16777619UL;
+    return h;
+}
+
+static void af_load(void)
+{
+    BPTR fh;
+    if (af_loaded)
+        return;
+    af_loaded = TRUE;
+    if (!(af = AllocVec(AF_MAX * sizeof(*af), MEMF_ANY)))
+        return;
+    if ((fh = Open((CONST_STRPTR)AF_FILE, MODE_OLDFILE))) {
+        LONG n = Read(fh, af, AF_MAX * sizeof(*af));
+        afn = n > 0 ? n / (LONG)sizeof(*af) : 0;
+        Close(fh);
+    }
+}
+
+/* fh's file as a fact's key (FALSE: not known) */
+static BOOL af_key(BPTR fh, const char *path, struct AnimFact *k)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BOOL ok = fib && ExamineFH(fh, fib);
+    if (ok) {
+        k->hash = af_hash(path);
+        k->days = fib->fib_Date.ds_Days;
+        k->minute = fib->fib_Date.ds_Minute;
+        k->tick = fib->fib_Date.ds_Tick;
+        k->size = fib->fib_Size;
+    }
+    if (fib)
+        FreeDosObject(DOS_FIB, fib);
+    return ok;
+}
+
+BOOL anim_fact_get(BPTR fh, const char *path, ULONG *frames, ULONG *ms)
+{
+    struct AnimFact k;
+    LONG i;
+    BOOL r = FALSE;
+    if (!af_key(fh, path, &k))
+        return FALSE;
+    af_lock();
+    af_load();
+    for (i = afn - 1; i >= 0 && af; i--)    /* the newest first: a file changed is added again */
+        if (af[i].hash == k.hash && af[i].days == k.days && af[i].minute == k.minute &&
+            af[i].tick == k.tick && af[i].size == k.size) {
+            *frames = af[i].frames;
+            *ms = af[i].ms;
+            r = TRUE;
+            break;
+        }
+    ReleaseSemaphore(&af_sem);
+    return r;
+}
+
+void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms)
+{
+    struct AnimFact k;
+    BPTR out, l;
+    ULONG f0, m0;
+    if (!frames || !af_key(fh, path, &k) || anim_fact_get(fh, path, &f0, &m0))
+        return;
+    k.frames = frames;
+    k.ms = ms;
+    af_lock();
+    if (af && afn < AF_MAX) {
+        af[afn++] = k;
+        if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
+            l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
+        if (l)
+            UnLock(l);
+        if ((out = Open((CONST_STRPTR)AF_FILE, MODE_READWRITE))) {
+            Seek(out, 0, OFFSET_END);
+            Write(out, &k, sizeof(k));
+            Close(out);
+        }
+    }
+    ReleaseSemaphore(&af_sem);
+}
+
 /* An ANIM's frames from here on, and their time: a few bytes of each
  * read, the rest passed by; frames and jiffies: those counted already. */
 static void count_frames(BPTR fh, struct PicInfo *pi, ULONG frames, ULONG jiffies)
@@ -51,7 +165,7 @@ static void count_frames(BPTR fh, struct PicInfo *pi, ULONG frames, ULONG jiffie
             frames++;
             got = Read(fh, h, len < (LONG)sizeof(h) ? len : (LONG)sizeof(h));
             if (got >= 8 + 18 && be32(h) == ID('A', 'N', 'H', 'D'))
-                jiffies += be32(h + 8 + 14);
+                jiffies += be32(h + 8 + 14) ? be32(h + 8 + 14) : 1;    /* as it plays */
             if (got < 0)
                 break;
         }
@@ -328,7 +442,7 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
             p += 8 + ((cl + 1) & ~1UL);
         }
         if (anhd)
-            *jif += be32(anhd + 14);
+            *jif += be32(anhd + 14) ? be32(anhd + 14) : 1;
         k = n & 1;
         if (anhd && anhd[18] == 1)          /* from the last frame, not two back */
             CopyMem(buf[!k], buf[k], fsz);
@@ -408,10 +522,17 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         ULONG frames = 1, jif = 0;
         cmaplen = cmaplen < sizeof(cm) ? cmaplen : sizeof(cm);
         CopyMem((APTR)cmap, cm, cmaplen);
+        ULONG kf, kms;
         img = anim_pick(afh, body, bodylen, sw, sh, planes, masking, comp, cm, &cmaplen, &frames,
                         &jif);
         cmap = cm;
-        count_frames(afh, pi, frames, jif);
+        if (anim_fact_get(afh, path, &kf, &kms)) {
+            pi->frames = kf > 65535 ? 65535 : kf;   /* counted before */
+            pi->ms = kms;
+        } else {
+            count_frames(afh, pi, frames, jif);
+            anim_fact_put(afh, path, pi->frames, pi->ms);
+        }
         Close(afh);
         afh = 0;
     }
