@@ -39,6 +39,7 @@
  */
 #include "amce.h"
 #include "animdec.h"
+#include "animdraw.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -1089,252 +1090,6 @@ BOOL anim_has_sound(const char *path)
 #define SLOW_MS     50
 #define SKIP_MS    250
 
-static ULONG p2c_hi[256], p2c_lo[256];  /* a plane's byte as 8 pixels' bits (4 + 4) */
-
-static void p2c_init(void)
-{
-    int b, i;
-    if (p2c_hi[255])
-        return;
-    for (b = 0; b < 256; b++) {
-        ULONG hi = 0, lo = 0;
-        for (i = 0; i < 4; i++) {
-            if (b & (0x80 >> i))
-                hi |= 1UL << (24 - 8 * i);
-            if (b & (0x08 >> i))
-                lo |= 1UL << (24 - 8 * i);
-        }
-        p2c_hi[b] = hi;
-        p2c_lo[b] = lo;
-    }
-}
-
-/* A row of interleaved planes (plane p at row + p * rb) as w bytes. */
-static void p2c_row(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, UBYTE *out)
-{
-    ULONG x;
-    for (x = 0; x < rb; x++) {
-        ULONG hi = 0, lo = 0;
-        UBYTE p;
-        for (p = 0; p < depth; p++) {
-            UBYTE b = row[p * rb + x];
-            hi |= p2c_hi[b] << p;
-            lo |= p2c_lo[b] << p;
-        }
-        if (x * 8 + 8 <= w) {
-            UBYTE *o = out + x * 8;
-            o[0] = hi >> 24; o[1] = hi >> 16; o[2] = hi >> 8; o[3] = hi;
-            o[4] = lo >> 24; o[5] = lo >> 16; o[6] = lo >> 8; o[7] = lo;
-        } else {
-            UBYTE t[8];
-            ULONG i;
-            t[0] = hi >> 24; t[1] = hi >> 16; t[2] = hi >> 8; t[3] = hi;
-            t[4] = lo >> 24; t[5] = lo >> 16; t[6] = lo >> 8; t[7] = lo;
-            for (i = 0; x * 8 + i < w; i++)
-                out[x * 8 + i] = t[i];
-        }
-    }
-}
-
-/* A CMAP as 0xRRGGBB colours (old 4-bit ones widened); extra halfbrite's
- * 32-63 the first 32 at half. */
-static void lut_from(const UBYTE *c, ULONG len, ULONG camg, UBYTE depth, ULONG *lut)
-{
-    ULONG i, n = len / 3, lo = 0;
-    if (n > 256)
-        n = 256;
-    for (i = 0; i < n * 3; i++)
-        lo |= c[i] & 0x0F;
-    for (i = 0; i < 256; i++) {
-        ULONG r = 0, gg = 0, b = 0;
-        if (i < n) {
-            r = c[i * 3];
-            gg = c[i * 3 + 1];
-            b = c[i * 3 + 2];
-            if (!lo) {
-                r |= r >> 4;
-                gg |= gg >> 4;
-                b |= b >> 4;
-            }
-        }
-        lut[i] = (r << 16) | (gg << 8) | b;
-    }
-    if ((camg & EXTRAHALFBRITE_KEY) && depth == 6)
-        for (i = 32; i < 64; i++)
-            lut[i] = (lut[i - 32] >> 1) & 0x7F7F7F;
-}
-
-/* The screen's own pixels: a 15 or 16-bit format (else 0, not written
- * straight), and its red, green and blue as parts of a pixel, already in
- * its byte order, so a pixel is rt[r] | gt[g] | bt[b]. */
-static UWORD rt[256], gt[256], bt[256];
-
-static BOOL pix_tables(ULONG fmt)
-{
-    ULONG v, i;
-    int rs, gs, bs, rbits = 5, gbits;
-    BOOL pc = FALSE;
-    switch (fmt) {
-    case PIXFMT_RGB16PC: pc = TRUE; /* fall through */
-    case PIXFMT_RGB16: rs = 11; gs = 5; bs = 0; gbits = 6; break;
-    case PIXFMT_BGR16PC: pc = TRUE; /* fall through */
-    case PIXFMT_BGR16: rs = 0; gs = 5; bs = 11; gbits = 6; break;
-    case PIXFMT_RGB15PC: pc = TRUE; /* fall through */
-    case PIXFMT_RGB15: rs = 10; gs = 5; bs = 0; gbits = 5; break;
-    case PIXFMT_BGR15PC: pc = TRUE; /* fall through */
-    case PIXFMT_BGR15: rs = 0; gs = 5; bs = 10; gbits = 5; break;
-    default: return FALSE;
-    }
-    for (i = 0; i < 256; i++) {
-        v = (i >> (8 - rbits)) << rs;
-        rt[i] = pc ? (UWORD)(((v & 0xFF) << 8) | (v >> 8)) : (UWORD)v;
-        v = (i >> (8 - gbits)) << gs;
-        gt[i] = pc ? (UWORD)(((v & 0xFF) << 8) | (v >> 8)) : (UWORD)v;
-        v = (i >> (8 - rbits)) << bs;
-        bt[i] = pc ? (UWORD)(((v & 0xFF) << 8) | (v >> 8)) : (UWORD)v;
-    }
-    return TRUE;
-}
-
-static void lut16_from(const ULONG *lut, UWORD *l16)
-{
-    int i;
-    for (i = 0; i < 256; i++)
-        l16[i] = rt[(lut[i] >> 16) & 255] | gt[(lut[i] >> 8) & 255] | bt[lut[i] & 255];
-}
-
-/* HAM as one step a pixel: pixel = (the one before & hk[c]) | hs[c]. A
- * base colour keeps nothing and sets its colour; a modify keeps the other
- * two of red, green and blue and sets its own (all in the screen's format,
- * byte order and all, so they are its masks too). */
-static UWORD hk[256], hs[256];
-
-static void ham_from(const UWORD *l16, UBYTE depth)
-{
-    ULONG c, bits = depth == 8 ? 6 : 4, lo = (1UL << bits) - 1;
-    for (c = 0; c < 256; c++) {
-        ULONG v = c & lo, ctl = (c >> bits) & 3;
-        v = bits == 4 ? v * 17 : (v << 2) | (v >> 4);
-        switch (ctl) {
-        case 0:
-            hk[c] = 0;
-            hs[c] = l16[c & lo];
-            break;
-        case 1:                             /* blue */
-            hk[c] = (UWORD)~bt[255];
-            hs[c] = bt[v];
-            break;
-        case 2:                             /* red */
-            hk[c] = (UWORD)~rt[255];
-            hs[c] = rt[v];
-            break;
-        default:                            /* green */
-            hk[c] = (UWORD)~gt[255];
-            hs[c] = gt[v];
-            break;
-        }
-    }
-}
-
-/* Where a row of planes (plane p at a + p * rb) differs from b's: its
- * first byte column and one past its last; FALSE if nowhere. */
-static BOOL row_span(const UBYTE *a, const UBYTE *b, ULONG rb, UBYTE depth, ULONG *x0, ULONG *x1)
-{
-    ULONG lo = rb, hi = 0, x;
-    UBYTE p;
-    if (!memcmp(a, b, rb * depth))
-        return FALSE;
-    for (p = 0; p < depth; p++, a += rb, b += rb) {
-        for (x = 0; x < lo; x++)
-            if (a[x] != b[x]) {
-                lo = x;
-                break;
-            }
-        for (x = rb; x > hi; x--)
-            if (a[x - 1] != b[x - 1]) {
-                hi = x;
-                break;
-            }
-    }
-    *x0 = lo;
-    *x1 = hi;
-    return lo < hi;
-}
-
-/* Byte columns x0 to x1 (one past) of a row of planes into the screen's
- * memory at out (the row's first pixel). Source pixel px goes to pixels
- * xo[px] to xo[px + 1] - 1; fx, if not 0, the whole number that is the
- * same (and quicker). HAM: each pixel hangs on the one before, so the row
- * is worked out from its start, and written from x0 to its end. */
-static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, ULONG x1, UWORD fx,
-                    const UWORD *xo, BOOL ham, const ULONG *lut, const UWORD *l16, UBYTE *out)
-{
-    ULONG x, i, pix = 0;
-    UBYTE t[8];
-    UWORD *o16 = (UWORD *)out;
-    ULONG wx = x0;                  /* HAM: written from here */
-    (void)lut;
-    if (ham) {
-        x0 = 0;
-        x1 = rb;
-        pix = l16[0];               /* each row starts from colour 0 */
-    }
-    for (x = x0; x < x1; x++) {
-        ULONG h = 0, l = 0, n = w - x * 8;
-        const UWORD *xp = xo + x * 8;
-        UBYTE p;
-        for (p = 0; p < depth; p++) {
-            UBYTE c = row[p * rb + x];
-            h |= p2c_hi[c] << p;
-            l |= p2c_lo[c] << p;
-        }
-        t[0] = h >> 24; t[1] = h >> 16; t[2] = h >> 8; t[3] = h;
-        t[4] = l >> 24; t[5] = l >> 16; t[6] = l >> 8; t[7] = l;
-        if (n > 8)
-            n = 8;
-        if (ham) {
-            if (x < wx) {                   /* left of what changed: worked out, not written */
-                for (i = 0; i < n; i++)
-                    pix = (pix & hk[t[i]]) | hs[t[i]];
-            } else if (fx == 2) {
-                ULONG *o2 = (ULONG *)(o16 + xp[0]);
-                for (i = 0; i < n; i++) {
-                    pix = (pix & hk[t[i]]) | hs[t[i]];
-                    o2[i] = pix | (pix << 16);
-                }
-            } else if (fx == 1) {
-                UWORD *o1 = o16 + xp[0];
-                for (i = 0; i < n; i++) {
-                    pix = (pix & hk[t[i]]) | hs[t[i]];
-                    o1[i] = (UWORD)pix;
-                }
-            } else
-                for (i = 0; i < n; i++) {
-                    UWORD *q = o16 + xp[i], *e = o16 + xp[i + 1];
-                    pix = (pix & hk[t[i]]) | hs[t[i]];
-                    while (q < e)
-                        *q++ = (UWORD)pix;
-                }
-        } else if (fx == 2) {
-            ULONG *o = (ULONG *)(o16 + xp[0]);
-            for (i = 0; i < n; i++) {
-                ULONG pix = l16[t[i]];
-                *o++ = pix | (pix << 16);
-            }
-        } else if (fx == 1) {
-            UWORD *o = o16 + xp[0];
-            for (i = 0; i < n; i++)
-                *o++ = l16[t[i]];
-        } else {
-            for (i = 0; i < n; i++) {
-                UWORD pix = l16[t[i]], *q = o16 + xp[i], *e = o16 + xp[i + 1];
-                while (q < e)
-                    *q++ = pix;
-            }
-        }
-    }
-}
-
 /* Where the picture goes on AmigaMCE's screen: dw x dh at vx, vy; source
  * pixel x at xo[x] (to xo[x + 1]), row y at yo[y] (to yo[y + 1]); fx, fy
  * the whole scales, or 0. Full: as large as the screen allows, its shape
@@ -1764,7 +1519,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     st.cw = st.h + GU(g, 6);
     st.x0 = GU(g, 8);
 
-    p2c_init();
+    ad_init();
     /* the screen's memory, to be written straight, if it can be had */
     if (GetCyberMapAttr(g->rp->BitMap, CYBRMATTR_ISCYBERGFX)) {
         UBYTE *base = NULL;
@@ -1773,7 +1528,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
                                  (ULONG)&bpr, LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE);
         if (lk) {
             UnLockBitMap(lk);
-            direct = base && bpr && pix_tables(fmt);
+            direct = base && bpr && ad_pix_tables(fmt);
         }
     }
     if (g->rp->Layer) {
@@ -1842,7 +1597,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         pl[k].h = h;
     }
     if (f->cmap)
-        lut_from(f->cmap, f->cmaplen, camg, depth, lut);
+        ad_lut(f->cmap, f->cmaplen, camg, depth, lut);
     else
         memset(lut, 0, 256 * sizeof(ULONG));
     total = anim_length(fh, path, 0);
@@ -1867,11 +1622,11 @@ restart:
     animdec_body(f->body, f->bodylen, &pl[0], comp, masking);
     CopyMem(planar, planar + fsz, fsz);
     if (runs && f->cmap)
-        lut_from(f->cmap, f->cmaplen, camg, depth, lut);
+        ad_lut(f->cmap, f->cmaplen, camg, depth, lut);
     if (direct) {
-        lut16_from(lut, l16);
+        ad_lut16(lut, l16);
         if (ham)
-            ham_from(l16, depth);
+            ad_ham(l16, depth);
     }
     fresh = TRUE;
     skip = FALSE;
@@ -1903,11 +1658,11 @@ restart:
                     if (fresh) {
                         x0 = 0;
                         x1 = rb;
-                    } else if (!row_span(a, b, rb, depth, &x0, &x1))
+                    } else if (!ad_row_span(a, b, rb, depth, &x0, &x1))
                         continue;
                     if (ham)
                         x1 = rb;                /* what follows a change changes with it */
-                    row_put(a, rb, depth, w, x0, x1, fx, lay.xo, ham, lut, l16, o);
+                    ad_row_put(a, rb, depth, w, x0, x1, fx, lay.xo, ham, lut, l16, o);
                     px0 = lay.xo[x0 * 8];
                     px1 = lay.xo[x1 * 8 > w ? w : x1 * 8];
                     span = (px1 - px0) * 2;
@@ -1953,7 +1708,7 @@ restart:
             UBYTE *row = chunky;
             ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp;
             for (y = 0; y < h; y++) {
-                p2c_row(src + y * rb * depth, rb, depth, w, line);
+                ad_p2c_row(src + y * rb * depth, rb, depth, w, line);
                 if (ham) {                  /* each pixel from the one before it */
                     ULONG rgb = lut[0], hb = depth == 8 ? 6 : 4, lo = (1UL << hb) - 1;
                     UBYTE *o = row;
@@ -2107,13 +1862,13 @@ restart:
             break;
         }
         if (f->cmap) {                      /* its colours changed: all of it again */
-            lut_from(f->cmap, f->cmaplen, camg, depth, lut + 256);
+            ad_lut(f->cmap, f->cmaplen, camg, depth, lut + 256);
             if (memcmp(lut, lut + 256, 256 * sizeof(ULONG))) {
                 CopyMem(lut + 256, lut, 256 * sizeof(ULONG));
                 if (direct) {
-                    lut16_from(lut, l16);
+                    ad_lut16(lut, l16);
                     if (ham)
-                        ham_from(l16, depth);
+                        ad_ham(l16, depth);
                 }
                 fresh = TRUE;
             }

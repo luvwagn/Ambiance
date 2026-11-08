@@ -32,7 +32,7 @@ LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
-       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c
+       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o
 VASM ?= vasmm68k_mot
 
@@ -57,7 +57,7 @@ ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt CREDITS.txt LICENSE
 
-.PHONY: all clean test test-replayer check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean test test-replayer test-animdraw anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha
 
@@ -87,6 +87,10 @@ build/cpucheck.o: src/cpucheck.c
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
 	@$(CC) $(CFLAGS) -c -o $@ $<
+
+# an animation's frames, decoded and drawn each frame: for speed, not size
+# (-O2 decodes Tron2's frames in 55% of the cycles -Os does)
+build/animdec.o build/animdraw.o: CFLAGS += -O2
 
 $(TARGET): $(OBJS)
 	@echo "  LINK  $@"
@@ -136,7 +140,7 @@ build/rtgbench: tools/rtgbench/rtgbench.c
 	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< -lamiga
 rtgbench: build/rtgbench
 
-test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex
+test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -163,6 +167,21 @@ build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h
 	@$(HOSTCC) -O2 -Wall -o $@ tests/radio_host.c src/radiocsv.c
 
 # a Plex server's XML (plexxml.c).
+build/animdraw_host: tests/animdraw_host.c src/animdraw.c src/animdraw.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/animdraw_host.c src/animdraw.c
+
+test-animdraw: build/animdraw_host
+	@build/animdraw_host > build/test-animdraw.txt && echo "  CHECK animation drawing ok" || (cat build/test-animdraw.txt; exit 1)
+
+# an ANIM's decoding and drawing timed on a 68020 (vamos counts its cycles):
+#   make anim-bench ANIM=file.anim
+anim-bench:
+	@mkdir -p build/bench
+	@$(CC) -O2 $(CPU) -noixemul -w -o build/bench/anim_bench tests/anim_bench.c src/animdec.c src/animdraw.c
+	@for m in "0 100" "1 100" "1 200"; do printf "mode/scale %s: " "$$m"; \
+		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench $(ANIM) $$m 2>&1 | grep -o "total_cycles=[0-9]*"; done
+
 build/plex_host: tests/plex_host.c src/plexxml.c src/plexxml.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/plex_host.c src/plexxml.c
