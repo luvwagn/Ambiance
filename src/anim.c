@@ -310,6 +310,90 @@ static void snd_command(const UBYTE *sc)
         snd_play(3, &snd[n - 1], vol, times, rate ? rate : snd[n - 1].rate);
 }
 
+/* ---- the file read ahead: frames are small (Tron2's 24 KB), and each
+ * DOS Read is a trip through the file system (two a frame: 6 ms a frame on
+ * Amiberry's hard file); read in RD_SIZE pieces instead, the frames
+ * copied out of them. Everything that reads or skips in the file goes
+ * through here, so its place and the buffer's agree; rd_seek goes back
+ * (to the start), rd_sync gives the file its place for one reading it
+ * itself (anim_length). */
+#define RD_SIZE (256UL * 1024)
+static struct {
+    BPTR fh;
+    UBYTE *buf;
+    LONG pos, len;                  /* what is left of the piece: buf[pos..len) */
+} rd;
+
+static void rd_begin(BPTR fh)
+{
+    rd.fh = fh;
+    rd.pos = rd.len = 0;
+    if (!rd.buf)
+        rd.buf = AllocVec(RD_SIZE, MEMF_ANY);   /* none: straight from the file */
+}
+
+static void rd_end(void)
+{
+    FreeVec(rd.buf);
+    memset(&rd, 0, sizeof(rd));
+}
+
+static LONG rd_read(void *dst, LONG n)
+{
+    UBYTE *d = dst;
+    LONG got = 0;
+    if (!rd.buf)
+        return Read(rd.fh, dst, n);
+    while (n > 0) {
+        LONG have = rd.len - rd.pos, k;
+        if (!have) {
+            if (n >= (LONG)RD_SIZE) {       /* a big one: straight in */
+                LONG r = Read(rd.fh, d, n);
+                return r < 0 ? (got ? got : r) : got + r;
+            }
+            rd.pos = 0;
+            rd.len = Read(rd.fh, rd.buf, RD_SIZE);
+            if (rd.len <= 0) {
+                rd.len = 0;
+                break;
+            }
+            have = rd.len;
+        }
+        k = n < have ? n : have;
+        CopyMem(rd.buf + rd.pos, d, k);
+        rd.pos += k;
+        d += k;
+        got += k;
+        n -= k;
+    }
+    return got;
+}
+
+/* n bytes on (Seek's OFFSET_CURRENT, forward): -1 if it cannot */
+static LONG rd_skip(LONG n)
+{
+    LONG have = rd.len - rd.pos;
+    if (rd.buf && n <= have) {
+        rd.pos += n;
+        return 0;
+    }
+    rd.pos = rd.len = 0;
+    return Seek(rd.fh, n - have, OFFSET_CURRENT) < 0 ? -1 : 0;
+}
+
+static LONG rd_seek(LONG at)                /* from the file's start, as Seek */
+{
+    rd.pos = rd.len = 0;
+    return Seek(rd.fh, at, OFFSET_BEGINNING);
+}
+
+static void rd_sync(void)                   /* the file where the reading has got to */
+{
+    if (rd.len - rd.pos)
+        Seek(rd.fh, -(rd.len - rd.pos), OFFSET_CURRENT);
+    rd.pos = rd.len = 0;
+}
+
 /* A FORM 8SVX's sound (its first octave), len bytes after the type, from
  * fh into chip RAM; Fibonacci-delta packed ones unpacked. */
 static void snd_load(BPTR fh, ULONG len)
@@ -319,17 +403,18 @@ static void snd_load(BPTR fh, ULONG len)
     const UBYTE *vhdr = NULL, *body = NULL;
     ULONG bl = 0, n;
     struct Sound *s;
+    (void)fh;                               /* (read through rd) */
     if (nsnd >= SOUNDS) {
-        Seek(fh, len + (len & 1), OFFSET_CURRENT);
+        rd_skip(len + (len & 1));
         return;
     }
     s = &snd[nsnd++];                       /* numbered as they come, read or not */
-    if (!(b = AllocVec(len, MEMF_ANY)) || Read(fh, b, len) != (LONG)len) {
+    if (!(b = AllocVec(len, MEMF_ANY)) || rd_read(b, len) != (LONG)len) {
         FreeVec(b);
         return;
     }
     if (len & 1)
-        Seek(fh, 1, OFFSET_CURRENT);
+        rd_skip(1);
     for (p = b, e = b + len; p + 8 <= e;) {
         ULONG id = be32(p), cl = be32(p + 4);
         if (cl > (ULONG)(e - p - 8))
@@ -409,7 +494,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
     ULONG len, t0 = time_ms();
     const UBYTE *p, *e;
     for (;;) {
-        if (Read(fh, h, 12) != 12 || be32(h) != ID('F', 'O', 'R', 'M'))
+        if (rd_read(h, 12) != 12 || be32(h) != ID('F', 'O', 'R', 'M'))
             return FALSE;
         len = be32(h + 4);
         if (len < 4)
@@ -421,7 +506,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
             snd_load(fh, len);              /* a sound, before the first frame */
             continue;
         }
-        if (Seek(fh, len + (len & 1), OFFSET_CURRENT) < 0)  /* the rest: passed */
+        if (rd_skip(len + (len & 1)) < 0)  /* the rest: passed */
             return FALSE;
     }
     if (len > fbuf_size) {
@@ -432,10 +517,10 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
             return FALSE;
         }
     }
-    if (Read(fh, fbuf, len) != (LONG)len)
+    if (rd_read(fbuf, len) != (LONG)len)
         return FALSE;
     if (len & 1)
-        Seek(fh, 1, OFFSET_CURRENT);
+        rd_skip(1);
     memset(f, 0, sizeof(*f));
     for (p = fbuf, e = fbuf + len; p + 8 <= e;) {
         ULONG id = be32(p), cl = be32(p + 4);
@@ -862,6 +947,7 @@ static ULONG anim_length(BPTR fh, const char *path, ULONG first)
     ULONG jif = first, frames = 0, kf, kms;
     if (anim_fact_get(fh, path, &kf, &kms))
         return kms;
+    rd_sync();                              /* (it reads the file itself) */
     pos = Seek(fh, 0, OFFSET_CURRENT);
     while (frames < 20000 && Read(fh, h, 12) == 12 && be32(h) == ID('F', 'O', 'R', 'M')) {
         LONG len = be32(h + 4) - 4, got = 0;
@@ -1837,7 +1923,7 @@ restart:
             continue;
         }
         if (r == 3) {
-            if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, f, &readms) || !f->body)
+            if (rd_seek(12) < 0 || !read_frame(fh, f, &readms) || !f->body)
                 break;
             if (snd_on) {
                 snd_quiet(2);
@@ -1904,7 +1990,7 @@ restart:
         ULONG ms = time_ms() - start_ms;
         if (!runs)
             loop = ms < LOOP_MS;
-        if (loop && Seek(fh, 12, OFFSET_BEGINNING) >= 0 && read_frame(fh, f, &readms) && f->body) {
+        if (loop && rd_seek(12) >= 0 && read_frame(fh, f, &readms) && f->body) {
             runs++;
             goto restart;
         }
@@ -1967,7 +2053,8 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
         amce_strlcpy(err, _("The animation could not be opened"), errmax);
         return -1;
     }
-    if (Read(fh, head, 12) != 12 || be32(head) != ID('F', 'O', 'R', 'M') ||
+    rd_begin(fh);                           /* read ahead from here on */
+    if (rd_read(head, 12) != 12 || be32(head) != ID('F', 'O', 'R', 'M') ||
         be32(head + 8) != ID('A', 'N', 'I', 'M') || !read_frame(fh, &f, &readms) ||
         !f.bmhd || !f.body) {
         amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
@@ -1994,7 +2081,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
             goto out;
         }
         /* not here after all (bigger than the screen, no memory): its own screen */
-        if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, &f, &readms) || !f.body)
+        if (rd_seek(12) < 0 || !read_frame(fh, &f, &readms) || !f.body)
             goto out;
         camg = f.camg;
     }
@@ -2105,7 +2192,7 @@ restart:
             quit = 1;
             break;
         }
-        if (r == 3 && Seek(fh, loop_pos, OFFSET_BEGINNING) >= 0 && read_frame(fh, &f, &readms) &&
+        if (r == 3 && rd_seek(loop_pos) >= 0 && read_frame(fh, &f, &readms) &&
             f.body) {
             if (snd_on) {                   /* from the start: its sounds too */
                 snd_quiet(2);
@@ -2202,7 +2289,7 @@ restart:
         ULONG ms = time_ms() - start_ms;
         if (runs == 1)
             loop = ms < LOOP_MS;
-        if (loop && Seek(fh, loop_pos, OFFSET_BEGINNING) >= 0 && read_frame(fh, &f, &readms) &&
+        if (loop && rd_seek(loop_pos) >= 0 && read_frame(fh, &f, &readms) &&
             f.body)
             goto restart;
     }
@@ -2261,6 +2348,7 @@ out:
     FreeVec(fbuf);
     fbuf = NULL;
     fbuf_size = 0;
+    rd_end();
     Close(fh);
     return result;
 }
