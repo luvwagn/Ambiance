@@ -25,7 +25,10 @@ PYTHON ?= python3
 # A 68020 or better (its libraries from the toolchain's m68020-60
 # multilib); src/cpucheck.c alone is built for the 68000, to say so there.
 CPU     = -m68020-60
+# a sprintf that may write past its buffer (numbers at their widest) is
+# an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga

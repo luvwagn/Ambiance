@@ -3491,7 +3491,7 @@ static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
     WORD x1 = clock_left() - g.mark_px - U(8);  /* the playing bars' place kept */
-    char cpu[16], app[16], fps[16], forms[3][96];
+    char cpu[16], app[16], fps[24], forms[3][112];
     const char *show = "";
     ULONG chip, used;
     int i;
@@ -11027,7 +11027,7 @@ static void hold_stop(void)
         amce_log("coast", m);
     }
     if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
-        char m[200];
+        char m[320];
         LONG moved = p->sel - hold.from;
         sprintf(m, "%ld entries in %ld ms (%ld by the clock), longest frame %ld ms, "
                    "%ld frames over 40 ms; "
