@@ -438,7 +438,11 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         return FALSE;
     }
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
-    amce_log("screen open", modes[smode].label);
+    {
+        char m[80];
+        sprintf(m, "%s, %ld-bit", modes[smode].label, (long)g->depth);
+        amce_log("screen open", m);
+    }
     amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
 
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);

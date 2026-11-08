@@ -93,16 +93,18 @@ BOOL caps_mode_is_rtg(ULONG id)
            (di.PropertyFlags & DIPF_IS_FOREIGN) != 0;
 }
 
-/* The best available RTG mode with exactly this nominal size, or
- * INVALID_ID. The UI is 8-bit if the card has it: a quarter of the bytes
- * of 32-bit to draw, scroll and clear, and pictures get pens of their own
- * (a full-screen picture the whole palette). Else the deepest: 32-bit
- * (aligned longword pixels are the quickest to move), 24, then 15/16. */
+/* Which of a size's RTG modes: 16-bit first (pictures in their own colours,
+ * no colour reduction: covers 3.5x and full-screen pictures 2.5x faster
+ * than at 8 bits, the interface no slower: rtgbench, 2026-11-07), 15-bit,
+ * then 8-bit where the size has nothing deeper. 24 and 32-bit are not used:
+ * twice 16-bit's bytes for nothing this interface shows. */
 static UWORD depth_rank(UWORD d)
 {
-    return d == 8 ? 5 : d == 32 ? 4 : d == 24 ? 3 : (d == 16 || d == 15) ? 2 : 0;
+    return d == 16 ? 3 : d == 15 ? 2 : d == 8 ? 1 : 0;
 }
 
+/* The best available RTG mode with exactly this nominal size (depth_rank),
+ * or INVALID_ID. */
 ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth)
 {
     ULONG id = INVALID_ID, best = INVALID_ID;
