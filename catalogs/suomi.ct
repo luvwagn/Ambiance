@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Muutettu %s
 ; Changed %s
+MSG_412F4EA4
+%ld kansio
+; %ld folder
+MSG_74791C75
+%ld kansiota
+; %ld folders
+MSG_406E0E4E
+%ld animaatio
+; %ld animation
+MSG_2A406A07
+%ld animaatiota
+; %ld animations
+MSG_15840E5E
+Tuli tai Oikea: avaa
+; Fire or Right: open
 MSG_79550836
 Tässä kansiossa ei ole kuvia.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Tuli: kuvaesitys
 MSG_178CD224
 Oikea: avaa kansio
 ; Right: open the folder
-MSG_412F4EA4
-%ld kansio
-; %ld folder
-MSG_74791C75
-%ld kansiota
-; %ld folders
-MSG_15840E5E
-Tuli tai Oikea: avaa
-; Fire or Right: open
 MSG_6E4CA1B5
 Ei Fonts-laatikossa
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  takaisin
 MSG_00FED3FC
 Ladataan Plexistä...
 ; Loading from Plex...
+MSG_2DD7976F
+Ei kuva: IFF %s -tiedosto
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Kuvaesitys näistä %ld kuvasta
 ; Slideshow of these %ld photos

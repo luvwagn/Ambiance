@@ -352,6 +352,7 @@ struct Item {
                          * name; item_path() gives the whole path */
 #define ITEM_GONE     8 /* its letter's names were dropped to save memory (the
                          * label is the letter): read again before use */
+#define ITEM_HIDDEN  32 /* left out of the list being made (pics.c: Videos) */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading
@@ -411,6 +412,7 @@ const char *pics_format(const char *name);              /* "GIF".. by name, NULL
 LONG pics_read_dir(const char *dir, struct ItemList *out, BOOL vids);  /* -1: cannot be read; vids:
                                  * a Videos folder, its .iff files looked inside (ANIMs) */
 BOOL pics_is_anim(const char *path);                    /* an IFF ANIM, whatever its name */
+const char *pics_iff_kind(const char *path);            /* an IFF file's FORM ("ILBM", "8SVX".. ) */
 /* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);

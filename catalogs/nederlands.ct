@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Gewijzigd %s
 ; Changed %s
+MSG_412F4EA4
+%ld map
+; %ld folder
+MSG_74791C75
+%ld mappen
+; %ld folders
+MSG_406E0E4E
+%ld animatie
+; %ld animation
+MSG_2A406A07
+%ld animaties
+; %ld animations
+MSG_15840E5E
+Vuur of Rechts: openen
+; Fire or Right: open
 MSG_79550836
 Geen afbeeldingen in deze map.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Vuur: diavoorstelling
 MSG_178CD224
 Rechts: de map openen
 ; Right: open the folder
-MSG_412F4EA4
-%ld map
-; %ld folder
-MSG_74791C75
-%ld mappen
-; %ld folders
-MSG_15840E5E
-Vuur of Rechts: openen
-; Fire or Right: open
 MSG_6E4CA1B5
 Niet in de lade Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  terug
 MSG_00FED3FC
 Laden vanaf Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Geen afbeelding: een IFF %s-bestand
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Diavoorstelling van deze %ld foto's
 ; Slideshow of these %ld photos

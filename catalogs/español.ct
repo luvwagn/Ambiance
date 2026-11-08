@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Modificado %s
 ; Changed %s
+MSG_412F4EA4
+%ld carpeta
+; %ld folder
+MSG_74791C75
+%ld carpetas
+; %ld folders
+MSG_406E0E4E
+%ld animación
+; %ld animation
+MSG_2A406A07
+%ld animaciones
+; %ld animations
+MSG_15840E5E
+Disparo o Derecha: abrir
+; Fire or Right: open
 MSG_79550836
 No hay imágenes en esta carpeta.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Disparo: pase de imágenes
 MSG_178CD224
 Derecha: abrir la carpeta
 ; Right: open the folder
-MSG_412F4EA4
-%ld carpeta
-; %ld folder
-MSG_74791C75
-%ld carpetas
-; %ld folders
-MSG_15840E5E
-Disparo o Derecha: abrir
-; Fire or Right: open
 MSG_6E4CA1B5
 No está en el cajón Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  atrás
 MSG_00FED3FC
 Cargando desde Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+No es una imagen: un archivo IFF %s
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Pase de estas %ld fotos
 ; Slideshow of these %ld photos

@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 %sを変更しました
 ; Changed %s
+MSG_412F4EA4
+%ldフォルダー
+; %ld folder
+MSG_74791C75
+%ldフォルダー
+; %ld folders
+MSG_406E0E4E
+アニメーション%ld個
+; %ld animation
+MSG_2A406A07
+アニメーション%ld個
+; %ld animations
+MSG_15840E5E
+ボタンか右: 開く
+; Fire or Right: open
 MSG_79550836
 このフォルダーに画像はありません。
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ MSG_52C18255
 MSG_178CD224
 右: フォルダーを開く
 ; Right: open the folder
-MSG_412F4EA4
-%ldフォルダー
-; %ld folder
-MSG_74791C75
-%ldフォルダー
-; %ld folders
-MSG_15840E5E
-ボタンか右: 開く
-; Fire or Right: open
 MSG_6E4CA1B5
 Fontsドロワーにありません
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc 戻る
 MSG_00FED3FC
 Plexから読み込み中...
 ; Loading from Plex...
+MSG_2DD7976F
+画像ではありません: IFF %sファイルです
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 この%ld枚の写真のスライドショー
 ; Slideshow of these %ld photos

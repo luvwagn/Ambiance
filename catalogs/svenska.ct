@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Ändrad %s
 ; Changed %s
+MSG_412F4EA4
+%ld mapp
+; %ld folder
+MSG_74791C75
+%ld mappar
+; %ld folders
+MSG_406E0E4E
+%ld animation
+; %ld animation
+MSG_2A406A07
+%ld animationer
+; %ld animations
+MSG_15840E5E
+Avfyra eller Höger: öppna
+; Fire or Right: open
 MSG_79550836
 Inga bilder i den här mappen.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Avfyra: bildspel
 MSG_178CD224
 Höger: öppna mappen
 ; Right: open the folder
-MSG_412F4EA4
-%ld mapp
-; %ld folder
-MSG_74791C75
-%ld mappar
-; %ld folders
-MSG_15840E5E
-Avfyra eller Höger: öppna
-; Fire or Right: open
 MSG_6E4CA1B5
 Finns inte i lådan Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  tillbaka
 MSG_00FED3FC
 Läser in från Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Inte en bild: en IFF %s-fil
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Bildspel med dessa %ld foton
 ; Slideshow of these %ld photos

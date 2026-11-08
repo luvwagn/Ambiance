@@ -97,6 +97,25 @@ static const char *entry_format(const char *dir, const char *name, BOOL vids)
     return strchr(name, '.') ? NULL : sniff(path);
 }
 
+/* What an IFF file holds: its FORM's type ("ILBM", "ANIM", "8SVX"..),
+ * NULL if not IFF or not to be read. */
+const char *pics_iff_kind(const char *path)
+{
+    static char kind[5];            /* (the UI's alone) */
+    UBYTE b[12];
+    LONG n = 0;
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    if (fh) {
+        n = Read(fh, b, sizeof(b));
+        Close(fh);
+    }
+    if (n < 12 || memcmp(b, "FORM", 4))
+        return NULL;
+    memcpy(kind, b + 8, 4);
+    kind[4] = 0;
+    return kind;
+}
+
 BOOL pics_is_anim(const char *path)
 {
     const char *s = sniff(path);
@@ -203,6 +222,42 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
     return n;
 }
 
+/* An animation anywhere in dir, down to depth folders more (Videos: a
+ * folder with none in it is not listed). */
+struct anim_ctx {
+    const char *dir;
+    int depth;
+    BOOL found;
+};
+
+static BOOL any_anim(const char *dir, int depth);
+
+static void any_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct anim_ctx *c = ctx;
+    const char *f;
+    char path[300];
+    if (c->found)
+        return;
+    if (isdir) {
+        if (c->depth > 0) {
+            join_path(path, sizeof(path), c->dir, name);
+            c->found = any_anim(path, c->depth - 1);
+        }
+    } else if ((f = entry_format(c->dir, name, TRUE)) && !strcmp(f, "ANIM"))
+        c->found = TRUE;
+}
+
+static BOOL any_anim(const char *dir, int depth)
+{
+    struct anim_ctx c;
+    c.dir = dir;
+    c.depth = depth;
+    c.found = FALSE;
+    dir_scan(dir, any_cb, &c);
+    return c.found;
+}
+
 /* Add dir's folders and pictures to out, unsorted; a letter folder's
  * entries instead of the folder itself. */
 struct collect_ctx {
@@ -259,8 +314,13 @@ static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
             it->sortkey = (char *)(f ? f : "");
         } else {
             LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na, vids);
-            if (vids)
-                np = 0;                         /* Videos: its pictures are not shown */
+            if (vids) {
+                np = 0;                         /* Videos: its pictures are not shown, */
+                if (!na && !(nd && any_anim(it->path, 3))) {
+                    it->flags |= ITEM_HIDDEN;   /* ...nor a folder with no animation in it */
+                    continue;
+                }
+            }
             it->sortkey = (char *)"";
             if (na > 0 && np <= 0 && nd == 0) {
                 char num[12];                   /* animations: opened, one played at a time */
@@ -279,6 +339,13 @@ static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
                 it->flags |= ITEM_DISABLED;     /* nothing in it to show */
             }
         }
+    }
+    if (vids) {                                 /* the hidden ones out */
+        LONG k = 0;
+        for (i = 0; i < out->count; i++)
+            if (!(out->items[i].flags & ITEM_HIDDEN))
+                out->items[k++] = out->items[i];
+        out->count = k;
     }
     return out->count;
 }

@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Endret %s
 ; Changed %s
+MSG_412F4EA4
+%ld mappe
+; %ld folder
+MSG_74791C75
+%ld mapper
+; %ld folders
+MSG_406E0E4E
+%ld animasjon
+; %ld animation
+MSG_2A406A07
+%ld animasjoner
+; %ld animations
+MSG_15840E5E
+Skyt eller Høyre: åpne
+; Fire or Right: open
 MSG_79550836
 Ingen bilder i denne mappen.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Skyt: lysbildefremvisning
 MSG_178CD224
 Høyre: åpne mappen
 ; Right: open the folder
-MSG_412F4EA4
-%ld mappe
-; %ld folder
-MSG_74791C75
-%ld mapper
-; %ld folders
-MSG_15840E5E
-Skyt eller Høyre: åpne
-; Fire or Right: open
 MSG_6E4CA1B5
 Ikke i skuffen Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  tilbake
 MSG_00FED3FC
 Laster fra Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Ikke et bilde: en IFF %s-fil
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Lysbildefremvisning av disse %ld bildene
 ; Slideshow of these %ld photos

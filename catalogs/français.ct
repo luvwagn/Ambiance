@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Modifié le %s
 ; Changed %s
+MSG_412F4EA4
+%ld dossier
+; %ld folder
+MSG_74791C75
+%ld dossiers
+; %ld folders
+MSG_406E0E4E
+%ld animation
+; %ld animation
+MSG_2A406A07
+%ld animations
+; %ld animations
+MSG_15840E5E
+Feu ou Droite : ouvrir
+; Fire or Right: open
 MSG_79550836
 Aucune image dans ce dossier.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Feu : diaporama
 MSG_178CD224
 Droite : ouvrir le dossier
 ; Right: open the folder
-MSG_412F4EA4
-%ld dossier
-; %ld folder
-MSG_74791C75
-%ld dossiers
-; %ld folders
-MSG_15840E5E
-Feu ou Droite : ouvrir
-; Fire or Right: open
 MSG_6E4CA1B5
 Absente du tiroir Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  retour
 MSG_00FED3FC
 Chargement depuis Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Pas une image : un fichier IFF %s
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Diaporama de ces %ld photos
 ; Slideshow of these %ld photos

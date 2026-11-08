@@ -4461,6 +4461,23 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             sprintf(line, _("Changed %s"), date);
             pv_line(line, w);
         }
+    } else if (cur() && cur()->pics == 2) {     /* Videos: its animations, not its pictures */
+        LONG na = 0;
+        const char *c = it->sortkey;
+        while (c && *c >= '0' && *c <= '9')
+            na = na * 10 + (*c++ - '0');    /* its count, as its row's tag */
+        line[0] = 0;
+        if (j->nd > 0)
+            sprintf(line, j->nd == 1 ? _("%ld folder") : _("%ld folders"), (long)j->nd);
+        if (na > 0) {
+            if (line[0])
+                strcat(line, ", ");
+            sprintf(line + strlen(line), na == 1 ? _("%ld animation") : _("%ld animations"), (long)na);
+        }
+        if (line[0])
+            pv_line(line, w);
+        pv_line("", w);
+        pv_line(_("Fire or Right: open"), w);
     } else if ((it->flags & ITEM_DISABLED) || (j->np <= 0 && j->nd == 0)) {
         pv_line(_("No pictures in this folder."), w);
     } else if (j->nd == 0) {
@@ -8663,11 +8680,21 @@ static void view_from_page(struct Page *p)
     LONG vis, last;
     struct Item *it = p->sel >= 0 && p->sel < p->list.count ? &p->list.items[p->sel] : NULL;
     const char *f = it ? pics_format(it->label) : NULL;
-    if (it && f && !strcmp(f, "ILBM") && pics_is_anim(it->path)) {
-        it->kind = IT_ANIM;                 /* an animation by a picture's name (.iff) */
-        it->sortkey = (char *)"ANIM";
-        anim_from_page(p);
-        return;
+    if (it && f && !strcmp(f, "ILBM")) {    /* by an IFF name: what it holds */
+        const char *k = pics_iff_kind(it->path);
+        if (k && !strcmp(k, "ANIM")) {
+            it->kind = IT_ANIM;             /* an animation by a picture's name (.iff) */
+            it->sortkey = (char *)"ANIM";
+            anim_from_page(p);
+            return;
+        }
+        if (k && strcmp(k, "ILBM") && strcmp(k, "PBM ")) {
+            char m[80];                     /* not a picture: a sound (8SVX), music (SMUS).. */
+            sprintf(m, _("Not a picture: an IFF %s file"), k);
+            set_msg(m);
+            draw_footer();
+            return;
+        }
     }
     vis = list_visible();
     last = viewer_run(&p->list, p->sel, FALSE);

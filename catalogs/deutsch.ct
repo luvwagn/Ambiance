@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Geändert %s
 ; Changed %s
+MSG_412F4EA4
+%ld Ordner
+; %ld folder
+MSG_74791C75
+%ld Ordner
+; %ld folders
+MSG_406E0E4E
+%ld Animation
+; %ld animation
+MSG_2A406A07
+%ld Animationen
+; %ld animations
+MSG_15840E5E
+Feuer oder Rechts: öffnen
+; Fire or Right: open
 MSG_79550836
 Keine Bilder in diesem Ordner.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Feuer: Diashow
 MSG_178CD224
 Rechts: Ordner öffnen
 ; Right: open the folder
-MSG_412F4EA4
-%ld Ordner
-; %ld folder
-MSG_74791C75
-%ld Ordner
-; %ld folders
-MSG_15840E5E
-Feuer oder Rechts: öffnen
-; Fire or Right: open
 MSG_6E4CA1B5
 Nicht in der Schublade Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  zurück
 MSG_00FED3FC
 Lade von Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Kein Bild: eine IFF-%s-Datei
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Diashow dieser %ld Fotos
 ; Slideshow of these %ld photos

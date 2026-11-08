@@ -297,18 +297,17 @@ int main(void)
     }
 
     /* Videos: animations and folders only; an ANIM by a picture's name
-     * (.iff) looked inside; a folder of pictures alone greyed. Read as
+     * (.iff) looked inside; a folder with no animation in it left out. Read as
      * Pictures, a .iff is not opened (found when it is opened). */
     {
         list_init(&l);
         n = pics_read_dir("Videos:", &l, TRUE);
-        check_long("vids count", n, 3);
+        check_long("vids count (Logo: pictures alone, left out)", n, 3);
         if (n == 3) {
             check_str("vids folder", l.items[0].label, "Clips");
             check_str("vids folder count", l.items[0].sortkey, "1");
             check_long("vids folder open", l.items[0].flags & ITEM_DISABLED, 0);
-            check_str("vids pictures folder", l.items[1].label, "Logo");
-            check_long("vids pictures folder greyed", l.items[1].flags & ITEM_DISABLED, ITEM_DISABLED);
+            check_str("vids deep folder (an animation further in)", l.items[1].label, "Deep");
             check_str("vids anim", l.items[2].label, "Spin.iff");
             check_long("vids anim kind", l.items[2].kind, IT_ANIM);
             check_str("vids anim tag", l.items[2].sortkey, "ANIM");
@@ -316,9 +315,9 @@ int main(void)
         list_free(&l);
         list_init(&l);
         n = pics_read_dir("Videos:", &l, FALSE);
-        check_long("pics of Videos count", n, 4);
-        if (n == 4)
-            check_long("pics .iff not opened", l.items[2].kind, IT_PIC);
+        check_long("pics of Videos count", n, 5);
+        if (n == 5)
+            check_long("pics .iff not opened", l.items[3].kind, IT_PIC);
         list_free(&l);
         check_long("is anim", pics_is_anim("Videos:Spin.iff"), TRUE);
         check_long("is not anim", pics_is_anim("Videos:Still.iff"), FALSE);

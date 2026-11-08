@@ -736,6 +736,21 @@ MSG_1403F9F1
 MSG_79CC558D
 Ændret %s
 ; Changed %s
+MSG_412F4EA4
+%ld mappe
+; %ld folder
+MSG_74791C75
+%ld mapper
+; %ld folders
+MSG_406E0E4E
+%ld animation
+; %ld animation
+MSG_2A406A07
+%ld animationer
+; %ld animations
+MSG_15840E5E
+Skyd eller Højre: åbn
+; Fire or Right: open
 MSG_79550836
 Ingen billeder i denne mappe.
 ; No pictures in this folder.
@@ -751,15 +766,6 @@ Skyd: diasshow
 MSG_178CD224
 Højre: åbn mappen
 ; Right: open the folder
-MSG_412F4EA4
-%ld mappe
-; %ld folder
-MSG_74791C75
-%ld mapper
-; %ld folders
-MSG_15840E5E
-Skyd eller Højre: åbn
-; Fire or Right: open
 MSG_6E4CA1B5
 Ikke i skuffen Fonts
 ; Not in the Fonts drawer
@@ -964,6 +970,9 @@ Esc  tilbage
 MSG_00FED3FC
 Indlæser fra Plex...
 ; Loading from Plex...
+MSG_2DD7976F
+Ikke et billede: en IFF %s-fil
+; Not a picture: an IFF %s file
 MSG_4FD7ED09
 Diasshow af disse %ld fotos
 ; Slideshow of these %ld photos
