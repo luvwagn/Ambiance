@@ -573,7 +573,7 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * they cover is kept (save[k]) and put back before the next frame is
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
-enum { BT_RESTART, BT_PLAY, BT_STOP, BT_VDOWN, BT_VUP, BT_N };
+enum { BT_RESTART, BT_PLAY, BT_STOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };   /* full: AmigaMCE's screen */
 static struct {
     BOOL on, ok;                /* shown; it can be (its memory and font) */
     BOOL saved[2];              /* buffer k has it drawn, what it covers in save[k] */
@@ -601,7 +601,7 @@ enum { CM_NONE, CM_MOUSE, CM_KEY };
 static struct {
     ULONG moved, opened, key;       /* clocks: the mouse last moved, the window opened, a key */
     ULONG moved_seen, key_seen;
-    int mode, focus;
+    int mode, focus, nbtn;          /* nbtn: the buttons it has (BT_FULL: not that one) */
     BOOL shown, ptr;
     UWORD *blank;                   /* an empty pointer (chip memory) */
     struct Window *win;
@@ -614,6 +614,7 @@ static void ctl_begin(struct Window *win, UWORD *blank)
     ctl.blank = blank;
     ctl.opened = time_ms();
     ctl.focus = 1;                  /* BT_PLAY */
+    ctl.nbtn = 5;                   /* BT_FULL: not on a screen of its own */
     if (blank)
         SetPointer(win, blank, 1, 16, 0, 0);
 }
@@ -779,7 +780,7 @@ static void bar_put(struct BitMap *bm, int k)
     SetAPen(rp, bar.dim);
     RectFill(rp, bar.x0, bar.y, bar.x1, bar.y);
     ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
-    for (i = 0, x = bar.x0 + 4; i < BT_N; i++, x += bar.cw) {
+    for (i = 0, x = bar.x0 + 4; i < BT_FULL; i++, x += bar.cw) {
         WORD ix;
         if (i == BT_VUP) {                  /* the volume between - and + */
             WORD vw = TextLength(rp, (STRPTR)"100%", 4) + 4;
@@ -844,7 +845,7 @@ static int bar_hit(WORD x, WORD y)
     int i;
     if (!bar.on || y < bar.y || y >= bar.y + bar.h)
         return -1;
-    for (i = 0; i < BT_N; i++)
+    for (i = 0; i < BT_FULL; i++)
         if (x >= bar.bx[i] && x < bar.bx[i] + bar.cw)
             return i;
     return -1;
@@ -892,7 +893,8 @@ static void volume(int d)
     bar_redraw = TRUE;
 }
 
-/* A button pressed: 1 stop, 2 pause or go on, 3 from the start, 0 else. */
+/* A button pressed: 1 stop, 2 pause or go on, 3 from the start, 4 full
+ * screen or not, 0 else. */
 static int ctl_press(int b)
 {
     switch (b) {
@@ -908,6 +910,8 @@ static int ctl_press(int b)
     case BT_VUP:
         volume(VOL_STEP);
         break;
+    case BT_FULL:
+        return 4;
     }
     return 0;
 }
@@ -918,7 +922,7 @@ static void ctl_move(int d)
 {
     if (ctl.shown && ctl.mode == CM_KEY) {
         int f = ctl.focus + d;
-        if (f >= 0 && f < BT_N)
+        if (f >= 0 && f < ctl.nbtn)
             ctl.focus = f;
     }
     bar_redraw = TRUE;
@@ -930,8 +934,8 @@ static int ctl_enter(void)
     return ctl_press(ctl.shown && ctl.mode == CM_KEY ? ctl.focus : BT_PLAY);
 }
 
-/* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 0
- * nothing; the volume set here, the mouse's moves noted (the controls).
+/* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 4
+ * full screen or not (AmigaMCE's screen), 0 nothing; the volume set here, the mouse's moves noted (the controls).
  * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
  * the controls but no button. */
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
@@ -957,6 +961,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 2;
             else if ((code == 0x44 || code == 0x43) && !r)  /* Return, Enter */
                 r = ctl_enter();
+            else if (code == 0x23 && !r)            /* F: full screen or not */
+                r = 4;
             else if (code == 0x4F)                  /* Left, Right: the focus */
                 ctl_move(-1);
             else if (code == 0x4E)
@@ -972,6 +978,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 2;
             else if (code == 13 && !r)
                 r = ctl_enter();
+            else if ((code == 'f' || code == 'F') && !r)
+                r = 4;
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
@@ -1234,14 +1242,16 @@ static BOOL row_span(const UBYTE *a, const UBYTE *b, ULONG rb, UBYTE depth, ULON
 }
 
 /* Byte columns x0 to x1 (one past) of a row of planes into the screen's
- * memory at out (the row's first pixel), each pixel fx wide. HAM: each
- * pixel hangs on the one before, so the row is worked out from its start,
- * and written from x0 to its end. */
+ * memory at out (the row's first pixel). Source pixel px goes to pixels
+ * xo[px] to xo[px + 1] - 1; fx, if not 0, the whole number that is the
+ * same (and quicker). HAM: each pixel hangs on the one before, so the row
+ * is worked out from its start, and written from x0 to its end. */
 static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, ULONG x1, UWORD fx,
-                    BOOL ham, const ULONG *lut, const UWORD *l16, UBYTE *out)
+                    const UWORD *xo, BOOL ham, const ULONG *lut, const UWORD *l16, UBYTE *out)
 {
     ULONG x, i, hb = depth == 8 ? 6 : 4, lo4 = (1UL << hb) - 1, r = 0, gg = 0, b = 0;
     UBYTE t[8];
+    UWORD *o16 = (UWORD *)out;
     ULONG wx = x0;                  /* HAM: written from here */
     if (ham) {
         x0 = 0;
@@ -1252,6 +1262,7 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
     }
     for (x = x0; x < x1; x++) {
         ULONG h = 0, l = 0, n = w - x * 8;
+        const UWORD *xp = xo + x * 8;
         UBYTE p;
         for (p = 0; p < depth; p++) {
             UBYTE c = row[p * rb + x];
@@ -1263,10 +1274,9 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
         if (n > 8)
             n = 8;
         if (ham) {
-            UWORD *o = (UWORD *)(out + x * 8 * fx * 2);
-            ULONG *o2 = (ULONG *)o;
+            ULONG *o2 = (ULONG *)(o16 + xp[0]);
             for (i = 0; i < n; i++) {
-                ULONG c = t[i], v = c & lo4, ctl = c >> hb, pix, j;
+                ULONG c = t[i], v = c & lo4, ctl = c >> hb, pix;
                 v = hb == 4 ? v * 17 : (v << 2) | (v >> 4);
                 if (ctl == 0) {
                     r = (lut[v = c & lo4] >> 16) & 255;
@@ -1283,48 +1293,69 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
                 pix = rt[r] | gt[gg] | bt[b];
                 if (fx == 2)
                     o2[i] = pix | (pix << 16);
-                else
-                    for (j = 0; j < fx; j++)
-                        o[i * fx + j] = pix;
+                else {
+                    UWORD *q = o16 + xp[i], *e = o16 + xp[i + 1];
+                    while (q < e)
+                        *q++ = pix;
+                }
             }
         } else if (fx == 2) {
-            ULONG *o = (ULONG *)(out + x * 32);
+            ULONG *o = (ULONG *)(o16 + xp[0]);
             for (i = 0; i < n; i++) {
                 ULONG pix = l16[t[i]];
                 *o++ = pix | (pix << 16);
             }
         } else if (fx == 1) {
-            UWORD *o = (UWORD *)(out + x * 16);
+            UWORD *o = o16 + xp[0];
             for (i = 0; i < n; i++)
                 *o++ = l16[t[i]];
         } else {
-            UWORD *o = (UWORD *)(out + x * 8 * fx * 2), j;
-            for (i = 0; i < n; i++)
-                for (j = 0; j < fx; j++)
-                    *o++ = l16[t[i]];
+            for (i = 0; i < n; i++) {
+                UWORD pix = l16[t[i]], *q = o16 + xp[i], *e = o16 + xp[i + 1];
+                while (q < e)
+                    *q++ = pix;
+            }
         }
     }
 }
+
+/* Where the picture goes on AmigaMCE's screen: dw x dh at vx, vy; source
+ * pixel x at xo[x] (to xo[x + 1]), row y at yo[y] (to yo[y + 1]); fx, fy
+ * the whole scales, or 0. Full: as large as the screen allows, its shape
+ * kept, under the controls when they show; else the largest whole scale
+ * above them. */
+static struct {
+    WORD dw, dh, vx, vy, fx, fy;
+    UWORD *xo, *yo;
+    BOOL full, can_full;
+    struct BitMap *pbm;             /* the picture, drawn here, then blitted onto the screen */
+} lay;
+static BOOL anim_full;          /* full screen chosen (for this run) */
 
 /* The controls beneath the picture */
 static struct {
     WORD y, h, x0, cw, px0, px1, cy, fill;
     ULONG sec;
     UWORD vol;
-    BOOL paused, bar, ring;
+    BOOL paused, bar, ring, full;
     int focus;
     WORD bx[BT_N];                  /* each button's left */
 } st;
 
 static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
 {
-    WORD x, s = st.h - GU(g, 6), cy = st.y + st.h / 2, t = s > 14 ? 2 : 1, i;
+    WORD x, s = st.h - GU(g, 6), cy = st.y + st.h / 2, t = s > 14 ? 2 : 1, i, xt = -1;
     char a[16], b[16], line[64];
     gfx_fill(g, 0, st.y, g->w - 1, st.y + st.h - 1, PEN_BG);
     st.ring = ctl_ring();
     st.focus = ctl.focus;
-    for (i = 0, x = st.x0; i < BT_N; i++, x += st.cw) {
+    st.full = lay.full;
+    for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
         WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
+        if (i == BT_FULL) {                 /* full screen: at the right end */
+            xt = x;
+            x = g->w - GU(g, 8) - st.cw;
+        }
         if (i == BT_VUP) {                  /* the volume between - and + */
             WORD vw = gfx_textlen(g, "100%", TS_BODY) + GU(g, 8);
             sprintf(line, "%ld%%", (long)(mp_volume() * 100 / 64));
@@ -1370,6 +1401,26 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
         case BT_STOP:
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
             break;
+        case BT_FULL: {                     /* four corners: out to fill, in to come back */
+            WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;
+            for (c = 0; c < 4; c++) {
+                WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
+                if (!lay.full) {            /* at the box's corners, arms along its edges */
+                    px = dx > 0 ? ix + a : ix + s - 1 - a;
+                    py = dy > 0 ? iy + a : iy + s - 1 - a;
+                } else {                    /* by the middle, arms outwards */
+                    px = ccx - dx * gap;
+                    py = ccy - dy * gap;
+                    dx = -dx;
+                    dy = -dy;
+                }
+                RectFill(g->rp, dx > 0 ? px : px - L + 1, dy > 0 ? py : py - t + 1,
+                         dx > 0 ? px + L - 1 : px, dy > 0 ? py + t - 1 : py);
+                RectFill(g->rp, dx > 0 ? px : px - t + 1, dy > 0 ? py : py - L + 1,
+                         dx > 0 ? px + t - 1 : px, dy > 0 ? py + L - 1 : py);
+            }
+            break;
+        }
         default:
             RectFill(g->rp, ix + s / 4, cy - t / 2, ix + s - s / 4, cy - t / 2 + t - 1);
             if (i == BT_VUP)
@@ -1378,6 +1429,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             break;
         }
     }
+    if (xt >= 0)
+        x = xt;
     time_text(a, at);
     if (total) {
         time_text(b, total);
@@ -1388,7 +1441,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
     x += gfx_textlen(g, line, TS_BODY) + GU(g, 8);
     st.px0 = x;
-    st.px1 = g->w - 1 - GU(g, 8);
+    st.px1 = (xt >= 0 ? st.bx[BT_FULL] : g->w) - 1 - GU(g, 8);
     st.cy = cy;
     st.sec = at / 1000;
     st.vol = mp_volume();
@@ -1452,6 +1505,26 @@ static struct {
     ULONG step_at;
 } sf;
 
+/* The picture's x0-x1, y0-y1 (one past) onto the screen from its bitmap,
+ * not over the controls while they show. */
+static void pic_blit(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    if (!lay.pbm)
+        return;
+    if (sf.lv > 0 && lay.vy + y1 > st.y)
+        y1 = st.y - lay.vy;
+    if (x1 > x0 && y1 > y0)
+        BltBitMapRastPort(lay.pbm, x0, y0, g->rp, lay.vx + x0, lay.vy + y0, x1 - x0, y1 - y0, 0xC0);
+}
+
+/* The controls gone: black there, and the picture where it reaches. */
+static void strip_clear(struct Gfx *g)
+{
+    FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
+    if (lay.vy + lay.dh > st.y)
+        pic_blit(g, 0, st.y - lay.vy, lay.dw, lay.dh);
+}
+
 static void strip_render(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG total,
                          const char *name, BOOL *changed)
 {
@@ -1476,13 +1549,13 @@ static void strip_show(struct Gfx *g)
 {
     if (!sf.bm) {
         if (sf.lv <= 0)
-            FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
+            strip_clear(g);
         return;                             /* else drawn already */
     }
     if (sf.lv >= FADE_N)
         BltBitMapRastPort(sf.bm, 0, 0, g->rp, 0, st.y, g->w, st.h, 0xC0);
     else if (sf.lv <= 0)
-        FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
+        strip_clear(g);
     else {
         UBYTE t[256];
         ULONG i, n = (ULONG)g->w * st.h * 3, k = (ULONG)sf.lv * sf.lv * 256 / (FADE_N * FADE_N);
@@ -1513,7 +1586,7 @@ static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     }
     if (lv > 0 || target > 0) {
         if (!sf.drawn || at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol ||
-            ctl_ring() != st.ring || ctl.focus != st.focus) {
+            ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full) {
             strip_render(g, TRUE, paused, at, total, name, &changed);
             sf.drawn = TRUE;
         } else
@@ -1570,10 +1643,63 @@ static int strip_hit(WORD x, WORD y)
     int i;
     if (y < st.y)
         return -1;                          /* the picture: pauses */
-    for (i = 0; i < BT_N; i++)
+    if (!ctl.shown)
+        return -1;                          /* hidden: anywhere pauses */
+    for (i = 0; i < ctl.nbtn; i++)
         if (x >= st.bx[i] && x < st.bx[i] + st.cw)
             return i;
     return -2;                              /* the controls, no button */
+}
+
+/* The picture's place (lay): the largest whole scale above the controls,
+ * or (full) as large as the screen allows, its shape kept; never smaller
+ * than the first. FALSE if it is bigger than the screen. */
+static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full)
+{
+    WORD avail = st.y - GU(g, 8), kk, fx, fy, dw, dh;
+    ULONG i;
+    kk = (g->w - GU(g, 16)) / (w * ax);
+    if (avail / (h * ay) < kk)
+        kk = avail / (h * ay);
+    if (kk >= 1) {
+        fx = ax * kk;
+        fy = ay * kk;
+    } else if (w <= g->w && h <= avail)
+        fx = fy = 1;                        /* as it is, its shape aside */
+    else
+        return FALSE;
+    dw = w * fx;
+    dh = h * fy;
+    lay.vx = (g->w - dw) / 2;
+    lay.vy = GU(g, 4) + (avail - dh) / 2;
+    lay.full = full;
+    if (full) {
+        LONG sw = (LONG)w * ax, sh = (LONG)h * ay, W = g->w, H = g->h, fw, fh;
+        if (sw * H <= sh * W) {
+            fh = H;
+            fw = sw * H / sh;
+        } else {
+            fw = W;
+            fh = sh * W / sw;
+        }
+        if (fw >= dw && fh >= dh) {
+            dw = (WORD)fw;
+            dh = (WORD)fh;
+            fx = dw % w ? 0 : dw / w;
+            fy = dh % h ? 0 : dh / h;
+            lay.vx = (g->w - dw) / 2;
+            lay.vy = (g->h - dh) / 2;
+        }
+    }
+    lay.dw = dw;
+    lay.dh = dh;
+    lay.fx = fx;
+    lay.fy = fy;
+    for (i = 0; i <= w; i++)
+        lay.xo[i] = (UWORD)(i * dw / w);
+    for (i = 0; i <= h; i++)
+        lay.yo[i] = (UWORD)(i * dh / h);
+    return TRUE;
 }
 
 /* 0 played, -1 an error (err), 1 too slow here: the caller plays it on a
@@ -1587,10 +1713,9 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     ULONG stripms = 0, nrows = 0, nskip = 0, skips = 0, fmt = 0;
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     UWORD *l16 = NULL;
-    struct BitMap *pbm = NULL;      /* the picture, drawn here, then blitted onto the screen */
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
-    BOOL direct = FALSE, fresh = TRUE, skip = FALSE;
-    WORD ax, ay, kk, fx, fy, dw, dh, vx, vy, avail, ox = 0, oy = 0;
+    BOOL direct = FALSE, fresh = TRUE, skip = FALSE, relaid = FALSE;
+    WORD ax, ay, fx, fy, dw, dh, vx, vy, ox = 0, oy = 0;
     struct AnimPlanes pl[2];
     LONG result = -1;
     int k, i, n, quit = 0, shown;
@@ -1607,21 +1732,16 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     }
     st.h = g->font_h + GU(g, 12);
     st.y = g->h - st.h;
-    avail = st.y - GU(g, 8);
-    kk = (g->w - GU(g, 16)) / (w * ax);
-    if (avail / (h * ay) < kk)
-        kk = avail / (h * ay);
-    if (kk >= 1) {
-        fx = ax * kk;
-        fy = ay * kk;
-    } else if (w <= g->w && h <= avail)
-        fx = fy = 1;                        /* as it is, its shape aside */
-    else
+    memset(&lay, 0, sizeof(lay));
+    if (!(lay.xo = AllocVec((w + 1) * sizeof(UWORD), MEMF_ANY)) ||
+        !(lay.yo = AllocVec((h + 1) * sizeof(UWORD), MEMF_ANY)) || !lay_out(g, w, h, ax, ay, FALSE)) {
+        FreeVec(lay.xo);
+        FreeVec(lay.yo);
+        memset(&lay, 0, sizeof(lay));
         return 1;                           /* bigger than this screen: its own */
-    dw = w * fx;
-    dh = h * fy;
-    vx = (g->w - dw) / 2;
-    vy = GU(g, 4) + (avail - dh) / 2;
+    }
+    dw = lay.dw;
+    dh = lay.dh;
     st.cw = st.h + GU(g, 6);
     st.x0 = GU(g, 8);
 
@@ -1644,20 +1764,38 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     /* Written into a bitmap of its own, not the screen's: locking what is
      * shown hides a pointer the system draws itself (PrismRTG's, Picasso96's
      * software one) each frame, and it flickers. Its changes blitted over. */
-    if (direct && (pbm = AllocBitMap(dw, dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
-                                     g->rp->BitMap))) {
+    if (direct) {                           /* big enough for it full screen, if it can be */
+        lay_out(g, w, h, ax, ay, TRUE);
+        lay.can_full = TRUE;
+        if (!(lay.pbm = AllocBitMap(lay.dw, lay.dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH),
+                                    BMF_MINPLANES, g->rp->BitMap))) {
+            lay.can_full = FALSE;
+            lay.pbm = AllocBitMap(dw, dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                                  g->rp->BitMap);
+        }
+    }
+    if (lay.pbm) {
         UBYTE *base = NULL;
         ULONG bpr = 0, f2 = 0;
-        APTR lk = GetCyberMapAttr(pbm, CYBRMATTR_ISCYBERGFX)
-                      ? LockBitMapTags(pbm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
-                                       LBMI_PIXFMT, (ULONG)&f2, TAG_DONE) : NULL;
+        APTR lk = GetCyberMapAttr(lay.pbm, CYBRMATTR_ISCYBERGFX)
+                      ? LockBitMapTags(lay.pbm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW,
+                                       (ULONG)&bpr, LBMI_PIXFMT, (ULONG)&f2, TAG_DONE) : NULL;
         if (lk)
             UnLockBitMap(lk);
         if (!lk || !base || f2 != fmt) {
-            FreeBitMap(pbm);
-            pbm = NULL;
+            FreeBitMap(lay.pbm);
+            lay.pbm = NULL;
         }
     }
+    if (!lay.pbm)
+        lay.can_full = FALSE;               /* straight onto the screen: whole scales */
+    lay_out(g, w, h, ax, ay, anim_full && lay.can_full);
+    fx = lay.fx;
+    fy = lay.fy;
+    dw = lay.dw;
+    dh = lay.dh;
+    vx = lay.vx;
+    vy = lay.vy;
     if (!(planar = AllocVec(fsz * 2, MEMF_ANY | MEMF_CLEAR)) ||
         !(last = AllocVec(fsz, MEMF_ANY | MEMF_CLEAR)) ||
         !(l16 = AllocVec(256 * sizeof(UWORD), MEMF_ANY | MEMF_CLEAR)) ||
@@ -1669,8 +1807,11 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         FreeVec(chunky);
         FreeVec(line);
         FreeVec(lut);
-        if (pbm)
-            FreeBitMap(pbm);
+        if (lay.pbm)
+            FreeBitMap(lay.pbm);
+        FreeVec(lay.xo);
+        FreeVec(lay.yo);
+        memset(&lay, 0, sizeof(lay));
         return 1;
     }
     for (k = 0; k < 2; k++) {
@@ -1688,10 +1829,11 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     total = anim_length(fh, path, 0);
     FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
     strip_setup(g);
-    sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ldx%ld (%ld x %ld), %s", name,
+    ctl.nbtn = lay.can_full ? BT_N : BT_FULL;
+    sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ld x %ld%s, %s", name,
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)camg,
-            (long)fx, (long)fy, (long)dw, (long)dh,
-            pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
+            (long)dw, (long)dh, lay.full ? " (full screen)" : "",
+            lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
     amce_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
@@ -1729,13 +1871,14 @@ restart:
         if (direct) {
             UBYTE *base = NULL;
             ULONG bpr = 0, y, x0, x1, j, span, rowl = rb * depth, ry0 = h, ry1 = 0, cx0 = rb, cx1 = 0;
-            APTR lk = LockBitMapTags(pbm ? pbm : g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
+            APTR lk = LockBitMapTags(lay.pbm ? lay.pbm : g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
                                      LBMI_BYTESPERROW, (ULONG)&bpr, TAG_DONE);
             if (lk && base) {
-                UBYTE *o = pbm ? base : base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * 2;
-                for (y = 0; y < h; y++, o += bpr * fy) {
+                UBYTE *o0 = lay.pbm ? base : base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * 2;
+                for (y = 0; y < h; y++) {
                     const UBYTE *a = src + y * rowl;
-                    UBYTE *b = last + y * rowl;
+                    UBYTE *b = last + y * rowl, *o = o0 + (ULONG)lay.yo[y] * bpr;
+                    ULONG px0, px1;
                     if (fresh) {
                         x0 = 0;
                         x1 = rb;
@@ -1743,10 +1886,12 @@ restart:
                         continue;
                     if (ham)
                         x1 = rb;                /* what follows a change changes with it */
-                    row_put(a, rb, depth, w, x0, x1, fx, ham, lut, l16, o);
-                    span = ((x1 * 8 > w ? w : x1 * 8) - x0 * 8) * fx * 2;
-                    for (j = 1; j < (ULONG)fy; j++)
-                        CopyMem(o + x0 * 16 * fx, o + j * bpr + x0 * 16 * fx, span);
+                    row_put(a, rb, depth, w, x0, x1, fx, lay.xo, ham, lut, l16, o);
+                    px0 = lay.xo[x0 * 8];
+                    px1 = lay.xo[x1 * 8 > w ? w : x1 * 8];
+                    span = (px1 - px0) * 2;
+                    for (j = 1; j < (ULONG)(lay.yo[y + 1] - lay.yo[y]); j++)
+                        CopyMem(o + px0 * 2, o + j * bpr + px0 * 2, span);
                     CopyMem((APTR)a, b, rowl);
                     nrows++;
                     if (y < ry0)
@@ -1761,13 +1906,23 @@ restart:
             }
             if (lk)
                 UnLockBitMap(lk);
-            if (lk && base && pbm && ry0 <= ry1) {  /* what changed, onto the screen */
-                WORD px0 = (WORD)(cx0 * 8 * fx), px1 = (WORD)((cx1 * 8 > w ? w : cx1 * 8) * fx);
-                BltBitMapRastPort(pbm, px0, (WORD)(ry0 * fy), g->rp, vx + px0, vy + (WORD)(ry0 * fy),
-                                  px1 - px0, (WORD)((ry1 - ry0 + 1) * fy), 0xC0);
-            }
+            if (lk && base && ry0 <= ry1)   /* what changed, onto the screen */
+                pic_blit(g, lay.xo[cx0 * 8], lay.yo[ry0], lay.xo[cx1 * 8 > w ? w : cx1 * 8],
+                         lay.yo[ry1 + 1]);
             if (!lk || !base) {                 /* not to be had after all: the other way */
                 direct = FALSE;
+                lay.can_full = FALSE;           /* (whole scales only, that way) */
+                ctl.nbtn = BT_FULL;
+                if (lay.full) {
+                    lay_out(g, w, h, ax, ay, FALSE);
+                    dw = lay.dw;
+                    dh = lay.dh;
+                    vx = lay.vx;
+                    vy = lay.vy;
+                    fx = lay.fx;
+                    fy = lay.fy;
+                    FillPixelArray(g->rp, 0, 0, g->w, st.y, 0x000000);
+                }
                 if (!(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
                     break;
             }
@@ -1845,6 +2000,22 @@ restart:
             }
             if (r == 3)
                 break;
+            if (r == 4 && lay.can_full) {   /* full screen or not: laid out again, drawn afresh */
+                anim_full = !lay.full;
+                lay_out(g, w, h, ax, ay, anim_full);
+                dw = lay.dw;
+                dh = lay.dh;
+                vx = lay.vx;
+                vy = lay.vy;
+                fx = lay.fx;
+                fy = lay.fy;
+                FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+                sf.lv = 0;
+                sf.drawn = FALSE;
+                fresh = TRUE;
+                relaid = TRUE;
+                break;
+            }
             if (r == 2) {
                 paused = !paused;
                 if (paused && snd_on) {
@@ -1863,6 +2034,11 @@ restart:
         }
         if (quit)
             break;
+        if (relaid) {                       /* the same frame drawn again, in its new place */
+            relaid = FALSE;
+            skip = FALSE;
+            continue;
+        }
         if (r == 3) {
             if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, f, &readms) || !f->body)
                 break;
@@ -1934,10 +2110,12 @@ restart:
     (void)errmax;
 out:
     strip_cleanup(g);
-    if (pbm) {
-        WaitBlit();
-        FreeBitMap(pbm);
-    }
+    WaitBlit();
+    if (lay.pbm)
+        FreeBitMap(lay.pbm);
+    FreeVec(lay.xo);
+    FreeVec(lay.yo);
+    memset(&lay, 0, sizeof(lay));
     FreeVec(planar);
     FreeVec(last);
     FreeVec(l16);
