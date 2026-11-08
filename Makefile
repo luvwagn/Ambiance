@@ -129,6 +129,13 @@ check-syscalls: $(SRCS) src/amce.h
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
 
+# rtgbench: AmigaMCE's drawing timed on RTG screens, 8-bit against 16-bit
+build/rtgbench: tools/rtgbench/rtgbench.c
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< -lamiga
+rtgbench: build/rtgbench
+
 test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
