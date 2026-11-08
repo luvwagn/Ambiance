@@ -33,7 +33,7 @@ LIBS    = -lamiga
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -74,6 +74,11 @@ build/eaglehost.o: src/eaglehost.s
 	@$(VASM) -Fhunk -m68000 -quiet -o $@ $<
 
 # HippoPlayer's FFT (the spectrum), as HippoPlayer assembles it
+build/animdraw68k.o: src/animdraw68k.s
+	@mkdir -p build
+	@echo "  ASM   $@"
+	@$(VASM) -Fhunk -m68020 -quiet -o $@ $<
+
 build/hfft.o: src/hfft.s
 	@mkdir -p build
 	@echo "  ASM   $@"
@@ -91,6 +96,7 @@ build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 # an animation's frames, decoded and drawn each frame: for speed, not size
 # (-O2 decodes Tron2's frames in 55% of the cycles -Os does)
 build/animdec.o build/animdraw.o: CFLAGS += -O2
+build/animdraw.o: CFLAGS += -DAD_ASM
 
 $(TARGET): $(OBJS)
 	@echo "  LINK  $@"
@@ -171,16 +177,23 @@ build/animdraw_host: tests/animdraw_host.c src/animdraw.c src/animdraw.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/animdraw_host.c src/animdraw.c
 
-test-animdraw: build/animdraw_host
+build/animdraw_68k: tests/animdraw_host.c src/animdraw.c src/animdraw.h build/animdraw68k.o
+	@$(CC) -O2 $(CPU) -noixemul -Wall -DAD_ASM -o $@ tests/animdraw_host.c src/animdraw.c build/animdraw68k.o
+
+# the drawing checked on the host (C), and on a 68020 with its assembler
+test-animdraw: build/animdraw_host build/animdraw_68k
 	@build/animdraw_host > build/test-animdraw.txt && echo "  CHECK animation drawing ok" || (cat build/test-animdraw.txt; exit 1)
+	@cd build && vamos -C 68020 -m 8192 -s 256 animdraw_68k > test-animdraw68k.txt && grep -q " 0 failed" test-animdraw68k.txt \
+		&& echo "  CHECK animation drawing (68020 assembler) ok" || (cat test-animdraw68k.txt; exit 1)
 
 # an ANIM's decoding and drawing timed on a 68020 (vamos counts its cycles):
 #   make anim-bench ANIM=file.anim
 anim-bench:
 	@mkdir -p build/bench
-	@$(CC) -O2 $(CPU) -noixemul -w -o build/bench/anim_bench tests/anim_bench.c src/animdec.c src/animdraw.c
-	@for m in "0 100" "1 100" "1 200"; do printf "mode/scale %s: " "$$m"; \
-		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench $(ANIM) $$m 2>&1 | grep -o "total_cycles=[0-9]*"; done
+	@$(CC) -O2 $(CPU) -noixemul -w -o build/bench/anim_bench_c tests/anim_bench.c src/animdec.c src/animdraw.c
+	@$(CC) -O2 $(CPU) -noixemul -w -DAD_ASM -o build/bench/anim_bench_asm tests/anim_bench.c src/animdec.c src/animdraw.c build/animdraw68k.o
+	@for b in c asm; do for m in "0 100" "1 100" "1 200"; do printf "%-3s mode/scale %s: " $$b "$$m"; \
+		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench_$$b $(ANIM) $$m 2>&1 | grep "runtime end" | grep -o "total_cycles=[0-9]*"; done; done
 
 build/plex_host: tests/plex_host.c src/plexxml.c src/plexxml.h
 	@mkdir -p build

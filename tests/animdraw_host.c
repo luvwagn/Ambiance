@@ -113,13 +113,13 @@ static void one(int depth, int w, int ham, int ehb, int scale, unsigned long fmt
 
 int main(void)
 {
-    static const int widths[] = { 16, 24, 320, 352, 376, 384 };
+    static const int widths[] = { 16, 24, 320, 352, 376, 384, 370, 321, 100, 9 };
     static const int scales[] = { 100, 200, 300, 113, 227, 250 };
     static const unsigned long fmts[] = { 7, 5, 1, 4 };
     int d, wi, si, fi, n = 0;
     ad_init();
     for (fi = 0; fi < 4; fi++)
-        for (wi = 0; wi < 6; wi++)
+        for (wi = 0; wi < 10; wi++)
             for (si = 0; si < 6; si++) {
                 for (d = 1; d <= 8; d++, n++)
                     one(d, widths[wi], 0, 0, scales[si], fmts[fi]);

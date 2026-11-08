@@ -18,6 +18,7 @@ enum { PIXFMT_LUT8, PIXFMT_RGB15, PIXFMT_BGR15, PIXFMT_RGB15PC, PIXFMT_BGR15PC, 
  * a table a plane, so a row's 8 pixels are its planes' entries or'd, no
  * shifts (16 KB). */
 static unsigned int p2c[8][256][2];
+static unsigned int l32[256], hk32[256], hs32[256];  /* doubled: two pixels a long */
 
 void ad_init(void)
 {
@@ -149,6 +150,8 @@ void ad_lut16(const unsigned long *lut, unsigned short *l16)
     int i;
     for (i = 0; i < 256; i++)
         l16[i] = rt[(lut[i] >> 16) & 255] | gt[(lut[i] >> 8) & 255] | bt[lut[i] & 255];
+    for (i = 0; i < 256; i++)
+        l32[i] = ((unsigned int)l16[i] << 16) | l16[i];
 }
 
 /* HAM as one step a pixel: pixel = (the one before & hk[c]) | hs[c]. A
@@ -181,6 +184,10 @@ void ad_ham(const unsigned short *l16, unsigned char depth)
             hs[c] = gt[v];
             break;
         }
+    }
+    for (c = 0; c < 256; c++) {
+        hk32[c] = ((unsigned int)hk[c] << 16) | hk[c];
+        hs32[c] = ((unsigned int)hs[c] << 16) | hs[c];
     }
 }
 
@@ -229,6 +236,13 @@ int ad_row_span(const unsigned char *a, const unsigned char *b, unsigned long rb
         c = l & 255;         { const int k = 7; __VA_ARGS__ }                     \
     } while (0)
 
+#ifdef AD_ASM
+/* animdraw68k.s: whole columns at 1 or 2 pixels a pixel (its kinds) */
+unsigned long ad_cols68k(const unsigned char *col, unsigned long rb, unsigned long depth,
+                         unsigned long ncols, void *out, const void *ta, const void *tb,
+                         unsigned long pix, unsigned long kind, const void *p2c);
+#endif
+
 void ad_row_put(const unsigned char *row, unsigned long rb, unsigned char depth, unsigned long w,
                 unsigned long x0, unsigned long x1, unsigned short fx, const unsigned short *xo,
                 int ham, const unsigned long *lut, const unsigned short *l16, unsigned char *out)
@@ -246,10 +260,34 @@ void ad_row_put(const unsigned char *row, unsigned long rb, unsigned char depth,
         x1 = rb;
         pix = l16[0];                       /* each row starts from colour 0 */
     }
+#ifdef AD_ASM
+    if ((fx == 1 || fx == 2) && depth >= 1 && depth <= 8) {
+        /* the whole columns by hand (animdraw68k.s); the rest below */
+        unsigned long full = w / 8, top = (unsigned long)(depth - 1) * rb;
+        if (full > x1)
+            full = x1;
+        if (ham) {
+            unsigned long nw = wx < full ? wx : full;   /* left of what changed */
+            if (nw)
+                pix = ad_cols68k(row + top, rb, depth, nw, 0, hk, hs, pix, 4, p2c);
+            if (full > nw)
+                pix = ad_cols68k(row + top + nw, rb, depth, full - nw, o16 + xo[nw * 8],
+                                 fx == 2 ? (const void *)hk32 : hk, fx == 2 ? (const void *)hs32 : hs,
+                                 pix, fx == 2 ? 3 : 2, p2c);
+            x0 = full;
+        } else if (full > x0) {
+            ad_cols68k(row + top + x0, rb, depth, full - x0, o16 + xo[x0 * 8],
+                       fx == 2 ? (const void *)l32 : l16, 0, 0, fx == 2 ? 1 : 0, p2c);
+            x0 = full;
+        }
+    }
+#endif
     for (x = x0; x < x1; x++) {
         unsigned int h, l;
-        unsigned long n = w - x * 8;
-        const unsigned short *xp = xo + x * 8;
+        long n = (long)w - (long)(x * 8);   /* its pixels in the picture: a row's last */
+        const unsigned short *xp = xo + x * 8;  /* (a word's padding) may have none */
+        if (n <= 0)
+            break;
         GATHER(pp, x, depth, h, l);
         if (n >= 8) {                       /* all 8: unrolled, the colours from registers */
             if (ham) {
@@ -278,7 +316,7 @@ void ad_row_put(const unsigned char *row, unsigned long rb, unsigned char depth,
             unsigned char t[8];
             t[0] = h >> 24; t[1] = h >> 16; t[2] = h >> 8; t[3] = h;
             t[4] = l >> 24; t[5] = l >> 16; t[6] = l >> 8; t[7] = l;
-            for (i = 0; i < n; i++) {
+            for (i = 0; i < (unsigned long)n; i++) {
                 unsigned short v, *q = o16 + xp[i], *e = o16 + xp[i + 1];
                 if (ham) {
                     pix = (pix & hk[t[i]]) | hs[t[i]];
