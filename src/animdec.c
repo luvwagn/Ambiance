@@ -253,6 +253,87 @@ static int delta78(const u8 *d, long len, const struct AnimPlanes *pl, int op8, 
     return 0;
 }
 
+/* ---- operation 8 in words, the usual kind (Tron2): delta78's runs with
+ * every size fixed, so each is a few moves; a value copied a word at a
+ * time (the planes' columns and the data both start on even bytes, IFF
+ * chunks being word aligned). */
+static unsigned be16(const u8 *p)
+{
+    return ((unsigned)p[0] << 8) | p[1];
+}
+
+/* A word moved as it is (its bytes in their order, so on any host): the
+ * planes' columns and the data are on even bytes; a damaged file's odd
+ * offset is a slower access on a 68020, not a fault. */
+typedef unsigned short __attribute__((may_alias)) w16;
+
+static int delta8w(const u8 *d, long len, const struct AnimPlanes *pl)
+{
+    const u8 *e = d + len;
+    long stride = pl->stride;
+    int p, h = pl->h;
+    if (len < 32)
+        return -1;
+    for (p = 0; p < pl->depth && p < 8; p++) {
+        unsigned long off = be32(d + p * 4);
+        const u8 *s;
+        int bx;
+        if (!off)
+            continue;
+        if (off >= (unsigned long)len)
+            return -1;
+        s = d + off;
+        for (bx = 0; bx < pl->rb; bx += 2) {
+            u8 *dst = pl->plane[p] + bx;
+            unsigned ops;
+            int row = 0;
+            if (e - s < 2)
+                return -1;
+            ops = be16(s);
+            s += 2;
+            for (; ops > 0; ops--) {
+                unsigned op;
+                int n;
+                if (e - s < 2)
+                    return -1;
+                op = be16(s);
+                s += 2;
+                if (op == 0) {                  /* a run: its count, then the value */
+                    w16 v;
+                    if (e - s < 4)
+                        return -1;
+                    n = (int)be16(s);
+                    v = *(const w16 *)(s + 2);
+                    s += 4;
+                    if (n > h - row)
+                        n = h - row > 0 ? h - row : 0;
+                    row += n;
+                    for (; n > 0; n--, dst += stride)
+                        *(w16 *)dst = v;
+                } else if (!(op & 0x8000)) {    /* skip */
+                    n = (int)op;
+                    if (n > h - row)
+                        n = h - row > 0 ? h - row : 0;
+                    row += n;
+                    dst += n * stride;
+                } else {                        /* that many words, a row each */
+                    int want = (int)(op & 0x7FFF), k;
+                    if (want > (e - s) / 2)
+                        return -1;
+                    n = want;
+                    if (n > h - row)
+                        n = h - row > 0 ? h - row : 0;
+                    row += n;
+                    for (k = 0; k < n; k++, dst += stride)
+                        *(w16 *)dst = ((const w16 *)s)[k];
+                    s += 2 * want;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int animdec_delta(const u8 *d, long len, const struct AnimPlanes *pl, int op, unsigned long bits)
 {
     switch (op) {
@@ -261,7 +342,7 @@ int animdec_delta(const u8 *d, long len, const struct AnimPlanes *pl, int op, un
     case 7:
         return delta78(d, len, pl, 0, (bits & 1) != 0);
     case 8:
-        return delta78(d, len, pl, 1, (bits & 1) != 0);
+        return bits & 1 ? delta78(d, len, pl, 1, 1) : delta8w(d, len, pl);
     }
     return -2;
 }
