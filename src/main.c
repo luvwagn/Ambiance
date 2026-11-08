@@ -587,6 +587,7 @@ static struct {
     struct DateStamp date;
     struct ItemList list;
     ULONG stamp;
+    BOOL vids;                  /* read as a Videos folder (its .iff files looked inside) */
 } pkeep[PICS_KEEP];
 static ULONG pkeep_clock;
 static struct LJob *pics_job;       /* a folder being read */
@@ -616,6 +617,7 @@ static void pics_copy(const struct ItemList *from, struct ItemList *out)
  * input (the read goes on), -1: cannot be read. */
 static LONG pics_read_ui(const char *dir, struct ItemList *out)
 {
+    BOOL vids = cur() && cur()->pics == 2;  /* a Videos page's (pushed already) */
     struct DateStamp ds;
     BOOL dated = idx_date(dir, &ds);
     struct LJob *j;
@@ -624,21 +626,22 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
     char m[80];
     for (k = 0; k < PICS_KEEP; k++)
         if (pkeep[k].list.pool && dated && !amce_stricmp(pkeep[k].path, dir) &&
-            !CompareDates(&ds, &pkeep[k].date)) {
+            !CompareDates(&ds, &pkeep[k].date) && pkeep[k].vids == vids) {
             list_free(out);
             list_init(out);
             pics_copy(&pkeep[k].list, out);
             pkeep[k].stamp = ++pkeep_clock;
             return out->count;
         }
-    if (pics_job && strcmp(pics_job->path, dir) != 0) {
+    if (pics_job && (strcmp(pics_job->path, dir) != 0 || (pics_job->mode == 1) != vids)) {
         ldr_orphan(pics_job);               /* another folder's: not wanted now */
         pics_job = NULL;
     }
     if (!pics_job) {
         if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
-            return pics_read_dir(dir, out);
+            return pics_read_dir(dir, out, vids);
         j->type = LJ_PICDIR;
+        j->mode = vids ? 1 : 0;
         amce_strlcpy(j->path, dir, sizeof(j->path));
         ldr_submit_first(j);
         pics_job = j;
@@ -664,6 +667,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
                 list_free(&pkeep[slot].list);
             amce_strlcpy(pkeep[slot].path, dir, sizeof(pkeep[slot].path));
             pkeep[slot].date = ds;
+            pkeep[slot].vids = vids;
             pkeep[slot].list = j->list;
             pkeep[slot].stamp = ++pkeep_clock;
             j->list.pool = NULL;
@@ -2839,7 +2843,7 @@ static void build_root_pages(int mod)
         if ((p = page_push(PT_LIST, _("Videos")))) {
             LONG n;
             const char *src;
-            p->pics = 1;
+            p->pics = 2;                    /* Videos: its folders' .iff files looked inside */
             n = vids_root_fill(p, &src);
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
@@ -2972,6 +2976,7 @@ static void nav_moved(void)
 static BOOL push_dir_quiet(struct Item *it)
 {
     BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods, songs = cur() && cur()->songs;
+    UBYTE pk = cur() ? cur()->pics : 0;     /* 2: Videos' */
     struct Page *p = page_push(PT_LIST, it->label);
     if (!p)
         return FALSE;
@@ -2994,7 +2999,7 @@ static BOOL push_dir_quiet(struct Item *it)
         return TRUE;
     }
     if (pics) {
-        p->pics = 1;
+        p->pics = pk;
         if (pics_read_ui(it->path, &p->list) <= 0) {
             page_pop();
             return FALSE;
@@ -7951,6 +7956,7 @@ static void open_dir_now(struct Item *it)
     struct Page *p;
     LONG n;
     BOOL pics = cur() && cur()->pics, mods = cur() && cur()->mods, songs = cur() && cur()->songs;
+    UBYTE pk = cur() ? cur()->pics : 0;     /* 2: Videos' */
     if (pics && (it->flags & ITEM_DISABLED)) {
         set_msg(_("No pictures in that folder"));
         return;
@@ -7962,7 +7968,7 @@ static void open_dir_now(struct Item *it)
         return;
     }
     if (pics) {
-        p->pics = 1;
+        p->pics = pk;
         n = pics_read_ui(it->path, &p->list);
         if (n <= 0) {
             page_pop();
@@ -8654,7 +8660,17 @@ static void anim_from_page(struct Page *p)
 
 static void view_from_page(struct Page *p)
 {
-    LONG vis = list_visible(), last = viewer_run(&p->list, p->sel, FALSE);
+    LONG vis, last;
+    struct Item *it = p->sel >= 0 && p->sel < p->list.count ? &p->list.items[p->sel] : NULL;
+    const char *f = it ? pics_format(it->label) : NULL;
+    if (it && f && !strcmp(f, "ILBM") && pics_is_anim(it->path)) {
+        it->kind = IT_ANIM;                 /* an animation by a picture's name (.iff) */
+        it->sortkey = (char *)"ANIM";
+        anim_from_page(p);
+        return;
+    }
+    vis = list_visible();
+    last = viewer_run(&p->list, p->sel, FALSE);
     p->sel = last;
     if (p->sel < p->top)
         p->top = p->sel;

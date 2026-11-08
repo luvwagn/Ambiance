@@ -408,7 +408,9 @@ BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *
 
 /* ---------------------------------------------------------------- pictures */
 const char *pics_format(const char *name);              /* "GIF".. by name, NULL if none */
-LONG pics_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
+LONG pics_read_dir(const char *dir, struct ItemList *out, BOOL vids);  /* -1: cannot be read; vids:
+                                 * a Videos folder, its .iff files looked inside (ANIMs) */
+BOOL pics_is_anim(const char *path);                    /* an IFF ANIM, whatever its name */
 /* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);

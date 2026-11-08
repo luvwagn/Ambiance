@@ -77,14 +77,29 @@ static void join_path(char *out, LONG max, const char *dir, const char *name)
     amce_strlcat(out, name, max);
 }
 
-/* The format of a directory entry, NULL if it is not a picture. */
-static const char *entry_format(const char *dir, const char *name)
+/* The format of a directory entry, NULL if it is not a picture. An IFF
+ * file's name (.iff) may be a picture's or an animation's: in Videos it
+ * is looked inside (few files there; Pictures' thousands of .iff game
+ * pictures are not opened one by one: an ANIM there is found when it is
+ * opened, pics_is_anim). */
+static const char *entry_format(const char *dir, const char *name, BOOL vids)
 {
     char path[300];
-    if (strchr(name, '.'))
-        return pics_format(name);
+    const char *f = strchr(name, '.') ? pics_format(name) : NULL;
+    if (f && !(vids && !strcmp(f, "ILBM")))
+        return f;
     join_path(path, sizeof(path), dir, name);
-    return sniff(path);
+    if (f) {
+        const char *s = sniff(path);
+        return s && !strcmp(s, "ANIM") ? s : f;
+    }
+    return strchr(name, '.') ? NULL : sniff(path);
+}
+
+BOOL pics_is_anim(const char *path)
+{
+    const char *s = sniff(path);
+    return s && !strcmp(s, "ANIM");
 }
 
 /* No "Please insert volume" requesters while looking (Media: missing). */
@@ -120,11 +135,11 @@ struct scan_ctx {
     const char *dir;
     LONG *ndirs, npics, nanims, firstmax;
     char *first;
-    BOOL top;
+    BOOL top, vids;
 };
 
 static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top,
-                 LONG *nanims);
+                 LONG *nanims, BOOL vids);
 
 static void scan_cb(void *ctx, const char *name, BOOL isdir)
 {
@@ -136,14 +151,14 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
             LONG n;
             LONG na = 0;
             join_path(path, sizeof(path), c->dir, name);
-            n = scan(path, c->ndirs, c->first, c->firstmax, FALSE, &na);
+            n = scan(path, c->ndirs, c->first, c->firstmax, FALSE, &na, c->vids);
             if (n > 0)
                 c->npics += n;
             c->nanims += na;
         } else if (c->ndirs) {
             (*c->ndirs)++;
         }
-    } else if ((f = entry_format(c->dir, name)) && !strcmp(f, "ANIM")) {
+    } else if ((f = entry_format(c->dir, name, c->vids)) && !strcmp(f, "ANIM")) {
         c->nanims++;                        /* played, not shown: not a slideshow's */
         if (c->first && c->firstmax && !c->first[0] && !c->npics)
             join_path(c->first, c->firstmax, c->dir, name);
@@ -156,10 +171,11 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
 }
 
 static LONG scan(const char *dir, LONG *ndirs, char *first, LONG firstmax, BOOL top,
-                 LONG *nanims)
+                 LONG *nanims, BOOL vids)
 {
     struct scan_ctx c;
     LONG r;
+    c.vids = vids;
     c.dir = dir;
     c.ndirs = ndirs;
     c.npics = 0;
@@ -181,7 +197,7 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
         *ndirs = 0;
     if (first && firstmax)
         first[0] = 0;
-    n = scan(dir, ndirs, first, firstmax, TRUE, NULL);
+    n = scan(dir, ndirs, first, firstmax, TRUE, NULL, FALSE);
     req_on(old);
     return n;
 }
@@ -191,21 +207,21 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
 struct collect_ctx {
     const char *dir;
     struct ItemList *out;
-    BOOL top;
+    BOOL top, vids;
 };
 
-static void collect(const char *dir, struct ItemList *out, BOOL top);
+static void collect(const char *dir, struct ItemList *out, BOOL top, BOOL vids);
 
 static void collect_cb(void *ctx, const char *name, BOOL isdir)
 {
     struct collect_ctx *c = ctx;
     char path[300], key[140];
-    const char *f = isdir ? NULL : entry_format(c->dir, name);
+    const char *f = isdir ? NULL : entry_format(c->dir, name, c->vids);
     if (!isdir && !f)
         return;
     join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
-        collect(path, c->out, FALSE);
+        collect(path, c->out, FALSE, c->vids);
         return;
     }
     key[0] = isdir ? '0' : '1';             /* folders first */
@@ -213,33 +229,35 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     list_add(c->out, name, path, key, isdir ? IT_DIR : !strcmp(f, "ANIM") ? IT_ANIM : IT_PIC);
 }
 
-static void collect(const char *dir, struct ItemList *out, BOOL top)
+static void collect(const char *dir, struct ItemList *out, BOOL top, BOOL vids)
 {
     struct collect_ctx c;
+    c.vids = vids;
     c.dir = dir;
     c.out = out;
     c.top = top;
     dir_scan(dir, collect_cb, &c);
 }
 
-static LONG read_dir(const char *dir, struct ItemList *out)
+static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
 {
     BPTR lock = Lock((CONST_STRPTR)dir, SHARED_LOCK);
     LONG i;
     if (!lock)
         return -1;
     UnLock(lock);
-    collect(dir, out, TRUE);
+    collect(dir, out, TRUE, vids);
     list_sort(out);
 
     /* now the tags (and what each folder holds) */
     for (i = 0; i < out->count; i++) {
         struct Item *it = &out->items[i];
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            const char *f = strchr(it->label, '.') ? pics_format(it->label) : sniff(it->path);
+            const char *f = it->kind == IT_ANIM ? "ANIM" :
+                            strchr(it->label, '.') ? pics_format(it->label) : sniff(it->path);
             it->sortkey = (char *)(f ? f : "");
         } else {
-            LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na);
+            LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na, vids);
             it->sortkey = (char *)"";
             if (na > 0 && np <= 0 && nd == 0) {
                 char num[12];                   /* animations: opened, one played at a time */
@@ -262,10 +280,10 @@ static LONG read_dir(const char *dir, struct ItemList *out)
     return out->count;
 }
 
-LONG pics_read_dir(const char *dir, struct ItemList *out)
+LONG pics_read_dir(const char *dir, struct ItemList *out, BOOL vids)
 {
     APTR old = req_off();
-    LONG n = read_dir(dir, out);
+    LONG n = read_dir(dir, out, vids);
     req_on(old);
     return n;
 }
