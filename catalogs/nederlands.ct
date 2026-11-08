@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nederlands
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld-compressie wordt niet ondersteund
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 De animatie kon niet worden geopend
 ; The animation could not be opened
@@ -13,9 +16,6 @@ Deze Amiga heeft er geen schermmodus voor (%ld kleuren, %s)
 MSG_638EABE4
 Animaties spelen op de eigen schermen van de Amiga, en er werd er geen gevonden
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld-compressie wordt niet ondersteund
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 Niet genoeg geheugen voor het scherm van de animatie
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ Visualisatie
 MSG_52325DD8
 Springend scrollen (per letter)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+Animaties
+; Animations
+MSG_5C9709AA
+Op het scherm van AmigaMCE
+; On AmigaMCE's screen
+MSG_3B46B8BE
+Op een eigen scherm
+; On a screen of their own
 MSG_71E19418
 Foutopsporing (CPU, geheugen, log)
 ; Debug (CPU, memory, log)

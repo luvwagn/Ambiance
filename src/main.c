@@ -134,7 +134,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1524,6 +1524,7 @@ static void save_screen_mode(void)
 #define LFONT_VAR "AmigaMCE/LacedFont"
 #define RFONT_VAR "AmigaMCE/RTGFont"    /* RTG's pixel style: a font of gfx_laced_fonts */
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
+#define ANIMSCR_VAR "AmigaMCE/AnimScreen"  /* "own": animations on their own screen */
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
 #define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters" or "spectrum" */
 #define HTTPS_VAR "AmigaMCE/RadioHTTPS"
@@ -1867,6 +1868,9 @@ static BOOL radio_https;
 /* Settings > Jump scrolling: held Up/Down in a very long list goes a
  * letter at a time once past cruising speed (off: it glides on). */
 static BOOL jump_scroll;
+/* Animations on a screen of their own even on a 16-bit RTG screen (HAM and
+ * extra halfbrite by the chipset, the classic look); native screens always */
+static BOOL anim_classic;
 
 static void set_msg(const char *m);
 
@@ -1932,6 +1936,8 @@ static void load_jump(void)
     char buf[8];
     jump_scroll = GetVar((CONST_STRPTR)JUMP_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                   buf[0] == '1';
+    anim_classic = GetVar((CONST_STRPTR)ANIMSCR_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+                   !strcmp(buf, "own");
 }
 
 /* Settings > Double buffering (RTG screens): on, by the setting; without
@@ -2136,6 +2142,15 @@ static void build_screen_settings(struct Page *p)
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    /* Videos' animations: on this screen (a 16-bit RTG one), or their own */
+    {
+        struct Item *it = action_item(p, _("Animations"),
+                                      g.truecolor && !anim_classic ? _("On AmigaMCE's screen")
+                                                                   : _("On a screen of their own"),
+                                      ACT_ANIMSCR, MARK_CYCLE);
+        if (it && !g.truecolor)
+            it->flags |= ITEM_DISABLED;     /* a native screen: always their own */
+    }
 }
 
 /* Settings > General. */
@@ -8641,10 +8656,17 @@ static void anim_from_page(struct Page *p)
             module = TRUE;
         }
     }
-    if (anim_play(&g, it->path, sound_ahi, err, sizeof(err)) < 0 || err[0]) {
+    /* on this screen it draws straight onto it: single buffered meanwhile,
+     * everything drawn again after (into the back buffer, then a flip) */
+    gfx_dbuf_stop(&g);
+    if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
         amce_log("anim", err);
         set_msg(err);
     }
+    gfx_dbuf_start(&g);
+    draw_all();
+    gfx_dirty();
+    gfx_present(&g);
     if (module)
         mp_pause(FALSE);
     if (stream) {
@@ -10707,6 +10729,10 @@ static void act_action(struct Item *it)
         toggle_jump();
     else if (it->action == ACT_VISUAL) {
         next_visual();
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_ANIMSCR) {
+        anim_classic = !anim_classic;
+        save_setting(ANIMSCR_VAR, anim_classic ? "own" : "");
         plex_settings_again(FALSE);
     }
     else if (it->action == ACT_LANGSET)

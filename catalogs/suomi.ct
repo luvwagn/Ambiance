@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language suomi
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld-pakkausta ei tueta
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 Animaatiota ei voitu avata
 ; The animation could not be opened
@@ -13,9 +16,6 @@ Tässä Amigassa ei ole sille näyttötilaa (%ld väriä, %s)
 MSG_638EABE4
 Animaatiot toistetaan Amigan omilla näytöillä, eikä sellaista löytynyt
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld-pakkausta ei tueta
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 Muisti ei riitä animaation näytölle
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ Visualisointi
 MSG_52325DD8
 Hyppivä vieritys (kirjaimittain)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+Animaatiot
+; Animations
+MSG_5C9709AA
+AmigaMCE:n näytöllä
+; On AmigaMCE's screen
+MSG_3B46B8BE
+Omalla näytöllään
+; On a screen of their own
 MSG_71E19418
 Vianetsintä (CPU, muisti, loki)
 ; Debug (CPU, memory, log)

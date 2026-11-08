@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nihongo
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld圧縮には対応していません
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 アニメーションを開けませんでした
 ; The animation could not be opened
@@ -13,9 +16,6 @@ MSG_26BEC995
 MSG_638EABE4
 アニメーションはAmiga本来の画面で再生しますが、見つかりませんでした
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld圧縮には対応していません
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 アニメーションの画面のためのメモリが足りません
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ MSG_20B362A2
 MSG_52325DD8
 ジャンプスクロール (頭文字ごと)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+アニメーション
+; Animations
+MSG_5C9709AA
+AmigaMCEの画面で
+; On AmigaMCE's screen
+MSG_3B46B8BE
+専用の画面で
+; On a screen of their own
 MSG_71E19418
 デバッグ (CPU、メモリ、ログ)
 ; Debug (CPU, memory, log)

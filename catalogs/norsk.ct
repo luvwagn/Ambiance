@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language norsk
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld-komprimering støttes ikke
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 Animasjonen kunne ikke åpnes
 ; The animation could not be opened
@@ -13,9 +16,6 @@ Denne Amigaen har ingen skjermmodus for den (%ld farger, %s)
 MSG_638EABE4
 Animasjoner spilles på Amigaens egne skjermer, og ingen ble funnet
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld-komprimering støttes ikke
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 Ikke nok minne til animasjonens skjerm
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ Visualisering
 MSG_52325DD8
 Hoppende rulling (per bokstav)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+Animasjoner
+; Animations
+MSG_5C9709AA
+På AmigaMCEs skjerm
+; On AmigaMCE's screen
+MSG_3B46B8BE
+På sin egen skjerm
+; On a screen of their own
 MSG_71E19418
 Feilsøking (CPU, minne, logg)
 ; Debug (CPU, memory, log)

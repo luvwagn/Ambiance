@@ -275,8 +275,9 @@ BOOL ilbm_is_anim(const char *path);
 BOOL anim_fact_get(BPTR fh, const char *path, ULONG *frames, ULONG *ms);
 void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms);    /* an IFF ANIM: its first frame only, never a datatype */
 /* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not;
- * its sound by AHI (ahi) or Paula's channels 2 and 3 */
-LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax);
+ * its sound by AHI (ahi) or Paula's channels 2 and 3; on a 16-bit RTG screen on
+ * AmigaMCE's own unless classic (Settings > Display > Animations) */
+LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */

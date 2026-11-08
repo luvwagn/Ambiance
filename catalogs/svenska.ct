@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language svenska
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld-komprimering stöds inte
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 Animationen kunde inte öppnas
 ; The animation could not be opened
@@ -13,9 +16,6 @@ Den här Amigan har inget skärmläge för den (%ld färger, %s)
 MSG_638EABE4
 Animationer spelas på Amigans egna skärmar, och ingen hittades
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld-komprimering stöds inte
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 Inte tillräckligt med minne för animationens skärm
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ Visualisering
 MSG_52325DD8
 Hoppande rullning (per bokstav)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+Animationer
+; Animations
+MSG_5C9709AA
+På AmigaMCE:s skärm
+; On AmigaMCE's screen
+MSG_3B46B8BE
+På en egen skärm
+; On a screen of their own
 MSG_71E19418
 Felsökning (CPU, minne, logg)
 ; Debug (CPU, memory, log)

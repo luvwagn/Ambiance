@@ -1,6 +1,9 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language deutsch
 ## codeset 0
+MSG_2F1926C3
+ANIM-%ld-Kompression wird nicht unterstützt
+; ANIM-%ld compression is not supported
 MSG_282FBBDC
 Die Animation ließ sich nicht öffnen
 ; The animation could not be opened
@@ -13,9 +16,6 @@ Dieser Amiga hat keinen Bildschirmmodus dafür (%ld Farben, %s)
 MSG_638EABE4
 Animationen laufen auf den eigenen Bildschirmen des Amiga, und keiner wurde gefunden
 ; Animations play on the Amiga's own screens, and none was found
-MSG_2F1926C3
-ANIM-%ld-Kompression wird nicht unterstützt
-; ANIM-%ld compression is not supported
 MSG_2EE1D46F
 Nicht genug Speicher für den Bildschirm der Animation
 ; Not enough memory for the animation's screen
@@ -370,6 +370,15 @@ Visualisierung
 MSG_52325DD8
 Sprungweises Blättern (nach Buchstabe)
 ; Jump scrolling (by letter)
+MSG_47318A8A
+Animationen
+; Animations
+MSG_5C9709AA
+Auf dem Bildschirm von AmigaMCE
+; On AmigaMCE's screen
+MSG_3B46B8BE
+Auf einem eigenen Bildschirm
+; On a screen of their own
 MSG_71E19418
 Debug (CPU, Speicher, Log)
 ; Debug (CPU, memory, log)

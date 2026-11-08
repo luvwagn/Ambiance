@@ -55,9 +55,11 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/lowlevel.h>
+#include <proto/cybergraphics.h>
+#include <cybergraphx/cybergraphics.h>
 
 extern struct GfxBase *GfxBase;
-extern struct Library *LowLevelBase;
+extern struct Library *LowLevelBase, *CyberGfxBase;
 
 #define ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (d))
 #define LOOP_MS 8000            /* a whole run shorter than this plays again */
@@ -807,8 +809,10 @@ static void volume(int d)
 }
 
 /* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 0
- * nothing; the volume set here, the mouse's moves noted (the controls). */
-static int input(struct Window *win, ULONG *jlast)
+ * nothing; the volume set here, the mouse's moves noted (the controls).
+ * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
+ * the controls but no button. */
+static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
     struct IntuiMessage *im;
@@ -829,11 +833,16 @@ static int input(struct Window *win, ULONG *jlast)
                 volume(VOL_STEP);
             else if (code == 0x4D || code == 0x7B)
                 volume(-VOL_STEP);
+        } else if (cl == IDCMP_VANILLAKEY) {   /* AmigaMCE's own window has these too */
+            if (code == 27 || code == 8 || code == 'q' || code == 'Q')
+                r = 1;
+            else if ((code == ' ' || code == 13) && !r)
+                r = 2;
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
             else if (code == SELECTDOWN) {
-                int b = bar_hit(mx, my);
+                int b = hit(mx, my);
                 if (b == BT_RESTART)
                     r = 3;
                 else if (b == BT_STOP)
@@ -842,7 +851,7 @@ static int input(struct Window *win, ULONG *jlast)
                     volume(-VOL_STEP);
                 else if (b == BT_VUP)
                     volume(VOL_STEP);
-                else if ((b == BT_PLAY || !(bar.on && my >= bar.y)) && !r)
+                else if ((b == BT_PLAY || b == -1) && !r)
                     r = 2;                  /* play/pause, or anywhere off the controls */
             }
         }
@@ -871,6 +880,18 @@ static int input(struct Window *win, ULONG *jlast)
     return r;
 }
 
+/* The controls over the picture, on its own screen */
+static int classic_hit(WORD x, WORD y)
+{
+    int b = bar_hit(x, y);
+    return b < 0 && bar.on && y >= bar.y ? -2 : b;
+}
+
+static int input(struct Window *win, ULONG *jlast)
+{
+    return input_with(win, jlast, classic_hit);
+}
+
 /* 8SVX samples in it: the FORM after its header one (they come first). */
 BOOL anim_has_sound(const char *path)
 {
@@ -891,7 +912,427 @@ BOOL anim_has_sound(const char *path)
     return r;
 }
 
-LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax)
+/* ---- playing on AmigaMCE's own screen (RTG, 16-bit): the frames decoded
+ * into bitplanes in ordinary memory, as on a screen of their own, each
+ * then made chunky (a byte a pixel) and drawn by the graphics card, its
+ * colours from the frame's colour table (WriteLUTPixelArray), HAM made
+ * into RGB pixel by pixel, fringes and all (WritePixelArray). Scaled by
+ * whole numbers to fit, its pixels' shape kept (lowres twice as wide as
+ * high-res, non-laced twice as tall as laced); the controls beneath it,
+ * AmigaMCE's own. No mode switch, and no colours shared with anything.
+ *
+ * A frame costs the conversion and the drawing, done by the CPU and the
+ * card; where they cannot keep up (over SLOW_MS a frame, and slower than
+ * the animation wants, over its first SLOW_FRAMES frames), it goes back
+ * to its own screen, from the start, and stays there for this run. */
+#define SLOW_FRAMES 12
+#define SLOW_MS     50
+static BOOL anim_slow;          /* too slow here once: own screens from now on */
+
+static ULONG p2c_hi[256], p2c_lo[256];  /* a plane's byte as 8 pixels' bits (4 + 4) */
+
+static void p2c_init(void)
+{
+    int b, i;
+    if (p2c_hi[255])
+        return;
+    for (b = 0; b < 256; b++) {
+        ULONG hi = 0, lo = 0;
+        for (i = 0; i < 4; i++) {
+            if (b & (0x80 >> i))
+                hi |= 1UL << (24 - 8 * i);
+            if (b & (0x08 >> i))
+                lo |= 1UL << (24 - 8 * i);
+        }
+        p2c_hi[b] = hi;
+        p2c_lo[b] = lo;
+    }
+}
+
+/* A row of interleaved planes (plane p at row + p * rb) as w bytes. */
+static void p2c_row(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, UBYTE *out)
+{
+    ULONG x;
+    for (x = 0; x < rb; x++) {
+        ULONG hi = 0, lo = 0;
+        UBYTE p;
+        for (p = 0; p < depth; p++) {
+            UBYTE b = row[p * rb + x];
+            hi |= p2c_hi[b] << p;
+            lo |= p2c_lo[b] << p;
+        }
+        if (x * 8 + 8 <= w) {
+            UBYTE *o = out + x * 8;
+            o[0] = hi >> 24; o[1] = hi >> 16; o[2] = hi >> 8; o[3] = hi;
+            o[4] = lo >> 24; o[5] = lo >> 16; o[6] = lo >> 8; o[7] = lo;
+        } else {
+            UBYTE t[8];
+            ULONG i;
+            t[0] = hi >> 24; t[1] = hi >> 16; t[2] = hi >> 8; t[3] = hi;
+            t[4] = lo >> 24; t[5] = lo >> 16; t[6] = lo >> 8; t[7] = lo;
+            for (i = 0; x * 8 + i < w; i++)
+                out[x * 8 + i] = t[i];
+        }
+    }
+}
+
+/* A CMAP as 0xRRGGBB colours (old 4-bit ones widened); extra halfbrite's
+ * 32-63 the first 32 at half. */
+static void lut_from(const UBYTE *c, ULONG len, ULONG camg, UBYTE depth, ULONG *lut)
+{
+    ULONG i, n = len / 3, lo = 0;
+    if (n > 256)
+        n = 256;
+    for (i = 0; i < n * 3; i++)
+        lo |= c[i] & 0x0F;
+    for (i = 0; i < 256; i++) {
+        ULONG r = 0, gg = 0, b = 0;
+        if (i < n) {
+            r = c[i * 3];
+            gg = c[i * 3 + 1];
+            b = c[i * 3 + 2];
+            if (!lo) {
+                r |= r >> 4;
+                gg |= gg >> 4;
+                b |= b >> 4;
+            }
+        }
+        lut[i] = (r << 16) | (gg << 8) | b;
+    }
+    if ((camg & EXTRAHALFBRITE_KEY) && depth == 6)
+        for (i = 32; i < 64; i++)
+            lut[i] = (lut[i - 32] >> 1) & 0x7F7F7F;
+}
+
+/* The controls beneath the picture */
+static struct {
+    WORD y, h, x0, cw, px0, px1;
+} st;
+
+static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
+{
+    WORD x, s = st.h - GU(g, 6), cy = st.y + st.h / 2, t = s > 14 ? 2 : 1, i;
+    char a[16], b[16], line[64];
+    gfx_fill(g, 0, st.y, g->w - 1, g->h - 1, PEN_BG);
+    for (i = 0, x = st.x0; i < BT_N; i++, x += st.cw) {
+        WORD ix = x + (st.cw - s) / 2, iy = st.y + (st.h - s) / 2, j;
+        gfx_fill(g, x + 1, st.y + 2, x + st.cw - 2, st.y + st.h - 3, PEN_BAR);
+        SetAPen(g->rp, PEN_WHITE);
+        switch (i) {
+        case BT_RESTART:
+            RectFill(g->rp, ix + s / 5, iy + s / 5, ix + s / 5 + t, iy + s - s / 5);
+            for (j = 0; j <= s / 3; j++) {
+                Move(g->rp, ix + s / 5 + t + 2 + j, cy - j);
+                Draw(g->rp, ix + s / 5 + t + 2 + j, cy + j);
+            }
+            break;
+        case BT_PLAY:
+            if (paused)
+                for (j = 0; j <= s / 3; j++) {
+                    Move(g->rp, ix + s / 3 + j, iy + s / 6 + j);
+                    Draw(g->rp, ix + s / 3 + j, iy + s - s / 6 - j);
+                }
+            else {
+                RectFill(g->rp, ix + s / 4, iy + s / 6, ix + s / 4 + t, iy + s - s / 6);
+                RectFill(g->rp, ix + s - s / 4 - t, iy + s / 6, ix + s - s / 4, iy + s - s / 6);
+            }
+            break;
+        case BT_STOP:
+            RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
+            break;
+        default:
+            RectFill(g->rp, ix + s / 4, cy - t / 2, ix + s - s / 4, cy - t / 2 + t - 1);
+            if (i == BT_VUP)
+                RectFill(g->rp, ix + s / 2 - t / 2, iy + s / 4, ix + s / 2 - t / 2 + t - 1,
+                         iy + s - s / 4);
+            break;
+        }
+    }
+    time_text(a, at);
+    if (total) {
+        time_text(b, total);
+        sprintf(line, "%s / %s   %ld%%", a, b, (long)(mp_volume() * 100 / 64));
+    } else
+        sprintf(line, "%s   %ld%%", a, (long)(mp_volume() * 100 / 64));
+    x += GU(g, 6);
+    gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
+    x += gfx_textlen(g, line, TS_BODY) + GU(g, 8);
+    st.px0 = x;
+    st.px1 = g->w - 1 - GU(g, 8);
+    if (st.px1 - st.px0 > GU(g, 40)) {          /* the name, then how far it has got */
+        WORD nw = gfx_textlen(g, name, TS_SMALL), pw;
+        if (nw > (st.px1 - st.px0) / 3)
+            nw = (st.px1 - st.px0) / 3;
+        gfx_text(g, st.px1 - nw, cy - g->font_h / 2, name, PEN_DIM, PEN_BG, nw, TS_SMALL);
+        st.px1 -= nw + GU(g, 8);
+        pw = st.px1 - st.px0;
+        if (pw > GU(g, 16)) {
+            WORD fill = st.px0 + (total ? (WORD)((at > total ? total : at) * (ULONG)pw / total) : 0);
+            gfx_fill(g, st.px0, cy - 1, st.px1, cy + 1, PEN_RULE);
+            if (fill > st.px0)
+                gfx_fill(g, st.px0, cy - 1, fill, cy + 1, PEN_WHITE);
+            gfx_fill(g, fill - 2, cy - 4, fill + 2, cy + 4, PEN_WHITE);
+        }
+    }
+}
+
+static int strip_hit(WORD x, WORD y)
+{
+    if (y < st.y)
+        return -1;                          /* the picture: pauses */
+    if (x < st.x0 || (x - st.x0) / st.cw >= BT_N)
+        return -2;                          /* the controls, no button */
+    return (x - st.x0) / st.cw;
+}
+
+/* 0 played, -1 an error (err), 1 too slow here: the caller plays it on a
+ * screen of its own. fh is just past the first frame (f). */
+static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *path, BOOL ahi,
+                           UWORD w, UWORD h, UBYTE depth, UBYTE masking, UBYTE comp, ULONG camg,
+                           BOOL has_camg, char *err, LONG errmax)
+{
+    ULONG rb = ((w + 15) >> 4) << 1, fsz = rb * depth * h, *lut = NULL, jlast = 0, readms = 0;
+    ULONG convms = 0, worst = 0, total, t0, due, jif, start_ms, runs = 0, nconv = 0;
+    UBYTE *planar = NULL, *chunky = NULL, *line = NULL;
+    BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
+    WORD ax, ay, kk, fx, fy, dw, dh, vx, vy, avail;
+    struct AnimPlanes pl[2];
+    LONG result = -1;
+    int k, i, n, quit = 0, shown;
+    char m[200];
+    const char *name = (const char *)FilePart((STRPTR)path);
+
+    /* the picture's pixels' shape, then the largest whole scale that fits */
+    if (!has_camg) {
+        ax = w > 400 ? 1 : 2;
+        ay = h > 300 ? 1 : 2;
+    } else {
+        ax = (camg & (HIRES | SUPERHIRES)) ? 1 : 2;
+        ay = (camg & LACE) ? 1 : 2;
+    }
+    st.h = g->font_h + GU(g, 12);
+    st.y = g->h - st.h;
+    avail = st.y - GU(g, 8);
+    kk = (g->w - GU(g, 16)) / (w * ax);
+    if (avail / (h * ay) < kk)
+        kk = avail / (h * ay);
+    if (kk >= 1) {
+        fx = ax * kk;
+        fy = ay * kk;
+    } else if (w <= g->w && h <= avail)
+        fx = fy = 1;                        /* as it is, its shape aside */
+    else
+        return 1;                           /* bigger than this screen: its own */
+    dw = w * fx;
+    dh = h * fy;
+    vx = (g->w - dw) / 2;
+    vy = GU(g, 4) + (avail - dh) / 2;
+    st.cw = st.h + GU(g, 6);
+    st.x0 = GU(g, 8);
+
+    p2c_init();
+    if (!(planar = AllocVec(fsz * 2, MEMF_ANY | MEMF_CLEAR)) ||
+        !(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)) ||
+        !(line = AllocVec(rb * 8 + 8, MEMF_ANY)) || !(lut = AllocVec(256 * sizeof(ULONG), MEMF_ANY))) {
+        FreeVec(planar);
+        FreeVec(chunky);
+        FreeVec(line);
+        FreeVec(lut);
+        return 1;
+    }
+    for (k = 0; k < 2; k++) {
+        for (i = 0; i < 8; i++)
+            pl[k].plane[i] = planar + k * fsz + i * rb;
+        pl[k].stride = rb * depth;
+        pl[k].depth = depth;
+        pl[k].rb = rb;
+        pl[k].h = h;
+    }
+    if (f->cmap)
+        lut_from(f->cmap, f->cmaplen, camg, depth, lut);
+    else
+        memset(lut, 0, 256 * sizeof(ULONG));
+    total = anim_length(fh, path, 0);
+    ClearPointer(g->win);
+    FillPixelArray(g->rp, 0, 0, g->w, st.y, 0x000000);
+    sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ldx%ld (%ld x %ld)", name,
+            (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)camg,
+            (long)fx, (long)fy, (long)dw, (long)dh);
+    amce_log("anim", m);
+    if (LowLevelBase)
+        jlast = ReadJoyPort(1);
+    if (nsnd && !snd_on) {
+        if (ahi && ahi_open())
+            snd_ahi = snd_on = TRUE;
+        else if ((silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR)) && mp_lend(TRUE))
+            snd_on = TRUE;
+    }
+
+restart:
+    animdec_body(f->body, f->bodylen, &pl[0], comp, masking);
+    CopyMem(planar, planar + fsz, fsz);
+    if (runs && f->cmap)
+        lut_from(f->cmap, f->cmaplen, camg, depth, lut);
+    shown = 0;
+    start_ms = t0 = time_ms();
+    due = 0;
+    n = 0;
+    for (;;) {
+        ULONG td, op, bits, il, dt;
+        int r;
+        const UBYTE *src;
+        /* the frame in pl[shown] to the screen */
+        td = time_ms();
+        src = planar + shown * fsz;
+        {
+            ULONG y, x, j;
+            UBYTE *row = chunky;
+            ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp;
+            for (y = 0; y < h; y++) {
+                p2c_row(src + y * rb * depth, rb, depth, w, line);
+                if (ham) {                  /* each pixel from the one before it */
+                    ULONG rgb = lut[0], hb = depth == 8 ? 6 : 4, lo = (1UL << hb) - 1;
+                    UBYTE *o = row;
+                    for (x = 0; x < w; x++) {
+                        ULONG c = line[x], v = c & lo, ctl = c >> hb;
+                        v = hb == 4 ? v * 17 : (v << 2) | (v >> 4);
+                        if (ctl == 0)
+                            rgb = lut[c & lo];
+                        else if (ctl == 1)
+                            rgb = (rgb & 0xFFFF00) | v;
+                        else if (ctl == 2)
+                            rgb = (rgb & 0x00FFFF) | (v << 16);
+                        else
+                            rgb = (rgb & 0xFF00FF) | (v << 8);
+                        for (j = 0; j < (ULONG)fx; j++) {
+                            o[0] = rgb >> 16;
+                            o[1] = rgb >> 8;
+                            o[2] = rgb;
+                            o += 3;
+                        }
+                    }
+                } else if (fx == 1)
+                    CopyMem(line, row, w);
+                else {
+                    UBYTE *o = row;
+                    for (x = 0; x < w; x++)
+                        for (j = 0; j < (ULONG)fx; j++)
+                            *o++ = line[x];
+                }
+                for (j = 1; j < (ULONG)fy; j++)
+                    CopyMem(row, row + j * rowb, rowb);
+                row += fy * rowb;
+            }
+            if (ham)
+                WritePixelArray(chunky, 0, 0, rowb, g->rp, vx, vy, dw, dh, RECTFMT_RGB);
+            else
+                WriteLUTPixelArray(chunky, 0, 0, dw, g->rp, lut, vx, vy, dw, dh, CTABFMT_XRGB8);
+        }
+        strip_draw(g, paused, due, total, name);
+        dt = time_ms() - td;
+        convms += dt;
+        nconv++;
+        if (dt > worst)
+            worst = dt;
+        if (!runs && nconv == SLOW_FRAMES) {    /* can it keep up here? */
+            ULONG avg = convms / nconv, want = due / (n ? n : 1);
+            if (avg > SLOW_MS && avg > want) {
+                sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: its own screen",
+                        (long)avg, (long)want);
+                amce_log("anim", m);
+                result = 1;
+                goto out;
+            }
+        }
+        /* input, and its time */
+        for (;;) {
+            r = input_with(g->win, &jlast, strip_hit);
+            if (r == 1) {
+                quit = 1;
+                break;
+            }
+            if (r == 3)
+                break;
+            if (r == 2) {
+                paused = !paused;
+                if (paused && snd_on) {
+                    snd_quiet(2);
+                    snd_quiet(3);
+                }
+                strip_draw(g, paused, due, total, name);
+            } else if (bar_redraw) {
+                bar_redraw = FALSE;
+                strip_draw(g, paused, due, total, name);
+            }
+            if (snd_on)
+                snd_tick();
+            if (!paused)
+                break;
+            WaitTOF();
+            t0 = time_ms() - due;
+        }
+        if (quit)
+            break;
+        if (r == 3) {
+            if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, f, &readms) || !f->body)
+                break;
+            if (snd_on) {
+                snd_quiet(2);
+                snd_quiet(3);
+            }
+            paused = FALSE;
+            runs++;
+            goto restart;
+        }
+        if (!read_frame(fh, f, &readms))
+            break;                          /* the end */
+        op = f->anhd ? f->anhd[0] : 0;
+        il = f->anhd ? f->anhd[18] : 0;
+        bits = f->anhd ? be32(f->anhd + 20) : 0;
+        jif = f->anhd ? be32(f->anhd + 14) : 1;
+        k = shown ^ 1;
+        if (il == 1)
+            CopyMem(planar + shown * fsz, planar + k * fsz, fsz);
+        if (op == 0 && f->body)
+            animdec_body(f->body, f->bodylen, &pl[k], comp, masking);
+        else if (f->dlta && animdec_delta(f->dlta, f->dltalen, &pl[k], op, bits) == -2) {
+            sprintf(err, _("ANIM-%ld compression is not supported"), (long)op);
+            break;
+        }
+        if (f->cmap)
+            lut_from(f->cmap, f->cmaplen, camg, depth, lut);
+        due += (jif ? jif : 1) * 1000 / 60;
+        while ((LONG)(time_ms() - t0) < (LONG)due - 10)
+            WaitTOF();
+        shown = k;
+        n++;
+        for (i = 0; i < f->nsctl; i++)
+            snd_command(f->sctl[i]);
+    }
+    if (!quit && !err[0]) {                 /* the end: a short one again until stopped */
+        ULONG ms = time_ms() - start_ms;
+        if (!runs)
+            loop = ms < LOOP_MS;
+        if (loop && Seek(fh, 12, OFFSET_BEGINNING) >= 0 && read_frame(fh, f, &readms) && f->body) {
+            runs++;
+            goto restart;
+        }
+    }
+    sprintf(m, "%ld frames on AmigaMCE's screen, drawn in %ld ms each (%ld at the most), reading %ld ms; "
+            "played %ld time%s", (long)nconv, (long)(nconv ? convms / nconv : 0), (long)worst,
+            (long)readms, (long)runs + 1, runs ? "s" : "");
+    amce_log("anim", m);
+    result = err[0] ? -1 : 0;
+    (void)errmax;
+out:
+    FreeVec(planar);
+    FreeVec(chunky);
+    FreeVec(line);
+    FreeVec(lut);
+    return result;
+}
+
+LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *err, LONG errmax)
 {
     BPTR fh;
     UBYTE head[12];
@@ -940,6 +1381,19 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax
     if (!w || !h || !depth || depth > 8 || comp > 1) {
         amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
         goto out;
+    }
+    /* on a 16-bit RTG screen: on AmigaMCE's own, unless chosen otherwise */
+    if (g && g->truecolor && g->win && CyberGfxBase && !classic && !anim_slow) {
+        LONG r = play_on_screen(g, fh, &f, path, ahi, w, h, depth, masking, comp, camg,
+                                f.has_camg, err, errmax);
+        if (r != 1) {
+            result = r;
+            goto out;
+        }
+        anim_slow = TRUE;                   /* too slow: its own screen, from the start */
+        if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, &f, &readms) || !f.body)
+            goto out;
+        camg = f.camg;
     }
     if ((id = pick_mode(camg, f.has_camg, w, h, depth)) == (ULONG)INVALID_ID || mode_depth(id) < depth) {
         (void)errmax;
@@ -996,7 +1450,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, char *err, LONG errmax
     amce_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
-    if (nsnd) {                             /* its own sound (what played waits: main.c) */
+    if (nsnd && !snd_on) {                  /* its own sound (what played waits: main.c) */
         if (ahi && ahi_open())
             snd_ahi = snd_on = TRUE;
         else if ((silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR)) && mp_lend(TRUE))
