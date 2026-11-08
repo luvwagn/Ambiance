@@ -56,6 +56,22 @@ static LONG afn;
 static BOOL af_loaded, af_sem_ready;
 static struct SignalSemaphore af_sem;
 
+/* No "write protected" or "please insert" requester for the Cache: on a
+ * read-only volume a write just fails (for the pane's loader process it
+ * would come up on the Workbench screen, behind AmigaMCE, and wait). */
+static APTR quiet_on(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    return old;
+}
+
+static void quiet_off(APTR old)
+{
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = old;
+}
+
 static void af_lock(void)
 {
     Forbid();
@@ -80,14 +96,17 @@ static void af_load(void)
     BPTR fh;
     if (af_loaded)
         return;
+    APTR q;
     af_loaded = TRUE;
     if (!(af = AllocVec(AF_MAX * sizeof(*af), MEMF_ANY)))
         return;
+    q = quiet_on();
     if ((fh = Open((CONST_STRPTR)AF_FILE, MODE_OLDFILE))) {
         LONG n = Read(fh, af, AF_MAX * sizeof(*af));
         afn = n > 0 ? n / (LONG)sizeof(*af) : 0;
         Close(fh);
     }
+    quiet_off(q);
 }
 
 /* fh's file as a fact's key (FALSE: not known) */
@@ -139,7 +158,8 @@ void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms)
     k.ms = ms;
     af_lock();
     if (af && afn < AF_MAX) {
-        af[afn++] = k;
+        APTR q = quiet_on();
+        af[afn++] = k;                      /* kept for this run whatever happens to the file */
         if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
             l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
         if (l)
@@ -149,6 +169,7 @@ void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms)
             Write(out, &k, sizeof(k));
             Close(out);
         }
+        quiet_off(q);
     }
     ReleaseSemaphore(&af_sem);
 }
@@ -410,7 +431,12 @@ static BOOL pick_load(BPTR fh, const char *path, ULONG sw, ULONG sh, UBYTE plane
     if (!af_key(fh, path, &k))
         return FALSE;
     pick_name(name, k.hash);
-    if (!(in = Open((CONST_STRPTR)name, MODE_OLDFILE)))
+    {
+        APTR q = quiet_on();
+        in = Open((CONST_STRPTR)name, MODE_OLDFILE);
+        quiet_off(q);
+    }
+    if (!in)
         return FALSE;
     if (Read(in, &ph, sizeof(ph)) == sizeof(ph) && ph.magic == PICK_MAGIC && ph.hash == k.hash &&
         ph.days == k.days && ph.minute == k.minute && ph.tick == k.tick && ph.size == k.size &&
@@ -430,8 +456,10 @@ static void pick_save(BPTR fh, const char *path, ULONG sw, ULONG sh, UBYTE plane
     struct PickHead ph;
     char name[48];
     BPTR out, l;
+    APTR q;
     if (!af_key(fh, path, &k))
         return;
+    q = quiet_on();
     if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
         l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
     if (l)
@@ -454,6 +482,7 @@ static void pick_save(BPTR fh, const char *path, ULONG sw, ULONG sh, UBYTE plane
         if (!ok)
             DeleteFile((CONST_STRPTR)name);     /* not half a frame for next time */
     }
+    quiet_off(q);
 }
 
 /* The frame to show, decoded into a new buffer of interleaved rows (the
