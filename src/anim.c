@@ -1074,8 +1074,10 @@ BOOL anim_has_sound(const char *path)
  * the one before). Behind time, frames are decoded and not drawn (up to
  * SKIP_MAX in a row), so it keeps its speed and its sound in step.
  *
- * Where even so it cannot keep up (drawing over SLOW_MS a frame, and over
- * three times what the animation wants, over its first SLOW_FRAMES drawn), it
+ * Full screen too slow (over three times what it wants, over its first
+ * SLOW_FRAMES drawn), it goes back to its whole scale for that one. Where
+ * even skipping cannot keep up (drawing over SLOW_MS a frame, and over
+ * SKIP_MAX + 1 times what the animation wants), it
  * goes back to its own screen, from the start; that file plays there for
  * the rest of this run. */
 #define SLOW_FRAMES 12
@@ -1979,7 +1981,25 @@ restart:
             worst = dt;
         if (!runs && nconv == SLOW_FRAMES) {    /* can it keep up here? */
             ULONG avg = convms / nconv, want = due / (n ? n : 1);
-            if (avg > SLOW_MS && avg > want * 3) {
+            if (lay.full && avg > SLOW_MS && avg > want * 3) {
+                /* full screen too much: its whole scale for this one, measured again */
+                sprintf(m, "%ld ms a frame to draw full screen, %ld wanted: at its whole scale",
+                        (long)avg, (long)want);
+                amce_log("anim", m);
+                lay_out(g, w, h, ax, ay, FALSE);
+                dw = lay.dw;
+                dh = lay.dh;
+                vx = lay.vx;
+                vy = lay.vy;
+                fx = lay.fx;
+                fy = lay.fy;
+                FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+                sf.lv = 0;
+                sf.drawn = FALSE;
+                fresh = TRUE;
+                nconv = 0;
+                convms = 0;
+            } else if (avg > SLOW_MS && avg > want * (SKIP_MAX + 1)) {
                 sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: its own screen",
                         (long)avg, (long)want);
                 amce_log("anim", m);
