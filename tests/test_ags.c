@@ -257,7 +257,7 @@ int main(void)
         char first[160];
         LONG nd;
         list_init(&l);
-        n = pics_read_dir("Images:", &l);
+        n = pics_read_dir("Images:", &l, FALSE);
         check_long("pics count", n, 9);
         for (i = 0; i < l.count && i < 9; i++)
             check_str("pics order", l.items[i].label, want[i]);
@@ -276,7 +276,7 @@ int main(void)
         }
         list_free(&l);
         list_init(&l);
-        n = pics_read_dir("Images:Mixed", &l);
+        n = pics_read_dir("Images:Mixed", &l, FALSE);
         check_long("pics Mixed entries", n, 3);
         if (n == 3) {
             check_str("pics Mixed sub", l.items[0].label, "Sub");
@@ -292,8 +292,36 @@ int main(void)
         check_long("scan root dirs", nd, 4);
         check_long("scan missing", pics_scan("Images:Nope", &nd, NULL, 0), -1);
         list_init(&l);
-        check_long("missing volume", pics_read_dir("NoSuchVolume:Images", &l), -1);
+        check_long("missing volume", pics_read_dir("NoSuchVolume:Images", &l, FALSE), -1);
         list_free(&l);
+    }
+
+    /* Videos: animations and folders only; an ANIM by a picture's name
+     * (.iff) looked inside; a folder of pictures alone greyed. Read as
+     * Pictures, a .iff is not opened (found when it is opened). */
+    {
+        list_init(&l);
+        n = pics_read_dir("Videos:", &l, TRUE);
+        check_long("vids count", n, 3);
+        if (n == 3) {
+            check_str("vids folder", l.items[0].label, "Clips");
+            check_str("vids folder count", l.items[0].sortkey, "1");
+            check_long("vids folder open", l.items[0].flags & ITEM_DISABLED, 0);
+            check_str("vids pictures folder", l.items[1].label, "Logo");
+            check_long("vids pictures folder greyed", l.items[1].flags & ITEM_DISABLED, ITEM_DISABLED);
+            check_str("vids anim", l.items[2].label, "Spin.iff");
+            check_long("vids anim kind", l.items[2].kind, IT_ANIM);
+            check_str("vids anim tag", l.items[2].sortkey, "ANIM");
+        }
+        list_free(&l);
+        list_init(&l);
+        n = pics_read_dir("Videos:", &l, FALSE);
+        check_long("pics of Videos count", n, 4);
+        if (n == 4)
+            check_long("pics .iff not opened", l.items[2].kind, IT_PIC);
+        list_free(&l);
+        check_long("is anim", pics_is_anim("Videos:Spin.iff"), TRUE);
+        check_long("is not anim", pics_is_anim("Videos:Still.iff"), FALSE);
     }
 
     Printf(failures ? "%ld FAILED\n" : "all tests passed\n", (LONG)failures);

@@ -140,7 +140,7 @@ test: check-formats check-syscalls build/test_ags build/test_songs build/test_ff
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
-	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V T:$(abspath build/vt) test_ags
+	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V Videos:$(abspath tests/fixtures/Videos) -V T:$(abspath build/vt) test_ags
 	@rm -rf build/songs build/ram && mkdir -p build/ram
 	@$(PYTHON) -I tests/mksongs.py build/songs
 	@cd build && vamos -V Songs:$(abspath build/songs) -V RAM:$(abspath build/ram) test_songs > test-songs.txt \

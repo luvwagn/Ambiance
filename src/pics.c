@@ -3,7 +3,8 @@
  * Copyright (c) 2026 Brian King
  *
  * A Pictures list holds folders (IT_DIR), picture files (IT_PIC) and IFF
- * ANIMs (IT_ANIM: Videos lists are these lists too, of animations),
+ * ANIMs (IT_ANIM). Videos lists are these lists too (vids), animations
+ * and folders only: a folder of no animations (pictures alone) greyed,
  * folders first, each part sorted by name. Once sorted, an entry's sortkey
  * holds the tag shown at the right of its row: a picture's format ("GIF"),
  * or a playable folder's picture count. A folder with pictures and no
@@ -217,8 +218,8 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     struct collect_ctx *c = ctx;
     char path[300], key[140];
     const char *f = isdir ? NULL : entry_format(c->dir, name, c->vids);
-    if (!isdir && !f)
-        return;
+    if (!isdir && (!f || (c->vids && strcmp(f, "ANIM"))))
+        return;                             /* (Videos: animations only, no pictures) */
     join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
         collect(path, c->out, FALSE, c->vids);
@@ -258,6 +259,8 @@ static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
             it->sortkey = (char *)(f ? f : "");
         } else {
             LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na, vids);
+            if (vids)
+                np = 0;                         /* Videos: its pictures are not shown */
             it->sortkey = (char *)"";
             if (na > 0 && np <= 0 && nd == 0) {
                 char num[12];                   /* animations: opened, one played at a time */
