@@ -1278,6 +1278,7 @@ static struct {
     UWORD *xo, *yo;
     BOOL full, can_full;
     struct BitMap *pbm;             /* the picture, drawn here, then blitted onto the screen */
+    void (*reblit)(struct Gfx *, WORD, WORD);   /* the picture's rows again (the card's way) */
 } lay;
 static BOOL anim_full;          /* full screen chosen (for this run) */
 
@@ -1472,8 +1473,12 @@ static void pic_blit(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 static void strip_clear(struct Gfx *g)
 {
     FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
-    if (lay.vy + lay.dh > st.y)
-        pic_blit(g, 0, st.y - lay.vy, lay.dw, lay.dh);
+    if (lay.vy + lay.dh > st.y) {
+        if (lay.reblit)
+            lay.reblit(g, st.y - lay.vy, lay.dh);
+        else
+            pic_blit(g, 0, st.y - lay.vy, lay.dw, lay.dh);
+    }
 }
 
 static void strip_render(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG total,
@@ -1601,6 +1606,212 @@ static int strip_hit(WORD x, WORD y)
         if (x >= st.bx[i] && x < st.bx[i] + st.cw)
             return i;
     return -2;                              /* the controls, no button */
+}
+
+/* ---- frames drawn by the graphics card: a colour-table animation's planes
+ * handed to it as a bitmap, BltBitMap converting them to the screen's
+ * pixels through the screen's colours (Picasso96's BlitPlanar2Direct; on
+ * Amiberry, PrismRTG passes it to the emulator, which does it on the PC:
+ * 0.2 ms a 384 x 290 frame, against 36 ms on the 68k). The animation's
+ * colours are loaded for the blit and the screen's put back after it.
+ *   CARD_PLANES   at 1:1, the planes as they are (the decoder's buffer)
+ *   CARD_STRETCH  at whole scales, the planes stretched first: a byte's
+ *                 bits each fx times by a table, a row fy times
+ *   CARD_SPREAD   at other scales: converted at 1:1 into a bitmap of the
+ *                 card's (a friend of the screen's: its colours), then
+ *                 its pixels spread by the CPU into lay.pbm
+ * HAM is not the card's: drawn by animdraw as before. The first frame is
+ * read back and checked against the colours it should have; any other,
+ * and the CPU draws it. */
+enum { CARD_OFF, CARD_PLANES, CARD_STRETCH, CARD_SPREAD };
+static struct {
+    int mode;
+    UBYTE depth;
+    UWORD w, h;
+    ULONG rb;                       /* the decoder's bytes a plane row */
+    struct BitMap src;              /* the frame's planes as a bitmap (rows interleaved) */
+    struct BitMap xb;               /* stretched (CARD_STRETCH) */
+    UBYTE *xbuf;
+    ULONG rbx, xsize;               /* its bytes a plane row; all of it */
+    WORD fx, fy;
+    struct BitMap *c1;              /* CARD_SPREAD: 1:1 on the card */
+    ULONG xt[256];                  /* a byte's bits, each fx times */
+    ULONG load[256 * 3 + 2];        /* LoadRGB32's: the animation's colours */
+    ULONG save[256 * 3 + 2];        /* ...and the screen's, to put back */
+    int ncol;
+    struct ViewPort *vp;
+    BOOL checked;                   /* the first frame's colours looked at */
+} cd;
+
+static void card_free(void)
+{
+    WaitBlit();
+    FreeVec(cd.xbuf);
+    cd.xbuf = NULL;
+    if (cd.c1)
+        FreeBitMap(cd.c1);
+    cd.c1 = NULL;
+    cd.mode = CARD_OFF;
+    lay.reblit = NULL;
+}
+
+/* The animation's colours (lut) for the card's blits */
+static void card_colours(const ULONG *lut)
+{
+    int i;
+    cd.load[0] = (ULONG)cd.ncol << 16;
+    for (i = 0; i < cd.ncol; i++) {
+        cd.load[1 + i * 3] = ((lut[i] >> 16) & 255) * 0x01010101UL;
+        cd.load[2 + i * 3] = ((lut[i] >> 8) & 255) * 0x01010101UL;
+        cd.load[3 + i * 3] = (lut[i] & 255) * 0x01010101UL;
+    }
+    cd.load[1 + cd.ncol * 3] = 0;
+}
+
+/* The frame in planes (buffer pl0) as the source bitmap */
+static void card_source(const UBYTE *pl0)
+{
+    int p;
+    for (p = 0; p < cd.depth; p++)
+        cd.src.Planes[p] = (PLANEPTR)(pl0 + p * cd.rb);
+}
+
+/* A blit of planes, the animation's colours loaded for it */
+static void card_blit(struct BitMap *bm, WORD sx, WORD sy, struct BitMap *to, struct RastPort *rp,
+                      WORD dx, WORD dy, WORD ww, WORD hh)
+{
+    if (ww <= 0 || hh <= 0)
+        return;
+    LoadRGB32(cd.vp, cd.load);
+    if (rp)
+        BltBitMapRastPort(bm, sx, sy, rp, dx, dy, ww, hh, 0xC0);
+    else
+        BltBitMap(bm, sx, sy, to, dx, dy, ww, hh, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    LoadRGB32(cd.vp, cd.save);
+}
+
+/* Picture rows y0-y1 (one past, the screen's scale) onto the screen from
+ * the card's planes, not over the controls while they show */
+static void card_reblit(struct Gfx *g, WORD y0, WORD y1)
+{
+    struct BitMap *bm = cd.mode == CARD_STRETCH ? &cd.xb : &cd.src;
+    if (sf.lv > 0 && lay.vy + y1 > st.y)
+        y1 = st.y - lay.vy;
+    card_blit(bm, 0, y0, NULL, g->rp, lay.vx, lay.vy + y0, lay.dw, y1 - y0);
+}
+
+/* Planes row y (of the frame's) stretched into the bitmap's rows */
+static void card_stretch_row(const UBYTE *row, ULONG y)
+{
+    ULONG stride = cd.rbx * cd.depth, x, j;
+    UBYTE *o = cd.xbuf + y * cd.fy * stride, p;
+    for (p = 0; p < cd.depth; p++) {
+        const UBYTE *s = row + p * cd.rb;
+        UBYTE *d = o + p * cd.rbx, *e = d + cd.rbx;
+        for (x = 0; x < cd.rb && d < e; x++) {
+            ULONG v = cd.xt[s[x]];
+            switch (cd.fx) {
+            case 4: *d++ = (UBYTE)(v >> 24); if (d >= e) break; /* fall through */
+            case 3: *d++ = (UBYTE)(v >> 16); if (d >= e) break; /* fall through */
+            case 2: *d++ = (UBYTE)(v >> 8); if (d >= e) break; /* fall through */
+            default: *d++ = (UBYTE)v;
+            }
+        }
+    }
+    for (j = 1; j < (ULONG)cd.fy; j++)
+        CopyMem(o, o + j * stride, stride);
+}
+
+/* The card's way for this layout (lay), if it can: its mode */
+static int card_choose(struct Gfx *g, UWORD w, UWORD h, UBYTE depth, BOOL ham, ULONG rb)
+{
+    int i, b, mode = CARD_OFF;
+    card_free();
+    if (ham || !CyberGfxBase || !g->truecolor || !g->scr || depth > 8 || cd.ncol == 0)
+        return CARD_OFF;
+    cd.vp = &g->scr->ViewPort;
+    cd.depth = depth;
+    cd.w = w;
+    cd.h = h;
+    cd.rb = rb;
+    InitBitMap(&cd.src, depth, w, h);
+    cd.src.BytesPerRow = rb * depth;        /* rows interleaved, as decoded */
+    if (lay.fx == 1 && lay.fy == 1)
+        mode = CARD_PLANES;
+    else if (lay.fx >= 1 && lay.fx <= 4 && lay.fy >= 1 && lay.fy <= 4) {
+        cd.fx = lay.fx;
+        cd.fy = lay.fy;
+        cd.rbx = (((ULONG)w * cd.fx + 15) >> 4) << 1;
+        cd.xsize = cd.rbx * depth * h * cd.fy;
+        if ((cd.xbuf = AllocVec(cd.xsize, MEMF_ANY | MEMF_CLEAR))) {
+            InitBitMap(&cd.xb, depth, w * cd.fx, h * cd.fy);
+            cd.xb.BytesPerRow = cd.rbx * depth;
+            for (i = 0; i < depth; i++)
+                cd.xb.Planes[i] = (PLANEPTR)(cd.xbuf + i * cd.rbx);
+            for (b = 0; b < 256; b++) {
+                ULONG v = 0;
+                int k, j;
+                for (k = 7; k >= 0; k--)
+                    for (j = 0; j < cd.fx; j++)
+                        v = (v << 1) | ((b >> k) & 1);
+                cd.xt[b] = v;
+            }
+            mode = CARD_STRETCH;
+        }
+    } else if (lay.pbm && (cd.c1 = AllocBitMap(w, h, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH),
+                                               BMF_MINPLANES, g->rp->BitMap)))
+        mode = CARD_SPREAD;
+    cd.mode = mode;
+    cd.checked = FALSE;
+    lay.reblit = mode == CARD_PLANES || mode == CARD_STRETCH ? card_reblit : NULL;
+    return mode;
+}
+
+/* The first frame drawn: do its pixels have the colours they should? A
+ * sample of rows read back (from where it was drawn), against the colour
+ * table, to the screen's bits. FALSE: not the card's to draw. */
+static BOOL card_check(struct Gfx *g, const UBYTE *planes, const ULONG *lut)
+{
+    UBYTE *rgb = AllocVec((ULONG)cd.w * 4 * 3, MEMF_ANY);
+    struct RastPort crp, *rp;
+    WORD x0, y0, sx, sy;
+    ULONG y, x, bad = 0;
+    UBYTE p;
+    if (!rgb)
+        return TRUE;                        /* (no memory to look: as it is) */
+    if (cd.mode == CARD_SPREAD) {
+        InitRastPort(&crp);
+        crp.BitMap = cd.c1;
+        rp = &crp;
+        x0 = y0 = 0;
+        sx = sy = 1;
+    } else {
+        rp = g->rp;
+        x0 = lay.vx;
+        y0 = lay.vy;
+        sx = cd.mode == CARD_STRETCH ? cd.fx : 1;
+        sy = cd.mode == CARD_STRETCH ? cd.fy : 1;
+    }
+    for (y = 0; y < cd.h && !bad; y += cd.h / 12 + 1) {
+        const UBYTE *row = planes + y * cd.rb * cd.depth;
+        if (sf.lv > 0 && rp == g->rp && y0 + (WORD)(y * sy) >= st.y)
+            break;                          /* (under the controls) */
+        ReadPixelArray(rgb, 0, 0, cd.w * sx * 3, rp, x0, y0 + y * sy, cd.w * sx, 1, RECTFMT_RGB);
+        for (x = 0; x < cd.w; x++) {
+            ULONG c = 0, want;
+            const UBYTE *got = rgb + x * sx * 3;
+            for (p = 0; p < cd.depth; p++)
+                if (row[p * cd.rb + (x >> 3)] & (0x80 >> (x & 7)))
+                    c |= 1UL << p;
+            want = lut[c];
+            if ((((want >> 16) ^ got[0]) & 0xF0) || (((want >> 8) ^ got[1]) & 0xF0) ||
+                ((want ^ got[2]) & 0xF0))
+                bad++;
+        }
+    }
+    FreeVec(rgb);
+    return bad == 0;
 }
 
 /* The picture's place (lay): the largest whole scale above the controls,
@@ -1783,9 +1994,29 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
     strip_setup(g);
     ctl.nbtn = lay.can_full ? BT_N : BT_FULL;
+    /* the card's way, for a colour-table animation: the screen's colours
+     * kept, to put back after each of its blits */
+    {
+        struct ColorMap *cm = g->scr ? g->scr->ViewPort.ColorMap : NULL;
+        memset(&cd, 0, sizeof(cd));
+        cd.ncol = depth >= 8 ? 256 : 1 << depth;
+        if (cm && cm->Count < cd.ncol)
+            cd.ncol = cm->Count;
+        if (cm && !ham) {
+            GetRGB32(cm, 0, cd.ncol, cd.save + 1);
+            cd.save[0] = (ULONG)cd.ncol << 16;
+            cd.save[1 + cd.ncol * 3] = 0;
+            card_colours(lut);
+            card_choose(g, w, h, depth, ham, rb);
+        } else
+            cd.ncol = 0;
+    }
     sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ld x %ld%s, %s", name,
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)camg,
             (long)dw, (long)dh, lay.full ? " (full screen)" : "",
+            cd.mode == CARD_PLANES ? "its planes blitted by the card" :
+            cd.mode == CARD_STRETCH ? "its planes stretched, then blitted by the card" :
+            cd.mode == CARD_SPREAD ? "blitted by the card, then spread" :
             lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
     amce_log("anim", m);
     if (LowLevelBase)
@@ -1807,6 +2038,8 @@ restart:
         if (ham)
             ad_ham(l16, depth);
     }
+    if (cd.ncol)
+        card_colours(lut);
     fresh = TRUE;
     skip = FALSE;
     shown = 0;
@@ -1823,7 +2056,71 @@ restart:
             goto drawn;
         td = time_ms();
         src = planar + shown * fsz;
-        if (direct) {
+        if (cd.mode != CARD_OFF) {          /* the card's way */
+            ULONG y, rowl = rb * depth;
+            LONG ry0 = -1, ry1 = -1;
+            card_source(src);
+            if (cd.mode == CARD_PLANES) {   /* (the whole frame: a fraction of a ms) */
+                card_reblit(g, 0, dh);
+                nrows += h;
+            } else {
+                for (y = 0; y < h; y++) {   /* the rows changed */
+                    const UBYTE *a = src + y * rowl;
+                    UBYTE *b = last + y * rowl;
+                    if (!fresh && !memcmp(a, b, rowl))
+                        continue;
+                    if (cd.mode == CARD_STRETCH)
+                        card_stretch_row(a, y);
+                    CopyMem((APTR)a, b, rowl);
+                    if (ry0 < 0)
+                        ry0 = y;
+                    ry1 = y;
+                    nrows++;
+                }
+                if (ry0 >= 0 && cd.mode == CARD_STRETCH)
+                    card_reblit(g, ry0 * cd.fy, (ry1 + 1) * cd.fy);
+                else if (ry0 >= 0) {        /* CARD_SPREAD: at 1:1 on the card, then spread */
+                    UBYTE *cb = NULL, *pb = NULL;
+                    ULONG cbpr = 0, pbpr = 0, x, j;
+                    APTR l1, l2 = NULL;
+                    card_blit(&cd.src, 0, ry0, cd.c1, NULL, 0, ry0, w, ry1 - ry0 + 1);
+                    l1 = LockBitMapTags(cd.c1, LBMI_BASEADDRESS, (ULONG)&cb, LBMI_BYTESPERROW,
+                                        (ULONG)&cbpr, TAG_DONE);
+                    if (l1)
+                        l2 = LockBitMapTags(lay.pbm, LBMI_BASEADDRESS, (ULONG)&pb, LBMI_BYTESPERROW,
+                                            (ULONG)&pbpr, TAG_DONE);
+                    if (l1 && l2 && cb && pb)
+                        for (y = ry0; y <= (ULONG)ry1; y++) {
+                            const UWORD *s16 = (const UWORD *)(cb + y * cbpr);
+                            UWORD *d16 = (UWORD *)(pb + (ULONG)lay.yo[y] * pbpr);
+                            for (x = 0; x < w; x++) {
+                                UWORD v = s16[x], *q = d16 + lay.xo[x], *e = d16 + lay.xo[x + 1];
+                                while (q < e)
+                                    *q++ = v;
+                            }
+                            for (j = 1; j < (ULONG)(lay.yo[y + 1] - lay.yo[y]); j++)
+                                CopyMem(d16, (UBYTE *)d16 + j * pbpr, (ULONG)dw * 2);
+                        }
+                    if (l2)
+                        UnLockBitMap(l2);
+                    if (l1)
+                        UnLockBitMap(l1);
+                    pic_blit(g, 0, lay.yo[ry0], dw, lay.yo[ry1 + 1]);
+                }
+            }
+            fresh = FALSE;
+            if (!cd.checked) {              /* the first: the colours it should have? */
+                cd.checked = TRUE;
+                if (!card_check(g, src, lut)) {
+                    amce_log("anim", "the card's colours are not the animation's: the CPU draws it");
+                    card_free();
+                    fresh = TRUE;
+                    if (!direct && !chunky &&
+                        !(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
+                        break;
+                }
+            }
+        } else if (direct) {
             UBYTE *base = NULL;
             ULONG bpr = 0, y, x0, x1, j, span, rowl = rb * depth, ry0 = h, ry1 = 0, cx0 = rb, cx1 = 0;
             APTR lk = LockBitMapTags(lay.pbm ? lay.pbm : g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
@@ -1876,13 +2173,15 @@ restart:
                     vy = lay.vy;
                     fx = lay.fx;
                     fy = lay.fy;
+                    if (cd.ncol)
+                        card_choose(g, w, h, depth, ham, rb);   /* (its way for the new size) */
                     FillPixelArray(g->rp, 0, 0, g->w, st.y, 0x000000);
                 }
                 if (!(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
                     break;
             }
         }
-        if (!direct) {
+        if (!direct && cd.mode == CARD_OFF) {
             ULONG y, x, j;
             UBYTE *row = chunky;
             ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp;
@@ -1947,6 +2246,8 @@ restart:
                 vy = lay.vy;
                 fx = lay.fx;
                 fy = lay.fy;
+                if (cd.ncol)
+                    card_choose(g, w, h, depth, ham, rb);   /* (its way for the new size) */
                 FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
                 sf.lv = 0;
                 sf.drawn = FALSE;
@@ -1984,6 +2285,8 @@ restart:
                 vy = lay.vy;
                 fx = lay.fx;
                 fy = lay.fy;
+                if (cd.ncol)
+                    card_choose(g, w, h, depth, ham, rb);   /* (its way for the new size) */
                 FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
                 sf.lv = 0;
                 sf.drawn = FALSE;
@@ -2064,6 +2367,8 @@ restart:
                     if (ham)
                         ad_ham(l16, depth);
                 }
+                if (cd.ncol)
+                    card_colours(lut);
                 fresh = TRUE;
             }
         }
@@ -2098,6 +2403,7 @@ restart:
     amce_log("anim", m);
     result = err[0] ? -1 : 0;
     (void)errmax;
+    card_free();
     strip_cleanup(g);
     WaitBlit();
     if (lay.pbm)
