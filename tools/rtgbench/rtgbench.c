@@ -425,6 +425,46 @@ static void t_ours_ham(void)             /* AmigaMCE's: HAM6 (the card cannot) *
     ours(1);
 }
 
+/* Does the card's planar blit draw what AmigaMCE's own does? Both read
+ * back as RGB and compared, to the screen's bits (5-6-5): the pixels that
+ * differ, and the first. */
+static void p_check(char *line)
+{
+    struct RastPort prp;
+    UBYTE *a = AllocVec(PW * PH * 3, MEMF_ANY), *b = AllocVec(PW * PH * 3, MEMF_ANY);
+    ULONG i, n = 0, first = 0;
+    line[0] = 0;
+    if (!a || !b || !p_ok) {
+        FreeVec(a);
+        FreeVec(b);
+        return;
+    }
+    t_p2d();
+    WaitBlit();
+    ReadPixelArray(a, 0, 0, PW * 3, rp, 20, 40, PW, PH, RECTFMT_RGB);
+    ours(0);
+    WaitBlit();
+    InitRastPort(&prp);
+    prp.BitMap = pbm;
+    ReadPixelArray(b, 0, 0, PW * 3, &prp, 0, 0, PW, PH, RECTFMT_RGB);
+    for (i = 0; i < (ULONG)PW * PH; i++)
+        if (((a[i * 3] ^ b[i * 3]) & 0xF8) || ((a[i * 3 + 1] ^ b[i * 3 + 1]) & 0xFC) ||
+            ((a[i * 3 + 2] ^ b[i * 3 + 2]) & 0xF8)) {
+            if (!n++)
+                first = i;
+        }
+    if (n)
+        sprintf(line, "  the card's planar blit: %ld of %ld pixels differ from AmigaMCE's (the first at "
+                "%ld,%ld: %02x%02x%02x, AmigaMCE %02x%02x%02x)\n", (long)n, (long)PW * PH,
+                (long)(first % PW), (long)(first / PW), a[first * 3], a[first * 3 + 1],
+                a[first * 3 + 2], b[first * 3], b[first * 3 + 1], b[first * 3 + 2]);
+    else
+        sprintf(line, "  the card's planar blit: every pixel the same as AmigaMCE's (%ld)\n",
+                (long)PW * PH);
+    FreeVec(a);
+    FreeVec(b);
+}
+
 static struct ScreenBuffer *sb[2];
 static struct MsgPort *safe;
 static BOOL safe_wait;
@@ -559,6 +599,10 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
             Wait(1UL << safe->mp_SigBit);
         safe_wait = FALSE;
     }
+    if (p_ok) {
+        p_check(line);
+        say(line);
+    }
     if (sb[1]) {
         if (sb[0]) {                    /* the screen's own bitmap shown before closing */
             while (!ChangeScreenBuffer(scr, sb[0]))
@@ -663,7 +707,7 @@ int main(void)
     for (i = 0; i < 48; i++)
         lut[16 + i] = cover_pal[i];
 
-    say("AmigaMCE RTG benchmark 1.0\n");
+    say("AmigaMCE RTG benchmark 1.1\n");
     sprintf(line, "68%s0%s, Kickstart %ld, graphics %ld, cybergraphics %s, fast RAM %ld KB, chip %ld KB\n",
             SysBase->AttnFlags & (1 << 7) ? "06" : SysBase->AttnFlags & AFF_68040 ? "04" :
             SysBase->AttnFlags & AFF_68030 ? "03" : SysBase->AttnFlags & AFF_68020 ? "02" : "00",
