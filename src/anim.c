@@ -602,6 +602,7 @@ static struct {
     ULONG moved, opened, key;       /* clocks: the mouse last moved, the window opened, a key */
     ULONG moved_seen, key_seen;
     int mode, focus, nbtn;          /* nbtn: the buttons it has (BT_FULL: not that one) */
+    UWORD off;                      /* buttons greyed (1 << BT_*): not pressed, not in focus */
     BOOL shown, ptr;
     UWORD *blank;                   /* an empty pointer (chip memory) */
     struct Window *win;
@@ -897,6 +898,8 @@ static void volume(int d)
  * screen or not, 0 else. */
 static int ctl_press(int b)
 {
+    if (b >= 0 && (ctl.off & (1 << b)))
+        return 0;                           /* greyed */
     switch (b) {
     case BT_RESTART:
         return 3;
@@ -922,6 +925,8 @@ static void ctl_move(int d)
 {
     if (ctl.shown && ctl.mode == CM_KEY) {
         int f = ctl.focus + d;
+        while (f >= 0 && f < ctl.nbtn && (ctl.off & (1 << f)))
+            f += d;                         /* greyed: passed over */
         if (f >= 0 && f < ctl.nbtn)
             ctl.focus = f;
     }
@@ -962,7 +967,7 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
             else if ((code == 0x44 || code == 0x43) && !r)  /* Return, Enter */
                 r = ctl_enter();
             else if (code == 0x23 && !r)            /* F: full screen or not */
-                r = 4;
+                r = ctl_press(BT_FULL);
             else if (code == 0x4F)                  /* Left, Right: the focus */
                 ctl_move(-1);
             else if (code == 0x4E)
@@ -979,7 +984,7 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
             else if (code == 13 && !r)
                 r = ctl_enter();
             else if ((code == 'f' || code == 'F') && !r)
-                r = 4;
+                r = ctl_press(BT_FULL);
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
@@ -1341,6 +1346,7 @@ static struct {
     UWORD vol;
     BOOL paused, bar, ring, full;
     int focus;
+    UWORD off;
     WORD bx[BT_N];                  /* each button's left */
 } st;
 
@@ -1352,6 +1358,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.ring = ctl_ring();
     st.focus = ctl.focus;
     st.full = lay.full;
+    st.off = ctl.off;
     for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
         WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
         if (i == BT_FULL) {                 /* full screen: at the right end */
@@ -1373,14 +1380,14 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
         if (sx > 1)
             ry = ry / 2 > 1 ? ry / 2 : 1;
         rx = ry * sx;
-        if (st.ring && i == st.focus) {     /* the focus: a yellow ring, the face inside */
+        if (st.ring && i == st.focus && !(st.off & (1 << i))) {    /* the focus: a yellow ring */
             WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
             gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
             gfx_rrect(g, bx + fx, by + ft, bw - 2 * fx, bh - 2 * ft, rx > fx ? rx - fx : 1,
                       ry > ft ? ry - ft : 1, PEN_BAR);
         } else
             gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_BAR);
-        SetAPen(g->rp, PEN_WHITE);
+        SetAPen(g->rp, st.off & (1 << i) ? PEN_RULE : PEN_WHITE);    /* greyed, as Now playing's */
         switch (i) {
         case BT_RESTART:
             RectFill(g->rp, ix + s / 5, iy + s / 5, ix + s / 5 + t, iy + s - s / 5);
@@ -1588,7 +1595,8 @@ static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     }
     if (lv > 0 || target > 0) {
         if (!sf.drawn || at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol ||
-            ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full) {
+            ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
+            ctl.off != st.off) {
             strip_render(g, TRUE, paused, at, total, name, &changed);
             sf.drawn = TRUE;
         } else
@@ -1999,6 +2007,9 @@ restart:
                 fresh = TRUE;
                 nconv = 0;
                 convms = 0;
+                ctl.off |= 1 << BT_FULL;    /* greyed for the rest of this one */
+                if (ctl.focus == BT_FULL)
+                    ctl.focus = BT_VUP;
             } else if (avg > SLOW_MS && avg > want * (SKIP_MAX + 1)) {
                 sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: its own screen",
                         (long)avg, (long)want);
