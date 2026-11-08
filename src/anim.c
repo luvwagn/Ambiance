@@ -44,6 +44,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <exec/ports.h>
+#include <dos/dosextens.h>
 #include <graphics/modeid.h>
 #include <graphics/displayinfo.h>
 #include <graphics/gfxbase.h>
@@ -310,57 +311,127 @@ static void snd_command(const UBYTE *sc)
         snd_play(3, &snd[n - 1], vol, times, rate ? rate : snd[n - 1].rate);
 }
 
-/* ---- the file read ahead: frames are small (Tron2's 24 KB), and each
- * DOS Read is a trip through the file system (two a frame: 6 ms a frame on
- * Amiberry's hard file); read in RD_SIZE pieces instead, the frames
- * copied out of them. Everything that reads or skips in the file goes
- * through here, so its place and the buffer's agree; rd_seek goes back
- * (to the start), rd_sync gives the file its place for one reading it
- * itself (anim_length). */
+/* ---- the file read ahead: frames are small (Tron2's 24 KB), and the file
+ * comes off Amiberry's hard file at some 4 MB a second (6 ms a frame).
+ * Read in RD_SIZE pieces, two of them: while frames are copied out of
+ * one, the next is being read into the other, asked for with a DOS packet
+ * (ACTION_READ, SendPkt) that is not waited for; the device moves it on a
+ * thread of its own, and meanwhile frames are decoded and drawn. With no
+ * handler to ask (or no memory) a piece is read when it is needed, as
+ * Read does.
+ *
+ * Everything that reads or skips in the file goes through here, so its
+ * place and the pieces' agree: rd_seek goes back (to the start), rd_sync
+ * gives the file its place for one reading it itself (anim_length); both
+ * wait for a piece being read first, as nothing else may use the file
+ * while a packet is out. */
 #define RD_SIZE (256UL * 1024)
 static struct {
     BPTR fh;
-    UBYTE *buf;
-    LONG pos, len;                  /* what is left of the piece: buf[pos..len) */
+    UBYTE *buf[2];                  /* the pieces: cur being read from, the other being read */
+    int cur;
+    LONG pos, len;                  /* what is left of cur: buf[cur][pos..len) */
+    struct MsgPort *port;           /* the handler's (fh_Type), and the replies' */
+    struct MsgPort *reply;
+    struct DosPacket *dp;
+    BOOL out;                       /* a piece being read into buf[!cur] */
+    BOOL eof;                       /* the last piece came short: no more to ask for */
+    ULONG waits, waitms;            /* (the log: pieces waited for, and how long) */
 } rd;
+
+static void rd_ask(void)                    /* the next piece, into the other buffer */
+{
+    struct FileHandle *h = (struct FileHandle *)BADDR(rd.fh);
+    if (rd.out || rd.eof || !rd.dp)
+        return;
+    rd.dp->dp_Type = ACTION_READ;
+    rd.dp->dp_Arg1 = h->fh_Arg1;
+    rd.dp->dp_Arg2 = (LONG)rd.buf[!rd.cur];
+    rd.dp->dp_Arg3 = RD_SIZE;
+    SendPkt(rd.dp, rd.port, rd.reply);
+    rd.out = TRUE;
+}
+
+static LONG rd_wait(void)                   /* the piece asked for: its length, -1 failed */
+{
+    ULONG t0 = time_ms();
+    if (!rd.out)
+        return 0;
+    WaitPort(rd.reply);
+    GetMsg(rd.reply);
+    rd.out = FALSE;
+    rd.waits++;
+    rd.waitms += time_ms() - t0;
+    return rd.dp->dp_Res1;
+}
 
 static void rd_begin(BPTR fh)
 {
+    struct FileHandle *h = (struct FileHandle *)BADDR(fh);
+    memset(&rd, 0, sizeof(rd));
     rd.fh = fh;
-    rd.pos = rd.len = 0;
-    if (!rd.buf)
-        rd.buf = AllocVec(RD_SIZE, MEMF_ANY);   /* none: straight from the file */
+    if (!(rd.buf[0] = AllocVec(RD_SIZE, MEMF_ANY)))
+        return;                             /* none: straight from the file */
+    if (h && h->fh_Type && (rd.buf[1] = AllocVec(RD_SIZE, MEMF_ANY)) &&
+        (rd.reply = CreateMsgPort()) && (rd.dp = AllocDosObject(DOS_STDPKT, NULL)))
+        rd.port = h->fh_Type;
+    else {                                  /* one piece, read when needed */
+        FreeVec(rd.buf[1]);
+        rd.buf[1] = NULL;
+        if (rd.reply)
+            DeleteMsgPort(rd.reply);
+        rd.reply = NULL;
+        rd.dp = NULL;
+    }
 }
 
 static void rd_end(void)
 {
-    FreeVec(rd.buf);
+    rd_wait();
+    if (rd.dp)
+        FreeDosObject(DOS_STDPKT, rd.dp);
+    if (rd.reply)
+        DeleteMsgPort(rd.reply);
+    FreeVec(rd.buf[0]);
+    FreeVec(rd.buf[1]);
     memset(&rd, 0, sizeof(rd));
+}
+
+/* The next piece in cur (the one asked for, or read now), the one after
+ * it asked for: FALSE at the end. */
+static BOOL rd_next(void)
+{
+    LONG n;
+    if (rd.out) {
+        n = rd_wait();
+        rd.cur = !rd.cur;
+    } else if (rd.eof)
+        n = 0;
+    else
+        n = Read(rd.fh, rd.buf[rd.cur], RD_SIZE);
+    rd.pos = 0;
+    rd.len = n > 0 ? n : 0;
+    if (n < (LONG)RD_SIZE)
+        rd.eof = TRUE;                      /* short (or failed): the file's end */
+    rd_ask();
+    return rd.len > 0;
 }
 
 static LONG rd_read(void *dst, LONG n)
 {
     UBYTE *d = dst;
     LONG got = 0;
-    if (!rd.buf)
+    if (!rd.buf[0])
         return Read(rd.fh, dst, n);
     while (n > 0) {
         LONG have = rd.len - rd.pos, k;
         if (!have) {
-            if (n >= (LONG)RD_SIZE) {       /* a big one: straight in */
-                LONG r = Read(rd.fh, d, n);
-                return r < 0 ? (got ? got : r) : got + r;
-            }
-            rd.pos = 0;
-            rd.len = Read(rd.fh, rd.buf, RD_SIZE);
-            if (rd.len <= 0) {
-                rd.len = 0;
+            if (!rd_next())
                 break;
-            }
             have = rd.len;
         }
         k = n < have ? n : have;
-        CopyMem(rd.buf + rd.pos, d, k);
+        CopyMem(rd.buf[rd.cur] + rd.pos, d, k);
         rd.pos += k;
         d += k;
         got += k;
@@ -369,29 +440,50 @@ static LONG rd_read(void *dst, LONG n)
     return got;
 }
 
+/* The file at the place reading has got to, nothing held: a piece being
+ * read waited for (its bytes not used: the file is gone back over them). */
+static void rd_sync(void)
+{
+    LONG back = rd.len - rd.pos;
+    if (rd.out) {
+        LONG n = rd_wait();
+        if (n > 0)
+            back += n;
+    }
+    if (back)
+        Seek(rd.fh, -back, OFFSET_CURRENT);
+    rd.pos = rd.len = 0;
+    rd.eof = FALSE;
+}
+
 /* n bytes on (Seek's OFFSET_CURRENT, forward): -1 if it cannot */
 static LONG rd_skip(LONG n)
 {
     LONG have = rd.len - rd.pos;
-    if (rd.buf && n <= have) {
+    if (rd.buf[0] && n <= have) {
         rd.pos += n;
         return 0;
     }
-    rd.pos = rd.len = 0;
-    return Seek(rd.fh, n - have, OFFSET_CURRENT) < 0 ? -1 : 0;
+    if (rd.buf[0] && rd.out && n - have <= (LONG)RD_SIZE) {
+        rd.pos = rd.len;                    /* into the next piece: taken as it comes */
+        n -= have;
+        if (!rd_next() && n)
+            return -1;
+        if (n > rd.len)
+            return -1;
+        rd.pos = n;
+        return 0;
+    }
+    rd_sync();
+    return Seek(rd.fh, n, OFFSET_CURRENT) < 0 ? -1 : 0;
 }
 
 static LONG rd_seek(LONG at)                /* from the file's start, as Seek */
 {
+    rd_wait();                              /* (its bytes not wanted) */
     rd.pos = rd.len = 0;
+    rd.eof = FALSE;
     return Seek(rd.fh, at, OFFSET_BEGINNING);
-}
-
-static void rd_sync(void)                   /* the file where the reading has got to */
-{
-    if (rd.len - rd.pos)
-        Seek(rd.fh, -(rd.len - rd.pos), OFFSET_CURRENT);
-    rd.pos = rd.len = 0;
 }
 
 /* A FORM 8SVX's sound (its first octave), len bytes after the type, from
@@ -1580,7 +1672,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     struct AnimPlanes pl[2];
     LONG result = -1;
     int k, i, n, quit = 0, shown;
-    char m[320];
+    char m[400];
     const char *name = (const char *)FilePart((STRPTR)path);
 
     /* the picture's pixels' shape, then the largest whole scale that fits */
@@ -1997,11 +2089,12 @@ restart:
     }
     sprintf(m, "%ld frames on AmigaMCE's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
             "each), %ld not drawn (behind; %ld of them not decoded); decoding %ld ms; controls %ld ms "
-            "each; reading %ld ms; played %ld time%s",
+            "each; reading %ld ms (%s: %ld ms waited for %ld pieces); played %ld time%s",
             (long)nframes, (long)nconv, (long)(nconv ? convms / nconv : 0), (long)worst,
             (long)(nconv ? nrows / nconv : 0), (long)nskip, (long)nnodec, (long)decms,
-            (long)(nframes ? stripms / nframes : 0),
-            (long)readms, (long)runs + 1, runs ? "s" : "");
+            (long)(nframes ? stripms / nframes : 0), (long)readms,
+            rd.dp ? "read ahead" : "read when needed", (long)rd.waitms, (long)rd.waits,
+            (long)runs + 1, runs ? "s" : "");
     amce_log("anim", m);
     result = err[0] ? -1 : 0;
     (void)errmax;
