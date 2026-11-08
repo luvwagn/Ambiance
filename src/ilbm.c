@@ -637,7 +637,9 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     ULONG base[64];
     BPTR afh = 0;
     UBYTE *img = NULL;
-    static UBYTE cm[768];
+    UBYTE *cm = NULL;               /* an ANIM's colours as of its frame shown: its own, as
+                                     * loaders make thumbnails side by side (a static one was
+                                     * overwritten by another's: Windmill2 in strange colours) */
 
     if (!(file = read_file(path, &len, &anim, pi, &afh)))
         return NULL;
@@ -675,7 +677,9 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         goto out;
     if (afh) {                              /* an ANIM: the frame worth showing, and the count */
         ULONG frames = 1, jif = 0;
-        cmaplen = cmaplen < sizeof(cm) ? cmaplen : sizeof(cm);
+        if (!(cm = AllocVec(768, MEMF_ANY)))
+            goto out;
+        cmaplen = cmaplen < 768 ? cmaplen : 768;
         CopyMem((APTR)cmap, cm, cmaplen);
         ULONG kf, kms;
         img = anim_pick(afh, path, body, bodylen, sw, sh, planes, masking, comp, camg, cm,
@@ -798,6 +802,7 @@ out:
     if (afh)
         Close(afh);
     FreeVec(img);
+    FreeVec(cm);
     FreeVec(row);
     FreeVec(xoff);
     FreeVec(chunky);
