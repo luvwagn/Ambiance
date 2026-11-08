@@ -17,6 +17,7 @@
  * the whole file. Its frames are counted on the way, a header each.
  */
 #include "amce.h"
+#include <stdio.h>
 #include "animdec.h"
 
 #include <string.h>
@@ -348,12 +349,11 @@ static void row_chunky(const UBYTE *row, ULONG rb, UBYTE planes, ULONG *out)
  * Nearly black all over is blank too: one fading in from black by its
  * colours (WalkerDemo2) has every pen used and none yet lit. */
 static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULONG sh,
-                         const UBYTE *cm, ULONG cml, ULONG camg, ULONG *lit)
+                         const UBYTE *cm, ULONG cml, ULONG camg, ULONG *lit, UWORD *hist)
 {
-    static UWORD hist[4096];
     ULONG x, y, most = 0, luma = 0, n = cml / 3;
     UBYTE k;
-    memset(hist, 0, sizeof(hist));
+    memset(hist, 0, 4096 * sizeof(UWORD));
     for (y = 0; y < 30; y++) {
         const UBYTE *r = img + (y * sh / 30) * rb * planes;
         for (x = 0; x < 40; x++) {
@@ -385,17 +385,90 @@ static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULO
     return most * 1000 / 1200;
 }
 
+/* ---- the frame chosen, kept (PROGDIR:Cache/<hash>.frame) when it is not
+ * the first: the next time the pane shows it straight away, no frames
+ * read or decoded (AL1-4: 309 of them). By the file's path, date and
+ * size, as the frame counts are; its planes and colours as they were. */
+#define PICK_MAGIC 0x414D4346UL         /* "AMCF" */
+struct PickHead {
+    ULONG magic, hash, days, minute, tick, size, sw, sh, planes, cml;
+};
+
+static void pick_name(char *out, ULONG hash)
+{
+    sprintf(out, "PROGDIR:Cache/%08lx.frame", (unsigned long)hash);
+}
+
+static BOOL pick_load(BPTR fh, const char *path, ULONG sw, ULONG sh, UBYTE planes, UBYTE *img,
+                      ULONG fsz, UBYTE *cm, ULONG *cml)
+{
+    struct AnimFact k;
+    struct PickHead ph;
+    char name[48];
+    BPTR in;
+    BOOL ok = FALSE;
+    if (!af_key(fh, path, &k))
+        return FALSE;
+    pick_name(name, k.hash);
+    if (!(in = Open((CONST_STRPTR)name, MODE_OLDFILE)))
+        return FALSE;
+    if (Read(in, &ph, sizeof(ph)) == sizeof(ph) && ph.magic == PICK_MAGIC && ph.hash == k.hash &&
+        ph.days == k.days && ph.minute == k.minute && ph.tick == k.tick && ph.size == k.size &&
+        ph.sw == sw && ph.sh == sh && ph.planes == planes && ph.cml <= 768 &&
+        Read(in, cm, ph.cml) == (LONG)ph.cml && Read(in, img, fsz) == (LONG)fsz) {
+        *cml = ph.cml;
+        ok = TRUE;
+    }
+    Close(in);
+    return ok;
+}
+
+static void pick_save(BPTR fh, const char *path, ULONG sw, ULONG sh, UBYTE planes,
+                      const UBYTE *img, ULONG fsz, const UBYTE *cm, ULONG cml)
+{
+    struct AnimFact k;
+    struct PickHead ph;
+    char name[48];
+    BPTR out, l;
+    if (!af_key(fh, path, &k))
+        return;
+    if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
+        l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
+    if (l)
+        UnLock(l);
+    pick_name(name, k.hash);
+    ph.magic = PICK_MAGIC;
+    ph.hash = k.hash;
+    ph.days = k.days;
+    ph.minute = k.minute;
+    ph.tick = k.tick;
+    ph.size = k.size;
+    ph.sw = sw;
+    ph.sh = sh;
+    ph.planes = planes;
+    ph.cml = cml;
+    if ((out = Open((CONST_STRPTR)name, MODE_NEWFILE))) {
+        BOOL ok = Write(out, &ph, sizeof(ph)) == sizeof(ph) && Write(out, (APTR)cm, cml) == (LONG)cml &&
+                  Write(out, (APTR)img, fsz) == (LONG)fsz;
+        Close(out);
+        if (!ok)
+            DeleteFile((CONST_STRPTR)name);     /* not half a frame for next time */
+    }
+}
+
 /* The frame to show, decoded into a new buffer of interleaved rows (the
  * caller frees it); its colours into cm (*cml bytes) if a frame changed
  * them. Frames read meanwhile counted into *frames and *jif. */
-static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULONG sh,
-                        UBYTE planes, UBYTE masking, UBYTE comp, ULONG camg, UBYTE *cm,
+static UBYTE *anim_pick(BPTR fh, const char *path, const UBYTE *body, ULONG bodylen, ULONG sw,
+                        ULONG sh, UBYTE planes, UBYTE masking, UBYTE comp, ULONG camg, UBYTE *cm,
                         ULONG *cml, ULONG *frames, ULONG *jif)
 {
     ULONG rb = ((sw + 15) >> 4) << 1, fsz = rb * planes * sh, best, got = 0, fl = 0, bestlit, lit;
     LONG found = -1;                    /* the first frame not blank */
+    BOOL later = FALSE;                 /* a frame after the first kept: to the cache */
     UBYTE *a, *buf[2], *keep, *f = NULL, *cur = NULL, h[12];
-    static UBYTE cm_now[768];
+    UBYTE cm_now[768];
+    UWORD *hist;
     ULONG cmn = *cml;
     struct AnimPlanes pl[2];
     int k, i;
@@ -408,6 +481,8 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
         keep = a + 2 * fsz;
     buf[0] = a;
     buf[1] = a + fsz;
+    if (pick_load(fh, path, sw, sh, planes, a, fsz, cm, cml))
+        return a;                           /* chosen before */
     for (k = 0; k < 2; k++) {
         for (i = 0; i < 8; i++)
             pl[k].plane[i] = buf[k] + i * rb;
@@ -417,9 +492,13 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
         pl[k].h = sh;
     }
     animdec_body(body, bodylen, &pl[0], comp, masking);
-    best = blank_score(buf[0], rb, planes, sw, sh, cm, *cml, camg, &bestlit);
-    if (best < PICK_BLANK || !keep)
+    if (!keep || !(hist = AllocVec(4096 * sizeof(UWORD), MEMF_ANY)))
+        return a;                           /* the first frame, as it is */
+    best = blank_score(buf[0], rb, planes, sw, sh, cm, *cml, camg, &bestlit, hist);
+    if (best < PICK_BLANK) {
+        FreeVec(hist);
         return a;
+    }
     CopyMem(buf[0], buf[1], fsz);
     CopyMem(buf[0], keep, fsz);
     CopyMem(cm, cm_now, cmn);
@@ -477,7 +556,7 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
         cur = buf[k];
         if (n % PICK_EVERY)
             continue;
-        sc = blank_score(cur, rb, planes, sw, sh, cm_now, cmn, camg, &lit);
+        sc = blank_score(cur, rb, planes, sw, sh, cm_now, cmn, camg, &lit, hist);
         if (sc < PICK_BLANK) {
             /* not blank: the brightest of this and the next few (a fade in
              * from black lit at last, not its first glimmer) */
@@ -487,6 +566,7 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
                 CopyMem(cur, keep, fsz);
                 CopyMem(cm_now, cm, cmn);
                 *cml = cmn;
+                later = TRUE;
             }
             if (found < 0)
                 found = n;
@@ -503,10 +583,14 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
             CopyMem(cur, keep, fsz);
             CopyMem(cm_now, cm, cmn);
             *cml = cmn;
+            later = TRUE;
         }
     }
     FreeVec(f);
+    FreeVec(hist);
     CopyMem(keep, a, fsz);
+    if (later)                              /* not the first: kept for next time */
+        pick_save(fh, path, sw, sh, planes, a, fsz, cm, *cml);
     return a;
 }
 
@@ -565,8 +649,8 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         cmaplen = cmaplen < sizeof(cm) ? cmaplen : sizeof(cm);
         CopyMem((APTR)cmap, cm, cmaplen);
         ULONG kf, kms;
-        img = anim_pick(afh, body, bodylen, sw, sh, planes, masking, comp, camg, cm, &cmaplen,
-                        &frames, &jif);
+        img = anim_pick(afh, path, body, bodylen, sw, sh, planes, masking, comp, camg, cm,
+                        &cmaplen, &frames, &jif);
         cmap = cm;
         if (anim_fact_get(afh, path, &kf, &kms)) {
             pi->frames = kf > 65535 ? 65535 : kf;   /* counted before */
