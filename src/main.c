@@ -5794,37 +5794,9 @@ static BOOL np_repeats(int b)
 
 /* A rounded frame t thick just inside x,y w x h (or, solid, the corners
  * the rounding takes off the button). */
-/* A rounded rectangle filled: its corners a quarter ellipse of rx pixels
- * across and ry rows down (on a screen of tall pixels ry is half rx, so
- * they look round). */
-static WORD isqrt_round(LONG v)
-{
-    LONG r = 0;
-    while ((r + 1) * (r + 1) <= v)
-        r++;
-    return (WORD)(v - r * r > r ? r + 1 : r);  /* to the nearer */
-}
-
 static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
 {
-    WORD k;
-    if (w <= 0 || h <= 0)
-        return;
-    if (ry * 2 > h)
-        ry = h / 2;
-    for (k = 0; k < ry; k++) {
-        /* row k from the top (and from the bottom): its inset */
-        LONG dy = (LONG)(ry - k) * rx;      /* in x units: rows scaled to rx */
-        WORD in = rx - isqrt_round((LONG)rx * rx - (dy / ry) * (dy / ry));
-        if (in < 0)
-            in = 0;
-        if (in * 2 >= w)
-            in = (w - 1) / 2;
-        gfx_fill(&g, x + in, y + k, x + w - 1 - in, y + k, pen);
-        gfx_fill(&g, x + in, y + h - 1 - k, x + w - 1 - in, y + h - 1 - k, pen);
-    }
-    if (h - 2 * ry > 0)
-        gfx_fill(&g, x, y + ry, x + w - 1, y + h - 1 - ry, pen);
+    gfx_rrect(&g, x, y, w, h, rx, ry, pen);
 }
 
 static BOOL np_on(void)

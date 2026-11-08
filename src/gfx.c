@@ -894,6 +894,39 @@ void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
+/* A rounded rectangle filled: its corners a quarter ellipse of rx pixels
+ * across and ry rows down (on a screen of tall pixels ry is half rx, so
+ * they look round). Now playing's buttons, and the animations'. */
+static WORD isqrt_round(LONG v)
+{
+    LONG r = 0;
+    while ((r + 1) * (r + 1) <= v)
+        r++;
+    return (WORD)(v - r * r > r ? r + 1 : r);  /* to the nearer */
+}
+
+void gfx_rrect(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
+{
+    WORD k;
+    if (w <= 0 || h <= 0)
+        return;
+    if (ry * 2 > h)
+        ry = h / 2;
+    for (k = 0; k < ry; k++) {
+        /* row k from the top (and from the bottom): its inset */
+        LONG dy = (LONG)(ry - k) * rx;      /* in x units: rows scaled to rx */
+        WORD in = rx - isqrt_round((LONG)rx * rx - (dy / ry) * (dy / ry));
+        if (in < 0)
+            in = 0;
+        if (in * 2 >= w)
+            in = (w - 1) / 2;
+        gfx_fill(g, x + in, y + k, x + w - 1 - in, y + k, pen);
+        gfx_fill(g, x + in, y + h - 1 - k, x + w - 1 - in, y + h - 1 - k, pen);
+    }
+    if (h - 2 * ry > 0)
+        gfx_fill(g, x, y + ry, x + w - 1, y + h - 1 - ry, pen);
+}
+
 /* Clear to the background, high planes first. A planar fill writes one
  * plane at a time; clearing planes 3+ first means a pixel caught halfway
  * shows one of the dark UI pens 0-7, not a stray colour such as pen 8. */

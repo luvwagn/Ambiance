@@ -155,6 +155,7 @@ WORD gfx_pane_w_wide(struct Gfx *g);
 void gfx_close(struct Gfx *g);
 BOOL gfx_restyle(struct Gfx *g, int style);    /* same screen, new style (gfx.c) */
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
+void gfx_rrect(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen);
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /* filled circle */
 /* Text in a cell font_h tall at y; bg is what it is drawn over (smooth

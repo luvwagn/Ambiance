@@ -583,11 +583,72 @@ static struct {
     WORD x0, x1, y, h, cw;      /* its place; a button's width */
     WORD px0, px1;              /* the progress line */
     UBYTE bg, fg, dim;
-    ULONG moved;                /* the clock when the mouse last moved */
-    ULONG opened;               /* ...and when the window opened */
     ULONG total_ms, at_ms;
     BOOL paused;
 } bar;
+
+/* ---- the controls' comings and goings, the same on either screen. The
+ * mouse brings them, with its pointer; they go again BAR_HIDE ms after it
+ * stops (not while paused). A key or the pad brings them to stay, without
+ * the pointer, a button in focus (the yellow ring, as Now playing's):
+ * Left and Right move it, Return or fire presses it. Hidden, the focus
+ * goes back to play/pause, so Return or fire pauses, as ever; Space
+ * always does, Up and Down set the volume, Esc stops. Each player draws
+ * them its own way: AmigaMCE's screen beneath the picture, fading in and
+ * out; a screen of its own over the picture's foot, in its colours. */
+enum { CM_NONE, CM_MOUSE, CM_KEY };
+static struct {
+    ULONG moved, opened, key;       /* clocks: the mouse last moved, the window opened, a key */
+    ULONG moved_seen, key_seen;
+    int mode, focus;
+    BOOL shown, ptr;
+    UWORD *blank;                   /* an empty pointer (chip memory) */
+    struct Window *win;
+} ctl;
+
+static void ctl_begin(struct Window *win, UWORD *blank)
+{
+    memset(&ctl, 0, sizeof(ctl));
+    ctl.win = win;
+    ctl.blank = blank;
+    ctl.opened = time_ms();
+    ctl.focus = 1;                  /* BT_PLAY */
+    if (blank)
+        SetPointer(win, blank, 1, 16, 0, 0);
+}
+
+static BOOL ctl_ring(void)
+{
+    return ctl.mode == CM_KEY;
+}
+
+/* Should they show now (the pointer set to match)? */
+static BOOL ctl_want(BOOL paused)
+{
+    ULONG now = time_ms();
+    BOOL want, ptr;
+    if (ctl.moved && ctl.moved != ctl.moved_seen) {
+        ctl.moved_seen = ctl.moved;
+        ctl.mode = CM_MOUSE;
+    }
+    if (ctl.key && ctl.key != ctl.key_seen) {
+        ctl.key_seen = ctl.key;
+        ctl.mode = CM_KEY;
+    }
+    want = ctl.mode == CM_KEY || (ctl.mode == CM_MOUSE && (paused || now - ctl.moved < BAR_HIDE));
+    ptr = ctl.mode == CM_MOUSE && want;
+    if (ptr != ctl.ptr && ctl.win) {
+        if (ptr)
+            ClearPointer(ctl.win);
+        else if (ctl.blank)
+            SetPointer(ctl.win, ctl.blank, 1, 16, 0, 0);
+        ctl.ptr = ptr;
+    }
+    if (!want && ctl.shown)
+        ctl.focus = 1;              /* BT_PLAY */
+    ctl.shown = want;
+    return want;
+}
 
 /* Its pens: the darkest and the lightest of the colours it may use (HAM:
  * the base ones; extra halfbrite: the first 32), one between for lines. */
@@ -635,7 +696,6 @@ static void bar_setup(struct BitMap *friend, UWORD w, UWORD h, UBYTE depth, ULON
     if (bar.y < 0 || bar.x1 - bar.x0 < 160)
         return;
     bar.cw = bar.h + 4;
-    bar.opened = time_ms();
     if (!(bar.save[0] = AllocBitMap(w, bar.h, depth, 0, friend)) ||
         !(bar.save[1] = AllocBitMap(w, bar.h, depth, 0, friend)))
         return;
@@ -717,8 +777,18 @@ static void bar_put(struct BitMap *bm, int k)
     RectFill(rp, bar.x0, bar.y, bar.x1, bar.y + bar.h - 1);
     SetAPen(rp, bar.dim);
     RectFill(rp, bar.x0, bar.y, bar.x1, bar.y);
-    for (i = 0, x = bar.x0 + 4; i < BT_N; i++, x += bar.cw)
-        bar_icon(i, x + (bar.cw - s) / 2 - 2, bar.y + 2, s);
+    for (i = 0, x = bar.x0 + 4; i < BT_N; i++, x += bar.cw) {
+        WORD ix = x + (bar.cw - s) / 2 - 2;
+        bar_icon(i, ix, bar.y + 2, s);
+        if (i == ctl.focus && ctl_ring()) {     /* the focus: a ring, its corners off */
+            WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s + 1, y1 = bar.y + bar.h - 1;
+            SetAPen(rp, bar.fg);
+            RectFill(rp, x0 + 1, y0, x1 - 1, y0);
+            RectFill(rp, x0 + 1, y1, x1 - 1, y1);
+            RectFill(rp, x0, y0 + 1, x0, y1 - 1);
+            RectFill(rp, x1, y0 + 1, x1, y1 - 1);
+        }
+    }
     time_text(a, bar.at_ms);
     if (bar.total_ms) {
         time_text(b, bar.total_ms);
@@ -808,6 +878,44 @@ static void volume(int d)
     bar_redraw = TRUE;
 }
 
+/* A button pressed: 1 stop, 2 pause or go on, 3 from the start, 0 else. */
+static int ctl_press(int b)
+{
+    switch (b) {
+    case BT_RESTART:
+        return 3;
+    case BT_PLAY:
+        return 2;
+    case BT_STOP:
+        return 1;
+    case BT_VDOWN:
+        volume(-VOL_STEP);
+        break;
+    case BT_VUP:
+        volume(VOL_STEP);
+        break;
+    }
+    return 0;
+}
+
+/* Left or right a button (only once they show: the first press brings
+ * them). */
+static void ctl_move(int d)
+{
+    if (ctl.shown && ctl.mode == CM_KEY) {
+        int f = ctl.focus + d;
+        if (f >= 0 && f < BT_N)
+            ctl.focus = f;
+    }
+    bar_redraw = TRUE;
+}
+
+/* Return or fire: the button in focus, or (hidden) play/pause. */
+static int ctl_enter(void)
+{
+    return ctl_press(ctl.shown && ctl.mode == CM_KEY ? ctl.focus : BT_PLAY);
+}
+
 /* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 0
  * nothing; the volume set here, the mouse's moves noted (the controls).
  * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
@@ -822,13 +930,23 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         UWORD code = im->Code;
         WORD mx = im->MouseX, my = im->MouseY;
         ReplyMsg((struct Message *)im);
-        if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS) && time_ms() - bar.opened > 500)
-            bar.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
+        if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||
+             (cl == IDCMP_RAWKEY && (code == 0x7A || code == 0x7B))) && time_ms() - ctl.opened > 500)
+            ctl.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
+        else if ((cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && code != 0x7A && code != 0x7B) ||
+                 cl == IDCMP_VANILLAKEY)
+            ctl.key = time_ms() ? time_ms() : 1;
         if (cl == IDCMP_RAWKEY) {
             if (code == 0x45 || code == 0x41 || code == 0x10)   /* Esc, Backspace, Q */
                 r = 1;
-            else if ((code == 0x40 || code == 0x44 || code == 0x43) && !r)  /* Space, Return */
+            else if (code == 0x40 && !r)            /* Space */
                 r = 2;
+            else if ((code == 0x44 || code == 0x43) && !r)  /* Return, Enter */
+                r = ctl_enter();
+            else if (code == 0x4F)                  /* Left, Right: the focus */
+                ctl_move(-1);
+            else if (code == 0x4E)
+                ctl_move(1);
             else if (code == 0x4C || code == 0x7A)  /* Up (held: it repeats), the wheel */
                 volume(VOL_STEP);
             else if (code == 0x4D || code == 0x7B)
@@ -836,33 +954,39 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         } else if (cl == IDCMP_VANILLAKEY) {   /* AmigaMCE's own window has these too */
             if (code == 27 || code == 8 || code == 'q' || code == 'Q')
                 r = 1;
-            else if ((code == ' ' || code == 13) && !r)
+            else if (code == ' ' && !r)
                 r = 2;
+            else if (code == 13 && !r)
+                r = ctl_enter();
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
             else if (code == SELECTDOWN) {
                 int b = hit(mx, my);
-                if (b == BT_RESTART)
-                    r = 3;
-                else if (b == BT_STOP)
-                    r = 1;
-                else if (b == BT_VDOWN)
-                    volume(-VOL_STEP);
-                else if (b == BT_VUP)
-                    volume(VOL_STEP);
-                else if ((b == BT_PLAY || b == -1) && !r)
-                    r = 2;                  /* play/pause, or anywhere off the controls */
+                if (b >= 0) {
+                    int k = ctl_press(b);
+                    if (k && !r)
+                        r = k;
+                } else if (b == -1 && !r)
+                    r = 2;                  /* anywhere off the controls: play/pause */
             }
         }
     }
     if (LowLevelBase) {
         ULONG st = ReadJoyPort(1), pressed = st & ~*jlast;
         if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
+            if (pressed || (st & (JPF_JOY_UP | JPF_JOY_DOWN)))
+                ctl.key = time_ms() ? time_ms() : 1;
             if (pressed & JPF_BUTTON_BLUE)
                 r = 1;
-            else if ((pressed & (JPF_BUTTON_RED | JPF_BUTTON_PLAY)) && !r)
+            else if ((pressed & JPF_BUTTON_PLAY) && !r)
                 r = 2;
+            else if ((pressed & JPF_BUTTON_RED) && !r)
+                r = ctl_enter();
+            if (pressed & JPF_JOY_LEFT)
+                ctl_move(-1);
+            else if (pressed & JPF_JOY_RIGHT)
+                ctl_move(1);
             if (st & (JPF_JOY_UP | JPF_JOY_DOWN)) {
                 ULONG now = time_ms();
                 int d = st & JPF_JOY_UP ? VOL_STEP : -VOL_STEP;
@@ -1165,17 +1289,31 @@ static struct {
     WORD y, h, x0, cw, px0, px1, cy, fill;
     ULONG sec;
     UWORD vol;
-    BOOL paused, bar;
+    BOOL paused, bar, ring;
+    int focus;
 } st;
 
 static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
 {
     WORD x, s = st.h - GU(g, 6), cy = st.y + st.h / 2, t = s > 14 ? 2 : 1, i;
     char a[16], b[16], line[64];
-    gfx_fill(g, 0, st.y, g->w - 1, g->h - 1, PEN_BG);
+    gfx_fill(g, 0, st.y, g->w - 1, st.y + st.h - 1, PEN_BG);
+    st.ring = ctl_ring();
+    st.focus = ctl.focus;
     for (i = 0, x = st.x0; i < BT_N; i++, x += st.cw) {
         WORD ix = x + (st.cw - s) / 2, iy = st.y + (st.h - s) / 2, j;
-        gfx_fill(g, x + 1, st.y + 2, x + st.cw - 2, st.y + st.h - 3, PEN_BAR);
+        WORD bx = x + 1, by = st.y + 2, bw = st.cw - 2, bh = st.h - 4;
+        WORD ry = bh / 5 > 2 ? bh / 5 : 2, sx = gfx_mode_tall(g->mode) ? 2 : 1, rx;
+        if (sx > 1)
+            ry = ry / 2 > 1 ? ry / 2 : 1;
+        rx = ry * sx;
+        if (st.ring && i == st.focus) {     /* the focus: a yellow ring, the face inside */
+            WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
+            gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
+            gfx_rrect(g, bx + fx, by + ft, bw - 2 * fx, bh - 2 * ft, rx > fx ? rx - fx : 1,
+                      ry > ft ? ry - ft : 1, PEN_BAR);
+        } else
+            gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_BAR);
         SetAPen(g->rp, PEN_WHITE);
         switch (i) {
         case BT_RESTART:
@@ -1243,27 +1381,153 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     }
 }
 
-/* Drawn again only where it changed: all of it once a second (the time),
- * or paused or the volume changed; else just how far it has got, when
- * that has moved a pixel. Its text is the costly part. */
-static void strip_update(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
+/* How far it has got, drawn again if it has moved a pixel: TRUE if so. */
+static BOOL strip_progress(struct Gfx *g, ULONG at, ULONG total)
 {
     WORD fill, cy = st.cy;
-    if (at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol) {
-        strip_draw(g, paused, at, total, name);
-        return;
-    }
     if (!st.bar || !total)
-        return;
+        return FALSE;
     fill = st.px0 + (WORD)((at > total ? total : at) * (ULONG)(st.px1 - st.px0) / total);
     if (fill == st.fill)
-        return;
+        return FALSE;
     gfx_fill(g, st.px0 - 2, cy - 4, st.px1 + 2, cy + 4, PEN_BG);
     gfx_fill(g, st.px0, cy - 1, st.px1, cy + 1, PEN_RULE);
     if (fill > st.px0)
         gfx_fill(g, st.px0, cy - 1, fill, cy + 1, PEN_WHITE);
     gfx_fill(g, fill - 2, cy - 4, fill + 2, cy + 4, PEN_WHITE);
     st.fill = fill;
+    return TRUE;
+}
+
+/* The controls beneath the picture, when ctl_want says: drawn into a
+ * bitmap of their own (sf.bm) and put on the screen from there, at a
+ * level of brightness while fading (FADE_N steps over FADE_MS); their
+ * text, the costly part, drawn again once a second, or paused, the volume
+ * or the focus changed, and only while they show. Without that bitmap,
+ * straight onto the screen, and no fading. */
+#define FADE_MS 240
+#define FADE_N  8
+static struct {
+    struct BitMap *bm;
+    struct RastPort rp;
+    UBYTE *rgb, *tmp;               /* its pixels, and at a level */
+    UWORD *blank;                   /* an empty pointer */
+    int lv;
+    BOOL drawn, rgb_ok;
+    ULONG step_at;
+} sf;
+
+static void strip_render(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG total,
+                         const char *name, BOOL *changed)
+{
+    struct RastPort *keep = g->rp;
+    WORD y = st.y;
+    if (sf.bm) {
+        g->rp = &sf.rp;
+        st.y = 0;
+    }
+    if (full) {
+        strip_draw(g, paused, at, total, name);
+        *changed = TRUE;
+    } else if (strip_progress(g, at, total))
+        *changed = TRUE;
+    g->rp = keep;
+    st.y = y;
+    if (*changed)
+        sf.rgb_ok = FALSE;
+}
+
+static void strip_show(struct Gfx *g)
+{
+    if (!sf.bm) {
+        if (sf.lv <= 0)
+            FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
+        return;                             /* else drawn already */
+    }
+    if (sf.lv >= FADE_N)
+        BltBitMapRastPort(sf.bm, 0, 0, g->rp, 0, st.y, g->w, st.h, 0xC0);
+    else if (sf.lv <= 0)
+        FillPixelArray(g->rp, 0, st.y, g->w, st.h, 0x000000);
+    else {
+        UBYTE t[256];
+        ULONG i, n = (ULONG)g->w * st.h * 3, k = (ULONG)sf.lv * sf.lv * 256 / (FADE_N * FADE_N);
+        if (!sf.rgb_ok) {
+            ReadPixelArray(sf.rgb, 0, 0, g->w * 3, &sf.rp, 0, 0, g->w, st.h, RECTFMT_RGB);
+            sf.rgb_ok = TRUE;
+        }
+        for (i = 0; i < 256; i++)
+            t[i] = (UBYTE)(i * k >> 8);
+        for (i = 0; i < n; i++)
+            sf.tmp[i] = t[sf.rgb[i]];
+        WritePixelArray(sf.tmp, 0, 0, g->w * 3, g->rp, 0, st.y, g->w, st.h, RECTFMT_RGB);
+    }
+}
+
+static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
+{
+    ULONG now = time_ms();
+    int target = ctl_want(paused) ? FADE_N : 0, lv = sf.lv;
+    BOOL changed = FALSE;
+    if (lv != target) {
+        if (!sf.bm)
+            lv = target;
+        else if (now - sf.step_at >= FADE_MS / FADE_N) {
+            lv += lv < target ? 1 : -1;
+            sf.step_at = now;
+        }
+    }
+    if (lv > 0 || target > 0) {
+        if (!sf.drawn || at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol ||
+            ctl_ring() != st.ring || ctl.focus != st.focus) {
+            strip_render(g, TRUE, paused, at, total, name, &changed);
+            sf.drawn = TRUE;
+        } else
+            strip_render(g, FALSE, paused, at, total, name, &changed);
+    }
+    if (changed || lv != sf.lv) {
+        sf.lv = lv;
+        if (!sf.bm && !lv && !changed)
+            strip_show(g);
+        else if (sf.bm)
+            strip_show(g);
+    }
+    if (!sf.lv)
+        sf.drawn = FALSE;                   /* drawn afresh when it next shows */
+}
+
+static void strip_setup(struct Gfx *g)
+{
+    memset(&sf, 0, sizeof(sf));
+    sf.blank = AllocMem(6 * sizeof(UWORD), MEMF_CHIP | MEMF_CLEAR);
+    if ((sf.bm = AllocBitMap(g->w, st.h, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                             g->rp->BitMap)) &&
+        (sf.rgb = AllocVec((ULONG)g->w * st.h * 3, MEMF_ANY)) &&
+        (sf.tmp = AllocVec((ULONG)g->w * st.h * 3, MEMF_ANY))) {
+        InitRastPort(&sf.rp);
+        sf.rp.BitMap = sf.bm;
+        SetFont(&sf.rp, g->rp->Font);
+        SetDrMd(&sf.rp, JAM1);
+    } else {
+        if (sf.bm)
+            FreeBitMap(sf.bm);
+        FreeVec(sf.rgb);
+        sf.bm = NULL;
+        sf.rgb = NULL;
+    }
+    ctl_begin(g->win, sf.blank);
+}
+
+static void strip_cleanup(struct Gfx *g)
+{
+    ClearPointer(g->win);
+    WaitBlit();
+    if (sf.bm)
+        FreeBitMap(sf.bm);
+    FreeVec(sf.rgb);
+    FreeVec(sf.tmp);
+    if (sf.blank)
+        FreeMem(sf.blank, 6 * sizeof(UWORD));
+    memset(&sf, 0, sizeof(sf));
 }
 
 static int strip_hit(WORD x, WORD y)
@@ -1286,6 +1550,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     ULONG stripms = 0, nrows = 0, nskip = 0, skips = 0, fmt = 0;
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     UWORD *l16 = NULL;
+    struct BitMap *pbm = NULL;      /* the picture, drawn here, then blitted onto the screen */
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
     BOOL direct = FALSE, fresh = TRUE, skip = FALSE;
     WORD ax, ay, kk, fx, fy, dw, dh, vx, vy, avail, ox = 0, oy = 0;
@@ -1339,6 +1604,23 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         ox = g->rp->Layer->bounds.MinX;
         oy = g->rp->Layer->bounds.MinY;
     }
+    /* Written into a bitmap of its own, not the screen's: locking what is
+     * shown hides a pointer the system draws itself (PrismRTG's, Picasso96's
+     * software one) each frame, and it flickers. Its changes blitted over. */
+    if (direct && (pbm = AllocBitMap(dw, dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                                     g->rp->BitMap))) {
+        UBYTE *base = NULL;
+        ULONG bpr = 0, f2 = 0;
+        APTR lk = GetCyberMapAttr(pbm, CYBRMATTR_ISCYBERGFX)
+                      ? LockBitMapTags(pbm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
+                                       LBMI_PIXFMT, (ULONG)&f2, TAG_DONE) : NULL;
+        if (lk)
+            UnLockBitMap(lk);
+        if (!lk || !base || f2 != fmt) {
+            FreeBitMap(pbm);
+            pbm = NULL;
+        }
+    }
     if (!(planar = AllocVec(fsz * 2, MEMF_ANY | MEMF_CLEAR)) ||
         !(last = AllocVec(fsz, MEMF_ANY | MEMF_CLEAR)) ||
         !(l16 = AllocVec(256 * sizeof(UWORD), MEMF_ANY | MEMF_CLEAR)) ||
@@ -1350,6 +1632,8 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         FreeVec(chunky);
         FreeVec(line);
         FreeVec(lut);
+        if (pbm)
+            FreeBitMap(pbm);
         return 1;
     }
     for (k = 0; k < 2; k++) {
@@ -1365,13 +1649,12 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     else
         memset(lut, 0, 256 * sizeof(ULONG));
     total = anim_length(fh, path, 0);
-    ClearPointer(g->win);
-    FillPixelArray(g->rp, 0, 0, g->w, st.y, 0x000000);
-    strip_draw(g, FALSE, 0, total, name);
+    FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+    strip_setup(g);
     sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ldx%ld (%ld x %ld), %s", name,
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)camg,
             (long)fx, (long)fy, (long)dw, (long)dh,
-            direct ? "written straight" : "by WritePixelArray");
+            pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
     amce_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
@@ -1408,11 +1691,11 @@ restart:
         src = planar + shown * fsz;
         if (direct) {
             UBYTE *base = NULL;
-            ULONG bpr = 0, y, x0, x1, j, span, rowl = rb * depth;
-            APTR lk = LockBitMapTags(g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW,
-                                     (ULONG)&bpr, TAG_DONE);
+            ULONG bpr = 0, y, x0, x1, j, span, rowl = rb * depth, ry0 = h, ry1 = 0, cx0 = rb, cx1 = 0;
+            APTR lk = LockBitMapTags(pbm ? pbm : g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
+                                     LBMI_BYTESPERROW, (ULONG)&bpr, TAG_DONE);
             if (lk && base) {
-                UBYTE *o = base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * 2;
+                UBYTE *o = pbm ? base : base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * 2;
                 for (y = 0; y < h; y++, o += bpr * fy) {
                     const UBYTE *a = src + y * rowl;
                     UBYTE *b = last + y * rowl;
@@ -1429,11 +1712,23 @@ restart:
                         CopyMem(o + x0 * 16 * fx, o + j * bpr + x0 * 16 * fx, span);
                     CopyMem((APTR)a, b, rowl);
                     nrows++;
+                    if (y < ry0)
+                        ry0 = y;
+                    ry1 = y;
+                    if (x0 < cx0)
+                        cx0 = x0;
+                    if (x1 > cx1)
+                        cx1 = x1;
                 }
                 fresh = FALSE;
             }
             if (lk)
                 UnLockBitMap(lk);
+            if (lk && base && pbm && ry0 <= ry1) {  /* what changed, onto the screen */
+                WORD px0 = (WORD)(cx0 * 8 * fx), px1 = (WORD)((cx1 * 8 > w ? w : cx1 * 8) * fx);
+                BltBitMapRastPort(pbm, px0, (WORD)(ry0 * fy), g->rp, vx + px0, vy + (WORD)(ry0 * fy),
+                                  px1 - px0, (WORD)((ry1 - ry0 + 1) * fy), 0xC0);
+            }
             if (!lk || !base) {                 /* not to be had after all: the other way */
                 direct = FALSE;
                 if (!(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
@@ -1502,7 +1797,7 @@ restart:
         }
     drawn:
         td = time_ms();
-        strip_update(g, paused, due, total, name);
+        strip_tick(g, paused, due, total, name);
         stripms += time_ms() - td;
         /* input, and its time */
         for (;;) {
@@ -1519,11 +1814,9 @@ restart:
                     snd_quiet(2);
                     snd_quiet(3);
                 }
-                strip_draw(g, paused, due, total, name);
-            } else if (bar_redraw) {
-                bar_redraw = FALSE;
-                strip_draw(g, paused, due, total, name);
             }
+            bar_redraw = FALSE;
+            strip_tick(g, paused, due, total, name);
             if (snd_on)
                 snd_tick();
             if (!paused)
@@ -1576,8 +1869,10 @@ restart:
             nskip++;
         } else
             skips = 0;
-        while ((LONG)(time_ms() - t0) < (LONG)due - 10)
+        while ((LONG)(time_ms() - t0) < (LONG)due - 10) {
             WaitTOF();
+            strip_tick(g, paused, due, total, name);    /* a fade goes on meanwhile */
+        }
         shown = k;
         n++;
         for (i = 0; i < f->nsctl; i++)
@@ -1601,6 +1896,11 @@ restart:
     result = err[0] ? -1 : 0;
     (void)errmax;
 out:
+    strip_cleanup(g);
+    if (pbm) {
+        WaitBlit();
+        FreeBitMap(pbm);
+    }
     FreeVec(planar);
     FreeVec(last);
     FreeVec(l16);
@@ -1714,7 +2014,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
                          WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
     if (!win)
         goto nomem;
-    SetPointer(win, blank, 1, 16, 0, 0);
+    ctl_begin(win, blank);
     planes_of(sb[0]->sb_BitMap, w, h, depth, &pl[0]);
     planes_of(sb[1]->sb_BitMap, w, h, depth, &pl[1]);
     bar_setup(sb[0]->sb_BitMap, w, h, depth, id, &clip, left, top);
@@ -1801,16 +2101,13 @@ restart:
         }
         /* the controls: up while the mouse moves, and while paused */
         bar.paused = paused;
-        want = bar.ok && (paused || (bar.moved && time_ms() - bar.moved < BAR_HIDE));
+        want = ctl_want(paused) && bar.ok;
         if (want != bar.on) {
             bar.on = want;
-            if (want) {
-                ClearPointer(win);
+            if (want)
                 bar_put(sb[shown]->sb_BitMap, shown);
-            } else {
-                SetPointer(win, blank, 1, 16, 0, 0);
+            else
                 bar_take(sb[shown]->sb_BitMap, shown);
-            }
             bar_redraw = FALSE;
         } else if (bar_redraw && bar.on) {
             bar_put(sb[shown]->sb_BitMap, shown);
