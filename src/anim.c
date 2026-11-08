@@ -1622,6 +1622,11 @@ static int strip_hit(WORD x, WORD y)
  *                 column's place; a row as many times as lay.yo says
  * (Stretching the pixels instead, in the card's memory, cost 55 ms a
  * frame full screen: the CPU writes card memory at some 45 MB a second.)
+ * Stretching costs a plane at a time, so with many planes it can cost
+ * more than animdraw's 68k drawing the pixels (Frog, 8 planes at 2:1:
+ * 66 ms against 20): a stretched animation's first CARD_TRIAL drawn
+ * frames are the card's, the next CARD_TRIAL the 68k's, each timed by the
+ * row, and the quicker draws the rest.
  * HAM is not the card's: drawn by animdraw as before. The first frame is
  * read back and checked against the colours it should have; any other,
  * and the CPU draws it. */
@@ -1641,7 +1646,10 @@ static struct {
     int ncol;
     struct ViewPort *vp;
     BOOL checked;                   /* the first frame's colours looked at */
+    int trial;                      /* CARD_STRETCH: 0 the card timed, 1 the 68k, 2 chosen */
+    ULONG tframes, tms[2], trows[2];
 } cd;
+#define CARD_TRIAL 8
 
 static void card_free(void)
 {
@@ -1786,6 +1794,9 @@ static int card_choose(struct Gfx *g, UWORD w, UWORD h, UBYTE depth, BOOL ham, U
     }
     cd.mode = mode;
     cd.checked = FALSE;
+    cd.trial = mode == CARD_STRETCH ? 0 : 2;
+    cd.tframes = 0;
+    cd.tms[0] = cd.tms[1] = cd.trows[0] = cd.trows[1] = 0;
     lay.reblit = mode == CARD_PLANES || mode == CARD_STRETCH ? card_reblit : NULL;
     return mode;
 }
@@ -2058,7 +2069,7 @@ restart:
     due = 0;
     n = 0;
     for (;;) {
-        ULONG td, op, bits, il, dt;
+        ULONG td, op, bits, il, dt, rows0;
         int r;
         const UBYTE *src;
         /* the frame in pl[shown] to the screen, unless behind time */
@@ -2067,7 +2078,8 @@ restart:
             goto drawn;
         td = time_ms();
         src = planar + shown * fsz;
-        if (cd.mode != CARD_OFF) {          /* the card's way */
+        rows0 = nrows;
+        if (cd.mode != CARD_OFF && cd.trial != 1) {     /* the card's way */
             ULONG y, rowl = rb * depth;
             LONG ry0 = -1, ry1 = -1;
             card_source(src);
@@ -2164,7 +2176,7 @@ restart:
                     break;
             }
         }
-        if (!direct && cd.mode == CARD_OFF) {
+        if (!direct && (cd.mode == CARD_OFF || cd.trial == 1)) {
             ULONG y, x, j;
             UBYTE *row = chunky;
             ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp;
@@ -2213,6 +2225,33 @@ restart:
         dt = drawn_at - td;
         convms += dt;
         nconv++;
+        if (cd.mode == CARD_STRETCH && cd.trial < 2 && direct) {
+            /* the card against the 68k: each timed by the row (a frame
+             * after the change, drawn whole, not counted) */
+            if (cd.tframes++ > 0) {
+                cd.tms[cd.trial] += dt;
+                cd.trows[cd.trial] += nrows - rows0;
+            }
+            if (cd.tframes > CARD_TRIAL) {
+                cd.tframes = 0;
+                fresh = TRUE;               /* (each way's own picture drawn whole) */
+                if (cd.trial == 0) {
+                    cd.trial = 1;
+                    lay.reblit = NULL;      /* (the 68k's picture is lay.pbm's) */
+                } else {
+                    ULONG c = cd.trows[0] ? cd.tms[0] * 1000 / cd.trows[0] : 0,
+                          k = cd.trows[1] ? cd.tms[1] * 1000 / cd.trows[1] : 0;
+                    sprintf(m, "the card %ld us a row, the 68k %ld: %s", (long)c, (long)k,
+                            c <= k ? "the card draws it" : "the 68k draws it");
+                    amce_log("anim", m);
+                    if (c <= k) {
+                        cd.trial = 2;
+                        lay.reblit = card_reblit;
+                    } else
+                        card_free();
+                }
+            }
+        }
         if (dt > worst)
             worst = dt;
         if (!runs && nconv == SLOW_FRAMES) {    /* can it keep up here? */

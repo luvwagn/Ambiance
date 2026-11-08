@@ -465,6 +465,24 @@ static void p_check(char *line)
     FreeVec(b);
 }
 
+static UBYTE *fastbuf;                  /* fast RAM, the card's row size */
+
+static void t_cpu_fast(void)             /* the same writes into fast RAM, to compare */
+{
+    APTR base = NULL;
+    ULONG bpr = 0, bpp = 0, y;
+    APTR h = LockBitMapTags(rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
+                            LBMI_BYTESPERROW, (ULONG)&bpr, LBMI_BYTESPERPIX, (ULONG)&bpp, TAG_DONE);
+    if (!h)
+        return;
+    UnLockBitMap(h);
+    for (y = 0; y < (ULONG)CH; y++) {
+        ULONG *p = (ULONG *)(fastbuf + y * CW * bpp), n = CW * bpp / 4, v = arg * 0x01010101UL;
+        while (n--)
+            *p++ = v;
+    }
+}
+
 static struct ScreenBuffer *sb[2];
 static struct MsgPort *safe;
 static BOOL safe_wait;
@@ -502,6 +520,7 @@ static const struct Test tests[] = {
     { "Full screen pic: reduce+write", t_full8, 8 },
     { "Full screen pic: RGB direct", t_full_rgb, 16 },
     { "CPU writes card RAM 256x256", t_cpu, 0 },
+    { "CPU writes fast RAM, as much", t_cpu_fast, 0 },
     { "Double-buffer flip", t_flip, 0 },
     { "Planes 384x290x6: card (P2D)", t_p2d, 16 },
     { "Planes 384x290x6: ours, 68k", t_ours, 16 },
@@ -575,7 +594,8 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
         BOOL deep = depth > 8;
         if ((tests[i].when == 8 && deep) || (tests[i].when == 16 && !deep) ||
             (tests[i].fn == t_copy && !off) || (tests[i].fn == t_flip && !(sb[0] && sb[1] && safe)) ||
-            ((tests[i].fn == t_cpu || tests[i].fn == t_cover_rgb || tests[i].fn == t_cover_lut ||
+            (tests[i].fn == t_cpu_fast && !fastbuf) ||
+            ((tests[i].fn == t_cpu || tests[i].fn == t_cpu_fast || tests[i].fn == t_cover_rgb || tests[i].fn == t_cover_lut ||
               tests[i].fn == t_full_rgb) && !CyberGfxBase) ||
             ((tests[i].fn == t_cover8 || tests[i].fn == t_cover8_write || tests[i].fn == t_full8) &&
              GfxBase->LibNode.lib_Version < 40) ||
@@ -693,6 +713,7 @@ int main(void)
         font = OpenFont(&ta);
     }
     cover_rgb = AllocVec(CW * CH * 3, MEMF_ANY);
+    fastbuf = AllocVec(CW * CH * 4, MEMF_FAST);
     cover_chunky = AllocVec(CW * CH, MEMF_ANY);
     full_rgb = AllocVec((ULONG)w * h * 3, MEMF_ANY);
     full_chunky = AllocVec((ULONG)w * h, MEMF_ANY);
@@ -775,6 +796,7 @@ int main(void)
         PutStr((CONST_STRPTR)"\nWritten to rtgbench.txt\n");
     }
 out:
+    FreeVec(fastbuf);
     FreeVec(cover_rgb);
     FreeVec(cover_chunky);
     FreeVec(full_rgb);
