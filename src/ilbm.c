@@ -340,26 +340,48 @@ static void row_chunky(const UBYTE *row, ULONG rb, UBYTE planes, ULONG *out)
 #define PICK_BYTES  (2UL << 20)
 #define PICK_EVERY  3
 #define PICK_BLANK  940             /* of 1000 points one colour: blank */
+#define PICK_SETTLE 24              /* frames on from the first not blank, for a brighter one */
 
 /* How much of a frame (interleaved rows: rb bytes a plane) is one colour,
- * of 1000: 40 x 30 points looked at. */
-static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULONG sh)
+ * of 1000: 40 x 30 points looked at, by the colours they show (cm: the
+ * CMAP as it is then; HAM by its base colours, extra halfbrite halved).
+ * Nearly black all over is blank too: one fading in from black by its
+ * colours (WalkerDemo2) has every pen used and none yet lit. */
+static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULONG sh,
+                         const UBYTE *cm, ULONG cml, ULONG camg, ULONG *lit)
 {
-    static UWORD hist[256];
-    ULONG x, y, most = 0;
+    static UWORD hist[4096];
+    ULONG x, y, most = 0, luma = 0, n = cml / 3;
     UBYTE k;
     memset(hist, 0, sizeof(hist));
     for (y = 0; y < 30; y++) {
         const UBYTE *r = img + (y * sh / 30) * rb * planes;
         for (x = 0; x < 40; x++) {
-            ULONG px = x * sw / 40, c = 0;
+            ULONG px = x * sw / 40, c = 0, rr = 0, gg = 0, bb = 0, half = 0;
+            UWORD key;
             for (k = 0; k < planes; k++)
                 if (r[k * rb + (px >> 3)] & (0x80 >> (px & 7)))
                     c |= 1UL << k;
-            if (++hist[c] > most)
-                most = hist[c];
+            if (camg & CAMG_HAM)
+                c &= planes == 8 ? 63 : 15;
+            else if ((camg & CAMG_EHB) && planes == 6 && c >= 32) {
+                c -= 32;
+                half = 1;
+            }
+            if (c < n) {
+                rr = cm[c * 3] >> half;
+                gg = cm[c * 3 + 1] >> half;
+                bb = cm[c * 3 + 2] >> half;
+            }
+            luma += rr * 3 + gg * 6 + bb;
+            key = (UWORD)(((rr >> 4) << 8) | ((gg >> 4) << 4) | (bb >> 4));
+            if (++hist[key] > most)
+                most = hist[key];
         }
     }
+    *lit = luma / 1200;                     /* 0-2550: how bright, on the whole */
+    if (*lit < 10 * 12)                     /* mean under about 12 of 255: dark */
+        return 1000;
     return most * 1000 / 1200;
 }
 
@@ -367,10 +389,11 @@ static ULONG blank_score(const UBYTE *img, ULONG rb, UBYTE planes, ULONG sw, ULO
  * caller frees it); its colours into cm (*cml bytes) if a frame changed
  * them. Frames read meanwhile counted into *frames and *jif. */
 static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULONG sh,
-                        UBYTE planes, UBYTE masking, UBYTE comp, UBYTE *cm, ULONG *cml,
-                        ULONG *frames, ULONG *jif)
+                        UBYTE planes, UBYTE masking, UBYTE comp, ULONG camg, UBYTE *cm,
+                        ULONG *cml, ULONG *frames, ULONG *jif)
 {
-    ULONG rb = ((sw + 15) >> 4) << 1, fsz = rb * planes * sh, best, got = 0, fl = 0;
+    ULONG rb = ((sw + 15) >> 4) << 1, fsz = rb * planes * sh, best, got = 0, fl = 0, bestlit, lit;
+    LONG found = -1;                    /* the first frame not blank */
     UBYTE *a, *buf[2], *keep, *f = NULL, *cur = NULL, h[12];
     static UBYTE cm_now[768];
     ULONG cmn = *cml;
@@ -394,7 +417,7 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
         pl[k].h = sh;
     }
     animdec_body(body, bodylen, &pl[0], comp, masking);
-    best = blank_score(buf[0], rb, planes, sw, sh);
+    best = blank_score(buf[0], rb, planes, sw, sh, cm, *cml, camg, &bestlit);
     if (best < PICK_BLANK || !keep)
         return a;
     CopyMem(buf[0], buf[1], fsz);
@@ -454,13 +477,29 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
         cur = buf[k];
         if (n % PICK_EVERY)
             continue;
-        if ((sc = blank_score(cur, rb, planes, sw, sh)) < best) {
+        sc = blank_score(cur, rb, planes, sw, sh, cm_now, cmn, camg, &lit);
+        if (sc < PICK_BLANK) {
+            /* not blank: the brightest of this and the next few (a fade in
+             * from black lit at last, not its first glimmer) */
+            if (found < 0 || lit > bestlit) {
+                best = sc;
+                bestlit = lit;
+                CopyMem(cur, keep, fsz);
+                CopyMem(cm_now, cm, cmn);
+                *cml = cmn;
+            }
+            if (found < 0)
+                found = n;
+            if (n - found >= PICK_SETTLE)
+                break;
+        } else if (found >= 0)
+            break;                          /* gone blank again: the one kept */
+        else if (sc < best) {               /* the least blank, should none do */
             best = sc;
+            bestlit = lit;
             CopyMem(cur, keep, fsz);
             CopyMem(cm_now, cm, cmn);
             *cml = cmn;
-            if (best < PICK_BLANK)
-                break;                      /* a good one */
         }
     }
     FreeVec(f);
@@ -523,8 +562,8 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         cmaplen = cmaplen < sizeof(cm) ? cmaplen : sizeof(cm);
         CopyMem((APTR)cmap, cm, cmaplen);
         ULONG kf, kms;
-        img = anim_pick(afh, body, bodylen, sw, sh, planes, masking, comp, cm, &cmaplen, &frames,
-                        &jif);
+        img = anim_pick(afh, body, bodylen, sw, sh, planes, masking, comp, camg, cm, &cmaplen,
+                        &frames, &jif);
         cmap = cm;
         if (anim_fact_get(afh, path, &kf, &kms)) {
             pi->frames = kf > 65535 ? 65535 : kf;   /* counted before */
