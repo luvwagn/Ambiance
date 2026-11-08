@@ -336,7 +336,7 @@ static void row_chunky(const UBYTE *row, ULONG rb, UBYTE planes, ULONG *out)
  * colour nearly all over: a black start, a title on black), then the
  * frames after it decoded (animdec.c) until one is not, every few looked
  * at, PICK_FRAMES or PICK_BYTES at the most: the least blank one seen. */
-#define PICK_FRAMES 150
+#define PICK_FRAMES 360             /* AL1-4's credits and title take 297 */
 #define PICK_BYTES  (2UL << 20)
 #define PICK_EVERY  3
 #define PICK_BLANK  940             /* of 1000 points one colour: blank */
@@ -492,9 +492,12 @@ static UBYTE *anim_pick(BPTR fh, const UBYTE *body, ULONG bodylen, ULONG sw, ULO
                 found = n;
             if (n - found >= PICK_SETTLE)
                 break;
-        } else if (found >= 0)
-            break;                          /* gone blank again: the one kept */
-        else if (sc < best) {               /* the least blank, should none do */
+        } else if (found >= 0) {
+            if (n - found >= PICK_SETTLE)   /* dark a moment (a scene lit in flickers) */
+                break;
+        } else if (sc < best || (sc == best && lit > bestlit)) {
+            /* the least blank, should none do; of the dark ones the
+             * brightest (a title on black, not the black before it) */
             best = sc;
             bestlit = lit;
             CopyMem(cur, keep, fsz);
