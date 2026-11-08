@@ -582,6 +582,7 @@ static struct {
     struct TextFont *font;
     WORD x0, x1, y, h, cw;      /* its place; a button's width */
     WORD px0, px1;              /* the progress line */
+    WORD bx[BT_N];              /* each button's left */
     UBYTE bg, fg, dim;
     ULONG total_ms, at_ms;
     BOOL paused;
@@ -777,8 +778,19 @@ static void bar_put(struct BitMap *bm, int k)
     RectFill(rp, bar.x0, bar.y, bar.x1, bar.y + bar.h - 1);
     SetAPen(rp, bar.dim);
     RectFill(rp, bar.x0, bar.y, bar.x1, bar.y);
+    ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
     for (i = 0, x = bar.x0 + 4; i < BT_N; i++, x += bar.cw) {
-        WORD ix = x + (bar.cw - s) / 2 - 2;
+        WORD ix;
+        if (i == BT_VUP) {                  /* the volume between - and + */
+            WORD vw = TextLength(rp, (STRPTR)"100%", 4) + 4;
+            sprintf(t, "%ld%%", (long)(mp_volume() * 100 / 64));
+            SetAPen(rp, bar.fg);
+            Move(rp, x + (vw - TextLength(rp, (STRPTR)t, strlen(t))) / 2, ty);
+            Text(rp, (STRPTR)t, strlen(t));
+            x += vw;
+        }
+        bar.bx[i] = x;
+        ix = x + (bar.cw - s) / 2 - 2;
         bar_icon(i, ix, bar.y + 2, s);
         if (i == ctl.focus && ctl_ring()) {     /* the focus: a ring, its corners off */
             WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s + 1, y1 = bar.y + bar.h - 1;
@@ -792,10 +804,9 @@ static void bar_put(struct BitMap *bm, int k)
     time_text(a, bar.at_ms);
     if (bar.total_ms) {
         time_text(b, bar.total_ms);
-        sprintf(t, "%s / %s  %ld%%", a, b, (long)(mp_volume() * 100 / 64));
+        sprintf(t, "%s / %s", a, b);
     } else
-        sprintf(t, "%s  %ld%%", a, (long)(mp_volume() * 100 / 64));
-    ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
+        strcpy(t, a);
     x += 6;
     SetAPen(rp, bar.fg);
     Move(rp, x, ty);
@@ -830,10 +841,13 @@ static void bar_take(struct BitMap *bm, int k)
 /* The button at (x, y), -1 none (or not on the bar). */
 static int bar_hit(WORD x, WORD y)
 {
-    if (!bar.on || y < bar.y || y >= bar.y + bar.h || x < bar.x0 + 4)
+    int i;
+    if (!bar.on || y < bar.y || y >= bar.y + bar.h)
         return -1;
-    x = (x - bar.x0 - 4) / bar.cw;
-    return x < BT_N ? x : -1;
+    for (i = 0; i < BT_N; i++)
+        if (x >= bar.bx[i] && x < bar.bx[i] + bar.cw)
+            return i;
+    return -1;
 }
 
 /* All the frames' time: kept from before (ilbm.c), or a header each read
@@ -1299,6 +1313,7 @@ static struct {
     UWORD vol;
     BOOL paused, bar, ring;
     int focus;
+    WORD bx[BT_N];                  /* each button's left */
 } st;
 
 static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
@@ -1309,9 +1324,19 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.ring = ctl_ring();
     st.focus = ctl.focus;
     for (i = 0, x = st.x0; i < BT_N; i++, x += st.cw) {
-        WORD ix = x + (st.cw - s) / 2, iy = st.y + (st.h - s) / 2, j;
-        WORD bx = x + 1, by = st.y + 2, bw = st.cw - 2, bh = st.h - 4;
-        WORD ry = bh / 5 > 2 ? bh / 5 : 2, sx = gfx_mode_tall(g->mode) ? 2 : 1, rx;
+        WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
+        if (i == BT_VUP) {                  /* the volume between - and + */
+            WORD vw = gfx_textlen(g, "100%", TS_BODY) + GU(g, 8);
+            sprintf(line, "%ld%%", (long)(mp_volume() * 100 / 64));
+            gfx_text(g, x + (vw - gfx_textlen(g, line, TS_BODY)) / 2, cy - g->font_h / 2, line,
+                     PEN_TEXT, PEN_BG, 0, TS_BODY);
+            x += vw;
+        }
+        st.bx[i] = x;
+        ix = x + (st.cw - s) / 2;
+        bx = x + 1, by = st.y + 2, bw = st.cw - 2, bh = st.h - 4;
+        ry = bh / 5 > 2 ? bh / 5 : 2;
+        sx = gfx_mode_tall(g->mode) ? 2 : 1;
         if (sx > 1)
             ry = ry / 2 > 1 ? ry / 2 : 1;
         rx = ry * sx;
@@ -1356,10 +1381,10 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     time_text(a, at);
     if (total) {
         time_text(b, total);
-        sprintf(line, "%s / %s   %ld%%", a, b, (long)(mp_volume() * 100 / 64));
+        sprintf(line, "%s / %s", a, b);
     } else
-        sprintf(line, "%s   %ld%%", a, (long)(mp_volume() * 100 / 64));
-    x += GU(g, 6);
+        strcpy(line, a);
+    x += GU(g, 10);
     gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
     x += gfx_textlen(g, line, TS_BODY) + GU(g, 8);
     st.px0 = x;
@@ -1542,11 +1567,13 @@ static void strip_cleanup(struct Gfx *g)
 
 static int strip_hit(WORD x, WORD y)
 {
+    int i;
     if (y < st.y)
         return -1;                          /* the picture: pauses */
-    if (x < st.x0 || (x - st.x0) / st.cw >= BT_N)
-        return -2;                          /* the controls, no button */
-    return (x - st.x0) / st.cw;
+    for (i = 0; i < BT_N; i++)
+        if (x >= st.bx[i] && x < st.bx[i] + st.cw)
+            return i;
+    return -2;                              /* the controls, no button */
 }
 
 /* 0 played, -1 an error (err), 1 too slow here: the caller plays it on a
