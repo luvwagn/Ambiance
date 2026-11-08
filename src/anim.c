@@ -1484,7 +1484,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
 {
     ULONG rb = ((w + 15) >> 4) << 1, fsz = rb * depth * h, *lut = NULL, jlast = 0, readms = 0;
     ULONG convms = 0, worst = 0, total, t0, due, jif, start_ms, runs = 0, nconv = 0, nframes = 0;
-    ULONG stripms = 0, nrows = 0, nskip = 0, nnodec = 0, fmt = 0, drawn_at = 0;
+    ULONG stripms = 0, nrows = 0, nskip = 0, nnodec = 0, fmt = 0, drawn_at = 0, decms = 0;
     BOOL whole_only = TRUE;         /* every frame so far a whole one (a BODY, op 0) */
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     UWORD *l16 = NULL;
@@ -1494,7 +1494,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     struct AnimPlanes pl[2];
     LONG result = -1;
     int k, i, n, quit = 0, shown;
-    char m[200];
+    char m[320];
     const char *name = (const char *)FilePart((STRPTR)path);
 
     /* the picture's pixels' shape, then the largest whole scale that fits */
@@ -1866,6 +1866,7 @@ restart:
             nnodec++;
             k = shown;                      /* (the shown one stays the last decoded) */
         } else {
+            ULONG tdec = time_ms();
             if (il == 1)
                 CopyMem(planar + shown * fsz, planar + k * fsz, fsz);
             if (op == 0 && f->body)
@@ -1874,6 +1875,7 @@ restart:
                 sprintf(err, _("ANIM-%ld compression is not supported"), (long)op);
                 break;
             }
+            decms += time_ms() - tdec;
         }
         if (f->cmap) {                      /* its colours changed: all of it again */
             ad_lut(f->cmap, f->cmaplen, camg, depth, lut + 256);
@@ -1908,10 +1910,10 @@ restart:
         }
     }
     sprintf(m, "%ld frames on AmigaMCE's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
-            "each), %ld not drawn (behind; %ld of them not decoded); controls %ld ms each; reading %ld ms; "
-            "played %ld time%s",
+            "each), %ld not drawn (behind; %ld of them not decoded); decoding %ld ms; controls %ld ms "
+            "each; reading %ld ms; played %ld time%s",
             (long)nframes, (long)nconv, (long)(nconv ? convms / nconv : 0), (long)worst,
-            (long)(nconv ? nrows / nconv : 0), (long)nskip, (long)nnodec,
+            (long)(nconv ? nrows / nconv : 0), (long)nskip, (long)nnodec, (long)decms,
             (long)(nframes ? stripms / nframes : 0),
             (long)readms, (long)runs + 1, runs ? "s" : "");
     amce_log("anim", m);
