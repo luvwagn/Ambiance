@@ -1076,38 +1076,18 @@ BOOL anim_has_sound(const char *path)
  * format), the pixels are written straight into it, and only where the
  * frame differs from the one shown: a row at a time, from its first
  * changed byte column to its last (HAM's whole row, each pixel hanging on
- * the one before). Behind time, frames are decoded and not drawn (up to
- * SKIP_MAX in a row), so it keeps its speed and its sound in step.
+ * the one before). Behind time, frames are decoded and not drawn, so it
+ * keeps its speed and its sound in step: as many as it takes, one drawn
+ * at least every SKIP_MS.
  *
  * Full screen too slow (over three times what it wants, over its first
- * SLOW_FRAMES drawn), it goes back to its whole scale for that one. Where
- * even skipping cannot keep up (drawing over SLOW_MS a frame, and over
- * SKIP_MAX + 1 times what the animation wants), it
- * goes back to its own screen, from the start; that file plays there for
- * the rest of this run. */
+ * SLOW_FRAMES drawn), it goes back to its whole scale for that one. It
+ * never goes to a screen of its own for being slow: on Amiberry the
+ * change from RTG to the Amiga's own display stops everything a long
+ * while; Settings > Display has that way for those who want it. */
 #define SLOW_FRAMES 12
 #define SLOW_MS     50
-#define SKIP_MAX    3
-static ULONG anim_slow[8];      /* files too slow here (their names' hashes) */
-static int anim_nslow;
-
-static ULONG path_hash(const char *s)
-{
-    ULONG h = 2166136261UL;
-    while (*s)
-        h = (h ^ (UBYTE)*s++) * 16777619UL;
-    return h | 1;
-}
-
-static BOOL slow_file(const char *path)
-{
-    ULONG h = path_hash(path);
-    int i;
-    for (i = 0; i < 8; i++)
-        if (anim_slow[i] == h)
-            return TRUE;
-    return FALSE;
-}
+#define SKIP_MS    250
 
 static ULONG p2c_hi[256], p2c_lo[256];  /* a plane's byte as 8 pixels' bits (4 + 4) */
 
@@ -1223,6 +1203,39 @@ static void lut16_from(const ULONG *lut, UWORD *l16)
         l16[i] = rt[(lut[i] >> 16) & 255] | gt[(lut[i] >> 8) & 255] | bt[lut[i] & 255];
 }
 
+/* HAM as one step a pixel: pixel = (the one before & hk[c]) | hs[c]. A
+ * base colour keeps nothing and sets its colour; a modify keeps the other
+ * two of red, green and blue and sets its own (all in the screen's format,
+ * byte order and all, so they are its masks too). */
+static UWORD hk[256], hs[256];
+
+static void ham_from(const UWORD *l16, UBYTE depth)
+{
+    ULONG c, bits = depth == 8 ? 6 : 4, lo = (1UL << bits) - 1;
+    for (c = 0; c < 256; c++) {
+        ULONG v = c & lo, ctl = (c >> bits) & 3;
+        v = bits == 4 ? v * 17 : (v << 2) | (v >> 4);
+        switch (ctl) {
+        case 0:
+            hk[c] = 0;
+            hs[c] = l16[c & lo];
+            break;
+        case 1:                             /* blue */
+            hk[c] = (UWORD)~bt[255];
+            hs[c] = bt[v];
+            break;
+        case 2:                             /* red */
+            hk[c] = (UWORD)~rt[255];
+            hs[c] = rt[v];
+            break;
+        default:                            /* green */
+            hk[c] = (UWORD)~gt[255];
+            hs[c] = gt[v];
+            break;
+        }
+    }
+}
+
 /* Where a row of planes (plane p at a + p * rb) differs from b's: its
  * first byte column and one past its last; FALSE if nowhere. */
 static BOOL row_span(const UBYTE *a, const UBYTE *b, ULONG rb, UBYTE depth, ULONG *x0, ULONG *x1)
@@ -1256,16 +1269,15 @@ static BOOL row_span(const UBYTE *a, const UBYTE *b, ULONG rb, UBYTE depth, ULON
 static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, ULONG x1, UWORD fx,
                     const UWORD *xo, BOOL ham, const ULONG *lut, const UWORD *l16, UBYTE *out)
 {
-    ULONG x, i, hb = depth == 8 ? 6 : 4, lo4 = (1UL << hb) - 1, r = 0, gg = 0, b = 0;
+    ULONG x, i, pix = 0;
     UBYTE t[8];
     UWORD *o16 = (UWORD *)out;
     ULONG wx = x0;                  /* HAM: written from here */
+    (void)lut;
     if (ham) {
         x0 = 0;
         x1 = rb;
-        r = (lut[0] >> 16) & 255;
-        gg = (lut[0] >> 8) & 255;
-        b = lut[0] & 255;
+        pix = l16[0];               /* each row starts from colour 0 */
     }
     for (x = x0; x < x1; x++) {
         ULONG h = 0, l = 0, n = w - x * 8;
@@ -1281,31 +1293,28 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
         if (n > 8)
             n = 8;
         if (ham) {
-            ULONG *o2 = (ULONG *)(o16 + xp[0]);
-            for (i = 0; i < n; i++) {
-                ULONG c = t[i], v = c & lo4, ctl = c >> hb, pix;
-                v = hb == 4 ? v * 17 : (v << 2) | (v >> 4);
-                if (ctl == 0) {
-                    r = (lut[v = c & lo4] >> 16) & 255;
-                    gg = (lut[v] >> 8) & 255;
-                    b = lut[v] & 255;
-                } else if (ctl == 1)
-                    b = v;
-                else if (ctl == 2)
-                    r = v;
-                else
-                    gg = v;
-                if (x < wx)
-                    continue;               /* left of what changed: as it was */
-                pix = rt[r] | gt[gg] | bt[b];
-                if (fx == 2)
+            if (x < wx) {                   /* left of what changed: worked out, not written */
+                for (i = 0; i < n; i++)
+                    pix = (pix & hk[t[i]]) | hs[t[i]];
+            } else if (fx == 2) {
+                ULONG *o2 = (ULONG *)(o16 + xp[0]);
+                for (i = 0; i < n; i++) {
+                    pix = (pix & hk[t[i]]) | hs[t[i]];
                     o2[i] = pix | (pix << 16);
-                else {
-                    UWORD *q = o16 + xp[i], *e = o16 + xp[i + 1];
-                    while (q < e)
-                        *q++ = pix;
                 }
-            }
+            } else if (fx == 1) {
+                UWORD *o1 = o16 + xp[0];
+                for (i = 0; i < n; i++) {
+                    pix = (pix & hk[t[i]]) | hs[t[i]];
+                    o1[i] = (UWORD)pix;
+                }
+            } else
+                for (i = 0; i < n; i++) {
+                    UWORD *q = o16 + xp[i], *e = o16 + xp[i + 1];
+                    pix = (pix & hk[t[i]]) | hs[t[i]];
+                    while (q < e)
+                        *q++ = (UWORD)pix;
+                }
         } else if (fx == 2) {
             ULONG *o = (ULONG *)(o16 + xp[0]);
             for (i = 0; i < n; i++) {
@@ -1720,7 +1729,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
 {
     ULONG rb = ((w + 15) >> 4) << 1, fsz = rb * depth * h, *lut = NULL, jlast = 0, readms = 0;
     ULONG convms = 0, worst = 0, total, t0, due, jif, start_ms, runs = 0, nconv = 0, nframes = 0;
-    ULONG stripms = 0, nrows = 0, nskip = 0, skips = 0, fmt = 0;
+    ULONG stripms = 0, nrows = 0, nskip = 0, fmt = 0, drawn_at = 0;
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     UWORD *l16 = NULL;
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
@@ -1859,11 +1868,13 @@ restart:
     CopyMem(planar, planar + fsz, fsz);
     if (runs && f->cmap)
         lut_from(f->cmap, f->cmaplen, camg, depth, lut);
-    if (direct)
+    if (direct) {
         lut16_from(lut, l16);
+        if (ham)
+            ham_from(l16, depth);
+    }
     fresh = TRUE;
     skip = FALSE;
-    skips = 0;
     shown = 0;
     start_ms = t0 = time_ms();
     due = 0;
@@ -1982,7 +1993,8 @@ restart:
                 WriteLUTPixelArray(chunky, 0, 0, dw, g->rp, lut, vx, vy, dw, dh, CTABFMT_XRGB8);
             nrows += h;
         }
-        dt = time_ms() - td;
+        drawn_at = time_ms();
+        dt = drawn_at - td;
         convms += dt;
         nconv++;
         if (dt > worst)
@@ -2010,12 +2022,10 @@ restart:
                 ctl.off |= 1 << BT_FULL;    /* greyed for the rest of this one */
                 if (ctl.focus == BT_FULL)
                     ctl.focus = BT_VUP;
-            } else if (avg > SLOW_MS && avg > want * (SKIP_MAX + 1)) {
-                sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: its own screen",
+            } else if (avg > SLOW_MS && avg > want) {
+                sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: frames left out",
                         (long)avg, (long)want);
                 amce_log("anim", m);
-                result = 1;
-                goto out;
             }
         }
     drawn:
@@ -2100,19 +2110,20 @@ restart:
             lut_from(f->cmap, f->cmaplen, camg, depth, lut + 256);
             if (memcmp(lut, lut + 256, 256 * sizeof(ULONG))) {
                 CopyMem(lut + 256, lut, 256 * sizeof(ULONG));
-                if (direct)
+                if (direct) {
                     lut16_from(lut, l16);
+                    if (ham)
+                        ham_from(l16, depth);
+                }
                 fresh = TRUE;
             }
         }
         due += (jif ? jif : 1) * 1000 / 60;
         /* the one after this due already: this one decoded, not drawn */
-        skip = skips < SKIP_MAX && (LONG)(time_ms() - t0) > (LONG)(due + (jif ? jif : 1) * 1000 / 60);
-        if (skip) {
-            skips++;
+        skip = time_ms() - drawn_at < SKIP_MS &&
+               (LONG)(time_ms() - t0) > (LONG)(due + (jif ? jif : 1) * 1000 / 60);
+        if (skip)
             nskip++;
-        } else
-            skips = 0;
         while ((LONG)(time_ms() - t0) < (LONG)due - 10) {
             WaitTOF();
             strip_tick(g, paused, due, total, name);    /* a fade goes on meanwhile */
@@ -2139,7 +2150,6 @@ restart:
     amce_log("anim", m);
     result = err[0] ? -1 : 0;
     (void)errmax;
-out:
     strip_cleanup(g);
     WaitBlit();
     if (lay.pbm)
@@ -2207,14 +2217,14 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
         goto out;
     }
     /* on a 16-bit RTG screen: on AmigaMCE's own, unless chosen otherwise */
-    if (g && g->truecolor && g->win && CyberGfxBase && !classic && !slow_file(path)) {
+    if (g && g->truecolor && g->win && CyberGfxBase && !classic) {
         LONG r = play_on_screen(g, fh, &f, path, ahi, w, h, depth, masking, comp, camg,
                                 f.has_camg, err, errmax);
         if (r != 1) {
             result = r;
             goto out;
         }
-        anim_slow[anim_nslow++ & 7] = path_hash(path);  /* too slow: its own screen, from the start */
+        /* not here after all (bigger than the screen, no memory): its own screen */
         if (Seek(fh, 12, OFFSET_BEGINNING) < 0 || !read_frame(fh, &f, &readms) || !f.body)
             goto out;
         camg = f.camg;
