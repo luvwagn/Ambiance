@@ -1,7 +1,8 @@
-; $VER: Install-AmigaMCE 1.2 (07.11.2026)
+; $VER: Install-AmigaMCE 1.3 (07.11.2026)
 ;
 ; Installer script for AmigaMCE: the program with its fonts and licences,
-; and the languages chosen, the Workbench's own ticked to begin with.
+; and the languages chosen: the Workbench's own (none besides English on
+; an English one), all eleven at once, or ticked one by one.
 ; English is built into the program. Each language is a catalog in
 ; AmigaMCE/Catalogs; AmigaMCE knows a catalog by the language written in
 ; it, so its drawer's name (francais, espanol) does not matter.
@@ -29,25 +30,43 @@
 (set #dest (tackon #where "AmigaMCE"))
 (set @default-dest #dest)
 
-; the Workbench's language, ticked
+; the Workbench's language (Japanese is never assumed: chosen, or all)
 (set #def 0)
-(if (= @language "deutsch") (set #def 1))
-(if (= @language "français") (set #def 2))
-(if (= @language "italiano") (set #def 4))
-(if (= @language "español") (set #def 8))
-(if (= @language "svenska") (set #def 16))
-(if (= @language "suomi") (set #def 32))
-(if (= @language "dansk") (set #def 64))
-(if (= @language "norsk") (set #def 128))
-(if (= @language "nederlands") (set #def 256))
-(if (= @language "português") (set #def 512))
+(set #wbname "")
+(if (= @language "deutsch") ((set #def 1) (set #wbname "Deutsch")))
+(if (= @language "français") ((set #def 2) (set #wbname "Français")))
+(if (= @language "italiano") ((set #def 4) (set #wbname "Italiano")))
+(if (= @language "español") ((set #def 8) (set #wbname "Español")))
+(if (= @language "svenska") ((set #def 16) (set #wbname "Svenska")))
+(if (= @language "suomi") ((set #def 32) (set #wbname "Suomi")))
+(if (= @language "dansk") ((set #def 64) (set #wbname "Dansk")))
+(if (= @language "norsk") ((set #def 128) (set #wbname "Norsk")))
+(if (= @language "nederlands") ((set #def 256) (set #wbname "Nederlands")))
+(if (= @language "português") ((set #def 512) (set #wbname "Português")))
 
-(set #langs
-  (askoptions
-    (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
+; first which: the Workbench's (or English alone), all eleven, or chosen
+; one by one (the boxes have no "all")
+(set #how
+  (askchoice
+    (prompt "Which languages, besides English (always there)?\n\nWith more than one, Settings > General > Language chooses.")
     (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
-    (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)")
-    (default #def)
+    (choices
+      (if #def (cat "Your Workbench's: " #wbname) "None: English only")
+      "All eleven"
+      "Let me choose...")
+    (default 0)
+  )
+)
+(if (= #how 0) (set #langs #def))
+(if (= #how 1) (set #langs 2047))
+(if (= #how 2)
+  (set #langs
+    (askoptions
+      (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
+      (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
+      (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)")
+      (default #def)
+    )
   )
 )
 
