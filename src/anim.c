@@ -1053,7 +1053,7 @@ BOOL anim_has_sound(const char *path)
  * SKIP_MAX in a row), so it keeps its speed and its sound in step.
  *
  * Where even so it cannot keep up (drawing over SLOW_MS a frame, and over
- * twice what the animation wants, over its first SLOW_FRAMES drawn), it
+ * three times what the animation wants, over its first SLOW_FRAMES drawn), it
  * goes back to its own screen, from the start; that file plays there for
  * the rest of this run. */
 #define SLOW_FRAMES 12
@@ -1220,13 +1220,15 @@ static BOOL row_span(const UBYTE *a, const UBYTE *b, ULONG rb, UBYTE depth, ULON
 }
 
 /* Byte columns x0 to x1 (one past) of a row of planes into the screen's
- * memory at out (the row's first pixel), each pixel fx wide; HAM the
- * whole row. */
+ * memory at out (the row's first pixel), each pixel fx wide. HAM: each
+ * pixel hangs on the one before, so the row is worked out from its start,
+ * and written from x0 to its end. */
 static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, ULONG x1, UWORD fx,
                     BOOL ham, const ULONG *lut, const UWORD *l16, UBYTE *out)
 {
     ULONG x, i, hb = depth == 8 ? 6 : 4, lo4 = (1UL << hb) - 1, r = 0, gg = 0, b = 0;
     UBYTE t[8];
+    ULONG wx = x0;                  /* HAM: written from here */
     if (ham) {
         x0 = 0;
         x1 = rb;
@@ -1248,6 +1250,7 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
             n = 8;
         if (ham) {
             UWORD *o = (UWORD *)(out + x * 8 * fx * 2);
+            ULONG *o2 = (ULONG *)o;
             for (i = 0; i < n; i++) {
                 ULONG c = t[i], v = c & lo4, ctl = c >> hb, pix, j;
                 v = hb == 4 ? v * 17 : (v << 2) | (v >> 4);
@@ -1261,9 +1264,14 @@ static void row_put(const UBYTE *row, ULONG rb, UBYTE depth, ULONG w, ULONG x0, 
                     r = v;
                 else
                     gg = v;
+                if (x < wx)
+                    continue;               /* left of what changed: as it was */
                 pix = rt[r] | gt[gg] | bt[b];
-                for (j = 0; j < fx; j++)
-                    *o++ = pix;
+                if (fx == 2)
+                    o2[i] = pix | (pix << 16);
+                else
+                    for (j = 0; j < fx; j++)
+                        o[i * fx + j] = pix;
             }
         } else if (fx == 2) {
             ULONG *o = (ULONG *)(out + x * 32);
@@ -1699,13 +1707,13 @@ restart:
                 for (y = 0; y < h; y++, o += bpr * fy) {
                     const UBYTE *a = src + y * rowl;
                     UBYTE *b = last + y * rowl;
-                    if (fresh || ham) {
-                        if (!fresh && !memcmp(a, b, rowl))
-                            continue;
+                    if (fresh) {
                         x0 = 0;
                         x1 = rb;
                     } else if (!row_span(a, b, rb, depth, &x0, &x1))
                         continue;
+                    if (ham)
+                        x1 = rb;                /* what follows a change changes with it */
                     row_put(a, rb, depth, w, x0, x1, fx, ham, lut, l16, o);
                     span = ((x1 * 8 > w ? w : x1 * 8) - x0 * 8) * fx * 2;
                     for (j = 1; j < (ULONG)fy; j++)
@@ -1787,7 +1795,7 @@ restart:
             worst = dt;
         if (!runs && nconv == SLOW_FRAMES) {    /* can it keep up here? */
             ULONG avg = convms / nconv, want = due / (n ? n : 1);
-            if (avg > SLOW_MS && avg > want * 2) {
+            if (avg > SLOW_MS && avg > want * 3) {
                 sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: its own screen",
                         (long)avg, (long)want);
                 amce_log("anim", m);
