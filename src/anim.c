@@ -1615,15 +1615,17 @@ static int strip_hit(WORD x, WORD y)
  * 0.2 ms a 384 x 290 frame, against 36 ms on the 68k). The animation's
  * colours are loaded for the blit and the screen's put back after it.
  *   CARD_PLANES   at 1:1, the planes as they are (the decoder's buffer)
- *   CARD_STRETCH  at whole scales, the planes stretched first: a byte's
- *                 bits each fx times by a table, a row fy times
- *   CARD_SPREAD   at other scales: converted at 1:1 into a bitmap of the
- *                 card's (a friend of the screen's: its colours), then
- *                 its pixels spread by the CPU into lay.pbm
+ *   CARD_STRETCH  at any other scale, the changed rows' planes stretched
+ *                 first, in fast RAM: a byte's 8 pixels as their run of
+ *                 bits (each pixel as many times as its columns, lay.xo),
+ *                 a table a byte column made for the size, or'd in at the
+ *                 column's place; a row as many times as lay.yo says
+ * (Stretching the pixels instead, in the card's memory, cost 55 ms a
+ * frame full screen: the CPU writes card memory at some 45 MB a second.)
  * HAM is not the card's: drawn by animdraw as before. The first frame is
  * read back and checked against the colours it should have; any other,
  * and the CPU draws it. */
-enum { CARD_OFF, CARD_PLANES, CARD_STRETCH, CARD_SPREAD };
+enum { CARD_OFF, CARD_PLANES, CARD_STRETCH };
 static struct {
     int mode;
     UBYTE depth;
@@ -1633,9 +1635,7 @@ static struct {
     struct BitMap xb;               /* stretched (CARD_STRETCH) */
     UBYTE *xbuf;
     ULONG rbx, xsize;               /* its bytes a plane row; all of it */
-    WORD fx, fy;
-    struct BitMap *c1;              /* CARD_SPREAD: 1:1 on the card */
-    ULONG xt[256];                  /* a byte's bits, each fx times */
+    ULONG *ct;                      /* a byte column's 256 bit runs (left-aligned) */
     ULONG load[256 * 3 + 2];        /* LoadRGB32's: the animation's colours */
     ULONG save[256 * 3 + 2];        /* ...and the screen's, to put back */
     int ncol;
@@ -1648,9 +1648,8 @@ static void card_free(void)
     WaitBlit();
     FreeVec(cd.xbuf);
     cd.xbuf = NULL;
-    if (cd.c1)
-        FreeBitMap(cd.c1);
-    cd.c1 = NULL;
+    FreeVec(cd.ct);
+    cd.ct = NULL;
     cd.mode = CARD_OFF;
     lay.reblit = NULL;
 }
@@ -1701,25 +1700,38 @@ static void card_reblit(struct Gfx *g, WORD y0, WORD y1)
     card_blit(bm, 0, y0, NULL, g->rp, lay.vx, lay.vy + y0, lay.dw, y1 - y0);
 }
 
-/* Planes row y (of the frame's) stretched into the bitmap's rows */
+/* Planes row y (of the frame's) stretched into the bitmap's rows: each
+ * plane's row cleared, each byte column's run of bits or'd in at its
+ * column's place (lay.xo); what spills past a run is 0 bits */
 static void card_stretch_row(const UBYTE *row, ULONG y)
 {
-    ULONG stride = cd.rbx * cd.depth, x, j;
-    UBYTE *o = cd.xbuf + y * cd.fy * stride, p;
+    ULONG stride = cd.rbx * cd.depth, x, j, n = lay.yo[y + 1] - lay.yo[y], cols = (cd.w + 7) >> 3;
+    UBYTE *o = cd.xbuf + (ULONG)lay.yo[y] * stride, p;
+    if (!n)
+        return;
     for (p = 0; p < cd.depth; p++) {
         const UBYTE *s = row + p * cd.rb;
-        UBYTE *d = o + p * cd.rbx, *e = d + cd.rbx;
-        for (x = 0; x < cd.rb && d < e; x++) {
-            ULONG v = cd.xt[s[x]];
-            switch (cd.fx) {
-            case 4: *d++ = (UBYTE)(v >> 24); if (d >= e) break; /* fall through */
-            case 3: *d++ = (UBYTE)(v >> 16); if (d >= e) break; /* fall through */
-            case 2: *d++ = (UBYTE)(v >> 8); if (d >= e) break; /* fall through */
-            default: *d++ = (UBYTE)v;
-            }
+        const ULONG *t = cd.ct;
+        UBYTE *d = o + p * cd.rbx;
+        memset(d, 0, cd.rbx);
+        for (x = 0; x < cols; x++, t += 256) {
+            ULONG v = t[s[x]], bo, sh, hi;
+            UBYTE *q;
+            if (!v)
+                continue;
+            bo = lay.xo[x * 8];
+            sh = bo & 7;
+            q = d + (bo >> 3);
+            hi = v >> sh;
+            q[0] |= (UBYTE)(hi >> 24);
+            q[1] |= (UBYTE)(hi >> 16);
+            q[2] |= (UBYTE)(hi >> 8);
+            q[3] |= (UBYTE)hi;
+            if (sh)
+                q[4] |= (UBYTE)(v << (8 - sh));
         }
     }
-    for (j = 1; j < (ULONG)cd.fy; j++)
+    for (j = 1; j < n; j++)
         CopyMem(o, o + j * stride, stride);
 }
 
@@ -1737,31 +1749,41 @@ static int card_choose(struct Gfx *g, UWORD w, UWORD h, UBYTE depth, BOOL ham, U
     cd.rb = rb;
     InitBitMap(&cd.src, depth, w, h);
     cd.src.BytesPerRow = rb * depth;        /* rows interleaved, as decoded */
-    if (lay.fx == 1 && lay.fy == 1)
+    if (lay.dw == w && lay.dh == h)
         mode = CARD_PLANES;
-    else if (lay.fx >= 1 && lay.fx <= 4 && lay.fy >= 1 && lay.fy <= 4) {
-        cd.fx = lay.fx;
-        cd.fy = lay.fy;
-        cd.rbx = (((ULONG)w * cd.fx + 15) >> 4) << 1;
-        cd.xsize = cd.rbx * depth * h * cd.fy;
-        if ((cd.xbuf = AllocVec(cd.xsize, MEMF_ANY | MEMF_CLEAR))) {
-            InitBitMap(&cd.xb, depth, w * cd.fx, h * cd.fy);
+    else {
+        ULONG cols = (w + 7) >> 3, x, most = 0;
+        for (x = 0; x < w; x++)             /* the widest pixel: a byte's run fits 32 bits? */
+            if ((ULONG)(lay.xo[x + 1] - lay.xo[x]) > most)
+                most = lay.xo[x + 1] - lay.xo[x];
+        cd.rbx = (((ULONG)lay.dw + 15) >> 4) << 1;
+        cd.xsize = cd.rbx * depth * lay.dh + 16;    /* (+: a last run's spill of 0 bits) */
+        if (most * 8 <= 32 && (cd.ct = AllocVec(cols * 256 * sizeof(ULONG), MEMF_ANY)) &&
+            (cd.xbuf = AllocVec(cd.xsize, MEMF_ANY | MEMF_CLEAR))) {
+            InitBitMap(&cd.xb, depth, lay.dw, lay.dh);
             cd.xb.BytesPerRow = cd.rbx * depth;
             for (i = 0; i < depth; i++)
                 cd.xb.Planes[i] = (PLANEPTR)(cd.xbuf + i * cd.rbx);
-            for (b = 0; b < 256; b++) {
-                ULONG v = 0;
-                int k, j;
-                for (k = 7; k >= 0; k--)
-                    for (j = 0; j < cd.fx; j++)
-                        v = (v << 1) | ((b >> k) & 1);
-                cd.xt[b] = v;
-            }
+            for (x = 0; x < cols; x++)      /* column x's runs: pixel k as its columns */
+                for (b = 0; b < 256; b++) {
+                    ULONG v = 0, nb = 0;
+                    int k;
+                    for (k = 0; k < 8; k++) {
+                        ULONG px = x * 8 + k, r = px < w ? lay.xo[px + 1] - lay.xo[px] : 0, bit;
+                        bit = (b >> (7 - k)) & 1;
+                        while (r--) {
+                            v = (v << 1) | bit;
+                            nb++;
+                        }
+                    }
+                    cd.ct[x * 256 + b] = nb ? v << (32 - nb) : 0;
+                }
             mode = CARD_STRETCH;
+        } else {
+            FreeVec(cd.ct);
+            cd.ct = NULL;
         }
-    } else if (lay.pbm && (cd.c1 = AllocBitMap(w, h, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH),
-                                               BMF_MINPLANES, g->rp->BitMap)))
-        mode = CARD_SPREAD;
+    }
     cd.mode = mode;
     cd.checked = FALSE;
     lay.reblit = mode == CARD_PLANES || mode == CARD_STRETCH ? card_reblit : NULL;
@@ -1773,34 +1795,24 @@ static int card_choose(struct Gfx *g, UWORD w, UWORD h, UBYTE depth, BOOL ham, U
  * table, to the screen's bits. FALSE: not the card's to draw. */
 static BOOL card_check(struct Gfx *g, const UBYTE *planes, const ULONG *lut)
 {
-    UBYTE *rgb = AllocVec((ULONG)cd.w * 4 * 3, MEMF_ANY);
-    struct RastPort crp, *rp;
-    WORD x0, y0, sx, sy;
+    UBYTE *rgb = AllocVec((ULONG)lay.dw * 3, MEMF_ANY);
     ULONG y, x, bad = 0;
     UBYTE p;
     if (!rgb)
         return TRUE;                        /* (no memory to look: as it is) */
-    if (cd.mode == CARD_SPREAD) {
-        InitRastPort(&crp);
-        crp.BitMap = cd.c1;
-        rp = &crp;
-        x0 = y0 = 0;
-        sx = sy = 1;
-    } else {
-        rp = g->rp;
-        x0 = lay.vx;
-        y0 = lay.vy;
-        sx = cd.mode == CARD_STRETCH ? cd.fx : 1;
-        sy = cd.mode == CARD_STRETCH ? cd.fy : 1;
-    }
     for (y = 0; y < cd.h && !bad; y += cd.h / 12 + 1) {
         const UBYTE *row = planes + y * cd.rb * cd.depth;
-        if (sf.lv > 0 && rp == g->rp && y0 + (WORD)(y * sy) >= st.y)
+        if (lay.yo[y + 1] == lay.yo[y] || lay.xo[cd.w] == 0)
+            continue;
+        if (sf.lv > 0 && lay.vy + lay.yo[y] >= st.y)
             break;                          /* (under the controls) */
-        ReadPixelArray(rgb, 0, 0, cd.w * sx * 3, rp, x0, y0 + y * sy, cd.w * sx, 1, RECTFMT_RGB);
+        ReadPixelArray(rgb, 0, 0, lay.dw * 3, g->rp, lay.vx, lay.vy + lay.yo[y], lay.dw, 1,
+                       RECTFMT_RGB);
         for (x = 0; x < cd.w; x++) {
             ULONG c = 0, want;
-            const UBYTE *got = rgb + x * sx * 3;
+            const UBYTE *got = rgb + (ULONG)lay.xo[x] * 3;
+            if (lay.xo[x + 1] == lay.xo[x])
+                continue;
             for (p = 0; p < cd.depth; p++)
                 if (row[p * cd.rb + (x >> 3)] & (0x80 >> (x & 7)))
                     c |= 1UL << p;
@@ -2016,7 +2028,6 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
             (long)dw, (long)dh, lay.full ? " (full screen)" : "",
             cd.mode == CARD_PLANES ? "its planes blitted by the card" :
             cd.mode == CARD_STRETCH ? "its planes stretched, then blitted by the card" :
-            cd.mode == CARD_SPREAD ? "blitted by the card, then spread" :
             lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
     amce_log("anim", m);
     if (LowLevelBase)
@@ -2077,36 +2088,8 @@ restart:
                     ry1 = y;
                     nrows++;
                 }
-                if (ry0 >= 0 && cd.mode == CARD_STRETCH)
-                    card_reblit(g, ry0 * cd.fy, (ry1 + 1) * cd.fy);
-                else if (ry0 >= 0) {        /* CARD_SPREAD: at 1:1 on the card, then spread */
-                    UBYTE *cb = NULL, *pb = NULL;
-                    ULONG cbpr = 0, pbpr = 0, x, j;
-                    APTR l1, l2 = NULL;
-                    card_blit(&cd.src, 0, ry0, cd.c1, NULL, 0, ry0, w, ry1 - ry0 + 1);
-                    l1 = LockBitMapTags(cd.c1, LBMI_BASEADDRESS, (ULONG)&cb, LBMI_BYTESPERROW,
-                                        (ULONG)&cbpr, TAG_DONE);
-                    if (l1)
-                        l2 = LockBitMapTags(lay.pbm, LBMI_BASEADDRESS, (ULONG)&pb, LBMI_BYTESPERROW,
-                                            (ULONG)&pbpr, TAG_DONE);
-                    if (l1 && l2 && cb && pb)
-                        for (y = ry0; y <= (ULONG)ry1; y++) {
-                            const UWORD *s16 = (const UWORD *)(cb + y * cbpr);
-                            UWORD *d16 = (UWORD *)(pb + (ULONG)lay.yo[y] * pbpr);
-                            for (x = 0; x < w; x++) {
-                                UWORD v = s16[x], *q = d16 + lay.xo[x], *e = d16 + lay.xo[x + 1];
-                                while (q < e)
-                                    *q++ = v;
-                            }
-                            for (j = 1; j < (ULONG)(lay.yo[y + 1] - lay.yo[y]); j++)
-                                CopyMem(d16, (UBYTE *)d16 + j * pbpr, (ULONG)dw * 2);
-                        }
-                    if (l2)
-                        UnLockBitMap(l2);
-                    if (l1)
-                        UnLockBitMap(l1);
-                    pic_blit(g, 0, lay.yo[ry0], dw, lay.yo[ry1 + 1]);
-                }
+                if (ry0 >= 0)
+                    card_reblit(g, lay.yo[ry0], lay.yo[ry1 + 1]);
             }
             fresh = FALSE;
             if (!cd.checked) {              /* the first: the colours it should have? */
