@@ -1415,6 +1415,8 @@ static BOOL strip_progress(struct Gfx *g, ULONG at, ULONG total)
  * straight onto the screen, and no fading. */
 #define FADE_MS 240
 #define FADE_N  8
+#define FADE_ON 0               /* off: each step's ReadPixelArray and RGB write made the
+                                 * frames uneven on Amiberry; they come and go at once */
 static struct {
     struct BitMap *bm;
     struct RastPort rp;
@@ -1477,7 +1479,7 @@ static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     int target = ctl_want(paused) ? FADE_N : 0, lv = sf.lv;
     BOOL changed = FALSE;
     if (lv != target) {
-        if (!sf.bm)
+        if (!sf.bm || !FADE_ON)
             lv = target;
         else if (now - sf.step_at >= FADE_MS / FADE_N) {
             lv += lv < target ? 1 : -1;
