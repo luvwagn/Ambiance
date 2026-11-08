@@ -143,10 +143,10 @@ check-syscalls: $(SRCS) src/amce.h
 	@echo "  CHECK OS-call arguments ok"
 
 # rtgbench: AmigaMCE's drawing timed on RTG screens, 8-bit against 16-bit
-build/rtgbench: tools/rtgbench/rtgbench.c
+build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/animdraw68k.o
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< -lamiga
+	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -DAD_ASM -s -o $@ $< src/animdraw.c build/animdraw68k.o -lamiga
 rtgbench: build/rtgbench
 
 test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw

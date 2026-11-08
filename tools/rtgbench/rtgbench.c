@@ -39,8 +39,9 @@
 #include <proto/cybergraphics.h>
 #include <string.h>
 #include <stdio.h>
+#include "../../src/animdraw.h"
 
-static const char version[] = "$VER: rtgbench 1.0 (07.11.2026)";
+static const char version[] = "$VER: rtgbench 1.1 (08.11.2026)";
 
 struct Library *CyberGfxBase, *DiskfontBase;
 struct Device *TimerBase;
@@ -51,7 +52,7 @@ static struct timerequest treq;
 static ULONG efreq;
 static ULONG run_ms = 1000;
 
-#define TESTS 16
+#define TESTS 24
 static LONG result[4][TESTS];           /* microseconds a run, -1 not run, -2 not here */
 static char out[8192];
 static int outn;
@@ -333,6 +334,97 @@ static void t_cpu(void)                  /* the CPU writing the card's memory it
     UnLockBitMap(h);
 }
 
+/* ---- an animation's frame from its planes (6, 384 x 290): by the card
+ * (BltBitMap from a planar bitmap, Picasso96 converting it through the
+ * screen's colours), against AmigaMCE's own (animdraw.c, its 68020
+ * assembler) into a bitmap of the card's, then blitted */
+#define PW 384
+#define PH 290
+#define PD 6
+static struct BitMap *planar;           /* a standard planar bitmap */
+static UBYTE *planes;                   /* the same, rows interleaved (animdraw's) */
+static struct BitMap *pbm;              /* the card's, the size of the frame */
+static unsigned long plut[256];
+static unsigned short pl16[256], pxo[PW + 1];
+static BOOL p_ok;
+
+static void p_setup(void)
+{
+    ULONG rb = ((PW + 15) >> 4) << 1, x, y, p, fmt = 0, bpr = 0;
+    APTR base = NULL, h;
+    p_ok = FALSE;
+    if (!(planar = AllocBitMap(PW, PH, PD, BMF_CLEAR | BMF_DISPLAYABLE, NULL)) ||
+        !(planes = AllocVec(rb * PD * PH, MEMF_ANY)) ||
+        !(pbm = AllocBitMap(PW, PH, depth, BMF_CLEAR | BMF_MINPLANES, scr->RastPort.BitMap)))
+        return;
+    for (y = 0; y < PH; y++)                /* a busy picture: every pen, changing along */
+        for (p = 0; p < PD; p++)
+            for (x = 0; x < rb; x++) {
+                UBYTE v = (UBYTE)((x * 37 + y * 11 + p * 73) ^ (y >> (p + 1)) ^ (x << p));
+                planes[(y * PD + p) * rb + x] = v;
+                if (x < (ULONG)planar->BytesPerRow)
+                    planar->Planes[p][y * planar->BytesPerRow + x] = v;
+            }
+    for (x = 0; x < 64; x++) {
+        ULONG r = (x * 4) & 255, g = (x * 37) & 255, b = (255 - x * 4) & 255;
+        plut[x] = (r << 16) | (g << 8) | b;
+        SetRGB32(&scr->ViewPort, x, r * 0x01010101UL, g * 0x01010101UL, b * 0x01010101UL);
+    }
+    for (x = 0; x <= PW; x++)
+        pxo[x] = (unsigned short)x;
+    h = LockBitMapTags(pbm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
+                       LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE);
+    if (h)
+        UnLockBitMap(h);
+    ad_init();
+    if (!h || !ad_pix_tables(fmt))
+        return;
+    ad_lut16(plut, pl16);
+    ad_ham(pl16, PD);
+    p_ok = TRUE;
+}
+
+static void p_free(void)
+{
+    WaitBlit();
+    if (planar)
+        FreeBitMap(planar);
+    if (pbm)
+        FreeBitMap(pbm);
+    FreeVec(planes);
+    planar = pbm = NULL;
+    planes = NULL;
+}
+
+static void t_p2d(void)                  /* the card's: planar to the screen */
+{
+    BltBitMapRastPort(planar, 0, 0, rp, 20, 40, PW, PH, 0xC0);
+}
+
+static void ours(int ham)
+{
+    ULONG rb = ((PW + 15) >> 4) << 1, bpr = 0, y;
+    UBYTE *base = NULL;
+    APTR h = LockBitMapTags(pbm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
+                            TAG_DONE);
+    if (!h)
+        return;
+    for (y = 0; y < PH; y++)
+        ad_row_put(planes + y * rb * PD, rb, PD, PW, 0, rb, 1, pxo, ham, plut, pl16, base + y * bpr);
+    UnLockBitMap(h);
+    BltBitMapRastPort(pbm, 0, 0, rp, 20, 40, PW, PH, 0xC0);
+}
+
+static void t_ours(void)                 /* AmigaMCE's: 64 colours */
+{
+    ours(0);
+}
+
+static void t_ours_ham(void)             /* AmigaMCE's: HAM6 (the card cannot) */
+{
+    ours(1);
+}
+
 static struct ScreenBuffer *sb[2];
 static struct MsgPort *safe;
 static BOOL safe_wait;
@@ -371,6 +463,9 @@ static const struct Test tests[] = {
     { "Full screen pic: RGB direct", t_full_rgb, 16 },
     { "CPU writes card RAM 256x256", t_cpu, 0 },
     { "Double-buffer flip", t_flip, 0 },
+    { "Planes 384x290x6: card (P2D)", t_p2d, 16 },
+    { "Planes 384x290x6: ours, 68k", t_ours, 16 },
+    { "Planes 384x290 HAM6: ours", t_ours_ham, 16 },
 };
 #define NT ((int)(sizeof(tests) / sizeof(tests[0])))
 
@@ -432,6 +527,8 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
         sb[1]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = safe;
     }
     safe_wait = FALSE;
+    if (depth > 8 && CyberGfxBase)
+        p_setup();
     sprintf(line, "  %ld-bit: %s (bitmap depth %ld)\n", (long)d, modename, (long)depth);
     say(line);
     for (i = 0; i < NT; i++) {
@@ -442,7 +539,8 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
               tests[i].fn == t_full_rgb) && !CyberGfxBase) ||
             ((tests[i].fn == t_cover8 || tests[i].fn == t_cover8_write || tests[i].fn == t_full8) &&
              GfxBase->LibNode.lib_Version < 40) ||
-            ((tests[i].fn == t_full8 || tests[i].fn == t_full_rgb) && (!full_rgb || !full_chunky))) {
+            ((tests[i].fn == t_full8 || tests[i].fn == t_full_rgb) && (!full_rgb || !full_chunky)) ||
+            ((tests[i].fn == t_p2d || tests[i].fn == t_ours || tests[i].fn == t_ours_ham) && !p_ok)) {
             result[slot][i] = -1;
             continue;
         }
@@ -483,6 +581,7 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
         FreeBitMap(off);
         off = NULL;
     }
+    p_free();
     CloseScreen(scr);
     scr = NULL;
     return TRUE;
@@ -506,7 +605,7 @@ int main(void)
     LONG args[4] = { 0, 0, 0, 0 };
     struct RDArgs *ra = ReadArgs((CONST_STRPTR)tmpl, args, NULL);
     struct TextAttr ta;
-    char line[200], names[3][64];
+    char line[320], names[3][64];
     WORD w = 640, h = 480;
     int nd, i, d;
     static const int depths[3] = { 8, 16, 32 };
@@ -613,6 +712,17 @@ int main(void)
             sprintf(line, "A full-screen picture: 8-bit %ld ms, 16-bit %ld ms\n",
                     (long)(result[0][f8] / 1000), (long)(result[1][frgb] / 1000));
             say(line);
+        }
+        for (d = 1; d < nd; d++) {
+            int pc = NT - 3, po = NT - 2, ph = NT - 1;
+            if (result[d][pc] > 0 && result[d][po] > 0) {
+                sprintf(line, "An animation's frame, 384 x 290 x 6, %ld-bit: the card's planar blit %ld.%01ld ms, "
+                        "AmigaMCE's 68k %ld.%01ld ms (HAM6 %ld.%01ld ms)\n", (long)depths[d],
+                        (long)(result[d][pc] / 1000), (long)(result[d][pc] % 1000 / 100),
+                        (long)(result[d][po] / 1000), (long)(result[d][po] % 1000 / 100),
+                        (long)(result[d][ph] / 1000), (long)(result[d][ph] % 1000 / 100));
+                say(line);
+            }
         }
     }
     if ((fh = Open((CONST_STRPTR)"PROGDIR:rtgbench.txt", MODE_NEWFILE))) {
