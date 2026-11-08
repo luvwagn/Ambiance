@@ -398,7 +398,7 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
     char line[300];
     int i;
     if (id == INVALID_ID) {
-        sprintf(line, "  %d-bit: no RTG mode of %d x %d\n", d, w, h);
+        sprintf(line, "  %ld-bit: no RTG mode of %ld x %ld\n", (long)d, (long)w, (long)h);
         say(line);
         for (i = 0; i < NT; i++)
             result[slot][i] = -2;
@@ -411,7 +411,7 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
         scr = OpenScreenTags(NULL, SA_DisplayID, id, SA_Width, w, SA_Height, h, SA_Depth, 24,
                              SA_Quiet, TRUE, SA_ShowTitle, FALSE, TAG_DONE);
     if (!scr) {
-        sprintf(line, "  %d-bit: the screen did not open (%s)\n", d, modename);
+        sprintf(line, "  %ld-bit: the screen did not open (%s)\n", (long)d, modename);
         say(line);
         for (i = 0; i < NT; i++)
             result[slot][i] = -2;
@@ -432,7 +432,7 @@ static BOOL run_depth(int slot, int d, WORD w, WORD h, char *modename)
         sb[1]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = safe;
     }
     safe_wait = FALSE;
-    sprintf(line, "  %d-bit: %s (bitmap depth %d)\n", d, modename, depth);
+    sprintf(line, "  %ld-bit: %s (bitmap depth %ld)\n", (long)d, modename, (long)depth);
     say(line);
     for (i = 0; i < NT; i++) {
         BOOL deep = depth > 8;
@@ -573,15 +573,15 @@ int main(void)
             CyberGfxBase ? "yes" : "no",
             (long)(AvailMem(MEMF_FAST | MEMF_TOTAL) >> 10), (long)(AvailMem(MEMF_CHIP | MEMF_TOTAL) >> 10));
     say(line);
-    sprintf(line, "Font %s %d, screen %d x %d, about %ld ms a test\n", (char *)ta.ta_Name, font->tf_YSize,
-            w, h, (long)run_ms);
+    sprintf(line, "Font %s %ld, screen %ld x %ld, about %ld ms a test\n", (char *)ta.ta_Name,
+            (long)font->tf_YSize, (long)w, (long)h, (long)run_ms);
     say(line);
     for (i = 0; i < nd; i++)
         run_depth(i, depths[i], w, h, names[i]);
 
     say("\nTest                              ");
     for (d = 0; d < nd; d++) {
-        sprintf(line, "%6d-bit   ", depths[d]);
+        sprintf(line, "%6ld-bit   ", (long)depths[d]);
         say(line);
     }
     say(" 16/8\n");
