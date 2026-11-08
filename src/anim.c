@@ -1484,7 +1484,8 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
 {
     ULONG rb = ((w + 15) >> 4) << 1, fsz = rb * depth * h, *lut = NULL, jlast = 0, readms = 0;
     ULONG convms = 0, worst = 0, total, t0, due, jif, start_ms, runs = 0, nconv = 0, nframes = 0;
-    ULONG stripms = 0, nrows = 0, nskip = 0, fmt = 0, drawn_at = 0;
+    ULONG stripms = 0, nrows = 0, nskip = 0, nnodec = 0, fmt = 0, drawn_at = 0;
+    BOOL whole_only = TRUE;         /* every frame so far a whole one (a BODY, op 0) */
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     UWORD *l16 = NULL;
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
@@ -1853,13 +1854,26 @@ restart:
         bits = f->anhd ? be32(f->anhd + 20) : 0;
         jif = f->anhd ? be32(f->anhd + 14) : 1;
         k = shown ^ 1;
-        if (il == 1)
-            CopyMem(planar + shown * fsz, planar + k * fsz, fsz);
-        if (op == 0 && f->body)
-            animdec_body(f->body, f->bodylen, &pl[k], comp, masking);
-        else if (f->dlta && animdec_delta(f->dlta, f->dltalen, &pl[k], op, bits) == -2) {
-            sprintf(err, _("ANIM-%ld compression is not supported"), (long)op);
-            break;
+        if (op != 0 || !f->body)
+            whole_only = FALSE;             /* deltas: each frame builds on the ones before */
+        due += (jif ? jif : 1) * 1000 / 60;
+        /* the one after this due already: this one not drawn; and, in an
+         * animation of whole frames (Tron2: a BODY each), not decoded
+         * either, as nothing builds on it */
+        skip = time_ms() - drawn_at < SKIP_MS &&
+               (LONG)(time_ms() - t0) > (LONG)(due + (jif ? jif : 1) * 1000 / 60);
+        if (skip && whole_only) {
+            nnodec++;
+            k = shown;                      /* (the shown one stays the last decoded) */
+        } else {
+            if (il == 1)
+                CopyMem(planar + shown * fsz, planar + k * fsz, fsz);
+            if (op == 0 && f->body)
+                animdec_body(f->body, f->bodylen, &pl[k], comp, masking);
+            else if (f->dlta && animdec_delta(f->dlta, f->dltalen, &pl[k], op, bits) == -2) {
+                sprintf(err, _("ANIM-%ld compression is not supported"), (long)op);
+                break;
+            }
         }
         if (f->cmap) {                      /* its colours changed: all of it again */
             ad_lut(f->cmap, f->cmaplen, camg, depth, lut + 256);
@@ -1873,10 +1887,6 @@ restart:
                 fresh = TRUE;
             }
         }
-        due += (jif ? jif : 1) * 1000 / 60;
-        /* the one after this due already: this one decoded, not drawn */
-        skip = time_ms() - drawn_at < SKIP_MS &&
-               (LONG)(time_ms() - t0) > (LONG)(due + (jif ? jif : 1) * 1000 / 60);
         if (skip)
             nskip++;
         while ((LONG)(time_ms() - t0) < (LONG)due - 10) {
@@ -1898,9 +1908,11 @@ restart:
         }
     }
     sprintf(m, "%ld frames on AmigaMCE's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
-            "each), %ld not drawn (behind); controls %ld ms each; reading %ld ms; played %ld time%s",
+            "each), %ld not drawn (behind; %ld of them not decoded); controls %ld ms each; reading %ld ms; "
+            "played %ld time%s",
             (long)nframes, (long)nconv, (long)(nconv ? convms / nconv : 0), (long)worst,
-            (long)(nconv ? nrows / nconv : 0), (long)nskip, (long)(nframes ? stripms / nframes : 0),
+            (long)(nconv ? nrows / nconv : 0), (long)nskip, (long)nnodec,
+            (long)(nframes ? stripms / nframes : 0),
             (long)readms, (long)runs + 1, runs ? "s" : "");
     amce_log("anim", m);
     result = err[0] ? -1 : 0;
