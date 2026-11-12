@@ -497,9 +497,11 @@ static void fail(const char *why)
 
 /* Paula wants a half: given it now (from wherever the process waits). */
 static void mhi_serve(void);
+static void titles_due(void);
 
 static void serve(void)
 {
+    titles_due();                           /* a title whose audio has come round */
     if (st.mhi) {
         mhi_serve();                        /* MHI's buffers back, a stall restarted */
         return;
@@ -1008,7 +1010,63 @@ static BOOL open_stream(void)
     return FALSE;
 }
 
-/* A title block: StreamTitle='...'; into st.title. */
+/* ---- titles, in time with what is heard
+ * A title block comes with the stream's bytes as they are read, a few
+ * seconds before they are heard (the FIFO's, or MHI's buffers, between):
+ * shown then, the title changed before the song did. So each is kept with
+ * how much audio had been read when it came (titles_in_ms) and shown once
+ * that much has been played (titles_out_ms), by the radio process, which
+ * also logs it. */
+#define TITLES 4
+static struct { ULONG at; char t[160]; } tq[TITLES];
+static UWORD tq_head, tq_tail;          /* the radio process's alone */
+static ULONG mh_queued_ms(void);
+static ULONG mh_ms(void);
+
+static ULONG titles_in_ms(void)
+{
+    ULONG r = st.dec_freq ? (ULONG)st.dec_freq : 0;
+    if (st.mhi)
+        return mh_queued_ms();
+    return r ? (st.f_in / r) * 1000 + (st.f_in % r) * 1000 / r : 0;
+}
+
+static ULONG titles_out_ms(void)
+{
+    ULONG r = st.dec_freq ? (ULONG)st.dec_freq : 0;
+    if (!st.started)
+        return 0;
+    if (st.mhi)
+        return mh_ms();
+    return r ? (st.f_out / r) * 1000 + (st.f_out % r) * 1000 / r : 0;
+}
+
+static void title_show(const char *t)
+{
+    if (!strcmp(t, st.title))
+        return;
+    amce_strlcpy(st.title, t, sizeof(st.title));
+    st.title_seq++;
+    if (!st.finite && t[0]) {
+        char m[200];
+        sprintf(m, "%.60s: %.120s", st.name[0] ? st.name : "a station", t);
+        amce_log("radio: on air", m);
+    }
+}
+
+static void titles_due(void)
+{
+    ULONG out;
+    if (tq_head == tq_tail)
+        return;
+    out = titles_out_ms();
+    while (tq_head != tq_tail && (st.started && (LONG)(out - tq[tq_head].at) >= 0)) {
+        title_show(tq[tq_head].t);
+        tq_head = (UWORD)((tq_head + 1) % TITLES);
+    }
+}
+
+/* A title block: StreamTitle='...'; kept till its audio is heard. */
 static void take_meta(const char *m)
 {
     const char *p = strstr(m, "StreamTitle='"), *e;
@@ -1027,10 +1085,17 @@ static void take_meta(const char *m)
     t[n] = 0;
     utf8_to_latin1(t);
     squeeze_spaces(t);
-    if (strcmp(t, st.title)) {
-        amce_strlcpy(st.title, t, sizeof(st.title));
-        st.title_seq++;
+    {
+        UWORD next = (UWORD)((tq_tail + 1) % TITLES);
+        if (next == tq_head) {              /* full (titles coming fast): the oldest now */
+            title_show(tq[tq_head].t);
+            tq_head = (UWORD)((tq_head + 1) % TITLES);
+        }
+        tq[tq_tail].at = titles_in_ms();
+        amce_strlcpy(tq[tq_tail].t, t, sizeof(tq[0].t));
+        tq_tail = next;
     }
+    titles_due();
 }
 
 /* Up to n bytes of MP3 into buf (title blocks taken out): the count, 0 at
@@ -1889,6 +1954,7 @@ static void mhi_play(LONG freq)
     while (!st.quit) {
         UBYTE status;
         mhi_serve();                        /* the buffers played, back */
+        titles_due();                       /* a title whose audio has come round */
         if (mhs.playing && !mhs.paused && mh_ms() > 5000) {
             /* the least held, for the log: how near it came to running dry */
             ULONG q = mh_queued_ms(), p = mh_ms();
@@ -2156,6 +2222,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     memset(&st.err, 0, sizeof(st.err));
     st.name[0] = st.genre[0] = st.title[0] = 0;
     st.title_seq++;
+    tq_head = tq_tail = 0;                  /* (the radio process is stopped here) */
     st.bitrate = st.freq = st.channels = st.dec_freq = st.dec_channels = 0;
     st.f_in = st.f_out = st.underruns = st.played = 0;
     st.flac = FALSE;

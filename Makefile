@@ -317,7 +317,7 @@ SQLIB_CC  = $(CC) -O2 -m68020 -noixemul -nostartfiles -fomit-frame-pointer -Wall
 build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
 	@mkdir -p build/sqlib
 	@echo "  CC    $<"
-	@$(SQLIB_CC) -Isrc/sqlib -c -o $@ $<
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<	# = LibVersion: OS 3.2 checks it
 $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a extras/sqlite/sqlite3.h
 	@echo "  LD    $@"
 	@$(SQLIB_CC) -Isrc/sqlib -Iextras/sqlite -o $@.dbg build/sqlib/libinit.o src/sqlib/amcesql.c \
@@ -355,7 +355,8 @@ $(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h dataty
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB)
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) \
+     assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
 	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Fonts/amce-cjk \
@@ -374,6 +375,11 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@mkdir -p $(LHA_DIR)/Libs
 	@cp $(SQLIB) $(LHA_DIR)/Libs/
 	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
+	@# Mozilla's root certificates (certifi's cacert.pem, MPL 2.0): what
+	@# HTTPS checks a server's certificate with (tls.c), AmiSSL's own or not
+	@mkdir -p $(LHA_DIR)/Certs
+	@cp assets/certs/cacert.pem $(LHA_DIR)/Certs/
+	@cp assets/certs/LICENSE-certifi.txt $(LHA_DIR)/Licences/Mozilla-CA-certificates.txt
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \
 		AmigaMCE.readme > $(LHA_DIR)/readme.txt
 	@cp docs/readme.info $(LHA_DIR)/readme.txt.info

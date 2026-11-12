@@ -1441,6 +1441,9 @@ Geannuleerd
 MSG_11341467
 HTTPS vereist AmiSSL 5
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+De certificaten van AmigaMCE ontbreken (zijn lade Certs)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 De beveiligde verbinding is mislukt
 ; The secure connection failed

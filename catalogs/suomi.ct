@@ -1441,6 +1441,9 @@ Peruttu
 MSG_11341467
 HTTPS vaatii AmiSSL 5:n
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+AmigaMCE:n varmenteet puuttuvat (sen Certs-laatikko)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 Suojattu yhteys epäonnistui
 ; The secure connection failed

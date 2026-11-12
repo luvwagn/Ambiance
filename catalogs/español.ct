@@ -1441,6 +1441,9 @@ Cancelado
 MSG_11341467
 HTTPS necesita AmiSSL 5
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+Faltan los certificados de AmigaMCE (su cajón Certs)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 La conexión segura falló
 ; The secure connection failed

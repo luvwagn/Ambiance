@@ -4193,7 +4193,12 @@ static WORD aside_x(void)
  * pad or mouse): its thumb says how long the list is and where in it this
  * is. The mouse can click above or below the thumb to page, or drag it;
  * while the mouse is in use the thumb is bright, at rest it is dimmer. */
-#define GUT_W U(9)                  /* the column: gap, bar, gap */
+/* the column: gap, bar, gap; on a lowres screen (320 wide, its pixels
+ * twice as wide as hires ones) narrower, 1 + 3 + 1, for the rows' room */
+#define GUT_LO  (g.w < 640)
+#define GUT_W   (GUT_LO ? 5 : U(9))
+#define GUT_GAP (GUT_LO ? 1 : U(2))
+#define GUT_BAR (GUT_LO ? 3 : U(5))
 static struct { BOOL drag; WORD off; } gut;
 static BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
@@ -5378,8 +5383,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
 static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 {
     LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
-    *bx0 = list_edge(p) - GUT_W + 1 + U(2);
-    *bx1 = *bx0 + U(5) - 1;
+    *bx0 = list_edge(p) - GUT_W + 1 + GUT_GAP;
+    *bx1 = *bx0 + GUT_BAR - 1;
     t = h * vis / n;
     if (t < U(10))
         t = U(10);
@@ -5657,13 +5662,24 @@ static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
          * time, then those under it are painted again (what was copied
          * there carries the letter, moved), and it over them */
         BOOL was = ov_hold;
+        LONG k;
         ov_hold = TRUE;
-        draw_list_move2(p, old_sel, old_top);
+        draw_list_move2(p, old_sel, old_top);   /* (it moves p->top to follow) */
         ov_hold = was;
-        if (p->top != old_top)
-            ov_rows_under(p);
-        else
+        k = p->top - old_top;
+        if (k) {
+            /* the copy took the letter's pixels k rows along with the rows
+             * (up for k > 0, down for k < 0): those rows too, or a sliver
+             * of it is left there and carried further each move */
+            WORD o = U(1) > 0 ? U(1) : 1, y0 = ov.y - o, y1 = ov.y + ov.bl->h - 1 + o;
+            if (k > 0)
+                y0 -= (WORD)(k * g.list_row_h);
+            else
+                y1 += (WORD)(-k * g.list_row_h);
+            ov_rows(p, y0, y1);
+        } else {
             ov_stamp();
+        }
     } else {
         draw_list_move2(p, old_sel, old_top);
     }
@@ -12739,6 +12755,21 @@ static int app_main(void)
 
     caps_detect(&caps);
     https_apply();                  /* the setting, now that AmiSSL is looked for */
+    {
+        /* HTTPS's root certificates (tls.c), by their full name: the
+         * network and radio processes have no PROGDIR: of their own */
+        char cp[256];
+        BPTR l;
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)"PROGDIR:Certs/cacert.pem", SHARED_LOCK))) {
+            if (NameFromLock(l, (STRPTR)cp, sizeof(cp)))
+                tls_set_certs(cp);
+            UnLock(l);
+        }
+        me->pr_WindowPtr = oldwin;
+    }
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */

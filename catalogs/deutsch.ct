@@ -1441,6 +1441,9 @@ Abgebrochen
 MSG_11341467
 HTTPS braucht AmiSSL 5
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+Die Zertifikate von AmigaMCE fehlen (seine Schublade Certs)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 Die sichere Verbindung ist fehlgeschlagen
 ; The secure connection failed
