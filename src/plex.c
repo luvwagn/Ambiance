@@ -295,8 +295,8 @@ BOOL plex_converts(const struct Item *it)
         return FALSE;
     if (amce_stricmp(codec, "mp3") && !(plex.flac && !amce_stricmp(codec, "flac")))
         return TRUE;                        /* MP3, and FLAC with flacdec.library, as stored */
-    if (plex.mhi && !amce_stricmp(codec, "mp3"))
-        return plex.convert;                /* MHI decodes it, however fast the Amiga */
+    if ((plex.mhi || plex.mp3_card) && !amce_stricmp(codec, "mp3"))
+        return plex.convert;                /* MHI or the ZZ9000 decodes it, however fast the Amiga */
     return plex.convert || plex_tier() < 2;     /* a slower Amiga: always converted */
 }
 
@@ -305,7 +305,7 @@ BOOL plex_converts(const struct Item *it)
 void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, LONG max)
 {
     char key[300], port[12], enc[400], n[160];
-    int tier = plex.mhi ? 3 : plex_tier();  /* MHI: what its driver plays */
+    int tier = plex.mhi || plex.mp3_card ? 3 : plex_tier();  /* MHI, the ZZ9000: what they play */
     BOOL mono = tier == 0;
     (void)cpu;
     sprintf(port, ":%lu", (unsigned long)plex.port);
@@ -812,8 +812,10 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
         UnLock(l);
     /* bigger than a 640 x 512 screen (a photo on RTG): JPEG, a tenth of a
-     * PNG's size (a 1024 x 768 PNG of a photo is past what is read, 2 MB) */
-    jpg = (LONG)w * h > 640L * 512;
+     * PNG's size (a 1024 x 768 PNG of a photo is past what is read, 2 MB).
+     * PNG below that only because the 68k decodes it faster; where the
+     * ZZ9000's datatype reads JPEG, the card decodes it: JPEG always. */
+    jpg = plex.jpeg_card || (LONG)w * h > 640L * 512;
     plex_art_file(thumb, w, h, file);
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));

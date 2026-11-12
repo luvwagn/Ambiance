@@ -169,6 +169,15 @@ ja
 MSG_62366FFA
 nein
 ; no
+MSG_7A881EB1
+ZZ9000: an Zorro %s; JPEG %s, PNG %s
+; ZZ9000: on Zorro %s; JPEG %s, PNG %s
+MSG_714F0E2D
+auf der Karte dekodiert
+; decoded on the card
+MSG_7AFA07FD
+hier dekodiert
+; decoded here
 MSG_25AF384C
 Freier Speicher: %luKB Chip, %luKB Fast
 ; Free memory: %luKB chip, %luKB fast
@@ -226,6 +235,9 @@ MP3: %s
 MSG_197B8973
 MHI-Treiber
 ; MHI driver
+MSG_4B721655
+mpega.library aus dem ZZ9000-SDK (auf der Karte dekodiert)
+; mpega.library, the ZZ9000 SDK's (decoded on the card)
 MSG_578E3365
 FLAC: %s
 ; FLAC: %s
@@ -505,9 +517,9 @@ nicht installiert
 MSG_2DA3A6A5
 MP3-Decoder
 ; MP3 decoder
-MSG_7AFA07FD
-hier dekodiert
-; decoded here
+MSG_3F71ACC2
+auf der ZZ9000 dekodiert
+; decoded on the ZZ9000
 MSG_22FBBBB2
 dekodiert und spielt
 ; decodes and plays
@@ -1138,6 +1150,9 @@ Token: nicht gesetzt
 MSG_0B620CC7
 MP3: dekodiert vom MHI-Treiber %.40s
 ; MP3: decoded by the MHI driver %.40s
+MSG_59D38C2E
+MP3: auf der ZZ9000 dekodiert (ihre mpega.library)
+; MP3: decoded on the ZZ9000 (its mpega.library)
 MSG_1133EF71
 MP3: dekodiert von mpega.library
 ; MP3: decoded by mpega.library

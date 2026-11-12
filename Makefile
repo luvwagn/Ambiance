@@ -151,6 +151,14 @@ build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/an
 	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -DAD_ASM -s -o $@ $< src/animdraw.c build/animdraw68k.o -lamiga
 rtgbench: build/rtgbench
 
+# zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
+# the card's own report) and how fast AmigaMCE's uses of it are
+build/zzprobe: tools/zzprobe/zzprobe.c
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< -lamiga
+zzprobe: build/zzprobe
+
 test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
