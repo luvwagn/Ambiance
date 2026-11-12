@@ -4054,12 +4054,15 @@ static BOOL list_follow(struct Page *p)
  * in the list, its right edge 90% of the way across. It is the UI font's
  * own glyph blown up in whole pixels, kept as a chip-RAM mask.
  *
- * It is a layer of its own: while it shows, the right of the list from
- * ov.strip_x on belongs to it alone. Rows are painted and scrolled only
- * left of the strip (the highlight and very long titles stop at its edge),
- * so scrolling never copies or repaints the letter; it is stamped once,
- * and again only when it changes. When it goes, the rows are repainted at
- * full width. It goes half a second after the key is let go. */
+ * Beside a list with a column of its own (games, pictures, music: the
+ * preview's), it takes that column: rows never touch it. Over a list
+ * without one (Radio's, Mods', a lowres screen's) it lies over the rows,
+ * outlined in the background's colour so it reads over their text: the
+ * rows keep their full width (they once shrank away from a strip of its
+ * own while it showed, and the whole list jumped sideways, the tags at the
+ * right most of all). The rows it covers are painted again, then it,
+ * whenever they change under it: scrolling, the selection, a new letter
+ * (ov_rows). It goes half a second after the key is let go. */
 /* (state is declared with the other globals, near the top) */
 
 static char ov_letter_of(const char *s)
@@ -4199,8 +4202,6 @@ static WORD list_xr(struct Page *p)
     WORD e = list_edge(p);
     if (list_overflows(p))
         e -= GUT_W;                         /* the column */
-    if (!has_aside(p) && ov.on && ov.page == p && e > ov.strip_x - 1)
-        e = ov.strip_x - 1;                 /* lowres: the letter's strip is off limits */
     return e;
 }
 
@@ -5114,10 +5115,59 @@ static BOOL ov_build(char ch)
 
 static void draw_list_rows(struct Page *p);
 
-/* Stamp the letter into its strip (nothing else is drawn there). */
+/* The letter over the rows (a list with no column beside it). */
+static BOOL ov_over(struct Page *p)
+{
+    return ov.on && ov.bl && ov.page == p && !has_aside(p);
+}
+
+/* Stamp the letter: in its column as it is, or over the rows outlined in
+ * the background's colour (so the rows' text under it does not run into
+ * it). */
 static void ov_stamp(void)
 {
+    if (!ov.bl)
+        return;
+    if (!has_aside(ov.page)) {
+        static const BYTE d[8][2] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
+                                      { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };
+        WORD o = U(1) > 0 ? U(1) : 1;
+        int i;
+        for (i = 0; i < 8; i++)
+            gfx_bigletter_draw(&g, ov.bl, ov.x + d[i][0] * o, ov.y + d[i][1] * o, PEN_BG);
+    }
     gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
+}
+
+/* While the rows are painted in a batch, the letter waits to be stamped
+ * once at its end (draw_list_row stamps it after a row of its own). */
+static BOOL ov_hold;
+static WORD mark_column(const struct Page *p);
+static void draw_list_row(struct Page *p, LONG idx, WORD col);
+
+/* The rows between y0 and y1 (screen lines) painted again, then the letter
+ * over them, if it shows. */
+static void ov_rows(struct Page *p, WORD y0, WORD y1)
+{
+    WORD vis = list_visible(), r, col = mark_column(p);
+    BOOL was = ov_hold;
+    ov_hold = TRUE;
+    for (r = 0; r < vis && p->top + r < p->list.count; r++) {
+        WORD ry = g.list_top + r * g.list_row_h;
+        if (ry + g.list_row_h - 1 >= y0 && ry <= y1)
+            draw_list_row(p, p->top + r, col);
+    }
+    ov_hold = was;
+    if (!ov_hold && ov_over(p))
+        ov_stamp();
+}
+
+/* The rows under the letter, outline and all, again (then the letter). */
+static void ov_rows_under(struct Page *p)
+{
+    WORD o = U(1) > 0 ? U(1) : 1;
+    if (ov.bl)
+        ov_rows(p, ov.y - o, ov.y + ov.bl->h - 1 + o);
 }
 
 static void ov_show(struct Page *p)
@@ -5133,9 +5183,9 @@ static void ov_show(struct Page *p)
         tb_close(&pv_tb);
         pv_shown = FALSE;
     }
-    /* hand the strip to the letter: clear it once, then stamp */
-    gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
-    ov_stamp();
+    if (has_aside(p))
+        gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
+    ov_stamp();                             /* (over the rows: they are as they were) */
 }
 
 /* Changing letters off screen: the old letter's box and the new one's,
@@ -5175,6 +5225,23 @@ static void ov_relabel_(char c)
     WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
     if (!ov.on || !c || c == ov.letter)
         return;
+    if (!has_aside(ov.page)) {
+        /* over the rows: those under the old letter and the new painted
+         * again, the new one stamped over them */
+        WORD o = U(1) > 0 ? U(1) : 1, top = oy, bot = old ? oy + old->h - 1 : oy;
+        if (!ov_build(c)) {
+            ov.bl = NULL;
+            if (old)
+                ov_rows(ov.page, top - o, bot + o);
+            return;
+        }
+        if (!old || ov.y < top)
+            top = ov.y;
+        if (ov.y + ov.bl->h - 1 > bot)
+            bot = ov.y + ov.bl->h - 1;
+        ov_rows(ov.page, top - o, bot + o);
+        return;
+    }
     if (!ov_build(c)) {
         if (old)
             gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
@@ -5227,8 +5294,8 @@ static void ov_hide(void)
             gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
         preview_touch(p);           /* and the preview comes back */
         pv_due = time_ms();
-    } else {
-        draw_list_rows(p);          /* rows at full width again, strip cleared */
+    } else if (ov.bl) {
+        ov_rows_under(p);           /* the rows it lay over, without it */
     }
 }
 
@@ -5285,6 +5352,9 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
+    if (!ov_hold && ov_over(p) && y + g.list_row_h > ov.y - U(1) - 1 &&
+        y <= ov.y + ov.bl->h + U(1))
+        ov_stamp();                         /* a row under the letter: the letter again */
 }
 
 /* The bar's place and its thumb's. */
@@ -5306,8 +5376,8 @@ static void draw_gutter(struct Page *p)
 {
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
-    if (!list_overflows(p) || (!has_aside(p) && ov.on && ov.page == p))
-        return;                             /* no column, or under the letter's strip */
+    if (!list_overflows(p))
+        return;                             /* no column */
     gut_geom(p, &bx0, &bx1, &ty, &th);
     (void)vis;
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
@@ -5472,10 +5542,17 @@ static void draw_list_rows(struct Page *p)
         gfx_text(&g, g.pane_x, g.list_top + U(2), _("(empty)"), PEN_DIM, PEN_BG, 0, TS_BODY);
         return;
     }
-    for (r = 0; r < vis && p->top + r < p->list.count; r++)
-        draw_list_row(p, p->top + r, col);
+    {
+        BOOL was = ov_hold;
+        ov_hold = TRUE;                     /* the letter once, after them all */
+        for (r = 0; r < vis && p->top + r < p->list.count; r++)
+            draw_list_row(p, p->top + r, col);
+        ov_hold = was;
+    }
     gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
     draw_gutter(p);
+    if (!ov_hold && ov_over(p))
+        ov_stamp();
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
@@ -5521,8 +5598,8 @@ static void blit_rows(LONG src, LONG dst, LONG n)
 {
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
     LONG vis = list_visible();
-    if (ov.on && x1 > ov.strip_x - 1)
-        x1 = ov.strip_x - 1;                /* never into the letter's strip */
+    if (ov.on && has_aside(cur()) && x1 > ov.strip_x - 1)
+        x1 = ov.strip_x - 1;                /* never into the letter's column */
     struct BitMap *bm = g.rp->BitMap;
     /* The copy goes straight to the screen's bitmap, which clips nothing:
      * never outside the list's rows. Rows copied past them once went past
@@ -5558,7 +5635,21 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
-    draw_list_move2(p, old_sel, old_top);
+    if (ov_over(p)) {
+        /* the letter over the rows: they move without it stamped each
+         * time, then those under it are painted again (what was copied
+         * there carries the letter, moved), and it over them */
+        BOOL was = ov_hold;
+        ov_hold = TRUE;
+        draw_list_move2(p, old_sel, old_top);
+        ov_hold = was;
+        if (p->top != old_top)
+            ov_rows_under(p);
+        else
+            ov_stamp();
+    } else {
+        draw_list_move2(p, old_sel, old_top);
+    }
     if (p->top != old_top) {
         draw_gutter(p);                     /* the thumb or the arrows */
         if (hover_row >= 0 && p == cur()) {
@@ -12124,8 +12215,7 @@ static BOOL gut_click(WORD x, WORD y)
     WORD bx0, bx1, ty, th;
     LONG vis = list_visible();
     if (!list_overflows(p) || y < g.list_top || y > g.footer_y - 2 ||
-        x <= list_edge(p) - GUT_W || x > list_edge(p) ||
-        (!has_aside(p) && ov.on && ov.page == p))
+        x <= list_edge(p) - GUT_W || x > list_edge(p))
         return FALSE;
     gut_geom(p, &bx0, &bx1, &ty, &th);
     if (focus != FOCUS_CONTENT)
