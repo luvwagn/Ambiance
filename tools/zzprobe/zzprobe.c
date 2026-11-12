@@ -1048,7 +1048,7 @@ static void ours_why_not(struct Row *r)
  * checked against jdec's, at 1/1 and 1/8 */
 static void ph_cell(char *out, ULONG us, BOOL have);
 static ULONG jdec_hash(const char *path, int scale);
-static char variants_out[6][200];
+static char variants_out[6][240];
 static int nvariants_out;
 
 static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
@@ -1063,7 +1063,7 @@ static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
     want[1] = jdec_hash(path, 3);
     nvariants_out = 0;
     for (v = 0; v < 4; v++) {
-        char cells[2][64];
+        char cells[2][96];
         for (si = 0; si < 2; si++) {
             struct ClsRun c = *c0;
             ULONG best = 0xFFFFFFFFUL, set = 0, lay = 0, i;
