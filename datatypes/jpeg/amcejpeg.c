@@ -21,6 +21,7 @@
 #include <exec/memory.h>
 #include <exec/libraries.h>
 #include <dos/dos.h>
+#include <dos/var.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/classes.h>
 #include <intuition/classusr.h>
@@ -319,19 +320,38 @@ Class *ObtainEngine(void)
 }
 
 void __UserLibCleanup(void);
+
+/* Why the library would not start, in ENV:amcejpeg.datatype (zzprobe
+ * shows it): a library has nowhere else to say so. Gone once it starts. */
+#define WHY_VAR "amcejpeg.datatype"
+static void why_not(const char *s)
+{
+    if (DOSBase)
+        SetVar((STRPTR)WHY_VAR, (STRPTR)s, -1, GVF_GLOBAL_ONLY);
+}
+
 int __UserLibInit(struct Library *lib)
 {
+    const char *why = NULL;
     (void)lib;
     SysBase = *(struct ExecBase *volatile *)4L;
-    if (!(DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 39)) ||
-        !(IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39)) ||
-        !(DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39)) ||
-        /* V43: deep pictures (PMODE_V43, PDTM_WRITEPIXELARRAY) */
-        !(PictureBase = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 43)) ||
-        !(jclass = MakeClass((ClassID)LibName, (ClassID)PICTUREDTCLASS, NULL, sizeof(struct Inst), 0))) {
+    if (!(DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 39)))
+        why = "no dos.library 39";
+    else if (!(IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39)))
+        why = "no intuition.library 39";
+    else if (!(DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39)))
+        why = "no datatypes.library 39";
+    /* V43: deep pictures (PMODE_V43, PDTM_WRITEPIXELARRAY) */
+    else if (!(PictureBase = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 43)))
+        why = "no datatypes/picture.datatype 43 or newer";
+    else if (!(jclass = MakeClass((ClassID)LibName, (ClassID)PICTUREDTCLASS, NULL, sizeof(struct Inst), 0)))
+        why = "MakeClass failed (no public picture.datatype class?)";
+    if (why) {
+        why_not(why);
         __UserLibCleanup();
         return 1;
     }
+    DeleteVar((STRPTR)WHY_VAR, GVF_GLOBAL_ONLY);
     jclass->cl_Dispatcher.h_Entry = (HOOKFUNC)dispatch;
     jclass->cl_UserData = (ULONG)lib;
     AddClass(jclass);

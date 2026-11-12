@@ -36,6 +36,7 @@
 #include <dos/dostags.h>
 #include <dos/datetime.h>
 #include <dos/rdargs.h>
+#include <dos/var.h>
 #include <graphics/gfxbase.h>
 #include <graphics/displayinfo.h>
 #include <graphics/modeid.h>
@@ -58,7 +59,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.3 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.4 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -507,9 +508,12 @@ static void why(LONG err, char *out, LONG max)
     t[0] = 0;
     if (err >= DTERROR_UNKNOWN_DATATYPE && err < DTERROR_UNKNOWN_DATATYPE + 100) {
         CONST_STRPTR s = GetDTString((ULONG)err);
+        char *p;
         if (s)
             strncpy(t, (const char *)s, sizeof(t) - 1);
         t[sizeof(t) - 1] = 0;
+        if ((p = strstr(t, " for %s")) || (p = strstr(t, " %s")))
+            *p = 0;                     /* its file name slot: the row says which */
     } else if (err > 0) {
         Fault(err, NULL, (STRPTR)t, sizeof(t));
     }
@@ -794,7 +798,20 @@ static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
         local = TRUE;
     r = row_new("JPEG", local ? "amcejpeg.datatype (*)" : "amcejpeg.datatype");
     if (!lib) {
-        strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
+        char why[100];
+        why[0] = 0;
+        if (!exists("PROGDIR:amcejpeg/amcejpeg.datatype") &&
+            !exists("SYS:Classes/DataTypes/amcejpeg.datatype")) {
+            strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
+        } else if (GetVar((STRPTR)"amcejpeg.datatype", (STRPTR)why, sizeof(why), GVF_GLOBAL_ONLY) > 0) {
+            snprintf(r->note, sizeof(r->note), "would not start: %s", why);
+        } else {
+            struct Library *pd = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 0);
+            snprintf(r->note, sizeof(r->note), "found, but would not open (picture.datatype here: %ld.%ld)",
+                     pd ? (long)pd->lib_Version : 0L, pd ? (long)pd->lib_Revision : 0L);
+            if (pd)
+                CloseLibrary(pd);
+        }
         return;
     }
     if (local)
@@ -1112,7 +1129,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.3, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.4, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
