@@ -14,10 +14,16 @@
  *   - the ZZ9000 datatype descriptors (active in DEVS:DataTypes, or
  *     installed inactive in SYS:Storage/DataTypes), and which datatype
  *     reads each picture and sound format here;
- *   - the card's own report: the SDK's zz9k-info and zz9k-services, run.
+ *   - the card's own report: the SDK's zz9k-info and zz9k-services, run;
+ *   - AmigaMCE's own JPEG datatype (amcejpeg.datatype) and its descriptor.
  * Then times what AmigaMCE does with them:
  *   - pictures decoded through datatypes (whichever reads them now), and
- *     their pixels read back, as AmigaMCE's previews do;
+ *     their pixels read back, as AmigaMCE's previews do; where
+ *     amcejpeg.datatype reads JPEGs, also at 1/2, 1/4 and 1/8 (its size
+ *     hint, as AmigaMCE's thumbnails ask for);
+ *   - JPEG decoded by jdec built into zzprobe, at every scale, from memory:
+ *     the decoder alone, no datatype or file in the way (what AmigaMCE
+ *     would take if it decoded JPEGs itself);
  *   - MP3 decoded by mpega.library, as AmigaMCE asks a 68k for this CPU,
  *     and at full quality (what it asks of the card's).
  * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3
@@ -50,8 +56,10 @@
 #include <clib/alib_protos.h>
 #include <string.h>
 #include <stdio.h>
+#include "../../datatypes/jpeg/jdec.h"
+#include "../../datatypes/jpeg/amcejpeg.h"
 
-static const char version[] = "$VER: zzprobe 1.0 (11.11.2026)";
+static const char version[] = "$VER: zzprobe 1.1 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -332,6 +340,10 @@ static void software(void)
     descriptor("ZZ9000-MP3");
     descriptor("ZZ9000-FLAC");
     descriptor("ZZ9000-OggVorbis");
+
+    heading("AmigaMCE's own datatypes");
+    lib_line("datatypes/amcejpeg.datatype", "amcejpeg.datatype (JPEG for 68020+)", NULL, 0);
+    descriptor("AmigaMCE-JPEG");
 }
 
 /* ------------------------------------------------------------ which datatype reads what */
@@ -353,6 +365,8 @@ static const UBYTE s_ogg[] = { 'O','g','g','S', 0, 2, 0,0,0,0,0,0,0,0, 1,0,0,0, 
     0,0,0,0, 1, 30, 1,'v','o','r','b','i','s', 0,0,0,0, 2, 0x44,0xAC,0,0, 0,0,0,0,
     0x00,0xF4,0x01,0x00, 0,0,0,0, 0xB8, 1 };
 
+static char jpeg_cls[40];                /* the class that reads JPEGs here */
+
 static void which_dt(const char *fmt, const char *ext, const UBYTE *data, ULONG len, ULONG group)
 {
     char file[40], line[200];
@@ -372,6 +386,10 @@ static void which_dt(const char *fmt, const char *ext, const UBYTE *data, ULONG 
         sprintf(line, "  %-5s no datatype", fmt);
     } else {
         const char *base = dtn->dtn_Header->dth_BaseName ? (const char *)dtn->dtn_Header->dth_BaseName : "?";
+        if (!strcmp(fmt, "JPEG")) {
+            strncpy(jpeg_cls, base, sizeof(jpeg_cls) - 1);
+            jpeg_cls[sizeof(jpeg_cls) - 1] = 0;
+        }
         sprintf(line, "  %-5s %s.datatype (descriptor %s)%s", fmt, base,
                 dtn->dtn_Header->dth_Name ? (const char *)dtn->dtn_Header->dth_Name : "?",
                 !strncmp(base, "zz9k", 4) ? "  <- on the ZZ9000" : "");
@@ -444,9 +462,13 @@ static void run_tool(const char *cmd, const char *title)
 }
 
 /* ------------------------------------------------------------ bench: pictures */
-static void bench_picture(const char *path, const char *fmt)
+/* fitw x fith: amcejpeg.datatype's size hint (0 0: none); *pw, *ph: the
+ * size decoded (the picture's own without a hint) */
+static void bench_picture(const char *path, const char *fmt, ULONG fitw, ULONG fith,
+                          ULONG *pw, ULONG *ph)
 {
-    char line[320], t1[24], t2[24], t3[24];
+    char line[320], t1[24], t2[24], t3[24], hint[48];
+    ULONG scale = 0;
     ULONG best = 0xFFFFFFFF, worst = 0, sum = 0, runs = 0, start, rb_best = 0xFFFFFFFF;
     ULONG w = 0, h = 0;
     UWORD depth = 0;
@@ -461,7 +483,8 @@ static void bench_picture(const char *path, const char *fmt)
     do {
         ULONG t0 = now_us(), dt;
         Object *o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                                PDTA_DestMode, PMODE_V43, TAG_END);
+                                PDTA_DestMode, PMODE_V43,
+                                JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
         struct BitMapHeader *bmh = NULL;
         struct DataType *dtn = NULL;
         if (!o) {
@@ -472,6 +495,7 @@ static void bench_picture(const char *path, const char *fmt)
         DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
         dt = now_us() - t0;
         GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
+        GetDTAttrs(o, JDTA_Scale, (ULONG)&scale, TAG_END);     /* amcejpeg's; else 0 */
         if (bmh) {
             w = bmh->bmh_Width;
             h = bmh->bmh_Height;
@@ -515,10 +539,131 @@ static void bench_picture(const char *path, const char *fmt)
     fmt_ms(t1, best);
     fmt_ms(t2, sum / runs);
     fmt_ms(t3, rb_best == 0xFFFFFFFF ? 0 : rb_best);
-    sprintf(line, "  %s %ld x %ld x %ld by %s.datatype%s: decode best %s, mean %s (%ld runs); "
+    hint[0] = 0;
+    if (fitw || fith)
+        sprintf(hint, ", size hint %ldx%ld: 1/%ld", (long)fitw, (long)fith, (long)(scale ? scale : 1));
+    sprintf(line, "  %s %ld x %ld x %ld by %s.datatype%s%s: decode best %s, mean %s (%ld runs); "
                   "pixels read back %s", fmt, (long)w, (long)h, (long)depth, base[0] ? base : "?",
-            !strncmp(base, "zz9k", 4) ? " (ZZ9000)" : "", t1, t2, (long)runs, t3);
+            !strncmp(base, "zz9k", 4) ? " (ZZ9000)" : "", hint, t1, t2, (long)runs, t3);
     sayf(line);
+    if (pw)
+        *pw = w;
+    if (ph)
+        *ph = h;
+}
+
+/* ------------------------------------------------------------ bench: jdec built in */
+struct MemSrc {
+    const UBYTE *p;
+    ULONG n, pos;
+};
+
+static int32_t mem_read(void *ctx, uint8_t *buf, int32_t n)
+{
+    struct MemSrc *m = ctx;
+    if ((ULONG)n > m->n - m->pos)
+        n = (int32_t)(m->n - m->pos);
+    memcpy(buf, m->p + m->pos, (size_t)n);
+    m->pos += (ULONG)n;
+    return n;
+}
+
+static void *mem_alloc(void *ctx, uint32_t n)
+{
+    (void)ctx;
+    return AllocVec(n, MEMF_ANY);
+}
+
+static void mem_free(void *ctx, void *p)
+{
+    (void)ctx;
+    FreeVec(p);
+}
+
+static int rows_drop(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t stride)
+{
+    (void)ctx; (void)rgb; (void)y; (void)n; (void)stride;
+    return 0;                           /* decoded, then nowhere to go: the decoder alone */
+}
+
+static const char *jd_why(int r)
+{
+    switch (r) {
+    case JD_ENOMEM: return "out of memory";
+    case JD_EFORMAT: return "not a JPEG, or damaged";
+    case JD_EPROGRESSIVE: return "progressive JPEG (not decoded yet)";
+    case JD_ECMYK: return "CMYK JPEG (not decoded yet)";
+    case JD_EUNSUPPORTED: return "a kind of JPEG not decoded";
+    case JD_ETOOBIG: return "too big";
+    default: return "error";
+    }
+}
+
+static void bench_jdec(const char *path)
+{
+    char line[200], t1[24], t2[24];
+    struct MemSrc m;
+    JDecIO io;
+    UBYTE *data;
+    LONG len;
+    BPTR fh;
+    int scale;
+    if (!(fh = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+        sprintf(line, "  JPEG: no test file (%.100s)", path);
+        sayf(line);
+        return;
+    }
+    Seek(fh, 0, OFFSET_END);
+    len = Seek(fh, 0, OFFSET_BEGINNING);
+    data = len > 0 ? AllocVec((ULONG)len, MEMF_ANY) : NULL;
+    if (!data || Read(fh, data, len) != len) {
+        Close(fh);
+        FreeVec(data);
+        sayf("  JPEG: the test file could not be read into memory");
+        return;
+    }
+    Close(fh);
+    io.ctx = &m;
+    io.read = mem_read;
+    io.alloc = mem_alloc;
+    io.free = mem_free;
+    io.rows = rows_drop;
+    for (scale = 0; scale < 4; scale++) {
+        ULONG best = 0xFFFFFFFF, sum = 0, runs = 0, start = now_us();
+        int32_t w = 0, h = 0;
+        int r = JD_OK;
+        do {
+            ULONG t0 = now_us(), dt;
+            JDecInfo info;
+            JDec *d;
+            m.p = data;
+            m.n = (ULONG)len;
+            m.pos = 0;
+            if (!(r = jd_open(&d, &io, &info))) {
+                jd_out_size(&info, scale, &w, &h);
+                r = jd_decode(d, scale);
+                jd_close(d);
+            }
+            if (r)
+                break;
+            dt = now_us() - t0;
+            if (dt < best)
+                best = dt;
+            sum += dt;
+            runs++;
+        } while (runs < 10 && now_us() - start < run_ms * 1000);
+        if (r) {
+            sprintf(line, "  JPEG: %s", jd_why(r));
+            sayf(line);
+            break;
+        }
+        fmt_ms(t1, best);
+        fmt_ms(t2, sum / runs);
+        sprintf(line, "  JPEG 1/%d, %ld x %ld: decode best %s, mean %s (%ld runs)",
+                1 << scale, (long)w, (long)h, t1, t2, (long)runs);
+        sayf(line);
+    }
+    FreeVec(data);
 }
 
 /* ------------------------------------------------------------ bench: MP3 by mpega.library */
@@ -642,6 +787,13 @@ static void summary(void)
          : "  MP3: no decoder");
     sayf(amissl_acc ? "  HTTPS (when AmigaMCE offers it): through the card's accelerated AmiSSL"
                     : "  HTTPS (when AmigaMCE offers it): AmiSSL as installed");
+    if (!strcmp(jpeg_cls, "amcejpeg"))
+        sayf("  JPEG: amcejpeg.datatype (thumbnails decoded at 1/2 to 1/8 when that is enough)");
+    else if (jpeg_cls[0]) {
+        char l[120];
+        sprintf(l, "  JPEG: %.40s.datatype (amcejpeg.datatype not in use)", jpeg_cls);
+        sayf(l);
+    }
     sayf("  Pictures: whichever datatype reads them above; JPEG, PNG and WebP are decoded");
     sayf("    on the card only when the ZZ9000-JPEG/PNG/WebP descriptors are active");
     if (zz_zorro && !zzlib)
@@ -702,7 +854,7 @@ int main(void)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.0, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.1, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
@@ -713,10 +865,19 @@ int main(void)
         if (exists("C:zz9k-services"))
             run_tool("C:zz9k-services --all", "The card's services (zz9k-services --all)");
         if (!(ra && args[5])) {
+            ULONG jw = 0, jh = 0;
             heading("Bench: pictures through datatypes (decode, then pixels read back as RGB)");
-            bench_picture(jpeg, "JPEG");
-            bench_picture(png, "PNG");
-            bench_picture(webp, "WebP");
+            bench_picture(jpeg, "JPEG", 0, 0, &jw, &jh);
+            if (!strcmp(jpeg_cls, "amcejpeg") && jw && jh) {
+                int s;                      /* the size hint, at each scale */
+                for (s = 1; s < 4; s++)
+                    bench_picture(jpeg, "JPEG", (jw + (1UL << s) - 1) >> s,
+                                  (jh + (1UL << s) - 1) >> s, NULL, NULL);
+            }
+            bench_picture(png, "PNG", 0, 0, NULL, NULL);
+            bench_picture(webp, "WebP", 0, 0, NULL, NULL);
+            heading("Bench: JPEG by jdec built into zzprobe, from memory (the decoder alone)");
+            bench_jdec(jpeg);
             heading("Bench: MP3 through mpega.library");
             bench_mp3(mp3);
         }

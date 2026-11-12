@@ -153,10 +153,11 @@ rtgbench: build/rtgbench
 
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast AmigaMCE's uses of it are
-build/zzprobe: tools/zzprobe/zzprobe.c
+# (with jdec built in, to time the JPEG decoder alone)
+build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< -lamiga
+	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
 test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets
