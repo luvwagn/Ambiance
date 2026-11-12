@@ -313,6 +313,48 @@ static BOOL certs_load(struct TlsLib *t)
     return FALSE;
 }
 
+/* ---- the time a certificate is checked at
+ * A certificate is valid between two dates, checked against the Amiga's
+ * clock. One that has no battery clock, or whose emulator does not set it,
+ * starts in 1978, and every certificate is "not yet valid". AmigaMCE was
+ * built on AMCE_DATE, so now is no earlier than that: if the clock says
+ * otherwise, the check is made as of that day (the certificate still
+ * checked against the root certificates, its name against the host's). */
+static ULONG days_from_civil(LONG y, LONG m, LONG d)    /* days since 1.1.1970 */
+{
+    LONG era, yoe, doy, doe;
+    y -= m <= 2;
+    era = y / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (ULONG)(era * 146097 + doe - 719468);
+}
+
+static ULONG build_secs(void)          /* AMCE_DATE ("12.11.2026"), seconds since 1970 */
+{
+    const char *p = AMCE_DATE;
+    LONG v[3] = { 0, 0, 0 };
+    int i;
+    for (i = 0; i < 3 && *p; i++) {
+        while (*p >= '0' && *p <= '9')
+            v[i] = v[i] * 10 + (*p++ - '0');
+        if (*p == '.')
+            p++;
+    }
+    if (v[2] < 2000 || v[1] < 1 || v[1] > 12 || v[0] < 1)
+        return 0;
+    return days_from_civil(v[2], v[1], v[0]) * 86400UL;
+}
+
+static ULONG amiga_secs(void)          /* the clock, seconds since 1970 */
+{
+    struct DateStamp ds;
+    DateStamp(&ds);
+    return ((ULONG)ds.ds_Days + 2922UL) * 86400UL + (ULONG)ds.ds_Minute * 60UL +
+           (ULONG)ds.ds_Tick / TICKS_PER_SECOND;
+}
+
 APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
 {
     struct TlsConn *c;
@@ -338,8 +380,21 @@ APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
     SSL_set_bio(c->ssl, c->rb, c->wb);      /* the SSL owns them now */
     SSL_set_tlsext_host_name(c->ssl, (char *)host);    /* SNI: one address, many sites */
     if (verify) {
+        ULONG now = amiga_secs(), built = build_secs();
         SSL_set1_host(c->ssl, host);        /* the certificate must be the host's */
         SSL_set_verify(c->ssl, SSL_VERIFY_PEER, NULL);
+        if (built && now < built) {
+            static BOOL said;
+            X509_VERIFY_PARAM_set_time(SSL_get0_param(c->ssl), (time_t)built);
+            if (!said) {
+                char m[160];
+                said = TRUE;
+                sprintf(m, "the Amiga's clock says day %lu after 1.1.1970, before AmigaMCE was "
+                           "built (" AMCE_DATE "): certificates checked as of then",
+                        (unsigned long)(now / 86400UL));
+                amce_log("https", m);
+            }
+        }
     } else {
         SSL_set_verify(c->ssl, SSL_VERIFY_NONE, NULL);
     }
