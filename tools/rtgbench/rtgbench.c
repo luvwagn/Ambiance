@@ -41,7 +41,8 @@
 #include <stdio.h>
 #include "../../src/animdraw.h"
 
-static const char version[] = "$VER: rtgbench 1.1 (08.11.2026)";
+/* used: nothing reads it, but Version finds it in the file (unused, it was dropped) */
+static const char __attribute__((used)) version[] = "$VER: rtgbench 1.1 (08.11.2026)";
 
 struct Library *CyberGfxBase, *DiskfontBase;
 struct Device *TimerBase;

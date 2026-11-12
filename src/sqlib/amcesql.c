@@ -42,6 +42,9 @@
 
 const char LibName[] = "amcesql.library";
 const char LibIdString[] = "amcesql 1.0 (07.11.2026) SQLite 3.34.0, read only, for AmigaMCE";
+/* for the Version command on the file (the ID string is for the library in memory) */
+static const char __attribute__((used)) LibVerTag[] =
+    "$VER: amcesql.library 1.0 (07.11.2026) SQLite 3.34.0, read only, for AmigaMCE";
 const UWORD LibVersion = 1;
 const UWORD LibRevision = 0;
 

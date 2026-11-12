@@ -277,6 +277,18 @@ Not there yet
 
 History
 -------
+0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
+       music folders with the spinner while read. HTTPS by AmiSSL 5
+       (Settings > Networking): secure radio stations play, and Plex
+       signs in at plex.tv by a code (plex.tv/link), the account's
+       servers listed with their own tokens. Radio: titles in time with
+       the music, smoother over MHI, Now playing in its lists. 6- and
+       8-channel MODs on AmigaMCE's own replayer, mixed onto Paula (after
+       ProTracker 4.1's mixer). ZZ9000: found, and MP3 decoded on the
+       card. JPEG thumbnails decoded by AmigaMCE itself (jdec), faster
+       than a datatype. Greek. Lists: the scroll bar always, the letter
+       over the rows, tags kept while scrolling; the menu stays open until
+       a list is gone into; a joystick for Games.
 0.7.0  Videos: IFF ANIMs (ANIM-5, 7 and 8) from Media:Animations, VIDEOS:
        and Videos folders, played on a screen in their own mode (HAM,
        extra halfbrite, interlace, overscan) a frame at a time from the

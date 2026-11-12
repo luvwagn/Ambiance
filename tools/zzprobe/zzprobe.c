@@ -60,7 +60,8 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.14 (12.11.2026)";
+/* used: nothing reads it, but Version finds it in the file (unused, it was dropped) */
+static const char __attribute__((used)) version[] = "$VER: zzprobe 1.14 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
