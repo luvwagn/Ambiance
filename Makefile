@@ -334,10 +334,14 @@ JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
 JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
 JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
 datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
-$(JDT): build/sqlib/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
+$(JDT_DIR)/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  CC    $< (amcejpeg)"
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=46 -c -o $@ $<
+$(JDT): $(JDT_DIR)/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
 	@mkdir -p $(JDT_DIR)
 	@echo "  LD    $@"
-	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg build/sqlib/libinit.o $(JDT_SRC) -lamiga
+	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg $(JDT_DIR)/libinit.o $(JDT_SRC) -lamiga
 	@$(STRIP) -o $@ $@.dbg
 $(JDT_DESC): tools/mkdtdesc.py
 	@mkdir -p $(JDT_DIR)

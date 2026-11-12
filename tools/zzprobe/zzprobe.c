@@ -31,6 +31,7 @@
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/execbase.h>
+#include <exec/resident.h>
 #include <devices/timer.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
@@ -59,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.4 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.5 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -481,7 +482,7 @@ struct Row {
 };
 static struct Row rows[12];
 static int nrows;
-static char notes[6][160];
+static char notes[8][160];
 static int nnotes;
 
 static struct Row *row_new(const char *fmt, const char *dec)
@@ -495,7 +496,7 @@ static struct Row *row_new(const char *fmt, const char *dec)
 
 static void note_add(const char *s)
 {
-    if (nnotes < 6) {
+    if (nnotes < 8) {
         strncpy(notes[nnotes], s, sizeof(notes[0]) - 1);
         nnotes++;
     }
@@ -785,6 +786,48 @@ static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG
 
 #define ObtainEngine(base) LP0(30, Class *, ObtainEngine, , base)
 
+/* Where a library that would not open stops: its file loaded (LoadSeg),
+ * its ROMTag (name, version, flags), and opened asking for any version */
+static void lib_diag(const char *path)
+{
+    char line[200];
+    BPTR seg = LoadSeg((CONST_STRPTR)path), s;
+    struct Resident *rt = NULL;
+    struct Library *l;
+    if (!seg) {
+        char e[80];
+        Fault(IoErr(), NULL, (STRPTR)e, sizeof(e));
+        snprintf(line, sizeof(line), "    (*) %.60s: LoadSeg failed: %s", path, e);
+        note_add(line + 4);
+        return;
+    }
+    for (s = seg; s && !rt; s = *(BPTR *)BADDR(s)) {
+        ULONG *p = (ULONG *)BADDR(s), n = (p[-1] - 8) / 2, i;
+        UWORD *w = (UWORD *)(p + 1);
+        for (i = 0; i + 13 < n; i++)
+            if (w[i] == RTC_MATCHWORD && *(ULONG *)(w + i + 1) == (ULONG)(w + i)) {
+                rt = (struct Resident *)(w + i);
+                break;
+            }
+    }
+    if (rt)
+        snprintf(line, sizeof(line), "(*) loads; ROMTag \"%.30s\" version %ld, flags $%02lx, type %ld",
+                 rt->rt_Name ? (const char *)rt->rt_Name : "?", (long)rt->rt_Version,
+                 (unsigned long)rt->rt_Flags, (long)rt->rt_Type);
+    else
+        snprintf(line, sizeof(line), "(*) loads, but has no ROMTag");
+    note_add(line);
+    UnLoadSeg(seg);
+    if ((l = OpenLibrary((CONST_STRPTR)path, 0))) {
+        snprintf(line, sizeof(line), "(*) opens when any version is asked for: it says %ld.%ld",
+                 (long)l->lib_Version, (long)l->lib_Revision);
+        CloseLibrary(l);
+    } else {
+        snprintf(line, sizeof(line), "(*) does not open even asking for any version (IoErr %ld)", (long)IoErr());
+    }
+    note_add(line);
+}
+
 static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
 {
     struct Library *lib = OpenLibrary((CONST_STRPTR)"datatypes/amcejpeg.datatype", 46);
@@ -811,6 +854,8 @@ static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
                      pd ? (long)pd->lib_Version : 0L, pd ? (long)pd->lib_Revision : 0L);
             if (pd)
                 CloseLibrary(pd);
+            lib_diag(exists("SYS:Classes/DataTypes/amcejpeg.datatype")
+                     ? "SYS:Classes/DataTypes/amcejpeg.datatype" : "PROGDIR:amcejpeg/amcejpeg.datatype");
         }
         return;
     }
@@ -1129,7 +1174,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.4, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.5, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
