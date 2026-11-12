@@ -290,28 +290,58 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     bmh->bmh_XAspect = (UBYTE)xa;
     bmh->bmh_YAspect = (UBYTE)ya;
     {
-        /* PMODE_V43 was given with OM_NEW (dispatch); set here only if
-         * picture.datatype did not take it there. The nominal size by
-         * OM_SET to picture.datatype itself, not SetDTAttrs: that went
-         * through datatypes.library and took 8-10 ms on OS 3.2 (68030). */
-        ULONG mode = 0, ts = eclock();
-        struct TagItem nt[3];
+        /* picture.datatype given PMODE_V43 and the nominal size. The way
+         * is under test (JDTA_Variant, zzprobe): SetDTAttrs took 8-10 ms
+         * on OS 3.2 (68030), but leaving it out (3) left an object that
+         * would not lay out.
+         *   0: SetDTAttrs, both together (the usual way; the default)
+         *   1: OM_SET to picture.datatype directly, both together
+         *   2: SetDTAttrs PMODE_V43; the nominal size by OM_SET
+         *   3: PMODE_V43 with OM_NEW; the nominal size by OM_SET */
+        ULONG variant = tag_data(attrs, JDTA_Variant, 0), ts = eclock();
+        struct TagItem nt[4];
         struct opSet os;
-        GetDTAttrs(o, PDTA_SourceMode, (ULONG)&mode, TAG_DONE);
-        if (mode != PMODE_V43)
-            SetDTAttrs(o, NULL, NULL, PDTA_SourceMode, PMODE_V43, TAG_DONE);
-        in->us_setattrs = ticks_us(eclock() - ts);
-        ts = eclock();
         nt[0].ti_Tag = DTA_NominalHoriz;
         nt[0].ti_Data = (ULONG)w;
         nt[1].ti_Tag = DTA_NominalVert;
         nt[1].ti_Data = (ULONG)h;
-        nt[2].ti_Tag = TAG_DONE;
+        nt[2].ti_Tag = PDTA_SourceMode;
+        nt[2].ti_Data = PMODE_V43;
+        nt[3].ti_Tag = TAG_DONE;
         os.MethodID = OM_SET;
         os.ops_AttrList = nt;
         os.ops_GInfo = NULL;
-        DoSuperMethodA(cl, o, (Msg)&os);
-        in->us_nominal = ticks_us(eclock() - ts);
+        switch (variant) {
+        case 1:
+            DoSuperMethodA(cl, o, (Msg)&os);
+            break;
+        case 2:
+            SetDTAttrs(o, NULL, NULL, PDTA_SourceMode, PMODE_V43, TAG_DONE);
+            in->us_setattrs = ticks_us(eclock() - ts);
+            ts = eclock();
+            nt[2].ti_Tag = TAG_DONE;
+            DoSuperMethodA(cl, o, (Msg)&os);
+            in->us_nominal = ticks_us(eclock() - ts);
+            break;
+        case 3: {
+            ULONG mode = 0;
+            GetDTAttrs(o, PDTA_SourceMode, (ULONG)&mode, TAG_DONE);
+            if (mode != PMODE_V43)
+                SetDTAttrs(o, NULL, NULL, PDTA_SourceMode, PMODE_V43, TAG_DONE);
+            in->us_setattrs = ticks_us(eclock() - ts);
+            ts = eclock();
+            nt[2].ti_Tag = TAG_DONE;
+            DoSuperMethodA(cl, o, (Msg)&os);
+            in->us_nominal = ticks_us(eclock() - ts);
+            break;
+        }
+        default:
+            SetDTAttrs(o, NULL, NULL, DTA_NominalHoriz, (ULONG)w, DTA_NominalVert, (ULONG)h,
+                       PDTA_SourceMode, PMODE_V43, TAG_DONE);
+            break;
+        }
+        if (variant < 2)
+            in->us_setattrs = ticks_us(eclock() - ts);
     }
 
     r = jd_decode(d, scale);
@@ -370,15 +400,18 @@ static ULONG dispatch(register Class *cl __asm("a0"), register Object *o __asm("
 {
     switch (msg->MethodID) {
     case OM_NEW: {
-        /* picture.datatype told PMODE_V43 at once, with the caller's tags */
+        /* variant 3: picture.datatype told PMODE_V43 at once, with the
+         * caller's tags */
         struct TagItem t[2];
         struct opSet ns = *(struct opSet *)msg;
         Object *obj;
-        t[0].ti_Tag = PDTA_SourceMode;
-        t[0].ti_Data = PMODE_V43;
-        t[1].ti_Tag = TAG_MORE;
-        t[1].ti_Data = (ULONG)((struct opSet *)msg)->ops_AttrList;
-        ns.ops_AttrList = t;
+        if (tag_data(ns.ops_AttrList, JDTA_Variant, 0) == 3) {
+            t[0].ti_Tag = PDTA_SourceMode;
+            t[0].ti_Data = PMODE_V43;
+            t[1].ti_Tag = TAG_MORE;
+            t[1].ti_Data = (ULONG)ns.ops_AttrList;
+            ns.ops_AttrList = t;
+        }
         obj = (Object *)DoSuperMethodA(cl, o, (Msg)&ns);
         if (obj) {
             struct LoadArgs la;

@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.12 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.13 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -708,7 +708,41 @@ struct ClsRun {
     ULONG *ph;                          /* the fastest run's parts */
     ULONG mode;                         /* PDTA_ModeID to give it, or INVALID_ID */
     ULONG *mode_out;                    /* where to put the mode it ends with */
+    ULONG variant;                      /* JDTA_Variant (ours) */
+    BOOL check;                         /* read the pixels back into hash */
+    ULONG hash;                         /* FNV-1a of the RGB read back; 0 none */
+    ULONG laid;                         /* what DTM_PROCLAYOUT returned */
+    ULONG last[PH_N];                   /* the last run's parts */
 };
+
+/* FNV-1a over bytes, from a running value */
+static ULONG fnv(ULONG h, const UBYTE *p, ULONG n)
+{
+    while (n--)
+        h = (h ^ *p++) * 16777619UL;
+    return h;
+}
+
+/* An object's pixels read back as RGB, hashed (0: none came back) */
+static ULONG pixels_hash(Object *o, ULONG w, ULONG h)
+{
+    struct pdtBlitPixelArray pb;
+    ULONG r = 0, mod = w * 3;
+    UBYTE *buf;
+    if (!w || !h || !(buf = AllocVec(mod * h, MEMF_ANY | MEMF_CLEAR)))
+        return 0;
+    pb.MethodID = PDTM_READPIXELARRAY;
+    pb.pbpa_PixelData = buf;
+    pb.pbpa_PixelFormat = PBPAFMT_RGB;
+    pb.pbpa_PixelArrayMod = mod;
+    pb.pbpa_Left = pb.pbpa_Top = 0;
+    pb.pbpa_Width = w;
+    pb.pbpa_Height = h;
+    if (DoMethodA(o, (Msg)&pb))
+        r = fnv(2166136261UL, buf, mod * h);
+    FreeVec(buf);
+    return r;
+}
 
 static LONG cls_once(void *p)
 {
@@ -726,14 +760,14 @@ static LONG cls_once(void *p)
     o = NewObject(c->cl, NULL, DTA_SourceType, DTST_FILE, DTA_Handle, (ULONG)fh,
                   DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
                   PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43,
-                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith,
+                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, JDTA_Variant, c->variant,
                   c->mode != (ULONG)INVALID_ID ? PDTA_ModeID : TAG_IGNORE, c->mode, TAG_END);
     if (!o) {
         LONG e = IoErr();
         return e ? e : -1;
     }
     t2 = now_us();
-    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    c->laid = DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
     t3 = now_us();
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
                JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr,
@@ -746,11 +780,16 @@ static LONG cls_once(void *p)
         c->h = bmh->bmh_Height;
     }
     c->scale = sc;
+    if (c->check)
+        c->hash = pixels_hash(o, c->w, c->h);
     {
-        ULONG d0 = now_us(), tot;       /* the GetDTAttrs above left out */
+        ULONG d0 = now_us(), tot;       /* the GetDTAttrs and the check above left out */
         DisposeObject(o);
         t4 = now_us() - d0;             /* disposing */
         tot = (t3 - t0) + t4;
+        c->last[PH_SETATTRS] = sa + nm;
+        c->last[PH_LAYOUT] = t3 - t2;
+        c->last[PH_TOTAL] = tot;
         if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
             c->ph[PH_READ] = t1 - t0;   /* opening it: the reading is the class's, in OM_NEW */
             c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and the class's with the decode */
@@ -1004,6 +1043,67 @@ static void ours_why_not(struct Row *r)
     }
 }
 
+/* amcejpeg.datatype: the ways of giving picture.datatype PMODE_V43 and
+ * the nominal size (JDTA_Variant), each timed, laid out and its pixels
+ * checked against jdec's, at 1/1 and 1/8 */
+static void ph_cell(char *out, ULONG us, BOOL have);
+static ULONG jdec_hash(const char *path, int scale);
+static char variants_out[6][200];
+static int nvariants_out;
+
+static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
+{
+    static const char *const vname[4] = {
+        "0 SetDTAttrs, both", "1 OM_SET, both", "2 SetDTAttrs mode, OM_SET size",
+        "3 mode with OM_NEW, OM_SET size"
+    };
+    ULONG want[2];
+    int v, si;
+    want[0] = jdec_hash(path, 0);
+    want[1] = jdec_hash(path, 3);
+    nvariants_out = 0;
+    for (v = 0; v < 4; v++) {
+        char cells[2][64];
+        for (si = 0; si < 2; si++) {
+            struct ClsRun c = *c0;
+            ULONG best = 0xFFFFFFFFUL, set = 0, lay = 0, i;
+            LONG err = 0;
+            c.variant = (ULONG)v;
+            c.ph = NULL;
+            c.mode_out = NULL;
+            c.mode = (ULONG)INVALID_ID;
+            c.fitw = si ? (w + 7) >> 3 : 0;
+            c.fith = si ? (h + 7) >> 3 : 0;
+            c.check = TRUE;             /* once, for the pixels */
+            if ((err = cls_once(&c))) {
+                why(err, cells[si], sizeof(cells[si]));
+                continue;
+            }
+            c.check = FALSE;
+            for (i = 0; i < 5 && !err; i++) {
+                if ((err = cls_once(&c)))
+                    break;
+                if (c.last[PH_TOTAL] < best) {
+                    best = c.last[PH_TOTAL];
+                    set = c.last[PH_SETATTRS];
+                    lay = c.last[PH_LAYOUT];
+                }
+            }
+            {
+                char b[16], st[16], l[16];
+                ph_cell(b, best, TRUE);
+                ph_cell(st, set, TRUE);
+                ph_cell(l, lay, TRUE);
+                snprintf(cells[si], sizeof(cells[si]), "%s (set %s, layout %s%s), %s", b, st, l,
+                         c.laid ? "" : " FAILED",
+                         !c.hash ? "no pixels" : c.hash == want[si] ? "pixels ok" : "pixels DIFFER");
+            }
+        }
+        snprintf(variants_out[nvariants_out++], sizeof(variants_out[0]), "  %-32s 1/1: %s;  1/8: %s",
+                 vname[v], cells[0], cells[1]);
+    }
+}
+
 static void bench_class(int k, const char *path, ULONG w, ULONG h)
 {
     struct Library *lib;
@@ -1080,6 +1180,8 @@ static void bench_class(int k, const char *path, ULONG w, ULONG h)
             DeleteVar((STRPTR)JFIF_PREFS, GVF_GLOBAL_ONLY);
         note_add("jfif.datatype at 1/2 to 1/8: its own SCALE prefs, set for the test and put back");
     }
+    if (k == CL_OURS && c.cl && clph[CL_OURS][0][PH_TOTAL])
+        ours_variants(&c, path, w, h);
     /* ours again at 1/1, given WarpJPEG's display mode: is the layout's
      * time picture.datatype choosing one? */
     if (k == CL_OURS && clph[CL_OURS][0][PH_TOTAL] && cl_mode[CL_WARP] != (ULONG)INVALID_ID) {
@@ -1168,6 +1270,65 @@ static void time_parts(void)
         sayf("  1/1+mode: ours again, given WarpJPEG's display mode when it is made.");
     sayf("  Each class's objects made directly, from the file. The rest of OM_NEW past");
     sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
+    if (nvariants_out) {
+        heading("amcejpeg.datatype: ways of giving picture.datatype the picture (ms, best of 5)");
+        for (i = 0; i < nvariants_out; i++)
+            sayf(variants_out[i]);
+        sayf("  set: PMODE_V43 and the nominal size given; pixels: read back, against jdec's.");
+    }
+}
+
+/* jdec's own RGB at a scale, hashed as pixels_hash does: what ours must
+ * give back */
+struct HashCtx {
+    ULONG h, w;
+};
+
+static int rows_hash(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t stride)
+{
+    struct HashCtx *x = ((struct MemSrc *)ctx)[1].p ? (struct HashCtx *)((struct MemSrc *)ctx)[1].p : NULL;
+    int32_t i;
+    (void)y;
+    if (x)
+        for (i = 0; i < n; i++)
+            x->h = fnv(x->h, rgb + i * stride, x->w * 3);
+    return 0;
+}
+
+static ULONG jdec_hash(const char *path, int scale)
+{
+    struct MemSrc m[2];                 /* [1].p: the hash, for rows_hash */
+    struct HashCtx x;
+    JDecIO io;
+    JDecInfo info;
+    JDec *d;
+    LONG len = file_size(path);
+    UBYTE *data;
+    int32_t w, h;
+    ULONG r = 0;
+    if (len <= 0 || !(data = AllocVec((ULONG)len, MEMF_ANY)))
+        return 0;
+    if (file_read(path, data, len)) {
+        m[0].p = data;
+        m[0].n = (ULONG)len;
+        m[0].pos = 0;
+        m[1].p = (const UBYTE *)&x;
+        io.ctx = m;
+        io.read = mem_read;
+        io.alloc = mem_alloc;
+        io.free = mem_free;
+        io.rows = rows_hash;
+        if (!jd_open(&d, &io, &info)) {
+            jd_out_size(&info, scale, &w, &h);
+            x.h = 2166136261UL;
+            x.w = (ULONG)w;
+            if (!jd_decode(d, scale))
+                r = x.h;
+            jd_close(d);
+        }
+    }
+    FreeVec(data);
+    return r;
 }
 
 static void bench_builtin_jpeg(const char *path)
@@ -1218,6 +1379,7 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     int i, s;
     nrows = nnotes = 0;
     have_sysph = have_modeph = FALSE;
+    nvariants_out = 0;
     sys_mode = (ULONG)INVALID_ID;
     memset(clph, 0, sizeof(clph));
     bench_system("JPEG", jpeg, &ours, &jw, &jh);
@@ -1462,7 +1624,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.12, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.13, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();

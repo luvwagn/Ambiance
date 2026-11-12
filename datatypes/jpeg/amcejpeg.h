@@ -51,4 +51,8 @@
 #define JDTA_TimeNominal (JDTA_Dummy + 11)
 #define JDTA_TimeRead   (JDTA_Dummy + 12)
 
+/* (ULONG) NewDTObject(), for zzprobe only: how picture.datatype is given
+ * PMODE_V43 and the nominal size (0 the default; see amcejpeg.c) */
+#define JDTA_Variant    (JDTA_Dummy + 20)
+
 #endif
