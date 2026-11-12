@@ -210,13 +210,17 @@ static const APTR InitTab[] = {
 /*                                                                            */
 /******************************************************************************/
 
-/* used: nothing references it, but exec finds the library by it */
+/* used: nothing references it, but exec finds the library by it.
+   LIB_RT_VERSION: the library's version in it too (a loader may check it) */
+#ifndef LIB_RT_VERSION
+#define LIB_RT_VERSION 0
+#endif
 static const struct Resident __attribute__((used)) RomTag = {
   RTC_MATCHWORD,
   (struct Resident *)&RomTag,
   (struct Resident *)&RomTag+1,
   RTF_AUTOINIT,
-  0,
+  LIB_RT_VERSION,
   NT_LIBRARY,
   0,
   (char *)LibName,

@@ -308,7 +308,7 @@ SQLIB_CC  = $(CC) -O2 -m68020 -noixemul -nostartfiles -fomit-frame-pointer -Wall
 build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
 	@mkdir -p build/sqlib
 	@echo "  CC    $<"
-	@$(SQLIB_CC) -Isrc/sqlib -c -o $@ $<
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<	# = LibVersion: OS 3.2 checks it
 $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a extras/sqlite/sqlite3.h
 	@echo "  LD    $@"
 	@$(SQLIB_CC) -Isrc/sqlib -Iextras/sqlite -o $@.dbg build/sqlib/libinit.o src/sqlib/amcesql.c \
