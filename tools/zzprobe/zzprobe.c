@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.11 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.12 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -545,8 +545,8 @@ static int nrows;
 
 /* Where the time goes, the fastest run's parts (us): JPEG through the
  * system's datatype at 1/1 (sysph) and through amcejpeg at each scale */
-enum { PH_READ, PH_NEW, PH_HEADERS, PH_SETATTRS, PH_DECODE, PH_WRITE, PH_LAYOUT, PH_DISPOSE,
-       PH_TOTAL, PH_N };
+enum { PH_READ, PH_NEW, PH_WHOLE, PH_HEADERS, PH_SETATTRS, PH_NOMINAL, PH_DECODE, PH_WRITE,
+       PH_LAYOUT, PH_DISPOSE, PH_TOTAL, PH_N };
 static ULONG sysph[PH_N], modeph[PH_N];   /* modeph: ours, 1/1, given WarpJPEG's ModeID */
 static BOOL have_sysph, have_modeph;
 static ULONG sys_mode = (ULONG)INVALID_ID;
@@ -714,7 +714,7 @@ static LONG cls_once(void *p)
 {
     struct ClsRun *c = p;
     struct BitMapHeader *bmh = NULL;
-    ULONG sc = 0, dec = 0, wr = 0, hd = 0, sa = 0, t0 = now_us(), t1, t2, t3, t4;
+    ULONG sc = 0, dec = 0, wr = 0, hd = 0, sa = 0, nm = 0, rd = 0, t0 = now_us(), t1, t2, t3, t4;
     Object *o;
     /* the file opened here and given to the object, as NewDTObject does
      * (DTA_Handle: a file handle, for DTST_FILE); the object closes it when
@@ -737,7 +737,8 @@ static LONG cls_once(void *p)
     t3 = now_us();
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
                JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr,
-               JDTA_TimeHeaders, (ULONG)&hd, JDTA_TimeSetAttrs, (ULONG)&sa, TAG_END);
+               JDTA_TimeHeaders, (ULONG)&hd, JDTA_TimeSetAttrs, (ULONG)&sa,
+               JDTA_TimeNominal, (ULONG)&nm, JDTA_TimeRead, (ULONG)&rd, TAG_END);
     if (c->ph && c->mode_out)
         GetDTAttrs(o, PDTA_ModeID, (ULONG)c->mode_out, TAG_END);
     if (bmh) {
@@ -753,9 +754,11 @@ static LONG cls_once(void *p)
         if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
             c->ph[PH_READ] = t1 - t0;   /* opening it: the reading is the class's, in OM_NEW */
             c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and the class's with the decode */
+            c->ph[PH_WHOLE] = rd;
             c->ph[PH_HEADERS] = hd;
             c->ph[PH_SETATTRS] = sa;
-            c->ph[PH_DECODE] = dec > wr + hd + sa ? dec - wr - hd - sa : 0;
+            c->ph[PH_NOMINAL] = nm;
+            c->ph[PH_DECODE] = dec > wr + hd + sa + nm + rd ? dec - wr - hd - sa - nm - rd : 0;
             c->ph[PH_WRITE] = wr;
             c->ph[PH_LAYOUT] = t3 - t2;
             c->ph[PH_DISPOSE] = t4;
@@ -1113,8 +1116,10 @@ static void time_parts(void)
     static const char *const name[PH_N] = {
         "open the file",
         "make the object (OM_NEW)",
+        "  of which: the file read whole",
         "  of which: headers (jd_open)",
-        "  of which: SetDTAttrs (size, mode)",
+        "  of which: PMODE_V43 set (if needed)",
+        "  of which: nominal size (OM_SET)",
         "  of which: decoding (jdec)",
         "  of which: rows to picture.datatype",
         "layout (DTM_PROCLAYOUT)",
@@ -1133,7 +1138,8 @@ static void time_parts(void)
              "jfif 1/1", "ours 1/1", "1/2", "1/4", "1/8", have_modeph ? "1/1+mode" : "");
     sayf(line);
     for (i = 0; i < PH_N; i++) {
-        BOOL ours_only = i == PH_HEADERS || i == PH_SETATTRS || i == PH_DECODE || i == PH_WRITE;
+        BOOL ours_only = i == PH_HEADERS || i == PH_SETATTRS || i == PH_DECODE || i == PH_WRITE ||
+                         i == PH_WHOLE || i == PH_NOMINAL;
         n = 0;
         ph_cell(c[n++], clph[CL_WARP][0][i], have[CL_WARP] && !ours_only);
         ph_cell(c[n++], clph[CL_JFIF][0][i], have[CL_JFIF] && !ours_only);
@@ -1456,7 +1462,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.11, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.12, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();

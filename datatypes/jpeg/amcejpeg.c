@@ -87,6 +87,7 @@ struct Inst {
     ULONG damaged;
     ULONG us_load, us_write;            /* JDTA_TimeLoad, JDTA_TimeWrite */
     ULONG us_headers, us_setattrs;      /* JDTA_TimeHeaders, JDTA_TimeSetAttrs */
+    ULONG us_nominal, us_read;          /* JDTA_TimeNominal, JDTA_TimeRead */
 };
 
 /* ---- jdec's input, memory and output */
@@ -100,6 +101,7 @@ struct Src {
     LONG ioerr;
     ULONG w;                            /* rows' width */
     ULONG t_write;                      /* E-clock ticks in WRITEPIXELARRAY */
+    UBYTE *whole;                       /* the file read whole, to free */
 };
 
 static int32_t src_read(void *ctx, uint8_t *buf, int32_t n)
@@ -218,10 +220,27 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     if (!bmh)
         return ERROR_NO_FREE_STORE;
     if (st == DTST_FILE) {
+        LONG n;
         GetDTAttrs(o, DTA_Handle, (ULONG)&s.fh, TAG_DONE);
         if (!s.fh)
             return ERROR_REQUIRED_ARG_MISSING;
-        Seek(s.fh, 0, OFFSET_BEGINNING);
+        /* a file up to 4 MB read whole, in one Read: much less filesystem
+         * work than jdec's 4 KB at a time. Bigger ones, or without the
+         * memory, streamed. */
+        Seek(s.fh, 0, OFFSET_END);
+        n = Seek(s.fh, 0, OFFSET_BEGINNING);
+        if (n > 0 && n <= 4L << 20 && (s.whole = AllocVec((ULONG)n, MEMF_ANY))) {
+            ULONG tr = eclock();
+            if (Read(s.fh, s.whole, n) == n) {
+                s.mem = s.whole;
+                s.memlen = (ULONG)n;
+            } else {
+                Seek(s.fh, 0, OFFSET_BEGINNING);
+                FreeVec(s.whole);
+                s.whole = NULL;
+            }
+            in->us_read = ticks_us(eclock() - tr);
+        }
 #if defined(DTST_MEMORY) && defined(DTA_SourceAddress) && defined(DTA_SourceSize)
     } else if (st == DTST_MEMORY) {
         APTR a = NULL;
@@ -246,8 +265,10 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
         r = jd_open(&d, &io, &info);
         in->us_headers = ticks_us(eclock() - th);
     }
-    if (r)
+    if (r) {
+        FreeVec(s.whole);
         return dos_err(r, &s);
+    }
 
     scale = jd_scale_for(&info, (int32_t)tag_data(attrs, JDTA_FitWidth, 0),
                          (int32_t)tag_data(attrs, JDTA_FitHeight, 0));
@@ -269,17 +290,34 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     bmh->bmh_XAspect = (UBYTE)xa;
     bmh->bmh_YAspect = (UBYTE)ya;
     {
-        ULONG ts = eclock();
-        SetDTAttrs(o, NULL, NULL,
-                   DTA_NominalHoriz, (ULONG)w, DTA_NominalVert, (ULONG)h,
-                   PDTA_SourceMode, PMODE_V43,
-                   TAG_DONE);
+        /* PMODE_V43 was given with OM_NEW (dispatch); set here only if
+         * picture.datatype did not take it there. The nominal size by
+         * OM_SET to picture.datatype itself, not SetDTAttrs: that went
+         * through datatypes.library and took 8-10 ms on OS 3.2 (68030). */
+        ULONG mode = 0, ts = eclock();
+        struct TagItem nt[3];
+        struct opSet os;
+        GetDTAttrs(o, PDTA_SourceMode, (ULONG)&mode, TAG_DONE);
+        if (mode != PMODE_V43)
+            SetDTAttrs(o, NULL, NULL, PDTA_SourceMode, PMODE_V43, TAG_DONE);
         in->us_setattrs = ticks_us(eclock() - ts);
+        ts = eclock();
+        nt[0].ti_Tag = DTA_NominalHoriz;
+        nt[0].ti_Data = (ULONG)w;
+        nt[1].ti_Tag = DTA_NominalVert;
+        nt[1].ti_Data = (ULONG)h;
+        nt[2].ti_Tag = TAG_DONE;
+        os.MethodID = OM_SET;
+        os.ops_AttrList = nt;
+        os.ops_GInfo = NULL;
+        DoSuperMethodA(cl, o, (Msg)&os);
+        in->us_nominal = ticks_us(eclock() - ts);
     }
 
     r = jd_decode(d, scale);
     in->damaged = jd_damaged(d) ? TRUE : FALSE;
     jd_close(d);
+    FreeVec(s.whole);
     in->us_load = ticks_us(eclock() - t0);
     in->us_write = ticks_us(s.t_write);
     if (r)
@@ -318,6 +356,8 @@ static ULONG get(Class *cl, Object *o, struct opGet *m)
     case JDTA_TimeWrite: v = in->us_write; break;
     case JDTA_TimeHeaders: v = in->us_headers; break;
     case JDTA_TimeSetAttrs: v = in->us_setattrs; break;
+    case JDTA_TimeNominal: v = in->us_nominal; break;
+    case JDTA_TimeRead: v = in->us_read; break;
     default:
         return DoSuperMethodA(cl, o, (Msg)m);
     }
@@ -330,7 +370,16 @@ static ULONG dispatch(register Class *cl __asm("a0"), register Object *o __asm("
 {
     switch (msg->MethodID) {
     case OM_NEW: {
-        Object *obj = (Object *)DoSuperMethodA(cl, o, msg);
+        /* picture.datatype told PMODE_V43 at once, with the caller's tags */
+        struct TagItem t[2];
+        struct opSet ns = *(struct opSet *)msg;
+        Object *obj;
+        t[0].ti_Tag = PDTA_SourceMode;
+        t[0].ti_Data = PMODE_V43;
+        t[1].ti_Tag = TAG_MORE;
+        t[1].ti_Data = (ULONG)((struct opSet *)msg)->ops_AttrList;
+        ns.ops_AttrList = t;
+        obj = (Object *)DoSuperMethodA(cl, o, (Msg)&ns);
         if (obj) {
             struct LoadArgs la;
             LONG err;

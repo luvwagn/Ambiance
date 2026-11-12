@@ -46,5 +46,9 @@
  * mode given to picture.datatype (SetDTAttrs) */
 #define JDTA_TimeHeaders (JDTA_Dummy + 9)
 #define JDTA_TimeSetAttrs (JDTA_Dummy + 10)
+/* ...the nominal size set (OM_SET to picture.datatype), and the whole
+ * file read into memory before decoding (0 when it was streamed) */
+#define JDTA_TimeNominal (JDTA_Dummy + 11)
+#define JDTA_TimeRead   (JDTA_Dummy + 12)
 
 #endif
