@@ -16,8 +16,14 @@
 #define JD_INBUF 4096
 #define PS 2                    /* extra fraction bits through the 8x8 IDCT */
 
+#ifndef FB
+#define FB 9                    /* the fast AC table's lookahead, 9-15 bits */
+#endif
+#define FMASK ((1 << FB) - 1)
+
 typedef struct {
     uint16_t look[512];         /* 9-bit lookahead: (length << 8) | symbol; 0: longer */
+    int32_t fast[1 << FB];      /* AC, code and value in FB bits: value << 16 | k step << 8 | bits (0: no) */
     int32_t maxcode[18];        /* largest code of each length (-1 none) */
     int32_t valoff[18];         /* val[] index of a length's code: valoff + code */
     uint8_t val[256];
@@ -38,9 +44,16 @@ typedef struct {
     uint8_t *up;                /* a row made output width */
     uint8_t *tmp;               /* a row averaged down from dny rows */
     int16_t q[64];              /* its dequantising table at this scale (natural order) */
-    int aan;                    /* 8 x 8 (AAN): each coefficient also scaled by aan[] */
+    const int16_t *sc;          /* each coefficient's scale after q, Q(14-PS): aan[] or flat */
     int dc;                     /* DC prediction */
 } JComp;
+
+/* A Cr or Cb value's colour terms; 8 bytes, for the 68020's index * 8 */
+typedef struct {
+    int16_t rb;                 /* Cr: to red; Cb: to blue */
+    int16_t pad;
+    int32_t g;                  /* to green in Q16; their sum >> 16 (Cb's has the rounding) */
+} JCol;
 
 struct JDec {
     JDecIO io;
@@ -69,10 +82,11 @@ struct JDec {
     JHuff hd[4], ha[4];
     JComp c[4];
     int16_t blk[64];
+    uint8_t nz[64];             /* where blk has values, to clear them after */
     int32_t ws[64];
     uint8_t clamp[1024];        /* index & 1023: 0-255 as is, 256-639 255, 640-1023 0 */
-    int16_t crr[256], cbb[256];
-    int32_t crg[256], cbg[256];
+    uint8_t cclamp[768];        /* colour sums -256..511, from cclamp + 256 */
+    JCol cr[256], cb[256];      /* colour: R (Cr) or B (Cb) offset, and G's part */
     uint8_t in[JD_INBUF];
 };
 
@@ -83,7 +97,16 @@ static const uint8_t zigzag[64] = {     /* natural index of each zigzag position
     58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63
 };
 
-static const uint16_t aan[64] = {       /* s(u)s(v) in Q14, s(0)=1, s(k)=sqrt2 cos(k pi/16) */
+static const int16_t flat[64] = {        /* the reduced IDCTs: 1 in Q(14-PS) */
+#define F4 (1 << (14 - 2))
+    F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4,
+    F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4,
+    F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4,
+    F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4, F4
+#undef F4
+};
+
+static const int16_t aan[64] = {       /* s(u)s(v) in Q14, s(0)=1, s(k)=sqrt2 cos(k pi/16) */
     16384, 22725, 21407, 19266, 16384, 12873,  8867,  4520,
     22725, 31521, 29692, 26722, 22725, 17855, 12299,  6270,
     21407, 29692, 27969, 25172, 21407, 16819, 11585,  5906,
@@ -183,11 +206,13 @@ static int next_marker(JDec *d)
 
 /* ------------------------------------------------------------------ headers */
 
-static int build_huff(JHuff *h, const uint8_t *counts, const uint8_t *vals, int total)
+static int build_huff(JHuff *h, const uint8_t *counts, const uint8_t *vals, int total, int ac)
 {
     int32_t code = 0;
     int len, i, k = 0;
-    memset(h, 0, sizeof(*h));
+    h->ok = 0;
+    memset(h->look, 0, sizeof(h->look));
+    memset(h->val, 0, sizeof(h->val));
     memcpy(h->val, vals, total);
     for (len = 1; len <= 16; len++) {
         int n = counts[len - 1];
@@ -207,6 +232,32 @@ static int build_huff(JHuff *h, const uint8_t *counts, const uint8_t *vals, int 
         code <<= 1;
     }
     h->maxcode[17] = 0x7FFFFFFFL;
+    if (ac) {                           /* run, size and value in one lookup: by code */
+        int32_t *f = h->fast;
+        memset(f, 0, sizeof(h->fast));
+        code = 0;
+        k = 0;
+        for (len = 1; len <= FB; len++) {
+            for (i = 0; i < counts[len - 1]; i++, code++, k++) {
+                int rs = vals[k], sz = rs & 15, sh = FB - len;
+                int32_t base = code << sh, e, m, vb;
+                if (!sz) {                  /* EOB: past the end; ZRL: 15 zeros and a 16th */
+                    e = rs == 0 ? 64L * 256 + len : rs == 0xF0 ? 15L * 256 + len : 0;
+                    for (m = 1L << sh; m-- > 0; )
+                        f[base++] = e;
+                } else if (sz <= sh) {
+                    sh -= sz;
+                    for (vb = 0; vb < (1L << sz); vb++) {
+                        int32_t v = vb < (1L << (sz - 1)) ? vb - (1L << sz) + 1 : vb;
+                        e = v * 65536 + (rs >> 4) * 256 + len + sz;
+                        for (m = 1L << sh; m-- > 0; )
+                            f[base++] = e;
+                    }
+                }
+            }
+            code <<= 1;
+        }
+    }
     h->ok = 1;
     return 0;
 }
@@ -238,7 +289,7 @@ static int read_dht(JDec *d)
             vals[i] = (uint8_t)c;
         }
         len -= total;
-        if (build_huff((tc_th >> 4) ? &d->ha[tc_th & 3] : &d->hd[tc_th & 3], counts, vals, total))
+        if (build_huff((tc_th >> 4) ? &d->ha[tc_th & 3] : &d->hd[tc_th & 3], counts, vals, total, tc_th >> 4))
             return JD_EFORMAT;
     }
     return JD_OK;
@@ -440,7 +491,17 @@ static int read_sos(JDec *d)
 
 static void fill(JDec *d)
 {
-    while (d->nbits <= 24) {
+    uint32_t bits = d->bits;
+    int nbits = d->nbits;
+    if (!d->marker) {                   /* the usual bytes: straight from the buffer */
+        const uint8_t *p = d->in + d->inpos, *e = d->in + d->inlen;
+        while (nbits <= 24 && p < e && *p != 0xFF) {
+            bits = (bits << 8) | *p++;
+            nbits += 8;
+        }
+        d->inpos = (int32_t)(p - d->in);
+    }
+    while (nbits <= 24) {
         int c = 0;
         if (d->marker) {
             d->pad++;
@@ -464,9 +525,11 @@ static void fill(JDec *d)
                 }
             }
         }
-        d->bits = (d->bits << 8) | (uint32_t)c;
-        d->nbits += 8;
+        bits = (bits << 8) | (uint32_t)c;
+        nbits += 8;
     }
+    d->bits = bits;
+    d->nbits = nbits;
 }
 
 static int getbits(JDec *d, int n)      /* n 1-16 */
@@ -511,14 +574,24 @@ static int16_t sat16(int32_t x)
     return (int16_t)(x > 32767 ? 32767 : x < -32768 ? -32768 : x);
 }
 
-/* One block's coefficients, dequantised, into d->blk (natural order).
- * Returns 1 if it has AC coefficients the IDCT needs. */
+/* One block's coefficients, dequantised, into d->blk (natural order),
+ * which is all zeros on entry; where they went into d->nz.
+ * Returns how many (1: the DC alone, for the IDCTs' fast path).
+ * The bit buffer lives in registers here; d's copy is brought up to
+ * date around every call that uses it. */
+#define BITS_OUT() (d->bits = bits, d->nbits = nbits)
+#define BITS_IN() (bits = d->bits, nbits = d->nbits)
+#define NEED(n) do { if (nbits < (n)) { BITS_OUT(); fill(d); BITS_IN(); } } while (0)
+
 static int decode_block(JDec *d, JComp *c)
 {
     int16_t *blk = d->blk;
-    const int16_t *q = c->q;
-    int s, k, ac = 0;
-    memset(blk, 0, sizeof(d->blk));
+    uint8_t *nz = d->nz + 1;
+    const int16_t *q = c->q, *sc = c->sc;
+    const int32_t *fast = d->ha[c->ta].fast;
+    uint32_t bits;
+    int nbits, s, k;
+    int32_t f;
     s = decode_huff(d, &d->hd[c->td]);
     if (s) {
         if (s > 15)
@@ -526,33 +599,83 @@ static int decode_block(JDec *d, JComp *c)
         c->dc += extend(getbits(d, s), s);
     }
     blk[0] = sat16((int32_t)sat16(c->dc) * q[0]);
-    if (c->aan)                         /* s(0)s(0) = 1: times 2^PS */
-        blk[0] = sat16((int32_t)blk[0] * (1 << PS));
+    blk[0] = sat16(((int32_t)blk[0] * sc[0] + (1L << (13 - PS))) >> (14 - PS));
+    d->nz[0] = 0;
+    BITS_IN();
+    if (c->bs == 1) {                   /* the DC alone: the rest only passed over */
+        for (k = 1; k < 64; k++) {
+            NEED(FB);
+            f = fast[(bits >> (nbits - FB)) & FMASK];
+            if (f) {
+                nbits -= f & 255;
+                k += (f >> 8) & 255;
+            } else {
+                BITS_OUT();
+                s = decode_huff(d, &d->ha[c->ta]);
+                if (s & 15) {
+                    if (d->nbits < (s & 15))
+                        fill(d);
+                    d->nbits -= s & 15;
+                } else if (s != 0xF0) {
+                    BITS_IN();
+                    break;              /* end of block */
+                }
+                BITS_IN();
+                k += s >> 4;
+            }
+        }
+        BITS_OUT();
+        return 1;
+    }
     for (k = 1; k < 64; k++) {
-        int rs = decode_huff(d, &d->ha[c->ta]), r = rs >> 4;
-        s = rs & 15;
-        if (s) {
-            int n;
-            k += r;
+        int z, v;
+        NEED(FB);
+        f = fast[(bits >> (nbits - FB)) & FMASK];
+        if (f) {                        /* run, size and value in the FB bits */
+            nbits -= f & 255;
+            k += (f >> 8) & 255;
             if (k > 63)
                 break;
-            n = zigzag[k];
-            if (q[n]) {                 /* 0: outside what this scale reads */
-                int32_t v = sat16((int32_t)(int16_t)extend(getbits(d, s), s) * q[n]);
-                if (c->aan)             /* the AAN scale, per coefficient: a second muls.w */
-                    v = ((int32_t)(int16_t)v * (int16_t)aan[n] + (1L << (13 - PS))) >> (14 - PS);
-                blk[n] = sat16(v);
-                ac = 1;
-            } else {
-                getbits(d, s);          /* read, not kept */
-            }
+            v = f >> 16;
         } else {
-            if (r != 15)
+            int rs, r;
+            BITS_OUT();
+            rs = decode_huff(d, &d->ha[c->ta]);
+            r = rs >> 4;
+            s = rs & 15;
+            if (!s) {
+                BITS_IN();
+                if (r != 15)
+                    break;              /* end of block */
+                k += 15;
+                continue;
+            }
+            k += r;
+            if (k > 63) {
+                BITS_IN();
                 break;
-            k += 15;
+            }
+            v = extend(getbits(d, s), s);
+            BITS_IN();
+        }
+        z = zigzag[k];
+        if (q[z]) {                     /* 0: outside what this scale reads */
+            /* two muls.w: the quantiser, then the AAN scale (or 1). Valid
+             * data stays in 16 bits; damaged data wraps, harmlessly */
+            int16_t t = (int16_t)(v * q[z]);
+            blk[z] = (int16_t)(((int32_t)t * sc[z] + (1L << (13 - PS))) >> (14 - PS));
+            *nz++ = (uint8_t)z;
         }
     }
-    return ac;
+    BITS_OUT();
+    return (int)(nz - d->nz);
+}
+
+/* After the IDCT: the block back to zeros, only where it was written. */
+static void clear_block(JDec *d, int n)
+{
+    while (n-- > 0)
+        d->blk[d->nz[n]] = 0;
 }
 
 /* ------------------------------------------------------------------ IDCT */
@@ -723,12 +846,14 @@ static void tables(JDec *d)
     int i;
     for (i = 0; i < 1024; i++)
         d->clamp[i] = (uint8_t)(i < 256 ? i : i < 640 ? 255 : 0);
+    for (i = 0; i < 768; i++)
+        d->cclamp[i] = (uint8_t)(i < 256 ? 0 : i < 512 ? i - 256 : 255);
     for (i = 0; i < 256; i++) {
         int32_t x = i - 128;
-        d->crr[i] = (int16_t)((91881L * x + 32768) >> 16);
-        d->cbb[i] = (int16_t)((116130L * x + 32768) >> 16);
-        d->crg[i] = -46802L * x;
-        d->cbg[i] = -22553L * x + 32768;
+        d->cr[i].rb = (int16_t)((91881L * x + 32768) >> 16);
+        d->cb[i].rb = (int16_t)((116130L * x + 32768) >> 16);
+        d->cr[i].g = -46802L * x;
+        d->cb[i].g = -22553L * x + 32768;
     }
 }
 
@@ -772,7 +897,7 @@ static int setup(JDec *d, int scale)
         /* the coefficients this block size reads (0 in q: skipped): all for
          * 8 x 8; for the averaging 4 x 4 all but row and column 4; for
          * 2 x 2 rows and columns 0, 1, 3, 5, 7; for 1 x 1 the DC */
-        c->aan = c->bs == 8;
+        c->sc = c->bs == 8 ? aan : flat;
         for (k = 0; k < 64; k++) {
             int u = k >> 3, v = k & 7, use;
             switch (c->bs) {
@@ -827,24 +952,32 @@ static void restart_marker(JDec *d)
 static void decode_band(JDec *d, int which, int32_t *mcu)
 {
     int32_t mx;
+    uint8_t *mp[4];                     /* each scan component's next MCU in the band */
+    int i;
+    for (i = 0; i < d->ns; i++)
+        mp[i] = d->c[d->scomp[i]].buf[which];
     for (mx = 0; mx < d->mcux; mx++) {
-        int i;
         if (d->restart && *mcu && *mcu % d->restart == 0)
             restart_marker(d);
         for (i = 0; i < d->ns; i++) {
             JComp *c = &d->c[d->scomp[i]];
             int bx, by, bs = c->bs;
-            for (by = 0; by < c->v; by++)
-                for (bx = 0; bx < c->h; bx++) {
-                    uint8_t *o = c->buf[which] + (int32_t)by * bs * c->rowlen + (mx * c->h + bx) * bs;
-                    int ac = decode_block(d, c);
+            int32_t rl = c->rowlen;
+            uint8_t *row = mp[i];
+            for (by = 0; by < c->v; by++, row += bs * rl) {
+                uint8_t *o = row;
+                for (bx = 0; bx < c->h; bx++, o += bs) {
+                    int n = decode_block(d, c), ac = n > 1;
                     switch (bs) {
-                    case 8: idct8(d, o, c->rowlen, ac); break;
-                    case 4: idct4(d, o, c->rowlen, ac); break;
-                    case 2: idct2(d, o, c->rowlen, ac); break;
-                    default: idct1(d, o, c->rowlen, ac); break;
+                    case 8: idct8(d, o, rl, ac); break;
+                    case 4: idct4(d, o, rl, ac); break;
+                    case 2: idct2(d, o, rl, ac); break;
+                    default: idct1(d, o, rl, ac); break;
                     }
+                    clear_block(d, n);
                 }
+            }
+            mp[i] += c->h * bs;
         }
         (*mcu)++;
     }
@@ -901,14 +1034,24 @@ static const uint8_t *comp_out(JComp *c, int r, int32_t b, int cur, int nxt)
                 o[0] = o[1] = near[0];
                 return o;
             }
-            o[0] = near[0];
-            o[1] = (uint8_t)((near[0] * 3 + near[1] + 2) >> 2);
-            for (i = 1; i < n - 1; i++) {
-                o[2 * i] = (uint8_t)((near[i] * 3 + near[i - 1] + 1) >> 2);
-                o[2 * i + 1] = (uint8_t)((near[i] * 3 + near[i + 1] + 2) >> 2);
+            {
+                const uint8_t *a = near + 1, *e = near + n - 1;
+                uint8_t *q = o + 2;
+                int last = near[0], this = near[1], t;
+                o[0] = (uint8_t)last;
+                o[1] = (uint8_t)((last * 3 + this + 2) >> 2);
+                while (a < e) {
+                    int next = a[1];
+                    t = this * 3;
+                    *q++ = (uint8_t)((t + last + 1) >> 2);
+                    *q++ = (uint8_t)((t + next + 2) >> 2);
+                    last = this;
+                    this = next;
+                    a++;
+                }
+                *q++ = (uint8_t)((this * 3 + last + 1) >> 2);
+                *q = (uint8_t)this;
             }
-            o[2 * i] = (uint8_t)((near[i] * 3 + near[i - 1] + 1) >> 2);
-            o[2 * i + 1] = near[i];
         } else {
             const uint8_t *far = comp_row(c, (r & 1) ? k + 1 : k - 1, b, cur, nxt);
             int32_t last, this, next;
@@ -924,15 +1067,20 @@ static const uint8_t *comp_out(JComp *c, int r, int32_t b, int cur, int nxt)
             o[1] = (uint8_t)((this * 3 + next + 7) >> 4);
             last = this;
             this = next;
-            for (i = 1; i < n - 1; i++) {
-                next = near[i + 1] * 3 + far[i + 1];
-                o[2 * i] = (uint8_t)((this * 3 + last + 8) >> 4);
-                o[2 * i + 1] = (uint8_t)((this * 3 + next + 7) >> 4);
-                last = this;
-                this = next;
+            {
+                const uint8_t *a = near + 2, *f = far + 2;
+                uint8_t *q = o + 2, *e = o + 2 * (n - 1);
+                while (q < e) {
+                    int32_t t = this * 3;
+                    next = *a++ * 3 + *f++;
+                    *q++ = (uint8_t)((t + last + 8) >> 4);
+                    *q++ = (uint8_t)((t + next + 7) >> 4);
+                    last = this;
+                    this = next;
+                }
+                q[0] = (uint8_t)((this * 3 + last + 8) >> 4);
+                q[1] = (uint8_t)((this * 4 + 7) >> 4);
             }
-            o[2 * i] = (uint8_t)((this * 3 + last + 8) >> 4);
-            o[2 * i + 1] = (uint8_t)((this * 4 + 7) >> 4);
         }
         return o;
     }
@@ -944,6 +1092,57 @@ static const uint8_t *comp_out(JComp *c, int r, int32_t b, int cur, int nxt)
         return o;
     }
 }
+
+/* One row of YCbCr to RGB, n > 0 pixels; cl is cclamp + 256 */
+#if defined(__GNUC__) && !defined(JD_NO_ASM) && \
+    (defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__))
+/* 16 instructions a pixel: the three samples' registers keep their upper
+ * bits zero for word indexes, and the 68020's index * 8 reads the tables */
+void jd_ycc_row(uint8_t *o, const uint8_t *y, const uint8_t *cb, const uint8_t *cr,
+                int32_t n, const uint8_t *cl, const JCol *crt, const JCol *cbt);
+#define JD_S2(x) #x
+#define JD_S(x) JD_S2(x)
+#define JD_SYM JD_S(__USER_LABEL_PREFIX__) "jd_ycc_row"
+__asm__(
+    "\t.text\n\t.even\n\t.globl " JD_SYM "\n" JD_SYM ":\n"
+    "\tmovem.l %d2-%d7/%a2-%a6,-(%sp)\n"
+    "\tmovem.l 48(%sp),%a0-%a3\n"            /* o, y, cb, cr (mask order) */
+    "\tmove.l 64(%sp),%d7\n"                  /* n */
+    "\tmovem.l 68(%sp),%a4-%a6\n"            /* cl, crt, cbt */
+    "\tmoveq #0,%d0\n\tmoveq #0,%d1\n\tmoveq #0,%d2\n"
+    "1:\tmove.b (%a1)+,%d0\n"                 /* Y */
+    "\tmove.b (%a3)+,%d1\n"                   /* Cr */
+    "\tmove.b (%a2)+,%d2\n"                   /* Cb */
+    "\tmove.w (%a5,%d1.w*8),%d3\n"
+    "\tadd.w %d0,%d3\n"
+    "\tmove.b (%a4,%d3.w),(%a0)+\n"           /* R */
+    "\tmove.l 4(%a5,%d1.w*8),%d4\n"
+    "\tadd.l 4(%a6,%d2.w*8),%d4\n"
+    "\tswap %d4\n"
+    "\tadd.w %d0,%d4\n"
+    "\tmove.b (%a4,%d4.w),(%a0)+\n"           /* G */
+    "\tmove.w (%a6,%d2.w*8),%d3\n"
+    "\tadd.w %d0,%d3\n"
+    "\tmove.b (%a4,%d3.w),(%a0)+\n"           /* B */
+    "\tsubq.l #1,%d7\n"
+    "\tbne.s 1b\n"
+    "\tmovem.l (%sp)+,%d2-%d7/%a2-%a6\n"
+    "\trts\n");
+#define ycc_row jd_ycc_row
+#else
+static void ycc_row(uint8_t *o, const uint8_t *y, const uint8_t *cb, const uint8_t *cr,
+                    int32_t n, const uint8_t *cl, const JCol *crt, const JCol *cbt)
+{
+    const uint8_t *e = y + n;
+    while (y < e) {
+        int l = *y++;
+        const JCol *r = crt + *cr++, *b = cbt + *cb++;
+        *o++ = cl[l + r->rb];
+        *o++ = cl[l + (int)((r->g + b->g) >> 16)];
+        *o++ = cl[l + b->rb];
+    }
+}
+#endif
 
 static int emit_band(JDec *d, int32_t b, int cur, int nxt)
 {
@@ -970,13 +1169,7 @@ static int emit_band(JDec *d, int32_t b, int cur, int nxt)
                     o[2] = p2[x];
                 }
             } else {
-                const uint8_t *cl = d->clamp;
-                for (x = 0; x < d->outw; x++, o += 3) {
-                    int y = p0[x], cb = p1[x], cr = p2[x];
-                    o[0] = cl[(y + d->crr[cr]) & 1023];
-                    o[1] = cl[(y + (int)((d->cbg[cb] + d->crg[cr]) >> 16)) & 1023];
-                    o[2] = cl[(y + d->cbb[cb]) & 1023];
-                }
+                ycc_row(o, p0, p1, p2, d->outw, d->cclamp + 256, d->cr, d->cb);
             }
         }
     }
