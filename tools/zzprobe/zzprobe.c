@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.10 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.11 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -547,9 +547,13 @@ static int nrows;
  * system's datatype at 1/1 (sysph) and through amcejpeg at each scale */
 enum { PH_READ, PH_NEW, PH_HEADERS, PH_SETATTRS, PH_DECODE, PH_WRITE, PH_LAYOUT, PH_DISPOSE,
        PH_TOTAL, PH_N };
-static ULONG sysph[PH_N], ourph[NSC][PH_N], modeph[PH_N];   /* modeph: ours, 1/1, its ModeID given */
-static BOOL have_sysph, have_ourph, have_modeph;
-static ULONG sys_mode = (ULONG)INVALID_ID, our_mode = (ULONG)INVALID_ID;
+static ULONG sysph[PH_N], modeph[PH_N];   /* modeph: ours, 1/1, given WarpJPEG's ModeID */
+static BOOL have_sysph, have_modeph;
+static ULONG sys_mode = (ULONG)INVALID_ID;
+/* the JPEG classes benched side by side, each made into objects directly */
+enum { CL_WARP, CL_JFIF, CL_OURS, CL_N };
+static ULONG clph[CL_N][NSC][PH_N];       /* the fastest run's parts, at each scale */
+static ULONG cl_mode[CL_N];               /* the display mode each one's object ends with */
 static char notes[8][160];
 static int nnotes;
 
@@ -699,12 +703,11 @@ struct ClsRun {
     Class *cl;
     struct DataType *dtn;
     const char *path;
-    UBYTE *buf;
-    LONG len;
     ULONG fitw, fith;
     ULONG w, h, scale;
     ULONG *ph;                          /* the fastest run's parts */
     ULONG mode;                         /* PDTA_ModeID to give it, or INVALID_ID */
+    ULONG *mode_out;                    /* where to put the mode it ends with */
 };
 
 static LONG cls_once(void *p)
@@ -713,11 +716,14 @@ static LONG cls_once(void *p)
     struct BitMapHeader *bmh = NULL;
     ULONG sc = 0, dec = 0, wr = 0, hd = 0, sa = 0, t0 = now_us(), t1, t2, t3, t4;
     Object *o;
-    if (!file_read(c->path, c->buf, c->len))   /* the file read each time, as a datatype does */
+    /* the file opened here and given to the object, as NewDTObject does
+     * (DTA_Handle: a file handle, for DTST_FILE); the object closes it when
+     * it is disposed of, so it is not closed here, even when OM_NEW fails */
+    BPTR fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE);
+    if (!fh)
         return IoErr() ? IoErr() : -1;
     t1 = now_us();
-    o = NewObject(c->cl, NULL, DTA_SourceType, DTST_MEMORY,
-                  DTA_SourceAddress, (ULONG)c->buf, DTA_SourceSize, (ULONG)c->len,
+    o = NewObject(c->cl, NULL, DTA_SourceType, DTST_FILE, DTA_Handle, (ULONG)fh,
                   DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
                   PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43,
                   JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith,
@@ -732,8 +738,8 @@ static LONG cls_once(void *p)
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
                JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr,
                JDTA_TimeHeaders, (ULONG)&hd, JDTA_TimeSetAttrs, (ULONG)&sa, TAG_END);
-    if (c->ph && c->mode == (ULONG)INVALID_ID)
-        GetDTAttrs(o, PDTA_ModeID, (ULONG)&our_mode, TAG_END);
+    if (c->ph && c->mode_out)
+        GetDTAttrs(o, PDTA_ModeID, (ULONG)c->mode_out, TAG_END);
     if (bmh) {
         c->w = bmh->bmh_Width;
         c->h = bmh->bmh_Height;
@@ -745,8 +751,8 @@ static LONG cls_once(void *p)
         t4 = now_us() - d0;             /* disposing */
         tot = (t3 - t0) + t4;
         if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
-            c->ph[PH_READ] = t1 - t0;
-            c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and ours with the decode */
+            c->ph[PH_READ] = t1 - t0;   /* opening it: the reading is the class's, in OM_NEW */
+            c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and the class's with the decode */
             c->ph[PH_HEADERS] = hd;
             c->ph[PH_SETATTRS] = sa;
             c->ph[PH_DECODE] = dec > wr + hd + sa ? dec - wr - hd - sa : 0;
@@ -865,29 +871,8 @@ static void expunge_lib(const char *name)
 }
 
 /* jfif.datatype (Henryk Richter's) decodes smaller only through its
- * prefs (SCALE=0..3 in ENV:classes/datatypes/jfif44.prefs, for everyone):
- * set for each scale here, the library expunged so it reads them again,
- * and whatever was there put back */
+ * prefs (SCALE=0..3 here, read when it is loaded, for every program) */
 #define JFIF_PREFS "classes/datatypes/jfif44.prefs"
-static void bench_jfif_scales(struct DtRun *c, struct Row *r)
-{
-    char old[200], val[220];
-    LONG had = GetVar((STRPTR)JFIF_PREFS, (STRPTR)old, sizeof(old), GVF_GLOBAL_ONLY);
-    int s;
-    for (s = 1; s < NSC; s++) {
-        snprintf(val, sizeof(val), "%s%sSCALE=%ld", had > 0 ? old : "", had > 0 ? " " : "", (long)s);
-        SetVar((STRPTR)JFIF_PREFS, (STRPTR)val, -1, GVF_GLOBAL_ONLY);
-        expunge_lib("jfif.datatype");
-        if (timed(dt_once, c, NULL, &r->best[s], &r->mean[s]))
-            break;
-    }
-    if (had > 0)
-        SetVar((STRPTR)JFIF_PREFS, (STRPTR)old, -1, GVF_GLOBAL_ONLY);
-    else
-        DeleteVar((STRPTR)JFIF_PREFS, GVF_GLOBAL_ONLY);
-    expunge_lib("jfif.datatype");
-    note_add("jfif.datatype at 1/2 to 1/8: its own SCALE prefs, set for the test and put back");
-}
 
 static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG *pw, ULONG *ph)
 {
@@ -923,8 +908,6 @@ static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG
         *pw = c.w;
     if (ph)
         *ph = c.h;
-    if (!strcmp(c.base, "jfif"))
-        bench_jfif_scales(&c, r);
     if (is_ours && *is_ours) {          /* its size hint, at each scale */
         int s;
         for (s = 1; s < NSC; s++) {
@@ -980,94 +963,138 @@ static void lib_diag(const char *path)
     note_add(line);
 }
 
-static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
+/* One JPEG class, its objects made directly from the file at each scale
+ * it can do: ours through its size hint, jfif.datatype through its
+ * prefs, others at 1/1. Installed (datatypes/), or beside zzprobe. */
+static const char *const cl_name[CL_N] = { "WarpJPEG.datatype", "jfif.datatype", "amcejpeg.datatype" };
+static const char *const cl_local[CL_N] = { NULL, "PROGDIR:jfif/jfif.datatype", "PROGDIR:amcejpeg/amcejpeg.datatype" };
+
+static struct Library *cl_open(int k, BOOL *local)
+{
+    char name[64];
+    struct Library *lib;
+    snprintf(name, sizeof(name), "datatypes/%s", cl_name[k]);
+    *local = FALSE;
+    lib = OpenLibrary((CONST_STRPTR)name, k == CL_OURS ? 46 : 0);
+    if (!lib && cl_local[k] && (lib = OpenLibrary((CONST_STRPTR)cl_local[k], k == CL_OURS ? 46 : 0)))
+        *local = TRUE;
+    return lib;
+}
+
+static void ours_why_not(struct Row *r)
+{
+    char why[100];
+    why[0] = 0;
+    if (!exists("PROGDIR:amcejpeg/amcejpeg.datatype") &&
+        !exists("SYS:Classes/DataTypes/amcejpeg.datatype")) {
+        strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
+    } else if (GetVar((STRPTR)"amcejpeg.datatype", (STRPTR)why, sizeof(why), GVF_GLOBAL_ONLY) > 0) {
+        snprintf(r->note, sizeof(r->note), "would not start: %s", why);
+    } else {
+        struct Library *pd = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 0);
+        snprintf(r->note, sizeof(r->note), "found, but would not open (picture.datatype here: %ld.%ld)",
+                 pd ? (long)pd->lib_Version : 0L, pd ? (long)pd->lib_Revision : 0L);
+        if (pd)
+            CloseLibrary(pd);
+        lib_diag(exists("SYS:Classes/DataTypes/amcejpeg.datatype")
+                 ? "SYS:Classes/DataTypes/amcejpeg.datatype" : "PROGDIR:amcejpeg/amcejpeg.datatype");
+    }
+}
+
+static void bench_class(int k, const char *path, ULONG w, ULONG h)
 {
     struct Library *lib;
-    expunge_lib("amcejpeg.datatype");
-    lib = OpenLibrary((CONST_STRPTR)"datatypes/amcejpeg.datatype", 46);
     struct ClsRun c;
     struct Row *r;
+    char label[48], old[200], val[220];
     BPTR lock;
-    LONG err;
-    int s;
-    BOOL local = FALSE;
-    if (!lib && (lib = OpenLibrary((CONST_STRPTR)"PROGDIR:amcejpeg/amcejpeg.datatype", 46)))
-        local = TRUE;
-    r = row_new("JPEG", local ? "amcejpeg.datatype (*)" : "amcejpeg.datatype");
+    LONG err, had = 0;
+    int s, ns = k == CL_WARP ? 1 : NSC;
+    BOOL local;
+    expunge_lib(cl_name[k]);            /* the file on disk, not one an earlier run left */
+    lib = cl_open(k, &local);
+    snprintf(label, sizeof(label), "%s%s", cl_name[k], local ? " (*)" : "");
+    r = row_new("JPEG", label);
     if (!lib) {
-        char why[100];
-        why[0] = 0;
-        if (!exists("PROGDIR:amcejpeg/amcejpeg.datatype") &&
-            !exists("SYS:Classes/DataTypes/amcejpeg.datatype")) {
-            strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
-        } else if (GetVar((STRPTR)"amcejpeg.datatype", (STRPTR)why, sizeof(why), GVF_GLOBAL_ONLY) > 0) {
-            snprintf(r->note, sizeof(r->note), "would not start: %s", why);
-        } else {
-            struct Library *pd = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 0);
-            snprintf(r->note, sizeof(r->note), "found, but would not open (picture.datatype here: %ld.%ld)",
-                     pd ? (long)pd->lib_Version : 0L, pd ? (long)pd->lib_Revision : 0L);
-            if (pd)
-                CloseLibrary(pd);
-            lib_diag(exists("SYS:Classes/DataTypes/amcejpeg.datatype")
-                     ? "SYS:Classes/DataTypes/amcejpeg.datatype" : "PROGDIR:amcejpeg/amcejpeg.datatype");
-        }
+        if (k == CL_OURS)
+            ours_why_not(r);
+        else
+            snprintf(r->note, sizeof(r->note), "not installed%s", cl_local[k] ? ", nor beside zzprobe" : "");
         return;
     }
     if (local)
-        note_add("(*) not installed: loaded from PROGDIR:amcejpeg for this test");
+        note_add("(*) not installed: loaded from beside zzprobe for this test");
     memset(&c, 0, sizeof(c));
     c.path = path;
     c.mode = (ULONG)INVALID_ID;
     c.cl = ObtainEngine(lib);
-    c.len = file_size(path);
     if ((lock = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
         c.dtn = ObtainDataTypeA(DTST_FILE, (APTR)lock, NULL);
         UnLock(lock);
     }
-    if (!c.cl || c.len <= 0 || !(c.buf = AllocVec((ULONG)c.len, MEMF_ANY))) {
-        strcpy(r->note, "could not be set up");
-    } else {
-        memset(ourph, 0, sizeof(ourph));
-        for (s = 0; s < NSC; s++) {
-            if (s) {
-                c.fitw = (w + (1UL << s) - 1) >> s;
-                c.fith = (h + (1UL << s) - 1) >> s;
-            }
-            c.ph = NULL;                /* the first load apart */
-            if (!s) {
-                ULONG t0 = now_us();
-                if ((err = cls_once(&c))) {
-                    why(err, r->note, sizeof(r->note));
-                    break;
-                }
-                r->first = now_us() - t0;
-                if (!r->first)
-                    r->first = 1;
-            }
-            c.ph = ourph[s];
-            if ((err = timed(cls_once, &c, NULL, &r->best[s], &r->mean[s]))) {
-                why(err, r->note, sizeof(r->note));
+    memset(clph[k], 0, sizeof(clph[k]));
+    cl_mode[k] = (ULONG)INVALID_ID;
+    if (k == CL_JFIF)
+        had = GetVar((STRPTR)JFIF_PREFS, (STRPTR)old, sizeof(old), GVF_GLOBAL_ONLY);
+    for (s = 0; s < ns && c.cl; s++) {
+        if (s && k == CL_OURS) {        /* its size hint */
+            c.fitw = (w + (1UL << s) - 1) >> s;
+            c.fith = (h + (1UL << s) - 1) >> s;
+        }
+        if (s && k == CL_JFIF) {        /* its prefs, read when it is loaded */
+            snprintf(val, sizeof(val), "%s%sSCALE=%ld", had > 0 ? old : "", had > 0 ? " " : "", (long)s);
+            SetVar((STRPTR)JFIF_PREFS, (STRPTR)val, -1, GVF_GLOBAL_ONLY);
+            CloseLibrary(lib);
+            expunge_lib(cl_name[k]);
+            if (!(lib = cl_open(k, &local)) || !(c.cl = ObtainEngine(lib))) {
+                strcpy(r->note, "could not be loaded again");
                 break;
             }
         }
+        c.ph = NULL;
+        c.mode_out = NULL;
+        if (!s) {                       /* the first load apart */
+            ULONG t0 = now_us();
+            if ((err = cls_once(&c))) {
+                why(err, r->note, sizeof(r->note));
+                break;
+            }
+            r->first = now_us() - t0;
+            if (!r->first)
+                r->first = 1;
+        }
+        c.ph = clph[k][s];
+        c.mode_out = s ? NULL : &cl_mode[k];
+        if ((err = timed(cls_once, &c, NULL, &r->best[s], &r->mean[s]))) {
+            why(err, r->note, sizeof(r->note));
+            break;
+        }
     }
-    if (ourph[0][PH_TOTAL])
-        have_ourph = TRUE;
-    /* again at 1/1, given the system's datatype's mode: is the layout's
-     * time picture.datatype choosing one (BestModeID over every mode)? */
-    if (have_ourph && have_sysph && sys_mode != (ULONG)INVALID_ID) {
+    if (k == CL_JFIF) {
+        if (had > 0)
+            SetVar((STRPTR)JFIF_PREFS, (STRPTR)old, -1, GVF_GLOBAL_ONLY);
+        else
+            DeleteVar((STRPTR)JFIF_PREFS, GVF_GLOBAL_ONLY);
+        note_add("jfif.datatype at 1/2 to 1/8: its own SCALE prefs, set for the test and put back");
+    }
+    /* ours again at 1/1, given WarpJPEG's display mode: is the layout's
+     * time picture.datatype choosing one? */
+    if (k == CL_OURS && clph[CL_OURS][0][PH_TOTAL] && cl_mode[CL_WARP] != (ULONG)INVALID_ID) {
         ULONG b, m;
         memset(modeph, 0, sizeof(modeph));
         c.fitw = c.fith = 0;
-        c.mode = sys_mode;
+        c.mode = cl_mode[CL_WARP];
         c.ph = modeph;
+        c.mode_out = NULL;
         if (!timed(cls_once, &c, NULL, &b, &m))
             have_modeph = TRUE;
     }
-    FreeVec(c.buf);
     if (c.dtn)
         ReleaseDataType(c.dtn);
-    CloseLibrary(lib);
+    if (lib)
+        CloseLibrary(lib);
+    if (k == CL_JFIF)
+        expunge_lib(cl_name[k]);        /* its prefs as they were, next time */
 }
 
 static void ph_cell(char *out, ULONG us, BOOL have)
@@ -1084,7 +1111,7 @@ static void ph_cell(char *out, ULONG us, BOOL have)
 static void time_parts(void)
 {
     static const char *const name[PH_N] = {
-        "read the file into memory",
+        "open the file",
         "make the object (OM_NEW)",
         "  of which: headers (jd_open)",
         "  of which: SetDTAttrs (size, mode)",
@@ -1094,81 +1121,47 @@ static void time_parts(void)
         "dispose of the object",
         "total",
     };
-    char line[200], c[NSC + 2][16], sys[48];
-    int i, s;
-    if (!have_sysph && !have_ourph)
+    char line[220], c[8][16];
+    int i, s, k, n;
+    BOOL have[CL_N];
+    for (k = 0; k < CL_N; k++)
+        have[k] = clph[k][0][PH_TOTAL] != 0;
+    if (!have[CL_WARP] && !have[CL_JFIF] && !have[CL_OURS])
         return;
-    snprintf(sys, sizeof(sys), "%.14s", rows[0].dec);
     heading("Where a JPEG's time goes (ms, the parts of the fastest run)");
-    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s %-8s", "", have_sysph ? sys : "",
-             "ours 1/1", "1/2", "1/4", "1/8", have_modeph ? "1/1+mode" : "");
+    snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s %-8s", "", "Warp 1/1",
+             "jfif 1/1", "ours 1/1", "1/2", "1/4", "1/8", have_modeph ? "1/1+mode" : "");
     sayf(line);
     for (i = 0; i < PH_N; i++) {
-        BOOL sys_has = have_sysph && i != PH_READ && i != PH_DECODE && i != PH_WRITE &&
-                       i != PH_HEADERS && i != PH_SETATTRS;
-        ph_cell(c[0], sysph[i], sys_has);
+        BOOL ours_only = i == PH_HEADERS || i == PH_SETATTRS || i == PH_DECODE || i == PH_WRITE;
+        n = 0;
+        ph_cell(c[n++], clph[CL_WARP][0][i], have[CL_WARP] && !ours_only);
+        ph_cell(c[n++], clph[CL_JFIF][0][i], have[CL_JFIF] && !ours_only);
         for (s = 0; s < NSC; s++)
-            ph_cell(c[s + 1], ourph[s][i], have_ourph && ourph[s][PH_TOTAL]);
-        ph_cell(c[NSC + 1], modeph[i], have_modeph);
+            ph_cell(c[n++], clph[CL_OURS][s][i], have[CL_OURS] && clph[CL_OURS][s][PH_TOTAL]);
+        ph_cell(c[n], modeph[i], have_modeph);
         if (!have_modeph)
-            c[NSC + 1][0] = 0;
-        snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s %-8s", name[i], c[0],
-                 c[1], c[2], c[3], c[4], c[5]);
+            c[n][0] = 0;
+        snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s %-8s", name[i],
+                 c[0], c[1], c[2], c[3], c[4], c[5], c[6]);
         sayf(line);
     }
-    /* what AmigaMCE's thumbnails of deep pictures take: no layout */
-    ph_cell(c[0], sysph[PH_TOTAL] - sysph[PH_LAYOUT], have_sysph);
+    n = 0;                              /* what AmigaMCE's thumbnails of deep pictures take */
+    ph_cell(c[n++], clph[CL_WARP][0][PH_TOTAL] - clph[CL_WARP][0][PH_LAYOUT], have[CL_WARP]);
+    ph_cell(c[n++], clph[CL_JFIF][0][PH_TOTAL] - clph[CL_JFIF][0][PH_LAYOUT], have[CL_JFIF]);
     for (s = 0; s < NSC; s++)
-        ph_cell(c[s + 1], ourph[s][PH_TOTAL] - ourph[s][PH_LAYOUT], have_ourph && ourph[s][PH_TOTAL]);
-    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", "total without the layout (thumbnails)",
-             c[0], c[1], c[2], c[3], c[4]);
+        ph_cell(c[n++], clph[CL_OURS][s][PH_TOTAL] - clph[CL_OURS][s][PH_LAYOUT],
+                have[CL_OURS] && clph[CL_OURS][s][PH_TOTAL]);
+    snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s", "total without the layout (thumbnails)",
+             c[0], c[1], c[2], c[3], c[4], c[5]);
     sayf(line);
-    snprintf(line, sizeof(line), "  Display mode after layout: %.14s $%08lx, ours $%08lx%s", sys,
-             (unsigned long)sys_mode, (unsigned long)our_mode,
-             have_modeph ? "; 1/1+mode: ours given the other's mode" : "");
+    snprintf(line, sizeof(line), "  Display mode after layout: WarpJPEG $%08lx, jfif $%08lx, ours $%08lx",
+             (unsigned long)cl_mode[CL_WARP], (unsigned long)cl_mode[CL_JFIF], (unsigned long)cl_mode[CL_OURS]);
     sayf(line);
-    sayf("  The system's datatype reads the file inside OM_NEW. The rest of OM_NEW, past");
+    if (have_modeph)
+        sayf("  1/1+mode: ours again, given WarpJPEG's display mode when it is made.");
+    sayf("  Each class's objects made directly, from the file. The rest of OM_NEW past");
     sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
-}
-
-static void bench_builtin_jpeg(const char *path)
-{
-    struct Row *r = row_new("JPEG", "built in (jdec, from memory)");
-    struct JdRun c;
-    int s;
-    memset(&c, 0, sizeof(c));
-    c.len = file_size(path);
-    if (c.len <= 0 || !(c.data = AllocVec((ULONG)c.len, MEMF_ANY)) || !file_read(path, c.data, c.len)) {
-        strcpy(r->note, "the test file could not be read into memory");
-        FreeVec(c.data);
-        return;
-    }
-    for (s = 0; s < NSC; s++) {
-        c.scale = s;
-        if (timed(jd_once, &c, NULL, &r->best[s], &r->mean[s])) {
-            snprintf(r->note, sizeof(r->note), "failed: %s", jd_why(c.err));
-            break;
-        }
-    }
-    FreeVec(c.data);
-}
-
-static void cell(char *out, ULONG best, ULONG mean)
-{
-    char b[16], m[16];
-    if (!best) {
-        strcpy(out, "-");
-        return;
-    }
-    if (best >= 10000)
-        sprintf(b, "%ld", (long)((best + 500) / 1000));
-    else
-        sprintf(b, "%ld.%ld", (long)(best / 1000), (long)(best % 1000 / 100));
-    if (mean >= 10000)
-        sprintf(m, "%ld", (long)((mean + 500) / 1000));
-    else
-        sprintf(m, "%ld.%ld", (long)(mean / 1000), (long)(mean % 1000 / 100));
-    sprintf(out, "%s (%s)", b, m);
 }
 
 static void bench_pictures(const char *jpeg, const char *png, const char *webp)
@@ -1178,11 +1171,15 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     BOOL ours = FALSE;
     int i, s;
     nrows = nnotes = 0;
-    have_sysph = have_ourph = have_modeph = FALSE;
-    sys_mode = our_mode = (ULONG)INVALID_ID;
+    have_sysph = have_modeph = FALSE;
+    sys_mode = (ULONG)INVALID_ID;
+    memset(clph, 0, sizeof(clph));
     bench_system("JPEG", jpeg, &ours, &jw, &jh);
-    if (!ours && exists(jpeg))
-        bench_ours_jpeg(jpeg, jw, jh);
+    if (exists(jpeg)) {                 /* the JPEG datatypes here, side by side */
+        int k;
+        for (k = 0; k < CL_N; k++)
+            bench_class(k, jpeg, jw, jh);
+    }
     if (exists(jpeg))
         bench_builtin_jpeg(jpeg);
     bench_system("PNG", png, NULL, NULL, NULL);
@@ -1419,7 +1416,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.10, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.11, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
