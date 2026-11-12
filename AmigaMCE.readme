@@ -41,7 +41,9 @@ Mods
   ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
   formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play
   through EaglePlayer's and DeliTracker's players where they are
-  installed (AGS has them). XM, S3M, IT, MTM, 669 and 6/8-channel MODs
+  installed (AGS has them). 6- and 8-channel MODs play on the same
+  replayer, channels 5 to 8 mixed onto Paula's four the way ProTracker
+  4.1 does (its mixer, by Andreas Wendorf). XM, S3M, IT, MTM and 669
   are mixed by modplug.library on a 68020 or better. Packed modules
   (PowerPacker, XPK...) are unpacked with xfdmaster.library.
 
@@ -300,6 +302,9 @@ Credits and licences
 AmigaMCE (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
 Its EaglePlayer host follows HippoPlayer's, and its spectrum analyser is
 HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
+6- and 8-channel modules are mixed the way ProTracker 4.1's 8-channel
+mixer does it (MIT, (c) 2026 Akustikrausch (Andreas Wendorf), used by his
+leave; ProTracker 4.1: https://github.com/akustikrausch/protracker4).
 
 The Extras drawer holds three Aminet archives, whole and unchanged, for
 the installer: modplug-68k (modplug.library 1.0, Thomas Wenzel's port of

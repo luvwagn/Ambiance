@@ -17,6 +17,12 @@
  * by something else) the tick waits them out on the beam instead.
  *
  * The module: header and patterns in any memory, samples in chip RAM.
+ *
+ * Modules of 5-8 channels ("8CHN", "OCTA", "FLT8"...) on a 68020 or
+ * better: the replayer drives eight Paulas in software (ptmix.c, after
+ * ProTracker 4.1's mixer by Andreas Wendorf), channel n + 4 mixed with
+ * channel n into a ring that Paula's channel n plays, a tick's worth at a
+ * time in a software interrupt (Cause) after each tick.
  */
 #include "amce.h"
 
@@ -38,6 +44,7 @@
 #include <proto/timer.h>
 
 #include "ptcore.h"
+#include "ptmix.h"
 
 extern struct ExecBase *SysBase;
 #define CU ((volatile struct Custom *)0xDFF000)
@@ -54,6 +61,8 @@ extern struct ExecBase *SysBase;
 #define CIAREG(base, r) (*(volatile UBYTE *)((base) + (r)))
 
 #define GAP_US 550
+#define MIX_RING 8192               /* bytes a ring (Paula's length: 4096 words) */
+#define MIX_Q    8                  /* ticks queued for mixing */
 
 enum { ENG_NONE, ENG_PT, ENG_EAGLE, ENG_MIX, ENG_RADIO };          /* each of the two gaps in starting a note */
 
@@ -116,6 +125,19 @@ static struct {
      * since then, at the count cnt */
     BOOL anc_on;
     ULONG anc_e, anc_done, anc_cnt;
+    /* 5-8 channels: mixed (ptmix.c). The replayer's registers for its
+     * eight channels; each tick's changes queued for the software
+     * interrupt that mixes them into Paula's rings */
+    BOOL mix8;
+    struct PtMix *pm;
+    BYTE *rings;                    /* chip: 4 x MIX_RING */
+    BYTE *vt;                       /* 65 x 256 */
+    struct { const pt_s8 *ptr; UWORD len, per; UBYTE vol; } vreg[PT_CHANS];
+    UBYTE voff;                     /* DMA switched off this tick */
+    struct PmTick q[MIX_Q];
+    volatile UWORD qhead, qtail;
+    struct Interrupt mix_int;
+    ULONG mix_lost;                 /* ticks the queue had no room for */
 } mp;
 
 /* ------------------------------------------------------------ Paula */
@@ -128,27 +150,172 @@ static UWORD scaled(UBYTE v)
 
 void pt_hw_period(int ch, pt_u16 p)
 {
-    CU->aud[ch].ac_per = p < 113 ? 113 : p;
+    if (mp.mix8)
+        mp.vreg[ch].per = p;
+    else
+        CU->aud[ch].ac_per = p < 113 ? 113 : p;
 }
 
 void pt_hw_volume(int ch, pt_u8 v)
 {
-    CU->aud[ch].ac_vol = scaled(v);
+    if (mp.mix8)
+        mp.vreg[ch].vol = v;
+    else
+        CU->aud[ch].ac_vol = scaled(v);
 }
 
 void pt_hw_data(int ch, const pt_s8 *ptr)
 {
-    CU->aud[ch].ac_ptr = (UWORD *)ptr;
+    if (mp.mix8)
+        mp.vreg[ch].ptr = ptr;
+    else
+        CU->aud[ch].ac_ptr = (UWORD *)ptr;
 }
 
 void pt_hw_length(int ch, pt_u16 words)
 {
-    CU->aud[ch].ac_len = words ? words : 1;
+    if (mp.mix8)
+        mp.vreg[ch].len = words ? words : 1;
+    else
+        CU->aud[ch].ac_len = words ? words : 1;
 }
 
 void pt_hw_dma_off(pt_u16 mask)
 {
-    CU->dmacon = mask & 0x0F;
+    if (mp.mix8)
+        mp.voff |= (UBYTE)mask;
+    else
+        CU->dmacon = mask & 0x0F;
+}
+
+/* ---- 5-8 channels: the mixing (ptmix.c) */
+static UWORD tick_count(UBYTE bpm);
+static void wait_lines(int n);
+
+/* The software interrupt: each tick queued, applied and mixed. */
+static void mix_code(void)
+{
+    while (mp.qtail != mp.qhead) {
+        struct PmTick *t = &mp.q[mp.qtail];
+        if (t->hold) {
+            pm_mix_silence(mp.pm, t->samples);     /* paused: the voices held */
+        } else {
+            pm_apply(mp.pm, t);
+            pm_mix(mp.pm, t->samples);
+        }
+        mp.qtail = (UWORD)((mp.qtail + 1) & (MIX_Q - 1));
+    }
+}
+
+/* This tick's changes queued (in the tempo interrupt): hold, a paused
+ * tick (silence, the voices where they are). */
+static void mix_queue(BOOL hold)
+{
+    struct Pt *pt = mp.pt;
+    UWORD next = (UWORD)((mp.qhead + 1) & (MIX_Q - 1));
+    struct PmTick *t;
+    int c;
+    if (next == mp.qtail) {
+        mp.mix_lost++;                      /* not mixed for a while: dropped */
+        mp.voff = 0;
+        return;
+    }
+    t = &mp.q[mp.qhead];
+    t->samples = pm_tick_samples(mp.pm, tick_count(mp.bpm_set));
+    t->hold = (pt_u8)hold;
+    if (!hold) {
+        t->off = mp.voff;
+        t->on = (UBYTE)pt->dmacontemp;
+        for (c = 0; c < pt->nch; c++) {
+            t->start[c] = mp.vreg[c].ptr;
+            t->slen[c] = mp.vreg[c].len;
+            if (pt->loopmask & (1 << c)) {
+                /* the loop, once the start is taken (at once: no Paula to wait for) */
+                mp.vreg[c].ptr = pt->loop_ptr[c];
+                mp.vreg[c].len = pt->loop_len[c] ? pt->loop_len[c] : 1;
+            }
+            t->ptr[c] = mp.vreg[c].ptr;
+            t->len[c] = mp.vreg[c].len;
+            t->per[c] = mp.vreg[c].per;
+            t->vol[c] = mp.vreg[c].vol;
+        }
+    }
+    mp.voff = 0;
+    mp.qhead = next;
+    Cause(&mp.mix_int);
+}
+
+/* Paula's four channels on the rings, from their start, the next tick
+ * written a lead ahead (some 120 ms: more than the slowest tempo's tick). */
+static void mix_rings_start(void)
+{
+    int i;
+    Disable();
+    CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+    mp.qhead = mp.qtail = 0;
+    pm_ring_start(mp.pm, mp.pm->rate * 12 / 100);
+    Enable();
+    wait_lines(3);
+    CU->adkcon = 0x00FF;                    /* no channel modulating another */
+    for (i = 0; i < 4; i++) {
+        CU->aud[i].ac_ptr = (UWORD *)(mp.rings + i * MIX_RING);
+        CU->aud[i].ac_len = MIX_RING / 2;
+        CU->aud[i].ac_per = mp.pm->period;
+        CU->aud[i].ac_vol = scaled(64);
+    }
+    CU->dmacon = DMAF_SETCLR | DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+}
+
+/* The rings' volume: the master's (0 paused). */
+static void mix_volume(void)
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        CU->aud[i].ac_vol = scaled(64);
+}
+
+static void mix_free(void)
+{
+    Disable();
+    mp.mix8 = FALSE;
+    mp.qhead = mp.qtail = 0;
+    Enable();
+    if (mp.rings)
+        FreeMem(mp.rings, 4 * MIX_RING);
+    if (mp.vt)
+        FreeVec(mp.vt);
+    if (mp.pm)
+        FreeVec(mp.pm);
+    mp.rings = NULL;
+    mp.vt = NULL;
+    mp.pm = NULL;
+}
+
+/* Set up for a module of nch (5-8) channels: FALSE without the memory. */
+static BOOL mix_alloc(int nch)
+{
+    BYTE *r[4];
+    int i;
+    /* 28.6 kHz on a 68030 or better, 22 kHz on a 68020 (as ProTracker 4.1) */
+    UWORD period = (SysBase->AttnFlags & (AFF_68030 | AFF_68040)) ? 124 : 161;
+    mp.rings = AllocMem(4 * MIX_RING, MEMF_CHIP | MEMF_CLEAR);
+    mp.vt = AllocVec(65 * 256, MEMF_ANY);
+    mp.pm = AllocVec(sizeof(struct PtMix), MEMF_ANY | MEMF_CLEAR);
+    if (!mp.rings || !mp.vt || !mp.pm) {
+        mix_free();
+        return FALSE;
+    }
+    pm_voltab((pt_s8 *)mp.vt);
+    for (i = 0; i < 4; i++)
+        r[i] = mp.rings + i * MIX_RING;
+    pm_init(mp.pm, nch, period, (pt_s8 *)mp.vt, (pt_s8 *const *)r, MIX_RING);
+    mp.mix_int.is_Node.ln_Type = NT_INTERRUPT;
+    mp.mix_int.is_Node.ln_Pri = 0;
+    mp.mix_int.is_Node.ln_Name = (char *)"AmigaMCE music (8 channels)";
+    mp.mix_int.is_Data = NULL;
+    mp.mix_int.is_Code = (void (*)())mix_code;
+    mp.mix8 = TRUE;
+    return TRUE;
 }
 
 static void set_loops(void)
@@ -291,9 +458,13 @@ static void tick_one(void)
     if (mp.seek_to >= 0) {
         WORD to = mp.seek_to;
         mp.seek_to = -1;
-        CU->dmacon = 0x0F;
-        for (i = 0; i < 4; i++)
-            CU->aud[i].ac_vol = 0;
+        if (mp.mix8) {
+            mp.voff = 0xFF;                 /* every channel stopped (the rings play on) */
+        } else {
+            CU->dmacon = 0x0F;
+            for (i = 0; i < 4; i++)
+                CU->aud[i].ac_vol = 0;
+        }
         if (mp.times && mp.times->at_ms[to] != 0xFFFFFFFFUL) {
             pt_restart(pt, to, mp.times->speed[to], mp.times->bpm[to]);
             pt->elapsed_us = mp.times->at_ms[to] * 1000;
@@ -303,12 +474,20 @@ static void tick_one(void)
         mp.fin_left = -1;
         mp.finished = FALSE;
     }
-    if (mp.paused || mp.finished)
+    if (mp.paused || mp.finished) {
+        if (mp.mix8)
+            mix_queue(TRUE);                /* the rings fed silence, the voices held */
         return;
+    }
     if (mp.fin_left >= 0) {
         /* the song is over once its last row has played out */
         if (mp.fin_left == 0) {
             mp.finished = TRUE;
+            if (mp.mix8) {
+                mp.voff = 0xFF;
+                mix_queue(FALSE);
+                return;
+            }
             CU->dmacon = 0x0F;
             for (i = 0; i < 4; i++)
                 CU->aud[i].ac_vol = 0;
@@ -322,6 +501,19 @@ static void tick_one(void)
     if (pt->bpm != mp.bpm_set) {
         mp.bpm_set = pt->bpm;
         tick_latch(tick_count(pt->bpm));    /* from the next tick */
+    }
+    if (mp.mix8) {
+        /* 5-8 channels: no Paula to wait for, the tick's changes mixed */
+        for (i = 0; i < 4; i++)
+            if (pt->dmacontemp & (1 << i)) {
+                mp.vnew[i].start = (const BYTE *)pt->ch[i].n_start;
+                mp.vnew[i].len = pt->ch[i].n_length;
+                mp.vnew[i].loop = (const BYTE *)pt->ch[i].n_loopstart;
+                mp.vnew[i].replen = pt->ch[i].n_replen;
+            }
+        mp.vtrig |= (UBYTE)(pt->dmacontemp & 0x0F);
+        mix_queue(FALSE);
+        return;
     }
     if (pt->loopmask) {
         for (i = 0; i < 4; i++) {
@@ -636,6 +828,7 @@ static void module_free(void)
         mx_unload();
     if (mp.engine == ENG_RADIO)
         st_stop();
+    mix_free();
     mp.engine = ENG_NONE;
     mp.serial++;
     mp.vtrig = mp.ep_trig = 0;
@@ -888,6 +1081,21 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     CacheClearU();
     pt_init(mp.pt, &mp.lay, mp.hdr, mp.pat, (pt_s8 *)mp.smp, (pt_s8 *)mp.silence);
     pt_measure(mp.pt, mp.times);
+    if (mp.pt->nch > 4) {
+        /* 5-8 channels: mixed onto Paula's four (ProTracker 4.1's way) */
+        if (!mix_alloc(mp.pt->nch)) {
+            amce_strlcpy(err, _("Not enough memory for that module"), errmax);
+            module_free();
+            return FALSE;
+        }
+        memset(mp.vreg, 0, sizeof(mp.vreg));
+        mp.voff = 0;
+        mp.mix_lost = 0;
+        sprintf(m, "%s: %ld channels, mixed in pairs onto Paula's four at %lu Hz "
+                   "(the mixer of ProTracker 4.1, by Andreas Wendorf)",
+                FilePart((STRPTR)path), (long)mp.pt->nch, (unsigned long)mp.pm->rate);
+        amce_log("music", m);
+    }
     mp.engine = ENG_PT;
     amce_strlcpy(mp.path, path, sizeof(mp.path));
     amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
@@ -992,6 +1200,13 @@ BOOL mp_play(char *err, LONG errmax)
     mp.finished = FALSE;
     mp.bpm_set = mp.pt->bpm;
     mp.paused = FALSE;
+    if (mp.mix8) {
+        /* every channel silent, then Paula on the rings */
+        memset(mp.vreg, 0, sizeof(mp.vreg));
+        memset(mp.pm->v, 0, sizeof(mp.pm->v));
+        mp.voff = 0;
+        mix_rings_start();
+    }
     mp.running = TRUE;
     tick_run(TRUE);
     return TRUE;
@@ -1092,6 +1307,10 @@ void mp_pause(BOOL on)
     }
     if (mp.engine == ENG_RADIO) {
         st_pause(on);                       /* live: it plays on, unheard */
+        return;
+    }
+    if (mp.mix8) {
+        mix_volume();
         return;
     }
     for (i = 0; i < 4; i++)
@@ -1218,6 +1437,8 @@ BOOL mp_lend(BOOL on)
     lend.on = FALSE;
     if (lend.opened && !mp.running)
         audio_close();
+    if (mp.mix8 && mp.running)
+        mix_rings_start();                  /* all four rings again, in step */
     if (lend.resume)
         mp_pause(FALSE);
     mp_set_volume(mp.master);               /* a change meanwhile, applied */
@@ -1247,7 +1468,9 @@ void mp_set_volume(int v)
         st_volume(v);
         return;
     }
-    if (mp.running && mp.pt)
+    if (mp.running && mp.mix8)
+        mix_volume();
+    else if (mp.running && mp.pt)
         for (i = 0; i < 4; i++)
             CU->aud[i].ac_vol = scaled(mp.pt->hwvol[i]);
 }
@@ -1360,8 +1583,12 @@ void mp_status(struct MpStatus *s)
         s->elapsed_ms = s->total_ms;        /* playing on past the end (looped) */
     for (i = 0; i < 4; i++) {
         vol[i] = pt->hit[i];
-        hit[i] = pt->hit[i] != 0;
+        if (i + 4 < pt->nch && pt->hit[i + 4] > vol[i])
+            vol[i] = pt->hit[i + 4];        /* mixed: the pair's meter, the louder */
+        hit[i] = vol[i] != 0;
         pt->hit[i] = 0;
+        if (i + 4 < pt->nch)
+            pt->hit[i + 4] = 0;
         s->sample[i] = pt->ch[i].n_sample;
     }
     meters(s, hit, vol);

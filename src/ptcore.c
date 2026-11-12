@@ -108,10 +108,13 @@ int pt_layout(const pt_u8 *hdr, pt_u32 hlen, pt_u32 filelen, struct PtLayout *L,
     if (hlen < 600 || filelen < 600)
         return PT_ERR_SHORT;
     chans = hlen >= 1084 ? tag_channels(hdr + 1080) : 0;
+    L->flt8 = 0;
     if (chans) {
         *channels = chans;
-        if (chans != 4)
+        if (chans < 4 || chans > PT_CHANS)
             return PT_ERR_CHANNELS;
+        /* Startrekker's 8 channels: each pattern stored as two of 4 */
+        L->flt8 = (pt_u8)(chans == 8 && hdr[1080] == 'F' && hdr[1081] == 'L' && hdr[1082] == 'T');
         nsmp = 31;
         L->tag[0] = hdr[1080];
         L->tag[1] = hdr[1081];
@@ -131,8 +134,9 @@ int pt_layout(const pt_u8 *hdr, pt_u32 hlen, pt_u32 filelen, struct PtLayout *L,
                 return PT_ERR_NOTMOD;
         }
         L->tag[0] = 'S'; L->tag[1] = 'T'; L->tag[2] = '1'; L->tag[3] = '5';
-        *channels = 4;
+        *channels = chans = 4;
     }
+    L->chans = (pt_u8)chans;
     L->tag[4] = 0;
     L->nsmp = (pt_u8)nsmp;
     pos = 20 + 30 * nsmp;               /* song length, then the restart byte, then 128 orders */
@@ -163,12 +167,17 @@ int pt_layout(const pt_u8 *hdr, pt_u32 hlen, pt_u32 filelen, struct PtLayout *L,
         maxpat = maxused;               /* the orders past the song are often junk */
     }
     L->hdr_len = pos + 2 + 128 + (nsmp == 31 ? 4 : 0);
+    if (L->flt8) {
+        /* an order names the first of its pattern's two halves (even) */
+        maxpat |= 1;
+        maxused |= 1;
+    }
     /* every pattern the orders name; if the file has not got them all,
      * those the song uses */
-    if (filelen < L->hdr_len + (pt_u32)(maxpat + 1) * 1024)
+    if (filelen < L->hdr_len + (pt_u32)(maxpat + 1) * (L->flt8 ? 1024 : 256UL * chans))
         maxpat = maxused;
     L->npat = (pt_u8)(maxpat + 1);
-    L->pat_len = (pt_u32)L->npat * 1024;
+    L->pat_len = (pt_u32)L->npat * (L->flt8 ? 1024 : 256UL * chans);
     for (i = 0; i < nsmp; i++)
         sum += (pt_u32)be16(hdr + 20 + 30 * i + 22) * 2;
     L->smp_len = sum;
@@ -192,6 +201,8 @@ void pt_init(struct Pt *pt, const struct PtLayout *L, const pt_u8 *hdr, const pt
     pt->pat = pat;
     pt->npat = L->npat;
     pt->nsmp = L->nsmp;
+    pt->nch = L->chans >= 4 && L->chans <= PT_CHANS ? L->chans : 4;
+    pt->flt8 = L->flt8;
     pt->songlen = L->songlen;
     pt->silence = silence;
     for (i = 0; i < 128; i++)
@@ -793,21 +804,29 @@ void pt_tick(struct Pt *pt)
             pt_u8 pat = pt->orders[pt->order & 0x7F];
             if (pat >= pt->npat)
                 pat = 0;
-            row = pt->pat + (pt_u32)pat * 1024 + (pt_u32)pt->row * 16;
+            if (pt->flt8) {
+                pat &= 0xFE;
+                if (pat + 1 >= pt->npat)
+                    pat = 0;
+                row = pt->pat + (pt_u32)pat * 1024 + (pt_u32)pt->row * 16;
+            } else {
+                row = pt->pat + (pt_u32)pat * 256 * pt->nch + (pt_u32)pt->row * 4 * pt->nch;
+            }
             {
                 unsigned k = ((unsigned)(pt->order & 0x7F) << 6) | (unsigned)(pt->row & 63);
                 pt->visited[k >> 3] |= (pt_u8)(1 << (k & 7));
             }
-            for (i = 0; i < PT_CHANS; i++)
-                play_voice(pt, &pt->ch[i], row + i * 4);
+            for (i = 0; i < pt->nch; i++)
+                play_voice(pt, &pt->ch[i],
+                           pt->flt8 && i >= 4 ? row + 1024 + (i - 4) * 4 : row + i * 4);
             /* after the DMA starts: every channel's loop, as 2.3D does */
-            pt->loopmask = 0x0F;
-            for (i = 0; i < PT_CHANS; i++) {
+            pt->loopmask = (pt_u16)((1 << pt->nch) - 1);
+            for (i = 0; i < pt->nch; i++) {
                 pt->loop_ptr[i] = pt->ch[i].n_loopstart;
                 pt->loop_len[i] = pt->ch[i].n_replen;
             }
         } else {
-            for (i = 0; i < PT_CHANS; i++)
+            for (i = 0; i < pt->nch; i++)
                 check_effects(pt, &pt->ch[i]);
         }
         pt->row++;
@@ -827,7 +846,7 @@ void pt_tick(struct Pt *pt)
         if (pt->row >= 64)
             next_position(pt);
     } else {
-        for (i = 0; i < PT_CHANS; i++)
+        for (i = 0; i < pt->nch; i++)
             check_effects(pt, &pt->ch[i]);
     }
     if (pt->posjumpflag)

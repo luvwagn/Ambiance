@@ -69,6 +69,35 @@ under this licence:
   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+Modules of 5 to 8 channels play on the same replayer, channels 5 to 8
+mixed onto Paula's four (src/ptmix.c): adapted from ProTracker 4.1's
+8-channel mixer (src/engine/mixer.asm), by Andreas Wendorf, used by his
+leave under this licence. ProTracker 4.1:
+https://github.com/akustikrausch/protracker4
+
+  MIT License
+
+  Copyright (c) 2026 Akustikrausch (Andreas Wendorf)
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 Packed modules are unpacked with xfdmaster.library, MP3 is decoded by
 mpega.library and XM, S3M and IT are mixed by modplug.library, where they
 are installed. They are not part of AmigaMCE. Its archive's Extras drawer

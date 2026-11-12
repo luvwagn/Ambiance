@@ -25,7 +25,7 @@ static struct {
     unsigned reg_len, len;      /* words */
     double pos;                 /* in bytes, within the block playing */
     unsigned per, vol;
-} paula[4];
+} paula[PT_CHANS];         /* 5-8: a Paula of their own here (mixed on the Amiga) */
 
 void pt_hw_period(int ch, pt_u16 p) { paula[ch].per = p; }
 void pt_hw_volume(int ch, pt_u8 v) { paula[ch].vol = v > 64 ? 64 : v; }
@@ -34,7 +34,7 @@ void pt_hw_length(int ch, pt_u16 w) { paula[ch].reg_len = w; }
 void pt_hw_dma_off(pt_u16 mask)
 {
     int i;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < PT_CHANS; i++)
         if (mask & (1 << i))
             paula[i].on = 0;
 }
@@ -42,7 +42,7 @@ void pt_hw_dma_off(pt_u16 mask)
 static void dma_on(pt_u16 mask)
 {
     int i;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < PT_CHANS; i++)
         if ((mask & (1 << i)) && !paula[i].on) {
             paula[i].on = 1;
             paula[i].ptr = paula[i].reg_ptr;
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     long frames = 0, total, sec_frames = 0;
     double acc = 0, sec_sum = 0, tick_left = 0;
     long loud_secs = 0, silent_secs = 0;
-    int chan_heard[4] = { 0, 0, 0, 0 };
+    int chan_heard[PT_CHANS] = { 0 };
 
     if (argc < 2) {
         fprintf(stderr, "usage: pt_host <module> [out.wav] [seconds]\n");
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         if (tick_left <= 0) {
             pt_tick(pt);
             dma_on(pt->dmacontemp);
-            for (i = 0; i < 4; i++)
+            for (i = 0; i < pt->nch; i++)
                 if (pt->loopmask & (1 << i)) {
                     paula[i].reg_ptr = pt->loop_ptr[i];
                     paula[i].reg_len = pt->loop_len[i];
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
         }
         {
             int l = 0, r = 0;
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < pt->nch; i++) {
                 int s = 0;
                 if (paula[i].on && paula[i].per) {
                     s = paula[i].ptr[(long)paula[i].pos] * (int)paula[i].vol;
@@ -141,7 +141,7 @@ int main(int argc, char **argv)
                     if (s)
                         chan_heard[i] = 1;
                 }
-                if (i == 0 || i == 3) l += s; else r += s;  /* Paula: 0,3 left, 1,2 right */
+                if ((i & 3) == 0 || (i & 3) == 3) l += s; else r += s;  /* Paula: 0,3 left */
             }
             if (w) { put16(w, (unsigned)(short)(l * 3)); put16(w, (unsigned)(short)(r * 3)); }
             acc = (double)l * l + (double)r * r;
@@ -157,9 +157,10 @@ int main(int argc, char **argv)
         }
     }
     if (w) fclose(w);
-    printf("  played %d s: %ld with sound, %ld near silent; channels heard %d%d%d%d; "
-           "ended %d at position %d row %d\n",
-           secs, loud_secs, silent_secs, chan_heard[0], chan_heard[1], chan_heard[2], chan_heard[3],
-           pt->ended, pt->order, pt->row);
+    printf("  played %d s: %ld with sound, %ld near silent; channels heard ", secs, loud_secs,
+           silent_secs);
+    for (i = 0; i < pt->nch; i++)
+        printf("%d", chan_heard[i]);
+    printf("; ended %d at position %d row %d\n", pt->ended, pt->order, pt->row);
     return 0;
 }

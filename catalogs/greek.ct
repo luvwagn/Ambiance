@@ -577,6 +577,9 @@ MSG_2B3D5B66
 MSG_3D495145
 Αναλυτής φάσματος: του HippoPlayer (άδεια MIT, (c) 2017 Kari-Pekka Koljonen), με το FFT του Tom Roberts (1989).
 ; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
+MSG_3F32F17E
+Modules 8 καναλιών: μιξάρονται όπως το κάνει ο μίκτης του ProTracker 4.1 (άδεια MIT, (c) 2026 Akustikrausch (Andreas Wendorf)· ProTracker 4.1: github.com/akustikrausch/protracker4).
+; 8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
 MSG_321AE26A
 Χρησιμοποιούνται αν υπάρχουν, δεν περιέχονται, το καθένα με την άδειά του: Amiga Game Selector, WHDLoad, AHI, drivers MHI, mpega.library, datatypes.
 ; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
