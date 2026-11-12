@@ -123,7 +123,8 @@ of the Amiga to how fast it really is.
   laced on OCS, ECS and AGA. RTG: 640x480, 800x600 and 1024x768.
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
-- Flicker-free scrolling text and lists, with a scroll bar for the mouse.
+- Flicker-free scrolling text and lists. A long list always shows a scroll bar
+  (how long it is, and where you are in it), which the mouse can drag or click.
 
 ## Requirements
 

@@ -142,8 +142,9 @@ Screens
 - The menu folds to its icons while you browse, giving the lists and
   Now Playing its room, and opens again with the focus or the pointer on
   it; it slides open and shut where the Amiga draws it quickly.
-- Flicker-free scrolling lists and text pages, with a scroll bar for the
-  mouse and arrows for the joystick.
+- Flicker-free scrolling lists and text pages. A long list always shows
+  a scroll bar (how long it is, and where you are in it), which the mouse
+  can drag or click.
 
 
 Requirements

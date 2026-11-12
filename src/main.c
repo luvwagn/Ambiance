@@ -4168,14 +4168,14 @@ static WORD aside_x(void)
     return g.pane_x + g.pane_w - aside_width();
 }
 
-/* ---- a long list's column at its right edge: with the mouse in use, a
- * scroll bar (click above or below the thumb to page, drag the thumb);
- * otherwise (joystick, pad), arrows where there is more above or below.
- * The mouse moving or clicking switches to the bar, the joystick to the
- * arrows; the keyboard leaves it as it is. */
+/* ---- a long list's column at its right edge: a scroll bar, always, from
+ * the moment the list is shown and whatever moves it (keyboard, joystick,
+ * pad or mouse): its thumb says how long the list is and where in it this
+ * is. The mouse can click above or below the thumb to page, or drag it;
+ * while the mouse is in use the thumb is bright, at rest it is dimmer. */
 #define GUT_W U(9)                  /* the column: gap, bar, gap */
 static struct { BOOL drag; WORD off; } gut;
-static BOOL bar_up;                 /* mouse mode: the bar is showing (the mouse moved lately) */
+static BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
 #define BAR_HIDE 1500               /* ms the mouse rests before the bar and the
                                      * pointer go */
@@ -5309,24 +5309,14 @@ static void draw_gutter(struct Page *p)
     if (!list_overflows(p) || (!has_aside(p) && ov.on && ov.page == p))
         return;                             /* no column, or under the letter's strip */
     gut_geom(p, &bx0, &bx1, &ty, &th);
+    (void)vis;
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
-    if (mouse_mode) {
-        if (bar_up || gut.drag) {
-            gfx_fill(&g, bx0, y0, bx1, y1, PEN_RULE);           /* the track */
-            gfx_fill(&g, bx0, ty, bx1, ty + th - 1, gut.drag ? PEN_WHITE : PEN_TEXT);
-        }
-        /* the mouse at rest: no bar (the count at the top right says where) */
-    } else {
-        /* arrows: more above, more below */
-        WORD ax = (bx0 + bx1) / 2, ah = U(3), i;
-        for (i = 0; i < ah; i++) {
-            WORD half = (i * U(3)) / ah;
-            if (p->top > 0)
-                gfx_fill(&g, ax - half, y0 + U(1) + i, ax + half, y0 + U(1) + i, PEN_DIM);
-            if (p->top + vis < p->list.count)
-                gfx_fill(&g, ax - half, y1 - U(1) - i, ax + half, y1 - U(1) - i, PEN_DIM);
-        }
-    }
+    if (ty > y0)
+        gfx_fill(&g, bx0, y0, bx1, ty - 1, PEN_RULE);           /* the track, above */
+    if (ty + th <= y1)
+        gfx_fill(&g, bx0, ty + th, bx1, y1, PEN_RULE);          /* and below */
+    gfx_fill(&g, bx0, ty, bx1, ty + th - 1,
+             gut.drag ? PEN_WHITE : mouse_mode && bar_up ? PEN_TEXT : PEN_DIM);
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
