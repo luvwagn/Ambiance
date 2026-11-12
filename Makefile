@@ -33,7 +33,7 @@ CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
 
-SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
+SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o
@@ -172,6 +172,12 @@ build/pt_host: tests/pt_host.c src/ptcore.c src/ptcore.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/pt_host.c src/ptcore.c
 
+# 5-8 channels mixed onto Paula's four (ptmix.c), against a plain model of
+# eight Paulas.
+build/ptmix_host: tests/ptmix_host.c src/ptmix.c src/ptmix.h src/ptcore.c src/ptcore.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/ptmix_host.c src/ptmix.c src/ptcore.c
+
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h
 	@mkdir -p build
@@ -227,11 +233,22 @@ test-plex: build/plex_host
 test-radio: build/radio_host
 	@build/radio_host > build/test-radio.txt && echo "  CHECK radio CSV ok" || (cat build/test-radio.txt; exit 1)
 
-test-replayer: build/pt_host
+test-replayer: build/pt_host build/ptmix_host
 	@$(PYTHON) -I tests/mkmod.py build/test.mod
 	@build/pt_host build/test.mod - > build/test-replayer.txt
 	@grep -q "length 0:19.440" build/test-replayer.txt && grep -q "channels heard 1111" build/test-replayer.txt \
 		&& echo "  CHECK replayer ok" || (cat build/test-replayer.txt; echo "replayer test failed"; exit 1)
+	@for k in 8CHN FLT8; do \
+		$(PYTHON) -I tests/mkmod.py build/test-$$k.mod $$k && \
+		build/pt_host build/test-$$k.mod - > build/test-replayer-$$k.txt && \
+		grep -q "length 0:19.440" build/test-replayer-$$k.txt && \
+		grep -q "channels heard 11111111" build/test-replayer-$$k.txt || \
+		{ cat build/test-replayer-$$k.txt; echo "replayer test ($$k) failed"; exit 1; }; \
+	done; echo "  CHECK replayer, 8 channels (8CHN, FLT8) ok"
+	@for k in 8CHN FLT8; do \
+		build/ptmix_host build/test-$$k.mod > build/test-mix-$$k.txt || \
+		{ cat build/test-mix-$$k.txt; echo "mixer test ($$k) failed"; exit 1; }; \
+	done; echo "  CHECK mixer, 8 channels onto 4 ok"
 
 # ------------------------------------------------------------------ assets
 art:

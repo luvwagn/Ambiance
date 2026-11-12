@@ -2691,6 +2691,10 @@ static void build_credits(struct Page *p)
     text_para(p, _("Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka "
                    "Koljonen), with Tom Roberts' fixed-point FFT (1989)."));
     text_line(p, "");
+    text_para(p, _("8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT "
+                   "licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: "
+                   "github.com/akustikrausch/protracker4)."));
+    text_line(p, "");
     text_para(p, _("Used if installed, not included, each under its own licence: Amiga Game "
                  "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."));
     text_line(p, "");

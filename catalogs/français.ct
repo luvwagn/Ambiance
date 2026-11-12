@@ -565,6 +565,9 @@ Code : bibliothèque C libnix (domaine public). L'hôte EaglePlayer suit celui d
 MSG_3D495145
 Analyseur de spectre : celui de HippoPlayer (licence MIT, (c) 2017 Kari-Pekka Koljonen), avec la FFT en virgule fixe de Tom Roberts (1989).
 ; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
+MSG_3F32F17E
+Modules 8 voies : mixés comme le fait le mixeur de ProTracker 4.1 (licence MIT, (c) 2026 Akustikrausch (Andreas Wendorf) ; ProTracker 4.1 : github.com/akustikrausch/protracker4).
+; 8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
 MSG_321AE26A
 Utilisés s'ils sont installés, non inclus, chacun sous sa propre licence : Amiga Game Selector, WHDLoad, AHI, pilotes MHI, mpega.library, datatypes.
 ; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.

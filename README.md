@@ -37,8 +37,11 @@ of the Amiga to how fast it really is.
   ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
   formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play through
   EaglePlayer and DeliTracker player modules where they are installed (AGS
-  has them). XM, S3M, IT and multichannel MODs are mixed by modplug.library
-  on a 68020 or better. Packed modules are unpacked with xfdmaster.library.
+  has them). 6- and 8-channel MODs (6CHN, 8CHN, FLT8...) play on the same
+  replayer, channels 5 to 8 mixed onto Paula's four the way ProTracker 4.1
+  does (its mixer, by Andreas Wendorf). XM, S3M and IT are mixed by
+  modplug.library on a 68020 or better. Packed modules are unpacked with
+  xfdmaster.library.
   Modules come from the `MODS:` assign and the folders of Settings > Folders
   > Modules, and on AGS from `ST-00:Modules`, `ST-00:C64Music` and `AGS:Mods`.
 - **Radio:** internet radio stations from

@@ -18,21 +18,24 @@ typedef signed short   pt_s16;
 typedef unsigned long  pt_u32;
 typedef signed long    pt_s32;
 
-#define PT_CHANS   4
+#define PT_CHANS   8        /* at most: 4 on Paula, 5-8 mixed (modplay.c, ptmix.c) */
 #define PT_SAMPLES 31
 
 /* What a module file is, from its first 1084 bytes (pt_layout). */
 struct PtLayout {
     pt_u8  nsmp;            /* 31, or 15 (an old Soundtracker module) */
     pt_u8  songlen;         /* positions in the song, 1-128 */
-    pt_u8  npat;            /* patterns stored */
+    pt_u8  npat;            /* patterns stored (FLT8: its 4-channel halves) */
+    pt_u8  chans;           /* 4, or 5-8 ("6CHN", "8CHN", "OCTA", "FLT8"...) */
+    pt_u8  flt8;            /* Startrekker's FLT8: each pattern two of 4 channels */
     pt_u32 hdr_len;         /* header bytes: 1084, or 600 for 15 samples */
-    pt_u32 pat_len;         /* pattern bytes after the header (npat * 1024) */
+    pt_u32 pat_len;         /* pattern bytes after the header (npat * 256 * chans) */
     pt_u32 smp_len;         /* sample bytes after the patterns, all samples */
     char   tag[5];          /* "M.K.", "FLT4"..., or "ST15" */
 };
 
-/* pt_layout's answers. */
+/* pt_layout's answers: PT_ERR_CHANNELS for more than 8 channels (or
+ * fewer than 4), *channels saying how many. */
 enum { PT_OK, PT_ERR_SHORT, PT_ERR_NOTMOD, PT_ERR_CHANNELS };
 int pt_layout(const pt_u8 *hdr, pt_u32 hlen, pt_u32 filelen, struct PtLayout *L,
               int *channels);
@@ -61,9 +64,10 @@ struct PtChan {
 
 struct Pt {
     /* the song */
-    const pt_u8 *pat;               /* npat * 1024 bytes */
+    const pt_u8 *pat;               /* npat * 256 * nch bytes */
     pt_u8  orders[128];
     pt_u8  songlen, npat, nsmp;
+    pt_u8  nch, flt8;               /* channels (4-8), and FLT8's pattern halves */
     struct PtSample smp[PT_SAMPLES];
     pt_s8 *silence;                 /* 4 zero bytes (chip RAM): an empty sample */
     char   title[21];
