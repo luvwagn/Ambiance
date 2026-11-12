@@ -65,13 +65,22 @@ Music (files)
 - MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
   Plex: the MUSIC: assign, if there is one, and up to eight folders chosen
   in Settings > Folders > Music. Only folders with music somewhere
-  inside are listed. Fire plays a file with the rest of its folder as
+  inside are listed (in a folder of more than 64 folders, all of them).
+  Fire plays a file with the rest of its folder as
   the playlist, with seeking. FLAC needs flacdec.library; a 68020/030
   plays it in mono at about 22 kHz.
 - Beside the list: the file's title, artist, album and year (ID3 tags,
   FLAC's comments, AIFF and 8SVX names), its format and length, and its
   cover: the folder's cover file (cover, folder or front .png or .jpg) or
   the picture inside the file. Now Playing shows them too.
+- A beets library (beets.io) with its database in MUSIC: (musiclibrary.db
+  or library.db) adds Music library (beets): Artists, Albums and Recently
+  added, then an artist's albums and an album's tracks, without reading
+  the folders (quick on a network share). The database is only ever read,
+  through AmigaMCE's own Libs/amcesql.library (SQLite). Its albums are
+  read once, a few seconds on an 030, and kept in Cache until the
+  database changes. Tracks in WMA, AAC or other formats AmigaMCE does
+  not play are left out, as are file names with characters Latin-1 lacks.
 
 Now Playing
 - Title, artist, album and cover, a level meter per channel (labelled for

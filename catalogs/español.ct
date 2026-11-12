@@ -19,6 +19,21 @@ Las animaciones se reproducen en las pantallas propias del Amiga, y no se encont
 MSG_2EE1D46F
 No hay memoria suficiente para la pantalla de la animación
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(sin nombre)
+; (no name)
+MSG_027BDF10
+Aquí no hay nada
+; Nothing here
+MSG_441552F7
+Artistas
+; Artists
+MSG_5C7535ED
+Álbumes
+; Albums
+MSG_5BBD0EC3
+Añadidos recientemente
+; Recently added
 MSG_4E6387ED
 No hay memoria suficiente
 ; Not enough memory
@@ -934,6 +949,9 @@ No se pudo abrir esa carpeta
 MSG_6FF9045E
 Esa carpeta no tiene imágenes
 ; That folder has no pictures
+MSG_54FCB2C5
+No se pudo leer la biblioteca musical: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 No hay archivos MP3 ni FLAC en esa carpeta
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ No se pudieron cargar los archivos del estilo suave
 MSG_38B5BCC0
 Suave: solo en pantallas RTG
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Biblioteca musical (beets)
+; Music library (beets)
 MSG_5D86BD77
 Archivos de música (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ No hay bibliotecas de música ahí
 MSG_3EEA8333
 No hay bibliotecas de fotos ahí
 ; No photo libraries there
-MSG_027BDF10
-Aquí no hay nada
-; Nothing here
 MSG_07C4F203
 No se pudo contactar con el servidor Plex
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ El servidor respondió %ld
 MSG_64F654D3
 No se pudo iniciar el proceso de red
 ; The network process could not start
-MSG_441552F7
-Artistas
-; Artists
-MSG_5C7535ED
-Álbumes
-; Albums
-MSG_5BBD0EC3
-Añadidos recientemente
-; Recently added
 MSG_201D2C97
 %lu foto
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu álbumes
 ; %lu albums
-MSG_0D3B3C12
-(sin nombre)
-; (no name)
 MSG_7EE6D283
 %s: no es MP3, y el servidor no dio forma de convertirlo
 ; %s: not MP3, and the server gave no way to convert it

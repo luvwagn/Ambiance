@@ -19,6 +19,21 @@ Animaatiot toistetaan Amigan omilla näytöillä, eikä sellaista löytynyt
 MSG_2EE1D46F
 Muisti ei riitä animaation näytölle
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(nimetön)
+; (no name)
+MSG_027BDF10
+Täällä ei ole mitään
+; Nothing here
+MSG_441552F7
+Artistit
+; Artists
+MSG_5C7535ED
+Albumit
+; Albums
+MSG_5BBD0EC3
+Äskettäin lisätyt
+; Recently added
 MSG_4E6387ED
 Muisti ei riitä
 ; Not enough memory
@@ -934,6 +949,9 @@ Kansiota ei voitu avata
 MSG_6FF9045E
 Kansiossa ei ole kuvia
 ; That folder has no pictures
+MSG_54FCB2C5
+Musiikkikirjastoa ei voitu lukea: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 Kansiossa ei ole MP3- tai FLAC-tiedostoja
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ Pehmeän tyylin tiedostoja ei voitu ladata
 MSG_38B5BCC0
 Pehmeä: vain RTG-näytöillä
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Musiikkikirjasto (beets)
+; Music library (beets)
 MSG_5D86BD77
 Musiikkitiedostot (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ Siellä ei ole musiikkikirjastoja
 MSG_3EEA8333
 Siellä ei ole kuvakirjastoja
 ; No photo libraries there
-MSG_027BDF10
-Täällä ei ole mitään
-; Nothing here
 MSG_07C4F203
 Plex-palvelimeen ei saatu yhteyttä
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ Palvelin vastasi %ld
 MSG_64F654D3
 Verkkoprosessia ei voitu käynnistää
 ; The network process could not start
-MSG_441552F7
-Artistit
-; Artists
-MSG_5C7535ED
-Albumit
-; Albums
-MSG_5BBD0EC3
-Äskettäin lisätyt
-; Recently added
 MSG_201D2C97
 %lu kuva
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu albumia
 ; %lu albums
-MSG_0D3B3C12
-(nimetön)
-; (no name)
 MSG_7EE6D283
 %s: ei MP3, eikä palvelin tarjonnut tapaa muuntaa sitä
 ; %s: not MP3, and the server gave no way to convert it

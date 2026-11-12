@@ -19,6 +19,21 @@ MSG_638EABE4
 MSG_2EE1D46F
 アニメーションの画面のためのメモリが足りません
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(名前なし)
+; (no name)
+MSG_027BDF10
+何もありません
+; Nothing here
+MSG_441552F7
+アーティスト
+; Artists
+MSG_5C7535ED
+アルバム
+; Albums
+MSG_5BBD0EC3
+最近追加
+; Recently added
 MSG_4E6387ED
 メモリが足りません
 ; Not enough memory
@@ -934,6 +949,9 @@ MSG_5116954E
 MSG_6FF9045E
 そのフォルダーには画像がありません
 ; That folder has no pictures
+MSG_54FCB2C5
+音楽ライブラリを読めませんでした: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 そのフォルダーにMP3やFLACのファイルはありません
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ MSG_61C33E78
 MSG_38B5BCC0
 スムーズ: RTG画面のみ
 ; Smooth: on RTG screens only
+MSG_4B65B047
+音楽ライブラリ (beets)
+; Music library (beets)
 MSG_5D86BD77
 音楽ファイル (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ MSG_49CF76D8
 MSG_3EEA8333
 そこに写真ライブラリーはありません
 ; No photo libraries there
-MSG_027BDF10
-何もありません
-; Nothing here
 MSG_07C4F203
 Plexサーバーに接続できませんでした
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ MSG_515157E5
 MSG_64F654D3
 ネットワークプロセスを開始できませんでした
 ; The network process could not start
-MSG_441552F7
-アーティスト
-; Artists
-MSG_5C7535ED
-アルバム
-; Albums
-MSG_5BBD0EC3
-最近追加
-; Recently added
 MSG_201D2C97
 %lu枚の写真
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %luアルバム
 ; %lu albums
-MSG_0D3B3C12
-(名前なし)
-; (no name)
 MSG_7EE6D283
 %s: MP3ではなく、サーバーに変換する方法がありません
 ; %s: not MP3, and the server gave no way to convert it

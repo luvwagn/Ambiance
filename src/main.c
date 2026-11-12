@@ -3004,7 +3004,8 @@ static BOOL push_dir_quiet(struct Item *it)
         return FALSE;
     if (songs) {
         p->songs = 1;
-        if (songs_read_dir(it->path, &p->list) <= 0) {
+        if ((beets_page(it->path) ? beets_read(it->path, &p->list)
+                                  : songs_read_dir(it->path, &p->list)) <= 0) {
             page_pop();
             return FALSE;
         }
@@ -4250,8 +4251,8 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
         return 0;                           /* not held now: previewed once read again */
     if (p->songs && !p->plex) {
         /* a music file or folder: its details, and its picture */
-        if (it->kind != IT_SONG && it->kind != IT_DIR)
-            return 0;
+        if ((it->kind != IT_SONG && it->kind != IT_DIR) || beets_page(it->path))
+            return 0;                       /* a beets page: no folder to look in */
         amce_strlcpy(path, it->path, max);
         *shot = SHOT_SONG;
         return LJ_SONG;
@@ -8027,7 +8028,19 @@ static void open_dir_now(struct Item *it)
     }
     if (songs) {
         p->songs = 1;
-        n = songs_read_dir(it->path, &p->list);
+        if (beets_page(it->path)) {
+            /* a beets library's page (beets.c) */
+            n = beets_read(it->path, &p->list);
+            if (n <= 0) {
+                char m[200];
+                page_pop();
+                sprintf(m, _("The music library could not be read: %.60s"), beets_error());
+                set_msg(m);
+                return;
+            }
+        } else {
+            n = songs_read_dir(it->path, &p->list);
+        }
         if (n <= 0) {
             page_pop();
             set_msg(n < 0 ? _("Could not open that folder") : _("No MP3 or FLAC files in that folder"));
@@ -9258,6 +9271,11 @@ static void music_file_rows(struct Page *p)
     struct Item *it;
     int i, n = 0;
     p->songs = 1;
+    if (music_assign && music_assign_there() && beets_there() &&
+        (it = list_add(&p->list, _("Music library (beets)"), "beets:", "", IT_DIR))) {
+        it->mark = MARK_ARROW;             /* its database in MUSIC: (beets.c) */
+        n++;
+    }
     if (music_assign && music_assign_there() &&
         (it = list_add(&p->list, _("Music files (MUSIC:)"), "MUSIC:", "", IT_DIR))) {
         it->mark = MARK_ARROW;
@@ -12454,6 +12472,7 @@ out:
     ldr_stop();
     pages_clear();
     amce_log("pages freed", "");
+    beets_forget();
     mp_shutdown();
     if (np.list.pool)
         list_free(&np.list);

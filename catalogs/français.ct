@@ -19,6 +19,21 @@ Les animations passent sur les écrans propres de l'Amiga, et aucun n'a été tr
 MSG_2EE1D46F
 Mémoire insuffisante pour l'écran de l'animation
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(sans nom)
+; (no name)
+MSG_027BDF10
+Rien ici
+; Nothing here
+MSG_441552F7
+Artistes
+; Artists
+MSG_5C7535ED
+Albums
+; Albums
+MSG_5BBD0EC3
+Ajouts récents
+; Recently added
 MSG_4E6387ED
 Mémoire insuffisante
 ; Not enough memory
@@ -934,6 +949,9 @@ Impossible d'ouvrir ce dossier
 MSG_6FF9045E
 Ce dossier ne contient aucune image
 ; That folder has no pictures
+MSG_54FCB2C5
+La bibliothèque musicale est illisible : %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 Aucun fichier MP3 ou FLAC dans ce dossier
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ Les fichiers du style lisse n'ont pas pu être chargés
 MSG_38B5BCC0
 Lisse : sur écrans RTG seulement
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Bibliothèque musicale (beets)
+; Music library (beets)
 MSG_5D86BD77
 Fichiers musicaux (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ Aucune bibliothèque musicale ici
 MSG_3EEA8333
 Aucune bibliothèque de photos ici
 ; No photo libraries there
-MSG_027BDF10
-Rien ici
-; Nothing here
 MSG_07C4F203
 Impossible de joindre le serveur Plex
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ Le serveur a répondu %ld
 MSG_64F654D3
 Le processus réseau n'a pas pu démarrer
 ; The network process could not start
-MSG_441552F7
-Artistes
-; Artists
-MSG_5C7535ED
-Albums
-; Albums
-MSG_5BBD0EC3
-Ajouts récents
-; Recently added
 MSG_201D2C97
 %lu photo
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu albums
 ; %lu albums
-MSG_0D3B3C12
-(sans nom)
-; (no name)
 MSG_7EE6D283
 %s : pas du MP3, et le serveur n'a donné aucun moyen de le convertir
 ; %s: not MP3, and the server gave no way to convert it

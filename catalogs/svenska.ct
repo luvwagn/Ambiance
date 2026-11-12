@@ -19,6 +19,21 @@ Animationer spelas på Amigans egna skärmar, och ingen hittades
 MSG_2EE1D46F
 Inte tillräckligt med minne för animationens skärm
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(utan namn)
+; (no name)
+MSG_027BDF10
+Inget här
+; Nothing here
+MSG_441552F7
+Artister
+; Artists
+MSG_5C7535ED
+Album
+; Albums
+MSG_5BBD0EC3
+Nyligen tillagda
+; Recently added
 MSG_4E6387ED
 Inte tillräckligt med minne
 ; Not enough memory
@@ -934,6 +949,9 @@ Mappen kunde inte öppnas
 MSG_6FF9045E
 Mappen har inga bilder
 ; That folder has no pictures
+MSG_54FCB2C5
+Musikbiblioteket kunde inte läsas: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 Inga MP3- eller FLAC-filer i den mappen
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ Den mjuka stilens filer kunde inte läsas in
 MSG_38B5BCC0
 Mjuk: bara på RTG-skärmar
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Musikbibliotek (beets)
+; Music library (beets)
 MSG_5D86BD77
 Musikfiler (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ Inga musikbibliotek där
 MSG_3EEA8333
 Inga fotobibliotek där
 ; No photo libraries there
-MSG_027BDF10
-Inget här
-; Nothing here
 MSG_07C4F203
 Plex-servern kunde inte nås
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ Servern svarade %ld
 MSG_64F654D3
 Nätverksprocessen kunde inte starta
 ; The network process could not start
-MSG_441552F7
-Artister
-; Artists
-MSG_5C7535ED
-Album
-; Albums
-MSG_5BBD0EC3
-Nyligen tillagda
-; Recently added
 MSG_201D2C97
 %lu foto
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu album
 ; %lu albums
-MSG_0D3B3C12
-(utan namn)
-; (no name)
 MSG_7EE6D283
 %s: inte MP3, och servern gav inget sätt att konvertera det
 ; %s: not MP3, and the server gave no way to convert it

@@ -57,11 +57,23 @@ of the Amiga to how fast it really is.
 - **Music files:** MP3, FLAC, WAV, AIFF and 8SVX files on the Amiga
   itself, under Music next to Plex: the `MUSIC:` assign if you have one,
   and up to eight folders chosen in Settings > Folders > Music. Only
-  folders with music somewhere inside are listed. Beside the list: the
+  folders with music somewhere inside are listed (in a folder of more than
+  64 folders, all of them). Beside the list: the
   file's tags (ID3, FLAC's Vorbis comments, AIFF and 8SVX names), format,
   length and cover (the folder's cover file, or the picture inside the
   file), which Now Playing shows too. A folder's files play in order, with
   seeking.
+- **A beets library:** with a [beets](https://beets.io) database in
+  `MUSIC:` (`musiclibrary.db` or `library.db`), Music gets *Music library
+  (beets)*: Artists, Albums and Recently added, then an artist's albums and
+  an album's tracks, straight from the database instead of the folders
+  (`src/beets.c`). The database is only read, never written, through
+  AmigaMCE's own `Libs/amcesql.library` (SQLite 3.34, `src/sqlib`). Its
+  albums are read once and kept in `Cache/beets.idx` until the database
+  changes; an album's tracks come from it each time. beets' Windows paths
+  are mapped to `MUSIC:` by finding which part of the first track's path
+  is there. Formats AmigaMCE cannot play (WMA, AAC) and file names Latin-1
+  cannot spell are left out.
 - **Now Playing:** title, artist, album and cover; a level meter per channel;
   a position bar you can click to seek; previous, back, play/pause, stop,
   forward, next and volume. The music plays on while you browse, and the

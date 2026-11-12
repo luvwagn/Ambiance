@@ -19,6 +19,21 @@ Animationer afspilles på Amigaens egne skærme, og ingen blev fundet
 MSG_2EE1D46F
 Ikke nok hukommelse til animationens skærm
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(uden navn)
+; (no name)
+MSG_027BDF10
+Intet her
+; Nothing here
+MSG_441552F7
+Kunstnere
+; Artists
+MSG_5C7535ED
+Albummer
+; Albums
+MSG_5BBD0EC3
+Senest tilføjet
+; Recently added
 MSG_4E6387ED
 Ikke nok hukommelse
 ; Not enough memory
@@ -934,6 +949,9 @@ Mappen kunne ikke åbnes
 MSG_6FF9045E
 Mappen har ingen billeder
 ; That folder has no pictures
+MSG_54FCB2C5
+Musikbiblioteket kunne ikke læses: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 Ingen MP3- eller FLAC-filer i den mappe
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ Den bløde stils filer kunne ikke indlæses
 MSG_38B5BCC0
 Blød: kun på RTG-skærme
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Musikbibliotek (beets)
+; Music library (beets)
 MSG_5D86BD77
 Musikfiler (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ Ingen musikbiblioteker der
 MSG_3EEA8333
 Ingen fotobiblioteker der
 ; No photo libraries there
-MSG_027BDF10
-Intet her
-; Nothing here
 MSG_07C4F203
 Plex-serveren kunne ikke nås
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ Serveren svarede %ld
 MSG_64F654D3
 Netværksprocessen kunne ikke starte
 ; The network process could not start
-MSG_441552F7
-Kunstnere
-; Artists
-MSG_5C7535ED
-Albummer
-; Albums
-MSG_5BBD0EC3
-Senest tilføjet
-; Recently added
 MSG_201D2C97
 %lu foto
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu albummer
 ; %lu albums
-MSG_0D3B3C12
-(uden navn)
-; (no name)
 MSG_7EE6D283
 %s: ikke MP3, og serveren gav ingen måde at konvertere det på
 ; %s: not MP3, and the server gave no way to convert it

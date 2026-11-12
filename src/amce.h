@@ -802,6 +802,13 @@ UBYTE *idx_block(const char *file, ULONG off, ULONG len);  /* FreeVec it */
  * given each name and whether it is a folder. -1 if dir cannot be read. */
 typedef void (*DirFn)(void *ctx, const char *name, BOOL isdir);
 LONG dir_scan(const char *dir, DirFn fn, void *ctx);
+
+/* beets.c: a beets music library in MUSIC: as Music pages ("beets:...") */
+BOOL beets_there(void);                 /* MUSIC:musiclibrary.db (or library.db) */
+BOOL beets_page(const char *path);      /* a "beets:" page's path */
+LONG beets_read(const char *path, struct ItemList *out);    /* -1: beets_error() */
+const char *beets_error(void);
+void beets_forget(void);
 extern void (*dir_tick)(void);  /* called as entries come, in dir_tick_task only */
 extern struct Task *dir_tick_task;
 

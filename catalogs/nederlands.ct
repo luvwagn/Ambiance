@@ -19,6 +19,21 @@ Animaties spelen op de eigen schermen van de Amiga, en er werd er geen gevonden
 MSG_2EE1D46F
 Niet genoeg geheugen voor het scherm van de animatie
 ; Not enough memory for the animation's screen
+MSG_0D3B3C12
+(zonder naam)
+; (no name)
+MSG_027BDF10
+Hier is niets
+; Nothing here
+MSG_441552F7
+Artiesten
+; Artists
+MSG_5C7535ED
+Albums
+; Albums
+MSG_5BBD0EC3
+Onlangs toegevoegd
+; Recently added
 MSG_4E6387ED
 Niet genoeg geheugen
 ; Not enough memory
@@ -934,6 +949,9 @@ Die map kon niet geopend worden
 MSG_6FF9045E
 Die map bevat geen afbeeldingen
 ; That folder has no pictures
+MSG_54FCB2C5
+De muziekbibliotheek kon niet worden gelezen: %.60s
+; The music library could not be read: %.60s
 MSG_4F992A62
 Geen MP3- of FLAC-bestanden in die map
 ; No MP3 or FLAC files in that folder
@@ -997,6 +1015,9 @@ De bestanden van de zachte stijl konden niet geladen worden
 MSG_38B5BCC0
 Zacht: alleen op RTG-schermen
 ; Smooth: on RTG screens only
+MSG_4B65B047
+Muziekbibliotheek (beets)
+; Music library (beets)
 MSG_5D86BD77
 Muziekbestanden (MUSIC:)
 ; Music files (MUSIC:)
@@ -1054,9 +1075,6 @@ Daar zijn geen muziekbibliotheken
 MSG_3EEA8333
 Daar zijn geen fotobibliotheken
 ; No photo libraries there
-MSG_027BDF10
-Hier is niets
-; Nothing here
 MSG_07C4F203
 De Plex-server was niet bereikbaar
 ; Could not reach the Plex server
@@ -1366,15 +1384,6 @@ De server antwoordde %ld
 MSG_64F654D3
 Het netwerkproces kon niet starten
 ; The network process could not start
-MSG_441552F7
-Artiesten
-; Artists
-MSG_5C7535ED
-Albums
-; Albums
-MSG_5BBD0EC3
-Onlangs toegevoegd
-; Recently added
 MSG_201D2C97
 %lu foto
 ; %lu photo
@@ -1399,9 +1408,6 @@ MSG_4E1664E0
 MSG_00405369
 %lu albums
 ; %lu albums
-MSG_0D3B3C12
-(zonder naam)
-; (no name)
 MSG_7EE6D283
 %s: geen MP3, en de server gaf geen manier om het om te zetten
 ; %s: not MP3, and the server gave no way to convert it
