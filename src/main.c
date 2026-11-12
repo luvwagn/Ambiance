@@ -9646,8 +9646,25 @@ static void radio_done(struct NetJob *j)
                 return;
             }
         }
+        const char *gone = NULL;
+        if (!j->body && j->status == 404 && plex.library[0]) {
+            /* the library Music remembers is not on the server now (a new
+             * server, or the library made again): forgotten, so Music
+             * lists the server's libraries again */
+            char lib[64];
+            sprintf(lib, "/library/sections/%.40s/", plex.library);
+            if (!strncmp(p->base, lib, strlen(lib))) {
+                sprintf(m, "%s: library %.40s not on the server now: forgotten", p->title,
+                        plex.library);
+                amce_log("plex", m);
+                plex_set_library("", 0);
+                music_root_again();
+                gone = _("That library is gone from the server: Music lists them again");
+            }
+        }
         if (!j->body || n <= 0) {
-            const char *why = !j->body && strstr(j->err, " 401")
+            const char *why = gone ? gone
+                              : !j->body && strstr(j->err, " 401")
                               ? _("The server wants a sign-in token: see About > Plex in AmigaMCE")
                               : !j->body ? j->err
                               : n < 0 ? _("The server answered with something unexpected")

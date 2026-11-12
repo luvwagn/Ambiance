@@ -1063,6 +1063,9 @@ Tyylilajit
 MSG_2062DC6D
 Maat
 ; Countries
+MSG_6358253C
+Kirjastoa ei enää ole palvelimella: Musiikki luettelee ne uudelleen
+; That library is gone from the server: Music lists them again
 MSG_7B170497
 Palvelin vaatii kirjautumistunnuksen: katso Tietoja > Plex AmigaMCE:ssä
 ; The server wants a sign-in token: see About > Plex in AmigaMCE

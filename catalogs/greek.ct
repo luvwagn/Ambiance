@@ -1063,6 +1063,9 @@ MSG_65D70EE9
 MSG_2062DC6D
 Χώρες
 ; Countries
+MSG_6358253C
+Η βιβλιοθήκη λείπει από τον server: η Μουσική τις δείχνει ξανά
+; That library is gone from the server: Music lists them again
 MSG_7B170497
 Ο server θέλει token: δείτε Σχετικά > Plex στο AmigaMCE
 ; The server wants a sign-in token: see About > Plex in AmigaMCE

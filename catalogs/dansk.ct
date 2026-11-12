@@ -1063,6 +1063,9 @@ Genrer
 MSG_2062DC6D
 Lande
 ; Countries
+MSG_6358253C
+Biblioteket findes ikke længere på serveren: Musik viser dem igen
+; That library is gone from the server: Music lists them again
 MSG_7B170497
 Serveren vil have et login-token: se Om > Plex i AmigaMCE
 ; The server wants a sign-in token: see About > Plex in AmigaMCE

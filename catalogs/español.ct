@@ -1063,6 +1063,9 @@ Géneros
 MSG_2062DC6D
 Países
 ; Countries
+MSG_6358253C
+Esa biblioteca ya no está en el servidor: Música las vuelve a listar
+; That library is gone from the server: Music lists them again
 MSG_7B170497
 El servidor pide un token de acceso: ver Acerca de > Plex en AmigaMCE
 ; The server wants a sign-in token: see About > Plex in AmigaMCE
