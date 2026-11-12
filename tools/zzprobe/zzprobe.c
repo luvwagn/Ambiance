@@ -1,0 +1,1672 @@
+/*
+ * zzprobe - what a ZZ9000 offers this Amiga, and how fast, as AmigaMCE uses it
+ * Copyright (c) 2026 Brian King, MIT
+ *
+ *   zzprobe [JPEG file] [PNG file] [WEBP file] [MP3 file] [QUICK] [NOBENCH]
+ *
+ * Probes, without the ZZ9000 SDK's headers (they are GPL-3; nothing of
+ * theirs is compiled in):
+ *   - the machine, and the ZZ9000 board (Zorro II or III) by its IDs;
+ *   - zz9k.library, mpega.library (the SDK's, decoding on the card, or the
+ *     68k one), MHI drivers, AHI and the ZZ9000AX driver, AmiSSL (and the
+ *     card's accelerated replacement), Picasso96 and CyberGraphX, the RTG
+ *     display modes by monitor, the SDK's commands and ZZPlay;
+ *   - the ZZ9000 datatype descriptors (active in DEVS:DataTypes, or
+ *     installed inactive in SYS:Storage/DataTypes), and which datatype
+ *     reads each picture and sound format here;
+ *   - the card's own report: the SDK's zz9k-info and zz9k-services, run;
+ *   - AmigaMCE's own JPEG datatype (amcejpeg.datatype) and its descriptor.
+ * Then times what AmigaMCE does with them:
+ *   - pictures, as one table: the datatype the system picks for each
+ *     format; for JPEG also amcejpeg.datatype (its class used directly,
+ *     installed or from PROGDIR:amcejpeg) at 1/1 to 1/8 through its size
+ *     hint, and jdec built into zzprobe (the decoder alone, from memory);
+ *   - MP3 decoded by mpega.library, as AmigaMCE asks a 68k for this CPU,
+ *     and at full quality (what it asks of the card's).
+ * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3
+ * (made by mkbench.py beside this file; the Bench drawer goes beside zzprobe).
+ * The report goes to the Shell, and is added to PROGDIR:zzprobe.txt with
+ * the date, so runs before and after a change sit side by side.
+ */
+#include <exec/types.h>
+#include <exec/memory.h>
+#include <exec/execbase.h>
+#include <exec/resident.h>
+#include <devices/timer.h>
+#include <dos/dos.h>
+#include <dos/dostags.h>
+#include <dos/datetime.h>
+#include <dos/rdargs.h>
+#include <dos/var.h>
+#include <graphics/gfxbase.h>
+#include <graphics/displayinfo.h>
+#include <graphics/modeid.h>
+#include <libraries/configvars.h>
+#include <datatypes/datatypes.h>
+#include <datatypes/datatypesclass.h>
+#include <datatypes/pictureclass.h>
+#include <inline/macros.h>
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <proto/graphics.h>
+#include <proto/timer.h>
+#include <proto/expansion.h>
+#include <proto/datatypes.h>
+#include <proto/intuition.h>
+#include <clib/alib_protos.h>
+#include <string.h>
+#include <stdio.h>
+#include "../../datatypes/jpeg/jdec.h"
+#include "../../datatypes/jpeg/amcejpeg.h"
+#include "../../datatypes/jpeg/stackcall.h"
+
+static const char version[] = "$VER: zzprobe 1.14 (12.11.2026)";
+
+extern struct ExecBase *SysBase;
+extern struct GfxBase *GfxBase;
+struct Device *TimerBase;
+struct Library *DataTypesBase;
+struct ExpansionBase *ExpansionBase;
+static struct Library *MPEGABase;
+
+static struct timerequest treq;
+static ULONG efreq;
+static ULONG run_ms = 2000;             /* each picture test: about this long */
+static ULONG mp3_secs = 30;             /* MP3: this many seconds of sound decoded */
+
+/* ------------------------------------------------------------ the report */
+static char *out;
+static ULONG outn, outmax = 65536;
+
+static void say(const char *s)
+{
+    ULONG n = strlen(s);
+    PutStr((CONST_STRPTR)s);
+    if (out && outn + n < outmax) {
+        memcpy(out + outn, s, n);
+        outn += n;
+    }
+}
+
+static void sayf(const char *s)         /* a line */
+{
+    say(s);
+    say("\n");
+}
+
+static void heading(const char *s)
+{
+    say("\n");
+    sayf(s);
+}
+
+static ULONG now_us(void)
+{
+    struct EClockVal e;
+    ReadEClock(&e);
+    return (ULONG)((((unsigned long long)e.ev_hi << 32) | e.ev_lo) * 1000000ULL / efreq);
+}
+
+static void fmt_ms(char *s, ULONG us)
+{
+    if (us >= 10000)
+        sprintf(s, "%ld ms", (long)((us + 500) / 1000));
+    else
+        sprintf(s, "%ld.%02ld ms", (long)(us / 1000), (long)(us % 1000 / 10));
+}
+
+/* ------------------------------------------------------------ small helpers */
+static BOOL exists(const char *path)
+{
+    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    if (!l)
+        return FALSE;
+    UnLock(l);
+    return TRUE;
+}
+
+/* A library's version and ID string, as a line: "name 2.29 (ID)", or
+ * "name: not installed". Opening it is all that is done with it. */
+static BOOL lib_line(const char *name, const char *show, char *idout, LONG idmax)
+{
+    char line[256];
+    struct Library *l = OpenLibrary((CONST_STRPTR)name, 0);
+    if (idout)
+        idout[0] = 0;
+    if (!l) {
+        sprintf(line, "  %s: not installed", show);
+        sayf(line);
+        return FALSE;
+    }
+    sprintf(line, "  %s %ld.%ld", show, (long)l->lib_Version, (long)l->lib_Revision);
+    if (l->lib_IdString) {
+        char id[120];
+        LONG n;
+        strncpy(id, (const char *)l->lib_IdString, sizeof(id) - 1);
+        id[sizeof(id) - 1] = 0;
+        for (n = strlen(id); n > 0 && (id[n - 1] == '\n' || id[n - 1] == '\r'); n--)
+            id[n - 1] = 0;
+        sprintf(line + strlen(line), " (%s)", id);
+        if (idout) {
+            strncpy(idout, id, idmax - 1);
+            idout[idmax - 1] = 0;
+        }
+    }
+    CloseLibrary(l);
+    sayf(line);
+    return TRUE;
+}
+
+/* ------------------------------------------------------------ the machine */
+static UWORD cpu_of(void)
+{
+    UWORD af = SysBase->AttnFlags;
+    return (af & AFF_68060) ? 60 : (af & AFF_68040) ? 40 : (af & AFF_68030) ? 30 :
+           (af & AFF_68020) ? 20 : (af & AFF_68010) ? 10 : 0;
+}
+
+static void machine(void)
+{
+    char line[200];
+    UWORD af = SysBase->AttnFlags;
+    BOOL uae = FALSE;
+    heading("Machine");
+    sprintf(line, "  CPU 680%02ld%s, Kickstart %ld.%ld, %s %s", (long)cpu_of(),
+            (af & (AFF_68881 | AFF_68882 | (1 << 6))) ? " with FPU" : "",   /* bit 6: AFF_FPU40 */
+            (long)SysBase->LibNode.lib_Version, (long)SysBase->SoftVer,
+            (GfxBase->ChipRevBits0 & GFXF_AA_ALICE) ? "AGA" :
+            (GfxBase->ChipRevBits0 & GFXF_HR_AGNUS) ? "ECS" : "OCS",
+            (GfxBase->DisplayFlags & PAL) ? "PAL" : "NTSC");
+    sayf(line);
+    sprintf(line, "  Free memory: %ld KB chip, %ld KB fast", (long)(AvailMem(MEMF_CHIP) >> 10),
+            (long)(AvailMem(MEMF_FAST) >> 10));
+    sayf(line);
+    if (ExpansionBase)
+        uae = FindConfigDev(NULL, 2011, -1) != NULL;
+    sayf(uae ? "  Emulator: UAE family (Amiberry, WinUAE, FS-UAE)" : "  Emulator: none seen");
+}
+
+/* ------------------------------------------------------------ the board */
+static int zz_zorro;                    /* 0 none, 2, 3 */
+
+static void board(void)
+{
+    struct ConfigDev *cd = NULL;
+    char line[200];
+    int n = 0;
+    heading("ZZ9000 board (MNT, manufacturer $6d6e)");
+    if (!ExpansionBase) {
+        sayf("  expansion.library did not open");
+        return;
+    }
+    while ((cd = FindConfigDev(cd, 0x6d6e, -1))) {
+        UBYTE p = cd->cd_Rom.er_Product;
+        const char *what = p == 4 ? "ZZ9000 on Zorro III" : p == 3 ? "ZZ9000 on Zorro II"
+                                                           : "another MNT board";
+        sprintf(line, "  %s (product %ld) at $%08lx, %ld KB", what, (long)p,
+                (unsigned long)cd->cd_BoardAddr, (long)(cd->cd_BoardSize >> 10));
+        sayf(line);
+        if (p == 4)
+            zz_zorro = 3;
+        else if (p == 3 && !zz_zorro)
+            zz_zorro = 2;
+        n++;
+    }
+    if (!n)
+        sayf("  none found");
+}
+
+/* ------------------------------------------------------------ software */
+static BOOL mpega_card, mpega_any, zzlib, mhizz, amissl_acc, ahi_ax;
+
+static void mhi_drivers(void)
+{
+    BPTR l = Lock((CONST_STRPTR)"LIBS:MHI", SHARED_LOCK);
+    struct FileInfoBlock *fib;
+    char line[200];
+    int n = 0;
+    if (!l) {
+        sayf("  MHI drivers: none (no LIBS:MHI)");
+        return;
+    }
+    if ((fib = AllocDosObject(DOS_FIB, NULL))) {
+        if (Examine(l, fib))
+            while (ExNext(l, fib)) {
+                if (fib->fib_DirEntryType > 0)
+                    continue;
+                sprintf(line, "  MHI driver: %.100s", fib->fib_FileName);
+                if (!strcmp((char *)fib->fib_FileName, "mhizz9000.library")) {
+                    strcat(line, " (the ZZ9000's)");
+                    mhizz = TRUE;
+                }
+                sayf(line);
+                n++;
+            }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    UnLock(l);
+    if (!n)
+        sayf("  MHI drivers: none in LIBS:MHI");
+}
+
+/* RTG display modes, one line per monitor (the part of a mode's name
+ * before the colon: "ZZ9000", "PRISM", "uaegfx"...), with how many modes. */
+static void rtg_monitors(void)
+{
+    char names[8][32], line[200];
+    LONG counts[8];
+    int nn = 0, i;
+    ULONG id = INVALID_ID;
+    while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID) {
+        struct DisplayInfo di;
+        struct NameInfo ni;
+        char mon[32], *c;
+        BOOL rtg = (id & MONITOR_ID_MASK) > DBLPAL_MONITOR_ID;
+        if (!rtg && GetDisplayInfoData(NULL, (UBYTE *)&di, sizeof(di), DTAG_DISP, id) > 0)
+            rtg = (di.PropertyFlags & DIPF_IS_FOREIGN) != 0;
+        if (!rtg)
+            continue;
+        if (GetDisplayInfoData(NULL, (UBYTE *)&ni, sizeof(ni), DTAG_NAME, id) <= 0)
+            strcpy(mon, "(unnamed)");
+        else {
+            strncpy(mon, (char *)ni.Name, sizeof(mon) - 1);
+            mon[sizeof(mon) - 1] = 0;
+            if ((c = strchr(mon, ':')))
+                *c = 0;
+        }
+        for (i = 0; i < nn && strcmp(names[i], mon); i++)
+            ;
+        if (i == nn && nn < 8) {
+            strcpy(names[nn], mon);
+            counts[nn++] = 0;
+        }
+        if (i < nn)
+            counts[i]++;
+    }
+    if (!nn)
+        sayf("  RTG modes: none");
+    for (i = 0; i < nn; i++) {
+        sprintf(line, "  RTG modes: %ld from \"%.31s\"", (long)counts[i], names[i]);
+        sayf(line);
+    }
+}
+
+static void descriptor(const char *name)
+{
+    char a[80], b[80], line[160];
+    sprintf(a, "DEVS:DataTypes/%s", name);
+    sprintf(b, "SYS:Storage/DataTypes/%s", name);
+    sprintf(line, "  %-18s %s", name,
+            exists(a) ? "active (DEVS:DataTypes)"
+            : exists(b) ? "installed but inactive: move it from SYS:Storage/DataTypes to DEVS:DataTypes"
+            : "not installed");
+    sayf(line);
+}
+
+static void software(void)
+{
+    char id[120];
+    heading("Libraries and programs");
+    zzlib = lib_line("zz9k.library", "zz9k.library (the card's services)", NULL, 0);
+    mpega_any = lib_line("mpega.library", "mpega.library", id, sizeof(id));
+    mpega_card = mpega_any && strstr(id, "ZZ9000") != NULL;
+    if (mpega_any)
+        sayf(mpega_card ? "    -> the ZZ9000 SDK's: MP3 decoded on the card"
+                        : "    -> not the card's: MP3 decoded by the 68k");
+    mhi_drivers();
+    sayf(exists("DEVS:ahi.device") ? "  AHI: installed" : "  AHI: not installed");
+    ahi_ax = exists("DEVS:AHI/zz9000ax.audio");
+    sayf(ahi_ax ? "  AHI driver for the ZZ9000AX: installed (DEVS:AHI/zz9000ax.audio)"
+                : "  AHI driver for the ZZ9000AX: not installed");
+    if (exists("LIBS:AmiSSL/amissl_v362.library")) {
+        amissl_acc = exists("LIBS:AmiSSL/amissl_v362.library.bak");
+        sayf(amissl_acc ? "  AmiSSL 5.x: the ZZ9000's accelerated amissl_v362.library (original kept as .bak)"
+                        : "  AmiSSL 5.x: installed, the original (not the ZZ9000's accelerated one)");
+    } else {
+        lib_line("amisslmaster.library", "amisslmaster.library", NULL, 0);
+    }
+    lib_line("Picasso96API.library", "Picasso96API.library", NULL, 0);
+    lib_line("cybergraphics.library", "cybergraphics.library", NULL, 0);
+    rtg_monitors();
+    sayf(exists("C:zz9k-info") ? "  C:zz9k-info: installed" : "  C:zz9k-info: not installed");
+    sayf(exists("C:zz9k-services") ? "  C:zz9k-services: installed"
+                                   : "  C:zz9k-services: not installed");
+    sayf(exists("SYS:Utilities/ZZ9000/ZZPlay") ? "  ZZPlay: installed (SYS:Utilities/ZZ9000)"
+                                                : "  ZZPlay: not found in SYS:Utilities/ZZ9000");
+
+    heading("ZZ9000 datatype descriptors");
+    descriptor("ZZ9000-JPEG");
+    descriptor("ZZ9000-PNG");
+    descriptor("ZZ9000-WebP");
+    descriptor("ZZ9000-MP3");
+    descriptor("ZZ9000-FLAC");
+    descriptor("ZZ9000-OggVorbis");
+
+    heading("AmigaMCE's own datatypes");
+    lib_line("datatypes/amcejpeg.datatype", "amcejpeg.datatype (JPEG for 68020+)", NULL, 0);
+    descriptor("AmigaMCE-JPEG");
+}
+
+/* ------------------------------------------------------------ which datatype reads what */
+static const UBYTE s_ilbm[] = { 'F','O','R','M', 0,0,0,46, 'I','L','B','M',
+    'B','M','H','D', 0,0,0,20, 0,1, 0,1, 0,0, 0,0, 1, 0, 0, 0, 0,0, 10, 11, 0,1, 0,1,
+    'C','M','A','P', 0,0,0,6, 0,0,0, 255,255,255, 'B','O','D','Y', 0,0,0,2, 0,0 };
+static const UBYTE s_gif[] = { 'G','I','F','8','9','a', 1,0, 1,0, 0x80, 0, 0,
+    0,0,0, 255,255,255, ',', 0,0, 0,0, 1,0, 1,0, 0, 2, 2, 0x44, 1, 0, ';' };
+static const UBYTE s_jpeg[] = { 0xFF,0xD8, 0xFF,0xE0, 0,16, 'J','F','I','F',0, 1,1, 0, 0,1, 0,1,
+    0,0, 0xFF,0xD9 };
+static const UBYTE s_png[] = { 0x89,'P','N','G',13,10,26,10, 0,0,0,13, 'I','H','D','R',
+    0,0,0,1, 0,0,0,1, 8, 2, 0, 0, 0, 0x90,0x77,0x53,0xDE, 0,0,0,0, 'I','E','N','D',
+    0xAE,0x42,0x60,0x82 };
+static const UBYTE s_webp[] = { 'R','I','F','F', 26,0,0,0, 'W','E','B','P', 'V','P','8','L',
+    13,0,0,0, 0x2F, 0,0,0, 0x10, 0x07,0x10,0x11,0x11,0x88,0x88,0xFE,0x07, 0 };
+static const UBYTE s_flac[] = { 'f','L','a','C', 0x80,0,0,34, 0x10,0x00,0x10,0x00, 0,0,0, 0,0,0,
+    0x0A,0xC4,0x42,0xF0, 0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0 };
+static const UBYTE s_ogg[] = { 'O','g','g','S', 0, 2, 0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,0,
+    0,0,0,0, 1, 30, 1,'v','o','r','b','i','s', 0,0,0,0, 2, 0x44,0xAC,0,0, 0,0,0,0,
+    0x00,0xF4,0x01,0x00, 0,0,0,0, 0xB8, 1 };
+
+static char jpeg_cls[40];                /* the class that reads JPEGs here */
+
+/* How a descriptor knows its files: the bytes it looks for at the start
+ * (?? any), the name pattern, its flags and priority */
+static void desc_detail(const struct DataTypeHeader *h)
+{
+    char line[200];
+    int i, n = h->dth_MaskLen, o;
+    o = sprintf(line, "        recognises: ");
+    if (!n || !h->dth_Mask)
+        o += sprintf(line + o, "(no bytes)");
+    for (i = 0; i < n && i < 16; i++) {
+        WORD m = h->dth_Mask[i];
+        if (m < 0) {
+            o += sprintf(line + o, "?? ");
+        } else if (m >= 32 && m < 127) {    /* not %c: this libnix's is 16-bit */
+            line[o++] = '\'';
+            line[o++] = (char)m;
+            line[o++] = '\'';
+            line[o++] = ' ';
+            line[o] = 0;
+        } else {
+            o += sprintf(line + o, "%02lx ", (unsigned long)(m & 0xFF));
+        }
+    }
+    if (n > 16)
+        o += sprintf(line + o, "...");
+    snprintf(line + o, sizeof(line) - o, "; name %.30s; flags $%04lx; priority %ld",
+             h->dth_Pattern ? (const char *)h->dth_Pattern : "-",
+             (unsigned long)h->dth_Flags, (long)h->dth_Priority);
+    sayf(line);
+}
+
+/* which descriptor an actual file matches */
+static void file_dt(const char *fmt, const char *path)
+{
+    char line[200];
+    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    struct DataType *dtn = NULL;
+    if (!l)
+        return;
+    dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+    UnLock(l);
+    if (dtn && dtn->dtn_Header) {
+        snprintf(line, sizeof(line), "  %-5s %.60s: descriptor %s (%s.datatype)", fmt, path,
+                 dtn->dtn_Header->dth_Name ? (const char *)dtn->dtn_Header->dth_Name : "?",
+                 dtn->dtn_Header->dth_BaseName ? (const char *)dtn->dtn_Header->dth_BaseName : "?");
+        sayf(line);
+    } else {
+        snprintf(line, sizeof(line), "  %-5s %.60s: no descriptor matches it", fmt, path);
+        sayf(line);
+    }
+    if (dtn)
+        ReleaseDataType(dtn);
+}
+
+static void which_dt(const char *fmt, const char *ext, const UBYTE *data, ULONG len, ULONG group)
+{
+    char file[40], line[200];
+    BPTR fh, l;
+    struct DataType *dtn = NULL;
+    sprintf(file, "T:zzprobe.%s", ext);
+    if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
+        Write(fh, (APTR)data, len);
+        Close(fh);
+    }
+    if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+        dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+        UnLock(l);
+    }
+    DeleteFile((CONST_STRPTR)file);
+    if (!dtn || !dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != group) {
+        sprintf(line, "  %-5s no datatype", fmt);
+    } else {
+        const char *base = dtn->dtn_Header->dth_BaseName ? (const char *)dtn->dtn_Header->dth_BaseName : "?";
+        if (!strcmp(fmt, "JPEG")) {
+            strncpy(jpeg_cls, base, sizeof(jpeg_cls) - 1);
+            jpeg_cls[sizeof(jpeg_cls) - 1] = 0;
+        }
+        sprintf(line, "  %-5s %s.datatype (descriptor %s)%s", fmt, base,
+                dtn->dtn_Header->dth_Name ? (const char *)dtn->dtn_Header->dth_Name : "?",
+                !strncmp(base, "zz9k", 4) ? "  <- on the ZZ9000" : "");
+    }
+    sayf(line);
+    if (dtn && dtn->dtn_Header && group == GID_PICTURE)
+        desc_detail(dtn->dtn_Header);
+    if (dtn)
+        ReleaseDataType(dtn);
+}
+
+static void datatypes(const char *jpeg, const char *png, const char *webp)
+{
+    UBYTE *mp3;
+    ULONG i;
+    heading("Which datatype reads each format here");
+    if (!DataTypesBase) {
+        sayf("  datatypes.library did not open");
+        return;
+    }
+    which_dt("JPEG", "jpg", s_jpeg, sizeof(s_jpeg), GID_PICTURE);
+    which_dt("PNG", "png", s_png, sizeof(s_png), GID_PICTURE);
+    which_dt("WebP", "webp", s_webp, sizeof(s_webp), GID_PICTURE);
+    which_dt("GIF", "gif", s_gif, sizeof(s_gif), GID_PICTURE);
+    which_dt("ILBM", "iff", s_ilbm, sizeof(s_ilbm), GID_PICTURE);
+    /* MP3: three 128 kbit/s 44.1 kHz frames (headers, silence) */
+    if ((mp3 = AllocVec(3 * 417, MEMF_ANY | MEMF_CLEAR))) {
+        for (i = 0; i < 3; i++) {
+            mp3[i * 417] = 0xFF;
+            mp3[i * 417 + 1] = 0xFB;
+            mp3[i * 417 + 2] = 0x90;
+            mp3[i * 417 + 3] = 0x64;
+        }
+        which_dt("MP3", "mp3", mp3, 3 * 417, GID_SOUND);
+        FreeVec(mp3);
+    }
+    which_dt("FLAC", "flac", s_flac, sizeof(s_flac), GID_SOUND);
+    which_dt("Ogg", "ogg", s_ogg, sizeof(s_ogg), GID_SOUND);
+    heading("Which descriptor each test file matches");
+    file_dt("JPEG", jpeg);
+    file_dt("PNG", png);
+    file_dt("WebP", webp);
+}
+
+/* ------------------------------------------------------------ the card's own report */
+static void run_tool(const char *cmd, const char *title)
+{
+    BPTR fh;
+    LONG rc;
+    char line[200];
+    heading(title);
+    if (!(fh = Open((CONST_STRPTR)"T:zzprobe.out", MODE_NEWFILE))) {
+        sayf("  T: could not be written");
+        return;
+    }
+    rc = SystemTags((CONST_STRPTR)cmd, SYS_Output, fh, SYS_Input, 0, TAG_END);
+    Close(fh);
+    if (rc == -1) {
+        sayf("  could not be run");
+    } else if ((fh = Open((CONST_STRPTR)"T:zzprobe.out", MODE_OLDFILE))) {
+        int n = 0;
+        while (FGets(fh, (STRPTR)line + 2, sizeof(line) - 3) && n < 120) {
+            line[0] = line[1] = ' ';
+            say(line);
+            if (line[strlen(line) - 1] != '\n')
+                say("\n");
+            n++;
+        }
+        if (!n)
+            sayf("  (no output)");
+        Close(fh);
+        sprintf(line, "  (return code %ld)", (long)rc);
+        sayf(line);
+    }
+    DeleteFile((CONST_STRPTR)"T:zzprobe.out");
+}
+
+/* ------------------------------------------------------------ bench: pictures, as a table */
+/* Each format's picture decoded every way there is here, one row a way:
+ *   - the datatype the system picks for it (NewDTObject, from the file);
+ *   - JPEG: amcejpeg.datatype, its class made into objects directly, from
+ *     the file read into memory each time (DTST_MEMORY), so it is timed
+ *     beside the system's pick even when that is another datatype, and
+ *     even when it is not installed (from PROGDIR:amcejpeg);
+ *   - JPEG: jdec built into zzprobe, from memory: the decoder alone.
+ * Times: best of up to 10 runs (mean); "first" is the first load apart,
+ * with the datatype's loading (and any requester it shows). */
+#define NSC 4
+struct Row {
+    const char *fmt;
+    char dec[48];
+    ULONG first;                        /* us; 0: not timed */
+    ULONG best[NSC], mean[NSC];         /* us at 1/1 .. 1/8; 0: not run */
+    char note[120];                     /* instead of times */
+};
+static struct Row rows[12];
+static int nrows;
+
+/* Where the time goes, the fastest run's parts (us): JPEG through the
+ * system's datatype at 1/1 (sysph) and through amcejpeg at each scale */
+enum { PH_READ, PH_NEW, PH_WHOLE, PH_HEADERS, PH_SETATTRS, PH_NOMINAL, PH_DECODE, PH_WRITE,
+       PH_LAYOUT, PH_DISPOSE, PH_TOTAL, PH_N };
+static ULONG sysph[PH_N], modeph[PH_N];   /* modeph: ours, 1/1, given WarpJPEG's ModeID */
+static BOOL have_sysph, have_modeph;
+static ULONG sys_mode = (ULONG)INVALID_ID;
+/* the JPEG classes benched side by side, each made into objects directly */
+enum { CL_WARP, CL_JFIF, CL_OURS, CL_N };
+static ULONG clph[CL_N][NSC][PH_N];       /* the fastest run's parts, at each scale */
+static ULONG cl_mode[CL_N];               /* the display mode each one's object ends with */
+static char notes[8][160];
+static int nnotes;
+
+static struct Row *row_new(const char *fmt, const char *dec)
+{
+    struct Row *r = &rows[nrows < 11 ? nrows++ : 11];
+    memset(r, 0, sizeof(*r));
+    r->fmt = fmt;
+    strncpy(r->dec, dec, sizeof(r->dec) - 1);
+    return r;
+}
+
+static void note_add(const char *s)
+{
+    if (nnotes < 8) {
+        strncpy(notes[nnotes], s, sizeof(notes[0]) - 1);
+        nnotes++;
+    }
+}
+
+/* why an object was not made, in words */
+static void why(LONG err, char *out, LONG max)
+{
+    char t[100];
+    t[0] = 0;
+    if (err >= DTERROR_UNKNOWN_DATATYPE && err < DTERROR_UNKNOWN_DATATYPE + 100) {
+        CONST_STRPTR s = GetDTString((ULONG)err);
+        char *p;
+        if (s)
+            strncpy(t, (const char *)s, sizeof(t) - 1);
+        t[sizeof(t) - 1] = 0;
+        if ((p = strstr(t, " for %s")) || (p = strstr(t, " %s")))
+            *p = 0;                     /* its file name slot: the row says which */
+    } else if (err > 0) {
+        Fault(err, NULL, (STRPTR)t, sizeof(t));
+    }
+    if (!t[0])
+        strcpy(t, "no reason given");
+    snprintf(out, max, "failed: %s", t);
+}
+
+typedef LONG (*Once)(void *ctx);        /* one decode: 0, or why not */
+
+/* first (if wanted), then up to 10 runs within run_ms */
+static LONG timed(Once f, void *ctx, ULONG *first, ULONG *best, ULONG *mean)
+{
+    ULONG start, runs = 0, sum = 0, b = 0xFFFFFFFFUL, t0, dt;
+    LONG err;
+    if (first) {
+        t0 = now_us();
+        if ((err = f(ctx)))
+            return err;
+        *first = now_us() - t0;
+        if (!*first)
+            *first = 1;
+    }
+    start = now_us();
+    do {
+        t0 = now_us();
+        if ((err = f(ctx)))
+            return err;
+        dt = now_us() - t0;
+        if (dt < b)
+            b = dt;
+        sum += dt;
+        runs++;
+    } while (runs < 10 && now_us() - start < run_ms * 1000);
+    *best = b ? b : 1;
+    *mean = sum / runs ? sum / runs : 1;
+    return 0;
+}
+
+static LONG file_size(const char *path)
+{
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG n;
+    if (!fh)
+        return -1;
+    Seek(fh, 0, OFFSET_END);
+    n = Seek(fh, 0, OFFSET_BEGINNING);
+    Close(fh);
+    return n;
+}
+
+static BOOL file_read(const char *path, UBYTE *buf, LONG n)
+{
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    BOOL ok;
+    if (!fh)
+        return FALSE;
+    ok = Read(fh, buf, n) == n;
+    Close(fh);
+    return ok;
+}
+
+/* -- the system's datatype, through NewDTObject */
+struct DtRun {
+    const char *path;
+    ULONG fitw, fith;
+    ULONG w, h, scale;
+    char base[40];
+    ULONG *ph;                          /* the fastest run's parts, or NULL */
+};
+
+static LONG dt_once(void *p)
+{
+    struct DtRun *c = p;
+    struct BitMapHeader *bmh = NULL;
+    struct DataType *dtn = NULL;
+    ULONG sc = 0, t0 = now_us(), t1, t2, t3;
+    Object *o = NewDTObject((APTR)c->path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
+                            PDTA_DestMode, PMODE_V43,
+                            JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, TAG_END);
+    if (!o) {
+        LONG e = IoErr();
+        return e ? e : -1;
+    }
+    t1 = now_us();
+    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    t2 = now_us();
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
+    GetDTAttrs(o, JDTA_Scale, (ULONG)&sc, TAG_END);     /* amcejpeg's; else 0 */
+    if (c->ph)
+        GetDTAttrs(o, PDTA_ModeID, (ULONG)&sys_mode, TAG_END);
+    if (bmh) {
+        c->w = bmh->bmh_Width;
+        c->h = bmh->bmh_Height;
+    }
+    c->scale = sc;
+    if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_BaseName) {
+        strncpy(c->base, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(c->base) - 1);
+        c->base[sizeof(c->base) - 1] = 0;
+    }
+    DisposeDTObject(o);
+    t3 = now_us();
+    if (c->ph && (!c->ph[PH_TOTAL] || t3 - t0 < c->ph[PH_TOTAL])) {
+        c->ph[PH_NEW] = t1 - t0;        /* the file read, and the decode, inside */
+        c->ph[PH_LAYOUT] = t2 - t1;
+        c->ph[PH_DISPOSE] = t3 - t2;
+        c->ph[PH_TOTAL] = t3 - t0;
+    }
+    return 0;
+}
+
+/* -- amcejpeg.datatype's class, directly, from memory */
+struct ClsRun {
+    Class *cl;
+    struct DataType *dtn;
+    const char *path;
+    ULONG fitw, fith;
+    ULONG w, h, scale;
+    ULONG *ph;                          /* the fastest run's parts */
+    ULONG mode;                         /* PDTA_ModeID to give it, or INVALID_ID */
+    ULONG *mode_out;                    /* where to put the mode it ends with */
+    ULONG variant;                      /* JDTA_Variant (ours) */
+    BOOL check;                         /* read the pixels back into hash */
+    ULONG hash;                         /* FNV-1a of the RGB read back; 0 none */
+    ULONG laid;                         /* what DTM_PROCLAYOUT returned */
+    ULONG last[PH_N];                   /* the last run's parts */
+};
+
+/* FNV-1a over bytes, from a running value */
+static ULONG fnv(ULONG h, const UBYTE *p, ULONG n)
+{
+    while (n--)
+        h = (h ^ *p++) * 16777619UL;
+    return h;
+}
+
+/* An object's pixels read back as RGB, hashed (0: none came back) */
+static ULONG pixels_hash(Object *o, ULONG w, ULONG h)
+{
+    struct pdtBlitPixelArray pb;
+    ULONG r = 0, mod = w * 3;
+    UBYTE *buf;
+    if (!w || !h || !(buf = AllocVec(mod * h, MEMF_ANY | MEMF_CLEAR)))
+        return 0;
+    pb.MethodID = PDTM_READPIXELARRAY;
+    pb.pbpa_PixelData = buf;
+    pb.pbpa_PixelFormat = PBPAFMT_RGB;
+    pb.pbpa_PixelArrayMod = mod;
+    pb.pbpa_Left = pb.pbpa_Top = 0;
+    pb.pbpa_Width = w;
+    pb.pbpa_Height = h;
+    if (DoMethodA(o, (Msg)&pb))
+        r = fnv(2166136261UL, buf, mod * h);
+    FreeVec(buf);
+    return r;
+}
+
+static LONG cls_once(void *p)
+{
+    struct ClsRun *c = p;
+    struct BitMapHeader *bmh = NULL;
+    ULONG sc = 0, dec = 0, wr = 0, hd = 0, sa = 0, nm = 0, rd = 0, t0 = now_us(), t1, t2, t3, t4;
+    Object *o;
+    /* the file opened here and given to the object, as NewDTObject does
+     * (DTA_Handle: a file handle, for DTST_FILE); the object closes it when
+     * it is disposed of, so it is not closed here, even when OM_NEW fails */
+    BPTR fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE);
+    if (!fh)
+        return IoErr() ? IoErr() : -1;
+    t1 = now_us();
+    o = NewObject(c->cl, NULL, DTA_SourceType, DTST_FILE, DTA_Handle, (ULONG)fh,
+                  DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
+                  PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43,
+                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, JDTA_Variant, c->variant,
+                  c->mode != (ULONG)INVALID_ID ? PDTA_ModeID : TAG_IGNORE, c->mode, TAG_END);
+    if (!o) {
+        LONG e = IoErr();
+        return e ? e : -1;
+    }
+    t2 = now_us();
+    c->laid = DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    t3 = now_us();
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
+               JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr,
+               JDTA_TimeHeaders, (ULONG)&hd, JDTA_TimeSetAttrs, (ULONG)&sa,
+               JDTA_TimeNominal, (ULONG)&nm, JDTA_TimeRead, (ULONG)&rd, TAG_END);
+    if (c->ph && c->mode_out)
+        GetDTAttrs(o, PDTA_ModeID, (ULONG)c->mode_out, TAG_END);
+    if (bmh) {
+        c->w = bmh->bmh_Width;
+        c->h = bmh->bmh_Height;
+    }
+    c->scale = sc;
+    if (c->check)
+        c->hash = pixels_hash(o, c->w, c->h);
+    {
+        ULONG d0 = now_us(), tot;       /* the GetDTAttrs and the check above left out */
+        DisposeObject(o);
+        t4 = now_us() - d0;             /* disposing */
+        tot = (t3 - t0) + t4;
+        c->last[PH_SETATTRS] = sa + nm;
+        c->last[PH_LAYOUT] = t3 - t2;
+        c->last[PH_TOTAL] = tot;
+        if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
+            c->ph[PH_READ] = t1 - t0;   /* opening it: the reading is the class's, in OM_NEW */
+            c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and the class's with the decode */
+            c->ph[PH_WHOLE] = rd;
+            c->ph[PH_HEADERS] = hd;
+            c->ph[PH_SETATTRS] = sa;
+            c->ph[PH_NOMINAL] = nm;
+            c->ph[PH_DECODE] = dec > wr + hd + sa + nm + rd ? dec - wr - hd - sa - nm - rd : 0;
+            c->ph[PH_WRITE] = wr;
+            c->ph[PH_LAYOUT] = t3 - t2;
+            c->ph[PH_DISPOSE] = t4;
+            c->ph[PH_TOTAL] = tot;
+        }
+    }
+    return 0;
+}
+
+/* -- jdec built in, from memory */
+struct MemSrc {
+    const UBYTE *p;
+    ULONG n, pos;
+};
+
+static int32_t mem_read(void *ctx, uint8_t *buf, int32_t n)
+{
+    struct MemSrc *m = ctx;
+    if ((ULONG)n > m->n - m->pos)
+        n = (int32_t)(m->n - m->pos);
+    memcpy(buf, m->p + m->pos, (size_t)n);
+    m->pos += (ULONG)n;
+    return n;
+}
+
+static void *mem_alloc(void *ctx, uint32_t n)
+{
+    (void)ctx;
+    return AllocVec(n, MEMF_ANY);
+}
+
+static void mem_free(void *ctx, void *p)
+{
+    (void)ctx;
+    FreeVec(p);
+}
+
+static int rows_drop(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t stride)
+{
+    (void)ctx; (void)rgb; (void)y; (void)n; (void)stride;
+    return 0;                           /* decoded, then nowhere to go: the decoder alone */
+}
+
+static const char *jd_why(int r)
+{
+    switch (r) {
+    case JD_ENOMEM: return "out of memory";
+    case JD_EFORMAT: return "not a JPEG, or damaged";
+    case JD_EPROGRESSIVE: return "progressive JPEG (not decoded yet)";
+    case JD_ECMYK: return "CMYK JPEG (not decoded yet)";
+    case JD_EUNSUPPORTED: return "a kind of JPEG not decoded";
+    case JD_ETOOBIG: return "too big";
+    default: return "error";
+    }
+}
+
+struct JdRun {
+    UBYTE *data;
+    LONG len;
+    int scale;
+    int err;
+};
+
+static LONG jd_once(void *p)
+{
+    struct JdRun *c = p;
+    struct MemSrc m;
+    JDecIO io;
+    JDecInfo info;
+    JDec *d;
+    int r;
+    m.p = c->data;
+    m.n = (ULONG)c->len;
+    m.pos = 0;
+    io.ctx = &m;
+    io.read = mem_read;
+    io.alloc = mem_alloc;
+    io.free = mem_free;
+    io.rows = rows_drop;
+    if (!(r = jd_open(&d, &io, &info))) {
+        r = jd_decode(d, c->scale);
+        jd_close(d);
+    }
+    c->err = r;
+    return r ? -1 : 0;
+}
+
+/* A WebP that strict decoders refuse: chunks after the image without
+ * the extended header (VP8X) that allows them (C2PA, EXIF added later) */
+static BOOL webp_odd(const char *path)
+{
+    UBYTE h[20];
+    LONG n = file_size(path);
+    ULONG c;
+    if (n < 20 || !file_read(path, h, 20))
+        return FALSE;
+    if (memcmp(h, "RIFF", 4) || memcmp(h + 8, "WEBP", 4) ||
+        (memcmp(h + 12, "VP8 ", 4) && memcmp(h + 12, "VP8L", 4)))
+        return FALSE;
+    c = h[16] | (h[17] << 8) | ((ULONG)h[18] << 16) | ((ULONG)h[19] << 24);
+    return (ULONG)n > 20 + c + (c & 1);
+}
+
+/* A library left in memory by an earlier run, opened by nobody, put out,
+ * so the file on disk is what is tested */
+static void expunge_lib(const char *name)
+{
+    struct Library *l;
+    Forbid();
+    if ((l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name)) && !l->lib_OpenCnt)
+        RemLibrary(l);
+    Permit();
+}
+
+/* jfif.datatype (Henryk Richter's) decodes smaller only through its
+ * prefs (SCALE=0..3 here, read when it is loaded, for every program) */
+#define JFIF_PREFS "classes/datatypes/jfif44.prefs"
+
+static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG *pw, ULONG *ph)
+{
+    struct DtRun c;
+    struct Row *r;
+    LONG err;
+    char name[64];
+    memset(&c, 0, sizeof(c));
+    c.path = path;
+    if (!exists(path)) {
+        r = row_new(fmt, "-");
+        snprintf(r->note, sizeof(r->note), "no test file (%.60s)", path);
+        return;
+    }
+    r = row_new(fmt, "the system's datatype");
+    if (!strcmp(fmt, "JPEG")) {
+        memset(sysph, 0, sizeof(sysph));
+        c.ph = sysph;
+    }
+    if ((err = timed(dt_once, &c, &r->first, &r->best[0], &r->mean[0]))) {
+        why(err, r->note, sizeof(r->note));
+        return;
+    }
+    if (c.ph) {
+        have_sysph = TRUE;
+        c.ph = NULL;
+    }
+    snprintf(name, sizeof(name), "%.40s.datatype", c.base[0] ? c.base : "?");
+    strncpy(r->dec, name, sizeof(r->dec) - 1);
+    if (is_ours)
+        *is_ours = !strcmp(c.base, "amcejpeg");
+    if (pw)
+        *pw = c.w;
+    if (ph)
+        *ph = c.h;
+    if (is_ours && *is_ours) {          /* its size hint, at each scale */
+        int s;
+        for (s = 1; s < NSC; s++) {
+            c.fitw = (c.w + (1UL << s) - 1) >> s;
+            c.fith = (c.h + (1UL << s) - 1) >> s;
+            if (timed(dt_once, &c, NULL, &r->best[s], &r->mean[s]))
+                break;
+        }
+    }
+}
+
+#define ObtainEngine(base) LP0(30, Class *, ObtainEngine, , base)
+
+/* Where a library that would not open stops: its file loaded (LoadSeg),
+ * its ROMTag (name, version, flags), and opened asking for any version */
+static void lib_diag(const char *path)
+{
+    char line[200];
+    BPTR seg = LoadSeg((CONST_STRPTR)path), s;
+    struct Resident *rt = NULL;
+    struct Library *l;
+    if (!seg) {
+        char e[80];
+        Fault(IoErr(), NULL, (STRPTR)e, sizeof(e));
+        snprintf(line, sizeof(line), "    (*) %.60s: LoadSeg failed: %s", path, e);
+        note_add(line + 4);
+        return;
+    }
+    for (s = seg; s && !rt; s = *(BPTR *)BADDR(s)) {
+        ULONG *p = (ULONG *)BADDR(s), n = (p[-1] - 8) / 2, i;
+        UWORD *w = (UWORD *)(p + 1);
+        for (i = 0; i + 13 < n; i++)
+            if (w[i] == RTC_MATCHWORD && *(ULONG *)(w + i + 1) == (ULONG)(w + i)) {
+                rt = (struct Resident *)(w + i);
+                break;
+            }
+    }
+    if (rt)
+        snprintf(line, sizeof(line), "(*) loads; ROMTag \"%.30s\" version %ld, flags $%02lx, type %ld",
+                 rt->rt_Name ? (const char *)rt->rt_Name : "?", (long)rt->rt_Version,
+                 (unsigned long)rt->rt_Flags, (long)rt->rt_Type);
+    else
+        snprintf(line, sizeof(line), "(*) loads, but has no ROMTag");
+    note_add(line);
+    UnLoadSeg(seg);
+    if ((l = OpenLibrary((CONST_STRPTR)path, 0))) {
+        snprintf(line, sizeof(line), "(*) opens when any version is asked for: it says %ld.%ld",
+                 (long)l->lib_Version, (long)l->lib_Revision);
+        CloseLibrary(l);
+    } else {
+        snprintf(line, sizeof(line), "(*) does not open even asking for any version (IoErr %ld)", (long)IoErr());
+    }
+    note_add(line);
+}
+
+/* One JPEG class, its objects made directly from the file at each scale
+ * it can do: ours through its size hint, jfif.datatype through its
+ * prefs, others at 1/1. Installed (datatypes/), or beside zzprobe. */
+static const char *const cl_name[CL_N] = { "WarpJPEG.datatype", "jfif.datatype", "amcejpeg.datatype" };
+static const char *const cl_local[CL_N] = { NULL, "PROGDIR:jfif/jfif.datatype", "PROGDIR:amcejpeg/amcejpeg.datatype" };
+
+static struct Library *cl_open(int k, BOOL *local)
+{
+    char name[64];
+    struct Library *lib;
+    snprintf(name, sizeof(name), "datatypes/%s", cl_name[k]);
+    *local = FALSE;
+    lib = OpenLibrary((CONST_STRPTR)name, k == CL_OURS ? 46 : 0);
+    if (!lib && cl_local[k] && (lib = OpenLibrary((CONST_STRPTR)cl_local[k], k == CL_OURS ? 46 : 0)))
+        *local = TRUE;
+    return lib;
+}
+
+static void ours_why_not(struct Row *r)
+{
+    char why[100];
+    why[0] = 0;
+    if (!exists("PROGDIR:amcejpeg/amcejpeg.datatype") &&
+        !exists("SYS:Classes/DataTypes/amcejpeg.datatype")) {
+        strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
+    } else if (GetVar((STRPTR)"amcejpeg.datatype", (STRPTR)why, sizeof(why), GVF_GLOBAL_ONLY) > 0) {
+        snprintf(r->note, sizeof(r->note), "would not start: %s", why);
+    } else {
+        struct Library *pd = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 0);
+        snprintf(r->note, sizeof(r->note), "found, but would not open (picture.datatype here: %ld.%ld)",
+                 pd ? (long)pd->lib_Version : 0L, pd ? (long)pd->lib_Revision : 0L);
+        if (pd)
+            CloseLibrary(pd);
+        lib_diag(exists("SYS:Classes/DataTypes/amcejpeg.datatype")
+                 ? "SYS:Classes/DataTypes/amcejpeg.datatype" : "PROGDIR:amcejpeg/amcejpeg.datatype");
+    }
+}
+
+/* amcejpeg.datatype: the ways of giving picture.datatype PMODE_V43 and
+ * the nominal size (JDTA_Variant), each timed, laid out and its pixels
+ * checked against jdec's, at 1/1 and 1/8 */
+static void ph_cell(char *out, ULONG us, BOOL have);
+static ULONG jdec_hash(const char *path, int scale);
+static char variants_out[6][240];
+static int nvariants_out;
+
+static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
+{
+    static const char *const vname[4] = {
+        "0 SetDTAttrs, both", "1 OM_SET, both", "2 SetDTAttrs mode, OM_SET size",
+        "3 mode with OM_NEW, OM_SET size", "4 as 0, given WarpJPEG's ModeID"
+    };
+    ULONG want[2];
+    int v, si;
+    want[0] = jdec_hash(path, 0);
+    want[1] = jdec_hash(path, 3);
+    nvariants_out = 0;
+    for (v = 0; v < 5; v++) {
+        char cells[2][96];
+        for (si = 0; si < 2; si++) {
+            struct ClsRun c = *c0;
+            ULONG best = 0xFFFFFFFFUL, set = 0, lay = 0, i;
+            LONG err = 0;
+            c.variant = (ULONG)v;
+            c.ph = NULL;
+            c.mode_out = NULL;
+            c.mode = v == 4 ? cl_mode[CL_WARP] : (ULONG)INVALID_ID;
+            if (v == 4 && c.mode == (ULONG)INVALID_ID) {
+                strcpy(cells[si], "no WarpJPEG here to take a mode from");
+                continue;
+            }
+            c.fitw = si ? (w + 7) >> 3 : 0;
+            c.fith = si ? (h + 7) >> 3 : 0;
+            c.check = TRUE;             /* once, for the pixels */
+            if ((err = cls_once(&c))) {
+                why(err, cells[si], sizeof(cells[si]));
+                continue;
+            }
+            c.check = FALSE;
+            for (i = 0; i < 5 && !err; i++) {
+                if ((err = cls_once(&c)))
+                    break;
+                if (c.last[PH_TOTAL] < best) {
+                    best = c.last[PH_TOTAL];
+                    set = c.last[PH_SETATTRS];
+                    lay = c.last[PH_LAYOUT];
+                }
+            }
+            {
+                char b[16], st[16], l[16];
+                ph_cell(b, best, TRUE);
+                ph_cell(st, set, TRUE);
+                ph_cell(l, lay, TRUE);
+                snprintf(cells[si], sizeof(cells[si]), "%s (set %s, layout %s%s), %s", b, st, l,
+                         c.laid ? "" : " FAILED",
+                         !c.hash ? "no pixels" : c.hash == want[si] ? "pixels ok" : "pixels DIFFER");
+            }
+        }
+        snprintf(variants_out[nvariants_out++], sizeof(variants_out[0]), "  %-32s 1/1: %s;  1/8: %s",
+                 vname[v], cells[0], cells[1]);
+    }
+}
+
+static void bench_class(int k, const char *path, ULONG w, ULONG h)
+{
+    struct Library *lib;
+    struct ClsRun c;
+    struct Row *r;
+    char label[48], old[200], val[220];
+    BPTR lock;
+    LONG err, had = 0;
+    int s, ns = k == CL_WARP ? 1 : NSC;
+    BOOL local;
+    expunge_lib(cl_name[k]);            /* the file on disk, not one an earlier run left */
+    lib = cl_open(k, &local);
+    snprintf(label, sizeof(label), "%s%s", cl_name[k], local ? " (*)" : "");
+    r = row_new("JPEG", label);
+    if (!lib) {
+        if (k == CL_OURS)
+            ours_why_not(r);
+        else
+            snprintf(r->note, sizeof(r->note), "not installed%s", cl_local[k] ? ", nor beside zzprobe" : "");
+        return;
+    }
+    if (local)
+        note_add("(*) not installed: loaded from beside zzprobe for this test");
+    memset(&c, 0, sizeof(c));
+    c.path = path;
+    c.mode = (ULONG)INVALID_ID;
+    c.cl = ObtainEngine(lib);
+    if ((lock = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
+        c.dtn = ObtainDataTypeA(DTST_FILE, (APTR)lock, NULL);
+        UnLock(lock);
+    }
+    memset(clph[k], 0, sizeof(clph[k]));
+    cl_mode[k] = (ULONG)INVALID_ID;
+    if (k == CL_JFIF)
+        had = GetVar((STRPTR)JFIF_PREFS, (STRPTR)old, sizeof(old), GVF_GLOBAL_ONLY);
+    for (s = 0; s < ns && c.cl; s++) {
+        if (s && k == CL_OURS) {        /* its size hint */
+            c.fitw = (w + (1UL << s) - 1) >> s;
+            c.fith = (h + (1UL << s) - 1) >> s;
+        }
+        if (s && k == CL_JFIF) {        /* its prefs, read when it is loaded */
+            snprintf(val, sizeof(val), "%s%sSCALE=%ld", had > 0 ? old : "", had > 0 ? " " : "", (long)s);
+            SetVar((STRPTR)JFIF_PREFS, (STRPTR)val, -1, GVF_GLOBAL_ONLY);
+            CloseLibrary(lib);
+            expunge_lib(cl_name[k]);
+            if (!(lib = cl_open(k, &local)) || !(c.cl = ObtainEngine(lib))) {
+                strcpy(r->note, "could not be loaded again");
+                break;
+            }
+        }
+        c.ph = NULL;
+        c.mode_out = NULL;
+        if (!s) {                       /* the first load apart */
+            ULONG t0 = now_us();
+            if ((err = cls_once(&c))) {
+                why(err, r->note, sizeof(r->note));
+                break;
+            }
+            r->first = now_us() - t0;
+            if (!r->first)
+                r->first = 1;
+        }
+        c.ph = clph[k][s];
+        c.mode_out = s ? NULL : &cl_mode[k];
+        if ((err = timed(cls_once, &c, NULL, &r->best[s], &r->mean[s]))) {
+            why(err, r->note, sizeof(r->note));
+            break;
+        }
+    }
+    if (k == CL_JFIF) {
+        if (had > 0)
+            SetVar((STRPTR)JFIF_PREFS, (STRPTR)old, -1, GVF_GLOBAL_ONLY);
+        else
+            DeleteVar((STRPTR)JFIF_PREFS, GVF_GLOBAL_ONLY);
+        note_add("jfif.datatype at 1/2 to 1/8: its own SCALE prefs, set for the test and put back");
+    }
+    if (k == CL_OURS && c.cl && clph[CL_OURS][0][PH_TOTAL])
+        ours_variants(&c, path, w, h);
+    /* ours again at 1/1, given WarpJPEG's display mode: is the layout's
+     * time picture.datatype choosing one? */
+    if (k == CL_OURS && clph[CL_OURS][0][PH_TOTAL] && cl_mode[CL_WARP] != (ULONG)INVALID_ID) {
+        ULONG b, m;
+        memset(modeph, 0, sizeof(modeph));
+        c.fitw = c.fith = 0;
+        c.mode = cl_mode[CL_WARP];
+        c.ph = modeph;
+        c.mode_out = NULL;
+        if (!timed(cls_once, &c, NULL, &b, &m))
+            have_modeph = TRUE;
+    }
+    if (c.dtn)
+        ReleaseDataType(c.dtn);
+    if (lib)
+        CloseLibrary(lib);
+    if (k == CL_JFIF)
+        expunge_lib(cl_name[k]);        /* its prefs as they were, next time */
+}
+
+static void ph_cell(char *out, ULONG us, BOOL have)
+{
+    if (!have)
+        strcpy(out, "-");
+    else if (us >= 10000)
+        sprintf(out, "%ld", (long)((us + 500) / 1000));
+    else
+        sprintf(out, "%ld.%ld", (long)(us / 1000), (long)(us % 1000 / 100));
+}
+
+/* the parts of the fastest runs, side by side */
+static void time_parts(void)
+{
+    static const char *const name[PH_N] = {
+        "open the file",
+        "make the object (OM_NEW)",
+        "  of which: the file read whole",
+        "  of which: headers (jd_open)",
+        "  of which: PMODE_V43 set (if needed)",
+        "  of which: nominal size (OM_SET)",
+        "  of which: decoding (jdec)",
+        "  of which: rows to picture.datatype",
+        "layout (DTM_PROCLAYOUT)",
+        "dispose of the object",
+        "total",
+    };
+    char line[220], c[8][16];
+    int i, s, k, n;
+    BOOL have[CL_N];
+    for (k = 0; k < CL_N; k++)
+        have[k] = clph[k][0][PH_TOTAL] != 0;
+    if (!have[CL_WARP] && !have[CL_JFIF] && !have[CL_OURS])
+        return;
+    heading("Where a JPEG's time goes (ms, the parts of the fastest run)");
+    snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s %-8s", "", "Warp 1/1",
+             "jfif 1/1", "ours 1/1", "1/2", "1/4", "1/8", have_modeph ? "1/1+mode" : "");
+    sayf(line);
+    for (i = 0; i < PH_N; i++) {
+        BOOL ours_only = i == PH_HEADERS || i == PH_SETATTRS || i == PH_DECODE || i == PH_WRITE ||
+                         i == PH_WHOLE || i == PH_NOMINAL;
+        n = 0;
+        ph_cell(c[n++], clph[CL_WARP][0][i], have[CL_WARP] && !ours_only);
+        ph_cell(c[n++], clph[CL_JFIF][0][i], have[CL_JFIF] && !ours_only);
+        for (s = 0; s < NSC; s++)
+            ph_cell(c[n++], clph[CL_OURS][s][i], have[CL_OURS] && clph[CL_OURS][s][PH_TOTAL]);
+        ph_cell(c[n], modeph[i], have_modeph);
+        if (!have_modeph)
+            c[n][0] = 0;
+        snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s %-8s", name[i],
+                 c[0], c[1], c[2], c[3], c[4], c[5], c[6]);
+        sayf(line);
+    }
+    n = 0;                              /* what AmigaMCE's thumbnails of deep pictures take */
+    ph_cell(c[n++], clph[CL_WARP][0][PH_TOTAL] - clph[CL_WARP][0][PH_LAYOUT], have[CL_WARP]);
+    ph_cell(c[n++], clph[CL_JFIF][0][PH_TOTAL] - clph[CL_JFIF][0][PH_LAYOUT], have[CL_JFIF]);
+    for (s = 0; s < NSC; s++)
+        ph_cell(c[n++], clph[CL_OURS][s][PH_TOTAL] - clph[CL_OURS][s][PH_LAYOUT],
+                have[CL_OURS] && clph[CL_OURS][s][PH_TOTAL]);
+    snprintf(line, sizeof(line), "  %-36s %-8s %-8s %-8s %-8s %-8s %-8s", "total without the layout (thumbnails)",
+             c[0], c[1], c[2], c[3], c[4], c[5]);
+    sayf(line);
+    snprintf(line, sizeof(line), "  Display mode after layout: WarpJPEG $%08lx, jfif $%08lx, ours $%08lx",
+             (unsigned long)cl_mode[CL_WARP], (unsigned long)cl_mode[CL_JFIF], (unsigned long)cl_mode[CL_OURS]);
+    sayf(line);
+    if (have_modeph)
+        sayf("  1/1+mode: ours again, given WarpJPEG's display mode when it is made.");
+    sayf("  Each class's objects made directly, from the file. The rest of OM_NEW past");
+    sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
+    if (nvariants_out) {
+        heading("amcejpeg.datatype: ways of giving picture.datatype the picture (ms, best of 5)");
+        for (i = 0; i < nvariants_out; i++)
+            sayf(variants_out[i]);
+        sayf("  set: PMODE_V43 and the nominal size given; pixels: read back, against jdec's.");
+    }
+}
+
+/* jdec's own RGB at a scale, hashed as pixels_hash does: what ours must
+ * give back */
+struct HashCtx {
+    ULONG h, w;
+};
+
+static int rows_hash(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t stride)
+{
+    struct HashCtx *x = ((struct MemSrc *)ctx)[1].p ? (struct HashCtx *)((struct MemSrc *)ctx)[1].p : NULL;
+    int32_t i;
+    (void)y;
+    if (x)
+        for (i = 0; i < n; i++)
+            x->h = fnv(x->h, rgb + i * stride, x->w * 3);
+    return 0;
+}
+
+static ULONG jdec_hash(const char *path, int scale)
+{
+    struct MemSrc m[2];                 /* [1].p: the hash, for rows_hash */
+    struct HashCtx x;
+    JDecIO io;
+    JDecInfo info;
+    JDec *d;
+    LONG len = file_size(path);
+    UBYTE *data;
+    int32_t w, h;
+    ULONG r = 0;
+    if (len <= 0 || !(data = AllocVec((ULONG)len, MEMF_ANY)))
+        return 0;
+    if (file_read(path, data, len)) {
+        m[0].p = data;
+        m[0].n = (ULONG)len;
+        m[0].pos = 0;
+        m[1].p = (const UBYTE *)&x;
+        io.ctx = m;
+        io.read = mem_read;
+        io.alloc = mem_alloc;
+        io.free = mem_free;
+        io.rows = rows_hash;
+        if (!jd_open(&d, &io, &info)) {
+            jd_out_size(&info, scale, &w, &h);
+            x.h = 2166136261UL;
+            x.w = (ULONG)w;
+            if (!jd_decode(d, scale))
+                r = x.h;
+            jd_close(d);
+        }
+    }
+    FreeVec(data);
+    return r;
+}
+
+static void bench_builtin_jpeg(const char *path)
+{
+    struct Row *r = row_new("JPEG", "built in (jdec, from memory)");
+    struct JdRun c;
+    int s;
+    memset(&c, 0, sizeof(c));
+    c.len = file_size(path);
+    if (c.len <= 0 || !(c.data = AllocVec((ULONG)c.len, MEMF_ANY)) || !file_read(path, c.data, c.len)) {
+        strcpy(r->note, "the test file could not be read into memory");
+        FreeVec(c.data);
+        return;
+    }
+    for (s = 0; s < NSC; s++) {
+        c.scale = s;
+        if (timed(jd_once, &c, NULL, &r->best[s], &r->mean[s])) {
+            snprintf(r->note, sizeof(r->note), "failed: %s", jd_why(c.err));
+            break;
+        }
+    }
+    FreeVec(c.data);
+}
+
+static void cell(char *out, ULONG best, ULONG mean)
+{
+    char b[16], m[16];
+    if (!best) {
+        strcpy(out, "-");
+        return;
+    }
+    if (best >= 10000)
+        sprintf(b, "%ld", (long)((best + 500) / 1000));
+    else
+        sprintf(b, "%ld.%ld", (long)(best / 1000), (long)(best % 1000 / 100));
+    if (mean >= 10000)
+        sprintf(m, "%ld", (long)((mean + 500) / 1000));
+    else
+        sprintf(m, "%ld.%ld", (long)(mean / 1000), (long)(mean % 1000 / 100));
+    sprintf(out, "%s (%s)", b, m);
+}
+
+static void bench_pictures(const char *jpeg, const char *png, const char *webp)
+{
+    char line[200], c[NSC][24], f[16];
+    ULONG jw = 0, jh = 0;
+    BOOL ours = FALSE;
+    int i, s;
+    nrows = nnotes = 0;
+    have_sysph = have_modeph = FALSE;
+    nvariants_out = 0;
+    sys_mode = (ULONG)INVALID_ID;
+    memset(clph, 0, sizeof(clph));
+    bench_system("JPEG", jpeg, &ours, &jw, &jh);
+    if (exists(jpeg)) {                 /* the JPEG datatypes here, side by side */
+        int k;
+        for (k = 0; k < CL_N; k++)
+            bench_class(k, jpeg, jw, jh);
+    }
+    if (exists(jpeg))
+        bench_builtin_jpeg(jpeg);
+    bench_system("PNG", png, NULL, NULL, NULL);
+    strcpy(row_new("PNG", "AmigaMCE's own")->note, "not written yet");
+    bench_system("WebP", webp, NULL, NULL, NULL);
+    strcpy(row_new("WebP", "AmigaMCE's own")->note, "not written yet");
+    if (exists(webp) && webp_odd(webp))
+        note_add("test.webp has chunks after its image without a VP8X header (C2PA or EXIF "
+                 "added later?): strict decoders refuse it");
+
+    heading("Bench: pictures (ms, best of up to 10 runs, mean in brackets)");
+    sayf("  Format Decoder                         first      1/1          1/2          1/4          1/8");
+    for (i = 0; i < nrows; i++) {
+        struct Row *r = &rows[i];
+        if (r->note[0] && !r->best[0]) {
+            snprintf(line, sizeof(line), "  %-6s %-30s %s", r->fmt, r->dec, r->note);
+            sayf(line);
+            continue;
+        }
+        if (r->first)
+            sprintf(f, "%ld", (long)((r->first + 500) / 1000));
+        else
+            strcpy(f, "-");
+        for (s = 0; s < NSC; s++)
+            cell(c[s], r->best[s], r->mean[s]);
+        snprintf(line, sizeof(line), "  %-6s %-30s %7s  %-12s %-12s %-12s %-12s",
+                 r->fmt, r->dec, f, c[0], c[1], c[2], c[3]);
+        sayf(line);
+        if (r->note[0]) {
+            snprintf(line, sizeof(line), "  %-6s %-30s %s", "", "", r->note);
+            sayf(line);
+        }
+    }
+    if (jw && jh) {
+        snprintf(line, sizeof(line), "  Test picture %ld x %ld. 1/2 to 1/8: amcejpeg.datatype's size hint, "
+                 "as AmigaMCE's thumbnails ask.", (long)jw, (long)jh);
+        sayf(line);
+    }
+    sayf("  first: the first load, with loading the datatype (and any requester it shows).");
+    sayf("  Datatypes: from the file, with the layout; built in: decoding alone, from memory.");
+    for (i = 0; i < nnotes; i++) {
+        snprintf(line, sizeof(line), "  %s", notes[i]);
+        sayf(line);
+    }
+    time_parts();
+}
+
+/* ------------------------------------------------------------ bench: MP3 by mpega.library */
+/* mpega.library has no C header here; its structures and calls as in
+ * AmigaMCE's stream.c, from its documentation. */
+typedef struct { WORD freq_div, quality; LONG freq_max; } MPEGA_OUTPUT;
+typedef struct { WORD force_mono; MPEGA_OUTPUT mono, stereo; } MPEGA_LAYER;
+typedef struct {
+    struct Hook *bs_access;
+    MPEGA_LAYER layer_1_2, layer_3;
+    WORD check_mpeg;
+    LONG stream_buffer_size;
+} MPEGA_CTRL;
+typedef struct {
+    WORD norm, layer, mode, bitrate;
+    LONG frequency;
+    WORD channels;
+    ULONG ms_duration;
+    WORD private_bit, copyright, original;
+    WORD dec_channels, dec_quality;
+    LONG dec_frequency;
+    APTR handle;
+} MPEGA_STREAM;
+#define MPEGA_PCM_SIZE 1152
+#define MPEGA_open(n, c) \
+    LP2(30, MPEGA_STREAM *, MPEGA_open, char *, n, a0, MPEGA_CTRL *, c, a1, , MPEGABase)
+#define MPEGA_close(s) LP1NR(36, MPEGA_close, MPEGA_STREAM *, s, a0, , MPEGABase)
+#define MPEGA_decode_frame(s, p) \
+    LP2(42, LONG, MPEGA_decode_frame, MPEGA_STREAM *, s, a0, WORD **, p, a1, , MPEGABase)
+
+static void bench_mp3_one(const char *path, const char *label, WORD q, WORD mono, LONG fmax)
+{
+    static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
+    WORD *pcm[2];
+    MPEGA_CTRL ctrl;
+    MPEGA_STREAM *ms;
+    ULONG t0, us, samples = 0, want;
+    char line[320], t[24];
+    int k;
+    pcm[0] = pcm0;
+    pcm[1] = pcm1;
+    memset(&ctrl, 0, sizeof(ctrl));
+    for (k = 0; k < 2; k++) {
+        MPEGA_LAYER *ly = k ? &ctrl.layer_3 : &ctrl.layer_1_2;
+        ly->force_mono = mono;
+        ly->mono.freq_div = 1;
+        ly->mono.quality = q;
+        ly->mono.freq_max = fmax;
+        ly->stereo = ly->mono;
+    }
+    if (!(ms = MPEGA_open((char *)path, &ctrl))) {
+        sprintf(line, "  %s: mpega.library could not open %.100s", label, path);
+        sayf(line);
+        return;
+    }
+    want = (ULONG)ms->dec_frequency * mp3_secs;
+    t0 = now_us();
+    while (samples < want) {
+        LONG n = MPEGA_decode_frame(ms, pcm);
+        if (n == -2)
+            continue;                   /* a bad frame: the next */
+        if (n < 0)
+            break;                      /* the end */
+        samples += n;
+    }
+    us = now_us() - t0;
+    if (samples && ms->dec_frequency) {
+        ULONG audio_ms = (ULONG)((unsigned long long)samples * 1000 / (ULONG)ms->dec_frequency);
+        fmt_ms(t, audio_ms ? us / audio_ms * 1000 : 0);
+        sprintf(line, "  %s: %ld kbit/s %ld Hz %s, decoded at %ld Hz %s (quality %ld): "
+                      "%s per second of sound, %ld.%ldx real time (%ld s decoded)",
+                label, (long)ms->bitrate, (long)ms->frequency, ms->channels == 2 ? "stereo" : "mono",
+                (long)ms->dec_frequency, ms->dec_channels == 2 ? "stereo" : "mono",
+                (long)ms->dec_quality, t,
+                (long)(us ? (unsigned long long)audio_ms * 1000 / us : 0),
+                (long)(us ? (unsigned long long)audio_ms * 10000 / us % 10 : 0),
+                (long)(audio_ms / 1000));
+    } else {
+        sprintf(line, "  %s: nothing decoded", label);
+    }
+    sayf(line);
+    MPEGA_close(ms);
+}
+
+static void bench_mp3(const char *path)
+{
+    UWORD cpu = cpu_of();
+    WORD q;
+    LONG fmax;
+    char line[320];
+    if (!exists(path)) {
+        sprintf(line, "  MP3: no test file (%.100s): copy the Bench drawer beside zzprobe, or give MP3=<file>", path);
+        sayf(line);
+        return;
+    }
+    if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
+        sayf("  MP3: mpega.library is not installed");
+        return;
+    }
+    /* what AmigaMCE asks of a 68k mpega for this CPU (Paula: up to 28 kHz) */
+    q = cpu >= 40 ? 1 : 0;
+    fmax = cpu >= 40 ? 28000 : cpu >= 30 ? 24000 : 12000;
+    bench_mp3_one(path, "as AmigaMCE asks a 68k", q, cpu < 40, fmax);
+    /* what it asks of the card's: stereo, best quality, the whole rate (AHI) */
+    bench_mp3_one(path, "full quality (as AmigaMCE asks the card's)", 2, 0, 48000);
+    if (mpega_card)
+        sayf("  (the card decodes: these times are the 68k waiting on the card, not working)");
+    CloseLibrary(MPEGABase);
+    MPEGABase = NULL;
+}
+
+/* ------------------------------------------------------------ summary */
+static void summary(void)
+{
+    heading("What AmigaMCE will use");
+    sayf(zz_zorro ? (zz_zorro == 3 ? "  ZZ9000 found, on Zorro III" : "  ZZ9000 found, on Zorro II")
+                  : "  No ZZ9000 found");
+    sayf(mpega_card ? "  MP3: decoded on the card (its mpega.library), stereo, best quality"
+         : mhizz ? "  MP3: the card's MHI driver can decode it (Settings > Sound > MP3: MHI, mhizz9000.library)"
+         : mpega_any ? "  MP3: decoded by the 68k (install the ZZ9000 SDK's mpega.library for the card)"
+         : "  MP3: no decoder");
+    sayf(amissl_acc ? "  HTTPS (when AmigaMCE offers it): through the card's accelerated AmiSSL"
+                    : "  HTTPS (when AmigaMCE offers it): AmiSSL as installed");
+    if (!strcmp(jpeg_cls, "amcejpeg"))
+        sayf("  JPEG: amcejpeg.datatype (thumbnails decoded at 1/2 to 1/8 when that is enough)");
+    else if (jpeg_cls[0]) {
+        char l[120];
+        sprintf(l, "  JPEG: %.40s.datatype (amcejpeg.datatype not in use)", jpeg_cls);
+        sayf(l);
+    }
+    sayf("  Pictures: whichever datatype reads them above; JPEG, PNG and WebP are decoded");
+    sayf("    on the card only when the ZZ9000-JPEG/PNG/WebP descriptors are active");
+    if (zz_zorro && !zzlib)
+        sayf("  Note: zz9k.library is not installed: the card's SDK services are not set up");
+}
+
+/* ------------------------------------------------------------ main */
+static ULONG run(void *unused)
+{
+    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S";
+    LONG args[6] = { 0, 0, 0, 0, 0, 0 };
+    struct RDArgs *ra = ReadArgs((CONST_STRPTR)tmpl, args, NULL);
+    const char *jpeg = "PROGDIR:Bench/test.jpg", *png = "PROGDIR:Bench/test.png",
+               *webp = "PROGDIR:Bench/test.webp", *mp3 = "PROGDIR:Bench/test.mp3";
+    char line[200], date[LEN_DATSTRING], clock[LEN_DATSTRING];
+    struct DateTime dt;
+    BPTR fh;
+
+    (void)version;
+    (void)unused;
+    if (ra) {
+        if (args[0])
+            jpeg = (const char *)args[0];
+        if (args[1])
+            png = (const char *)args[1];
+        if (args[2])
+            webp = (const char *)args[2];
+        if (args[3])
+            mp3 = (const char *)args[3];
+        if (args[4]) {
+            run_ms = 500;
+            mp3_secs = 10;
+        }
+    }
+    if (OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)&treq, 0)) {
+        PutStr((CONST_STRPTR)"zzprobe: timer.device did not open\n");
+        if (ra)
+            FreeArgs(ra);
+        return 20;
+    }
+    TimerBase = treq.tr_node.io_Device;
+    {
+        struct EClockVal e;
+        efreq = ReadEClock(&e);
+    }
+    out = AllocVec(outmax, MEMF_ANY);
+    ExpansionBase = (struct ExpansionBase *)OpenLibrary((CONST_STRPTR)"expansion.library", 36);
+    DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        me->pr_WindowPtr = (APTR)-1;    /* no "insert volume" requesters */
+
+        DateStamp(&dt.dat_Stamp);
+        dt.dat_Format = FORMAT_INT;      /* yy-mm-dd: this NDK has no FORMAT_ISO */
+        dt.dat_Flags = 0;
+        dt.dat_StrDay = NULL;
+        dt.dat_StrDate = (STRPTR)date;
+        dt.dat_StrTime = (STRPTR)clock;
+        date[0] = clock[0] = 0;
+        DateToStr(&dt);
+        sprintf(line, "======== zzprobe 1.14, %s %s ========", date, clock);
+        sayf(line);
+        machine();
+        board();
+        software();
+        datatypes(jpeg, png, webp);
+        if (exists("C:zz9k-info"))
+            run_tool("C:zz9k-info", "The card's own report (zz9k-info)");
+        if (exists("C:zz9k-services"))
+            run_tool("C:zz9k-services --all", "The card's services (zz9k-services --all)");
+        if (!(ra && args[5])) {
+            bench_pictures(jpeg, png, webp);
+            heading("Bench: MP3 through mpega.library");
+            bench_mp3(mp3);
+        }
+        summary();
+        me->pr_WindowPtr = oldwin;
+    }
+    if (out && (fh = Open((CONST_STRPTR)"PROGDIR:zzprobe.txt", MODE_READWRITE))) {
+        Seek(fh, 0, OFFSET_END);
+        Write(fh, out, outn);
+        Write(fh, (APTR)"\n", 1);
+        Close(fh);
+        PutStr((CONST_STRPTR)"\nAdded to zzprobe.txt beside the program\n");
+    }
+    if (DataTypesBase)
+        CloseLibrary(DataTypesBase);
+    if (ExpansionBase)
+        CloseLibrary((struct Library *)ExpansionBase);
+    FreeVec(out);
+    CloseDevice((struct IORequest *)&treq);
+    if (ra)
+        FreeArgs(ra);
+    return 0;
+}
+
+/* on a stack of its own: the Shell's may be 4 KB, and the datatypes
+ * benched, picture.datatype and what they call all run on it */
+int main(void)
+{
+    return (int)stack_call(65536, run, NULL);
+}

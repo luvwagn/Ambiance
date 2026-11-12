@@ -35,8 +35,9 @@ LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
-       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o
+       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
+       src/jpgthumb.c
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -62,9 +63,9 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean test test-replayer test-animdraw test-beets anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype test test-replayer test-animdraw test-beets anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) lha
+all: $(TARGET) lha datatype
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -150,6 +151,15 @@ build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/an
 	@echo "  CC    $<"
 	@$(CC) -O2 -m68020 -noixemul -Wall -Wno-pointer-sign -DAD_ASM -s -o $@ $< src/animdraw.c build/animdraw68k.o -lamiga
 rtgbench: build/rtgbench
+
+# zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
+# the card's own report) and how fast AmigaMCE's uses of it are
+# (with jdec built in, to time the JPEG decoder alone)
+build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
+zzprobe: build/zzprobe
 
 test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
@@ -315,6 +325,42 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a e
 		extras/sqlite/libsqlite3.a -lm -lamiga
 	@$(STRIP) -o $@ $@.dbg
 
+# jdec, the JPEG decoder (datatypes/jpeg), built into AmigaMCE for JPEG
+# thumbnails (src/jpgthumb.c); -O2, as in the datatype: it is the hot path
+build/jdec.o: datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
+
+# amcejpeg.datatype (datatypes/jpeg): JPEG for every program that loads
+# pictures through datatypes, on jdec; libnix's libinit as amcesql's. With
+# its descriptor (DEVS:DataTypes) and dtjpeg, a test that loads a picture
+# through datatypes and times it.
+JDT_DIR   = build/amcejpeg
+JDT       = $(JDT_DIR)/amcejpeg.datatype
+JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
+JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
+JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
+datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
+$(JDT_DIR)/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  CC    $< (amcejpeg)"
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=46 -c -o $@ $<
+$(JDT): $(JDT_DIR)/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  LD    $@"
+	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg $(JDT_DIR)/libinit.o $(JDT_SRC) -lamiga
+	@$(STRIP) -o $@ $@.dbg
+$(JDT_DESC): tools/mkdtdesc.py
+	@mkdir -p $(JDT_DIR)
+	@echo "  DTYP  $@"
+	@$(PYTHON) tools/mkdtdesc.py $@ --name AmigaMCE-JPEG --base amcejpeg --group pict --id jpeg \
+		--recog "ff d8 ff" --priority 5 --version '$$VER: AmigaMCE-JPEG 46.0 ($(ADATE))'
+$(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  CC    $@"
+	@$(CC) -Os $(CPU) -noixemul -Wall -Wno-pointer-sign -o $@ $< -lamiga
+
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) \
@@ -361,5 +407,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

@@ -169,6 +169,15 @@ sim
 MSG_62366FFA
 não
 ; no
+MSG_7A881EB1
+ZZ9000: em Zorro %s; JPEG %s, PNG %s
+; ZZ9000: on Zorro %s; JPEG %s, PNG %s
+MSG_714F0E2D
+descodificado na placa
+; decoded on the card
+MSG_7AFA07FD
+descodificado aqui
+; decoded here
 MSG_25AF384C
 Memória livre: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast
@@ -226,6 +235,9 @@ MP3: %s
 MSG_197B8973
 controlador MHI
 ; MHI driver
+MSG_4B721655
+mpega.library do SDK da ZZ9000 (descodificado na placa)
+; mpega.library, the ZZ9000 SDK's (decoded on the card)
 MSG_578E3365
 FLAC: %s
 ; FLAC: %s
@@ -520,9 +532,9 @@ não instalado
 MSG_2DA3A6A5
 Descodificador MP3
 ; MP3 decoder
-MSG_7AFA07FD
-descodificado aqui
-; decoded here
+MSG_3F71ACC2
+descodificado na ZZ9000
+; decoded on the ZZ9000
 MSG_22FBBBB2
 descodifica e toca
 ; decodes and plays
@@ -1198,6 +1210,9 @@ plex.tv: sem sessão iniciada
 MSG_0B620CC7
 MP3: descodificado pelo controlador MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
+MSG_59D38C2E
+MP3: descodificado na ZZ9000 (a sua mpega.library)
+; MP3: decoded on the ZZ9000 (its mpega.library)
 MSG_1133EF71
 MP3: descodificado pela mpega.library
 ; MP3: decoded by mpega.library

@@ -28,6 +28,8 @@ struct Caps {
     UWORD kick, kick_rev; /* ROM: exec version, SysBase->SoftVer */
     UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
+    UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
+    BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
     UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
@@ -249,6 +251,8 @@ void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 /* The same in two halves: decoding (any process; remap FALSE takes no
  * pens) and drawing what was decoded (the object stays the caller's, to
  * draw again, unless *taken). */
+APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                    struct PicInfo *pi, ULONG fitw, ULONG fith);
 APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                 struct PicInfo *pi);
 BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
@@ -265,6 +269,13 @@ struct Thumb {
     UBYTE *px;
 };
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
+struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
+/* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it
+ * decodes: use the datatypes); kind says where it came from, for the
+ * note of those it does not (AmigaMCE-jpeg.txt) */
+struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                         struct PicInfo *pi, const char *kind);
+void jpeg_thumb_init(void);
 void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */
@@ -571,6 +582,7 @@ BOOL st_secure(void);           /* the stream playing came over HTTPS */
 void st_use_https(BOOL on);     /* https: streams played (Settings > Networking > HTTPS, AmiSSL) */
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
+void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
@@ -712,6 +724,7 @@ LONG ldr_out(void);             /* jobs out now */
 void pic_dispose(APTR obj);
 /* System Information: which datatype reads each picture format (a line each). */
 void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx);
+BOOL pic_on_card(const char *fmt);     /* "JPEG", "PNG": read by the ZZ9000's datatype */
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {
@@ -920,6 +933,8 @@ struct PlexConf {
     UWORD cpu;                  /* caps.cpu (plex_load) */
     BOOL flac;                  /* flacdec.library installed: FLAC plays as stored too */
     BOOL mhi;                   /* MP3 by an MHI driver: no decoding here, any quality */
+    BOOL mp3_card;              /* MP3 by the ZZ9000 SDK's mpega.library: on the card, any quality */
+    BOOL jpeg_card;             /* JPEG read by the ZZ9000's datatype: covers and photos as JPEG */
     char library[16];           /* the music library used ("" not known yet) */
     UWORD libraries;            /*   of how many on the server */
 };

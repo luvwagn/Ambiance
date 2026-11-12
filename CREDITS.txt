@@ -34,6 +34,19 @@ The AmigaMCE logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).
 
+Pictures
+--------
+amcejpeg.datatype's JPEG decoder (datatypes/jpeg/jdec.c) was written for
+AmigaMCE and is under AmigaMCE's MIT licence; it contains no code from
+libjpeg or libjpeg-turbo. It follows the methods they use and document,
+so that its pictures match theirs: the Arai-Agui-Nakajima fast inverse
+DCT (as in the Independent JPEG Group's jidctfst.c), libjpeg's "fancy"
+triangle-filter upsampling of 4:2:2 and 4:2:0 chroma, and its YCbCr to
+RGB conversion and rounding (JFIF, ITU-T T.871). It is tested against
+libjpeg (through Pillow) at every scale. With thanks to the Independent
+JPEG Group (libjpeg, (c) 1991-2020 Thomas G. Lane, Guido Vollbeding) and
+the libjpeg-turbo Project.
+
 Music
 -----
 The module replayer follows the ProTracker 2.3D play routine; its period

@@ -22,6 +22,9 @@ jobs:
     - name: Build program and LHA
       run: make all
 
+    - name: Build zzprobe (the ZZ9000 probe and bench)
+      run: make zzprobe
+
     - name: Run AGS parser tests
       run: make test
 
@@ -35,6 +38,24 @@ jobs:
       with:
         name: AmigaMCE Program
         path: AmigaMCE
+
+    - name: Archive JPEG datatype
+      uses: actions/upload-artifact@v4
+      with:
+        name: amcejpeg.datatype
+        path: |
+          build/amcejpeg/amcejpeg.datatype
+          build/amcejpeg/AmigaMCE-JPEG
+          build/amcejpeg/dtjpeg
+          datatypes/jpeg/README.md
+
+    - name: Archive zzprobe
+      uses: actions/upload-artifact@v4
+      with:
+        name: zzprobe
+        path: |
+          build/zzprobe
+          tools/zzprobe/Bench
 
     - name: Archive LHA
       uses: actions/upload-artifact@v4

@@ -27,6 +27,7 @@
 #include <proto/cybergraphics.h>
 #include <proto/layers.h>
 #include <stdio.h>
+#include "../datatypes/jpeg/amcejpeg.h"
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase;
@@ -1542,6 +1543,18 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
 APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                 struct PicInfo *pi)
 {
+    return pic_decode_fit(path, scr, remap, remapped, pi, 0, 0);
+}
+
+/* pic_decode, for a picture that will be shown no bigger than fitw x fith:
+ * amcejpeg.datatype (datatypes/jpeg) then decodes a JPEG at 1/2, 1/4 or
+ * 1/8 where that is still at least that big, much faster; other datatypes
+ * ignore the tags. pi has the picture's own size either way; the object's
+ * bitmap header, what was decoded. */
+APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                    struct PicInfo *pi, ULONG fitw, ULONG fith)
+{
+    ULONG fullw = 0, fullh = 0;
     struct BitMapHeader *bmh = NULL;
     Object *o;
     if (!DataTypesBase)
@@ -1550,13 +1563,20 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
                         PDTA_Screen, (ULONG)scr, PDTA_Remap, TRUE,
                         PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
-                        TAG_END);
+                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
     else
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                        PDTA_DestMode, PMODE_V43, TAG_END);
+                        PDTA_DestMode, PMODE_V43,
+                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
     if (!o)
         return NULL;
-    if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+    /* The layout (picture.datatype making its bitmap: 8-11 ms whatever the
+     * size, on a 68030) only for a picture that will be drawn. A thumbnail
+     * of a deep one (fit given) reads its pixels from the object as RGB
+     * (thumb.c) and never uses the bitmap. */
+    if (!(fitw && !remap && bmh && bmh->bmh_Depth > 8) &&
+        !DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
         DisposeDTObject(o);
         return NULL;
     }
@@ -1567,9 +1587,14 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
     }
     if (!remap && bmh->bmh_Depth > 8 && scr) {
         DisposeDTObject(o);
-        return pic_decode(path, scr, TRUE, remapped, pi);
+        return pic_decode_fit(path, scr, TRUE, remapped, pi, fitw, fith);
     }
     pic_info(o, bmh, pi);
+    GetDTAttrs(o, JDTA_FullWidth, (ULONG)&fullw, JDTA_FullHeight, (ULONG)&fullh, TAG_END);
+    if (fullw && fullh) {               /* decoded smaller: its own size */
+        pi->w = (UWORD)fullw;
+        pi->h = (UWORD)fullh;
+    }
     *remapped = remap;
     return o;
 }
@@ -2262,8 +2287,10 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     if (!(g->pens_shared || g->truecolor))
         return FALSE;
     if (gfx_thumbs(g) &&
-        (t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi))) {
-        ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM: no datatype */
+        ((t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi)) ||
+         (t = jpeg_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi,
+                         "picture")))) {
+        ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM or a JPEG: no datatype */
         thumb_free(t);
         return ok;
     }
@@ -2295,18 +2322,68 @@ static const UBYTE s_bmp[] = { 'B','M', 58,0,0,0, 0,0,0,0, 54,0,0,0, 40,0,0,0, 1
 static const UBYTE s_pcx[] = { 10, 5, 1, 8, 0,0, 0,0, 0,0, 0,0, 72,0, 72,0 };
 static const UBYTE s_tga[] = { 0, 0, 2, 0,0, 0,0, 0, 0,0, 0,0, 1,0, 1,0, 24, 0, 255,255,255 };
 
+static const struct { const char *fmt, *ext; const UBYTE *data; UWORD len; } dt_sample[] = {
+    { "ILBM", "iff", s_ilbm, sizeof(s_ilbm) }, { "GIF", "gif", s_gif, sizeof(s_gif) },
+    { "JPEG", "jpg", s_jpeg, sizeof(s_jpeg) }, { "PNG", "png", s_png, sizeof(s_png) },
+    { "BMP", "bmp", s_bmp, sizeof(s_bmp) }, { "PCX", "pcx", s_pcx, sizeof(s_pcx) },
+    { "TGA", "tga", s_tga, sizeof(s_tga) },
+};
+
+/* The datatype that reads sample i (written to T: and recognised as a
+ * file is), or NULL: ReleaseDataType it. No requesters: the caller's
+ * pr_WindowPtr. */
+static struct DataType *dt_of_sample(LONG i)
+{
+    struct DataType *dtn = NULL;
+    char file[40];
+    BPTR fh, l;
+    sprintf(file, "T:AmigaMCE-probe.%s", dt_sample[i].ext);
+    if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
+        Write(fh, (APTR)dt_sample[i].data, dt_sample[i].len);
+        Close(fh);
+    }
+    if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+        dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+        UnLock(l);
+    }
+    DeleteFile((CONST_STRPTR)file);
+    if (dtn && (!dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != GID_PICTURE)) {
+        ReleaseDataType(dtn);
+        dtn = NULL;
+    }
+    return dtn;
+}
+
+/* Pictures of this format ("JPEG", "PNG") are read by the ZZ9000's own
+ * datatype (zz9k-picture.datatype, its descriptor moved from
+ * SYS:Storage/DataTypes to DEVS:DataTypes): decoded on the card. */
+BOOL pic_on_card(const char *fmt)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    BOOL r = FALSE;
+    LONG i;
+    if (!DataTypesBase)
+        return FALSE;
+    me->pr_WindowPtr = (APTR)-1;
+    for (i = 0; i < (LONG)(sizeof(dt_sample) / sizeof(dt_sample[0])); i++) {
+        struct DataType *dtn;
+        if (strcmp(dt_sample[i].fmt, fmt) || !(dtn = dt_of_sample(i)))
+            continue;
+        r = dtn->dtn_Header->dth_BaseName &&
+            !amce_stricmp((const char *)dtn->dtn_Header->dth_BaseName, "zz9k-picture");
+        ReleaseDataType(dtn);
+    }
+    me->pr_WindowPtr = oldwin;
+    return r;
+}
+
 void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
 {
-    static const struct { const char *fmt, *ext; const UBYTE *data; UWORD len; } s[] = {
-        { "ILBM", "iff", s_ilbm, sizeof(s_ilbm) }, { "GIF", "gif", s_gif, sizeof(s_gif) },
-        { "JPEG", "jpg", s_jpeg, sizeof(s_jpeg) }, { "PNG", "png", s_png, sizeof(s_png) },
-        { "BMP", "bmp", s_bmp, sizeof(s_bmp) }, { "PCX", "pcx", s_pcx, sizeof(s_pcx) },
-        { "TGA", "tga", s_tga, sizeof(s_tga) },
-    };
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
     struct Library *lib;
-    char line[160], file[40];
+    char line[160];
     LONG i;
     if (!DataTypesBase) {
         out(ctx, "datatypes.library: missing (only IFF ILBM pictures can be shown)");
@@ -2321,33 +2398,22 @@ void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
     }
     out(ctx, line);
     me->pr_WindowPtr = (APTR)-1;
-    for (i = 0; i < (LONG)(sizeof(s) / sizeof(s[0])); i++) {
-        BPTR fh, l;
-        struct DataType *dtn = NULL;
-        sprintf(file, "T:AmigaMCE-probe.%s", s[i].ext);
-        if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
-            Write(fh, (APTR)s[i].data, s[i].len);
-            Close(fh);
-        }
-        if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
-            dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
-            UnLock(l);
-        }
-        DeleteFile((CONST_STRPTR)file);
-        if (!dtn || !dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != GID_PICTURE) {
-            sprintf(line, "  %s: no datatype", s[i].fmt);
+    for (i = 0; i < (LONG)(sizeof(dt_sample) / sizeof(dt_sample[0])); i++) {
+        struct DataType *dtn = dt_of_sample(i);
+        if (!dtn) {
+            sprintf(line, "  %s: no datatype", dt_sample[i].fmt);
         } else {
             const struct DataTypeHeader *h = dtn->dtn_Header;
             char cls[64];
             const char *base = h->dth_BaseName ? (const char *)h->dth_BaseName : "?";
             sprintf(cls, "datatypes/%.40s.datatype", base);
             if ((lib = OpenLibrary((CONST_STRPTR)cls, 0))) {
-                sprintf(line, "  %s: %.40s.datatype %lu.%lu (descriptor %.30s)", s[i].fmt, base,
+                sprintf(line, "  %s: %.40s.datatype %lu.%lu (descriptor %.30s)", dt_sample[i].fmt, base,
                         (unsigned long)lib->lib_Version, (unsigned long)lib->lib_Revision,
                         h->dth_Name ? (const char *)h->dth_Name : "?");
                 CloseLibrary(lib);
             } else {
-                sprintf(line, "  %s: %.40s.datatype, not found (descriptor %.30s)", s[i].fmt, base,
+                sprintf(line, "  %s: %.40s.datatype, not found (descriptor %.30s)", dt_sample[i].fmt, base,
                         h->dth_Name ? (const char *)h->dth_Name : "?");
             }
         }

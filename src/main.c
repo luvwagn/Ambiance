@@ -195,9 +195,10 @@ static void page_picture(struct Page *p, WORD w, WORD h)
         amce_log("page picture", "this screen shows no pictures");
         return;
     }
-    if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi))) {
+    if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi)) &&
+        !(t = jpeg_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi, "picture"))) {
         BOOL remapped = FALSE;
-        APTR o = pic_decode(p->pic, NULL, FALSE, &remapped, &pi);
+        APTR o = pic_decode_fit(p->pic, NULL, FALSE, &remapped, &pi, (ULONG)w, (ULONG)h);
         if (o) {
             ULONG dw, dh;
             pic_fit(pi.w, pi.h, tall, w, h, FALSE, &dw, &dh);    /* smaller or larger: to fit */
@@ -1461,6 +1462,12 @@ static void build_sysinfo(struct Page *p)
     }
     sprintf(line, _("Graphics card (RTG): %s"), caps.rtg ? _("yes") : _("no"));
     text_line(p, line);
+    if (caps.zz9000) {
+        sprintf(line, _("ZZ9000: on Zorro %s; JPEG %s, PNG %s"), caps.zz9000 == 3 ? "III" : "II",
+                plex.jpeg_card ? _("decoded on the card") : _("decoded here"),
+                pic_on_card("PNG") ? _("decoded on the card") : _("decoded here"));
+        text_line(p, line);
+    }
     sprintf(line, _("Free memory: %luKB chip, %luKB fast"),
             (unsigned long)(caps.chipfree >> 10), (unsigned long)(caps.fastfree >> 10));
     text_line(p, line);
@@ -1483,7 +1490,9 @@ static void build_sysinfo(struct Page *p)
     text_line(p, line);
     sprintf(line, _("Network stack: %s"), caps.net ? _("running") : _("none"));
     text_line(p, line);
-    sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver") : caps.mp3_mpega ? "mpega.library" : _("none"));
+    sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver")
+                                : caps.mpega_zz ? _("mpega.library, the ZZ9000 SDK's (decoded on the card)")
+                                : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
     /* FLAC: the library, and whether this Amiga decodes it in time (measured
      * at each start: the same system image on a slow and a fast Amiga) */
@@ -1608,6 +1617,8 @@ static const char *const buf_notes[3] = { N_("starts in 0.6s"), N_("1.2s"),
 static UWORD rkbps_auto(void)
 {
     int t = plex_tier();
+    if (plex.mhi || plex.mp3_card)
+        return 0;                       /* MP3 not decoded by the 68k: any bitrate */
     return t == 0 ? 128 : t == 1 ? 192 : 0;
 }
 
@@ -1841,6 +1852,9 @@ static void mhi_apply(void)
         st_use_mhi("");
     }
     plex.mhi = mhi_sel[0] != 0;
+    /* the ZZ9000 SDK's mpega.library decodes on the card: full quality */
+    st_use_card_mpega(caps.mpega_zz);
+    plex.mp3_card = caps.mpega_zz && !mhi_sel[0];
 }
 
 static void load_sound_out(void)
@@ -1869,7 +1883,9 @@ static void load_sound_out(void)
     {
         char m[160];
         sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI", sound_ahi ? "AHI" : "Paula",
-                mhi_sel[0] ? mhi_sel : "mpega.library", (long)nmhi, nmhi == 1 ? "" : "s");
+                mhi_sel[0] ? mhi_sel : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)"
+                                                     : "mpega.library",
+                (long)nmhi, nmhi == 1 ? "" : "s");
         amce_log("sound", m);
     }
 }
@@ -2423,7 +2439,7 @@ static void build_plex_settings(struct Page *p)
     /* the server's conversion: a choice only where the Amiga is fast enough
      * to decode the files as stored (plex_tier: how fast it really is, not
      * only its CPU); on others always on */
-    fast = plex_tier() >= 2 || plex.mhi;   /* MHI decodes MP3, however fast the Amiga */
+    fast = plex_tier() >= 2 || plex.mhi || plex.mp3_card;  /* MHI or the ZZ9000 decodes MP3 */
     if ((it = action_item(p, _("Request lower quality audio"), fast ? "" : _("needed on this Amiga"),
                           ACT_PLEXCONV, plex.convert || !fast ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
         !fast)
@@ -2447,7 +2463,9 @@ static void build_sound_settings(struct Page *p)
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
     heading_item(p, _("MP3 decoder"));
-    if ((it = action_item(p, "MP3: mpega.library", caps.mp3_mpega ? _("decoded here") : _("not installed"),
+    if ((it = action_item(p, "MP3: mpega.library",
+                          !caps.mp3_mpega ? _("not installed")
+                          : caps.mpega_zz ? _("decoded on the ZZ9000") : _("decoded here"),
                           ACT_SND_MPEGA, !mhi_sel[0] && caps.mp3_mpega ? MARK_RADIO_ON
                                                                      : MARK_RADIO_OFF)) &&
         !caps.mp3_mpega)
@@ -11140,8 +11158,9 @@ static void plex_help(void)
         if (mp3)
             sprintf(line, _("MP3: decoded by the MHI driver %.40s"), mp3);
         else
-            amce_strlcpy(line, caps.mp3_mpega ? _("MP3: decoded by mpega.library")
-                                              : _("MP3: no decoder (mpega.library or MHI)"),
+            amce_strlcpy(line, caps.mpega_zz ? _("MP3: decoded on the ZZ9000 (its mpega.library)")
+                               : caps.mp3_mpega ? _("MP3: decoded by mpega.library")
+                               : _("MP3: no decoder (mpega.library or MHI)"),
                          sizeof(line));
         text_line(p, line);
         text_line(p, !caps.flacdec ? _("FLAC: converted to MP3 (flacdec.library is not installed)")
@@ -12744,6 +12763,7 @@ static int app_main(void)
     }
 
     caps_detect(&caps);
+    jpeg_thumb_init();                  /* before the loader: its note's lock */
     https_apply();                  /* the setting, now that AmiSSL is looked for */
     {
         /* HTTPS's root certificates (tls.c), by their full name: the
@@ -12762,6 +12782,16 @@ static int app_main(void)
     }
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
+    plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
+    if (caps.zz9000) {
+        char m[160];
+        sprintf(m, "ZZ9000 on Zorro %s; mpega.library %s; JPEG %s, PNG %s",
+                caps.zz9000 == 3 ? "III" : "II",
+                caps.mpega_zz ? "the ZZ9000 SDK's" : caps.mp3_mpega ? "not the card's" : "absent",
+                plex.jpeg_card ? "by zz9k-picture.datatype" : "by another datatype",
+                pic_on_card("PNG") ? "by zz9k-picture.datatype" : "by another datatype");
+        amce_log("zz9000", m);
+    }
     load_sound_out();
     load_folders();
     songs_can_play(caps.mp3_mpega, caps.flacdec);   /* what music lists show */

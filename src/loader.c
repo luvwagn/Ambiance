@@ -74,6 +74,19 @@ static struct Worker *worker_for(const struct LJob *j)
     return &workers[W_QUICK];
 }
 
+/* Where a job's picture comes from, for jpgthumb.c's note of the JPEGs
+ * jdec leaves to the datatypes */
+static const char *pic_kind(const struct LJob *j, const char *src)
+{
+    if (!strncmp(src, "RAM:AmigaMCE-art/", 17))
+        return "streamed cover (Plex)";
+    if (j->type == LJ_ENTRY || (j->type == LJ_SHOT && j->mode == SHOT_AGS))
+        return "game screenshot";
+    if (j->type == LJ_SHOT && j->mode == SHOT_SONG)
+        return "music cover (beets or files)";
+    return "picture";
+}
+
 /* Decode picture src for job j. With tw (a colour-table screen), it is
  * decoded as it is and made small in colours of its own (thumb.c): the
  * pane's picture always, the viewer's one only when its colours do not
@@ -87,9 +100,18 @@ static void decode(struct LJob *j, const char *src)
         j->own = TRUE;
         return;
     }
+    if (j->tw && !j->viewfit &&
+        (j->thumb = jpeg_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info,
+                               pic_kind(j, src)))) {
+        j->ms_decode = time_ms() - t0;      /* a JPEG: jdec, built in, no datatype */
+        j->own = TRUE;
+        return;
+    }
     if (ilbm_is_anim(src))
         return;                         /* not to a datatype: it would read every frame */
-    j->obj = pic_decode(src, j->tw ? NULL : j->scr, j->remap, &j->remapped, &j->info);
+    /* a thumbnail: decoded no bigger than it needs (amcejpeg.datatype) */
+    j->obj = pic_decode_fit(src, j->tw ? NULL : j->scr, j->remap, &j->remapped, &j->info,
+                            j->tw && !j->viewfit ? j->tw : 0, j->tw && !j->viewfit ? j->th : 0);
     j->ms_decode = time_ms() - t0;
     if (!j->obj || !j->tw || j->remapped || j->cancel)
         return;

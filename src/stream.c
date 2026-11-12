@@ -228,6 +228,7 @@ static struct {
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
+static BOOL card_mpega;             /* mpega.library is the ZZ9000 SDK's: it decodes on the card */
 struct Library *MHIBase;            /* the MHI driver's (the radio process's, while it plays) */
 
 /* ---------------------------------------------------------- Paula */
@@ -2117,9 +2118,12 @@ static void radio_main(void)
     ctrl.bs_access = &hook;
     {
         /* what the CPU can decode in time, and never more than Paula plays
-         * (with AHI, a 68060 class Amiga: the whole rate) */
-        WORD q = st.cpu >= 40 ? 1 : 0, mono = st.cpu < 40, div = 1;
-        LONG fmax = st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
+         * (with AHI, a 68060 class Amiga: the whole rate). The ZZ9000
+         * SDK's mpega.library decodes on the card, whatever the CPU: the
+         * best it offers, stereo, the whole rate on AHI. */
+        WORD q = card_mpega ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card_mpega && st.cpu < 40, div = 1;
+        LONG fmax = card_mpega ? (st.ahi ? 48000 : 28000)
+                  : st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = first_frame_freq();
         MPEGA_LAYER *ls[2];
         int k;
@@ -2162,10 +2166,11 @@ static void radio_main(void)
         amce_strlcpy(u, st.url, sizeof(u));
         if ((q = strchr(u, '?')))
             *q = 0;
-        sprintf(m, "%s: MP3 %ld kbit/s %ld Hz %s, decoded at %ld Hz %s (quality %ld)",
+        sprintf(m, "%s: MP3 %ld kbit/s %ld Hz %s, decoded at %ld Hz %s (quality %ld)%s",
                 st.name[0] && !st.finite ? st.name : u, (long)st.bitrate, (long)st.freq,
                 st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
-                st.dec_channels == 2 ? "stereo" : "mono", (long)ms->dec_quality);
+                st.dec_channels == 2 ? "stereo" : "mono", (long)ms->dec_quality,
+                card_mpega ? " on the ZZ9000" : "");
         amce_log(st.finite ? "track" : "radio", m);
     }
     decode_loop(ms);
@@ -2305,6 +2310,13 @@ BOOL st_ahi(void)
 void st_use_mhi(const char *driver)
 {
     amce_strlcpy(mhi_driver, driver ? driver : "", sizeof(mhi_driver));
+}
+
+/* Settings > Sound found mpega.library to be the ZZ9000 SDK's (caps.mpega_zz):
+ * MP3 is decoded on the card, at the best quality, whatever the CPU. */
+void st_use_card_mpega(BOOL on)
+{
+    card_mpega = on;
 }
 
 BOOL st_mhi(void)

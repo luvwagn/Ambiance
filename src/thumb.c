@@ -35,6 +35,8 @@
 static BOOL read_rows(Object *o, UBYTE *buf, ULONG sw, ULONG top, ULONG n, BOOL rgb)
 {
     struct pdtBlitPixelArray pbpa;
+    if (!o)
+        return FALSE;
     pbpa.MethodID = PDTM_READPIXELARRAY;
     pbpa.pbpa_PixelData = buf;
     pbpa.pbpa_PixelFormat = rgb ? PBPAFMT_RGB : PBPAFMT_LUT8;
@@ -270,7 +272,18 @@ void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map)
 /* Averaged down, then maxcol colours of its own. rgb: the colour table of
  * a colour-table picture (read as LUT8), NULL for a deep one (read as
  * RGB). */
-static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
+/* rows from a decoded picture in memory (mem: RGB, sw * 3 a row), or
+ * from the object */
+static BOOL get_rows(Object *o, const UBYTE *mem, UBYTE *buf, ULONG sw, ULONG top, ULONG n, BOOL rgb)
+{
+    if (mem) {
+        CopyMem((APTR)(mem + top * sw * 3), buf, n * sw * 3);
+        return TRUE;
+    }
+    return read_rows(o, buf, sw, top, n, rgb);
+}
+
+static struct Thumb *quantise(Object *o, const UBYTE *mem, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
                               const ULONG *rgb, LONG maxcol)
 {
     struct Thumb *t = NULL;
@@ -308,7 +321,7 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
         for (y = 0; y < dh; y += rmax) {
             ULONG k = dh - y < rmax ? dh - y : rmax, r;
             t1 = time_ms();
-            if (!read_rows(o, rows, sw, y, k, TRUE))
+            if (!get_rows(o, mem, rows, sw, y, k, TRUE))
                 goto out;
             tm_read += time_ms() - t1;
             for (r = 0; r < k; r++) {
@@ -336,7 +349,7 @@ static struct Thumb *quantise(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
             if (sy1 - sy0 > rmax)
                 sy1 = sy0 + rmax;
             t1 = time_ms();
-            if (!read_rows(o, rows, sw, sy0, sy1 - sy0, deep))
+            if (!get_rows(o, mem, rows, sw, sy0, sy1 - sy0, deep))
                 goto out;
             tm_read += time_ms() - t1;
             memset(sum, 0, dw * 4 * sizeof(ULONG));
@@ -490,6 +503,14 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
     return TRUE;
 }
 
+/* A thumbnail of a picture decoded into memory (RGB, sw * 3 a row):
+ * jpgthumb.c's, made as thumb_make makes a deep picture's */
+struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol)
+{
+    tm_read = tm_cells = tm_cut = tm_map = 0;
+    return quantise(NULL, rgb, sw, sh, dw, dh, NULL, maxcol);
+}
+
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
 {
     Object *o = obj;
@@ -514,7 +535,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
     sh = bmh->bmh_Height;
     deep = bmh->bmh_Depth > 8 || (mode & HAM_KEY) || !cregs || !ncol;
     if (deep)
-        return quantise(o, sw, sh, dw, dh, NULL, maxcol);
+        return quantise(o, NULL, sw, sh, dw, dh, NULL, maxcol);
 
     /* the colour table, 8 bits a gun; extra halfbrite: the dark half too */
     memset(rgb, 0, sizeof(rgb));
