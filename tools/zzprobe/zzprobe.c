@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.7 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.8 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -379,12 +379,17 @@ static void desc_detail(const struct DataTypeHeader *h)
         o += sprintf(line + o, "(no bytes)");
     for (i = 0; i < n && i < 16; i++) {
         WORD m = h->dth_Mask[i];
-        if (m < 0)
+        if (m < 0) {
             o += sprintf(line + o, "?? ");
-        else if (m >= 32 && m < 127)
-            o += sprintf(line + o, "'%c' ", (char)m);
-        else
+        } else if (m >= 32 && m < 127) {    /* not %c: this libnix's is 16-bit */
+            line[o++] = '\'';
+            line[o++] = (char)m;
+            line[o++] = '\'';
+            line[o++] = ' ';
+            line[o] = 0;
+        } else {
             o += sprintf(line + o, "%02lx ", (unsigned long)(m & 0xFF));
+        }
     }
     if (n > 16)
         o += sprintf(line + o, "...");
@@ -926,9 +931,22 @@ static void lib_diag(const char *path)
     note_add(line);
 }
 
+/* A library left in memory by an earlier run, opened by nobody, put out,
+ * so the file on disk is what is tested */
+static void expunge_lib(const char *name)
+{
+    struct Library *l;
+    Forbid();
+    if ((l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name)) && !l->lib_OpenCnt)
+        RemLibrary(l);
+    Permit();
+}
+
 static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
 {
-    struct Library *lib = OpenLibrary((CONST_STRPTR)"datatypes/amcejpeg.datatype", 46);
+    struct Library *lib;
+    expunge_lib("amcejpeg.datatype");
+    lib = OpenLibrary((CONST_STRPTR)"datatypes/amcejpeg.datatype", 46);
     struct ClsRun c;
     struct Row *r;
     BPTR lock;
@@ -1022,7 +1040,7 @@ static void time_parts(void)
         "  of which: rows to picture.datatype",
         "layout (DTM_PROCLAYOUT)",
         "dispose of the object",
-        "total"
+        "total",
     };
     char line[200], c[NSC + 1][16], sys[48];
     int i, s;
@@ -1042,6 +1060,13 @@ static void time_parts(void)
                  c[1], c[2], c[3], c[4]);
         sayf(line);
     }
+    /* what AmigaMCE's thumbnails of deep pictures take: no layout */
+    ph_cell(c[0], sysph[PH_TOTAL] - sysph[PH_LAYOUT], have_sysph);
+    for (s = 0; s < NSC; s++)
+        ph_cell(c[s + 1], ourph[s][PH_TOTAL] - ourph[s][PH_LAYOUT], have_ourph && ourph[s][PH_TOTAL]);
+    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", "total without the layout (thumbnails)",
+             c[0], c[1], c[2], c[3], c[4]);
+    sayf(line);
     sayf("  The system's datatype reads the file inside OM_NEW. The rest of OM_NEW, past");
     sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
 }
@@ -1333,7 +1358,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.7, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.8, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();

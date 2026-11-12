@@ -1570,7 +1570,13 @@ APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *rema
                         JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
     if (!o)
         return NULL;
-    if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+    /* The layout (picture.datatype making its bitmap: 8-11 ms whatever the
+     * size, on a 68030) only for a picture that will be drawn. A thumbnail
+     * of a deep one (fit given) reads its pixels from the object as RGB
+     * (thumb.c) and never uses the bitmap. */
+    if (!(fitw && !remap && bmh && bmh->bmh_Depth > 8) &&
+        !DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
         DisposeDTObject(o);
         return NULL;
     }
