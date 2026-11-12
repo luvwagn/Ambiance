@@ -826,6 +826,7 @@ struct TlsLib {
     struct Library *master, *ssl, *ext;
     APTR ctx;                   /* NULL: not open */
     BOOL tried;
+    LONG err;                   /* the socket calls' errno: the stack's and AmiSSL's both */
     char ver[44];               /* OpenSSL's version, for the log */
     char why[128];              /* the last failure */
 };

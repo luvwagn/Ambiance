@@ -14,6 +14,13 @@
  * the caller waits on the socket as it does already (its timeout, its
  * Stop), then calls again.
  *
+ * AmiSSL learns what a socket call failed with (above all "would wait",
+ * on these non-blocking sockets) from an errno, which it is given; the
+ * process's bsdsocket.library is told to set that same one (it sets none
+ * of the program's by itself). Without, AmiSSL read whatever an earlier
+ * call had left there ("Device not configured") and gave the connection
+ * up at its first read.
+ *
  * Certificates are checked (AmiSSL's own, in AmiSSL:Certs) where something
  * of the user's is sent (plex.tv: the sign-in); a radio station's stream is
  * public, and many stations' certificates would fail an Amiga's checks
@@ -28,6 +35,8 @@
 #include <errno.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/bsdsocket.h>
+#include <libraries/bsdsocket.h>
 
 /* AmiSSL's calls take the base of the process making them */
 struct Library;
@@ -83,6 +92,12 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
     if (t->tried)
         return FALSE;                       /* once a process: not there is not there */
     t->tried = TRUE;
+    if (socketbase) {
+        /* the stack's errno for this process: t->err, AmiSSL's too */
+        struct Library *SocketBase = socketbase;
+        t->err = 0;
+        SocketBaseTags(SBTM_SETVAL(SBTC_ERRNOPTR(sizeof(t->err))), (ULONG)&t->err, TAG_END);
+    }
     if (!socketbase ||
         !(AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library",
                                          AMISSLMASTER_MIN_VERSION))) {
@@ -95,7 +110,7 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
                        AmiSSL_GetAmiSSLBase, (ULONG)&ssl,
                        AmiSSL_GetAmiSSLExtBase, (ULONG)&ext,
                        AmiSSL_SocketBase, (ULONG)socketbase,
-                       AmiSSL_ErrNoPtr, (ULONG)&errno,
+                       AmiSSL_ErrNoPtr, (ULONG)&t->err,
                        TAG_DONE) != 0 || !ssl) {
         CloseLibrary(AmiSSLMasterBase);
         amce_strlcpy(t->why, "AmiSSL could not be opened (AmiSSL 5 needed)", sizeof(t->why));
