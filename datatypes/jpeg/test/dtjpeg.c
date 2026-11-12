@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../amcejpeg.h"
+#include "../stackcall.h"
 
 static const char __attribute__((used)) ver[] = "$VER: dtjpeg 1.0 (12.11.2026) AmigaMCE";
 struct Library *DataTypesBase;
@@ -34,7 +35,7 @@ static LONG ticks(void)
     return ds.ds_Days * 24 * 60 * 50 + ds.ds_Minute * 60 * 50 + ds.ds_Tick;
 }
 
-int main(void)
+static ULONG run(void *unused)
 {
     LONG args[4] = { 0 };
     struct RDArgs *ra;
@@ -42,6 +43,7 @@ int main(void)
     Object *o = NULL;
     LONG t0, t1, err = 0;
     int rc = RETURN_FAIL;
+    (void)unused;
 
     if (!(ra = ReadArgs("FILE/A,FIT/K,TIMES/N,PPM/K", args, NULL))) {
         PrintFault(IoErr(), "dtjpeg");
@@ -143,5 +145,12 @@ out:
     if (DataTypesBase)
         CloseLibrary(DataTypesBase);
     FreeArgs(ra);
-    return rc;
+    return (ULONG)rc;
+}
+
+/* on a stack of its own: the Shell's may be 4 KB, and a datatype,
+ * picture.datatype and what they call all run on it */
+int main(void)
+{
+    return (int)stack_call(65536, run, NULL);
 }

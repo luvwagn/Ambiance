@@ -36,6 +36,7 @@
 #include "stabs.h"
 #include "jdec.h"
 #include "amcejpeg.h"
+#include "stackcall.h"
 
 #ifndef DTERROR_UNKNOWN_COMPRESSION
 #define DTERROR_UNKNOWN_COMPRESSION DTERROR_INVALID_DATA
@@ -251,6 +252,21 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     return 0;
 }
 
+/* load() on a stack of its own: a datatype runs on its caller's, which
+ * may be a Shell's 4 KB, and picture.datatype is called from inside */
+#define LOAD_STACK 24576
+struct LoadArgs {
+    Class *cl;
+    Object *o;
+    struct TagItem *attrs;
+};
+
+static ULONG load_entry(void *p)
+{
+    struct LoadArgs *a = p;
+    return (ULONG)load(a->cl, a->o, a->attrs);
+}
+
 static ULONG get(Class *cl, Object *o, struct opGet *m)
 {
     struct Inst *in = INST_DATA(cl, o);
@@ -274,7 +290,12 @@ static ULONG dispatch(register Class *cl __asm("a0"), register Object *o __asm("
     case OM_NEW: {
         Object *obj = (Object *)DoSuperMethodA(cl, o, msg);
         if (obj) {
-            LONG err = load(cl, obj, ((struct opSet *)msg)->ops_AttrList);
+            struct LoadArgs la;
+            LONG err;
+            la.cl = cl;
+            la.o = obj;
+            la.attrs = ((struct opSet *)msg)->ops_AttrList;
+            err = (LONG)stack_call(LOAD_STACK, load_entry, &la);
             if (err) {
                 ULONG dispose = OM_DISPOSE;
                 CoerceMethodA(cl, obj, (Msg)&dispose);

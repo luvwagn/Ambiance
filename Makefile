@@ -154,7 +154,7 @@ rtgbench: build/rtgbench
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast AmigaMCE's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
-build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h
+build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
 	@mkdir -p build
 	@echo "  CC    $<"
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
@@ -334,7 +334,7 @@ JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
 JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
 JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
 datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
-$(JDT): build/sqlib/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h
+$(JDT): build/sqlib/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
 	@mkdir -p $(JDT_DIR)
 	@echo "  LD    $@"
 	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg build/sqlib/libinit.o $(JDT_SRC) -lamiga
@@ -344,7 +344,7 @@ $(JDT_DESC): tools/mkdtdesc.py
 	@echo "  DTYP  $@"
 	@$(PYTHON) tools/mkdtdesc.py $@ --name AmigaMCE-JPEG --base amcejpeg --group pict --id jpeg \
 		--recog "ff d8 ff" --priority 5 --version '$$VER: AmigaMCE-JPEG 46.0 ($(ADATE))'
-$(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h
+$(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
 	@mkdir -p $(JDT_DIR)
 	@echo "  CC    $@"
 	@$(CC) -Os $(CPU) -noixemul -Wall -Wno-pointer-sign -o $@ $< -lamiga

@@ -58,8 +58,9 @@
 #include <stdio.h>
 #include "../../datatypes/jpeg/jdec.h"
 #include "../../datatypes/jpeg/amcejpeg.h"
+#include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.1 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.2 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -801,7 +802,7 @@ static void summary(void)
 }
 
 /* ------------------------------------------------------------ main */
-int main(void)
+static ULONG run(void *unused)
 {
     static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S";
     LONG args[6] = { 0, 0, 0, 0, 0, 0 };
@@ -813,6 +814,7 @@ int main(void)
     BPTR fh;
 
     (void)version;
+    (void)unused;
     if (ra) {
         if (args[0])
             jpeg = (const char *)args[0];
@@ -854,7 +856,7 @@ int main(void)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.1, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.2, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
@@ -900,4 +902,11 @@ int main(void)
     if (ra)
         FreeArgs(ra);
     return 0;
+}
+
+/* on a stack of its own: the Shell's may be 4 KB, and the datatypes
+ * benched, picture.datatype and what they call all run on it */
+int main(void)
+{
+    return (int)stack_call(65536, run, NULL);
 }
