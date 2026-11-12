@@ -22,6 +22,7 @@
 #include <exec/libraries.h>
 #include <dos/dos.h>
 #include <dos/var.h>
+#include <devices/timer.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/classes.h>
 #include <intuition/classusr.h>
@@ -32,6 +33,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/datatypes.h>
+#include <proto/timer.h>
 #include <clib/alib_protos.h>
 #include <string.h>
 #include "stabs.h"
@@ -60,12 +62,30 @@ struct IntuitionBase *IntuitionBase;
 struct Library *DataTypesBase;
 static struct Library *PictureBase;     /* held open: our superclass */
 static Class *jclass;
+struct Device *TimerBase;               /* the E-clock, for JDTA_Time*; NULL: none */
+static struct timerequest treq;
+static ULONG efreq_k;                   /* E-clock ticks a millisecond */
+
+static ULONG eclock(void)
+{
+    struct EClockVal e;
+    if (!TimerBase)
+        return 0;
+    ReadEClock(&e);
+    return e.ev_lo;
+}
+
+static ULONG ticks_us(ULONG t)          /* to 4 s or so */
+{
+    return efreq_k ? t * 1000 / efreq_k : 0;
+}
 
 /* each object's own */
 struct Inst {
     ULONG fullw, fullh;                 /* the picture's size */
     ULONG scale;                        /* 1, 2, 4, 8 */
     ULONG damaged;
+    ULONG us_load, us_write;            /* JDTA_TimeLoad, JDTA_TimeWrite */
 };
 
 /* ---- jdec's input, memory and output */
@@ -78,6 +98,7 @@ struct Src {
     ULONG memlen, mempos;
     LONG ioerr;
     ULONG w;                            /* rows' width */
+    ULONG t_write;                      /* E-clock ticks in WRITEPIXELARRAY */
 };
 
 static int32_t src_read(void *ctx, uint8_t *buf, int32_t n)
@@ -125,7 +146,11 @@ static int src_rows(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t
     m.pbpa_Top = (ULONG)y;
     m.pbpa_Width = s->w;
     m.pbpa_Height = (ULONG)n;
-    DoSuperMethodA(s->cl, s->o, (Msg)&m);
+    {
+        ULONG t0 = eclock();
+        DoSuperMethodA(s->cl, s->o, (Msg)&m);
+        s->t_write += eclock() - t0;
+    }
     return 0;
 }
 
@@ -183,6 +208,7 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     JDec *d;
     int32_t w, h;
     int r, scale;
+    ULONG t0 = eclock();
 
     memset(&s, 0, sizeof(s));
     s.cl = cl;
@@ -245,6 +271,8 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     r = jd_decode(d, scale);
     in->damaged = jd_damaged(d) ? TRUE : FALSE;
     jd_close(d);
+    in->us_load = ticks_us(eclock() - t0);
+    in->us_write = ticks_us(s.t_write);
     if (r)
         return dos_err(r, &s);
     in->fullw = (ULONG)info.width;
@@ -277,6 +305,8 @@ static ULONG get(Class *cl, Object *o, struct opGet *m)
     case JDTA_FullHeight: v = in->fullh; break;
     case JDTA_Scale: v = in->scale; break;
     case JDTA_Damaged: v = in->damaged; break;
+    case JDTA_TimeLoad: v = in->us_load; break;
+    case JDTA_TimeWrite: v = in->us_write; break;
     default:
         return DoSuperMethodA(cl, o, (Msg)m);
     }
@@ -352,6 +382,11 @@ int __UserLibInit(struct Library *lib)
         return 1;
     }
     DeleteVar((STRPTR)WHY_VAR, GVF_GLOBAL_ONLY);
+    if (!OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)&treq, 0)) {
+        struct EClockVal e;
+        TimerBase = treq.tr_node.io_Device;
+        efreq_k = ReadEClock(&e) / 1000;
+    }
     jclass->cl_Dispatcher.h_Entry = (HOOKFUNC)dispatch;
     jclass->cl_UserData = (ULONG)lib;
     AddClass(jclass);
@@ -360,6 +395,10 @@ int __UserLibInit(struct Library *lib)
 
 void __UserLibCleanup(void)
 {
+    if (TimerBase) {
+        CloseDevice((struct IORequest *)&treq);
+        TimerBase = NULL;
+    }
     if (jclass) {
         RemoveClass(jclass);
         FreeClass(jclass);

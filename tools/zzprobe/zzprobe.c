@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.6 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.7 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -537,6 +537,12 @@ struct Row {
 };
 static struct Row rows[12];
 static int nrows;
+
+/* Where the time goes, the fastest run's parts (us): JPEG through the
+ * system's datatype at 1/1 (sysph) and through amcejpeg at each scale */
+enum { PH_READ, PH_NEW, PH_DECODE, PH_WRITE, PH_LAYOUT, PH_DISPOSE, PH_TOTAL, PH_N };
+static ULONG sysph[PH_N], ourph[NSC][PH_N];
+static BOOL have_sysph, have_ourph;
 static char notes[8][160];
 static int nnotes;
 
@@ -638,6 +644,7 @@ struct DtRun {
     ULONG fitw, fith;
     ULONG w, h, scale;
     char base[40];
+    ULONG *ph;                          /* the fastest run's parts, or NULL */
 };
 
 static LONG dt_once(void *p)
@@ -645,7 +652,7 @@ static LONG dt_once(void *p)
     struct DtRun *c = p;
     struct BitMapHeader *bmh = NULL;
     struct DataType *dtn = NULL;
-    ULONG sc = 0;
+    ULONG sc = 0, t0 = now_us(), t1, t2, t3;
     Object *o = NewDTObject((APTR)c->path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
                             PDTA_DestMode, PMODE_V43,
                             JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, TAG_END);
@@ -653,7 +660,9 @@ static LONG dt_once(void *p)
         LONG e = IoErr();
         return e ? e : -1;
     }
+    t1 = now_us();
     DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    t2 = now_us();
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
     GetDTAttrs(o, JDTA_Scale, (ULONG)&sc, TAG_END);     /* amcejpeg's; else 0 */
     if (bmh) {
@@ -666,6 +675,13 @@ static LONG dt_once(void *p)
         c->base[sizeof(c->base) - 1] = 0;
     }
     DisposeDTObject(o);
+    t3 = now_us();
+    if (c->ph && (!c->ph[PH_TOTAL] || t3 - t0 < c->ph[PH_TOTAL])) {
+        c->ph[PH_NEW] = t1 - t0;        /* the file read, and the decode, inside */
+        c->ph[PH_LAYOUT] = t2 - t1;
+        c->ph[PH_DISPOSE] = t3 - t2;
+        c->ph[PH_TOTAL] = t3 - t0;
+    }
     return 0;
 }
 
@@ -678,16 +694,18 @@ struct ClsRun {
     LONG len;
     ULONG fitw, fith;
     ULONG w, h, scale;
+    ULONG *ph;                          /* the fastest run's parts */
 };
 
 static LONG cls_once(void *p)
 {
     struct ClsRun *c = p;
     struct BitMapHeader *bmh = NULL;
-    ULONG sc = 0;
+    ULONG sc = 0, dec = 0, wr = 0, t0 = now_us(), t1, t2, t3, t4;
     Object *o;
     if (!file_read(c->path, c->buf, c->len))   /* the file read each time, as a datatype does */
         return IoErr() ? IoErr() : -1;
+    t1 = now_us();
     o = NewObject(c->cl, NULL, DTA_SourceType, DTST_MEMORY,
                   DTA_SourceAddress, (ULONG)c->buf, DTA_SourceSize, (ULONG)c->len,
                   DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
@@ -697,14 +715,31 @@ static LONG cls_once(void *p)
         LONG e = IoErr();
         return e ? e : -1;
     }
+    t2 = now_us();
     DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
-    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc, TAG_END);
+    t3 = now_us();
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
+               JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr, TAG_END);
     if (bmh) {
         c->w = bmh->bmh_Width;
         c->h = bmh->bmh_Height;
     }
     c->scale = sc;
-    DisposeObject(o);
+    {
+        ULONG d0 = now_us(), tot;       /* the GetDTAttrs above left out */
+        DisposeObject(o);
+        t4 = now_us() - d0;             /* disposing */
+        tot = (t3 - t0) + t4;
+        if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
+            c->ph[PH_READ] = t1 - t0;
+            c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and ours with the decode */
+            c->ph[PH_DECODE] = dec > wr ? dec - wr : 0;
+            c->ph[PH_WRITE] = wr;
+            c->ph[PH_LAYOUT] = t3 - t2;
+            c->ph[PH_DISPOSE] = t4;
+            c->ph[PH_TOTAL] = tot;
+        }
+    }
     return 0;
 }
 
@@ -816,9 +851,17 @@ static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG
         return;
     }
     r = row_new(fmt, "the system's datatype");
+    if (!strcmp(fmt, "JPEG")) {
+        memset(sysph, 0, sizeof(sysph));
+        c.ph = sysph;
+    }
     if ((err = timed(dt_once, &c, &r->first, &r->best[0], &r->mean[0]))) {
         why(err, r->note, sizeof(r->note));
         return;
+    }
+    if (c.ph) {
+        have_sysph = TRUE;
+        c.ph = NULL;
     }
     snprintf(name, sizeof(name), "%.40s.datatype", c.base[0] ? c.base : "?");
     strncpy(r->dec, name, sizeof(r->dec) - 1);
@@ -927,21 +970,80 @@ static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
     if (!c.cl || c.len <= 0 || !(c.buf = AllocVec((ULONG)c.len, MEMF_ANY))) {
         strcpy(r->note, "could not be set up");
     } else {
+        memset(ourph, 0, sizeof(ourph));
         for (s = 0; s < NSC; s++) {
             if (s) {
                 c.fitw = (w + (1UL << s) - 1) >> s;
                 c.fith = (h + (1UL << s) - 1) >> s;
             }
-            if ((err = timed(cls_once, &c, s ? NULL : &r->first, &r->best[s], &r->mean[s]))) {
+            c.ph = NULL;                /* the first load apart */
+            if (!s) {
+                ULONG t0 = now_us();
+                if ((err = cls_once(&c))) {
+                    why(err, r->note, sizeof(r->note));
+                    break;
+                }
+                r->first = now_us() - t0;
+                if (!r->first)
+                    r->first = 1;
+            }
+            c.ph = ourph[s];
+            if ((err = timed(cls_once, &c, NULL, &r->best[s], &r->mean[s]))) {
                 why(err, r->note, sizeof(r->note));
                 break;
             }
         }
     }
+    if (ourph[0][PH_TOTAL])
+        have_ourph = TRUE;
     FreeVec(c.buf);
     if (c.dtn)
         ReleaseDataType(c.dtn);
     CloseLibrary(lib);
+}
+
+static void ph_cell(char *out, ULONG us, BOOL have)
+{
+    if (!have)
+        strcpy(out, "-");
+    else if (us >= 10000)
+        sprintf(out, "%ld", (long)((us + 500) / 1000));
+    else
+        sprintf(out, "%ld.%ld", (long)(us / 1000), (long)(us % 1000 / 100));
+}
+
+/* the parts of the fastest runs, side by side */
+static void time_parts(void)
+{
+    static const char *const name[PH_N] = {
+        "read the file into memory",
+        "make the object (OM_NEW)",
+        "  of which: decoding (jdec)",
+        "  of which: rows to picture.datatype",
+        "layout (DTM_PROCLAYOUT)",
+        "dispose of the object",
+        "total"
+    };
+    char line[200], c[NSC + 1][16], sys[48];
+    int i, s;
+    if (!have_sysph && !have_ourph)
+        return;
+    snprintf(sys, sizeof(sys), "%.14s", rows[0].dec);
+    heading("Where a JPEG's time goes (ms, the parts of the fastest run)");
+    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", "", have_sysph ? sys : "",
+             "ours 1/1", "1/2", "1/4", "1/8");
+    sayf(line);
+    for (i = 0; i < PH_N; i++) {
+        BOOL sys_has = have_sysph && i != PH_READ && i != PH_DECODE && i != PH_WRITE;
+        ph_cell(c[0], sysph[i], sys_has);
+        for (s = 0; s < NSC; s++)
+            ph_cell(c[s + 1], ourph[s][i], have_ourph && ourph[s][PH_TOTAL]);
+        snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", name[i], c[0],
+                 c[1], c[2], c[3], c[4]);
+        sayf(line);
+    }
+    sayf("  The system's datatype reads the file inside OM_NEW. The rest of OM_NEW, past");
+    sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
 }
 
 static void bench_builtin_jpeg(const char *path)
@@ -991,6 +1093,7 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     BOOL ours = FALSE;
     int i, s;
     nrows = nnotes = 0;
+    have_sysph = have_ourph = FALSE;
     bench_system("JPEG", jpeg, &ours, &jw, &jh);
     if (!ours && exists(jpeg))
         bench_ours_jpeg(jpeg, jw, jh);
@@ -1038,6 +1141,7 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
         snprintf(line, sizeof(line), "  %s", notes[i]);
         sayf(line);
     }
+    time_parts();
 }
 
 /* ------------------------------------------------------------ bench: MP3 by mpega.library */
@@ -1229,7 +1333,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.6, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.7, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();

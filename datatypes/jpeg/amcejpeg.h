@@ -36,4 +36,11 @@
  * the picture did (what is missing is grey) */
 #define JDTA_Damaged    (JDTA_Dummy + 6)
 
+/* (ULONG *) GetDTAttrs(): where the decode's time went, in microseconds
+ * (0 where timer.device's E-clock was not to be had): all of it, from
+ * the headers to the last row; and of that, handing the rows over to
+ * picture.datatype (PDTM_WRITEPIXELARRAY). For zzprobe. */
+#define JDTA_TimeLoad   (JDTA_Dummy + 7)
+#define JDTA_TimeWrite  (JDTA_Dummy + 8)
+
 #endif
