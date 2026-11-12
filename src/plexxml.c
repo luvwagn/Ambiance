@@ -179,3 +179,119 @@ const char *xml_attr(char **attr, int n, const char *name)
             return attr[i * 2 + 1];
     return 0;
 }
+
+/* ------------------------------------------------------------ plex.tv */
+static void cpy(char *d, const char *s, long n)
+{
+    long i;
+    for (i = 0; i < n - 1 && s[i]; i++)
+        d[i] = s[i];
+    if (n > 0)
+        d[i] = 0;
+}
+
+static void cat(char *d, const char *s, long n)
+{
+    long k = (long)strlen(d);
+    if (k < n)
+        cpy(d + k, s, n - k);
+}
+
+int plex_tv_value(const unsigned char *body, const char *name, char *out, long max)
+{
+    char pat[48];
+    const char *p, *e;
+    long k = (long)strlen(name);
+    out[0] = 0;
+    if (!body || k > 40 || max < 1)
+        return 0;
+    pat[0] = ' ';
+    memcpy(pat + 1, name, k);
+    memcpy(pat + 1 + k, "=\"", 3);
+    if ((p = strstr((const char *)body, pat))) {
+        p += k + 3;                         /* XML: name="value" */
+        e = strchr(p, '"');
+    } else {
+        pat[0] = '"';
+        memcpy(pat + 1, name, k);
+        memcpy(pat + 1 + k, "\":", 3);
+        if (!(p = strstr((const char *)body, pat)))
+            return 0;
+        p += k + 3;                         /* JSON: "name": "value" or a number */
+        while (*p == ' ')
+            p++;
+        if (*p == '"') {
+            e = strchr(++p, '"');
+        } else {
+            for (e = p; *e && *e != ',' && *e != '}' && *e != ' ' && *e != '\r' && *e != '\n'; e++)
+                ;
+            if (e - p == 4 && !strncmp(p, "null", 4))
+                return 0;
+        }
+    }
+    if (!e || e - p >= max)
+        return 0;
+    memcpy(out, p, e - p);
+    out[e - p] = 0;
+    return out[0] != 0;
+}
+
+struct res {
+    char *out;
+    long max, n;
+    int server, done;
+    char name[64], token[64], addr[48], port[8];
+};
+
+static void res_flush(struct res *r)
+{
+    if (r->server && r->addr[0] && r->token[0]) {
+        cat(r->out, r->addr, r->max);
+        cat(r->out, "\t", r->max);
+        cat(r->out, r->port[0] ? r->port : "32400", r->max);
+        cat(r->out, "\t", r->max);
+        cat(r->out, r->name, r->max);
+        cat(r->out, "\t", r->max);
+        cat(r->out, r->token, r->max);
+        cat(r->out, "\n", r->max);
+        r->n++;
+    }
+    r->server = 0;
+    r->addr[0] = 0;
+}
+
+static int res_el(void *ctx, const char *name, char **a, int n, int depth)
+{
+    struct res *r = ctx;
+    const char *v;
+    (void)depth;
+    if (!strcmp(name, "Device")) {
+        res_flush(r);
+        r->server = (v = xml_attr(a, n, "provides")) && strstr(v, "server");
+        cpy(r->name, (v = xml_attr(a, n, "name")) ? v : "", sizeof(r->name));
+        cpy(r->token, (v = xml_attr(a, n, "accessToken")) ? v : "", sizeof(r->token));
+        r->done = 0;
+    } else if (!strcmp(name, "Connection") && r->server && !r->done) {
+        const char *loc = xml_attr(a, n, "local"), *pr = xml_attr(a, n, "protocol");
+        const char *ad = xml_attr(a, n, "address"), *po = xml_attr(a, n, "port");
+        /* a local IPv4 address (no relay, no IPv6) */
+        if (loc && loc[0] == '1' && ad && strchr(ad, '.') && !strchr(ad, ':')) {
+            cpy(r->addr, ad, sizeof(r->addr));
+            cpy(r->port, po ? po : "32400", sizeof(r->port));
+            r->done = pr && !strcmp(pr, "http");    /* plain HTTP: no better */
+        }
+    }
+    return 1;
+}
+
+long plex_resource_lines(unsigned char *body, unsigned long len, char *out, long max)
+{
+    struct res r;
+    memset(&r, 0, sizeof(r));
+    r.out = out;
+    r.max = max;
+    out[0] = 0;
+    xml_scan((char *)body, len, res_el, &r);
+    res_flush(&r);
+    return r.n;
+}

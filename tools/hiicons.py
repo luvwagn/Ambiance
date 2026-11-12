@@ -34,11 +34,12 @@ def line(d, x0, y0, x1, y1, w=1.0):
 
 
 def games(d):
-    rrect_outline(d, 1, 4, 15, 13, 4)
-    box(d, 3.5, 8, 6.5, 9)            # d-pad, on whole rows
-    box(d, 4.5, 7, 5.5, 10)
-    box(d, 10, 7, 11.5, 8)            # buttons
-    box(d, 11.5, 9, 13, 10)
+    # a joystick, as most Amigas were played with: the ball on its stick,
+    # the base, and the fire button on it
+    disc(d, 8, 3.4, 2.6)
+    box(d, 7.25, 5, 8.75, 10.2)
+    d.rounded_rectangle([P(2.2, 8.4), P(5.4, 10.4)], radius=0.6 * S, fill=255)
+    rrect_outline(d, 0.8, 10, 15.2, 14.6, 1.2)
 
 
 def mods(d):

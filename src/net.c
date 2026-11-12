@@ -10,11 +10,12 @@
  * when its signal comes.
  *
  * bsdsocket.library belongs to the process that opened it, so this
- * process opens it, and is the only one that uses SocketBase. Plain HTTP
- * only (HTTP/1.0, Connection: close, chunked bodies understood all the
- * same); a redirect to another http: address is followed, one to https:
- * is reported. Every wait has a timeout, and a job given up by the UI
- * (cancel) stops at the next one.
+ * process opens it, and is the only one that uses SocketBase. HTTP/1.0,
+ * Connection: close, chunked bodies understood all the same; a redirect is
+ * followed. HTTPS (a job's tls, or a redirect to https:) only with
+ * Settings > Networking > HTTPS on: by AmiSSL (tls.c), opened here, for
+ * this process, the first time it is wanted. Every wait has a timeout, and
+ * a job given up by the UI (cancel) stops at the next one.
  *
  * A Plex server is asked the same way (host and port given). Plex servers
  * are also looked for (a gdm job): GDM, Plex's own discovery, a UDP
@@ -27,6 +28,7 @@
  * gives way to the next.
  */
 #include "amce.h"
+#include "plexxml.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -49,6 +51,14 @@ struct Library *SocketBase;         /* the network process's alone */
 #define BODY_MAX    (1536UL << 10)  /* a body larger is cut off */
 #define MAX_HOSTS   8
 #define REDIRECTS   3
+
+static struct TlsLib tls;           /* AmiSSL, the process's own (tls.c) */
+static volatile BOOL use_https;     /* Settings > Networking > HTTPS, set by the UI */
+
+void net_use_https(BOOL on)
+{
+    use_https = on;
+}
 
 static struct MsgPort *port;        /* the process's */
 static struct MsgPort *reply_port;  /* the UI's */
@@ -220,13 +230,53 @@ static LONG open_conn(struct NetJob *j, ULONG addr, UWORD port_no)
     return s;
 }
 
-static BOOL send_all(struct NetJob *j, LONG s, const char *buf, LONG n)
+/* TLS's handshake on s, waiting as it asks: the connection, NULL failed. */
+static APTR tls_start(struct NetJob *j, LONG s, const char *host)
+{
+    APTR c;
+    char m[200];
+    if (!tls_open(&tls, SocketBase)) {
+        set_err(j, _("HTTPS needs AmiSSL 5"));
+        amce_log("network: https", tls.why);
+        return NULL;
+    }
+    if (!(c = tls_new(&tls, s, host, TRUE))) {
+        set_err(j, _("Not enough memory"));
+        return NULL;
+    }
+    for (;;) {
+        int r = tls_handshake(&tls, c);
+        if (r == 1)
+            return c;
+        if (r == TLS_WANT_READ || r == TLS_WANT_WRITE) {
+            int w = wait_sock(j, s, r == TLS_WANT_WRITE, READ_S);
+            if (w > 0)
+                continue;
+            set_err(j, w < 0 ? _("Cancelled") : _("The server did not answer"));
+        } else {
+            sprintf(m, "%.60s: %.120s", host, tls.why);
+            amce_log("network: https", m);
+            set_err(j, strncmp(tls.why, "certificate", 11) ? _("The secure connection failed")
+                     : _("The server's certificate was not accepted (is the Amiga's clock right?)"));
+        }
+        tls_free(&tls, c);
+        return NULL;
+    }
+}
+
+static BOOL send_all(struct NetJob *j, LONG s, APTR c, const char *buf, LONG n)
 {
     while (n > 0) {
         LONG w;
         if (wait_sock(j, s, TRUE, READ_S) <= 0)
             return FALSE;
-        w = send(s, (APTR)buf, n, 0);
+        if (c) {
+            w = tls_write(&tls, c, buf, n);
+            if (w == TLS_WANT_READ || w == TLS_WANT_WRITE)
+                continue;
+        } else {
+            w = send(s, (APTR)buf, n, 0);
+        }
         if (w <= 0)
             return FALSE;
         buf += w;
@@ -236,7 +286,7 @@ static BOOL send_all(struct NetJob *j, LONG s, const char *buf, LONG n)
 }
 
 /* The whole response into j->body (AllocVec, 0-terminated): headers and all. */
-static BOOL read_all(struct NetJob *j, LONG s)
+static BOOL read_all(struct NetJob *j, LONG s, APTR c)
 {
     ULONG cap = 32768, len = 0;
     UBYTE *b = AllocVec(cap + 1, MEMF_ANY);
@@ -246,7 +296,7 @@ static BOOL read_all(struct NetJob *j, LONG s)
     }
     for (;;) {
         LONG r;
-        int w = wait_sock(j, s, FALSE, READ_S);
+        int w = c && tls_pending(&tls, c) > 0 ? 1 : wait_sock(j, s, FALSE, READ_S);
         if (w <= 0) {
             FreeVec(b);
             set_err(j, w < 0 ? _("Cancelled") : _("The server stopped answering"));
@@ -266,9 +316,15 @@ static BOOL read_all(struct NetJob *j, LONG s)
             b = nb;
             cap *= 2;
         }
-        r = recv(s, b + len, cap - len, 0);
-        if (r < 0 && Errno() == EWOULDBLOCK)
-            continue;
+        if (c) {
+            r = tls_read(&tls, c, b + len, cap - len);
+            if (r == TLS_WANT_READ || r == TLS_WANT_WRITE)
+                continue;
+        } else {
+            r = recv(s, b + len, cap - len, 0);
+            if (r < 0 && Errno() == EWOULDBLOCK)
+                continue;
+        }
         if (r <= 0)
             break;                          /* closed: all there */
         len += r;
@@ -347,19 +403,21 @@ static LONG parse_response(struct NetJob *j, char *loc, LONG locmax)
     return status;
 }
 
-/* host:port and path from an http: URL; FALSE for https: or nonsense. */
+/* host:port and path from an http: or https: URL (secure: which);
+ * FALSE for nonsense. */
 static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port_no, char *path,
-                      LONG pmax)
+                      LONG pmax, UBYTE *secure)
 {
     const char *h, *slash, *colon;
     LONG n;
-    if (amce_strnicmp(url, "http://", 7))
+    *secure = !amce_strnicmp(url, "https://", 8);
+    if (amce_strnicmp(url, "http://", 7) && !*secure)
         return FALSE;
-    h = url + 7;
+    h = url + (*secure ? 8 : 7);
     slash = strchr(h, '/');
     n = slash ? slash - h : (LONG)strlen(h);
     colon = memchr(h, ':', n);
-    *port_no = 80;
+    *port_no = *secure ? 443 : 80;
     if (colon) {
         LONG v = 0;
         const char *c = colon + 1;
@@ -377,27 +435,33 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port_no, ch
 }
 
 static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
-                  const char *path)
+                  const char *path, BOOL secure)
 {
-    char req[700];
+    char req[900];
     LONG s;
+    APTR c = NULL;
+    BOOL ok;
     if ((s = open_conn(j, addr, port_no)) < 0)
         return FALSE;
+    if (secure && !(c = tls_start(j, s, host))) {
+        CloseSocket(s);
+        return FALSE;
+    }
     sprintf(req,
-            "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
-            "\r\nAccept: */*\r\nConnection: close\r\n\r\n",
-            path, host);
-    if (!send_all(j, s, req, strlen(req))) {
+            "%s %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+            "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
+            j->post ? "POST" : "GET", path, host, j->post ? "Content-Length: 0\r\n" : "",
+            j->extra);
+    if (!send_all(j, s, c, req, strlen(req))) {
+        tls_free(&tls, c);
         CloseSocket(s);
         set_err(j, j->cancel ? "Cancelled" : "The request could not be sent");
         return FALSE;
     }
-    if (!read_all(j, s)) {
-        CloseSocket(s);
-        return FALSE;
-    }
+    ok = read_all(j, s, c);
+    tls_free(&tls, c);
     CloseSocket(s);
-    return TRUE;
+    return ok;
 }
 
 /* host's address: a dotted quad as it is, a name looked up. */
@@ -521,11 +585,77 @@ static void gdm(struct NetJob *j)
     j->status = 200;
 }
 
+/* The account's servers too (signed in at plex.tv, HTTPS on: the job's
+ * tls, its extra the account's headers): first, each with its token, then
+ * those GDM found that are not among them. */
+static void gdm_account(struct NetJob *j)
+{
+    static char acc[2048];              /* the network process's alone */
+    UBYTE *g = j->body, *out;
+    ULONG glen = j->len, len, addr;
+    char err[96], loc[8];
+    const char *p, *e;
+    amce_strlcpy(err, j->err, sizeof(err));
+    j->body = NULL;
+    j->len = 0;
+    j->err[0] = 0;
+    acc[0] = 0;
+    if (!resolve(PLEX_TV, &addr))
+        set_err(j, _("That server could not be found (DNS)"));
+    else if (fetch(j, addr, PLEX_TV, 443, "/api/resources?includeHttps=1&includeRelay=0", TRUE)) {
+        LONG st = parse_response(j, loc, sizeof(loc));
+        if (st == 200)
+            plex_resource_lines(j->body, j->len, acc, sizeof(acc));
+        else {
+            sprintf(err, _("The server answered %ld"), (long)st);
+            set_err(j, err);
+        }
+        FreeVec(j->body);
+    }
+    if (j->err[0])
+        amce_log("plex: the account's servers", j->err);
+    j->body = NULL;
+    j->len = 0;
+    if (!acc[0] || !(out = AllocVec(strlen(acc) + glen + 1, MEMF_ANY))) {
+        j->body = g;                        /* GDM's alone, as they were */
+        j->len = glen;
+        amce_strlcpy(j->err, g ? "" : err, sizeof(j->err));
+        return;
+    }
+    strcpy((char *)out, acc);
+    len = strlen(acc);
+    for (p = (const char *)g; g && p < (const char *)g + glen; p = e + 1) {
+        const char *t;
+        char key[72];
+        LONG k;
+        if (!(e = strchr(p, '\n')))
+            break;
+        /* "address\tport\t": already the account's? */
+        if (!(t = strchr(p, '\t')) || !(t = strchr(t + 1, '\t')) || t > e ||
+            (k = t + 1 - p) >= (LONG)sizeof(key) - 1)
+            continue;
+        key[0] = '\n';
+        memcpy(key + 1, p, k);
+        key[k + 1] = 0;
+        if (!strncmp(acc, key + 1, k) || strstr(acc, key))
+            continue;
+        memcpy(out + len, p, e + 1 - p);
+        len += e + 1 - p;
+    }
+    out[len] = 0;
+    FreeVec(g);
+    j->body = out;
+    j->len = len;
+    j->status = 200;
+    j->err[0] = 0;
+}
+
 static void run(struct NetJob *j)
 {
     char host[80], path[400], loc[400];
     UWORD port_no = 80;
     ULONG addr = 0;
+    UBYTE secure = j->tls;
     int hop, tries;
     ULONG t0 = time_ms();
     BOOL is_api = !j->host[0];
@@ -539,7 +669,13 @@ static void run(struct NetJob *j)
     }
     if (j->gdm) {
         gdm(j);
+        if (j->tls && use_https)
+            gdm_account(j);
         j->ms = time_ms() - t0;
+        return;
+    }
+    if (secure && !use_https) {
+        set_err(j, _("HTTPS is off (Settings > Networking)"));
         return;
     }
     amce_strlcpy(path, j->path, sizeof(path));
@@ -557,14 +693,14 @@ static void run(struct NetJob *j)
                 port_no = 80;
             } else if (hop == 0) {
                 amce_strlcpy(host, j->host, sizeof(host));
-                port_no = j->port ? j->port : 80;
+                port_no = j->port ? j->port : secure ? 443 : 80;
                 if (!resolve(host, &addr)) {
                     set_err(j, _("That server could not be found (DNS)"));
                     return;
                 }
             }
             j->err[0] = 0;
-            if (fetch(j, addr, host, port_no, path))
+            if (fetch(j, addr, host, port_no, path, secure))
                 break;
             if (j->cancel)
                 return;
@@ -583,11 +719,11 @@ static void run(struct NetJob *j)
                 amce_strlcpy(path, loc, sizeof(path));
                 continue;
             }
-            if (!amce_strnicmp(loc, "https:", 6)) {
+            if (!amce_strnicmp(loc, "https:", 6) && !use_https) {
                 set_err(j, _("The server only answers over HTTPS"));
                 return;
             }
-            if (!split_url(loc, host, sizeof(host), &port_no, path, sizeof(path)) ||
+            if (!split_url(loc, host, sizeof(host), &port_no, path, sizeof(path), &secure) ||
                 !(h = gethostbyname((STRPTR)host)) || h->h_length != 4) {
                 set_err(j, _("The server sent us somewhere we cannot follow"));
                 return;
@@ -598,7 +734,7 @@ static void run(struct NetJob *j)
         }
         break;
     }
-    if (j->body && j->status != 200) {
+    if (j->body && (j->status < 200 || j->status > 299)) {    /* 201: plex.tv's new code */
         char m[96];
         sprintf(m, _("The server answered %ld"), (long)j->status);
         set_err(j, m);
@@ -627,6 +763,7 @@ static void net_main(void)
         WaitPort(p);
         while ((j = (struct NetJob *)GetMsg(p))) {
             if (j->quit) {
+                tls_close(&tls);            /* before the socket library it uses */
                 if (SocketBase)
                     CloseLibrary(SocketBase);
                 SocketBase = NULL;
@@ -663,7 +800,7 @@ BOOL net_start(void)
     SetSignal(0, 1UL << start_sig);
     proc = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)net_main,
                                             NP_Name, (ULONG)"AmigaMCE network",
-                                            NP_StackSize, 32768, NP_Priority, -1,
+                                            NP_StackSize, 65536, NP_Priority, -1,
                                             NP_WindowPtr, (ULONG)-1, TAG_END);
     if (proc)
         Wait(1UL << start_sig);

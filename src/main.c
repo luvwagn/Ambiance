@@ -3,6 +3,8 @@
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"
+#include "radiocsv.h"
+#include "plexxml.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -62,6 +64,7 @@ struct Page {
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
+    UBYTE plexlink;             /* PT_TEXT: signing in at plex.tv (its code, then the outcome) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
@@ -142,6 +145,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 3, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
+       ACT_PLEXLINK, ACT_PLEXOUT,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1895,9 +1899,22 @@ static void load_net_if(void)
         net_if_apply();
 }
 
-/* Settings > Allow HTTPS streams: Radio lists https: stations too (off by
- * default; only with AmiSSL installed, which plays them). */
+/* Settings > Networking > HTTPS: secure connections by AmiSSL 5 (tls.c),
+ * off by default, and only with AmiSSL installed: Radio lists and plays
+ * https: stations, and Plex signs in at plex.tv. */
 static BOOL radio_https;
+
+static BOOL https_ok(void)
+{
+    return radio_https && caps.amissl;
+}
+
+/* The network and radio processes told (they read it as they connect). */
+static void https_apply(void)
+{
+    net_use_https(https_ok());
+    st_use_https(https_ok());
+}
 
 /* Settings > Jump scrolling: held Up/Down in a very long list goes a
  * letter at a time once past cruising speed (off: it glides on). */
@@ -1999,7 +2016,7 @@ static void load_https(void)
     char buf[8];
     radio_https = GetVar((CONST_STRPTR)HTTPS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                   buf[0] == '1';
-}
+}   /* told to the processes once AmiSSL is looked for (https_apply) */
 
 static void load_debug(void)
 {
@@ -2240,6 +2257,10 @@ static void build_net_settings(struct Page *p)
         list_add(&p->list, _("No TCP/IP stack running"), "", "", IT_TEXT);
         return;
     }
+    if ((it = action_item(p, _("HTTPS (secure connections)"),
+                          caps.amissl ? _("radio stations, plex.tv") : _("needs AmiSSL"), ACT_HTTPS,
+                          https_ok() ? MARK_CHECK_ON : MARK_CHECK_OFF)) && !caps.amissl)
+        it->flags |= ITEM_DISABLED;     /* secure connections need AmiSSL */
     rkbps_text(rkbps_now(), use);
     sprintf(tag, _("stations up to %s"), use);
     action_item(p, _("Radio"), tag, ACT_RADIOSET, MARK_ARROW);
@@ -2285,17 +2306,12 @@ static void build_nic_settings(struct Page *p)
         list_add(&p->list, _("This TCP/IP stack does not list its interfaces"), "", "", IT_TEXT);
 }
 
-/* Settings > Networking > Radio: HTTPS, the highest bitrate listed, and
- * the server the station lists come from. */
+/* Settings > Networking > Radio: the highest bitrate listed, and the
+ * server the station lists come from (HTTPS: Settings > Networking). */
 static void build_radio_settings(struct Page *p)
 {
-    struct Item *it;
     char tag[80], k[16], nm[64];
     p->setp = SETP_RADIO;
-    if ((it = action_item(p, _("Allow HTTPS streams"), caps.amissl ? "" : _("needs AmiSSL"), ACT_HTTPS,
-                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
-        !caps.amissl)
-        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
     rkbps_text(rkbps_now(), k);
     if (rkbps_sel == 0)
         sprintf(tag, _("Automatic: %s"), k);
@@ -2410,6 +2426,15 @@ static void build_plex_settings(struct Page *p)
                        "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
                                             : _("none chosen"), IT_PLEXDIR)))
         it->mark = MARK_ARROW;
+    if (plex.account[0]) {
+        char tag[48];
+        sprintf(tag, "%.40s", plex.user[0] ? plex.user : _("signed in"));
+        action_item(p, _("Sign out of plex.tv"), tag, ACT_PLEXOUT, MARK_NONE);
+    } else if ((it = action_item(p, _("Sign in at plex.tv"),
+                                 https_ok() ? "" : _("needs HTTPS (Settings > Networking)"),
+                                 ACT_PLEXLINK, MARK_ARROW)) && !https_ok()) {
+        it->flags |= ITEM_DISABLED;     /* plex.tv answers HTTPS alone */
+    }
     /* the server's conversion: a choice only where the Amiga is fast enough
      * to decode the files as stored (plex_tier: how fast it really is, not
      * only its CPU); on others always on */
@@ -2713,7 +2738,7 @@ static void build_credits(struct Page *p)
                    "github.com/akustikrausch/protracker4)."));
     text_line(p, "");
     text_para(p, _("Used if installed, not included, each under its own licence: Amiga Game "
-                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."));
+                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL."));
     text_line(p, "");
     text_para(p, _("FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David "
                  "Reid (public domain or MIT-0), used if installed, not included. It is free to "
@@ -4046,12 +4071,15 @@ static BOOL list_follow(struct Page *p)
  * in the list, its right edge 90% of the way across. It is the UI font's
  * own glyph blown up in whole pixels, kept as a chip-RAM mask.
  *
- * It is a layer of its own: while it shows, the right of the list from
- * ov.strip_x on belongs to it alone. Rows are painted and scrolled only
- * left of the strip (the highlight and very long titles stop at its edge),
- * so scrolling never copies or repaints the letter; it is stamped once,
- * and again only when it changes. When it goes, the rows are repainted at
- * full width. It goes half a second after the key is let go. */
+ * Beside a list with a column of its own (games, pictures, music: the
+ * preview's), it takes that column: rows never touch it. Over a list
+ * without one (Radio's, Mods', a lowres screen's) it lies over the rows,
+ * outlined in the background's colour so it reads over their text: the
+ * rows keep their full width (they once shrank away from a strip of its
+ * own while it showed, and the whole list jumped sideways, the tags at the
+ * right most of all). The rows it covers are painted again, then it,
+ * whenever they change under it: scrolling, the selection, a new letter
+ * (ov_rows). It goes half a second after the key is let go. */
 /* (state is declared with the other globals, near the top) */
 
 static char ov_letter_of(const char *s)
@@ -4087,6 +4115,11 @@ static BOOL ov_eligible(const struct Page *p)
     LONG i, runs = 0;
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
+    if (p->radio && !p->plex)
+        /* Radio: Countries alone is A to Z (this Amiga's first); stations
+         * and genres come by votes, listeners or size, where a letter
+         * would say nothing */
+        return !strcmp(p->base, RADIO_COUNTRIES);
     for (i = 0; i < p->list.count; i++)
         if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
             p->list.items[i].kind == IT_ANIM || p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
@@ -4155,14 +4188,14 @@ static WORD aside_x(void)
     return g.pane_x + g.pane_w - aside_width();
 }
 
-/* ---- a long list's column at its right edge: with the mouse in use, a
- * scroll bar (click above or below the thumb to page, drag the thumb);
- * otherwise (joystick, pad), arrows where there is more above or below.
- * The mouse moving or clicking switches to the bar, the joystick to the
- * arrows; the keyboard leaves it as it is. */
+/* ---- a long list's column at its right edge: a scroll bar, always, from
+ * the moment the list is shown and whatever moves it (keyboard, joystick,
+ * pad or mouse): its thumb says how long the list is and where in it this
+ * is. The mouse can click above or below the thumb to page, or drag it;
+ * while the mouse is in use the thumb is bright, at rest it is dimmer. */
 #define GUT_W U(9)                  /* the column: gap, bar, gap */
 static struct { BOOL drag; WORD off; } gut;
-static BOOL bar_up;                 /* mouse mode: the bar is showing (the mouse moved lately) */
+static BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
 #define BAR_HIDE 1500               /* ms the mouse rests before the bar and the
                                      * pointer go */
@@ -4186,8 +4219,6 @@ static WORD list_xr(struct Page *p)
     WORD e = list_edge(p);
     if (list_overflows(p))
         e -= GUT_W;                         /* the column */
-    if (!has_aside(p) && ov.on && ov.page == p && e > ov.strip_x - 1)
-        e = ov.strip_x - 1;                 /* lowres: the letter's strip is off limits */
     return e;
 }
 
@@ -5101,10 +5132,59 @@ static BOOL ov_build(char ch)
 
 static void draw_list_rows(struct Page *p);
 
-/* Stamp the letter into its strip (nothing else is drawn there). */
+/* The letter over the rows (a list with no column beside it). */
+static BOOL ov_over(struct Page *p)
+{
+    return ov.on && ov.bl && ov.page == p && !has_aside(p);
+}
+
+/* Stamp the letter: in its column as it is, or over the rows outlined in
+ * the background's colour (so the rows' text under it does not run into
+ * it). */
 static void ov_stamp(void)
 {
+    if (!ov.bl)
+        return;
+    if (!has_aside(ov.page)) {
+        static const BYTE d[8][2] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
+                                      { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };
+        WORD o = U(1) > 0 ? U(1) : 1;
+        int i;
+        for (i = 0; i < 8; i++)
+            gfx_bigletter_draw(&g, ov.bl, ov.x + d[i][0] * o, ov.y + d[i][1] * o, PEN_BG);
+    }
     gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
+}
+
+/* While the rows are painted in a batch, the letter waits to be stamped
+ * once at its end (draw_list_row stamps it after a row of its own). */
+static BOOL ov_hold;
+static WORD mark_column(const struct Page *p);
+static void draw_list_row(struct Page *p, LONG idx, WORD col);
+
+/* The rows between y0 and y1 (screen lines) painted again, then the letter
+ * over them, if it shows. */
+static void ov_rows(struct Page *p, WORD y0, WORD y1)
+{
+    WORD vis = list_visible(), r, col = mark_column(p);
+    BOOL was = ov_hold;
+    ov_hold = TRUE;
+    for (r = 0; r < vis && p->top + r < p->list.count; r++) {
+        WORD ry = g.list_top + r * g.list_row_h;
+        if (ry + g.list_row_h - 1 >= y0 && ry <= y1)
+            draw_list_row(p, p->top + r, col);
+    }
+    ov_hold = was;
+    if (!ov_hold && ov_over(p))
+        ov_stamp();
+}
+
+/* The rows under the letter, outline and all, again (then the letter). */
+static void ov_rows_under(struct Page *p)
+{
+    WORD o = U(1) > 0 ? U(1) : 1;
+    if (ov.bl)
+        ov_rows(p, ov.y - o, ov.y + ov.bl->h - 1 + o);
 }
 
 static void ov_show(struct Page *p)
@@ -5120,9 +5200,9 @@ static void ov_show(struct Page *p)
         tb_close(&pv_tb);
         pv_shown = FALSE;
     }
-    /* hand the strip to the letter: clear it once, then stamp */
-    gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);
-    ov_stamp();
+    if (has_aside(p))
+        gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
+    ov_stamp();                             /* (over the rows: they are as they were) */
 }
 
 /* Changing letters off screen: the old letter's box and the new one's,
@@ -5162,6 +5242,23 @@ static void ov_relabel_(char c)
     WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
     if (!ov.on || !c || c == ov.letter)
         return;
+    if (!has_aside(ov.page)) {
+        /* over the rows: those under the old letter and the new painted
+         * again, the new one stamped over them */
+        WORD o = U(1) > 0 ? U(1) : 1, top = oy, bot = old ? oy + old->h - 1 : oy;
+        if (!ov_build(c)) {
+            ov.bl = NULL;
+            if (old)
+                ov_rows(ov.page, top - o, bot + o);
+            return;
+        }
+        if (!old || ov.y < top)
+            top = ov.y;
+        if (ov.y + ov.bl->h - 1 > bot)
+            bot = ov.y + ov.bl->h - 1;
+        ov_rows(ov.page, top - o, bot + o);
+        return;
+    }
     if (!ov_build(c)) {
         if (old)
             gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
@@ -5214,14 +5311,16 @@ static void ov_hide(void)
             gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
         preview_touch(p);           /* and the preview comes back */
         pv_due = time_ms();
-    } else {
-        draw_list_rows(p);          /* rows at full width again, strip cleared */
+    } else if (ov.bl) {
+        ov_rows_under(p);           /* the rows it lay over, without it */
     }
 }
 
 /* One row of the list in its slot, background and all. Rows are painted
  * one by one over what was there, never after clearing the whole list,
  * so fast scrolling does not flash. */
+static const char *row_tag(const struct Page *p, const struct Item *it);
+
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     struct Item *it = &p->list.items[idx];
@@ -5259,7 +5358,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
-        const char *tag = it->kind == IT_ACTION ? it->path : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
+        const char *tag = row_tag(p, it);
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
             gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
@@ -5270,6 +5369,9 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
     if (g.planar)
         SetWriteMask(g.rp, 0xFF);
+    if (!ov_hold && ov_over(p) && y + g.list_row_h > ov.y - U(1) - 1 &&
+        y <= ov.y + ov.bl->h + U(1))
+        ov_stamp();                         /* a row under the letter: the letter again */
 }
 
 /* The bar's place and its thumb's. */
@@ -5291,27 +5393,17 @@ static void draw_gutter(struct Page *p)
 {
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
-    if (!list_overflows(p) || (!has_aside(p) && ov.on && ov.page == p))
-        return;                             /* no column, or under the letter's strip */
+    if (!list_overflows(p))
+        return;                             /* no column */
     gut_geom(p, &bx0, &bx1, &ty, &th);
+    (void)vis;
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
-    if (mouse_mode) {
-        if (bar_up || gut.drag) {
-            gfx_fill(&g, bx0, y0, bx1, y1, PEN_RULE);           /* the track */
-            gfx_fill(&g, bx0, ty, bx1, ty + th - 1, gut.drag ? PEN_WHITE : PEN_TEXT);
-        }
-        /* the mouse at rest: no bar (the count at the top right says where) */
-    } else {
-        /* arrows: more above, more below */
-        WORD ax = (bx0 + bx1) / 2, ah = U(3), i;
-        for (i = 0; i < ah; i++) {
-            WORD half = (i * U(3)) / ah;
-            if (p->top > 0)
-                gfx_fill(&g, ax - half, y0 + U(1) + i, ax + half, y0 + U(1) + i, PEN_DIM);
-            if (p->top + vis < p->list.count)
-                gfx_fill(&g, ax - half, y1 - U(1) - i, ax + half, y1 - U(1) - i, PEN_DIM);
-        }
-    }
+    if (ty > y0)
+        gfx_fill(&g, bx0, y0, bx1, ty - 1, PEN_RULE);           /* the track, above */
+    if (ty + th <= y1)
+        gfx_fill(&g, bx0, ty + th, bx1, y1, PEN_RULE);          /* and below */
+    gfx_fill(&g, bx0, ty, bx1, ty + th - 1,
+             gut.drag ? PEN_WHITE : mouse_mode && bar_up ? PEN_TEXT : PEN_DIM);
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
@@ -5467,10 +5559,17 @@ static void draw_list_rows(struct Page *p)
         gfx_text(&g, g.pane_x, g.list_top + U(2), _("(empty)"), PEN_DIM, PEN_BG, 0, TS_BODY);
         return;
     }
-    for (r = 0; r < vis && p->top + r < p->list.count; r++)
-        draw_list_row(p, p->top + r, col);
+    {
+        BOOL was = ov_hold;
+        ov_hold = TRUE;                     /* the letter once, after them all */
+        for (r = 0; r < vis && p->top + r < p->list.count; r++)
+            draw_list_row(p, p->top + r, col);
+        ov_hold = was;
+    }
     gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
     draw_gutter(p);
+    if (!ov_hold && ov_over(p))
+        ov_stamp();
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
@@ -5482,14 +5581,23 @@ static void draw_list_rows(struct Page *p)
  * the copy need go no further, since everything right of it is background
  * in every row. Measured each move (TextLength is cheap); list entries
  * stay read-only here. */
+/* The tag a row shows at its right (a setting's value, a picture's format,
+ * a folder's count, a station's bitrate): "" none. */
+static const char *row_tag(const struct Page *p, const struct Item *it)
+{
+    return it->kind == IT_ACTION ? it->path
+         : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
+}
+
 static WORD rows_right(struct Page *p, LONG top, WORD col)
 {
     WORD vis = list_visible(), r, right = g.pane_x;
     for (r = 0; r < vis && top + r < p->list.count; r++) {
         struct Item *it = &p->list.items[top + r];
         WORD e;
-        if (it->kind == IT_ACTION && it->path[0]) {
-            right = g.w - 1;                /* right-aligned values: the whole row */
+        if (row_tag(p, it)[0]) {
+            right = g.w - 1;                /* a tag at the right (a count, a value):
+                                             * the whole row, or it stays behind */
             break;
         }
         e = g.pane_x + col + gfx_textlen(&g, it->label, TS_BODY) + U(1);
@@ -5507,8 +5615,8 @@ static void blit_rows(LONG src, LONG dst, LONG n)
 {
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
     LONG vis = list_visible();
-    if (ov.on && x1 > ov.strip_x - 1)
-        x1 = ov.strip_x - 1;                /* never into the letter's strip */
+    if (ov.on && has_aside(cur()) && x1 > ov.strip_x - 1)
+        x1 = ov.strip_x - 1;                /* never into the letter's column */
     struct BitMap *bm = g.rp->BitMap;
     /* The copy goes straight to the screen's bitmap, which clips nothing:
      * never outside the list's rows. Rows copied past them once went past
@@ -5544,7 +5652,21 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
-    draw_list_move2(p, old_sel, old_top);
+    if (ov_over(p)) {
+        /* the letter over the rows: they move without it stamped each
+         * time, then those under it are painted again (what was copied
+         * there carries the letter, moved), and it over them */
+        BOOL was = ov_hold;
+        ov_hold = TRUE;
+        draw_list_move2(p, old_sel, old_top);
+        ov_hold = was;
+        if (p->top != old_top)
+            ov_rows_under(p);
+        else
+            ov_stamp();
+    } else {
+        draw_list_move2(p, old_sel, old_top);
+    }
     if (p->top != old_top) {
         draw_gutter(p);                     /* the thumb or the arrows */
         if (hover_row >= 0 && p == cur()) {
@@ -6499,6 +6621,12 @@ static void np_draw_station(void)
     }
     np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("Radio"), PEN_WHITE, TS_BOLD);
     sprintf(info, _("Radio   %s"), mp_tag());
+    if (st_secure()) {
+        /* the stream's connection, whatever the address asked for said */
+        if (info[strlen(info) - 1] != ' ')
+            amce_strlcat(info, ",", sizeof(info));
+        amce_strlcat(info, " HTTPS", sizeof(info));
+    }
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
         sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
         amce_strlcat(info, part, sizeof(info));
@@ -7603,12 +7731,16 @@ static void np_shortcut(struct Page *p)
     action_item(p, _("Now playing"), t, ACT_NOWPLAYING, MARK_PLAYING);
 }
 
-/* A library's long list (Artists, Albums, Recently added): a Now playing
- * row first while something plays, as Music's own page has. */
+/* A library's long list (Artists, Albums, Recently added), or one of
+ * Radio's (stations, genres, countries): a Now playing row first while
+ * something plays, as Music's and Radio's own pages have. */
 static BOOL plex_lib_list(const struct Page *p)
 {
-    return p && p->type == PT_LIST && p->plex && p->radio && !p->photos &&
-           !strncmp(p->base, "/library/sections/", 18);
+    if (!p || p->type != PT_LIST || !p->radio)
+        return FALSE;
+    if (!p->plex)
+        return p > &pages[0];               /* Radio's lists under its own page */
+    return !p->photos && !strncmp(p->base, "/library/sections/", 18);
 }
 
 /* Its Now playing row made as playback is now (added, taken out, or its
@@ -7973,11 +8105,24 @@ static void menu_slide(UWORD from, UWORD to)
  * every screen: lists, Now playing and the rest get its room. The labels
  * come back with the focus, or the pointer, on the menu; the breadcrumb
  * and the highlighted icon say where you are meanwhile. On the first page
- * it keeps its labels. TRUE if the layout changed (everything was drawn
- * again). */
+ * it keeps its labels. Opened by the pointer, it stays open (the pointer
+ * moving off, or hidden at rest, is no reason to close it) until the
+ * content is gone into: Return, Fire or Right (the focus to the content),
+ * or a click in it (menu_unpin). TRUE if the layout changed (everything
+ * was drawn again). */
+static BOOL menu_pinned;            /* opened by the pointer: open till the content is used */
+
+static void menu_unpin(void)
+{
+    menu_pinned = FALSE;
+}
+
 static BOOL menu_layout(void)
 {
-    BOOL narrow = focus != FOCUS_MENU && hover_menu < 0 && !hover_strip && depth > 0;
+    BOOL narrow;
+    if (hover_menu >= 0 || hover_strip)
+        menu_pinned = TRUE;
+    narrow = focus != FOCUS_MENU && !menu_pinned && depth > 0;
     if (!g.win || narrow == gfx_menu_is_narrow())
         return FALSE;
     menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
@@ -7990,6 +8135,8 @@ static BOOL menu_layout(void)
 static void set_focus(int f)
 {
     pane_settle();
+    if (f == FOCUS_CONTENT && !section_inert())
+        menu_unpin();                       /* into the content: the menu to its icons */
     if (focus == f || (f == FOCUS_CONTENT && section_inert()))
         return;
     focus = f;
@@ -9151,6 +9298,7 @@ static void toggle_https(void)
         return;
     radio_https = !radio_https;
     save_setting(HTTPS_VAR, radio_https ? "1" : "0");
+    https_apply();
     (void)p;
     (void)sel;
     plex_settings_again(FALSE);
@@ -9489,6 +9637,303 @@ static void plex_letters_came(struct Page *p, struct NetJob *j)
     }
 }
 
+/* Settings > Networking > Plex > Sign in at plex.tv: Plex's own way for a
+ * device without a keyboard to speak of. A code is asked for (a POST to
+ * /api/v2/pins), shown, and entered by the user at plex.tv/link on a phone
+ * or computer; the code is asked after every few seconds until its
+ * authToken comes (or it runs out). Then the account's name, and its
+ * servers: the one chosen gets its token, or, none chosen, the first is.
+ * All over HTTPS (AmiSSL, net.c); no token is logged. Leaving the page
+ * gives up. */
+enum { PL_IDLE, PL_PIN, PL_WAIT, PL_CHECK, PL_USER, PL_SERVERS, PL_DONE, PL_FAILED };
+static struct {
+    UBYTE state;
+    char id[24], code[16], why[120];
+    ULONG next_ms, until_ms;
+    struct NetJob *j;
+} plink;
+
+#define PLINK_POLL_MS 3000
+
+static ULONG plink_num(const char *t)
+{
+    ULONG v = 0;
+    while (*t >= '0' && *t <= '9')
+        v = v * 10 + (ULONG)(*t++ - '0');
+    return v;
+}
+
+static struct Page *plink_page(void)
+{
+    int d;
+    for (d = 0; d < depth; d++)
+        if (pages[d].plexlink && pages[d].type == PT_TEXT)
+            return &pages[d];
+    return NULL;
+}
+
+/* The page as things stand. */
+static void plink_show(void)
+{
+    struct Page *p = plink_page();
+    char line[200];
+    int i, k = 0;
+    if (!p)
+        return;
+    tb_close(&p->tb);                       /* drawn from the lines below, anew */
+    list_free(&p->list);
+    if (!list_init(&p->list))
+        return;
+    switch (plink.state) {
+    case PL_PIN:
+        text_para(p, _("Asking plex.tv for a code...  Esc to give up"));
+        break;
+    case PL_WAIT:
+    case PL_CHECK:
+        text_para(p, _("On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, "
+                       "and enter this code:"));
+        text_line(p, "");
+        strcpy(line, "        ");
+        k = strlen(line);
+        for (i = 0; plink.code[i] && k < (int)sizeof(line) - 3; i++) {
+            line[k++] = plink.code[i];      /* spaced: read across a room */
+            line[k++] = ' ';
+        }
+        line[k] = 0;
+        text_line(p, line);
+        text_line(p, "");
+        text_para(p, _("AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). "
+                       "Esc gives up."));
+        break;
+    case PL_USER:
+    case PL_SERVERS:
+        text_para(p, _("Signed in. Asking plex.tv for this account's servers..."));
+        break;
+    case PL_DONE:
+        sprintf(line, _("Signed in to plex.tv as %s."), plex.user[0] ? plex.user : "?");
+        text_para(p, line);
+        text_line(p, "");
+        sprintf(line, _("Server: %s"), plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
+                                                    : _("none chosen"));
+        text_line(p, line);
+        text_line(p, "");
+        text_para(p, _("Settings > Networking > Plex > Plex server lists this account's servers "
+                       "beside those found on the network."));
+        break;
+    case PL_FAILED:
+        sprintf(line, _("Signing in did not work: %s"), plink.why);
+        text_para(p, line);
+        break;
+    }
+    if (p == cur()) {
+        draw_pane(TRUE);
+        draw_footer();
+    }
+}
+
+static void plink_fail(const char *why)
+{
+    amce_strlcpy(plink.why, why, sizeof(plink.why));
+    plink.state = PL_FAILED;
+    amce_log("plex: signing in", why);
+    plink_show();
+}
+
+/* The next request of the sign-in, out to plex.tv. */
+static void plink_ask(UBYTE state)
+{
+    struct NetJob *j;
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        plink_fail(_("Not enough memory"));
+        return;
+    }
+    amce_strlcpy(j->host, PLEX_TV, sizeof(j->host));
+    j->port = 443;
+    j->tls = 1;
+    plex_tv_headers(j->extra, sizeof(j->extra), state == PL_USER || state == PL_SERVERS);
+    if (state == PL_PIN) {
+        j->post = 1;
+        strcpy(j->path, "/api/v2/pins?strong=false");      /* a short code, for plex.tv/link */
+    } else if (state == PL_CHECK) {
+        sprintf(j->path, "/api/v2/pins/%s", plink.id);
+    } else if (state == PL_USER) {
+        strcpy(j->path, "/api/v2/user");
+    } else {
+        strcpy(j->path, "/api/resources?includeHttps=1&includeRelay=0");
+    }
+    plink.state = state;
+    plink.j = j;
+    net_submit(j);
+    if (j->done && !j->busy) {              /* the process could not start */
+        plink.j = NULL;
+        FreeVec(j);
+        plink_fail(_("No TCP/IP stack is running"));
+    }
+}
+
+/* The request out, if any, given up (its job freed when it comes back). */
+static void plink_stop(void)
+{
+    if (plink.j) {
+        net_cancel(plink.j);
+        plink.j->orphan = TRUE;
+        plink.j->seq = 0;
+        plink.j = NULL;
+    }
+    plink.state = PL_IDLE;
+}
+
+/* The account's servers: the chosen one's token, or, none chosen, the
+ * first of them chosen (the owner's token where none fits). */
+static void plink_servers(UBYTE *body, ULONG len)
+{
+    static char lines[2048];
+    char want[80], m[80], line[240], first[240], *f[4];
+    const char *l, *e;
+    LONG n = plex_resource_lines(body, len, lines, sizeof(lines));
+    BOOL found = FALSE;
+    first[0] = 0;
+    sprintf(want, "%.60s\t%lu\t", plex.host, (unsigned long)plex.port);
+    for (l = lines; *l && (e = strchr(l, '\n')); l = e + 1) {
+        LONG c = e - l < (LONG)sizeof(line) - 1 ? e - l : (LONG)sizeof(line) - 1;
+        memcpy(line, l, c);
+        line[c] = 0;
+        if (!first[0])
+            strcpy(first, line);
+        if (plex.host[0] && !strncmp(line, want, strlen(want))) {
+            strcpy(first, line);            /* the one chosen: this one's token */
+            found = TRUE;
+            break;
+        }
+    }
+    if (first[0] && (found || !plex.host[0])) {
+        int k = 1;
+        f[0] = first;
+        while (k < 4 && (f[k] = strchr(f[k - 1], '\t')))
+            *f[k++]++ = 0;
+        if (k == 4) {
+            if (!found) {
+                LONG port = (LONG)plink_num(f[1]);
+                utf8_to_latin1(f[2]);
+                plex_set_server(f[0], (UWORD)(port > 0 && port < 65536 ? port : 32400), f[2]);
+            }
+            plex_set_token(f[3]);           /* the server's own token */
+            found = TRUE;
+        }
+    }
+    if (!found && !plex.token[0])
+        plex_set_token(plex.account);       /* the owner's token opens the owner's servers */
+    sprintf(m, "signed in; %ld server%s on the account", (long)n, n == 1 ? "" : "s");
+    amce_log("plex: plex.tv", m);
+}
+
+/* plex.tv answered. */
+static void plink_came(struct NetJob *j)
+{
+    char v[80];
+    UBYTE was = plink.state;
+    plink.j = NULL;
+    if (was == PL_CHECK && !j->body && j->status != 404) {
+        plink.state = PL_WAIT;              /* a hiccup: asked again in a moment */
+        plink.next_ms = time_ms() + PLINK_POLL_MS;
+        return;
+    }
+    if (!j->body) {
+        plink_fail(was == PL_CHECK ? _("The code ran out before it was entered: try again")
+                   : j->err[0] ? j->err : _("The server did not answer"));
+        return;
+    }
+    switch (was) {
+    case PL_PIN:
+        if (!plex_tv_value(j->body, "id", plink.id, sizeof(plink.id)) ||
+            !plex_tv_value(j->body, "code", plink.code, sizeof(plink.code))) {
+            plink_fail(_("plex.tv sent no code"));
+            return;
+        }
+        plink.state = PL_WAIT;
+        plink.next_ms = time_ms() + PLINK_POLL_MS;
+        plink.until_ms = time_ms() + (plex_tv_value(j->body, "expiresIn", v, sizeof(v)) &&
+                                      plink_num(v) > 60 ? plink_num(v) : 900UL) * 1000UL;
+        amce_log("plex: signing in", "a code to enter at plex.tv/link");
+        plink_show();
+        break;
+    case PL_CHECK:
+        {
+            char tok[64];
+            if (plex_tv_value(j->body, "authToken", tok, sizeof(tok))) {
+                plex_set_account(tok, "");
+                plink_ask(PL_USER);
+                plink_show();
+            } else {
+                plink.state = PL_WAIT;      /* not entered yet */
+                plink.next_ms = time_ms() + PLINK_POLL_MS;
+            }
+        }
+        break;
+    case PL_USER:
+        if (!plex_tv_value(j->body, "username", v, sizeof(v)))
+            plex_tv_value(j->body, "title", v, sizeof(v));
+        utf8_to_latin1(v);
+        plex_set_account(plex.account, v);
+        plink_ask(PL_SERVERS);
+        break;
+    case PL_SERVERS:
+        plink_servers(j->body, j->len);
+        plink.state = PL_DONE;
+        settings_rebuild();                 /* Settings > Plex under: signed in, its server */
+        plink_show();
+        break;
+    }
+}
+
+/* Once a second: the code asked after, until it is entered or runs out;
+ * the page gone, given up. */
+static void plink_tick(void)
+{
+    if (plink.state == PL_IDLE)
+        return;
+    if (!plink_page()) {
+        plink_stop();
+        return;
+    }
+    if (plink.state != PL_WAIT)
+        return;
+    if ((LONG)(time_ms() - plink.until_ms) >= 0) {
+        plink_fail(_("The code ran out before it was entered: try again"));
+        return;
+    }
+    if ((LONG)(time_ms() - plink.next_ms) >= 0)
+        plink_ask(PL_CHECK);
+}
+
+static void plink_start(void)
+{
+    struct Page *p;
+    if (!https_ok()) {
+        set_msg(_("needs HTTPS (Settings > Networking)"));
+        return;
+    }
+    plink_stop();
+    if (!(p = page_push(PT_TEXT, _("Sign in at plex.tv")))) {
+        set_msg(_("Too many levels open"));
+        return;
+    }
+    p->plexlink = 1;
+    plink_ask(PL_PIN);
+    if (plink.state == PL_PIN)
+        plink_show();
+}
+
+static void plink_sign_out(void)
+{
+    plink_stop();
+    plex_set_account("", "");
+    plex_set_token("");                     /* the server's, which came with it */
+    amce_log("plex: plex.tv", "signed out");
+    plex_settings_again(TRUE);
+    set_msg(_("Signed out of plex.tv"));
+}
+
 static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
@@ -9511,6 +9956,13 @@ static void radio_done(struct NetJob *j)
             FreeVec(j);
             return;
         }
+    if (j == plink.j) {
+        plink_came(j);                      /* signing in at plex.tv */
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+        return;
+    }
     if (j == plex_sj) {
         /* an artist's or album's own answer: its summary */
         plex_sum_came(j);
@@ -9755,7 +10207,7 @@ static void radio_done(struct NetJob *j)
         char m[160];
         p->net_seq = 0;
         if (j->body)
-            n = radio_fill(p->base, j->body, j->len, &p->list, radio_https, &skipped);
+            n = radio_fill(p->base, j->body, j->len, &p->list, https_ok(), &skipped);
         if (!j->body || n <= 0) {
             const char *why = !j->body ? j->err
                               : n < 0 ? "radio-browser.info answered with something unexpected"
@@ -9769,6 +10221,7 @@ static void radio_done(struct NetJob *j)
             sprintf(m, "%s: %ld listed, %ld left out, from %s in %ld ms", p->title, (long)n,
                     (long)skipped, j->server, (long)j->ms);
             amce_log("radio", m);
+            plex_shortcut_fix(p);           /* Now playing first, while a station plays */
         }
         if (p == cur() && !pane_pending) {
             msg[0] = 0;
@@ -9892,6 +10345,10 @@ static void radio_open(struct Item *it)
         }
         if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
+            if (plex.account[0] && https_ok()) {
+                j->tls = 1;                 /* the account's servers too, from plex.tv */
+                plex_tv_headers(j->extra, sizeof(j->extra), TRUE);
+            }
             amce_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
         } else {
             amce_strlcpy(j->host, plex.host, sizeof(j->host));
@@ -9903,7 +10360,7 @@ static void radio_open(struct Item *it)
         }
     } else {
         radio_set_max_kbps(rkbps_now());
-        radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
+        radio_request(p->base, https_ok(), j->path, sizeof(j->path));
         amce_strlcpy(msg, _("Asking radio-browser.info...  Esc to give up"), sizeof(msg));
     }
     j->seq = ++rq_seq;
@@ -10602,6 +11059,9 @@ static void plex_choose(struct Item *it)
             port = (UWORD)v;
     }
     plex_set_server(host, port, name);
+    radio_field(it, 2, name, sizeof(name));
+    if (name[0])
+        plex_set_token(name);               /* the account's server: its own token */
     amce_log("plex: server chosen", hp);
     if (depth >= 2 && menu_sel >= 0 && menu[menu_sel] == MOD_SETTINGS) {
         /* chosen in Settings > Plex: back there, the row naming it */
@@ -10646,14 +11106,23 @@ static void plex_help(void)
                  "network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: "
                  "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400"));
     text_line(p, "");
-    text_para(p, _("Signing in: a server asks for its owner's token. Find it in Plex Web (an "
-                 "item's Get Info > View XML: the X-Plex-Token in the address) and set it from "
-                 "the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv "
-                 "needs HTTPS (AmiSSL) and comes later."));
+    text_para(p, _("Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, "
+                   "Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at "
+                   "plex.tv/link on a phone or computer. The account's servers are then listed "
+                   "with those found on the network, each with its own token. Without AmiSSL, "
+                   "set a server's token from the Shell: find it in Plex Web (an item's Get "
+                   "Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE "
+                   "AmigaMCE/PlexToken <token>."));
     text_line(p, "");
     sprintf(line, _("Server: %s"), plex.host[0] ? plex.host : _("none chosen"));
     text_line(p, line);
     text_line(p, plex.token[0] ? _("Token: set") : _("Token: not set"));
+    if (plex.account[0]) {
+        sprintf(line, _("plex.tv: signed in as %s"), plex.user[0] ? plex.user : "?");
+        text_line(p, line);
+    } else {
+        text_line(p, _("plex.tv: not signed in"));
+    }
     {
         /* what plays the tracks here: MP3, FLAC, and what they come out of */
         int i;
@@ -10844,6 +11313,10 @@ static void act_action(struct Item *it)
         toggle_https();
     else if (it->action == ACT_PLEXCONV)
         toggle_plex_convert();
+    else if (it->action == ACT_PLEXLINK)
+        plink_start();
+    else if (it->action == ACT_PLEXOUT)
+        plink_sign_out();
     else if (it->action == ACT_PLEXON)
         toggle_plex_on();
     else if (it->action == ACT_PLEXSET)
@@ -11760,8 +12233,7 @@ static BOOL gut_click(WORD x, WORD y)
     WORD bx0, bx1, ty, th;
     LONG vis = list_visible();
     if (!list_overflows(p) || y < g.list_top || y > g.footer_y - 2 ||
-        x <= list_edge(p) - GUT_W || x > list_edge(p) ||
-        (!has_aside(p) && ov.on && ov.page == p))
+        x <= list_edge(p) - GUT_W || x > list_edge(p))
         return FALSE;
     gut_geom(p, &bx0, &bx1, &ty, &th);
     if (focus != FOCUS_CONTENT)
@@ -11788,8 +12260,11 @@ static void handle_mouse(struct IntuiMessage *im)
             amce_log("click", "it stopped a coast, and did nothing else");
         return;                             /* a click during a coast only stops it */
     }
-    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
+    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top)) {
         pane_settle();              /* a click outside the menu acts on the section */
+        if (im->Code == SELECTDOWN && x >= g.menu_w && y >= g.top && y < g.footer_y)
+            menu_unpin();           /* the content clicked: the menu to its icons */
+    }
     tb = cur_tb();
     if (!tb && pv_tb.open)
         tb = &pv_tb;                /* the preview pane's fact sheet */
@@ -12263,6 +12738,7 @@ static int app_main(void)
     }
 
     caps_detect(&caps);
+    https_apply();                  /* the setting, now that AmiSSL is looked for */
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
@@ -12424,6 +12900,7 @@ static int app_main(void)
                     scr_watch();            /* a screen gone blank: why (log) */
                     mp_tempo_check();
                     flac_slow_check();      /* a FLAC track running dry: said once */
+                    plink_tick();           /* signing in at plex.tv: asked after */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */

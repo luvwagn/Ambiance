@@ -415,6 +415,15 @@ Debug (CPU, μνήμη, log)
 MSG_4393028C
 Δεν τρέχει TCP/IP
 ; No TCP/IP stack running
+MSG_4FC02885
+HTTPS (ασφαλείς συνδέσεις)
+; HTTPS (secure connections)
+MSG_17450D60
+ραδιοσταθμοί, plex.tv
+; radio stations, plex.tv
+MSG_30C0E827
+θέλει AmiSSL
+; needs AmiSSL
 MSG_4C151C1E
 σταθμοί έως %s
 ; stations up to %s
@@ -448,12 +457,6 @@ MSG_3DB9B915
 MSG_450E2AE8
 Αυτό το TCP/IP δεν δείχνει τις διεπαφές του
 ; This TCP/IP stack does not list its interfaces
-MSG_604E4CF2
-Ροές HTTPS
-; Allow HTTPS streams
-MSG_30C0E827
-θέλει AmiSSL
-; needs AmiSSL
 MSG_185E3E26
 Αυτόματα: %s
 ; Automatic: %s
@@ -493,6 +496,18 @@ Server Plex
 MSG_23B63BC7
 κανένας
 ; none chosen
+MSG_1A42C214
+συνδεδεμένος
+; signed in
+MSG_51A683F2
+Αποσύνδεση από το plex.tv
+; Sign out of plex.tv
+MSG_123ED553
+Σύνδεση στο plex.tv
+; Sign in at plex.tv
+MSG_2D9C8A61
+θέλει HTTPS (Ρυθμίσεις > Δίκτυο)
+; needs HTTPS (Settings > Networking)
 MSG_5F6445D0
 Ήχος χαμηλότερης ποιότητας
 ; Request lower quality audio
@@ -580,9 +595,9 @@ MSG_3D495145
 MSG_3F32F17E
 Modules 8 καναλιών: μιξάρονται όπως το κάνει ο μίκτης του ProTracker 4.1 (άδεια MIT, (c) 2026 Akustikrausch (Andreas Wendorf)· ProTracker 4.1: github.com/akustikrausch/protracker4).
 ; 8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
-MSG_321AE26A
-Χρησιμοποιούνται αν υπάρχουν, δεν περιέχονται, το καθένα με την άδειά του: Amiga Game Selector, WHDLoad, AHI, drivers MHI, mpega.library, datatypes.
-; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_7AD43A09
+Χρησιμοποιούνται αν υπάρχουν, δεν περιέχονται, το καθένα με την άδειά του: Amiga Game Selector, WHDLoad, AHI, drivers MHI, mpega.library, datatypes, AmiSSL.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL.
 MSG_64ED99F8
 FLAC: flacdec.library (c) 2026 Renaud Schweingruber, με το dr_flac του David Reid (public domain ή MIT-0), αν υπάρχει, δεν περιέχεται. Ελεύθερο, σε αμετάβλητο αρχείο (Aminet: util/libs/flacdec).
 ; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
@@ -1078,6 +1093,45 @@ MSG_65D70EE9
 MSG_2062DC6D
 Χώρες
 ; Countries
+MSG_2AA3C84C
+Ζητείται κωδικός από το plex.tv...  Esc ακύρωση
+; Asking plex.tv for a code...  Esc to give up
+MSG_19C08CA4
+Σε τηλέφωνο ή υπολογιστή, πηγαίνετε στο plex.tv/link, συνδεθείτε στο Plex αν ζητηθεί και δώστε αυτόν τον κωδικό:
+; On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
+MSG_4F573886
+Το AmigaMCE περιμένει να δοθεί (ο κωδικός ισχύει 15 λεπτά). Esc ακύρωση.
+; AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
+MSG_3DC2D1A0
+Συνδεθήκατε. Ζητούνται από το plex.tv οι server του λογαριασμού...
+; Signed in. Asking plex.tv for this account's servers...
+MSG_46CB6DE4
+Συνδεθήκατε στο plex.tv ως %s.
+; Signed in to plex.tv as %s.
+MSG_7445FC0C
+Server: %s
+; Server: %s
+MSG_091E9862
+Οι Ρυθμίσεις > Δίκτυο > Plex > Server Plex δείχνουν τους server του λογαριασμού δίπλα σε όσους βρέθηκαν στο δίκτυο.
+; Settings > Networking > Plex > Plex server lists this account's servers beside those found on the network.
+MSG_33545DFE
+Η σύνδεση δεν πέτυχε: %s
+; Signing in did not work: %s
+MSG_24FC226E
+Δεν τρέχει στοίβα TCP/IP
+; No TCP/IP stack is running
+MSG_6CE44B71
+Ο κωδικός έληξε πριν δοθεί: δοκιμάστε ξανά
+; The code ran out before it was entered: try again
+MSG_4641030F
+Ο server δεν απάντησε
+; The server did not answer
+MSG_7B2696DA
+Το plex.tv δεν έστειλε κωδικό
+; plex.tv sent no code
+MSG_1D831D65
+Αποσυνδεθήκατε από το plex.tv
+; Signed out of plex.tv
 MSG_6358253C
 Η βιβλιοθήκη λείπει από τον server: η Μουσική τις δείχνει ξανά
 ; That library is gone from the server: Music lists them again
@@ -1138,18 +1192,21 @@ MSG_35BE063F
 MSG_2FBD9CB6
 Εύρεση server: οι Ρυθμίσεις > Δίκτυο > Plex > Server Plex ρωτούν το δίκτυο (GDM του Plex)· διαλέξτε έναν και κρατιέται. Ή ορίστε τη διεύθυνση από το Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
 ; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-MSG_6A05B8D3
-Σύνδεση: ένας server ζητά το token του κατόχου. Βρείτε το στο Plex Web (Get Info > View XML ενός στοιχείου: το X-Plex-Token στη διεύθυνση) και ορίστε το από το Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Η σύνδεση στο plex.tv θέλει HTTPS (AmiSSL) και έρχεται αργότερα.
-; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
-MSG_7445FC0C
-Server: %s
-; Server: %s
+MSG_5B40D81A
+Σύνδεση: με εγκατεστημένο το AmiSSL 5 και ενεργό το Ρυθμίσεις > Δίκτυο > HTTPS, το Ρυθμίσεις > Δίκτυο > Plex > Σύνδεση στο plex.tv δείχνει έναν κωδικό που δίνετε στο plex.tv/link από τηλέφωνο ή υπολογιστή. Οι server του λογαριασμού εμφανίζονται τότε μαζί με όσους βρέθηκαν στο δίκτυο, ο καθένας με το δικό του token. Χωρίς AmiSSL, ορίστε το token ενός server από το Shell: βρείτε το στο Plex Web (Πληροφορίες > Προβολή XML ενός στοιχείου: το X-Plex-Token στη διεύθυνση) και μετά SetEnv SAVE AmigaMCE/PlexToken <token>.
+; Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
 MSG_6D54C528
 Token: ορίστηκε
 ; Token: set
 MSG_59B6EDB9
 Token: όχι
 ; Token: not set
+MSG_6A307F3D
+plex.tv: συνδεδεμένος ως %s
+; plex.tv: signed in as %s
+MSG_2DD69A9C
+plex.tv: χωρίς σύνδεση
+; plex.tv: not signed in
 MSG_0B620CC7
 MP3: από τον driver MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
@@ -1381,9 +1438,15 @@ MSG_6A2F5761
 MSG_262B09BC
 Ακυρώθηκε
 ; Cancelled
-MSG_4641030F
-Ο server δεν απάντησε
-; The server did not answer
+MSG_11341467
+Το HTTPS θέλει AmiSSL 5
+; HTTPS needs AmiSSL 5
+MSG_68A35804
+Η ασφαλής σύνδεση απέτυχε
+; The secure connection failed
+MSG_487D4FD3
+Το πιστοποιητικό του server δεν έγινε δεκτό (είναι σωστό το ρολόι του Amiga;)
+; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_2ACCD57C
 Ο server σταμάτησε να απαντά
 ; The server stopped answering
@@ -1393,15 +1456,18 @@ MSG_05C477DC
 MSG_4A212D5E
 Ο server δεν βρέθηκε (DNS)
 ; That server could not be found (DNS)
+MSG_515157E5
+Ο server απάντησε %ld
+; The server answered %ld
+MSG_2FFE0C45
+Το HTTPS είναι κλειστό (Ρυθμίσεις > Δίκτυο)
+; HTTPS is off (Settings > Networking)
 MSG_68C8EB43
 Ο server απαντά μόνο με HTTPS
 ; The server only answers over HTTPS
 MSG_563B6546
 Ο server μάς στέλνει όπου δεν πάμε
 ; The server sent us somewhere we cannot follow
-MSG_515157E5
-Ο server απάντησε %ld
-; The server answered %ld
 MSG_64F654D3
 Η διεργασία δικτύου δεν ξεκίνησε
 ; The network process could not start
@@ -1486,9 +1552,9 @@ MSG_2919BAF1
 MSG_0761145C
 Το αρχείο δεν άνοιξε
 ; The file could not be opened
-MSG_2D2A3CF1
-Ο σταθμός στέλνει μόνο με HTTPS, που δεν παίζει ακόμα
-; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_294C1997
+Ο σταθμός εκπέμπει μόνο μέσω HTTPS: ανοίξτε το Ρυθμίσεις > Δίκτυο > HTTPS
+; This station only streams over HTTPS: turn on Settings > Networking > HTTPS
 MSG_103190A0
 Η διεύθυνση του σταθμού δεν ακολουθείται
 ; The station's address is not one AmigaMCE can follow

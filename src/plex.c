@@ -11,7 +11,13 @@
  * ENVARC:AmigaMCE/PlexServer ("address:port"). Its sign-in token, which a
  * server asks for unless it lets this address in without one, is
  * ENVARC:AmigaMCE/PlexToken (from the Shell: SetEnv SAVE AmigaMCE/PlexToken
- * ...; signing in at plex.tv needs HTTPS, so AmiSSL, and is for later).
+ * ...), or comes from signing in at plex.tv (HTTPS, so AmiSSL): Plex's
+ * own way for a device without a keyboard to speak of, a code asked for
+ * (POST /api/v2/pins), entered by the user at plex.tv/link on a phone or
+ * computer, the code then asked after until its authToken comes. The
+ * account's servers (/api/resources) are then offered beside those GDM
+ * finds, each with its own token. The account's token is
+ * ENVARC:AmigaMCE/PlexAccount; no token is ever logged.
  *
  * The lists are pages of items, as Radio's: IT_PLEXDIR rows open another
  * list (path: the server's key for it, "@<n>" a music library's own menu,
@@ -57,6 +63,8 @@
 #define ON_VAR     "AmigaMCE/Plex"
 #define LIB_VAR    "AmigaMCE/PlexLibrary"
 #define PHOTO_VAR  "AmigaMCE/PlexPhotos"    /* its photo libraries: "key\ttitle" lines */
+#define ACCT_VAR   "AmigaMCE/PlexAccount"   /* plex.tv: the account's token */
+#define USER_VAR   "AmigaMCE/PlexUser"      /* ...and its name */
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
@@ -119,6 +127,8 @@ void plex_load(UWORD cpu)
     get_var(NAME_VAR, plex.name, sizeof(plex.name));
     get_var(TOKEN_VAR, plex.token, sizeof(plex.token));
     get_var(CID_VAR, plex.cid, sizeof(plex.cid));
+    get_var(ACCT_VAR, plex.account, sizeof(plex.account));
+    get_var(USER_VAR, plex.user, sizeof(plex.user));
     get_var(CONV_VAR, v, sizeof(v));
     plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
     get_var(ON_VAR, v, sizeof(v));
@@ -340,7 +350,7 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
              * own players do; another session for it is refused (400) */
             sprintf(n, "&session=%s", last_session);
         } else {
-            sprintf(n, "&session=amce%lu-%s", (unsigned long)++sessions, plex.cid + 9);
+            sprintf(n, "&session=amce%lu-%.30s", (unsigned long)++sessions, plex.cid + 9);
             amce_strlcpy(last_session, n + 9, sizeof(last_session));
         }
         amce_strlcpy(last_item, key, sizeof(last_item));
@@ -739,13 +749,43 @@ BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max)
     return out[0] != 0;
 }
 
-/* The servers GDM found (net.c: "address\tport\tname" lines) into l. */
+/* ------------------------------------------------------------ plex.tv */
+void plex_tv_headers(char *out, LONG max, BOOL token)
+{
+    amce_strlcpy(out, "X-Plex-Product: AmigaMCE\r\nX-Plex-Version: " AMCE_VERSION
+                      "\r\nX-Plex-Platform: AmigaOS\r\nX-Plex-Device-Name: Amiga"
+                      "\r\nX-Plex-Client-Identifier: ", max);
+    amce_strlcat(out, plex.cid, max);
+    amce_strlcat(out, "\r\n", max);
+    if (token && plex.account[0]) {
+        amce_strlcat(out, "X-Plex-Token: ", max);
+        amce_strlcat(out, plex.account, max);
+        amce_strlcat(out, "\r\n", max);
+    }
+}
+
+void plex_set_account(const char *token, const char *user)
+{
+    amce_strlcpy(plex.account, token, sizeof(plex.account));
+    amce_strlcpy(plex.user, user, sizeof(plex.user));
+    set_var(ACCT_VAR, plex.account);
+    set_var(USER_VAR, plex.user);
+}
+
+void plex_set_token(const char *token)
+{
+    amce_strlcpy(plex.token, token, sizeof(plex.token));
+    set_var(TOKEN_VAR, plex.token);
+}
+
+/* The servers GDM found (net.c: "address\tport\tname" lines; the
+ * account's, from plex.tv, with a fourth: its token) into l. */
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l)
 {
-    char *p = (char *)body, *e = p + len, line[200];
+    char *p = (char *)body, *e = p + len, line[240];
     LONG n = 0;
     while (p < e) {
-        char *nl = memchr(p, '\n', e - p), *t1, *t2, path[400], tag[40];
+        char *nl = memchr(p, '\n', e - p), *t1, *t2, *t3, path[400], tag[40];
         LONG k = nl ? nl - p : e - p;
         if (k >= (LONG)sizeof(line))
             k = sizeof(line) - 1;
@@ -756,9 +796,14 @@ LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l)
             continue;
         *t1++ = 0;
         *t2++ = 0;
+        if ((t3 = strchr(t2, '\t')))
+            *t3++ = 0;                      /* the account's server: its token */
         utf8_to_latin1(t2);
-        sprintf(path, "%s:%s\t%s", line, t1, t2);
-        amce_strlcpy(tag, line, sizeof(tag));
+        sprintf(path, "%s:%s\t%s\t%s", line, t1, t2, t3 ? t3 : "");
+        if (t3)
+            sprintf(tag, "%.20s, plex.tv", line);
+        else
+            amce_strlcpy(tag, line, sizeof(tag));
         if (list_add(l, t2[0] ? t2 : line, path, tag, IT_PLEXSRV))
             n++;
     }

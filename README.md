@@ -49,14 +49,18 @@ of the Amiga to how fast it really is.
   listened to, trending, chiptune, demoscene, genre or country (A to Z,
   your country first), showing only stations an Amiga can play: MP3,
   working, and no faster than this Amiga copes with. Shows the station's
-  current song titles.
+  current song titles. With AmiSSL 5 and Settings > Networking > HTTPS on,
+  stations that stream over HTTPS are listed and play too, marked HTTPS in
+  the lists and on Now Playing.
 - **Plex:** the music libraries of a
   [Plex Media Server](https://www.plex.tv) on your network, by artist,
   album or recently added, with covers and details beside the list. Plex
   converts each track to an MP3 this Amiga can decode: 22 kHz mono on a
   68020/030, 24 kHz stereo on a 68040/060 or faster; a fast Amiga with
   flacdec.library plays MP3 and FLAC tracks as stored. Plain HTTP on your
-  own network, so no AmiSSL is needed.
+  own network, so no AmiSSL is needed; with it, you can sign in at plex.tv
+  instead of setting a token by hand, and your account's servers are
+  listed too.
 - **Music files:** MP3, FLAC, WAV, AIFF and 8SVX files on the Amiga
   itself, under Music next to Plex: the `MUSIC:` assign if you have one,
   and up to eight folders chosen in Settings > Folders > Music. Only
@@ -119,7 +123,8 @@ of the Amiga to how fast it really is.
   laced on OCS, ECS and AGA. RTG: 640x480, 800x600 and 1024x768.
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
-- Flicker-free scrolling text and lists, with a scroll bar for the mouse.
+- Flicker-free scrolling text and lists. A long list always shows a scroll bar
+  (how long it is, and where you are in it), which the mouse can drag or click.
 
 ## Requirements
 
@@ -129,7 +134,7 @@ of the Amiga to how fast it really is.
 | **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign) |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
 | **For MP3 and FLAC** | mpega.library for MP3 (the installer offers it); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
-| **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL to list HTTPS radio stations |
+| **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv) |
 
 Radio, Plex and music files can play through AHI (16-bit, at AHI's own
 mode and rate) instead of Paula, and their MP3 can be decoded and played by
@@ -200,8 +205,13 @@ playing.
 
 1. Settings > Networking > Plex: turn Plex on and choose your server under
    Plex server. Servers on your network are found automatically.
-2. If your server asks for a sign-in, give AmigaMCE your Plex token from the
-   Shell: `SetEnv SAVE AmigaMCE/PlexToken <token>`. About > Plex in AmigaMCE
+2. If your server asks for a sign-in: with AmiSSL 5 installed, turn on
+   Settings > Networking > HTTPS, then choose Settings > Networking > Plex >
+   Sign in at plex.tv. It shows a short code: enter it at
+   [plex.tv/link](https://plex.tv/link) on a phone or computer. Your
+   account's servers then appear under Plex server, each with its own token.
+   Without AmiSSL, give AmigaMCE your Plex token from the Shell:
+   `SetEnv SAVE AmigaMCE/PlexToken <token>`. About > Plex in AmigaMCE
    explains where to find it.
 3. Your music libraries appear under Music, your photo libraries at the
    top of Pictures.
@@ -214,7 +224,7 @@ playing.
 | Display | Screen mode, Style (fonts and looks), Double buffering (RTG), Visualisation, Jump scrolling (very long lists step a letter at a time) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
-| Networking | Radio (HTTPS stations, the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, lower quality audio), Stream buffer, Network interface |
+| Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
 memory use in the header and writes a timing log to `AmigaMCE.log` next to
@@ -223,12 +233,7 @@ the program, which is the first thing to look at if something misbehaves.
 ## Not there yet
 
 - Videos plays IFF ANIMs; other video formats come later.
-- beets music libraries: `amcesql.library` (SQLite, read only, `src/sqlib`)
-  is built and in the archive; browsing them comes later.
-- HTTPS radio streams are listed (with AmiSSL) but do not play yet.
 - Modules play on Paula only; AHI for them comes later.
-- Plex sign-in through plex.tv needs HTTPS, so the token is set by hand for
-  now.
 
 ## Building
 

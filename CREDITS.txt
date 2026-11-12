@@ -98,6 +98,11 @@ https://github.com/akustikrausch/protracker4
   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+HTTPS (secure radio stations, signing in at plex.tv) is by AmiSSL 5
+(AmiSSL Open Source Team, Apache License 2.0; OpenSSL), where it is
+installed. It is not part of AmigaMCE or its archive: get it from Aminet
+(util/libs/AmiSSL-5.x-OS3) or https://github.com/jens-maus/amissl.
+
 Packed modules are unpacked with xfdmaster.library, MP3 is decoded by
 mpega.library and XM, S3M and IT are mixed by modplug.library, where they
 are installed. They are not part of AmigaMCE. Its archive's Extras drawer

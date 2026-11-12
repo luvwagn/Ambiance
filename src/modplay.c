@@ -1677,6 +1677,13 @@ static BOOL load_stream(const char *url, const char *name, const char *tag, UWOR
     amce_strlcpy(mp.path, url, sizeof(mp.path));
     amce_strlcpy(mp.rname, name, sizeof(mp.rname));
     amce_strlcpy(mp.rtag, tag, sizeof(mp.rtag));
+    {
+        /* the list's HTTPS mark off: the format alone ("MP3" is compared),
+         * Now Playing saying HTTPS by the connection itself (st_secure) */
+        LONG n = strlen(mp.rtag);
+        if (n >= 6 && !strcmp(mp.rtag + n - 6, " HTTPS"))
+            mp.rtag[n - 6] = 0;
+    }
     return TRUE;
 }
 

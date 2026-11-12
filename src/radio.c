@@ -96,7 +96,7 @@ static BOOL is_scheme(const char *u, const char *s)
 static int station_row(struct fill *x, char **f, int n)
 {
     const char *url = col(f, n, x->c_urlr), *codec = col(f, n, x->c_codec);
-    char name[96], tags[120], home[160], path[600], tag[16];
+    char name[96], tags[120], home[160], path[600], tag[24];
     LONG i, br = num(col(f, n, x->c_bitrate));
     if (!url[0])
         url = col(f, n, x->c_url);
@@ -128,7 +128,7 @@ static int station_row(struct fill *x, char **f, int n)
     else
         amce_strlcpy(tag, codec, sizeof(tag));
     if (is_scheme(url, "https://"))
-        amce_strlcat(tag, " S", sizeof(tag));     /* a secure stream (AmiSSL) */
+        amce_strlcat(tag, " HTTPS", sizeof(tag));     /* a secure stream (AmiSSL) */
     if (!list_add(x->l, name, path, tag, IT_STATION))
         return 0;
     return x->l->count < STATIONS_MAX;

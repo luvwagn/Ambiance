@@ -26,7 +26,9 @@
  *
  * The process has its own bsdsocket.library (each process opens its own);
  * net.c's SocketBase is the network process's, so this file names its own
- * base for the library's inline calls.
+ * base for the library's inline calls. An https: stream (Settings >
+ * Networking > HTTPS on, AmiSSL installed) goes through AmiSSL (tls.c),
+ * which the process likewise opens for itself, the first time one plays.
  */
 #include "amce.h"
 #include "radiocsv.h"
@@ -51,6 +53,15 @@
 #include <sys/filio.h>
 
 struct Library *st_SocketBase;      /* the radio process's */
+static struct TlsLib st_tls;        /* AmiSSL, the radio process's (tls.c) */
+static APTR st_ssl;                 /* the stream's TLS, NULL plain HTTP */
+static volatile BOOL https_on;      /* Settings > Networking > HTTPS (with AmiSSL) */
+static volatile BOOL secure_now;    /* the stream's own connection is TLS (st_secure) */
+
+void st_use_https(BOOL on)
+{
+    https_on = on;
+}
 
 /* Time the radio process spends asleep, all told (Debug's load line says
  * how busy it is: st_busy_sample) */
@@ -485,10 +496,14 @@ static void fail(const char *why)
 }
 
 /* Paula wants a half: given it now (from wherever the process waits). */
+static void mhi_serve(void);
+
 static void serve(void)
 {
-    if (st.mhi)
-        return;                             /* MHI's buffers: taken back in mhi_play */
+    if (st.mhi) {
+        mhi_serve();                        /* MHI's buffers back, a stall restarted */
+        return;
+    }
     if (st.started && (SetSignal(0, 1UL << st.sig) & (1UL << st.sig)))
         out_take();
 }
@@ -530,13 +545,14 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port, char 
 {
     const char *h, *slash, *colon;
     LONG n;
-    if (amce_strnicmp(url, "http://", 7))
+    BOOL secure = !amce_strnicmp(url, "https://", 8);
+    if (amce_strnicmp(url, "http://", 7) && !secure)
         return FALSE;
-    h = url + 7;
+    h = url + (secure ? 8 : 7);
     slash = strchr(h, '/');
     n = slash ? slash - h : (LONG)strlen(h);
     colon = memchr(h, ':', n);
-    *port = 80;
+    *port = secure ? 443 : 80;
     if (colon) {
         LONG v = 0;
         const char *c = colon + 1;
@@ -590,6 +606,82 @@ static LONG connect_to(const char *host, UWORD port)
     return s;
 }
 
+/* The connection closed (its TLS first). */
+static void sock_close(void)
+{
+    if (st_ssl)
+        tls_free(&st_tls, st_ssl);
+    st_ssl = NULL;
+    secure_now = FALSE;
+    if (st.sock >= 0)
+        CloseSocket(st.sock);
+    st.sock = -1;
+}
+
+/* Connected to host (TLS's handshake too, secure): st.sock, FALSE failed. */
+static BOOL sock_open(const char *host, UWORD port, BOOL secure)
+{
+    char m[200];
+    sock_close();
+    if ((st.sock = connect_to(host, port)) < 0)
+        return FALSE;
+    if (!secure)
+        return TRUE;
+    if (!tls_open(&st_tls, st_SocketBase)) {
+        amce_log("radio: https", st_tls.why);
+        sock_close();
+        fail(_("HTTPS needs AmiSSL 5"));
+        return FALSE;
+    }
+    if (!(st_ssl = tls_new(&st_tls, st.sock, host, FALSE))) {
+        sock_close();
+        fail(_("Not enough memory"));
+        return FALSE;
+    }
+    for (;;) {
+        int r = tls_handshake(&st_tls, st_ssl), w;
+        if (r == 1) {
+            secure_now = TRUE;
+            return TRUE;
+        }
+        if (r != TLS_WANT_READ && r != TLS_WANT_WRITE) {
+            sprintf(m, "%.60s: %.120s", host, st_tls.why);
+            amce_log("radio: https", m);
+            sock_close();
+            fail(_("The secure connection failed"));
+            return FALSE;
+        }
+        if ((w = wait_sock(st.sock, r == TLS_WANT_WRITE, CONNECT_S)) <= 0) {
+            sock_close();
+            fail(w < 0 ? _("Stopped") : _("The station did not answer"));
+            return FALSE;
+        }
+    }
+}
+
+/* The request sent whole: FALSE failed. */
+static BOOL sock_send(const char *req)
+{
+    LONG left = strlen(req), off = 0;
+    while (left > 0) {
+        LONG w;
+        if (wait_sock(st.sock, TRUE, READ_S) <= 0)
+            return FALSE;
+        if (st_ssl) {
+            w = tls_write(&st_tls, st_ssl, req + off, left);
+            if (w == TLS_WANT_READ || w == TLS_WANT_WRITE)
+                continue;
+        } else {
+            w = send(st.sock, (APTR)(req + off), left, 0);
+        }
+        if (w <= 0)
+            return FALSE;
+        off += w;
+        left -= w;
+    }
+    return TRUE;
+}
+
 /* More bytes into the network buffer (after what is there): FALSE at the
  * stream's end or on a failure. */
 static BOOL net_more(void)
@@ -615,14 +707,20 @@ static BOOL net_more(void)
         return TRUE;
     }
     for (;;) {
-        int w = wait_sock(st.sock, FALSE, READ_S);
+        int w = st_ssl && tls_pending(&st_tls, st_ssl) > 0 ? 1 : wait_sock(st.sock, FALSE, READ_S);
         if (w <= 0) {
             fail(w < 0 ? _("Stopped") : _("The station stopped sending"));
             return FALSE;
         }
-        r = recv(st.sock, st.nb + st.nb_len, NETBUF - st.nb_len, 0);
-        if (r < 0 && Errno() == EWOULDBLOCK)
-            continue;
+        if (st_ssl) {
+            r = tls_read(&st_tls, st_ssl, st.nb + st.nb_len, NETBUF - st.nb_len);
+            if (r == TLS_WANT_READ || r == TLS_WANT_WRITE)
+                continue;
+        } else {
+            r = recv(st.sock, st.nb + st.nb_len, NETBUF - st.nb_len, 0);
+            if (r < 0 && Errno() == EWOULDBLOCK)
+                continue;
+        }
         if (r <= 0) {
             if (st.finite && r == 0)
                 st.eof = TRUE;              /* a track: all of it read */
@@ -756,25 +854,15 @@ static void ping_url(const char *url)
     static char path[1024], req[1300];
     char host[96], hdr[512], m[80];
     UWORD port;
-    LONG status = 0, left, off = 0;
+    LONG status = 0;
     if (!split_url(url, host, sizeof(host), &port, path, sizeof(path)))
         return;
-    if ((st.sock = connect_to(host, port)) >= 0) {
+    if (sock_open(host, port, !amce_strnicmp(url, "https:", 6))) {
         sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
                      "\r\nConnection: close\r\n\r\n", path, host);
-        left = strlen(req);
-        while (left > 0) {
-            LONG w;
-            if (wait_sock(st.sock, TRUE, READ_S) <= 0 ||
-                (w = send(st.sock, (APTR)(req + off), left, 0)) <= 0)
-                break;
-            off += w;
-            left -= w;
-        }
-        if (left <= 0)
+        if (sock_send(req))
             status = read_headers(hdr, sizeof(hdr));
-        CloseSocket(st.sock);
-        st.sock = -1;
+        sock_close();
     }
     sprintf(m, "the conversion before stopped: %ld", (long)status);
     amce_log("plex", m);
@@ -815,8 +903,9 @@ static BOOL open_stream(void)
     }
     for (hop = 0; hop < 4; hop++) {
         LONG status;
-        if (!amce_strnicmp(url, "https:", 6)) {
-            fail(_("This station only streams over HTTPS, which AmigaMCE cannot play yet"));
+        BOOL secure = !amce_strnicmp(url, "https:", 6);
+        if (secure && !https_on) {
+            fail(_("This station only streams over HTTPS: turn on Settings > Networking > HTTPS"));
             return FALSE;
         }
         if (!split_url(url, host, sizeof(host), &port, path, sizeof(path))) {
@@ -824,7 +913,7 @@ static BOOL open_stream(void)
             return FALSE;
         }
         st.state = ST_CONNECTING;
-        if ((st.sock = connect_to(host, port)) < 0)
+        if (!sock_open(host, port, secure))
             return FALSE;
         if (st.range_from)
             sprintf(range, "Range: bytes=%lu-\r\n", (unsigned long)st.range_from);
@@ -834,18 +923,9 @@ static BOOL open_stream(void)
                 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
                 "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
                 path, host, st.finite ? "" : "Icy-MetaData: 1\r\n", range);
-        {
-            LONG left = strlen(req), off = 0;
-            while (left > 0) {
-                LONG w;
-                if (wait_sock(st.sock, TRUE, READ_S) <= 0 ||
-                    (w = send(st.sock, (APTR)(req + off), left, 0)) <= 0) {
-                    fail(st.quit ? "Stopped" : "The request could not be sent");
-                    return FALSE;
-                }
-                off += w;
-                left -= w;
-            }
+        if (!sock_send(req)) {
+            fail(st.quit ? "Stopped" : "The request could not be sent");
+            return FALSE;
         }
         if (!(status = read_headers(hdr, sizeof(hdr)))) {
             fail(st.err[0] ? st.err : st.finite ? "The server sent no answer we understand"
@@ -853,8 +933,7 @@ static BOOL open_stream(void)
             return FALSE;
         }
         if (status >= 300 && status < 400 && header(hdr, "Location", v, sizeof(v))) {
-            CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             amce_strlcpy(url, v, sizeof(url));
             continue;
         }
@@ -863,8 +942,7 @@ static BOOL open_stream(void)
         if (status == 400 && st.skip_ms && !st.skipping && drop_offset(url)) {
             /* the server would not start its conversion part way in: from
              * the start, the frames before the time passed over here */
-            CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             st.skipping = no_offset = TRUE;
             amce_log("track", "the server would not start part way in: seeking by reading");
             hop--;
@@ -900,7 +978,13 @@ static BOOL open_stream(void)
                     ;
                 st.err[0] = 0;
                 st.nb[st.nb_len] = 0;
-                if (!(p = strstr((char *)st.nb + st.nb_pos, "http://"))) {
+                {
+                    char *q = strstr((char *)st.nb + st.nb_pos, "https://");
+                    p = strstr((char *)st.nb + st.nb_pos, "http://");
+                    if (q && https_on && (!p || q < p))
+                        p = q;              /* the first address, secure too */
+                }
+                if (!p) {
                     fail(_("The station's playlist has no stream AmigaMCE can play"));
                     return FALSE;
                 }
@@ -908,8 +992,7 @@ static BOOL open_stream(void)
                     ;
                 *e = 0;
                 amce_strlcpy(url, p, sizeof(url));
-                CloseSocket(st.sock);
-                st.sock = -1;
+                sock_close();
                 continue;
             }
             if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet") &&
@@ -1287,9 +1370,7 @@ static ULONG flac_io(register struct Hook *h __asm("a0"), register struct FLACDe
         /* far, or back: the file asked for again from there */
         {
             UBYTE was = st.state;
-            if (st.sock >= 0)
-                CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             st.nb_pos = st.nb_len = 0;
             st.eof = FALSE;
             st.err[0] = 0;
@@ -1543,9 +1624,24 @@ static void pcm_play(void)
 /* ---------------------------------------------------------- MHI
  * MP3 given as it comes to an MHI driver (Settings > Sound), which
  * decodes and plays it itself (in hardware, or the emulator's): buffers
- * queued, taken back when played (its signal), queued again. */
-#define MHI_BUFS  8
-#define MHI_BUFSZ 16384
+ * queued, taken back when played (its signal), queued again. They are
+ * taken back, and the driver started again if it ran dry, while the
+ * process waits for the network too (serve, mhi_serve): it waited in a
+ * read of a whole buffer with MHI stopped (a second or so at 128 kbit/s),
+ * which was heard as choppy sound on a station whose data came in fits.
+ * Small buffers, many: one comes back, and is filled again, sooner. */
+#define MHI_BUFS  16
+#define MHI_BUFSZ 8192
+
+/* The MHI decoder and its buffers (the radio process's, while it plays). */
+static struct {
+    APTR h;
+    UBYTE *buf[MHI_BUFS];
+    LONG len[MHI_BUFS];
+    BOOL queued[MHI_BUFS], playing, paused;
+    int nq;
+    ULONG played_bytes;
+} mhs;
 
 /* An MP3 frame's bitrate and channels, from the first one in the buffer. */
 static void mp3_first_frame(LONG *kbps, LONG *ch)
@@ -1728,29 +1824,47 @@ static void mh_peaks(UBYTE *l, UBYTE *r)
     *r = c;
 }
 
+/* The buffers MHI has played, taken back; the driver started again if it
+ * ran dry with some queued (a dropout). From mhi_play's loop and from the
+ * network's waits (serve). */
+static void mhi_serve(void)
+{
+    APTR e;
+    int i;
+    if (!mhs.h)
+        return;
+    while ((e = MHIGetEmpty(mhs.h)))
+        for (i = 0; i < MHI_BUFS; i++)
+            if (mhs.queued[i] && mhs.buf[i] == e) {
+                mhs.queued[i] = FALSE;
+                mhs.played_bytes += mhs.len[i];
+                mhs.nq--;
+            }
+    if (mhs.playing && !mhs.paused && mhs.nq && MHIGetStatus(mhs.h) == MHIF_OUT_OF_DATA) {
+        st.underruns++;
+        MHIPlay(mhs.h);                     /* more came: on again */
+    }
+}
+
 static void mhi_play(LONG freq)
 {
-    UBYTE *buf[MHI_BUFS];
-    LONG len[MHI_BUFS], kbps = 0, ch = 0;
-    BOOL queued[MHI_BUFS], playing = FALSE, paused = FALSE, ended = FALSE;
-    ULONG played_bytes = 0;
+    LONG kbps = 0, ch = 0;
+    BOOL ended = FALSE;
     UWORD vol = 0xFFFF;
-    APTR h = NULL;
-    int i, nq = 0;
-    for (i = 0; i < MHI_BUFS; i++) {
-        buf[i] = NULL;
-        queued[i] = FALSE;
-    }
+    ULONG low_ms = 0xFFFFFFFFUL;
+    int i;
+    memset(&mhs, 0, sizeof(mhs));
     if (!(MHIBase = OpenLibrary((CONST_STRPTR)mhi_driver, 0))) {
         fail(_("The MHI driver could not be opened (Settings > Sound)"));
         return;
     }
-    if (!(h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig))) {
+    if (!(mhs.h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig))) {
+        mhs.h = NULL;
         fail(_("The MHI driver's decoder is in use, or not there"));
         goto done;
     }
     for (i = 0; i < MHI_BUFS; i++)
-        if (!(buf[i] = AllocVec(MHI_BUFSZ, MEMF_PUBLIC))) {
+        if (!(mhs.buf[i] = AllocVec(MHI_BUFSZ, MEMF_PUBLIC))) {
             fail(_("Not enough memory for MHI's buffers"));
             goto done;
         }
@@ -1773,33 +1887,31 @@ static void mhi_play(LONG freq)
     mh.gtop = MH_GTOP_START * 256;
     st.state = ST_BUFFERING;
     while (!st.quit) {
-        APTR e;
         UBYTE status;
-        /* the buffers played, back */
-        while ((e = MHIGetEmpty(h))) {
-            for (i = 0; i < MHI_BUFS; i++)
-                if (queued[i] && buf[i] == e) {
-                    queued[i] = FALSE;
-                    played_bytes += len[i];
-                    nq--;
-                }
+        mhi_serve();                        /* the buffers played, back */
+        if (mhs.playing && !mhs.paused && mh_ms() > 5000) {
+            /* the least held, for the log: how near it came to running dry */
+            ULONG q = mh_queued_ms(), p = mh_ms();
+            q = q > p ? q - p : 0;
+            if (q < low_ms)
+                low_ms = q;
         }
         if (st.bitrate > 0) {
-            ULONG ms = played_bytes / ((ULONG)st.bitrate) * 8;  /* bytes / (kbit/s / 8) */
+            ULONG ms = mhs.played_bytes / ((ULONG)st.bitrate) * 8;  /* bytes / (kbit/s / 8) */
             st.played = (ms / 1000) * (ULONG)freq + (ms % 1000) * (ULONG)freq / 1000;
         }
         /* and filled again, from the stream */
         for (i = 0; i < MHI_BUFS && !ended && !st.quit; i++) {
             LONG n;
-            if (queued[i])
+            if (mhs.queued[i])
                 continue;
-            n = stream_read(buf[i], MHI_BUFSZ);
+            n = stream_read(mhs.buf[i], MHI_BUFSZ);     /* (MHI served while it waits) */
             if (n <= 0) {
                 ended = TRUE;
                 break;
             }
-            len[i] = n;
-            mh_scan(buf[i], n);             /* its levels, for the meters */
+            mhs.len[i] = n;
+            mh_scan(mhs.buf[i], n);         /* its levels, for the meters */
             mh.bytes_in += n;
             if (mh.frames >= 40 && !st.icy_br) {
                 /* its bitrate from what it is, not its first frame */
@@ -1810,9 +1922,9 @@ static void mhi_play(LONG freq)
                         st.len_ms = (st.clen / (ULONG)st.bitrate) * 8;
                 }
             }
-            MHIQueueBuffer(h, buf[i], n);
-            queued[i] = TRUE;
-            nq++;
+            MHIQueueBuffer(mhs.h, mhs.buf[i], n);
+            mhs.queued[i] = TRUE;
+            mhs.nq++;
         }
         if (ended && st.err[0] && !st.eof && !st.finite) {
             fail(st.err);
@@ -1820,39 +1932,33 @@ static void mhi_play(LONG freq)
         }
         if (st.master != vol) {
             vol = st.master;
-            MHISetParam(h, MHIP_VOLUME, (ULONG)vol * 100 / 64);
+            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 100 / 64);
         }
-        if (!playing && nq && (nq == MHI_BUFS || ended)) {
-            MHIPlay(h);
+        if (!mhs.playing && mhs.nq && (mhs.nq == MHI_BUFS || ended)) {
+            MHIPlay(mhs.h);
             mh.t0 = time_ms();
-            playing = TRUE;
+            mhs.playing = TRUE;
             st.started = TRUE;
             st.state = ST_PLAYING;
         }
-        if (playing && st.paused != paused) {
-            paused = st.paused;
-            if (paused) {
-                MHIPause(h);
+        if (mhs.playing && st.paused != mhs.paused) {
+            mhs.paused = st.paused;
+            if (mhs.paused) {
+                MHIPause(mhs.h);
                 mh.pause_at = time_ms();
             } else {
-                MHIPlay(h);
+                MHIPlay(mhs.h);
                 if (mh.pause_at)
                     mh.paused_ms += time_ms() - mh.pause_at;
                 mh.pause_at = 0;
             }
         }
-        status = MHIGetStatus(h);
-        if (playing && status == MHIF_OUT_OF_DATA) {
-            if (ended && !nq)
-                break;                      /* all of it played */
-            if (nq && !paused) {
-                st.underruns++;
-                MHIPlay(h);                 /* more came: on again */
-            }
-        }
-        if (ended && !nq)
+        status = MHIGetStatus(mhs.h);
+        if (mhs.playing && status == MHIF_OUT_OF_DATA && ended && !mhs.nq)
+            break;                          /* all of it played */
+        if (ended && !mhs.nq)
             break;
-        if (nq == MHI_BUFS || ended) {
+        if (mhs.nq == MHI_BUFS || ended) {
             /* all queued: till one is played (its signal), looked at a
              * tenth of a second on in any case (pause, volume, its status) */
             ULONG got = SetSignal(0, (1UL << st.sig) | SIGBREAKF_CTRL_C);
@@ -1863,14 +1969,25 @@ static void mhi_play(LONG freq)
         }
     }
 done:
-    if (h) {
-        MHIStop(h);
-        MHIFreeDecoder(h);
+    if (mhs.playing) {
+        char m[160];
+        sprintf(m, "%.60s: %lu s played, %lu dropout%s, at least %lu.%lu s held",
+                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                (unsigned long)(mh_ms() / 1000), (unsigned long)st.underruns,
+                st.underruns == 1 ? "" : "s", (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms / 1000),
+                (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms % 1000 / 100));
+        amce_log(st.finite ? "track" : "radio", m);
+    }
+    if (mhs.h) {
+        APTR hh = mhs.h;
+        mhs.h = NULL;                           /* serve no more */
+        MHIStop(hh);
+        MHIFreeDecoder(hh);
     }
     st.started = FALSE;
     for (i = 0; i < MHI_BUFS; i++)
-        if (buf[i])
-            FreeVec(buf[i]);
+        if (mhs.buf[i])
+            FreeVec(mhs.buf[i]);
     CloseLibrary(MHIBase);
     MHIBase = NULL;
 }
@@ -1995,9 +2112,8 @@ out:
     out_stop();
     if (ms)
         MPEGA_close(ms);
-    if (st.sock >= 0)
-        CloseSocket(st.sock);
-    st.sock = -1;
+    sock_close();
+    tls_close(&st_tls);                     /* before the socket library it uses */
     if (st.fh) {
         Close(st.fh);
         st.fh = 0;
@@ -2065,7 +2181,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.state = ST_CONNECTING;
     st.cpu = cpu;
     st.proc = CreateNewProcTags(NP_Entry, (ULONG)radio_main, NP_Name, (ULONG)"AmigaMCE radio",
-                                NP_Priority, 3, NP_StackSize, 32768, NP_WindowPtr, (ULONG)-1,
+                                NP_Priority, 3, NP_StackSize, 65536, NP_WindowPtr, (ULONG)-1,
                                 TAG_DONE);
     if (!st.proc) {
         st_stop();
@@ -2108,6 +2224,13 @@ void st_stop(void)
 void st_use_ahi(BOOL on)
 {
     use_ahi = on;
+}
+
+/* What plays came over HTTPS (redirects followed: the connection it is
+ * on, not the address asked for). */
+BOOL st_secure(void)
+{
+    return secure_now;
 }
 
 BOOL st_ahi(void)

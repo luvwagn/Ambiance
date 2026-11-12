@@ -571,6 +571,8 @@ struct StInfo {
 };
 void st_set_buffer(int level);
 void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */
+BOOL st_secure(void);           /* the stream playing came over HTTPS */
+void st_use_https(BOOL on);     /* https: streams played (Settings > Networking > HTTPS, AmiSSL) */
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
@@ -822,6 +824,28 @@ extern struct Task *dir_tick_task;
 int  amce_stricmp(const char *a, const char *b);
 int  amce_strnicmp(const char *a, const char *b, LONG n);
 
+/* ---------------------------------------------------------------- HTTPS
+ * tls.c: TLS by AmiSSL 5, opened by each process that uses it, for itself
+ * (with its own bsdsocket.library); calls on a non-blocking socket say
+ * when they would wait. */
+struct TlsLib {
+    struct Library *master, *ssl, *ext;
+    APTR ctx;                   /* NULL: not open */
+    BOOL tried;
+    char ver[44];               /* OpenSSL's version, for the log */
+    char why[128];              /* the last failure */
+};
+#define TLS_WANT_READ  (-2)
+#define TLS_WANT_WRITE (-3)
+BOOL tls_open(struct TlsLib *t, struct Library *socketbase);   /* FALSE: no AmiSSL (t->why) */
+void tls_close(struct TlsLib *t);
+APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify);
+int  tls_handshake(struct TlsLib *t, APTR c);  /* 1 done, TLS_WANT_*, -1 failed */
+LONG tls_read(struct TlsLib *t, APTR c, APTR buf, LONG n);     /* > 0, 0 closed, TLS_WANT_*, -1 */
+LONG tls_write(struct TlsLib *t, APTR c, const void *buf, LONG n);
+LONG tls_pending(struct TlsLib *t, APTR c);     /* bytes read already, to be had at once */
+void tls_free(struct TlsLib *t, APTR c);
+
 /* ---------------------------------------------------------------- network
  * net.c: a process of its own does HTTP requests (bsdsocket.library);
  * the UI sends a job and collects it when its signal comes. */
@@ -830,6 +854,9 @@ struct NetJob {
     volatile UBYTE cancel;      /* given up: it stops at its next wait */
     UBYTE busy, done, quit, orphan;
     UBYTE gdm;                  /* not a request: Plex servers looked for on the network */
+    UBYTE tls;                  /* HTTPS (port 0: 443), AmiSSL's certificate check */
+    UBYTE post;                 /* POST, with no body, rather than GET */
+    char extra[320];            /* more request headers ("Name: value\r\n" each) */
     UWORD port;                 /* 0: 80 */
     char host[80];              /* "" the radio-browser.info API (found by DNS) */
     char path[400];
@@ -870,6 +897,7 @@ struct NetMirror { char name[64]; ULONG addr; LONG ms; };
 int net_radio_mirrors(struct NetMirror *out, int max);  /* -1: not found (DNS) */
 void net_radio_server(const char *name);    /* the station-list server asked first; "" any */
 void net_bind_to(ULONG ip);     /* connections from this address; 0 the stack's choice */
+void net_use_https(BOOL on);    /* Settings > Networking > HTTPS (with AmiSSL): https: followed */
 ULONG net_sigmask(void);
 
 /* radio.c: radio-browser.info's lists into pages */
@@ -887,6 +915,7 @@ struct PlexConf {
     char host[64];              /* "" none chosen */
     UWORD port;
     char name[64], token[64], cid[40];
+    char account[64], user[64]; /* plex.tv: the account's token, its name ("" not signed in) */
     BOOL convert;               /* every track converted for this Amiga by the server */
     BOOL on;                    /* Settings > Plex */
     UWORD cpu;                  /* caps.cpu (plex_load) */
@@ -918,6 +947,12 @@ BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max);  /* an item's ow
 LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l);
 const char *plex_why(const struct Item *it);
+/* plex.tv (HTTPS): signing in by a code entered at plex.tv/link */
+#define PLEX_TV "plex.tv"
+void plex_tv_headers(char *out, LONG max, BOOL token);  /* who asks (and the account's token) */
+void plex_set_account(const char *token, const char *user);    /* "" signed out */
+void plex_set_token(const char *token);     /* the chosen server's */
+/* plex_tv_value, plex_resource_lines: plexxml.h */
 ULONG plex_stream_rate(UBYTE *body, ULONG len);
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax);
 void plex_art_file(const char *thumb, WORD w, WORD h, char *file);  /* its file alone */
