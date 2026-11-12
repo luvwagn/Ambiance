@@ -103,7 +103,9 @@ static ULONG run(void *unused)
                    JDTA_Scale, (ULONG)&scale, JDTA_Damaged, (ULONG)&damaged, TAG_DONE);
         if (!bmh)
             goto out;
-        printf("%u x %u, depth %u", bmh->bmh_Width, bmh->bmh_Height, bmh->bmh_Depth);
+        /* %ld throughout: this libnix's plain %d and %u are 16-bit */
+        printf("%lu x %lu, depth %lu", (ULONG)bmh->bmh_Width, (ULONG)bmh->bmh_Height,
+               (ULONG)bmh->bmh_Depth);
         if (scale)
             printf(" (1/%lu of %lu x %lu%s)", scale, full_w, full_h, damaged ? ", damaged" : "");
         printf("\n%lu ms a decode (%lu x, %ld ticks)\n",

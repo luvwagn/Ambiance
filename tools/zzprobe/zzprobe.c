@@ -17,13 +17,10 @@
  *   - the card's own report: the SDK's zz9k-info and zz9k-services, run;
  *   - AmigaMCE's own JPEG datatype (amcejpeg.datatype) and its descriptor.
  * Then times what AmigaMCE does with them:
- *   - pictures decoded through datatypes (whichever reads them now), and
- *     their pixels read back, as AmigaMCE's previews do; where
- *     amcejpeg.datatype reads JPEGs, also at 1/2, 1/4 and 1/8 (its size
- *     hint, as AmigaMCE's thumbnails ask for);
- *   - JPEG decoded by jdec built into zzprobe, at every scale, from memory:
- *     the decoder alone, no datatype or file in the way (what AmigaMCE
- *     would take if it decoded JPEGs itself);
+ *   - pictures, as one table: the datatype the system picks for each
+ *     format; for JPEG also amcejpeg.datatype (its class used directly,
+ *     installed or from PROGDIR:amcejpeg) at 1/1 to 1/8 through its size
+ *     hint, and jdec built into zzprobe (the decoder alone, from memory);
  *   - MP3 decoded by mpega.library, as AmigaMCE asks a 68k for this CPU,
  *     and at full quality (what it asks of the card's).
  * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3
@@ -53,6 +50,7 @@
 #include <proto/timer.h>
 #include <proto/expansion.h>
 #include <proto/datatypes.h>
+#include <proto/intuition.h>
 #include <clib/alib_protos.h>
 #include <string.h>
 #include <stdio.h>
@@ -60,7 +58,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.2 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.3 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -462,98 +460,195 @@ static void run_tool(const char *cmd, const char *title)
     DeleteFile((CONST_STRPTR)"T:zzprobe.out");
 }
 
-/* ------------------------------------------------------------ bench: pictures */
-/* fitw x fith: amcejpeg.datatype's size hint (0 0: none); *pw, *ph: the
- * size decoded (the picture's own without a hint) */
-static void bench_picture(const char *path, const char *fmt, ULONG fitw, ULONG fith,
-                          ULONG *pw, ULONG *ph)
+/* ------------------------------------------------------------ bench: pictures, as a table */
+/* Each format's picture decoded every way there is here, one row a way:
+ *   - the datatype the system picks for it (NewDTObject, from the file);
+ *   - JPEG: amcejpeg.datatype, its class made into objects directly, from
+ *     the file read into memory each time (DTST_MEMORY), so it is timed
+ *     beside the system's pick even when that is another datatype, and
+ *     even when it is not installed (from PROGDIR:amcejpeg);
+ *   - JPEG: jdec built into zzprobe, from memory: the decoder alone.
+ * Times: best of up to 10 runs (mean); "first" is the first load apart,
+ * with the datatype's loading (and any requester it shows). */
+#define NSC 4
+struct Row {
+    const char *fmt;
+    char dec[48];
+    ULONG first;                        /* us; 0: not timed */
+    ULONG best[NSC], mean[NSC];         /* us at 1/1 .. 1/8; 0: not run */
+    char note[120];                     /* instead of times */
+};
+static struct Row rows[12];
+static int nrows;
+static char notes[6][160];
+static int nnotes;
+
+static struct Row *row_new(const char *fmt, const char *dec)
 {
-    char line[320], t1[24], t2[24], t3[24], hint[48];
-    ULONG scale = 0;
-    ULONG best = 0xFFFFFFFF, worst = 0, sum = 0, runs = 0, start, rb_best = 0xFFFFFFFF;
-    ULONG w = 0, h = 0;
-    UWORD depth = 0;
-    char base[40];
-    base[0] = 0;
-    if (!exists(path)) {
-        sprintf(line, "  %s: no test file (%.100s): copy the Bench drawer beside zzprobe, or give %s=<file>", fmt, path, fmt);
-        sayf(line);
-        return;
+    struct Row *r = &rows[nrows < 11 ? nrows++ : 11];
+    memset(r, 0, sizeof(*r));
+    r->fmt = fmt;
+    strncpy(r->dec, dec, sizeof(r->dec) - 1);
+    return r;
+}
+
+static void note_add(const char *s)
+{
+    if (nnotes < 6) {
+        strncpy(notes[nnotes], s, sizeof(notes[0]) - 1);
+        nnotes++;
+    }
+}
+
+/* why an object was not made, in words */
+static void why(LONG err, char *out, LONG max)
+{
+    char t[100];
+    t[0] = 0;
+    if (err >= DTERROR_UNKNOWN_DATATYPE && err < DTERROR_UNKNOWN_DATATYPE + 100) {
+        CONST_STRPTR s = GetDTString((ULONG)err);
+        if (s)
+            strncpy(t, (const char *)s, sizeof(t) - 1);
+        t[sizeof(t) - 1] = 0;
+    } else if (err > 0) {
+        Fault(err, NULL, (STRPTR)t, sizeof(t));
+    }
+    if (!t[0])
+        strcpy(t, "no reason given");
+    snprintf(out, max, "failed: %s", t);
+}
+
+typedef LONG (*Once)(void *ctx);        /* one decode: 0, or why not */
+
+/* first (if wanted), then up to 10 runs within run_ms */
+static LONG timed(Once f, void *ctx, ULONG *first, ULONG *best, ULONG *mean)
+{
+    ULONG start, runs = 0, sum = 0, b = 0xFFFFFFFFUL, t0, dt;
+    LONG err;
+    if (first) {
+        t0 = now_us();
+        if ((err = f(ctx)))
+            return err;
+        *first = now_us() - t0;
+        if (!*first)
+            *first = 1;
     }
     start = now_us();
     do {
-        ULONG t0 = now_us(), dt;
-        Object *o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                                PDTA_DestMode, PMODE_V43,
-                                JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
-        struct BitMapHeader *bmh = NULL;
-        struct DataType *dtn = NULL;
-        if (!o) {
-            sprintf(line, "  %s: %.100s could not be read by any datatype", fmt, path);
-            sayf(line);
-            return;
-        }
-        DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+        t0 = now_us();
+        if ((err = f(ctx)))
+            return err;
         dt = now_us() - t0;
-        GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
-        GetDTAttrs(o, JDTA_Scale, (ULONG)&scale, TAG_END);     /* amcejpeg's; else 0 */
-        if (bmh) {
-            w = bmh->bmh_Width;
-            h = bmh->bmh_Height;
-            depth = bmh->bmh_Depth;
-        }
-        if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_BaseName) {
-            strncpy(base, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(base) - 1);
-            base[sizeof(base) - 1] = 0;
-        }
-        /* its pixels read back as RGB, as AmigaMCE's previews read them */
-        if (w && h) {
-            UBYTE *buf = AllocVec(w * 3 * 16, MEMF_ANY);
-            if (buf) {
-                ULONG r0 = now_us(), y;
-                struct pdtBlitPixelArray pb;
-                for (y = 0; y < h; y += 16) {
-                    pb.MethodID = PDTM_READPIXELARRAY;
-                    pb.pbpa_PixelData = buf;
-                    pb.pbpa_PixelFormat = PBPAFMT_RGB;
-                    pb.pbpa_PixelArrayMod = w * 3;
-                    pb.pbpa_Left = 0;
-                    pb.pbpa_Top = y;
-                    pb.pbpa_Width = w;
-                    pb.pbpa_Height = h - y < 16 ? h - y : 16;
-                    DoMethodA(o, (Msg)&pb);
-                }
-                r0 = now_us() - r0;
-                if (r0 < rb_best)
-                    rb_best = r0;
-                FreeVec(buf);
-            }
-        }
-        DisposeDTObject(o);
-        if (dt < best)
-            best = dt;
-        if (dt > worst)
-            worst = dt;
+        if (dt < b)
+            b = dt;
         sum += dt;
         runs++;
     } while (runs < 10 && now_us() - start < run_ms * 1000);
-    fmt_ms(t1, best);
-    fmt_ms(t2, sum / runs);
-    fmt_ms(t3, rb_best == 0xFFFFFFFF ? 0 : rb_best);
-    hint[0] = 0;
-    if (fitw || fith)
-        sprintf(hint, ", size hint %ldx%ld: 1/%ld", (long)fitw, (long)fith, (long)(scale ? scale : 1));
-    sprintf(line, "  %s %ld x %ld x %ld by %s.datatype%s%s: decode best %s, mean %s (%ld runs); "
-                  "pixels read back %s", fmt, (long)w, (long)h, (long)depth, base[0] ? base : "?",
-            !strncmp(base, "zz9k", 4) ? " (ZZ9000)" : "", hint, t1, t2, (long)runs, t3);
-    sayf(line);
-    if (pw)
-        *pw = w;
-    if (ph)
-        *ph = h;
+    *best = b ? b : 1;
+    *mean = sum / runs ? sum / runs : 1;
+    return 0;
 }
 
-/* ------------------------------------------------------------ bench: jdec built in */
+static LONG file_size(const char *path)
+{
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG n;
+    if (!fh)
+        return -1;
+    Seek(fh, 0, OFFSET_END);
+    n = Seek(fh, 0, OFFSET_BEGINNING);
+    Close(fh);
+    return n;
+}
+
+static BOOL file_read(const char *path, UBYTE *buf, LONG n)
+{
+    BPTR fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    BOOL ok;
+    if (!fh)
+        return FALSE;
+    ok = Read(fh, buf, n) == n;
+    Close(fh);
+    return ok;
+}
+
+/* -- the system's datatype, through NewDTObject */
+struct DtRun {
+    const char *path;
+    ULONG fitw, fith;
+    ULONG w, h, scale;
+    char base[40];
+};
+
+static LONG dt_once(void *p)
+{
+    struct DtRun *c = p;
+    struct BitMapHeader *bmh = NULL;
+    struct DataType *dtn = NULL;
+    ULONG sc = 0;
+    Object *o = NewDTObject((APTR)c->path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
+                            PDTA_DestMode, PMODE_V43,
+                            JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, TAG_END);
+    if (!o) {
+        LONG e = IoErr();
+        return e ? e : -1;
+    }
+    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
+    GetDTAttrs(o, JDTA_Scale, (ULONG)&sc, TAG_END);     /* amcejpeg's; else 0 */
+    if (bmh) {
+        c->w = bmh->bmh_Width;
+        c->h = bmh->bmh_Height;
+    }
+    c->scale = sc;
+    if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_BaseName) {
+        strncpy(c->base, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(c->base) - 1);
+        c->base[sizeof(c->base) - 1] = 0;
+    }
+    DisposeDTObject(o);
+    return 0;
+}
+
+/* -- amcejpeg.datatype's class, directly, from memory */
+struct ClsRun {
+    Class *cl;
+    struct DataType *dtn;
+    const char *path;
+    UBYTE *buf;
+    LONG len;
+    ULONG fitw, fith;
+    ULONG w, h, scale;
+};
+
+static LONG cls_once(void *p)
+{
+    struct ClsRun *c = p;
+    struct BitMapHeader *bmh = NULL;
+    ULONG sc = 0;
+    Object *o;
+    if (!file_read(c->path, c->buf, c->len))   /* the file read each time, as a datatype does */
+        return IoErr() ? IoErr() : -1;
+    o = NewObject(c->cl, NULL, DTA_SourceType, DTST_MEMORY,
+                  DTA_SourceAddress, (ULONG)c->buf, DTA_SourceSize, (ULONG)c->len,
+                  DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
+                  PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43,
+                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, TAG_END);
+    if (!o) {
+        LONG e = IoErr();
+        return e ? e : -1;
+    }
+    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc, TAG_END);
+    if (bmh) {
+        c->w = bmh->bmh_Width;
+        c->h = bmh->bmh_Height;
+    }
+    c->scale = sc;
+    DisposeObject(o);
+    return 0;
+}
+
+/* -- jdec built in, from memory */
 struct MemSrc {
     const UBYTE *p;
     ULONG n, pos;
@@ -600,71 +695,232 @@ static const char *jd_why(int r)
     }
 }
 
-static void bench_jdec(const char *path)
-{
-    char line[200], t1[24], t2[24];
-    struct MemSrc m;
-    JDecIO io;
+struct JdRun {
     UBYTE *data;
     LONG len;
-    BPTR fh;
     int scale;
-    if (!(fh = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
-        sprintf(line, "  JPEG: no test file (%.100s)", path);
-        sayf(line);
-        return;
-    }
-    Seek(fh, 0, OFFSET_END);
-    len = Seek(fh, 0, OFFSET_BEGINNING);
-    data = len > 0 ? AllocVec((ULONG)len, MEMF_ANY) : NULL;
-    if (!data || Read(fh, data, len) != len) {
-        Close(fh);
-        FreeVec(data);
-        sayf("  JPEG: the test file could not be read into memory");
-        return;
-    }
-    Close(fh);
+    int err;
+};
+
+static LONG jd_once(void *p)
+{
+    struct JdRun *c = p;
+    struct MemSrc m;
+    JDecIO io;
+    JDecInfo info;
+    JDec *d;
+    int r;
+    m.p = c->data;
+    m.n = (ULONG)c->len;
+    m.pos = 0;
     io.ctx = &m;
     io.read = mem_read;
     io.alloc = mem_alloc;
     io.free = mem_free;
     io.rows = rows_drop;
-    for (scale = 0; scale < 4; scale++) {
-        ULONG best = 0xFFFFFFFF, sum = 0, runs = 0, start = now_us();
-        int32_t w = 0, h = 0;
-        int r = JD_OK;
-        do {
-            ULONG t0 = now_us(), dt;
-            JDecInfo info;
-            JDec *d;
-            m.p = data;
-            m.n = (ULONG)len;
-            m.pos = 0;
-            if (!(r = jd_open(&d, &io, &info))) {
-                jd_out_size(&info, scale, &w, &h);
-                r = jd_decode(d, scale);
-                jd_close(d);
-            }
-            if (r)
+    if (!(r = jd_open(&d, &io, &info))) {
+        r = jd_decode(d, c->scale);
+        jd_close(d);
+    }
+    c->err = r;
+    return r ? -1 : 0;
+}
+
+/* A WebP that strict decoders refuse: chunks after the image without
+ * the extended header (VP8X) that allows them (C2PA, EXIF added later) */
+static BOOL webp_odd(const char *path)
+{
+    UBYTE h[20];
+    LONG n = file_size(path);
+    ULONG c;
+    if (n < 20 || !file_read(path, h, 20))
+        return FALSE;
+    if (memcmp(h, "RIFF", 4) || memcmp(h + 8, "WEBP", 4) ||
+        (memcmp(h + 12, "VP8 ", 4) && memcmp(h + 12, "VP8L", 4)))
+        return FALSE;
+    c = h[16] | (h[17] << 8) | ((ULONG)h[18] << 16) | ((ULONG)h[19] << 24);
+    return (ULONG)n > 20 + c + (c & 1);
+}
+
+static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG *pw, ULONG *ph)
+{
+    struct DtRun c;
+    struct Row *r;
+    LONG err;
+    char name[64];
+    memset(&c, 0, sizeof(c));
+    c.path = path;
+    if (!exists(path)) {
+        r = row_new(fmt, "-");
+        snprintf(r->note, sizeof(r->note), "no test file (%.60s)", path);
+        return;
+    }
+    r = row_new(fmt, "the system's datatype");
+    if ((err = timed(dt_once, &c, &r->first, &r->best[0], &r->mean[0]))) {
+        why(err, r->note, sizeof(r->note));
+        return;
+    }
+    snprintf(name, sizeof(name), "%.40s.datatype", c.base[0] ? c.base : "?");
+    strncpy(r->dec, name, sizeof(r->dec) - 1);
+    if (is_ours)
+        *is_ours = !strcmp(c.base, "amcejpeg");
+    if (pw)
+        *pw = c.w;
+    if (ph)
+        *ph = c.h;
+    if (is_ours && *is_ours) {          /* its size hint, at each scale */
+        int s;
+        for (s = 1; s < NSC; s++) {
+            c.fitw = (c.w + (1UL << s) - 1) >> s;
+            c.fith = (c.h + (1UL << s) - 1) >> s;
+            if (timed(dt_once, &c, NULL, &r->best[s], &r->mean[s]))
                 break;
-            dt = now_us() - t0;
-            if (dt < best)
-                best = dt;
-            sum += dt;
-            runs++;
-        } while (runs < 10 && now_us() - start < run_ms * 1000);
-        if (r) {
-            sprintf(line, "  JPEG: %s", jd_why(r));
-            sayf(line);
+        }
+    }
+}
+
+#define ObtainEngine(base) LP0(30, Class *, ObtainEngine, , base)
+
+static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
+{
+    struct Library *lib = OpenLibrary((CONST_STRPTR)"datatypes/amcejpeg.datatype", 46);
+    struct ClsRun c;
+    struct Row *r;
+    BPTR lock;
+    LONG err;
+    int s;
+    BOOL local = FALSE;
+    if (!lib && (lib = OpenLibrary((CONST_STRPTR)"PROGDIR:amcejpeg/amcejpeg.datatype", 46)))
+        local = TRUE;
+    r = row_new("JPEG", local ? "amcejpeg.datatype (*)" : "amcejpeg.datatype");
+    if (!lib) {
+        strcpy(r->note, "not installed, nor in PROGDIR:amcejpeg");
+        return;
+    }
+    if (local)
+        note_add("(*) not installed: loaded from PROGDIR:amcejpeg for this test");
+    memset(&c, 0, sizeof(c));
+    c.path = path;
+    c.cl = ObtainEngine(lib);
+    c.len = file_size(path);
+    if ((lock = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
+        c.dtn = ObtainDataTypeA(DTST_FILE, (APTR)lock, NULL);
+        UnLock(lock);
+    }
+    if (!c.cl || c.len <= 0 || !(c.buf = AllocVec((ULONG)c.len, MEMF_ANY))) {
+        strcpy(r->note, "could not be set up");
+    } else {
+        for (s = 0; s < NSC; s++) {
+            if (s) {
+                c.fitw = (w + (1UL << s) - 1) >> s;
+                c.fith = (h + (1UL << s) - 1) >> s;
+            }
+            if ((err = timed(cls_once, &c, s ? NULL : &r->first, &r->best[s], &r->mean[s]))) {
+                why(err, r->note, sizeof(r->note));
+                break;
+            }
+        }
+    }
+    FreeVec(c.buf);
+    if (c.dtn)
+        ReleaseDataType(c.dtn);
+    CloseLibrary(lib);
+}
+
+static void bench_builtin_jpeg(const char *path)
+{
+    struct Row *r = row_new("JPEG", "built in (jdec, from memory)");
+    struct JdRun c;
+    int s;
+    memset(&c, 0, sizeof(c));
+    c.len = file_size(path);
+    if (c.len <= 0 || !(c.data = AllocVec((ULONG)c.len, MEMF_ANY)) || !file_read(path, c.data, c.len)) {
+        strcpy(r->note, "the test file could not be read into memory");
+        FreeVec(c.data);
+        return;
+    }
+    for (s = 0; s < NSC; s++) {
+        c.scale = s;
+        if (timed(jd_once, &c, NULL, &r->best[s], &r->mean[s])) {
+            snprintf(r->note, sizeof(r->note), "failed: %s", jd_why(c.err));
             break;
         }
-        fmt_ms(t1, best);
-        fmt_ms(t2, sum / runs);
-        sprintf(line, "  JPEG 1/%d, %ld x %ld: decode best %s, mean %s (%ld runs)",
-                1 << scale, (long)w, (long)h, t1, t2, (long)runs);
+    }
+    FreeVec(c.data);
+}
+
+static void cell(char *out, ULONG best, ULONG mean)
+{
+    char b[16], m[16];
+    if (!best) {
+        strcpy(out, "-");
+        return;
+    }
+    if (best >= 10000)
+        sprintf(b, "%ld", (long)((best + 500) / 1000));
+    else
+        sprintf(b, "%ld.%ld", (long)(best / 1000), (long)(best % 1000 / 100));
+    if (mean >= 10000)
+        sprintf(m, "%ld", (long)((mean + 500) / 1000));
+    else
+        sprintf(m, "%ld.%ld", (long)(mean / 1000), (long)(mean % 1000 / 100));
+    sprintf(out, "%s (%s)", b, m);
+}
+
+static void bench_pictures(const char *jpeg, const char *png, const char *webp)
+{
+    char line[200], c[NSC][24], f[16];
+    ULONG jw = 0, jh = 0;
+    BOOL ours = FALSE;
+    int i, s;
+    nrows = nnotes = 0;
+    bench_system("JPEG", jpeg, &ours, &jw, &jh);
+    if (!ours && exists(jpeg))
+        bench_ours_jpeg(jpeg, jw, jh);
+    if (exists(jpeg))
+        bench_builtin_jpeg(jpeg);
+    bench_system("PNG", png, NULL, NULL, NULL);
+    strcpy(row_new("PNG", "AmigaMCE's own")->note, "not written yet");
+    bench_system("WebP", webp, NULL, NULL, NULL);
+    strcpy(row_new("WebP", "AmigaMCE's own")->note, "not written yet");
+    if (exists(webp) && webp_odd(webp))
+        note_add("test.webp has chunks after its image without a VP8X header (C2PA or EXIF "
+                 "added later?): strict decoders refuse it");
+
+    heading("Bench: pictures (ms, best of up to 10 runs, mean in brackets)");
+    sayf("  Format Decoder                         first      1/1          1/2          1/4          1/8");
+    for (i = 0; i < nrows; i++) {
+        struct Row *r = &rows[i];
+        if (r->note[0] && !r->best[0]) {
+            snprintf(line, sizeof(line), "  %-6s %-30s %s", r->fmt, r->dec, r->note);
+            sayf(line);
+            continue;
+        }
+        if (r->first)
+            sprintf(f, "%ld", (long)((r->first + 500) / 1000));
+        else
+            strcpy(f, "-");
+        for (s = 0; s < NSC; s++)
+            cell(c[s], r->best[s], r->mean[s]);
+        snprintf(line, sizeof(line), "  %-6s %-30s %7s  %-12s %-12s %-12s %-12s",
+                 r->fmt, r->dec, f, c[0], c[1], c[2], c[3]);
+        sayf(line);
+        if (r->note[0]) {
+            snprintf(line, sizeof(line), "  %-6s %-30s %s", "", "", r->note);
+            sayf(line);
+        }
+    }
+    if (jw && jh) {
+        snprintf(line, sizeof(line), "  Test picture %ld x %ld. 1/2 to 1/8: amcejpeg.datatype's size hint, "
+                 "as AmigaMCE's thumbnails ask.", (long)jw, (long)jh);
         sayf(line);
     }
-    FreeVec(data);
+    sayf("  first: the first load, with loading the datatype (and any requester it shows).");
+    sayf("  Datatypes: from the file, with the layout; built in: decoding alone, from memory.");
+    for (i = 0; i < nnotes; i++) {
+        snprintf(line, sizeof(line), "  %s", notes[i]);
+        sayf(line);
+    }
 }
 
 /* ------------------------------------------------------------ bench: MP3 by mpega.library */
@@ -856,7 +1112,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.2, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.3, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
@@ -867,19 +1123,7 @@ static ULONG run(void *unused)
         if (exists("C:zz9k-services"))
             run_tool("C:zz9k-services --all", "The card's services (zz9k-services --all)");
         if (!(ra && args[5])) {
-            ULONG jw = 0, jh = 0;
-            heading("Bench: pictures through datatypes (decode, then pixels read back as RGB)");
-            bench_picture(jpeg, "JPEG", 0, 0, &jw, &jh);
-            if (!strcmp(jpeg_cls, "amcejpeg") && jw && jh) {
-                int s;                      /* the size hint, at each scale */
-                for (s = 1; s < 4; s++)
-                    bench_picture(jpeg, "JPEG", (jw + (1UL << s) - 1) >> s,
-                                  (jh + (1UL << s) - 1) >> s, NULL, NULL);
-            }
-            bench_picture(png, "PNG", 0, 0, NULL, NULL);
-            bench_picture(webp, "WebP", 0, 0, NULL, NULL);
-            heading("Bench: JPEG by jdec built into zzprobe, from memory (the decoder alone)");
-            bench_jdec(jpeg);
+            bench_pictures(jpeg, png, webp);
             heading("Bench: MP3 through mpega.library");
             bench_mp3(mp3);
         }
