@@ -567,6 +567,7 @@ struct StInfo {
 };
 void st_set_buffer(int level);
 void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */
+BOOL st_secure(void);           /* the stream playing came over HTTPS */
 void st_use_https(BOOL on);     /* https: streams played (Settings > Networking > HTTPS, AmiSSL) */
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);

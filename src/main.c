@@ -6507,6 +6507,12 @@ static void np_draw_station(void)
     }
     np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("Radio"), PEN_WHITE, TS_BOLD);
     sprintf(info, _("Radio   %s"), mp_tag());
+    if (st_secure()) {
+        /* the stream's connection, whatever the address asked for said */
+        if (info[strlen(info) - 1] != ' ')
+            amce_strlcat(info, ",", sizeof(info));
+        amce_strlcat(info, " HTTPS", sizeof(info));
+    }
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
         sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
         amce_strlcat(info, part, sizeof(info));

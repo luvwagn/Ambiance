@@ -54,7 +54,8 @@ Radio
   play are listed: MP3, working, and no higher in bitrate than this Amiga
   copes with. Now Playing shows the song titles the station sends.
 - With AmiSSL 5 and Settings > Networking > HTTPS on, stations that
-  stream over HTTPS are listed and play too.
+  stream over HTTPS are listed and play too, marked HTTPS in the lists
+  and on Now Playing.
 
 Music (Plex)
 - The music libraries of a Plex Media Server on your network: by artist,

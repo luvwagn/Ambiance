@@ -56,6 +56,7 @@ struct Library *st_SocketBase;      /* the radio process's */
 static struct TlsLib st_tls;        /* AmiSSL, the radio process's (tls.c) */
 static APTR st_ssl;                 /* the stream's TLS, NULL plain HTTP */
 static volatile BOOL https_on;      /* Settings > Networking > HTTPS (with AmiSSL) */
+static volatile BOOL secure_now;    /* the stream's own connection is TLS (st_secure) */
 
 void st_use_https(BOOL on)
 {
@@ -606,6 +607,7 @@ static void sock_close(void)
     if (st_ssl)
         tls_free(&st_tls, st_ssl);
     st_ssl = NULL;
+    secure_now = FALSE;
     if (st.sock >= 0)
         CloseSocket(st.sock);
     st.sock = -1;
@@ -633,8 +635,10 @@ static BOOL sock_open(const char *host, UWORD port, BOOL secure)
     }
     for (;;) {
         int r = tls_handshake(&st_tls, st_ssl), w;
-        if (r == 1)
+        if (r == 1) {
+            secure_now = TRUE;
             return TRUE;
+        }
         if (r != TLS_WANT_READ && r != TLS_WANT_WRITE) {
             sprintf(m, "%.60s: %.120s", host, st_tls.why);
             amce_log("radio: https", m);
@@ -2175,6 +2179,13 @@ void st_stop(void)
 void st_use_ahi(BOOL on)
 {
     use_ahi = on;
+}
+
+/* What plays came over HTTPS (redirects followed: the connection it is
+ * on, not the address asked for). */
+BOOL st_secure(void)
+{
+    return secure_now;
 }
 
 BOOL st_ahi(void)

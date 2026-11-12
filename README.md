@@ -50,7 +50,8 @@ of the Amiga to how fast it really is.
   your country first), showing only stations an Amiga can play: MP3,
   working, and no faster than this Amiga copes with. Shows the station's
   current song titles. With AmiSSL 5 and Settings > Networking > HTTPS on,
-  stations that stream over HTTPS are listed and play too.
+  stations that stream over HTTPS are listed and play too, marked HTTPS in
+  the lists and on Now Playing.
 - **Plex:** the music libraries of a
   [Plex Media Server](https://www.plex.tv) on your network, by artist,
   album or recently added, with covers and details beside the list. Plex
