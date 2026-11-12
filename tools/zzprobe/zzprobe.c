@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.5 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.6 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -368,6 +368,55 @@ static const UBYTE s_ogg[] = { 'O','g','g','S', 0, 2, 0,0,0,0,0,0,0,0, 1,0,0,0, 
 
 static char jpeg_cls[40];                /* the class that reads JPEGs here */
 
+/* How a descriptor knows its files: the bytes it looks for at the start
+ * (?? any), the name pattern, its flags and priority */
+static void desc_detail(const struct DataTypeHeader *h)
+{
+    char line[200];
+    int i, n = h->dth_MaskLen, o;
+    o = sprintf(line, "        recognises: ");
+    if (!n || !h->dth_Mask)
+        o += sprintf(line + o, "(no bytes)");
+    for (i = 0; i < n && i < 16; i++) {
+        WORD m = h->dth_Mask[i];
+        if (m < 0)
+            o += sprintf(line + o, "?? ");
+        else if (m >= 32 && m < 127)
+            o += sprintf(line + o, "'%c' ", (char)m);
+        else
+            o += sprintf(line + o, "%02lx ", (unsigned long)(m & 0xFF));
+    }
+    if (n > 16)
+        o += sprintf(line + o, "...");
+    snprintf(line + o, sizeof(line) - o, "; name %.30s; flags $%04lx; priority %ld",
+             h->dth_Pattern ? (const char *)h->dth_Pattern : "-",
+             (unsigned long)h->dth_Flags, (long)h->dth_Priority);
+    sayf(line);
+}
+
+/* which descriptor an actual file matches */
+static void file_dt(const char *fmt, const char *path)
+{
+    char line[200];
+    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    struct DataType *dtn = NULL;
+    if (!l)
+        return;
+    dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+    UnLock(l);
+    if (dtn && dtn->dtn_Header) {
+        snprintf(line, sizeof(line), "  %-5s %.60s: descriptor %s (%s.datatype)", fmt, path,
+                 dtn->dtn_Header->dth_Name ? (const char *)dtn->dtn_Header->dth_Name : "?",
+                 dtn->dtn_Header->dth_BaseName ? (const char *)dtn->dtn_Header->dth_BaseName : "?");
+        sayf(line);
+    } else {
+        snprintf(line, sizeof(line), "  %-5s %.60s: no descriptor matches it", fmt, path);
+        sayf(line);
+    }
+    if (dtn)
+        ReleaseDataType(dtn);
+}
+
 static void which_dt(const char *fmt, const char *ext, const UBYTE *data, ULONG len, ULONG group)
 {
     char file[40], line[200];
@@ -395,12 +444,14 @@ static void which_dt(const char *fmt, const char *ext, const UBYTE *data, ULONG 
                 dtn->dtn_Header->dth_Name ? (const char *)dtn->dtn_Header->dth_Name : "?",
                 !strncmp(base, "zz9k", 4) ? "  <- on the ZZ9000" : "");
     }
+    sayf(line);
+    if (dtn && dtn->dtn_Header && group == GID_PICTURE)
+        desc_detail(dtn->dtn_Header);
     if (dtn)
         ReleaseDataType(dtn);
-    sayf(line);
 }
 
-static void datatypes(void)
+static void datatypes(const char *jpeg, const char *png, const char *webp)
 {
     UBYTE *mp3;
     ULONG i;
@@ -427,6 +478,10 @@ static void datatypes(void)
     }
     which_dt("FLAC", "flac", s_flac, sizeof(s_flac), GID_SOUND);
     which_dt("Ogg", "ogg", s_ogg, sizeof(s_ogg), GID_SOUND);
+    heading("Which descriptor each test file matches");
+    file_dt("JPEG", jpeg);
+    file_dt("PNG", png);
+    file_dt("WebP", webp);
 }
 
 /* ------------------------------------------------------------ the card's own report */
@@ -1174,12 +1229,12 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.5, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.6, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
         software();
-        datatypes();
+        datatypes(jpeg, png, webp);
         if (exists("C:zz9k-info"))
             run_tool("C:zz9k-info", "The card's own report (zz9k-info)");
         if (exists("C:zz9k-services"))
