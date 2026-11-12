@@ -450,11 +450,13 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
         CloseSocket(s);
         return FALSE;
     }
+    /* HTTP/1.1 over HTTPS: plex.tv refuses 1.0 ("426 Upgrade Required");
+     * Connection: close all the same, chunked answers put together */
     sprintf(req,
-            "%s %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+            "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
             "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
-            j->post ? "POST" : "GET", path, host, j->post ? "Content-Length: 0\r\n" : "",
-            j->extra);
+            j->post ? "POST" : "GET", path, secure ? "1" : "0", host,
+            j->post ? "Content-Length: 0\r\n" : "", j->extra);
     if (!send_all(j, s, c, req, strlen(req))) {
         tls_free(&tls, c);
         CloseSocket(s);
