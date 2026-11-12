@@ -224,7 +224,7 @@ static void mhi_drivers(void)
             while (ExNext(l, fib)) {
                 if (fib->fib_DirEntryType > 0)
                     continue;
-                sprintf(line, "  MHI driver: %s", fib->fib_FileName);
+                sprintf(line, "  MHI driver: %.100s", fib->fib_FileName);
                 if (!strcmp((char *)fib->fib_FileName, "mhizz9000.library")) {
                     strcat(line, " (the ZZ9000's)");
                     mhizz = TRUE;
@@ -276,7 +276,7 @@ static void rtg_monitors(void)
     if (!nn)
         sayf("  RTG modes: none");
     for (i = 0; i < nn; i++) {
-        sprintf(line, "  RTG modes: %ld from \"%s\"", (long)counts[i], names[i]);
+        sprintf(line, "  RTG modes: %ld from \"%.31s\"", (long)counts[i], names[i]);
         sayf(line);
     }
 }
