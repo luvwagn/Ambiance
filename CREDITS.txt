@@ -23,6 +23,13 @@ has not, Ark Pixel Font 12px, (c) 2021 TakWolf, licensed under the SIL
 Open Font Licence 1.1 (see OFL-ArkPixel.txt). The glyph packs in
 Fonts/amce-cjk are released under the same licence.
 
+Greek is drawn from glyphs copied from Galmuri11 (above), in
+Fonts/amce-cjk/greek, and on RTG screens in the smooth style from
+Geologica, (c) 2020 The Geologisk Project Authors, licensed under the
+SIL Open Font Licence 1.1 (see OFL-Geologica.txt), rendered with the
+Rubik text into Fonts/amce-smooth. Both are released under the same
+licence.
+
 The AmigaMCE logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).

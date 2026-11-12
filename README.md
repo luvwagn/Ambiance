@@ -133,13 +133,16 @@ Paula.
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português and 日本語 (Japanese). AmigaMCE follows the
+Norsk, Nederlands, Português, 日本語 (Japanese) and Ελληνικά (Greek). AmigaMCE follows the
 Workbench's language (Locale prefs) when its catalog is installed;
 Settings › General › Language picks another, and is greyed out showing the
 one in use when no other is installed. Workbench 3.x has no Japanese
 locale, so Japanese is only ever picked there (its catalog's language is
 `nihongo`, a name of AmigaMCE's own); AmigaMCE draws it with its own glyph
-packs and needs nothing from the system for it.
+packs and needs nothing from the system for it. Greek likewise needs no
+Greek fonts, keymap or ReplaceTopaz: its catalog's language is `greek`, and
+a Workbench whose Locale prefs call it `greek` or `ellinika` gets it by
+itself.
 
 Text in the source is written in English as `_("...")`, or `N_("...")` in a
 table. A string's catalog ID is a hash of its English, so nothing else
@@ -150,7 +153,11 @@ their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
 Chinese and Korean text can go in a catalog too, drawn from the glyph packs
 in `Fonts/amce-cjk`; in Japanese the clock and file dates are written year,
 month, day, and wrapped text keeps 、。」 and small kana off the start of a
-line.
+line. Greek is kept as two bytes a letter (`src/cjk.c`), drawn from the
+smooth style's own Greek letters (Geologica, sized to Rubik) or from
+`Fonts/amce-cjk/greek` (Galmuri11's, at 12 pixels), which is always installed.
+Greek takes more bytes than English, and a translation may be at most
+twice its English's bytes and 16 more, so the Greek is written to fit.
 
 | Command | What it does |
 |---|---|
@@ -228,6 +235,7 @@ inline OS call when a multiply helper call ends up between them (see
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
 | `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
 | `python3 tools/mkcjk.py <galmuri-dist> <ark-pixel-font> assets/Fonts/amce-cjk` | Regenerates the Japanese, Chinese and Korean glyph packs from Galmuri's BDFs and Ark Pixel Font's 12px glyphs |
+| `python3 tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amce-cjk/greek` | Regenerates the Greek glyph pack (also part of `make fonts`) |
 | `make icons` | Regenerates the Workbench icons in `docs/` |
 
 Every push to `main` is built and tested by GitHub Actions.
@@ -257,7 +265,7 @@ attached. Publishing that release uploads it to Aminet.
 
 AmigaMCE © 2026 Brian King, under the [MIT licence](LICENSE).
 
-The fonts (Pixelify Sans, Galmuri, Ark Pixel Font and Rubik, and the Amiga fonts made from
+The fonts (Pixelify Sans, Galmuri, Ark Pixel Font, Rubik and Geologica, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT
 licence; see `assets/fonts-src/`. The EaglePlayer host follows HippoPlayer's,
 and Now Playing's spectrum analyser is HippoPlayer's (`src/vis.c`, its FFT

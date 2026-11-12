@@ -14,7 +14,8 @@ A string's ID is a hash of its English (FNV-1a, 31 bits, as src/lang.c
 computes it at run time), named MSG_<hex> in the .cd and .ct files, which
 are FlexCat's formats. The .ct files are kept in UTF-8 here; the catalogs
 are Latin-1, with Japanese, Chinese and Korean characters in AmigaMCE's own
-three bytes (src/cjk.c), so any of those languages can be added too.
+three bytes and Greek letters in two (src/cjk.c), so any of those languages
+can be added too.
 """
 import os
 import re
@@ -24,7 +25,7 @@ import time
 import unicodedata
 
 LANGS = ["deutsch", "français", "italiano", "español", "svenska", "suomi", "dansk", "norsk",
-         "nederlands", "português", "nihongo"]
+         "nederlands", "português", "nihongo", "greek"]
 
 
 def fnv(b):
@@ -188,7 +189,8 @@ def formats(s):
 
 
 def amiga_bytes(s):
-    """Latin-1, the Far East characters as AmigaMCE's three bytes."""
+    """Latin-1, the Far East characters as AmigaMCE's three bytes, Greek as
+    its two."""
     out = bytearray()
     for ch in s:
         c = ord(ch)
@@ -202,6 +204,9 @@ def amiga_bytes(s):
             out.append(0x2D)
         elif c == 0x2026:
             out += b"..."
+        elif 0x380 <= c <= 0x3FF:
+            # Greek: two bytes (src/cjk.c)
+            out += bytes([0x80 | (c - 0x380) >> 6, 0x80 | (c & 63)])
         elif (0x1100 <= c <= 0x11FF or 0x3000 <= c <= 0x30FF or 0x3130 <= c <= 0x318F or
               0x31F0 <= c <= 0x31FF or 0x3400 <= c <= 0x4DBF or 0x4E00 <= c <= 0x9FFF or
               0xAC00 <= c <= 0xD7A3 or 0xFF00 <= c <= 0xFFEF):

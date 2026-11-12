@@ -1,0 +1,1548 @@
+## version $VER: AmigaMCE.catalog 1.0 (11.11.2026)
+## language greek
+## codeset 0
+MSG_2F1926C3
+Η συμπίεση ANIM-%ld δεν υποστηρίζεται
+; ANIM-%ld compression is not supported
+MSG_282FBBDC
+Το animation δεν άνοιξε
+; The animation could not be opened
+MSG_3A04E1BB
+Δεν είναι IFF ANIM που παίζεται εδώ
+; Not an IFF ANIM this can play
+MSG_26BEC995
+Καμία οθόνη γι' αυτό εδώ (%ld χρώματα, %s)
+; This Amiga has no screen mode for it (%ld colours, %s)
+MSG_638EABE4
+Τα animation παίζουν σε οθόνες του Amiga, και δεν βρέθηκε καμία
+; Animations play on the Amiga's own screens, and none was found
+MSG_2EE1D46F
+Δεν φτάνει η μνήμη για την οθόνη του animation
+; Not enough memory for the animation's screen
+MSG_4E6387ED
+Δεν φτάνει η μνήμη
+; Not enough memory
+MSG_1592F849
+Κανένας player δεν ξέρει αυτό το module
+; No player AmigaMCE has knows this module
+MSG_3EE87411
+Δεν παίζεται, και δεν βρέθηκαν players του EaglePlayer
+; Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_62F4807B
+Το %s δεν φόρτωσε τα άλλα αρχεία του module
+; %s could not load the module's other files
+MSG_4E20BD99
+Το %s δεν ξεκίνησε αυτό το module
+; %s could not start this module
+MSG_647DD404
+θέλει κάρτα γραφικών
+; needs a graphics card
+MSG_2B7EBD1D
+θέλει AGA
+; needs AGA
+MSG_550E04D5
+δεν υπάρχει
+; not available
+MSG_30386F8F
+true colour
+; true colour
+MSG_3665BBE3
+64 χρώματα, EHB
+; 64 colours, EHB
+MSG_0F6E4D56
+%lu χρώματα
+; %lu colours
+MSG_73F99D3C
+Παιχνίδια
+; Games
+MSG_5D4E86F0
+Modules
+; Mods
+MSG_0F955E3F
+Demos
+; Demos
+MSG_63609FED
+Βίντεο
+; Videos
+MSG_0D70FEAE
+Εικόνες
+; Pictures
+MSG_584A1D74
+Μουσική
+; Music
+MSG_5675F954
+Ράδιο
+; Radio
+MSG_4B058728
+Ρυθμίσεις
+; Settings
+MSG_58E096DE
+Σχετικά
+; About
+MSG_17B11033
+Φόρτωση...
+; Loading...
+MSG_542CAAAC
+Λίγη μνήμη: η λίστα σταματά στα %ld
+; Low on memory: list stops at %ld entries
+MSG_7C46D36F
+Όλα τα παιχνίδια
+; All Games
+MSG_7E40EC70
+Όλα τα demos
+; All Demos
+MSG_4D9D0161
+Λείπει το Amiga Game Selector.
+; Amiga Game Selector was not found.
+MSG_3F233512
+Το Amiga Game Selector 3 (AGS) είναι έτοιμη συλλογή παιχνιδιών και demos για WHDLoad, με εικόνες και περιγραφές. Αν υπάρχει, φαίνονται εδώ και ξεκινούν από το AmigaMCE.
+; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
+MSG_017A1274
+Το AmigaMCE ψάχνει το assign AGS:, μετά ένα συρτάρι AGS2 δίπλα στο δικό του και στο WHDLoad:. Βάλτε το AmigaMCE σε σύστημα AGS 3 ή ξεκινήστε μία φορά το AGS για τα assigns του.
+; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_5C6E1F8B
+Μουσική, Modules, Εικόνες, Βίντεο και Ραδιόφωνο δουλεύουν και χωρίς αυτό: οι Ρυθμίσεις > Φάκελοι λένε πού είναι.
+; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
+MSG_0C290F2C
+Βρέθηκαν στην εκκίνηση:
+; Found when AmigaMCE started:
+MSG_6C041D54
+Μηχάνημα: %s
+; Machine type: %s
+MSG_26E752CC
+εξομοιωτής (UAE)
+; emulator (UAE family)
+MSG_6FE54AD0
+πραγματικό Amiga
+; real Amiga
+MSG_0C26D003
+Chipset: %s%s, %s
+; Chipset: %s%s, %s
+MSG_55012A6E
+ με EHB
+;  with EHB
+MSG_4540315A
+ανώνυμη λειτουργία
+; unnamed mode
+MSG_49947ED3
+Οθόνη: %s
+; Screen: %s
+MSG_2C6DC5BF
+%lu-bit χρώμα
+; %lu-bit colour
+MSG_67DA4F80
+  %lu x %lu, %s, mode ID $%08lx
+;   %lu x %lu, %s, mode ID $%08lx
+MSG_3096D6FE
+Στυλ: smooth, %lu.%02lux
+; Style: smooth, %lu.%02lux
+MSG_2D957250
+Στυλ: pixel, %lux%s
+; Style: pixel, %lux%s
+MSG_402F4AD3
+ (ψηλά pixels)
+;  (tall pixels: dense)
+MSG_321FCB8C
+  αποχρώσεις, λογότυπο: %lu pens
+;   its shades and logo: %lu pens so far
+MSG_77468FB6
+Κάρτα γραφικών (RTG): %s
+; Graphics card (RTG): %s
+MSG_4E9F3590
+ναι
+; yes
+MSG_62366FFA
+όχι
+; no
+MSG_25AF384C
+Μνήμη: %luKB chip, %luKB fast
+; Free memory: %luKB chip, %luKB fast
+MSG_2E02D31A
+Γραμματοσειρά: %s
+; Font: %s
+MSG_7F759611
+amce-pixel (δική του)
+; amce-pixel (bundled)
+MSG_27934164
+topaz 8 (εφεδρική)
+; topaz 8 (fallback)
+MSG_6F035CA3
+Datatypes (ποιο διαβάζει κάθε μορφή εικόνας):
+; Datatypes (which one reads each picture format):
+MSG_336DE098
+AGS: %s
+; AGS: %s
+MSG_64FF7B9F
+βρέθηκε
+; found
+MSG_40A7AEDA
+δεν βρέθηκε
+; not found
+MSG_4FE02B8B
+Assigns του AmigaMCE (το AGS-Stuff δεν έτρεξε):
+; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_38F75BEF
+Ρύθμιση μηχανής AGS (HW): %s
+; AGS machine setting (HW): %s
+MSG_7FA35E26
+καμία
+; not set
+MSG_1ACE6AF5
+Για ενήλικες: %s
+; Adult entries: %s
+MSG_4E294716
+φαίνονται
+; shown
+MSG_7618F139
+κρυμμένα
+; hidden
+MSG_320E5353
+Δίκτυο: %s
+; Network stack: %s
+MSG_147EB74C
+τρέχει
+; running
+MSG_2DA7AFDB
+κανένα
+; none
+MSG_1358A393
+MP3: %s
+; MP3: %s
+MSG_197B8973
+driver MHI
+; MHI driver
+MSG_578E3365
+FLAC: %s
+; FLAC: %s
+MSG_3DEA7C01
+λείπει (Aminet: util/libs/flacdec)
+; not installed (Aminet: util/libs/flacdec)
+MSG_0CC9EBEF
+flacdec.library, αργό εδώ
+; flacdec.library, too slow here
+MSG_55B725DE
+flacdec.library, αρκετά γρήγορο
+; flacdec.library, fast enough
+MSG_748668C9
+  Plex: FLAC σε MP3 εδώ
+;   Plex: FLAC converted to MP3 here
+MSG_72380C4A
+Players: %ld (EaglePlayer, DeliTracker)
+; Module players: %ld (EaglePlayer, DeliTracker)
+MSG_4662E8D4
+Players για modules: κανένας (Aminet: mus/play/Eagleplayer)
+; Module players: none (Aminet: mus/play/Eagleplayer)
+MSG_5FDDDD75
+Μικρό
+; Short
+MSG_58DE2772
+Κανονικό
+; Normal
+MSG_45939473
+Μεγάλο
+; Long
+MSG_43BC9D28
+ξεκινά σε 0,6s
+; starts in 0.6s
+MSG_720CF4AD
+1,2s
+; 1.2s
+MSG_0065B852
+3s, κρατά για διακοπές
+; 3s, more held against dropouts
+MSG_4DAC8901
+Φάκελοι μουσικής
+; Music folders
+MSG_674C644A
+Modules
+; Modules
+MSG_7338A4A0
+Φάκελοι modules
+; Module folders
+MSG_045F3994
+Φάκελοι εικόνων
+; Picture folders
+MSG_7B7A30D9
+Φάκελοι βίντεο
+; Video folders
+MSG_2DA81BF2
+Smooth: το Fonts/amce-smooth δεν ταιριάζει
+; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_022C9299
+Χωρίς φάσμα με MHI: παίζει μόνο του το MP3
+; No spectrum under MHI: it plays the MP3 itself
+MSG_0B3A7E73
+Χωρίς φάσμα: ο player δεν λέει τι παίζει
+; No spectrum: this player does not say what it plays
+MSG_5561FD0B
+Γενικά
+; General
+MSG_5A05D9B5
+Οθόνη
+; Display
+MSG_33CA9A34
+Ήχος
+; Sound
+MSG_1917381B
+Δίκτυο
+; Networking
+MSG_30B474E4
+Plex
+; Plex
+MSG_6C2261DE
+Διεπαφή δικτύου
+; Network interface
+MSG_23140C4E
+Μέγιστο bitrate σταθμών
+; Highest station bitrate
+MSG_360055B5
+Buffer ροής
+; Stream buffer
+MSG_18162AC4
+Server λίστας σταθμών
+; Station list server
+MSG_542FED8A
+Φάκελοι
+; Folders
+MSG_1A73DB9B
+Γλώσσα
+; Language
+MSG_1B9AE0BB
+Αγγλικά
+; English
+MSG_11100833
+Γερμανικά
+; German
+MSG_7CBD6CA5
+Γαλλικά
+; French
+MSG_7039952B
+Ιταλικά
+; Italian
+MSG_3819825B
+Ισπανικά
+; Spanish
+MSG_5605543E
+Σουηδικά
+; Swedish
+MSG_71231814
+Φινλανδικά
+; Finnish
+MSG_003478B8
+Δανικά
+; Danish
+MSG_233CA44B
+Νορβηγικά
+; Norwegian
+MSG_3297E9D1
+Ολλανδικά
+; Dutch
+MSG_66D67D5C
+Πορτογαλικά
+; Portuguese
+MSG_140C2E0A
+Ιαπωνικά
+; Japanese
+MSG_2653C2A3
+Ελληνικά
+; Greek
+MSG_73C73B18
+Όπως το Workbench
+; As Workbench
+MSG_2D0EBF47
+χωρίς TCP/IP
+; no TCP/IP stack
+MSG_1624E3CC
+Λειτουργία οθόνης
+; Screen mode
+MSG_5467EC76
+Στυλ
+; Style
+MSG_4A02D9CF
+Smooth
+; Smooth
+MSG_2AB32B77
+Pixel
+; Pixel
+MSG_63678BEE
+Διπλό buffer
+; Double buffering
+MSG_20B362A2
+Οπτικοποίηση
+; Visualisation
+MSG_52325DD8
+Άλμα ανά γράμμα
+; Jump scrolling (by letter)
+MSG_47318A8A
+Animations
+; Animations
+MSG_5C9709AA
+Στην οθόνη του AmigaMCE
+; On AmigaMCE's screen
+MSG_3B46B8BE
+Σε δική τους οθόνη
+; On a screen of their own
+MSG_71E19418
+Debug (CPU, μνήμη, log)
+; Debug (CPU, memory, log)
+MSG_4393028C
+Δεν τρέχει TCP/IP
+; No TCP/IP stack running
+MSG_4C151C1E
+σταθμοί έως %s
+; stations up to %s
+MSG_0DC6B4AA
+Ανενεργό
+; Off
+MSG_424097EC
+Ενεργό, χωρίς server
+; On, no server chosen
+MSG_33774386
+Αυτόματα: %.40s
+; Automatic: %.40s
+MSG_616A6784
+Αυτόματα
+; Automatic
+MSG_3FCAC913
+Αυτόματα (του stack)
+; Automatic (the stack's choice)
+MSG_690CE026
+χωρίς διεύθυνση
+; no address
+MSG_589EC060
+%s, %.39s μονάδα %ld
+; %s, %.39s unit %ld
+MSG_43430B20
+ενεργή
+; up
+MSG_3DB9B915
+ανενεργή
+; down
+MSG_450E2AE8
+Αυτό το TCP/IP δεν δείχνει τις διεπαφές του
+; This TCP/IP stack does not list its interfaces
+MSG_604E4CF2
+Ροές HTTPS
+; Allow HTTPS streams
+MSG_30C0E827
+θέλει AmiSSL
+; needs AmiSSL
+MSG_185E3E26
+Αυτόματα: %s
+; Automatic: %s
+MSG_557E4FAB
+Ταχύτερος: %s
+; Fastest: %s
+MSG_50FCFDDF
+για αυτό το Amiga: %s
+; for this Amiga: %s
+MSG_33C1DFF1
+Έως %lukbps
+; Up to %lukbps
+MSG_0EB61AED
+Όλα
+; Any
+MSG_024A57E9
+ένας τυχαίος (radio-browser.info)
+; one at random, as radio-browser.info asks
+MSG_4C1FEAD9
+Ταχύτερος
+; Fastest
+MSG_7016D0E0
+Δεν βρέθηκαν οι servers του radio-browser.info
+; radio-browser.info's servers could not be found
+MSG_3E7F369F
+τώρα %.30s, %ld ms
+; now %.30s, %ld ms
+MSG_62CD57D2
+κανείς δεν απάντησε
+; none answered
+MSG_1B68D598
+καμία απάντηση
+; no answer
+MSG_3F3927CF
+Server Plex
+; Plex server
+MSG_23B63BC7
+κανένας
+; none chosen
+MSG_5F6445D0
+Ήχος χαμηλότερης ποιότητας
+; Request lower quality audio
+MSG_720ED4F6
+χρειάζεται εδώ
+; needed on this Amiga
+MSG_116FD231
+Έξοδος ήχου
+; Sound output
+MSG_1DE950F6
+4 κανάλια, έως 28kHz, 8-bit
+; 4 channels, up to 28kHz, 8-bit
+MSG_6CB6532B
+AHI: ραδιόφωνο, Plex, αρχεία
+; AHI: radio, Plex, music files
+MSG_1AB0857C
+16-bit, λειτουργία των Prefs του
+; 16-bit, its Preferences' mode
+MSG_7EF1200C
+λείπει
+; not installed
+MSG_2DA3A6A5
+Αποκωδικοποίηση MP3
+; MP3 decoder
+MSG_7AFA07FD
+εδώ
+; decoded here
+MSG_22FBBBB2
+αποκωδ. και παίζει
+; decodes and plays
+MSG_4DEE1DD3
+%ld θέση
+; %ld place
+MSG_4DD8A2E0
+%ld θέσεις
+; %ld places
+MSG_4A20BCD9
+καμία ακόμα
+; none yet
+MSG_765A3F9A
+Χρήση του assign %s
+; Use the %s assign
+MSG_4AE004BD
+υπάρχει
+; assigned
+MSG_5D2E5EC2
+δεν υπάρχει τώρα
+; not assigned now
+MSG_68FF039F
+Fire ξανά: αφαίρεση
+; Fire again: remove
+MSG_30B1BFB1
+Νέος φάκελος...
+; Add a folder...
+MSG_4ACE7BF4
+έως οκτώ
+; eight at most
+MSG_50BCAC0E
+μόνο RTG
+; RTG only
+MSG_4D914B4E
+Αυτόματα: 
+; Automatic: 
+MSG_0F9ADE75
+Ευχαριστίες
+; Credits
+MSG_589D7E42
+Πληροφορίες συστήματος
+; System information
+MSG_345099C5
+Plex στο AmigaMCE
+; Plex in AmigaMCE
+MSG_718F9B3E
+(c) 2026 Brian King, με άδεια MIT
+; (c) 2026 Brian King, under the MIT licence
+MSG_1BA733E8
+Γραμματοσειρές: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, και Geologica (c) 2020 The Geologisk Project Authors, όλες με SIL Open Font License 1.1. Οι amce-pixel και amce-galmuri είναι Modified Versions των Pixelify Sans και Galmuri.
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_2B3D5B66
+Κώδικας: libnix C runtime (public domain). Ο host του EaglePlayer ακολουθεί του HippoPlayer (άδεια MIT, (c) 2017 Kari-Pekka Koljonen).
+; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+MSG_3D495145
+Αναλυτής φάσματος: του HippoPlayer (άδεια MIT, (c) 2017 Kari-Pekka Koljonen), με το FFT του Tom Roberts (1989).
+; Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
+MSG_321AE26A
+Χρησιμοποιούνται αν υπάρχουν, δεν περιέχονται, το καθένα με την άδειά του: Amiga Game Selector, WHDLoad, AHI, drivers MHI, mpega.library, datatypes.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_64ED99F8
+FLAC: flacdec.library (c) 2026 Renaud Schweingruber, με το dr_flac του David Reid (public domain ή MIT-0), αν υπάρχει, δεν περιέχεται. Ελεύθερο, σε αμετάβλητο αρχείο (Aminet: util/libs/flacdec).
+; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
+MSG_56CB434E
+Το Amiga είναι εμπορικό σήμα του κατόχου του. Παιχνίδια, demos, μουσική και εικόνες ανήκουν στους δημιουργούς τους. Οι άδειες είναι στο συρτάρι Licences.
+; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
+MSG_302861BB
+Αυτό το front-end δεν θα υπήρχε χωρίς την τεράστια δουλειά του Paul Vince και το Amiga Game Selector.
+; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_07ED33C3
+Εικόνες: %.100s
+; Pictures: %.100s
+MSG_749CDC88
+Βίντεο: %.100s
+; Videos: %.100s
+MSG_40EDAFB4
+Δεν υπάρχει %s εδώ
+; No %s here
+MSG_190B5576
+Το %s είναι άδειο
+; %s is empty
+MSG_1018D7F4
+Χωρίς φάκελο εικόνων: Ρυθμίσεις > Φάκελοι
+; No pictures folder: Settings > Folders > Pictures
+MSG_247DBF4F
+Δεν βρέθηκαν animations: το AmigaMCE ψάχνει στο %s.
+; No animations found: AmigaMCE looks for them in %s.
+MSG_6A5613A3
+Το %s δεν έχει animations.
+; %s has no animations in it.
+MSG_7D6C1643
+Δεν βρέθηκαν animations. Το AmigaMCE παίζει IFF ANIM από το VIDEOS:, τους φακέλους στις Ρυθμίσεις > Φάκελοι > Βίντεο, και στο AGS %s.
+; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_29C163F7
+Δεν βρέθηκαν εικόνες: το AmigaMCE ψάχνει στο %s.
+; No pictures found: AmigaMCE looks for them in %s.
+MSG_6A91D3DF
+Το %s δεν έχει εικόνες.
+; %s has no pictures in it.
+MSG_5DEE87BD
+Δεν βρέθηκαν εικόνες. Το AmigaMCE ψάχνει στο PICTURES:, στους φακέλους στις Ρυθμίσεις > Φάκελοι > Εικόνες, και στο AGS στο %s.
+; No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
+MSG_42D8D701
+Κυρ
+; Sun
+MSG_4EA382E1
+Δευ
+; Mon
+MSG_7AB4F425
+Τρί
+; Tue
+MSG_74645757
+Τετ
+; Wed
+MSG_0699308C
+Πέμ
+; Thu
+MSG_2663FBE8
+Παρ
+; Fri
+MSG_38A72A77
+Σάβ
+; Sat
+MSG_46F2CEAE
+Ιαν
+; Jan
+MSG_278D4B82
+Φεβ
+; Feb
+MSG_42A7ED2B
+Μάρ
+; Mar
+MSG_03F51DF2
+Απρ
+; Apr
+MSG_3BA7E226
+Μάι
+; May
+MSG_46C131E2
+Ιούν
+; Jun
+MSG_44C12EBC
+Ιούλ
+; Jul
+MSG_20EE8FD4
+Αύγ
+; Aug
+MSG_2CB1A4EF
+Σεπ
+; Sep
+MSG_11D1F3E9
+Οκτ
+; Oct
+MSG_0A3DC404
+Νοέ
+; Nov
+MSG_275E7A73
+Δεκ
+; Dec
+MSG_3705878B
+Πάνω/Κάτω  κίνηση    Δεξιά/Fire  άνοιγμα    Return  παίξιμο    Αριστ./Esc  πίσω
+; Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
+MSG_56178B52
+Πάνω/Κάτω  επιλογή      Esc δύο φορές  έξοδος
+; Up/Down  choose      Esc twice  quit
+MSG_11D91495
+Esc x2 έξοδος
+; Esc twice quit
+MSG_4B5CD1EF
+Πάνω/Κάτω  επιλογή      Δεξιά/Fire  άνοιγμα      Esc δύο φορές  έξοδος
+; Up/Down  choose      Right/Fire  open      Esc twice  quit
+MSG_3804081F
+Fire άνοιγμα  Esc x2 έξοδος
+; Fire open  Esc twice quit
+MSG_2BD6BD72
+Πάνω/Κάτω  κύλιση      Fire/Return  προβολή      Αριστ./Esc  πίσω
+; Up/Down  scroll      Fire/Return  view      Left/Esc  back
+MSG_4F05244A
+Fire προβολή  Esc πίσω
+; Fire view  Esc back
+MSG_0E23C285
+Πάνω/Κάτω  κύλιση      Fire/Return  παίξιμο      Αριστ./Esc  πίσω
+; Up/Down  scroll      Fire/Return  play      Left/Esc  back
+MSG_67E35425
+Fire παίξιμο  Esc πίσω
+; Fire play  Esc back
+MSG_169BF20A
+Πάνω/Κάτω  κίνηση    Fire/Return  προβολή    Αριστ./Esc  πίσω
+; Up/Down  move    Fire/Return  view    Left/Esc  back
+MSG_6C808185
+Πάνω/Κάτω  κίνηση    Fire/Return  παίξιμο    Αριστ./Esc  πίσω
+; Up/Down  move    Fire/Return  play    Left/Esc  back
+MSG_6DAF7CE6
+Πάνω/Κάτω  κίνηση    Fire  προβολή    Δεξιά  άνοιγμα    Αριστ./Esc  πίσω
+; Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
+MSG_1F838A3C
+Fire προβολή  Δεξιά άνοιγμα
+; Fire show  Right open
+MSG_11F23D61
+Πάνω/Κάτω  κίνηση    Fire/Δεξιά  άνοιγμα    Αριστ./Esc  πίσω
+; Up/Down  move    Fire/Right  open    Left/Esc  back
+MSG_41738E8F
+Fire άνοιγμα  Esc πίσω
+; Fire open  Esc back
+MSG_59045BF0
+Πάνω/Κάτω  κίνηση    Fire  αυτός ο server    Αριστ./Esc  πίσω
+; Up/Down  move    Fire  use this server    Left/Esc  back
+MSG_481DF333
+Fire επιλογή  Esc πίσω
+; Fire use it  Esc back
+MSG_29E8EF53
+Πάνω/Κάτω  κίνηση    Fire/Return  παίξιμο    Δεξιά  πληροφορίες    Αριστ./Esc  πίσω
+; Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
+MSG_463F7CE7
+Fire παίξιμο  Δεξιά πληρ.
+; Fire play  Right info
+MSG_1710A7DF
+Πάνω/Κάτω  κίνηση    Δεξιά/Fire  άνοιγμα    Αριστ./Esc  πίσω
+; Up/Down  move    Right/Fire  open    Left/Esc  back
+MSG_341D99F5
+Πάνω/Κάτω  κίνηση    Δεξιά  λεπτομέρειες    Fire/Return  παίξιμο    Αριστ./Esc  πίσω
+; Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
+MSG_0B4D231C
+Fire άνοιγμα  Ret παίξ.  Esc πίσω
+; Fire open  Ret play  Esc back
+MSG_3EBC8DC1
+Fire/Return  παίξιμο      Πάνω/Κάτω  κύλιση      Αριστ./Esc  πίσω
+; Fire/Return  play      Up/Down  scroll      Left/Esc  back
+MSG_6F2C1751
+Αριστ./Δεξιά  επιλογή    Fire  πάτημα    Πάνω/Κάτω  ένταση    Space  παύση    Esc  πίσω
+; Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
+MSG_4372AA87
+Fire πάτημα  Π/Κ ένταση  Esc πίσω
+; Fire press  Up/Dn vol  Esc back
+MSG_2B8E61B8
+Πάνω/Κάτω  κύλιση      Αριστ./Esc  πίσω
+; Up/Down  scroll      Left/Esc  back
+MSG_642000D2
+Π/Κ κύλιση  Esc πίσω
+; Up/Down scroll  Esc back
+MSG_1403F9F1
+%ld καρέ, %ld,%ld s
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+Αλλαγή %s
+; Changed %s
+MSG_412F4EA4
+%ld φάκελος
+; %ld folder
+MSG_74791C75
+%ld φάκελοι
+; %ld folders
+MSG_406E0E4E
+%ld animation
+; %ld animation
+MSG_2A406A07
+%ld animations
+; %ld animations
+MSG_15840E5E
+Fire ή Δεξιά: άνοιγμα
+; Fire or Right: open
+MSG_79550836
+Καμία εικόνα εδώ.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld εικόνα
+; %ld picture
+MSG_6A487423
+%ld εικόνες
+; %ld pictures
+MSG_52C18255
+Fire: προβολή
+; Fire: slideshow
+MSG_178CD224
+Δεξιά: άνοιγμα φακέλου
+; Right: open the folder
+MSG_6E4CA1B5
+Όχι στο συρτάρι Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(άδειο)
+; (empty)
+MSG_0ECC2045
+Φόρτωση εικόνας...
+; Loading screenshot...
+MSG_65C00D26
+Ένταση %ld%%
+; Volume %ld%%
+MSG_17251C33
+Ένταση 100%
+; Volume 100%
+MSG_3827BF33
+Θέση %ld/%ld   Pattern %ld   Γρ. %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Θέση %ld από %ld
+; Position %ld of %ld
+MSG_5F643207
+Θέση %ld   Pattern %ld   Γρ. %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Buffer %ld,%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   διακοπές %ld
+;    dropouts %ld
+MSG_44D22F83
+Σύνδεση...
+; Connecting...
+MSG_6038FAB1
+Buffering...
+; Buffering...
+MSG_4D72110C
+Αναπαραγωγή
+; Playback
+MSG_6E6C1A7A
+MHI (αποκωδ. και παίζει)
+; MHI (decoded and played by it)
+MSG_7A38DB91
+(χωρίς τίτλο)
+; (no title)
+MSG_3CB15829
+   Κομμάτι %ld από %ld
+;    Track %ld of %ld
+MSG_2B183663
+Αρχείο
+; File
+MSG_7FB0FF72
+Μορφή
+; Format
+MSG_063F19EE
+Σταμάτησε
+; Stopped
+MSG_170FF847
+Ανάγνωση...
+; Reading...
+MSG_22FE7692
+Πρωτότυπο
+; Original
+MSG_504BD8C0
+στέλνει το αρχείο ως έχει
+; sends the file as stored
+MSG_4A129B78
+Ραδιόφωνο   %s
+; Radio   %s
+MSG_01440831
+   %ld από %ld σε 
+;    %ld of %ld in 
+MSG_0A088884
+Στον αέρα
+; On air
+MSG_44471F44
+(ο σταθμός δεν λέει)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B παίζει σε %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, από MHI
+; , by MHI
+MSG_716687B8
+Δεν παίζει τίποτα
+; Nothing playing
+MSG_085A357E
+   από %s
+;    by %s
+MSG_47760A7D
+   subsong %ld από %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Samples
+; Samples
+MSG_61B4DC81
+Αυτό ήταν το τελευταίο κομμάτι
+; That was the last track
+MSG_2208340A
+Αυτός ήταν ο τελευταίος σταθμός
+; That was the last station in the list
+MSG_3652522E
+Αυτό ήταν το τελευταίο module
+; That was the last module in the folder
+MSG_1CAF7095
+Σε αυτό το module δεν γίνεται μετακίνηση
+; This module cannot be moved through
+MSG_6AA26665
+Παίζει τώρα
+; Now playing
+MSG_7DDFAD41
+Αυτό το Amiga είναι αργό για ομαλό FLAC
+; This Amiga is too slow to decode FLAC smoothly
+MSG_0D65D8B7
+Αργό για FLAC: ζητήστε χαμηλότερη ποιότητα
+; Too slow for FLAC: try Request lower quality audio
+MSG_0BBA80CF
+Το κομμάτι δεν παίχτηκε
+; That track could not be played
+MSG_052FF533
+Το κομμάτι δεν ξεκίνησε από εκεί
+; The track could not be started there
+MSG_369379DB
+Ο σταθμός σταμάτησε να στέλνει
+; The station stopped sending
+MSG_0D35346B
+Δεν βρέθηκαν modules. Το AmigaMCE ψάχνει στο MODS:, στους φακέλους στις Ρυθμίσεις > Φάκελοι > Modules, και στο AGS στα %s και %s (μουσική μενού).
+; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
+MSG_6870F104
+Παίζει μόνο του modules του ProTracker, και εκατοντάδες άλλες μορφές (OctaMED, TFMX, Future Composer, SID...) με τους players του EaglePlayer και του DeliTracker, όλα με τον ήχο του Amiga.
+; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+MSG_2E3C8991
+Δεν βρέθηκε το EaglePlayer: για αυτές τις μορφές εγκαταστήστε το από το Aminet (mus/play/Eagleplayer).
+; EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
+MSG_1B1E85CB
+Μουσική C64
+; C64 music
+MSG_7F6215F5
+Μουσική μενού
+; Menu music
+MSG_0D90C4A2
+Modules (MODS:)
+; Modules (MODS:)
+MSG_66E86F1F
+Modules: %.100s
+; Modules: %.100s
+MSG_0B5B4D9C
+Περισσότερες μορφές: EaglePlayer, από Aminet (mus/play/Eagleplayer)
+; More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
+MSG_1361020B
+Καμία εικόνα σε αυτόν τον φάκελο
+; No pictures in that folder
+MSG_46C7288D
+Πάρα πολλά επίπεδα ανοιχτά
+; Too many levels open
+MSG_5116954E
+Ο φάκελος δεν άνοιξε
+; Could not open that folder
+MSG_6FF9045E
+Ο φάκελος δεν έχει εικόνες
+; That folder has no pictures
+MSG_4F992A62
+Κανένα MP3 ή FLAC στον φάκελο
+; No MP3 or FLAC files in that folder
+MSG_15E6DCFA
+Ο φάκελος δεν έχει modules
+; That folder has no modules
+MSG_6D9550B1
+Το μενού δεν άνοιξε
+; Could not open that menu
+MSG_3030A110
+Το μενού είναι άδειο
+; That menu is empty
+MSG_74066526
+Δεν γράφτηκε το T:AmigaMCE-run
+; Could not write T:AmigaMCE-run
+MSG_0C682AC4
+%ld/%ld   %s   %s%s
+; %ld/%ld   %s   %s%s
+MSG_2D43D301
+   Προβολή
+;    Slideshow
+MSG_359B5B48
+Αριστ./Δεξιά  προηγ./επόμ.    Fire  παύση    Esc  πίσω
+; Left/Right  previous/next    Fire  pause    Esc  back
+MSG_7ED0D392
+Αριστ./Δεξιά  προηγ./επόμ.    Fire  προβολή    Esc  πίσω
+; Left/Right  previous/next    Fire  slideshow    Esc  back
+MSG_152E3E65
+Δεν φτάνει η μνήμη για την προβολή
+; Not enough memory for the viewer
+MSG_21238256
+δεν στάλθηκε από %.50s
+; not sent by %.50s
+MSG_74BBD86D
+Esc  πίσω
+; Esc  back
+MSG_00FED3FC
+Φόρτωση από Plex...
+; Loading from Plex...
+MSG_2DD7976F
+Όχι εικόνα: αρχείο IFF %s
+; Not a picture: an IFF %s file
+MSG_4FD7ED09
+Προβολή των %ld φωτογραφιών
+; Slideshow of these %ld photos
+MSG_5123470D
+Η λειτουργία %.60s
+; That mode %.60s
+MSG_2EF5225D
+Η λειτουργία οθόνης δεν άνοιξε
+; Could not open that screen mode
+MSG_4C560A92
+Συνδέσεις: η διεπαφή του stack
+; Connections: the stack's choice of interface
+MSG_247B55C3
+Οι συνδέσεις βγαίνουν από αυτή τη διεπαφή
+; Connections go out from this interface
+MSG_61C33E78
+Τα αρχεία του στυλ smooth δεν φορτώθηκαν
+; The smooth style's files could not be loaded
+MSG_38B5BCC0
+Smooth: μόνο σε οθόνες RTG
+; Smooth: on RTG screens only
+MSG_5D86BD77
+Αρχεία μουσικής (MUSIC:)
+; Music files (MUSIC:)
+MSG_47B3C622
+Αρχεία μουσικής: %.100s
+; Music files: %.100s
+MSG_55DB9C3A
+Μουσική: Ρυθμίσεις > Φάκελοι
+; Music files: Settings > Folders > Music
+MSG_75470054
+Δεν τρέχει TCP/IP: το Plex θέλει δίκτυο
+; No TCP/IP stack running: Plex needs networking
+MSG_05BF19DC
+Το Plex είναι κλειστό (Ρυθμίσεις > Δίκτυο > Plex)
+; Plex is turned off (Settings > Networking > Plex)
+MSG_370F28B1
+Άλλες βιβλιοθήκες στο %s
+; Other libraries on %s
+MSG_5CB8F506
+Plex: %s
+; Plex: %s
+MSG_3D6359D0
+Χωρίς server Plex: Ρυθμίσεις > Δίκτυο > Plex
+; No Plex server chosen: Settings > Networking > Plex
+MSG_12991ED4
+Κορυφαίοι
+; Top voted
+MSG_59DBAEB1
+Πιο ακουσμένοι
+; Most listened to
+MSG_47B6B3B8
+Δημοφιλείς τώρα
+; Trending
+MSG_7CA786A9
+Chiptune
+; Chiptune
+MSG_00D1A496
+Demoscene
+; Demoscene
+MSG_65D70EE9
+Είδη
+; Genres
+MSG_2062DC6D
+Χώρες
+; Countries
+MSG_7B170497
+Ο server θέλει token: δείτε Σχετικά > Plex στο AmigaMCE
+; The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_229E5121
+Ο server απάντησε κάτι απρόσμενο
+; The server answered with something unexpected
+MSG_49CF76D8
+Χωρίς βιβλιοθήκες μουσικής
+; No music libraries there
+MSG_3EEA8333
+Δεν έχει φωτογραφίες
+; No photo libraries there
+MSG_027BDF10
+Τίποτα εδώ
+; Nothing here
+MSG_07C4F203
+Ο server Plex δεν βρέθηκε
+; Could not reach the Plex server
+MSG_1CFE72A3
+Δείξε τη φωτογραφία
+; Show the photo
+MSG_7BB6085B
+Τίποτα στη λίστα
+; Nothing listed
+MSG_46D7374C
+Κανένας σταθμός για εδώ
+; No stations here that AmigaMCE can play
+MSG_1BED60DF
+Διαβάζεται ακόμα: μια στιγμή
+; Still being read from the server: a moment
+MSG_7F58E800
+Ψάχνω servers Plex...  Esc ακύρωση
+; Looking for Plex servers...  Esc to give up
+MSG_13C1CD18
+Ρωτώ το %.40s...  Esc ακύρωση
+; Asking %.40s...  Esc to give up
+MSG_04730DAC
+radio-browser.info...  Esc ακύρωση
+; Asking radio-browser.info...  Esc to give up
+MSG_497165DA
+Φωτογραφίες Plex: το Plex είναι κλειστό (Ρυθμίσεις > Δίκτυο > Plex)
+; Plex photos: Plex is turned off (Settings > Networking > Plex)
+MSG_6273A841
+Φωτογραφίες Plex: διαλέξτε server (Ρυθμίσεις > Δίκτυο > Plex)
+; Plex photos: choose a server (Settings > Networking > Plex)
+MSG_276888E6
+Φωτογραφίες Plex στο %.80s
+; Plex photos on %.80s
+MSG_62B4E865
+Plex: %.100s
+; Plex: %.100s
+MSG_2550824B
+Επιλέχθηκε server Plex
+; Plex server chosen
+MSG_35BE063F
+Το AmigaMCE παίζει μουσική από έναν Plex Media Server στο δίκτυό σας: τις βιβλιοθήκες μουσικής του, ανά καλλιτέχνη και άλμπουμ, με τα εξώφυλλα. Ο server κάνει κάθε κομμάτι MP3 που παίζει αυτό το Amiga: 22kHz μονοφωνικό για 68020/030, 24kHz στερεοφωνικό για 68040/060, περισσότερο για ένα γρήγορο, και την καλύτερη ποιότητα όταν ένας driver MHI αποκωδικοποιεί MP3 (Ρυθμίσεις > Ήχος). Σε γρήγορο Amiga ή με MHI, κλείνοντας τις Ρυθμίσεις > Δίκτυο > Plex > Ήχος χαμηλότερης ποιότητας, τα MP3 παίζουν ως έχουν, και σε γρήγορο Amiga και τα FLAC, αν υπάρχει το flacdec.library· άλλες μορφές μετατρέπονται. Οι Ρυθμίσεις > Δίκτυο > Plex > Plex τα κλείνουν όλα.
+; AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_2FBD9CB6
+Εύρεση server: οι Ρυθμίσεις > Δίκτυο > Plex > Server Plex ρωτούν το δίκτυο (GDM του Plex)· διαλέξτε έναν και κρατιέται. Ή ορίστε τη διεύθυνση από το Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+MSG_6A05B8D3
+Σύνδεση: ένας server ζητά το token του κατόχου. Βρείτε το στο Plex Web (Get Info > View XML ενός στοιχείου: το X-Plex-Token στη διεύθυνση) και ορίστε το από το Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Η σύνδεση στο plex.tv θέλει HTTPS (AmiSSL) και έρχεται αργότερα.
+; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
+MSG_7445FC0C
+Server: %s
+; Server: %s
+MSG_6D54C528
+Token: ορίστηκε
+; Token: set
+MSG_59B6EDB9
+Token: όχι
+; Token: not set
+MSG_0B620CC7
+MP3: από τον driver MHI %.40s
+; MP3: decoded by the MHI driver %.40s
+MSG_1133EF71
+MP3: από το mpega.library
+; MP3: decoded by mpega.library
+MSG_04F04DC5
+MP3: χωρίς mpega.library ή MHI
+; MP3: no decoder (mpega.library or MHI)
+MSG_6FC4AC95
+FLAC: σε MP3 (λείπει το flacdec.library)
+; FLAC: converted to MP3 (flacdec.library is not installed)
+MSG_226669D7
+FLAC: σε MP3 (αργό εδώ)
+; FLAC: converted to MP3 (too slow to decode here)
+MSG_3521D30E
+FLAC: σε MP3 (χαμηλότερη ποιότητα)
+; FLAC: converted to MP3 (lower quality audio is on)
+MSG_2B51B45B
+FLAC: ως έχει, με flacdec.library
+; FLAC: played as stored, by flacdec.library
+MSG_586857BF
+Ήχος: AHI, 16-bit
+; Sound: AHI, 16-bit
+MSG_0F2AADBB
+Ήχος: Paula, 8-bit
+; Sound: Paula, 8-bit
+MSG_5353700C
+Μορφή:    %s
+; Format:   %s
+MSG_4B7B9DA5
+Χώρα:     %s
+; Country:  %s
+MSG_1399F81C
+Ψήφοι:    %s
+; Votes:    %s
+MSG_55E8E50A
+Ετικέτες: %s
+; Tags:     %s
+MSG_64C287CF
+Σελίδα:   %s
+; Homepage: %s
+MSG_5A5309D7
+Ροή:      %s
+; Stream:   %s
+MSG_18A292C0
+Το Fire στη λίστα τον παίζει.
+; Fire on the station in its list plays it.
+MSG_5143C289
+Φάκελος με MP3 ή FLAC
+; A folder of MP3 or FLAC files
+MSG_19FEBB54
+Φάκελος με modules
+; A folder of modules
+MSG_20B552D8
+Φάκελος με εικόνες
+; A folder of pictures
+MSG_1B002318
+Φάκελος με animations
+; A folder of animations
+MSG_5B08757B
+Νέος φάκελος: στη Μουσική
+; Folder added: its music is under Music
+MSG_182BFE5D
+Νέος φάκελος: στα Modules
+; Folder added: its modules are under Mods
+MSG_082FF2F7
+Νέος φάκελος: στις Εικόνες
+; Folder added: its pictures are under Pictures
+MSG_1C78BE4C
+Νέος φάκελος: στα Βίντεο
+; Folder added: its animations are under Videos
+MSG_0242E102
+Έως οκτώ φάκελοι: βγάλτε πρώτα έναν
+; Eight folders at most: take one out first
+MSG_1DC3AA14
+Προσθήκη
+; Add
+MSG_2B8275A5
+Ο φάκελος δεν βρέθηκε
+; That folder could not be found
+MSG_692E7242
+Ο φάκελος υπάρχει ήδη
+; That folder is there already
+MSG_2C2767AF
+Το στυλ Smooth θέλει οθόνη RTG
+; Style: Smooth needs an RTG screen
+MSG_14386364
+Εδώ παίζει τη χαμηλότερη ποιότητα του Plex: τα αρχεία ως έχουν είναι πολλά
+; This Amiga plays Plex's lower quality: the files as stored are too much
+MSG_5CBCDB5D
+Η διεπαφή δεν είναι ενεργή
+; That interface is not up
+MSG_646AFCF3
+Το MHI λείπει (οι drivers του στο LIBS:MHI)
+; MHI is not installed (its drivers in LIBS:MHI)
+MSG_7AE98FE6
+Για λίστες σταθμών από τώρα
+; Station lists opened from now on
+MSG_5AA18328
+Από τον επόμενο σταθμό ή κομμάτι
+; The next station or track started
+MSG_415E54B9
+Κανείς δεν απάντησε: μένει Αυτόματα
+; None of the servers answered: Automatic kept
+MSG_7800A723
+MP3 με MHI: ραδιόφωνο, Plex (άριστη ποιότητα) και αρχεία
+; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_605E617D
+MP3 εδώ με mpega.library
+; MP3 decoded here by mpega.library
+MSG_59AEDDD1
+AHI από το επόμενο κομμάτι· modules στην Paula
+; AHI from the next track or station on; modules stay on Paula
+MSG_06B72AB3
+AHI: ραδιόφωνο, Plex, αρχεία· modules στην Paula
+; AHI: radio, Plex and music files; modules stay on Paula
+MSG_4975E21A
+Η Paula παίζει τα πάντα
+; Paula plays everything
+MSG_0EE3FD77
+%s όταν υπάρχει
+; %s used when it is assigned
+MSG_26D6BADA
+%s εκτός
+; %s left out
+MSG_719F5F36
+Fire ξανά: βγαίνει ο φάκελος (όχι τα αρχεία)
+; Fire again to take this folder out (its files stay)
+MSG_4A2FC46E
+Ο φάκελος βγήκε
+; Folder taken out
+MSG_746B08BF
+Esc ξανά για έξοδο
+; Press Esc again to quit AmigaMCE
+MSG_16ABF123
+Το AmigaMCE θέλει Kickstart 3.0 ή νεότερο.\n
+; AmigaMCE needs Kickstart 3.0 or newer.\n
+MSG_43383FA3
+Το AmigaMCE δεν άνοιξε την οθόνη του.\n
+; AmigaMCE could not open its screen.\n
+MSG_3D0CDD4E
+Η αποθηκευμένη οθόνη λείπει εδώ: Αυτόματα
+; Saved screen mode not available here: using Automatic
+MSG_1767B111
+Το module θέλει 68020 ή καλύτερο για μίξη
+; This module needs a 68020 or better to be mixed
+MSG_3DD51BC4
+Δεν φτάνει η μνήμη για μίξη
+; Not enough memory to mix this module
+MSG_69F7300F
+Δεν είναι module που παίζει το AmigaMCE
+; Not a module AmigaMCE can play
+MSG_3F4BE355
+Ο μίκτης δεν ξεκίνησε
+; Could not start the mixer
+MSG_5537D534
+Το module είναι κομμένο
+; The module file is cut short
+MSG_6E9632F2
+Modules %ld καναλιών: πάνω από τα 4 της Paula
+; %ld-channel modules need more than Paula's four
+MSG_0B3B1D28
+PowerPacker
+; packed with PowerPacker
+MSG_074FA98E
+XPK
+; packed with XPK
+MSG_3E5C3646
+Pack-Ice
+; packed with Pack-Ice
+MSG_2570FA54
+module MED/OctaMED
+; a MED/OctaMED module
+MSG_090E157E
+module FastTracker 2 (XM)
+; a FastTracker 2 module (XM)
+MSG_4BC0A0C8
+module Scream Tracker 3 (S3M)
+; a Scream Tracker 3 module (S3M)
+MSG_41529869
+module Impulse Tracker (IT)
+; an Impulse Tracker module (IT)
+MSG_451A18EF
+module AHX
+; an AHX module
+MSG_177C7924
+Το αρχείο του module δεν άνοιξε
+; Could not open the module file
+MSG_57FD81FC
+Πακέτο %s, αλλά %s
+; Packed with %s, but %s
+MSG_59FF2336
+packer
+; a packer
+MSG_0CB7D3B5
+Αυτό το αρχείο είναι %s: δεν παίζεται
+; This file is %s, which AmigaMCE cannot play
+MSG_3575C0BB
+Λίγη chip μνήμη για τα samples (%lu KB)
+; Not enough chip memory for its samples (%lu KB)
+MSG_686FC405
+Δεν φτάνει η μνήμη για το module
+; Not enough memory for that module
+MSG_00592588
+Κανένας ελεύθερος timer CIA για μουσική
+; No CIA timer free to play music with
+MSG_1CC1D05F
+Κανένα module
+; No module loaded
+MSG_748B0D26
+Τα κανάλια ήχου τα έχει άλλο πρόγραμμα
+; The audio channels are in use by another program
+MSG_2AC2E3CB
+Δεν είναι διεύθυνση σταθμού
+; Not a station's address
+MSG_415987C0
+radio-browser.info: δεν βρέθηκε (DNS)
+; radio-browser.info could not be found (DNS)
+MSG_34D70E8E
+Χωρίς socket (τρέχει το TCP/IP;)
+; No socket (is the TCP/IP stack running?)
+MSG_6A2F5761
+Η σύνδεση απορρίφθηκε
+; The connection was refused
+MSG_262B09BC
+Ακυρώθηκε
+; Cancelled
+MSG_4641030F
+Ο server δεν απάντησε
+; The server did not answer
+MSG_2ACCD57C
+Ο server σταμάτησε να απαντά
+; The server stopped answering
+MSG_05C477DC
+Κανένας server Plex στο δίκτυο
+; No Plex server answered on this network
+MSG_4A212D5E
+Ο server δεν βρέθηκε (DNS)
+; That server could not be found (DNS)
+MSG_68C8EB43
+Ο server απαντά μόνο με HTTPS
+; The server only answers over HTTPS
+MSG_563B6546
+Ο server μάς στέλνει όπου δεν πάμε
+; The server sent us somewhere we cannot follow
+MSG_515157E5
+Ο server απάντησε %ld
+; The server answered %ld
+MSG_64F654D3
+Η διεργασία δικτύου δεν ξεκίνησε
+; The network process could not start
+MSG_441552F7
+Καλλιτέχνες
+; Artists
+MSG_5C7535ED
+Άλμπουμ
+; Albums
+MSG_5BBD0EC3
+Πρόσφατα
+; Recently added
+MSG_201D2C97
+%lu φωτογραφία
+; %lu photo
+MSG_71EDAAEC
+%lu φωτογραφίες
+; %lu photos
+MSG_7C81E0F2
+%lu στοιχείο
+; %lu item
+MSG_01746B13
+%lu στοιχεία
+; %lu items
+MSG_4C50B8D0
+%lu κομμάτι
+; %lu track
+MSG_4612A899
+%lu κομμάτια
+; %lu tracks
+MSG_4E1664E0
+%lu άλμπουμ
+; %lu album
+MSG_00405369
+%lu άλμπουμ
+; %lu albums
+MSG_0D3B3C12
+(χωρίς όνομα)
+; (no name)
+MSG_7EE6D283
+%s: όχι MP3, και ο server δεν το μετατρέπει
+; %s: not MP3, and the server gave no way to convert it
+MSG_6BBD2577
+Η μορφή
+; That format
+MSG_134FDFA5
+Κομμάτι %.10s   
+; Track %.10s   
+MSG_7286EE6A
+μονο
+; mono
+MSG_4C87A64D
+στέρεο
+; stereo
+MSG_43D67FB2
+πολυκ.
+; multi
+MSG_379F025B
+1 αρχείο μουσικής
+; 1 music file
+MSG_0A57AE24
+%ld αρχεία μουσικής
+; %ld music files
+MSG_4BE4B028
+%s%ld φάκελος
+; %s%ld folder
+MSG_54019F41
+%s%ld φάκελοι
+; %s%ld folders
+MSG_07A36F34
+Δεν διαβάστηκε
+; Could not be read
+MSG_523F6D57
+Το AHI δεν άνοιξε (λειτουργία στα Prefs του;)
+; AHI could not be opened (its Preferences: a mode?)
+MSG_59B9295C
+Ο server του σταθμού δεν βρέθηκε (DNS)
+; The station's server could not be found (DNS)
+MSG_3708365D
+Ο σταθμός απέρριψε τη σύνδεση
+; The station refused the connection
+MSG_7D8C9876
+Ο σταθμός δεν απάντησε
+; The station did not answer
+MSG_2A3F28C9
+Το αρχείο δεν διαβάστηκε
+; The file could not be read
+MSG_4375E450
+Ο server σταμάτησε να στέλνει
+; The server stopped sending
+MSG_2919BAF1
+Ο σταθμός έκλεισε τη ροή
+; The station closed the stream
+MSG_0761145C
+Το αρχείο δεν άνοιξε
+; The file could not be opened
+MSG_2D2A3CF1
+Ο σταθμός στέλνει μόνο με HTTPS, που δεν παίζει ακόμα
+; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_103190A0
+Η διεύθυνση του σταθμού δεν ακολουθείται
+; The station's address is not one AmigaMCE can follow
+MSG_65B74193
+Το %s απάντησε %ld
+; %s answered %ld
+MSG_4163EE37
+Ο server
+; The server
+MSG_3B0705F8
+Ο σταθμός
+; The station
+MSG_37840EF9
+Η playlist δεν έχει ροή που παίζεται
+; The station's playlist has no stream AmigaMCE can play
+MSG_47FA6F71
+Το %s στέλνει %s, όχι MP3
+; %s sends %s, not MP3
+MSG_53CE943A
+Ο σταθμός μάς έστειλε αλλού πολλές φορές
+; The station sent us on too many times
+MSG_5B0AAE77
+Η ροή δεν αποκωδικοποιήθηκε
+; The stream could not be decoded
+MSG_10039953
+Μόνο αρχεία εδώ παίζουν ως WAV, AIFF ή 8SVX
+; Only music files on this Amiga play as WAV, AIFF or 8SVX
+MSG_3E5CE903
+WAV, AIFF ή 8SVX που δεν παίζει (συμπιεσμένο;)
+; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_52A6DB2B
+Ο driver MHI δεν άνοιξε (Ρυθμίσεις > Ήχος)
+; The MHI driver could not be opened (Settings > Sound)
+MSG_74E4B952
+Ο decoder του MHI είναι σε χρήση ή λείπει
+; The MHI driver's decoder is in use, or not there
+MSG_166B781B
+Λίγη μνήμη για τα buffers του MHI
+; Not enough memory for MHI's buffers
+MSG_03D74A28
+Κανένα ελεύθερο signal
+; No signal free
+MSG_2F19A1CE
+Το κομμάτι τελείωσε πριν τη μουσική
+; The track ended before its music began
+MSG_755A0080
+Το κομμάτι τελείωσε πριν από εκεί
+; The track ended before that time
+MSG_1186B14C
+Η ροή δεν μοιάζει με MP3
+; The stream does not look like MP3
+MSG_3AC77067
+Δεν φτάνει η μνήμη για σταθμό
+; Not enough memory to play a station
+MSG_41C55AEA
+Η διεργασία ραδιοφώνου δεν ξεκίνησε
+; Could not start the radio process
+MSG_6A5609A3
+Φόρτωση %.80s
+; Loading %.80s
+MSG_02281E0C
+Δεν δείχνεται το %.80s
+; Could not show %.80s
+MSG_158F4FA3
+Λίγη μνήμη για %.70s
+; Not enough memory for %.70s
+MSG_54706675
+Μετρητές στάθμης
+; Level meters
+MSG_72FB1A0A
+Φάσμα
+; Spectrum
+MSG_476F7877
+Παύση: η μουσική θέλει τη CPU
+; Paused: the music needs the CPU
+MSG_5966858A
+Μονο
+; Mono
+MSG_1E9E9F85
+Δεξί
+; Right
+MSG_12773890
+Αριστερό
+; Left

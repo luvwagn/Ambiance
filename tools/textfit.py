@@ -13,7 +13,8 @@ layout_metrics and fit_menu, main.c's footer hints):
   - one-line text wider than the pane (paragraphs wrap, so are not checked),
     or for a status message (set_msg, errors) wider than the screen
 Glyphs are measured as TextLength does: each character's kern + space; Far
-East characters at their advance in the glyph pack (Fonts/amce-cjk/12).
+East characters at their advance in the glyph pack (Fonts/amce-cjk/12),
+Greek at its own (Fonts/amce-cjk/greek).
 """
 import os
 import struct
@@ -164,6 +165,7 @@ def main():
     catdir, fonts_dir = sys.argv[1:3]
     want = sys.argv[3:]
     CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "12")))
+    CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "greek")))
     STATUS.update(status_strings(os.path.join(os.path.dirname(os.path.abspath(catdir)), "src")))
     cd = catalog.read_cd(os.path.join(catdir, "AmigaMCE.cd"))
     total = 0

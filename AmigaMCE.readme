@@ -117,7 +117,8 @@ Screens
   that fits the Workbench's screen), else hires on AGA, lowres before it.
 - Japanese, Chinese and Korean names (from Plex, stations and song
   tags) are shown in their own characters, at 12 or 15 pixels (without
-  Fonts/amce-cjk, as [JP], [KO] or [CJK]).
+  Fonts/amce-cjk, as [JP], [KO] or [CJK]). Greek names too, in the smooth
+  style's own letters or at 12 pixels.
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.
@@ -159,12 +160,14 @@ first, then double-click AmigaMCE.
 Languages
 ---------
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português and Japanese. AmigaMCE speaks your
+Norsk, Nederlands, Português, Japanese and Greek. AmigaMCE speaks your
 Workbench's language (Locale prefs) when its catalog is installed;
 Settings > General > Language chooses another. Workbench 3.x has no
 Japanese locale, so Japanese is only ever chosen there: AmigaMCE draws
 it with its own glyphs (Fonts/amce-cjk), needing nothing from the
-system. The translations are new: corrections are
+system. Greek is drawn with AmigaMCE's own glyphs too, so it needs no
+Greek fonts or ReplaceTopaz; it is chosen by itself where Locale prefs
+put Greek first. The translations are new: corrections are
 welcome (catalogs/*.ct in the source, FlexCat's format).
 
 
@@ -303,8 +306,9 @@ is not included: get it from Aminet, util/libs/flacdec, in its own
 unchanged archive.
 
 Fonts: Pixelify Sans (c) The Pixelify Sans Project Authors, Galmuri
-(c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf and Rubik
-(c) The Rubik Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in the Licences
+(c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik
+(c) The Rubik Project Authors and Geologica (c) 2020 The Geologisk
+Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in the Licences
 drawer. Radio's station lists come from radio-browser.info.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other

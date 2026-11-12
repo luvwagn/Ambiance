@@ -65,6 +65,15 @@ int main(void)
     CHECK(!strcmp(c.names[3], "Caf\xE9 \"Radio\" ?"));
     squeeze_spaces(c.names[2]);
     CHECK(!strcmp(c.names[2], "Multi Line"));
+    {
+        /* Greek kept as cjk.c's two bytes, Japanese as its three */
+        char gr[] = "\xCE\x95\xCE\xBB\xCE\xBB\xCE\xAC\xCE\xB4\xCE\xB1 FM \xCF\x8E";
+        char jp[] = "\xE3\x83\xA9\xCE\xB1";
+        utf8_to_latin1(gr);
+        CHECK(!strcmp(gr, "\x80\x95\x80\xBB\x80\xBB\x80\xAC\x80\xB4\x80\xB1 FM \x81\x8E"));
+        utf8_to_latin1(jp);
+        CHECK(!strcmp(jp, "\x86\xA3\xA9\x80\xB1"));
+    }
     url_encode("drum and bass/ü", enc, sizeof(enc));
     CHECK(!strcmp(enc, "drum%20and%20bass%2F%C3%BC"));
     free(buf);

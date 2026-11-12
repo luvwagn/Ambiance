@@ -101,7 +101,7 @@ static int cjk_wanted(unsigned long c)
 
 /* UTF-8 to Latin-1, in place (it only gets shorter). Japanese, Chinese
  * and Korean characters stay, as three bytes no Latin-1 text has (cjk.c);
- * their UTF-8 is three bytes too. */
+ * their UTF-8 is three bytes too. Greek stays as two (its UTF-8's two). */
 void utf8_to_latin1(char *s)
 {
     unsigned char *p = (unsigned char *)s, *o = (unsigned char *)s;
@@ -137,6 +137,10 @@ void utf8_to_latin1(char *s)
         }
         if (c >= 0xA0 && c <= 0xFF)
             *o++ = (unsigned char)c;
+        else if (c >= 0x380 && c <= 0x3FF) {
+            *o++ = (unsigned char)(0x80 | ((c - 0x380) >> 6));
+            *o++ = (unsigned char)(0x80 | (c & 63));
+        }
         else if (cjk_wanted(c)) {
             *o++ = (unsigned char)(0x80 | (c >> 11));
             *o++ = (unsigned char)(0xA0 | ((c >> 6) & 31));

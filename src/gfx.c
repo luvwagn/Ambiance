@@ -995,13 +995,15 @@ WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 {
     ULONG n = strlen(s);
     if (cjk_any(s, n)) {
-        /* Japanese, Chinese, Korean: their glyphs, or a tag (cjk.c) */
+        /* Japanese, Chinese, Korean: their glyphs, or a tag; Greek: its
+         * glyphs (cjk.c) */
+        char buf[300];
         if (cjk_tags()) {
-            char buf[300];
-            cjk_tagged(s, n, buf, sizeof(buf));
-            return gfx_textlen(g, buf, ts);
+            n = cjk_tagged(s, n, buf, sizeof(buf));
+            s = buf;
         }
-        return cjk_textlen(g, g->rp, s, n, ts & 0x0F);
+        if (cjk_any(s, n))
+            return cjk_textlen(g, g->rp, s, n, ts & 0x0F);
     }
     if (g->sm)
         return sm_textlen(g->sm, s, n, ts & 0x0F);
@@ -1017,12 +1019,14 @@ void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char 
     ULONG n = strlen(s);
     char buf[300];
     if (n && cjk_any(s, n)) {
-        if (!cjk_tags()) {
+        if (cjk_tags()) {
+            n = cjk_tagged(s, n, buf, sizeof(buf));
+            s = buf;
+        }
+        if (cjk_any(s, n)) {
             cjk_text(g, rp, x, y, s, n, fg, 0, FALSE, TS_BODY, maxw);
             return;
         }
-        n = cjk_tagged(s, n, buf, sizeof(buf));
-        s = buf;
     }
     if (maxw > 0)
         n = TextFit(rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, g->font_h + 1);
@@ -1044,11 +1048,13 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
     if (!n)
         return;
     if (cjk_any(s, n)) {
-        /* Japanese, Chinese, Korean: their glyphs, or a tag (cjk.c) */
+        /* Japanese, Chinese, Korean: their glyphs, or a tag; Greek: its
+         * glyphs (cjk.c) */
         if (cjk_tags()) {
             n = cjk_tagged(s, n, tagged, sizeof(tagged));
             s = tagged;
-        } else {
+        }
+        if (cjk_any(s, n)) {
             if (g->sm && maxw > 0 && cjk_textlen(g, g->rp, s, n, face) > maxw) {
                 /* too long: as much as fits, then "..." */
                 WORD dots = sm_textlen(g->sm, "...", 3, face), w;

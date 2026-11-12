@@ -14,6 +14,15 @@
  * along untouched. Text is only read from its start, so the second and
  * third bytes need not differ from a first.
  *
+ * Greek (U+0380-U+03FF) is kept the same way in two bytes, as its UTF-8
+ * is: 0x80 | (cp - 0x380) >> 6, then 0x80 | (cp & 63). Its first byte,
+ * 0x80 or 0x81, is one no Far East character begins with (theirs are all
+ * U+1100 or more: 0x82 up), so the two never mix. Greek is drawn from
+ * the smooth style's own Greek glyphs where it has them, else from a
+ * small pack of its own (PROGDIR:Fonts/amce-cjk/greek, from Galmuri11),
+ * which is always there: Greek is never a tag. Unlike the Far East
+ * characters it is written in words, so a line is not broken inside it.
+ *
  * Drawn from glyph packs (tools/mkcjk.py: Galmuri, Ark Pixel), in
  * PROGDIR:Fonts/amce-cjk: 12 (12 pixels) and 15 (Galmuri14's). A screen's
  * packs are a chain, the first that has the character drawing it: 15 then
@@ -37,11 +46,25 @@
 
 int cjk_dec(const UBYTE *s, ULONG n, ULONG *cp)
 {
-    if (n < 3 || s[0] < 0x80 || s[0] > 0x9F || s[1] < 0xA0 || s[1] > 0xBF || s[2] < 0x80 ||
+    if (n >= 2 && s[0] <= 0x81 && s[0] >= 0x80) {
+        /* Greek: two bytes */
+        if (s[1] < 0x80 || s[1] > 0xBF)
+            return 0;
+        *cp = 0x380 + ((ULONG)(s[0] & 1) << 6) + (s[1] & 63);
+        return 2;
+    }
+    if (n < 3 || s[0] < 0x82 || s[0] > 0x9F || s[1] < 0xA0 || s[1] > 0xBF || s[2] < 0x80 ||
         s[2] > 0xBF)
         return 0;
     *cp = ((ULONG)(s[0] & 31) << 11) | ((ULONG)(s[1] & 31) << 6) | (s[2] & 63);
     return 3;
+}
+
+/* Japanese, Chinese or Korean at s (not Greek): its length, 0 none. */
+int cjk_far_east(const UBYTE *s, ULONG n, ULONG *cp)
+{
+    int k = cjk_dec(s, n, cp);
+    return k == 3 ? 3 : 0;
 }
 
 BOOL cjk_any(const char *s, ULONG n)
@@ -106,6 +129,14 @@ ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max)
             out[o++] = (char)p[i++];
             continue;
         }
+        if (k == 2) {
+            /* Greek: kept, it has glyphs */
+            if (o + 3 > max)
+                break;
+            out[o++] = (char)p[i++];
+            out[o++] = (char)p[i++];
+            continue;
+        }
         if (o + tl + 1 > max)
             break;
         memcpy(out + o, tag, tl);
@@ -115,7 +146,7 @@ ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max)
             ULONG j = i;
             while (j < n && p[j] == ' ')
                 j++;
-            if ((k = cjk_dec(p + j, n - j, &cp)))
+            if ((k = cjk_far_east(p + j, n - j, &cp)))
                 i = j + k;
             else
                 break;
@@ -127,9 +158,9 @@ ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max)
 
 /* ---- the packs */
 
-#define NPACKS 2
+#define NPACKS 3
 #define CACHE  256
-static const char *pack_name[NPACKS] = { "12", "15" };
+static const char *pack_name[NPACKS] = { "12", "15", "greek" };
 
 struct Pack {
     BOOL tried, ok;
@@ -143,7 +174,7 @@ struct Pack {
 };
 
 static struct Pack packs[NPACKS];
-static int chain[2], nchain;
+static int chain[NPACKS], nchain;
 static BOOL tags;
 static struct {
     UWORD pack, idx1;               /* idx1: glyph index + 1, 0 empty */
@@ -274,11 +305,12 @@ void cjk_open(struct Gfx *g)
     tags = !(l = Lock((STRPTR) "PROGDIR:Fonts/amce-cjk/12", ACCESS_READ));
     if (l)
         UnLock(l);
-    if (tags)
-        return;
-    if (g->font_h >= 20)
-        chain[nchain++] = 1;
-    chain[nchain++] = 0;
+    if (!tags) {
+        if (g->font_h >= 20)
+            chain[nchain++] = 1;
+        chain[nchain++] = 0;
+    }
+    chain[nchain++] = 2;                    /* Greek: never a tag */
     if (!chip)
         chip = AllocMem(17 * 2, MEMF_CHIP | MEMF_CLEAR);
     qmark_w = 0;
@@ -331,12 +363,22 @@ static WORD char_w(struct Gfx *g, struct RastPort *rp, ULONG cp, int face)
     return qmark_w;
 }
 
-/* The length of the Latin-1 run at s (up to a Far East character). */
-static ULONG latin_run(const UBYTE *s, ULONG n)
+/* The length of the run at s the screen's own font draws: Latin-1, and
+ * Greek too where the smooth style has its glyphs (up to a character the
+ * packs draw). */
+static ULONG latin_run(struct Gfx *g, const UBYTE *s, ULONG n)
 {
     ULONG i = 0;
-    while (i < n && !(s[i] >= 0x80 && s[i] <= 0x9F))
+    BOOL greek = g->sm && sm_greek(g->sm);
+    while (i < n) {
+        if (s[i] >= 0x80 && s[i] <= 0x9F) {
+            if (!greek || s[i] > 0x81 || i + 1 >= n || s[i + 1] < 0x80 || s[i + 1] > 0xBF)
+                break;
+            i += 2;
+            continue;
+        }
         i++;
+    }
     return i;
 }
 
@@ -346,7 +388,7 @@ WORD cjk_textlen(struct Gfx *g, struct RastPort *rp, const char *s, ULONG n, int
     ULONG i = 0, cp;
     LONG w = 0;
     while (i < n) {
-        ULONG r = latin_run(p + i, n - i);
+        ULONG r = latin_run(g, p + i, n - i);
         int k;
         w += latin_len(g, rp, s + i, r, face);
         i += r;
@@ -369,7 +411,7 @@ ULONG cjk_fit(struct Gfx *g, struct RastPort *rp, const char *s, ULONG n, int fa
     ULONG i = 0, cp;
     LONG w = 0;
     while (i < n) {
-        ULONG r = latin_run(p + i, n - i);
+        ULONG r = latin_run(g, p + i, n - i);
         int k;
         if (r) {
             WORD rw = latin_len(g, rp, s + i, r, face);
@@ -449,7 +491,7 @@ WORD cjk_text(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s,
     if (maxw > 0)
         n = cjk_fit(g, rp, s, n, face, maxw);
     while (i < n) {
-        ULONG r = latin_run(p + i, n - i);
+        ULONG r = latin_run(g, p + i, n - i);
         int k;
         if (r) {
             if (g->sm) {

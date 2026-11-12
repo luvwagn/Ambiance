@@ -1241,13 +1241,14 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
         int k;
         while (*s == ' ')
             s++, spaced = TRUE;
-        if ((k = cjk_dec((const UBYTE *)s, strlen(s), &cp))) {
+        if ((k = cjk_far_east((const UBYTE *)s, strlen(s), &cp))) {
+            /* a Far East character is a word of its own (Greek is not) */
             memcpy(word, s, k);
             n = k;
             s += k;
         } else {
             while (*s && *s != ' ' && n < (LONG)sizeof(word) - 1 &&
-                   !(n && cjk_dec((const UBYTE *)s, strlen(s), &cp)))
+                   !(n && cjk_far_east((const UBYTE *)s, strlen(s), &cp)))
                 word[n++] = *s++;
         }
         word[n] = 0;
@@ -1263,7 +1264,7 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
              * after Far East text, Latin or not */
             if (!spaced && last > 0 && cjk_any(line, strlen(line)) &&
                 (strchr(")]},.:;!?", word[0]) ||
-                 (n == 3 && cjk_dec((const UBYTE *)word, 3, &cp) && no_line_start(cp)))) {
+                 (n == 3 && cjk_far_east((const UBYTE *)word, 3, &cp) && no_line_start(cp)))) {
                 char carry[96];
                 amce_strlcpy(carry, line + last, sizeof(carry));
                 line[last] = 0;
@@ -2052,6 +2053,11 @@ static void lang_name(const char *lang, char *out)
         strcpy(out, "\214\267\245\214\274\254\221\252\236");
         return;
     }
+    if (!amce_stricmp(lang, "greek") || !amce_stricmp(lang, "ellinika")) {
+        /* "Ellinika" in Greek letters (cjk.c's two bytes each) */
+        strcpy(out, "\200\225\200\273\200\273\200\267\200\275\200\271\200\272\200\254");
+        return;
+    }
     amce_strlcpy(out, lang, 32);
     if ((UBYTE)out[0] >= 'a' && (UBYTE)out[0] <= 'z')
         out[0] -= 32;
@@ -2068,6 +2074,7 @@ static const char *lang_here(const char *lang)
         { "suomi", N_("Finnish") }, { "dansk", N_("Danish") },
         { "norsk", N_("Norwegian") }, { "nederlands", N_("Dutch") },
         { "portugu\352s", N_("Portuguese") }, { "nihongo", N_("Japanese") },
+        { "greek", N_("Greek") }, { "ellinika", N_("Greek") },
     };
     unsigned i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
@@ -2659,9 +2666,10 @@ static void build_credits(struct Page *p)
     text_line(p, _("(c) 2026 Brian King, under the MIT licence"));
     text_line(p, "");
     text_para(p, _("Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
-                 "(c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all "
-                 "under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are "
-                 "Modified Versions of Pixelify Sans and Galmuri."));
+                 "(c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The "
+                 "Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, "
+                 "all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts "
+                 "are Modified Versions of Pixelify Sans and Galmuri."));
     text_line(p, "");
     text_para(p, _("Code: libnix C runtime (public domain). The EaglePlayer host follows "
                  "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen)."));

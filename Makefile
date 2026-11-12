@@ -54,11 +54,13 @@ FONT_FILES += $(foreach f,$(GALMURI),assets/Fonts/$(word 1,$(subst :, ,$(f))).fo
 SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/768 assets/Fonts/amce-smooth/logo1 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
-# Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel)
-CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15
+# Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel),
+# and Greek (tools/mkgreek.py: Galmuri11)
+CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15 assets/Fonts/amce-cjk/greek
 ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
-             assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt CREDITS.txt LICENSE
+             assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
+             assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
 .PHONY: all clean test test-replayer test-animdraw anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
@@ -227,9 +229,11 @@ fonts:
 	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri11-Bold-latin1.bdf assets/Fonts amce-galmuri11b
 	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri14-latin1.bdf assets/Fonts amce-galmuri14
 	$(PYTHON) tools/mkbdf.py assets/fonts-src/Galmuri14-latin1.bdf assets/Fonts amce-galmuri14b --bold
+	$(PYTHON) tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amce-cjk/greek
 
 smooth:
-	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768
+	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768 \
+		--greek assets/fonts-src/Geologica-VF.ttf
 
 icons:
 	$(PYTHON) tools/mkicon.py docs

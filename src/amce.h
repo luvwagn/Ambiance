@@ -183,8 +183,10 @@ const char *amce_lang_now(void);
 const char *amce_lang_iso(void);
 
 /* cjk.c: Japanese, Chinese and Korean text, kept in strings as three bytes
- * a character (see there), drawn from glyph packs or shown as a tag */
-int cjk_dec(const UBYTE *s, ULONG n, ULONG *cp);
+ * a character (see there), drawn from glyph packs or shown as a tag; and
+ * Greek, two bytes a letter, drawn from its own glyphs */
+int cjk_dec(const UBYTE *s, ULONG n, ULONG *cp);        /* 2 Greek, 3 Far East, 0 */
+int cjk_far_east(const UBYTE *s, ULONG n, ULONG *cp);   /* 3 Far East, else 0 */
 BOOL cjk_any(const char *s, ULONG n);
 ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max);
 void cjk_open(struct Gfx *g);
@@ -216,6 +218,7 @@ void sm_attach(struct Smooth *s, struct Gfx *g);    /* screen open: pens, metric
 void sm_detach(struct Smooth *s);
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face);
 LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw);
+BOOL sm_greek(const struct Smooth *s);  /* it has Greek glyphs (cjk.c's two bytes) */
 void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, LONG n,
              int face, UBYTE fg, UBYTE bg, BOOL opaque);
 void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);

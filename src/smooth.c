@@ -5,7 +5,8 @@
  * Used on RTG screens, 8-bit ones too. Everything is pre-rendered by
  * tools/mksmooth.py at the exact size this screen needs, from Rubik and the
  * vector icon shapes, into PROGDIR:Fonts/amce-smooth/<lines>; nothing is
- * scaled or rasterised here.
+ * scaled or rasterised here. Greek, which Rubik lacks, comes from
+ * Geologica, sized to Rubik's: its letters are cjk.c's two bytes.
  *
  * Glyphs, icons and markers are coverage maps (4 bits a pixel). Drawing one
  * sorts its pixels into SMOOTH_LEVELS - 1 one-bit masks by coverage step
@@ -57,6 +58,8 @@ struct Face {
     const UBYTE *gl;            /* GLYPH_BYTES per character lo..hi */
     const UBYTE *blob;          /* coverage data */
     UWORD widest_cap;           /* widest A-Z, in pixels */
+    UWORD glo, ghi;             /* Greek code points, if the file has them */
+    const UBYTE *ggl, *gblob;   /*   their glyphs and coverage data (NULL none) */
 };
 
 struct Smooth {
@@ -193,8 +196,49 @@ static BOOL parse(struct Smooth *s)
         s->letter[f] = p;
         p += 8 + rd32(p + 4);
     }
+    /* Greek glyphs, if the file has them: "GREK", then per face u16 lo, hi,
+     * the glyphs, u32 bytes, the coverage data (as above). A file
+     * without them is drawn as before, its Greek from cjk.c's pack. */
+    if (p + 4 <= end && !memcmp(p, "GREK", 4)) {
+        const UBYTE *q = p + 4;
+        struct Face gf[NFACES];
+        for (f = 0; f < NFACES; f++) {
+            ULONG n;
+            if (q + 4 > end)
+                break;
+            gf[f].glo = rd16(q);
+            gf[f].ghi = rd16(q + 2);
+            if (gf[f].ghi < gf[f].glo || gf[f].glo < 0x380 || gf[f].ghi > 0x3FF)
+                break;
+            q += 4;
+            gf[f].ggl = q;
+            q += (ULONG)(gf[f].ghi - gf[f].glo + 1) * GLYPH_BYTES;
+            if (q + 4 > end)
+                break;
+            n = rd32(q);
+            q += 4;
+            gf[f].gblob = q;
+            q += n;
+            if (q > end)
+                break;
+        }
+        if (f == NFACES) {
+            for (f = 0; f < NFACES; f++) {
+                s->face[f].glo = gf[f].glo;
+                s->face[f].ghi = gf[f].ghi;
+                s->face[f].ggl = gf[f].ggl;
+                s->face[f].gblob = gf[f].gblob;
+            }
+            p = q;
+        }
+    }
     return p <= end && s->icon_cnt >= ICON_COUNT && s->mark_cnt >= MARK_RADIO_ON &&
            s->logo_nc <= 32;
+}
+
+BOOL sm_greek(const struct Smooth *s)
+{
+    return s && s->face[0].ggl != NULL;
 }
 
 struct Smooth *sm_load(UWORD lines)
@@ -554,6 +598,34 @@ static const UBYTE *glyph(const struct Face *f, UBYTE c)
     return f->gl + (ULONG)(c - f->lo) * GLYPH_BYTES;
 }
 
+/* The glyph at str[*i]: a Latin-1 byte, or a Greek letter's two bytes
+ * (cjk.c); its entry, and in *blob the coverage data its offset is in.
+ * *i is moved past it. A Greek letter without a glyph is a "?"; a first
+ * byte left alone is the Latin-1 table's (empty) entry for it. */
+static const UBYTE *glyph_at(const struct Face *f, const char *str, LONG n, LONG *i,
+                             const UBYTE **blob)
+{
+    UBYTE c = (UBYTE)str[*i];
+    *blob = f->blob;
+    if ((c == 0x80 || c == 0x81) && f->ggl && *i + 1 < n) {
+        UBYTE c2 = (UBYTE)str[*i + 1];
+        if (c2 >= 0x80 && c2 <= 0xBF) {
+            UWORD cp = (UWORD)(0x380 + ((c & 1) << 6) + (c2 & 63));
+            *i += 2;
+            if (cp >= f->glo && cp <= f->ghi) {
+                const UBYTE *G = f->ggl + (ULONG)(cp - f->glo) * GLYPH_BYTES;
+                if (rd16(G)) {
+                    *blob = f->gblob;
+                    return G;
+                }
+            }
+            return glyph(f, '?');
+        }
+    }
+    (*i)++;
+    return glyph(f, c);
+}
+
 /* Text is laid out in 1/16 pixels, each glyph drawn from the stored
  * quarter-pixel position nearest its true one. */
 static UWORD adv16(const UBYTE *G) { return rd16(G); }
@@ -561,24 +633,28 @@ static UWORD adv16(const UBYTE *G) { return rd16(G); }
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face)
 {
     const struct Face *f = &s->face[face < NFACES ? face : 0];
+    const UBYTE *b;
     ULONG w16 = 0;
-    while (n-- > 0)
-        w16 += adv16(glyph(f, (UBYTE)*str++));
+    LONG i = 0;
+    while (i < n)
+        w16 += adv16(glyph_at(f, str, n, &i, &b));
     return (WORD)((w16 + 8) >> 4);
 }
 
-/* How many characters of str fit in maxw pixels. */
+/* How many bytes of str fit in maxw pixels (whole characters). */
 LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw)
 {
     const struct Face *f = &s->face[face < NFACES ? face : 0];
-    LONG i;
+    const UBYTE *b;
+    LONG i = 0, at;
     ULONG w16 = 0;
-    for (i = 0; i < n; i++) {
-        w16 += adv16(glyph(f, (UBYTE)str[i]));
+    while (i < n) {
+        at = i;
+        w16 += adv16(glyph_at(f, str, n, &i, &b));
         if ((WORD)((w16 + 8) >> 4) > maxw)
-            break;
+            return at;
     }
-    return i;
+    return n;
 }
 
 void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, LONG n,
@@ -591,8 +667,8 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
     if (n <= 0)
         return;
     /* the box every glyph's ink falls in (accents may rise above the cell) */
-    for (i = 0; i < n; i++) {
-        const UBYTE *G = glyph(f, (UBYTE)str[i]);
+    for (i = 0; i < n;) {
+        const UBYTE *b, *G = glyph_at(f, str, n, &i, &b);
         ULONG q = SNAP_Q(pen16);                /* in quarter pixels */
         WORD gx = (WORD)(q >> 2) + (BYTE)G[G_X], gy = (BYTE)G[G_Y];
         if (G[G_W]) {
@@ -612,13 +688,13 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
     if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny))
         return;
     pen16 = 0;
-    for (i = 0; i < n; i++) {
-        const UBYTE *G = glyph(f, (UBYTE)str[i]);
+    for (i = 0; i < n;) {
+        const UBYTE *b, *G = glyph_at(f, str, n, &i, &b);
         ULONG q = SNAP_Q(pen16);
         UWORD w = G[G_W], h = G[G_H];
         if (w) {
             UWORD bytes = (UWORD)(((ULONG)w * h + 1) >> 1), ph = (UWORD)(q & 3);
-            const UBYTE *d = f->blob + rd32(G + 6);
+            const UBYTE *d = b + rd32(G + 6);
             while (ph--)
                 d += bytes;
             masks_put(s, d, w, h, (WORD)(q >> 2) + (BYTE)G[G_X] - minx, (BYTE)G[G_Y] - miny);

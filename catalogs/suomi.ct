@@ -343,6 +343,9 @@ Portugali
 MSG_140C2E0A
 Japani
 ; Japanese
+MSG_2653C2A3
+Kreikka
+; Greek
 MSG_73C73B18
 Kuten Workbench
 ; As Workbench
@@ -538,9 +541,9 @@ Plex AmigaMCE:ssä
 MSG_718F9B3E
 (c) 2026 Brian King, MIT-lisenssillä
 ; (c) 2026 Brian King, under the MIT licence
-MSG_36BA6F5C
-Fontit: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo ja Rubik (c) 2015 The Rubik Project Authors, kaikki SIL Open Font License 1.1 -lisenssillä. Fontit amce-pixel ja amce-galmuri ovat Pixelify Sansin ja Galmurin muokattuja versioita (Modified Versions).
-; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_1BA733E8
+Fontit: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors ja Geologica (c) 2020 The Geologisk Project Authors, kaikki SIL Open Font License 1.1 -lisenssillä. Fontit amce-pixel ja amce-galmuri ovat Pixelify Sansin ja Galmurin muokattuja versioita (Modified Versions).
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
 MSG_2B3D5B66
 Koodi: libnix C -ajonaikainen kirjasto (vapaa). EaglePlayer-isäntä seuraa HippoPlayerin isäntää (MIT-lisenssi, (c) 2017 Kari-Pekka Koljonen).
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).

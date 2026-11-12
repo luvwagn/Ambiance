@@ -214,6 +214,24 @@ const char *amce_lang_wb(void)
     return wb_languages(l, 4) ? l[0] : "";
 }
 
+/* The same language by another name: Greek's catalog is "greek" (as
+ * Workbench 3.x's Greek localisations call it), which some systems'
+ * Locale prefs call "ellinika". */
+static BOOL same_lang(const char *a, const char *b)
+{
+    static const char *const greek[] = { "greek", "ellinika" };
+    int i, ia = -1, ib = -1;
+    if (!amce_stricmp(a, b))
+        return TRUE;
+    for (i = 0; i < 2; i++) {
+        if (!amce_stricmp(a, greek[i]))
+            ia = i;
+        if (!amce_stricmp(b, greek[i]))
+            ib = i;
+    }
+    return ia >= 0 && ib >= 0;
+}
+
 static BOOL load(int k)
 {
     BPTR fh;
@@ -279,7 +297,7 @@ void amce_lang_open(const char *lang)
     }
     if (lang && *lang) {
         for (i = 0; i < ncats && k < 0; i++)
-            if (!amce_stricmp(cats[i].lang, lang))
+            if (same_lang(cats[i].lang, lang))
                 k = i;
     } else {
         char wb[10][32];
@@ -288,7 +306,7 @@ void amce_lang_open(const char *lang)
             if (!amce_stricmp(wb[j], "english"))
                 break;                      /* English comes first there */
             for (i = 0; i < ncats && k < 0; i++)
-                if (!amce_stricmp(cats[i].lang, wb[j]))
+                if (same_lang(cats[i].lang, wb[j]))
                     k = i;
         }
     }
@@ -338,7 +356,7 @@ const char *amce_lang_iso(void)
         { "deutsch", "de" }, { "fran\347ais", "fr" }, { "italiano", "it" },
         { "espa\361ol", "es" }, { "svenska", "sv" }, { "suomi", "fi" }, { "dansk", "da" },
         { "norsk", "nb" }, { "nederlands", "nl" }, { "portugu\352s", "pt" },
-        { "polski", "pl" }, { "nihongo", "ja" },
+        { "polski", "pl" }, { "nihongo", "ja" }, { "greek", "el" }, { "ellinika", "el" },
     };
     unsigned i;
     if (!cat_n)

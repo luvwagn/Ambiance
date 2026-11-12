@@ -40,18 +40,20 @@ int amce_strnicmp(const char *a, const char *b, LONG n)
     return 0;
 }
 
-/* Cut short: a Far East character's three bytes (cjk.c) are kept whole or
- * left out, never split (its first byte alone would show as a box). */
+/* Cut short: a Far East character's three bytes, or a Greek letter's two
+ * (cjk.c), are kept whole or left out, never split (a first byte alone
+ * would show as a box). */
 static void cut_whole(UBYTE *d0, UBYTE *d)
 {
     UBYTE *p = d0;
     while (p < d) {
-        if (*p >= 0x80 && *p <= 0x9F && (p + 1 == d || (p[1] >= 0xA0 && p[1] <= 0xBF))) {
-            if (p + 3 > d) {
+        if (*p >= 0x80 && *p <= 0x9F) {
+            ULONG len = *p <= 0x81 ? 2 : 3;
+            if (p + len > d) {
                 *p = 0;
                 return;
             }
-            p += 3;
+            p += len;
         } else {
             p++;
         }

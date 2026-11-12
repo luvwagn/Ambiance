@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Smooth-style artwork for AmigaMCE's RTG screens, one file per screen height.
 
-Usage: python3 tools/mksmooth.py <Rubik-VF.ttf> <out dir> [heights...]
+Usage: python3 tools/mksmooth.py <Rubik-VF.ttf> <out dir> [heights...] [--greek <Geologica-VF.ttf>]
 
 The layout is designed for a 256-line screen. An RTG screen of H lines draws
 it H/RTG_LINES times larger (RTG_LINES = 384: a 1024x768 screen shows it at
@@ -16,6 +16,9 @@ with anti-aliased edges:
   - the logo, in full colour, reduced to a small palette
   - the list overlay's big letters A-Z and '#', drawn from the outlines at
     exactly the size the overlay uses on this screen, one bit a pixel
+  - with --greek: the three faces' Greek letters (U+0384-U+03CE), which
+    Rubik lacks, from Geologica at Rubik's weights, scaled so its letters
+    sit between Rubik's x-height and cap height
 
 Glyphs, icons and markers are coverage maps, 4 bits a pixel (0 = none, 15 =
 full); AmigaMCE blends them between the text colour and the background with
@@ -36,6 +39,8 @@ File layout (big-endian), written to <out dir>/<H>:
       u16 w, u16 h, u32 bytes, then each row as run lengths (u8),
       alternately clear and set, starting with clear, summing to w; a run
       over 255 is written 255, 0, rest
+  with --greek: "GREK", then per face u16 lo, u16 hi and its glyphs and
+      coverage data as above (src/smooth.c reads a file with or without it)
 """
 import os
 import struct
@@ -78,17 +83,28 @@ SS = 8              # oversampling: glyphs are drawn 8x and averaged down
 PHASES = 4          # quarter-pixel horizontal positions each glyph is stored at
 
 
-def face(ttf, size, wght, k, cell_h, base):
+GREEK_LO, GREEK_HI = 0x384, 0x3CE    # tonos to omega with tonos: modern Greek
+# Geologica's letters, scaled to sit with Rubik's: Rubik's x-height is 0.52
+# of its size and its caps 0.70, Geologica's 0.48 and 0.70; between the two
+GREEK_SCALE = 1.05
+
+
+def face(ttf, size, wght, k, cell_h, base, codes=None, axes=None, scale=1.0):
     """Glyphs drawn unhinted (from 8x oversampling) at each quarter-pixel
     position, so text can be laid out at fractional advances: no snapped,
-    uneven gaps at small sizes. Advances are in 1/16 pixel."""
-    font = ImageFont.truetype(ttf, max(1, round(size * k * SS)))
-    font.set_variation_by_axes([wght])
+    uneven gaps at small sizes. Advances are in 1/16 pixel. codes: the code
+    points (Latin-1's by default); a font without one gets an empty entry."""
+    font = ImageFont.truetype(ttf, max(1, round(size * k * SS * scale)))
+    font.set_variation_by_axes(axes(wght) if axes else [wght])
+    have = None
+    if codes is not None:
+        from fontTools.ttLib import TTFont
+        have = TTFont(ttf).getBestCmap()
     glyphs, blob = [], bytearray()
     pad = cell_h
-    for c in range(LO, HI + 1):
-        ch = bytes([c]).decode("latin-1")
-        if c in range(0x7F, 0xA0):
+    for c in (codes if codes is not None else range(LO, HI + 1)):
+        ch = chr(c)
+        if c in range(0x7F, 0xA0) or (have is not None and c not in have):
             glyphs.append((0, 0, 0, 0, 0, 0))
             continue
         adv = font.getlength(ch) / SS
@@ -225,7 +241,7 @@ def big_letters(ttf, ink_h):
     return out, max(w for w, h, r in out)
 
 
-def build(ttf, H):
+def build(ttf, H, greek=None):
     k256 = round(H * 256 / RTG_LINES)
     k = k256 / 256
     cell_h, base = round(CELL * k), round(BASE * k)
@@ -256,6 +272,17 @@ def build(ttf, H):
     for w, h, rows in letters:
         data = bytes(v for runs in rows for v in runs)
         out += struct.pack(">HHI", w, h, len(data)) + data
+    if greek:
+        # Geologica's axes: weight, cursive, sharpness, slant
+        out += b"GREK"
+        for size, wght in FACES:
+            glyphs, blob = face(greek, size, wght, k, cell_h, base,
+                                codes=range(GREEK_LO, GREEK_HI + 1),
+                                axes=lambda w: [w, 0, 0, 0], scale=GREEK_SCALE)
+            out += struct.pack(">HH", GREEK_LO, GREEK_HI)
+            for adv16, xo, yo, w, h, off in glyphs:
+                out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
+            out += struct.pack(">I", len(blob)) + blob
     return bytes(out)
 
 
@@ -271,11 +298,17 @@ def logo_file(ttf, scale):
 
 
 def main():
-    ttf, outdir = sys.argv[1], sys.argv[2]
-    heights = [int(v) for v in sys.argv[3:]] or [480, 600, 768]
+    args = sys.argv[1:]
+    greek = None
+    if "--greek" in args:
+        i = args.index("--greek")
+        greek = args[i + 1]
+        del args[i:i + 2]
+    ttf, outdir = args[0], args[1]
+    heights = [int(v) for v in args[2:]] or [480, 600, 768]
     os.makedirs(outdir, exist_ok=True)
     for H in heights:
-        data = build(ttf, H)
+        data = build(ttf, H, greek)
         with open(os.path.join(outdir, str(H)), "wb") as fh:
             fh.write(data)
         print(f"  SMOOTH {H} lines: scale {round(H * 256 / RTG_LINES) / 256:.2f}, {len(data)} bytes")
