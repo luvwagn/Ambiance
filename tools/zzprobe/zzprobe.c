@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.9 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.10 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -853,6 +853,42 @@ static BOOL webp_odd(const char *path)
     return (ULONG)n > 20 + c + (c & 1);
 }
 
+/* A library left in memory by an earlier run, opened by nobody, put out,
+ * so the file on disk is what is tested */
+static void expunge_lib(const char *name)
+{
+    struct Library *l;
+    Forbid();
+    if ((l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name)) && !l->lib_OpenCnt)
+        RemLibrary(l);
+    Permit();
+}
+
+/* jfif.datatype (Henryk Richter's) decodes smaller only through its
+ * prefs (SCALE=0..3 in ENV:classes/datatypes/jfif44.prefs, for everyone):
+ * set for each scale here, the library expunged so it reads them again,
+ * and whatever was there put back */
+#define JFIF_PREFS "classes/datatypes/jfif44.prefs"
+static void bench_jfif_scales(struct DtRun *c, struct Row *r)
+{
+    char old[200], val[220];
+    LONG had = GetVar((STRPTR)JFIF_PREFS, (STRPTR)old, sizeof(old), GVF_GLOBAL_ONLY);
+    int s;
+    for (s = 1; s < NSC; s++) {
+        snprintf(val, sizeof(val), "%s%sSCALE=%ld", had > 0 ? old : "", had > 0 ? " " : "", (long)s);
+        SetVar((STRPTR)JFIF_PREFS, (STRPTR)val, -1, GVF_GLOBAL_ONLY);
+        expunge_lib("jfif.datatype");
+        if (timed(dt_once, c, NULL, &r->best[s], &r->mean[s]))
+            break;
+    }
+    if (had > 0)
+        SetVar((STRPTR)JFIF_PREFS, (STRPTR)old, -1, GVF_GLOBAL_ONLY);
+    else
+        DeleteVar((STRPTR)JFIF_PREFS, GVF_GLOBAL_ONLY);
+    expunge_lib("jfif.datatype");
+    note_add("jfif.datatype at 1/2 to 1/8: its own SCALE prefs, set for the test and put back");
+}
+
 static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG *pw, ULONG *ph)
 {
     struct DtRun c;
@@ -887,6 +923,8 @@ static void bench_system(const char *fmt, const char *path, BOOL *is_ours, ULONG
         *pw = c.w;
     if (ph)
         *ph = c.h;
+    if (!strcmp(c.base, "jfif"))
+        bench_jfif_scales(&c, r);
     if (is_ours && *is_ours) {          /* its size hint, at each scale */
         int s;
         for (s = 1; s < NSC; s++) {
@@ -940,17 +978,6 @@ static void lib_diag(const char *path)
         snprintf(line, sizeof(line), "(*) does not open even asking for any version (IoErr %ld)", (long)IoErr());
     }
     note_add(line);
-}
-
-/* A library left in memory by an earlier run, opened by nobody, put out,
- * so the file on disk is what is tested */
-static void expunge_lib(const char *name)
-{
-    struct Library *l;
-    Forbid();
-    if ((l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name)) && !l->lib_OpenCnt)
-        RemLibrary(l);
-    Permit();
 }
 
 static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
@@ -1392,7 +1419,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.9, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.10, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
