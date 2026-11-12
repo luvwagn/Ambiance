@@ -51,3 +51,12 @@ The tests are in `test/`:
 - `compare.py`: compares against libjpeg at every scale.
 - `fuzz.py`: fuzzing with sanitizers.
 - `cyc/`: 68020 cycle counts and profiles under Musashi.
+
+## Credits
+
+jdec contains no code from libjpeg or libjpeg-turbo. It follows the
+methods they use and document, so that its pictures match theirs: the
+Arai-Agui-Nakajima fast IDCT (as in the IJG's `jidctfst.c`), libjpeg's
+"fancy" chroma upsampling, and its YCbCr-to-RGB rounding (JFIF, ITU-T
+T.871). It is tested against libjpeg through Pillow. With thanks to the
+Independent JPEG Group and the libjpeg-turbo Project (see CREDITS.txt).
