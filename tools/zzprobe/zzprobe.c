@@ -694,7 +694,7 @@ int main(void)
         me->pr_WindowPtr = (APTR)-1;    /* no "insert volume" requesters */
 
         DateStamp(&dt.dat_Stamp);
-        dt.dat_Format = FORMAT_ISO;
+        dt.dat_Format = FORMAT_INT;      /* yy-mm-dd: this NDK has no FORMAT_ISO */
         dt.dat_Flags = 0;
         dt.dat_StrDay = NULL;
         dt.dat_StrDate = (STRPTR)date;
