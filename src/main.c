@@ -4176,7 +4176,12 @@ static WORD aside_x(void)
  * pad or mouse): its thumb says how long the list is and where in it this
  * is. The mouse can click above or below the thumb to page, or drag it;
  * while the mouse is in use the thumb is bright, at rest it is dimmer. */
-#define GUT_W U(9)                  /* the column: gap, bar, gap */
+/* the column: gap, bar, gap; on a lowres screen (320 wide, its pixels
+ * twice as wide as hires ones) narrower, 1 + 3 + 1, for the rows' room */
+#define GUT_LO  (g.w < 640)
+#define GUT_W   (GUT_LO ? 5 : U(9))
+#define GUT_GAP (GUT_LO ? 1 : U(2))
+#define GUT_BAR (GUT_LO ? 3 : U(5))
 static struct { BOOL drag; WORD off; } gut;
 static BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
@@ -5361,8 +5366,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
 static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 {
     LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
-    *bx0 = list_edge(p) - GUT_W + 1 + U(2);
-    *bx1 = *bx0 + U(5) - 1;
+    *bx0 = list_edge(p) - GUT_W + 1 + GUT_GAP;
+    *bx1 = *bx0 + GUT_BAR - 1;
     t = h * vis / n;
     if (t < U(10))
         t = U(10);
