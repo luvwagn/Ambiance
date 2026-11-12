@@ -21,6 +21,11 @@
  * call had left there ("Device not configured") and gave the connection
  * up at its first read.
  *
+ * OpenSSL's error queue is emptied before each handshake, read and write:
+ * SSL_get_error reads it, and an error left there by anything before
+ * (loading the certificates) made a read that only had to wait look like
+ * a failure, every connection given up at its first wait.
+ *
  * Certificates are checked (AmiSSL's own, in AmiSSL:Certs) where something
  * of the user's is sent (plex.tv: the sign-in); a radio station's stream is
  * public, and many stations' certificates would fail an Amiga's checks
@@ -127,7 +132,18 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
         amce_strlcpy(t->why, "AmiSSL could not make a TLS context", sizeof(t->why));
         return FALSE;
     }
-    SSL_CTX_set_default_verify_paths(ctx);  /* AmiSSL:Certs */
+    if (!SSL_CTX_set_default_verify_paths(ctx) || ERR_peek_error()) {
+        /* AmiSSL's certificates (AmiSSL:Certs): what went wrong, for the
+         * log; then the queue emptied, or every call after reads it as its
+         * own failure (SSL_get_error needs it empty before the call) */
+        unsigned long q;
+        char m[160];
+        while ((q = ERR_get_error())) {
+            ERR_error_string_n(q, m, sizeof(m));
+            amce_log("https: AmiSSL's certificates", m);
+        }
+    }
+    ERR_clear_error();
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     t->ctx = ctx;
     sprintf(t->ver, "%.40s", OpenSSL_version(OPENSSL_VERSION));
@@ -193,7 +209,8 @@ static LONG result(struct TlsLib *t, SSL *s, int r)
         else if (q)
             ERR_error_string_n(q, t->why, sizeof(t->why));
         else
-            sprintf(t->why, "TLS error %ld", (long)e);
+            sprintf(t->why, "TLS error %ld (errno %ld)", (long)e, (long)t->err);
+        ERR_clear_error();
     }
     return -1;
 }
@@ -202,6 +219,7 @@ int tls_handshake(struct TlsLib *t, APTR c)
 {
     LONG r;
     BASES(t);
+    ERR_clear_error();                      /* (SSL_get_error: only this call's) */
     r = result(t, (SSL *)c, SSL_connect((SSL *)c));
     if (r == 0)
         amce_strlcpy(t->why, "the server closed the connection", sizeof(t->why));
@@ -211,12 +229,14 @@ int tls_handshake(struct TlsLib *t, APTR c)
 LONG tls_read(struct TlsLib *t, APTR c, APTR buf, LONG n)
 {
     BASES(t);
+    ERR_clear_error();
     return result(t, (SSL *)c, SSL_read((SSL *)c, buf, (int)n));
 }
 
 LONG tls_write(struct TlsLib *t, APTR c, const void *buf, LONG n)
 {
     BASES(t);
+    ERR_clear_error();
     return result(t, (SSL *)c, SSL_write((SSL *)c, buf, (int)n));
 }
 
