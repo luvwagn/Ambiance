@@ -1164,6 +1164,46 @@ static void time_parts(void)
     sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
 }
 
+static void bench_builtin_jpeg(const char *path)
+{
+    struct Row *r = row_new("JPEG", "built in (jdec, from memory)");
+    struct JdRun c;
+    int s;
+    memset(&c, 0, sizeof(c));
+    c.len = file_size(path);
+    if (c.len <= 0 || !(c.data = AllocVec((ULONG)c.len, MEMF_ANY)) || !file_read(path, c.data, c.len)) {
+        strcpy(r->note, "the test file could not be read into memory");
+        FreeVec(c.data);
+        return;
+    }
+    for (s = 0; s < NSC; s++) {
+        c.scale = s;
+        if (timed(jd_once, &c, NULL, &r->best[s], &r->mean[s])) {
+            snprintf(r->note, sizeof(r->note), "failed: %s", jd_why(c.err));
+            break;
+        }
+    }
+    FreeVec(c.data);
+}
+
+static void cell(char *out, ULONG best, ULONG mean)
+{
+    char b[16], m[16];
+    if (!best) {
+        strcpy(out, "-");
+        return;
+    }
+    if (best >= 10000)
+        sprintf(b, "%ld", (long)((best + 500) / 1000));
+    else
+        sprintf(b, "%ld.%ld", (long)(best / 1000), (long)(best % 1000 / 100));
+    if (mean >= 10000)
+        sprintf(m, "%ld", (long)((mean + 500) / 1000));
+    else
+        sprintf(m, "%ld.%ld", (long)(mean / 1000), (long)(mean % 1000 / 100));
+    sprintf(out, "%s (%s)", b, m);
+}
+
 static void bench_pictures(const char *jpeg, const char *png, const char *webp)
 {
     char line[200], c[NSC][24], f[16];
