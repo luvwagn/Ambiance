@@ -4739,8 +4739,19 @@ static void pv_draw_picture(void)
     if (j && j->thumb) {
         char m[400];
         ULONG t0 = time_ms(), now;
+        char by[64];
         ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
         now = time_ms();
+        /* who read it: AmigaMCE's own readers (ILBM, JPEG by jdec), or a
+         * datatype (its class named), and the format */
+        if (!strcmp(j->info.cls, "jdec"))
+            strcpy(by, "JPEG read by AmigaMCE (jdec)");
+        else if (j->own)
+            sprintf(by, "%.8s read by AmigaMCE", j->info.fmt[0] ? j->info.fmt : "ILBM");
+        else if (j->info.cls[0])
+            sprintf(by, "decoded by %.40s.datatype", j->info.cls);
+        else
+            strcpy(by, "decoded by a datatype");
         /* where the time went: waiting for the loader, reading, making,
          * drawing; and in all since the selection came to rest */
         sprintf(m, "%.60s, %lu x %lu, depth %lu: %s%lu ms to start, %s in %lu ms, "
@@ -4749,14 +4760,13 @@ static void pv_draw_picture(void)
                    "shown %lu ms after the move%s%s%s",
                 FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
                 (unsigned long)j->info.depth, j->urgent ? "" : "read ahead, ",
-                (unsigned long)(j->t_begun - j->t_sent), j->own ? "read by AmigaMCE" : "decoded",
+                (unsigned long)(j->t_begun - j->t_sent), by,
                 (unsigned long)j->ms_decode, (unsigned long)j->thumb->w,
                 (unsigned long)j->thumb->h, (unsigned long)j->thumb->ncol,
                 (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
                 (unsigned long)gfx_draw_ms[0], (unsigned long)gfx_draw_ms[1],
                 (unsigned long)gfx_draw_ms[2],
-                (unsigned long)(now - pv_since), j->info.cls[0] ? " (" : "",
-                j->info.cls, j->info.cls[0] ? ".datatype)" : "");
+                (unsigned long)(now - pv_since), "", "", "");
         amce_log("preview", m);
         if (j->ms_parts[0] + j->ms_parts[1] + j->ms_parts[2] + j->ms_parts[3]) {
             sprintf(m, "made in: reading the picture %lu ms, counting its colours %lu, "
