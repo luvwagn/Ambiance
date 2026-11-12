@@ -5235,6 +5235,8 @@ static void ov_hide(void)
 /* One row of the list in its slot, background and all. Rows are painted
  * one by one over what was there, never after clearing the whole list,
  * so fast scrolling does not flash. */
+static const char *row_tag(const struct Page *p, const struct Item *it);
+
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     struct Item *it = &p->list.items[idx];
@@ -5272,7 +5274,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
-        const char *tag = it->kind == IT_ACTION ? it->path : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
+        const char *tag = row_tag(p, it);
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
             gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
@@ -5495,14 +5497,23 @@ static void draw_list_rows(struct Page *p)
  * the copy need go no further, since everything right of it is background
  * in every row. Measured each move (TextLength is cheap); list entries
  * stay read-only here. */
+/* The tag a row shows at its right (a setting's value, a picture's format,
+ * a folder's count, a station's bitrate): "" none. */
+static const char *row_tag(const struct Page *p, const struct Item *it)
+{
+    return it->kind == IT_ACTION ? it->path
+         : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
+}
+
 static WORD rows_right(struct Page *p, LONG top, WORD col)
 {
     WORD vis = list_visible(), r, right = g.pane_x;
     for (r = 0; r < vis && top + r < p->list.count; r++) {
         struct Item *it = &p->list.items[top + r];
         WORD e;
-        if (it->kind == IT_ACTION && it->path[0]) {
-            right = g.w - 1;                /* right-aligned values: the whole row */
+        if (row_tag(p, it)[0]) {
+            right = g.w - 1;                /* a tag at the right (a count, a value):
+                                             * the whole row, or it stays behind */
             break;
         }
         e = g.pane_x + col + gfx_textlen(&g, it->label, TS_BODY) + U(1);
@@ -7622,12 +7633,16 @@ static void np_shortcut(struct Page *p)
     action_item(p, _("Now playing"), t, ACT_NOWPLAYING, MARK_PLAYING);
 }
 
-/* A library's long list (Artists, Albums, Recently added): a Now playing
- * row first while something plays, as Music's own page has. */
+/* A library's long list (Artists, Albums, Recently added), or one of
+ * Radio's (stations, genres, countries): a Now playing row first while
+ * something plays, as Music's and Radio's own pages have. */
 static BOOL plex_lib_list(const struct Page *p)
 {
-    return p && p->type == PT_LIST && p->plex && p->radio && !p->photos &&
-           !strncmp(p->base, "/library/sections/", 18);
+    if (!p || p->type != PT_LIST || !p->radio)
+        return FALSE;
+    if (!p->plex)
+        return p > &pages[0];               /* Radio's lists under its own page */
+    return !p->photos && !strncmp(p->base, "/library/sections/", 18);
 }
 
 /* Its Now playing row made as playback is now (added, taken out, or its
@@ -7992,11 +8007,24 @@ static void menu_slide(UWORD from, UWORD to)
  * every screen: lists, Now playing and the rest get its room. The labels
  * come back with the focus, or the pointer, on the menu; the breadcrumb
  * and the highlighted icon say where you are meanwhile. On the first page
- * it keeps its labels. TRUE if the layout changed (everything was drawn
- * again). */
+ * it keeps its labels. Opened by the pointer, it stays open (the pointer
+ * moving off, or hidden at rest, is no reason to close it) until the
+ * content is gone into: Return, Fire or Right (the focus to the content),
+ * or a click in it (menu_unpin). TRUE if the layout changed (everything
+ * was drawn again). */
+static BOOL menu_pinned;            /* opened by the pointer: open till the content is used */
+
+static void menu_unpin(void)
+{
+    menu_pinned = FALSE;
+}
+
 static BOOL menu_layout(void)
 {
-    BOOL narrow = focus != FOCUS_MENU && hover_menu < 0 && !hover_strip && depth > 0;
+    BOOL narrow;
+    if (hover_menu >= 0 || hover_strip)
+        menu_pinned = TRUE;
+    narrow = focus != FOCUS_MENU && !menu_pinned && depth > 0;
     if (!g.win || narrow == gfx_menu_is_narrow())
         return FALSE;
     menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
@@ -8009,6 +8037,8 @@ static BOOL menu_layout(void)
 static void set_focus(int f)
 {
     pane_settle();
+    if (f == FOCUS_CONTENT && !section_inert())
+        menu_unpin();                       /* into the content: the menu to its icons */
     if (focus == f || (f == FOCUS_CONTENT && section_inert()))
         return;
     focus = f;
@@ -10093,6 +10123,7 @@ static void radio_done(struct NetJob *j)
             sprintf(m, "%s: %ld listed, %ld left out, from %s in %ld ms", p->title, (long)n,
                     (long)skipped, j->server, (long)j->ms);
             amce_log("radio", m);
+            plex_shortcut_fix(p);           /* Now playing first, while a station plays */
         }
         if (p == cur() && !pane_pending) {
             msg[0] = 0;
@@ -12131,8 +12162,11 @@ static void handle_mouse(struct IntuiMessage *im)
             amce_log("click", "it stopped a coast, and did nothing else");
         return;                             /* a click during a coast only stops it */
     }
-    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top))
+    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top)) {
         pane_settle();              /* a click outside the menu acts on the section */
+        if (im->Code == SELECTDOWN && x >= g.menu_w && y >= g.top && y < g.footer_y)
+            menu_unpin();           /* the content clicked: the menu to its icons */
+    }
     tb = cur_tb();
     if (!tb && pv_tb.open)
         tb = &pv_tb;                /* the preview pane's fact sheet */
