@@ -1,4 +1,4 @@
-; $VER: Install-AmigaMCE 1.4 (11.11.2026)
+; $VER: Install-AmigaMCE 1.5 (11.11.2026)
 ;
 ; Installer script for AmigaMCE: the program with its fonts and licences,
 ; and the languages chosen: the Workbench's own (none besides English on
@@ -17,6 +17,10 @@
 ; offered where LIBS: has none or an older one. modplug.library (public
 ; domain), mpega.library and xfdmaster.library with its decrunchers (free
 ; to pass on, not for profit, each archive whole and unchanged).
+;
+; Installer will not compile a very long string ("symbol or string too
+; long": a 548-character help text did it), so long texts are put
+; together with cat, each piece under 200 characters.
 ;
 ; This file is Latin-1 (Français, Español, Português).
 
@@ -162,7 +166,13 @@
       (set #libs
         (askoptions
           (prompt "AmigaMCE plays more with these libraries from Aminet. Which should be installed in LIBS:? Those missing, or older than these, are ticked.")
-          (help "modplug.library (public domain) mixes XM, S3M, IT and multichannel MODs on a 68020 or better.\n\nmpega.library 2.4 (Stéphane Tavenard, giftware) decodes MP3 for radio, Plex and music files: its 68040 build on a 68040 or 68060, its 68020 build otherwise.\n\nxfdmaster.library 39.15 (Georg Hörmann, Dirk Stöcker) unpacks packed modules; its decrunchers go in LIBS:xfd, only those not there already.\n\nmpega and xfd are free to pass on but not for profit. Their archives are in this one's Extras drawer, whole and unchanged, with their own documents.")
+          (help (cat "modplug.library (public domain) mixes XM, S3M, IT and multichannel MODs on a 68020 or better.\n\n"
+                     "mpega.library 2.4 (Stéphane Tavenard, giftware) decodes MP3 for radio, Plex and music files: "
+                     "its 68040 build on a 68040 or 68060, its 68020 build otherwise.\n\n"
+                     "xfdmaster.library 39.15 (Georg Hörmann, Dirk Stöcker) unpacks packed modules; "
+                     "its decrunchers go in LIBS:xfd, only those not there already.\n\n"
+                     "mpega and xfd are free to pass on but not for profit. Their archives are in this one's "
+                     "Extras drawer, whole and unchanged, with their own documents."))
           (choices (cat "modplug.library: XM, S3M, IT (" #st0 ")")
                    (cat "mpega.library: MP3 (" #st1 ")")
                    (cat "xfdmaster.library: packed modules (" #st2 ")"))
