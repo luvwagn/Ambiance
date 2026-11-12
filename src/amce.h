@@ -824,6 +824,7 @@ int  amce_strnicmp(const char *a, const char *b, LONG n);
  * when they would wait. */
 struct TlsLib {
     struct Library *master, *ssl, *ext;
+    struct Library *sock;       /* the process's bsdsocket.library (the bytes moved here) */
     APTR ctx;                   /* NULL: not open */
     BOOL tried;
     LONG err;                   /* the socket calls' errno: the stack's and AmiSSL's both */
