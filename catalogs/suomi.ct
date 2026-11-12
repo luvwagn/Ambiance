@@ -169,6 +169,15 @@ kyllä
 MSG_62366FFA
 ei
 ; no
+MSG_7A881EB1
+ZZ9000: Zorro %s; JPEG %s, PNG %s
+; ZZ9000: on Zorro %s; JPEG %s, PNG %s
+MSG_714F0E2D
+puretaan kortilla
+; decoded on the card
+MSG_7AFA07FD
+puretaan täällä
+; decoded here
 MSG_25AF384C
 Vapaa muisti: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast
@@ -226,6 +235,9 @@ MP3: %s
 MSG_197B8973
 MHI-ajuri
 ; MHI driver
+MSG_4B721655
+ZZ9000 SDK:n mpega.library (puretaan kortilla)
+; mpega.library, the ZZ9000 SDK's (decoded on the card)
 MSG_578E3365
 FLAC: %s
 ; FLAC: %s
@@ -505,9 +517,9 @@ ei asennettu
 MSG_2DA3A6A5
 MP3-dekooderi
 ; MP3 decoder
-MSG_7AFA07FD
-puretaan täällä
-; decoded here
+MSG_3F71ACC2
+puretaan ZZ9000:lla
+; decoded on the ZZ9000
 MSG_22FBBBB2
 purkaa ja soittaa
 ; decodes and plays
@@ -1141,6 +1153,9 @@ Tunnus: ei asetettu
 MSG_0B620CC7
 MP3: purkaa MHI-ajuri %.40s
 ; MP3: decoded by the MHI driver %.40s
+MSG_59D38C2E
+MP3: puretaan ZZ9000:lla (sen mpega.library)
+; MP3: decoded on the ZZ9000 (its mpega.library)
 MSG_1133EF71
 MP3: purkaa mpega.library
 ; MP3: decoded by mpega.library

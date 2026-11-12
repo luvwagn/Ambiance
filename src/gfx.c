@@ -2314,18 +2314,68 @@ static const UBYTE s_bmp[] = { 'B','M', 58,0,0,0, 0,0,0,0, 54,0,0,0, 40,0,0,0, 1
 static const UBYTE s_pcx[] = { 10, 5, 1, 8, 0,0, 0,0, 0,0, 0,0, 72,0, 72,0 };
 static const UBYTE s_tga[] = { 0, 0, 2, 0,0, 0,0, 0, 0,0, 0,0, 1,0, 1,0, 24, 0, 255,255,255 };
 
+static const struct { const char *fmt, *ext; const UBYTE *data; UWORD len; } dt_sample[] = {
+    { "ILBM", "iff", s_ilbm, sizeof(s_ilbm) }, { "GIF", "gif", s_gif, sizeof(s_gif) },
+    { "JPEG", "jpg", s_jpeg, sizeof(s_jpeg) }, { "PNG", "png", s_png, sizeof(s_png) },
+    { "BMP", "bmp", s_bmp, sizeof(s_bmp) }, { "PCX", "pcx", s_pcx, sizeof(s_pcx) },
+    { "TGA", "tga", s_tga, sizeof(s_tga) },
+};
+
+/* The datatype that reads sample i (written to T: and recognised as a
+ * file is), or NULL: ReleaseDataType it. No requesters: the caller's
+ * pr_WindowPtr. */
+static struct DataType *dt_of_sample(LONG i)
+{
+    struct DataType *dtn = NULL;
+    char file[40];
+    BPTR fh, l;
+    sprintf(file, "T:AmigaMCE-probe.%s", dt_sample[i].ext);
+    if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
+        Write(fh, (APTR)dt_sample[i].data, dt_sample[i].len);
+        Close(fh);
+    }
+    if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+        dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
+        UnLock(l);
+    }
+    DeleteFile((CONST_STRPTR)file);
+    if (dtn && (!dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != GID_PICTURE)) {
+        ReleaseDataType(dtn);
+        dtn = NULL;
+    }
+    return dtn;
+}
+
+/* Pictures of this format ("JPEG", "PNG") are read by the ZZ9000's own
+ * datatype (zz9k-picture.datatype, its descriptor moved from
+ * SYS:Storage/DataTypes to DEVS:DataTypes): decoded on the card. */
+BOOL pic_on_card(const char *fmt)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    BOOL r = FALSE;
+    LONG i;
+    if (!DataTypesBase)
+        return FALSE;
+    me->pr_WindowPtr = (APTR)-1;
+    for (i = 0; i < (LONG)(sizeof(dt_sample) / sizeof(dt_sample[0])); i++) {
+        struct DataType *dtn;
+        if (strcmp(dt_sample[i].fmt, fmt) || !(dtn = dt_of_sample(i)))
+            continue;
+        r = dtn->dtn_Header->dth_BaseName &&
+            !amce_stricmp((const char *)dtn->dtn_Header->dth_BaseName, "zz9k-picture");
+        ReleaseDataType(dtn);
+    }
+    me->pr_WindowPtr = oldwin;
+    return r;
+}
+
 void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
 {
-    static const struct { const char *fmt, *ext; const UBYTE *data; UWORD len; } s[] = {
-        { "ILBM", "iff", s_ilbm, sizeof(s_ilbm) }, { "GIF", "gif", s_gif, sizeof(s_gif) },
-        { "JPEG", "jpg", s_jpeg, sizeof(s_jpeg) }, { "PNG", "png", s_png, sizeof(s_png) },
-        { "BMP", "bmp", s_bmp, sizeof(s_bmp) }, { "PCX", "pcx", s_pcx, sizeof(s_pcx) },
-        { "TGA", "tga", s_tga, sizeof(s_tga) },
-    };
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
     struct Library *lib;
-    char line[160], file[40];
+    char line[160];
     LONG i;
     if (!DataTypesBase) {
         out(ctx, "datatypes.library: missing (only IFF ILBM pictures can be shown)");
@@ -2340,33 +2390,22 @@ void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
     }
     out(ctx, line);
     me->pr_WindowPtr = (APTR)-1;
-    for (i = 0; i < (LONG)(sizeof(s) / sizeof(s[0])); i++) {
-        BPTR fh, l;
-        struct DataType *dtn = NULL;
-        sprintf(file, "T:AmigaMCE-probe.%s", s[i].ext);
-        if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
-            Write(fh, (APTR)s[i].data, s[i].len);
-            Close(fh);
-        }
-        if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
-            dtn = ObtainDataTypeA(DTST_FILE, (APTR)l, NULL);
-            UnLock(l);
-        }
-        DeleteFile((CONST_STRPTR)file);
-        if (!dtn || !dtn->dtn_Header || dtn->dtn_Header->dth_GroupID != GID_PICTURE) {
-            sprintf(line, "  %s: no datatype", s[i].fmt);
+    for (i = 0; i < (LONG)(sizeof(dt_sample) / sizeof(dt_sample[0])); i++) {
+        struct DataType *dtn = dt_of_sample(i);
+        if (!dtn) {
+            sprintf(line, "  %s: no datatype", dt_sample[i].fmt);
         } else {
             const struct DataTypeHeader *h = dtn->dtn_Header;
             char cls[64];
             const char *base = h->dth_BaseName ? (const char *)h->dth_BaseName : "?";
             sprintf(cls, "datatypes/%.40s.datatype", base);
             if ((lib = OpenLibrary((CONST_STRPTR)cls, 0))) {
-                sprintf(line, "  %s: %.40s.datatype %lu.%lu (descriptor %.30s)", s[i].fmt, base,
+                sprintf(line, "  %s: %.40s.datatype %lu.%lu (descriptor %.30s)", dt_sample[i].fmt, base,
                         (unsigned long)lib->lib_Version, (unsigned long)lib->lib_Revision,
                         h->dth_Name ? (const char *)h->dth_Name : "?");
                 CloseLibrary(lib);
             } else {
-                sprintf(line, "  %s: %.40s.datatype, not found (descriptor %.30s)", s[i].fmt, base,
+                sprintf(line, "  %s: %.40s.datatype, not found (descriptor %.30s)", dt_sample[i].fmt, base,
                         h->dth_Name ? (const char *)h->dth_Name : "?");
             }
         }

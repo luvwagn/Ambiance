@@ -28,6 +28,8 @@ struct Caps {
     UWORD kick, kick_rev; /* ROM: exec version, SysBase->SoftVer */
     UWORD wb, wb_rev;     /* version.library on disk, 0 if absent */
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
+    UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
+    BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
     UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
@@ -571,6 +573,7 @@ void st_set_buffer(int level);
 void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams */
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
+void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
@@ -712,6 +715,7 @@ LONG ldr_out(void);             /* jobs out now */
 void pic_dispose(APTR obj);
 /* System Information: which datatype reads each picture format (a line each). */
 void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx);
+BOOL pic_on_card(const char *fmt);     /* "JPEG", "PNG": read by the ZZ9000's datatype */
 
 /* ---------------------------------------------------------------- textbox */
 struct TextBox {
@@ -888,6 +892,8 @@ struct PlexConf {
     UWORD cpu;                  /* caps.cpu (plex_load) */
     BOOL flac;                  /* flacdec.library installed: FLAC plays as stored too */
     BOOL mhi;                   /* MP3 by an MHI driver: no decoding here, any quality */
+    BOOL mp3_card;              /* MP3 by the ZZ9000 SDK's mpega.library: on the card, any quality */
+    BOOL jpeg_card;             /* JPEG read by the ZZ9000's datatype: covers and photos as JPEG */
     char library[16];           /* the music library used ("" not known yet) */
     UWORD libraries;            /*   of how many on the server */
 };

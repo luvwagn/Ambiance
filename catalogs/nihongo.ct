@@ -169,6 +169,15 @@ MSG_4E9F3590
 MSG_62366FFA
 いいえ
 ; no
+MSG_7A881EB1
+ZZ9000: Zorro %s; JPEG %s、PNG %s
+; ZZ9000: on Zorro %s; JPEG %s, PNG %s
+MSG_714F0E2D
+カードでデコード
+; decoded on the card
+MSG_7AFA07FD
+ここでデコード
+; decoded here
 MSG_25AF384C
 空きメモリ: チップ%luKB、ファスト%luKB
 ; Free memory: %luKB chip, %luKB fast
@@ -226,6 +235,9 @@ MP3: %s
 MSG_197B8973
 MHIドライバー
 ; MHI driver
+MSG_4B721655
+mpega.library (ZZ9000 SDKのもの、カードでデコード)
+; mpega.library, the ZZ9000 SDK's (decoded on the card)
 MSG_578E3365
 FLAC: %s
 ; FLAC: %s
@@ -505,9 +517,9 @@ MSG_7EF1200C
 MSG_2DA3A6A5
 MP3デコーダー
 ; MP3 decoder
-MSG_7AFA07FD
-ここでデコード
-; decoded here
+MSG_3F71ACC2
+ZZ9000でデコード
+; decoded on the ZZ9000
 MSG_22FBBBB2
 デコードして再生
 ; decodes and plays
@@ -1141,6 +1153,9 @@ MSG_59B6EDB9
 MSG_0B620CC7
 MP3: MHIドライバー%.40sでデコード
 ; MP3: decoded by the MHI driver %.40s
+MSG_59D38C2E
+MP3: ZZ9000でデコード (そのmpega.library)
+; MP3: decoded on the ZZ9000 (its mpega.library)
 MSG_1133EF71
 MP3: mpega.libraryでデコード
 ; MP3: decoded by mpega.library

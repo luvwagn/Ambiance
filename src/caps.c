@@ -13,6 +13,7 @@
 #include <proto/graphics.h>
 #include <proto/expansion.h>
 #include <libraries/configvars.h>
+#include <string.h>
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -40,6 +41,42 @@ static BOOL emulator_detect(void)
         Permit();
     }
     return found;
+}
+
+/* The ZZ9000 (MNT's graphics and coprocessor card): its Zorro II and
+ * Zorro III boards, by their autoconfig IDs (the ZZ9000 SDK's abi.h:
+ * manufacturer 0x6d6e, products 3 and 4). Amiberry's emulated one shows
+ * the same. */
+#define ZZ9000_MANUFACTURER 0x6d6e
+#define ZZ9000_PRODUCT_Z2   3
+#define ZZ9000_PRODUCT_Z3   4
+
+static UBYTE zz9000_detect(void)
+{
+    UBYTE z = 0;
+    ExpansionBase = (struct ExpansionBase *)OpenLibrary((CONST_STRPTR)"expansion.library", 36);
+    if (ExpansionBase) {
+        if (FindConfigDev(NULL, ZZ9000_MANUFACTURER, ZZ9000_PRODUCT_Z3))
+            z = 3;
+        else if (FindConfigDev(NULL, ZZ9000_MANUFACTURER, ZZ9000_PRODUCT_Z2))
+            z = 2;
+        CloseLibrary((struct Library *)ExpansionBase);
+        ExpansionBase = NULL;
+    }
+    return z;
+}
+
+/* A library whose ID string ($VER) contains what: the ZZ9000 SDK's
+ * mpega.library says "ZZ9000 SDK" in its own. */
+static BOOL lib_id_has(const char *name, const char *what)
+{
+    struct Library *l = OpenLibrary((CONST_STRPTR)name, 0);
+    BOOL r = FALSE;
+    if (l) {
+        r = l->lib_IdString && strstr((const char *)l->lib_IdString, what) != NULL;
+        CloseLibrary(l);
+    }
+    return r;
 }
 
 static BOOL lib_present(const char *name, ULONG ver)
@@ -163,6 +200,10 @@ void caps_detect(struct Caps *c)
     c->rtg = any_rtg_mode();
     c->net = lib_present("bsdsocket.library", 4);
     c->mp3_mpega = lib_present("mpega.library", 0);
+    /* The ZZ9000 SDK's mpega.library decodes on the card: AmigaMCE need
+     * not ask it for less than a fast Amiga would (stream.c, plex.c). */
+    c->zz9000 = zz9000_detect();
+    c->mpega_zz = c->mp3_mpega && lib_id_has("mpega.library", "ZZ9000");
     c->mp3_mhi = path_present("LIBS:MHI");
     c->ahi = path_present("DEVS:ahi.device");      /* AHI: Settings > Sound, later */
     c->flacdec = lib_present("flacdec.library", 1);  /* FLAC tracks as stored (Plex) */
