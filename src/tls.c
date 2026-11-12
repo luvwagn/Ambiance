@@ -89,6 +89,41 @@ static BOOL own(struct TlsLib *t, BOOL on)
 
 #define BASES(t) (void)(t)
 
+/* OpenSSL's random numbers seeded from what this Amiga has to hand: the
+ * clock and the date, the beam's position (read again and again, each
+ * read a little later), tasks and free memory. A TLS handshake needs
+ * random numbers at once; AmiSSL on a 68k has no source of its own here
+ * (as YAM, by AmiSSL's own author, seeds it), and without one OpenSSL
+ * stopped the handshake at its first step with a "system library" error
+ * ("Device not configured"). */
+static void seed(struct TlsLib *t)
+{
+    ULONG pool[48];
+    struct DateStamp ds;
+    volatile UWORD *vhpos = (volatile UWORD *)0xDFF006;
+    int i, k = 0;
+    BASES(t);
+    DateStamp(&ds);
+    pool[k++] = (ULONG)ds.ds_Days;
+    pool[k++] = (ULONG)ds.ds_Minute;
+    pool[k++] = (ULONG)ds.ds_Tick;
+    pool[k++] = time_ms();
+    pool[k++] = (ULONG)FindTask(NULL);
+    pool[k++] = AvailMem(MEMF_ANY);
+    pool[k++] = AvailMem(MEMF_CHIP);
+    pool[k++] = (ULONG)SysBase->DispCount;
+    pool[k++] = (ULONG)SysBase->IdleCount;
+    pool[k++] = (ULONG)t ^ (ULONG)t->ctx;
+    for (i = 0; k < 48; i++) {
+        ULONG v = ((ULONG)*vhpos << 16) ^ time_ms() ^ ((ULONG)i * 2654435761UL);
+        LONG d;
+        for (d = 0; d < 50 + (LONG)(v & 63); d++)
+            v = v * 1103515245UL + 12345UL + *vhpos;    /* a little later each time */
+        pool[k++] = v;
+    }
+    RAND_seed(pool, sizeof(pool));
+}
+
 BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
 {
     struct Library *AmiSSLMasterBase, *ssl = NULL, *ext = NULL;
@@ -142,8 +177,18 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
     ERR_clear_error();
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     t->ctx = ctx;
+    {
+        int before = RAND_status();
+        char m[80];
+        seed(t);
+        sprintf(m, "random numbers %s before seeding, %s after",
+                before == 1 ? "ready" : "not ready", RAND_status() == 1 ? "ready" : "not ready");
+        amce_log("https", m);
+        ERR_clear_error();
+    }
     sprintf(t->ver, "%.40s", OpenSSL_version(OPENSSL_VERSION));
     t->why[0] = 0;
+    amce_log("https: AmiSSL opened", t->ver);
     return TRUE;
 }
 
@@ -281,12 +326,19 @@ static LONG result(struct TlsLib *t, SSL *s, int r)
         return 0;                           /* closed without a goodbye: many servers */
     {
         long v = SSL_get_verify_result(s);
-        unsigned long q = ERR_get_error();
+        const char *file = NULL, *data = NULL;
+        int line = 0, flags = 0;
+        unsigned long q = ERR_get_error_line_data(&file, &line, &data, &flags);
         if (q && ERR_GET_REASON(q) == SSL_R_CERTIFICATE_VERIFY_FAILED && v != X509_V_OK)
             sprintf(t->why, "certificate: %.80s", X509_verify_cert_error_string(v));
-        else if (q)
-            ERR_error_string_n(q, t->why, sizeof(t->why));
-        else
+        else if (q) {
+            char w[100];
+            ERR_error_string_n(q, w, sizeof(w));
+            /* where in OpenSSL it came from, for the log */
+            sprintf(t->why, "%.70s (%.24s:%ld%s%.16s)", w, file ? (const char *)FilePart((STRPTR)file) : "?",
+                    (long)line, data && (flags & ERR_TXT_STRING) ? " " : "",
+                    data && (flags & ERR_TXT_STRING) ? data : "");
+        } else
             sprintf(t->why, "TLS error %ld", (long)e);
         ERR_clear_error();
     }
