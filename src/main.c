@@ -4095,6 +4095,11 @@ static BOOL ov_eligible(const struct Page *p)
     LONG i, runs = 0;
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
+    if (p->radio && !p->plex)
+        /* Radio: Countries alone is A to Z (this Amiga's first); stations
+         * and genres come by votes, listeners or size, where a letter
+         * would say nothing */
+        return !strcmp(p->base, RADIO_COUNTRIES);
     for (i = 0; i < p->list.count; i++)
         if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
             p->list.items[i].kind == IT_ANIM || p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
