@@ -7748,6 +7748,11 @@ static void np_shortcut(struct Page *p)
     action_item(p, _("Now playing"), t, ACT_NOWPLAYING, MARK_PLAYING);
 }
 
+/* How long a Plex server may take to start answering a list: a NAS's
+ * (a Synology's, say) thinks for longer than 20 seconds over a large
+ * library's artists, where a PC's answers at once. Esc gives up sooner. */
+#define PLEX_WAIT_S 60
+
 /* A library's long list (Artists, Albums, Recently added), or one of
  * Radio's (stations, genres, countries): a Now playing row first while
  * something plays, as Music's and Radio's own pages have. */
@@ -9614,6 +9619,7 @@ static void plex_more_ask(struct Page *p)
     } else {
         plex_request_from(p->base, k * PLEX_PART, j->path, sizeof(j->path));
         j->parse = 1;
+        j->wait_s = PLEX_WAIT_S;          /* a NAS's server may think for a while */
         j->start = k * PLEX_PART + 1;       /* +1: never 0, which is a first part */
         amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
     }
@@ -10372,6 +10378,7 @@ static void radio_open(struct Item *it)
             j->port = plex.port;
             plex_request(p->base, j->path, sizeof(j->path));
             j->parse = 1;                   /* read in the network process */
+            j->wait_s = PLEX_WAIT_S;        /* a NAS's server may think for a while */
             amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
             sprintf(msg, _("Asking %.40s...  Esc to give up"), plex.name[0] ? plex.name : plex.host);
         }
@@ -10493,6 +10500,7 @@ static void plex_refetch(struct Page *p, const char *key)
     j->port = plex.port;
     plex_request(key, j->path, sizeof(j->path));
     j->parse = 1;
+    j->wait_s = PLEX_WAIT_S;
     amce_strlcpy(j->pkey, key, sizeof(j->pkey));
     j->seq = ++rq_seq;
     p->net_seq = j->seq;

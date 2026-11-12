@@ -299,7 +299,8 @@ static BOOL read_all(struct NetJob *j, LONG s, APTR c)
     }
     for (;;) {
         LONG r;
-        int w = c && tls_pending(&tls, c) > 0 ? 1 : wait_sock(j, s, FALSE, READ_S);
+        int w = c && tls_pending(&tls, c) > 0 ? 1
+              : wait_sock(j, s, FALSE, j->wait_s ? j->wait_s : READ_S);
         if (w <= 0) {
             FreeVec(b);
             set_err(j, w < 0 ? _("Cancelled") : _("The server stopped answering"));

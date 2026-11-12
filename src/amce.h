@@ -867,6 +867,7 @@ struct NetJob {
     UBYTE gdm;                  /* not a request: Plex servers looked for on the network */
     UBYTE tls;                  /* HTTPS (port 0: 443), AmiSSL's certificate check */
     UBYTE post;                 /* POST, with no body, rather than GET */
+    UBYTE wait_s;               /* seconds without a byte before giving up (0: 20) */
     char extra[320];            /* more request headers ("Name: value\r\n" each) */
     UWORD port;                 /* 0: 80 */
     char host[80];              /* "" the radio-browser.info API (found by DNS) */
