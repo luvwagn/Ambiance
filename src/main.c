@@ -504,6 +504,20 @@ static char plex_shown[260];
 
 static BOOL busy_was_shown;         /* the last busy_end took a spinner off the screen */
 
+/* A folder being read in this task (dirscan.c's dir_tick): the spinner
+ * turns as its entries come, at most every 40 ms, so a slow one (on a
+ * network share) shows it is working. */
+static void busy_dir_tick(void)
+{
+    static ULONG last;
+    ULONG now = time_ms();
+    if (!busy.depth || (LONG)(now - last) < 40)
+        return;
+    last = now;
+    busy_tick();
+    gfx_present(&g);
+}
+
 static void busy_end(BOOL redraw)
 {
     if (busy.depth && --busy.depth == 0 && busy.on) {
@@ -4054,8 +4068,11 @@ static BOOL ov_eligible(const struct Page *p)
     for (i = 0; i < p->list.count; i++)
         if (p->list.items[i].kind == IT_RUN || p->list.items[i].kind == IT_PIC ||
             p->list.items[i].kind == IT_ANIM || p->list.items[i].kind == IT_MOD || p->list.items[i].kind == IT_SONG ||
-            p->list.items[i].kind == IT_PLEXDIR)
-            runs++;                         /* lists in title order (not a track list's) */
+            p->list.items[i].kind == IT_PLEXDIR ||
+            (p->list.items[i].kind == IT_DIR && (p->songs || p->mods || p->pics)))
+            runs++;                         /* lists in title order (not a track list's);
+                                             * folders of music, modules and pictures
+                                             * by name too (a library's artists) */
     return runs * 2 >= p->list.count;
 }
 
@@ -12167,6 +12184,8 @@ static int app_main(void)
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
+        dir_tick_task = FindTask(NULL);
+        dir_tick = busy_dir_tick;
         me->pr_WindowPtr = (APTR)-1;
         l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.noloader", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;

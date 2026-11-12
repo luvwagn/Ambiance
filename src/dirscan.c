@@ -7,6 +7,10 @@
  * hands over a buffer full at a time (PFS3 and FFS do it natively; dos
  * emulates it for file systems that do not), so it is used, with ExNext
  * as the fallback should ExAll fail before giving anything.
+ *
+ * dir_tick, if set, is called every few entries in the task that set it
+ * (main.c: the spinner turns while a slow folder, a network share, is
+ * read); other tasks' scans leave it alone.
  */
 #include "amce.h"
 
@@ -17,6 +21,15 @@
 
 #define EXALL_BUF 4096
 
+void (*dir_tick)(void);
+struct Task *dir_tick_task;
+
+static void tick(LONG n)
+{
+    if (dir_tick && !(n & 7) && FindTask(NULL) == dir_tick_task)
+        dir_tick();
+}
+
 static LONG by_exnext(BPTR lock, DirFn fn, void *ctx)
 {
     struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
@@ -26,7 +39,7 @@ static LONG by_exnext(BPTR lock, DirFn fn, void *ctx)
     if (Examine(lock, fib))
         while (ExNext(lock, fib)) {
             fn(ctx, (const char *)fib->fib_FileName, fib->fib_DirEntryType > 0);
-            n++;
+            tick(++n);
         }
     FreeDosObject(DOS_FIB, fib);
     return n;
@@ -71,7 +84,7 @@ LONG dir_scan(const char *dir, DirFn fn, void *ctx)
         if (eac->eac_Entries)
             for (ed = buf; ed; ed = ed->ed_Next) {
                 fn(ctx, (const char *)ed->ed_Name, ed->ed_Type > 0);
-                n++;
+                tick(++n);
             }
     } while (more);
     FreeDosObject(DOS_EXALLCONTROL, eac);

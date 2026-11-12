@@ -165,7 +165,7 @@ BOOL song_name_ok(const char *name)
 /* ---- whether a folder has music in it, anywhere below: looked through
  * (a few levels down; in a very large tree it is taken to have), and the
  * answer kept for the session */
-#define HAS_KEPT   96
+#define HAS_KEPT   512
 #define HAS_DEPTH  4
 #define HAS_BUDGET 1500             /* entries looked at, at most */
 static struct { ULONG hash; BOOL yes; } has_kept[HAS_KEPT];
@@ -242,8 +242,6 @@ static void song_cb(void *ctx, const char *name, BOOL isdir)
     if (!isdir && !song_name_ok(name))
         return;
     join_path(path, sizeof(path), c->dir, name);
-    if (isdir && !has_music_kept(path))
-        return;                             /* no music anywhere in it */
     amce_strlcpy(label, name, sizeof(label));
     if (!isdir && (dot = strrchr(label, '.')))
         *dot = 0;                           /* the name without .mp3, .flac */
@@ -252,6 +250,12 @@ static void song_cb(void *ctx, const char *name, BOOL isdir)
     if (list_add(c->out, label, path, key, isdir ? IT_DIR : IT_SONG) && !isdir)
         c->mods++;
 }
+
+/* A folder with more folders than this has them all listed, without
+ * looking inside each for music: an artist folder of a big library on a
+ * network share was thousands of folder reads (minutes) before its list
+ * showed. */
+#define SONGS_LOOK_MAX 64
 
 /* dir's folders with music and its music files into out, sorted; -1 if it
  * cannot be read. */
@@ -266,6 +270,19 @@ LONG songs_read_dir(const char *dir, struct ItemList *out)
     c.out = out;
     c.mods = 0;
     n = dir_scan(dir, song_cb, &c);
+    if (n >= 0) {
+        LONG i, k, dirs = 0;
+        for (i = 0; i < out->count; i++)
+            if (out->items[i].kind == IT_DIR)
+                dirs++;
+        if (dirs && dirs <= SONGS_LOOK_MAX) {
+            /* the folders with no music anywhere in them left out */
+            for (i = k = 0; i < out->count; i++)
+                if (out->items[i].kind != IT_DIR || has_music_kept(out->items[i].path))
+                    out->items[k++] = out->items[i];
+            out->count = k;
+        }
+    }
     me->pr_WindowPtr = old;
     if (n < 0)
         return -1;

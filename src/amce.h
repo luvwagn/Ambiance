@@ -802,6 +802,8 @@ UBYTE *idx_block(const char *file, ULONG off, ULONG len);  /* FreeVec it */
  * given each name and whether it is a folder. -1 if dir cannot be read. */
 typedef void (*DirFn)(void *ctx, const char *name, BOOL isdir);
 LONG dir_scan(const char *dir, DirFn fn, void *ctx);
+extern void (*dir_tick)(void);  /* called as entries come, in dir_tick_task only */
+extern struct Task *dir_tick_task;
 
 /* ---------------------------------------------------------------- util */
 int  amce_stricmp(const char *a, const char *b);
