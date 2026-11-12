@@ -5640,13 +5640,23 @@ static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
          * time, then those under it are painted again (what was copied
          * there carries the letter, moved), and it over them */
         BOOL was = ov_hold;
+        LONG k = p->top - old_top;
         ov_hold = TRUE;
         draw_list_move2(p, old_sel, old_top);
         ov_hold = was;
-        if (p->top != old_top)
-            ov_rows_under(p);
-        else
+        if (k) {
+            /* the copy took the letter's pixels k rows along with the rows
+             * (up for k > 0, down for k < 0): those rows too, or a sliver
+             * of it is left there and carried further each move */
+            WORD o = U(1) > 0 ? U(1) : 1, y0 = ov.y - o, y1 = ov.y + ov.bl->h - 1 + o;
+            if (k > 0)
+                y0 -= (WORD)(k * g.list_row_h);
+            else
+                y1 += (WORD)(-k * g.list_row_h);
+            ov_rows(p, y0, y1);
+        } else {
             ov_stamp();
+        }
     } else {
         draw_list_move2(p, old_sel, old_top);
     }
