@@ -26,7 +26,15 @@
  * (loading the certificates) made a read that only had to wait look like
  * a failure, every connection given up at its first wait.
  *
- * Certificates are checked (AmiSSL's own, in AmiSSL:Certs) where something
+ * The root certificates a server's is checked against are AmigaMCE's own,
+ * Certs/cacert.pem (Mozilla's, from certifi), read here and given to
+ * OpenSSL from memory, the first time a check is wanted; AmiSSL's own
+ * (AmiSSL:Certs) only without them, and only where that assign exists:
+ * OpenSSL's default lookup stat()ed AmiSSL:Certs, which an AmiSSL put in
+ * LIBS: alone (as AGS's is) does not have, and the handshake failed with
+ * "system library: Device not configured".
+ *
+ * Certificates are checked where something
  * of the user's is sent (plex.tv: the sign-in); a radio station's stream is
  * public, and many stations' certificates would fail an Amiga's checks
  * (a clock not set, an old chain), so theirs is not.
@@ -163,18 +171,7 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
         amce_strlcpy(t->why, "AmiSSL could not make a TLS context", sizeof(t->why));
         return FALSE;
     }
-    if (!SSL_CTX_set_default_verify_paths(ctx) || ERR_peek_error()) {
-        /* AmiSSL's certificates (AmiSSL:Certs): what went wrong, for the
-         * log; then the queue emptied, or every call after reads it as its
-         * own failure (SSL_get_error needs it empty before the call) */
-        unsigned long q;
-        char m[160];
-        while ((q = ERR_get_error())) {
-            ERR_error_string_n(q, m, sizeof(m));
-            amce_log("https: AmiSSL's certificates", m);
-        }
-    }
-    ERR_clear_error();
+    ERR_clear_error();                      /* (SSL_get_error needs it empty) */
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     t->ctx = ctx;
     {
@@ -222,10 +219,109 @@ struct TlsConn {
     UBYTE in[4096];
 };
 
+/* ---- the root certificates */
+static char certs_path[256];            /* set by the main task, read here */
+
+void tls_set_certs(const char *path)
+{
+    amce_strlcpy(certs_path, path ? path : "", sizeof(certs_path));
+}
+
+/* A file whole into memory (AllocVec'd, 0 after it): NULL if not there. */
+static char *read_whole(const char *path, ULONG *len)
+{
+    BPTR fh;
+    LONG size, got;
+    char *b = NULL;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    fh = path[0] ? Open((CONST_STRPTR)path, MODE_OLDFILE) : 0;
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return NULL;
+    Seek(fh, 0, OFFSET_END);
+    size = Seek(fh, 0, OFFSET_BEGINNING);
+    if (size > 0 && size < 2L << 20 && (b = AllocVec(size + 1, MEMF_ANY))) {
+        got = Read(fh, b, size);
+        if (got != size) {
+            FreeVec(b);
+            b = NULL;
+        } else {
+            b[size] = 0;
+            *len = (ULONG)size;
+        }
+    }
+    Close(fh);
+    return b;
+}
+
+/* The root certificates into the context's store, once: TRUE if there
+ * are some. */
+static BOOL certs_load(struct TlsLib *t)
+{
+    char m[200], *pem;
+    ULONG len = 0, t0 = time_ms();
+    LONG n = 0;
+    BASES(t);
+    if (t->certs)
+        return t->certs > 0;
+    t->certs = -1;
+    if ((pem = read_whole(certs_path, &len))) {
+        BIO *b = BIO_new_mem_buf(pem, (int)len);
+        X509_STORE *st = SSL_CTX_get_cert_store((SSL_CTX *)t->ctx);
+        X509 *x;
+        while (b && st && (x = PEM_read_bio_X509(b, NULL, NULL, NULL))) {
+            if (X509_STORE_add_cert(st, x))
+                n++;
+            X509_free(x);
+        }
+        if (b)
+            BIO_free(b);
+        FreeVec(pem);
+        ERR_clear_error();                  /* (the end of the file: "no start line") */
+    }
+    if (n > 0) {
+        sprintf(m, "%ld root certificates from %.120s in %ld ms", (long)n, certs_path,
+                (long)(time_ms() - t0));
+        amce_log("https", m);
+        t->certs = 1;
+        return TRUE;
+    }
+    {
+        /* AmigaMCE's not there: AmiSSL's, if its assign is */
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        l = Lock((CONST_STRPTR)"AmiSSL:Certs", SHARED_LOCK);
+        me->pr_WindowPtr = oldwin;
+        if (l) {
+            UnLock(l);
+            if (SSL_CTX_set_default_verify_paths((SSL_CTX *)t->ctx)) {
+                ERR_clear_error();
+                amce_log("https", "root certificates: AmiSSL's (AmiSSL:Certs)");
+                t->certs = 1;
+                return TRUE;
+            }
+            ERR_clear_error();
+        }
+    }
+    sprintf(m, "no root certificates: %.120s not read, no AmiSSL:Certs",
+            certs_path[0] ? certs_path : "Certs/cacert.pem");
+    amce_log("https", m);
+    return FALSE;
+}
+
 APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
 {
     struct TlsConn *c;
     BASES(t);
+    t->why[0] = 0;
+    if (verify && t->ctx && !certs_load(t)) {
+        amce_strlcpy(t->why, "no root certificates to check the server's with", sizeof(t->why));
+        return NULL;
+    }
     if (!t->ctx || !(c = AllocVec(sizeof(*c), MEMF_ANY | MEMF_CLEAR)))
         return NULL;
     c->sock = sock;

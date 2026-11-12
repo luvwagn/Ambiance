@@ -1426,6 +1426,9 @@ MSG_262B09BC
 MSG_11341467
 HTTPSにはAmiSSL 5が必要です
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+AmigaMCEの証明書がありません (Certsドロワー)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 安全な接続に失敗しました
 ; The secure connection failed

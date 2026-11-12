@@ -241,7 +241,10 @@ static APTR tls_start(struct NetJob *j, LONG s, const char *host)
         return NULL;
     }
     if (!(c = tls_new(&tls, s, host, TRUE))) {
-        set_err(j, _("Not enough memory"));
+        if (tls.why[0])
+            amce_log("network: https", tls.why);
+        set_err(j, tls.why[0] ? _("AmigaMCE's certificates are missing (its Certs drawer)")
+                              : _("Not enough memory"));
         return NULL;
     }
     for (;;) {

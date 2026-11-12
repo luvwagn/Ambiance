@@ -1426,6 +1426,9 @@ Annulleret
 MSG_11341467
 HTTPS kræver AmiSSL 5
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+AmigaMCE's certifikater mangler (dens skuffe Certs)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 Den sikre forbindelse mislykkedes
 ; The secure connection failed

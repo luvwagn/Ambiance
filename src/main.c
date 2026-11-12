@@ -12737,6 +12737,21 @@ static int app_main(void)
 
     caps_detect(&caps);
     https_apply();                  /* the setting, now that AmiSSL is looked for */
+    {
+        /* HTTPS's root certificates (tls.c), by their full name: the
+         * network and radio processes have no PROGDIR: of their own */
+        char cp[256];
+        BPTR l;
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR oldwin = me->pr_WindowPtr;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)"PROGDIR:Certs/cacert.pem", SHARED_LOCK))) {
+            if (NameFromLock(l, (STRPTR)cp, sizeof(cp)))
+                tls_set_certs(cp);
+            UnLock(l);
+        }
+        me->pr_WindowPtr = oldwin;
+    }
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     load_sound_out();

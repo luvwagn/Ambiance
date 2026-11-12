@@ -1426,6 +1426,9 @@ MSG_262B09BC
 MSG_11341467
 Το HTTPS θέλει AmiSSL 5
 ; HTTPS needs AmiSSL 5
+MSG_7CD9BEE0
+Λείπουν τα πιστοποιητικά του AmigaMCE (το συρτάρι του Certs)
+; AmigaMCE's certificates are missing (its Certs drawer)
 MSG_68A35804
 Η ασφαλής σύνδεση απέτυχε
 ; The secure connection failed

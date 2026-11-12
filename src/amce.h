@@ -827,6 +827,7 @@ struct TlsLib {
     struct Library *sock;       /* the process's bsdsocket.library (the bytes moved here) */
     APTR ctx;                   /* NULL: not open */
     BOOL tried;
+    BYTE certs;                 /* root certificates: 0 not loaded yet, 1 in, -1 none */
     LONG err;                   /* the socket calls' errno: the stack's and AmiSSL's both */
     char ver[44];               /* OpenSSL's version, for the log */
     char why[128];              /* the last failure */
@@ -834,6 +835,7 @@ struct TlsLib {
 #define TLS_WANT_READ  (-2)
 #define TLS_WANT_WRITE (-3)
 BOOL tls_open(struct TlsLib *t, struct Library *socketbase);   /* FALSE: no AmiSSL (t->why) */
+void tls_set_certs(const char *path);   /* the root certificates' file (main: PROGDIR:Certs) */
 void tls_close(struct TlsLib *t);
 APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify);
 int  tls_handshake(struct TlsLib *t, APTR c);  /* 1 done, TLS_WANT_*, -1 failed */
