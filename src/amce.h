@@ -269,6 +269,13 @@ struct Thumb {
     UBYTE *px;
 };
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
+struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
+/* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it
+ * decodes: use the datatypes); kind says where it came from, for the
+ * note of those it does not (AmigaMCE-jpeg.txt) */
+struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                         struct PicInfo *pi, const char *kind);
+void jpeg_thumb_init(void);
 void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */

@@ -74,6 +74,19 @@ static struct Worker *worker_for(const struct LJob *j)
     return &workers[W_QUICK];
 }
 
+/* Where a job's picture comes from, for jpgthumb.c's note of the JPEGs
+ * jdec leaves to the datatypes */
+static const char *pic_kind(const struct LJob *j, const char *src)
+{
+    if (!strncmp(src, "RAM:AmigaMCE-art/", 17))
+        return "streamed cover (Plex)";
+    if (j->type == LJ_ENTRY || (j->type == LJ_SHOT && j->mode == SHOT_AGS))
+        return "game screenshot";
+    if (j->type == LJ_SHOT && j->mode == SHOT_SONG)
+        return "music cover (beets or files)";
+    return "picture";
+}
+
 /* Decode picture src for job j. With tw (a colour-table screen), it is
  * decoded as it is and made small in colours of its own (thumb.c): the
  * pane's picture always, the viewer's one only when its colours do not
@@ -84,6 +97,13 @@ static void decode(struct LJob *j, const char *src)
     if (j->tw && !j->viewfit &&
         (j->thumb = ilbm_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info))) {
         j->ms_decode = time_ms() - t0;      /* an ILBM: read here, no datatype */
+        j->own = TRUE;
+        return;
+    }
+    if (j->tw && !j->viewfit &&
+        (j->thumb = jpeg_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info,
+                               pic_kind(j, src)))) {
+        j->ms_decode = time_ms() - t0;      /* a JPEG: jdec, built in, no datatype */
         j->own = TRUE;
         return;
     }

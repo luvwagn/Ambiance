@@ -2287,8 +2287,10 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
     if (!(g->pens_shared || g->truecolor))
         return FALSE;
     if (gfx_thumbs(g) &&
-        (t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi))) {
-        ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM: no datatype */
+        ((t = ilbm_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi)) ||
+         (t = jpeg_thumb(path, w, h, gfx_mode_tall(g->mode), whole, gfx_thumb_colours(g), &pi,
+                         "picture")))) {
+        ok = gfx_thumb(g, t, &pi, x, y, w, h, drawn_h);     /* an ILBM or a JPEG: no datatype */
         thumb_free(t);
         return ok;
     }

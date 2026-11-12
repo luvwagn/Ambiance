@@ -195,7 +195,8 @@ static void page_picture(struct Page *p, WORD w, WORD h)
         amce_log("page picture", "this screen shows no pictures");
         return;
     }
-    if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi))) {
+    if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi)) &&
+        !(t = jpeg_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi, "picture"))) {
         BOOL remapped = FALSE;
         APTR o = pic_decode_fit(p->pic, NULL, FALSE, &remapped, &pi, (ULONG)w, (ULONG)h);
         if (o) {
@@ -12754,6 +12755,7 @@ static int app_main(void)
     }
 
     caps_detect(&caps);
+    jpeg_thumb_init();                  /* before the loader: its note's lock */
     https_apply();                  /* the setting, now that AmiSSL is looked for */
     {
         /* HTTPS's root certificates (tls.c), by their full name: the

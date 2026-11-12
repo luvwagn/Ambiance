@@ -35,8 +35,9 @@ LIBS    = -lamiga
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
-       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o
+       src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
+       src/jpgthumb.c
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -323,6 +324,13 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a e
 	@$(SQLIB_CC) -Isrc/sqlib -Iextras/sqlite -o $@.dbg build/sqlib/libinit.o src/sqlib/amcesql.c \
 		extras/sqlite/libsqlite3.a -lm -lamiga
 	@$(STRIP) -o $@ $@.dbg
+
+# jdec, the JPEG decoder (datatypes/jpeg), built into AmigaMCE for JPEG
+# thumbnails (src/jpgthumb.c); -O2, as in the datatype: it is the hot path
+build/jdec.o: datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
 
 # amcejpeg.datatype (datatypes/jpeg): JPEG for every program that loads
 # pictures through datatypes, on jdec; libnix's libinit as amcesql's. With
