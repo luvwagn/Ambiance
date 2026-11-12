@@ -297,7 +297,9 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
          *   0: SetDTAttrs, both together (the usual way; the default)
          *   1: OM_SET to picture.datatype directly, both together
          *   2: SetDTAttrs PMODE_V43; the nominal size by OM_SET
-         *   3: PMODE_V43 with OM_NEW; the nominal size by OM_SET */
+         *   3: PMODE_V43 with OM_NEW; the nominal size by OM_SET
+         *   4: as 0, with the caller's PDTA_ModeID too: is the time
+         *      picture.datatype choosing a display mode? */
         ULONG variant = tag_data(attrs, JDTA_Variant, 0), ts = eclock();
         struct TagItem nt[4];
         struct opSet os;
@@ -323,6 +325,11 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
             DoSuperMethodA(cl, o, (Msg)&os);
             in->us_nominal = ticks_us(eclock() - ts);
             break;
+        case 4:
+            SetDTAttrs(o, NULL, NULL, DTA_NominalHoriz, (ULONG)w, DTA_NominalVert, (ULONG)h,
+                       PDTA_ModeID, tag_data(attrs, PDTA_ModeID, 0),
+                       PDTA_SourceMode, PMODE_V43, TAG_DONE);
+            break;
         case 3: {
             ULONG mode = 0;
             GetDTAttrs(o, PDTA_SourceMode, (ULONG)&mode, TAG_DONE);
@@ -340,7 +347,7 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
                        PDTA_SourceMode, PMODE_V43, TAG_DONE);
             break;
         }
-        if (variant < 2)
+        if (variant < 2 || variant == 4)
             in->us_setattrs = ticks_us(eclock() - ts);
     }
 

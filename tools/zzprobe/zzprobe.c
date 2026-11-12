@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.13 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.14 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -1055,14 +1055,14 @@ static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
 {
     static const char *const vname[4] = {
         "0 SetDTAttrs, both", "1 OM_SET, both", "2 SetDTAttrs mode, OM_SET size",
-        "3 mode with OM_NEW, OM_SET size"
+        "3 mode with OM_NEW, OM_SET size", "4 as 0, given WarpJPEG's ModeID"
     };
     ULONG want[2];
     int v, si;
     want[0] = jdec_hash(path, 0);
     want[1] = jdec_hash(path, 3);
     nvariants_out = 0;
-    for (v = 0; v < 4; v++) {
+    for (v = 0; v < 5; v++) {
         char cells[2][96];
         for (si = 0; si < 2; si++) {
             struct ClsRun c = *c0;
@@ -1071,7 +1071,11 @@ static void ours_variants(struct ClsRun *c0, const char *path, ULONG w, ULONG h)
             c.variant = (ULONG)v;
             c.ph = NULL;
             c.mode_out = NULL;
-            c.mode = (ULONG)INVALID_ID;
+            c.mode = v == 4 ? cl_mode[CL_WARP] : (ULONG)INVALID_ID;
+            if (v == 4 && c.mode == (ULONG)INVALID_ID) {
+                strcpy(cells[si], "no WarpJPEG here to take a mode from");
+                continue;
+            }
             c.fitw = si ? (w + 7) >> 3 : 0;
             c.fith = si ? (h + 7) >> 3 : 0;
             c.check = TRUE;             /* once, for the pixels */
@@ -1624,7 +1628,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.13, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.14, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
