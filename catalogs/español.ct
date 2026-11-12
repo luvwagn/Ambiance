@@ -403,6 +403,15 @@ Depuración (CPU, memoria, registro)
 MSG_4393028C
 No hay ninguna pila TCP/IP activa
 ; No TCP/IP stack running
+MSG_4FC02885
+HTTPS (conexiones seguras)
+; HTTPS (secure connections)
+MSG_17450D60
+emisoras de radio, plex.tv
+; radio stations, plex.tv
+MSG_30C0E827
+necesita AmiSSL
+; needs AmiSSL
 MSG_4C151C1E
 emisoras hasta %s
 ; stations up to %s
@@ -436,12 +445,6 @@ inactiva
 MSG_450E2AE8
 Esta pila TCP/IP no enumera sus interfaces
 ; This TCP/IP stack does not list its interfaces
-MSG_604E4CF2
-Permitir flujos HTTPS
-; Allow HTTPS streams
-MSG_30C0E827
-necesita AmiSSL
-; needs AmiSSL
 MSG_185E3E26
 Automático: %s
 ; Automatic: %s
@@ -481,6 +484,18 @@ Servidor Plex
 MSG_23B63BC7
 ninguno elegido
 ; none chosen
+MSG_1A42C214
+con sesión iniciada
+; signed in
+MSG_51A683F2
+Cerrar sesión en plex.tv
+; Sign out of plex.tv
+MSG_123ED553
+Iniciar sesión en plex.tv
+; Sign in at plex.tv
+MSG_2D9C8A61
+necesita HTTPS (Ajustes > Red)
+; needs HTTPS (Settings > Networking)
 MSG_5F6445D0
 Pedir audio de menor calidad
 ; Request lower quality audio
@@ -568,9 +583,9 @@ Analizador de espectro: el de HippoPlayer (licencia MIT, (c) 2017 Kari-Pekka Kol
 MSG_3F32F17E
 Módulos de 8 canales: mezclados como lo hace el mezclador de ProTracker 4.1 (licencia MIT, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
 ; 8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
-MSG_321AE26A
-Se usan si están instalados, no incluidos, cada uno bajo su licencia: Amiga Game Selector, WHDLoad, AHI, controladores MHI, mpega.library, datatypes.
-; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes.
+MSG_7AD43A09
+Se usan si están instalados, no incluidos, cada uno bajo su licencia: Amiga Game Selector, WHDLoad, AHI, controladores MHI, mpega.library, datatypes, AmiSSL.
+; Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL.
 MSG_64ED99F8
 FLAC: flacdec.library (c) 2026 Renaud Schweingruber, con dr_flac de David Reid (dominio público o MIT-0), se usa si está instalada, no incluida. Se puede usar y distribuir libremente en su propio archivo sin cambios (Aminet: util/libs/flacdec).
 ; FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
@@ -1066,6 +1081,45 @@ Géneros
 MSG_2062DC6D
 Países
 ; Countries
+MSG_2AA3C84C
+Pidiendo un código a plex.tv...  Esc para abandonar
+; Asking plex.tv for a code...  Esc to give up
+MSG_19C08CA4
+En un teléfono u ordenador, ve a plex.tv/link, inicia sesión en Plex si lo pide e introduce este código:
+; On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
+MSG_4F573886
+AmigaMCE espera a que se introduzca (el código dura 15 minutos). Esc para abandonar.
+; AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
+MSG_3DC2D1A0
+Sesión iniciada. Pidiendo a plex.tv los servidores de esta cuenta...
+; Signed in. Asking plex.tv for this account's servers...
+MSG_46CB6DE4
+Sesión iniciada en plex.tv como %s.
+; Signed in to plex.tv as %s.
+MSG_7445FC0C
+Servidor: %s
+; Server: %s
+MSG_091E9862
+Ajustes > Red > Plex > Servidor Plex muestra los servidores de esta cuenta junto a los encontrados en la red.
+; Settings > Networking > Plex > Plex server lists this account's servers beside those found on the network.
+MSG_33545DFE
+No se pudo iniciar sesión: %s
+; Signing in did not work: %s
+MSG_24FC226E
+No hay ninguna pila TCP/IP en marcha
+; No TCP/IP stack is running
+MSG_6CE44B71
+El código caducó antes de introducirse: inténtalo de nuevo
+; The code ran out before it was entered: try again
+MSG_4641030F
+El servidor no respondió
+; The server did not answer
+MSG_7B2696DA
+plex.tv no envió ningún código
+; plex.tv sent no code
+MSG_1D831D65
+Sesión cerrada en plex.tv
+; Signed out of plex.tv
 MSG_6358253C
 Esa biblioteca ya no está en el servidor: Música las vuelve a listar
 ; That library is gone from the server: Music lists them again
@@ -1126,18 +1180,21 @@ AmigaMCE reproduce música de un Plex Media Server de tu red: sus bibliotecas de
 MSG_2FBD9CB6
 Encontrar un servidor: Ajustes > Red > Plex > Servidor Plex pregunta a la red (el GDM de Plex); elige uno y se recuerda. O fija su dirección desde el Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
 ; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-MSG_6A05B8D3
-Acceso: un servidor pide el token de su dueño. Lo encuentras en Plex Web (Información > Ver XML de un elemento: el X-Plex-Token en la dirección) y lo fijas desde el Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Iniciar sesión en plex.tv necesita HTTPS (AmiSSL) y llegará más adelante.
-; Signing in: a server asks for its owner's token. Find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address) and set it from the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv needs HTTPS (AmiSSL) and comes later.
-MSG_7445FC0C
-Servidor: %s
-; Server: %s
+MSG_5B40D81A
+Iniciar sesión: con AmiSSL 5 instalado y Ajustes > Red > HTTPS activado, Ajustes > Red > Plex > Iniciar sesión en plex.tv muestra un código para introducir en plex.tv/link desde un teléfono u ordenador. Los servidores de la cuenta aparecen entonces junto a los encontrados en la red, cada uno con su propio token. Sin AmiSSL, fija el token de un servidor desde el Shell: encuéntralo en Plex Web (Información > Ver XML de un elemento: el X-Plex-Token de la dirección) y luego SetEnv SAVE AmigaMCE/PlexToken <token>.
+; Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
 MSG_6D54C528
 Token: fijado
 ; Token: set
 MSG_59B6EDB9
 Token: sin fijar
 ; Token: not set
+MSG_6A307F3D
+plex.tv: sesión iniciada como %s
+; plex.tv: signed in as %s
+MSG_2DD69A9C
+plex.tv: sin sesión iniciada
+; plex.tv: not signed in
 MSG_0B620CC7
 MP3: decodificado por el controlador MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
@@ -1366,9 +1423,15 @@ Se rechazó la conexión
 MSG_262B09BC
 Cancelado
 ; Cancelled
-MSG_4641030F
-El servidor no respondió
-; The server did not answer
+MSG_11341467
+HTTPS necesita AmiSSL 5
+; HTTPS needs AmiSSL 5
+MSG_68A35804
+La conexión segura falló
+; The secure connection failed
+MSG_487D4FD3
+No se aceptó el certificado del servidor (¿está bien el reloj del Amiga?)
+; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_2ACCD57C
 El servidor dejó de responder
 ; The server stopped answering
@@ -1378,15 +1441,18 @@ Ningún servidor Plex respondió en esta red
 MSG_4A212D5E
 No se encontró ese servidor (DNS)
 ; That server could not be found (DNS)
+MSG_515157E5
+El servidor respondió %ld
+; The server answered %ld
+MSG_2FFE0C45
+HTTPS está desactivado (Ajustes > Red)
+; HTTPS is off (Settings > Networking)
 MSG_68C8EB43
 El servidor solo responde por HTTPS
 ; The server only answers over HTTPS
 MSG_563B6546
 El servidor nos envió a donde no podemos seguir
 ; The server sent us somewhere we cannot follow
-MSG_515157E5
-El servidor respondió %ld
-; The server answered %ld
 MSG_64F654D3
 No se pudo iniciar el proceso de red
 ; The network process could not start
@@ -1471,9 +1537,9 @@ La emisora cerró el flujo
 MSG_0761145C
 No se pudo abrir el archivo
 ; The file could not be opened
-MSG_2D2A3CF1
-Esta emisora solo emite por HTTPS, que AmigaMCE aún no puede reproducir
-; This station only streams over HTTPS, which AmigaMCE cannot play yet
+MSG_294C1997
+Esta emisora solo emite por HTTPS: activa Ajustes > Red > HTTPS
+; This station only streams over HTTPS: turn on Settings > Networking > HTTPS
 MSG_103190A0
 AmigaMCE no puede seguir la dirección de esta emisora
 ; The station's address is not one AmigaMCE can follow

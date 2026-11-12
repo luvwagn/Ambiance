@@ -3,6 +3,8 @@
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"
+#include "radiocsv.h"
+#include "plexxml.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -62,6 +64,7 @@ struct Page {
     UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
     UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
     UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
+    UBYTE plexlink;             /* PT_TEXT: signing in at plex.tv (its code, then the outcome) */
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
@@ -142,6 +145,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 3, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
+       ACT_PLEXLINK, ACT_PLEXOUT,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1880,9 +1884,22 @@ static void load_net_if(void)
         net_if_apply();
 }
 
-/* Settings > Allow HTTPS streams: Radio lists https: stations too (off by
- * default; only with AmiSSL installed, which plays them). */
+/* Settings > Networking > HTTPS: secure connections by AmiSSL 5 (tls.c),
+ * off by default, and only with AmiSSL installed: Radio lists and plays
+ * https: stations, and Plex signs in at plex.tv. */
 static BOOL radio_https;
+
+static BOOL https_ok(void)
+{
+    return radio_https && caps.amissl;
+}
+
+/* The network and radio processes told (they read it as they connect). */
+static void https_apply(void)
+{
+    net_use_https(https_ok());
+    st_use_https(https_ok());
+}
 
 /* Settings > Jump scrolling: held Up/Down in a very long list goes a
  * letter at a time once past cruising speed (off: it glides on). */
@@ -1984,7 +2001,7 @@ static void load_https(void)
     char buf[8];
     radio_https = GetVar((CONST_STRPTR)HTTPS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                   buf[0] == '1';
-}
+}   /* told to the processes once AmiSSL is looked for (https_apply) */
 
 static void load_debug(void)
 {
@@ -2225,6 +2242,10 @@ static void build_net_settings(struct Page *p)
         list_add(&p->list, _("No TCP/IP stack running"), "", "", IT_TEXT);
         return;
     }
+    if ((it = action_item(p, _("HTTPS (secure connections)"),
+                          caps.amissl ? _("radio stations, plex.tv") : _("needs AmiSSL"), ACT_HTTPS,
+                          https_ok() ? MARK_CHECK_ON : MARK_CHECK_OFF)) && !caps.amissl)
+        it->flags |= ITEM_DISABLED;     /* secure connections need AmiSSL */
     rkbps_text(rkbps_now(), use);
     sprintf(tag, _("stations up to %s"), use);
     action_item(p, _("Radio"), tag, ACT_RADIOSET, MARK_ARROW);
@@ -2270,17 +2291,12 @@ static void build_nic_settings(struct Page *p)
         list_add(&p->list, _("This TCP/IP stack does not list its interfaces"), "", "", IT_TEXT);
 }
 
-/* Settings > Networking > Radio: HTTPS, the highest bitrate listed, and
- * the server the station lists come from. */
+/* Settings > Networking > Radio: the highest bitrate listed, and the
+ * server the station lists come from (HTTPS: Settings > Networking). */
 static void build_radio_settings(struct Page *p)
 {
-    struct Item *it;
     char tag[80], k[16], nm[64];
     p->setp = SETP_RADIO;
-    if ((it = action_item(p, _("Allow HTTPS streams"), caps.amissl ? "" : _("needs AmiSSL"), ACT_HTTPS,
-                          radio_https && caps.amissl ? MARK_CHECK_ON : MARK_CHECK_OFF)) &&
-        !caps.amissl)
-        it->flags |= ITEM_DISABLED;     /* secure streams need AmiSSL */
     rkbps_text(rkbps_now(), k);
     if (rkbps_sel == 0)
         sprintf(tag, _("Automatic: %s"), k);
@@ -2395,6 +2411,15 @@ static void build_plex_settings(struct Page *p)
                        "#gdm", plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
                                             : _("none chosen"), IT_PLEXDIR)))
         it->mark = MARK_ARROW;
+    if (plex.account[0]) {
+        char tag[48];
+        sprintf(tag, "%.40s", plex.user[0] ? plex.user : _("signed in"));
+        action_item(p, _("Sign out of plex.tv"), tag, ACT_PLEXOUT, MARK_NONE);
+    } else if ((it = action_item(p, _("Sign in at plex.tv"),
+                                 https_ok() ? "" : _("needs HTTPS (Settings > Networking)"),
+                                 ACT_PLEXLINK, MARK_ARROW)) && !https_ok()) {
+        it->flags |= ITEM_DISABLED;     /* plex.tv answers HTTPS alone */
+    }
     /* the server's conversion: a choice only where the Amiga is fast enough
      * to decode the files as stored (plex_tier: how fast it really is, not
      * only its CPU); on others always on */
@@ -2696,7 +2721,7 @@ static void build_credits(struct Page *p)
                    "github.com/akustikrausch/protracker4)."));
     text_line(p, "");
     text_para(p, _("Used if installed, not included, each under its own licence: Amiga Game "
-                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes."));
+                 "Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL."));
     text_line(p, "");
     text_para(p, _("FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David "
                  "Reid (public domain or MIT-0), used if installed, not included. It is free to "
@@ -9134,6 +9159,7 @@ static void toggle_https(void)
         return;
     radio_https = !radio_https;
     save_setting(HTTPS_VAR, radio_https ? "1" : "0");
+    https_apply();
     (void)p;
     (void)sel;
     plex_settings_again(FALSE);
@@ -9472,6 +9498,303 @@ static void plex_letters_came(struct Page *p, struct NetJob *j)
     }
 }
 
+/* Settings > Networking > Plex > Sign in at plex.tv: Plex's own way for a
+ * device without a keyboard to speak of. A code is asked for (a POST to
+ * /api/v2/pins), shown, and entered by the user at plex.tv/link on a phone
+ * or computer; the code is asked after every few seconds until its
+ * authToken comes (or it runs out). Then the account's name, and its
+ * servers: the one chosen gets its token, or, none chosen, the first is.
+ * All over HTTPS (AmiSSL, net.c); no token is logged. Leaving the page
+ * gives up. */
+enum { PL_IDLE, PL_PIN, PL_WAIT, PL_CHECK, PL_USER, PL_SERVERS, PL_DONE, PL_FAILED };
+static struct {
+    UBYTE state;
+    char id[24], code[16], why[120];
+    ULONG next_ms, until_ms;
+    struct NetJob *j;
+} plink;
+
+#define PLINK_POLL_MS 3000
+
+static ULONG plink_num(const char *t)
+{
+    ULONG v = 0;
+    while (*t >= '0' && *t <= '9')
+        v = v * 10 + (ULONG)(*t++ - '0');
+    return v;
+}
+
+static struct Page *plink_page(void)
+{
+    int d;
+    for (d = 0; d < depth; d++)
+        if (pages[d].plexlink && pages[d].type == PT_TEXT)
+            return &pages[d];
+    return NULL;
+}
+
+/* The page as things stand. */
+static void plink_show(void)
+{
+    struct Page *p = plink_page();
+    char line[200];
+    int i, k = 0;
+    if (!p)
+        return;
+    tb_close(&p->tb);                       /* drawn from the lines below, anew */
+    list_free(&p->list);
+    if (!list_init(&p->list))
+        return;
+    switch (plink.state) {
+    case PL_PIN:
+        text_para(p, _("Asking plex.tv for a code...  Esc to give up"));
+        break;
+    case PL_WAIT:
+    case PL_CHECK:
+        text_para(p, _("On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, "
+                       "and enter this code:"));
+        text_line(p, "");
+        strcpy(line, "        ");
+        k = strlen(line);
+        for (i = 0; plink.code[i] && k < (int)sizeof(line) - 3; i++) {
+            line[k++] = plink.code[i];      /* spaced: read across a room */
+            line[k++] = ' ';
+        }
+        line[k] = 0;
+        text_line(p, line);
+        text_line(p, "");
+        text_para(p, _("AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). "
+                       "Esc gives up."));
+        break;
+    case PL_USER:
+    case PL_SERVERS:
+        text_para(p, _("Signed in. Asking plex.tv for this account's servers..."));
+        break;
+    case PL_DONE:
+        sprintf(line, _("Signed in to plex.tv as %s."), plex.user[0] ? plex.user : "?");
+        text_para(p, line);
+        text_line(p, "");
+        sprintf(line, _("Server: %s"), plex.host[0] ? (plex.name[0] ? plex.name : plex.host)
+                                                    : _("none chosen"));
+        text_line(p, line);
+        text_line(p, "");
+        text_para(p, _("Settings > Networking > Plex > Plex server lists this account's servers "
+                       "beside those found on the network."));
+        break;
+    case PL_FAILED:
+        sprintf(line, _("Signing in did not work: %s"), plink.why);
+        text_para(p, line);
+        break;
+    }
+    if (p == cur()) {
+        draw_pane(TRUE);
+        draw_footer();
+    }
+}
+
+static void plink_fail(const char *why)
+{
+    amce_strlcpy(plink.why, why, sizeof(plink.why));
+    plink.state = PL_FAILED;
+    amce_log("plex: signing in", why);
+    plink_show();
+}
+
+/* The next request of the sign-in, out to plex.tv. */
+static void plink_ask(UBYTE state)
+{
+    struct NetJob *j;
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        plink_fail(_("Not enough memory"));
+        return;
+    }
+    amce_strlcpy(j->host, PLEX_TV, sizeof(j->host));
+    j->port = 443;
+    j->tls = 1;
+    plex_tv_headers(j->extra, sizeof(j->extra), state == PL_USER || state == PL_SERVERS);
+    if (state == PL_PIN) {
+        j->post = 1;
+        strcpy(j->path, "/api/v2/pins?strong=false");      /* a short code, for plex.tv/link */
+    } else if (state == PL_CHECK) {
+        sprintf(j->path, "/api/v2/pins/%s", plink.id);
+    } else if (state == PL_USER) {
+        strcpy(j->path, "/api/v2/user");
+    } else {
+        strcpy(j->path, "/api/resources?includeHttps=1&includeRelay=0");
+    }
+    plink.state = state;
+    plink.j = j;
+    net_submit(j);
+    if (j->done && !j->busy) {              /* the process could not start */
+        plink.j = NULL;
+        FreeVec(j);
+        plink_fail(_("No TCP/IP stack is running"));
+    }
+}
+
+/* The request out, if any, given up (its job freed when it comes back). */
+static void plink_stop(void)
+{
+    if (plink.j) {
+        net_cancel(plink.j);
+        plink.j->orphan = TRUE;
+        plink.j->seq = 0;
+        plink.j = NULL;
+    }
+    plink.state = PL_IDLE;
+}
+
+/* The account's servers: the chosen one's token, or, none chosen, the
+ * first of them chosen (the owner's token where none fits). */
+static void plink_servers(UBYTE *body, ULONG len)
+{
+    static char lines[2048];
+    char want[80], m[80], line[240], first[240], *f[4];
+    const char *l, *e;
+    LONG n = plex_resource_lines(body, len, lines, sizeof(lines));
+    BOOL found = FALSE;
+    first[0] = 0;
+    sprintf(want, "%.60s\t%lu\t", plex.host, (unsigned long)plex.port);
+    for (l = lines; *l && (e = strchr(l, '\n')); l = e + 1) {
+        LONG c = e - l < (LONG)sizeof(line) - 1 ? e - l : (LONG)sizeof(line) - 1;
+        memcpy(line, l, c);
+        line[c] = 0;
+        if (!first[0])
+            strcpy(first, line);
+        if (plex.host[0] && !strncmp(line, want, strlen(want))) {
+            strcpy(first, line);            /* the one chosen: this one's token */
+            found = TRUE;
+            break;
+        }
+    }
+    if (first[0] && (found || !plex.host[0])) {
+        int k = 1;
+        f[0] = first;
+        while (k < 4 && (f[k] = strchr(f[k - 1], '\t')))
+            *f[k++]++ = 0;
+        if (k == 4) {
+            if (!found) {
+                LONG port = (LONG)plink_num(f[1]);
+                utf8_to_latin1(f[2]);
+                plex_set_server(f[0], (UWORD)(port > 0 && port < 65536 ? port : 32400), f[2]);
+            }
+            plex_set_token(f[3]);           /* the server's own token */
+            found = TRUE;
+        }
+    }
+    if (!found && !plex.token[0])
+        plex_set_token(plex.account);       /* the owner's token opens the owner's servers */
+    sprintf(m, "signed in; %ld server%s on the account", (long)n, n == 1 ? "" : "s");
+    amce_log("plex: plex.tv", m);
+}
+
+/* plex.tv answered. */
+static void plink_came(struct NetJob *j)
+{
+    char v[80];
+    UBYTE was = plink.state;
+    plink.j = NULL;
+    if (was == PL_CHECK && !j->body && j->status != 404) {
+        plink.state = PL_WAIT;              /* a hiccup: asked again in a moment */
+        plink.next_ms = time_ms() + PLINK_POLL_MS;
+        return;
+    }
+    if (!j->body) {
+        plink_fail(was == PL_CHECK ? _("The code ran out before it was entered: try again")
+                   : j->err[0] ? j->err : _("The server did not answer"));
+        return;
+    }
+    switch (was) {
+    case PL_PIN:
+        if (!plex_tv_value(j->body, "id", plink.id, sizeof(plink.id)) ||
+            !plex_tv_value(j->body, "code", plink.code, sizeof(plink.code))) {
+            plink_fail(_("plex.tv sent no code"));
+            return;
+        }
+        plink.state = PL_WAIT;
+        plink.next_ms = time_ms() + PLINK_POLL_MS;
+        plink.until_ms = time_ms() + (plex_tv_value(j->body, "expiresIn", v, sizeof(v)) &&
+                                      plink_num(v) > 60 ? plink_num(v) : 900UL) * 1000UL;
+        amce_log("plex: signing in", "a code to enter at plex.tv/link");
+        plink_show();
+        break;
+    case PL_CHECK:
+        {
+            char tok[64];
+            if (plex_tv_value(j->body, "authToken", tok, sizeof(tok))) {
+                plex_set_account(tok, "");
+                plink_ask(PL_USER);
+                plink_show();
+            } else {
+                plink.state = PL_WAIT;      /* not entered yet */
+                plink.next_ms = time_ms() + PLINK_POLL_MS;
+            }
+        }
+        break;
+    case PL_USER:
+        if (!plex_tv_value(j->body, "username", v, sizeof(v)))
+            plex_tv_value(j->body, "title", v, sizeof(v));
+        utf8_to_latin1(v);
+        plex_set_account(plex.account, v);
+        plink_ask(PL_SERVERS);
+        break;
+    case PL_SERVERS:
+        plink_servers(j->body, j->len);
+        plink.state = PL_DONE;
+        settings_rebuild();                 /* Settings > Plex under: signed in, its server */
+        plink_show();
+        break;
+    }
+}
+
+/* Once a second: the code asked after, until it is entered or runs out;
+ * the page gone, given up. */
+static void plink_tick(void)
+{
+    if (plink.state == PL_IDLE)
+        return;
+    if (!plink_page()) {
+        plink_stop();
+        return;
+    }
+    if (plink.state != PL_WAIT)
+        return;
+    if ((LONG)(time_ms() - plink.until_ms) >= 0) {
+        plink_fail(_("The code ran out before it was entered: try again"));
+        return;
+    }
+    if ((LONG)(time_ms() - plink.next_ms) >= 0)
+        plink_ask(PL_CHECK);
+}
+
+static void plink_start(void)
+{
+    struct Page *p;
+    if (!https_ok()) {
+        set_msg(_("needs HTTPS (Settings > Networking)"));
+        return;
+    }
+    plink_stop();
+    if (!(p = page_push(PT_TEXT, _("Sign in at plex.tv")))) {
+        set_msg(_("Too many levels open"));
+        return;
+    }
+    p->plexlink = 1;
+    plink_ask(PL_PIN);
+    if (plink.state == PL_PIN)
+        plink_show();
+}
+
+static void plink_sign_out(void)
+{
+    plink_stop();
+    plex_set_account("", "");
+    plex_set_token("");                     /* the server's, which came with it */
+    amce_log("plex: plex.tv", "signed out");
+    plex_settings_again(TRUE);
+    set_msg(_("Signed out of plex.tv"));
+}
+
 static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
@@ -9494,6 +9817,13 @@ static void radio_done(struct NetJob *j)
             FreeVec(j);
             return;
         }
+    if (j == plink.j) {
+        plink_came(j);                      /* signing in at plex.tv */
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+        return;
+    }
     if (j == plex_sj) {
         /* an artist's or album's own answer: its summary */
         plex_sum_came(j);
@@ -9738,7 +10068,7 @@ static void radio_done(struct NetJob *j)
         char m[160];
         p->net_seq = 0;
         if (j->body)
-            n = radio_fill(p->base, j->body, j->len, &p->list, radio_https, &skipped);
+            n = radio_fill(p->base, j->body, j->len, &p->list, https_ok(), &skipped);
         if (!j->body || n <= 0) {
             const char *why = !j->body ? j->err
                               : n < 0 ? "radio-browser.info answered with something unexpected"
@@ -9875,6 +10205,10 @@ static void radio_open(struct Item *it)
         }
         if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
+            if (plex.account[0] && https_ok()) {
+                j->tls = 1;                 /* the account's servers too, from plex.tv */
+                plex_tv_headers(j->extra, sizeof(j->extra), TRUE);
+            }
             amce_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
         } else {
             amce_strlcpy(j->host, plex.host, sizeof(j->host));
@@ -9886,7 +10220,7 @@ static void radio_open(struct Item *it)
         }
     } else {
         radio_set_max_kbps(rkbps_now());
-        radio_request(p->base, radio_https && caps.amissl, j->path, sizeof(j->path));
+        radio_request(p->base, https_ok(), j->path, sizeof(j->path));
         amce_strlcpy(msg, _("Asking radio-browser.info...  Esc to give up"), sizeof(msg));
     }
     j->seq = ++rq_seq;
@@ -10585,6 +10919,9 @@ static void plex_choose(struct Item *it)
             port = (UWORD)v;
     }
     plex_set_server(host, port, name);
+    radio_field(it, 2, name, sizeof(name));
+    if (name[0])
+        plex_set_token(name);               /* the account's server: its own token */
     amce_log("plex: server chosen", hp);
     if (depth >= 2 && menu_sel >= 0 && menu[menu_sel] == MOD_SETTINGS) {
         /* chosen in Settings > Plex: back there, the row naming it */
@@ -10629,14 +10966,23 @@ static void plex_help(void)
                  "network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: "
                  "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400"));
     text_line(p, "");
-    text_para(p, _("Signing in: a server asks for its owner's token. Find it in Plex Web (an "
-                 "item's Get Info > View XML: the X-Plex-Token in the address) and set it from "
-                 "the Shell: SetEnv SAVE AmigaMCE/PlexToken <token>. Signing in at plex.tv "
-                 "needs HTTPS (AmiSSL) and comes later."));
+    text_para(p, _("Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, "
+                   "Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at "
+                   "plex.tv/link on a phone or computer. The account's servers are then listed "
+                   "with those found on the network, each with its own token. Without AmiSSL, "
+                   "set a server's token from the Shell: find it in Plex Web (an item's Get "
+                   "Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE "
+                   "AmigaMCE/PlexToken <token>."));
     text_line(p, "");
     sprintf(line, _("Server: %s"), plex.host[0] ? plex.host : _("none chosen"));
     text_line(p, line);
     text_line(p, plex.token[0] ? _("Token: set") : _("Token: not set"));
+    if (plex.account[0]) {
+        sprintf(line, _("plex.tv: signed in as %s"), plex.user[0] ? plex.user : "?");
+        text_line(p, line);
+    } else {
+        text_line(p, _("plex.tv: not signed in"));
+    }
     {
         /* what plays the tracks here: MP3, FLAC, and what they come out of */
         int i;
@@ -10826,6 +11172,10 @@ static void act_action(struct Item *it)
         toggle_https();
     else if (it->action == ACT_PLEXCONV)
         toggle_plex_convert();
+    else if (it->action == ACT_PLEXLINK)
+        plink_start();
+    else if (it->action == ACT_PLEXOUT)
+        plink_sign_out();
     else if (it->action == ACT_PLEXON)
         toggle_plex_on();
     else if (it->action == ACT_PLEXSET)
@@ -12245,6 +12595,7 @@ static int app_main(void)
     }
 
     caps_detect(&caps);
+    https_apply();                  /* the setting, now that AmiSSL is looked for */
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     load_sound_out();
@@ -12396,6 +12747,7 @@ static int app_main(void)
                     scr_watch();            /* a screen gone blank: why (log) */
                     mp_tempo_check();
                     flac_slow_check();      /* a FLAC track running dry: said once */
+                    plink_tick();           /* signing in at plex.tv: asked after */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */

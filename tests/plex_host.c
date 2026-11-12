@@ -63,5 +63,52 @@ int main(void)
           !strcmp(c.titles[6], "Single quotes") && !strcmp(c.keys[6], "3"));
     printf(fails ? "plex xml: %d failed\n" : "plex xml: all passed\n", fails);
     free(buf);
+    {
+        /* plex.tv: a code (XML and JSON), and an account's servers */
+        static const char pin_xml[] =
+            "<?xml version=\"1.0\"?>\n<pin id=\"123456789\" code=\"AB12\" product=\"AmigaMCE\" "
+            "trusted=\"0\" clientIdentifier=\"amigamce-1\" expiresIn=\"900\" authToken=\"\"/>";
+        static const char pin_json[] =
+            "{\"id\":987654,\"code\":\"ZQ9X\",\"product\":\"AmigaMCE\",\"expiresIn\": 1800,"
+            "\"authToken\":null,\"clientIdentifier\":\"amigamce-1\"}";
+        static const char pin_done[] = "{\"id\":987654,\"code\":\"ZQ9X\",\"authToken\":\"tok-ABC_123\"}";
+        static const char res[] =
+            "<MediaContainer size=\"3\">\n"
+            "<Device name=\"Synology &amp; co\" product=\"Plex Media Server\" provides=\"server\" "
+            "owned=\"1\" accessToken=\"srv-token-1\" clientIdentifier=\"abc\">\n"
+            "  <Connection protocol=\"https\" address=\"192.168.1.20\" port=\"32400\" "
+            "uri=\"https://192-168-1-20.x.plex.direct:32400\" local=\"1\"/>\n"
+            "  <Connection protocol=\"http\" address=\"192.168.1.20\" port=\"32400\" "
+            "uri=\"http://192.168.1.20:32400\" local=\"1\"/>\n"
+            "  <Connection protocol=\"https\" address=\"81.2.3.4\" port=\"40000\" local=\"0\"/>\n"
+            "</Device>\n"
+            "<Device name=\"Phone\" product=\"Plex for iOS\" provides=\"client,player\" "
+            "accessToken=\"x\"/>\n"
+            "<Device name=\"Friend's\" provides=\"server\" owned=\"0\" accessToken=\"srv-token-2\">\n"
+            "  <Connection protocol=\"https\" address=\"fe80::1\" port=\"32400\" local=\"1\"/>\n"
+            "  <Connection protocol=\"https\" address=\"10.0.0.5\" port=\"32401\" local=\"1\"/>\n"
+            "</Device>\n"
+            "<Device name=\"Away\" provides=\"server\" accessToken=\"srv-token-3\">\n"
+            "  <Connection protocol=\"https\" address=\"5.6.7.8\" port=\"32400\" local=\"0\"/>\n"
+            "</Device>\n"
+            "</MediaContainer>\n";
+        char v[64], out[512], *rb = malloc(sizeof(res));
+        CHECK(plex_tv_value((const unsigned char *)pin_xml, "id", v, sizeof(v)) && !strcmp(v, "123456789"));
+        CHECK(plex_tv_value((const unsigned char *)pin_xml, "code", v, sizeof(v)) && !strcmp(v, "AB12"));
+        CHECK(plex_tv_value((const unsigned char *)pin_xml, "expiresIn", v, sizeof(v)) && !strcmp(v, "900"));
+        CHECK(!plex_tv_value((const unsigned char *)pin_xml, "authToken", v, sizeof(v)));
+        CHECK(plex_tv_value((const unsigned char *)pin_json, "id", v, sizeof(v)) && !strcmp(v, "987654"));
+        CHECK(plex_tv_value((const unsigned char *)pin_json, "code", v, sizeof(v)) && !strcmp(v, "ZQ9X"));
+        CHECK(plex_tv_value((const unsigned char *)pin_json, "expiresIn", v, sizeof(v)) && !strcmp(v, "1800"));
+        CHECK(!plex_tv_value((const unsigned char *)pin_json, "authToken", v, sizeof(v)));
+        CHECK(plex_tv_value((const unsigned char *)pin_done, "authToken", v, sizeof(v)) &&
+              !strcmp(v, "tok-ABC_123"));
+        CHECK(!plex_tv_value((const unsigned char *)pin_xml, "missing", v, sizeof(v)));
+        memcpy(rb, res, sizeof(res));
+        CHECK(plex_resource_lines((unsigned char *)rb, sizeof(res) - 1, out, sizeof(out)) == 2);
+        CHECK(!strcmp(out, "192.168.1.20\t32400\tSynology & co\tsrv-token-1\n"
+                           "10.0.0.5\t32401\tFriend's\tsrv-token-2\n"));
+        free(rb);
+    }
     return fails ? 1 : 0;
 }

@@ -53,6 +53,8 @@ Radio
   country first, from your Locale settings). Only stations an Amiga can
   play are listed: MP3, working, and no higher in bitrate than this Amiga
   copes with. Now Playing shows the song titles the station sends.
+- With AmiSSL 5 and Settings > Networking > HTTPS on, stations that
+  stream over HTTPS are listed and play too.
 
 Music (Plex)
 - The music libraries of a Plex Media Server on your network: by artist,
@@ -61,7 +63,10 @@ Music (Plex)
   on a 68020/030, 24 kHz stereo on a 68040/060, at a higher bitrate on a
   fast one. On a fast Amiga with flacdec.library, MP3 and FLAC tracks
   play as stored. Plain HTTP on your own network: no AmiSSL needed.
-- Servers are found on the network by Plex's own discovery (GDM).
+- Servers are found on the network by Plex's own discovery (GDM). With
+  AmiSSL 5, sign in at plex.tv by a code entered at plex.tv/link on a
+  phone or computer: no token to copy, and your account's servers are
+  listed too.
 
 Music (files)
 - MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
@@ -152,7 +157,7 @@ Requirements
   DeliTracker's, modplug.library and
   xfdmaster.library for more module formats (the installer offers the
   two libraries); picture datatypes; AHI for sound through a sound card;
-  AmiSSL to list HTTPS radio stations.
+  AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv).
 
 
 Installation
@@ -230,9 +235,12 @@ Settings
                the MUSIC:, MODS:, PICTURES: and VIDEOS: assigns on or
                off, folders added (Add a folder...) or taken out (Fire
                twice); AGS's own drawers are found by themselves
-  Networking   Radio: HTTPS stations, the highest bitrate listed, which
+  Networking   HTTPS: secure connections, with AmiSSL 5 (radio stations,
+                 signing in at plex.tv)
+               Radio: the highest bitrate listed, which
                  radio-browser.info server the lists come from
-               Plex: on or off, the server, lower quality audio
+               Plex: on or off, the server, signing in at plex.tv,
+                 lower quality audio
                Stream buffer: short, normal or long
                Network interface: which one connections go out from
 
@@ -248,7 +256,11 @@ Setting up Plex
 ---------------
 1. Settings > Networking > Plex: turn Plex on, then choose your server
    under Plex server (servers on the network are found for you).
-2. If the server asks for a sign-in, set your Plex token from the Shell:
+2. If the server asks for a sign-in: with AmiSSL 5 installed, turn on
+   Settings > Networking > HTTPS, then choose Settings > Networking >
+   Plex > Sign in at plex.tv and enter the code it shows at plex.tv/link
+   on a phone or computer. Your account's servers then appear under Plex
+   server. Without AmiSSL, set your Plex token from the Shell:
      SetEnv SAVE AmigaMCE/PlexToken <token>
    About > Plex in AmigaMCE says where to find it.
 3. Your music libraries appear under Music, photo libraries at the top
@@ -258,11 +270,7 @@ Setting up Plex
 Not there yet
 -------------
 - Videos plays IFF ANIMs; other video formats come later.
-- beets music libraries: amcesql.library (SQLite, read only) is in the
-  archive, browsing them comes later.
-- HTTPS radio streams are listed (with AmiSSL) but do not play yet.
 - Modules play on Paula only; AHI for them comes later.
-- Signing in through plex.tv needs HTTPS: the token is set by hand.
 
 
 History

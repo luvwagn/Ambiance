@@ -26,7 +26,9 @@
  *
  * The process has its own bsdsocket.library (each process opens its own);
  * net.c's SocketBase is the network process's, so this file names its own
- * base for the library's inline calls.
+ * base for the library's inline calls. An https: stream (Settings >
+ * Networking > HTTPS on, AmiSSL installed) goes through AmiSSL (tls.c),
+ * which the process likewise opens for itself, the first time one plays.
  */
 #include "amce.h"
 #include "radiocsv.h"
@@ -51,6 +53,14 @@
 #include <sys/filio.h>
 
 struct Library *st_SocketBase;      /* the radio process's */
+static struct TlsLib st_tls;        /* AmiSSL, the radio process's (tls.c) */
+static APTR st_ssl;                 /* the stream's TLS, NULL plain HTTP */
+static volatile BOOL https_on;      /* Settings > Networking > HTTPS (with AmiSSL) */
+
+void st_use_https(BOOL on)
+{
+    https_on = on;
+}
 
 /* Time the radio process spends asleep, all told (Debug's load line says
  * how busy it is: st_busy_sample) */
@@ -529,13 +539,14 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port, char 
 {
     const char *h, *slash, *colon;
     LONG n;
-    if (amce_strnicmp(url, "http://", 7))
+    BOOL secure = !amce_strnicmp(url, "https://", 8);
+    if (amce_strnicmp(url, "http://", 7) && !secure)
         return FALSE;
-    h = url + 7;
+    h = url + (secure ? 8 : 7);
     slash = strchr(h, '/');
     n = slash ? slash - h : (LONG)strlen(h);
     colon = memchr(h, ':', n);
-    *port = 80;
+    *port = secure ? 443 : 80;
     if (colon) {
         LONG v = 0;
         const char *c = colon + 1;
@@ -589,6 +600,79 @@ static LONG connect_to(const char *host, UWORD port)
     return s;
 }
 
+/* The connection closed (its TLS first). */
+static void sock_close(void)
+{
+    if (st_ssl)
+        tls_free(&st_tls, st_ssl);
+    st_ssl = NULL;
+    if (st.sock >= 0)
+        CloseSocket(st.sock);
+    st.sock = -1;
+}
+
+/* Connected to host (TLS's handshake too, secure): st.sock, FALSE failed. */
+static BOOL sock_open(const char *host, UWORD port, BOOL secure)
+{
+    char m[200];
+    sock_close();
+    if ((st.sock = connect_to(host, port)) < 0)
+        return FALSE;
+    if (!secure)
+        return TRUE;
+    if (!tls_open(&st_tls, st_SocketBase)) {
+        amce_log("radio: https", st_tls.why);
+        sock_close();
+        fail(_("HTTPS needs AmiSSL 5"));
+        return FALSE;
+    }
+    if (!(st_ssl = tls_new(&st_tls, st.sock, host, FALSE))) {
+        sock_close();
+        fail(_("Not enough memory"));
+        return FALSE;
+    }
+    for (;;) {
+        int r = tls_handshake(&st_tls, st_ssl), w;
+        if (r == 1)
+            return TRUE;
+        if (r != TLS_WANT_READ && r != TLS_WANT_WRITE) {
+            sprintf(m, "%.60s: %.120s", host, st_tls.why);
+            amce_log("radio: https", m);
+            sock_close();
+            fail(_("The secure connection failed"));
+            return FALSE;
+        }
+        if ((w = wait_sock(st.sock, r == TLS_WANT_WRITE, CONNECT_S)) <= 0) {
+            sock_close();
+            fail(w < 0 ? _("Stopped") : _("The station did not answer"));
+            return FALSE;
+        }
+    }
+}
+
+/* The request sent whole: FALSE failed. */
+static BOOL sock_send(const char *req)
+{
+    LONG left = strlen(req), off = 0;
+    while (left > 0) {
+        LONG w;
+        if (wait_sock(st.sock, TRUE, READ_S) <= 0)
+            return FALSE;
+        if (st_ssl) {
+            w = tls_write(&st_tls, st_ssl, req + off, left);
+            if (w == TLS_WANT_READ || w == TLS_WANT_WRITE)
+                continue;
+        } else {
+            w = send(st.sock, (APTR)(req + off), left, 0);
+        }
+        if (w <= 0)
+            return FALSE;
+        off += w;
+        left -= w;
+    }
+    return TRUE;
+}
+
 /* More bytes into the network buffer (after what is there): FALSE at the
  * stream's end or on a failure. */
 static BOOL net_more(void)
@@ -614,14 +698,20 @@ static BOOL net_more(void)
         return TRUE;
     }
     for (;;) {
-        int w = wait_sock(st.sock, FALSE, READ_S);
+        int w = st_ssl && tls_pending(&st_tls, st_ssl) > 0 ? 1 : wait_sock(st.sock, FALSE, READ_S);
         if (w <= 0) {
             fail(w < 0 ? _("Stopped") : _("The station stopped sending"));
             return FALSE;
         }
-        r = recv(st.sock, st.nb + st.nb_len, NETBUF - st.nb_len, 0);
-        if (r < 0 && Errno() == EWOULDBLOCK)
-            continue;
+        if (st_ssl) {
+            r = tls_read(&st_tls, st_ssl, st.nb + st.nb_len, NETBUF - st.nb_len);
+            if (r == TLS_WANT_READ || r == TLS_WANT_WRITE)
+                continue;
+        } else {
+            r = recv(st.sock, st.nb + st.nb_len, NETBUF - st.nb_len, 0);
+            if (r < 0 && Errno() == EWOULDBLOCK)
+                continue;
+        }
         if (r <= 0) {
             if (st.finite && r == 0)
                 st.eof = TRUE;              /* a track: all of it read */
@@ -755,25 +845,15 @@ static void ping_url(const char *url)
     static char path[1024], req[1300];
     char host[96], hdr[512], m[80];
     UWORD port;
-    LONG status = 0, left, off = 0;
+    LONG status = 0;
     if (!split_url(url, host, sizeof(host), &port, path, sizeof(path)))
         return;
-    if ((st.sock = connect_to(host, port)) >= 0) {
+    if (sock_open(host, port, !amce_strnicmp(url, "https:", 6))) {
         sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
                      "\r\nConnection: close\r\n\r\n", path, host);
-        left = strlen(req);
-        while (left > 0) {
-            LONG w;
-            if (wait_sock(st.sock, TRUE, READ_S) <= 0 ||
-                (w = send(st.sock, (APTR)(req + off), left, 0)) <= 0)
-                break;
-            off += w;
-            left -= w;
-        }
-        if (left <= 0)
+        if (sock_send(req))
             status = read_headers(hdr, sizeof(hdr));
-        CloseSocket(st.sock);
-        st.sock = -1;
+        sock_close();
     }
     sprintf(m, "the conversion before stopped: %ld", (long)status);
     amce_log("plex", m);
@@ -814,8 +894,9 @@ static BOOL open_stream(void)
     }
     for (hop = 0; hop < 4; hop++) {
         LONG status;
-        if (!amce_strnicmp(url, "https:", 6)) {
-            fail(_("This station only streams over HTTPS, which AmigaMCE cannot play yet"));
+        BOOL secure = !amce_strnicmp(url, "https:", 6);
+        if (secure && !https_on) {
+            fail(_("This station only streams over HTTPS: turn on Settings > Networking > HTTPS"));
             return FALSE;
         }
         if (!split_url(url, host, sizeof(host), &port, path, sizeof(path))) {
@@ -823,7 +904,7 @@ static BOOL open_stream(void)
             return FALSE;
         }
         st.state = ST_CONNECTING;
-        if ((st.sock = connect_to(host, port)) < 0)
+        if (!sock_open(host, port, secure))
             return FALSE;
         if (st.range_from)
             sprintf(range, "Range: bytes=%lu-\r\n", (unsigned long)st.range_from);
@@ -833,18 +914,9 @@ static BOOL open_stream(void)
                 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
                 "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
                 path, host, st.finite ? "" : "Icy-MetaData: 1\r\n", range);
-        {
-            LONG left = strlen(req), off = 0;
-            while (left > 0) {
-                LONG w;
-                if (wait_sock(st.sock, TRUE, READ_S) <= 0 ||
-                    (w = send(st.sock, (APTR)(req + off), left, 0)) <= 0) {
-                    fail(st.quit ? "Stopped" : "The request could not be sent");
-                    return FALSE;
-                }
-                off += w;
-                left -= w;
-            }
+        if (!sock_send(req)) {
+            fail(st.quit ? "Stopped" : "The request could not be sent");
+            return FALSE;
         }
         if (!(status = read_headers(hdr, sizeof(hdr)))) {
             fail(st.err[0] ? st.err : st.finite ? "The server sent no answer we understand"
@@ -852,8 +924,7 @@ static BOOL open_stream(void)
             return FALSE;
         }
         if (status >= 300 && status < 400 && header(hdr, "Location", v, sizeof(v))) {
-            CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             amce_strlcpy(url, v, sizeof(url));
             continue;
         }
@@ -862,8 +933,7 @@ static BOOL open_stream(void)
         if (status == 400 && st.skip_ms && !st.skipping && drop_offset(url)) {
             /* the server would not start its conversion part way in: from
              * the start, the frames before the time passed over here */
-            CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             st.skipping = no_offset = TRUE;
             amce_log("track", "the server would not start part way in: seeking by reading");
             hop--;
@@ -899,7 +969,13 @@ static BOOL open_stream(void)
                     ;
                 st.err[0] = 0;
                 st.nb[st.nb_len] = 0;
-                if (!(p = strstr((char *)st.nb + st.nb_pos, "http://"))) {
+                {
+                    char *q = strstr((char *)st.nb + st.nb_pos, "https://");
+                    p = strstr((char *)st.nb + st.nb_pos, "http://");
+                    if (q && https_on && (!p || q < p))
+                        p = q;              /* the first address, secure too */
+                }
+                if (!p) {
                     fail(_("The station's playlist has no stream AmigaMCE can play"));
                     return FALSE;
                 }
@@ -907,8 +983,7 @@ static BOOL open_stream(void)
                     ;
                 *e = 0;
                 amce_strlcpy(url, p, sizeof(url));
-                CloseSocket(st.sock);
-                st.sock = -1;
+                sock_close();
                 continue;
             }
             if (!strstr(v, "mpeg") && !strstr(v, "mp3") && !strstr(v, "octet") &&
@@ -1286,9 +1361,7 @@ static ULONG flac_io(register struct Hook *h __asm("a0"), register struct FLACDe
         /* far, or back: the file asked for again from there */
         {
             UBYTE was = st.state;
-            if (st.sock >= 0)
-                CloseSocket(st.sock);
-            st.sock = -1;
+            sock_close();
             st.nb_pos = st.nb_len = 0;
             st.eof = FALSE;
             st.err[0] = 0;
@@ -1990,9 +2063,8 @@ out:
     out_stop();
     if (ms)
         MPEGA_close(ms);
-    if (st.sock >= 0)
-        CloseSocket(st.sock);
-    st.sock = -1;
+    sock_close();
+    tls_close(&st_tls);                     /* before the socket library it uses */
     if (st.fh) {
         Close(st.fh);
         st.fh = 0;
@@ -2060,7 +2132,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.state = ST_CONNECTING;
     st.cpu = cpu;
     st.proc = CreateNewProcTags(NP_Entry, (ULONG)radio_main, NP_Name, (ULONG)"AmigaMCE radio",
-                                NP_Priority, 3, NP_StackSize, 32768, NP_WindowPtr, (ULONG)-1,
+                                NP_Priority, 3, NP_StackSize, 65536, NP_WindowPtr, (ULONG)-1,
                                 TAG_DONE);
     if (!st.proc) {
         st_stop();
