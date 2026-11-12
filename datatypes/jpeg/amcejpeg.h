@@ -42,5 +42,9 @@
  * picture.datatype (PDTM_WRITEPIXELARRAY). For zzprobe. */
 #define JDTA_TimeLoad   (JDTA_Dummy + 7)
 #define JDTA_TimeWrite  (JDTA_Dummy + 8)
+/* ...and of it: the headers read (jd_open), and the picture's size and
+ * mode given to picture.datatype (SetDTAttrs) */
+#define JDTA_TimeHeaders (JDTA_Dummy + 9)
+#define JDTA_TimeSetAttrs (JDTA_Dummy + 10)
 
 #endif

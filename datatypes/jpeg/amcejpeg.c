@@ -86,6 +86,7 @@ struct Inst {
     ULONG scale;                        /* 1, 2, 4, 8 */
     ULONG damaged;
     ULONG us_load, us_write;            /* JDTA_TimeLoad, JDTA_TimeWrite */
+    ULONG us_headers, us_setattrs;      /* JDTA_TimeHeaders, JDTA_TimeSetAttrs */
 };
 
 /* ---- jdec's input, memory and output */
@@ -240,7 +241,11 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     io.alloc = src_alloc;
     io.free = src_free;
     io.rows = src_rows;
-    r = jd_open(&d, &io, &info);
+    {
+        ULONG th = eclock();
+        r = jd_open(&d, &io, &info);
+        in->us_headers = ticks_us(eclock() - th);
+    }
     if (r)
         return dos_err(r, &s);
 
@@ -263,10 +268,14 @@ static LONG load(Class *cl, Object *o, struct TagItem *attrs)
     bmh->bmh_Depth = 24;
     bmh->bmh_XAspect = (UBYTE)xa;
     bmh->bmh_YAspect = (UBYTE)ya;
-    SetDTAttrs(o, NULL, NULL,
-               DTA_NominalHoriz, (ULONG)w, DTA_NominalVert, (ULONG)h,
-               PDTA_SourceMode, PMODE_V43,
-               TAG_DONE);
+    {
+        ULONG ts = eclock();
+        SetDTAttrs(o, NULL, NULL,
+                   DTA_NominalHoriz, (ULONG)w, DTA_NominalVert, (ULONG)h,
+                   PDTA_SourceMode, PMODE_V43,
+                   TAG_DONE);
+        in->us_setattrs = ticks_us(eclock() - ts);
+    }
 
     r = jd_decode(d, scale);
     in->damaged = jd_damaged(d) ? TRUE : FALSE;
@@ -307,6 +316,8 @@ static ULONG get(Class *cl, Object *o, struct opGet *m)
     case JDTA_Damaged: v = in->damaged; break;
     case JDTA_TimeLoad: v = in->us_load; break;
     case JDTA_TimeWrite: v = in->us_write; break;
+    case JDTA_TimeHeaders: v = in->us_headers; break;
+    case JDTA_TimeSetAttrs: v = in->us_setattrs; break;
     default:
         return DoSuperMethodA(cl, o, (Msg)m);
     }

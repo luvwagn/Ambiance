@@ -60,7 +60,7 @@
 #include "../../datatypes/jpeg/amcejpeg.h"
 #include "../../datatypes/jpeg/stackcall.h"
 
-static const char version[] = "$VER: zzprobe 1.8 (12.11.2026)";
+static const char version[] = "$VER: zzprobe 1.9 (12.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -545,9 +545,11 @@ static int nrows;
 
 /* Where the time goes, the fastest run's parts (us): JPEG through the
  * system's datatype at 1/1 (sysph) and through amcejpeg at each scale */
-enum { PH_READ, PH_NEW, PH_DECODE, PH_WRITE, PH_LAYOUT, PH_DISPOSE, PH_TOTAL, PH_N };
-static ULONG sysph[PH_N], ourph[NSC][PH_N];
-static BOOL have_sysph, have_ourph;
+enum { PH_READ, PH_NEW, PH_HEADERS, PH_SETATTRS, PH_DECODE, PH_WRITE, PH_LAYOUT, PH_DISPOSE,
+       PH_TOTAL, PH_N };
+static ULONG sysph[PH_N], ourph[NSC][PH_N], modeph[PH_N];   /* modeph: ours, 1/1, its ModeID given */
+static BOOL have_sysph, have_ourph, have_modeph;
+static ULONG sys_mode = (ULONG)INVALID_ID, our_mode = (ULONG)INVALID_ID;
 static char notes[8][160];
 static int nnotes;
 
@@ -670,6 +672,8 @@ static LONG dt_once(void *p)
     t2 = now_us();
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, DTA_DataType, (ULONG)&dtn, TAG_END);
     GetDTAttrs(o, JDTA_Scale, (ULONG)&sc, TAG_END);     /* amcejpeg's; else 0 */
+    if (c->ph)
+        GetDTAttrs(o, PDTA_ModeID, (ULONG)&sys_mode, TAG_END);
     if (bmh) {
         c->w = bmh->bmh_Width;
         c->h = bmh->bmh_Height;
@@ -700,13 +704,14 @@ struct ClsRun {
     ULONG fitw, fith;
     ULONG w, h, scale;
     ULONG *ph;                          /* the fastest run's parts */
+    ULONG mode;                         /* PDTA_ModeID to give it, or INVALID_ID */
 };
 
 static LONG cls_once(void *p)
 {
     struct ClsRun *c = p;
     struct BitMapHeader *bmh = NULL;
-    ULONG sc = 0, dec = 0, wr = 0, t0 = now_us(), t1, t2, t3, t4;
+    ULONG sc = 0, dec = 0, wr = 0, hd = 0, sa = 0, t0 = now_us(), t1, t2, t3, t4;
     Object *o;
     if (!file_read(c->path, c->buf, c->len))   /* the file read each time, as a datatype does */
         return IoErr() ? IoErr() : -1;
@@ -715,7 +720,8 @@ static LONG cls_once(void *p)
                   DTA_SourceAddress, (ULONG)c->buf, DTA_SourceSize, (ULONG)c->len,
                   DTA_DataType, (ULONG)c->dtn, DTA_Name, (ULONG)c->path,
                   PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43,
-                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith, TAG_END);
+                  JDTA_FitWidth, c->fitw, JDTA_FitHeight, c->fith,
+                  c->mode != (ULONG)INVALID_ID ? PDTA_ModeID : TAG_IGNORE, c->mode, TAG_END);
     if (!o) {
         LONG e = IoErr();
         return e ? e : -1;
@@ -724,7 +730,10 @@ static LONG cls_once(void *p)
     DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
     t3 = now_us();
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, JDTA_Scale, (ULONG)&sc,
-               JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr, TAG_END);
+               JDTA_TimeLoad, (ULONG)&dec, JDTA_TimeWrite, (ULONG)&wr,
+               JDTA_TimeHeaders, (ULONG)&hd, JDTA_TimeSetAttrs, (ULONG)&sa, TAG_END);
+    if (c->ph && c->mode == (ULONG)INVALID_ID)
+        GetDTAttrs(o, PDTA_ModeID, (ULONG)&our_mode, TAG_END);
     if (bmh) {
         c->w = bmh->bmh_Width;
         c->h = bmh->bmh_Height;
@@ -738,7 +747,9 @@ static LONG cls_once(void *p)
         if (c->ph && (!c->ph[PH_TOTAL] || tot < c->ph[PH_TOTAL])) {
             c->ph[PH_READ] = t1 - t0;
             c->ph[PH_NEW] = t2 - t1;    /* picture.datatype's OM_NEW, and ours with the decode */
-            c->ph[PH_DECODE] = dec > wr ? dec - wr : 0;
+            c->ph[PH_HEADERS] = hd;
+            c->ph[PH_SETATTRS] = sa;
+            c->ph[PH_DECODE] = dec > wr + hd + sa ? dec - wr - hd - sa : 0;
             c->ph[PH_WRITE] = wr;
             c->ph[PH_LAYOUT] = t3 - t2;
             c->ph[PH_DISPOSE] = t4;
@@ -979,6 +990,7 @@ static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
         note_add("(*) not installed: loaded from PROGDIR:amcejpeg for this test");
     memset(&c, 0, sizeof(c));
     c.path = path;
+    c.mode = (ULONG)INVALID_ID;
     c.cl = ObtainEngine(lib);
     c.len = file_size(path);
     if ((lock = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
@@ -1014,6 +1026,17 @@ static void bench_ours_jpeg(const char *path, ULONG w, ULONG h)
     }
     if (ourph[0][PH_TOTAL])
         have_ourph = TRUE;
+    /* again at 1/1, given the system's datatype's mode: is the layout's
+     * time picture.datatype choosing one (BestModeID over every mode)? */
+    if (have_ourph && have_sysph && sys_mode != (ULONG)INVALID_ID) {
+        ULONG b, m;
+        memset(modeph, 0, sizeof(modeph));
+        c.fitw = c.fith = 0;
+        c.mode = sys_mode;
+        c.ph = modeph;
+        if (!timed(cls_once, &c, NULL, &b, &m))
+            have_modeph = TRUE;
+    }
     FreeVec(c.buf);
     if (c.dtn)
         ReleaseDataType(c.dtn);
@@ -1036,28 +1059,34 @@ static void time_parts(void)
     static const char *const name[PH_N] = {
         "read the file into memory",
         "make the object (OM_NEW)",
+        "  of which: headers (jd_open)",
+        "  of which: SetDTAttrs (size, mode)",
         "  of which: decoding (jdec)",
         "  of which: rows to picture.datatype",
         "layout (DTM_PROCLAYOUT)",
         "dispose of the object",
         "total",
     };
-    char line[200], c[NSC + 1][16], sys[48];
+    char line[200], c[NSC + 2][16], sys[48];
     int i, s;
     if (!have_sysph && !have_ourph)
         return;
     snprintf(sys, sizeof(sys), "%.14s", rows[0].dec);
     heading("Where a JPEG's time goes (ms, the parts of the fastest run)");
-    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", "", have_sysph ? sys : "",
-             "ours 1/1", "1/2", "1/4", "1/8");
+    snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s %-8s", "", have_sysph ? sys : "",
+             "ours 1/1", "1/2", "1/4", "1/8", have_modeph ? "1/1+mode" : "");
     sayf(line);
     for (i = 0; i < PH_N; i++) {
-        BOOL sys_has = have_sysph && i != PH_READ && i != PH_DECODE && i != PH_WRITE;
+        BOOL sys_has = have_sysph && i != PH_READ && i != PH_DECODE && i != PH_WRITE &&
+                       i != PH_HEADERS && i != PH_SETATTRS;
         ph_cell(c[0], sysph[i], sys_has);
         for (s = 0; s < NSC; s++)
             ph_cell(c[s + 1], ourph[s][i], have_ourph && ourph[s][PH_TOTAL]);
-        snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", name[i], c[0],
-                 c[1], c[2], c[3], c[4]);
+        ph_cell(c[NSC + 1], modeph[i], have_modeph);
+        if (!have_modeph)
+            c[NSC + 1][0] = 0;
+        snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s %-8s", name[i], c[0],
+                 c[1], c[2], c[3], c[4], c[5]);
         sayf(line);
     }
     /* what AmigaMCE's thumbnails of deep pictures take: no layout */
@@ -1066,6 +1095,10 @@ static void time_parts(void)
         ph_cell(c[s + 1], ourph[s][PH_TOTAL] - ourph[s][PH_LAYOUT], have_ourph && ourph[s][PH_TOTAL]);
     snprintf(line, sizeof(line), "  %-38s %-14s %-8s %-8s %-8s %-8s", "total without the layout (thumbnails)",
              c[0], c[1], c[2], c[3], c[4]);
+    sayf(line);
+    snprintf(line, sizeof(line), "  Display mode after layout: %.14s $%08lx, ours $%08lx%s", sys,
+             (unsigned long)sys_mode, (unsigned long)our_mode,
+             have_modeph ? "; 1/1+mode: ours given the other's mode" : "");
     sayf(line);
     sayf("  The system's datatype reads the file inside OM_NEW. The rest of OM_NEW, past");
     sayf("  decoding and handing rows over: picture.datatype's own work, and our stack.");
@@ -1118,7 +1151,8 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     BOOL ours = FALSE;
     int i, s;
     nrows = nnotes = 0;
-    have_sysph = have_ourph = FALSE;
+    have_sysph = have_ourph = have_modeph = FALSE;
+    sys_mode = our_mode = (ULONG)INVALID_ID;
     bench_system("JPEG", jpeg, &ours, &jw, &jh);
     if (!ours && exists(jpeg))
         bench_ours_jpeg(jpeg, jw, jh);
@@ -1358,7 +1392,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.8, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.9, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
