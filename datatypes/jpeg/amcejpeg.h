@@ -1,0 +1,39 @@
+/*
+ * amcejpeg.datatype: JPEG pictures for 68020+ Amigas (picture.datatype V43+)
+ * Copyright (c) 2026 Brian King, MIT
+ *
+ * Every program that loads pictures through datatypes gets it as it is.
+ * A program that shows a picture smaller than its own size (a thumbnail,
+ * a picture fitted to a screen) can say so with the tags below, given to
+ * NewDTObject(): the datatype then decodes at 1/2, 1/4 or 1/8 of the
+ * size where that is still at least as big as asked, which is several
+ * times faster than decoding it whole and scaling it down. The object's
+ * bitmap header then has the size decoded; JDTA_FullWidth/Height give the
+ * picture's own. Other JPEG datatypes ignore the tags, so a program can
+ * always pass them.
+ */
+#ifndef AMCEJPEG_H
+#define AMCEJPEG_H
+
+#include <utility/tagitem.h>
+
+#define JDTA_Dummy      (TAG_USER + 0x4A440000UL)   /* 'JD' */
+
+/* (ULONG) NewDTObject(): the width and height it will be shown at, in
+ * pixels. The datatype decodes no smaller than that, keeping the
+ * picture's shape. 0 or left out: no limit that way. */
+#define JDTA_FitWidth   (JDTA_Dummy + 1)
+#define JDTA_FitHeight  (JDTA_Dummy + 2)
+
+/* (ULONG *) GetDTAttrs(): the picture's own size, whatever was decoded */
+#define JDTA_FullWidth  (JDTA_Dummy + 3)
+#define JDTA_FullHeight (JDTA_Dummy + 4)
+
+/* (ULONG *) GetDTAttrs(): the scale decoded at: 1, 2, 4 or 8 (1/n) */
+#define JDTA_Scale      (JDTA_Dummy + 5)
+
+/* (ULONG *) GetDTAttrs(): TRUE if the file ended or was damaged before
+ * the picture did (what is missing is grey) */
+#define JDTA_Damaged    (JDTA_Dummy + 6)
+
+#endif

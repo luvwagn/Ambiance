@@ -193,7 +193,7 @@ static void page_picture(struct Page *p, WORD w, WORD h)
     }
     if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi))) {
         BOOL remapped = FALSE;
-        APTR o = pic_decode(p->pic, NULL, FALSE, &remapped, &pi);
+        APTR o = pic_decode_fit(p->pic, NULL, FALSE, &remapped, &pi, (ULONG)w, (ULONG)h);
         if (o) {
             ULONG dw, dh;
             pic_fit(pi.w, pi.h, tall, w, h, FALSE, &dw, &dh);    /* smaller or larger: to fit */

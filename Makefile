@@ -62,9 +62,9 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean test test-replayer test-animdraw test-beets anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype test test-replayer test-animdraw test-beets anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) lha
+all: $(TARGET) lha datatype
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -315,6 +315,31 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a e
 		extras/sqlite/libsqlite3.a -lm -lamiga
 	@$(STRIP) -o $@ $@.dbg
 
+# amcejpeg.datatype (datatypes/jpeg): JPEG for every program that loads
+# pictures through datatypes, on jdec; libnix's libinit as amcesql's. With
+# its descriptor (DEVS:DataTypes) and dtjpeg, a test that loads a picture
+# through datatypes and times it.
+JDT_DIR   = build/amcejpeg
+JDT       = $(JDT_DIR)/amcejpeg.datatype
+JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
+JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
+JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
+datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
+$(JDT): build/sqlib/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  LD    $@"
+	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg build/sqlib/libinit.o $(JDT_SRC) -lamiga
+	@$(STRIP) -o $@ $@.dbg
+$(JDT_DESC): tools/mkdtdesc.py
+	@mkdir -p $(JDT_DIR)
+	@echo "  DTYP  $@"
+	@$(PYTHON) tools/mkdtdesc.py $@ --name AmigaMCE-JPEG --base amcejpeg --group pict --id jpeg \
+		--recog "ff d8 ff" --priority 5 --version '$$VER: AmigaMCE-JPEG 46.0 ($(ADATE))'
+$(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h
+	@mkdir -p $(JDT_DIR)
+	@echo "  CC    $@"
+	@$(CC) -Os $(CPU) -noixemul -Wall -Wno-pointer-sign -o $@ $< -lamiga
+
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB)
@@ -355,5 +380,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

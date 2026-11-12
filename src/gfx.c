@@ -27,6 +27,7 @@
 #include <proto/cybergraphics.h>
 #include <proto/layers.h>
 #include <stdio.h>
+#include "../datatypes/jpeg/amcejpeg.h"
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase;
@@ -1542,6 +1543,18 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
 APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                 struct PicInfo *pi)
 {
+    return pic_decode_fit(path, scr, remap, remapped, pi, 0, 0);
+}
+
+/* pic_decode, for a picture that will be shown no bigger than fitw x fith:
+ * amcejpeg.datatype (datatypes/jpeg) then decodes a JPEG at 1/2, 1/4 or
+ * 1/8 where that is still at least that big, much faster; other datatypes
+ * ignore the tags. pi has the picture's own size either way; the object's
+ * bitmap header, what was decoded. */
+APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                    struct PicInfo *pi, ULONG fitw, ULONG fith)
+{
+    ULONG fullw = 0, fullh = 0;
     struct BitMapHeader *bmh = NULL;
     Object *o;
     if (!DataTypesBase)
@@ -1550,10 +1563,11 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
                         PDTA_Screen, (ULONG)scr, PDTA_Remap, TRUE,
                         PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
-                        TAG_END);
+                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
     else
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                        PDTA_DestMode, PMODE_V43, TAG_END);
+                        PDTA_DestMode, PMODE_V43,
+                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
     if (!o)
         return NULL;
     if (!DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE) && remap) {
@@ -1567,9 +1581,14 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
     }
     if (!remap && bmh->bmh_Depth > 8 && scr) {
         DisposeDTObject(o);
-        return pic_decode(path, scr, TRUE, remapped, pi);
+        return pic_decode_fit(path, scr, TRUE, remapped, pi, fitw, fith);
     }
     pic_info(o, bmh, pi);
+    GetDTAttrs(o, JDTA_FullWidth, (ULONG)&fullw, JDTA_FullHeight, (ULONG)&fullh, TAG_END);
+    if (fullw && fullh) {               /* decoded smaller: its own size */
+        pi->w = (UWORD)fullw;
+        pi->h = (UWORD)fullh;
+    }
     *remapped = remap;
     return o;
 }

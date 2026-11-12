@@ -249,6 +249,8 @@ void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);
 /* The same in two halves: decoding (any process; remap FALSE takes no
  * pens) and drawing what was decoded (the object stays the caller's, to
  * draw again, unless *taken). */
+APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
+                    struct PicInfo *pi, ULONG fitw, ULONG fith);
 APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                 struct PicInfo *pi);
 BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
