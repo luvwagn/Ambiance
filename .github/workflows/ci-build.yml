@@ -43,7 +43,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: zzprobe
-        path: build/zzprobe
+        path: |
+          build/zzprobe
+          tools/zzprobe/Bench
 
     - name: Archive LHA
       uses: actions/upload-artifact@v4

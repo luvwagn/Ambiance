@@ -20,7 +20,8 @@
  *     their pixels read back, as AmigaMCE's previews do;
  *   - MP3 decoded by mpega.library, as AmigaMCE asks a 68k for this CPU,
  *     and at full quality (what it asks of the card's).
- * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3.
+ * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3
+ * (made by mkbench.py beside this file; the Bench drawer goes beside zzprobe).
  * The report goes to the Shell, and is added to PROGDIR:zzprobe.txt with
  * the date, so runs before and after a change sit side by side.
  */
@@ -445,14 +446,14 @@ static void run_tool(const char *cmd, const char *title)
 /* ------------------------------------------------------------ bench: pictures */
 static void bench_picture(const char *path, const char *fmt)
 {
-    char line[220], t1[24], t2[24], t3[24];
+    char line[320], t1[24], t2[24], t3[24];
     ULONG best = 0xFFFFFFFF, worst = 0, sum = 0, runs = 0, start, rb_best = 0xFFFFFFFF;
     ULONG w = 0, h = 0;
     UWORD depth = 0;
     char base[40];
     base[0] = 0;
     if (!exists(path)) {
-        sprintf(line, "  %s: no test file (%s)", fmt, path);
+        sprintf(line, "  %s: no test file (%.100s): copy the Bench drawer beside zzprobe, or give %s=<file>", fmt, path, fmt);
         sayf(line);
         return;
     }
@@ -464,7 +465,7 @@ static void bench_picture(const char *path, const char *fmt)
         struct BitMapHeader *bmh = NULL;
         struct DataType *dtn = NULL;
         if (!o) {
-            sprintf(line, "  %s: %s could not be read by any datatype", fmt, path);
+            sprintf(line, "  %s: %.100s could not be read by any datatype", fmt, path);
             sayf(line);
             return;
         }
@@ -569,7 +570,7 @@ static void bench_mp3_one(const char *path, const char *label, WORD q, WORD mono
         ly->stereo = ly->mono;
     }
     if (!(ms = MPEGA_open((char *)path, &ctrl))) {
-        sprintf(line, "  %s: mpega.library could not open %s", label, path);
+        sprintf(line, "  %s: mpega.library could not open %.100s", label, path);
         sayf(line);
         return;
     }
@@ -607,9 +608,9 @@ static void bench_mp3(const char *path)
     UWORD cpu = cpu_of();
     WORD q;
     LONG fmax;
-    char line[200];
+    char line[320];
     if (!exists(path)) {
-        sprintf(line, "  MP3: no test file (%s)", path);
+        sprintf(line, "  MP3: no test file (%.100s): copy the Bench drawer beside zzprobe, or give MP3=<file>", path);
         sayf(line);
         return;
     }
