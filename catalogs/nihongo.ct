@@ -961,9 +961,9 @@ MSG_1CAF7095
 MSG_0B3E0086
 ループ オン: 終わると最初から再生します
 ; Loop on: it plays again at its end
-MSG_546C12F6
-ループ オフ
-; Loop off
+MSG_0144F316
+ループ オフ: 終わると止まります
+; Loop off: it stops at its end
 MSG_6AA26665
 再生中
 ; Now playing

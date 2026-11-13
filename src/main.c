@@ -7585,7 +7585,8 @@ static void np_press(int b)
         }
         play_loop = !play_loop;
         save_setting(LOOP_VAR, play_loop ? "1" : "0");
-        set_msg(play_loop ? _("Loop on: it plays again at its end") : _("Loop off"));
+        set_msg(play_loop ? _("Loop on: it plays again at its end")
+                          : _("Loop off: it stops at its end"));
         break;
     case NB_VDOWN:
         np_volume(-VOL_STEP);

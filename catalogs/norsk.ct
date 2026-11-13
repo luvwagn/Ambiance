@@ -961,9 +961,9 @@ Denne modulen kan ikke spoles i
 MSG_0B3E0086
 Gjenta på: den spilles igjen når den er ferdig
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Gjenta av
-; Loop off
+MSG_0144F316
+Gjenta av: den stopper når den er ferdig
+; Loop off: it stops at its end
 MSG_6AA26665
 Spilles nå
 ; Now playing

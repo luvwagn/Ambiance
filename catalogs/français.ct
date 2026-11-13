@@ -961,9 +961,9 @@ On ne peut pas se déplacer dans ce module
 MSG_0B3E0086
 Boucle activée : la lecture reprend à la fin
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Boucle désactivée
-; Loop off
+MSG_0144F316
+Boucle désactivée : la lecture s'arrête à la fin
+; Loop off: it stops at its end
 MSG_6AA26665
 En lecture
 ; Now playing

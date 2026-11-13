@@ -961,8 +961,8 @@ This module cannot be moved through
 MSG_0B3E0086 (188612742//)
 Loop on: it plays again at its end
 ; main.c:7588
-MSG_546C12F6 (1416368886//)
-Loop off
+MSG_0144F316 (21295894//)
+Loop off: it stops at its end
 ; main.c:7606 main.c:8101 main.c:8140
 MSG_6AA26665 (1789027941//)
 Now playing

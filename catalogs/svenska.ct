@@ -961,9 +961,9 @@ Den här modulen går inte att spola i
 MSG_0B3E0086
 Upprepa på: den spelas igen när den är slut
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Upprepa av
-; Loop off
+MSG_0144F316
+Upprepa av: den stannar när den är slut
+; Loop off: it stops at its end
 MSG_6AA26665
 Spelas nu
 ; Now playing

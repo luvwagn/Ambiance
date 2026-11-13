@@ -961,9 +961,9 @@ En este módulo no se puede avanzar ni retroceder
 MSG_0B3E0086
 Repetir activado: vuelve a sonar al terminar
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Repetir desactivado
-; Loop off
+MSG_0144F316
+Repetir desactivado: se detiene al terminar
+; Loop off: it stops at its end
 MSG_6AA26665
 Reproduciendo
 ; Now playing

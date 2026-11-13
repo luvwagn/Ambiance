@@ -961,9 +961,9 @@ Neste módulo não é possível avançar ou recuar
 MSG_0B3E0086
 Repetir ligado: volta a tocar no fim
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Repetir desligado
-; Loop off
+MSG_0144F316
+Repetir desligado: para no fim
+; Loop off: it stops at its end
 MSG_6AA26665
 A tocar
 ; Now playing

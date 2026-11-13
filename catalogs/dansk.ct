@@ -961,9 +961,9 @@ Man kan ikke spole i dette modul
 MSG_0B3E0086
 Gentag til: den spiller igen, når den slutter
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Gentag fra
-; Loop off
+MSG_0144F316
+Gentag fra: den stopper, når den slutter
+; Loop off: it stops at its end
 MSG_6AA26665
 Spiller nu
 ; Now playing

@@ -961,9 +961,9 @@ Tässä moduulissa ei voi siirtyä
 MSG_0B3E0086
 Toisto päällä: soi uudelleen loputtuaan
 ; Loop on: it plays again at its end
-MSG_546C12F6
-Toisto pois
-; Loop off
+MSG_0144F316
+Toisto pois: pysähtyy loputtuaan
+; Loop off: it stops at its end
 MSG_6AA26665
 Nyt soi
 ; Now playing
