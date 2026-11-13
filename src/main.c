@@ -6679,13 +6679,16 @@ static void np_layout(void)
          * (half on hires, whose pixels are twice as tall) */
         WORD per = gfx_mode_tall(g.mode) ? 2 : 1;
         WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
-        WORD sa = (g.footer_y - 2 - np.samples_y - U(2)) * per, sb, right, y = np.samples_y;
+        /* (as if the tips bar showed: a window's hides and comes back,
+         * and the cover would grow and shrink, and move, with it) */
+        WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
+        WORD sa = (fy - 2 - np.samples_y - U(2)) * per, sb, right, y = np.samples_y;
         if (sa > np.w * 2 / 5)
             sa = np.w * 2 / 5;
         right = (np.vol_x >= 0 ? np.vol_x + vt : np.bx[NB_VUP] + np.bw) + U(10);
         sb = np.x0 + np.w - right;
-        if (sb > (g.footer_y - 2 - np.by - U(2)) * per)
-            sb = (g.footer_y - 2 - np.by - U(2)) * per;
+        if (sb > (fy - 2 - np.by - U(2)) * per)
+            sb = (fy - 2 - np.by - U(2)) * per;
         if (sb > sa) {
             sa = sb;
             y = np.by;
