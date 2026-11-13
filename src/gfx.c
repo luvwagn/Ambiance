@@ -811,6 +811,44 @@ void gfx_window_size_to(struct Gfx *g, WORD iw, WORD ih)
         ChangeWindowBox(win, win->LeftEdge, win->TopEdge, iw + bw, ih + bh);
 }
 
+/* The grip dragged (the main loop's and a video's): a press on it begins,
+ * the mouse's moves size the window, its release ends. x, y as the message
+ * gives them (the window's, borders included). TRUE: the message was the
+ * grip's. */
+static struct { BOOL on; WORD mx, my, w, h; } sizing;
+
+BOOL gfx_window_sizing(struct Gfx *g, ULONG cls, UWORD code, WORD mx, WORD my)
+{
+    struct Screen *sc;
+    WORD x, y, s;
+    if (!g->wb || !g->win) {
+        sizing.on = FALSE;
+        return FALSE;
+    }
+    sc = g->win->WScreen;
+    x = mx - g->win->BorderLeft;
+    y = my - g->win->BorderTop;
+    s = gfx_window_grip(g);
+    if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN && s &&
+        x >= g->w - s && y >= g->h - s && x < g->w && y < g->h) {
+        sizing.on = TRUE;
+        sizing.mx = sc->MouseX;
+        sizing.my = sc->MouseY;
+        sizing.w = g->w;
+        sizing.h = g->h;
+        return TRUE;
+    }
+    if (!sizing.on)
+        return FALSE;
+    if (cls == IDCMP_MOUSEMOVE)
+        gfx_window_size_to(g, sizing.w + sc->MouseX - sizing.mx, sizing.h + sc->MouseY - sizing.my);
+    else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTUP)
+        sizing.on = FALSE;
+    else if (cls == IDCMP_INACTIVEWINDOW)
+        sizing.on = FALSE;
+    return TRUE;
+}
+
 /* Where it is and how large inside (to keep, and give back next time). */
 BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k)
 {

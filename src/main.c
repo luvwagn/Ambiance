@@ -4012,38 +4012,6 @@ static void draw_footer(void)
 
 /* Sizing the window by its grip: pressed there, the pointer followed (by
  * the screen's position, the window moving under it) until let go. */
-static struct { BOOL on; WORD mx, my, w, h; } sizing;
-
-static BOOL window_sizing(const struct IntuiMessage *im)
-{
-    struct Screen *sc;
-    WORD x, y, s;
-    if (!g.wb || !g.win)
-        return FALSE;
-    sc = g.win->WScreen;
-    x = im->MouseX - g.win->BorderLeft;
-    y = im->MouseY - g.win->BorderTop;
-    s = gfx_window_grip(&g);
-    if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && s &&
-        x >= g.w - s && y >= g.h - s && x < g.w && y < g.h) {
-        sizing.on = TRUE;
-        sizing.mx = sc->MouseX;
-        sizing.my = sc->MouseY;
-        sizing.w = g.w;
-        sizing.h = g.h;
-        return TRUE;
-    }
-    if (!sizing.on)
-        return FALSE;
-    if (im->Class == IDCMP_MOUSEMOVE)
-        gfx_window_size_to(&g, sizing.w + sc->MouseX - sizing.mx, sizing.h + sc->MouseY - sizing.my);
-    else if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP)
-        sizing.on = FALSE;
-    else if (im->Class == IDCMP_INACTIVEWINDOW)
-        sizing.on = FALSE;
-    return TRUE;
-}
-
 static void set_msg(const char *m)
 {
     amce_strlcpy(msg, m ? m : "", sizeof(msg));
@@ -9341,6 +9309,9 @@ static void viewer_done(void)
     view_restore(&g);
 }
 
+static void layout_let_go(void);
+static void window_relaid(WORD ow, WORD oh, ULONG t0);
+
 /* An animation of a Videos (or Pictures) list, played on a screen of its
  * own in front of AmigaMCE's (anim.c), which comes back as it was. */
 static void anim_from_page(struct Page *p)
@@ -9377,12 +9348,17 @@ static void anim_from_page(struct Page *p)
     gfx_window_rmb(&g, 32767);              /* (the right button: Back, not the menus) */
     {
         BOOL loop_was = play_loop;
+        WORD aw = g.w, ah = g.h;
         if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amce_log("anim", err);
             set_msg(err);
         }
         if (play_loop != loop_was)          /* (its loop button: the one setting) */
             save_setting(LOOP_VAR, play_loop ? "1" : "0");
+        if (g.wb && (g.w != aw || g.h != ah)) {
+            layout_let_go();                /* resized while it played: laid out for it */
+            window_relaid(aw, ah, time_ms());
+        }
     }
     gfx_dbuf_start(&g);
     draw_all();
@@ -9841,18 +9817,28 @@ static void foot_show(BOOL on)
     foot_since = on && mouse_mode ? time_ms() : 0;
 }
 
+static void window_relaid(WORD ow, WORD oh, ULONG t0);
+
 static void window_resized(void)
 {
     ULONG t0 = time_ms();
-    WORD ow = g.w, oh = g.h, vis;
-    char m[200];
-    int i;
+    WORD ow = g.w, oh = g.h;
     gfx_resized_at = 0;
     if (!g.wb)
         return;
     layout_let_go();
     if (!gfx_window_resize(&g))
         return;
+    window_relaid(ow, oh, t0);
+}
+
+/* ...its new size's layout, from ow x oh (a video resizes the window as it
+ * plays, and this follows when it ends). */
+static void window_relaid(WORD ow, WORD oh, ULONG t0)
+{
+    WORD vis;
+    char m[200];
+    int i;
     if (foot_hidden)
         g.footer_y = g.h;                   /* (still hidden) */
     spin_free();
@@ -13814,7 +13800,7 @@ static int app_main(void)
                         running = FALSE;    /* the close gadget: as Esc on the menu twice */
                 } else if (copy.Class == IDCMP_MENUPICK) {
                     window_menu(copy.Code);
-                } else if (window_sizing(&copy)) {
+                } else if (gfx_window_sizing(&g, copy.Class, copy.Code, copy.MouseX, copy.MouseY)) {
                     ;                       /* the grip's (a window) */
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */

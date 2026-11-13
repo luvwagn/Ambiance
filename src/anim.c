@@ -1181,6 +1181,7 @@ static int ctl_enter(void)
  * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
  * the controls but no button. */
 static struct Gfx *anim_g;      /* AmigaMCE's screen or window, while playing on it */
+#define RESIZE_SETTLE 150       /* ms after a window's last NEWSIZE (as main.c's) */
 
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
@@ -1197,6 +1198,9 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 1;                      /* the window's close gadget: out */
             continue;
         }
+        if (anim_g && win == anim_g->win && !gfx_fs_on() &&
+            gfx_window_sizing(anim_g, cl, code, mx + win->BorderLeft, my + win->BorderTop))
+            continue;                       /* the grip: the window resized */
         if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||
              (cl == IDCMP_RAWKEY && (code == 0x7A || code == 0x7B))) && time_ms() - ctl.opened > 500)
             ctl.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
@@ -1275,6 +1279,9 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         }
         *jlast = st;
     }
+    if (!r && anim_g && win == anim_g->win && anim_g->wb && !gfx_fs_on() && gfx_resized_at &&
+        (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
+        r = 6;                              /* resized, and settled: laid out again */
     return r;
 }
 
@@ -2553,6 +2560,51 @@ restart:
                 relaid = TRUE;              /* (the frame there drawn, not the next read) */
                 sprintf(m, "seek to %lu ms: %lu frames decoded in %lu ms", (unsigned long)target,
                         (unsigned long)dec, (unsigned long)(time_ms() - tseek));
+                amce_log("anim", m);
+                break;
+            }
+            if (r == 6) {
+                /* the window resized: its buffer made again at its new
+                 * size, the picture and the controls laid out in it */
+                int focus = ctl.focus;
+                ULONG tr = time_ms();
+                WORD ow = g->w, oh = g->h;
+                gfx_resized_at = 0;
+                whole = TRUE;               /* (the window all copied, once drawn) */
+                strip_cleanup(g);
+                if (!gfx_window_resize(g)) {
+                    strip_setup(g);
+                    ctl.nbtn = BT_N;
+                    ctl.focus = focus;
+                    continue;
+                }
+                st.y = g->h - st.h;         /* the controls at its foot */
+                fs_pbm(g, w, h, ax, ay);    /* the picture's bitmap, for the new size */
+                strip_setup(g);
+                ctl.nbtn = BT_N;
+                ctl.focus = focus;
+                ox = oy = 0;
+                if (g->rp->Layer) {
+                    ox = g->rp->Layer->bounds.MinX;
+                    oy = g->rp->Layer->bounds.MinY;
+                }
+                lay_out(g, w, h, ax, ay, FALSE);
+                dw = lay.dw;
+                dh = lay.dh;
+                vx = lay.vx;
+                vy = lay.vy;
+                fx = lay.fx;
+                fy = lay.fy;
+                if (cd.ncol)
+                    card_choose(g, w, h, depth, ham, rb);
+                FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+                sf.lv = 0;
+                sf.drawn = FALSE;
+                fresh = TRUE;
+                relaid = TRUE;
+                sprintf(m, "window %ld x %ld to %ld x %ld: the picture %ld x %ld, laid out in %lu ms",
+                        (long)ow, (long)oh, (long)g->w, (long)g->h, (long)dw, (long)dh,
+                        (unsigned long)(time_ms() - tr));
                 amce_log("anim", m);
                 break;
             }
