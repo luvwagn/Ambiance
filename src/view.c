@@ -827,10 +827,17 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     Object *o = NULL;
     char msg[160];
 
+    if (has_pic && !clut && view_transition != VT_CUT) {
+        /* the bar and the spinner off it first, and seen to be: a window
+         * shows only the picture's part during the transition, which
+         * drew into a bar still showing beside it */
+        view_spin_hide(g);
+        view_bar_hide(g);
+        gfx_present(g);
+    }
     spin_forget();
     if (has_pic && !clut && view_transition != VT_CUT) {
         /* left up, for the transition to this one */
-        view_bar_hide(g);
         if (obj) {
             DisposeDTObject(obj);
             obj = NULL;
