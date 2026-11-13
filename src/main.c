@@ -9876,6 +9876,7 @@ static void wb_follow(void)
         Delay(5);
     }
     gfx_wb_done();
+    SetSignal(0, gfx_wb_sigmask());     /* (a prefs file's other notifications meanwhile) */
     sprintf(m, "%s after %lu ms", running && time_ms() - t0 < WB_BACK_WAIT ? "Workbench back" :
             "Workbench not back", (unsigned long)(time_ms() - t0));
     amce_log("window", m);
@@ -13767,7 +13768,9 @@ static int app_main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
-        if ((sig & bsig) || gfx_wb_event()) {
+        if (sig & bsig)
+            gfx_wb_signalled();         /* (watched prefs changed: OS 3.0, 3.1) */
+        if (gfx_wb_event()) {
             wb_follow();                /* Workbench closing: our window too, until it is back */
             if (!running)
                 break;

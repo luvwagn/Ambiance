@@ -31,6 +31,7 @@
 #include <libraries/gadtools.h>
 #include <workbench/workbench.h>
 #include <proto/wb.h>
+#include <dos/notify.h>
 #include <stdio.h>
 #include "../datatypes/jpeg/amcejpeg.h"
 
@@ -865,6 +866,18 @@ static BYTE wbw_bit = -1;
 static volatile BOOL wbw_open;          /* our window is on Workbench now */
 static volatile UBYTE wbw_ev;           /* GFX_WB_* asked, for the main loop */
 static BOOL wbw_on;
+/* Without the hook (workbench.library V40: OS 3.0, 3.1): the prefs whose
+ * change makes IPrefs reset Workbench watched as IPrefs watches them, the
+ * window closed at once, and Workbench seen to go and come back. */
+static const char *const wbw_files[] = {
+    "ENV:Sys/screenmode.prefs", "ENV:Sys/overscan.prefs", "ENV:Sys/font.prefs" };
+#define WBW_NFILES 3
+#define WBW_SAME_MS 5000                /* not gone by then: it was not reset */
+static struct NotifyRequest wbw_nr[WBW_NFILES];
+static UBYTE wbw_nr_on;                 /* bit a file watched */
+static struct Screen *wbw_old;          /* (compared only, never used) */
+static BOOL wbw_seen_gone;
+static ULONG wbw_t0;
 
 static ULONG wbw_func(register struct Hook *h __asm("a0"),
                       register struct SetupCleanupHookMsg *m __asm("a1"),
@@ -895,13 +908,27 @@ static void wbw_start(void)
     struct TagItem t[2];
     if (wbw_on)
         return;
-    if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45))) {
-        amce_log("window", "workbench.library under V45: Workbench's closing not followed");
-        return;
-    }
-    if ((wbw_bit = AllocSignal(-1)) < 0)
+    if (wbw_bit < 0 && (wbw_bit = AllocSignal(-1)) < 0)
         return;
     wbw_task = FindTask(NULL);
+    if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45))) {
+        int i;
+        for (i = 0; i < WBW_NFILES; i++) {
+            struct NotifyRequest *nr = &wbw_nr[i];
+            memset(nr, 0, sizeof(*nr));
+            nr->nr_Name = (STRPTR)wbw_files[i];
+            nr->nr_Flags = NRF_SEND_SIGNAL;
+            nr->nr_stuff.nr_Signal.nr_Task = wbw_task;
+            nr->nr_stuff.nr_Signal.nr_SignalNum = (UBYTE)wbw_bit;
+            if (StartNotify(nr))
+                wbw_nr_on |= 1 << i;
+        }
+        wbw_on = TRUE;
+        amce_log("window", wbw_nr_on ? "Workbench's closing followed (its prefs watched: no "
+                                       "workbench.library V45)"
+                                     : "Workbench's closing not followed (no notification)");
+        return;
+    }
     wbw_hook.h_Entry = (HOOKFUNC)(APTR)wbw_func;
     t[0].ti_Tag = WBCTRLA_AddSetupCleanupHook;
     t[0].ti_Data = (ULONG)&wbw_hook;
@@ -918,6 +945,14 @@ static void wbw_start(void)
 
 void gfx_wb_watch_end(void)
 {
+    int i;
+    for (i = 0; i < WBW_NFILES; i++)
+        if (wbw_nr_on & (1 << i))
+            EndNotify(&wbw_nr[i]);
+    if (wbw_nr_on) {
+        wbw_nr_on = 0;
+        wbw_on = FALSE;
+    }
     if (wbw_on) {
         struct TagItem t[2];
         t[0].ti_Tag = WBCTRLA_RemSetupCleanupHook;
@@ -944,11 +979,39 @@ ULONG gfx_wb_sigmask(void)
 int gfx_wb_event(void)
 {
     UBYTE e = wbw_ev;
+    if (e == GFX_WB_GONE && wbw_nr_on) {
+        /* watched prefs: back once it has gone and come again (or is another
+         * screen now), or when it stayed (no reset after all) */
+        struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+        if (!s)
+            wbw_seen_gone = TRUE;
+        else {
+            if (s != wbw_old || wbw_seen_gone || time_ms() - wbw_t0 >= WBW_SAME_MS)
+                wbw_ev = e = GFX_WB_BACK;
+            UnlockPubScreen(NULL, s);
+        }
+    }
     return e == GFX_WB_CLOSING || e == GFX_WB_BACK ? e : 0;
+}
+
+/* The main loop's signal came: with watched prefs, a change (our window,
+ * if open, to close now). */
+void gfx_wb_signalled(void)
+{
+    if (wbw_nr_on && wbw_open && !wbw_ev)
+        wbw_ev = GFX_WB_CLOSING;
 }
 
 void gfx_wb_gone(void)
 {
+    if (wbw_nr_on) {
+        struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+        wbw_old = s;
+        if (s)
+            UnlockPubScreen(NULL, s);
+        wbw_seen_gone = !s;
+        wbw_t0 = time_ms();
+    }
     wbw_ev = GFX_WB_GONE;               /* (BACK when it is) */
 }
 

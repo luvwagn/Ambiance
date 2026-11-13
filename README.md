@@ -147,8 +147,11 @@ of the Amiga to how fast it really is.
   change mode. When Workbench's screen mode is changed (ScreenMode prefs),
   the window closes as Workbench does, so no "Intuition is attempting to
   reset the Workbench screen" requester, and opens again on the new
-  screen, or full screen if a window cannot be there now
-  (workbench.library V45 or newer: OS 3.5, 3.9, 3.2).
+  screen, or full screen if a window cannot be there now. On OS 3.5, 3.9
+  and 3.2 Workbench says when it is closing (workbench.library V45's
+  setup/cleanup hook); on 3.0 and 3.1 AmigaMCE watches the ScreenMode,
+  Overscan and Font prefs in ENV:Sys as IPrefs does, and closes its window
+  as soon as one changes.
 - Flicker-free scrolling text and lists. A long list always shows a scroll bar
   (how long it is, and where you are in it), which the mouse can drag or click.
 
