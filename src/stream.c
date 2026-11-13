@@ -1297,6 +1297,19 @@ static LONG first_frame_freq(void)
     return 0;
 }
 
+/* What a track is called in the log: the last part of its URL or path,
+ * without the query (a Plex track's carries the sign-in token, which
+ * never goes into the log). */
+static const char *log_name(void)
+{
+    static char u[120];
+    char *q;
+    amce_strlcpy(u, (const char *)FilePart((STRPTR)st.url), sizeof(u));
+    if ((q = strchr(u, '?')))
+        *q = 0;
+    return u;
+}
+
 /* ---------------------------------------------------------- decoding */
 static ULONG dec_full, dec_samples;     /* mpega's samples at full scale, of all it gave */
 
@@ -1684,7 +1697,7 @@ static void pcm_play(void)
     {
         char m[200];
         sprintf(m, "%s: %s %ld Hz %ld-bit, %ld channel%s, played at %ld Hz %s",
-                FilePart((STRPTR)st.url), pf.kind == PCM_WAV ? "WAV" : pf.kind == PCM_AIFF ? "AIFF"
+                log_name(), pf.kind == PCM_WAV ? "WAV" : pf.kind == PCM_AIFF ? "AIFF"
                 : "8SVX", (long)pf.rate, (long)pf.bits, (long)pf.channels,
                 pf.channels == 1 ? "" : "s", (long)st.dec_freq, mono ? "mono" : "stereo");
         amce_log("track", m);
@@ -1950,7 +1963,7 @@ static void mhi_play(LONG freq)
     {
         char m[200];
         sprintf(m, "%.60s: MP3 %ld kbit/s %ld Hz %s, decoded and played by %.60s",
-                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                st.finite ? log_name() : st.name[0] ? st.name : "a station",
                 (long)st.bitrate, (long)freq, ch == 1 ? "mono" : "stereo",
                 (const char *)FilePart((STRPTR)mhi_driver));
         amce_log(st.finite ? "track" : "radio", m);
@@ -2045,7 +2058,7 @@ done:
     if (mhs.playing) {
         char m[160];
         sprintf(m, "%.60s: %lu s played, %lu dropout%s, at least %lu.%lu s held",
-                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                st.finite ? log_name() : st.name[0] ? st.name : "a station",
                 (unsigned long)(mh_ms() / 1000), (unsigned long)st.underruns,
                 st.underruns == 1 ? "" : "s", (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms / 1000),
                 (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms % 1000 / 100));
@@ -2193,7 +2206,7 @@ static void radio_main(void)
         ULONG per = dec_samples / 10000 ? dec_full / (dec_samples / 10000) : 0;
         sprintf(m, "%.60s: %lu s decoded, %lu dropout%s; %lu samples at full scale (%lu in 10000), "
                    "to %s",
-                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                st.finite ? log_name() : st.name[0] ? st.name : "a station",
                 (unsigned long)(dec_samples / (st.dec_freq ? st.dec_freq : 22050)),
                 (unsigned long)st.underruns, st.underruns == 1 ? "" : "s",
                 (unsigned long)dec_full, (unsigned long)per, st.ahi ? "AHI" : "Paula");
