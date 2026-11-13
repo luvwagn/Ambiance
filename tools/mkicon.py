@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Write Workbench .info icons: classic 4-colour images (OS 1.x-3.x), and
-for the program a GlowIcon too (OS 3.5+ shows it instead: 256 colours).
+"""Write Workbench .info icons: classic 4-colour images (OS 1.x-3.x), each
+with a selected image of its own (complement highlighting inverts all of a
+deeper Workbench's bitplanes: colours from anywhere in its palette), and
+for the program and the drawer a GlowIcon too (OS 3.5+ shows it instead:
+256 colours).
 
 Usage: python3 tools/mkicon.py <outdir>
 Writes:
@@ -186,6 +189,29 @@ def tool_glow():
         out.append(canvas)
     return out
 
+def drawer_glow():
+    """46 x 40: a drawer, its tab on the left, the badge on its front;
+    selected, lighter (Workbench adds its own glow)."""
+    out = []
+    for light in (False, True):
+        ss = 8
+        big = Image.new("RGBA", (46 * ss, 40 * ss), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        body = (0xC8, 0xC8, 0xC8) if not light else (0xE4, 0xE4, 0xE4)
+        tab = (0xB0, 0xB0, 0xB0) if not light else (0xD0, 0xD0, 0xD0)
+        edge = (0x33, 0x33, 0x33)
+        lw = 2 * ss // 2 + ss // 2
+        d.rounded_rectangle([3 * ss, 2 * ss, 18 * ss, 10 * ss], radius=2 * ss, fill=tab + (255,),
+                            outline=edge + (255,), width=lw)
+        d.rounded_rectangle([1 * ss, 6 * ss, 45 * ss - 1, 39 * ss - 1], radius=3 * ss,
+                            fill=body + (255,), outline=edge + (255,), width=lw)
+        d.line([(3 * ss, 8 * ss), (43 * ss, 8 * ss)], fill=WHITE + (255,), width=ss)
+        im = big.resize((46, 40), Image.LANCZOS)
+        im.alpha_composite(badge(14, sx=22 / 14, sy=22 / 14, light=light), (12, 12))
+        out.append(im)
+    return out
+
+
 WB_DISKMAGIC = 0xE310
 WBDISK, WBDRAWER, WBTOOL, WBPROJECT = 1, 2, 3, 4
 NO_ICON_POSITION = 0x80000000
@@ -254,6 +280,28 @@ def planes(art):
     return w, h, bytes(out)
 
 
+def selected_art(art):
+    """The selected image: what complement highlighting showed on a 4-colour
+    Workbench (each pen p as 3 - p), drawn as an image of its own, the
+    background round the shape left as it is. Complement itself inverts
+    every bitplane of the screen: on a deeper Workbench, colours from
+    anywhere in its palette."""
+    w = max(len(r) for r in art)
+    g = [list(r.ljust(w, ".")) for r in art]
+    h = len(g)
+    outside = set()
+    todo = [(x, y) for y in range(h) for x in (0, w - 1)] + [(x, y) for x in range(w) for y in (0, h - 1)]
+    while todo:
+        x, y = todo.pop()
+        if (x, y) in outside or not (0 <= x < w and 0 <= y < h) or g[y][x] != ".":
+            continue
+        outside.add((x, y))
+        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    inv = {".": "b", "k": "w", "w": "k", "b": "."}
+    return ["".join(c if (x, y) in outside else inv[c] for x, c in enumerate(row))
+            for y, row in enumerate(g)]
+
+
 def image(art):
     w, h, data = planes(art)
     # LeftEdge, TopEdge, Width, Height, Depth, ImageData(ptr), PlanePick, PlaneOnOff, NextImage
@@ -267,14 +315,15 @@ def bstr(s):
 
 def diskobject(kind, art, default_tool=None, tooltypes=None, stack=0, glow=None):
     img, w, h = image(art)
+    simg, _, _ = image(selected_art(art))
     gadget = struct.pack(">IhhhhHHHIIIiIHI",
                          0,            # NextGadget
                          0, 0, w, h,   # LeftEdge, TopEdge, Width, Height
-                         0x0004,       # Flags: GFLG_GADGIMAGE, complement highlight
+                         0x0006,       # Flags: GFLG_GADGIMAGE, GFLG_GADGHIMAGE (its own selected image)
                          0x0003,       # Activation: RELVERIFY | GADGIMMEDIATE
                          0x0001,       # GadgetType: BOOLGADGET
                          1,            # GadgetRender (non-zero: image follows)
-                         0,            # SelectRender
+                         1,            # SelectRender (non-zero: its image follows the first)
                          0,            # GadgetText
                          0,            # MutualExclude
                          0,            # SpecialInfo
@@ -297,7 +346,7 @@ def diskobject(kind, art, default_tool=None, tooltypes=None, stack=0, glow=None)
                          0, 0, 0, 0, 0, 90, 40, 0xFFFF, 0xFFFF, 1)
         assert len(nw) == 48, len(nw)
         out += nw + struct.pack(">ii", 0, 0)
-    out += img
+    out += img + simg
     if default_tool:
         out += bstr(default_tool)
     if tooltypes:
@@ -315,7 +364,7 @@ def main():
     files = {
         "AmigaMCE.info": diskobject(WBTOOL, badge_art(), stack=32768,
                                     tooltypes=["DONOTWAIT", "(WINDOWED)"], glow=glowicon(*tool_glow())),
-        "drawer.info": diskobject(WBDRAWER, DRAWER_ART),
+        "drawer.info": diskobject(WBDRAWER, DRAWER_ART, glow=glowicon(*drawer_glow())),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
         "install.info": diskobject(WBPROJECT, badge_art(), default_tool="Installer", stack=16384,
                                    tooltypes=["APPNAME=AmigaMCE", "MINUSER=AVERAGE"],
