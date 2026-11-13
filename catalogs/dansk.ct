@@ -424,9 +424,6 @@ Mellem
 MSG_718B9F54
 Stor
 ; Large
-MSG_678631FD
-Vindue
-; Window
 MSG_2C041143
 Tekststørrelse
 ; Text size
@@ -454,15 +451,9 @@ Spring-rulning (pr. bogstav)
 MSG_1CD58066
 Diasshow-overgang
 ; Slideshow transition
-MSG_47318A8A
-Animationer
-; Animations
-MSG_5C9709AA
-På AmigaMCE's skærm
-; On AmigaMCE's screen
-MSG_3B46B8BE
-På deres egen skærm
-; On a screen of their own
+MSG_584F0908
+Videoer på egen skærm
+; Videos on a screen of their own
 MSG_71E19418
 Fejlfinding (CPU, hukommelse, log)
 ; Debug (CPU, memory, log)

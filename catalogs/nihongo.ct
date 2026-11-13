@@ -424,9 +424,6 @@ MSG_09BE5F96
 MSG_718B9F54
 大
 ; Large
-MSG_678631FD
-ウィンドウ
-; Window
 MSG_2C041143
 文字サイズ
 ; Text size
@@ -454,15 +451,9 @@ MSG_52325DD8
 MSG_1CD58066
 スライドショーの切り替え
 ; Slideshow transition
-MSG_47318A8A
-アニメーション
-; Animations
-MSG_5C9709AA
-AmigaMCEの画面で
-; On AmigaMCE's screen
-MSG_3B46B8BE
-専用の画面で
-; On a screen of their own
+MSG_584F0908
+ビデオを専用の画面で
+; Videos on a screen of their own
 MSG_71E19418
 デバッグ (CPU、メモリ、ログ)
 ; Debug (CPU, memory, log)

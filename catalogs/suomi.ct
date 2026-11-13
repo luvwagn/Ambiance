@@ -424,9 +424,6 @@ Keskikokoinen
 MSG_718B9F54
 Suuri
 ; Large
-MSG_678631FD
-Ikkuna
-; Window
 MSG_2C041143
 Tekstin koko
 ; Text size
@@ -454,15 +451,9 @@ Hyppivä vieritys (kirjaimittain)
 MSG_1CD58066
 Diaesityksen siirtymä
 ; Slideshow transition
-MSG_47318A8A
-Animaatiot
-; Animations
-MSG_5C9709AA
-AmigaMCE:n näytöllä
-; On AmigaMCE's screen
-MSG_3B46B8BE
-Omalla näytöllään
-; On a screen of their own
+MSG_584F0908
+Videot omalla näytöllään
+; Videos on a screen of their own
 MSG_71E19418
 Vianetsintä (CPU, muisti, loki)
 ; Debug (CPU, memory, log)

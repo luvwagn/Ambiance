@@ -424,9 +424,6 @@ Middels
 MSG_718B9F54
 Stor
 ; Large
-MSG_678631FD
-Vindu
-; Window
 MSG_2C041143
 Tekststørrelse
 ; Text size
@@ -454,15 +451,9 @@ Hoppende rulling (per bokstav)
 MSG_1CD58066
 Lysbildeovergang
 ; Slideshow transition
-MSG_47318A8A
-Animasjoner
-; Animations
-MSG_5C9709AA
-På AmigaMCEs skjerm
-; On AmigaMCE's screen
-MSG_3B46B8BE
-På sin egen skjerm
-; On a screen of their own
+MSG_584F0908
+Videoer på egen skjerm
+; Videos on a screen of their own
 MSG_71E19418
 Feilsøking (CPU, minne, logg)
 ; Debug (CPU, memory, log)

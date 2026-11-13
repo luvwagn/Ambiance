@@ -424,9 +424,6 @@ Mittel
 MSG_718B9F54
 Groß
 ; Large
-MSG_678631FD
-Fenster
-; Window
 MSG_2C041143
 Textgröße
 ; Text size
@@ -454,15 +451,9 @@ Sprungweises Blättern (nach Buchstabe)
 MSG_1CD58066
 Diaschau-Übergang
 ; Slideshow transition
-MSG_47318A8A
-Animationen
-; Animations
-MSG_5C9709AA
-Auf dem Bildschirm von AmigaMCE
-; On AmigaMCE's screen
-MSG_3B46B8BE
-Auf einem eigenen Bildschirm
-; On a screen of their own
+MSG_584F0908
+Videos auf eigenem Bildschirm
+; Videos on a screen of their own
 MSG_71E19418
 Debug (CPU, Speicher, Log)
 ; Debug (CPU, memory, log)

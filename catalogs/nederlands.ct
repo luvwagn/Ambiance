@@ -424,9 +424,6 @@ Middel
 MSG_718B9F54
 Groot
 ; Large
-MSG_678631FD
-Venster
-; Window
 MSG_2C041143
 Tekstgrootte
 ; Text size
@@ -454,15 +451,9 @@ Springend scrollen (per letter)
 MSG_1CD58066
 Diavoorstelling-overgang
 ; Slideshow transition
-MSG_47318A8A
-Animaties
-; Animations
-MSG_5C9709AA
-Op het scherm van AmigaMCE
-; On AmigaMCE's screen
-MSG_3B46B8BE
-Op een eigen scherm
-; On a screen of their own
+MSG_584F0908
+Video's op een eigen scherm
+; Videos on a screen of their own
 MSG_71E19418
 Foutopsporing (CPU, geheugen, log)
 ; Debug (CPU, memory, log)

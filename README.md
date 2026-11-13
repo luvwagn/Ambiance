@@ -138,7 +138,7 @@ of the Amiga to how fast it really is.
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
 - Or a window on Workbench, when Workbench is on a graphics card at 15 bits
-  or more: Settings > Display > Window, or the program icon's `WINDOWED`
+  or more: Settings > Display > Workbench window, or the program icon's `WINDOWED`
   tooltype (shipped commented out as `(WINDOWED)`; take the brackets away),
   or `AmigaMCE WINDOWED` from a Shell. A choice made in Settings comes first.
   Its text is Small, Medium or Large (the window 512 x 384, 640 x 480 or
@@ -264,7 +264,7 @@ was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Window (full screen or a Workbench window, where Workbench can take one), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Animations |
+| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on AmigaMCE's screen or window, where it is 16-bit RTG) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |

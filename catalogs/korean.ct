@@ -424,9 +424,6 @@ MSG_09BE5F96
 MSG_718B9F54
 크게
 ; Large
-MSG_678631FD
-창
-; Window
 MSG_2C041143
 글자 크기
 ; Text size
@@ -454,15 +451,9 @@ MSG_52325DD8
 MSG_1CD58066
 슬라이드쇼 전환
 ; Slideshow transition
-MSG_47318A8A
-애니메이션
-; Animations
-MSG_5C9709AA
-AmigaMCE 화면에서
-; On AmigaMCE's screen
-MSG_3B46B8BE
-자체 화면에서
-; On a screen of their own
+MSG_584F0908
+비디오를 전용 화면에서
+; Videos on a screen of their own
 MSG_71E19418
 디버그 (CPU, 메모리, 로그)
 ; Debug (CPU, memory, log)

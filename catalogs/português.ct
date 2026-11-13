@@ -424,9 +424,6 @@ Médio
 MSG_718B9F54
 Grande
 ; Large
-MSG_678631FD
-Janela
-; Window
 MSG_2C041143
 Tamanho do texto
 ; Text size
@@ -454,15 +451,9 @@ Deslocamento aos saltos (por letra)
 MSG_1CD58066
 Transição de diapositivos
 ; Slideshow transition
-MSG_47318A8A
-Animações
-; Animations
-MSG_5C9709AA
-No ecrã do AmigaMCE
-; On AmigaMCE's screen
-MSG_3B46B8BE
-Num ecrã próprio
-; On a screen of their own
+MSG_584F0908
+Vídeos num ecrã próprio
+; Videos on a screen of their own
 MSG_71E19418
 Depuração (CPU, memória, registo)
 ; Debug (CPU, memory, log)

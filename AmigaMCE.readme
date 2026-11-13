@@ -300,6 +300,16 @@ Not there yet
 
 History
 -------
+0.8.1  Now playing at the top of every section's lists, its label in
+       orange; what was playing at quit back at the next start, stopped,
+       Play going on from where it was. MED songs (MED_note): their
+       length and seeking, real levels on the meters, the right tempo
+       where the player gives none, four tracks on Paula's four. AHI:
+       its default mode (the Music unit's); mpega at its best quality on
+       a fast Amiga. Viewer: Previous's arrow, no transition when stepped
+       by hand, the bar kept clear of one. The window: Amiga-F and a
+       double-click on its title bar for full screen; Display's two-way
+       choices as checkboxes. Plex tokens kept out of the log.
 0.8.0  Slideshow transitions (Settings > Display): Off, Fade, Cross-fade,
        Tiles or Wipe; on a screen with a colour table, a fade. Korean.
        The window follows Workbench's screen mode changing, back into a
@@ -308,7 +318,7 @@ History
        periods read right, 5-8 channels. Icons highlighted with images
        of their own; the drawer's a GlowIcon.
 0.7.2  A window on Workbench (15-bit or deeper, on a graphics card):
-       Settings > Display > Window, the icon's WINDOWED tooltype or
+       Settings > Display > Workbench window, the icon's WINDOWED tooltype or
        WINDOWED from a Shell; text Small, Medium or Large; resized by its
        grip, the layout and text pages following; its Project menu; the
        tips bar going once seen with the mouse; its place and size kept.

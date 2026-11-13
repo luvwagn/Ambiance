@@ -2393,8 +2393,8 @@ static void build_screen_settings(struct Page *p)
     struct Item *it;
     p->setp = SETP_SCREEN;
     if (window_offered())
-        action_item(p, _("Window"), g.wb ? _("Workbench window") : _("Full screen"), ACT_WINDOW,
-                    MARK_CYCLE);
+        action_item(p, _("Workbench window"), "", ACT_WINDOW,    /* (two ways: a checkbox) */
+                    g.wb ? MARK_CHECK_ON : MARK_CHECK_OFF);
     if (g.wb) {
         /* the text's size, smooth (the pixel style's is its font: Style) */
         if (g.style == STYLE_SMOOTH)
@@ -2429,12 +2429,11 @@ static void build_screen_settings(struct Page *p)
     /* a slideshow's way from one picture to the next */
     action_item(p, _("Slideshow transition"), _(trans_names[view_transition]), ACT_TRANS,
                 MARK_CYCLE);
-    /* Videos' animations: on this screen (a 16-bit RTG one), or their own */
+    /* videos (IFF ANIMs, from Videos or Pictures): on this screen (a 16-bit
+     * RTG one, or the window), or on one of their own */
     {
-        struct Item *it = action_item(p, _("Animations"),
-                                      g.truecolor && !anim_classic ? _("On AmigaMCE's screen")
-                                                                   : _("On a screen of their own"),
-                                      ACT_ANIMSCR, MARK_CYCLE);
+        struct Item *it = action_item(p, _("Videos on a screen of their own"), "", ACT_ANIMSCR,
+                                      !g.truecolor || anim_classic ? MARK_CHECK_ON : MARK_CHECK_OFF);
         if (it && !g.truecolor)
             it->flags |= ITEM_DISABLED;     /* a native screen: always their own */
     }

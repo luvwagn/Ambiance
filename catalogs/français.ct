@@ -424,9 +424,6 @@ Moyenne
 MSG_718B9F54
 Grande
 ; Large
-MSG_678631FD
-Fenêtre
-; Window
 MSG_2C041143
 Taille du texte
 ; Text size
@@ -454,15 +451,9 @@ Défilement par lettre
 MSG_1CD58066
 Transition du diaporama
 ; Slideshow transition
-MSG_47318A8A
-Animations
-; Animations
-MSG_5C9709AA
-Sur l'écran d'AmigaMCE
-; On AmigaMCE's screen
-MSG_3B46B8BE
-Sur leur propre écran
-; On a screen of their own
+MSG_584F0908
+Vidéos sur leur propre écran
+; Videos on a screen of their own
 MSG_71E19418
 Débogage (CPU, mémoire, journal)
 ; Debug (CPU, memory, log)
