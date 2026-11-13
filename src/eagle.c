@@ -166,6 +166,16 @@ extern void ehs_getlistdata(void), ehs_loadfile(void), ehs_copydir(void), ehs_co
     ehs_settimer(void), ehs_waitdma(void), ehs_alloclist(void), ehs_modchange(void);
 UWORD eh_master = 64;           /* PokeVol's scale (0-64) */
 static void note_map(UBYTE *nst);
+
+/* A note's period from nch_Frequency: a frequency (Hz), or with
+ * NSTF_Period a period, which MED_note gives as 16.16 fixed point
+ * ($01510000: 337, E-2), so above 65535 its whole part. */
+static ULONG nt_period(ULONG flags, ULONG f)
+{
+    if (!(flags & (1 << 1)))                /* (NSTF_Period, defined below) */
+        return f ? 3546895UL / f : 0;
+    return f > 0xFFFFUL ? (f + 0x8000UL) >> 16 : f;
+}
 #define NT_LOG 24
 static struct { UBYTE ch, c; ULONG ss, sl, rs, rl, f; UWORD vol; } nt_log[NT_LOG];
 static volatile UBYTE nt_nlog, nt_logged;
@@ -1230,7 +1240,7 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
     for (i = 0; i < PT_CHANS && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
         UBYTE c = ch[NCH_CHANGED];
         if (c & NCHF_Frequency) {
-            ULONG f = L(ch, NCH_FREQ), per = flags & NSTF_Period ? f : f ? 3546895UL / f : 0;
+            ULONG per = nt_period(flags, L(ch, NCH_FREQ));
             if (per && per < 113)
                 per = 113;
             if (per > 65535)
@@ -1331,7 +1341,7 @@ static void note_play(void)
     for (i = 0; i < 4 && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
         UBYTE c = ch[NCH_CHANGED], p = nt_map[i];
         if (c & NCHF_Frequency) {
-            ULONG f = L(ch, NCH_FREQ), per = flags & NSTF_Period ? f : f ? 3546895UL / f : 0;
+            ULONG per = nt_period(flags, L(ch, NCH_FREQ));
             if (per && per < 113)
                 per = 113;
             if (per > 65535)
