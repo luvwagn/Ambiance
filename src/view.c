@@ -312,9 +312,9 @@ static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg)
         switch (i) {
         case VB_PREV:                       /* a bar, then a triangle pointing left */
             RectFill(g->rp, ix + s / 5, iy + s / 6, ix + s / 5 + t, iy + s - s / 6);
-            for (j = 0; j <= s / 3; j++) {
-                Move(g->rp, ix + s - s / 5 - j, cy - j);
-                Draw(g->rp, ix + s - s / 5 - j, cy + j);
+            for (j = 0; j <= s / 3; j++) {  /* (its base at the right, its tip at the bar) */
+                Move(g->rp, ix + s - s / 5 - j, cy - (s / 3 - j));
+                Draw(g->rp, ix + s - s / 5 - j, cy + (s / 3 - j));
             }
             break;
         case VB_PLAY:

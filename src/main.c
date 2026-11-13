@@ -9071,6 +9071,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     char scale[24];
     LONG shown = -1, want = idx, dir = 1, asked = -1, fails = 0;
     ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0, spin_tick = 0, ptr_until = 0;
+    BOOL by_hand = FALSE;               /* the next one asked for (keys, joystick, mouse): no transition */
     BOOL quit = FALSE, ok = FALSE, bar_due = TRUE, loading_bar = FALSE;
 
     vw_mouse = FALSE;
@@ -9162,8 +9163,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             APTR pre = vw_take(l->items[want].path, &remapped, &pre_t, &pre_i);
             ULONG t0 = time_ms();
             BOOL keep = vw_mouse && (LONG)(t0 - bar_until) < 0;    /* the mouse's bar stays up */
+            int vt = view_transition;
+            if (by_hand)
+                view_transition = VT_CUT;   /* stepped through by hand: at once */
             ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale),
                            pre, remapped, pre_t, &pre_i);
+            view_transition = vt;
             {
                 char m[300];
                 sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s, %s.datatype", l->items[want].label,
@@ -9312,11 +9317,13 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             if (i >= 0)
                 want = i;
             bar_due = TRUE;
+            by_hand = TRUE;
         } else if (slideshow && (LONG)(now - next_at) >= 0) {
             LONG i = view_step(l, shown, 1);
             dir = 1;
             if (i >= 0)
                 want = i;
+            by_hand = FALSE;                /* the slideshow's own: its transition */
         }
         if (poke && want == shown && ok) {
             viewer_bar(l, shown, &pi, scale, slideshow);
