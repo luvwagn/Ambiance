@@ -866,6 +866,7 @@ static BYTE wbw_bit = -1;
 static volatile BOOL wbw_open;          /* our window is on Workbench now */
 static volatile UBYTE wbw_ev;           /* GFX_WB_* asked, for the main loop */
 static BOOL wbw_on, wbw_hooked;
+static volatile BOOL wbw_want_back;  /* full screen, a window wanted: changes watched */
 /* Without the hook (workbench.library V40: OS 3.0, 3.1): the prefs whose
  * change makes IPrefs reset Workbench watched as IPrefs watches them, the
  * window closed at once, and Workbench seen to go and come back. */
@@ -997,8 +998,17 @@ int gfx_wb_event(void)
  * if open, to close now). */
 void gfx_wb_signalled(void)
 {
-    if (wbw_nr_on && wbw_open && !wbw_ev)
+    if (wbw_nr_on && (wbw_open || wbw_want_back) && !wbw_ev)
         wbw_ev = GFX_WB_CLOSING;
+}
+
+/* Full screen where a window was wanted: Workbench's prefs watched all
+ * the same, for a change that lets a window be there. */
+void gfx_wb_want_back(BOOL on)
+{
+    wbw_want_back = on;
+    if (on)
+        wbw_start();
 }
 
 void gfx_wb_gone(void)

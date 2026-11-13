@@ -9699,6 +9699,8 @@ static void apply_screen_mode(int sm)
         note_style();
 }
 
+static void wb_note_fallback(void);
+
 /* Settings > Display > Window, or Text size: the display closed and opened
  * again as now wanted, every page rebuilt, and back on Settings > Display
  * at that row (in the list sub, if one). */
@@ -9739,6 +9741,7 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
     focus = FOCUS_CONTENT;
     msg[0] = 0;
     draw_all();
+    wb_note_fallback();
     if (gfx_window_wanted && !g.wb)
         set_msg(_("The window could not open: full screen"));
     else
@@ -9849,25 +9852,40 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
  * open, laid out for the new size. */
 #define WB_BACK_WAIT 60000              /* ms: Workbench not back by then, opened anyway */
 
+static BOOL wb_fell_back;               /* a window wanted, full screen for now */
+
+/* Full screen where a window was wanted (Workbench could not take one):
+ * Workbench's prefs watched for a change that lets it. */
+static void wb_note_fallback(void)
+{
+    wb_fell_back = gfx_window_wanted && !g.wb;
+    gfx_wb_want_back(wb_fell_back);
+}
+
 static void wb_follow(void)
 {
-    ULONG t0 = time_ms();
+    ULONG t0 = time_ms(), tl;
     WORD ow = g.w, oh = g.h;
+    BOOL was_window = g.wb;
     char m[120];
-    if (gfx_wb_event() != GFX_WB_CLOSING || !g.wb) {
-        if (gfx_wb_event() == GFX_WB_BACK)
-            gfx_wb_done();              /* (back, with nothing of ours closed) */
+    if (gfx_wb_event() != GFX_WB_CLOSING || (!g.wb && !wb_fell_back)) {
+        if (gfx_wb_event())
+            gfx_wb_done();              /* (nothing of ours on it) */
         return;
     }
-    layout_let_go();
-    pv_flush();
-    spin_free();
-    ov_bm_free();
-    vis_stop();
-    ptr_hidden = NULL;                  /* a new window comes with its pointer */
-    gfx_close(&g);
+    if (was_window) {
+        layout_let_go();
+        pv_flush();
+        spin_free();
+        ov_bm_free();
+        vis_stop();
+        ptr_hidden = NULL;              /* a new window comes with its pointer */
+        gfx_close(&g);
+        amce_log("window", "Workbench is closing: closed until it is back");
+    } else {
+        amce_log("window", "Workbench's prefs changed: a window again, if it can be one now");
+    }
     gfx_wb_gone();
-    amce_log("window", "Workbench is closing: closed until it is back");
     while (gfx_wb_event() != GFX_WB_BACK && time_ms() - t0 < WB_BACK_WAIT) {
         if (SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) {
             running = FALSE;
@@ -9881,14 +9899,31 @@ static void wb_follow(void)
             "Workbench not back", (unsigned long)(time_ms() - t0));
     amce_log("window", m);
     caps_wb_read();
+    if (!was_window) {
+        const char *why = gfx_window_problem(&caps);
+        if (why) {
+            sprintf(m, "%.80s: full screen still", why);
+            amce_log("window", m);
+            return;
+        }
+        layout_let_go();                /* the full screen closed for the window */
+        pv_flush();
+        spin_free();
+        ov_bm_free();
+        vis_stop();
+        ptr_hidden = NULL;
+        gfx_close(&g);
+    }
+    tl = time_ms();
     if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
         running = FALSE;
         return;
     }
+    wb_note_fallback();
     foot_hidden = FALSE;
     foot_since = mouse_mode && g.wb ? time_ms() : 0;
-    window_relaid(ow, oh, t0);
-    if (gfx_window_wanted && !g.wb)
+    window_relaid(ow, oh, tl);
+    if (wb_fell_back)
         set_msg(_("The window could not open: full screen"));
 }
 
@@ -13699,6 +13734,7 @@ static int app_main(void)
             goto out;
         }
     }
+    wb_note_fallback();             /* (full screen where a window was wanted: watched) */
 
     tport = CreateMsgPort();
     treq = tport ? (struct timerequest *)CreateIORequest(tport, sizeof(*treq)) : NULL;

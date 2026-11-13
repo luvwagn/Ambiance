@@ -355,6 +355,7 @@ ULONG gfx_wb_sigmask(void);
 int gfx_wb_event(void);
 void gfx_wb_gone(void);
 void gfx_wb_signalled(void);
+void gfx_wb_want_back(BOOL on);
 void gfx_wb_done(void);
 void gfx_wb_watch_end(void);
 extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */

@@ -150,7 +150,9 @@ of the Amiga to how fast it really is.
   screen, or full screen if a window cannot be there now. AmigaMCE watches
   the ScreenMode, Overscan and Font prefs in ENV:Sys as IPrefs does, and
   closes its window as soon as one changes (Intuition asks for windows to
-  be closed before Workbench is told anything); on OS 3.5, 3.9 and 3.2
+  be closed before Workbench is told anything). Full screen because
+  Workbench could not take a window, it goes back into one when Workbench's
+  mode changes to one that can; on OS 3.5, 3.9 and 3.2
   Workbench's setup/cleanup hook covers its other ways of closing too.
 - Flicker-free scrolling text and lists. A long list always shows a scroll bar
   (how long it is, and where you are in it), which the mouse can drag or click.
