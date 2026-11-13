@@ -1298,6 +1298,8 @@ static LONG first_frame_freq(void)
 }
 
 /* ---------------------------------------------------------- decoding */
+static ULONG dec_full, dec_samples;     /* mpega's samples at full scale, of all it gave */
+
 /* Frames decoded into the FIFO while there is room; Paula served between. */
 static void decode_loop(MPEGA_STREAM *ms)
 {
@@ -1335,10 +1337,15 @@ static void decode_loop(MPEGA_STREAM *ms)
         }
         o = st.f_in;
         for (i = 0; i < n; i++, o++) {
-            st.fl[o & (FIFO_N - 1)] = pcm0[i];
+            WORD a = pcm0[i], b = st.dec_channels == 2 ? pcm1[i] : 0;
+            st.fl[o & (FIFO_N - 1)] = a;
             if (st.dec_channels == 2)
-                st.fr[o & (FIFO_N - 1)] = pcm1[i];
+                st.fr[o & (FIFO_N - 1)] = b;
+            /* (the decoder's own clipping: a sample at full scale) */
+            if (a >= 32767 || a <= -32767 || b >= 32767 || b <= -32767)
+                dec_full++;
         }
+        dec_samples += (ULONG)n;
         st.f_in = o;
         if (!st.started && st.f_in - st.f_out >= prebuf) {
             st.state = ST_PLAYING;
@@ -2173,7 +2180,21 @@ static void radio_main(void)
                 card_mpega ? " on the ZZ9000" : "");
         amce_log(st.finite ? "track" : "radio", m);
     }
+    dec_full = dec_samples = 0;
     decode_loop(ms);
+    if (dec_samples) {
+        /* how it went: what was heard, and how much the decoder clipped
+         * (full scale: a loud master, or mpega's own) */
+        char m[200];
+        ULONG per = dec_samples / 10000 ? dec_full / (dec_samples / 10000) : 0;
+        sprintf(m, "%.60s: %lu s decoded, %lu dropout%s; %lu samples at full scale (%lu in 10000), "
+                   "to %s",
+                st.finite ? (const char *)FilePart((STRPTR)st.url) : st.name[0] ? st.name : "a station",
+                (unsigned long)(dec_samples / (st.dec_freq ? st.dec_freq : 22050)),
+                (unsigned long)st.underruns, st.underruns == 1 ? "" : "s",
+                (unsigned long)dec_full, (unsigned long)per, st.ahi ? "AHI" : "Paula");
+        amce_log(st.finite ? "track" : "radio", m);
+    }
 out:
     out_stop();
     if (ms)
