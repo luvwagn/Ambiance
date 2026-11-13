@@ -7583,6 +7583,35 @@ static void np_track_from(LONG idx, ULONG ms, ULONG total, ULONG size, const cha
         np_soft_redraw();
 }
 
+/* Settings > Sound changed (Paula or AHI, MHI or mpega) while a track or
+ * station plays: it goes on through the new way at once, a track from
+ * where it was (paused, it stays so), a station started again. Modules
+ * play on Paula either way. TRUE if it was restarted. */
+static BOOL sound_restart(void)
+{
+    struct MpStatus st;
+    BOOL paused;
+    if (!mp_loaded() || !mp_is_stream() || !mp_running())
+        return FALSE;
+    paused = mp_paused();
+    if (mp_is_track()) {
+        if (!np.list.pool || np.idx < 0 || np.idx >= np.list.count)
+            return FALSE;
+        mp_status(&st);
+        amce_log("sound", "Settings > Sound changed: the track again from where it was");
+        np_seek_track(np.seek_due ? (ULONG)np.seek_to : st.elapsed_ms, 0);
+    } else {
+        if (!np.list.pool || np.idx < 0 || np.idx >= np.list.count)
+            return FALSE;
+        amce_log("sound", "Settings > Sound changed: the station started again");
+        if (!np_start(np.idx))
+            return FALSE;
+    }
+    if (paused && mp_loaded())
+        mp_pause(TRUE);
+    return TRUE;
+}
+
 static void np_volume(int d)
 {
     mp_set_volume(mp_volume() + d);
@@ -12855,6 +12884,7 @@ static void act_action(struct Item *it)
             amce_strlcpy(mhi_sel, d, sizeof(mhi_sel));
             save_setting(MP3_VAR, d[0] ? d : "mpega");
             mhi_apply();
+            sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
         set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
@@ -12866,11 +12896,10 @@ static void act_action(struct Item *it)
             sound_ahi = on;
             st_use_ahi(on);
             save_setting(SOUND_VAR, on ? "ahi" : "paula");
+            sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
-        set_msg(on ? (mp_loaded() && mp_is_stream() && mp_running()
-                      ? _("AHI from the next track or station on; modules stay on Paula")
-                      : _("AHI: radio, Plex and music files; modules stay on Paula"))
+        set_msg(on ? _("AHI: radio, Plex and music files; modules stay on Paula")
                    : _("Paula plays everything"));
     }
     else if (it->action == ACT_FOLDERS)

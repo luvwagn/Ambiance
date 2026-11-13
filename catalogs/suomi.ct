@@ -1381,9 +1381,6 @@ MP3:n purkaa MHI: radio, Plex (parhaalla laadulla) ja tiedostot
 MSG_605E617D
 MP3:n purkaa täällä mpega.library
 ; MP3 decoded here by mpega.library
-MSG_59AEDDD1
-AHI seuraavasta kappaleesta tai asemasta; moduulit pysyvät Paulalla
-; AHI from the next track or station on; modules stay on Paula
 MSG_06B72AB3
 AHI: radio, Plex ja musiikkitiedostot; moduulit pysyvät Paulalla
 ; AHI: radio, Plex and music files; modules stay on Paula

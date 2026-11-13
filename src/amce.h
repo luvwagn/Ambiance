@@ -286,6 +286,8 @@ struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULO
 struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi, const char *kind);
 void jpeg_thumb_init(void);
+struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap *friend,
+                           ULONG *sw, ULONG *sh, struct PicInfo *pi);  /* the viewer's, no datatype */
 void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */

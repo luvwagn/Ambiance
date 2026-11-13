@@ -27,6 +27,9 @@
 #include <dos/datetime.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/graphics.h>
+#include <proto/cybergraphics.h>
+#include <cybergraphx/cybergraphics.h>
 
 #define WHOLE_MAX (4L << 20)    /* a file up to this read whole; bigger, streamed */
 
@@ -215,4 +218,91 @@ out:
     FreeVec(file);
     Close(s.fh);
     return t;
+}
+
+/* The viewer's JPEG when no datatype takes it (on a true-colour screen):
+ * decoded by jdec at the smallest of 1/1, 1/2, 1/4, 1/8 still at least
+ * maxw x maxh, into a bitmap like friend (the screen's); *sw x *sh its
+ * size, pi the picture's own. NULL if jdec cannot either. */
+struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap *friend,
+                           ULONG *sw, ULONG *sh, struct PicInfo *pi)
+{
+    struct JSrc s;
+    struct BitMap *bm = NULL;
+    UBYTE *file = NULL, sig[4];
+    JDecIO io;
+    JDecInfo info;
+    JDec *d = NULL;
+    LONG len;
+    int32_t ow, oh;
+    int r, scale;
+    const char *why;
+
+    if (!CyberGfxBase)
+        return NULL;
+    memset(&s, 0, sizeof(s));
+    if (!(s.fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
+        return NULL;
+    if (Read(s.fh, sig, 4) != 4 || sig[0] != 0xFF || sig[1] != 0xD8 || sig[2] != 0xFF)
+        goto out;                           /* not a JPEG */
+    Seek(s.fh, 0, OFFSET_END);
+    len = Seek(s.fh, 0, OFFSET_BEGINNING);
+    if (len > 0 && len <= WHOLE_MAX && (file = AllocVec((ULONG)len, MEMF_ANY))) {
+        if (Read(s.fh, file, len) == len) {
+            s.mem = file;
+            s.len = (ULONG)len;
+        } else {
+            Seek(s.fh, 0, OFFSET_BEGINNING);
+        }
+    }
+    io.ctx = &s;
+    io.read = j_read;
+    io.alloc = j_alloc;
+    io.free = j_free;
+    io.rows = j_rows;
+    if ((r = jd_open(&d, &io, &info))) {
+        if ((why = why_not(r)))
+            note("picture (viewer)", why, path);
+        goto out;
+    }
+    scale = jd_scale_for(&info, maxw, maxh);
+    jd_out_size(&info, scale, &ow, &oh);
+    s.w = (ULONG)ow;
+    s.h = (ULONG)oh;
+    if (!(s.rgb = AllocVec(s.w * s.h * 3, MEMF_ANY | MEMF_CLEAR)))
+        goto out;
+    if ((r = jd_decode(d, scale))) {
+        if ((why = why_not(r)))
+            note("picture (viewer)", why, path);
+        goto out;
+    }
+    if ((bm = AllocBitMap(s.w, s.h, GetBitMapAttr(friend, BMA_DEPTH), BMF_MINPLANES, friend))) {
+        struct RastPort rp;
+        InitRastPort(&rp);
+        rp.BitMap = bm;
+        WritePixelArray(s.rgb, 0, 0, (UWORD)(s.w * 3), &rp, 0, 0, (UWORD)s.w, (UWORD)s.h,
+                        RECTFMT_RGB);
+        WaitBlit();
+        *sw = s.w;
+        *sh = s.h;
+        memset(pi, 0, sizeof(*pi));
+        pi->w = (UWORD)info.width;
+        pi->h = (UWORD)info.height;
+        pi->depth = info.ncomp == 1 ? 8 : 24;
+        strcpy(pi->fmt, "JPEG");
+        strcpy(pi->cls, "jdec");
+        {
+            char m[96];             /* (what the datatypes may not have known it by) */
+            sprintf(m, "%lu x %lu, its first marker FF%02lx, read at 1/%ld", (unsigned long)info.width,
+                    (unsigned long)info.height, (unsigned long)sig[3], (long)(1 << scale));
+            amce_log("viewer: jdec", m);
+        }
+    }
+out:
+    if (d)
+        jd_close(d);
+    FreeVec(s.rgb);
+    FreeVec(file);
+    Close(s.fh);
+    return bm;
 }

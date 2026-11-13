@@ -1381,9 +1381,6 @@ MP3 με MHI: ραδιόφωνο, Plex (άριστη ποιότητα) και α
 MSG_605E617D
 MP3 εδώ με mpega.library
 ; MP3 decoded here by mpega.library
-MSG_59AEDDD1
-AHI από το επόμενο κομμάτι· modules στην Paula
-; AHI from the next track or station on; modules stay on Paula
 MSG_06B72AB3
 AHI: ραδιόφωνο, Plex, αρχεία· modules στην Paula
 ; AHI: radio, Plex and music files; modules stay on Paula

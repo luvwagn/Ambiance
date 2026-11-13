@@ -991,23 +991,30 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
                 o = NULL;
             }
         }
-        if (!o) {
-            sprintf(msg, _("Could not show %.80s"), label);
-            show_message(g, msg);
-            return FALSE;
+        if (!o && !clut && (src = jpeg_bitmap(path, g->w, g->h, g->rp->BitMap, &sw, &sh, pi))) {
+            /* no datatype took it (a camera's Exif JPEG, say): read by
+             * AmigaMCE itself, in true colour */
+            own_src = TRUE;
+            amce_log("viewer", "no datatype took it: the JPEG read by AmigaMCE (jdec)");
+        } else {
+            if (!o) {
+                sprintf(msg, _("Could not show %.80s"), label);
+                show_message(g, msg);
+                return FALSE;
+            }
+            GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_DestBitMap, (ULONG)&src, TAG_END);
+            if (!src)
+                GetDTAttrs(o, PDTA_BitMap, (ULONG)&src, TAG_END);
+            if (!src || !bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
+                DisposeDTObject(o);
+                sprintf(msg, _("Could not show %.80s"), label);
+                show_message(g, msg);
+                return FALSE;
+            }
+            sw = bmh->bmh_Width;
+            sh = bmh->bmh_Height;
+            pic_info(o, bmh, pi);
         }
-        GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_DestBitMap, (ULONG)&src, TAG_END);
-        if (!src)
-            GetDTAttrs(o, PDTA_BitMap, (ULONG)&src, TAG_END);
-        if (!src || !bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
-            DisposeDTObject(o);
-            sprintf(msg, _("Could not show %.80s"), label);
-            show_message(g, msg);
-            return FALSE;
-        }
-        sw = bmh->bmh_Width;
-        sh = bmh->bmh_Height;
-        pic_info(o, bmh, pi);
         if (clut) {
             UBYTE *alloc = NULL;
             ULONG na = 0;

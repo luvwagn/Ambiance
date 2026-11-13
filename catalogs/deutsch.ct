@@ -1381,9 +1381,6 @@ MP3 dekodiert von MHI: Radio, Plex (in bester Qualität) und Dateien
 MSG_605E617D
 MP3 hier dekodiert von mpega.library
 ; MP3 decoded here by mpega.library
-MSG_59AEDDD1
-AHI ab dem nächsten Titel oder Sender; Module bleiben auf Paula
-; AHI from the next track or station on; modules stay on Paula
 MSG_06B72AB3
 AHI: Radio, Plex und Musikdateien; Module bleiben auf Paula
 ; AHI: radio, Plex and music files; modules stay on Paula

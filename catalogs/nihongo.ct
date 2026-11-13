@@ -1381,9 +1381,6 @@ MHIでMP3をデコード: ラジオ、Plex (最高音質) とファイル
 MSG_605E617D
 mpega.libraryでここでMP3をデコード
 ; MP3 decoded here by mpega.library
-MSG_59AEDDD1
-次のトラックか局からAHI。モジュールはPaulaのまま
-; AHI from the next track or station on; modules stay on Paula
 MSG_06B72AB3
 AHI: ラジオ、Plex、音楽ファイル。MODはPaula
 ; AHI: radio, Plex and music files; modules stay on Paula

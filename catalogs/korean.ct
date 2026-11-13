@@ -1381,9 +1381,6 @@ MHI가 MP3 디코딩: 라디오, Plex (최고 음질), 파일
 MSG_605E617D
 MP3를 여기서 mpega.library로 디코딩
 ; MP3 decoded here by mpega.library
-MSG_59AEDDD1
-다음 트랙이나 방송국부터 AHI; 모듈은 Paula로
-; AHI from the next track or station on; modules stay on Paula
 MSG_06B72AB3
 AHI: 라디오, Plex, 음악 파일; 모듈은 Paula로
 ; AHI: radio, Plex and music files; modules stay on Paula
