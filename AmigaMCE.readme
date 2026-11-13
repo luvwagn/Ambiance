@@ -312,7 +312,8 @@ History
        their end back to the first frame, stopped; a click on their
        progress line seeks. Loop, on Now Playing and video's controls.
        EaglePlayer: a module's kind from what it holds, note players
-       (MED_note) heard, and a player whose check hangs left out. Korean.
+       (MED_note) heard, and a player whose check hangs left out. The
+       window follows Workbench's screen mode changing. Korean.
 0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
        music folders with the spinner while read. HTTPS by AmiSSL 5
        (Settings > Networking): secure radio stations play, and Plex

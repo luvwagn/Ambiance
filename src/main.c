@@ -9198,6 +9198,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                     quit = TRUE;
             }
         }
+        if (gfx_wb_event() == GFX_WB_CLOSING)
+            quit = TRUE;                    /* Workbench closing: back, so the window can go */
         if (LowLevelBase) {
             ULONG st = gfx_joy(&g), pressed = st & ~jlast;
             if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
@@ -9815,6 +9817,78 @@ static void foot_show(BOOL on)
     layout_again();
     draw_all();
     foot_since = on && mouse_mode ? time_ms() : 0;
+}
+
+/* Which display the Workbench uses: Automatic follows it onto the
+ * graphics card (gfx_mode_auto), and a native <-> RTG switch on exit can be
+ * slow in some emulators and drivers. Read at the start, and again when
+ * Workbench comes back (its screen mode changed). */
+static void caps_wb_read(void)
+{
+    struct Screen *wb = LockPubScreen(NULL);
+    if (wb) {
+        ULONG id = GetVPModeID(&wb->ViewPort);
+        char m[80];
+        caps.wb_rtg = caps_mode_is_rtg(id);
+        caps.wb_w = wb->Width;
+        caps.wb_h = wb->Height;
+        sprintf(m, "%s, %lu x %lu, %lu-bit", caps.wb_rtg ? "RTG" : "native chipset",
+                (unsigned long)caps.wb_w, (unsigned long)caps.wb_h,
+                (unsigned long)GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH));
+        amce_log("Workbench screen", m);
+        UnlockPubScreen(NULL, wb);
+    }
+}
+
+static void window_relaid(WORD ow, WORD oh, ULONG t0);
+
+/* Workbench closing (its screen mode changed, say): the window closed at
+ * once, so Intuition can close its screen with no requester; opened again
+ * when it is back, on its new screen, or full screen if a window cannot be
+ * there now (under 15 bits, or off the graphics card). What is open stays
+ * open, laid out for the new size. */
+#define WB_BACK_WAIT 60000              /* ms: Workbench not back by then, opened anyway */
+
+static void wb_follow(void)
+{
+    ULONG t0 = time_ms();
+    WORD ow = g.w, oh = g.h;
+    char m[120];
+    if (gfx_wb_event() != GFX_WB_CLOSING || !g.wb) {
+        if (gfx_wb_event() == GFX_WB_BACK)
+            gfx_wb_done();              /* (back, with nothing of ours closed) */
+        return;
+    }
+    layout_let_go();
+    pv_flush();
+    spin_free();
+    ov_bm_free();
+    vis_stop();
+    ptr_hidden = NULL;                  /* a new window comes with its pointer */
+    gfx_close(&g);
+    gfx_wb_gone();
+    amce_log("window", "Workbench is closing: closed until it is back");
+    while (gfx_wb_event() != GFX_WB_BACK && time_ms() - t0 < WB_BACK_WAIT) {
+        if (SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) {
+            running = FALSE;
+            break;
+        }
+        Delay(5);
+    }
+    gfx_wb_done();
+    sprintf(m, "%s after %lu ms", running && time_ms() - t0 < WB_BACK_WAIT ? "Workbench back" :
+            "Workbench not back", (unsigned long)(time_ms() - t0));
+    amce_log("window", m);
+    caps_wb_read();
+    if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
+        running = FALSE;
+        return;
+    }
+    foot_hidden = FALSE;
+    foot_since = mouse_mode && g.wb ? time_ms() : 0;
+    window_relaid(ow, oh, t0);
+    if (gfx_window_wanted && !g.wb)
+        set_msg(_("The window could not open: full screen"));
 }
 
 static void window_relaid(WORD ow, WORD oh, ULONG t0);
@@ -13604,21 +13678,7 @@ static int app_main(void)
     load_screen_mode();
     load_style();
     {
-        /* Which display the Workbench uses: Automatic follows it onto the
-         * graphics card (gfx_mode_auto), and a native <-> RTG switch on
-         * exit can be slow in some emulators and drivers. */
-        struct Screen *wb = LockPubScreen(NULL);
-        if (wb) {
-            ULONG id = GetVPModeID(&wb->ViewPort);
-            char m[64];
-            caps.wb_rtg = caps_mode_is_rtg(id);
-            caps.wb_w = wb->Width;
-            caps.wb_h = wb->Height;
-            sprintf(m, "%s, %lu x %lu", caps.wb_rtg ? "RTG" : "native chipset",
-                    (unsigned long)caps.wb_w, (unsigned long)caps.wb_h);
-            amce_log("Workbench screen", m);
-            UnlockPubScreen(NULL, wb);
-        }
+        caps_wb_read();
     }
 
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
@@ -13687,7 +13747,8 @@ static int app_main(void)
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
         ULONG lsig = ldr_sigmask();
         ULONG nsig = net_sigmask();
-        ULONG mask = wsig | tsig | lsig | nsig | SIGBREAKF_CTRL_C;
+        ULONG bsig = gfx_wb_sigmask();
+        ULONG mask = wsig | tsig | lsig | nsig | bsig | SIGBREAKF_CTRL_C;
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
@@ -13706,6 +13767,12 @@ static int app_main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
+        if ((sig & bsig) || gfx_wb_event()) {
+            wb_follow();                /* Workbench closing: our window too, until it is back */
+            if (!running)
+                break;
+            continue;
+        }
         if (sig & lsig)
             preview_arrived();          /* the loader brought something */
         if (sig & nsig)
@@ -13881,6 +13948,7 @@ out:
             save_setting(WINBOX_VAR, b);
         }
     }
+    gfx_wb_watch_end();                 /* (Workbench's hook out: its process calls it) */
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);

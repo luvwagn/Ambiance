@@ -144,7 +144,11 @@ of the Amiga to how fast it really is.
   title bar) has About, Settings, Full screen and
   Quit. Pictures and videos go full screen from it (their button, F or
   Amiga-F) on a screen in Workbench's own mode, so the monitor does not
-  change mode.
+  change mode. When Workbench's screen mode is changed (ScreenMode prefs),
+  the window closes as Workbench does, so no "Intuition is attempting to
+  reset the Workbench screen" requester, and opens again on the new
+  screen, or full screen if a window cannot be there now
+  (workbench.library V45 or newer: OS 3.5, 3.9, 3.2).
 - Flicker-free scrolling text and lists. A long list always shows a scroll bar
   (how long it is, and where you are in it), which the mouse can drag or click.
 

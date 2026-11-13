@@ -1279,6 +1279,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         }
         *jlast = st;
     }
+    if (anim_g && gfx_wb_event() == GFX_WB_CLOSING)
+        r = 1;                              /* Workbench closing: out, so the window can go */
     if (!r && anim_g && win == anim_g->win && anim_g->wb && !gfx_fs_on() && gfx_resized_at &&
         (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
         r = 6;                              /* resized, and settled: laid out again */

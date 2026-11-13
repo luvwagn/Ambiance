@@ -347,6 +347,15 @@ BOOL gfx_window_resize(struct Gfx *g);
 WORD gfx_window_grip(const struct Gfx *g);      /* our sizing grip's size, 0 none */
 void gfx_window_size_to(struct Gfx *g, WORD iw, WORD ih);
 BOOL gfx_window_sizing(struct Gfx *g, ULONG cls, UWORD code, WORD mx, WORD my);
+/* Workbench closing (its screen mode changed) and back: gfx.c */
+#define GFX_WB_CLOSING 1
+#define GFX_WB_GONE 2
+#define GFX_WB_BACK 3
+ULONG gfx_wb_sigmask(void);
+int gfx_wb_event(void);
+void gfx_wb_gone(void);
+void gfx_wb_done(void);
+void gfx_wb_watch_end(void);
 extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */
 BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k);
 void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k);

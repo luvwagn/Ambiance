@@ -29,6 +29,8 @@
 #include <proto/lowlevel.h>
 #include <proto/gadtools.h>
 #include <libraries/gadtools.h>
+#include <workbench/workbench.h>
+#include <proto/wb.h>
 #include <stdio.h>
 #include "../datatypes/jpeg/amcejpeg.h"
 
@@ -849,6 +851,112 @@ BOOL gfx_window_sizing(struct Gfx *g, ULONG cls, UWORD code, WORD mx, WORD my)
     return TRUE;
 }
 
+/* ---- Workbench closing and coming back (its screen mode changed, say).
+ * Intuition can close Workbench's screen only with no windows but its
+ * drawers on it, and says so with a requester otherwise. workbench.library
+ * (V45 on: OS 3.5, 3.9, 3.2) calls a hook before it shuts down and when it
+ * is back: here, in Workbench's process, the first signals AmigaMCE and
+ * waits (3 s at most) for its window to close, so the screen closes
+ * cleanly; the second signals it to open again on the new one. */
+struct Library *WorkbenchBase;
+static struct Hook wbw_hook;
+static struct Task *wbw_task;
+static BYTE wbw_bit = -1;
+static volatile BOOL wbw_open;          /* our window is on Workbench now */
+static volatile UBYTE wbw_ev;           /* GFX_WB_* asked, for the main loop */
+static BOOL wbw_on;
+
+static ULONG wbw_func(register struct Hook *h __asm("a0"),
+                      register struct SetupCleanupHookMsg *m __asm("a1"),
+                      register APTR o __asm("a2"))
+{
+    (void)h;
+    (void)o;
+    if (m->schm_State == SCHMSTATE_TryCleanup || m->schm_State == SCHMSTATE_Cleanup) {
+        if (wbw_open) {
+            int n;
+            wbw_ev = GFX_WB_CLOSING;
+            Signal(wbw_task, 1UL << wbw_bit);
+            for (n = 0; n < 150 && wbw_open; n++)
+                Delay(1);
+        }
+    } else if (m->schm_State == SCHMSTATE_Setup) {
+        if (wbw_ev == GFX_WB_GONE) {
+            wbw_ev = GFX_WB_BACK;
+            Signal(wbw_task, 1UL << wbw_bit);
+        }
+    }
+    return 0;
+}
+
+/* The hook installed (once, with the first window), and taken out. */
+static void wbw_start(void)
+{
+    struct TagItem t[2];
+    if (wbw_on)
+        return;
+    if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45))) {
+        amce_log("window", "workbench.library under V45: Workbench's closing not followed");
+        return;
+    }
+    if ((wbw_bit = AllocSignal(-1)) < 0)
+        return;
+    wbw_task = FindTask(NULL);
+    wbw_hook.h_Entry = (HOOKFUNC)(APTR)wbw_func;
+    t[0].ti_Tag = WBCTRLA_AddSetupCleanupHook;
+    t[0].ti_Data = (ULONG)&wbw_hook;
+    t[1].ti_Tag = TAG_DONE;
+    if (!WorkbenchControlA(NULL, t)) {
+        amce_log("window", "Workbench's setup/cleanup hook not taken");
+        FreeSignal(wbw_bit);
+        wbw_bit = -1;
+        return;
+    }
+    wbw_on = TRUE;
+    amce_log("window", "Workbench's closing followed (its setup/cleanup hook)");
+}
+
+void gfx_wb_watch_end(void)
+{
+    if (wbw_on) {
+        struct TagItem t[2];
+        t[0].ti_Tag = WBCTRLA_RemSetupCleanupHook;
+        t[0].ti_Data = (ULONG)&wbw_hook;
+        t[1].ti_Tag = TAG_DONE;
+        WorkbenchControlA(NULL, t);
+        wbw_on = FALSE;
+    }
+    if (wbw_bit >= 0)
+        FreeSignal(wbw_bit);
+    wbw_bit = -1;
+    if (WorkbenchBase)
+        CloseLibrary(WorkbenchBase);
+    WorkbenchBase = NULL;
+}
+
+ULONG gfx_wb_sigmask(void)
+{
+    return wbw_bit >= 0 ? 1UL << wbw_bit : 0;
+}
+
+/* What Workbench asked (GFX_WB_CLOSING, GFX_WB_BACK), 0 nothing; the main
+ * loop's answer to CLOSING is to close (gfx_close), then gfx_wb_gone(). */
+int gfx_wb_event(void)
+{
+    UBYTE e = wbw_ev;
+    return e == GFX_WB_CLOSING || e == GFX_WB_BACK ? e : 0;
+}
+
+void gfx_wb_gone(void)
+{
+    wbw_ev = GFX_WB_GONE;               /* (BACK when it is) */
+}
+
+void gfx_wb_done(void)
+{
+    wbw_ev = 0;
+}
+
 /* Where it is and how large inside (to keep, and give back next time). */
 BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k)
 {
@@ -1053,6 +1161,8 @@ static BOOL win_open(struct Gfx *g, int style)
         amce_log("window", "OpenWindow failed");
         goto fail;
     }
+    wbw_start();
+    wbw_open = TRUE;
     g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
     g->h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
     if (!wbuf_make(g)) {
@@ -1100,6 +1210,7 @@ fail:
     if (g->win)
         CloseWindow(g->win);
     g->win = NULL;
+    wbw_open = FALSE;
     UnlockPubScreen(NULL, wb);
     g->scr = NULL;
     g->wb = FALSE;
@@ -1699,6 +1810,7 @@ void gfx_close(struct Gfx *g)
         CloseWindow(g->win);
         g->win = NULL;
     }
+    wbw_open = FALSE;                       /* (Workbench may close now) */
     if (g->font) {
         CloseFont(g->font);
         g->font = NULL;
