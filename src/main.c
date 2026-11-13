@@ -2300,7 +2300,7 @@ static const char *lang_here(const char *lang)
         { "suomi", N_("Finnish") }, { "dansk", N_("Danish") },
         { "norsk", N_("Norwegian") }, { "nederlands", N_("Dutch") },
         { "portugu\352s", N_("Portuguese") }, { "nihongo", N_("Japanese") },
-        { "greek", N_("Greek") }, { "ellinika", N_("Greek") },
+        { "greek", N_("Greek") }, { "ellinika", N_("Greek") }, { "korean", N_("Korean") },
     };
     unsigned i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
@@ -6378,8 +6378,11 @@ static void np_button(int i)
         if (mp_is_stream()) {
             bg = PEN_BAR;                   /* a station: nothing to loop */
             fg = PEN_RULE;
-        } else if (play_loop && !lit) {
-            fg = PEN_YELLOW;                /* on: lit in yellow */
+        } else if (play_loop) {
+            /* on: latched, its face lit orange, the glyph dark on it (off,
+             * it is a button as the others are) */
+            bg = lit ? PEN_HL : PEN_ACCENT;
+            fg = lit ? PEN_WHITE : PEN_BAR;
         }
     }
     /* the glyph: an odd number of rows, about half the button, so each

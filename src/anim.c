@@ -947,8 +947,12 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
     case BT_STOP:
         RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
         break;
-    case BT_LOOP:
-        loop_glyph(rp, x, y, s, t, play_loop ? bar.fg : bar.dim);
+    case BT_LOOP:                           /* on: latched, the glyph dark on a light box */
+        if (play_loop) {
+            SetAPen(rp, bar.fg);
+            RectFill(rp, x, y, x + s - 1, y + s - 1);
+        }
+        loop_glyph(rp, x, y, s, t, play_loop ? bar.bg : bar.fg);
         break;
     case BT_VDOWN:
     case BT_VUP:
@@ -1382,13 +1386,17 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
         if (sx > 1)
             ry = ry / 2 > 1 ? ry / 2 : 1;
         rx = ry * sx;
-        if (st.ring && i == st.focus && !(st.off & (1 << i))) {    /* the focus: a yellow ring */
-            WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
-            gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
-            gfx_rrect(g, bx + fx, by + ft, bw - 2 * fx, bh - 2 * ft, rx > fx ? rx - fx : 1,
-                      ry > ft ? ry - ft : 1, PEN_BAR);
-        } else
-            gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_BAR);
+        {
+            /* loop on: latched, its face lit orange (off, as the others) */
+            UBYTE face = i == BT_LOOP && play_loop ? PEN_ACCENT : PEN_BAR;
+            if (st.ring && i == st.focus && !(st.off & (1 << i))) {    /* the focus: a yellow ring */
+                WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
+                gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
+                gfx_rrect(g, bx + fx, by + ft, bw - 2 * fx, bh - 2 * ft, rx > fx ? rx - fx : 1,
+                          ry > ft ? ry - ft : 1, face);
+            } else
+                gfx_rrect(g, bx, by, bw, bh, rx, ry, face);
+        }
         SetAPen(g->rp, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE));    /* greyed, as Now playing's */
         switch (i) {
         case BT_RESTART:
@@ -1413,7 +1421,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
             break;
         case BT_LOOP:
-            loop_glyph(g->rp, ix, iy, s, t, GPEN(play_loop ? PEN_YELLOW : PEN_RULE));
+            loop_glyph(g->rp, ix, iy, s, t, GPEN(play_loop ? PEN_BAR : PEN_WHITE));
             break;
         case BT_FULL: {                     /* four corners: out to fill, in to come back */
             WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;

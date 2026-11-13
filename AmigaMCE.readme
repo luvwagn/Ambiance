@@ -299,6 +299,19 @@ Not there yet
 
 History
 -------
+0.7.2  A window on Workbench (15-bit or deeper, on a graphics card):
+       Settings > Display > Window, the icon's WINDOWED tooltype or
+       WINDOWED from a Shell; text Small, Medium or Large; resized by its
+       grip, the layout and text pages following; its Project menu; the
+       tips bar going once seen with the mouse; its place and size kept.
+       Pictures and videos full screen from it on a screen in
+       Workbench's own mode (no mode switch). The viewer: the pointer and
+       previous, play/pause, next and full-screen buttons with the mouse.
+       Videos: made to fit a window, larger or smaller, at any depth; at
+       their end back to the first frame, stopped; a click on their
+       progress line seeks. Loop, on Now Playing and video's controls.
+       EaglePlayer: a module's kind from what it holds, note players
+       (MED_note) heard, and a player whose check hangs left out.
 0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
        music folders with the spinner while read. HTTPS by AmiSSL 5
        (Settings > Networking): secure radio stations play, and Plex

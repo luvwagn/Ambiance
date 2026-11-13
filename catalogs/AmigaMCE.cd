@@ -21,7 +21,7 @@ Not enough memory for the animation's screen
 ; beets.c:542 beets.c:563 plex.c:696
 MSG_0D3B3C12 (221985810//)
 (no name)
-; beets.c:724 main.c:10841
+; beets.c:724 main.c:10842
 MSG_027BDF10 (41672464//)
 Nothing here
 ; beets.c:735 plex.c:395
@@ -33,7 +33,7 @@ Albums
 ; beets.c:736 plex.c:397
 MSG_5BBD0EC3 (1539116739//)
 Recently added
-; eagle.c:948 main.c:10425 main.c:11022
+; eagle.c:948 main.c:10426 main.c:11023
 MSG_4E6387ED (1315145709//)
 Not enough memory
 ; eagle.c:964
@@ -69,7 +69,7 @@ MSG_0F6E4D56 (258886998//)
 ; main.c:42
 MSG_73F99D3C (1945738556//)
 Games
-; main.c:42 main.c:8269 main.c:8287
+; main.c:42 main.c:8270 main.c:8288
 MSG_5D4E86F0 (1565427440//)
 Mods
 ; main.c:42
@@ -294,7 +294,7 @@ MSG_0065B852 (6666322//)
 ; main.c:1921
 MSG_4DAC8901 (1303152897//)
 Music folders
-; main.c:1923 main.c:8292
+; main.c:1923 main.c:8293
 MSG_674C644A (1733059658//)
 Modules
 ; main.c:1923
@@ -315,37 +315,37 @@ No spectrum under MHI: it plays the MP3 itself
 ; main.c:2156
 MSG_0B3A7E73 (188382835//)
 No spectrum: this player does not say what it plays
-; main.c:2250 main.c:2343 main.c:12103
+; main.c:2250 main.c:2343 main.c:12104
 MSG_5561FD0B (1432485131//)
 General
-; main.c:2250 main.c:2344 main.c:9649
+; main.c:2250 main.c:2344 main.c:9650
 MSG_5A05D9B5 (1510332853//)
 Display
-; main.c:2251 main.c:2346 main.c:9940
+; main.c:2251 main.c:2346 main.c:9941
 MSG_33CA9A34 (868915764//)
 Sound
-; main.c:2251 main.c:2348 main.c:12164
+; main.c:2251 main.c:2348 main.c:12165
 MSG_1917381B (420952091//)
 Networking
-; main.c:2251 main.c:9950
+; main.c:2251 main.c:9951
 MSG_30B474E4 (817132772//)
 Plex
-; main.c:2251 main.c:2485 main.c:12107
+; main.c:2251 main.c:2485 main.c:12108
 MSG_6C2261DE (1814192606//)
 Network interface
-; main.c:2252 main.c:2529 main.c:12111
+; main.c:2252 main.c:2529 main.c:12112
 MSG_23140C4E (588516430//)
 Highest station bitrate
-; main.c:2252 main.c:2479 main.c:12113
+; main.c:2252 main.c:2479 main.c:12114
 MSG_360055B5 (905991605//)
 Stream buffer
-; main.c:2252 main.c:2538 main.c:12121
+; main.c:2252 main.c:2538 main.c:12122
 MSG_18162AC4 (404105924//)
 Station list server
 ; main.c:2253 main.c:2253 main.c:2347
 MSG_542FED8A (1412427146//)
 Folders
-; main.c:2253 main.c:2431 main.c:12081
+; main.c:2253 main.c:2431 main.c:12082
 MSG_1A73DB9B (443800475//)
 Language
 ; main.c:2297
@@ -387,6 +387,9 @@ Japanese
 ; main.c:2303 main.c:2303
 MSG_2653C2A3 (643023523//)
 Greek
+; main.c:2303
+MSG_2D70BF21 (762363681//)
+Korean
 ; main.c:2332
 MSG_73C73B18 (1942436632//)
 As Workbench
@@ -408,10 +411,10 @@ Large
 ; main.c:2378
 MSG_678631FD (1736847869//)
 Window
-; main.c:2383 main.c:9864 main.c:12059
+; main.c:2383 main.c:9865 main.c:12060
 MSG_2C041143 (738464067//)
 Text size
-; main.c:2387 main.c:9565 main.c:9654
+; main.c:2387 main.c:9566 main.c:9655
 MSG_1624E3CC (371516364//)
 Screen mode
 ; main.c:2392 main.c:2395 main.c:2399
@@ -525,7 +528,7 @@ no answer
 ; main.c:2633
 MSG_3F3927CF (1060710351//)
 Plex server
-; main.c:2635 main.c:10395 main.c:11887
+; main.c:2635 main.c:10396 main.c:11888
 MSG_23B63BC7 (599145415//)
 none chosen
 ; main.c:2639
@@ -534,10 +537,10 @@ signed in
 ; main.c:2640
 MSG_51A683F2 (1369867250//)
 Sign out of plex.tv
-; main.c:2641 main.c:10595
+; main.c:2641 main.c:10596
 MSG_123ED553 (306107731//)
 Sign in at plex.tv
-; main.c:2642 main.c:10591
+; main.c:2642 main.c:10592
 MSG_2D9C8A61 (765233761//)
 needs HTTPS (Settings > Networking)
 ; main.c:2650
@@ -603,13 +606,13 @@ RTG only
 ; main.c:2895
 MSG_4D914B4E (1301367630//)
 Automatic: 
-; main.c:2930 main.c:9585
+; main.c:2930 main.c:9586
 MSG_0F9ADE75 (261807733//)
 Credits
-; main.c:2931 main.c:9595
+; main.c:2931 main.c:9596
 MSG_589D7E42 (1486716482//)
 System information
-; main.c:2933 main.c:11860
+; main.c:2933 main.c:11861
 MSG_345099C5 (877697477//)
 Plex in AmigaMCE
 ; main.c:2946
@@ -960,439 +963,439 @@ This module cannot be moved through
 ; main.c:7588
 MSG_0B3E0086 (188612742//)
 Loop on: it plays again at its end
-; main.c:7588
+; main.c:7589
 MSG_0144F316 (21295894//)
 Loop off: it stops at its end
-; main.c:7606 main.c:8101 main.c:8140
+; main.c:7607 main.c:8102 main.c:8141
 MSG_6AA26665 (1789027941//)
 Now playing
-; main.c:7846
+; main.c:7847
 MSG_7DDFAD41 (2111810881//)
 This Amiga is too slow to decode FLAC smoothly
-; main.c:7847
+; main.c:7848
 MSG_0D65D8B7 (224778423//)
 Too slow for FLAC: try Request lower quality audio
-; main.c:7874
+; main.c:7875
 MSG_0BBA80CF (196772047//)
 That track could not be played
-; main.c:7882
+; main.c:7883
 MSG_052FF533 (87029043//)
 The track could not be started there
-; main.c:7908 stream.c:714
+; main.c:7909 stream.c:714
 MSG_369379DB (915634651//)
 The station stopped sending
-; main.c:8271
+; main.c:8272
 MSG_0D35346B (221590635//)
 No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
-; main.c:8276
+; main.c:8277
 MSG_6870F104 (1752232196//)
 It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
-; main.c:8281
+; main.c:8282
 MSG_2E3C8991 (775719313//)
 EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
-; main.c:8294
+; main.c:8295
 MSG_1B1E85CB (454985163//)
 C64 music
-; main.c:8296
+; main.c:8297
 MSG_7F6215F5 (2137134581//)
 Menu music
-; main.c:8298
+; main.c:8299
 MSG_0D90C4A2 (227591330//)
 Modules (MODS:)
-; main.c:8302
+; main.c:8303
 MSG_66E86F1F (1726508831//)
 Modules: %.100s
-; main.c:8306
+; main.c:8307
 MSG_0B5B4D9C (190533020//)
 More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
-; main.c:8551 main.c:9474
+; main.c:8552 main.c:9475
 MSG_1361020B (325124619//)
 No pictures in that folder
-; main.c:8557 main.c:10596 main.c:11001
+; main.c:8558 main.c:10597 main.c:11002
 MSG_46C7288D (1187457165//)
 Too many levels open
-; main.c:8568 main.c:8593 main.c:8607
+; main.c:8569 main.c:8594 main.c:8608
 MSG_5116954E (1360434510//)
 Could not open that folder
-; main.c:8568
+; main.c:8569
 MSG_6FF9045E (1878590558//)
 That folder has no pictures
-; main.c:8584
+; main.c:8585
 MSG_54FCB2C5 (1425846981//)
 The music library could not be read: %.60s
-; main.c:8593
+; main.c:8594
 MSG_4F992A62 (1335437922//)
 No MP3 or FLAC files in that folder
-; main.c:8607
+; main.c:8608
 MSG_15E6DCFA (367451386//)
 That folder has no modules
-; main.c:8622
+; main.c:8623
 MSG_6D9550B1 (1838502065//)
 Could not open that menu
-; main.c:8622
+; main.c:8623
 MSG_3030A110 (808493328//)
 That menu is empty
-; main.c:8754
+; main.c:8755
 MSG_74066526 (1946576166//)
 Could not write T:AmigaMCE-run
-; main.c:8815
+; main.c:8816
 MSG_0C682AC4 (208153284//)
 %ld/%ld   %s   %s%s
-; main.c:8816
+; main.c:8817
 MSG_2D43D301 (759419649//)
    Slideshow
-; main.c:8819
+; main.c:8820
 MSG_359B5B48 (899373896//)
 Left/Right  previous/next    Fire  pause    Esc  back
-; main.c:8820
+; main.c:8821
 MSG_7ED0D392 (2127614866//)
 Left/Right  previous/next    Fire  slideshow    Esc  back
-; main.c:9020
+; main.c:9021
 MSG_152E3E65 (355352165//)
 Not enough memory for the viewer
-; main.c:9044
+; main.c:9045
 MSG_21238256 (555975254//)
 not sent by %.50s
-; main.c:9045 main.c:9076
+; main.c:9046 main.c:9077
 MSG_74BBD86D (1958467693//)
 Esc  back
-; main.c:9076
+; main.c:9077
 MSG_00FED3FC (16700412//)
 Loading from Plex...
-; main.c:9361
+; main.c:9362
 MSG_2DD7976F (769103727//)
 Not a picture: an IFF %s file
-; main.c:9393 main.c:10884
+; main.c:9394 main.c:10885
 MSG_4FD7ED09 (1339550985//)
 Slideshow of these %ld photos
-; main.c:9613
+; main.c:9614
 MSG_5123470D (1361266445//)
 That mode %.60s
-; main.c:9661
+; main.c:9662
 MSG_2EF5225D (787817053//)
 Could not open that screen mode
-; main.c:9707
+; main.c:9708
 MSG_66DF0CD5 (1725893845//)
 The window could not open: full screen
-; main.c:9934
+; main.c:9935
 MSG_4C560A92 (1280707218//)
 Connections: the stack's choice of interface
-; main.c:9935
+; main.c:9936
 MSG_247B55C3 (612062659//)
 Connections go out from this interface
-; main.c:10043
+; main.c:10044
 MSG_61C33E78 (1640185464//)
 The smooth style's files could not be loaded
-; main.c:10067
+; main.c:10068
 MSG_38B5BCC0 (951434432//)
 Smooth: on RTG screens only
-; main.c:10121
+; main.c:10122
 MSG_4B65B047 (1264955463//)
 Music library (beets)
-; main.c:10126
+; main.c:10127
 MSG_5D86BD77 (1569111415//)
 Music files (MUSIC:)
-; main.c:10133
+; main.c:10134
 MSG_47B3C622 (1202964002//)
 Music files: %.100s
-; main.c:10140
+; main.c:10141
 MSG_55DB9C3A (1440455738//)
 Music files: Settings > Folders > Music
-; main.c:10150
+; main.c:10151
 MSG_75470054 (1967587412//)
 No TCP/IP stack running: Plex needs networking
-; main.c:10155
+; main.c:10156
 MSG_05BF19DC (96410076//)
 Plex is turned off (Settings > Networking > Plex)
-; main.c:10163
+; main.c:10164
 MSG_370F28B1 (923740337//)
 Other libraries on %s
-; main.c:10168
+; main.c:10169
 MSG_5CB8F506 (1555625222//)
 Plex: %s
-; main.c:10173 main.c:11012
+; main.c:10174 main.c:11013
 MSG_3D6359D0 (1029921232//)
 No Plex server chosen: Settings > Networking > Plex
-; main.c:10181
+; main.c:10182
 MSG_12991ED4 (312024788//)
 Top voted
-; main.c:10182
+; main.c:10183
 MSG_59DBAEB1 (1507569329//)
 Most listened to
-; main.c:10183
+; main.c:10184
 MSG_47B6B3B8 (1203155896//)
 Trending
-; main.c:10184
+; main.c:10185
 MSG_7CA786A9 (2091353769//)
 Chiptune
-; main.c:10185
+; main.c:10186
 MSG_00D1A496 (13739158//)
 Demoscene
-; main.c:10186
+; main.c:10187
 MSG_65D70EE9 (1708592873//)
 Genres
-; main.c:10187
+; main.c:10188
 MSG_2062DC6D (543349869//)
 Countries
-; main.c:10367
+; main.c:10368
 MSG_2AA3C84C (715376716//)
 Asking plex.tv for a code...  Esc to give up
-; main.c:10371
+; main.c:10372
 MSG_19C08CA4 (432049316//)
 On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
-; main.c:10383
+; main.c:10384
 MSG_4F573886 (1331116166//)
 AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
-; main.c:10388
+; main.c:10389
 MSG_3DC2D1A0 (1036177824//)
 Signed in. Asking plex.tv for this account's servers...
-; main.c:10391
+; main.c:10392
 MSG_46CB6DE4 (1187737060//)
 Signed in to plex.tv as %s.
-; main.c:10394 main.c:11887
+; main.c:10395 main.c:11888
 MSG_7445FC0C (1950743564//)
 Server: %s
-; main.c:10398
+; main.c:10399
 MSG_091E9862 (153000034//)
 Settings > Networking > Plex > Plex server lists this account's servers beside those found on the network.
-; main.c:10402
+; main.c:10403
 MSG_33545DFE (861167102//)
 Signing in did not work: %s
-; main.c:10448
+; main.c:10449
 MSG_24FC226E (620503662//)
 No TCP/IP stack is running
-; main.c:10520 main.c:10580
+; main.c:10521 main.c:10581
 MSG_6CE44B71 (1826900849//)
 The code ran out before it was entered: try again
-; main.c:10521 net.c:227 net.c:258
+; main.c:10522 net.c:227 net.c:258
 MSG_4641030F (1178665743//)
 The server did not answer
-; main.c:10528
+; main.c:10529
 MSG_7B2696DA (2066126554//)
 plex.tv sent no code
-; main.c:10612
+; main.c:10613
 MSG_1D831D65 (495132005//)
 Signed out of plex.tv
-; main.c:10830
+; main.c:10831
 MSG_6358253C (1666721084//)
 That library is gone from the server: Music lists them again
-; main.c:10836
+; main.c:10837
 MSG_7B170497 (2065106071//)
 The server wants a sign-in token: see About > Plex in AmigaMCE
-; main.c:10838
+; main.c:10839
 MSG_229E5121 (580800801//)
 The server answered with something unexpected
-; main.c:10839
+; main.c:10840
 MSG_49CF76D8 (1238333144//)
 No music libraries there
-; main.c:10840
+; main.c:10841
 MSG_3EEA8333 (1055556403//)
 No photo libraries there
-; main.c:10842
+; main.c:10843
 MSG_07C4F203 (130347523//)
 Could not reach the Plex server
-; main.c:10882
+; main.c:10883
 MSG_1CFE72A3 (486437539//)
 Show the photo
-; main.c:10909
+; main.c:10910
 MSG_7BB6085B (2075527259//)
 Nothing listed
-; main.c:10910
+; main.c:10911
 MSG_46D7374C (1188509516//)
 No stations here that AmigaMCE can play
-; main.c:10987
+; main.c:10988
 MSG_1BED60DF (468541663//)
 Still being read from the server: a moment
-; main.c:11047
+; main.c:11048
 MSG_7F58E800 (2136532992//)
 Looking for Plex servers...  Esc to give up
-; main.c:11055
+; main.c:11056
 MSG_13C1CD18 (331468056//)
 Asking %.40s...  Esc to give up
-; main.c:11060
+; main.c:11061
 MSG_04730DAC (74649004//)
 Asking radio-browser.info...  Esc to give up
-; main.c:11103
+; main.c:11104
 MSG_497165DA (1232168410//)
 Plex photos: Plex is turned off (Settings > Networking > Plex)
-; main.c:11104
+; main.c:11105
 MSG_6273A841 (1651746881//)
 Plex photos: choose a server (Settings > Networking > Plex)
-; main.c:11130
+; main.c:11131
 MSG_276888E6 (661162214//)
 Plex photos on %.80s
-; main.c:11136
+; main.c:11137
 MSG_62B4E865 (1656023141//)
 Plex: %.100s
-; main.c:11840
+; main.c:11841
 MSG_2550824B (626033227//)
 Plex server chosen
-; main.c:11864
+; main.c:11865
 MSG_35BE063F (901645887//)
 AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
-; main.c:11875
+; main.c:11876
 MSG_2FBD9CB6 (800955574//)
 Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-; main.c:11879
+; main.c:11880
 MSG_5B40D81A (1530976282//)
 Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
-; main.c:11889
+; main.c:11890
 MSG_6D54C528 (1834272040//)
 Token: set
-; main.c:11889
+; main.c:11890
 MSG_59B6EDB9 (1505160633//)
 Token: not set
-; main.c:11891
+; main.c:11892
 MSG_6A307F3D (1781563197//)
 plex.tv: signed in as %s
-; main.c:11894
+; main.c:11895
 MSG_2DD69A9C (769039004//)
 plex.tv: not signed in
-; main.c:11904
+; main.c:11905
 MSG_0B620CC7 (190975175//)
 MP3: decoded by the MHI driver %.40s
-; main.c:11906
+; main.c:11907
 MSG_59D38C2E (1507036206//)
 MP3: decoded on the ZZ9000 (its mpega.library)
-; main.c:11907
+; main.c:11908
 MSG_1133EF71 (288616305//)
 MP3: decoded by mpega.library
-; main.c:11908
+; main.c:11909
 MSG_04F04DC5 (82857413//)
 MP3: no decoder (mpega.library or MHI)
-; main.c:11911
+; main.c:11912
 MSG_6FC4AC95 (1875160213//)
 FLAC: converted to MP3 (flacdec.library is not installed)
-; main.c:11912
+; main.c:11913
 MSG_226669D7 (577137111//)
 FLAC: converted to MP3 (too slow to decode here)
-; main.c:11913
+; main.c:11914
 MSG_3521D30E (891409166//)
 FLAC: converted to MP3 (lower quality audio is on)
-; main.c:11914
+; main.c:11915
 MSG_2B51B45B (726774875//)
 FLAC: played as stored, by flacdec.library
-; main.c:11915
+; main.c:11916
 MSG_586857BF (1483233215//)
 Sound: AHI, 16-bit
-; main.c:11915
+; main.c:11916
 MSG_0F2AADBB (254455227//)
 Sound: Paula, 8-bit
-; main.c:11941
+; main.c:11942
 MSG_5353700C (1397977100//)
 Format:   %s
-; main.c:11945
+; main.c:11946
 MSG_4B7B9DA5 (1266392485//)
 Country:  %s
-; main.c:11949
+; main.c:11950
 MSG_1399F81C (328857628//)
 Votes:    %s
-; main.c:11953
+; main.c:11954
 MSG_55E8E50A (1441326346//)
 Tags:     %s
-; main.c:11958
+; main.c:11959
 MSG_64C287CF (1690470351//)
 Homepage: %s
-; main.c:11962
+; main.c:11963
 MSG_5A5309D7 (1515391447//)
 Stream:   %s
-; main.c:11965
+; main.c:11966
 MSG_18A292C0 (413307584//)
 Fire on the station in its list plays it.
-; main.c:11974
+; main.c:11975
 MSG_5143C289 (1363395209//)
 A folder of MP3 or FLAC files
-; main.c:11975
+; main.c:11976
 MSG_19FEBB54 (436124500//)
 A folder of modules
-; main.c:11975
+; main.c:11976
 MSG_20B552D8 (548754136//)
 A folder of pictures
-; main.c:11975
+; main.c:11976
 MSG_1B002318 (452993816//)
 A folder of animations
-; main.c:11976
+; main.c:11977
 MSG_5B08757B (1527281019//)
 Folder added: its music is under Music
-; main.c:11977
+; main.c:11978
 MSG_182BFE5D (405536349//)
 Folder added: its modules are under Mods
-; main.c:11978
+; main.c:11979
 MSG_082FF2F7 (137360119//)
 Folder added: its pictures are under Pictures
-; main.c:11979
+; main.c:11980
 MSG_1C78BE4C (477675084//)
 Folder added: its animations are under Videos
-; main.c:11986
+; main.c:11987
 MSG_0242E102 (37937410//)
 Eight folders at most: take one out first
-; main.c:11998
+; main.c:11999
 MSG_1DC3AA14 (499362324//)
 Add
-; main.c:12013
+; main.c:12014
 MSG_2B8275A5 (729970085//)
 That folder could not be found
-; main.c:12024
+; main.c:12025
 MSG_692E7242 (1764651586//)
 That folder is there already
-; main.c:12041
+; main.c:12042
 MSG_2C2767AF (740779951//)
 Style: Smooth needs an RTG screen
-; main.c:12043
+; main.c:12044
 MSG_14386364 (339239780//)
 This Amiga plays Plex's lower quality: the files as stored are too much
-; main.c:12045
+; main.c:12046
 MSG_5CBCDB5D (1555880797//)
 That interface is not up
-; main.c:12049
+; main.c:12050
 MSG_646AFCF3 (1684733171//)
 MHI is not installed (its drivers in LIBS:MHI)
-; main.c:12135
+; main.c:12136
 MSG_7AE98FE6 (2062127078//)
 Station lists opened from now on
-; main.c:12141
+; main.c:12142
 MSG_5AA18328 (1520534312//)
 The next station or track started
-; main.c:12149
+; main.c:12150
 MSG_415E54B9 (1096701113//)
 None of the servers answered: Automatic kept
-; main.c:12176
+; main.c:12177
 MSG_7800A723 (2013308707//)
 MP3 decoded by MHI: radio, Plex (at its best quality) and files
-; main.c:12177
+; main.c:12178
 MSG_605E617D (1616798077//)
 MP3 decoded here by mpega.library
-; main.c:12188
+; main.c:12189
 MSG_59AEDDD1 (1504632273//)
 AHI from the next track or station on; modules stay on Paula
-; main.c:12189
+; main.c:12190
 MSG_06B72AB3 (112667315//)
 AHI: radio, Plex and music files; modules stay on Paula
-; main.c:12190
+; main.c:12191
 MSG_4975E21A (1232462362//)
 Paula plays everything
-; main.c:12205
+; main.c:12206
 MSG_0EE3FD77 (249822583//)
 %s used when it is assigned
-; main.c:12205
+; main.c:12206
 MSG_26D6BADA (651606746//)
 %s left out
-; main.c:12218
+; main.c:12219
 MSG_719F5F36 (1906270006//)
 Fire again to take this folder out (its files stay)
-; main.c:12227
+; main.c:12228
 MSG_4A2FC46E (1244644462//)
 Folder taken out
-; main.c:12841
+; main.c:12842
 MSG_746B08BF (1953171647//)
 Press Esc again to quit AmigaMCE
-; main.c:13477 main.c:13483
+; main.c:13478 main.c:13484
 MSG_16ABF123 (380367139//)
 AmigaMCE needs Kickstart 3.0 or newer.\n
-; main.c:13592
+; main.c:13593
 MSG_43383FA3 (1127759779//)
 AmigaMCE could not open its screen.\n
-; main.c:13633
+; main.c:13634
 MSG_3D0CDD4E (1024253262//)
 Saved screen mode not available here: using Automatic
 ; mixplay.c:237

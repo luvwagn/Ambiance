@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <exec/execbase.h>
 #include <dos/dosextens.h>
+#include <hardware/custom.h>
+#include <hardware/dmabits.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 
@@ -162,6 +164,7 @@ extern void ehs_getlistdata(void), ehs_loadfile(void), ehs_copydir(void), ehs_co
     ehs_copystring(void), ehs_ok(void), ehs_songend(void), ehs_cutsuffix(void),
     ehs_settimer(void), ehs_waitdma(void), ehs_alloclist(void), ehs_modchange(void);
 UWORD eh_master = 64;           /* PokeVol's scale (0-64) */
+static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
 ULONG eh_len;                   /* GetListData's second result */
 ULONG eh_d1;                    /* eh_call: what D1 and A0 were left as */
 APTR eh_a0;
@@ -1029,6 +1032,10 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     ep.pos = -1;
     if ((fn = tag(ep.tags, DTP_NoteStruct)))
         ep.notestruct = *(APTR *)fn;
+    if (ep.notestruct && !nt_silence)
+        nt_silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR);
+    if (ep.notestruct)
+        amce_log("eagleplayer", "a note player: its notes played on Paula by AmigaMCE");
     ep.own_int = ep.f_startint != NULL;
     /* the names it knows */
     mi = module_info();
@@ -1070,6 +1077,124 @@ BOOL ep_start(UWORD *count)
 }
 
 /* AmigaMCE's timer tick (an interrupt): the player's routine. */
+/* ---------------------------------------------------------- note players
+ * A note player (DTP_NoteStruct: MED_note, ...) plays nothing itself: each
+ * tick it says in its NoteStruct what each channel should play (DeliTracker's
+ * DeliPlayer.h), and the host plays it. Here, on Paula: the channels in its
+ * list are Paula's 0-3; a sample started (NCHF_Sample) from its start, then
+ * its repeat (or silence); its period, or a frequency made one; its volume
+ * to Paula's 64, at AmigaMCE's own. 8-bit samples only (Paula's). */
+#define CU ((volatile struct Custom *)0xDFF000)
+#define NST_CHANNELS 0              /* struct NoteStruct */
+#define NST_FLAGS 4
+#define NST_MAXVOL 12
+#define NSTF_Period (1 << 1)
+#define NSTF_16Bit (1 << 18)
+#define NSTF_32Bit (1 << 20)
+#define NCH_NEXT 0                  /* struct NoteChannel */
+#define NCH_CHANGED 11
+#define NCH_SSTART 16
+#define NCH_SLEN 20
+#define NCH_RSTART 24
+#define NCH_RLEN 28
+#define NCH_FREQ 32
+#define NCH_VOL 36
+#define NCHF_Sample (1 << 1)
+#define NCHF_Repeat (1 << 2)
+#define NCHF_Frequency (1 << 3)
+#define NCHF_Volume (1 << 4)
+
+static void raster_wait(int lines)
+{
+    /* Paula takes its new address and length a few lines after its DMA
+     * is switched (as replayers wait) */
+    while (lines-- > 0) {
+        UBYTE l = *(volatile UBYTE *)0xDFF006;
+        while (*(volatile UBYTE *)0xDFF006 == l)
+            ;
+    }
+}
+
+static void note_play(void)
+{
+    UBYTE *nst = ep.notestruct, *ch;
+    ULONG flags, maxvol;
+    UWORD start = 0;
+    UBYTE *rs[4];
+    ULONG rl[4];
+    int i;
+    if (!nst || !nt_silence)
+        return;
+    flags = L(nst, NST_FLAGS);
+    if ((flags & (NSTF_16Bit | NSTF_32Bit)) && !(flags & (1 << 17)))
+        return;                             /* not 8-bit: not Paula's */
+    maxvol = *(UWORD *)(nst + NST_MAXVOL);
+    if (!maxvol)
+        maxvol = 64;
+    ch = (UBYTE *)L(nst, NST_CHANNELS);
+    for (i = 0; i < 4 && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
+        UBYTE c = ch[NCH_CHANGED];
+        rs[i] = NULL;
+        if (c & NCHF_Frequency) {
+            ULONG f = L(ch, NCH_FREQ), per = flags & NSTF_Period ? f : f ? 3546895UL / f : 0;
+            if (per && per < 113)
+                per = 113;
+            if (per > 65535)
+                per = 65535;
+            CU->aud[i].ac_per = (UWORD)per;
+            eh_per[i] = (UWORD)per;
+        }
+        if (c & NCHF_Volume) {
+            ULONG v = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
+            if (v > 64)
+                v = 64;
+            v = v * eh_master / 64;
+            CU->aud[i].ac_vol = (UWORD)v;
+            eh_vol[i] = (UBYTE)v;
+        }
+        if (c & NCHF_Sample) {
+            UBYTE *ss = (UBYTE *)L(ch, NCH_SSTART);
+            ULONG sl = L(ch, NCH_SLEN) >> 1;
+            if (ss && sl) {
+                start |= 1 << i;
+                CU->dmacon = 1 << i;        /* (off, to start it afresh) */
+                eh_sadr[i] = ss;
+                eh_slen[i] = (UWORD)(sl > 65535 ? 65535 : sl);
+            } else {
+                CU->dmacon = 1 << i;        /* nothing to play: quiet */
+            }
+        }
+        if (c & (NCHF_Sample | NCHF_Repeat)) {
+            rs[i] = (UBYTE *)L(ch, NCH_RSTART);
+            rl[i] = L(ch, NCH_RLEN) >> 1;
+            if (!rs[i] || rl[i] < 2) {
+                rs[i] = (UBYTE *)nt_silence;    /* played once: silence after */
+                rl[i] = 1;
+            }
+        }
+        ch[NCH_CHANGED] = 0;
+    }
+    if (start) {
+        raster_wait(2);
+        for (i = 0; i < 4; i++)
+            if (start & (1 << i)) {
+                CU->aud[i].ac_ptr = (UWORD *)eh_sadr[i];
+                CU->aud[i].ac_len = eh_slen[i];
+            }
+        CU->dmacon = DMAF_SETCLR | start;
+        raster_wait(2);
+        eh_hit |= (UBYTE)start;             /* (Now Playing's meters) */
+        eh_trig |= (UBYTE)start;
+    }
+    for (i = 0; i < 4; i++)                 /* what plays next: the repeat */
+        if (rs[i]) {
+            CU->aud[i].ac_ptr = (UWORD *)rs[i];
+            CU->aud[i].ac_len = (UWORD)(rl[i] > 65535 ? 65535 : rl[i]);
+            eh_adr[i] = rs[i];
+            eh_plen[i] = (UWORD)(rl[i] > 65535 ? 65535 : rl[i]);
+        }
+}
+
 void ep_tick(void)
 {
     struct Host *h = ep.h;
@@ -1080,6 +1205,8 @@ void ep_tick(void)
         eh_icall(ep.f_voices, h->g, 0x0F);
     if (ep.f_interrupt)
         eh_icall(ep.f_interrupt, h->g, 0);
+    if (ep.notestruct)
+        note_play();                        /* a note player's notes, on Paula */
     if (ep.vol_changed && ep.f_volume) {
         ep.vol_changed = FALSE;
         eh_icall(ep.f_volume, h->g, 0);
