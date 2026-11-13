@@ -98,6 +98,7 @@ static struct {
     ULONG med_units;                /* a MED song's length (medtime.c: ticks x 16), 0 none */
     UWORD med_cnt0;                 /* its timer at its first tempo (its first tick's) */
     UWORD med_tracks;               /* its tracks (a note player's mixer: four or fewer at full scale) */
+    BOOL med_said;                  /* its length logged (once a song) */
     ULONG ep_t0, ep_played;         /* ...and its time played, by the clock */
     /* playing */
     volatile BOOL running, paused;
@@ -733,11 +734,7 @@ void mp_tempo_check(void)
         amce_log("music", m);
         if (mp.engine == ENG_EAGLE) {
             ep_note_log();                  /* (a note player's first notes, once) */
-            if (mp.med_units) {
-                sprintf(m, "its length: %lu ms (a tick %lu E-clocks at its first tempo)",
-                        (unsigned long)med_ms(mp.med_units), (unsigned long)mp.med_cnt0);
-                amce_log("music", m);
-            }
+
         }
     }
 }
@@ -1204,6 +1201,7 @@ static BOOL play_eagle(char *err, LONG errmax)
     mp.ep_t0 = time_ms();
     mp.ep_played = 0;
     mp.med_cnt0 = 0;
+    mp.med_said = FALSE;
     {
         /* a note player of 5-8 channels: mixed in pairs onto Paula's four,
          * as ProTracker's 8-channel modules are */
@@ -1630,6 +1628,16 @@ void mp_status(struct MpStatus *s)
         s->total_ms = med_ms(mp.med_units);
         if (s->total_ms && s->elapsed_ms > s->total_ms)
             s->elapsed_ms = s->total_ms;
+        if (mp.med_units && !mp.med_said && s->elapsed_ms > 1500) {
+            char m[140];
+            mp.med_said = TRUE;
+            sprintf(m, "its length: %lu ms (%lu ticks; a tick %lu E-clocks at its first tempo, "
+                       "%lu now; the E-clock %lu Hz)",
+                    (unsigned long)s->total_ms, (unsigned long)(mp.med_units / 16),
+                    (unsigned long)mp.med_cnt0, (unsigned long)mp.tick_cnt,
+                    (unsigned long)mp.eclock);
+            amce_log("music", m);
+        }
         s->sub = in.sub;
         s->subs = in.subs;
         {
