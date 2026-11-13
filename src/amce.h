@@ -344,6 +344,9 @@ void gfx_window_log(struct Gfx *g);    /* Debug: the window's measurements so fa
 /* Resizing (gfx.c): the buffer and metrics for the window's new inside;
  * its place and size kept (WindowBox), given back next time. */
 BOOL gfx_window_resize(struct Gfx *g);
+WORD gfx_window_grip(const struct Gfx *g);      /* our sizing grip's size, 0 none */
+void gfx_window_grip_draw(struct Gfx *g, UBYTE pen);
+void gfx_window_size_to(struct Gfx *g, WORD iw, WORD ih);
 extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */
 BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k);
 void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k);
@@ -425,6 +428,8 @@ struct Item {
 #define ITEM_GONE     8 /* its letter's names were dropped to save memory (the
                          * label is the letter): read again before use */
 #define ITEM_HIDDEN  32 /* left out of the list being made (pics.c: Videos) */
+#define ITEM_PARA    64 /* a text page's line wrapped from a paragraph (wrap_into)... */
+#define ITEM_WRAP   128 /* ...and not its first: wrapped again at another width */
 
 /* Keep struct Item a power of two in size: then count * sizeof is a shift.
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading

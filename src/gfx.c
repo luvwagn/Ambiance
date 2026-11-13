@@ -567,6 +567,24 @@ static void win_stat(struct Gfx *g, ULONG ms)
         gfx_window_log(g);
 }
 
+/* The buffer's x, y, w x h copied into the window, never past its inside
+ * as it is now: resized smaller, the buffer is the old size until the
+ * layout follows (RESIZE_SETTLE later), and copied whole it drew over the
+ * window's right and bottom borders, which stayed so. */
+static void win_copy(struct Gfx *g, WORD x, WORD y, WORD w, WORD h)
+{
+    struct Window *win = g->win;
+    WORD iw = win->Width - win->BorderLeft - win->BorderRight,
+         ih = win->Height - win->BorderTop - win->BorderBottom;
+    if (x + w > iw)
+        w = iw - x;
+    if (y + h > ih)
+        h = ih - y;
+    if (w > 0 && h > 0)
+        BltBitMapRastPort(wbuf_bm, x, y, win->RPort, win->BorderLeft + x, win->BorderTop + y, w, h,
+                          0xC0);
+}
+
 static void win_free(struct Gfx *g)
 {
     UWORD i;
@@ -729,7 +747,58 @@ BOOL gfx_window_resize(struct Gfx *g)
     win_ih = h;
     win_k = g->k;
     dirty = TRUE;
+    RefreshWindowFrame(g->win);             /* its borders and gadgets, clean */
     return TRUE;
+}
+
+/* Our own sizing grip in the inside's bottom right corner (Intuition's
+ * size gadget would take a whole thick bottom border): its size, 0 none. */
+WORD gfx_window_grip(const struct Gfx *g)
+{
+    return g->wb && g->win ? GU(g, 11) : 0;
+}
+
+/* The grip drawn (three diagonal lines, as Workbench's own). */
+void gfx_window_grip_draw(struct Gfx *g, UBYTE pen)
+{
+    WORD s = gfx_window_grip(g), x1 = g->w - 1, y1 = g->h - 1, i, t = GU(g, 1) > 1 ? GU(g, 1) : 1;
+    if (!s)
+        return;
+    SetAPen(g->rp, GPEN(pen));
+    for (i = 1; i <= 3; i++) {
+        WORD d = s * i / 3 - GU(g, 2), j;
+        for (j = 0; j < t; j++) {
+            Move(g->rp, x1 - d + j, y1 - GU(g, 1));
+            Draw(g->rp, x1 - GU(g, 1), y1 - d + j);
+        }
+    }
+    dirty = TRUE;
+}
+
+/* Sized by the grip: the inside asked for (kept within its limits and the
+ * screen); the window follows (NEWSIZE then lays it out). */
+void gfx_window_size_to(struct Gfx *g, WORD iw, WORD ih)
+{
+    struct Window *win = g->win;
+    WORD bw, bh, minw, minh, maxw, maxh;
+    if (!g->wb || !win)
+        return;
+    bw = win->BorderLeft + win->BorderRight;
+    bh = win->BorderTop + win->BorderBottom;
+    minw = (WORD)((LONG)WIN_MIN_DW * g->k / 256);
+    minh = (WORD)((LONG)WIN_MIN_DH * g->k / 256);
+    maxw = win->WScreen->Width - win->LeftEdge - bw;
+    maxh = win->WScreen->Height - win->TopEdge - bh;
+    if (iw > maxw)
+        iw = maxw;
+    if (ih > maxh)
+        ih = maxh;
+    if (iw < minw)
+        iw = minw;
+    if (ih < minh)
+        ih = minh;
+    if (iw + bw != win->Width || ih + bh != win->Height)
+        ChangeWindowBox(win, win->LeftEdge, win->TopEdge, iw + bw, ih + bh);
 }
 
 /* Where it is and how large inside (to keep, and give back next time). */
@@ -923,7 +992,7 @@ static BOOL win_open(struct Gfx *g, int style)
                             WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
                             WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
                             WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
-                            WA_SizeGadget, TRUE, WA_SizeBBottom, TRUE, WA_NewLookMenus, TRUE,
+                            WA_NewLookMenus, TRUE,     /* (sized by our own grip: gfx_window_grip) */
                             WA_MinWidth, (LONG)WIN_MIN_DW * g->k / 256 + bw,
                             WA_MinHeight, (LONG)WIN_MIN_DH * g->k / 256 + bh,
                             WA_MaxWidth, ~0UL, WA_MaxHeight, ~0UL,
@@ -999,8 +1068,7 @@ BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
         /* uncovered: what it showed, from the buffer */
         BeginRefresh(g->win);
         if (wbuf_bm)
-            BltBitMapRastPort(wbuf_bm, 0, 0, g->win->RPort, g->win->BorderLeft,
-                              g->win->BorderTop, g->w, g->h, 0xC0);
+            win_copy(g, 0, 0, g->w, g->h);
         EndRefresh(g->win, TRUE);
         return TRUE;
     case IDCMP_CLOSEWINDOW:
@@ -1043,8 +1111,7 @@ void gfx_window_show_rect(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
         return;
     WaitBlit();
     t0 = time_ms();
-    BltBitMapRastPort(wbuf_bm, x0, y0, g->win->RPort, g->win->BorderLeft + x0,
-                      g->win->BorderTop + y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0);
+    win_copy(g, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
     WaitBlit();
     win_stat(g, time_ms() - t0);
 }
@@ -2647,8 +2714,7 @@ BOOL gfx_present(struct Gfx *g)
         dirty = FALSE;
         WaitBlit();
         t0 = time_ms();
-        BltBitMapRastPort(wbuf_bm, 0, 0, g->win->RPort, g->win->BorderLeft, g->win->BorderTop,
-                          g->w, g->h, 0xC0);
+        win_copy(g, 0, 0, g->w, g->h);
         WaitBlit();
         gfx_present_ms = time_ms() - t0;
         gfx_flips++;
@@ -2689,8 +2755,7 @@ void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1)
     if (g->wb && wbuf_bm) {
         if (x1 >= x0 && y1 >= y0 && g->win) {
             WaitBlit();
-            BltBitMapRastPort(wbuf_bm, x0, y0, g->win->RPort, g->win->BorderLeft + x0,
-                              g->win->BorderTop + y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0);
+            win_copy(g, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
             WaitBlit();
         }
         dirty = was;

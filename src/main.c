@@ -1262,10 +1262,21 @@ static BOOL no_line_start(ULONG c)
 /* Word-wrap a paragraph into l, maxw pixels wide. A Japanese, Chinese or
  * Korean character is a word of its own, joined without a space (their
  * text has none to break at). */
+/* A wrapped line, marked as one (the paragraph's first, or a later one) so
+ * that it can be wrapped again at another width (rewrap_list). */
+static void wrap_line(struct ItemList *l, const char *line, BOOL *more)
+{
+    struct Item *it = list_add(l, line, "", "", IT_TEXT);
+    if (it)
+        it->flags |= ITEM_PARA | (*more ? ITEM_WRAP : 0);
+    *more = TRUE;
+}
+
 static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
 {
     char line[256], word[96];
     LONG last = 0;                      /* where line's last word begins */
+    BOOL more = FALSE;                  /* a line of it added already */
     line[0] = 0;
     while (*s) {
         LONG n = 0;
@@ -1304,13 +1315,13 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
                 line[last] = 0;
                 while (last > 0 && line[last - 1] == ' ')
                     line[--last] = 0;
-                list_add(l, line, "", "", IT_TEXT);
+                wrap_line(l, line, &more);
                 amce_strlcpy(line, carry, sizeof(line));
                 amce_strlcat(line, word, sizeof(line));
                 last = 0;
                 continue;
             }
-            list_add(l, line, "", "", IT_TEXT);
+            wrap_line(l, line, &more);
             amce_strlcpy(line, word, sizeof(line));
             last = 0;
         } else {
@@ -1319,7 +1330,63 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
         }
     }
     if (line[0])
-        list_add(l, line, "", "", IT_TEXT);
+        wrap_line(l, line, &more);
+}
+
+/* A text page's lines wrapped again to maxw (the window resized): each
+ * paragraph wrap_into made joined again (a space between its lines, but
+ * none between Far East characters) and wrapped anew; any other line kept
+ * as it is. FALSE: no memory, as it was. */
+static BOOL rewrap_list(struct ItemList *l, WORD maxw)
+{
+    struct ItemList nl;
+    LONG i = 0;
+    if (!list_init(&nl))
+        return FALSE;
+    while (i < l->count) {
+        struct Item *it = &l->items[i];
+        if (it->flags & ITEM_PARA) {
+            LONG j, len = 0;
+            char *para;
+            ULONG cp;
+            for (j = i; j < l->count && (j == i || (l->items[j].flags & ITEM_WRAP)); j++)
+                len += strlen(l->items[j].label) + 1;
+            if (!(para = AllocVec(len + 1, MEMF_ANY))) {
+                list_free(&nl);
+                return FALSE;
+            }
+            para[0] = 0;
+            for (j = i; j < l->count && (j == i || (l->items[j].flags & ITEM_WRAP)); j++) {
+                const char *t = l->items[j].label;
+                LONG pl = strlen(para);
+                if (j > i && pl && t[0]) {
+                    /* a space unless both sides are Far East characters */
+                    LONG k = pl - 1;
+                    while (k > 0 && ((UBYTE)para[k] & 0xC0) == 0x80)
+                        k--;
+                    if (!(cjk_far_east((const UBYTE *)para + k, pl - k, &cp) &&
+                          cjk_far_east((const UBYTE *)t, strlen(t), &cp)))
+                        strcat(para, " ");
+                }
+                strcat(para, t);
+            }
+            wrap_into(&nl, para, maxw);
+            FreeVec(para);
+            i = j;
+        } else {
+            struct Item *n = list_add(&nl, it->label, it->path ? it->path : "",
+                                      it->sortkey ? it->sortkey : "", it->kind);
+            if (n) {
+                n->action = it->action;
+                n->mark = it->mark;
+                n->flags = it->flags;
+            }
+            i++;
+        }
+    }
+    list_free(l);
+    *l = nl;
+    return TRUE;
 }
 
 /* Word-wrap a paragraph to the text box width. */
@@ -3902,7 +3969,42 @@ static void draw_footer(void)
     gfx_fill(&g, 0, g.footer_y - U(1), g.w - 1, g.footer_y - 1, PEN_RULE);
     gfx_fill(&g, 0, g.footer_y, g.w - 1, g.h - 1, PEN_BAR);
     gfx_text(&g, U(6), g.footer_y + (g.h - g.footer_y - g.font_h) / 2, msg[0] ? msg : hint_text(),
-             msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12), TS_SMALL);
+             msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12) - gfx_window_grip(&g), TS_SMALL);
+    gfx_window_grip_draw(&g, PEN_DIM);      /* a window: its sizing grip in the corner */
+}
+
+/* Sizing the window by its grip: pressed there, the pointer followed (by
+ * the screen's position, the window moving under it) until let go. */
+static struct { BOOL on; WORD mx, my, w, h; } sizing;
+
+static BOOL window_sizing(const struct IntuiMessage *im)
+{
+    struct Screen *sc;
+    WORD x, y, s;
+    if (!g.wb || !g.win)
+        return FALSE;
+    sc = g.win->WScreen;
+    x = im->MouseX - g.win->BorderLeft;
+    y = im->MouseY - g.win->BorderTop;
+    s = gfx_window_grip(&g);
+    if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && s &&
+        x >= g.w - s && y >= g.h - s && x < g.w && y < g.h) {
+        sizing.on = TRUE;
+        sizing.mx = sc->MouseX;
+        sizing.my = sc->MouseY;
+        sizing.w = g.w;
+        sizing.h = g.h;
+        return TRUE;
+    }
+    if (!sizing.on)
+        return FALSE;
+    if (im->Class == IDCMP_MOUSEMOVE)
+        gfx_window_size_to(&g, sizing.w + sc->MouseX - sizing.mx, sizing.h + sc->MouseY - sizing.my);
+    else if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP)
+        sizing.on = FALSE;
+    else if (im->Class == IDCMP_INACTIVEWINDOW)
+        sizing.on = FALSE;
+    return TRUE;
 }
 
 static void set_msg(const char *m)
@@ -9571,6 +9673,14 @@ static void window_resized(void)
     ov_bm_free();
     pv_flush();
     vis_stop();
+    for (i = 0; i < depth; i++) {           /* text pages wrapped again to the new width */
+        struct Page *p = &pages[i];
+        if (p->type == PT_TEXT || p->type == PT_DETAIL) {
+            LONG n0 = p->list.count;
+            if (rewrap_list(&p->list, textbox_w()) && n0 && p->list.count != n0)
+                p->tb.pos = p->tb.target = p->tb.pos * p->list.count / n0;    /* about there */
+        }
+    }
     vis = list_visible();
     for (i = 0; i < depth; i++) {           /* the selection still in view */
         struct Page *p = &pages[i];
@@ -13510,6 +13620,8 @@ static int app_main(void)
                         running = FALSE;    /* the close gadget: as Esc on the menu twice */
                 } else if (copy.Class == IDCMP_MENUPICK) {
                     window_menu(copy.Code);
+                } else if (window_sizing(&copy)) {
+                    ;                       /* the grip's (a window) */
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
                 else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)

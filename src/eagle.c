@@ -218,8 +218,9 @@ static const char *const dirs[] = {
     NULL
 };
 
-/* Players known to hang on a check or need what AmigaMCE has not. */
-static const char *const skip[] = { "Core Design", NULL };
+/* Players known to hang on a check or need what AmigaMCE has not
+ * (PlaySid: its check never came back here, on a module of another kind). */
+static const char *const skip[] = { "Core Design", "PlaySid", NULL };
 
 /* Players that did not come back from a check here (hung, or crashed the
  * Amiga): a player's name is written to TRY_FILE before its check and the
