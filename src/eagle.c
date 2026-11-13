@@ -182,6 +182,7 @@ static volatile UBYTE nt_nlog, nt_logged;
 /* a mixed note player's channels, as Paula's registers would be (note_mix) */
 static const UBYTE *nm_ptr[PT_CHANS];
 static ULONG nm_len[PT_CHANS];
+static ULONG nm_slen4[4];       /* (the spectrum's: a start's whole length) */
 static UWORD nm_per[PT_CHANS];
 static UBYTE nm_vol[PT_CHANS];
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
@@ -1232,9 +1233,11 @@ void ep_note_log(void)
     }
 }
 
+static BOOL nt_quiet;            /* run on silently (a seek): notes taken, not played */
+
 static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
 {
-    struct PmTick *t = mp_mix_slot();
+    struct PmTick *t = nt_quiet ? NULL : mp_mix_slot();
     UBYTE *ch = (UBYTE *)L(nst, NST_CHANNELS), off = 0, on = 0;
     int i;
     for (i = 0; i < PT_CHANS && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
@@ -1265,6 +1268,7 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
                 if (i < 4) {
                     eh_sadr[i] = (APTR)ss;          /* (the spectrum: the first four) */
                     eh_slen[i] = (UWORD)(sl > 65535 ? 65535 : sl);
+                    nm_slen4[i] = sl;
                     eh_per[i] = nm_per[i];
                     eh_vol[i] = nm_vol[i];
                     eh_trig |= (UBYTE)(1 << i);
@@ -1403,6 +1407,31 @@ static void note_play(void)
             eh_adr[i] = rs[i];
             eh_plen[i] = (UWORD)(rl[i] > 65535 ? 65535 : rl[i]);
         }
+}
+
+/* One tick of the player run silently (a seek, from the task, the tempo
+ * interrupt stopped): its notes taken from its NoteStruct, not played. */
+void ep_ff_tick(void)
+{
+    UBYTE *ch;
+    int i;
+    if (!ep.h || !ep.f_interrupt || ep.own_int)
+        return;
+    eh_call(ep.f_interrupt, ep.h->g, 0, 0);
+    if (ep.notestruct_at && *ep.notestruct_at)
+        ep.notestruct = *ep.notestruct_at;
+    if (!ep.notestruct)
+        return;
+    if (mp_mixing()) {
+        nt_quiet = TRUE;
+        note_mix((UBYTE *)ep.notestruct, L(ep.notestruct, NST_FLAGS),
+                 *(UWORD *)((UBYTE *)ep.notestruct + NST_MAXVOL) ? *(UWORD *)((UBYTE *)ep.notestruct + NST_MAXVOL) : 64);
+        nt_quiet = FALSE;
+        return;
+    }
+    for (i = 0, ch = (UBYTE *)L(ep.notestruct, NST_CHANNELS); i < 32 && ch;
+         i++, ch = (UBYTE *)L(ch, NCH_NEXT))
+        ch[NCH_CHANGED] = 0;                /* (Paula's: what it last asked, let go) */
 }
 
 void ep_tick(void)
@@ -1583,7 +1612,7 @@ BOOL ep_levels(UBYTE *hit, UBYTE *vol, struct EpVoice *v, UBYTE *trig)
         for (i = 0; i < 4; i++)
             if (t & (1 << i)) {
                 v[i].adr = (const BYTE *)eh_sadr[i];
-                v[i].len = eh_slen[i];
+                v[i].len = mp_mixing() && ep.notestruct ? nm_slen4[i] : eh_slen[i];
             }
     Enable();
     for (i = 0; i < 4; i++) {

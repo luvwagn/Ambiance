@@ -45,6 +45,7 @@
 
 #include "ptcore.h"
 #include "ptmix.h"
+#include "medtime.h"
 
 extern struct ExecBase *SysBase;
 #define CU ((volatile struct Custom *)0xDFF000)
@@ -94,6 +95,8 @@ static struct {
     char packer[40];                /* what it was packed with ("" none) */
     UBYTE engine;                   /* ENG_*: what plays it */
     UWORD tick_cnt;                 /* an EaglePlayer player's timer (CIA count) */
+    ULONG med_units;                /* a MED song's length (medtime.c: ticks x 16), 0 none */
+    UWORD med_cnt0;                 /* its timer at its first tempo (its first tick's) */
     ULONG ep_t0, ep_played;         /* ...and its time played, by the clock */
     /* playing */
     volatile BOOL running, paused;
@@ -463,6 +466,7 @@ static UWORD tick_owed(void)
 }
 
 static void tick_one(void);
+static ULONG med_ms(ULONG units16);
 
 static void tick_code(void)
 {
@@ -481,8 +485,11 @@ static void tick_one(void)
     struct Pt *pt = mp.pt;
     int i;
     if (mp.engine == ENG_EAGLE) {
-        if (!mp.paused)
+        if (!mp.paused) {
             ep_tick();                      /* the player's own routine */
+            if (!mp.med_cnt0)
+                mp.med_cnt0 = mp.tick_cnt;  /* (the song's first tempo, as it set it) */
+        }
         return;
     }
     if (!pt)
@@ -870,6 +877,7 @@ static void module_free(void)
     if (mp.engine == ENG_RADIO)
         st_stop();
     mix_free();
+    mp.med_units = 0;
     mp.engine = ENG_NONE;
     mp.serial++;
     mp.vtrig = mp.ep_trig = 0;
@@ -1054,6 +1062,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             UBYTE *copy = mx_available() ? AllocVec(mlen + 16, MEMF_ANY) : NULL;
             if (copy)
                 CopyMem(mem, copy, mlen);   /* for the mixer, if no player knows it */
+            mp.med_units = med_measure(mem, mlen, NULL);   /* (a MED song's length, before it is relocated) */
             if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
                 FreeVec(copy);
                 mp.engine = ENG_EAGLE;
@@ -1173,6 +1182,7 @@ static BOOL play_eagle(char *err, LONG errmax)
     tick = ep_start(&cnt);
     mp.ep_t0 = time_ms();
     mp.ep_played = 0;
+    mp.med_cnt0 = 0;
     {
         /* a note player of 5-8 channels: mixed in pairs onto Paula's four,
          * as ProTracker's 8-channel modules are */
@@ -1592,6 +1602,9 @@ void mp_status(struct MpStatus *s)
         s->songlen = in.pos >= 0 ? in.poslen : 0;
         s->pattern = -1;
         s->elapsed_ms = mp.ep_played + (mp.running && !mp.paused ? time_ms() - mp.ep_t0 : 0);
+        s->total_ms = med_ms(mp.med_units);
+        if (s->total_ms && s->elapsed_ms > s->total_ms)
+            s->elapsed_ms = s->total_ms;
         s->sub = in.sub;
         s->subs = in.subs;
         {
@@ -1601,6 +1614,25 @@ void mp_status(struct MpStatus *s)
         }
         for (i = 0; i < 4; i++)
             hit[i] = (mask >> i) & 1;
+        if (mp.mix8 && mp.pm && mp.running && !mp.paused) {
+            /* mixed: each of Paula's four as loud as it really is, from its
+             * ring about where Paula reads it (the mixing is a lead ahead),
+             * so a long sample started once still shows (a bass line) */
+            ULONG rl = mp.pm->ring_len, lead = mp.pm->rate * 12 / 100, win = mp.pm->rate / 25;
+            ULONG rp = (mp.pm->wpos + rl - lead % rl) % rl, k;
+            for (i = 0; i < 4; i++) {
+                const BYTE *r = (const BYTE *)mp.pm->ring[i];
+                UBYTE pk = 0;
+                for (k = 1; k <= win; k += 2) {
+                    BYTE v = r[(rp + rl - k) % rl];
+                    UBYTE a = (UBYTE)(v < 0 ? -v : v);
+                    if (a > pk)
+                        pk = a;
+                }
+                hit[i] = pk != 0;
+                vol[i] = (UBYTE)(mp.pm->nch > 4 ? (pk > 64 ? 64 : pk) : pk / 2);
+            }
+        }
         meters(s, hit, vol);
         return;
     }
@@ -1891,8 +1923,69 @@ int mp_meter_count(void)
 const char *mp_stream_name(void) { return mp.rname; }
 
 /* To a time in the song (modules mixed): FALSE if this module cannot. */
+/* A MED song's ticks (x 16) as ms, by its timer at its first tempo: 0
+ * not known (not MED, or before its first tick). */
+static ULONG med_ms(ULONG units16)
+{
+    ULONG us_tick;
+    if (!units16 || !mp.med_cnt0 || !mp.eclock)
+        return 0;
+    us_tick = (ULONG)mp.med_cnt0 * 1000 / (mp.eclock / 1000);  /* a tick, in us */
+    return (units16 / 16) * us_tick / 1000;
+}
+
+/* An EaglePlayer song to ms in (a MED song, its length known): its player
+ * run on silently from where it is (or from the start, for a time before),
+ * its ticks counted by its own timer, the mixer's voices quiet after. */
+#define EAGLE_SEEK_MS 4000              /* as long as a seek may take */
+
+static BOOL eagle_seek_ms(ULONG ms)
+{
+    struct EpInfo in;
+    ULONG now, at_us, want_us = ms * 1000, t0 = time_ms(), n = 0;
+    BOOL was_paused = mp.paused;
+    char m[120];
+    if (!mp.med_units || !mp.running || ep_own_timer() || !mp.med_cnt0)
+        return FALSE;
+    now = mp.ep_played + (!mp.paused ? time_ms() - mp.ep_t0 : 0);
+    tick_run(FALSE);
+    if (ms < now) {
+        ep_info(&in);
+        ep_subsong(in.sub_raw);             /* from its start */
+        tick_run(FALSE);
+        at_us = 0;
+    } else {
+        at_us = now * 1000;
+    }
+    while (at_us < want_us && time_ms() - t0 < EAGLE_SEEK_MS) {
+        ep_ff_tick();
+        at_us += (ULONG)mp.tick_cnt * 1000 / (mp.eclock / 1000);
+        n++;
+    }
+    if (mp.mix8 && mp.pm) {
+        Disable();
+        memset(mp.pm->v, 0, sizeof(mp.pm->v));  /* what sounded before: quiet */
+        Enable();
+        mix_rings_start();
+    } else {
+        paula_quiet();
+    }
+    mp.ep_played = at_us / 1000;
+    mp.ep_t0 = time_ms();
+    mp.finished = FALSE;
+    mp.anc_on = FALSE;
+    if (!was_paused)
+        tick_run(TRUE);
+    sprintf(m, "seek to %lu ms: %lu ticks run on in %lu ms, at %lu ms", (unsigned long)ms,
+            (unsigned long)n, (unsigned long)(time_ms() - t0), (unsigned long)(at_us / 1000));
+    amce_log("eagleplayer", m);
+    return TRUE;
+}
+
 BOOL mp_seek_ms(ULONG ms)
 {
+    if (mp.engine == ENG_EAGLE)
+        return eagle_seek_ms(ms);
     if (mp.engine != ENG_MIX)
         return FALSE;
     mx_seek_ms(ms);

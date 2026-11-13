@@ -727,7 +727,8 @@ void ep_unload(void);
 BOOL ep_loaded(void);
 BOOL ep_own_timer(void);
 int ep_note_channels(void);
-void ep_note_log(void);               /* its first notes, logged once */          /* a note player's channels, 0 not one */
+void ep_note_log(void);
+void ep_ff_tick(void);                 /* a tick run silently (a seek) */               /* its first notes, logged once */          /* a note player's channels, 0 not one */
 /* A note player's ticks for the 5-8 channel mixer (modplay.c): a slot to
  * fill (NULL: the queue is full), then queued. */
 struct PmTick;
@@ -745,7 +746,8 @@ void ep_info(struct EpInfo *in);
  * adr, len words, then its loop. */
 struct EpVoice {
     const BYTE *adr, *loop;
-    UWORD len, replen, per;
+    ULONG len;                      /* words (a mixed note player's: past 65535) */
+    UWORD replen, per;
     UBYTE vol;
 };
 /* hit, vol: the meters'; v (or NULL): where the voices are, trig the ones
