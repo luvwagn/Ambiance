@@ -338,6 +338,13 @@ static BOOL mix_alloc(int nch)
         return FALSE;
     }
     pm_voltab((pt_s8 *)mp.vt);
+    if (nch <= 4) {
+        /* (a note player of four: nothing paired, so each voice full scale) */
+        int v, x;
+        for (v = 0; v <= 64; v++)
+            for (x = 0; x < 256; x++)
+                mp.vt[v * 256 + x] = (BYTE)(((int)(BYTE)x * v) >> 6);
+    }
     for (i = 0; i < 4; i++)
         r[i] = mp.rings + i * MIX_RING;
     pm_init(mp.pm, nch, period, (pt_s8 *)mp.vt, (pt_s8 *const *)r, MIX_RING);
@@ -716,6 +723,8 @@ void mp_tempo_check(void)
         sprintf(m, "the tempo interrupt came %ld times in %ld ms, of %ld (%ld%%); %ld ticks caught up",
                 (long)got, (long)el, (long)want, (long)(got * 100 / want), (long)caught);
         amce_log("music", m);
+        if (mp.engine == ENG_EAGLE)
+            ep_note_log();                  /* (a note player's first notes, once) */
     }
 }
 
@@ -1168,13 +1177,15 @@ static BOOL play_eagle(char *err, LONG errmax)
         /* a note player of 5-8 channels: mixed in pairs onto Paula's four,
          * as ProTracker's 8-channel modules are */
         int nn = ep_note_channels();
-        if (nn > 4 && tick && (mp.mix8 || mix_alloc(nn > PT_CHANS ? PT_CHANS : nn))) {
-            char m[120];
+        if (nn > 0 && tick && (SysBase->AttnFlags & AFF_68020) &&
+            (mp.mix8 || mix_alloc(nn > PT_CHANS ? PT_CHANS : nn))) {
+            char m[140];
             memset(mp.pm->v, 0, sizeof(mp.pm->v));
             mp.mix_lost = 0;
             mp.tick_cnt = cnt;
             mix_rings_start();
-            sprintf(m, "a note player's %ld channels, mixed in pairs onto Paula's four at %lu Hz",
+            sprintf(m, "a note player's %ld channels, mixed onto Paula's four at %lu Hz "
+                       "(samples of any length, as the player gives them)",
                     (long)nn, (unsigned long)mp.pm->rate);
             amce_log("music", m);
         }

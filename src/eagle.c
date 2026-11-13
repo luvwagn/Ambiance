@@ -166,9 +166,13 @@ extern void ehs_getlistdata(void), ehs_loadfile(void), ehs_copydir(void), ehs_co
     ehs_settimer(void), ehs_waitdma(void), ehs_alloclist(void), ehs_modchange(void);
 UWORD eh_master = 64;           /* PokeVol's scale (0-64) */
 static void note_map(UBYTE *nst);
+#define NT_LOG 24
+static struct { UBYTE ch, c; ULONG ss, sl, rs, rl, f; UWORD vol; } nt_log[NT_LOG];
+static volatile UBYTE nt_nlog, nt_logged;
 /* a mixed note player's channels, as Paula's registers would be (note_mix) */
 static const UBYTE *nm_ptr[PT_CHANS];
-static UWORD nm_len[PT_CHANS], nm_per[PT_CHANS];
+static ULONG nm_len[PT_CHANS];
+static UWORD nm_per[PT_CHANS];
 static UBYTE nm_vol[PT_CHANS];
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
 ULONG eh_len;                   /* GetListData's second result */
@@ -1057,6 +1061,8 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         memset(nm_len, 0, sizeof(nm_len));
         memset(nm_per, 0, sizeof(nm_per));
         memset(nm_vol, 0, sizeof(nm_vol));
+        nt_nlog = 0;
+        nt_logged = FALSE;
 {
             char m[160];
             sprintf(m, "a note player: its notes played on Paula by AmigaMCE "
@@ -1178,6 +1184,44 @@ static void note_map(UBYTE *nst)
  * Paula's registers would have them; it plays channels n and n + 4 on
  * Paula's n. A sample played once ends its voice (no repeat). */
 
+/* A note player's first notes, kept (in the interrupt) for the log: what
+ * it asked for, to set beside the module. */
+
+static void nt_note(int i, UBYTE c, UBYTE *ch)
+{
+    if (nt_logged || nt_nlog >= NT_LOG)
+        return;
+    nt_log[nt_nlog].ch = (UBYTE)i;
+    nt_log[nt_nlog].c = c;
+    nt_log[nt_nlog].ss = L(ch, NCH_SSTART);
+    nt_log[nt_nlog].sl = L(ch, NCH_SLEN);
+    nt_log[nt_nlog].rs = L(ch, NCH_RSTART);
+    nt_log[nt_nlog].rl = L(ch, NCH_RLEN);
+    nt_log[nt_nlog].f = L(ch, NCH_FREQ);
+    nt_log[nt_nlog].vol = *(UWORD *)(ch + NCH_VOL);
+    nt_nlog++;
+}
+
+void ep_note_log(void)
+{
+    char m[160];
+    int i, n = nt_nlog;
+    if (nt_logged || !ep.notestruct)
+        return;
+    nt_logged = TRUE;
+    sprintf(m, "a note player's first %ld notes (channel, changed, start, length, repeat, "
+               "its length, period or Hz, volume):", (long)n);
+    amce_log("eagleplayer", m);
+    for (i = 0; i < n; i++) {
+        sprintf(m, "  %ld %02lx $%08lx %lu, $%08lx %lu, %lu, %lu", (long)nt_log[i].ch,
+                (unsigned long)nt_log[i].c, (unsigned long)nt_log[i].ss,
+                (unsigned long)nt_log[i].sl, (unsigned long)nt_log[i].rs,
+                (unsigned long)nt_log[i].rl, (unsigned long)nt_log[i].f,
+                (unsigned long)nt_log[i].vol);
+        amce_log("eagleplayer", m);
+    }
+}
+
 static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
 {
     struct PmTick *t = mp_mix_slot();
@@ -1205,7 +1249,7 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
                 on |= 1 << i;
                 if (t) {
                     t->start[i] = (const pt_s8 *)ss;
-                    t->slen[i] = (pt_u16)(sl > 65535 ? 65535 : sl);
+                    t->slen[i] = (pt_u32)sl;    /* (all of it: the mixer is not Paula) */
                 }
                 eh_hit |= (UBYTE)(1 << (i & 3));    /* (Now Playing's meters) */
                 if (i < 4) {
@@ -1225,12 +1269,14 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
                 rl = 0;
             }
             nm_ptr[i] = rs;
-            nm_len[i] = (UWORD)(rl > 65535 ? 65535 : rl);
+            nm_len[i] = rl;
             if (i < 4) {
                 eh_adr[i] = (APTR)(rs ? rs : (const UBYTE *)nt_silence);
-                eh_plen[i] = rs ? nm_len[i] : 1;
+                eh_plen[i] = rs ? (UWORD)(nm_len[i] > 65535 ? 65535 : nm_len[i]) : 1;
             }
         }
+        if (c & NCHF_Sample)
+            nt_note(i, c, ch);
         ch[NCH_CHANGED] = 0;
     }
     if (!t)
@@ -1320,6 +1366,8 @@ static void note_play(void)
                 rl[p] = 1;
             }
         }
+        if (c & NCHF_Sample)
+            nt_note(i, c, ch);
         ch[NCH_CHANGED] = 0;
     }
     if (start) {

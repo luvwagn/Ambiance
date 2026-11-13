@@ -720,7 +720,8 @@ void ep_pause(BOOL on);
 void ep_unload(void);
 BOOL ep_loaded(void);
 BOOL ep_own_timer(void);
-int ep_note_channels(void);          /* a note player's channels, 0 not one */
+int ep_note_channels(void);
+void ep_note_log(void);               /* its first notes, logged once */          /* a note player's channels, 0 not one */
 /* A note player's ticks for the 5-8 channel mixer (modplay.c): a slot to
  * fill (NULL: the queue is full), then queued. */
 struct PmTick;

@@ -17,7 +17,8 @@ struct PtVoice {
     pt_u32 step;                    /* bytes per output sample, 16.16 */
     pt_u16 step_per;                /* the period step is for */
     const pt_s8 *reg_ptr;           /* the registers: start and length (words) */
-    pt_u16 reg_len, per;
+    pt_u32 reg_len;                 /* (32 bits: a note player's samples run past 128K) */
+    pt_u16 per;
     pt_u8 vol, on;
 };
 
@@ -26,9 +27,10 @@ struct PtVoice {
 struct PmTick {
     pt_u8 off, on;                  /* DMA switched off, then on (bit a channel) */
     const pt_s8 *start[PT_CHANS];   /* on: the start and length taken */
-    pt_u16 slen[PT_CHANS];
+    pt_u32 slen[PT_CHANS];          /* words, 0 Paula's 65536 (a note player's: longer) */
     const pt_s8 *ptr[PT_CHANS];     /* the registers after the tick (the loop) */
-    pt_u16 len[PT_CHANS], per[PT_CHANS];
+    pt_u32 len[PT_CHANS];
+    pt_u16 per[PT_CHANS];
     pt_u8 vol[PT_CHANS];
     pt_u8 hold;                     /* paused: silence, the voices where they are */
     pt_u32 samples;                 /* output samples this tick */
