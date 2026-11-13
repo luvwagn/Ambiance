@@ -2128,7 +2128,11 @@ static void radio_main(void)
          * (with AHI, a 68060 class Amiga: the whole rate). The ZZ9000
          * SDK's mpega.library decodes on the card, whatever the CPU: the
          * best it offers, stereo, the whole rate on AHI. */
-        WORD q = card_mpega ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card_mpega && st.cpu < 40, div = 1;
+        /* quality: 2, mpega's best, where the CPU is fast (a 68060 class
+         * Amiga, or one measured so): its medium (1) reaches full scale on
+         * loud passes (Plex's conversions), and clips */
+        WORD q = card_mpega || st.cpu >= 60 ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card_mpega && st.cpu < 40,
+             div = 1;
         LONG fmax = card_mpega ? (st.ahi ? 48000 : 28000)
                   : st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = first_frame_freq();
