@@ -804,11 +804,31 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
     return TRUE;
 }
 
+/* The module's kind from what it holds (its first bytes), where its name
+ * may say nothing ("WeNeedJungle", an OctaMED module): a word players of
+ * that kind have in their names, NULL not known. */
+static const char *content_kind(const UBYTE *d, ULONG n)
+{
+    if (!d || n < 4)
+        return NULL;
+    if (d[0] == 'M' && d[1] == 'M' && d[2] == 'D' && d[3] >= '0' && d[3] <= '3')
+        return "med";                       /* MED, OctaMED: MMD0-MMD3 */
+    if (d[0] == 'T' && d[1] == 'H' && d[2] == 'X' && d[3] <= 1)
+        return "ahx";                       /* AHX (THX) */
+    if (n >= 12 && !memcmp(d, "FORM", 4) && !memcmp(d + 8, "SMUS", 4))
+        return "smus";
+    if (n >= 4 && !memcmp(d, "SMOD", 4))
+        return "future";                    /* Future Composer 1.0-1.3 */
+    if (n >= 4 && !memcmp(d, "FC14", 4))
+        return "future";                    /* Future Composer 1.4 */
+    return NULL;
+}
+
 /* The player for the module in h: tried in order of likelihood. */
 static BOOL find_player(struct Host *h, char *found, LONG fmax)
 {
-    char pre[16], ext[16];
-    const char *want[2];
+    char pre[16], ext[16], ckey[16];
+    const char *want[3], *ck;
     UBYTE *tried;
     LONG i, k, pass;
     BOOL ok = FALSE;
@@ -821,22 +841,27 @@ static BOOL find_player(struct Host *h, char *found, LONG fmax)
     name_keys(h->file, pre, ext);
     want[0] = map_find(pre);
     want[1] = map_find(ext);
-    /* 0: what played this kind before; 1: named like its prefix or suffix;
-     * 2: the rest */
+    ckey[0] = 0;
+    if ((ck = content_kind((const UBYTE *)L(h->g, o_ChkData), L(h->g, o_ChkSize))))
+        sprintf(ckey, "c:%s", ck);
+    want[2] = ckey[0] ? map_find(ckey) : NULL;
+    /* 0: what played this kind before (by its name, or what it holds);
+     * 1: named like its prefix or suffix, or its kind; 2: the rest */
     for (pass = 0; pass < 3 && !ok; pass++) {
         for (i = 0; i < ncands && !ok; i++) {
             struct Cand *c = &cands[i];
             if (tried[i])
                 continue;
             if (pass == 0) {
-                for (k = 0; k < 2; k++)
+                for (k = 0; k < 3; k++)
                     if (want[k] && !amce_stricmp(want[k], c->name))
                         break;
-                if (k == 2)
+                if (k == 3)
                     continue;
             } else if (pass == 1) {
                 if (!(pre[2] && contains_nocase(c->name, pre + 2)) &&
-                    !(ext[2] && contains_nocase(c->name, ext + 2)))
+                    !(ext[2] && contains_nocase(c->name, ext + 2)) &&
+                    !(ck && contains_nocase(c->name, ck)))
                     continue;
             }
             tried[i] = 1;
@@ -844,6 +869,8 @@ static BOOL find_player(struct Host *h, char *found, LONG fmax)
                 amce_strlcpy(found, c->name, fmax);
                 map_learn(pre, c->name);
                 map_learn(ext, c->name);
+                if (ckey[0])
+                    map_learn(ckey, c->name);
                 ok = TRUE;
             }
         }
