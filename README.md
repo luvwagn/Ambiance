@@ -93,6 +93,8 @@ of the Amiga to how fast it really is.
   shows pictures full screen on AmigaMCE's own screen (no mode switch), and
   plays folders as slideshows. Pictures are decoded by the installed
   datatypes and shown in their own colours where the screen allows it.
+  Moving the mouse shows the pointer and buttons for the previous picture,
+  the slideshow (play or pause) and the next.
 - **Plex photos:** the photo libraries of your Plex server, at the top of
   Pictures: albums and photos with a preview beside the list, each photo
   full screen and slideshows. The server makes each photo the size of the
@@ -116,6 +118,9 @@ of the Amiga to how fast it really is.
   and started again afterwards).
 - Moving the mouse brings up controls over the picture: from the start,
   play/pause, stop, volume, the time and the length.
+- In a Workbench window, one bigger than the window is made smaller to fit
+  it; the full-screen button shows it on the whole display, on a screen in
+  Workbench's own mode (no mode switch), and back.
 
 ### Screens and looks
 

@@ -106,6 +106,8 @@ Pictures
   shows pictures full screen on AmigaMCE's own screen (no mode switch) and
   plays folders as slideshows, in the pictures' own colours where the
   screen allows. Pictures are decoded by the installed datatypes.
+  Moving the mouse shows the pointer and buttons for the previous
+  picture, the slideshow (play or pause) and the next.
 - Plex photos: the photo libraries of your Plex server at the top of
   Pictures, albums and photos with a preview beside the list, full
   screen and as slideshows. The server makes each photo the size of the
@@ -126,6 +128,9 @@ Videos
   play/pause, stop, volume, the time and the length. Up/Down set the
   volume; Esc or the right button stops; one under 8 seconds plays
   again until stopped.
+- In a Workbench window, one bigger than the window is made smaller to
+  fit; the full-screen button shows it on the whole display, on a screen
+  in Workbench's own mode (no mode switch), and back.
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS

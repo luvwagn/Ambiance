@@ -1289,6 +1289,7 @@ static struct {
     void (*reblit)(struct Gfx *, WORD, WORD);   /* the picture's rows again (the card's way) */
 } lay;
 static BOOL anim_full;          /* full screen chosen (for this run) */
+static struct Screen *fs_scr;   /* from a window, full screen: a screen in Workbench's mode */
 
 /* The controls beneath the picture */
 static struct {
@@ -1365,7 +1366,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;
             for (c = 0; c < 4; c++) {
                 WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
-                if (!lay.full) {            /* at the box's corners, arms along its edges */
+                if (!lay.full && !fs_scr) { /* at the box's corners, arms along its edges */
                     px = dx > 0 ? ix + a : ix + s - 1 - a;
                     py = dy > 0 ? iy + a : iy + s - 1 - a;
                 } else {                    /* by the middle, arms outwards */
@@ -1847,7 +1848,9 @@ static BOOL card_check(struct Gfx *g, const UBYTE *planes, const ULONG *lut)
 
 /* The picture's place (lay): the largest whole scale above the controls,
  * or (full) as large as the screen allows, its shape kept; never smaller
- * than the first. FALSE if it is bigger than the screen. */
+ * than the first. In a window, one bigger than it is made smaller to fit
+ * (full screen shows it as large as the display: fs_enter). FALSE if it is
+ * bigger than the screen. */
 static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full)
 {
     WORD avail = st.y - GU(g, 8), kk, fx, fy, dw, dh;
@@ -1858,12 +1861,28 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
     if (kk >= 1) {
         fx = ax * kk;
         fy = ay * kk;
-    } else if (w <= g->w && h <= avail)
+        dw = w * fx;
+        dh = h * fy;
+    } else if (w <= g->w && h <= avail) {
         fx = fy = 1;                        /* as it is, its shape aside */
-    else
+        dw = w;
+        dh = h;
+    } else if (g->wb) {
+        /* a window: smaller, its shape kept (fx, fy 0: lay.xo/yo say
+         * where each pixel goes, some of them nowhere) */
+        LONG sw = (LONG)w * ax, sh = (LONG)h * ay, W = g->w - GU(g, 16), H = avail;
+        if (sw * H <= sh * W) {
+            dh = (WORD)H;
+            dw = (WORD)(sw * H / sh);
+        } else {
+            dw = (WORD)W;
+            dh = (WORD)(sh * W / sw);
+        }
+        if (dw < 16 || dh < 16)
+            return FALSE;
+        fx = fy = 0;
+    } else
         return FALSE;
-    dw = w * fx;
-    dh = h * fy;
     lay.vx = (g->w - dw) / 2;
     lay.vy = GU(g, 4) + (avail - dh) / 2;
     lay.full = full;
@@ -1894,6 +1913,112 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
     for (i = 0; i <= h; i++)
         lay.yo[i] = (UWORD)(i * dh / h);
     return TRUE;
+}
+
+/* Full screen from a window: a screen of its own in Workbench's mode, size
+ * and depth (the monitor does not change mode), with Workbench's colours
+ * (the pens AmigaMCE has there draw the same), in place of the window for
+ * as long as it is chosen. The picture's bitmap is made again for it. */
+static struct Window *fs_win;
+static struct { struct Screen *scr; struct Window *win; struct RastPort *rp; WORD w, h; } fs_was;
+
+static BOOL fs_pbm(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay)
+{
+    if (lay.pbm) {
+        WaitBlit();
+        FreeBitMap(lay.pbm);
+    }
+    lay_out(g, w, h, ax, ay, TRUE);         /* (the largest it will be here) */
+    lay.pbm = AllocBitMap(lay.dw, lay.dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                          g->rp->BitMap);
+    return lay.pbm != NULL;
+}
+
+static void fs_leave(struct Gfx *g);
+
+static BOOL fs_enter(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay)
+{
+    struct Screen *wb = g->scr;
+    struct ColorMap *cm = wb->ViewPort.ColorMap;
+    ULONG n = cm->Count > 256 ? 256 : cm->Count, *tab, id = GetVPModeID(&wb->ViewPort);
+    char m[160];
+    if (fs_scr || !(tab = AllocVec((n * 3 + 2) * sizeof(ULONG), MEMF_ANY)))
+        return FALSE;
+    tab[0] = n << 16;
+    GetRGB32(cm, 0, n, tab + 1);
+    tab[1 + n * 3] = 0;
+    fs_scr = OpenScreenTags(NULL, SA_DisplayID, id, SA_Width, wb->Width, SA_Height, wb->Height,
+                            SA_Depth, g->depth, SA_Colors32, (ULONG)tab, SA_Quiet, TRUE,
+                            SA_ShowTitle, FALSE, SA_Type, CUSTOMSCREEN, SA_Behind, TRUE,
+                            SA_Draggable, FALSE, SA_Exclusive, TRUE, SA_Title, (ULONG)"AmigaMCE",
+                            TAG_DONE);
+    FreeVec(tab);
+    if (fs_scr)
+        fs_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)fs_scr, WA_Left, 0, WA_Top, 0,
+                                WA_Width, fs_scr->Width, WA_Height, fs_scr->Height,
+                                WA_Backdrop, TRUE, WA_Borderless, TRUE, WA_Activate, TRUE,
+                                WA_RMBTrap, TRUE, WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE,
+                                WA_ReportMouse, TRUE,
+                                WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                                          IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW,
+                                TAG_DONE);
+    sprintf(m, "full screen: mode %08lx, %ld x %ld, %ld-bit, %s", (unsigned long)id,
+            (long)wb->Width, (long)wb->Height, (long)g->depth,
+            fs_win ? "opened" : fs_scr ? "its window would not open" : "the screen would not open");
+    amce_log("anim", m);
+    if (!fs_win) {
+        if (fs_scr)
+            CloseScreen(fs_scr);
+        fs_scr = NULL;
+        return FALSE;
+    }
+    fs_was.scr = g->scr;
+    fs_was.win = g->win;
+    fs_was.rp = g->rp;
+    fs_was.w = g->w;
+    fs_was.h = g->h;
+    SetFont(fs_win->RPort, g->rp->Font);
+    SetDrMd(fs_win->RPort, JAM1);
+    g->scr = fs_scr;
+    g->win = fs_win;
+    g->rp = fs_win->RPort;
+    g->w = fs_scr->Width;
+    g->h = fs_scr->Height;
+    g->wb = FALSE;                          /* (drawn on it straight: no window to copy into) */
+    st.y = g->h - st.h;                     /* the controls at its foot */
+    FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+    if (!fs_pbm(g, w, h, ax, ay)) {
+        fs_leave(g);
+        fs_pbm(g, w, h, ax, ay);
+        return FALSE;
+    }
+    ScreenToFront(fs_scr);
+    return TRUE;
+}
+
+static void fs_leave(struct Gfx *g)
+{
+    if (!fs_scr)
+        return;
+    WaitBlit();
+    g->scr = fs_was.scr;
+    g->win = fs_was.win;
+    g->rp = fs_was.rp;
+    g->w = fs_was.w;
+    g->h = fs_was.h;
+    g->wb = TRUE;
+    st.y = g->h - st.h;
+    if (lay.pbm) {                          /* (the screen's friend: the window's again) */
+        FreeBitMap(lay.pbm);
+        lay.pbm = NULL;
+    }
+    ScreenToFront(g->scr);
+    CloseWindow(fs_win);
+    CloseScreen(fs_scr);
+    fs_win = NULL;
+    fs_scr = NULL;
+    ActivateWindow(g->win);
+    amce_log("anim", "full screen: back in the window");
 }
 
 /* 0 played, -1 an error (err), 1 too slow here: the caller plays it on a
@@ -1984,6 +2109,21 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     }
     if (!lay.pbm)
         lay.can_full = FALSE;               /* straight onto the screen: whole scales */
+    if (!direct && (!lay.fx || !lay.fy)) {
+        /* made smaller (a window), and only the direct way can: its own screen */
+        if (lay.pbm)
+            FreeBitMap(lay.pbm);
+        FreeVec(lay.xo);
+        FreeVec(lay.yo);
+        memset(&lay, 0, sizeof(lay));
+        return 1;
+    }
+    if (g->wb && anim_full && lay.can_full && !fs_enter(g, w, h, ax, ay))
+        anim_full = FALSE;                  /* (the screen would not open: in the window) */
+    if (fs_scr && g->rp->Layer) {
+        ox = g->rp->Layer->bounds.MinX;
+        oy = g->rp->Layer->bounds.MinY;
+    }
     lay_out(g, w, h, ax, ay, anim_full && lay.can_full);
     fx = lay.fx;
     fy = lay.fy;
@@ -2284,9 +2424,11 @@ restart:
                 fresh = TRUE;
                 nconv = 0;
                 convms = 0;
-                ctl.off |= 1 << BT_FULL;    /* greyed for the rest of this one */
-                if (ctl.focus == BT_FULL)
-                    ctl.focus = BT_VUP;
+                if (!fs_scr) {              /* (from a window's: the way back stays) */
+                    ctl.off |= 1 << BT_FULL;    /* greyed for the rest of this one */
+                    if (ctl.focus == BT_FULL)
+                        ctl.focus = BT_VUP;
+                }
             } else if (avg > SLOW_MS && avg > want) {
                 sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: frames left out",
                         (long)avg, (long)want);
@@ -2308,7 +2450,28 @@ restart:
             if (r == 3)
                 break;
             if (r == 4 && lay.can_full) {   /* full screen or not: laid out again, drawn afresh */
-                anim_full = !lay.full;
+                anim_full = g->wb || fs_scr ? !fs_scr : !lay.full;
+                if (g->wb || fs_scr) {
+                    /* a window: full screen is the whole display, a screen
+                     * of its own in Workbench's mode; back, the window */
+                    int focus = ctl.focus;
+                    strip_cleanup(g);
+                    if (anim_full) {
+                        if (!fs_enter(g, w, h, ax, ay))
+                            anim_full = FALSE;
+                    } else {
+                        fs_leave(g);
+                        fs_pbm(g, w, h, ax, ay);    /* the picture's bitmap, the window's */
+                    }
+                    strip_setup(g);
+                    ctl.nbtn = BT_N;
+                    ctl.focus = focus;
+                    ox = oy = 0;
+                    if (g->rp->Layer) {
+                        ox = g->rp->Layer->bounds.MinX;
+                        oy = g->rp->Layer->bounds.MinY;
+                    }
+                }
                 lay_out(g, w, h, ax, ay, anim_full);
                 dw = lay.dw;
                 dh = lay.dh;
@@ -2437,6 +2600,8 @@ restart:
     (void)errmax;
     card_free();
     strip_cleanup(g);
+    if (fs_scr)
+        fs_leave(g);                        /* the window again */
     WaitBlit();
     if (lay.pbm)
         FreeBitMap(lay.pbm);

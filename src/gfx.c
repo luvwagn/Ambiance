@@ -672,8 +672,13 @@ static BOOL win_open(struct Gfx *g, int style)
     cm = wb->ViewPort.ColorMap;
     wb_npen = 0;
     for (i = 0; i < NUM_UI_PENS; i++) {
-        LONG p = ObtainBestPen(cm, ui_palette32[1 + i * 3], ui_palette32[2 + i * 3],
-                               ui_palette32[3 + i * 3], OBP_Precision, PRECISION_EXACT, TAG_END);
+        LONG p = -1;
+        if (i > PEN_YELLOW) {               /* (not used: no pen taken for them) */
+            gfx_penmap[i] = gfx_penmap[PEN_BG];
+            continue;
+        }
+        p = ObtainBestPen(cm, ui_palette32[1 + i * 3], ui_palette32[2 + i * 3],
+                          ui_palette32[3 + i * 3], OBP_Precision, PRECISION_EXACT, TAG_END);
         if (p >= 0)
             wb_pen[wb_npen++] = (UBYTE)p;
         gfx_penmap[i] = p >= 0 ? (UBYTE)p : 1;
@@ -681,7 +686,7 @@ static BOOL win_open(struct Gfx *g, int style)
     {
         /* (strlen: this sprintf, RawDoFmt's, returns no length) */
         strcpy(m, "UI colours in Workbench's pens");
-        for (i = 0; i < NUM_UI_PENS; i++)
+        for (i = 0; i <= PEN_YELLOW; i++)
             sprintf(m + strlen(m), " %ld", (long)gfx_penmap[i]);
         amce_log("window", m);
     }
