@@ -148,7 +148,7 @@ Screens
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.
 - Or a window on Workbench, when Workbench is on a graphics card at 15
-  bits or more: Settings > Display > Window, the icon's WINDOWED
+  bits or more: Settings > Display > Workbench window, the icon's WINDOWED
   tooltype (shipped as (WINDOWED): take the brackets away), or
   AmigaMCE WINDOWED from a Shell; a choice made in Settings comes first.
   Its text is Small, Medium or Large (512 x 384, 640 x 480 or 800 x 600
