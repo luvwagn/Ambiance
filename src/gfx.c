@@ -34,6 +34,7 @@ extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase, *LowLevelBase;
 struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
 static BOOL dirty;              /* drawn since the last gfx_present (double buffering) */
+static BOOL win_plain;          /* a window: the pixel font chosen had no room, Pixelify 12 */
 
 static Object *pic_obj;         /* datatype object of the picture on screen */
 
@@ -162,6 +163,9 @@ int gfx_rtg_font_shown(WORD lines)
 /* The pixel style's font where the screen has a choice (laced, RTG). */
 static const struct LacedFont *chosen_font(const struct Gfx *g)
 {
+    if (g->wb)                              /* a window: the font is its size */
+        return g->style == STYLE_PIXEL && gfx_rtg_font >= 0 && !win_plain
+                   ? &gfx_laced_fonts[gfx_rtg_font] : NULL;
     if (laced(g))
         return &gfx_laced_fonts[gfx_laced_font];
     if (rtg_kind(g) && g->style == STYLE_PIXEL && gfx_rtg_font >= 0 &&
@@ -173,7 +177,9 @@ static const struct LacedFont *chosen_font(const struct Gfx *g)
 static void pixel_scale(struct Gfx *g)
 {
     const struct LacedFont *f = chosen_font(g);
-    if (rtg_kind(g)) {
+    if (g->wb) {
+        g->kint = 1;                        /* Pixelify Sans 12 unless another is chosen */
+    } else if (rtg_kind(g)) {
         /* the whole factor again (a font chosen before may have set it) */
         g->kint = g->h / RTG_LINES;
         if (g->kint < 1)
@@ -391,11 +397,19 @@ static void blk_reserve(struct Gfx *g);
 BOOL gfx_window_wanted;
 BOOL gfx_close_asked;
 UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-#define WIN_W 640           /* inside: 512 x 384 design units at Medium */
-#define WIN_H 480
-#define WIN_MIN_W 600       /* 480 x 256 design units at Medium */
-#define WIN_MIN_H 320
-#define WIN_LINES 480       /* the smooth set: Medium */
+#define WIN_DW 512          /* inside, design units: as a 640 x 480 screen's layout */
+#define WIN_DH 384
+#define WIN_MIN_DW 480      /* the smallest it may be, design units */
+#define WIN_MIN_DH 256
+/* Settings > Display > Text size (smooth): the smooth set each uses, as a
+ * full screen of those lines would; the window is WIN_DW x WIN_DH design
+ * units at its scale (Small 512 x 384 pixels, Medium 640 x 480, Large
+ * 800 x 600), or as large as Workbench allows. In the pixel style the
+ * font chosen (Settings > Display > Style) is the size. */
+int gfx_text_size = TSIZE_MEDIUM;
+static const UWORD tsize_lines[TSIZE_COUNT] = { 384, 480, 600 };
+#define WIN_LINES (tsize_lines[win_tsize])
+static int win_tsize = TSIZE_MEDIUM;        /* the size the window has (may be smaller) */
 static WORD win_left = -1, win_top = -1;    /* where it was: reopened there (after a game) */
 static UBYTE wb_pen[NUM_UI_PENS + 32];      /* pens obtained from Workbench, let go at close */
 static UWORD wb_npen;
@@ -412,6 +426,53 @@ static void wb_box(struct Screen *wb, WORD *bw, WORD *bh, WORD *maxw, WORD *maxh
     *bh = bt + wb->WBorBottom;
     *maxw = wb->Width - *bw;
     *maxh = wb->Height - (wb->BarHeight + 1) - *bh;
+}
+
+/* Does a window of scale k (x 256) have room for its smallest here? */
+static BOOL k_fits(UWORD k, WORD mw, WORD mh)
+{
+    return (LONG)WIN_MIN_DW * k / 256 <= mw && (LONG)WIN_MIN_DH * k / 256 <= mh;
+}
+
+static BOOL wb_room(WORD *mw, WORD *mh)
+{
+    struct Screen *wb = LockPubScreen(NULL);
+    WORD bw, bh;
+    if (!wb)
+        return FALSE;
+    wb_box(wb, &bw, &bh, mw, mh);
+    UnlockPubScreen(NULL, wb);
+    return TRUE;
+}
+
+/* A window in the pixel style with laced font i: room for it here? */
+BOOL gfx_window_font_fits(int i)
+{
+    WORD mw, mh;
+    return i >= 0 && i < LFONT_COUNT && wb_room(&mw, &mh) &&
+           k_fits((UWORD)(((ULONG)gfx_laced_fonts[i].ysize << 8) / 12), mw, mh);
+}
+
+/* Text size i: room for its window here? */
+BOOL gfx_window_size_fits(int i)
+{
+    WORD mw, mh;
+    return i >= 0 && i < TSIZE_COUNT && wb_room(&mw, &mh) &&
+           k_fits((UWORD)(((ULONG)tsize_lines[i] << 8) / RTG_LINES), mw, mh);
+}
+
+/* The pixel font shown (Settings): on a screen, as gfx_rtg_font_shown; in
+ * a window, the one chosen if it fits, else Pixelify Sans 12. */
+int gfx_font_shown(const struct Gfx *g)
+{
+    if (!g->wb)
+        return gfx_rtg_font_shown(g->h);
+    return gfx_rtg_font >= 0 && !win_plain ? gfx_rtg_font : 0;
+}
+
+int gfx_window_tsize(void)
+{
+    return win_tsize;
 }
 
 const char *gfx_window_problem(const struct Caps *c)
@@ -431,9 +492,9 @@ const char *gfx_window_problem(const struct Caps *c)
         sprintf(why, "Workbench is %lu-bit: a window needs 15 bits or more", (unsigned long)d);
         return why;
     }
-    if (mw < WIN_MIN_W || mh < WIN_MIN_H) {
+    if (!k_fits(256, mw, mh)) {             /* not even at Small */
         sprintf(why, "Workbench has room for %ld x %ld inside a window, under %ld x %ld",
-                (long)mw, (long)mh, (long)WIN_MIN_W, (long)WIN_MIN_H);
+                (long)mw, (long)mh, (long)WIN_MIN_DW, (long)WIN_MIN_DH);
         return why;
     }
     return NULL;
@@ -533,13 +594,45 @@ static BOOL win_open(struct Gfx *g, int style)
     if (!(wb = LockPubScreen(NULL)))
         return FALSE;
     wb_box(wb, &bw, &bh, &mw, &mh);
-    iw = mw < WIN_W ? mw : WIN_W;
-    ih = mh < WIN_H ? mh : WIN_H;
-    left = win_left >= 0 ? win_left : (wb->Width - (iw + bw)) / 2;
-    top = win_top >= 0 ? win_top : wb->BarHeight + 1 + (mh - ih) / 2;
     g->scr = wb;
     g->wb = TRUE;
     g->mode = SM_RTG_640;                   /* the full screen it looks like */
+
+    /* the scale first (the text size, or the pixel font): the window's
+     * size follows from it. One whose smallest window does not fit goes
+     * down a size (Pixelify Sans 12 in the pixel style). */
+    g->style = STYLE_PIXEL;
+    g->sm = NULL;
+    win_plain = FALSE;
+    if (style == STYLE_SMOOTH) {
+        for (win_tsize = gfx_text_size; win_tsize > 0; win_tsize--)
+            if (k_fits((UWORD)(((ULONG)tsize_lines[win_tsize] << 8) / RTG_LINES), mw, mh))
+                break;
+        if (win_tsize != gfx_text_size) {
+            sprintf(m, "text size %ld has no room here: %ld", (long)gfx_text_size, (long)win_tsize);
+            amce_log("window", m);
+        }
+        if ((g->sm = sm_load(WIN_LINES))) {
+            g->style = STYLE_SMOOTH;
+            g->k = sm_scale(g->sm);
+        }
+    }
+    if (g->style == STYLE_PIXEL) {
+        pixel_scale(g);
+        if (!k_fits(g->k, mw, mh)) {
+            win_plain = TRUE;               /* the font chosen is too big here */
+            amce_log("window", "the pixel font chosen has no room here: Pixelify Sans 12");
+            pixel_scale(g);
+        }
+    }
+    iw = (WORD)((LONG)WIN_DW * g->k / 256);
+    ih = (WORD)((LONG)WIN_DH * g->k / 256);
+    if (iw > mw)
+        iw = mw;
+    if (ih > mh)
+        ih = mh;
+    left = win_left >= 0 ? win_left : (wb->Width - (iw + bw)) / 2;
+    top = win_top >= 0 ? win_top : wb->BarHeight + 1 + (mh - ih) / 2;
     g->depth = GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH);
     g->truecolor = TRUE;
     g->planar = FALSE;
@@ -586,10 +679,10 @@ static BOOL win_open(struct Gfx *g, int style)
         gfx_penmap[i] = p >= 0 ? (UBYTE)p : 1;
     }
     {
-        char *e = m;
-        e += sprintf(m, "UI colours in Workbench's pens");
+        /* (strlen: this sprintf, RawDoFmt's, returns no length) */
+        strcpy(m, "UI colours in Workbench's pens");
         for (i = 0; i < NUM_UI_PENS; i++)
-            e += sprintf(e, " %ld", (long)gfx_penmap[i]);
+            sprintf(m + strlen(m), " %ld", (long)gfx_penmap[i]);
         amce_log("window", m);
     }
     sprintf(m, "%ld x %ld inside at %ld, %ld on a %ld x %ld Workbench, %ld-bit; the buffer %s",
@@ -597,21 +690,14 @@ static BOOL win_open(struct Gfx *g, int style)
             (long)wb->Width, (long)wb->Height, (long)g->depth, wbuf_where());
     amce_log("window", m);
     wst_n = wst_sum = wst_max = wst_all = 0;
-
-    g->kint = 1;
-    g->style = STYLE_PIXEL;
-    g->sm = NULL;
-    pixel_scale(g);
-    if (style == STYLE_SMOOTH && (g->sm = sm_load(WIN_LINES))) {
-        g->style = STYLE_SMOOTH;
-        g->k = sm_scale(g->sm);
-    }
     layout_metrics(g);
     amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
     open_finish(g);
     return TRUE;
 
 fail:
+    sm_free(g->sm);
+    g->sm = NULL;
     win_free(g);
     if (g->win)
         CloseWindow(g->win);

@@ -52,7 +52,7 @@ GALMURI    = amce-galmuri11:16 amce-galmuri11b:16 amce-galmuri14:21 amce-galmuri
 FONT_FILES += $(foreach f,$(GALMURI),assets/Fonts/$(word 1,$(subst :, ,$(f))).font \
               assets/Fonts/$(subst :,/,$(f)))
 # Smooth style, one file per RTG screen height (tools/mksmooth.py)
-SMOOTH_FILES = assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
+SMOOTH_FILES = assets/Fonts/amce-smooth/384 assets/Fonts/amce-smooth/480 assets/Fonts/amce-smooth/600 \
                assets/Fonts/amce-smooth/768 assets/Fonts/amce-smooth/logo1 \
                assets/Fonts/amce-smooth/logo2 assets/Fonts/amce-smooth/logo3
 # Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel),
@@ -276,7 +276,7 @@ fonts:
 	$(PYTHON) tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amce-cjk/greek
 
 smooth:
-	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 480 600 768 \
+	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amce-smooth 384 480 600 768 \
 		--greek assets/fonts-src/Geologica-VF.ttf
 
 icons:

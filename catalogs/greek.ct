@@ -376,9 +376,30 @@ MSG_2653C2A3
 MSG_73C73B18
 Όπως το Workbench
 ; As Workbench
+MSG_70FBE876
+Παράθυρο του Workbench
+; Workbench window
 MSG_2D0EBF47
 χωρίς TCP/IP
 ; no TCP/IP stack
+MSG_4880662C
+Μικρό
+; Small
+MSG_09BE5F96
+Μεσαίο
+; Medium
+MSG_718B9F54
+Μεγάλο
+; Large
+MSG_678631FD
+Παράθυρο
+; Window
+MSG_4EDBBEE0
+Πλήρης οθόνη
+; Full screen
+MSG_2C041143
+Μέγεθος κειμένου
+; Text size
 MSG_1624E3CC
 Λειτουργία οθόνης
 ; Screen mode
@@ -1033,6 +1054,9 @@ MSG_5123470D
 MSG_2EF5225D
 Η λειτουργία οθόνης δεν άνοιξε
 ; Could not open that screen mode
+MSG_66DF0CD5
+Το παράθυρο δεν άνοιξε: πλήρης οθόνη
+; The window could not open: full screen
 MSG_4C560A92
 Συνδέσεις: η διεπαφή του stack
 ; Connections: the stack's choice of interface

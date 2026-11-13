@@ -314,7 +314,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     files = {
         "AmigaMCE.info": diskobject(WBTOOL, badge_art(), stack=32768,
-                                    tooltypes=["DONOTWAIT"], glow=glowicon(*tool_glow())),
+                                    tooltypes=["DONOTWAIT", "(WINDOWED)"], glow=glowicon(*tool_glow())),
         "drawer.info": diskobject(WBDRAWER, DRAWER_ART),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
         "install.info": diskobject(WBPROJECT, badge_art(), default_tool="Installer", stack=16384,

@@ -139,6 +139,13 @@ Screens
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
   anti-aliased one. Never uses Extra Half-Brite.
+- Or a window on Workbench, when Workbench is on a graphics card at 15
+  bits or more: Settings > Display > Window, the icon's WINDOWED
+  tooltype (shipped as (WINDOWED): take the brackets away), or
+  AmigaMCE WINDOWED from a Shell; a choice made in Settings comes first.
+  Its text is Small, Medium or Large (512 x 384, 640 x 480 or 800 x 600,
+  as far as Workbench has room); in the pixel style the font is the
+  size.
 - The menu folds to its icons while you browse, giving the lists and
   Now Playing its room, and opens again with the focus or the pointer on
   it; it slides open and shut where the Amiga draws it quickly.
@@ -224,7 +231,9 @@ Controls
 Settings
 --------
   General      Language, Debug
-  Display      Screen mode, Style (a laced or RTG screen: the font, those
+  Display      Window (full screen or a Workbench window, where Workbench
+               can take one), Screen mode (full screen) or Text size (a
+               window), Style (a laced or RTG screen: the font, those
                whose layout fits; RTG: or Smooth), Double buffering
                (RTG), Visualisation
                (Now Playing's level meters, or HippoPlayer's spectrum

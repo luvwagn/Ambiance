@@ -123,6 +123,13 @@ of the Amiga to how fast it really is.
   laced on OCS, ECS and AGA. RTG: 640x480, 800x600 and 1024x768.
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
+- Or a window on Workbench, when Workbench is on a graphics card at 15 bits
+  or more: Settings > Display > Window, or the program icon's `WINDOWED`
+  tooltype (shipped commented out as `(WINDOWED)`; take the brackets away),
+  or `AmigaMCE WINDOWED` from a Shell. A choice made in Settings comes first.
+  Its text is Small, Medium or Large (the window 512 x 384, 640 x 480 or
+  800 x 600, as far as Workbench has room); in the pixel style the font is
+  the size.
 - Flicker-free scrolling text and lists. A long list always shows a scroll bar
   (how long it is, and where you are in it), which the mouse can drag or click.
 
@@ -221,7 +228,7 @@ playing.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Screen mode, Style (fonts and looks), Double buffering (RTG), Visualisation, Jump scrolling (very long lists step a letter at a time) |
+| Display | Window (full screen or a Workbench window, where Workbench can take one), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |

@@ -322,6 +322,13 @@ void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
  * cannot be had here (NULL: it can). */
 extern BOOL gfx_window_wanted;
 const char *gfx_window_problem(const struct Caps *c);
+/* Settings > Display > Text size, in a window (the smooth style) */
+enum { TSIZE_SMALL, TSIZE_MEDIUM, TSIZE_LARGE, TSIZE_COUNT };
+extern int gfx_text_size;
+int  gfx_window_tsize(void);            /* the size the window has (less, if no room) */
+BOOL gfx_window_size_fits(int tsize);   /* room on Workbench for its smallest window */
+BOOL gfx_window_font_fits(int lfont);   /* ...for a pixel font's */
+int  gfx_font_shown(const struct Gfx *g);   /* RTG or window: the pixel font in use */
 void gfx_window_show(struct Gfx *g);   /* window: what was drawn, copied in now */
 /* A window message only the window has (refresh, close): dealt with, TRUE.
  * The close gadget sets gfx_close_asked. */

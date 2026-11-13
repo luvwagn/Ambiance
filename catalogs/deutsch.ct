@@ -376,9 +376,30 @@ Griechisch
 MSG_73C73B18
 Wie Workbench
 ; As Workbench
+MSG_70FBE876
+Workbench-Fenster
+; Workbench window
 MSG_2D0EBF47
 kein TCP/IP-Stack
 ; no TCP/IP stack
+MSG_4880662C
+Klein
+; Small
+MSG_09BE5F96
+Mittel
+; Medium
+MSG_718B9F54
+Groß
+; Large
+MSG_678631FD
+Fenster
+; Window
+MSG_4EDBBEE0
+Vollbild
+; Full screen
+MSG_2C041143
+Textgröße
+; Text size
 MSG_1624E3CC
 Bildschirmmodus
 ; Screen mode
@@ -1033,6 +1054,9 @@ Dieser Modus %.60s
 MSG_2EF5225D
 Dieser Bildschirmmodus konnte nicht geöffnet werden
 ; Could not open that screen mode
+MSG_66DF0CD5
+Das Fenster ließ sich nicht öffnen: Vollbild
+; The window could not open: full screen
 MSG_4C560A92
 Verbindungen: Schnittstelle nach Wahl des Stacks
 ; Connections: the stack's choice of interface

@@ -376,9 +376,30 @@ Grego
 MSG_73C73B18
 Como o Workbench
 ; As Workbench
+MSG_70FBE876
+Janela do Workbench
+; Workbench window
 MSG_2D0EBF47
 sem pilha TCP/IP
 ; no TCP/IP stack
+MSG_4880662C
+Pequeno
+; Small
+MSG_09BE5F96
+Médio
+; Medium
+MSG_718B9F54
+Grande
+; Large
+MSG_678631FD
+Janela
+; Window
+MSG_4EDBBEE0
+Ecrã inteiro
+; Full screen
+MSG_2C041143
+Tamanho do texto
+; Text size
 MSG_1624E3CC
 Modo de ecrã
 ; Screen mode
@@ -1033,6 +1054,9 @@ Esse modo %.60s
 MSG_2EF5225D
 Não foi possível abrir esse modo de ecrã
 ; Could not open that screen mode
+MSG_66DF0CD5
+Não foi possível abrir a janela: ecrã inteiro
+; The window could not open: full screen
 MSG_4C560A92
 Ligações: a interface que a pilha escolher
 ; Connections: the stack's choice of interface

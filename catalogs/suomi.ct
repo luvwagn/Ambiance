@@ -376,9 +376,30 @@ Kreikka
 MSG_73C73B18
 Kuten Workbench
 ; As Workbench
+MSG_70FBE876
+Workbench-ikkuna
+; Workbench window
 MSG_2D0EBF47
 ei TCP/IP-pinoa
 ; no TCP/IP stack
+MSG_4880662C
+Pieni
+; Small
+MSG_09BE5F96
+Keskikokoinen
+; Medium
+MSG_718B9F54
+Suuri
+; Large
+MSG_678631FD
+Ikkuna
+; Window
+MSG_4EDBBEE0
+Koko näyttö
+; Full screen
+MSG_2C041143
+Tekstin koko
+; Text size
 MSG_1624E3CC
 Näyttötila
 ; Screen mode
@@ -1033,6 +1054,9 @@ Se tila %.60s
 MSG_2EF5225D
 Näyttötilaa ei voitu avata
 ; Could not open that screen mode
+MSG_66DF0CD5
+Ikkunaa ei voitu avata: koko näyttö
+; The window could not open: full screen
 MSG_4C560A92
 Yhteydet: pinon valitsema liitäntä
 ; Connections: the stack's choice of interface

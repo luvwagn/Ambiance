@@ -23,6 +23,8 @@
 #include <proto/locale.h>
 #include <proto/asl.h>
 #include <libraries/asl.h>
+#include <workbench/startup.h>
+#include <proto/icon.h>
 
 static const char version_tag[] __attribute__((used)) =
     "$VER: AmigaMCE " AMCE_VERSION " (" AMCE_DATE ")";
@@ -122,6 +124,14 @@ static UWORD *ptr_blank;            /* the empty pointer (chip RAM) */
 
 /* Design units (a 256-line layout) to pixels on this screen. */
 #define U(v) GU(&g, v)
+/* A lowres-narrow display, for the layout's choices (the letter column,
+ * the gutter, the screenshot, the cycle gadget's label). A screen tests its
+ * pixels, as ever: lowres is the one under 640 (a laced screen in a large
+ * font is as few design units across, but its pixels are fine ones). A
+ * window, whose pixels no longer say how much fits, tests design units:
+ * 512 across at any text size, 480 at the least. */
+#define DW ((WORD)((LONG)g.w * 256 / g.k))
+#define NARROW (g.wb ? DW < 400 : g.w < 640)
 
 /* Big-letter overlay on long content lists while they glide (see below). */
 static struct {
@@ -145,7 +155,8 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 3, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
-       ACT_PLEXLINK, ACT_PLEXOUT,
+       ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
+       ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1517,6 +1528,43 @@ static void build_sysinfo(struct Page *p)
 
 /* ------------------------------------------------------------ settings */
 #define MODE_VAR "AmigaMCE/ScreenMode"
+#define WINDOW_VAR "AmigaMCE/Windowed"  /* "1" a window on Workbench, "0" full screen */
+#define TSIZE_VAR "AmigaMCE/TextSize"   /* the window's: small, medium, large */
+
+/* The icon's WINDOWED tooltype (shipped as "(WINDOWED)": in brackets, off),
+ * or WINDOWED from a Shell: the window unless Settings has saved a choice,
+ * which comes first (load_screen_mode). */
+extern struct WBStartup *_WBenchMsg;
+struct Library *IconBase;
+static BOOL start_windowed;
+static const char *win_chosen_by = "nothing: full screen";
+
+static void read_start_args(void)
+{
+    if (_WBenchMsg) {
+        if (_WBenchMsg->sm_NumArgs > 0 &&
+            (IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 37))) {
+            struct WBArg *a = &_WBenchMsg->sm_ArgList[0];   /* the program's own icon */
+            BPTR old = CurrentDir(a->wa_Lock);
+            struct DiskObject *d = GetDiskObject(a->wa_Name);
+            if (d) {
+                start_windowed = FindToolType((CONST_STRPTR *)d->do_ToolTypes,
+                                              (CONST_STRPTR)"WINDOWED") != NULL;
+                FreeDiskObject(d);
+            }
+            CurrentDir(old);
+            CloseLibrary(IconBase);
+            IconBase = NULL;
+        }
+    } else {
+        LONG arg[1] = { 0 };
+        struct RDArgs *rd = ReadArgs((CONST_STRPTR)"WINDOWED/S", arg, NULL);
+        if (rd) {
+            start_windowed = arg[0] != 0;
+            FreeArgs(rd);
+        }
+    }
+}
 
 static void ensure_dir(const char *path)
 {
@@ -1536,12 +1584,20 @@ static void load_screen_mode(void)
     if (GetVar((CONST_STRPTR)MODE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
         (m = gfx_mode_from_key(buf)) >= 0)
         screen_mode = m;
-    /* A window on Workbench instead of a screen of our own (gfx.c): 1 in
-     * AmigaMCE/Windowed. Settings > Display does not offer it yet (the
-     * next step): SetEnv SAVE AmigaMCE/Windowed 1 chooses it. Workbench
-     * must be 15-bit or deeper, on the card, or the screen opens as ever. */
-    gfx_window_wanted = GetVar((CONST_STRPTR)"AmigaMCE/Windowed", (STRPTR)buf, sizeof(buf),
-                               GVF_GLOBAL_ONLY) > 0 && buf[0] == '1';
+    /* A window on Workbench instead of a screen of our own (gfx.c):
+     * Settings > Display > Window, saved; without a saved choice, the
+     * icon's tooltype or the Shell's argument. Workbench must be 15-bit or
+     * deeper, on the card, or the screen opens as ever. */
+    if (GetVar((CONST_STRPTR)WINDOW_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
+        gfx_window_wanted = buf[0] == '1';
+        win_chosen_by = gfx_window_wanted ? "Settings: a window" : "Settings: full screen";
+    } else if (start_windowed) {
+        gfx_window_wanted = TRUE;
+        win_chosen_by = _WBenchMsg ? "the icon's WINDOWED tooltype" : "WINDOWED from the Shell";
+    }
+    if (GetVar((CONST_STRPTR)TSIZE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        gfx_text_size = !amce_stricmp(buf, "small") ? TSIZE_SMALL
+                        : !amce_stricmp(buf, "large") ? TSIZE_LARGE : TSIZE_MEDIUM;
 }
 
 static void save_setting(const char *var, const char *value)
@@ -2171,7 +2227,8 @@ static void build_settings(struct Page *p)
 {
     p->setp = SETP_ROOT;
     action_item(p, _("General"), "", ACT_GENSET, MARK_ARROW);
-    action_item(p, _("Display"), gfx_mode_label(g.mode), ACT_SCREENSET, MARK_ARROW);
+    action_item(p, _("Display"), g.wb ? _("Workbench window") : gfx_mode_label(g.mode),
+                ACT_SCREENSET, MARK_ARROW);
     action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
     action_item(p, _("Folders"), "", ACT_FOLDERS, MARK_ARROW);
     action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
@@ -2181,13 +2238,40 @@ static void build_settings(struct Page *p)
 /* Settings > Display: the screen mode, the style (its font on a laced
  * screen), double buffering where it is offered, the visualisation, and
  * jump scrolling (how long lists move). */
+static const char *const tsize_names[TSIZE_COUNT] = { N_("Small"), N_("Medium"), N_("Large") };
+
+/* Is the Window row offered: Workbench can take the window, or it is in one. */
+static BOOL window_offered(void)
+{
+    return g.wb || !gfx_window_problem(&caps);
+}
+
+/* Settings > Display's rows, in order: the Window row where offered, then
+ * Text size (a window, smooth) or Screen mode (full screen), then Style. */
+static int screen_row_window(void) { return window_offered() ? 0 : -1; }
+static int screen_row_size(void) { return window_offered() ? 1 : 0; }
+static int screen_row_style(void)
+{
+    return screen_row_size() + (g.wb && g.style != STYLE_SMOOTH ? 0 : 1);
+}
+
 static void build_screen_settings(struct Page *p)
 {
     char tag[64];
     struct Item *it;
     p->setp = SETP_SCREEN;
-    amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
-    action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
+    if (window_offered())
+        action_item(p, _("Window"), g.wb ? _("Workbench window") : _("Full screen"), ACT_WINDOW,
+                    MARK_CYCLE);
+    if (g.wb) {
+        /* the text's size, smooth (the pixel style's is its font: Style) */
+        if (g.style == STYLE_SMOOTH)
+            action_item(p, _("Text size"), _(tsize_names[gfx_window_tsize()]), ACT_TSIZES,
+                        MARK_ARROW);
+    } else {
+        amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
+        action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
+    }
     /* Style: the font on a laced screen; greyed out, showing Pixel, where
      * this screen can only be pixel (other native modes, 8-bit RTG) */
     if (gfx_laced(g.mode)) {
@@ -2195,7 +2279,7 @@ static void build_screen_settings(struct Page *p)
     } else if (gfx_mode_is_rtg(g.mode)) {
         /* RTG: Smooth, or the pixel style's font */
         action_item(p, _("Style"), g.style == STYLE_SMOOTH ? _("Smooth")
-                                   : gfx_laced_fonts[gfx_rtg_font_shown(g.h)].name,
+                                   : gfx_laced_fonts[gfx_font_shown(&g)].name,
                     ACT_STYLES, MARK_ARROW);
     } else if (gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
         action_item(p, _("Style"), ui_style == STYLE_SMOOTH ? _("Smooth") : _("Pixel"), ACT_STYLES,
@@ -2203,7 +2287,8 @@ static void build_screen_settings(struct Page *p)
     } else if ((it = action_item(p, _("Style"), _("Pixel"), ACT_STYLES, MARK_ARROW))) {
         it->flags |= ITEM_DISABLED;
     }
-    if (!g.planar)                      /* native screens draw straight on: not offered */
+    if (!g.planar && !g.wb)             /* native screens draw straight on, a window
+                                         * always through its buffer: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
@@ -2420,7 +2505,6 @@ static void build_rsrv_settings(struct Page *p)
 }
 
 #define SETTINGS_SCREEN_ROW 1   /* "Display" in build_settings */
-#define SCREEN_STYLE_ROW 1      /* "Style" in build_screen_settings */
 static void build_screen_settings(struct Page *p);
 
 /* Settings > Plex: on or off, the server, and how the music is asked for. */
@@ -2658,13 +2742,13 @@ static void build_styles(struct Page *p)
     if (gfx_mode_is_rtg(g.mode)) {
         /* RTG: the pixel fonts whose layout fits the screen (Pixelify Sans
          * at its whole factor until one is chosen), and Smooth */
-        int shown = gfx_rtg_font_shown(g.h);
+        int shown = gfx_font_shown(&g);
         struct Item *it;
         p->sel = -1;
         for (i = 0; i < LFONT_COUNT; i++) {
             BOOL on = g.style != STYLE_SMOOTH && i == shown;
-            if (!gfx_font_fits(i, g.h))
-                continue;
+            if (g.wb ? !gfx_window_font_fits(i) && i : !gfx_font_fits(i, g.h))
+                continue;                   /* (a window: those with room on Workbench) */
             action_item(p, gfx_laced_fonts[i].name, "", ACT_RFONT0 + i,
                         on ? MARK_RADIO_ON : MARK_RADIO_OFF);
             if (on)
@@ -2707,6 +2791,22 @@ static void build_screenmodes(struct Page *p)
         action_item(p, label, why ? why : "", ACT_MODE0 + m,
                     m == screen_mode ? MARK_RADIO_ON : MARK_RADIO_OFF);
         if (m == screen_mode)
+            p->sel = p->list.count - 1;
+    }
+}
+
+/* Settings > Display > Text size (a window, smooth): those with room on
+ * this Workbench. */
+static void build_tsizes(struct Page *p)
+{
+    int i;
+    for (i = 0; i < TSIZE_COUNT; i++) {
+        if (!gfx_window_size_fits(i) && i)
+            continue;
+        /* (the size the window has: less than the one saved, without room) */
+        action_item(p, _(tsize_names[i]), "", ACT_TSIZE0 + i,
+                    i == gfx_window_tsize() ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        if (i == gfx_window_tsize())
             p->sel = p->list.count - 1;
     }
 }
@@ -4156,7 +4256,7 @@ static WORD aside_w = -1;           /* -1: work out (after a screen opens) */
 static WORD aside_width(void)
 {
     if (aside_w < 0)
-        aside_w = g.w >= 640 ? g.pane_w / 2 : 0;
+        aside_w = !NARROW ? g.pane_w / 2 : 0;
     return aside_w;
 }
 
@@ -4208,7 +4308,7 @@ static WORD aside_x(void)
  * while the mouse is in use the thumb is bright, at rest it is dimmer. */
 /* the column: gap, bar, gap; on a lowres screen (320 wide, its pixels
  * twice as wide as hires ones) narrower, 1 + 3 + 1, for the rows' room */
-#define GUT_LO  (g.w < 640)
+#define GUT_LO  NARROW
 #define GUT_W   (GUT_LO ? 5 : U(9))
 #define GUT_GAP (GUT_LO ? 1 : U(2))
 #define GUT_BAR (GUT_LO ? 3 : U(5))
@@ -5938,7 +6038,7 @@ static void draw_pane(BOOL full)
             /* screenshot box: AGS's are 320 x 128 lowres, so 128 design
              * lines shows them at their own size where the pane is wide
              * enough (lowres); 85 elsewhere, twice that on laced screens */
-            WORD ph = g.w < 640 ? U(128) : (g.k == 256 && g.h >= 400) ? 170 : U(85), dh = 0;
+            WORD ph = NARROW ? U(128) : (g.k == 256 && g.h >= 400) ? 170 : U(85), dh = 0;
             p->facts_y = g.list_top;
             if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
                 set_msg(_("Loading screenshot..."));
@@ -6417,7 +6517,7 @@ static void np_cycle_layout(void)
 {
     WORD box = g.font_h, right = np.x0 + np.w - 1, w, nw = 0;
     int i;
-    np.cyc_label = g.w > 320;
+    np.cyc_label = g.wb ? DW > 320 : g.w > 320;
     for (i = 0; np.cyc_label && i < VIS_COUNT; i++) {
         WORD t = gfx_textlen(&g, _(vis_name(i)), TS_SMALL);
         if (t > nw)
@@ -9246,7 +9346,7 @@ static void apply_screen_mode(int sm)
         struct Page *p = page_push(PT_LIST, _("Display"));
         if (p) {
             build_screen_settings(p);
-            p->sel = 0;
+            p->sel = screen_row_size();
         }
         if ((p = page_push(PT_LIST, _("Screen mode"))))
             build_screenmodes(p);
@@ -9258,6 +9358,70 @@ static void apply_screen_mode(int sm)
         set_msg(_("Could not open that screen mode"));
     else
         note_style();
+}
+
+/* Settings > Display > Window, or Text size: the display closed and opened
+ * again as now wanted, every page rebuilt, and back on Settings > Display
+ * at that row (in the list sub, if one). */
+static void display_again(BOOL size_row, const char *sub_title, void (*sub)(struct Page *))
+{
+    struct Page *p;
+    BOOL ok;
+    int i;
+    pages_clear();
+    pv_flush();
+    ptr_hidden = NULL;              /* a new window comes with its pointer */
+    spin_free();
+    ov_bm_free();
+    gfx_close(&g);
+    if (!(ok = gfx_open(&g, &caps, screen_mode, ui_style)) && gfx_window_wanted) {
+        gfx_window_wanted = FALSE;  /* full screen, as it was */
+        ok = gfx_open(&g, &caps, screen_mode, ui_style);
+        gfx_window_wanted = TRUE;
+    }
+    if (!ok && !(ok = gfx_open(&g, &caps, SM_AUTO, ui_style))) {
+        running = FALSE;
+        return;
+    }
+    for (i = 0; i < nmenu; i++)
+        if (menu[i] == MOD_SETTINGS)
+            menu_sel = i;
+    build_root(MOD_SETTINGS);
+    if (cur())
+        cur()->sel = SETTINGS_SCREEN_ROW;
+    if ((p = page_push(PT_LIST, _("Display")))) {
+        build_screen_settings(p);
+        p->sel = size_row ? screen_row_size() : screen_row_window();
+        if (p->sel < 0)
+            p->sel = 0;
+    }
+    if (sub && (p = page_push(PT_LIST, sub_title)))
+        sub(p);
+    focus = FOCUS_CONTENT;
+    msg[0] = 0;
+    draw_all();
+    if (gfx_window_wanted && !g.wb)
+        set_msg(_("The window could not open: full screen"));
+    else
+        note_style();
+}
+
+static void toggle_window(void)
+{
+    gfx_window_wanted = !g.wb;
+    save_setting(WINDOW_VAR, gfx_window_wanted ? "1" : "0");
+    win_chosen_by = gfx_window_wanted ? "Settings: a window" : "Settings: full screen";
+    display_again(FALSE, NULL, NULL);
+}
+
+static void apply_tsize(int i)
+{
+    if (i < 0 || i >= TSIZE_COUNT || (i == gfx_text_size && gfx_window_tsize() == i))
+        return;
+    gfx_text_size = i;
+    save_setting(TSIZE_VAR, i == TSIZE_SMALL ? "small" : i == TSIZE_LARGE ? "large" : "medium");
+    if (g.wb)
+        display_again(TRUE, _("Text size"), build_tsizes);
 }
 
 static void toggle_jump(void)
@@ -9404,7 +9568,19 @@ static void restyle(void)
     pv_flush();
     spin_free();
     ov_bm_free();
-    BOOL restyled = gfx_restyle(&g, ui_style);
+    BOOL restyled;
+    if (g.wb) {
+        /* a window: opened again, its size following the new scale */
+        ptr_hidden = NULL;
+        gfx_close(&g);
+        if (!gfx_open(&g, &caps, screen_mode, ui_style)) {
+            running = FALSE;
+            return;
+        }
+        restyled = ui_style != STYLE_SMOOTH || g.style == STYLE_SMOOTH;
+    } else {
+        restyled = gfx_restyle(&g, ui_style);
+    }
     for (i = 0; i < nmenu; i++)
         if (menu[i] == MOD_SETTINGS)
             menu_sel = i;
@@ -9413,7 +9589,7 @@ static void restyle(void)
         cur()->sel = SETTINGS_SCREEN_ROW;
     if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
-        p->sel = SCREEN_STYLE_ROW;
+        p->sel = screen_row_style();
     }
     if ((p = page_push(PT_LIST, _("Style"))))
         build_styles(p);
@@ -9456,7 +9632,7 @@ static void apply_style(int st)
  * if it was Smooth), and the layout with it. */
 static void apply_rtg_font(int i)
 {
-    if (i == gfx_rtg_font_shown(g.h) && g.style != STYLE_SMOOTH)
+    if (i == gfx_font_shown(&g) && g.style != STYLE_SMOOTH)
         return;
     gfx_rtg_font = i;
     save_setting(RFONT_VAR, gfx_laced_fonts[i].name);
@@ -11435,6 +11611,12 @@ static void act_action(struct Item *it)
     }
     if (it->action == ACT_SCREENMODES)
         open_screenmodes();
+    else if (it->action == ACT_WINDOW)
+        toggle_window();
+    else if (it->action == ACT_TSIZES)
+        open_settings_page(_("Text size"), build_tsizes);
+    else if (it->action >= ACT_TSIZE0 && it->action <= ACT_TSIZE_END)
+        apply_tsize(it->action - ACT_TSIZE0);
     else if (it->action == ACT_STYLES)
         open_styles();
     else if (it->action == ACT_SYSINFO)
@@ -12861,6 +13043,7 @@ static int app_main(void)
         goto out;
     }
     dbg_mem_baseline();
+    read_start_args();
     load_debug();
     load_dbuf();
     load_https();
@@ -12952,6 +13135,7 @@ static int app_main(void)
     }
 
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
+    amce_log("window: chosen by", win_chosen_by);
     {
         BOOL opened = gfx_open(&g, &caps, screen_mode, ui_style) ||
                       (screen_mode != SM_AUTO && gfx_open(&g, &caps, SM_AUTO, ui_style));
