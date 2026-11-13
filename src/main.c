@@ -10864,11 +10864,12 @@ static void mini_volume(void)
              muted ? PEN_DIM : hot ? PEN_WHITE : PEN_TEXT);
 }
 
-/* The meter: a bar a channel (Paula's four, a stream's two, or one). */
+/* The meter: a thin bar a channel (Paula's four, a stream's two, or one),
+ * across, stacked, each filling from the left over a dim track. */
 static void mini_meter(const struct MpStatus *st, BOOL full)
 {
     int n = mp_loaded() && mp_running() ? mp_meter_count() : 0, i;
-    WORD gap = MK(2), w, x;
+    WORD gap = MK(2), h, y, len = mn.vu_x1 - mn.vu_x0 + 1;
     BOOL same = !full && n == mn.s_n;
     if (n > 4)
         n = 4;
@@ -10882,13 +10883,17 @@ static void mini_meter(const struct MpStatus *st, BOOL full)
     mn.drawn = TRUE;
     if (!n)
         return;
-    w = (mn.vu_x1 - mn.vu_x0 + 1 - (n - 1) * gap) / n;
-    for (i = 0, x = mn.vu_x0; i < n; i++, x += w + gap) {
-        WORD h = (WORD)((LONG)mn.bh * st->level[i] / 64);
+    h = (mn.bh - (n - 1) * gap) / n;
+    if (h > MK(3))
+        h = MK(3);                          /* thin, whatever their number */
+    y = mn.by + (mn.bh - (n * h + (n - 1) * gap)) / 2;
+    for (i = 0; i < n; i++, y += h + gap) {
+        WORD w = (WORD)((LONG)len * st->level[i] / 64);
         mn.s_lv[i] = st->level[i];
-        gfx_fill(&mg, x, mn.by + mn.bh - 1, x + w - 1, mn.by + mn.bh - 1, PEN_RULE);   /* its floor */
-        if (h > 0)
-            gfx_fill(&mg, x, mn.by + mn.bh - h, x + w - 1, mn.by + mn.bh - 1, PEN_HL);
+        if (w > 0)
+            gfx_fill(&mg, mn.vu_x0, y, mn.vu_x0 + w - 1, y + h - 1, PEN_HL);
+        if (w < len)
+            gfx_fill(&mg, mn.vu_x0 + w, y, mn.vu_x1, y + h - 1, PEN_RULE);
     }
 }
 
