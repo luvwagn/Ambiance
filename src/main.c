@@ -2789,9 +2789,12 @@ static void plex_sum_came(struct NetJob *j);
 static void plex_ask_rate(const char *key);
 /* Pictures of the server's (an album's cover): asked for (art_fetch), kept
  * in RAM: (plex_art), then made for their place by the loader */
-enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_KINDS };   /* VW: the viewer's photo, and its next */
+/* AHEAD: a Plex list's neighbours' pictures, fetched while the selection
+ * rests, so moving to one shows it at once (plex_ahead) */
+enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_AHEAD, ART_KINDS };   /* VW: the viewer's photo, and its next */
 static struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
+static ULONG art_asked[ART_KINDS];     /* time_ms each was asked for (log) */
 static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
 static void art_ready(int kind, const char *file);
 static struct LJob *np_aj;          /* Now playing's cover, made for its square */
@@ -4232,7 +4235,9 @@ static WORD list_xr(struct Page *p)
 #define PREVIEW_SETTLE 100     /* ms the selection rests before its preview is read */
 static BOOL pv_clicked;         /* the selection made by a click (preview_touch) */
 static ULONG dc_time(void);
-#define PLEX_SETTLE    350     /* ...a Plex entry's: its picture asked for, then decoded */
+#define PLEX_SETTLE    150     /* ...a Plex entry's: its picture asked for, then decoded
+                                * (350 while a datatype decoded it; jdec takes ~25 ms, and
+                                * a request given up stops at once) */
 #define PREVIEW_READY   30     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
 static BOOL pv_pending;
@@ -5045,6 +5050,8 @@ static void style_preview(struct Page *p)
 #undef SU
 }
 
+static BOOL plex_art_kept(struct Page *p, LONG idx);
+
 static void preview_touch(struct Page *p)
 {
     char path[300];
@@ -5058,7 +5065,8 @@ static void preview_touch(struct Page *p)
         return;
     }
     if (p->plex)
-        settle = PLEX_SETTLE;               /* its picture is asked of the server: rest first */
+        settle = plex_art_kept(p, p->sel) ? PREVIEW_READY   /* fetched ahead: only a decode */
+                                          : PLEX_SETTLE;    /* asked of the server: rest first */
     /* read ahead and back already: drawing it is only a copy, so sooner */
     if ((k = pv_kind(p, p->sel, path, sizeof(path), &shot))) {
         want = shot && pv_pictures() ? 2 : 1;
@@ -5099,11 +5107,16 @@ static void preview_touch(struct Page *p)
     pv_due = pv_since + settle;
 }
 
+static void plex_ahead(struct Page *p);
+
 static void preview_tick(void)
 {
     struct Page *p = cur();
-    if (!pv_pending)
+    if (!pv_pending) {
+        if (p)
+            plex_ahead(p);                  /* at rest: the neighbours' pictures */
         return;
+    }
     if (!p || !has_aside(p) || pane_pending) {
         pv_pending = FALSE;
         return;
@@ -9976,10 +9989,22 @@ static void radio_done(struct NetJob *j)
             /* a picture of the server's: kept in RAM:, then shown */
             art_nj[d] = NULL;
             if (j->body && j->status == 200 && plex_art_save(art_want[d], j->body, j->len)) {
-                char m[120];
-                /* its size and time: what the format costs on the wire */
-                sprintf(m, "%.50s: %lu bytes in %lu ms", FilePart((STRPTR)art_want[d]),
-                        (unsigned long)j->len, (unsigned long)j->ms);
+                char m[220];
+                ULONG now = time_ms();
+                /* its size, and its time step by step: waiting for the
+                 * network process, fetching, then until it was taken here */
+                sprintf(m, "%.50s%s: %lu bytes; %lu ms waiting to be fetched, fetched in %lu ms, "
+                           "taken %lu ms later%s",
+                        FilePart((STRPTR)art_want[d]), d == ART_AHEAD ? " (ahead)" : "",
+                        (unsigned long)j->len,
+                        (unsigned long)(j->t_start - j->t_sub), (unsigned long)j->ms,
+                        (unsigned long)(now - (j->t_start + j->ms)), d == ART_PV ? "" : "");
+                if (d == ART_PV) {
+                    char t[60];
+                    sprintf(t, "; asked %lu ms after the move",
+                            (unsigned long)(art_asked[d] - pv_since));
+                    amce_strlcat(m, t, sizeof(m));
+                }
                 amce_log("plex: picture", m);
                 art_ready(d, art_want[d]);
             } else {
@@ -10570,6 +10595,21 @@ static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
         return FALSE;
     if (plex_art(thumb, w, h, req, sizeof(req), file, 120))
         return TRUE;
+    if (kind != ART_AHEAD && art_nj[ART_AHEAD]) {
+        if (kind == ART_PV && !strcmp(art_want[ART_AHEAD], file)) {
+            /* on its way already, fetched ahead: this kind's now */
+            art_nj[kind] = art_nj[ART_AHEAD];
+            amce_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
+            art_asked[kind] = art_asked[ART_AHEAD];
+            art_nj[ART_AHEAD] = NULL;
+            return FALSE;
+        }
+        /* one fetched ahead is no reason for this one to wait behind it */
+        net_cancel(art_nj[ART_AHEAD]);
+        art_nj[ART_AHEAD]->orphan = TRUE;   /* freed when it comes back */
+        art_nj[ART_AHEAD]->seq = 0;
+        art_nj[ART_AHEAD] = NULL;
+    }
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return FALSE;
     amce_strlcpy(j->host, plex.host, sizeof(j->host));
@@ -10577,6 +10617,7 @@ static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
     amce_strlcpy(j->path, req, sizeof(j->path));
     j->seq = 0;
     amce_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
+    art_asked[kind] = time_ms();
     art_nj[kind] = j;
     net_submit(j);
     if (j->done && !j->busy)
@@ -10958,6 +10999,61 @@ static void pv_photo_keep(const char *file)
     pv_photo_next = (pv_photo_next + 1) % PV_PHOTOS_KEPT;
 }
 
+/* Entry idx's picture, at the preview's size, kept in RAM already. */
+static BOOL plex_art_kept(struct Page *p, LONG idx)
+{
+    struct Item src;
+    char thumb[160], req[400], file[120];
+    WORD s = plex_art_side();
+    if (idx < 0 || idx >= p->list.count || !pv_pictures() || !plex_pv_src(p, idx, &src))
+        return FALSE;
+    radio_field(&src, 2, thumb, sizeof(thumb));
+    return thumb[0] && plex.host[0] && plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+}
+
+/* While the selection rests, its shown and nothing else asked of the
+ * server: the neighbours' pictures fetched into RAM, one at a time, the
+ * way it was moving first (1 and 2 on, 1 back, 3 on, 2 back), so moving
+ * to one shows it at once. Anything the user asks for gives it up
+ * (art_fetch). */
+static void plex_ahead(struct Page *p)
+{
+    static struct Page *ap;
+    static LONG asel = -1;
+    static int adir = 1, astep;
+    static const signed char off[] = { 1, 2, -1, 3, -2 };
+    struct Item src;
+    char thumb[160], file[120];
+    WORD s;
+    if (!p->plex || p->type != PT_LIST || !has_aside(p) || !pv_pictures() || !g.pic_w ||
+        hold_active() || ov.on || pane_pending)
+        return;
+    if (!pv_shown || pv_page != p || pv_sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
+        plex_sj)
+        return;                             /* not at rest, or the server busy for it */
+    if (AvailMem(MEMF_ANY) < 4UL << 20)
+        return;                             /* RAM: keeps what is fetched (never trimmed):
+                                             * not ahead with under 4 MB free */
+    if (ap != p || asel != p->sel) {
+        if (ap == p && asel >= 0 && p->sel != asel)
+            adir = p->sel > asel ? 1 : -1;  /* the way it was going */
+        ap = p;
+        asel = p->sel;
+        astep = 0;
+    }
+    s = plex_art_side();
+    while (astep < (int)sizeof(off)) {
+        LONG i = p->sel + off[astep] * adir;
+        astep++;
+        if (i < 0 || i >= p->list.count || !plex_pv_src(p, i, &src))
+            continue;
+        radio_field(&src, 2, thumb, sizeof(thumb));
+        if (!thumb[0] || art_fetch(ART_AHEAD, thumb, s, s, file))
+            continue;                       /* none, or kept already */
+        return;                             /* asked: the next once it has come */
+    }
+}
+
 static void plex_pv_draw(struct Page *p, BOOL was_shown)
 {
     char *last = plex_shown;
@@ -11058,6 +11154,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
 static void art_ready(int kind, const char *file)
 {
     struct Page *p = cur();
+    if (kind == ART_AHEAD)
+        return;                             /* kept in RAM: shown if it is moved to */
     if (kind == ART_VW || kind == ART_VWNEXT) {
         vw_keep(file);
         if (kind == ART_VWNEXT && vw_list && vw_cur >= 0)

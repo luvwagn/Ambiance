@@ -665,6 +665,7 @@ static void run(struct NetJob *j)
     int hop, tries;
     ULONG t0 = time_ms();
     BOOL is_api = !j->host[0];
+    j->t_start = t0;
     j->status = 0;
     j->err[0] = 0;
     j->body = NULL;
@@ -825,6 +826,7 @@ ULONG net_sigmask(void)
 
 void net_submit(struct NetJob *j)
 {
+    j->t_sub = time_ms();
     j->busy = TRUE;
     j->done = FALSE;
     j->quit = FALSE;
