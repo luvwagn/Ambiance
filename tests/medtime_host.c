@@ -23,8 +23,8 @@ int main(int argc, char **argv)
         return 2;
     fclose(f);
     med_measure(m, (unsigned long)n, &t);
-    printf("units16 %lu (%lu ticks), %d positions, tempo %u", t.units16, t.units16 / 16,
-           t.positions, t.tempo);
+    printf("units16 %lu (%lu ticks), %d positions, %d tracks, tempo %u", t.units16,
+           t.units16 / 16, t.positions, t.tracks, t.tempo);
     if (!cnt && t.tempo > 10)
         cnt = 474326UL / t.tempo;           /* MED's SPD timer */
     if (cnt)

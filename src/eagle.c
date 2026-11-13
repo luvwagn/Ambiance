@@ -182,7 +182,8 @@ static volatile UBYTE nt_nlog, nt_logged;
 /* a mixed note player's channels, as Paula's registers would be (note_mix) */
 static const UBYTE *nm_ptr[PT_CHANS];
 static ULONG nm_len[PT_CHANS];
-static ULONG nm_slen4[4];       /* (the spectrum's: a start's whole length) */
+static ULONG nm_slen4[4];
+static BOOL nm_wide;            /* more than four slots: spread (nm_voice) */       /* (the spectrum's: a start's whole length) */
 static UWORD nm_per[PT_CHANS];
 static UBYTE nm_vol[PT_CHANS];
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
@@ -1068,6 +1069,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
                 amce_strlcat(sides, st < 0 ? "L" : st > 0 ? "R" : "-", sizeof(sides));
             }
         note_map(ns);
+        nm_wide = n > 4;
         memset(nm_ptr, 0, sizeof(nm_ptr));
         memset(nm_len, 0, sizeof(nm_len));
         memset(nm_per, 0, sizeof(nm_per));
@@ -1235,6 +1237,16 @@ void ep_note_log(void)
 
 static BOOL nt_quiet;            /* run on silently (a seek): notes taken, not played */
 
+/* Which of the mixer's voices each slot is: as they are for four or fewer;
+ * for more, the even slots one to each of Paula's four (0 2 4 6: 0 1 2 3)
+ * and the odd ones paired behind them (4-7), since MED_note puts a song of
+ * four tracks on the even slots (paired n with n + 4, two of Paula's four
+ * stayed silent). */
+static int nm_voice(int i)
+{
+    return nm_wide ? ((i >> 1) | ((i & 1) << 2)) : i;
+}
+
 static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
 {
     struct PmTick *t = nt_quiet ? NULL : mp_mix_slot();
@@ -1242,36 +1254,37 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
     int i;
     for (i = 0; i < PT_CHANS && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
         UBYTE c = ch[NCH_CHANGED];
+        int v = nm_voice(i);
         if (c & NCHF_Frequency) {
             ULONG per = nt_period(flags, L(ch, NCH_FREQ));
             if (per && per < 113)
                 per = 113;
             if (per > 65535)
                 per = 65535;
-            nm_per[i] = (UWORD)per;
+            nm_per[v] = (UWORD)per;
         }
         if (c & NCHF_Volume) {
             ULONG v = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
-            nm_vol[i] = (UBYTE)(v > 64 ? 64 : v);
+            nm_vol[v] = (UBYTE)(v > 64 ? 64 : v);
         }
         if (c & NCHF_Sample) {
             const UBYTE *ss = (const UBYTE *)L(ch, NCH_SSTART);
             ULONG sl = L(ch, NCH_SLEN) >> 1;
-            off |= 1 << i;
+            off |= 1 << v;
             if (ss && sl) {
-                on |= 1 << i;
+                on |= 1 << v;
                 if (t) {
-                    t->start[i] = (const pt_s8 *)ss;
-                    t->slen[i] = (pt_u32)sl;    /* (all of it: the mixer is not Paula) */
+                    t->start[v] = (const pt_s8 *)ss;
+                    t->slen[v] = (pt_u32)sl;    /* (all of it: the mixer is not Paula) */
                 }
-                eh_hit |= (UBYTE)(1 << (i & 3));    /* (Now Playing's meters) */
-                if (i < 4) {
-                    eh_sadr[i] = (APTR)ss;          /* (the spectrum: the first four) */
-                    eh_slen[i] = (UWORD)(sl > 65535 ? 65535 : sl);
-                    nm_slen4[i] = sl;
-                    eh_per[i] = nm_per[i];
-                    eh_vol[i] = nm_vol[i];
-                    eh_trig |= (UBYTE)(1 << i);
+                eh_hit |= (UBYTE)(1 << (v & 3));    /* (Now Playing's meters) */
+                if (v < 4) {
+                    eh_sadr[v] = (APTR)ss;          /* (the spectrum: Paula's four's first) */
+                    eh_slen[v] = (UWORD)(sl > 65535 ? 65535 : sl);
+                    nm_slen4[v] = sl;
+                    eh_per[v] = nm_per[v];
+                    eh_vol[v] = nm_vol[v];
+                    eh_trig |= (UBYTE)(1 << v);
                 }
             }
         }
@@ -1282,11 +1295,11 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
                 rs = NULL;                  /* played once: the voice ends */
                 rl = 0;
             }
-            nm_ptr[i] = rs;
-            nm_len[i] = rl;
-            if (i < 4) {
-                eh_adr[i] = (APTR)(rs ? rs : (const UBYTE *)nt_silence);
-                eh_plen[i] = rs ? (UWORD)(nm_len[i] > 65535 ? 65535 : nm_len[i]) : 1;
+            nm_ptr[v] = rs;
+            nm_len[v] = rl;
+            if (v < 4) {
+                eh_adr[v] = (APTR)(rs ? rs : (const UBYTE *)nt_silence);
+                eh_plen[v] = rs ? (UWORD)(nm_len[v] > 65535 ? 65535 : nm_len[v]) : 1;
             }
         }
         if (c & NCHF_Sample)

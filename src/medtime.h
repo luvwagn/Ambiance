@@ -9,6 +9,7 @@ struct MedTime {
     unsigned long units16;      /* its length: ticks at its first tempo, x 16 */
     int positions;              /* in its order */
     unsigned tempo;             /* its first tempo */
+    int tracks;                 /* its blocks' most tracks */
 };
 
 /* m: the module as in its file (len bytes). Its length, as units16; 0 if

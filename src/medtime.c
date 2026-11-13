@@ -43,10 +43,12 @@ unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedT
     unsigned char seen[MAXSEQ];
     int nseq = 0, ver, pos, line, numblocks, i;
     unsigned tempo, tempo0, tpl;
+    int tracks = 0;
     if (out) {
         out->units16 = 0;
         out->positions = 0;
         out->tempo = 0;
+        out->tracks = 0;
     }
     if (len < 52 || m[0] != 'M' || m[1] != 'M' || m[2] != 'D' || m[3] < '0' || m[3] > '3')
         return 0;
@@ -88,6 +90,12 @@ unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedT
                 seq[nseq++] = (unsigned short)b;
             }
         }
+    }
+    for (i = 0; i < numblocks; i++) {
+        unsigned long blk = u32(m, len, blkarr + 4 * i);
+        int nt = !blk || blk >= len ? 0 : ver == 0 ? m[blk] : (int)u16(m, len, blk);
+        if (nt > tracks)
+            tracks = nt;
     }
     if (!nseq)
         return 0;
@@ -170,6 +178,7 @@ unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedT
         out->units16 = units;
         out->positions = nseq;
         out->tempo = tempo0;
+        out->tracks = tracks;
     }
     return units;
 }

@@ -97,6 +97,7 @@ static struct {
     UWORD tick_cnt;                 /* an EaglePlayer player's timer (CIA count) */
     ULONG med_units;                /* a MED song's length (medtime.c: ticks x 16), 0 none */
     UWORD med_cnt0;                 /* its timer at its first tempo (its first tick's) */
+    UWORD med_tracks;               /* its tracks (a note player's mixer: four or fewer at full scale) */
     ULONG ep_t0, ep_played;         /* ...and its time played, by the clock */
     /* playing */
     volatile BOOL running, paused;
@@ -878,6 +879,7 @@ static void module_free(void)
         st_stop();
     mix_free();
     mp.med_units = 0;
+    mp.med_tracks = 0;
     mp.engine = ENG_NONE;
     mp.serial++;
     mp.vtrig = mp.ep_trig = 0;
@@ -1062,7 +1064,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             UBYTE *copy = mx_available() ? AllocVec(mlen + 16, MEMF_ANY) : NULL;
             if (copy)
                 CopyMem(mem, copy, mlen);   /* for the mixer, if no player knows it */
-            mp.med_units = med_measure(mem, mlen, NULL);   /* (a MED song's length, before it is relocated) */
+            {
+                struct MedTime mt;          /* (a MED song's length, before it is relocated) */
+                mp.med_units = med_measure(mem, mlen, &mt);
+                mp.med_tracks = (UWORD)mt.tracks;
+            }
             if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
                 FreeVec(copy);
                 mp.engine = ENG_EAGLE;
@@ -1186,9 +1192,13 @@ static BOOL play_eagle(char *err, LONG errmax)
     {
         /* a note player of 5-8 channels: mixed in pairs onto Paula's four,
          * as ProTracker's 8-channel modules are */
-        int nn = ep_note_channels();
+        int nn = ep_note_channels(), nv = nn > PT_CHANS ? PT_CHANS : nn;
+        if (nn > 4 && mp.med_tracks && mp.med_tracks <= 4)
+            nv = 4;                         /* (MED_note's slots for four tracks: one a channel, full scale) */
+        if (mp.mix8 && mp.pm && mp.pm->nch != nv)
+            mix_free();                     /* (another module's mixer) */
         if (nn > 0 && tick && (SysBase->AttnFlags & AFF_68020) &&
-            (mp.mix8 || mix_alloc(nn > PT_CHANS ? PT_CHANS : nn))) {
+            (mp.mix8 || mix_alloc(nv))) {
             char m[140];
             memset(mp.pm->v, 0, sizeof(mp.pm->v));
             mp.mix_lost = 0;
