@@ -5674,16 +5674,15 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
                         sel ? PEN_WHITE : PEN_TEXT);
     else if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
-                 off ? PEN_RULE : np ? PEN_ACCENT : sel ? PEN_WHITE
-                 : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
+                 off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
         const char *tag = row_tag(p, it);
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
-            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : np ? PEN_ACCENT : sel ? PEN_WHITE
-                     : PEN_DIM, bg, 0, TS_SMALL);
+            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
+                     TS_SMALL);
             right -= tagw + U(8);
         }
     }
@@ -7818,7 +7817,7 @@ static void np_eq_redraw(void)
                  : mouse_mode && i - p->top == hover_row ? PEN_RULE : PEN_BG;
         was = gfx_quiet_begin();
         gfx_mark(&g, MARK_PLAYING, g.pane_x, y,
-                 np_row(it) ? PEN_ACCENT : sel ? PEN_WHITE : PEN_TEXT, bg);
+                 sel ? PEN_WHITE : PEN_TEXT, bg);
         gfx_quiet_end(&g, was, g.pane_x, y, g.pane_x + g.mark_px - 1, y + g.mark_px - 1);
     }
 }
