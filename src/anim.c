@@ -752,6 +752,13 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
 enum { BT_RESTART, BT_PLAY, BT_STOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };   /* full: AmigaMCE's screen */
+
+/* No sound of its own: the volume's buttons (and its figure) not shown. */
+static BOOL btn_hidden(int b)
+{
+    return (b == BT_VDOWN || b == BT_VUP) && !nsnd;
+}
+
 static struct {
     BOOL on, ok;                /* shown; it can be (its memory and font) */
     BOOL saved[2];              /* buffer k has it drawn, what it covers in save[k] */
@@ -961,6 +968,11 @@ static void bar_put(struct BitMap *bm, int k)
     ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
     for (i = 0, x = bar.x0 + 4; i < BT_FULL; i++, x += bar.cw) {
         WORD ix;
+        if (btn_hidden(i)) {
+            bar.bx[i] = -32000;
+            x -= bar.cw;
+            continue;
+        }
         if (i == BT_VUP) {                  /* the volume between - and + */
             WORD vw = TextLength(rp, (STRPTR)"100%", 4) + 4;
             sprintf(t, "%ld%%", (long)(mp_volume() * 100 / 64));
@@ -1104,8 +1116,8 @@ static void ctl_move(int d)
 {
     if (ctl.shown && ctl.mode == CM_KEY) {
         int f = ctl.focus + d;
-        while (f >= 0 && f < ctl.nbtn && (ctl.off & (1 << f)))
-            f += d;                         /* greyed: passed over */
+        while (f >= 0 && f < ctl.nbtn && ((ctl.off & (1 << f)) || btn_hidden(f)))
+            f += d;                         /* greyed or not shown: passed over */
         if (f >= 0 && f < ctl.nbtn)
             ctl.focus = f;
     }
@@ -1158,9 +1170,9 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 ctl_move(-1);
             else if (code == 0x4E)
                 ctl_move(1);
-            else if (code == 0x4C || code == 0x7A)  /* Up (held: it repeats), the wheel */
-                volume(VOL_STEP);
-            else if (code == 0x4D || code == 0x7B)
+            else if ((code == 0x4C || code == 0x7A) && nsnd)    /* Up (held: it repeats), */
+                volume(VOL_STEP);                               /* the wheel: its sound's */
+            else if ((code == 0x4D || code == 0x7B) && nsnd)
                 volume(-VOL_STEP);
         } else if (cl == IDCMP_VANILLAKEY) {   /* AmigaMCE's own window has these too */
             if (code == 27 || code == 8 || code == 'q' || code == 'Q')
@@ -1313,6 +1325,11 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.off = ctl.off;
     for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
         WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
+        if (btn_hidden(i)) {
+            st.bx[i] = -32000;              /* (never hit) */
+            x -= st.cw;
+            continue;
+        }
         if (i == BT_FULL) {                 /* full screen: at the right end */
             xt = x;
             x = g->w - GU(g, 8) - st.cw;
@@ -1536,11 +1553,12 @@ static void strip_show(struct Gfx *g)
     }
 }
 
-static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
+/* TRUE if the controls' place was drawn (a window copies it in then). */
+static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
 {
     ULONG now = time_ms();
     int target = ctl_want(paused) ? FADE_N : 0, lv = sf.lv;
-    BOOL changed = FALSE;
+    BOOL changed = FALSE, drew = FALSE;
     if (lv != target) {
         if (!sf.bm || !FADE_ON)
             lv = target;
@@ -1564,9 +1582,25 @@ static void strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             strip_show(g);
         else if (sf.bm)
             strip_show(g);
+        drew = TRUE;
     }
     if (!sf.lv)
         sf.drawn = FALSE;                   /* drawn afresh when it next shows */
+    return drew;
+}
+
+/* A window: the frame (vx..: the picture's place) and the controls' place,
+ * if drawn, copied in; only those, not the whole window: a pointer the
+ * card draws itself (PrismRTG's) is taken off for each copy under it, and
+ * copied 50 times a second it was not seen at all. */
+static void win_show(struct Gfx *g, BOOL frame, BOOL strip, WORD vx, WORD vy, WORD dw, WORD dh)
+{
+    if (!g->wb)
+        return;
+    if (frame)
+        gfx_window_show_rect(g, vx, vy, vx + dw - 1, vy + dh - 1);
+    if (strip)
+        gfx_window_show_rect(g, 0, st.y, g->w - 1, g->h - 1);
 }
 
 static void strip_setup(struct Gfx *g)
@@ -2041,7 +2075,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     ULONG chunky_sz = 0;            /* (made, and made again, as its size on screen needs) */
     UWORD *l16 = NULL;
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
-    BOOL direct = FALSE, fresh = TRUE, skip = FALSE, relaid = FALSE;
+    BOOL direct = FALSE, fresh = TRUE, skip = FALSE, relaid = FALSE, whole = TRUE;
     WORD ax, ay, fx, fy, dw, dh, vx, vy, ox = 0, oy = 0;
     struct AnimPlanes pl[2];
     LONG result = -1;
@@ -2444,8 +2478,14 @@ restart:
         }
     drawn:
         td = time_ms();
-        strip_tick(g, paused, due, total, name);
-        gfx_window_show(g);                 /* a window: the frame copied in */
+        {
+            BOOL sdrew = strip_tick(g, paused, due, total, name);
+            if (whole)
+                gfx_window_show(g);         /* a window: all of it, once laid out */
+            else
+                win_show(g, !skip, sdrew || sf.lv > 0, vx, vy, dw, dh);
+            whole = FALSE;
+        }
         stripms += time_ms() - td;
         /* input, and its time */
         for (;;) {
@@ -2503,12 +2543,12 @@ restart:
                 }
             }
             bar_redraw = FALSE;
-            strip_tick(g, paused, due, total, name);
+            if (strip_tick(g, paused, due, total, name))
+                win_show(g, FALSE, TRUE, 0, 0, 0, 0);   /* (only what changed: paused) */
             if (snd_on)
                 snd_tick();
             if (!paused)
                 break;
-            gfx_window_show(g);
             WaitTOF();
             t0 = time_ms() - due;
         }
@@ -2516,6 +2556,7 @@ restart:
             break;
         if (relaid) {                       /* the same frame drawn again, in its new place */
             relaid = FALSE;
+            whole = TRUE;
             skip = FALSE;
             continue;
         }
@@ -2578,7 +2619,8 @@ restart:
             nskip++;
         while ((LONG)(time_ms() - t0) < (LONG)due - 10) {
             WaitTOF();
-            strip_tick(g, paused, due, total, name);    /* a fade goes on meanwhile */
+            if (strip_tick(g, paused, due, total, name))    /* a fade goes on meanwhile */
+                win_show(g, FALSE, TRUE, 0, 0, 0, 0);
         }
         shown = k;
         n++;

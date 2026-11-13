@@ -330,6 +330,7 @@ BOOL gfx_window_size_fits(int tsize);   /* room on Workbench for its smallest wi
 BOOL gfx_window_font_fits(int lfont);   /* ...for a pixel font's */
 int  gfx_font_shown(const struct Gfx *g);   /* RTG or window: the pixel font in use */
 void gfx_window_show(struct Gfx *g);   /* window: what was drawn, copied in now */
+void gfx_window_show_rect(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);  /* ...part of it */
 /* A window message only the window has (refresh, close): dealt with, TRUE.
  * The close gadget sets gfx_close_asked. */
 BOOL gfx_window_msg(struct Gfx *g, ULONG cls);

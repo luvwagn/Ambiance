@@ -746,6 +746,30 @@ ULONG gfx_joy(const struct Gfx *g)
     return LowLevelBase && gfx_input_ours(g) ? ReadJoyPort(1) : 0;
 }
 
+/* Part of what was drawn (x0..x1, y0..y1) copied into the window now. */
+void gfx_window_show_rect(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    ULONG t0;
+    if (!g->wb || !wbuf_bm || !g->win)
+        return;
+    if (x0 < 0)
+        x0 = 0;
+    if (y0 < 0)
+        y0 = 0;
+    if (x1 > g->w - 1)
+        x1 = g->w - 1;
+    if (y1 > g->h - 1)
+        y1 = g->h - 1;
+    if (x1 < x0 || y1 < y0)
+        return;
+    WaitBlit();
+    t0 = time_ms();
+    BltBitMapRastPort(wbuf_bm, x0, y0, g->win->RPort, g->win->BorderLeft + x0,
+                      g->win->BorderTop + y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0);
+    WaitBlit();
+    win_stat(g, time_ms() - t0);
+}
+
 /* What was drawn copied into the window now (a loop with no present of its
  * own: the viewer's, video's). Nothing on a screen of our own. */
 void gfx_window_show(struct Gfx *g)
