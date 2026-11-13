@@ -10371,6 +10371,7 @@ static void window_menu(UWORD code)
             return;
         }
         if (what == WM_FULL) {
+            amce_log("window", "Project > Full screen (the menu, or Right-Amiga-F)");
             toggle_window();                /* full screen, and kept */
             return;
         }
@@ -13776,6 +13777,17 @@ static void handle_key(struct IntuiMessage *im)
     }
     BOOL shift = (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
     LONG page = list_visible() - 1;
+
+    /* Amiga-F, either Amiga: a window to full screen and back (Right-Amiga
+     * comes as Project > Full screen when the menus are there; Left-Amiga,
+     * a PC keyboard's Windows key under UAE, as a key) */
+    if ((im->Class == IDCMP_VANILLAKEY ? (code == 'f' || code == 'F') : code == 0x23) &&
+        (im->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
+        amce_log("window", g.wb ? "Amiga-F (a key): full screen" : "Amiga-F (a key): the window");
+        if (window_offered())
+            toggle_window();
+        return;
+    }
 
     if (im->Class == IDCMP_RAWKEY) {
         if (code & IECODE_UP_PREFIX) {
