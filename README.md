@@ -118,9 +118,9 @@ of the Amiga to how fast it really is.
   and started again afterwards).
 - Moving the mouse brings up controls over the picture: from the start,
   play/pause, stop, volume, the time and the length.
-- In a Workbench window, one bigger than the window is made smaller to fit
-  it; the full-screen button shows it on the whole display, on a screen in
-  Workbench's own mode (no mode switch), and back.
+- In a Workbench window it is made as large as the window holds, larger or
+  smaller; the full-screen button shows it on the whole display, on a
+  screen in Workbench's own mode (no mode switch), and back.
 
 ### Screens and looks
 

@@ -1863,13 +1863,14 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
         fy = ay * kk;
         dw = w * fx;
         dh = h * fy;
-    } else if (w <= g->w && h <= avail) {
+    } else if (w <= g->w && h <= avail && !g->wb) {
         fx = fy = 1;                        /* as it is, its shape aside */
         dw = w;
         dh = h;
     } else if (g->wb) {
-        /* a window: smaller, its shape kept (fx, fy 0: lay.xo/yo say
-         * where each pixel goes, some of them nowhere) */
+        /* a window: as large as it holds, its shape kept, larger or
+         * smaller (fx, fy 0: lay.xo/yo say where each pixel goes, some of
+         * a smaller one's nowhere) */
         LONG sw = (LONG)w * ax, sh = (LONG)h * ay, W = g->w - GU(g, 16), H = avail;
         if (sw * H <= sh * W) {
             dh = (WORD)H;
@@ -1922,12 +1923,17 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
 static struct Window *fs_win;
 static struct { struct Screen *scr; struct Window *win; struct RastPort *rp; WORD w, h; } fs_was;
 
+static BOOL pb_direct;          /* written straight (into lay.pbm), not made chunky */
+
 static BOOL fs_pbm(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay)
 {
     if (lay.pbm) {
         WaitBlit();
         FreeBitMap(lay.pbm);
+        lay.pbm = NULL;
     }
+    if (!pb_direct)
+        return TRUE;                        /* (the 68k's way draws on the screen itself) */
     lay_out(g, w, h, ax, ay, TRUE);         /* (the largest it will be here) */
     lay.pbm = AllocBitMap(lay.dw, lay.dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
                           g->rp->BitMap);
@@ -2032,6 +2038,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     ULONG stripms = 0, nrows = 0, nskip = 0, nnodec = 0, fmt = 0, drawn_at = 0, decms = 0;
     BOOL whole_only = TRUE;         /* every frame so far a whole one (a BODY, op 0) */
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
+    ULONG chunky_sz = 0;            /* (made, and made again, as its size on screen needs) */
     UWORD *l16 = NULL;
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
     BOOL direct = FALSE, fresh = TRUE, skip = FALSE, relaid = FALSE;
@@ -2107,17 +2114,11 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
             lay.pbm = NULL;
         }
     }
-    if (!lay.pbm)
+    if (!direct)
+        lay.can_full = TRUE;                /* made chunky by the table: any size */
+    else if (!lay.pbm)
         lay.can_full = FALSE;               /* straight onto the screen: whole scales */
-    if (!direct && (!lay.fx || !lay.fy)) {
-        /* made smaller (a window), and only the direct way can: its own screen */
-        if (lay.pbm)
-            FreeBitMap(lay.pbm);
-        FreeVec(lay.xo);
-        FreeVec(lay.yo);
-        memset(&lay, 0, sizeof(lay));
-        return 1;
-    }
+    pb_direct = direct;
     if (g->wb && anim_full && lay.can_full && !fs_enter(g, w, h, ax, ay))
         anim_full = FALSE;                  /* (the screen would not open: in the window) */
     if (fs_scr && g->rp->Layer) {
@@ -2134,7 +2135,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     if (!(planar = AllocVec(fsz * 2, MEMF_ANY | MEMF_CLEAR)) ||
         !(last = AllocVec(fsz, MEMF_ANY | MEMF_CLEAR)) ||
         !(l16 = AllocVec(256 * sizeof(UWORD), MEMF_ANY | MEMF_CLEAR)) ||
-        (!direct && !(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY))) ||
+        (!direct && !(chunky = AllocVec(chunky_sz = (ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY))) ||
         !(line = AllocVec(rb * 8 + 8, MEMF_ANY)) || !(lut = AllocVec(512 * sizeof(ULONG), MEMF_ANY))) {
         FreeVec(planar);
         FreeVec(last);
@@ -2258,9 +2259,7 @@ restart:
                     amce_log("anim", "the card's colours are not the animation's: the CPU draws it");
                     card_free();
                     fresh = TRUE;
-                    if (!direct && !chunky &&
-                        !(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
-                        break;
+                    /* (the chunky buffer: made as the 68k's way draws) */
                 }
             }
         } else if (direct) {
@@ -2305,30 +2304,35 @@ restart:
                 pic_blit(g, lay.xo[cx0 * 8], lay.yo[ry0], lay.xo[cx1 * 8 > w ? w : cx1 * 8],
                          lay.yo[ry1 + 1]);
             if (!lk || !base) {                 /* not to be had after all: the other way */
-                direct = FALSE;
-                lay.can_full = FALSE;           /* (whole scales only, that way) */
-                ctl.nbtn = BT_FULL;
-                if (lay.full) {
-                    lay_out(g, w, h, ax, ay, FALSE);
-                    dw = lay.dw;
-                    dh = lay.dh;
-                    vx = lay.vx;
-                    vy = lay.vy;
-                    fx = lay.fx;
-                    fy = lay.fy;
-                    if (cd.ncol)
-                        card_choose(g, w, h, depth, ham, rb);   /* (its way for the new size) */
-                    FillPixelArray(g->rp, 0, 0, g->w, st.y, 0x000000);
+                direct = pb_direct = FALSE;
+                if (lay.pbm) {                  /* (that way draws on the screen) */
+                    WaitBlit();
+                    FreeBitMap(lay.pbm);
+                    lay.pbm = NULL;
                 }
-                if (!(chunky = AllocVec((ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY)))
-                    break;
+                fresh = TRUE;
+                goto drawn;                     /* (drawn that way next time) */
             }
         }
         if (!direct && (cd.mode == CARD_OFF || cd.trial == 1)) {
+            /* made chunky at its size on screen, each pixel where the
+             * table (lay.xo, lay.yo) puts it: any size, larger or smaller
+             * (a pixel or a row of a smaller one going nowhere), then
+             * drawn by the system at any depth */
             ULONG y, x, j;
-            UBYTE *row = chunky;
-            ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp;
+            UBYTE *row;
+            ULONG bpp = ham ? 3 : 1, rowb = (ULONG)dw * bpp, need = rowb * dh;
+            if (need > chunky_sz) {
+                FreeVec(chunky);
+                chunky_sz = (chunky = AllocVec(need, MEMF_ANY)) ? need : 0;
+                if (!chunky)
+                    break;
+            }
             for (y = 0; y < h; y++) {
+                ULONG nr = lay.yo[y + 1] - lay.yo[y];
+                if (!nr)
+                    continue;                   /* (smaller: this row not shown) */
+                row = chunky + (ULONG)lay.yo[y] * rowb;
                 ad_p2c_row(src + y * rb * depth, rb, depth, w, line);
                 if (ham) {                  /* each pixel from the one before it */
                     ULONG rgb = lut[0], hb = depth == 8 ? 6 : 4, lo = (1UL << hb) - 1;
@@ -2344,24 +2348,27 @@ restart:
                             rgb = (rgb & 0x00FFFF) | (v << 16);
                         else
                             rgb = (rgb & 0xFF00FF) | (v << 8);
-                        for (j = 0; j < (ULONG)fx; j++) {
+                        for (j = lay.xo[x]; j < lay.xo[x + 1]; j++) {
+                            o = row + j * 3;
                             o[0] = rgb >> 16;
                             o[1] = rgb >> 8;
                             o[2] = rgb;
-                            o += 3;
                         }
                     }
                 } else if (fx == 1)
                     CopyMem(line, row, w);
-                else {
+                else if (fx > 1) {
                     UBYTE *o = row;
                     for (x = 0; x < w; x++)
                         for (j = 0; j < (ULONG)fx; j++)
                             *o++ = line[x];
+                } else {
+                    for (x = 0; x < w; x++)
+                        for (j = lay.xo[x]; j < lay.xo[x + 1]; j++)
+                            row[j] = line[x];
                 }
-                for (j = 1; j < (ULONG)fy; j++)
+                for (j = 1; j < nr; j++)
                     CopyMem(row, row + j * rowb, rowb);
-                row += fy * rowb;
             }
             if (ham)
                 WritePixelArray(chunky, 0, 0, rowb, g->rp, vx, vy, dw, dh, RECTFMT_RGB);
@@ -2598,6 +2605,7 @@ restart:
     amce_log("anim", m);
     result = err[0] ? -1 : 0;
     (void)errmax;
+    (void)fy;                               /* (the rows go by lay.yo) */
     card_free();
     strip_cleanup(g);
     if (fs_scr)
