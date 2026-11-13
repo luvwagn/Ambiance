@@ -156,7 +156,10 @@ Screens
   is the size. Resize it (its grip, bottom right) and the layout
   follows, the text staying its size; it opens again where and as large
   as it was left. Its Project menu (the right button over its title
-  bar): About, Settings, Full screen, Quit. Pictures and videos go full
+  bar): About, Settings, Full screen, Iconify, Quit. Iconify (Amiga-I,
+  or the title bar's gadget on OS 3.2; full screen too) leaves an
+  AppIcon on Workbench and the music playing: double-click it to come
+  back; Workbench's Tools > Quit AmigaMCE quits. Pictures and videos go full
   screen from it (their button, F or Amiga-F) on a screen in
   Workbench's own mode, so the monitor does not change mode.
 - The menu folds to its icons while you browse, giving the lists and
@@ -300,6 +303,10 @@ Not there yet
 
 History
 -------
+0.8.5  Iconify: the window's gadget on OS 3.2, Project > Iconify or
+       Amiga-I (full screen too) leave an AppIcon with a musical note on
+       Workbench, the music playing on; double-clicked, AmigaMCE is back
+       where it was. Workbench's Tools menu quits it meanwhile.
 0.8.1  Now playing at the top of every section's lists, its label in
        orange; what was playing at quit back at the next start, stopped,
        Play going on from where it was. MED songs (MED_note): their

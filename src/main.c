@@ -5,6 +5,7 @@
 #include "amce.h"
 #include "radiocsv.h"
 #include "plexxml.h"
+#include "iconify.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -575,8 +576,9 @@ static BOOL ui_input_waiting(void)
                 return TRUE;
             if ((im = (struct IntuiMessage *)GetMsg(mp))) {
                 ULONG cl = im->Class;
+                UWORD code = im->Code;
                 ReplyMsg((struct Message *)im);
-                gfx_window_msg(&g, cl);     /* a window uncovered: shown again */
+                gfx_window_msg(&g, cl, code);   /* a window uncovered: shown again */
             }
         }
     if (LowLevelBase) {
@@ -1614,26 +1616,31 @@ static const char *win_chosen_by = "nothing: full screen";
 /* The window's Workbench menus (gfx.c lays them out): their labels in
  * the language chosen, except Japanese, Chinese and Korean, which
  * Workbench's own font has no letters for. */
-enum { WM_ABOUT = 1, WM_SETTINGS, WM_FULL = GFX_MENU_FULL, WM_QUIT };
-static struct NewMenu wb_menus[6];
+enum { WM_ABOUT = 1, WM_SETTINGS, WM_FULL = GFX_MENU_FULL, WM_QUIT, WM_ICONIFY = GFX_MENU_ICONIFY };
+static struct NewMenu wb_menus[7];
+
+static BOOL wb_text_english(void);
 
 static void window_menus_make(void)
 {
-    const char *iso = amce_lang_iso();
-    BOOL en = iso && (!strncmp(iso, "ja", 2) || !strncmp(iso, "zh", 2) || !strncmp(iso, "ko", 2));
+    BOOL en = wb_text_english();
 
-    struct NewMenu nm[6] = {
+    struct NewMenu nm[7] = {
         { NM_TITLE, NULL, NULL, 0, 0, NULL },
         { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_ABOUT },
         { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_SETTINGS },
         { NM_ITEM, NULL, (STRPTR)"F", 0, 0, (APTR)WM_FULL },   /* Amiga-F */
+        { NM_ITEM, NULL, (STRPTR)"I", 0, 0, (APTR)WM_ICONIFY }, /* Amiga-I */
         { NM_ITEM, NULL, (STRPTR)"Q", 0, 0, (APTR)WM_QUIT },
         { NM_END, NULL, NULL, 0, 0, NULL } };
     nm[0].nm_Label = (STRPTR)(en ? "Project" : _("Project"));
     nm[1].nm_Label = (STRPTR)(en ? "About..." : _("About..."));
     nm[2].nm_Label = (STRPTR)(en ? "Settings..." : _("Settings..."));
     nm[3].nm_Label = (STRPTR)(en ? "Full screen" : _("Full screen"));
-    nm[4].nm_Label = (STRPTR)(en ? "Quit" : _("Quit"));
+    nm[4].nm_Label = (STRPTR)(en ? "Iconify" : _("Iconify"));
+    if (!icon_available())
+        nm[4].nm_Flags = NM_ITEMDISABLED;   /* (no workbench.library) */
+    nm[5].nm_Label = (STRPTR)(en ? "Quit" : _("Quit"));
     memcpy(wb_menus, nm, sizeof(nm));
     gfx_window_menus(wb_menus);
 }
@@ -9455,9 +9462,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             UWORD code = im->Code;
             WORD mx = im->MouseX - g.win->BorderLeft, my = im->MouseY - g.win->BorderTop;
             ReplyMsg((struct Message *)im);
-            if (gfx_window_msg(&g, cl)) {
-                if (gfx_close_asked)
-                    quit = TRUE;            /* the close gadget: out, then AmigaMCE quits */
+            if (gfx_window_msg(&g, cl, code)) {
+                if (gfx_close_asked || gfx_iconify_asked)
+                    quit = TRUE;            /* the close gadget: out, then AmigaMCE quits;
+                                             * iconify: out, then iconified */
             } else if (cl == IDCMP_MENUPICK) {
                 /* Amiga-F comes as Project > Full screen: here, the
                  * picture's own (as F) */
@@ -9466,6 +9474,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 while ((what = gfx_window_menu_pick(&c)))
                     if (what == WM_FULL)
                         full = TRUE;
+                    else if (what == WM_ICONIFY) {
+                        gfx_iconify_asked = TRUE;   /* out, then iconified */
+                        quit = TRUE;
+                    }
             } else if (cl == IDCMP_MOUSEMOVE) {
                 moused = TRUE;              /* the pointer, and the bar with its buttons */
             } else if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
@@ -10167,6 +10179,8 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 #define WB_BACK_WAIT 60000              /* ms: Workbench not back by then, opened anyway */
 
 static BOOL wb_fell_back;               /* a window wanted, full screen for now */
+static BOOL iconified;                  /* (below: iconify) */
+static BOOL iconic_screen;              /* ...full screen: its screen behind Workbench's */
 
 /* Full screen where a window was wanted (Workbench could not take one):
  * Workbench's prefs watched for a change that lets it. */
@@ -10182,6 +10196,11 @@ static void wb_follow(void)
     WORD ow = g.w, oh = g.h;
     BOOL was_window = g.wb;
     char m[120];
+    if (iconified && !g.wb) {
+        if (gfx_wb_event())             /* (iconified, its screen behind: left so) */
+            gfx_wb_done();
+        return;
+    }
     if (gfx_wb_event() != GFX_WB_CLOSING || (!g.wb && !wb_fell_back)) {
         if (gfx_wb_event())
             gfx_wb_done();              /* (nothing of ours on it) */
@@ -10229,6 +10248,27 @@ static void wb_follow(void)
         gfx_close(&g);
     }
     tl = time_ms();
+    if (iconified) {
+        /* still iconified: the buffer alone on the new Workbench; or, no
+         * window there now, full screen behind it */
+        if (!gfx_open_hidden(&g, &caps, ui_style)) {
+            if (!gfx_open(&g, &caps, screen_mode, ui_style) &&
+                !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
+                running = FALSE;
+                return;
+            }
+            if (g.wb) {
+                gfx_window_hide(&g);    /* (a window after all) */
+            } else {
+                ScreenToBack(g.scr);
+                iconic_screen = TRUE;
+                amce_log("iconify", "no window on the new Workbench: full screen, behind it");
+            }
+        }
+        wb_note_fallback();
+        window_relaid(ow, oh, tl);
+        return;
+    }
     if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
         running = FALSE;
         return;
@@ -10360,6 +10400,107 @@ static void window_title_watch(void)
     }
 }
 
+/* ---- Iconified: the window closed (its buffer kept and drawn into
+ * unseen, gfx_window_hide), or full screen, the screen put behind
+ * Workbench's; an AppIcon on Workbench (iconify.c) brings it back, as does
+ * the screen brought to the front. The music plays on: the main loop's
+ * tick does only what keeps it going (iconified_tick). A video stops and
+ * the viewer closes first (their loops end on gfx_iconify_asked). */
+
+/* Workbench's own font has no Japanese, Chinese or Korean letters: its
+ * labels (menus, the icon's) in English then. */
+static BOOL wb_text_english(void)
+{
+    const char *iso = amce_lang_iso();
+    return iso && (!strncmp(iso, "ja", 2) || !strncmp(iso, "zh", 2) || !strncmp(iso, "ko", 2));
+}
+
+static void iconify(void)
+{
+    struct Screen *wb;
+    if (iconified || gfx_fs_on())
+        return;
+    if (!(wb = LockPubScreen((CONST_STRPTR)"Workbench"))) {
+        set_msg(_("Iconify needs Workbench"));
+        return;
+    }
+    UnlockPubScreen(NULL, wb);
+    if (!icon_add("AmigaMCE", wb_text_english() ? "Quit AmigaMCE" : _("Quit AmigaMCE"))) {
+        set_msg(_("Iconify needs Workbench"));
+        return;
+    }
+    hold_stop();
+    ov.on = FALSE;
+    if (g.wb) {
+        if (!gfx_window_hide(&g)) {
+            icon_remove();
+            return;
+        }
+        ptr_hidden = NULL;              /* (a new window comes with its pointer) */
+        amce_log("iconify", "the window closed, an AppIcon on Workbench: the music plays on");
+    } else {
+        ScreenToBack(g.scr);
+        iconic_screen = TRUE;
+        amce_log("iconify", "the screen behind Workbench's, an AppIcon on it: the music plays on");
+    }
+    iconified = TRUE;
+}
+
+static void uniconify(const char *why)
+{
+    if (!iconified)
+        return;
+    icon_remove();
+    iconified = FALSE;
+    amce_log("iconify", why);
+    if (iconic_screen) {
+        iconic_screen = FALSE;
+        if (g.scr && !g.wb) {
+            ScreenToFront(g.scr);
+            if (g.win)
+                ActivateWindow(g.win);
+        }
+    } else if (g.wb && !gfx_window_unhide(&g)) {
+        /* the window would not open again: the display made anew */
+        WORD ow = g.w, oh = g.h;
+        ULONG t0 = time_ms();
+        layout_let_go();
+        pv_flush();
+        spin_free();
+        ov_bm_free();
+        vis_stop();
+        ptr_hidden = NULL;
+        gfx_close(&g);
+        if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
+            running = FALSE;
+            return;
+        }
+        wb_note_fallback();
+        window_relaid(ow, oh, t0);
+        return;
+    }
+    mouse_last = time_ms();
+    draw_all();
+    gfx_present(&g);
+}
+
+/* The main loop's tick while iconified: the music kept going (the next
+ * track, a stream's title), nothing drawn but what that draws. */
+static void iconified_tick(void)
+{
+    static ULONG next;
+    np_tick();
+    mp_paula_check();
+    if (!next || (LONG)(time_ms() - next) >= 0) {
+        next = time_ms() + 1000;
+        mp_tempo_check();
+        flac_slow_check();
+        nav_tick_1s();
+    }
+    if (iconic_screen && g.scr && IntuitionBase->FirstScreen == g.scr)
+        uniconify("its screen brought to the front: no longer iconified");
+}
+
 /* The window's Workbench menus. */
 static void window_menu(UWORD code)
 {
@@ -10373,6 +10514,11 @@ static void window_menu(UWORD code)
         if (what == WM_FULL) {
             amce_log("window", "Project > Full screen (the menu, or Right-Amiga-F)");
             toggle_window();                /* full screen, and kept */
+            return;
+        }
+        if (what == WM_ICONIFY) {
+            amce_log("iconify", "Project > Iconify (the menu, or Right-Amiga-I)");
+            gfx_iconify_asked = TRUE;       /* (the main loop's, once these are read) */
             return;
         }
         mod = what == WM_ABOUT ? MOD_ABOUT : MOD_SETTINGS;
@@ -13788,6 +13934,13 @@ static void handle_key(struct IntuiMessage *im)
             toggle_window();
         return;
     }
+    /* Amiga-I, either Amiga: iconified (full screen too) */
+    if ((im->Class == IDCMP_VANILLAKEY ? (code == 'i' || code == 'I') : code == 0x17) &&
+        (im->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
+        amce_log("iconify", "Amiga-I (a key)");
+        gfx_iconify_asked = TRUE;
+        return;
+    }
 
     if (im->Class == IDCMP_RAWKEY) {
         if (code & IECODE_UP_PREFIX) {
@@ -14035,6 +14188,7 @@ static int app_main(void)
     }
     dbg_mem_baseline();
     read_start_args();
+    gfx_iconify_gadget = icon_available();  /* (OS 3.2: the window's gadget) */
     window_menus_make();
     load_debug();
     load_dbuf();
@@ -14175,18 +14329,23 @@ static int app_main(void)
     while (running) {
         if (gfx_close_asked)
             break;                  /* the window's close gadget (the viewer saw it, say) */
+        if (gfx_iconify_asked) {
+            gfx_iconify_asked = FALSE;  /* its gadget, Project > Iconify, Amiga-I */
+            iconify();
+        }
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         loop_wakes++;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
         ULONG lsig = ldr_sigmask();
         ULONG nsig = net_sigmask();
         ULONG bsig = gfx_wb_sigmask();
-        ULONG mask = wsig | tsig | lsig | nsig | bsig | SIGBREAKF_CTRL_C;
+        ULONG isig = icon_sigmask();
+        ULONG mask = wsig | tsig | lsig | nsig | bsig | isig | SIGBREAKF_CTRL_C;
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = (atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
-                    tb_animating(&pv_tb);
+        BOOL busy = !iconified && ((atb && tb_animating(atb)) || hold_active() || pane_pending ||
+                                   pv_pending || tb_animating(&pv_tb));
         ULONG sig;
         if (loader_due())
             preview_arrived();
@@ -14200,6 +14359,15 @@ static int app_main(void)
         }
         if (sig & SIGBREAKF_CTRL_C)
             break;
+        if (sig & isig) {
+            int a = icon_poll();
+            if (a == ICON_QUIT) {
+                amce_log("iconify", "Workbench's Tools > Quit AmigaMCE");
+                break;
+            }
+            if (a == ICON_OPEN)
+                uniconify("its AppIcon opened: no longer iconified");
+        }
         if (sig & bsig)
             gfx_wb_signalled();         /* (watched prefs changed: OS 3.0, 3.1) */
         if (gfx_wb_event()) {
@@ -14214,6 +14382,11 @@ static int app_main(void)
             radio_collect();            /* radio-browser.info answered */
         if (sig & tsig) {
             if (GetMsg(tport)) {
+                if (iconified) {
+                    iconified_tick();       /* the music kept going, nothing more */
+                    tick_us = 200000;
+                    goto tick_again;
+                }
                 joy_poll();
                 window_title_watch();       /* (a window: its title bar double-clicked) */
                 if (gfx_resized_at && (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
@@ -14284,6 +14457,7 @@ static int app_main(void)
                            np.flash >= 0 || np.rep >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 :
                           mp_playing() ? 120000 : 200000;  /* the header's bars dance */
+            tick_again:
                 if (running) {
                     treq->tr_node.io_Command = TR_ADDREQUEST;
                     treq->tr_time.tv_secs = 0;
@@ -14297,9 +14471,11 @@ static int app_main(void)
             while (g.win && (im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
                 struct IntuiMessage copy = *im;
                 ReplyMsg((struct Message *)im);
+                if (iconified)
+                    continue;               /* (its screen behind Workbench's: let go) */
                 if (copy.Class == IDCMP_MOUSEMOVE)
                     gfx_window_rmb(&g, copy.MouseY);    /* title bar: the menus */
-                if (gfx_window_msg(&g, copy.Class)) {
+                if (gfx_window_msg(&g, copy.Class, copy.Code)) {
                     if (gfx_close_asked)
                         running = FALSE;    /* the close gadget: as Esc on the menu twice */
                 } else if (copy.Class == IDCMP_MENUPICK) {
@@ -14387,6 +14563,7 @@ out:
         }
     }
     gfx_wb_watch_end();                 /* (Workbench's hook out: its process calls it) */
+    icon_end();                         /* (the AppIcon, if iconified at the end) */
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);

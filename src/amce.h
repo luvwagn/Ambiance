@@ -332,9 +332,19 @@ int  gfx_font_shown(const struct Gfx *g);   /* RTG or window: the pixel font in 
 void gfx_window_show(struct Gfx *g);   /* window: what was drawn, copied in now */
 void gfx_window_show_rect(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1);  /* ...part of it */
 /* A window message only the window has (refresh, close): dealt with, TRUE.
- * The close gadget sets gfx_close_asked. */
-BOOL gfx_window_msg(struct Gfx *g, ULONG cls);
+ * The close gadget sets gfx_close_asked; the iconify gadget (OS 3.2: a
+ * CLOSEWINDOW with code 1) gfx_iconify_asked. */
+BOOL gfx_window_msg(struct Gfx *g, ULONG cls, UWORD code);
 extern BOOL gfx_close_asked;
+extern BOOL gfx_iconify_asked;
+/* Iconified (main.c): the window closed, its buffer kept and drawn into
+ * unseen (gfx_window_hide), opened again where it was (..._unhide); or,
+ * Workbench back from a reset meanwhile, the buffer alone made on its new
+ * screen (gfx_open_hidden). gfx_iconify_gadget: the window has one. */
+extern BOOL gfx_iconify_gadget;
+BOOL gfx_window_hide(struct Gfx *g);
+BOOL gfx_window_unhide(struct Gfx *g);
+BOOL gfx_open_hidden(struct Gfx *g, const struct Caps *c, int style);
 /* Input meant for us: always on our own screen; in a window, only while
  * it is the active one (the joystick and lowlevel see the whole machine). */
 BOOL gfx_input_ours(const struct Gfx *g);
@@ -367,6 +377,7 @@ void gfx_window_menus(const struct NewMenu *nm);
 void gfx_window_menus_again(struct Gfx *g);
 ULONG gfx_window_menu_pick(UWORD *code);
 #define GFX_MENU_FULL 3                 /* Project > Full screen's (Amiga-F): main.c's WM_FULL */
+#define GFX_MENU_ICONIFY 5              /* Project > Iconify's (Amiga-I): main.c's WM_ICONIFY */
 void gfx_window_rmb(struct Gfx *g, WORD y);     /* title bar: menus; inside: Back */
 /* Full screen from the window, in Workbench's mode (video, the viewer). */
 BOOL gfx_fs_enter(struct Gfx *g);

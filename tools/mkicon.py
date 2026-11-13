@@ -12,6 +12,9 @@ Writes:
                   two IMAG chunks, run-length coded, after the classic data)
   drawer.info     drawer icon for the AmigaMCE drawer in the LHA
   readme.info     project icon for readme.txt (default tool SYS:Utilities/MultiView)
+  appicon.info    the AppIcon AmigaMCE shows on Workbench while iconified
+                  (Icons/AppIcon.info in its drawer): the badge with a
+                  musical note in place of the play triangle
   install.info    project icon for the Installer script (default tool Installer,
                   found on the Workbench's path: C: or SYS:Utilities)
 
@@ -36,9 +39,29 @@ HL_DARK = (0x11, 0x44, 0x99)
 WHITE = (0xFF, 0xFF, 0xFF)
 
 
-def badge(size, sx=1.0, sy=1.0, ss=8, light=False):
+def note_shape(d, kx, ky, fill):
+    """Two beamed quavers, white, in the badge's 14 x 14 units: the heads
+    tilted ovals at the foot, stems up their right, a slanting beam."""
+    import math
+    for cx, cy in ((4.4, 10.4), (9.6, 9.4)):
+        pts = []
+        for i in range(48):
+            t = 2 * math.pi * i / 48
+            x, y = 1.85 * math.cos(t), 1.3 * math.sin(t)
+            a = -0.42                               # (tilted up to the right)
+            pts.append(((cx + x * math.cos(a) - y * math.sin(a)) * kx,
+                        (cy + x * math.sin(a) + y * math.cos(a)) * ky))
+        d.polygon(pts, fill=fill)
+    for x0, ytop, ybot in ((5.75, 3.9, 10.2), (10.95, 2.9, 9.2)):
+        d.rectangle([x0 * kx, ytop * ky, (x0 + 0.75) * kx, ybot * ky], fill=fill)
+    d.polygon([(5.75 * kx, 3.2 * ky), (11.7 * kx, 2.2 * ky), (11.7 * kx, 4.1 * ky),
+               (5.75 * kx, 5.1 * ky)], fill=fill)
+
+
+def badge(size, sx=1.0, sy=1.0, ss=8, light=False, glyph="play"):
     """RGBA image of the badge, size x size units scaled by sx, sy (pixels a
-    unit), rendered ss times over and shrunk (anti-aliased)."""
+    unit), rendered ss times over and shrunk (anti-aliased). glyph: "play"
+    (the logo's triangle) or "note" (the iconified AppIcon's)."""
     w, h = round(14 * sx), round(14 * sy)
     big = Image.new("RGBA", (w * ss, h * ss), (0, 0, 0, 0))
     d = ImageDraw.Draw(big)
@@ -58,15 +81,18 @@ def badge(size, sx=1.0, sy=1.0, ss=8, light=False):
     big.paste(grad, (0, 0), mask)
     d.rounded_rectangle([0, 0, big.size[0] - 1, big.size[1] - 1], radius=r, outline=HL_DARK + (255,),
                         width=max(1, round(0.6 * min(kx, ky))))
-    d.polygon([(4.7 * kx, 3.9 * ky), (11.0 * kx, 7.0 * ky), (4.7 * kx, 10.1 * ky)],
-              fill=WHITE + (255,))
+    if glyph == "note":
+        note_shape(d, kx, ky, WHITE + (255,))
+    else:
+        d.polygon([(4.7 * kx, 3.9 * ky), (11.0 * kx, 7.0 * ky), (4.7 * kx, 10.1 * ky)],
+                  fill=WHITE + (255,))
     return big.resize((w, h), Image.LANCZOS)
 
 
-def badge_art():
+def badge_art(glyph="play"):
     """The classic 4-colour tool icon: the badge on Workbench's hires grid
     (pixels twice as tall as wide), 36 x 18, a black rim, snapped to pens."""
-    im = badge(14, sx=36 / 14, sy=18 / 14, ss=8)
+    im = badge(14, sx=36 / 14, sy=18 / 14, ss=8, glyph=glyph)
     px = im.load()
     w, h = im.size
     rows = []
@@ -99,10 +125,34 @@ def badge_art():
         for x in range(len(rim[y])):
             if rim[y][x] == "w":
                 rim[y][x] = "b"
+    if glyph == "note":
+        for y, row in enumerate(NOTE_ART):
+            for x, c in enumerate(row):
+                if c == "w":
+                    rim[3 + y][12 + x] = "w"
+        return ["".join(r) for r in rim]
     for i, wd in enumerate((2, 5, 8, 11, 14, 11, 8, 5, 2)):
         for x in range(15, 15 + wd):
             rim[5 + i][x] = "w"
     return ["".join(r) for r in rim]
+
+
+# The beamed quavers by hand on the hires grid (pixels twice as tall as
+# wide), placed at row 3, column 12 of the rimmed badge.
+NOTE_ART = [
+    "..............wwww",
+    "........wwwwwwwwww",
+    "......wwwwwwwwwwww",
+    "......wwwwwww...ww",
+    "......ww........ww",
+    "......ww........ww",
+    "......ww........ww",
+    "......ww.....wwwww",
+    "..wwwwww...wwwwwww",
+    ".wwwwwww...wwwwww.",
+    ".wwwwwww....wwww..",
+    "..wwwww...........",
+]
 
 
 # ------------------------------------------------------------ GlowIcon
@@ -179,13 +229,13 @@ def glowicon(normal, selected):
     return b"FORM" + struct.pack(">I", len(body)) + body
 
 
-def tool_glow():
+def tool_glow(glyph="play"):
     """46 x 46: the badge, 42 x 42, centred; selected, lighter (Workbench
     adds its own glow)."""
     out = []
     for light in (False, True):
         canvas = Image.new("RGBA", (46, 46), (0, 0, 0, 0))
-        canvas.alpha_composite(badge(14, sx=42 / 14, sy=42 / 14, light=light), (2, 2))
+        canvas.alpha_composite(badge(14, sx=42 / 14, sy=42 / 14, light=light, glyph=glyph), (2, 2))
         out.append(canvas)
     return out
 
@@ -366,6 +416,8 @@ def main():
                                     tooltypes=["DONOTWAIT", "(WINDOWED)"], glow=glowicon(*tool_glow())),
         "drawer.info": diskobject(WBDRAWER, DRAWER_ART, glow=glowicon(*drawer_glow())),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
+        # the AppIcon while iconified (PROGDIR:Icons/AppIcon.info): a note
+        "appicon.info": diskobject(WBTOOL, badge_art("note"), glow=glowicon(*tool_glow("note"))),
         "install.info": diskobject(WBPROJECT, badge_art(), default_tool="Installer", stack=16384,
                                    tooltypes=["APPNAME=AmigaMCE", "MINUSER=AVERAGE"],
                                    glow=glowicon(*tool_glow())),

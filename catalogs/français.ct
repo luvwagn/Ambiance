@@ -271,6 +271,9 @@ Réglages...
 MSG_4EDBBEE0
 Plein écran
 ; Full screen
+MSG_7AB09B7A
+Iconifier
+; Iconify
 MSG_47B3D356
 Quitter
 ; Quit
@@ -1084,6 +1087,12 @@ Impossible d'ouvrir ce mode d'écran
 MSG_66DF0CD5
 La fenêtre n'a pas pu s'ouvrir : plein écran
 ; The window could not open: full screen
+MSG_4926346E
+L'iconification nécessite le Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+Quitter AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Connexions : l'interface choisie par la pile
 ; Connections: the stack's choice of interface

@@ -401,6 +401,8 @@ static void blk_reserve(struct Gfx *g);
  * copied into the window by gfx_present. */
 BOOL gfx_window_wanted;
 BOOL gfx_close_asked;
+BOOL gfx_iconify_asked;
+BOOL gfx_iconify_gadget;
 ULONG gfx_resized_at;           /* a NEWSIZE's time (0 none): laid out again once it settles */
 UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 #define WIN_DW 512          /* inside, design units: as a 640 x 480 screen's layout */
@@ -1146,9 +1148,35 @@ void gfx_fs_leave(struct Gfx *g)
 
 static void open_finish(struct Gfx *g);
 
+/* The window itself, at left, top, iw x ih inside (bw, bh its borders):
+ * g->win. OS 3.2 (Intuition V46 on) draws an iconify gadget in its title
+ * bar when asked. */
+static BOOL win_window(struct Gfx *g, WORD left, WORD top, WORD iw, WORD ih, WORD bw, WORD bh)
+{
+    BOOL icon = gfx_iconify_gadget && IntuitionBase->LibNode.lib_Version >= 46;
+    g->win = OpenWindowTags(NULL,
+                            WA_PubScreen, (ULONG)g->scr, WA_Left, left, WA_Top, top,
+                            WA_InnerWidth, iw, WA_InnerHeight, ih, WA_AutoAdjust, TRUE,
+                            WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
+                            WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
+                            WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
+                            WA_NewLookMenus, TRUE,     /* (sized by our own grip: gfx_window_grip) */
+                            WA_MinWidth, (LONG)WIN_MIN_DW * g->k / 256 + bw,
+                            WA_MinHeight, (LONG)WIN_MIN_DH * g->k / 256 + bh,
+                            WA_MaxWidth, ~0UL, WA_MaxHeight, ~0UL,
+                            icon ? WA_IconifyGadget : TAG_IGNORE, TRUE,
+                            WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                                      IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW |
+                                      IDCMP_ACTIVEWINDOW | IDCMP_CLOSEWINDOW |
+                                      IDCMP_REFRESHWINDOW | IDCMP_NEWSIZE | IDCMP_MENUPICK,
+                            TAG_END);
+    return g->win != NULL;
+}
+
 /* The window opened on Workbench, everything ready to draw: FALSE (and
- * nothing left open) if it could not be. */
-static BOOL win_open(struct Gfx *g, int style)
+ * nothing left open) if it could not be. Not shown (iconified): its buffer
+ * alone, the window to come (gfx_window_unhide). */
+static BOOL win_open(struct Gfx *g, int style, BOOL show)
 {
     struct Screen *wb;
     struct ColorMap *cm;
@@ -1214,29 +1242,23 @@ static BOOL win_open(struct Gfx *g, int style)
     g->pens_shared = FALSE;
     if (!CyberGfxBase)
         CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
-    g->win = OpenWindowTags(NULL,
-                            WA_PubScreen, (ULONG)wb, WA_Left, left, WA_Top, top,
-                            WA_InnerWidth, iw, WA_InnerHeight, ih, WA_AutoAdjust, TRUE,
-                            WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
-                            WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
-                            WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
-                            WA_NewLookMenus, TRUE,     /* (sized by our own grip: gfx_window_grip) */
-                            WA_MinWidth, (LONG)WIN_MIN_DW * g->k / 256 + bw,
-                            WA_MinHeight, (LONG)WIN_MIN_DH * g->k / 256 + bh,
-                            WA_MaxWidth, ~0UL, WA_MaxHeight, ~0UL,
-                            WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
-                                      IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW |
-                                      IDCMP_ACTIVEWINDOW | IDCMP_CLOSEWINDOW |
-                                      IDCMP_REFRESHWINDOW | IDCMP_NEWSIZE | IDCMP_MENUPICK,
-                            TAG_END);
-    if (!g->win) {
-        amce_log("window", "OpenWindow failed");
-        goto fail;
+    if (show) {
+        if (!win_window(g, left, top, iw, ih, bw, bh)) {
+            amce_log("window", "OpenWindow failed");
+            goto fail;
+        }
+        g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
+        g->h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
+        left = g->win->LeftEdge;
+        top = g->win->TopEdge;
+    } else {
+        g->w = iw;                          /* (iconified: its buffer, unseen) */
+        g->h = ih;
+        win_left = left;
+        win_top = top;
     }
     wbw_start();
-    wbw_open = TRUE;
-    g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
-    g->h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
+    wbw_open = TRUE;                        /* (Workbench's, held: let go if it resets) */
     if (!wbuf_make(g)) {
         amce_log("window", "no memory for its buffer");
         goto fail;
@@ -1265,9 +1287,10 @@ static BOOL win_open(struct Gfx *g, int style)
             sprintf(m + strlen(m), " %ld", (long)gfx_penmap[i]);
         amce_log("window", m);
     }
-    sprintf(m, "%ld x %ld inside at %ld, %ld on a %ld x %ld Workbench, %ld-bit; the buffer %s",
-            (long)g->w, (long)g->h, (long)g->win->LeftEdge, (long)g->win->TopEdge,
-            (long)wb->Width, (long)wb->Height, (long)g->depth, wbuf_where());
+    sprintf(m, "%ld x %ld inside at %ld, %ld on a %ld x %ld Workbench, %ld-bit; the buffer %s%s",
+            (long)g->w, (long)g->h, (long)left, (long)top,
+            (long)wb->Width, (long)wb->Height, (long)g->depth, wbuf_where(),
+            show ? "" : " (iconified: not shown)");
     amce_log("window", m);
     wst_n = wst_sum = wst_max = wst_all = 0;
     layout_metrics(g);
@@ -1290,7 +1313,7 @@ fail:
 }
 
 /* A window message only a window on Workbench has. */
-BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
+BOOL gfx_window_msg(struct Gfx *g, ULONG cls, UWORD code)
 {
     if (!g->wb || !g->win)
         return FALSE;
@@ -1303,7 +1326,10 @@ BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
         EndRefresh(g->win, TRUE);
         return TRUE;
     case IDCMP_CLOSEWINDOW:
-        gfx_close_asked = TRUE;
+        if (code == 1)
+            gfx_iconify_asked = TRUE;       /* (OS 3.2's iconify gadget) */
+        else
+            gfx_close_asked = TRUE;
         return TRUE;
     case IDCMP_NEWSIZE:
         gfx_resized_at = time_ms() ? time_ms() : 1;    /* (opaque resizing: many) */
@@ -1312,6 +1338,67 @@ BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
         return TRUE;
     }
     return FALSE;
+}
+
+/* Iconified: the window closed where it is, its buffer kept (drawn into
+ * as ever, unseen); its place and size kept for it to open again. Not while
+ * full screen from it (video, the viewer). */
+BOOL gfx_window_hide(struct Gfx *g)
+{
+    if (!g->wb || !g->win || fs_scr)
+        return FALSE;
+    win_left = g->win->LeftEdge;
+    win_top = g->win->TopEdge;
+    win_iw = g->w;
+    win_ih = g->h;
+    win_k = g->k;
+    win_menus_off(g);
+    amce_log("CloseWindow", "iconified: its buffer kept");
+    CloseWindow(g->win);
+    g->win = NULL;
+    return TRUE;
+}
+
+/* ...and opened again, there, at its size, showing what was drawn
+ * meanwhile. Laid out again later (gfx_resized_at) if Workbench made it
+ * another size. */
+BOOL gfx_window_unhide(struct Gfx *g)
+{
+    WORD bw, bh, mw, mh, left, top, iw, ih;
+    if (!g->wb || !wbuf_bm)
+        return FALSE;
+    if (g->win)
+        return TRUE;
+    wb_box(g->scr, &bw, &bh, &mw, &mh);
+    left = win_left >= 0 && win_left + g->w + bw <= g->scr->Width ? win_left
+                                                                  : (g->scr->Width - (g->w + bw)) / 2;
+    top = win_top >= 0 && win_top + g->h + bh <= g->scr->Height ? win_top
+                                                                : g->scr->BarHeight + 1;
+    if (left < 0)
+        left = 0;
+    if (!win_window(g, left, top, g->w, g->h, bw, bh)) {
+        amce_log("window", "iconified: OpenWindow failed");
+        return FALSE;
+    }
+    win_menus_on(g);
+    iw = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
+    ih = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
+    if (iw != (WORD)g->w || ih != (WORD)g->h)
+        gfx_resized_at = time_ms() ? time_ms() : 1;     /* laid out for its size */
+    dirty = TRUE;
+    amce_log("window", "opened again (no longer iconified)");
+    return TRUE;
+}
+
+/* Iconified, Workbench back from a reset: the buffer alone, on its new
+ * screen; FALSE if a window cannot be there now. */
+BOOL gfx_open_hidden(struct Gfx *g, const struct Caps *c, int style)
+{
+    g->wb = FALSE;
+    gfx_close_asked = FALSE;
+    if (gfx_window_problem(c))
+        return FALSE;
+    return win_open(g, style, FALSE);
 }
 
 BOOL gfx_input_ours(const struct Gfx *g)
@@ -1368,7 +1455,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     if (gfx_window_wanted) {
         const char *why = gfx_window_problem(c);
         char m[140];
-        if (!why && win_open(g, style))
+        if (!why && win_open(g, style, TRUE))
             return TRUE;
         sprintf(m, "%s: full screen instead", why ? why : "it would not open");
         amce_log("window", m);

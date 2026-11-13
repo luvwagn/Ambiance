@@ -271,6 +271,9 @@ Asetukset...
 MSG_4EDBBEE0
 Koko näyttö
 ; Full screen
+MSG_7AB09B7A
+Pienennä kuvakkeeksi
+; Iconify
 MSG_47B3D356
 Lopeta
 ; Quit
@@ -1084,6 +1087,12 @@ Näyttötilaa ei voitu avata
 MSG_66DF0CD5
 Ikkunaa ei voitu avata: koko näyttö
 ; The window could not open: full screen
+MSG_4926346E
+Kuvakkeeksi pienentäminen vaatii Workbenchin
+; Iconify needs Workbench
+MSG_7170B5C2
+Lopeta AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Yhteydet: pinon valitsema liitäntä
 ; Connections: the stack's choice of interface

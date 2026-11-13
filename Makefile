@@ -36,7 +36,7 @@ LIBS    = -lamiga
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c
+       src/jpgthumb.c src/iconify.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -58,7 +58,7 @@ SMOOTH_FILES = assets/Fonts/amce-smooth/384 assets/Fonts/amce-smooth/480 assets/
 # Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel),
 # and Greek (tools/mkgreek.py: Galmuri11)
 CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15 assets/Fonts/amce-cjk/greek
-ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info
+ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info docs/appicon.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
@@ -371,6 +371,9 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 		$(LHA_DIR)/Licences
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
+	@# the AppIcon shown while iconified (iconify.c): no drawer icon, unseen
+	@mkdir -p $(LHA_DIR)/Icons
+	@cp docs/appicon.info $(LHA_DIR)/Icons/AppIcon.info
 	@cp assets/Fonts/amce-pixel.font $(LHA_DIR)/Fonts/
 	@cp assets/Fonts/amce-pixel/12 assets/Fonts/amce-pixel/24 assets/Fonts/amce-pixel/36 \
 		$(LHA_DIR)/Fonts/amce-pixel/

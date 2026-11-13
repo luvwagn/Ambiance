@@ -271,6 +271,9 @@ MSG_7D35778E
 MSG_4EDBBEE0
 フルスクリーン
 ; Full screen
+MSG_7AB09B7A
+アイコン化
+; Iconify
 MSG_47B3D356
 終了
 ; Quit
@@ -1084,6 +1087,12 @@ MSG_2EF5225D
 MSG_66DF0CD5
 ウィンドウを開けませんでした: フルスクリーン
 ; The window could not open: full screen
+MSG_4926346E
+アイコン化にはWorkbenchが必要です
+; Iconify needs Workbench
+MSG_7170B5C2
+AmigaMCEを終了
+; Quit AmigaMCE
 MSG_4C560A92
 接続: スタックが選ぶインターフェース
 ; Connections: the stack's choice of interface

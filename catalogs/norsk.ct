@@ -271,6 +271,9 @@ Innstillinger...
 MSG_4EDBBEE0
 Fullskjerm
 ; Full screen
+MSG_7AB09B7A
+Ikonifiser
+; Iconify
 MSG_47B3D356
 Avslutt
 ; Quit
@@ -1084,6 +1087,12 @@ Skjermmodusen kunne ikke åpnes
 MSG_66DF0CD5
 Vinduet kunne ikke åpnes: fullskjerm
 ; The window could not open: full screen
+MSG_4926346E
+Ikonifisering krever Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+Avslutt AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Tilkoblinger: grensesnittet stakken velger
 ; Connections: the stack's choice of interface

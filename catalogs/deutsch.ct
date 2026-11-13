@@ -271,6 +271,9 @@ Einstellungen...
 MSG_4EDBBEE0
 Vollbild
 ; Full screen
+MSG_7AB09B7A
+Ikonifizieren
+; Iconify
 MSG_47B3D356
 Beenden
 ; Quit
@@ -1084,6 +1087,12 @@ Dieser Bildschirmmodus konnte nicht geöffnet werden
 MSG_66DF0CD5
 Das Fenster ließ sich nicht öffnen: Vollbild
 ; The window could not open: full screen
+MSG_4926346E
+Ikonifizieren braucht die Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+AmigaMCE beenden
+; Quit AmigaMCE
 MSG_4C560A92
 Verbindungen: Schnittstelle nach Wahl des Stacks
 ; Connections: the stack's choice of interface

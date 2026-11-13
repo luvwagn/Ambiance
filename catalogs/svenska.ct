@@ -271,6 +271,9 @@ Inställningar...
 MSG_4EDBBEE0
 Helskärm
 ; Full screen
+MSG_7AB09B7A
+Ikonifiera
+; Iconify
 MSG_47B3D356
 Avsluta
 ; Quit
@@ -1084,6 +1087,12 @@ Skärmläget kunde inte öppnas
 MSG_66DF0CD5
 Fönstret kunde inte öppnas: helskärm
 ; The window could not open: full screen
+MSG_4926346E
+Ikonifiering kräver Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+Avsluta AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Anslutningar: gränssnittet som stacken väljer
 ; Connections: the stack's choice of interface

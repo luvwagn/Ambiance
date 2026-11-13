@@ -271,6 +271,9 @@ Instellingen...
 MSG_4EDBBEE0
 Volledig scherm
 ; Full screen
+MSG_7AB09B7A
+Iconiseren
+; Iconify
 MSG_47B3D356
 Stoppen
 ; Quit
@@ -1084,6 +1087,12 @@ Die schermmodus kon niet geopend worden
 MSG_66DF0CD5
 Het venster kon niet worden geopend: volledig scherm
 ; The window could not open: full screen
+MSG_4926346E
+Iconiseren vereist de Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+AmigaMCE afsluiten
+; Quit AmigaMCE
 MSG_4C560A92
 Verbindingen: de interface die de stack kiest
 ; Connections: the stack's choice of interface

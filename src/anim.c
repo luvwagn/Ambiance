@@ -1193,9 +1193,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         UWORD code = im->Code;
         WORD mx = im->MouseX - win->BorderLeft, my = im->MouseY - win->BorderTop;
         ReplyMsg((struct Message *)im);
-        if (anim_g && win == anim_g->win && gfx_window_msg(anim_g, cl)) {
-            if (gfx_close_asked)
-                r = 1;                      /* the window's close gadget: out */
+        if (anim_g && win == anim_g->win && gfx_window_msg(anim_g, cl, code)) {
+            if (gfx_close_asked || gfx_iconify_asked)
+                r = 1;                      /* the window's close gadget: out (iconify:
+                                             * the video stops, then iconified) */
             continue;
         }
         if (anim_g && win == anim_g->win && !gfx_fs_on() &&
@@ -1209,6 +1210,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
             while ((what = gfx_window_menu_pick(&c)))
                 if (what == GFX_MENU_FULL && !r)
                     r = 4;
+                else if (what == GFX_MENU_ICONIFY) {
+                    gfx_iconify_asked = TRUE;   /* the video stops, then iconified */
+                    r = 1;
+                }
             continue;
         }
         if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||

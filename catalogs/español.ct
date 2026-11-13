@@ -271,6 +271,9 @@ Ajustes...
 MSG_4EDBBEE0
 Pantalla completa
 ; Full screen
+MSG_7AB09B7A
+Iconizar
+; Iconify
 MSG_47B3D356
 Salir
 ; Quit
@@ -1084,6 +1087,12 @@ No se pudo abrir ese modo de pantalla
 MSG_66DF0CD5
 No se pudo abrir la ventana: pantalla completa
 ; The window could not open: full screen
+MSG_4926346E
+Iconizar necesita el Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+Salir de AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Conexiones: la interfaz que elija la pila
 ; Connections: the stack's choice of interface

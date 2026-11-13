@@ -271,6 +271,9 @@ Definições...
 MSG_4EDBBEE0
 Ecrã inteiro
 ; Full screen
+MSG_7AB09B7A
+Iconificar
+; Iconify
 MSG_47B3D356
 Sair
 ; Quit
@@ -1084,6 +1087,12 @@ Não foi possível abrir esse modo de ecrã
 MSG_66DF0CD5
 Não foi possível abrir a janela: ecrã inteiro
 ; The window could not open: full screen
+MSG_4926346E
+Iconificar requer o Workbench
+; Iconify needs Workbench
+MSG_7170B5C2
+Sair do AmigaMCE
+; Quit AmigaMCE
 MSG_4C560A92
 Ligações: a interface que a pilha escolher
 ; Connections: the stack's choice of interface

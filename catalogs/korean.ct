@@ -271,6 +271,9 @@ MSG_7D35778E
 MSG_4EDBBEE0
 전체 화면
 ; Full screen
+MSG_7AB09B7A
+아이콘화
+; Iconify
 MSG_47B3D356
 종료
 ; Quit
@@ -1084,6 +1087,12 @@ MSG_2EF5225D
 MSG_66DF0CD5
 창을 열 수 없어 전체 화면으로
 ; The window could not open: full screen
+MSG_4926346E
+아이콘화하려면 Workbench가 필요합니다
+; Iconify needs Workbench
+MSG_7170B5C2
+AmigaMCE 종료
+; Quit AmigaMCE
 MSG_4C560A92
 연결: 스택이 고르는 인터페이스
 ; Connections: the stack's choice of interface
