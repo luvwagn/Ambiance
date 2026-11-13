@@ -26,6 +26,7 @@
  * level.
  */
 #include "amce.h"
+#include "ptmix.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -165,6 +166,10 @@ extern void ehs_getlistdata(void), ehs_loadfile(void), ehs_copydir(void), ehs_co
     ehs_settimer(void), ehs_waitdma(void), ehs_alloclist(void), ehs_modchange(void);
 UWORD eh_master = 64;           /* PokeVol's scale (0-64) */
 static void note_map(UBYTE *nst);
+/* a mixed note player's channels, as Paula's registers would be (note_mix) */
+static const UBYTE *nm_ptr[PT_CHANS];
+static UWORD nm_len[PT_CHANS], nm_per[PT_CHANS];
+static UBYTE nm_vol[PT_CHANS];
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
 ULONG eh_len;                   /* GetListData's second result */
 ULONG eh_d1;                    /* eh_call: what D1 and A0 were left as */
@@ -1048,6 +1053,10 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
                 amce_strlcat(sides, st < 0 ? "L" : st > 0 ? "R" : "-", sizeof(sides));
             }
         note_map(ns);
+        memset(nm_ptr, 0, sizeof(nm_ptr));
+        memset(nm_len, 0, sizeof(nm_len));
+        memset(nm_per, 0, sizeof(nm_per));
+        memset(nm_vol, 0, sizeof(nm_vol));
 {
             char m[160];
             sprintf(m, "a note player: its notes played on Paula by AmigaMCE "
@@ -1165,6 +1174,91 @@ static void note_map(UBYTE *nst)
             nt_map[i] = m[i];
 }
 
+/* 5-8 channels: each tick's changes to the mixer (modplay.c, ptmix.c), as
+ * Paula's registers would have them; it plays channels n and n + 4 on
+ * Paula's n. A sample played once ends its voice (no repeat). */
+
+static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
+{
+    struct PmTick *t = mp_mix_slot();
+    UBYTE *ch = (UBYTE *)L(nst, NST_CHANNELS), off = 0, on = 0;
+    int i;
+    for (i = 0; i < PT_CHANS && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
+        UBYTE c = ch[NCH_CHANGED];
+        if (c & NCHF_Frequency) {
+            ULONG f = L(ch, NCH_FREQ), per = flags & NSTF_Period ? f : f ? 3546895UL / f : 0;
+            if (per && per < 113)
+                per = 113;
+            if (per > 65535)
+                per = 65535;
+            nm_per[i] = (UWORD)per;
+        }
+        if (c & NCHF_Volume) {
+            ULONG v = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
+            nm_vol[i] = (UBYTE)(v > 64 ? 64 : v);
+        }
+        if (c & NCHF_Sample) {
+            const UBYTE *ss = (const UBYTE *)L(ch, NCH_SSTART);
+            ULONG sl = L(ch, NCH_SLEN) >> 1;
+            off |= 1 << i;
+            if (ss && sl) {
+                on |= 1 << i;
+                if (t) {
+                    t->start[i] = (const pt_s8 *)ss;
+                    t->slen[i] = (pt_u16)(sl > 65535 ? 65535 : sl);
+                }
+                eh_hit |= (UBYTE)(1 << (i & 3));    /* (Now Playing's meters) */
+                if (i < 4) {
+                    eh_sadr[i] = (APTR)ss;          /* (the spectrum: the first four) */
+                    eh_slen[i] = (UWORD)(sl > 65535 ? 65535 : sl);
+                    eh_per[i] = nm_per[i];
+                    eh_vol[i] = nm_vol[i];
+                    eh_trig |= (UBYTE)(1 << i);
+                }
+            }
+        }
+        if (c & (NCHF_Sample | NCHF_Repeat)) {
+            const UBYTE *rs = (const UBYTE *)L(ch, NCH_RSTART);
+            ULONG rl = L(ch, NCH_RLEN) >> 1;
+            if (!rs || rl < 2) {
+                rs = NULL;                  /* played once: the voice ends */
+                rl = 0;
+            }
+            nm_ptr[i] = rs;
+            nm_len[i] = (UWORD)(rl > 65535 ? 65535 : rl);
+            if (i < 4) {
+                eh_adr[i] = (APTR)(rs ? rs : (const UBYTE *)nt_silence);
+                eh_plen[i] = rs ? nm_len[i] : 1;
+            }
+        }
+        ch[NCH_CHANGED] = 0;
+    }
+    if (!t)
+        return;                             /* (not mixed for a while: this tick dropped) */
+    t->off = off;
+    t->on = on;
+    for (i = 0; i < PT_CHANS; i++) {
+        t->ptr[i] = (const pt_s8 *)nm_ptr[i];
+        t->len[i] = nm_len[i];
+        t->per[i] = nm_per[i];
+        t->vol[i] = nm_vol[i];
+    }
+    mp_mix_push();
+}
+
+/* Its channels: 0 when it is not a note player. */
+int ep_note_channels(void)
+{
+    UBYTE *ch;
+    int n = 0;
+    if (!ep.notestruct)
+        return 0;
+    for (ch = (UBYTE *)L((UBYTE *)ep.notestruct, NST_CHANNELS); ch && n < 32;
+         ch = (UBYTE *)L(ch, NCH_NEXT))
+        n++;
+    return n;
+}
+
 static void note_play(void)
 {
     UBYTE *nst = ep.notestruct, *ch;
@@ -1181,6 +1275,10 @@ static void note_play(void)
     maxvol = *(UWORD *)(nst + NST_MAXVOL);
     if (!maxvol)
         maxvol = 64;
+    if (mp_mixing()) {
+        note_mix(nst, flags, maxvol);       /* 5-8 channels: mixed */
+        return;
+    }
     ch = (UBYTE *)L(nst, NST_CHANNELS);
     for (i = 0; i < 4; i++)
         rs[i] = NULL;

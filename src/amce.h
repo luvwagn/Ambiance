@@ -354,6 +354,7 @@ BOOL gfx_window_sizing(struct Gfx *g, ULONG cls, UWORD code, WORD mx, WORD my);
 ULONG gfx_wb_sigmask(void);
 int gfx_wb_event(void);
 void gfx_wb_gone(void);
+void gfx_wb_signalled(void);
 void gfx_wb_done(void);
 void gfx_wb_watch_end(void);
 extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */
@@ -718,6 +719,13 @@ void ep_pause(BOOL on);
 void ep_unload(void);
 BOOL ep_loaded(void);
 BOOL ep_own_timer(void);
+int ep_note_channels(void);          /* a note player's channels, 0 not one */
+/* A note player's ticks for the 5-8 channel mixer (modplay.c): a slot to
+ * fill (NULL: the queue is full), then queued. */
+struct PmTick;
+BOOL mp_mixing(void);
+struct PmTick *mp_mix_slot(void);
+void mp_mix_push(void);
 BOOL ep_song_ended(void);
 void ep_set_volume(int v);
 BOOL ep_step_position(int d);

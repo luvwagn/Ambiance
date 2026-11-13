@@ -245,6 +245,38 @@ static void mix_queue(BOOL hold)
     Cause(&mp.mix_int);
 }
 
+/* An EaglePlayer note player's tick (eagle.c fills it, in the tempo
+ * interrupt), for the mixer: a slot, NULL if the queue is full; then
+ * queued and mixed. */
+BOOL mp_mixing(void)
+{
+    return mp.mix8;
+}
+
+static UWORD mix_next;
+
+struct PmTick *mp_mix_slot(void)
+{
+    struct PmTick *t;
+    if (!mp.mix8)
+        return NULL;
+    mix_next = (UWORD)((mp.qhead + 1) & (MIX_Q - 1));
+    if (mix_next == mp.qtail) {
+        mp.mix_lost++;
+        return NULL;
+    }
+    t = &mp.q[mp.qhead];
+    t->samples = pm_tick_samples(mp.pm, mp.tick_cnt ? mp.tick_cnt : 14187);
+    t->hold = 0;
+    return t;
+}
+
+void mp_mix_push(void)
+{
+    mp.qhead = mix_next;
+    Cause(&mp.mix_int);
+}
+
 /* Paula's four channels on the rings, from their start, the next tick
  * written a lead ahead (some 120 ms: more than the slowest tempo's tick). */
 static void mix_rings_start(void)
@@ -1132,6 +1164,21 @@ static BOOL play_eagle(char *err, LONG errmax)
     tick = ep_start(&cnt);
     mp.ep_t0 = time_ms();
     mp.ep_played = 0;
+    {
+        /* a note player of 5-8 channels: mixed in pairs onto Paula's four,
+         * as ProTracker's 8-channel modules are */
+        int nn = ep_note_channels();
+        if (nn > 4 && tick && (mp.mix8 || mix_alloc(nn > PT_CHANS ? PT_CHANS : nn))) {
+            char m[120];
+            memset(mp.pm->v, 0, sizeof(mp.pm->v));
+            mp.mix_lost = 0;
+            mp.tick_cnt = cnt;
+            mix_rings_start();
+            sprintf(m, "a note player's %ld channels, mixed in pairs onto Paula's four at %lu Hz",
+                    (long)nn, (unsigned long)mp.pm->rate);
+            amce_log("music", m);
+        }
+    }
     mp.running = TRUE;
     if (tick) {
         mp.tick_cnt = cnt;
@@ -1299,6 +1346,8 @@ void mp_pause(BOOL on)
         else
             mp.ep_t0 = time_ms();
         ep_pause(on);
+        if (mp.mix8 && !on)
+            mix_rings_start();              /* the rings again, in step */
         return;
     }
     if (mp.engine == ENG_MIX) {
@@ -1458,6 +1507,8 @@ void mp_set_volume(int v)
         return;                             /* noted: applied when given back */
     if (mp.engine == ENG_EAGLE) {
         ep_set_volume(v);
+        if (mp.running && mp.mix8)
+            mix_volume();                   /* (a mixed note player's: the rings') */
         return;
     }
     if (mp.engine == ENG_MIX) {
