@@ -5654,7 +5654,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     BOOL sel = idx == p->sel;
     BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
     BOOL np = np_row(it);
-    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : sel ? PEN_WHITE : np ? PEN_ACCENT : PEN_TEXT;
+    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : np ? PEN_ACCENT : sel ? PEN_WHITE : PEN_TEXT;
     UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
                mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
                ? PEN_RULE : PEN_BG;
@@ -5674,7 +5674,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
                         sel ? PEN_WHITE : PEN_TEXT);
     else if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
-                 off ? PEN_RULE : sel ? PEN_WHITE : np ? PEN_ACCENT
+                 off ? PEN_RULE : np ? PEN_ACCENT : sel ? PEN_WHITE
                  : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     {
         /* the tag at the right: a setting's value; a picture's format or
@@ -5682,7 +5682,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         const char *tag = row_tag(p, it);
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
-            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : np ? PEN_ACCENT
+            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : np ? PEN_ACCENT : sel ? PEN_WHITE
                      : PEN_DIM, bg, 0, TS_SMALL);
             right -= tagw + U(8);
         }
@@ -7818,7 +7818,7 @@ static void np_eq_redraw(void)
                  : mouse_mode && i - p->top == hover_row ? PEN_RULE : PEN_BG;
         was = gfx_quiet_begin();
         gfx_mark(&g, MARK_PLAYING, g.pane_x, y,
-                 sel ? PEN_WHITE : np_row(it) ? PEN_ACCENT : PEN_TEXT, bg);
+                 np_row(it) ? PEN_ACCENT : sel ? PEN_WHITE : PEN_TEXT, bg);
         gfx_quiet_end(&g, was, g.pane_x, y, g.pane_x + g.mark_px - 1, y + g.mark_px - 1);
     }
 }

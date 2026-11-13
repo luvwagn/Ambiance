@@ -182,8 +182,8 @@ static volatile UBYTE nt_nlog, nt_logged;
 /* a mixed note player's channels, as Paula's registers would be (note_mix) */
 static const UBYTE *nm_ptr[PT_CHANS];
 static ULONG nm_len[PT_CHANS];
-static ULONG nm_slen4[4];
-static BOOL nm_wide;            /* more than four slots: spread (nm_voice) */       /* (the spectrum's: a start's whole length) */
+static ULONG nm_slen4[4];       /* (the spectrum's: a start's whole length) */
+static BOOL nm_wide;            /* more than four slots: spread (nm_voice) */
 static UWORD nm_per[PT_CHANS];
 static UBYTE nm_vol[PT_CHANS];
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
@@ -1264,8 +1264,8 @@ static void note_mix(UBYTE *nst, ULONG flags, ULONG maxvol)
             nm_per[v] = (UWORD)per;
         }
         if (c & NCHF_Volume) {
-            ULONG v = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
-            nm_vol[v] = (UBYTE)(v > 64 ? 64 : v);
+            ULONG vl = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
+            nm_vol[v] = (UBYTE)(vl > 64 ? 64 : vl);
         }
         if (c & NCHF_Sample) {
             const UBYTE *ss = (const UBYTE *)L(ch, NCH_SSTART);
