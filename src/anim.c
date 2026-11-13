@@ -904,12 +904,13 @@ static void bar_cleanup(void)
     memset(&bar, 0, sizeof(bar));
 }
 
-/* Loop: a rounded loop, an arrowhead on its top running right; pen set
- * (lit while looping, dim while not). */
-static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE pen)
+/* Loop: a loop over a straight arrow, the one that happens bright (loop
+ * on: the loop; off: the arrow, played through), the other dim. */
+static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE bright, UBYTE dim)
 {
-    WORD x0 = x + s / 6, x1 = x + s - s / 6, y0 = y + s / 4, y1 = y + s - s / 4, a = s / 6, i;
-    SetAPen(rp, pen);
+    WORD x0 = x + s / 6, x1 = x + s - s / 6, y0 = y + s / 6, y1 = y + s / 2, a = s / 7, i;
+    WORD ay = y + s - s / 5, b = s / 6;
+    SetAPen(rp, play_loop ? bright : dim);
     RectFill(rp, x0 + t, y0, x1 - t - a, y0 + t - 1);          /* the top, short of the head */
     RectFill(rp, x0 + t, y1 - t + 1, x1 - t, y1);              /* the bottom */
     RectFill(rp, x0, y0 + t, x0 + t - 1, y1 - t);              /* the sides */
@@ -917,6 +918,12 @@ static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYT
     for (i = 0; i <= a; i++) {                                 /* the head, pointing right */
         Move(rp, x1 - a - t + i, y0 + t / 2 - (a - i));
         Draw(rp, x1 - a - t + i, y0 + t / 2 + (a - i));
+    }
+    SetAPen(rp, play_loop ? dim : bright);                     /* the arrow under it */
+    RectFill(rp, x0, ay - t / 2, x1 - b, ay - t / 2 + t - 1);
+    for (i = 0; i <= b; i++) {
+        Move(rp, x1 - b + i, ay - (b - i));
+        Draw(rp, x1 - b + i, ay + (b - i));
     }
 }
 
@@ -947,12 +954,8 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
     case BT_STOP:
         RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
         break;
-    case BT_LOOP:                           /* on: latched, the glyph dark on a light box */
-        if (play_loop) {
-            SetAPen(rp, bar.fg);
-            RectFill(rp, x, y, x + s - 1, y + s - 1);
-        }
-        loop_glyph(rp, x, y, s, t, play_loop ? bar.bg : bar.fg);
+    case BT_LOOP:
+        loop_glyph(rp, x, y, s, t, bar.fg, bar.dim);
         break;
     case BT_VDOWN:
     case BT_VUP:
@@ -1387,8 +1390,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             ry = ry / 2 > 1 ? ry / 2 : 1;
         rx = ry * sx;
         {
-            /* loop on: latched, its face lit orange (off, as the others) */
-            UBYTE face = i == BT_LOOP && play_loop ? PEN_ACCENT : PEN_BAR;
+            UBYTE face = PEN_BAR;
             if (st.ring && i == st.focus && !(st.off & (1 << i))) {    /* the focus: a yellow ring */
                 WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
                 gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
@@ -1421,7 +1423,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
             break;
         case BT_LOOP:
-            loop_glyph(g->rp, ix, iy, s, t, GPEN(play_loop ? PEN_BAR : PEN_WHITE));
+            loop_glyph(g->rp, ix, iy, s, t, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE),
+                       GPEN(PEN_DIM));
             break;
         case BT_FULL: {                     /* four corners: out to fill, in to come back */
             WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;

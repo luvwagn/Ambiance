@@ -6378,11 +6378,6 @@ static void np_button(int i)
         if (mp_is_stream()) {
             bg = PEN_BAR;                   /* a station: nothing to loop */
             fg = PEN_RULE;
-        } else if (play_loop) {
-            /* on: latched, its face lit orange, the glyph dark on it (off,
-             * it is a button as the others are) */
-            bg = lit ? PEN_HL : PEN_ACCENT;
-            fg = lit ? PEN_WHITE : PEN_BAR;
         }
     }
     /* the glyph: an odd number of rows, about half the button, so each
@@ -6452,14 +6447,21 @@ static void np_button(int i)
         break;
     }
     case NB_LOOP: {
-        /* a loop: a frame t thick, an arrowhead on its top running right */
-        WORD lw = gh * sx + 2 * sx, lh = gh - 2, x0 = cx - lw / 2, y0 = cy - lh / 2, tt = t > 2 ? 2 : t;
-        WORD txs = tt * sx, hd = (lh / 2) | 1;
-        gfx_fill(&g, x0 + txs, y0, x0 + lw - 1 - txs - (hd + 1) / 2 * sx, y0 + tt - 1, fg);
-        gfx_fill(&g, x0 + txs, y0 + lh - tt, x0 + lw - 1 - txs, y0 + lh - 1, fg);
-        gfx_fill(&g, x0, y0 + tt, x0 + txs - 1, y0 + lh - tt - 1, fg);
-        gfx_fill(&g, x0 + lw - txs, y0 + tt, x0 + lw - 1, y0 + lh - tt - 1, fg);
-        np_tri(x0 + lw - txs - (hd + 1) / 2 * sx, y0 + tt / 2 - hd / 2, hd, sx, 1, fg);
+        /* a loop over a straight arrow: the one that happens bright (loop
+         * on: the loop; off: the arrow, played through), the other grey */
+        UBYTE on = fg, dim = fg == PEN_RULE ? PEN_RULE : PEN_DIM;
+        UBYTE lp = play_loop ? on : dim, ap = play_loop ? dim : on;
+        WORD lw = gh * sx + 2 * sx, x0 = cx - lw / 2, y0 = gy, tt = t > 2 ? 2 : t, txs = tt * sx;
+        WORD lh = gh * 3 / 5, hd = (lh / 2) | 1, ay = gy + gh - 1 - tt / 2, ahd = (gh / 3) | 1;
+        /* the loop: a frame, an arrowhead on its top running right */
+        gfx_fill(&g, x0 + txs, y0, x0 + lw - 1 - txs - (hd + 1) / 2 * sx, y0 + tt - 1, lp);
+        gfx_fill(&g, x0 + txs, y0 + lh - tt, x0 + lw - 1 - txs, y0 + lh - 1, lp);
+        gfx_fill(&g, x0, y0 + tt, x0 + txs - 1, y0 + lh - tt - 1, lp);
+        gfx_fill(&g, x0 + lw - txs, y0 + tt, x0 + lw - 1, y0 + lh - tt - 1, lp);
+        np_tri(x0 + lw - txs - (hd + 1) / 2 * sx, y0 + tt / 2 - hd / 2, hd, sx, 1, lp);
+        /* the arrow under it, straight through */
+        gfx_fill(&g, x0, ay - tt / 2, x0 + lw - 1 - (ahd + 1) / 2 * sx, ay - tt / 2 + tt - 1, ap);
+        np_tri(x0 + lw - (ahd + 1) / 2 * sx, ay - ahd / 2, ahd, sx, 1, ap);
         break;
     }
     case NB_VDOWN:
