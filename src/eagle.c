@@ -219,8 +219,9 @@ static const char *const dirs[] = {
 };
 
 /* Players known to hang on a check or need what AmigaMCE has not
- * (PlaySid: its check never came back here, on a module of another kind). */
-static const char *const skip[] = { "Core Design", "PlaySid", NULL };
+ * (PlaySid and DeliSID, the C64 SID players: their checks never came back
+ * here, on a module of another kind). */
+static const char *const skip[] = { "Core Design", "PlaySid", "DeliSID", NULL };
 
 /* Players that did not come back from a check here (hung, or crashed the
  * Amiga): a player's name is written to TRY_FILE before its check and the
@@ -782,9 +783,16 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
     if (!fn)
         fn = tag(t, EP_Check5);
     if (fn) {
+        /* no DOS requesters meanwhile: one asking for a disk or a library
+         * a check wants could wait behind AmigaMCE's screen, and the
+         * Amiga would look hung */
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
         amce_log("eagleplayer: checking with", name);   /* (Debug: the last before a hang) */
         trying(name);
+        me->pr_WindowPtr = (APTR)-1;
         rc = eh_call((APTR)fn, h->g, 0, 0);
+        me->pr_WindowPtr = old;
         trying(NULL);
     }
     if (rc != 0) {

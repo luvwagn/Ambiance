@@ -571,6 +571,8 @@ static void win_stat(struct Gfx *g, ULONG ms)
  * as it is now: resized smaller, the buffer is the old size until the
  * layout follows (RESIZE_SETTLE later), and copied whole it drew over the
  * window's right and bottom borders, which stayed so. */
+static void grip_stamp(struct Gfx *g);
+
 static void win_copy(struct Gfx *g, WORD x, WORD y, WORD w, WORD h)
 {
     struct Window *win = g->win;
@@ -580,9 +582,13 @@ static void win_copy(struct Gfx *g, WORD x, WORD y, WORD w, WORD h)
         w = iw - x;
     if (y + h > ih)
         h = ih - y;
-    if (w > 0 && h > 0)
+    if (w > 0 && h > 0) {
+        WORD s = gfx_window_grip(g);
         BltBitMapRastPort(wbuf_bm, x, y, win->RPort, win->BorderLeft + x, win->BorderTop + y, w, h,
                           0xC0);
+        if (s && x + w > g->w - s && y + h > g->h - s && !gfx_fs_on())
+            grip_stamp(g);                  /* the corner copied over: the grip again */
+    }
 }
 
 static void win_free(struct Gfx *g)
@@ -758,21 +764,25 @@ WORD gfx_window_grip(const struct Gfx *g)
     return g->wb && g->win ? GU(g, 11) : 0;
 }
 
-/* The grip drawn (three diagonal lines, as Workbench's own). */
-void gfx_window_grip_draw(struct Gfx *g, UBYTE pen)
+/* The grip (three diagonal lines, as Workbench's own), drawn on the window
+ * itself over what was copied there, so it stays on top of whatever the
+ * corner holds (the footer, or the content when the footer is hidden). */
+static void grip_stamp(struct Gfx *g)
 {
-    WORD s = gfx_window_grip(g), x1 = g->w - 1, y1 = g->h - 1, i, t = GU(g, 1) > 1 ? GU(g, 1) : 1;
-    if (!s)
-        return;
-    SetAPen(g->rp, GPEN(pen));
+    struct RastPort *rp = g->win->RPort;
+    WORD s = gfx_window_grip(g), i, t = GU(g, 1) > 1 ? GU(g, 1) : 1,
+         x1 = g->win->BorderLeft + g->w - 1, y1 = g->win->BorderTop + g->h - 1;
+    if (!s || g->w + g->win->BorderLeft + g->win->BorderRight > g->win->Width ||
+        g->h + g->win->BorderTop + g->win->BorderBottom > g->win->Height)
+        return;                             /* (resized smaller, not laid out yet) */
+    SetAPen(rp, GPEN(PEN_DIM));
     for (i = 1; i <= 3; i++) {
         WORD d = s * i / 3 - GU(g, 2), j;
         for (j = 0; j < t; j++) {
-            Move(g->rp, x1 - d + j, y1 - GU(g, 1));
-            Draw(g->rp, x1 - GU(g, 1), y1 - d + j);
+            Move(rp, x1 - d + j, y1 - GU(g, 1));
+            Draw(rp, x1 - GU(g, 1), y1 - d + j);
         }
     }
-    dirty = TRUE;
 }
 
 /* Sized by the grip: the inside asked for (kept within its limits and the

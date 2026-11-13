@@ -3963,14 +3963,31 @@ static const char *hint_text(void)
 
 static const char *hint_shown;      /* the hint in the footer now */
 
+/* In a window, used by the mouse, the footer's tips go once seen
+ * (FOOT_SEEN_MS), the content taking its room; keys bring them back. A
+ * message meanwhile shows in a footer drawn over the content's foot, and
+ * the content is drawn again when it goes. */
+#define FOOT_SEEN_MS 4000
+static BOOL foot_hidden, foot_over, foot_redraw;
+static ULONG foot_since;            /* shown (with the mouse in use) since */
+
 static void draw_footer(void)
 {
+    WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
     hint_shown = msg[0] ? NULL : hint_text();
-    gfx_fill(&g, 0, g.footer_y - U(1), g.w - 1, g.footer_y - 1, PEN_RULE);
-    gfx_fill(&g, 0, g.footer_y, g.w - 1, g.h - 1, PEN_BAR);
-    gfx_text(&g, U(6), g.footer_y + (g.h - g.footer_y - g.font_h) / 2, msg[0] ? msg : hint_text(),
+    if (foot_hidden && !msg[0]) {
+        if (foot_over) {                    /* a message's footer gone: what it covered */
+            foot_over = FALSE;
+            foot_redraw = TRUE;
+        }
+        return;
+    }
+    if (foot_hidden)
+        foot_over = TRUE;
+    gfx_fill(&g, 0, fy - U(1), g.w - 1, fy - 1, PEN_RULE);
+    gfx_fill(&g, 0, fy, g.w - 1, g.h - 1, PEN_BAR);
+    gfx_text(&g, U(6), fy + (g.h - fy - g.font_h) / 2, msg[0] ? msg : hint_text(),
              msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12) - gfx_window_grip(&g), TS_SMALL);
-    gfx_window_grip_draw(&g, PEN_DIM);      /* a window: its sizing grip in the corner */
 }
 
 /* Sizing the window by its grip: pressed there, the pointer followed (by
@@ -5812,12 +5829,17 @@ static void pointer_show(void)
 static BOOL np_on(void);
 static void np_update(void);
 
+static void foot_show(BOOL on);
+
 static void set_mouse_mode(BOOL on)
 {
     struct Page *p = cur();
     if (on == mouse_mode)
         return;
     mouse_mode = on;
+    foot_since = on ? time_ms() : 0;
+    if (!on && foot_hidden)
+        foot_show(TRUE);                    /* keys: their tips again */
     if (p && p->type == PT_LIST && !pane_pending)
         draw_gutter(p);
     if (!on)
@@ -8238,6 +8260,10 @@ static void pane_settle(void);
 
 static void draw_all(void)
 {
+    if (foot_hidden && (!g.wb || g.footer_y != g.h)) {
+        foot_hidden = foot_over = FALSE;    /* opened again (its metrics anew): shown */
+        foot_since = mouse_mode ? time_ms() : 0;
+    }
     aside_w = -1;               /* the screen may be new: work the column out again */
     pane_settle();
     gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
@@ -9643,15 +9669,11 @@ static void toggle_window(void)
  * lines keep their wrapping until it is opened again. */
 #define RESIZE_SETTLE 150
 
-static void window_resized(void)
+/* What was made for the layout let go before it changes (text boxes, a
+ * text page's picture, the letter column's choice). */
+static void layout_let_go(void)
 {
-    ULONG t0 = time_ms();
-    WORD ow = g.w, oh = g.h, vis;
-    char m[200];
     int i;
-    gfx_resized_at = 0;
-    if (!g.wb)
-        return;
     hold_stop();
     ov.on = FALSE;
     tb_close(&pv_tb);
@@ -9667,8 +9689,58 @@ static void window_resized(void)
         }
         p->aside = 0;
     }
+}
+
+/* ...and after: the rest made for it, and each list's selection in view. */
+static void layout_again(void)
+{
+    WORD vis;
+    int i;
+    spin_free();
+    ov_bm_free();
+    pv_flush();
+    vis_stop();
+    vis = list_visible();
+    for (i = 0; i < depth; i++) {
+        struct Page *p = &pages[i];
+        if (p->sel >= p->top + vis)
+            p->top = p->sel - vis + 1;
+        if (p->top > p->list.count - vis)
+            p->top = p->list.count - vis;
+        if (p->top < 0)
+            p->top = 0;
+    }
+}
+
+/* The footer shown or hidden (a window used by the mouse): the content's
+ * foot moved, everything laid out again. */
+static void foot_show(BOOL on)
+{
+    if (on != foot_hidden || !g.wb)
+        return;
+    layout_let_go();
+    foot_hidden = !on;
+    foot_over = FALSE;
+    g.footer_y = foot_hidden ? g.h : g.h - U(12);
+    layout_again();
+    draw_all();
+    foot_since = on && mouse_mode ? time_ms() : 0;
+}
+
+static void window_resized(void)
+{
+    ULONG t0 = time_ms();
+    WORD ow = g.w, oh = g.h, vis;
+    char m[200];
+    int i;
+    gfx_resized_at = 0;
+    if (!g.wb)
+        return;
+    layout_let_go();
     if (!gfx_window_resize(&g))
         return;
+    if (foot_hidden)
+        g.footer_y = g.h;                   /* (still hidden) */
     spin_free();
     ov_bm_free();
     pv_flush();
@@ -13543,6 +13615,14 @@ static int app_main(void)
                 joy_poll();
                 if (gfx_resized_at && (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
                     window_resized();   /* (a resize's last NEWSIZE, settled) */
+                if (g.wb && mouse_mode && !foot_hidden && !msg[0] && foot_since &&
+                    time_ms() - foot_since >= FOOT_SEEN_MS)
+                    foot_show(FALSE);   /* the mouse's: its tips seen, their room given over */
+                if (foot_redraw) {
+                    foot_redraw = FALSE;
+                    if (foot_hidden)
+                        draw_all();     /* a message's footer gone from over the content */
+                }
                 /* the letter lingers ~0.5 s after the glide ends */
                 if (ov.on && !hold_active()) {
                     if (!ov.linger)

@@ -345,7 +345,6 @@ void gfx_window_log(struct Gfx *g);    /* Debug: the window's measurements so fa
  * its place and size kept (WindowBox), given back next time. */
 BOOL gfx_window_resize(struct Gfx *g);
 WORD gfx_window_grip(const struct Gfx *g);      /* our sizing grip's size, 0 none */
-void gfx_window_grip_draw(struct Gfx *g, UBYTE pen);
 void gfx_window_size_to(struct Gfx *g, WORD iw, WORD ih);
 extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */
 BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k);
