@@ -237,8 +237,11 @@ twice its English's bytes and 16 more, so the Greek is written to fit.
 | A-Z | Jump to a letter; CD32 shoulder buttons step letters |
 | Now Playing | Left/Right choose a button, Fire presses it; Space play/pause; S stop; N/P next/previous; `,` and `.` back/forward; Up/Down volume |
 
-A Now playing row at the top of the music lists takes you back to what is
-playing.
+A Now playing row at the top of the lists (Games, Demos, Mods, Music,
+Pictures, Videos, Radio and Plex's) takes you back to what is playing.
+What was playing when AmigaMCE quit comes back at its next start, loaded
+and stopped, with its playlist and the row: Play goes on from where it
+was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
 
 ### Setting up Plex
 

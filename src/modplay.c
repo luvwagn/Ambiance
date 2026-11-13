@@ -1986,8 +1986,8 @@ static BOOL eagle_seek_ms(ULONG ms)
     ULONG now, at_us, want_us = ms * 1000, t0 = time_ms(), n = 0;
     BOOL was_paused = mp.paused;
     char m[120];
-    if (!mp.med_units || !mp.running || ep_own_timer() || !mp.med_cnt0)
-        return FALSE;
+    if (!mp.med_units || !mp.running || ep_own_timer())
+        return FALSE;                       /* (its first tick not needed: the timer as it is) */
     now = mp.ep_played + (!mp.paused ? time_ms() - mp.ep_t0 : 0);
     tick_run(FALSE);
     if (ms < now) {

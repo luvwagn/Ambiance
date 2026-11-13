@@ -7310,6 +7310,9 @@ static const char *plex_tag(const struct Item *it)
 
 /* Load playlist entry idx and play it; FALSE (and why, in msg) if not. */
 static BOOL np_start_now(LONG idx);
+static BOOL np_no_play;             /* np_start_now: loaded only, not played (a resume) */
+static ULONG np_resume_ms;          /* loaded at the start, stopped: Play goes on from here */
+static ULONG np_resume_total, np_resume_size;  /* (a track's length and file, then) */
 
 static BOOL np_start(LONG idx)
 {
@@ -7333,6 +7336,8 @@ static BOOL np_start_now(LONG idx)
     struct Item *it;
     if (!np.list.pool || idx < 0 || idx >= np.list.count)
         return FALSE;
+    if (!np_no_play)
+        np_resume_ms = 0;                   /* something else: no going on from before */
     it = &np.list.items[idx];
     busy_begin();
     if (it->kind == IT_STATION) {
@@ -7449,6 +7454,10 @@ static BOOL np_start_now(LONG idx)
     np.idx = idx;
     np.ended_seen = FALSE;
     np.seek_due = 0;
+    if (np_no_play) {
+        np_mark_lists(FALSE);               /* (loaded, stopped: Now playing's row shows it) */
+        return TRUE;
+    }
     if (!mp_play(err, sizeof(err))) {
         set_msg(err);
         np_mark_lists(FALSE);
@@ -7584,6 +7593,200 @@ static void np_redraw_all(void)
     }
 }
 
+/* ---- what was playing when AmigaMCE quit, and where: kept, loaded at
+ * the next start (stopped), so Now playing's row is there and Play goes on
+ * from where it was. Its playlist, its place, where it was started from. */
+#define RESUME_FILE "ENVARC:AmigaMCE/Resume"
+#define RESUME_MAX  (512L * 1024)
+
+static void resume_store(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    struct MpStatus st;
+    char line[160];
+    BPTR fh;
+    LONG i;
+    me->pr_WindowPtr = (APTR)-1;
+    if (!mp_loaded() || !np.list.pool || np.idx < 0 || np.idx >= np.list.count) {
+        DeleteFile((CONST_STRPTR)RESUME_FILE);  /* nothing: none next time */
+        me->pr_WindowPtr = oldwin;
+        return;
+    }
+    mp_status(&st);
+    ensure_dir("ENVARC:AmigaMCE");
+    fh = Open((CONST_STRPTR)RESUME_FILE, MODE_NEWFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return;
+    FPuts(fh, (CONST_STRPTR)"AmigaMCE resume 1\n");
+    sprintf(line, "%ld\t%lu\t%lu\t%lu\t%ld\t%ld\t%ld\n", (long)np.idx,
+            (unsigned long)(mp_is_stream() && !mp_is_track() ? 0 : st.elapsed_ms),
+            (unsigned long)st.total_ms, (unsigned long)(mp_is_track() ? st_size() : 0),
+            (long)np_src, (long)np_trail_n, (long)np.list.count);
+    FPuts(fh, (CONST_STRPTR)line);
+    FPuts(fh, (CONST_STRPTR)np.folder);
+    FPuts(fh, (CONST_STRPTR)"\n");
+    FPuts(fh, (CONST_STRPTR)np_src_list);
+    FPuts(fh, (CONST_STRPTR)"\n");
+    for (i = 0; i < np_trail_n; i++) {
+        FPuts(fh, (CONST_STRPTR)np_trail[i]);
+        FPuts(fh, (CONST_STRPTR)"\n");
+    }
+    for (i = 0; i < np.list.count; i++) {
+        const struct Item *it = &np.list.items[i];
+        sprintf(line, "%lu %lu %lu\n", (unsigned long)it->kind, (unsigned long)it->flags,
+                (unsigned long)it->action);
+        FPuts(fh, (CONST_STRPTR)line);
+        FPuts(fh, (CONST_STRPTR)(it->label ? it->label : ""));
+        FPuts(fh, (CONST_STRPTR)"\n");
+        FPuts(fh, (CONST_STRPTR)(it->path ? it->path : ""));
+        FPuts(fh, (CONST_STRPTR)"\n");
+        FPuts(fh, (CONST_STRPTR)(it->sortkey ? it->sortkey : ""));
+        FPuts(fh, (CONST_STRPTR)"\n");
+    }
+    Close(fh);
+    sprintf(line, "%.80s, at %lu ms: kept for the next start", np.list.items[np.idx].label,
+            (unsigned long)st.elapsed_ms);
+    amce_log("resume", line);
+}
+
+static ULONG resume_num(char **s)
+{
+    ULONG v = 0;
+    while (**s >= '0' && **s <= '9')
+        v = v * 10 + (ULONG)(*(*s)++ - '0');
+    while (**s == '\t' || **s == ' ')
+        (*s)++;
+    return v;
+}
+
+static void resume_load(void)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    char *buf, *s, m[160];
+    LONG len, pos = 0, i, n, idx, trail;
+    ULONG ms, total, size;
+    int src;
+    BPTR fh;
+    me->pr_WindowPtr = (APTR)-1;
+    fh = Open((CONST_STRPTR)RESUME_FILE, MODE_OLDFILE);
+    me->pr_WindowPtr = oldwin;
+    if (!fh)
+        return;
+    Seek(fh, 0, OFFSET_END);
+    len = Seek(fh, 0, OFFSET_BEGINNING);
+    if (len <= 0 || len > RESUME_MAX || !(buf = AllocVec(len + 1, MEMF_ANY))) {
+        Close(fh);
+        return;
+    }
+    len = Read(fh, buf, len);
+    Close(fh);
+    if (len <= 0) {
+        FreeVec(buf);
+        return;
+    }
+    buf[len] = 0;
+    if (!(s = nav_line(buf, len, &pos)) || strcmp(s, "AmigaMCE resume 1") != 0 ||
+        !(s = nav_line(buf, len, &pos))) {
+        FreeVec(buf);
+        return;
+    }
+    idx = (LONG)resume_num(&s);
+    ms = resume_num(&s);
+    total = resume_num(&s);
+    size = resume_num(&s);
+    src = *s == '-' ? (s++, -(int)resume_num(&s)) : (int)resume_num(&s);
+    trail = (LONG)resume_num(&s);
+    n = (LONG)resume_num(&s);
+    if (np.list.pool)
+        list_free(&np.list);
+    list_init(&np.list);
+    if ((s = nav_line(buf, len, &pos)))
+        amce_strlcpy(np.folder, s, sizeof(np.folder));
+    if ((s = nav_line(buf, len, &pos)))
+        amce_strlcpy(np_src_list, s, sizeof(np_src_list));
+    np_trail_n = 0;
+    for (i = 0; i < trail && (s = nav_line(buf, len, &pos)); i++)
+        if (np_trail_n < MAXDEPTH)
+            amce_strlcpy(np_trail[np_trail_n++], s, sizeof(np_trail[0]));
+    for (i = 0; i < n; i++) {
+        char *k, *label, *path, *key;
+        ULONG kind, flags, action;
+        struct Item *it;
+        if (!(k = nav_line(buf, len, &pos)) || !(label = nav_line(buf, len, &pos)) ||
+            !(path = nav_line(buf, len, &pos)) || !(key = nav_line(buf, len, &pos)))
+            break;
+        kind = resume_num(&k);
+        flags = resume_num(&k);
+        action = resume_num(&k);
+        if ((it = list_add(&np.list, label, path, key, (UBYTE)kind))) {
+            it->flags = (UBYTE)(flags & ~ITEM_SPLIT);
+            it->action = (UBYTE)action;
+        }
+    }
+    FreeVec(buf);
+    if (idx < 0 || idx >= np.list.count) {
+        list_free(&np.list);
+        list_init(&np.list);
+        np.idx = -1;
+        return;
+    }
+    np_src = src;
+    np_no_play = TRUE;
+    if (np_start_now(idx)) {
+        np_resume_ms = ms;
+        np_resume_total = total;
+        np_resume_size = size;
+        sprintf(m, "%.80s: loaded, stopped; Play goes on from %lu ms", np.list.items[idx].label,
+                (unsigned long)ms);
+    } else {
+        sprintf(m, "%.80s: could not be loaded again", np.list.items[idx].label);
+        np.idx = -1;
+    }
+    np_no_play = FALSE;
+    msg[0] = 0;
+    amce_log("resume", m);
+}
+
+/* Play on what the last run left loaded: from where it was. FALSE: played
+ * as any is (a station: live, from now). */
+static BOOL resume_play(void)
+{
+    ULONG ms = np_resume_ms;
+    char err[100];
+    np_resume_ms = 0;
+    if (!ms || !mp_loaded())
+        return FALSE;
+    if (mp_is_track()) {
+        np.seeked = TRUE;
+        np_track_from(np.idx, ms, np_resume_total, np_resume_size, mp_stream_name(),
+                      mp_track_by());
+        return TRUE;
+    }
+    if (mp_is_stream())
+        return FALSE;
+    if (!mp_play(err, sizeof(err))) {
+        set_msg(err);
+        return TRUE;
+    }
+    if (!mp_seek_ms(ms)) {
+        /* ProTracker's: the position it was in */
+        struct MpStatus st;
+        int pos, best = 0;
+        mp_status(&st);
+        for (pos = 0; pos < st.songlen; pos++) {
+            ULONG at = mp_position_ms(pos);
+            if (at != 0xFFFFFFFFUL && at <= ms && at >= mp_position_ms(best))
+                best = pos;
+        }
+        if (best)
+            mp_seek(best);
+    }
+    return TRUE;
+}
+
 static void np_press(int b)
 {
     char err[100];
@@ -7656,6 +7859,8 @@ static void np_press(int b)
             mp_pause(TRUE);
         } else if (mp_paused()) {
             mp_pause(FALSE);
+        } else if (resume_play()) {
+            ;                               /* (left by the last run: on from where it was) */
         } else if (!mp_play(err, sizeof(err))) {
             set_msg(err);
         }
@@ -13856,6 +14061,7 @@ static int app_main(void)
 
     if (debug_on)
         dbg_cpu_start();
+    resume_load();                  /* what was playing at the last quit: loaded, stopped */
     {
         /* where the last run left off: its section, its trail, its pane */
         int at, i;
@@ -14054,6 +14260,7 @@ out:
         amce_log("previews", m);
     }
     amce_log("quitting", "");
+    resume_store();                 /* what plays now, for the next start */
     radio_stop();
     if (depth)
         nav_store(TRUE);            /* where to start next time */
