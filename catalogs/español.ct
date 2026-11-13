@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 Cargando captura...
 ; Loading screenshot...
+MSG_551A6630
+Silenciado
+; Muted
 MSG_65C00D26
 Volumen %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ Repetir activado: vuelve a sonar al terminar
 MSG_0144F316
 Repetir desactivado: se detiene al terminar
 ; Loop off: it stops at its end
+MSG_230A5085
+Sonido activado
+; Sound on
 MSG_6AA26665
 Reproduciendo
 ; Now playing
@@ -1093,6 +1099,12 @@ Iconizar necesita el Workbench
 MSG_7170B5C2
 Salir de AmigaMCE
 ; Quit AmigaMCE
+MSG_336326B3
+Pista %ld de %ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld de %ld
+; %ld of %ld
 MSG_4C560A92
 Conexiones: la interfaz que elija la pila
 ; Connections: the stack's choice of interface

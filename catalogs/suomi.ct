@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 Ladataan kuvakaappausta...
 ; Loading screenshot...
+MSG_551A6630
+Mykistetty
+; Muted
 MSG_65C00D26
 Äänenvoimakkuus %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ Toisto päällä: soi uudelleen loputtuaan
 MSG_0144F316
 Toisto pois: pysähtyy loputtuaan
 ; Loop off: it stops at its end
+MSG_230A5085
+Ääni päällä
+; Sound on
 MSG_6AA26665
 Nyt soi
 ; Now playing
@@ -1093,6 +1099,12 @@ Kuvakkeeksi pienentäminen vaatii Workbenchin
 MSG_7170B5C2
 Lopeta AmigaMCE
 ; Quit AmigaMCE
+MSG_336326B3
+Kappale %ld/%ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld/%ld
+; %ld of %ld
 MSG_4C560A92
 Yhteydet: pinon valitsema liitäntä
 ; Connections: the stack's choice of interface

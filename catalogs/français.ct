@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 Chargement de la capture...
 ; Loading screenshot...
+MSG_551A6630
+Son coupé
+; Muted
 MSG_65C00D26
 Volume %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ Boucle activée : la lecture reprend à la fin
 MSG_0144F316
 Boucle désactivée : la lecture s'arrête à la fin
 ; Loop off: it stops at its end
+MSG_230A5085
+Son rétabli
+; Sound on
 MSG_6AA26665
 En lecture
 ; Now playing
@@ -1093,6 +1099,12 @@ L'iconification nécessite le Workbench
 MSG_7170B5C2
 Quitter AmigaMCE
 ; Quit AmigaMCE
+MSG_336326B3
+Piste %ld sur %ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld sur %ld
+; %ld of %ld
 MSG_4C560A92
 Connexions : l'interface choisie par la pile
 ; Connections: the stack's choice of interface

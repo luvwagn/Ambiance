@@ -403,6 +403,7 @@ BOOL gfx_window_wanted;
 BOOL gfx_close_asked;
 BOOL gfx_iconify_asked;
 BOOL gfx_iconify_gadget;
+BOOL gfx_mini_asked;            /* the window's zoom gadget: the mini player (main.c) */
 ULONG gfx_resized_at;           /* a NEWSIZE's time (0 none): laid out again once it settles */
 UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 #define WIN_DW 512          /* inside, design units: as a 640 x 480 screen's layout */
@@ -659,18 +660,23 @@ static void win_menus_off(struct Gfx *g)
     win_vi = NULL;
 }
 
-static void win_menus_on(struct Gfx *g)
+static void win_menus_for(struct Gfx *g, struct Window *w)
 {
-    if (!win_nm || !g->win)
+    if (!win_nm || !w)
         return;
     if (!GadToolsBase && !(GadToolsBase = OpenLibrary((CONST_STRPTR)"gadtools.library", 39)))
         return;
     if (!(win_vi = GetVisualInfo(g->scr, TAG_END)) || !(win_menu = CreateMenus(win_nm, TAG_END)) ||
         !LayoutMenus(win_menu, win_vi, GTMN_NewLookMenus, TRUE, TAG_END) ||
-        !SetMenuStrip(g->win, win_menu)) {
+        !SetMenuStrip(w, win_menu)) {
         amce_log("window", "its menus could not be made");
         win_menus_off(g);
     }
+}
+
+static void win_menus_on(struct Gfx *g)
+{
+    win_menus_for(g, g->win);
 }
 
 /* Made again (the language changed). */
@@ -1151,9 +1157,16 @@ static void open_finish(struct Gfx *g);
 /* The window itself, at left, top, iw x ih inside (bw, bh its borders):
  * g->win. OS 3.2 (Intuition V46 on) draws an iconify gadget in its title
  * bar when asked. */
+static WORD win_zoom[4];                    /* its zoom box: the mini player's size, in place */
+
 static BOOL win_window(struct Gfx *g, WORD left, WORD top, WORD iw, WORD ih, WORD bw, WORD bh)
 {
     BOOL icon = gfx_iconify_gadget && IntuitionBase->LibNode.lib_Version >= 46;
+    WORD mw, mh;
+    gfx_mini_size(g->scr, &mw, &mh, NULL);
+    win_zoom[0] = win_zoom[1] = -1;         /* (V39: the size alone, the window stays put) */
+    win_zoom[2] = mw + bw;
+    win_zoom[3] = mh + bh;
     g->win = OpenWindowTags(NULL,
                             WA_PubScreen, (ULONG)g->scr, WA_Left, left, WA_Top, top,
                             WA_InnerWidth, iw, WA_InnerHeight, ih, WA_AutoAdjust, TRUE,
@@ -1165,6 +1178,7 @@ static BOOL win_window(struct Gfx *g, WORD left, WORD top, WORD iw, WORD ih, WOR
                             WA_MinHeight, (LONG)WIN_MIN_DH * g->k / 256 + bh,
                             WA_MaxWidth, ~0UL, WA_MaxHeight, ~0UL,
                             icon ? WA_IconifyGadget : TAG_IGNORE, TRUE,
+                            WA_Zoom, (ULONG)win_zoom,
                             WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                                       IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW |
                                       IDCMP_ACTIVEWINDOW | IDCMP_CLOSEWINDOW |
@@ -1332,6 +1346,10 @@ BOOL gfx_window_msg(struct Gfx *g, ULONG cls, UWORD code)
             gfx_close_asked = TRUE;
         return TRUE;
     case IDCMP_NEWSIZE:
+        if (g->win->Flags & WFLG_ZOOMED) {
+            gfx_mini_asked = TRUE;          /* its zoom gadget: the mini player */
+            return TRUE;
+        }
         gfx_resized_at = time_ms() ? time_ms() : 1;    /* (opaque resizing: many) */
         return TRUE;
     case IDCMP_ACTIVEWINDOW:
@@ -1399,6 +1417,197 @@ BOOL gfx_open_hidden(struct Gfx *g, const struct Caps *c, int style)
     if (gfx_window_problem(c))
         return FALSE;
     return win_open(g, style, FALSE);
+}
+
+/* ---- The mini player (main.c): a small window of its own while the
+ * window is away (gfx_window_hide), drawn in the pixel font (Pixelify Sans
+ * 12, 24 or 36: 1x, 2x or 3x by Workbench's height) into a buffer of its
+ * own, whatever the window's text size or style. Its zoom gadget brings
+ * the window back. */
+static struct BitMap *mini_bm;
+static struct Layer_Info *mini_li;
+static struct Layer *mini_lay;
+static WORD mini_zoom[4];
+
+/* Its inside at Workbench's size (and its scale, 1-3). */
+void gfx_mini_size(struct Screen *wb, WORD *w, WORD *h, WORD *k)
+{
+    WORD kk = wb ? wb->Height / 500 : 1;
+    if (kk < 1)
+        kk = 1;
+    if (kk > 3)
+        kk = 3;
+    *w = GFX_MINI_W * kk;
+    *h = GFX_MINI_H * kk;
+    if (k)
+        *k = kk;
+}
+
+static void mini_free(struct Gfx *mg)
+{
+    if (mini_lay)
+        DeleteLayer(0, mini_lay);
+    if (mini_li)
+        DisposeLayerInfo(mini_li);
+    WaitBlit();
+    if (mini_bm)
+        FreeBitMap(mini_bm);
+    mini_lay = NULL;
+    mini_li = NULL;
+    mini_bm = NULL;
+    if (mg->font)
+        CloseFont(mg->font);
+    mg->font = NULL;
+    mg->rp = NULL;
+}
+
+/* Opened on Workbench (g's: the window hidden) at left, top; mg made
+ * ready to draw into its buffer. NULL: it could not. */
+struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top)
+{
+    struct Window *w;
+    struct TextAttr ta;
+    WORD iw, ih, kk, bw, bh, mw, mh;
+    BOOL icon = gfx_iconify_gadget && IntuitionBase->LibNode.lib_Version >= 46;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    char m[120];
+    if (!g->wb || !g->scr)
+        return NULL;
+    memset(mg, 0, sizeof(*mg));
+    gfx_mini_size(g->scr, &iw, &ih, &kk);
+    wb_box(g->scr, &bw, &bh, &mw, &mh);
+    if (left < 0 || left + iw + bw > g->scr->Width)
+        left = left < 0 ? 0 : g->scr->Width - (iw + bw);
+    if (top < 0 || top + ih + bh > g->scr->Height)
+        top = top < 0 ? g->scr->BarHeight + 1 : g->scr->Height - (ih + bh);
+    mini_zoom[0] = mini_zoom[1] = -1;       /* (the window's size, where this is) */
+    mini_zoom[2] = win_iw + bw;
+    mini_zoom[3] = win_ih + bh;
+    if (!(mini_bm = AllocBitMap(iw, ih, g->depth, BMF_MINPLANES, g->scr->RastPort.BitMap)) ||
+        !LayersBase || !(mini_li = NewLayerInfo()) ||
+        !(mini_lay = CreateUpfrontLayer(mini_li, mini_bm, 0, 0, iw - 1, ih - 1, LAYERSIMPLE, NULL))) {
+        mini_free(mg);
+        amce_log("mini player", "no memory for its buffer");
+        return NULL;
+    }
+    mg->scr = g->scr;
+    mg->rp = mini_lay->rp;
+    mg->w = iw;
+    mg->h = ih;
+    mg->depth = g->depth;
+    mg->k = 256 * kk;
+    mg->kint = (UBYTE)kk;
+    mg->style = STYLE_PIXEL;
+    mg->mode = g->mode;
+    mg->wb = TRUE;
+    mg->truecolor = g->truecolor;
+    me->pr_WindowPtr = (APTR)-1;
+    ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+    ta.ta_YSize = 12 * kk;
+    ta.ta_Style = FS_NORMAL;
+    ta.ta_Flags = FPF_DESIGNED;
+    mg->font = DiskfontBase ? OpenDiskFont(&ta) : NULL;
+    me->pr_WindowPtr = oldwin;
+    if (!mg->font) {
+        ta.ta_Name = (STRPTR)"topaz.font";
+        ta.ta_YSize = 8;
+        ta.ta_Flags = FPF_ROMFONT;
+        mg->font = OpenFont(&ta);
+    }
+    if (mg->font) {
+        SetFont(mg->rp, mg->font);
+        mg->font_h = mg->font->tf_YSize;
+        mg->baseline = mg->font->tf_Baseline;
+    }
+    SetDrMd(mg->rp, JAM1);
+    w = OpenWindowTags(NULL,
+                       WA_PubScreen, (ULONG)g->scr, WA_Left, left, WA_Top, top,
+                       WA_InnerWidth, iw, WA_InnerHeight, ih,
+                       WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
+                       WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, FALSE,
+                       WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE, WA_NewLookMenus, TRUE,
+                       icon ? WA_IconifyGadget : TAG_IGNORE, TRUE,
+                       WA_Zoom, (ULONG)mini_zoom,
+                       WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                                 IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW | IDCMP_ACTIVEWINDOW |
+                                 IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_NEWSIZE |
+                                 IDCMP_MENUPICK,
+                       TAG_END);
+    if (!w) {
+        mini_free(mg);
+        amce_log("mini player", "OpenWindow failed");
+        return NULL;
+    }
+    mg->win = w;
+    win_menus_for(g, w);
+    sprintf(m, "%ld x %ld at %ld, %ld, %ldx (Pixelify Sans %ld)", (long)iw, (long)ih,
+            (long)w->LeftEdge, (long)w->TopEdge, (long)kk, (long)(12 * kk));
+    amce_log("mini player", m);
+    return w;
+}
+
+/* What was drawn, x0..x1, y0..y1 of it, copied into its window. */
+void gfx_mini_show(struct Gfx *mg, WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    struct Window *w = mg->win;
+    if (!w || !mini_bm)
+        return;
+    if (x0 < 0)
+        x0 = 0;
+    if (y0 < 0)
+        y0 = 0;
+    if (x1 > (WORD)mg->w - 1)
+        x1 = mg->w - 1;
+    if (y1 > (WORD)mg->h - 1)
+        y1 = mg->h - 1;
+    if (x1 < x0 || y1 < y0)
+        return;
+    WaitBlit();
+    BltBitMapRastPort(mini_bm, x0, y0, w->RPort, w->BorderLeft + x0, w->BorderTop + y0,
+                      x1 - x0 + 1, y1 - y0 + 1, 0xC0);
+}
+
+/* A window message of its own: refresh dealt with here; TRUE. */
+void gfx_mini_refresh(struct Gfx *mg)
+{
+    if (!mg->win)
+        return;
+    BeginRefresh(mg->win);
+    gfx_mini_show(mg, 0, 0, mg->w - 1, mg->h - 1);
+    EndRefresh(mg->win, TRUE);
+}
+
+/* Closed: the window comes back where it was left (its top left). */
+void gfx_mini_close(struct Gfx *g, struct Gfx *mg)
+{
+    if (mg->win) {
+        win_left = mg->win->LeftEdge;
+        win_top = mg->win->TopEdge;
+        if (win_menu)
+            ClearMenuStrip(mg->win);
+        CloseWindow(mg->win);
+        mg->win = NULL;
+    }
+    win_menus_off(g);
+    mini_free(mg);
+}
+
+/* A thumbnail drawn as it is at x, y (a true-colour Workbench). */
+void gfx_mini_thumb(struct Gfx *mg, const struct Thumb *t, WORD x, WORD y)
+{
+    struct BitMap *tmp;
+    struct RastPort trp;
+    if (!t || !mg->truecolor || !CyberGfxBase ||
+        !(tmp = AllocBitMap(t->w, t->h, GetBitMapAttr(mg->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                            mg->rp->BitMap)))
+        return;
+    InitRastPort(&trp);
+    trp.BitMap = tmp;
+    WriteLUTPixelArray(t->px, 0, 0, t->mod, &trp, (APTR)t->pal, 0, 0, t->w, t->h, CTABFMT_XRGB8);
+    BltBitMapRastPort(tmp, 0, 0, mg->rp, x, y, t->w, t->h, 0xC0);
+    WaitBlit();
+    FreeBitMap(tmp);
 }
 
 BOOL gfx_input_ours(const struct Gfx *g)

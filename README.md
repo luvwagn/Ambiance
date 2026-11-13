@@ -154,7 +154,13 @@ of the Amiga to how fast it really is.
   Workbench's, and leaves an AppIcon with a musical note on Workbench: the
   music plays on, a video stops and the viewer closes. Double-click the
   icon (or its Open) to bring AmigaMCE back where it was; Workbench's
-  Tools > Quit AmigaMCE quits. Pictures and videos go full screen from it (their button, F or
+  Tools > Quit AmigaMCE quits. Its zoom gadget swaps the window for a mini
+  player: the cover, what plays and where it is in its album or list, the
+  time and its bar (click it to go there), Previous, Play, Stop, Next,
+  mute, the volume and a meter, in the pixel font at 1x, 2x or 3x by
+  Workbench's size (360 x 100 at 1x). Its own zoom gadget, a click on the
+  cover, Esc or Return bring the window back. Space plays and pauses,
+  Left/Right seek, Up/Down the volume, M mutes, N and P skip. Pictures and videos go full screen from it (their button, F or
   Amiga-F) on a screen in Workbench's own mode, so the monitor does not
   change mode. When Workbench's screen mode is changed (ScreenMode prefs),
   the window closes as Workbench does, so no "Intuition is attempting to

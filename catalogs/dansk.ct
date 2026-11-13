@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 Indlæser skærmbillede...
 ; Loading screenshot...
+MSG_551A6630
+Lyd slået fra
+; Muted
 MSG_65C00D26
 Lydstyrke %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ Gentag til: den spiller igen, når den slutter
 MSG_0144F316
 Gentag fra: den stopper, når den slutter
 ; Loop off: it stops at its end
+MSG_230A5085
+Lyd slået til
+; Sound on
 MSG_6AA26665
 Spiller nu
 ; Now playing
@@ -1093,6 +1099,12 @@ Ikonificering kræver Workbench
 MSG_7170B5C2
 Afslut AmigaMCE
 ; Quit AmigaMCE
+MSG_336326B3
+Nummer %ld af %ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld af %ld
+; %ld of %ld
 MSG_4C560A92
 Forbindelser: det interface, stakken vælger
 ; Connections: the stack's choice of interface

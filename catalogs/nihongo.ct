@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 スクリーンショットを読み込み中...
 ; Loading screenshot...
+MSG_551A6630
+ミュート
+; Muted
 MSG_65C00D26
 音量 %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ MSG_0B3E0086
 MSG_0144F316
 ループ オフ: 終わると止まります
 ; Loop off: it stops at its end
+MSG_230A5085
+サウンドオン
+; Sound on
 MSG_6AA26665
 再生中
 ; Now playing
@@ -1093,6 +1099,12 @@ MSG_4926346E
 MSG_7170B5C2
 AmigaMCEを終了
 ; Quit AmigaMCE
+MSG_336326B3
+トラック %ld/%ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld/%ld
+; %ld of %ld
 MSG_4C560A92
 接続: スタックが選ぶインターフェース
 ; Connections: the stack's choice of interface

@@ -347,6 +347,18 @@ extern BOOL gfx_iconify_gadget;
 BOOL gfx_window_hide(struct Gfx *g);
 BOOL gfx_window_unhide(struct Gfx *g);
 BOOL gfx_open_hidden(struct Gfx *g, const struct Caps *c, int style);
+/* The mini player's window (main.c draws it): its zoom gadget and the
+ * window's swap them. GFX_MINI_W x GFX_MINI_H at 1x. */
+#define GFX_MINI_W 360
+#define GFX_MINI_H 100
+extern BOOL gfx_mini_asked;
+struct Thumb;
+void gfx_mini_size(struct Screen *wb, WORD *w, WORD *h, WORD *k);
+struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top);
+void gfx_mini_show(struct Gfx *mg, WORD x0, WORD y0, WORD x1, WORD y1);
+void gfx_mini_refresh(struct Gfx *mg);
+void gfx_mini_close(struct Gfx *g, struct Gfx *mg);
+void gfx_mini_thumb(struct Gfx *mg, const struct Thumb *t, WORD x, WORD y);
 /* Input meant for us: always on our own screen; in a window, only while
  * it is the active one (the joystick and lowlevel see the whole machine). */
 BOOL gfx_input_ours(const struct Gfx *g);

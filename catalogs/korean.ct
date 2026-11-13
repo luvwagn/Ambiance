@@ -868,6 +868,9 @@ MSG_42B0DEF7
 MSG_0ECC2045
 스크린샷 불러오는 중...
 ; Loading screenshot...
+MSG_551A6630
+음소거
+; Muted
 MSG_65C00D26
 음량 %ld%%
 ; Volume %ld%%
@@ -976,6 +979,9 @@ MSG_0B3E0086
 MSG_0144F316
 반복 꺼짐: 끝나면 멈춥니다
 ; Loop off: it stops at its end
+MSG_230A5085
+소리 켜짐
+; Sound on
 MSG_6AA26665
 지금 재생 중
 ; Now playing
@@ -1093,6 +1099,12 @@ MSG_4926346E
 MSG_7170B5C2
 AmigaMCE 종료
 ; Quit AmigaMCE
+MSG_336326B3
+트랙 %ld/%ld
+; Track %ld of %ld
+MSG_41D16C8A
+%ld/%ld
+; %ld of %ld
 MSG_4C560A92
 연결: 스택이 고르는 인터페이스
 ; Connections: the stack's choice of interface

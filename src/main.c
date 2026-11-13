@@ -6279,7 +6279,8 @@ static void set_focus(int f);
  * only what changed, and (double-buffered) without a flip. */
 #define VOL_STEP   4
 
-enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_VDOWN, NB_VUP, NB_COUNT };
+enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB_VDOWN, NB_VUP,
+       NB_COUNT };
 
 /* Loop: what plays, again at its end (a module from its start, a track or
  * file played again, a video: anim.c), kept (AmigaMCE/Loop). A station
@@ -6387,6 +6388,72 @@ static void np_tri(WORD x, WORD y, WORD h, WORD sx, int dir, UBYTE pen)
     }
 }
 
+/* Muted: the volume it had, given back when unmuted (-1: not muted).
+ * Not kept past a quit: AmigaMCE starts at its volume, never silent. */
+static int vol_unmuted = -1;
+
+static BOOL np_muted(void)
+{
+    return vol_unmuted >= 0;
+}
+
+static void np_mute(BOOL on)
+{
+    if (on == np_muted())
+        return;
+    if (on) {
+        vol_unmuted = mp_volume();
+        mp_set_volume(0);
+    } else {
+        int v = vol_unmuted;
+        vol_unmuted = -1;
+        mp_set_volume(v > 0 ? v : 32);
+    }
+}
+
+/* A speaker, gh rows tall, its left at x, centred on row cy (sx: pixels
+ * across for one down, 2 where pixels are tall): a cross after it when
+ * muted, two waves when not. Its width: speaker_w. */
+static void speaker_parts(WORD gh, WORD sx, WORD *bh, WORD *bw, WORD *cw, WORD *t)
+{
+    *bh = gh / 3 > 2 ? gh / 3 : 2;
+    *bw = (gh / 4 > 1 ? gh / 4 : 1) * sx;
+    *cw = (gh / 3 > 1 ? gh / 3 : 1) * sx;
+    *t = gh / 7 > 1 ? gh / 7 : 1;
+}
+
+static WORD speaker_w(WORD gh, WORD sx)
+{
+    WORD bh, bw, cw, t, xs = gh / 2 | 1;
+    speaker_parts(gh, sx, &bh, &bw, &cw, &t);
+    return bw + cw + 2 * sx + (xs + t - 1) * sx;
+}
+
+static void speaker_glyph(struct Gfx *gp, WORD x, WORD cy, WORD gh, WORD sx, BOOL muted, UBYTE fg)
+{
+    WORD bh, bw, cw, t, c, rx;
+    speaker_parts(gh, sx, &bh, &bw, &cw, &t);
+    gfx_fill(gp, x, cy - bh / 2, x + bw - 1, cy - bh / 2 + bh - 1, fg);
+    for (c = 0; c < cw; c++) {              /* the cone, widening */
+        WORD hh = bh + (WORD)((LONG)(gh - bh) * (c + 1) / cw);
+        gfx_fill(gp, x + bw + c, cy - hh / 2, x + bw + c, cy - hh / 2 + hh - 1, fg);
+    }
+    rx = x + bw + cw + 2 * sx;
+    if (muted) {
+        WORD xs = gh / 2 | 1, d;
+        for (d = 0; d < xs; d++) {
+            WORD y0 = cy - xs / 2 + d;
+            gfx_fill(gp, rx + d * sx, y0, rx + (d + t) * sx - 1, y0, fg);
+            gfx_fill(gp, rx + (xs - 1 - d) * sx, y0, rx + (xs - 1 - d + t) * sx - 1, y0, fg);
+        }
+    } else {
+        WORD h1 = gh / 3 | 1, h2 = (gh * 2 / 3) | 1;
+        gfx_fill(gp, rx, cy - h1 / 2, rx + t * sx - 1, cy - h1 / 2 + h1 - 1, fg);
+        gfx_fill(gp, rx + (t + 2) * sx, cy - h2 / 2, rx + (t * 2 + 2) * sx - 1, cy - h2 / 2 + h2 - 1,
+                 fg);
+    }
+}
+
 static int np_state(void)
 {
     return !mp_loaded() ? 0 : mp_playing() ? 1 : mp_paused() ? 2 : 3;
@@ -6406,6 +6473,8 @@ static void np_button(int i)
         if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
             fg = lit ? PEN_TEXT : PEN_DIM;
     }
+    if (i == NB_MUTE && np_muted() && !lit && !hov)
+        fg = PEN_ACCENT;                    /* muted: the speaker in orange */
     if ((i == NB_BACK || i == NB_FWD) && !mp_can_step(i == NB_FWD ? 1 : -1)) {
         bg = PEN_BAR;                       /* not for this module: greyed, never lit */
         fg = PEN_RULE;
@@ -6534,6 +6603,9 @@ static void np_button(int i)
         np_tri(x0 + lw - (ahd + 1) / 2 * sx, ay - ahd / 2, ahd, sx, 1, ap);
         break;
     }
+    case NB_MUTE:
+        speaker_glyph(&g, cx - speaker_w(gh, sx) / 2, cy, gh, sx, np_muted(), fg);
+        break;
     case NB_VDOWN:
     case NB_VUP: {
         WORD len = gh, lw = len * sx, th = t > 2 ? t - 1 : 2, tx = th * sx;
@@ -6553,7 +6625,10 @@ static void np_volume_text(void)
         return;
     if (np.art_s && np.art_y <= np.by + np.bh)
         end = np.art_x - U(8) - 1;          /* the cover beside it */
-    sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
+    if (np_muted())
+        amce_strlcpy(m, _("Muted"), sizeof(m));
+    else
+        sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
     gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
     x += gfx_textlen(&g, m, TS_SMALL);
     if (x <= end)
@@ -6656,7 +6731,7 @@ static void np_layout(void)
     else if (gfx_mode_tall(g.mode) && np.bh * 2 > np.bw)
         np.bh = np.bw / 2 > g.font_h + U(2) ? np.bw / 2 : g.font_h + U(2);
     for (i = 0; i <= NB_VDOWN; i++)
-        np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_VDOWN ? gap * 2 : 0);
+        np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_MUTE ? gap * 2 : 0);
     {
         /* room enough: a slider between - and + */
         WORD at = np.bx[NB_VDOWN] + np.bw + gap;
@@ -7193,7 +7268,7 @@ controls:
                 ((i == np.hov || i == np.s_hov) && np.hov != np.s_hov) ||
                 ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
                 ((i == np.rep || i == np.s_rep) && np.rep != np.s_rep) ||
-                ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol) ||
+                ((i == NB_VDOWN || i == NB_VUP || i == NB_MUTE) && mp_volume() != np.s_vol) ||
                 ((i == NB_BACK || i == NB_FWD) && steps != np.s_steps) ||
                 (i == NB_LOOP && play_loop != np.s_loop))
                 np_button(i);
@@ -7612,8 +7687,22 @@ static BOOL sound_restart(void)
     return TRUE;
 }
 
+/* To volume v (the slider's): unmuted, if it was. */
+static void np_set_volume(int v)
+{
+    vol_unmuted = -1;
+    mp_set_volume(v);
+    if (np_on())
+        np_update();
+}
+
 static void np_volume(int d)
 {
+    if (np_muted()) {
+        int v = vol_unmuted;                /* a change of volume: unmuted, from there */
+        vol_unmuted = -1;
+        mp_set_volume(v);
+    }
     mp_set_volume(mp_volume() + d);
     if (np_on())
         np_update();
@@ -7912,6 +8001,10 @@ static void np_press(int b)
         save_setting(LOOP_VAR, play_loop ? "1" : "0");
         set_msg(play_loop ? _("Loop on: it plays again at its end")
                           : _("Loop off: it stops at its end"));
+        break;
+    case NB_MUTE:
+        np_mute(!np_muted());
+        set_msg(np_muted() ? _("Muted") : _("Sound on"));
         break;
     case NB_VDOWN:
         np_volume(-VOL_STEP);
@@ -8307,8 +8400,8 @@ static void np_hover(WORD x, WORD y)
         return;
     if (np.sl_drag) {
         int v = np_slider_vol(x);
-        if (v != mp_volume())
-            np_volume(v - mp_volume());
+        if (v != mp_volume() || np_muted())
+            np_set_volume(v);
         return;
     }
     h = np_button_at(x, y);
@@ -8340,6 +8433,36 @@ static void np_mouse_up(void)
     }
 }
 
+/* To part n of d of the song (a bar clicked: Now playing's, the mini
+ * player's). */
+static void np_seek_part(ULONG n, ULONG d)
+{
+    struct MpStatus st;
+    ULONG want;
+    int pos, best = 0;
+    mp_status(&st);
+    if (!st.total_ms || !d)
+        return;                             /* its length is not known */
+    want = st.total_ms / 100 * n / d * 100;
+    if (mp_is_track()) {
+        np_seek_track(want, 0);             /* a track: from there, at once */
+        return;
+    }
+    if (mp_seek_ms(want)) {                 /* mixed modules: to the time itself */
+        if (np_on())
+            np_update();
+        return;
+    }
+    for (pos = 0; pos < st.songlen; pos++) {
+        ULONG at = mp_position_ms(pos);
+        if (at != 0xFFFFFFFFUL && at <= want && at >= mp_position_ms(best))
+            best = pos;
+    }
+    mp_seek(best);
+    if (np_on())
+        np_update();
+}
+
 static BOOL np_click(WORD x, WORD y)
 {
     int i;
@@ -8353,7 +8476,7 @@ static BOOL np_click(WORD x, WORD y)
     if (i == NB_SLIDER) {                   /* to that volume, and drag from there */
         np.sl_drag = TRUE;
         np.hov = NB_SLIDER;
-        np_volume(np_slider_vol(x) - mp_volume());
+        np_set_volume(np_slider_vol(x));
         return TRUE;
     }
     if (i >= 0) {
@@ -8365,28 +8488,7 @@ static BOOL np_click(WORD x, WORD y)
     /* the bar (and the line under it): to that part of the song */
     if (y >= np.time_y - U(2) && y < np.time_y + g.font_h + U(2) && x >= np.x0 &&
         x < np.x0 + np.bar_w) {
-        struct MpStatus st;
-        ULONG want;
-        int pos, best = 0;
-        mp_status(&st);
-        if (!st.total_ms)
-            return TRUE;                    /* its length is not known */
-        want = st.total_ms / 100 * (ULONG)(x - np.x0) / (ULONG)np.bar_w * 100;
-        if (mp_is_track()) {
-            np_seek_track(want, 0);         /* a track: from there, at once */
-            return TRUE;
-        }
-        if (mp_seek_ms(want)) {             /* mixed modules: to the time itself */
-            np_update();
-            return TRUE;
-        }
-        for (pos = 0; pos < st.songlen; pos++) {
-            ULONG at = mp_position_ms(pos);
-            if (at != 0xFFFFFFFFUL && at <= want && at >= mp_position_ms(best))
-                best = pos;
-        }
-        mp_seek(best);
-        np_update();
+        np_seek_part((ULONG)(x - np.x0), (ULONG)np.bar_w);
         return TRUE;
     }
     return FALSE;
@@ -10209,6 +10311,9 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 
 static BOOL wb_fell_back;               /* a window wanted, full screen for now */
 static BOOL iconified;                  /* (below: iconify) */
+static BOOL mini_on;                    /* the mini player up, the window away (below) */
+static struct Gfx mg;                   /* ...its window and drawing */
+static void mini_drop(void);
 static BOOL iconic_screen;              /* ...full screen: its screen behind Workbench's */
 
 /* Full screen where a window was wanted (Workbench could not take one):
@@ -10230,6 +10335,8 @@ static void wb_follow(void)
             gfx_wb_done();
         return;
     }
+    if (mini_on && !iconified && gfx_wb_event() == GFX_WB_CLOSING)
+        mini_drop();                    /* (the window comes back on the new Workbench) */
     if (gfx_wb_event() != GFX_WB_CLOSING || (!g.wb && !wb_fell_back)) {
         if (gfx_wb_event())
             gfx_wb_done();              /* (nothing of ours on it) */
@@ -10444,6 +10551,8 @@ static BOOL wb_text_english(void)
     return iso && (!strncmp(iso, "ja", 2) || !strncmp(iso, "zh", 2) || !strncmp(iso, "ko", 2));
 }
 
+static void mini_drop_window(void);
+
 static void iconify(void)
 {
     struct Screen *wb;
@@ -10460,7 +10569,10 @@ static void iconify(void)
     }
     hold_stop();
     ov.on = FALSE;
-    if (g.wb) {
+    if (mini_on) {
+        mini_drop_window();             /* the mini player's window, back on the icon */
+        amce_log("iconify", "the mini player closed, an AppIcon on Workbench: the music plays on");
+    } else if (g.wb) {
         if (!gfx_window_hide(&g)) {
             icon_remove();
             return;
@@ -10475,6 +10587,29 @@ static void iconify(void)
     iconified = TRUE;
 }
 
+/* The window would not open again (Workbench changed meanwhile): the
+ * display made anew, every page kept. */
+static void display_reopen(void)
+{
+    WORD ow = g.w, oh = g.h;
+    ULONG t0 = time_ms();
+    layout_let_go();
+    pv_flush();
+    spin_free();
+    ov_bm_free();
+    vis_stop();
+    ptr_hidden = NULL;
+    gfx_close(&g);
+    if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
+        running = FALSE;
+        return;
+    }
+    wb_note_fallback();
+    window_relaid(ow, oh, t0);
+}
+
+static BOOL mini_window(void);
+
 static void uniconify(const char *why)
 {
     if (!iconified)
@@ -10482,6 +10617,11 @@ static void uniconify(const char *why)
     icon_remove();
     iconified = FALSE;
     amce_log("iconify", why);
+    if (mini_on) {
+        if (mini_window())
+            return;                     /* the mini player again */
+        mini_on = FALSE;                /* (would not open: the window instead) */
+    }
     if (iconic_screen) {
         iconic_screen = FALSE;
         if (g.scr && !g.wb) {
@@ -10490,22 +10630,7 @@ static void uniconify(const char *why)
                 ActivateWindow(g.win);
         }
     } else if (g.wb && !gfx_window_unhide(&g)) {
-        /* the window would not open again: the display made anew */
-        WORD ow = g.w, oh = g.h;
-        ULONG t0 = time_ms();
-        layout_let_go();
-        pv_flush();
-        spin_free();
-        ov_bm_free();
-        vis_stop();
-        ptr_hidden = NULL;
-        gfx_close(&g);
-        if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
-            running = FALSE;
-            return;
-        }
-        wb_note_fallback();
-        window_relaid(ow, oh, t0);
+        display_reopen();
         return;
     }
     mouse_last = time_ms();
@@ -10530,6 +10655,649 @@ static void iconified_tick(void)
         uniconify("its screen brought to the front: no longer iconified");
 }
 
+
+/* ---- The mini player: Now playing, small, in a window of its own, the
+ * window away meanwhile (its buffer kept and drawn into unseen, as when
+ * iconified). The window's zoom gadget opens it; its own zoom gadget, a
+ * click on its cover, Esc or Return bring the window back. In the pixel
+ * font at 1x, 2x or 3x by Workbench's height (gfx_mini_size), whatever
+ * the window's style: the cover, what plays, the count in its list, the
+ * time and its bar, the buttons, mute, the volume, a meter. Music only: a
+ * video stops and the viewer closes before (as when iconified). */
+enum { MB_PREV, MB_PLAY, MB_STOP, MB_NEXT, MB_MUTE, MB_SLIDER, MB_BAR, MB_ART };
+static void window_menu(UWORD code);
+static struct {
+    WORD k;                                 /* pixels a unit: 1-3 */
+    WORD art_x, art_y, art_s, tx, tw, r1, r2, r3, ty, tw_time, bar_x0, bar_x1, bar_y, bar_h;
+    WORD by, bh, bw, bx[4], mute_x, mute_w, sl_x0, sl_x1, vu_x0, vu_x1;
+    int hov, press, s_hov, s_press, s_state, s_vol, s_muted, s_fill, s_n;
+    ULONG press_until;
+    LONG s_sec, s_total;
+    BOOL sl_drag, drawn;
+    char s_l1[48], s_l2[160], s_l3[200];
+    struct LJob *aj;                        /* its cover, made for its square */
+    char art_file[120];
+    BOOL art_drawn;
+    UBYTE s_lv[4];
+} mn = { .hov = -1, .press = -1 };
+
+#define MK(v) ((WORD)((v) * mn.k))
+
+static void mini_layout(void)
+{
+    WORD fh = mg.font_h, i;
+    mn.k = mg.kint ? mg.kint : 1;
+    mn.art_s = MK(88);
+    mn.art_x = MK(6);
+    mn.art_y = (mg.h - mn.art_s) / 2;
+    mn.tx = mn.art_x + mn.art_s + MK(10);
+    mn.tw = mg.w - MK(8) - mn.tx;
+    mn.r1 = MK(5);
+    mn.r2 = mn.r1 + fh + MK(2);
+    mn.r3 = mn.r2 + fh + MK(1);
+    mn.ty = mn.r3 + fh + MK(5);
+    mn.tw_time = TextLength(mg.rp, (CONST_STRPTR) "88:88", 5);
+    mn.bar_x0 = mn.tx + mn.tw_time + MK(5);
+    mn.bar_x1 = mn.tx + mn.tw - mn.tw_time - MK(5) - 1;
+    mn.bar_h = MK(3);
+    mn.bar_y = mn.ty + (fh - mn.bar_h) / 2;
+    mn.bh = MK(18);
+    mn.by = mg.h - MK(5) - mn.bh;
+    mn.bw = MK(22);
+    for (i = 0; i < 4; i++)
+        mn.bx[i] = mn.tx + i * (mn.bw + MK(3));
+    mn.mute_x = mn.bx[3] + mn.bw + MK(8);
+    mn.mute_w = MK(16);
+    mn.sl_x0 = mn.mute_x + mn.mute_w + MK(4);
+    mn.sl_x1 = mn.sl_x0 + MK(56);
+    mn.vu_x0 = mn.sl_x1 + MK(10);
+    mn.vu_x1 = mn.tx + mn.tw - 1;
+}
+
+/* s at x, y (the line's top), in maxw at most ("..." where cut short). */
+static void mini_text(WORD x, WORD y, WORD maxw, const char *s, UBYTE pen)
+{
+    ULONG n = strlen(s), f;
+    struct TextExtent te;
+    if (maxw <= 0 || !n)
+        return;
+    if (cjk_any(s, n)) {
+        cjk_text(&mg, mg.rp, x, y, s, n, pen, PEN_BG, FALSE, 0, maxw);
+        return;
+    }
+    f = TextFit(mg.rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, mg.font_h + 1);
+    if (f < n) {
+        WORD dw = TextLength(mg.rp, (CONST_STRPTR) "...", 3);
+        f = maxw > dw ? TextFit(mg.rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw - dw, mg.font_h + 1)
+                      : 0;
+    }
+    SetAPen(mg.rp, GPEN(pen));
+    SetDrMd(mg.rp, JAM1);
+    Move(mg.rp, x, y + mg.baseline);
+    Text(mg.rp, (CONST_STRPTR)s, f);
+    if (f < n)
+        Text(mg.rp, (CONST_STRPTR) "...", 3);
+}
+
+/* What it shows: the count in its list, the title, the line under it. */
+static void mini_lines(char *l1, char *l2, char *l3)
+{
+    l1[0] = l2[0] = l3[0] = 0;
+    if (np.list.pool && np.idx >= 0 && np.list.count > 1 && mp_loaded())
+        sprintf(l1, mp_is_track() ? _("Track %ld of %ld") : _("%ld of %ld"), (long)np.idx + 1,
+                (long)np.list.count);
+    if (!mp_loaded()) {
+        strcpy(l2, _("Nothing playing"));
+        return;
+    }
+    if (mp_is_stream()) {
+        const char *by = mp_track_by(), *p;
+        char *o = l3;
+        amce_strlcpy(l2, mp_stream_name()[0] ? mp_stream_name()
+                                              : mp_is_track() ? _("(no title)") : _("Radio"), 160);
+        if (!mp_is_track()) {
+            /* a station: what is on air, or how it is */
+            const char *now = st_title();
+            int stt = mp_running() ? st_state() : -1;
+            if (!mp_running())
+                now = _("Stopped");
+            else if (stt == ST_CONNECTING)
+                now = _("Connecting...");
+            else if (stt == ST_BUFFERING)
+                now = _("Buffering...");
+            amce_strlcpy(l3, now, 200);
+            return;
+        }
+        /* a track: its artist and album ("   " between) as "artist - album" */
+        for (p = by; *p && o < l3 + 196;) {
+            if (p[0] == ' ' && p[1] == ' ' && p[2] == ' ') {
+                strcpy(o, " - ");
+                o += 3;
+                p += 3;
+            } else {
+                *o++ = *p++;
+            }
+        }
+        *o = 0;
+        return;
+    }
+    {
+        /* a module: its title (or its file's), what it is, by whom */
+        const char *t = mp_title();
+        char label[120];
+        while (*t == ' ')
+            t++;
+        mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
+        amce_strlcpy(l2, t[0] ? t : label, 160);
+        amce_strlcpy(l3, mp_tag(), 200);
+        if (mp_author()[0]) {
+            char part[120];
+            sprintf(part, _("   by %s"), mp_author());
+            amce_strlcat(l3, part, 200);
+        }
+    }
+}
+
+static void mini_tri(WORD x, WORD y, WORD h, int dir, UBYTE pen)
+{
+    WORD r, w = (h + 1) / 2;
+    for (r = 0; r < h; r++) {
+        WORD d = r < h - 1 - r ? r : h - 1 - r, len = d + 1;
+        if (dir > 0)
+            gfx_fill(&mg, x, y + r, x + len - 1, y + r, pen);
+        else
+            gfx_fill(&mg, x + w - len, y + r, x + w - 1, y + r, pen);
+    }
+}
+
+static void mini_button(int i)
+{
+    BOOL lit = i == mn.press, hov = i == mn.hov;
+    UBYTE bg = lit ? PEN_HL : hov ? PEN_SELDIM : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
+    WORD x = mn.bx[i], y = mn.by, w = mn.bw, h = mn.bh;
+    WORD gh = (h / 2) | 1, tw = (gh + 1) / 2, cx = x + w / 2, cy = y + h / 2, gy = cy - gh / 2;
+    WORD t = MK(2);
+    gfx_fill(&mg, x, y, x + w - 1, y + h - 1, PEN_BG);
+    gfx_rrect(&mg, x, y, w, h, MK(2), MK(2), bg);
+    switch (i) {
+    case MB_PREV:
+        gfx_fill(&mg, cx - (t + tw) / 2, gy, cx - (t + tw) / 2 + t - 1, gy + gh - 1, fg);
+        mini_tri(cx - (t + tw) / 2 + t, gy, gh, -1, fg);
+        break;
+    case MB_NEXT:
+        mini_tri(cx - (t + tw) / 2, gy, gh, 1, fg);
+        gfx_fill(&mg, cx - (t + tw) / 2 + tw, gy, cx - (t + tw) / 2 + tw + t - 1, gy + gh - 1, fg);
+        break;
+    case MB_PLAY:
+        if (mp_playing()) {
+            WORD bw = gh / 3 > 1 ? gh / 3 : 1, x0 = cx - (bw * 3) / 2;
+            gfx_fill(&mg, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
+            gfx_fill(&mg, x0 + bw * 2, gy, x0 + bw * 3 - 1, gy + gh - 1, fg);
+        } else {
+            mini_tri(cx - tw / 2, gy, gh, 1, fg);
+        }
+        break;
+    case MB_STOP: {
+        WORD sh = gh - 2;
+        gfx_fill(&mg, cx - sh / 2, cy - sh / 2, cx - sh / 2 + sh - 1, cy - sh / 2 + sh - 1, fg);
+        break;
+    }
+    }
+}
+
+/* Mute (the speaker) and the volume slider. */
+static void mini_volume(void)
+{
+    BOOL muted = np_muted(), hot = mn.sl_drag || mn.hov == MB_SLIDER;
+    WORD gh = (mn.bh / 2) | 1, cy = mn.by + mn.bh / 2, kw = MK(3), th = MK(2), kh = mn.bh * 6 / 10;
+    WORD span = mn.sl_x1 - mn.sl_x0 + 1 - kw;
+    WORD kx = mn.sl_x0 + (WORD)((LONG)span * (muted ? vol_unmuted : mp_volume()) / 64);
+    UBYTE sp = muted ? PEN_ACCENT : mn.hov == MB_MUTE ? PEN_WHITE : PEN_TEXT;
+    gfx_fill(&mg, mn.mute_x, mn.by, mn.sl_x1, mn.by + mn.bh - 1, PEN_BG);
+    speaker_glyph(&mg, mn.mute_x + (mn.mute_w - speaker_w(gh, 1)) / 2, cy, gh, 1, muted, sp);
+    if (kx > mn.sl_x0)
+        gfx_fill(&mg, mn.sl_x0, cy - th / 2, kx - 1, cy - th / 2 + th - 1,
+                 muted ? PEN_RULE : hot ? PEN_TEXT : PEN_DIM);
+    if (kx + kw <= mn.sl_x1)
+        gfx_fill(&mg, kx + kw, cy - th / 2, mn.sl_x1, cy - th / 2 + th - 1, PEN_RULE);
+    gfx_fill(&mg, kx, cy - kh / 2, kx + kw - 1, cy - kh / 2 + kh - 1,
+             muted ? PEN_DIM : hot ? PEN_WHITE : PEN_TEXT);
+}
+
+/* The meter: a bar a channel (Paula's four, a stream's two, or one). */
+static void mini_meter(const struct MpStatus *st, BOOL full)
+{
+    int n = mp_loaded() && mp_running() ? mp_meter_count() : 0, i;
+    WORD gap = MK(2), w, x;
+    BOOL same = !full && n == mn.s_n;
+    if (n > 4)
+        n = 4;
+    for (i = 0; same && i < n; i++)
+        if (st->level[i] != mn.s_lv[i])
+            same = FALSE;
+    if (same)
+        return;
+    gfx_fill(&mg, mn.vu_x0, mn.by, mn.vu_x1, mn.by + mn.bh - 1, PEN_BG);
+    mn.s_n = n;
+    mn.drawn = TRUE;
+    if (!n)
+        return;
+    w = (mn.vu_x1 - mn.vu_x0 + 1 - (n - 1) * gap) / n;
+    for (i = 0, x = mn.vu_x0; i < n; i++, x += w + gap) {
+        WORD h = (WORD)((LONG)mn.bh * st->level[i] / 64);
+        mn.s_lv[i] = st->level[i];
+        gfx_fill(&mg, x, mn.by + mn.bh - 1, x + w - 1, mn.by + mn.bh - 1, PEN_RULE);   /* its floor */
+        if (h > 0)
+            gfx_fill(&mg, x, mn.by + mn.bh - h, x + w - 1, mn.by + mn.bh - 1, PEN_HL);
+    }
+}
+
+static void mini_art_free(void)
+{
+    struct LJob *j = mn.aj;
+    mn.aj = NULL;
+    mn.art_file[0] = 0;
+    mn.art_drawn = FALSE;
+    if (!j)
+        return;
+    if (j->busy)
+        ldr_wait(j);
+    pic_dispose(j->obj);
+    thumb_free(j->thumb);
+    FreeVec(j);
+}
+
+/* No cover: two quavers in its square. */
+static void mini_art_none(void)
+{
+    WORD s = mn.art_s, x = mn.art_x, y = mn.art_y, u = s / 14 > 1 ? s / 14 : 1, c;
+    gfx_fill(&mg, x, y, x + s - 1, y + s - 1, PEN_BG);
+    gfx_rrect(&mg, x, y, s, s, MK(4), MK(4), PEN_SELDIM);
+    x += s / 2 - 7 * u;
+    y += s / 2 - 7 * u;
+    gfx_dot(&mg, x + u * 9 / 2, y + u * 21 / 2, u * 3 / 2 + 1, PEN_DIM, PEN_SELDIM);
+    gfx_dot(&mg, x + u * 19 / 2, y + u * 19 / 2, u * 3 / 2 + 1, PEN_DIM, PEN_SELDIM);
+    gfx_fill(&mg, x + u * 11 / 2, y + u * 4, x + u * 11 / 2 + u - 1, y + u * 21 / 2, PEN_DIM);
+    gfx_fill(&mg, x + u * 21 / 2, y + u * 3, x + u * 21 / 2 + u - 1, y + u * 19 / 2, PEN_DIM);
+    for (c = 0; c <= u * 6; c++) {          /* the beam, rising to the right */
+        WORD yt = y + u * 3 + (WORD)((LONG)(u * 6 - c) * u / (u * 6));
+        gfx_fill(&mg, x + u * 11 / 2 + c, yt, x + u * 11 / 2 + c, yt + u * 3 / 2, PEN_DIM);
+    }
+}
+
+/* The cover: Now playing's file, made for this square by the loader. */
+static void mini_art(BOOL full)
+{
+    const char *f = mp_loaded() && mp_is_track() ? np_art_file : "";
+    if (strcmp(f, mn.art_file)) {
+        BPTR l = 0;
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        if (f[0]) {
+            me->pr_WindowPtr = (APTR)-1;
+            l = Lock((CONST_STRPTR)f, SHARED_LOCK);
+            me->pr_WindowPtr = old;
+        }
+        if (f[0] && !l) {
+            if (!mn.art_drawn || full) {    /* (not here yet: a server's, coming) */
+                mini_art_none();
+                mn.art_drawn = TRUE;
+                mn.drawn = TRUE;
+            }
+            return;
+        }
+        if (l)
+            UnLock(l);
+        mini_art_free();
+        amce_strlcpy(mn.art_file, f, sizeof(mn.art_file));
+        if (f[0] && gfx_thumbs(&g) && (mn.aj = AllocVec(sizeof(*mn.aj), MEMF_ANY | MEMF_CLEAR))) {
+            struct LJob *j = mn.aj;
+            j->type = LJ_SHOT;
+            j->mode = SHOT_FILE;
+            amce_strlcpy(j->path, f, sizeof(j->path));
+            j->scr = g.scr;
+            j->tw = j->th = mn.art_s;
+            j->maxcol = 256;
+            ldr_submit_first(j);
+        }
+        full = TRUE;
+    }
+    if (full)
+        mn.art_drawn = FALSE;
+    if (mn.art_drawn || (mn.aj && !mn.aj->done))
+        return;
+    if (mn.aj && mn.aj->thumb) {
+        struct Thumb *t = mn.aj->thumb;
+        gfx_fill(&mg, mn.art_x, mn.art_y, mn.art_x + mn.art_s - 1, mn.art_y + mn.art_s - 1, PEN_BG);
+        gfx_mini_thumb(&mg, t, mn.art_x + (mn.art_s - t->w) / 2, mn.art_y + (mn.art_s - t->h) / 2);
+    } else {
+        mini_art_none();
+    }
+    mn.art_drawn = TRUE;
+    mn.drawn = TRUE;
+}
+
+/* Drawn (full: everything; else what changed), and shown. */
+static void mini_draw(BOOL full)
+{
+    struct MpStatus st;
+    char l1[48], l2[160], l3[200], a[16], b[16];
+    ULONG at;
+    LONG fill = 0, bw = mn.bar_x1 - mn.bar_x0 + 1;
+    int state = np_state(), i;
+    WORD right = mn.tx + mn.tw;
+    if (!mini_on || !mg.rp)
+        return;
+    mp_status(&st);
+    mn.drawn = FALSE;
+    if (full) {
+        gfx_fill(&mg, 0, 0, mg.w - 1, mg.h - 1, PEN_BG);
+        mn.drawn = TRUE;
+    }
+    mini_art(full);
+    mini_lines(l1, l2, l3);
+    if (full || strcmp(l1, mn.s_l1)) {
+        WORD w1 = l1[0] ? TextLength(mg.rp, (CONST_STRPTR)l1, strlen(l1)) : 0;
+        gfx_fill(&mg, mn.tx, mn.r1, right - 1, mn.r1 + mg.font_h - 1, PEN_BG);
+        mini_text(mn.tx, mn.r1, mn.tw - w1 - MK(6), _("Now playing"), PEN_ACCENT);
+        if (l1[0])
+            mini_text(right - w1, mn.r1, w1, l1, PEN_DIM);
+        strcpy(mn.s_l1, l1);
+        mn.drawn = TRUE;
+    }
+    if (full || strcmp(l2, mn.s_l2)) {
+        gfx_fill(&mg, mn.tx, mn.r2, right - 1, mn.r2 + mg.font_h - 1, PEN_BG);
+        mini_text(mn.tx, mn.r2, mn.tw, l2, mp_loaded() ? PEN_WHITE : PEN_DIM);
+        strcpy(mn.s_l2, l2);
+        mn.drawn = TRUE;
+    }
+    if (full || strcmp(l3, mn.s_l3)) {
+        gfx_fill(&mg, mn.tx, mn.r3, right - 1, mn.r3 + mg.font_h - 1, PEN_BG);
+        mini_text(mn.tx, mn.r3, mn.tw, l3, PEN_DIM);
+        amce_strlcpy(mn.s_l3, l3, sizeof(mn.s_l3));
+        mn.drawn = TRUE;
+    }
+    /* the time, and its bar */
+    at = np.seek_due ? (ULONG)np.seek_to : st.elapsed_ms;
+    if (st.total_ms && bw > 0) {
+        fill = (LONG)((ULONG)bw * (at / 100) / ((st.total_ms + 99) / 100));
+        if (fill > bw)
+            fill = bw;
+    }
+    if (full || (LONG)(at / 1000) != mn.s_sec || (LONG)st.total_ms != mn.s_total || fill != mn.s_fill) {
+        gfx_fill(&mg, mn.tx, mn.ty, right - 1, mn.ty + mg.font_h - 1, PEN_BG);
+        if (mp_loaded()) {
+            time_text(at, a);
+            mini_text(mn.tx, mn.ty, mn.tw_time + MK(4), a, PEN_TEXT);
+            if (st.total_ms) {
+                time_text(st.total_ms, b);
+                mini_text(right - TextLength(mg.rp, (CONST_STRPTR)b, strlen(b)), mn.ty,
+                          mn.tw_time + MK(4), b, PEN_DIM);
+            }
+            if (fill > 0)
+                gfx_fill(&mg, mn.bar_x0, mn.bar_y, mn.bar_x0 + fill - 1, mn.bar_y + mn.bar_h - 1,
+                         PEN_ACCENT);
+            if (fill < bw)
+                gfx_fill(&mg, mn.bar_x0 + fill, mn.bar_y, mn.bar_x1, mn.bar_y + mn.bar_h - 1,
+                         PEN_RULE);
+        }
+        mn.s_sec = (LONG)(at / 1000);
+        mn.s_total = (LONG)st.total_ms;
+        mn.s_fill = fill;
+        mn.drawn = TRUE;
+    }
+    if (mn.press >= 0 && (LONG)(time_ms() - mn.press_until) >= 0)
+        mn.press = -1;                      /* its moment is over */
+    for (i = 0; i < 4; i++)
+        if (full || (i == MB_PLAY && state != mn.s_state) ||
+            ((i == mn.hov || i == mn.s_hov) && mn.hov != mn.s_hov) ||
+            ((i == mn.press || i == mn.s_press) && mn.press != mn.s_press)) {
+            mini_button(i);
+            mn.drawn = TRUE;
+        }
+    if (full || mp_volume() != mn.s_vol || np_muted() != mn.s_muted ||
+        ((mn.hov >= MB_MUTE || mn.s_hov >= MB_MUTE) && mn.hov != mn.s_hov)) {
+        mini_volume();
+        mn.drawn = TRUE;
+    }
+    mini_meter(&st, full);
+    mn.s_state = state;
+    mn.s_hov = mn.hov;
+    mn.s_press = mn.press;
+    mn.s_vol = mp_volume();
+    mn.s_muted = np_muted();
+    if (mn.drawn)
+        gfx_mini_show(&mg, 0, 0, mg.w - 1, mg.h - 1);
+}
+
+/* Its window (again: after iconified), drawn. */
+static BOOL mini_window(void)
+{
+    WORD l, t, w, h;
+    UWORD k;
+    if (!gfx_window_box(&l, &t, &w, &h, &k))
+        l = t = -1;
+    if (!gfx_mini_open(&g, &mg, l, t))
+        return FALSE;
+    mini_layout();
+    mn.hov = mn.press = -1;
+    mn.sl_drag = FALSE;
+    mini_draw(TRUE);
+    return TRUE;
+}
+
+/* The window's zoom gadget: the window away, the mini player up. */
+static void mini_enter(void)
+{
+    if (mini_on || iconified || !g.wb || !g.win || gfx_fs_on())
+        return;
+    hold_stop();
+    ov.on = FALSE;
+    if (!gfx_window_hide(&g))
+        return;
+    ptr_hidden = NULL;
+    mini_on = TRUE;
+    if (!mini_window()) {
+        mini_on = FALSE;
+        if (!gfx_window_unhide(&g)) {
+            display_reopen();
+            return;
+        }
+        draw_all();
+        gfx_present(&g);
+        return;
+    }
+    amce_log("mini player", "the window's zoom gadget: the mini player");
+}
+
+/* Its window closed (iconified, or quitting): mini_on stays as it was. */
+static void mini_drop_window(void)
+{
+    mini_art_free();
+    if (mg.win || mg.rp)
+        gfx_mini_close(&g, &mg);
+}
+
+/* ...and the mini player left for good (Workbench closing): the window
+ * comes back with it. */
+static void mini_drop(void)
+{
+    mini_drop_window();
+    mini_on = FALSE;
+}
+
+/* Back to the window, where the mini player was. */
+static void mini_leave(const char *why)
+{
+    if (!mini_on)
+        return;
+    mini_drop();
+    amce_log("mini player", why);
+    if (!gfx_window_unhide(&g)) {
+        display_reopen();
+        return;
+    }
+    mouse_last = time_ms();
+    draw_all();
+    gfx_present(&g);
+}
+
+static int mini_hit(WORD x, WORD y)
+{
+    int i;
+    if (x >= mn.art_x && x < mn.art_x + mn.art_s && y >= mn.art_y && y < mn.art_y + mn.art_s)
+        return MB_ART;
+    if (y >= mn.by && y < mn.by + mn.bh) {
+        for (i = 0; i < 4; i++)
+            if (x >= mn.bx[i] && x < mn.bx[i] + mn.bw)
+                return i;
+        if (x >= mn.mute_x && x < mn.mute_x + mn.mute_w)
+            return MB_MUTE;
+        if (x >= mn.sl_x0 - MK(2) && x <= mn.sl_x1 + MK(2))
+            return MB_SLIDER;
+    }
+    if (y >= mn.ty - MK(2) && y < mn.ty + mg.font_h + MK(2) && x >= mn.bar_x0 && x <= mn.bar_x1)
+        return MB_BAR;
+    return -1;
+}
+
+static void mini_slide(WORD x)
+{
+    WORD kw = MK(3), span = mn.sl_x1 - mn.sl_x0 + 1 - kw;
+    LONG v = span > 0 ? ((LONG)(x - mn.sl_x0 - kw / 2) * 64 + span / 2) / span : mp_volume();
+    np_set_volume(v < 0 ? 0 : v > 64 ? 64 : (int)v);
+}
+
+static void mini_press(int b)
+{
+    static const int nb[] = { NB_PREV, NB_PLAY, NB_STOP, NB_NEXT };
+    mn.press = b;
+    mn.press_until = time_ms() + FLASH_MS;
+    if (b >= MB_PREV && b <= MB_NEXT)
+        np_press(nb[b]);
+    else if (b == MB_MUTE)
+        np_mute(!np_muted());
+}
+
+static void mini_mouse(const struct IntuiMessage *im)
+{
+    WORD x = im->MouseX - mg.win->BorderLeft, y = im->MouseY - mg.win->BorderTop;
+    if (im->Class == IDCMP_MOUSEMOVE) {
+        if (mn.sl_drag)
+            mini_slide(x);
+        else
+            mn.hov = mini_hit(x, y);
+    } else if (im->Code == SELECTDOWN) {
+        int b = mini_hit(x, y);
+        if (b == MB_ART) {
+            mini_leave("its cover clicked: the window again");
+            return;
+        }
+        if (b == MB_SLIDER) {
+            mn.sl_drag = TRUE;
+            mini_slide(x);
+        } else if (b == MB_BAR) {
+            np_seek_part((ULONG)(x - mn.bar_x0), (ULONG)(mn.bar_x1 - mn.bar_x0 + 1));
+        } else if (b >= 0) {
+            mini_press(b);
+        }
+    } else if (im->Code == SELECTUP) {
+        mn.sl_drag = FALSE;
+    }
+    mini_draw(FALSE);
+}
+
+static void mini_key(const struct IntuiMessage *im)
+{
+    UWORD c = im->Code;
+    BOOL cmd = (im->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) != 0;
+    if (im->Class == IDCMP_VANILLAKEY) {
+        if (cmd && (c == 'i' || c == 'I')) {
+            gfx_iconify_asked = TRUE;
+            return;
+        }
+        if (cmd && (c == 'f' || c == 'F')) {
+            mini_leave("Amiga-F: the window, then full screen");
+            if (running && g.wb)
+                toggle_window();
+            return;
+        }
+        if (cmd && (c == 'q' || c == 'Q')) {
+            running = FALSE;
+            return;
+        }
+        switch (c) {
+        case ' ': mini_press(MB_PLAY); break;
+        case 's': case 'S': mini_press(MB_STOP); break;
+        case 'n': case 'N': case '>': mini_press(MB_NEXT); break;
+        case 'p': case 'P': case '<': mini_press(MB_PREV); break;
+        case 'm': case 'M': mini_press(MB_MUTE); break;
+        case '+': case '=': np_volume(VOL_STEP); break;
+        case '-': case '_': np_volume(-VOL_STEP); break;
+        case 13: case 27:
+            mini_leave(c == 27 ? "Esc: the window again" : "Return: the window again");
+            return;
+        }
+    } else if (!(c & IECODE_UP_PREFIX)) {
+        switch (c) {
+        case 0x4C: np_volume(VOL_STEP); break;          /* up: louder */
+        case 0x4D: np_volume(-VOL_STEP); break;
+        case 0x4F: case 0x4E: np_press(c == 0x4E ? NB_FWD : NB_BACK); break;
+        }
+    }
+    mini_draw(FALSE);
+}
+
+/* Its window's messages. */
+static void mini_input(void)
+{
+    struct IntuiMessage *im;
+    while (mini_on && mg.win && (im = (struct IntuiMessage *)GetMsg(mg.win->UserPort))) {
+        struct IntuiMessage c = *im;
+        ReplyMsg((struct Message *)im);
+        switch (c.Class) {
+        case IDCMP_CLOSEWINDOW:
+            if (c.Code == 1)
+                gfx_iconify_asked = TRUE;   /* (OS 3.2's iconify gadget) */
+            else
+                running = FALSE;
+            return;
+        case IDCMP_REFRESHWINDOW:
+            gfx_mini_refresh(&mg);
+            break;
+        case IDCMP_NEWSIZE:
+            if (mg.win->Flags & WFLG_ZOOMED) {
+                mini_leave("its zoom gadget: the window again");
+                return;
+            }
+            break;
+        case IDCMP_MENUPICK:
+            window_menu(c.Code);
+            if (!mini_on)
+                return;
+            break;
+        case IDCMP_MOUSEBUTTONS:
+        case IDCMP_MOUSEMOVE:
+            mini_mouse(&c);
+            break;
+        case IDCMP_RAWKEY:
+        case IDCMP_VANILLAKEY:
+            mini_key(&c);
+            break;
+        }
+        if (!running)
+            return;
+    }
+}
+
+/* The main loop's tick: the music kept going, the mini player brought up
+ * to date. */
+static void mini_tick(void)
+{
+    iconified_tick();
+    mini_draw(FALSE);
+}
+
 /* The window's Workbench menus. */
 static void window_menu(UWORD code)
 {
@@ -10539,6 +11307,13 @@ static void window_menu(UWORD code)
         if (what == WM_QUIT) {
             running = FALSE;
             return;
+        }
+        if (mini_on && what != WM_ICONIFY) {
+            /* (its menus go with it: this one item, then back) */
+            mini_leave("a menu item: the window again");
+            if (!running || mini_on)
+                return;
+            code = MENUNULL;
         }
         if (what == WM_FULL) {
             amce_log("window", "Project > Full screen (the menu, or Right-Amiga-F)");
@@ -14039,6 +14814,7 @@ static void handle_key(struct IntuiMessage *im)
         case ' ': disarm(); np_press(NB_PLAY); return;
         case '+': case '=': disarm(); np_press(NB_VUP); return;
         case '-': case '_': disarm(); np_press(NB_VDOWN); return;
+        case 'm': case 'M': disarm(); np_press(NB_MUTE); return;
         case 'n': case 'N': case '>': disarm(); np_press(NB_NEXT); return;
         case 'p': case 'P': case '<': disarm(); np_press(NB_PREV); return;
         case 's': case 'S': disarm(); np_press(NB_STOP); return;
@@ -14362,6 +15138,10 @@ static int app_main(void)
             gfx_iconify_asked = FALSE;  /* its gadget, Project > Iconify, Amiga-I */
             iconify();
         }
+        if (gfx_mini_asked) {
+            gfx_mini_asked = FALSE;     /* the window's zoom gadget */
+            mini_enter();
+        }
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         loop_wakes++;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
@@ -14369,12 +15149,14 @@ static int app_main(void)
         ULONG nsig = net_sigmask();
         ULONG bsig = gfx_wb_sigmask();
         ULONG isig = icon_sigmask();
-        ULONG mask = wsig | tsig | lsig | nsig | bsig | isig | SIGBREAKF_CTRL_C;
+        ULONG msig = mini_on && mg.win ? 1UL << mg.win->UserPort->mp_SigBit : 0;
+        ULONG mask = wsig | tsig | lsig | nsig | bsig | isig | msig | SIGBREAKF_CTRL_C;
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = !iconified && ((atb && tb_animating(atb)) || hold_active() || pane_pending ||
-                                   pv_pending || tb_animating(&pv_tb));
+        BOOL busy = !iconified && !mini_on &&
+                    ((atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
+                     tb_animating(&pv_tb));
         ULONG sig;
         if (loader_due())
             preview_arrived();
@@ -14397,6 +15179,11 @@ static int app_main(void)
             if (a == ICON_OPEN)
                 uniconify("its AppIcon opened: no longer iconified");
         }
+        if (sig & msig) {
+            mini_input();               /* the mini player's window */
+            if (!running)
+                break;
+        }
         if (sig & bsig)
             gfx_wb_signalled();         /* (watched prefs changed: OS 3.0, 3.1) */
         if (gfx_wb_event()) {
@@ -14414,6 +15201,11 @@ static int app_main(void)
                 if (iconified) {
                     iconified_tick();       /* the music kept going, nothing more */
                     tick_us = 200000;
+                    goto tick_again;
+                }
+                if (mini_on) {
+                    mini_tick();            /* ...and the mini player up to date */
+                    tick_us = mp_running() || mn.sl_drag ? 40000 : 200000;
                     goto tick_again;
                 }
                 joy_poll();
@@ -14580,6 +15372,8 @@ out:
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();
+    if (mini_on)
+        mini_drop_window();         /* (the mini player's window, on Workbench) */
     gfx_close(&g);
     amce_log("screen closed", "");
     {

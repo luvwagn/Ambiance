@@ -159,7 +159,11 @@ Screens
   bar): About, Settings, Full screen, Iconify, Quit. Iconify (Amiga-I,
   or the title bar's gadget on OS 3.2; full screen too) leaves an
   AppIcon on Workbench and the music playing: double-click it to come
-  back; Workbench's Tools > Quit AmigaMCE quits. Pictures and videos go full
+  back; Workbench's Tools > Quit AmigaMCE quits. Its zoom gadget swaps
+  it for a mini player (the cover, what plays, the time, the buttons,
+  mute, the volume, a meter; 1x, 2x or 3x by Workbench's size); its own
+  zoom gadget, a click on the cover, Esc or Return bring the window
+  back. Pictures and videos go full
   screen from it (their button, F or Amiga-F) on a screen in
   Workbench's own mode, so the monitor does not change mode.
 - The menu folds to its icons while you browse, giving the lists and
@@ -306,7 +310,10 @@ History
 0.8.5  Iconify: the window's gadget on OS 3.2, Project > Iconify or
        Amiga-I (full screen too) leave an AppIcon with a musical note on
        Workbench, the music playing on; double-clicked, AmigaMCE is back
-       where it was. Workbench's Tools menu quits it meanwhile.
+       where it was. Workbench's Tools menu quits it meanwhile. A mini
+       player on the window's zoom gadget. Mute on Now playing (M). Sound
+       output changed in Settings applies to what plays at once. JPEGs
+       no datatype takes (a camera's, from Plex) read by AmigaMCE.
 0.8.1  Now playing at the top of every section's lists, its label in
        orange; what was playing at quit back at the next start, stopped,
        Play going on from where it was. MED songs (MED_note): their
