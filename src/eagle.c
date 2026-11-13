@@ -164,6 +164,7 @@ extern void ehs_getlistdata(void), ehs_loadfile(void), ehs_copydir(void), ehs_co
     ehs_copystring(void), ehs_ok(void), ehs_songend(void), ehs_cutsuffix(void),
     ehs_settimer(void), ehs_waitdma(void), ehs_alloclist(void), ehs_modchange(void);
 UWORD eh_master = 64;           /* PokeVol's scale (0-64) */
+static void note_map(UBYTE *nst);
 static UWORD *nt_silence;       /* two words of nothing (chip RAM): a note player's channel's end */
 ULONG eh_len;                   /* GetListData's second result */
 ULONG eh_d1;                    /* eh_call: what D1 and A0 were left as */
@@ -195,7 +196,7 @@ static struct {
     const ULONG *tags;
     APTR f_interrupt, f_volume, f_voices, f_getpos, f_startint, f_stopint, f_initsound,
          f_endsound, f_nextpatt, f_prevpatt;
-    APTR notestruct;
+    APTR notestruct, *notestruct_at;
     UBYTE *pinfo, *ups;         /* the player's pattern info, scope data */
     WORD sub_min, sub_max, sub;
     WORD poslen;
@@ -1030,12 +1031,32 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     ep.f_prevpatt = (APTR)tag(ep.tags, DTP_PrevPatt);
     ep.f_getpos = (APTR)tag(ep.tags, EP_GetPositionNr);
     ep.pos = -1;
-    if ((fn = tag(ep.tags, DTP_NoteStruct)))
+    if ((fn = tag(ep.tags, DTP_NoteStruct))) {
+        ep.notestruct_at = (APTR *)fn;     /* (its pointer: read each tick) */
         ep.notestruct = *(APTR *)fn;
+    }
     if (ep.notestruct && !nt_silence)
         nt_silence = AllocMem(4, MEMF_CHIP | MEMF_CLEAR);
-    if (ep.notestruct)
-        amce_log("eagleplayer", "a note player: its notes played on Paula by AmigaMCE");
+    if (ep.notestruct) {
+        UBYTE *ns = (UBYTE *)ep.notestruct, *c;
+        int n = 0;
+        char sides[24];
+        sides[0] = 0;
+        for (c = (UBYTE *)*(APTR *)ns; c && n < 32; c = (UBYTE *)*(APTR *)c, n++)
+            if (n < 8) {
+                WORD st = *(WORD *)(c + 14);
+                amce_strlcat(sides, st < 0 ? "L" : st > 0 ? "R" : "-", sizeof(sides));
+            }
+        note_map(ns);
+{
+            char m[160];
+            sprintf(m, "a note player: its notes played on Paula by AmigaMCE "
+                    "(flags %08lx, max %lu Hz, volume %lu, %ld channels %s)",
+                    (unsigned long)*(ULONG *)(ns + 4), (unsigned long)*(ULONG *)(ns + 8),
+                    (unsigned long)*(UWORD *)(ns + 12), (long)n, sides);
+            amce_log("eagleplayer", m);
+        }
+    }
     ep.own_int = ep.f_startint != NULL;
     /* the names it knows */
     mi = module_info();
@@ -1093,6 +1114,7 @@ BOOL ep_start(UWORD *count)
 #define NSTF_32Bit (1 << 20)
 #define NCH_NEXT 0                  /* struct NoteChannel */
 #define NCH_CHANGED 11
+#define NCH_STEREO 14
 #define NCH_SSTART 16
 #define NCH_SLEN 20
 #define NCH_RSTART 24
@@ -1103,6 +1125,8 @@ BOOL ep_start(UWORD *count)
 #define NCHF_Repeat (1 << 2)
 #define NCHF_Frequency (1 << 3)
 #define NCHF_Volume (1 << 4)
+
+#define NT_DMAWAIT 12                /* raster lines (as the host's WaitAudioDMA) */
 
 static void raster_wait(int lines)
 {
@@ -1115,11 +1139,37 @@ static void raster_wait(int lines)
     }
 }
 
+/* Which of Paula's channels each of the list's first 4 plays on: by the side
+ * the player gives it (nch_Stereo: left on 0 and 3, right on 1 and 2) when
+ * two say left and two right, else in order. */
+static UBYTE nt_map[4] = { 0, 1, 2, 3 };
+
+static void note_map(UBYTE *nst)
+{
+    static const UBYTE left[2] = { 0, 3 }, right[2] = { 1, 2 };
+    UBYTE m[4], nl = 0, nr = 0, *ch = (UBYTE *)L(nst, NST_CHANNELS);
+    int i;
+    for (i = 0; i < 4; i++)
+        nt_map[i] = (UBYTE)i;
+    for (i = 0; i < 4 && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
+        WORD st = *(WORD *)(ch + NCH_STEREO);
+        if (st < 0 && nl < 2)
+            m[i] = left[nl++];
+        else if (st > 0 && nr < 2)
+            m[i] = right[nr++];
+        else
+            return;
+    }
+    if (i == 4)
+        for (i = 0; i < 4; i++)
+            nt_map[i] = m[i];
+}
+
 static void note_play(void)
 {
     UBYTE *nst = ep.notestruct, *ch;
     ULONG flags, maxvol;
-    UWORD start = 0;
+    UWORD start = 0, stop = 0;
     UBYTE *rs[4];
     ULONG rl[4];
     int i;
@@ -1132,62 +1182,66 @@ static void note_play(void)
     if (!maxvol)
         maxvol = 64;
     ch = (UBYTE *)L(nst, NST_CHANNELS);
-    for (i = 0; i < 4 && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
-        UBYTE c = ch[NCH_CHANGED];
+    for (i = 0; i < 4; i++)
         rs[i] = NULL;
+    for (i = 0; i < 4 && ch; i++, ch = (UBYTE *)L(ch, NCH_NEXT)) {
+        UBYTE c = ch[NCH_CHANGED], p = nt_map[i];
         if (c & NCHF_Frequency) {
             ULONG f = L(ch, NCH_FREQ), per = flags & NSTF_Period ? f : f ? 3546895UL / f : 0;
             if (per && per < 113)
                 per = 113;
             if (per > 65535)
                 per = 65535;
-            CU->aud[i].ac_per = (UWORD)per;
-            eh_per[i] = (UWORD)per;
+            CU->aud[p].ac_per = (UWORD)per;
+            eh_per[p] = (UWORD)per;
         }
         if (c & NCHF_Volume) {
             ULONG v = (ULONG)*(UWORD *)(ch + NCH_VOL) * 64 / maxvol;
             if (v > 64)
                 v = 64;
             v = v * eh_master / 64;
-            CU->aud[i].ac_vol = (UWORD)v;
-            eh_vol[i] = (UBYTE)v;
+            CU->aud[p].ac_vol = (UWORD)v;
+            eh_vol[p] = (UBYTE)v;
         }
         if (c & NCHF_Sample) {
             UBYTE *ss = (UBYTE *)L(ch, NCH_SSTART);
             ULONG sl = L(ch, NCH_SLEN) >> 1;
+            CU->dmacon = 1 << p;            /* (off, to start it afresh) */
+            stop |= 1 << p;
             if (ss && sl) {
-                start |= 1 << i;
-                CU->dmacon = 1 << i;        /* (off, to start it afresh) */
-                eh_sadr[i] = ss;
-                eh_slen[i] = (UWORD)(sl > 65535 ? 65535 : sl);
-            } else {
-                CU->dmacon = 1 << i;        /* nothing to play: quiet */
+                start |= 1 << p;
+                eh_sadr[p] = ss;
+                eh_slen[p] = (UWORD)(sl > 65535 ? 65535 : sl);
             }
         }
         if (c & (NCHF_Sample | NCHF_Repeat)) {
-            rs[i] = (UBYTE *)L(ch, NCH_RSTART);
-            rl[i] = L(ch, NCH_RLEN) >> 1;
-            if (!rs[i] || rl[i] < 2) {
-                rs[i] = (UBYTE *)nt_silence;    /* played once: silence after */
-                rl[i] = 1;
+            rs[p] = (UBYTE *)L(ch, NCH_RSTART);
+            rl[p] = L(ch, NCH_RLEN) >> 1;
+            if (!rs[p] || rl[p] < 2) {
+                rs[p] = (UBYTE *)nt_silence;    /* played once: silence after */
+                rl[p] = 1;
             }
         }
         ch[NCH_CHANGED] = 0;
     }
     if (start) {
-        raster_wait(2);
+        /* as a replayer's DMA wait (and the host's WaitAudioDMA): Paula lets
+         * a channel go, then takes its start, within a sample's time (a low
+         * note's is several lines); too short and the start is lost to the
+         * repeat (a drum heard as a click, or not at all) */
+        raster_wait(NT_DMAWAIT);
         for (i = 0; i < 4; i++)
             if (start & (1 << i)) {
                 CU->aud[i].ac_ptr = (UWORD *)eh_sadr[i];
                 CU->aud[i].ac_len = eh_slen[i];
             }
         CU->dmacon = DMAF_SETCLR | start;
-        raster_wait(2);
+        raster_wait(NT_DMAWAIT);
         eh_hit |= (UBYTE)start;             /* (Now Playing's meters) */
         eh_trig |= (UBYTE)start;
     }
     for (i = 0; i < 4; i++)                 /* what plays next: the repeat */
-        if (rs[i]) {
+        if (rs[i] && (!(stop & (1 << i)) || (start & (1 << i)))) {
             CU->aud[i].ac_ptr = (UWORD *)rs[i];
             CU->aud[i].ac_len = (UWORD)(rl[i] > 65535 ? 65535 : rl[i]);
             eh_adr[i] = rs[i];
@@ -1205,6 +1259,8 @@ void ep_tick(void)
         eh_icall(ep.f_voices, h->g, 0x0F);
     if (ep.f_interrupt)
         eh_icall(ep.f_interrupt, h->g, 0);
+    if (ep.notestruct_at && *ep.notestruct_at)
+        ep.notestruct = *ep.notestruct_at;  /* (a player may move it) */
     if (ep.notestruct)
         note_play();                        /* a note player's notes, on Paula */
     if (ep.vol_changed && ep.f_volume) {

@@ -6453,6 +6453,40 @@ static void np_button(int i)
         UBYTE lp = play_loop ? on : dim, ap = play_loop ? dim : on;
         WORD lw = gh * sx + 2 * sx, x0 = cx - lw / 2, y0 = gy, tt = t > 2 ? 2 : t, txs = tt * sx;
         WORD lh = gh * 3 / 5, hd = (lh / 2) | 1, ay = gy + gh - 1 - tt / 2, ahd = (gh / 3) | 1;
+        if (!tall && h > 16) {
+            /* not lowres: finer, as the solid glyphs beside it are; lines
+             * of one pixel (two from 19 rows), rounded corners, the head
+             * at the top's middle, in a gap of its own */
+            WORD lt = gh < 19 ? 1 : 2, x1, y1, ah, hx, bh;
+            lw = gh + gh / 3;
+            if (!(lw & 1))
+                lw--;
+            x0 = cx - lw / 2;
+            x1 = x0 + lw - 1;
+            lh = gh * 5 / 9;
+            y1 = y0 + lh - 1;
+            ah = (lh / 2 + lt) | 1;
+            hx = cx - (ah + 1) / 4;
+            gfx_fill(&g, x0 + lt, y0, hx - lt - 1, y0 + lt - 1, lp);
+            gfx_fill(&g, hx + (ah + 1) / 2 + 1, y0, x1 - lt, y0 + lt - 1, lp);
+            gfx_fill(&g, x0 + lt, y1 - lt + 1, x1 - lt, y1, lp);
+            gfx_fill(&g, x0, y0 + lt, x0 + lt - 1, y1 - lt, lp);
+            gfx_fill(&g, x1 - lt + 1, y0 + lt, x1, y1 - lt, lp);
+            if (lt > 1) {
+                gfx_fill(&g, x0 + 1, y0 + 1, x0 + 1, y0 + 1, lp);
+                gfx_fill(&g, x1 - 1, y0 + 1, x1 - 1, y0 + 1, lp);
+                gfx_fill(&g, x0 + 1, y1 - 1, x0 + 1, y1 - 1, lp);
+                gfx_fill(&g, x1 - 1, y1 - 1, x1 - 1, y1 - 1, lp);
+            }
+            np_tri(hx, y0 + lt / 2 - ah / 2, ah, 1, 1, lp);
+            bh = ((gh - lh) / 2) | 1;
+            if (bh < ah)
+                bh = ah;
+            ay = gy + gh - 1 - bh / 2;
+            gfx_fill(&g, x0, ay - (lt - 1) / 2, x1 - (bh + 1) / 2, ay - (lt - 1) / 2 + lt - 1, ap);
+            np_tri(x1 - (bh + 1) / 2 + 1, ay - bh / 2, bh, 1, 1, ap);
+            break;
+        }
         /* the loop: a frame, an arrowhead on its top running right */
         gfx_fill(&g, x0 + txs, y0, x0 + lw - 1 - txs - (hd + 1) / 2 * sx, y0 + tt - 1, lp);
         gfx_fill(&g, x0 + txs, y0 + lh - tt, x0 + lw - 1 - txs, y0 + lh - 1, lp);

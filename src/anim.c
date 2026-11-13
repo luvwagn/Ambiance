@@ -909,15 +909,23 @@ static void bar_cleanup(void)
 static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE bright, UBYTE dim)
 {
     WORD x0 = x + s / 6, x1 = x + s - s / 6, y0 = y + s / 6, y1 = y + s / 2, a = s / 7, i;
-    WORD ay = y + s - s / 5, b = s / 6;
+    WORD ay = y + s - s / 5, b = s / 6, hx = (x0 + x1) / 2 - a / 2;
     SetAPen(rp, play_loop ? bright : dim);
-    RectFill(rp, x0 + t, y0, x1 - t - a, y0 + t - 1);          /* the top, short of the head */
+    /* rounded corners; the head at the top's middle, in a gap of its own */
+    RectFill(rp, x0 + t, y0, hx - t - 1, y0 + t - 1);          /* the top, either side */
+    RectFill(rp, hx + a + 1 + (t > 1), y0, x1 - t, y0 + t - 1);
     RectFill(rp, x0 + t, y1 - t + 1, x1 - t, y1);              /* the bottom */
     RectFill(rp, x0, y0 + t, x0 + t - 1, y1 - t);              /* the sides */
     RectFill(rp, x1 - t + 1, y0 + t, x1, y1 - t);
+    if (t > 1) {
+        WritePixel(rp, x0 + 1, y0 + 1);
+        WritePixel(rp, x1 - 1, y0 + 1);
+        WritePixel(rp, x0 + 1, y1 - 1);
+        WritePixel(rp, x1 - 1, y1 - 1);
+    }
     for (i = 0; i <= a; i++) {                                 /* the head, pointing right */
-        Move(rp, x1 - a - t + i, y0 + t / 2 - (a - i));
-        Draw(rp, x1 - a - t + i, y0 + t / 2 + (a - i));
+        Move(rp, hx + i, y0 + (t - 1) / 2 - (a - i));
+        Draw(rp, hx + i, y0 + (t - 1) / 2 + (a - i));
     }
     SetAPen(rp, play_loop ? dim : bright);                     /* the arrow under it */
     RectFill(rp, x0, ay - t / 2, x1 - b, ay - t / 2 + t - 1);
