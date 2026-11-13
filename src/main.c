@@ -2155,6 +2155,14 @@ static void load_visual(void)
         vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM : VIS_METERS);
     if (GetVar((CONST_STRPTR)"AmigaMCE/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         play_loop = buf[0] == '1';
+    /* the volume as it was left (kept at quit; muted, the volume before) */
+    if (GetVar((CONST_STRPTR)"AmigaMCE/Volume", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+        buf[0] >= '0' && buf[0] <= '9') {
+        LONG v = 0;
+        StrToLong((CONST_STRPTR)buf, &v);
+        if (v >= 0 && v <= 64)
+            mp_set_volume((int)v);
+    }
 }
 
 static void np_draw(BOOL full);
@@ -15349,6 +15357,13 @@ out:
     }
     amce_log("quitting", "");
     resume_store();                 /* what plays now, for the next start */
+    {
+        /* the volume, for the next start (muted: the one before, never silent) */
+        char v[16];
+        int vol = vol_unmuted >= 0 ? vol_unmuted : mp_volume();
+        sprintf(v, "%ld", (long)(vol > 0 ? vol : 32));
+        save_setting("AmigaMCE/Volume", v);
+    }
     radio_stop();
     if (depth)
         nav_store(TRUE);            /* where to start next time */

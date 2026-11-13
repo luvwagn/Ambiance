@@ -1441,6 +1441,89 @@ static LONG first_frame_freq(void)
     return 0;
 }
 
+/* A frame header's frame length in bytes (0: not a header). */
+static LONG mp3_frame_len(const UBYTE *b)
+{
+    static const UWORD br[2][3][15] = {
+        {   /* MPEG 1: layers I, II, III */
+            { 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448 },
+            { 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384 },
+            { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 } },
+        {   /* MPEG 2 and 2.5 */
+            { 0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256 },
+            { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 },
+            { 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160 } } };
+    static const LONG rates[4][3] = {
+        { 11025, 12000, 8000 }, { 0, 0, 0 }, { 22050, 24000, 16000 }, { 44100, 48000, 32000 } };
+    UBYTE ver = (b[1] >> 3) & 3, layer = (b[1] >> 1) & 3, bri = b[2] >> 4, sri = (b[2] >> 2) & 3,
+          pad = (b[2] >> 1) & 1;
+    LONG kbps, sr;
+    int l;
+    if (b[0] != 0xFF || (b[1] & 0xE0) != 0xE0 || ver == 1 || layer == 0 || bri == 15 || bri == 0 ||
+        sri == 3)
+        return 0;
+    l = 3 - layer;                          /* 0: I, 1: II, 2: III */
+    kbps = br[ver == 3 ? 0 : 1][l][bri];
+    sr = rates[ver][sri];
+    if (l == 0)
+        return (12000L * kbps / sr + pad) * 4;
+    if (l == 2 && ver != 3)
+        return 72000L * kbps / sr + pad;    /* MPEG 2, 2.5's layer III: half */
+    return 144000L * kbps / sr + pad;
+}
+
+/* A track started part way (a seek: a byte reckoned from the time): the
+ * bytes before its next real frame let go, one whose frame is followed by
+ * two more like it, never bytes that only look like a header (a seek into
+ * the ID3 tag's picture, at the file's start). FALSE: none found. */
+static BOOL mp3_resync(void)
+{
+    ULONG skipped = 0;
+    for (;;) {
+        LONG lim, i;
+        while (st.nb_len - st.nb_pos < 4096 && st.nb_len < NETBUF)
+            if (!net_more())
+                return FALSE;
+        lim = st.nb_len - st.nb_pos;
+        for (i = 0; i + 4 <= lim; i++) {
+            const UBYTE *b = st.nb + st.nb_pos + i;
+            LONG f1 = mp3_frame_len(b), f2;
+            if (!f1)
+                continue;
+            if (i + f1 + 4 > lim)
+                break;                      /* (more wanted to tell) */
+            if (!(f2 = mp3_frame_len(b + f1)) || ((b[f1 + 1] ^ b[1]) & 0xFE) ||
+                ((b[f1 + 2] ^ b[2]) & 0x0C))
+                continue;                   /* not followed by one like it */
+            if (i + f1 + f2 + 4 > lim)
+                break;
+            if (!mp3_frame_len(b + f1 + f2) || ((b[f1 + f2 + 1] ^ b[1]) & 0xFE))
+                continue;
+            st.nb_pos += i;
+            skipped += (ULONG)i;
+            if (skipped) {
+                char m[80];
+                sprintf(m, "%lu bytes before the first whole frame let go", (unsigned long)skipped);
+                amce_log("track: seek", m);
+            }
+            return TRUE;
+        }
+        if (i == 0)
+            i = 1;
+        st.nb_pos += i;                     /* none there: on through the rest */
+        skipped += (ULONG)i;
+        if (skipped > 2UL << 20)
+            return FALSE;                   /* 2 MB and nothing: not MP3 */
+        if (st.nb_pos > 0) {                /* (room for more: what is left to the front) */
+            memmove(st.nb, st.nb + st.nb_pos, st.nb_len - st.nb_pos);
+            st.nb_len -= st.nb_pos;
+            st.nb_pos = 0;
+        }
+        if (!net_more())
+            return FALSE;
+    }
+}
+
 /* What a track is called in the log: the last part of its URL or path,
  * without the query (a Plex track's carries the sign-in token, which
  * never goes into the log). */
@@ -2260,6 +2343,10 @@ static void radio_main(void)
             fail(st.err[0] ? st.err : _("The track ended before that time"));
             goto out;
         }
+        if (st.range_from && !st.metaint && !mp3_resync()) {
+            fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
+            goto out;
+        }
         if (!(f = first_frame_freq())) {
             fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
             goto out;
@@ -2273,6 +2360,10 @@ static void radio_main(void)
     }
     if (st.skipping && !skip_to()) {
         fail(st.err[0] ? st.err : _("The track ended before that time"));
+        goto out;
+    }
+    if (st.range_from && !st.metaint && !mp3_resync()) {
+        fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
         goto out;
     }
     st.state = ST_BUFFERING;
