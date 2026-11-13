@@ -48,6 +48,7 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/mhi.h>
+#include <proto/ahi.h>
 #define SocketBase st_SocketBase
 #include <proto/bsdsocket.h>
 #include <sys/filio.h>
@@ -393,6 +394,77 @@ static void ahi_serve(void)
     }
 }
 
+/* What AHI does to what it is given, logged once: its default unit's
+ * mode (by name), mixing rate, channels and output volume, and how it
+ * scales and clips (ENV:Sys/ahi.prefs, its AHIU and AHIG chunks). A mode
+ * on Paula at a low rate, or scaling at 0 dB with the volume above 100%,
+ * is heard as clipping where Paula played straight sounds full. */
+struct Library *AHIBase;
+
+static void ahi_describe(void)
+{
+    static BOOL said;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    UBYTE buf[512];
+    char m[220], name[64];
+    LONG len = 0, o;
+    BPTR fh;
+    ULONG mode = 0, freq = 0, outvol = 0, chans = 0;
+    UWORD scale = 0xFFFF, clip = 0xFFFF;
+    BOOL unit = FALSE;
+    static const char *const scales[] = { "safe (1/channels at most)", "dynamic safe (1/channels)",
+                                          "0 dB", "-3 dB", "-6 dB" };
+    if (said)
+        return;
+    said = TRUE;
+    me->pr_WindowPtr = (APTR)-1;
+    if ((fh = Open((CONST_STRPTR)"ENV:Sys/ahi.prefs", MODE_OLDFILE))) {
+        len = Read(fh, buf, sizeof(buf));
+        Close(fh);
+    }
+    me->pr_WindowPtr = oldwin;
+    for (o = 12; o + 8 <= len;) {
+        ULONG id = ((ULONG)buf[o] << 24) | ((ULONG)buf[o + 1] << 16) | ((ULONG)buf[o + 2] << 8) | buf[o + 3];
+        ULONG n = ((ULONG)buf[o + 4] << 24) | ((ULONG)buf[o + 5] << 16) | ((ULONG)buf[o + 6] << 8) | buf[o + 7];
+        const UBYTE *c = buf + o + 8;
+#define B32(p) (((ULONG)(p)[0] << 24) | ((ULONG)(p)[1] << 16) | ((ULONG)(p)[2] << 8) | (p)[3])
+        if (id == ID_AHIG && n >= 22 && o + 8 + 22 <= len) {
+            clip = (UWORD)((c[12] << 8) | c[13]);
+            scale = (UWORD)((c[20] << 8) | c[21]);
+        } else if (id == ID_AHIU && n >= 24 && o + 8 + 24 <= len && c[0] == AHI_DEFAULT_UNIT) {
+            unit = TRUE;
+            chans = (ULONG)((c[2] << 8) | c[3]);
+            mode = B32(c + 4);
+            freq = B32(c + 8);
+            outvol = B32(c + 20);
+        }
+#undef B32
+        o += 8 + n + (n & 1);
+    }
+    name[0] = 0;
+    if (unit && (AHIBase = (struct Library *)ah.io[0]->ahir_Std.io_Device)) {
+        struct TagItem t[3];
+        t[0].ti_Tag = AHIDB_Name;
+        t[0].ti_Data = (ULONG)name;
+        t[1].ti_Tag = AHIDB_BufferLen;
+        t[1].ti_Data = sizeof(name);
+        t[2].ti_Tag = TAG_DONE;
+        if (!AHI_GetAudioAttrsA(mode, NULL, t))
+            name[0] = 0;
+    }
+    if (!unit) {
+        amce_log("sound", "AHI: its preferences not read (ENV:Sys/ahi.prefs)");
+        return;
+    }
+    sprintf(m, "AHI's default unit: %.50s ($%08lx), mixing at %lu Hz, %lu channel%s, output volume "
+               "%lu%%; scaling %s, master volume %s",
+            name[0] ? name : "?", (unsigned long)mode, (unsigned long)freq, (unsigned long)chans,
+            chans == 1 ? "" : "s", (unsigned long)((outvol * 100 + 0x8000) >> 16),
+            scale < 5 ? scales[scale] : "?", clip == 0xFFFF ? "?" : clip ? "clipped" : "not clipped");
+    amce_log("sound", m);
+}
+
 static BOOL ahi_start(void)
 {
     int k;
@@ -420,6 +492,7 @@ static BOOL ahi_start(void)
                 st.dec_channels == 1 ? "mono" : "stereo");
         amce_log("sound", m);
     }
+    ahi_describe();
     return TRUE;
 }
 
