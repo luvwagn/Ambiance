@@ -731,8 +731,14 @@ void mp_tempo_check(void)
         sprintf(m, "the tempo interrupt came %ld times in %ld ms, of %ld (%ld%%); %ld ticks caught up",
                 (long)got, (long)el, (long)want, (long)(got * 100 / want), (long)caught);
         amce_log("music", m);
-        if (mp.engine == ENG_EAGLE)
+        if (mp.engine == ENG_EAGLE) {
             ep_note_log();                  /* (a note player's first notes, once) */
+            if (mp.med_units) {
+                sprintf(m, "its length: %lu ms (a tick %lu E-clocks at its first tempo)",
+                        (unsigned long)med_ms(mp.med_units), (unsigned long)mp.med_cnt0);
+                amce_log("music", m);
+            }
+        }
     }
 }
 
@@ -1068,6 +1074,15 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                 struct MedTime mt;          /* (a MED song's length, before it is relocated) */
                 mp.med_units = med_measure(mem, mlen, &mt);
                 mp.med_tracks = (UWORD)mt.tracks;
+                if (mlen >= 4 && mem[0] == 'M' && mem[1] == 'M' && mem[2] == 'D') {
+                    char kind[2];
+                    kind[0] = (char)mem[3];
+                    kind[1] = 0;
+                    sprintf(m, "%s: MMD%s, %ld positions, %ld tracks, first tempo %lu: %lu ticks",
+                            FilePart((STRPTR)path), kind, (long)mt.positions, (long)mt.tracks,
+                            (unsigned long)mt.tempo, (unsigned long)(mp.med_units / 16));
+                    amce_log("music", m);
+                }
             }
             if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
                 FreeVec(copy);

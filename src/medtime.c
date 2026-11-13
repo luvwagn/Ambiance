@@ -39,8 +39,9 @@ static unsigned u16(const unsigned char *m, unsigned long len, unsigned long o)
 unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedTime *out)
 {
     unsigned long song, blkarr, units = 0, lines = 0;
-    unsigned short seq[MAXSEQ], first[MAXSEQ];      /* block per position; its section's start */
-    unsigned char seen[MAXSEQ];
+    static unsigned short seq[MAXSEQ], first[MAXSEQ];   /* block per position; its section's
+                                                         * start (static: not on a small stack) */
+    static unsigned char seen[MAXSEQ];
     int nseq = 0, ver, pos, line, numblocks, i;
     unsigned tempo, tempo0, tpl;
     int tracks = 0;
