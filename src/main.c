@@ -9976,6 +9976,11 @@ static void radio_done(struct NetJob *j)
             /* a picture of the server's: kept in RAM:, then shown */
             art_nj[d] = NULL;
             if (j->body && j->status == 200 && plex_art_save(art_want[d], j->body, j->len)) {
+                char m[120];
+                /* its size and time: what the format costs on the wire */
+                sprintf(m, "%.50s: %lu bytes in %lu ms", FilePart((STRPTR)art_want[d]),
+                        (unsigned long)j->len, (unsigned long)j->ms);
+                amce_log("plex: picture", m);
                 art_ready(d, art_want[d]);
             } else {
                 char m[80];

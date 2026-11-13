@@ -843,8 +843,7 @@ void plex_art_file(const char *thumb, WORD w, WORD h, char *file)
     const char *s;
     for (s = thumb; *s; s++)
         hash = hash * 33 + (UBYTE)*s;
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.%s", (unsigned long)hash, (long)w, (long)h,
-            (LONG)w * h > 640L * 512 ? "jpg" : "png");
+    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.jpg", (unsigned long)hash, (long)w, (long)h);
 }
 
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax)
@@ -856,11 +855,14 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
         UnLock(l);
     else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
         UnLock(l);
-    /* bigger than a 640 x 512 screen (a photo on RTG): JPEG, a tenth of a
-     * PNG's size (a 1024 x 768 PNG of a photo is past what is read, 2 MB).
-     * PNG below that only because the 68k decodes it faster; where the
-     * ZZ9000's datatype reads JPEG, the card decodes it: JPEG always. */
-    jpg = plex.jpeg_card || (LONG)w * h > 640L * 512;
+    /* JPEG at every size: AmigaMCE decodes it itself (jdec, jpgthumb.c),
+     * with no datatype (none of Warp's shareware requesters), several times
+     * faster than WarpJPEG, and the server's are baseline, which jdec
+     * reads; a tenth of a PNG's size besides. PNG was asked for below 640
+     * x 512 only while the datatypes did the decoding (PNG was quicker
+     * there, notes/cover-decode-times.md); the ZZ9000's datatype reads
+     * JPEG too. */
+    jpg = TRUE;
     plex_art_file(thumb, w, h, file);
     (void)fmax;
     url_encode(thumb, enc, sizeof(enc));
