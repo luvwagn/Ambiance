@@ -865,7 +865,7 @@ static struct Task *wbw_task;
 static BYTE wbw_bit = -1;
 static volatile BOOL wbw_open;          /* our window is on Workbench now */
 static volatile UBYTE wbw_ev;           /* GFX_WB_* asked, for the main loop */
-static BOOL wbw_on;
+static BOOL wbw_on, wbw_hooked;
 /* Without the hook (workbench.library V40: OS 3.0, 3.1): the prefs whose
  * change makes IPrefs reset Workbench watched as IPrefs watches them, the
  * window closed at once, and Workbench seen to go and come back. */
@@ -906,41 +906,42 @@ static ULONG wbw_func(register struct Hook *h __asm("a0"),
 static void wbw_start(void)
 {
     struct TagItem t[2];
+    int i;
     if (wbw_on)
         return;
     if (wbw_bit < 0 && (wbw_bit = AllocSignal(-1)) < 0)
         return;
     wbw_task = FindTask(NULL);
-    if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45))) {
-        int i;
-        for (i = 0; i < WBW_NFILES; i++) {
-            struct NotifyRequest *nr = &wbw_nr[i];
-            memset(nr, 0, sizeof(*nr));
-            nr->nr_Name = (STRPTR)wbw_files[i];
-            nr->nr_Flags = NRF_SEND_SIGNAL;
-            nr->nr_stuff.nr_Signal.nr_Task = wbw_task;
-            nr->nr_stuff.nr_Signal.nr_SignalNum = (UBYTE)wbw_bit;
-            if (StartNotify(nr))
-                wbw_nr_on |= 1 << i;
-        }
-        wbw_on = TRUE;
-        amce_log("window", wbw_nr_on ? "Workbench's closing followed (its prefs watched: no "
-                                       "workbench.library V45)"
-                                     : "Workbench's closing not followed (no notification)");
-        return;
+    wbw_on = TRUE;
+    /* the prefs watched, on every version: Intuition puts up its "close
+     * all windows" requester before it asks Workbench to shut down, so
+     * Workbench's hook comes too late for a screen mode change */
+    for (i = 0; i < WBW_NFILES; i++) {
+        struct NotifyRequest *nr = &wbw_nr[i];
+        memset(nr, 0, sizeof(*nr));
+        nr->nr_Name = (STRPTR)wbw_files[i];
+        nr->nr_Flags = NRF_SEND_SIGNAL;
+        nr->nr_stuff.nr_Signal.nr_Task = wbw_task;
+        nr->nr_stuff.nr_Signal.nr_SignalNum = (UBYTE)wbw_bit;
+        if (StartNotify(nr))
+            wbw_nr_on |= 1 << i;
     }
+    amce_log("window", wbw_nr_on ? "Workbench's prefs watched (ScreenMode, Overscan, Font)"
+                                 : "Workbench's prefs not watched (no notification)");
+    /* and Workbench's own hook (V45 on), for its other ways of closing */
+    if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45)))
+        return;
     wbw_hook.h_Entry = (HOOKFUNC)(APTR)wbw_func;
     t[0].ti_Tag = WBCTRLA_AddSetupCleanupHook;
     t[0].ti_Data = (ULONG)&wbw_hook;
     t[1].ti_Tag = TAG_DONE;
-    if (!WorkbenchControlA(NULL, t)) {
-        amce_log("window", "Workbench's setup/cleanup hook not taken");
-        FreeSignal(wbw_bit);
-        wbw_bit = -1;
-        return;
+    if (WorkbenchControlA(NULL, t)) {
+        wbw_hooked = TRUE;
+        amce_log("window", "Workbench's closing followed (its setup/cleanup hook)");
+    } else {
+        CloseLibrary(WorkbenchBase);
+        WorkbenchBase = NULL;
     }
-    wbw_on = TRUE;
-    amce_log("window", "Workbench's closing followed (its setup/cleanup hook)");
 }
 
 void gfx_wb_watch_end(void)
@@ -949,18 +950,16 @@ void gfx_wb_watch_end(void)
     for (i = 0; i < WBW_NFILES; i++)
         if (wbw_nr_on & (1 << i))
             EndNotify(&wbw_nr[i]);
-    if (wbw_nr_on) {
-        wbw_nr_on = 0;
-        wbw_on = FALSE;
-    }
-    if (wbw_on) {
+    wbw_nr_on = 0;
+    if (wbw_hooked) {
         struct TagItem t[2];
         t[0].ti_Tag = WBCTRLA_RemSetupCleanupHook;
         t[0].ti_Data = (ULONG)&wbw_hook;
         t[1].ti_Tag = TAG_DONE;
         WorkbenchControlA(NULL, t);
-        wbw_on = FALSE;
+        wbw_hooked = FALSE;
     }
+    wbw_on = FALSE;
     if (wbw_bit >= 0)
         FreeSignal(wbw_bit);
     wbw_bit = -1;
