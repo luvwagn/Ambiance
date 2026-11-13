@@ -313,7 +313,7 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
 
 UWORD sm_pens_used(const struct Smooth *s)
 {
-    return s->g && !s->g->truecolor ? s->ngot : s->next_pen - FIRST_PEN;
+    return s->g && (!s->g->truecolor || s->g->wb) ? s->ngot : s->next_pen - FIRST_PEN;
 }
 
 void sm_detach(struct Smooth *s)
@@ -358,8 +358,10 @@ static UBYTE alloc_rgb(struct Smooth *s, ULONG r, ULONG gg, ULONG b)
     UBYTE pen;
     if (!s->g)
         return 0;
-    if (!s->g->truecolor) {
-        /* a real pen: any free one from 32 up, held while the screen is
+    if (!s->g->truecolor || s->g->wb) {
+        /* (a window on Workbench likewise: its pens are everyone's, and
+         * one set to a shade would change what other programs draw)
+         * a real pen: any free one from 32 up, held while the screen is
          * open. The UI's own pens (0-15) and the pointer's (16-31) are not
          * obtained by anyone (the screen shares its pens), so ObtainPen
          * can hand them out; a shade there was changed back under the
@@ -557,9 +559,9 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         /* each step to its pen, then the box in one write */
         UBYTE pen[SMOOTH_LEVELS], *c = s->cbuf;
         ULONG k, n = (ULONG)s->cmod * h;
-        pen[0] = bg;
+        pen[0] = GPEN(bg);
         for (lv = 1; lv < SMOOTH_LEVELS; lv++)
-            pen[lv] = (s->used & (1 << lv)) ? sm_pen(s, g, fg, bg, lv) : bg;
+            pen[lv] = GPEN((s->used & (1 << lv)) ? sm_pen(s, g, fg, bg, lv) : bg);
         for (k = 0; k < n; k++)
             c[k] = pen[c[k]];
         WriteChunkyPixels(rp, x, y, x + w - 1, y + h - 1, s->cbuf, s->cmod);
@@ -578,14 +580,14 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
                 s->pl[0][roff + i] = (UBYTE)~b & (i == nb - 1 ? last : 0xFF);
             }
         }
-        SetAPen(rp, bg);
+        SetAPen(rp, GPEN(bg));
         BltTemplate((PLANEPTR)s->pl[0], 0, s->bpr, rp, x, y, w, h);
     }
     for (lv = 1; lv < SMOOTH_LEVELS; lv++)
         if (s->used & (1 << lv)) {
             UBYTE pen = sm_pen(s, g, fg, bg, lv);
             PLANEPTR m = (PLANEPTR)s->pl[lv];
-            SetAPen(rp, pen);
+            SetAPen(rp, GPEN(pen));
             BltTemplate(m, 0, s->bpr, rp, x, y, w, h);
         }
 }
@@ -777,7 +779,7 @@ BOOL sm_logo(struct Smooth *s, struct Gfx *g)
     for (c = 0; c < s->logo_nc; c++) {
         const UBYTE *rgb = s->logo_pal + 3 * c;
         UBYTE pen = alloc_rgb(s, rgb[0], rgb[1], rgb[2]);
-        pens[c] = pen ? pen : nearest_ui_pen(rgb);
+        pens[c] = pen ? pen : GPEN(nearest_ui_pen(rgb));   /* the pen drawn with */
     }
     return logo_masks(g, s->logo_w, s->logo_h, s->logo_nc, s->logo_idx, pens);
 }
@@ -810,6 +812,10 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale)
             cm && cm->Count >= FIRST_PEN + nc) {
             for (c = 0; c < nc; c++) {
                 const UBYTE *rgb = pal + 3 * c;
+                if (g->wb) {                /* Workbench's pens: obtained, not set */
+                    pens[c] = gfx_obtain_rgb(g, rgb[0], rgb[1], rgb[2]);
+                    continue;
+                }
                 pens[c] = (UBYTE)(FIRST_PEN + c);
                 SetRGB32(&g->scr->ViewPort, FIRST_PEN + c, rgb[0] * 0x01010101UL,
                          rgb[1] * 0x01010101UL, rgb[2] * 0x01010101UL);

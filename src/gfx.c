@@ -26,11 +26,12 @@
 #include <cybergraphx/cybergraphics.h>
 #include <proto/cybergraphics.h>
 #include <proto/layers.h>
+#include <proto/lowlevel.h>
 #include <stdio.h>
 #include "../datatypes/jpeg/amcejpeg.h"
 
 extern struct GfxBase *GfxBase;
-extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase;
+extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase, *LowLevelBase;
 struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
 static BOOL dirty;              /* drawn since the last gfx_present (double buffering) */
 
@@ -376,12 +377,310 @@ BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
 
 static void blk_reserve(struct Gfx *g);
 
+/* ------------------------------------------------------------ window
+ * A window on the Workbench screen (claude/workbench-window.md, step 1):
+ * a fixed size, the Medium text size (the 480 smooth set; the pixel style
+ * at 1x, as on a 640 x 480 screen), 640 x 480 inside if the Workbench has
+ * room. Only on a 15-bit or deeper Workbench on the graphics card:
+ * pictures, thumbnails and video go to it as RGB, needing no pens, and
+ * AmigaMCE's 16 colours are pens obtained from Workbench (gfx_penmap)
+ * rather than its own 0-15, which are Workbench's there. Everything is
+ * drawn into a buffer of our own (a layer on a bitmap in the Workbench's
+ * format, so the blits that write g->rp->BitMap straight land in it) and
+ * copied into the window by gfx_present. */
+BOOL gfx_window_wanted;
+BOOL gfx_close_asked;
+UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+#define WIN_W 640           /* inside: 512 x 384 design units at Medium */
+#define WIN_H 480
+#define WIN_MIN_W 600       /* 480 x 256 design units at Medium */
+#define WIN_MIN_H 320
+#define WIN_LINES 480       /* the smooth set: Medium */
+static WORD win_left = -1, win_top = -1;    /* where it was: reopened there (after a game) */
+static UBYTE wb_pen[NUM_UI_PENS + 32];      /* pens obtained from Workbench, let go at close */
+static UWORD wb_npen;
+static struct BitMap *wbuf_bm;              /* the buffer drawn into */
+static struct Layer_Info *wbuf_li;
+static struct Layer *wbuf_lay;
+static ULONG wst_n, wst_sum, wst_max, wst_first, wst_all;  /* presents (Debug) */
+
+/* The window's borders on this Workbench, and the most the inside can be. */
+static void wb_box(struct Screen *wb, WORD *bw, WORD *bh, WORD *maxw, WORD *maxh)
+{
+    WORD bt = wb->WBorTop + (wb->Font ? wb->Font->ta_YSize : 8) + 1;
+    *bw = wb->WBorLeft + wb->WBorRight;
+    *bh = bt + wb->WBorBottom;
+    *maxw = wb->Width - *bw;
+    *maxh = wb->Height - (wb->BarHeight + 1) - *bh;
+}
+
+const char *gfx_window_problem(const struct Caps *c)
+{
+    static char why[80];
+    struct Screen *wb;
+    ULONG d;
+    WORD bw, bh, mw, mh;
+    if (!c->rtg || !c->wb_rtg)
+        return "Workbench is not on the graphics card";
+    if (!(wb = LockPubScreen(NULL)))
+        return "Workbench is not open";
+    d = GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH);
+    wb_box(wb, &bw, &bh, &mw, &mh);
+    UnlockPubScreen(NULL, wb);
+    if (d < 15) {
+        sprintf(why, "Workbench is %lu-bit: a window needs 15 bits or more", (unsigned long)d);
+        return why;
+    }
+    if (mw < WIN_MIN_W || mh < WIN_MIN_H) {
+        sprintf(why, "Workbench has room for %ld x %ld inside a window, under %ld x %ld",
+                (long)mw, (long)mh, (long)WIN_MIN_W, (long)WIN_MIN_H);
+        return why;
+    }
+    return NULL;
+}
+
+/* A pen of Workbench's in this colour (8 bits a gun), held until the window
+ * closes: one already that colour, or a free one made it. */
+UBYTE gfx_obtain_rgb(struct Gfx *g, UBYTE r, UBYTE gg, UBYTE b)
+{
+    LONG p;
+    if (wb_npen >= sizeof(wb_pen))
+        return GPEN(PEN_TEXT);
+    p = ObtainBestPen(g->scr->ViewPort.ColorMap, r * 0x01010101UL, gg * 0x01010101UL,
+                      b * 0x01010101UL, OBP_Precision, PRECISION_EXACT, TAG_END);
+    if (p < 0)
+        return GPEN(PEN_TEXT);
+    wb_pen[wb_npen++] = (UBYTE)p;
+    return (UBYTE)p;
+}
+
+/* Where the buffer is: the card's memory (in no list of the system's), or
+ * Fast or Chip RAM (a buffer outside the card is copied over the bus at
+ * every present). */
+static const char *wbuf_where(void)
+{
+    APTR base = NULL, lk;
+    ULONG t;
+    if (!wbuf_bm || !CyberGfxBase || !GetCyberMapAttr(wbuf_bm, CYBRMATTR_ISCYBERGFX))
+        return "not a graphics card bitmap";
+    if ((lk = LockBitMapTags(wbuf_bm, LBMI_BASEADDRESS, (ULONG)&base, TAG_END)))
+        UnLockBitMap(lk);
+    if (!base)
+        return "where, it would not say";
+    t = TypeOfMem(base);
+    return t & MEMF_CHIP ? "in Chip RAM" : t ? "in Fast RAM" : "in the card's memory";
+}
+
+void gfx_window_log(struct Gfx *g)
+{
+    char m[200];
+    if (!g->wb || !wst_n)
+        return;
+    sprintf(m, "%lu presents (%lu in all): %lu ms on average, longest %lu, the first %lu; "
+               "%lu x %lu, %lu-bit, the buffer %s",
+            (unsigned long)wst_n, (unsigned long)wst_all, (unsigned long)(wst_sum / wst_n),
+            (unsigned long)wst_max, (unsigned long)wst_first, (unsigned long)g->w,
+            (unsigned long)g->h, (unsigned long)g->depth, wbuf_where());
+    amce_log("window", m);
+    wst_n = wst_sum = wst_max = 0;
+}
+
+static void win_stat(struct Gfx *g, ULONG ms)
+{
+    if (!wst_all++)
+        wst_first = ms;
+    wst_n++;
+    wst_sum += ms;
+    if (ms > wst_max)
+        wst_max = ms;
+    if (wst_all == 1 || wst_n >= 500)
+        gfx_window_log(g);
+}
+
+static void win_free(struct Gfx *g)
+{
+    UWORD i;
+    if (wbuf_lay)
+        DeleteLayer(0, wbuf_lay);
+    if (wbuf_li)
+        DisposeLayerInfo(wbuf_li);
+    WaitBlit();
+    if (wbuf_bm)
+        FreeBitMap(wbuf_bm);
+    wbuf_lay = NULL;
+    wbuf_li = NULL;
+    wbuf_bm = NULL;
+    if (g->scr)
+        for (i = 0; i < wb_npen; i++)
+            ReleasePen(g->scr->ViewPort.ColorMap, wb_pen[i]);
+    wb_npen = 0;
+    for (i = 0; i < NUM_UI_PENS; i++)
+        gfx_penmap[i] = (UBYTE)i;
+}
+
+static void open_finish(struct Gfx *g);
+
+/* The window opened on Workbench, everything ready to draw: FALSE (and
+ * nothing left open) if it could not be. */
+static BOOL win_open(struct Gfx *g, int style)
+{
+    struct Screen *wb;
+    struct ColorMap *cm;
+    WORD bw, bh, mw, mh, iw, ih, left, top;
+    char m[160];
+    int i;
+
+    if (!(wb = LockPubScreen(NULL)))
+        return FALSE;
+    wb_box(wb, &bw, &bh, &mw, &mh);
+    iw = mw < WIN_W ? mw : WIN_W;
+    ih = mh < WIN_H ? mh : WIN_H;
+    left = win_left >= 0 ? win_left : (wb->Width - (iw + bw)) / 2;
+    top = win_top >= 0 ? win_top : wb->BarHeight + 1 + (mh - ih) / 2;
+    g->scr = wb;
+    g->wb = TRUE;
+    g->mode = SM_RTG_640;                   /* the full screen it looks like */
+    g->depth = GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH);
+    g->truecolor = TRUE;
+    g->planar = FALSE;
+    g->pens_shared = FALSE;
+    if (!CyberGfxBase)
+        CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
+    g->win = OpenWindowTags(NULL,
+                            WA_PubScreen, (ULONG)wb, WA_Left, left, WA_Top, top,
+                            WA_InnerWidth, iw, WA_InnerHeight, ih, WA_AutoAdjust, TRUE,
+                            WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
+                            WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
+                            WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
+                            WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                                      IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW |
+                                      IDCMP_ACTIVEWINDOW | IDCMP_CLOSEWINDOW |
+                                      IDCMP_REFRESHWINDOW,
+                            TAG_END);
+    if (!g->win) {
+        amce_log("window", "OpenWindow failed");
+        goto fail;
+    }
+    g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
+    g->h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
+    /* the buffer: the inside, a friend of Workbench's bitmap (so in its
+     * format, and on the card if there is room) */
+    wbuf_bm = AllocBitMap(g->w, g->h, g->depth, BMF_MINPLANES, wb->RastPort.BitMap);
+    wbuf_li = wbuf_bm && LayersBase ? NewLayerInfo() : NULL;
+    wbuf_lay = wbuf_li ? CreateUpfrontLayer(wbuf_li, wbuf_bm, 0, 0, g->w - 1, g->h - 1,
+                                            LAYERSIMPLE, NULL) : NULL;
+    if (!wbuf_lay) {
+        amce_log("window", "no memory for its buffer");
+        goto fail;
+    }
+    g->rp = wbuf_lay->rp;
+    /* AmigaMCE's colours: Workbench's pens of those colours, or free ones
+     * made them (shared with anyone wanting the same) */
+    cm = wb->ViewPort.ColorMap;
+    wb_npen = 0;
+    for (i = 0; i < NUM_UI_PENS; i++) {
+        LONG p = ObtainBestPen(cm, ui_palette32[1 + i * 3], ui_palette32[2 + i * 3],
+                               ui_palette32[3 + i * 3], OBP_Precision, PRECISION_EXACT, TAG_END);
+        if (p >= 0)
+            wb_pen[wb_npen++] = (UBYTE)p;
+        gfx_penmap[i] = p >= 0 ? (UBYTE)p : 1;
+    }
+    {
+        char *e = m;
+        e += sprintf(m, "UI colours in Workbench's pens");
+        for (i = 0; i < NUM_UI_PENS; i++)
+            e += sprintf(e, " %ld", (long)gfx_penmap[i]);
+        amce_log("window", m);
+    }
+    sprintf(m, "%ld x %ld inside at %ld, %ld on a %ld x %ld Workbench, %ld-bit; the buffer %s",
+            (long)g->w, (long)g->h, (long)g->win->LeftEdge, (long)g->win->TopEdge,
+            (long)wb->Width, (long)wb->Height, (long)g->depth, wbuf_where());
+    amce_log("window", m);
+    wst_n = wst_sum = wst_max = wst_all = 0;
+
+    g->kint = 1;
+    g->style = STYLE_PIXEL;
+    g->sm = NULL;
+    pixel_scale(g);
+    if (style == STYLE_SMOOTH && (g->sm = sm_load(WIN_LINES))) {
+        g->style = STYLE_SMOOTH;
+        g->k = sm_scale(g->sm);
+    }
+    layout_metrics(g);
+    amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
+    open_finish(g);
+    return TRUE;
+
+fail:
+    win_free(g);
+    if (g->win)
+        CloseWindow(g->win);
+    g->win = NULL;
+    UnlockPubScreen(NULL, wb);
+    g->scr = NULL;
+    g->wb = FALSE;
+    return FALSE;
+}
+
+/* A window message only a window on Workbench has. */
+BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
+{
+    if (!g->wb || !g->win)
+        return FALSE;
+    switch (cls) {
+    case IDCMP_REFRESHWINDOW:
+        /* uncovered: what it showed, from the buffer */
+        BeginRefresh(g->win);
+        if (wbuf_bm)
+            BltBitMapRastPort(wbuf_bm, 0, 0, g->win->RPort, g->win->BorderLeft,
+                              g->win->BorderTop, g->w, g->h, 0xC0);
+        EndRefresh(g->win, TRUE);
+        return TRUE;
+    case IDCMP_CLOSEWINDOW:
+        gfx_close_asked = TRUE;
+        return TRUE;
+    case IDCMP_ACTIVEWINDOW:
+        return TRUE;
+    }
+    return FALSE;
+}
+
+BOOL gfx_input_ours(const struct Gfx *g)
+{
+    return !g->wb || (g->win && (g->win->Flags & WFLG_WINDOWACTIVE));
+}
+
+ULONG gfx_joy(const struct Gfx *g)
+{
+    return LowLevelBase && gfx_input_ours(g) ? ReadJoyPort(1) : 0;
+}
+
+/* What was drawn copied into the window now (a loop with no present of its
+ * own: the viewer's, video's). Nothing on a screen of our own. */
+void gfx_window_show(struct Gfx *g)
+{
+    if (!g->wb)
+        return;
+    dirty = TRUE;
+    gfx_present(g);
+}
+
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 {
     static UWORD pens[] = { (UWORD)~0 };
     ULONG mode;
     int i;
 
+    g->wb = FALSE;
+    gfx_close_asked = FALSE;
+    if (gfx_window_wanted) {
+        const char *why = gfx_window_problem(c);
+        char m[140];
+        if (!why && win_open(g, style))
+            return TRUE;
+        sprintf(m, "%s: full screen instead", why ? why : "it would not open");
+        amce_log("window", m);
+    }
     if (smode == SM_AUTO || gfx_mode_problem(c, smode))
         smode = gfx_mode_auto(c);
     mode = mode_id(smode);
@@ -477,6 +776,13 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         return FALSE;
     }
     g->rp = g->win->RPort;
+    open_finish(g);
+    return TRUE;
+}
+
+/* Fonts, artwork and the first fill, the screen or window open. */
+static void open_finish(struct Gfx *g)
+{
     SetDrMd(g->rp, JAM1);
     open_font(g);
     if (g->sm) {
@@ -495,7 +801,11 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
     blk_reserve(g);
     gfx_dbuf_start(g);
-    return TRUE;
+    if (g->sm && g->wb) {
+        char m[80];
+        sprintf(m, "%lu pens for its shades and logo so far", (unsigned long)sm_pens_used(g->sm));
+        amce_log("window: smooth", m);
+    }
 }
 
 static UBYTE pic_pens[256];     /* pens the picture on screen holds (own remap) */
@@ -644,7 +954,7 @@ static void band_fill(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WOR
     WORD r, r1;
     if (x1 < x0 || y1 < y0)
         return;
-    SetAPen(g->rp, PEN_BG);
+    SetAPen(g->rp, GPEN(PEN_BG));
     SetWriteMask(g->rp, 0xFF);
     for (r = y0; r <= y1; r = r1 + 1) {
         r1 = b->on && r + BAND_ROWS - 1 < y1 ? r + BAND_ROWS - 1 : y1;
@@ -819,7 +1129,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
     g->style = STYLE_PIXEL;                 /* (pixel_scale asks: the pixel style's font) */
     pixel_scale(g);
     if (style == STYLE_SMOOTH && modes[g->mode].kind == K_RTG && g->depth >= 8) {
-        if ((g->sm = sm_load(g->h))) {
+        if ((g->sm = sm_load(g->wb ? WIN_LINES : g->h))) {
             g->style = STYLE_SMOOTH;
             g->k = sm_scale(g->sm);
         } else {
@@ -853,6 +1163,8 @@ void gfx_close(struct Gfx *g)
 {
     int i;
     menu_narrow = FALSE;                    /* a new screen starts with its labels */
+    if (g->wb)
+        gfx_window_log(g);                  /* (while cybergraphics is open) */
     cjk_close();
     gfx_dbuf_stop(g);
     gfx_picture_free(g);
@@ -862,6 +1174,13 @@ void gfx_close(struct Gfx *g)
         CyberGfxBase = NULL;
     }
     style_free(g);
+    if (g->wb) {
+        win_free(g);                        /* the buffer, Workbench's pens */
+        if (g->win) {
+            win_left = g->win->LeftEdge;    /* reopened there */
+            win_top = g->win->TopEdge;
+        }
+    }
     if (g->win) {
         amce_log("CloseWindow", "");
         CloseWindow(g->win);
@@ -870,6 +1189,11 @@ void gfx_close(struct Gfx *g)
     if (g->font) {
         CloseFont(g->font);
         g->font = NULL;
+    }
+    if (g->scr && g->wb) {
+        UnlockPubScreen(NULL, g->scr);      /* Workbench's: never closed */
+        g->scr = NULL;
+        g->wb = FALSE;
     }
     if (g->scr) {
         BOOL ok;
@@ -891,7 +1215,7 @@ void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
     dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
-    SetAPen(g->rp, pen);
+    SetAPen(g->rp, GPEN(pen));
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
@@ -951,7 +1275,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
     SetWriteMask(g->rp, 0xFF);
     if (!g->sm) {
         /* whole pixels: a run per row, inside if the pixel's centre is */
-        SetAPen(g->rp, pen);
+        SetAPen(g->rp, GPEN(pen));
         for (y = -ry; y < ry; y++) {
             LONG py = 8 * y + 4, half = 0;
             while (half < r && INSIDE(8 * half + 4, py))
@@ -971,7 +1295,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
                         n++;
                 }
             if (n) {
-                SetAPen(g->rp, sm_pen(g->sm, g, pen, bg, (UBYTE)((n * (SMOOTH_LEVELS - 1) + 8) / 16)));
+                SetAPen(g->rp, GPEN(sm_pen(g->sm, g, pen, bg, (UBYTE)((n * (SMOOTH_LEVELS - 1) + 8) / 16))));
                 WritePixel(g->rp, cx + x, cy + y);
             }
         }
@@ -983,7 +1307,7 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
     dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
-    SetAPen(g->rp, PEN_BG);
+    SetAPen(g->rp, GPEN(PEN_BG));
     if (g->planar && g->depth > 3) {
         SetWriteMask(g->rp, 0xF8);
         RectFill(g->rp, x0, y0, x1, y1);
@@ -1033,7 +1357,7 @@ void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char 
         n = TextFit(rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, g->font_h + 1);
     if (!n)
         return;
-    SetAPen(rp, fg);
+    SetAPen(rp, GPEN(fg));
     Move(rp, x, y + g->baseline);
     Text(rp, (CONST_STRPTR)s, n);
 }
@@ -1096,9 +1420,9 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
         n = TextFit(g->rp, (CONST_STRPTR)s, n, &te, NULL, 1, maxw, g->font_h + 1);
     if (!n)
         return;
-    SetAPen(g->rp, fg);
+    SetAPen(g->rp, GPEN(fg));
     if (opaque) {
-        SetBPen(g->rp, bg);
+        SetBPen(g->rp, GPEN(bg));
         SetDrMd(g->rp, JAM2);
     }
     Move(g->rp, x, y + g->baseline);
@@ -1191,6 +1515,8 @@ static void cache_art(struct Gfx *g)
                     if (px[j * w + i] == g->logo_pens[p])
                         put_block(m, g->logo_bpr, i, j, k);
         }
+    for (p = 0; p < g->logo_npens; p++)
+        g->logo_pens[p] = GPEN(g->logo_pens[p]);    /* the pens drawn with (a window's) */
 icons:
     g->icon_masks = enlarge_words(&icons16[0][0], ICON_COUNT, 16, k, &g->icon_bpr);
     g->mark_masks = enlarge_words(&marks16[0][0], MARK_PLAY, MARK_SIZE, k, &g->mark_bpr);
@@ -1272,7 +1598,7 @@ void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
     if (!g->mark_masks)
         return;
     m = (PLANEPTR)(g->mark_masks + (ULONG)(mark - 1) * g->mark_px * g->mark_bpr);
-    SetAPen(g->rp, fg);
+    SetAPen(g->rp, GPEN(fg));
     SetDrMd(g->rp, JAM1);
     BltTemplate(m, 0, g->mark_bpr, g->rp, x, y, g->mark_px, g->mark_px);
 }
@@ -1321,7 +1647,7 @@ void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
     if (!g->icon_masks)
         return;
     m = (PLANEPTR)(g->icon_masks + (ULONG)icon * g->icon_px * g->icon_bpr);
-    SetAPen(g->rp, fg);
+    SetAPen(g->rp, GPEN(fg));
     SetDrMd(g->rp, JAM1);
     BltTemplate(m, 0, g->icon_bpr, g->rp, x, y, g->icon_px, g->icon_px);
 }
@@ -1352,7 +1678,7 @@ void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px)
         }
     }
     dirty = TRUE;
-    SetAPen(g->rp, fg);
+    SetAPen(g->rp, GPEN(fg));
     SetDrMd(g->rp, JAM1);
     BltTemplate((PLANEPTR)buf, 0, bpr, g->rp, x, y, px, px);
     WaitBlit();
@@ -1494,7 +1820,7 @@ void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD 
     if (!bl || !bl->mask)
         return;
     SetDrMd(g->rp, JAM1);
-    SetAPen(g->rp, pen);
+    SetAPen(g->rp, GPEN(pen));
     BltTemplate((PLANEPTR)bl->mask, 0, bl->bpr, g->rp, x, y, bl->w, bl->h);
 }
 
@@ -1849,7 +2175,7 @@ void gfx_dirty(void)
 
 BOOL gfx_dbuf_active(void)
 {
-    return dbuf_on;
+    return dbuf_on || wbuf_bm;              /* (a window's buffer is always on) */
 }
 
 static void dbuf_wait_safe(void)
@@ -1864,8 +2190,8 @@ static void dbuf_wait_safe(void)
 void gfx_dbuf_start(struct Gfx *g)
 {
     int i;
-    if (dbuf_on || !gfx_dbuf_wanted || g->planar || !g->scr || !g->win)
-        return;
+    if (g->wb || dbuf_on || !gfx_dbuf_wanted || g->planar || !g->scr || !g->win)
+        return;                             /* (a window has its buffer from the start) */
     if (!(dsafe = CreateMsgPort()))
         return;
     dsb[0] = AllocScreenBuffer(g->scr, NULL, SB_SCREEN_BITMAP);
@@ -1914,6 +2240,23 @@ BOOL gfx_present(struct Gfx *g)
 {
     int front;
     ULONG t0;
+    if (g->wb && wbuf_bm) {
+        /* a window: the buffer copied into it, layers clipping it against
+         * the windows in front. No vertical blank is waited for: FALSE, so
+         * the caller paces itself as without double buffering. */
+        if (!dirty || !g->win)
+            return FALSE;
+        dirty = FALSE;
+        WaitBlit();
+        t0 = time_ms();
+        BltBitMapRastPort(wbuf_bm, 0, 0, g->win->RPort, g->win->BorderLeft, g->win->BorderTop,
+                          g->w, g->h, 0xC0);
+        WaitBlit();
+        gfx_present_ms = time_ms() - t0;
+        gfx_flips++;
+        win_stat(g, gfx_present_ms);
+        return FALSE;
+    }
     if (!dbuf_on || !dirty)
         return FALSE;
     dirty = FALSE;
@@ -1945,7 +2288,16 @@ BOOL gfx_quiet_begin(void)
 
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1)
 {
-    (void)g;
+    if (g->wb && wbuf_bm) {
+        if (x1 >= x0 && y1 >= y0 && g->win) {
+            WaitBlit();
+            BltBitMapRastPort(wbuf_bm, x0, y0, g->win->RPort, g->win->BorderLeft + x0,
+                              g->win->BorderTop + y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0);
+            WaitBlit();
+        }
+        dirty = was;
+        return;
+    }
     if (!dbuf_on)
         return;
     if (x1 >= x0 && y1 >= y0) {
@@ -1961,6 +2313,10 @@ void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1)
 void gfx_dbuf_stop(struct Gfx *g)
 {
     int i;
+    if (g->wb) {
+        gfx_present(g);         /* a window keeps its buffer: what is drawn next goes there too */
+        return;
+    }
     if (!dbuf_on)
         return;
     if (dlay[0] && dlay[1])

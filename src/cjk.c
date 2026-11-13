@@ -458,7 +458,7 @@ static void draw_char(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, ULONG 
         if (g->sm) {
             sm_text(g->sm, g, x, y, "?", 1, face, fg, bg, opaque);
         } else {
-            SetAPen(rp, fg);
+            SetAPen(rp, GPEN(fg));
             Move(rp, x, y + g->baseline);
             Text(rp, (CONST_STRPTR) "?", 1);
         }
@@ -467,7 +467,7 @@ static void draw_char(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, ULONG 
     p = &packs[pk];
     *adv = p->adv[gi];
     if (opaque) {
-        SetAPen(rp, bg);
+        SetAPen(rp, GPEN(bg));
         RectFill(rp, x, y, x + *adv - 1, y + g->font_h - 1);
     }
     /* on the text's baseline, kept within a pixel of its line */
@@ -475,7 +475,7 @@ static void draw_char(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, ULONG 
     if (top < y - 1)
         top = y - 1;
     CopyMem((APTR)rows, chip, p->ch * 2);
-    SetAPen(rp, fg);
+    SetAPen(rp, GPEN(fg));
     SetDrMd(rp, JAM1);
     BltTemplate((PLANEPTR)chip, 0, 2, rp, x, top, p->cw, p->ch);
 }
@@ -497,9 +497,9 @@ WORD cjk_text(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s,
             if (g->sm) {
                 sm_text(g->sm, g, x, y, s + i, r, face, fg, bg, opaque);
             } else {
-                SetAPen(rp, fg);
+                SetAPen(rp, GPEN(fg));
                 if (opaque) {
-                    SetBPen(rp, bg);
+                    SetBPen(rp, GPEN(bg));
                     SetDrMd(rp, JAM2);
                 }
                 Move(rp, x, y + g->baseline);

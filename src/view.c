@@ -154,8 +154,10 @@ static void pens_reclaim(struct Gfx *g)
         ObtainPen(cm, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
 }
 
+/* (pen is a real one: the picture's, or black obtained) */
 static void fill(struct Gfx *g, UBYTE pen)
 {
+    gfx_dirty();
     SetWriteMask(g->rp, 0xFF);
     SetAPen(g->rp, pen);
     RectFill(g->rp, 0, 0, g->w - 1, g->h - 1);
@@ -199,7 +201,7 @@ BOOL view_begin(struct Gfx *g)
         fill(g, 0);
     } else {
         black_pen = ObtainBestPen(cm, 0, 0, 0, OBP_Precision, PRECISION_EXACT, TAG_END);
-        fill(g, black_pen >= 0 ? black_pen : PEN_BG);
+        fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
     }
     return TRUE;
 }
@@ -215,6 +217,7 @@ void view_bar_hide(struct Gfx *g)
     spin_x = -1;
     if (!bar_bm)
         return;
+    gfx_dirty();
     BltBitMapRastPort(bar_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);
     WaitBlit();
     FreeBitMap(bar_bm);
@@ -237,11 +240,12 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
         if (bar_bm)
             BltBitMap(g->rp->BitMap, 0, bar_y, bar_bm, 0, 0, g->w, bar_h, 0xC0, 0xFF, NULL);
     }
+    gfx_dirty();
     SetWriteMask(g->rp, 0xFF);
-    SetAPen(g->rp, bg);
+    SetAPen(g->rp, GPEN(bg));
     RectFill(g->rp, 0, bar_y, g->w - 1, g->h - 1);
     if (!clut) {
-        SetAPen(g->rp, PEN_RULE);
+        SetAPen(g->rp, GPEN(PEN_RULE));
         RectFill(g->rp, 0, bar_y, g->w - 1, bar_y + GU(g, 1) - 1);
     }
     ty = bar_y + (bar_h - g->font_h + GU(g, 1)) / 2;
@@ -273,7 +277,7 @@ static void spin_dots(struct Gfx *g, WORD cx, WORD cy, WORD r, UWORD phase, UBYT
         WORD x = cx + dx[i] * r / 100, y = cy + dy[i] * r / 100;
         BOOL lit = i == (phase & 7);
         WORD h = lit ? d : (d > 1 ? d - 1 : 0);
-        SetAPen(g->rp, lit ? fg : dim);
+        SetAPen(g->rp, GPEN(lit ? fg : dim));
         RectFill(g->rp, x - h, y - h, x + h, y + h);
     }
 }
@@ -296,12 +300,13 @@ void view_spin(struct Gfx *g, UWORD phase)
 {
     UBYTE bg, fg, dim;
     bar_pens(&bg, &fg, &dim);
+    gfx_dirty();
     SetWriteMask(g->rp, 0xFF);
     if (bar_bm || (!has_pic && spin_x >= 0 && bar_h)) {
         WORD r = bar_h / 3;
         if (spin_x < 0)
             return;
-        SetAPen(g->rp, bg);
+        SetAPen(g->rp, GPEN(bg));
         RectFill(g->rp, spin_x - r - 2, bar_y + 2, spin_x + r + 2, bar_y + bar_h - 1);
         spin_dots(g, spin_x, bar_y + bar_h / 2, r, phase, fg, dim);
         return;
@@ -315,7 +320,7 @@ void view_spin(struct Gfx *g, UWORD phase)
         BltBitMap(g->rp->BitMap, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_bm, 0, 0,
                   spin_s, spin_s, 0xC0, 0xFF, NULL);
     }
-    SetAPen(g->rp, bg);
+    SetAPen(g->rp, GPEN(bg));
     RectFill(g->rp, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_cx - spin_s / 2 + spin_s - 1,
              spin_cy - spin_s / 2 + spin_s - 1);
     spin_dots(g, spin_cx, spin_cy, spin_s * 3 / 8, phase, fg, dim);
@@ -326,6 +331,7 @@ void view_spin_hide(struct Gfx *g)
 {
     if (!spin_bm)
         return;
+    gfx_dirty();
     BltBitMapRastPort(spin_bm, 0, 0, g->rp, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_s,
                       spin_s, 0xC0);
     WaitBlit();
@@ -425,7 +431,7 @@ static void drop_picture(struct Gfx *g)
         all_black(g);
         fill(g, 0);
     } else {
-        fill(g, black_pen >= 0 ? black_pen : PEN_BG);
+        fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
     }
 }
 
@@ -738,8 +744,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         }
         pick_bar_pens(pens, npens);
     } else {
-        fill(g, black_pen >= 0 ? black_pen : PEN_BG);
+        fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
     }
+    gfx_dirty();
     BltBitMapRastPort(tmp, 0, 0, g->rp, (g->w - bsa.bsa_DestWidth) / 2,
                       (g->h - bsa.bsa_DestHeight) / 2, bsa.bsa_DestWidth, bsa.bsa_DestHeight, 0xC0);
     WaitBlit();

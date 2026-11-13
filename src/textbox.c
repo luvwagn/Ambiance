@@ -196,7 +196,7 @@ static void blit_window(struct Gfx *g, struct TextBox *tb)
         if (tb->pic_a <= tb->pic_z) {
             WORD oa = tb->pic_a, oz = tb->pic_z;
             SetWriteMask(g->rp, 0xFF & ~TB_PLANE_MASK);
-            SetAPen(g->rp, PEN_BG);
+            SetAPen(g->rp, GPEN(PEN_BG));
             if (a > z) {
                 RectFill(g->rp, px0, oa, px1, oz);
             } else {
@@ -272,7 +272,7 @@ static void scroll_direct(struct Gfx *g, struct TextBox *tb)
     if (d >= tb->h || -d >= tb->h || tb->drawn_pos < 0) {
         draw_rows(g, tb, tb->y, y1);
     } else {
-        SetBPen(g->rp, PEN_BG);
+        SetBPen(g->rp, GPEN(PEN_BG));
         ScrollRaster(g->rp, 0, d, tb->x, tb->y, tb->x + tb->w - 1, y1);
         if (d > 0)
             draw_rows(g, tb, y1 - d + 1, y1);

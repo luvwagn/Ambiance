@@ -466,7 +466,7 @@ static void busy_begin(void)
         busy.on = FALSE;
         busy.since = time_ms();
         ui_aborted = FALSE;
-        ui_joy0 = LowLevelBase ? ReadJoyPort(1) : 0;
+        ui_joy0 = LowLevelBase ? gfx_joy(&g) : 0;
     }
 }
 
@@ -550,7 +550,7 @@ static BOOL ui_input_waiting(void)
             if (!im->ExecMessage.mn_Node.ln_Succ)
                 im = NULL;
             nav = im && ((im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX)) ||
-                         im->Class == IDCMP_VANILLAKEY ||
+                         im->Class == IDCMP_VANILLAKEY || im->Class == IDCMP_CLOSEWINDOW ||
                          (im->Class == IDCMP_MOUSEBUTTONS &&
                           (im->Code == SELECTDOWN || im->Code == MENUDOWN)));
             Permit();
@@ -558,11 +558,14 @@ static BOOL ui_input_waiting(void)
                 break;
             if (nav)
                 return TRUE;
-            if ((im = (struct IntuiMessage *)GetMsg(mp)))
+            if ((im = (struct IntuiMessage *)GetMsg(mp))) {
+                ULONG cl = im->Class;
                 ReplyMsg((struct Message *)im);
+                gfx_window_msg(&g, cl);     /* a window uncovered: shown again */
+            }
         }
     if (LowLevelBase) {
-        ULONG st = ReadJoyPort(1), mask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT |
+        ULONG st = gfx_joy(&g), mask = JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT |
                                           JPF_BUTTON_RED | JPF_BUTTON_BLUE |
                                           JPF_BUTTON_FORWARD | JPF_BUTTON_REVERSE;
         if ((st & JP_TYPE_MASK) != JP_TYPE_NOTAVAIL && (st & mask & ~ui_joy0))
@@ -1533,6 +1536,12 @@ static void load_screen_mode(void)
     if (GetVar((CONST_STRPTR)MODE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
         (m = gfx_mode_from_key(buf)) >= 0)
         screen_mode = m;
+    /* A window on Workbench instead of a screen of our own (gfx.c): 1 in
+     * AmigaMCE/Windowed. Settings > Display does not offer it yet (the
+     * next step): SetEnv SAVE AmigaMCE/Windowed 1 chooses it. Workbench
+     * must be 15-bit or deeper, on the card, or the screen opens as ever. */
+    gfx_window_wanted = GetVar((CONST_STRPTR)"AmigaMCE/Windowed", (STRPTR)buf, sizeof(buf),
+                               GVF_GLOBAL_ONLY) > 0 && buf[0] == '1';
 }
 
 static void save_setting(const char *var, const char *value)
@@ -3494,7 +3503,7 @@ static void scr_watch(void)
             for (k = 0; k < 3; k++)
                 if (ys[k] >= 0 && ys[k] < g.h)
                     for (x = k ? g.pane_x : 0; x < (k ? g.pane_x + g.pane_w / 2 : g.w); x += 2)
-                        if (ReadPixel(g.rp, x, ys[k]) != PEN_BG)
+                        if (ReadPixel(g.rp, x, ys[k]) != GPEN(PEN_BG))
                             ink[k]++;
         /* the display itself: whose View is loaded, our ViewPort hidden or
          * not, its copper lists there, and chip RAM (copper lists are made
@@ -5038,7 +5047,7 @@ static void style_preview(struct Page *p)
         SetFont(g.rp, f);
         n = TextFit(g.rp, (CONST_STRPTR)s, strlen(s), &te, NULL, 1, mw - SU(24),
                     f->tf_YSize + 1);
-        SetAPen(g.rp, PEN_WHITE);
+        SetAPen(g.rp, GPEN(PEN_WHITE));
         SetDrMd(g.rp, JAM1);
         Move(g.rp, x0 + SU(23), y + (rh - f->tf_YSize) / 2 + f->tf_Baseline);
         if (n > 0)
@@ -7505,7 +7514,8 @@ static void np_repeat(void)
     if ((LONG)(time_ms() - np.rep_next) < 0)
         return;
     np.rep_next = time_ms() + REP_EVERY;
-    if (np.rep_src == REP_MOUSE && g.win && np_button_at(g.win->MouseX, g.win->MouseY) != np.rep)
+    if (np.rep_src == REP_MOUSE && g.win &&
+        np_button_at(g.win->MouseX - g.win->BorderLeft, g.win->MouseY - g.win->BorderTop) != np.rep)
         return;
     np_press(np.rep);
 }
@@ -8104,7 +8114,7 @@ static void menu_slide(UWORD from, UWORD to)
     int frames = 0;
     if (!t0 || menu_draw_ms > MENU_SLIDE_MAX || from == to)
         return;
-    SetBPen(g.rp, PEN_BG);
+    SetBPen(g.rp, GPEN(PEN_BG));
     for (;;) {
         LONG f;
         UWORD w;
@@ -8119,7 +8129,7 @@ static void menu_slide(UWORD from, UWORD to)
             continue;
         }
         tf = time_ms();
-        SetBPen(g.rp, PEN_BG);
+        SetBPen(g.rp, GPEN(PEN_BG));
         if (g.planar) {
             if (w < prev)                   /* the column's old edge, now page margin */
                 gfx_fill(&g, w + U(3), y0, prev + U(3), y1, PEN_BG);
@@ -8677,7 +8687,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         return idx;
     }
     if (LowLevelBase)
-        jlast = ReadJoyPort(1);
+        jlast = gfx_joy(&g);
     while (!quit) {
         struct IntuiMessage *im;
         LONG step = 0;
@@ -8780,7 +8790,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             ULONG cl = im->Class;
             UWORD code = im->Code;
             ReplyMsg((struct Message *)im);
-            if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
+            if (gfx_window_msg(&g, cl)) {
+                if (gfx_close_asked)
+                    quit = TRUE;            /* the close gadget: out, then AmigaMCE quits */
+            } else if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
                 switch (code) {
                 case 0x4F: case 0x4C: step--; break;            /* left, up */
                 case 0x4E: case 0x4D: step++; break;            /* right, down */
@@ -8803,7 +8816,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             }
         }
         if (LowLevelBase) {
-            ULONG st = ReadJoyPort(1), pressed = st & ~jlast;
+            ULONG st = gfx_joy(&g), pressed = st & ~jlast;
             if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
                 if (pressed & (JPF_JOY_LEFT | JPF_JOY_UP))
                     step--;
@@ -8844,6 +8857,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         }
         if (view_bar_shown() && ok && (LONG)(now - bar_until) >= 0)
             view_bar_hide(&g);
+        gfx_present(&g);                    /* a window: what changed, copied in */
         dbg_sleep_begin();
         WaitTOF();
         dbg_sleep_end();
@@ -11730,7 +11744,7 @@ static void hold_stop(void)
                 (long)(time_ms() - hold.t_down), (long)hold.worst, (long)hold.slow,
                 (long)hold.move_ms, (long)hold.present_ms, (long)ov_n,
                 (long)ov_ms, (long)p->sel, (long)p->top, (long)p->list.count);
-        amce_log("glide", m);
+        amce_log(g.wb ? "glide (in a window)" : "glide", m);
         scr_watch_now("the glide's end");
     }
     hold.dir = 0;
@@ -11951,6 +11965,8 @@ static BOOL hold_active(void)
 static BOOL key_is_down(UWORD rawkey)
 {
     struct KeyQuery kq;
+    if (!gfx_input_ours(&g))
+        return FALSE;                       /* typed into another window */
     if (!LowLevelBase)
         return TRUE;
     kq.kq_KeyCode = rawkey;
@@ -12388,7 +12404,8 @@ static BOOL gut_click(WORD x, WORD y)
 
 static void handle_mouse(struct IntuiMessage *im)
 {
-    WORD x = im->MouseX, y = im->MouseY;
+    /* inside the window's borders (none on our own screen) */
+    WORD x = im->MouseX - g.win->BorderLeft, y = im->MouseY - g.win->BorderTop;
     BOOL dbl;
     LONG idx = -1;
     struct TextBox *tb;
@@ -12635,8 +12652,10 @@ static void handle_key(struct IntuiMessage *im)
         }
         case 0x4E: disarm(); if (!np_lr(1)) act_right(); break;      /* cursor right */
         case 0x4F: disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); break; /* left */
-        case 0x7A: disarm(); act_wheel(-1, im->MouseX, im->MouseY); break; /* NM_WHEEL_UP */
-        case 0x7B: disarm(); act_wheel(1, im->MouseX, im->MouseY); break;  /* NM_WHEEL_DOWN */
+        case 0x7A: disarm(); act_wheel(-1, im->MouseX - g.win->BorderLeft,
+                                       im->MouseY - g.win->BorderTop); break; /* NM_WHEEL_UP */
+        case 0x7B: disarm(); act_wheel(1, im->MouseX - g.win->BorderLeft,
+                                       im->MouseY - g.win->BorderTop); break; /* NM_WHEEL_DOWN */
         }
         return;
     }
@@ -12700,7 +12719,7 @@ static void joy_poll(void)
     ULONG st, dir, btn, newbtn, act = 0;
     if (!LowLevelBase)
         return;
-    st = ReadJoyPort(1);
+    st = gfx_joy(&g);
     joy_present = (st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR;
     if (!joy_present)
         return;
@@ -12982,7 +13001,7 @@ static int app_main(void)
         nav_sum_seen = nav_sum_written = nav_sum();
     }
     draw_all();
-    if (screen_mode != SM_AUTO && g.mode != screen_mode) {
+    if (screen_mode != SM_AUTO && g.mode != screen_mode && !g.wb) {
         screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
         set_msg(_("Saved screen mode not available here: using Automatic"));
     } else {
@@ -12990,6 +13009,8 @@ static int app_main(void)
     }
 
     while (running) {
+        if (gfx_close_asked)
+            break;                  /* the window's close gadget (the viewer saw it, say) */
         ULONG wsig = g.win ? 1UL << g.win->UserPort->mp_SigBit : 0;
         loop_wakes++;
         ULONG tsig = timer_open ? 1UL << tport->mp_SigBit : 0;
@@ -13091,7 +13112,10 @@ static int app_main(void)
             while (g.win && (im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
                 struct IntuiMessage copy = *im;
                 ReplyMsg((struct Message *)im);
-                if (copy.Class == IDCMP_INACTIVEWINDOW)
+                if (gfx_window_msg(&g, copy.Class)) {
+                    if (gfx_close_asked)
+                        running = FALSE;    /* the close gadget: as Esc on the menu twice */
+                } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
                 else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
                     handle_mouse(&copy);
@@ -13105,8 +13129,8 @@ static int app_main(void)
                       ((atb = cur_tb()) && tb_animating(atb)))) {
             ULONG tp = time_ms();
             BOOL flipped = gfx_present(&g);
-            if (hold.dir && flipped)
-                hold.present_ms += time_ms() - tp;
+            if (hold.dir && (flipped || g.wb))
+                hold.present_ms += time_ms() - tp;  /* (a window's copy waits for no flip) */
             if (!flipped) {             /* a flip paces the frame, or else */
                 dbg_sleep_begin();
                 WaitTOF();

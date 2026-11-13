@@ -47,6 +47,12 @@ enum {
     NUM_UI_PENS = 16,    /* AmigaMCE's pens are 0-15; 16-31 keep the screen's colours */
     POINTER_PEN0 = 17    /* 17-19: the mouse pointer's colours, from the user's prefs */
 };
+/* The pen a UI colour is drawn with: itself on AmigaMCE's own screen; in a
+ * window on Workbench, the Workbench pen obtained for it (gfx.c). Every
+ * SetAPen / SetBPen of a UI colour goes through this; pens that are not UI
+ * colours (32 up: smooth's shades, a picture's) pass through as they are. */
+extern UBYTE gfx_penmap[NUM_UI_PENS];
+#define GPEN(p) ((UBYTE)(p) < NUM_UI_PENS ? gfx_penmap[(UBYTE)(p)] : (UBYTE)(p))
 
 /* ---------------------------------------------------------------- gfx */
 /* The layout is designed for a 256-line screen, in design units. A screen
@@ -122,6 +128,10 @@ struct Gfx {
     BYTE  mode;         /* SM_* actually open, never SM_AUTO */
     WORD  pic_x, pic_y, pic_w, pic_h;   /* the picture on screen (pic_w 0: none) */
     struct PicInfo pic;         /* and what it is */
+    BOOL  wb;           /* a window on the Workbench screen, not a screen of our own:
+                         * g->scr is Workbench's (locked, never closed), everything
+                         * is drawn into a buffer of our own and copied into the
+                         * window (gfx_present) */
 };
 
 /* Design units to pixels on this screen. */
@@ -308,6 +318,21 @@ void gfx_dirty(void);
 BOOL gfx_dbuf_active(void);
 BOOL gfx_quiet_begin(void);     /* around a small update shown without a flip */
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
+/* A window on Workbench (gfx.c): wanted (AmigaMCE/Windowed), and why it
+ * cannot be had here (NULL: it can). */
+extern BOOL gfx_window_wanted;
+const char *gfx_window_problem(const struct Caps *c);
+void gfx_window_show(struct Gfx *g);   /* window: what was drawn, copied in now */
+/* A window message only the window has (refresh, close): dealt with, TRUE.
+ * The close gadget sets gfx_close_asked. */
+BOOL gfx_window_msg(struct Gfx *g, ULONG cls);
+extern BOOL gfx_close_asked;
+/* Input meant for us: always on our own screen; in a window, only while
+ * it is the active one (the joystick and lowlevel see the whole machine). */
+BOOL gfx_input_ours(const struct Gfx *g);
+ULONG gfx_joy(const struct Gfx *g);    /* ReadJoyPort(1), 0 when not ours */
+UBYTE gfx_obtain_rgb(struct Gfx *g, UBYTE r, UBYTE gg, UBYTE b);   /* window: a Workbench pen */
+void gfx_window_log(struct Gfx *g);    /* Debug: the window's measurements so far */
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */

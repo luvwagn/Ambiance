@@ -1122,6 +1122,8 @@ static int ctl_enter(void)
  * full screen or not (AmigaMCE's screen), 0 nothing; the volume set here, the mouse's moves noted (the controls).
  * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
  * the controls but no button. */
+static struct Gfx *anim_g;      /* AmigaMCE's screen or window, while playing on it */
+
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
@@ -1130,8 +1132,13 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
     while ((im = (struct IntuiMessage *)GetMsg(win->UserPort))) {
         ULONG cl = im->Class;
         UWORD code = im->Code;
-        WORD mx = im->MouseX, my = im->MouseY;
+        WORD mx = im->MouseX - win->BorderLeft, my = im->MouseY - win->BorderTop;
         ReplyMsg((struct Message *)im);
+        if (anim_g && win == anim_g->win && gfx_window_msg(anim_g, cl)) {
+            if (gfx_close_asked)
+                r = 1;                      /* the window's close gadget: out */
+            continue;
+        }
         if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||
              (cl == IDCMP_RAWKEY && (code == 0x7A || code == 0x7B))) && time_ms() - ctl.opened > 500)
             ctl.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
@@ -1179,7 +1186,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         }
     }
     if (LowLevelBase) {
-        ULONG st = ReadJoyPort(1), pressed = st & ~*jlast;
+        ULONG st = anim_g && win == anim_g->win ? gfx_joy(anim_g) : ReadJoyPort(1);
+        ULONG pressed = st & ~*jlast;
         if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
             if (pressed || (st & (JPF_JOY_UP | JPF_JOY_DOWN)))
                 ctl.key = time_ms() ? time_ms() : 1;
@@ -1330,7 +1338,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
                       ry > ft ? ry - ft : 1, PEN_BAR);
         } else
             gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_BAR);
-        SetAPen(g->rp, st.off & (1 << i) ? PEN_RULE : PEN_WHITE);    /* greyed, as Now playing's */
+        SetAPen(g->rp, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE));    /* greyed, as Now playing's */
         switch (i) {
         case BT_RESTART:
             RectFill(g->rp, ix + s / 5, iy + s / 5, ix + s / 5 + t, iy + s - s / 5);
@@ -1748,8 +1756,8 @@ static int card_choose(struct Gfx *g, UWORD w, UWORD h, UBYTE depth, BOOL ham, U
 {
     int i, b, mode = CARD_OFF;
     card_free();
-    if (ham || !CyberGfxBase || !g->truecolor || !g->scr || depth > 8 || cd.ncol == 0)
-        return CARD_OFF;
+    if (ham || !CyberGfxBase || !g->truecolor || !g->scr || g->wb || depth > 8 || cd.ncol == 0)
+        return CARD_OFF;                    /* (a window: Workbench's palette is not ours to load) */
     cd.vp = &g->scr->ViewPort;
     cd.depth = depth;
     cd.w = w;
@@ -2042,7 +2050,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
             lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
     amce_log("anim", m);
     if (LowLevelBase)
-        jlast = ReadJoyPort(1);
+        jlast = (anim_g ? gfx_joy(anim_g) : ReadJoyPort(1));
     if (nsnd && !snd_on) {
         if (ahi && ahi_open())
             snd_ahi = snd_on = TRUE;
@@ -2288,6 +2296,7 @@ restart:
     drawn:
         td = time_ms();
         strip_tick(g, paused, due, total, name);
+        gfx_window_show(g);                 /* a window: the frame copied in */
         stripms += time_ms() - td;
         /* input, and its time */
         for (;;) {
@@ -2329,6 +2338,7 @@ restart:
                 snd_tick();
             if (!paused)
                 break;
+            gfx_window_show(g);
             WaitTOF();
             t0 = time_ms() - due;
         }
@@ -2444,6 +2454,7 @@ restart:
 
 LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *err, LONG errmax)
 {
+    anim_g = g;
     BPTR fh;
     UBYTE head[12];
     struct Frame f;
