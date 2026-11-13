@@ -1614,7 +1614,7 @@ static const char *win_chosen_by = "nothing: full screen";
 /* The window's Workbench menus (gfx.c lays them out): their labels in
  * the language chosen, except Japanese, Chinese and Korean, which
  * Workbench's own font has no letters for. */
-enum { WM_ABOUT = 1, WM_SETTINGS, WM_FULL, WM_QUIT };
+enum { WM_ABOUT = 1, WM_SETTINGS, WM_FULL = GFX_MENU_FULL, WM_QUIT };
 static struct NewMenu wb_menus[6];
 
 static void window_menus_make(void)
@@ -1626,7 +1626,7 @@ static void window_menus_make(void)
         { NM_TITLE, NULL, NULL, 0, 0, NULL },
         { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_ABOUT },
         { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_SETTINGS },
-        { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_FULL },
+        { NM_ITEM, NULL, (STRPTR)"F", 0, 0, (APTR)WM_FULL },   /* Amiga-F */
         { NM_ITEM, NULL, (STRPTR)"Q", 0, 0, (APTR)WM_QUIT },
         { NM_END, NULL, NULL, 0, 0, NULL } };
     nm[0].nm_Label = (STRPTR)(en ? "Project" : _("Project"));
@@ -9459,6 +9459,14 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             if (gfx_window_msg(&g, cl)) {
                 if (gfx_close_asked)
                     quit = TRUE;            /* the close gadget: out, then AmigaMCE quits */
+            } else if (cl == IDCMP_MENUPICK) {
+                /* Amiga-F comes as Project > Full screen: here, the
+                 * picture's own (as F) */
+                UWORD c = code;
+                ULONG what;
+                while ((what = gfx_window_menu_pick(&c)))
+                    if (what == WM_FULL)
+                        full = TRUE;
             } else if (cl == IDCMP_MOUSEMOVE) {
                 moused = TRUE;              /* the pointer, and the bar with its buttons */
             } else if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
@@ -10286,6 +10294,71 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0)
             (long)ow, (long)oh, (long)g.w, (long)g.h, (long)g.w * 256 / g.k, (long)g.h * 256 / g.k,
             (unsigned long)(time_ms() - t0), cur() ? cur()->title : "the menu");
     amce_log("window: resized", m);
+}
+
+/* A double-click on the window's title bar: full screen. Intuition keeps
+ * the clicks on its drag bar to itself (they drag the window), so the left
+ * button is watched (the mouse port's, through lowlevel.library or CIA-A)
+ * while the window is active and the pointer over its title bar, clear of
+ * the gadgets at its ends; two presses Intuition counts as a double-click
+ * there. */
+static void toggle_window(void);
+
+/* The pointer over the active window's title bar (the clock ticks faster
+ * then, for a double-click's presses). */
+static BOOL window_title_hover(void)
+{
+    struct Window *w = g.win;
+    WORD y;
+    if (!g.wb || !w || gfx_fs_on() || !(w->Flags & WFLG_WINDOWACTIVE))
+        return FALSE;
+    y = w->WScreen->MouseY - w->TopEdge;
+    return y >= 0 && y < w->BorderTop && w->WScreen->MouseX >= w->LeftEdge &&
+           w->WScreen->MouseX < w->LeftEdge + w->Width;
+}
+
+static void window_title_watch(void)
+{
+    static BOOL down;
+    static ULONG s0, m0;
+    static BOOL first;
+    struct Window *w = g.win;
+    struct Screen *sc;
+    WORD x, y, gad;
+    BOOL lmb;
+    if (!g.wb || !w || gfx_fs_on() || !(w->Flags & WFLG_WINDOWACTIVE)) {
+        down = first = FALSE;
+        return;
+    }
+    lmb = LowLevelBase ? (ReadJoyPort(0) & JPF_BUTTON_RED) != 0
+                       : !(*(volatile UBYTE *)0xBFE001 & 0x40);
+    if (lmb == down)
+        return;
+    down = lmb;
+    if (!lmb)
+        return;                             /* (its press counts) */
+    sc = w->WScreen;
+    x = sc->MouseX - w->LeftEdge;
+    y = sc->MouseY - w->TopEdge;
+    gad = w->BorderTop + 4;                 /* about a title bar gadget's width */
+    if (y < 0 || y >= w->BorderTop || x < gad || x >= w->Width - 2 * gad) {
+        first = FALSE;                      /* not the bar: a double-click starts again */
+        return;
+    }
+    {
+        ULONG s1, m1;
+        CurrentTime(&s1, &m1);
+        if (first && DoubleClick(s0, m0, s1, m1)) {
+            first = FALSE;
+            down = FALSE;
+            amce_log("window", "title bar double-clicked: full screen");
+            toggle_window();
+            return;
+        }
+        first = TRUE;
+        s0 = s1;
+        m0 = m1;
+    }
 }
 
 /* The window's Workbench menus. */
@@ -14131,6 +14204,7 @@ static int app_main(void)
         if (sig & tsig) {
             if (GetMsg(tport)) {
                 joy_poll();
+                window_title_watch();       /* (a window: its title bar double-clicked) */
                 if (gfx_resized_at && (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
                     window_resized();   /* (a resize's last NEWSIZE, settled) */
                 if (g.wb && mouse_mode && !foot_hidden && !msg[0] && foot_since &&
@@ -14195,6 +14269,7 @@ static int app_main(void)
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
                 tick_us = (joy_present || ov.on || pv_spinning() || radio_waiting() || np_live() ||
+                           window_title_hover() ||
                            np.flash >= 0 || np.rep >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 :
                           mp_playing() ? 120000 : 200000;  /* the header's bars dance */

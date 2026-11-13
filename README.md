@@ -146,8 +146,9 @@ of the Amiga to how fast it really is.
   font is the size. Resize it by the grip in its bottom right corner and
   the layout follows, the text staying its size; it opens again where and
   as large as it was left. Its Project menu (the right button over its
-  title bar) has About, Settings, Full screen and
-  Quit. Pictures and videos go full screen from it (their button, F or
+  title bar) has About, Settings, Full screen (Amiga-F) and Quit
+  (Amiga-Q); a double-click on its title bar goes full screen too. In
+  the viewer and a video, Amiga-F (as F) is their own full screen. Pictures and videos go full screen from it (their button, F or
   Amiga-F) on a screen in Workbench's own mode, so the monitor does not
   change mode. When Workbench's screen mode is changed (ScreenMode prefs),
   the window closes as Workbench does, so no "Intuition is attempting to

@@ -1201,6 +1201,16 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         if (anim_g && win == anim_g->win && !gfx_fs_on() &&
             gfx_window_sizing(anim_g, cl, code, mx + win->BorderLeft, my + win->BorderTop))
             continue;                       /* the grip: the window resized */
+        if (cl == IDCMP_MENUPICK) {
+            /* Amiga-F comes as Project > Full screen: here, the video's
+             * own full screen (as F) */
+            UWORD c = code;
+            ULONG what;
+            while ((what = gfx_window_menu_pick(&c)))
+                if (what == GFX_MENU_FULL && !r)
+                    r = 4;
+            continue;
+        }
         if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||
              (cl == IDCMP_RAWKEY && (code == 0x7A || code == 0x7B))) && time_ms() - ctl.opened > 500)
             ctl.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */

@@ -366,6 +366,7 @@ struct NewMenu;
 void gfx_window_menus(const struct NewMenu *nm);
 void gfx_window_menus_again(struct Gfx *g);
 ULONG gfx_window_menu_pick(UWORD *code);
+#define GFX_MENU_FULL 3                 /* Project > Full screen's (Amiga-F): main.c's WM_FULL */
 void gfx_window_rmb(struct Gfx *g, WORD y);     /* title bar: menus; inside: Back */
 /* Full screen from the window, in Workbench's mode (video, the viewer). */
 BOOL gfx_fs_enter(struct Gfx *g);
