@@ -7197,6 +7197,8 @@ static void np_update(void)
     }
 }
 
+static BOOL plex_shortcut_fix(struct Page *p);
+
 /* The playing module marked in any Mods list open (redraw: and the list
  * on screen drawn again, when the music moved on by itself). */
 static void np_mark_lists(BOOL redraw)
@@ -7239,6 +7241,17 @@ static void np_mark_lists(BOOL redraw)
                             (plex_now_in[1][0] && !strcmp(key, plex_now_in[1])))
                            ? MARK_PLAYING : MARK_ARROW;
             }
+        }
+    }
+    {
+        /* each open list's Now playing row, as playback is now */
+        BOOL moved = FALSE;
+        for (d = 0; d < depth; d++)
+            if (plex_shortcut_fix(&pages[d]) && &pages[d] == cur())
+                moved = TRUE;
+        if (redraw && moved && !pane_pending) {
+            draw_pane(TRUE);                /* (its rows all moved down or up) */
+            return;
         }
     }
     if (redraw && !pane_pending && cur() && cur()->type == PT_LIST &&
@@ -8157,20 +8170,40 @@ static BOOL plex_lib_list(const struct Page *p)
     return !p->photos && !strncmp(p->base, "/library/sections/", 18);
 }
 
+/* A list with a Now playing row at its top while something plays: a Plex
+ * library's or Radio's long lists, and every folder of Mods and Music
+ * under their first pages (whose own row is made with them). */
+static BOOL np_row_list(const struct Page *p)
+{
+    if (plex_lib_list(p))
+        return TRUE;
+    return p && p->type == PT_LIST && p > &pages[0] && (p->mods || p->songs);
+}
+
 /* Its Now playing row made as playback is now (added, taken out, or its
- * title changed); the selection stays on the entry it was on. */
-static void plex_shortcut_fix(struct Page *p)
+ * title changed); the selection stays on the entry it was on. TRUE: the
+ * list changed. */
+static BOOL plex_shortcut_fix(struct Page *p)
 {
     struct Item *it;
     const char *t;
+    char label[120];
     BOOL has, playing = mp_loaded();
-    if (!plex_lib_list(p) || !p->list.pool)
-        return;
+    if (!np_row_list(p) || !p->list.pool)
+        return FALSE;
     it = p->list.count ? &p->list.items[0] : NULL;
     has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
     t = !playing ? "" : mp_is_stream() ? mp_stream_name() : mp_title();
+    while (*t == ' ')
+        t++;
+    if (playing && !t[0] && !mp_is_stream()) {
+        mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));     /* (an untitled module) */
+        t = label;
+    }
     if (has && playing && !strcmp(it->path, t))
-        return;                             /* as it is */
+        return FALSE;                       /* as it is */
+    if (!has && !playing)
+        return FALSE;
     {
         LONG row = p->sel - p->top, e = p->sel - (has ? 1 : 0), ns;
         BOOL added = FALSE;
@@ -8191,6 +8224,7 @@ static void plex_shortcut_fix(struct Page *p)
         if (p->top > ns)
             p->top = ns;
     }
+    return TRUE;
 }
 
 /* Where each of the last few Plex lists was left (its key, the entry and
@@ -8256,7 +8290,7 @@ static void plex_pos_restore(struct Page *p)
 static void np_shortcut_sync(void)
 {
     struct Page *p = cur();
-    if (plex_lib_list(p)) {
+    if (np_row_list(p)) {
         plex_shortcut_fix(p);
         return;
     }
