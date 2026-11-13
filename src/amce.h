@@ -341,6 +341,22 @@ BOOL gfx_input_ours(const struct Gfx *g);
 ULONG gfx_joy(const struct Gfx *g);    /* ReadJoyPort(1), 0 when not ours */
 UBYTE gfx_obtain_rgb(struct Gfx *g, UBYTE r, UBYTE gg, UBYTE b);   /* window: a Workbench pen */
 void gfx_window_log(struct Gfx *g);    /* Debug: the window's measurements so far */
+/* Resizing (gfx.c): the buffer and metrics for the window's new inside;
+ * its place and size kept (WindowBox), given back next time. */
+BOOL gfx_window_resize(struct Gfx *g);
+extern ULONG gfx_resized_at;            /* the last NEWSIZE's time, 0 none */
+BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k);
+void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k);
+/* Its Workbench menus: main.c's NewMenu (UserData: what each does). */
+struct NewMenu;
+void gfx_window_menus(const struct NewMenu *nm);
+void gfx_window_menus_again(struct Gfx *g);
+ULONG gfx_window_menu_pick(UWORD *code);
+void gfx_window_rmb(struct Gfx *g, WORD y);     /* title bar: menus; inside: Back */
+/* Full screen from the window, in Workbench's mode (video, the viewer). */
+BOOL gfx_fs_enter(struct Gfx *g);
+void gfx_fs_leave(struct Gfx *g);
+BOOL gfx_fs_on(void);
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
@@ -364,8 +380,8 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
 void view_bar_hide(struct Gfx *g);
 /* The mouse's buttons in the bar (instead of the keys' hint), for the next
  * view_bar: previous, play/pause the slideshow, next. */
-enum { VB_PREV, VB_PLAY, VB_NEXT, VB_COUNT };
-void view_bar_buttons(BOOL on, BOOL playing);
+enum { VB_PREV, VB_PLAY, VB_NEXT, VB_FULL, VB_COUNT };
+void view_bar_buttons(BOOL on, BOOL playing, int full);    /* full: 0 none, 1 to, 2 back */
 BOOL view_bar_has_buttons(void);
 int  view_bar_hit(struct Gfx *g, WORD x, WORD y);  /* VB_*, -1 none */
 BOOL view_bar_at(struct Gfx *g, WORD y);           /* in the bar (shown)? */

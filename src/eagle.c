@@ -221,6 +221,66 @@ static const char *const dirs[] = {
 /* Players known to hang on a check or need what AmigaMCE has not. */
 static const char *const skip[] = { "Core Design", NULL };
 
+/* Players that did not come back from a check here (hung, or crashed the
+ * Amiga): a player's name is written to TRY_FILE before its check and the
+ * file deleted after; found at the next start, the player is added to
+ * SKIP_FILE and left out from then on. */
+#define TRY_FILE "PROGDIR:Cache/EaglePlayers.trying"
+#define SKIP_FILE "PROGDIR:Cache/EaglePlayers.skip"
+#define LEARNT_MAX 32
+static char learnt[LEARNT_MAX][40];
+static int nlearnt;
+
+static void learnt_load(void)
+{
+    BPTR fh;
+    char line[64];
+    if ((fh = Open((CONST_STRPTR)TRY_FILE, MODE_OLDFILE))) {
+        LONG n = Read(fh, line, sizeof(line) - 1);
+        Close(fh);
+        DeleteFile((CONST_STRPTR)TRY_FILE);
+        if (n > 0) {
+            BPTR sf;
+            line[n] = 0;
+            if ((sf = Open((CONST_STRPTR)SKIP_FILE, MODE_READWRITE))) {
+                Seek(sf, 0, OFFSET_END);
+                FPuts(sf, (CONST_STRPTR)line);
+                FPuts(sf, (CONST_STRPTR)"\n");
+                Close(sf);
+            }
+            amce_log("eagleplayer: did not come back from its check last time (hung or crashed): "
+                     "left out from now on", line);
+        }
+    }
+    if (!(fh = Open((CONST_STRPTR)SKIP_FILE, MODE_OLDFILE)))
+        return;
+    while (nlearnt < LEARNT_MAX && FGets(fh, (STRPTR)line, sizeof(line))) {
+        char *nl = strchr(line, '\n');
+        if (nl)
+            *nl = 0;
+        if (line[0])
+            amce_strlcpy(learnt[nlearnt++], line, sizeof(learnt[0]));
+    }
+    Close(fh);
+}
+
+static void trying(const char *name)
+{
+    BPTR fh, l;
+    if (!name) {
+        DeleteFile((CONST_STRPTR)TRY_FILE);
+        return;
+    }
+    if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
+        l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
+    if (l)
+        UnLock(l);
+    if ((fh = Open((CONST_STRPTR)TRY_FILE, MODE_NEWFILE))) {
+        FPuts(fh, (CONST_STRPTR)name);
+        Close(fh);
+    }
+}
+
 struct Cand {
     char name[40];
     UBYTE dir;
@@ -237,6 +297,9 @@ static void cand_cb(void *ctx, const char *name, BOOL isdir)
         return;
     for (i = 0; skip[i]; i++)
         if (!amce_stricmp(name, skip[i]))
+            return;
+    for (i = 0; i < nlearnt; i++)
+        if (!amce_stricmp(name, learnt[i]))
             return;
     for (i = 0; i < ncands; i++)
         if (!amce_stricmp(cands[i].name, name))
@@ -266,6 +329,7 @@ static void scan_players(void)
         return;
     scanned = TRUE;
     me->pr_WindowPtr = (APTR)-1;
+    learnt_load();
     for (d = 0; dirs[d]; d++)
         dir_scan(dirs[d], cand_cb, (void *)(LONG)d);
     me->pr_WindowPtr = old;
@@ -709,14 +773,19 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
         *var = (ULONG)h->g;
     if ((var = (ULONG *)tag(t, EP_EagleBase)))
         *var = (ULONG)h->g;
-    if ((fn = tag(t, DTP_Check2)))
+    fn = tag(t, DTP_Check2);
+    if (!fn)
+        fn = tag(t, DTP_Check1);
+    if (!fn)
+        fn = tag(t, EP_Check3);
+    if (!fn)
+        fn = tag(t, EP_Check5);
+    if (fn) {
+        amce_log("eagleplayer: checking with", name);   /* (Debug: the last before a hang) */
+        trying(name);
         rc = eh_call((APTR)fn, h->g, 0, 0);
-    else if ((fn = tag(t, DTP_Check1)))
-        rc = eh_call((APTR)fn, h->g, 0, 0);
-    else if ((fn = tag(t, EP_Check3)))
-        rc = eh_call((APTR)fn, h->g, 0, 0);
-    else if ((fn = tag(t, EP_Check5)))
-        rc = eh_call((APTR)fn, h->g, 0, 0);
+        trying(NULL);
+    }
     if (rc != 0) {
         UnLoadSeg(seg);
         return FALSE;

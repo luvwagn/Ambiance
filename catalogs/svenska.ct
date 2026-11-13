@@ -259,6 +259,21 @@ Modulspelare: %ld (EaglePlayer, DeliTracker)
 MSG_4662E8D4
 Modulspelare: inga (Aminet: mus/play/Eagleplayer)
 ; Module players: none (Aminet: mus/play/Eagleplayer)
+MSG_7B5FEA5E
+Projekt
+; Project
+MSG_3D68301C
+Om...
+; About...
+MSG_7D35778E
+Inställningar...
+; Settings...
+MSG_4EDBBEE0
+Helskärm
+; Full screen
+MSG_47B3D356
+Avsluta
+; Quit
 MSG_5FDDDD75
 Kort
 ; Short
@@ -394,9 +409,6 @@ Stor
 MSG_678631FD
 Fönster
 ; Window
-MSG_4EDBBEE0
-Helskärm
-; Full screen
 MSG_2C041143
 Textstorlek
 ; Text size

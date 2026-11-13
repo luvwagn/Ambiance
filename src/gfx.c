@@ -27,6 +27,8 @@
 #include <proto/cybergraphics.h>
 #include <proto/layers.h>
 #include <proto/lowlevel.h>
+#include <proto/gadtools.h>
+#include <libraries/gadtools.h>
 #include <stdio.h>
 #include "../datatypes/jpeg/amcejpeg.h"
 
@@ -396,6 +398,7 @@ static void blk_reserve(struct Gfx *g);
  * copied into the window by gfx_present. */
 BOOL gfx_window_wanted;
 BOOL gfx_close_asked;
+ULONG gfx_resized_at;           /* a NEWSIZE's time (0 none): laid out again once it settles */
 UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 #define WIN_DW 512          /* inside, design units: as a 640 x 480 screen's layout */
 #define WIN_DH 384
@@ -411,6 +414,12 @@ static const UWORD tsize_lines[TSIZE_COUNT] = { 384, 480, 600 };
 #define WIN_LINES (tsize_lines[win_tsize])
 static int win_tsize = TSIZE_MEDIUM;        /* the size the window has (may be smaller) */
 static WORD win_left = -1, win_top = -1;    /* where it was: reopened there (after a game) */
+static WORD win_iw, win_ih;                 /* its size inside, as last left (0: not yet) */
+static UWORD win_k;                         /* ...at this scale (another: its own size) */
+static const struct NewMenu *win_nm;        /* its menus (main.c's, translated) */
+static struct Menu *win_menu;
+static APTR win_vi;
+struct Library *GadToolsBase;
 static UBYTE wb_pen[NUM_UI_PENS + 32];      /* pens obtained from Workbench, let go at close */
 static UWORD wb_npen;
 static struct BitMap *wbuf_bm;              /* the buffer drawn into */
@@ -579,6 +588,265 @@ static void win_free(struct Gfx *g)
         gfx_penmap[i] = (UBYTE)i;
 }
 
+/* The buffer drawn into: the window's inside (g->w x g->h), a friend of
+ * Workbench's bitmap (so in its format, and on the card if there is room),
+ * a layer on it at 0,0; g->rp its RastPort. */
+static BOOL wbuf_make(struct Gfx *g)
+{
+    struct BitMap *bm = AllocBitMap(g->w, g->h, g->depth, BMF_MINPLANES, g->scr->RastPort.BitMap);
+    struct Layer_Info *li = bm && LayersBase ? NewLayerInfo() : NULL;
+    struct Layer *lay = li ? CreateUpfrontLayer(li, bm, 0, 0, g->w - 1, g->h - 1, LAYERSIMPLE,
+                                                NULL) : NULL;
+    if (!lay) {
+        if (li)
+            DisposeLayerInfo(li);
+        if (bm)
+            FreeBitMap(bm);
+        return FALSE;
+    }
+    wbuf_bm = bm;
+    wbuf_li = li;
+    wbuf_lay = lay;
+    g->rp = lay->rp;
+    return TRUE;
+}
+
+/* Its menus (Project: About, Settings, Full screen, Quit), from main.c's
+ * NewMenu, laid out in Workbench's font. */
+void gfx_window_menus(const struct NewMenu *nm)
+{
+    win_nm = nm;
+}
+
+static void win_menus_off(struct Gfx *g)
+{
+    if (win_menu && g->win)
+        ClearMenuStrip(g->win);
+    if (win_menu)
+        FreeMenus(win_menu);
+    if (win_vi)
+        FreeVisualInfo(win_vi);
+    win_menu = NULL;
+    win_vi = NULL;
+}
+
+static void win_menus_on(struct Gfx *g)
+{
+    if (!win_nm || !g->win)
+        return;
+    if (!GadToolsBase && !(GadToolsBase = OpenLibrary((CONST_STRPTR)"gadtools.library", 39)))
+        return;
+    if (!(win_vi = GetVisualInfo(g->scr, TAG_END)) || !(win_menu = CreateMenus(win_nm, TAG_END)) ||
+        !LayoutMenus(win_menu, win_vi, GTMN_NewLookMenus, TRUE, TAG_END) ||
+        !SetMenuStrip(g->win, win_menu)) {
+        amce_log("window", "its menus could not be made");
+        win_menus_off(g);
+    }
+}
+
+/* Made again (the language changed). */
+void gfx_window_menus_again(struct Gfx *g)
+{
+    if (!g->wb)
+        return;
+    win_menus_off(g);
+    win_menus_on(g);
+}
+
+/* The menu item a MENUPICK code names (its UserData), 0 none; the next of
+ * several picked in one go through *code. */
+ULONG gfx_window_menu_pick(UWORD *code)
+{
+    struct MenuItem *mi;
+    if (!win_menu || *code == MENUNULL || !(mi = ItemAddress(win_menu, *code)))
+        return 0;
+    *code = mi->NextSelect;
+    return (ULONG)GTMENUITEM_USERDATA(mi);
+}
+
+/* The right button: over the title bar the menus; over the inside, Back
+ * (the window traps it). A common Workbench trick: the window's flag set
+ * and cleared as the pointer moves. */
+void gfx_window_rmb(struct Gfx *g, WORD y)
+{
+    BOOL trap;
+    if (!g->wb || !g->win || !win_menu)
+        return;
+    trap = y >= g->win->BorderTop;
+    if (trap == !!(g->win->Flags & WFLG_RMBTRAP))
+        return;
+    Forbid();
+    if (trap)
+        g->win->Flags |= WFLG_RMBTRAP;
+    else
+        g->win->Flags &= ~WFLG_RMBTRAP;
+    Permit();
+}
+
+/* Resized: the buffer made again at the window's new inside, the layout's
+ * metrics with it. FALSE if nothing changed (or no memory for the new
+ * buffer: the old size kept, what fits of it shown). */
+BOOL gfx_window_resize(struct Gfx *g)
+{
+    WORD w, h;
+    struct BitMap *obm = wbuf_bm;
+    struct Layer_Info *oli = wbuf_li;
+    struct Layer *olay = wbuf_lay;
+    struct TextFont *font;
+    WORD ow = g->w, oh = g->h;
+    if (!g->wb || !g->win)
+        return FALSE;
+    w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
+    h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
+    if (w == g->w && h == g->h)
+        return FALSE;
+    font = g->rp->Font;
+    g->w = w;
+    g->h = h;
+    WaitBlit();
+    if (!wbuf_make(g)) {
+        wbuf_bm = obm;
+        wbuf_li = oli;
+        wbuf_lay = olay;
+        g->rp = olay->rp;
+        g->w = ow;
+        g->h = oh;
+        amce_log("window", "no memory for a buffer of its new size: as it was");
+        return FALSE;
+    }
+    DeleteLayer(0, olay);
+    DisposeLayerInfo(oli);
+    FreeBitMap(obm);
+    SetFont(g->rp, font);
+    SetDrMd(g->rp, JAM1);
+    layout_metrics(g);
+    fit_menu(g);
+    if (g->sm) {
+        g->font_h = sm_cell_h(g->sm);
+        g->baseline = sm_baseline(g->sm);
+    }
+    win_iw = w;
+    win_ih = h;
+    win_k = g->k;
+    dirty = TRUE;
+    return TRUE;
+}
+
+/* Where it is and how large inside (to keep, and give back next time). */
+BOOL gfx_window_box(WORD *l, WORD *t, WORD *w, WORD *h, UWORD *k)
+{
+    if (!win_iw)
+        return FALSE;
+    *l = win_left;
+    *t = win_top;
+    *w = win_iw;
+    *h = win_ih;
+    *k = win_k;
+    return TRUE;
+}
+
+void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k)
+{
+    win_left = l;
+    win_top = t;
+    win_iw = w;
+    win_ih = h;
+    win_k = k;
+}
+
+/* Full screen from the window (video's, the viewer's): a screen of its own
+ * in Workbench's mode, size and depth, so the monitor does not change mode,
+ * with Workbench's colours (the pens AmigaMCE has there draw the same), in
+ * place of the window (g's screen, window, RastPort and size) until left.
+ * Drawn on straight: g->wb is FALSE meanwhile. */
+static struct Screen *fs_scr;
+static struct Window *fs_win;
+static struct { struct Screen *scr; struct Window *win; struct RastPort *rp; WORD w, h; } fs_was;
+
+BOOL gfx_fs_on(void)
+{
+    return fs_scr != NULL;
+}
+
+BOOL gfx_fs_enter(struct Gfx *g)
+{
+    struct Screen *wb = g->scr;
+    struct ColorMap *cm;
+    ULONG n, *tab, id;
+    char m[160];
+    if (fs_scr || !g->wb || !wb)
+        return FALSE;
+    cm = wb->ViewPort.ColorMap;
+    n = cm->Count > 256 ? 256 : cm->Count;
+    id = GetVPModeID(&wb->ViewPort);
+    if (!(tab = AllocVec((n * 3 + 2) * sizeof(ULONG), MEMF_ANY)))
+        return FALSE;
+    tab[0] = n << 16;
+    GetRGB32(cm, 0, n, tab + 1);
+    tab[1 + n * 3] = 0;
+    fs_scr = OpenScreenTags(NULL, SA_DisplayID, id, SA_Width, wb->Width, SA_Height, wb->Height,
+                            SA_Depth, g->depth, SA_Colors32, (ULONG)tab, SA_Quiet, TRUE,
+                            SA_ShowTitle, FALSE, SA_Type, CUSTOMSCREEN, SA_Behind, TRUE,
+                            SA_Draggable, FALSE, SA_Exclusive, TRUE, SA_Title, (ULONG)"AmigaMCE",
+                            TAG_DONE);
+    FreeVec(tab);
+    if (fs_scr)
+        fs_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)fs_scr, WA_Left, 0, WA_Top, 0,
+                                WA_Width, fs_scr->Width, WA_Height, fs_scr->Height,
+                                WA_Backdrop, TRUE, WA_Borderless, TRUE, WA_Activate, TRUE,
+                                WA_RMBTrap, TRUE, WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE,
+                                WA_ReportMouse, TRUE,
+                                WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                                          IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW,
+                                TAG_DONE);
+    sprintf(m, "full screen: mode %08lx, %ld x %ld, %ld-bit, %s", (unsigned long)id,
+            (long)wb->Width, (long)wb->Height, (long)g->depth,
+            fs_win ? "opened" : fs_scr ? "its window would not open" : "the screen would not open");
+    amce_log("window", m);
+    if (!fs_win) {
+        if (fs_scr)
+            CloseScreen(fs_scr);
+        fs_scr = NULL;
+        return FALSE;
+    }
+    fs_was.scr = g->scr;
+    fs_was.win = g->win;
+    fs_was.rp = g->rp;
+    fs_was.w = g->w;
+    fs_was.h = g->h;
+    SetFont(fs_win->RPort, g->rp->Font);
+    SetDrMd(fs_win->RPort, JAM1);
+    g->scr = fs_scr;
+    g->win = fs_win;
+    g->rp = fs_win->RPort;
+    g->w = fs_scr->Width;
+    g->h = fs_scr->Height;
+    g->wb = FALSE;
+    FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+    ScreenToFront(fs_scr);
+    return TRUE;
+}
+
+void gfx_fs_leave(struct Gfx *g)
+{
+    if (!fs_scr)
+        return;
+    WaitBlit();
+    g->scr = fs_was.scr;
+    g->win = fs_was.win;
+    g->rp = fs_was.rp;
+    g->w = fs_was.w;
+    g->h = fs_was.h;
+    g->wb = TRUE;
+    ScreenToFront(g->scr);
+    CloseWindow(fs_win);
+    CloseScreen(fs_scr);
+    fs_win = NULL;
+    fs_scr = NULL;
+    ActivateWindow(g->win);
+    amce_log("window", "full screen: back in the window");
+}
+
 static void open_finish(struct Gfx *g);
 
 /* The window opened on Workbench, everything ready to draw: FALSE (and
@@ -627,12 +895,22 @@ static BOOL win_open(struct Gfx *g, int style)
     }
     iw = (WORD)((LONG)WIN_DW * g->k / 256);
     ih = (WORD)((LONG)WIN_DH * g->k / 256);
+    if (win_iw && win_k == g->k) {          /* the size it was left at (at this scale) */
+        iw = win_iw;
+        ih = win_ih;
+    }
+    if (iw < (WORD)((LONG)WIN_MIN_DW * g->k / 256))
+        iw = (WORD)((LONG)WIN_MIN_DW * g->k / 256);
+    if (ih < (WORD)((LONG)WIN_MIN_DH * g->k / 256))
+        ih = (WORD)((LONG)WIN_MIN_DH * g->k / 256);
     if (iw > mw)
         iw = mw;
     if (ih > mh)
         ih = mh;
-    left = win_left >= 0 ? win_left : (wb->Width - (iw + bw)) / 2;
-    top = win_top >= 0 ? win_top : wb->BarHeight + 1 + (mh - ih) / 2;
+
+    left = win_left >= 0 && win_left + iw + bw <= wb->Width ? win_left : (wb->Width - (iw + bw)) / 2;
+    top = win_top >= 0 && win_top + ih + bh <= wb->Height ? win_top
+                                                         : wb->BarHeight + 1 + (mh - ih) / 2;
     g->depth = GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH);
     g->truecolor = TRUE;
     g->planar = FALSE;
@@ -645,10 +923,14 @@ static BOOL win_open(struct Gfx *g, int style)
                             WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
                             WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
                             WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
+                            WA_SizeGadget, TRUE, WA_SizeBBottom, TRUE, WA_NewLookMenus, TRUE,
+                            WA_MinWidth, (LONG)WIN_MIN_DW * g->k / 256 + bw,
+                            WA_MinHeight, (LONG)WIN_MIN_DH * g->k / 256 + bh,
+                            WA_MaxWidth, ~0UL, WA_MaxHeight, ~0UL,
                             WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                                       IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW |
                                       IDCMP_ACTIVEWINDOW | IDCMP_CLOSEWINDOW |
-                                      IDCMP_REFRESHWINDOW,
+                                      IDCMP_REFRESHWINDOW | IDCMP_NEWSIZE | IDCMP_MENUPICK,
                             TAG_END);
     if (!g->win) {
         amce_log("window", "OpenWindow failed");
@@ -656,17 +938,11 @@ static BOOL win_open(struct Gfx *g, int style)
     }
     g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
     g->h = g->win->Height - g->win->BorderTop - g->win->BorderBottom;
-    /* the buffer: the inside, a friend of Workbench's bitmap (so in its
-     * format, and on the card if there is room) */
-    wbuf_bm = AllocBitMap(g->w, g->h, g->depth, BMF_MINPLANES, wb->RastPort.BitMap);
-    wbuf_li = wbuf_bm && LayersBase ? NewLayerInfo() : NULL;
-    wbuf_lay = wbuf_li ? CreateUpfrontLayer(wbuf_li, wbuf_bm, 0, 0, g->w - 1, g->h - 1,
-                                            LAYERSIMPLE, NULL) : NULL;
-    if (!wbuf_lay) {
+    if (!wbuf_make(g)) {
         amce_log("window", "no memory for its buffer");
         goto fail;
     }
-    g->rp = wbuf_lay->rp;
+    win_menus_on(g);
     /* AmigaMCE's colours: Workbench's pens of those colours, or free ones
      * made them (shared with anyone wanting the same) */
     cm = wb->ViewPort.ColorMap;
@@ -729,6 +1005,9 @@ BOOL gfx_window_msg(struct Gfx *g, ULONG cls)
         return TRUE;
     case IDCMP_CLOSEWINDOW:
         gfx_close_asked = TRUE;
+        return TRUE;
+    case IDCMP_NEWSIZE:
+        gfx_resized_at = time_ms() ? time_ms() : 1;    /* (opaque resizing: many) */
         return TRUE;
     case IDCMP_ACTIVEWINDOW:
         return TRUE;
@@ -1290,10 +1569,14 @@ void gfx_close(struct Gfx *g)
     }
     style_free(g);
     if (g->wb) {
+        win_menus_off(g);
         win_free(g);                        /* the buffer, Workbench's pens */
         if (g->win) {
-            win_left = g->win->LeftEdge;    /* reopened there */
+            win_left = g->win->LeftEdge;    /* reopened there, at that size */
             win_top = g->win->TopEdge;
+            win_iw = g->w;
+            win_ih = g->h;
+            win_k = g->k;
         }
     }
     if (g->win) {

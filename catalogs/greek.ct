@@ -259,6 +259,21 @@ Players: %ld (EaglePlayer, DeliTracker)
 MSG_4662E8D4
 Players για modules: κανένας (Aminet: mus/play/Eagleplayer)
 ; Module players: none (Aminet: mus/play/Eagleplayer)
+MSG_7B5FEA5E
+Έργο
+; Project
+MSG_3D68301C
+Σχετικά...
+; About...
+MSG_7D35778E
+Ρυθμίσεις...
+; Settings...
+MSG_4EDBBEE0
+Πλήρης οθόνη
+; Full screen
+MSG_47B3D356
+Έξοδος
+; Quit
 MSG_5FDDDD75
 Μικρό
 ; Short
@@ -394,9 +409,6 @@ MSG_718B9F54
 MSG_678631FD
 Παράθυρο
 ; Window
-MSG_4EDBBEE0
-Πλήρης οθόνη
-; Full screen
 MSG_2C041143
 Μέγεθος κειμένου
 ; Text size

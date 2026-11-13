@@ -25,6 +25,7 @@
 #include <libraries/asl.h>
 #include <workbench/startup.h>
 #include <proto/icon.h>
+#include <libraries/gadtools.h>
 
 static const char version_tag[] __attribute__((used)) =
     "$VER: AmigaMCE " AMCE_VERSION " (" AMCE_DATE ")";
@@ -1530,6 +1531,7 @@ static void build_sysinfo(struct Page *p)
 #define MODE_VAR "AmigaMCE/ScreenMode"
 #define WINDOW_VAR "AmigaMCE/Windowed"  /* "1" a window on Workbench, "0" full screen */
 #define TSIZE_VAR "AmigaMCE/TextSize"   /* the window's: small, medium, large */
+#define WINBOX_VAR "AmigaMCE/WindowBox"  /* left top width height scale: where it was left */
 
 /* The icon's WINDOWED tooltype (shipped as "(WINDOWED)": in brackets, off),
  * or WINDOWED from a Shell: the window unless Settings has saved a choice,
@@ -1538,6 +1540,33 @@ extern struct WBStartup *_WBenchMsg;
 struct Library *IconBase;
 static BOOL start_windowed;
 static const char *win_chosen_by = "nothing: full screen";
+
+/* The window's Workbench menus (gfx.c lays them out): their labels in
+ * the language chosen, except Japanese, Chinese and Korean, which
+ * Workbench's own font has no letters for. */
+enum { WM_ABOUT = 1, WM_SETTINGS, WM_FULL, WM_QUIT };
+static struct NewMenu wb_menus[6];
+
+static void window_menus_make(void)
+{
+    const char *iso = amce_lang_iso();
+    BOOL en = iso && (!strncmp(iso, "ja", 2) || !strncmp(iso, "zh", 2) || !strncmp(iso, "ko", 2));
+
+    struct NewMenu nm[6] = {
+        { NM_TITLE, NULL, NULL, 0, 0, NULL },
+        { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_ABOUT },
+        { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_SETTINGS },
+        { NM_ITEM, NULL, NULL, 0, 0, (APTR)WM_FULL },
+        { NM_ITEM, NULL, (STRPTR)"Q", 0, 0, (APTR)WM_QUIT },
+        { NM_END, NULL, NULL, 0, 0, NULL } };
+    nm[0].nm_Label = (STRPTR)(en ? "Project" : _("Project"));
+    nm[1].nm_Label = (STRPTR)(en ? "About..." : _("About..."));
+    nm[2].nm_Label = (STRPTR)(en ? "Settings..." : _("Settings..."));
+    nm[3].nm_Label = (STRPTR)(en ? "Full screen" : _("Full screen"));
+    nm[4].nm_Label = (STRPTR)(en ? "Quit" : _("Quit"));
+    memcpy(wb_menus, nm, sizeof(nm));
+    gfx_window_menus(wb_menus);
+}
 
 static void read_start_args(void)
 {
@@ -1594,6 +1623,22 @@ static void load_screen_mode(void)
     } else if (start_windowed) {
         gfx_window_wanted = TRUE;
         win_chosen_by = _WBenchMsg ? "the icon's WINDOWED tooltype" : "WINDOWED from the Shell";
+    }
+    if (GetVar((CONST_STRPTR)WINBOX_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
+        LONG v[5], n = 0;
+        char *q = buf;
+        while (n < 5 && *q) {
+            LONG x = 0, neg = *q == '-';
+            if (neg)
+                q++;
+            while (*q >= '0' && *q <= '9')
+                x = x * 10 + (*q++ - '0');
+            v[n++] = neg ? -x : x;
+            while (*q == ' ')
+                q++;
+        }
+        if (n == 5 && v[2] > 0 && v[3] > 0)
+            gfx_window_box_set((WORD)v[0], (WORD)v[1], (WORD)v[2], (WORD)v[3], (UWORD)v[4]);
     }
     if (GetVar((CONST_STRPTR)TSIZE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         gfx_text_size = !amce_stricmp(buf, "small") ? TSIZE_SMALL
@@ -8574,6 +8619,7 @@ static LONG view_step(const struct ItemList *l, LONG i, LONG d)
 }
 
 static BOOL vw_mouse;               /* the mouse in use: the bar has its buttons */
+static BOOL vw_full;                /* from a window, pictures full screen (for this run) */
 
 static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *pi,
                        const char *scale, BOOL slideshow)
@@ -8589,7 +8635,7 @@ static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *p
     pic_describe(pi, desc, sizeof(desc));
     sprintf(detail, _("%ld/%ld   %s   %s%s"), (long)pos, (long)n, desc, scale,
             slideshow ? _("   Slideshow") : "");
-    view_bar_buttons(vw_mouse, slideshow);
+    view_bar_buttons(vw_mouse, slideshow, gfx_fs_on() ? 2 : g.wb ? 1 : 0);
     view_bar(&g, l->items[i].label, detail,
              slideshow ? _("Left/Right  previous/next    Fire  pause    Esc  back")
                        : _("Left/Right  previous/next    Fire  slideshow    Esc  back"));
@@ -8786,7 +8832,11 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     pv_pending = FALSE;
     pv_let_go();                    /* the viewer takes the screen's colours over */
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
+    gfx_window_rmb(&g, 32767);      /* (the right button: Back, not the menus) */
+    if (g.wb && vw_full && !gfx_fs_enter(&g))
+        vw_full = FALSE;            /* full screen, as chosen before (from a window) */
     if (!view_begin(&g)) {
+        gfx_fs_leave(&g);
         gfx_dbuf_start(&g);
         set_msg(_("Not enough memory for the viewer"));
         return idx;
@@ -8796,7 +8846,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     while (!quit) {
         struct IntuiMessage *im;
         LONG step = 0;
-        BOOL toggle = FALSE, poke = FALSE, moused = FALSE, keyed = FALSE;
+        BOOL toggle = FALSE, poke = FALSE, moused = FALSE, keyed = FALSE, full = FALSE;
         ULONG now;
         while (ldr_collect())
             ;                               /* the loader's jobs back: marked done */
@@ -8910,6 +8960,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 case 0x4E: case 0x4D: step++; break;            /* right, down */
                 case 0x43: case 0x44: toggle = !toggle; break;  /* enter, return */
                 case 0x45: case 0x41: quit = TRUE; break;       /* esc, backspace */
+                case 0x23: full = TRUE; break;                  /* F, Amiga-F */
                 default: poke = TRUE; break;
                 }
             } else if (cl == IDCMP_VANILLAKEY) {
@@ -8918,6 +8969,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                     quit = TRUE;
                 else if (code == 13 || code == ' ')
                     toggle = !toggle;
+                else if (code == 'f' || code == 'F')
+                    full = TRUE;            /* (Amiga-F comes as its raw key) */
                 else
                     poke = TRUE;
             } else if (cl == IDCMP_MOUSEBUTTONS) {
@@ -8932,6 +8985,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                         step++;
                     else if (b == VB_PLAY)
                         toggle = !toggle;
+                    else if (b == VB_FULL)
+                        full = TRUE;
                     else if (!view_bar_at(&g, my))
                         step++;
                 } else if (code == MENUDOWN)
@@ -8956,6 +9011,24 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         }
         if (quit)
             break;
+        if (full && (g.wb || gfx_fs_on())) {
+            /* from a window: the whole display (a screen in Workbench's
+             * mode) or back, the picture shown again at its new size */
+            view_bar_hide(&g);
+            view_end(&g);
+            if (gfx_fs_on())
+                gfx_fs_leave(&g);
+            else if (!gfx_fs_enter(&g))
+                set_msg("");
+            vw_full = gfx_fs_on();
+            if (!view_begin(&g)) {
+                quit = TRUE;
+                break;
+            }
+            shown = -1;                     /* shown again, from its file */
+            bar_due = TRUE;
+            continue;
+        }
         now = time_ms();
         if (keyed && vw_mouse) {
             /* keys again: the keys' hint, the pointer away */
@@ -9008,6 +9081,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     }
     vw_drop();
     view_end(&g);
+    gfx_fs_leave(&g);               /* (full screen: the window again) */
     return shown >= 0 ? shown : idx;
 }
 
@@ -9063,6 +9137,7 @@ static void anim_from_page(struct Page *p)
     /* on this screen it draws straight onto it: single buffered meanwhile,
      * everything drawn again after (into the back buffer, then a flip) */
     gfx_dbuf_stop(&g);
+    gfx_window_rmb(&g, 32767);              /* (the right button: Back, not the menus) */
     if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
         amce_log("anim", err);
         set_msg(err);
@@ -9458,6 +9533,89 @@ static void toggle_window(void)
     display_again(FALSE, NULL, NULL);
 }
 
+/* Resized: laid out again once it settles (a resize sends one NEWSIZE,
+ * an opaque one many). Pages keep what they hold: lists and Now Playing lay
+ * themselves out as drawn; what was made for the old size goes (text boxes,
+ * a text page's picture, the letter column's choice, the preview's
+ * pictures, the spinner, the letter, the spectrum's tables). A text page's
+ * lines keep their wrapping until it is opened again. */
+#define RESIZE_SETTLE 150
+
+static void window_resized(void)
+{
+    ULONG t0 = time_ms();
+    WORD ow = g.w, oh = g.h, vis;
+    char m[200];
+    int i;
+    gfx_resized_at = 0;
+    if (!g.wb)
+        return;
+    hold_stop();
+    ov.on = FALSE;
+    tb_close(&pv_tb);
+    pv_shown = FALSE;
+    for (i = 0; i < depth; i++) {
+        struct Page *p = &pages[i];
+        tb_close(&p->tb);
+        if (p->pic_bm) {
+            WaitBlit();
+            FreeBitMap(p->pic_bm);
+            p->pic_bm = NULL;
+            p->pic_y = -1;
+        }
+        p->aside = 0;
+    }
+    if (!gfx_window_resize(&g))
+        return;
+    spin_free();
+    ov_bm_free();
+    pv_flush();
+    vis_stop();
+    vis = list_visible();
+    for (i = 0; i < depth; i++) {           /* the selection still in view */
+        struct Page *p = &pages[i];
+        if (p->sel >= p->top + vis)
+            p->top = p->sel - vis + 1;
+        if (p->top > p->list.count - vis)
+            p->top = p->list.count - vis;
+        if (p->top < 0)
+            p->top = 0;
+    }
+    draw_all();
+    gfx_present(&g);
+    sprintf(m, "%ld x %ld to %ld x %ld (%ld x %ld design units): laid out again in %lu ms, on %.60s",
+            (long)ow, (long)oh, (long)g.w, (long)g.h, (long)g.w * 256 / g.k, (long)g.h * 256 / g.k,
+            (unsigned long)(time_ms() - t0), cur() ? cur()->title : "the menu");
+    amce_log("window: resized", m);
+}
+
+/* The window's Workbench menus. */
+static void window_menu(UWORD code)
+{
+    ULONG what;
+    while ((what = gfx_window_menu_pick(&code))) {
+        int i, mod = -1;
+        if (what == WM_QUIT) {
+            running = FALSE;
+            return;
+        }
+        if (what == WM_FULL) {
+            toggle_window();                /* full screen, and kept */
+            return;
+        }
+        mod = what == WM_ABOUT ? MOD_ABOUT : MOD_SETTINGS;
+        for (i = 0; i < nmenu && menu[i] != mod; i++)
+            ;
+        if (i < nmenu) {
+            while (depth > 1)
+                page_pop();
+            focus = FOCUS_MENU;
+            menu_select_now(i, TRUE);
+            draw_all();
+        }
+    }
+}
+
 static void apply_tsize(int i)
 {
     if (i < 0 || i >= TSIZE_COUNT || (i == gfx_text_size && gfx_window_tsize() == i))
@@ -9518,6 +9676,8 @@ static void choose_language(const char *lang)
     save_setting(LANG_VAR, lang_set);
     amce_lang_open(lang_set);
     gfx_menu_refit(&g);
+    window_menus_make();                    /* (the window's, in it too) */
+    gfx_window_menus_again(&g);
     settings_rebuild();
     draw_all();
     lang_name(amce_lang_now(), t);
@@ -13088,6 +13248,7 @@ static int app_main(void)
     }
     dbg_mem_baseline();
     read_start_args();
+    window_menus_make();
     load_debug();
     load_dbuf();
     load_https();
@@ -13270,6 +13431,8 @@ static int app_main(void)
         if (sig & tsig) {
             if (GetMsg(tport)) {
                 joy_poll();
+                if (gfx_resized_at && (LONG)(time_ms() - gfx_resized_at) >= RESIZE_SETTLE)
+                    window_resized();   /* (a resize's last NEWSIZE, settled) */
                 /* the letter lingers ~0.5 s after the glide ends */
                 if (ov.on && !hold_active()) {
                     if (!ov.linger)
@@ -13340,9 +13503,13 @@ static int app_main(void)
             while (g.win && (im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
                 struct IntuiMessage copy = *im;
                 ReplyMsg((struct Message *)im);
+                if (copy.Class == IDCMP_MOUSEMOVE)
+                    gfx_window_rmb(&g, copy.MouseY);    /* title bar: the menus */
                 if (gfx_window_msg(&g, copy.Class)) {
                     if (gfx_close_asked)
                         running = FALSE;    /* the close gadget: as Esc on the menu twice */
+                } else if (copy.Class == IDCMP_MENUPICK) {
+                    window_menu(copy.Code);
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
                 else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
@@ -13413,6 +13580,15 @@ out:
     ov_bm_free();
     gfx_close(&g);
     amce_log("screen closed", "");
+    {
+        WORD l, t, w, h;
+        UWORD k;
+        if (gfx_window_box(&l, &t, &w, &h, &k)) {   /* where the window was left */
+            char b[48];
+            sprintf(b, "%ld %ld %ld %ld %ld", (long)l, (long)t, (long)w, (long)h, (long)k);
+            save_setting(WINBOX_VAR, b);
+        }
+    }
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);

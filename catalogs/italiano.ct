@@ -259,6 +259,21 @@ Lettori di moduli: %ld (EaglePlayer, DeliTracker)
 MSG_4662E8D4
 Lettori di moduli: nessuno (Aminet: mus/play/Eagleplayer)
 ; Module players: none (Aminet: mus/play/Eagleplayer)
+MSG_7B5FEA5E
+Progetto
+; Project
+MSG_3D68301C
+Info...
+; About...
+MSG_7D35778E
+Impostazioni...
+; Settings...
+MSG_4EDBBEE0
+Schermo intero
+; Full screen
+MSG_47B3D356
+Esci
+; Quit
 MSG_5FDDDD75
 Breve
 ; Short
@@ -394,9 +409,6 @@ Grande
 MSG_678631FD
 Finestra
 ; Window
-MSG_4EDBBEE0
-Schermo intero
-; Full screen
 MSG_2C041143
 Dimensione del testo
 ; Text size

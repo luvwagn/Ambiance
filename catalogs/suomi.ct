@@ -259,6 +259,21 @@ Moduulisoittimet: %ld (EaglePlayer, DeliTracker)
 MSG_4662E8D4
 Moduulisoittimet: ei yhtään (Aminet: mus/play/Eagleplayer)
 ; Module players: none (Aminet: mus/play/Eagleplayer)
+MSG_7B5FEA5E
+Projekti
+; Project
+MSG_3D68301C
+Tietoja...
+; About...
+MSG_7D35778E
+Asetukset...
+; Settings...
+MSG_4EDBBEE0
+Koko näyttö
+; Full screen
+MSG_47B3D356
+Lopeta
+; Quit
 MSG_5FDDDD75
 Lyhyt
 ; Short
@@ -394,9 +409,6 @@ Suuri
 MSG_678631FD
 Ikkuna
 ; Window
-MSG_4EDBBEE0
-Koko näyttö
-; Full screen
 MSG_2C041143
 Tekstin koko
 ; Text size

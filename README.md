@@ -133,8 +133,13 @@ of the Amiga to how fast it really is.
   tooltype (shipped commented out as `(WINDOWED)`; take the brackets away),
   or `AmigaMCE WINDOWED` from a Shell. A choice made in Settings comes first.
   Its text is Small, Medium or Large (the window 512 x 384, 640 x 480 or
-  800 x 600, as far as Workbench has room); in the pixel style the font is
-  the size.
+  800 x 600 at first, as far as Workbench has room); in the pixel style the
+  font is the size. Resize it and the layout follows, the text staying its
+  size; it opens again where and as large as it was left. Its Project menu
+  (the right button over its title bar) has About, Settings, Full screen and
+  Quit. Pictures and videos go full screen from it (their button, F or
+  Amiga-F) on a screen in Workbench's own mode, so the monitor does not
+  change mode.
 - Flicker-free scrolling text and lists. A long list always shows a scroll bar
   (how long it is, and where you are in it), which the mouse can drag or click.
 

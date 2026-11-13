@@ -60,6 +60,8 @@ static LONG black_pen = -1;     /* true colour: a black pen for the border */
 static UWORD *blank;            /* an empty mouse pointer (chip RAM) */
 static BOOL ptr_shown;          /* the mouse moved: the pointer shown till the bar goes */
 static BOOL btns, btn_playing;  /* the bar's buttons (the mouse's), the slideshow running */
+static int btn_full;            /* full screen's: 0 not shown, 1 to it, 2 back from it */
+static int btn_n;               /* buttons shown */
 static WORD btn_x[VB_COUNT], btn_cw;   /* each button's left, and width */
 static UBYTE pen_bg, pen_fg, pen_dim, pen_border;
 static BOOL has_pic;            /* a picture is up */
@@ -262,7 +264,8 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
          * where the keys' hint would be */
         WORD b0;
         btn_cw = bar_h + GU(g, 4);
-        b0 = g->w - GU(g, 4) - VB_COUNT * btn_cw;
+        btn_n = btn_full ? VB_COUNT : VB_FULL;
+        b0 = g->w - GU(g, 4) - btn_n * btn_cw;
         bar_buttons(g, b0, fg);
         hw = g->w - b0;                     /* (what the text keeps clear of) */
         hint = NULL;
@@ -292,7 +295,7 @@ static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg)
     if (s < 6)
         s = 6;
     SetAPen(g->rp, GPEN(fg));
-    for (i = 0; i < VB_COUNT; i++) {
+    for (i = 0; i < btn_n; i++) {
         WORD ix = x0 + i * btn_cw + (btn_cw - s) / 2, iy = cy - s / 2;
         btn_x[i] = x0 + i * btn_cw;
         switch (i) {
@@ -321,14 +324,35 @@ static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg)
             }
             RectFill(g->rp, ix + s - s / 5 - t, iy + s / 6, ix + s - s / 5, iy + s - s / 6);
             break;
+        case VB_FULL: {                     /* four corners, as video's: out, or in to come back */
+            WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;
+            for (c = 0; c < 4; c++) {
+                WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
+                if (btn_full == 1) {
+                    px = dx > 0 ? ix + a : ix + s - 1 - a;
+                    py = dy > 0 ? iy + a : iy + s - 1 - a;
+                } else {
+                    px = ccx - dx * gap;
+                    py = ccy - dy * gap;
+                    dx = -dx;
+                    dy = -dy;
+                }
+                RectFill(g->rp, dx > 0 ? px : px - L + 1, dy > 0 ? py : py - t + 1,
+                         dx > 0 ? px + L - 1 : px, dy > 0 ? py + t - 1 : py);
+                RectFill(g->rp, dx > 0 ? px : px - t + 1, dy > 0 ? py : py - L + 1,
+                         dx > 0 ? px + t - 1 : px, dy > 0 ? py + L - 1 : py);
+            }
+            break;
+        }
         }
     }
 }
 
-void view_bar_buttons(BOOL on, BOOL playing)
+void view_bar_buttons(BOOL on, BOOL playing, int full)
 {
     btns = on;
     btn_playing = playing;
+    btn_full = full;
 }
 
 BOOL view_bar_has_buttons(void)
@@ -341,7 +365,7 @@ int view_bar_hit(struct Gfx *g, WORD x, WORD y)
     int i;
     if (!bar_bm || !btns || y < bar_y || y >= g->h)
         return -1;
-    for (i = 0; i < VB_COUNT; i++)
+    for (i = 0; i < btn_n; i++)
         if (x >= btn_x[i] && x < btn_x[i] + btn_cw)
             return i;
     return -1;
