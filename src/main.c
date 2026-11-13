@@ -4158,7 +4158,7 @@ static void draw_title(struct Page *p)
             crumb[i].x0 = crumb[i].x1 = -1;
         crumb_first = 0;
         w = gfx_textlen(&g, p->title, TS_BOLD);
-        gfx_text(&g, x, U(28), p->title, PEN_WHITE, PEN_BG, maxw, TS_BOLD | TS_OPAQUE);
+        gfx_text(&g, x, U(28), p->title, PEN_ACCENT, PEN_BG, maxw, TS_BOLD | TS_OPAQUE);
         x += w < maxw ? w : maxw;
         amce_strlcpy(from, _(mod_names[np_src]), sizeof(from));
         if (np_src_list[0] && strcmp(np_src_list, from)) {
@@ -4212,8 +4212,8 @@ static void draw_title(struct Page *p)
                 w = room;
             if (hov)
                 gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-            gfx_text(&g, x, U(28), txt[k], last ? PEN_WHITE : PEN_TEXT, hov ? PEN_RULE : PEN_BG,
-                     room, TS_BOLD | TS_OPAQUE);
+            gfx_text(&g, x, U(28), txt[k], last ? PEN_ACCENT : PEN_TEXT, hov ? PEN_RULE : PEN_BG,
+                     room, TS_BOLD | TS_OPAQUE);     /* (the last: Now playing, in its orange) */
             crumb[lv[k]].x0 = x;
             crumb[lv[k]].x1 = x + w - 1;
             x += w;
@@ -4248,8 +4248,9 @@ static void draw_title(struct Page *p)
                 w = room;
             if (hov)
                 gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-            gfx_text(&g, x, U(28), pages[i].title, last ? PEN_WHITE : PEN_TEXT, bg, room,
-                     TS_BOLD | TS_OPAQUE);
+            gfx_text(&g, x, U(28), pages[i].title,
+                     pages[i].type == PT_PLAYER ? PEN_ACCENT : last ? PEN_WHITE : PEN_TEXT, bg, room,
+                     TS_BOLD | TS_OPAQUE);          /* (Now playing: in its orange) */
             crumb[i].x0 = x;
             crumb[i].x1 = x + w - 1;
             x += w;
@@ -5624,6 +5625,21 @@ static void ov_hide(void)
  * so fast scrolling does not flash. */
 static const char *row_tag(const struct Page *p, const struct Item *it);
 
+/* The Now playing row at a list's top (Mods, Music, Radio, Plex): drawn
+ * in the accent's orange, so it does not read as one of the list's. */
+static BOOL np_row(const struct Item *it)
+{
+    return it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
+}
+
+/* The planes a list's rows are drawn and moved on (a native screen): its
+ * pens are below 8, so 0-2 (3/8 of the blitter's work), except where it
+ * has a Now playing row, whose orange (pen 8) is on plane 3 too. */
+static UBYTE list_planes(const struct Page *p)
+{
+    return p && p->list.count && np_row(&p->list.items[0]) ? 0xFF : 0x07;
+}
+
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     struct Item *it = &p->list.items[idx];
@@ -5637,7 +5653,8 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
         right = xr - U(2);
     BOOL sel = idx == p->sel;
     BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
-    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : sel ? PEN_WHITE : PEN_TEXT;
+    BOOL np = np_row(it);
+    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : sel ? PEN_WHITE : np ? PEN_ACCENT : PEN_TEXT;
     UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
                mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
                ? PEN_RULE : PEN_BG;
@@ -5645,7 +5662,7 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
      * pane is cleared on all planes when the page is drawn), so on native
      * screens only planes 0-2 are written: 3/8 of the blitter work. */
     if (g.planar)
-        SetWriteMask(g.rp, 0x07);
+        SetWriteMask(g.rp, list_planes(p));
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
     if (it->flags & ITEM_GONE) {            /* its letter is being read again */
         if (g.planar)
@@ -5657,15 +5674,16 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
                         sel ? PEN_WHITE : PEN_TEXT);
     else if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
-                 off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
+                 off ? PEN_RULE : sel ? PEN_WHITE : np ? PEN_ACCENT
+                 : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
     {
         /* the tag at the right: a setting's value; a picture's format or
          * a playable folder's picture count (pics.c keeps it in sortkey) */
         const char *tag = row_tag(p, it);
         if (tag[0]) {
             WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
-            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
-                     TS_SMALL);
+            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : np ? PEN_ACCENT
+                     : PEN_DIM, bg, 0, TS_SMALL);
             right -= tagw + U(8);
         }
     }
@@ -5941,7 +5959,7 @@ static void blit_rows(LONG src, LONG dst, LONG n)
     gfx_dirty();
     LockLayerRom(g.rp->Layer);             /* the window's, or a double buffer's */
     BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
-              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? 0x07 : 0xFF, NULL);
+              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? list_planes(cur()) : 0xFF, NULL);
     UnlockLayerRom(g.rp->Layer);
 }
 
@@ -7198,6 +7216,7 @@ static void np_update(void)
 }
 
 static BOOL plex_shortcut_fix(struct Page *p);
+static BOOL np_row(const struct Item *it);
 
 /* The playing module marked in any Mods list open (redraw: and the list
  * on screen drawn again, when the music moved on by itself). */
@@ -7798,7 +7817,8 @@ static void np_eq_redraw(void)
         bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM)
                  : mouse_mode && i - p->top == hover_row ? PEN_RULE : PEN_BG;
         was = gfx_quiet_begin();
-        gfx_mark(&g, MARK_PLAYING, g.pane_x, y, sel ? PEN_WHITE : PEN_TEXT, bg);
+        gfx_mark(&g, MARK_PLAYING, g.pane_x, y,
+                 sel ? PEN_WHITE : np_row(it) ? PEN_ACCENT : PEN_TEXT, bg);
         gfx_quiet_end(&g, was, g.pane_x, y, g.pane_x + g.mark_px - 1, y + g.mark_px - 1);
     }
 }
