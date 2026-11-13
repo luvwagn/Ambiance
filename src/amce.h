@@ -361,6 +361,15 @@ void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw
               char *scale, LONG max);
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
 void view_bar_hide(struct Gfx *g);
+/* The mouse's buttons in the bar (instead of the keys' hint), for the next
+ * view_bar: previous, play/pause the slideshow, next. */
+enum { VB_PREV, VB_PLAY, VB_NEXT, VB_COUNT };
+void view_bar_buttons(BOOL on, BOOL playing);
+BOOL view_bar_has_buttons(void);
+int  view_bar_hit(struct Gfx *g, WORD x, WORD y);  /* VB_*, -1 none */
+BOOL view_bar_at(struct Gfx *g, WORD y);           /* in the bar (shown)? */
+void view_pointer(struct Gfx *g, BOOL on);         /* the pointer, while the mouse is used */
+BOOL view_pointer_shown(void);
 void view_spin(struct Gfx *g, UWORD phase);    /* the next picture coming: in the bar, or a corner */
 void view_spin_hide(struct Gfx *g);
 BOOL view_bar_shown(void);

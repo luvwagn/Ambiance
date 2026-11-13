@@ -58,6 +58,9 @@ static Object *obj;             /* remapped picture: holds its pens */
 static BOOL pen0_held, black_held;
 static LONG black_pen = -1;     /* true colour: a black pen for the border */
 static UWORD *blank;            /* an empty mouse pointer (chip RAM) */
+static BOOL ptr_shown;          /* the mouse moved: the pointer shown till the bar goes */
+static BOOL btns, btn_playing;  /* the bar's buttons (the mouse's), the slideshow running */
+static WORD btn_x[VB_COUNT], btn_cw;   /* each button's left, and width */
 static UBYTE pen_bg, pen_fg, pen_dim, pen_border;
 static BOOL has_pic;            /* a picture is up */
 static struct BitMap *bar_bm;   /* what the bar covers */
@@ -174,6 +177,8 @@ BOOL view_begin(struct Gfx *g)
     bar_bm = NULL;
     if ((blank = AllocMem(6 * sizeof(UWORD), MEMF_CHIP | MEMF_CLEAR)))
         SetPointer(g->win, blank, 1, 16, 0, 0);
+    ptr_shown = FALSE;
+    btns = FALSE;
     if (clut) {
         LONG n = ncolors * 3;
         saved = AllocVec((n + 2) * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
@@ -224,6 +229,8 @@ void view_bar_hide(struct Gfx *g)
     bar_bm = NULL;
 }
 
+static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg);
+
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint)
 {
     UBYTE bg = clut ? pen_bg : PEN_BAR, fg = clut ? pen_fg : PEN_WHITE,
@@ -250,21 +257,118 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
     }
     ty = bar_y + (bar_h - g->font_h + GU(g, 1)) / 2;
     tw = gfx_textlen(g, title, TS_BOLD);
-    if (hint && hint[0])
+    if (btns) {
+        /* the mouse's: previous, play or pause, next at the right end,
+         * where the keys' hint would be */
+        WORD b0;
+        btn_cw = bar_h + GU(g, 4);
+        b0 = g->w - GU(g, 4) - VB_COUNT * btn_cw;
+        bar_buttons(g, b0, fg);
+        hw = g->w - b0;                     /* (what the text keeps clear of) */
+        hint = NULL;
+    } else if (hint && hint[0])
         hw = gfx_textlen(g, hint, TS_SMALL);
-    gfx_text(g, x, ty, title, fg, bg, g->w - 2 * x, TS_BOLD);
+    gfx_text(g, x, ty, title, fg, bg, g->w - x - (btns ? hw + GU(g, 6) : x), TS_BOLD);
     x += tw + GU(g, 10);
-    if (detail && detail[0] && x < g->w - GU(g, 6)) {
+    if (detail && detail[0] && x < g->w - GU(g, 6) - (btns ? hw : 0)) {
         WORD dw = gfx_textlen(g, detail, TS_SMALL);
-        gfx_text(g, x, ty, detail, dim, bg, g->w - GU(g, 6) - x, TS_SMALL);
+        gfx_text(g, x, ty, detail, dim, bg, g->w - GU(g, 6) - (btns ? hw : 0) - x, TS_SMALL);
         x += dw + GU(g, 12);
     }
-    if (hw && x + hw <= g->w - GU(g, 6))
+    if (hint && hw && x + hw <= g->w - GU(g, 6))
         gfx_text(g, g->w - GU(g, 6) - hw, ty, hint, dim, bg, 0, TS_SMALL);
-    /* the spinner's place, if one turns: left of the hint, after the text */
-    spin_x = g->w - GU(g, 6) - (hw ? hw + GU(g, 10) : 0) - bar_h / 2;
+    /* the spinner's place, if one turns: left of the hint (or the
+     * buttons), after the text */
+    spin_x = g->w - (btns ? hw : GU(g, 6) + (hw ? hw + GU(g, 10) : 0)) - bar_h / 2;
     if (spin_x - bar_h / 2 < x)
         spin_x = -1;
+}
+
+/* The buttons from x0: previous, play (the slideshow paused) or pause,
+ * next, in pen fg, drawn as video's are. */
+static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg)
+{
+    WORD s = bar_h - GU(g, 7), cy = bar_y + (bar_h + GU(g, 1)) / 2, t = s > 14 ? 2 : 1, i, j;
+    if (s < 6)
+        s = 6;
+    SetAPen(g->rp, GPEN(fg));
+    for (i = 0; i < VB_COUNT; i++) {
+        WORD ix = x0 + i * btn_cw + (btn_cw - s) / 2, iy = cy - s / 2;
+        btn_x[i] = x0 + i * btn_cw;
+        switch (i) {
+        case VB_PREV:                       /* a bar, then a triangle pointing left */
+            RectFill(g->rp, ix + s / 5, iy + s / 6, ix + s / 5 + t, iy + s - s / 6);
+            for (j = 0; j <= s / 3; j++) {
+                Move(g->rp, ix + s - s / 5 - j, cy - j);
+                Draw(g->rp, ix + s - s / 5 - j, cy + j);
+            }
+            break;
+        case VB_PLAY:
+            if (!btn_playing)               /* paused: play */
+                for (j = 0; j <= s / 3; j++) {
+                    Move(g->rp, ix + s / 3 + j, iy + s / 6 + j);
+                    Draw(g->rp, ix + s / 3 + j, iy + s - s / 6 - j);
+                }
+            else {
+                RectFill(g->rp, ix + s / 4, iy + s / 6, ix + s / 4 + t, iy + s - s / 6);
+                RectFill(g->rp, ix + s - s / 4 - t, iy + s / 6, ix + s - s / 4, iy + s - s / 6);
+            }
+            break;
+        case VB_NEXT:                       /* a triangle pointing right, then a bar */
+            for (j = 0; j <= s / 3; j++) {
+                Move(g->rp, ix + s / 5 + j, cy - (s / 3 - j));
+                Draw(g->rp, ix + s / 5 + j, cy + (s / 3 - j));
+            }
+            RectFill(g->rp, ix + s - s / 5 - t, iy + s / 6, ix + s - s / 5, iy + s - s / 6);
+            break;
+        }
+    }
+}
+
+void view_bar_buttons(BOOL on, BOOL playing)
+{
+    btns = on;
+    btn_playing = playing;
+}
+
+BOOL view_bar_has_buttons(void)
+{
+    return bar_bm && btns;
+}
+
+int view_bar_hit(struct Gfx *g, WORD x, WORD y)
+{
+    int i;
+    if (!bar_bm || !btns || y < bar_y || y >= g->h)
+        return -1;
+    for (i = 0; i < VB_COUNT; i++)
+        if (x >= btn_x[i] && x < btn_x[i] + btn_cw)
+            return i;
+    return -1;
+}
+
+BOOL view_bar_at(struct Gfx *g, WORD y)
+{
+    (void)g;
+    return bar_bm && y >= bar_y;
+}
+
+/* The pointer while the mouse is in use (it moved), hidden again with the
+ * bar. */
+void view_pointer(struct Gfx *g, BOOL on)
+{
+    if (on == ptr_shown || !blank)
+        return;
+    if (on)
+        ClearPointer(g->win);
+    else
+        SetPointer(g->win, blank, 1, 16, 0, 0);
+    ptr_shown = on;
+}
+
+BOOL view_pointer_shown(void)
+{
+    return ptr_shown;
 }
 
 /* Eight dots round (cx, cy), radius r, the one at phase lit and larger. */

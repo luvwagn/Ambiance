@@ -8573,6 +8573,8 @@ static LONG view_step(const struct ItemList *l, LONG i, LONG d)
     return -1;
 }
 
+static BOOL vw_mouse;               /* the mouse in use: the bar has its buttons */
+
 static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *pi,
                        const char *scale, BOOL slideshow)
 {
@@ -8587,6 +8589,7 @@ static void viewer_bar(const struct ItemList *l, LONG i, const struct PicInfo *p
     pic_describe(pi, desc, sizeof(desc));
     sprintf(detail, _("%ld/%ld   %s   %s%s"), (long)pos, (long)n, desc, scale,
             slideshow ? _("   Slideshow") : "");
+    view_bar_buttons(vw_mouse, slideshow);
     view_bar(&g, l->items[i].label, detail,
              slideshow ? _("Left/Right  previous/next    Fire  pause    Esc  back")
                        : _("Left/Right  previous/next    Fire  slideshow    Esc  back"));
@@ -8769,8 +8772,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     struct PicInfo pi = { 0 };
     char scale[24];
     LONG shown = -1, want = idx, dir = 1, asked = -1, fails = 0;
-    ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0, spin_tick = 0;
+    ULONG bar_until = 0, next_at = 0, jlast = 0, wait_from = 0, spin_tick = 0, ptr_until = 0;
     BOOL quit = FALSE, ok = FALSE, bar_due = TRUE, loading_bar = FALSE;
+
+    vw_mouse = FALSE;
 
     if (idx < 0 || idx >= l->count || l->items[idx].kind != IT_PIC)
         return idx;
@@ -8791,7 +8796,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     while (!quit) {
         struct IntuiMessage *im;
         LONG step = 0;
-        BOOL toggle = FALSE, poke = FALSE;
+        BOOL toggle = FALSE, poke = FALSE, moused = FALSE, keyed = FALSE;
         ULONG now;
         while (ldr_collect())
             ;                               /* the loader's jobs back: marked done */
@@ -8854,6 +8859,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             struct PicInfo pre_i;
             APTR pre = vw_take(l->items[want].path, &remapped, &pre_t, &pre_i);
             ULONG t0 = time_ms();
+            BOOL keep = vw_mouse && (LONG)(t0 - bar_until) < 0;    /* the mouse's bar stays up */
             ok = view_show(&g, l->items[want].path, l->items[want].label, &pi, scale, sizeof(scale),
                            pre, remapped, pre_t, &pre_i);
             {
@@ -8879,9 +8885,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 vw_ahead(l, shown, dir);
             }
             next_at = time_ms() + SLIDE_MS;
-            if (ok && bar_due) {
+            if (ok && (bar_due || keep)) {
                 viewer_bar(l, shown, &pi, scale, slideshow);
-                bar_until = time_ms() + BAR_MS;
+                if (!keep)
+                    bar_until = time_ms() + BAR_MS;
             }
             bar_due = !slideshow;
         }
@@ -8889,11 +8896,15 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
         while ((im = (struct IntuiMessage *)GetMsg(g.win->UserPort))) {
             ULONG cl = im->Class;
             UWORD code = im->Code;
+            WORD mx = im->MouseX - g.win->BorderLeft, my = im->MouseY - g.win->BorderTop;
             ReplyMsg((struct Message *)im);
             if (gfx_window_msg(&g, cl)) {
                 if (gfx_close_asked)
                     quit = TRUE;            /* the close gadget: out, then AmigaMCE quits */
+            } else if (cl == IDCMP_MOUSEMOVE) {
+                moused = TRUE;              /* the pointer, and the bar with its buttons */
             } else if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
+                keyed = TRUE;
                 switch (code) {
                 case 0x4F: case 0x4C: step--; break;            /* left, up */
                 case 0x4E: case 0x4D: step++; break;            /* right, down */
@@ -8902,6 +8913,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 default: poke = TRUE; break;
                 }
             } else if (cl == IDCMP_VANILLAKEY) {
+                keyed = TRUE;
                 if (code == 27 || code == 8)
                     quit = TRUE;
                 else if (code == 13 || code == ' ')
@@ -8909,9 +8921,20 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 else
                     poke = TRUE;
             } else if (cl == IDCMP_MOUSEBUTTONS) {
-                if (code == SELECTDOWN)
-                    step++;
-                else if (code == MENUDOWN)
+                if (code == SELECTDOWN) {
+                    /* the bar's buttons; elsewhere in the bar nothing;
+                     * on the picture, the next one */
+                    int b = view_bar_hit(&g, mx, my);
+                    moused = TRUE;
+                    if (b == VB_PREV)
+                        step--;
+                    else if (b == VB_NEXT)
+                        step++;
+                    else if (b == VB_PLAY)
+                        toggle = !toggle;
+                    else if (!view_bar_at(&g, my))
+                        step++;
+                } else if (code == MENUDOWN)
                     quit = TRUE;
             }
         }
@@ -8926,12 +8949,29 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                     toggle = !toggle;
                 if (pressed & JPF_BUTTON_BLUE)
                     quit = TRUE;
+                if (pressed)
+                    keyed = TRUE;
             }
             jlast = st;
         }
         if (quit)
             break;
         now = time_ms();
+        if (keyed && vw_mouse) {
+            /* keys again: the keys' hint, the pointer away */
+            vw_mouse = FALSE;
+            view_pointer(&g, FALSE);
+            if (view_bar_has_buttons())
+                poke = TRUE;
+        } else if (moused) {
+            view_pointer(&g, TRUE);
+            ptr_until = now + BAR_MS;
+            if (ok && !view_bar_has_buttons()) {
+                vw_mouse = TRUE;
+                poke = TRUE;
+            }
+            bar_until = now + BAR_MS;
+        }
         if (toggle) {
             slideshow = !slideshow;
             next_at = now + SLIDE_MS;
@@ -8955,8 +8995,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             viewer_bar(l, shown, &pi, scale, slideshow);
             bar_until = now + BAR_MS;
         }
-        if (view_bar_shown() && ok && (LONG)(now - bar_until) >= 0)
+        if (view_bar_shown() && ok && (LONG)(now - bar_until) >= 0) {
             view_bar_hide(&g);
+            vw_mouse = FALSE;
+        }
+        if (view_pointer_shown() && (LONG)(now - ptr_until) >= 0 && !view_bar_has_buttons())
+            view_pointer(&g, FALSE);        /* the mouse at rest: hidden again */
         gfx_present(&g);                    /* a window: what changed, copied in */
         dbg_sleep_begin();
         WaitTOF();
