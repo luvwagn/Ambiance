@@ -379,6 +379,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
 void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw, ULONG *dh,
               char *scale, LONG max);
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
+/* Loop (main.c): what plays, again at its end (Now Playing's and video's
+ * loop buttons, one setting). */
+extern BOOL play_loop;
 void view_bar_hide(struct Gfx *g);
 /* The mouse's buttons in the bar (instead of the keys' hint), for the next
  * view_bar: previous, play/pause the slideshow, next. */

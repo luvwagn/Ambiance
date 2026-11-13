@@ -958,6 +958,12 @@ MSG_3652522E
 MSG_1CAF7095
 Σε αυτό το module δεν γίνεται μετακίνηση
 ; This module cannot be moved through
+MSG_0B3E0086
+Επανάληψη ενεργή: παίζει ξανά στο τέλος
+; Loop on: it plays again at its end
+MSG_546C12F6
+Επανάληψη ανενεργή
+; Loop off
 MSG_6AA26665
 Παίζει τώρα
 ; Now playing

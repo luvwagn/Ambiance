@@ -958,6 +958,12 @@ MSG_3652522E
 MSG_1CAF7095
 このモジュールは移動できません
 ; This module cannot be moved through
+MSG_0B3E0086
+ループ オン: 終わると最初から再生します
+; Loop on: it plays again at its end
+MSG_546C12F6
+ループ オフ
+; Loop off
 MSG_6AA26665
 再生中
 ; Now playing

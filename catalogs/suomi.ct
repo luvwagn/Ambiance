@@ -958,6 +958,12 @@ Se oli kansion viimeinen moduuli
 MSG_1CAF7095
 Tässä moduulissa ei voi siirtyä
 ; This module cannot be moved through
+MSG_0B3E0086
+Toisto päällä: soi uudelleen loputtuaan
+; Loop on: it plays again at its end
+MSG_546C12F6
+Toisto pois
+; Loop off
 MSG_6AA26665
 Nyt soi
 ; Now playing

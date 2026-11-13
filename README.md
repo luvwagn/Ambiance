@@ -83,7 +83,8 @@ of the Amiga to how fast it really is.
   cannot spell are left out.
 - **Now Playing:** title, artist, album and cover; a level meter per channel;
   a position bar you can click to seek; previous, back, play/pause, stop,
-  forward, next and volume. The music plays on while you browse, and the
+  forward, next, loop (the module, track or file again at its end, until
+  turned off; kept) and volume. The music plays on while you browse, and the
   list you came from marks what is playing.
 
 ### Pictures
@@ -117,7 +118,10 @@ of the Amiga to how fast it really is.
   playing waits meanwhile (a module paused, a station or a track stopped
   and started again afterwards).
 - Moving the mouse brings up controls over the picture: from the start,
-  play/pause, stop, volume, the time and the length.
+  play/pause, stop, loop, volume (when it has sound), the time and the
+  length; a click on the line of how far it has got goes there. At its end
+  it goes back to its first frame and waits there, stopped, unless loop is
+  on.
 - In a Workbench window it is made as large as the window holds, larger or
   smaller; the full-screen button shows it on the whole display, on a
   screen in Workbench's own mode (no mode switch), and back.

@@ -958,6 +958,12 @@ Dat was de laatste module in de map
 MSG_1CAF7095
 In deze module kan niet gespoeld worden
 ; This module cannot be moved through
+MSG_0B3E0086
+Herhalen aan: het speelt opnieuw aan het eind
+; Loop on: it plays again at its end
+MSG_546C12F6
+Herhalen uit
+; Loop off
 MSG_6AA26665
 Speelt nu
 ; Now playing

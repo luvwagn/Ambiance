@@ -958,6 +958,12 @@ Das war das letzte Modul im Ordner
 MSG_1CAF7095
 In diesem Modul kann man nicht springen
 ; This module cannot be moved through
+MSG_0B3E0086
+Wiederholen an: es läuft am Ende erneut
+; Loop on: it plays again at its end
+MSG_546C12F6
+Wiederholen aus
+; Loop off
 MSG_6AA26665
 Läuft gerade
 ; Now playing

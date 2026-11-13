@@ -958,6 +958,12 @@ Era l'ultimo modulo della cartella
 MSG_1CAF7095
 In questo modulo non ci si può spostare
 ; This module cannot be moved through
+MSG_0B3E0086
+Ripetizione attiva: riparte alla fine
+; Loop on: it plays again at its end
+MSG_546C12F6
+Ripetizione disattivata
+; Loop off
 MSG_6AA26665
 In riproduzione
 ; Now playing

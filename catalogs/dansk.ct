@@ -958,6 +958,12 @@ Det var det sidste modul i mappen
 MSG_1CAF7095
 Man kan ikke spole i dette modul
 ; This module cannot be moved through
+MSG_0B3E0086
+Gentag til: den spiller igen, når den slutter
+; Loop on: it plays again at its end
+MSG_546C12F6
+Gentag fra
+; Loop off
 MSG_6AA26665
 Spiller nu
 ; Now playing

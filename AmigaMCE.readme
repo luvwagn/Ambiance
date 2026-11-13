@@ -93,7 +93,8 @@ Music (files)
 Now Playing
 - Title, artist, album and cover, a level meter per channel (labelled for
   modules by their samples), a position bar you can click to seek, and
-  buttons for previous, back, play/pause, stop, forward, next and volume.
+  buttons for previous, back, play/pause, stop, forward, next, loop
+  (again at its end, until turned off) and volume.
 - The music plays on while you browse; the lists you came from mark what
   is playing, and a Now playing row at their top brings you back to it.
 - Stop gives Paula and its timer back to the system, so other programs
@@ -125,9 +126,10 @@ Videos
   AHI if that is the sound output, else Paula; what was playing waits
   (a station or a track is stopped, and goes on afterwards).
 - Moving the mouse brings up controls over the picture: from the start,
-  play/pause, stop, volume, the time and the length. Up/Down set the
-  volume; Esc or the right button stops; one under 8 seconds plays
-  again until stopped.
+  play/pause, stop, loop, volume (when it has sound), the time and the
+  length; a click on the line of how far it has got goes there. Up/Down
+  set the volume; Esc or the right button stops. At its end it goes
+  back to its first frame and waits there, unless loop is on.
 - In a Workbench window it is made as large as the window holds,
   larger or smaller; the full-screen button shows it on the whole
   display, on a screen in Workbench's own mode (no mode switch), and

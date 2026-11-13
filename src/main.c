@@ -2139,6 +2139,8 @@ static void load_visual(void)
     char buf[16];
     if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM : VIS_METERS);
+    if (GetVar((CONST_STRPTR)"AmigaMCE/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        play_loop = buf[0] == '1';
 }
 
 static void np_draw(BOOL full);
@@ -6241,7 +6243,13 @@ static void set_focus(int f);
  * only what changed, and (double-buffered) without a flip. */
 #define VOL_STEP   4
 
-enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_VDOWN, NB_VUP, NB_COUNT };
+enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_VDOWN, NB_VUP, NB_COUNT };
+
+/* Loop: what plays, again at its end (a module from its start, a track or
+ * file played again, a video: anim.c), kept (AmigaMCE/Loop). A station
+ * has none. */
+BOOL play_loop;
+#define LOOP_VAR "AmigaMCE/Loop"
 
 static struct {
     struct ItemList list;       /* the playlist: the modules of the folder played from */
@@ -6261,7 +6269,7 @@ static struct {
     ULONG seek_due;
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
-    int s_state, s_vol, s_btn, s_flash, s_steps;
+    int s_state, s_vol, s_btn, s_flash, s_steps, s_loop;
     BOOL s_focus;
     int flash;                  /* the button just pressed (-1 none): lit briefly */
     ULONG flash_until;
@@ -6366,6 +6374,14 @@ static void np_button(int i)
         bg = PEN_BAR;                       /* not for this module: greyed, never lit */
         fg = PEN_RULE;
     }
+    if (i == NB_LOOP) {
+        if (mp_is_stream()) {
+            bg = PEN_BAR;                   /* a station: nothing to loop */
+            fg = PEN_RULE;
+        } else if (play_loop && !lit) {
+            fg = PEN_YELLOW;                /* on: lit in yellow */
+        }
+    }
     /* the glyph: an odd number of rows, about half the button, so each
      * triangle has a one-row tip; everything else measured from it */
     gh = (h * 3 / 5) | 1;
@@ -6430,6 +6446,17 @@ static void np_button(int i)
     case NB_STOP: {
         WORD sh = gh - 2, sw = sh * sx;     /* a square, a little under the triangles */
         gfx_fill(&g, cx - sw / 2, cy - sh / 2, cx - sw / 2 + sw - 1, cy - sh / 2 + sh - 1, fg);
+        break;
+    }
+    case NB_LOOP: {
+        /* a loop: a frame t thick, an arrowhead on its top running right */
+        WORD lw = gh * sx + 2 * sx, lh = gh - 2, x0 = cx - lw / 2, y0 = cy - lh / 2, tt = t > 2 ? 2 : t;
+        WORD txs = tt * sx, hd = (lh / 2) | 1;
+        gfx_fill(&g, x0 + txs, y0, x0 + lw - 1 - txs - (hd + 1) / 2 * sx, y0 + tt - 1, fg);
+        gfx_fill(&g, x0 + txs, y0 + lh - tt, x0 + lw - 1 - txs, y0 + lh - 1, fg);
+        gfx_fill(&g, x0, y0 + tt, x0 + txs - 1, y0 + lh - tt - 1, fg);
+        gfx_fill(&g, x0 + lw - txs, y0 + tt, x0 + lw - 1, y0 + lh - tt - 1, fg);
+        np_tri(x0 + lw - txs - (hd + 1) / 2 * sx, y0 + tt / 2 - hd / 2, hd, sx, 1, fg);
         break;
     }
     case NB_VDOWN:
@@ -7089,7 +7116,8 @@ controls:
                 ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
                 ((i == np.rep || i == np.s_rep) && np.rep != np.s_rep) ||
                 ((i == NB_VDOWN || i == NB_VUP) && mp_volume() != np.s_vol) ||
-                ((i == NB_BACK || i == NB_FWD) && steps != np.s_steps))
+                ((i == NB_BACK || i == NB_FWD) && steps != np.s_steps) ||
+                (i == NB_LOOP && play_loop != np.s_loop))
                 np_button(i);
         if (full || mp_volume() != np.s_vol || hot != np.s_slhot)
             np_slider();
@@ -7097,6 +7125,7 @@ controls:
             np_volume_text();
         np.s_state = state;
         np.s_steps = steps;
+        np.s_loop = play_loop;
         np.s_btn = np.btn;
         np.s_hov = np.hov;
         np.s_flash = np.flash;
@@ -7549,6 +7578,15 @@ static void np_press(int b)
     case NB_STOP:
         mp_stop();
         break;
+    case NB_LOOP:
+        if (mp_is_stream()) {
+            np.flash = -1;                  /* greyed: nothing done */
+            break;
+        }
+        play_loop = !play_loop;
+        save_setting(LOOP_VAR, play_loop ? "1" : "0");
+        set_msg(play_loop ? _("Loop on: it plays again at its end") : _("Loop off"));
+        break;
     case NB_VDOWN:
         np_volume(-VOL_STEP);
         return;
@@ -7847,6 +7885,12 @@ static void np_tick(void)
             np.s_rstate = -2;
             return;
         }
+        if (play_loop && !failed && np.idx >= 0 && np_start(np.idx)) {
+            if (np_on())
+                np_redraw_all();            /* looping: the same again */
+            np.s_rstate = -2;
+            return;
+        }
         if (!np_skip(1)) {
             mp_stop();
             np_mark_lists(TRUE);
@@ -7889,6 +7933,13 @@ static void np_tick(void)
     }
     if (mp_running() && mp_ended() && !np.ended_seen) {
         np.ended_seen = TRUE;
+        if (play_loop) {                    /* looping: this song from its start */
+            mp_rewind();
+            np.ended_seen = FALSE;
+            if (np_on())
+                np_update();
+            return;
+        }
         if (mp_subsong_step(1)) {           /* a module of several songs: the next */
             np.ended_seen = FALSE;
             np_redraw_all();
@@ -9266,9 +9317,14 @@ static void anim_from_page(struct Page *p)
      * everything drawn again after (into the back buffer, then a flip) */
     gfx_dbuf_stop(&g);
     gfx_window_rmb(&g, 32767);              /* (the right button: Back, not the menus) */
-    if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
-        amce_log("anim", err);
-        set_msg(err);
+    {
+        BOOL loop_was = play_loop;
+        if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
+            amce_log("anim", err);
+            set_msg(err);
+        }
+        if (play_loop != loop_was)          /* (its loop button: the one setting) */
+            save_setting(LOOP_VAR, play_loop ? "1" : "0");
     }
     gfx_dbuf_start(&g);
     draw_all();

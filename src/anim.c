@@ -64,7 +64,6 @@ extern struct GfxBase *GfxBase;
 extern struct Library *LowLevelBase, *CyberGfxBase;
 
 #define ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (d))
-#define LOOP_MS 8000            /* a whole run shorter than this plays again */
 
 static ULONG be32(const UBYTE *p)
 {
@@ -751,7 +750,7 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * they cover is kept (save[k]) and put back before the next frame is
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
-enum { BT_RESTART, BT_PLAY, BT_STOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };   /* full: AmigaMCE's screen */
+enum { BT_RESTART, BT_PLAY, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N }; /* full: AmigaMCE's */
 
 /* No sound of its own: the volume's buttons (and its figure) not shown. */
 static BOOL btn_hidden(int b)
@@ -800,7 +799,7 @@ static void ctl_begin(struct Window *win, UWORD *blank)
     ctl.blank = blank;
     ctl.opened = time_ms();
     ctl.focus = 1;                  /* BT_PLAY */
-    ctl.nbtn = 5;                   /* BT_FULL: not on a screen of its own */
+    ctl.nbtn = BT_FULL;             /* BT_FULL: not on a screen of its own */
     if (blank)
         SetPointer(win, blank, 1, 16, 0, 0);
 }
@@ -905,6 +904,22 @@ static void bar_cleanup(void)
     memset(&bar, 0, sizeof(bar));
 }
 
+/* Loop: a rounded loop, an arrowhead on its top running right; pen set
+ * (lit while looping, dim while not). */
+static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE pen)
+{
+    WORD x0 = x + s / 6, x1 = x + s - s / 6, y0 = y + s / 4, y1 = y + s - s / 4, a = s / 6, i;
+    SetAPen(rp, pen);
+    RectFill(rp, x0 + t, y0, x1 - t - a, y0 + t - 1);          /* the top, short of the head */
+    RectFill(rp, x0 + t, y1 - t + 1, x1 - t, y1);              /* the bottom */
+    RectFill(rp, x0, y0 + t, x0 + t - 1, y1 - t);              /* the sides */
+    RectFill(rp, x1 - t + 1, y0 + t, x1, y1 - t);
+    for (i = 0; i <= a; i++) {                                 /* the head, pointing right */
+        Move(rp, x1 - a - t + i, y0 + t / 2 - (a - i));
+        Draw(rp, x1 - a - t + i, y0 + t / 2 + (a - i));
+    }
+}
+
 static void bar_icon(int b, WORD x, WORD y, WORD s)
 {
     struct RastPort *rp = &bar.rp;
@@ -931,6 +946,9 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
         break;
     case BT_STOP:
         RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
+        break;
+    case BT_LOOP:
+        loop_glyph(rp, x, y, s, t, play_loop ? bar.fg : bar.dim);
         break;
     case BT_VDOWN:
     case BT_VUP:
@@ -1098,6 +1116,10 @@ static int ctl_press(int b)
         return 2;
     case BT_STOP:
         return 1;
+    case BT_LOOP:
+        play_loop = !play_loop;             /* (Now Playing's too: the same setting) */
+        bar_redraw = TRUE;
+        break;
     case BT_VDOWN:
         volume(-VOL_STEP);
         break;
@@ -1122,6 +1144,15 @@ static void ctl_move(int d)
             ctl.focus = f;
     }
     bar_redraw = TRUE;
+}
+
+/* At the end, not looping: stopped (paused at its first frame), the
+ * controls up with Play in focus, so Fire or Return plays it again. */
+static void end_stop(BOOL *paused)
+{
+    *paused = TRUE;
+    ctl.key = time_ms() ? time_ms() : 1;
+    ctl.focus = BT_PLAY;
 }
 
 /* Return or fire: the button in focus, or (hidden) play/pause. */
@@ -1194,6 +1225,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                         r = k;
                 } else if (b == -1 && !r)
                     r = 2;                  /* anywhere off the controls: play/pause */
+                else if (b == -3 && !r)
+                    r = 5;                  /* the progress line: seek there */
             }
         }
     }
@@ -1307,7 +1340,7 @@ static struct {
     WORD y, h, x0, cw, px0, px1, cy, fill;
     ULONG sec;
     UWORD vol;
-    BOOL paused, bar, ring, full;
+    BOOL paused, bar, ring, full, loop;
     int focus;
     UWORD off;
     WORD bx[BT_N];                  /* each button's left */
@@ -1322,6 +1355,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.focus = ctl.focus;
     st.full = lay.full;
     st.off = ctl.off;
+    st.loop = play_loop;
     for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
         WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
         if (btn_hidden(i)) {
@@ -1377,6 +1411,9 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             break;
         case BT_STOP:
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
+            break;
+        case BT_LOOP:
+            loop_glyph(g->rp, ix, iy, s, t, GPEN(play_loop ? PEN_YELLOW : PEN_RULE));
             break;
         case BT_FULL: {                     /* four corners: out to fill, in to come back */
             WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;
@@ -1569,7 +1606,7 @@ static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     if (lv > 0 || target > 0) {
         if (!sf.drawn || at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol ||
             ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
-            ctl.off != st.off) {
+            ctl.off != st.off || play_loop != st.loop) {
             strip_render(g, TRUE, paused, at, total, name, &changed);
             sf.drawn = TRUE;
         } else
@@ -1637,6 +1674,8 @@ static void strip_cleanup(struct Gfx *g)
     memset(&sf, 0, sizeof(sf));
 }
 
+static WORD seek_x;             /* the progress line clicked here (-3 from strip_hit) */
+
 static int strip_hit(WORD x, WORD y)
 {
     int i;
@@ -1647,6 +1686,10 @@ static int strip_hit(WORD x, WORD y)
     for (i = 0; i < ctl.nbtn; i++)
         if (x >= st.bx[i] && x < st.bx[i] + st.cw)
             return i;
+    if (st.px1 > st.px0 + 8 && x >= st.px0 - 4 && x <= st.px1 + 4) {
+        seek_x = x;                         /* the progress line: there */
+        return -3;
+    }
     return -2;                              /* the controls, no button */
 }
 
@@ -2434,6 +2477,66 @@ restart:
             }
             if (r == 3)
                 break;
+            if (r == 5 && total) {
+                /* seek: there by decoding (not drawing) from where it is, or
+                 * from its first frame for a place before: a frame of an
+                 * ANIM is the changes to the one two before, so there is
+                 * no going straight to one */
+                ULONG target, tseek = time_ms(), dec = 0;
+                LONG x0 = st.px0, x1 = st.px1;
+                target = (ULONG)((seek_x < x0 ? 0 : seek_x > x1 ? x1 - x0 : seek_x - x0) *
+                                 (ULONG)total / (ULONG)(x1 - x0 ? x1 - x0 : 1));
+                if (snd_on) {
+                    snd_quiet(2);
+                    snd_quiet(3);
+                }
+                if (target < due) {
+                    if (rd_seek(12) < 0 || !read_frame(fh, f, &readms) || !f->body)
+                        break;
+                    animdec_body(f->body, f->bodylen, &pl[0], comp, masking);
+                    CopyMem(planar, planar + fsz, fsz);
+                    if (f->cmap)
+                        ad_lut(f->cmap, f->cmaplen, camg, depth, lut);
+                    shown = 0;
+                    due = 0;
+                }
+                while (due < target) {
+                    ULONG sop, sil, sbits, sjif;
+                    int sk;
+                    if (!read_frame(fh, f, &readms))
+                        break;              /* (its end: the last frame) */
+                    sop = f->anhd ? f->anhd[0] : 0;
+                    sil = f->anhd ? f->anhd[18] : 0;
+                    sbits = f->anhd ? be32(f->anhd + 20) : 0;
+                    sjif = f->anhd ? be32(f->anhd + 14) : 1;
+                    sk = shown ^ 1;
+                    if (sil == 1)
+                        CopyMem(planar + shown * fsz, planar + sk * fsz, fsz);
+                    if (sop == 0 && f->body)
+                        animdec_body(f->body, f->bodylen, &pl[sk], comp, masking);
+                    else if (f->dlta)
+                        animdec_delta(f->dlta, f->dltalen, &pl[sk], sop, sbits);
+                    if (f->cmap)
+                        ad_lut(f->cmap, f->cmaplen, camg, depth, lut);
+                    due += (sjif ? sjif : 1) * 1000 / 60;
+                    shown = sk;
+                    dec++;
+                }
+                if (direct) {
+                    ad_lut16(lut, l16);
+                    if (ham)
+                        ad_ham(l16, depth);
+                }
+                if (cd.ncol)
+                    card_colours(lut);
+                t0 = time_ms() - due;       /* the clock from there */
+                fresh = TRUE;
+                relaid = TRUE;              /* (the frame there drawn, not the next read) */
+                sprintf(m, "seek to %lu ms: %lu frames decoded in %lu ms", (unsigned long)target,
+                        (unsigned long)dec, (unsigned long)(time_ms() - tseek));
+                amce_log("anim", m);
+                break;
+            }
             if (r == 4 && lay.can_full) {   /* full screen or not: laid out again, drawn afresh */
                 anim_full = g->wb || gfx_fs_on() ? !gfx_fs_on() : !lay.full;
                 if (g->wb || gfx_fs_on()) {
@@ -2565,15 +2668,19 @@ restart:
         for (i = 0; i < f->nsctl; i++)
             snd_command(f->sctl[i]);
     }
-    if (!quit && !err[0]) {                 /* the end: a short one again until stopped */
-        ULONG ms = time_ms() - start_ms;
-        if (!runs)
-            loop = ms < LOOP_MS;
-        if (loop && rd_seek(12) >= 0 && read_frame(fh, f, &readms) && f->body) {
-            runs++;
-            goto restart;
+    if (!quit && !err[0] && rd_seek(12) >= 0 && read_frame(fh, f, &readms) && f->body) {
+        /* the end: again, looping; else its first frame, stopped there with
+         * its controls up (Play from the start, Esc back) */
+        runs++;
+        if (snd_on) {
+            snd_quiet(2);
+            snd_quiet(3);
         }
+        if (!play_loop)
+            end_stop(&paused);
+        goto restart;
     }
+    (void)loop;
     sprintf(m, "%ld frames on AmigaMCE's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
             "each), %ld not drawn (behind; %ld of them not decoded); decoding %ld ms; controls %ld ms "
             "each; reading %ld ms (%s: %ld ms waited for %ld pieces); played %ld time%s",
@@ -2586,6 +2693,7 @@ restart:
     result = err[0] ? -1 : 0;
     (void)errmax;
     (void)fy;                               /* (the rows go by lay.yo) */
+    (void)start_ms;
     card_free();
     strip_cleanup(g);
     if (gfx_fs_on())
@@ -2870,14 +2978,19 @@ restart:
         n++;
     }
     runs++;
-    if (!quit && !err[0]) {
-        ULONG ms = time_ms() - start_ms;
-        if (runs == 1)
-            loop = ms < LOOP_MS;
-        if (loop && rd_seek(loop_pos) >= 0 && read_frame(fh, &f, &readms) &&
-            f.body)
-            goto restart;
+    if (!quit && !err[0] && rd_seek(loop_pos) >= 0 && read_frame(fh, &f, &readms) && f.body) {
+        if (snd_on) {
+            snd_quiet(2);
+            snd_quiet(3);
+        }
+        if (!play_loop) {
+            end_stop(&paused);              /* its first frame, stopped there */
+            bar.paused = TRUE;
+            bar_redraw = TRUE;
+        }
+        goto restart;
     }
+    (void)loop;
     {
         ULONG ms = time_ms() - start_ms;
         sprintf(m, "%ld frames in %ld ms (%ld a second), decoding %ld ms (%ld at the most), "
