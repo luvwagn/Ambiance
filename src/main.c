@@ -11031,9 +11031,9 @@ static void plex_ahead(struct Page *p)
     if (!pv_shown || pv_page != p || pv_sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
         plex_sj)
         return;                             /* not at rest, or the server busy for it */
-    if (AvailMem(MEMF_ANY) < 4UL << 20)
-        return;                             /* RAM: keeps what is fetched (never trimmed):
-                                             * not ahead with under 4 MB free */
+    if (AvailMem(MEMF_ANY) < 2UL << 20)
+        return;                             /* not ahead with under 2 MB free (RAM:'s
+                                             * pictures are trimmed to a budget: plex.c) */
     if (ap != p || asel != p->sel) {
         if (ap == p && asel >= 0 && p->sel != asel)
             adir = p->sel > asel ? 1 : -1;  /* the way it was going */

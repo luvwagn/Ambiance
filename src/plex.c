@@ -884,6 +884,105 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
 }
 
 /* A picture the server sent (plex_art) kept in file. */
+/* ---- RAM:AmigaMCE-art kept within a budget
+ * Every picture fetched (covers, artists, photos, fetched ahead) and every
+ * cover copied out of a song is kept in RAM:AmigaMCE-art, and RAM: is
+ * memory: the folder was never trimmed. It now has a budget, an eighth of
+ * the memory free (256 KB to 16 MB), worked out again each time; past it,
+ * the oldest pictures go until it is three quarters full. With under 2 MB
+ * free, half the budget. The newest few are always kept (what is on
+ * screen, the viewer's next photo); one open (being read) is skipped, its
+ * DeleteFile failing. Checked after each picture saved here; the folder
+ * read only when the running total says it may be over. */
+#define ART_DIR       "RAM:AmigaMCE-art"
+#define ART_KEEP_NEW  8
+#define ART_MAX_FILES 600
+
+static ULONG art_total = 0xFFFFFFFFUL;  /* bytes, as last counted: unknown till read */
+
+static ULONG art_budget(void)
+{
+    ULONG fr = AvailMem(MEMF_ANY), b = fr / 8;
+    if (b < 256UL << 10)
+        b = 256UL << 10;
+    if (b > 16UL << 20)
+        b = 16UL << 20;
+    if (fr < 2UL << 20)
+        b /= 2;
+    return b;
+}
+
+struct ArtFile {
+    char name[40];
+    ULONG size;
+    struct DateStamp when;
+};
+
+static BOOL art_older(const struct DateStamp *a, const struct DateStamp *b)
+{
+    if (a->ds_Days != b->ds_Days)
+        return a->ds_Days < b->ds_Days;
+    if (a->ds_Minute != b->ds_Minute)
+        return a->ds_Minute < b->ds_Minute;
+    return a->ds_Tick < b->ds_Tick;
+}
+
+static void art_trim(void)
+{
+    static struct ArtFile f[ART_MAX_FILES];
+    struct FileInfoBlock *fib;
+    BPTR dl;
+    ULONG total = 0, budget = art_budget(), freed = 0;
+    LONG n = 0, i, j, gone = 0;
+    if (art_total != 0xFFFFFFFFUL && art_total <= budget)
+        return;
+    if (!(dl = Lock((CONST_STRPTR)ART_DIR, SHARED_LOCK)))
+        return;
+    if (!(fib = AllocDosObject(DOS_FIB, NULL))) {
+        UnLock(dl);
+        return;
+    }
+    if (Examine(dl, fib))
+        while (ExNext(dl, fib))
+            if (fib->fib_DirEntryType < 0 && n < ART_MAX_FILES &&
+                strlen((char *)fib->fib_FileName) < sizeof(f[0].name)) {
+                strcpy(f[n].name, (char *)fib->fib_FileName);
+                f[n].size = (ULONG)fib->fib_Size;
+                f[n].when = fib->fib_Date;
+                total += f[n].size;
+                n++;
+            }
+    FreeDosObject(DOS_FIB, fib);
+    UnLock(dl);
+    art_total = total;
+    if (total <= budget)
+        return;
+    /* oldest first (a few hundred at most: insertion) */
+    for (i = 1; i < n; i++) {
+        struct ArtFile t = f[i];
+        for (j = i - 1; j >= 0 && art_older(&t.when, &f[j].when); j--)
+            f[j + 1] = f[j];
+        f[j + 1] = t;
+    }
+    for (i = 0; i < n - ART_KEEP_NEW && total > budget / 4 * 3; i++) {
+        char path[80];
+        sprintf(path, ART_DIR "/%.39s", f[i].name);
+        if (DeleteFile((CONST_STRPTR)path)) {
+            total -= f[i].size;
+            freed += f[i].size;
+            gone++;
+        }
+    }
+    art_total = total;
+    if (gone) {
+        char m[120];
+        sprintf(m, "%ld pictures let go (%lu KB); %lu KB kept, budget %lu KB of %lu KB free",
+                (long)gone, (unsigned long)(freed >> 10), (unsigned long)(total >> 10),
+                (unsigned long)(budget >> 10), (unsigned long)(AvailMem(MEMF_ANY) >> 10));
+        amce_log("pictures: RAM", m);
+    }
+}
+
 BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len)
 {
     BPTR fh = Open((CONST_STRPTR)file, MODE_NEWFILE);
@@ -896,6 +995,9 @@ BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len)
         DeleteFile((CONST_STRPTR)file);
         return FALSE;
     }
+    if (art_total != 0xFFFFFFFFUL)
+        art_total += len;
+    art_trim();                             /* within its budget */
     return TRUE;
 }
 
