@@ -71,6 +71,7 @@ struct Page {
     char plex_label[96];        /* a Plex album's page: the album (its details pane) */
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
+    UBYTE ags;                  /* a Games or Demos list (AGS's menus) */
     LONG plex_more, plex_total; /* a long Plex list: its parts read (count), its total */
     ULONG plex_parts[4];        /* which parts of PLEX_PART entries are read (a bit each) */
     BOOL plex_letters;          /* its first characters asked for (placeholders labelled) */
@@ -98,6 +99,8 @@ static struct Page pages[MAXDEPTH];
 static int depth;
 static int menu[MOD_COUNT], nmenu, menu_sel;
 static int focus = FOCUS_MENU;
+static BOOL plex_shortcut_fix(struct Page *p);  /* a list's Now playing row, as playback is */
+static BOOL vw_active;          /* the viewer is up: its list's rows keep their places */
 static BOOL running = TRUE, quit_armed;
 static char msg[160];
 static char fact_buf[FACT_LINES][96];
@@ -3135,7 +3138,16 @@ static void pics_root_empty(struct Page *p, LONG n, const char *src)
     list_add(&p->list, t, "", "", IT_TEXT);
 }
 
+static void build_root_pages_now(int mod);
+
 static void build_root_pages(int mod)
+{
+    build_root_pages_now(mod);
+    if (depth == 1)
+        plex_shortcut_fix(&pages[0]);       /* Now playing first, where its list has one */
+}
+
+static void build_root_pages_now(int mod)
 {
     struct Page *p;
     pages_clear();
@@ -3144,8 +3156,10 @@ static void build_root_pages(int mod)
     case MOD_DEMOS:
         if (ags.found) {
             p = page_push(PT_LIST, _(mod_names[mod]));
-            if (p)
+            if (p) {
+                p->ags = 1;
                 build_ags_root(p, mod);
+            }
         } else if ((p = page_push(PT_TEXT, _(mod_names[mod]))))
             no_ags_text(p);
         break;
@@ -7214,7 +7228,6 @@ static void np_update(void)
     }
 }
 
-static BOOL plex_shortcut_fix(struct Page *p);
 static BOOL np_row(const struct Item *it);
 
 /* The playing module marked in any Mods list open (redraw: and the list
@@ -8196,6 +8209,12 @@ static BOOL np_row_list(const struct Page *p)
 {
     if (plex_lib_list(p))
         return TRUE;
+    if (p && p->type == PT_LIST && p->ags && !p->ch)
+        return TRUE;                        /* Games', Demos' menus (a long list held a letter at
+                                             * a time keeps its places: none) */
+    if (p && p->type == PT_LIST && p->pics && !p->plex && !(vw_active && p == cur()))
+        return TRUE;                        /* Pictures', Videos' folders (not while the viewer
+                                             * steps through it by its places) */
     return p && p->type == PT_LIST && p > &pages[0] && (p->mods || p->songs);
 }
 
@@ -8660,6 +8679,7 @@ static void open_dir_now(struct Item *it)
                 set_msg(n < 0 ? _("Could not open that folder") : _("That folder has no pictures"));
             return;
         }
+        plex_shortcut_fix(p);               /* Now playing first, while something plays */
         msg[0] = 0;
         draw_pane(TRUE);
         draw_footer();
@@ -8705,6 +8725,7 @@ static void open_dir_now(struct Item *it)
         draw_footer();
         return;
     }
+    p->ags = 1;
     n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (ch_pump) */
     if (n <= 0) {
         page_pop();
@@ -8714,6 +8735,7 @@ static void open_dir_now(struct Item *it)
             set_msg(n < 0 ? _("Could not open that menu") : _("That menu is empty"));
         return;
     }
+    plex_shortcut_fix(p);                   /* (a short menu: Now playing first; not a long list) */
     msg[0] = 0;
     draw_pane(TRUE);
     draw_footer();
@@ -9103,6 +9125,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     pv_shown = FALSE;
     pv_pending = FALSE;
     pv_let_go();                    /* the viewer takes the screen's colours over */
+    vw_active = TRUE;
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     gfx_window_rmb(&g, 32767);      /* (the right button: Back, not the menus) */
     if (g.wb && vw_full && !gfx_fs_enter(&g))
@@ -9110,6 +9133,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     if (!view_begin(&g)) {
         gfx_fs_leave(&g);
         gfx_dbuf_start(&g);
+        vw_active = FALSE;
         set_msg(_("Not enough memory for the viewer"));
         return idx;
     }
@@ -9362,6 +9386,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     vw_drop();
     view_end(&g);
     gfx_fs_leave(&g);               /* (full screen: the window again) */
+    vw_active = FALSE;
     return shown >= 0 ? shown : idx;
 }
 
@@ -9378,6 +9403,7 @@ static void viewer_done(void)
      * came back blank on PrismRTG (the copy made before the card had
      * drawn it, it seems), only what was drawn later showing */
     gfx_dbuf_start(&g);
+    plex_shortcut_fix(cur());       /* (its Now playing row, held while it was viewed) */
     draw_all();
     gfx_dirty();
     gfx_present(&g);
