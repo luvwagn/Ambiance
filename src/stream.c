@@ -325,22 +325,29 @@ static void paula_stop(void)
 }
 
 /* ---------------------------------------------------------- AHI
- * Settings > Sound > AHI: ahi.device's default unit (its mode and rate
- * chosen in AHI's Preferences), fed 16-bit stereo, two requests linked so
- * one plays while the other is filled (the process's port: its replies
- * wake it as Paula's interrupt does). */
+ * Settings > Sound > AHI: AHI's own default, its Music unit's mode and
+ * mixing rate as AHI's Preferences set them (as players have it: the
+ * library's interface, ahi.device opened on no unit; ahi.device's unit 0
+ * is often left on a Paula mode at a low rate). Fed 16-bit stereo from two
+ * buffers, each one dynamic sample: as one starts (its sound hook) the
+ * other is queued after it and the process woken to fill it. */
 #define AHI_FRAMES 4096
+struct Library *AHIBase;
 static struct {
     struct MsgPort *port;
-    struct AHIRequest *io[2];
+    struct AHIRequest *io;
+    struct AHIAudioCtrl *ctrl;
+    struct Hook hook;
+    struct Task *task;
     WORD *buf[2];
-    BOOL busy[2], open;
-    BYTE old_sig;
+    BYTE sig, old_sig, queued;      /* queued: the sound queued after this one, -1 none yet */
+    BOOL open, playing;
+    volatile UBYTE fill_due;        /* bit k: buffer k to be filled (it is queued next) */
+    UWORD vol;
 } ah;
 
-/* Request k filled from the FIFO (silence when paused or short), and sent
- * to follow link. */
-static void ahi_send(int k, struct AHIRequest *link)
+/* Buffer k filled from the FIFO (silence when paused or short). */
+static void ahi_fill(int k)
 {
     WORD *b = ah.buf[k];
     ULONG have = st.paused ? 0 : st.f_in - st.f_out, n = have < AHI_FRAMES ? have : AHI_FRAMES;
@@ -367,160 +374,167 @@ static void ahi_send(int k, struct AHIRequest *link)
         st.peak_l = (UBYTE)(pl >> 8);
     if ((pr >> 8) > st.peak_r)
         st.peak_r = (UBYTE)(pr >> 8);
-    ah.io[k]->ahir_Std.io_Command = CMD_WRITE;
-    ah.io[k]->ahir_Std.io_Data = b;
-    ah.io[k]->ahir_Std.io_Length = AHI_FRAMES * 4;
-    ah.io[k]->ahir_Std.io_Offset = 0;
-    ah.io[k]->ahir_Frequency = st.dec_freq ? (ULONG)st.dec_freq : 22050;
-    ah.io[k]->ahir_Type = AHIST_S16S;
-    ah.io[k]->ahir_Volume = (Fixed)(((ULONG)st.master << 16) / 64);
-    ah.io[k]->ahir_Position = 0x8000;
-    ah.io[k]->ahir_Link = link;
-    SendIO((struct IORequest *)ah.io[k]);
-    ah.busy[k] = TRUE;
 }
 
-/* A request back: refilled and sent after the one still playing. */
+/* AHI's sound hook (its interrupt): a buffer starts playing; the other,
+ * just played, is queued after it and the process woken to fill it. */
+static ULONG ahi_soundfunc(register struct Hook *h __asm("a0"),
+                           register struct AHISoundMessage *sm __asm("a1"),
+                           register struct AHIAudioCtrl *a __asm("a2"))
+{
+    BYTE k = ah.queued < 0 ? 0 : ah.queued;     /* the one starting now */
+    (void)h;
+    (void)sm;
+    st.ahi_play = (UBYTE)k;
+    ah.queued = (BYTE)(k ^ 1);
+    AHI_SetSound(0, (UWORD)(k ^ 1), 0, 0, a, AHISF_NONE);
+    ah.fill_due |= (UBYTE)(1 << (k ^ 1));
+    Signal(ah.task, 1UL << ah.sig);
+    return 0;
+}
+
+/* The process woken: the buffer queued next filled; the volume as set. */
 static void ahi_serve(void)
 {
-    struct Message *m;
-    while ((m = GetMsg(ah.port))) {
-        int k = m == (struct Message *)ah.io[0] ? 0 : 1;
-        ah.busy[k] = FALSE;
-        st.ahi_play = (UBYTE)(k ^ 1);       /* the other plays now */
-        st.play_t = time_ms();
-        if (st.started)
-            ahi_send(k, ah.busy[k ^ 1] ? ah.io[k ^ 1] : NULL);
+    UBYTE due;
+    int k;
+    Disable();
+    due = ah.fill_due;
+    ah.fill_due = 0;
+    Enable();
+    if (due)
+        st.play_t = time_ms();              /* (one began about now: the spectrum's clock) */
+    for (k = 0; k < 2; k++)
+        if (st.started && (due & (1 << k)))
+            ahi_fill(k);
+    if (ah.ctrl && ah.vol != st.master) {
+        ah.vol = st.master;
+        AHI_SetVol(0, (Fixed)(((ULONG)st.master << 16) / 64), 0x8000, ah.ctrl, AHISF_IMM);
     }
-}
-
-/* What AHI does to what it is given, logged once: its default unit's
- * mode (by name), mixing rate, channels and output volume, and how it
- * scales and clips (ENV:Sys/ahi.prefs, its AHIU and AHIG chunks). A mode
- * on Paula at a low rate, or scaling at 0 dB with the volume above 100%,
- * is heard as clipping where Paula played straight sounds full. */
-struct Library *AHIBase;
-
-static void ahi_describe(void)
-{
-    static BOOL said;
-    struct Process *me = (struct Process *)FindTask(NULL);
-    APTR oldwin = me->pr_WindowPtr;
-    UBYTE buf[512];
-    char m[220], name[64];
-    LONG len = 0, o;
-    BPTR fh;
-    ULONG mode = 0, freq = 0, outvol = 0, chans = 0;
-    UWORD scale = 0xFFFF, clip = 0xFFFF;
-    BOOL unit = FALSE;
-    static const char *const scales[] = { "safe (1/channels at most)", "dynamic safe (1/channels)",
-                                          "0 dB", "-3 dB", "-6 dB" };
-    if (said)
-        return;
-    said = TRUE;
-    me->pr_WindowPtr = (APTR)-1;
-    if ((fh = Open((CONST_STRPTR)"ENV:Sys/ahi.prefs", MODE_OLDFILE))) {
-        len = Read(fh, buf, sizeof(buf));
-        Close(fh);
-    }
-    me->pr_WindowPtr = oldwin;
-    for (o = 12; o + 8 <= len;) {
-        ULONG id = ((ULONG)buf[o] << 24) | ((ULONG)buf[o + 1] << 16) | ((ULONG)buf[o + 2] << 8) | buf[o + 3];
-        ULONG n = ((ULONG)buf[o + 4] << 24) | ((ULONG)buf[o + 5] << 16) | ((ULONG)buf[o + 6] << 8) | buf[o + 7];
-        const UBYTE *c = buf + o + 8;
-#define B32(p) (((ULONG)(p)[0] << 24) | ((ULONG)(p)[1] << 16) | ((ULONG)(p)[2] << 8) | (p)[3])
-        if (id == ID_AHIG && n >= 22 && o + 8 + 22 <= len) {
-            clip = (UWORD)((c[12] << 8) | c[13]);
-            scale = (UWORD)((c[20] << 8) | c[21]);
-        } else if (id == ID_AHIU && n >= 24 && o + 8 + 24 <= len && c[0] == AHI_DEFAULT_UNIT) {
-            unit = TRUE;
-            chans = (ULONG)((c[2] << 8) | c[3]);
-            mode = B32(c + 4);
-            freq = B32(c + 8);
-            outvol = B32(c + 20);
-        }
-#undef B32
-        o += 8 + n + (n & 1);
-    }
-    name[0] = 0;
-    if (unit && (AHIBase = (struct Library *)ah.io[0]->ahir_Std.io_Device)) {
-        struct TagItem t[3];
-        t[0].ti_Tag = AHIDB_Name;
-        t[0].ti_Data = (ULONG)name;
-        t[1].ti_Tag = AHIDB_BufferLen;
-        t[1].ti_Data = sizeof(name);
-        t[2].ti_Tag = TAG_DONE;
-        if (!AHI_GetAudioAttrsA(mode, NULL, t))
-            name[0] = 0;
-    }
-    if (!unit) {
-        amce_log("sound", "AHI: its preferences not read (ENV:Sys/ahi.prefs)");
-        return;
-    }
-    sprintf(m, "AHI's default unit: %.50s ($%08lx), mixing at %lu Hz, %lu channel%s, output volume "
-               "%lu%%; scaling %s, master volume %s",
-            name[0] ? name : "?", (unsigned long)mode, (unsigned long)freq, (unsigned long)chans,
-            chans == 1 ? "" : "s", (unsigned long)((outvol * 100 + 0x8000) >> 16),
-            scale < 5 ? scales[scale] : "?", clip == 0xFFFF ? "?" : clip ? "clipped" : "not clipped");
-    amce_log("sound", m);
 }
 
 static BOOL ahi_start(void)
 {
+    struct TagItem t[8];
+    struct AHISampleInfo si;
+    char m[160], name[64];
+    ULONG mix = 0;
     int k;
-    if (!(ah.port = CreateMsgPort()))
+    memset(&ah, 0, sizeof(ah));
+    ah.sig = -1;
+    ah.queued = -1;
+    if (!(ah.port = CreateMsgPort()) ||
+        !(ah.io = (struct AHIRequest *)CreateIORequest(ah.port, sizeof(struct AHIRequest))))
         return FALSE;
-    ah.io[0] = (struct AHIRequest *)CreateIORequest(ah.port, sizeof(struct AHIRequest));
-    ah.io[1] = AllocVec(sizeof(struct AHIRequest), MEMF_ANY | MEMF_PUBLIC);
-    ah.buf[0] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC);
-    ah.buf[1] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC);
-    if (!ah.io[0] || !ah.io[1] || !ah.buf[0] || !ah.buf[1])
+    ah.buf[0] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC | MEMF_CLEAR);
+    ah.buf[1] = AllocVec(AHI_FRAMES * 4, MEMF_ANY | MEMF_PUBLIC | MEMF_CLEAR);
+    if (!ah.buf[0] || !ah.buf[1] || (ah.sig = AllocSignal(-1)) < 0)
         return FALSE;
-    ah.io[0]->ahir_Version = 4;
-    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ah.io[0], 0))
+    ah.io->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_NO_UNIT, (struct IORequest *)ah.io, 0))
         return FALSE;
     ah.open = TRUE;
-    CopyMem(ah.io[0], ah.io[1], sizeof(struct AHIRequest));
-    ah.old_sig = st.sig;
-    st.sig = (BYTE)ah.port->mp_SigBit;      /* its replies wake the process */
-    st.started = TRUE;
-    for (k = 0; k < 2; k++)
-        ahi_send(k, k ? ah.io[0] : NULL);
-    {
-        char m[80];
-        sprintf(m, "AHI's default unit, %ld Hz 16-bit %s", (long)ah.io[0]->ahir_Frequency,
-                st.dec_channels == 1 ? "mono" : "stereo");
-        amce_log("sound", m);
+    AHIBase = (struct Library *)ah.io->ahir_Std.io_Device;
+    ah.task = FindTask(NULL);
+    ah.hook.h_Entry = (HOOKFUNC)(APTR)ahi_soundfunc;
+    t[0].ti_Tag = AHIA_AudioID;
+    t[0].ti_Data = AHI_DEFAULT_ID;          /* the Music unit's mode */
+    t[1].ti_Tag = AHIA_MixFreq;
+    t[1].ti_Data = AHI_DEFAULT_FREQ;        /* ...and its rate */
+    t[2].ti_Tag = AHIA_Channels;
+    t[2].ti_Data = 1;
+    t[3].ti_Tag = AHIA_Sounds;
+    t[3].ti_Data = 2;
+    t[4].ti_Tag = AHIA_SoundFunc;
+    t[4].ti_Data = (ULONG)&ah.hook;
+    t[5].ti_Tag = TAG_DONE;
+    if (!(ah.ctrl = AHI_AllocAudioA(t)))
+        return FALSE;
+    for (k = 0; k < 2; k++) {
+        si.ahisi_Type = AHIST_S16S;
+        si.ahisi_Address = ah.buf[k];
+        si.ahisi_Length = AHI_FRAMES;
+        if (AHI_LoadSound((UWORD)k, AHIST_DYNAMICSAMPLE, &si, ah.ctrl) != AHIE_OK)
+            return FALSE;
     }
-    ahi_describe();
+    ah.old_sig = st.sig;
+    st.sig = ah.sig;                        /* its hook wakes the process */
+    st.started = TRUE;
+    ahi_fill(0);                            /* the first; the second asked for as it starts */
+    t[0].ti_Tag = AHIC_Play;
+    t[0].ti_Data = TRUE;
+    t[1].ti_Tag = TAG_DONE;
+    if (AHI_ControlAudioA(ah.ctrl, t) != AHIE_OK)
+        return FALSE;
+    ah.playing = TRUE;
+    ah.vol = st.master;
+    t[0].ti_Tag = AHIP_BeginChannel;
+    t[0].ti_Data = 0;
+    t[1].ti_Tag = AHIP_Freq;
+    t[1].ti_Data = st.dec_freq ? (ULONG)st.dec_freq : 22050;
+    t[2].ti_Tag = AHIP_Vol;
+    t[2].ti_Data = (((ULONG)st.master << 16) / 64);
+    t[3].ti_Tag = AHIP_Pan;
+    t[3].ti_Data = 0x8000;
+    t[4].ti_Tag = AHIP_Sound;
+    t[4].ti_Data = 0;
+    t[5].ti_Tag = AHIP_EndChannel;
+    t[5].ti_Data = 0;
+    t[6].ti_Tag = TAG_DONE;
+    AHI_PlayA(ah.ctrl, t);
+    st.play_t = time_ms();
+    /* what it plays on: the mode allocated, its mixing rate */
+    name[0] = 0;
+    t[0].ti_Tag = AHIDB_Name;
+    t[0].ti_Data = (ULONG)name;
+    t[1].ti_Tag = AHIDB_BufferLen;
+    t[1].ti_Data = sizeof(name);
+    t[2].ti_Tag = TAG_DONE;
+    if (!AHI_GetAudioAttrsA(AHI_INVALID_ID, ah.ctrl, t))
+        name[0] = 0;
+    t[0].ti_Tag = AHIC_MixFreq_Query;
+    t[0].ti_Data = (ULONG)&mix;
+    t[1].ti_Tag = TAG_DONE;
+    AHI_ControlAudioA(ah.ctrl, t);
+    sprintf(m, "AHI's default mode (its Music unit's): %.50s, mixing at %lu Hz; given %ld Hz "
+               "16-bit %s",
+            name[0] ? name : "?", (unsigned long)mix, (long)(st.dec_freq ? st.dec_freq : 22050),
+            st.dec_channels == 1 ? "mono" : "stereo");
+    amce_log("sound", m);
     return TRUE;
 }
 
 static void ahi_stop(void)
 {
-    int k;
     st.started = FALSE;
-    for (k = 0; k < 2; k++)
-        if (ah.busy[k]) {
-            AbortIO((struct IORequest *)ah.io[k]);
-            WaitIO((struct IORequest *)ah.io[k]);
-            ah.busy[k] = FALSE;
+    if (ah.ctrl) {
+        if (ah.playing) {
+            struct TagItem t[2];
+            t[0].ti_Tag = AHIC_Play;
+            t[0].ti_Data = FALSE;
+            t[1].ti_Tag = TAG_DONE;
+            AHI_ControlAudioA(ah.ctrl, t);
         }
-    if (ah.open) {
-        CloseDevice((struct IORequest *)ah.io[0]);
-        ah.open = FALSE;
-        st.sig = ah.old_sig;
+        AHI_FreeAudio(ah.ctrl);             /* (its sounds unloaded with it) */
     }
-    if (ah.io[1])
-        FreeVec(ah.io[1]);
-    if (ah.io[0])
-        DeleteIORequest((struct IORequest *)ah.io[0]);
-    for (k = 0; k < 2; k++)
-        if (ah.buf[k])
-            FreeVec(ah.buf[k]);
+    if (ah.open)
+        CloseDevice((struct IORequest *)ah.io);
+    AHIBase = NULL;
+    if (ah.io)
+        DeleteIORequest((struct IORequest *)ah.io);
     if (ah.port)
         DeleteMsgPort(ah.port);
+    if (ah.sig >= 0) {
+        if (st.sig == ah.sig)
+            st.sig = ah.old_sig;
+        FreeSignal(ah.sig);
+    }
+    if (ah.buf[0])
+        FreeVec(ah.buf[0]);
+    if (ah.buf[1])
+        FreeVec(ah.buf[1]);
     memset(&ah, 0, sizeof(ah));
+    ah.sig = -1;
 }
 
 /* The output: Paula's or AHI's, started once the prebuffer is in. */
