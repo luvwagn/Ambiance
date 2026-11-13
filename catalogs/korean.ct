@@ -274,6 +274,21 @@ MSG_4EDBBEE0
 MSG_47B3D356
 종료
 ; Quit
+MSG_0DC6B4AA
+끄기
+; Off
+MSG_7415CC33
+페이드
+; Fade
+MSG_2AAD5304
+크로스페이드
+; Cross-fade
+MSG_0581156E
+타일
+; Tiles
+MSG_67819DA6
+와이프
+; Wipe
 MSG_5FDDDD75
 짧게
 ; Short
@@ -436,6 +451,9 @@ MSG_20B362A2
 MSG_52325DD8
 점프 스크롤 (글자별)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+슬라이드쇼 전환
+; Slideshow transition
 MSG_47318A8A
 애니메이션
 ; Animations
@@ -463,9 +481,6 @@ AmiSSL 필요
 MSG_4C151C1E
 %s까지의 방송국
 ; stations up to %s
-MSG_0DC6B4AA
-끄기
-; Off
 MSG_424097EC
 켜짐, 서버 선택 안 됨
 ; On, no server chosen

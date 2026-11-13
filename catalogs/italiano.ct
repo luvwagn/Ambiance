@@ -274,6 +274,21 @@ Schermo intero
 MSG_47B3D356
 Esci
 ; Quit
+MSG_0DC6B4AA
+Spento
+; Off
+MSG_7415CC33
+Dissolvenza
+; Fade
+MSG_2AAD5304
+Dissolvenza incrociata
+; Cross-fade
+MSG_0581156E
+Riquadri
+; Tiles
+MSG_67819DA6
+Tendina
+; Wipe
 MSG_5FDDDD75
 Breve
 ; Short
@@ -436,6 +451,9 @@ Visualizzazione
 MSG_52325DD8
 Scorrimento a salti (per lettera)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Transizione presentazione
+; Slideshow transition
 MSG_47318A8A
 Animazioni
 ; Animations
@@ -463,9 +481,6 @@ richiede AmiSSL
 MSG_4C151C1E
 stazioni fino a %s
 ; stations up to %s
-MSG_0DC6B4AA
-Spento
-; Off
 MSG_424097EC
 Acceso, nessun server scelto
 ; On, no server chosen

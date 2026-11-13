@@ -274,6 +274,21 @@ MSG_4EDBBEE0
 MSG_47B3D356
 終了
 ; Quit
+MSG_0DC6B4AA
+オフ
+; Off
+MSG_7415CC33
+フェード
+; Fade
+MSG_2AAD5304
+クロスフェード
+; Cross-fade
+MSG_0581156E
+タイル
+; Tiles
+MSG_67819DA6
+ワイプ
+; Wipe
 MSG_5FDDDD75
 短い
 ; Short
@@ -436,6 +451,9 @@ MSG_20B362A2
 MSG_52325DD8
 ジャンプスクロール (頭文字ごと)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+スライドショーの切り替え
+; Slideshow transition
 MSG_47318A8A
 アニメーション
 ; Animations
@@ -463,9 +481,6 @@ AmiSSLが必要
 MSG_4C151C1E
 %sまでの局
 ; stations up to %s
-MSG_0DC6B4AA
-オフ
-; Off
 MSG_424097EC
 オン、サーバー未選択
 ; On, no server chosen

@@ -274,6 +274,21 @@ MSG_4EDBBEE0
 MSG_47B3D356
 Έξοδος
 ; Quit
+MSG_0DC6B4AA
+Ανενεργό
+; Off
+MSG_7415CC33
+Σβήσιμο
+; Fade
+MSG_2AAD5304
+Διασταύρωση
+; Cross-fade
+MSG_0581156E
+Πλακίδια
+; Tiles
+MSG_67819DA6
+Σάρωση
+; Wipe
 MSG_5FDDDD75
 Μικρό
 ; Short
@@ -436,6 +451,9 @@ MSG_20B362A2
 MSG_52325DD8
 Άλμα ανά γράμμα
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Μετάβαση προβολής
+; Slideshow transition
 MSG_47318A8A
 Animations
 ; Animations
@@ -463,9 +481,6 @@ MSG_30C0E827
 MSG_4C151C1E
 σταθμοί έως %s
 ; stations up to %s
-MSG_0DC6B4AA
-Ανενεργό
-; Off
 MSG_424097EC
 Ενεργό, χωρίς server
 ; On, no server chosen

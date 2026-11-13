@@ -380,6 +380,12 @@ BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, W
  * 256-colour and native screens a picture gets the screen's whole palette
  * while it is shown, and the info bar takes its colours from the picture.
  * view_end leaves the screen black; redraw it, then view_restore. */
+/* A slideshow's way from one picture to the next (Settings > Display):
+ * at once, through black, one into the other, in tiles at random, or in
+ * tiles swept across. A screen with a colour table fades through black
+ * for all but Cut (its colours are the picture's). */
+enum { VT_CUT, VT_FADE, VT_XFADE, VT_TILES, VT_WIPE, VT_COUNT };
+extern int view_transition;
 BOOL view_begin(struct Gfx *g);
 /* pre: decoded ahead; or pre_thumb (made ahead for the screen, given
  * up to view_show), pre_info: what it is */

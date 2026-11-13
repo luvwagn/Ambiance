@@ -300,6 +300,13 @@ Not there yet
 
 History
 -------
+0.8.0  Slideshow transitions (Settings > Display): Off, Fade, Cross-fade,
+       Tiles or Wipe; on a screen with a colour table, a fade. Korean.
+       The window follows Workbench's screen mode changing, back into a
+       window when it can. Videos resized as they play. Note players
+       (MED_note) mixed on a 68020 or better: samples of any length, its
+       periods read right, 5-8 channels. Icons highlighted with images
+       of their own; the drawer's a GlowIcon.
 0.7.2  A window on Workbench (15-bit or deeper, on a graphics card):
        Settings > Display > Window, the icon's WINDOWED tooltype or
        WINDOWED from a Shell; text Small, Medium or Large; resized by its
@@ -312,8 +319,7 @@ History
        their end back to the first frame, stopped; a click on their
        progress line seeks. Loop, on Now Playing and video's controls.
        EaglePlayer: a module's kind from what it holds, note players
-       (MED_note) heard, and a player whose check hangs left out. The
-       window follows Workbench's screen mode changing. Korean.
+       (MED_note) heard, and a player whose check hangs left out.
 0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
        music folders with the spinner while read. HTTPS by AmiSSL 5
        (Settings > Networking): secure radio stations play, and Plex

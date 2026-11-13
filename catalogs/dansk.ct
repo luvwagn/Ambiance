@@ -274,6 +274,21 @@ Fuld skærm
 MSG_47B3D356
 Afslut
 ; Quit
+MSG_0DC6B4AA
+Fra
+; Off
+MSG_7415CC33
+Fade
+; Fade
+MSG_2AAD5304
+Krydsfade
+; Cross-fade
+MSG_0581156E
+Fliser
+; Tiles
+MSG_67819DA6
+Wipe
+; Wipe
 MSG_5FDDDD75
 Kort
 ; Short
@@ -436,6 +451,9 @@ Visualisering
 MSG_52325DD8
 Spring-rulning (pr. bogstav)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Diasshow-overgang
+; Slideshow transition
 MSG_47318A8A
 Animationer
 ; Animations
@@ -463,9 +481,6 @@ kræver AmiSSL
 MSG_4C151C1E
 stationer op til %s
 ; stations up to %s
-MSG_0DC6B4AA
-Fra
-; Off
 MSG_424097EC
 Til, ingen server valgt
 ; On, no server chosen

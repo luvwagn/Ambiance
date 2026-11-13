@@ -274,6 +274,21 @@ Ecrã inteiro
 MSG_47B3D356
 Sair
 ; Quit
+MSG_0DC6B4AA
+Desligado
+; Off
+MSG_7415CC33
+Esvanecer
+; Fade
+MSG_2AAD5304
+Transição cruzada
+; Cross-fade
+MSG_0581156E
+Mosaicos
+; Tiles
+MSG_67819DA6
+Varrimento
+; Wipe
 MSG_5FDDDD75
 Curto
 ; Short
@@ -436,6 +451,9 @@ Visualização
 MSG_52325DD8
 Deslocamento aos saltos (por letra)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Transição de diapositivos
+; Slideshow transition
 MSG_47318A8A
 Animações
 ; Animations
@@ -463,9 +481,6 @@ precisa do AmiSSL
 MSG_4C151C1E
 estações até %s
 ; stations up to %s
-MSG_0DC6B4AA
-Desligado
-; Off
 MSG_424097EC
 Ligado, nenhum servidor escolhido
 ; On, no server chosen

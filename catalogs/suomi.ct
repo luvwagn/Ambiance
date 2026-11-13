@@ -274,6 +274,21 @@ Koko näyttö
 MSG_47B3D356
 Lopeta
 ; Quit
+MSG_0DC6B4AA
+Pois
+; Off
+MSG_7415CC33
+Häivytys
+; Fade
+MSG_2AAD5304
+Ristihäivytys
+; Cross-fade
+MSG_0581156E
+Ruudut
+; Tiles
+MSG_67819DA6
+Pyyhkäisy
+; Wipe
 MSG_5FDDDD75
 Lyhyt
 ; Short
@@ -436,6 +451,9 @@ Visualisointi
 MSG_52325DD8
 Hyppivä vieritys (kirjaimittain)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Diaesityksen siirtymä
+; Slideshow transition
 MSG_47318A8A
 Animaatiot
 ; Animations
@@ -463,9 +481,6 @@ vaatii AmiSSL:n
 MSG_4C151C1E
 asemat %s asti
 ; stations up to %s
-MSG_0DC6B4AA
-Pois
-; Off
 MSG_424097EC
 Päällä, palvelinta ei valittu
 ; On, no server chosen

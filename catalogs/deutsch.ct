@@ -274,6 +274,21 @@ Vollbild
 MSG_47B3D356
 Beenden
 ; Quit
+MSG_0DC6B4AA
+Aus
+; Off
+MSG_7415CC33
+Überblenden über Schwarz
+; Fade
+MSG_2AAD5304
+Überblenden
+; Cross-fade
+MSG_0581156E
+Kacheln
+; Tiles
+MSG_67819DA6
+Wischen
+; Wipe
 MSG_5FDDDD75
 Kurz
 ; Short
@@ -436,6 +451,9 @@ Visualisierung
 MSG_52325DD8
 Sprungweises Blättern (nach Buchstabe)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Diaschau-Übergang
+; Slideshow transition
 MSG_47318A8A
 Animationen
 ; Animations
@@ -463,9 +481,6 @@ braucht AmiSSL
 MSG_4C151C1E
 Sender bis %s
 ; stations up to %s
-MSG_0DC6B4AA
-Aus
-; Off
 MSG_424097EC
 An, kein Server gewählt
 ; On, no server chosen

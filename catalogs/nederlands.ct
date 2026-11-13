@@ -274,6 +274,21 @@ Volledig scherm
 MSG_47B3D356
 Stoppen
 ; Quit
+MSG_0DC6B4AA
+Uit
+; Off
+MSG_7415CC33
+Vervagen
+; Fade
+MSG_2AAD5304
+Overvloeien
+; Cross-fade
+MSG_0581156E
+Tegels
+; Tiles
+MSG_67819DA6
+Veeg
+; Wipe
 MSG_5FDDDD75
 Kort
 ; Short
@@ -436,6 +451,9 @@ Visualisatie
 MSG_52325DD8
 Springend scrollen (per letter)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Diavoorstelling-overgang
+; Slideshow transition
 MSG_47318A8A
 Animaties
 ; Animations
@@ -463,9 +481,6 @@ vereist AmiSSL
 MSG_4C151C1E
 zenders tot %s
 ; stations up to %s
-MSG_0DC6B4AA
-Uit
-; Off
 MSG_424097EC
 Aan, geen server gekozen
 ; On, no server chosen

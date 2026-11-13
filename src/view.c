@@ -43,9 +43,14 @@
 #include <proto/intuition.h>
 #include <proto/datatypes.h>
 #include <clib/alib_protos.h>
+#include <cybergraphx/cybergraphics.h>
+#include <proto/cybergraphics.h>
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DataTypesBase;
+extern struct Library *CyberGfxBase;
+
+int view_transition = VT_FADE;
 
 #define FADE_STEPS 8
 
@@ -65,6 +70,8 @@ static int btn_n;               /* buttons shown */
 static WORD btn_x[VB_COUNT], btn_cw;   /* each button's left, and width */
 static UBYTE pen_bg, pen_fg, pen_dim, pen_border;
 static BOOL has_pic;            /* a picture is up */
+static WORD pic_x, pic_y, pic_w, pic_h;     /* where (true colour: what a transition leaves) */
+static BOOL kept;               /* the last one left up, for the transition to the next */
 static struct BitMap *bar_bm;   /* what the bar covers */
 static WORD bar_y, bar_h;
 static WORD spin_x = -1;            /* the bar's spinner: its centre (-1: none) */
@@ -87,6 +94,10 @@ static void load_table(struct Gfx *g, const ULONG *rgb, ULONG scale)
 static void fade(struct Gfx *g, const ULONG *rgb, BOOL in)
 {
     ULONG s;
+    if (view_transition == VT_CUT) {        /* (at once) */
+        load_table(g, rgb, in ? FADE_STEPS : 0);
+        return;
+    }
     for (s = 1; s <= FADE_STEPS; s++) {
         WaitTOF();
         load_table(g, rgb, in ? s : FADE_STEPS - s);
@@ -612,6 +623,10 @@ static struct BitMap *direct_bitmap(struct Gfx *g, Object *o, ULONG sw, ULONG sh
 
 static void show_message(struct Gfx *g, const char *s)
 {
+    if (kept) {                             /* (the one left up for a transition) */
+        kept = FALSE;
+        fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
+    }
     if (clut) {
         ULONG grey = 0xAAAAAAAAUL;
         SetRGB32(&g->scr->ViewPort, ncolors - 1, grey, grey, grey);
@@ -634,6 +649,168 @@ static void spin_forget(void)
     }
 }
 
+/* ---- transitions (true colour): from what is on the screen in u (the
+ * last picture, or black) to nb, the next one as u is to look. Tiles: nb
+ * copied a tile at a time, at random or swept across, over TR_TILES_MS.
+ * Fades: the pixels mixed by the CPU, as many steps as fit in TR_FADE_MS
+ * (a slow Amiga: few); one that takes too long goes on in tiles. */
+#define TR_TILES_MS 600
+#define TR_FADE_MS 800
+#define TR_SLOW_MS 300          /* a fade's step longer than this: tiles instead */
+
+static void tr_show(struct Gfx *g, WORD x, WORD y, WORD w, WORD h)
+{
+    gfx_dirty();
+    if (g->wb)
+        gfx_window_show_rect(g, x, y, x + w - 1, y + h - 1);   /* (a window: its buffer, copied in) */
+}
+
+static void tr_tiles(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw, WORD uh,
+                     BOOL sweep, ULONG ms)
+{
+    WORD t = g->h >= 480 ? 32 : 16, nx = (uw + t - 1) / t, ny = (uh + t - 1) / t;
+    LONG n = (LONG)nx * ny, i, done = 0;
+    UWORD *order = AllocVec(n * sizeof(UWORD), MEMF_ANY);
+    ULONG t0 = time_ms(), seed = t0 | 1;
+    if (!order) {
+        BltBitMapRastPort(nb, 0, 0, g->rp, ux, uy, uw, uh, 0xC0);
+        tr_show(g, ux, uy, uw, uh);
+        return;
+    }
+    if (sweep) {
+        /* by diagonals, top left to bottom right */
+        LONG d, k = 0;
+        for (d = 0; d < nx + ny - 1; d++)
+            for (i = 0; i < nx; i++)
+                if (d - i >= 0 && d - i < ny)
+                    order[k++] = (UWORD)((d - i) * nx + i);
+    } else {
+        for (i = 0; i < n; i++)
+            order[i] = (UWORD)i;
+        for (i = n - 1; i > 0; i--) {       /* shuffled */
+            LONG j;
+            UWORD x;
+            seed = seed * 1103515245UL + 12345;
+            j = (LONG)((seed >> 8) % (ULONG)(i + 1));
+            x = order[i];
+            order[i] = order[j];
+            order[j] = x;
+        }
+    }
+    while (done < n) {
+        ULONG el = time_ms() - t0;
+        LONG upto = el >= ms ? n : (LONG)(n * el / ms) + 1;
+        if (upto > n)
+            upto = n;
+        for (; done < upto; done++) {
+            WORD tx = order[done] % nx, ty = order[done] / nx, w = t, h = t;
+            if (tx * t + w > uw)
+                w = uw - tx * t;
+            if (ty * t + h > uh)
+                h = uh - ty * t;
+            BltBitMapRastPort(nb, tx * t, ty * t, g->rp, ux + tx * t, uy + ty * t, w, h, 0xC0);
+        }
+        tr_show(g, ux, uy, uw, uh);
+        WaitTOF();
+    }
+    FreeVec(order);
+}
+
+/* FALSE: no memory (or no cybergraphics), nothing done. */
+static BOOL tr_fade(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw, WORD uh,
+                    BOOL through)
+{
+    ULONG n = (ULONG)uw * uh * 3, t0, i;
+    UBYTE *o, *nw, *out, ta[256], tb[256];
+    struct RastPort nrp;
+    char m[100];
+    int steps = 0;
+    if (!CyberGfxBase || !(o = AllocVec(n * 3, MEMF_ANY)))
+        return FALSE;
+    nw = o + n;
+    out = nw + n;
+    InitRastPort(&nrp);
+    nrp.BitMap = nb;
+    ReadPixelArray(o, 0, 0, uw * 3, g->rp, ux, uy, uw, uh, RECTFMT_RGB);
+    ReadPixelArray(nw, 0, 0, uw * 3, &nrp, 0, 0, uw, uh, RECTFMT_RGB);
+    t0 = time_ms();
+    for (;;) {
+        ULONG el = time_ms() - t0, k, ts = time_ms();
+        if (el >= TR_FADE_MS)
+            break;
+        k = el * 256 / TR_FADE_MS;          /* 0..255: how far */
+        if (through) {
+            /* the old to black, then black to the new */
+            ULONG a = k < 128 ? 255 - k * 2 : 0, b = k < 128 ? 0 : (k - 128) * 2;
+            for (i = 0; i < 256; i++) {
+                ta[i] = (UBYTE)(i * a >> 8);
+                tb[i] = (UBYTE)(i * b >> 8);
+            }
+        } else {
+            for (i = 0; i < 256; i++) {
+                ta[i] = (UBYTE)(i * (256 - k) >> 8);
+                tb[i] = (UBYTE)(i * k >> 8);
+            }
+        }
+        for (i = 0; i < n; i++)
+            out[i] = (UBYTE)(ta[o[i]] + tb[nw[i]]);
+        WritePixelArray(out, 0, 0, uw * 3, g->rp, ux, uy, uw, uh, RECTFMT_RGB);
+        tr_show(g, ux, uy, uw, uh);
+        steps++;
+        if (time_ms() - ts > TR_SLOW_MS) {
+            /* too slow here for a fade worth the name: the rest in tiles */
+            sprintf(m, "a fade's step took %lu ms (%ld x %ld): the rest in tiles",
+                    (unsigned long)(time_ms() - ts), (long)uw, (long)uh);
+            amce_log("viewer", m);
+            FreeVec(o);
+            tr_tiles(g, nb, ux, uy, uw, uh, FALSE, TR_TILES_MS / 2);
+            return TRUE;
+        }
+    }
+    FreeVec(o);
+    BltBitMapRastPort(nb, 0, 0, g->rp, ux, uy, uw, uh, 0xC0);   /* the last step: the new one */
+    tr_show(g, ux, uy, uw, uh);
+    sprintf(m, "%s: %ld steps in %lu ms (%ld x %ld)", through ? "fade" : "cross-fade",
+            (long)steps, (unsigned long)(time_ms() - t0), (long)uw, (long)uh);
+    amce_log("viewer", m);
+    return TRUE;
+}
+
+/* The new picture (tmp, dw x dh) shown at its place by the transition
+ * chosen, from what is on screen; FALSE if it could not be (no memory):
+ * the caller draws it at once. */
+static BOOL transition(struct Gfx *g, struct BitMap *tmp, WORD dw, WORD dh)
+{
+    WORD nx = (g->w - dw) / 2, ny = (g->h - dh) / 2, ux = nx, uy = ny, ux1 = nx + dw,
+         uy1 = ny + dh, uw, uh;
+    struct BitMap *nb;
+    if (view_transition == VT_CUT || clut)
+        return FALSE;
+    if (kept) {                             /* the old picture's place too */
+        if (pic_x < ux)
+            ux = pic_x;
+        if (pic_y < uy)
+            uy = pic_y;
+        if (pic_x + pic_w > ux1)
+            ux1 = pic_x + pic_w;
+        if (pic_y + pic_h > uy1)
+            uy1 = pic_y + pic_h;
+    }
+    uw = ux1 - ux;
+    uh = uy1 - uy;
+    if (!(nb = AllocBitMap(uw, uh, g->depth, BMF_CLEAR, g->rp->BitMap)))
+        return FALSE;
+    /* (around it black: a cleared bitmap is black in true colour) */
+    BltBitMap(tmp, 0, 0, nb, nx - ux, ny - uy, dw, dh, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    if (view_transition == VT_TILES || view_transition == VT_WIPE ||
+        !tr_fade(g, nb, ux, uy, uw, uh, view_transition == VT_FADE))
+        tr_tiles(g, nb, ux, uy, uw, uh, view_transition == VT_WIPE, TR_TILES_MS);
+    WaitBlit();
+    FreeBitMap(nb);
+    return TRUE;
+}
+
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
                char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
                struct Thumb *pre_thumb, const struct PicInfo *pre_info)
@@ -651,7 +828,19 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     char msg[160];
 
     spin_forget();
-    drop_picture(g);
+    if (has_pic && !clut && view_transition != VT_CUT) {
+        /* left up, for the transition to this one */
+        view_bar_hide(g);
+        if (obj) {
+            DisposeDTObject(obj);
+            obj = NULL;
+        }
+        has_pic = FALSE;
+        kept = TRUE;
+    } else {
+        kept = FALSE;
+        drop_picture(g);
+    }
     if (!DataTypesBase) {
         pic_dispose(pre);
         return FALSE;
@@ -660,7 +849,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         thumb_free(pre_thumb);
         pre_thumb = NULL;
     }
-    if (!pre && !pre_thumb) {
+    if (!pre && !pre_thumb && !kept) {
         sprintf(msg, _("Loading %.80s"), label);
         show_message(g, msg);
     }
@@ -871,12 +1060,24 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             CopyMem(target, shown, ncolors * 3 * sizeof(ULONG));
         }
         pick_bar_pens(pens, npens);
-    } else {
+    } else if (!kept && view_transition != VT_CUT) {
+        fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));    /* (faded in from black) */
+    } else if (view_transition == VT_CUT) {
         fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
     }
     gfx_dirty();
-    BltBitMapRastPort(tmp, 0, 0, g->rp, (g->w - bsa.bsa_DestWidth) / 2,
-                      (g->h - bsa.bsa_DestHeight) / 2, bsa.bsa_DestWidth, bsa.bsa_DestHeight, 0xC0);
+    if (!transition(g, tmp, (WORD)bsa.bsa_DestWidth, (WORD)bsa.bsa_DestHeight)) {
+        if (kept)
+            fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
+        BltBitMapRastPort(tmp, 0, 0, g->rp, (g->w - bsa.bsa_DestWidth) / 2,
+                          (g->h - bsa.bsa_DestHeight) / 2, bsa.bsa_DestWidth, bsa.bsa_DestHeight,
+                          0xC0);
+    }
+    kept = FALSE;
+    pic_x = (WORD)((g->w - bsa.bsa_DestWidth) / 2);
+    pic_y = (WORD)((g->h - bsa.bsa_DestHeight) / 2);
+    pic_w = (WORD)bsa.bsa_DestWidth;
+    pic_h = (WORD)bsa.bsa_DestHeight;
     WaitBlit();
     FreeBitMap(tmp);
     if (own_src)

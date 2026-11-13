@@ -274,6 +274,21 @@ Plein écran
 MSG_47B3D356
 Quitter
 ; Quit
+MSG_0DC6B4AA
+Désactivé
+; Off
+MSG_7415CC33
+Fondu au noir
+; Fade
+MSG_2AAD5304
+Fondu enchaîné
+; Cross-fade
+MSG_0581156E
+Tuiles
+; Tiles
+MSG_67819DA6
+Balayage
+; Wipe
 MSG_5FDDDD75
 Court
 ; Short
@@ -436,6 +451,9 @@ Visualisation
 MSG_52325DD8
 Défilement par lettre
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Transition du diaporama
+; Slideshow transition
 MSG_47318A8A
 Animations
 ; Animations
@@ -463,9 +481,6 @@ nécessite AmiSSL
 MSG_4C151C1E
 stations jusqu'à %s
 ; stations up to %s
-MSG_0DC6B4AA
-Désactivé
-; Off
 MSG_424097EC
 Activé, aucun serveur choisi
 ; On, no server chosen

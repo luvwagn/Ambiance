@@ -274,6 +274,21 @@ Fullskjerm
 MSG_47B3D356
 Avslutt
 ; Quit
+MSG_0DC6B4AA
+Av
+; Off
+MSG_7415CC33
+Tone
+; Fade
+MSG_2AAD5304
+Krysstoning
+; Cross-fade
+MSG_0581156E
+Fliser
+; Tiles
+MSG_67819DA6
+Sveip
+; Wipe
 MSG_5FDDDD75
 Kort
 ; Short
@@ -436,6 +451,9 @@ Visualisering
 MSG_52325DD8
 Hoppende rulling (per bokstav)
 ; Jump scrolling (by letter)
+MSG_1CD58066
+Lysbildeovergang
+; Slideshow transition
 MSG_47318A8A
 Animasjoner
 ; Animations
@@ -463,9 +481,6 @@ krever AmiSSL
 MSG_4C151C1E
 stasjoner opptil %s
 ; stations up to %s
-MSG_0DC6B4AA
-Av
-; Off
 MSG_424097EC
 På, ingen server valgt
 ; On, no server chosen

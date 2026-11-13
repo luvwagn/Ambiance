@@ -95,7 +95,12 @@ of the Amiga to how fast it really is.
   plays folders as slideshows. Pictures are decoded by the installed
   datatypes and shown in their own colours where the screen allows it.
   Moving the mouse shows the pointer and buttons for the previous picture,
-  the slideshow (play or pause) and the next.
+  the slideshow (play or pause) and the next. One picture gives way to
+  the next as Settings > Display > Slideshow transition says: at once, a
+  fade through black, a cross-fade, tiles at random, or tiles swept
+  across. On a true-colour screen the fades are mixed by the CPU in as
+  many steps as fit in 0.8 s, and an Amiga too slow for that finishes in
+  tiles; on a screen with a colour table each is a fade of its colours.
 - **Plex photos:** the photo libraries of your Plex server, at the top of
   Pictures: albums and photos with a preview beside the list, each photo
   full screen and slideshows. The server makes each photo the size of the
@@ -255,7 +260,7 @@ playing.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Window (full screen or a Workbench window, where Workbench can take one), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time) |
+| Display | Window (full screen or a Workbench window, where Workbench can take one), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Animations |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |
