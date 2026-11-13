@@ -198,12 +198,13 @@ first, then double-click AmigaMCE.
 Languages
 ---------
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português, Japanese and Greek. AmigaMCE speaks your
-Workbench's language (Locale prefs) when its catalog is installed;
+Norsk, Nederlands, Português, Japanese, Greek and Korean. AmigaMCE
+speaks your Workbench's language (Locale prefs) when its catalog is
+installed;
 Settings > General > Language chooses another. Workbench 3.x has no
-Japanese locale, so Japanese is only ever chosen there: AmigaMCE draws
-it with its own glyphs (Fonts/amce-cjk), needing nothing from the
-system. Greek is drawn with AmigaMCE's own glyphs too, so it needs no
+Japanese or Korean locale, so they are only ever chosen there: AmigaMCE
+draws them with its own glyphs (Fonts/amce-cjk), needing nothing from
+the system. Greek is drawn with AmigaMCE's own glyphs too, so it needs no
 Greek fonts or ReplaceTopaz; it is chosen by itself where Locale prefs
 put Greek first. The translations are new: corrections are
 welcome (catalogs/*.ct in the source, FlexCat's format).
@@ -311,7 +312,7 @@ History
        their end back to the first frame, stopped; a click on their
        progress line seeks. Loop, on Now Playing and video's controls.
        EaglePlayer: a module's kind from what it holds, note players
-       (MED_note) heard, and a player whose check hangs left out.
+       (MED_note) heard, and a player whose check hangs left out. Korean.
 0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
        music folders with the spinner while read. HTTPS by AmiSSL 5
        (Settings > Networking): secure radio stations play, and Plex

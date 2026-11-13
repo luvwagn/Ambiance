@@ -357,6 +357,7 @@ const char *amce_lang_iso(void)
         { "espa\361ol", "es" }, { "svenska", "sv" }, { "suomi", "fi" }, { "dansk", "da" },
         { "norsk", "nb" }, { "nederlands", "nl" }, { "portugu\352s", "pt" },
         { "polski", "pl" }, { "nihongo", "ja" }, { "greek", "el" }, { "ellinika", "el" },
+        { "korean", "ko" },
     };
     unsigned i;
     if (!cat_n)

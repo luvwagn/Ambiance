@@ -1,14 +1,14 @@
-; $VER: Install-AmigaMCE 1.5 (11.11.2026)
+; $VER: Install-AmigaMCE 1.6 (13.11.2026)
 ;
 ; Installer script for AmigaMCE: the program with its fonts and licences,
 ; and the languages chosen: the Workbench's own (none besides English on
-; an English one), all twelve at once, or ticked one by one.
+; an English one), all thirteen at once, or ticked one by one.
 ; English is built into the program. Each language is a catalog in
 ; AmigaMCE/Catalogs; AmigaMCE knows a catalog by the language written in
 ; it, so its drawer's name (francais, espanol) does not matter.
-; Japanese is never ticked to begin with: Workbench 3.x has no Japanese
-; locale. It is chosen in AmigaMCE (Settings > General > Language), whose
-; own glyphs draw it. Greek needs nothing from the Workbench either (no
+; Japanese and Korean are never ticked to begin with: Workbench 3.x has
+; no Japanese or Korean locale. It is chosen in AmigaMCE (Settings > General > Language), whose
+; own glyphs draw them. Greek needs nothing from the Workbench either (no
 ; Greek fonts or ReplaceTopaz): AmigaMCE draws it with its own glyphs too.
 ; It is ticked where the Workbench's language is Greek, by either name
 ; it goes by ("greek" or "ellinika").
@@ -37,7 +37,7 @@
 (set #dest (tackon #where "AmigaMCE"))
 (set @default-dest #dest)
 
-; the Workbench's language (Japanese is never assumed: chosen, or all)
+; the Workbench's language (Japanese and Korean are never assumed: chosen, or all)
 (set #def 0)
 (set #wbname "")
 (if (= @language "deutsch") ((set #def 1) (set #wbname "Deutsch")))
@@ -53,7 +53,7 @@
 (if (= @language "greek") ((set #def 2048) (set #wbname "Greek")))
 (if (= @language "ellinika") ((set #def 2048) (set #wbname "Greek")))
 
-; first which: the Workbench's (or English alone), all twelve, or chosen
+; first which: the Workbench's (or English alone), all thirteen, or chosen
 ; one by one (the boxes have no "all")
 (set #how
   (askchoice
@@ -61,19 +61,19 @@
     (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
     (choices
       (if #def (cat "Your Workbench's: " #wbname) "None: English only")
-      "All twelve"
+      "All thirteen"
       "Let me choose...")
     (default 0)
   )
 )
 (if (= #how 0) (set #langs #def))
-(if (= #how 1) (set #langs 4095))
+(if (= #how 1) (set #langs 8191))
 (if (= #how 2)
   (set #langs
     (askoptions
       (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
       (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
-      (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)" "Ellinika (Greek)")
+      (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)" "Ellinika (Greek)" "Hangugeo (Korean)")
       (default #def)
     )
   )
@@ -126,6 +126,7 @@
 (if (IN #langs 9) ((set #drawer "portugues") (P_LANG)))
 (if (IN #langs 10) ((set #drawer "nihongo") (P_LANG)))
 (if (IN #langs 11) ((set #drawer "greek") (P_LANG)))
+(if (IN #langs 12) ((set #drawer "korean") (P_LANG)))
 (complete 90)
 
 ; ---- Libraries for more of the music, from Aminet (Extras) --------------

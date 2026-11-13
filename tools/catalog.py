@@ -25,7 +25,7 @@ import time
 import unicodedata
 
 LANGS = ["deutsch", "français", "italiano", "español", "svenska", "suomi", "dansk", "norsk",
-         "nederlands", "português", "nihongo", "greek"]
+         "nederlands", "português", "nihongo", "greek", "korean"]
 
 
 def fnv(b):

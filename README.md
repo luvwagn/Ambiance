@@ -175,13 +175,16 @@ Paula.
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português, 日本語 (Japanese) and Ελληνικά (Greek). AmigaMCE follows the
+Norsk, Nederlands, Português, 日本語 (Japanese), Ελληνικά (Greek) and 한국어
+(Korean). AmigaMCE follows the
 Workbench's language (Locale prefs) when its catalog is installed;
 Settings › General › Language picks another, and is greyed out showing the
-one in use when no other is installed. Workbench 3.x has no Japanese
-locale, so Japanese is only ever picked there (its catalog's language is
-`nihongo`, a name of AmigaMCE's own); AmigaMCE draws it with its own glyph
-packs and needs nothing from the system for it. Greek likewise needs no
+one in use when no other is installed. Workbench 3.x has no Japanese or
+Korean locale, so they are only ever picked there (their catalogs'
+languages are `nihongo`, a name of AmigaMCE's own, and `korean`); AmigaMCE
+draws them with its own glyph packs and needs nothing from the system for
+them. Korean keeps to the 2,350 Hangul syllables of KS X 1001, all of which
+the 15-pixel pack has. Greek likewise needs no
 Greek fonts, keymap or ReplaceTopaz: its catalog's language is `greek`, and
 a Workbench whose Locale prefs call it `greek` or `ellinika` gets it by
 itself.
@@ -193,7 +196,7 @@ and one `.ct` per language in FlexCat's format, kept in UTF-8. Catalogs
 are read by AmigaMCE itself and known by the language written in them, so
 their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
 Chinese and Korean text can go in a catalog too, drawn from the glyph packs
-in `Fonts/amce-cjk`; in Japanese the clock and file dates are written year,
+in `Fonts/amce-cjk`; in Japanese and Korean the clock and file dates are written year,
 month, day, and wrapped text keeps 、。」 and small kana off the start of a
 line. Greek is kept as two bytes a letter (`src/cjk.c`), drawn from the
 smooth style's own Greek letters (Geologica, sized to Rubik) or from

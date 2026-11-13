@@ -2279,6 +2279,11 @@ static void lang_name(const char *lang, char *out)
         strcpy(out, "\214\267\245\214\274\254\221\252\236");
         return;
     }
+    if (!amce_stricmp(lang, "korean")) {
+        /* "Hangugeo" in Hangul (cjk.c's three bytes each) */
+        strcpy(out, "\232\265\234\225\265\255\230\266\264");
+        return;
+    }
     if (!amce_stricmp(lang, "greek") || !amce_stricmp(lang, "ellinika")) {
         /* "Ellinika" in Greek letters (cjk.c's two bytes each) */
         strcpy(out, "\200\225\200\273\200\273\200\267\200\275\200\271\200\272\200\254");
@@ -3538,11 +3543,23 @@ static const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr
                                         N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"),
                                         N_("Nov"), N_("Dec") };
 
-/* Dates the Japanese way round (year, month, day), the month and day as
- * numbers. */
+/* Dates the Japanese and Korean way round (year, month, day), the month
+ * and day as numbers, each followed by its word: Japanese tsuki and hi,
+ * Korean wol and il (cjk.c's three bytes each). */
 static BOOL date_ymd(void)
 {
-    return !strcmp(amce_lang_iso(), "ja");
+    const char *iso = amce_lang_iso();
+    return !strcmp(iso, "ja") || !strcmp(iso, "ko");
+}
+
+static const char *date_mon_word(void)
+{
+    return !strcmp(amce_lang_iso(), "ko") ? "\230\273\224 " : "\214\274\210";
+}
+
+static const char *date_day_word(void)
+{
+    return !strcmp(amce_lang_iso(), "ko") ? "\230\275\274 " : "\214\267\245";
 }
 
 static void clock_text(char *buf)
@@ -3574,9 +3591,9 @@ static void clock_text(char *buf)
             m++;
         }
         if (date_ymd())         /* "11 gatsu 06 nichi (kin)": the month first */
-            sprintf(buf, "%ld\214\274\210%02ld\214\267\245(%s)  %02ld:%02ld", (long)m + 1,
-                    (long)days + 1, _(day_abbr[wday]), (long)ds.ds_Minute / 60,
-                    (long)ds.ds_Minute % 60);
+            sprintf(buf, "%ld%s%02ld%s(%s)  %02ld:%02ld", (long)m + 1, date_mon_word(),
+                    (long)days + 1, date_day_word(), _(day_abbr[wday]),
+                    (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60);
         else
             sprintf(buf, "%s %02ld %s  %02ld:%02ld", _(day_abbr[wday]), (long)days + 1,
                     _(mon_abbr[m]), (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60);
@@ -3589,10 +3606,11 @@ static WORD clock_left(void)
     /* the widest day and month in this language */
     WORD dw = 0, mw = 0, w;
     int i;
-    if (date_ymd())
-        return g.w - U(8) -
-               gfx_textlen(&g, "12\214\274\21030\214\267\245(\214\274\210)  00:00", TS_SMALL) -
-               U(4);
+    if (date_ymd()) {
+        char wide[48];
+        sprintf(wide, "12%s30%s(%s)  00:00", date_mon_word(), date_day_word(), date_mon_word());
+        return g.w - U(8) - gfx_textlen(&g, wide, TS_SMALL) - U(4);
+    }
     for (i = 0; i < 7; i++)
         if ((w = gfx_textlen(&g, _(day_abbr[i]), TS_SMALL)) > dw)
             dw = w;
