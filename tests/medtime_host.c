@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     printf("units16 %lu (%lu ticks), %d positions, %d tracks, tempo %u", t.units16,
            t.units16 / 16, t.positions, t.tracks, t.tempo);
     if (!cnt && t.tempo > 10)
-        cnt = 474326UL / t.tempo;           /* MED's SPD timer */
+        cnt = t.timer;
     if (cnt)
         printf(", %.1f s at %lu E-clocks a tick", t.units16 / 16.0 * cnt / 709379.0, cnt);
     printf("\n");

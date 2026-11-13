@@ -99,6 +99,7 @@ static struct {
     UWORD med_cnt0;                 /* its timer at its first tempo (its first tick's) */
     UWORD med_tracks;               /* its tracks (a note player's mixer: four or fewer at full scale) */
     BOOL med_said;                  /* its length logged (once a song) */
+    UWORD med_timer;                /* its first tempo's timer, from the module (a player's 0 put right) */
     ULONG ep_t0, ep_played;         /* ...and its time played, by the clock */
     /* playing */
     volatile BOOL running, paused;
@@ -742,6 +743,11 @@ void mp_tempo_check(void)
 /* For EaglePlayer players: their timer (callable from the interrupt). */
 void mp_tick_count(UWORD c)
 {
+    /* 0 is no tempo (a CIA timer of 0 underflows at once, again and
+     * again): MED_note sets it for some songs (Pure Aggression); the
+     * song's own first tempo's timer then, else 50 Hz's */
+    if (!c)
+        c = mp.med_timer ? mp.med_timer : 14187;
     mp.tick_cnt = c;
     if (mp.have_tick && mp.running)
         tick_latch(c);
@@ -883,6 +889,7 @@ static void module_free(void)
     mix_free();
     mp.med_units = 0;
     mp.med_tracks = 0;
+    mp.med_timer = 0;
     mp.engine = ENG_NONE;
     mp.serial++;
     mp.vtrig = mp.ep_trig = 0;
@@ -1071,6 +1078,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                 struct MedTime mt;          /* (a MED song's length, before it is relocated) */
                 mp.med_units = med_measure(mem, mlen, &mt);
                 mp.med_tracks = (UWORD)mt.tracks;
+                mp.med_timer = (UWORD)(mt.timer < 65536UL ? mt.timer : 0);
                 if (mlen >= 4 && mem[0] == 'M' && mem[1] == 'M' && mem[2] == 'D') {
                     char kind[2];
                     kind[0] = (char)mem[3];

@@ -50,6 +50,7 @@ unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedT
         out->positions = 0;
         out->tempo = 0;
         out->tracks = 0;
+        out->timer = 0;
     }
     if (len < 52 || m[0] != 'M' || m[1] != 'M' || m[2] != 'D' || m[3] < '0' || m[3] > '3')
         return 0;
@@ -180,6 +181,12 @@ unsigned long med_measure(const unsigned char *m, unsigned long len, struct MedT
         out->positions = nseq;
         out->tempo = tempo0;
         out->tracks = tracks;
+        /* the timer a player of it sets: in SPD mode 470000 / tempo
+         * E-clocks (PAL; tempos 1-10 SoundTracker's, a tick at 50 Hz); in
+         * BPM mode not worked out here */
+        out->timer = 0;
+        if (!(m[song + 768] & 0x20))
+            out->timer = tempo0 > 10 ? 470000UL / tempo0 : 14187UL;     /* (MED_note's: 21363 at 22) */
     }
     return units;
 }
