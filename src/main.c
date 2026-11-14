@@ -8,6 +8,7 @@
 #include "iconify.h"
 #include "vprobe.h"
 #include "video.h"
+#include "dvdplay.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -3115,12 +3116,34 @@ static LONG pics_root_fill(struct Page *p, const char **src)
     return n;
 }
 
+/* Videos' DVDs: a row first for each DVD-Video disc in a drive (Fire plays
+ * its film: anim_play_dvd). Its path is the disc's VIDEO_TS.IFO, for the
+ * preview's size and date; its sortkey "DVD". Their count. */
+static ULONG dvd_sig;               /* the CD/DVD volumes when Videos was built (dvd_watch) */
+
+static LONG vids_dvd_rows(struct ItemList *l)
+{
+    struct DvdVol v[4];
+    LONG n, i;
+    dvd_sig = dvd_volumes_sig();
+    n = dvd_volumes(v, 4);
+    for (i = n - 1; i >= 0; i--) {
+        char label[80], path[64];
+        sprintf(label, _("DVD: %.31s"), v[i].vol);
+        sprintf(path, "%.31s:VIDEO_TS/VIDEO_TS.IFO", v[i].vol);
+        list_add_first(l, label, path, "DVD", IT_ANIM);
+    }
+    return n;
+}
+
 /* Videos' first page, as Pictures': AGS's Media:Animations, the VIDEOS:
- * assign and the folders of Settings > Folders > Videos. */
+ * assign and the folders of Settings > Folders > Videos; a DVD in a drive
+ * first. */
 static LONG vids_root_fill(struct Page *p, const char **src)
 {
     const char *at[FS_DIRS + 2];
     int n = 0, i;
+    LONG r;
     if (place_there(VIDS_ROOT))
         at[n++] = VIDS_ROOT;
     if (fs_assign_used(FS_VIDEOS))
@@ -3129,16 +3152,28 @@ static LONG vids_root_fill(struct Page *p, const char **src)
         at[n++] = fs[FS_VIDEOS].dir[i];
     *src = n == 1 ? at[0] : NULL;
     if (n == 0)
-        return -1;
-    if (n == 1)
-        return pics_read_ui(at[0], &p->list);
+        return vids_dvd_rows(&p->list) ? p->list.count : -1;
+    if (n == 1) {
+        r = pics_read_ui(at[0], &p->list);
+        if (r == -2)
+            return r;                       /* (built again when it settles: the DVDs then) */
+        if (vids_dvd_rows(&p->list))
+            return p->list.count;           /* (the folder's own rows, if any, after) */
+        return r;
+    }
     for (i = 0; i < n; i++) {
         char label[180];
         const char *f = (const char *)FilePart((STRPTR)at[i]);
         sprintf(label, _("Videos: %.100s"), f[0] ? f : at[i]);
         list_add(&p->list, label, at[i], "", IT_DIR);
     }
-    return n;
+    vids_dvd_rows(&p->list);
+    return p->list.count;
+}
+
+static BOOL is_dvd_row(const struct Item *it)
+{
+    return it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "DVD");
 }
 
 /* Pictures' first page with nothing of its own (the server's rows follow). */
@@ -4628,8 +4663,9 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     if (p->pics) {
         amce_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            if (!(it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")))
-                *shot = SHOT_FILE;          /* an animation: its first frame (MPEG: none) */
+            if (!(it->kind == IT_ANIM && it->sortkey &&
+                  (!strcmp(it->sortkey, "MPEG") || !strcmp(it->sortkey, "DVD"))))
+                *shot = SHOT_FILE;          /* an animation: its first frame (MPEG, DVD: none) */
             return LJ_PICTURE;
         }
         if (it->kind == IT_DIR) {
@@ -4825,6 +4861,23 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 {
     char line[120];
     pv_line(it->label, w);
+    if (is_dvd_row(it)) {
+        /* a DVD: what Fire does (the disc itself read only then) */
+        pv_line(_("A DVD-Video disc"), w);
+        if (!dvd_lib_there()) {
+            pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+            return;
+        }
+        pv_line(_("Fire plays its film, its longest title, on the ZZ9000"), w);
+        pv_line(_("N and P: the next and previous chapter"), w);
+        if (j && j->size >= 0) {
+            char date[32];
+            pv_line("", w);
+            date_text(j->days, date);
+            pv_line(date, w);
+        }
+        return;
+    }
     if (it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")) {
         /* an MPEG file: what its headers say (64 KB of its start and end
          * read once a file, the last 8 kept: a list moved through is not
@@ -8866,6 +8919,23 @@ static void pane_settle(void)
     busy_end(FALSE);                /* drawn just now */
 }
 
+/* Videos' first page, shown: a DVD put in or taken out shows there within
+ * a second (the DOS list's CD/DVD volumes looked at, no disc read unless
+ * they changed), the page built again as when the section is chosen. */
+static void dvd_watch(void)
+{
+    ULONG s;
+    if (shown_mod != MOD_VIDEOS || depth != 1 || pane_pending || menu[menu_sel] != MOD_VIDEOS)
+        return;
+    s = dvd_volumes_sig();
+    if (s == dvd_sig)
+        return;
+    dvd_sig = s;                            /* (once a change, built or not) */
+    amce_log("dvd", "a CD/DVD volume came or went: Videos built again");
+    pane_pending = TRUE;
+    pane_settle();
+}
+
 /* Up/Down (or keypad 8/2) still held? */
 static BOOL menu_key_held(void)
 {
@@ -9833,7 +9903,8 @@ static void anim_from_page(struct Page *p)
 {
     char err[160], title[120], by[200];
     const struct Item *it = &p->list.items[p->sel];
-    BOOL mpeg = it->sortkey && !strcmp(it->sortkey, "MPEG");
+    BOOL dvd = is_dvd_row(it);
+    BOOL mpeg = dvd || (it->sortkey && !strcmp(it->sortkey, "MPEG"));
     /* (an MPEG plays through the stream process: what streams stops, sound or not) */
     BOOL sound = mpeg || anim_has_sound(it->path), stream = FALSE, track = FALSE, was_paused = FALSE;
     BOOL module = FALSE;
@@ -9866,7 +9937,13 @@ static void anim_from_page(struct Page *p)
     {
         BOOL loop_was = play_loop;
         WORD aw = g.w, ah = g.h;
-        if (mpeg) {
+        if (dvd) {
+            char vol[40];
+            const char *c = strchr(it->path, ':');
+            amce_strlcpy(vol, it->path, c ? (LONG)(c - it->path) + 1 : (LONG)sizeof(vol));
+            if (anim_play_dvd(&g, vol, caps.cpu, err, sizeof(err)) < 0 && err[0])
+                set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
+        } else if (mpeg) {
             if (anim_play_video(&g, it->path, caps.cpu, err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
@@ -15320,6 +15397,7 @@ static int app_main(void)
                     mp_tempo_check();
                     flac_slow_check();      /* a FLAC track running dry: said once */
                     plink_tick();           /* signing in at plex.tv: asked after */
+                    dvd_watch();            /* Videos: a DVD put in or taken out */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
                 pv_spin_tick();             /* the preview's spinner, if it is waiting */

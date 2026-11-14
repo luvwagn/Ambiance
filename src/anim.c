@@ -45,6 +45,7 @@
 #include "animdraw.h"
 #include "vprobe.h"
 #include "video.h"
+#include "dvdplay.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -758,6 +759,8 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
 enum { BT_RESTART, BT_PLAY, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N }; /* full: AmigaMCE's */
 
 static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
+static struct DvdPlay *vid_dvd; /* a DVD's film playing (dvdplay.c): its chapters by N, P */
+static BOOL vid_dvd_fresh;      /*   at its start already (dvdplay_open's) */
 
 /* No sound of its own: the volume's buttons (and its figure) not shown. */
 static BOOL btn_hidden(int b)
@@ -1240,6 +1243,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = ctl_enter();
             else if (code == 0x23 && !r)            /* F: full screen or not */
                 r = ctl_press(BT_FULL);
+            else if (vid_dvd && code == 0x36 && !r) /* N, P: a DVD's next, previous chapter */
+                r = 7;
+            else if (vid_dvd && code == 0x19 && !r)
+                r = 8;
             else if (code == 0x4F)                  /* Left, Right: the focus */
                 ctl_move(-1);
             else if (code == 0x4E)
@@ -1257,6 +1264,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = ctl_enter();
             else if ((code == 'f' || code == 'F') && !r)
                 r = ctl_press(BT_FULL);
+            else if (vid_dvd && (code == 'n' || code == 'N') && !r)
+                r = 7;
+            else if (vid_dvd && (code == 'p' || code == 'P') && !r)
+                r = 8;
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
@@ -1285,6 +1296,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 2;
             else if ((pressed & JPF_BUTTON_RED) && !r)
                 r = ctl_enter();
+            else if (vid_dvd && (pressed & JPF_BUTTON_FORWARD) && !r)
+                r = 7;                      /* a CD32 pad's shoulders: a DVD's chapters */
+            else if (vid_dvd && (pressed & JPF_BUTTON_REVERSE) && !r)
+                r = 8;
             if (pressed & JPF_JOY_LEFT)
                 ctl_move(-1);
             else if (pressed & JPF_JOY_RIGHT)
@@ -2827,6 +2842,18 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 {
     ULONG at = ms && vid.ms && vid.bytes ? (ULONG)(((unsigned long long)vid.bytes * ms) / vid.ms) : 0;
     st_stop();
+    if (vid_dvd) {
+        /* a DVD: the disc to there (where it starts: a whole VOBU's) */
+        if (vid_dvd_fresh && !ms)
+            at = 0;
+        else if (!dvdplay_seek(vid_dvd, ms, &at)) {
+            amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+            return FALSE;
+        }
+        vid_dvd_fresh = FALSE;
+        vid_base = at;
+        return st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax);
+    }
     vid_base = at ? ms : 0;
     return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
 }
@@ -2884,15 +2911,12 @@ static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
     vid_was_h = -1;
 }
 
+static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                     LONG errmax);
+
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
 {
-    const char *why, *name = (const char *)FilePart((STRPTR)path);
-    ULONG jlast = 0, at = 0, t0 = time_ms();
-    UWORD sw;
-    BOOL paused = FALSE, ended = FALSE, whole = TRUE;
-    LONG result = -1;
-    int r, s;
-    char m[200];
+    const char *why;
     err[0] = 0;
     anim_g = g;
     if (!g || !g->win || !g->truecolor) {
@@ -2903,6 +2927,38 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
         amce_strlcpy(err, why, errmax);
         return -1;
     }
+    return vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+}
+
+/* A DVD's film (the disc in volume vol): as an MPEG file, read from the
+ * disc by dvdplay.c, its chapters by N and P (a CD32 pad's shoulders). */
+LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax)
+{
+    LONG r;
+    err[0] = 0;
+    anim_g = g;
+    if (!g || !g->win || !g->truecolor) {
+        amce_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
+        return -1;
+    }
+    if (!(vid_dvd = dvdplay_open(vol, &vid, err, errmax)))
+        return -1;
+    vid_dvd_fresh = TRUE;
+    r = vid_play(g, dvdplay_name(vid_dvd), dvdplay_name(vid_dvd), cpu, err, errmax);
+    dvdplay_close(vid_dvd);
+    vid_dvd = NULL;
+    return r;
+}
+
+static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                     LONG errmax)
+{
+    ULONG jlast = 0, at = 0, t0 = time_ms();
+    UWORD sw;
+    BOOL paused = FALSE, ended = FALSE, whole = TRUE;
+    LONG result = -1;
+    int r, s;
+    char m[200];
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
@@ -3041,6 +3097,21 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
             if (!vid_start(cpu, target, err, errmax))
                 break;
             at = target;
+        } else if ((r == 7 || r == 8) && vid_dvd && dvdplay_can_chapter(vid_dvd, r == 7 ? 1 : -1)) {
+            /* a DVD's next or previous chapter: the card started again there */
+            ULONG to = 0;
+            ended = paused = FALSE;
+            st_stop();
+            if (!dvdplay_chapter(vid_dvd, r == 7 ? 1 : -1, &to)) {
+                amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+                break;
+            }
+            sprintf(m, "chapter %s: at %lu ms", r == 7 ? "next" : "previous", (unsigned long)to);
+            amce_log("dvd", m);
+            vid_base = to;
+            if (!st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax))
+                break;
+            at = to;
         } else if (r == 4) {
             /* full screen or not: a window's is a screen of its own (the
              * overlay made again there), AmigaMCE's screen's the whole of it */

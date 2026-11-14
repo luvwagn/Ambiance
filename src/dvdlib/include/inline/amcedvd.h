@@ -87,4 +87,8 @@
       LP0(0x8a, CONST_STRPTR, DvdVersion ,\
       , AMCEDVD_BASE_NAME)
 
+#define DvdTitleLength(___dvd, ___title, ___ms) \
+      LP3(0x90, LONG, DvdTitleLength , APTR, ___dvd, a0, LONG, ___title, d0, ULONG *, ___ms, a1,\
+      , AMCEDVD_BASE_NAME)
+
 #endif /* !_INLINE_AMCEDVD_H */

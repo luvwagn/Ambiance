@@ -4,6 +4,13 @@
 MSG_2F1926C3
 ANIM-%ld-compressie wordt niet ondersteund
 ; ANIM-%ld compression is not supported
+MSG_5799A183
+De dvd kon daar niet worden gelezen
+; The DVD could not be read there
+MSG_21CB4B97
+; MPEG video plays on the ZZ9000's display
+MSG_612F22BA
+; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 De animatie kon niet worden geopend
 ; The animation could not be opened
@@ -37,6 +44,21 @@ Onlangs toegevoegd
 MSG_4E6387ED
 Niet genoeg geheugen
 ; Not enough memory
+MSG_38381E85
+Dvd's hebben amcedvd.library nodig (in de Libs van AmigaMCE)
+; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_3A32AEDF
+Geen dvd-videoschijf die AmigaMCE kan lezen: %.120s
+; Not a DVD-Video disc AmigaMCE can read: %.120s
+MSG_57CA60FE
+De film van de dvd kon niet worden afgespeeld
+; The DVD's film could not be played
+MSG_1865B509
+titel
+; title
+MSG_50A1D5F7
+De dvd zit niet meer in het station
+; The DVD is no longer in its drive
 MSG_1592F849
 Geen enkele speler van AmigaMCE kent deze module
 ; No player AmigaMCE has knows this module
@@ -655,6 +677,9 @@ Deze interface was niet mogelijk geweest zonder het enorme werk van Paul Vince e
 MSG_07ED33C3
 Afbeeldingen: %.100s
 ; Pictures: %.100s
+MSG_3518A84D
+DVD: %.31s
+; DVD: %.31s
 MSG_749CDC88
 Video's: %.100s
 ; Videos: %.100s
@@ -823,12 +848,25 @@ Op/Neer  scrollen      Links/Esc  terug
 MSG_642000D2
 Op/Neer scrollen  Esc terug
 ; Up/Down scroll  Esc back
+MSG_7FF7C0A9
+Een dvd-videoschijf
+; A DVD-Video disc
+MSG_5981907F
+Vuur speelt de film af, de langste titel, op de ZZ9000
+; Fire plays its film, its longest title, on the ZZ9000
+MSG_4B763229
+N en P: volgend en vorig hoofdstuk
+; N and P: the next and previous chapter
 MSG_6B41435A
 ; With sound
 MSG_6524B26D
 ; No sound
+MSG_3D33D3EB
+; A transport stream
 MSG_7EB7DE9D
 ; A bare video stream
+MSG_5E08A9DF
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_50D8B3E7
 ; Not an MPEG video AmigaMCE can read
 MSG_1403F9F1
@@ -1698,8 +1736,6 @@ MSG_267A9302
 ; MPEG video plays on a ZZ9000 (zz9k.library not found)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
-MSG_612F22BA
-; The ZZ9000's overlay could not be opened on this screen
 MSG_6A5609A3
 %.80s laden
 ; Loading %.80s

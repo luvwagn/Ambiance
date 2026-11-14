@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga
@@ -36,7 +36,7 @@ LIBS    = -lamiga
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c
+       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c src/dvdplay.c src/dvddisc.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -298,12 +298,24 @@ build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdlib/inclu
 	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
 	@cp $(DVDLIB) build/dvd/prog/Libs/
 	@cp $@ build/dvd/prog/
-test-dvd: build/dvd/dvd_68k $(DVD_ISO)
+# AmigaMCE's side (src/dvdplay.c): the film chosen and read as the player reads it
+build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddisc.c src/dvddisc.h \
+                       src/util.c src/amce.h $(DVDLIB)
+	@mkdir -p build/dvd/prog
+	@echo "  CC    $@"
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ \
+		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c -lamiga
+	@cp $@ build/dvd/prog/
+test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cp $(DVD_ISO) build/dvd/prog/test.iso
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvd_68k prog:test.iso > ../test-dvd.txt 2>&1 \
 		&& grep -q "dvd tests passed" ../test-dvd.txt \
 		&& echo "  CHECK DVD navigation (68020, amcedvd.library) ok" || (cat ../test-dvd.txt; exit 1)
+	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
+		prog:dvdplay_68k prog:test.iso > ../test-dvdplay.txt 2>&1 \
+		&& grep -q "dvdplay tests passed" ../test-dvdplay.txt \
+		&& echo "  CHECK a DVD's film (68020, dvdplay.c) ok" || (cat ../test-dvdplay.txt; exit 1)
 
 # a beets library (beets.c) read on a 68020 through amcesql.library, from
 # a small library made for it (tests/mkbeets.py)

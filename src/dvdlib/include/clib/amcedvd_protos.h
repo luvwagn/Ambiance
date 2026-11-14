@@ -29,6 +29,7 @@ LONG DvdSetRegion(APTR dvd, ULONG mask);
 LONG DvdAngle(APTR dvd, LONG angle);
 CONST_STRPTR DvdError(APTR dvd);
 CONST_STRPTR DvdVersion(void);
+LONG DvdTitleLength(APTR dvd, LONG title, ULONG *ms);
 
 #ifdef __cplusplus
 }

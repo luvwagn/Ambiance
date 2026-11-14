@@ -655,6 +655,25 @@ API CONST_STRPTR DvdError(APTR dvd)
     return (CONST_STRPTR)(d ? d->err : open_err);
 }
 
+/* A title's chapters (0: no such title) and playing time, from its title
+ * set's IFO, without playing it: what the main film is, before choosing. */
+API LONG DvdTitleLength(APTR dvd, LONG title, ULONG *ms)
+{
+    struct Dvd *d = dvd;
+    uint64_t *times = NULL, duration = 0;
+    uint32_t parts;
+    ENTER(d, 0);
+    *ms = 0;
+    parts = dvdnav_describe_title_chapters(d->nav, title, &times, &duration);
+    dvdp_free(times);
+    if (parts)
+        *ms = (ULONG)(duration / 90);
+    else
+        strcpy(d->err, "no such title");
+    LEAVE(d);
+    return (LONG)parts;
+}
+
 API CONST_STRPTR DvdVersion(void)
 {
     return (CONST_STRPTR)version;
@@ -695,5 +714,6 @@ ADDTABL_2(DvdSetRegion, a0, d0);
 ADDTABL_2(DvdAngle, a0, d0);
 ADDTABL_1(DvdError, a0);
 ADDTABL_0(DvdVersion);
+ADDTABL_3(DvdTitleLength, a0, d0, a1);
 ADDTABL_END();
 #endif

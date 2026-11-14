@@ -11,9 +11,14 @@
  * SCSI cards' devices and the ATAPI drivers all take: READ(10) for the
  * sectors and READ CAPACITY for the size. Sectors arrive in a buffer of
  * our own (public memory, longword aligned, as DMA controllers want),
- * then are copied to where the library asked for them. A failed read is
- * tried three times; a drive still spinning up ("not ready") is given up
- * to ten seconds.
+ * 16 at a time: libdvdnav asks for one at a time as a film plays, so the
+ * next 15 are there already. A failed read is tried three times; a drive
+ * still spinning up ("not ready") is given up to ten seconds.
+ *
+ * A disc may be read from any task, one at a time (the player's process
+ * while a film plays, AmigaMCE's own between): its requests come back to
+ * a port that signals whichever task sent them, with SIGF_SINGLE, exec's
+ * signal for waiting on one thing.
  *
  * An image file is read with Seek and Read: 32-bit, so an image of 2 GB
  * or more is refused for now (a single-layer DVD is up to 4.7 GB; most
@@ -28,16 +33,18 @@
 #include <dos/dos.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <clib/alib_protos.h>
 #include <string.h>
 
 #define CHUNK 16                            /* sectors per SCSI read (32 KB) */
 
 struct DvdDisc {
     BPTR fh;                                /* an image, or */
-    struct MsgPort *port;                   /* a drive */
+    struct MsgPort *port;                   /* a drive (SIGB_SINGLE, any task's) */
     struct IOStdReq *io;
     BOOL dev_open;
     UBYTE *bounce;                          /* CHUNK sectors, for the drive */
+    ULONG b_from, b_n;                      /* what bounce holds (b_n 0: nothing) */
     ULONG pos;                              /* the next sector */
     ULONG sectors;
     ULONG errors;
@@ -137,6 +144,8 @@ static LONG scsi(struct DvdDisc *d, UBYTE *cmd, UWORD cmdlen, APTR data, ULONG l
     d->io->io_Command = HD_SCSICMD;
     d->io->io_Data = &sc;
     d->io->io_Length = sizeof(sc);
+    d->port->mp_SigTask = FindTask(NULL);   /* the reply to whoever asks */
+    SetSignal(0, SIGF_SINGLE);
     DoIO((struct IORequest *)d->io);
     *sense_key = sc.scsi_SenseActual >= 3 ? (UBYTE)(sense[2] & 15) : 0;
     if (d->io->io_Error || sc.scsi_Status)
@@ -190,13 +199,25 @@ static LONG drive_read(APTR h, APTR buf, LONG n)
     if (d->sectors && (ULONG)n > d->sectors - d->pos)
         n = (LONG)(d->sectors - d->pos);
     while (done < n) {
-        UWORD c = (UWORD)(n - done > CHUNK ? CHUNK : n - done);
-        if (!drive_read10(d, d->pos, c))
-            return done ? done : -1;
-        CopyMem(d->bounce, out, (ULONG)c * DVD_BLOCK);
-        out += (ULONG)c * DVD_BLOCK;
+        ULONG c;
+        if (!d->b_n || d->pos < d->b_from || d->pos >= d->b_from + d->b_n) {
+            /* not read ahead already: CHUNK sectors from here */
+            UWORD k = CHUNK;
+            if (d->sectors && d->sectors - d->pos < k)
+                k = (UWORD)(d->sectors - d->pos);
+            d->b_n = 0;
+            if (!drive_read10(d, d->pos, k))
+                return done ? done : -1;
+            d->b_from = d->pos;
+            d->b_n = k;
+        }
+        c = d->b_from + d->b_n - d->pos;
+        if (c > (ULONG)(n - done))
+            c = (ULONG)(n - done);
+        CopyMem(d->bounce + (d->pos - d->b_from) * DVD_BLOCK, out, c * DVD_BLOCK);
+        out += c * DVD_BLOCK;
         d->pos += c;
-        done += c;
+        done += (LONG)c;
     }
     return done;
 }
@@ -210,8 +231,14 @@ struct DvdDisc *dvdd_open_drive(const char *device, LONG unit, char *err, LONG e
         put_err(err, errlen, "out of memory", NULL);
         return NULL;
     }
-    if (!(d->bounce = AllocVec(CHUNK * DVD_BLOCK, MEMF_PUBLIC)) ||
-        !(d->port = CreateMsgPort()) ||
+    if ((d->port = AllocVec(sizeof(*d->port), MEMF_PUBLIC | MEMF_CLEAR))) {
+        d->port->mp_Node.ln_Type = NT_MSGPORT;
+        d->port->mp_Flags = PA_SIGNAL;
+        d->port->mp_SigBit = SIGB_SINGLE;
+        d->port->mp_SigTask = FindTask(NULL);
+        NewList(&d->port->mp_MsgList);
+    }
+    if (!(d->bounce = AllocVec(CHUNK * DVD_BLOCK, MEMF_PUBLIC)) || !d->port ||
         !(d->io = (struct IOStdReq *)CreateIORequest(d->port, sizeof(struct IOStdReq)))) {
         put_err(err, errlen, "out of memory", NULL);
         dvdd_close(d);
@@ -262,7 +289,7 @@ void dvdd_close(struct DvdDisc *d)
     if (d->io)
         DeleteIORequest((struct IORequest *)d->io);
     if (d->port)
-        DeleteMsgPort(d->port);
+        FreeVec(d->port);                   /* (no signal of its own to free) */
     if (d->bounce)
         FreeVec(d->bounce);
     FreeVec(d);

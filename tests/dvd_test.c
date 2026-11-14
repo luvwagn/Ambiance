@@ -37,6 +37,7 @@ LONG DvdSetRegion(APTR dvd, ULONG mask);
 LONG DvdAngle(APTR dvd, LONG angle);
 CONST_STRPTR DvdError(APTR dvd);
 CONST_STRPTR DvdVersion(void);
+LONG DvdTitleLength(APTR dvd, LONG title, ULONG *ms);
 unsigned long dvdp_memory(int peak);
 #endif
 
@@ -259,6 +260,16 @@ int main(int argc, char **argv)
     CHECK(info.titles == 2, "titles %ld", (long)info.titles);
     printf("disc \"%s\": %ld titles\n", info.name, (long)info.titles);
     CHECK(!strcmp(info.name, "AMCE_TEST"), "disc name \"%s\"", info.name);
+    {
+        ULONG ms1 = 0, ms2 = 0, ms9 = 1;
+        LONG c1 = DvdTitleLength(dvd, 1, &ms1), c2 = DvdTitleLength(dvd, 2, &ms2);
+        CHECK(c1 == 2 && ms1 >= 3800 && ms1 <= 4200, "title 1: %ld chapters, %lu ms", (long)c1,
+              (unsigned long)ms1);
+        CHECK(c2 == 1 && ms2 >= 1800 && ms2 <= 2200, "title 2: %ld chapters, %lu ms", (long)c2,
+              (unsigned long)ms2);
+        CHECK(DvdTitleLength(dvd, 9, &ms9) == 0 && ms9 == 0, "title 9 has a length");
+        log_errors = 0;                     /* (title 9's) */
+    }
 
     /* first play goes to the root menu: a still with two buttons */
     e = run(dvd, &r, UNTIL(DVDE_STILL), 5000);

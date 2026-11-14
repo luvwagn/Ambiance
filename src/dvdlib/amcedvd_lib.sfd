@@ -30,4 +30,5 @@ LONG DvdSetRegion(APTR dvd, ULONG mask) (a0,d0)
 LONG DvdAngle(APTR dvd, LONG angle) (a0,d0)
 CONST_STRPTR DvdError(APTR dvd) (a0)
 CONST_STRPTR DvdVersion() ()
+LONG DvdTitleLength(APTR dvd, LONG title, ULONG * ms) (a0,d0,a1)
 ==end
