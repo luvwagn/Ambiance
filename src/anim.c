@@ -921,6 +921,17 @@ static void bar_cleanup(void)
     memset(&bar, 0, sizeof(bar));
 }
 
+/* Pause (||) in an s-square at x, y, bars t + 1 wide: a little shorter
+ * than Play's triangle, the bars close together (a gap about as wide as
+ * one), centred. */
+static void pause_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t)
+{
+    WORD bw = t + 1, gap = s / 6 > bw ? s / 6 : bw, top = y + s * 2 / 9, bot = y + s - 1 - s * 2 / 9;
+    WORD x0 = x + (s - 2 * bw - gap) / 2;
+    RectFill(rp, x0, top, x0 + bw - 1, bot);
+    RectFill(rp, x0 + bw + gap, top, x0 + 2 * bw + gap - 1, bot);
+}
+
 /* Loop: a loop over a straight arrow, the one that happens bright (loop
  * on: the loop; off: the arrow, played through), the other dim. */
 static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE bright, UBYTE dim)
@@ -993,10 +1004,8 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
                 Move(rp, x + s / 3 + i, y + s / 6 + i);
                 Draw(rp, x + s / 3 + i, y + s - s / 6 - i);
             }
-        else {                              /* || */
-            RectFill(rp, x + s / 4, y + s / 6, x + s / 4 + t, y + s - s / 6);
-            RectFill(rp, x + s - s / 4 - t, y + s / 6, x + s - s / 4, y + s - s / 6);
-        }
+        else                                /* || */
+            pause_glyph(rp, x, y, s, t);
         break;
     case BT_STOP:
         RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
@@ -1507,10 +1516,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
                     Move(g->rp, ix + s / 3 + j, iy + s / 6 + j);
                     Draw(g->rp, ix + s / 3 + j, iy + s - s / 6 - j);
                 }
-            else {
-                RectFill(g->rp, ix + s / 4, iy + s / 6, ix + s / 4 + t, iy + s - s / 6);
-                RectFill(g->rp, ix + s - s / 4 - t, iy + s / 6, ix + s - s / 4, iy + s - s / 6);
-            }
+            else
+                pause_glyph(g->rp, ix, iy, s, t);
             break;
         case BT_STOP:
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
