@@ -32,6 +32,7 @@
  */
 #include "amce.h"
 #include "radiocsv.h"
+#include "zz9k.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -47,6 +48,7 @@
 #include <inline/macros.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <devices/timer.h>
 #include <proto/mhi.h>
 #include <proto/ahi.h>
 #define SocketBase st_SocketBase
@@ -225,7 +227,13 @@ static struct {
     BOOL mhi;                       /* MP3 decoded and played by an MHI driver */
     BOOL flac;                      /* decoded here by flacdec.library */
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
+    /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
+    BOOL video, v_mpeg2, v_mp2;
+    UWORD v_w, v_h;
+    volatile ULONG v_shown, v_dropped;
 } st;
+
+static struct { BOOL on, mpeg2, mp2; UWORD w, h; ULONG ms; } vid_next;  /* st_start_video's */
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
@@ -1903,6 +1911,371 @@ static void pcm_play(void)
     pcm_loop(pcm_frames, NULL, pf.channels, div, mono);
 }
 
+/* ---------------------------------------------------------- video
+ * MPEG on the ZZ9000 (zz9k.c): the file written to the card's media
+ * session in chunks; each picture it holds shown on its overlay (the UI's
+ * PIP window), or let go if late, against the sound's clock; its MP2
+ * decoded on the card, read back from a ring and played as music is (the
+ * FIFO, Paula or AHI, the volume, the meters). Without sound, the clock is
+ * the time since the first picture. */
+#define V_IN_BYTES   (32UL * 1024)
+#define V_PCM_BYTES  (64UL * 1024)
+
+static struct MsgPort *v_tport;
+static struct timerequest *v_treq;
+static BOOL v_topen;
+
+/* Waited us microseconds (the output served, a stop seen). */
+static void v_wait(ULONG us)
+{
+    ULONG tsig, got;
+    if (!v_topen) {
+        st_delay(1);
+        return;
+    }
+    tsig = 1UL << v_tport->mp_SigBit;
+    v_treq->tr_node.io_Command = TR_ADDREQUEST;
+    v_treq->tr_time.tv_secs = us / 1000000;
+    v_treq->tr_time.tv_micro = us % 1000000;
+    SendIO((struct IORequest *)v_treq);
+    for (;;) {
+        got = Wait(tsig | (st.sig >= 0 ? 1UL << st.sig : 0) | SIGBREAKF_CTRL_C);
+        if (got & SIGBREAKF_CTRL_C)
+            st.quit = TRUE;
+        if (st.sig >= 0 && (got & (1UL << st.sig)))
+            SetSignal(1UL << st.sig, 1UL << st.sig);    /* (serve() takes it) */
+        serve();
+        if (CheckIO((struct IORequest *)v_treq) || st.quit)
+            break;
+    }
+    if (!CheckIO((struct IORequest *)v_treq))
+        AbortIO((struct IORequest *)v_treq);
+    WaitIO((struct IORequest *)v_treq);
+    SetSignal(0, tsig);
+}
+
+/* The sound's clock, 90 kHz: what the output plays now (the FIFO's samples
+ * given it, less what it still holds, plus what it has played of that). */
+static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
+{
+    ULONG lat = st.ahi ? AHI_FRAMES : HALF, pos = st.f_out - f0, el;
+    el = (time_ms() - st.play_t) * (ULONG)st.dec_freq / 1000;
+    if (el > lat)
+        el = lat;
+    pos = pos > lat ? pos - lat + el : el;
+    return origin + (ZzU64)pos * div * 90000ULL / rate;
+}
+
+static void video_run(void)
+{
+    struct ZzBuf in, pcm;
+    struct ZzMain r, held;
+    struct ZzAudio au;
+    ULONG session = 0, pend_off = 0, pend_len = 0, acc = 0, rate = 0, chans = 0, div = 1;
+    ULONG f0 = 0, t0 = 0, held_at = 0, run = 0, skip = 0, period = 3600, hold, drop, starved_at = 0;
+    ZzU64 ack = 0, origin = ZZ_NO_PTS, pts0 = 0;
+    BOOL held_now = FALSE, in_eof = FALSE, eof_sent = FALSE, done = FALSE, on = FALSE;
+    BOOL out_paused = FALSE, sound = st.v_mp2, said_audio = FALSE;
+    int s;
+    char m[200];
+    memset(&in, 0, sizeof(in));
+    memset(&pcm, 0, sizeof(pcm));
+    memset(&held, 0, sizeof(held));
+    memset(&au, 0, sizeof(au));
+    st.v_shown = st.v_dropped = 0;
+    if ((v_tport = CreateMsgPort()) &&
+        (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
+        !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
+        v_topen = TRUE;
+    if (!zz_open()) {
+        fail("zz9k.library 2 is needed to play video");
+        goto out;
+    }
+    if ((s = zz_alloc(V_IN_BYTES, &in)) != ZZ_OK) {
+        sprintf(m, "No room on the ZZ9000 for the video (%s)", zz_name(s));
+        fail(m);
+        goto out;
+    }
+    if (sound && zz_alloc(V_PCM_BYTES, &pcm) != ZZ_OK && zz_alloc(V_PCM_BYTES / 2, &pcm) != ZZ_OK) {
+        amce_log("video", "no room on the card for its sound: played without it");
+        sound = FALSE;
+    }
+    if ((s = zz_begin(st.v_w, st.v_h, st.v_mpeg2, sound, sound ? &pcm : NULL, &r)) != ZZ_OK) {
+        sprintf(m, "The ZZ9000 would not play it (%s)", zz_name(s));
+        fail(m);
+        goto out;
+    }
+    session = r.session;
+    sprintf(m, "%s: %ld x %ld %s on the ZZ9000, %s; session %lu", log_name(), (long)st.v_w,
+            (long)st.v_h, st.v_mpeg2 ? "MPEG-2" : "MPEG-1",
+            sound ? "its sound to the card's ring" : "no sound", (unsigned long)session);
+    amce_log("video", m);
+    st.state = ST_BUFFERING;
+    hold = period / 2;
+    drop = period > 3600 ? period : 3600;
+    while (!st.quit) {
+        BOOL busy = FALSE;
+        serve();
+        /* paused: nothing shown, the output stopped (its FIFO kept) */
+        if (st.paused) {
+            if (on && st.started && !out_paused) {
+                out_stop();
+                out_paused = TRUE;
+            }
+            v_wait(20000);
+            continue;
+        }
+        if (out_paused) {
+            out_start();
+            out_paused = FALSE;
+        }
+        /* the file to the card, while it takes it */
+        {
+            int k;
+            for (k = 0; k < 4 && !eof_sent; k++) {
+                if (!pend_len && !in_eof) {
+                    LONG n = Read(st.fh, (APTR)in.data, in.length);
+                    if (n < 0) {
+                        fail(_("The file could not be read"));
+                        goto out;
+                    }
+                    if (n == 0)
+                        in_eof = TRUE;
+                    pend_off = 0;
+                    pend_len = (ULONG)n;
+                }
+                if (pend_len) {
+                    ULONG took;
+                    s = zz_write(session, &in, pend_off, pend_len, FALSE, &r);
+                    if (s == ZZ_BUSY)
+                        break;
+                    if (s != ZZ_OK) {
+                        sprintf(m, "The ZZ9000 took no more of it (%s)", zz_name(s));
+                        fail(m);
+                        goto out;
+                    }
+                    took = r.accepted >= acc ? r.accepted - acc : r.written;
+                    acc = r.accepted;
+                    if (took > pend_len)
+                        took = pend_len;
+                    pend_off += took;
+                    pend_len -= took;
+                    busy = TRUE;
+                    if (!took)
+                        break;              /* (full: on later) */
+                } else if (in_eof) {
+                    s = zz_write(session, &in, 0, 0, TRUE, &r);
+                    if (s == ZZ_OK)
+                        eof_sent = TRUE;
+                    else if (s != ZZ_BUSY) {
+                        sprintf(m, "the end of the file not taken (%s)", zz_name(s));
+                        amce_log("video", m);
+                        eof_sent = TRUE;
+                    }
+                    break;
+                }
+            }
+        }
+        /* its sound, from the card's ring into the FIFO */
+        if (sound) {
+            s = zz_audio_read(session, ack, &au);
+            if (s != ZZ_OK) {
+                sprintf(m, "its sound could not be read (%s): on without it", zz_name(s));
+                amce_log("video", m);
+                sound = FALSE;
+            } else {
+                if (au.rate && !rate) {
+                    if (au.format != 2 || (au.channels != 1 && au.channels != 2)) {
+                        amce_log("video", "its sound is in a form AmigaMCE does not play: on without it");
+                        sound = FALSE;
+                    } else {
+                        rate = au.rate;
+                        chans = au.channels;
+                        div = 1;
+                        while ((!st.ahi && rate / div > 28867) || rate / div > 48000)
+                            div *= 2;       /* Paula's limit: 44.1 kHz at 22050 */
+                        st.freq = (LONG)rate;
+                        st.channels = (LONG)chans;
+                        st.dec_freq = (LONG)(rate / div);
+                        st.dec_channels = (LONG)chans;
+                        sprintf(m, "its sound: MP2 %lu Hz %s, played at %lu Hz through %s",
+                                (unsigned long)rate, chans == 2 ? "stereo" : "mono",
+                                (unsigned long)(rate / div), st.ahi ? "AHI" : "Paula");
+                        amce_log("video", m);
+                    }
+                }
+                if (sound && rate && au.produced > ack) {
+                    ULONG fb = chans * 2, cap = pcm.length, room, want, i;
+                    ZzU64 avail = au.produced - ack;
+                    room = FIFO_N - (st.f_in - st.f_out);
+                    room = room > 64 ? room - 64 : 0;
+                    want = (ULONG)(avail / fb);
+                    want -= want % div;
+                    if (want / div > room)
+                        want = room * div;
+                    if (want) {
+                        ULONG o = st.f_in, at = (ULONG)(ack % cap);
+                        LONG al = 0, ar = 0;
+                        for (i = 0; i < want; i++) {
+                            /* (S16BE: the 68k's own order, a word a read across the bus) */
+                            const volatile WORD *p = (const volatile WORD *)(pcm.data + at);
+                            WORD l = p[0];
+                            WORD rr = chans == 2 ? p[1] : l;
+                            at += fb;
+                            if (at >= cap)
+                                at -= cap;
+                            al += l;
+                            ar += rr;
+                            if ((i + 1) % div)
+                                continue;
+                            st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)div);
+                            st.fr[o & (FIFO_N - 1)] = (WORD)(ar / (LONG)div);
+                            o++;
+                            al = ar = 0;
+                        }
+                        st.f_in = o;
+                        ack += (ZzU64)want * fb;
+                        busy = TRUE;
+                    }
+                }
+                if (sound && origin == ZZ_NO_PTS && au.produced)
+                    zz_audio_origin(session, &origin);
+                if (sound && !said_audio && origin != ZZ_NO_PTS) {
+                    said_audio = TRUE;
+                    sprintf(m, "its sound begins at %lu ms", (unsigned long)(origin / 90));
+                    amce_log("video", m);
+                }
+            }
+        }
+        /* the next picture */
+        if (!held_now && !done) {
+            s = zz_cmd(ZZ_DECODE, session, skip, &r);
+            if (s == ZZ_BUSY) {
+                v_wait(2000);
+                continue;
+            }
+            if (s != ZZ_OK) {
+                sprintf(m, "The ZZ9000 could not decode it (%s)", zz_name(s));
+                fail(m);
+                goto out;
+            }
+            skip = 0;
+            if (r.flags & ZZ_R_FRAME_HELD) {
+                held = r;
+                held_now = TRUE;
+                held_at = time_ms();
+                busy = TRUE;
+                if (r.rate_num && r.rate_den) {
+                    period = (ULONG)((90000ULL * r.rate_den + r.rate_num / 2) / r.rate_num);
+                    hold = period / 2;
+                    drop = period > 3600 ? period : 3600;
+                }
+            } else if (r.flags & ZZ_R_DONE) {
+                done = TRUE;
+            } else if (eof_sent && (r.flags & ZZ_R_NEED_INPUT)) {
+                /* all of it given, more wanted: the end, if it says nothing more */
+                if (!starved_at)
+                    starved_at = time_ms() | 1;
+                else if (time_ms() - starved_at > 3000) {
+                    amce_log("video", "the card wanted more after the end: taken as the end");
+                    done = TRUE;
+                }
+            }
+        }
+        /* started: the first picture, the sound with it */
+        if (!on && held_now) {
+            ULONG pre = (ULONG)st.dec_freq * 300 / 1000;
+            BOOL ready = !sound || (rate && st.f_in - st.f_out >= pre) || eof_sent ||
+                         time_ms() - held_at > 1500 || (au.flags & ZZ_R_BACKPRESSURE);
+            if (!ready) {
+                if (!busy)
+                    v_wait(5000);
+                continue;
+            }
+            if (sound && rate && st.f_in != st.f_out)
+                out_start();
+            else
+                sound = FALSE;              /* (none came: by the time alone) */
+            f0 = st.f_out;
+            t0 = time_ms();
+            pts0 = held.pts;
+            if (origin == ZZ_NO_PTS)
+                origin = held.pts;
+            on = TRUE;
+            st.state = ST_PLAYING;
+            sprintf(m, "playing: the first picture at %lu ms, %s", (unsigned long)(held.pts / 90),
+                    sound ? "timed by its sound" : "timed by the clock");
+            amce_log("video", m);
+        }
+        /* the held picture: shown on time, let go if late */
+        if (on && held_now) {
+            ZzU64 master = sound && st.started ? v_clock(origin, f0, rate, div)
+                                               : pts0 + (ZzU64)(time_ms() - t0) * 90;
+            long long drift = (long long)(held.pts - master);
+            int op = ZZ_PRESENT;
+            if (drift > (long long)hold) {
+                BOOL starved = sound && st.f_in - st.f_out < (ULONG)st.dec_freq / 10;
+                if (!starved) {
+                    ULONG us = (ULONG)((drift - (long long)hold) * 1000 / 90);
+                    v_wait(us > 10000 ? 10000 : us < 1000 ? 1000 : us);
+                    continue;               /* early: soon */
+                }
+            } else if (drift < -(long long)drop && run < 2) {
+                op = ZZ_DISCARD;            /* late: let go */
+                skip = drift < -45000 ? ZZ_SKIP_TO_I_PICTURE : ZZ_SKIP_TO_KEYFRAME;
+            }
+            s = zz_cmd(op, session, 0, &r);
+            if (s == ZZ_BUSY) {
+                v_wait(2000);
+                continue;
+            }
+            if (s != ZZ_OK) {
+                sprintf(m, "The ZZ9000 could not show it (%s)", zz_name(s));
+                fail(m);
+                goto out;
+            }
+            if (op == ZZ_DISCARD) {
+                st.v_dropped++;
+                run++;
+            } else {
+                st.v_shown++;
+                run = 0;
+            }
+            held_now = FALSE;
+            busy = TRUE;
+        }
+        if (done && !held_now)
+            break;
+        if (!busy)
+            v_wait(3000);
+    }
+    /* the end: its sound plays out */
+    while (!st.quit && st.started && st.f_in != st.f_out) {
+        ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+        if (got & SIGBREAKF_CTRL_C)
+            break;
+        out_take();
+    }
+    sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts", log_name(),
+            (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
+    amce_log("video", m);
+out:
+    if (session)
+        zz_cmd(ZZ_CLOSE, session, 0, &r);
+    zz_free(&pcm);
+    zz_free(&in);
+    zz_close();
+    if (v_topen)
+        CloseDevice((struct IORequest *)v_treq);
+    v_topen = FALSE;
+    if (v_treq)
+        DeleteIORequest((struct IORequest *)v_treq);
+    if (v_tport)
+        DeleteMsgPort(v_tport);
+    v_treq = NULL;
+    v_tport = NULL;
+}
+
 /* ---------------------------------------------------------- MHI
  * MP3 given as it comes to an MHI driver (Settings > Sound), which
  * decodes and plays it itself (in hardware, or the emulator's): buffers
@@ -2295,6 +2668,10 @@ static void radio_main(void)
     }
     if (!open_stream())
         goto out;
+    if (st.video) {
+        video_run();                        /* MPEG on the ZZ9000 */
+        goto out;
+    }
     if (st.finite && !skip_id3()) {
         fail(st.err[0] ? st.err : _("The track ended before its music began"));
         goto out;
@@ -2479,6 +2856,13 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.ahi = use_ahi;
     st.icy_br = FALSE;
     st.mhi = FALSE;                         /* set when it is MP3, and MHI is chosen */
+    st.video = vid_next.on;                 /* (st_start_video's) */
+    st.v_mpeg2 = vid_next.mpeg2;
+    st.v_mp2 = vid_next.mp2;
+    st.v_w = vid_next.w;
+    st.v_h = vid_next.h;
+    st.v_shown = st.v_dropped = 0;
+    memset(&vid_next, 0, sizeof(vid_next));
     amce_strlcpy(st.url, url, sizeof(st.url));
     st.fifo_n = fifo_sizes[buf_level];
     st.nb = AllocVec(NETBUF + 1, MEMF_ANY);
@@ -2501,6 +2885,31 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
         return FALSE;
     }
     return TRUE;
+}
+
+/* An MPEG file played by the ZZ9000 (w x h, MPEG-2 or 1, with MPEG audio
+ * or none): the radio process runs it (video_run), its sound as music's. */
+BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
+                    BOOL mp2, ULONG ms, char *err, LONG errmax)
+{
+    BOOL ok;
+    vid_next.on = TRUE;
+    vid_next.mpeg2 = mpeg2;
+    vid_next.mp2 = mp2;
+    vid_next.w = w;
+    vid_next.h = h;
+    ok = st_start(path, master, cpu, TRUE, 0, 0, err, errmax);
+    memset(&vid_next, 0, sizeof(vid_next));
+    if (ok)
+        st.len_ms = ms;
+    return ok;
+}
+
+/* Pictures shown and let go (a video). */
+void st_video_counts(ULONG *shown, ULONG *dropped)
+{
+    *shown = st.v_shown;
+    *dropped = st.v_dropped;
 }
 
 void st_stop(void)

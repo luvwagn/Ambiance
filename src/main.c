@@ -6,6 +6,8 @@
 #include "radiocsv.h"
 #include "plexxml.h"
 #include "iconify.h"
+#include "vprobe.h"
+#include "video.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -4626,7 +4628,8 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     if (p->pics) {
         amce_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            *shot = SHOT_FILE;              /* an animation: its first frame */
+            if (!(it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")))
+                *shot = SHOT_FILE;          /* an animation: its first frame (MPEG: none) */
             return LJ_PICTURE;
         }
         if (it->kind == IT_DIR) {
@@ -4816,10 +4819,39 @@ static void pv_read_ahead(struct Page *p)
 
 /* A Pictures row's lines: what it is and, for a folder, what Fire and
  * Right do there (the picture's size once it is drawn). */
+static void time_text(ULONG ms, char *out);
+
 static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 {
     char line[120];
     pv_line(it->label, w);
+    if (it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")) {
+        /* an MPEG file: what its headers say (read once a file) */
+        static struct VProbe vp;
+        static char probed[300];
+        static BOOL ok;
+        if (strcmp(probed, it->path)) {
+            amce_strlcpy(probed, it->path, sizeof(probed));
+            ok = vprobe(it->path, &vp);
+        }
+        if (ok) {
+            char t[16];
+            sprintf(line, "%s, %ld x %ld", vprobe_kind(&vp), (long)vp.w, (long)vp.h);
+            if (vp.fps_milli)
+                sprintf(line + strlen(line), ", %ld.%02ld fps", (long)(vp.fps_milli / 1000),
+                        (long)(vp.fps_milli % 1000 / 10));
+            pv_line(line, w);
+            if (vp.ms) {
+                time_text(vp.ms, t);
+                pv_line(t, w);
+            }
+            pv_line(vp.mp2 ? _("With sound") : _("No sound"), w);
+            if (!vp.ps)
+                pv_line(_("Not a Program Stream: not played"), w);
+        } else {
+            pv_line(_("Not an MPEG video AmigaMCE can read"), w);
+        }
+    }
     if (it->kind == IT_PIC || it->kind == IT_ANIM) {
         char date[32];
         if (drawn) {
@@ -9781,11 +9813,25 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 
 /* An animation of a Videos (or Pictures) list, played on a screen of its
  * own in front of AmigaMCE's (anim.c), which comes back as it was. */
+/* A video's volume keys (video.c): Now playing's volume, given to its
+ * stream (d 0: mute or not). */
+static BOOL video_vol(int d)
+{
+    if (!d)
+        np_mute(!np_muted());
+    else
+        np_volume(d);
+    st_volume(mp_volume());
+    return TRUE;
+}
+
 static void anim_from_page(struct Page *p)
 {
     char err[160], title[120], by[200];
     const struct Item *it = &p->list.items[p->sel];
-    BOOL sound = anim_has_sound(it->path), stream = FALSE, track = FALSE, was_paused = FALSE;
+    BOOL mpeg = it->sortkey && !strcmp(it->sortkey, "MPEG");
+    /* (an MPEG plays through the stream process: what streams stops, sound or not) */
+    BOOL sound = mpeg || anim_has_sound(it->path), stream = FALSE, track = FALSE, was_paused = FALSE;
     BOOL module = FALSE;
     LONG idx = np.idx;
     struct MpStatus st;
@@ -9816,7 +9862,10 @@ static void anim_from_page(struct Page *p)
     {
         BOOL loop_was = play_loop;
         WORD aw = g.w, ah = g.h;
-        if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
+        if (mpeg) {
+            if (video_play(&g, it->path, caps.cpu, video_vol, err, sizeof(err)) < 0 && err[0])
+                set_msg(err);               /* (MPEG: the ZZ9000's, video.c) */
+        } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amce_log("anim", err);
             set_msg(err);
         }

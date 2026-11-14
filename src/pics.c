@@ -27,7 +27,14 @@ static const struct { const char *ext, *tag; } exts[] = {
     { "gif", "GIF" }, { "png", "PNG" }, { "jpg", "JPEG" }, { "jpeg", "JPEG" },
     { "jpe", "JPEG" }, { "bmp", "BMP" }, { "pcx", "PCX" }, { "tga", "TGA" },
     { "anim", "ANIM" }, { "anm", "ANIM" },
+    { "mpg", "MPEG" }, { "mpeg", "MPEG" }, { "vob", "MPEG" },   /* (played by a ZZ9000) */
 };
+
+/* Played, not shown as a picture: an IFF ANIM, an MPEG file. */
+static BOOL moving(const char *f)
+{
+    return f && (!strcmp(f, "ANIM") || !strcmp(f, "MPEG"));
+}
 
 /* The format a picture file's name says it is, NULL if none. */
 const char *pics_format(const char *name)
@@ -178,7 +185,7 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
         } else if (c->ndirs) {
             (*c->ndirs)++;
         }
-    } else if ((f = entry_format(c->dir, name, c->vids)) && !strcmp(f, "ANIM")) {
+    } else if ((f = entry_format(c->dir, name, c->vids)) && moving(f)) {
         c->nanims++;                        /* played, not shown: not a slideshow's */
         if (c->first && c->firstmax && !c->first[0] && !c->npics)
             join_path(c->first, c->firstmax, c->dir, name);
@@ -244,7 +251,7 @@ static void any_cb(void *ctx, const char *name, BOOL isdir)
             join_path(path, sizeof(path), c->dir, name);
             c->found = any_anim(path, c->depth - 1);
         }
-    } else if ((f = entry_format(c->dir, name, TRUE)) && !strcmp(f, "ANIM"))
+    } else if ((f = entry_format(c->dir, name, TRUE)) && moving(f))
         c->found = TRUE;
 }
 
@@ -273,7 +280,7 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     struct collect_ctx *c = ctx;
     char path[300], key[140];
     const char *f = isdir ? NULL : entry_format(c->dir, name, c->vids);
-    if (!isdir && (!f || (c->vids && strcmp(f, "ANIM"))))
+    if (!isdir && (!f || (c->vids && !moving(f))))
         return;                             /* (Videos: animations only, no pictures) */
     join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
@@ -282,7 +289,7 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     }
     key[0] = isdir ? '0' : '1';             /* folders first */
     amce_strlcpy(key + 1, name, sizeof(key) - 1);
-    list_add(c->out, name, path, key, isdir ? IT_DIR : !strcmp(f, "ANIM") ? IT_ANIM : IT_PIC);
+    list_add(c->out, name, path, key, isdir ? IT_DIR : moving(f) ? IT_ANIM : IT_PIC);
 }
 
 static void collect(const char *dir, struct ItemList *out, BOOL top, BOOL vids)
@@ -309,7 +316,9 @@ static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
     for (i = 0; i < out->count; i++) {
         struct Item *it = &out->items[i];
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            const char *f = it->kind == IT_ANIM ? "ANIM" :
+            const char *f = it->kind == IT_ANIM ? (pics_format(it->label) &&
+                                                   !strcmp(pics_format(it->label), "MPEG")
+                                                   ? "MPEG" : "ANIM") :
                             strchr(it->label, '.') ? pics_format(it->label) : sniff(it->path);
             it->sortkey = (char *)(f ? f : "");
         } else {

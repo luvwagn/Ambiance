@@ -823,6 +823,14 @@ Ylös/Alas  vieritä      Vasen/Esc  takaisin
 MSG_642000D2
 Ylös/Alas vieritä  Esc takaisin
 ; Up/Down scroll  Esc back
+MSG_6B41435A
+; With sound
+MSG_6524B26D
+; No sound
+MSG_2AC72CDD
+; Not a Program Stream: not played
+MSG_50D8B3E7
+; Not an MPEG video AmigaMCE can read
 MSG_1403F9F1
 %ld kuvaa, %ld,%ld s
 ; %ld frames, %ld.%ld s
@@ -1684,6 +1692,14 @@ Muisti ei riitä aseman soittamiseen
 MSG_41C55AEA
 Radioprosessia ei voitu käynnistää
 ; Could not start the radio process
+MSG_49FB1D9D
+; Only MPEG Program Streams play (this one has no packs)
+MSG_267A9302
+; MPEG video plays on a ZZ9000 (zz9k.library not found)
+MSG_5EF81658
+; MPEG video needs Picasso96 (Picasso96API.library)
+MSG_612F22BA
+; The ZZ9000's overlay could not be opened on this screen
 MSG_6A5609A3
 Ladataan %.80s
 ; Loading %.80s
