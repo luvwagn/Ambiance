@@ -480,6 +480,8 @@ Vidéos sur leur propre écran
 ; Videos on a screen of their own
 MSG_58B78A34
 ; MPEG video on the ZZ9000
+MSG_6DF6A531
+; Use overlay when available (RTG)
 MSG_71E19418
 Débogage (CPU, mémoire, journal)
 ; Debug (CPU, memory, log)

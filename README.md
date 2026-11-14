@@ -142,6 +142,12 @@ of the Amiga to how fast it really is.
   AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
   and AAC are not the card's: the preview says so (AAC: played without
   its sound).
+- Without a ZZ9000 (or with Settings > Display > MPEG video on the ZZ9000
+  off), MPEG-1 is decoded by the CPU, its sound by mpega.library. Its
+  pictures go to the graphics card's YUV overlay where the screen has one
+  (Picasso96's PIP), which scales them; otherwise (or with Settings >
+  Display > Use overlay when available off) they are made RGB and drawn,
+  on an RTG screen of 16 bits or more.
 - DVDs: while a DVD-Video disc is mounted in a drive (any CD/DVD
   filesystem: ODFileSystem, CDFileSystem, a UDF handler), its volume is
   at the top of Videos with a disc beside it, within a second of going
@@ -300,7 +306,7 @@ was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on AmigaMCE's screen or window, where it is 16-bit RTG) |
+| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on AmigaMCE's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |

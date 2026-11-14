@@ -2187,11 +2187,13 @@ done:
  * Where there is no ZZ9000 (or it is not to be used): pl_mpeg's demuxer
  * and MPEG-1 video decoder (plmpeg.c), the sound by mpega.library as an
  * MP3 file's is (through the same bitstream hook, from the demuxer's audio
- * packets). Each picture made 24-bit RGB in one of SWV_SLOTS buffers, held
- * until its time by the sound (or the clock without), then given to the UI
- * (anim.c), which draws the newest it is given; one too late is let go,
- * not converted. Pictures are decoded as the sound is: on a slow Amiga
- * the sound keeps time and the pictures fall behind and are let go. */
+ * packets). Each picture's planes (Y, Cb, Cr: 4:2:0) copied into one of
+ * SWV_SLOTS buffers, held until its time by the sound (or the clock
+ * without), then given to the UI (anim.c), which takes the newest it is
+ * given and makes it what it shows: the card's YUV overlay's (st_swv_yuyv)
+ * or RGB to draw (st_swv_rgb); one too late is let go, not copied.
+ * Pictures are decoded as the sound is: on a slow Amiga the sound keeps
+ * time and the pictures fall behind and are let go. */
 #define SWV_SLOTS   3
 #define SW_AQ       (128UL * 1024)          /* its sound's bytes, demuxed, for mpega */
 #define SW_IN       16384
@@ -2204,6 +2206,8 @@ static struct {
     ZzU64 pts;
 } swv[SWV_SLOTS];
 static ULONG swv_w, swv_h, swv_seq;
+static ULONG swv_yw, swv_yh;              /* its planes' (whole macroblocks) */
+static int swv_on = -1;                    /* the slot the UI has (SW_ON) */
 static plm_buffer_t *sw_fbuf, *sw_vbuf;
 static plm_demux_t *sw_demux;
 static UBYTE *sw_aq, *sw_in;
@@ -2211,9 +2215,10 @@ static ULONG sw_aq_in, sw_aq_out;
 static double sw_apts, sw_vpts;             /* the first audio and video packets' times */
 static BOOL sw_ended, sw_sound;
 
-/* The newest picture given to show (NULL: none new since the last), its
- * size and bytes a row: the one shown before it let go. For the UI. */
-const UBYTE *st_swv_frame(ULONG *w, ULONG *h, ULONG *bpr)
+/* The newest picture given to show, if one is (FALSE: none new since the
+ * last), and its size: the UI's (st_swv_rgb, st_swv_yuyv) until the next,
+ * the one before it let go. For the UI. */
+BOOL st_swv_take(ULONG *w, ULONG *h)
 {
     int i, best = -1;
     ULONG bs = 0;
@@ -2228,14 +2233,65 @@ const UBYTE *st_swv_frame(ULONG *w, ULONG *h, ULONG *bpr)
             if (i != best && (swv[i].state == SW_ON || swv[i].state == SW_SHOW))
                 swv[i].state = SW_FREE;
         swv[best].state = SW_ON;
+        swv_on = best;
     }
     Permit();
-    if (best < 0)
-        return NULL;
     *w = swv_w;
     *h = swv_h;
-    *bpr = swv_w * 3;
-    return swv[best].buf;
+    return best >= 0;
+}
+
+/* The UI's picture as pl_mpeg's frame (FALSE: it has none). */
+static BOOL swv_frame(plm_frame_t *f)
+{
+    int s = swv_on;
+    UBYTE *b;
+    if (s < 0 || !swv[s].buf || swv[s].state != SW_ON)
+        return FALSE;
+    b = swv[s].buf;
+    f->time = 0;
+    f->width = swv_w;
+    f->height = swv_h;
+    f->y.width = swv_yw;
+    f->y.height = swv_yh;
+    f->y.data = b;
+    f->cb.width = f->cr.width = swv_yw / 2;
+    f->cb.height = f->cr.height = swv_yh / 2;
+    f->cb.data = b + swv_yw * swv_yh;
+    f->cr.data = f->cb.data + swv_yw * swv_yh / 4;
+    return TRUE;
+}
+
+/* The UI's picture as 24-bit RGB into dst (bpr bytes a row). */
+BOOL st_swv_rgb(UBYTE *dst, ULONG bpr)
+{
+    plm_frame_t f;
+    if (!swv_frame(&f))
+        return FALSE;
+    plm_frame_to_rgb(&f, dst, (int)bpr);
+    return TRUE;
+}
+
+/* The UI's picture as packed YUV 4:2:2 into dst (bpr bytes a row): the
+ * ZZ9000's YUV422CGX overlay, Y0 Cb Y1 Cr (each chroma row twice). Written
+ * a longword at a time (the card's memory, across the Zorro bus). */
+BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr)
+{
+    plm_frame_t f;
+    ULONG r, x, n;
+    if (!swv_frame(&f))
+        return FALSE;
+    n = f.width / 2;
+    for (r = 0; r < f.height; r++) {
+        const UWORD *y = (const UWORD *)(f.y.data + r * f.y.width);
+        const UBYTE *cb = f.cb.data + (r >> 1) * f.cb.width, *cr = f.cr.data + (r >> 1) * f.cr.width;
+        ULONG *d = (ULONG *)(dst + r * bpr);
+        for (x = 0; x < n; x++) {
+            ULONG yy = *y++;
+            *d++ = ((yy & 0xFF00) << 16) | ((ULONG)*cb++ << 16) | ((yy & 0xFF) << 8) | *cr++;
+        }
+    }
+    return TRUE;
 }
 
 /* Its pictures' buffers freed: by the UI, once it has stopped it. */
@@ -2249,6 +2305,7 @@ void st_swv_release(void)
         swv[i].size = 0;
         swv[i].state = SW_FREE;
     }
+    swv_on = -1;
 }
 
 static void sw_aq_put(const UBYTE *d, ULONG n)
@@ -2382,10 +2439,15 @@ static void swv_run(void)
         goto out;
     }
     /* its pictures' buffers (kept from the last if large enough) */
+    Forbid();
+    swv_on = -1;                            /* (the UI's let go: these are new) */
+    Permit();
     swv_w = st.v_w;
     swv_h = st.v_h;
+    swv_yw = (swv_w + 15) & ~15UL;
+    swv_yh = (swv_h + 15) & ~15UL;
     for (i = 0; i < SWV_SLOTS; i++) {
-        ULONG need = swv_w * swv_h * 3;
+        ULONG need = swv_yw * swv_yh * 3 / 2;
         if (swv[i].size < need) {
             if (swv[i].buf)
                 FreeVec(swv[i].buf);
@@ -2545,7 +2607,14 @@ static void swv_run(void)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
                     else {
                         tk = time_ticks(&hz);
-                        plm_frame_to_rgb(f, swv[s].buf, (int)(swv_w * 3));
+                        ULONG ny = swv_yw * swv_yh;
+                        if (f->y.width != swv_yw || f->y.height != swv_yh) {
+                            swv[s].pts |= 1ULL << 62;   /* (not the size it said: not shown) */
+                        } else {
+                            memcpy(swv[s].buf, f->y.data, ny);
+                            memcpy(swv[s].buf + ny, f->cb.data, ny / 4);
+                            memcpy(swv[s].buf + ny + ny / 4, f->cr.data, ny / 4);
+                        }
                         t_conv += time_ticks(&hz) - tk;
                         n_conv++;
                     }
@@ -2617,7 +2686,7 @@ static void swv_run(void)
     amce_log("video", m);
     m[0] = 0;
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
-    sw_stat(m, "made RGB", t_conv, n_conv, hz);
+    sw_stat(m, "copied", t_conv, n_conv, hz);
     sw_stat(m, "a sound frame decoded", t_aud, n_aud, hz);
     sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
             (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);

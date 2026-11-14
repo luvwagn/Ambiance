@@ -155,7 +155,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1748,6 +1748,7 @@ static void save_screen_mode(void)
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define ANIMSCR_VAR "AmigaMCE/AnimScreen"  /* "own": animations on their own screen */
 #define VDEC_VAR "AmigaMCE/VideoDecoder"   /* "CPU": MPEG by the CPU on a ZZ9000 too (video.c) */
+#define VOVL_VAR "AmigaMCE/VideoOverlay"   /* "off": the CPU's pictures drawn, not on the overlay */
 #define TRANS_VAR "AmigaMCE/Transition"    /* a slideshow's: off fade crossfade tiles wipe */
 static const char *const trans_keys[VT_COUNT] = { "off", "fade", "crossfade", "tiles", "wipe" };
 static const char *const trans_names[VT_COUNT] = { N_("Off"), N_("Fade"), N_("Cross-fade"),
@@ -2121,6 +2122,7 @@ static BOOL anim_classic;
 /* Settings > Display > MPEG video on the ZZ9000 (with one): off, the CPU
  * decodes it (MPEG-1), as without one */
 static BOOL video_cpu;
+static BOOL video_no_overlay;
 
 static void set_msg(const char *m);
 
@@ -2200,6 +2202,8 @@ static void load_jump(void)
                    !strcmp(buf, "own");
     video_cpu = GetVar((CONST_STRPTR)VDEC_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                 (buf[0] == 'c' || buf[0] == 'C');
+    video_no_overlay = GetVar((CONST_STRPTR)VOVL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+                       !strcmp(buf, "off");
     if (GetVar((CONST_STRPTR)TRANS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
         int i;
         for (i = 0; i < VT_COUNT; i++)
@@ -2466,6 +2470,14 @@ static void build_screen_settings(struct Page *p)
     if (caps.zz9000)
         action_item(p, _("MPEG video on the ZZ9000"), "", ACT_ZZVIDEO,
                     video_cpu ? MARK_CHECK_OFF : MARK_CHECK_ON);
+    /* MPEG decoded by the CPU: its pictures on the graphics card's YUV
+     * overlay (scaled by the card), else drawn; no card, no overlay */
+    {
+        struct Item *it = action_item(p, _("Use overlay when available (RTG)"), "", ACT_VOVERLAY,
+                                      caps.rtg && !video_no_overlay ? MARK_CHECK_ON : MARK_CHECK_OFF);
+        if (it && !caps.rtg)
+            it->flags |= ITEM_DISABLED;
+    }
 }
 
 /* Settings > General. */
@@ -13727,6 +13739,10 @@ static void act_action(struct Item *it)
     } else if (it->action == ACT_ZZVIDEO) {
         video_cpu = !video_cpu;
         save_setting(VDEC_VAR, video_cpu ? "CPU" : "");
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_VOVERLAY) {
+        video_no_overlay = !video_no_overlay;
+        save_setting(VOVL_VAR, video_no_overlay ? "off" : "");
         plex_settings_again(FALSE);
     }
     else if (it->action == ACT_LANGSET)
