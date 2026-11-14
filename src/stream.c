@@ -413,20 +413,14 @@ static void ahi_serve(void)
     }
 }
 
-/* What sets how loud AHI plays us (MHI's decoder plays at full scale):
- * the mode's stereo and panning (a centred channel, half each side), and
- * the prefs' scaling (ENV:Sys/ahi.prefs: AHIG's ScaleMode, the Music
- * unit's channels, AHIU with unit 255). Logged once, to match the two. */
+/* How AHI's mode mixes us (logged once): stereo and panning, its
+ * centred channel half each side, as loud as mpega to Paula. */
 static void ahi_level_log(void)
 {
     static BOOL said;
-    static const char *const scales[] = { "safe (1/max channels)", "safe, dynamic (1/channels)",
-                                          "0 dB", "-3 dB", "-6 dB" };
-    struct TagItem t[6];
+    struct TagItem t[5];
     ULONG stereo = 0, pan = 0, hifi = 0, maxch = 0;
-    char m[200];
-    BPTR fh;
-    LONG scale = -1, unit_ch = -1, clip = -1;
+    char m[120];
     if (said || !ah.ctrl)
         return;
     said = TRUE;
@@ -440,32 +434,8 @@ static void ahi_level_log(void)
     t[3].ti_Data = (ULONG)&maxch;
     t[4].ti_Tag = TAG_DONE;
     AHI_GetAudioAttrsA(AHI_INVALID_ID, ah.ctrl, t);
-    if ((fh = Open((CONST_STRPTR)"ENV:Sys/ahi.prefs", MODE_OLDFILE))) {
-        static UBYTE b[512];
-        LONG n = Read(fh, b, sizeof(b)), o = 12;
-        Close(fh);
-        while (n > 12 && o + 8 <= n) {
-            ULONG id = ((ULONG)b[o] << 24) | ((ULONG)b[o + 1] << 16) | ((ULONG)b[o + 2] << 8) | b[o + 3];
-            ULONG len = ((ULONG)b[o + 4] << 24) | ((ULONG)b[o + 5] << 16) |
-                        ((ULONG)b[o + 6] << 8) | b[o + 7];
-            UBYTE *d = b + o + 8;
-            if (o + 8 + (LONG)len > n)
-                break;
-            if (id == ID_AHIG && len >= 22) {
-                clip = (d[12] << 8) | d[13];
-                scale = (d[20] << 8) | d[21];
-            } else if (id == ID_AHIU && len >= 4 && d[0] == AHI_NO_UNIT) {
-                unit_ch = (d[2] << 8) | d[3];
-            }
-            o += 8 + ((len + 1) & ~1UL);
-        }
-    }
-    sprintf(m, "AHI's level: the mode %s%s%s, %lu channels at most; prefs: scaling %s, "
-               "master volume %s, the Music unit's channels %ld",
-            stereo ? "stereo" : "mono", pan ? ", panning" : "", hifi ? ", HiFi" : "",
-            (unsigned long)maxch,
-            scale >= 0 && scale <= 4 ? scales[scale] : scale < 0 ? "?" : "other",
-            clip < 0 ? "?" : clip ? "with clipping" : "without clipping", (long)unit_ch);
+    sprintf(m, "AHI's mode: %s%s%s, %lu channels at most", stereo ? "stereo" : "mono",
+            pan ? ", panning" : "", hifi ? ", HiFi" : "", (unsigned long)maxch);
     amce_log("sound", m);
 }
 
@@ -2244,8 +2214,10 @@ static void mhi_play(LONG freq)
             break;
         }
         if (st.master != vol) {
+            /* half of MHI's 0 dB at full volume (-6 dB): as loud as mpega to
+             * Paula (two channels a side) or AHI (one, centred), not twice */
             vol = st.master;
-            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 100 / 64);
+            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 50 / 64);
         }
         if (!mhs.playing && mhs.nq && (mhs.nq == MHI_BUFS || ended)) {
             MHIPlay(mhs.h);
