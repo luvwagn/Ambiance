@@ -3076,6 +3076,8 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 break;
             }
             dvdplay_probe(vid_dvd, &vid);
+            if (!vid_sound)
+                vid.mp2 = vid.ac3 = FALSE;      /* (without sound already: so on) */
             sprintf(m, "%s: on to it", name);
             amce_log("dvd", m);
             vid_base = to;
@@ -3170,6 +3172,8 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 break;
             }
             dvdplay_probe(vid_dvd, &vid);      /* (another programme: its length) */
+            if (!vid_sound)
+                vid.mp2 = vid.ac3 = FALSE;
             sprintf(m, "%s: %s, at %lu ms", name, r == 7 ? "next" : "previous", (unsigned long)to);
             amce_log("dvd", m);
             vid_base = to;

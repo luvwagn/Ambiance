@@ -8,7 +8,8 @@
 #         1 at (100,200)-(320,280) plays title 1, 2 at (400,200)-(620,280)
 #         plays title 2; left/right move between them
 #   title 1: two chapters, 2 s each; title 2: one chapter, 2 s
-#   PAL 720 x 576 4:3, AC-3 stereo "en"; volume AMCE_TEST
+#   PAL 720 x 576 4:3; two sound tracks: AC-3 5.1 "en" (0x80), then MPEG-1
+#   layer II stereo "de" (0xC0); volume AMCE_TEST
 #
 # dvdauthor leaves the buttons' colour table empty, so the highlight
 # colours are set afterwards in the menu's NAV packs: 0xFEDC9876 for a
@@ -35,7 +36,8 @@ EOF
 spumux -v 0 menu.xml < menu_bg.mpg > menu.mpg 2> spumux.log
 for i in 1 2 3; do
     $ff -f lavfi -i "testsrc=s=720x576:r=25:d=2" -f lavfi -i "sine=f=$((400 * i)):r=48000:d=2" \
-        -ac 2 -target pal-dvd -b:v 800k -b:a 128k t$i.mpg
+        -map 0:v -map 1:a -map 1:a -target pal-dvd -b:v 800k \
+        -c:a:0 ac3 -ac:a:0 6 -b:a:0 192k -c:a:1 mp2 -ac:a:1 2 -b:a:1 128k t$i.mpg
 done
 cat > dvd.xml <<'EOF'
 <dvdauthor dest="DVD" jumppad="yes">
@@ -55,6 +57,7 @@ cat > dvd.xml <<'EOF'
   <titles>
    <video format="pal" aspect="4:3"/>
    <audio lang="en"/>
+   <audio lang="de"/>
    <pgc>
     <vob file="t1.mpg" chapters="0"/>
     <vob file="t2.mpg" chapters="0"/>

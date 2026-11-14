@@ -56,5 +56,7 @@ void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v);  /* v: the title now (
 void dvdplay_close(struct DvdPlay *dp);
 /* (what plays, from its titles' lengths: dvdplay.c; for the tests) */
 LONG dvdplay_choose(const ULONG *lens, LONG nt, UBYTE *list, ULONG *out);
+struct DvdStreamInfo;
+LONG dvdplay_pick_audio(const struct DvdStreamInfo *si, LONG n, LONG deflt);
 
 #endif

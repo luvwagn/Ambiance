@@ -198,6 +198,10 @@ struct DvdPlay {
     ULONG lens[TMAX];                       /*   their lengths (ms) */
     LONG n, idx;                            /*   how many, which now */
     LONG title;                             /* list[idx] */
+    LONG a_fmt;                             /* its sound chosen: DVDA_, -1 none */
+    UBYTE a_id, a_sub;                      /*   its packets: stream id, and in private
+                                             *   stream 1 its substream (0 none) */
+    UBYTE a_ch;
     char vol[32];
     volatile LONG chapter, chapters;        /* (dvdplay_read's, read by AmigaMCE) */
     ULONG ms;                               /* the title's length */
@@ -274,6 +278,101 @@ LONG dvdplay_choose(const ULONG *lens, LONG nt, UBYTE *list, ULONG *out)
     return n;
 }
 
+/* Which sound track plays, of n (si[i] the disc's track i): the one the
+ * card is likeliest to play, MPEG audio first (Amiberry's emulated card
+ * plays no AC-3), then AC-3 in two channels or fewer, then any AC-3; LPCM
+ * and DTS are not the card's. Of equals, the disc's own choice (deflt),
+ * else the first. -1 if none plays. */
+static int rank(const struct DvdStreamInfo *si)
+{
+    if (!si->present)
+        return 0;
+    if (si->format == DVDA_MPEG1 || si->format == DVDA_MPEG2)
+        return 3;
+    if (si->format == DVDA_AC3)
+        return si->channels && si->channels <= 2 ? 2 : 1;
+    return 0;
+}
+
+LONG dvdplay_pick_audio(const struct DvdStreamInfo *si, LONG n, LONG deflt)
+{
+    LONG i, best = -1;
+    int br = 0;
+    for (i = 0; i < n; i++) {
+        int r = rank(&si[i]);
+        if (r > br || (r == br && r && i == deflt)) {
+            best = i;
+            br = r;
+        }
+    }
+    return best;
+}
+
+/* The title's sound tracks looked at, one chosen and given to the disc
+ * (DvdSetStream), its packets noted for dvdplay_read */
+static void choose_audio(struct DvdPlay *dp)
+{
+    struct DvdStreamInfo si[8];
+    struct DvdInfo in;
+    LONG i, k;
+    char m[160];
+    dp->a_fmt = -1;
+    dp->a_id = dp->a_sub = dp->a_ch = 0;
+    if (!DvdGetInfo(dp->dvd, &in))
+        return;
+    for (i = 0; i < 8; i++)
+        DvdStreamInfo(dp->dvd, DVDS_AUDIO, i, &si[i]);
+    k = dvdplay_pick_audio(si, 8, in.audio);
+    if (k < 0) {
+        sprintf(m, "title %ld: no sound the card plays (%ld tracks)", (long)dp->title,
+                (long)in.audio_count);
+        amce_log("dvd", m);
+        return;
+    }
+    if (k != in.audio)
+        DvdSetStream(dp->dvd, DVDS_AUDIO, k);
+    dp->a_fmt = si[k].format;
+    dp->a_ch = (UBYTE)si[k].channels;
+    if (si[k].format == DVDA_AC3) {
+        dp->a_id = 0xBD;
+        dp->a_sub = (UBYTE)(0x80 + si[k].physical);
+    } else
+        dp->a_id = (UBYTE)(0xC0 + si[k].physical);
+    sprintf(m, "title %ld: sound track %ld of %ld (%s, %ld channels, \"%s\")", (long)dp->title,
+            (long)(k + 1), (long)in.audio_count, dp->a_fmt == DVDA_AC3 ? "AC-3" : "MPEG",
+            (long)dp->a_ch, si[k].lang);
+    amce_log("dvd", m);
+}
+
+/* A pack's sound not the one chosen (or any, with none chosen): its
+ * packet made a padding packet (stream BE), so the card sees one track
+ * and the pack's clock stays */
+static void other_sound_out(struct DvdPlay *dp, UBYTE *b)
+{
+    UBYTE *p, *e = b + DVD_BLOCK;
+    if (b[0] || b[1] || b[2] != 1 || b[3] != 0xBA)
+        return;
+    p = b + 14 + (b[13] & 7);
+    while (p + 9 < e && !p[0] && !p[1] && p[2] == 1) {
+        UBYTE id = p[3];
+        LONG len = ((LONG)p[4] << 8) | p[5];
+        BOOL sound = FALSE, keep = FALSE;
+        if (id >= 0xC0 && id <= 0xDF) {
+            sound = TRUE;
+            keep = id == dp->a_id;
+        } else if (id == 0xBD && p + 9 + p[8] < e) {
+            UBYTE sub = p[9 + p[8]];
+            if (sub >= 0x80 && sub <= 0xAF) {   /* AC-3, DTS, LPCM (0x20-0x3F: pictures) */
+                sound = TRUE;
+                keep = dp->a_id == 0xBD && sub == dp->a_sub;
+            }
+        }
+        if (sound && !keep)
+            p[3] = 0xBE;
+        p += 6 + len;
+    }
+}
+
 /* Programme k of the list, from chapter (0: its start) */
 static BOOL start(struct DvdPlay *dp, LONG k, LONG chapter)
 {
@@ -286,7 +385,11 @@ static BOOL start(struct DvdPlay *dp, LONG k, LONG chapter)
         sprintf(dp->name, "%.31s: %ld / %ld", dp->vol, (long)(k + 1), (long)dp->n);
     else
         sprintf(dp->name, "%.31s", dp->vol);
-    return prime(dp);
+    if (!prime(dp))
+        return FALSE;
+    choose_audio(dp);
+    other_sound_out(dp, dp->blk);           /* (the pack prime kept) */
+    return TRUE;
 }
 
 static void fail(char *err, LONG errlen, const char *why)
@@ -302,7 +405,6 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     struct DvdPlay *dp;
     struct DvdReader rd;
     struct DvdInfo in;
-    struct DvdStreamInfo si;
     char m[300];
     LONG t, best;
     ULONG best_ms, ms;
@@ -348,20 +450,11 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     DvdGetInfo(dp->dvd, &in);
     memset(v, 0, sizeof(*v));
     dvdplay_probe(dp, v);
-    if (DvdStreamInfo(dp->dvd, DVDS_AUDIO, in.audio >= 0 ? in.audio : 0, &si)) {
-        if (si.format == DVDA_AC3)
-            v->ac3 = TRUE;
-        else if (si.format == DVDA_MPEG1 || si.format == DVDA_MPEG2) {
-            v->mp2 = TRUE;
-            v->audio_id = (UBYTE)(0xC0 + si.physical);
-        } else
-            v->a_other = si.format == DVDA_LPCM ? "LPCM" : si.format == DVDA_DTS ? "DTS" : "?";
-    }
     sprintf(m, "%.31s (%.60s): %s; title %ld of %ld, %ld chapters, %lu s, %ld x %ld %s, sound %s",
             name, from, dp->n > 1 ? "its programmes in order" : "its film", (long)best,
             (long)in.titles, (long)dp->chapters,
             (unsigned long)(best_ms / 1000), (long)v->w, (long)v->h, in.wide ? "16:9" : "4:3",
-            v->ac3 ? "AC-3" : v->mp2 ? "MPEG" : v->a_other ? v->a_other : "none");
+            v->ac3 ? "AC-3" : v->mp2 ? "MPEG" : "none the card plays");
     amce_log("dvd", m);
     return dp;
 }
@@ -422,6 +515,9 @@ LONG dvdplay_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
             e = DvdNextBlock(dp->dvd, dp->blk, &ev);
         switch (e) {
         case DVDE_BLOCK:
+            if (e == DVDE_BLOCK)
+                other_sound_out(dp, dp->blk);
+            /* fall through */
         case DVDE_NAV:                      /* (the NAV pack carries the system header) */
             CopyMem(dp->blk, (APTR)(dst + got), DVD_BLOCK);
             got += DVD_BLOCK;
@@ -529,6 +625,10 @@ void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v)
     v->ps = TRUE;
     v->mpeg2 = TRUE;
     v->ms = dp->ms;
+    v->ac3 = dp->a_fmt == DVDA_AC3;
+    v->mp2 = dp->a_fmt == DVDA_MPEG1 || dp->a_fmt == DVDA_MPEG2;
+    v->audio_id = v->mp2 ? dp->a_id : 0;
+    v->a_chans = dp->a_ch;
 }
 
 void dvdplay_close(struct DvdPlay *dp)

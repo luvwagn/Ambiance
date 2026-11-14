@@ -560,6 +560,8 @@ API LONG DvdStreamInfo(APTR dvd, LONG type, LONG stream, struct DvdStreamInfo *s
         LEAVE(d);
         return FALSE;
     }
+    /* (libdvdnav's "*_logical_stream" calls take the DVD's own stream
+     * number and give the MPEG one, whatever their header says) */
     if (type == DVDS_AUDIO) {
         lang = dvdnav_audio_stream_to_lang(d->nav, (uint8_t)stream);
         si->format = dvdnav_audio_stream_format(d->nav, (uint8_t)stream);
@@ -568,18 +570,12 @@ API LONG DvdStreamInfo(APTR dvd, LONG type, LONG stream, struct DvdStreamInfo *s
             si->format = -1;
         if (si->channels == 0xffff)
             si->channels = 0;
-        for (p = 0; p < 8; p++)
-            if (dvdnav_get_audio_logical_stream(d->nav, (uint8_t)p) == stream) {
-                si->physical = p;
-                break;
-            }
+        p = si->format >= 0 ? dvdnav_get_audio_logical_stream(d->nav, (uint8_t)stream) : -1;
+        si->physical = p >= 0 ? (p & 7) : -1;
     } else {
         lang = dvdnav_spu_stream_to_lang(d->nav, (uint8_t)stream);
-        for (p = 0; p < 32; p++)
-            if (dvdnav_get_spu_logical_stream(d->nav, (uint8_t)p) == stream) {
-                si->physical = p;
-                break;
-            }
+        p = lang != 0xffff ? dvdnav_get_spu_logical_stream(d->nav, (uint8_t)stream) : -1;
+        si->physical = p >= 0 ? (p & 31) : -1;
     }
     si->present = si->physical >= 0;
     if (lang != 0xffff && lang > 0x00ff) {

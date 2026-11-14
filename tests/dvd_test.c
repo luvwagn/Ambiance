@@ -325,10 +325,15 @@ int main(int argc, char **argv)
     CHECK(DvdGetInfo(dvd, &info), "info in title 2");
     CHECK(info.title == 2 && info.chapters == 1 && info.chapter == 1,
           "title %ld chapter %ld of %ld", (long)info.title, (long)info.chapter, (long)info.chapters);
-    CHECK(info.audio_count == 1, "audio streams %ld", (long)info.audio_count);
+    CHECK(info.audio_count == 2, "audio streams %ld", (long)info.audio_count);
     CHECK(DvdStreamInfo(dvd, DVDS_AUDIO, 0, &si), "audio 0");
-    CHECK(si.format == DVDA_AC3 && si.channels == 2 && si.physical == 0 && !strcmp(si.lang, "en"),
+    CHECK(si.format == DVDA_AC3 && si.channels == 6 && si.physical == 0 && !strcmp(si.lang, "en"),
           "audio 0: format %ld channels %ld physical %ld lang '%s'", (long)si.format,
+          (long)si.channels, (long)si.physical, si.lang);
+    CHECK(DvdStreamInfo(dvd, DVDS_AUDIO, 1, &si), "audio 1");
+    CHECK((si.format == DVDA_MPEG1 || si.format == DVDA_MPEG2) && si.channels == 2 &&
+          si.physical == 0 && !strcmp(si.lang, "de"),
+          "audio 1: format %ld channels %ld physical %ld lang '%s'", (long)si.format,
           (long)si.channels, (long)si.physical, si.lang);
     CHECK(!DvdStreamInfo(dvd, DVDS_AUDIO, 3, &si), "audio 3 is there");
     e = run(dvd, &r, UNTIL(DVDE_STILL), 20000);
