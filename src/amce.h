@@ -912,6 +912,7 @@ LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
 void  dbg_set_timer(struct Device *timer);
 LONG st_busy_sample(void);         /* stream.c: the radio process, % busy (debug) */
 ULONG time_ms(void);                /* E-clock milliseconds, 0 without a timer */
+ULONG time_ticks(ULONG *hz);        /* E-clock ticks (their rate at *hz): measuring */
 void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
 void  dbg_sleep_end(void);
 LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at first */

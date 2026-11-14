@@ -2321,6 +2321,15 @@ static LONG sw_aread(UBYTE *buf, LONG n)
     return got;
 }
 
+/* A measured step's time, for the log: "what 1.23 ms (n)" (each, on
+ * average, to the hundredth of a millisecond). */
+static void sw_stat(char *out, const char *what, unsigned long long ticks, ULONG n, ULONG hz)
+{
+    ULONG c = n && hz ? (ULONG)(ticks * 100000ULL / hz / n) : 0;
+    sprintf(out + strlen(out), "%s%s %lu.%02lu ms (%lu)", out[0] ? ", " : "", what,
+            (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)n);
+}
+
 static int sw_slot(void)
 {
     int i;
@@ -2343,6 +2352,9 @@ static void swv_run(void)
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
     char m[200];
+    /* (measured: each step's E-clock ticks, and how many) */
+    unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
+    ULONG n_dec = 0, n_conv = 0, n_aud = 0, hz = 0, tk;
     pcm[0] = pcm0;
     pcm[1] = pcm1;
     st.v_shown = st.v_dropped = 0;
@@ -2464,8 +2476,12 @@ static void swv_run(void)
         /* its sound decoded while there is room (a second and a half ahead) */
         while (sw_sound && !a_done && st.f_in - st.f_out < (ULONG)st.dec_freq * 3 / 2 &&
                st.f_in - st.f_out < FIFO_N - MPEGA_PCM_SIZE) {
-            LONG n = MPEGA_decode_frame(ms, pcm), k;
+            LONG n, k;
             ULONG o;
+            tk = time_ticks(&hz);
+            n = MPEGA_decode_frame(ms, pcm);
+            t_aud += time_ticks(&hz) - tk;
+            n_aud++;
             if (n == -2)
                 continue;                   /* (a bad frame: the next) */
             if (n < 0) {
@@ -2490,7 +2506,13 @@ static void swv_run(void)
                 v_wait(2000);               /* (the UI has them all) */
                 continue;
             }
-            if (!(f = plm_video_decode(vd))) {
+            tk = time_ticks(&hz);
+            f = plm_video_decode(vd);
+            if (f) {
+                t_dec += time_ticks(&hz) - tk;
+                n_dec++;
+            }
+            if (!f) {
                 if (plm_video_has_ended(vd) || sw_ended)
                     done = TRUE;
             } else {
@@ -2513,8 +2535,12 @@ static void swv_run(void)
                                                                  : pts0 + (ZzU64)(time_ms() - t0) * 90;
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
-                    else
+                    else {
+                        tk = time_ticks(&hz);
                         plm_frame_to_rgb(f, swv[s].buf, (int)(swv_w * 3));
+                        t_conv += time_ticks(&hz) - tk;
+                        n_conv++;
+                    }
                 }
             }
         }
@@ -2581,6 +2607,13 @@ static void swv_run(void)
     sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts", log_name(),
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
     amce_log("video", m);
+    m[0] = 0;
+    sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
+    sw_stat(m, "made RGB", t_conv, n_conv, hz);
+    sw_stat(m, "a sound frame decoded", t_aud, n_aud, hz);
+    sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
+            (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);
+    amce_log("video: by the CPU", m);
 out:
     sw_on = FALSE;
     if (ms)
