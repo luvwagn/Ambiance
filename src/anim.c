@@ -2834,12 +2834,25 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 
 /* The picture's place for the overlay: under the controls, full screen,
  * while they show. */
+static WORD vid_was_h = -1;     /* the overlay's height last placed */
+
 static BOOL vid_place(struct Gfx *g)
 {
-    WORD h = lay.dh;
+    WORD h = lay.dh, y1;
+    BOOL ok;
     if (lay.full && sf.lv > 0 && lay.vy + h > st.y)
         h = st.y - lay.vy;
-    return vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+    ok = vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+    if (ok && h != vid_was_h) {
+        /* it moved (the controls came or went): what it uncovered is the
+         * screen's colour 0 (Workbench's grey, a window's backfill), so
+         * black there, beside and above the controls */
+        y1 = sf.lv > 0 ? st.y : g->h;
+        FillPixelArray(g->rp, 0, 0, g->w, y1, 0x000000);
+        win_show(g, TRUE, FALSE, 0, 0, g->w, y1);
+    }
+    vid_was_h = ok ? h : -1;
+    return ok;
 }
 
 /* Laid out (full or not) for the picture, the screen black around it. */
@@ -2864,6 +2877,7 @@ static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
     FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
     sf.lv = 0;
     sf.drawn = FALSE;
+    vid_was_h = -1;
 }
 
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
