@@ -324,7 +324,11 @@ History
        RTG screens without one. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
        controls, the sound track the card plays best
-       (Libs/amcedvd.library: libdvdread and libdvdnav).
+       (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
+       pictures go on the graphics card's YUV overlay where there is one
+       (Settings > Display: Use overlay when available). One set of
+       control glyphs for Now playing, the mini player, ANIMs, videos
+       and DVDs, square on lowres, hires and laced screens alike.
 0.8.8  MP3 seeks land on a real frame (no error after a sound output
        change). The volume kept between runs. MHI at the level of mpega
        through Paula or AHI. On Workbench, the smooth style leaves pens

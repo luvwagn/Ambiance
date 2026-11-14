@@ -8,6 +8,7 @@
 #include "iconify.h"
 #include "vprobe.h"
 #include "video.h"
+#include "glyph.h"
 #include "dvdplay.h"
 
 #include <stdio.h>
@@ -6509,23 +6510,6 @@ static void time_text(ULONG ms, char *out)
     sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
 }
 
-/* A triangle w x h pointing right (dir 1) or left (-1), row by row. */
-/* A triangle pointing right (dir > 0) or left, h rows (odd: one row for
- * its tip), each row sx pixels wider than the last to the middle: clean
- * 45-degree edges in pixels, as wide as it is tall on screen (sx 2 where
- * pixels are tall). Its width: (h + 1) / 2 * sx. */
-static void np_tri(WORD x, WORD y, WORD h, WORD sx, int dir, UBYTE pen)
-{
-    WORD r, w = (h + 1) / 2 * sx;
-    for (r = 0; r < h; r++) {
-        WORD d = r < h - 1 - r ? r : h - 1 - r, len = (d + 1) * sx;
-        if (dir > 0)
-            gfx_fill(&g, x, y + r, x + len - 1, y + r, pen);
-        else
-            gfx_fill(&g, x + w - len, y + r, x + w - 1, y + r, pen);
-    }
-}
-
 /* Muted: the volume it had, given back when unmuted (-1: not muted).
  * Not kept past a quit: AmigaMCE starts at its volume, never silent. */
 static int vol_unmuted = -1;
@@ -6549,49 +6533,6 @@ static void np_mute(BOOL on)
     }
 }
 
-/* A speaker, gh rows tall, its left at x, centred on row cy (sx: pixels
- * across for one down, 2 where pixels are tall): a cross after it when
- * muted, two waves when not. Its width: speaker_w. */
-static void speaker_parts(WORD gh, WORD sx, WORD *bh, WORD *bw, WORD *cw, WORD *t)
-{
-    *bh = gh / 3 > 2 ? gh / 3 : 2;
-    *bw = (gh / 4 > 1 ? gh / 4 : 1) * sx;
-    *cw = (gh / 3 > 1 ? gh / 3 : 1) * sx;
-    *t = gh / 7 > 1 ? gh / 7 : 1;
-}
-
-static WORD speaker_w(WORD gh, WORD sx)
-{
-    WORD bh, bw, cw, t, xs = gh / 2 | 1;
-    speaker_parts(gh, sx, &bh, &bw, &cw, &t);
-    return bw + cw + 2 * sx + (xs + t - 1) * sx;
-}
-
-static void speaker_glyph(struct Gfx *gp, WORD x, WORD cy, WORD gh, WORD sx, BOOL muted, UBYTE fg)
-{
-    WORD bh, bw, cw, t, c, rx;
-    speaker_parts(gh, sx, &bh, &bw, &cw, &t);
-    gfx_fill(gp, x, cy - bh / 2, x + bw - 1, cy - bh / 2 + bh - 1, fg);
-    for (c = 0; c < cw; c++) {              /* the cone, widening */
-        WORD hh = bh + (WORD)((LONG)(gh - bh) * (c + 1) / cw);
-        gfx_fill(gp, x + bw + c, cy - hh / 2, x + bw + c, cy - hh / 2 + hh - 1, fg);
-    }
-    rx = x + bw + cw + 2 * sx;
-    if (muted) {
-        WORD xs = gh / 2 | 1, d;
-        for (d = 0; d < xs; d++) {
-            WORD y0 = cy - xs / 2 + d;
-            gfx_fill(gp, rx + d * sx, y0, rx + (d + t) * sx - 1, y0, fg);
-            gfx_fill(gp, rx + (xs - 1 - d) * sx, y0, rx + (xs - 1 - d + t) * sx - 1, y0, fg);
-        }
-    } else {
-        WORD h1 = gh / 3 | 1, h2 = (gh * 2 / 3) | 1;
-        gfx_fill(gp, rx, cy - h1 / 2, rx + t * sx - 1, cy - h1 / 2 + h1 - 1, fg);
-        gfx_fill(gp, rx + (t + 2) * sx, cy - h2 / 2, rx + (t * 2 + 2) * sx - 1, cy - h2 / 2 + h2 - 1,
-                 fg);
-    }
-}
-
 static int np_state(void)
 {
     return !mp_loaded() ? 0 : mp_playing() ? 1 : mp_paused() ? 2 : 3;
@@ -6606,7 +6547,7 @@ static void np_button(int i)
     WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
     BOOL tall = gfx_mode_tall(g.mode);
     WORD sx = tall ? 2 : 1;                     /* pixels across for one down, to look square */
-    WORD gh, tw, cx, cy, gy, t, rx, ry;
+    WORD gh, cx, cy, rx, ry;
     if (i == NB_VDOWN || i == NB_VUP) {
         if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
             fg = lit ? PEN_TEXT : PEN_DIM;
@@ -6623,18 +6564,11 @@ static void np_button(int i)
             fg = PEN_RULE;
         }
     }
-    /* the glyph: an odd number of rows, about half the button, so each
-     * triangle has a one-row tip; everything else measured from it */
-    gh = (h * 3 / 5) | 1;
-    if (h <= 16)
-        gh = (h / 2) | 1;                   /* small (lowres): more room round it */
-    if (gh < (h <= 16 ? 5 : 7))
-        gh = h <= 16 ? 5 : 7;
-    tw = (gh + 1) / 2 * sx;                 /* a triangle's width */
-    t = gh / 5 > 2 ? gh / 5 : 2;            /* a bar's thickness, in rows */
+    /* the glyph (glyph.c): an odd number of rows, about three fifths of
+     * the button, so each triangle has a one-row tip */
+    gh = glyph_rows(h);
     cx = x + w / 2;
     cy = y + h / 2;
-    gy = cy - gh / 2;
     /* the button: rounded by about a fifth of its height; the focus ring
      * (yellow) is its outer t rows, the face inside it */
     ry = h / 5 > 2 ? h / 5 : 2;
@@ -6652,106 +6586,13 @@ static void np_button(int i)
     } else {
         np_rrect(x, y, w, h, rx, ry, bg);
     }
-    switch (i) {
-    case NB_PREV: {
-        WORD bw = t * sx, x0 = cx - (bw + tw) / 2;
-        gfx_fill(&g, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
-        np_tri(x0 + bw, gy, gh, sx, -1, fg);
-        break;
-    }
-    case NB_NEXT: {
-        WORD bw = t * sx, x0 = cx - (bw + tw) / 2;
-        np_tri(x0, gy, gh, sx, 1, fg);
-        gfx_fill(&g, x0 + tw, gy, x0 + tw + bw - 1, gy + gh - 1, fg);
-        break;
-    }
-    case NB_BACK:
-        np_tri(cx - tw, gy, gh, sx, -1, fg);
-        np_tri(cx, gy, gh, sx, -1, fg);
-        break;
-    case NB_FWD:
-        np_tri(cx - tw, gy, gh, sx, 1, fg);
-        np_tri(cx, gy, gh, sx, 1, fg);
-        break;
-    case NB_PLAY:
-        if (mp_playing()) {
-            /* pause: two bars, a bar's width apart, as wide in all as a
-             * triangle is */
-            WORD bw = gh / 3 * sx, x0 = cx - (bw * 3) / 2;
-            gfx_fill(&g, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
-            gfx_fill(&g, x0 + bw * 2, gy, x0 + bw * 3 - 1, gy + gh - 1, fg);
-        } else {
-            np_tri(cx - tw / 2, gy, gh, sx, 1, fg);
-        }
-        break;
-    case NB_STOP: {
-        WORD sh = gh - 2, sw = sh * sx;     /* a square, a little under the triangles */
-        gfx_fill(&g, cx - sw / 2, cy - sh / 2, cx - sw / 2 + sw - 1, cy - sh / 2 + sh - 1, fg);
-        break;
-    }
-    case NB_LOOP: {
-        /* a loop over a straight arrow: the one that happens bright (loop
-         * on: the loop; off: the arrow, played through), the other grey */
-        UBYTE on = fg, dim = fg == PEN_RULE ? PEN_RULE : PEN_DIM;
-        UBYTE lp = play_loop ? on : dim, ap = play_loop ? dim : on;
-        WORD lw = gh * sx + 2 * sx, x0 = cx - lw / 2, y0 = gy, tt = t > 2 ? 2 : t, txs = tt * sx;
-        WORD lh = gh * 3 / 5, hd = (lh / 2) | 1, ay = gy + gh - 1 - tt / 2, ahd = (gh / 3) | 1;
-        if (!tall && h > 16) {
-            /* not lowres: finer, as the solid glyphs beside it are; lines
-             * of one pixel (two from 19 rows), rounded corners, the head
-             * at the top's middle, in a gap of its own */
-            WORD lt = gh < 19 ? 1 : 2, x1, y1, ah, hx, bh;
-            lw = gh + gh / 3;
-            if (!(lw & 1))
-                lw--;
-            x0 = cx - lw / 2;
-            x1 = x0 + lw - 1;
-            lh = gh * 5 / 9;
-            y1 = y0 + lh - 1;
-            ah = (lh / 2 + lt) | 1;
-            hx = cx - (ah + 1) / 4;
-            gfx_fill(&g, x0 + lt, y0, hx - lt - 1, y0 + lt - 1, lp);
-            gfx_fill(&g, hx + (ah + 1) / 2 + 1, y0, x1 - lt, y0 + lt - 1, lp);
-            gfx_fill(&g, x0 + lt, y1 - lt + 1, x1 - lt, y1, lp);
-            gfx_fill(&g, x0, y0 + lt, x0 + lt - 1, y1 - lt, lp);
-            gfx_fill(&g, x1 - lt + 1, y0 + lt, x1, y1 - lt, lp);
-            if (lt > 1) {
-                gfx_fill(&g, x0 + 1, y0 + 1, x0 + 1, y0 + 1, lp);
-                gfx_fill(&g, x1 - 1, y0 + 1, x1 - 1, y0 + 1, lp);
-                gfx_fill(&g, x0 + 1, y1 - 1, x0 + 1, y1 - 1, lp);
-                gfx_fill(&g, x1 - 1, y1 - 1, x1 - 1, y1 - 1, lp);
-            }
-            np_tri(hx, y0 + lt / 2 - ah / 2, ah, 1, 1, lp);
-            bh = ((gh - lh) / 2) | 1;
-            if (bh < ah)
-                bh = ah;
-            ay = gy + gh - 1 - bh / 2;
-            gfx_fill(&g, x0, ay - (lt - 1) / 2, x1 - (bh + 1) / 2, ay - (lt - 1) / 2 + lt - 1, ap);
-            np_tri(x1 - (bh + 1) / 2 + 1, ay - bh / 2, bh, 1, 1, ap);
-            break;
-        }
-        /* the loop: a frame, an arrowhead on its top running right */
-        gfx_fill(&g, x0 + txs, y0, x0 + lw - 1 - txs - (hd + 1) / 2 * sx, y0 + tt - 1, lp);
-        gfx_fill(&g, x0 + txs, y0 + lh - tt, x0 + lw - 1 - txs, y0 + lh - 1, lp);
-        gfx_fill(&g, x0, y0 + tt, x0 + txs - 1, y0 + lh - tt - 1, lp);
-        gfx_fill(&g, x0 + lw - txs, y0 + tt, x0 + lw - 1, y0 + lh - tt - 1, lp);
-        np_tri(x0 + lw - txs - (hd + 1) / 2 * sx, y0 + tt / 2 - hd / 2, hd, sx, 1, lp);
-        /* the arrow under it, straight through */
-        gfx_fill(&g, x0, ay - tt / 2, x0 + lw - 1 - (ahd + 1) / 2 * sx, ay - tt / 2 + tt - 1, ap);
-        np_tri(x0 + lw - (ahd + 1) / 2 * sx, ay - ahd / 2, ahd, sx, 1, ap);
-        break;
-    }
-    case NB_MUTE:
-        speaker_glyph(&g, cx - speaker_w(gh, sx) / 2, cy, gh, sx, np_muted(), fg);
-        break;
-    case NB_VDOWN:
-    case NB_VUP: {
-        WORD len = gh, lw = len * sx, th = t > 2 ? t - 1 : 2, tx = th * sx;
-        gfx_fill(&g, cx - lw / 2, cy - th / 2, cx - lw / 2 + lw - 1, cy - th / 2 + th - 1, fg);
-        if (i == NB_VUP)
-            gfx_fill(&g, cx - tx / 2, cy - len / 2, cx - tx / 2 + tx - 1, cy - len / 2 + len - 1, fg);
-        break;
-    }
+    {
+        static const UBYTE kind[] = { GL_PREV, GL_BACK, GL_PLAY, GL_STOP, GL_FWD, GL_NEXT, GL_LOOP,
+                                      GL_MUTE, GL_VDOWN, GL_VUP };
+        int k = i == NB_PLAY && mp_playing() ? GL_PAUSE : i <= NB_VUP ? kind[i] : -1;
+        UWORD f = (i == NB_LOOP && play_loop) || (i == NB_MUTE && np_muted()) ? GLF_ON : 0;
+        if (k >= 0)
+            glyph_draw(g.rp, k, cx, cy, gh, sx, GPEN(fg), GPEN(fg == PEN_RULE ? PEN_RULE : PEN_DIM), f);
     }
 }
 
@@ -10965,51 +10806,17 @@ static void mini_lines(char *l1, char *l2, char *l3)
     }
 }
 
-static void mini_tri(WORD x, WORD y, WORD h, int dir, UBYTE pen)
-{
-    WORD r, w = (h + 1) / 2;
-    for (r = 0; r < h; r++) {
-        WORD d = r < h - 1 - r ? r : h - 1 - r, len = d + 1;
-        if (dir > 0)
-            gfx_fill(&mg, x, y + r, x + len - 1, y + r, pen);
-        else
-            gfx_fill(&mg, x + w - len, y + r, x + w - 1, y + r, pen);
-    }
-}
-
 static void mini_button(int i)
 {
     BOOL lit = i == mn.press, hov = i == mn.hov;
     UBYTE bg = lit ? PEN_HL : hov ? PEN_SELDIM : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
     WORD x = mn.bx[i], y = mn.by, w = mn.bw, h = mn.bh;
-    WORD gh = (h / 2) | 1, tw = (gh + 1) / 2, cx = x + w / 2, cy = y + h / 2, gy = cy - gh / 2;
-    WORD t = MK(2);
+    static const UBYTE kind[] = { GL_PREV, GL_PLAY, GL_STOP, GL_NEXT };
     gfx_fill(&mg, x, y, x + w - 1, y + h - 1, PEN_BG);
     gfx_rrect(&mg, x, y, w, h, MK(2), MK(2), bg);
-    switch (i) {
-    case MB_PREV:
-        gfx_fill(&mg, cx - (t + tw) / 2, gy, cx - (t + tw) / 2 + t - 1, gy + gh - 1, fg);
-        mini_tri(cx - (t + tw) / 2 + t, gy, gh, -1, fg);
-        break;
-    case MB_NEXT:
-        mini_tri(cx - (t + tw) / 2, gy, gh, 1, fg);
-        gfx_fill(&mg, cx - (t + tw) / 2 + tw, gy, cx - (t + tw) / 2 + tw + t - 1, gy + gh - 1, fg);
-        break;
-    case MB_PLAY:
-        if (mp_playing()) {
-            WORD bw = gh / 3 > 1 ? gh / 3 : 1, x0 = cx - (bw * 3) / 2;
-            gfx_fill(&mg, x0, gy, x0 + bw - 1, gy + gh - 1, fg);
-            gfx_fill(&mg, x0 + bw * 2, gy, x0 + bw * 3 - 1, gy + gh - 1, fg);
-        } else {
-            mini_tri(cx - tw / 2, gy, gh, 1, fg);
-        }
-        break;
-    case MB_STOP: {
-        WORD sh = gh - 2;
-        gfx_fill(&mg, cx - sh / 2, cy - sh / 2, cx - sh / 2 + sh - 1, cy - sh / 2 + sh - 1, fg);
-        break;
-    }
-    }
+    if (i >= MB_PREV && i <= MB_NEXT)
+        glyph_draw(mg.rp, i == MB_PLAY && mp_playing() ? GL_PAUSE : kind[i - MB_PREV], x + w / 2,
+                   y + h / 2, (h / 2) | 1, glyph_sx(mg.scr), GPEN(fg), GPEN(fg), 0);
 }
 
 /* Mute (the speaker) and the volume slider. */
@@ -11021,7 +10828,8 @@ static void mini_volume(void)
     WORD kx = mn.sl_x0 + (WORD)((LONG)span * (muted ? vol_unmuted : mp_volume()) / 64);
     UBYTE sp = muted ? PEN_ACCENT : mn.hov == MB_MUTE ? PEN_WHITE : PEN_TEXT;
     gfx_fill(&mg, mn.mute_x, mn.by, mn.sl_x1, mn.by + mn.bh - 1, PEN_BG);
-    speaker_glyph(&mg, mn.mute_x + (mn.mute_w - speaker_w(gh, 1)) / 2, cy, gh, 1, muted, sp);
+    glyph_draw(mg.rp, GL_MUTE, mn.mute_x + mn.mute_w / 2, cy, gh, glyph_sx(mg.scr), GPEN(sp), GPEN(sp),
+               muted ? GLF_ON : 0);
     if (kx > mn.sl_x0)
         gfx_fill(&mg, mn.sl_x0, cy - th / 2, kx - 1, cy - th / 2 + th - 1,
                  muted ? PEN_RULE : hot ? PEN_TEXT : PEN_DIM);

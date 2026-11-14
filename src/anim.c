@@ -45,6 +45,7 @@
 #include "animdraw.h"
 #include "vprobe.h"
 #include "video.h"
+#include "glyph.h"
 #include "dvdplay.h"
 
 #include <string.h>
@@ -781,7 +782,7 @@ static struct {
     struct BitMap *save[2];
     struct RastPort rp;
     struct TextFont *font;
-    WORD x0, x1, y, h, cw;      /* its place; a button's width */
+    WORD x0, x1, y, h, cw, sx;  /* its place; a button's width; pixels across for one down */
     WORD px0, px1;              /* the progress line */
     WORD bx[BT_N];              /* each button's left */
     UBYTE bg, fg, dim;
@@ -899,7 +900,8 @@ static void bar_setup(struct BitMap *friend, UWORD w, UWORD h, UBYTE depth, ULON
     bar.y = (vis_bottom < (WORD)h ? vis_bottom : (WORD)h) - bar.h;
     if (bar.y < 0 || bar.x1 - bar.x0 < 160)
         return;
-    bar.cw = bar.h + 4;
+    bar.sx = glyph_sx_mode(id);             /* (tall pixels: its glyphs as wide on screen) */
+    bar.cw = (bar.h - 4) * bar.sx + 8;
     if (!(bar.save[0] = AllocBitMap(w, bar.h, depth, 0, friend)) ||
         !(bar.save[1] = AllocBitMap(w, bar.h, depth, 0, friend)))
         return;
@@ -921,138 +923,44 @@ static void bar_cleanup(void)
     memset(&bar, 0, sizeof(bar));
 }
 
-/* Pause (||) in an s-square at x, y, bars t + 1 wide: a little shorter
- * than Play's triangle, the bars close together (a gap about as wide as
- * one), centred. */
-static void pause_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t)
-{
-    WORD bw = t + 1, gap = s / 6 > bw ? s / 6 : bw, top = y + s * 2 / 9, bot = y + s - 1 - s * 2 / 9;
-    WORD x0 = x + (s - 2 * bw - gap) / 2;
-    RectFill(rp, x0, top, x0 + bw - 1, bot);
-    RectFill(rp, x0 + bw + gap, top, x0 + 2 * bw + gap - 1, bot);
-}
-
-/* Loop: a loop over a straight arrow, the one that happens bright (loop
- * on: the loop; off: the arrow, played through), the other dim. */
-static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYTE bright, UBYTE dim)
-{
-    WORD x0 = x + s / 6, x1 = x + s - s / 6, y0 = y + s / 6, y1 = y + s / 2, a = s / 7, i;
-    WORD ay = y + s - s / 5, b = s / 6, hx = (x0 + x1) / 2 - a / 2;
-    SetAPen(rp, play_loop ? bright : dim);
-    /* rounded corners; the head at the top's middle, in a gap of its own */
-    RectFill(rp, x0 + t, y0, hx - t - 1, y0 + t - 1);          /* the top, either side */
-    RectFill(rp, hx + a + 1 + (t > 1), y0, x1 - t, y0 + t - 1);
-    RectFill(rp, x0 + t, y1 - t + 1, x1 - t, y1);              /* the bottom */
-    RectFill(rp, x0, y0 + t, x0 + t - 1, y1 - t);              /* the sides */
-    RectFill(rp, x1 - t + 1, y0 + t, x1, y1 - t);
-    if (t > 1) {
-        WritePixel(rp, x0 + 1, y0 + 1);
-        WritePixel(rp, x1 - 1, y0 + 1);
-        WritePixel(rp, x0 + 1, y1 - 1);
-        WritePixel(rp, x1 - 1, y1 - 1);
-    }
-    for (i = 0; i <= a; i++) {                                 /* the head, pointing right */
-        Move(rp, hx + i, y0 + (t - 1) / 2 - (a - i));
-        Draw(rp, hx + i, y0 + (t - 1) / 2 + (a - i));
-    }
-    SetAPen(rp, play_loop ? dim : bright);                     /* the arrow under it */
-    RectFill(rp, x0, ay - t / 2, x1 - b, ay - t / 2 + t - 1);
-    for (i = 0; i <= b; i++) {
-        Move(rp, x1 - b + i, ay - (b - i));
-        Draw(rp, x1 - b + i, ay + (b - i));
-    }
-}
-
-/* A DVD's previous (dir < 0: |<<) or next (>>|) chapter, in a box s
- * square at x, y: two triangles and a bar, t thick */
-static void chap_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, int dir)
-{
-    WORD cy = y + s / 2, w = s / 4 > 1 ? s / 4 : 1, x0 = x + (s - (t + 2 * w + 2)) / 2, i, k;
-    if (dir < 0) {
-        RectFill(rp, x0, cy - w, x0 + t - 1, cy + w);
-        for (k = 0; k < 2; k++)
-            for (i = 0; i <= w; i++) {
-                Move(rp, x0 + t + 1 + k * w + i, cy - i);
-                Draw(rp, x0 + t + 1 + k * w + i, cy + i);
-            }
-    } else {
-        for (k = 0; k < 2; k++)
-            for (i = 0; i <= w; i++) {
-                Move(rp, x0 + k * w + i, cy - (w - i));
-                Draw(rp, x0 + k * w + i, cy + (w - i));
-            }
-        RectFill(rp, x0 + 2 * w + 2, cy - w, x0 + 2 * w + 1 + t, cy + w);
-    }
-}
-
-/* Button b's glyph in an s-square at x, y, lines t thick, in fg (dim: the
- * loop's part not in effect): the same for the controls beneath the
- * picture (strip_draw) and the bar over it (bar_put). paused: Play (>),
- * else Pause (||); out: full screen now (Full's corners point in). */
-static void ctl_glyph(struct RastPort *rp, int b, WORD x, WORD y, WORD s, WORD t, BOOL paused,
+/* Button b's glyph (glyph.c, as Now playing's), gh rows centred on cx,
+ * cy, sx across for one down: the same for the controls beneath the
+ * picture (strip_draw) and the bar over it (bar_put). paused: Play, else
+ * Pause; out: full screen now (Full's corners in). From the start and a
+ * DVD's previous chapter are |<, its next >|. */
+static void ctl_glyph(struct RastPort *rp, int b, WORD cx, WORD cy, WORD gh, WORD sx, BOOL paused,
                       BOOL out, UBYTE fg, UBYTE dim)
 {
-    WORD cy = y + s / 2, i;
-    SetAPen(rp, fg);
+    int k = -1;
     switch (b) {
-    case BT_RESTART:                        /* |< */
-        RectFill(rp, x + s / 5, y + s / 5, x + s / 5 + t, y + s - s / 5);
-        for (i = 0; i <= s / 3; i++) {
-            Move(rp, x + s / 5 + t + 2 + i, cy - i);
-            Draw(rp, x + s / 5 + t + 2 + i, cy + i);
-        }
+    case BT_RESTART:
+    case BT_PREV:
+        k = GL_PREV;
+        break;
+    case BT_NEXT:
+        k = GL_NEXT;
         break;
     case BT_PLAY:
-        if (paused)                         /* > */
-            for (i = 0; i <= s / 3; i++) {
-                Move(rp, x + s / 3 + i, y + s / 6 + i);
-                Draw(rp, x + s / 3 + i, y + s - s / 6 - i);
-            }
-        else                                /* || */
-            pause_glyph(rp, x, y, s, t);
+        k = paused ? GL_PLAY : GL_PAUSE;
         break;
     case BT_STOP:
-        RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
-        break;
-    case BT_PREV:
-    case BT_NEXT:
-        chap_glyph(rp, x, y, s, t, b == BT_NEXT ? 1 : -1);
+        k = GL_STOP;
         break;
     case BT_LOOP:
-        loop_glyph(rp, x, y, s, t, fg, dim);
+        k = GL_LOOP;
         break;
-    case BT_FULL: {                         /* four corners: out to fill, in to come back */
-        WORD a = s / 5, L = s / 4, c, ccx = x + s / 2, gap = s / 8 + t;
-        for (c = 0; c < 4; c++) {
-            WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
-            if (!out) {                     /* at the box's corners, arms along its edges */
-                px = dx > 0 ? x + a : x + s - 1 - a;
-                py = dy > 0 ? y + a : y + s - 1 - a;
-            } else {                        /* by the middle, arms outwards */
-                px = ccx - dx * gap;
-                py = cy - dy * gap;
-                dx = -dx;
-                dy = -dy;
-            }
-            RectFill(rp, dx > 0 ? px : px - L + 1, dy > 0 ? py : py - t + 1,
-                     dx > 0 ? px + L - 1 : px, dy > 0 ? py + t - 1 : py);
-            RectFill(rp, dx > 0 ? px : px - t + 1, dy > 0 ? py : py - L + 1,
-                     dx > 0 ? px + t - 1 : px, dy > 0 ? py + L - 1 : py);
-        }
+    case BT_VDOWN:
+        k = GL_VDOWN;
         break;
-    }
-    case BT_VDOWN:                          /* - and + */
     case BT_VUP:
-        RectFill(rp, x + s / 4, cy - t / 2, x + s - s / 4, cy - t / 2 + t - 1);
-        if (b == BT_VUP)
-            RectFill(rp, x + s / 2 - t / 2, y + s / 4, x + s / 2 - t / 2 + t - 1, y + s - s / 4);
+        k = GL_VUP;
+        break;
+    case BT_FULL:
+        k = out ? GL_UNFULL : GL_FULL;
         break;
     }
-}
-
-static void bar_icon(int b, WORD x, WORD y, WORD s)
-{
-    ctl_glyph(&bar.rp, b, x, y, s, s > 12 ? 2 : 1, bar.paused, TRUE, bar.fg, bar.dim);
+    if (k >= 0)
+        glyph_draw(rp, k, cx, cy, gh, sx, fg, dim, b == BT_LOOP && play_loop ? GLF_ON : 0);
 }
 
 static void time_text(char *out, ULONG ms)
@@ -1096,10 +1004,11 @@ static void bar_put(struct BitMap *bm, int k)
             x += vw;
         }
         bar.bx[i] = x;
-        ix = x + (bar.cw - s) / 2 - 2;
-        bar_icon(i, ix, bar.y + 2, s);
+        ix = x + (bar.cw - s * bar.sx) / 2 - 2;
+        ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
+                  TRUE, bar.fg, bar.dim);
         if (i == ctl.focus && ctl_ring()) {     /* the focus: a ring, its corners off */
-            WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s + 1, y1 = bar.y + bar.h - 1;
+            WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s * bar.sx + 1, y1 = bar.y + bar.h - 1;
             SetAPen(rp, bar.fg);
             RectFill(rp, x0 + 1, y0, x1 - 1, y0);
             RectFill(rp, x0 + 1, y1, x1 - 1, y1);
@@ -1486,7 +1395,7 @@ static struct {
 
 static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
 {
-    WORD x, s = st.h - GU(g, 6), cy = st.y + st.h / 2, t = s > 14 ? 2 : 1, i, xt = -1;
+    WORD x, cy = st.y + st.h / 2, i, xt = -1;
     char a[16], b[16], line[64];
     gfx_fill(g, 0, st.y, g->w - 1, st.y + st.h - 1, PEN_BG);
     st.ring = ctl_ring();
@@ -1495,7 +1404,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.off = ctl.off;
     st.loop = play_loop;
     for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
-        WORD ix, iy = st.y + (st.h - s) / 2, bx, by, bw, bh, ry, sx, rx;
+        WORD bx, by, bw, bh, ry, sx, rx;
         if (btn_hidden(i)) {
             st.bx[i] = -32000;              /* (never hit) */
             x -= st.cw;
@@ -1513,7 +1422,6 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             x += vw;
         }
         st.bx[i] = x;
-        ix = x + (st.cw - s) / 2;
         bx = x + 1, by = st.y + 2, bw = st.cw - 2, bh = st.h - 4;
         ry = bh / 5 > 2 ? bh / 5 : 2;
         sx = gfx_mode_tall(g->mode) ? 2 : 1;
@@ -1530,8 +1438,11 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             } else
                 gfx_rrect(g, bx, by, bw, bh, rx, ry, face);
         }
-        ctl_glyph(g->rp, i, ix, iy, s, t, paused, lay.full || gfx_fs_on(),
-                  GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE), GPEN(PEN_DIM)); /* greyed, as Now playing's */
+        {
+            UBYTE fg = st.off & (1 << i) ? PEN_RULE : PEN_WHITE;    /* greyed, as Now playing's */
+            ctl_glyph(g->rp, i, bx + bw / 2, by + bh / 2, glyph_rows(bh), sx, paused,
+                      lay.full || gfx_fs_on(), GPEN(fg), GPEN(fg == PEN_RULE ? PEN_RULE : PEN_DIM));
+        }
     }
     if (xt >= 0)
         x = xt;
