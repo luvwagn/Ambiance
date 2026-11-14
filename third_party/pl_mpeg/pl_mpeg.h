@@ -2873,6 +2873,50 @@ static inline uint8_t plm_clamp(int n) {
 	return n;
 }
 
+// AmigaMCE: value added to 8 pixels at q, each clamped (plm_clamp(q[k] +
+// value)), a longword (4 pixels) at a time: per byte, a saturating add or
+// subtract, no carry or borrow reaching the next (each byte's low 7 bits'
+// sum is under 256; each byte's difference from x | 0x80 at least 1).
+static inline uint32_t plm_add_sat4(uint32_t x, uint32_t y) {
+	uint32_t s7 = (x & 0x7f7f7f7fu) + (y & 0x7f7f7f7fu);
+	uint32_t s = s7 ^ ((x ^ y) & 0x80808080u);
+	uint32_t c = ((x & y) | ((x | y) & ~s)) & 0x80808080u;
+	return s | ((c << 1) - (c >> 7));
+}
+static inline uint32_t plm_sub_sat4(uint32_t x, uint32_t y) {
+	uint32_t d7 = (x | 0x80808080u) - (y & 0x7f7f7f7fu);
+	uint32_t d = d7 ^ ((x ^ ~y) & 0x80808080u);
+	uint32_t b = ((~x & y) | (~(x ^ y) & d)) & 0x80808080u;
+	return d & ~((b << 1) - (b >> 7));
+}
+#if defined(__GNUC__)
+__attribute__((always_inline))
+#endif
+static inline void plm_add_const8(uint8_t *q, int value) {
+	if (value >= 0) {
+		if (value > 255) {
+			PLM_ST32(q, 0xffffffffu);
+			PLM_ST32(q + 4, 0xffffffffu);
+		}
+		else {
+			uint32_t y = (uint32_t)value * 0x01010101u;
+			PLM_ST32(q, plm_add_sat4(PLM_LD32(q), y));
+			PLM_ST32(q + 4, plm_add_sat4(PLM_LD32(q + 4), y));
+		}
+	}
+	else {
+		if (value < -255) {
+			PLM_ST32(q, 0);
+			PLM_ST32(q + 4, 0);
+		}
+		else {
+			uint32_t y = (uint32_t)(-value) * 0x01010101u;
+			PLM_ST32(q, plm_sub_sat4(PLM_LD32(q), y));
+			PLM_ST32(q + 4, plm_sub_sat4(PLM_LD32(q + 4), y));
+		}
+	}
+}
+
 // AmigaMCE: x * 362 and x * 196 by shifts and adds (the same products:
 // a 68020's MULS.L takes some 45 cycles, these some 30 and 20); the empty
 // asm keeps the compiler from making them a multiply again.
@@ -3777,15 +3821,7 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 		else {
 			int value = (s[0] + 128) >> 8;
 			for (i = 0; i < 8; i++, di += dw) {
-				uint8_t *q = d + di;
-				q[0] = plm_clamp(q[0] + value);
-				q[1] = plm_clamp(q[1] + value);
-				q[2] = plm_clamp(q[2] + value);
-				q[3] = plm_clamp(q[3] + value);
-				q[4] = plm_clamp(q[4] + value);
-				q[5] = plm_clamp(q[5] + value);
-				q[6] = plm_clamp(q[6] + value);
-				q[7] = plm_clamp(q[7] + value);
+				plm_add_const8(d + di, value);
 			}
 		}
 		s[0] = 0;
@@ -3862,6 +3898,28 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	OUT(7, y4 - b7); \
 } while (0)
 
+// AmigaMCE: LOOP(EV, OV) for the pair of halves ev, ov, as constants
+#define PLM_IDCT_PAIRS(ev, ov, LOOP) do { \
+	switch ((ev) * 4 + (ov)) { \
+		case 0: LOOP(0, 0); break; \
+		case 1: LOOP(0, 1); break; \
+		case 2: LOOP(0, 2); break; \
+		case 3: LOOP(0, 3); break; \
+		case 4: LOOP(1, 0); break; \
+		case 5: LOOP(1, 1); break; \
+		case 6: LOOP(1, 2); break; \
+		case 7: LOOP(1, 3); break; \
+		case 8: LOOP(2, 0); break; \
+		case 9: LOOP(2, 1); break; \
+		case 10: LOOP(2, 2); break; \
+		case 11: LOOP(2, 3); break; \
+		case 12: LOOP(3, 0); break; \
+		case 13: LOOP(3, 1); break; \
+		case 14: LOOP(3, 2); break; \
+		default: LOOP(3, 3); break; \
+	} \
+} while (0)
+
 // AmigaMCE: the block's IDCT put into the picture at d (dw bytes a row):
 // as plm_video_idct then setting (intra) or adding to the 8 x 8 pixels,
 // clamped, but each column and row worked out from only the inputs that
@@ -3881,21 +3939,26 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 	PLM_IDCT_HALVES(cols, rev, rov);
 	read = (rev == 0 ? 0 : rev == 1 ? 0x01 : rev == 2 ? 0x05 : 0x55) |
 		(rov == 0 ? 0 : rov == 1 ? 0x02 : rov == 2 ? 0x0a : 0xaa);
-	for (c = 0; c < 8; c++) {
-		int *o = t + c;
-		#define PLM_COL_OUT(k, v) o[(k) * 8] = (v)
-		if (cols & (1u << c)) {
-			const int *b = s + c;
-			#define PLM_COL_IN(k) b[(k) * 8]
-			PLM_IDCT_SPLIT(cev, cov, PLM_COL_IN, PLM_COL_OUT);
-			#undef PLM_COL_IN
+	// (each pair of halves a loop of its own: in each, which inputs are
+	// zero is known, and what they would add left out)
+	#define PLM_COL_OUT(k, v) o[(k) * 8] = (v)
+	#define PLM_COL_IN(k) b[(k) * 8]
+	#define PLM_COL_LOOP(EV, OV) \
+		for (c = 0; c < 8; c++) { \
+			int *o = t + c; \
+			if (cols & (1u << c)) { \
+				const int *b = s + c; \
+				PLM_IDCT_SPLIT(EV, OV, PLM_COL_IN, PLM_COL_OUT); \
+			} \
+			else if (read & (1u << c)) { \
+				PLM_COL_OUT(0, 0); PLM_COL_OUT(1, 0); PLM_COL_OUT(2, 0); PLM_COL_OUT(3, 0); \
+				PLM_COL_OUT(4, 0); PLM_COL_OUT(5, 0); PLM_COL_OUT(6, 0); PLM_COL_OUT(7, 0); \
+			} \
 		}
-		else if (read & (1u << c)) {
-			PLM_COL_OUT(0, 0); PLM_COL_OUT(1, 0); PLM_COL_OUT(2, 0); PLM_COL_OUT(3, 0);
-			PLM_COL_OUT(4, 0); PLM_COL_OUT(5, 0); PLM_COL_OUT(6, 0); PLM_COL_OUT(7, 0);
-		}
-		#undef PLM_COL_OUT
-	}
+	PLM_IDCT_PAIRS(cev, cov, PLM_COL_LOOP);
+	#undef PLM_COL_LOOP
+	#undef PLM_COL_IN
+	#undef PLM_COL_OUT
 
 	// the rows, rounded, into the picture
 	#define PLM_ROW_IN(k) a[k]
@@ -3928,17 +3991,37 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 			}
 		}
 	}
-	else if (intra) {
+	else if (rev == 1 && rov == 0) {
+		// the first column alone: each row one number, (a[0] + 128) >> 8
 		for (r = 0; r < 8; r++, d += dw) {
-			const int *a = t + r * 8;
-			PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_SET);
+			int value = (t[r * 8] + 128) >> 8;
+			if (intra) {
+				uint32_t q = plm_clamp(value) * 0x01010101u;
+				PLM_ST32(d, q);
+				PLM_ST32(d + 4, q);
+			}
+			else {
+				plm_add_const8(d, value);
+			}
 		}
 	}
+	else if (intra) {
+		#define PLM_ROW_LOOP(EV, OV) \
+			for (r = 0; r < 8; r++, d += dw) { \
+				const int *a = t + r * 8; \
+				PLM_IDCT_SPLIT(EV, OV, PLM_ROW_IN, PLM_ROW_SET); \
+			}
+		PLM_IDCT_PAIRS(rev, rov, PLM_ROW_LOOP);
+		#undef PLM_ROW_LOOP
+	}
 	else {
-		for (r = 0; r < 8; r++, d += dw) {
-			const int *a = t + r * 8;
-			PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_ADD);
-		}
+		#define PLM_ROW_LOOP(EV, OV) \
+			for (r = 0; r < 8; r++, d += dw) { \
+				const int *a = t + r * 8; \
+				PLM_IDCT_SPLIT(EV, OV, PLM_ROW_IN, PLM_ROW_ADD); \
+			}
+		PLM_IDCT_PAIRS(rev, rov, PLM_ROW_LOOP);
+		#undef PLM_ROW_LOOP
 	}
 	#undef PLM_ROW_IN
 	#undef PLM_ROW_SET
