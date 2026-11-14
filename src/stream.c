@@ -249,6 +249,7 @@ static struct {
     volatile UBYTE v_adec;          /* who decodes it: VSD_ */
     volatile UBYTE v_achans, v_alfe;    /* its own channels (AC3's 5.1: 5 and 1) */
     ULONG v_probe_kbps;             /* (the probe's, for MPEG audio) */
+    ULONG v_bps;                    /* its bytes a second (the probe's; 0 not known) */
     UBYTE v_ts;                     /* a transport stream (its packet size): packed as it goes */
     UWORD v_vpid, v_apid;
     ULONG v_tsfirst;
@@ -263,7 +264,7 @@ static struct {                     /* st_start_video's */
     struct DvdPlay *dvd;
     BOOL on, mpeg2, mp2, es, ac3, sw, ac3cpu;
     UBYTE ts, achans;
-    ULONG hz, akbps;
+    ULONG hz, akbps, bps;
     UWORD w, h, vpid, apid;
     ULONG tsfirst;
 } vid_next;
@@ -2113,6 +2114,38 @@ static LONG ts_read(void *ctx, UBYTE *b, LONG n)
     return Read(st.fh, b, n);
 }
 
+/* A seek's start, close before its place: the file's offset of the pack
+ * (a bare stream: the header itself) holding the last sequence header, or
+ * with gop the last picture group's header (an I picture follows either),
+ * at most a second's bytes before at (32 KB to 1 MB); -1 if none is. A
+ * picture shown from just before the place, not the next I picture's
+ * wait, nor the blocks of pictures built on ones not decoded. */
+static LONG v_back(ULONG at, BOOL gop)
+{
+    ULONG win = st.v_bps < 32768 ? 32768 : st.v_bps > 1048576 ? 1048576 : st.v_bps;
+    ULONG from = at > win ? at - win : 0, n = at - from;
+    UBYTE *b;
+    LONG i, g = -1, r = -1, got;
+    if (!n || !(b = AllocVec(n + 4, MEMF_ANY)))
+        return -1;
+    if (Seek(st.fh, (LONG)from, OFFSET_BEGINNING) >= 0 && (got = Read(st.fh, b, n + 3)) > 4) {
+        for (i = got - 4; i >= 0 && g < 0; i--)
+            if (!b[i] && !b[i + 1] && b[i + 2] == 1 && (b[i + 3] == 0xB3 || (gop && b[i + 3] == 0xB8)) &&
+                from + (ULONG)i <= at)
+                g = i;
+        if (g >= 0 && st.v_es)
+            r = (LONG)from + g;
+        else
+            for (i = g; i >= 0 && r < 0; i--)
+                if (!b[i] && !b[i + 1] && b[i + 2] == 1 && b[i + 3] == 0xBA)
+                    r = (LONG)from + i;
+    }
+    FreeVec(b);
+    return r;
+}
+
+static BOOL v_from_back;                    /* the last seek began just before its place */
+
 /* A seek (st.range_from, the file there already): for a Program Stream
  * its first headers (pack and system headers, up to its first audio or
  * video packet: a decoder that reads its streams from them, pl_mpeg, needs
@@ -2145,13 +2178,24 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
     }
     if (!b)
         return FALSE;
-    n = Read(st.fh, b, V_SCAN);
-    for (i = 0; i + 4 <= n; i++)
+    v_from_back = FALSE;
+    {
+        LONG back = v_back(st.range_from, !st.v_es);
+        if (back >= 0) {
+            at = back - (LONG)st.range_from;    /* (before it: negative) */
+            v_from_back = TRUE;
+        }
+    }
+    if (Seek(st.fh, (LONG)st.range_from, OFFSET_BEGINNING) < 0)
+        n = -1;
+    else
+        n = Read(st.fh, b, V_SCAN);
+    for (i = 0; at < 0 && !v_from_back && i + 4 <= n; i++)
         if (!b[i] && !b[i + 1] && b[i + 2] == 1 && b[i + 3] == want) {
             at = i;
             break;
         }
-    if (n < 0 || at < 0) {
+    if (!v_from_back && (n < 0 || at < 0)) {
         sprintf(m, "a seek to byte %lu: no %s after it", (unsigned long)st.range_from,
                 st.v_es ? "sequence header" : "pack");
         amce_log("video", m);
@@ -2176,9 +2220,9 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
         fail(_("The file could not be read"));
         goto done;
     }
-    sprintf(m, "from byte %lu (asked %lu), its first %lu bytes of headers first",
+    sprintf(m, "from byte %lu (asked %lu%s), its first %lu bytes of headers first",
             (unsigned long)(st.range_from + at), (unsigned long)st.range_from,
-            (unsigned long)*pend);
+            v_from_back ? ": the picture group before it" : "", (unsigned long)*pend);
     amce_log("video", m);
     ok = TRUE;
 done:
@@ -2657,19 +2701,32 @@ static BOOL sw_seek_prep(void)
     }
     for (i = sq; i < se; i++)
         sw_pre[k++] = b[i];
-    /* the file from there */
-    if (Seek(st.fh, (LONG)st.range_from, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
-        goto done;
-    if (st.v_es) {
-        LONG a = sw_find(b, n, 0, 0xB3), g = sw_find(b, n, 0, 0xB8);
-        at = a >= 0 && (g < 0 || a < g) ? a : g;
-    } else
-        at = sw_find(b, n, 0, 0xBA);
-    if (at < 0 || Seek(st.fh, (LONG)st.range_from + at, OFFSET_BEGINNING) < 0)
+    /* the file from there: the picture group just before it if there is
+     * one within a second, else the first pack (sequence header, picture
+     * group) after it */
+    {
+        LONG back = v_back(st.range_from, TRUE);
+        v_from_back = back >= 0;
+        if (v_from_back)
+            at = back - (LONG)st.range_from;
+    }
+    if (!v_from_back) {
+        if (Seek(st.fh, (LONG)st.range_from, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
+            goto done;
+        if (st.v_es) {
+            LONG a = sw_find(b, n, 0, 0xB3), g = sw_find(b, n, 0, 0xB8);
+            at = a >= 0 && (g < 0 || a < g) ? a : g;
+        } else
+            at = sw_find(b, n, 0, 0xBA);
+        if (at < 0)
+            goto done;
+    }
+    if (Seek(st.fh, (LONG)st.range_from + at, OFFSET_BEGINNING) < 0)
         goto done;
     sw_pre_len = (ULONG)k;
-    sprintf(m, "from byte %lu (asked %lu), its first %lu bytes of headers first",
-            (unsigned long)(st.range_from + at), (unsigned long)st.range_from, (unsigned long)k);
+    sprintf(m, "from byte %lu (asked %lu%s), its first %lu bytes of headers first",
+            (unsigned long)(st.range_from + at), (unsigned long)st.range_from,
+            v_from_back ? ": the picture group before it" : "", (unsigned long)k);
     amce_log("video: by the CPU", m);
     ok = TRUE;
 done:
@@ -3194,7 +3251,7 @@ static void video_run(void)
     st.v_ms = 0;
     if (st.range_from && !v_seek(&in, &pend_len))
         goto out;
-    if (st.range_from)
+    if (st.range_from && !v_from_back)
         skip = ZZ_SKIP_TO_I_PICTURE;        /* (a seek: from an I picture, not blocks) */
     hold = period / 2;
     drop = period > 3600 ? period : 3600;
@@ -4188,6 +4245,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_ac3 = vid_next.ac3;
     st.v_ac3cpu = vid_next.ac3cpu;
     st.v_probe_kbps = vid_next.akbps;
+    st.v_bps = vid_next.bps;
     st.v_bytes = st.v_bskipped = st.v_akbps = 0;
     st.v_drift = 0;
     st.v_adec = VSD_NONE;
@@ -4252,6 +4310,7 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VPro
     vid_next.hz = v->a_hz;
     vid_next.akbps = v->a_kbps;
     vid_next.achans = v->a_chans;
+    vid_next.bps = v->ms ? (ULONG)((unsigned long long)v->bytes * 1000ULL / v->ms) : 0;
     vid_next.ac3cpu = vid_next.ac3 && ac3_by_cpu;
     ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
