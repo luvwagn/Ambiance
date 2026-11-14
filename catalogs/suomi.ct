@@ -55,9 +55,6 @@ Ei DVD-Video-levy, jota AmigaMCE osaa lukea: %.120s
 MSG_57CA60FE
 DVD:n elokuvaa ei voitu toistaa
 ; The DVD's film could not be played
-MSG_1865B509
-nimike
-; title
 MSG_50A1D5F7
 DVD ei ole enää asemassa
 ; The DVD is no longer in its drive
@@ -852,12 +849,12 @@ Ylös/Alas vieritä  Esc takaisin
 MSG_7FF7C0A9
 DVD-Video-levy
 ; A DVD-Video disc
-MSG_5981907F
-Tulita toistaa elokuvan, pisimmän nimikkeen, ZZ9000:lla
-; Fire plays its film, its longest title, on the ZZ9000
-MSG_4B763229
-N ja P: seuraava ja edellinen kappale
-; N and P: the next and previous chapter
+MSG_77C67E04
+Tulita toistaa elokuvan tai ohjelmat peräkkäin ZZ9000:lla
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N ja P: seuraava ja edellinen kappale tai ohjelma
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

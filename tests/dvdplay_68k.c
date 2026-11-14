@@ -60,6 +60,26 @@ int main(int argc, char **argv)
     LONG packs, nav;
     ULONG at;
     int bad;
+    /* what plays: a disc of episodes (C11's lengths), a film with extras,
+     * a "play all" beside its parts, the test disc (all under a minute) */
+    {
+        static const ULONG c11[18] = { 404000, 419000, 431000, 490000, 426000, 453000, 417000,
+                                       443000, 445000, 511000, 513000, 403000, 597000, 379000,
+                                       20000, 10000, 17000, 9000 };
+        static const ULONG film[4] = { 30000, 6120000, 900000, 600000 };
+        static const ULONG all[4] = { 1200000, 1300000, 2500000, 15000 };
+        static const ULONG tiny[2] = { 4000, 2000 };
+        UBYTE l[99];
+        ULONG o[99];
+        LONG k = dvdplay_choose(c11, 18, l, o);
+        CHECK(k == 14 && l[0] == 1 && l[13] == 14 && o[12] == 597000, "episodes: %ld", (long)k);
+        k = dvdplay_choose(film, 4, l, o);
+        CHECK(k == 1 && l[0] == 2, "film: %ld, title %ld", (long)k, (long)l[0]);
+        k = dvdplay_choose(all, 4, l, o);
+        CHECK(k == 1 && l[0] == 3, "play all: %ld, title %ld", (long)k, (long)l[0]);
+        k = dvdplay_choose(tiny, 2, l, o);
+        CHECK(k == 1 && l[0] == 1, "short titles: %ld, title %ld", (long)k, (long)l[0]);
+    }
     if (argc < 2) {
         printf("usage: dvdplay_68k image\n");
         return 20;
@@ -70,7 +90,7 @@ int main(int argc, char **argv)
     if (!dp)
         goto done;
     printf("%s\n", dvdplay_name(dp));
-    CHECK(!strcmp(dvdplay_name(dp), "test.iso: title 1"), "name %s", dvdplay_name(dp));
+    CHECK(!strcmp(dvdplay_name(dp), "test.iso"), "name %s", dvdplay_name(dp));
     CHECK(v.w == 720 && v.h == 576 && v.aspect == 2 && v.mpeg2 && v.ps && v.fps_milli == 25000,
           "video %ldx%ld aspect %ld", (long)v.w, (long)v.h, (long)v.aspect);
     CHECK(v.ac3 && !v.mp2 && !v.a_other, "sound: ac3 %ld mp2 %ld", (long)v.ac3, (long)v.mp2);

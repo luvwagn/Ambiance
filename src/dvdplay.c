@@ -11,11 +11,15 @@
  *
  * Playing one: amcedvd.library (src/dvdlib), on the drive's sectors read
  * through its device (dvddisc.c), the volume's DOS device giving device
- * and unit. Its longest title is the film, played from its start; the
- * card is fed its Program Stream as it comes (stream.c's video_run, by
- * dvdplay_read). No menus yet: still frames and waits are passed over,
- * and the film ends when the disc leaves the title (its last chapter
- * done, a menu next).
+ * and unit. What plays: its film, when one title is most of the disc
+ * (half its programmes' time or more: a film, or a "play all"); else its
+ * programmes one after another, as a disc of episodes or music videos has
+ * them, each a title of its own (those under a minute, logos and
+ * trailers, left out). The card is fed a title's Program Stream as it
+ * comes (stream.c's video_run, by dvdplay_read); at its end the player
+ * starts the next (dvdplay_chapter). No menus yet: still frames and waits
+ * are passed over, and a title ends when the disc leaves it (its last
+ * chapter done, a menu next).
  *
  * The library is opened by dvdplay_open and closed by dvdplay_close (it
  * stays loaded until memory is wanted, as amcesql.library does). It is
@@ -184,10 +188,17 @@ BOOL dvd_lib_there(void)
 }
 
 /* ---- playing one */
+#define TMAX 99                             /* titles a disc can have */
+#define SHORT_MS 60000                      /* shorter: not a programme */
+
 struct DvdPlay {
     struct DvdDisc *disc;
     APTR dvd;
-    LONG title;
+    UBYTE list[TMAX];                       /* what plays: titles in order */
+    ULONG lens[TMAX];                       /*   their lengths (ms) */
+    LONG n, idx;                            /*   how many, which now */
+    LONG title;                             /* list[idx] */
+    char vol[32];
     volatile LONG chapter, chapters;        /* (dvdplay_read's, read by AmigaMCE) */
     ULONG ms;                               /* the title's length */
     BOOL pend;                              /* a pack in blk still to give */
@@ -233,6 +244,51 @@ static BOOL prime(struct DvdPlay *dp)
     return FALSE;
 }
 
+/* What plays, from the titles' lengths (lens[0] title 1's, 0 not one):
+ * the longest alone when it is half the programmes' time or more (a film,
+ * or a "play all"), else every title of a minute or more in order. Into
+ * list (title numbers) and out (their lengths): how many. */
+LONG dvdplay_choose(const ULONG *lens, LONG nt, UBYTE *list, ULONG *out)
+{
+    ULONG total = 0, best_ms = 0;
+    LONG t, best = 0, n = 0;
+    for (t = 1; t <= nt && t <= TMAX; t++) {
+        if (lens[t - 1] >= SHORT_MS)
+            total += lens[t - 1];
+        if (lens[t - 1] > best_ms) {
+            best_ms = lens[t - 1];
+            best = t;
+        }
+    }
+    if (best && best_ms >= SHORT_MS && best_ms * 2 < total) {
+        for (t = 1; t <= nt && t <= TMAX; t++)
+            if (lens[t - 1] >= SHORT_MS) {
+                list[n] = (UBYTE)t;
+                out[n++] = lens[t - 1];
+            }
+    } else if (best) {
+        list[0] = (UBYTE)best;
+        out[0] = best_ms;
+        n = 1;
+    }
+    return n;
+}
+
+/* Programme k of the list, from chapter (0: its start) */
+static BOOL start(struct DvdPlay *dp, LONG k, LONG chapter)
+{
+    if (k < 0 || k >= dp->n || !DvdPlay(dp->dvd, dp->list[k], chapter > 0 ? chapter : 0))
+        return FALSE;
+    dp->idx = k;
+    dp->title = dp->list[k];
+    dp->ms = dp->lens[k];
+    if (dp->n > 1)
+        sprintf(dp->name, "%.31s: %ld / %ld", dp->vol, (long)(k + 1), (long)dp->n);
+    else
+        sprintf(dp->name, "%.31s", dp->vol);
+    return prime(dp);
+}
+
 static void fail(char *err, LONG errlen, const char *why)
 {
     amce_strlcpy(err, why, errlen);
@@ -247,9 +303,9 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     struct DvdReader rd;
     struct DvdInfo in;
     struct DvdStreamInfo si;
-    char m[200];
-    LONG t, best = 0;
-    ULONG best_ms = 0, ms;
+    char m[300];
+    LONG t, best;
+    ULONG best_ms, ms;
     if (!(dp = AllocVec(sizeof(*dp), MEMF_ANY | MEMF_CLEAR))) {
         dvdd_close(disc);
         fail(err, errlen, _("Not enough memory"));
@@ -271,30 +327,27 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         dvdplay_close(dp);
         return NULL;
     }
-    /* the film: the longest title */
+    /* what plays: the film, or the programmes in order */
     DvdGetInfo(dp->dvd, &in);
-    for (t = 1; t <= in.titles; t++)
-        if (DvdTitleLength(dp->dvd, t, &ms) > 0 && ms > best_ms) {
-            best_ms = ms;
-            best = t;
-        }
-    dp->title = best;
-    if (!best || !DvdPlay(dp->dvd, best, 0) || !prime(dp)) {
+    {
+        ULONG lens[TMAX];
+        LONG nt = in.titles < TMAX ? in.titles : TMAX;
+        for (t = 1; t <= nt; t++)
+            if (DvdTitleLength(dp->dvd, t, &ms) <= 0 || !(lens[t - 1] = ms))
+                lens[t - 1] = 0;
+        dp->n = dvdplay_choose(lens, nt, dp->list, dp->lens);
+    }
+    amce_strlcpy(dp->vol, name, sizeof(dp->vol));
+    if (!dp->n || !start(dp, 0, 0)) {
         fail(err, errlen, _("The DVD's film could not be played"));
         dvdplay_close(dp);
         return NULL;
     }
-    dp->ms = best_ms;
+    best = dp->title;
+    best_ms = dp->ms;
     DvdGetInfo(dp->dvd, &in);
-    sprintf(dp->name, "%.40s: %s %ld", name, _("title"), (long)best);
     memset(v, 0, sizeof(*v));
-    v->w = (UWORD)(in.width ? in.width : 720);
-    v->h = (UWORD)(in.height ? in.height : 576);
-    v->aspect = in.wide ? 3 : 2;            /* (MPEG-2's codes: 16:9, 4:3) */
-    v->fps_milli = v->h == 576 ? 25000 : 29970;
-    v->ps = TRUE;
-    v->mpeg2 = TRUE;
-    v->ms = best_ms;
+    dvdplay_probe(dp, v);
     if (DvdStreamInfo(dp->dvd, DVDS_AUDIO, in.audio >= 0 ? in.audio : 0, &si)) {
         if (si.format == DVDA_AC3)
             v->ac3 = TRUE;
@@ -304,8 +357,9 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         } else
             v->a_other = si.format == DVDA_LPCM ? "LPCM" : si.format == DVDA_DTS ? "DTS" : "?";
     }
-    sprintf(m, "%.31s (%.60s): title %ld of %ld, %ld chapters, %lu s, %ld x %ld %s, sound %s",
-            name, from, (long)best, (long)in.titles, (long)dp->chapters,
+    sprintf(m, "%.31s (%.60s): %s; title %ld of %ld, %ld chapters, %lu s, %ld x %ld %s, sound %s",
+            name, from, dp->n > 1 ? "its programmes in order" : "its film", (long)best,
+            (long)in.titles, (long)dp->chapters,
             (unsigned long)(best_ms / 1000), (long)v->w, (long)v->h, in.wide ? "16:9" : "4:3",
             v->ac3 ? "AC-3" : v->mp2 ? "MPEG" : v->a_other ? v->a_other : "none");
     amce_log("dvd", m);
@@ -426,28 +480,55 @@ BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at)
     return TRUE;
 }
 
+/* N: the next chapter, or at the title's last the next programme; P: the
+ * previous chapter, or at its first the previous programme (the first's
+ * start again). After a title's end, from where it ended. */
 BOOL dvdplay_chapter(struct DvdPlay *dp, int dir, ULONG *at)
 {
     *at = 0;
-    if (dp->ended) {
-        /* after its end, back in the film at the chapter it ended in */
-        LONG c = dp->chapter;
-        if (!DvdPlay(dp->dvd, dp->title, c > 0 ? c : 0) || !prime(dp))
-            return FALSE;
+    if (dp->ended && dp->chapters > 1 && !start(dp, dp->idx, dp->chapter))
+        return FALSE;                       /* (back in it at the chapter it ended in) */
+    if (dir > 0) {
+        if (!dp->ended && dp->chapter < dp->chapters) {
+            if (!DvdChapter(dp->dvd, DVDC_NEXT) || !prime(dp))
+                return FALSE;
+            *at = where(dp);
+            return TRUE;
+        }
+        return start(dp, dp->idx + 1, 0);
     }
-    if (dir > 0 && dp->chapter >= dp->chapters)
-        return FALSE;                       /* the last: nothing after it in the film */
-    if (dir < 0 && dp->chapter <= 1)
-        return dvdplay_seek(dp, 0, at);
-    if (!DvdChapter(dp->dvd, dir > 0 ? DVDC_NEXT : DVDC_PREV) || !prime(dp))
-        return FALSE;
-    *at = where(dp);
-    return TRUE;
+    if (!dp->ended && dp->chapter > 1) {
+        if (!DvdChapter(dp->dvd, DVDC_PREV) || !prime(dp))
+            return FALSE;
+        *at = where(dp);
+        return TRUE;
+    }
+    return start(dp, dp->idx > 0 ? dp->idx - 1 : 0, 0);
 }
 
 BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir)
 {
-    return dir > 0 ? dp->chapter < dp->chapters : dp->chapters > 0;
+    return dir > 0 ? (!dp->ended && dp->chapter < dp->chapters) || dp->idx + 1 < dp->n : TRUE;
+}
+
+BOOL dvdplay_next_title(struct DvdPlay *dp)
+{
+    return dp->idx + 1 < dp->n;
+}
+
+/* What the player needs of the title now: size, aspect, length */
+void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v)
+{
+    struct DvdInfo in;
+    if (!DvdGetInfo(dp->dvd, &in))
+        in.width = in.height = in.wide = 0;
+    v->w = (UWORD)(in.width ? in.width : 720);
+    v->h = (UWORD)(in.height ? in.height : 576);
+    v->aspect = in.wide ? 3 : 2;            /* (MPEG-2's codes: 16:9, 4:3) */
+    v->fps_milli = v->h == 576 ? 25000 : 29970;
+    v->ps = TRUE;
+    v->mpeg2 = TRUE;
+    v->ms = dp->ms;
 }
 
 void dvdplay_close(struct DvdPlay *dp)

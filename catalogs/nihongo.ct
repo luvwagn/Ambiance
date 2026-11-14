@@ -55,9 +55,6 @@ AmigaMCEが読めるDVDビデオディスクではありません: %.120s
 MSG_57CA60FE
 DVDの映画を再生できませんでした
 ; The DVD's film could not be played
-MSG_1865B509
-タイトル
-; title
 MSG_50A1D5F7
 DVDはもうドライブにありません
 ; The DVD is no longer in its drive
@@ -852,12 +849,12 @@ MSG_642000D2
 MSG_7FF7C0A9
 DVDビデオディスク
 ; A DVD-Video disc
-MSG_5981907F
-ボタン: ZZ9000で映画（最も長いタイトル）を再生
-; Fire plays its film, its longest title, on the ZZ9000
-MSG_4B763229
-NとP: 次のチャプターと前のチャプター
-; N and P: the next and previous chapter
+MSG_77C67E04
+ボタン: ZZ9000で映画、または番組を順に再生
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+NとP: 次と前のチャプターまたは番組
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

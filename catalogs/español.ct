@@ -55,9 +55,6 @@ No es un disco DVD-Video que AmigaMCE pueda leer: %.120s
 MSG_57CA60FE
 No se pudo reproducir la película del DVD
 ; The DVD's film could not be played
-MSG_1865B509
-título
-; title
 MSG_50A1D5F7
 El DVD ya no está en su unidad
 ; The DVD is no longer in its drive
@@ -852,12 +849,12 @@ Arriba/Abajo desplazar  Esc atrás
 MSG_7FF7C0A9
 Un disco DVD-Video
 ; A DVD-Video disc
-MSG_5981907F
-Disparo reproduce su película, su título más largo, en la ZZ9000
-; Fire plays its film, its longest title, on the ZZ9000
-MSG_4B763229
-N y P: capítulo siguiente y anterior
-; N and P: the next and previous chapter
+MSG_77C67E04
+Disparo reproduce su película o sus programas uno tras otro en la ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N y P: capítulo o programa siguiente y anterior
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

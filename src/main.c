@@ -4880,8 +4880,8 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
             return;
         }
-        pv_line(_("Fire plays its film, its longest title, on the ZZ9000"), w);
-        pv_line(_("N and P: the next and previous chapter"), w);
+        pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
+        pv_line(_("N and P: the next and previous chapter or programme"), w);
         if (j && j->size >= 0) {
             char date[32];
             pv_line("", w);

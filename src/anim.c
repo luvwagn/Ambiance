@@ -3067,6 +3067,23 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         st_info(&in);
         if (!ended)
             at = vid_base + in.played_ms;
+        if (s == ST_ENDED && !ended && vid_dvd && dvdplay_next_title(vid_dvd)) {
+            /* a DVD's programme over: the next, as N would */
+            ULONG to = 0;
+            st_stop();
+            if (!dvdplay_chapter(vid_dvd, 1, &to)) {
+                amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+                break;
+            }
+            dvdplay_probe(vid_dvd, &vid);
+            sprintf(m, "%s: on to it", name);
+            amce_log("dvd", m);
+            vid_base = to;
+            if (!st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax))
+                break;
+            at = to;
+            continue;
+        }
         if (s == ST_ENDED && !ended) {
             if (play_loop) {
                 if (!vid_start(cpu, 0, err, errmax))
@@ -3152,7 +3169,8 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 amce_strlcpy(err, _("The DVD could not be read there"), errmax);
                 break;
             }
-            sprintf(m, "chapter %s: at %lu ms", r == 7 ? "next" : "previous", (unsigned long)to);
+            dvdplay_probe(vid_dvd, &vid);      /* (another programme: its length) */
+            sprintf(m, "%s: %s, at %lu ms", name, r == 7 ? "next" : "previous", (unsigned long)to);
             amce_log("dvd", m);
             vid_base = to;
             if (!st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax))

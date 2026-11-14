@@ -1,9 +1,9 @@
 ; AmigaMCE's catalog description: made by tools/catalog.py scan from
 ; the _() and N_() strings in src/. Do not edit: edit the source.
-; anim.c:2752 anim.c:3452
+; anim.c:2752 anim.c:3470
 MSG_2F1926C3 (790177475//)
 ANIM-%ld compression is not supported
-; anim.c:2850 anim.c:3152
+; anim.c:2850 anim.c:3075 anim.c:3169
 MSG_5799A183 (1469686147//)
 The DVD could not be read there
 ; anim.c:2959
@@ -12,22 +12,22 @@ MPEG video plays on an RTG screen (AGA screens to come)
 ; anim.c:2960 anim.c:2975
 MSG_21CB4B97 (566971287//)
 MPEG video plays on the ZZ9000's display
-; anim.c:3099
+; anim.c:3116
 MSG_612F22BA (1630479034//)
 The ZZ9000's overlay could not be opened on this screen
-; anim.c:3250
+; anim.c:3268
 MSG_282FBBDC (674216924//)
 The animation could not be opened
-; anim.c:3257 anim.c:3269
+; anim.c:3275 anim.c:3287
 MSG_3A04E1BB (973398459//)
 Not an IFF ANIM this can play
-; anim.c:3287
+; anim.c:3305
 MSG_26BEC995 (650037653//)
 This Amiga has no screen mode for it (%ld colours, %s)
-; anim.c:3316
+; anim.c:3334
 MSG_638EABE4 (1670294500//)
 Animations play on the Amiga's own screens, and none was found
-; anim.c:3509
+; anim.c:3527
 MSG_2EE1D46F (786551919//)
 Not enough memory for the animation's screen
 ; beets.c:542 beets.c:563 plex.c:696
@@ -45,22 +45,19 @@ Albums
 ; beets.c:736 plex.c:397
 MSG_5BBD0EC3 (1539116739//)
 Recently added
-; dvdplay.c:255 eagle.c:975 main.c:12069
+; dvdplay.c:311 eagle.c:975 main.c:12069
 MSG_4E6387ED (1315145709//)
 Not enough memory
-; dvdplay.c:262 main.c:4880
+; dvdplay.c:318 main.c:4880
 MSG_38381E85 (943201925//)
 DVDs need amcedvd.library (in AmigaMCE's Libs)
-; dvdplay.c:269
+; dvdplay.c:325
 MSG_3A32AEDF (976400095//)
 Not a DVD-Video disc AmigaMCE can read: %.120s
-; dvdplay.c:283
+; dvdplay.c:342
 MSG_57CA60FE (1472880894//)
 The DVD's film could not be played
-; dvdplay.c:289
-MSG_1865B509 (409318665//)
-title
-; dvdplay.c:330
+; dvdplay.c:384
 MSG_50A1D5F7 (1352783351//)
 The DVD is no longer in its drive
 ; eagle.c:991
@@ -856,11 +853,11 @@ Up/Down scroll  Esc back
 MSG_7FF7C0A9 (2146943145//)
 A DVD-Video disc
 ; main.c:4883
-MSG_5981907F (1501663359//)
-Fire plays its film, its longest title, on the ZZ9000
+MSG_77C67E04 (2009497092//)
+Fire plays its film, or its programmes one after another, on the ZZ9000
 ; main.c:4884
-MSG_4B763229 (1266037289//)
-N and P: the next and previous chapter
+MSG_5AEFD354 (1525666644//)
+N and P: the next and previous chapter or programme
 ; main.c:4924
 MSG_6B41435A (1799439194//)
 With sound

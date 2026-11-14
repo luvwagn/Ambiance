@@ -55,9 +55,6 @@ MSG_3A32AEDF
 MSG_57CA60FE
 Η ταινία του DVD δεν αναπαράχθηκε
 ; The DVD's film could not be played
-MSG_1865B509
-τίτλος
-; title
 MSG_50A1D5F7
 Το DVD δεν είναι πια στη μονάδα του
 ; The DVD is no longer in its drive
@@ -852,12 +849,12 @@ MSG_642000D2
 MSG_7FF7C0A9
 Ένας δίσκος DVD-Video
 ; A DVD-Video disc
-MSG_5981907F
-Το Fire παίζει την ταινία του, τον μεγαλύτερο τίτλο του, στο ZZ9000
-; Fire plays its film, its longest title, on the ZZ9000
-MSG_4B763229
-N και P: επόμενο και προηγούμενο κεφάλαιο
-; N and P: the next and previous chapter
+MSG_77C67E04
+Το Fire παίζει την ταινία του ή τα προγράμματά του το ένα μετά το άλλο, στο ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N και P: επόμενο και προηγούμενο κεφάλαιο ή πρόγραμμα
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

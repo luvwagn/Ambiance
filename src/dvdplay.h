@@ -33,9 +33,10 @@ BOOL dvd_lib_there(void);       /* amcedvd.library in PROGDIR:Libs or LIBS: */
 /* ---- the main film of one */
 struct DvdPlay;
 
-/* The disc in volume vol (its name, with or without the colon): its
- * longest title chosen and started, v filled for the player (an MPEG-2
- * Program Stream: size, aspect, length, sound). NULL, with why in err. */
+/* The disc in volume vol (its name, with or without the colon): its film,
+ * or the first of its programmes, started; v filled for the player (an
+ * MPEG-2 Program Stream: size, aspect, length, sound). NULL, with why in
+ * err. dvdplay_name: "VOLUME", or "VOLUME: 3 / 14" (changing as it goes). */
 struct DvdPlay *dvdplay_open(const char *vol, struct VProbe *v, char *err, LONG errlen);
 /* The same, from an image file of a disc (a .iso) */
 struct DvdPlay *dvdplay_open_image(const char *path, struct VProbe *v, char *err, LONG errlen);
@@ -44,12 +45,16 @@ const char *dvdplay_name(struct DvdPlay *dp);   /* "MOVIE: title 3" */
  * dst, up to max bytes. The count; 0 at its end; -1 if the disc could not
  * be read. Called by the player's process. */
 LONG dvdplay_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max);
-/* To ms into it (0: its start), or to the next or previous chapter
- * (dir 1, -1); *at: where it is now (ms). FALSE if it could not. Only
+/* To ms into the title (0: its start), or to the next or previous chapter
+ * or programme (dir 1, -1; see dvdplay.c); *at: where it is now (ms). FALSE if it could not. Only
  * while dvdplay_read is not being called. */
 BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at);
 BOOL dvdplay_chapter(struct DvdPlay *dp, int dir, ULONG *at);
-BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir);  /* a chapter there (asks nothing of the disc) */
+BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir);  /* somewhere to go (asks nothing of the disc) */
+BOOL dvdplay_next_title(struct DvdPlay *dp);    /* another programme after this one */
+void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v);  /* v: the title now (size, length) */
 void dvdplay_close(struct DvdPlay *dp);
+/* (what plays, from its titles' lengths: dvdplay.c; for the tests) */
+LONG dvdplay_choose(const ULONG *lens, LONG nt, UBYTE *list, ULONG *out);
 
 #endif
