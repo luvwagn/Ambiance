@@ -31,6 +31,7 @@ struct VProbe {
     UWORD ts_ppid;              /* a private stream (type 06): its sound told by its packets */
     ULONG ts_first;             /* its first packet's offset in the file */
     const char *a_other;        /* sound there the card does not play ("AAC"), NULL none */
+    BOOL sw;                    /* to be decoded by the CPU (pl_mpeg): video_check's choice */
 };
 
 /* TRUE when a sequence header was found (its size known). span: the

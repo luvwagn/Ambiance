@@ -31,12 +31,12 @@ CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
           -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
-LIBS    = -lamiga
+LIBS    = -lamiga -lm
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c
+       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c src/plmpeg.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -100,6 +100,8 @@ ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
+# pl_mpeg's decoder: for speed, its own warnings its own
+build/plmpeg.o: CFLAGS += -O2 -w
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
