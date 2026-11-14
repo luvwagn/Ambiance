@@ -1,33 +1,33 @@
 ; AmigaMCE's catalog description: made by tools/catalog.py scan from
 ; the _() and N_() strings in src/. Do not edit: edit the source.
-; anim.c:2752 anim.c:3470
+; anim.c:2752 anim.c:3490
 MSG_2F1926C3 (790177475//)
 ANIM-%ld compression is not supported
-; anim.c:2850 anim.c:3075 anim.c:3169
+; anim.c:2850 anim.c:3084 anim.c:3180
 MSG_5799A183 (1469686147//)
 The DVD could not be read there
-; anim.c:2959
+; anim.c:2966
 MSG_48EC1181 (1223430529//)
 MPEG video plays on an RTG screen (AGA screens to come)
-; anim.c:2960 anim.c:2975
+; anim.c:2967 anim.c:2982
 MSG_21CB4B97 (566971287//)
 MPEG video plays on the ZZ9000's display
-; anim.c:3116
+; anim.c:3127
 MSG_612F22BA (1630479034//)
 The ZZ9000's overlay could not be opened on this screen
-; anim.c:3268
+; anim.c:3288
 MSG_282FBBDC (674216924//)
 The animation could not be opened
-; anim.c:3275 anim.c:3287
+; anim.c:3295 anim.c:3307
 MSG_3A04E1BB (973398459//)
 Not an IFF ANIM this can play
-; anim.c:3305
+; anim.c:3325
 MSG_26BEC995 (650037653//)
 This Amiga has no screen mode for it (%ld colours, %s)
-; anim.c:3334
+; anim.c:3354
 MSG_638EABE4 (1670294500//)
 Animations play on the Amiga's own screens, and none was found
-; anim.c:3527
+; anim.c:3547
 MSG_2EE1D46F (786551919//)
 Not enough memory for the animation's screen
 ; beets.c:542 beets.c:563 plex.c:696
@@ -45,19 +45,19 @@ Albums
 ; beets.c:736 plex.c:397
 MSG_5BBD0EC3 (1539116739//)
 Recently added
-; dvdplay.c:311 eagle.c:975 main.c:12069
+; dvdplay.c:413 eagle.c:975 main.c:12069
 MSG_4E6387ED (1315145709//)
 Not enough memory
-; dvdplay.c:318 main.c:4880
+; dvdplay.c:420 main.c:4880
 MSG_38381E85 (943201925//)
 DVDs need amcedvd.library (in AmigaMCE's Libs)
-; dvdplay.c:325
+; dvdplay.c:427
 MSG_3A32AEDF (976400095//)
 Not a DVD-Video disc AmigaMCE can read: %.120s
-; dvdplay.c:342
+; dvdplay.c:444
 MSG_57CA60FE (1472880894//)
 The DVD's film could not be played
-; dvdplay.c:384
+; dvdplay.c:477
 MSG_50A1D5F7 (1352783351//)
 The DVD is no longer in its drive
 ; eagle.c:991
@@ -1710,31 +1710,31 @@ Only music files on this Amiga play as WAV, AIFF or 8SVX
 ; stream.c:1902
 MSG_3E5CE903 (1046276355//)
 Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
-; stream.c:3246
+; stream.c:3279
 MSG_52A6DB2B (1386666795//)
 The MHI driver could not be opened (Settings > Sound)
-; stream.c:3251
+; stream.c:3284
 MSG_74E4B952 (1961146706//)
 The MHI driver's decoder is in use, or not there
-; stream.c:3256
+; stream.c:3289
 MSG_166B781B (376141851//)
 Not enough memory for MHI's buffers
-; stream.c:3395
+; stream.c:3428
 MSG_03D74A28 (64440872//)
 No signal free
-; stream.c:3412
+; stream.c:3445
 MSG_2F19A1CE (790208974//)
 The track ended before its music began
-; stream.c:3428 stream.c:3447
+; stream.c:3461 stream.c:3480
 MSG_755A0080 (1968832640//)
 The track ended before that time
-; stream.c:3432 stream.c:3436 stream.c:3451
+; stream.c:3465 stream.c:3469 stream.c:3484
 MSG_1186B14C (294039884//)
 The stream does not look like MP3
-; stream.c:3620
+; stream.c:3653
 MSG_3AC77067 (986148967//)
 Not enough memory to play a station
-; stream.c:3630
+; stream.c:3663
 MSG_41C55AEA (1103452906//)
 Could not start the radio process
 ; video.c:194
