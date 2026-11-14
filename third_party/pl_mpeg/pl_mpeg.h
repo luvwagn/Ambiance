@@ -3934,25 +3934,39 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 	unsigned int read;
 
 	// the columns, by the rows they have coefficients in; those the rows
-	// will read but which have none, zeros
+	// will read but which have none, zeros. Each result of both directions
+	// has the first input in it once, rounded nowhere on the way: so 128
+	// added to the first column's first input is added once to every
+	// row's first input and so to every result, and the rows' rounding,
+	// (x + 128) >> 8, is then x >> 8 (the first column is always worked
+	// out, and the even half, which has the first input, always: of
+	// zeros, it gives zeros).
 	PLM_IDCT_HALVES(rows, cev, cov);
 	PLM_IDCT_HALVES(cols, rev, rov);
-	read = (rev == 0 ? 0 : rev == 1 ? 0x01 : rev == 2 ? 0x05 : 0x55) |
+	if (cev == 0) {
+		cev = 1;
+	}
+	if (rev == 0) {
+		rev = 1;
+	}
+	read = (rev == 1 ? 0x01 : rev == 2 ? 0x05 : 0x55) |
 		(rov == 0 ? 0 : rov == 1 ? 0x02 : rov == 2 ? 0x0a : 0xaa);
 	// (each pair of halves a loop of its own: in each, which inputs are
 	// zero is known, and what they would add left out)
 	#define PLM_COL_OUT(k, v) o[(k) * 8] = (v)
-	#define PLM_COL_IN(k) b[(k) * 8]
+	#define PLM_COL_IN(k) ((k) == 0 ? b[0] + round : b[(k) * 8])
 	#define PLM_COL_LOOP(EV, OV) \
 		for (c = 0; c < 8; c++) { \
 			int *o = t + c; \
+			int round = c == 0 ? 128 : 0; \
 			if (cols & (1u << c)) { \
 				const int *b = s + c; \
 				PLM_IDCT_SPLIT(EV, OV, PLM_COL_IN, PLM_COL_OUT); \
 			} \
 			else if (read & (1u << c)) { \
-				PLM_COL_OUT(0, 0); PLM_COL_OUT(1, 0); PLM_COL_OUT(2, 0); PLM_COL_OUT(3, 0); \
-				PLM_COL_OUT(4, 0); PLM_COL_OUT(5, 0); PLM_COL_OUT(6, 0); PLM_COL_OUT(7, 0); \
+				PLM_COL_OUT(0, round); PLM_COL_OUT(1, round); PLM_COL_OUT(2, round); \
+				PLM_COL_OUT(3, round); PLM_COL_OUT(4, round); PLM_COL_OUT(5, round); \
+				PLM_COL_OUT(6, round); PLM_COL_OUT(7, round); \
 			} \
 		}
 	PLM_IDCT_PAIRS(cev, cov, PLM_COL_LOOP);
@@ -3962,14 +3976,14 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 
 	// the rows, rounded, into the picture
 	#define PLM_ROW_IN(k) a[k]
-	#define PLM_ROW_SET(k, v) d[k] = plm_clamp(((v) + 128) >> 8)
-	#define PLM_ROW_ADD(k, v) d[k] = plm_clamp(d[k] + (((v) + 128) >> 8))
+	#define PLM_ROW_SET(k, v) d[k] = plm_clamp((v) >> 8)
+	#define PLM_ROW_ADD(k, v) d[k] = plm_clamp(d[k] + ((v) >> 8))
 	if (rows <= 1) {
 		// coefficients in its first row alone: the columns each one number
 		// all the way down, so the rows all the same: one worked out
 		int v[8];
 		const int *a = t;
-		#define PLM_ROW_KEEP(k, x) v[k] = ((x) + 128) >> 8
+		#define PLM_ROW_KEEP(k, x) v[k] = (x) >> 8
 		PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_KEEP);
 		#undef PLM_ROW_KEEP
 		if (intra) {
@@ -3992,9 +4006,10 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 		}
 	}
 	else if (rev == 1 && rov == 0) {
-		// the first column alone: each row one number, (a[0] + 128) >> 8
+		// the first column alone: each row one number, a[0] >> 8 (its
+		// rounding in it already)
 		for (r = 0; r < 8; r++, d += dw) {
-			int value = (t[r * 8] + 128) >> 8;
+			int value = t[r * 8] >> 8;
 			if (intra) {
 				uint32_t q = plm_clamp(value) * 0x01010101u;
 				PLM_ST32(d, q);
