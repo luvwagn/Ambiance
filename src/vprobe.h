@@ -17,6 +17,11 @@ struct VProbe {
     ULONG ms;                   /* its length, 0 not known */
     ULONG bytes;
     ULONG kbps;                 /* the sequence header's bitrate (kbit/s) */
+    UBYTE audio_id;             /* its first MPEG audio stream (0xC0-0xDF), 0 none */
+    UBYTE a_layer;              /* that stream's first frame: layer 1-3, 0 not found */
+    UBYTE a_chans;
+    UBYTE a_version;            /* 1 MPEG-1, 2 MPEG-2, 25 MPEG-2.5 */
+    ULONG a_hz, a_kbps;
 };
 
 /* TRUE when a sequence header was found (its size known). */

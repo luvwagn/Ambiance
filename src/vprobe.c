@@ -47,6 +47,54 @@ static BOOL pes_pts(const UBYTE *b, LONG n, unsigned long long *pts)
     return TRUE;
 }
 
+/* A PES packet's payload: its offset from the start code, -1 if not here. */
+static LONG pes_payload(const UBYTE *b, LONG n)
+{
+    LONG i = 6;
+    if (n < 9)
+        return -1;
+    if ((b[6] & 0xC0) == 0x80)              /* MPEG-2's PES header */
+        return 9 + b[8];
+    while (i < n && i < 6 + 16 && b[i] == 0xFF)
+        i++;
+    if (i + 2 < n && (b[i] & 0xC0) == 0x40)
+        i += 2;
+    if (i >= n)
+        return -1;
+    if ((b[i] & 0xF0) == 0x20)
+        return i + 5;
+    if ((b[i] & 0xF0) == 0x30)
+        return i + 10;
+    return b[i] == 0x0F ? i + 1 : -1;
+}
+
+/* The MPEG audio frame header in a's n bytes: what kind it is. */
+static void audio_head(const UBYTE *a, LONG n, struct VProbe *v)
+{
+    static const UWORD hz1[3] = { 44100, 48000, 32000 };
+    static const UWORD kb[3][16] = {
+        { 0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0 },
+        { 0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0 },
+        { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 } };
+    LONG i;
+    for (i = 0; i + 3 < n; i++) {
+        UBYTE ver, lay, rate;
+        if (a[i] != 0xFF || (a[i + 1] & 0xE0) != 0xE0)
+            continue;
+        ver = (UBYTE)((a[i + 1] >> 3) & 3);
+        lay = (UBYTE)((a[i + 1] >> 1) & 3);
+        rate = (UBYTE)((a[i + 2] >> 2) & 3);
+        if (ver == 1 || lay == 0 || rate == 3 || (a[i + 2] >> 4) == 15)
+            continue;
+        v->a_layer = (UBYTE)(4 - lay);
+        v->a_version = ver == 3 ? 1 : ver == 2 ? 2 : 25;
+        v->a_hz = hz1[rate] / (ver == 3 ? 1 : ver == 2 ? 2 : 4);
+        v->a_kbps = ver == 3 ? kb[v->a_layer - 1][a[i + 2] >> 4] : 0;
+        v->a_chans = (UBYTE)((a[i + 3] >> 6) == 3 ? 1 : 2);
+        return;
+    }
+}
+
 /* Through n bytes at b: what they say (first: the start of the file). */
 static void scan(const UBYTE *b, LONG n, struct VProbe *v, BOOL first,
                  unsigned long long *lo, unsigned long long *hi, BOOL *have)
@@ -71,6 +119,17 @@ static void scan(const UBYTE *b, LONG n, struct VProbe *v, BOOL first,
             v->mpeg2 = TRUE;                /* a sequence extension */
         } else if (c >= 0xC0 && c <= 0xDF) {
             v->mp2 = TRUE;                  /* MPEG audio (layer I or II, in practice II) */
+            if (first && (!v->audio_id || (c == v->audio_id && !v->a_layer))) {
+                LONG len = ((LONG)b[i + 4] << 8) | b[i + 5], o = pes_payload(b + i, n - i);
+                v->audio_id = c;
+                if (o > 0 && o < len + 6) {
+                    LONG end = i + 6 + len;
+                    if (end > n)
+                        end = n;
+                    if (i + o < end)
+                        audio_head(b + i + o, end - i - o, v);
+                }
+            }
         } else if (c >= 0xE0 && c <= 0xEF) {
             unsigned long long t;
             if (pes_pts(b + i, n - i, &t)) {

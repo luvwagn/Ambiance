@@ -74,43 +74,61 @@ static ULONG shown_w(const struct VProbe *v)
 /* The overlay: a borderless PIP window on scr (pub: Workbench), the
  * picture fitted into ax, ay, aw x ah with its aspect (sw for its height);
  * *pe Picasso96's error if not. */
+/* The picture's place in ax, ay, aw x ah: centred, its aspect kept. */
+static void pip_fit(const struct VProbe *v, LONG sw, LONG ax, LONG ay, LONG aw, LONG ah, LONG *x,
+                    LONG *y, LONG *dw, LONG *dh)
+{
+    *dw = aw;
+    *dh = (LONG)((ULONG)aw * v->h / (ULONG)sw);
+    if (*dh > ah) {
+        *dh = ah;
+        *dw = (LONG)((ULONG)ah * (ULONG)sw / v->h);
+    }
+    *dw &= ~1;
+    *x = ax + (aw - *dw) / 2;
+    *y = ay + (ah - *dh) / 2;
+}
+
+/* The overlay's window moved to x, y, dw x dh inside (as a drag does: so
+ * Picasso96 moves the overlay with it), waited for (half a second at most);
+ * FALSE if it did not get there. */
+static BOOL pip_move(struct Window *w, LONG x, LONG y, LONG dw, LONG dh)
+{
+    LONG ow = dw + w->BorderLeft + w->BorderRight, oh = dh + w->BorderTop + w->BorderBottom, t;
+    if (w->Width != ow || w->Height != oh || w->LeftEdge != x || w->TopEdge != y)
+        ChangeWindowBox(w, x, y, ow, oh);
+    for (t = 0; t < 25; t++) {
+        if (w->Width == ow && w->Height == oh && w->LeftEdge == x && w->TopEdge == y)
+            break;
+        Delay(1);
+    }
+    Delay(1);                               /* (Picasso96 sets the overlay after Intuition) */
+    return t < 25;
+}
+
 static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe *v, LONG ax,
                                LONG ay, LONG aw, LONG ah, LONG sw, LONG *pe)
 {
     struct Window *w;
-    LONG dw = aw, dh = (LONG)((ULONG)aw * v->h / (ULONG)sw);
+    LONG x, y, dw, dh;
     char m[160];
-    if (dh > ah) {
-        dh = ah;
-        dw = (LONG)((ULONG)ah * (ULONG)sw / v->h);
-    }
-    dw &= ~1;
+    pip_fit(v, sw, ax, ay, aw, ah, &x, &y, &dw, &dh);
     *pe = 0;
     w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
                         P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
                         P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
-                        (ULONG)scr, WA_Left, ax + (aw - dw) / 2, WA_Top, ay + (ah - dh) / 2,
+                        (ULONG)scr, WA_Left, x, WA_Top, y,
                         WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
                         WA_Activate, TRUE, WA_RMBTrap, TRUE,
                         WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS, TAG_DONE);
     if (w) {
         /* the size and place asked for at opening are not reliably taken
-         * (the window stays the picture's size, top left): set again the
-         * way a drag does, and waited for (half a second at most), so
-         * Picasso96 moves the overlay before the first picture */
-        LONG x = ax + (aw - dw) / 2, y = ay + (ah - dh) / 2, ow = dw + w->BorderLeft + w->BorderRight,
-             oh = dh + w->BorderTop + w->BorderBottom, t;
-        if (w->Width != ow || w->Height != oh || w->LeftEdge != x || w->TopEdge != y)
-            ChangeWindowBox(w, x, y, ow, oh);
-        for (t = 0; t < 25; t++) {
-            if (w->Width == ow && w->Height == oh && w->LeftEdge == x && w->TopEdge == y)
-                break;
-            Delay(1);
-        }
-        Delay(1);                           /* (Picasso96 sets the overlay after Intuition) */
-        sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s", (long)(w->Width - ow + dw),
-                (long)(w->Height - oh + dh), (long)w->LeftEdge, (long)w->TopEdge, (long)v->w,
-                (long)v->h, t >= 25 ? "; not the size asked for" : "");
+         * (the window stays the picture's size, top left): set again */
+        BOOL there = pip_move(w, x, y, dw, dh);
+        sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s",
+                (long)(w->Width - w->BorderLeft - w->BorderRight),
+                (long)(w->Height - w->BorderTop - w->BorderBottom), (long)w->LeftEdge,
+                (long)w->TopEdge, (long)v->w, (long)v->h, there ? "" : "; not the size asked for");
     } else
         sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(*pe), (long)*pe);
     amce_log("video", m);
@@ -141,6 +159,7 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
     LONG pe = 0, ax, ay, aw, ah, sw;
     BOOL paused = FALSE, stop = FALSE;
     ULONG t0, shown = 0, dropped = 0;
+    LONG wx = 0, wy = 0, ww = 0, wh = 0;     /* AmigaMCE's window, as last seen */
     int r = -1;
     char m[200];
     err[0] = 0;
@@ -154,6 +173,16 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
             v.mp2 ? "MPEG audio" : "no sound", (unsigned long)v.ms, (unsigned long)v.bytes,
             v.ps ? "" : " (a bare video stream)");
     amce_log("video", m);
+    if (v.audio_id) {
+        sprintf(m, "its sound: stream %02lx, %s", (unsigned long)v.audio_id,
+                v.a_layer ? "" : "no frame header found at its start");
+        if (v.a_layer)
+            sprintf(m + strlen(m), "MPEG-%s layer %s, %lu Hz, %lu kbit/s, %s",
+                    v.a_version == 1 ? "1" : v.a_version == 2 ? "2" : "2.5",
+                    v.a_layer == 1 ? "I" : v.a_layer == 2 ? "II" : "III", (unsigned long)v.a_hz,
+                    (unsigned long)v.a_kbps, v.a_chans == 1 ? "mono" : "stereo");
+        amce_log("video", m);
+    }
     if (!v.ps && v.mpeg2) {
         amce_strlcpy(err, _("Only MPEG Program Streams play (this one has no packs)"), errmax);
         return -1;
@@ -219,9 +248,30 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
                         v.ms, err, errmax))
         goto out;
     t0 = time_ms();
+    if (!vscr && g->wb && g->win) {
+        wx = g->win->LeftEdge;
+        wy = g->win->TopEdge;
+        ww = g->win->Width;
+        wh = g->win->Height;
+    }
     while (!stop) {
         struct IntuiMessage *im;
         int s = st_state();
+        if (!vscr && g->wb && g->win &&
+            (g->win->LeftEdge != wx || g->win->TopEdge != wy || g->win->Width != ww ||
+             g->win->Height != wh)) {
+            /* AmigaMCE's window moved (or sized): the overlay after it */
+            LONG x, y, dw, dh;
+            wx = g->win->LeftEdge;
+            wy = g->win->TopEdge;
+            ww = g->win->Width;
+            wh = g->win->Height;
+            pip_fit(&v, sw, wx + g->win->BorderLeft, wy + g->win->BorderTop,
+                    ww - g->win->BorderLeft - g->win->BorderRight,
+                    wh - g->win->BorderTop - g->win->BorderBottom, &x, &y, &dw, &dh);
+            WindowToFront(pip);
+            pip_move(pip, x, y, dw, dh);
+        }
         if (s == ST_ENDED || s == ST_FAILED) {
             if (s == ST_FAILED && st_error()[0])
                 amce_strlcpy(err, st_error(), errmax);

@@ -2357,6 +2357,14 @@ static void video_run(void)
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns,
             (unsigned long)pcm_frames, (unsigned long)pcm_peak);
     amce_log("video", m);
+    if (st.v_mp2) {
+        sprintf(m, "the card's sound at the end: state %lu, flags %08lx, %lu Hz, %lu channels, "
+                   "format %lu, %lu bytes made, %lu taken",
+                (unsigned long)au.state, (unsigned long)au.flags, (unsigned long)au.rate,
+                (unsigned long)au.channels, (unsigned long)au.format, (unsigned long)au.produced,
+                (unsigned long)au.acknowledged);
+        amce_log("video", m);
+    }
 out:
     if (session) {
         /* its held picture let go, then closed: busy until the card has
