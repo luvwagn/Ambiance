@@ -23,6 +23,8 @@
 #include <proto/graphics.h>
 #include <graphics/modeid.h>
 #include <graphics/view.h>
+#include <graphics/clip.h>
+#include <graphics/layers.h>
 #include <stdio.h>
 #include <string.h>
 #include "amce.h"
@@ -271,6 +273,12 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
                     wh - g->win->BorderTop - g->win->BorderBottom, &x, &y, &dw, &dh);
             WindowToFront(pip);
             pip_move(pip, x, y, dw, dh);
+        }
+        if (!vscr && g->wb && g->win && g->win->WLayer &&
+            (g->win->WLayer->Flags & LAYERREFRESH)) {
+            /* AmigaMCE's window uncovered (moved, or the overlay moved off
+             * it): the border around the picture drawn again */
+            gfx_window_msg(g, IDCMP_REFRESHWINDOW, 0);
         }
         if (s == ST_ENDED || s == ST_FAILED) {
             if (s == ST_FAILED && st_error()[0])

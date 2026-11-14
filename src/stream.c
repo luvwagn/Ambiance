@@ -1976,6 +1976,39 @@ static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
 static ULONG es_bytes;                      /* the stream's bytes packed so far */
 static BOOL es_ended;
 
+/* A Program Stream's first system header made to say what it carries: a
+ * VCD's first says video only (its audio's own comes next), and a
+ * decoder that reads only the first (pl_mpeg's, Amiberry's emulated
+ * ZZ9000) then plays no sound. Its bounds set to at least one stream of
+ * each the file has; the card's own firmware ignores system headers.
+ * TRUE once the first was found (in the first 4 KB of the file). */
+static BOOL sys_fix(volatile UBYTE *b, ULONG n)
+{
+    ULONG i;
+    if (n > 4096)
+        n = 4096;
+    for (i = 0; i + 12 <= n; i++) {
+        UBYTE a, v;
+        char m[100];
+        if (b[i] || b[i + 1] || b[i + 2] != 1 || b[i + 3] != 0xBB)
+            continue;
+        a = b[i + 9];
+        v = b[i + 10];
+        if (st.v_mp2 && !(a >> 2))
+            b[i + 9] = (UBYTE)((1 << 2) | (a & 3));
+        if (!(v & 0x1F))
+            b[i + 10] = (UBYTE)((v & 0xE0) | 1);
+        if (b[i + 9] != a || b[i + 10] != v) {
+            sprintf(m, "its first system header said %lu audio, %lu video streams: %lu and %lu given",
+                    (unsigned long)(a >> 2), (unsigned long)(v & 0x1F),
+                    (unsigned long)(b[i + 9] >> 2), (unsigned long)(b[i + 10] & 0x1F));
+            amce_log("video", m);
+        }
+        return TRUE;
+    }
+    return n == 4096;                       /* (none at its start: none looked for) */
+}
+
 static ULONG es_pack(volatile UBYTE *out, ULONG max)
 {
     static UBYTE b[ES_CHUNK + 64];
@@ -2047,7 +2080,7 @@ static void video_run(void)
     ULONG pcm_peak = 0, pcm_frames = 0;    /* (the log: what its sound held) */
     ZzU64 ack = 0, origin = ZZ_NO_PTS, pts0 = 0;
     BOOL held_now = FALSE, in_eof = FALSE, eof_sent = FALSE, done = FALSE, on = FALSE;
-    BOOL out_paused = FALSE, sound = st.v_mp2, said_audio = FALSE;
+    BOOL out_paused = FALSE, sound = st.v_mp2, said_audio = FALSE, sys_seen = FALSE;
     int s;
     char m[200];
     memset(&in, 0, sizeof(in));
@@ -2128,6 +2161,8 @@ static void video_run(void)
                     }
                     if (n == 0)
                         in_eof = TRUE;
+                    if (n > 0 && !st.v_es && !sys_seen)
+                        sys_seen = sys_fix(in.data, (ULONG)n);
                     pend_off = 0;
                     pend_len = (ULONG)n;
                 }
