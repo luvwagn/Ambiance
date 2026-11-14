@@ -756,15 +756,22 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * they cover is kept (save[k]) and put back before the next frame is
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
-enum { BT_RESTART, BT_PLAY, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N }; /* full: AmigaMCE's */
+/* (BT_PREV, BT_NEXT: a DVD's, in place of BT_RESTART and BT_LOOP; full: AmigaMCE's) */
+enum { BT_RESTART, BT_PREV, BT_PLAY, BT_NEXT, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };
 
 static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
 static struct DvdPlay *vid_dvd; /* a DVD's film playing (dvdplay.c): its chapters by N, P */
 static BOOL vid_dvd_fresh;      /*   at its start already (dvdplay_open's) */
 
-/* No sound of its own: the volume's buttons (and its figure) not shown. */
+/* No sound of its own: the volume's buttons (and its figure) not shown.
+ * A DVD: the previous and next chapter (or programme) in place of from
+ * the start and the loop (its programmes play on one after another). */
 static BOOL btn_hidden(int b)
 {
+    if (b == BT_PREV || b == BT_NEXT)
+        return !vid_dvd;
+    if (b == BT_RESTART || b == BT_LOOP)
+        return vid_dvd != NULL;
     return (b == BT_VDOWN || b == BT_VUP) && !nsnd && !vid_sound;
 }
 
@@ -808,7 +815,7 @@ static void ctl_begin(struct Window *win, UWORD *blank)
     ctl.win = win;
     ctl.blank = blank;
     ctl.opened = time_ms();
-    ctl.focus = 1;                  /* BT_PLAY */
+    ctl.focus = BT_PLAY;
     ctl.nbtn = BT_FULL;             /* BT_FULL: not on a screen of its own */
     if (blank)
         SetPointer(win, blank, 1, 16, 0, 0);
@@ -842,7 +849,7 @@ static BOOL ctl_want(BOOL paused)
         ctl.ptr = ptr;
     }
     if (!want && ctl.shown)
-        ctl.focus = 1;              /* BT_PLAY */
+        ctl.focus = BT_PLAY;
     ctl.shown = want;
     return want;
 }
@@ -945,6 +952,28 @@ static void loop_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, UBYT
     }
 }
 
+/* A DVD's previous (dir < 0: |<<) or next (>>|) chapter, in a box s
+ * square at x, y: two triangles and a bar, t thick */
+static void chap_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, int dir)
+{
+    WORD cy = y + s / 2, w = s / 4 > 1 ? s / 4 : 1, x0 = x + (s - (t + 2 * w + 2)) / 2, i, k;
+    if (dir < 0) {
+        RectFill(rp, x0, cy - w, x0 + t - 1, cy + w);
+        for (k = 0; k < 2; k++)
+            for (i = 0; i <= w; i++) {
+                Move(rp, x0 + t + 1 + k * w + i, cy - i);
+                Draw(rp, x0 + t + 1 + k * w + i, cy + i);
+            }
+    } else {
+        for (k = 0; k < 2; k++)
+            for (i = 0; i <= w; i++) {
+                Move(rp, x0 + k * w + i, cy - (w - i));
+                Draw(rp, x0 + k * w + i, cy + (w - i));
+            }
+        RectFill(rp, x0 + 2 * w + 2, cy - w, x0 + 2 * w + 1 + t, cy + w);
+    }
+}
+
 static void bar_icon(int b, WORD x, WORD y, WORD s)
 {
     struct RastPort *rp = &bar.rp;
@@ -971,6 +1000,10 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
         break;
     case BT_STOP:
         RectFill(rp, x + s / 4, y + s / 4, x + s - s / 4, y + s - s / 4);
+        break;
+    case BT_PREV:
+    case BT_NEXT:
+        chap_glyph(rp, x, y, s, t, b == BT_NEXT ? 1 : -1);
         break;
     case BT_LOOP:
         loop_glyph(rp, x, y, s, t, bar.fg, bar.dim);
@@ -1139,6 +1172,10 @@ static int ctl_press(int b)
     switch (b) {
     case BT_RESTART:
         return 3;
+    case BT_PREV:
+        return 8;                           /* (as P: a DVD's previous chapter) */
+    case BT_NEXT:
+        return 7;                           /* (as N) */
     case BT_PLAY:
         return 2;
     case BT_STOP:
@@ -1477,6 +1514,10 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             break;
         case BT_STOP:
             RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
+            break;
+        case BT_PREV:
+        case BT_NEXT:
+            chap_glyph(g->rp, ix, iy, s, t, i == BT_NEXT ? 1 : -1);
             break;
         case BT_LOOP:
             loop_glyph(g->rp, ix, iy, s, t, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE),
@@ -3074,6 +3115,12 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             break;
         }
         st_info(&in);
+        if (vid_dvd) {                      /* a DVD's next: greyed after its last */
+            UWORD off = ctl.off & ~(1 << BT_NEXT);
+            if (!dvdplay_can_chapter(vid_dvd, 1))
+                off |= 1 << BT_NEXT;
+            ctl.off = off;
+        }
         if (!ended)
             at = vid_base + in.played_ms;
         if (s == ST_ENDED && !ended && vid_dvd && dvdplay_next_title(vid_dvd)) {
