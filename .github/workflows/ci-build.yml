@@ -57,6 +57,15 @@ jobs:
           build/zzprobe
           tools/zzprobe/Bench
 
+    - name: Archive amcedvd.library (DVD navigation, GPL-2.0-or-later: src/dvdlib/README)
+      uses: actions/upload-artifact@v4
+      with:
+        name: amcedvd.library
+        path: |
+          build/dvdlib/amcedvd.library
+          build/dvd/dvd_68k
+          src/dvdlib/README
+
     - name: Archive LHA
       uses: actions/upload-artifact@v4
       with:

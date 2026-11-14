@@ -73,7 +73,7 @@ link_t play_PGC(vm_t *vm) {
       pgCnt = (vm->state).pgc->nr_of_programs;
     }
     if (pgCnt>1) {
-      (vm->state).pgN = 1 + ((int) ((float) pgCnt * rand()/(RAND_MAX+1.0)));
+      (vm->state).pgN = 1 + ((int) ((int64_t) pgCnt * rand() / ((int64_t) RAND_MAX + 1))); /* AmigaMCE: integer, no floating point */
     }
   }
 

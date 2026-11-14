@@ -322,7 +322,7 @@ static int file_seek(dvd_input_t dev, int blocks)
 
   if (dev->stream_cb) {
     /* Returns 0 on successful completion and -1 on error */
-    pos = dev->stream_cb->pf_seek(dev->priv, (off_t)blocks * (off_t)DVD_VIDEO_LB_LEN);
+    pos = dev->stream_cb->pf_seek(dev->priv, (uint64_t)blocks * DVD_VIDEO_LB_LEN); /* AmigaMCE: 64-bit, off_t is 32-bit on AmigaOS */
 
     if (!pos) {
       dev->ipos = blocks;
