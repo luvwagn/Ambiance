@@ -57,7 +57,7 @@ jobs:
           build/zzprobe
           tools/zzprobe/Bench
 
-    - name: Archive amcedvd.library (DVD navigation, GPL-2.0-or-later: src/dvdlib/README)
+    - name: Archive amcedvd.library (DVD navigation, GPL-2.0-or-later, see src/dvdlib/README)
       uses: actions/upload-artifact@v4
       with:
         name: amcedvd.library
