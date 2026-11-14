@@ -17,6 +17,10 @@ import re
 import sys
 
 SLICE = 500
+# MPEG_PROF_PCS=n: also the n busiest places (offsets in the program's
+# code, for objdump -d), with their share
+import os
+PCS = int(os.environ.get("MPEG_PROF_PCS", "0"))
 
 mapfile = sys.argv[1]
 args = sys.argv[sys.argv.index("--") + 1:]
@@ -80,6 +84,10 @@ def report():
     print("total %d cycles" % total[0], file=out)
     for name, c in per.most_common(30):
         print("%6.2f%% %12d  %s" % (100.0 * c / t, c, name), file=out)
+    if PCS:
+        print("busiest places:", file=out)
+        for pc, c in samples.most_common(PCS):
+            print("%6.2f%%  %08x" % (100.0 * c / t, pc - base[0]), file=out)
 
 
 atexit.register(report)

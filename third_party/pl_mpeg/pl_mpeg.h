@@ -1428,8 +1428,19 @@ int plm_buffer_read_slow(plm_buffer_t *self, int count);
 // AmigaMCE: bits read a longword at a time where the buffer holds 4 more
 // bytes (unaligned, as the 68020 and later read them); else, near its end,
 // as pl_mpeg read them (plm_buffer_read_slow): the same bits either way.
-#if defined(__m68k__) || defined(__mc68000__)
+#if defined(__GNUC__)
 typedef uint32_t plm_u32_alias __attribute__((may_alias));
+#else
+typedef uint32_t plm_u32_alias;
+#endif
+#if defined(__m68k__) || defined(__mc68000__)
+#define PLM_LD32(p) (*(const plm_u32_alias *)(const void *)(p))
+#define PLM_ST32(p, v) (*(plm_u32_alias *)(void *)(p) = (v))
+#else
+static inline uint32_t PLM_LD32(const void *p) { uint32_t v; memcpy(&v, p, 4); return v; }
+#define PLM_ST32(p, v) do { uint32_t v_ = (v); memcpy((p), &v_, 4); } while (0)
+#endif
+#if defined(__m68k__) || defined(__mc68000__)
 #define PLM_BE32(p) (*(const plm_u32_alias *)(const void *)(p))
 #else
 #define PLM_BE32(p) (((uint32_t)(p)[0] << 24) | ((uint32_t)(p)[1] << 16) | \
@@ -2827,6 +2838,12 @@ struct plm_video_t {
 	uint8_t *frames_data;
 
 	int block_data[64];
+	// AmigaMCE: where block_data has coefficients (zeroed there alone
+	// after its IDCT): the columns and rows they are in, and their places
+	// (64 or more: all zeroed)
+	unsigned int block_cols, block_rows;
+	int block_n;
+	uint8_t block_at[64];
 	uint8_t intra_quant_matrix[64];
 	uint8_t non_intra_quant_matrix[64];
 
@@ -2857,6 +2874,7 @@ void plm_video_interpolate_macroblock(plm_video_t *self, plm_frame_t *s, int mot
 void plm_video_process_macroblock(plm_video_t *self, uint8_t *s, uint8_t *d, int mh, int mb, int bs, int interp);
 void plm_video_decode_block(plm_video_t *self, int block);
 void plm_video_idct(int *block);
+void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra);
 
 // AmigaMCE: the video VLCs' tables of their first bits (plm_vlc_fast_t),
 // made once.
@@ -3474,24 +3492,46 @@ void plm_video_process_macroblock(
 		return; // corrupt video
 	}
 
-	#define PLM_MB_CASE(INTERPOLATE, ODD_H, ODD_V, OP) \
-		case ((INTERPOLATE << 2) | (ODD_H << 1) | (ODD_V)): \
-			PLM_BLOCK_SET(d, di, dw, si, dw, block_size, OP); \
-			break
-
+	// AmigaMCE: four pixels at a time, a longword each (read unaligned):
+	// the same averages, rounded the same, worked out a byte apiece in
+	// each longword (no carry between them): a and b's, (a + b + 1) >> 1;
+	// four's, (a + b + c + d + 2) >> 2, from their top six bits and their
+	// bottom two apart.
+	#define PLM_AVG2(a, b) (((a) | (b)) - ((((a) ^ (b)) >> 1) & 0x7f7f7f7fu))
+	#define PLM_AVG4(a, b, c, e) ( \
+		(((a) >> 2) & 0x3f3f3f3fu) + (((b) >> 2) & 0x3f3f3f3fu) + \
+		(((c) >> 2) & 0x3f3f3f3fu) + (((e) >> 2) & 0x3f3f3f3fu) + \
+		(((((a) & 0x03030303u) + ((b) & 0x03030303u) + ((c) & 0x03030303u) + \
+		   ((e) & 0x03030303u) + 0x02020202u) >> 2) & 0x03030303u))
+	#define PLM_MB_ROWS(OP) \
+		for (int y = 0; y < block_size; y++, sp += dw, dp += dw) { \
+			for (int x = 0; x < block_size; x += 4) { \
+				uint32_t v; \
+				OP; \
+				PLM_ST32(dp + x, v); \
+			} \
+		}
+	const uint8_t *sp = s + si;
+	uint8_t *dp = d + di;
 	switch ((interpolate << 2) | (odd_h << 1) | (odd_v)) {
-		PLM_MB_CASE(0, 0, 0, (s[si]));
-		PLM_MB_CASE(0, 0, 1, (s[si] + s[si + dw] + 1) >> 1);
-		PLM_MB_CASE(0, 1, 0, (s[si] + s[si + 1] + 1) >> 1);
-		PLM_MB_CASE(0, 1, 1, (s[si] + s[si + 1] + s[si + dw] + s[si + dw + 1] + 2) >> 2);
-
-		PLM_MB_CASE(1, 0, 0, (d[di] + (s[si]) + 1) >> 1);
-		PLM_MB_CASE(1, 0, 1, (d[di] + ((s[si] + s[si + dw] + 1) >> 1) + 1) >> 1);
-		PLM_MB_CASE(1, 1, 0, (d[di] + ((s[si] + s[si + 1] + 1) >> 1) + 1) >> 1);
-		PLM_MB_CASE(1, 1, 1, (d[di] + ((s[si] + s[si + 1] + s[si + dw] + s[si + dw + 1] + 2) >> 2) + 1) >> 1);
+		case 0: PLM_MB_ROWS(v = PLM_LD32(sp + x)); break;
+		case 1: PLM_MB_ROWS(v = PLM_AVG2(PLM_LD32(sp + x), PLM_LD32(sp + x + dw))); break;
+		case 2: PLM_MB_ROWS(v = PLM_AVG2(PLM_LD32(sp + x), PLM_LD32(sp + x + 1))); break;
+		case 3: PLM_MB_ROWS(v = PLM_AVG4(PLM_LD32(sp + x), PLM_LD32(sp + x + 1),
+			PLM_LD32(sp + x + dw), PLM_LD32(sp + x + dw + 1))); break;
+		case 4: PLM_MB_ROWS(uint32_t p = PLM_LD32(sp + x); uint32_t q = PLM_LD32(dp + x);
+			v = PLM_AVG2(q, p)); break;
+		case 5: PLM_MB_ROWS(uint32_t p = PLM_AVG2(PLM_LD32(sp + x), PLM_LD32(sp + x + dw));
+			uint32_t q = PLM_LD32(dp + x); v = PLM_AVG2(q, p)); break;
+		case 6: PLM_MB_ROWS(uint32_t p = PLM_AVG2(PLM_LD32(sp + x), PLM_LD32(sp + x + 1));
+			uint32_t q = PLM_LD32(dp + x); v = PLM_AVG2(q, p)); break;
+		case 7: PLM_MB_ROWS(uint32_t p = PLM_AVG4(PLM_LD32(sp + x), PLM_LD32(sp + x + 1),
+			PLM_LD32(sp + x + dw), PLM_LD32(sp + x + dw + 1));
+			uint32_t q = PLM_LD32(dp + x); v = PLM_AVG2(q, p)); break;
 	}
-
-	#undef PLM_MB_CASE
+	#undef PLM_MB_ROWS
+	#undef PLM_AVG2
+	#undef PLM_AVG4
 }
 
 void plm_video_decode_block(plm_video_t *self, int block) {
@@ -3525,6 +3565,12 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 
 		// Save predictor value
 		self->dc_predictor[plane_index] = self->block_data[0];
+		self->block_cols |= 1;          // (AmigaMCE: where it is)
+		self->block_rows |= 1;
+		if (self->block_n < 64) {
+			self->block_at[self->block_n] = 0;
+		}
+		self->block_n++;
 
 		// Dequantize + premultiply
 		self->block_data[0] <<= (3 + 5);
@@ -3592,8 +3638,14 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 			level = -2048;
 		}
 
-		// Save premultiplied coefficient
+		// Save premultiplied coefficient (AmigaMCE: and where it is)
 		self->block_data[de_zig_zagged] = level * PLM_VIDEO_PREMULTIPLIER_MATRIX[de_zig_zagged];
+		self->block_cols |= 1u << (de_zig_zagged & 7);
+		self->block_rows |= 1u << (de_zig_zagged >> 3);
+		if (self->block_n < 64) {
+			self->block_at[self->block_n] = (uint8_t)de_zig_zagged;
+		}
+		self->block_n++;
 	}
 
 	// Move block to its place
@@ -3619,33 +3671,153 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	}
 
 	int *s = self->block_data;
-	int si = 0;
-	if (self->macroblock_intra) {
-		// Overwrite (no prediction)
-		if (n == 1) {
-			int clamped = plm_clamp((s[0] + 128) >> 8);
-			PLM_BLOCK_SET(d, di, dw, si, 8, 8, clamped);
-			s[0] = 0;
+	if (n == 1) {
+		// AmigaMCE: its DC alone, as pl_mpeg did it: a longword at a time
+		// when intra
+		int i;
+		if (self->macroblock_intra) {
+			uint32_t v = plm_clamp((s[0] + 128) >> 8) * 0x01010101u;
+			for (i = 0; i < 8; i++, di += dw) {
+				plm_u32_alias *q = (plm_u32_alias *)(void *)(d + di);
+				q[0] = v;
+				q[1] = v;
+			}
 		}
 		else {
-			plm_video_idct(s);
-			PLM_BLOCK_SET(d, di, dw, si, 8, 8, plm_clamp(s[si]));
-			memset(self->block_data, 0, sizeof(self->block_data));
+			int value = (s[0] + 128) >> 8;
+			for (i = 0; i < 8; i++, di += dw) {
+				uint8_t *q = d + di;
+				q[0] = plm_clamp(q[0] + value);
+				q[1] = plm_clamp(q[1] + value);
+				q[2] = plm_clamp(q[2] + value);
+				q[3] = plm_clamp(q[3] + value);
+				q[4] = plm_clamp(q[4] + value);
+				q[5] = plm_clamp(q[5] + value);
+				q[6] = plm_clamp(q[6] + value);
+				q[7] = plm_clamp(q[7] + value);
+			}
 		}
+		s[0] = 0;
+		if (self->block_n == 1) {
+			// (nothing else there: if a block before it was given up,
+			// its coefficients stay, as they did)
+			self->block_cols = self->block_rows = 0;
+			self->block_n = 0;
+		}
+		return;
+	}
+	plm_video_idct_put(self, d + di, dw, self->macroblock_intra);
+}
+
+// AmigaMCE: pl_mpeg's IDCT (plm_video_idct, below) in one direction: the
+// same sums and roundings, OUT(k, v) given each result. Given constant
+// zeros, the compiler leaves out what they add nothing to: the same
+// numbers, sooner.
+#define PLM_IDCT_1D(c0, c1, c2, c3, c4, c5, c6, c7, OUT) do { \
+	int b1 = (c4); \
+	int b3 = (c2) + (c6); \
+	int b4 = (c5) - (c3); \
+	int tmp1 = (c1) + (c7); \
+	int tmp2 = (c3) + (c5); \
+	int b6 = (c1) - (c7); \
+	int b7 = tmp1 + tmp2; \
+	int m0 = (c0); \
+	int x4 = ((b6 * 473 - b4 * 196 + 128) >> 8) - b7; \
+	int x0 = x4 - (((tmp1 - tmp2) * 362 + 128) >> 8); \
+	int x1 = m0 - b1; \
+	int x2 = ((((c2) - (c6)) * 362 + 128) >> 8) - b3; \
+	int x3 = m0 + b1; \
+	int y3 = x1 + x2; \
+	int y4 = x3 + b3; \
+	int y5 = x1 - x2; \
+	int y6 = x3 - b3; \
+	int y7 = -x0 - ((b4 * 473 + b6 * 196 + 128) >> 8); \
+	OUT(0, b7 + y4); \
+	OUT(1, x4 + y3); \
+	OUT(2, y5 - x0); \
+	OUT(3, y6 - y7); \
+	OUT(4, y6 + y7); \
+	OUT(5, x0 + y5); \
+	OUT(6, y3 - x4); \
+	OUT(7, y4 - b7); \
+} while (0)
+
+// AmigaMCE: the block's IDCT put into the picture at d (dw bytes a row):
+// as plm_video_idct then setting (intra) or adding to the 8 x 8 pixels,
+// clamped, but only the columns and rows that have coefficients worked
+// on (the rest are zeros, which give zeros), the columns into t and the
+// rows straight into place; then block_data's coefficients zeroed.
+void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
+	int *s = self->block_data;
+	unsigned int cols = self->block_cols, rows = self->block_rows;
+	int t[64];
+	int ncols = cols <= 1 ? 1 : cols <= 3 ? 2 : cols <= 15 ? 4 : 8;
+	int c, r;
+
+	// the columns the rows will read: each worked on, or zeros
+	for (c = 0; c < ncols; c++) {
+		int *b = s + c;
+		int *o = t + c;
+		#define PLM_COL_OUT(k, v) o[(k) * 8] = (v)
+		if (!(cols & (1u << c))) {
+			PLM_COL_OUT(0, 0); PLM_COL_OUT(1, 0); PLM_COL_OUT(2, 0); PLM_COL_OUT(3, 0);
+			PLM_COL_OUT(4, 0); PLM_COL_OUT(5, 0); PLM_COL_OUT(6, 0); PLM_COL_OUT(7, 0);
+		}
+		else if (rows <= 1) {
+			PLM_IDCT_1D(b[0], 0, 0, 0, 0, 0, 0, 0, PLM_COL_OUT);
+		}
+		else if (rows <= 3) {
+			PLM_IDCT_1D(b[0], b[8], 0, 0, 0, 0, 0, 0, PLM_COL_OUT);
+		}
+		else if (rows <= 15) {
+			PLM_IDCT_1D(b[0], b[8], b[16], b[24], 0, 0, 0, 0, PLM_COL_OUT);
+		}
+		else {
+			PLM_IDCT_1D(b[0], b[8], b[16], b[24], b[32], b[40], b[48], b[56], PLM_COL_OUT);
+		}
+		#undef PLM_COL_OUT
+	}
+
+	// the rows, rounded, into the picture
+	#define PLM_ROW_SET(k, v) d[k] = plm_clamp(((v) + 128) >> 8)
+	#define PLM_ROW_ADD(k, v) d[k] = plm_clamp(d[k] + (((v) + 128) >> 8))
+	#define PLM_ROWS(OUT) \
+		for (r = 0; r < 8; r++, d += dw) { \
+			const int *a = t + r * 8; \
+			if (ncols == 1) { \
+				PLM_IDCT_1D(a[0], 0, 0, 0, 0, 0, 0, 0, OUT); \
+			} \
+			else if (ncols == 2) { \
+				PLM_IDCT_1D(a[0], a[1], 0, 0, 0, 0, 0, 0, OUT); \
+			} \
+			else if (ncols == 4) { \
+				PLM_IDCT_1D(a[0], a[1], a[2], a[3], 0, 0, 0, 0, OUT); \
+			} \
+			else { \
+				PLM_IDCT_1D(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], OUT); \
+			} \
+		}
+	if (intra) {
+		PLM_ROWS(PLM_ROW_SET);
 	}
 	else {
-		// Add data to the predicted macroblock
-		if (n == 1) {
-			int value = (s[0] + 128) >> 8;
-			PLM_BLOCK_SET(d, di, dw, si, 8, 8, plm_clamp(d[di] + value));
-			s[0] = 0;
-		}
-		else {
-			plm_video_idct(s);
-			PLM_BLOCK_SET(d, di, dw, si, 8, 8, plm_clamp(d[di] + s[si]));
-			memset(self->block_data, 0, sizeof(self->block_data));
+		PLM_ROWS(PLM_ROW_ADD);
+	}
+	#undef PLM_ROWS
+	#undef PLM_ROW_SET
+	#undef PLM_ROW_ADD
+
+	// block_data zeros again: where it had coefficients
+	if (self->block_n > 64) {
+		memset(self->block_data, 0, sizeof(self->block_data));
+	}
+	else {
+		for (c = 0; c < self->block_n; c++) {
+			s[self->block_at[c]] = 0;
 		}
 	}
+	self->block_cols = self->block_rows = 0;
+	self->block_n = 0;
 }
 
 void plm_video_idct(int *block) {
