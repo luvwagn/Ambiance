@@ -7,6 +7,8 @@ La compression ANIM-%ld n'est pas prise en charge
 MSG_5799A183
 Le DVD n'a pas pu être lu à cet endroit
 ; The DVD could not be read there
+MSG_48EC1181
+; MPEG video plays on an RTG screen (AGA screens to come)
 MSG_21CB4B97
 ; MPEG video plays on the ZZ9000's display
 MSG_612F22BA
@@ -479,6 +481,8 @@ Transition du diaporama
 MSG_584F0908
 Vidéos sur leur propre écran
 ; Videos on a screen of their own
+MSG_58B78A34
+; MPEG video on the ZZ9000
 MSG_71E19418
 Débogage (CPU, mémoire, journal)
 ; Debug (CPU, memory, log)
@@ -1732,8 +1736,8 @@ Impossible de lancer le processus radio
 ; Could not start the radio process
 MSG_49FB1D9D
 ; Only MPEG Program Streams play (this one has no packs)
-MSG_267A9302
-; MPEG video plays on a ZZ9000 (zz9k.library not found)
+MSG_550F84B3
+; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
