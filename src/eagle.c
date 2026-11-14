@@ -506,20 +506,6 @@ static void name_keys(const char *file, char *pre, char *ext)
     }
 }
 
-static BOOL contains_nocase(const char *hay, const char *needle)
-{
-    LONG n = strlen(needle), i, j;
-    if (!n)
-        return FALSE;
-    for (i = 0; hay[i]; i++) {
-        for (j = 0; j < n && hay[i + j] && ((hay[i + j] | 0x20) == (needle[j] | 0x20)); j++)
-            ;
-        if (j == n)
-            return TRUE;
-    }
-    return FALSE;
-}
-
 /* ---------------------------------------------------------- tags */
 static const ULONG *seg_tags(BPTR seg)
 {
@@ -886,9 +872,9 @@ static BOOL find_player(struct Host *h, char *found, LONG fmax, BOOL quick)
                 if (k == 3)
                     continue;
             } else if (pass == 1) {
-                if (!(pre[2] && contains_nocase(c->name, pre + 2)) &&
-                    !(ext[2] && contains_nocase(c->name, ext + 2)) &&
-                    !(ck && contains_nocase(c->name, ck)))
+                if (!(pre[2] && amce_contains_nocase(c->name, pre + 2)) &&
+                    !(ext[2] && amce_contains_nocase(c->name, ext + 2)) &&
+                    !(ck && amce_contains_nocase(c->name, ck)))
                     continue;
             }
             tried[i] = 1;

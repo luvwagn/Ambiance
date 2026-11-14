@@ -247,12 +247,6 @@ void list_sort(struct ItemList *l)
 
 /* ------------------------------------------------------------ names */
 
-static BOOL ends_with(const char *s, const char *ext)
-{
-    LONG a = strlen(s), b = strlen(ext);
-    return a > b && amce_stricmp(s + a - b, ext) == 0;
-}
-
 /* AGS orders its menus with leading spaces and the prefixes "+  ", "-  "
  * and "-- "; the display name drops them, plus the .ags/.run extension. */
 void ags_clean_name(const char *raw, char *out, LONG max)
@@ -260,7 +254,7 @@ void ags_clean_name(const char *raw, char *out, LONG max)
     char buf[128];
     char *p, *e;
     amce_strlcpy(buf, raw, sizeof(buf));
-    if (ends_with(buf, ".ags") || ends_with(buf, ".run") || ends_with(buf, ".agz") || ends_with(buf, ".rub"))
+    if (amce_ends_with(buf, ".ags") || amce_ends_with(buf, ".run") || amce_ends_with(buf, ".agz") || amce_ends_with(buf, ".rub"))
         buf[strlen(buf) - 4] = 0;
     p = buf;
     while (*p == ' ')
@@ -288,18 +282,6 @@ BOOL ags_is_separator(const char *clean)
     return TRUE;
 }
 
-static BOOL contains_nocase(const char *hay, const char *needle)
-{
-    LONG n = strlen(needle);
-    char tmp[64];
-    for (; *hay; hay++) {
-        amce_strlcpy(tmp, hay, n + 1 < (LONG)sizeof(tmp) ? n + 1 : (LONG)sizeof(tmp));
-        if (amce_stricmp(tmp, needle) == 0)
-            return TRUE;
-    }
-    return FALSE;
-}
-
 /* One directory entry of an AGS folder: added to out if it is a menu
  * (.ags folder) or an entry (.run). TRUE if added. */
 static BOOL add_entry(char *dir, const char *name, BOOL isdir, struct ItemList *out, BOOL adult)
@@ -307,18 +289,18 @@ static BOOL add_entry(char *dir, const char *name, BOOL isdir, struct ItemList *
     char clean[128];
     UBYTE kind;
     if (isdir) {
-        if (!ends_with(name, ".ags"))
+        if (!amce_ends_with(name, ".ags"))
             return FALSE;               /* .agz = hidden by AGS; other drawers are data */
         kind = IT_DIR;
     } else {
-        if (!ends_with(name, ".run"))
+        if (!amce_ends_with(name, ".run"))
             return FALSE;               /* .txt/.iff are read with their entry; .rub = disabled */
         kind = IT_RUN;
     }
     ags_clean_name(name, clean, sizeof(clean));
     if (ags_is_separator(clean) || clean[0] == '[')
         return FALSE;                   /* AGS's own option entries */
-    if (!adult && contains_nocase(clean, "adult"))
+    if (!adult && amce_contains_nocase(clean, "adult"))
         return FALSE;
     return list_add_split(out, clean, dir, name, kind) != NULL;
 }
@@ -447,15 +429,6 @@ LONG ags_read_dir_flat(const char *dir, struct ItemList *out, BOOL adult)
 
 /* ------------------------------------------------------------ AGS */
 
-static BOOL exists(const char *path)
-{
-    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
-    if (!l)
-        return FALSE;
-    UnLock(l);
-    return TRUE;
-}
-
 /* Assign name: to target unless name: already exists or target does not.
  * Each assign made is noted in a->added for System information. */
 static void assign_if_missing(struct Ags *a, const char *name, const char *target)
@@ -466,7 +439,7 @@ static void assign_if_missing(struct Ags *a, const char *name, const char *targe
         return;
     amce_strlcpy(dev, name, sizeof(dev));
     amce_strlcat(dev, ":", sizeof(dev));
-    if (exists(dev))
+    if (amce_exists(dev))
         return;
     l = Lock((CONST_STRPTR)target, SHARED_LOCK);
     if (!l)
@@ -520,7 +493,7 @@ BOOL ags_init(struct Ags *a)
     memset(a, 0, sizeof(*a));
     list_init(&a->top);
     me->pr_WindowPtr = (APTR)-1;
-    if (exists("AGS:")) {
+    if (amce_exists("AGS:")) {
         a->found = TRUE;
     } else {
         for (i = 0; cands[i]; i++) {
@@ -543,7 +516,7 @@ BOOL ags_init(struct Ags *a)
         assign_if_missing(a, "Scripts", "AGS:Scripts");
         assign_if_missing(a, "AGSOS", "AGS:OS");
         assign_if_missing(a, "Admin", "Scripts:Admin");
-        if (exists("WHDLoad:")) {
+        if (amce_exists("WHDLoad:")) {
             assign_if_missing(a, "WHD_Games", "WHDLoad:");
             assign_if_missing(a, "WHD_Demos", "WHDLoad:");
         }
@@ -627,11 +600,11 @@ BOOL ags_screenshot_path(const char *base, char *out, LONG max)
 {
     amce_strlcpy(out, base, max);
     amce_strlcat(out, "-1.iff", max);
-    if (exists(out))
+    if (amce_exists(out))
         return TRUE;
     amce_strlcpy(out, base, max);
     amce_strlcat(out, ".iff", max);
-    return exists(out);
+    return amce_exists(out);
 }
 
 /* The launch script runs the entry's own .run, as AGS does:

@@ -110,12 +110,6 @@ static const UBYTE step_of[16] = { 0, 0, 0, 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 7, 7, 
  * sixteenths, so the spacing stays true over a line. */
 #define SNAP_Q(pen16) ((((pen16) + 8) >> 4) << 2)  /* quarter pixels, phase 0 */
 
-static UWORD rd16(const UBYTE *p) { return (UWORD)((p[0] << 8) | p[1]); }
-static ULONG rd32(const UBYTE *p)
-{
-    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
-}
-
 static UBYTE nib(const UBYTE *d, ULONG i)
 {
     UBYTE b = d[i >> 1];
@@ -127,11 +121,11 @@ static BOOL parse(struct Smooth *s)
 {
     const UBYTE *p = s->data, *end = s->data + s->size;
     int f;
-    if (s->size < 14 || memcmp(p, "AMSM", 4) || rd16(p + 4) != 3 || rd16(p + 12) != NFACES)
+    if (s->size < 14 || memcmp(p, "AMSM", 4) || amce_be16(p + 4) != 3 || amce_be16(p + 12) != NFACES)
         return FALSE;
-    s->k = rd16(p + 6);
-    s->cell_h = rd16(p + 8);
-    s->base = rd16(p + 10);
+    s->k = amce_be16(p + 6);
+    s->cell_h = amce_be16(p + 8);
+    s->base = amce_be16(p + 10);
     p += 14;
     for (f = 0; f < NFACES; f++) {
         struct Face *fc = &s->face[f];
@@ -139,8 +133,8 @@ static BOOL parse(struct Smooth *s)
         UBYTE c;
         if (p + 4 > end)
             return FALSE;
-        fc->lo = rd16(p);
-        fc->hi = rd16(p + 2);
+        fc->lo = amce_be16(p);
+        fc->hi = amce_be16(p + 2);
         if (fc->hi < fc->lo || fc->lo > '?' || fc->hi < 'Z')
             return FALSE;
         p += 4;
@@ -148,7 +142,7 @@ static BOOL parse(struct Smooth *s)
         p += (ULONG)(fc->hi - fc->lo + 1) * GLYPH_BYTES;
         if (p + 4 > end)
             return FALSE;
-        n = rd32(p);
+        n = amce_be32(p);
         p += 4;
         fc->blob = p;
         p += n;
@@ -163,25 +157,25 @@ static BOOL parse(struct Smooth *s)
     }
     if (p + 4 > end)
         return FALSE;
-    s->icon_n = rd16(p);
-    s->icon_cnt = rd16(p + 2);
+    s->icon_n = amce_be16(p);
+    s->icon_cnt = amce_be16(p + 2);
     p += 4;
     s->icons = p;
     s->icon_bytes = ((ULONG)s->icon_n * s->icon_n + 1) / 2;
     p += s->icon_bytes * s->icon_cnt;
     if (p + 4 > end)
         return FALSE;
-    s->mark_n = rd16(p);
-    s->mark_cnt = rd16(p + 2);
+    s->mark_n = amce_be16(p);
+    s->mark_cnt = amce_be16(p + 2);
     p += 4;
     s->marks = p;
     s->mark_bytes = ((ULONG)s->mark_n * s->mark_n + 1) / 2;
     p += s->mark_bytes * s->mark_cnt;
     if (p + 6 > end)
         return FALSE;
-    s->logo_w = rd16(p);
-    s->logo_h = rd16(p + 2);
-    s->logo_nc = rd16(p + 4);
+    s->logo_w = amce_be16(p);
+    s->logo_h = amce_be16(p + 2);
+    s->logo_nc = amce_be16(p + 4);
     p += 6;
     s->logo_pal = p;
     p += 3 * (ULONG)s->logo_nc;
@@ -189,8 +183,8 @@ static BOOL parse(struct Smooth *s)
     p += (ULONG)s->logo_w * s->logo_h;
     if (p + 4 > end)
         return FALSE;
-    s->nletters = rd16(p);
-    s->letter_cell_w = rd16(p + 2);
+    s->nletters = amce_be16(p);
+    s->letter_cell_w = amce_be16(p + 2);
     p += 4;
     if (s->nletters != 27)
         return FALSE;
@@ -198,7 +192,7 @@ static BOOL parse(struct Smooth *s)
         if (p + 8 > end)
             return FALSE;
         s->letter[f] = p;
-        p += 8 + rd32(p + 4);
+        p += 8 + amce_be32(p + 4);
     }
     /* Greek glyphs, if the file has them: "GREK", then per face u16 lo, hi,
      * the glyphs, u32 bytes, the coverage data (as above). A file
@@ -210,8 +204,8 @@ static BOOL parse(struct Smooth *s)
             ULONG n;
             if (q + 4 > end)
                 break;
-            gf[f].glo = rd16(q);
-            gf[f].ghi = rd16(q + 2);
+            gf[f].glo = amce_be16(q);
+            gf[f].ghi = amce_be16(q + 2);
             if (gf[f].ghi < gf[f].glo || gf[f].glo < 0x380 || gf[f].ghi > 0x3FF)
                 break;
             q += 4;
@@ -219,7 +213,7 @@ static BOOL parse(struct Smooth *s)
             q += (ULONG)(gf[f].ghi - gf[f].glo + 1) * GLYPH_BYTES;
             if (q + 4 > end)
                 break;
-            n = rd32(q);
+            n = amce_be32(q);
             q += 4;
             gf[f].gblob = q;
             q += n;
@@ -623,7 +617,7 @@ static const UBYTE *glyph_at(const struct Face *f, const char *str, LONG n, LONG
             *i += 2;
             if (cp >= f->glo && cp <= f->ghi) {
                 const UBYTE *G = f->ggl + (ULONG)(cp - f->glo) * GLYPH_BYTES;
-                if (rd16(G)) {
+                if (amce_be16(G)) {
                     *blob = f->gblob;
                     return G;
                 }
@@ -637,7 +631,7 @@ static const UBYTE *glyph_at(const struct Face *f, const char *str, LONG n, LONG
 
 /* Text is laid out in 1/16 pixels, each glyph drawn from the stored
  * quarter-pixel position nearest its true one. */
-static UWORD adv16(const UBYTE *G) { return rd16(G); }
+static UWORD adv16(const UBYTE *G) { return amce_be16(G); }
 
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face)
 {
@@ -703,7 +697,7 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
         UWORD w = G[G_W], h = G[G_H];
         if (w) {
             UWORD bytes = (UWORD)(((ULONG)w * h + 1) >> 1), ph = (UWORD)(q & 3);
-            const UBYTE *d = b + rd32(G + 6);
+            const UBYTE *d = b + amce_be32(G + 6);
             while (ph--)
                 d += bytes;
             masks_put(s, d, w, h, (WORD)(q >> 2) + (BYTE)G[G_X] - minx, (BYTE)G[G_Y] - miny);
@@ -812,8 +806,8 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale)
     Seek(fh, 0, OFFSET_END);
     size = Seek(fh, 0, OFFSET_BEGINNING);
     if (size > 12 && (data = AllocVec(size, MEMF_ANY)) && Read(fh, data, size) == size &&
-        !memcmp(data, "AMLG", 4) && rd16(data + 4) == 1) {
-        UWORD w = rd16(data + 6), h = rd16(data + 8), nc = rd16(data + 10), c;
+        !memcmp(data, "AMLG", 4) && amce_be16(data + 4) == 1) {
+        UWORD w = amce_be16(data + 6), h = amce_be16(data + 8), nc = amce_be16(data + 10), c;
         const UBYTE *pal = data + 12, *idx = pal + 3 * (ULONG)nc;
         if (nc <= 32 && idx + (ULONG)w * h <= data + size &&
             cm && cm->Count >= FIRST_PEN + nc) {
@@ -870,8 +864,8 @@ BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl)
         L = s->letter[26];
     else
         return FALSE;
-    w = rd16(L);
-    h = rd16(L + 2);
+    w = amce_be16(L);
+    h = amce_be16(L + 2);
     r = L + 8;
     if (!w || !h)
         return FALSE;

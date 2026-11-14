@@ -72,16 +72,6 @@ extern struct Library *LowLevelBase, *CyberGfxBase;
 
 #define ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (d))
 
-static ULONG be32(const UBYTE *p)
-{
-    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
-}
-
-static UWORD be16(const UBYTE *p)
-{
-    return (UWORD)((p[0] << 8) | p[1]);
-}
-
 /* One frame's FORM, as read */
 #define FRAME_SCTL 8
 struct Frame {
@@ -295,7 +285,7 @@ static void snd_tick(void)
  * 4 times, 6 channels (bits 0-3), 8 rate (0: the sound's own), 10 flags. */
 static void snd_command(const UBYTE *sc)
 {
-    UWORD n = be16(sc + 2), times = be16(sc + 4), mask = be16(sc + 6), rate = be16(sc + 8);
+    UWORD n = amce_be16(sc + 2), times = amce_be16(sc + 4), mask = amce_be16(sc + 6), rate = amce_be16(sc + 8);
     BOOL left = (mask & 9) != 0, right = (mask & 6) != 0;
     UWORD vol = sc[1] > 64 ? 64 : sc[1];
     if (!snd_on)
@@ -514,7 +504,7 @@ static void snd_load(BPTR fh, ULONG len)
     if (len & 1)
         rd_skip(1);
     for (p = b, e = b + len; p + 8 <= e;) {
-        ULONG id = be32(p), cl = be32(p + 4);
+        ULONG id = amce_be32(p), cl = amce_be32(p + 4);
         if (cl > (ULONG)(e - p - 8))
             cl = e - p - 8;
         if (id == ID('V', 'H', 'D', 'R') && cl >= 20)
@@ -526,7 +516,7 @@ static void snd_load(BPTR fh, ULONG len)
         p += 8 + ((cl + 1) & ~1UL);
     }
     if (vhdr && body && bl > 2) {
-        ULONG oct = be32(vhdr) + be32(vhdr + 4);    /* one-shot and repeat parts */
+        ULONG oct = amce_be32(vhdr) + amce_be32(vhdr + 4);    /* one-shot and repeat parts */
         BOOL packed = vhdr[15] == 1;
         n = packed ? (bl - 2) * 2 : bl;
         if (oct && oct < n)
@@ -547,8 +537,8 @@ static void snd_load(BPTR fh, ULONG len)
                 CopyMem((APTR)body, s->data, n);
             }
             s->len = n;
-            s->rate = be16(vhdr + 12);
-            s->vol = (UWORD)(be32(vhdr + 16) >> 10);    /* 1.0 (0x10000) = 64 */
+            s->rate = amce_be16(vhdr + 12);
+            s->vol = (UWORD)(amce_be32(vhdr + 16) >> 10);    /* 1.0 (0x10000) = 64 */
             if (!s->vol || s->vol > 64)
                 s->vol = 64;
         }
@@ -592,15 +582,15 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
     ULONG len, t0 = time_ms();
     const UBYTE *p, *e;
     for (;;) {
-        if (rd_read(h, 12) != 12 || be32(h) != ID('F', 'O', 'R', 'M'))
+        if (rd_read(h, 12) != 12 || amce_be32(h) != ID('F', 'O', 'R', 'M'))
             return FALSE;
-        len = be32(h + 4);
+        len = amce_be32(h + 4);
         if (len < 4)
             return FALSE;
         len -= 4;
-        if (be32(h + 8) == ID('I', 'L', 'B', 'M'))
+        if (amce_be32(h + 8) == ID('I', 'L', 'B', 'M'))
             break;
-        if (be32(h + 8) == ID('8', 'S', 'V', 'X') && !snd_read && nsnd < SOUNDS) {
+        if (amce_be32(h + 8) == ID('8', 'S', 'V', 'X') && !snd_read && nsnd < SOUNDS) {
             snd_load(fh, len);              /* a sound, before the first frame */
             continue;
         }
@@ -621,7 +611,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
         rd_skip(1);
     memset(f, 0, sizeof(*f));
     for (p = fbuf, e = fbuf + len; p + 8 <= e;) {
-        ULONG id = be32(p), cl = be32(p + 4);
+        ULONG id = amce_be32(p), cl = amce_be32(p + 4);
         const UBYTE *d = p + 8;
         if (cl > (ULONG)(e - d))
             cl = e - d;
@@ -631,7 +621,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
             f->cmap = d;
             f->cmaplen = cl;
         } else if (id == ID('C', 'A', 'M', 'G') && cl >= 4) {
-            f->camg = be32(d);
+            f->camg = amce_be32(d);
             f->has_camg = TRUE;
         } else if (id == ID('A', 'N', 'H', 'D') && cl >= 24)
             f->anhd = d;
@@ -963,12 +953,6 @@ static void ctl_glyph(struct RastPort *rp, int b, WORD cx, WORD cy, WORD gh, WOR
         glyph_draw(rp, k, cx, cy, gh, sx, fg, dim, b == BT_LOOP && play_loop ? GLF_ON : 0);
 }
 
-static void time_text(char *out, ULONG ms)
-{
-    ULONG s = ms / 1000;
-    sprintf(out, "%ld:%02ld", (long)(s / 60), (long)(s % 60));
-}
-
 /* Drawn into buffer k (what it covers kept first). */
 static void bar_put(struct BitMap *bm, int k)
 {
@@ -1016,9 +1000,9 @@ static void bar_put(struct BitMap *bm, int k)
             RectFill(rp, x1, y0 + 1, x1, y1 - 1);
         }
     }
-    time_text(a, bar.at_ms);
+    amce_time_text(a, bar.at_ms);
     if (bar.total_ms) {
-        time_text(b, bar.total_ms);
+        amce_time_text(b, bar.total_ms);
         sprintf(t, "%s / %s", a, b);
     } else
         strcpy(t, a);
@@ -1076,16 +1060,16 @@ static ULONG anim_length(BPTR fh, const char *path, ULONG first)
         return kms;
     rd_sync();                              /* (it reads the file itself) */
     pos = Seek(fh, 0, OFFSET_CURRENT);
-    while (frames < 20000 && Read(fh, h, 12) == 12 && be32(h) == ID('F', 'O', 'R', 'M')) {
-        LONG len = be32(h + 4) - 4, got = 0;
+    while (frames < 20000 && Read(fh, h, 12) == 12 && amce_be32(h) == ID('F', 'O', 'R', 'M')) {
+        LONG len = amce_be32(h + 4) - 4, got = 0;
         if (len < 0)
             break;
-        if (be32(h + 8) == ID('I', 'L', 'B', 'M')) {
+        if (amce_be32(h + 8) == ID('I', 'L', 'B', 'M')) {
             frames++;
             if ((got = Read(fh, h, len < (LONG)sizeof(h) ? len : (LONG)sizeof(h))) < 0)
                 break;
-            if (got >= 8 + 18 && be32(h) == ID('A', 'N', 'H', 'D'))
-                jif += be32(h + 8 + 14) ? be32(h + 8 + 14) : 1;
+            if (got >= 8 + 18 && amce_be32(h) == ID('A', 'N', 'H', 'D'))
+                jif += amce_be32(h + 8 + 14) ? amce_be32(h + 8 + 14) : 1;
         }
         if (Seek(fh, len - got + (len & 1), OFFSET_CURRENT) < 0)
             break;
@@ -1335,9 +1319,9 @@ BOOL anim_has_sound(const char *path)
     me->pr_WindowPtr = oldwin;
     if (!fh)
         return FALSE;
-    r = Read(fh, h, 24) == 24 && be32(h) == ID('F', 'O', 'R', 'M') &&
-        be32(h + 8) == ID('A', 'N', 'I', 'M') && be32(h + 12) == ID('F', 'O', 'R', 'M') &&
-        be32(h + 20) == ID('8', 'S', 'V', 'X');
+    r = Read(fh, h, 24) == 24 && amce_be32(h) == ID('F', 'O', 'R', 'M') &&
+        amce_be32(h + 8) == ID('A', 'N', 'I', 'M') && amce_be32(h + 12) == ID('F', 'O', 'R', 'M') &&
+        amce_be32(h + 20) == ID('8', 'S', 'V', 'X');
     Close(fh);
     return r;
 }
@@ -1446,9 +1430,9 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     }
     if (xt >= 0)
         x = xt;
-    time_text(a, at);
+    amce_time_text(a, at);
     if (total) {
-        time_text(b, total);
+        amce_time_text(b, total);
         sprintf(line, "%s / %s", a, b);
     } else
         strcpy(line, a);
@@ -2508,8 +2492,8 @@ restart:
                         break;              /* (its end: the last frame) */
                     sop = f->anhd ? f->anhd[0] : 0;
                     sil = f->anhd ? f->anhd[18] : 0;
-                    sbits = f->anhd ? be32(f->anhd + 20) : 0;
-                    sjif = f->anhd ? be32(f->anhd + 14) : 1;
+                    sbits = f->anhd ? amce_be32(f->anhd + 20) : 0;
+                    sjif = f->anhd ? amce_be32(f->anhd + 14) : 1;
                     sk = shown ^ 1;
                     if (sil == 1)
                         CopyMem(planar + shown * fsz, planar + sk * fsz, fsz);
@@ -2662,8 +2646,8 @@ restart:
             break;                          /* the end */
         op = f->anhd ? f->anhd[0] : 0;
         il = f->anhd ? f->anhd[18] : 0;
-        bits = f->anhd ? be32(f->anhd + 20) : 0;
-        jif = f->anhd ? be32(f->anhd + 14) : 1;
+        bits = f->anhd ? amce_be32(f->anhd + 20) : 0;
+        jif = f->anhd ? amce_be32(f->anhd + 14) : 1;
         k = shown ^ 1;
         if (op != 0 || !f->body)
             whole_only = FALSE;             /* deltas: each frame builds on the ones before */
@@ -3280,16 +3264,16 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
         return -1;
     }
     rd_begin(fh);                           /* read ahead from here on */
-    if (rd_read(head, 12) != 12 || be32(head) != ID('F', 'O', 'R', 'M') ||
-        be32(head + 8) != ID('A', 'N', 'I', 'M') || !read_frame(fh, &f, &readms) ||
+    if (rd_read(head, 12) != 12 || amce_be32(head) != ID('F', 'O', 'R', 'M') ||
+        amce_be32(head + 8) != ID('A', 'N', 'I', 'M') || !read_frame(fh, &f, &readms) ||
         !f.bmhd || !f.body) {
         amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
         goto out;
     }
     loop_pos = 12;
     snd_read = TRUE;                        /* playing again: they are not read again */
-    w = be16(f.bmhd);
-    h = be16(f.bmhd + 2);
+    w = amce_be16(f.bmhd);
+    h = amce_be16(f.bmhd + 2);
     depth = f.bmhd[8];
     masking = f.bmhd[9];
     comp = f.bmhd[10];
@@ -3407,7 +3391,7 @@ restart:
     bar.at_ms = 0;
     bar_put(sb[k]->sb_BitMap, k);
     start_ms = t0 = time_ms();
-    jif = f.anhd ? be32(f.anhd + 14) : 0;
+    jif = f.anhd ? amce_be32(f.anhd + 14) : 0;
     due = 0;
     n = 1;
     for (;;) {
@@ -3462,8 +3446,8 @@ restart:
             break;                          /* the end */
         op = f.anhd ? f.anhd[0] : 0;
         il = f.anhd ? f.anhd[18] : 0;
-        bits = f.anhd ? be32(f.anhd + 20) : 0;
-        jif = f.anhd ? be32(f.anhd + 14) : 1;
+        bits = f.anhd ? amce_be32(f.anhd + 20) : 0;
+        jif = f.anhd ? amce_be32(f.anhd + 14) : 1;
         k = shown ^ 1;                      /* the buffer not shown: two frames back */
         safe_done(safe, safe_wait);
         td = time_ms();

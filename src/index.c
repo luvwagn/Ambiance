@@ -29,11 +29,6 @@
 #define IDX_SLOT    80
 #define IDX_NAME    (IDX_SLOT - 24)
 
-static ULONG get32(const UBYTE *p)
-{
-    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
-}
-
 static void put32(UBYTE *p, ULONG v)
 {
     p[0] = v >> 24;
@@ -89,7 +84,7 @@ BOOL idx_load(const char *file, struct Idx *ix)
     memset(ix, 0, sizeof(*ix));
     if (!(fh = Open((CONST_STRPTR)file, MODE_OLDFILE)))
         return FALSE;
-    if (Read(fh, head, IDX_HEAD) != IDX_HEAD || get32(head) != IDX_MAGIC ||
+    if (Read(fh, head, IDX_HEAD) != IDX_HEAD || amce_be32(head) != IDX_MAGIC ||
         ((head[4] << 8) | head[5]) != IDX_VERSION || !(n = (head[6] << 8) | head[7])) {
         Close(fh);
         return FALSE;
@@ -108,12 +103,12 @@ BOOL idx_load(const char *file, struct Idx *ix)
     for (i = 0; i < n; i++) {
         const UBYTE *t = tab + i * IDX_SLOT;
         struct IdxLetter *L = &ix->l[i];
-        L->date.ds_Days = get32(t);
-        L->date.ds_Minute = get32(t + 4);
-        L->date.ds_Tick = get32(t + 8);
-        L->count = (LONG)get32(t + 12);
-        L->off = get32(t + 16);
-        L->len = get32(t + 20);
+        L->date.ds_Days = amce_be32(t);
+        L->date.ds_Minute = amce_be32(t + 4);
+        L->date.ds_Tick = amce_be32(t + 8);
+        L->count = (LONG)amce_be32(t + 12);
+        L->off = amce_be32(t + 16);
+        L->len = amce_be32(t + 20);
         memcpy(L->name, t + 24, IDX_NAME);
         L->name[IDX_NAME - 1] = 0;
     }

@@ -934,14 +934,6 @@ static BOOL header(const char *hdr, const char *name, char *out, LONG max)
     return FALSE;
 }
 
-static LONG num(const char *s)
-{
-    LONG v = 0;
-    while (*s >= '0' && *s <= '9')
-        v = v * 10 + (*s++ - '0');
-    return v;
-}
-
 /* A seek's "&offset=" taken out of url: FALSE if it had none. */
 static BOOL no_offset;              /* this server refused one: not asked again */
 static BOOL drop_offset(char *url)
@@ -1115,11 +1107,11 @@ static BOOL open_stream(void)
             amce_strlcpy(st.genre, v, sizeof(st.genre));
         }
         if (header(hdr, "icy-br", v, sizeof(v))) {
-            st.bitrate = num(v);
+            st.bitrate = amce_num(v);
             st.icy_br = TRUE;
         }
-        st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? num(v) + st.range_from : 0;
-        st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? num(v) : 0;
+        st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? amce_num(v) + st.range_from : 0;
+        st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? amce_num(v) : 0;
         st.meta_left = st.metaint;
         if (header(hdr, "Content-Type", v, sizeof(v))) {
             if (strstr(v, "mpegurl") || strstr(v, "scpls") || strstr(v, "x-mpegURL")) {

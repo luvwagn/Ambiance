@@ -18,12 +18,6 @@
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 
-static BOOL ends_with(const char *s, const char *ext)
-{
-    LONG n = strlen(s), k = strlen(ext);
-    return n > k && amce_stricmp(s + n - k, ext) == 0;
-}
-
 /* Formats' names, as file name prefixes and suffixes. */
 static const char *const kinds[] = {
     "mod", "med", "mmd0", "mmd1", "mmd2", "mmd3", "omed", "nst", "stk", "m15", "ust",
@@ -72,16 +66,6 @@ static const char *const not_music[] = {
     ".exe", ".rexx", ".py", ".html", ".htm", ".pdf", NULL
 };
 
-static void join_path(char *out, LONG max, const char *dir, const char *name)
-{
-    LONG n;
-    amce_strlcpy(out, dir, max);
-    n = strlen(out);
-    if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
-}
-
 BOOL mods_is_module(const char *dir, const char *name)
 {
     int i;
@@ -89,12 +73,12 @@ BOOL mods_is_module(const char *dir, const char *name)
     if (name[0] == '.')
         return FALSE;
     for (i = 0; not_music[i]; i++)
-        if (ends_with(name, not_music[i]))
+        if (amce_ends_with(name, not_music[i]))
             return FALSE;
     /* the second file of a pair (mdat. plays, smpl. is its samples) */
     if (!amce_stricmp(name, "smpl") || (strlen(name) > 5 && !memcmp(name, "smpl.", 5)) ||
-        (strlen(name) > 5 && !memcmp(name, "SMPL.", 5)) || ends_with(name, ".smpl") ||
-        ends_with(name, ".ssd") || ends_with(name, ".instr"))
+        (strlen(name) > 5 && !memcmp(name, "SMPL.", 5)) || amce_ends_with(name, ".smpl") ||
+        amce_ends_with(name, ".ssd") || amce_ends_with(name, ".instr"))
         return FALSE;
     return TRUE;
 }
@@ -111,7 +95,7 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     char path[300], key[140], label[120];
     if (!isdir && !mods_is_module(c->dir, name))
         return;
-    join_path(path, sizeof(path), c->dir, name);
+    amce_join_path(path, sizeof(path), c->dir, name);
     if (isdir)
         amce_strlcpy(label, name, sizeof(label));
     else
@@ -157,9 +141,9 @@ BOOL song_name_ok(const char *name)
 {
     if (name[0] == '.')
         return FALSE;
-    return (can_mp3 && ends_with(name, ".mp3")) || (can_flac && ends_with(name, ".flac")) ||
-           ends_with(name, ".wav") || ends_with(name, ".aif") || ends_with(name, ".aiff") ||
-           ends_with(name, ".aifc") || ends_with(name, ".8svx") || ends_with(name, ".svx");
+    return (can_mp3 && amce_ends_with(name, ".mp3")) || (can_flac && amce_ends_with(name, ".flac")) ||
+           amce_ends_with(name, ".wav") || amce_ends_with(name, ".aif") || amce_ends_with(name, ".aiff") ||
+           amce_ends_with(name, ".aifc") || amce_ends_with(name, ".8svx") || amce_ends_with(name, ".svx");
 }
 
 /* ---- whether a folder has music in it, anywhere below: looked through
@@ -208,7 +192,7 @@ static BOOL has_music(const char *dir, int depth, LONG *budget)
     yes = c->found;
     for (i = 0; !yes && i < c->ndirs; i++) {
         char sub[300];
-        join_path(sub, sizeof(sub), dir, c->dirs[i]);
+        amce_join_path(sub, sizeof(sub), dir, c->dirs[i]);
         yes = has_music(sub, depth + 1, budget);
     }
     FreeVec(c);
@@ -241,7 +225,7 @@ static void song_cb(void *ctx, const char *name, BOOL isdir)
     char path[300], key[140], label[120], *dot;
     if (!isdir && !song_name_ok(name))
         return;
-    join_path(path, sizeof(path), c->dir, name);
+    amce_join_path(path, sizeof(path), c->dir, name);
     amce_strlcpy(label, name, sizeof(label));
     if (!isdir && (dot = strrchr(label, '.')))
         *dot = 0;                           /* the name without .mp3, .flac */
@@ -293,8 +277,8 @@ LONG songs_read_dir(const char *dir, struct ItemList *out)
 /* A music file's format, for Now Playing: "FLAC", "MP3". */
 const char *song_format(const char *path)
 {
-    return ends_with(path, ".flac") ? "FLAC" : ends_with(path, ".wav") ? "WAV"
-           : ends_with(path, ".8svx") || ends_with(path, ".svx") ? "8SVX"
-           : ends_with(path, ".aif") || ends_with(path, ".aiff") || ends_with(path, ".aifc")
+    return amce_ends_with(path, ".flac") ? "FLAC" : amce_ends_with(path, ".wav") ? "WAV"
+           : amce_ends_with(path, ".8svx") || amce_ends_with(path, ".svx") ? "8SVX"
+           : amce_ends_with(path, ".aif") || amce_ends_with(path, ".aiff") || amce_ends_with(path, ".aifc")
              ? "AIFF" : "MP3";
 }

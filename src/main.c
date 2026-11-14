@@ -4880,7 +4880,6 @@ static void pv_read_ahead(struct Page *p)
 
 /* A Pictures row's lines: what it is and, for a folder, what Fire and
  * Right do there (the picture's size once it is drawn). */
-static void time_text(ULONG ms, char *out);
 
 static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 {
@@ -4931,7 +4930,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
                         (long)(vp.fps_milli % 1000 / 10));
             pv_line(line, w);
             if (vp.ms) {
-                time_text(vp.ms, t);
+                amce_time_text(t, vp.ms);
                 pv_line(t, w);
             }
             pv_line(vp.mp2 || vp.ac3 ? _("With sound") : _("No sound"), w);
@@ -6504,12 +6503,6 @@ static BOOL np_live(void)
     return np_on() && mp_running();
 }
 
-static void time_text(ULONG ms, char *out)
-{
-    ULONG s = ms / 1000;
-    sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
-}
-
 /* Muted: the volume it had, given back when unmuted (-1: not muted).
  * Not kept past a quit: AmigaMCE starts at its volume, never silent. */
 static int vol_unmuted = -1;
@@ -6787,8 +6780,8 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
     np.s_total = st->total_ms;
     np.s_order = st->order;
     np.s_row = st->row;
-    time_text(at, a);
-    time_text(st->total_ms, b);
+    amce_time_text(a, at);
+    amce_time_text(b, st->total_ms);
     if (st->total_ms)
         sprintf(t, "%s / %s", a, b);
     else
@@ -8473,20 +8466,6 @@ static BOOL np_click(WORD x, WORD y)
     return FALSE;
 }
 
-/* The Mods section: what is playing, then the folders of modules. */
-static BOOL dir_exists(const char *path)
-{
-    struct Process *me = (struct Process *)FindTask(NULL);
-    APTR old = me->pr_WindowPtr;
-    BPTR l;
-    me->pr_WindowPtr = (APTR)-1;
-    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
-    me->pr_WindowPtr = old;
-    if (l)
-        UnLock(l);
-    return l != 0;
-}
-
 /* "Now playing" at the top of the Mods and Radio pages while something
  * plays (a module or a station), its tag the title or the station. */
 static void np_shortcut(struct Page *p)
@@ -8697,7 +8676,7 @@ static void np_shortcut_sync(void)
 static void build_mods_root(void)
 {
     struct Page *p;
-    BOOL mods = dir_exists(MODS_ROOT), menu_music = dir_exists(MODS_MENU), sid = dir_exists(MODS_SID);
+    BOOL mods = amce_exists(MODS_ROOT), menu_music = amce_exists(MODS_MENU), sid = amce_exists(MODS_SID);
     BOOL asg = fs_assign_used(FS_MODS);
     int i;
     if (!mods && !menu_music && !sid && !asg && !fs[FS_MODS].n && !mp_loaded()) {
@@ -11007,10 +10986,10 @@ static void mini_draw(BOOL full)
     if (full || (LONG)(at / 1000) != mn.s_sec || (LONG)st.total_ms != mn.s_total || fill != mn.s_fill) {
         gfx_fill(&mg, mn.tx, mn.ty, right - 1, mn.ty + mg.font_h - 1, PEN_BG);
         if (mp_loaded()) {
-            time_text(at, a);
+            amce_time_text(a, at);
             mini_text(mn.tx, mn.ty, mn.tw_time + MK(4), a, PEN_TEXT);
             if (st.total_ms) {
-                time_text(st.total_ms, b);
+                amce_time_text(b, st.total_ms);
                 mini_text(right - TextLength(mg.rp, (CONST_STRPTR)b, strlen(b)), mn.ty,
                           mn.tw_time + MK(4), b, PEN_DIM);
             }

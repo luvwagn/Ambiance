@@ -21,10 +21,6 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 
-static ULONG be32(const UBYTE *b) { return ((ULONG)b[0] << 24) | ((ULONG)b[1] << 16) | ((ULONG)b[2] << 8) | b[3]; }
-static ULONG le32(const UBYTE *b) { return ((ULONG)b[3] << 24) | ((ULONG)b[2] << 16) | ((ULONG)b[1] << 8) | b[0]; }
-static UWORD be16(const UBYTE *b) { return (UWORD)((b[0] << 8) | b[1]); }
-static UWORD le16(const UBYTE *b) { return (UWORD)((b[1] << 8) | b[0]); }
 
 /* ---- PCM files: WAV, AIFF (and AIFC uncompressed), 8SVX */
 
@@ -32,7 +28,7 @@ static UWORD le16(const UBYTE *b) { return (UWORD)((b[1] << 8) | b[0]); }
 static ULONG ext80(const UBYTE *b)
 {
     int e = ((b[0] & 0x7F) << 8 | b[1]) - 16383 - 31;
-    ULONG m = be32(b + 2);
+    ULONG m = amce_be32(b + 2);
     if (e > 0 || e < -31)
         return 0;                           /* past 4 GHz, or under 1 Hz */
     return m >> -e;
@@ -61,23 +57,23 @@ BOOL pcm_header(const UBYTE *b, LONG n, struct PcmFmt *f)
     f->channels = 1;
     for (p = 12; p + 8 <= n;) {
         const UBYTE *c = b + p;
-        ULONG len = wav ? le32(c + 4) : be32(c + 4);
+        ULONG len = wav ? amce_le32(c + 4) : amce_be32(c + 4);
         const UBYTE *d = c + 8;
         LONG have = n - (p + 8);
         if (wav && !memcmp(c, "fmt ", 4) && have >= 16) {
-            UWORD tag = le16(d);
+            UWORD tag = amce_le16(d);
             if (tag == 0xFFFE && len >= 26 && have >= 26)
-                tag = le16(d + 24);         /* WAVE_FORMAT_EXTENSIBLE: its sub-format */
+                tag = amce_le16(d + 24);         /* WAVE_FORMAT_EXTENSIBLE: its sub-format */
             if (tag != 1)
                 return FALSE;               /* not PCM */
-            f->channels = le16(d + 2);
-            f->rate = le32(d + 4);
-            f->bits = le16(d + 14);
+            f->channels = amce_le16(d + 2);
+            f->rate = amce_le32(d + 4);
+            f->bits = amce_le16(d + 14);
             have_fmt = TRUE;
         } else if (aiff && !memcmp(c, "COMM", 4) && have >= 18) {
-            f->channels = be16(d);
-            f->frames = be32(d + 2);
-            f->bits = be16(d + 6);
+            f->channels = amce_be16(d);
+            f->frames = amce_be32(d + 2);
+            f->bits = amce_be16(d + 6);
             f->rate = ext80(d + 8);
             if (!memcmp(b + 8, "AIFC", 4) && have >= 22) {
                 if (!memcmp(d + 18, "sowt", 4))
@@ -87,21 +83,21 @@ BOOL pcm_header(const UBYTE *b, LONG n, struct PcmFmt *f)
             }
             have_fmt = TRUE;
         } else if (svx && !memcmp(c, "VHDR", 4) && have >= 20) {
-            f->rate = be16(d + 12);
+            f->rate = amce_be16(d + 12);
             f->bits = 8;
             if (d[15])
                 return FALSE;               /* Fibonacci-delta packed */
             have_fmt = TRUE;
         } else if (svx && !memcmp(c, "CHAN", 4) && have >= 4) {
-            if (be32(d) == 6)
+            if (amce_be32(d) == 6)
                 f->svx_stereo = TRUE;       /* left, then right: the left played */
         } else if ((wav && !memcmp(c, "data", 4)) || (svx && !memcmp(c, "BODY", 4))) {
             f->off = p + 8;
             f->bytes = len;
             break;
         } else if (aiff && !memcmp(c, "SSND", 4) && have >= 8) {
-            f->off = p + 8 + 8 + be32(d);   /* its offset field, then the samples */
-            f->bytes = len >= 8 ? len - 8 - be32(d) : 0;
+            f->off = p + 8 + 8 + amce_be32(d);   /* its offset field, then the samples */
+            f->bytes = len >= 8 ? len - 8 - amce_be32(d) : 0;
             break;
         }
         if (len > (ULONG)(n - p))
@@ -190,7 +186,7 @@ static void read_id3(BPTR fh, const UBYTE *h, struct SongInfo *si, struct Art *a
         Seek(fh, 10, OFFSET_BEGINNING);
         if (Read(fh, fb, 4) != 4)
             return;
-        pos += ver == 4 ? (LONG)syncsafe(fb) : (LONG)be32(fb) + 4;
+        pos += ver == 4 ? (LONG)syncsafe(fb) : (LONG)amce_be32(fb) + 4;
     }
     while (pos + (ver == 2 ? 6 : 10) <= end) {
         char id[5];
@@ -205,8 +201,8 @@ static void read_id3(BPTR fh, const UBYTE *h, struct SongInfo *si, struct Art *a
         } else {
             memcpy(id, fb, 4);
             id[4] = 0;
-            flen = ver == 4 ? (LONG)syncsafe(fb + 4) : (LONG)be32(fb + 4);
-            ffl = be16(fb + 8);
+            flen = ver == 4 ? (LONG)syncsafe(fb + 4) : (LONG)amce_be32(fb + 4);
+            ffl = amce_be16(fb + 8);
         }
         if (flen <= 0 || pos + hl + flen > end)
             break;
@@ -325,7 +321,7 @@ static void read_mp3(BPTR fh, LONG from, LONG size, struct SongInfo *si)
         /* a Xing (VBR) or Info (CBR) frame: the number of frames */
         x = i + 4 + (v == 3 ? (mode == 3 ? 17 : 32) : (mode == 3 ? 9 : 17));
         if (x + 12 < n && (!memcmp(b + x, "Xing", 4) || !memcmp(b + x, "Info", 4)) &&
-            (b[x + 7] & 1) && (frames = be32(b + x + 8))) {
+            (b[x + 7] & 1) && (frames = amce_be32(b + x + 8))) {
             ULONG spf = v == 3 ? 1152 : 576;
             si->ms = (ULONG)(((unsigned long long)frames * spf * 1000) / rate);
             if (si->ms)
@@ -353,7 +349,7 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
         len = (LONG)h[1] << 16 | (LONG)h[2] << 8 | h[3];
         if (type == 0 && len >= 18 && Read(fh, b, 18) == 18) {
             ULONG rate = (ULONG)b[10] << 12 | (ULONG)b[11] << 4 | b[12] >> 4;
-            unsigned long long total = ((unsigned long long)(b[13] & 0x0F) << 32) | be32(b + 14);
+            unsigned long long total = ((unsigned long long)(b[13] & 0x0F) << 32) | amce_be32(b + 14);
             si->rate = rate;
             si->channels = ((b[12] >> 1) & 7) + 1;
             si->bits = (((b[12] & 1) << 4) | (b[13] >> 4)) + 1;
@@ -366,17 +362,17 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
             LONG p = pos + 4, end = pos + 4 + len, cnt, i;
             if (Read(fh, h, 4) != 4)
                 return;
-            p += 4 + le32(h);
+            p += 4 + amce_le32(h);
             if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                 return;
-            cnt = le32(h);
+            cnt = amce_le32(h);
             p += 4;
             for (i = 0; i < cnt && p + 4 <= end; i++) {
                 LONG cl, k;
                 char *eq;
                 if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                     return;
-                cl = le32(h);
+                cl = amce_le32(h);
                 k = cl < (LONG)sizeof(b) - 1 ? cl : (LONG)sizeof(b) - 1;
                 if (cl < 0 || Read(fh, b, k) != k)
                     return;
@@ -408,18 +404,18 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
             LONG p = pos + 4, ml, dl;
             if (Read(fh, b, 8) != 8)
                 return;
-            ml = be32(b + 4);
+            ml = amce_be32(b + 4);
             if (ml < 0 || ml > 64 || Read(fh, b, ml + 4) != ml + 4)
                 return;
             b[ml] = 0;
             art->png = strstr((char *)b, "png") != NULL;
-            dl = be32(b + ml);
+            dl = amce_be32(b + ml);
             p += 8 + ml + 4 + dl + 16;
             if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                 return;
-            if (be32(h) > 64 && p + 4 + (LONG)be32(h) <= pos + 4 + len) {
+            if (amce_be32(h) > 64 && p + 4 + (LONG)amce_be32(h) <= pos + 4 + len) {
                 art->off = p + 4;
-                art->len = be32(h);
+                art->len = amce_be32(h);
             }
         }
         pos += 4 + len;
@@ -466,15 +462,6 @@ static void genre_name(char *g, LONG max)
 }
 
 /* ---- pictures */
-static BOOL exists(const char *path)
-{
-    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
-    if (!l)
-        return FALSE;
-    UnLock(l);
-    return TRUE;
-}
-
 static void join(char *out, LONG max, const char *dir, const char *name)
 {
     LONG n;
@@ -494,7 +481,7 @@ BOOL song_folder_art(const char *dir, char *out, LONG max)
     int i;
     for (i = 0; names[i]; i++) {
         join(out, max, dir, names[i]);
-        if (exists(out))
+        if (amce_exists(out))
             return TRUE;
     }
     out[0] = 0;
@@ -518,7 +505,7 @@ static BOOL art_out(BPTR fh, const char *path, const struct SongInfo *si, const 
     hash = hash * 33 + (ULONG)a->len;
     sprintf(out, "RAM:AmigaMCE-art/s%08lx.%s", (unsigned long)hash, a->png ? "png" : "jpg");
     (void)max;
-    if (exists(out))
+    if (amce_exists(out))
         return TRUE;
     if (!extract)
         return TRUE;                        /* where it would be */
@@ -600,7 +587,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
                 /* NAME and AUTH (AIFF, 8SVX): its title and author */
                 LONG p = 12;
                 while (f.big && p + 8 <= n) {
-                    ULONG len = be32(pb + p + 4);
+                    ULONG len = amce_be32(pb + p + 4);
                     if (len > (ULONG)n)
                         break;
                     if (!memcmp(pb + p, "NAME", 4))

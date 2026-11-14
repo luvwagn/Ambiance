@@ -1,8 +1,14 @@
 /*
- * AmigaMCE - small string helpers (no C library string locale dependence)
+ * AmigaMCE - small string helpers (no C library string locale dependence),
+ * and the other small helpers more than one part of AmigaMCE uses: kept
+ * here once, not copied into each
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <dos/dosextens.h>
+#include <string.h>
 
 #include <stdio.h>
 
@@ -95,4 +101,62 @@ const char *fmt_khz(ULONG hz, char *out)
     else
         sprintf(out, "%lu.%03lukHz", (unsigned long)k, (unsigned long)f);
     return out;
+}
+
+BOOL amce_ends_with(const char *s, const char *ext)
+{
+    LONG a = strlen(s), b = strlen(ext);
+    return a > b && amce_stricmp(s + a - b, ext) == 0;
+}
+
+BOOL amce_contains_nocase(const char *hay, const char *needle)
+{
+    const UBYTE *h = (const UBYTE *)hay, *n = (const UBYTE *)needle;
+    LONG i, j;
+    if (!n[0])
+        return FALSE;
+    for (i = 0; h[i]; i++) {
+        for (j = 0; n[j] && h[i + j] && fold(h[i + j]) == fold(n[j]); j++)
+            ;
+        if (!n[j])
+            return TRUE;
+    }
+    return FALSE;
+}
+
+LONG amce_num(const char *s)
+{
+    LONG v = 0;
+    while (s && *s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    return v;
+}
+
+void amce_join_path(char *out, LONG max, const char *dir, const char *name)
+{
+    LONG n;
+    amce_strlcpy(out, dir, max);
+    n = strlen(out);
+    if (n && out[n - 1] != ':' && out[n - 1] != '/')
+        amce_strlcat(out, "/", max);
+    amce_strlcat(out, name, max);
+}
+
+BOOL amce_exists(const char *path)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;            /* (no "insert volume" requester) */
+    l = Lock((CONST_STRPTR)path, SHARED_LOCK);
+    me->pr_WindowPtr = old;
+    if (l)
+        UnLock(l);
+    return l != 0;
+}
+
+void amce_time_text(char *out, ULONG ms)
+{
+    ULONG s = ms / 1000;
+    sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
 }

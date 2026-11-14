@@ -97,11 +97,6 @@ const char *amce_tr(const char *s)
     return s;
 }
 
-static ULONG be32(const UBYTE *p)
-{
-    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
-}
-
 /* The language written in a catalog file (its LANG chunk), into lang. */
 static BOOL cat_language(const char *path, char *lang)
 {
@@ -116,7 +111,7 @@ static BOOL cat_language(const char *path, char *lang)
     if (n < 20 || memcmp(b, "FORM", 4) || memcmp(b + 8, "CTLG", 4))
         return FALSE;
     for (i = 12; i + 8 <= n;) {
-        ULONG len = be32(b + i + 4);
+        ULONG len = amce_be32(b + i + 4);
         if (!memcmp(b + i, "LANG", 4)) {
             ULONG k;
             for (k = 0; k < len && k < 31 && i + 8 + (LONG)k < n && b[i + 8 + k]; k++)
@@ -250,7 +245,7 @@ static BOOL load(int k)
     /* the STRS chunk: ID, length (its NUL counted as written), the string,
      * padded to 4 */
     for (i = 12; i + 8 <= cat_size;) {
-        ULONG len = be32(cat_buf + i + 4);
+        ULONG len = amce_be32(cat_buf + i + 4);
         if (!memcmp(cat_buf + i, "STRS", 4) && i + 8 + len <= cat_size) {
             UBYTE *p = cat_buf + i + 8, *e = p + len;
             cap = len / 12 + 1;
@@ -261,7 +256,7 @@ static BOOL load(int k)
                 return FALSE;
             }
             while (p + 8 <= e && n < cap) {
-                ULONG id = be32(p), sl = be32(p + 4), j;
+                ULONG id = amce_be32(p), sl = amce_be32(p + 4), j;
                 const char *s = (const char *)(p + 8);
                 if (p + 8 + sl > e)
                     break;

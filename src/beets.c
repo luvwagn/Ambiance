@@ -199,11 +199,6 @@ void beets_forget(void)
     prefix_len = -1;
 }
 
-static ULONG rd32(const UBYTE *p)
-{
-    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
-}
-
 static void wr32(UBYTE *p, ULONG v)
 {
     p[0] = (UBYTE)(v >> 24);
@@ -305,8 +300,8 @@ static BOOL ix_sort(void)
 static BOOL ix_parse(void)
 {
     const UBYTE *p = ix.buf + HEAD, *end = ix.buf + ix.buf_size;
-    LONG n = (LONG)rd32(ix.buf + 28), i;
-    BOOL sorted = rd32(ix.buf + 24) == 1;
+    LONG n = (LONG)amce_be32(ix.buf + 28), i;
+    BOOL sorted = amce_be32(ix.buf + 24) == 1;
     if (n < 0 || n > 200000 || !(ix.al = AllocVec(sizeof(struct BAlbum) * (n + 1), MEMF_ANY)) ||
         !(ix.by_name = AllocVec(sizeof(LONG) * (n + 1), MEMF_ANY)))
         return FALSE;
@@ -314,7 +309,7 @@ static BOOL ix_parse(void)
         struct BAlbum *a = &ix.al[i];
         if (p + 8 > end)
             return FALSE;
-        a->id = rd32(p);
+        a->id = amce_be32(p);
         a->year = (UWORD)((p[4] << 8) | p[5]);
         p += 6;
         a->artist = (const char *)p;
@@ -333,9 +328,9 @@ static BOOL ix_parse(void)
     if (!sorted)
         return ix_sort();
     for (i = 0; i < n; i++, p += 4) {
-        if (p + 4 > end || rd32(p) >= (ULONG)n)
+        if (p + 4 > end || amce_be32(p) >= (ULONG)n)
             return FALSE;
-        ix.by_name[i] = (LONG)rd32(p);
+        ix.by_name[i] = (LONG)amce_be32(p);
     }
     return TRUE;
 }
@@ -398,9 +393,9 @@ static BOOL ix_read_file(ULONG size, const struct DateStamp *date)
         ix.buf_size = (ULONG)len;
         ix.buf[len] = 0;
         Close(fh);
-        if (rd32(ix.buf) == IDX_MAGIC && rd32(ix.buf + 4) == IDX_VER && rd32(ix.buf + 8) == size &&
-            rd32(ix.buf + 12) == (ULONG)date->ds_Days && rd32(ix.buf + 16) == (ULONG)date->ds_Minute &&
-            rd32(ix.buf + 20) == (ULONG)date->ds_Tick && ix_parse())
+        if (amce_be32(ix.buf) == IDX_MAGIC && amce_be32(ix.buf + 4) == IDX_VER && amce_be32(ix.buf + 8) == size &&
+            amce_be32(ix.buf + 12) == (ULONG)date->ds_Days && amce_be32(ix.buf + 16) == (ULONG)date->ds_Minute &&
+            amce_be32(ix.buf + 20) == (ULONG)date->ds_Tick && ix_parse())
             return TRUE;
         ix_free();
         return FALSE;
@@ -626,16 +621,6 @@ static BOOL path_latin1(const UBYTE *s, char *out, LONG max)
     return !*s;
 }
 
-static BOOL exists(const char *path)
-{
-    APTR old = quiet();
-    BPTR l = Lock((CONST_STRPTR)path, SHARED_LOCK);
-    loud(old);
-    if (l)
-        UnLock(l);
-    return l != 0;
-}
-
 /* p (Latin-1, /) as the file in MUSIC:, into out: the part before it
  * found once by trying p from each of its folders down. */
 static BOOL music_path(const char *p, char *out, LONG max)
@@ -647,7 +632,7 @@ static BOOL music_path(const char *p, char *out, LONG max)
     }
     for (s = p; (s = strchr(s, '/')); s++) {
         sprintf(out, "MUSIC:%.*s", (int)(max - 8), s + 1);
-        if (exists(out)) {
+        if (amce_exists(out)) {
             prefix_len = (LONG)(s + 1 - p);
             if (prefix_len >= (LONG)sizeof(prefix))
                 prefix_len = -1;

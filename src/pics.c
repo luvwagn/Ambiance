@@ -76,16 +76,6 @@ static const char *sniff(const char *path)
     return NULL;
 }
 
-static void join_path(char *out, LONG max, const char *dir, const char *name)
-{
-    LONG n;
-    amce_strlcpy(out, dir, max);
-    n = strlen(out);
-    if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
-}
-
 /* The format of a directory entry, NULL if it is not a picture. An IFF
  * file's name (.iff) may be a picture's or an animation's: in Videos it
  * is looked inside (few files there; Pictures' thousands of .iff game
@@ -97,7 +87,7 @@ static const char *entry_format(const char *dir, const char *name, BOOL vids)
     const char *f = strchr(name, '.') ? pics_format(name) : NULL;
     if (f && !(vids && !strcmp(f, "ILBM")))
         return f;
-    join_path(path, sizeof(path), dir, name);
+    amce_join_path(path, sizeof(path), dir, name);
     if (f) {
         const char *s = sniff(path);
         return s && !strcmp(s, "ANIM") ? s : f;
@@ -178,7 +168,7 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
         if (c->top && letter_dir(name)) {
             LONG n;
             LONG na = 0;
-            join_path(path, sizeof(path), c->dir, name);
+            amce_join_path(path, sizeof(path), c->dir, name);
             n = scan(path, c->ndirs, c->first, c->firstmax, FALSE, &na, c->vids);
             if (n > 0)
                 c->npics += n;
@@ -189,12 +179,12 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
     } else if ((f = entry_format(c->dir, name, c->vids)) && moving(f)) {
         c->nanims++;                        /* played, not shown: not a slideshow's */
         if (c->first && c->firstmax && !c->first[0] && !c->npics)
-            join_path(c->first, c->firstmax, c->dir, name);
+            amce_join_path(c->first, c->firstmax, c->dir, name);
     } else if (f) {
         c->npics++;
         if (c->first && c->firstmax &&
             (!c->first[0] || amce_stricmp(name, (const char *)FilePart((STRPTR)c->first)) < 0))
-            join_path(c->first, c->firstmax, c->dir, name);
+            amce_join_path(c->first, c->firstmax, c->dir, name);
     }
 }
 
@@ -249,7 +239,7 @@ static void any_cb(void *ctx, const char *name, BOOL isdir)
         return;
     if (isdir) {
         if (c->depth > 0) {
-            join_path(path, sizeof(path), c->dir, name);
+            amce_join_path(path, sizeof(path), c->dir, name);
             c->found = any_anim(path, c->depth - 1);
         }
     } else if ((f = entry_format(c->dir, name, TRUE)) && moving(f))
@@ -283,7 +273,7 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     const char *f = isdir ? NULL : entry_format(c->dir, name, c->vids);
     if (!isdir && (!f || (c->vids && !moving(f))))
         return;                             /* (Videos: animations only, no pictures) */
-    join_path(path, sizeof(path), c->dir, name);
+    amce_join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
         collect(path, c->out, FALSE, c->vids);
         return;

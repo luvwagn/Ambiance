@@ -69,7 +69,6 @@
 
 struct PlexConf plex;
 static char photo_libs[400];
-static ULONG num(const char *s);
 static ULONG sessions;          /* conversions asked for: each its own session */
 static char last_session[64];   /* the conversion asked for last: stopped before the next */
 static char last_item[160];     /* its track: asked for again (a seek), the same session */
@@ -141,7 +140,7 @@ void plex_load(UWORD cpu)
         char *sp = strchr(v, ' ');
         if (sp) {
             *sp = 0;
-            plex.libraries = (UWORD)num(sp + 1);
+            plex.libraries = (UWORD)amce_num(sp + 1);
         }
         amce_strlcpy(plex.library, v, sizeof(plex.library));
     }
@@ -287,9 +286,9 @@ ULONG plex_track_byte(const struct Item *it, ULONG from_ms)
     if (amce_stricmp(f, "mp3"))
         return 0;                           /* FLAC: seeks by its frames, from the start */
     radio_field(it, 10, f, sizeof(f));
-    size = num(f);
+    size = amce_num(f);
     radio_field(it, 2, f, sizeof(f));
-    total = num(f);
+    total = amce_num(f);
     if (!size || !total || from_ms >= total)
         return 0;
     return (size / 1000) * (from_ms / 10) / (total / 10000);
@@ -417,14 +416,6 @@ static void dur_text(ULONG ms, char *out)
         sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
 }
 
-static ULONG num(const char *s)
-{
-    ULONG v = 0;
-    while (s && *s >= '0' && *s <= '9')
-        v = v * 10 + (*s++ - '0');
-    return v;
-}
-
 static void text(const char *in, char *out, LONG max)
 {
     amce_strlcpy(out, in ? in : "", max);
@@ -532,8 +523,8 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
     if (x->ph && depth <= x->ph_depth)
         flush_photo(x);
     if (x->ph && !strcmp(name, "Media")) {
-        x->ph_w = num(xml_attr(a, n, "width"));
-        x->ph_h = num(xml_attr(a, n, "height"));
+        x->ph_w = amce_num(xml_attr(a, n, "width"));
+        x->ph_h = amce_num(xml_attr(a, n, "height"));
         return 1;
     }
     if (x->ph && !strcmp(name, "Part")) {
@@ -556,29 +547,29 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         return 1;
     }
     if (!strcmp(name, "MediaContainer")) {
-        x->total = num(xml_attr(a, n, "totalSize"));
+        x->total = amce_num(xml_attr(a, n, "totalSize"));
         if (!x->total)
-            x->total = num(xml_attr(a, n, "size"));
+            x->total = amce_num(xml_attr(a, n, "size"));
         return 1;
     }
     if (x->track && !strcmp(name, "Media")) {
         text(xml_attr(a, n, "audioCodec"), x->t_codec, sizeof(x->t_codec));
         if (!x->t_ms)
-            x->t_ms = num(xml_attr(a, n, "duration"));
-        x->t_kbps = num(xml_attr(a, n, "bitrate"));
-        x->t_ch = num(xml_attr(a, n, "audioChannels"));
+            x->t_ms = amce_num(xml_attr(a, n, "duration"));
+        x->t_kbps = amce_num(xml_attr(a, n, "bitrate"));
+        x->t_ch = amce_num(xml_attr(a, n, "audioChannels"));
         return 1;
     }
-    if (x->track && !strcmp(name, "Stream") && num(xml_attr(a, n, "streamType")) == 2) {
-        x->t_rate = num(xml_attr(a, n, "samplingRate"));
+    if (x->track && !strcmp(name, "Stream") && amce_num(xml_attr(a, n, "streamType")) == 2) {
+        x->t_rate = amce_num(xml_attr(a, n, "samplingRate"));
         if (!x->t_ch)
-            x->t_ch = num(xml_attr(a, n, "channels"));
+            x->t_ch = amce_num(xml_attr(a, n, "channels"));
         return 1;
     }
     if (x->track && !strcmp(name, "Part")) {
         if (!x->t_part[0] && (v = xml_attr(a, n, "key"))) {
             amce_strlcpy(x->t_part, v, sizeof(x->t_part));
-            x->t_size = num(xml_attr(a, n, "size"));
+            x->t_size = amce_num(xml_attr(a, n, "size"));
         }
         return 1;
     }
@@ -600,7 +591,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         /* its album and artist, so their rows can show it playing */
         text(xml_attr(a, n, "parentRatingKey"), x->t_album_rk, sizeof(x->t_album_rk));
         text(xml_attr(a, n, "grandparentRatingKey"), x->t_artist_rk, sizeof(x->t_artist_rk));
-        x->t_ms = num(xml_attr(a, n, "duration"));
+        x->t_ms = amce_num(xml_attr(a, n, "duration"));
         x->t_kbps = x->t_ch = x->t_rate = x->t_size = 0;
         return 1;
     }
@@ -661,12 +652,12 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         tag[0] = 0;
         if ((v = xml_attr(a, n, "year")))
             amce_strlcpy(tag, v, sizeof(tag));
-        else if (photo && (v = xml_attr(a, n, "leafCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? _("%lu photo") : _("%lu photos"), (unsigned long)num(v));
-        else if (photo && (v = xml_attr(a, n, "childCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? _("%lu item") : _("%lu items"), (unsigned long)num(v));
-        else if ((v = xml_attr(a, n, "leafCount")) && num(v))
-            sprintf(tag, num(v) == 1 ? _("%lu track") : _("%lu tracks"), (unsigned long)num(v));
+        else if (photo && (v = xml_attr(a, n, "leafCount")) && amce_num(v))
+            sprintf(tag, amce_num(v) == 1 ? _("%lu photo") : _("%lu photos"), (unsigned long)amce_num(v));
+        else if (photo && (v = xml_attr(a, n, "childCount")) && amce_num(v))
+            sprintf(tag, amce_num(v) == 1 ? _("%lu item") : _("%lu items"), (unsigned long)amce_num(v));
+        else if ((v = xml_attr(a, n, "leafCount")) && amce_num(v))
+            sprintf(tag, amce_num(v) == 1 ? _("%lu track") : _("%lu tracks"), (unsigned long)amce_num(v));
         {
             /* what the details pane shows of it: after the key, by tabs */
             static char more[700];
@@ -677,14 +668,14 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             text(xml_attr(a, n, "year"), year, sizeof(year));
             text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
             count[0] = 0;
-            if (!strcmp(type, "artist") && num(xml_attr(a, n, "childCount")))
-                sprintf(count, num(xml_attr(a, n, "childCount")) == 1 ? _("%lu album") : _("%lu albums"),
-                        (unsigned long)num(xml_attr(a, n, "childCount")));
+            if (!strcmp(type, "artist") && amce_num(xml_attr(a, n, "childCount")))
+                sprintf(count, amce_num(xml_attr(a, n, "childCount")) == 1 ? _("%lu album") : _("%lu albums"),
+                        (unsigned long)amce_num(xml_attr(a, n, "childCount")));
             else if (!strcmp(type, "photo"))
                 amce_strlcpy(count, tag, sizeof(count));    /* photos, or items */
-            else if (num(xml_attr(a, n, "leafCount")))
-                sprintf(count, num(xml_attr(a, n, "leafCount")) == 1 ? _("%lu track") : _("%lu tracks"),
-                        (unsigned long)num(xml_attr(a, n, "leafCount")));
+            else if (amce_num(xml_attr(a, n, "leafCount")))
+                sprintf(count, amce_num(xml_attr(a, n, "leafCount")) == 1 ? _("%lu track") : _("%lu tracks"),
+                        (unsigned long)amce_num(xml_attr(a, n, "leafCount")));
             text(xml_attr(a, n, "studio"), studio, sizeof(studio));
             summary_text(xml_attr(a, n, "summary"), summary, sizeof(summary));
             sprintf(more, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s", type, thumb, year, by, count, studio,
@@ -814,8 +805,8 @@ static int rate_el(void *ctx, const char *name, char **a, int n, int depth)
 {
     ULONG *r = ctx;
     (void)depth;
-    if (!strcmp(name, "Stream") && num(xml_attr(a, n, "streamType")) == 2) {
-        *r = num(xml_attr(a, n, "samplingRate"));
+    if (!strcmp(name, "Stream") && amce_num(xml_attr(a, n, "streamType")) == 2) {
+        *r = amce_num(xml_attr(a, n, "samplingRate"));
         return 0;
     }
     return 1;

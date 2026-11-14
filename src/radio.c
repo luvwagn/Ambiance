@@ -80,14 +80,6 @@ static const char *col(char **f, int n, int c)
     return c >= 0 && c < n ? f[c] : "";
 }
 
-static LONG num(const char *s)
-{
-    LONG v = 0;
-    while (*s >= '0' && *s <= '9')
-        v = v * 10 + (*s++ - '0');
-    return v;
-}
-
 static BOOL is_scheme(const char *u, const char *s)
 {
     return !amce_strnicmp(u, s, strlen(s));
@@ -97,10 +89,10 @@ static int station_row(struct fill *x, char **f, int n)
 {
     const char *url = col(f, n, x->c_urlr), *codec = col(f, n, x->c_codec);
     char name[96], tags[120], home[160], path[600], tag[24];
-    LONG i, br = num(col(f, n, x->c_bitrate));
+    LONG i, br = amce_num(col(f, n, x->c_bitrate));
     if (!url[0])
         url = col(f, n, x->c_url);
-    if (num(col(f, n, x->c_hls)) || amce_stricmp(codec, "MP3") || (max_kbps && br > max_kbps) ||
+    if (amce_num(col(f, n, x->c_hls)) || amce_stricmp(codec, "MP3") || (max_kbps && br > max_kbps) ||
         !(is_scheme(url, "http://") || (x->https && is_scheme(url, "https://")))) {
         x->skipped++;
         return 1;
@@ -122,7 +114,7 @@ static int station_row(struct fill *x, char **f, int n)
     amce_strlcpy(home, col(f, n, x->c_home), sizeof(home));
     squeeze_spaces(home);
     sprintf(path, "%s\t%s\t%s\t%s\t%ld\t%s\t%ld", url, col(f, n, x->c_cc), tags, home,
-            (long)num(col(f, n, x->c_votes)), codec, (long)br);
+            (long)amce_num(col(f, n, x->c_votes)), codec, (long)br);
     if (br > 0)
         sprintf(tag, "%ldk", (long)br);
     else
@@ -137,7 +129,7 @@ static int station_row(struct fill *x, char **f, int n)
 static int folder_row(struct fill *x, char **f, int n)
 {
     char name[64], q[240], enc[160], count[16];
-    LONG c = num(col(f, n, x->c_count));
+    LONG c = amce_num(col(f, n, x->c_count));
     struct Item *it;
     amce_strlcpy(name, col(f, n, x->c_name), sizeof(name));
     utf8_to_latin1(name);

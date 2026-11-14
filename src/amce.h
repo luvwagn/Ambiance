@@ -1115,4 +1115,30 @@ BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len);
 void amce_strlcpy(char *d, const char *s, LONG n);
 void amce_strlcat(char *d, const char *s, LONG n);
 
+/* Small helpers, one copy each (util.c): */
+BOOL amce_ends_with(const char *s, const char *ext);            /* case aside */
+BOOL amce_contains_nocase(const char *hay, const char *needle);  /* Latin-1 case aside */
+LONG amce_num(const char *s);           /* the digits at s (0: none, or s NULL) */
+void amce_join_path(char *out, LONG max, const char *dir, const char *name);  /* dir/name, dir: */
+BOOL amce_exists(const char *path);     /* a file or drawer there (no requester asked) */
+void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
+/* Numbers stored a byte at a time, big-endian (IFF, MP3, the index) or
+ * little (WAV): read wherever they lie (no alignment). */
+static inline ULONG amce_be32(const UBYTE *p)
+{
+    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
+}
+static inline UWORD amce_be16(const UBYTE *p)
+{
+    return (UWORD)((p[0] << 8) | p[1]);
+}
+static inline ULONG amce_le32(const UBYTE *p)
+{
+    return ((ULONG)p[3] << 24) | ((ULONG)p[2] << 16) | ((ULONG)p[1] << 8) | p[0];
+}
+static inline UWORD amce_le16(const UBYTE *p)
+{
+    return (UWORD)((p[1] << 8) | p[0]);
+}
+
 #endif
