@@ -15313,6 +15313,7 @@ out:
     amce_log("quitting", "");
     resume_store();                 /* what plays now, for the next start */
     vo_end();                       /* (Picasso96API.library, if a video opened it) */
+    st_mpv_close();                 /* (mpegv.library, if a video decoded by the CPU did) */
     {
         /* the volume, for the next start (muted: the one before, never silent) */
         char v[16];

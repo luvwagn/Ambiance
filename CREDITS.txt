@@ -181,11 +181,13 @@ internet radio stations kept by its community (https://www.radio-browser.info).
 
 Video
 -----
-MPEG-1 video without a ZZ9000 is decoded by pl_mpeg, by Dominic Szablewski
-(https://github.com/phoboslab/pl_mpeg), MIT licence: third_party/pl_mpeg/,
-its licence there; changed by AmigaMCE for speed on a 68020 (its
-README.txt says how), the pictures the same. Its sound is decoded by
-mpega.library.
+MPEG-1 video without a ZZ9000 is decoded by Libs/mpegv.library, its own
+project (extras/mpegv, https://github.com/luvwagn/mpegv.library), MIT
+licence (Licences/mpegv.library.txt): pl_mpeg, by Dominic Szablewski
+(https://github.com/phoboslab/pl_mpeg), MIT licence, changed by AmigaMCE
+for speed on a 68020 (extras/mpegv/third_party/pl_mpeg/README.txt says
+how), the pictures the same. AmigaMCE opens it at run time. Its sound is
+decoded by mpega.library.
 
 On a ZZ9000, MPEG video is decoded by the card through zz9k.library,
 called with the ZZ9000 SDK's headers (BlitterStudio's zz9000-firmware,
