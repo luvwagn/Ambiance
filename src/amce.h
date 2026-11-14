@@ -722,6 +722,12 @@ BOOL st_swv_take(ULONG *w, ULONG *h);
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);
 BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr);
 void st_swv_release(void);
+/* AC3 the card will not decode (Amiberry's emulated card): decoded by the
+ * CPU from now on (ac3.library), the card given the video without sound;
+ * NULL if the CPU can here, else why not. */
+void st_ac3_by_cpu(BOOL on);
+BOOL st_ac3_by_cpu_on(void);
+const char *st_ac3_cpu_why(void);
 void st_pause(BOOL on);
 void st_volume(int v);
 int st_state(void);

@@ -141,10 +141,10 @@ Videos
 - DVDs: while a DVD-Video disc is in a drive, its volume is at the top
   of Videos with a disc beside it. Fire plays its film, or its
   programmes one after another (a disc of episodes); N and P, or the
-  controls' |<< and >>|, the previous and next chapter or programme. Of
-  its sound tracks, the one the card is likeliest to play. Needs a
-  ZZ9000 and Libs/amcedvd.library (in the archive); no menus yet, and
-  no encrypted (CSS) discs.
+  controls' |< and >|, the previous and next chapter or programme. Of
+  its sound tracks, a stereo one first (MPEG audio, then AC-3), then
+  the others. Needs a ZZ9000 and Libs/amcedvd.library (in the archive);
+  no menus yet, and no encrypted (CSS) discs.
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
@@ -323,8 +323,10 @@ History
        transport streams, with their sound), and MPEG-1 by the CPU on
        RTG screens without one. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
-       controls, the sound track the card plays best
-       (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
+       controls, a stereo sound track first (Libs/amcedvd.library:
+       libdvdread and libdvdnav). AC-3 the card will not decode
+       (Amiberry's emulated card) decoded by a 68040 or 68060 instead
+       (Libs/ac3.library, ac3fpu.library: liba52). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
        (Settings > Display: Use overlay when available), decoded about
        twice as fast (2.6 times on a 68020), its B pictures passed over

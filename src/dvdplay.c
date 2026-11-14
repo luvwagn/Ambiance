@@ -278,19 +278,22 @@ LONG dvdplay_choose(const ULONG *lens, LONG nt, UBYTE *list, ULONG *out)
     return n;
 }
 
-/* Which sound track plays, of n (si[i] the disc's track i): the one the
- * card is likeliest to play, MPEG audio first (Amiberry's emulated card
- * plays no AC-3), then AC-3 in two channels or fewer, then any AC-3; LPCM
- * and DTS are not the card's. Of equals, the disc's own choice (deflt),
- * else the first. -1 if none plays. */
+/* Which sound track plays, of n (si[i] the disc's track i): stereo (two
+ * channels or fewer) first, whatever else there is; of those, MPEG audio
+ * before AC-3 (Amiberry's emulated card plays no AC-3: the CPU then
+ * decodes it, ac3.library, which stereo spares a mixing down). Then
+ * multichannel MPEG, then multichannel AC-3; LPCM and DTS are not the
+ * card's. Of equals, the disc's own choice (deflt), else the first. -1 if
+ * none plays. */
 static int rank(const struct DvdStreamInfo *si)
 {
+    BOOL stereo = si->channels && si->channels <= 2;
     if (!si->present)
         return 0;
     if (si->format == DVDA_MPEG1 || si->format == DVDA_MPEG2)
-        return 3;
+        return stereo ? 4 : 2;
     if (si->format == DVDA_AC3)
-        return si->channels && si->channels <= 2 ? 2 : 1;
+        return stereo ? 3 : 1;
     return 0;
 }
 

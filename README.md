@@ -137,7 +137,10 @@ of the Amiga to how fast it really is.
   freely scaled to fill the picture's place, with the same controls, keys
   and full screen as an ANIM; its sound (MPEG audio, or AC3) comes back
   from the card and plays as music does (AHI or Paula), the pictures kept
-  in time with it. Clicking the line of how far it has got goes there.
+  in time with it. Where the card will not decode AC3 (Amiberry's
+  emulated ZZ9000), a 68040 or 68060 decodes it instead with
+  `Libs/ac3.library` or `Libs/ac3fpu.library` (liba52), the card showing
+  the pictures. Clicking the line of how far it has got goes there.
   It needs the card's firmware with media sessions, Picasso96, and
   AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
   and AAC are not the card's: the preview says so (AAC: played without
@@ -396,6 +399,15 @@ interface of its own (`src/dvdlib/include`, MIT) and compiles none of its
 code. Whoever is given the library must be able to get its complete
 source: `src/dvdlib`, `extras/libdvd` and the Makefile's dvdlib part go
 with any distributed archive that holds it. See `src/dvdlib/README`.
+
+AC-3 sound the ZZ9000 will not decode is decoded by `ac3.library` or
+`ac3fpu.library`: liba52 0.8.0 (VideoLAN, `extras/liba52/`, changed for
+these libraries: `extras/liba52/CHANGES`) built as Exec libraries
+(`src/ac3lib/`, `make ac3lib`), for any program, as mpega.library is.
+They are GPL-2.0-or-later, opened at run time through an interface of
+their own (`src/ac3lib/include`, MIT); their source goes with any
+archive that holds them, as `amcedvd.library`'s does. See
+`src/ac3lib/README`.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which

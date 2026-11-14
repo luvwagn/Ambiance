@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Isrc/ac3lib/include \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
@@ -569,7 +569,7 @@ $(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h dataty
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) \
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
@@ -595,6 +595,11 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@# internal test builds: a public release must carry its source too
 	@cp $(DVDLIB) $(LHA_DIR)/Libs/
 	@cp extras/libdvd/libdvdnav/COPYING $(LHA_DIR)/Licences/amcedvd.library-GPL-2.txt
+	@# ac3.library and ac3fpu.library (AC-3 sound: liba52, GPL-2.0-or-later),
+	@# for a video's AC3 where the ZZ9000 will not decode it; the same: a
+	@# public release must carry their source too
+	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
+	@cp extras/liba52/COPYING $(LHA_DIR)/Licences/ac3.library-GPL-2.txt
 	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
 	@# Mozilla's root certificates (certifi's cacert.pem, MPL 2.0): what
 	@# HTTPS checks a server's certificate with (tls.c), AmiSSL's own or not

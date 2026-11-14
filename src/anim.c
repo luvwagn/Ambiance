@@ -3020,10 +3020,23 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             st_video_counts(&shown, &dropped);
             sprintf(m, "%s: stopped after %lu pictures: %s", name, (unsigned long)shown, st_error());
             amce_log("video", m);
+            if (!shown && vid_sound && vid.ac3 && !st_ac3_by_cpu_on()) {
+                /* the card would not take its AC3 (Amiberry's emulated
+                 * card decodes it only if its FFmpeg has it): the CPU's,
+                 * from now on (ac3.library), where it can */
+                const char *why = st_ac3_cpu_why();
+                if (!why) {
+                    amce_log("video", "again, its AC3 decoded by the CPU (from now on)");
+                    st_ac3_by_cpu(TRUE);
+                    sf.drawn = FALSE;
+                    if (!vid_start(cpu, 0, err, errmax))
+                        break;
+                    continue;
+                }
+                amce_log("video", why);
+            }
             if (!shown && vid_sound) {
-                /* the card would not take it with its sound (Amiberry's
-                 * emulated card, for one, decodes AC3 only if its FFmpeg
-                 * has it): again without */
+                /* the card would not take it with its sound: again without */
                 amce_log("video", "again without its sound");
                 vid.mp2 = vid.ac3 = FALSE;
                 vid_sound = FALSE;

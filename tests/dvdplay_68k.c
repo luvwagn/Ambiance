@@ -92,8 +92,9 @@ int main(int argc, char **argv)
         k = dvdplay_choose(tiny, 2, l, o);
         CHECK(k == 1 && l[0] == 1, "short titles: %ld, title %ld", (long)k, (long)l[0]);
     }
-    /* which sound track: MPEG, then AC-3 in two channels, then AC-3; of
-     * equals the disc's own; none of LPCM, DTS */
+    /* which sound track: stereo first (MPEG, then AC-3), then
+     * multichannel (MPEG, then AC-3); of equals the disc's own; none of
+     * LPCM, DTS */
     {
         struct DvdStreamInfo t[3];
         memset(t, 0, sizeof(t));
@@ -103,6 +104,9 @@ int main(int argc, char **argv)
         CHECK(dvdplay_pick_audio(t, 3, 0) == 1, "MPEG over AC-3");
         t[1].format = DVDA_AC3, t[1].channels = 2;
         CHECK(dvdplay_pick_audio(t, 3, 0) == 1, "AC-3 stereo over 5.1");
+        t[0].format = DVDA_MPEG2;
+        CHECK(dvdplay_pick_audio(t, 3, 0) == 1, "AC-3 stereo over multichannel MPEG");
+        t[0].format = DVDA_AC3;
         t[1].channels = 6;
         CHECK(dvdplay_pick_audio(t, 3, 1) == 1 && dvdplay_pick_audio(t, 3, -1) == 0,
               "of equals, the disc's own, else the first");
