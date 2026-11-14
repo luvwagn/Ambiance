@@ -3139,10 +3139,11 @@ static LONG vids_dvd_rows(struct ItemList *l)
     dvd_sig = dvd_volumes_sig();
     n = dvd_volumes(v, 4);
     for (i = n - 1; i >= 0; i--) {
-        char label[80], path[64];
-        sprintf(label, _("DVD: %.31s"), v[i].vol);
+        char path[64];
+        struct Item *it;
         sprintf(path, "%.31s:VIDEO_TS/VIDEO_TS.IFO", v[i].vol);
-        list_add_first(l, label, path, "DVD", IT_ANIM);
+        if ((it = list_add_first(l, v[i].vol, path, "DVD", IT_ANIM)))
+            it->mark = MARK_DISC;           /* its name, a disc beside it */
     }
     return n;
 }
@@ -5812,6 +5813,9 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     if (it->mark == MARK_CYCLE)
         gfx_cycle_glyph(&g, g.pane_x, y + (g.list_row_h - g.mark_px) / 2, g.mark_px,
                         sel ? PEN_WHITE : PEN_TEXT);
+    else if (it->mark == MARK_DISC)
+        gfx_disc_glyph(&g, g.pane_x, y + (g.list_row_h - g.mark_px) / 2, g.mark_px, PEN_TEXT,
+                       PEN_DIM, PEN_WHITE);
     else if (it->mark != MARK_NONE)
         gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
                  off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
@@ -6050,6 +6054,8 @@ static void draw_list_rows(struct Page *p)
  * a folder's count, a station's bitrate): "" none. */
 static const char *row_tag(const struct Page *p, const struct Item *it)
 {
+    if (is_dvd_row(it))
+        return "";                          /* (its disc says it) */
     return it->kind == IT_ACTION ? it->path
          : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
 }

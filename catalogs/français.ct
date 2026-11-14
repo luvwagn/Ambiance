@@ -681,9 +681,6 @@ Cette interface n'existerait pas sans l'immense travail de Paul Vince et d'Amiga
 MSG_07ED33C3
 Images : %.100s
 ; Pictures: %.100s
-MSG_3518A84D
-DVD : %.31s
-; DVD: %.31s
 MSG_749CDC88
 Vidéos : %.100s
 ; Videos: %.100s

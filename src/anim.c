@@ -2977,6 +2977,15 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG er
     }
     if (!(vid_dvd = dvdplay_open(vol, &vid, err, errmax)))
         return -1;
+    {
+        const char *why = video_check_dvd(&vid);    /* the card, and Picasso96 for its overlay */
+        if (why) {
+            amce_strlcpy(err, why, errmax);
+            dvdplay_close(vid_dvd);
+            vid_dvd = NULL;
+            return -1;
+        }
+    }
     vid_dvd_fresh = TRUE;
     r = vid_play(g, dvdplay_name(vid_dvd), dvdplay_name(vid_dvd), cpu, err, errmax);
     dvdplay_close(vid_dvd);

@@ -2650,6 +2650,34 @@ void gfx_cycle_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE pen)
         }
 }
 
+/* A shiny disc (a DVD in a drive) in a box px square: its rim and the
+ * ring round its hole in rim, the disc in body, glints at its upper left
+ * and lower right in shine; the hole left as it is (the row's
+ * background). 11 x 11 cells, fills of whole runs as the cycle
+ * glyph's, so the same in every style. */
+#define DISC_N 11
+void gfx_disc_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE rim, UBYTE body, UBYTE shine)
+{
+    static const char *const rows[DISC_N] = {
+        "...ttttt...", "..twddddt..", ".twwdddddt.", "twwwtttdddt", "tddt...tddt", "tddt...tddt",
+        "tddt...tddt", "tdddtttdwwt", ".tdddddwwt.", "..tddddwt..", "...ttttt..."
+    };
+    WORD cs = px / DISC_N > 0 ? px / DISC_N : 1, r, c;
+    WORD x0 = x + (px - DISC_N * cs) / 2, y0 = y + (px - DISC_N * cs) / 2;
+    for (r = 0; r < DISC_N; r++)
+        for (c = 0; c < DISC_N; c++) {
+            char k = rows[r][c];
+            WORD e;
+            if (k == '.')
+                continue;
+            for (e = c; e + 1 < DISC_N && rows[r][e + 1] == k; e++)
+                ;
+            gfx_fill(g, x0 + c * cs, y0 + r * cs, x0 + (e + 1) * cs - 1, y0 + (r + 1) * cs - 1,
+                     k == 't' ? rim : k == 'w' ? shine : body);
+            c = e;
+        }
+}
+
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     dirty = TRUE;

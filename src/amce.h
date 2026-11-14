@@ -211,6 +211,7 @@ WORD cjk_text(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s,
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
 void gfx_cycle_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE pen);
+void gfx_disc_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE rim, UBYTE body, UBYTE shine);
 void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px);
 struct TextFont *gfx_open_laced_font(int i);
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
@@ -459,7 +460,8 @@ enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATIO
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
        MARK_PLAYING /* the music playing now: dancing bars, drawn (not a bitmap) */,
-       MARK_CYCLE /* a setting Fire steps through (a cycle gadget's glyph, drawn) */ };
+       MARK_CYCLE /* a setting Fire steps through (a cycle gadget's glyph, drawn) */,
+       MARK_DISC /* a DVD in a drive: a shiny disc (drawn) */ };
 
 struct Item {
     char  *label;       /* what the user sees */
