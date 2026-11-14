@@ -2214,10 +2214,10 @@ static void mhi_play(LONG freq)
             break;
         }
         if (st.master != vol) {
-            /* half of MHI's 0 dB at full volume (-6 dB): as loud as mpega to
-             * Paula (two channels a side) or AHI (one, centred), not twice */
+            /* 90 of MHI's 100 at full volume (by ear: 50 was too quiet), near
+             * mpega's level through Paula or AHI */
             vol = st.master;
-            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 50 / 64);
+            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 90 / 64);
         }
         if (!mhs.playing && mhs.nq && (mhs.nq == MHI_BUFS || ended)) {
             MHIPlay(mhs.h);

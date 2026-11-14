@@ -51,6 +51,10 @@
 #define G_H 5
 #define PHASES      4           /* each glyph at 0, 1/4, 1/2, 3/4 of a pixel */
 #define FIRST_PEN   32          /* below: UI pens 0-15, the screen's 16-31 */
+#define WB_SPARE    8           /* Workbench's pens left free for everyone else
+                                 * (a video overlay's colour key needs one, other
+                                 * programs theirs): shades past that are the
+                                 * nearest colours */
 #define MAX_TEXT_W  2048        /* widest text drawn in one go, in pixels */
 
 struct Face {
@@ -371,6 +375,9 @@ static UBYTE alloc_rgb(struct Smooth *s, ULONG r, ULONG gg, ULONG b)
             LONG p;
             if (s->ngot >= sizeof(s->got))
                 return 0;
+            if (s->g->wb && s->g->scr->ViewPort.ColorMap->PalExtra &&
+                s->g->scr->ViewPort.ColorMap->PalExtra->pe_NFree <= WB_SPARE)
+                return 0;                   /* (the rest left for others) */
             p = (LONG)ObtainPen(s->g->scr->ViewPort.ColorMap, -1, r * 0x01010101UL,
                                      gg * 0x01010101UL, b * 0x01010101UL, PEN_EXCLUSIVE);
             if (p < 0)
