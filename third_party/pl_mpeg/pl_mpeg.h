@@ -1423,7 +1423,28 @@ size_t plm_buffer_tell_file_callback(plm_buffer_t *self, void *user);
 #endif
 
 int plm_buffer_has(plm_buffer_t *self, size_t count);
-int plm_buffer_read(plm_buffer_t *self, int count);
+int plm_buffer_read_slow(plm_buffer_t *self, int count);
+
+// AmigaMCE: bits read a longword at a time where the buffer holds 4 more
+// bytes (unaligned, as the 68020 and later read them); else, near its end,
+// as pl_mpeg read them (plm_buffer_read_slow): the same bits either way.
+#if defined(__m68k__) || defined(__mc68000__)
+typedef uint32_t plm_u32_alias __attribute__((may_alias));
+#define PLM_BE32(p) (*(const plm_u32_alias *)(const void *)(p))
+#else
+#define PLM_BE32(p) (((uint32_t)(p)[0] << 24) | ((uint32_t)(p)[1] << 16) | \
+	((uint32_t)(p)[2] << 8) | (uint32_t)(p)[3])
+#endif
+
+static inline int plm_buffer_read(plm_buffer_t *self, int count) {
+	size_t i = self->bit_index >> 3;
+	if (self->length - i >= 4 && count > 0 && count <= 25) {
+		uint32_t w = PLM_BE32(self->bytes + i) << (self->bit_index & 7);
+		self->bit_index += count;
+		return (int)(w >> (32 - count));
+	}
+	return plm_buffer_read_slow(self, count);
+}
 void plm_buffer_align(plm_buffer_t *self);
 void plm_buffer_skip(plm_buffer_t *self, size_t count);
 int plm_buffer_skip_bytes(plm_buffer_t *self, uint8_t v);
@@ -1672,7 +1693,7 @@ int plm_buffer_has(plm_buffer_t *self, size_t count) {
 	return FALSE;
 }
 
-int plm_buffer_read(plm_buffer_t *self, int count) {
+int plm_buffer_read_slow(plm_buffer_t *self, int count) {
 	if (!plm_buffer_has(self, count)) {
 		return 0;
 	}
@@ -1776,6 +1797,67 @@ int16_t plm_buffer_read_vlc(plm_buffer_t *self, const plm_vlc_t *table) {
 
 uint16_t plm_buffer_read_vlc_uint(plm_buffer_t *self, const plm_vlc_uint_t *table) {
 	return (uint16_t)plm_buffer_read_vlc(self, (const plm_vlc_t *)table);
+}
+
+// AmigaMCE: a VLC by a table of its first bits (plm_vlc_fast_build: each
+// pattern of them the code it begins and its length, or the tree's node
+// it goes on from), where the buffer holds 4 more bytes; else bit by bit
+// as above. The same codes either way: the tables are made by walking the
+// same trees.
+typedef struct {
+	int16_t value;   // the code's value; or, length 0, the node to go on from
+	uint8_t length;  // its bits (0: longer than the table's)
+	uint8_t pad;
+} plm_vlc_fast_t;
+
+static void plm_vlc_fast_build(const plm_vlc_t *table, plm_vlc_fast_t *fast, int bits) {
+	for (int pattern = 0; pattern < (1 << bits); pattern++) {
+		int index = 0;
+		plm_vlc_fast_t e = {0, 0, 0};
+		for (int b = 0; b < bits; b++) {
+			plm_vlc_t state = table[index + ((pattern >> (bits - 1 - b)) & 1)];
+			if (state.index <= 0) {
+				e.value = state.value;
+				e.length = (uint8_t)(b + 1);
+				break;
+			}
+			index = state.index;
+		}
+		if (!e.length) {
+			e.value = (int16_t)index;
+		}
+		fast[pattern] = e;
+	}
+}
+
+static inline int16_t plm_buffer_read_vlc_fast(
+	plm_buffer_t *self, const plm_vlc_t *table, const plm_vlc_fast_t *fast, int bits
+) {
+	size_t i = self->bit_index >> 3;
+	if (self->length - i >= 4) {
+		uint32_t w = PLM_BE32(self->bytes + i) << (self->bit_index & 7);
+		const plm_vlc_fast_t *e = &fast[w >> (32 - bits)];
+		if (e->length) {
+			self->bit_index += e->length;
+			return e->value;
+		}
+		// longer: on through the tree from where the table left it (25
+		// bits are in w; no code here is that long)
+		plm_vlc_t state;
+		int index = e->value;
+		int b = bits;
+		do {
+			state = table[index + ((w >> (31 - b)) & 1)];
+			index = state.index;
+			b++;
+		} while (state.index > 0 && b < 25);
+		self->bit_index += b;
+		while (state.index > 0) {
+			state = table[state.index + plm_buffer_read(self, 1)];
+		}
+		return state.value;
+	}
+	return plm_buffer_read_vlc(self, table);
 }
 
 
@@ -2776,7 +2858,36 @@ void plm_video_process_macroblock(plm_video_t *self, uint8_t *s, uint8_t *d, int
 void plm_video_decode_block(plm_video_t *self, int block);
 void plm_video_idct(int *block);
 
+// AmigaMCE: the video VLCs' tables of their first bits (plm_vlc_fast_t),
+// made once.
+#define PLM_VLC_FAST_BITS 8
+#define PLM_VLC_FAST_COEFF_BITS 10
+static plm_vlc_fast_t plm_fast_mb_increment[1 << PLM_VLC_FAST_BITS];
+static plm_vlc_fast_t plm_fast_mb_type[4][1 << PLM_VLC_FAST_BITS];
+static plm_vlc_fast_t plm_fast_cbp[1 << PLM_VLC_FAST_BITS];
+static plm_vlc_fast_t plm_fast_motion[1 << PLM_VLC_FAST_BITS];
+static plm_vlc_fast_t plm_fast_dct_size[2][1 << PLM_VLC_FAST_BITS];
+static plm_vlc_fast_t plm_fast_dct_coeff[1 << PLM_VLC_FAST_COEFF_BITS];
+static int plm_fast_ready;
+
+static void plm_video_fast_init(void) {
+	if (plm_fast_ready) {
+		return;
+	}
+	plm_vlc_fast_build(PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT, plm_fast_mb_increment, PLM_VLC_FAST_BITS);
+	for (int t = 1; t < 4; t++) {
+		plm_vlc_fast_build(PLM_VIDEO_MACROBLOCK_TYPE[t], plm_fast_mb_type[t], PLM_VLC_FAST_BITS);
+	}
+	plm_vlc_fast_build(PLM_VIDEO_CODE_BLOCK_PATTERN, plm_fast_cbp, PLM_VLC_FAST_BITS);
+	plm_vlc_fast_build(PLM_VIDEO_MOTION, plm_fast_motion, PLM_VLC_FAST_BITS);
+	plm_vlc_fast_build(PLM_VIDEO_DCT_SIZE_LUMINANCE, plm_fast_dct_size[0], PLM_VLC_FAST_BITS);
+	plm_vlc_fast_build(PLM_VIDEO_DCT_SIZE_CHROMINANCE, plm_fast_dct_size[1], PLM_VLC_FAST_BITS);
+	plm_vlc_fast_build((const plm_vlc_t *)PLM_VIDEO_DCT_COEFF, plm_fast_dct_coeff, PLM_VLC_FAST_COEFF_BITS);
+	plm_fast_ready = TRUE;
+}
+
 plm_video_t * plm_video_create_with_buffer(plm_buffer_t *buffer, int destroy_when_done) {
+	plm_video_fast_init();
 	plm_video_t *self = (plm_video_t *)PLM_MALLOC(sizeof(plm_video_t));
 	memset(self, 0, sizeof(plm_video_t));
 	
@@ -3137,16 +3248,16 @@ void plm_video_decode_slice(plm_video_t *self, int slice) {
 void plm_video_decode_macroblock(plm_video_t *self) {
 	// Decode increment
 	int increment = 0;
-	int t = plm_buffer_read_vlc(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT);
+	int t = plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT, plm_fast_mb_increment, PLM_VLC_FAST_BITS);
 
 	while (t == 34) {
 		// macroblock_stuffing
-		t = plm_buffer_read_vlc(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT);
+		t = plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT, plm_fast_mb_increment, PLM_VLC_FAST_BITS);
 	}
 	while (t == 35) {
 		// macroblock_escape
 		increment += 33;
-		t = plm_buffer_read_vlc(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT);
+		t = plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT, plm_fast_mb_increment, PLM_VLC_FAST_BITS);
 	}
 	increment += t;
 
@@ -3195,7 +3306,9 @@ void plm_video_decode_macroblock(plm_video_t *self) {
 
 	// Process the current macroblock
 	const plm_vlc_t *table = PLM_VIDEO_MACROBLOCK_TYPE[self->picture_type];
-	self->macroblock_type = plm_buffer_read_vlc(self->buffer, table);
+	self->macroblock_type = self->picture_type >= 1 && self->picture_type <= 3
+		? plm_buffer_read_vlc_fast(self->buffer, table, plm_fast_mb_type[self->picture_type], PLM_VLC_FAST_BITS)
+		: plm_buffer_read_vlc(self->buffer, table);
 
 	self->macroblock_intra = (self->macroblock_type & 0x01);
 	self->motion_forward.is_set = (self->macroblock_type & 0x08);
@@ -3223,7 +3336,7 @@ void plm_video_decode_macroblock(plm_video_t *self) {
 
 	// Decode blocks
 	int cbp = ((self->macroblock_type & 0x02) != 0)
-		? plm_buffer_read_vlc(self->buffer, PLM_VIDEO_CODE_BLOCK_PATTERN)
+		? plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_CODE_BLOCK_PATTERN, plm_fast_cbp, PLM_VLC_FAST_BITS)
 		: (self->macroblock_intra ? 0x3f : 0);
 
 	for (int block = 0, mask = 0x20; block < 6; block++) {
@@ -3257,7 +3370,7 @@ void plm_video_decode_motion_vectors(plm_video_t *self) {
 
 int plm_video_decode_motion_vector(plm_video_t *self, int r_size, int motion) {
 	int fscale = 1 << r_size;
-	int m_code = plm_buffer_read_vlc(self->buffer, PLM_VIDEO_MOTION);
+	int m_code = plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_MOTION, plm_fast_motion, PLM_VLC_FAST_BITS);
 	int r = 0;
 	int d;
 
@@ -3394,7 +3507,7 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 		// DC prediction
 		int plane_index = block > 3 ? block - 3 : 0;
 		predictor = self->dc_predictor[plane_index];
-		dct_size = plm_buffer_read_vlc(self->buffer, PLM_VIDEO_DCT_SIZE[plane_index]);
+		dct_size = plm_buffer_read_vlc_fast(self->buffer, PLM_VIDEO_DCT_SIZE[plane_index], plm_fast_dct_size[plane_index ? 1 : 0], PLM_VLC_FAST_BITS);
 
 		// Read DC coeff
 		if (dct_size > 0) {
@@ -3427,7 +3540,7 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	int level = 0;
 	while (TRUE) {
 		int run = 0;
-		uint16_t coeff = plm_buffer_read_vlc_uint(self->buffer, PLM_VIDEO_DCT_COEFF);
+		uint16_t coeff = (uint16_t)plm_buffer_read_vlc_fast(self->buffer, (const plm_vlc_t *)PLM_VIDEO_DCT_COEFF, plm_fast_dct_coeff, PLM_VLC_FAST_COEFF_BITS);
 
 		if ((coeff == 0x0001) && (n > 0) && (plm_buffer_read(self->buffer, 1) == 0)) {
 			// end_of_block
