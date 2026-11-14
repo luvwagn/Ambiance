@@ -2942,6 +2942,22 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
         /* where it is; its end (looped, or stopped there) */
         s = st_state();
         if (s == ST_FAILED) {
+            ULONG shown = 0, dropped = 0;
+            st_video_counts(&shown, &dropped);
+            sprintf(m, "%s: stopped after %lu pictures: %s", name, (unsigned long)shown, st_error());
+            amce_log("video", m);
+            if (!shown && vid_sound) {
+                /* the card would not take it with its sound (Amiberry's
+                 * emulated card, for one, decodes AC3 only if its FFmpeg
+                 * has it): again without */
+                amce_log("video", "again without its sound");
+                vid.mp2 = vid.ac3 = FALSE;
+                vid_sound = FALSE;
+                sf.drawn = FALSE;
+                if (!vid_start(cpu, 0, err, errmax))
+                    break;
+                continue;
+            }
             if (st_error()[0])
                 amce_strlcpy(err, st_error(), errmax);
             break;
