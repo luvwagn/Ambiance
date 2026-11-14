@@ -137,7 +137,8 @@ Videos
 - MPEG video on a ZZ9000: .mpg, .mpeg, .vob and transport streams
   (.ts, .m2ts), MPEG-1 or MPEG-2, decoded by the card and shown on its
   overlay, its sound (MPEG audio or AC-3) played as music is. Without
-  one, MPEG-1 is decoded by the CPU on RTG screens.
+  one, MPEG-1 is decoded by the CPU on RTG screens (Libs/mpegv.library,
+  also on Aminet for other programs).
 - DVDs: while a DVD-Video disc is in a drive, its volume is at the top
   of Videos with a disc beside it. Fire plays its film, or its
   programmes one after another (a disc of episodes); N and P, or the

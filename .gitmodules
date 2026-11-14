@@ -1,0 +1,3 @@
+[submodule "extras/mpegv"]
+	path = extras/mpegv
+	url = https://github.com/luvwagn/mpegv.library.git

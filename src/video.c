@@ -209,7 +209,7 @@ const char *video_check(const char *path, struct VProbe *v)
     v->sw = FALSE;
     {
         /* the card if it can (unless ENV:AmigaMCE/VideoDecoder says CPU),
-         * else the CPU: MPEG-1 only (pl_mpeg) */
+         * else the CPU: MPEG-1 only (mpegv.library) */
         char ev[16];
         BOOL cpu = GetVar((CONST_STRPTR)"AmigaMCE/VideoDecoder", (STRPTR)ev, sizeof(ev),
                           GVF_GLOBAL_ONLY) > 0 && (ev[0] == 'c' || ev[0] == 'C');
@@ -233,6 +233,10 @@ const char *video_check(const char *path, struct VProbe *v)
             }
             sprintf(m, "decoded by the CPU (%s)", w);
             amce_log("video", m);
+            if (!st_mpv_open()) {
+                amce_log("video", "no mpegv.library (AmigaMCE's Libs, or LIBS:)");
+                return _("MPEG-1 by the CPU needs mpegv.library (AmigaMCE's Libs)");
+            }
             v->sw = TRUE;
             /* its pictures on the card's overlay if this screen has one
              * (Picasso96's PIP: it scales them), else drawn */

@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Isrc/ac3lib/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Isrc/ac3lib/include -Iextras/mpegv/include \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
@@ -36,7 +36,7 @@ LIBS    = -lamiga -lm
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c src/plmpeg.c \
+       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/glyph.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
@@ -64,7 +64,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -101,9 +101,6 @@ ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
-# pl_mpeg's decoder: for speed (-O2: fewer 68020 cycles than -O3 here,
-# tests/mpeg_prof.py), its own warnings its own
-build/plmpeg.o: CFLAGS += -O2 -w
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
@@ -172,7 +169,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3
+test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -218,23 +215,24 @@ test-animdraw: build/animdraw_host build/animdraw_68k
 	@cd build && vamos -C 68020 -m 8192 -s 256 animdraw_68k > test-animdraw68k.txt && grep -q " 0 failed" test-animdraw68k.txt \
 		&& echo "  CHECK animation drawing (68020 assembler) ok" || (cat test-animdraw68k.txt; exit 1)
 
-# MPEG-1 decoding (pl_mpeg, src/plmpeg.c) on a 68020 under vamos: where
-# the cycles go, by function, for the first N pictures of a file
+# mpegv.library: MPEG-1 video decoded by the CPU (pl_mpeg inside), its own
+# project (extras/mpegv, a git submodule: github.com/luvwagn/mpegv.library,
+# MIT), opened at run time where there is no ZZ9000. Built by its own
+# Makefile; its tests (its pictures against pl_mpeg's own, bit for bit, on
+# the host and on a 68020 under vamos) are part of make test; where a
+# 68020's cycles go, by function, for the first N pictures of a file:
 #   make mpeg-prof MPG=file.mpg [N=60]
-# and each picture's hash (tests/mpeg_bench.c), to see a change gives the
-# same pictures: build/bench/mpeg_bench_host file.mpg, before and after
+MPEGVLIB = extras/mpegv/build/mpegv.library
+MPEGV_SRC = $(wildcard extras/mpegv/src/*.c extras/mpegv/src/*.h extras/mpegv/include/*/*.h \
+              extras/mpegv/third_party/pl_mpeg/pl_mpeg.h) extras/mpegv/Makefile
+$(MPEGVLIB): $(MPEGV_SRC)
+	@$(MAKE) --no-print-directory -C extras/mpegv build/mpegv.library
+mpegvlib: $(MPEGVLIB)
+test-mpegv: $(MPEGVLIB)
+	@$(MAKE) --no-print-directory -C extras/mpegv test
 N ?= 60
-# (vamos's own Python, whose amitools the profiler drives)
-VAMOS_PYTHON ?= $(dir $(shell command -v vamos))python
 mpeg-prof:
-	@mkdir -p build/bench
-	@gcc -O2 -w -Ithird_party/pl_mpeg -o build/bench/mpeg_bench_host tests/mpeg_bench.c src/plmpeg.c
-	@$(CC) -O2 $(CPU) -noixemul -w -Ithird_party/pl_mpeg -o build/bench/mpeg_bench tests/mpeg_bench.c src/plmpeg.c -lm
-	@m68k-amigaos-nm build/bench/mpeg_bench > build/bench/mpeg_bench.syms
-	@ln -sf $(abspath $(MPG)) build/bench/bench.mpg
-	@cd build/bench && rm -f mpeg_bench.base && \
-		$(VAMOS_PYTHON) $(abspath tests/mpeg_prof.py) mpeg_bench.syms -- -C 68020 -m 8192 -s 64 \
-		--slice-cycles 700 mpeg_bench bench.mpg $(N) nohash 2>&1 | grep -A14 "^total"
+	@$(MAKE) --no-print-directory -C extras/mpegv prof MPG=$(abspath $(MPG)) N=$(N)
 
 # an ANIM's decoding and drawing timed on a 68020 (vamos counts its cycles):
 #   make anim-bench ANIM=file.anim
@@ -569,7 +567,7 @@ $(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h dataty
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) \
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPEGVLIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
@@ -599,6 +597,9 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@# for a video's AC3 where the ZZ9000 will not decode it; the same: a
 	@# public release must carry their source too
 	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
+	@# mpegv.library (MPEG-1 by the CPU: pl_mpeg, MIT), extras/mpegv
+	@cp $(MPEGVLIB) $(LHA_DIR)/Libs/
+	@cp extras/mpegv/LICENSE $(LHA_DIR)/Licences/mpegv.library.txt
 	@cp extras/liba52/COPYING $(LHA_DIR)/Licences/ac3.library-GPL-2.txt
 	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
 	@# Mozilla's root certificates (certifi's cacert.pem, MPL 2.0): what

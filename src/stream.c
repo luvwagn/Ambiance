@@ -35,8 +35,8 @@
 #include "zz9k.h"
 #include "tspack.h"
 #include <stddef.h>
-#define PLM_NO_STDIO
-#include "../third_party/pl_mpeg/pl_mpeg.h"
+#include <libraries/mpegv.h>
+#include <proto/mpegv.h>
 #include "vprobe.h"
 #include "dvdplay.h"
 #include <libraries/ac3.h>
@@ -237,7 +237,7 @@ static struct {
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
     /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
     BOOL video, v_mpeg2, v_mp2, v_es;   /* (v_mp2: its sound the card's, MPEG audio or AC3) */
-    BOOL v_sw;                      /* decoded by the CPU (pl_mpeg), not the card */
+    BOOL v_sw;                      /* decoded by the CPU (mpegv.library), not the card */
     ULONG v_hz;                     /* its sound's rate (the probe's) */
     BOOL v_ac3;                     /* ...AC3 */
     BOOL v_ac3cpu;                  /* its AC3 decoded by the CPU (ac3.library), not the card */
@@ -2432,10 +2432,11 @@ static LONG a3_frame(struct Ac3Info *ai)
 }
 
 /* ---------------------------------------------------------- MPEG-1 by the CPU
- * Where there is no ZZ9000 (or it is not to be used): pl_mpeg's demuxer
- * and MPEG-1 video decoder (plmpeg.c), the sound by mpega.library as an
- * MP3 file's is (through the same bitstream hook, from the demuxer's audio
- * packets). Each picture's planes (Y, Cb, Cr: 4:2:0) copied into one of
+ * Where there is no ZZ9000 (or it is not to be used): mpegv.library
+ * (extras/mpegv: pl_mpeg's demuxer and MPEG-1 video decoder, opened at run
+ * time) reads the file through a hook and hands its audio packets to
+ * another, which queues them for mpega.library, the sound decoded as an
+ * MP3 file's is (through the same bitstream hook). Each picture's planes (Y, Cb, Cr: 4:2:0) copied into one of
  * SWV_SLOTS buffers, held until its time by the sound (or the clock
  * without), then given to the UI (anim.c), which takes the newest it is
  * given and makes it what it shows: the card's YUV overlay's (st_swv_yuyv)
@@ -2456,12 +2457,31 @@ static struct {
 static ULONG swv_w, swv_h, swv_seq;
 static ULONG swv_yw, swv_yh;              /* its planes' (whole macroblocks) */
 static int swv_on = -1;                    /* the slot the UI has (SW_ON) */
-static plm_buffer_t *sw_fbuf, *sw_vbuf;
-static plm_demux_t *sw_demux;
-static UBYTE *sw_aq, *sw_in;
+static APTR sw_mpv;                         /* its decoder (mpegv.library) */
+static UBYTE *sw_aq;
 static ULONG sw_aq_in, sw_aq_out;
-static double sw_apts, sw_vpts;             /* the first audio and video packets' times */
-static BOOL sw_ended, sw_sound;
+static LONG sw_apts;                        /* the first audio packet's time (90 kHz), -1 none */
+static BOOL sw_sound;
+
+/* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
+ * video is to be decoded by the CPU (video_check: its PROGDIR: is
+ * AmigaMCE's), used by the radio process and the UI alike, kept until
+ * AmigaMCE quits (st_mpv_close). NULL if it is not there. */
+struct Library *MpegvBase;
+
+struct Library *st_mpv_open(void)
+{
+    if (!MpegvBase && !(MpegvBase = OpenLibrary((CONST_STRPTR) "PROGDIR:Libs/" MPEGVNAME, MPEGVVERSION)))
+        MpegvBase = OpenLibrary((CONST_STRPTR)MPEGVNAME, MPEGVVERSION);
+    return MpegvBase;
+}
+
+void st_mpv_close(void)
+{
+    if (MpegvBase)
+        CloseLibrary(MpegvBase);
+    MpegvBase = NULL;
+}
 
 /* The newest picture given to show, if one is (FALSE: none new since the
  * last), and its size: the UI's (st_swv_rgb, st_swv_yuyv) until the next,
@@ -2489,56 +2509,46 @@ BOOL st_swv_take(ULONG *w, ULONG *h)
     return best >= 0;
 }
 
-/* The UI's picture as pl_mpeg's frame (FALSE: it has none). */
-static BOOL swv_frame(plm_frame_t *f)
+/* The UI's picture, as mpegv.library's helpers take one (FALSE: it has
+ * none, or there is no library). */
+static BOOL swv_pic(struct MpvPicture *p)
 {
     int s = swv_on;
     UBYTE *b;
-    if (s < 0 || !swv[s].buf || swv[s].state != SW_ON)
+    if (s < 0 || !swv[s].buf || swv[s].state != SW_ON || !MpegvBase)
         return FALSE;
     b = swv[s].buf;
-    f->time = 0;
-    f->width = swv_w;
-    f->height = swv_h;
-    f->y.width = swv_yw;
-    f->y.height = swv_yh;
-    f->y.data = b;
-    f->cb.width = f->cr.width = swv_yw / 2;
-    f->cb.height = f->cr.height = swv_yh / 2;
-    f->cb.data = b + swv_yw * swv_yh;
-    f->cr.data = f->cb.data + swv_yw * swv_yh / 4;
+    memset(p, 0, sizeof(*p));
+    p->mpic_Y = b;
+    p->mpic_Cb = b + swv_yw * swv_yh;
+    p->mpic_Cr = p->mpic_Cb + swv_yw * swv_yh / 4;
+    p->mpic_Width = (UWORD)swv_w;
+    p->mpic_Height = (UWORD)swv_h;
+    p->mpic_YModulo = (UWORD)swv_yw;
+    p->mpic_CModulo = (UWORD)(swv_yw / 2);
+    p->mpic_YRows = (UWORD)swv_yh;
     return TRUE;
 }
 
 /* The UI's picture as 24-bit RGB into dst (bpr bytes a row). */
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr)
 {
-    plm_frame_t f;
-    if (!swv_frame(&f))
+    struct MpvPicture p;
+    if (!swv_pic(&p))
         return FALSE;
-    plm_frame_to_rgb(&f, dst, (int)bpr);
+    MpvToRGB(&p, dst, bpr, MPVR_RGB24);
     return TRUE;
 }
 
 /* The UI's picture as packed YUV 4:2:2 into dst (bpr bytes a row): the
- * ZZ9000's YUV422CGX overlay, Y0 Cb Y1 Cr (each chroma row twice). Written
- * a longword at a time (the card's memory, across the Zorro bus). */
+ * ZZ9000's YUV422CGX overlay, Y0 Cb Y1 Cr (each chroma row twice), a
+ * longword at a time (the card's memory, across the Zorro bus). */
 BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr)
 {
-    plm_frame_t f;
-    ULONG r, x, n;
-    if (!swv_frame(&f))
+    struct MpvPicture p;
+    if (!swv_pic(&p))
         return FALSE;
-    n = f.width / 2;
-    for (r = 0; r < f.height; r++) {
-        const UWORD *y = (const UWORD *)(f.y.data + r * f.y.width);
-        const UBYTE *cb = f.cb.data + (r >> 1) * f.cb.width, *cr = f.cr.data + (r >> 1) * f.cr.width;
-        ULONG *d = (ULONG *)(dst + r * bpr);
-        for (x = 0; x < n; x++) {
-            ULONG yy = *y++;
-            *d++ = ((yy & 0xFF00) << 16) | ((ULONG)*cb++ << 16) | ((yy & 0xFF) << 8) | *cr++;
-        }
-    }
+    MpvToYUV422(&p, dst, bpr, MPVY_Y0UY1V);
     return TRUE;
 }
 
@@ -2565,59 +2575,30 @@ static void sw_aq_put(const UBYTE *d, ULONG n)
     }
 }
 
-/* One packet from the file: video to the decoder's buffer, sound to the
- * queue. FALSE at its end. */
-static BOOL sw_pump(void)
+/* mpegv.library's read hook: the file's next bytes (0 at its end, as an
+ * error was taken before) */
+static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
+                     register struct MpvRead *r __asm("a1"))
 {
-    plm_packet_t *p;
-    if (sw_ended)
-        return FALSE;
-    if (!(p = plm_demux_decode(sw_demux))) {
-        sw_ended = TRUE;
-        plm_buffer_signal_end(sw_vbuf);
-        return FALSE;
-    }
-    if (p->type == (int)PLM_DEMUX_PACKET_VIDEO_1) {
-        if (sw_vpts < 0 && p->pts != PLM_PACKET_INVALID_TS)
-            sw_vpts = p->pts;
-        plm_buffer_write(sw_vbuf, p->data, p->length);
-    } else if (p->type == (int)PLM_DEMUX_PACKET_AUDIO_1 && sw_sound) {
-        if (sw_apts < 0 && p->pts != PLM_PACKET_INVALID_TS)
-            sw_apts = p->pts;
-        sw_aq_put(p->data, p->length);
-    }
-    return TRUE;
+    LONG n = Read(st.fh, r->mr_Buffer, r->mr_Length);
+    (void)h;
+    (void)mpv;
+    return n > 0 ? (ULONG)n : 0;
 }
 
-/* The file into the demuxer's buffer. */
-static void sw_fload(plm_buffer_t *b, void *user)
+/* mpegv.library's packet hook: the file's first audio stream to the
+ * sound's queue, its first time kept */
+static ULONG sw_packet(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
+                       register struct MpvPacket *p __asm("a1"))
 {
-    LONG n = Read(st.fh, sw_in, SW_IN);
-    (void)user;
-    if (n <= 0)
-        plm_buffer_signal_end(b);
-    else
-        plm_buffer_write(b, sw_in, (size_t)n);
-}
-
-/* The video decoder wants more: packets until a video one (a bare stream:
- * the file itself). */
-static void sw_vload(plm_buffer_t *b, void *user)
-{
-    (void)user;
-    if (!sw_demux) {
-        LONG n = Read(st.fh, sw_in, SW_IN);
-        if (n <= 0)
-            plm_buffer_signal_end(b);
-        else
-            plm_buffer_write(b, sw_in, (size_t)n);
-        return;
+    (void)h;
+    (void)mpv;
+    if (p->mp_Stream == 0xC0 && sw_sound) {
+        if (sw_apts < 0 && (p->mp_Flags & MPVPF_PTS))
+            sw_apts = (LONG)p->mp_PTS;
+        sw_aq_put(p->mp_Data, p->mp_Length);
     }
-    {
-        size_t had = plm_buffer_get_remaining(b);
-        while (plm_buffer_get_remaining(b) == had && sw_pump())
-            ;
-    }
+    return 0;
 }
 
 /* mpega's bytes: from the sound's queue (the file demuxed further as
@@ -2626,7 +2607,7 @@ static LONG sw_aread(UBYTE *buf, LONG n)
 {
     LONG got = 0;
     while (got < n) {
-        if (sw_aq_in == sw_aq_out && !sw_pump())
+        if (sw_aq_in == sw_aq_out && !MpvPump(sw_mpv))
             break;
         while (got < n && sw_aq_out != sw_aq_in)
             buf[got++] = sw_aq[sw_aq_out++ % SW_AQ];
@@ -2657,14 +2638,15 @@ static void swv_run(void)
     struct Hook hook;
     MPEGA_CTRL ctrl;
     MPEGA_STREAM *ms = NULL;
-    plm_video_t *vd = NULL;
+    struct Hook rhook, phook;
+    struct MpvInfo mi;
     static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
     WORD *pcm[2];
     ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre;
     ZzU64 origin = 0, pts0 = 0;
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
-    /* behind: B pictures passed over (pl_mpeg), until enough are on time
+    /* behind: B pictures passed over (mpegv.library), until enough are on time
      * again to try them (twice as many each time it fell behind again) */
     BOOL skip_b = FALSE;
     ULONG b_ontime = 0, b_need = 30, b_turns = 0;
@@ -2677,16 +2659,18 @@ static void swv_run(void)
     st.v_shown = st.v_dropped = 0;
     st.v_ms = 0;
     sw_aq_in = sw_aq_out = 0;
-    sw_apts = sw_vpts = -1;
-    sw_ended = FALSE;
+    sw_apts = -1;
     sw_sound = st.v_mp2 && !st.v_es && !st.v_ac3;
-    sw_fbuf = sw_vbuf = NULL;
-    sw_demux = NULL;
+    sw_mpv = NULL;
     if ((v_tport = CreateMsgPort()) &&
         (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
         !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
         v_topen = TRUE;
-    if (!(sw_in = AllocVec(SW_IN, MEMF_ANY)) || (sw_sound && !(sw_aq = AllocVec(SW_AQ, MEMF_ANY)))) {
+    if (!st_mpv_open()) {
+        fail(_("MPEG-1 by the CPU needs mpegv.library"));
+        goto out;
+    }
+    if (sw_sound && !(sw_aq = AllocVec(SW_AQ, MEMF_ANY))) {
         fail(_("Not enough memory"));
         goto out;
     }
@@ -2712,15 +2696,15 @@ static void swv_run(void)
         }
         swv[i].state = SW_FREE;
     }
-    sw_vbuf = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
-    plm_buffer_set_load_callback(sw_vbuf, sw_vload, NULL);
-    if (!st.v_es) {
-        sw_fbuf = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
-        plm_buffer_set_load_callback(sw_fbuf, sw_fload, NULL);
-        sw_demux = plm_demux_create(sw_fbuf, FALSE);
-    }
-    vd = plm_video_create_with_buffer(sw_vbuf, FALSE);
-    if (!sw_vbuf || !vd || (!st.v_es && !sw_demux)) {
+    /* its decoder: the file through the read hook (16 KB at a time), its
+     * audio packets to the queue (a Program Stream's first are read now) */
+    memset(&rhook, 0, sizeof(rhook));
+    memset(&phook, 0, sizeof(phook));
+    rhook.h_Entry = (HOOKFUNC)(APTR)sw_read;
+    phook.h_Entry = (HOOKFUNC)(APTR)sw_packet;
+    if (!(sw_mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rhook, MPVA_PacketHook, (ULONG)&phook,
+                               MPVA_Stream, st.v_es ? MPVS_VIDEO : MPVS_PROGRAM,
+                               MPVA_ReadSize, SW_IN, TAG_DONE))) {
         fail(_("Not enough memory"));
         goto out;
     }
@@ -2766,8 +2750,8 @@ static void swv_run(void)
             }
         }
     }
-    sprintf(m, "%s: %ld x %ld MPEG-1 by the CPU (pl_mpeg)%s; %s", log_name(), (long)st.v_w,
-            (long)st.v_h, st.v_es ? ", a bare video stream" : "",
+    sprintf(m, "%s: %ld x %ld MPEG-1 by the CPU (%s)%s; %s", log_name(), (long)st.v_w,
+            (long)st.v_h, (const char *)MpvVersion(), st.v_es ? ", a bare video stream" : "",
             sw_sound ? "its sound by mpega.library" : "no sound");
     amce_log("video", m);
     if (sw_sound) {
@@ -2822,31 +2806,29 @@ static void swv_run(void)
         }
         /* the next picture, into a free buffer */
         if (held < 0 && !done) {
-            plm_frame_t *f;
+            struct MpvPicture *f;
+            LONG e = MPVE_OK;
             int s = sw_slot();
             if (s < 0) {
                 v_wait(2000);               /* (the UI has them all) */
                 continue;
             }
             tk = time_ticks(&hz);
-            f = plm_video_decode(vd);
+            f = MpvDecode(sw_mpv, &e);
             if (f) {
                 t_dec += time_ticks(&hz) - tk;
                 n_dec++;
             }
             if (!f) {
-                if (plm_video_has_ended(vd) || sw_ended)
-                    done = TRUE;
+                if (e != MPVE_MORE)
+                    done = TRUE;            /* (its end, or it could not be read) */
             } else {
-                double t = f->time + (sw_vpts > 0 ? sw_vpts : 0);
-                swv[s].pts = (ZzU64)(t * 90000.0);
-                if (!period || st.v_shown + st.v_dropped == 0) {
-                    double fr = plm_video_get_framerate(vd);
-                    if (fr > 1.0) {
-                        period = (ULONG)(90000.0 / fr);
-                        hold = period / 2;
-                        drop = period > 3600 ? period : 3600;
-                    }
+                swv[s].pts = (f->mpic_Flags & MPVPF_PTS) ? f->mpic_PTS : f->mpic_Time;
+                if ((!period || st.v_shown + st.v_dropped == 0) && MpvGetInfo(sw_mpv, &mi) &&
+                    mi.mi_Period) {
+                    period = mi.mi_Period;
+                    hold = period / 2;
+                    drop = period > 3600 ? period : 3600;
                 }
                 held = s;
                 swv[s].state = SW_READY;
@@ -2860,12 +2842,12 @@ static void swv_run(void)
                     else {
                         tk = time_ticks(&hz);
                         ULONG ny = swv_yw * swv_yh;
-                        if (f->y.width != swv_yw || f->y.height != swv_yh) {
+                        if (f->mpic_YModulo != swv_yw || f->mpic_YRows != swv_yh) {
                             swv[s].pts |= 1ULL << 62;   /* (not the size it said: not shown) */
                         } else {
-                            memcpy(swv[s].buf, f->y.data, ny);
-                            memcpy(swv[s].buf + ny, f->cb.data, ny / 4);
-                            memcpy(swv[s].buf + ny + ny / 4, f->cr.data, ny / 4);
+                            memcpy(swv[s].buf, f->mpic_Y, ny);
+                            memcpy(swv[s].buf + ny, f->mpic_Cb, ny / 4);
+                            memcpy(swv[s].buf + ny + ny / 4, f->mpic_Cr, ny / 4);
                         }
                         t_conv += time_ticks(&hz) - tk;
                         n_conv++;
@@ -2875,7 +2857,7 @@ static void swv_run(void)
         }
         /* started: the first picture, the sound with it */
         if (!on && held >= 0) {
-            if (sw_sound && !a_done && st.f_in - st.f_out < pre && !sw_ended) {
+            if (sw_sound && !a_done && st.f_in - st.f_out < pre && !MpvControl(sw_mpv, MPVC_ENDED, 0)) {
                 if (!busy)
                     v_wait(2000);
                 continue;
@@ -2885,7 +2867,7 @@ static void swv_run(void)
                 out_start();
             t0 = time_ms();
             pts0 = swv[held].pts;
-            origin = sw_sound && sw_apts >= 0 ? (ZzU64)(sw_apts * 90000.0) : pts0;
+            origin = sw_sound && sw_apts >= 0 ? (ZzU64)(ULONG)sw_apts : pts0;
             on = TRUE;
             st.state = ST_PLAYING;
             sprintf(m, "playing: the first picture at %lu ms, its sound's at %lu ms, %s",
@@ -2913,7 +2895,7 @@ static void swv_run(void)
                 if (!skip_b) {
                     /* behind: its B pictures not decoded at all */
                     skip_b = TRUE;
-                    plm_video_set_skip_b(vd, TRUE);
+                    MpvControl(sw_mpv, MPVC_SKIPB, TRUE);
                     if (b_turns++)
                         b_need = b_need < 960 ? b_need * 2 : b_need;
                     if (b_turns <= 3) {
@@ -2929,7 +2911,7 @@ static void swv_run(void)
                 run = 0;
                 if (skip_b && drift >= 0 && ++b_ontime >= b_need) {
                     skip_b = FALSE;         /* caught up: its B pictures tried again */
-                    plm_video_set_skip_b(vd, FALSE);
+                    MpvControl(sw_mpv, MPVC_SKIPB, FALSE);
                     b_ontime = 0;
                 }
             }
@@ -2953,7 +2935,7 @@ static void swv_run(void)
     sprintf(m, "%s: %lu pictures shown, %lu let go (late), %lu B pictures passed over (behind %lu "
                "time%s); %lu dropouts",
             log_name(), (unsigned long)st.v_shown, (unsigned long)st.v_dropped,
-            (unsigned long)plm_video_get_skipped_b(vd), (unsigned long)b_turns, b_turns == 1 ? "" : "s",
+            (unsigned long)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0), (unsigned long)b_turns, b_turns == 1 ? "" : "s",
             (unsigned long)st.underruns);
     amce_log("video", m);
     m[0] = 0;
@@ -2967,21 +2949,12 @@ out:
     sw_on = FALSE;
     if (ms)
         MPEGA_close(ms);
-    if (vd)
-        plm_video_destroy(vd);
-    if (sw_demux)
-        plm_demux_destroy(sw_demux);
-    if (sw_fbuf)
-        plm_buffer_destroy(sw_fbuf);
-    if (sw_vbuf)
-        plm_buffer_destroy(sw_vbuf);
-    sw_demux = NULL;
-    sw_fbuf = sw_vbuf = NULL;
+    if (sw_mpv)
+        MpvClose(sw_mpv);
+    sw_mpv = NULL;
     if (sw_aq)
         FreeVec(sw_aq);
-    if (sw_in)
-        FreeVec(sw_in);
-    sw_aq = sw_in = NULL;
+    sw_aq = NULL;
     for (i = 0; i < SWV_SLOTS; i++)
         if (swv[i].state == SW_READY)
             swv[i].state = SW_FREE;
