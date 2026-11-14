@@ -211,6 +211,7 @@ WORD cjk_text(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s,
 void gfx_logo(struct Gfx *g, WORD x, WORD y);
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg);
 void gfx_cycle_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE pen);
+void gfx_disc_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE rim, UBYTE body, UBYTE shine);
 void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px);
 struct TextFont *gfx_open_laced_font(int i);
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg); /* MARK_* icon */
@@ -308,6 +309,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
 /* An MPEG video played by the ZZ9000 the same way, its overlay the picture
  * (AmigaMCE's RTG screen or window on the card) */
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
+LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax);   /* a DVD's film */
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
@@ -458,7 +460,8 @@ enum { IT_DIR = 1, IT_RUN, IT_TEXT, IT_ACTION, IT_PIC, IT_MOD, IT_NET, IT_STATIO
 enum { MARK_NONE, MARK_ARROW, MARK_CHECK_OFF, MARK_CHECK_ON, MARK_RADIO_OFF, MARK_RADIO_ON,
        MARK_PLAY /* a folder Fire plays (slideshow); Right opens it */,
        MARK_PLAYING /* the music playing now: dancing bars, drawn (not a bitmap) */,
-       MARK_CYCLE /* a setting Fire steps through (a cycle gadget's glyph, drawn) */ };
+       MARK_CYCLE /* a setting Fire steps through (a cycle gadget's glyph, drawn) */,
+       MARK_DISC /* a DVD in a drive: a shiny disc (drawn) */ };
 
 struct Item {
     char  *label;       /* what the user sees */
@@ -707,6 +710,9 @@ void st_stop(void);
 struct VProbe;
 BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VProbe *v,
                     ULONG range_from, char *err, LONG errmax);  /* MPEG on the ZZ9000 */
+struct DvdPlay;
+BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VProbe *v, char *err,
+                  LONG errmax);   /* a DVD's film (dvdplay.c) */
 void st_video_counts(ULONG *shown, ULONG *dropped);
 void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
 /* A video decoded by the CPU: the newest picture taken (FALSE none new),

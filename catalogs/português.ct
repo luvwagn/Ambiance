@@ -4,6 +4,15 @@
 MSG_2F1926C3
 A compressão ANIM-%ld não é suportada
 ; ANIM-%ld compression is not supported
+MSG_5799A183
+Não foi possível ler o DVD nesse ponto
+; The DVD could not be read there
+MSG_48EC1181
+; MPEG video plays on an RTG screen (AGA screens to come)
+MSG_21CB4B97
+; MPEG video plays on the ZZ9000's display
+MSG_612F22BA
+; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 Não foi possível abrir a animação
 ; The animation could not be opened
@@ -37,6 +46,18 @@ Adicionados recentemente
 MSG_4E6387ED
 Memória insuficiente
 ; Not enough memory
+MSG_38381E85
+Os DVD precisam de amcedvd.library (em Libs do AmigaMCE)
+; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_3A32AEDF
+Não é um disco DVD-Vídeo que o AmigaMCE consiga ler: %.120s
+; Not a DVD-Video disc AmigaMCE can read: %.120s
+MSG_57CA60FE
+Não foi possível reproduzir o filme do DVD
+; The DVD's film could not be played
+MSG_50A1D5F7
+O DVD já não está na unidade
+; The DVD is no longer in its drive
 MSG_1592F849
 Nenhum leitor do AmigaMCE conhece este módulo
 ; No player AmigaMCE has knows this module
@@ -457,6 +478,10 @@ Transição de diapositivos
 MSG_584F0908
 Vídeos num ecrã próprio
 ; Videos on a screen of their own
+MSG_58B78A34
+; MPEG video on the ZZ9000
+MSG_6DF6A531
+; Use overlay when available (RTG)
 MSG_71E19418
 Depuração (CPU, memória, registo)
 ; Debug (CPU, memory, log)
@@ -823,12 +848,25 @@ Cima/Baixo  deslocar      Esquerda/Esc  voltar
 MSG_642000D2
 Cima/Baixo deslocar  Esc voltar
 ; Up/Down scroll  Esc back
+MSG_7FF7C0A9
+Um disco DVD-Vídeo
+; A DVD-Video disc
+MSG_77C67E04
+Disparo reproduz o filme, ou os programas um após o outro, na ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N e P: capítulo ou programa seguinte e anterior
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D
 ; No sound
+MSG_3D33D3EB
+; A transport stream
 MSG_7EB7DE9D
 ; A bare video stream
+MSG_5E08A9DF
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_50D8B3E7
 ; Not an MPEG video AmigaMCE can read
 MSG_1403F9F1
@@ -1694,12 +1732,10 @@ Não foi possível iniciar o processo de rádio
 ; Could not start the radio process
 MSG_49FB1D9D
 ; Only MPEG Program Streams play (this one has no packs)
-MSG_267A9302
-; MPEG video plays on a ZZ9000 (zz9k.library not found)
+MSG_550F84B3
+; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
-MSG_612F22BA
-; The ZZ9000's overlay could not be opened on this screen
 MSG_6A5609A3
 A carregar %.80s
 ; Loading %.80s

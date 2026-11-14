@@ -256,6 +256,28 @@ const char *video_check(const char *path, struct VProbe *v)
     return NULL;
 }
 
+/* A DVD's film (v from dvdplay_open): MPEG-2, so the card's always, and
+ * its overlay made ready as video_check does a file's. NULL if it plays,
+ * else why not. */
+const char *video_check_dvd(const struct VProbe *v)
+{
+    static char why[120];
+    const char *w;
+    if (!zz_open())
+        return _("MPEG-2 video plays on a ZZ9000 (zz9k.library not found)");
+    w = zz_video_check(TRUE, v->mp2 && !v->ac3);
+    zz_close();
+    if (w) {
+        amce_log("video", w);
+        amce_strlcpy(why, w, sizeof(why));
+        return why;
+    }
+    if (!P96Base && !(P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2)))
+        return _("MPEG video needs Picasso96 (Picasso96API.library)");
+    vo_failed = FALSE;                      /* a new video: its overlay tried again */
+    return NULL;
+}
+
 /* Where AmigaMCE's coordinates are on the screen. */
 static void vo_origin(struct Gfx *g, LONG *ox, LONG *oy)
 {

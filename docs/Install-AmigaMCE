@@ -1,6 +1,8 @@
-; $VER: Install-AmigaMCE 1.6 (13.11.2026)
+; $VER: Install-AmigaMCE 1.7 (14.11.2026)
 ;
-; Installer script for AmigaMCE: the program with its fonts and licences,
+; Installer script for AmigaMCE: the program with its fonts, licences and
+; its own libraries in AmigaMCE/Libs (amcesql.library for beets,
+; amcedvd.library for DVDs: opened from there, never put in LIBS:),
 ; and the languages chosen: the Workbench's own (none besides English on
 ; an English one), all thirteen at once, or ticked one by one.
 ; English is built into the program. Each language is a catalog in
@@ -90,7 +92,7 @@
 )
 (complete 10)
 (copyfiles
-  (prompt "Copying AmigaMCE, its fonts and licences")
+  (prompt "Copying AmigaMCE, its fonts, libraries and licences")
   (help @copyfiles-help)
   (source "AmigaMCE")
   (dest #dest)

@@ -4,6 +4,15 @@
 MSG_2F1926C3
 ANIM-%ld 압축은 지원하지 않습니다
 ; ANIM-%ld compression is not supported
+MSG_5799A183
+DVD의 그 위치를 읽을 수 없습니다
+; The DVD could not be read there
+MSG_48EC1181
+; MPEG video plays on an RTG screen (AGA screens to come)
+MSG_21CB4B97
+; MPEG video plays on the ZZ9000's display
+MSG_612F22BA
+; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 애니메이션을 열 수 없습니다
 ; The animation could not be opened
@@ -37,6 +46,18 @@ MSG_5BBD0EC3
 MSG_4E6387ED
 메모리가 부족합니다
 ; Not enough memory
+MSG_38381E85
+DVD에는 amcedvd.library가 필요합니다 (AmigaMCE의 Libs)
+; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_3A32AEDF
+AmigaMCE가 읽을 수 있는 DVD-Video 디스크가 아닙니다: %.120s
+; Not a DVD-Video disc AmigaMCE can read: %.120s
+MSG_57CA60FE
+DVD의 영화를 재생할 수 없습니다
+; The DVD's film could not be played
+MSG_50A1D5F7
+DVD가 더 이상 드라이브에 없습니다
+; The DVD is no longer in its drive
 MSG_1592F849
 AmigaMCE의 플레이어 중 이 모듈을 아는 것이 없습니다
 ; No player AmigaMCE has knows this module
@@ -457,6 +478,10 @@ MSG_1CD58066
 MSG_584F0908
 비디오를 전용 화면에서
 ; Videos on a screen of their own
+MSG_58B78A34
+; MPEG video on the ZZ9000
+MSG_6DF6A531
+; Use overlay when available (RTG)
 MSG_71E19418
 디버그 (CPU, 메모리, 로그)
 ; Debug (CPU, memory, log)
@@ -823,12 +848,25 @@ MSG_2B8E61B8
 MSG_642000D2
 위/아래 스크롤  Esc 뒤로
 ; Up/Down scroll  Esc back
+MSG_7FF7C0A9
+DVD-Video 디스크
+; A DVD-Video disc
+MSG_77C67E04
+버튼: ZZ9000에서 영화 또는 프로그램을 차례로 재생
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N과 P: 다음/이전 챕터 또는 프로그램
+; N and P: the next and previous chapter or programme
 MSG_6B41435A
 ; With sound
 MSG_6524B26D
 ; No sound
+MSG_3D33D3EB
+; A transport stream
 MSG_7EB7DE9D
 ; A bare video stream
+MSG_5E08A9DF
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_50D8B3E7
 ; Not an MPEG video AmigaMCE can read
 MSG_1403F9F1
@@ -1694,12 +1732,10 @@ MSG_41C55AEA
 ; Could not start the radio process
 MSG_49FB1D9D
 ; Only MPEG Program Streams play (this one has no packs)
-MSG_267A9302
-; MPEG video plays on a ZZ9000 (zz9k.library not found)
+MSG_550F84B3
+; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
-MSG_612F22BA
-; The ZZ9000's overlay could not be opened on this screen
 MSG_6A5609A3
 %.80s 불러오는 중
 ; Loading %.80s

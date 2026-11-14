@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include \
           -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
@@ -36,7 +36,8 @@ LIBS    = -lamiga -lm
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c src/plmpeg.c
+       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c src/plmpeg.c \
+       src/dvdplay.c src/dvddisc.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -63,7 +64,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype test test-replayer test-animdraw test-beets anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -170,7 +171,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets
+test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -224,6 +225,100 @@ anim-bench:
 	@$(CC) -O2 $(CPU) -noixemul -w -DAD_ASM -o build/bench/anim_bench_asm tests/anim_bench.c src/animdec.c src/animdraw.c build/animdraw68k.o
 	@for b in c asm; do for m in "0 100" "1 100" "1 200"; do printf "%-3s mode/scale %s: " $$b "$$m"; \
 		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench_$$b $(ANIM) $$m 2>&1 | grep "runtime end" | grep -o "total_cycles=[0-9]*"; done; done
+
+# amcedvd.library: DVD-Video navigation, libdvdread 7.1.1 and libdvdnav
+# 7.0.0 (extras/libdvd, GPL-2.0-or-later) behind AmigaMCE's own interface
+# (src/dvdlib/include and amcedvd_lib.sfd, MIT). Opened at run time only,
+# like amcesql.library. In the archive's Libs for internal test builds; a
+# public release must carry its complete source with it (src/dvdlib/README).
+DVDLIB     = build/dvdlib/amcedvd.library
+DVDREAD    = extras/libdvd/libdvdread/src
+DVDNAV     = extras/libdvd/libdvdnav/src
+DVDLIB_SRC = $(addprefix $(DVDREAD)/,bitreader.c dvd_input.c dvd_reader.c dvd_udf.c ifo_read.c \
+               logger.c md5.c nav_read.c) \
+             $(addprefix $(DVDNAV)/,dvdnav.c highlight.c logger.c navigation.c read_cache.c \
+               searching.c settings.c vm/decoder.c vm/getset.c vm/play.c vm/vm.c vm/vmcmd.c vm/vmget.c) \
+             src/dvdlib/port.c src/dvdlib/amcedvd.c
+DVDLIB_OBJ = $(patsubst %.c,build/dvdlib/obj/%.o,$(DVDLIB_SRC))
+DVDLIB_HDR = $(wildcard src/dvdlib/*.h src/dvdlib/port/*.h src/dvdlib/port/*/*.h \
+               src/dvdlib/include/libraries/*.h $(DVDREAD)/*.h $(DVDREAD)/dvdread/*.h \
+               $(DVDNAV)/*.h $(DVDNAV)/dvdnav/*.h $(DVDNAV)/vm/*.h)
+# the C library libdvd calls is port.c's (port/amiport.h, forced in);
+# each library's own headers first, as their own builds have them
+DVDLIB_FLAGS = -std=gnu11 -Wall -Wno-unused-function -Wno-attributes -DHAVE_CONFIG_H -Isrc/dvdlib/port \
+               -Isrc/dvdlib/include -Isrc/dvdlib -Isrc/sqlib -include src/dvdlib/port/amiport.h
+DVDLIB_CC  = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer
+DVD_INC    = -I$(DVDREAD) -I$(DVDNAV)
+build/dvdlib/obj/$(DVDNAV)/%.o: DVD_INC = -I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)
+# libdvd passes int32_t * where int * is declared (and back): the same 32
+# bits, but newlib's int32_t is a long, and GCC 14 on makes that an error
+DVD_UPSTREAM =
+build/dvdlib/obj/extras/%.o: DVD_UPSTREAM = -Wno-incompatible-pointer-types -Wno-discarded-qualifiers
+build/dvdlib/obj/%.o: %.c $(DVDLIB_HDR)
+	@mkdir -p $(dir $@)
+	@echo "  CC    $< (amcedvd)"
+	@$(DVDLIB_CC) $(DVDLIB_FLAGS) $(DVD_UPSTREAM) $(DVD_INC) -c -o $@ $<
+# the E-clock, apart: devices/timer.h and newlib's sys/time.h both have a timeval
+build/dvdlib/amitime.o: src/dvdlib/amitime.c
+	@mkdir -p build/dvdlib
+	@echo "  CC    $< (amcedvd)"
+	@$(DVDLIB_CC) -Wall -c -o $@ $<
+build/dvdlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+	@mkdir -p build/dvdlib
+	@echo "  CC    $< (amcedvd)"
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<
+$(DVDLIB): build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o
+	@echo "  LD    $@"
+	@$(DVDLIB_CC) -o $@.dbg build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o -lamiga
+	@$(STRIP) -o $@ $@.dbg
+dvdlib: $(DVDLIB)
+
+# its tests (tests/dvd_test.c) on a DVD image made for them (tests/mkdvd.sh,
+# kept xz-compressed): on the host with the library's sources linked in
+# (big-endian or not, the same code), then on a 68020 under vamos through
+# the library itself, with AmigaMCE's reader (src/dvddisc.c)
+DVD_ISO = build/dvd/test.iso
+$(DVD_ISO): tests/fixtures/dvd/test.iso.xz
+	@mkdir -p build/dvd
+	@$(PYTHON) -I -c "import lzma, sys; open(sys.argv[2], 'wb').write(lzma.open(sys.argv[1]).read())" $< $@
+build/dvd/dvd_host: tests/dvd_test.c $(DVDLIB_SRC) $(DVDLIB_HDR) tests/host/exec/types.h
+	@mkdir -p build/dvd
+	@set -e; o=""; for f in $(DVDLIB_SRC); do \
+		case $$f in $(DVDNAV)/*) i="-I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)";; *) i="-I$(DVDREAD) -I$(DVDNAV)";; esac; \
+		b=build/dvd/host_$$(echo $$f | tr / _ | sed 's/\.c$$/.o/'); \
+		$(HOSTCC) -O2 $(DVDLIB_FLAGS) -Itests/host $$i -c -o $$b $$f; o="$$o $$b"; done; \
+		$(HOSTCC) -O2 -Wall -Isrc/dvdlib/include -Itests/host -o $@ tests/dvd_test.c $$o
+test-dvd-host: build/dvd/dvd_host $(DVD_ISO)
+	@build/dvd/dvd_host $(DVD_ISO) > build/test-dvd-host.txt 2>&1 \
+		&& grep -q "dvd tests passed" build/test-dvd-host.txt \
+		&& echo "  CHECK DVD navigation (host) ok" || (cat build/test-dvd-host.txt; exit 1)
+build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdlib/include/libraries/amcedvd.h \
+                   src/dvdlib/include/inline/amcedvd.h $(DVDLIB)
+	@mkdir -p build/dvd/prog/Libs
+	@echo "  CC    $@"
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ tests/dvd_test.c src/dvddisc.c -lamiga
+	@$(CC) -Os $(CPU) -noixemul -Isrc/dvdlib/include -S -o build/dvd/dvddisc.s src/dvddisc.c
+	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
+	@cp $(DVDLIB) build/dvd/prog/Libs/
+	@cp $@ build/dvd/prog/
+# AmigaMCE's side (src/dvdplay.c): the film chosen and read as the player reads it
+build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddisc.c src/dvddisc.h \
+                       src/util.c src/amce.h $(DVDLIB)
+	@mkdir -p build/dvd/prog
+	@echo "  CC    $@"
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ \
+		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c -lamiga
+	@cp $@ build/dvd/prog/
+test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
+	@cp $(DVD_ISO) build/dvd/prog/test.iso
+	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
+		prog:dvd_68k prog:test.iso > ../test-dvd.txt 2>&1 \
+		&& grep -q "dvd tests passed" ../test-dvd.txt \
+		&& echo "  CHECK DVD navigation (68020, amcedvd.library) ok" || (cat ../test-dvd.txt; exit 1)
+	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
+		prog:dvdplay_68k prog:test.iso > ../test-dvdplay.txt 2>&1 \
+		&& grep -q "dvdplay tests passed" ../test-dvdplay.txt \
+		&& echo "  CHECK a DVD's film (68020, dvdplay.c) ok" || (cat ../test-dvdplay.txt; exit 1)
 
 # a beets library (beets.c) read on a 68020 through amcesql.library, from
 # a small library made for it (tests/mkbeets.py)
@@ -372,7 +467,7 @@ $(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h dataty
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) \
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
@@ -394,6 +489,10 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
 	@mkdir -p $(LHA_DIR)/Libs
 	@cp $(SQLIB) $(LHA_DIR)/Libs/
+	@# amcedvd.library (DVDs: libdvdread and libdvdnav, GPL-2.0-or-later), for
+	@# internal test builds: a public release must carry its source too
+	@cp $(DVDLIB) $(LHA_DIR)/Libs/
+	@cp extras/libdvd/libdvdnav/COPYING $(LHA_DIR)/Licences/amcedvd.library-GPL-2.txt
 	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
 	@# Mozilla's root certificates (certifi's cacert.pem, MPL 2.0): what
 	@# HTTPS checks a server's certificate with (tls.c), AmiSSL's own or not
@@ -419,5 +518,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/dvdlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

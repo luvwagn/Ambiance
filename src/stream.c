@@ -38,6 +38,7 @@
 #define PLM_NO_STDIO
 #include "../third_party/pl_mpeg/pl_mpeg.h"
 #include "vprobe.h"
+#include "dvdplay.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -244,9 +245,11 @@ static struct {
     volatile ULONG v_ms;            /* where it is: the last picture's time from the first's */
     UWORD v_w, v_h;
     volatile ULONG v_shown, v_dropped;
+    struct DvdPlay *v_dvd;          /* a DVD's film (dvdplay.c), read from there, not a file */
 } st;
 
 static struct {                     /* st_start_video's */
+    struct DvdPlay *dvd;
     BOOL on, mpeg2, mp2, es, ac3, sw;
     UBYTE ts;
     ULONG hz;
@@ -1022,6 +1025,11 @@ static BOOL open_stream(void)
     UWORD port;
     int hop;
     amce_strlcpy(url, st.url, sizeof(url));
+    if (st.v_dvd) {
+        st.clen = 0;                        /* a DVD: read by dvdplay.c, no file */
+        st.nb_pos = st.nb_len = 0;
+        return TRUE;
+    }
     if (st.local) {
         /* a music file on this Amiga: opened, from range_from on */
         LONG size;
@@ -2808,7 +2816,8 @@ static void video_run(void)
             int k;
             for (k = 0; k < 4 && !eof_sent; k++) {
                 if (!pend_len && !in_eof) {
-                    LONG n = st.v_ts   ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
+                    LONG n = st.v_dvd  ? dvdplay_read(st.v_dvd, in.data, (LONG)in.length)
+                             : st.v_ts ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
                              : st.v_es ? (LONG)es_pack(in.data, in.length)
                                      : Read(st.fh, (APTR)in.data, in.length);
                     if (st.v_es && st.state == ST_FAILED)
@@ -3698,6 +3707,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_tsfirst = vid_next.tsfirst;
     st.v_w = vid_next.w;
     st.v_h = vid_next.h;
+    st.v_dvd = vid_next.dvd;
     st.v_shown = st.v_dropped = 0;
     st.v_ms = 0;
     memset(&vid_next, 0, sizeof(vid_next));
@@ -3747,6 +3757,27 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VPro
     vid_next.sw = v->sw;
     vid_next.hz = v->a_hz;
     ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
+    memset(&vid_next, 0, sizeof(vid_next));
+    if (ok)
+        st.len_ms = v->ms;
+    return ok;
+}
+
+/* A DVD's film (dvdplay.c: opened, and where to start chosen already),
+ * played as an MPEG file is: v from dvdplay_open. */
+BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VProbe *v, char *err,
+                  LONG errmax)
+{
+    BOOL ok;
+    vid_next.dvd = dp;
+    vid_next.on = TRUE;
+    vid_next.mpeg2 = TRUE;
+    vid_next.ac3 = v->ac3;
+    vid_next.mp2 = v->ac3 || v->mp2;
+    vid_next.apid = 0x1FFF;
+    vid_next.w = v->w;
+    vid_next.h = v->h;
+    ok = st_start(dvdplay_name(dp), master, cpu, TRUE, 0, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
     if (ok)
         st.len_ms = v->ms;
