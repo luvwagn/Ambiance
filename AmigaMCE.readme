@@ -134,6 +134,17 @@ Videos
   larger or smaller; the full-screen button shows it on the whole
   display, on a screen in Workbench's own mode (no mode switch), and
   back.
+- MPEG video on a ZZ9000: .mpg, .mpeg, .vob and transport streams
+  (.ts, .m2ts), MPEG-1 or MPEG-2, decoded by the card and shown on its
+  overlay, its sound (MPEG audio or AC-3) played as music is. Without
+  one, MPEG-1 is decoded by the CPU on RTG screens.
+- DVDs: while a DVD-Video disc is in a drive, its volume is at the top
+  of Videos with a disc beside it. Fire plays its film, or its
+  programmes one after another (a disc of episodes); N and P, or the
+  controls' |<< and >>|, the previous and next chapter or programme. Of
+  its sound tracks, the one the card is likeliest to play. Needs a
+  ZZ9000 and Libs/amcedvd.library (in the archive); no menus yet, and
+  no encrypted (CSS) discs.
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
@@ -301,12 +312,19 @@ Setting up Plex
 
 Not there yet
 -------------
-- Videos plays IFF ANIMs; other video formats come later.
+- DVD menus and subtitles; encrypted (CSS) discs.
+- MPEG video on AGA screens without a ZZ9000.
 - Modules play on Paula only; AHI for them comes later.
 
 
 History
 -------
+0.8.9  Videos plays MPEG: on a ZZ9000 (MPEG-1 and MPEG-2, program and
+       transport streams, with their sound), and MPEG-1 by the CPU on
+       RTG screens without one. DVDs in a drive: their film, or their
+       programmes one after another, chapters by N and P and the
+       controls, the sound track the card plays best
+       (Libs/amcedvd.library: libdvdread and libdvdnav).
 0.8.8  MP3 seeks land on a real frame (no error after a sound output
        change). The volume kept between runs. MHI at the level of mpega
        through Paula or AHI. On Workbench, the smooth style leaves pens

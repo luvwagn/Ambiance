@@ -144,6 +144,17 @@ sqlite-3.34.0.a-amiga). SQLite, by D. Richard Hipp and others, is in the
 public domain (Licences/SQLite.txt). AmigaMCE opens the library only when
 a beets library is set up.
 
+Libs/amcedvd.library, which reads DVDs, is libdvdread 7.1.1 and libdvdnav
+7.0.0 (VideoLAN, from the Ogle DVD player: Daniel Caujolle-Bert, Rich
+Wareham, Michael Roitzsch, Jean-Baptiste Kempf, Erik Hovland and others;
+their AUTHORS files are in its source) built as an Exec library, with
+three lines changed for AmigaOS. They and the library are under the GNU
+General Public License, version 2 or later
+(Licences/amcedvd.library-GPL-2.txt); the library's complete source is
+src/dvdlib and extras/libdvd in AmigaMCE's source. AmigaMCE opens it at run time, through an
+interface of its own, only when a DVD is played; none of its code is in
+AmigaMCE.
+
 FLAC (Plex tracks as stored, and the files in Music folders) is decoded by
 flacdec.library where it is installed; it is not included in the archive.
 flacdec.library is (c) 2026 Renaud Schweingruber, "free to use and to

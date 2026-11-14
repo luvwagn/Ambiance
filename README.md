@@ -142,6 +142,18 @@ of the Amiga to how fast it really is.
   AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
   and AAC are not the card's: the preview says so (AAC: played without
   its sound).
+- DVDs: while a DVD-Video disc is mounted in a drive (any CD/DVD
+  filesystem: ODFileSystem, CDFileSystem, a UDF handler), its volume is
+  at the top of Videos with a disc beside it, within a second of going
+  in. Fire plays it on the ZZ9000: its film when one title is most of
+  the disc, else its programmes one after another (a disc of episodes or
+  music videos). N and P, or the controls' |<< and >>| (in place of from
+  the start and loop), go to the previous and next chapter or programme.
+  Of its sound tracks the one the card is likeliest to play is chosen
+  (MPEG audio, then AC-3 in stereo, then any AC-3), and only that one is
+  sent. The disc is read through its drive's device (`HD_SCSICMD`) by
+  `Libs/amcedvd.library` (libdvdread and libdvdnav, `src/dvdlib`). No
+  menus or subtitles yet, and no encrypted (CSS) discs.
 
 ### Screens and looks
 
@@ -299,6 +311,8 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
 
+- DVD menus and subtitles (the subpicture decoder, and drawing over the
+  card's overlay); encrypted (CSS) discs; disc images of 2 GB or more.
 - MPEG video without a ZZ9000: MPEG-1 on RTG screens for now; AGA screens
   come next.
 - Modules play on Paula only; AHI for them comes later.
@@ -319,7 +333,8 @@ inline OS call when a multiply helper call ends up between them (see
 | Target | Result |
 |---|---|
 | `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
-| `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host |
+| `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos |
+| `make dvdlib` | `build/dvdlib/amcedvd.library` (also part of `make`, into the archive's `Libs`) |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
 | `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
 | `python3 tools/mkcjk.py <galmuri-dist> <ark-pixel-font> assets/Fonts/amce-cjk` | Regenerates the Japanese, Chinese and Korean glyph packs from Galmuri's BDFs and Ark Pixel Font's 12px glyphs |
@@ -364,6 +379,15 @@ on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.
 
 MPEG-1 video without a ZZ9000 is decoded by pl_mpeg (`third_party/pl_mpeg/`,
 MIT, © Dominic Szablewski).
+
+DVDs are read by `amcedvd.library`: libdvdread 7.1.1 and libdvdnav 7.0.0
+(VideoLAN, `extras/libdvd/`, three lines changed: `extras/libdvd/CHANGES`)
+built as an Exec library (`src/dvdlib/`, `make dvdlib`). It is
+GPL-2.0-or-later; AmigaMCE (MIT) opens it at run time through an
+interface of its own (`src/dvdlib/include`, MIT) and compiles none of its
+code. Whoever is given the library must be able to get its complete
+source: `src/dvdlib`, `extras/libdvd` and the Makefile's dvdlib part go
+with any distributed archive that holds it. See `src/dvdlib/README`.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which
