@@ -147,7 +147,9 @@ of the Amiga to how fast it really is.
   pictures go to the graphics card's YUV overlay where the screen has one
   (Picasso96's PIP), which scales them; otherwise (or with Settings >
   Display > Use overlay when available off) they are made RGB and drawn,
-  on an RTG screen of 16 bits or more.
+  on an RTG screen of 16 bits or more. When the CPU falls behind, the
+  video's B pictures (most of a VCD's) are passed over, not decoded,
+  until it has caught up.
 - DVDs: while a DVD-Video disc is mounted in a drive (any CD/DVD
   filesystem: ODFileSystem, CDFileSystem, a UDF handler), its volume is
   at the top of Videos with a disc beside it, within a second of going

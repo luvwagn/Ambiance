@@ -17,6 +17,10 @@ AmigaMCE for speed on a 68020 without an FPU (each change marked
   time, each byte's average or clamp as pl_mpeg's
 - start codes looked for through what the buffer holds at once
 
+And one addition: plm_video_set_skip_b(), B pictures passed over
+undecoded (nothing is predicted from them) while AmigaMCE is behind, each
+one's time still counted; the pictures it does decode are unchanged.
+
 Checked with tests/mpeg_bench.c (each picture's hash, against the
 original's, built for this computer and for the 68020 under vamos) and
 timed with tests/mpeg_prof.py (make mpeg-prof).

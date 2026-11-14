@@ -708,6 +708,15 @@ int plm_video_get_height(plm_video_t *self);
 void plm_video_set_no_delay(plm_video_t *self, int no_delay);
 
 
+// AmigaMCE: skip B pictures (when the CPU is behind). Nothing is predicted
+// from a B picture, so it can be passed over undecoded: plm_video_decode()
+// goes on to the next picture, the time still advanced for the one passed.
+// How many have been passed over so far.
+
+void plm_video_set_skip_b(plm_video_t *self, int skip);
+unsigned int plm_video_get_skipped_b(plm_video_t *self);
+
+
 // Get the current internal time in seconds.
 
 double plm_video_get_time(plm_video_t *self);
@@ -2863,6 +2872,11 @@ struct plm_video_t {
 
 	int has_reference_frame;
 	int assume_no_b_frames;
+
+	// AmigaMCE: B pictures passed over (plm_video_set_skip_b)
+	int skip_b;
+	int b_skipped;
+	unsigned int b_skipped_count;
 };
 
 static inline uint8_t plm_clamp(int n) {
@@ -3046,6 +3060,14 @@ void plm_video_set_no_delay(plm_video_t *self, int no_delay) {
 	self->assume_no_b_frames = no_delay;
 }
 
+void plm_video_set_skip_b(plm_video_t *self, int skip) {
+	self->skip_b = skip;
+}
+
+unsigned int plm_video_get_skipped_b(plm_video_t *self) {
+	return self->b_skipped_count;
+}
+
 double plm_video_get_time(plm_video_t *self) {
 	return self->time;
 }
@@ -3112,6 +3134,14 @@ plm_frame_t *plm_video_decode(plm_video_t *self) {
 		
 		plm_video_decode_picture(self);
 
+		if (self->b_skipped) {
+			// AmigaMCE: a B picture passed over: its time goes by, no frame
+			self->b_skipped = FALSE;
+			self->b_skipped_count++;
+			self->frames_decoded++;
+			self->time = (double)self->frames_decoded / self->framerate;
+			continue;
+		}
 		if (self->assume_no_b_frames) {
 			frame = &self->frame_backward;
 		}
@@ -3259,6 +3289,18 @@ void plm_video_decode_picture(plm_video_t *self) {
 
 	// D frames or unknown coding type
 	if (self->picture_type <= 0 || self->picture_type > PLM_VIDEO_PICTURE_TYPE_B) {
+		return;
+	}
+
+	// AmigaMCE: a B picture passed over (only once a reference frame is
+	// shown, and not in "no delay" mode, where every frame is returned):
+	// its slices not read, the next picture found from here
+	if (
+		self->skip_b && self->picture_type == PLM_VIDEO_PICTURE_TYPE_B &&
+		self->has_reference_frame && !self->assume_no_b_frames
+	) {
+		self->b_skipped = TRUE;
+		self->start_code = -1;
 		return;
 	}
 

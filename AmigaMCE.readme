@@ -326,7 +326,9 @@ History
        controls, the sound track the card plays best
        (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
-       (Settings > Display: Use overlay when available). One set of
+       (Settings > Display: Use overlay when available), decoded about
+       twice as fast (2.6 times on a 68020), its B pictures passed over
+       while it is behind. One set of
        control glyphs for Now playing, the mini player, ANIMs, videos
        and DVDs, square on lowres, hires and laced screens alike.
 0.8.8  MP3 seeks land on a real frame (no error after a sound output

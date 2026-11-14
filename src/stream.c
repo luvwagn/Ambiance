@@ -2408,6 +2408,10 @@ static void swv_run(void)
     ZzU64 origin = 0, pts0 = 0;
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
+    /* behind: B pictures passed over (pl_mpeg), until enough are on time
+     * again to try them (twice as many each time it fell behind again) */
+    BOOL skip_b = FALSE;
+    ULONG b_ontime = 0, b_need = 30, b_turns = 0;
     char m[200];
     /* (measured: each step's E-clock ticks, and how many) */
     unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
@@ -2649,12 +2653,29 @@ static void swv_run(void)
                 swv[held].state = SW_FREE;  /* late: let go */
                 st.v_dropped++;
                 run++;
+                b_ontime = 0;
+                if (!skip_b) {
+                    /* behind: its B pictures not decoded at all */
+                    skip_b = TRUE;
+                    plm_video_set_skip_b(vd, TRUE);
+                    if (b_turns++)
+                        b_need = b_need < 960 ? b_need * 2 : b_need;
+                    if (b_turns <= 3) {
+                        sprintf(m, "behind at %lu ms: B pictures passed over", (unsigned long)(pts / 90));
+                        amce_log("video: by the CPU", m);
+                    }
+                }
             } else {
                 swv[held].pts = pts;
                 swv[held].seq = ++swv_seq;
                 swv[held].state = st.v_hidden ? SW_FREE : SW_SHOW;
                 st.v_shown++;
                 run = 0;
+                if (skip_b && drift >= 0 && ++b_ontime >= b_need) {
+                    skip_b = FALSE;         /* caught up: its B pictures tried again */
+                    plm_video_set_skip_b(vd, FALSE);
+                    b_ontime = 0;
+                }
             }
             if (pts >= pts0)
                 st.v_ms = (ULONG)((pts - pts0) / 90);
@@ -2673,8 +2694,11 @@ static void swv_run(void)
             break;
         out_take();
     }
-    sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts", log_name(),
-            (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
+    sprintf(m, "%s: %lu pictures shown, %lu let go (late), %lu B pictures passed over (behind %lu "
+               "time%s); %lu dropouts",
+            log_name(), (unsigned long)st.v_shown, (unsigned long)st.v_dropped,
+            (unsigned long)plm_video_get_skipped_b(vd), (unsigned long)b_turns, b_turns == 1 ? "" : "s",
+            (unsigned long)st.underruns);
     amce_log("video", m);
     m[0] = 0;
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
