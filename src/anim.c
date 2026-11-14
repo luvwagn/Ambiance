@@ -2864,6 +2864,8 @@ static WORD vid_was_h = -1;     /* the overlay's height last placed */
 
 static const UBYTE *sw_last;    /* decoded by the CPU: the picture drawn last */
 static ULONG sw_w, sw_h, sw_bpr;
+static unsigned long long sw_tdraw;     /* (measured: drawing them, E-clock ticks) */
+static ULONG sw_ndraw, sw_hz;
 
 /* Decoded by the CPU: the newest picture (or the last again, redraw) drawn
  * scaled into the picture's place, h high at most (the controls'). */
@@ -2882,11 +2884,16 @@ static void sw_draw(struct Gfx *g, WORD h, BOOL redraw)
     }
     if (dw < 2 || dh < 2)
         return;
-    if (dw == (LONG)sw_w && dh == (LONG)sw_h)
-        WritePixelArray((APTR)sw_last, 0, 0, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
-    else
-        ScalePixelArray((APTR)sw_last, sw_w, sw_h, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
-    win_show(g, TRUE, FALSE, x, y, dw, dh);
+    {
+        ULONG tk = time_ticks(&sw_hz);
+        if (dw == (LONG)sw_w && dh == (LONG)sw_h)
+            WritePixelArray((APTR)sw_last, 0, 0, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
+        else
+            ScalePixelArray((APTR)sw_last, sw_w, sw_h, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
+        win_show(g, TRUE, FALSE, x, y, dw, dh);
+        sw_tdraw += time_ticks(&sw_hz) - tk;
+        sw_ndraw++;
+    }
 }
 
 static BOOL vid_place(struct Gfx *g)
@@ -3003,6 +3010,8 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     int r, s;
     char m[200];
     sw_last = NULL;
+    sw_tdraw = 0;
+    sw_ndraw = 0;
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
@@ -3221,8 +3230,15 @@ out:
         st_video_counts(&shown, &dropped);
         st_stop();
         if (vid.sw) {
+            ULONG c = sw_ndraw && sw_hz ? (ULONG)(sw_tdraw * 100000ULL / sw_hz / sw_ndraw) : 0;
             st_swv_release();       /* (its pictures' buffers, now it has stopped) */
             sw_last = NULL;
+            sprintf(m, "a picture drawn %lu.%02lu ms (%lu), %lu x %lu to %ld x %ld (%s)",
+                    (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)sw_ndraw,
+                    (unsigned long)sw_w, (unsigned long)sw_h, (long)lay.dw, (long)lay.dh,
+                    lay.dw == (WORD)sw_w && lay.dh == (WORD)sw_h ? "WritePixelArray"
+                                                               : "ScalePixelArray");
+            amce_log("video: by the CPU", m);
         }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
                 (unsigned long)dropped, (unsigned long)(time_ms() - t0));

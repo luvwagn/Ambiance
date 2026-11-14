@@ -126,6 +126,20 @@ ULONG time_ms(void)
     return ev.ev_hi * (0xFFFFFFFFUL / khz) + ev.ev_lo / khz;
 }
 
+/* The E-clock's ticks (its low long: differences of up to an hour or so
+ * are right), its rate at *hz: for measuring short work. 0 without a
+ * timer. */
+ULONG time_ticks(ULONG *hz)
+{
+    struct EClockVal ev;
+    if (!TimerBase) {
+        *hz = 0;
+        return 0;
+    }
+    *hz = ReadEClock(&ev);
+    return ev.ev_lo;
+}
+
 void dbg_sleep_begin(void)
 {
     if (!TimerBase)
