@@ -1675,7 +1675,14 @@ void gfx_window_show(struct Gfx *g)
 
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 {
-    static UWORD pens[] = { (UWORD)~0 };
+    /* The screen's DrawInfo pens, in AmigaMCE's colours (ui_palette32): a
+     * system requester on it (ASL's, to add a folder) light text on a dark
+     * blue, not Intuition's defaults for its depth, which on these colours
+     * were dark text (pen 1) on dark (pen 0), unreadable. In order:
+     * detail, block, text, shine, shadow, fill, fill text, background,
+     * highlight text, the menu bar's detail, block and trim. */
+    static UWORD pens[] = { PEN_BAR, PEN_TEXT, PEN_TEXT, PEN_FAINT, PEN_BAR, PEN_HL, PEN_WHITE,
+                            PEN_KEYCAP, PEN_WHITE, PEN_TEXT, PEN_KEYCAP, PEN_BAR, (UWORD)~0 };
     ULONG mode;
     int i;
 
