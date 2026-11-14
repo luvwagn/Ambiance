@@ -1089,7 +1089,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                     amce_log("music", m);
                 }
             }
-            if (ep_load(path, mem, mlen, eerr, sizeof(eerr))) {
+            /* a MED song the mixer plays: only MED's players asked first */
+            if (ep_load(path, mem, mlen,
+                        copy && mlen >= 4 && mem[0] == 'M' && mem[1] == 'M' && mem[2] == 'D' &&
+                            mem[3] >= '0' && mem[3] <= '3',
+                        eerr, sizeof(eerr))) {
                 FreeVec(copy);
                 mp.engine = ENG_EAGLE;
                 amce_strlcpy(mp.path, path, sizeof(mp.path));
