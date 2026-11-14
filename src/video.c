@@ -47,9 +47,11 @@ static LONG vo_x, vo_y, vo_w, vo_h;     /* its place, in AmigaMCE's coordinates 
 static LONG vo_wx = -1, vo_wy = -1;     /* AmigaMCE's window, where it was last seen */
 static ULONG vo_cs, vo_cm;              /* the last click (a double click) */
 static BOOL vo_failed;                  /* it could not be opened for this video */
+static BOOL vo_off;                     /* the CPU's pictures not to go on it (Settings) */
 static ULONG vo_opens;                  /* times opened (a new one's memory is not the last's) */
 static struct BitMap *vo_bm;            /* its picture's memory, locked (vo_lock) */
 static LONG vo_lk;
+static int vo_logged;                   /* (said once a video: its memory, the first picture) */
 
 static const char *pip_error(LONG e)
 {
@@ -131,6 +133,9 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
     char m[160];
     pip_fit(v, sw, ax, ay, aw, ah, &x, &y, &dw, &dh);
     *pe = 0;
+    sprintf(m, "opening its overlay: %ld x %ld YUV, at %ld, %ld, %ld x %ld%s", (long)v->w, (long)v->h,
+            (long)x, (long)y, (long)dw, (long)dh, v->sw ? " (the CPU's pictures)" : "");
+    amce_log("video", m);
     w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
                         P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
                         P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
@@ -138,6 +143,8 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
                         WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
                         WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_IDCMP, IDCMP_MOUSEBUTTONS,
                         TAG_DONE);
+    if (w)
+        amce_log("video", "its overlay opened: placing it");
     if (w) {
         /* the size and place asked for at opening are not reliably taken
          * (the window stays the picture's size, top left): set again */
@@ -229,15 +236,23 @@ const char *video_check(const char *path, struct VProbe *v)
             v->sw = TRUE;
             /* its pictures on the card's overlay if this screen has one
              * (Picasso96's PIP: it scales them), else drawn */
-            if (!P96Base)
-                P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
             vo_failed = FALSE;
+            if (GetVar((CONST_STRPTR)"AmigaMCE/VideoOverlay", (STRPTR)ev, sizeof(ev),
+                       GVF_GLOBAL_ONLY) > 0 && !strcmp(ev, "off")) {
+                amce_log("video", "Settings > Display: the overlay off: its pictures drawn");
+                vo_off = TRUE;
+            } else {
+                vo_off = FALSE;
+                if (!P96Base)
+                    P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+            }
             return NULL;
         }
     }
     if (!P96Base && !(P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2)))
         return _("MPEG video needs Picasso96 (Picasso96API.library)");
-    vo_failed = FALSE;                      /* a new video: its overlay tried again */
+    vo_failed = FALSE;
+    vo_off = FALSE;                         /* (the card's: its overlay is its only way) */                      /* a new video: its overlay tried again */
     return NULL;
 }
 
@@ -271,7 +286,7 @@ BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG
         pip_move(vo_win, px, py, dw, dh);
         return TRUE;
     }
-    if (vo_failed || !P96Base)
+    if (vo_failed || !P96Base || (v->sw && vo_off))
         return FALSE;
     vo_v = *v;
     vo_sw = (LONG)video_shown_w(v);
@@ -289,6 +304,7 @@ BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG
     }
     vo_scr = g->scr;
     vo_opens++;
+    vo_logged = 0;
     vo_x = x;
     vo_y = y;
     vo_w = w;
@@ -343,6 +359,13 @@ UBYTE *vo_lock(ULONG *bpr)
         return NULL;
     memset(&ri, 0, sizeof(ri));
     vo_lk = p96LockBitMap(bm, (UBYTE *)&ri, sizeof(ri));
+    if (vo_logged < 1) {
+        char m[120];
+        sprintf(m, "its overlay's memory: %08lx, %ld bytes a row, format %ld", (unsigned long)ri.Memory,
+                (long)ri.BytesPerRow, (long)ri.RGBFormat);
+        amce_log("video", m);
+        vo_logged = 1;
+    }
     if (!ri.Memory || ri.BytesPerRow <= 0) {
         p96UnlockBitMap(bm, vo_lk);
         return NULL;
@@ -356,6 +379,10 @@ void vo_unlock(void)
 {
     if (vo_bm)
         p96UnlockBitMap(vo_bm, vo_lk);
+    if (vo_bm && vo_logged < 2) {
+        amce_log("video", "its first picture written to the overlay");
+        vo_logged = 2;
+    }
     vo_bm = NULL;
 }
 
