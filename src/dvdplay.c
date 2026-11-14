@@ -573,10 +573,34 @@ BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at)
     /* (after its end the disc has gone on to a menu: back in the film first) */
     if (dp->ended && !(DvdPlay(dp->dvd, dp->title, 0) && prime(dp)))
         return FALSE;
-    if (!DvdSeekTime(dp->dvd, ms) || !prime(dp))
-        return FALSE;
-    *at = where(dp);
-    return TRUE;
+    {
+        /* there, or if the disc will not seek to that time (a cell it
+         * cannot find, an angle block), the nearest that it will: a few
+         * seconds either side, then further */
+        static const LONG near_s[] = { 0, -2, 2, -5, 5, -10, 10, -30, 30, -60, 60 };
+        int i;
+        char m[100];
+        for (i = 0; i < (int)(sizeof(near_s) / sizeof(near_s[0])); i++) {
+            LONG t = (LONG)ms + near_s[i] * 1000;
+            if (t < 0 || (dp->ms && (ULONG)t >= dp->ms))
+                continue;
+            if (DvdSeekTime(dp->dvd, (ULONG)t)) {
+                if (i) {
+                    sprintf(m, "a seek to %lu ms: not there, %ld s %s", (unsigned long)ms,
+                            (long)(near_s[i] < 0 ? -near_s[i] : near_s[i]),
+                            near_s[i] < 0 ? "before" : "after");
+                    amce_log("dvd", m);
+                }
+                if (!prime(dp))
+                    return FALSE;
+                *at = where(dp);
+                return TRUE;
+            }
+        }
+        sprintf(m, "a seek to %lu ms: not there or within a minute of it", (unsigned long)ms);
+        amce_log("dvd", m);
+    }
+    return FALSE;
 }
 
 /* N: the next chapter, or at the title's last the next programme; P: the

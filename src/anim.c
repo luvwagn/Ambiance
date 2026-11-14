@@ -2996,10 +2996,13 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     pb_direct = FALSE;                      /* (no picture of its own: the overlay's) */
     if (LowLevelBase)
         jlast = gfx_joy(g);
-    strip_setup(g);
-    ctl.nbtn = BT_N;
+    /* full screen first, then its controls: their bitmap the screen's
+     * width (made first, the window's, it was too narrow, and their
+     * right end wrapped round onto their left) */
     if (g->wb && anim_full && !fs_enter(g, sw, vid.h, 1, 1))
         anim_full = FALSE;                  /* (the screen would not open: in the window) */
+    strip_setup(g);
+    ctl.nbtn = BT_N;
     vid_lay(g, sw, anim_full);
     sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, %s", name,
             g->wb && !gfx_fs_on() ? "window" : "screen", (long)lay.dw, (long)lay.dh,
@@ -3150,8 +3153,16 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             ended = paused = FALSE;
             sprintf(m, "seek to %lu ms", (unsigned long)target);
             amce_log("video", m);
-            if (!vid_start(cpu, target, err, errmax))
-                break;
+            if (!vid_start(cpu, target, err, errmax)) {
+                /* not there (nor near it, a DVD's): on from where it was,
+                 * not the end of it */
+                sprintf(m, "the seek failed (%s): on from %lu ms", err, (unsigned long)at);
+                amce_log("video", m);
+                err[0] = 0;
+                target = at;
+                if (!vid_start(cpu, target, err, errmax))
+                    break;
+            }
             at = target;
         } else if ((r == 7 || r == 8) && vid_dvd && dvdplay_can_chapter(vid_dvd, r == 7 ? 1 : -1)) {
             /* a DVD's next or previous chapter: the card started again there */

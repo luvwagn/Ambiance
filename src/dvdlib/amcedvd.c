@@ -186,6 +186,10 @@ API APTR DvdOpen(struct DvdReader *reader, ULONG flags)
     }
     dvdnav_set_readahead_flag(d->nav, (flags & DVDF_READAHEAD) ? 1 : 0);
     dvdnav_set_region_mask(d->nav, 0xff);   /* a player of every region */
+    /* times and places in the whole title (its PGC), not its current
+     * chapter's: DvdSeekTime to a time past the chapter playing failed
+     * ("Error when seeking"), and dvdnav_get_current_time is the title's */
+    dvdnav_set_PGC_positioning_flag(d->nav, 1);
     dvdnav_menu_language_select(d->nav, "en");
     dvdnav_audio_language_select(d->nav, "en");
     dvdnav_spu_language_select(d->nav, "en");
