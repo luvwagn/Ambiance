@@ -2985,7 +2985,7 @@ static void vi_draw(struct Gfx *g, UWORD sw)
             (unsigned long)(vi.fps10 / 10), (unsigned long)(vi.fps10 % 10),
             vid_dvd ? "a DVD" : vid.ts ? "a transport stream" : vid.ps ? "a program stream"
                                                               : "a bare video stream",
-            vid.sw ? "decoded by the CPU (pl_mpeg)" : "decoded by the ZZ9000");
+            vid.sw ? "decoded by the CPU (mpegv.library)" : "decoded by the ZZ9000");
     sprintf(l[0] + strlen(l[0]), ", %s %ld x %ld", vo_shown() ? "on the overlay at" : "drawn at",
             (long)lay.dw, (long)lay.dh);
     /* the sound */
