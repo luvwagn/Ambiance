@@ -2583,14 +2583,121 @@ static void sw_aq_put(const UBYTE *d, ULONG n)
     }
 }
 
-/* mpegv.library's read hook: the file's next bytes (0 at its end, as an
- * error was taken before) */
+/* A seek's prefix: the file's first headers, which the decoder needs
+ * before anything it can decode (a Program Stream's first pack and system
+ * headers, and its sequence header in a video packet of its own; a bare
+ * stream's sequence header), given before the file from where it is
+ * started. Many files have their sequence header only at their start. */
+#define SW_PRE 1024
+static UBYTE sw_pre[SW_PRE];
+static ULONG sw_pre_len, sw_pre_pos;
+
+/* Looked for in b (n bytes) from i: 00 00 01 id (id < 0: any); its offset
+ * or -1. */
+static LONG sw_find(const UBYTE *b, LONG n, LONG i, int id)
+{
+    for (; i + 4 <= n; i++)
+        if (!b[i] && !b[i + 1] && b[i + 2] == 1 && (id < 0 || b[i + 3] == (UBYTE)id))
+            return i;
+    return -1;
+}
+
+/* For a start at st.range_from: the prefix made from the file's first
+ * 64 KB, and the file from the first pack (a bare stream: sequence header,
+ * else picture group) at or after it. FALSE if it cannot start there. */
+static BOOL sw_seek_prep(void)
+{
+    UBYTE *b = AllocVec(V_SCAN, MEMF_ANY);
+    LONG n, sq, se, i, at = -1, k = 0;
+    char m[120];
+    BOOL ok = FALSE;
+    sw_pre_len = sw_pre_pos = 0;
+    if (!b)
+        return FALSE;
+    if (Seek(st.fh, 0, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
+        goto done;
+    /* the sequence header: to the next start code but its extensions' */
+    if ((sq = sw_find(b, n, 0, 0xB3)) < 0)
+        goto done;
+    for (se = sq + 4; (se = sw_find(b, n, se, -1)) >= 0 && b[se + 3] == 0xB5; se += 4)
+        ;
+    if (se < 0 || se - sq > SW_PRE - 64)
+        goto done;
+    if (!st.v_es) {
+        LONG pk = sw_find(b, n, 0, 0xBA), vp = -1, plen;
+        BOOL mpeg2;
+        if (pk < 0 || pk + 14 > n)
+            goto done;
+        mpeg2 = (b[pk + 4] & 0xC0) == 0x40;
+        plen = mpeg2 ? 14 + (b[pk + 13] & 7) : 12;
+        for (i = 0; i < plen; i++)
+            sw_pre[k++] = b[pk + i];
+        if (pk + plen + 6 <= n && sw_find(b, n, pk + plen, -1) == pk + plen && b[pk + plen + 3] == 0xBB) {
+            LONG sl = 6 + ((b[pk + plen + 4] << 8) | b[pk + plen + 5]);
+            if (sl < 256)
+                for (i = 0; i < sl; i++)
+                    sw_pre[k++] = b[pk + plen + i];
+        }
+        /* the video packet the sequence header is in: its stream's id */
+        for (i = sq; i >= 0 && vp < 0; i--)
+            if (!b[i] && !b[i + 1] && b[i + 2] == 1 && b[i + 3] >= 0xE0 && b[i + 3] <= 0xEF)
+                vp = i;
+        sw_pre[k++] = 0;
+        sw_pre[k++] = 0;
+        sw_pre[k++] = 1;
+        sw_pre[k++] = vp >= 0 ? b[vp + 3] : 0xE0;
+        sw_pre[k++] = (UBYTE)((se - sq + (mpeg2 ? 3 : 1)) >> 8);
+        sw_pre[k++] = (UBYTE)(se - sq + (mpeg2 ? 3 : 1));
+        if (mpeg2) {
+            sw_pre[k++] = 0x80;             /* no time stamp */
+            sw_pre[k++] = 0x00;
+            sw_pre[k++] = 0x00;
+        } else
+            sw_pre[k++] = 0x0F;
+    }
+    for (i = sq; i < se; i++)
+        sw_pre[k++] = b[i];
+    /* the file from there */
+    if (Seek(st.fh, (LONG)st.range_from, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
+        goto done;
+    if (st.v_es) {
+        LONG a = sw_find(b, n, 0, 0xB3), g = sw_find(b, n, 0, 0xB8);
+        at = a >= 0 && (g < 0 || a < g) ? a : g;
+    } else
+        at = sw_find(b, n, 0, 0xBA);
+    if (at < 0 || Seek(st.fh, (LONG)st.range_from + at, OFFSET_BEGINNING) < 0)
+        goto done;
+    sw_pre_len = (ULONG)k;
+    sprintf(m, "from byte %lu (asked %lu), its first %lu bytes of headers first",
+            (unsigned long)(st.range_from + at), (unsigned long)st.range_from, (unsigned long)k);
+    amce_log("video: by the CPU", m);
+    ok = TRUE;
+done:
+    FreeVec(b);
+    if (!ok) {
+        sprintf(m, "a seek to byte %lu: no sequence header or pack found", (unsigned long)st.range_from);
+        amce_log("video: by the CPU", m);
+    }
+    return ok;
+}
+
+/* mpegv.library's read hook: a seek's prefix, then the file's next bytes
+ * (0 at its end, as an error was taken before) */
 static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
                      register struct MpvRead *r __asm("a1"))
 {
-    LONG n = Read(st.fh, r->mr_Buffer, r->mr_Length);
+    LONG n;
     (void)h;
     (void)mpv;
+    if (sw_pre_pos < sw_pre_len) {
+        ULONG k = sw_pre_len - sw_pre_pos;
+        if (k > (ULONG)r->mr_Length)
+            k = (ULONG)r->mr_Length;
+        CopyMem(sw_pre + sw_pre_pos, r->mr_Buffer, k);
+        sw_pre_pos += k;
+        return k;
+    }
+    n = Read(st.fh, r->mr_Buffer, r->mr_Length);
     if (n > 0)
         st.v_bytes += (ULONG)n;             /* (its information's data rate) */
     return n > 0 ? (ULONG)n : 0;
@@ -2659,7 +2766,7 @@ static void swv_run(void)
     /* behind: B pictures passed over (mpegv.library), until enough are on time
      * again to try them (twice as many each time it fell behind again) */
     BOOL skip_b = FALSE;
-    ULONG b_ontime = 0, b_need = 30, b_turns = 0;
+    ULONG b_ontime = 0, b_need = 30, b_turns = 0, b_late = 0, b_okrun = 0;
     char m[200];
     /* (measured: each step's E-clock ticks, and how many) */
     unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
@@ -2712,6 +2819,11 @@ static void swv_run(void)
     memset(&phook, 0, sizeof(phook));
     rhook.h_Entry = (HOOKFUNC)(APTR)sw_read;
     phook.h_Entry = (HOOKFUNC)(APTR)sw_packet;
+    sw_pre_len = sw_pre_pos = 0;
+    if (st.range_from && !sw_seek_prep()) {
+        fail(_("The file could not be read there"));
+        goto out;
+    }
     if (!(sw_mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rhook, MPVA_PacketHook, (ULONG)&phook,
                                MPVA_Stream, st.v_es ? MPVS_VIDEO : MPVS_PROGRAM,
                                MPVA_ReadSize, SW_IN, TAG_DONE))) {
@@ -2907,7 +3019,10 @@ static void swv_run(void)
                 st.v_dropped++;
                 run++;
                 b_ontime = 0;
-                if (!skip_b) {
+                b_okrun = 0;
+                /* behind, not a start's stumble: three late without thirty
+                 * on time between, after its first second */
+                if (!skip_b && ++b_late >= 3 && time_ms() - t0 > 1000) {
                     /* behind: its B pictures not decoded at all */
                     skip_b = TRUE;
                     MpvControl(sw_mpv, MPVC_SKIPB, TRUE);
@@ -2924,10 +3039,13 @@ static void swv_run(void)
                 swv[held].state = st.v_hidden ? SW_FREE : SW_SHOW;
                 st.v_shown++;
                 run = 0;
+                if (!skip_b && ++b_okrun >= 30)
+                    b_late = 0;
                 if (skip_b && drift >= 0 && ++b_ontime >= b_need) {
                     skip_b = FALSE;         /* caught up: its B pictures tried again */
                     MpvControl(sw_mpv, MPVC_SKIPB, FALSE);
                     b_ontime = 0;
+                    b_late = b_okrun = 0;
                 }
             }
             if (pts >= pts0)
