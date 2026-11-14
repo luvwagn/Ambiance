@@ -829,9 +829,9 @@ With sound
 MSG_6524B26D (1696903789//)
 No sound
 ; main.c:4850
-MSG_2AC72CDD (717696221//)
-Not a Program Stream: not played
-; main.c:4852 video.c:84
+MSG_7EB7DE9D (2125979293//)
+A bare video stream
+; main.c:4852 video.c:147
 MSG_50D8B3E7 (1356379111//)
 Not an MPEG video AmigaMCE can read
 ; main.c:4863
@@ -1623,7 +1623,7 @@ The station refused the connection
 ; stream.c:727 stream.c:780
 MSG_7D8C9876 (2106366070//)
 The station did not answer
-; stream.c:827 stream.c:1897 stream.c:2039
+; stream.c:827 stream.c:1897 stream.c:1988
 MSG_2A3F28C9 (708782281//)
 The file could not be read
 ; stream.c:852
@@ -1668,43 +1668,43 @@ Only music files on this Amiga play as WAV, AIFF or 8SVX
 ; stream.c:1870
 MSG_3E5CE903 (1046276355//)
 Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
-; stream.c:2513
+; stream.c:2616
 MSG_52A6DB2B (1386666795//)
 The MHI driver could not be opened (Settings > Sound)
-; stream.c:2518
+; stream.c:2621
 MSG_74E4B952 (1961146706//)
 The MHI driver's decoder is in use, or not there
-; stream.c:2523
+; stream.c:2626
 MSG_166B781B (376141851//)
 Not enough memory for MHI's buffers
-; stream.c:2662
+; stream.c:2765
 MSG_03D74A28 (64440872//)
 No signal free
-; stream.c:2676
+; stream.c:2779
 MSG_2F19A1CE (790208974//)
 The track ended before its music began
-; stream.c:2692 stream.c:2711
+; stream.c:2795 stream.c:2814
 MSG_755A0080 (1968832640//)
 The track ended before that time
-; stream.c:2696 stream.c:2700 stream.c:2715
+; stream.c:2799 stream.c:2803 stream.c:2818
 MSG_1186B14C (294039884//)
 The stream does not look like MP3
-; stream.c:2874
+; stream.c:2978
 MSG_3AC77067 (986148967//)
 Not enough memory to play a station
-; stream.c:2884
+; stream.c:2988
 MSG_41C55AEA (1103452906//)
 Could not start the radio process
-; video.c:94
+; video.c:157
 MSG_49FB1D9D (1241193885//)
 Only MPEG Program Streams play (this one has no packs)
-; video.c:98
+; video.c:161
 MSG_267A9302 (645567234//)
 MPEG video plays on a ZZ9000 (zz9k.library not found)
-; video.c:108
+; video.c:171
 MSG_5EF81658 (1593316952//)
 MPEG video needs Picasso96 (Picasso96API.library)
-; video.c:145
+; video.c:209
 MSG_612F22BA (1630479034//)
 The ZZ9000's overlay could not be opened on this screen
 ; view.c:860

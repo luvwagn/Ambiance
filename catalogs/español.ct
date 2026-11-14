@@ -827,8 +827,8 @@ MSG_6B41435A
 ; With sound
 MSG_6524B26D
 ; No sound
-MSG_2AC72CDD
-; Not a Program Stream: not played
+MSG_7EB7DE9D
+; A bare video stream
 MSG_50D8B3E7
 ; Not an MPEG video AmigaMCE can read
 MSG_1403F9F1

@@ -4847,7 +4847,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             }
             pv_line(vp.mp2 ? _("With sound") : _("No sound"), w);
             if (!vp.ps)
-                pv_line(_("Not a Program Stream: not played"), w);
+                pv_line(_("A bare video stream"), w);
         } else {
             pv_line(_("Not an MPEG video AmigaMCE can read"), w);
         }

@@ -66,6 +66,7 @@ static void scan(const UBYTE *b, LONG n, struct VProbe *v, BOOL first,
             v->h = (UWORD)(((b[i + 5] & 0x0F) << 8) | b[i + 6]);
             v->aspect = (UBYTE)(b[i + 7] >> 4);
             v->fps_milli = fps_milli[b[i + 7] & 0x0F];
+            v->kbps = (((ULONG)b[i + 8] << 10) | ((ULONG)b[i + 9] << 2) | (b[i + 10] >> 6)) * 2 / 5;
         } else if (c == 0xB5 && first && (b[i + 4] >> 4) == 1) {
             v->mpeg2 = TRUE;                /* a sequence extension */
         } else if (c >= 0xC0 && c <= 0xDF) {
@@ -116,6 +117,8 @@ BOOL vprobe(const char *path, struct VProbe *v)
         if (v->fps_milli)
             v->ms += 1000000UL / v->fps_milli;  /* (its last picture's time too) */
     }
+    if (!v->ms && v->kbps && v->kbps < 104857 && v->bytes)
+        v->ms = v->bytes / v->kbps * 8;     /* (a bare stream: by its bitrate) */
     return v->w && v->h;
 }
 

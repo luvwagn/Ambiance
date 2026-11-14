@@ -20,6 +20,8 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/Picasso96.h>
+#include <proto/graphics.h>
+#include <graphics/modeid.h>
 #include <stdio.h>
 #include <string.h>
 #include "amce.h"
@@ -68,13 +70,74 @@ static ULONG shown_w(const struct VProbe *v)
     return v->w;
 }
 
+/* The overlay: a borderless PIP window on scr (pub: Workbench), the
+ * picture fitted into ax, ay, aw x ah with its aspect (sw for its height);
+ * *pe Picasso96's error if not. */
+static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe *v, LONG ax,
+                               LONG ay, LONG aw, LONG ah, LONG sw, LONG *pe)
+{
+    struct Window *w;
+    LONG dw = aw, dh = (LONG)((ULONG)aw * v->h / (ULONG)sw);
+    char m[160];
+    if (dh > ah) {
+        dh = ah;
+        dw = (LONG)((ULONG)ah * (ULONG)sw / v->h);
+    }
+    dw &= ~1;
+    *pe = 0;
+    w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
+                        P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
+                        P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
+                        (ULONG)scr, WA_Left, ax + (aw - dw) / 2, WA_Top, ay + (ah - dh) / 2,
+                        WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
+                        WA_Activate, TRUE, WA_RMBTrap, TRUE,
+                        WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS, TAG_DONE);
+    if (w) {
+        /* the size and place asked for at opening are not reliably taken
+         * (the window stays the picture's size, top left): set again the
+         * way a drag does, and waited for (half a second at most), so
+         * Picasso96 moves the overlay before the first picture */
+        LONG x = ax + (aw - dw) / 2, y = ay + (ah - dh) / 2, ow = dw + w->BorderLeft + w->BorderRight,
+             oh = dh + w->BorderTop + w->BorderBottom, t;
+        if (w->Width != ow || w->Height != oh || w->LeftEdge != x || w->TopEdge != y)
+            ChangeWindowBox(w, x, y, ow, oh);
+        for (t = 0; t < 25; t++) {
+            if (w->Width == ow && w->Height == oh && w->LeftEdge == x && w->TopEdge == y)
+                break;
+            Delay(1);
+        }
+        Delay(1);                           /* (Picasso96 sets the overlay after Intuition) */
+        sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s", (long)(w->Width - ow + dw),
+                (long)(w->Height - oh + dh), (long)w->LeftEdge, (long)w->TopEdge, (long)v->w,
+                (long)v->h, t >= 25 ? "; not the size asked for" : "");
+    } else
+        sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(*pe), (long)*pe);
+    amce_log("video", m);
+    return w;
+}
+
+/* A screen of its own for it, in mode's own size and depth (on the
+ * ZZ9000: Workbench's, or AmigaMCE's), its pens left free (the overlay's
+ * colour key needs one), black. */
+static UWORD vs_pens[] = { (UWORD)~0 };
+static ULONG vs_black[] = { 1UL << 16, 0, 0, 0, 0 };
+
+static struct Screen *own_screen(ULONG mode, ULONG depth)
+{
+    return p96OpenScreenTags(P96SA_DisplayID, mode, P96SA_Depth, depth, P96SA_Title,
+                             (ULONG) "AmigaMCE", P96SA_ShowTitle, FALSE, P96SA_Quiet, TRUE,
+                             P96SA_AutoScroll, FALSE, P96SA_SharePens, TRUE, P96SA_Pens,
+                             (ULONG)vs_pens, P96SA_Colors32, (ULONG)vs_black, TAG_DONE);
+}
+
 int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
                char *err, LONG errmax)
 {
+    struct Screen *vscr = NULL;
     struct VProbe v;
     struct Window *pip = NULL;
     const char *why;
-    LONG pe = 0, ax, ay, aw, ah, dw, dh, sw;
+    LONG pe = 0, ax, ay, aw, ah, sw;
     BOOL paused = FALSE, stop = FALSE;
     ULONG t0, shown = 0, dropped = 0;
     int r = -1;
@@ -88,12 +151,12 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
             (const char *)FilePart((STRPTR)path), vprobe_kind(&v), (long)v.w, (long)v.h,
             (long)v.aspect, (long)(v.fps_milli / 1000), (long)(v.fps_milli % 1000),
             v.mp2 ? "MPEG audio" : "no sound", (unsigned long)v.ms, (unsigned long)v.bytes,
-            v.ps ? "" : " (not a Program Stream)");
+            v.ps ? "" : " (a bare video stream)");
     amce_log("video", m);
-    if (!v.ps) {
+    if (!v.ps && v.mpeg2) {
         amce_strlcpy(err, _("Only MPEG Program Streams play (this one has no packs)"), errmax);
         return -1;
-    }
+    }                                       /* (bare MPEG-1 video: packed as it plays) */
     if (!zz_open()) {
         amce_strlcpy(err, _("MPEG video plays on a ZZ9000 (zz9k.library not found)"), errmax);
         return -1;
@@ -121,36 +184,33 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
     sw = (LONG)shown_w(&v);
     if (sw <= 0)
         sw = v.w;
-    dw = aw;
-    dh = (LONG)((ULONG)aw * v.h / (ULONG)sw);
-    if (dh > ah) {
-        dh = ah;
-        dw = (LONG)((ULONG)ah * (ULONG)sw / v.h);
-    }
-    dw &= ~1;
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);     /* (around it) */
     gfx_present(g);
-    pip = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v.w,
-                          P96PIP_SourceHeight, (ULONG)v.h, P96PIP_Type, P96PIPT_MemoryWindow,
-                          P96PIP_ErrorCode, (ULONG)&pe,
-                          g->wb ? WA_PubScreen : WA_CustomScreen, (ULONG)g->scr,
-                          WA_Left, ax + (aw - dw) / 2, WA_Top, ay + (ah - dh) / 2,
-                          WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
-                          WA_Activate, TRUE, WA_RMBTrap, TRUE,
-                          WA_IDCMP, IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS,
-                          TAG_DONE);
+    amce_log("video", g->wb ? "its overlay over AmigaMCE's window" : "its overlay on AmigaMCE's screen");
+    pip = pip_open(g->scr, g->wb, &v, ax, ay, aw, ah, sw, &pe);
     if (!pip) {
-        sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(pe), (long)pe);
-        amce_log("video", m);
+        /* (all the screen's pens taken, say: Workbench's, by AmigaMCE's window
+         * among others) on a screen of its own, in the same mode */
+        ULONG mode = GetVPModeID(&g->scr->ViewPort);
+        ULONG depth = GetBitMapAttr(g->scr->RastPort.BitMap, BMA_DEPTH);
+        if (depth < 15)
+            depth = 16;
+        if (mode != (ULONG)INVALID_ID && (vscr = own_screen(mode, depth))) {
+            sprintf(m, "on a screen of its own: mode %08lx, %ld x %ld, %ld-bit",
+                    (unsigned long)mode, (long)vscr->Width, (long)vscr->Height, (long)depth);
+            amce_log("video", m);
+            pip = pip_open(vscr, FALSE, &v, 0, 0, vscr->Width, vscr->Height, sw, &pe);
+        } else {
+            sprintf(m, "a screen of its own could not be opened (mode %08lx)", (unsigned long)mode);
+            amce_log("video", m);
+        }
+    }
+    if (!pip) {
         amce_strlcpy(err, _("The ZZ9000's overlay could not be opened on this screen"), errmax);
         goto out;
     }
-    sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld) on %s", (long)dw, (long)dh,
-            (long)(ax + (aw - dw) / 2), (long)(ay + (ah - dh) / 2), (long)v.w, (long)v.h,
-            g->wb ? "Workbench" : "AmigaMCE's screen");
-    amce_log("video", m);
-    if (!st_start_video(path, (UWORD)mp_volume(), cpu, v.w, v.h, v.mpeg2, v.mp2, v.ms, err,
-                        errmax))
+    if (!st_start_video(path, (UWORD)mp_volume(), cpu, v.w, v.h, v.mpeg2, v.mp2 && v.ps, !v.ps,
+                        v.ms, err, errmax))
         goto out;
     t0 = time_ms();
     while (!stop) {
@@ -201,6 +261,8 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
 out:
     if (pip)
         p96PIP_Close(pip);
+    if (vscr)
+        p96CloseScreen(vscr);
     if (g->wb && g->win)
         ActivateWindow(g->win);
     CloseLibrary(P96Base);

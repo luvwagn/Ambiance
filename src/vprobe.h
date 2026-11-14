@@ -16,6 +16,7 @@ struct VProbe {
     BOOL mp2;                   /* it has MPEG audio */
     ULONG ms;                   /* its length, 0 not known */
     ULONG bytes;
+    ULONG kbps;                 /* the sequence header's bitrate (kbit/s) */
 };
 
 /* TRUE when a sequence header was found (its size known). */

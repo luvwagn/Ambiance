@@ -228,12 +228,12 @@ static struct {
     BOOL flac;                      /* decoded here by flacdec.library */
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
     /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
-    BOOL video, v_mpeg2, v_mp2;
+    BOOL video, v_mpeg2, v_mp2, v_es;
     UWORD v_w, v_h;
     volatile ULONG v_shown, v_dropped;
 } st;
 
-static struct { BOOL on, mpeg2, mp2; UWORD w, h; ULONG ms; } vid_next;  /* st_start_video's */
+static struct { BOOL on, mpeg2, mp2, es; UWORD w, h; ULONG ms; } vid_next;  /* st_start_video's */
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
@@ -1966,6 +1966,77 @@ static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
     return origin + (ZzU64)pos * div * 90000ULL / rate;
 }
 
+/* A bare MPEG-1 video stream (no packs: RiVA's, a .m1v by a .mpg name)
+ * made a Program Stream as it is given to the card, which takes no other:
+ * a pack header (its clock reckoned at 1.5 Mbit/s), a system header with
+ * the first, and each 2000 bytes a video packet, the first with a time
+ * stamp (0: the card goes on from it). The end: an end code. Up to max
+ * bytes at out; 0 at the end. */
+#define ES_CHUNK 2000
+static ULONG es_bytes;                      /* the stream's bytes packed so far */
+static BOOL es_ended;
+
+static ULONG es_pack(volatile UBYTE *out, ULONG max)
+{
+    static UBYTE b[ES_CHUNK + 64];
+    ULONG o = 0;
+    while (!es_ended && o + sizeof(b) <= max) {
+        LONG n = Read(st.fh, b + 64, ES_CHUNK), k = 0, i;
+        ULONG scr = (ULONG)((unsigned long long)es_bytes * 90000ULL / 187500ULL), mr = 3750;
+        UBYTE h[64];
+        if (n < 0) {
+            fail(_("The file could not be read"));
+            return o;
+        }
+        if (n == 0) {
+            h[0] = h[1] = 0;
+            h[2] = 1;
+            h[3] = 0xB9;                    /* the program's end */
+            for (i = 0; i < 4; i++)
+                out[o++] = h[i];
+            es_ended = TRUE;
+            break;
+        }
+        /* the pack header (MPEG-1): its clock, its rate (50 bytes a second units) */
+        h[k++] = 0; h[k++] = 0; h[k++] = 1; h[k++] = 0xBA;
+        h[k++] = (UBYTE)(0x21 | ((scr >> 29) & 0x0E));
+        h[k++] = (UBYTE)(scr >> 22);
+        h[k++] = (UBYTE)(((scr >> 14) & 0xFE) | 1);
+        h[k++] = (UBYTE)(scr >> 7);
+        h[k++] = (UBYTE)(((scr << 1) & 0xFE) | 1);
+        h[k++] = (UBYTE)(0x80 | (mr >> 15));
+        h[k++] = (UBYTE)(mr >> 7);
+        h[k++] = (UBYTE)(((mr & 0x7F) << 1) | 1);
+        if (!es_bytes) {
+            /* the system header: one video stream, its buffer 46 KB */
+            h[k++] = 0; h[k++] = 0; h[k++] = 1; h[k++] = 0xBB;
+            h[k++] = 0; h[k++] = 9;
+            h[k++] = (UBYTE)(0x80 | (mr >> 15));
+            h[k++] = (UBYTE)(mr >> 7);
+            h[k++] = (UBYTE)(((mr & 0x7F) << 1) | 1);
+            h[k++] = 0x00;                  /* no audio, not fixed, not CSPS */
+            h[k++] = 0xE1;                  /* locks, a marker, one video stream */
+            h[k++] = 0xFF;
+            h[k++] = 0xE0; h[k++] = 0xE0; h[k++] = 46;
+        }
+        /* the video packet: a time stamp on the first */
+        h[k++] = 0; h[k++] = 0; h[k++] = 1; h[k++] = 0xE0;
+        h[k++] = (UBYTE)((n + (es_bytes ? 1 : 5)) >> 8);
+        h[k++] = (UBYTE)(n + (es_bytes ? 1 : 5));
+        if (!es_bytes) {
+            h[k++] = 0x21; h[k++] = 0x00; h[k++] = 0x01; h[k++] = 0x00; h[k++] = 0x01;  /* PTS 0 */
+        } else {
+            h[k++] = 0x0F;                  /* no time stamp */
+        }
+        for (i = 0; i < k; i++)
+            out[o++] = h[i];
+        for (i = 0; i < n; i++)
+            out[o++] = b[64 + i];
+        es_bytes += (ULONG)n;
+    }
+    return o;
+}
+
 static void video_run(void)
 {
     struct ZzBuf in, pcm;
@@ -1983,6 +2054,8 @@ static void video_run(void)
     memset(&held, 0, sizeof(held));
     memset(&au, 0, sizeof(au));
     st.v_shown = st.v_dropped = 0;
+    es_bytes = 0;
+    es_ended = FALSE;
     if ((v_tport = CreateMsgPort()) &&
         (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
         !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
@@ -2000,15 +2073,25 @@ static void video_run(void)
         amce_log("video", "no room on the card for its sound: played without it");
         sound = FALSE;
     }
-    if ((s = zz_begin(st.v_w, st.v_h, st.v_mpeg2, sound, sound ? &pcm : NULL, &r)) != ZZ_OK) {
+    {
+        int k;                              /* (a session closing just before: busy a while) */
+        for (k = 0; k < 25; k++) {
+            if (k)
+                Delay(2);
+            if ((s = zz_begin(st.v_w, st.v_h, st.v_mpeg2, sound, sound ? &pcm : NULL, &r)) != ZZ_BUSY)
+                break;
+        }
+    }
+    if (s != ZZ_OK) {
         sprintf(m, "The ZZ9000 would not play it (%s)", zz_name(s));
         fail(m);
         goto out;
     }
     session = r.session;
-    sprintf(m, "%s: %ld x %ld %s on the ZZ9000, %s; session %lu", log_name(), (long)st.v_w,
+    sprintf(m, "%s: %ld x %ld %s on the ZZ9000, %s%s; session %lu", log_name(), (long)st.v_w,
             (long)st.v_h, st.v_mpeg2 ? "MPEG-2" : "MPEG-1",
-            sound ? "its sound to the card's ring" : "no sound", (unsigned long)session);
+            sound ? "its sound to the card's ring" : "no sound",
+            st.v_es ? ", a bare video stream packed as it goes" : "", (unsigned long)session);
     amce_log("video", m);
     st.state = ST_BUFFERING;
     hold = period / 2;
@@ -2034,7 +2117,10 @@ static void video_run(void)
             int k;
             for (k = 0; k < 4 && !eof_sent; k++) {
                 if (!pend_len && !in_eof) {
-                    LONG n = Read(st.fh, (APTR)in.data, in.length);
+                    LONG n = st.v_es ? (LONG)es_pack(in.data, in.length)
+                                     : Read(st.fh, (APTR)in.data, in.length);
+                    if (st.v_es && st.state == ST_FAILED)
+                        goto out;
                     if (n < 0) {
                         fail(_("The file could not be read"));
                         goto out;
@@ -2260,8 +2346,25 @@ static void video_run(void)
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
     amce_log("video", m);
 out:
-    if (session)
-        zz_cmd(ZZ_CLOSE, session, 0, &r);
+    if (session) {
+        /* its held picture let go, then closed: busy until the card has
+         * handed its last picture to the overlay (a tick between tries);
+         * left open, the next video's Begin is refused (busy) */
+        int k;
+        if (held_now)
+            zz_cmd(ZZ_DISCARD, session, 0, &r);
+        s = ZZ_BUSY;
+        for (k = 0; k < 25 && s == ZZ_BUSY; k++) {
+            if (k)
+                Delay(1);
+            s = zz_cmd(ZZ_CLOSE, session, 0, &r);
+        }
+        if (s != ZZ_OK) {
+            sprintf(m, "its session %lu could not be closed (%s)", (unsigned long)session,
+                    zz_name(s));
+            amce_log("video", m);
+        }
+    }
     zz_free(&pcm);
     zz_free(&in);
     zz_close();
@@ -2859,6 +2962,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.video = vid_next.on;                 /* (st_start_video's) */
     st.v_mpeg2 = vid_next.mpeg2;
     st.v_mp2 = vid_next.mp2;
+    st.v_es = vid_next.es;
     st.v_w = vid_next.w;
     st.v_h = vid_next.h;
     st.v_shown = st.v_dropped = 0;
@@ -2890,10 +2994,11 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
 /* An MPEG file played by the ZZ9000 (w x h, MPEG-2 or 1, with MPEG audio
  * or none): the radio process runs it (video_run), its sound as music's. */
 BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, ULONG ms, char *err, LONG errmax)
+                    BOOL mp2, BOOL es, ULONG ms, char *err, LONG errmax)
 {
     BOOL ok;
     vid_next.on = TRUE;
+    vid_next.es = es;
     vid_next.mpeg2 = mpeg2;
     vid_next.mp2 = mp2;
     vid_next.w = w;

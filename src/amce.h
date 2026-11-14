@@ -702,7 +702,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
               ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);
 BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, ULONG ms, char *err, LONG errmax);   /* MPEG on the ZZ9000 */
+                    BOOL mp2, BOOL es, ULONG ms, char *err, LONG errmax);  /* MPEG on the ZZ9000 */
 void st_video_counts(ULONG *shown, ULONG *dropped);
 void st_pause(BOOL on);
 void st_volume(int v);
