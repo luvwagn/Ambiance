@@ -19,6 +19,7 @@ ULONG video_shown_w(const struct VProbe *v);    /* its width for its height, as 
  * tried again for this video). */
 BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG h);
 BOOL vo_failed_here(void);
+void vo_retry(void);                    /* tried again (another screen) */
 void vo_hide(void);                     /* taken down (before AmigaMCE's window goes, too) */
 BOOL vo_shown(void);
 void vo_end(void);                      /* at quitting */

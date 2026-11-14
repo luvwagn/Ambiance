@@ -248,6 +248,11 @@ BOOL vo_failed_here(void)
     return vo_failed;
 }
 
+void vo_retry(void)
+{
+    vo_failed = FALSE;
+}
+
 void vo_hide(void)
 {
     if (vo_win) {

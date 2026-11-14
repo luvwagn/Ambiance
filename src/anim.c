@@ -2943,6 +2943,23 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
             }
         }
         if (!vid_place(g)) {
+            if (gfx_fs_on()) {
+                /* not on the full screen's screen: back in the window, its
+                 * full screen greyed for this one */
+                int focus = ctl.focus;
+                amce_log("video", "no overlay full screen: back in the window");
+                strip_cleanup(g);
+                fs_leave(g);
+                strip_setup(g);
+                ctl.nbtn = BT_N;
+                ctl.focus = focus == BT_FULL ? BT_PLAY : focus;
+                ctl.off |= 1 << BT_FULL;
+                anim_full = FALSE;
+                vid_lay(g, sw, FALSE);
+                whole = TRUE;
+                vo_retry();
+                continue;
+            }
             amce_strlcpy(err, _("The ZZ9000's overlay could not be opened on this screen"), errmax);
             break;
         }

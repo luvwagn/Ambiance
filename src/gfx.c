@@ -1094,8 +1094,26 @@ BOOL gfx_fs_enter(struct Gfx *g)
                             SA_Depth, g->depth, SA_Colors32, (ULONG)tab, SA_Quiet, TRUE,
                             SA_ShowTitle, FALSE, SA_Type, CUSTOMSCREEN, SA_Behind, TRUE,
                             SA_Draggable, FALSE, SA_Exclusive, TRUE, SA_Title, (ULONG)"AmigaMCE",
-                            TAG_DONE);
+                            SA_SharePens, TRUE, TAG_DONE);
     FreeVec(tab);
+    if (fs_scr) {
+        /* its pens as Workbench's: those taken there (AmigaMCE's among them)
+         * taken here too, those free there left free (a video overlay's
+         * colour key takes one; without SA_SharePens none were) */
+        struct ColorMap *fc = fs_scr->ViewPort.ColorMap;
+        ULONG i, nf = 0, top = fc && fc->Count < n ? fc->Count : n;
+        for (i = 0; fc && i < top; i++) {
+            LONG p = ObtainPen(cm, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
+            if (p == (LONG)i) {
+                ReleasePen(cm, i);          /* free there: free here */
+                nf++;
+            } else
+                ObtainPen(fc, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
+        }
+        sprintf(m, "full screen: %lu of its %lu pens left free, as on Workbench", (unsigned long)nf,
+                (unsigned long)top);
+        amce_log("window", m);
+    }
     if (fs_scr)
         fs_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)fs_scr, WA_Left, 0, WA_Top, 0,
                                 WA_Width, fs_scr->Width, WA_Height, fs_scr->Height,
