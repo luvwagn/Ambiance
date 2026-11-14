@@ -985,21 +985,25 @@ static void chap_glyph(struct RastPort *rp, WORD x, WORD y, WORD s, WORD t, int 
     }
 }
 
-static void bar_icon(int b, WORD x, WORD y, WORD s)
+/* Button b's glyph in an s-square at x, y, lines t thick, in fg (dim: the
+ * loop's part not in effect): the same for the controls beneath the
+ * picture (strip_draw) and the bar over it (bar_put). paused: Play (>),
+ * else Pause (||); out: full screen now (Full's corners point in). */
+static void ctl_glyph(struct RastPort *rp, int b, WORD x, WORD y, WORD s, WORD t, BOOL paused,
+                      BOOL out, UBYTE fg, UBYTE dim)
 {
-    struct RastPort *rp = &bar.rp;
-    WORD cy = y + s / 2, i, t = s > 12 ? 2 : 1;
-    SetAPen(rp, bar.fg);
+    WORD cy = y + s / 2, i;
+    SetAPen(rp, fg);
     switch (b) {
     case BT_RESTART:                        /* |< */
-        RectFill(rp, x + s / 6, y + s / 6, x + s / 6 + t, y + s - s / 6);
+        RectFill(rp, x + s / 5, y + s / 5, x + s / 5 + t, y + s - s / 5);
         for (i = 0; i <= s / 3; i++) {
-            Move(rp, x + s / 6 + t + 2 + i, cy - i);
-            Draw(rp, x + s / 6 + t + 2 + i, cy + i);
+            Move(rp, x + s / 5 + t + 2 + i, cy - i);
+            Draw(rp, x + s / 5 + t + 2 + i, cy + i);
         }
         break;
     case BT_PLAY:
-        if (bar.paused)                     /* > */
+        if (paused)                         /* > */
             for (i = 0; i <= s / 3; i++) {
                 Move(rp, x + s / 3 + i, y + s / 6 + i);
                 Draw(rp, x + s / 3 + i, y + s - s / 6 - i);
@@ -1015,15 +1019,40 @@ static void bar_icon(int b, WORD x, WORD y, WORD s)
         chap_glyph(rp, x, y, s, t, b == BT_NEXT ? 1 : -1);
         break;
     case BT_LOOP:
-        loop_glyph(rp, x, y, s, t, bar.fg, bar.dim);
+        loop_glyph(rp, x, y, s, t, fg, dim);
         break;
-    case BT_VDOWN:
+    case BT_FULL: {                         /* four corners: out to fill, in to come back */
+        WORD a = s / 5, L = s / 4, c, ccx = x + s / 2, gap = s / 8 + t;
+        for (c = 0; c < 4; c++) {
+            WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
+            if (!out) {                     /* at the box's corners, arms along its edges */
+                px = dx > 0 ? x + a : x + s - 1 - a;
+                py = dy > 0 ? y + a : y + s - 1 - a;
+            } else {                        /* by the middle, arms outwards */
+                px = ccx - dx * gap;
+                py = cy - dy * gap;
+                dx = -dx;
+                dy = -dy;
+            }
+            RectFill(rp, dx > 0 ? px : px - L + 1, dy > 0 ? py : py - t + 1,
+                     dx > 0 ? px + L - 1 : px, dy > 0 ? py + t - 1 : py);
+            RectFill(rp, dx > 0 ? px : px - t + 1, dy > 0 ? py : py - L + 1,
+                     dx > 0 ? px + t - 1 : px, dy > 0 ? py + L - 1 : py);
+        }
+        break;
+    }
+    case BT_VDOWN:                          /* - and + */
     case BT_VUP:
         RectFill(rp, x + s / 4, cy - t / 2, x + s - s / 4, cy - t / 2 + t - 1);
         if (b == BT_VUP)
             RectFill(rp, x + s / 2 - t / 2, y + s / 4, x + s / 2 - t / 2 + t - 1, y + s - s / 4);
         break;
     }
+}
+
+static void bar_icon(int b, WORD x, WORD y, WORD s)
+{
+    ctl_glyph(&bar.rp, b, x, y, s, s > 12 ? 2 : 1, bar.paused, TRUE, bar.fg, bar.dim);
 }
 
 static void time_text(char *out, ULONG ms)
@@ -1466,7 +1495,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     st.off = ctl.off;
     st.loop = play_loop;
     for (i = 0, x = st.x0; i < ctl.nbtn; i++, x += st.cw) {
-        WORD ix, iy = st.y + (st.h - s) / 2, j, bx, by, bw, bh, ry, sx, rx;
+        WORD ix, iy = st.y + (st.h - s) / 2, bx, by, bw, bh, ry, sx, rx;
         if (btn_hidden(i)) {
             st.bx[i] = -32000;              /* (never hit) */
             x -= st.cw;
@@ -1501,62 +1530,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             } else
                 gfx_rrect(g, bx, by, bw, bh, rx, ry, face);
         }
-        SetAPen(g->rp, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE));    /* greyed, as Now playing's */
-        switch (i) {
-        case BT_RESTART:
-            RectFill(g->rp, ix + s / 5, iy + s / 5, ix + s / 5 + t, iy + s - s / 5);
-            for (j = 0; j <= s / 3; j++) {
-                Move(g->rp, ix + s / 5 + t + 2 + j, cy - j);
-                Draw(g->rp, ix + s / 5 + t + 2 + j, cy + j);
-            }
-            break;
-        case BT_PLAY:
-            if (paused)
-                for (j = 0; j <= s / 3; j++) {
-                    Move(g->rp, ix + s / 3 + j, iy + s / 6 + j);
-                    Draw(g->rp, ix + s / 3 + j, iy + s - s / 6 - j);
-                }
-            else
-                pause_glyph(g->rp, ix, iy, s, t);
-            break;
-        case BT_STOP:
-            RectFill(g->rp, ix + s / 4, iy + s / 4, ix + s - s / 4, iy + s - s / 4);
-            break;
-        case BT_PREV:
-        case BT_NEXT:
-            chap_glyph(g->rp, ix, iy, s, t, i == BT_NEXT ? 1 : -1);
-            break;
-        case BT_LOOP:
-            loop_glyph(g->rp, ix, iy, s, t, GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE),
-                       GPEN(PEN_DIM));
-            break;
-        case BT_FULL: {                     /* four corners: out to fill, in to come back */
-            WORD a = s / 5, L = s / 4, c, ccx = ix + s / 2, ccy = iy + s / 2, gap = s / 8 + t;
-            for (c = 0; c < 4; c++) {
-                WORD dx = c & 1 ? -1 : 1, dy = c & 2 ? -1 : 1, px, py;
-                if (!lay.full && !gfx_fs_on()) { /* at the box's corners, arms along its edges */
-                    px = dx > 0 ? ix + a : ix + s - 1 - a;
-                    py = dy > 0 ? iy + a : iy + s - 1 - a;
-                } else {                    /* by the middle, arms outwards */
-                    px = ccx - dx * gap;
-                    py = ccy - dy * gap;
-                    dx = -dx;
-                    dy = -dy;
-                }
-                RectFill(g->rp, dx > 0 ? px : px - L + 1, dy > 0 ? py : py - t + 1,
-                         dx > 0 ? px + L - 1 : px, dy > 0 ? py + t - 1 : py);
-                RectFill(g->rp, dx > 0 ? px : px - t + 1, dy > 0 ? py : py - L + 1,
-                         dx > 0 ? px + t - 1 : px, dy > 0 ? py + L - 1 : py);
-            }
-            break;
-        }
-        default:
-            RectFill(g->rp, ix + s / 4, cy - t / 2, ix + s - s / 4, cy - t / 2 + t - 1);
-            if (i == BT_VUP)
-                RectFill(g->rp, ix + s / 2 - t / 2, iy + s / 4, ix + s / 2 - t / 2 + t - 1,
-                         iy + s - s / 4);
-            break;
-        }
+        ctl_glyph(g->rp, i, ix, iy, s, t, paused, lay.full || gfx_fs_on(),
+                  GPEN(st.off & (1 << i) ? PEN_RULE : PEN_WHITE), GPEN(PEN_DIM)); /* greyed, as Now playing's */
     }
     if (xt >= 0)
         x = xt;
