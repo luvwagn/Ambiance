@@ -195,8 +195,17 @@ static void ts_pmt(const UBYTE *p, LONG n, struct VProbe *v)
         } else if (v->ts_apid == 0x1FFF && (t == 0x03 || t == 0x04 || ac3)) {
             v->ts_atype = ac3 ? 0x81 : t;
             v->ts_apid = pid;
-        } else if (!v->a_other && (t == 0x0F || t == 0x11))
+        } else if (t == 0x06 && v->ts_ppid == 0x1FFF) {
+            v->ts_ppid = pid;               /* (MPEG audio or AC3 in some: seen by its packets) */
+        } else if (!v->a_other && (t == 0x0F || t == 0x11)) {
             v->a_other = "AAC";
+        } else if (!v->a_other && (t == 0x82 || t == 0x85 || t == 0x86)) {
+            v->a_other = "DTS";             /* (a Blu-ray's) */
+        } else if (!v->a_other && t == 0x80) {
+            v->a_other = "Blu-ray LPCM";
+        } else if (!v->a_other && (t == 0x83 || t == 0x84 || t == 0x87)) {
+            v->a_other = t == 0x83 ? "TrueHD" : "E-AC3";
+        }
         j += 5 + el;
     }
 }
@@ -237,6 +246,22 @@ static void ts_split(const UBYTE *b, LONG n, ULONG at, struct VProbe *v, UBYTE *
             const UBYTE *t = p + k + 1 + p[k];
             if (t < p + 188)
                 ts_pmt(t, (LONG)(p + 188 - t), v);
+        } else if (pid == v->ts_ppid && v->ts_apid == 0x1FFF && (p[1] & 0x40) && k + 12 <= 188) {
+            /* a private stream's first PES packet: MPEG audio or AC3, by
+             * its stream id and its first bytes */
+            const UBYTE *t = p + k;
+            if (!t[0] && !t[1] && t[2] == 1 && (t[3] & 0xE0) == 0xC0) {
+                v->ts_apid = pid;
+                v->ts_atype = 0x03;
+            } else if (!t[0] && !t[1] && t[2] == 1 && t[3] == 0xBD && 9 + t[8] + k + 2 <= 188 &&
+                       t[9 + t[8]] == 0x0B && t[10 + t[8]] == 0x77) {
+                v->ts_apid = pid;
+                v->ts_atype = 0x81;
+            }
+            if (v->ts_apid == pid && *an + 188 <= amax) {
+                CopyMem((APTR)(p + k), ab + *an, 188 - k);
+                *an += 188 - k;
+            }
         } else if (pid == v->ts_vpid && v->ts_vtype && *vn + 188 <= vmax) {
             CopyMem((APTR)(p + k), vb + *vn, 188 - k);
             *vn += 188 - k;
@@ -263,7 +288,7 @@ BOOL vprobe(const char *path, struct VProbe *v, ULONG span)
         Close(fh);
         return FALSE;
     }
-    v->ts_apid = v->ts_vpid = 0x1FFF;
+    v->ts_apid = v->ts_vpid = v->ts_ppid = 0x1FFF;
     n = Read(fh, buf, (LONG)span);
     if (n > 0 && ts_size(buf, n, &v->ts_first, &v->ts))
         tb = AllocVec(span + 4096, MEMF_ANY);

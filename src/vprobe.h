@@ -28,6 +28,7 @@ struct VProbe {
     UBYTE ts;                   /* a transport stream: its packets' size (188, 192), 0 not */
     UBYTE ts_vtype, ts_atype;   /* its video's and sound's stream types (PMT) */
     UWORD ts_vpid, ts_apid;     /* their packets' PIDs (0x1FFF none) */
+    UWORD ts_ppid;              /* a private stream (type 06): its sound told by its packets */
     ULONG ts_first;             /* its first packet's offset in the file */
     const char *a_other;        /* sound there the card does not play ("AAC"), NULL none */
 };

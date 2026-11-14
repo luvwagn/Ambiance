@@ -121,10 +121,20 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
     struct Window *w;
     LONG x, y, dw, dh;
     char m[160];
+    ULONG srcw = v->w, srch = v->h;
     pip_fit(v, sw, ax, ay, aw, ah, &x, &y, &dw, &dh);
     *pe = 0;
-    w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
-                        P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
+    if (srcw > (ULONG)scr->Width || srch > (ULONG)scr->Height) {
+        /* larger than the screen (720p on 1024 x 768): its source at half
+         * size, which the card fills with each picture halved (the
+         * firmware's half-packed frames; Amiberry's emulated card does the
+         * same when the source is smaller than the picture). At full size
+         * the emulated card's overlay showed only stripes. */
+        srcw = (srcw / 2) & ~1UL;
+        srch /= 2;
+    }
+    w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, srcw,
+                        P96PIP_SourceHeight, srch, P96PIP_Type, P96PIPT_MemoryWindow,
                         P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
                         (ULONG)scr, WA_Left, x, WA_Top, y,
                         WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
@@ -134,10 +144,12 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
         /* the size and place asked for at opening are not reliably taken
          * (the window stays the picture's size, top left): set again */
         BOOL there = pip_move(w, x, y, dw, dh);
-        sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s",
+        sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld%s)%s",
                 (long)(w->Width - w->BorderLeft - w->BorderRight),
                 (long)(w->Height - w->BorderTop - w->BorderBottom), (long)w->LeftEdge,
-                (long)w->TopEdge, (long)v->w, (long)v->h, there ? "" : "; not the size asked for");
+                (long)w->TopEdge, (long)v->w, (long)v->h,
+                srcw != v->w ? ", its source at half size" : "",
+                there ? "" : "; not the size asked for");
     } else
         sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(*pe), (long)*pe);
     amce_log("video", m);
