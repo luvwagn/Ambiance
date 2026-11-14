@@ -22,6 +22,7 @@
 #include <proto/Picasso96.h>
 #include <proto/graphics.h>
 #include <graphics/modeid.h>
+#include <graphics/view.h>
 #include <stdio.h>
 #include <string.h>
 #include "amce.h"
@@ -186,7 +187,12 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
         sw = v.w;
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);     /* (around it) */
     gfx_present(g);
-    amce_log("video", g->wb ? "its overlay over AmigaMCE's window" : "its overlay on AmigaMCE's screen");
+    if (g->wb && g->scr->ViewPort.ColorMap && g->scr->ViewPort.ColorMap->PalExtra) {
+        sprintf(m, "its overlay over AmigaMCE's window (Workbench's free pens: %ld)",
+                (long)g->scr->ViewPort.ColorMap->PalExtra->pe_NFree);
+        amce_log("video", m);
+    } else
+        amce_log("video", g->wb ? "its overlay over AmigaMCE's window" : "its overlay on AmigaMCE's screen");
     pip = pip_open(g->scr, g->wb, &v, ax, ay, aw, ah, sw, &pe);
     if (!pip) {
         /* (all the screen's pens taken, say: Workbench's, by AmigaMCE's window

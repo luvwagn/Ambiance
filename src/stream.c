@@ -2043,7 +2043,8 @@ static void video_run(void)
     struct ZzMain r, held;
     struct ZzAudio au;
     ULONG session = 0, pend_off = 0, pend_len = 0, acc = 0, rate = 0, chans = 0, div = 1;
-    ULONG f0 = 0, t0 = 0, held_at = 0, run = 0, skip = 0, period = 3600, hold, drop, starved_at = 0;
+    ULONG f0 = st.f_out, t0 = 0, held_at = 0, run = 0, skip = 0, period = 3600, hold, drop, starved_at = 0;
+    ULONG pcm_peak = 0, pcm_frames = 0;    /* (the log: what its sound held) */
     ZzU64 ack = 0, origin = ZZ_NO_PTS, pts0 = 0;
     BOOL held_now = FALSE, in_eof = FALSE, eof_sent = FALSE, done = FALSE, on = FALSE;
     BOOL out_paused = FALSE, sound = st.v_mp2, said_audio = FALSE;
@@ -2207,6 +2208,9 @@ static void video_run(void)
                             const volatile WORD *p = (const volatile WORD *)(pcm.data + at);
                             WORD l = p[0];
                             WORD rr = chans == 2 ? p[1] : l;
+                            ULONG al_ = (ULONG)(l < 0 ? -l : l);
+                            if (al_ > pcm_peak)
+                                pcm_peak = al_;
                             at += fb;
                             if (at >= cap)
                                 at -= cap;
@@ -2221,6 +2225,7 @@ static void video_run(void)
                         }
                         st.f_in = o;
                         ack += (ZzU64)want * fb;
+                        pcm_frames += want;
                         busy = TRUE;
                     }
                 }
@@ -2272,25 +2277,30 @@ static void video_run(void)
         if (!on && held_now) {
             ULONG pre = (ULONG)st.dec_freq * 300 / 1000;
             BOOL ready = !sound || (rate && st.f_in - st.f_out >= pre) || eof_sent ||
-                         time_ms() - held_at > 1500 || (au.flags & ZZ_R_BACKPRESSURE);
+                         time_ms() - held_at > 500 || (au.flags & ZZ_R_BACKPRESSURE);
             if (!ready) {
                 if (!busy)
                     v_wait(5000);
                 continue;
             }
             if (sound && rate && st.f_in != st.f_out)
-                out_start();
-            else
-                sound = FALSE;              /* (none came: by the time alone) */
-            f0 = st.f_out;
+                out_start();                /* (none yet: started when it comes) */
             t0 = time_ms();
             pts0 = held.pts;
             if (origin == ZZ_NO_PTS)
                 origin = held.pts;
             on = TRUE;
             st.state = ST_PLAYING;
-            sprintf(m, "playing: the first picture at %lu ms, %s", (unsigned long)(held.pts / 90),
-                    sound ? "timed by its sound" : "timed by the clock");
+            sprintf(m, "playing: the first picture at %lu ms, %s; volume %ld", (unsigned long)(held.pts / 90),
+                    st.started ? "timed by its sound" : sound ? "by the clock till its sound comes"
+                                                          : "timed by the clock", (long)st.master);
+            amce_log("video", m);
+        }
+        if (on && sound && rate && !st.started && !out_paused &&
+            st.f_in - st.f_out >= (ULONG)st.dec_freq / 5) {
+            out_start();                    /* its sound, come late: on from here */
+            sprintf(m, "its sound started %lu ms after the first picture",
+                    (unsigned long)(time_ms() - t0));
             amce_log("video", m);
         }
         /* the held picture: shown on time, let go if late */
@@ -2342,8 +2352,10 @@ static void video_run(void)
             break;
         out_take();
     }
-    sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts", log_name(),
-            (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
+    sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts; its sound: %lu frames "
+               "from the card, peak %lu of 32767", log_name(),
+            (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns,
+            (unsigned long)pcm_frames, (unsigned long)pcm_peak);
     amce_log("video", m);
 out:
     if (session) {
@@ -2690,10 +2702,10 @@ static void mhi_play(LONG freq)
             break;
         }
         if (st.master != vol) {
-            /* half of MHI's 0 dB at full volume (-6 dB): as loud as mpega to
-             * Paula (two channels a side) or AHI (one, centred), not twice */
+            /* 90 of MHI's 100 at full volume (by ear: 50 was too quiet), near
+             * mpega's level through Paula or AHI */
             vol = st.master;
-            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 50 / 64);
+            MHISetParam(mhs.h, MHIP_VOLUME, (ULONG)vol * 90 / 64);
         }
         if (!mhs.playing && mhs.nq && (mhs.nq == MHI_BUFS || ended)) {
             MHIPlay(mhs.h);
