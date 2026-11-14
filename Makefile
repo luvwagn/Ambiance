@@ -64,7 +64,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host anim-bench check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -101,7 +101,8 @@ ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
-# pl_mpeg's decoder: for speed, its own warnings its own
+# pl_mpeg's decoder: for speed (-O2: fewer 68020 cycles than -O3 here,
+# tests/mpeg_prof.py), its own warnings its own
 build/plmpeg.o: CFLAGS += -O2 -w
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
@@ -216,6 +217,24 @@ test-animdraw: build/animdraw_host build/animdraw_68k
 	@build/animdraw_host > build/test-animdraw.txt && echo "  CHECK animation drawing ok" || (cat build/test-animdraw.txt; exit 1)
 	@cd build && vamos -C 68020 -m 8192 -s 256 animdraw_68k > test-animdraw68k.txt && grep -q " 0 failed" test-animdraw68k.txt \
 		&& echo "  CHECK animation drawing (68020 assembler) ok" || (cat test-animdraw68k.txt; exit 1)
+
+# MPEG-1 decoding (pl_mpeg, src/plmpeg.c) on a 68020 under vamos: where
+# the cycles go, by function, for the first N pictures of a file
+#   make mpeg-prof MPG=file.mpg [N=60]
+# and each picture's hash (tests/mpeg_bench.c), to see a change gives the
+# same pictures: build/bench/mpeg_bench_host file.mpg, before and after
+N ?= 60
+# (vamos's own Python, whose amitools the profiler drives)
+VAMOS_PYTHON ?= $(dir $(shell command -v vamos))python
+mpeg-prof:
+	@mkdir -p build/bench
+	@gcc -O2 -w -Ithird_party/pl_mpeg -o build/bench/mpeg_bench_host tests/mpeg_bench.c src/plmpeg.c
+	@$(CC) -O2 $(CPU) -noixemul -w -Ithird_party/pl_mpeg -o build/bench/mpeg_bench tests/mpeg_bench.c src/plmpeg.c -lm
+	@m68k-amigaos-nm build/bench/mpeg_bench > build/bench/mpeg_bench.syms
+	@ln -sf $(abspath $(MPG)) build/bench/bench.mpg
+	@cd build/bench && rm -f mpeg_bench.base && \
+		$(VAMOS_PYTHON) $(abspath tests/mpeg_prof.py) mpeg_bench.syms -- -C 68020 -m 8192 -s 64 \
+		--slice-cycles 700 mpeg_bench bench.mpg $(N) nohash 2>&1 | grep -A14 "^total"
 
 # an ANIM's decoding and drawing timed on a 68020 (vamos counts its cycles):
 #   make anim-bench ANIM=file.anim
