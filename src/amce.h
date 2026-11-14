@@ -305,6 +305,9 @@ void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms);    /* an 
  * its sound by AHI (ahi) or Paula's channels 2 and 3; on a 16-bit RTG screen on
  * AmigaMCE's own unless classic (Settings > Display > Animations) */
 LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *err, LONG errmax);
+/* An MPEG video played by the ZZ9000 the same way, its overlay the picture
+ * (AmigaMCE's RTG screen or window on the card) */
+LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
@@ -702,8 +705,10 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
               ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);
 BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, BOOL es, ULONG ms, char *err, LONG errmax);  /* MPEG on the ZZ9000 */
+                    BOOL mp2, BOOL es, ULONG ms, ULONG range_from, char *err,
+                    LONG errmax);  /* MPEG on the ZZ9000 */
 void st_video_counts(ULONG *shown, ULONG *dropped);
+void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
 void st_pause(BOOL on);
 void st_volume(int v);
 int st_state(void);

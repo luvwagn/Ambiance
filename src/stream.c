@@ -229,6 +229,8 @@ static struct {
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
     /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
     BOOL video, v_mpeg2, v_mp2, v_es;
+    volatile BOOL v_hidden;         /* its overlay down: pictures let go on time, unseen */
+    volatile ULONG v_ms;            /* where it is: the last picture's time from the first's */
     UWORD v_w, v_h;
     volatile ULONG v_shown, v_dropped;
 } st;
@@ -1919,6 +1921,7 @@ static void pcm_play(void)
  * FIFO, Paula or AHI, the volume, the meters). Without sound, the clock is
  * the time since the first picture. */
 #define V_IN_BYTES   (32UL * 1024)
+#define V_SCAN      (64UL * 1024)   /* a seek: looked through for where to start */
 #define V_PCM_BYTES  (64UL * 1024)
 
 static struct MsgPort *v_tport;
@@ -2070,6 +2073,62 @@ static ULONG es_pack(volatile UBYTE *out, ULONG max)
     return o;
 }
 
+/* A seek (st.range_from, the file there already): for a Program Stream
+ * its first headers (pack and system headers, up to its first audio or
+ * video packet: a decoder that reads its streams from them, pl_mpeg, needs
+ * them first) put in the card's buffer to go first, then the file from the
+ * first pack at or after where it is; a bare stream from its next
+ * sequence header. FALSE if the file could not be read. */
+static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
+{
+    UBYTE *b = AllocVec(V_SCAN, MEMF_ANY);
+    LONG n, i, at = -1;
+    UBYTE want = st.v_es ? 0xB3 : 0xBA;
+    char m[120];
+    BOOL ok = FALSE;
+    if (!b)
+        return FALSE;
+    n = Read(st.fh, b, V_SCAN);
+    for (i = 0; i + 4 <= n; i++)
+        if (!b[i] && !b[i + 1] && b[i + 2] == 1 && b[i + 3] == want) {
+            at = i;
+            break;
+        }
+    if (n < 0 || at < 0) {
+        sprintf(m, "a seek to byte %lu: no %s after it", (unsigned long)st.range_from,
+                st.v_es ? "sequence header" : "pack");
+        amce_log("video", m);
+        fail(_("The file could not be read"));
+        goto done;
+    }
+    *pend = 0;
+    if (!st.v_es && Seek(st.fh, 0, OFFSET_BEGINNING) >= 0 && (n = Read(st.fh, b, V_SCAN)) > 0) {
+        LONG p = -1;
+        for (i = 0; i + 4 <= n; i++)
+            if (!b[i] && !b[i + 1] && b[i + 2] == 1 && b[i + 3] >= 0xC0 && b[i + 3] <= 0xEF) {
+                p = i;
+                break;
+            }
+        if (p > 0 && (ULONG)p <= in->length) {
+            for (i = 0; i < p; i++)
+                in->data[i] = b[i];
+            *pend = (ULONG)p;               /* (sent first: its headers) */
+        }
+    }
+    if (Seek(st.fh, (LONG)st.range_from + at, OFFSET_BEGINNING) < 0) {
+        fail(_("The file could not be read"));
+        goto done;
+    }
+    sprintf(m, "from byte %lu (asked %lu), its first %lu bytes of headers first",
+            (unsigned long)(st.range_from + at), (unsigned long)st.range_from,
+            (unsigned long)*pend);
+    amce_log("video", m);
+    ok = TRUE;
+done:
+    FreeVec(b);
+    return ok;
+}
+
 static void video_run(void)
 {
     struct ZzBuf in, pcm;
@@ -2128,6 +2187,9 @@ static void video_run(void)
             st.v_es ? ", a bare video stream packed as it goes" : "", (unsigned long)session);
     amce_log("video", m);
     st.state = ST_BUFFERING;
+    st.v_ms = 0;
+    if (st.range_from && !v_seek(&in, &pend_len))
+        goto out;
     hold = period / 2;
     drop = period > 3600 ? period : 3600;
     while (!st.quit) {
@@ -2343,7 +2405,7 @@ static void video_run(void)
             ZzU64 master = sound && st.started ? v_clock(origin, f0, rate, div)
                                                : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(held.pts - master);
-            int op = ZZ_PRESENT;
+            int op = st.v_hidden ? ZZ_DISCARD : ZZ_PRESENT;   /* (unseen: on time, let go) */
             if (drift > (long long)hold) {
                 BOOL starved = sound && st.f_in - st.f_out < (ULONG)st.dec_freq / 10;
                 if (!starved) {
@@ -2365,13 +2427,15 @@ static void video_run(void)
                 fail(m);
                 goto out;
             }
-            if (op == ZZ_DISCARD) {
+            if (op == ZZ_DISCARD && !st.v_hidden) {
                 st.v_dropped++;
                 run++;
             } else {
                 st.v_shown++;
                 run = 0;
             }
+            if (held.pts >= pts0)
+                st.v_ms = (ULONG)((held.pts - pts0) / 90);
             held_now = FALSE;
             busy = TRUE;
         }
@@ -3021,6 +3085,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_w = vid_next.w;
     st.v_h = vid_next.h;
     st.v_shown = st.v_dropped = 0;
+    st.v_ms = 0;
     memset(&vid_next, 0, sizeof(vid_next));
     amce_strlcpy(st.url, url, sizeof(st.url));
     st.fifo_n = fifo_sizes[buf_level];
@@ -3049,7 +3114,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
 /* An MPEG file played by the ZZ9000 (w x h, MPEG-2 or 1, with MPEG audio
  * or none): the radio process runs it (video_run), its sound as music's. */
 BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, BOOL es, ULONG ms, char *err, LONG errmax)
+                    BOOL mp2, BOOL es, ULONG ms, ULONG range_from, char *err, LONG errmax)
 {
     BOOL ok;
     vid_next.on = TRUE;
@@ -3058,11 +3123,17 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h,
     vid_next.mp2 = mp2;
     vid_next.w = w;
     vid_next.h = h;
-    ok = st_start(path, master, cpu, TRUE, 0, 0, err, errmax);
+    ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
     if (ok)
         st.len_ms = ms;
     return ok;
+}
+
+/* The overlay up (shown) or down: its pictures shown or let go unseen. */
+void st_video_show(BOOL shown)
+{
+    st.v_hidden = !shown;
 }
 
 /* Pictures shown and let go (a video). */
@@ -3235,7 +3306,7 @@ void st_info(struct StInfo *i)
     i->dec_freq = st.dec_freq;
     i->dec_channels = st.dec_channels;
     i->buffer_ms = (ULONG)(have * 10 / rate) * 100;
-    i->played_ms = (st.played / rate) * 1000 + (st.played % rate) * 1000 / rate;
+    i->played_ms = st.video ? st.v_ms : (st.played / rate) * 1000 + (st.played % rate) * 1000 / rate;
     i->underruns = st.underruns;
     i->avg_kbps = st_avg_kbps();
     i->ahi = st.ahi;

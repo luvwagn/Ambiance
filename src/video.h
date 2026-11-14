@@ -8,10 +8,22 @@
 #include <exec/types.h>
 
 struct Gfx;
+struct VProbe;
 
-/* path played on g's display till its end or a key; vol(d): the volume
- * up or down by d (0: mute or not). 0 played, -1 not (err says why). */
-int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d), char *err,
-               LONG errmax);
+/* Whether path plays here (v: what its headers say): NULL if it can, else
+ * why not (for the footer). */
+const char *video_check(const char *path, struct VProbe *v);
+ULONG video_shown_w(const struct VProbe *v);    /* its width for its height, as meant to be seen */
+/* The overlay at x, y, w x h of AmigaMCE's display (the picture fitted in
+ * it): opened, or moved there. FALSE if it cannot be shown (logged; not
+ * tried again for this video). */
+BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG h);
+BOOL vo_failed_here(void);
+void vo_hide(void);                     /* taken down (before AmigaMCE's window goes, too) */
+BOOL vo_shown(void);
+void vo_end(void);                      /* at quitting */
+ULONG vo_sigmask(void);
+enum { VO_NONE, VO_CLICK, VO_DCLICK, VO_RIGHT };
+int vo_poll(struct Gfx *g);             /* the overlay clicked (the keys given back) */
 
 #endif

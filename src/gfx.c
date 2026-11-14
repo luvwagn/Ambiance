@@ -8,6 +8,7 @@
  * (smooth.c).
  */
 #include "amce.h"
+#include "video.h"
 
 #include <string.h>
 #include <graphics/modeid.h>
@@ -1372,6 +1373,7 @@ BOOL gfx_window_hide(struct Gfx *g)
     win_k = g->k;
     win_menus_off(g);
     amce_log("CloseWindow", "iconified: its buffer kept");
+    vo_hide();
     CloseWindow(g->win);
     g->win = NULL;
     return TRUE;
@@ -2150,6 +2152,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
 void gfx_close(struct Gfx *g)
 {
     int i;
+    vo_hide();                              /* (a video's overlay: on this screen) */
     menu_narrow = FALSE;                    /* a new screen starts with its labels */
     if (g->wb)
         gfx_window_log(g);                  /* (while cybergraphics is open) */

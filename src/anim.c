@@ -31,6 +31,9 @@
  * (restart, play or pause, stop, volume, the time, how far it has got);
  * they go again a moment after it stops, and stay while it is paused.
  *
+ * An MPEG video (Videos' .mpg) plays here the same way on a ZZ9000: the
+ * card decodes it and its overlay is the picture (anim_play_video).
+ *
  * Keys: Esc, Backspace, the right button or the pad's blue stop it; Space,
  * Return, the left button (not on the controls) or fire pause it; Up and Down (the stick, the
  * wheel) set the volume of what plays meanwhile, a station or a module,
@@ -40,6 +43,8 @@
 #include "amce.h"
 #include "animdec.h"
 #include "animdraw.h"
+#include "vprobe.h"
+#include "video.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -752,10 +757,12 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
 enum { BT_RESTART, BT_PLAY, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N }; /* full: AmigaMCE's */
 
+static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
+
 /* No sound of its own: the volume's buttons (and its figure) not shown. */
 static BOOL btn_hidden(int b)
 {
-    return (b == BT_VDOWN || b == BT_VUP) && !nsnd;
+    return (b == BT_VDOWN || b == BT_VUP) && !nsnd && !vid_sound;
 }
 
 static struct {
@@ -1115,6 +1122,8 @@ static void volume(int d)
 {
     int v = mp_volume() + d;
     mp_set_volume(v < 0 ? 0 : v > 64 ? 64 : v);
+    if (vid_sound)
+        st_volume(mp_volume());             /* (a video's: its stream's) */
     bar_redraw = TRUE;
 }
 
@@ -1235,9 +1244,9 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 ctl_move(-1);
             else if (code == 0x4E)
                 ctl_move(1);
-            else if ((code == 0x4C || code == 0x7A) && nsnd)    /* Up (held: it repeats), */
-                volume(VOL_STEP);                               /* the wheel: its sound's */
-            else if ((code == 0x4D || code == 0x7B) && nsnd)
+            else if ((code == 0x4C || code == 0x7A) && (nsnd || vid_sound)) /* Up (held: */
+                volume(VOL_STEP);                   /* it repeats), the wheel: its sound's */
+            else if ((code == 0x4D || code == 0x7B) && (nsnd || vid_sound))
                 volume(-VOL_STEP);
         } else if (cl == IDCMP_VANILLAKEY) {   /* AmigaMCE's own window has these too */
             if (code == 27 || code == 8 || code == 'q' || code == 'Q')
@@ -2798,6 +2807,241 @@ restart:
     FreeVec(chunky);
     FreeVec(line);
     FreeVec(lut);
+    return result;
+}
+
+/* ---- an MPEG video, played by the ZZ9000 as an animation plays here: the
+ * same place for its picture, the same controls beneath it, full screen,
+ * keys and pad. The picture is the card's overlay (video.c) over the
+ * picture's place; the radio process feeds the card and plays the sound
+ * it gives back (stream.c: video_run), pausing, seeking and the volume
+ * asked of it. Full screen, the overlay leaves the controls' room while
+ * they show. A seek starts the card again from about that byte (the first
+ * pack after it); at the end it loops, or stops there with its controls up
+ * (Play from the start, Esc back). */
+static struct VProbe vid;
+static char lay_path[300];      /* its file */
+static ULONG vid_base;          /* where the card was started from (ms) */
+
+static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
+{
+    ULONG at = ms && vid.ms && vid.bytes ? (ULONG)(((unsigned long long)vid.bytes * ms) / vid.ms) : 0;
+    st_stop();
+    vid_base = at ? ms : 0;
+    return st_start_video(lay_path, (UWORD)mp_volume(), cpu, vid.w, vid.h, vid.mpeg2,
+                          vid.mp2 && vid.ps, !vid.ps, vid.ms, at, err, errmax);
+}
+
+/* The picture's place for the overlay: under the controls, full screen,
+ * while they show. */
+static BOOL vid_place(struct Gfx *g)
+{
+    WORD h = lay.dh;
+    if (lay.full && sf.lv > 0 && lay.vy + h > st.y)
+        h = st.y - lay.vy;
+    return vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+}
+
+/* Laid out (full or not) for the picture, the screen black around it. */
+static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
+{
+    if (!lay_out(g, sw, vid.h, 1, 1, full)) {
+        /* (larger than this screen, beneath the controls: fitted) */
+        LONG W = g->w, H = st.y - GU(g, 8), dw, dh;
+        if ((LONG)sw * H <= (LONG)vid.h * W) {
+            dh = H;
+            dw = (LONG)sw * H / vid.h;
+        } else {
+            dw = W;
+            dh = (LONG)vid.h * W / sw;
+        }
+        lay.dw = (WORD)dw;
+        lay.dh = (WORD)dh;
+        lay.vx = (WORD)((g->w - dw) / 2);
+        lay.vy = (WORD)(GU(g, 4) + (H - dh) / 2);
+        lay.full = full;
+    }
+    FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
+    sf.lv = 0;
+    sf.drawn = FALSE;
+}
+
+LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
+{
+    const char *why, *name = (const char *)FilePart((STRPTR)path);
+    ULONG jlast = 0, at = 0, t0 = time_ms();
+    UWORD sw;
+    BOOL paused = FALSE, ended = FALSE, whole = TRUE;
+    LONG result = -1;
+    int r, s;
+    char m[200];
+    err[0] = 0;
+    anim_g = g;
+    if (!g || !g->win || !g->truecolor) {
+        amce_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
+        return -1;
+    }
+    if ((why = video_check(path, &vid))) {
+        amce_strlcpy(err, why, errmax);
+        return -1;
+    }
+    sw = (UWORD)video_shown_w(&vid);
+    if (!sw)
+        sw = vid.w;
+    vid_sound = vid.mp2 && vid.ps;
+    amce_strlcpy(lay_path, path, sizeof(lay_path));
+    memset(&lay, 0, sizeof(lay));
+    if (!(lay.xo = AllocVec((sw + 1) * sizeof(UWORD), MEMF_ANY)) ||
+        !(lay.yo = AllocVec((vid.h + 1) * sizeof(UWORD), MEMF_ANY))) {
+        FreeVec(lay.xo);
+        memset(&lay, 0, sizeof(lay));
+        vid_sound = FALSE;
+        return -1;
+    }
+    st.h = g->font_h + GU(g, 12);
+    st.y = g->h - st.h;
+    st.cw = st.h + GU(g, 6);
+    st.x0 = GU(g, 8);
+    lay.can_full = TRUE;
+    pb_direct = FALSE;                      /* (no picture of its own: the overlay's) */
+    if (LowLevelBase)
+        jlast = gfx_joy(g);
+    strip_setup(g);
+    ctl.nbtn = BT_N;
+    if (g->wb && anim_full && !fs_enter(g, sw, vid.h, 1, 1))
+        anim_full = FALSE;                  /* (the screen would not open: in the window) */
+    vid_lay(g, sw, anim_full);
+    sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, the ZZ9000's overlay", name,
+            g->wb && !gfx_fs_on() ? "window" : "screen", (long)lay.dw, (long)lay.dh,
+            lay.full ? " (full screen)" : "");
+    amce_log("video", m);
+    st_video_show(TRUE);
+    if (!vid_start(cpu, 0, err, errmax))
+        goto out;
+    for (;;) {
+        struct StInfo in;
+        int a;
+        /* where it is; its end (looped, or stopped there) */
+        s = st_state();
+        if (s == ST_FAILED) {
+            if (st_error()[0])
+                amce_strlcpy(err, st_error(), errmax);
+            break;
+        }
+        st_info(&in);
+        if (!ended)
+            at = vid_base + in.played_ms;
+        if (s == ST_ENDED && !ended) {
+            if (play_loop) {
+                if (!vid_start(cpu, 0, err, errmax))
+                    break;
+                at = 0;
+            } else {
+                ended = TRUE;               /* its last picture stays, the controls up */
+                end_stop(&paused);
+                at = vid.ms ? vid.ms : at;
+            }
+        }
+        if (!vid_place(g)) {
+            amce_strlcpy(err, _("The ZZ9000's overlay could not be opened on this screen"), errmax);
+            break;
+        }
+        {
+            BOOL sdrew = strip_tick(g, paused, at, vid.ms, name);
+            if (whole)
+                gfx_window_show(g);         /* a window: all of it, once laid out */
+            else
+                win_show(g, FALSE, sdrew, 0, 0, 0, 0);
+            whole = FALSE;
+        }
+        r = input_with(g->win, &jlast, strip_hit);
+        a = vo_poll(g);                     /* the overlay clicked: as the picture */
+        if (a != VO_NONE)
+            ctl.moved = time_ms() ? time_ms() : 1;
+        if (a == VO_RIGHT && !r)
+            r = 1;
+        else if ((a == VO_CLICK || a == VO_DCLICK) && !r)
+            r = 2;
+        if (r == 1)
+            break;
+        if (r == 2) {
+            if (ended) {                    /* Play at the end: from the start */
+                ended = paused = FALSE;
+                if (!vid_start(cpu, 0, err, errmax))
+                    break;
+                at = 0;
+            } else {
+                paused = !paused;
+                st_pause(paused);
+            }
+        } else if (r == 3) {
+            ended = paused = FALSE;
+            if (!vid_start(cpu, 0, err, errmax))
+                break;
+            at = 0;
+        } else if (r == 5 && vid.ms) {
+            /* seek: the card started again from about there (playing) */
+            LONG x0 = st.px0, x1 = st.px1;
+            ULONG target = (ULONG)((seek_x < x0 ? 0 : seek_x > x1 ? x1 - x0 : seek_x - x0) *
+                                   (ULONG)vid.ms / (ULONG)(x1 - x0 ? x1 - x0 : 1));
+            ended = paused = FALSE;
+            sprintf(m, "seek to %lu ms", (unsigned long)target);
+            amce_log("video", m);
+            if (!vid_start(cpu, target, err, errmax))
+                break;
+            at = target;
+        } else if (r == 4) {
+            /* full screen or not: a window's is a screen of its own (the
+             * overlay made again there), AmigaMCE's screen's the whole of it */
+            int focus = ctl.focus;
+            anim_full = g->wb || gfx_fs_on() ? !gfx_fs_on() : !lay.full;
+            if (g->wb || gfx_fs_on()) {
+                vo_hide();
+                strip_cleanup(g);
+                if (anim_full) {
+                    if (!fs_enter(g, sw, vid.h, 1, 1))
+                        anim_full = FALSE;
+                } else
+                    fs_leave(g);
+                strip_setup(g);
+                ctl.nbtn = BT_N;
+                ctl.focus = focus;
+            }
+            vid_lay(g, sw, anim_full);
+            whole = TRUE;
+        } else if (r == 6) {
+            /* the window resized: laid out again at its new size */
+            int focus = ctl.focus;
+            gfx_resized_at = 0;
+            strip_cleanup(g);
+            if (gfx_window_resize(g))
+                st.y = g->h - st.h;
+            strip_setup(g);
+            ctl.nbtn = BT_N;
+            ctl.focus = focus;
+            vid_lay(g, sw, FALSE);
+            whole = TRUE;
+        }
+        WaitTOF();
+    }
+    result = err[0] ? -1 : 0;
+out:
+    {
+        ULONG shown = 0, dropped = 0;
+        st_video_counts(&shown, &dropped);
+        st_stop();
+        sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
+                (unsigned long)dropped, (unsigned long)(time_ms() - t0));
+        amce_log("video", m);
+    }
+    vo_hide();
+    strip_cleanup(g);
+    if (gfx_fs_on())
+        fs_leave(g);                        /* the window again */
+    FreeVec(lay.xo);
+    FreeVec(lay.yo);
+    memset(&lay, 0, sizeof(lay));
+    vid_sound = FALSE;
     return result;
 }
 

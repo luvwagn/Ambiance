@@ -9824,18 +9824,6 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 
 /* An animation of a Videos (or Pictures) list, played on a screen of its
  * own in front of AmigaMCE's (anim.c), which comes back as it was. */
-/* A video's volume keys (video.c): Now playing's volume, given to its
- * stream (d 0: mute or not). */
-static BOOL video_vol(int d)
-{
-    if (!d)
-        np_mute(!np_muted());
-    else
-        np_volume(d);
-    st_volume(mp_volume());
-    return TRUE;
-}
-
 static void anim_from_page(struct Page *p)
 {
     char err[160], title[120], by[200];
@@ -9874,8 +9862,8 @@ static void anim_from_page(struct Page *p)
         BOOL loop_was = play_loop;
         WORD aw = g.w, ah = g.h;
         if (mpeg) {
-            if (video_play(&g, it->path, caps.cpu, video_vol, err, sizeof(err)) < 0 && err[0])
-                set_msg(err);               /* (MPEG: the ZZ9000's, video.c) */
+            if (anim_play_video(&g, it->path, caps.cpu, err, sizeof(err)) < 0 && err[0])
+                set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amce_log("anim", err);
             set_msg(err);
@@ -15417,6 +15405,7 @@ out:
     }
     amce_log("quitting", "");
     resume_store();                 /* what plays now, for the next start */
+    vo_end();                       /* (Picasso96API.library, if a video opened it) */
     {
         /* the volume, for the next start (muted: the one before, never silent) */
         char v[16];
