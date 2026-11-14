@@ -150,14 +150,35 @@ const char *video_check(const char *path, struct VProbe *v)
     static char why[120];
     const char *w;
     char m[200];
-    if (!vprobe(path, v, 0))
+    if (!vprobe(path, v, 0)) {
+        if (v->h264) {
+            sprintf(why, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(v));
+            sprintf(m, "%s: %s", (const char *)FilePart((STRPTR)path), why);
+            amce_log("video", m);
+            return why;
+        }
         return _("Not an MPEG video AmigaMCE can read");
+    }
     sprintf(m, "%s: %s %ld x %ld, aspect %ld, %ld.%03ld fps, %s, %lu ms, %lu bytes%s",
             (const char *)FilePart((STRPTR)path), vprobe_kind(v), (long)v->w, (long)v->h,
             (long)v->aspect, (long)(v->fps_milli / 1000), (long)(v->fps_milli % 1000),
-            v->mp2 ? "MPEG audio" : "no sound", (unsigned long)v->ms, (unsigned long)v->bytes,
-            v->ps ? "" : " (a bare video stream)");
+            v->ac3 ? "AC3 sound" : v->mp2 ? "MPEG audio" : "no sound", (unsigned long)v->ms,
+            (unsigned long)v->bytes,
+            v->ts ? " (a transport stream)" : v->ps ? "" : " (a bare video stream)");
     amce_log("video", m);
+    if (v->ts) {
+        sprintf(m, "its transport stream: %ld-byte packets from byte %lu; video PID %ld (type "
+                   "%02lx), sound PID %ld (type %02lx)%s%s",
+                (long)v->ts, (unsigned long)v->ts_first, (long)v->ts_vpid,
+                (unsigned long)v->ts_vtype, (long)(v->ts_apid == 0x1FFF ? -1 : v->ts_apid),
+                (unsigned long)v->ts_atype, v->a_other ? "; also " : "",
+                v->a_other ? v->a_other : "");
+        amce_log("video", m);
+    }
+    if (v->a_other && !v->mp2 && !v->ac3) {
+        sprintf(m, "its sound (%s) is not the card's: played without it", v->a_other);
+        amce_log("video", m);
+    }
     if (v->audio_id) {
         sprintf(m, "its sound: stream %02lx, %s", (unsigned long)v->audio_id,
                 v->a_layer ? "" : "no frame header found at its start");
@@ -168,11 +189,11 @@ const char *video_check(const char *path, struct VProbe *v)
                     (unsigned long)v->a_kbps, v->a_chans == 1 ? "mono" : "stereo");
         amce_log("video", m);
     }
-    if (!v->ps && v->mpeg2)
+    if (!v->ps && !v->ts && v->mpeg2)
         return _("Only MPEG Program Streams play (this one has no packs)");
     if (!zz_open())
         return _("MPEG video plays on a ZZ9000 (zz9k.library not found)");
-    w = zz_video_check(v->mpeg2, v->mp2);
+    w = zz_video_check(v->mpeg2, v->mp2 && !v->ac3 && (v->ps || v->ts));
     zz_close();
     if (w) {
         amce_log("video", w);

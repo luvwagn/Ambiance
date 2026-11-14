@@ -33,6 +33,8 @@
 #include "amce.h"
 #include "radiocsv.h"
 #include "zz9k.h"
+#include "tspack.h"
+#include "vprobe.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -228,14 +230,23 @@ static struct {
     BOOL flac;                      /* decoded here by flacdec.library */
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
     /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
-    BOOL video, v_mpeg2, v_mp2, v_es;
+    BOOL video, v_mpeg2, v_mp2, v_es;   /* (v_mp2: its sound the card's, MPEG audio or AC3) */
+    BOOL v_ac3;                     /* ...AC3 */
+    UBYTE v_ts;                     /* a transport stream (its packet size): packed as it goes */
+    UWORD v_vpid, v_apid;
+    ULONG v_tsfirst;
     volatile BOOL v_hidden;         /* its overlay down: pictures let go on time, unseen */
     volatile ULONG v_ms;            /* where it is: the last picture's time from the first's */
     UWORD v_w, v_h;
     volatile ULONG v_shown, v_dropped;
 } st;
 
-static struct { BOOL on, mpeg2, mp2, es; UWORD w, h; ULONG ms; } vid_next;  /* st_start_video's */
+static struct {                     /* st_start_video's */
+    BOOL on, mpeg2, mp2, es, ac3;
+    UBYTE ts;
+    UWORD w, h, vpid, apid;
+    ULONG tsfirst;
+} vid_next;
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
@@ -2073,6 +2084,13 @@ static ULONG es_pack(volatile UBYTE *out, ULONG max)
     return o;
 }
 
+/* A transport stream's bytes, for tspack.c. */
+static LONG ts_read(void *ctx, UBYTE *b, LONG n)
+{
+    (void)ctx;
+    return Read(st.fh, b, n);
+}
+
 /* A seek (st.range_from, the file there already): for a Program Stream
  * its first headers (pack and system headers, up to its first audio or
  * video packet: a decoder that reads its streams from them, pl_mpeg, needs
@@ -2086,6 +2104,23 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
     UBYTE want = st.v_es ? 0xB3 : 0xBA;
     char m[120];
     BOOL ok = FALSE;
+    if (st.v_ts) {
+        /* a transport stream: from the packet there (its PES packets
+         * taken up from the next that begins) */
+        ULONG at = st.range_from > st.v_tsfirst
+                       ? st.v_tsfirst + (st.range_from - st.v_tsfirst) / st.v_ts * st.v_ts
+                       : st.v_tsfirst;
+        FreeVec(b);
+        *pend = 0;
+        if (Seek(st.fh, (LONG)at, OFFSET_BEGINNING) < 0) {
+            fail(_("The file could not be read"));
+            return FALSE;
+        }
+        tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);
+        sprintf(m, "from byte %lu (a transport stream's packet)", (unsigned long)at);
+        amce_log("video", m);
+        return TRUE;
+    }
     if (!b)
         return FALSE;
     n = Read(st.fh, b, V_SCAN);
@@ -2149,6 +2184,8 @@ static void video_run(void)
     st.v_shown = st.v_dropped = 0;
     es_bytes = 0;
     es_ended = FALSE;
+    if (st.v_ts)
+        tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);
     if ((v_tport = CreateMsgPort()) &&
         (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
         !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
@@ -2171,7 +2208,9 @@ static void video_run(void)
         for (k = 0; k < 25; k++) {
             if (k)
                 Delay(2);
-            if ((s = zz_begin(st.v_w, st.v_h, st.v_mpeg2, sound, sound ? &pcm : NULL, &r)) != ZZ_BUSY)
+            if ((s = zz_begin(st.v_w, st.v_h, st.v_mpeg2,
+                              !sound ? ZZ_AUDIO_NONE : st.v_ac3 ? ZZ_AUDIO_AC3 : ZZ_AUDIO_MP2,
+                              sound ? &pcm : NULL, &r)) != ZZ_BUSY)
                 break;
         }
     }
@@ -2183,8 +2222,11 @@ static void video_run(void)
     session = r.session;
     sprintf(m, "%s: %ld x %ld %s on the ZZ9000, %s%s; session %lu", log_name(), (long)st.v_w,
             (long)st.v_h, st.v_mpeg2 ? "MPEG-2" : "MPEG-1",
-            sound ? "its sound to the card's ring" : "no sound",
-            st.v_es ? ", a bare video stream packed as it goes" : "", (unsigned long)session);
+            !sound ? "no sound" : st.v_ac3 ? "its sound (AC3) to the card's ring"
+                                          : "its sound to the card's ring",
+            st.v_es ? ", a bare video stream packed as it goes"
+                    : st.v_ts ? ", a transport stream packed as it goes" : "",
+            (unsigned long)session);
     amce_log("video", m);
     st.state = ST_BUFFERING;
     st.v_ms = 0;
@@ -2213,7 +2255,8 @@ static void video_run(void)
             int k;
             for (k = 0; k < 4 && !eof_sent; k++) {
                 if (!pend_len && !in_eof) {
-                    LONG n = st.v_es ? (LONG)es_pack(in.data, in.length)
+                    LONG n = st.v_ts   ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
+                             : st.v_es ? (LONG)es_pack(in.data, in.length)
                                      : Read(st.fh, (APTR)in.data, in.length);
                     if (st.v_es && st.state == ST_FAILED)
                         goto out;
@@ -2223,7 +2266,7 @@ static void video_run(void)
                     }
                     if (n == 0)
                         in_eof = TRUE;
-                    if (n > 0 && !st.v_es && !sys_seen)
+                    if (n > 0 && !st.v_es && !st.v_ts && !sys_seen)
                         sys_seen = sys_fix(in.data, (ULONG)n);
                     pend_off = 0;
                     pend_len = (ULONG)n;
@@ -3082,6 +3125,11 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_mpeg2 = vid_next.mpeg2;
     st.v_mp2 = vid_next.mp2;
     st.v_es = vid_next.es;
+    st.v_ac3 = vid_next.ac3;
+    st.v_ts = vid_next.ts;
+    st.v_vpid = vid_next.vpid;
+    st.v_apid = vid_next.apid;
+    st.v_tsfirst = vid_next.tsfirst;
     st.v_w = vid_next.w;
     st.v_h = vid_next.h;
     st.v_shown = st.v_dropped = 0;
@@ -3111,22 +3159,29 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     return TRUE;
 }
 
-/* An MPEG file played by the ZZ9000 (w x h, MPEG-2 or 1, with MPEG audio
- * or none): the radio process runs it (video_run), its sound as music's. */
-BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, BOOL es, ULONG ms, ULONG range_from, char *err, LONG errmax)
+/* An MPEG file played by the ZZ9000 (v: what vprobe found): the radio
+ * process runs it (video_run), its sound as music's. A Program Stream goes
+ * to the card as it is; a bare video stream or a transport stream packed
+ * as one as it goes. */
+BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VProbe *v,
+                    ULONG range_from, char *err, LONG errmax)
 {
     BOOL ok;
     vid_next.on = TRUE;
-    vid_next.es = es;
-    vid_next.mpeg2 = mpeg2;
-    vid_next.mp2 = mp2;
-    vid_next.w = w;
-    vid_next.h = h;
+    vid_next.ts = v->ts;
+    vid_next.es = !v->ps && !v->ts;
+    vid_next.mpeg2 = v->mpeg2;
+    vid_next.ac3 = v->ac3 && (v->ps || (v->ts && v->ts_apid != 0x1FFF));
+    vid_next.mp2 = vid_next.ac3 || (v->mp2 && (v->ps || (v->ts && v->ts_apid != 0x1FFF)));
+    vid_next.vpid = v->ts_vpid;
+    vid_next.apid = vid_next.mp2 ? v->ts_apid : 0x1FFF;
+    vid_next.tsfirst = v->ts_first;
+    vid_next.w = v->w;
+    vid_next.h = v->h;
     ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
     if (ok)
-        st.len_ms = ms;
+        st.len_ms = v->ms;
     return ok;
 }
 

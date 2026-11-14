@@ -156,7 +156,7 @@ static int main_call(ZZ9KRequest *rq, UWORD op, struct ZzMain *r)
     return ZZ9K_STATUS_OK;
 }
 
-int zz_begin(ULONG w, ULONG h, BOOL mpeg2, BOOL mp2, const struct ZzBuf *pcm, struct ZzMain *r)
+int zz_begin(ULONG w, ULONG h, BOOL mpeg2, int audio, const struct ZzBuf *pcm, struct ZzMain *r)
 {
     ZZ9KMediaSessionBeginDesc d;
     ZZ9KRequest rq;
@@ -167,8 +167,9 @@ int zz_begin(ULONG w, ULONG h, BOOL mpeg2, BOOL mp2, const struct ZzBuf *pcm, st
     d.width = w;
     d.height = h;
     d.output_format = ZZ9K_VIDEO_OUTPUT_DIRECT_OVERLAY;
-    d.audio_codec = mp2 ? ZZ9K_MEDIA_AUDIO_MP2 : ZZ9K_MEDIA_AUDIO_NONE;
-    if (mp2 && pcm) {
+    d.audio_codec = audio == ZZ_AUDIO_AC3 ? ZZ9K_MEDIA_AUDIO_AC3
+                    : audio == ZZ_AUDIO_MP2 ? ZZ9K_MEDIA_AUDIO_MP2 : ZZ9K_MEDIA_AUDIO_NONE;
+    if (audio && pcm) {
         ULONG high = pcm->length - pcm->length / 4, low = pcm->length / 4;
         d.pcm_ring_handle = pcm->handle;
         d.pcm_ring_capacity = pcm->length;

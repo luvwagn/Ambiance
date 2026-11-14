@@ -2828,8 +2828,7 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
     ULONG at = ms && vid.ms && vid.bytes ? (ULONG)(((unsigned long long)vid.bytes * ms) / vid.ms) : 0;
     st_stop();
     vid_base = at ? ms : 0;
-    return st_start_video(lay_path, (UWORD)mp_volume(), cpu, vid.w, vid.h, vid.mpeg2,
-                          vid.mp2 && vid.ps, !vid.ps, vid.ms, at, err, errmax);
+    return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
 }
 
 /* The picture's place for the overlay: under the controls, full screen,
@@ -2902,7 +2901,7 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
-    vid_sound = vid.mp2 && vid.ps;
+    vid_sound = (vid.mp2 || vid.ac3) && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
     amce_strlcpy(lay_path, path, sizeof(lay_path));
     memset(&lay, 0, sizeof(lay));
     if (!(lay.xo = AllocVec((sw + 1) * sizeof(UWORD), MEMF_ANY)) ||

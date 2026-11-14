@@ -58,7 +58,8 @@ const char *zz_name(int status);
 const char *zz_video_check(BOOL mpeg2, BOOL mp2);
 int zz_alloc(ULONG length, struct ZzBuf *b);    /* host-visible, shared */
 void zz_free(struct ZzBuf *b);
-int zz_begin(ULONG w, ULONG h, BOOL mpeg2, BOOL mp2, const struct ZzBuf *pcm,
+enum { ZZ_AUDIO_NONE = 0, ZZ_AUDIO_MP2 = 1, ZZ_AUDIO_AC3 = 3 };   /* (the SDK's numbers) */
+int zz_begin(ULONG w, ULONG h, BOOL mpeg2, int audio, const struct ZzBuf *pcm,
              struct ZzMain *r);
 int zz_write(ULONG session, const struct ZzBuf *in, ULONG off, ULONG len, BOOL eof,
              struct ZzMain *r);

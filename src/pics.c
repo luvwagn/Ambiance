@@ -28,6 +28,7 @@ static const struct { const char *ext, *tag; } exts[] = {
     { "jpe", "JPEG" }, { "bmp", "BMP" }, { "pcx", "PCX" }, { "tga", "TGA" },
     { "anim", "ANIM" }, { "anm", "ANIM" },
     { "mpg", "MPEG" }, { "mpeg", "MPEG" }, { "vob", "MPEG" },   /* (played by a ZZ9000) */
+    { "ts", "MPEG" }, { "m2ts", "MPEG" }, { "mts", "MPEG" },   /* (transport streams: repacked) */
 };
 
 /* Played, not shown as a picture: an IFF ANIM, an MPEG file. */

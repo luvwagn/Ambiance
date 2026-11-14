@@ -704,9 +704,9 @@ ULONG st_size(void);                /* ...its size in bytes, 0 not known */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
               ULONG skip_ms, char *err, LONG errmax);
 void st_stop(void);
-BOOL st_start_video(const char *path, UWORD master, UWORD cpu, UWORD w, UWORD h, BOOL mpeg2,
-                    BOOL mp2, BOOL es, ULONG ms, ULONG range_from, char *err,
-                    LONG errmax);  /* MPEG on the ZZ9000 */
+struct VProbe;
+BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VProbe *v,
+                    ULONG range_from, char *err, LONG errmax);  /* MPEG on the ZZ9000 */
 void st_video_counts(ULONG *shown, ULONG *dropped);
 void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
 void st_pause(BOOL on);

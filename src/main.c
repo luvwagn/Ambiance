@@ -4856,9 +4856,14 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
                 time_text(vp.ms, t);
                 pv_line(t, w);
             }
-            pv_line(vp.mp2 ? _("With sound") : _("No sound"), w);
-            if (!vp.ps)
+            pv_line(vp.mp2 || vp.ac3 ? _("With sound") : _("No sound"), w);
+            if (vp.ts)
+                pv_line(_("A transport stream"), w);
+            else if (!vp.ps)
                 pv_line(_("A bare video stream"), w);
+        } else if (vp.h264) {
+            sprintf(line, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(&vp));
+            pv_line(line, w);
         } else {
             pv_line(_("Not an MPEG video AmigaMCE can read"), w);
         }

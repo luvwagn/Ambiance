@@ -11,7 +11,8 @@ struct VProbe {
     UWORD w, h;                 /* its pictures' size */
     UBYTE aspect;               /* the sequence header's aspect code */
     ULONG fps_milli;            /* frames a second x 1000, 0 not known */
-    BOOL ps;                    /* a Program Stream (pack headers): the card plays these */
+    BOOL ps;                    /* a Program Stream (pack headers): the card plays these
+                                 * (a transport stream, ts, sent to it as one) */
     BOOL mpeg2;
     BOOL mp2;                   /* it has MPEG audio */
     ULONG ms;                   /* its length, 0 not known */
@@ -22,6 +23,13 @@ struct VProbe {
     UBYTE a_chans;
     UBYTE a_version;            /* 1 MPEG-1, 2 MPEG-2, 25 MPEG-2.5 */
     ULONG a_hz, a_kbps;
+    BOOL ac3;                   /* AC3 sound (a DVD's private stream 1, or a .ts's) */
+    BOOL h264;                  /* H.264 (or other) video, not MPEG: not the card's */
+    UBYTE ts;                   /* a transport stream: its packets' size (188, 192), 0 not */
+    UBYTE ts_vtype, ts_atype;   /* its video's and sound's stream types (PMT) */
+    UWORD ts_vpid, ts_apid;     /* their packets' PIDs (0x1FFF none) */
+    ULONG ts_first;             /* its first packet's offset in the file */
+    const char *a_other;        /* sound there the card does not play ("AAC"), NULL none */
 };
 
 /* TRUE when a sequence header was found (its size known). span: the

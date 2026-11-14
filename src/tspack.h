@@ -1,0 +1,25 @@
+/*
+ * AmigaMCE - an MPEG transport stream (.ts, .m2ts) packed as a Program
+ * Stream as it is read (tspack.c), for the ZZ9000's media session
+ * Copyright (c) 2026 Brian King, MIT licence
+ */
+#ifndef AMCE_TSPACK_H
+#define AMCE_TSPACK_H
+
+#include <exec/types.h>
+
+/* Reads up to n bytes of the file into b: the bytes read, 0 at its end,
+ * -1 if it could not be read. */
+typedef LONG (*TspRead)(void *ctx, UBYTE *b, LONG n);
+
+/* A new stream (or the file from another place: a seek): packets of size
+ * (188, or 192 with a 4-byte time before each), the video's PID (MPEG-1 or
+ * MPEG-2), the sound's (0x1FFF none), AC3 or MPEG audio. */
+void tsp_begin(UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2);
+/* Up to max bytes of the Program Stream into out: how many (0 at its end,
+ * its end code given before); -1 if the file could not be read. */
+LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max);
+/* The packets lost (out of step) and PES packets cut short, so far. */
+void tsp_counts(ULONG *resyncs, ULONG *packets);
+
+#endif
