@@ -19,7 +19,8 @@ void tsp_begin(UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2);
 /* Up to max bytes of the Program Stream into out: how many (0 at its end,
  * its end code given before); -1 if the file could not be read. */
 LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max);
-/* The packets lost (out of step) and PES packets cut short, so far. */
-void tsp_counts(ULONG *resyncs, ULONG *packets);
+/* The packets lost (out of step), PES packets not read, and the video's
+ * bytes passed over before its sound's first, so far. */
+void tsp_counts(ULONG *resyncs, ULONG *packets, ULONG *before_sound);
 
 #endif

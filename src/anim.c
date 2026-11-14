@@ -2854,25 +2854,30 @@ static BOOL vid_place(struct Gfx *g)
     return ok;
 }
 
-/* Laid out (full or not) for the picture, the screen black around it. */
+/* Laid out (full or not) for the picture, the screen black around it: the
+ * overlay scales freely (an ANIM's whole scales are the 68k's, not its),
+ * so as large as its place allows, its shape kept: full screen the whole
+ * display, else above the controls. */
 static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
 {
-    if (!lay_out(g, sw, vid.h, 1, 1, full)) {
-        /* (larger than this screen, beneath the controls: fitted) */
-        LONG W = g->w, H = st.y - GU(g, 8), dw, dh;
-        if ((LONG)sw * H <= (LONG)vid.h * W) {
-            dh = H;
-            dw = (LONG)sw * H / vid.h;
-        } else {
-            dw = W;
-            dh = (LONG)vid.h * W / sw;
-        }
-        lay.dw = (WORD)dw;
-        lay.dh = (WORD)dh;
-        lay.vx = (WORD)((g->w - dw) / 2);
-        lay.vy = (WORD)(GU(g, 4) + (H - dh) / 2);
-        lay.full = full;
+    LONG W = g->w, top = full ? 0 : GU(g, 4), H = (full ? g->h : st.y - GU(g, 4)) - top, dw, dh;
+    if (W < 16)
+        W = 16;
+    if (H < 16)
+        H = 16;
+    if ((LONG)sw * H <= (LONG)vid.h * W) {
+        dh = H;
+        dw = (LONG)sw * H / vid.h;
+    } else {
+        dw = W;
+        dh = (LONG)vid.h * W / sw;
     }
+    lay.dw = (WORD)(dw & ~1);
+    lay.dh = (WORD)dh;
+    lay.vx = (WORD)((g->w - lay.dw) / 2);
+    lay.vy = (WORD)(top + (H - dh) / 2);
+    lay.full = full;
+    lay.fx = lay.fy = 0;
     FillPixelArray(g->rp, 0, 0, g->w, g->h, 0x000000);
     sf.lv = 0;
     sf.drawn = FALSE;

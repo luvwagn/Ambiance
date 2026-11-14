@@ -2499,6 +2499,14 @@ static void video_run(void)
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns,
             (unsigned long)pcm_frames, (unsigned long)pcm_peak);
     amce_log("video", m);
+    if (st.v_ts) {
+        ULONG rs, cut, pre;
+        tsp_counts(&rs, &cut, &pre);
+        sprintf(m, "its transport stream: %lu times out of step, %lu PES packets not read, "
+                   "%lu bytes of video before its sound's first left out",
+                (unsigned long)rs, (unsigned long)cut, (unsigned long)pre);
+        amce_log("video", m);
+    }
     if (st.v_mp2) {
         sprintf(m, "the card's sound at the end: state %lu, flags %08lx, %lu Hz, %lu channels, "
                    "format %lu, %lu bytes made, %lu taken",
