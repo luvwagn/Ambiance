@@ -13,6 +13,9 @@ typedef void *APTR;
 typedef unsigned char *STRPTR;
 typedef const unsigned char *CONST_STRPTR;
 #define VOID void
+#ifndef CONST
+#define CONST const
+#endif
 #ifndef TRUE
 #define TRUE 1
 #define FALSE 0
