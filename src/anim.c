@@ -2835,20 +2835,49 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
  * while they show. */
 static WORD vid_was_h = -1;     /* the overlay's height last placed */
 
-static const UBYTE *sw_last;    /* decoded by the CPU: the picture drawn last */
-static ULONG sw_w, sw_h, sw_bpr;
-static unsigned long long sw_tdraw;     /* (measured: drawing them, E-clock ticks) */
-static ULONG sw_ndraw, sw_hz;
+/* Decoded by the CPU: its pictures on the card's YUV overlay where this
+ * screen has one (the card scales them; vo_show), else made RGB here and
+ * drawn (ScalePixelArray). */
+static BOOL sw_have;            /* a picture taken (st_swv_take) */
+static UBYTE *sw_rgb;           /* it as RGB (drawn without the overlay) */
+static BOOL sw_rgb_ok;          /* (made from the picture taken last) */
+static ULONG sw_w, sw_h, sw_vo; /* its size; the overlay it was put on (vo_opened) */
+static unsigned long long sw_tdraw;     /* (measured: showing them, E-clock ticks) */
+static ULONG sw_ndraw, sw_hz, sw_novl;  /* (how many; of them on the overlay) */
 
-/* Decoded by the CPU: the newest picture (or the last again, redraw) drawn
- * scaled into the picture's place, h high at most (the controls'). */
-static void sw_draw(struct Gfx *g, WORD h, BOOL redraw)
+/* Decoded by the CPU: the newest picture (or the last again, redraw)
+ * shown: put on the overlay (ovl), or drawn scaled into the picture's
+ * place, h high at most (the controls'). */
+static void sw_draw(struct Gfx *g, WORD h, BOOL redraw, BOOL ovl)
 {
-    const UBYTE *f = st_swv_frame(&sw_w, &sw_h, &sw_bpr);
+    BOOL fresh = st_swv_take(&sw_w, &sw_h);
     LONG x = lay.vx, y = lay.vy, dw = lay.dw, dh = lay.dh;
-    if (f)
-        sw_last = f;
-    else if (!redraw || !sw_last)
+    ULONG tk;
+    if (fresh) {
+        sw_have = TRUE;
+        sw_rgb_ok = FALSE;
+    }
+    if (!sw_have)
+        return;
+    if (ovl) {
+        /* the overlay keeps its picture: put there when new (or a new
+         * overlay's) */
+        UBYTE *mem;
+        ULONG bpr;
+        if (!fresh && sw_vo == vo_opened())
+            return;
+        tk = time_ticks(&sw_hz);
+        if ((mem = vo_lock(&bpr))) {
+            if (st_swv_yuyv(mem, bpr))
+                sw_vo = vo_opened();
+            vo_unlock();
+        }
+        sw_tdraw += time_ticks(&sw_hz) - tk;
+        sw_ndraw++;
+        sw_novl++;
+        return;
+    }
+    if (!fresh && !redraw)
         return;
     if (h < dh) {
         dw = (LONG)lay.dw * h / lay.dh;
@@ -2857,25 +2886,38 @@ static void sw_draw(struct Gfx *g, WORD h, BOOL redraw)
     }
     if (dw < 2 || dh < 2)
         return;
-    {
-        ULONG tk = time_ticks(&sw_hz);
-        if (dw == (LONG)sw_w && dh == (LONG)sw_h)
-            WritePixelArray((APTR)sw_last, 0, 0, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
-        else
-            ScalePixelArray((APTR)sw_last, sw_w, sw_h, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
-        win_show(g, TRUE, FALSE, x, y, dw, dh);
-        sw_tdraw += time_ticks(&sw_hz) - tk;
-        sw_ndraw++;
+    tk = time_ticks(&sw_hz);
+    if (!sw_rgb_ok) {
+        if (!sw_rgb && !(sw_rgb = AllocVec(sw_w * sw_h * 3, MEMF_ANY)))
+            return;
+        sw_rgb_ok = st_swv_rgb(sw_rgb, sw_w * 3);
+        if (!sw_rgb_ok)
+            return;
     }
+    if (dw == (LONG)sw_w && dh == (LONG)sw_h)
+        WritePixelArray((APTR)sw_rgb, 0, 0, sw_w * 3, g->rp, x, y, dw, dh, RECTFMT_RGB);
+    else
+        ScalePixelArray((APTR)sw_rgb, sw_w, sw_h, sw_w * 3, g->rp, x, y, dw, dh, RECTFMT_RGB);
+    win_show(g, TRUE, FALSE, x, y, dw, dh);
+    sw_tdraw += time_ticks(&sw_hz) - tk;
+    sw_ndraw++;
 }
 
 static BOOL vid_place(struct Gfx *g)
 {
     WORD h = lay.dh, y1;
     BOOL ok, moved;
+    BOOL ovl = FALSE;
     if (lay.full && sf.lv > 0 && lay.vy + h > st.y)
         h = st.y - lay.vy;
-    ok = vid.sw ? TRUE : vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+    if (vid.sw) {
+        /* (the overlay if it can: else drawn, not an error) */
+        ovl = !vo_failed_here() && vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+        if (!ovl && vo_shown())
+            vo_hide();
+        ok = TRUE;
+    } else
+        ok = vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
     moved = ok && h != vid_was_h;
     if (moved) {
         /* it moved (the controls came or went): what it uncovered is the
@@ -2887,7 +2929,7 @@ static BOOL vid_place(struct Gfx *g)
     }
     vid_was_h = ok ? h : -1;
     if (ok && vid.sw)
-        sw_draw(g, h, moved);
+        sw_draw(g, h, moved, ovl);
     return ok;
 }
 
@@ -2943,9 +2985,11 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
                                  : _("MPEG video plays on the ZZ9000's display"), errmax);
         return -1;
     }
-    sw_last = NULL;
+    sw_have = sw_rgb_ok = FALSE;
+    sw_rgb = NULL;
+    sw_vo = 0;
     sw_tdraw = 0;
-    sw_ndraw = 0;
+    sw_ndraw = sw_novl = 0;
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
@@ -2976,7 +3020,8 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, %s", name,
             g->wb && !gfx_fs_on() ? "window" : "screen", (long)lay.dw, (long)lay.dh,
             lay.full ? " (full screen)" : "",
-            vid.sw ? "decoded by the CPU, scaled by ScalePixelArray" : "the ZZ9000's overlay");
+            vid.sw ? "decoded by the CPU, on the overlay if it opens (else ScalePixelArray)"
+                   : "the ZZ9000's overlay");
     amce_log("video", m);
     st_video_show(TRUE);
     if (!vid_start(cpu, 0, err, errmax))
@@ -3091,6 +3136,8 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
              * overlay made again there), AmigaMCE's screen's the whole of it */
             int focus = ctl.focus;
             anim_full = g->wb || gfx_fs_on() ? !gfx_fs_on() : !lay.full;
+            if (vid.sw)
+                vo_retry();                 /* (the overlay tried again on the new screen) */
             if (g->wb || gfx_fs_on()) {
                 vo_hide();
                 strip_cleanup(g);
@@ -3129,12 +3176,16 @@ out:
         if (vid.sw) {
             ULONG c = sw_ndraw && sw_hz ? (ULONG)(sw_tdraw * 100000ULL / sw_hz / sw_ndraw) : 0;
             st_swv_release();       /* (its pictures' buffers, now it has stopped) */
-            sw_last = NULL;
-            sprintf(m, "a picture drawn %lu.%02lu ms (%lu), %lu x %lu to %ld x %ld (%s)",
+            FreeVec(sw_rgb);
+            sw_rgb = NULL;
+            sw_have = FALSE;
+            sprintf(m, "a picture shown %lu.%02lu ms (%lu), %lu x %lu to %ld x %ld (%s)",
                     (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)sw_ndraw,
                     (unsigned long)sw_w, (unsigned long)sw_h, (long)lay.dw, (long)lay.dh,
-                    lay.dw == (WORD)sw_w && lay.dh == (WORD)sw_h ? "WritePixelArray"
-                                                               : "ScalePixelArray");
+                    sw_novl == sw_ndraw && sw_ndraw ? "made YUV on the overlay: the card scales"
+                    : sw_novl ? "on the overlay and drawn"
+                    : lay.dw == (WORD)sw_w && lay.dh == (WORD)sw_h ? "made RGB, WritePixelArray"
+                                                                 : "made RGB, ScalePixelArray");
             amce_log("video: by the CPU", m);
         }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,

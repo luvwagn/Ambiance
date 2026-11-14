@@ -142,6 +142,11 @@ of the Amiga to how fast it really is.
   AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
   and AAC are not the card's: the preview says so (AAC: played without
   its sound).
+- Without a ZZ9000 (or with Settings > Display > MPEG video on the ZZ9000
+  off), MPEG-1 is decoded by the CPU, its sound by mpega.library. Its
+  pictures go to the graphics card's YUV overlay where the screen has one
+  (Picasso96's PIP), which scales them; otherwise they are made RGB and
+  drawn, on an RTG screen of 16 bits or more.
 
 ### Screens and looks
 

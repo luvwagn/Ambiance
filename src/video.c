@@ -14,6 +14,10 @@
  *
  * Needs the ZZ9000's firmware with media sessions (zz9k.c's checks) and
  * AmigaMCE's screen (or Workbench, in a window) on the ZZ9000 itself.
+ *
+ * MPEG-1 decoded by the CPU (stream.c: swv_run) uses the same overlay where
+ * it opens, its pictures written into its memory as packed YUV (vo_lock);
+ * where it does not, anim.c draws them as RGB.
  */
 #include <exec/types.h>
 #include <intuition/intuition.h>
@@ -43,6 +47,9 @@ static LONG vo_x, vo_y, vo_w, vo_h;     /* its place, in AmigaMCE's coordinates 
 static LONG vo_wx = -1, vo_wy = -1;     /* AmigaMCE's window, where it was last seen */
 static ULONG vo_cs, vo_cm;              /* the last click (a double click) */
 static BOOL vo_failed;                  /* it could not be opened for this video */
+static ULONG vo_opens;                  /* times opened (a new one's memory is not the last's) */
+static struct BitMap *vo_bm;            /* its picture's memory, locked (vo_lock) */
+static LONG vo_lk;
 
 static const char *pip_error(LONG e)
 {
@@ -220,6 +227,11 @@ const char *video_check(const char *path, struct VProbe *v)
             sprintf(m, "decoded by the CPU (%s)", w);
             amce_log("video", m);
             v->sw = TRUE;
+            /* its pictures on the card's overlay if this screen has one
+             * (Picasso96's PIP: it scales them), else drawn */
+            if (!P96Base)
+                P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+            vo_failed = FALSE;
             return NULL;
         }
     }
@@ -276,6 +288,7 @@ BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG
         return FALSE;
     }
     vo_scr = g->scr;
+    vo_opens++;
     vo_x = x;
     vo_y = y;
     vo_w = w;
@@ -299,6 +312,7 @@ void vo_retry(void)
 
 void vo_hide(void)
 {
+    vo_unlock();
     if (vo_win) {
         p96PIP_Close(vo_win);
         amce_log("video", "its overlay taken down");
@@ -311,6 +325,38 @@ void vo_hide(void)
 BOOL vo_shown(void)
 {
     return vo_win != NULL;
+}
+
+ULONG vo_opened(void)
+{
+    return vo_opens;
+}
+
+UBYTE *vo_lock(ULONG *bpr)
+{
+    struct RenderInfo ri;
+    struct BitMap *bm = NULL;
+    if (!vo_win || vo_bm)
+        return NULL;
+    p96PIP_GetTags(vo_win, P96PIP_SourceBitMap, (ULONG)&bm, TAG_DONE);
+    if (!bm)
+        return NULL;
+    memset(&ri, 0, sizeof(ri));
+    vo_lk = p96LockBitMap(bm, (UBYTE *)&ri, sizeof(ri));
+    if (!ri.Memory || ri.BytesPerRow <= 0) {
+        p96UnlockBitMap(bm, vo_lk);
+        return NULL;
+    }
+    vo_bm = bm;
+    *bpr = (ULONG)ri.BytesPerRow;
+    return (UBYTE *)ri.Memory;
+}
+
+void vo_unlock(void)
+{
+    if (vo_bm)
+        p96UnlockBitMap(vo_bm, vo_lk);
+    vo_bm = NULL;
 }
 
 void vo_end(void)

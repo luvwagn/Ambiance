@@ -709,9 +709,12 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VPro
                     ULONG range_from, char *err, LONG errmax);  /* MPEG on the ZZ9000 */
 void st_video_counts(ULONG *shown, ULONG *dropped);
 void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
-/* A video decoded by the CPU: the newest picture to draw (NULL none new),
- * 24-bit RGB; its buffers freed once it is stopped. */
-const UBYTE *st_swv_frame(ULONG *w, ULONG *h, ULONG *bpr);
+/* A video decoded by the CPU: the newest picture taken (FALSE none new),
+ * made 24-bit RGB or the overlay's packed YUV (Y0 Cb Y1 Cr); its buffers
+ * freed once it is stopped. */
+BOOL st_swv_take(ULONG *w, ULONG *h);
+BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);
+BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr);
 void st_swv_release(void);
 void st_pause(BOOL on);
 void st_volume(int v);
