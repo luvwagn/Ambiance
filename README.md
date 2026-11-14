@@ -130,6 +130,18 @@ of the Amiga to how fast it really is.
 - In a Workbench window it is made as large as the window holds, larger or
   smaller; the full-screen button shows it on the whole display, on a
   screen in Workbench's own mode (no mode switch), and back.
+- On a ZZ9000 it also plays MPEG video: `.mpg`, `.mpeg`, `.vob` (MPEG-1 or
+  MPEG-2 Program Streams, and bare MPEG-1 video), and transport streams
+  (`.ts`, `.m2ts`, `.mts`) with MPEG-2 video, which AmigaMCE repacks as it
+  reads them. The card decodes the pictures and shows them on its overlay,
+  freely scaled to fill the picture's place, with the same controls, keys
+  and full screen as an ANIM; its sound (MPEG audio, or AC3) comes back
+  from the card and plays as music does (AHI or Paula), the pictures kept
+  in time with it. Clicking the line of how far it has got goes there.
+  It needs the card's firmware with media sessions, Picasso96, and
+  AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
+  and AAC are not the card's: the preview says so (AAC: played without
+  its sound).
 
 ### Screens and looks
 
@@ -287,7 +299,8 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
 
-- Videos plays IFF ANIMs; other video formats come later.
+- Videos plays IFF ANIMs anywhere and MPEG on a ZZ9000; MPEG without one
+  (a software decoder for fast Amigas) comes later.
 - Modules play on Paula only; AHI for them comes later.
 
 ## Building
@@ -348,6 +361,13 @@ and Now Playing's spectrum analyser is HippoPlayer's (`src/vis.c`, its FFT
 (© 2026 Renaud Schweingruber, with dr_flac by David Reid, public domain or
 MIT-0) where it is installed; it is not included, as it may only be passed
 on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.
+
+The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
+headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which
+are GPL-3.0-or-later. Their author has agreed a GPL-3 section 7 exception
+for programs that only call zz9k.library; until it is published, builds
+containing that code are for testing and are not to be distributed. See
+`third_party/zz9k-sdk/README.txt`.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
 names belong to their owners; AmigaMCE is not affiliated with any of them.

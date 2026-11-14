@@ -13,4 +13,4 @@ From https://github.com/BlitterStudio/zz9000-firmware at
 LICENCE: these files are GPL-3.0-or-later. AmigaMCE is MIT. The SDK's
 author has agreed to add a GPL-3 section 7 exception for programs that only
 call zz9k.library; until that exception is published, a build containing
-this code must not be distributed. This branch (zz9k-video) is for testing.
+this code must not be distributed: such builds are for testing.
