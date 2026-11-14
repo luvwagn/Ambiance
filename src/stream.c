@@ -3226,14 +3226,18 @@ static void video_run(void)
                 }
             }
         }
-        /* its AC3, decoded here into the FIFO (a second and a half ahead) */
+        /* its AC3, decoded here into the FIFO (a second ahead): before the
+         * first picture as fast as it comes, then a frame or two a turn,
+         * so the pictures are shown on time between them (a dozen at once
+         * made the first second's late: they were let go, a stutter);
+         * more while the sound runs low */
         if (csound) {
             struct Ac3Info ai;
-            int k;
-            for (k = 0; k < 12; k++) {
+            int k, most = !on ? 12 : rate && st.f_in - st.f_out < (ULONG)st.dec_freq / 4 ? 6 : 2;
+            for (k = 0; k < most; k++) {
                 ULONG room = FIFO_N - (st.f_in - st.f_out), i, o;
                 LONG got;
-                if (rate && (st.f_in - st.f_out >= (ULONG)st.dec_freq * 3 / 2 ||
+                if (rate && (st.f_in - st.f_out >= (ULONG)st.dec_freq ||
                              room < AC3_FRAME_SAMPLES / div + 64))
                     break;
                 got = a3_frame(&ai);
