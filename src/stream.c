@@ -3097,6 +3097,8 @@ static void video_run(void)
         {
             int k;
             for (k = 0; k < 4 && !eof_sent; k++) {
+                if (!pend_len && !in_eof && csound && a3.qin - a3.qout > A3Q * 3 / 4)
+                    break;                  /* (its AC3 well ahead: the card waits for it) */
                 if (!pend_len && !in_eof) {
                     LONG n = st.v_dvd  ? dvdplay_read(st.v_dvd, in.data, (LONG)in.length)
                              : st.v_ts ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
@@ -3264,7 +3266,11 @@ static void video_run(void)
                     LONG al = 0, ar = 0;
                     ULONG j;
                     for (j = 0; j < div; j++) {
-                        al += a3.pcm[(i + j) * 2];
+                        WORD l = a3.pcm[(i + j) * 2];
+                        ULONG al_ = (ULONG)(l < 0 ? -l : l);
+                        if (al_ > pcm_peak)
+                            pcm_peak = al_;
+                        al += l;
                         ar += a3.pcm[(i + j) * 2 + 1];
                     }
                     st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)div);
@@ -3393,9 +3399,9 @@ static void video_run(void)
         out_take();
     }
     sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts; its sound: %lu frames "
-               "from the card, peak %lu of 32767", log_name(),
+               "from %s, peak %lu of 32767", log_name(),
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns,
-            (unsigned long)pcm_frames, (unsigned long)pcm_peak);
+            (unsigned long)pcm_frames, csound ? "the CPU's AC3" : "the card", (unsigned long)pcm_peak);
     amce_log("video", m);
     if (csound) {
         sprintf(m, "its AC3 by the CPU: %lu frames decoded, %lu of them bad, %lu bytes lost (too far "
@@ -3412,7 +3418,7 @@ static void video_run(void)
                 (unsigned long)rs, (unsigned long)cut, (unsigned long)pre);
         amce_log("video", m);
     }
-    if (st.v_mp2) {
+    if (st.v_mp2 && !csound) {
         sprintf(m, "the card's sound at the end: state %lu, flags %08lx, %lu Hz, %lu channels, "
                    "format %lu, %lu bytes made, %lu taken",
                 (unsigned long)au.state, (unsigned long)au.flags, (unsigned long)au.rate,
