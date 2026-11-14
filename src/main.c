@@ -155,7 +155,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1747,6 +1747,7 @@ static void save_screen_mode(void)
 #define RFONT_VAR "AmigaMCE/RTGFont"    /* RTG's pixel style: a font of gfx_laced_fonts */
 #define JUMP_VAR  "AmigaMCE/JumpScroll"
 #define ANIMSCR_VAR "AmigaMCE/AnimScreen"  /* "own": animations on their own screen */
+#define VDEC_VAR "AmigaMCE/VideoDecoder"   /* "CPU": MPEG by the CPU on a ZZ9000 too (video.c) */
 #define TRANS_VAR "AmigaMCE/Transition"    /* a slideshow's: off fade crossfade tiles wipe */
 static const char *const trans_keys[VT_COUNT] = { "off", "fade", "crossfade", "tiles", "wipe" };
 static const char *const trans_names[VT_COUNT] = { N_("Off"), N_("Fade"), N_("Cross-fade"),
@@ -2117,6 +2118,9 @@ static BOOL jump_scroll;
 /* Animations on a screen of their own even on a 16-bit RTG screen (HAM and
  * extra halfbrite by the chipset, the classic look); native screens always */
 static BOOL anim_classic;
+/* Settings > Display > MPEG video on the ZZ9000 (with one): off, the CPU
+ * decodes it (MPEG-1), as without one */
+static BOOL video_cpu;
 
 static void set_msg(const char *m);
 
@@ -2194,6 +2198,8 @@ static void load_jump(void)
                   buf[0] == '1';
     anim_classic = GetVar((CONST_STRPTR)ANIMSCR_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
                    !strcmp(buf, "own");
+    video_cpu = GetVar((CONST_STRPTR)VDEC_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+                (buf[0] == 'c' || buf[0] == 'C');
     if (GetVar((CONST_STRPTR)TRANS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
         int i;
         for (i = 0; i < VT_COUNT; i++)
@@ -2455,6 +2461,11 @@ static void build_screen_settings(struct Page *p)
         if (it && !g.truecolor)
             it->flags |= ITEM_DISABLED;     /* a native screen: always their own */
     }
+    /* MPEG video: decoded by the ZZ9000 where there is one (off: by the
+     * CPU, MPEG-1 only, as without one) */
+    if (caps.zz9000)
+        action_item(p, _("MPEG video on the ZZ9000"), "", ACT_ZZVIDEO,
+                    video_cpu ? MARK_CHECK_OFF : MARK_CHECK_ON);
 }
 
 /* Settings > General. */
@@ -13706,6 +13717,10 @@ static void act_action(struct Item *it)
     } else if (it->action == ACT_ANIMSCR) {
         anim_classic = !anim_classic;
         save_setting(ANIMSCR_VAR, anim_classic ? "own" : "");
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_ZZVIDEO) {
+        video_cpu = !video_cpu;
+        save_setting(VDEC_VAR, video_cpu ? "CPU" : "");
         plex_settings_again(FALSE);
     }
     else if (it->action == ACT_LANGSET)

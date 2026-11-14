@@ -155,6 +155,16 @@ interface (five functions) and carries none of its files.
 Radio's station lists come from radio-browser.info, a free directory of
 internet radio stations kept by its community (https://www.radio-browser.info).
 
+Video
+-----
+MPEG-1 video without a ZZ9000 is decoded by pl_mpeg, by Dominic Szablewski
+(https://github.com/phoboslab/pl_mpeg), MIT licence: third_party/pl_mpeg/,
+unchanged, its licence there. Its sound is decoded by mpega.library.
+
+On a ZZ9000, MPEG video is decoded by the card through zz9k.library,
+called with the ZZ9000 SDK's headers (BlitterStudio's zz9000-firmware,
+GPL-3.0-or-later): third_party/zz9k-sdk/, and its README on distribution.
+
 Trademarks
 ----------
 Amiga is a trademark of Amiga Corporation. AGS (Amiga Game Selector),

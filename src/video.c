@@ -20,6 +20,7 @@
 #include <devices/inputevent.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <dos/var.h>
 #include <proto/intuition.h>
 #include <proto/Picasso96.h>
 #include <proto/graphics.h>
@@ -191,14 +192,36 @@ const char *video_check(const char *path, struct VProbe *v)
     }
     if (!v->ps && !v->ts && v->mpeg2)
         return _("Only MPEG Program Streams play (this one has no packs)");
-    if (!zz_open())
-        return _("MPEG video plays on a ZZ9000 (zz9k.library not found)");
-    w = zz_video_check(v->mpeg2, v->mp2 && !v->ac3 && (v->ps || v->ts));
-    zz_close();
-    if (w) {
-        amce_log("video", w);
-        amce_strlcpy(why, w, sizeof(why));
-        return why;
+    v->sw = FALSE;
+    {
+        /* the card if it can (unless ENV:AmigaMCE/VideoDecoder says CPU),
+         * else the CPU: MPEG-1 only (pl_mpeg) */
+        char ev[16];
+        BOOL cpu = GetVar((CONST_STRPTR)"AmigaMCE/VideoDecoder", (STRPTR)ev, sizeof(ev),
+                          GVF_GLOBAL_ONLY) > 0 && (ev[0] == 'c' || ev[0] == 'C');
+        w = NULL;
+        if (cpu)
+            w = "Settings > Display: MPEG video on the ZZ9000 off";
+        else if (!zz_open())
+            w = "no zz9k.library";
+        else {
+            w = zz_video_check(v->mpeg2, v->mp2 && !v->ac3 && (v->ps || v->ts));
+            zz_close();
+        }
+        if (w) {
+            if (v->mpeg2 || v->ts) {
+                amce_log("video", w);
+                if (!cpu && !strcmp(w, "no zz9k.library"))
+                    return _("MPEG-2 video plays on a ZZ9000 (zz9k.library not found)");
+                amce_strlcpy(why, cpu ? "MPEG-2 video plays on a ZZ9000 (the CPU decodes MPEG-1)" : w,
+                             sizeof(why));
+                return why;
+            }
+            sprintf(m, "decoded by the CPU (%s)", w);
+            amce_log("video", m);
+            v->sw = TRUE;
+            return NULL;
+        }
     }
     if (!P96Base && !(P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2)))
         return _("MPEG video needs Picasso96 (Picasso96API.library)");

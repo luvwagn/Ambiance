@@ -713,6 +713,10 @@ BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VPro
                   LONG errmax);   /* a DVD's film (dvdplay.c) */
 void st_video_counts(ULONG *shown, ULONG *dropped);
 void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
+/* A video decoded by the CPU: the newest picture to draw (NULL none new),
+ * 24-bit RGB; its buffers freed once it is stopped. */
+const UBYTE *st_swv_frame(ULONG *w, ULONG *h, ULONG *bpr);
+void st_swv_release(void);
 void st_pause(BOOL on);
 void st_volume(int v);
 int st_state(void);

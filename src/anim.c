@@ -2862,14 +2862,42 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
  * while they show. */
 static WORD vid_was_h = -1;     /* the overlay's height last placed */
 
+static const UBYTE *sw_last;    /* decoded by the CPU: the picture drawn last */
+static ULONG sw_w, sw_h, sw_bpr;
+
+/* Decoded by the CPU: the newest picture (or the last again, redraw) drawn
+ * scaled into the picture's place, h high at most (the controls'). */
+static void sw_draw(struct Gfx *g, WORD h, BOOL redraw)
+{
+    const UBYTE *f = st_swv_frame(&sw_w, &sw_h, &sw_bpr);
+    LONG x = lay.vx, y = lay.vy, dw = lay.dw, dh = lay.dh;
+    if (f)
+        sw_last = f;
+    else if (!redraw || !sw_last)
+        return;
+    if (h < dh) {
+        dw = (LONG)lay.dw * h / lay.dh;
+        dh = h;
+        x = lay.vx + (lay.dw - dw) / 2;
+    }
+    if (dw < 2 || dh < 2)
+        return;
+    if (dw == (LONG)sw_w && dh == (LONG)sw_h)
+        WritePixelArray((APTR)sw_last, 0, 0, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
+    else
+        ScalePixelArray((APTR)sw_last, sw_w, sw_h, sw_bpr, g->rp, x, y, dw, dh, RECTFMT_RGB);
+    win_show(g, TRUE, FALSE, x, y, dw, dh);
+}
+
 static BOOL vid_place(struct Gfx *g)
 {
     WORD h = lay.dh, y1;
-    BOOL ok;
+    BOOL ok, moved;
     if (lay.full && sf.lv > 0 && lay.vy + h > st.y)
         h = st.y - lay.vy;
-    ok = vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
-    if (ok && h != vid_was_h) {
+    ok = vid.sw ? TRUE : vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+    moved = ok && h != vid_was_h;
+    if (moved) {
         /* it moved (the controls came or went): what it uncovered is the
          * screen's colour 0 (Workbench's grey, a window's backfill), so
          * black there, beside and above the controls */
@@ -2878,6 +2906,8 @@ static BOOL vid_place(struct Gfx *g)
         win_show(g, TRUE, FALSE, 0, 0, g->w, y1);
     }
     vid_was_h = ok ? h : -1;
+    if (ok && vid.sw)
+        sw_draw(g, h, moved);
     return ok;
 }
 
@@ -2919,19 +2949,23 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     const char *why;
     err[0] = 0;
     anim_g = g;
-    if (!g || !g->win || !g->truecolor) {
-        amce_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
+    if (!g || !g->win)
         return -1;
-    }
     if ((why = video_check(path, &vid))) {
         amce_strlcpy(err, why, errmax);
+        return -1;
+    }
+    if (!g->truecolor) {
+        amce_strlcpy(err, vid.sw ? _("MPEG video plays on an RTG screen (AGA screens to come)")
+                                 : _("MPEG video plays on the ZZ9000's display"), errmax);
         return -1;
     }
     return vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
 }
 
 /* A DVD's film (the disc in volume vol): as an MPEG file, read from the
- * disc by dvdplay.c, its chapters by N and P (a CD32 pad's shoulders). */
+ * disc by dvdplay.c, its chapters by N and P (a CD32 pad's shoulders).
+ * MPEG-2: the ZZ9000's always (vid.sw stays FALSE). */
 LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax)
 {
     LONG r;
@@ -2959,10 +2993,12 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     LONG result = -1;
     int r, s;
     char m[200];
+    sw_last = NULL;
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
-    vid_sound = (vid.mp2 || vid.ac3) && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
+    vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && vid.ps
+                       : (vid.mp2 || vid.ac3) && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
     amce_strlcpy(lay_path, path, sizeof(lay_path));
     memset(&lay, 0, sizeof(lay));
     if (!(lay.xo = AllocVec((sw + 1) * sizeof(UWORD), MEMF_ANY)) ||
@@ -2985,9 +3021,10 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     if (g->wb && anim_full && !fs_enter(g, sw, vid.h, 1, 1))
         anim_full = FALSE;                  /* (the screen would not open: in the window) */
     vid_lay(g, sw, anim_full);
-    sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, the ZZ9000's overlay", name,
+    sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, %s", name,
             g->wb && !gfx_fs_on() ? "window" : "screen", (long)lay.dw, (long)lay.dh,
-            lay.full ? " (full screen)" : "");
+            lay.full ? " (full screen)" : "",
+            vid.sw ? "decoded by the CPU, scaled by ScalePixelArray" : "the ZZ9000's overlay");
     amce_log("video", m);
     st_video_show(TRUE);
     if (!vid_start(cpu, 0, err, errmax))
@@ -3152,6 +3189,10 @@ out:
         ULONG shown = 0, dropped = 0;
         st_video_counts(&shown, &dropped);
         st_stop();
+        if (vid.sw) {
+            st_swv_release();       /* (its pictures' buffers, now it has stopped) */
+            sw_last = NULL;
+        }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
                 (unsigned long)dropped, (unsigned long)(time_ms() - t0));
         amce_log("video", m);

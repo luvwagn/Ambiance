@@ -34,6 +34,9 @@
 #include "radiocsv.h"
 #include "zz9k.h"
 #include "tspack.h"
+#include <stddef.h>
+#define PLM_NO_STDIO
+#include "../third_party/pl_mpeg/pl_mpeg.h"
 #include "vprobe.h"
 #include "dvdplay.h"
 
@@ -232,6 +235,8 @@ static struct {
     BOOL icy_br;                    /* the station said its bitrate (icy-br) */
     /* a video (MPEG on the ZZ9000's overlay: video_run); its sound as music's */
     BOOL video, v_mpeg2, v_mp2, v_es;   /* (v_mp2: its sound the card's, MPEG audio or AC3) */
+    BOOL v_sw;                      /* decoded by the CPU (pl_mpeg), not the card */
+    ULONG v_hz;                     /* its sound's rate (the probe's) */
     BOOL v_ac3;                     /* ...AC3 */
     UBYTE v_ts;                     /* a transport stream (its packet size): packed as it goes */
     UWORD v_vpid, v_apid;
@@ -245,8 +250,9 @@ static struct {
 
 static struct {                     /* st_start_video's */
     struct DvdPlay *dvd;
-    BOOL on, mpeg2, mp2, es, ac3;
+    BOOL on, mpeg2, mp2, es, ac3, sw;
     UBYTE ts;
+    ULONG hz;
     UWORD w, h, vpid, apid;
     ULONG tsfirst;
 } vid_next;
@@ -1290,6 +1296,9 @@ static LONG stream_read(UBYTE *buf, LONG n)
     return got;
 }
 
+static BOOL sw_on;                      /* (a video's sound: swv_run) */
+static LONG sw_aread(UBYTE *buf, LONG n);
+
 /* mpega.library's bitstream hook: the stream, read as it comes. */
 static ULONG hook_func(register struct Hook *h __asm("a0"), register MPEGA_ACCESS *a __asm("a1"),
                        register APTR handle __asm("a2"))
@@ -1303,6 +1312,8 @@ static ULONG hook_func(register struct Hook *h __asm("a0"), register MPEGA_ACCES
     case MPEGA_BSFUNC_CLOSE:
         return 0;
     case MPEGA_BSFUNC_READ:
+        if (sw_on)                          /* (a video's sound: its demuxed packets) */
+            return (ULONG)sw_aread(a->data.read.buffer, a->data.read.num_bytes);
         return (ULONG)stream_read(a->data.read.buffer, a->data.read.num_bytes);
     case MPEGA_BSFUNC_SEEK:
         return a->data.seek.abs_byte_seek_pos == 0 ? 0 : (ULONG)-1;
@@ -2172,6 +2183,446 @@ done:
     return ok;
 }
 
+/* ---------------------------------------------------------- MPEG-1 by the CPU
+ * Where there is no ZZ9000 (or it is not to be used): pl_mpeg's demuxer
+ * and MPEG-1 video decoder (plmpeg.c), the sound by mpega.library as an
+ * MP3 file's is (through the same bitstream hook, from the demuxer's audio
+ * packets). Each picture made 24-bit RGB in one of SWV_SLOTS buffers, held
+ * until its time by the sound (or the clock without), then given to the UI
+ * (anim.c), which draws the newest it is given; one too late is let go,
+ * not converted. Pictures are decoded as the sound is: on a slow Amiga
+ * the sound keeps time and the pictures fall behind and are let go. */
+#define SWV_SLOTS   3
+#define SW_AQ       (128UL * 1024)          /* its sound's bytes, demuxed, for mpega */
+#define SW_IN       16384
+enum { SW_FREE, SW_READY, SW_SHOW, SW_ON };
+static struct {
+    UBYTE *buf;
+    ULONG size;
+    volatile UBYTE state;
+    ULONG seq;
+    ZzU64 pts;
+} swv[SWV_SLOTS];
+static ULONG swv_w, swv_h, swv_seq;
+static plm_buffer_t *sw_fbuf, *sw_vbuf;
+static plm_demux_t *sw_demux;
+static UBYTE *sw_aq, *sw_in;
+static ULONG sw_aq_in, sw_aq_out;
+static double sw_apts, sw_vpts;             /* the first audio and video packets' times */
+static BOOL sw_ended, sw_sound;
+
+/* The newest picture given to show (NULL: none new since the last), its
+ * size and bytes a row: the one shown before it let go. For the UI. */
+const UBYTE *st_swv_frame(ULONG *w, ULONG *h, ULONG *bpr)
+{
+    int i, best = -1;
+    ULONG bs = 0;
+    Forbid();
+    for (i = 0; i < SWV_SLOTS; i++)
+        if (swv[i].state == SW_SHOW && (best < 0 || swv[i].seq > bs)) {
+            best = i;
+            bs = swv[i].seq;
+        }
+    if (best >= 0) {
+        for (i = 0; i < SWV_SLOTS; i++)
+            if (i != best && (swv[i].state == SW_ON || swv[i].state == SW_SHOW))
+                swv[i].state = SW_FREE;
+        swv[best].state = SW_ON;
+    }
+    Permit();
+    if (best < 0)
+        return NULL;
+    *w = swv_w;
+    *h = swv_h;
+    *bpr = swv_w * 3;
+    return swv[best].buf;
+}
+
+/* Its pictures' buffers freed: by the UI, once it has stopped it. */
+void st_swv_release(void)
+{
+    int i;
+    for (i = 0; i < SWV_SLOTS; i++) {
+        if (swv[i].buf)
+            FreeVec(swv[i].buf);
+        swv[i].buf = NULL;
+        swv[i].size = 0;
+        swv[i].state = SW_FREE;
+    }
+}
+
+static void sw_aq_put(const UBYTE *d, ULONG n)
+{
+    while (n--) {
+        if (sw_aq_in - sw_aq_out >= SW_AQ)
+            sw_aq_out++;                    /* (full: the oldest let go) */
+        sw_aq[sw_aq_in++ % SW_AQ] = *d++;
+    }
+}
+
+/* One packet from the file: video to the decoder's buffer, sound to the
+ * queue. FALSE at its end. */
+static BOOL sw_pump(void)
+{
+    plm_packet_t *p;
+    if (sw_ended)
+        return FALSE;
+    if (!(p = plm_demux_decode(sw_demux))) {
+        sw_ended = TRUE;
+        plm_buffer_signal_end(sw_vbuf);
+        return FALSE;
+    }
+    if (p->type == (int)PLM_DEMUX_PACKET_VIDEO_1) {
+        if (sw_vpts < 0 && p->pts != PLM_PACKET_INVALID_TS)
+            sw_vpts = p->pts;
+        plm_buffer_write(sw_vbuf, p->data, p->length);
+    } else if (p->type == (int)PLM_DEMUX_PACKET_AUDIO_1 && sw_sound) {
+        if (sw_apts < 0 && p->pts != PLM_PACKET_INVALID_TS)
+            sw_apts = p->pts;
+        sw_aq_put(p->data, p->length);
+    }
+    return TRUE;
+}
+
+/* The file into the demuxer's buffer. */
+static void sw_fload(plm_buffer_t *b, void *user)
+{
+    LONG n = Read(st.fh, sw_in, SW_IN);
+    (void)user;
+    if (n <= 0)
+        plm_buffer_signal_end(b);
+    else
+        plm_buffer_write(b, sw_in, (size_t)n);
+}
+
+/* The video decoder wants more: packets until a video one (a bare stream:
+ * the file itself). */
+static void sw_vload(plm_buffer_t *b, void *user)
+{
+    (void)user;
+    if (!sw_demux) {
+        LONG n = Read(st.fh, sw_in, SW_IN);
+        if (n <= 0)
+            plm_buffer_signal_end(b);
+        else
+            plm_buffer_write(b, sw_in, (size_t)n);
+        return;
+    }
+    {
+        size_t had = plm_buffer_get_remaining(b);
+        while (plm_buffer_get_remaining(b) == had && sw_pump())
+            ;
+    }
+}
+
+/* mpega's bytes: from the sound's queue (the file demuxed further as
+ * needed). */
+static LONG sw_aread(UBYTE *buf, LONG n)
+{
+    LONG got = 0;
+    while (got < n) {
+        if (sw_aq_in == sw_aq_out && !sw_pump())
+            break;
+        while (got < n && sw_aq_out != sw_aq_in)
+            buf[got++] = sw_aq[sw_aq_out++ % SW_AQ];
+    }
+    return got;
+}
+
+static int sw_slot(void)
+{
+    int i;
+    for (i = 0; i < SWV_SLOTS; i++)
+        if (swv[i].state == SW_FREE)
+            return i;
+    return -1;
+}
+
+static void swv_run(void)
+{
+    struct Hook hook;
+    MPEGA_CTRL ctrl;
+    MPEGA_STREAM *ms = NULL;
+    plm_video_t *vd = NULL;
+    static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
+    WORD *pcm[2];
+    ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre;
+    ZzU64 origin = 0, pts0 = 0;
+    int held = -1, i;
+    BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
+    char m[200];
+    pcm[0] = pcm0;
+    pcm[1] = pcm1;
+    st.v_shown = st.v_dropped = 0;
+    st.v_ms = 0;
+    sw_aq_in = sw_aq_out = 0;
+    sw_apts = sw_vpts = -1;
+    sw_ended = FALSE;
+    sw_sound = st.v_mp2 && !st.v_es && !st.v_ac3;
+    sw_fbuf = sw_vbuf = NULL;
+    sw_demux = NULL;
+    if ((v_tport = CreateMsgPort()) &&
+        (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
+        !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
+        v_topen = TRUE;
+    if (!(sw_in = AllocVec(SW_IN, MEMF_ANY)) || (sw_sound && !(sw_aq = AllocVec(SW_AQ, MEMF_ANY)))) {
+        fail(_("Not enough memory"));
+        goto out;
+    }
+    /* its pictures' buffers (kept from the last if large enough) */
+    swv_w = st.v_w;
+    swv_h = st.v_h;
+    for (i = 0; i < SWV_SLOTS; i++) {
+        ULONG need = swv_w * swv_h * 3;
+        if (swv[i].size < need) {
+            if (swv[i].buf)
+                FreeVec(swv[i].buf);
+            swv[i].size = 0;
+            if (!(swv[i].buf = AllocVec(need, MEMF_ANY))) {
+                fail(_("Not enough memory"));
+                goto out;
+            }
+            swv[i].size = need;
+        }
+        swv[i].state = SW_FREE;
+    }
+    sw_vbuf = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
+    plm_buffer_set_load_callback(sw_vbuf, sw_vload, NULL);
+    if (!st.v_es) {
+        sw_fbuf = plm_buffer_create_with_capacity(PLM_BUFFER_DEFAULT_SIZE);
+        plm_buffer_set_load_callback(sw_fbuf, sw_fload, NULL);
+        sw_demux = plm_demux_create(sw_fbuf, FALSE);
+    }
+    vd = plm_video_create_with_buffer(sw_vbuf, FALSE);
+    if (!sw_vbuf || !vd || (!st.v_es && !sw_demux)) {
+        fail(_("Not enough memory"));
+        goto out;
+    }
+    if (sw_sound) {
+        /* its sound by mpega.library, as an MP3 file's: the same quality
+         * and rate for the CPU (stream.c's mpega_run) */
+        WORD q = st.cpu >= 60 ? 2 : st.cpu >= 40 ? 1 : 0, mono = st.cpu < 40, div = 1;
+        LONG fmax = st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
+        LONG f = st.v_hz ? (LONG)st.v_hz : 44100;
+        MPEGA_LAYER *ls[2];
+        int k;
+        if (!MPEGABase && !(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
+            amce_log("video", "no mpega.library: its sound left out");
+            sw_sound = FALSE;
+        } else {
+            while (div < 4 && f / div > fmax)
+                div *= 2;
+            memset(&hook, 0, sizeof(hook));
+            hook.h_Entry = (HOOKFUNC)(APTR)hook_func;
+            memset(&ctrl, 0, sizeof(ctrl));
+            ctrl.bs_access = &hook;
+            ls[0] = &ctrl.layer_1_2;
+            ls[1] = &ctrl.layer_3;
+            for (k = 0; k < 2; k++) {
+                ls[k]->force_mono = mono;
+                ls[k]->mono.freq_div = div;
+                ls[k]->mono.quality = q;
+                ls[k]->mono.freq_max = fmax;
+                ls[k]->stereo = ls[k]->mono;
+            }
+            sw_on = TRUE;                   /* (the hook: from the queue) */
+            if (!(ms = MPEGA_open((char *)"AmigaMCE video", &ctrl))) {
+                amce_log("video", "mpega.library would not take its sound: left out");
+                sw_sound = FALSE;
+            } else {
+                st.freq = ms->frequency;
+                st.channels = ms->channels;
+                st.dec_freq = ms->dec_frequency;
+                st.dec_channels = ms->dec_channels;
+                if (!st.ahi && (st.dec_freq > 28867 || st.dec_freq < 4000))
+                    st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;
+                rate = (ULONG)st.dec_freq;
+            }
+        }
+    }
+    sprintf(m, "%s: %ld x %ld MPEG-1 by the CPU (pl_mpeg)%s; %s", log_name(), (long)st.v_w,
+            (long)st.v_h, st.v_es ? ", a bare video stream" : "",
+            sw_sound ? "its sound by mpega.library" : "no sound");
+    amce_log("video", m);
+    if (sw_sound) {
+        sprintf(m, "its sound: %ld Hz %s, decoded at %ld Hz %s through %s", (long)st.freq,
+                st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
+                st.dec_channels == 2 ? "stereo" : "mono", st.ahi ? "AHI" : "Paula");
+        amce_log("video", m);
+    }
+    st.state = ST_BUFFERING;
+    pre = (ULONG)st.dec_freq * 300 / 1000;
+    hold = period / 2;
+    drop = period > 3600 ? period : 3600;
+    while (!st.quit) {
+        BOOL busy = FALSE;
+        serve();
+        if (st.paused) {
+            if (on && st.started && !out_paused) {
+                out_stop();
+                out_paused = TRUE;
+            }
+            v_wait(20000);
+            continue;
+        }
+        if (out_paused) {
+            out_start();
+            out_paused = FALSE;
+        }
+        /* its sound decoded while there is room (a second and a half ahead) */
+        while (sw_sound && !a_done && st.f_in - st.f_out < (ULONG)st.dec_freq * 3 / 2 &&
+               st.f_in - st.f_out < FIFO_N - MPEGA_PCM_SIZE) {
+            LONG n = MPEGA_decode_frame(ms, pcm), k;
+            ULONG o;
+            if (n == -2)
+                continue;                   /* (a bad frame: the next) */
+            if (n < 0) {
+                a_done = TRUE;
+                break;
+            }
+            o = st.f_in;
+            for (k = 0; k < n; k++, o++) {
+                st.fl[o & (FIFO_N - 1)] = pcm0[k];
+                st.fr[o & (FIFO_N - 1)] = st.dec_channels == 2 ? pcm1[k] : pcm0[k];
+            }
+            st.f_in = o;
+            busy = TRUE;
+            if (!on)
+                break;                      /* (before the first picture: a frame a turn) */
+        }
+        /* the next picture, into a free buffer */
+        if (held < 0 && !done) {
+            plm_frame_t *f;
+            int s = sw_slot();
+            if (s < 0) {
+                v_wait(2000);               /* (the UI has them all) */
+                continue;
+            }
+            if (!(f = plm_video_decode(vd))) {
+                if (plm_video_has_ended(vd) || sw_ended)
+                    done = TRUE;
+            } else {
+                double t = f->time + (sw_vpts > 0 ? sw_vpts : 0);
+                swv[s].pts = (ZzU64)(t * 90000.0);
+                if (!period || st.v_shown + st.v_dropped == 0) {
+                    double fr = plm_video_get_framerate(vd);
+                    if (fr > 1.0) {
+                        period = (ULONG)(90000.0 / fr);
+                        hold = period / 2;
+                        drop = period > 3600 ? period : 3600;
+                    }
+                }
+                held = s;
+                swv[s].state = SW_READY;
+                busy = TRUE;
+                /* converted now unless already late (then let go below) */
+                {
+                    ZzU64 now = !on ? 0 : sw_sound && st.started ? v_clock(origin, f0, rate, 1)
+                                                                 : pts0 + (ZzU64)(time_ms() - t0) * 90;
+                    if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
+                        swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
+                    else
+                        plm_frame_to_rgb(f, swv[s].buf, (int)(swv_w * 3));
+                }
+            }
+        }
+        /* started: the first picture, the sound with it */
+        if (!on && held >= 0) {
+            if (sw_sound && !a_done && st.f_in - st.f_out < pre && !sw_ended) {
+                if (!busy)
+                    v_wait(2000);
+                continue;
+            }
+            f0 = st.f_out;
+            if (sw_sound && st.f_in != st.f_out)
+                out_start();
+            t0 = time_ms();
+            pts0 = swv[held].pts;
+            origin = sw_sound && sw_apts >= 0 ? (ZzU64)(sw_apts * 90000.0) : pts0;
+            on = TRUE;
+            st.state = ST_PLAYING;
+            sprintf(m, "playing: the first picture at %lu ms, its sound's at %lu ms, %s",
+                    (unsigned long)(pts0 / 90), (unsigned long)(origin / 90),
+                    st.started ? "timed by its sound" : "timed by the clock");
+            amce_log("video", m);
+        }
+        /* the held picture: given to show on time, let go if late */
+        if (on && held >= 0) {
+            BOOL raw = (swv[held].pts >> 62) & 1;
+            ZzU64 pts = swv[held].pts & ~(1ULL << 62);
+            ZzU64 master = sw_sound && st.started ? v_clock(origin, f0, rate, 1)
+                                                  : pts0 + (ZzU64)(time_ms() - t0) * 90;
+            long long drift = (long long)(pts - master);
+            if (!raw && drift > (long long)hold) {
+                ULONG us = (ULONG)((drift - (long long)hold) * 1000 / 90);
+                v_wait(us > 10000 ? 10000 : us < 1000 ? 1000 : us);
+                continue;                   /* early: soon */
+            }
+            if (raw || (drift < -(long long)drop && run < 2)) {
+                swv[held].state = SW_FREE;  /* late: let go */
+                st.v_dropped++;
+                run++;
+            } else {
+                swv[held].pts = pts;
+                swv[held].seq = ++swv_seq;
+                swv[held].state = st.v_hidden ? SW_FREE : SW_SHOW;
+                st.v_shown++;
+                run = 0;
+            }
+            if (pts >= pts0)
+                st.v_ms = (ULONG)((pts - pts0) / 90);
+            held = -1;
+            busy = TRUE;
+        }
+        if (done && held < 0)
+            break;
+        if (!busy)
+            v_wait(3000);
+    }
+    /* the end: its sound plays out */
+    while (!st.quit && st.started && st.f_in != st.f_out) {
+        ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
+        if (got & SIGBREAKF_CTRL_C)
+            break;
+        out_take();
+    }
+    sprintf(m, "%s: %lu pictures shown, %lu let go (late); %lu dropouts", log_name(),
+            (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns);
+    amce_log("video", m);
+out:
+    sw_on = FALSE;
+    if (ms)
+        MPEGA_close(ms);
+    if (vd)
+        plm_video_destroy(vd);
+    if (sw_demux)
+        plm_demux_destroy(sw_demux);
+    if (sw_fbuf)
+        plm_buffer_destroy(sw_fbuf);
+    if (sw_vbuf)
+        plm_buffer_destroy(sw_vbuf);
+    sw_demux = NULL;
+    sw_fbuf = sw_vbuf = NULL;
+    if (sw_aq)
+        FreeVec(sw_aq);
+    if (sw_in)
+        FreeVec(sw_in);
+    sw_aq = sw_in = NULL;
+    for (i = 0; i < SWV_SLOTS; i++)
+        if (swv[i].state == SW_READY)
+            swv[i].state = SW_FREE;
+    if (v_topen) {
+        CloseDevice((struct IORequest *)v_treq);
+        v_topen = FALSE;
+    }
+    if (v_treq)
+        DeleteIORequest((struct IORequest *)v_treq);
+    if (v_tport)
+        DeleteMsgPort(v_tport);
+    v_treq = NULL;
+    v_tport = NULL;
+}
+
 static void video_run(void)
 {
     struct ZzBuf in, pcm;
@@ -2951,7 +3402,10 @@ static void radio_main(void)
     if (!open_stream())
         goto out;
     if (st.video) {
-        video_run();                        /* MPEG on the ZZ9000 */
+        if (st.v_sw)
+            swv_run();                      /* MPEG-1 by the CPU */
+        else
+            video_run();                    /* MPEG on the ZZ9000 */
         goto out;
     }
     if (st.finite && !skip_id3()) {
@@ -3143,6 +3597,8 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_mp2 = vid_next.mp2;
     st.v_es = vid_next.es;
     st.v_ac3 = vid_next.ac3;
+    st.v_sw = vid_next.sw;
+    st.v_hz = vid_next.hz;
     st.v_ts = vid_next.ts;
     st.v_vpid = vid_next.vpid;
     st.v_apid = vid_next.apid;
@@ -3196,6 +3652,8 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VPro
     vid_next.tsfirst = v->ts_first;
     vid_next.w = v->w;
     vid_next.h = v->h;
+    vid_next.sw = v->sw;
+    vid_next.hz = v->a_hz;
     ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
     if (ok)
