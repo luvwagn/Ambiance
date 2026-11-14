@@ -165,7 +165,7 @@ int video_play(struct Gfx *g, const char *path, UWORD cpu, BOOL (*vol)(int d),
     int r = -1;
     char m[200];
     err[0] = 0;
-    if (!vprobe(path, &v)) {
+    if (!vprobe(path, &v, 0)) {
         amce_strlcpy(err, _("Not an MPEG video AmigaMCE can read"), errmax);
         return -1;
     }

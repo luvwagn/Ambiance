@@ -24,8 +24,9 @@ struct VProbe {
     ULONG a_hz, a_kbps;
 };
 
-/* TRUE when a sequence header was found (its size known). */
-BOOL vprobe(const char *path, struct VProbe *v);
+/* TRUE when a sequence header was found (its size known). span: the
+ * bytes read at its start and again at its end (0: 192 KB). */
+BOOL vprobe(const char *path, struct VProbe *v, ULONG span);
 const char *vprobe_kind(const struct VProbe *v);
 
 #endif

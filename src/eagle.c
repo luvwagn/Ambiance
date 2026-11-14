@@ -850,7 +850,7 @@ static const char *content_kind(const UBYTE *d, ULONG n)
 }
 
 /* The player for the module in h: tried in order of likelihood. */
-static BOOL find_player(struct Host *h, char *found, LONG fmax)
+static BOOL find_player(struct Host *h, char *found, LONG fmax, BOOL quick)
 {
     char pre[16], ext[16], ckey[16];
     const char *want[3], *ck;
@@ -871,8 +871,10 @@ static BOOL find_player(struct Host *h, char *found, LONG fmax)
         sprintf(ckey, "c:%s", ck);
     want[2] = ckey[0] ? map_find(ckey) : NULL;
     /* 0: what played this kind before (by its name, or what it holds);
-     * 1: named like its prefix or suffix, or its kind; 2: the rest */
-    for (pass = 0; pass < 3 && !ok; pass++) {
+     * 1: named like its prefix or suffix, or its kind; 2: the rest (not
+     * when quick: something else plays it, and each of some 270 players
+     * loaded from disk to ask takes seconds in all) */
+    for (pass = 0; pass < (quick ? 2 : 3) && !ok; pass++) {
         for (i = 0; i < ncands && !ok; i++) {
             struct Cand *c = &cands[i];
             if (tried[i])
@@ -944,7 +946,7 @@ static void copy_text(char *out, LONG max, const char *s)
 /* ---------------------------------------------------------- playing */
 /* The module (len bytes; AllocVec, given to this) at path: its player
  * found and started up, ready to play. FALSE and why if not. */
-BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
+BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LONG errmax)
 {
     UBYTE *chip;
     BOOL ischip = FALSE;
@@ -983,7 +985,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
             eh_plen[i] = eh_slen[i] = eh_per[i] = 0;
         }
     }
-    if (!find_player(ep.h, found, sizeof(found))) {
+    if (!find_player(ep.h, found, sizeof(found), quick)) {
         host_free(ep.h);
         ep.h = NULL;
         amce_strlcpy(err, ncands ? _("No player AmigaMCE has knows this module")

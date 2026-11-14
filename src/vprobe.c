@@ -143,7 +143,7 @@ static void scan(const UBYTE *b, LONG n, struct VProbe *v, BOOL first,
     }
 }
 
-BOOL vprobe(const char *path, struct VProbe *v)
+BOOL vprobe(const char *path, struct VProbe *v, ULONG span)
 {
     UBYTE *buf;
     BPTR fh;
@@ -151,20 +151,22 @@ BOOL vprobe(const char *path, struct VProbe *v)
     unsigned long long lo0 = 0, hi0 = 0, lo1 = 0, hi1 = 0;
     BOOL have0 = FALSE, have1 = FALSE;
     memset(v, 0, sizeof(*v));
+    if (!span || span > PROBE_BYTES)
+        span = PROBE_BYTES;
     if (!(fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
         return FALSE;
-    if (!(buf = AllocVec(PROBE_BYTES, MEMF_ANY))) {
+    if (!(buf = AllocVec(span, MEMF_ANY))) {
         Close(fh);
         return FALSE;
     }
-    n = Read(fh, buf, PROBE_BYTES);
+    n = Read(fh, buf, (LONG)span);
     if (n > 0)
         scan(buf, n, v, TRUE, &lo0, &hi0, &have0);
     Seek(fh, 0, OFFSET_END);
     size = Seek(fh, 0, OFFSET_BEGINNING);
     v->bytes = size > 0 ? (ULONG)size : 0;
-    if (size > (LONG)PROBE_BYTES * 2 && Seek(fh, size - PROBE_BYTES, OFFSET_BEGINNING) >= 0 &&
-        (n = Read(fh, buf, PROBE_BYTES)) > 0)
+    if (size > (LONG)span * 2 && Seek(fh, size - (LONG)span, OFFSET_BEGINNING) >= 0 &&
+        (n = Read(fh, buf, (LONG)span)) > 0)
         scan(buf, n, v, FALSE, &lo1, &hi1, &have1);
     Close(fh);
     FreeVec(buf);

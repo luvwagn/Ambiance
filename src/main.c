@@ -4826,14 +4826,25 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
     char line[120];
     pv_line(it->label, w);
     if (it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")) {
-        /* an MPEG file: what its headers say (read once a file) */
-        static struct VProbe vp;
-        static char probed[300];
-        static BOOL ok;
-        if (strcmp(probed, it->path)) {
-            amce_strlcpy(probed, it->path, sizeof(probed));
-            ok = vprobe(it->path, &vp);
+        /* an MPEG file: what its headers say (64 KB of its start and end
+         * read once a file, the last 8 kept: a list moved through is not
+         * read again) */
+        static struct { char path[256]; struct VProbe vp; BOOL ok; } pc[8];
+        static int pc_next;
+        int q;
+        BOOL ok;
+        struct VProbe vp;
+        for (q = 0; q < 8; q++)
+            if (pc[q].path[0] && !strcmp(pc[q].path, it->path))
+                break;
+        if (q == 8) {
+            q = pc_next;
+            pc_next = (pc_next + 1) & 7;
+            amce_strlcpy(pc[q].path, it->path, sizeof(pc[q].path));
+            pc[q].ok = vprobe(it->path, &pc[q].vp, 64UL * 1024);
         }
+        ok = pc[q].ok;
+        vp = pc[q].vp;
         if (ok) {
             char t[16];
             sprintf(line, "%s, %ld x %ld", vprobe_kind(&vp), (long)vp.w, (long)vp.h);
