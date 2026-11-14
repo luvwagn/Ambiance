@@ -241,6 +241,14 @@ static struct {
     ULONG v_hz;                     /* its sound's rate (the probe's) */
     BOOL v_ac3;                     /* ...AC3 */
     BOOL v_ac3cpu;                  /* its AC3 decoded by the CPU (ac3.library), not the card */
+    /* for its information (st_video_stats; the "i" key) */
+    volatile ULONG v_bytes;         /* the file's (disc's) bytes read so far */
+    volatile LONG v_drift;          /* the last picture's time less the sound's (ms) */
+    volatile ULONG v_bskipped;      /* B pictures passed over (the CPU's) */
+    volatile ULONG v_akbps;         /* its sound's bit rate (kbit/s), 0 not known */
+    volatile UBYTE v_adec;          /* who decodes it: VSD_ */
+    volatile UBYTE v_achans, v_alfe;    /* its own channels (AC3's 5.1: 5 and 1) */
+    ULONG v_probe_kbps;             /* (the probe's, for MPEG audio) */
     UBYTE v_ts;                     /* a transport stream (its packet size): packed as it goes */
     UWORD v_vpid, v_apid;
     ULONG v_tsfirst;
@@ -254,8 +262,8 @@ static struct {
 static struct {                     /* st_start_video's */
     struct DvdPlay *dvd;
     BOOL on, mpeg2, mp2, es, ac3, sw, ac3cpu;
-    UBYTE ts;
-    ULONG hz;
+    UBYTE ts, achans;
+    ULONG hz, akbps;
     UWORD w, h, vpid, apid;
     ULONG tsfirst;
 } vid_next;
@@ -2596,8 +2604,10 @@ static void sw_fload(plm_buffer_t *b, void *user)
     (void)user;
     if (n <= 0)
         plm_buffer_signal_end(b);
-    else
+    else {
+        st.v_bytes += (ULONG)n;
         plm_buffer_write(b, sw_in, (size_t)n);
+    }
 }
 
 /* The video decoder wants more: packets until a video one (a bare stream:
@@ -2609,8 +2619,10 @@ static void sw_vload(plm_buffer_t *b, void *user)
         LONG n = Read(st.fh, sw_in, SW_IN);
         if (n <= 0)
             plm_buffer_signal_end(b);
-        else
+        else {
+            st.v_bytes += (ULONG)n;
             plm_buffer_write(b, sw_in, (size_t)n);
+        }
         return;
     }
     {
@@ -2763,6 +2775,9 @@ static void swv_run(void)
                 if (!st.ahi && (st.dec_freq > 28867 || st.dec_freq < 4000))
                     st.dec_freq = st.dec_freq > 28867 ? st.dec_freq / 2 : 22050;
                 rate = (ULONG)st.dec_freq;
+                st.v_adec = VSD_MPEGA;
+                st.v_akbps = st.v_probe_kbps;
+                st.v_achans = (UBYTE)ms->channels;
             }
         }
     }
@@ -2900,6 +2915,8 @@ static void swv_run(void)
             ZzU64 master = sw_sound && st.started ? v_clock(origin, f0, rate, 1)
                                                   : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(pts - master);
+            st.v_drift = (LONG)(drift / 90);
+            st.v_bskipped = plm_video_get_skipped_b(vd);
             if (!raw && drift > (long long)hold) {
                 ULONG us = (ULONG)((drift - (long long)hold) * 1000 / 90);
                 v_wait(us > 10000 ? 10000 : us < 1000 ? 1000 : us);
@@ -3116,6 +3133,8 @@ static void video_run(void)
                         sys_seen = sys_fix(in.data, (ULONG)n);
                     if (n > 0 && csound)
                         a3_tap(in.data, (ULONG)n);
+                    if (n > 0)
+                        st.v_bytes += (ULONG)n;
                     pend_off = 0;
                     pend_len = (ULONG)n;
                 }
@@ -3173,6 +3192,10 @@ static void video_run(void)
                         st.channels = (LONG)chans;
                         st.dec_freq = (LONG)(rate / div);
                         st.dec_channels = (LONG)chans;
+                        st.v_adec = VSD_CARD;
+                        st.v_akbps = st.v_ac3 ? 0 : st.v_probe_kbps;
+                        if (!st.v_ac3)
+                            st.v_achans = (UBYTE)chans;
                         sprintf(m, "its sound: MP2 %lu Hz %s, played at %lu Hz through %s",
                                 (unsigned long)rate, chans == 2 ? "stereo" : "mono",
                                 (unsigned long)(rate / div), st.ahi ? "AHI" : "Paula");
@@ -3256,6 +3279,10 @@ static void video_run(void)
                     st.dec_freq = (LONG)(rate / div);
                     st.dec_channels = 2;
                     origin = a3.pts0;
+                    st.v_adec = VSD_CPU_AC3;
+                    st.v_akbps = ai.ai_BitRate / 1000;
+                    st.v_achans = (UBYTE)ai.ai_Channels;
+                    st.v_alfe = (UBYTE)ai.ai_LFE;
                     sprintf(m, "its sound: AC3 %lu Hz, %lu kbit/s, %lu.%lu channels, mixed to stereo, "
                                "played at %lu Hz through %s; it begins at %lu ms",
                             (unsigned long)rate, (unsigned long)(ai.ai_BitRate / 1000),
@@ -3357,6 +3384,7 @@ static void video_run(void)
                                                : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(held.pts - master);
             int op = st.v_hidden ? ZZ_DISCARD : ZZ_PRESENT;   /* (unseen: on time, let go) */
+            st.v_drift = (LONG)(drift / 90);
             if (drift > (long long)hold) {
                 BOOL starved = (sound || csound) && st.f_in - st.f_out < (ULONG)st.dec_freq / 10;
                 if (!starved) {
@@ -4055,6 +4083,12 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_es = vid_next.es;
     st.v_ac3 = vid_next.ac3;
     st.v_ac3cpu = vid_next.ac3cpu;
+    st.v_probe_kbps = vid_next.akbps;
+    st.v_bytes = st.v_bskipped = st.v_akbps = 0;
+    st.v_drift = 0;
+    st.v_adec = VSD_NONE;
+    st.v_achans = vid_next.achans;
+    st.v_alfe = 0;
     st.v_sw = vid_next.sw;
     st.v_hz = vid_next.hz;
     st.v_ts = vid_next.ts;
@@ -4112,6 +4146,8 @@ BOOL st_start_video(const char *path, UWORD master, UWORD cpu, const struct VPro
     vid_next.h = v->h;
     vid_next.sw = v->sw;
     vid_next.hz = v->a_hz;
+    vid_next.akbps = v->a_kbps;
+    vid_next.achans = v->a_chans;
     vid_next.ac3cpu = vid_next.ac3 && ac3_by_cpu;
     ok = st_start(path, master, cpu, TRUE, range_from, 0, err, errmax);
     memset(&vid_next, 0, sizeof(vid_next));
@@ -4146,6 +4182,28 @@ BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VPro
 void st_video_show(BOOL shown)
 {
     st.v_hidden = !shown;
+}
+
+/* What a video's playing is like now, for its information (anim.c). */
+void st_video_stats(struct StVStats *v)
+{
+    ULONG held = st.f_in - st.f_out;
+    memset(v, 0, sizeof(*v));
+    v->shown = st.v_shown;
+    v->dropped = st.v_dropped;
+    v->bskipped = st.v_bskipped;
+    v->underruns = st.underruns;
+    v->bytes = st.v_bytes;
+    v->drift_ms = st.v_drift;
+    v->a_dec = st.v_adec;
+    v->a_kbps = st.v_akbps;
+    v->a_chans = st.v_achans;
+    v->a_lfe = st.v_alfe;
+    v->a_hz = st.v_adec != VSD_NONE ? (ULONG)st.freq : 0;
+    v->out_hz = st.v_adec != VSD_NONE ? (ULONG)st.dec_freq : 0;
+    v->fifo_ms = st.dec_freq > 0 ? (ULONG)((unsigned long long)held * 1000 / (ULONG)st.dec_freq) : 0;
+    v->ahi = st.ahi;
+    v->started = st.started;
 }
 
 /* Pictures shown and let go (a video). */

@@ -202,6 +202,8 @@ struct DvdPlay {
     UBYTE a_id, a_sub;                      /*   its packets: stream id, and in private
                                              *   stream 1 its substream (0 none) */
     UBYTE a_ch;
+    char a_lang[4];                         /*   its language ("en"), "" not given */
+    LONG a_track, a_tracks;                 /*   which of how many (from 1) */
     char vol[32];
     volatile LONG chapter, chapters;        /* (dvdplay_read's, read by AmigaMCE) */
     ULONG ms;                               /* the title's length */
@@ -336,6 +338,10 @@ static void choose_audio(struct DvdPlay *dp)
         DvdSetStream(dp->dvd, DVDS_AUDIO, k);
     dp->a_fmt = si[k].format;
     dp->a_ch = (UBYTE)si[k].channels;
+    memcpy(dp->a_lang, si[k].lang, 3);
+    dp->a_lang[3] = 0;
+    dp->a_track = k + 1;
+    dp->a_tracks = in.audio_count;
     if (si[k].format == DVDA_AC3) {
         dp->a_id = 0xBD;
         dp->a_sub = (UBYTE)(0x80 + si[k].physical);
@@ -627,6 +633,20 @@ BOOL dvdplay_chapter(struct DvdPlay *dp, int dir, ULONG *at)
         return TRUE;
     }
     return start(dp, dp->idx > 0 ? dp->idx - 1 : 0, 0);
+}
+
+void dvdplay_where(struct DvdPlay *dp, struct DvdWhere *w)
+{
+    w->title = dp->title;
+    w->programme = dp->idx + 1;
+    w->programmes = dp->n;
+    w->chapter = dp->chapter;
+    w->chapters = dp->chapters;
+    w->a_track = dp->a_fmt >= 0 ? dp->a_track : 0;
+    w->a_tracks = dp->a_tracks;
+    w->a_ch = dp->a_ch;
+    w->a_ac3 = dp->a_fmt == DVDA_AC3;
+    memcpy(w->a_lang, dp->a_lang, sizeof(w->a_lang));
 }
 
 BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir)

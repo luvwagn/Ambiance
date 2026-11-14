@@ -50,6 +50,16 @@ LONG dvdplay_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max);
  * while dvdplay_read is not being called. */
 BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at);
 BOOL dvdplay_chapter(struct DvdPlay *dp, int dir, ULONG *at);
+/* Where it is, for its information: the title, which programme of how
+ * many, the chapter of how many, its sound track (0 none) of how many,
+ * its channels, AC-3 or not, its language. */
+struct DvdWhere {
+    LONG title, programme, programmes, chapter, chapters, a_track, a_tracks;
+    UBYTE a_ch;
+    BOOL a_ac3;
+    char a_lang[4];
+};
+void dvdplay_where(struct DvdPlay *dp, struct DvdWhere *w);
 BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir);  /* somewhere to go (asks nothing of the disc) */
 BOOL dvdplay_next_title(struct DvdPlay *dp);    /* another programme after this one */
 void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v);  /* v: the title now (size, length) */

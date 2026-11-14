@@ -714,6 +714,18 @@ struct DvdPlay;
 BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VProbe *v, char *err,
                   LONG errmax);   /* a DVD's film (dvdplay.c) */
 void st_video_counts(ULONG *shown, ULONG *dropped);
+/* A video's playing now, for its information (the "i" key). */
+enum { VSD_NONE, VSD_CARD, VSD_CPU_AC3, VSD_MPEGA };   /* who decodes its sound */
+struct StVStats {
+    ULONG shown, dropped, bskipped, underruns;  /* pictures shown, let go late, B passed over */
+    ULONG bytes;                /* the file's (disc's) bytes read so far */
+    LONG drift_ms;              /* the last picture's time less the sound's */
+    ULONG fifo_ms;              /* its sound decoded ahead */
+    ULONG a_hz, out_hz, a_kbps; /* its sound's rate, played at; its bit rate (0: not known) */
+    UBYTE a_dec, a_chans, a_lfe;
+    BOOL ahi, started;
+};
+void st_video_stats(struct StVStats *v);
 void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let go unseen) */
 /* A video decoded by the CPU: the newest picture taken (FALSE none new),
  * made 24-bit RGB or the overlay's packed YUV (Y0 Cb Y1 Cr); its buffers

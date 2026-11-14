@@ -1163,6 +1163,18 @@ static int ctl_enter(void)
 static struct Gfx *anim_g;      /* AmigaMCE's screen or window, while playing on it */
 #define RESIZE_SETTLE 150       /* ms after a window's last NEWSIZE (as main.c's) */
 
+/* A video's information (the "i" key): a slice beneath its controls, its
+ * picture, sound and playing, drawn again each second. Kept on or off
+ * from one video to the next. vi.h is 0 while it is off, and for ANIMs. */
+static struct {
+    WORD h;                         /* its height (0: none) */
+    BOOL dirty;                     /* to be drawn again now */
+    ULONG at, shown0, bytes0, t0, t_first, bytes_first;
+    ULONG fps10, kbps;              /* measured over the last second */
+} vi;
+static BOOL vi_want;                /* shown (the last video's choice) */
+static BOOL vi_keys;                /* a video: "i" means it */
+
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
@@ -1213,6 +1225,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = ctl_press(BT_FULL);
             else if (vid_dvd && code == 0x36 && !r) /* N, P: a DVD's next, previous chapter */
                 r = 7;
+            else if (vi_keys && code == 0x17 && !r) /* I: a video's information */
+                r = 9;
             else if (vid_dvd && code == 0x19 && !r)
                 r = 8;
             else if (code == 0x4F)                  /* Left, Right: the focus */
@@ -1234,6 +1248,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = ctl_press(BT_FULL);
             else if (vid_dvd && (code == 'n' || code == 'N') && !r)
                 r = 7;
+            else if (vi_keys && (code == 'i' || code == 'I') && !r)
+                r = 9;
             else if (vid_dvd && (code == 'p' || code == 'P') && !r)
                 r = 8;
         } else if (cl == IDCMP_MOUSEBUTTONS) {
@@ -1666,6 +1682,8 @@ static int strip_hit(WORD x, WORD y)
     int i;
     if (y < st.y)
         return -1;                          /* the picture: pauses */
+    if (y >= st.y + st.h)
+        return -2;                          /* a video's information: nothing */
     if (!ctl.shown)
         return -1;                          /* hidden: anywhere pauses */
     for (i = 0; i < ctl.nbtn; i++)
@@ -2004,10 +2022,10 @@ static BOOL fs_enter(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay)
 {
     if (!gfx_fs_enter(g))
         return FALSE;
-    st.y = g->h - st.h;                     /* the controls at its foot */
+    st.y = g->h - st.h - vi.h;              /* the controls at its foot */
     if (!fs_pbm(g, w, h, ax, ay)) {
         gfx_fs_leave(g);
-        st.y = g->h - st.h;
+        st.y = g->h - st.h - vi.h;
         fs_pbm(g, w, h, ax, ay);
         return FALSE;
     }
@@ -2024,7 +2042,7 @@ static void fs_leave(struct Gfx *g)
         lay.pbm = NULL;
     }
     gfx_fs_leave(g);
-    st.y = g->h - st.h;
+    st.y = g->h - st.h - vi.h;
 }
 
 /* 0 played, -1 an error (err), 1 too slow here: the caller plays it on a
@@ -2058,7 +2076,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         ay = (camg & LACE) ? 1 : 2;
     }
     st.h = g->font_h + GU(g, 12);
-    st.y = g->h - st.h;
+    st.y = g->h - st.h - vi.h;
     memset(&lay, 0, sizeof(lay));
     if (!(lay.xo = AllocVec((w + 1) * sizeof(UWORD), MEMF_ANY)) ||
         !(lay.yo = AllocVec((h + 1) * sizeof(UWORD), MEMF_ANY)) || !lay_out(g, w, h, ax, ay, FALSE)) {
@@ -2537,7 +2555,7 @@ restart:
                     ctl.focus = focus;
                     continue;
                 }
-                st.y = g->h - st.h;         /* the controls at its foot */
+                st.y = g->h - st.h - vi.h;  /* the controls at its foot */
                 fs_pbm(g, w, h, ax, ay);    /* the picture's bitmap, for the new size */
                 strip_setup(g);
                 ctl.nbtn = BT_N;
@@ -2868,7 +2886,8 @@ static BOOL vid_place(struct Gfx *g)
         /* it moved (the controls came or went): what it uncovered is the
          * screen's colour 0 (Workbench's grey, a window's backfill), so
          * black there, beside and above the controls */
-        y1 = sf.lv > 0 ? st.y : g->h;
+        y1 = sf.lv > 0 ? st.y : g->h - vi.h;
+        vi.dirty = TRUE;
         FillPixelArray(g->rp, 0, 0, g->w, y1, 0x000000);
         win_show(g, TRUE, FALSE, 0, 0, g->w, y1);
     }
@@ -2884,7 +2903,8 @@ static BOOL vid_place(struct Gfx *g)
  * display, else above the controls. */
 static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
 {
-    LONG W = g->w, top = full ? 0 : GU(g, 4), H = (full ? g->h : st.y - GU(g, 4)) - top, dw, dh;
+    LONG W = g->w, top = full ? 0 : GU(g, 4), dw, dh;
+    LONG H = (full ? g->h - vi.h : st.y - GU(g, 4)) - top;
     if (W < 16)
         W = 16;
     if (H < 16)
@@ -2906,6 +2926,135 @@ static void vid_lay(struct Gfx *g, UWORD sw, BOOL full)
     sf.lv = 0;
     sf.drawn = FALSE;
     vid_was_h = -1;
+    vi.dirty = TRUE;
+}
+
+/* The information's height: three lines. */
+static WORD vi_height(struct Gfx *g)
+{
+    return (WORD)(3 * (g->font_h + GU(g, 2)) + GU(g, 6));
+}
+
+/* "1.23" from hundredths. */
+static void vi_dec2(char *out, ULONG v100)
+{
+    sprintf(out, "%lu.%02lu", (unsigned long)(v100 / 100), (unsigned long)(v100 % 100));
+}
+
+/* The information, drawn again each second (at once if dirty): what the
+ * picture is and who shows it; the sound, who decodes it and where it
+ * goes; how it is playing (the data's rate now and on average, pictures
+ * shown and late, B pictures passed over, the picture against the sound,
+ * dropouts) and, a DVD's, where on the disc. */
+static void vi_draw(struct Gfx *g, UWORD sw)
+{
+    struct StVStats v;
+    char l[3][240], a[16], b[16];
+    static const char *const lab[3] = { "Video", "Sound", "Playing" };
+    ULONG now = time_ms();
+    WORD y0, lh, lw, vx;
+    int i;
+    if (!vi.h || (!vi.dirty && vi.at && now - vi.at < 1000))
+        return;
+    vi.at = now;
+    vi.dirty = FALSE;
+    st_video_stats(&v);
+    if (v.bytes < vi.bytes0 || v.shown < vi.shown0) {
+        vi.t0 = 0;                          /* (started again: a seek) */
+        vi.t_first = 0;
+    }
+    if (vi.t0 && now - vi.t0 >= 300) {
+        ULONG dt = now - vi.t0;
+        vi.fps10 = (v.shown - vi.shown0) * 10000UL / dt;
+        vi.kbps = (ULONG)((unsigned long long)(v.bytes - vi.bytes0) * 8ULL / dt);
+    }
+    if (!vi.t0 || now - vi.t0 >= 300) {
+        vi.t0 = now;
+        vi.shown0 = v.shown;
+        vi.bytes0 = v.bytes;
+    }
+    if (!vi.t_first) {
+        vi.t_first = now;
+        vi.bytes_first = v.bytes;
+    }
+    /* the picture */
+    sprintf(l[0], "%s %lu x %lu, %lu.%02lu:1, %lu.%03lu fps (%lu.%lu shown a second); %s, %s",
+            vid.mpeg2 ? "MPEG-2" : "MPEG-1", (unsigned long)vid.w, (unsigned long)vid.h,
+            (unsigned long)(sw * 100UL / vid.h / 100), (unsigned long)(sw * 100UL / vid.h % 100),
+            (unsigned long)(vid.fps_milli / 1000), (unsigned long)(vid.fps_milli % 1000),
+            (unsigned long)(vi.fps10 / 10), (unsigned long)(vi.fps10 % 10),
+            vid_dvd ? "a DVD" : vid.ts ? "a transport stream" : vid.ps ? "a program stream"
+                                                              : "a bare video stream",
+            vid.sw ? "decoded by the CPU (pl_mpeg)" : "decoded by the ZZ9000");
+    sprintf(l[0] + strlen(l[0]), ", %s %ld x %ld", vo_shown() ? "on the overlay at" : "drawn at",
+            (long)lay.dw, (long)lay.dh);
+    /* the sound */
+    if (v.a_dec == VSD_NONE) {
+        strcpy(l[1], vid_sound ? "not yet" : "none");
+        if (vid.a_other)
+            sprintf(l[1] + strlen(l[1]), " (%s: not played)", vid.a_other);
+    } else {
+        if (vid.ac3)
+            strcpy(l[1], "AC-3");
+        else
+            sprintf(l[1], "MPEG-%s layer %s",
+                    vid.a_version == 1 ? "1" : vid.a_version == 2 ? "2" : "2.5",
+                    vid.a_layer == 1 ? "I" : vid.a_layer == 3 ? "III" : "II");
+        if (v.a_chans == 1 && !v.a_lfe)
+            strcpy(a, "mono");
+        else if (v.a_chans == 2 && !v.a_lfe)
+            strcpy(a, "stereo");
+        else
+            sprintf(a, "%lu%s channels", (unsigned long)v.a_chans, v.a_lfe ? ".1" : "");
+        sprintf(l[1] + strlen(l[1]), " %lu Hz, %s", (unsigned long)v.a_hz, a);
+        if (v.a_kbps)
+            sprintf(l[1] + strlen(l[1]), ", %lu kbit/s", (unsigned long)v.a_kbps);
+        sprintf(l[1] + strlen(l[1]), "; decoded by %s, played at %lu Hz through %s, %lu.%lu s ahead",
+                v.a_dec == VSD_CARD ? "the ZZ9000" : v.a_dec == VSD_CPU_AC3 ? "the CPU (ac3.library)"
+                                                                            : "mpega.library",
+                (unsigned long)v.out_hz, v.ahi ? "AHI" : "Paula", (unsigned long)(v.fifo_ms / 1000),
+                (unsigned long)(v.fifo_ms % 1000 / 100));
+    }
+    /* how it plays */
+    vi_dec2(a, vi.kbps / 10);
+    strcpy(l[2], "data ");
+    strcat(l[2], a);
+    strcat(l[2], " Mbit/s now");
+    if (now - vi.t_first >= 2000) {
+        vi_dec2(b, (ULONG)((unsigned long long)(v.bytes - vi.bytes_first) * 8ULL / (now - vi.t_first) / 10));
+        sprintf(l[2] + strlen(l[2]), ", %s on average", b);
+    }
+    sprintf(l[2] + strlen(l[2]), "; %lu pictures shown, %lu late", (unsigned long)v.shown,
+            (unsigned long)v.dropped);
+    if (vid.sw)
+        sprintf(l[2] + strlen(l[2]), ", %lu B passed over", (unsigned long)v.bskipped);
+    if (v.a_dec != VSD_NONE && v.started)
+        sprintf(l[2] + strlen(l[2]), "; picture %s sound %ld ms; %lu dropouts",
+                v.drift_ms < 0 ? "after" : "before", (long)(v.drift_ms < 0 ? -v.drift_ms : v.drift_ms),
+                (unsigned long)v.underruns);
+    if (vid_dvd) {
+        struct DvdWhere w;
+        dvdplay_where(vid_dvd, &w);
+        sprintf(l[2] + strlen(l[2]), "; title %ld", (long)w.title);
+        if (w.programmes > 1)
+            sprintf(l[2] + strlen(l[2]), " (%ld of %ld)", (long)w.programme, (long)w.programmes);
+        sprintf(l[2] + strlen(l[2]), ", chapter %ld of %ld", (long)w.chapter, (long)w.chapters);
+        if (w.a_track)
+            sprintf(l[2] + strlen(l[2]), ", sound track %ld of %ld%s%s%s", (long)w.a_track,
+                    (long)w.a_tracks, w.a_lang[0] ? " (" : "", w.a_lang, w.a_lang[0] ? ")" : "");
+    }
+    /* drawn: its labels dim, at the window's foot beneath the controls */
+    y0 = g->h - vi.h;
+    lh = g->font_h + GU(g, 2);
+    lw = gfx_textlen(g, lab[2], TS_SMALL) + GU(g, 8);
+    vx = GU(g, 8) + lw;
+    gfx_fill(g, 0, y0, g->w - 1, g->h - 1, PEN_BG);
+    for (i = 0; i < 3; i++) {
+        WORD y = y0 + GU(g, 3) + i * lh;
+        gfx_text(g, GU(g, 8), y, lab[i], PEN_DIM, PEN_BG, 0, TS_SMALL);
+        gfx_text(g, vx, y, l[i], PEN_TEXT, PEN_BG, g->w - vx - GU(g, 8), TS_SMALL);
+    }
+    win_show(g, TRUE, FALSE, 0, y0, g->w, vi.h);
 }
 
 static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
@@ -2988,8 +3137,11 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         vid_sound = FALSE;
         return -1;
     }
+    memset(&vi, 0, sizeof(vi));
+    vi_keys = TRUE;
+    vi.h = vi_want ? vi_height(g) : 0;
     st.h = g->font_h + GU(g, 12);
-    st.y = g->h - st.h;
+    st.y = g->h - st.h - vi.h;
     st.cw = st.h + GU(g, 6);
     st.x0 = GU(g, 8);
     lay.can_full = TRUE;
@@ -3114,6 +3266,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         }
         {
             BOOL sdrew = strip_tick(g, paused, at, vid.ms, name);
+            vi_draw(g, sw);
             if (whole)
                 gfx_window_show(g);         /* a window: all of it, once laid out */
             else
@@ -3203,13 +3356,24 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             }
             vid_lay(g, sw, anim_full);
             whole = TRUE;
+        } else if (r == 9) {
+            /* its information shown or not: the controls above it, the
+             * picture above them, laid out again */
+            vi_want = !vi_want;
+            vi.h = vi_want ? vi_height(g) : 0;
+            vi.at = 0;
+            st.y = g->h - st.h - vi.h;
+            vid_lay(g, sw, lay.full);
+            whole = TRUE;
+            sprintf(m, "its information %s", vi_want ? "shown" : "hidden");
+            amce_log("video", m);
         } else if (r == 6) {
             /* the window resized: laid out again at its new size */
             int focus = ctl.focus;
             gfx_resized_at = 0;
             strip_cleanup(g);
             if (gfx_window_resize(g))
-                st.y = g->h - st.h;
+                st.y = g->h - st.h - vi.h;
             strip_setup(g);
             ctl.nbtn = BT_N;
             ctl.focus = focus;
@@ -3251,6 +3415,8 @@ out:
     FreeVec(lay.yo);
     memset(&lay, 0, sizeof(lay));
     vid_sound = FALSE;
+    vi_keys = FALSE;
+    vi.h = 0;                               /* (ANIMs have none) */
     return result;
 }
 
