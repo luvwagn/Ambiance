@@ -2882,6 +2882,9 @@ static inline uint8_t plm_clamp(int n) {
 #define PLM_KEEP(x)
 #endif
 static inline int plm_mul362(int x) {
+	if (__builtin_constant_p(x)) {
+		return x * 362;
+	}
 	int t = x + (int)((unsigned int)x << 2);       // 5x
 	PLM_KEEP(t);
 	t = t + (int)((unsigned int)t << 3);           // 45x
@@ -2890,6 +2893,9 @@ static inline int plm_mul362(int x) {
 	return t + t;
 }
 static inline int plm_mul196(int x) {
+	if (__builtin_constant_p(x)) {
+		return x * 196;
+	}
 	int t = x + (int)((unsigned int)x << 1);       // 3x
 	PLM_KEEP(t);
 	t = x + (int)((unsigned int)t << 4);           // 49x
@@ -3619,24 +3625,62 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	}
 
 	// Decode AC coefficients (+DC for non-intra)
+	// (AmigaMCE: as pl_mpeg did, with what it uses kept to hand; a code of
+	// 10 bits or fewer read with the bit or two after it, its sign or end
+	// of block's second, from one longword, where the buffer holds 4 more
+	// bytes: 25 bits)
+	plm_buffer_t *buffer = self->buffer;
+	const int intra = self->macroblock_intra;
+	const int quantizer_scale = self->quantizer_scale;
+	int *block_data = self->block_data;
+	unsigned int block_cols = self->block_cols, block_rows = self->block_rows;
+	int block_n = self->block_n;
 	int level = 0;
 	while (TRUE) {
 		int run = 0;
-		uint16_t coeff = (uint16_t)plm_buffer_read_vlc_fast(self->buffer, (const plm_vlc_t *)PLM_VIDEO_DCT_COEFF, plm_fast_dct_coeff, PLM_VLC_FAST_COEFF_BITS);
+		uint16_t coeff;
+		size_t bi = buffer->bit_index;
+		size_t bytei = bi >> 3;
+		if (buffer->length - bytei >= 4) {
+			uint32_t w = PLM_BE32(buffer->bytes + bytei) << (bi & 7);
+			const plm_vlc_fast_t *e = &plm_fast_dct_coeff[w >> (32 - PLM_VLC_FAST_COEFF_BITS)];
+			int length = e->length;
+			coeff = (uint16_t)e->value;
+			if (length && coeff != 0xffff) {
+				w <<= length;
+				if (coeff == 0x0001 && n > 0) {
+					length++;
+					if (!(w & 0x80000000u)) {
+						// end_of_block
+						buffer->bit_index = bi + length;
+						break;
+					}
+					w <<= 1;
+				}
+				run = coeff >> 8;
+				level = coeff & 0xff;
+				if (w & 0x80000000u) {
+					level = -level;
+				}
+				buffer->bit_index = bi + length + 1;
+				goto coded;
+			}
+		}
+		coeff = (uint16_t)plm_buffer_read_vlc_fast(buffer, (const plm_vlc_t *)PLM_VIDEO_DCT_COEFF, plm_fast_dct_coeff, PLM_VLC_FAST_COEFF_BITS);
 
-		if ((coeff == 0x0001) && (n > 0) && (plm_buffer_read(self->buffer, 1) == 0)) {
+		if ((coeff == 0x0001) && (n > 0) && (plm_buffer_read(buffer, 1) == 0)) {
 			// end_of_block
 			break;
 		}
 		if (coeff == 0xffff) {
 			// escape
-			run = plm_buffer_read(self->buffer, 6);
-			level = plm_buffer_read(self->buffer, 8);
+			run = plm_buffer_read(buffer, 6);
+			level = plm_buffer_read(buffer, 8);
 			if (level == 0) {
-				level = plm_buffer_read(self->buffer, 8);
+				level = plm_buffer_read(buffer, 8);
 			}
 			else if (level == 128) {
-				level = plm_buffer_read(self->buffer, 8) - 256;
+				level = plm_buffer_read(buffer, 8) - 256;
 			}
 			else if (level > 128) {
 				level = level - 256;
@@ -3645,13 +3689,17 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 		else {
 			run = coeff >> 8;
 			level = coeff & 0xff;
-			if (plm_buffer_read(self->buffer, 1)) {
+			if (plm_buffer_read(buffer, 1)) {
 				level = -level;
 			}
 		}
 
+	coded:
 		n += run;
 		if (n < 0 || n >= 64) {
+			self->block_cols = block_cols;
+			self->block_rows = block_rows;
+			self->block_n = block_n;
 			return; // invalid
 		}
 
@@ -3660,12 +3708,12 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 
 		// Dequantize, oddify, clip
 		level = (unsigned)level << 1;
-		if (!self->macroblock_intra) {
+		if (!intra) {
 			level += (level < 0 ? -1 : 1);
 		}
 		// (AmigaMCE: 16-bit multiplies, the same products: the level is
 		// at most 513 either way, the scale 31 and the matrix's 255)
-		level = ((int)(int16_t)((int)(int16_t)level * (int)(int16_t)self->quantizer_scale) *
+		level = ((int)(int16_t)((int)(int16_t)level * (int)(int16_t)quantizer_scale) *
 			(int)(int16_t)quant_matrix[de_zig_zagged]) >> 4;
 		if ((level & 1) == 0) {
 			level -= level > 0 ? 1 : -1;
@@ -3678,15 +3726,18 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 		}
 
 		// Save premultiplied coefficient (AmigaMCE: and where it is)
-		self->block_data[de_zig_zagged] = (int)(int16_t)level *
+		block_data[de_zig_zagged] = (int)(int16_t)level *
 			(int)(int16_t)PLM_VIDEO_PREMULTIPLIER_MATRIX[de_zig_zagged];
-		self->block_cols |= 1u << (de_zig_zagged & 7);
-		self->block_rows |= 1u << (de_zig_zagged >> 3);
-		if (self->block_n < 64) {
-			self->block_at[self->block_n] = (uint8_t)de_zig_zagged;
+		block_cols |= 1u << (de_zig_zagged & 7);
+		block_rows |= 1u << (de_zig_zagged >> 3);
+		if (block_n < 64) {
+			self->block_at[block_n] = (uint8_t)de_zig_zagged;
 		}
-		self->block_n++;
+		block_n++;
 	}
+	self->block_cols = block_cols;
+	self->block_rows = block_rows;
+	self->block_n = block_n;
 
 	// Move block to its place
 	uint8_t *d;
@@ -3749,29 +3800,58 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	plm_video_idct_put(self, d + di, dw, self->macroblock_intra);
 }
 
-// AmigaMCE: pl_mpeg's IDCT (plm_video_idct, below) in one direction: the
-// same sums and roundings, OUT(k, v) given each result. Given constant
-// zeros, the compiler leaves out what they add nothing to: the same
-// numbers, sooner.
-#define PLM_IDCT_1D(c0, c1, c2, c3, c4, c5, c6, c7, OUT) do { \
+// AmigaMCE: pl_mpeg's IDCT (plm_video_idct, below) in one direction, in
+// its two halves: the even inputs' (c0, c2, c4, c6: y3 to y6) and the odd
+// inputs' (c1, c3, c5, c7: b7, x4, x0, y7), with the same sums and
+// roundings, each rounding within one half. A half of zeros gives zeros
+// (each rounding of 0 is 0), so it is left out where its inputs are all
+// zero, and given constant zeros the compiler leaves out what they add
+// nothing to: the same numbers, sooner. PLM_IDCT_SPLIT: by which inputs
+// may not be zero (PLM_IDCT_HALVES: each half's 0 none, 1 its first, 2
+// its first two, 3 all four), A(k) each input, OUT(k, v) each result.
+#define PLM_IDCT_EVEN(c0, c2, c4, c6) do { \
 	int b1 = (c4); \
 	int b3 = (c2) + (c6); \
+	int m0 = (c0); \
+	int x1 = m0 - b1; \
+	int x2 = ((plm_mul362((c2) - (c6)) + 128) >> 8) - b3; \
+	int x3 = m0 + b1; \
+	y3 = x1 + x2; \
+	y4 = x3 + b3; \
+	y5 = x1 - x2; \
+	y6 = x3 - b3; \
+} while (0)
+
+#define PLM_IDCT_ODD(c1, c3, c5, c7) do { \
 	int b4 = (c5) - (c3); \
 	int tmp1 = (c1) + (c7); \
 	int tmp2 = (c3) + (c5); \
 	int b6 = (c1) - (c7); \
-	int b7 = tmp1 + tmp2; \
-	int m0 = (c0); \
-	int x4 = ((b6 * 473 - plm_mul196(b4) + 128) >> 8) - b7; \
-	int x0 = x4 - ((plm_mul362(tmp1 - tmp2) + 128) >> 8); \
-	int x1 = m0 - b1; \
-	int x2 = ((plm_mul362((c2) - (c6)) + 128) >> 8) - b3; \
-	int x3 = m0 + b1; \
-	int y3 = x1 + x2; \
-	int y4 = x3 + b3; \
-	int y5 = x1 - x2; \
-	int y6 = x3 - b3; \
-	int y7 = -x0 - ((b4 * 473 + plm_mul196(b6) + 128) >> 8); \
+	b7 = tmp1 + tmp2; \
+	x4 = ((b6 * 473 - plm_mul196(b4) + 128) >> 8) - b7; \
+	x0 = x4 - ((plm_mul362(tmp1 - tmp2) + 128) >> 8); \
+	y7 = -x0 - ((b4 * 473 + plm_mul196(b6) + 128) >> 8); \
+} while (0)
+
+#define PLM_IDCT_HALVES(mask, ev, ov) do { \
+	ev = !((mask) & 0x55) ? 0 : !((mask) & 0x54) ? 1 : !((mask) & 0x50) ? 2 : 3; \
+	ov = !((mask) & 0xaa) ? 0 : !((mask) & 0xa8) ? 1 : !((mask) & 0xa0) ? 2 : 3; \
+} while (0)
+
+#define PLM_IDCT_SPLIT(ev, ov, A, OUT) do { \
+	int y3, y4, y5, y6, b7, x4, x0, y7; \
+	switch (ev) { \
+		case 0: y3 = y4 = y5 = y6 = 0; break; \
+		case 1: PLM_IDCT_EVEN(A(0), 0, 0, 0); break; \
+		case 2: PLM_IDCT_EVEN(A(0), A(2), 0, 0); break; \
+		default: PLM_IDCT_EVEN(A(0), A(2), A(4), A(6)); break; \
+	} \
+	switch (ov) { \
+		case 0: b7 = x4 = x0 = y7 = 0; break; \
+		case 1: PLM_IDCT_ODD(A(1), 0, 0, 0); break; \
+		case 2: PLM_IDCT_ODD(A(1), A(3), 0, 0); break; \
+		default: PLM_IDCT_ODD(A(1), A(3), A(5), A(7)); break; \
+	} \
 	OUT(0, b7 + y4); \
 	OUT(1, x4 + y3); \
 	OUT(2, y5 - x0); \
@@ -3784,77 +3864,50 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 
 // AmigaMCE: the block's IDCT put into the picture at d (dw bytes a row):
 // as plm_video_idct then setting (intra) or adding to the 8 x 8 pixels,
-// clamped, but only the columns and rows that have coefficients worked
-// on (the rest are zeros, which give zeros), the columns into t and the
-// rows straight into place; then block_data's coefficients zeroed.
+// clamped, but each column and row worked out from only the inputs that
+// can be other than zero (the columns and rows its coefficients are in),
+// the columns into t and the rows straight into place; then
+// block_data's coefficients zeroed.
 void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 	int *s = self->block_data;
 	unsigned int cols = self->block_cols, rows = self->block_rows;
 	int t[64];
-	int ncols = cols <= 1 ? 1 : cols <= 3 ? 2 : cols <= 15 ? 4 : 8;
-	int c, r;
+	int cev, cov, rev, rov, c, r;
+	unsigned int read;
 
-	// the columns the rows will read: each worked on, or zeros
-	for (c = 0; c < ncols; c++) {
-		int *b = s + c;
+	// the columns, by the rows they have coefficients in; those the rows
+	// will read but which have none, zeros
+	PLM_IDCT_HALVES(rows, cev, cov);
+	PLM_IDCT_HALVES(cols, rev, rov);
+	read = (rev == 0 ? 0 : rev == 1 ? 0x01 : rev == 2 ? 0x05 : 0x55) |
+		(rov == 0 ? 0 : rov == 1 ? 0x02 : rov == 2 ? 0x0a : 0xaa);
+	for (c = 0; c < 8; c++) {
 		int *o = t + c;
 		#define PLM_COL_OUT(k, v) o[(k) * 8] = (v)
-		if (!(cols & (1u << c))) {
+		if (cols & (1u << c)) {
+			const int *b = s + c;
+			#define PLM_COL_IN(k) b[(k) * 8]
+			PLM_IDCT_SPLIT(cev, cov, PLM_COL_IN, PLM_COL_OUT);
+			#undef PLM_COL_IN
+		}
+		else if (read & (1u << c)) {
 			PLM_COL_OUT(0, 0); PLM_COL_OUT(1, 0); PLM_COL_OUT(2, 0); PLM_COL_OUT(3, 0);
 			PLM_COL_OUT(4, 0); PLM_COL_OUT(5, 0); PLM_COL_OUT(6, 0); PLM_COL_OUT(7, 0);
-		}
-		else if (rows <= 1) {
-			PLM_IDCT_1D(b[0], 0, 0, 0, 0, 0, 0, 0, PLM_COL_OUT);
-		}
-		else if (rows <= 3) {
-			PLM_IDCT_1D(b[0], b[8], 0, 0, 0, 0, 0, 0, PLM_COL_OUT);
-		}
-		else if (rows <= 15) {
-			PLM_IDCT_1D(b[0], b[8], b[16], b[24], 0, 0, 0, 0, PLM_COL_OUT);
-		}
-		else {
-			PLM_IDCT_1D(b[0], b[8], b[16], b[24], b[32], b[40], b[48], b[56], PLM_COL_OUT);
 		}
 		#undef PLM_COL_OUT
 	}
 
 	// the rows, rounded, into the picture
+	#define PLM_ROW_IN(k) a[k]
 	#define PLM_ROW_SET(k, v) d[k] = plm_clamp(((v) + 128) >> 8)
 	#define PLM_ROW_ADD(k, v) d[k] = plm_clamp(d[k] + (((v) + 128) >> 8))
-	#define PLM_ROWS(OUT) \
-		for (r = 0; r < 8; r++, d += dw) { \
-			const int *a = t + r * 8; \
-			if (ncols == 1) { \
-				PLM_IDCT_1D(a[0], 0, 0, 0, 0, 0, 0, 0, OUT); \
-			} \
-			else if (ncols == 2) { \
-				PLM_IDCT_1D(a[0], a[1], 0, 0, 0, 0, 0, 0, OUT); \
-			} \
-			else if (ncols == 4) { \
-				PLM_IDCT_1D(a[0], a[1], a[2], a[3], 0, 0, 0, 0, OUT); \
-			} \
-			else { \
-				PLM_IDCT_1D(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], OUT); \
-			} \
-		}
 	if (rows <= 1) {
 		// coefficients in its first row alone: the columns each one number
 		// all the way down, so the rows all the same: one worked out
 		int v[8];
 		const int *a = t;
 		#define PLM_ROW_KEEP(k, x) v[k] = ((x) + 128) >> 8
-		if (ncols == 1) {
-			PLM_IDCT_1D(a[0], 0, 0, 0, 0, 0, 0, 0, PLM_ROW_KEEP);
-		}
-		else if (ncols == 2) {
-			PLM_IDCT_1D(a[0], a[1], 0, 0, 0, 0, 0, 0, PLM_ROW_KEEP);
-		}
-		else if (ncols == 4) {
-			PLM_IDCT_1D(a[0], a[1], a[2], a[3], 0, 0, 0, 0, PLM_ROW_KEEP);
-		}
-		else {
-			PLM_IDCT_1D(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], PLM_ROW_KEEP);
-		}
+		PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_KEEP);
 		#undef PLM_ROW_KEEP
 		if (intra) {
 			uint8_t q[8];
@@ -3876,12 +3929,18 @@ void plm_video_idct_put(plm_video_t *self, uint8_t *d, int dw, int intra) {
 		}
 	}
 	else if (intra) {
-		PLM_ROWS(PLM_ROW_SET);
+		for (r = 0; r < 8; r++, d += dw) {
+			const int *a = t + r * 8;
+			PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_SET);
+		}
 	}
 	else {
-		PLM_ROWS(PLM_ROW_ADD);
+		for (r = 0; r < 8; r++, d += dw) {
+			const int *a = t + r * 8;
+			PLM_IDCT_SPLIT(rev, rov, PLM_ROW_IN, PLM_ROW_ADD);
+		}
 	}
-	#undef PLM_ROWS
+	#undef PLM_ROW_IN
 	#undef PLM_ROW_SET
 	#undef PLM_ROW_ADD
 

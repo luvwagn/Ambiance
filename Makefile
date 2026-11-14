@@ -100,8 +100,9 @@ ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
-# pl_mpeg's decoder: for speed, its own warnings its own
-build/plmpeg.o: CFLAGS += -O2 -w
+# pl_mpeg's decoder: for speed (-O3: some 6% fewer 68020 cycles than
+# -O2, tests/mpeg_prof.py), its own warnings its own
+build/plmpeg.o: CFLAGS += -O3 -w
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
