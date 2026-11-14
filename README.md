@@ -299,8 +299,8 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
 
-- Videos plays IFF ANIMs anywhere and MPEG on a ZZ9000; MPEG without one
-  (a software decoder for fast Amigas) comes later.
+- MPEG video without a ZZ9000: MPEG-1 on RTG screens for now; AGA screens
+  come next.
 - Modules play on Paula only; AHI for them comes later.
 
 ## Building
@@ -361,6 +361,9 @@ and Now Playing's spectrum analyser is HippoPlayer's (`src/vis.c`, its FFT
 (© 2026 Renaud Schweingruber, with dr_flac by David Reid, public domain or
 MIT-0) where it is installed; it is not included, as it may only be passed
 on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.
+
+MPEG-1 video without a ZZ9000 is decoded by pl_mpeg (`third_party/pl_mpeg/`,
+MIT, © Dominic Szablewski).
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which
