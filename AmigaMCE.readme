@@ -307,6 +307,12 @@ Not there yet
 
 History
 -------
+0.8.8  MP3 seeks land on a real frame (no error after a sound output
+       change). The volume kept between runs. MHI at the level of mpega
+       through Paula or AHI. On Workbench, the smooth style leaves pens
+       free for other programs. A MED song EaglePlayer's MED players turn
+       down goes to the mixer without every other player asked first.
+       The mini player's meters across.
 0.8.5  Iconify: the window's gadget on OS 3.2, Project > Iconify or
        Amiga-I (full screen too) leave an AppIcon with a musical note on
        Workbench, the music playing on; double-clicked, AmigaMCE is back
