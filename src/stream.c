@@ -2767,6 +2767,10 @@ static void swv_run(void)
      * again to try them (twice as many each time it fell behind again) */
     BOOL skip_b = FALSE;
     ULONG b_ontime = 0, b_need = 30, b_turns = 0, b_late = 0, b_okrun = 0;
+    /* a seek: nothing shown until an I picture (those before it are built
+     * on pictures from before the seek, never decoded: blocks of others) */
+    BOOL want_i = st.range_from != 0;
+    ULONG i_skipped = 0;
     char m[200];
     /* (measured: each step's E-clock ticks, and how many) */
     unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
@@ -2947,7 +2951,16 @@ static void swv_run(void)
             if (!f) {
                 if (e != MPVE_MORE)
                     done = TRUE;            /* (its end, or it could not be read) */
+            } else if (want_i && f->mpic_Type != MPVT_I) {
+                i_skipped++;                /* (a seek's: built on pictures not decoded) */
+                busy = TRUE;
             } else {
+                if (want_i) {
+                    want_i = FALSE;
+                    sprintf(m, "after the seek: %lu pictures before its first I picture not shown",
+                            (unsigned long)i_skipped);
+                    amce_log("video: by the CPU", m);
+                }
                 swv[s].pts = (f->mpic_Flags & MPVPF_PTS) ? f->mpic_PTS : f->mpic_Time;
                 if ((!period || st.v_shown + st.v_dropped == 0) && MpvGetInfo(sw_mpv, &mi) &&
                     mi.mi_Period) {
@@ -3181,6 +3194,8 @@ static void video_run(void)
     st.v_ms = 0;
     if (st.range_from && !v_seek(&in, &pend_len))
         goto out;
+    if (st.range_from)
+        skip = ZZ_SKIP_TO_I_PICTURE;        /* (a seek: from an I picture, not blocks) */
     hold = period / 2;
     drop = period > 3600 ? period : 3600;
     while (!st.quit) {
