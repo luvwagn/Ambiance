@@ -3889,8 +3889,10 @@ static void swv_run(void)
             if (pe == DVDP_WAIT) {
                 /* all it gave shown: on (the decoder taking more again) */
                 dvdplay_go(st.v_dvd);
+                sw_keep_whole();            /* (a still may follow with no picture of its own) */
                 MpvControl(sw_mpv, MPVC_FLUSH, 0);
                 sw_f_ok = sw_last_ok = FALSE;
+                sw_last_why = 'w';
                 want_i = sw_old_times;      /* (as after any flush) */
                 done = FALSE;
                 continue;
