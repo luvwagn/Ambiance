@@ -3502,7 +3502,9 @@ out:
                     : sw_nyuv ? "drawn in the screen's own pixels at its size, then blitted"
                     : lay.dw == (WORD)sw_w && lay.dh == (WORD)sw_h ? "made RGB, WritePixelArray"
                                                                  : "made RGB, ScalePixelArray");
-            amce_log("video: by the CPU", m);
+            if (sw_ndraw)                   /* (none by the UI: all written onto the overlay
+                                             * by the playback process, its own line says) */
+                amce_log("video: by the CPU", m);
             sw_nyuv = 0;
         }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
