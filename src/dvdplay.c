@@ -231,6 +231,7 @@ struct DvdPlay {
     volatile LONG still_s;
     volatile BOOL ev_user;                  /*   a hop the viewer asked for (a button, Menu) */
     BOOL user_req;                          /* (asked: the next hop is the viewer's) */
+    BOOL hop_done;                          /* (a jump acted on when asked: its DVDE_HOP passed over) */
     struct { UBYTE what; LONG a, b; } asks[8];
     volatile UBYTE ask_in, ask_out;
     volatile LONG domain, vts;
@@ -681,7 +682,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
         return FALSE;
     }
     dp->nav = TRUE;
-    dp->ended = dp->pend = dp->pend_nav = dp->vobu_known = FALSE;
+    dp->ended = dp->pend = dp->pend_nav = dp->vobu_known = dp->hop_done = FALSE;
     dp->stop_ev = DVDP_NONE;
     dp->spu = -1;
     dp->title = 0;
@@ -731,6 +732,10 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
     switch (e) {
     case DVDE_HOP:
         dp->vobu_known = FALSE;             /* (its times start afresh) */
+        if (dp->hop_done) {
+            dp->hop_done = FALSE;           /* (acted on already, when asked) */
+            break;
+        }
         dp->ev_user = dp->user_req;
         dp->user_req = FALSE;
         dp->stop_ev = DVDP_HOP;
@@ -950,9 +955,10 @@ void dvdplay_service(struct DvdPlay *dp)
         }
         case DVDQ_MENU:
             dp->user_req = TRUE;
-            if (dp->domain == DVDD_TITLE)
-                ok = DvdMenu(dp->dvd, DVDM_ROOT) || DvdMenu(dp->dvd, DVDM_TITLE);
-            else
+            if (dp->domain == DVDD_TITLE) {
+                if (!(ok = DvdMenu(dp->dvd, DVDM_ROOT)))
+                    ok = DvdMenu(dp->dvd, DVDM_TITLE);
+            } else
                 ok = DvdMenu(dp->dvd, DVDM_ESCAPE);     /* (from a menu: back to the title) */
             break;
         case DVDQ_SEEK:
@@ -968,6 +974,16 @@ void dvdplay_service(struct DvdPlay *dp)
             dp->user_req = FALSE;
             sprintf(m, "asked %ld: %.60s", (long)what, (const char *)DvdError(dp->dvd));
             amce_log("dvd", m);
+        } else if (ok == DVD_JUMPED && what != DVDQ_POINT) {
+            /* the disc jumps (amcedvd 1.5 says so at once): what is read
+             * ahead and held let go now, not when its DVDE_HOP is read in
+             * turn (seconds of the menu later) */
+            dp->hop_done = TRUE;
+            dp->user_req = FALSE;
+            dp->ev_user = TRUE;
+            dp->pend = dp->pend_nav = FALSE;
+            dp->vobu_known = FALSE;
+            dp->stop_ev = DVDP_HOP;
         }
         hl_fetch(dp);                       /* (a button moved to: drawn now, a still too) */
     }

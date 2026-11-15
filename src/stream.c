@@ -215,6 +215,7 @@ static struct {
     ULONG fifo_n;                   /* their size (FIFO_N) */
     volatile ULONG f_in, f_out;     /* written, played (they run on) */
     volatile ULONG underruns;
+    volatile BOOL quiet;            /* no sound meant now (a DVD's still, its sound over): no underruns */
     /* Paula */
     BYTE *chip;                     /* left 0, left 1, right 0, right 1 */
     UWORD period;
@@ -305,7 +306,7 @@ static void fill_half(int half)
     }
     for (; i < HALF; i++)
         l[i] = r[i] = 0;
-    if (n < HALF && st.state == ST_PLAYING)
+    if (n < HALF && st.state == ST_PLAYING && !st.quiet)
         st.underruns++;
     st.f_out += n;
     st.played += n;
@@ -418,7 +419,7 @@ static void ahi_fill(int k)
     }
     for (; i < AHI_FRAMES; i++)
         b[2 * i] = b[2 * i + 1] = 0;
-    if (n < AHI_FRAMES && !st.paused && st.state == ST_PLAYING)
+    if (n < AHI_FRAMES && !st.paused && st.state == ST_PLAYING && !st.quiet)
         st.underruns++;
     st.f_out += n;
     st.played += n;
@@ -3156,17 +3157,21 @@ static BOOL sw_band_out(int s, struct MpvPicture *f, const struct SpuPic *sp, co
         return FALSE;
     tk = time_ticks(&hz);
     MpvToYUV422(f, mem, bpr, MPVY_Y0UY1V);
-    /* the band: the subpicture's, its edges even, inside the picture */
+    /* the band: what blending the subpicture can change (most often its
+     * values other than 0: its buttons' shapes, a subtitle's letters), its
+     * edges even, inside the picture */
     sw_bx = sw_by = sw_bw = sw_bh = 0;
-    if (sp && sp->pix && sp->x < swv_w && sp->y < swv_h) {
-        ULONG x1 = sp->x + sp->w, y1 = sp->y + sp->h;
-        sw_bx = sp->x & ~1UL;
-        sw_by = sp->y & ~1UL;
-        x1 = (x1 > swv_w ? swv_w : x1 + 1) & ~1UL;
-        y1 = (y1 > swv_h ? swv_h : y1 + 1) & ~1UL;
-        if (x1 > sw_bx && y1 > sw_by) {
-            sw_bw = x1 - sw_bx;
-            sw_bh = y1 - sw_by;
+    {
+        ULONG x0, y0, x1, y1;
+        if (spu_extent(sp, hl, &x0, &y0, &x1, &y1) && x0 < swv_w && y0 < swv_h) {
+            sw_bx = x0 & ~1UL;
+            sw_by = y0 & ~1UL;
+            x1 = (x1 > swv_w ? swv_w : x1 + 1) & ~1UL;
+            y1 = (y1 > swv_h ? swv_h : y1 + 1) & ~1UL;
+            if (x1 > sw_bx && y1 > sw_by) {
+                sw_bw = x1 - sw_bx;
+                sw_bh = y1 - sw_by;
+            }
         }
     }
     sw_band_copy(sw_clean, sw_clean + ny, sw_clean + ny + ny / 4, swv_yw, swv_yw / 2, f->mpic_Y,
@@ -3258,6 +3263,9 @@ static void swv_run(void)
      * (seg_t0) and how many parts */
     BOOL still_on = FALSE;
     ULONG still_t0 = 0, drain_t0 = 0, seg_t0 = time_ms(), n_seg = 1, n_still = 0, n_hop = 0;
+    /* (each part's own, for the log: shown, let go, decoded and its ticks at its start) */
+    ULONG seg_shown = 0, seg_drop = 0, seg_ndec = 0, seg_under = 0;
+    unsigned long long seg_tdec = 0;
     LONG still_s = 0;
     char m[200];
     /* (measured: each step's E-clock ticks, and how many) */
@@ -3416,11 +3424,32 @@ static void swv_run(void)
     pre = (ULONG)st.dec_freq * 300 / 1000;
     hold = period / 2;
     drop = period > 3600 ? period : 3600;
+    /* a DVD's part over (the first 40): how it played, for the log */
+#define seg_log()                                                                    \
+    do {                                                                             \
+        if (sw_nav && n_seg <= 40 && st.v_shown + st.v_dropped > seg_shown + seg_drop) { \
+            ULONG nd = n_dec - seg_ndec;                                             \
+            sprintf(m, "part %lu: %lu pictures shown, %lu late, in %lu ms; decoded "    \
+                       "%lu ms each; %lu dropouts",                                   \
+                    (unsigned long)n_seg, (unsigned long)(st.v_shown - seg_shown),   \
+                    (unsigned long)(st.v_dropped - seg_drop),                        \
+                    (unsigned long)(time_ms() - seg_t0),                             \
+                    (unsigned long)(nd && hz ? (t_dec - seg_tdec) * 1000 / hz / nd : 0), \
+                    (unsigned long)(st.underruns - seg_under));                      \
+            amce_log("video: by the CPU", m);                                        \
+        }                                                                            \
+        seg_shown = st.v_shown;                                                      \
+        seg_drop = st.v_dropped;                                                     \
+        seg_ndec = n_dec;                                                            \
+        seg_tdec = t_dec;                                                            \
+        seg_under = st.underruns;                                                    \
+    } while (0)
     /* a DVD's jump (a menu's button, its menu, the disc's own): what was
      * decoded and its sound let go, the next part started as the first was
      * (its first picture, its sound with it, timed afresh) */
 #define SEG_FLUSH()                                                                  \
     do {                                                                             \
+        seg_log();                                                                   \
         MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
         sw_f_ok = sw_last_ok = FALSE;                                                \
         if (held >= 0) {                                                             \
@@ -3452,6 +3481,7 @@ static void swv_run(void)
     } while (0)
     while (!st.quit) {
         BOOL busy = FALSE;
+        st.quiet = still_on || a_done;   /* (its sound over: the FIFO run dry is no dropout) */
         serve();
         if (sw_redraw) {
             /* a new overlay (blank): the newest picture on it again (paused,
@@ -3868,7 +3898,10 @@ static void swv_run(void)
         if (!busy)
             v_wait(3000);
     }
+    seg_log();
 #undef SEG_FLUSH
+#undef seg_log
+    st.quiet = FALSE;
     /* the end: its sound plays out */
     while (!st.quit && st.started && st.f_in != st.f_out) {
         ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);

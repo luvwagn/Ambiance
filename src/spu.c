@@ -241,11 +241,40 @@ BOOL spu_decode(const UBYTE *u, ULONG n, ULONG pts, struct SpuPic *out)
         return FALSE;
     if (!started)
         out->start = pts;
-    if (!(out->pix = AllocVec((ULONG)out->w * out->h, MEMF_ANY | MEMF_CLEAR)))
-        return FALSE;
-    if (!field(u, size, off1, out->pix, out->w, out->h, 0) ||
-        !field(u, size, off2, out->pix, out->w, out->h, 1)) {
-        /* (cut short: what was decoded is kept, the rest clear) */
+    {
+        /* its pixels, then each row's span of values other than 0 */
+        ULONG np = ((ULONG)out->w * out->h + 1) & ~1UL, r;
+        if (!(out->pix = AllocVec(np + (ULONG)out->h * 4, MEMF_ANY | MEMF_CLEAR)))
+            return FALSE;
+        out->span = (UWORD *)(out->pix + np);
+        if (!field(u, size, off1, out->pix, out->w, out->h, 0) ||
+            !field(u, size, off2, out->pix, out->w, out->h, 1)) {
+            /* (cut short: what was decoded is kept, the rest clear) */
+        }
+        out->nx0 = out->w;
+        out->ny0 = out->h;
+        out->nx1 = out->ny1 = 0;
+        for (r = 0; r < out->h; r++) {
+            const UBYTE *row = out->pix + r * out->w;
+            ULONG a = 0, e = out->w;
+            while (a < e && !row[a])
+                a++;
+            while (e > a && !row[e - 1])
+                e--;
+            out->span[2 * r] = (UWORD)a;
+            out->span[2 * r + 1] = (UWORD)e;
+            if (a < e) {
+                if (a < out->nx0)
+                    out->nx0 = (UWORD)a;
+                if (e > out->nx1)
+                    out->nx1 = (UWORD)e;
+                if (r < out->ny0)
+                    out->ny0 = (UWORD)r;
+                out->ny1 = (UWORD)(r + 1);
+            }
+        }
+        if (!out->nx1)
+            out->nx0 = out->ny0 = 0;
     }
     return TRUE;
 }
@@ -338,6 +367,7 @@ void spu_blend420(const struct SpuPic *p, const struct SpuHl *hl, const ULONG *c
     UBYTE cy[2][4], ccb[2][4], ccr[2][4], ca[2][4];
     ULONG r, x;
     int k, v;
+    BOOL sparse;
     if (!p || !p->pix || p->x >= pw || p->y >= ph)
         return;
     if (hl && !hl->on)
@@ -351,13 +381,16 @@ void spu_blend420(const struct SpuPic *p, const struct SpuHl *hl, const ULONG *c
             ccb[k][v] = (UBYTE)c;
             ca[k][v] = k ? hl->alpha[v] : p->alpha[v];
         }
-    for (r = 0; r < p->h && p->y + r < ph; r++) {
-        ULONG py = p->y + r;
+    /* value 0 clear (its own and the highlight's): only each row's span
+     * of the others */
+    sparse = p->span && !ca[0][0] && !(hl && ca[1][0]);
+    for (r = sparse ? p->ny0 : 0; r < (sparse ? p->ny1 : p->h) && p->y + r < ph; r++) {
+        ULONG py = p->y + r, xe = sparse ? p->span[2 * r + 1] : p->w;
         const UBYTE *s = p->pix + r * p->w;
         UBYTE *yo = y + py * ymod;
         BOOL hrow = hl && py >= hl->y0 && py <= hl->y1, crow = !(py & 1);
         UBYTE *cbo = cb + (py >> 1) * cmod, *cro = cr + (py >> 1) * cmod;
-        for (x = 0; x < p->w && p->x + x < pw; x++) {
+        for (x = sparse ? p->span[2 * r] : 0; x < xe && p->x + x < pw; x++) {
             ULONG px = p->x + x;
             int val = s[x], h = hrow && px >= hl->x0 && px <= hl->x1;
             UBYTE a = ca[h][val];
@@ -370,4 +403,51 @@ void spu_blend420(const struct SpuPic *p, const struct SpuHl *hl, const ULONG *c
             }
         }
     }
+}
+
+BOOL spu_extent(const struct SpuPic *p, const struct SpuHl *hl, ULONG *x0, ULONG *y0, ULONG *x1,
+                ULONG *y1)
+{
+    ULONG a0, b0, a1, b1;
+    if (!p || !p->pix || !p->w || !p->h)
+        return FALSE;
+    if (hl && !hl->on)
+        hl = NULL;
+    if (!p->span || p->alpha[0]) {
+        a0 = p->x;                          /* (its value 0 shows: all of it) */
+        b0 = p->y;
+        a1 = p->x + p->w;
+        b1 = p->y + p->h;
+    } else {
+        if (p->nx1) {
+            a0 = p->x + p->nx0;
+            b0 = p->y + p->ny0;
+            a1 = p->x + p->nx1;
+            b1 = p->y + p->ny1;
+        } else
+            a0 = b0 = a1 = b1 = 0;
+        if (hl && hl->alpha[0]) {
+            /* (the highlight's value 0 shows: its rectangle, inside it) */
+            ULONG h0 = hl->x0 > p->x ? hl->x0 : p->x, v0 = hl->y0 > p->y ? hl->y0 : p->y;
+            ULONG h1 = (ULONG)hl->x1 + 1 < (ULONG)p->x + p->w ? (ULONG)hl->x1 + 1 : (ULONG)p->x + p->w;
+            ULONG v1 = (ULONG)hl->y1 + 1 < (ULONG)p->y + p->h ? (ULONG)hl->y1 + 1 : (ULONG)p->y + p->h;
+            if (h1 > h0 && v1 > v0) {
+                if (a1 == a0) {
+                    a0 = h0, b0 = v0, a1 = h1, b1 = v1;
+                } else {
+                    a0 = h0 < a0 ? h0 : a0;
+                    b0 = v0 < b0 ? v0 : b0;
+                    a1 = h1 > a1 ? h1 : a1;
+                    b1 = v1 > b1 ? v1 : b1;
+                }
+            }
+        }
+    }
+    if (a1 <= a0 || b1 <= b0)
+        return FALSE;
+    *x0 = a0;
+    *y0 = b0;
+    *x1 = a1;
+    *y1 = b1;
+    return TRUE;
 }

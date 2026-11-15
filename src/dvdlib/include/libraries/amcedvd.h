@@ -107,6 +107,12 @@ struct DvdEvent {
     ULONG clut[16];         /* DVDE_CLUT: 0x00YYCrCb, as on the disc */
 };
 
+/* DvdButton, DvdPoint and DvdMenu return FALSE (DvdError says why), TRUE,
+ * or (1.5) DVD_JUMPED: the disc jumps elsewhere, as the DVDE_HOP that the
+ * next DvdNextBlock gives will say (the player may drop what it holds at
+ * once) */
+#define DVD_JUMPED    2
+
 /* DvdButton actions */
 #define DVDB_UP       1
 #define DVDB_DOWN     2

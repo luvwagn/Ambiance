@@ -44,11 +44,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.4 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.5 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.4 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.5 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 4;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there; 1.4: held only while a disc is */
+const UWORD LibRevision = 5;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there; 1.4: held only while a disc is; 1.5: DVD_JUMPED */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -58,7 +58,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.4, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.5, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
@@ -140,6 +140,9 @@ static int stream_read(void *priv, void *buf, int bytes)
     n = d->rd.read(d->rd.handle, buf, bytes >> 11);
     return n < 0 ? -1 : (int)(n << 11);
 }
+
+/* ok()'s, and DVD_JUMPED if the VM jumped since its hop channel was h */
+static LONG ok_jumped(struct Dvd *d, dvdnav_status_t st, int32_t h);
 
 static LONG ok(struct Dvd *d, dvdnav_status_t st)
 {
@@ -310,12 +313,21 @@ API LONG DvdNextBlock(APTR dvd, APTR buf, struct DvdEvent *ev)
     return r;
 }
 
+static LONG ok_jumped(struct Dvd *d, dvdnav_status_t st, int32_t h)
+{
+    LONG r = ok(d, st);
+    return r && d->nav->vm && d->nav->vm->hop_channel != h ? DVD_JUMPED : r;
+}
+
 API LONG DvdButton(APTR dvd, LONG action, LONG button)
 {
     struct Dvd *d = dvd;
     pci_t *pci;
     dvdnav_status_t st;
+    int32_t h;
+    LONG r;
     ENTER(d, FALSE);
+    h = d->nav->vm ? d->nav->vm->hop_channel : 0;
     pci = dvdnav_get_current_nav_pci(d->nav);
     if (!pci) {
         strcpy(d->err, "no menu");
@@ -349,15 +361,16 @@ API LONG DvdButton(APTR dvd, LONG action, LONG button)
         LEAVE(d);
         return FALSE;
     }
-    st = ok(d, st);
+    r = ok_jumped(d, st, h);
     LEAVE(d);
-    return st;
+    return r;
 }
 
 API LONG DvdPoint(APTR dvd, LONG x, LONG y, LONG activate)
 {
     struct Dvd *d = dvd;
     pci_t *pci;
+    int32_t h;
     LONG r;
     ENTER(d, FALSE);
     pci = dvdnav_get_current_nav_pci(d->nav);
@@ -366,8 +379,9 @@ API LONG DvdPoint(APTR dvd, LONG x, LONG y, LONG activate)
         LEAVE(d);
         return FALSE;
     }
-    r = ok(d, activate ? dvdnav_mouse_activate(d->nav, pci, x, y) :
-                         dvdnav_mouse_select(d->nav, pci, x, y));
+    h = d->nav->vm ? d->nav->vm->hop_channel : 0;
+    r = ok_jumped(d, activate ? dvdnav_mouse_activate(d->nav, pci, x, y) :
+                                dvdnav_mouse_select(d->nav, pci, x, y), h);
     LEAVE(d);
     return r;
 }
@@ -408,9 +422,11 @@ API LONG DvdHighlight(APTR dvd, struct DvdHighlight *hl, LONG mode)
 API LONG DvdMenu(APTR dvd, LONG menu)
 {
     struct Dvd *d = dvd;
+    int32_t h;
     LONG r;
     ENTER(d, FALSE);
-    r = ok(d, dvdnav_menu_call(d->nav, (DVDMenuID_t)menu));
+    h = d->nav->vm ? d->nav->vm->hop_channel : 0;
+    r = ok_jumped(d, dvdnav_menu_call(d->nav, (DVDMenuID_t)menu), h);
     LEAVE(d);
     return r;
 }

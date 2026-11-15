@@ -142,6 +142,31 @@ int main(void)
         spu_blend420(q, &hl, clut, Y, Cb, Cr, 320, 160, 320, 240);
         CHECK(Y[203 * 320 + 110] == 30 && Y[203 * 320 + 120] != 30, "highlight: %d %d",
               Y[203 * 320 + 110], Y[203 * 320 + 120]);
+        /* only the rows' spans of values other than 0 blended (value 0
+         * clear): the same as all of it */
+        {
+            static UBYTE Y2[320 * 240], Cb2[160 * 120], Cr2[160 * 120];
+            struct SpuPic dense = *q;
+            ULONG x0, y0, x1, y1;
+            dense.span = NULL;
+            memset(Y, 77, sizeof(Y)); memset(Cb, 66, sizeof(Cb)); memset(Cr, 55, sizeof(Cr));
+            memcpy(Y2, Y, sizeof(Y)); memcpy(Cb2, Cb, sizeof(Cb)); memcpy(Cr2, Cr, sizeof(Cr));
+            spu_blend420(q, &hl, clut, Y, Cb, Cr, 320, 160, 320, 240);
+            spu_blend420(&dense, &hl, clut, Y2, Cb2, Cr2, 320, 160, 320, 240);
+            CHECK(!memcmp(Y, Y2, sizeof(Y)) && !memcmp(Cb, Cb2, sizeof(Cb)) && !memcmp(Cr, Cr2, sizeof(Cr)),
+                  "spans blended unlike the whole");
+            CHECK(q->nx1 > q->nx0 && q->ny1 > q->ny0, "no box of its values");
+            CHECK(spu_extent(q, &hl, &x0, &y0, &x1, &y1) && x0 == (ULONG)q->x + q->nx0 &&
+                  y1 == (ULONG)q->y + q->ny1, "extent %lu %lu %lu %lu", (unsigned long)x0, (unsigned long)y0,
+                  (unsigned long)x1, (unsigned long)y1);
+            for (y = 0; y < 240; y++)
+                for (x = 0; x < 320; x++)
+                    if ((x < (int)x0 || x >= (int)x1 || y < (int)y0 || y >= (int)y1) && Y[y * 320 + x] != 77)
+                        wrong++;
+            CHECK(!wrong, "%d pixels changed outside its extent", wrong);
+            hl.alpha[0] = 5;                /* (the highlight's value 0 shows: its rectangle too) */
+            CHECK(spu_extent(q, &hl, &x0, &y0, &x1, &y1) && x0 <= 100 && y0 <= 200, "extent with hl 0");
+        }
     }
     /* a unit that is not one */
     memset(u, 0xEE, 64); u[0] = 0; u[1] = 64; u[2] = 0; u[3] = 8;

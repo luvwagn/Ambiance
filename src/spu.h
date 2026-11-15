@@ -18,6 +18,12 @@ struct SpuPic {
     ULONG start, stop;          /* 90 kHz; stop meaningful only with has_stop */
     BOOL has_stop;
     BOOL forced;                /* shown even with subtitles off (a menu's, a forced line) */
+    /* where its values other than 0 are: each row's first and end (span[2
+     * * row], [2 * row + 1]; equal: none), and their box (nx0 <= x < nx1,
+     * ny0 <= y < ny1; nx1 0: none), from its own top left. Value 0 is
+     * most often clear: then only these are blended. */
+    UWORD *span;
+    UWORD nx0, ny0, nx1, ny1;
 };
 
 /* A button's highlight over it (DvdHighlight's, amcedvd.h): inside the
@@ -49,6 +55,11 @@ void spu_counts(struct Spu *s, ULONG *decoded, ULONG *bad);
  * 0x00YYCrCb, as on the disc). */
 void spu_blend420(const struct SpuPic *p, const struct SpuHl *hl, const ULONG *clut, UBYTE *y,
                   UBYTE *cb, UBYTE *cr, ULONG ymod, ULONG cmod, ULONG pw, ULONG ph);
+
+/* What blending p (with hl) can change, in the picture's pixels (x0 <= x
+ * < x1, y0 <= y < y1): FALSE if nothing. */
+BOOL spu_extent(const struct SpuPic *p, const struct SpuHl *hl, ULONG *x0, ULONG *y0, ULONG *x1,
+                ULONG *y1);
 
 /* (for the tests: one subpicture unit decoded from its bytes; FALSE if
  * it is not one) */

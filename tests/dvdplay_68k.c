@@ -187,7 +187,7 @@ int main(int argc, char **argv)
         ULONG mb = dvdplay_menus(dp), seq0, seq1, cseq;
         struct SpuHl hl;
         struct DvdNow now;
-        LONG still = 0, sub = 0, spu_packs = 0, k;
+        LONG still = 0, sub = 0, spu_packs = 0, k, hops0 = 0;
         BOOL user = 0, forced;
         int ev = DVDP_NONE;
         CHECK(mb & DVDMB_TITLE, "menus %lx", (unsigned long)mb);
@@ -231,10 +231,13 @@ int main(int argc, char **argv)
             dvdplay_poll(dp);
         CHECK(ev == DVDP_HOP && user, "pressed: %d %d", ev, user);
         dvdplay_go(dp);
-        /* title 2: its packs, then its end goes back to the menu */
+        /* title 2: its packs, then its end goes back to the menu (the jump
+         * acted on when pressed: no second for it) */
         packs = 0;
         for (k = 0; k < 400 && (ev = dvdplay_pending(dp, NULL, NULL)) != DVDP_STILL; k++) {
             LONG n;
+            if (ev == DVDP_HOP && !packs)
+                hops0++;
             if (ev == DVDP_HOP || ev == DVDP_WAIT) {
                 dvdplay_now(dp, &now);
                 dvdplay_go(dp);
@@ -252,6 +255,7 @@ int main(int argc, char **argv)
         }
         printf("title 2: %ld packs, then event %d\n", (long)packs, ev);
         CHECK(mb & 0x100, "title 2 not played");
+        CHECK(!hops0, "the press's jump given again: %ld", (long)hops0);
         CHECK(packs >= 140, "title 2: %ld packs", (long)packs);
         CHECK(ev == DVDP_STILL, "back at the menu: %d", ev);
     }
