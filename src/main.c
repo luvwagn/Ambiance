@@ -14322,54 +14322,123 @@ static void act_back(void)
 
 static void act_letter_now(char c);
 
+/* Typing in a list: letters (and digits) typed within TYPE_GAP_MS of each
+ * other make one word, and the selection goes to the first entry from
+ * here on that begins with it ("a", "c": AC/DC, after ABBA); a pause
+ * starts a new word. Punctuation and spaces in the entries are passed
+ * over ("acdc" finds AC/DC too), capitals and accents do not matter (É is
+ * E). The same letter again and again steps through that letter's
+ * entries, as one letter at a time always did. */
+#define TYPE_GAP_MS 1000
+#define TYPE_MAX 24
+static char typed[TYPE_MAX + 1];
+static ULONG typed_ms;
+static struct Page *typed_page;     /* the list typed in (another: a new word) */
+
 static void act_letter(char c)
 {
+    ULONG now = time_ms();
+    LONG n = (LONG)strlen(typed);
+    if (!n || !now || now - typed_ms > TYPE_GAP_MS || n >= TYPE_MAX || typed_page != cur())
+        n = 0;                      /* a new word */
+    typed_page = cur();
+    typed[n++] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+    typed[n] = 0;
+    typed_ms = now;
     busy_begin();                   /* a letter not read yet can take a while */
     act_letter_now(c);
     busy_end(TRUE);
+    typed_ms = time_ms() ? time_ms() : now; /* (the gap counts from the jump made) */
+}
+
+/* A character as typing compares it: a-z, 0-9, accented letters as their
+ * base letter in small, anything else 0 (passed over). */
+static char type_fold(UBYTE c)
+{
+    static const char base[] = "aaaaaaaceeeeiiiidnooooo.ouuuuyts";
+    if (c >= 'A' && c <= 'Z')
+        return (char)(c + 32);
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
+        return (char)c;
+    if (c >= 0xC0 && c != 0xD7 && c != 0xF7) {
+        if (c == 0xFF)
+            return 'y';
+        if (c >= 0xE0)
+            c -= 32;
+        if (c == 0xDF)
+            return 's';
+        return base[c - 0xC0] != '.' ? base[c - 0xC0] : 0;
+    }
+    return 0;
+}
+
+/* Does the entry begin with w (folded, its punctuation passed over)? */
+static BOOL type_match(const char *label, const char *w)
+{
+    const UBYTE *s = (const UBYTE *)label;
+    if ((*s >= 0x80 && *s <= 0x9F))
+        return FALSE;               /* Japanese, Chinese, Korean: no letters to type */
+    for (; *w; w++) {
+        char f = 0;
+        while (*s && !(f = type_fold(*s)))
+            s++;
+        if (!*s || f != *w)
+            return FALSE;
+        s++;
+    }
+    return TRUE;
 }
 
 static void act_letter_now(char c)
 {
     struct Page *p;
+    LONG i, n, from;
+    const char *w = typed;
+    char one[2];
+    BOOL same = TRUE;
     nav_moved();
     pane_settle();
     p = cur();
-    LONG i, n;
-    char k[2];
     if (focus != FOCUS_CONTENT || !p || p->type != PT_LIST || !p->list.count)
         return;
-    k[0] = c;
-    k[1] = 0;
-    /* still loading: read on until the letter turns up after the
-     * selection (or the list is complete, then wrap round as usual) */
-    for (i = p->sel + 1; ch_reading(p) || i < p->list.count; i++) {
-        char first[2];
+    for (i = 1; typed[i]; i++)
+        if (typed[i] != typed[0])
+            same = FALSE;
+    if (!typed[0] || same) {
+        /* one letter, or the same again: its next entry after this one */
+        one[0] = typed[0] ? typed[0] : type_fold((UBYTE)c);
+        one[1] = 0;
+        w = one;
+        from = p->sel + 1;
+    } else
+        from = p->sel;              /* this one may begin with the longer word too */
+    /* still loading: read on until it turns up after the selection (or the
+     * list is complete, then wrap round as usual) */
+    for (i = from; ch_reading(p) || i < p->list.count; i++) {
         if (i >= p->list.count) {
             if (!ch_wait_one(p, TRUE))
                 break;
             i--;
             continue;
         }
-        first[0] = p->list.items[i].label[0];
-        first[1] = 0;
-        if (amce_stricmp(first, k) == 0) {
-            p->sel = i;
-            draw_title_count(p);
-            draw_list_rows(p);
+        if (type_match(p->list.items[i].label, w)) {
+            if (p->sel != i) {
+                p->sel = i;
+                draw_title_count(p);
+                draw_list_rows(p);
+            }
             return;
         }
     }
     n = p->list.count;
-    for (i = 1; i <= n; i++) {
-        LONG idx = (p->sel + i) % n;
-        char first[2];
-        first[0] = p->list.items[idx].label[0];
-        first[1] = 0;
-        if (amce_stricmp(first, k) == 0) {
-            p->sel = idx;
-            draw_title_count(p);
-            draw_list_rows(p);
+    for (i = 0; i < n; i++) {
+        LONG idx = (from + i) % n;
+        if (type_match(p->list.items[idx].label, w)) {
+            if (p->sel != idx) {
+                p->sel = idx;
+                draw_title_count(p);
+                draw_list_rows(p);
+            }
             return;
         }
     }
