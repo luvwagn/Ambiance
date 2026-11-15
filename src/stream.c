@@ -2034,6 +2034,25 @@ static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
     return origin + (ZzU64)pos * div * 90000ULL / rate;
 }
 
+/* The sound's clock (v_clock's, m), carried on by the time of day once
+ * the sound is over (all of it decoded, over, and played: its FIFO empty):
+ * pictures after its sound's end (a DVD menu's moving part longer than
+ * its sound) shown on time, not waited for forever. */
+static ZzU64 v_clock_on(ZzU64 m, BOOL over, ULONG *dry_t, ZzU64 *dry_m)
+{
+    ZzU64 w;
+    if (!over || st.f_in != st.f_out) {
+        *dry_t = 0;
+        return m;
+    }
+    if (!*dry_t) {
+        *dry_t = time_ms() ? time_ms() : 1;
+        *dry_m = m;
+    }
+    w = *dry_m + (ZzU64)(time_ms() - *dry_t) * 90;
+    return w > m ? w : m;
+}
+
 /* A bare MPEG-1 video stream (no packs: RiVA's, a .m1v by a .mpg name)
  * made a Program Stream as it is given to the card, which takes no other:
  * a pack header (its clock reckoned at 1.5 Mbit/s), a system header with
@@ -3085,7 +3104,8 @@ static void swv_run(void)
     static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
     WORD *pcm[2];
     ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre, adiv = 1, pcm_peak = 0;
-    ZzU64 origin = 0, pts0 = 0;
+    ZzU64 origin = 0, pts0 = 0, dry_m = 0;
+    ULONG dry_t = 0;                        /* (its sound over since: v_clock_on) */
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
     /* behind: B pictures passed over (mpegv.library), until enough are on time
@@ -3502,7 +3522,8 @@ static void swv_run(void)
                 /* converted now unless already late (then let go below) */
                 {
                     ZzU64 now = !on ? 0 : (sw_sound || sw_ac3) && st.started
-                                              ? v_clock(origin, f0, rate, adiv)
+                                              ? v_clock_on(v_clock(origin, f0, rate, adiv), a_done,
+                                                           &dry_t, &dry_m)
                                               : pts0 + (ZzU64)(time_ms() - t0) * 90;
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
@@ -3559,8 +3580,9 @@ static void swv_run(void)
         if (on && held >= 0) {
             BOOL raw = (swv[held].pts >> 62) & 1;
             ZzU64 pts = swv[held].pts & ~(1ULL << 62);
-            ZzU64 master = (sw_sound || sw_ac3) && st.started ? v_clock(origin, f0, rate, adiv)
-                                                              : pts0 + (ZzU64)(time_ms() - t0) * 90;
+            ZzU64 master = (sw_sound || sw_ac3) && st.started
+                               ? v_clock_on(v_clock(origin, f0, rate, adiv), a_done, &dry_t, &dry_m)
+                               : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(pts - master);
             st.v_drift = (LONG)(drift / 90);
             st.v_bskipped = (ULONG)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0);
