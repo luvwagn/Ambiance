@@ -16,4 +16,5 @@ extern struct dvdp_ctx *dvdp_cur;
 
 unsigned long dvdp_memory(int peak);
 void dvdp_clock(unsigned long *sec, unsigned long *usec);  /* amitime.c */
+void dvdp_css_end(void);        /* cssdecrypt.library let go (port.c) */
 #endif

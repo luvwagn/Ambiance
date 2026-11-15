@@ -1,8 +1,8 @@
 /*
  * dlfcn.h for libdvdread in amcedvd.library. libdvdread looks for
- * libdvdcss with dlopen(); here that is port.c's, which finds nothing
- * for now (an optional dvdcss.library later: see dvd-navigation.md), so
- * libdvdread reads discs without CSS.
+ * libdvdcss with dlopen(); here that is port.c's, which opens the
+ * optional cssdecrypt.library if the user has it (not part of AmigaMCE),
+ * else finds nothing and libdvdread reads discs without CSS.
  * Part of amcedvd.library: GPL-2.0-or-later (see src/dvdlib/README).
  */
 #ifndef AMCEDVD_DLFCN_H

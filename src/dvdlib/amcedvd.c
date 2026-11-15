@@ -44,11 +44,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.2 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.3 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.2 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.3 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 2;   /* 1.1: seeks across the whole title; 1.2: DvdMenus */
+const UWORD LibRevision = 3;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -58,7 +58,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.2, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.3, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
@@ -742,6 +742,7 @@ int __UserLibInit(struct Library *lib)
 
 void __UserLibCleanup(void)
 {
+    dvdp_css_end();
     dvdp_timer_close();
 }
 

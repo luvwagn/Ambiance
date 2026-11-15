@@ -572,24 +572,108 @@ char *dvdp_realpath(const char *path, char *resolved)
     return NULL;
 }
 
+/* libdvdread's dlopen() of libdvdcss: cssdecrypt.library, if the user
+ * has put it in AmigaMCE's Libs or LIBS: (an optional library, not part of
+ * AmigaMCE: libdvdcss 1.4.3 for CSS-scrambled discs). Opened once, kept
+ * until this library is put out (dvdp_css_end). Its calls, libdvdcss's
+ * own (a register each): -30 CssOpenStream(a0 stream, a1 callbacks), -36
+ * CssClose(a0), -42 CssSeek(a0, d0 block, d1 flags), -48 CssRead(a0, a1
+ * buffer, d0 blocks, d1 flags); libdvdread calls them through the
+ * functions below, as it would libdvdcss's. Without it, discs are read as
+ * they are (an unscrambled image or disc plays; a scrambled one does not). */
+#ifdef __amigaos__
+#include <inline/macros.h>
+static struct Library *CssBase;
+static int css_tried;
+
+static void *css_open_stream(void *stream, void *cb)
+{
+    return LP2(0x1e, APTR, CssOpenStream, APTR, stream, a0, APTR, cb, a1, , CssBase);
+}
+
+static void *css_open(const char *path)
+{
+    (void)path;                             /* (only streams: the opener's reader) */
+    return NULL;
+}
+
+static int css_close(void *d)
+{
+    return (int)LP1(0x24, LONG, CssClose, APTR, d, a0, , CssBase);
+}
+
+static int css_seek(void *d, int block, int flags)
+{
+    return (int)LP3(0x2a, LONG, CssSeek, APTR, d, a0, LONG, block, d0, LONG, flags, d1, , CssBase);
+}
+
+static int css_read(void *d, void *buf, int blocks, int flags)
+{
+    return (int)LP4(0x30, LONG, CssRead, APTR, d, a0, APTR, buf, a1, LONG, blocks, d0, LONG, flags, d1, ,
+                    CssBase);
+}
+#endif
+
 void *dvdp_dlopen(const char *name, int mode)
 {
-    (void)name;                             /* libdvdcss: not yet (dvdcss.library) */
     (void)mode;
+#ifdef __amigaos__
+    if (!strstr(name, "dvdcss"))
+        return NULL;
+    if (!CssBase && !css_tried) {
+        css_tried = 1;
+        if (!(CssBase = OpenLibrary((CONST_STRPTR) "PROGDIR:Libs/cssdecrypt.library", 1)))
+            CssBase = OpenLibrary((CONST_STRPTR) "cssdecrypt.library", 1);
+        if (CssBase && dvdp_cur && dvdp_cur->log) {
+            char buf[100];
+            dvdp_snprintf(buf, sizeof(buf), "cssdecrypt.library %d.%d: CSS-scrambled discs read",
+                          CssBase->lib_Version, CssBase->lib_Revision);
+            dvdp_cur->log(dvdp_cur, 2, buf);
+        }
+    }
+    return CssBase;
+#else
+    (void)name;
     return NULL;
+#endif
 }
 
 void *dvdp_dlsym(void *handle, const char *name)
 {
+#ifdef __amigaos__
+    if (!handle || handle != CssBase)
+        return NULL;
+    if (!strcmp(name, "dvdcss_open_stream"))
+        return (void *)css_open_stream;
+    if (!strcmp(name, "dvdcss_open"))
+        return (void *)css_open;
+    if (!strcmp(name, "dvdcss_close"))
+        return (void *)css_close;
+    if (!strcmp(name, "dvdcss_seek"))
+        return (void *)css_seek;
+    if (!strcmp(name, "dvdcss_read"))
+        return (void *)css_read;
+#else
     (void)handle;
     (void)name;
-    return NULL;
+#endif
+    return NULL;                            /* (dvdcss_crack, DVD-Audio's: none) */
 }
 
 int dvdp_dlclose(void *handle)
 {
-    (void)handle;
+    (void)handle;                           /* (kept: dvdp_css_end) */
     return 0;
+}
+
+void dvdp_css_end(void)
+{
+#ifdef __amigaos__
+    if (CssBase)
+        CloseLibrary(CssBase);
+    CssBase = NULL;
+    css_tried = 0;
+#endif
 }
 
 const char *dvdp_dlerror(void)
