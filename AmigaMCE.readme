@@ -321,17 +321,16 @@ Not there yet
 History
 -------
 0.8.9  Videos plays MPEG: on a ZZ9000 (MPEG-1 and MPEG-2, program and
-       transport streams, with their sound), and MPEG-1 by the CPU on
-       RTG screens without one. DVDs in a drive: their film, or their
+       transport streams, with their sound), and by the CPU on RTG
+       screens without one (Libs/mpegv.library 2: libmpeg2), DVDs too. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
        controls, a stereo sound track first (Libs/amcedvd.library:
        libdvdread and libdvdnav). AC-3 the card will not decode
        (Amiberry's emulated card) decoded by a 68040 or 68060 instead
        (Libs/ac3.library, ac3fpu.library: liba52). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
-       (Settings > Display: Use overlay when available), decoded about
-       twice as fast (2.6 times on a 68020), its B pictures passed over
-       while it is behind. One set of
+       (Settings > Video: Use overlay when available), its B pictures
+       passed over while it is behind. One set of
        control glyphs for Now playing, the mini player, ANIMs, videos
        and DVDs, square on lowres, hires and laced screens alike.
 0.8.8  MP3 seeks land on a real frame (no error after a sound output

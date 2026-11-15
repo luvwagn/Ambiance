@@ -127,6 +127,33 @@ static BOOL pip_move(struct Window *w, LONG x, LONG y, LONG dw, LONG dh)
     return t < 25;
 }
 
+/* The overlay's picture black (YUV 16, 128, 128) until its first comes:
+ * opened, its memory holds zeros, which YUV shows green, for as long as
+ * the first picture takes (a DVD's, a second or so). */
+static void pip_black(struct Window *w, const struct VProbe *v)
+{
+    struct BitMap *bm = NULL;
+    struct RenderInfo ri;
+    LONG lk;
+    ULONG y, x, n;
+    p96PIP_GetTags(w, P96PIP_SourceBitMap, (ULONG)&bm, TAG_DONE);
+    if (!bm)
+        return;
+    memset(&ri, 0, sizeof(ri));
+    lk = p96LockBitMap(bm, (UBYTE *)&ri, sizeof(ri));
+    if (ri.Memory && ri.BytesPerRow > 0) {
+        n = (ULONG)v->w / 2;                /* two pixels a longword: Y0 Cb Y1 Cr */
+        if (n * 4 > (ULONG)ri.BytesPerRow)
+            n = (ULONG)ri.BytesPerRow / 4;
+        for (y = 0; y < (ULONG)v->h; y++) {
+            ULONG *o = (ULONG *)((UBYTE *)ri.Memory + y * (ULONG)ri.BytesPerRow);
+            for (x = 0; x < n; x++)
+                o[x] = 0x10801080UL;
+        }
+    }
+    p96UnlockBitMap(bm, lk);
+}
+
 static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe *v, LONG ax,
                                LONG ay, LONG aw, LONG ah, LONG sw, LONG *pe)
 {
@@ -146,8 +173,10 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
                         WA_InnerWidth, dw, WA_InnerHeight, dh, WA_Borderless, TRUE,
                         WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_IDCMP, IDCMP_MOUSEBUTTONS,
                         TAG_DONE);
-    if (w)
-        amce_log("video", "its overlay opened: placing it");
+    if (w) {
+        pip_black(w, v);
+        amce_log("video", "its overlay opened (black): placing it");
+    }
     if (w) {
         /* the size and place asked for at opening are not reliably taken
          * (the window stays the picture's size, top left): set again */
@@ -165,6 +194,42 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
     return w;
 }
 
+
+/* Settings > Video: MPEG video on the ZZ9000 off (ENV:AmigaMCE/VideoDecoder
+ * "cpu"): decoded by the CPU even where there is a card. */
+static BOOL video_cpu_chosen(void)
+{
+    char ev[16];
+    return GetVar((CONST_STRPTR)"AmigaMCE/VideoDecoder", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+           (ev[0] == 'c' || ev[0] == 'C');
+}
+
+/* Decoded by the CPU (mpegv.library), the card not used for why: NULL if it
+ * plays so, else why not. Its pictures on the card's overlay if this screen
+ * has one (Picasso96's PIP: it scales them), unless Settings say not,
+ * else drawn. */
+static const char *video_by_cpu(struct VProbe *v, const char *why)
+{
+    char m[160], ev[16];
+    sprintf(m, "decoded by the CPU (%s)", why);
+    amce_log("video", m);
+    if (!st_mpv_open()) {
+        amce_log("video", "no mpegv.library 2 (AmigaMCE's Libs, or LIBS:)");
+        return _("MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)");
+    }
+    v->sw = TRUE;
+    vo_failed = FALSE;
+    if (GetVar((CONST_STRPTR)"AmigaMCE/VideoOverlay", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+        !strcmp(ev, "off")) {
+        amce_log("video", "Settings > Video: the overlay off: its pictures drawn");
+        vo_off = TRUE;
+    } else {
+        vo_off = FALSE;
+        if (!P96Base)
+            P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+    }
+    return NULL;
+}
 
 const char *video_check(const char *path, struct VProbe *v)
 {
@@ -210,78 +275,49 @@ const char *video_check(const char *path, struct VProbe *v)
                     (unsigned long)v->a_kbps, v->a_chans == 1 ? "mono" : "stereo");
         amce_log("video", m);
     }
-    if (!v->ps && !v->ts && v->mpeg2)
-        return _("Only MPEG Program Streams play (this one has no packs)");
     v->sw = FALSE;
     {
-        /* the card if it can (unless ENV:AmigaMCE/VideoDecoder says CPU),
-         * else the CPU: MPEG-1 only (mpegv.library) */
-        char ev[16];
-        BOOL cpu = GetVar((CONST_STRPTR)"AmigaMCE/VideoDecoder", (STRPTR)ev, sizeof(ev),
-                          GVF_GLOBAL_ONLY) > 0 && (ev[0] == 'c' || ev[0] == 'C');
+        /* the card if it can (unless Settings say the CPU), else the CPU:
+         * MPEG-1 and MPEG-2 (mpegv.library 2) */
+        BOOL cpu = video_cpu_chosen();
         w = NULL;
         if (cpu)
-            w = "Settings > Display: MPEG video on the ZZ9000 off";
+            w = "Settings > Video: MPEG video on the ZZ9000 off";
         else if (!zz_open())
             w = "no zz9k.library";
         else {
             w = zz_video_check(v->mpeg2, v->mp2 && !v->ac3 && (v->ps || v->ts));
             zz_close();
+            if (!w && !v->ps && !v->ts && v->mpeg2)
+                w = "the card plays MPEG-2 in Program Streams only";
         }
-        if (w) {
-            if (v->mpeg2 || v->ts) {
-                amce_log("video", w);
-                if (!cpu && !strcmp(w, "no zz9k.library"))
-                    return _("MPEG-2 video plays on a ZZ9000 (zz9k.library not found)");
-                amce_strlcpy(why, cpu ? "MPEG-2 video plays on a ZZ9000 (the CPU decodes MPEG-1)" : w,
-                             sizeof(why));
-                return why;
-            }
-            sprintf(m, "decoded by the CPU (%s)", w);
-            amce_log("video", m);
-            if (!st_mpv_open()) {
-                amce_log("video", "no mpegv.library (AmigaMCE's Libs, or LIBS:)");
-                return _("MPEG-1 by the CPU needs mpegv.library (AmigaMCE's Libs)");
-            }
-            v->sw = TRUE;
-            /* its pictures on the card's overlay if this screen has one
-             * (Picasso96's PIP: it scales them), else drawn */
-            vo_failed = FALSE;
-            if (GetVar((CONST_STRPTR)"AmigaMCE/VideoOverlay", (STRPTR)ev, sizeof(ev),
-                       GVF_GLOBAL_ONLY) > 0 && !strcmp(ev, "off")) {
-                amce_log("video", "Settings > Display: the overlay off: its pictures drawn");
-                vo_off = TRUE;
-            } else {
-                vo_off = FALSE;
-                if (!P96Base)
-                    P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
-            }
-            return NULL;
-        }
+        if (w)
+            return video_by_cpu(v, w);
     }
     if (!P96Base && !(P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2)))
         return _("MPEG video needs Picasso96 (Picasso96API.library)");
     vo_failed = FALSE;
-    vo_off = FALSE;                         /* (the card's: its overlay is its only way) */                      /* a new video: its overlay tried again */
+    vo_off = FALSE;                         /* (the card's: its overlay is its only way) */
     return NULL;
 }
 
-/* A DVD's film (v from dvdplay_open): MPEG-2, so the card's always, and
- * its overlay made ready as video_check does a file's. NULL if it plays,
- * else why not. */
-const char *video_check_dvd(const struct VProbe *v)
+/* A DVD's film (v from dvdplay_open): MPEG-2, on the card if it can, else
+ * by the CPU (mpegv.library: v->sw), its overlay made ready as video_check
+ * does a file's. NULL if it plays, else why not. */
+const char *video_check_dvd(struct VProbe *v)
 {
-    static char why[120];
     const char *w;
-    if (!zz_open())
-        return _("MPEG-2 video plays on a ZZ9000 (zz9k.library not found)");
-    w = zz_video_check(TRUE, v->mp2 && !v->ac3);
-    zz_close();
-    if (w) {
-        amce_log("video", w);
-        amce_strlcpy(why, w, sizeof(why));
-        return why;
+    v->sw = FALSE;
+    if (video_cpu_chosen())
+        w = "Settings > Video: MPEG video on the ZZ9000 off";
+    else if (!zz_open())
+        w = "no zz9k.library";
+    else {
+        w = zz_video_check(TRUE, v->mp2 && !v->ac3);
+        zz_close();
     }
+    if (w)
+        return video_by_cpu(v, w);          /* (by the CPU: mpegv.library) */
     if (!P96Base && !(P96Base = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2)))
         return _("MPEG video needs Picasso96 (Picasso96API.library)");
     vo_failed = FALSE;                      /* a new video: its overlay tried again */

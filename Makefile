@@ -246,16 +246,19 @@ test-animdraw: build/animdraw_host build/animdraw_68k
 	@cd build && vamos -C 68020 -m 8192 -s 256 animdraw_68k > test-animdraw68k.txt && grep -q " 0 failed" test-animdraw68k.txt \
 		&& echo "  CHECK animation drawing (68020 assembler) ok" || (cat test-animdraw68k.txt; exit 1)
 
-# mpegv.library: MPEG-1 video decoded by the CPU (pl_mpeg inside), its own
-# project (extras/mpegv, a git submodule: github.com/luvwagn/mpegv.library,
-# MIT), opened at run time where there is no ZZ9000. Built by its own
-# Makefile; its tests (its pictures against pl_mpeg's own, bit for bit, on
-# the host and on a 68020 under vamos) are part of make test; where a
-# 68020's cycles go, by function, for the first N pictures of a file:
+# mpegv.library 2: MPEG-1 and MPEG-2 video decoded by the CPU (libmpeg2
+# inside, made faster for a 68k), its own project (extras/mpegv, a git
+# submodule: github.com/luvwagn/mpegv.library, GPL-3: its source there,
+# not in the archive), opened at run time where there is no ZZ9000 (or it
+# is not to be used). Built by its own Makefile; its tests (its pictures
+# against libmpeg2's own C, bit for bit, on the host and on a 68020 under
+# vamos) are part of make test; where a 68020's cycles go, by stage and
+# function, for the first N pictures of a file:
 #   make mpeg-prof MPG=file.mpg [N=60]
 MPEGVLIB = extras/mpegv/build/mpegv.library
-MPEGV_SRC = $(wildcard extras/mpegv/src/*.c extras/mpegv/src/*.h extras/mpegv/include/*/*.h \
-              extras/mpegv/third_party/pl_mpeg/pl_mpeg.h) extras/mpegv/Makefile
+MPEGV_SRC = $(wildcard extras/mpegv/src/*.c extras/mpegv/src/*.h extras/mpegv/src/*.s \
+              extras/mpegv/include/*/*.h extras/mpegv/third_party/libmpeg2/libmpeg2/*.[chs] \
+              extras/mpegv/third_party/libmpeg2/include/*.h) extras/mpegv/Makefile
 $(MPEGVLIB): $(MPEGV_SRC)
 	@$(MAKE) --no-print-directory -C extras/mpegv build/mpegv.library
 mpegvlib: $(MPEGVLIB)
@@ -628,7 +631,8 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@# for a video's AC3 where the ZZ9000 will not decode it; the same: a
 	@# public release must carry their source too
 	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
-	@# mpegv.library (MPEG-1 by the CPU: pl_mpeg, MIT), extras/mpegv
+	@# mpegv.library (MPEG-1 and MPEG-2 by the CPU: libmpeg2, GPL-3; its source
+	@# at github.com/luvwagn/mpegv.library), extras/mpegv
 	@cp $(MPEGVLIB) $(LHA_DIR)/Libs/
 	@cp extras/mpegv/LICENSE $(LHA_DIR)/Licences/mpegv.library.txt
 	@cp extras/liba52/COPYING $(LHA_DIR)/Licences/ac3.library-GPL-2.txt

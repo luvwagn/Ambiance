@@ -388,6 +388,9 @@ MSG_542FED8A
 MSG_1A73DB9B
 언어
 ; Language
+MSG_5B67C80C
+비디오
+; Video
 MSG_1B9AE0BB
 영어
 ; English
@@ -436,6 +439,9 @@ Workbench와 같게
 MSG_70FBE876
 Workbench 창
 ; Workbench window
+MSG_3C2510A9
+CPU
+; CPU
 MSG_2D0EBF47
 TCP/IP 스택 없음
 ; no TCP/IP stack
@@ -1703,8 +1709,9 @@ MSG_10039953
 MSG_3E5CE903
 AmigaMCE가 재생하는 WAV, AIFF, 8SVX 종류가 아닙니다 (압축?)
 ; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
-MSG_71F4B50B
-; MPEG-1 by the CPU needs mpegv.library
+MSG_00ABC308
+CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다
+; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
 ; The file could not be read there
 MSG_52A6DB2B
@@ -1734,12 +1741,9 @@ MSG_3AC77067
 MSG_2ADCBED0
 백그라운드 재생 프로세스를 시작할 수 없습니다
 ; Could not start the background playback process
-MSG_49FB1D9D
-; Only MPEG Program Streams play (this one has no packs)
-MSG_550F84B3
-; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
-MSG_2B6936D6
-; MPEG-1 by the CPU needs mpegv.library (AmigaMCE's Libs)
+MSG_650CDFE1
+CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다 (AmigaMCE의 Libs)
+; MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3

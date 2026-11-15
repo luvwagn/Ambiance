@@ -733,8 +733,9 @@ void st_video_show(BOOL shown);     /* its overlay up: pictures shown (else let 
  * made 24-bit RGB or the overlay's packed YUV (Y0 Cb Y1 Cr); its buffers
  * freed once it is stopped. */
 BOOL st_swv_take(ULONG *w, ULONG *h);
-/* mpegv.library (PROGDIR:Libs, else LIBS:), which decodes MPEG-1 by the
- * CPU: opened by the UI (NULL: not there), closed at quitting */
+/* mpegv.library 2 (PROGDIR:Libs, else LIBS:), which decodes MPEG-1 and
+ * MPEG-2 by the CPU: opened by the UI (NULL: not there), let go after each
+ * video */
 struct Library *st_mpv_open(void);
 void st_mpv_close(void);
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);

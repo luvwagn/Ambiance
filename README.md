@@ -344,7 +344,7 @@ inline OS call when a multiply helper call ends up between them (see
 | Target | Result |
 |---|---|
 | `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
-| `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos; MPEG-1 decoding, `mpegv.library`'s pictures against pl_mpeg's own, on the host and under vamos |
+| `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
 | `make dvdlib` | `build/dvdlib/amcedvd.library` (also part of `make`, into the archive's `Libs`) |
 | `make mpegvlib` | `extras/mpegv/build/mpegv.library` (also part of `make`, into the archive's `Libs`; needs the submodule: `git submodule update --init`) |
 | `make mpeg-prof MPG=file.mpg [N=60]` | A 68020's cycles for MPEG-1 pictures under vamos: through `mpegv.library`, and by function (its profiler) |
@@ -390,11 +390,11 @@ and Now Playing's spectrum analyser is HippoPlayer's (`src/vis.c`, its FFT
 MIT-0) where it is installed; it is not included, as it may only be passed
 on in its own archive. [CREDITS.txt](CREDITS.txt) has the details.
 
-MPEG-1 video without a ZZ9000 is decoded by `mpegv.library`, a project of its
-own (`extras/mpegv`, a git submodule:
-[mpegv.library](https://github.com/luvwagn/mpegv.library), MIT): pl_mpeg
-(© Dominic Szablewski, MIT), made faster on a 68020, behind an interface
-for any Amiga program. AmigaMCE opens it at run time from its Libs. Clone
+MPEG-1 and MPEG-2 video without a ZZ9000 (files, transport streams and
+DVDs) is decoded by `mpegv.library` 2, a project of its own (`extras/mpegv`,
+a git submodule: [mpegv.library](https://github.com/luvwagn/mpegv.library),
+GPL-3.0-or-later, its source there): libmpeg2 0.5.1 (GPL-2.0-or-later),
+made faster on a 68k, behind an interface for any Amiga program. AmigaMCE opens it at run time from its Libs. Clone
 with `git clone --recursive`, or `git submodule update --init` after.
 
 DVDs are read by `amcedvd.library`: libdvdread 7.1.1 and libdvdnav 7.0.0

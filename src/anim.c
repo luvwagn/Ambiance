@@ -3092,7 +3092,7 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
 
 /* A DVD's film (the disc in volume vol): as an MPEG file, read from the
  * disc by dvdplay.c, its chapters by N and P (a CD32 pad's shoulders).
- * MPEG-2: the ZZ9000's always (vid.sw stays FALSE). */
+ * MPEG-2: the ZZ9000's where it can, else the CPU's (mpegv.library: vid.sw). */
 LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax)
 {
     LONG r;
@@ -3110,6 +3110,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG er
             amce_strlcpy(err, why, errmax);
             dvdplay_close(vid_dvd);
             vid_dvd = NULL;
+            st_mpv_close();
             return -1;
         }
     }
@@ -3117,6 +3118,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG er
     r = vid_play(g, dvdplay_name(vid_dvd), dvdplay_name(vid_dvd), cpu, err, errmax);
     dvdplay_close(vid_dvd);
     vid_dvd = NULL;
+    st_mpv_close();                         /* (mpegv.library, if the CPU decoded it) */
     return r;
 }
 

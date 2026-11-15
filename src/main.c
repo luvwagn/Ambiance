@@ -157,7 +157,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
-       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_NICSET,
+       ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_VIDEOSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
        ACT_RSRV_END = ACT_RSRV0 + 7, ACT_NICAUTO, ACT_NIC0, ACT_NIC_END = ACT_NIC0 + 7,
@@ -2120,8 +2120,8 @@ static BOOL jump_scroll;
 /* Animations on a screen of their own even on a 16-bit RTG screen (HAM and
  * extra halfbrite by the chipset, the classic look); native screens always */
 static BOOL anim_classic;
-/* Settings > Display > MPEG video on the ZZ9000 (with one): off, the CPU
- * decodes it (MPEG-1), as without one */
+/* Settings > Video > MPEG video on the ZZ9000 (with one): off, the CPU
+ * decodes it (mpegv.library), as without one */
 static BOOL video_cpu;
 static BOOL video_no_overlay;
 
@@ -2287,12 +2287,14 @@ static void sel_off_heading(struct Page *p, LONG d)
 }
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
-       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS };
+       SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
+       SETP_VIDEO };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
-    N_("Folders"), N_("Language"), N_("Folders") };    /* SETP_FOLDSET: titled by its kind */
+    N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
+    N_("Video") };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2382,14 +2384,16 @@ static void build_lang_settings(struct Page *p)
         lang_row(p, amce_lang_name(i), ACT_LANG0 + i, !amce_stricmp(lang_set, amce_lang_name(i)));
 }
 
-/* Settings: General, Display, Sound, Folders, Networking (Plex inside it,
- * as it needs the network). */
+/* Settings: General, Display, Video, Sound, Folders, Networking (Plex
+ * inside it, as it needs the network). */
 static void build_settings(struct Page *p)
 {
     p->setp = SETP_ROOT;
     action_item(p, _("General"), "", ACT_GENSET, MARK_ARROW);
     action_item(p, _("Display"), g.wb ? _("Workbench window") : gfx_mode_label(g.mode),
                 ACT_SCREENSET, MARK_ARROW);
+    action_item(p, _("Video"), caps.zz9000 && !video_cpu ? "ZZ9000" : _("CPU"), ACT_VIDEOSET,
+                MARK_ARROW);
     action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
     action_item(p, _("Folders"), "", ACT_FOLDERS, MARK_ARROW);
     action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
@@ -2458,6 +2462,13 @@ static void build_screen_settings(struct Page *p)
     /* a slideshow's way from one picture to the next */
     action_item(p, _("Slideshow transition"), _(trans_names[view_transition]), ACT_TRANS,
                 MARK_CYCLE);
+}
+
+/* Settings > Video: where IFF ANIMs play, who decodes MPEG video, and
+ * whether the CPU's pictures go to the card's overlay. */
+static void build_video_settings(struct Page *p)
+{
+    p->setp = SETP_VIDEO;
     /* videos (IFF ANIMs, from Videos or Pictures): on this screen (a 16-bit
      * RTG one, or the window), or on one of their own */
     {
@@ -2467,7 +2478,7 @@ static void build_screen_settings(struct Page *p)
             it->flags |= ITEM_DISABLED;     /* a native screen: always their own */
     }
     /* MPEG video: decoded by the ZZ9000 where there is one (off: by the
-     * CPU, MPEG-1 only, as without one) */
+     * CPU, mpegv.library, as without one) */
     if (caps.zz9000)
         action_item(p, _("MPEG video on the ZZ9000"), "", ACT_ZZVIDEO,
                     video_cpu ? MARK_CHECK_OFF : MARK_CHECK_ON);
@@ -2829,6 +2840,7 @@ static void settings_rebuild(void)
         case SETP_NET: build_net_settings(q); break;
         case SETP_GENERAL: build_general_settings(q); break;
         case SETP_SCREEN: build_screen_settings(q); break;
+        case SETP_VIDEO: build_video_settings(q); break;
         case SETP_NIC: build_nic_settings(q); break;
         case SETP_RADIO: build_radio_settings(q); break;
         case SETP_RKBPS: build_rkbps_settings(q); break;
@@ -13572,6 +13584,8 @@ static void act_action(struct Item *it)
         open_settings_page(_("General"), build_general_settings);
     else if (it->action == ACT_SCREENSET)
         open_settings_page(_("Display"), build_screen_settings);
+    else if (it->action == ACT_VIDEOSET)
+        open_settings_page(_("Video"), build_video_settings);
     else if (it->action == ACT_NICSET)
         open_settings_page(_("Network interface"), build_nic_settings);
     else if (it->action == ACT_RADIOSET)

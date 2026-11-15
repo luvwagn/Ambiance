@@ -388,6 +388,9 @@ Mappen
 MSG_1A73DB9B
 Taal
 ; Language
+MSG_5B67C80C
+Video
+; Video
 MSG_1B9AE0BB
 Engels
 ; English
@@ -436,6 +439,9 @@ Als de Workbench
 MSG_70FBE876
 Workbench-venster
 ; Workbench window
+MSG_3C2510A9
+CPU
+; CPU
 MSG_2D0EBF47
 geen TCP/IP-stack
 ; no TCP/IP stack
@@ -1703,8 +1709,9 @@ Alleen muziekbestanden op deze Amiga spelen als WAV, AIFF of 8SVX
 MSG_3E5CE903
 Geen soort WAV, AIFF of 8SVX die AmigaMCE speelt (gecomprimeerd?)
 ; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
-MSG_71F4B50B
-; MPEG-1 by the CPU needs mpegv.library
+MSG_00ABC308
+MPEG-video via de CPU heeft mpegv.library nodig
+; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
 ; The file could not be read there
 MSG_52A6DB2B
@@ -1734,12 +1741,9 @@ Niet genoeg geheugen om een zender te spelen
 MSG_2ADCBED0
 Het afspeelproces op de achtergrond kon niet starten
 ; Could not start the background playback process
-MSG_49FB1D9D
-; Only MPEG Program Streams play (this one has no packs)
-MSG_550F84B3
-; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
-MSG_2B6936D6
-; MPEG-1 by the CPU needs mpegv.library (AmigaMCE's Libs)
+MSG_650CDFE1
+MPEG-video via de CPU heeft mpegv.library nodig (Libs van AmigaMCE)
+; MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3

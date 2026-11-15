@@ -2507,12 +2507,14 @@ static LONG a3_frame(struct Ac3Info *ai)
     return AC3_FRAME_SAMPLES;
 }
 
-/* ---------------------------------------------------------- MPEG-1 by the CPU
- * Where there is no ZZ9000 (or it is not to be used): mpegv.library
- * (extras/mpegv: pl_mpeg's demuxer and MPEG-1 video decoder, opened at run
- * time) reads the file through a hook and hands its audio packets to
- * another, which queues them for mpega.library, the sound decoded as an
- * MP3 file's is (through the same bitstream hook). Each picture's planes (Y, Cb, Cr: 4:2:0) copied into one of
+/* -------------------------------------------------- MPEG-1 and MPEG-2 by the CPU
+ * Where there is no ZZ9000 (or it is not to be used): mpegv.library 2
+ * (extras/mpegv: its own demultiplexer and libmpeg2, opened at run time)
+ * reads the file through a hook (a transport stream packed as a Program
+ * Stream as it is read, tspack.c; a DVD's film from the disc, dvdplay.c)
+ * and hands its sound's packets to another: MPEG audio queued for
+ * mpega.library, decoded as an MP3 file's is (through the same bitstream
+ * hook), AC3 (a DVD's private stream 1) for ac3.library as for the card. Each picture's planes (Y, Cb, Cr: 4:2:0) copied into one of
  * SWV_SLOTS buffers, held until its time by the sound (or the clock
  * without), then given to the UI (anim.c), which takes the newest it is
  * given and makes it what it shows: the card's YUV overlay's (st_swv_yuyv)
@@ -2522,6 +2524,7 @@ static LONG a3_frame(struct Ac3Info *ai)
 #define SWV_SLOTS   3
 #define SW_AQ       (128UL * 1024)          /* its sound's bytes, demuxed, for mpega */
 #define SW_IN       16384
+#define SW_HELD_MAX (6UL * 1024 * 1024)     /* video held by mpegv while its sound is sought */
 enum { SW_FREE, SW_READY, SW_SHOW, SW_ON };
 static struct {
     UBYTE *buf;
@@ -2537,7 +2540,8 @@ static APTR sw_mpv;                         /* its decoder (mpegv.library) */
 static UBYTE *sw_aq;
 static ULONG sw_aq_in, sw_aq_out;
 static LONG sw_apts;                        /* the first audio packet's time (90 kHz), -1 none */
-static BOOL sw_sound;
+static BOOL sw_sound;                       /* MPEG audio, by mpega.library */
+static BOOL sw_ac3;                         /* AC3 (a DVD's, a transport stream's), by ac3.library */
 
 /* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
  * video is to be decoded by the CPU (video_check: its PROGDIR: is
@@ -2681,7 +2685,17 @@ static BOOL sw_seek_prep(void)
     sw_pre_len = sw_pre_pos = 0;
     if (!b)
         return FALSE;
-    if (Seek(st.fh, 0, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
+    if (st.v_ts) {
+        /* a transport stream: its start packed, to find its first headers in */
+        LONG got;
+        tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);
+        if (Seek(st.fh, (LONG)st.v_tsfirst, OFFSET_BEGINNING) < 0)
+            goto done;
+        for (n = 0; n < (LONG)V_SCAN && (got = tsp_pack(ts_read, NULL, b + n, V_SCAN - n)) > 0; n += got)
+            ;
+        if (n <= 0)
+            goto done;
+    } else if (Seek(st.fh, 0, OFFSET_BEGINNING) < 0 || (n = Read(st.fh, b, V_SCAN)) <= 0)
         goto done;
     /* the sequence header: to the next start code but its extensions' */
     if ((sq = sw_find(b, n, 0, 0xB3)) < 0)
@@ -2724,6 +2738,23 @@ static BOOL sw_seek_prep(void)
     }
     for (i = sq; i < se; i++)
         sw_pre[k++] = b[i];
+    if (st.v_ts) {
+        /* a transport stream: from the packet there, packed afresh (the
+         * pictures before its first I picture not shown: want_i) */
+        ULONG pk = st.range_from > st.v_tsfirst
+                       ? st.v_tsfirst + (st.range_from - st.v_tsfirst) / st.v_ts * st.v_ts
+                       : st.v_tsfirst;
+        if (Seek(st.fh, (LONG)pk, OFFSET_BEGINNING) < 0)
+            goto done;
+        tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);
+        sw_pre_len = (ULONG)k;
+        v_from_back = FALSE;
+        sprintf(m, "from byte %lu (a transport stream's packet), its first %lu bytes of headers first",
+                (unsigned long)pk, (unsigned long)k);
+        amce_log("video: by the CPU", m);
+        ok = TRUE;
+        goto done;
+    }
     /* the file from there: the picture group just before it if there is
      * one within a second, else the first pack (sequence header, picture
      * group) after it */
@@ -2777,7 +2808,12 @@ static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __as
         sw_pre_pos += k;
         return k;
     }
-    n = Read(st.fh, r->mr_Buffer, r->mr_Length);
+    if (st.v_dvd)
+        n = dvdplay_read(st.v_dvd, r->mr_Buffer, r->mr_Length);    /* (a DVD's film) */
+    else if (st.v_ts)
+        n = tsp_pack(ts_read, NULL, r->mr_Buffer, (ULONG)r->mr_Length);  /* (packed as read) */
+    else
+        n = Read(st.fh, r->mr_Buffer, r->mr_Length);
     if (n > 0)
         st.v_bytes += (ULONG)n;             /* (its information's data rate) */
     return n > 0 ? (ULONG)n : 0;
@@ -2794,6 +2830,18 @@ static ULONG sw_packet(register struct Hook *h __asm("a0"), register APTR mpv __
         if (sw_apts < 0 && (p->mp_Flags & MPVPF_PTS))
             sw_apts = (LONG)p->mp_PTS;
         sw_aq_put(p->mp_Data, p->mp_Length);
+    } else if (p->mp_Stream == 0xBD && sw_ac3 && p->mp_Length > 4 && p->mp_SubStream >= 0x80 &&
+               p->mp_SubStream <= 0x87) {
+        /* a DVD's AC3 (private stream 1): its first track's, after the
+         * substream's 4 bytes (number, frames, first frame's place) */
+        if (!a3.sub)
+            a3.sub = (UBYTE)p->mp_SubStream;
+        if (p->mp_SubStream == a3.sub) {
+            if (a3.pts0 == ZZ_NO_PTS && (p->mp_Flags & MPVPF_PTS))
+                a3.pts0 = p->mp_PTS;
+            if (a3.pts0 != ZZ_NO_PTS)
+                a3_put(p->mp_Data + 4, p->mp_Length - 4);
+        }
     }
     return 0;
 }
@@ -2839,7 +2887,7 @@ static void swv_run(void)
     struct MpvInfo mi;
     static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
     WORD *pcm[2];
-    ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre;
+    ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre, adiv = 1, pcm_peak = 0;
     ZzU64 origin = 0, pts0 = 0;
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
@@ -2862,15 +2910,30 @@ static void swv_run(void)
     sw_aq_in = sw_aq_out = 0;
     sw_apts = -1;
     sw_sound = st.v_mp2 && !st.v_es && !st.v_ac3;
+    sw_ac3 = st.v_ac3 && !st.v_es;
     sw_mpv = NULL;
     if ((v_tport = CreateMsgPort()) &&
         (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
         !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
         v_topen = TRUE;
     if (!st_mpv_open()) {
-        fail(_("MPEG-1 by the CPU needs mpegv.library"));
+        fail(_("MPEG video by the CPU needs mpegv.library"));
         goto out;
     }
+    if (sw_ac3) {
+        /* its AC3 by ac3.library (a 68040 or better), as for the card */
+        const char *why = st_ac3_cpu_why();
+        if (why) {
+            sprintf(m, "%s: played without its sound", why);
+            sw_ac3 = FALSE;
+        } else if (!a3_open(m)) {
+            a3_close();                     /* (whatever it did open) */
+            sw_ac3 = FALSE;
+        }
+        amce_log("video", m);
+    }
+    if (st.v_ts && !st.range_from)
+        tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);    /* (packed as read) */
     if (sw_sound && !(sw_aq = AllocVec(SW_AQ, MEMF_ANY))) {
         fail(_("Not enough memory"));
         goto out;
@@ -2959,9 +3022,11 @@ static void swv_run(void)
             }
         }
     }
-    sprintf(m, "%s: %ld x %ld MPEG-1 by the CPU (%s)%s; %s", log_name(), (long)st.v_w,
-            (long)st.v_h, (const char *)MpvVersion(), st.v_es ? ", a bare video stream" : "",
-            sw_sound ? "its sound by mpega.library" : "no sound");
+    sprintf(m, "%s: %ld x %ld MPEG-%ld by the CPU (%s)%s; %s", log_name(), (long)st.v_w,
+            (long)st.v_h, st.v_mpeg2 ? 2L : 1L, (const char *)MpvVersion(),
+            st.v_dvd ? ", a DVD's" : st.v_ts ? ", a transport stream packed as it is read"
+                                           : st.v_es ? ", a bare video stream" : "",
+            sw_sound ? "its sound by mpega.library" : sw_ac3 ? "its sound (AC3) by the CPU" : "no sound");
     amce_log("video", m);
     if (sw_sound) {
         sprintf(m, "its sound: %ld Hz %s, decoded at %ld Hz %s through %s", (long)st.freq,
@@ -3013,6 +3078,73 @@ static void swv_run(void)
             if (!on)
                 break;                      /* (before the first picture: a frame a turn) */
         }
+        /* its AC3, decoded here into the FIFO (a second ahead): before the
+         * first picture as fast as it comes, then a frame or two a turn
+         * (more while the sound runs low), the stream demultiplexed further
+         * while a whole frame is not there yet */
+        if (sw_ac3 && !a_done) {
+            struct Ac3Info ai;
+            int k, most = !on ? 12 : rate && st.f_in - st.f_out < (ULONG)st.dec_freq / 4 ? 6 : 2;
+            for (k = 0; k < most; k++) {
+                ULONG room = FIFO_N - (st.f_in - st.f_out), j, o;
+                LONG got;
+                if (rate && (st.f_in - st.f_out >= (ULONG)st.dec_freq ||
+                             room < AC3_FRAME_SAMPLES / adiv + 64))
+                    break;
+                tk = time_ticks(&hz);
+                while (!(got = a3_frame(&ai)) && (ULONG)MpvControl(sw_mpv, MPVC_HELD, 0) < SW_HELD_MAX &&
+                       MpvPump(sw_mpv))
+                    ;
+                t_aud += time_ticks(&hz) - tk;
+                if (!got) {
+                    if (MpvControl(sw_mpv, MPVC_ENDED, 0))
+                        a_done = TRUE;      /* (its end: no more of its sound) */
+                    break;
+                }
+                if (got < 0)
+                    continue;
+                n_aud++;
+                if (!rate) {
+                    rate = ai.ai_Rate;
+                    while ((!st.ahi && rate / adiv > 28867) || rate / adiv > 48000)
+                        adiv *= 2;
+                    st.freq = (LONG)rate;
+                    st.channels = 2;
+                    st.dec_freq = (LONG)(rate / adiv);
+                    st.dec_channels = 2;
+                    pre = (ULONG)st.dec_freq * 300 / 1000;
+                    st.v_adec = VSD_CPU_AC3;
+                    st.v_akbps = ai.ai_BitRate / 1000;
+                    st.v_achans = (UBYTE)ai.ai_Channels;
+                    st.v_alfe = (UBYTE)ai.ai_LFE;
+                    sprintf(m, "its sound: AC3 %lu Hz, %lu kbit/s, %lu.%lu channels, mixed to stereo, "
+                               "played at %lu Hz through %s; it begins at %lu ms",
+                            (unsigned long)rate, (unsigned long)(ai.ai_BitRate / 1000),
+                            (unsigned long)ai.ai_Channels, (unsigned long)ai.ai_LFE,
+                            (unsigned long)(rate / adiv), st.ahi ? "AHI" : "Paula",
+                            (unsigned long)(a3.pts0 / 90));
+                    amce_log("video", m);
+                }
+                o = st.f_in;
+                for (j = 0; j + adiv <= (ULONG)got; j += adiv) {
+                    LONG al = 0, ar = 0;
+                    ULONG q;
+                    for (q = 0; q < adiv; q++) {
+                        WORD l = a3.pcm[(j + q) * 2];
+                        ULONG al_ = (ULONG)(l < 0 ? -l : l);
+                        if (al_ > pcm_peak)
+                            pcm_peak = al_;
+                        al += l;
+                        ar += a3.pcm[(j + q) * 2 + 1];
+                    }
+                    st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)adiv);
+                    st.fr[o & (FIFO_N - 1)] = (WORD)(ar / (LONG)adiv);
+                    o++;
+                }
+                st.f_in = o;
+                busy = TRUE;
+            }
+        }
         /* the next picture, into a free buffer */
         if (held < 0 && !done) {
             struct MpvPicture *f;
@@ -3053,8 +3185,9 @@ static void swv_run(void)
                 busy = TRUE;
                 /* converted now unless already late (then let go below) */
                 {
-                    ZzU64 now = !on ? 0 : sw_sound && st.started ? v_clock(origin, f0, rate, 1)
-                                                                 : pts0 + (ZzU64)(time_ms() - t0) * 90;
+                    ZzU64 now = !on ? 0 : (sw_sound || sw_ac3) && st.started
+                                              ? v_clock(origin, f0, rate, adiv)
+                                              : pts0 + (ZzU64)(time_ms() - t0) * 90;
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
                     else {
@@ -3075,17 +3208,19 @@ static void swv_run(void)
         }
         /* started: the first picture, the sound with it */
         if (!on && held >= 0) {
-            if (sw_sound && !a_done && st.f_in - st.f_out < pre && !MpvControl(sw_mpv, MPVC_ENDED, 0)) {
+            if ((sw_sound || sw_ac3) && !a_done && (!rate || st.f_in - st.f_out < pre) &&
+                !MpvControl(sw_mpv, MPVC_ENDED, 0)) {
                 if (!busy)
                     v_wait(2000);
                 continue;
             }
             f0 = st.f_out;
-            if (sw_sound && st.f_in != st.f_out)
+            if ((sw_sound || sw_ac3) && rate && st.f_in != st.f_out)
                 out_start();
             t0 = time_ms();
             pts0 = swv[held].pts;
-            origin = sw_sound && sw_apts >= 0 ? (ZzU64)(ULONG)sw_apts : pts0;
+            origin = sw_sound && sw_apts >= 0 ? (ZzU64)(ULONG)sw_apts
+                     : sw_ac3 && a3.pts0 != ZZ_NO_PTS ? a3.pts0 : pts0;
             on = TRUE;
             st.state = ST_PLAYING;
             sprintf(m, "playing: the first picture at %lu ms, its sound's at %lu ms, %s",
@@ -3097,8 +3232,8 @@ static void swv_run(void)
         if (on && held >= 0) {
             BOOL raw = (swv[held].pts >> 62) & 1;
             ZzU64 pts = swv[held].pts & ~(1ULL << 62);
-            ZzU64 master = sw_sound && st.started ? v_clock(origin, f0, rate, 1)
-                                                  : pts0 + (ZzU64)(time_ms() - t0) * 90;
+            ZzU64 master = (sw_sound || sw_ac3) && st.started ? v_clock(origin, f0, rate, adiv)
+                                                              : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(pts - master);
             st.v_drift = (LONG)(drift / 90);
             st.v_bskipped = (ULONG)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0);
@@ -3167,12 +3302,29 @@ static void swv_run(void)
     m[0] = 0;
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
     sw_stat(m, "copied", t_conv, n_conv, hz);
-    sw_stat(m, "a sound frame decoded", t_aud, n_aud, hz);
+    sw_stat(m, sw_ac3 ? "an AC3 frame decoded" : "a sound frame decoded", t_aud, n_aud, hz);
     sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
             (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);
     amce_log("video: by the CPU", m);
+    if (sw_ac3) {
+        sprintf(m, "its AC3 by the CPU: %lu frames decoded, %lu of them bad, %lu bytes lost (too far "
+                   "ahead), %lu left; peak %lu of 32767",
+                (unsigned long)a3.frames, (unsigned long)a3.bad, (unsigned long)a3.lost,
+                (unsigned long)(a3.qin - a3.qout), (unsigned long)pcm_peak);
+        amce_log("video", m);
+    }
+    if (st.v_ts) {
+        ULONG rs, cut, pr;
+        tsp_counts(&rs, &cut, &pr);
+        sprintf(m, "its transport stream: %lu times out of step, %lu PES packets not read",
+                (unsigned long)rs, (unsigned long)cut);
+        amce_log("video", m);
+    }
 out:
     sw_on = FALSE;
+    if (sw_ac3)
+        a3_close();
+    sw_ac3 = FALSE;
     if (ms)
         MPEGA_close(ms);
     if (sw_mpv)
@@ -4077,7 +4229,7 @@ static void playback_main(void)
         goto out;
     if (st.video) {
         if (st.v_sw)
-            swv_run();                      /* MPEG-1 by the CPU */
+            swv_run();                      /* MPEG-1 or MPEG-2 by the CPU */
         else
             video_run();                    /* MPEG on the ZZ9000 */
         goto out;
@@ -4359,6 +4511,8 @@ BOOL st_start_dvd(struct DvdPlay *dp, UWORD master, UWORD cpu, const struct VPro
     vid_next.ac3 = v->ac3;
     vid_next.mp2 = v->ac3 || v->mp2;
     vid_next.ac3cpu = v->ac3 && ac3_by_cpu;
+    vid_next.sw = v->sw;                    /* (by the CPU: mpegv.library) */
+    vid_next.hz = v->a_hz;
     vid_next.apid = 0x1FFF;
     vid_next.w = v->w;
     vid_next.h = v->h;
