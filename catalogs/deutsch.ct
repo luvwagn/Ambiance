@@ -863,6 +863,9 @@ Feuer spielt ihren Film oder ihre Sendungen nacheinander auf der ZZ9000
 MSG_5AEFD354
 N und P: nächstes und voriges Kapitel oder Sendung
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Von der CPU dekodiert: ihre Menüs, M holt sie zurück
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

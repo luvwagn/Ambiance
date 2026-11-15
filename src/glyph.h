@@ -24,7 +24,8 @@ enum {
     GL_VDOWN,       /* -   */
     GL_VUP,         /* +   */
     GL_FULL,        /* four corners at the edges: full screen */
-    GL_UNFULL       /* four corners by the middle: back from it */
+    GL_UNFULL,      /* four corners by the middle: back from it */
+    GL_MENU         /* three bars: a DVD's menu */
 };
 #define GLF_ON 1
 

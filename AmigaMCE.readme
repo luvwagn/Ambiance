@@ -144,8 +144,11 @@ Videos
   programmes one after another (a disc of episodes); N and P, or the
   controls' |< and >|, the previous and next chapter or programme. Of
   its sound tracks, a stereo one first (MPEG audio, then AC-3), then
-  the others. Needs a ZZ9000 and Libs/amcedvd.library (in the archive);
-  no menus yet, and no encrypted (CSS) discs.
+  the others. Needs Libs/amcedvd.library (in the archive); no encrypted
+  (CSS) discs. Decoded by the CPU, a disc with menus plays from its
+  start, its menus' buttons drawn over the picture: arrows or the stick
+  and Return or fire, or the pointer and a click; M, a CD32 pad's green
+  button or the controls' menu button bring its menu back.
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
@@ -325,7 +328,9 @@ History
        screens without one (Libs/mpegv.library 2: libmpeg2), DVDs too. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
        controls, a stereo sound track first (Libs/amcedvd.library:
-       libdvdread and libdvdnav). AC-3 the card will not decode
+       libdvdread and libdvdnav); decoded by the CPU, their menus
+       (their buttons drawn over the picture, forced subtitles too, a
+       menu button in the controls). AC-3 the card will not decode
        (Amiberry's emulated card) decoded by a 68040 or 68060 instead
        (Libs/ac3.library, ac3fpu.library: liba52). The CPU's
        pictures go on the graphics card's YUV overlay where there is one

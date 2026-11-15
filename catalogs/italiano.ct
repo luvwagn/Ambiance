@@ -863,6 +863,9 @@ Fuoco riproduce il suo film, o i suoi programmi uno dopo l'altro, sulla ZZ9000
 MSG_5AEFD354
 N e P: capitolo o programma successivo e precedente
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Decodificato dalla CPU: i suoi menu, M per tornarci
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

@@ -1,4 +1,4 @@
-==id $Id: amcedvd_lib.sfd,v 1.1 2026/11/14 $
+==id $Id: amcedvd_lib.sfd,v 1.2 2026/11/14 $
 * amcedvd.library: DVD-Video navigation for AmigaMCE (libdvdread and
 * libdvdnav inside). The structures and constants are in
 * <libraries/amcedvd.h>. This file and the headers made from it:
@@ -31,4 +31,6 @@ LONG DvdAngle(APTR dvd, LONG angle) (a0,d0)
 CONST_STRPTR DvdError(APTR dvd) (a0)
 CONST_STRPTR DvdVersion() ()
 LONG DvdTitleLength(APTR dvd, LONG title, ULONG * ms) (a0,d0,a1)
+* 1.2
+ULONG DvdMenus(APTR dvd) (a0)
 ==end

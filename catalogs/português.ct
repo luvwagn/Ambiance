@@ -863,6 +863,9 @@ Disparo reproduz o filme, ou os programas um após o outro, na ZZ9000
 MSG_5AEFD354
 N e P: capítulo ou programa seguinte e anterior
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Descodificado pela CPU: os seus menus, M para voltar a eles
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

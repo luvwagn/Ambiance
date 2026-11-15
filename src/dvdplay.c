@@ -17,9 +17,18 @@
  * them, each a title of its own (those under a minute, logos and
  * trailers, left out). The card is fed a title's Program Stream as it
  * comes (stream.c's video_run, by dvdplay_read); at its end the player
- * starts the next (dvdplay_chapter). No menus yet: still frames and waits
- * are passed over, and a title ends when the disc leaves it (its last
- * chapter done, a menu next).
+ * starts the next (dvdplay_chapter). Still frames and waits are passed
+ * over, and a title ends when the disc leaves it (its last chapter done, a
+ * menu next).
+ *
+ * Or, decoded by the CPU, a disc with menus (dvdplay_nav): from its first
+ * play as a DVD player reads it, its virtual machine deciding what comes
+ * next; reading stops at what the player must deal with (a jump, a still,
+ * a wait: dvdplay_pending), and what the viewer asks of its menus (a
+ * button, its menu, a seek) is queued by the UI (dvdplay_ask) and done by
+ * the playback process (dvdplay_service), the one task using the library
+ * while it plays. Its subpictures' stream, colours and highlighted button
+ * are kept for the player to draw (spu.c).
  *
  * The library is opened by dvdplay_open and closed by dvdplay_close (it
  * stays loaded until memory is wanted, as amcesql.library does). It is
@@ -30,6 +39,7 @@
 #include "dvdplay.h"
 #include "dvddisc.h"
 #include "vprobe.h"
+#include "spu.h"
 
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
@@ -210,6 +220,27 @@ struct DvdPlay {
     BOOL pend;                              /* a pack in blk still to give */
     BOOL ended;
     char name[64];
+    /* the disc's own navigation (dvdplay_nav): from its first play, its
+     * menus and whatever they lead to; the playback process reads, and
+     * carries out what the UI asks (asks[], under Forbid) */
+    BOOL nav;
+    ULONG menus;                            /* DvdMenus' bits (0 none, or no 1.2 library) */
+    volatile int stop_ev;                   /* DVDP_: what reading stopped for */
+    volatile LONG still_s;
+    volatile BOOL ev_user;                  /*   a hop the viewer asked for (a button, Menu) */
+    BOOL user_req;                          /* (asked: the next hop is the viewer's) */
+    struct { UBYTE what; LONG a, b; } asks[8];
+    volatile UBYTE ask_in, ask_out;
+    volatile LONG domain, vts;
+    volatile LONG spu;                      /* the subpicture stream (0-31), -1 none */
+    volatile BOOL spu_forced;               /*   only its forced ones (subtitles off) */
+    ULONG clut[16];
+    volatile ULONG clut_seq;
+    struct SpuHl hl;
+    volatile ULONG hl_seq;
+    volatile LONG hl_button;
+    volatile ULONG at_ms, forbidden;
+    volatile BOOL wide;
     UBYTE blk[DVD_BLOCK];
 };
 
@@ -328,6 +359,9 @@ static void choose_audio(struct DvdPlay *dp)
     for (i = 0; i < 8; i++)
         DvdStreamInfo(dp->dvd, DVDS_AUDIO, i, &si[i]);
     k = dvdplay_pick_audio(si, 8, in.audio);
+    if (dp->nav && in.audio >= 0 && in.audio < 8 && rank(&si[in.audio]))
+        k = in.audio;                       /* (its own navigation: the disc's choice, its
+                                             * audio menu's, if it plays) */
     if (k < 0) {
         sprintf(m, "title %ld: no sound the card plays (%ld tracks)", (long)dp->title,
                 (long)in.audio_count);
@@ -347,9 +381,13 @@ static void choose_audio(struct DvdPlay *dp)
         dp->a_sub = (UBYTE)(0x80 + si[k].physical);
     } else
         dp->a_id = (UBYTE)(0xC0 + si[k].physical);
-    sprintf(m, "title %ld: sound track %ld of %ld (%s, %ld channels, \"%s\")", (long)dp->title,
-            (long)(k + 1), (long)in.audio_count, dp->a_fmt == DVDA_AC3 ? "AC-3" : "MPEG",
-            (long)dp->a_ch, si[k].lang);
+    if (dp->nav && in.domain != DVDD_TITLE)
+        sprintf(m, "a menu: its sound (%s, %ld channels)", si[k].format == DVDA_AC3 ? "AC-3" : "MPEG",
+                (long)si[k].channels);
+    else
+        sprintf(m, "title %ld: sound track %ld of %ld (%s, %ld channels, \"%s\")", (long)dp->title,
+                (long)(k + 1), (long)in.audio_count, dp->a_fmt == DVDA_AC3 ? "AC-3" : "MPEG",
+                (long)dp->a_ch, si[k].lang);
     amce_log("dvd", m);
 }
 
@@ -436,6 +474,9 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         dvdplay_close(dp);
         return NULL;
     }
+    /* its menus (amcedvd.library 1.2 on) */
+    if (AmceDvdBase->lib_Version > 1 || AmceDvdBase->lib_Revision >= 2)
+        dp->menus = DvdMenus(dp->dvd);
     /* what plays: the film, or the programmes in order */
     DvdGetInfo(dp->dvd, &in);
     {
@@ -508,11 +549,382 @@ const char *dvdplay_name(struct DvdPlay *dp)
     return dp->name;
 }
 
+/* ---- the disc's own navigation (its menus) */
+
+/* The highlighted button, as the playback process will draw it */
+static void hl_fetch(struct DvdPlay *dp)
+{
+    struct DvdHighlight h;
+    struct SpuHl n;
+    LONG b = DvdHighlight(dp->dvd, &h, DVDH_SELECTED), i;
+    memset(&n, 0, sizeof(n));
+    if (b > 0) {
+        n.on = TRUE;
+        n.x0 = h.x0, n.y0 = h.y0, n.x1 = h.x1, n.y1 = h.y1;
+        for (i = 0; i < 4; i++) {
+            n.col[i] = h.colour[i];
+            n.alpha[i] = h.alpha[i];
+        }
+    }
+    dp->hl_button = b > 0 ? b : 0;
+    if (memcmp(&n, &dp->hl, sizeof(n))) {
+        Forbid();
+        dp->hl = n;
+        dp->hl_seq++;
+        Permit();
+    }
+}
+
+/* Where it is now: its domain, title, time, what the disc forbids */
+static void now_fetch(struct DvdPlay *dp)
+{
+    struct DvdInfo in;
+    if (!DvdGetInfo(dp->dvd, &in))
+        return;
+    dp->domain = in.domain;
+    dp->at_ms = in.domain == DVDD_TITLE ? in.ms : 0;
+    dp->forbidden = in.forbidden;
+    dp->wide = in.wide;
+    dp->chapter = in.chapter;
+    dp->chapters = in.chapters;
+    if (in.domain == DVDD_TITLE && in.title != dp->title) {
+        ULONG ms = 0;
+        dp->title = in.title;
+        DvdTitleLength(dp->dvd, in.title, &ms);
+        dp->ms = ms;
+    }
+}
+
+ULONG dvdplay_menus(struct DvdPlay *dp)
+{
+    return dp->menus;
+}
+
+BOOL dvdplay_is_nav(struct DvdPlay *dp)
+{
+    return dp->nav;
+}
+
+/* Reading from the disc's start, its first play: the disc opened afresh
+ * (its machine started again), its first pack found as prime does,
+ * passing over the jumps and changes before it. */
+BOOL dvdplay_nav(struct DvdPlay *dp)
+{
+    struct DvdReader rd;
+    struct DvdEvent ev;
+    LONG k;
+    char m[120];
+    if (!dp->menus)
+        return FALSE;
+    DvdClose(dp->dvd);
+    dvdd_reader(dp->disc, &rd);
+    rd.log = lib_log;
+    if (!(dp->dvd = DvdOpen(&rd, 0))) {
+        amce_log("dvd", "opened again for its menus: could not be");
+        dp->ended = TRUE;
+        return FALSE;
+    }
+    dp->nav = TRUE;
+    dp->ended = dp->pend = FALSE;
+    dp->stop_ev = DVDP_NONE;
+    dp->spu = -1;
+    dp->title = 0;
+    dp->ms = 0;
+    dp->a_fmt = -1;
+    sprintf(dp->name, "%.31s", dp->vol);
+    for (k = 0; k < 4000; k++) {
+        LONG e = DvdNextBlock(dp->dvd, dp->blk, &ev);
+        if (e == DVDE_BLOCK || e == DVDE_NAV) {
+            dp->pend = TRUE;
+            if (e == DVDE_BLOCK)
+                other_sound_out(dp, dp->blk);
+            now_fetch(dp);
+            sprintf(m, "from its start: its menus (%lx)", (unsigned long)dp->menus);
+            amce_log("dvd", m);
+            return TRUE;
+        }
+        if (e == DVDE_DOMAIN) {
+            dp->domain = ev.domain;
+            dp->vts = ev.vts;
+            choose_audio(dp);
+        } else if (e == DVDE_SPU_STREAM) {
+            dp->spu = ev.spu_wide >= 0 ? (ev.spu_wide & 31) : -1;
+            dp->spu_forced = ev.spu_wide >= 0 && (ev.spu_wide & 0x80);
+        } else if (e == DVDE_CLUT) {
+            memcpy(dp->clut, ev.clut, sizeof(dp->clut));
+            dp->clut_seq++;
+        } else if (e == DVDE_AUDIO_STREAM)
+            choose_audio(dp);
+        else if (e == DVDE_STILL)
+            DvdSkip(dp->dvd, DVDSKIP_STILL);    /* (a still before any picture) */
+        else if (e == DVDE_WAIT)
+            DvdSkip(dp->dvd, DVDSKIP_WAIT);
+        else if (e == DVDE_STOP || e == DVDE_ERROR)
+            break;
+    }
+    amce_log("dvd", "from its start: nothing to play: its film instead");
+    dp->nav = FALSE;
+    start(dp, 0, 0);
+    return FALSE;
+}
+
+/* One of the disc's events taken in (not a pack): what reading stops for */
+static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
+{
+    switch (e) {
+    case DVDE_HOP:
+        dp->ev_user = dp->user_req;
+        dp->user_req = FALSE;
+        dp->stop_ev = DVDP_HOP;
+        break;
+    case DVDE_STILL:
+        dp->still_s = ev->still;
+        dp->stop_ev = DVDP_STILL;
+        break;
+    case DVDE_WAIT:
+        dp->stop_ev = DVDP_WAIT;
+        break;
+    case DVDE_STOP:
+        dp->ended = TRUE;
+        dp->stop_ev = DVDP_END;
+        break;
+    case DVDE_DOMAIN: {
+        char m[80];
+        dp->domain = ev->domain;
+        dp->vts = ev->vts;
+        sprintf(m, "now %s (title set %ld)",
+                ev->domain == DVDD_TITLE ? "a title" : ev->domain == DVDD_FIRSTPLAY ? "its first play"
+                                                                                      : "a menu",
+                (long)ev->vts);
+        amce_log("dvd", m);
+        now_fetch(dp);
+        choose_audio(dp);
+        hl_fetch(dp);
+        break;
+    }
+    case DVDE_AUDIO_STREAM:
+        choose_audio(dp);
+        break;
+    case DVDE_SPU_STREAM:
+        dp->spu = ev->spu_wide >= 0 ? (ev->spu_wide & 31) : -1;
+        dp->spu_forced = ev->spu_wide >= 0 && (ev->spu_wide & 0x80);
+        break;
+    case DVDE_CLUT:
+        Forbid();
+        memcpy(dp->clut, ev->clut, sizeof(dp->clut));
+        dp->clut_seq++;
+        Permit();
+        break;
+    case DVDE_HIGHLIGHT:
+        hl_fetch(dp);
+        break;
+    case DVDE_CELL:
+        now_fetch(dp);
+        hl_fetch(dp);
+        break;
+    default:
+        break;
+    }
+}
+
+/* The disc read on through its menus and titles: packs into dst until
+ * something it must stop for (dvdplay_pending), then 0 until dvdplay_go. */
+static LONG nav_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
+{
+    LONG got = 0;
+    struct DvdEvent ev;
+    while (dp->stop_ev == DVDP_NONE && got + DVD_BLOCK <= max) {
+        LONG e;
+        if (dp->pend) {
+            dp->pend = FALSE;
+            e = DVDE_BLOCK;
+        } else
+            e = DvdNextBlock(dp->dvd, dp->blk, &ev);
+        if (e == DVDE_BLOCK || e == DVDE_NAV) {
+            if (e == DVDE_BLOCK)
+                other_sound_out(dp, dp->blk);
+            else {
+                now_fetch(dp);              /* (a new VOBU: its time; its buttons) */
+                hl_fetch(dp);
+            }
+            CopyMem(dp->blk, (APTR)(dst + got), DVD_BLOCK);
+            got += DVD_BLOCK;
+        } else if (e == DVDE_ERROR) {
+            char m[200];
+            sprintf(m, "read: %.150s", (const char *)DvdError(dp->dvd));
+            amce_log("dvd", m);
+            dp->ended = TRUE;
+            dp->stop_ev = DVDP_END;
+            return got ? got : -1;
+        } else
+            nav_event(dp, e, &ev);
+    }
+    return got;
+}
+
+int dvdplay_pending(struct DvdPlay *dp, LONG *still_s, BOOL *user)
+{
+    if (still_s)
+        *still_s = dp->still_s;
+    if (user)
+        *user = dp->ev_user;
+    return dp->nav ? dp->stop_ev : DVDP_NONE;
+}
+
+void dvdplay_go(struct DvdPlay *dp)
+{
+    if (dp->stop_ev == DVDP_STILL)
+        DvdSkip(dp->dvd, DVDSKIP_STILL);
+    else if (dp->stop_ev == DVDP_WAIT)
+        DvdSkip(dp->dvd, DVDSKIP_WAIT);
+    if (dp->stop_ev != DVDP_END)
+        dp->stop_ev = DVDP_NONE;
+    dp->ev_user = FALSE;
+}
+
+void dvdplay_ask(struct DvdPlay *dp, int what, LONG a, LONG b)
+{
+    UBYTE i;
+    if (!dp || !dp->nav)
+        return;
+    Forbid();
+    i = dp->ask_in;
+    if ((UBYTE)(i - dp->ask_out) < 8) {
+        dp->asks[i & 7].what = (UBYTE)what;
+        dp->asks[i & 7].a = a;
+        dp->asks[i & 7].b = b;
+        dp->ask_in = (UBYTE)(i + 1);
+    }
+    Permit();
+}
+
+void dvdplay_service(struct DvdPlay *dp)
+{
+    char m[100];
+    while (dp->nav && dp->ask_out != dp->ask_in) {
+        UBYTE what;
+        LONG a, b, ok = TRUE;
+        Forbid();
+        what = dp->asks[dp->ask_out & 7].what;
+        a = dp->asks[dp->ask_out & 7].a;
+        b = dp->asks[dp->ask_out & 7].b;
+        dp->ask_out++;
+        Permit();
+        switch (what) {
+        case DVDQ_UP:
+            ok = DvdButton(dp->dvd, DVDB_UP, 0);
+            break;
+        case DVDQ_DOWN:
+            ok = DvdButton(dp->dvd, DVDB_DOWN, 0);
+            break;
+        case DVDQ_LEFT:
+            ok = DvdButton(dp->dvd, DVDB_LEFT, 0);
+            break;
+        case DVDQ_RIGHT:
+            ok = DvdButton(dp->dvd, DVDB_RIGHT, 0);
+            break;
+        case DVDQ_ACTIVATE:
+            dp->user_req = TRUE;
+            ok = DvdButton(dp->dvd, DVDB_ACTIVATE, 0);
+            break;
+        case DVDQ_POINT:
+            DvdPoint(dp->dvd, a, b, FALSE);     /* (off its buttons: nothing) */
+            break;
+        case DVDQ_CLICK:
+            dp->user_req = TRUE;
+            ok = DvdPoint(dp->dvd, a, b, TRUE);
+            break;
+        case DVDQ_MENU:
+            dp->user_req = TRUE;
+            if (dp->domain == DVDD_TITLE)
+                ok = DvdMenu(dp->dvd, DVDM_ROOT) || DvdMenu(dp->dvd, DVDM_TITLE);
+            else
+                ok = DvdMenu(dp->dvd, DVDM_ESCAPE);     /* (from a menu: back to the title) */
+            break;
+        case DVDQ_SEEK:
+            dp->user_req = TRUE;
+            ok = DvdSeekTime(dp->dvd, (ULONG)a);
+            break;
+        case DVDQ_CHAPTER:
+            dp->user_req = TRUE;
+            ok = DvdChapter(dp->dvd, a > 0 ? DVDC_NEXT : DVDC_PREV);
+            break;
+        }
+        if (!ok) {
+            dp->user_req = FALSE;
+            sprintf(m, "asked %ld: %.60s", (long)what, (const char *)DvdError(dp->dvd));
+            amce_log("dvd", m);
+        }
+        hl_fetch(dp);                       /* (a button moved to: drawn now, a still too) */
+    }
+}
+
+void dvdplay_poll(struct DvdPlay *dp)
+{
+    struct DvdEvent ev;
+    int k;
+    dvdplay_service(dp);
+    if (dp->stop_ev != DVDP_STILL && dp->stop_ev != DVDP_WAIT)
+        return;
+    /* the disc's events while it stands still: a button changed, a jump */
+    for (k = 0; k < 16; k++) {
+        LONG e = DvdNextBlock(dp->dvd, dp->blk, &ev);
+        if (e == DVDE_STILL || e == DVDE_WAIT || e == DVDE_NOP)
+            break;
+        if (e == DVDE_BLOCK || e == DVDE_NAV) {
+            dp->pend = TRUE;                /* (moved on by itself: given next) */
+            if (e == DVDE_BLOCK)
+                other_sound_out(dp, dp->blk);
+            dp->stop_ev = DVDP_HOP;
+            break;
+        }
+        if (e == DVDE_ERROR)
+            break;
+        nav_event(dp, e, &ev);
+        if (dp->stop_ev == DVDP_HOP || dp->stop_ev == DVDP_END)
+            break;
+    }
+}
+
+void dvdplay_now(struct DvdPlay *dp, struct DvdNow *n)
+{
+    n->menu = dp->nav && dp->domain != DVDD_TITLE;
+    n->buttons = dp->nav && dp->hl_button > 0;
+    n->title_ms = dp->nav && dp->domain == DVDD_TITLE ? dp->ms : 0;
+    n->at_ms = dp->at_ms;
+    n->forbidden = dp->forbidden;
+    n->title = dp->title;
+}
+
+LONG dvdplay_spu(struct DvdPlay *dp, BOOL *forced_only)
+{
+    *forced_only = dp->spu_forced;
+    return dp->nav ? dp->spu : -1;
+}
+
+const ULONG *dvdplay_clut(struct DvdPlay *dp, ULONG *seq)
+{
+    *seq = dp->clut_seq;
+    return dp->clut;
+}
+
+ULONG dvdplay_highlight(struct DvdPlay *dp, struct SpuHl *hl)
+{
+    ULONG q;
+    Forbid();
+    *hl = dp->hl;
+    q = dp->hl_seq;
+    Permit();
+    return q;
+}
+
 LONG dvdplay_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
 {
     LONG got = 0;
     struct DvdEvent ev;
     struct DvdInfo in;
+    if (dp->nav)
+        return nav_read(dp, dst, max);
     while (!dp->ended && got + DVD_BLOCK <= max) {
         LONG e;
         if (dp->pend) {
@@ -572,6 +984,8 @@ static ULONG where(struct DvdPlay *dp)
 BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at)
 {
     *at = 0;
+    if (dp->nav && !ms)
+        return dvdplay_nav(dp);             /* (its menus: the disc from its start again) */
     if (!ms)
         return DvdPlay(dp->dvd, dp->title, 0) && prime(dp);
     /* (after its end the disc has gone on to a menu: back in the film first) */
@@ -649,11 +1063,17 @@ void dvdplay_where(struct DvdPlay *dp, struct DvdWhere *w)
 
 BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir)
 {
+    if (dp->nav)
+        return dp->domain == DVDD_TITLE && dp->stop_ev != DVDP_END &&
+               !(dp->forbidden & (dir > 0 ? DVDU_NEXT_CHAPTER : DVDU_PREV_CHAPTER)) &&
+               (dir < 0 || dp->chapter < dp->chapters);
     return dir > 0 ? (!dp->ended && dp->chapter < dp->chapters) || dp->idx + 1 < dp->n : TRUE;
 }
 
 BOOL dvdplay_next_title(struct DvdPlay *dp)
 {
+    if (dp->nav)
+        return FALSE;                       /* (the disc's own navigation goes on) */
     return dp->idx + 1 < dp->n;
 }
 

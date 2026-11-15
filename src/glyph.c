@@ -262,5 +262,15 @@ void glyph_draw(struct RastPort *rp, int kind, WORD cx, WORD cy, WORD gh, WORD s
     case GL_UNFULL:
         corners(rp, cx, cy, gh, sx, gh < 11 ? 1 : t > 2 ? t - 1 : 2, kind == GL_UNFULL, fg);
         break;
+    case GL_MENU: {
+        /* three bars as wide as the glyph is tall, a bar's height apart
+         * (thinner than Pause's: a list, not a button) */
+        WORD th = t > 2 ? t - 1 : 2, lw = gh * sx, gap = (gh - 3 * th) / 2, k;
+        for (k = 0; k < 3; k++) {
+            WORD y0 = gy + k * (th + gap);
+            fill(rp, cx - lw / 2, y0, cx - lw / 2 + lw - 1, y0 + th - 1, fg);
+        }
+        break;
+    }
     }
 }

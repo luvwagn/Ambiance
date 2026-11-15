@@ -863,6 +863,9 @@ Skyt spiller av filmen, eller programmene etter hverandre, på ZZ9000
 MSG_5AEFD354
 N og P: neste og forrige kapittel eller program
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Dekodet av CPU-en: menyene, M henter dem fram igjen
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

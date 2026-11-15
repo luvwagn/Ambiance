@@ -38,6 +38,7 @@ LONG DvdAngle(APTR dvd, LONG angle);
 CONST_STRPTR DvdError(APTR dvd);
 CONST_STRPTR DvdVersion(void);
 LONG DvdTitleLength(APTR dvd, LONG title, ULONG *ms);
+ULONG DvdMenus(APTR dvd);
 unsigned long dvdp_memory(int peak);
 #endif
 
@@ -269,6 +270,12 @@ int main(int argc, char **argv)
               (unsigned long)ms2);
         CHECK(DvdTitleLength(dvd, 9, &ms9) == 0 && ms9 == 0, "title 9 has a length");
         log_errors = 0;                     /* (title 9's) */
+    }
+    /* its menus: the video manager's title menu (the root menu of its
+     * title set is only a jump back there: not one) */
+    {
+        ULONG mb = DvdMenus(dvd);
+        CHECK(mb & DVDMB_TITLE, "menus %lx", (unsigned long)mb);
     }
 
     /* first play goes to the root menu: a still with two buttons */

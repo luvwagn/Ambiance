@@ -863,6 +863,9 @@ MSG_77C67E04
 MSG_5AEFD354
 N και P: επόμενο και προηγούμενο κεφάλαιο ή πρόγραμμα
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Αποκωδικοποίηση από τη CPU: τα μενού του, M για επιστροφή σε αυτά
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

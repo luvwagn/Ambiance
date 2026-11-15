@@ -863,6 +863,9 @@ Skyd afspiller dens film eller dens programmer efter hinanden på ZZ9000
 MSG_5AEFD354
 N og P: næste og forrige kapitel eller program
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Afkodet af CPU'en: dens menuer, M henter dem frem igen
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

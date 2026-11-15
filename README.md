@@ -164,7 +164,19 @@ of the Amiga to how fast it really is.
   (MPEG audio, then AC-3 in stereo, then any AC-3), and only that one is
   sent. The disc is read through its drive's device (`HD_SCSICMD`) by
   `Libs/amcedvd.library` (libdvdread and libdvdnav, `src/dvdlib`). No
-  menus or subtitles yet, and no encrypted (CSS) discs.
+  encrypted (CSS) discs.
+- DVD menus: when the CPU decodes a DVD (Settings > Video: MPEG on the
+  ZZ9000 off, or no ZZ9000) and the disc has menus, Fire plays it from
+  its start as a DVD player does: its intro, then its menus. Their
+  buttons are drawn over the picture (on the overlay or drawn alike, at
+  the picture's own size); the arrows, Return or the stick and fire move
+  between and press them, the pointer selects the one under it and a
+  click presses it. M, a CD32 pad's green button or the controls' menu
+  button (three bars) bring its menu back while a title plays, and from
+  a menu go back to the title. Forced subtitles show over the film. The
+  disc's own rules are kept: what it forbids at a point is greyed. On
+  the ZZ9000 a DVD plays its film as before (the card's pictures cannot
+  be drawn over).
 
 ### Screens and looks
 

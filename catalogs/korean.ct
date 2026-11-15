@@ -863,6 +863,9 @@ MSG_77C67E04
 MSG_5AEFD354
 N과 P: 다음/이전 챕터 또는 프로그램
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+CPU 디코딩: 디스크 메뉴, M으로 다시 표시
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

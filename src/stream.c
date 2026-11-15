@@ -39,6 +39,7 @@
 #include <proto/mpegv.h>
 #include "vprobe.h"
 #include "dvdplay.h"
+#include "spu.h"
 #include "video.h"
 #include <libraries/ac3.h>
 #include <proto/ac3.h>
@@ -2615,6 +2616,20 @@ static struct MpvPicture *sw_f;             /* the decoder's newest picture... *
 static BOOL sw_f_ok;                        /* ...still valid (no MpvDecode since) */
 static ULONG sw_ndirect;                    /* (pictures written straight to the overlay) */
 static unsigned long long sw_tdirect;
+/* A DVD's menus (dvdplay.c's own navigation): its subpictures (buttons,
+ * subtitles) decoded from their packets and blended into each picture
+ * they show over, the highlighted button with them, at the picture's own
+ * size before it is shown (on the overlay or drawn alike). The last
+ * picture is kept as it was (sw_clean) while the disc stands still, so a
+ * button moved to is drawn again on it. */
+static BOOL sw_nav;                         /* the disc's own navigation */
+static struct Spu *sw_spu;
+static UBYTE *sw_clean;
+static BOOL sw_clean_ok;
+static ULONG sw_clean_pts;
+static ULONG sw_hl_drawn, sw_clut_drawn;    /* (what the last composed picture had) */
+static const struct SpuPic *sw_spu_drawn;
+static ULONG sw_ncomposed;
 
 /* The CPU's pictures straight onto the UI's overlay (TRUE: it shows one
  * now), or not (drawn by the UI). From the UI. */
@@ -2936,6 +2951,13 @@ static ULONG sw_packet(register struct Hook *h __asm("a0"), register APTR mpv __
         if (sw_apts < 0 && (p->mp_Flags & MPVPF_PTS))
             sw_apts = (LONG)p->mp_PTS;
         sw_aq_put(p->mp_Data, p->mp_Length);
+    } else if (p->mp_Stream == 0xBD && sw_spu && p->mp_Length > 1 && (p->mp_SubStream & 0xE0) == 0x20) {
+        /* a DVD's subpicture (its menu's buttons, a subtitle): the stream
+         * the disc says, after the substream's byte */
+        BOOL forced;
+        if ((LONG)(p->mp_SubStream & 31) == dvdplay_spu(st.v_dvd, &forced))
+            spu_put(sw_spu, p->mp_Data + 1, p->mp_Length - 1, (p->mp_Flags & MPVPF_PTS) != 0,
+                    (ULONG)p->mp_PTS);
     } else if (p->mp_Stream == 0xBD && sw_ac3 && p->mp_Length > 4 && p->mp_SubStream >= 0x80 &&
                p->mp_SubStream <= 0x87) {
         /* a DVD's AC3 (private stream 1): its first track's, after the
@@ -2984,6 +3006,75 @@ static int sw_slot(void)
     return -1;
 }
 
+/* Slot s's planes, as mpegv.library's helpers take a picture */
+static void sw_slot_pic(int s, struct MpvPicture *p)
+{
+    UBYTE *b = swv[s].buf;
+    memset(p, 0, sizeof(*p));
+    p->mpic_Y = b;
+    p->mpic_Cb = b + swv_yw * swv_yh;
+    p->mpic_Cr = p->mpic_Cb + swv_yw * swv_yh / 4;
+    p->mpic_Width = (UWORD)swv_w;
+    p->mpic_Height = (UWORD)swv_h;
+    p->mpic_YModulo = (UWORD)swv_yw;
+    p->mpic_CModulo = (UWORD)(swv_yw / 2);
+    p->mpic_YRows = (UWORD)swv_yh;
+}
+
+/* The subpicture to show over a picture at pts now (NULL none), and the
+ * highlighted button (hl->on) */
+static const struct SpuPic *sw_spu_now(ULONG pts, struct SpuHl *hl)
+{
+    BOOL forced = FALSE;
+    LONG k = dvdplay_spu(st.v_dvd, &forced);
+    sw_hl_drawn = dvdplay_highlight(st.v_dvd, hl);
+    dvdplay_clut(st.v_dvd, &sw_clut_drawn);
+    return k >= 0 ? spu_at(sw_spu, pts, forced) : NULL;
+}
+
+/* Slot s (its planes the picture as it was: sw_clean's) with the
+ * subpicture and highlight blended in, shown: onto the overlay, or given
+ * to the UI. */
+static void sw_compose_out(int s, const struct SpuPic *sp, const struct SpuHl *hl)
+{
+    ULONG ny = swv_yw * swv_yh, seq;
+    UBYTE *b = swv[s].buf;
+    const ULONG *clut = dvdplay_clut(st.v_dvd, &seq);
+    spu_blend420(sp, hl, clut, b, b + ny, b + ny + ny / 4, swv_yw, swv_yw / 2, swv_w, swv_h);
+    sw_spu_drawn = sp;
+    sw_ncomposed++;
+    if (sw_direct && !st.v_hidden) {
+        ULONG bpr;
+        UBYTE *mem = vo_lock(&bpr);
+        if (mem) {
+            struct MpvPicture p;
+            sw_slot_pic(s, &p);
+            MpvToYUV422(&p, mem, bpr, MPVY_Y0UY1V);
+            vo_unlock();
+            swv[s].state = SW_FREE;
+            return;
+        }
+    }
+    swv[s].seq = ++swv_seq;
+    swv[s].state = st.v_hidden ? SW_FREE : SW_SHOW;
+}
+
+/* The last picture again, from sw_clean, with what shows over it now (a
+ * button moved to while the disc stands still): FALSE if it cannot be. */
+static BOOL sw_recompose(ULONG pts)
+{
+    struct SpuHl hl;
+    const struct SpuPic *sp;
+    int s = sw_slot();
+    ULONG ny = swv_yw * swv_yh;
+    if (!sw_clean_ok || s < 0)
+        return FALSE;
+    sp = sw_spu_now(pts, &hl);
+    memcpy(swv[s].buf, sw_clean, ny * 3 / 2);
+    sw_compose_out(s, sp, &hl);
+    return TRUE;
+}
+
 static void swv_run(void)
 {
     struct Hook hook;
@@ -3005,6 +3096,12 @@ static void swv_run(void)
      * on pictures from before the seek, never decoded: blocks of others) */
     BOOL want_i = st.range_from != 0;
     ULONG i_skipped = 0;
+    /* a DVD's menus: standing still (since still_t0, still_s seconds), the
+     * output played out before going on (since drain_t0), a part's start
+     * (seg_t0) and how many parts */
+    BOOL still_on = FALSE;
+    ULONG still_t0 = 0, drain_t0 = 0, seg_t0 = time_ms(), n_seg = 1, n_still = 0, n_hop = 0;
+    LONG still_s = 0;
     char m[200];
     /* (measured: each step's E-clock ticks, and how many) */
     unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
@@ -3070,6 +3167,16 @@ static void swv_run(void)
             swv[i].size = need;
         }
         swv[i].state = SW_FREE;
+    }
+    /* a DVD's menus: its subpictures, and the last picture as it was */
+    sw_nav = st.v_dvd && dvdplay_is_nav(st.v_dvd);
+    sw_spu = NULL;
+    sw_clean_ok = FALSE;
+    sw_spu_drawn = NULL;
+    sw_ncomposed = 0;
+    if (sw_nav && (!(sw_spu = spu_new()) || !(sw_clean = AllocVec(swv_yw * swv_yh * 3 / 2, MEMF_ANY)))) {
+        fail(_("Not enough memory"));
+        goto out;
     }
     /* its decoder: the file through the read hook (16 KB at a time), its
      * audio packets to the queue (a Program Stream's first are read now) */
@@ -3149,6 +3256,39 @@ static void swv_run(void)
     pre = (ULONG)st.dec_freq * 300 / 1000;
     hold = period / 2;
     drop = period > 3600 ? period : 3600;
+    /* a DVD's jump (a menu's button, its menu, the disc's own): what was
+     * decoded and its sound let go, the next part started as the first was
+     * (its first picture, its sound with it, timed afresh) */
+#define SEG_FLUSH()                                                                  \
+    do {                                                                             \
+        MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
+        sw_f_ok = FALSE;                                                             \
+        if (held >= 0) {                                                             \
+            swv[held].state = SW_FREE;                                               \
+            held = -1;                                                               \
+        }                                                                            \
+        done = a_done = on = FALSE;                                                  \
+        if (st.started)                                                              \
+            out_stop();                                                              \
+        st.f_out = st.f_in;                                                          \
+        if (sw_ac3) {                                                                \
+            a3.qout = a3.qin;                                                        \
+            a3.sub = 0;                                                              \
+            a3.pts0 = ZZ_NO_PTS;                                                     \
+        }                                                                            \
+        sw_aq_out = sw_aq_in;                                                        \
+        sw_apts = -1;                                                                \
+        spu_reset(sw_spu);                                                           \
+        sw_spu_drawn = NULL;                                                         \
+        if (skip_b) {                                                                \
+            skip_b = FALSE;                                                          \
+            MpvControl(sw_mpv, MPVC_SKIPB, FALSE);                                   \
+        }                                                                            \
+        run = b_late = b_okrun = b_ontime = 0;                                       \
+        seg_t0 = time_ms();                                                          \
+        drain_t0 = 0;                                                                \
+        n_seg++;                                                                     \
+    } while (0)
     while (!st.quit) {
         BOOL busy = FALSE;
         serve();
@@ -3156,7 +3296,9 @@ static void swv_run(void)
             /* a new overlay (blank): the newest picture on it again (paused,
              * or until the next is due) */
             sw_redraw = FALSE;
-            if (sw_direct && sw_f_ok)
+            if (sw_nav && sw_clean_ok)
+                sw_recompose(sw_clean_pts);         /* (with what shows over it) */
+            else if (sw_direct && sw_f_ok)
                 sw_to_overlay(sw_f);
         }
         if (st.paused) {
@@ -3170,6 +3312,23 @@ static void swv_run(void)
         if (out_paused) {
             out_start();
             out_paused = FALSE;
+        }
+        /* a DVD's menus: what the viewer asked done; a jump they asked for at
+         * once; standing still till its time is up or a button is pressed */
+        if (sw_nav) {
+            BOOL user = FALSE;
+            int pe;
+            dvdplay_service(st.v_dvd);
+            if (still_on)
+                dvdplay_poll(st.v_dvd);     /* (the disc's events while it stands) */
+            pe = dvdplay_pending(st.v_dvd, &still_s, &user);
+            if (pe == DVDP_HOP && (user || still_on)) {
+                n_hop++;
+                still_on = FALSE;
+                SEG_FLUSH();
+                dvdplay_go(st.v_dvd);
+                continue;
+            }
         }
         /* its sound decoded while there is room (a second and a half ahead) */
         while (sw_sound && !a_done && st.f_in - st.f_out < (ULONG)st.dec_freq * 3 / 2 &&
@@ -3263,6 +3422,41 @@ static void swv_run(void)
                 busy = TRUE;
             }
         }
+        /* a DVD's still: what shows over its picture drawn again as it
+         * changes, till its time is up (its sound decoded on meanwhile) */
+        if (sw_nav) {
+            if (still_on) {
+                int pe = dvdplay_pending(st.v_dvd, &still_s, NULL);
+                if (pe != DVDP_STILL) {
+                    still_on = FALSE;       /* (the end, or on by itself) */
+                    if (pe == DVDP_END)
+                        break;
+                    SEG_FLUSH();
+                    continue;
+                }
+                {
+                    /* what shows over it now (a button moved to, a
+                     * subpicture come after the picture) drawn again */
+                    struct SpuHl hl;
+                    ULONG cq, pts = sw_clean_pts + (time_ms() - still_t0) * 90;
+                    BOOL forced = FALSE;
+                    LONG k = dvdplay_spu(st.v_dvd, &forced);
+                    const struct SpuPic *sp = k >= 0 ? spu_at(sw_spu, pts, forced) : NULL;
+                    dvdplay_clut(st.v_dvd, &cq);
+                    if (dvdplay_highlight(st.v_dvd, &hl) != sw_hl_drawn || cq != sw_clut_drawn ||
+                        sp != sw_spu_drawn)
+                        sw_recompose(pts);
+                }
+                if (still_s != 255 /* (till a button) */ && time_ms() - still_t0 >= (ULONG)still_s * 1000) {
+                    still_on = FALSE;       /* its time up: on */
+                    dvdplay_go(st.v_dvd);
+                    SEG_FLUSH();
+                    continue;
+                }
+                v_wait(20000);
+                continue;
+            }
+        }
         /* the next picture, into a free buffer */
         if (held < 0 && !done) {
             struct MpvPicture *f;
@@ -3333,7 +3527,7 @@ static void swv_run(void)
         /* started: the first picture, the sound with it */
         if (!on && held >= 0) {
             if ((sw_sound || sw_ac3) && !a_done && (!rate || st.f_in - st.f_out < pre) &&
-                !MpvControl(sw_mpv, MPVC_ENDED, 0)) {
+                !MpvControl(sw_mpv, MPVC_ENDED, 0) && !(sw_nav && time_ms() - seg_t0 > 800)) {
                 if (!busy)
                     v_wait(2000);
                 continue;
@@ -3347,10 +3541,19 @@ static void swv_run(void)
                      : sw_ac3 && a3.pts0 != ZZ_NO_PTS ? a3.pts0 : pts0;
             on = TRUE;
             st.state = ST_PLAYING;
-            sprintf(m, "playing: the first picture at %lu ms, its sound's at %lu ms, %s",
-                    (unsigned long)(pts0 / 90), (unsigned long)(origin / 90),
-                    st.started ? "timed by its sound" : "timed by the clock");
-            amce_log("video", m);
+            if (n_seg <= 1 || n_seg % 50 == 0) {   /* (a DVD's menus: not every part's) */
+                sprintf(m, "playing%s: the first picture at %lu ms, its sound's at %lu ms, %s",
+                        n_seg > 1 ? " again" : "", (unsigned long)(pts0 / 90),
+                        (unsigned long)(origin / 90), st.started ? "timed by its sound" : "timed by the clock");
+                amce_log("video", m);
+            }
+        }
+        /* a DVD's menu: its sound come after its first picture, from here */
+        if (sw_nav && on && !st.started && !out_paused && sw_ac3 && rate && a3.pts0 != ZZ_NO_PTS &&
+            st.f_in - st.f_out >= pre) {
+            f0 = st.f_out;
+            origin = a3.pts0;
+            out_start();
         }
         /* the held picture: given to show on time, let go if late */
         if (on && held >= 0) {
@@ -3387,15 +3590,35 @@ static void swv_run(void)
                 }
             } else {
                 BOOL direct = swv[held].direct;
+                struct SpuHl hl;
+                const struct SpuPic *sp = NULL;
+                struct DvdNow now;
+                ULONG ny = swv_yw * swv_yh;
                 swv[held].direct = 0;
                 swv[held].pts = pts;
                 swv[held].seq = ++swv_seq;
-                if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f))
+                if (sw_nav) {
+                    sp = sw_spu_now((ULONG)pts, &hl);
+                    dvdplay_now(st.v_dvd, &now);
+                }
+                if (sw_nav && (sp || now.menu) && (!direct || sw_f_ok)) {
+                    /* a menu's, or under a subpicture: kept as it is, then
+                     * what shows over it blended in */
+                    if (direct) {
+                        memcpy(sw_clean, sw_f->mpic_Y, ny);
+                        memcpy(sw_clean + ny, sw_f->mpic_Cb, ny / 4);
+                        memcpy(sw_clean + ny + ny / 4, sw_f->mpic_Cr, ny / 4);
+                        memcpy(swv[held].buf, sw_clean, ny * 3 / 2);
+                    } else
+                        memcpy(sw_clean, swv[held].buf, ny * 3 / 2);
+                    sw_clean_ok = TRUE;
+                    sw_clean_pts = (ULONG)pts;
+                    sw_compose_out(held, sp, &hl);
+                } else if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f))
                     swv[held].state = SW_FREE;      /* (on the overlay already) */
                 else {
                     if (direct && sw_f_ok) {
                         /* no overlay now after all: a copy for the UI */
-                        ULONG ny = swv_yw * swv_yh;
                         memcpy(swv[held].buf, sw_f->mpic_Y, ny);
                         memcpy(swv[held].buf + ny, sw_f->mpic_Cb, ny / 4);
                         memcpy(swv[held].buf + ny + ny / 4, sw_f->mpic_Cr, ny / 4);
@@ -3418,11 +3641,45 @@ static void swv_run(void)
             held = -1;
             busy = TRUE;
         }
-        if (done && held < 0)
+        if (done && held < 0) {
+            /* a DVD's menus: the disc stopped giving for a reason of its own */
+            int pe = sw_nav ? dvdplay_pending(st.v_dvd, &still_s, NULL) : DVDP_NONE;
+            if (pe == DVDP_WAIT) {
+                /* all it gave shown: on (the decoder taking more again) */
+                dvdplay_go(st.v_dvd);
+                MpvControl(sw_mpv, MPVC_FLUSH, 0);
+                sw_f_ok = FALSE;
+                done = FALSE;
+                continue;
+            }
+            if (pe == DVDP_HOP) {
+                /* its own jump (a menu going round, a title's end): what
+                 * came before it played out, then on */
+                if (st.started && st.f_in != st.f_out && !drain_t0)
+                    drain_t0 = time_ms() ? time_ms() : 1;
+                if (drain_t0 && st.f_in != st.f_out && time_ms() - drain_t0 < 1500) {
+                    v_wait(10000);
+                    continue;
+                }
+                n_hop++;
+                SEG_FLUSH();
+                dvdplay_go(st.v_dvd);
+                continue;
+            }
+            if (pe == DVDP_STILL) {
+                /* its last picture stands (its buttons over it) */
+                still_on = TRUE;
+                still_t0 = time_ms();
+                n_still++;
+                sw_hl_drawn = ~0UL;         /* (drawn again with what shows now) */
+                continue;
+            }
             break;
+        }
         if (!busy)
             v_wait(3000);
     }
+#undef SEG_FLUSH
     /* the end: its sound plays out */
     while (!st.quit && st.started && st.f_in != st.f_out) {
         ULONG got = st_wait((1UL << st.sig) | SIGBREAKF_CTRL_C);
@@ -3452,6 +3709,15 @@ static void swv_run(void)
                 (unsigned long)(a3.qin - a3.qout), (unsigned long)pcm_peak);
         amce_log("video", m);
     }
+    if (sw_nav) {
+        ULONG dec = 0, bad = 0;
+        spu_counts(sw_spu, &dec, &bad);
+        sprintf(m, "a DVD's menus: %lu parts (%lu jumps), %lu stills; %lu subpictures decoded, %lu not; "
+                   "%lu pictures with something over them",
+                (unsigned long)n_seg, (unsigned long)n_hop, (unsigned long)n_still, (unsigned long)dec,
+                (unsigned long)bad, (unsigned long)sw_ncomposed);
+        amce_log("video", m);
+    }
     if (st.v_ts) {
         ULONG rs, cut, pr;
         tsp_counts(&rs, &cut, &pr);
@@ -3462,6 +3728,13 @@ static void swv_run(void)
 out:
     sw_on = FALSE;
     sw_f_ok = FALSE;
+    spu_free(sw_spu);
+    sw_spu = NULL;
+    if (sw_clean)
+        FreeVec(sw_clean);
+    sw_clean = NULL;
+    sw_clean_ok = FALSE;
+    sw_nav = FALSE;
     if (sw_ac3)
         a3_close();
     sw_ac3 = FALSE;

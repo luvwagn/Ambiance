@@ -7,6 +7,7 @@
 #include "../src/amce.h"
 #include "../src/dvdplay.h"
 #include "../src/vprobe.h"
+#include "../src/spu.h"
 #include <stdio.h>
 #include <string.h>
 #include <proto/exec.h>
@@ -160,6 +161,82 @@ int main(int argc, char **argv)
     packs = read_all(dp, 100000, &nav, &bad);
     CHECK(packs >= 200 && packs <= 300 && !bad, "from 1 s: %ld packs", (long)packs);
     CHECK(dvdplay_chapter(dp, -1, &at) && at <= 200, "previous chapter: %lu", (unsigned long)at);
+
+    /* its menus: from its first play to the root menu's still, its two
+     * buttons (the first highlighted), right to the second, pressed: title
+     * 2 plays, then back to the menu */
+    {
+        ULONG mb = dvdplay_menus(dp), seq0, seq1, cseq;
+        struct SpuHl hl;
+        struct DvdNow now;
+        LONG still = 0, sub = 0, spu_packs = 0, k;
+        BOOL user = 0, forced;
+        int ev = DVDP_NONE;
+        CHECK(mb & DVDMB_TITLE, "menus %lx", (unsigned long)mb);
+        CHECK(dvdplay_nav(dp) && dvdplay_is_nav(dp), "from its first play");
+        /* the menu's packs, to its still */
+        for (k = 0; k < 400 && ((ev = dvdplay_pending(dp, &still, &user)) == DVDP_NONE || ev == DVDP_WAIT); k++) {
+            LONG n, i;
+            if (ev == DVDP_WAIT) {
+                dvdplay_go(dp);             /* (shown what it had: on to the still) */
+                continue;
+            }
+            n = dvdplay_read(dp, buf, sizeof(buf));
+            for (i = 0; i + 2048 <= n; i += 2048) {
+                UBYTE *e = buf + i + 14 + (buf[i + 13] & 7);
+                if (e[3] == 0xBB)
+                    e += 6 + ((e[4] << 8) | e[5]);
+                if (e[3] == 0xBD && (e[9 + e[8]] & 0xE0) == 0x20)
+                    spu_packs++;
+            }
+        }
+        dvdplay_now(dp, &now);
+        printf("menu: event %d, still %ld, %ld subpicture packs\n", ev, (long)still, (long)spu_packs);
+        CHECK(ev == DVDP_STILL && still == 255, "the menu's still: %d %ld", ev, (long)still);
+        CHECK(now.menu && now.buttons && !now.title_ms, "in a menu: %d %d %lu", now.menu, now.buttons,
+              (unsigned long)now.title_ms);
+        CHECK(spu_packs >= 1, "subpicture packs %ld", (long)spu_packs);
+        sub = dvdplay_spu(dp, &forced);
+        CHECK(sub == 0, "its subpicture stream %ld", (long)sub);
+        dvdplay_clut(dp, &cseq);
+        CHECK(cseq >= 1, "no colour table");
+        seq0 = dvdplay_highlight(dp, &hl);
+        CHECK(hl.on && hl.x0 == 100 && hl.y0 == 200 && hl.x1 >= 318 && hl.x1 <= 320, "button 1: %d %d %d %d",
+              hl.on, hl.x0, hl.y0, hl.x1);
+        dvdplay_ask(dp, DVDQ_RIGHT, 0, 0);
+        dvdplay_poll(dp);
+        seq1 = dvdplay_highlight(dp, &hl);
+        CHECK(seq1 != seq0 && hl.on && hl.x0 == 400, "button 2: %d", hl.x0);
+        CHECK(dvdplay_pending(dp, NULL, NULL) == DVDP_STILL, "still after moving");
+        dvdplay_ask(dp, DVDQ_ACTIVATE, 0, 0);
+        for (k = 0; k < 5 && (ev = dvdplay_pending(dp, NULL, &user)) == DVDP_STILL; k++)
+            dvdplay_poll(dp);
+        CHECK(ev == DVDP_HOP && user, "pressed: %d %d", ev, user);
+        dvdplay_go(dp);
+        /* title 2: its packs, then its end goes back to the menu */
+        packs = 0;
+        for (k = 0; k < 400 && (ev = dvdplay_pending(dp, NULL, NULL)) != DVDP_STILL; k++) {
+            LONG n;
+            if (ev == DVDP_HOP || ev == DVDP_WAIT) {
+                dvdplay_now(dp, &now);
+                dvdplay_go(dp);
+                continue;
+            }
+            if (ev == DVDP_END)
+                break;
+            n = dvdplay_read(dp, buf, sizeof(buf));
+            if (n > 0) {
+                packs += n / 2048;
+                dvdplay_now(dp, &now);
+                if (now.title == 2 && !now.menu)
+                    mb |= 0x100;            /* (seen playing title 2) */
+            }
+        }
+        printf("title 2: %ld packs, then event %d\n", (long)packs, ev);
+        CHECK(mb & 0x100, "title 2 not played");
+        CHECK(packs >= 140, "title 2: %ld packs", (long)packs);
+        CHECK(ev == DVDP_STILL, "back at the menu: %d", ev);
+    }
     dvdplay_close(dp);
 
 done:

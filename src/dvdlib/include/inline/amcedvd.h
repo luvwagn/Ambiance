@@ -91,4 +91,8 @@
       LP3(0x90, LONG, DvdTitleLength , APTR, ___dvd, a0, LONG, ___title, d0, ULONG *, ___ms, a1,\
       , AMCEDVD_BASE_NAME)
 
+#define DvdMenus(___dvd) \
+      LP1(0x96, ULONG, DvdMenus , APTR, ___dvd, a0,\
+      , AMCEDVD_BASE_NAME)
+
 #endif /* !_INLINE_AMCEDVD_H */

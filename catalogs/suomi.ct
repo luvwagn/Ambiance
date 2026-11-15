@@ -863,6 +863,9 @@ Tulita toistaa elokuvan tai ohjelmat peräkkäin ZZ9000:lla
 MSG_5AEFD354
 N ja P: seuraava ja edellinen kappale tai ohjelma
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Suorittimen purkamana: levyn valikot, M tuo ne takaisin
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

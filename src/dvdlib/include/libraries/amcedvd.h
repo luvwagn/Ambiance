@@ -211,4 +211,11 @@ struct DvdInfo {
 #define DVDU_SUBTITLE_CHANGE      0x00200000
 #define DVDU_ANGLE_CHANGE         0x00400000
 
+/* DvdMenus (1.2): the menus the disc has, from its IFOs' menu tables
+ * (0: none, as a disc of programmes or a film alone) */
+#define DVDMB_TITLE   0x01  /* the disc's title menu (video manager) */
+#define DVDMB_ROOT    0x02  /* a title set's root menu */
+#define DVDMB_CHAPTERS 0x04 /* a chapter menu */
+#define DVDMB_OTHER   0x08  /* sound, subtitle or angle menus */
+
 #endif /* LIBRARIES_AMCEDVD_H */

@@ -32,6 +32,10 @@
 #undef close
 #undef lseek
 #include <dvdnav/dvdnav.h>
+#include <dvdread/ifo_read.h>
+#include "vm/decoder.h"                     /* (DvdMenus: the VM's disc reader) */
+#include "vm/vm.h"
+#include "dvdnav_internal.h"
 #include <libraries/amcedvd.h>
 
 #ifdef __amigaos__
@@ -40,11 +44,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.1 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.2 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.1 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.2 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 1;   /* 1.1: seeks across the whole title */
+const UWORD LibRevision = 2;   /* 1.1: seeks across the whole title; 1.2: DvdMenus */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -54,7 +58,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.1, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.2, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
@@ -674,6 +678,53 @@ API LONG DvdTitleLength(APTR dvd, LONG title, ULONG *ms)
     return (LONG)parts;
 }
 
+/* Which menus the disc has (DVDMB_ bits), from the menu tables of its
+ * video manager and title sets (each "menu exists" flag of its first
+ * language): 0 for none, a disc that only plays. */
+static ULONG menu_bits(const ifo_handle_t *ifo, int vmg)
+{
+    ULONG b = 0;
+    int i;
+    if (!ifo || !ifo->pgci_ut || !ifo->pgci_ut->lu)
+        return 0;
+    for (i = 0; i < ifo->pgci_ut->nr_of_lus; i++) {
+        UBYTE e = ifo->pgci_ut->lu[i].exists;
+        if (vmg)
+            b |= e & 0x80 ? DVDMB_TITLE : 0;
+        else
+            b |= (e & 0x80 ? DVDMB_ROOT : 0) | (e & 0x08 ? DVDMB_CHAPTERS : 0) |
+                 (e & 0x70 ? DVDMB_OTHER : 0);
+    }
+    return b;
+}
+
+API ULONG DvdMenus(APTR dvd)
+{
+    struct Dvd *d = dvd;
+    dvd_reader_t *r;
+    ifo_handle_t *vmg;
+    ULONG b = 0;
+    int t, n;
+    ENTER(d, 0);
+    if (!(r = vm_get_dvd_reader(d->nav->vm)) || !(vmg = ifoOpen(r, 0))) {
+        strcpy(d->err, "no video manager");
+        LEAVE(d);
+        return 0;
+    }
+    b = menu_bits(vmg, 1);
+    n = vmg->vmgi_mat ? vmg->vmgi_mat->vmg_nr_of_title_sets : 0;
+    for (t = 1; t <= n && t <= 99; t++) {
+        ifo_handle_t *v = ifoOpen(r, t);
+        if (v) {
+            b |= menu_bits(v, 0);
+            ifoClose(v);
+        }
+    }
+    ifoClose(vmg);
+    LEAVE(d);
+    return b;
+}
+
 API CONST_STRPTR DvdVersion(void)
 {
     return (CONST_STRPTR)version;
@@ -715,5 +766,6 @@ ADDTABL_2(DvdAngle, a0, d0);
 ADDTABL_1(DvdError, a0);
 ADDTABL_0(DvdVersion);
 ADDTABL_3(DvdTitleLength, a0, d0, a1);
+ADDTABL_1(DvdMenus, a0);
 ADDTABL_END();
 #endif

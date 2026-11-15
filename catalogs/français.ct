@@ -863,6 +863,9 @@ Feu lit son film, ou ses programmes l'un après l'autre, sur la ZZ9000
 MSG_5AEFD354
 N et P : chapitre ou programme suivant et précédent
 ; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Décodé par le CPU : ses menus, M pour y revenir
+; Decoded by the CPU: its menus, M to bring them back
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

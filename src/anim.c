@@ -47,6 +47,7 @@
 #include "video.h"
 #include "glyph.h"
 #include "dvdplay.h"
+#include <libraries/amcedvd.h>
 #include "yuvdraw.h"
 #include <libraries/mpegv.h>
 
@@ -754,8 +755,9 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * they cover is kept (save[k]) and put back before the next frame is
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
-/* (BT_PREV, BT_NEXT: a DVD's, in place of BT_RESTART and BT_LOOP; full: AmigaMCE's) */
-enum { BT_RESTART, BT_PREV, BT_PLAY, BT_NEXT, BT_STOP, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };
+/* (BT_PREV, BT_NEXT: a DVD's, in place of BT_RESTART and BT_LOOP; BT_MENU: a
+ * DVD's own menus, when AmigaMCE draws them; full: AmigaMCE's) */
+enum { BT_RESTART, BT_PREV, BT_PLAY, BT_NEXT, BT_STOP, BT_MENU, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };
 
 static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
 static struct DvdPlay *vid_dvd; /* a DVD's film playing (dvdplay.c): its chapters by N, P */
@@ -768,6 +770,8 @@ static BOOL btn_hidden(int b)
 {
     if (b == BT_PREV || b == BT_NEXT)
         return !vid_dvd;
+    if (b == BT_MENU)
+        return !vid_dvd || !dvdplay_is_nav(vid_dvd);
     if (b == BT_RESTART || b == BT_LOOP)
         return vid_dvd != NULL;
     return (b == BT_VDOWN || b == BT_VUP) && !nsnd && !vid_sound;
@@ -955,6 +959,9 @@ static void ctl_glyph(struct RastPort *rp, int b, WORD cx, WORD cy, WORD gh, WOR
     case BT_FULL:
         k = out ? GL_UNFULL : GL_FULL;
         break;
+    case BT_MENU:
+        k = GL_MENU;
+        break;
     }
     if (k >= 0)
         glyph_draw(rp, k, cx, cy, gh, sx, fg, dim, b == BT_LOOP && play_loop ? GLF_ON : 0);
@@ -1118,6 +1125,8 @@ static int ctl_press(int b)
         return 2;
     case BT_STOP:
         return 1;
+    case BT_MENU:
+        return 10;                          /* (as M: a DVD's menu) */
     case BT_LOOP:
         play_loop = !play_loop;             /* (Now Playing's too: the same setting) */
         bar_redraw = TRUE;
@@ -1182,6 +1191,12 @@ static struct {
 static BOOL vi_want;                /* shown (the last video's choice) */
 static BOOL vi_keys;                /* a video: "i" means it */
 
+/* A DVD's menu with buttons showing (vid_play): the arrows, Return, Enter
+ * and the stick and fire move between and press them (11 up, 12 down, 13
+ * left, 14 right, 15 press), a click on the picture presses the one there
+ * (16), not the controls'. M or a CD32 pad's green: its menu (10). */
+static BOOL vid_menu_keys;
+
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
@@ -1215,6 +1230,14 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 }
             continue;
         }
+        if (vid_menu_keys && ((cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) &&
+                               ((code >= 0x4C && code <= 0x4F) || code == 0x44 || code == 0x43)) ||
+                              (cl == IDCMP_VANILLAKEY && code == 13))) {
+            if (!r)
+                r = cl == IDCMP_VANILLAKEY || code == 0x44 || code == 0x43 ? 15
+                    : code == 0x4C ? 11 : code == 0x4D ? 12 : code == 0x4F ? 13 : 14;
+            continue;                       /* (a menu's: not the controls') */
+        }
         if ((cl == IDCMP_MOUSEMOVE || cl == IDCMP_MOUSEBUTTONS ||
              (cl == IDCMP_RAWKEY && (code == 0x7A || code == 0x7B))) && time_ms() - ctl.opened > 500)
             ctl.moved = time_ms() ? time_ms() : 1;  /* (not the window's own first) */
@@ -1236,6 +1259,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 9;
             else if (vid_dvd && code == 0x19 && !r)
                 r = 8;
+            else if (vid_dvd && dvdplay_is_nav(vid_dvd) && code == 0x37 && !r)    /* M: its menu */
+                r = 10;
             else if (code == 0x4F)                  /* Left, Right: the focus */
                 ctl_move(-1);
             else if (code == 0x4E)
@@ -1259,6 +1284,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 9;
             else if (vid_dvd && (code == 'p' || code == 'P') && !r)
                 r = 8;
+            else if (vid_dvd && dvdplay_is_nav(vid_dvd) && (code == 'm' || code == 'M') && !r)
+                r = 10;
         } else if (cl == IDCMP_MOUSEBUTTONS) {
             if (code == MENUDOWN)
                 r = 1;
@@ -1269,7 +1296,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                     if (k && !r)
                         r = k;
                 } else if (b == -1 && !r)
-                    r = 2;                  /* anywhere off the controls: play/pause */
+                    r = vid_menu_keys ? 16 : 2;     /* anywhere off the controls: play/pause
+                                                     * (a DVD's menu: its button there) */
                 else if (b == -3 && !r)
                     r = 5;                  /* the progress line: seek there */
             }
@@ -1281,6 +1309,15 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         if ((st & JP_TYPE_MASK) == JP_TYPE_JOYSTK || (st & JP_TYPE_MASK) == JP_TYPE_GAMECTLR) {
             if (pressed || (st & (JPF_JOY_UP | JPF_JOY_DOWN)))
                 ctl.key = time_ms() ? time_ms() : 1;
+            if (vid_dvd && dvdplay_is_nav(vid_dvd) && (pressed & JPF_BUTTON_GREEN) && !r)
+                r = 10;                     /* green: a DVD's menu */
+            if (vid_menu_keys && (pressed & (JPF_JOY_UP | JPF_JOY_DOWN | JPF_JOY_LEFT | JPF_JOY_RIGHT |
+                                             JPF_BUTTON_RED))) {
+                if (!r)
+                    r = pressed & JPF_BUTTON_RED ? 15 : pressed & JPF_JOY_UP ? 11
+                        : pressed & JPF_JOY_DOWN ? 12 : pressed & JPF_JOY_LEFT ? 13 : 14;
+                pressed = 0;                /* (a menu's: not the controls' nor the volume) */
+            }
             if (pressed & JPF_BUTTON_BLUE)
                 r = 1;
             else if ((pressed & JPF_BUTTON_PLAY) && !r)
@@ -1295,7 +1332,7 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 ctl_move(-1);
             else if (pressed & JPF_JOY_RIGHT)
                 ctl_move(1);
-            if (st & (JPF_JOY_UP | JPF_JOY_DOWN)) {
+            if ((st & (JPF_JOY_UP | JPF_JOY_DOWN)) && !vid_menu_keys) {
                 ULONG now = time_ms();
                 int d = st & JPF_JOY_UP ? VOL_STEP : -VOL_STEP;
                 if (pressed & (JPF_JOY_UP | JPF_JOY_DOWN)) {
@@ -3183,12 +3220,41 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG er
             return -1;
         }
     }
+    if (vid.sw && dvdplay_menus(vid_dvd) && dvdplay_nav(vid_dvd)) {
+        /* its own menus (the CPU's pictures, AmigaMCE drawing their
+         * buttons): the disc from its start, as a DVD player plays it; its
+         * sound AC-3, as menus' is (its length each title's, as it comes) */
+        vid.ac3 = TRUE;
+        vid.mp2 = FALSE;
+        vid.audio_id = 0;
+        vid.ms = 0;
+    }
     vid_dvd_fresh = TRUE;
     r = vid_play(g, dvdplay_name(vid_dvd), dvdplay_name(vid_dvd), cpu, err, errmax);
+    vid_menu_keys = FALSE;
     dvdplay_close(vid_dvd);
     vid_dvd = NULL;
     st_mpv_close();                         /* (mpegv.library, if the CPU decoded it) */
     return r;
+}
+
+/* The pointer over the picture, in the video's own pixels (a DVD's menus'
+ * buttons are placed in them): FALSE if it is not over it. */
+static WORD vid_hover_x = -1, vid_hover_y = -1;
+
+static BOOL vid_pointer(struct Gfx *g, WORD *px, WORD *py)
+{
+    struct Window *w = g->win;
+    LONG mx, my;
+    if (!w || !w->WScreen || lay.dw < 2 || lay.dh < 2)
+        return FALSE;
+    mx = (LONG)w->WScreen->MouseX - w->LeftEdge - w->BorderLeft - lay.vx;
+    my = (LONG)w->WScreen->MouseY - w->TopEdge - w->BorderTop - lay.vy;
+    if (mx < 0 || my < 0 || mx >= lay.dw || my >= lay.dh)
+        return FALSE;
+    *px = (WORD)(mx * (LONG)vid.w / lay.dw);
+    *py = (WORD)(my * (LONG)vid.h / lay.dh);
+    return TRUE;
 }
 
 static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
@@ -3306,6 +3372,33 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         }
         if (!ended)
             at = vid_base + in.played_ms;
+        if (vid_dvd && dvdplay_is_nav(vid_dvd)) {
+            /* its own menus: where it is (a title's time and length, none
+             * in a menu), its buttons' keys while a menu shows them, Menu
+             * greyed where the disc forbids it, the pointer over a button
+             * selecting it */
+            struct DvdNow now;
+            WORD px, py;
+            UWORD off = ctl.off & ~(1 << BT_MENU);
+            dvdplay_now(vid_dvd, &now);
+            vid_menu_keys = now.buttons && !ended;
+            vid.ms = now.title_ms;
+            if (!ended)
+                at = now.menu ? 0 : now.at_ms;
+            if (now.menu ? (now.forbidden & DVDU_RESUME) != 0
+                         : (now.forbidden & DVDU_ROOT_MENU) && (now.forbidden & DVDU_TITLE_MENU))
+                off |= 1 << BT_MENU;
+            if (!dvdplay_can_chapter(vid_dvd, -1))
+                off |= 1 << BT_PREV;
+            else
+                off &= ~(1 << BT_PREV);
+            ctl.off = off;
+            if (vid_menu_keys && vid_pointer(g, &px, &py) && (px != vid_hover_x || py != vid_hover_y)) {
+                vid_hover_x = px;
+                vid_hover_y = py;
+                dvdplay_ask(vid_dvd, DVDQ_POINT, px, py);
+            }
+        }
         if (s == ST_ENDED && !ended && vid_dvd && dvdplay_next_title(vid_dvd)) {
             /* a DVD's programme over: the next, as N would */
             ULONG to = 0;
@@ -3373,7 +3466,26 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         if (a == VO_RIGHT && !r)
             r = 1;
         else if ((a == VO_CLICK || a == VO_DCLICK) && !r)
-            r = 2;
+            r = vid_menu_keys ? 16 : 2;     /* (a DVD's menu: the button there) */
+        if (r >= 10 && r <= 16 && vid_dvd) {
+            /* a DVD's menus: asked of the playback process, which reads the disc */
+            static const UBYTE q[] = { DVDQ_MENU, DVDQ_UP, DVDQ_DOWN, DVDQ_LEFT, DVDQ_RIGHT,
+                                       DVDQ_ACTIVATE, DVDQ_CLICK };
+            WORD px = -1, py = -1;
+            if (r == 16 && !vid_pointer(g, &px, &py))
+                r = 0;                      /* (not on the picture) */
+            if (r)
+                dvdplay_ask(vid_dvd, q[r - 10], px, py);
+            if (r == 10) {
+                sprintf(m, "%s: its menu asked for", name);
+                amce_log("dvd", m);
+            }
+            if (paused && !ended) {
+                paused = FALSE;             /* (a menu's answer to be seen) */
+                st_pause(FALSE);
+            }
+            r = 0;
+        }
         if (r == 1)
             break;
         if (r == 2) {
@@ -3391,6 +3503,28 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             if (!vid_start(cpu, 0, err, errmax))
                 break;
             at = 0;
+        } else if (r == 5 && vid.ms && vid_dvd && dvdplay_is_nav(vid_dvd)) {
+            /* its own navigation: the playback process seeks on the disc */
+            struct DvdNow now;
+            LONG x0 = st.px0, x1 = st.px1;
+            ULONG target = (ULONG)((seek_x < x0 ? 0 : seek_x > x1 ? x1 - x0 : seek_x - x0) *
+                                   (ULONG)vid.ms / (ULONG)(x1 - x0 ? x1 - x0 : 1));
+            dvdplay_now(vid_dvd, &now);
+            if (!(now.forbidden & DVDU_TIME_OR_CHAPTER_SEEK)) {
+                sprintf(m, "seek to %lu ms", (unsigned long)target);
+                amce_log("video", m);
+                dvdplay_ask(vid_dvd, DVDQ_SEEK, (LONG)target, 0);
+                if (paused) {
+                    paused = FALSE;
+                    st_pause(FALSE);
+                }
+            }
+        } else if ((r == 7 || r == 8) && vid_dvd && dvdplay_is_nav(vid_dvd)) {
+            if (dvdplay_can_chapter(vid_dvd, r == 7 ? 1 : -1)) {
+                dvdplay_ask(vid_dvd, DVDQ_CHAPTER, r == 7 ? 1 : -1, 0);
+                sprintf(m, "%s: %s chapter", name, r == 7 ? "next" : "previous");
+                amce_log("dvd", m);
+            }
         } else if (r == 5 && vid.ms) {
             /* seek: the card started again from about there (playing) */
             LONG x0 = st.px0, x1 = st.px1;
