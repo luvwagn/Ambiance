@@ -256,8 +256,10 @@ static ULONG code_bytes(void)
     return n;
 }
 
-/* Quitting, everything let go: the memory not back since the baseline (the
- * system's unused libraries put out first, by the caller), into the log. */
+/* Quitting, everything let go: the memory not back since the baseline, into
+ * the log, with the libraries, devices and fonts loaded meanwhile that the
+ * system keeps (their memory is in the figure: they stay for the next
+ * start, which then finds them there). */
 void dbg_mem_report(void)
 {
     char m[120];

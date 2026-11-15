@@ -15043,8 +15043,6 @@ static int app_main(void)
     }
     amce_card_init();               /* (before any process that reaches the card) */
     load_debug();
-    if (debug_on)
-        flush_memory();             /* (a baseline without others' idle libraries) */
     dbg_mem_baseline();
     read_start_args();
     gfx_iconify_gadget = icon_available();  /* (OS 3.2: the window's gadget) */
@@ -15471,10 +15469,11 @@ out:
         CloseLibrary((struct Library *)GfxBase);
     amce_lang_quit();
     vis_stop();
-    if (debug_on) {
-        flush_memory();             /* (the libraries AmigaMCE opened, out of memory) */
+    /* (no flush_memory first: putting idle libraries out put out ahi.device
+     * while the ZZ9000AX's driver stayed, and the next program's sound hung
+     * the Amiga as it began; what stays in memory is listed instead) */
+    if (debug_on)
         dbg_mem_report();
-    }
     amce_log("libraries closed, exiting", "");
     amce_log_close();
     if (IntuitionBase)
