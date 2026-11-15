@@ -49,6 +49,18 @@ struct Library *amce_open_own_lib(const char *name, ULONG version)
     return l;
 }
 
+/* One no longer open (closed, kept in memory meanwhile) put out of it now:
+ * at quitting, for one opened and closed again and again (amcesql.library,
+ * an album's tracks each time: kept between, not loaded again). */
+void amce_flush_own_lib(const char *name)
+{
+    struct Library *l;
+    Forbid();
+    if ((l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name)) && l->lib_OpenCnt == 0)
+        RemLibrary(l);
+    Permit();
+}
+
 void amce_close_own_lib(struct Library **base)
 {
     struct Library *l = *base;

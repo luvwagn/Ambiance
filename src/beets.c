@@ -148,7 +148,8 @@ static APTR db_open(void)
     }
     if (!(db = SqlOpen((STRPTR)ix.db))) {
         sprintf(err, "%.60s", (const char *)SqlError(NULL));
-        amce_close_own_lib(&AmceSqlBase);
+        CloseLibrary(AmceSqlBase);
+        AmceSqlBase = NULL;
     }
     return db;
 }
@@ -161,7 +162,7 @@ static void db_close(APTR db)
         char m[80];
         sprintf(m, "SQLite memory at its most %lu KB", (unsigned long)(SqlMemory(1) >> 10));
         amce_log("beets", m);
-        amce_close_own_lib(&AmceSqlBase);
+        CloseLibrary(AmceSqlBase);  /* kept in memory: the next album's tracks soon */
     }
     AmceSqlBase = NULL;
 }
@@ -194,6 +195,7 @@ void beets_forget(void)
 {
     ix_free();
     prefix_len = -1;
+    amce_flush_own_lib("amcesql.library");  /* (AmigaMCE quits: its 574 KB given back) */
 }
 
 static void wr32(UBYTE *p, ULONG v)
