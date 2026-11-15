@@ -425,8 +425,13 @@ void vo_unlock(void)
 void vo_end(void)
 {
     vo_hide();
-    if (P96Base)
+    if (P96Base) {
+        char m[80];
+        sprintf(m, "Picasso96API.library closed (open %ld times before, ours included)",
+                (long)P96Base->lib_OpenCnt);
+        amce_log("video", m);
         CloseLibrary(P96Base);
+    }
     P96Base = NULL;
 }
 
