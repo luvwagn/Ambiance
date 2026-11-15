@@ -23,12 +23,18 @@
  * is a close estimate, not an exact count.
  */
 #include <stdio.h>
+#include <string.h>
 #include "amce.h"
 
 #include <exec/tasks.h>
 #include <dos/dosextens.h>
 #include <devices/timer.h>
+#include <exec/execbase.h>
+#include <graphics/gfxbase.h>
+#include <proto/graphics.h>
+#include <dos/dos.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 #include <proto/timer.h>
 #include <clib/alib_protos.h>
 
@@ -180,10 +186,57 @@ LONG dbg_app_sample(void)
     return r;
 }
 
+/* What was in memory at the baseline: the libraries' and devices' names
+ * (those still there at quit, not there then, are what AmigaMCE brought
+ * in and the system kept), and how much RAM: held (ENV: is there). */
+#define SNAP_MAX 200
+static char snap[SNAP_MAX][28];
+static int snap_n;
+static LONG ram0 = -1;
+
+static void snap_take(struct List *l)
+{
+    struct Node *n;
+    for (n = l->lh_Head; n->ln_Succ && snap_n < SNAP_MAX; n = n->ln_Succ)
+        amce_strlcpy(snap[snap_n++], n->ln_Name ? n->ln_Name : "", sizeof(snap[0]));
+}
+
+static BOOL snap_has(const char *name)
+{
+    int i;
+    for (i = 0; i < snap_n; i++)
+        if (!strncmp(snap[i], name, sizeof(snap[0]) - 1))
+            return TRUE;
+    return FALSE;
+}
+
+/* RAM:'s bytes in use (-1 not known) */
+static LONG ram_used(void)
+{
+    struct InfoData *id = AllocVec(sizeof(*id), MEMF_ANY | MEMF_CLEAR);
+    BPTR l = Lock((CONST_STRPTR)"RAM:", SHARED_LOCK);
+    LONG r = -1;
+    if (id && l && Info(l, id))
+        r = id->id_NumBlocksUsed * id->id_BytesPerBlock;
+    if (l)
+        UnLock(l);
+    if (id)
+        FreeVec(id);
+    return r;
+}
+
 void dbg_mem_baseline(void)
 {
+    struct ExecBase *eb = SysBase;
     base_chip = AvailMem(MEMF_CHIP);
     base_fast = AvailMem(MEMF_FAST);
+    snap_n = 0;
+    Forbid();
+    snap_take(&eb->LibList);
+    snap_take(&eb->DeviceList);
+    snap_take(&GfxBase->TextFonts);
+    Permit();
+    ram0 = ram_used();
 }
 
 static ULONG code_bytes(void)
@@ -210,9 +263,43 @@ void dbg_mem_report(void)
     char m[120];
     LONG dc = (LONG)base_chip - (LONG)AvailMem(MEMF_CHIP);
     LONG df = (LONG)base_fast - (LONG)AvailMem(MEMF_FAST);
+    char kept[600];
+    struct ExecBase *eb = SysBase;
+    struct List *ls[3];
+    struct Node *n;
+    LONG ram1 = ram_used(), sum = 0;
+    int k;
     sprintf(m, "%ld bytes of chip RAM and %ld of fast not back since the start (the log's own "
                "file still open)", (long)dc, (long)df);
     amce_log("memory", m);
+    /* where it may be: libraries and devices brought in and kept, RAM: */
+    ls[0] = &eb->LibList;
+    ls[1] = &eb->DeviceList;
+    ls[2] = &GfxBase->TextFonts;
+    kept[0] = 0;
+    Forbid();
+    for (k = 0; k < 3; k++)
+        for (n = ls[k]->lh_Head; n->ln_Succ; n = n->ln_Succ) {
+            if (!n->ln_Name || snap_has(n->ln_Name) || strlen(kept) > sizeof(kept) - 60)
+                continue;
+            if (k < 2) {
+                struct Library *lib = (struct Library *)n;
+                sprintf(kept + strlen(kept), "%s%.30s (open %ld, base %lu)", kept[0] ? ", " : "",
+                        n->ln_Name, (long)lib->lib_OpenCnt,
+                        (unsigned long)lib->lib_NegSize + lib->lib_PosSize);
+            } else {
+                struct TextFont *f = (struct TextFont *)n;
+                sprintf(kept + strlen(kept), "%sfont %.30s %ld (open %ld)", kept[0] ? ", " : "",
+                        n->ln_Name, (long)f->tf_YSize, (long)f->tf_Accessors);
+            }
+            sum++;
+        }
+    Permit();
+    amce_log("memory: in memory now, not at the start", sum ? kept : "nothing");
+    if (ram0 >= 0 && ram1 >= 0) {
+        sprintf(m, "RAM: (ENV:, T:) holds %ld bytes more than at the start", (long)(ram1 - ram0));
+        amce_log("memory", m);
+    }
 }
 
 /* Bytes AmigaMCE is using: total, and how much of it is chip RAM. */
