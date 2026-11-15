@@ -2312,14 +2312,74 @@ const char *st_ac3_cpu_why(void)
     return "no ac3.library (AmigaMCE's Libs or LIBS:)";
 }
 
+/* Which AC3 library is the faster here, found once a run: with an FPU,
+ * both are timed on the same four frames (5.1 at 448 kbit/s, as a DVD's)
+ * and the faster kept. An FPU's build is not always the faster: under an
+ * emulator whose JIT leaves the FPU's instructions out, ac3fpu took 13 ms
+ * a frame (40% of the CPU for a DVD's sound). */
+#include "ac3probe.h"
+static const char *a3_lib;                  /* the one to use (NULL: not timed yet) */
+
+/* name's microseconds a frame on the probe (its first frame not counted:
+ * its tables made), 0 if it could not decode them */
+static ULONG a3_time(const char *name)
+{
+    struct Ac3Info ai;
+    APTR dec;
+    ULONG hz = 0, t = 0, n = 0, i, at = 0;
+    if (!(Ac3Base = amce_open_own_lib(name, AC3VERSION)))
+        return 0;
+    if ((dec = Ac3Open(AC3_STEREO, 0))) {
+        for (i = 0; at + AC3_HEADER <= sizeof(ac3probe); i++) {
+            LONG off = Ac3Find((UBYTE *)ac3probe + at, (LONG)(sizeof(ac3probe) - at), &ai);
+            ULONG tk;
+            if (off < 0 || at + off + ai.ai_FrameBytes > sizeof(ac3probe))
+                break;
+            at += (ULONG)off;
+            CopyMem((APTR)(ac3probe + at), a3.frame, ai.ai_FrameBytes);
+            tk = time_ticks(&hz);
+            if (Ac3Decode(dec, a3.frame, a3.pcm, &ai) != AC3_FRAME_SAMPLES)
+                break;
+            if (i) {
+                t += time_ticks(&hz) - tk;
+                n++;
+            }
+            at += ai.ai_FrameBytes;
+        }
+        Ac3Close(dec);
+    }
+    amce_close_own_lib(&Ac3Base);
+    return n && hz ? (ULONG)((unsigned long long)t * 1000000ULL / hz / n) : 0;
+}
+
+static void a3_choose(void)
+{
+    ULONG f, i;
+    char m[160];
+    if (a3_lib)
+        return;
+    a3_lib = AC3NAME;
+    if (!(SysBase->AttnFlags & AFF_FPU40))
+        return;                             /* (no FPU: the integer build) */
+    f = a3_time(AC3FPUNAME);
+    i = a3_time(AC3NAME);
+    if (f && (!i || f <= i))
+        a3_lib = AC3FPUNAME;
+    sprintf(m, "AC3, a 5.1 frame: %s %lu.%02lu ms, %s %lu.%02lu ms: %s used", AC3FPUNAME,
+            (unsigned long)(f / 1000), (unsigned long)(f % 1000 / 10), AC3NAME,
+            (unsigned long)(i / 1000), (unsigned long)(i % 1000 / 10), a3_lib);
+    amce_log("video", m);
+}
+
 /* The library and a decoder (stereo): FALSE if not. */
 static BOOL a3_open(char *m)
 {
     memset(&a3, 0, offsetof(__typeof__(a3), pcm));
     a3.pts0 = ZZ_NO_PTS;
-    if (!Ac3Base && (SysBase->AttnFlags & AFF_FPU40))
-        Ac3Base = amce_open_own_lib(AC3FPUNAME, AC3VERSION);    /* (an FPU: its build) */
+    a3_choose();
     if (!Ac3Base)
+        Ac3Base = amce_open_own_lib(a3_lib, AC3VERSION);
+    if (!Ac3Base && strcmp(a3_lib, AC3NAME))
         Ac3Base = amce_open_own_lib(AC3NAME, AC3VERSION);
     if (!Ac3Base) {
         strcpy(m, "no ac3.library: played without its sound");
@@ -2645,6 +2705,12 @@ static BOOL swv_pic(struct MpvPicture *p)
     p->mpic_CModulo = (UWORD)(swv_yw / 2);
     p->mpic_YRows = (UWORD)swv_yh;
     return TRUE;
+}
+
+/* The UI's picture's planes, for drawing it (FALSE: none). */
+BOOL st_swv_planes(struct MpvPicture *p)
+{
+    return swv_pic(p);
 }
 
 /* The UI's picture as 24-bit RGB into dst (bpr bytes a row). */

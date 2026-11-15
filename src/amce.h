@@ -739,6 +739,8 @@ BOOL st_swv_take(ULONG *w, ULONG *h);
 struct Library *st_mpv_open(void);
 void st_mpv_close(void);
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);
+struct MpvPicture;
+BOOL st_swv_planes(struct MpvPicture *p);  /* its planes (yuvdraw.c draws them) */
 BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr);
 void st_swv_release(void);
 /* the CPU's pictures written straight onto the overlay by the playback

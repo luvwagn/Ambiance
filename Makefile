@@ -29,7 +29,7 @@ CPU     = -m68020-60
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
           -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Isrc/ac3lib/include -Iextras/mpegv/include \
-          -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
+          -Ibuild -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
 
@@ -43,7 +43,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/glyph.c src/ownlib.c
+       src/dvdplay.c src/dvddisc.c src/glyph.c src/ownlib.c src/yuvdraw.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -70,7 +70,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test-yuvdraw test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -107,6 +107,18 @@ ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
+
+# four frames of AC-3 (5.1, 448 kbit/s: a DVD's kind) that stream.c times
+# each AC-3 library on, to use the faster here (an FPU's build is not
+# always: an emulator without its JIT's FPU)
+build/ac3probe.h: tests/fixtures/ac3/5.1-448k.ac3
+	@mkdir -p build
+	@echo "  GEN   $@"
+	@$(PYTHON) -c "import sys; d=open(sys.argv[1],'rb').read()[:4*1792]; \
+		print('static const UBYTE ac3probe[%d] = {' % len(d)); \
+		print(',\n'.join(','.join('0x%02x' % b for b in d[i:i+16]) for i in range(0, len(d), 16))); \
+		print('};')" $< > $@
+build/stream.o: build/ac3probe.h
 
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
@@ -164,13 +176,21 @@ check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(SQLIB) $(MPEGVLIB) $(JDT)
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
 		$(JDT)=datatypes/jpeg/amcejpeg.c
 
-check-syscalls: $(SRCS) src/amce.h
+check-syscalls: $(SRCS) src/amce.h build/ac3probe.h
 	@mkdir -p $(ASM_DIR)
 	@set -e; for f in $(SRCS); do \
 		$(CC) $(CFLAGS) $$( [ $$f = src/zz9k.c ] && echo '$(ZZ9K_CFLAGS)' ) \
 		  -S -o $(ASM_DIR)/$$(basename $$f .c).s $$f; done
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
+
+# yuv_draw (a CPU-decoded video's picture in the screen's own pixels): on
+# the host, with stand-in Amiga headers (tests/yuvdraw)
+build/yuvdraw_host: src/yuvdraw.c src/yuvdraw.h tests/yuvdraw/yuvdraw_host.c
+	@mkdir -p build
+	@cc -O2 -w -Itests/yuvdraw -Isrc -o $@ tests/yuvdraw/yuvdraw_host.c src/yuvdraw.c -lm
+test-yuvdraw: build/yuvdraw_host
+	@build/yuvdraw_host > /dev/null && echo "  CHECK video pictures in a screen's own pixels (host) ok"
 
 # leakcheck: clang's static analyser over AmigaMCE's own sources, the NDK's
 # acquire/release pairs (AllocVec/FreeVec, Open/Close, Lock/UnLock,
@@ -189,13 +209,13 @@ LC_FLAGS  = --target=m68k-unknown-linux-gnu -mcpu=68020 -fpack-struct=2 -nostdin
             -Xanalyzer -analyzer-config -Xanalyzer unix.DynamicMemoryModeling:Optimistic=true \
             -Xanalyzer -analyzer-disable-checker=deadcode \
             -D__AMIGA__ -Damigaos -D__mc68020__ \
-            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Isrc/sqlib/include -Isrc/dvdlib/include \
+            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Isrc/dvdlib/include \
             -Isrc/ac3lib/include -Iextras/mpegv/include \
             -isystem $(TOOLROOT)/m68k-amigaos/libnix/include \
             -isystem $(wildcard $(TOOLROOT)/lib/gcc/m68k-amigaos/*/include) \
             -isystem $(TOOLROOT)/m68k-amigaos/ndk-include -isystem $(TOOLROOT)/m68k-amigaos/sys-include \
             -isystem $(TOOLROOT)/m68k-amigaos/include
-leakcheck:
+leakcheck: build/ac3probe.h
 	@mkdir -p $(LC_DIR)
 	@$(PYTHON) tools/leakcheck/mkshim.py $(TOOLROOT)/m68k-amigaos/ndk-include $(LC_DIR)
 	@echo "  CLANG --analyze ($(words $(LC_SRCS)) files)"
@@ -219,7 +239,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
+test: check-formats check-syscalls check-libs test-yuvdraw build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt

@@ -47,6 +47,8 @@
 #include "video.h"
 #include "glyph.h"
 #include "dvdplay.h"
+#include "yuvdraw.h"
+#include <libraries/mpegv.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -2807,6 +2809,58 @@ static WORD vid_was_h = -1;     /* the overlay's height last placed */
  * screen has one (the card scales them; vo_show), else made RGB here and
  * drawn (ScalePixelArray). */
 static BOOL sw_have;            /* a picture taken (st_swv_take) */
+static struct BitMap *sw_bm;    /* it at the size shown, the screen's format (yuv_draw) */
+static ULONG sw_bmw, sw_bmh, sw_nyuv;
+static BOOL sw_yuv_no;          /* (the screen's format is not one yuv_draw writes) */
+
+/* The picture drawn straight in the screen's own pixels at dw x dh into a
+ * bitmap like the screen's (not the screen itself: locking what is shown
+ * makes a software pointer flicker), then blitted: FALSE if it cannot be
+ * (not RTG, a format it does not write), and the RGB way is taken. */
+static BOOL sw_draw_yuv(struct Gfx *g, LONG x, LONG y, LONG dw, LONG dh)
+{
+    struct MpvPicture p;
+    UBYTE *base = NULL;
+    ULONG bpr = 0, fmt = 0;
+    APTR lk;
+    BOOL ok;
+    if (sw_yuv_no || !CyberGfxBase || !st_swv_planes(&p))
+        return FALSE;
+    if (sw_bm && (sw_bmw != (ULONG)dw || sw_bmh != (ULONG)dh)) {
+        WaitBlit();
+        FreeBitMap(sw_bm);
+        sw_bm = NULL;
+    }
+    if (!sw_bm) {
+        if (!(sw_bm = AllocBitMap(dw, dh, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                                  g->rp->BitMap)))
+            return FALSE;
+        sw_bmw = dw;
+        sw_bmh = dh;
+        if (!GetCyberMapAttr(sw_bm, CYBRMATTR_ISCYBERGFX)) {
+            sw_yuv_no = TRUE;
+            return FALSE;
+        }
+    }
+    if (!(lk = LockBitMapTags(sw_bm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
+                              LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE)))
+        return FALSE;
+    ok = base && bpr && yuv_draw(p.mpic_Y, p.mpic_Cb, p.mpic_Cr, p.mpic_YModulo, p.mpic_CModulo,
+                                 p.mpic_Width, p.mpic_Height, base, bpr, fmt, dw, dh);
+    UnLockBitMap(lk);
+    if (!ok) {
+        if (!yuv_format_ok(fmt)) {
+            char m[80];
+            sprintf(m, "the screen's pixels (format %lu): drawn by way of RGB", (unsigned long)fmt);
+            amce_log("video: by the CPU", m);
+            sw_yuv_no = TRUE;
+        }
+        return FALSE;
+    }
+    BltBitMapRastPort(sw_bm, 0, 0, g->rp, x, y, dw, dh, 0xC0);
+    sw_nyuv++;
+    return TRUE;
+}
 static UBYTE *sw_rgb;           /* it as RGB (drawn without the overlay) */
 static BOOL sw_rgb_ok;          /* (made from the picture taken last) */
 static ULONG sw_w, sw_h, sw_vo; /* its size; the overlay it was put on (vo_opened) */
@@ -2864,6 +2918,12 @@ static void sw_draw(struct Gfx *g, WORD h, BOOL redraw, BOOL ovl)
     if (dw < 2 || dh < 2)
         return;
     tk = time_ticks(&sw_hz);
+    if (sw_draw_yuv(g, x, y, dw, dh)) {
+        win_show(g, TRUE, FALSE, x, y, dw, dh);
+        sw_tdraw += time_ticks(&sw_hz) - tk;
+        sw_ndraw++;
+        return;
+    }
     if (!sw_rgb_ok) {
         if (!sw_rgb && !(sw_rgb = AllocVec(sw_w * sw_h * 3, MEMF_ANY)))
             return;
@@ -3144,7 +3204,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     sw_rgb = NULL;
     sw_vo = 0;
     sw_tdraw = 0;
-    sw_ndraw = sw_novl = 0;
+    sw_ndraw = sw_novl = sw_nyuv = 0;
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
@@ -3428,14 +3488,22 @@ out:
             FreeVec(sw_rgb);
             sw_rgb = NULL;
             sw_have = FALSE;
+            if (sw_bm) {
+                WaitBlit();
+                FreeBitMap(sw_bm);
+            }
+            sw_bm = NULL;
+            sw_yuv_no = FALSE;
             sprintf(m, "a picture shown %lu.%02lu ms (%lu), %lu x %lu to %ld x %ld (%s)",
                     (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)sw_ndraw,
                     (unsigned long)sw_w, (unsigned long)sw_h, (long)lay.dw, (long)lay.dh,
-                    sw_novl == sw_ndraw && sw_ndraw ? "made YUV on the overlay: the card scales"
+                    sw_novl == sw_ndraw && sw_ndraw ? "on the overlay: the card scales"
                     : sw_novl ? "on the overlay and drawn"
+                    : sw_nyuv ? "drawn in the screen's own pixels at its size, then blitted"
                     : lay.dw == (WORD)sw_w && lay.dh == (WORD)sw_h ? "made RGB, WritePixelArray"
                                                                  : "made RGB, ScalePixelArray");
             amce_log("video: by the CPU", m);
+            sw_nyuv = 0;
         }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
                 (unsigned long)dropped, (unsigned long)(time_ms() - t0));
