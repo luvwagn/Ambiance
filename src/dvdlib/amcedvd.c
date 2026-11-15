@@ -44,11 +44,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.3 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.4 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.3 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.4 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 3;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there */
+const UWORD LibRevision = 4;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there; 1.4: held only while a disc is */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -58,7 +58,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.3, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.4, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
@@ -178,6 +178,7 @@ API APTR DvdOpen(struct DvdReader *reader, ULONG flags)
     if (setjmp(d->jb)) {
         strcpy(open_err, "internal error in libdvd while opening");
         dvdp_cur = prev_ctx;
+        dvdp_css_drop(&d->ctx);
         dvdp_free(d);                       /* what libdvd held is lost: it may be inconsistent */
         return NULL;
     }
@@ -185,6 +186,7 @@ API APTR DvdOpen(struct DvdReader *reader, ULONG flags)
         strcpy(open_err, d->err[0] ? d->err : "not a DVD-Video disc");
         d->nav = NULL;
         dvdp_cur = prev_ctx;
+        dvdp_css_drop(&d->ctx);
         dvdp_free(d);
         return NULL;
     }
@@ -213,6 +215,7 @@ API VOID DvdClose(APTR dvd)
             dvdnav_close(d->nav);
         dvdp_cur = prev_ctx;
     }
+    dvdp_css_drop(&d->ctx);                 /* (cssdecrypt.library, if it held it) */
     dvdp_free(d);
 }
 

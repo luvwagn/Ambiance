@@ -11,10 +11,12 @@
 struct dvdp_ctx {
     void (*log)(struct dvdp_ctx *ctx, int level, const char *line); /* DVDLOG_ levels */
     jmp_buf *jb;                    /* abort() returns here: the call fails */
+    int css;                        /* this disc holds cssdecrypt.library open (port.c) */
 };
 extern struct dvdp_ctx *dvdp_cur;
 
 unsigned long dvdp_memory(int peak);
 void dvdp_clock(unsigned long *sec, unsigned long *usec);  /* amitime.c */
 void dvdp_css_end(void);        /* cssdecrypt.library let go (port.c) */
+void dvdp_css_drop(struct dvdp_ctx *ctx);   /* a disc closed: its hold on it let go */
 #endif

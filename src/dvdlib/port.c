@@ -574,9 +574,12 @@ char *dvdp_realpath(const char *path, char *resolved)
 
 /* libdvdread's dlopen() of libdvdcss: cssdecrypt.library, if the user
  * has put it in AmigaMCE's Libs or LIBS: (an optional library, not part of
- * AmigaMCE: libdvdcss 1.4.3 for CSS-scrambled discs). Opened once, kept
- * until this library is put out (dvdp_css_end). Its calls, libdvdcss's
- * own (a register each): -30 CssOpenStream(a0 stream, a1 callbacks), -36
+ * AmigaMCE: libdvdcss 1.4.3 for CSS-scrambled discs). Held open while a
+ * disc that asked for it is (dvdp_css_drop at DvdClose); and a copy left
+ * in memory by an earlier amcedvd.library, no one using it, is put out
+ * before the first open, so a newer file in Libs is the one loaded (Exec
+ * would otherwise give the old one again). Its calls, libdvdcss's own (a
+ * register each): -30 CssOpenStream(a0 stream, a1 callbacks), -36
  * CssClose(a0), -42 CssSeek(a0, d0 block, d1 flags), -48 CssRead(a0, a1
  * buffer, d0 blocks, d1 flags); libdvdread calls them through the
  * functions below, as it would libdvdcss's. Without it, discs are read as
@@ -584,7 +587,7 @@ char *dvdp_realpath(const char *path, char *resolved)
 #ifdef __amigaos__
 #include <inline/macros.h>
 static struct Library *CssBase;
-static int css_tried;
+static int css_users, css_checked;
 
 static void *css_open_stream(void *stream, void *cb)
 {
@@ -620,8 +623,16 @@ void *dvdp_dlopen(const char *name, int mode)
 #ifdef __amigaos__
     if (!strstr(name, "dvdcss"))
         return NULL;
-    if (!CssBase && !css_tried) {
-        css_tried = 1;
+    if (!CssBase) {
+        struct Library *l;
+        Forbid();                           /* (a stale copy nobody has open, left by an
+                                             * earlier amcedvd: out, once) */
+        if (!css_checked &&
+            (l = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR) "cssdecrypt.library")) &&
+            !l->lib_OpenCnt)
+            RemLibrary(l);
+        css_checked = 1;
+        Permit();
         if (!(CssBase = OpenLibrary((CONST_STRPTR) "PROGDIR:Libs/cssdecrypt.library", 1)))
             CssBase = OpenLibrary((CONST_STRPTR) "cssdecrypt.library", 1);
         if (CssBase && dvdp_cur && dvdp_cur->log) {
@@ -630,6 +641,10 @@ void *dvdp_dlopen(const char *name, int mode)
                           CssBase->lib_Version, CssBase->lib_Revision);
             dvdp_cur->log(dvdp_cur, 2, buf);
         }
+    }
+    if (CssBase && dvdp_cur && !dvdp_cur->css) {
+        dvdp_cur->css = 1;
+        css_users++;
     }
     return CssBase;
 #else
@@ -666,13 +681,28 @@ int dvdp_dlclose(void *handle)
     return 0;
 }
 
+void dvdp_css_drop(struct dvdp_ctx *ctx)
+{
+#ifdef __amigaos__
+    if (!ctx || !ctx->css)
+        return;
+    ctx->css = 0;
+    if (css_users > 0 && !--css_users && CssBase) {
+        CloseLibrary(CssBase);
+        CssBase = NULL;
+    }
+#else
+    (void)ctx;
+#endif
+}
+
 void dvdp_css_end(void)
 {
 #ifdef __amigaos__
     if (CssBase)
         CloseLibrary(CssBase);
     CssBase = NULL;
-    css_tried = 0;
+    css_users = 0;
 #endif
 }
 
