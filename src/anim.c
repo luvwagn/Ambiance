@@ -3069,14 +3069,20 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
         return -1;
     if ((why = video_check(path, &vid))) {
         amce_strlcpy(err, why, errmax);
+        st_mpv_close();
         return -1;
     }
     if (!g->truecolor) {
         amce_strlcpy(err, vid.sw ? _("MPEG video plays on an RTG screen (AGA screens to come)")
                                  : _("MPEG video plays on the ZZ9000's display"), errmax);
+        st_mpv_close();
         return -1;
     }
-    return vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+    {
+        LONG r = vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+        st_mpv_close();                     /* (mpegv.library let go after each video) */
+        return r;
+    }
 }
 
 /* A DVD's film (the disc in volume vol): as an MPEG file, read from the

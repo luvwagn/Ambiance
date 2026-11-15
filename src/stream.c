@@ -2512,8 +2512,9 @@ static BOOL sw_sound;
 
 /* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
  * video is to be decoded by the CPU (video_check: its PROGDIR: is
- * AmigaMCE's), used by the radio process and the UI alike, kept until
- * AmigaMCE quits (st_mpv_close). NULL if it is not there. */
+ * AmigaMCE's), used by the radio process and the UI alike, let go after
+ * each video (st_mpv_close: anim_play_video, once the radio process has
+ * stopped), and at quitting. NULL if it is not there. */
 struct Library *MpegvBase;
 
 struct Library *st_mpv_open(void)
