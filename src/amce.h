@@ -165,6 +165,7 @@ UWORD gfx_menu_width(struct Gfx *g, BOOL narrow);
 BOOL gfx_menu_is_narrow(void);
 WORD gfx_pane_w_wide(struct Gfx *g);
 void gfx_close(struct Gfx *g);
+void gfx_quit(void);                    /* (quitting, after gfx_close) */
 BOOL gfx_restyle(struct Gfx *g, int style);    /* same screen, new style (gfx.c) */
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen);
 void gfx_rrect(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen);
@@ -302,6 +303,7 @@ BOOL ilbm_is_anim(const char *path);
 /* an ANIM's frame count and length, kept in PROGDIR:Cache/Animations (ilbm.c) */
 BOOL anim_fact_get(BPTR fh, const char *path, ULONG *frames, ULONG *ms);
 void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms);    /* an IFF ANIM: its first frame only, never a datatype */
+void anim_fact_forget(void);    /* (quitting) */
 /* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not;
  * its sound by AHI (ahi) or Paula's channels 2 and 3; on a 16-bit RTG screen on
  * AmigaMCE's own unless classic (Settings > Display > Animations) */
@@ -948,6 +950,7 @@ void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
 void  dbg_sleep_end(void);
 LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at first */
 void  dbg_mem_baseline(void);
+void  dbg_mem_report(void);     /* (quitting: what is not back, logged) */
 ULONG dbg_mem_used(ULONG *chip);
 void amce_log(const char *what, const char *detail);
 const char *fmt_khz(ULONG hz, char *out);    /* "44.1kHz" (out: 16 bytes) */

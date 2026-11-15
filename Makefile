@@ -64,7 +64,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -152,6 +152,37 @@ check-syscalls: $(SRCS) src/amce.h
 		  -S -o $(ASM_DIR)/$$(basename $$f .c).s $$f; done
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
+
+# leakcheck: clang's static analyser over AmigaMCE's own sources, the NDK's
+# acquire/release pairs (AllocVec/FreeVec, Open/Close, Lock/UnLock,
+# OpenLibrary/CloseLibrary, AllocBitMap/FreeBitMap...) declared to it as
+# ownership (tools/leakcheck/mkshim.py): a path that drops what it acquired
+# is reported. A report, not a gate: AssignLock taking its lock (ags.c) is
+# not known to it, and memory AllocVec cleared reads to it as unset.
+# tls.c, net.c and zz9k.c are left out (their own inline calls do not parse).
+CLANG    ?= clang
+TOOLROOT  = $(abspath $(dir $(shell command -v $(CC)))..)
+LC_DIR    = build/leakcheck
+LC_SRCS   = $(filter-out src/tls.c src/net.c src/zz9k.c,$(SRCS))
+LC_FLAGS  = --target=m68k-unknown-linux-gnu -mcpu=68020 -fpack-struct=2 -nostdinc -w --analyze \
+            -Wno-error=implicit-function-declaration -Wno-error=int-conversion \
+            -Wno-error=incompatible-function-pointer-types \
+            -Xanalyzer -analyzer-config -Xanalyzer unix.DynamicMemoryModeling:Optimistic=true \
+            -Xanalyzer -analyzer-disable-checker=deadcode \
+            -D__AMIGA__ -Damigaos -D__mc68020__ \
+            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Isrc/sqlib/include -Isrc/dvdlib/include \
+            -Isrc/ac3lib/include -Iextras/mpegv/include \
+            -isystem $(TOOLROOT)/m68k-amigaos/libnix/include \
+            -isystem $(wildcard $(TOOLROOT)/lib/gcc/m68k-amigaos/*/include) \
+            -isystem $(TOOLROOT)/m68k-amigaos/ndk-include -isystem $(TOOLROOT)/m68k-amigaos/sys-include \
+            -isystem $(TOOLROOT)/m68k-amigaos/include
+leakcheck:
+	@mkdir -p $(LC_DIR)
+	@$(PYTHON) tools/leakcheck/mkshim.py $(TOOLROOT)/m68k-amigaos/ndk-include $(LC_DIR)
+	@echo "  CLANG --analyze ($(words $(LC_SRCS)) files)"
+	@printf '%s\n' $(LC_SRCS) | xargs -P 8 -I{} sh -c \
+		'$(CLANG) $(LC_FLAGS) -o /dev/null {} > $(LC_DIR)/$$(basename {}).txt 2>&1 || true'
+	@cat $(LC_DIR)/*.c.txt | grep -E "warning: .*(leak|freed|free |released)" || echo "  CHECK no leak found"
 
 # rtgbench: AmigaMCE's drawing timed on RTG screens, 8-bit against 16-bit
 build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/animdraw68k.o

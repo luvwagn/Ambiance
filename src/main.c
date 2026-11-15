@@ -5290,7 +5290,7 @@ static void pv_progress(struct Page *p)
 static void preview_draw(struct Page *p)
 {
     char path[300];
-    UBYTE shot;
+    UBYTE shot = 0;
     int k;
     BOOL keep;
     WORD x0 = aside_x(), max_y = g.footer_y - 2;
@@ -12404,6 +12404,20 @@ static void radio_page_gone(struct Page *p)
 static void radio_stop(void)
 {
     int d;
+    struct NetJob **held[3 + ART_KINDS];
+    held[0] = &plex_dj;
+    held[1] = &plex_sj;
+    plink_stop();                       /* (signing in: given up) */
+    held[2] = &plink.j;
+    for (d = 0; d < ART_KINDS; d++)
+        held[3 + d] = &art_nj[d];
+    for (d = 0; d < 3 + ART_KINDS; d++)     /* the rest out given up too: net_stop frees them */
+        if (*held[d]) {
+            net_cancel(*held[d]);
+            (*held[d])->orphan = TRUE;
+            (*held[d])->seq = 0;
+            *held[d] = NULL;
+        }
     if (rq) {
         net_cancel(rq);
         rq->orphan = TRUE;
@@ -14958,6 +14972,9 @@ static int app_main(void)
         rc = 20;
         goto out;
     }
+    load_debug();
+    if (debug_on)
+        flush_memory();             /* (a baseline without others' idle libraries) */
     dbg_mem_baseline();
     read_start_args();
     gfx_iconify_gadget = icon_available();  /* (OS 3.2: the window's gadget) */
@@ -15337,9 +15354,11 @@ out:
     if (tport)
         DeleteMsgPort(tport);
     amce_log("timer closed", "");
+    mini_art_free();                /* (the mini player's cover: before the loader stops) */
     pv_flush();
     pics_forget();
     ldr_stop();
+    anim_fact_forget();             /* (after the loader's processes: they read it) */
     pages_clear();
     amce_log("pages freed", "");
     beets_forget();
@@ -15363,6 +15382,7 @@ out:
         }
     }
     gfx_wb_watch_end();                 /* (Workbench's hook out: its process calls it) */
+    gfx_quit();
     icon_end();                         /* (the AppIcon, if iconified at the end) */
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
@@ -15381,6 +15401,10 @@ out:
         CloseLibrary((struct Library *)GfxBase);
     amce_lang_quit();
     vis_stop();
+    if (debug_on) {
+        flush_memory();             /* (the libraries AmigaMCE opened, out of memory) */
+        dbg_mem_report();
+    }
     amce_log("libraries closed, exiting", "");
     amce_log_close();
     if (IntuitionBase)

@@ -116,6 +116,21 @@ static BOOL af_key(BPTR fh, const char *path, struct AnimFact *k)
     return ok;
 }
 
+/* The facts read in let go (quitting: the loader's processes stopped
+ * first, so nothing else holds them); read again if asked for after. */
+void anim_fact_forget(void)
+{
+    if (af_sem_ready)
+        ObtainSemaphore(&af_sem);
+    if (af)
+        FreeVec(af);
+    af = NULL;
+    afn = 0;
+    af_loaded = FALSE;
+    if (af_sem_ready)
+        ReleaseSemaphore(&af_sem);
+}
+
 BOOL anim_fact_get(BPTR fh, const char *path, ULONG *frames, ULONG *ms)
 {
     struct AnimFact k;

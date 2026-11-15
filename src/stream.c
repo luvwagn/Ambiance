@@ -1996,6 +1996,8 @@ static void v_wait(ULONG us)
 static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
 {
     ULONG lat = st.ahi ? AHI_FRAMES : HALF, pos = st.f_out - f0, el;
+    if (!rate)
+        return origin;                      /* (no sound's rate yet) */
     el = (time_ms() - st.play_t) * (ULONG)st.dec_freq / 1000;
     if (el > lat)
         el = lat;

@@ -867,8 +867,11 @@ void net_stop(void)
             if (j->body)
                 FreeVec(j->body);
             j->body = NULL;
-            if (j->orphan)
+            if (j->orphan) {
+                if (j->parsed)
+                    list_free(&j->list);    /* (a Plex list read for it) */
                 FreeVec(j);
+            }
         }
     }
     memset(&q, 0, sizeof(q));

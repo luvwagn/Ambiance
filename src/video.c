@@ -97,6 +97,8 @@ ULONG video_shown_w(const struct VProbe *v)
 static void pip_fit(const struct VProbe *v, LONG sw, LONG ax, LONG ay, LONG aw, LONG ah, LONG *x,
                     LONG *y, LONG *dw, LONG *dh)
 {
+    if (sw <= 0)
+        sw = aw > 0 ? aw : 1;               /* (no width known: never a division by 0) */
     *dw = aw;
     *dh = (LONG)((ULONG)aw * v->h / (ULONG)sw);
     if (*dh > ah) {

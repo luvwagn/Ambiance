@@ -978,6 +978,15 @@ void gfx_wb_watch_end(void)
     WorkbenchBase = NULL;
 }
 
+/* What outlives a screen let go (quitting, after gfx_close): gadtools.library,
+ * opened for a window's menus and kept for the next window. */
+void gfx_quit(void)
+{
+    if (GadToolsBase)
+        CloseLibrary(GadToolsBase);
+    GadToolsBase = NULL;
+}
+
 ULONG gfx_wb_sigmask(void)
 {
     return wbw_bit >= 0 ? 1UL << wbw_bit : 0;

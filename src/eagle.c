@@ -1516,6 +1516,9 @@ void ep_unload(void)
     ep.tags = NULL;
     host_free(ep.h);
     ep.h = NULL;
+    if (nt_silence)                         /* (a note player's: made at its load) */
+        FreeMem(nt_silence, 4);
+    nt_silence = NULL;
 }
 
 BOOL ep_loaded(void) { return ep.h != NULL; }

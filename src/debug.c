@@ -22,6 +22,7 @@
  * Other programs allocating or freeing meanwhile shift the figure, so it
  * is a close estimate, not an exact count.
  */
+#include <stdio.h>
 #include "amce.h"
 
 #include <exec/tasks.h>
@@ -200,6 +201,18 @@ static ULONG code_bytes(void)
         seg = (BPTR)p[0];
     }
     return n;
+}
+
+/* Quitting, everything let go: the memory not back since the baseline (the
+ * system's unused libraries put out first, by the caller), into the log. */
+void dbg_mem_report(void)
+{
+    char m[120];
+    LONG dc = (LONG)base_chip - (LONG)AvailMem(MEMF_CHIP);
+    LONG df = (LONG)base_fast - (LONG)AvailMem(MEMF_FAST);
+    sprintf(m, "%ld bytes of chip RAM and %ld of fast not back since the start (the log's own "
+               "file still open)", (long)dc, (long)df);
+    amce_log("memory", m);
 }
 
 /* Bytes AmigaMCE is using: total, and how much of it is chip RAM. */
