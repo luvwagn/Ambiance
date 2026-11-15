@@ -2663,6 +2663,8 @@ static ULONG sw_clean_pts;
  * untouched (sw_last_ok: no picture decoded since), whole into sw_clean
  * when the disc stands still. */
 static BOOL sw_band_ok, sw_last_ok;
+static BOOL sw_last_b;                      /* (sw_last a B picture: its buffer the next B's) */
+static char sw_last_why;                    /* (why not untouched, for the log: p m f) */
 static BOOL sw_old_times;                   /* (mpegv before 2.2: times across a flush) */
 static ULONG sw_bx, sw_by, sw_bw, sw_bh;
 static struct MpvPicture *sw_last;
@@ -3182,6 +3184,7 @@ static BOOL sw_band_out(int s, struct MpvPicture *f, const struct SpuPic *sp, co
     sw_clean_pts = pts;
     sw_last = f;
     sw_last_ok = TRUE;
+    sw_last_b = f->mpic_Type == MPVT_B;
     sw_band_draw(s, sp, hl, mem, bpr);
     vo_unlock();
     sw_tdirect += time_ticks(&hz) - tk;
@@ -3460,6 +3463,7 @@ static void swv_run(void)
         seg_log();                                                                   \
         MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
         sw_f_ok = sw_last_ok = FALSE;                                                \
+        sw_last_why = 'f';                                                           \
         want_i = sw_old_times;                                                       \
         if (held >= 0) {                                                             \
             swv[held].state = SW_FREE;                                               \
@@ -3690,8 +3694,14 @@ static void swv_run(void)
             tk = time_ticks(&hz);
             sw_f_ok = FALSE;                /* (the last one's planes: the decoder's again) */
             f = MpvDecode(sw_mpv, &e);
-            if (f || e == MPVE_MORE)
-                sw_last_ok = FALSE;         /* (the decoder's last picture: not as it was) */
+            if (sw_last_ok && (f || (e == MPVE_MORE && sw_last_b))) {
+                /* the decoder's last picture not as it was: another given
+                 * (its struct the same), or one begun in a B picture's
+                 * buffer (an I or P picture stays, a reference, while
+                 * the next is decoded) */
+                sw_last_ok = FALSE;
+                sw_last_why = f ? 'p' : 'm';
+            }
             if (f) {
                 t_dec += time_ticks(&hz) - tk;
                 n_dec++;
@@ -3903,8 +3913,13 @@ static void swv_run(void)
                 /* its last picture stands (its buttons over it), kept
                  * whole to draw them again on */
                 sw_keep_whole();
-                if (sw_band_ok && !sw_clean_ok && n_still < 4)
-                    amce_log("video: by the CPU", "a still: its picture could not be kept whole");
+                if (sw_band_ok && !sw_clean_ok && n_still < 4) {
+                    char why[2];
+                    why[0] = sw_last_why ? sw_last_why : '?';
+                    why[1] = 0;
+                    sprintf(m, "a still: its picture could not be kept whole (%s)", why);
+                    amce_log("video: by the CPU", m);
+                }
                 still_on = TRUE;
                 still_t0 = time_ms();
                 n_still++;
