@@ -2649,6 +2649,16 @@ static struct Spu *sw_spu;
 static UBYTE *sw_clean;
 static BOOL sw_clean_ok;
 static ULONG sw_clean_pts;
+/* On the overlay, a picture is written as it is, then only the band its
+ * subpicture covers (sw_bx..: even, in the picture's pixels) blended and
+ * written again over it: of sw_clean only that band is kept (sw_band_ok,
+ * not sw_clean_ok), and the decoder's own picture (sw_last) while it is
+ * untouched (sw_last_ok: no picture decoded since), whole into sw_clean
+ * when the disc stands still. */
+static BOOL sw_band_ok, sw_last_ok;
+static ULONG sw_bx, sw_by, sw_bw, sw_bh;
+static struct MpvPicture *sw_last;
+static ULONG sw_nband;
 static ULONG sw_hl_drawn, sw_clut_drawn;    /* (what the last composed picture had) */
 static const struct SpuPic *sw_spu_drawn;
 static ULONG sw_ncomposed;
@@ -3081,19 +3091,129 @@ static void sw_compose_out(int s, const struct SpuPic *sp, const struct SpuHl *h
     swv[s].state = st.v_hidden ? SW_FREE : SW_SHOW;
 }
 
+/* The band of a picture's planes (w x h, ymod and cmod a row) that
+ * sw_bx.. say, from one to another. */
+static void sw_band_copy(UBYTE *dy, UBYTE *dcb, UBYTE *dcr, ULONG dym, ULONG dcm, const UBYTE *sy,
+                         const UBYTE *scb, const UBYTE *scr, ULONG sym, ULONG scm)
+{
+    ULONG r;
+    for (r = sw_by; r < sw_by + sw_bh; r++)
+        memcpy(dy + r * dym + sw_bx, sy + r * sym + sw_bx, sw_bw);
+    for (r = sw_by / 2; r < (sw_by + sw_bh) / 2; r++) {
+        memcpy(dcb + r * dcm + sw_bx / 2, scb + r * scm + sw_bx / 2, sw_bw / 2);
+        memcpy(dcr + r * dcm + sw_bx / 2, scr + r * scm + sw_bx / 2, sw_bw / 2);
+    }
+}
+
+/* The band (sw_clean's) with the subpicture and highlight blended in, in
+ * slot s's planes, written onto the overlay (mem) over the picture there. */
+static void sw_band_draw(int s, const struct SpuPic *sp, const struct SpuHl *hl, UBYTE *mem, ULONG bpr)
+{
+    ULONG ny = swv_yw * swv_yh, cm = swv_yw / 2, seq;
+    UBYTE *b = swv[s].buf;
+    struct MpvPicture p;
+    if (!sw_bw || !sw_bh)
+        return;
+    sw_band_copy(b, b + ny, b + ny + ny / 4, swv_yw, cm, sw_clean, sw_clean + ny,
+                 sw_clean + ny + ny / 4, swv_yw, cm);
+    spu_blend420(sp, hl, dvdplay_clut(st.v_dvd, &seq), b, b + ny, b + ny + ny / 4, swv_yw, cm, swv_w,
+                 swv_h);
+    sw_slot_pic(s, &p);
+    p.mpic_Y += sw_by * swv_yw + sw_bx;
+    p.mpic_Cb += sw_by / 2 * cm + sw_bx / 2;
+    p.mpic_Cr += sw_by / 2 * cm + sw_bx / 2;
+    p.mpic_Width = (UWORD)sw_bw;
+    p.mpic_Height = (UWORD)sw_bh;
+    MpvToYUV422(&p, mem + sw_by * bpr + sw_bx * 2, bpr, MPVY_Y0UY1V);
+}
+
+/* A menu's picture (the decoder's, f), or one under a subpicture, onto
+ * the overlay: written as it is, then the band under its subpicture
+ * blended and written again (slot s's planes for that). FALSE: no overlay
+ * (then composed whole). */
+static BOOL sw_band_out(int s, struct MpvPicture *f, const struct SpuPic *sp, const struct SpuHl *hl,
+                        ULONG pts)
+{
+    ULONG bpr, hz = 0, tk, ny = swv_yw * swv_yh;
+    UBYTE *mem;
+    if (!sw_direct || st.v_hidden || f->mpic_YModulo != swv_yw || f->mpic_YRows != swv_yh ||
+        f->mpic_CModulo != swv_yw / 2)
+        return FALSE;
+    if (!(mem = vo_lock(&bpr)))
+        return FALSE;
+    tk = time_ticks(&hz);
+    MpvToYUV422(f, mem, bpr, MPVY_Y0UY1V);
+    /* the band: the subpicture's, its edges even, inside the picture */
+    sw_bx = sw_by = sw_bw = sw_bh = 0;
+    if (sp && sp->pix && sp->x < swv_w && sp->y < swv_h) {
+        ULONG x1 = sp->x + sp->w, y1 = sp->y + sp->h;
+        sw_bx = sp->x & ~1UL;
+        sw_by = sp->y & ~1UL;
+        x1 = (x1 > swv_w ? swv_w : x1 + 1) & ~1UL;
+        y1 = (y1 > swv_h ? swv_h : y1 + 1) & ~1UL;
+        if (x1 > sw_bx && y1 > sw_by) {
+            sw_bw = x1 - sw_bx;
+            sw_bh = y1 - sw_by;
+        }
+    }
+    sw_band_copy(sw_clean, sw_clean + ny, sw_clean + ny + ny / 4, swv_yw, swv_yw / 2, f->mpic_Y,
+                 f->mpic_Cb, f->mpic_Cr, f->mpic_YModulo, f->mpic_CModulo);
+    sw_clean_ok = FALSE;
+    sw_band_ok = TRUE;
+    sw_clean_pts = pts;
+    sw_last = f;
+    sw_last_ok = TRUE;
+    sw_band_draw(s, sp, hl, mem, bpr);
+    vo_unlock();
+    sw_tdirect += time_ticks(&hz) - tk;
+    sw_ndirect++;
+    sw_spu_drawn = sp;
+    sw_ncomposed++;
+    sw_nband++;
+    return TRUE;
+}
+
+/* The decoder's last picture (untouched since: sw_last_ok) kept whole in
+ * sw_clean, for the disc standing still on it. */
+static void sw_keep_whole(void)
+{
+    ULONG ny = swv_yw * swv_yh, r;
+    if (sw_clean_ok || !sw_band_ok || !sw_last_ok)
+        return;
+    for (r = 0; r < swv_yh; r++)
+        memcpy(sw_clean + r * swv_yw, sw_last->mpic_Y + r * sw_last->mpic_YModulo, swv_yw);
+    for (r = 0; r < swv_yh / 2; r++) {
+        memcpy(sw_clean + ny + r * (swv_yw / 2), sw_last->mpic_Cb + r * sw_last->mpic_CModulo, swv_yw / 2);
+        memcpy(sw_clean + ny + ny / 4 + r * (swv_yw / 2), sw_last->mpic_Cr + r * sw_last->mpic_CModulo,
+               swv_yw / 2);
+    }
+    sw_clean_ok = TRUE;
+}
+
 /* The last picture again, from sw_clean, with what shows over it now (a
- * button moved to while the disc stands still): FALSE if it cannot be. */
+ * button moved to while the disc stands still): FALSE if it cannot be.
+ * Of a band only: that band again over what the overlay shows. */
 static BOOL sw_recompose(ULONG pts)
 {
     struct SpuHl hl;
     const struct SpuPic *sp;
     int s = sw_slot();
-    ULONG ny = swv_yw * swv_yh;
-    if (!sw_clean_ok || s < 0)
+    ULONG ny = swv_yw * swv_yh, bpr;
+    UBYTE *mem;
+    if (s < 0 || (!sw_clean_ok && !sw_band_ok))
         return FALSE;
     sp = sw_spu_now(pts, &hl);
-    memcpy(swv[s].buf, sw_clean, ny * 3 / 2);
-    sw_compose_out(s, sp, &hl);
+    if (sw_clean_ok) {
+        memcpy(swv[s].buf, sw_clean, ny * 3 / 2);
+        sw_compose_out(s, sp, &hl);
+        return TRUE;
+    }
+    if (!sw_direct || st.v_hidden || !(mem = vo_lock(&bpr)))
+        return FALSE;
+    sw_band_draw(s, sp, &hl, mem, bpr);
+    vo_unlock();
+    sw_spu_drawn = sp;
+    sw_ncomposed++;
     return TRUE;
 }
 
@@ -3195,9 +3315,9 @@ static void swv_run(void)
     /* a DVD's menus: its subpictures, and the last picture as it was */
     sw_nav = st.v_dvd && dvdplay_is_nav(st.v_dvd);
     sw_spu = NULL;
-    sw_clean_ok = FALSE;
+    sw_clean_ok = sw_band_ok = sw_last_ok = FALSE;
     sw_spu_drawn = NULL;
-    sw_ncomposed = 0;
+    sw_ncomposed = sw_nband = 0;
     if (sw_nav && (!(sw_spu = spu_new()) || !(sw_clean = AllocVec(swv_yw * swv_yh * 3 / 2, MEMF_ANY)))) {
         fail(_("Not enough memory"));
         goto out;
@@ -3286,7 +3406,7 @@ static void swv_run(void)
 #define SEG_FLUSH()                                                                  \
     do {                                                                             \
         MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
-        sw_f_ok = FALSE;                                                             \
+        sw_f_ok = sw_last_ok = FALSE;                                                \
         if (held >= 0) {                                                             \
             swv[held].state = SW_FREE;                                               \
             held = -1;                                                               \
@@ -3321,7 +3441,9 @@ static void swv_run(void)
             /* a new overlay (blank): the newest picture on it again (paused,
              * or until the next is due) */
             sw_redraw = FALSE;
-            if (sw_nav && sw_clean_ok)
+            if (sw_nav && !sw_clean_ok && sw_band_ok && sw_last_ok && sw_direct)
+                sw_to_overlay(sw_last);             /* (a band's: the picture under it first) */
+            if (sw_nav && (sw_clean_ok || (sw_band_ok && sw_last_ok)))
                 sw_recompose(sw_clean_pts);         /* (with what shows over it) */
             else if (sw_direct && sw_f_ok)
                 sw_to_overlay(sw_f);
@@ -3494,6 +3616,8 @@ static void swv_run(void)
             tk = time_ticks(&hz);
             sw_f_ok = FALSE;                /* (the last one's planes: the decoder's again) */
             f = MpvDecode(sw_mpv, &e);
+            if (f || e == MPVE_MORE)
+                sw_last_ok = FALSE;         /* (the decoder's last picture: not as it was) */
             if (f) {
                 t_dec += time_ticks(&hz) - tk;
                 n_dec++;
@@ -3628,9 +3752,13 @@ static void swv_run(void)
                     sp = sw_spu_now((ULONG)pts, &hl);
                     dvdplay_now(st.v_dvd, &now);
                 }
-                if (sw_nav && (sp || now.menu) && (!direct || sw_f_ok)) {
+                if (sw_nav && (sp || now.menu) && direct && sw_f_ok &&
+                    sw_band_out(held, sw_f, sp, &hl, (ULONG)pts))
+                    swv[held].state = SW_FREE;      /* (on the overlay, its band blended) */
+                else if (sw_nav && (sp || now.menu) && (!direct || sw_f_ok)) {
                     /* a menu's, or under a subpicture: kept as it is, then
                      * what shows over it blended in */
+                    sw_band_ok = FALSE;
                     if (direct) {
                         memcpy(sw_clean, sw_f->mpic_Y, ny);
                         memcpy(sw_clean + ny, sw_f->mpic_Cb, ny / 4);
@@ -3676,7 +3804,7 @@ static void swv_run(void)
                 /* all it gave shown: on (the decoder taking more again) */
                 dvdplay_go(st.v_dvd);
                 MpvControl(sw_mpv, MPVC_FLUSH, 0);
-                sw_f_ok = FALSE;
+                sw_f_ok = sw_last_ok = FALSE;
                 done = FALSE;
                 continue;
             }
@@ -3695,7 +3823,9 @@ static void swv_run(void)
                 continue;
             }
             if (pe == DVDP_STILL) {
-                /* its last picture stands (its buttons over it) */
+                /* its last picture stands (its buttons over it), kept
+                 * whole to draw them again on */
+                sw_keep_whole();
                 still_on = TRUE;
                 still_t0 = time_ms();
                 n_still++;
@@ -3755,10 +3885,10 @@ static void swv_run(void)
     if (sw_nav) {
         ULONG dec = 0, bad = 0;
         spu_counts(sw_spu, &dec, &bad);
-        sprintf(m, "a DVD's menus: %lu parts (%lu jumps), %lu stills; %lu subpictures decoded, %lu not; "
-                   "%lu pictures with something over them",
+        sprintf(m, "DVD menus: %lu parts (%lu jumps), %lu stills; %lu subpictures decoded, %lu not; "
+                   "%lu with something over them (%lu: its band alone)",
                 (unsigned long)n_seg, (unsigned long)n_hop, (unsigned long)n_still, (unsigned long)dec,
-                (unsigned long)bad, (unsigned long)sw_ncomposed);
+                (unsigned long)bad, (unsigned long)sw_ncomposed, (unsigned long)sw_nband);
         amce_log("video", m);
     }
     if (st.v_ts) {
