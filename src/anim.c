@@ -3169,6 +3169,17 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                    : "the ZZ9000's overlay");
     amce_log("video", m);
     st_video_show(TRUE);
+    {
+        /* its overlay opened and placed before the stream starts: Picasso96
+         * opening one on the ZZ9000 while the radio process began the
+         * sound (the SDK's mpega.library, AHI's ZZ9000AX) hung the Amiga,
+         * twice (the overlay as vid_place puts it, so it stays there) */
+        WORD h = lay.dh;
+        if (lay.full && sf.lv > 0 && lay.vy + h > st.y)
+            h = st.y - lay.vy;
+        if (!vid.sw || !vo_failed_here())
+            vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
+    }
     if (!vid_start(cpu, 0, err, errmax))
         goto out;
     for (;;) {
