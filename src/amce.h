@@ -943,7 +943,7 @@ BOOL  dbg_cpu_start(void);
 void  dbg_cpu_stop(void);
 LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
 void  dbg_set_timer(struct Device *timer);
-LONG st_busy_sample(void);         /* stream.c: the radio process, % busy (debug) */
+LONG st_busy_sample(void);         /* stream.c: the playback process, % busy (debug) */
 ULONG time_ms(void);                /* E-clock milliseconds, 0 without a timer */
 ULONG time_ticks(ULONG *hz);        /* E-clock ticks (their rate at *hz): measuring */
 void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
@@ -1147,6 +1147,10 @@ LONG amce_num(const char *s);           /* the digits at s (0: none, or s NULL) 
 void amce_join_path(char *out, LONG max, const char *dir, const char *name);  /* dir/name, dir: */
 BOOL amce_exists(const char *path);     /* a file or drawer there (no requester asked) */
 void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
+/* the ZZ9000, one task at a time (util.c): around each call that reaches it */
+void amce_card_init(void);
+void amce_card_lock(void);
+void amce_card_unlock(void);
 /* One of AmigaMCE's own libraries, from its Libs (else LIBS:): an older
  * copy left in memory, unused, put out first; logged (ownlib.c) */
 struct Library *amce_open_own_lib(const char *name, ULONG version);

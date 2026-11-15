@@ -6,7 +6,7 @@
  * Picasso96 PIP window (YUV) over AmigaMCE's display, borderless, where the
  * anim player puts its picture (anim.c: anim_play_video), so a video looks
  * and acts as an ANIM does there: its controls beneath, full screen, the
- * same keys. The radio process feeds the card and paces its pictures
+ * same keys. The playback process feeds the card and paces its pictures
  * against the sound, which comes back from the card and plays as music
  * does (stream.c: video_run). Here: the checks before it plays, and the
  * overlay's window: shown where it is asked for, moved with AmigaMCE's
@@ -138,6 +138,7 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
     sprintf(m, "opening its overlay: %ld x %ld YUV, at %ld, %ld, %ld x %ld%s", (long)v->w, (long)v->h,
             (long)x, (long)y, (long)dw, (long)dh, v->sw ? " (the CPU's pictures)" : "");
     amce_log("video", m);
+    amce_card_lock();                       /* (the ZZ9000: one task at a time) */
     w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
                         P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
                         P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
@@ -151,12 +152,15 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
         /* the size and place asked for at opening are not reliably taken
          * (the window stays the picture's size, top left): set again */
         BOOL there = pip_move(w, x, y, dw, dh);
+        amce_card_unlock();
         sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s",
                 (long)(w->Width - w->BorderLeft - w->BorderRight),
                 (long)(w->Height - w->BorderTop - w->BorderBottom), (long)w->LeftEdge,
                 (long)w->TopEdge, (long)v->w, (long)v->h, there ? "" : "; not the size asked for");
-    } else
+    } else {
+        amce_card_unlock();
         sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(*pe), (long)*pe);
+    }
     amce_log("video", m);
     return w;
 }
@@ -310,8 +314,10 @@ BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG
         vo_wx = ox;
         vo_wy = oy;
         pip_fit(&vo_v, vo_sw, ox + x, oy + y, w, h, &px, &py, &dw, &dh);
+        amce_card_lock();
         WindowToFront(vo_win);
         pip_move(vo_win, px, py, dw, dh);
+        amce_card_unlock();
         return TRUE;
     }
     if (vo_failed || !P96Base || (v->sw && vo_off))
@@ -358,7 +364,9 @@ void vo_hide(void)
 {
     vo_unlock();
     if (vo_win) {
+        amce_card_lock();
         p96PIP_Close(vo_win);
+        amce_card_unlock();
         amce_log("video", "its overlay taken down");
     }
     vo_win = NULL;

@@ -9,7 +9,7 @@
  * testing, not for distribution). Its request builders and reply decoders
  * (zz9k/request.h, reply.h) make each call; zz9k.library carries it
  * (ZZ9KCall), shared safely with the card's picture datatype, mpega and
- * AmiSSL. The UI and the radio process both call it: the library
+ * AmiSSL. The UI and the playback process both call it: the library
  * serialises the mailbox.
  */
 #include <exec/types.h>
@@ -70,12 +70,17 @@ const char *zz_video_check(BOOL mpeg2, BOOL mp2)
         return "zz9k.library is not there";
     memset(&caps, 0, sizeof(caps));
     memset(&svc, 0, sizeof(svc));
-    if ((s = ZZ9KQueryCaps(&caps)) != ZZ9K_STATUS_OK) {
+    amce_card_lock();
+    s = ZZ9KQueryCaps(&caps);
+    amce_card_unlock();
+    if (s != ZZ9K_STATUS_OK) {
         sprintf(m, "the card's capabilities could not be read (%s)", zz_name(s));
         amce_log("zz9k", m);
         return "The ZZ9000 did not answer";
     }
+    amce_card_lock();
     s = ZZ9KQueryService(ZZ9K_SERVICE_VIDEO, &svc);
+    amce_card_unlock();
     if (!said) {
         said = 1;
         sprintf(m, "zz9k.library %ld.%ld, ABI %ld.%ld, firmware %08lx, caps %08lx; video service "
@@ -106,12 +111,15 @@ int zz_alloc(ULONG length, struct ZzBuf *b)
     int s;
     memset(&sb, 0, sizeof(sb));
     memset(b, 0, sizeof(*b));
+    amce_card_lock();
     s = ZZ9KAllocShared(length, 64, ZZ9K_ALLOC_HOST_WINDOW, &sb);
     if (s == ZZ9K_STATUS_OK && !sb.data) {
         if (sb.handle)
             ZZ9KFreeShared(sb.handle);
+        amce_card_unlock();
         return ZZ9K_STATUS_NO_MEMORY;
     }
+    amce_card_unlock();
     b->handle = sb.handle;
     b->data = (volatile UBYTE *)sb.data;
     b->length = sb.length;
@@ -120,8 +128,11 @@ int zz_alloc(ULONG length, struct ZzBuf *b)
 
 void zz_free(struct ZzBuf *b)
 {
-    if (b->handle)
+    if (b->handle) {
+        amce_card_lock();
         ZZ9KFreeShared(b->handle);
+        amce_card_unlock();
+    }
     memset(b, 0, sizeof(*b));
 }
 
@@ -148,7 +159,10 @@ static int main_call(ZZ9KRequest *rq, UWORD op, struct ZzMain *r)
     int s;
     memset(&reply, 0, sizeof(reply));
     memset(r, 0, sizeof(*r));
-    if ((s = ZZ9KCall(rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS)) != ZZ9K_STATUS_OK)
+    amce_card_lock();
+    s = ZZ9KCall(rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
+    amce_card_unlock();
+    if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_main(&reply, op, &res)) != ZZ9K_STATUS_OK)
         return s;
@@ -220,7 +234,10 @@ int zz_audio_read(ULONG session, ZzU64 acknowledged, struct ZzAudio *r)
                                                       session, acknowledged, 0)) != ZZ9K_STATUS_OK)
         return s;
     memset(&reply, 0, sizeof(reply));
-    if ((s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS)) != ZZ9K_STATUS_OK)
+    amce_card_lock();
+    s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
+    amce_card_unlock();
+    if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_audio(&reply, ZZ9K_OP_MEDIA_SESSION_AUDIO_READ, &a)) !=
         ZZ9K_STATUS_OK)
@@ -248,7 +265,10 @@ int zz_audio_origin(ULONG session, ZzU64 *pts)
         ZZ9K_STATUS_OK)
         return s;
     memset(&reply, 0, sizeof(reply));
-    if ((s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS)) != ZZ9K_STATUS_OK)
+    amce_card_lock();
+    s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
+    amce_card_unlock();
+    if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_status(&reply, &res)) != ZZ9K_STATUS_OK)
         return s;

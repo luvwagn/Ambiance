@@ -139,7 +139,9 @@ static void ahi_close(void)
         ahi_io[c] = NULL;
     }
     if (ahi_dev) {
+        amce_card_lock();                   /* (AHI's ZZ9000AX: the card) */
         CloseDevice((struct IORequest *)ahi_dev);
+        amce_card_unlock();
         DeleteIORequest((struct IORequest *)ahi_dev);
         ahi_dev = NULL;
     }
@@ -155,7 +157,10 @@ static BOOL ahi_open(void)
         !(ahi_dev = (struct AHIRequest *)CreateIORequest(ahi_port, sizeof(struct AHIRequest))))
         goto fail;
     ahi_dev->ahir_Version = 4;
-    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ahi_dev, 0)) {
+    amce_card_lock();                       /* (AHI's ZZ9000AX: the card) */
+    c = OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ahi_dev, 0);
+    amce_card_unlock();
+    if (c) {
         DeleteIORequest((struct IORequest *)ahi_dev);
         ahi_dev = NULL;
         goto fail;
@@ -2764,7 +2769,7 @@ restart:
 /* ---- an MPEG video, played by the ZZ9000 as an animation plays here: the
  * same place for its picture, the same controls beneath it, full screen,
  * keys and pad. The picture is the card's overlay (video.c) over the
- * picture's place; the radio process feeds the card and plays the sound
+ * picture's place; the playback process feeds the card and plays the sound
  * it gives back (stream.c: video_run), pausing, seeking and the volume
  * asked of it. Full screen, the overlay leaves the controls' room while
  * they show. A seek starts the card again from about that byte (the first
@@ -3171,7 +3176,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     st_video_show(TRUE);
     {
         /* its overlay opened and placed before the stream starts: Picasso96
-         * opening one on the ZZ9000 while the radio process began the
+         * opening one on the ZZ9000 while the playback process began the
          * sound (the SDK's mpega.library, AHI's ZZ9000AX) hung the Amiga,
          * twice (the overlay as vid_place puts it, so it stays there) */
         WORD h = lay.dh;

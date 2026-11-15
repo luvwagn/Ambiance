@@ -160,3 +160,33 @@ void amce_time_text(char *out, ULONG ms)
     ULONG s = ms / 1000;
     sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
 }
+
+/* The ZZ9000 asked one thing at a time from AmigaMCE's tasks: Picasso96's
+ * overlay (opened, moved, closed), the SDK's mpega.library, AHI and MHI
+ * set up or fed, zz9k.library's calls. Picasso96 opening an overlay while
+ * the background playback process began the sound hung the Amiga. A
+ * task may take it again inside (a semaphore nests); none waits for
+ * another task while holding it. Before amce_card_init (the tests), a
+ * no-op. */
+static struct SignalSemaphore card_sem;
+static BOOL card_ready;
+
+void amce_card_init(void)
+{
+    if (!card_ready) {
+        InitSemaphore(&card_sem);
+        card_ready = TRUE;
+    }
+}
+
+void amce_card_lock(void)
+{
+    if (card_ready)
+        ObtainSemaphore(&card_sem);
+}
+
+void amce_card_unlock(void)
+{
+    if (card_ready)
+        ReleaseSemaphore(&card_sem);
+}

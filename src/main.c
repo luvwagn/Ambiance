@@ -2107,7 +2107,7 @@ static BOOL https_ok(void)
     return radio_https && caps.amissl;
 }
 
-/* The network and radio processes told (they read it as they connect). */
+/* The network and playback processes told (they read it as they connect). */
 static void https_apply(void)
 {
     net_use_https(https_ok());
@@ -14972,6 +14972,7 @@ static int app_main(void)
         rc = 20;
         goto out;
     }
+    amce_card_init();               /* (before any process that reaches the card) */
     load_debug();
     if (debug_on)
         flush_memory();             /* (a baseline without others' idle libraries) */
@@ -15017,7 +15018,7 @@ static int app_main(void)
     https_apply();                  /* the setting, now that AmiSSL is looked for */
     {
         /* HTTPS's root certificates (tls.c), by their full name: the
-         * network and radio processes have no PROGDIR: of their own */
+         * network and playback processes have no PROGDIR: of their own */
         char cp[256];
         BPTR l;
         struct Process *me = (struct Process *)FindTask(NULL);

@@ -16,7 +16,7 @@
 
 static BPTR logfh;
 static const char *logpath;
-static struct SignalSemaphore loglock;  /* the radio process logs too */
+static struct SignalSemaphore loglock;  /* the playback process logs too */
 static BOOL lock_ready;
 
 /* Opens the log when Debug is on in Settings (force) or the file

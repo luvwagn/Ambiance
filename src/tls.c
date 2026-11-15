@@ -5,7 +5,7 @@
  * AmiSSL (amisslmaster.library, AmiSSL 5: OpenSSL 3) is opened by each
  * process that uses it, for itself, with its own bsdsocket.library: a
  * base of AmiSSL's is its opener's, as SocketBase is. So the network
- * process and the radio process each have a TlsLib, and AmiSSL's inline
+ * process and the playback process each have a TlsLib, and AmiSSL's inline
  * calls (and the inline functions of its headers) find the calling
  * process's bases by its task (tls_base), never a global shared by both.
  *

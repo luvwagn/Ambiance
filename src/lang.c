@@ -80,7 +80,7 @@ const char *amce_tr(const char *s)
     if (!cat_n || !s || !*s)
         return s;
     k = ((ULONG)s >> 1) & (TR_CACHE - 1);
-    /* the network and radio processes ask too: one at a time at the cache */
+    /* the network and playback processes ask too: one at a time at the cache */
     Forbid();
     if (cache[k].en != s) {
         cache[k].en = s;

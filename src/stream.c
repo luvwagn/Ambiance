@@ -4,7 +4,7 @@
  *
  * A station's stream is an endless MP3 file sent over HTTP (Icecast and
  * SHOUTcast servers; SHOUTcast answers "ICY 200 OK"). A process of its own
- * ("AmigaMCE radio") connects, asks for the stream with its titles
+ * ("AmigaMCE playback") connects, asks for the stream with its titles
  * ("Icy-MetaData: 1": every icy-metaint bytes a little block saying what
  * plays), and gives the MP3 to mpega.library through a bitstream hook:
  * the decoder asks for bytes, the hook reads them off the socket and takes
@@ -63,8 +63,8 @@
 #include <proto/bsdsocket.h>
 #include <sys/filio.h>
 
-struct Library *st_SocketBase;      /* the radio process's */
-static struct TlsLib st_tls;        /* AmiSSL, the radio process's (tls.c) */
+struct Library *st_SocketBase;      /* the playback process's */
+static struct TlsLib st_tls;        /* AmiSSL, the playback process's (tls.c) */
 static APTR st_ssl;                 /* the stream's TLS, NULL plain HTTP */
 static volatile BOOL https_on;      /* Settings > Networking > HTTPS (with AmiSSL) */
 static volatile BOOL secure_now;    /* the stream's own connection is TLS (st_secure) */
@@ -74,7 +74,7 @@ void st_use_https(BOOL on)
     https_on = on;
 }
 
-/* Time the radio process spends asleep, all told (Debug's load line says
+/* Time the playback process spends asleep, all told (Debug's load line says
  * how busy it is: st_busy_sample) */
 static volatile ULONG slept_ms;
 
@@ -145,11 +145,19 @@ typedef struct {
 #define MPEGA_BSFUNC_SEEK  3
 #define MPEGA_PCM_SIZE     1152
 
-#define MPEGA_open(n, c) \
+#define MPEGA_open_(n, c) \
     LP2(30, MPEGA_STREAM *, MPEGA_open, char *, n, a0, MPEGA_CTRL *, c, a1, , MPEGABase)
-#define MPEGA_close(s) LP1NR(36, MPEGA_close, MPEGA_STREAM *, s, a0, , MPEGABase)
-#define MPEGA_decode_frame(s, p) \
+#define MPEGA_close_(s) LP1NR(36, MPEGA_close, MPEGA_STREAM *, s, a0, , MPEGABase)
+#define MPEGA_decode_frame_(s, p) \
     LP2(42, LONG, MPEGA_decode_frame, MPEGA_STREAM *, s, a0, WORD **, p, a1, , MPEGABase)
+/* the ZZ9000 SDK's mpega.library streams to the card: each call under the
+ * card lock (amce_card_lock: one task at a time) */
+#define MPEGA_open(n, c) \
+    ({ MPEGA_STREAM *r_; amce_card_lock(); r_ = MPEGA_open_(n, c); amce_card_unlock(); r_; })
+#define MPEGA_close(s) \
+    do { amce_card_lock(); MPEGA_close_(s); amce_card_unlock(); } while (0)
+#define MPEGA_decode_frame(s, p) \
+    ({ LONG r_; amce_card_lock(); r_ = MPEGA_decode_frame_(s, p); amce_card_unlock(); r_; })
 
 typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
 
@@ -272,7 +280,7 @@ static struct {                     /* st_start_video's */
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
 static BOOL card_mpega;             /* mpega.library is the ZZ9000 SDK's: it decodes on the card */
-struct Library *MHIBase;            /* the MHI driver's (the radio process's, while it plays) */
+struct Library *MHIBase;            /* the MHI driver's (the playback process's, while it plays) */
 
 /* ---------------------------------------------------------- Paula */
 /* A half of Paula's buffer from the FIFO (the process, when woken). */
@@ -332,7 +340,7 @@ static void paula_start(void)
     st.want = 1;
     st.aint.is_Node.ln_Type = NT_INTERRUPT;
     st.aint.is_Node.ln_Pri = 0;
-    st.aint.is_Node.ln_Name = (char *)"AmigaMCE radio";
+    st.aint.is_Node.ln_Name = (char *)"AmigaMCE playback";
     st.aint.is_Data = NULL;
     st.aint.is_Code = (void (*)())audio_code;
     CU->intena = INTF_AUD0;
@@ -481,7 +489,7 @@ static void ahi_level_log(void)
     amce_log("sound", m);
 }
 
-static BOOL ahi_start(void)
+static BOOL ahi_start_(void)
 {
     struct TagItem t[8];
     struct AHISampleInfo si;
@@ -573,7 +581,26 @@ static BOOL ahi_start(void)
     return TRUE;
 }
 
+/* AHI set up (ZZ9000AX: on the card) under the card lock */
+static BOOL ahi_start(void)
+{
+    BOOL r;
+    amce_card_lock();
+    r = ahi_start_();
+    amce_card_unlock();
+    return r;
+}
+
+static void ahi_stop_(void);
+
 static void ahi_stop(void)
+{
+    amce_card_lock();
+    ahi_stop_();
+    amce_card_unlock();
+}
+
+static void ahi_stop_(void)
 {
     st.started = FALSE;
     if (ah.ctrl) {
@@ -1168,11 +1195,11 @@ static BOOL open_stream(void)
  * seconds before they are heard (the FIFO's, or MHI's buffers, between):
  * shown then, the title changed before the song did. So each is kept with
  * how much audio had been read when it came (titles_in_ms) and shown once
- * that much has been played (titles_out_ms), by the radio process, which
+ * that much has been played (titles_out_ms), by the playback process, which
  * also logs it. */
 #define TITLES 4
 static struct { ULONG at; char t[160]; } tq[TITLES];
-static UWORD tq_head, tq_tail;          /* the radio process's alone */
+static UWORD tq_head, tq_tail;          /* the playback process's alone */
 static ULONG mh_queued_ms(void);
 static ULONG mh_ms(void);
 
@@ -2514,8 +2541,8 @@ static BOOL sw_sound;
 
 /* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
  * video is to be decoded by the CPU (video_check: its PROGDIR: is
- * AmigaMCE's), used by the radio process and the UI alike, let go after
- * each video (st_mpv_close: anim_play_video, once the radio process has
+ * AmigaMCE's), used by the playback process and the UI alike, let go after
+ * each video (st_mpv_close: anim_play_video, once the playback process has
  * stopped), and at quitting. NULL if it is not there. */
 struct Library *MpegvBase;
 
@@ -3663,7 +3690,7 @@ out:
 #define MHI_BUFS  16
 #define MHI_BUFSZ 8192
 
-/* The MHI decoder and its buffers (the radio process's, while it plays). */
+/* The MHI decoder and its buffers (the playback process's, while it plays). */
 static struct {
     APTR h;
     UBYTE *buf[MHI_BUFS];
@@ -3888,7 +3915,10 @@ static void mhi_play(LONG freq)
         fail(_("The MHI driver could not be opened (Settings > Sound)"));
         return;
     }
-    if (!(mhs.h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig))) {
+    amce_card_lock();                       /* (mhizz9000: the card's) */
+    mhs.h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig);
+    amce_card_unlock();
+    if (!mhs.h) {
         mhs.h = NULL;
         fail(_("The MHI driver's decoder is in use, or not there"));
         goto done;
@@ -4014,8 +4044,10 @@ done:
     if (mhs.h) {
         APTR hh = mhs.h;
         mhs.h = NULL;                           /* serve no more */
+        amce_card_lock();
         MHIStop(hh);
         MHIFreeDecoder(hh);
+        amce_card_unlock();
     }
     st.started = FALSE;
     for (i = 0; i < MHI_BUFS; i++)
@@ -4025,7 +4057,7 @@ done:
     MHIBase = NULL;
 }
 
-static void radio_main(void)
+static void playback_main(void)
 {
     MPEGA_STREAM *ms = NULL;
     static struct Hook hook;
@@ -4131,7 +4163,7 @@ static void radio_main(void)
     }
     ctrl.check_mpeg = 0;
     ctrl.stream_buffer_size = 0;
-    if (!(ms = MPEGA_open((char *)"AmigaMCE radio", &ctrl))) {
+    if (!(ms = MPEGA_open((char *)"AmigaMCE playback", &ctrl))) {
         fail(st.err[0] ? st.err : "The stream is not MP3 that mpega.library can decode");
         goto out;
     }
@@ -4222,7 +4254,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     memset(&st.err, 0, sizeof(st.err));
     st.name[0] = st.genre[0] = st.title[0] = 0;
     st.title_seq++;
-    tq_head = tq_tail = 0;                  /* (the radio process is stopped here) */
+    tq_head = tq_tail = 0;                  /* (the playback process is stopped here) */
     st.bitrate = st.freq = st.channels = st.dec_freq = st.dec_channels = 0;
     st.f_in = st.f_out = st.underruns = st.played = 0;
     st.flac = FALSE;
@@ -4272,12 +4304,12 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     }
     st.state = ST_CONNECTING;
     st.cpu = cpu;
-    st.proc = CreateNewProcTags(NP_Entry, (ULONG)radio_main, NP_Name, (ULONG)"AmigaMCE radio",
+    st.proc = CreateNewProcTags(NP_Entry, (ULONG)playback_main, NP_Name, (ULONG)"AmigaMCE playback",
                                 NP_Priority, 3, NP_StackSize, 65536, NP_WindowPtr, (ULONG)-1,
                                 TAG_DONE);
     if (!st.proc) {
         st_stop();
-        amce_strlcpy(err, _("Could not start the radio process"), errmax);
+        amce_strlcpy(err, _("Could not start the background playback process"), errmax);
         return FALSE;
     }
     return TRUE;
@@ -4561,7 +4593,7 @@ void st_info(struct StInfo *i)
     st.peak_r = st.peak_r * 3 / 4;
 }
 
-/* How busy the radio process was since the last call, in percent of the
+/* How busy the playback process was since the last call, in percent of the
  * time (-1 not running): for Debug's load line. */
 LONG st_busy_sample(void)
 {

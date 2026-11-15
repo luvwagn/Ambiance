@@ -1703,6 +1703,10 @@ Nur Musikdateien auf diesem Amiga spielen als WAV, AIFF oder 8SVX
 MSG_3E5CE903
 Keine Art von WAV, AIFF oder 8SVX, die AmigaMCE spielt (komprimiert?)
 ; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_71F4B50B
+; MPEG-1 by the CPU needs mpegv.library
+MSG_7BA5A883
+; The file could not be read there
 MSG_52A6DB2B
 Der MHI-Treiber konnte nicht geöffnet werden (Einstellungen > Ton)
 ; The MHI driver could not be opened (Settings > Sound)
@@ -1727,13 +1731,15 @@ Der Stream sieht nicht nach MP3 aus
 MSG_3AC77067
 Nicht genug Speicher, um einen Sender zu spielen
 ; Not enough memory to play a station
-MSG_41C55AEA
-Der Radioprozess konnte nicht starten
-; Could not start the radio process
+MSG_2ADCBED0
+Der Wiedergabeprozess im Hintergrund konnte nicht starten
+; Could not start the background playback process
 MSG_49FB1D9D
 ; Only MPEG Program Streams play (this one has no packs)
 MSG_550F84B3
 ; MPEG-2 video plays on a ZZ9000 (zz9k.library not found)
+MSG_2B6936D6
+; MPEG-1 by the CPU needs mpegv.library (AmigaMCE's Libs)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
