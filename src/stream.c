@@ -2531,6 +2531,7 @@ static struct {
     UBYTE *buf;
     ULONG size;
     volatile UBYTE state;
+    UBYTE direct;                           /* to go straight onto the overlay when due */
     ULONG seq;
     ZzU64 pts;
 } swv[SWV_SLOTS];
@@ -3226,6 +3227,7 @@ static void swv_run(void)
                     amce_log("video: by the CPU", m);
                 }
                 swv[s].pts = (f->mpic_Flags & MPVPF_PTS) ? f->mpic_PTS : f->mpic_Time;
+                swv[s].direct = 0;
                 if ((!period || st.v_shown + st.v_dropped == 0) && MpvGetInfo(sw_mpv, &mi) &&
                     mi.mi_Period) {
                     period = mi.mi_Period;
@@ -3243,7 +3245,7 @@ static void swv_run(void)
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
                     else if (sw_direct && f->mpic_YModulo == swv_yw && f->mpic_YRows == swv_yh) {
-                        swv[s].pts |= 1ULL << 61;   /* (straight to the overlay when due) */
+                        swv[s].direct = 1;          /* (straight to the overlay when due) */
                     } else {
                         tk = time_ticks(&hz);
                         ULONG ny = swv_yw * swv_yh;
@@ -3316,8 +3318,8 @@ static void swv_run(void)
                     }
                 }
             } else {
-                BOOL direct = (swv[held].pts >> 61) & 1;
-                pts &= ~(1ULL << 61);
+                BOOL direct = swv[held].direct;
+                swv[held].direct = 0;
                 swv[held].pts = pts;
                 swv[held].seq = ++swv_seq;
                 if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f))
