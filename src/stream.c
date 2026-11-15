@@ -2034,14 +2034,17 @@ static ZzU64 v_clock(ZzU64 origin, ULONG f0, ULONG rate, ULONG div)
     return origin + (ZzU64)pos * div * 90000ULL / rate;
 }
 
-/* The sound's clock (v_clock's, m), carried on by the time of day once
- * the sound is over (all of it decoded, over, and played: its FIFO empty):
- * pictures after its sound's end (a DVD menu's moving part longer than
- * its sound) shown on time, not waited for forever. */
-static ZzU64 v_clock_on(ZzU64 m, BOOL over, ULONG *dry_t, ZzU64 *dry_m)
+/* The sound's clock (v_clock's, m), carried on by the time of day while
+ * its FIFO is empty (its sound over, or not decoded yet): a picture due
+ * after the sound's end (a DVD menu's moving part longer than its sound)
+ * shown, and never a picture waiting for a clock that waits for sound
+ * behind that picture's own (the reading held while mpegv holds enough
+ * video). The sound back: its own clock again (the pictures waiting for
+ * it to catch up). */
+static ZzU64 v_clock_on(ZzU64 m, ULONG *dry_t, ZzU64 *dry_m)
 {
     ZzU64 w;
-    if (!over || st.f_in != st.f_out) {
+    if (st.f_in != st.f_out) {
         *dry_t = 0;
         return m;
     }
@@ -3105,7 +3108,8 @@ static void swv_run(void)
     WORD *pcm[2];
     ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre, adiv = 1, pcm_peak = 0;
     ZzU64 origin = 0, pts0 = 0, dry_m = 0;
-    ULONG dry_t = 0;                        /* (its sound over since: v_clock_on) */
+    ULONG dry_t = 0;                        /* (its sound run dry since: v_clock_on) */
+    ULONG shown_t = 0, n_stall = 0;         /* (the last picture shown: when) */
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
     /* behind: B pictures passed over (mpegv.library), until enough are on time
@@ -3306,6 +3310,7 @@ static void swv_run(void)
         }                                                                            \
         run = b_late = b_okrun = b_ontime = 0;                                       \
         seg_t0 = time_ms();                                                          \
+        shown_t = seg_t0;                                                            \
         drain_t0 = 0;                                                                \
         n_seg++;                                                                     \
     } while (0)
@@ -3522,8 +3527,8 @@ static void swv_run(void)
                 /* converted now unless already late (then let go below) */
                 {
                     ZzU64 now = !on ? 0 : (sw_sound || sw_ac3) && st.started
-                                              ? v_clock_on(v_clock(origin, f0, rate, adiv), a_done,
-                                                           &dry_t, &dry_m)
+                                              ? v_clock_on(v_clock(origin, f0, rate, adiv), &dry_t,
+                                                           &dry_m)
                                               : pts0 + (ZzU64)(time_ms() - t0) * 90;
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
@@ -3581,7 +3586,7 @@ static void swv_run(void)
             BOOL raw = (swv[held].pts >> 62) & 1;
             ZzU64 pts = swv[held].pts & ~(1ULL << 62);
             ZzU64 master = (sw_sound || sw_ac3) && st.started
-                               ? v_clock_on(v_clock(origin, f0, rate, adiv), a_done, &dry_t, &dry_m)
+                               ? v_clock_on(v_clock(origin, f0, rate, adiv), &dry_t, &dry_m)
                                : pts0 + (ZzU64)(time_ms() - t0) * 90;
             long long drift = (long long)(pts - master);
             st.v_drift = (LONG)(drift / 90);
@@ -3648,6 +3653,7 @@ static void swv_run(void)
                     swv[held].state = st.v_hidden || (direct && !sw_f_ok) ? SW_FREE : SW_SHOW;
                 }
                 st.v_shown++;
+                shown_t = time_ms();
                 run = 0;
                 if (!skip_b && ++b_okrun >= 30)
                     b_late = 0;
@@ -3697,6 +3703,21 @@ static void swv_run(void)
                 continue;
             }
             break;
+        }
+        /* nothing shown for a while, not standing still or paused: how it
+         * stands, for the log (a few times) */
+        if (!shown_t)
+            shown_t = time_ms() ? time_ms() : 1;
+        if (time_ms() - shown_t > 4000 && n_stall < 4) {
+            n_stall++;
+            shown_t = time_ms();
+            sprintf(m, "4 s with nothing shown: on %ld, held %ld, done %ld, sound over %ld, out %ld, "
+                       "%lu frames queued, %lu bytes held, read all %ld, DVD stop %ld, drift %ld ms",
+                    (long)on, (long)held, (long)done, (long)a_done, (long)st.started,
+                    (unsigned long)(st.f_in - st.f_out), (unsigned long)MpvControl(sw_mpv, MPVC_HELD, 0),
+                    (long)MpvControl(sw_mpv, MPVC_ENDED, 0),
+                    (long)(sw_nav ? dvdplay_pending(st.v_dvd, NULL, NULL) : -1), (long)st.v_drift);
+            amce_log("video: by the CPU", m);
         }
         if (!busy)
             v_wait(3000);
