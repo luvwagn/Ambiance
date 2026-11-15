@@ -1196,6 +1196,7 @@ static BOOL vi_keys;                /* a video: "i" means it */
  * left, 14 right, 15 press), a click on the picture presses the one there
  * (16), not the controls'. M or a CD32 pad's green: its menu (10). */
 static BOOL vid_menu_keys;
+static BOOL vid_nav_menu;                   /* (in one of its menus, its buttons or not yet) */
 
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
@@ -1296,8 +1297,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                     if (k && !r)
                         r = k;
                 } else if (b == -1 && !r)
-                    r = vid_menu_keys ? 16 : 2;     /* anywhere off the controls: play/pause
-                                                     * (a DVD's menu: its button there) */
+                    r = vid_menu_keys || vid_nav_menu ? 16 : 2; /* anywhere off the controls:
+                                                     * play/pause (a DVD's menu: its button there) */
                 else if (b == -3 && !r)
                     r = 5;                  /* the progress line: seek there */
             }
@@ -3233,7 +3234,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *
     }
     vid_dvd_fresh = TRUE;
     r = vid_play(g, dvdplay_name(vid_dvd), dvdplay_name(vid_dvd), cpu, err, errmax);
-    vid_menu_keys = FALSE;
+    vid_menu_keys = vid_nav_menu = FALSE;
     dvdplay_close(vid_dvd);
     vid_dvd = NULL;
     st_mpv_close();                         /* (mpegv.library, if the CPU decoded it) */
@@ -3384,6 +3385,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             UWORD off = ctl.off & ~(1 << BT_MENU);
             dvdplay_now(vid_dvd, &now);
             vid_menu_keys = now.buttons && !ended;
+            vid_nav_menu = now.menu && !ended;
             vid.ms = now.title_ms;
             if (!ended)
                 at = now.menu ? 0 : now.at_ms;
@@ -3469,14 +3471,25 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         if (a == VO_RIGHT && !r)
             r = 1;
         else if ((a == VO_CLICK || a == VO_DCLICK) && !r)
-            r = vid_menu_keys ? 16 : 2;     /* (a DVD's menu: the button there) */
+            r = vid_menu_keys || vid_nav_menu ? 16 : 2;     /* (a DVD's menu: the button there) */
         if (r >= 10 && r <= 16 && vid_dvd) {
             /* a DVD's menus: asked of the playback process, which reads the disc */
             static const UBYTE q[] = { DVDQ_MENU, DVDQ_UP, DVDQ_DOWN, DVDQ_LEFT, DVDQ_RIGHT,
                                        DVDQ_ACTIVATE, DVDQ_CLICK };
             WORD px = -1, py = -1;
-            if (r == 16 && !vid_pointer(g, &px, &py))
+            if (r == 16 && !vid_menu_keys) {
+                /* a menu with no buttons yet (its opening moving): the
+                 * click not a pause, nothing */
+                sprintf(m, "%s: its menu clicked before it has buttons to press", name);
+                amce_log("dvd", m);
+                r = 0;
+            } else if (r == 16 && !vid_pointer(g, &px, &py)) {
+                sprintf(m, "%s: a click off the picture (at %ld, %ld of the screen)", name,
+                        g->win && g->win->WScreen ? (long)g->win->WScreen->MouseX : -1L,
+                        g->win && g->win->WScreen ? (long)g->win->WScreen->MouseY : -1L);
+                amce_log("dvd", m);
                 r = 0;                      /* (not on the picture) */
+            }
             if (r)
                 dvdplay_ask(vid_dvd, q[r - 10], px, py);
             if (r == 10) {

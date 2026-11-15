@@ -219,6 +219,7 @@ struct DvdPlay {
     volatile LONG chapter, chapters;        /* (dvdplay_read's, read by AmigaMCE) */
     ULONG ms;                               /* the title's length */
     BOOL pend;                              /* a pack in blk still to give */
+    BOOL pend_nav;                          /*   (a NAV pack) */
     BOOL ended;
     char name[64];
     /* the disc's own navigation (dvdplay_nav): from its first play, its
@@ -242,6 +243,10 @@ struct DvdPlay {
     volatile LONG hl_button;
     volatile ULONG at_ms, forbidden;
     volatile BOOL wide;
+    /* its times: the last VOBU's end (90 kHz), to see them jump back (a
+     * menu going round) or on, with no jump of the disc's to say so */
+    BOOL vobu_known;
+    ULONG vobu_end, n_restart;
     UBYTE blk[DVD_BLOCK];
 };
 
@@ -635,7 +640,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
         return FALSE;
     }
     dp->nav = TRUE;
-    dp->ended = dp->pend = FALSE;
+    dp->ended = dp->pend = dp->pend_nav = dp->vobu_known = FALSE;
     dp->stop_ev = DVDP_NONE;
     dp->spu = -1;
     dp->title = 0;
@@ -646,6 +651,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
         LONG e = DvdNextBlock(dp->dvd, dp->blk, &ev);
         if (e == DVDE_BLOCK || e == DVDE_NAV) {
             dp->pend = TRUE;
+            dp->pend_nav = e == DVDE_NAV;
             if (e == DVDE_BLOCK)
                 other_sound_out(dp, dp->blk);
             now_fetch(dp);
@@ -683,6 +689,7 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
 {
     switch (e) {
     case DVDE_HOP:
+        dp->vobu_known = FALSE;             /* (its times start afresh) */
         dp->ev_user = dp->user_req;
         dp->user_req = FALSE;
         dp->stop_ev = DVDP_HOP;
@@ -743,6 +750,32 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
     }
 }
 
+/* A NAV pack's VOBU: TRUE if its times do not follow on from the last's
+ * (back, or more than a second on), with no jump to say so. */
+static BOOL nav_restarts(struct DvdPlay *dp)
+{
+    const UBYTE *b = dp->blk;
+    ULONG s, e;
+    BOOL known = dp->vobu_known;
+    if (b[38] || b[39] || b[40] != 1 || b[41] != 0xBF || b[44] != 0)
+        return FALSE;                       /* (not the PCI where it should be) */
+    s = ((ULONG)b[57] << 24) | ((ULONG)b[58] << 16) | ((ULONG)b[59] << 8) | b[60];
+    e = ((ULONG)b[61] << 24) | ((ULONG)b[62] << 16) | ((ULONG)b[63] << 8) | b[64];
+    dp->vobu_known = TRUE;
+    if (known && (s + 9000 < dp->vobu_end || s > dp->vobu_end + 90000)) {
+        dp->vobu_known = FALSE;             /* (this pack again after: taken as it is) */
+        if (++dp->n_restart <= 3) {
+            char m[100];
+            sprintf(m, "its times start again (%lu ms, from %lu): played out, then on",
+                    (unsigned long)(s / 90), (unsigned long)(dp->vobu_end / 90));
+            amce_log("dvd", m);
+        }
+        return TRUE;
+    }
+    dp->vobu_end = e;
+    return FALSE;
+}
+
 /* The disc read on through its menus and titles: packs into dst until
  * something it must stop for (dvdplay_pending), then 0 until dvdplay_go. */
 static LONG nav_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
@@ -753,9 +786,19 @@ static LONG nav_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
         LONG e;
         if (dp->pend) {
             dp->pend = FALSE;
-            e = DVDE_BLOCK;
+            e = dp->pend_nav ? DVDE_NAV : DVDE_BLOCK;
+            dp->pend_nav = FALSE;
         } else
             e = DvdNextBlock(dp->dvd, dp->blk, &ev);
+        if (e == DVDE_NAV && nav_restarts(dp)) {
+            /* its times start again (a menu going round to its start): what
+             * came before played out first, then on from this pack, timed
+             * afresh, as after a jump of the disc's own */
+            dp->pend = dp->pend_nav = TRUE;
+            dp->ev_user = FALSE;
+            dp->stop_ev = DVDP_HOP;
+            break;
+        }
         if (e == DVDE_BLOCK || e == DVDE_NAV) {
             if (e == DVDE_BLOCK)
                 other_sound_out(dp, dp->blk);
@@ -842,14 +885,28 @@ void dvdplay_service(struct DvdPlay *dp)
         case DVDQ_ACTIVATE:
             dp->user_req = TRUE;
             ok = DvdButton(dp->dvd, DVDB_ACTIVATE, 0);
+            if (ok) {
+                sprintf(m, "its menu's button %ld pressed", (long)dp->hl_button);
+                amce_log("dvd", m);
+            }
             break;
         case DVDQ_POINT:
             DvdPoint(dp->dvd, a, b, FALSE);     /* (off its buttons: nothing) */
             break;
-        case DVDQ_CLICK:
+        case DVDQ_CLICK: {
+            struct DvdHighlight h;
+            LONG was = DvdHighlight(dp->dvd, &h, DVDH_SELECTED);
             dp->user_req = TRUE;
             ok = DvdPoint(dp->dvd, a, b, TRUE);
+            sprintf(m, "its menu clicked at %ld, %ld: %s (button %ld before)", (long)a, (long)b,
+                    ok ? "a button pressed" : "no button there", (long)was);
+            amce_log("dvd", m);
+            if (!ok) {
+                dp->user_req = FALSE;
+                ok = TRUE;                  /* (logged) */
+            }
             break;
+        }
         case DVDQ_MENU:
             dp->user_req = TRUE;
             if (dp->domain == DVDD_TITLE)
@@ -889,6 +946,7 @@ void dvdplay_poll(struct DvdPlay *dp)
             break;
         if (e == DVDE_BLOCK || e == DVDE_NAV) {
             dp->pend = TRUE;                /* (moved on by itself: given next) */
+            dp->pend_nav = e == DVDE_NAV;
             if (e == DVDE_BLOCK)
                 other_sound_out(dp, dp->blk);
             dp->stop_ev = DVDP_HOP;
