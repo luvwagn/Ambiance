@@ -37,7 +37,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/glyph.c
+       src/dvdplay.c src/dvddisc.c src/glyph.c src/ownlib.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -320,11 +320,11 @@ build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdlib/inclu
 	@cp $@ build/dvd/prog/
 # AmigaMCE's side (src/dvdplay.c): the film chosen and read as the player reads it
 build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddisc.c src/dvddisc.h \
-                       src/util.c src/amce.h $(DVDLIB)
+                       src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
 	@echo "  CC    $@"
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ \
-		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c -lamiga
+		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c src/ownlib.c -lamiga
 	@cp $@ build/dvd/prog/
 test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cp $(DVD_ISO) build/dvd/prog/test.iso

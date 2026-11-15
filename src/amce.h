@@ -1144,6 +1144,9 @@ LONG amce_num(const char *s);           /* the digits at s (0: none, or s NULL) 
 void amce_join_path(char *out, LONG max, const char *dir, const char *name);  /* dir/name, dir: */
 BOOL amce_exists(const char *path);     /* a file or drawer there (no requester asked) */
 void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
+/* One of AmigaMCE's own libraries, from its Libs (else LIBS:): an older
+ * copy left in memory, unused, put out first; logged (ownlib.c) */
+struct Library *amce_open_own_lib(const char *name, ULONG version);
 /* Numbers stored a byte at a time, big-endian (IFF, MP3, the index) or
  * little (WAV): read wherever they lie (no alignment). */
 static inline ULONG amce_be32(const UBYTE *p)

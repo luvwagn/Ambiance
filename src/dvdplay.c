@@ -423,9 +423,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         return NULL;
     }
     dp->disc = disc;
-    if (!AmceDvdBase &&
-        !(AmceDvdBase = OpenLibrary((CONST_STRPTR)"PROGDIR:Libs/" AMCEDVD_NAME, AMCEDVD_VERSION)) &&
-        !(AmceDvdBase = OpenLibrary((CONST_STRPTR)AMCEDVD_NAME, AMCEDVD_VERSION))) {
+    if (!AmceDvdBase && !(AmceDvdBase = amce_open_own_lib(AMCEDVD_NAME, AMCEDVD_VERSION))) {
         fail(err, errlen, _("DVDs need amcedvd.library (in AmigaMCE's Libs)"));
         dvdplay_close(dp);
         return NULL;

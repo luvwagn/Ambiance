@@ -2285,15 +2285,12 @@ const char *st_ac3_cpu_why(void)
 /* The library and a decoder (stereo): FALSE if not. */
 static BOOL a3_open(char *m)
 {
-    static const char *const fpu[] = { "PROGDIR:Libs/" AC3FPUNAME, AC3FPUNAME, NULL };
-    static const char *const integer[] = { "PROGDIR:Libs/" AC3NAME, AC3NAME, NULL };
-    const char *const *try = (SysBase->AttnFlags & AFF_FPU40) ? fpu : integer;
-    int pass, i;
     memset(&a3, 0, offsetof(__typeof__(a3), pcm));
     a3.pts0 = ZZ_NO_PTS;
-    for (pass = 0; pass < 2 && !Ac3Base; pass++, try = integer)
-        for (i = 0; try[i] && !Ac3Base; i++)
-            Ac3Base = OpenLibrary((CONST_STRPTR)try[i], AC3VERSION);
+    if (!Ac3Base && (SysBase->AttnFlags & AFF_FPU40))
+        Ac3Base = amce_open_own_lib(AC3FPUNAME, AC3VERSION);    /* (an FPU: its build) */
+    if (!Ac3Base)
+        Ac3Base = amce_open_own_lib(AC3NAME, AC3VERSION);
     if (!Ac3Base) {
         strcpy(m, "no ac3.library: played without its sound");
         return FALSE;
@@ -2523,8 +2520,8 @@ struct Library *MpegvBase;
 
 struct Library *st_mpv_open(void)
 {
-    if (!MpegvBase && !(MpegvBase = OpenLibrary((CONST_STRPTR) "PROGDIR:Libs/" MPEGVNAME, MPEGVVERSION)))
-        MpegvBase = OpenLibrary((CONST_STRPTR)MPEGVNAME, MPEGVVERSION);
+    if (!MpegvBase)
+        MpegvBase = amce_open_own_lib(MPEGVNAME, MPEGVVERSION);
     return MpegvBase;
 }
 

@@ -40,11 +40,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.0 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.1 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.0 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.1 (14.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 0;
+const UWORD LibRevision = 1;   /* 1.1: seeks across the whole title */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -54,7 +54,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.0, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.1, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
