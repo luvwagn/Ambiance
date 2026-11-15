@@ -346,11 +346,12 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
 
-- DVD menus and subtitles (the subpicture decoder, and drawing over the
-  card's overlay); encrypted (CSS) discs; DVD images over 4 GB on a file
-  system without 64-bit packets.
-- MPEG video without a ZZ9000: MPEG-1 on RTG screens for now; AGA screens
-  come next.
+- DVD menus when the ZZ9000 decodes (its pictures cannot be drawn over:
+  the CPU's decoding plays them); choosing subtitles (forced ones show);
+  encrypted (CSS) discs; DVD images over 4 GB on a file system without
+  64-bit packets.
+- MPEG video without a ZZ9000: on RTG screens for now; AGA screens come
+  next.
 - Modules play on Paula only; AHI for them comes later.
 
 ## Building
