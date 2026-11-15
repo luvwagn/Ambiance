@@ -2,10 +2,13 @@
  * dvdplay.c run under vamos on the test DVD's image (tests/mkdvd.sh),
  * through amcedvd.library: the film chosen (the longest title: title 1,
  * two chapters, 4 s), what the player is told of it, its packs read to
- * its end, a seek and the chapters.
+ * its end, a seek and the chapters; first what the image holds, as Videos'
+ * preview reads it.
  */
 #include "../src/amce.h"
 #include "../src/dvdplay.h"
+#include "../src/dvddisc.h"
+#include "../src/dvdiso.h"
 #include "../src/vprobe.h"
 #include "../src/spu.h"
 #include <stdio.h>
@@ -120,13 +123,26 @@ int main(int argc, char **argv)
         printf("usage: dvdplay_68k image\n");
         return 20;
     }
+    /* what an image holds, as Videos' preview asks (under 2 GB: Seek, no
+     * 64-bit packets, which vamos would not know) */
+    {
+        ULONG sectors;
+        LONG k = dvdd_image_kind(argv[1], &sectors, err, sizeof(err));
+        CHECK(k == DVDI_VIDEO && sectors > 400, "the image: kind %ld, %lu sectors (%s)", (long)k,
+              (unsigned long)sectors, k < 0 ? err : "");
+        err[0] = 0;
+        k = dvdd_image_kind("nothere.iso", &sectors, err, sizeof(err));
+        CHECK(k == -1 && err[0] && !sectors, "a missing image: kind %ld", (long)k);
+        k = dvdd_image_kind("prog:dvdplay_68k", &sectors, err, sizeof(err));
+        CHECK(k == DVDI_NONE, "a program taken for a disc: kind %ld", (long)k);
+    }
     CHECK(!dvdplay_open_image("nothere.iso", &v, err, sizeof(err)) && err[0], "a missing image");
     dp = dvdplay_open_image(argv[1], &v, err, sizeof(err));
     CHECK(dp != NULL, "open: %s", err);
     if (!dp)
         goto done;
     printf("%s\n", dvdplay_name(dp));
-    CHECK(!strcmp(dvdplay_name(dp), "test.iso"), "name %s", dvdplay_name(dp));
+    CHECK(!strcmp(dvdplay_name(dp), "test"), "name %s (test.iso, without .iso)", dvdplay_name(dp));
     CHECK(v.w == 720 && v.h == 576 && v.aspect == 2 && v.mpeg2 && v.ps && v.fps_milli == 25000,
           "video %ldx%ld aspect %ld", (long)v.w, (long)v.h, (long)v.aspect);
     /* two tracks, AC-3 5.1 first: the MPEG one chosen */

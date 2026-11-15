@@ -4,7 +4,8 @@
  *
  * Through amcedvd.library (src/dvdlib), opened only while a disc is
  * played. Its sectors are read from the drive (dvddisc.c), not through the
- * volume's filesystem, which only says a DVD is there.
+ * volume's filesystem, which only says a DVD is there; an image's from its
+ * file.
  */
 #ifndef AMCE_DVDPLAY_H
 #define AMCE_DVDPLAY_H
@@ -38,7 +39,8 @@ struct DvdPlay;
  * MPEG-2 Program Stream: size, aspect, length, sound). NULL, with why in
  * err. dvdplay_name: "VOLUME", or "VOLUME: 3 / 14" (changing as it goes). */
 struct DvdPlay *dvdplay_open(const char *vol, struct VProbe *v, char *err, LONG errlen);
-/* The same, from an image file of a disc (a .iso) */
+/* The same, from an image file of a disc (a .iso; named as its file is,
+ * without the .iso) */
 struct DvdPlay *dvdplay_open_image(const char *path, struct VProbe *v, char *err, LONG errlen);
 const char *dvdplay_name(struct DvdPlay *dp);   /* "MOVIE: title 3" */
 /* The film from where it is, for the card: whole 2048-byte packs into

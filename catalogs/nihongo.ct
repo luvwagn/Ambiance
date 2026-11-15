@@ -854,9 +854,18 @@ MSG_2B8E61B8
 MSG_642000D2
 上下 スクロール  Esc 戻る
 ; Up/Down scroll  Esc back
-MSG_7FF7C0A9
-DVDビデオディスク
-; A DVD-Video disc
+MSG_2FCA6510
+DVDビデオのディスクイメージ
+; A DVD-Video disc image
+MSG_7838F274
+ディスクイメージ (UDF)
+; A disc image (UDF)
+MSG_608D9413
+DVDビデオのディスクイメージではありません
+; Not a DVD-Video disc image
+MSG_754C4DD5
+このイメージを読み込めませんでした (理由はログに)
+; This image could not be read (the log says why)
 MSG_77C67E04
 ボタン: ZZ9000で映画、または番組を順に再生
 ; Fire plays its film, or its programmes one after another, on the ZZ9000
@@ -866,6 +875,9 @@ NとP: 次と前のチャプターまたは番組
 MSG_351C83CC
 CPUでデコード時: ディスクのメニュー、Mで戻る
 ; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+DVDビデオディスク
+; A DVD-Video disc
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

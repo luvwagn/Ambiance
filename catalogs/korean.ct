@@ -854,9 +854,18 @@ MSG_2B8E61B8
 MSG_642000D2
 위/아래 스크롤  Esc 뒤로
 ; Up/Down scroll  Esc back
-MSG_7FF7C0A9
-DVD-Video 디스크
-; A DVD-Video disc
+MSG_2FCA6510
+DVD-Video 디스크 이미지
+; A DVD-Video disc image
+MSG_7838F274
+디스크 이미지 (UDF)
+; A disc image (UDF)
+MSG_608D9413
+DVD-Video 디스크 이미지가 아닙니다
+; Not a DVD-Video disc image
+MSG_754C4DD5
+이미지를 읽을 수 없습니다 (이유는 로그에 있습니다)
+; This image could not be read (the log says why)
 MSG_77C67E04
 버튼: ZZ9000에서 영화 또는 프로그램을 차례로 재생
 ; Fire plays its film, or its programmes one after another, on the ZZ9000
@@ -866,6 +875,9 @@ N과 P: 다음/이전 챕터 또는 프로그램
 MSG_351C83CC
 CPU 디코딩: 디스크 메뉴, M으로 다시 표시
 ; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+DVD-Video 디스크
+; A DVD-Video disc
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

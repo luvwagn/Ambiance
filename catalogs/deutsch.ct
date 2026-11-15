@@ -854,9 +854,18 @@ Auf/Ab  blättern      Links/Esc  zurück
 MSG_642000D2
 Auf/Ab blättern  Esc zurück
 ; Up/Down scroll  Esc back
-MSG_7FF7C0A9
-Eine DVD-Video-Disc
-; A DVD-Video disc
+MSG_2FCA6510
+Ein DVD-Video-Abbild
+; A DVD-Video disc image
+MSG_7838F274
+Ein Disc-Abbild (UDF)
+; A disc image (UDF)
+MSG_608D9413
+Kein DVD-Video-Abbild
+; Not a DVD-Video disc image
+MSG_754C4DD5
+Das Abbild ließ sich nicht lesen (das Log sagt, warum)
+; This image could not be read (the log says why)
 MSG_77C67E04
 Feuer spielt ihren Film oder ihre Sendungen nacheinander auf der ZZ9000
 ; Fire plays its film, or its programmes one after another, on the ZZ9000
@@ -866,6 +875,9 @@ N und P: nächstes und voriges Kapitel oder Sendung
 MSG_351C83CC
 Von der CPU dekodiert: ihre Menüs, M holt sie zurück
 ; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+Eine DVD-Video-Disc
+; A DVD-Video disc
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

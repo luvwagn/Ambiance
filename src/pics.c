@@ -3,8 +3,9 @@
  * Copyright (c) 2026 Brian King
  *
  * A Pictures list holds folders (IT_DIR), picture files (IT_PIC) and IFF
- * ANIMs (IT_ANIM). Videos lists are these lists too (vids), animations
- * and folders only: a folder of no animations (pictures alone) greyed,
+ * ANIMs (IT_ANIM; MPEG files and DVD images, .iso, too, tagged "MPEG" and
+ * "DVD", an image with a disc beside it, as a drive's DVD has). Videos
+ * lists are these lists too (vids), animations and folders only: a folder of no animations (pictures alone) greyed,
  * folders first, each part sorted by name. Once sorted, an entry's sortkey
  * holds the tag shown at the right of its row: a picture's format ("GIF"),
  * or a playable folder's picture count. A folder with pictures and no
@@ -29,12 +30,13 @@ static const struct { const char *ext, *tag; } exts[] = {
     { "anim", "ANIM" }, { "anm", "ANIM" },
     { "mpg", "MPEG" }, { "mpeg", "MPEG" }, { "vob", "MPEG" },   /* (played by a ZZ9000) */
     { "ts", "MPEG" }, { "m2ts", "MPEG" }, { "mts", "MPEG" },   /* (transport streams: repacked) */
+    { "iso", "DVD" },                       /* (a DVD's image: not looked in here, dvdplay.c) */
 };
 
-/* Played, not shown as a picture: an IFF ANIM, an MPEG file. */
+/* Played, not shown as a picture: an IFF ANIM, an MPEG file, a DVD's image. */
 static BOOL moving(const char *f)
 {
-    return f && (!strcmp(f, "ANIM") || !strcmp(f, "MPEG"));
+    return f && (!strcmp(f, "ANIM") || !strcmp(f, "MPEG") || !strcmp(f, "DVD"));
 }
 
 /* The format a picture file's name says it is, NULL if none. */
@@ -307,11 +309,13 @@ static LONG read_dir(const char *dir, struct ItemList *out, BOOL vids)
     for (i = 0; i < out->count; i++) {
         struct Item *it = &out->items[i];
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            const char *f = it->kind == IT_ANIM ? (pics_format(it->label) &&
-                                                   !strcmp(pics_format(it->label), "MPEG")
-                                                   ? "MPEG" : "ANIM") :
-                            strchr(it->label, '.') ? pics_format(it->label) : sniff(it->path);
+            const char *n = pics_format(it->label);
+            const char *f = it->kind == IT_ANIM ? (n && (!strcmp(n, "MPEG") || !strcmp(n, "DVD"))
+                                                   ? n : "ANIM") :
+                            strchr(it->label, '.') ? n : sniff(it->path);
             it->sortkey = (char *)(f ? f : "");
+            if (f && !strcmp(f, "DVD"))
+                it->mark = MARK_DISC;           /* a DVD's image: a disc beside it, as a drive's */
         } else {
             LONG nd = 0, na = 0, np = scan(it->path, &nd, NULL, 0, TRUE, &na, vids);
             if (vids) {

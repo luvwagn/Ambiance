@@ -3196,10 +3196,11 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     }
 }
 
-/* A DVD's film (the disc in volume vol): as an MPEG file, read from the
- * disc by dvdplay.c, its chapters by N and P (a CD32 pad's shoulders).
- * MPEG-2: the ZZ9000's where it can, else the CPU's (mpegv.library: vid.sw). */
-LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax)
+/* A DVD's film (the disc in volume vol, or in the image file of that path):
+ * as an MPEG file, read from the disc by dvdplay.c, its chapters by N and
+ * P (a CD32 pad's shoulders). MPEG-2: the ZZ9000's where it can, else the
+ * CPU's (mpegv.library: vid.sw). */
+LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *err, LONG errmax)
 {
     LONG r;
     err[0] = 0;
@@ -3208,7 +3209,8 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG er
         amce_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
         return -1;
     }
-    if (!(vid_dvd = dvdplay_open(vol, &vid, err, errmax)))
+    if (!(vid_dvd = image ? dvdplay_open_image(vol, &vid, err, errmax)
+                          : dvdplay_open(vol, &vid, err, errmax)))
         return -1;
     {
         const char *why = video_check_dvd(&vid);    /* the card, and Picasso96 for its overlay */

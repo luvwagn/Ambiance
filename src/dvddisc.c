@@ -20,17 +20,25 @@
  * a port that signals whichever task sent them, with SIGF_SINGLE, exec's
  * signal for waiting on one thing.
  *
- * An image file is read with Seek and Read: 32-bit, so an image of 2 GB
- * or more is refused for now (a single-layer DVD is up to 4.7 GB; most
- * of that is the films, the menus and IFOs are near the start, but a
- * film's sectors past 2 GB could not be read).
+ * An image file is read with Read, positioned with Seek under 2 GB.
+ * DVD images are bigger (4.7 GB a layer), and DOS's Seek is 32-bit: past
+ * 2 GB the 64-bit packets MorphOS brought in are sent to the file's
+ * handler (dvdiso.h), which UAE's and Amiberry's host file system answers
+ * (a folder of the host's mounted as a volume). A handler that does not
+ * know them is positioned in two 32-bit Seeks, from the start and then
+ * on, which reaches 4 GB if it takes positions past 2 GB at all (PFS3
+ * holds no file over 2 GB, FFS and SFS none over 4 GB); a bigger image
+ * there cannot be read, and the log says so. An image under 2 GB is never
+ * sent the packets (vamos, which runs the tests, would not know them).
  */
 #include "dvddisc.h"
+#include "dvdiso.h"
 
 #include <exec/memory.h>
 #include <exec/io.h>
 #include <devices/scsidisk.h>
 #include <dos/dos.h>
+#include <dos/dosextens.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <clib/alib_protos.h>
@@ -38,9 +46,17 @@
 
 #define CHUNK 16                            /* sectors per SCSI read (32 KB) */
 
+/* a 64-bit packet, and the message it goes in */
+struct Pkt64 {
+    struct Message m;
+    struct DosPacket64 p;
+};
+
+enum { POS_32, POS_STEPS, POS_64 };         /* how an image is positioned */
+
 struct DvdDisc {
     BPTR fh;                                /* an image, or */
-    struct MsgPort *port;                   /* a drive (SIGB_SINGLE, any task's) */
+    struct MsgPort *port;                   /* a drive (SIGB_SINGLE, any task's; an image's 64-bit packets too) */
     struct IOStdReq *io;
     BOOL dev_open;
     UBYTE *bounce;                          /* CHUNK sectors, for the drive */
@@ -48,6 +64,11 @@ struct DvdDisc {
     ULONG pos;                              /* the next sector */
     ULONG sectors;
     ULONG errors;
+    struct Pkt64 *pk;                       /* an image's: its packet, */
+    UBYTE how;                              /*   POS_, */
+    BOOL told;                              /*   a sector it could not reach logged, */
+    void (*log)(APTR h, LONG level, CONST_STRPTR line);
+    char what[64];                          /*   how it is positioned, for the log */
 };
 
 static void put_err(char *err, LONG len, const char *a, const char *b)
@@ -62,14 +83,94 @@ static void put_err(char *err, LONG len, const char *a, const char *b)
     err[n] = 0;
 }
 
+/* A port for replies, which signals whichever task waits on it */
+static BOOL make_port(struct DvdDisc *d)
+{
+    if (!(d->port = AllocVec(sizeof(*d->port), MEMF_PUBLIC | MEMF_CLEAR)))
+        return FALSE;
+    d->port->mp_Node.ln_Type = NT_MSGPORT;
+    d->port->mp_Flags = PA_SIGNAL;
+    d->port->mp_SigBit = SIGB_SINGLE;
+    d->port->mp_SigTask = FindTask(NULL);
+    NewList(&d->port->mp_MsgList);
+    return TRUE;
+}
+
 /* ---- an image file */
+
+/* A 64-bit packet to the image's handler: FALSE if it does not know it,
+ * or it failed (dp_Res2 set: UAE's refused position has dp_Res1 -1);
+ * *hi, *lo its result (dp_Res1). */
+static BOOL pkt64(struct DvdDisc *d, LONG type, ULONG a_hi, ULONG a_lo, LONG mode, ULONG *hi,
+                  ULONG *lo)
+{
+    struct FileHandle *fh = (struct FileHandle *)BADDR(d->fh);
+    struct Pkt64 *k = d->pk;
+    *hi = *lo = 0;
+    if (!k && !(k = d->pk = AllocVec(sizeof(*k), MEMF_PUBLIC | MEMF_CLEAR)))
+        return FALSE;
+    if (!fh->fh_Type || (!d->port && !make_port(d)))
+        return FALSE;                       /* (NIL:'s has no handler) */
+    memset(&k->m, 0, sizeof(k->m));
+    k->m.mn_Node.ln_Type = NT_MESSAGE;
+    k->m.mn_Node.ln_Name = (char *)&k->p;
+    k->m.mn_ReplyPort = d->port;
+    k->m.mn_Length = sizeof(*k);
+    dvdi_pkt64(&k->p, type, fh->fh_Arg1, a_hi, a_lo, mode);
+    k->p.dp_Link = (ULONG)&k->m;
+    k->p.dp_Port = (ULONG)d->port;
+    d->port->mp_SigTask = FindTask(NULL);   /* the reply to whoever asks */
+    SetSignal(0, SIGF_SINGLE);
+    PutMsg(fh->fh_Type, &k->m);
+    WaitPort(d->port);
+    GetMsg(d->port);
+    *hi = k->p.dp_Res1Hi;
+    *lo = k->p.dp_Res1Lo;
+    return dvdi_pkt64_known(&k->p) && !k->p.dp_Res2;
+}
+
+/* Why a sector could not be reached: logged once */
+static void img_tell(struct DvdDisc *d, const char *m)
+{
+    if (d->told)
+        return;
+    d->told = TRUE;
+    if (d->log)
+        d->log(d, DVDLOG_ERROR, (CONST_STRPTR)m);
+}
+
+static BOOL img_to(struct DvdDisc *d, ULONG sector)
+{
+    ULONG hi, lo, r_hi, r_lo;
+    LONG first, rest;
+    if (d->how == POS_64) {
+        dvdi_sector_pos(sector, &hi, &lo);
+        if (pkt64(d, ACTION_CHANGE_FILE_POSITION64, hi, lo, OFFSET_BEGINNING, &r_hi, &r_lo) &&
+            (r_hi | r_lo))
+            return TRUE;
+        img_tell(d, "image: a 64-bit position refused by its file system");
+        return FALSE;
+    }
+    switch (dvdi_seek_steps(sector, &first, &rest)) {
+    case 1:
+        return Seek(d->fh, first, OFFSET_BEGINNING) != -1;
+    case 2:
+        if (Seek(d->fh, first, OFFSET_BEGINNING) != -1 && Seek(d->fh, rest, OFFSET_CURRENT) != -1)
+            return TRUE;
+        img_tell(d, "image: its file system cannot position past 2 GB "
+                    "(no 64-bit packets, and Seek past 2 GB refused)");
+        return FALSE;
+    }
+    img_tell(d, "image: a sector past 4 GB, and its file system has no 64-bit packets");
+    return FALSE;
+}
 
 static LONG img_seek(APTR h, ULONG sector)
 {
     struct DvdDisc *d = h;
     if (sector > d->sectors)
         return -1;
-    if (Seek(d->fh, (LONG)(sector * DVD_BLOCK), OFFSET_BEGINNING) < 0) {
+    if (!img_to(d, sector)) {
         d->errors++;
         return -1;
     }
@@ -95,10 +196,60 @@ static LONG img_read(APTR h, APTR buf, LONG n)
     return got;
 }
 
+/* Its size, and how it is positioned: under 2 GB by Seek (fib_Size, a
+ * LONG, positive); else by the 64-bit packets if its handler knows them
+ * (its size asked for, then a position tried), else by Seek in two steps
+ * under 4 GB (fib_Size taken as a ULONG). FALSE, with why in err, if it
+ * cannot be read. */
+static BOOL img_size(struct DvdDisc *d, const char *path, char *err, LONG errlen)
+{
+    struct FileInfoBlock *fib;
+    ULONG size = 0, hi, lo, r_hi, r_lo;
+    BOOL known = FALSE;
+    if ((fib = AllocDosObject(DOS_FIB, NULL))) {
+        if (ExamineFH(d->fh, fib)) {
+            size = (ULONG)fib->fib_Size;
+            known = TRUE;
+        }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    if (known && size && size < 0x80000000UL) {
+        d->how = POS_32;
+        strcpy(d->what, "positioned by Seek");
+        if ((d->sectors = size / DVD_BLOCK))
+            return TRUE;
+        put_err(err, errlen, "image too small: ", path);
+        return FALSE;
+    }
+    /* 2 GB or more (or no size said): its handler's 64-bit packets */
+    if (pkt64(d, ACTION_GET_FILE_SIZE64, 0, 0, 0, &hi, &lo) && !(hi & 0x80000000UL) &&
+        (d->sectors = dvdi_size_sectors(hi, lo)) &&
+        pkt64(d, ACTION_CHANGE_FILE_POSITION64, 0, 0, OFFSET_BEGINNING, &r_hi, &r_lo) &&
+        (r_hi | r_lo)) {
+        d->how = POS_64;
+        strcpy(d->what, "positioned by 64-bit packets");
+        return TRUE;
+    }
+    d->sectors = 0;
+    if (!known || !size) {
+        put_err(err, errlen, "image empty, or its size not to be had: ", path);
+        return FALSE;
+    }
+    if (size == 0xFFFFFFFFUL) {
+        /* (UAE's size for 4 GB or more; its packets were not answered) */
+        put_err(err, errlen, "image of 4 GB or more, and its file system cannot position "
+                "past 4 GB (no 64-bit packets): ", path);
+        return FALSE;
+    }
+    d->sectors = size / DVD_BLOCK;
+    d->how = POS_STEPS;
+    strcpy(d->what, "positioned by Seek, in two steps past 2 GB");
+    return TRUE;
+}
+
 struct DvdDisc *dvdd_open_image(const char *path, char *err, LONG errlen)
 {
     struct DvdDisc *d = AllocVec(sizeof(*d), MEMF_ANY | MEMF_CLEAR);
-    struct FileInfoBlock *fib;
     if (!d) {
         put_err(err, errlen, "out of memory", NULL);
         return NULL;
@@ -108,22 +259,48 @@ struct DvdDisc *dvdd_open_image(const char *path, char *err, LONG errlen)
         FreeVec(d);
         return NULL;
     }
-    if ((fib = AllocDosObject(DOS_FIB, NULL))) {
-        if (ExamineFH(d->fh, fib)) {
-            /* fib_Size is a LONG: 2 GB and over shows negative (or 0) */
-            if (fib->fib_Size > 0)
-                d->sectors = (ULONG)fib->fib_Size / DVD_BLOCK;
-            else
-                d->sectors = 0;
-        }
-        FreeDosObject(DOS_FIB, fib);
-    }
-    if (!d->sectors) {
-        put_err(err, errlen, "image empty, or 2 GB or more (not read yet): ", path);
+    if (!img_size(d, path, err, errlen)) {
         dvdd_close(d);
         return NULL;
     }
     return d;
+}
+
+LONG dvdd_image_kind(const char *path, ULONG *sectors, char *err, LONG errlen)
+{
+    struct DvdDisc *d = dvdd_open_image(path, err, errlen);
+    UBYTE *b;
+    ULONG root, len;
+    LONG kind = DVDI_NONE, n;
+    BOOL udf;
+    *sectors = 0;
+    if (!d)
+        return -1;
+    *sectors = d->sectors;
+    if (!(b = AllocVec(5 * DVD_BLOCK, MEMF_ANY))) {
+        put_err(err, errlen, "out of memory", NULL);
+        dvdd_close(d);
+        return -1;
+    }
+    /* the volume descriptors, from sector 16: ISO 9660's, then UDF's */
+    if (img_seek(d, 16) == 0 && (n = img_read(d, b, 5)) > 0) {
+        if (dvdi_volume(b, n, &root, &len, &udf)) {
+            if (len > 2 * DVD_BLOCK)
+                len = 2 * DVD_BLOCK;        /* (a disc's root folder holds a few names) */
+            n = (LONG)((len + DVD_BLOCK - 1) / DVD_BLOCK);
+            kind = img_seek(d, root) == 0 && img_read(d, b, n) == n &&
+                   dvdi_has_dir(b, len, "VIDEO_TS") ? DVDI_VIDEO : DVDI_ISO;
+        } else if (udf)
+            kind = DVDI_UDF;
+    }
+    FreeVec(b);
+    dvdd_close(d);
+    return kind;
+}
+
+const char *dvdd_how(struct DvdDisc *d)
+{
+    return d->fh ? d->what : "a drive";
 }
 
 /* ---- a drive, through HD_SCSICMD */
@@ -231,13 +408,7 @@ struct DvdDisc *dvdd_open_drive(const char *device, LONG unit, char *err, LONG e
         put_err(err, errlen, "out of memory", NULL);
         return NULL;
     }
-    if ((d->port = AllocVec(sizeof(*d->port), MEMF_PUBLIC | MEMF_CLEAR))) {
-        d->port->mp_Node.ln_Type = NT_MSGPORT;
-        d->port->mp_Flags = PA_SIGNAL;
-        d->port->mp_SigBit = SIGB_SINGLE;
-        d->port->mp_SigTask = FindTask(NULL);
-        NewList(&d->port->mp_MsgList);
-    }
+    make_port(d);
     if (!(d->bounce = AllocVec(CHUNK * DVD_BLOCK, MEMF_PUBLIC)) || !d->port ||
         !(d->io = (struct IOStdReq *)CreateIORequest(d->port, sizeof(struct IOStdReq)))) {
         put_err(err, errlen, "out of memory", NULL);
@@ -292,6 +463,8 @@ void dvdd_close(struct DvdDisc *d)
         FreeVec(d->port);                   /* (no signal of its own to free) */
     if (d->bounce)
         FreeVec(d->bounce);
+    if (d->pk)
+        FreeVec(d->pk);
     FreeVec(d);
 }
 
@@ -311,4 +484,9 @@ void dvdd_reader(struct DvdDisc *d, struct DvdReader *rd)
     rd->seek = d->fh ? img_seek : drive_seek;
     rd->read = d->fh ? img_read : drive_read;
     rd->log = NULL;
+}
+
+void dvdd_log(struct DvdDisc *d, void (*log)(APTR h, LONG level, CONST_STRPTR line))
+{
+    d->log = log;
 }

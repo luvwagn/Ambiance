@@ -11,7 +11,8 @@
  *
  * Playing one: amcedvd.library (src/dvdlib), on the drive's sectors read
  * through its device (dvddisc.c), the volume's DOS device giving device
- * and unit. What plays: its film, when one title is most of the disc
+ * and unit; or an image file's (a .iso in Videos), read through its file
+ * system. What plays: its film, when one title is most of the disc
  * (half its programmes' time or more: a film, or a "play all"); else its
  * programmes one after another, as a disc of episodes or music videos has
  * them, each a title of its own (those under a minute, logos and
@@ -452,7 +453,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     struct DvdPlay *dp;
     struct DvdReader rd;
     struct DvdInfo in;
-    char m[300];
+    char m[360];
     LONG t, best;
     ULONG best_ms, ms;
     if (!(dp = AllocVec(sizeof(*dp), MEMF_ANY | MEMF_CLEAR))) {
@@ -468,6 +469,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     }
     dvdd_reader(dp->disc, &rd);
     rd.log = lib_log;
+    dvdd_log(dp->disc, lib_log);            /* (an image's sector out of reach) */
     if (!(dp->dvd = DvdOpen(&rd, 0))) {
         sprintf(m, _("Not a DVD-Video disc AmigaMCE can read: %.120s"), (const char *)DvdError(NULL));
         fail(err, errlen, m);
@@ -498,7 +500,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     DvdGetInfo(dp->dvd, &in);
     memset(v, 0, sizeof(*v));
     dvdplay_probe(dp, v);
-    sprintf(m, "%.31s (%.60s): %s; title %ld of %ld, %ld chapters, %lu s, %ld x %ld %s, sound %s",
+    sprintf(m, "%.31s (%.110s): %s; title %ld of %ld, %ld chapters, %lu s, %ld x %ld %s, sound %s",
             name, from, dp->n > 1 ? "its programmes in order" : "its film", (long)best,
             (long)in.titles, (long)dp->chapters,
             (unsigned long)(best_ms / 1000), (long)v->w, (long)v->h, in.wide ? "16:9" : "4:3",
@@ -536,12 +538,20 @@ struct DvdPlay *dvdplay_open(const char *vol, struct VProbe *v, char *err, LONG 
 struct DvdPlay *dvdplay_open_image(const char *path, struct VProbe *v, char *err, LONG errlen)
 {
     struct DvdDisc *disc;
+    char name[32], from[120];
+    LONG n;
     err[0] = 0;
     if (!(disc = dvdd_open_image(path, err, errlen))) {
         amce_log("dvd", err);
         return NULL;
     }
-    return open_disc(disc, (const char *)FilePart((STRPTR)path), path, v, err, errlen);
+    /* its name without .iso, as a disc's volume is named */
+    amce_strlcpy(name, (const char *)FilePart((STRPTR)path), sizeof(name));
+    if ((n = (LONG)strlen(name)) > 4 && !amce_stricmp(name + n - 4, ".iso"))
+        name[n - 4] = 0;
+    sprintf(from, "%.60s, %lu MB, %.40s", path, (unsigned long)(dvdd_sectors(disc) / 512),
+            dvdd_how(disc));
+    return open_disc(disc, name, from, v, err, errlen);
 }
 
 const char *dvdplay_name(struct DvdPlay *dp)

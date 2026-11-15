@@ -311,7 +311,8 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
 /* An MPEG video played by the ZZ9000 the same way, its overlay the picture
  * (AmigaMCE's RTG screen or window on the card) */
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
-LONG anim_play_dvd(struct Gfx *g, const char *vol, UWORD cpu, char *err, LONG errmax);   /* a DVD's film */
+/* A DVD's film: the disc in volume vol, or (image) in the image file vol */
+LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */

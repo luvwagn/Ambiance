@@ -165,6 +165,18 @@ of the Amiga to how fast it really is.
   sent. The disc is read through its drive's device (`HD_SCSICMD`) by
   `Libs/amcedvd.library` (libdvdread and libdvdnav, `src/dvdlib`). No
   encrypted (CSS) discs.
+- DVD images: a `.iso` in Videos' folders is listed with a disc beside
+  it, and Fire plays it as a disc in a drive is played (its menus too,
+  decoded by the CPU). Its preview says what it holds (a DVD-Video disc:
+  `VIDEO_TS` in its ISO 9660 root folder) and its size, a few KB of it
+  read. DOS's `Seek` is 32-bit, so past 2 GB an image is positioned with
+  the 64-bit packets MorphOS brought in (`ACTION_GET_FILE_SIZE64`,
+  `ACTION_CHANGE_FILE_POSITION64`), which UAE's and Amiberry's host file
+  system answers: a folder of the host's mounted as a volume plays an
+  image of any size. A file system that does not answer them is
+  positioned by `Seek` in two steps, which reaches 4 GB at most if it
+  takes positions past 2 GB at all; `AmigaMCE.log` says when an image
+  cannot be read.
 - DVD menus: when the CPU decodes a DVD (Settings > Video: MPEG on the
   ZZ9000 off, or no ZZ9000) and the disc has menus, Fire plays it from
   its start as a DVD player does: its intro, then its menus. Their
@@ -335,7 +347,8 @@ the program, which is the first thing to look at if something misbehaves.
 ## Not there yet
 
 - DVD menus and subtitles (the subpicture decoder, and drawing over the
-  card's overlay); encrypted (CSS) discs; disc images of 2 GB or more.
+  card's overlay); encrypted (CSS) discs; DVD images over 4 GB on a file
+  system without 64-bit packets.
 - MPEG video without a ZZ9000: MPEG-1 on RTG screens for now; AGA screens
   come next.
 - Modules play on Paula only; AHI for them comes later.

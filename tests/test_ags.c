@@ -298,26 +298,32 @@ int main(void)
 
     /* Videos: animations and folders only; an ANIM by a picture's name
      * (.iff) looked inside; a folder with no animation in it left out. Read as
-     * Pictures, a .iff is not opened (found when it is opened). */
+     * Pictures, a .iff is not opened (found when it is opened). A .iso is a
+     * DVD's image, by its name alone (not read here: its preview says what
+     * it holds), with a disc beside it. */
     {
         list_init(&l);
         n = pics_read_dir("Videos:", &l, TRUE);
-        check_long("vids count (Logo: pictures alone, left out)", n, 3);
-        if (n == 3) {
+        check_long("vids count (Logo: pictures alone, left out)", n, 4);
+        if (n == 4) {
             check_str("vids folder", l.items[0].label, "Clips");
             check_str("vids folder count", l.items[0].sortkey, "1");
             check_long("vids folder open", l.items[0].flags & ITEM_DISABLED, 0);
             check_str("vids deep folder (an animation further in)", l.items[1].label, "Deep");
-            check_str("vids anim", l.items[2].label, "Spin.iff");
-            check_long("vids anim kind", l.items[2].kind, IT_ANIM);
-            check_str("vids anim tag", l.items[2].sortkey, "ANIM");
+            check_str("vids DVD image", l.items[2].label, "Film.iso");
+            check_long("vids DVD image kind", l.items[2].kind, IT_ANIM);
+            check_str("vids DVD image tag", l.items[2].sortkey, "DVD");
+            check_long("vids DVD image mark", l.items[2].mark, MARK_DISC);
+            check_str("vids anim", l.items[3].label, "Spin.iff");
+            check_long("vids anim kind", l.items[3].kind, IT_ANIM);
+            check_str("vids anim tag", l.items[3].sortkey, "ANIM");
         }
         list_free(&l);
         list_init(&l);
         n = pics_read_dir("Videos:", &l, FALSE);
-        check_long("pics of Videos count", n, 5);
-        if (n == 5)
-            check_long("pics .iff not opened", l.items[3].kind, IT_PIC);
+        check_long("pics of Videos count", n, 6);
+        if (n == 6)
+            check_long("pics .iff not opened", l.items[4].kind, IT_PIC);
         list_free(&l);
         check_long("is anim", pics_is_anim("Videos:Spin.iff"), TRUE);
         check_long("is not anim", pics_is_anim("Videos:Still.iff"), FALSE);

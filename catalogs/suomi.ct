@@ -854,9 +854,18 @@ Ylös/Alas  vieritä      Vasen/Esc  takaisin
 MSG_642000D2
 Ylös/Alas vieritä  Esc takaisin
 ; Up/Down scroll  Esc back
-MSG_7FF7C0A9
-DVD-Video-levy
-; A DVD-Video disc
+MSG_2FCA6510
+DVD-Video-levykuva
+; A DVD-Video disc image
+MSG_7838F274
+Levykuva (UDF)
+; A disc image (UDF)
+MSG_608D9413
+Ei DVD-Video-levykuva
+; Not a DVD-Video disc image
+MSG_754C4DD5
+Levykuvaa ei voitu lukea (loki kertoo miksi)
+; This image could not be read (the log says why)
 MSG_77C67E04
 Tulita toistaa elokuvan tai ohjelmat peräkkäin ZZ9000:lla
 ; Fire plays its film, or its programmes one after another, on the ZZ9000
@@ -866,6 +875,9 @@ N ja P: seuraava ja edellinen kappale tai ohjelma
 MSG_351C83CC
 Suorittimen purkamana: levyn valikot, M tuo ne takaisin
 ; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+DVD-Video-levy
+; A DVD-Video disc
 MSG_6B41435A
 ; With sound
 MSG_6524B26D

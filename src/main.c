@@ -10,6 +10,8 @@
 #include "video.h"
 #include "glyph.h"
 #include "dvdplay.h"
+#include "dvddisc.h"
+#include "dvdiso.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -3208,9 +3210,16 @@ static LONG vids_root_fill(struct Page *p, const char **src)
     return p->list.count;
 }
 
+/* A DVD's row: a disc in a drive, or a DVD's image (a .iso, pics.c) */
 static BOOL is_dvd_row(const struct Item *it)
 {
     return it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "DVD");
+}
+
+static BOOL is_dvd_image(const struct Item *it)
+{
+    LONG n = (LONG)strlen(it->path);
+    return is_dvd_row(it) && n > 4 && !amce_stricmp(it->path + n - 4, ".iso");
 }
 
 /* Pictures' first page with nothing of its own (the server's rows follow). */
@@ -4897,6 +4906,51 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 {
     char line[120];
     pv_line(it->label, w);
+    if (is_dvd_image(it)) {
+        /* a DVD's image: what its first sectors say, and its size (some
+         * 12 KB read once an image, the last 4 kept) */
+        static struct { char path[256]; LONG kind; ULONG sectors; } ic[4];
+        static int ic_next;
+        int q;
+        for (q = 0; q < 4; q++)
+            if (ic[q].path[0] && !strcmp(ic[q].path, it->path))
+                break;
+        if (q == 4) {
+            char err[160];
+            q = ic_next;
+            ic_next = (ic_next + 1) & 3;
+            amce_strlcpy(ic[q].path, it->path, sizeof(ic[q].path));
+            if ((ic[q].kind = dvdd_image_kind(it->path, &ic[q].sectors, err, sizeof(err))) < 0)
+                amce_log("dvd", err);
+        }
+        pv_line(ic[q].kind == DVDI_VIDEO ? _("A DVD-Video disc image")
+                : ic[q].kind == DVDI_UDF ? _("A disc image (UDF)")
+                : ic[q].kind >= 0 ? _("Not a DVD-Video disc image")
+                : _("This image could not be read (the log says why)"), w);
+        if (ic[q].sectors >= 524288)
+            sprintf(line, "%lu.%02lu GB", (unsigned long)(ic[q].sectors / 524288),
+                    (unsigned long)(ic[q].sectors % 524288 * 100 / 524288));
+        else
+            sprintf(line, "%lu MB", (unsigned long)(ic[q].sectors / 512));
+        if (ic[q].sectors)
+            pv_line(line, w);
+        if (ic[q].kind == DVDI_VIDEO || ic[q].kind == DVDI_UDF) {
+            if (!dvd_lib_there())
+                pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+            else {
+                pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
+                pv_line(_("N and P: the next and previous chapter or programme"), w);
+                pv_line(_("Decoded by the CPU: its menus, M to bring them back"), w);
+            }
+        }
+        if (j && j->days > 0) {             /* (j->size: -1 for 2 GB and more) */
+            char date[32];
+            pv_line("", w);
+            date_text(j->days, date);
+            pv_line(date, w);
+        }
+        return;
+    }
     if (is_dvd_row(it)) {
         /* a DVD: what Fire does (the disc itself read only then) */
         pv_line(_("A DVD-Video disc"), w);
@@ -9799,11 +9853,14 @@ static void anim_from_page(struct Page *p)
     {
         BOOL loop_was = play_loop;
         WORD aw = g.w, ah = g.h;
-        if (dvd) {
+        if (dvd && is_dvd_image(it)) {
+            if (anim_play_dvd(&g, it->path, TRUE, caps.cpu, err, sizeof(err)) < 0 && err[0])
+                set_msg(err);               /* (a DVD's image: the same, from its file) */
+        } else if (dvd) {
             char vol[40];
             const char *c = strchr(it->path, ':');
             amce_strlcpy(vol, it->path, c ? (LONG)(c - it->path) + 1 : (LONG)sizeof(vol));
-            if (anim_play_dvd(&g, vol, caps.cpu, err, sizeof(err)) < 0 && err[0])
+            if (anim_play_dvd(&g, vol, FALSE, caps.cpu, err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
             if (anim_play_video(&g, it->path, caps.cpu, err, sizeof(err)) < 0 && err[0])

@@ -148,7 +148,10 @@ Videos
   (CSS) discs. Decoded by the CPU, a disc with menus plays from its
   start, its menus' buttons drawn over the picture: arrows or the stick
   and Return or fire, or the pointer and a click; M, a CD32 pad's green
-  button or the controls' menu button bring its menu back.
+  button or the controls' menu button bring its menu back. A DVD's
+  image (.iso) in Videos' folders plays the same way, a disc beside it;
+  past 2 GB through the 64-bit DOS packets UAE's and Amiberry's host
+  file system answers (elsewhere up to 4 GB at most).
 
 Screens
 - 320x200/256 lowres, 640x200/256 hires and 640x400/512 laced on OCS, ECS
@@ -325,7 +328,7 @@ History
 -------
 0.8.9  Videos plays MPEG: on a ZZ9000 (MPEG-1 and MPEG-2, program and
        transport streams, with their sound), and by the CPU on RTG
-       screens without one (Libs/mpegv.library 2: libmpeg2), DVDs too. DVDs in a drive: their film, or their
+       screens without one (Libs/mpegv.library 2: libmpeg2), DVDs too. DVDs in a drive, and DVD images (.iso): their film, or their
        programmes one after another, chapters by N and P and the
        controls, a stereo sound track first (Libs/amcedvd.library:
        libdvdread and libdvdnav); decoded by the CPU, their menus

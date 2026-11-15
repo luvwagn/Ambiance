@@ -43,7 +43,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/glyph.c src/ownlib.c src/yuvdraw.c src/spu.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/yuvdraw.c src/spu.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -70,7 +70,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-yuvdraw test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test-yuvdraw test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -244,7 +244,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-yuvdraw test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
+test: check-formats check-syscalls check-libs test-yuvdraw test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -387,22 +387,31 @@ test-dvd-host: build/dvd/dvd_host $(DVD_ISO)
 	@build/dvd/dvd_host $(DVD_ISO) > build/test-dvd-host.txt 2>&1 \
 		&& grep -q "dvd tests passed" build/test-dvd-host.txt \
 		&& echo "  CHECK DVD navigation (host) ok" || (cat build/test-dvd-host.txt; exit 1)
-build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdlib/include/libraries/amcedvd.h \
-                   src/dvdlib/include/inline/amcedvd.h $(DVDLIB)
+# a DVD image's reading past 2 GB and what one holds (src/dvdiso.c), on the
+# host: the 64-bit packet as UAE's file system reads it, the test image
+build/dvd/dvdiso_host: tests/dvdiso_host.c src/dvdiso.c src/dvdiso.h tests/host/exec/types.h
+	@mkdir -p build/dvd
+	@$(HOSTCC) -O2 -Wall -Itests/host -Isrc -o $@ tests/dvdiso_host.c src/dvdiso.c
+test-dvdiso: build/dvd/dvdiso_host $(DVD_ISO)
+	@build/dvd/dvdiso_host $(DVD_ISO) > build/test-dvdiso.txt 2>&1 \
+		&& grep -q "dvdiso tests passed" build/test-dvdiso.txt \
+		&& echo "  CHECK DVD images: 64-bit positions, what one holds (host) ok" || (cat build/test-dvdiso.txt; exit 1)
+build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdiso.c src/dvdiso.h \
+                   src/dvdlib/include/libraries/amcedvd.h src/dvdlib/include/inline/amcedvd.h $(DVDLIB)
 	@mkdir -p build/dvd/prog/Libs
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ tests/dvd_test.c src/dvddisc.c -lamiga
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ tests/dvd_test.c src/dvddisc.c src/dvdiso.c -lamiga
 	@$(CC) -Os $(CPU) -noixemul -Isrc/dvdlib/include -S -o build/dvd/dvddisc.s src/dvddisc.c
 	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
 	@cp $(DVDLIB) build/dvd/prog/Libs/
 	@cp $@ build/dvd/prog/
 # AmigaMCE's side (src/dvdplay.c): the film chosen and read as the player reads it
 build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddisc.c src/dvddisc.h src/spu.h \
-                       src/util.c src/ownlib.c src/amce.h $(DVDLIB)
+                       src/dvdiso.c src/dvdiso.h src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
 	@echo "  CC    $@"
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -DAMCE_NO_EXPUNGE -o $@ \
-		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c src/ownlib.c -lamiga
+		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/dvdiso.c src/util.c src/ownlib.c -lamiga
 	@cp $@ build/dvd/prog/
 test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cp $(DVD_ISO) build/dvd/prog/test.iso
