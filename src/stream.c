@@ -2306,6 +2306,7 @@ static struct {
     UBYTE h[20];
     ULONG sc, rem;
     ZzU64 pts0;                             /* its first packet's time (ZZ_NO_PTS: none yet) */
+    unsigned long long t_dec;               /* E-clock ticks in Ac3Decode alone */
     ULONG frames, bad;
     WORD pcm[AC3_FRAME_SAMPLES * 2];
     UBYTE frame[AC3_MAX_FRAME];
@@ -2585,9 +2586,14 @@ static LONG a3_frame(struct Ac3Info *ai)
     if ((ULONG)len > avail)
         return 0;
     a3.qout += (ULONG)len;
-    if (Ac3Decode(a3.dec, a3.frame, a3.pcm, ai) != AC3_FRAME_SAMPLES) {
-        a3.bad++;                           /* (its samples silence: played as such) */
-        memset(a3.pcm, 0, sizeof(a3.pcm));
+    {
+        ULONG hz = 0, t = time_ticks(&hz);
+        LONG r = Ac3Decode(a3.dec, a3.frame, a3.pcm, ai);
+        a3.t_dec += time_ticks(&hz) - t;    /* (the decoding alone) */
+        if (r != AC3_FRAME_SAMPLES) {
+            a3.bad++;                       /* (its samples silence: played as such) */
+            memset(a3.pcm, 0, sizeof(a3.pcm));
+        }
     }
     a3.frames++;
     return AC3_FRAME_SAMPLES;
@@ -2947,10 +2953,14 @@ done:
 
 /* mpegv.library's read hook: a seek's prefix, then the file's next bytes
  * (0 at its end, as an error was taken before) */
+static unsigned long long sw_tread;         /* (the read hook's time, E-clock ticks; calls) */
+static ULONG sw_nread, sw_t_start;
+
 static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
                      register struct MpvRead *r __asm("a1"))
 {
     LONG n;
+    ULONG hz = 0, tk;
     (void)h;
     (void)mpv;
     if (sw_pre_pos < sw_pre_len) {
@@ -2961,12 +2971,15 @@ static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __as
         sw_pre_pos += k;
         return k;
     }
+    tk = time_ticks(&hz);
     if (st.v_dvd)
         n = dvdplay_read(st.v_dvd, r->mr_Buffer, r->mr_Length);    /* (a DVD's film) */
     else if (st.v_ts)
         n = tsp_pack(ts_read, NULL, r->mr_Buffer, (ULONG)r->mr_Length);  /* (packed as read) */
     else
         n = Read(st.fh, r->mr_Buffer, r->mr_Length);
+    sw_tread += time_ticks(&hz) - tk;
+    sw_nread++;
     if (n > 0)
         st.v_bytes += (ULONG)n;             /* (its information's data rate) */
     return n > 0 ? (ULONG)n : 0;
@@ -3318,6 +3331,9 @@ static void swv_run(void)
     sw_clean_ok = sw_band_ok = sw_last_ok = FALSE;
     sw_spu_drawn = NULL;
     sw_ncomposed = sw_nband = 0;
+    sw_tread = 0;
+    sw_nread = 0;
+    sw_t_start = time_ms();
     if (sw_nav && (!(sw_spu = spu_new()) || !(sw_clean = AllocVec(swv_yw * swv_yh * 3 / 2, MEMF_ANY)))) {
         fail(_("Not enough memory"));
         goto out;
@@ -3874,6 +3890,16 @@ static void swv_run(void)
         sw_stat(m, "written straight to the overlay", sw_tdirect, sw_ndirect, hz);
     sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
             (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);
+    amce_log("video: by the CPU", m);
+    /* of those (each includes what it read): the decoding of its AC3
+     * alone, and the reading (the file, the disc) */
+    m[0] = 0;
+    if (sw_ac3)
+        sw_stat(m, "of that its AC3's decoding alone", a3.t_dec, n_aud, hz);
+    sw_stat(m, "reading (the read hook)", sw_tread, sw_nread, hz);
+    if (hz)
+        sprintf(m + strlen(m), ": %lu ms in %lu s", (unsigned long)(sw_tread * 1000 / hz),
+                (unsigned long)((time_ms() - sw_t_start) / 1000));
     amce_log("video: by the CPU", m);
     if (sw_ac3) {
         sprintf(m, "its AC3 by the CPU: %lu frames decoded, %lu of them bad, %lu bytes lost (too far "

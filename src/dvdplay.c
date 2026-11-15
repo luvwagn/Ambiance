@@ -247,8 +247,49 @@ struct DvdPlay {
      * menu going round) or on, with no jump of the disc's to say so */
     BOOL vobu_known;
     ULONG vobu_end, n_restart;
+    /* the disc's reading (the library's, its CSS library's): through
+     * timed_read, counted and timed, for the log */
+    LONG (*r_seek)(APTR h, ULONG sector);
+    LONG (*r_read)(APTR h, APTR buf, LONG n);
+    ULONG r_calls, r_sectors, r_slow, r_hz, r_slowest;
+    unsigned long long r_ticks;
     UBYTE blk[DVD_BLOCK];
 };
+
+static LONG timed_seek(APTR h, ULONG sector)
+{
+    struct DvdPlay *dp = h;
+    return dp->r_seek(dp->disc, sector);
+}
+
+static LONG timed_read(APTR h, APTR buf, LONG n)
+{
+    struct DvdPlay *dp = h;
+    ULONG hz = 0, t = time_ticks(&hz), dt;
+    LONG got = dp->r_read(dp->disc, buf, n);
+    dt = time_ticks(&hz) - t;
+    dp->r_hz = hz;
+    dp->r_ticks += dt;
+    dp->r_calls++;
+    if (got > 0)
+        dp->r_sectors += (ULONG)got;
+    if (dt > dp->r_slowest)
+        dp->r_slowest = dt;
+    if (hz && dt > hz / 20)
+        dp->r_slow++;                       /* (over 50 ms) */
+    return got;
+}
+
+/* The disc's reader, through timed_read */
+static void reader(struct DvdPlay *dp, struct DvdReader *rd)
+{
+    dvdd_reader(dp->disc, rd);
+    dp->r_seek = rd->seek;
+    dp->r_read = rd->read;
+    rd->handle = dp;
+    rd->seek = timed_seek;
+    rd->read = timed_read;
+}
 
 static void lib_log(APTR h, LONG level, CONST_STRPTR line)
 {
@@ -472,7 +513,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         dvdplay_close(dp);
         return NULL;
     }
-    dvdd_reader(dp->disc, &rd);
+    reader(dp, &rd);
     rd.log = lib_log;
     dvdd_log(dp->disc, lib_log);            /* (an image's sector out of reach) */
     if (!(dp->dvd = DvdOpen(&rd, 0))) {
@@ -632,7 +673,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
     if (!dp->menus)
         return FALSE;
     DvdClose(dp->dvd);
-    dvdd_reader(dp->disc, &rd);
+    reader(dp, &rd);
     rd.log = lib_log;
     if (!(dp->dvd = DvdOpen(&rd, 0))) {
         amce_log("dvd", "opened again for its menus: could not be");
@@ -1174,6 +1215,17 @@ void dvdplay_close(struct DvdPlay *dp)
 {
     if (!dp)
         return;
+    if (dp->r_calls && dp->r_hz) {
+        char m[160];
+        sprintf(m, "the disc read: %lu MB in %lu calls, %lu ms in all (%lu KB/s), the slowest %lu ms, "
+                   "%lu over 50 ms",
+                (unsigned long)(dp->r_sectors / 512), (unsigned long)dp->r_calls,
+                (unsigned long)(dp->r_ticks * 1000 / dp->r_hz),
+                (unsigned long)(dp->r_ticks ? (unsigned long long)dp->r_sectors * 2 * dp->r_hz / dp->r_ticks : 0),
+                (unsigned long)((unsigned long long)dp->r_slowest * 1000 / dp->r_hz),
+                (unsigned long)dp->r_slow);
+        amce_log("dvd", m);
+    }
     if (dp->dvd)
         DvdClose(dp->dvd);
     if (dp->disc)

@@ -19,6 +19,8 @@
 /* what dvdplay.c uses from the rest of AmigaMCE */
 const char *amce_tr(const char *s) { return s; }
 void amce_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
+static ULONG fake_ticks;
+ULONG time_ticks(ULONG *hz) { if (hz) *hz = 1000; return fake_ticks += 1; }
 
 static int failed, passed;
 #define CHECK(c, ...)                                   \
