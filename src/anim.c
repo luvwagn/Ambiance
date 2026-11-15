@@ -2818,9 +2818,18 @@ static ULONG sw_ndraw, sw_hz, sw_novl;  /* (how many; of them on the overlay) */
  * place, h high at most (the controls'). */
 static void sw_draw(struct Gfx *g, WORD h, BOOL redraw, BOOL ovl)
 {
-    BOOL fresh = st_swv_take(&sw_w, &sw_h);
+    BOOL fresh;
     LONG x = lay.vx, y = lay.vy, dw = lay.dw, dh = lay.dh;
     ULONG tk;
+    /* on the overlay, the playback process writes them there itself as
+     * they are due (st_video_direct); a new overlay (blank) asks it for
+     * the picture again */
+    st_video_direct(ovl);
+    if (ovl && sw_vo != vo_opened()) {
+        st_video_redraw();
+        sw_vo = vo_opened();
+    }
+    fresh = st_swv_take(&sw_w, &sw_h);
     if (fresh) {
         sw_have = TRUE;
         sw_rgb_ok = FALSE;
@@ -3415,6 +3424,7 @@ out:
         if (vid.sw) {
             ULONG c = sw_ndraw && sw_hz ? (ULONG)(sw_tdraw * 100000ULL / sw_hz / sw_ndraw) : 0;
             st_swv_release();       /* (its pictures' buffers, now it has stopped) */
+            st_video_direct(FALSE);
             FreeVec(sw_rgb);
             sw_rgb = NULL;
             sw_have = FALSE;

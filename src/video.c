@@ -51,6 +51,25 @@ static BOOL vo_off;                     /* the CPU's pictures not to go on it (S
 static ULONG vo_opens;                  /* times opened (a new one's memory is not the last's) */
 static struct BitMap *vo_bm;            /* its picture's memory, locked (vo_lock) */
 static LONG vo_lk;
+/* The overlay's window and its memory, one task at a time: the UI opens,
+ * moves and closes it; the background playback process writes the CPU's
+ * pictures straight onto it (vo_lock: held until vo_unlock). */
+static struct SignalSemaphore vo_sem;
+static BOOL vo_sem_ready;
+
+static void vo_take(void)
+{
+    if (!vo_sem_ready) {
+        InitSemaphore(&vo_sem);
+        vo_sem_ready = TRUE;
+    }
+    ObtainSemaphore(&vo_sem);
+}
+
+static void vo_give(void)
+{
+    ReleaseSemaphore(&vo_sem);
+}
 static int vo_logged;                   /* (said once a video: its memory, the first picture) */
 
 static const char *pip_error(LONG e)
@@ -331,7 +350,18 @@ static void vo_origin(struct Gfx *g, LONG *ox, LONG *oy)
     *oy = g->win ? g->win->TopEdge + g->win->BorderTop : 0;
 }
 
+static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG h);
+
 BOOL vo_show(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG h)
+{
+    BOOL r;
+    vo_take();
+    r = vo_show_(g, v, x, y, w, h);
+    vo_give();
+    return r;
+}
+
+static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG w, LONG h)
 {
     LONG ox, oy, px, py, dw, dh, pe = 0;
     char m[160];
@@ -398,6 +428,7 @@ void vo_retry(void)
 
 void vo_hide(void)
 {
+    vo_take();
     vo_unlock();
     if (vo_win) {
         amce_card_lock();
@@ -408,6 +439,7 @@ void vo_hide(void)
     vo_win = NULL;
     vo_scr = NULL;
     vo_wx = vo_wy = -1;
+    vo_give();
 }
 
 BOOL vo_shown(void)
@@ -424,11 +456,16 @@ UBYTE *vo_lock(ULONG *bpr)
 {
     struct RenderInfo ri;
     struct BitMap *bm = NULL;
-    if (!vo_win || vo_bm)
+    vo_take();                              /* (held until vo_unlock: whichever task) */
+    if (!vo_win || vo_bm) {
+        vo_give();
         return NULL;
+    }
     p96PIP_GetTags(vo_win, P96PIP_SourceBitMap, (ULONG)&bm, TAG_DONE);
-    if (!bm)
+    if (!bm) {
+        vo_give();
         return NULL;
+    }
     memset(&ri, 0, sizeof(ri));
     vo_lk = p96LockBitMap(bm, (UBYTE *)&ri, sizeof(ri));
     if (vo_logged < 1) {
@@ -440,6 +477,7 @@ UBYTE *vo_lock(ULONG *bpr)
     }
     if (!ri.Memory || ri.BytesPerRow <= 0) {
         p96UnlockBitMap(bm, vo_lk);
+        vo_give();
         return NULL;
     }
     vo_bm = bm;
@@ -449,13 +487,15 @@ UBYTE *vo_lock(ULONG *bpr)
 
 void vo_unlock(void)
 {
-    if (vo_bm)
-        p96UnlockBitMap(vo_bm, vo_lk);
-    if (vo_bm && vo_logged < 2) {
+    if (!vo_bm)
+        return;                             /* (not locked) */
+    p96UnlockBitMap(vo_bm, vo_lk);
+    if (vo_logged < 2) {
         amce_log("video", "its first picture written to the overlay");
         vo_logged = 2;
     }
     vo_bm = NULL;
+    vo_give();
 }
 
 void vo_end(void)

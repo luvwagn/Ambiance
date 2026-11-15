@@ -39,6 +39,7 @@
 #include <proto/mpegv.h>
 #include "vprobe.h"
 #include "dvdplay.h"
+#include "video.h"
 #include <libraries/ac3.h>
 #include <proto/ac3.h>
 
@@ -2542,6 +2543,42 @@ static ULONG sw_aq_in, sw_aq_out;
 static LONG sw_apts;                        /* the first audio packet's time (90 kHz), -1 none */
 static BOOL sw_sound;                       /* MPEG audio, by mpega.library */
 static BOOL sw_ac3;                         /* AC3 (a DVD's, a transport stream's), by ac3.library */
+/* The UI's overlay: the pictures written straight onto it from the
+ * decoder's own planes, when they are due (no copy of each: a DVD
+ * picture's 0.6 MB), else into a slot for the UI as before. */
+static volatile BOOL sw_direct;             /* set by the UI (st_video_direct) */
+static volatile BOOL sw_redraw;             /* the UI's new overlay wants the picture again */
+static struct MpvPicture *sw_f;             /* the decoder's newest picture... */
+static BOOL sw_f_ok;                        /* ...still valid (no MpvDecode since) */
+static ULONG sw_ndirect;                    /* (pictures written straight to the overlay) */
+static unsigned long long sw_tdirect;
+
+/* The CPU's pictures straight onto the UI's overlay (TRUE: it shows one
+ * now), or not (drawn by the UI). From the UI. */
+void st_video_direct(BOOL on)
+{
+    sw_direct = on;
+}
+
+/* The overlay was opened again (a new one is blank): the picture again. */
+void st_video_redraw(void)
+{
+    sw_redraw = TRUE;
+}
+
+/* The decoder's picture written onto the overlay (FALSE: no overlay now). */
+static BOOL sw_to_overlay(const struct MpvPicture *f)
+{
+    ULONG bpr, hz = 0, tk = time_ticks(&hz);
+    UBYTE *mem = vo_lock(&bpr);
+    if (!mem)
+        return FALSE;
+    MpvToYUV422((struct MpvPicture *)f, mem, bpr, MPVY_Y0UY1V);
+    vo_unlock();
+    sw_tdirect += time_ticks(&hz) - tk;
+    sw_ndirect++;
+    return TRUE;
+}
 
 /* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
  * video is to be decoded by the CPU (video_check: its PROGDIR: is
@@ -2912,6 +2949,11 @@ static void swv_run(void)
     sw_sound = st.v_mp2 && !st.v_es && !st.v_ac3;
     sw_ac3 = st.v_ac3 && !st.v_es;
     sw_mpv = NULL;
+    sw_f = NULL;
+    sw_f_ok = FALSE;
+    sw_redraw = FALSE;
+    sw_ndirect = 0;
+    sw_tdirect = 0;
     if ((v_tport = CreateMsgPort()) &&
         (v_treq = (struct timerequest *)CreateIORequest(v_tport, sizeof(struct timerequest))) &&
         !OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)v_treq, 0))
@@ -3041,6 +3083,13 @@ static void swv_run(void)
     while (!st.quit) {
         BOOL busy = FALSE;
         serve();
+        if (sw_redraw) {
+            /* a new overlay (blank): the newest picture on it again (paused,
+             * or until the next is due) */
+            sw_redraw = FALSE;
+            if (sw_direct && sw_f_ok)
+                sw_to_overlay(sw_f);
+        }
         if (st.paused) {
             if (on && st.started && !out_paused) {
                 out_stop();
@@ -3155,10 +3204,13 @@ static void swv_run(void)
                 continue;
             }
             tk = time_ticks(&hz);
+            sw_f_ok = FALSE;                /* (the last one's planes: the decoder's again) */
             f = MpvDecode(sw_mpv, &e);
             if (f) {
                 t_dec += time_ticks(&hz) - tk;
                 n_dec++;
+                sw_f = f;
+                sw_f_ok = TRUE;
             }
             if (!f) {
                 if (e != MPVE_MORE)
@@ -3190,7 +3242,9 @@ static void swv_run(void)
                                               : pts0 + (ZzU64)(time_ms() - t0) * 90;
                     if (on && (long long)(swv[s].pts - now) < -(long long)drop && run < 2)
                         swv[s].pts |= 1ULL << 62;   /* (marked: not converted) */
-                    else {
+                    else if (sw_direct && f->mpic_YModulo == swv_yw && f->mpic_YRows == swv_yh) {
+                        swv[s].pts |= 1ULL << 61;   /* (straight to the overlay when due) */
+                    } else {
                         tk = time_ticks(&hz);
                         ULONG ny = swv_yw * swv_yh;
                         if (f->mpic_YModulo != swv_yw || f->mpic_YRows != swv_yh) {
@@ -3262,9 +3316,22 @@ static void swv_run(void)
                     }
                 }
             } else {
+                BOOL direct = (swv[held].pts >> 61) & 1;
+                pts &= ~(1ULL << 61);
                 swv[held].pts = pts;
                 swv[held].seq = ++swv_seq;
-                swv[held].state = st.v_hidden ? SW_FREE : SW_SHOW;
+                if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f))
+                    swv[held].state = SW_FREE;      /* (on the overlay already) */
+                else {
+                    if (direct && sw_f_ok) {
+                        /* no overlay now after all: a copy for the UI */
+                        ULONG ny = swv_yw * swv_yh;
+                        memcpy(swv[held].buf, sw_f->mpic_Y, ny);
+                        memcpy(swv[held].buf + ny, sw_f->mpic_Cb, ny / 4);
+                        memcpy(swv[held].buf + ny + ny / 4, sw_f->mpic_Cr, ny / 4);
+                    }
+                    swv[held].state = st.v_hidden || (direct && !sw_f_ok) ? SW_FREE : SW_SHOW;
+                }
                 st.v_shown++;
                 run = 0;
                 if (!skip_b && ++b_okrun >= 30)
@@ -3303,6 +3370,8 @@ static void swv_run(void)
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
     sw_stat(m, "copied", t_conv, n_conv, hz);
     sw_stat(m, sw_ac3 ? "an AC3 frame decoded" : "a sound frame decoded", t_aud, n_aud, hz);
+    if (sw_ndirect)
+        sw_stat(m, "written straight to the overlay", sw_tdirect, sw_ndirect, hz);
     sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
             (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);
     amce_log("video: by the CPU", m);
@@ -3322,6 +3391,7 @@ static void swv_run(void)
     }
 out:
     sw_on = FALSE;
+    sw_f_ok = FALSE;
     if (sw_ac3)
         a3_close();
     sw_ac3 = FALSE;

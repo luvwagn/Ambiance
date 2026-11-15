@@ -741,6 +741,10 @@ void st_mpv_close(void);
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);
 BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr);
 void st_swv_release(void);
+/* the CPU's pictures written straight onto the overlay by the playback
+ * process (no copy: TRUE while it shows), and once again on a new one */
+void st_video_direct(BOOL on);
+void st_video_redraw(void);
 /* AC3 the card will not decode (Amiberry's emulated card): decoded by the
  * CPU from now on (ac3.library), the card given the video without sound;
  * NULL if the CPU can here, else why not. */

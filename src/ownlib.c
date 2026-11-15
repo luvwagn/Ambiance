@@ -18,6 +18,7 @@
 #include <exec/execbase.h>
 #include <proto/exec.h>
 #include <stdio.h>
+#include <proto/dos.h>
 #include "amce.h"
 
 #ifdef AMCE_NO_EXPUNGE
@@ -44,6 +45,31 @@ struct Library *amce_open_own_lib(const char *name, ULONG version)
     if (l) {
         sprintf(m, "%s %ld.%ld%s", name, (long)l->lib_Version, (long)l->lib_Revision,
                 flushed ? " (an older copy in memory put out first)" : "");
+        amce_log("library", m);
+    } else {
+        /* why not: one in memory already (too old, and still open), or
+         * the file's own (its version, or it would not load) */
+        struct Library *in, *any;
+        LONG err = IoErr();
+        UWORD iv = 0, ir = 0, ic = 0;
+        Forbid();
+        if ((in = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)name))) {
+            iv = in->lib_Version;
+            ir = in->lib_Revision;
+            ic = in->lib_OpenCnt;
+        }
+        Permit();
+        if (in)
+            sprintf(m, "%s %ld wanted: %ld.%ld in memory, open %ld time%s%s", name, (long)version,
+                    (long)iv, (long)ir, (long)ic, ic == 1 ? "" : "s",
+                    flushed ? " (an unused copy was put out first)" : "");
+        else if ((any = OpenLibrary((CONST_STRPTR)path, 0))) {
+            sprintf(m, "%s %ld wanted: %s is %ld.%ld", name, (long)version, path,
+                    (long)any->lib_Version, (long)any->lib_Revision);
+            CloseLibrary(any);
+        } else
+            sprintf(m, "%s %ld wanted: %s would not load (error %ld)", name, (long)version, path,
+                    (long)err);
         amce_log("library", m);
     }
     return l;
