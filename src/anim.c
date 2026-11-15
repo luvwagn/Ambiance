@@ -3421,7 +3421,8 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             continue;
         }
         if (s == ST_ENDED && !ended) {
-            if (play_loop) {
+            if (play_loop && !vid_dvd) {    /* (a DVD: its loop button hidden, its
+                                             * disc's end its own) */
                 if (!vid_start(cpu, 0, err, errmax))
                     break;
                 at = 0;

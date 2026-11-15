@@ -694,10 +694,16 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
     case DVDE_WAIT:
         dp->stop_ev = DVDP_WAIT;
         break;
-    case DVDE_STOP:
+    case DVDE_STOP: {
+        char m[160];
+        sprintf(m, "the disc stopped%s (in %s)", dp->title ? "" : " before any title of its own",
+                dp->domain == DVDD_TITLE ? "a title" : dp->domain == DVDD_FIRSTPLAY ? "its first play"
+                                                                                      : "a menu");
+        amce_log("dvd", m);
         dp->ended = TRUE;
         dp->stop_ev = DVDP_END;
         break;
+    }
     case DVDE_DOMAIN: {
         char m[80];
         dp->domain = ev->domain;
