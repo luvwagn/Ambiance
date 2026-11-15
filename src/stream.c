@@ -3339,6 +3339,11 @@ static void swv_run(void)
     sw_clean_ok = sw_band_ok = sw_last_ok = FALSE;
     sw_spu_drawn = NULL;
     sw_ncomposed = sw_nband = 0;
+    /* a DVD's menus: each part from its first I picture (mpegv gives a
+     * picture or two from before a flush first, B pictures built on what
+     * was let go, timed by the part before: seconds ahead) */
+    if (sw_nav)
+        want_i = TRUE;
     sw_tread = 0;
     sw_nread = 0;
     sw_t_start = time_ms();
@@ -3452,6 +3457,7 @@ static void swv_run(void)
         seg_log();                                                                   \
         MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
         sw_f_ok = sw_last_ok = FALSE;                                                \
+        want_i = TRUE;                                                               \
         if (held >= 0) {                                                             \
             swv[held].state = SW_FREE;                                               \
             held = -1;                                                               \
@@ -3679,9 +3685,11 @@ static void swv_run(void)
             } else {
                 if (want_i) {
                     want_i = FALSE;
-                    sprintf(m, "after the seek: %lu pictures before its first I picture not shown",
-                            (unsigned long)i_skipped);
-                    amce_log("video: by the CPU", m);
+                    if (st.range_from && !sw_nav) {
+                        sprintf(m, "after the seek: %lu pictures before its first I picture not shown",
+                                (unsigned long)i_skipped);
+                        amce_log("video: by the CPU", m);
+                    }
                 }
                 swv[s].pts = (f->mpic_Flags & MPVPF_PTS) ? f->mpic_PTS : f->mpic_Time;
                 swv[s].direct = 0;
@@ -3851,6 +3859,7 @@ static void swv_run(void)
                 dvdplay_go(st.v_dvd);
                 MpvControl(sw_mpv, MPVC_FLUSH, 0);
                 sw_f_ok = sw_last_ok = FALSE;
+                want_i = TRUE;              /* (as after any flush) */
                 done = FALSE;
                 continue;
             }
