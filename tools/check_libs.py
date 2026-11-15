@@ -8,7 +8,8 @@ A library's version is in three places, and they must agree:
     older than the version asked for (OS 3.2 checks it; vamos does not);
   - lib_Version and lib_Revision, from the source's LibVersion and
     LibRevision, which OpenLibrary checks;
-  - its $VER string, which Version and the Workbench show.
+  - its $VER string, which Version and the Workbench show, and any other
+    "name V.R" in it (its id string, the text a Version() function returns).
 
 And the version AmigaMCE asks for (its header's define, or the number in
 amce_open_own_lib's call) must be no newer than the library. mpegv.library
@@ -73,6 +74,13 @@ def main(args):
             why.append("Resident says %d, LibVersion %d (ramlib checks the Resident)" % (rt, sv))
         if vs and sv is not None and sr is not None and vs != (sv, sr):
             why.append("$VER says %d.%d, LibVersion.LibRevision %d.%d" % (vs + (sv, sr)))
+        # every other "name V.R" in it (an id string, its Version() text)
+        short = name.rsplit(".", 1)[0]
+        for m in re.finditer(rb"(?<![\w.])" + re.escape(short.encode()) + rb"(?:\.library|\.datatype)? (\d+)\.(\d+)\b", data):
+            other = (int(m.group(1)), int(m.group(2)))
+            if sv is not None and sr is not None and other != (sv, sr):
+                why.append("%r says %d.%d" % (m.group(0).decode("latin-1"), other[0], other[1]))
+                break
         if wanted is not None and sv is not None and wanted > sv:
             why.append("AmigaMCE asks for %d, the library is %d" % (wanted, sv))
         if why:
