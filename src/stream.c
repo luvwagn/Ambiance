@@ -3855,9 +3855,11 @@ static void swv_run(void)
                     sw_clean_ok = TRUE;
                     sw_clean_pts = (ULONG)pts;
                     sw_compose_out(held, sp, &hl);
-                } else if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f))
+                } else if (direct && !st.v_hidden && sw_f_ok && sw_direct && sw_to_overlay(sw_f)) {
                     swv[held].state = SW_FREE;      /* (on the overlay already) */
-                else {
+                    sw_clean_ok = sw_band_ok = FALSE;   /* (what is kept: older than this) */
+                } else {
+                    sw_clean_ok = sw_band_ok = FALSE;
                     if (direct && sw_f_ok) {
                         /* no overlay now after all: a copy for the UI */
                         memcpy(swv[held].buf, sw_f->mpic_Y, ny);
