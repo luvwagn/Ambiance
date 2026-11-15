@@ -323,7 +323,7 @@ build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddi
                        src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ \
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -DAMCE_NO_EXPUNGE -o $@ \
 		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/util.c src/ownlib.c -lamiga
 	@cp $@ build/dvd/prog/
 test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
@@ -422,10 +422,10 @@ test-ac3: build/ac3/ac3_host build/ac3/ac3_68k $(AC3_FIX)
 
 # a beets library (beets.c) read on a 68020 through amcesql.library, from
 # a small library made for it (tests/mkbeets.py)
-build/beets_68k: tests/beets_68k.c src/beets.c src/util.c src/radiocsv.c src/amce.h $(SQLIB)
+build/beets_68k: tests/beets_68k.c src/beets.c src/util.c src/ownlib.c src/radiocsv.c src/amce.h $(SQLIB)
 	@mkdir -p build/beets/prog/Libs build/beets/prog/Cache
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Isrc/sqlib/include '-DIDX_FILE="prog:Cache/beets.idx"' \
-		-o $@ tests/beets_68k.c src/beets.c src/util.c src/radiocsv.c
+		-DAMCE_NO_EXPUNGE -o $@ tests/beets_68k.c src/beets.c src/util.c src/ownlib.c src/radiocsv.c
 	@cp $(SQLIB) build/beets/prog/Libs/
 
 test-beets: build/beets_68k

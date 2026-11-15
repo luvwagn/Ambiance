@@ -2312,9 +2312,7 @@ static void a3_close(void)
         FreeVec(a3.q);
     a3.dec = NULL;
     a3.q = NULL;
-    if (Ac3Base)
-        CloseLibrary(Ac3Base);
-    Ac3Base = NULL;
+    amce_close_own_lib(&Ac3Base);
 }
 
 static void a3_put(const volatile UBYTE *b, ULONG n)
@@ -2527,9 +2525,7 @@ struct Library *st_mpv_open(void)
 
 void st_mpv_close(void)
 {
-    if (MpegvBase)
-        CloseLibrary(MpegvBase);
-    MpegvBase = NULL;
+    amce_close_own_lib(&MpegvBase);
 }
 
 /* The newest picture given to show, if one is (FALSE: none new since the

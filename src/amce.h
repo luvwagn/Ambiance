@@ -1147,6 +1147,7 @@ void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
 /* One of AmigaMCE's own libraries, from its Libs (else LIBS:): an older
  * copy left in memory, unused, put out first; logged (ownlib.c) */
 struct Library *amce_open_own_lib(const char *name, ULONG version);
+void amce_close_own_lib(struct Library **base);     /* closed, and out of memory if unused */
 /* Numbers stored a byte at a time, big-endian (IFF, MP3, the index) or
  * little (WAV): read wherever they lie (no alignment). */
 static inline ULONG amce_be32(const UBYTE *p)

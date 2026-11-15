@@ -139,9 +139,7 @@ static APTR db_open(void)
     APTR db;
     if (!AmceSqlBase) {
         APTR old = quiet();
-        AmceSqlBase = OpenLibrary((CONST_STRPTR) "PROGDIR:Libs/amcesql.library", 1);
-        if (!AmceSqlBase)
-            AmceSqlBase = OpenLibrary((CONST_STRPTR) "amcesql.library", 1);
+        AmceSqlBase = amce_open_own_lib("amcesql.library", 1);
         loud(old);
         if (!AmceSqlBase) {
             strcpy(err, "amcesql.library");
@@ -150,8 +148,7 @@ static APTR db_open(void)
     }
     if (!(db = SqlOpen((STRPTR)ix.db))) {
         sprintf(err, "%.60s", (const char *)SqlError(NULL));
-        CloseLibrary(AmceSqlBase);
-        AmceSqlBase = NULL;
+        amce_close_own_lib(&AmceSqlBase);
     }
     return db;
 }
@@ -164,7 +161,7 @@ static void db_close(APTR db)
         char m[80];
         sprintf(m, "SQLite memory at its most %lu KB", (unsigned long)(SqlMemory(1) >> 10));
         amce_log("beets", m);
-        CloseLibrary(AmceSqlBase);  /* stays loaded until memory is wanted */
+        amce_close_own_lib(&AmceSqlBase);
     }
     AmceSqlBase = NULL;
 }

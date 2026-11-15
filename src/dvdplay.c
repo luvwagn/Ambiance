@@ -685,8 +685,5 @@ void dvdplay_close(struct DvdPlay *dp)
     if (dp->disc)
         dvdd_close(dp->disc);
     FreeVec(dp);
-    if (AmceDvdBase) {
-        CloseLibrary(AmceDvdBase);          /* stays loaded until memory is wanted */
-        AmceDvdBase = NULL;
-    }
+    amce_close_own_lib(&AmceDvdBase);
 }
