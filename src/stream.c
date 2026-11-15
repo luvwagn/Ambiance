@@ -2314,9 +2314,11 @@ const char *st_ac3_cpu_why(void)
 
 /* Which AC3 library is the faster here, found once a run: with an FPU,
  * both are timed on the same four frames (5.1 at 448 kbit/s, as a DVD's)
- * and the faster kept. An FPU's build is not always the faster: under an
- * emulator whose JIT leaves the FPU's instructions out, ac3fpu took 13 ms
- * a frame (40% of the CPU for a DVD's sound). */
+ * and the faster kept. An FPU's build is not always the faster: ac3fpu 1.0
+ * took 14-35 ms a frame under Amiberry's JIT against ac3.library's 1.5
+ * (its float-to-integer conversions switched the FPCR's rounding twice a
+ * sample, which UAE does slowly; 1.1 does not), and an emulator's FPU may
+ * be slow anyway. */
 #include "ac3probe.h"
 static const char *a3_lib;                  /* the one to use (NULL: not timed yet) */
 
