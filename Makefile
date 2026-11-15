@@ -33,6 +33,12 @@ CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
 
+# A library's version for its Resident (LIB_RT_VERSION, src/sqlib/libinit.c)
+# from its source's own LibVersion, so the two cannot differ: ramlib turns a
+# library away whose Resident is older than the version asked for
+# (tools/check_libs.py checks every library built).
+libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
+
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
@@ -64,7 +70,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -145,6 +151,19 @@ check-formats:
 # (see tests/aligntest/gcc-register-asm-bug-report.txt); the scan of the
 # generated code stays as a guard against a regression.
 ASM_DIR = build/asm
+# every library and datatype built, as AmigaOS will see it: its Resident's
+# version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
+# newer (tools/check_libs.py)
+hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(SQLIB) $(MPEGVLIB) $(JDT)
+	@$(PYTHON) tools/check_libs.py \
+		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
+		$(AC3LIB)=src/ac3lib/ac3lib.c=$(call hdrver,src/ac3lib/include/libraries/ac3.h,AC3VERSION) \
+		$(AC3FPULIB)=src/ac3lib/ac3lib.c=$(call hdrver,src/ac3lib/include/libraries/ac3.h,AC3VERSION) \
+		$(SQLIB)=src/sqlib/amcesql.c=1 \
+		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
+		$(JDT)=datatypes/jpeg/amcejpeg.c
+
 check-syscalls: $(SRCS) src/amce.h
 	@mkdir -p $(ASM_DIR)
 	@set -e; for f in $(SRCS); do \
@@ -200,7 +219,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
+test: check-formats check-syscalls check-libs build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvd test-ac3 test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -314,10 +333,10 @@ build/dvdlib/amitime.o: src/dvdlib/amitime.c
 	@mkdir -p build/dvdlib
 	@echo "  CC    $< (amcedvd)"
 	@$(DVDLIB_CC) -Wall -c -o $@ $<
-build/dvdlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+build/dvdlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/dvdlib/amcedvd.c Makefile
 	@mkdir -p build/dvdlib
 	@echo "  CC    $< (amcedvd)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/dvdlib/amcedvd.c) -c -o $@ $<
 $(DVDLIB): build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o
 	@echo "  LD    $@"
 	@$(DVDLIB_CC) -o $@.dbg build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o -lamiga
@@ -415,10 +434,10 @@ build/ac3lib/fpu/%.o: %.c $(AC3_HDR) $(AC3_TABLES)
 	@mkdir -p $(dir $@)
 	@echo "  CC    $< (ac3fpu)"
 	@$(AC3_CC) $(AC3_FPU) $(AC3_FLAGS) $(AC3_UPSTREAM) -Ibuild/ac3lib -Isrc/sqlib -c -o $@ $<
-build/ac3lib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+build/ac3lib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/ac3lib/ac3lib.c Makefile
 	@mkdir -p build/ac3lib
 	@echo "  CC    $< (ac3)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/ac3lib/ac3lib.c) -c -o $@ $<
 $(AC3LIB): build/ac3lib/libinit.o $(patsubst %.c,build/ac3lib/obj/%.o,$(AC3_SRC))
 	@echo "  LD    $@"
 	@$(AC3_CC) $(AC3_INT) -o $@.dbg $^ -lamiga
@@ -553,10 +572,10 @@ catalogs: build/catalogs/.built
 # loaded by AmigaMCE only when one is set up (PROGDIR:Libs)
 SQLIB     = build/sqlib/amcesql.library
 SQLIB_CC  = $(CC) -O2 -m68020 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-array-bounds
-build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/sqlib/amcesql.c Makefile
 	@mkdir -p build/sqlib
 	@echo "  CC    $<"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=1 -c -o $@ $<	# = LibVersion: OS 3.2 checks it
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/sqlib/amcesql.c) -c -o $@ $<
 $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a extras/sqlite/sqlite3.h
 	@echo "  LD    $@"
 	@$(SQLIB_CC) -Isrc/sqlib -Iextras/sqlite -o $@.dbg build/sqlib/libinit.o src/sqlib/amcesql.c \
@@ -580,10 +599,10 @@ JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
 JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
 JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
 datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
-$(JDT_DIR)/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h
+$(JDT_DIR)/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h datatypes/jpeg/amcejpeg.c Makefile
 	@mkdir -p $(JDT_DIR)
 	@echo "  CC    $< (amcejpeg)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=46 -c -o $@ $<
+	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,datatypes/jpeg/amcejpeg.c) -c -o $@ $<
 $(JDT): $(JDT_DIR)/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
 	@mkdir -p $(JDT_DIR)
 	@echo "  LD    $@"
