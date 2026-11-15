@@ -8,12 +8,13 @@
  * programs that only call zz9k.library is published: such a build is for
  * testing, not for distribution). Its request builders and reply decoders
  * (zz9k/request.h, reply.h) make each call; zz9k.library carries it
- * (ZZ9KCall), shared safely with the card's picture datatype, mpega and
- * AmiSSL. The UI and the playback process both call it: the library
+ * (ZZ9KCall; before 2.34, zz_call's own wait), shared safely with the
+ * card's picture datatype, mpega and AmiSSL. The UI and the playback process both call it: the library
  * serialises the mailbox.
  */
 #include <exec/types.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 #include <stdio.h>
 #include <string.h>
 #include "proto/zz9k.h"
@@ -84,11 +85,13 @@ const char *zz_video_check(BOOL mpeg2, BOOL mp2)
     if (!said) {
         said = 1;
         sprintf(m, "zz9k.library %ld.%ld, ABI %ld.%ld, firmware %08lx, caps %08lx; video service "
-                   "%s, flags %08lx",
+                   "%s, flags %08lx%s",
                 (long)ZZ9KBase->lib_Version, (long)ZZ9KBase->lib_Revision, (long)caps.abi_major,
                 (long)caps.abi_minor, (unsigned long)caps.firmware_version,
                 (unsigned long)caps.capability_bits, s == ZZ9K_STATUS_OK ? "there" : zz_name(s),
-                (unsigned long)svc.flags);
+                (unsigned long)svc.flags,
+                ZZ9KBase->lib_Version == 2 && ZZ9KBase->lib_Revision >= 2 && ZZ9KBase->lib_Revision < 34
+                    ? "; its replies waited for by AmigaMCE (before 2.34 its timeout is 250 polls)" : "");
         amce_log("zz9k", m);
     }
     if ((caps.capability_bits & (ZZ9K_CAP_VIDEO_DECODE | ZZ9K_CAP_MEDIA_SESSION)) !=
@@ -151,6 +154,57 @@ static void main_out(const ZZ9KMediaSessionMainResult *a, struct ZzMain *r)
     r->flags = a->flags;
 }
 
+/* A request sent and its reply waited for, under the card lock.
+ * zz9k.library before 2.34 counted ZZ9KCall's timeout in tight polls of
+ * the mailbox (250 of them: a few milliseconds), not in DOS ticks as it
+ * says: a reply the card was a little slower over (a PRESENT while it
+ * composes the last picture) came back as a timeout, and the video
+ * stopped. There it is sent asynchronously and polled here: tightly at
+ * first, then a tick at a time, ZZ_WAIT_TICKS at most (and taken off the
+ * library's list if it never comes, as it lives on this stack). */
+#define ZZ_SPIN_POLLS 400
+#define ZZ_WAIT_TICKS 150                   /* (three seconds) */
+static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
+{
+    ZZ9KAsyncRequest a;
+    ULONG n, done;
+    int s;
+    if (ZZ9KBase->lib_Version > 2 || ZZ9KBase->lib_Revision >= 34 || ZZ9KBase->lib_Revision < 2) {
+        amce_card_lock();                   /* (2.34 on: its timeout is ticks; before 2.2 no cancel) */
+        s = ZZ9KCall(rq, reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
+        amce_card_unlock();
+        return s;
+    }
+    memset(&a, 0, sizeof(a));
+    amce_card_lock();
+    s = ZZ9KCallAsync(&a, rq, NULL, NULL);
+    if (s != ZZ9K_STATUS_QUEUED) {
+        amce_card_unlock();
+        return s;
+    }
+    for (n = 0;; n++) {
+        done = 0;
+        s = ZZ9KPoll(8, &done);
+        if (a.completed) {
+            *reply = a.reply;
+            s = a.status;
+            break;
+        }
+        if (s != ZZ9K_STATUS_OK)
+            break;
+        if (n >= ZZ_SPIN_POLLS + ZZ_WAIT_TICKS) {
+            s = ZZ9K_STATUS_TIMEOUT;
+            break;
+        }
+        if (n >= ZZ_SPIN_POLLS)
+            Delay(1);
+    }
+    if (a.queued && !a.completed)
+        ZZ9KCancelAsync(&a);
+    amce_card_unlock();
+    return s;
+}
+
 /* A request sent, its main result read back. */
 static int main_call(ZZ9KRequest *rq, UWORD op, struct ZzMain *r)
 {
@@ -159,9 +213,7 @@ static int main_call(ZZ9KRequest *rq, UWORD op, struct ZzMain *r)
     int s;
     memset(&reply, 0, sizeof(reply));
     memset(r, 0, sizeof(*r));
-    amce_card_lock();
-    s = ZZ9KCall(rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
-    amce_card_unlock();
+    s = zz_call(rq, &reply);
     if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_main(&reply, op, &res)) != ZZ9K_STATUS_OK)
@@ -234,9 +286,7 @@ int zz_audio_read(ULONG session, ZzU64 acknowledged, struct ZzAudio *r)
                                                       session, acknowledged, 0)) != ZZ9K_STATUS_OK)
         return s;
     memset(&reply, 0, sizeof(reply));
-    amce_card_lock();
-    s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
-    amce_card_unlock();
+    s = zz_call(&rq, &reply);
     if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_audio(&reply, ZZ9K_OP_MEDIA_SESSION_AUDIO_READ, &a)) !=
@@ -265,9 +315,7 @@ int zz_audio_origin(ULONG session, ZzU64 *pts)
         ZZ9K_STATUS_OK)
         return s;
     memset(&reply, 0, sizeof(reply));
-    amce_card_lock();
-    s = ZZ9KCall(&rq, &reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
-    amce_card_unlock();
+    s = zz_call(&rq, &reply);
     if (s != ZZ9K_STATUS_OK)
         return s;
     if ((s = zz9k_reply_media_session_status(&reply, &res)) != ZZ9K_STATUS_OK)
