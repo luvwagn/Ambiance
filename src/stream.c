@@ -2663,6 +2663,7 @@ static ULONG sw_clean_pts;
  * untouched (sw_last_ok: no picture decoded since), whole into sw_clean
  * when the disc stands still. */
 static BOOL sw_band_ok, sw_last_ok;
+static BOOL sw_old_times;                   /* (mpegv before 2.2: times across a flush) */
 static ULONG sw_bx, sw_by, sw_bw, sw_bh;
 static struct MpvPicture *sw_last;
 static ULONG sw_nband;
@@ -3265,6 +3266,7 @@ static void swv_run(void)
     ULONG still_t0 = 0, drain_t0 = 0, seg_t0 = time_ms(), n_seg = 1, n_still = 0, n_hop = 0;
     /* (each part's own, for the log: shown, let go, decoded and its ticks at its start) */
     ULONG seg_shown = 0, seg_drop = 0, seg_ndec = 0, seg_under = 0;
+    ULONG redraw_tries = 0, n_redraw = 0;  /* (a new overlay's picture: tries, logged) */
     unsigned long long seg_tdec = 0;
     LONG still_s = 0;
     char m[200];
@@ -3339,10 +3341,11 @@ static void swv_run(void)
     sw_clean_ok = sw_band_ok = sw_last_ok = FALSE;
     sw_spu_drawn = NULL;
     sw_ncomposed = sw_nband = 0;
-    /* a DVD's menus: each part from its first I picture (mpegv gives a
-     * picture or two from before a flush first, B pictures built on what
-     * was let go, timed by the part before: seconds ahead) */
-    if (sw_nav)
+    /* a DVD's menus: before mpegv 2.2 a part's first B pictures (before
+     * its I picture, the only one a DVD times) had the time of the part
+     * before (seconds off): each part from its first I picture then */
+    sw_old_times = MpegvBase && MpegvBase->lib_Version == 2 && MpegvBase->lib_Revision < 2;
+    if (sw_nav && sw_old_times)
         want_i = TRUE;
     sw_tread = 0;
     sw_nread = 0;
@@ -3457,7 +3460,7 @@ static void swv_run(void)
         seg_log();                                                                   \
         MpvControl(sw_mpv, MPVC_FLUSH, 0);                                           \
         sw_f_ok = sw_last_ok = FALSE;                                                \
-        want_i = TRUE;                                                               \
+        want_i = sw_old_times;                                                       \
         if (held >= 0) {                                                             \
             swv[held].state = SW_FREE;                                               \
             held = -1;                                                               \
@@ -3492,13 +3495,32 @@ static void swv_run(void)
         if (sw_redraw) {
             /* a new overlay (blank): the newest picture on it again (paused,
              * or until the next is due) */
+            const char *how = "nothing to draw";
+            BOOL drawn = FALSE;
             sw_redraw = FALSE;
             if (sw_nav && !sw_clean_ok && sw_band_ok && sw_last_ok && sw_direct)
                 sw_to_overlay(sw_last);             /* (a band's: the picture under it first) */
-            if (sw_nav && (sw_clean_ok || (sw_band_ok && sw_last_ok)))
-                sw_recompose(sw_clean_pts);         /* (with what shows over it) */
-            else if (sw_direct && sw_f_ok)
-                sw_to_overlay(sw_f);
+            if (sw_nav && (sw_clean_ok || (sw_band_ok && sw_last_ok))) {
+                drawn = sw_recompose(sw_clean_pts); /* (with what shows over it) */
+                how = sw_clean_ok ? "kept whole" : "the decoder's, its band over it";
+            } else if (sw_direct && sw_f_ok) {
+                drawn = sw_to_overlay(sw_f);
+                how = "the decoder's";
+            } else if (sw_nav && sw_band_ok)
+                how = "only its band kept";
+            /* not drawn (the overlay not ready yet): again, for half a
+             * second at most */
+            if (!drawn && sw_direct && redraw_tries < 25 && strcmp(how, "nothing to draw")) {
+                redraw_tries++;
+                sw_redraw = TRUE;
+            } else {
+                if (n_redraw++ < 4) {
+                    sprintf(m, "a new overlay: the picture again, %s: %s (%lu tries)", how,
+                            drawn ? "drawn" : "not drawn", (unsigned long)redraw_tries);
+                    amce_log("video: by the CPU", m);
+                }
+                redraw_tries = 0;
+            }
         }
         if (st.paused) {
             if (on && st.started && !out_paused) {
@@ -3859,7 +3881,7 @@ static void swv_run(void)
                 dvdplay_go(st.v_dvd);
                 MpvControl(sw_mpv, MPVC_FLUSH, 0);
                 sw_f_ok = sw_last_ok = FALSE;
-                want_i = TRUE;              /* (as after any flush) */
+                want_i = sw_old_times;      /* (as after any flush) */
                 done = FALSE;
                 continue;
             }
@@ -3881,6 +3903,8 @@ static void swv_run(void)
                 /* its last picture stands (its buttons over it), kept
                  * whole to draw them again on */
                 sw_keep_whole();
+                if (sw_band_ok && !sw_clean_ok && n_still < 4)
+                    amce_log("video: by the CPU", "a still: its picture could not be kept whole");
                 still_on = TRUE;
                 still_t0 = time_ms();
                 n_still++;
