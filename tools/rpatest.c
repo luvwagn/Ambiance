@@ -220,6 +220,59 @@ static void test_rp(struct RastPort *rp, struct BitMap *bm, WORD x, WORD y, cons
     say("  ReadPixelArray ARGB: %08lx%s\n", rd[0], near(rd[0] & 0xFFFFFF, 0x0A1530) ? "  ok" : "  WRONG");
 }
 
+/* ReadPixelArray (ARGB) at each width 1-24, at x 0 to 3: a row of known
+ * colours written, read back, each pixel checked; the first wrong said */
+static void width_sweep(struct RastPort *rp, const char *title)
+{
+    static ULONG row[32], rd[40];
+    int w, x0, i;
+    say("\n== ReadPixelArray ARGB by width, %s (ok, or the first pixel wrong)\n", title);
+    for (i = 0; i < 32; i++)
+        row[i] = colours[i % N] ^ (i << 2);
+    for (x0 = 0; x0 < 4; x0++) {
+        say("  x %ld:", (LONG)x0);
+        for (w = 1; w <= 24; w++) {
+            int bad = -1;
+            WritePixelArray(row, 0, 0, 32 * 4, rp, x0, 20, 32, 1, RECTFMT_ARGB);
+            WaitBlit();
+            for (i = 0; i < 40; i++)
+                rd[i] = 0xEEEEEEEE;
+            ReadPixelArray(rd, 0, 0, w * 4, rp, x0, 20, w, 1, RECTFMT_ARGB);
+            WaitBlit();
+            for (i = 0; i < w && bad < 0; i++)
+                if (!near(rd[i] & 0xFFFFFF, row[i] & 0xFFFFFF))
+                    bad = i;
+            if (bad < 0 && rd[w] != 0xEEEEEEEE)
+                bad = 100;                  /* written past the end */
+            if (bad < 0)
+                say(" %ld", (LONG)w);
+            else if (bad == 100)
+                say(" %ld:past(%08lx)", (LONG)w, rd[w]);
+            else
+                say(" %ld:[%ld]%08lx", (LONG)w, (LONG)bad, rd[bad]);
+        }
+        say("\n");
+    }
+    /* and two rows at once (the modulo): 5 wide, 2 high */
+    {
+        int bad = -1;
+        WritePixelArray(row, 0, 0, 32 * 4, rp, 0, 20, 5, 1, RECTFMT_ARGB);
+        WritePixelArray(row + 5, 0, 0, 32 * 4, rp, 0, 21, 5, 1, RECTFMT_ARGB);
+        WaitBlit();
+        for (i = 0; i < 40; i++)
+            rd[i] = 0xEEEEEEEE;
+        ReadPixelArray(rd, 0, 0, 5 * 4, rp, 0, 20, 5, 2, RECTFMT_ARGB);
+        WaitBlit();
+        for (i = 0; i < 10 && bad < 0; i++)
+            if (!near(rd[i] & 0xFFFFFF, row[i] & 0xFFFFFF))
+                bad = i;
+        say("  5 x 2: %s", bad < 0 ? "ok" : "WRONG");
+        if (bad >= 0)
+            say(" (pixel %ld: %08lx, wanted %06lx)", (LONG)bad, rd[bad], row[bad] & 0xFFFFFF);
+        say("\n");
+    }
+}
+
 static void test_bitmap(struct Screen *scr, UWORD w, UWORD h, WORD x, WORD y)
 {
     struct BitMap *bm = AllocBitMap(w, h, GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH), BMF_MINPLANES | BMF_CLEAR,
@@ -297,6 +350,18 @@ int main(void)
     test_bitmap(scr, 8, 3, 0, 0);       /* tiny */
     test_bitmap(scr, 64, 16, 8, 4);
     test_bitmap(scr, 640, 32, 100, 10);
+    {
+        struct BitMap *bm = AllocBitMap(64, 32, GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH),
+                                        BMF_MINPLANES | BMF_CLEAR, scr->RastPort.BitMap);
+        if (bm) {
+            struct RastPort trp;
+            InitRastPort(&trp);
+            trp.BitMap = bm;
+            width_sweep(&trp, "a 64 x 32 bitmap like Workbench's");
+            WaitBlit();
+            FreeBitMap(bm);
+        }
+    }
 
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, 40, WA_Top, 40, WA_InnerWidth, 200,
                          WA_InnerHeight, 40, WA_Title, (ULONG)"rpatest", WA_DragBar, TRUE,
@@ -306,6 +371,7 @@ int main(void)
         say("  (the window's pixels in the screen's memory, at its place:)\n");
         raw_row(scr->RastPort.BitMap, win->LeftEdge + win->BorderLeft + 10, win->TopEdge + win->BorderTop + 10, N,
                 "Workbench's bitmap", colours);
+        width_sweep(win->RPort, "a window on Workbench");
         Delay(50);
         CloseWindow(win);
     } else {
