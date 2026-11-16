@@ -5719,6 +5719,47 @@ UWORD st_pcm(WORD *out, UWORD n, ULONG *rate)
     return n;
 }
 
+/* The last n sample frames played, left and right interleaved, 16-bit,
+ * at the rate played (AmigaAMP's visual plug-ins, amphost.c): 0 none. */
+UWORD st_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
+{
+    ULONG r = st.dec_freq ? (ULONG)st.dec_freq : 22050, at, k, len;
+    if (!st.started || st.mhi || st.paused || !st.chip)
+        return 0;
+    at = time_ms() - st.play_t;
+    if (at > 1000)
+        at = 1000;
+    at = at * r / 1000;
+    len = st.ahi ? AHI_FRAMES : HALF;
+    if (n > len)
+        n = (UWORD)len;
+    if (at > len)
+        at = len;
+    if (at < n)
+        at = n;
+    if (st.ahi) {
+        const WORD *b = ah.buf[st.ahi_play & 1];
+        if (!b)
+            return 0;
+        for (k = 0; k < n; k++) {
+            ULONG i = at - n + k;
+            lr[2 * k] = b[2 * i];
+            lr[2 * k + 1] = b[2 * i + 1];
+        }
+    } else {
+        const BYTE *l = st.chip + st.cur * HALF, *rr = st.chip + (2 + st.cur) * HALF;
+        const UBYTE *ll = st.paula14 ? (const UBYTE *)st.chip + (4 + st.cur) * HALF : NULL;
+        const UBYTE *rl = st.paula14 ? (const UBYTE *)st.chip + (6 + st.cur) * HALF : NULL;
+        for (k = 0; k < n; k++) {
+            ULONG i = at - n + k;
+            lr[2 * k] = (WORD)((l[i] << 8) | (ll ? ll[i] << 2 : 0));
+            lr[2 * k + 1] = (WORD)((rr[i] << 8) | (rl ? rl[i] << 2 : 0));
+        }
+    }
+    *rate = r;
+    return n;
+}
+
 void st_pause(BOOL on)
 {
     st.paused = on;

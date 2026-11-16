@@ -1952,6 +1952,18 @@ void mp_vis_feed(struct VisFeed *f, UWORD want)
                                         : st_pcm(f->pcm, VIS_PCM, &f->rate);
 }
 
+/* The sound playing now as stereo samples (amphost.c), where an engine
+ * has them: the mixer's, a stream's (not MHI's); Paula's own voices are
+ * mixed by vis_pcm_lr. 0: none. */
+UWORD mp_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
+{
+    if (mp.engine == ENG_MIX)
+        return mx_pcm_lr(lr, n, rate);
+    if (mp.engine == ENG_RADIO)
+        return st_pcm_lr(lr, n, rate);
+    return 0;
+}
+
 int mp_meter_count(void)
 {
     if (mp.engine == ENG_MIX)

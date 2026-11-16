@@ -417,7 +417,7 @@ UBYTE gfx_penmap[NUM_UI_PENS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 
  * 800 x 600), or as large as Workbench allows. In the pixel style the
  * font chosen (Settings > Display > Style) is the size. */
 int gfx_text_size = TSIZE_MEDIUM;
-static const UWORD tsize_lines[TSIZE_COUNT] = { 384, 480, 600 };
+static const UWORD tsize_lines[TSIZE_COUNT] = { 384, 480, 600, 768 };   /* (768: a big Workbench) */
 #define WIN_LINES (tsize_lines[win_tsize])
 static int win_tsize = TSIZE_MEDIUM;        /* the size the window has (may be smaller) */
 static WORD win_left = -1, win_top = -1;    /* where it was: reopened there (after a game) */
@@ -1077,6 +1077,13 @@ void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k)
 static struct Screen *fs_scr;
 static struct Window *fs_win;
 static struct { struct Screen *scr; struct Window *win; struct RastPort *rp; WORD w, h; } fs_was;
+
+/* AmigaMCE's own screen in front now (its full screen from a window, or
+ * the screen it opened): NULL for a window on Workbench. */
+struct Screen *gfx_own_screen(const struct Gfx *g)
+{
+    return fs_scr ? fs_scr : g && !g->wb ? g->scr : NULL;
+}
 
 BOOL gfx_fs_on(void)
 {

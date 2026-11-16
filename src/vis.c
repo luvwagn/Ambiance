@@ -420,6 +420,74 @@ static void spectrum_draw(const struct VisCtx *c, BOOL full)
         SetWriteMask(g->rp, 0xFF);
 }
 
+/* ------------------------------------------------------------ stereo, for plug-ins */
+#define LR_HZ    22050          /* Paula's voices mixed at this rate, for AmigaAMP's plug-ins */
+#define LR_BYTES 4096           /* a voice's sample bytes copied (512 frames at the highest note) */
+
+/* len bytes of a voice from where it plays, round its loop */
+static void copy_voice_n(const struct VisVoice *v, BYTE *d, LONG len)
+{
+    const BYTE *p = v->pos;
+    LONG left = v->left, n = 0;
+    while (n < len) {
+        LONG k = left < len - n ? left : len - n;
+        if (k > 0) {
+            memcpy(d + n, p, k);
+            n += k;
+        }
+        if (n >= len)
+            break;
+        if (!v->loop || v->replen <= 2) {
+            memset(d + n, 0, len - n);
+            break;
+        }
+        p = v->loop;
+        left = v->replen;
+    }
+}
+
+/* The last n frames playing as 16-bit stereo, interleaved: the engine's
+ * own samples (a stream, the mixer), or Paula's four voices mixed at LR_HZ
+ * (0 and 3 left, 1 and 2 right). 0: none (MHI, nothing playing). */
+static BYTE *lr_ch;             /* (a voice's bytes, copied) */
+
+UWORD vis_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
+{
+    static struct VisFeed f;
+    BYTE *ch;
+    UWORD got = mp_pcm_lr(lr, n, rate);
+    int c;
+    ULONG k;
+    if (got)
+        return got;
+    if (!(mp_vis_have() & VF_VOICES))
+        return 0;
+    if (!lr_ch && !(lr_ch = AllocVec(LR_BYTES, MEMF_ANY)))
+        return 0;
+    ch = lr_ch;
+    mp_vis_feed(&f, VF_VOICES);
+    memset(lr, 0, (ULONG)n * 4);
+    for (c = 0; c < 4; c++) {
+        const struct VisVoice *v = &f.voice[c];
+        ULONG step, at = 0;
+        WORD vol = v->vol * mp_volume() / 64;
+        WORD *o = lr + (c == 0 || c == 3 ? 0 : 1);
+        if (!v->pos || !vol || v->period < 100 || v->left <= 0)
+            continue;
+        step = ((3546895UL / v->period) << 8) / LR_HZ;     /* 8.8 */
+        copy_voice_n(v, ch, LR_BYTES);
+        for (k = 0; k < n; k++, o += 2) {
+            ULONG i = at >> 8;
+            if (i >= LR_BYTES)
+                break;
+            *o = (WORD)(*o + ch[i] * vol * 2);
+            at += step;
+        }
+    }
+    *rate = LR_HZ;
+    return n;
+}
+
 /* ------------------------------------------------------------ the playing marker */
 /* MARK_PLAYING (the header's, a list's playing row) as the visualization
  * shown: four of the spectrum's bands, or the meters' left and right.
@@ -496,6 +564,9 @@ BOOL vis_draw_full(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, BOOL first)
 void vis_stop(void)
 {
     vf_stop();
+    if (lr_ch)
+        FreeVec(lr_ch);
+    lr_ch = NULL;
     if (sp.mem)
         FreeVec(sp.mem);
     sp.mem = NULL;

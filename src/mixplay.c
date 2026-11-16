@@ -479,6 +479,33 @@ UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
     *rate = mx.rate / dec;
     return n;
 }
+/* The last n sample frames mixed, left and right interleaved, 16-bit (amphost.c) */
+UWORD mx_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
+{
+    ULONG at, k;
+    const BYTE *l, *r;
+    if (!mx.file || !mx.running || mx.paused || !mx.chip || !mx.rate)
+        return 0;
+    if (n > HALF)
+        n = HALF;
+    at = time_ms() - mx.play_t;
+    if (at > 1000)
+        at = 1000;
+    at = at * mx.rate / 1000;
+    if (at > HALF)
+        at = HALF;
+    if (at < n)
+        at = n;
+    l = mx.chip + mx.cur * HALF;
+    r = mx.chip + (2 + mx.cur) * HALF;
+    for (k = 0; k < n; k++) {
+        ULONG i = at - n + k;
+        lr[2 * k] = (WORD)(l[i] << 8);
+        lr[2 * k + 1] = (WORD)(r[i] << 8);
+    }
+    *rate = mx.rate;
+    return n;
+}
 const char *mx_title(void) { return mx.title; }
 const char *mx_kind(void) { return mx.kind; }
 int mx_names(void) { return mx.nnames; }

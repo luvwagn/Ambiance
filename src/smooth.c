@@ -31,6 +31,14 @@
  * practice (the glide's time was its speed curve, not drawing) and the
  * text looked worse, so it is only used with PROGDIR:AmigaMCE.chunkytext.
  *
+ * On a fast Amiga with a graphics card's 15 to 32-bit screen (as
+ * measured, sm_alpha_allow: not by the CPU's name, a 25 MHz 68030 keeps
+ * the masks) the text is blended instead: all 16 coverage steps, each
+ * pixel the colour that far from what is under it to the ink, read and
+ * written back in one ReadPixelArray and one WritePixelArray (an opaque
+ * box: no reading, the background's colour). Truer edges than 7 pens
+ * can give, on any background (a picture, Flow).
+ *
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
  */
@@ -42,6 +50,16 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
+#include <proto/cybergraphics.h>
+#include <cybergraphx/cybergraphics.h>
+
+extern struct Library *CyberGfxBase;
+static BOOL alpha_allowed;      /* fast enough (main.c, by the speed measured) */
+
+void sm_alpha_allow(BOOL on)
+{
+    alpha_allowed = on;
+}
 
 #define NFACES      3
 #define GLYPH_BYTES 10          /* u16 advance (1/16 px), s8 xoff, s8 yoff, u8 w, u8 h, u32 offset */
@@ -97,7 +115,16 @@ struct Smooth {
     UBYTE *cbuf;                /* its pixels: a step, then a pen, each */
     ULONG cbuf_size;
     UWORD cmod;                 /* bytes a row of cbuf (a multiple of 16) */
+    BOOL alpha_ok;              /* a graphics card's 15-32 bit screen: blending possible */
+    BOOL alpha;                 /* this box blended (cbuf: coverage 0-15) */
+    ULONG *argb;                /* its pixels, read and written */
+    ULONG argb_size;
 };
+
+/* coverage 0..15 -> how much ink, 0..15, blended: the faintest fringe
+ * left out and the nearly full made full, as step_of does, linear
+ * between in sixteen steps */
+static const UBYTE alpha_of[16] = { 0, 0, 0, 1, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 15, 15 };
 
 /* coverage 0..15 -> step 0..SMOOTH_LEVELS-1, with some contrast: the
  * faintest fringe (under a fifth covered) left out, the nearly full
@@ -306,7 +333,10 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
             UnLock(l);
         s->chunky = l != 0;
     }
-    amce_log("smooth style", s->chunky ? "text drawn as chunky pixels" : "text drawn with masks");
+    s->alpha_ok = g->truecolor && !g->planar && CyberGfxBase && g->depth >= 15;
+    amce_log("smooth style", s->chunky ? "text drawn as chunky pixels"
+                             : s->alpha_ok && alpha_allowed ? "text blended (16 steps, over what is there)"
+                                                            : "text drawn with masks");
 }
 
 UWORD sm_pens_used(const struct Smooth *s)
@@ -336,6 +366,10 @@ void sm_detach(struct Smooth *s)
         FreeVec(s->cbuf);
     s->cbuf = NULL;
     s->cbuf_size = 0;
+    if (s->argb)
+        FreeVec(s->argb);
+    s->argb = NULL;
+    s->argb_size = 0;
     s->g = NULL;
 }
 
@@ -474,7 +508,20 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
 static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h)
 {
     ULONG need;
-    if (s->chunky) {
+    s->alpha = s->alpha_ok && alpha_allowed && !s->chunky;
+    if (s->alpha) {
+        need = (ULONG)w * h * 4;
+        if (need > s->argb_size) {
+            if (s->argb)
+                FreeVec(s->argb);
+            s->argb_size = 0;
+            if (!(s->argb = AllocVec(need, MEMF_ANY)))
+                s->alpha = FALSE;           /* (no memory: the masks) */
+            else
+                s->argb_size = need;
+        }
+    }
+    if (s->chunky || s->alpha) {
         s->cmod = (w + 15) & ~15;
         need = (ULONG)s->cmod * h;
         if (need > s->cbuf_size) {
@@ -521,14 +568,15 @@ static void masks_put(struct Smooth *s, const UBYTE *d, UWORD w, UWORD h, WORD x
     UWORD i, j, bpr = s->bpr;
     ULONG n = 0, roff = (ULONG)y * bpr;
     UBYTE used = s->used;
-    if (s->chunky) {
+    if (s->chunky || s->alpha) {
+        const UBYTE *map = s->alpha ? alpha_of : step_of;
         UBYTE *row = s->cbuf + (ULONG)y * s->cmod + x;
         for (j = 0; j < h; j++, row += s->cmod) {
             for (i = 0; i < w; i++, n++) {
-                UBYTE lv = step_of[nib(d, n)];
+                UBYTE lv = map[nib(d, n)];
                 if (lv > row[i]) {          /* glyphs that touch: the more ink */
                     row[i] = lv;
-                    used |= 1 << lv;
+                    used |= 1 << (lv & 7);
                 }
             }
         }
@@ -556,6 +604,57 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
     gfx_dirty();
     struct RastPort *rp = g->rp;
     UBYTE lv;
+    if (s->alpha && fg < NUM_UI_PENS && bg < NUM_UI_PENS) {
+        /* blended: each pixel that far from what is under it (an opaque
+         * box: from bg's colour) to fg's, in sixteen steps */
+        ULONG *px = s->argb, k, f[3];
+        const UBYTE *c = s->cbuf;
+        UWORD i, j;
+        int ch;
+        for (ch = 0; ch < 3; ch++)
+            f[ch] = ui_rgb(fg, ch);
+        if (opaque) {
+            ULONG lut[16];
+            for (k = 0; k < 16; k++) {
+                ULONG v = 0;
+                for (ch = 0; ch < 3; ch++) {
+                    LONG b = (LONG)ui_rgb(bg, ch);
+                    v = (v << 8) | (ULONG)(b + ((LONG)f[ch] - b) * (LONG)k / 15);
+                }
+                lut[k] = v;
+            }
+            for (j = 0; j < h; j++, c += s->cmod)
+                for (i = 0; i < w; i++)
+                    *px++ = lut[c[i]];
+        } else {
+            ReadPixelArray(px, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
+            for (j = 0; j < h; j++, c += s->cmod)
+                for (i = 0; i < w; i++, px++) {
+                    ULONG a = c[i], p = *px, v = 0;
+                    if (!a)
+                        continue;
+                    for (ch = 16; ch >= 0; ch -= 8) {
+                        LONG b = (LONG)((p >> ch) & 255);
+                        v = (v << 8) | (ULONG)(b + ((LONG)f[2 - ch / 8] - b) * (LONG)a / 15);
+                    }
+                    *px = v;
+                }
+        }
+        WritePixelArray(s->argb, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
+        return;
+    }
+    if (s->alpha) {
+        /* (a colour not of the UI's: the steps as the chunky path's) */
+        UBYTE *c = s->cbuf;
+        ULONG k, n = (ULONG)s->cmod * h;
+        for (k = 0; k < n; k++)
+            c[k] = step_of[c[k]];
+        s->used = 0xFE;
+        s->chunky = TRUE;
+        masks_end(s, g, x, y, w, h, fg, bg, opaque);
+        s->chunky = FALSE;
+        return;
+    }
     if (s->chunky) {
         /* each step to its pen, then the box in one write */
         UBYTE pen[SMOOTH_LEVELS], *c = s->cbuf;

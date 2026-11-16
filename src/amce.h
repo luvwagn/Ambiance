@@ -230,6 +230,7 @@ void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD 
 struct Smooth *sm_load(UWORD lines);    /* PROGDIR:Fonts/amce-smooth/<lines> */
 void sm_free(struct Smooth *s);
 void sm_attach(struct Smooth *s, struct Gfx *g);    /* screen open: pens, metrics */
+void sm_alpha_allow(BOOL on);        /* text blended in 16 steps (fast, 15-32 bit) */
 void sm_detach(struct Smooth *s);
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face);
 LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw);
@@ -334,7 +335,7 @@ void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
 extern BOOL gfx_window_wanted;
 const char *gfx_window_problem(const struct Caps *c);
 /* Settings > Display > Text size, in a window (the smooth style) */
-enum { TSIZE_SMALL, TSIZE_MEDIUM, TSIZE_LARGE, TSIZE_COUNT };
+enum { TSIZE_SMALL, TSIZE_MEDIUM, TSIZE_LARGE, TSIZE_XLARGE, TSIZE_COUNT };
 extern int gfx_text_size;
 int  gfx_window_tsize(void);            /* the size the window has (less, if no room) */
 BOOL gfx_window_size_fits(int tsize);   /* room on Workbench for its smallest window */
@@ -406,6 +407,7 @@ void gfx_window_rmb(struct Gfx *g, WORD y);     /* title bar: menus; inside: Bac
 BOOL gfx_fs_enter(struct Gfx *g);
 void gfx_fs_leave(struct Gfx *g);
 BOOL gfx_fs_on(void);
+struct Screen *gfx_own_screen(const struct Gfx *g);  /* its own screen, NULL a window on WB */
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
@@ -668,6 +670,14 @@ struct VisCtx {                     /* where a visualization draws */
 enum { VIS_METERS, VIS_SPECTRUM, VIS_FLOW, VIS_COUNT };
 void vis_set_gfx(struct Gfx *g);    /* the display (whether Flow can be) */
 BOOL vis_draw_full(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, BOOL first);
+/* amphost.c: AmigaAMP's visual plug-ins, hosted */
+BOOL amp_host_start(void);          /* its port (FALSE: AmigaAMP's own is up) */
+void amp_host_end(void);            /* (a plug-in asked to go first) */
+BOOL amp_launch(const char *path, char *err, LONG errmax);
+BOOL amp_attached(void);
+BOOL amp_ours(void);                /* attached, and started by AmigaMCE */
+void amp_tick(void);                /* each frame: its messages; the sound, the plug-in told */
+void amp_stop(ULONG wait_ms);
 /* visflow.c: Flow, on graphics cards */
 BOOL vf_possible(const struct Gfx *g);
 BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wave, int n, const UBYTE *lev,
@@ -717,6 +727,7 @@ void st_set_stop_url(const char *url);     /* asked before the next stream (Plex
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
 UWORD st_pcm(WORD *out, UWORD n, ULONG *rate);  /* the last n played (spectrum), 0 none */
+UWORD st_pcm_lr(WORD *lr, UWORD n, ULONG *rate);  /* ...n frames, stereo, at the rate played */
 ULONG st_length_ms(void);           /* a track's length as its stream says, 0 not known */
 ULONG st_size(void);                /* ...its size in bytes, 0 not known */
 BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range_from,
@@ -797,6 +808,9 @@ BOOL mx_can_step(void);
 void mx_rewind(void);
 void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r);
 UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate);  /* the last n played (spectrum), 0 none */
+UWORD mx_pcm_lr(WORD *lr, UWORD n, ULONG *rate);
+UWORD mp_pcm_lr(WORD *lr, UWORD n, ULONG *rate);  /* the mixer's or a stream's, stereo; 0 none */
+UWORD vis_pcm_lr(WORD *lr, UWORD n, ULONG *rate); /* ...or Paula's voices mixed (vis.c) */
 BOOL mx_loaded(void);
 void mx_unload(void);
 const char *mx_title(void);

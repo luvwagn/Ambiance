@@ -259,9 +259,12 @@ Controls
                play/pause; S stop; N/P next/previous; , and . back and
                forward; Up/Down or the wheel volume; a click on the bar
                jumps there; V, or the cycle gadget at the meters' top
-               right, the level meters or the spectrum (the playing
+               right, the level meters, the spectrum or Flow (the playing
                marker in the header and lists follows it; greyed where
-               the music allows the meters only, as under MHI). Opened
+               the music allows the meters only, as under MHI). F: Flow
+               on the whole window or screen (a key, a click or fire
+               to come back), or the AmigaAMP plug-in chosen in
+               Settings. Opened
                from another section (a module's page from Music), its
                title says where the music is from: a click there, or G,
                goes to that folder; Esc goes back where you were. Esc goes back, the
@@ -276,9 +279,19 @@ Settings
                window), Style (a laced or RTG screen: the font, those
                whose layout fits; RTG: or Smooth), Double buffering
                (RTG), Visualisation
-               (Now Playing's level meters, or HippoPlayer's spectrum
-               analyser; under MHI the meters), Jump scrolling (very
-               long lists step a letter at a time)
+               (Now Playing's level meters, HippoPlayer's spectrum
+               analyser, or Flow on graphics cards; under MHI the
+               meters), Full screen visual (F on Now Playing: Flow, or
+               one of AmigaAMP's visual plug-ins put in AmigaMCE's
+               Visuals drawer or AmigaAMP:Plugins; AmigaMCE answers on
+               their port as AmigaAMP does, and its screen goes behind
+               while one runs: Esc in it to come back), Jump scrolling
+               (very long lists step a letter at a time). Text size, in
+               a window: Small, Medium, Large or Extra large (a big
+               Workbench). On a fast Amiga (as measured) the smooth
+               style's text is blended in 16 steps over what is under
+               it on a 15 to 32-bit screen; AmigaMCE/TextBlend "on" or
+               "off" says otherwise.
   Sound        Paula, Paula at 14 bits, or AHI (16-bit) for radio,
                Plex and music files; MP3 by amcempega.library
                (AmigaMCE's own), mpega.library or an MHI driver (which
@@ -331,6 +344,12 @@ Not there yet
 
 History
 -------
+0.9.1  Flow, Now Playing's visualisation for graphics cards: the
+       picture carried on and on, zoomed, turned and rippled, the
+       sound's wave drawn in; F shows it on the whole screen. AmigaAMP's
+       visual plug-ins run from AmigaMCE (F, Settings > Display > Full
+       screen visual). Text blended in 16 steps on fast Amigas with a
+       graphics card; Extra large text in a window.
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it

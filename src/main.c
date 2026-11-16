@@ -158,7 +158,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_P14, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5, ACT_SND_MQ0, ACT_SND_MQ_END = ACT_SND_MQ0 + 2,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_P14, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5, ACT_SND_MQ0, ACT_SND_MQ_END = ACT_SND_MQ0 + 2, ACT_FULLVIS,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_VIDEOSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -171,7 +171,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
-       ACT_MODE0 = 128 };
+       ACT_MODE0 = 160 };
 typedef char act_mode0_clear[ACT_COUNT <= ACT_MODE0 && ACT_MODE0 + SM_COUNT <= 255 ? 1 : -1];
 
 /* ------------------------------------------------------------ pages */
@@ -1729,7 +1729,8 @@ static void load_screen_mode(void)
     }
     if (GetVar((CONST_STRPTR)TSIZE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         gfx_text_size = !amce_stricmp(buf, "small") ? TSIZE_SMALL
-                        : !amce_stricmp(buf, "large") ? TSIZE_LARGE : TSIZE_MEDIUM;
+                        : !amce_stricmp(buf, "large") ? TSIZE_LARGE
+                        : !amce_stricmp(buf, "xlarge") ? TSIZE_XLARGE : TSIZE_MEDIUM;
 }
 
 static void save_setting(const char *var, const char *value)
@@ -2191,12 +2192,75 @@ static void load_style(void)
                 gfx_rtg_font = i;
 }
 
+/* F on Now playing: Flow, or one of AmigaAMP's visual plug-ins (amphost.c)
+ * from PROGDIR:Visuals or AmigaAMP:Plugins, AmigaMCE/FullVisual its path
+ * ("" or not set: Flow) */
+#define FULLVIS_VAR "AmigaMCE/FullVisual"
+#define FULLVIS_MAX 16
+static char fullvis[200];
+static char fv_paths[FULLVIS_MAX][160];
+static int fv_n;
+static const char *fv_dir;
+
+static void fv_cb(void *ctx, const char *name, BOOL isdir)
+{
+    LONG n = strlen(name);
+    (void)ctx;
+    if (isdir || fv_n >= FULLVIS_MAX || (n > 5 && !amce_stricmp(name + n - 5, ".info")) ||
+        (n > 4 && (!amce_stricmp(name + n - 4, ".txt") || !amce_stricmp(name + n - 4, ".doc"))) ||
+        (n > 7 && !amce_stricmp(name + n - 7, ".readme")))
+        return;
+    sprintf(fv_paths[fv_n++], "%.80s%.78s", fv_dir, name);
+}
+
+/* the plug-ins there now */
+static void fullvis_scan(void)
+{
+    static const char *const dirs[] = { "PROGDIR:Visuals/", "AmigaAMP:Plugins/" };
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    int i;
+    fv_n = 0;
+    me->pr_WindowPtr = (APTR)-1;            /* (no "insert volume" for AmigaAMP:) */
+    for (i = 0; i < 2; i++) {
+        if (!(l = Lock((CONST_STRPTR)dirs[i], SHARED_LOCK)))
+            continue;
+        UnLock(l);
+        fv_dir = dirs[i];
+        dir_scan(dirs[i], fv_cb, NULL);
+    }
+    me->pr_WindowPtr = old;
+}
+
+static void fullvis_next(void)
+{
+    int i, at = -1;
+    fullvis_scan();
+    for (i = 0; i < fv_n; i++)
+        if (!amce_stricmp(fv_paths[i], fullvis))
+            at = i;
+    if (at + 1 < fv_n)
+        amce_strlcpy(fullvis, fv_paths[at + 1], sizeof(fullvis));
+    else
+        fullvis[0] = 0;                     /* round to Flow */
+    save_setting(FULLVIS_VAR, fullvis[0] ? fullvis : "flow");
+    set_msg(fullvis[0] ? _("F on Now playing starts this AmigaAMP plug-in")
+            : !fv_n ? _("Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)")
+                    : _("Flow"));
+}
+
 /* Settings > Display > Visualisation: the level meters or the
  * spectrum (vis.c); V on Now playing goes to the next. */
 static void load_visual(void)
 {
     char buf[16];
     vis_set_gfx(&g);
+    fullvis[0] = 0;
+    if (GetVar((CONST_STRPTR)FULLVIS_VAR, (STRPTR)fullvis, sizeof(fullvis), GVF_GLOBAL_ONLY) <= 0 ||
+        !amce_stricmp(fullvis, "flow"))
+        fullvis[0] = 0;
+    amp_host_start();                   /* AmigaAMP's plug-ins: they find AmigaMCE */
     if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM
                    : !amce_stricmp(buf, "flow") ? VIS_FLOW : VIS_METERS);
@@ -2453,7 +2517,8 @@ static void build_settings(struct Page *p)
 /* Settings > Display: the screen mode, the style (its font on a laced
  * screen), double buffering where it is offered, the visualisation, and
  * jump scrolling (how long lists move). */
-static const char *const tsize_names[TSIZE_COUNT] = { N_("Small"), N_("Medium"), N_("Large") };
+static const char *const tsize_names[TSIZE_COUNT] = { N_("Small"), N_("Medium"), N_("Large"),
+                                                      N_("Extra large") };
 
 /* Is the Window row offered: Workbench can take the window, or it is in one. */
 static BOOL window_offered(void)
@@ -2507,6 +2572,9 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
+    fullvis_scan();
+    action_item(p, _("Full screen visual (F)"), fullvis[0] ? (const char *)FilePart((STRPTR)fullvis) : _("Flow"),
+                ACT_FULLVIS, MARK_CYCLE);
     action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
     /* a slideshow's way from one picture to the next */
@@ -11450,7 +11518,8 @@ static void apply_tsize(int i)
     if (i < 0 || i >= TSIZE_COUNT || (i == gfx_text_size && gfx_window_tsize() == i))
         return;
     gfx_text_size = i;
-    save_setting(TSIZE_VAR, i == TSIZE_SMALL ? "small" : i == TSIZE_LARGE ? "large" : "medium");
+    save_setting(TSIZE_VAR, i == TSIZE_SMALL ? "small" : i == TSIZE_LARGE ? "large"
+                            : i == TSIZE_XLARGE ? "xlarge" : "medium");
     if (g.wb)
         display_again(TRUE, _("Text size"), build_tsizes);
 }
@@ -13683,6 +13752,9 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_VISUAL) {
         next_visual();
         plex_settings_again(FALSE);
+    } else if (it->action == ACT_FULLVIS) {
+        fullvis_next();
+        plex_settings_again(FALSE);
     } else if (it->action == ACT_TRANS) {
         view_transition = (view_transition + 1) % VT_COUNT;
         save_setting(TRANS_VAR, trans_keys[view_transition]);
@@ -14943,6 +15015,39 @@ static void handle_mouse(struct IntuiMessage *im)
     last_y = y;
 }
 
+/* ------------------------------------------------------------ AmigaAMP's plug-ins */
+/* Each tick: the attached plug-in fed; one AmigaMCE started puts
+ * AmigaMCE's screen behind as it comes, and in front again as it goes
+ * (Esc in it, the music over) */
+static void amp_frame(void)
+{
+    static BOOL was, was_ours;
+    static struct Screen *behind;
+    BOOL now;
+    amp_tick();
+    now = amp_attached();
+    if (now && !was) {
+        was_ours = amp_ours();
+        if (was_ours && (behind = gfx_own_screen(&g))) {
+            ScreenToBack(behind);
+            WBenchToFront();
+        }
+    }
+    if (now && was_ours && !mp_loaded())
+        amp_stop(1500);                     /* the music over: it goes */
+    if (!amp_attached() && was) {
+        if (was_ours && behind && behind == gfx_own_screen(&g)) {
+            ScreenToFront(behind);
+            if (g.win)
+                ActivateWindow(g.win);
+            draw_all();
+        }
+        behind = NULL;
+        was_ours = FALSE;
+    }
+    was = amp_attached();
+}
+
 /* ------------------------------------------------------------ Flow on the whole screen */
 /* F on Now playing: Flow over the whole window or screen, what plays
  * written over it for a few seconds (and again as it changes); a key, a
@@ -14963,6 +15068,16 @@ static void np_full_enter(void)
         return;
     if (!mp_loaded()) {
         set_msg(_("Nothing is playing"));
+        return;
+    }
+    if (fullvis[0]) {
+        /* an AmigaAMP plug-in: its own window on Workbench (or the default
+         * public screen), AmigaMCE's screen behind it as it attaches */
+        char err[100];
+        if (amp_launch(fullvis, err, sizeof(err)))
+            set_msg(_("Starting the plug-in (Esc in it to come back)"));
+        else
+            set_msg(err);
         return;
     }
     if (!vis_available(VIS_FLOW)) {
@@ -15353,6 +15468,17 @@ static int app_main(void)
         me->pr_WindowPtr = oldwin;
     }
     plex_load(caps.cpu);            /* after: it needs the CPU */
+    {
+        /* the smooth style's text blended in 16 steps where this Amiga is
+         * fast (as measured: a JIT's 68030 too, never a 25 MHz one), on a
+         * graphics card's 15-32 bit screen; AmigaMCE/TextBlend "on" or
+         * "off" says otherwise */
+        char v[8];
+        BOOL on = plex_tier() >= 2;
+        if (GetVar((CONST_STRPTR)"AmigaMCE/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+            on = !amce_stricmp(v, "on");
+        sm_alpha_allow(on);
+    }
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
     if (caps.zz9000) {
@@ -15509,6 +15635,7 @@ static int app_main(void)
                     tick_us = 200000;
                     goto tick_again;
                 }
+                amp_frame();                /* AmigaAMP's plug-in, if one is attached */
                 if (np_full) {
                     /* Flow on the whole screen: a frame, the music kept going */
                     static ULONG nf_sec;
@@ -15597,6 +15724,7 @@ static int app_main(void)
                  * otherwise 5 a second, which still notices a joystick
                  * plugged in. */
                 tick_us = (joy_present || ov.on || pv_spinning() || radio_waiting() || np_live() ||
+                           amp_attached() ||
                            window_title_hover() ||
                            np.flash >= 0 || np.rep >= 0 ||
                            (np_list_on() && mp_playing())) ? 40000 :
@@ -15676,6 +15804,7 @@ out:
         amce_log("previews", m);
     }
     amce_log("quitting", "");
+    amp_host_end();                 /* (a plug-in asked to go, its port taken down) */
     resume_store();                 /* what plays now, for the next start */
     vo_end();                       /* (Picasso96API.library, if a video opened it) */
     st_mpv_close();                 /* (mpegv.library, if a video decoded by the CPU did) */

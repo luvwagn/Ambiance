@@ -41,7 +41,7 @@ libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 
 SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
-       src/vis.c src/visflow.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
+       src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
@@ -607,7 +607,8 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
 	@mkdir -p $(LHA_DIR)/Fonts/amce-pixel $(LHA_DIR)/Fonts/amce-smooth $(LHA_DIR)/Fonts/amce-cjk \
-		$(LHA_DIR)/Licences
+		$(LHA_DIR)/Licences $(LHA_DIR)/Visuals
+	@cp docs/Visuals-ReadMe.txt $(LHA_DIR)/Visuals/ReadMe.txt
 	@cp $(TARGET) $(LHA_DIR)/
 	@cp docs/AmigaMCE.info $(LHA_DIR)/
 	@# the AppIcon shown while iconified (iconify.c): no drawer icon, unseen
