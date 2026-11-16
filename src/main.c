@@ -15099,7 +15099,7 @@ static void amp_frame(void)
 static BOOL np_full_fs;             /* it opened the full screen (a window before) */
 static ULONG np_full_ctl;           /* the controls shown until (0: hidden) */
 enum { NF_PREV, NF_PLAY, NF_NEXT, NF_VDOWN, NF_VUP, NF_FULL, NF_COUNT };
-static WORD nf_x[NF_COUNT], nf_y, nf_w, nf_h, nf_bx0, nf_bx1, nf_by0;
+static WORD nf_x[NF_COUNT], nf_y, nf_w, nf_h, nf_bx0, nf_bx1, nf_by0;   /* (the controls' strip) */
 static WORD nf_band = 0x7FFF;       /* the strip at the bottom kept black (0x7FFF: none) */
 
 /* the pointer over Flow: shown or not, nothing else drawn (pointer_hide's
@@ -15171,13 +15171,12 @@ static void np_full_enter(void)
                                          : "Flow: the whole screen (Esc, a click on it or fire: back)");
 }
 
-/* what plays, over the picture: the title, and who by (above the
- * controls when they show) */
+/* what plays, over the picture for a moment: the title, and who by */
 static void np_full_title(void)
 {
     const char *t = mp_is_stream() ? (st_title()[0] ? st_title() : mp_stream_name()) : mp_title();
     const char *by = mp_is_stream() ? mp_stream_name() : mp_track_by();
-    WORD x = U(16), y = (np_full_ctl ? nf_by0 - U(4) : g.h - U(12)) - 2 * (g.font_h + U(4));
+    WORD x = U(16), y = g.h - U(12) - 2 * (g.font_h + U(4));
     if (!t || !t[0])
         return;
     gfx_text(&g, x, y, t, PEN_WHITE, PEN_BG, g.w - 2 * x, TS_BOLD);
@@ -15185,40 +15184,117 @@ static void np_full_title(void)
         gfx_text(&g, x, y + g.font_h + U(4), by, PEN_TEXT, PEN_BG, g.w - 2 * x, TS_SMALL);
 }
 
-/* the controls' places: a row of buttons centred at the bottom */
+/* The controls: the same strip as a video's (anim.c's strip_draw), along
+ * the foot of the screen: previous, play/pause, next, volume down, the
+ * volume, up; the time, how far it has got, the title; full screen or the
+ * window at the right end. Drawn whole once a second (or as something on
+ * it changes), the bar alone in between: drawn over each frame, its text
+ * would flicker. */
+static WORD nf_px0, nf_px1, nf_cy, nf_fill;
+static ULONG nf_sec;
+static int nf_vol;
+static BOOL nf_paused, nf_drawn;
+
 static void np_full_layout(void)
 {
-    WORD gap = U(6), i, total;
-    nf_h = g.font_h * 2 + U(8);
-    nf_w = nf_h * 3 / 2;
-    if (gfx_mode_tall(g.mode))
-        nf_w = nf_h * 3;
-    total = NF_COUNT * nf_w + (NF_COUNT - 1) * gap + 2 * gap;
-    nf_bx0 = (WORD)((g.w - total) / 2);
-    nf_bx1 = nf_bx0 + total - 1;
-    nf_y = g.h - U(16) - nf_h;
-    nf_by0 = nf_y - gap;
-    for (i = 0; i < NF_COUNT; i++)
-        nf_x[i] = nf_bx0 + gap + i * (nf_w + gap) + (i >= NF_FULL ? gap : 0);
+    nf_h = g.font_h + U(12);
+    nf_y = g.h - nf_h;
+    nf_w = nf_h + U(6);
+    nf_by0 = nf_y;
+    nf_bx0 = 0;
+    nf_bx1 = g.w - 1;
+}
+
+static void nf_bar(WORD fill)
+{
+    gfx_fill(&g, nf_px0, nf_cy - 1, nf_px1, nf_cy + 1, PEN_RULE);
+    if (fill > nf_px0)
+        gfx_fill(&g, nf_px0, nf_cy - 1, fill, nf_cy + 1, PEN_WHITE);
+    gfx_fill(&g, fill - 2, nf_cy - 4, fill + 2, nf_cy + 4, PEN_WHITE);
+    nf_fill = fill;
 }
 
 static void np_full_controls(void)
 {
     static const UBYTE kind[NF_COUNT] = { GL_PREV, GL_PLAY, GL_NEXT, GL_VDOWN, GL_VUP, GL_FULL };
-    WORD i, sx = gfx_mode_tall(g.mode) ? 2 : 1, ry = nf_h / 5 > 2 ? nf_h / 5 : 2;
-    WORD mx = g.win ? g.win->MouseX - g.win->BorderLeft : -1, my = g.win ? g.win->MouseY - g.win->BorderTop : -1;
+    struct MpStatus st;
+    WORD i, x = U(8), cy, sx = gfx_mode_tall(g.mode) ? 2 : 1;
+    BOOL paused = !mp_playing();
+    const char *t = mp_is_stream() ? (st_title()[0] ? st_title() : mp_stream_name()) : mp_title();
+    char a[16], b[16], line[48];
     np_full_layout();
-    for (i = 0; i < NF_COUNT; i++) {
-        BOOL hov = mx >= nf_x[i] && mx < nf_x[i] + nf_w && my >= nf_y && my < nf_y + nf_h;
-        int k = kind[i];
-        if (i == NF_PLAY && mp_playing())
-            k = GL_PAUSE;
-        if (i == NF_FULL)
-            k = g.wb ? GL_FULL : GL_UNFULL;   /* (on its own screen: back to the page) */
-        np_rrect(nf_x[i], nf_y, nf_w, nf_h, ry, ry, hov ? PEN_SELDIM : PEN_BAR);
-        glyph_draw(g.rp, k, nf_x[i] + nf_w / 2, nf_y + nf_h / 2, glyph_rows(nf_h), sx,
-                   GPEN(hov ? PEN_WHITE : PEN_TEXT), GPEN(PEN_DIM), 0);
+    cy = nf_y + nf_h / 2;
+    memset(&st, 0, sizeof(st));
+    mp_status(&st);
+    if (nf_drawn && st.elapsed_ms / 1000 == nf_sec && paused == nf_paused && mp_volume() == nf_vol) {
+        /* only how far it has got, if it has moved a pixel */
+        if (st.total_ms && nf_px1 > nf_px0) {
+            WORD fill = nf_px0 + (WORD)((st.elapsed_ms > st.total_ms ? st.total_ms : st.elapsed_ms) *
+                                        (ULONG)(nf_px1 - nf_px0) / st.total_ms);
+            if (fill != nf_fill) {
+                gfx_fill(&g, nf_px0 - 2, nf_cy - 4, nf_px1 + 2, nf_cy + 4, PEN_BG);
+                nf_bar(fill);
+            }
+        }
+        return;
     }
+    gfx_fill(&g, 0, nf_y, g.w - 1, g.h - 1, PEN_BG);
+    for (i = 0; i < NF_COUNT; i++) {
+        WORD bx, by, bw, bh, ry, rx;
+        int k = kind[i];
+        if (i == NF_FULL) {
+            x = g.w - U(8) - nf_w;          /* at the right end */
+            k = g.wb ? GL_FULL : GL_UNFULL; /* (on its own screen: back to the page) */
+        }
+        if (i == NF_VUP) {                  /* the volume between - and + */
+            WORD vw = gfx_textlen(&g, "100%", TS_BODY) + U(8);
+            sprintf(line, "%ld%%", (long)(mp_volume() * 100 / 64));
+            gfx_text(&g, x + (vw - gfx_textlen(&g, line, TS_BODY)) / 2, cy - g.font_h / 2, line, PEN_TEXT,
+                     PEN_BG, 0, TS_BODY);
+            x += vw;
+        }
+        if (i == NF_PLAY && !paused)
+            k = GL_PAUSE;
+        nf_x[i] = x;
+        bx = x + 1, by = nf_y + 2, bw = nf_w - 2, bh = nf_h - 4;
+        ry = bh / 5 > 2 ? bh / 5 : 2;
+        if (sx > 1)
+            ry = ry / 2 > 1 ? ry / 2 : 1;
+        rx = ry * sx;
+        gfx_rrect(&g, bx, by, bw, bh, rx, ry, PEN_BAR);
+        glyph_draw(g.rp, k, bx + bw / 2, by + bh / 2, glyph_rows(bh), sx, GPEN(PEN_WHITE), GPEN(PEN_DIM), 0);
+        if (i < NF_FULL)
+            x += nf_w;
+    }
+    x = nf_x[NF_VUP] + nf_w + U(10);        /* the time, after the buttons on the left */
+    amce_time_text(a, st.elapsed_ms);
+    if (st.total_ms) {
+        amce_time_text(b, st.total_ms);
+        sprintf(line, "%s / %s", a, b);
+    } else
+        strcpy(line, a);
+    gfx_text(&g, x, cy - g.font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
+    nf_px0 = x + gfx_textlen(&g, line, TS_BODY) + U(8);
+    nf_px1 = nf_x[NF_FULL] - 1 - U(8);
+    nf_cy = cy;
+    nf_fill = -1;
+    if (t && t[0] && nf_px1 - nf_px0 > U(40)) {
+        WORD nw = gfx_textlen(&g, t, TS_SMALL);
+        if (nw > (nf_px1 - nf_px0) / 3)
+            nw = (nf_px1 - nf_px0) / 3;
+        gfx_text(&g, nf_px1 - nw, cy - g.font_h / 2, t, PEN_DIM, PEN_BG, nw, TS_SMALL);
+        nf_px1 -= nw + U(8);
+    }
+    if (nf_px1 - nf_px0 > U(16))
+        nf_bar(nf_px0 + (st.total_ms ? (WORD)((st.elapsed_ms > st.total_ms ? st.total_ms : st.elapsed_ms) *
+                                               (ULONG)(nf_px1 - nf_px0) / st.total_ms)
+                                     : 0));
+    else
+        nf_px1 = nf_px0;                    /* (no room: no bar) */
+    nf_sec = st.elapsed_ms / 1000;
+    nf_paused = paused;
+    nf_vol = mp_volume();
+    nf_drawn = TRUE;
 }
 
 /* full screen from the window, or the window again, Flow on either */
@@ -15260,17 +15336,24 @@ static BOOL np_full_input(struct IntuiMessage *m)
                 np_full_exit();             /* the right button: back */
             return TRUE;
         }
-        if (np_full_ctl && y >= nf_by0 && x >= nf_bx0 && x <= nf_bx1) {
+        if (np_full_ctl && y >= nf_y) {
             np_full_ctl = time_ms() + 3000;
             for (i = 0; i < NF_COUNT; i++)
-                if (x >= nf_x[i] && x < nf_x[i] + nf_w && y >= nf_y && y < nf_y + nf_h) {
+                if (x >= nf_x[i] && x < nf_x[i] + nf_w) {
                     if (i == NF_FULL)
                         np_full_toggle_fs();
                     else
                         np_press(i == NF_PREV ? NB_PREV : i == NF_PLAY ? NB_PLAY : i == NF_NEXT ? NB_NEXT
                                  : i == NF_VDOWN ? NB_VDOWN : NB_VUP);
+                    nf_drawn = FALSE;       /* (its state shown again) */
+                    return TRUE;
                 }
-            return TRUE;
+            if (nf_px1 > nf_px0 && x >= nf_px0 - U(4) && x <= nf_px1 + U(4)) {
+                np_seek_part((ULONG)(x < nf_px0 ? 0 : x > nf_px1 ? nf_px1 - nf_px0 : x - nf_px0),
+                             (ULONG)(nf_px1 - nf_px0));   /* the bar: there */
+                nf_drawn = FALSE;
+            }
+            return TRUE;                    /* (elsewhere on the strip: nothing) */
         }
         np_full_exit();
         return TRUE;
@@ -15323,14 +15406,13 @@ static void np_full_tick(void)
         /* the strip at the bottom for what plays and the controls: black,
          * Flow above it (drawn over, they would flicker on a screen
          * without a buffer) */
-        BOOL title = np_full_ctl || now - np_full_since < 6000;
+        BOOL title = !np_full_ctl && now - np_full_since < 6000;
         WORD band = 0x7FFF;
+        np_full_layout();
         if (np_full_ctl)
-            np_full_layout();
-        if (title)
-            band = (np_full_ctl ? nf_by0 - U(4) : g.h - U(12)) - 2 * (g.font_h + U(4)) - U(8);
-        else if (np_full_ctl)
-            band = nf_by0 - U(8);
+            band = nf_y;                    /* the controls' strip */
+        else if (title)
+            band = g.h - U(12) - 2 * (g.font_h + U(4)) - U(8);  /* what plays, for a moment */
         if (band < g.h / 2)
             band = g.h / 2;
         vf_clip(band);
@@ -15340,6 +15422,7 @@ static void np_full_tick(void)
                 RectFill(g.rp, 0, band, g.w - 1, g.h - 1);
             }
             nf_band = band;
+            nf_drawn = FALSE;               /* (what is on it drawn again) */
         }
     }
     if (!vis_draw_full(&g, 0, 0, (WORD)g.w, (WORD)g.h, np_full_first)) {
@@ -15351,11 +15434,14 @@ static void np_full_tick(void)
     if (mp_serial() != np_full_serial) {
         np_full_serial = mp_serial();       /* another track: said again */
         np_full_since = now;
+        nf_band = 0x7FFF;                   /* (its strip cleared next frame) */
     }
     if (np_full_ctl)
         np_full_controls();
-    if (np_full_ctl || now - np_full_since < 6000)
-        np_full_title();
+    else if (nf_band < (WORD)g.h && !nf_drawn) {
+        np_full_title();                    /* once: Flow stays above it */
+        nf_drawn = TRUE;
+    }
 }
 
 static void handle_key(struct IntuiMessage *im)

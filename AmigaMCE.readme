@@ -264,9 +264,10 @@ Controls
                the music allows the meters only, as under MHI). F: Flow
                on the whole screen (from a window, a screen of its own
                in Workbench's mode), or the AmigaAMP plug-in chosen in
-               Settings. On Flow: move the mouse for its controls
-               (previous, play/pause, next, volume, and full screen or
-               the window); Space play/pause, N/P or Right/Left next
+               Settings. On Flow: move the mouse for its controls,
+               as a video's (previous, play/pause, next, volume, the
+               time and a bar to click to jump, and full screen or the
+               window); Space play/pause, N/P or Right/Left next
                and previous, Up/Down volume; F full screen or the
                window; Esc, Return, the
                right button, fire or a click on the picture to come
