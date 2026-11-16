@@ -349,7 +349,9 @@ History
        sound's wave drawn in; F shows it on the whole screen. AmigaAMP's
        visual plug-ins run from AmigaMCE (F, Settings > Display > Full
        screen visual). Text blended in 16 steps on fast Amigas with a
-       graphics card; Extra large text in a window.
+       graphics card; Extra large text in a window. A module back at
+       the next start plays from its beginning (a track still from
+       where it was).
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it

@@ -8047,11 +8047,18 @@ static void resume_load(void)
     np_src = src;
     np_no_play = TRUE;
     if (np_start_now(idx)) {
-        np_resume_ms = ms;
+        /* a track goes on where it was; a module from its start (jumped
+         * into, modplug's songs could stay nearly silent until their
+         * patterns set their volumes again) */
+        np_resume_ms = mp_is_track() ? ms : 0;
         np_resume_total = total;
         np_resume_size = size;
-        sprintf(m, "%.80s: loaded, stopped; Play goes on from %lu ms", np.list.items[idx].label,
-                (unsigned long)ms);
+        if (np_resume_ms)
+            sprintf(m, "%.80s: loaded, stopped; Play goes on from %lu ms", np.list.items[idx].label,
+                    (unsigned long)ms);
+        else
+            sprintf(m, "%.80s: loaded, stopped; Play starts it from the beginning",
+                    np.list.items[idx].label);
     } else {
         sprintf(m, "%.80s: could not be loaded again", np.list.items[idx].label);
         np.idx = -1;
