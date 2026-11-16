@@ -347,11 +347,13 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
                                         g->rp->BitMap);
         if (bm) {
             struct RastPort trp;
-            ULONG wr[2] = { 0x00F80000UL, 0x000000F8UL }, rd[2] = { 0, 0 };
+            /* (4 wide: rtg.library 43.787 reads the last width mod 4 of a
+             * 16-bit row wrongly, which masks_end reads round) */
+            ULONG wr[4] = { 0x00F80000UL, 0x000000F8UL, 0, 0 }, rd[4] = { 0, 0, 0, 0 };
             InitRastPort(&trp);
             trp.BitMap = bm;
-            WritePixelArray(wr, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
-            ReadPixelArray(rd, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
+            WritePixelArray(wr, 0, 0, 16, &trp, 0, 0, 4, 1, RECTFMT_ARGB);
+            ReadPixelArray(rd, 0, 0, 16, &trp, 0, 0, 4, 1, RECTFMT_ARGB);
             WaitBlit();
             FreeBitMap(bm);
             if ((rd[0] & 0xF00000) == 0xF00000 && !(rd[0] & 0xF0) && (rd[1] & 0xF0) == 0xF0 &&
@@ -547,7 +549,7 @@ static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h, BOOL opaque)
      * else only an opaque box (from its background's colour) */
     s->alpha = s->alpha_ok && alpha_allowed && !s->chunky && (opaque || s->read_order < 2);
     if (s->alpha) {
-        need = (ULONG)w * h * 4;
+        need = (ULONG)((w + 3) & ~3) * h * 4;      /* (read 4 pixels at a time: see masks_end) */
         if (need > s->argb_size) {
             if (s->argb)
                 FreeVec(s->argb);
@@ -664,9 +666,25 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
                 for (i = 0; i < w; i++)
                     *px++ = lut[c[i]];
         } else {
+            /* what is there read a multiple of 4 pixels wide: rtg.library
+             * 43.787 gives the last (width mod 4) of a 16-bit row back as
+             * packed words (tools/rpabug.c), so the box is read wider (to
+             * the left at the bitmap's right edge) and its pixels taken
+             * from the middle */
             BOOL swap = s->read_order == 1;
-            ReadPixelArray(px, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
-            for (j = 0; j < h; j++, c += s->cmod)
+            UWORD rw = (w + 3) & ~3, ofs = 0;
+            WORD rx = x;
+            if (rx + rw > g->w) {
+                rx = g->w - rw;
+                if (rx < 0)
+                    rx = 0;
+                ofs = (UWORD)(x - rx);
+            }
+            if (ofs + w > rw)
+                ofs = 0, rw = w;                /* (narrower than 4 at all: as it is) */
+            ReadPixelArray(px, 0, 0, (UWORD)(rw * 4), rp, rx, y, rw, h, RECTFMT_ARGB);
+            for (j = 0; j < h; j++, c += s->cmod) {
+                px = s->argb + (ULONG)j * rw + ofs;
                 for (i = 0; i < w; i++, px++) {
                     ULONG a = c[i], p = *px, v = 0;
                     if (swap)
@@ -679,6 +697,9 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
                     }
                     *px = v;
                 }
+            }
+            WritePixelArray(s->argb, ofs, 0, (UWORD)(rw * 4), rp, x, y, w, h, RECTFMT_ARGB);
+            return;
         }
         WritePixelArray(s->argb, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
         return;

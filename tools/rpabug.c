@@ -1,7 +1,7 @@
 /*
  * rpabug - ReadPixelArray(RECTFMT_ARGB) from a 16-bit bitmap, at widths 1
- * to 8: each read is checked against what WritePixelArray wrote (and
- * against the bitmap's own memory, which is right).
+ * to 8, then RECTFMT_RAW at the same widths: each read is checked against
+ * what WritePixelArray wrote (and the bitmap's own memory, which is right).
  *
  * Seen with rtg.library 43.787 (6.6.2026), cybergraphics.library 42.7, on
  * a 16-bit (RGB16) Workbench: widths that are a multiple of 4 read back
@@ -20,6 +20,10 @@
 #include <proto/graphics.h>
 #include <proto/cybergraphics.h>
 #include <stdio.h>
+
+#ifndef RECTFMT_RAW
+#define RECTFMT_RAW 5                   /* the bitmap's own pixels (CyberGraphX 4; not in the NDK) */
+#endif
 
 struct Library *CyberGfxBase;
 
@@ -75,6 +79,28 @@ int main(void)
         for (i = 0; i < w && (got[i] & 0xFFFFFF) == want[i]; i++)
             ;
         if (i < w || got[w] != 0xEEEEEEEE) {
+            printf("   WRONG (pixel %lu)", i);
+            bugs++;
+        } else {
+            printf("   ok");
+        }
+        printf("\n");
+    }
+    /* the same widths in RECTFMT_RAW: the bitmap's own 16-bit pixels, as
+     * in memory (no conversion) */
+    for (w = 1; w <= 8; w++) {
+        UWORD r16[16];
+        ULONG n;
+        for (i = 0; i < 16; i++)
+            r16[i] = 0xEEEE;
+        n = ReadPixelArray(r16, 0, 0, w * 2, &rp, 0, 0, w, 1, RECTFMT_RAW);
+        WaitBlit();
+        printf("RAW width %lu (said %lu):", w, n);
+        for (i = 0; i < w; i++)
+            printf(" %04x", r16[i]);
+        for (i = 0; i < w && r16[i] == raw[i]; i++)
+            ;
+        if (i < w || r16[w] != 0xEEEE) {
             printf("   WRONG (pixel %lu)", i);
             bugs++;
         } else {
