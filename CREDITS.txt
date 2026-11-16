@@ -159,14 +159,15 @@ Libs/ac3.library and Libs/ac3fpu.library, which decode AC-3 (Dolby
 Digital) sound, are liba52 0.8.0 (Aaron Holtzman, Michel Lespinasse and
 others; VideoLAN; its AUTHORS file is in its source) built as Exec
 libraries: ac3.library its integer build, ac3fpu.library its floating-
-point build for a 68040 or 68060's FPU. liba52 and the libraries are
-under the GNU General Public License, version 2 or later
-(Licences/ac3.library-GPL-2.txt); their complete source is src/ac3lib
-and extras/liba52 in AmigaMCE's source (what was changed: extras/liba52/
-CHANGES). Their interface (src/ac3lib/include, ac3_lib.sfd, ac3.doc) is
-MIT, for any program. AmigaMCE opens one at run time, through that
-interface, only for a video's AC3 the ZZ9000 will not decode; none of
-their code is in AmigaMCE.
+point build for a 68040 or 68060's FPU. The libraries are their own
+project (extras/ac3, https://github.com/luvwagn/ac3.library): liba52 is
+under the GNU General Public License, version 2 or later, the libraries
+version 3 or later (Licences/ac3.library.txt), their source at that
+address, not in this archive (what was changed in liba52:
+third_party/liba52/CHANGES there). Their interface (include/,
+ac3_lib.sfd, ac3.doc) is MIT, for any program. AmigaMCE opens one at run
+time, through that interface, only for a video's AC3 the ZZ9000 will not
+decode; none of their code is in AmigaMCE.
 
 FLAC (Plex tracks as stored, and the files in Music folders) is decoded by
 flacdec.library where it is installed; it is not included in the archive.

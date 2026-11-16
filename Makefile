@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Isrc/ac3lib/include -Iextras/mpegv/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Iextras/ac3/include -Iextras/mpegv/include \
           -Ibuild -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
@@ -111,7 +111,7 @@ build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
 # four frames of AC-3 (5.1, 448 kbit/s: a DVD's kind) that stream.c times
 # each AC-3 library on, to use the faster here (an FPU's build is not
 # always: an emulator without its JIT's FPU)
-build/ac3probe.h: tests/fixtures/ac3/5.1-448k.ac3
+build/ac3probe.h: extras/ac3/tests/fixtures/5.1-448k.ac3
 	@mkdir -p build
 	@echo "  GEN   $@"
 	@$(PYTHON) -c "import sys; d=open(sys.argv[1],'rb').read()[:4*1792]; \
@@ -170,8 +170,8 @@ hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
 check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(SQLIB) $(MPEGVLIB) $(JDT)
 	@$(PYTHON) tools/check_libs.py \
 		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
-		$(AC3LIB)=src/ac3lib/ac3lib.c=$(call hdrver,src/ac3lib/include/libraries/ac3.h,AC3VERSION) \
-		$(AC3FPULIB)=src/ac3lib/ac3lib.c=$(call hdrver,src/ac3lib/include/libraries/ac3.h,AC3VERSION) \
+		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
+		$(AC3FPULIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(SQLIB)=src/sqlib/amcesql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
 		$(JDT)=datatypes/jpeg/amcejpeg.c
@@ -209,7 +209,7 @@ LC_FLAGS  = --target=m68k-unknown-linux-gnu -mcpu=68020 -fpack-struct=2 -nostdin
             -Xanalyzer -analyzer-disable-checker=deadcode \
             -D__AMIGA__ -Damigaos -D__mc68020__ \
             -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Isrc/dvdlib/include \
-            -Isrc/ac3lib/include -Iextras/mpegv/include \
+            -Iextras/ac3/include -Iextras/mpegv/include \
             -isystem $(TOOLROOT)/m68k-amigaos/libnix/include \
             -isystem $(wildcard $(TOOLROOT)/lib/gcc/m68k-amigaos/*/include) \
             -isystem $(TOOLROOT)/m68k-amigaos/ndk-include -isystem $(TOOLROOT)/m68k-amigaos/sys-include \
@@ -419,87 +419,24 @@ test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 		&& echo "  CHECK a DVD's film (68020, dvdplay.c) ok" || (cat ../test-dvdplay.txt; exit 1)
 
 # ac3.library and ac3fpu.library: A/52 (Dolby Digital, AC-3) audio decoded
-# to 16-bit PCM by liba52 0.8.0 (extras/liba52, GPL-2.0-or-later) behind
-# an interface of their own (src/ac3lib/include and ac3_lib.sfd, MIT), for
-# any program to open at run time, as mpega.library is. ac3.library is
-# liba52's integer build (68020 and up, its multiplies one MULS.L each);
-# ac3fpu.library its floating-point build for a 68040 or 68060's FPU. Not
-# part of AmigaMCE's archive; a release of them carries their source
-# (src/ac3lib/README).
-AC3LIB     = build/ac3lib/ac3.library
-AC3FPULIB  = build/ac3lib/ac3fpu.library
-A52_SRC    = $(addprefix extras/liba52/liba52/,bitstream.c imdct.c bit_allocate.c parse.c downmix.c)
-AC3_SRC    = $(A52_SRC) src/ac3lib/ac3lib.c
-AC3_HDR    = $(wildcard extras/liba52/liba52/*.h extras/liba52/include/*.h src/ac3lib/port/*.h \
-               src/ac3lib/include/*/*.h)
-AC3_FLAGS  = -std=gnu11 -Wall -Wno-unused-function -include src/ac3lib/port/config.h -Isrc/ac3lib/port \
-             -Iextras/liba52/include -Iextras/liba52/liba52 -Isrc/ac3lib/include
-AC3_CC     = $(CC) -O2 -noixemul -nostartfiles -fomit-frame-pointer
-AC3_INT    = -m68020 -msoft-float -DLIBA52_FIXED -DA52_MUL64 -DA52_IMDCT_TABLES='"imdct_int.h"'
-AC3_FPU    = -m68040 -mhard-float -DA52_IMDCT_TABLES='"imdct_fpu.h"'
-AC3_TABLES = build/ac3lib/imdct_int.h build/ac3lib/imdct_fpu.h
-# liba52's IMDCT tables, computed on the build host (src/ac3lib/mktables.c):
-# none of them on the Amiga, so no maths library and no wait at Ac3Open
-build/ac3lib/imdct_int.h: src/ac3lib/mktables.c extras/liba52/liba52/imdct.c $(AC3_HDR)
-	@mkdir -p build/ac3lib
-	@echo "  GEN   $@"
-	@$(HOSTCC) -O2 -w -DLIBA52_FIXED -DA52_IMDCT_DUMP $(AC3_FLAGS) -o build/ac3lib/mktables_int \
-		src/ac3lib/mktables.c extras/liba52/liba52/imdct.c -lm
-	@build/ac3lib/mktables_int > $@
-build/ac3lib/imdct_fpu.h: src/ac3lib/mktables.c extras/liba52/liba52/imdct.c $(AC3_HDR)
-	@mkdir -p build/ac3lib
-	@echo "  GEN   $@"
-	@$(HOSTCC) -O2 -w -DA52_IMDCT_DUMP $(AC3_FLAGS) -o build/ac3lib/mktables_fpu \
-		src/ac3lib/mktables.c extras/liba52/liba52/imdct.c -lm
-	@build/ac3lib/mktables_fpu > $@
-build/ac3lib/obj/extras/%.o: AC3_UPSTREAM = -w
-build/ac3lib/obj/%.o: %.c $(AC3_HDR) $(AC3_TABLES)
-	@mkdir -p $(dir $@)
-	@echo "  CC    $< (ac3)"
-	@$(AC3_CC) $(AC3_INT) $(AC3_FLAGS) $(AC3_UPSTREAM) -Ibuild/ac3lib -Isrc/sqlib -c -o $@ $<
-build/ac3lib/fpu/extras/%.o: AC3_UPSTREAM = -w
-build/ac3lib/fpu/%.o: %.c $(AC3_HDR) $(AC3_TABLES)
-	@mkdir -p $(dir $@)
-	@echo "  CC    $< (ac3fpu)"
-	@$(AC3_CC) $(AC3_FPU) $(AC3_FLAGS) $(AC3_UPSTREAM) -Ibuild/ac3lib -Isrc/sqlib -c -o $@ $<
-build/ac3lib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/ac3lib/ac3lib.c Makefile
-	@mkdir -p build/ac3lib
-	@echo "  CC    $< (ac3)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/ac3lib/ac3lib.c) -c -o $@ $<
-$(AC3LIB): build/ac3lib/libinit.o $(patsubst %.c,build/ac3lib/obj/%.o,$(AC3_SRC))
-	@echo "  LD    $@"
-	@$(AC3_CC) $(AC3_INT) -o $@.dbg $^ -lamiga
-	@$(STRIP) -o $@ $@.dbg
-$(AC3FPULIB): build/ac3lib/libinit.o $(patsubst %.c,build/ac3lib/fpu/%.o,$(AC3_SRC))
-	@echo "  LD    $@"
-	@$(AC3_CC) $(AC3_FPU) -o $@.dbg $^ -lamiga
-	@$(STRIP) -o $@ $@.dbg
+# to 16-bit PCM by liba52 0.8.0, for any program to open at run time, as
+# mpega.library is: their own project (extras/ac3, a git submodule:
+# github.com/luvwagn/ac3.library, GPL-3: its source there, not in the
+# archive). ac3.library is liba52's integer build (68020 and up, its
+# multiplies one MULS.L each); ac3fpu.library its floating-point build for
+# a 68040 or 68060's FPU. Built by their own Makefile; its test (the
+# fixtures' CRCs on the host and through ac3.library on a 68020 under
+# vamos) is part of make test.
+AC3LIB     = extras/ac3/build/ac3.library
+AC3FPULIB  = extras/ac3/build/ac3fpu.library
+AC3_DEPS   = $(wildcard extras/ac3/src/*.c extras/ac3/src/*.h extras/ac3/src/port/*.h \
+               extras/ac3/include/*/*.h extras/ac3/third_party/liba52/liba52/*.[ch] \
+               extras/ac3/third_party/liba52/include/*.h) extras/ac3/Makefile
+$(AC3LIB) $(AC3FPULIB) &: $(AC3_DEPS)
+	@$(MAKE) --no-print-directory -C extras/ac3 build/ac3.library build/ac3fpu.library
 ac3lib: $(AC3LIB) $(AC3FPULIB)
-
-# its test: the fixtures (tests/mkac3.sh) decoded in each mode, on the host
-# (the same C, its 64-bit multiplies in C) and on a 68020 through
-# ac3.library: the samples' CRCs alike, and as tests/fixtures/ac3/expected.txt
-AC3_FIX    = $(sort $(wildcard tests/fixtures/ac3/*.ac3))
-build/ac3/ac3_host: tests/ac3_test.c $(AC3_SRC) $(AC3_HDR) build/ac3lib/imdct_int.h tests/host/exec/types.h
-	@mkdir -p build/ac3
-	@echo "  CC    $@"
-	@$(HOSTCC) -O2 -DLIBA52_FIXED -DA52_MUL64 -DA52_IMDCT_TABLES='"imdct_int.h"' $(AC3_FLAGS) \
-		-Wno-unused-variable -Ibuild/ac3lib -Itests/host -o $@ tests/ac3_test.c $(AC3_SRC)
-build/ac3/ac3_68k: tests/ac3_test.c src/ac3lib/include/libraries/ac3.h src/ac3lib/include/inline/ac3.h $(AC3LIB)
-	@mkdir -p build/ac3/prog/Libs
-	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Isrc/ac3lib/include -o $@ tests/ac3_test.c
-	@cp $(AC3LIB) build/ac3/prog/Libs/
-	@cp $@ build/ac3/prog/
-test-ac3: build/ac3/ac3_host build/ac3/ac3_68k $(AC3_FIX)
-	@build/ac3/ac3_host $(AC3_FIX) > build/ac3/host.txt
-	@cmp -s build/ac3/host.txt tests/fixtures/ac3/expected.txt \
-		&& echo "  CHECK AC-3 decoding (host) ok" || (diff build/ac3/host.txt tests/fixtures/ac3/expected.txt; exit 1)
-	@cp $(AC3_FIX) build/ac3/prog/
-	@cd build/ac3 && vamos -C 68020 -m 8192 -V prog:$(abspath build/ac3/prog) prog:ac3_68k \
-		$(addprefix prog:,$(notdir $(AC3_FIX))) > 68k.txt 2> 68k-err.txt; grep '\.ac3 ' 68k.txt > 68k-crc.txt; \
-		cmp -s 68k-crc.txt ../../tests/fixtures/ac3/expected.txt \
-		&& echo "  CHECK AC-3 decoding (68020, ac3.library) ok" || (cat 68k.txt 68k-err.txt; exit 1)
+test-ac3: $(AC3LIB) $(AC3FPULIB)
+	@$(MAKE) --no-print-directory -C extras/ac3 test
 
 # a beets library (beets.c) read on a 68020 through amcesql.library, from
 # a small library made for it (tests/mkbeets.py)
@@ -674,15 +611,15 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@# internal test builds: a public release must carry its source too
 	@cp $(DVDLIB) $(LHA_DIR)/Libs/
 	@cp extras/libdvd/libdvdnav/COPYING $(LHA_DIR)/Licences/amcedvd.library-GPL-2.txt
-	@# ac3.library and ac3fpu.library (AC-3 sound: liba52, GPL-2.0-or-later),
-	@# for a video's AC3 where the ZZ9000 will not decode it; the same: a
-	@# public release must carry their source too
+	@# ac3.library and ac3fpu.library (AC-3 sound: liba52, GPL-3; their
+	@# source at github.com/luvwagn/ac3.library), extras/ac3, for a video's
+	@# AC3 where the ZZ9000 will not decode it
 	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
+	@cp extras/ac3/LICENSE $(LHA_DIR)/Licences/ac3.library.txt
 	@# mpegv.library (MPEG-1 and MPEG-2 by the CPU: libmpeg2, GPL-3; its source
 	@# at github.com/luvwagn/mpegv.library), extras/mpegv
 	@cp $(MPEGVLIB) $(LHA_DIR)/Libs/
 	@cp extras/mpegv/LICENSE $(LHA_DIR)/Licences/mpegv.library.txt
-	@cp extras/liba52/COPYING $(LHA_DIR)/Licences/ac3.library-GPL-2.txt
 	@cp extras/sqlite/LICENSE.md $(LHA_DIR)/Licences/SQLite.txt
 	@# Mozilla's root certificates (certifi's cacert.pem, MPL 2.0): what
 	@# HTTPS checks a server's certificate with (tls.c), AmiSSL's own or not
@@ -708,5 +645,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/dvdlib build/dvd build/ac3lib build/ac3 build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/dvdlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

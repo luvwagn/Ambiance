@@ -17,7 +17,7 @@ amce_open_own_lib's call) must be no newer than the library. mpegv.library
 a real Amiga while every test passed.
 
 Usage: check_libs.py library=source[=wanted] ...
-  library  the built file (build/ac3lib/ac3.library)
+  library  the built file (extras/ac3/build/ac3.library)
   source   the C file with LibVersion, LibRevision and the $VER string
   wanted   the version AmigaMCE asks for (optional)
 Exit 1 if any disagree.

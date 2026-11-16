@@ -433,13 +433,13 @@ source: `src/dvdlib`, `extras/libdvd` and the Makefile's dvdlib part go
 with any distributed archive that holds it. See `src/dvdlib/README`.
 
 AC-3 sound the ZZ9000 will not decode is decoded by `ac3.library` or
-`ac3fpu.library`: liba52 0.8.0 (VideoLAN, `extras/liba52/`, changed for
-these libraries: `extras/liba52/CHANGES`) built as Exec libraries
-(`src/ac3lib/`, `make ac3lib`), for any program, as mpega.library is.
-They are GPL-2.0-or-later, opened at run time through an interface of
-their own (`src/ac3lib/include`, MIT); their source goes with any
-archive that holds them, as `amcedvd.library`'s does. See
-`src/ac3lib/README`.
+`ac3fpu.library`: liba52 0.8.0 (VideoLAN) built as Exec libraries, for
+any program, as mpega.library is. They are their own project
+(`extras/ac3`, a git submodule:
+[luvwagn/ac3.library](https://github.com/luvwagn/ac3.library),
+GPL-3.0-or-later, its source there, not in the archive), built by its
+own Makefile (`make ac3lib`, tested by `make test`), and opened at run
+time through an interface of their own (`extras/ac3/include`, MIT).
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which

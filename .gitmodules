@@ -1,3 +1,6 @@
 [submodule "extras/mpegv"]
 	path = extras/mpegv
 	url = https://github.com/luvwagn/mpegv.library.git
+[submodule "extras/ac3"]
+	path = extras/ac3
+	url = https://github.com/luvwagn/ac3.library.git
