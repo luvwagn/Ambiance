@@ -61,6 +61,7 @@ static struct Library *ModPlugBase;
 #define MP_GetName(f) LP1(60, STRPTR, ModPlug_GetName, APTR, f, a1, , ModPlugBase)
 #define MP_GetLength(f) LP1(66, LONG, ModPlug_GetLength, APTR, f, a1, , ModPlugBase)
 #define MP_Seek(f, ms) LP2NR(72, ModPlug_Seek, APTR, f, a1, LONG, ms, d1, , ModPlugBase)
+#define MP_SetMasterVolume(f, v) LP2NR(96, ModPlug_SetMasterVolume, APTR, f, a1, ULONG, v, d1, , ModPlugBase)
 #define MP_GetSettings(h, s) LP2NR(78, ModPlug_GetSettings, APTR, h, a1, APTR, s, a2, , ModPlugBase)
 #define MP_SetSettings(h, s) LP2NR(84, ModPlug_SetSettings, APTR, h, a1, APTR, s, a2, , ModPlugBase)
 #define MP_GetSpeed(f) LP1(102, LONG, ModPlug_GetCurrentSpeed, APTR, f, a1, , ModPlugBase)
@@ -108,6 +109,8 @@ static struct {
     volatile BOOL quit, ended, running, paused;
     volatile ULONG mixed;           /* samples mixed (the time played) */
     volatile UBYTE peak_l, peak_r;
+    volatile UWORD first_pk;        /* the loudest sample since Play (its first seconds logged) */
+    ULONG first_t;                  /* when Play started it (0: logged) */
     volatile ULONG play_t;          /* when the half playing now began (spectrum) */
     struct Interrupt aint;
     struct Interrupt *old_aint;
@@ -167,6 +170,10 @@ static void mix_half(int half)
         }
     }
     mx.mixed += (ULONG)n;
+    if (pl > mx.first_pk)
+        mx.first_pk = pl;
+    if (pr > mx.first_pk)
+        mx.first_pk = pr;
     if ((pl >> 8) > mx.peak_l)
         mx.peak_l = (UBYTE)(pl >> 8);
     if ((pr >> 8) > mx.peak_r)
@@ -346,6 +353,11 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
         amce_strlcpy(mx.title, (const char *)name, sizeof(mx.title));
     amce_strlcpy(mx.kind, type_name(MP_GetModuleType(mx.file)), sizeof(mx.kind));
     mx.length_ms = (ULONG)MP_GetLength(mx.file);
+    /* louder: libmodplug's own level leaves a 4-channel module's peaks
+     * near -10 dB (WeNeedJungle: 10560 of 32767), its quiet passages
+     * 30 dB down, and Paula's 8 bits only the top of them. 384 is twice
+     * its 128 (6 dB), 256 one and a half (more channels: more to add up) */
+    MP_SetMasterVolume(mx.file, MP_NumChannels(mx.file) <= 4 ? 384 : 256);
     /* the sample names (instruments' where it has them) */
     mx.nnames = 0;
     n = MP_NumInstruments(mx.file);
@@ -549,6 +561,8 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     }
     mx.quit = mx.ended = mx.paused = FALSE;
     mx.sig = -1;
+    mx.first_pk = 0;
+    mx.first_t = time_ms();
     mx.master = master;
     mx.proc = CreateNewProcTags(NP_Entry, (ULONG)mixer_main, NP_Name, (ULONG)"AmigaMCE mixer",
                                 NP_Priority, 5, NP_StackSize, 32768, TAG_DONE);
@@ -710,6 +724,18 @@ void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r)
     *lev_l = mx.peak_l;
     *lev_r = mx.peak_r;
     mx.peak_l = mx.peak_r = 0;
+    if (mx.first_t && mx.running && !mx.paused && time_ms() - mx.first_t >= 5000) {
+        /* how loud its first seconds were mixed, and the volume they had:
+         * a Play heard quieter than another comes out here */
+        static const char *const outs[] = { "Paula 8-bit", "Paula 14-bit", "AHI" };
+        char m[140];
+        sprintf(m, "from %lu ms, 5 s: loudest sample %lu of 32767, %s at volume %lu of 64",
+                (unsigned long)(s->elapsed_ms > 5000 ? s->elapsed_ms - 5000 : 0),
+                (unsigned long)mx.first_pk, outs[mx.out],
+                (unsigned long)(mx.out == MXO_AHI ? mx.avol : mx.master));
+        amce_log("modplug", m);
+        mx.first_t = 0;
+    }
 }
 
 BOOL mx_loaded(void) { return mx.file != NULL; }
