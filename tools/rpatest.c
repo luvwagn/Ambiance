@@ -7,7 +7,8 @@
  * AmigaMCE's diagnostic for its blended text (ReadPixelArray's colours
  * coming back wrong on an emulated ZZ9000's 16-bit Workbench).
  *
- *   rpatest            writes to the console and to rpatest.log here
+ *   rpatest            writes to the console and to rpatest.log here (or,
+ *                      where that cannot be written, T:rpatest.log)
  *
  * MIT, (c) 2026 Brian King. Build: m68k-amigaos-gcc -O2 -m68020 -noixemul
  *   -o rpatest tools/rpatest.c
@@ -109,27 +110,37 @@ static void raw_row(struct BitMap *bm, WORD x, WORD y, int n, const char *what, 
 {
     APTR base = NULL, lk;
     ULONG bpr = 0, bpp = 0, fmt = 0, i, k;
+    UBYTE raw[N * 4];
     if (!bm || !GetCyberMapAttr(bm, CYBRMATTR_ISCYBERGFX)) {
         say("  raw (%s): not a CyberGraphX bitmap\n", what);
         return;
     }
+    /* copied out while locked, said after: nothing that draws (the
+     * console's text) while a bitmap is locked, or it waits for ever */
+    memset(raw, 0, sizeof(raw));
     lk = LockBitMapTags(bm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
                         LBMI_BYTESPERPIX, (ULONG)&bpp, LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE);
+    if (lk) {
+        if (base && bpp >= 1 && bpp <= 4)
+            for (i = 0; i < (ULONG)n; i++)
+                for (k = 0; k < bpp; k++)
+                    raw[i * 4 + k] = ((const UBYTE *)base)[(ULONG)y * bpr + (x + i) * bpp + k];
+        UnLockBitMap(lk);
+    }
     if (!lk) {
         say("  raw (%s): LockBitMapTags failed\n", what);
         return;
     }
     say("  raw (%s): base %08lx, %lu bytes a row, %lu a pixel, %s\n", what, (ULONG)base, bpr, bpp,
         fmtname(fmt));
-    for (i = 0; i < (ULONG)n && base; i++) {
-        const UBYTE *p = (const UBYTE *)base + (ULONG)y * bpr + (x + i) * bpp;
+    for (i = 0; i < (ULONG)n && base && bpp <= 4; i++) {
+        const UBYTE *p = raw + i * 4;
         ULONG d = decode(p, fmt);
         say("    %-6s bytes", names[i]);
         for (k = 0; k < bpp; k++)
             say(" %02lx", (ULONG)p[k]);
         say("  = %06lx%s\n", d, want ? (near(d, want[i]) ? "  ok" : "  WRONG") : "");
     }
-    UnLockBitMap(lk);
 }
 
 static void show(const char *what, const ULONG *got, const ULONG *want, BOOL rgb3, BOOL rgba)
@@ -232,7 +243,9 @@ int main(void)
     struct Screen *scr;
     struct Window *win;
     ULONG id;
-    logf = Open((CONST_STRPTR)"rpatest.log", MODE_NEWFILE);
+    static const char *logname = "rpatest.log";
+    if (!(logf = Open((CONST_STRPTR)logname, MODE_NEWFILE)))
+        logf = Open((CONST_STRPTR)(logname = "T:rpatest.log"), MODE_NEWFILE);
     if (!(CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 40))) {
         say("rpatest: no cybergraphics.library 40\n");
         goto out;
@@ -299,7 +312,7 @@ int main(void)
         say("\n(no window could be opened)\n");
     }
     UnlockPubScreen(NULL, scr);
-    say("\ndone: rpatest.log\n");
+    say("\ndone: %s\n", logf ? logname : "(no log could be written)");
 out:
     if (CyberGfxBase)
         CloseLibrary(CyberGfxBase);
