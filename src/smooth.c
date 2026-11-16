@@ -47,6 +47,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <graphics/view.h>
+#include <graphics/clip.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
@@ -123,6 +124,7 @@ struct Smooth {
     BOOL alpha;                 /* this box blended (cbuf: coverage 0-15) */
     ULONG *argb;                /* its pixels, read and written */
     ULONG argb_size;
+    BOOL direct_said;           /* (alpha_direct's first: logged) */
 };
 
 /* coverage 0..15 -> how much ink, 0..15, blended: the faintest fringe
@@ -547,7 +549,9 @@ static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h, BOOL opaque)
     ULONG need;
     /* blended: over what is there where ReadPixelArray can be trusted,
      * else only an opaque box (from its background's colour) */
-    s->alpha = s->alpha_ok && alpha_allowed && !s->chunky && (opaque || s->read_order < 2);
+    s->alpha = s->alpha_ok && alpha_allowed && !s->chunky;
+    (void)opaque;   /* (masks_end blends it in the bitmap's own pixels, else by Read/WritePixelArray
+                       where ReadPixelArray can be trusted, else draws it as an opaque box) */
     if (s->alpha) {
         need = (ULONG)((w + 3) & ~3) * h * 4;      /* (read 4 pixels at a time: see masks_end) */
         if (need > s->argb_size) {
@@ -635,6 +639,139 @@ static void masks_put(struct Smooth *s, const UBYTE *d, UWORD w, UWORD h, WORD x
     s->used = used;
 }
 
+/* ------------------------------------------------------------ blended, in the bitmap's own pixels */
+
+/* a pixel of format fmt at p as r, g, b (0-255 each, the low bits as
+ * stored: 5 or 6 bits shifted up) */
+static BOOL px_get(ULONG fmt, const UBYTE *p, ULONG *r, ULONG *gg, ULONG *b)
+{
+    ULONG v;
+    switch (fmt) {
+    case PIXFMT_RGB16: case PIXFMT_BGR16: case PIXFMT_RGB15: case PIXFMT_BGR15:
+        v = (ULONG)p[0] << 8 | p[1];
+        break;
+    case PIXFMT_RGB16PC: case PIXFMT_BGR16PC: case PIXFMT_RGB15PC: case PIXFMT_BGR15PC:
+        v = (ULONG)p[1] << 8 | p[0];
+        break;
+    case PIXFMT_RGB24:  *r = p[0]; *gg = p[1]; *b = p[2]; return TRUE;
+    case PIXFMT_BGR24:  *r = p[2]; *gg = p[1]; *b = p[0]; return TRUE;
+    case PIXFMT_ARGB32: *r = p[1]; *gg = p[2]; *b = p[3]; return TRUE;
+    case PIXFMT_BGRA32: *r = p[2]; *gg = p[1]; *b = p[0]; return TRUE;
+    case PIXFMT_RGBA32: *r = p[0]; *gg = p[1]; *b = p[2]; return TRUE;
+    default: return FALSE;
+    }
+    if (fmt == PIXFMT_RGB16 || fmt == PIXFMT_BGR16 || fmt == PIXFMT_RGB16PC || fmt == PIXFMT_BGR16PC) {
+        *r = (v >> 11) << 3;
+        *gg = ((v >> 5) & 63) << 2;
+    } else {
+        *r = ((v >> 10) & 31) << 3;
+        *gg = ((v >> 5) & 31) << 3;
+    }
+    *b = (v & 31) << 3;
+    if (fmt == PIXFMT_BGR16 || fmt == PIXFMT_BGR16PC || fmt == PIXFMT_BGR15 || fmt == PIXFMT_BGR15PC) {
+        ULONG t = *r;
+        *r = *b;
+        *b = t;
+    }
+    return TRUE;
+}
+
+static void px_put(ULONG fmt, UBYTE *p, ULONG r, ULONG gg, ULONG b)
+{
+    ULONG v;
+    switch (fmt) {
+    case PIXFMT_RGB24:  p[0] = (UBYTE)r; p[1] = (UBYTE)gg; p[2] = (UBYTE)b; return;
+    case PIXFMT_BGR24:  p[0] = (UBYTE)b; p[1] = (UBYTE)gg; p[2] = (UBYTE)r; return;
+    case PIXFMT_ARGB32: p[0] = 0xFF; p[1] = (UBYTE)r; p[2] = (UBYTE)gg; p[3] = (UBYTE)b; return;
+    case PIXFMT_BGRA32: p[0] = (UBYTE)b; p[1] = (UBYTE)gg; p[2] = (UBYTE)r; p[3] = 0xFF; return;
+    case PIXFMT_RGBA32: p[0] = (UBYTE)r; p[1] = (UBYTE)gg; p[2] = (UBYTE)b; p[3] = 0xFF; return;
+    default: break;
+    }
+    if (fmt == PIXFMT_BGR16 || fmt == PIXFMT_BGR16PC || fmt == PIXFMT_BGR15 || fmt == PIXFMT_BGR15PC) {
+        ULONG t = r;
+        r = b;
+        b = t;
+    }
+    if (fmt == PIXFMT_RGB16 || fmt == PIXFMT_BGR16 || fmt == PIXFMT_RGB16PC || fmt == PIXFMT_BGR16PC)
+        v = (r >> 3) << 11 | (gg >> 2) << 5 | (b >> 3);
+    else
+        v = (r >> 3) << 10 | (gg >> 3) << 5 | (b >> 3);
+    if (fmt == PIXFMT_RGB16PC || fmt == PIXFMT_BGR16PC || fmt == PIXFMT_RGB15PC || fmt == PIXFMT_BGR15PC) {
+        p[0] = (UBYTE)v;
+        p[1] = (UBYTE)(v >> 8);
+    } else {
+        p[0] = (UBYTE)(v >> 8);
+        p[1] = (UBYTE)v;
+    }
+}
+
+/* The box blended straight in the bitmap's memory, in its own pixels (no
+ * ReadPixelArray, no ARGB on the way): where the RastPort's layer is the
+ * only one on its bitmap, at its corner, with no clip region (AmigaMCE's
+ * window buffer, its double buffers), so its pixels are the bitmap's.
+ * FALSE: not so here (the caller goes by Read/WritePixelArray). Nothing
+ * else is drawn while the bitmap is locked. */
+static BOOL alpha_direct(struct Smooth *s, struct RastPort *rp, WORD x, WORD y, UWORD w, UWORD h,
+                         const ULONG *f, UBYTE bg, BOOL opaque)
+{
+    struct Layer *l = rp->Layer;
+    struct BitMap *bm = rp->BitMap;
+    APTR lk, base = NULL;
+    ULONG bpr = 0, bpp = 0, fmt = 0, r, gg, b, k;
+    ULONG lut[16][3];
+    const UBYTE *c = s->cbuf;
+    UWORD i, j;
+    if (!bm || x < 0 || y < 0)
+        return FALSE;
+    if (l && (l->ClipRegion || l->front || l->back || l->bounds.MinX || l->bounds.MinY ||
+              x + w - 1 > l->bounds.MaxX || y + h - 1 > l->bounds.MaxY))
+        return FALSE;
+    if ((ULONG)(x + w) > GetBitMapAttr(bm, BMA_WIDTH) || (ULONG)(y + h) > GetBitMapAttr(bm, BMA_HEIGHT) ||
+        !GetCyberMapAttr(bm, CYBRMATTR_ISCYBERGFX))
+        return FALSE;
+    if (opaque)
+        for (k = 0; k < 16; k++) {
+            int ch;
+            for (ch = 0; ch < 3; ch++) {
+                LONG bc = (LONG)ui_rgb(bg, ch);
+                lut[k][ch] = (ULONG)(bc + ((LONG)f[ch] - bc) * (LONG)k / 15);
+            }
+        }
+    if (!(lk = LockBitMapTags(bm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
+                              LBMI_BYTESPERPIX, (ULONG)&bpp, LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE)))
+        return FALSE;
+    if (!base || bpp < 2 || bpp > 4 || !px_get(fmt, (const UBYTE *)base, &r, &gg, &b)) {
+        UnLockBitMap(lk);
+        return FALSE;
+    }
+    for (j = 0; j < h; j++, c += s->cmod) {
+        UBYTE *p = (UBYTE *)base + (ULONG)(y + j) * bpr + (ULONG)x * bpp;
+        for (i = 0; i < w; i++, p += bpp) {
+            ULONG a = c[i];
+            if (opaque) {
+                px_put(fmt, p, lut[a][0], lut[a][1], lut[a][2]);
+                continue;
+            }
+            if (!a)
+                continue;
+            px_get(fmt, p, &r, &gg, &b);
+            r = (ULONG)((LONG)r + ((LONG)f[0] - (LONG)r) * (LONG)a / 15);
+            gg = (ULONG)((LONG)gg + ((LONG)f[1] - (LONG)gg) * (LONG)a / 15);
+            b = (ULONG)((LONG)b + ((LONG)f[2] - (LONG)b) * (LONG)a / 15);
+            px_put(fmt, p, r, gg, b);
+        }
+    }
+    UnLockBitMap(lk);
+    if (!s->direct_said) {
+        char m[100];
+        s->direct_said = TRUE;
+        sprintf(m, "text blended straight in the bitmap's own pixels (format %lu, %lu bytes a pixel)",
+                (unsigned long)fmt, (unsigned long)bpp);
+        amce_log("smooth style", m);
+    }
+    return TRUE;
+}
+
 /* Stamp the masks at (x, y). Opaque: the uncovered pixels of the box get
  * bg too, in the same pass, so the text needs no clearing first. */
 static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, UWORD h,
@@ -643,7 +780,7 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
     gfx_dirty();
     struct RastPort *rp = g->rp;
     UBYTE lv;
-    if (s->alpha && fg < NUM_UI_PENS && bg < NUM_UI_PENS && (opaque || s->read_order < 2)) {
+    if (s->alpha && fg < NUM_UI_PENS && bg < NUM_UI_PENS) {
         /* blended: each pixel that far from what is under it (an opaque
          * box: from bg's colour) to fg's, in sixteen steps */
         ULONG *px = s->argb, k, f[3];
@@ -652,6 +789,10 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         int ch;
         for (ch = 0; ch < 3; ch++)
             f[ch] = ui_rgb(fg, ch);
+        if (alpha_direct(s, rp, x, y, w, h, f, bg, opaque))
+            return;
+        if (!opaque && s->read_order >= 2)
+            goto fallback;                  /* (not readable here: an opaque box, below) */
         if (opaque) {
             ULONG lut[16];
             for (k = 0; k < 16; k++) {
@@ -704,8 +845,10 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         WritePixelArray(s->argb, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
         return;
     }
+fallback:
     if (s->alpha) {
-        /* (a colour not of the UI's: the steps as the chunky path's) */
+        /* (a colour not of the UI's, or nothing to blend over: the steps
+         * as the chunky path's, an opaque box) */
         UBYTE *c = s->cbuf;
         ULONG k, n = (ULONG)s->cmod * h;
         for (k = 0; k < n; k++)
