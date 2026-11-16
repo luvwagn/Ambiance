@@ -249,13 +249,17 @@ int main(int argc, char **argv)
             if (n > 0) {
                 packs += n / 2048;
                 dvdplay_now(dp, &now);
-                if (now.title == 2 && !now.menu)
+                if (now.title == 2 && !now.menu) {
                     mb |= 0x100;            /* (seen playing title 2) */
+                    if (dvdplay_can_chapter(dp, -1))
+                        mb |= 0x200;        /* (its first chapter: none before it) */
+                }
             }
         }
         printf("title 2: %ld packs, then event %d\n", (long)packs, ev);
         CHECK(mb & 0x100, "title 2 not played");
         CHECK(!hops0, "the press's jump given again: %ld", (long)hops0);
+        CHECK(!(mb & 0x200), "a previous chapter offered in title 2's first");
         CHECK(packs >= 140, "title 2: %ld packs", (long)packs);
         CHECK(ev == DVDP_STILL, "back at the menu: %d", ev);
     }

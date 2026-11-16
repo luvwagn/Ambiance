@@ -189,7 +189,8 @@ struct DvdInfo {
     LONG  audio, spu;       /* active streams (the DVD's numbers), -1 none */
     LONG  audio_count, spu_count;
     char  name[48];         /* the disc's title, from its volume, may be empty */
-    ULONG forbidden;        /* what the disc forbids now: DVDU_ bits */
+    ULONG forbidden;        /* what the disc forbids now: DVDU_ bits (1.6: and
+                             * DVDU_PREV_CHAPTER where there is no chapter before) */
 };
 
 /* DvdInfo.forbidden: the user operations the disc does not allow at this point */

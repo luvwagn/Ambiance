@@ -231,7 +231,8 @@ struct DvdPlay {
     volatile LONG still_s;
     volatile BOOL ev_user;                  /*   a hop the viewer asked for (a button, Menu) */
     BOOL user_req;                          /* (asked: the next hop is the viewer's) */
-    BOOL hop_done;                          /* (a jump acted on when asked: its DVDE_HOP passed over) */
+    BOOL hop_done;
+    BOOL exact_prev;                        /* (amcedvd 1.6: no previous chapter is forbidden) */                          /* (a jump acted on when asked: its DVDE_HOP passed over) */
     struct { UBYTE what; LONG a, b; } asks[8];
     volatile UBYTE ask_in, ask_out;
     volatile LONG domain, vts;
@@ -526,6 +527,8 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     /* its menus (amcedvd.library 1.2 on) */
     if (AmceDvdBase->lib_Version > 1 || AmceDvdBase->lib_Revision >= 2)
         dp->menus = DvdMenus(dp->dvd);
+    /* (1.6 on: DVDU_PREV_CHAPTER also where there is no chapter before) */
+    dp->exact_prev = AmceDvdBase->lib_Version > 1 || AmceDvdBase->lib_Revision >= 6;
     /* what plays: the film, or the programmes in order */
     DvdGetInfo(dp->dvd, &in);
     {
@@ -1197,7 +1200,9 @@ BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir)
     if (dp->nav)
         return dp->domain == DVDD_TITLE && dp->stop_ev != DVDP_END &&
                !(dp->forbidden & (dir > 0 ? DVDU_NEXT_CHAPTER : DVDU_PREV_CHAPTER)) &&
-               (dir < 0 || dp->chapter < dp->chapters);
+               (dir > 0 ? dp->chapter < dp->chapters
+                        : dp->exact_prev || dp->chapter > 1); /* (before amcedvd 1.6:
+                                                            * by its chapter number) */
     return dir > 0 ? (!dp->ended && dp->chapter < dp->chapters) || dp->idx + 1 < dp->n : TRUE;
 }
 

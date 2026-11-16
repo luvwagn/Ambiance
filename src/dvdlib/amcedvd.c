@@ -44,11 +44,11 @@
 #include "stabs.h"
 
 const char LibName[] = "amcedvd.library";
-const char LibIdString[] = "amcedvd 1.5 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+const char LibIdString[] = "amcedvd 1.6 (16.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcedvd.library 1.5 (15.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
+    "$VER: amcedvd.library 1.6 (16.11.2026) libdvdnav 7.0.0, libdvdread 7.1.1, for AmigaMCE";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 5;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there; 1.4: held only while a disc is; 1.5: DVD_JUMPED */
+const UWORD LibRevision = 6;   /* 1.1: seeks across the whole title; 1.2: DvdMenus; 1.3: cssdecrypt.library if there; 1.4: held only while a disc is; 1.5: DVD_JUMPED; 1.6: DVDU_PREV_CHAPTER where there is none */
 
 struct ExecBase *SysBase;
 int dvdp_timer_open(void);                  /* amitime.c */
@@ -58,7 +58,7 @@ void dvdp_timer_close(void);
 #define API                                 /* on the host: plain functions (tests/dvd_host.c) */
 #endif
 
-static const char version[] = "amcedvd 1.5, libdvdnav 7.0.0, libdvdread 7.1.1";
+static const char version[] = "amcedvd 1.6, libdvdnav 7.0.0, libdvdread 7.1.1";
 
 struct Dvd {
     struct dvdp_ctx ctx;                    /* first: port.c's view */
@@ -571,6 +571,14 @@ API LONG DvdGetInfo(APTR dvd, struct DvdInfo *info)
         }
     }
     info->forbidden = forbidden_bits(dvdnav_get_restrictions(d->nav));
+    {
+        /* (1.6) no previous chapter to go to: the first of its program
+         * chain, which has none before it (dvdnav_prev_pg_search would
+         * fail) */
+        vm_t *vm = d->nav->vm;
+        if (vm && vm->state.pgc && vm->state.pgN <= 1 && !vm->state.pgc->prev_pgc_nr)
+            info->forbidden |= DVDU_PREV_CHAPTER;
+    }
     LEAVE(d);
     return TRUE;
 }
