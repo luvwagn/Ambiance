@@ -665,7 +665,15 @@ struct VisCtx {                     /* where a visualization draws */
     WORD row_h, rows, gap;          /* laid out in rows (the meters'), gap between */
     WORD label_w;                   /* the meters' channel names, left */
 };
-enum { VIS_METERS, VIS_SPECTRUM, VIS_COUNT };
+enum { VIS_METERS, VIS_SPECTRUM, VIS_FLOW, VIS_COUNT };
+void vis_set_gfx(struct Gfx *g);    /* the display (whether Flow can be) */
+BOOL vis_draw_full(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, BOOL first);
+/* visflow.c: Flow, on graphics cards */
+BOOL vf_possible(const struct Gfx *g);
+BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wave, int n, const UBYTE *lev,
+             int nlev, BOOL full);
+void vf_stop(void);
+void vf_timing(ULONG *frames, ULONG *ms);
 const char *vis_name(int v);        /* N_(): translate where shown */
 void vis_select(int v);             /* (also lifts a pause for load) */
 BOOL vis_paused(void);              /* paused: the music needed the CPU */

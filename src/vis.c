@@ -6,6 +6,10 @@
  *
  *   VIS_METERS    the level meters: Paula's four channels with their
  *                 samples, or a stream's left and right (any engine)
+ *   VIS_FLOW      Flow (visflow.c): a picture carried on and on, the
+ *                 sound's wave drawn in, on graphics cards (else the
+ *                 spectrum); F on Now playing shows it on the whole
+ *                 screen
  *   VIS_SPECTRUM  HippoPlayer's spectrum analyser (MIT licence, (c) 2017
  *                 Kari-Pekka Koljonen; puu016.s and hippo_fft.s, the FFT
  *                 in hfft.s): a 128-point FFT of the sound at about 8 kHz,
@@ -37,7 +41,13 @@ static struct {
 } mt;
 static int drawn = -1;          /* the one drawn last */
 
-static const char *const names[VIS_COUNT] = { N_("Level meters"), N_("Spectrum") };
+static const char *const names[VIS_COUNT] = { N_("Level meters"), N_("Spectrum"), N_("Flow") };
+static struct Gfx *vis_g;       /* the display (Flow: a graphics card's?) */
+
+void vis_set_gfx(struct Gfx *g)
+{
+    vis_g = g;
+}
 
 const char *vis_name(int v)
 {
@@ -84,16 +94,20 @@ int vis_selected(void)
 
 int vis_active(void)
 {
-    if (sel == VIS_SPECTRUM && (mp_vis_have() & (VF_VOICES | VF_PCM)))
+    if (sel == VIS_FLOW && vis_available(VIS_FLOW))
+        return VIS_FLOW;
+    if ((sel == VIS_SPECTRUM || sel == VIS_FLOW) && (mp_vis_have() & (VF_VOICES | VF_PCM)))
         return VIS_SPECTRUM;
     return VIS_METERS;
 }
 
-/* The playing engine can give what v needs. */
+/* The playing engine can give what v needs (Flow: on a graphics card). */
 BOOL vis_available(int v)
 {
     if (v == VIS_SPECTRUM)
         return (mp_vis_have() & (VF_VOICES | VF_PCM)) != 0;
+    if (v == VIS_FLOW)
+        return (mp_vis_have() & (VF_VOICES | VF_PCM)) != 0 && vf_possible(vis_g);
     return v == VIS_METERS;
 }
 
@@ -242,6 +256,7 @@ static struct {
     APTR mem;
     WORD *sine;                 /* 1024: a sine of 32767, shifted right once */
     WORD *re, *im;              /* FFT_N each */
+    WORD wave[FFT_N];           /* the sound analysed, as it was (Flow draws it) */
     ULONG *loud;                /* LEVELS thresholds, quietest first */
     BYTE *ch;                   /* CH_BYTES a voice */
     struct VisFeed feed;
@@ -350,6 +365,7 @@ static BOOL sp_analyse(void)
     } else {
         memset(sp.re, 0, FFT_N * 2);        /* paused, or nothing yet */
     }
+    memcpy(sp.wave, sp.re, FFT_N * 2);
     hfft_window(sp.re, sp.sine);
     hfft_fft(sp.re, sp.im, sp.sine);
     loudness(sp.lev);
@@ -413,7 +429,7 @@ int vis_marker(UBYTE *lev)
 {
     ULONG now = time_ms();
     int a = vis_active(), i;
-    if (a == VIS_SPECTRUM) {
+    if (a == VIS_SPECTRUM || a == VIS_FLOW) {
         static const UBYTE band[5] = { 1, 3, 7, 17, BINS };  /* low to high, wider as they go */
         if (now - sp.lev_t > 200 && !sp_analyse())
             return -1;
@@ -459,14 +475,27 @@ void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full)
         drawn = a;
         full = TRUE;
     }
-    if (a == VIS_SPECTRUM)
+    if (a == VIS_FLOW && sp_analyse() &&
+        vf_draw(c->g, c->x, c->y, c->w, area_h(c), sp.wave, FFT_N, sp.lev, BINS, full))
+        return;
+    if (a == VIS_SPECTRUM || a == VIS_FLOW)
         spectrum_draw(c, full);
     else
         meters_draw(c, st, full);
 }
 
+/* Flow on the whole of w x h at x, y (F on Now playing): FALSE if it
+ * cannot be (not a graphics card's screen, no memory). */
+BOOL vis_draw_full(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, BOOL first)
+{
+    if (!vf_possible(g) || !sp_analyse())
+        return FALSE;
+    return vf_draw(g, x, y, w, h, sp.wave, FFT_N, sp.lev, BINS, first);
+}
+
 void vis_stop(void)
 {
+    vf_stop();
     if (sp.mem)
         FreeVec(sp.mem);
     sp.mem = NULL;
@@ -475,7 +504,11 @@ void vis_stop(void)
 
 void vis_timing(ULONG *frames, ULONG *ms100)
 {
+    ULONG ff, fm;
+    vf_timing(&ff, &fm);
+    /* (Flow analyses the sound too: its frames are the spectrum's, its
+     * time theirs and its own) */
     *frames = sp.frames;
-    *ms100 = sp.ms * 10;
+    *ms100 = (sp.ms + fm) * 10;
     sp.frames = sp.ms = 0;
 }

@@ -1761,7 +1761,7 @@ static const char *const trans_keys[VT_COUNT] = { "off", "fade", "crossfade", "t
 static const char *const trans_names[VT_COUNT] = { N_("Off"), N_("Fade"), N_("Cross-fade"),
                                                    N_("Tiles"), N_("Wipe") };
 #define DBUF_VAR  "AmigaMCE/DoubleBuffer"
-#define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters" or "spectrum" */
+#define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters", "spectrum" or "flow" */
 #define HTTPS_VAR "AmigaMCE/RadioHTTPS"
 #define NETIF_VAR "AmigaMCE/NetInterface"
 
@@ -2196,8 +2196,10 @@ static void load_style(void)
 static void load_visual(void)
 {
     char buf[16];
+    vis_set_gfx(&g);
     if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM : VIS_METERS);
+        vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM
+                   : !amce_stricmp(buf, "flow") ? VIS_FLOW : VIS_METERS);
     if (GetVar((CONST_STRPTR)"AmigaMCE/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         play_loop = buf[0] == '1';
     /* the volume as it was left (kept at quit; muted, the volume before) */
@@ -2223,9 +2225,21 @@ static void next_visual(void)
                                : _("No spectrum: this player does not say what it plays"));
         return;
     }
-    vis_select((vis_selected() + 1) % VIS_COUNT);
-    save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum" : "meters");
-    set_msg(_(vis_name(vis_selected())));
+    {
+        /* the next this screen can show (Flow on graphics cards; nothing
+         * playing yet, all of them) */
+        int v = vis_selected(), k;
+        for (k = 0; k < VIS_COUNT; k++) {
+            v = (v + 1) % VIS_COUNT;
+            if (v != VIS_FLOW || vf_possible(&g))
+                break;
+        }
+        vis_select(v);
+    }
+    save_setting(VISUAL_VAR, vis_selected() == VIS_SPECTRUM ? "spectrum"
+                 : vis_selected() == VIS_FLOW ? "flow" : "meters");
+    set_msg(vis_selected() == VIS_FLOW ? _("Flow: F shows it on the whole screen")
+            : _(vis_name(vis_selected())));
     np_visual_changed();
 }
 
@@ -6616,10 +6630,16 @@ static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen
     gfx_rrect(&g, x, y, w, h, rx, ry, pen);
 }
 
+/* Flow on the whole window or screen (F on Now playing): the page
+ * behind it drawn again when it goes (a key, a click, the fire button) */
+static BOOL np_full;
+static BOOL np_full_first;
+static ULONG np_full_since, np_full_serial;
+
 static BOOL np_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
-    return p && p->type == PT_PLAYER;
+    return p && p->type == PT_PLAYER && !np_full;
 }
 
 /* The page is up and something on it moves. */
@@ -14923,6 +14943,84 @@ static void handle_mouse(struct IntuiMessage *im)
     last_y = y;
 }
 
+/* ------------------------------------------------------------ Flow on the whole screen */
+/* F on Now playing: Flow over the whole window or screen, what plays
+ * written over it for a few seconds (and again as it changes); a key, a
+ * click or the fire button and the page is back. The music goes on as
+ * ever (np_tick between frames: the next track, a station's titles). */
+static void np_full_exit(void)
+{
+    if (!np_full)
+        return;
+    np_full = FALSE;
+    amce_log("visualisation", "Flow: the whole screen left");
+    draw_all();
+}
+
+static void np_full_enter(void)
+{
+    if (np_full)
+        return;
+    if (!mp_loaded()) {
+        set_msg(_("Nothing is playing"));
+        return;
+    }
+    if (!vis_available(VIS_FLOW)) {
+        set_msg(!vf_possible(&g) ? _("Flow needs a graphics card's screen (15 to 32-bit)")
+                                 : _("Flow: this player does not say what it plays"));
+        return;
+    }
+    np_full = TRUE;
+    np_full_first = TRUE;
+    np_full_since = time_ms();
+    np_full_serial = mp_serial();
+    pointer_hide();
+    amce_log("visualisation", "Flow: the whole screen (a key, a click or fire: back)");
+}
+
+/* what plays, over the picture: the title, and who by */
+static void np_full_title(void)
+{
+    const char *t = mp_is_stream() ? (st_title()[0] ? st_title() : mp_stream_name()) : mp_title();
+    const char *by = mp_is_stream() ? mp_stream_name() : mp_track_by();
+    WORD x = U(16), y = g.h - U(16) - 2 * (g.font_h + U(4));
+    if (!t || !t[0])
+        return;
+    gfx_text(&g, x, y, t, PEN_WHITE, PEN_BG, g.w - 2 * x, TS_BOLD);
+    if (by && by[0] && strcmp(by, t))
+        gfx_text(&g, x, y + g.font_h + U(4), by, PEN_TEXT, PEN_BG, g.w - 2 * x, TS_SMALL);
+}
+
+static void np_full_tick(void)
+{
+    ULONG now = time_ms();
+    ULONG joy = gfx_joy(&g);
+    static BOOL fire_was;
+    BOOL fire = (joy & (JPF_BUTTON_RED | JPF_BUTTON_BLUE)) != 0;
+    if (fire && !fire_was && !np_full_first) {
+        fire_was = fire;
+        np_full_exit();
+        return;
+    }
+    fire_was = fire;
+    if (!mp_loaded()) {
+        np_full_exit();                     /* the music over: the page */
+        return;
+    }
+    if (!vis_draw_full(&g, 0, 0, (WORD)g.w, (WORD)g.h, np_full_first)) {
+        np_full_exit();
+        set_msg(_("Flow could not be shown here"));
+        return;
+    }
+    np_full_first = FALSE;
+    if (mp_serial() != np_full_serial) {
+        np_full_serial = mp_serial();       /* another track: said again */
+        np_full_since = now;
+    }
+    if (now - np_full_since < 6000)
+        np_full_title();
+}
+
 static void handle_key(struct IntuiMessage *im)
 {
     UWORD code = im->Code;
@@ -15024,6 +15122,7 @@ static void handle_key(struct IntuiMessage *im)
         case 'p': case 'P': case '<': disarm(); np_press(NB_PREV); return;
         case 's': case 'S': disarm(); np_press(NB_STOP); return;
         case 'v': case 'V': disarm(); next_visual(); return;
+        case 'f': case 'F': disarm(); np_full_enter(); return;
         case 'g': case 'G': disarm(); if (np_away()) np_goto_source(); return;
         case ',': disarm(); np_press(NB_BACK); return;
         case '.': disarm(); np_press(NB_FWD); return;
@@ -15410,6 +15509,22 @@ static int app_main(void)
                     tick_us = 200000;
                     goto tick_again;
                 }
+                if (np_full) {
+                    /* Flow on the whole screen: a frame, the music kept going */
+                    static ULONG nf_sec;
+                    np_full_tick();
+                    np_tick();
+                    mp_paula_check();
+                    if (!nf_sec || (LONG)(time_ms() - nf_sec) >= 0) {
+                        nf_sec = time_ms() + 1000;
+                        mp_tempo_check();
+                        flac_slow_check();
+                        if (debug_on)
+                            dbg_load_log();
+                    }
+                    tick_us = 40000;
+                    goto tick_again;
+                }
                 if (mini_on) {
                     mini_tick();            /* ...and the mini player up to date */
                     tick_us = mp_running() || mn.sl_drag ? 40000 : 200000;
@@ -15502,6 +15617,16 @@ static int app_main(void)
                 ReplyMsg((struct Message *)im);
                 if (iconified)
                     continue;               /* (its screen behind Workbench's: let go) */
+                if (np_full && ((copy.Class == IDCMP_RAWKEY && !(copy.Code & IECODE_UP_PREFIX) &&
+                                 (copy.Code < 0x60 || copy.Code > 0x67)) ||
+                                copy.Class == IDCMP_VANILLAKEY ||
+                                (copy.Class == IDCMP_MOUSEBUTTONS && !(copy.Code & IECODE_UP_PREFIX)))) {
+                    np_full_exit();         /* a key (not a shift alone), a click: the page */
+                    continue;
+                }
+                if (np_full && (copy.Class == IDCMP_MOUSEMOVE || copy.Class == IDCMP_RAWKEY ||
+                                copy.Class == IDCMP_MOUSEBUTTONS))
+                    continue;               /* (its key-up, the mouse moving: nothing) */
                 if (copy.Class == IDCMP_MOUSEMOVE)
                     gfx_window_rmb(&g, copy.MouseY);    /* title bar: the menus */
                 if (gfx_window_msg(&g, copy.Class, copy.Code)) {
