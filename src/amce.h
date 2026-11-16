@@ -30,6 +30,7 @@ struct Caps {
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
     BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
+    BOOL  mpega_own;    /* AmigaMCE's own amcempega.library is in its Libs */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
     UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
@@ -701,6 +702,7 @@ void st_use_https(BOOL on);     /* https: streams played (Settings > Networking 
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
+void st_use_own_mpega(BOOL on);          /* MP3 by amcempega.library, AmigaMCE's own */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */

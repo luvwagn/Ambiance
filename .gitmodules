@@ -4,3 +4,6 @@
 [submodule "extras/ac3"]
 	path = extras/ac3
 	url = https://github.com/luvwagn/ac3.library.git
+[submodule "extras/mpga"]
+	path = extras/mpga
+	url = https://github.com/luvwagn/mpga.library.git

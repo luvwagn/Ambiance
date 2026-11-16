@@ -180,6 +180,15 @@ interface (five functions) and carries none of its files.
 Radio's station lists come from radio-browser.info, a free directory of
 internet radio stations kept by its community (https://www.radio-browser.info).
 
+Libs/amcempega.library, which decodes MP3 (and MPEG audio's Layers I and
+II) when Settings > Sound chooses it, is libmad 0.15.1b (Robert Leslie,
+Underbit Technologies; with Debian's security fixes) behind mpega.library's
+functions, AmigaMCE's own project (extras/mpga,
+https://github.com/luvwagn/mpga.library): libmad is under the GNU General
+Public License, version 2 or later, the library version 3 or later
+(Licences/amcempega.library.txt), its source at that address, not in this
+archive. AmigaMCE opens it at run time; none of its code is in AmigaMCE.
+
 Video
 -----
 MPEG-1 and MPEG-2 video without a ZZ9000 (or with its decoding turned off)

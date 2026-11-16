@@ -164,6 +164,49 @@ typedef struct {
 
 typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
 
+/* amcempega.library (extras/mpga, AmigaMCE's Libs): mpega's functions under
+ * a name of its own (libmad inside), and one more of its own after them,
+ * MPGA_decode_to: each frame straight into our FIFO (16-bit rings), its
+ * peaks and clipped samples with it. Settings > Sound chooses it or
+ * LIBS:mpega.library (st_use_own_mpega). */
+#define AMCEMPEGANAME   "amcempega.library"
+#define MPGA_FMT_S16    0
+struct MpgaOut {
+    ULONG mo_Format;
+    APTR mo_Buffer[4];
+    ULONG mo_Mask, mo_Index;
+    UWORD mo_Peak[2];
+    ULONG mo_Clipped;
+};
+typedef char mpgaout_size_check[sizeof(struct MpgaOut) == 36 ? 1 : -1];
+#define MPGA_decode_to(s, o) \
+    LP2(72, LONG, MPGA_decode_to, MPEGA_STREAM *, s, a0, struct MpgaOut *, o, a1, , MPEGABase)
+static BOOL own_mpega;              /* Settings > Sound: MP3 by amcempega.library */
+static BOOL mpega_is_own;           /* MPEGABase is it, this stream */
+
+/* the MP3 decoder chosen: amcempega.library from AmigaMCE's Libs, or
+ * LIBS:mpega.library (and that, if ours will not open) */
+static struct Library *mpega_open(void)
+{
+    struct Library *l = NULL;
+    mpega_is_own = FALSE;
+    if (own_mpega && (l = amce_open_own_lib(AMCEMPEGANAME, 1)))
+        mpega_is_own = TRUE;
+    else
+        l = OpenLibrary((CONST_STRPTR)"mpega.library", 2);
+    return l;
+}
+
+static void mpega_close(void)
+{
+    if (mpega_is_own)
+        amce_close_own_lib(&MPEGABase);
+    else if (MPEGABase)
+        CloseLibrary(MPEGABase);
+    MPEGABase = NULL;
+    mpega_is_own = FALSE;
+}
+
 /* ---------------------------------------------------------- flacdec.library
  * Renaud Schweingruber's FLAC decoder (dr_flac by David Reid, its loops in
  * 68020 assembler), on Aminet as util/libs/flacdec. Its archive goes
@@ -1606,7 +1649,28 @@ static void decode_loop(MPEGA_STREAM *ms)
                 out_take();
             continue;
         }
-        n = MPEGA_decode_frame(ms, pcm);
+        if (mpega_is_own) {
+            /* straight into the FIFO, its clipped samples counted by it */
+            struct MpgaOut mo;
+            memset(&mo, 0, sizeof(mo));
+            mo.mo_Format = MPGA_FMT_S16;
+            mo.mo_Buffer[0] = st.fl;
+            mo.mo_Buffer[1] = st.fr;
+            mo.mo_Mask = FIFO_N - 1;
+            mo.mo_Index = st.f_in;
+            n = MPGA_decode_to(ms, &mo);
+            if (n > 0) {
+                dec_full += mo.mo_Clipped;
+                dec_samples += (ULONG)n;
+                st.f_in += (ULONG)n;
+                if (!st.started && st.f_in - st.f_out >= prebuf) {
+                    st.state = ST_PLAYING;
+                    out_start();
+                }
+                continue;
+            }
+        } else
+            n = MPEGA_decode_frame(ms, pcm);
         if (n < 0) {
             if (st.eof) {
                 if (!st.started && st.f_in != st.f_out) {
@@ -3420,7 +3484,7 @@ static void swv_run(void)
         LONG f = st.v_hz ? (LONG)st.v_hz : 44100;
         MPEGA_LAYER *ls[2];
         int k;
-        if (!MPEGABase && !(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
+        if (!MPEGABase && !(MPEGABase = mpega_open())) {
             amce_log("video", "no mpega.library: its sound left out");
             sw_sound = FALSE;
         } else {
@@ -4062,6 +4126,7 @@ out:
     sw_ac3 = FALSE;
     if (ms)
         MPEGA_close(ms);
+    mpega_close();                          /* (opened for its sound, if it had any) */
     if (sw_mpv)
         MpvClose(sw_mpv);
     sw_mpv = NULL;
@@ -5000,7 +5065,7 @@ static void playback_main(void)
         mhi_play(f);
         goto out;
     }
-    if (!(MPEGABase = OpenLibrary((CONST_STRPTR)"mpega.library", 2))) {
+    if (!(MPEGABase = mpega_open())) {
         fail("mpega.library is needed to play MP3");
         goto out;
     }
@@ -5025,9 +5090,10 @@ static void playback_main(void)
         /* quality: 2, mpega's best, where the CPU is fast (a 68060 class
          * Amiga, or one measured so): its medium (1) reaches full scale on
          * loud passes (Plex's conversions), and clips */
-        WORD q = card_mpega || st.cpu >= 60 ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card_mpega && st.cpu < 40,
+        BOOL card = card_mpega && !mpega_is_own;    /* (ours decodes here, whatever is in LIBS:) */
+        WORD q = card || st.cpu >= 60 || mpega_is_own ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card && st.cpu < 40,
              div = 1;
-        LONG fmax = card_mpega ? (st.ahi ? 48000 : 28000)
+        LONG fmax = card ? (st.ahi ? 48000 : 28000)
                   : st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = first_frame_freq();
         MPEGA_LAYER *ls[2];
@@ -5075,7 +5141,7 @@ static void playback_main(void)
                 st.name[0] && !st.finite ? st.name : u, (long)st.bitrate, (long)st.freq,
                 st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
                 st.dec_channels == 2 ? "stereo" : "mono", (long)ms->dec_quality,
-                card_mpega ? " on the ZZ9000" : "");
+                mpega_is_own ? " by amcempega.library" : card_mpega ? " on the ZZ9000" : "");
         amce_log(st.finite ? "track" : "radio", m);
     }
     dec_full = dec_samples = 0;
@@ -5103,9 +5169,7 @@ out:
         Close(st.fh);
         st.fh = 0;
     }
-    if (MPEGABase)
-        CloseLibrary(MPEGABase);
-    MPEGABase = NULL;
+    mpega_close();
     if (st_SocketBase)
         CloseLibrary(st_SocketBase);
     st_SocketBase = NULL;
@@ -5345,6 +5409,14 @@ BOOL st_ahi(void)
 void st_use_mhi(const char *driver)
 {
     amce_strlcpy(mhi_driver, driver ? driver : "", sizeof(mhi_driver));
+}
+
+/* Settings > Sound: MP3 (and MPEG video's sound) by amcempega.library,
+ * AmigaMCE's own (else LIBS:mpega.library), for streams started from now
+ * on. */
+void st_use_own_mpega(BOOL on)
+{
+    own_mpega = on;
 }
 
 /* Settings > Sound found mpega.library to be the ZZ9000 SDK's (caps.mpega_zz):

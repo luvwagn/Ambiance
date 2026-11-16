@@ -447,6 +447,17 @@ GPL-3.0-or-later, its source there, not in the archive), built by its
 own Makefile (`make ac3lib`, tested by `make test`), and opened at run
 time through an interface of their own (`extras/ac3/include`, MIT).
 
+MP3 (and MP2) is decoded by `mpega.library` from `LIBS:` (Stéphane
+Tavenard's, a clone, or the ZZ9000's, which decodes on the card) or, as
+Settings > Sound chooses, by **`amcempega.library`**: libmad behind
+mpega's functions under a name of its own, so it never clashes with the
+one in `LIBS:`, with one more of its own that writes each frame straight
+into AmigaMCE's FIFO. It is its own project (`extras/mpga`, a git
+submodule: [luvwagn/mpga.library](https://github.com/luvwagn/mpga.library),
+GPL-3.0-or-later), built by its own Makefile (`make mpgalib`, tested by
+`make test`). Unless Settings > Sound says otherwise, MP3 is decoded by
+it, except where `LIBS:mpega.library` is the ZZ9000's.
+
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which
 are GPL-3.0-or-later. Their author has agreed a GPL-3 section 7 exception

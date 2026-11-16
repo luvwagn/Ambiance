@@ -70,7 +70,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -167,11 +167,12 @@ ASM_DIR = build/asm
 # version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
-check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(SQLIB) $(MPEGVLIB) $(JDT)
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT)
 	@$(PYTHON) tools/check_libs.py \
 		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(AC3FPULIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
+		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMCEMPEGAVERSION) \
 		$(SQLIB)=src/sqlib/amcesql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
 		$(JDT)=datatypes/jpeg/amcejpeg.c
@@ -238,7 +239,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -438,6 +439,22 @@ ac3lib: $(AC3LIB) $(AC3FPULIB)
 test-ac3: $(AC3LIB) $(AC3FPULIB)
 	@$(MAKE) --no-print-directory -C extras/ac3 test
 
+# amcempega.library: MPEG audio (MP3, MP2) decoded by the CPU, libmad behind
+# mpega.library's functions under a name of its own, so it never clashes
+# with LIBS:mpega.library (Tavenard's, a clone, or the ZZ9000's): Settings >
+# Sound chooses. Its own project (extras/mpga, a git submodule:
+# github.com/luvwagn/mpga.library, GPL-3: its source there, not in the
+# archive); built by its own Makefile, its test part of make test.
+MPGALIB   = extras/mpga/build/amcempega.library
+MPGA_DEPS = $(wildcard extras/mpga/src/*.c extras/mpga/src/*.h extras/mpga/src/*.s \
+              extras/mpga/src/port/*.h extras/mpga/include/*/*.h \
+              extras/mpga/third_party/libmad/*.[ch]) extras/mpga/Makefile
+$(MPGALIB): $(MPGA_DEPS)
+	@$(MAKE) --no-print-directory -C extras/mpga build/amcempega.library
+mpgalib: $(MPGALIB)
+test-mpga: $(MPGALIB)
+	@$(MAKE) --no-print-directory -C extras/mpga test
+
 # a beets library (beets.c) read on a 68020 through amcesql.library, from
 # a small library made for it (tests/mkbeets.py)
 build/beets_68k: tests/beets_68k.c src/beets.c src/util.c src/ownlib.c src/radiocsv.c src/amce.h $(SQLIB)
@@ -585,7 +602,7 @@ $(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h dataty
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPEGVLIB) \
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPEGVLIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
@@ -616,6 +633,10 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@# AC3 where the ZZ9000 will not decode it
 	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
 	@cp extras/ac3/LICENSE $(LHA_DIR)/Licences/ac3.library.txt
+	@# amcempega.library (MP3 and MP2 by the CPU: libmad, GPL-3; its source
+	@# at github.com/luvwagn/mpga.library), extras/mpga
+	@cp $(MPGALIB) $(LHA_DIR)/Libs/
+	@cp extras/mpga/LICENSE $(LHA_DIR)/Licences/amcempega.library.txt
 	@# mpegv.library (MPEG-1 and MPEG-2 by the CPU: libmpeg2, GPL-3; its source
 	@# at github.com/luvwagn/mpegv.library), extras/mpegv
 	@cp $(MPEGVLIB) $(LHA_DIR)/Libs/

@@ -2,8 +2,9 @@
 ;
 ; Installer script for AmigaMCE: the program with its fonts, licences and
 ; its own libraries in AmigaMCE/Libs (amcesql.library for beets,
-; amcedvd.library for DVDs, ac3.library and ac3fpu.library for AC-3 sound:
-; opened from there, never put in LIBS:),
+; amcedvd.library for DVDs, ac3.library and ac3fpu.library for AC-3 sound,
+; mpegv.library for MPEG video, amcempega.library for MP3: opened from
+; there, never put in LIBS:),
 ; and the languages chosen: the Workbench's own (none besides English on
 ; an English one), all thirteen at once, or ticked one by one.
 ; English is built into the program. Each language is a catalog in

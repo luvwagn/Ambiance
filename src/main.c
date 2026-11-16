@@ -158,7 +158,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_VIDEOSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -1494,6 +1494,9 @@ static void dt_line(void *ctx, const char *s)
     text_line((struct Page *)ctx, s);
 }
 
+/* MP3 by AmigaMCE's own amcempega.library (Settings > Sound, load_sound_out) */
+static BOOL own_mpega;
+
 static void build_sysinfo(struct Page *p)
 {
     char line[200];
@@ -1584,6 +1587,7 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, _("Network stack: %s"), caps.net ? _("running") : _("none"));
     text_line(p, line);
     sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver")
+                                : own_mpega ? _("amcempega.library, AmigaMCE's own")
                                 : caps.mpega_zz ? _("mpega.library, the ZZ9000 SDK's (decoded on the card)")
                                 : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
@@ -2026,7 +2030,10 @@ static BOOL fs_assign_used(int k)
 static BOOL sound_ahi;
 
 /* MHI: its drivers (the libraries in LIBS:MHI), and the one MP3 goes to ("":
- * mpega.library), AmigaMCE/MP3Decoder. */
+ * a decoder with mpega's functions: AmigaMCE's own amcempega.library,
+ * own_mpega, or LIBS:mpega.library), AmigaMCE/MP3Decoder ("amcempega",
+ * "mpega" or the driver's name; not set: ours, unless LIBS:mpega.library is
+ * the ZZ9000's, which decodes on the card). */
 #define MP3_VAR "AmigaMCE/MP3Decoder"
 static char mhi_names[6][48];
 static int nmhi;
@@ -2053,7 +2060,8 @@ static void mhi_apply(void)
     plex.mhi = mhi_sel[0] != 0;
     /* the ZZ9000 SDK's mpega.library decodes on the card: full quality */
     st_use_card_mpega(caps.mpega_zz);
-    plex.mp3_card = caps.mpega_zz && !mhi_sel[0];
+    st_use_own_mpega(own_mpega && !mhi_sel[0]);
+    plex.mp3_card = caps.mpega_zz && !mhi_sel[0] && !own_mpega;
 }
 
 static void load_sound_out(void)
@@ -2072,18 +2080,24 @@ static void load_sound_out(void)
         dir_scan("LIBS:MHI", mhi_cb, NULL);
         me->pr_WindowPtr = old;
     }
-    if (GetVar((CONST_STRPTR)MP3_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+    own_mpega = caps.mpega_own && !caps.mpega_zz;     /* (not chosen yet) */
+    if (GetVar((CONST_STRPTR)MP3_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0) {
+        if (!amce_stricmp(v, "amcempega"))
+            own_mpega = caps.mpega_own;
+        else if (!amce_stricmp(v, "mpega"))
+            own_mpega = !caps.mp3_mpega && caps.mpega_own;     /* (else nothing to play it) */
         for (i = 0; i < nmhi; i++)
             if (!amce_stricmp(v, mhi_names[i]))
                 amce_strlcpy(mhi_sel, mhi_names[i], sizeof(mhi_sel));
-    if (!caps.mp3_mpega && !mhi_sel[0] && nmhi)
+    }
+    if (!caps.mp3_mpega && !caps.mpega_own && !mhi_sel[0] && nmhi)
         amce_strlcpy(mhi_sel, mhi_names[0], sizeof(mhi_sel));  /* no mpega: MHI it is */
     mhi_apply();
     {
         char m[160];
         sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI", sound_ahi ? "AHI" : "Paula",
-                mhi_sel[0] ? mhi_sel : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)"
-                                                     : "mpega.library",
+                mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (AmigaMCE's own)"
+                : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)" : "mpega.library",
                 (long)nmhi, nmhi == 1 ? "" : "s");
         amce_log("sound", m);
     }
@@ -2745,11 +2759,17 @@ static void build_sound_settings(struct Page *p)
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
     heading_item(p, _("MP3 decoder"));
+    if ((it = action_item(p, "MP3: amcempega.library",
+                          !caps.mpega_own ? _("not installed (AmigaMCE's Libs)")
+                          : _("AmigaMCE's own, decoded here"),
+                          ACT_SND_OWNMPEGA, !mhi_sel[0] && own_mpega ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+        !caps.mpega_own)
+        it->flags |= ITEM_DISABLED;
     if ((it = action_item(p, "MP3: mpega.library",
                           !caps.mp3_mpega ? _("not installed")
                           : caps.mpega_zz ? _("decoded on the ZZ9000") : _("decoded here"),
-                          ACT_SND_MPEGA, !mhi_sel[0] && caps.mp3_mpega ? MARK_RADIO_ON
-                                                                     : MARK_RADIO_OFF)) &&
+                          ACT_SND_MPEGA, !mhi_sel[0] && !own_mpega && caps.mp3_mpega ? MARK_RADIO_ON
+                                                                                   : MARK_RADIO_OFF)) &&
         !caps.mp3_mpega)
         it->flags |= ITEM_DISABLED;
     {
@@ -13430,7 +13450,8 @@ static void plex_help(void)
         if (mp3)
             sprintf(line, _("MP3: decoded by the MHI driver %.40s"), mp3);
         else
-            amce_strlcpy(line, caps.mpega_zz ? _("MP3: decoded on the ZZ9000 (its mpega.library)")
+            amce_strlcpy(line, own_mpega ? _("MP3: decoded by amcempega.library, AmigaMCE's own")
+                               : caps.mpega_zz ? _("MP3: decoded on the ZZ9000 (its mpega.library)")
                                : caps.mp3_mpega ? _("MP3: decoded by mpega.library")
                                : _("MP3: no decoder (mpega.library or MHI)"),
                          sizeof(line));
@@ -13576,6 +13597,8 @@ static void act_action(struct Item *it)
             set_msg(_("MHI is not installed (its drivers in LIBS:MHI)"));
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
+        else if (it->action == ACT_SND_OWNMPEGA)
+            set_msg(_("amcempega.library is not in AmigaMCE's Libs"));
         return;
     }
     if (it->action == ACT_SCREENMODES)
@@ -13705,18 +13728,22 @@ static void act_action(struct Item *it)
         open_settings_page(_("Networking"), build_net_settings);
     else if (it->action == ACT_PLEXSLIDES && cur())
         plex_photo_view(cur(), -1, TRUE);
-    else if (it->action == ACT_SND_MPEGA ||
+    else if (it->action == ACT_SND_MPEGA || it->action == ACT_SND_OWNMPEGA ||
              (it->action >= ACT_SND_MHI0 && it->action <= ACT_SND_MHI_END)) {
-        const char *d = it->action == ACT_SND_MPEGA ? "" : mhi_names[it->action - ACT_SND_MHI0];
-        if (amce_stricmp(d, mhi_sel)) {
+        const char *d = it->action == ACT_SND_MPEGA || it->action == ACT_SND_OWNMPEGA
+                        ? "" : mhi_names[it->action - ACT_SND_MHI0];
+        BOOL own = it->action == ACT_SND_OWNMPEGA;
+        if (amce_stricmp(d, mhi_sel) || own != own_mpega) {
             amce_strlcpy(mhi_sel, d, sizeof(mhi_sel));
-            save_setting(MP3_VAR, d[0] ? d : "mpega");
+            own_mpega = own;
+            save_setting(MP3_VAR, d[0] ? d : own ? "amcempega" : "mpega");
             mhi_apply();
             sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
         set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
-                     : _("MP3 decoded here by mpega.library"));
+                : own ? _("MP3 decoded here by amcempega.library, AmigaMCE's own")
+                      : _("MP3 decoded here by mpega.library"));
     }
     else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI) {
         BOOL on = it->action == ACT_SND_AHI;
@@ -15037,7 +15064,7 @@ static void build_menu(void)
     nmenu = 0;
     for (i = 0; i < (int)(sizeof(order) / sizeof(order[0])); i++) {
         m = order[i];
-        if (m == MOD_RADIO && !(caps.net && (caps.mp3_mhi || caps.mp3_mpega)))
+        if (m == MOD_RADIO && !(caps.net && (caps.mp3_mhi || caps.mp3_mpega || caps.mpega_own)))
             continue;           /* needs a network stack and an MP3 path */
         menu[nmenu++] = m;
     }
@@ -15184,7 +15211,7 @@ static int app_main(void)
     }
     load_sound_out();
     load_folders();
-    songs_can_play(caps.mp3_mpega, caps.flacdec);   /* what music lists show */
+    songs_can_play(caps.mp3_mpega || caps.mpega_own, caps.flacdec);   /* what music lists show */
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);
