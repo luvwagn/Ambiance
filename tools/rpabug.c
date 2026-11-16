@@ -19,6 +19,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/cybergraphics.h>
+#include <proto/dos.h>
 #include <stdio.h>
 
 #ifndef RECTFMT_RAW
@@ -26,6 +27,25 @@
 #endif
 
 struct Library *CyberGfxBase;
+
+/* a rough speed (thousands of loops a second, over half a second): an
+ * emulator's JIT shows as many times its interpreter's */
+static ULONG speed(void)
+{
+    struct DateStamp a, b;
+    volatile ULONG x = 1;
+    ULONG n = 0, t;
+    DateStamp(&a);
+    do {
+        ULONG k;
+        for (k = 0; k < 1000; k++)
+            x = x * 69069 + 1;
+        n++;
+        DateStamp(&b);
+        t = (b.ds_Minute - a.ds_Minute) * 3000 + b.ds_Tick - a.ds_Tick;
+    } while (t < 25);
+    return n * 50 / t;
+}
 
 int main(void)
 {
@@ -47,6 +67,7 @@ int main(void)
            GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH),
            GetCyberMapAttr(scr->RastPort.BitMap, CYBRMATTR_PIXFMT), CyberGfxBase->lib_Version,
            CyberGfxBase->lib_Revision);
+    printf("speed: %lu thousand loops a second (an emulator's JIT: many times its interpreter's)\n", speed());
     bm = AllocBitMap(16, 1, GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH), BMF_MINPLANES | BMF_CLEAR,
                      scr->RastPort.BitMap);
     UnlockPubScreen(NULL, scr);
