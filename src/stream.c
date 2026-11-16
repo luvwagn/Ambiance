@@ -207,6 +207,185 @@ static void mpega_close(void)
     mpega_is_own = FALSE;
 }
 
+/* ---------------------------------------------------------- how fast MPEG audio decodes here
+ * Measured, not judged from the CPU's name: a 68030 under an emulator's
+ * JIT can be faster than a real 68060, and a 68060 does amcempega's
+ * 64-bit multiplies in 68060.library's software. The first time a stream
+ * needs it in a run, the decoder in use decodes src/mpaprobe.h (128
+ * kbit/s joint stereo at 44.1 kHz, synthetic) at each step of a ladder,
+ * best first, only as far down as it has to. The times are kept in
+ * memory for the run alone, never saved: a drive or card moved to
+ * another Amiga (or the emulator's settings changed) is measured afresh.
+ * The ZZ9000's mpega.library decodes on the card, so is not measured. */
+#include "mpaprobe.h"
+
+struct MpaStep {
+    WORD q, div, mono;              /* mpega's quality; 44.1 kHz divided by; mono */
+};
+static const struct MpaStep mpa_steps[] = {
+    { 2, 1, 0 }, { 1, 1, 0 },       /* the whole rate (AHI): high, medium */
+    { 2, 2, 0 }, { 1, 2, 0 },       /* 22 kHz (Paula's most) */
+    { 2, 2, 1 }, { 1, 2, 1 },       /* 22 kHz mono */
+    { 1, 4, 1 },                    /* 11 kHz mono: the last resort */
+};
+#define MPA_STEPS ((int)(sizeof(mpa_steps) / sizeof(mpa_steps[0])))
+static ULONG mpa_us[MPA_STEPS];     /* microseconds a probe frame (0: not yet; ~0: could not) */
+static struct Library *mpa_lib;     /* the decoder they are of */
+static BOOL mpa_lib_own;
+static int mpa_pref;                /* Settings > Sound: 0 automatic, 1 high, 2 medium */
+static ULONG mpa_pos;               /* the probe's read position */
+
+void st_mp3_quality(int pref)
+{
+    mpa_pref = pref;
+}
+
+/* the probe, to the decoder, as a file */
+static ULONG mpa_hook(register struct Hook *h __asm("a0"), register MPEGA_ACCESS *a __asm("a1"),
+                      register APTR handle __asm("a2"))
+{
+    ULONG n;
+    (void)h;
+    (void)handle;
+    switch (a->func) {
+    case MPEGA_BSFUNC_OPEN:
+        mpa_pos = 0;
+        a->data.open.stream_size = sizeof(mpa_probe);
+        return 1;
+    case MPEGA_BSFUNC_CLOSE:
+        return 0;
+    case MPEGA_BSFUNC_READ:
+        n = sizeof(mpa_probe) - mpa_pos;
+        if (n > (ULONG)a->data.read.num_bytes)
+            n = (ULONG)a->data.read.num_bytes;
+        CopyMem((APTR)(mpa_probe + mpa_pos), a->data.read.buffer, n);
+        mpa_pos += n;
+        return n;
+    case MPEGA_BSFUNC_SEEK:
+        if ((ULONG)a->data.seek.abs_byte_seek_pos > sizeof(mpa_probe))
+            return (ULONG)-1;
+        mpa_pos = (ULONG)a->data.seek.abs_byte_seek_pos;
+        return 0;
+    }
+    return (ULONG)-1;
+}
+
+/* A step's microseconds a probe frame (its first frame not counted: the
+ * caches, a JIT's translation), ~0 if the probe would not decode. Up to
+ * 12 frames, fewer where they are slow (a quarter of a second). */
+static ULONG mpa_measure(const struct MpaStep *s)
+{
+    static struct Hook h;
+    static WORD p0[MPEGA_PCM_SIZE], p1[MPEGA_PCM_SIZE];
+    MPEGA_CTRL c;
+    MPEGA_STREAM *ms;
+    MPEGA_LAYER *ls[2];
+    WORD *pcm[2];
+    ULONG hz = 0, n = 0, tk;
+    unsigned long long t = 0;
+    int k;
+    memset(&h, 0, sizeof(h));
+    h.h_Entry = (HOOKFUNC)(APTR)mpa_hook;
+    memset(&c, 0, sizeof(c));
+    c.bs_access = &h;
+    ls[0] = &c.layer_1_2;
+    ls[1] = &c.layer_3;
+    for (k = 0; k < 2; k++) {
+        ls[k]->force_mono = s->mono;
+        ls[k]->mono.freq_div = s->div;
+        ls[k]->mono.quality = s->q;
+        ls[k]->mono.freq_max = 48000;
+        ls[k]->stereo = ls[k]->mono;
+    }
+    pcm[0] = p0;
+    pcm[1] = p1;
+    if (!(ms = MPEGA_open((char *)"AmigaMCE speed", &c)))
+        return ~0UL;
+    if (MPEGA_decode_frame(ms, pcm) >= 0) {
+        while (n < MPA_PROBE_FRAMES - 2) {
+            LONG r;
+            tk = time_ticks(&hz);
+            r = MPEGA_decode_frame(ms, pcm);
+            t += time_ticks(&hz) - tk;
+            if (r < 0)
+                break;
+            n++;
+            if (n >= 2 && hz && t * 4 > hz)
+                break;                      /* (slow: enough to go by) */
+        }
+    }
+    MPEGA_close(ms);
+    return n && hz ? (ULONG)(t * 1000000ULL / hz / n) : ~0UL;
+}
+
+/* The share of real time (percent) step i takes for a stream at f Hz
+ * decoded at f / div (the probe: 44.1 kHz at 44100 / its div, a frame
+ * 26.12 ms) */
+static ULONG mpa_load(int i, LONG f, LONG div)
+{
+    return (ULONG)((unsigned long long)mpa_us[i] * (ULONG)(f / div) * (ULONG)mpa_steps[i].div * 100ULL /
+                   (44100ULL * 26122ULL));
+}
+
+/* For the stream about to be decoded by MPEGABase at f Hz, no more than
+ * fmax Hz out (Paula: 28 kHz; AHI: 48): the best step whose decoding takes
+ * at most share percent of real time, measuring as far as that needs; its
+ * quality, the stream's freq_div and whether mono into *q, *div, *mono,
+ * and what was measured and chosen into m (the log). FALSE: not measured
+ * (the probe would not decode): the caller goes by the CPU. paula8: the
+ * output Paula's 8 bits, where medium quality's 70 dB is beyond hearing. */
+static BOOL mpa_choose(LONG f, LONG fmax, ULONG share, BOOL paula8, WORD *q, WORD *div, WORD *mono, char *m)
+{
+    int i, pick = -1;
+    WORD want = mpa_pref == 1 ? 2 : mpa_pref == 2 ? 1 : paula8 && mpega_is_own ? 1 : 0;
+    LONG d = 1, pd = 1;
+    char *e = m;
+    if (mpa_lib != MPEGABase || mpa_lib_own != mpega_is_own) {
+        memset(mpa_us, 0, sizeof(mpa_us));         /* another decoder: measured afresh */
+        mpa_lib = MPEGABase;
+        mpa_lib_own = mpega_is_own;
+    }
+    if (f <= 0)
+        f = 44100;
+    *m = 0;
+    for (i = 0; i < MPA_STEPS && pick < 0; i++) {
+        const struct MpaStep *s = &mpa_steps[i];
+        if (want && s->q != want)
+            continue;
+        /* the stream's own divisor for this step's rate: 48 kHz as 44.1,
+         * a 22 kHz stream's whole rate as 44.1 halved */
+        for (d = 1; d < 4 && f / d > 44100 / s->div + 4000; d *= 2)
+            ;
+        if (f / d > fmax)
+            continue;                       /* (more than the output plays) */
+        if (!mpa_us[i])
+            mpa_us[i] = mpa_measure(s);
+        if (mpa_us[i] == ~0UL)
+            continue;
+        pick = -2 - i;                      /* (measured: -2 - i till one is in time) */
+        pd = d;
+        e += sprintf(e, "%s%s %ld Hz%s %lu.%02lu ms (%lu%%)", e == m ? "" : ", ", s->q == 2 ? "high" : "medium",
+                     (long)(44100 / s->div), s->mono ? " mono" : "", (unsigned long)(mpa_us[i] / 1000),
+                     (unsigned long)(mpa_us[i] % 1000 / 10), (unsigned long)mpa_load(i, f, d));
+        if (mpa_load(i, f, d) <= share)
+            pick = i;
+    }
+    if (pick == -1)
+        return FALSE;
+    if (pick < 0)
+        pick = -2 - pick;                   /* nothing in time: the least of them */
+    d = pd;                                 /* (the last measured is the one chosen) */
+    *q = mpa_steps[pick].q;
+    *div = (WORD)d;
+    *mono = mpa_steps[pick].mono;
+    sprintf(e, "; a frame of this stream at %s, %ld Hz%s: %lu%% of the time (up to %lu%% wanted)%s",
+            *q == 2 ? "high" : "medium", (long)(f / d), *mono ? " mono" : "",
+            (unsigned long)mpa_load(pick, f, d), (unsigned long)share,
+            mpa_pref ? (mpa_pref == 1 ? ", Settings: high" : ", Settings: medium")
+            : want == 1 ? ", medium for Paula's 8 bits" : "");
+    return TRUE;
+}
+
 /* ---------------------------------------------------------- flacdec.library
  * Renaud Schweingruber's FLAC decoder (dr_flac by David Reid, its loops in
  * 68020 assembler), on Aminet as util/libs/flacdec. Its archive goes
@@ -3557,19 +3736,27 @@ static void swv_run(void)
         goto out;
     }
     if (sw_sound) {
-        /* its sound by mpega.library, as an MP3 file's: the same quality
-         * and rate for the CPU (stream.c's mpega_run) */
+        /* its sound by mpega.library, as an MP3 file's (mpega_run): what
+         * this Amiga decodes in a fifth of the time, as measured (the
+         * pictures want the rest), else by the CPU as before */
         WORD q = st.cpu >= 60 ? 2 : st.cpu >= 40 ? 1 : 0, mono = st.cpu < 40, div = 1;
         LONG fmax = st.cpu >= 60 && st.ahi ? 48000 : st.cpu >= 40 ? 28000 : st.cpu >= 30 ? 24000 : 12000;
         LONG f = st.v_hz ? (LONG)st.v_hz : 44100;
         MPEGA_LAYER *ls[2];
         int k;
+        char pm[600];
         if (!MPEGABase && !(MPEGABase = mpega_open())) {
             amce_log("video", "no mpega.library: its sound left out");
             sw_sound = FALSE;
         } else {
-            while (div < 4 && f / div > fmax)
-                div *= 2;
+            if (!(card_mpega && !mpega_is_own) &&
+                mpa_choose(f, st.ahi ? 48000 : 28000, 20, !st.ahi && !st.paula14, &q, &div, &mono, pm)) {
+                amce_log("video", "its sound: MPEG audio decoding here, measured a probe frame (26 ms of sound):");
+                amce_log("video", pm);
+            } else {
+                while (div < 4 && f / div > fmax)
+                    div *= 2;
+            }
             memset(&hook, 0, sizeof(hook));
             hook.h_Entry = (HOOKFUNC)(APTR)hook_func;
             memset(&ctrl, 0, sizeof(ctrl));
@@ -4132,8 +4319,9 @@ static void swv_run(void)
     sw_stat(m, sw_ac3 ? "an AC3 frame decoded" : "a sound frame decoded", t_aud, n_aud, hz);
     if (sw_ndirect)
         sw_stat(m, "written straight to the overlay", sw_tdirect, sw_ndirect, hz);
-    sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; a 680%ld",
-            (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90), (long)st.cpu);
+    sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; %s 680%ld",
+            (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90),
+            (SysBase->AttnFlags & AFF_68060) || st.cpu < 60 ? "a" : "as fast as a", (long)st.cpu);
     amce_log("video: by the CPU", m);
     /* of those (each includes what it read): the decoding of its AC3
      * alone, and the reading (the file, the disc) */
@@ -5124,13 +5312,13 @@ static void playback_main(void)
     memset(&ctrl, 0, sizeof(ctrl));
     ctrl.bs_access = &hook;
     {
-        /* what the CPU can decode in time, and never more than Paula plays
-         * (with AHI, a 68060 class Amiga: the whole rate). The ZZ9000
-         * SDK's mpega.library decodes on the card, whatever the CPU: the
-         * best it offers, stereo, the whole rate on AHI. */
-        /* quality: 2, mpega's best, where the CPU is fast (a 68060 class
-         * Amiga, or one measured so): its medium (1) reaches full scale on
-         * loud passes (Plex's conversions), and clips */
+        /* what this Amiga decodes in half the time, as measured
+         * (mpa_choose), and never more than Paula plays (AHI: the whole
+         * rate). The ZZ9000 SDK's mpega.library decodes on the card,
+         * whatever the CPU: the best it offers, stereo, the whole rate on
+         * AHI. Where the probe would not decode, by the CPU as before:
+         * quality 2, mpega's best, on a 68060 (Tavenard's medium, 1,
+         * reaches full scale on loud passes, and clips). */
         BOOL card = card_mpega && !mpega_is_own;    /* (ours decodes here, whatever is in LIBS:) */
         WORD q = card || st.cpu >= 60 || mpega_is_own ? 2 : st.cpu >= 40 ? 1 : 0, mono = !card && st.cpu < 40,
              div = 1;
@@ -5139,12 +5327,18 @@ static void playback_main(void)
         LONG f = first_frame_freq();
         MPEGA_LAYER *ls[2];
         int k;
+        char pm[600];
         if (!f) {
             fail(st.err[0] ? st.err : _("The stream does not look like MP3"));
             goto out;
         }
-        while (div < 4 && f / div > fmax)
-            div *= 2;                       /* 44.1 kHz: 22050 on a 68030 */
+        if (!card && mpa_choose(f, st.ahi ? 48000 : 28000, 50, !st.ahi && !st.paula14, &q, &div, &mono, pm)) {
+            amce_log("sound", "MP3 decoding here, measured a probe frame (26 ms of sound):");
+            amce_log("sound", pm);
+        } else {
+            while (div < 4 && f / div > fmax)
+                div *= 2;                   /* 44.1 kHz: 22050 on a 68030 */
+        }
         ls[0] = &ctrl.layer_1_2;
         ls[1] = &ctrl.layer_3;
         for (k = 0; k < 2; k++) {

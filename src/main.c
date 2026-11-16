@@ -158,7 +158,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_P14, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_P14, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5, ACT_SND_MQ0, ACT_SND_MQ_END = ACT_SND_MQ0 + 2,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_VIDEOSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -2039,6 +2039,12 @@ static BOOL sound_p14;
  * "mpega" or the driver's name; not set: ours, unless LIBS:mpega.library is
  * the ZZ9000's, which decodes on the card). */
 #define MP3_VAR "AmigaMCE/MP3Decoder"
+/* MPEG audio's quality (AmigaMCE/MP3Quality "high" or "medium"; not set:
+ * automatic, by how fast the decoder measures at its first stream each
+ * run, stream.c's mpa_choose; the measurement itself is never saved) */
+#define MP3Q_VAR "AmigaMCE/MP3Quality"
+static int mp3_q;                   /* 0 automatic, 1 high, 2 medium */
+static const char *const mp3q_val[3] = { "auto", "high", "medium" };
 static char mhi_names[6][48];
 static int nmhi;
 static char mhi_sel[48];
@@ -2088,6 +2094,10 @@ static void load_sound_out(void)
         me->pr_WindowPtr = old;
     }
     own_mpega = caps.mpega_own && !caps.mpega_zz;     /* (not chosen yet) */
+    mp3_q = 0;
+    if (GetVar((CONST_STRPTR)MP3Q_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+        mp3_q = !amce_stricmp(v, "high") ? 1 : !amce_stricmp(v, "medium") ? 2 : 0;
+    st_mp3_quality(mp3_q);
     if (GetVar((CONST_STRPTR)MP3_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0) {
         if (!amce_stricmp(v, "amcempega"))
             own_mpega = caps.mpega_own;
@@ -2102,10 +2112,11 @@ static void load_sound_out(void)
     mhi_apply();
     {
         char m[160];
-        sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI",
+        sprintf(m, "%s; MP3 by %s, %s quality; %ld MHI driver%s in LIBS:MHI",
                 sound_ahi ? "AHI" : sound_p14 ? "Paula, 14 bits" : "Paula",
                 mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (AmigaMCE's own)"
                 : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)" : "mpega.library",
+                mp3_q == 1 ? "high" : mp3_q == 2 ? "medium" : "automatic (measured)",
                 (long)nmhi, nmhi == 1 ? "" : "s");
         amce_log("sound", m);
     }
@@ -2795,6 +2806,22 @@ static void build_sound_settings(struct Page *p)
             action_item(p, label, _("decodes and plays"), ACT_SND_MHI0 + i,
                         !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
         }
+    }
+    /* MPEG audio's quality where the CPU decodes it (not MHI, not the
+     * ZZ9000's mpega.library, which give their best) */
+    heading_item(p, _("MP3 quality"));
+    {
+        static const char *const lab[3] = { N_("MP3 quality: automatic"), N_("MP3 quality: high"),
+                                            N_("MP3 quality: medium") };
+        static const char *const sub[3] = { N_("by this Amiga's speed, measured each run"),
+                                            N_("the most accurate"), N_("about a tenth less work") };
+        BOOL here = !mhi_sel[0] && (own_mpega || !caps.mpega_zz);
+        int i;
+        for (i = 0; i < 3; i++)
+            if ((it = action_item(p, _(lab[i]), here ? _(sub[i]) : _("the decoder gives its best"),
+                                  ACT_SND_MQ0 + i, mp3_q == i ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
+                !here)
+                it->flags |= ITEM_DISABLED;
     }
     /* FLAC has nothing to choose: flacdec.library is used where it is
      * installed, and whether this Amiga is fast enough is measured at
@@ -7494,7 +7521,7 @@ static BOOL np_start_now(LONG idx)
     if (it->kind == IT_STATION) {
         char url[256];
         radio_field(it, 0, url, sizeof(url));
-        if (!mp_load_stream(url, it->label, it->sortkey, caps.cpu, err, sizeof(err))) {
+        if (!mp_load_stream(url, it->label, it->sortkey, plex_decoder_cpu(), err, sizeof(err))) {
             busy_end(FALSE);
             np.idx = idx;
             set_msg(err);
@@ -9885,16 +9912,16 @@ static void anim_from_page(struct Page *p)
         BOOL loop_was = play_loop;
         WORD aw = g.w, ah = g.h;
         if (dvd && is_dvd_image(it)) {
-            if (anim_play_dvd(&g, it->path, TRUE, caps.cpu, err, sizeof(err)) < 0 && err[0])
+            if (anim_play_dvd(&g, it->path, TRUE, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's image: the same, from its file) */
         } else if (dvd) {
             char vol[40];
             const char *c = strchr(it->path, ':');
             amce_strlcpy(vol, it->path, c ? (LONG)(c - it->path) + 1 : (LONG)sizeof(vol));
-            if (anim_play_dvd(&g, vol, FALSE, caps.cpu, err, sizeof(err)) < 0 && err[0])
+            if (anim_play_dvd(&g, vol, FALSE, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
-            if (anim_play_video(&g, it->path, caps.cpu, err, sizeof(err)) < 0 && err[0])
+            if (anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amce_log("anim", err);
@@ -13611,6 +13638,8 @@ static void act_action(struct Item *it)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         else if (it->action == ACT_SND_OWNMPEGA)
             set_msg(_("amcempega.library is not in AmigaMCE's Libs"));
+        else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END)
+            set_msg(_("MHI and the ZZ9000's mpega.library decode MP3 at their best"));
         return;
     }
     if (it->action == ACT_SCREENMODES)
@@ -13756,6 +13785,18 @@ static void act_action(struct Item *it)
         set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
                 : own ? _("MP3 decoded here by amcempega.library, AmigaMCE's own")
                       : _("MP3 decoded here by mpega.library"));
+    }
+    else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END) {
+        int q = it->action - ACT_SND_MQ0;
+        if (q != mp3_q) {
+            mp3_q = q;
+            st_mp3_quality(q);
+            save_setting(MP3Q_VAR, mp3q_val[q]);
+            sound_restart();                /* what plays: at it now */
+        }
+        set_msg(q == 1 ? _("MP3 at high quality, at the rate this Amiga can decode it")
+                : q == 2 ? _("MP3 at medium quality: about a tenth less work, 70 dB")
+                         : _("MP3 quality by this Amiga's speed, measured at the first MP3 each run"));
     }
     else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI || it->action == ACT_SND_P14) {
         BOOL on = it->action == ACT_SND_AHI, p14 = it->action == ACT_SND_P14;

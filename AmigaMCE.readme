@@ -3,7 +3,7 @@ Author:       Brian King
 Uploader:     Brian King
 Type:         util/wb
 Version:      [VERSION]
-Requires:     68020+, Kickstart 3.1+; mpega.library, flacdec.library
+Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
@@ -197,7 +197,8 @@ Requirements
 - Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG.
 - Amiga Game Selector 3 for Games and Demos (found through AGS:).
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
-- For MP3: mpega.library (the installer offers it). For FLAC:
+- For MP3: nothing more (Libs/amcempega.library is in the archive);
+  mpega.library or an MHI driver may be chosen instead. For FLAC:
   flacdec.library (Aminet: util/libs/flacdec; on a 68060 its 68060 build).
 - Optional: EaglePlayer's players (Aminet: mus/play/Eagleplayer, with its
   own installer, which assigns Eagleplayer2:; AGS has them) or
@@ -278,9 +279,12 @@ Settings
                (Now Playing's level meters, or HippoPlayer's spectrum
                analyser; under MHI the meters), Jump scrolling (very
                long lists step a letter at a time)
-  Sound        Paula, or AHI (16-bit) for radio, Plex and music files;
-               MP3 by mpega.library or an MHI driver (which decodes
-               and plays it itself); FLAC by flacdec.library
+  Sound        Paula, Paula at 14 bits, or AHI (16-bit) for radio,
+               Plex and music files; MP3 by amcempega.library
+               (AmigaMCE's own), mpega.library or an MHI driver (which
+               decodes and plays it itself); MP3 quality: automatic
+               (by this Amiga's speed, measured each run), high or
+               medium; FLAC by flacdec.library
   Folders      Where Music, Mods, Pictures and Videos find their files:
                the MUSIC:, MODS:, PICTURES: and VIDEOS: assigns on or
                off, folders added (Add a folder...) or taken out (Fire
@@ -319,26 +323,36 @@ Setting up Plex
 
 Not there yet
 -------------
-- DVD menus and subtitles; encrypted (CSS) discs.
+- DVD subtitles (other than a menu's forced ones); encrypted (CSS)
+  discs.
 - MPEG video on AGA screens without a ZZ9000.
 - Modules play on Paula only; AHI for them comes later.
 
 
 History
 -------
+0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
+       screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
+       fast where there is no overlay; B pictures passed over while it
+       is behind. DVD menus, decoded by the CPU (their buttons drawn over
+       the picture, forced subtitles too, a menu button in the
+       controls), and DVD images (.iso) in Videos' folders. AC-3 the card
+       will not decode (Amiberry's emulated card) decoded by a 68040 or
+       68060 instead (Libs/ac3.library, ac3fpu.library: liba52). MP3 and
+       MPEG audio by AmigaMCE's own Libs/amcempega.library (libmad: about
+       83 dB from a perfect decoder, where mpega 2.4 gives 34), or
+       mpega.library or MHI as before (Settings > Sound); its quality
+       chosen by how fast this Amiga is, measured at the first MP3 each
+       run, not by the name of its CPU (or high or medium, in Settings).
+       Paula at 14 bits: all four channels, quieter passages cleaner.
 0.8.9  Videos plays MPEG: on a ZZ9000 (MPEG-1 and MPEG-2, program and
-       transport streams, with their sound), and by the CPU on RTG
-       screens without one (Libs/mpegv.library 2: libmpeg2), DVDs too. DVDs in a drive, and DVD images (.iso): their film, or their
+       transport streams, with their sound), and MPEG-1 by the CPU on
+       RTG screens without one. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
-       controls, a stereo sound track first (Libs/amcedvd.library:
-       libdvdread and libdvdnav); decoded by the CPU, their menus
-       (their buttons drawn over the picture, forced subtitles too, a
-       menu button in the controls). AC-3 the card will not decode
-       (Amiberry's emulated card) decoded by a 68040 or 68060 instead
-       (Libs/ac3.library, ac3fpu.library: liba52). The CPU's
+       controls, the sound track the card plays best
+       (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
-       (Settings > Video: Use overlay when available), its B pictures
-       passed over while it is behind. One set of
+       (Settings > Display: Use overlay when available). One set of
        control glyphs for Now playing, the mini player, ANIMs, videos
        and DVDs, square on lowres, hires and laced screens alike.
 0.8.8  MP3 seeks land on a real frame (no error after a sound output
