@@ -1678,19 +1678,62 @@ static const char *log_name(void)
 /* ---------------------------------------------------------- decoding */
 static ULONG dec_full, dec_samples;     /* mpega's samples at full scale, of all it gave */
 
+/* One frame of MPEG audio into the FIFO at st.f_in (room there for
+ * MPEGA_PCM_SIZE), for music, radio and Plex (decode_loop) and a video's
+ * sound alike: through amcempega.library straight into the FIFO's rings
+ * (MPGA_decode_to), else mpega.library's frame copied in. The samples
+ * clipped counted (dec_full), and all (dec_samples). both: a mono
+ * stream's samples in both rings (a video's sound). The samples, or
+ * mpega's error (negative); st.f_in after them. */
+static LONG mpa_frame(MPEGA_STREAM *ms, BOOL both)
+{
+    LONG n, i;
+    ULONG o = st.f_in;
+    BOOL stereo = st.dec_channels == 2;
+    if (mpega_is_own) {
+        struct MpgaOut mo;
+        memset(&mo, 0, sizeof(mo));
+        mo.mo_Format = MPGA_FMT_S16;
+        mo.mo_Buffer[0] = st.fl;
+        mo.mo_Buffer[1] = st.fr;
+        mo.mo_Mask = FIFO_N - 1;
+        mo.mo_Index = o;
+        if ((n = MPGA_decode_to(ms, &mo)) <= 0)
+            return n;
+        dec_full += mo.mo_Clipped;
+        if (both && !stereo)
+            for (i = 0; i < n; i++, o++)
+                st.fr[o & (FIFO_N - 1)] = st.fl[o & (FIFO_N - 1)];
+    } else {
+        static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
+        WORD *pcm[2];
+        pcm[0] = pcm0;
+        pcm[1] = pcm1;
+        if ((n = MPEGA_decode_frame(ms, pcm)) <= 0)
+            return n;
+        for (i = 0; i < n; i++, o++) {
+            WORD a = pcm0[i], b = stereo ? pcm1[i] : both ? a : 0;
+            st.fl[o & (FIFO_N - 1)] = a;
+            if (stereo || both)
+                st.fr[o & (FIFO_N - 1)] = b;
+            /* (the decoder's own clipping: a sample at full scale) */
+            if (a >= 32767 || a <= -32767 || b >= 32767 || b <= -32767)
+                dec_full++;
+        }
+    }
+    dec_samples += (ULONG)n;
+    st.f_in += (ULONG)n;
+    return n;
+}
+
 /* Frames decoded into the FIFO while there is room; Paula served between. */
 static void decode_loop(MPEGA_STREAM *ms)
 {
-    static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
-    WORD *pcm[2];
     ULONG prebuf = (ULONG)st.dec_freq * prebuf_ms[buf_level] / 1000;
-    pcm[0] = pcm0;
-    pcm[1] = pcm1;
     if (prebuf > FIFO_N / 2)
         prebuf = FIFO_N / 2;
     while (!st.quit) {
-        LONG n, i;
-        ULONG o;
+        LONG n;
         serve();
         if (st.f_in - st.f_out > FIFO_N - MPEGA_PCM_SIZE) {
             /* full: wait for Paula to take some */
@@ -1699,28 +1742,7 @@ static void decode_loop(MPEGA_STREAM *ms)
                 out_take();
             continue;
         }
-        if (mpega_is_own) {
-            /* straight into the FIFO, its clipped samples counted by it */
-            struct MpgaOut mo;
-            memset(&mo, 0, sizeof(mo));
-            mo.mo_Format = MPGA_FMT_S16;
-            mo.mo_Buffer[0] = st.fl;
-            mo.mo_Buffer[1] = st.fr;
-            mo.mo_Mask = FIFO_N - 1;
-            mo.mo_Index = st.f_in;
-            n = MPGA_decode_to(ms, &mo);
-            if (n > 0) {
-                dec_full += mo.mo_Clipped;
-                dec_samples += (ULONG)n;
-                st.f_in += (ULONG)n;
-                if (!st.started && st.f_in - st.f_out >= prebuf) {
-                    st.state = ST_PLAYING;
-                    out_start();
-                }
-                continue;
-            }
-        } else
-            n = MPEGA_decode_frame(ms, pcm);
+        n = mpa_frame(ms, FALSE);
         if (n < 0) {
             if (st.eof) {
                 if (!st.started && st.f_in != st.f_out) {
@@ -1734,18 +1756,6 @@ static void decode_loop(MPEGA_STREAM *ms)
             fail(st.err[0] ? st.err : _("The stream could not be decoded"));
             break;
         }
-        o = st.f_in;
-        for (i = 0; i < n; i++, o++) {
-            WORD a = pcm0[i], b = st.dec_channels == 2 ? pcm1[i] : 0;
-            st.fl[o & (FIFO_N - 1)] = a;
-            if (st.dec_channels == 2)
-                st.fr[o & (FIFO_N - 1)] = b;
-            /* (the decoder's own clipping: a sample at full scale) */
-            if (a >= 32767 || a <= -32767 || b >= 32767 || b <= -32767)
-                dec_full++;
-        }
-        dec_samples += (ULONG)n;
-        st.f_in = o;
         if (!st.started && st.f_in - st.f_out >= prebuf) {
             st.state = ST_PLAYING;
             out_start();
@@ -2715,6 +2725,30 @@ static LONG a3_frame(struct Ac3Info *ai)
     return AC3_FRAME_SAMPLES;
 }
 
+/* An AC3 frame's got samples (a3.pcm, stereo) into the FIFO at st.f_in,
+ * each div of them averaged to one (the rate Paula or AHI plays), the
+ * left's largest size kept in *peak: for the CPU's video player and the
+ * ZZ9000's alike. */
+static void a3_to_fifo(LONG got, ULONG div, ULONG *peak)
+{
+    ULONG o = st.f_in, i, j;
+    for (i = 0; i + div <= (ULONG)got; i += div) {
+        LONG al = 0, ar = 0;
+        for (j = 0; j < div; j++) {
+            WORD l = a3.pcm[(i + j) * 2];
+            ULONG al_ = (ULONG)(l < 0 ? -l : l);
+            if (al_ > *peak)
+                *peak = al_;
+            al += l;
+            ar += a3.pcm[(i + j) * 2 + 1];
+        }
+        st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)div);
+        st.fr[o & (FIFO_N - 1)] = (WORD)(ar / (LONG)div);
+        o++;
+    }
+    st.f_in = o;
+}
+
 /* -------------------------------------------------- MPEG-1 and MPEG-2 by the CPU
  * Where there is no ZZ9000 (or it is not to be used): mpegv.library 2
  * (extras/mpegv: its own demultiplexer and libmpeg2, opened at run time)
@@ -3398,8 +3432,6 @@ static void swv_run(void)
     MPEGA_STREAM *ms = NULL;
     struct Hook rhook, phook;
     struct MpvInfo mi;
-    static WORD pcm0[MPEGA_PCM_SIZE], pcm1[MPEGA_PCM_SIZE];
-    WORD *pcm[2];
     ULONG f0 = 0, t0 = 0, rate = 0, period = 3600, hold, drop, run = 0, pre, adiv = 1, pcm_peak = 0;
     ZzU64 origin = 0, pts0 = 0, dry_m = 0;
     ULONG dry_t = 0;                        /* (its sound run dry since: v_clock_on) */
@@ -3428,8 +3460,6 @@ static void swv_run(void)
     /* (measured: each step's E-clock ticks, and how many) */
     unsigned long long t_dec = 0, t_conv = 0, t_aud = 0;
     ULONG n_dec = 0, n_conv = 0, n_aud = 0, hz = 0, tk;
-    pcm[0] = pcm0;
-    pcm[1] = pcm1;
     st.v_shown = st.v_dropped = 0;
     st.v_ms = 0;
     sw_aq_in = sw_aq_out = 0;
@@ -3575,7 +3605,7 @@ static void swv_run(void)
             (long)st.v_h, st.v_mpeg2 ? 2L : 1L, (const char *)MpvVersion(),
             st.v_dvd ? ", a DVD's" : st.v_ts ? ", a transport stream packed as it is read"
                                            : st.v_es ? ", a bare video stream" : "",
-            sw_sound ? "its sound by mpega.library" : sw_ac3 ? "its sound (AC3) by the CPU" : "no sound");
+            sw_sound ? (mpega_is_own ? "its sound by amcempega.library" : "its sound by mpega.library") : sw_ac3 ? "its sound (AC3) by the CPU" : "no sound");
     amce_log("video", m);
     if (sw_sound) {
         sprintf(m, "its sound: %ld Hz %s, decoded at %ld Hz %s through %s", (long)st.freq,
@@ -3710,10 +3740,9 @@ static void swv_run(void)
         /* its sound decoded while there is room (a second and a half ahead) */
         while (sw_sound && !a_done && st.f_in - st.f_out < (ULONG)st.dec_freq * 3 / 2 &&
                st.f_in - st.f_out < FIFO_N - MPEGA_PCM_SIZE) {
-            LONG n, k;
-            ULONG o;
+            LONG n;
             tk = time_ticks(&hz);
-            n = MPEGA_decode_frame(ms, pcm);
+            n = mpa_frame(ms, TRUE);
             t_aud += time_ticks(&hz) - tk;
             n_aud++;
             if (n == -2)
@@ -3722,12 +3751,6 @@ static void swv_run(void)
                 a_done = TRUE;
                 break;
             }
-            o = st.f_in;
-            for (k = 0; k < n; k++, o++) {
-                st.fl[o & (FIFO_N - 1)] = pcm0[k];
-                st.fr[o & (FIFO_N - 1)] = st.dec_channels == 2 ? pcm1[k] : pcm0[k];
-            }
-            st.f_in = o;
             busy = TRUE;
             if (!on)
                 break;                      /* (before the first picture: a frame a turn) */
@@ -3740,7 +3763,7 @@ static void swv_run(void)
             struct Ac3Info ai;
             int k, most = !on ? 12 : rate && st.f_in - st.f_out < (ULONG)st.dec_freq / 4 ? 6 : 2;
             for (k = 0; k < most; k++) {
-                ULONG room = FIFO_N - (st.f_in - st.f_out), j, o;
+                ULONG room = FIFO_N - (st.f_in - st.f_out);
                 LONG got;
                 if (rate && (st.f_in - st.f_out >= (ULONG)st.dec_freq ||
                              room < AC3_FRAME_SAMPLES / adiv + 64))
@@ -3779,23 +3802,7 @@ static void swv_run(void)
                             (unsigned long)(a3.pts0 / 90));
                     amce_log("video", m);
                 }
-                o = st.f_in;
-                for (j = 0; j + adiv <= (ULONG)got; j += adiv) {
-                    LONG al = 0, ar = 0;
-                    ULONG q;
-                    for (q = 0; q < adiv; q++) {
-                        WORD l = a3.pcm[(j + q) * 2];
-                        ULONG al_ = (ULONG)(l < 0 ? -l : l);
-                        if (al_ > pcm_peak)
-                            pcm_peak = al_;
-                        al += l;
-                        ar += a3.pcm[(j + q) * 2 + 1];
-                    }
-                    st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)adiv);
-                    st.fr[o & (FIFO_N - 1)] = (WORD)(ar / (LONG)adiv);
-                    o++;
-                }
-                st.f_in = o;
+                a3_to_fifo(got, adiv, &pcm_peak);
                 busy = TRUE;
             }
         }
@@ -4444,7 +4451,7 @@ static void video_run(void)
             struct Ac3Info ai;
             int k, most = !on ? 12 : rate && st.f_in - st.f_out < (ULONG)st.dec_freq / 4 ? 6 : 2;
             for (k = 0; k < most; k++) {
-                ULONG room = FIFO_N - (st.f_in - st.f_out), i, o;
+                ULONG room = FIFO_N - (st.f_in - st.f_out);
                 LONG got;
                 if (rate && (st.f_in - st.f_out >= (ULONG)st.dec_freq ||
                              room < AC3_FRAME_SAMPLES / div + 64))
@@ -4478,23 +4485,7 @@ static void video_run(void)
                     amce_log("video", m);
                     said_audio = TRUE;
                 }
-                o = st.f_in;
-                for (i = 0; i + div <= (ULONG)got; i += div) {
-                    LONG al = 0, ar = 0;
-                    ULONG j;
-                    for (j = 0; j < div; j++) {
-                        WORD l = a3.pcm[(i + j) * 2];
-                        ULONG al_ = (ULONG)(l < 0 ? -l : l);
-                        if (al_ > pcm_peak)
-                            pcm_peak = al_;
-                        al += l;
-                        ar += a3.pcm[(i + j) * 2 + 1];
-                    }
-                    st.fl[o & (FIFO_N - 1)] = (WORD)(al / (LONG)div);
-                    st.fr[o & (FIFO_N - 1)] = (WORD)(ar / (LONG)div);
-                    o++;
-                }
-                st.f_in = o;
+                a3_to_fifo(got, div, &pcm_peak);
                 pcm_frames += (ULONG)got;
                 busy = TRUE;
             }
