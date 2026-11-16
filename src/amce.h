@@ -684,6 +684,7 @@ BOOL vf_possible(const struct Gfx *g);
 BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wave, int n, const UBYTE *lev,
              int nlev, BOOL full);
 void vf_stop(void);
+void vf_clip(WORD bottom);          /* rows shown above this y only (0x7FFF: all) */
 void vf_timing(ULONG *frames, ULONG *ms);
 const char *vis_name(int v);        /* N_(): translate where shown */
 void vis_select(int v);             /* (also lifts a pause for load) */

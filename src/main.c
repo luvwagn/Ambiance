@@ -15092,11 +15092,47 @@ static void amp_frame(void)
  * written over it for a few seconds (and again as it changes); a key, a
  * click or the fire button and the page is back. The music goes on as
  * ever (np_tick between frames: the next track, a station's titles). */
+/* Flow on the whole screen: from a window, AmigaMCE's own full screen (as
+ * the picture viewer's), back to the window as it ends. Its controls, over
+ * the bottom, while the mouse moves: previous, play/pause, next, volume
+ * down and up, and full screen or the window. */
+static BOOL np_full_fs;             /* it opened the full screen (a window before) */
+static ULONG np_full_ctl;           /* the controls shown until (0: hidden) */
+enum { NF_PREV, NF_PLAY, NF_NEXT, NF_VDOWN, NF_VUP, NF_FULL, NF_COUNT };
+static WORD nf_x[NF_COUNT], nf_y, nf_w, nf_h, nf_bx0, nf_bx1, nf_by0;
+static WORD nf_band = 0x7FFF;       /* the strip at the bottom kept black (0x7FFF: none) */
+
+/* the pointer over Flow: shown or not, nothing else drawn (pointer_hide's
+ * hover and title would draw over the picture) */
+static void nf_pointer(BOOL show)
+{
+    if (!g.win)
+        return;
+    if (show) {
+        if (ptr_hidden == g.win)
+            ClearPointer(g.win);
+        ptr_hidden = NULL;
+    } else if (ptr_hidden != g.win) {
+        if (!ptr_blank && !(ptr_blank = AllocMem(6 * sizeof(UWORD), MEMF_CHIP | MEMF_CLEAR)))
+            return;
+        SetPointer(g.win, ptr_blank, 1, 16, 0, 0);
+        ptr_hidden = g.win;
+    }
+}
+
 static void np_full_exit(void)
 {
     if (!np_full)
         return;
     np_full = FALSE;
+    np_full_ctl = 0;
+    nf_band = 0x7FFF;
+    vf_clip(0x7FFF);
+    nf_pointer(TRUE);
+    if (np_full_fs && gfx_fs_on())
+        gfx_fs_leave(&g);                   /* the window again */
+    np_full_fs = FALSE;
+    vf_stop();                              /* (its full-size maps given back) */
     amce_log("visualisation", "Flow: the whole screen left");
     draw_all();
 }
@@ -15125,24 +15161,142 @@ static void np_full_enter(void)
         return;
     }
     np_full = TRUE;
+    np_full_fs = g.wb && gfx_fs_enter(&g);  /* a window: the whole display */
     np_full_first = TRUE;
     np_full_since = time_ms();
     np_full_serial = mp_serial();
-    pointer_hide();
-    amce_log("visualisation", "Flow: the whole screen (a key, a click or fire: back)");
+    np_full_ctl = 0;
+    nf_pointer(FALSE);
+    amce_log("visualisation", np_full_fs ? "Flow: full screen (Esc, a click on it or fire: back)"
+                                         : "Flow: the whole screen (Esc, a click on it or fire: back)");
 }
 
-/* what plays, over the picture: the title, and who by */
+/* what plays, over the picture: the title, and who by (above the
+ * controls when they show) */
 static void np_full_title(void)
 {
     const char *t = mp_is_stream() ? (st_title()[0] ? st_title() : mp_stream_name()) : mp_title();
     const char *by = mp_is_stream() ? mp_stream_name() : mp_track_by();
-    WORD x = U(16), y = g.h - U(16) - 2 * (g.font_h + U(4));
+    WORD x = U(16), y = (np_full_ctl ? nf_by0 - U(4) : g.h - U(12)) - 2 * (g.font_h + U(4));
     if (!t || !t[0])
         return;
     gfx_text(&g, x, y, t, PEN_WHITE, PEN_BG, g.w - 2 * x, TS_BOLD);
     if (by && by[0] && strcmp(by, t))
         gfx_text(&g, x, y + g.font_h + U(4), by, PEN_TEXT, PEN_BG, g.w - 2 * x, TS_SMALL);
+}
+
+/* the controls' places: a row of buttons centred at the bottom */
+static void np_full_layout(void)
+{
+    WORD gap = U(6), i, total;
+    nf_h = g.font_h * 2 + U(8);
+    nf_w = nf_h * 3 / 2;
+    if (gfx_mode_tall(g.mode))
+        nf_w = nf_h * 3;
+    total = NF_COUNT * nf_w + (NF_COUNT - 1) * gap + 2 * gap;
+    nf_bx0 = (WORD)((g.w - total) / 2);
+    nf_bx1 = nf_bx0 + total - 1;
+    nf_y = g.h - U(16) - nf_h;
+    nf_by0 = nf_y - gap;
+    for (i = 0; i < NF_COUNT; i++)
+        nf_x[i] = nf_bx0 + gap + i * (nf_w + gap) + (i >= NF_FULL ? gap : 0);
+}
+
+static void np_full_controls(void)
+{
+    static const UBYTE kind[NF_COUNT] = { GL_PREV, GL_PLAY, GL_NEXT, GL_VDOWN, GL_VUP, GL_FULL };
+    WORD i, sx = gfx_mode_tall(g.mode) ? 2 : 1, ry = nf_h / 5 > 2 ? nf_h / 5 : 2;
+    WORD mx = g.win ? g.win->MouseX - g.win->BorderLeft : -1, my = g.win ? g.win->MouseY - g.win->BorderTop : -1;
+    np_full_layout();
+    for (i = 0; i < NF_COUNT; i++) {
+        BOOL hov = mx >= nf_x[i] && mx < nf_x[i] + nf_w && my >= nf_y && my < nf_y + nf_h;
+        int k = kind[i];
+        if (i == NF_PLAY && mp_playing())
+            k = GL_PAUSE;
+        if (i == NF_FULL)
+            k = g.wb ? GL_FULL : GL_UNFULL;   /* (on its own screen: back to the page) */
+        np_rrect(nf_x[i], nf_y, nf_w, nf_h, ry, ry, hov ? PEN_SELDIM : PEN_BAR);
+        glyph_draw(g.rp, k, nf_x[i] + nf_w / 2, nf_y + nf_h / 2, glyph_rows(nf_h), sx,
+                   GPEN(hov ? PEN_WHITE : PEN_TEXT), GPEN(PEN_DIM), 0);
+    }
+}
+
+/* full screen from the window, or the window again, Flow on either */
+static void np_full_toggle_fs(void)
+{
+    if (!np_full_fs && !g.wb) {
+        np_full_exit();                     /* its own screen already: the page */
+        return;
+    }
+    nf_pointer(TRUE);                       /* (the window it was on: its own pointer back) */
+    if (np_full_fs && gfx_fs_on()) {
+        gfx_fs_leave(&g);
+        np_full_fs = FALSE;
+    } else if (g.wb) {
+        np_full_fs = gfx_fs_enter(&g);
+    }
+    np_full_first = TRUE;                   /* (its size another: from black) */
+    if (!np_full_ctl)
+        nf_pointer(FALSE);
+}
+
+/* A message while Flow fills the screen: TRUE if it was Flow's. The mouse
+ * moved shows the controls; a click on one of them presses it, elsewhere
+ * goes back to the page; Space, N, P and Up/Down play as on Now playing;
+ * F the full screen or the window; Esc, Return, Backspace back. */
+static BOOL np_full_input(struct IntuiMessage *m)
+{
+    WORD x = m->MouseX - (g.win ? g.win->BorderLeft : 0), y = m->MouseY - (g.win ? g.win->BorderTop : 0);
+    if (m->Class == IDCMP_MOUSEMOVE) {
+        if (!np_full_ctl)
+            nf_pointer(TRUE);
+        np_full_ctl = time_ms() + 3000;
+        return TRUE;
+    }
+    if (m->Class == IDCMP_MOUSEBUTTONS) {
+        int i;
+        if (m->Code != SELECTDOWN) {
+            if (m->Code == MENUDOWN)
+                np_full_exit();             /* the right button: back */
+            return TRUE;
+        }
+        if (np_full_ctl && y >= nf_by0 && x >= nf_bx0 && x <= nf_bx1) {
+            np_full_ctl = time_ms() + 3000;
+            for (i = 0; i < NF_COUNT; i++)
+                if (x >= nf_x[i] && x < nf_x[i] + nf_w && y >= nf_y && y < nf_y + nf_h) {
+                    if (i == NF_FULL)
+                        np_full_toggle_fs();
+                    else
+                        np_press(i == NF_PREV ? NB_PREV : i == NF_PLAY ? NB_PLAY : i == NF_NEXT ? NB_NEXT
+                                 : i == NF_VDOWN ? NB_VDOWN : NB_VUP);
+                }
+            return TRUE;
+        }
+        np_full_exit();
+        return TRUE;
+    }
+    if (m->Class == IDCMP_VANILLAKEY) {
+        switch (m->Code) {
+        case ' ': np_press(NB_PLAY); return TRUE;
+        case 'n': case 'N': np_press(NB_NEXT); return TRUE;
+        case 'p': case 'P': np_press(NB_PREV); return TRUE;
+        case 'f': case 'F': np_full_toggle_fs(); return TRUE;
+        case 27: case 13: case 8: np_full_exit(); return TRUE;
+        default: return TRUE;
+        }
+    }
+    if (m->Class == IDCMP_RAWKEY && !(m->Code & IECODE_UP_PREFIX)) {
+        if (m->Code == 0x4C)
+            np_press(NB_VUP);               /* Up */
+        else if (m->Code == 0x4D)
+            np_press(NB_VDOWN);             /* Down */
+        else if (m->Code == 0x4F)
+            np_press(NB_PREV);              /* Left */
+        else if (m->Code == 0x4E)
+            np_press(NB_NEXT);              /* Right */
+        return TRUE;
+    }
+    return m->Class == IDCMP_RAWKEY;        /* (key-ups) */
 }
 
 static void np_full_tick(void)
@@ -15161,6 +15315,33 @@ static void np_full_tick(void)
         np_full_exit();                     /* the music over: the page */
         return;
     }
+    if (np_full_ctl && (LONG)(now - np_full_ctl) >= 0) {
+        np_full_ctl = 0;                    /* the mouse still: the controls go */
+        nf_pointer(FALSE);
+    }
+    {
+        /* the strip at the bottom for what plays and the controls: black,
+         * Flow above it (drawn over, they would flicker on a screen
+         * without a buffer) */
+        BOOL title = np_full_ctl || now - np_full_since < 6000;
+        WORD band = 0x7FFF;
+        if (np_full_ctl)
+            np_full_layout();
+        if (title)
+            band = (np_full_ctl ? nf_by0 - U(4) : g.h - U(12)) - 2 * (g.font_h + U(4)) - U(8);
+        else if (np_full_ctl)
+            band = nf_by0 - U(8);
+        if (band < g.h / 2)
+            band = g.h / 2;
+        vf_clip(band);
+        if (band != nf_band || np_full_first) {
+            if (band < (WORD)g.h) {
+                SetAPen(g.rp, GPEN(PEN_BG));
+                RectFill(g.rp, 0, band, g.w - 1, g.h - 1);
+            }
+            nf_band = band;
+        }
+    }
     if (!vis_draw_full(&g, 0, 0, (WORD)g.w, (WORD)g.h, np_full_first)) {
         np_full_exit();
         set_msg(_("Flow could not be shown here"));
@@ -15171,7 +15352,9 @@ static void np_full_tick(void)
         np_full_serial = mp_serial();       /* another track: said again */
         np_full_since = now;
     }
-    if (now - np_full_since < 6000)
+    if (np_full_ctl)
+        np_full_controls();
+    if (np_full_ctl || now - np_full_since < 6000)
         np_full_title();
 }
 
@@ -15787,16 +15970,8 @@ static int app_main(void)
                 ReplyMsg((struct Message *)im);
                 if (iconified)
                     continue;               /* (its screen behind Workbench's: let go) */
-                if (np_full && ((copy.Class == IDCMP_RAWKEY && !(copy.Code & IECODE_UP_PREFIX) &&
-                                 (copy.Code < 0x60 || copy.Code > 0x67)) ||
-                                copy.Class == IDCMP_VANILLAKEY ||
-                                (copy.Class == IDCMP_MOUSEBUTTONS && !(copy.Code & IECODE_UP_PREFIX)))) {
-                    np_full_exit();         /* a key (not a shift alone), a click: the page */
-                    continue;
-                }
-                if (np_full && (copy.Class == IDCMP_MOUSEMOVE || copy.Class == IDCMP_RAWKEY ||
-                                copy.Class == IDCMP_MOUSEBUTTONS))
-                    continue;               /* (its key-up, the mouse moving: nothing) */
+                if (np_full && np_full_input(&copy))
+                    continue;               /* (Flow on the whole screen: its own) */
                 if (copy.Class == IDCMP_MOUSEMOVE)
                     gfx_window_rmb(&g, copy.MouseY);    /* title bar: the menus */
                 if (gfx_window_msg(&g, copy.Class, copy.Code)) {
@@ -15884,6 +16059,8 @@ out:
     mp_shutdown();
     if (np.list.pool)
         list_free(&np.list);
+    if (gfx_fs_on())
+        gfx_fs_leave(&g);           /* (Flow's full screen, as it quit) */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();

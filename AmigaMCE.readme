@@ -262,9 +262,15 @@ Controls
                right, the level meters, the spectrum or Flow (the playing
                marker in the header and lists follows it; greyed where
                the music allows the meters only, as under MHI). F: Flow
-               on the whole window or screen (a key, a click or fire
-               to come back), or the AmigaAMP plug-in chosen in
-               Settings. Opened
+               on the whole screen (from a window, a screen of its own
+               in Workbench's mode), or the AmigaAMP plug-in chosen in
+               Settings. On Flow: move the mouse for its controls
+               (previous, play/pause, next, volume, and full screen or
+               the window); Space play/pause, N/P or Right/Left next
+               and previous, Up/Down volume; F full screen or the
+               window; Esc, Return, the
+               right button, fire or a click on the picture to come
+               back. Opened
                from another section (a module's page from Music), its
                title says where the music is from: a click there, or G,
                goes to that folder; Esc goes back where you were. Esc goes back, the
@@ -339,19 +345,24 @@ Not there yet
 - DVD subtitles (other than a menu's forced ones); encrypted (CSS)
   discs.
 - MPEG video on AGA screens without a ZZ9000.
-- Modules play on Paula only; AHI for them comes later.
+- Modules played by the Protracker replayer or EaglePlayer's play on
+  Paula only (those the mixer plays follow Settings > Sound).
 
 
 History
 -------
 0.9.1  Flow, Now Playing's visualisation for graphics cards: the
        picture carried on and on, zoomed, turned and rippled, the
-       sound's wave drawn in; F shows it on the whole screen. AmigaAMP's
+       sound's wave drawn in, at half the screen's resolution on fast
+       Amigas (a quarter on others, coarser where frames come slowly);
+       F shows it on a screen of its own, its controls there while the
+       mouse moves. AmigaAMP's
        visual plug-ins run from AmigaMCE (F, Settings > Display > Full
        screen visual). Text blended in 16 steps on fast Amigas with a
        graphics card; Extra large text in a window. A module back at
        the next start plays from its beginning (a track still from
-       where it was).
+       where it was). Modules the mixer plays follow Settings > Sound:
+       AHI, or Paula at 14 bits, changed as they play.
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it

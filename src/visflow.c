@@ -27,7 +27,7 @@
 
 extern struct Library *CyberGfxBase;
 
-#define MAXPIX  65535           /* the warp's table: UWORD offsets */
+#define MAXPIX  (512UL * 384)   /* the most worked out (2 MB with its tables) */
 #define MAPROWS 12              /* rows of the next table made a frame */
 
 /* a palette: brightness 0, 85, 170 and 255 as RGB, the rest between */
@@ -60,13 +60,14 @@ static const struct Preset presets[] = {
 static struct {
     BOOL on, failed;
     WORD logged_w, logged_h;    /* (the size last logged: logged again only as it changes) */
+    UBYTE coarse;               /* slow here: worked out this much coarser (vf_draw) */
     struct Gfx *g;
     struct Screen *scr;
     WORD w, h;                  /* the place drawn, pixels */
     WORD iw, ih;                /* worked out at */
     APTR mem;                   /* (all below from it) */
     UBYTE *a, *b;               /* this frame's brightness and the last's (swapped each frame) */
-    UWORD *map, *next;          /* the warp: where each pixel comes from */
+    ULONG *map, *next;          /* the warp: where each pixel comes from */
     UBYTE *colrun, *rowrun;     /* each internal column's and row's pixels on screen */
     UBYTE fade[1024];           /* four pixels' sum: their average, dimmed */
     WORD sine[1024];
@@ -165,7 +166,7 @@ static void map_rows(int p, int rows)
     if (end > vf.ih)
         end = vf.ih;
     for (y = vf.map_row; y < end; y++) {
-        UWORD *m = vf.next + y * vf.iw;
+        ULONG *m = vf.next + (ULONG)y * vf.iw;
         LONG dy = y - cy;
         for (x = 0; x < vf.iw; x++) {
             LONG dx = x - cx, q = (dx * dx + dy * dy) * 1024 / r2max;     /* 0-1024 out to the corners */
@@ -186,7 +187,7 @@ static void map_rows(int p, int rows)
                 sy = 0;
             else if (sy > vf.ih - 2)
                 sy = vf.ih - 2;
-            m[x] = (UWORD)(sy * vf.iw + sx);
+            m[x] = (ULONG)(sy * vf.iw + sx);
         }
     }
     vf.map_row = end;
@@ -198,7 +199,7 @@ static void warp(void)
 {
     const UBYTE *src = vf.b, *f = vf.fade;
     UBYTE *dst = vf.a;
-    const UWORD *m = vf.map;
+    const ULONG *m = vf.map;
     ULONG n = (ULONG)vf.iw * vf.ih, iw = vf.iw;
     while (n--) {
         const UBYTE *p = src + *m++;
@@ -304,10 +305,10 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     vf_free();
     if (w < 16 || h < 8)
         return FALSE;
-    /* about 256 across; never more than MAXPIX in all */
-    s = ((ULONG)w + 255) / 256;
-    if (s < 2)
-        s = 2;
+    /* half the screen's pixels each way where this Amiga is fast (as
+     * measured), else a quarter; coarser again if its frames come slowly
+     * (vf_draw); never more than MAXPIX in all */
+    s = (plex_tier() >= 2 ? 2 : 4) + vf.coarse;
     if (s > (ULONG)h / 24)
         s = (ULONG)h / 24;                  /* a low strip (Now playing's): finer, not 11 rows */
     if (s < 1)
@@ -319,7 +320,7 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     if (vf.iw < 8 || vf.ih < 8)
         return FALSE;
     n = (ULONG)vf.iw * vf.ih;
-    mem = 2 * n + 2 * n * 2 + vf.iw + vf.ih + (ULONG)w * 4 + 16;
+    mem = ((2 * n + 3) & ~3UL) + 2 * n * 4 + vf.iw + vf.ih + (ULONG)w * 4 + 16;
     if (!(m = AllocVec(mem, MEMF_ANY | MEMF_CLEAR))) {
         vf.failed = TRUE;
         return FALSE;
@@ -327,7 +328,7 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     vf.mem = m;
     vf.a = m;
     vf.b = m + n;
-    vf.map = (UWORD *)(m + 2 * n);
+    vf.map = (ULONG *)(m + ((2 * n + 3) & ~3UL));
     vf.next = vf.map + n;
     vf.line = (UBYTE *)(vf.next + n);
     vf.colrun = vf.line + (ULONG)w * 4;
@@ -375,7 +376,7 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     vf.pal_to = vf.pal;
     vf.map_row = 0;
     map_rows(vf.preset, vf.ih);
-    memcpy(vf.map, vf.next, n * 2);
+    memcpy(vf.map, vf.next, n * 4);
     vf.map_row = -1;
     vf.t_preset = vf.t_pal = vf.t_beat = time_ms();
     vf.on = TRUE;
@@ -426,10 +427,22 @@ static void make_line(const UBYTE *row)
     }
 }
 
+/* the rows shown stop above this (the screen's own y): what is below
+ * kept for the controls over the picture */
+static WORD vf_bottom = 0x7FFF;
+
+void vf_clip(WORD bottom)
+{
+    vf_bottom = bottom;
+}
+
 static void show(struct Gfx *g, WORD x, WORD y)
 {
     int r, k;
     ULONG wb = (ULONG)vf.w * vf.bpp;
+    WORD hh = vf_bottom - y < vf.h ? vf_bottom - y : vf.h;
+    if (hh <= 0)
+        return;
     if (vf.direct) {
         APTR base = NULL, lk;
         ULONG bpr = 0;
@@ -444,13 +457,13 @@ static void show(struct Gfx *g, WORD x, WORD y)
                 CopyMem(vf.line, d, wb);
         }
         UnLockBitMap(lk);
-        BltBitMapRastPort(vf.bm, 0, 0, g->rp, x, y, vf.w, vf.h, 0xC0);
+        BltBitMapRastPort(vf.bm, 0, 0, g->rp, x, y, vf.w, hh, 0xC0);
     } else {
         /* a row at a time through WritePixelArray, ARGB */
         WORD yy = y;
         for (r = 0; r < vf.ih; r++) {
             make_line(vf.a + r * vf.iw);
-            for (k = vf.rowrun[r]; k; k--, yy++)
+            for (k = vf.rowrun[r]; k && yy < y + hh; k--, yy++)
                 WritePixelArray(vf.argb, 0, 0, (UWORD)(vf.w * 4), g->rp, x, yy, (UWORD)vf.w, 1,
                                 RECTFMT_ARGB);
         }
@@ -500,7 +513,7 @@ BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wv, int 
     if (vf.map_row >= 0) {
         map_rows(vf.next_preset, MAPROWS);
         if (vf.map_row >= vf.ih) {
-            UWORD *s = vf.map;
+            ULONG *s = vf.map;
             vf.map = vf.next;
             vf.next = s;
             vf.preset = vf.next_preset;
@@ -533,6 +546,19 @@ BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wv, int 
     gfx_dirty();                    /* (a double-buffered screen flips to it; a window's copy) */
     vf.frames++;
     vf.ms += time_ms() - t0;
+    if (h > 120 && time_ms() - t0 > 50) {
+        /* the whole screen's coming slowly (under 20 a second for a second):
+         * coarser from the next frame */
+        if (++vf.slow >= 20 && vf.coarse < 4) {
+            char m[80];
+            vf.coarse++;
+            sprintf(m, "Flow: frames slow here (%lu ms): worked out coarser", (unsigned long)(time_ms() - t0));
+            amce_log("visualisation", m);
+            vf_free();
+        }
+    } else {
+        vf.slow = 0;
+    }
     return TRUE;
 }
 
