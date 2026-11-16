@@ -59,6 +59,8 @@ static BOOL alpha_allowed;      /* fast enough (main.c, by the speed measured) *
 void sm_alpha_allow(BOOL on)
 {
     alpha_allowed = on;
+    amce_log("smooth style", on ? "text blended in 16 steps where the screen is 15 to 32-bit (fast here)"
+                                : "text with masks (not fast enough here, or AmigaMCE/TextBlend off)");
 }
 
 #define NFACES      3

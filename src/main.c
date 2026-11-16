@@ -337,6 +337,7 @@ struct Chunks {
 };
 
 static void set_msg(const char *m);
+static BOOL np_full;                /* Flow on the whole screen: the page draws nothing */
 static WORD list_visible(void);
 static void draw_list_rows(struct Page *p);
 static void draw_title(struct Page *p);
@@ -4279,7 +4280,8 @@ static void draw_footer(void)
 static void set_msg(const char *m)
 {
     amce_strlcpy(msg, m ? m : "", sizeof(msg));
-    draw_footer();
+    if (!np_full)
+        draw_footer();                      /* (Flow on the whole screen: shown as it goes) */
 }
 
 /* The list's "n/total" at the right of the title row. Only this changes
@@ -6699,8 +6701,8 @@ static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen
 }
 
 /* Flow on the whole window or screen (F on Now playing): the page
- * behind it drawn again when it goes (a key, a click, the fire button) */
-static BOOL np_full;
+ * behind it drawn again when it goes (a key, a click, the fire button);
+ * np_full itself near the top (set_msg looks at it) */
 static BOOL np_full_first;
 static ULONG np_full_since, np_full_serial;
 
@@ -8457,7 +8459,8 @@ static void np_tick(void)
     if (np.seek_due && (LONG)(time_ms() - np.seek_due) >= 0)
         np_seek_track((ULONG)np.seek_to, 0);    /* Back/Forward rested: from there */
     np_repeat();
-    np_eq_tick();
+    if (!np_full)
+        np_eq_tick();                       /* (Flow on the whole screen: no marker under it) */
     if (mp_is_track() && mp_running() && np_on() && np.w) {
         /* the average bitrate settling: its line again when it moves */
         static ULONG shown;
@@ -15468,17 +15471,6 @@ static int app_main(void)
         me->pr_WindowPtr = oldwin;
     }
     plex_load(caps.cpu);            /* after: it needs the CPU */
-    {
-        /* the smooth style's text blended in 16 steps where this Amiga is
-         * fast (as measured: a JIT's 68030 too, never a 25 MHz one), on a
-         * graphics card's 15-32 bit screen; AmigaMCE/TextBlend "on" or
-         * "off" says otherwise */
-        char v[8];
-        BOOL on = plex_tier() >= 2;
-        if (GetVar((CONST_STRPTR)"AmigaMCE/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
-            on = !amce_stricmp(v, "on");
-        sm_alpha_allow(on);
-    }
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
     if (caps.zz9000) {
@@ -15533,6 +15525,17 @@ static int app_main(void)
         treq->tr_time.tv_micro = 40000;
         SendIO((struct IORequest *)treq);
     }
+    {
+        /* the smooth style's text blended in 16 steps where this Amiga is
+         * fast (as measured, so after the timer: a JIT's 68030 too, never a
+         * 25 MHz one), on a graphics card's 15-32 bit screen;
+         * AmigaMCE/TextBlend "on" or "off" says otherwise */
+        char v[8];
+        BOOL on = plex_tier() >= 2;
+        if (GetVar((CONST_STRPTR)"AmigaMCE/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+            on = !amce_stricmp(v, "on");
+        sm_alpha_allow(on);
+    }
 
     if (debug_on)
         dbg_cpu_start();
@@ -15586,13 +15589,16 @@ static int app_main(void)
         struct TextBox *atb = cur_tb();
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
-        BOOL busy = !iconified && !mini_on &&
+        BOOL busy = !iconified && !mini_on && !np_full &&
                     ((atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
                      tb_animating(&pv_tb));
         ULONG sig;
-        if (loader_due())
-            preview_arrived();
-        menu_layout();                  /* the focus moved by another way: the column follows */
+        if (!np_full) {
+            /* (Flow on the whole screen: the page's own drawing waits) */
+            if (loader_due())
+                preview_arrived();
+            menu_layout();              /* the focus moved by another way: the column follows */
+        }
         if (busy) {
             sig = SetSignal(0, mask) & mask;
         } else {
@@ -15624,7 +15630,7 @@ static int app_main(void)
                 break;
             continue;
         }
-        if (sig & lsig)
+        if ((sig & lsig) && !np_full)
             preview_arrived();          /* the loader brought something */
         if (sig & nsig)
             radio_collect();            /* radio-browser.info answered */
@@ -15774,8 +15780,8 @@ static int app_main(void)
                     break;      /* a launch closed and reopened the window */
             }
         }
-        if (g.win && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
-                      ((atb = cur_tb()) && tb_animating(atb)))) {
+        if (g.win && !np_full && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
+                                  ((atb = cur_tb()) && tb_animating(atb)))) {
             ULONG tp = time_ms();
             BOOL flipped = gfx_present(&g);
             if (hold.dir && (flipped || g.wb))

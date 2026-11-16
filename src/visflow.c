@@ -305,6 +305,10 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     s = ((ULONG)w + 255) / 256;
     if (s < 2)
         s = 2;
+    if (s > (ULONG)h / 24)
+        s = (ULONG)h / 24;                  /* a low strip (Now playing's): finer, not 11 rows */
+    if (s < 1)
+        s = 1;
     while (((ULONG)w / s) * ((ULONG)h / s) > MAXPIX)
         s++;
     vf.iw = (WORD)(w / s);
@@ -521,6 +525,7 @@ BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wv, int 
     if (n > 1)
         wave(wv, n, (int)loud);
     show(g, x, y);
+    gfx_dirty();                    /* (a double-buffered screen flips to it; a window's copy) */
     vf.frames++;
     vf.ms += time_ms() - t0;
     return TRUE;
