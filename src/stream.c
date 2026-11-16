@@ -5648,6 +5648,12 @@ BOOL st_ahi(void)
     return use_ahi;
 }
 
+/* Settings > Sound: Paula at 14 bits (the mixer's modules follow it too) */
+BOOL st_paula14_wanted(void)
+{
+    return paula14_on && !use_ahi;
+}
+
 /* Settings > Sound: MP3 decoded by this MHI driver (a library's path; ""
  * mpega.library), for streams started from now on. */
 void st_use_mhi(const char *driver)

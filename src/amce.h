@@ -628,6 +628,7 @@ void mp_subsongs(int *cur, int *n);
 BOOL mp_subsong_step(int d);            /* FALSE: no such subsong */
 const char *mp_author(void);
 BOOL mp_seek_ms(ULONG ms);
+BOOL mp_output_changed(char *err, LONG errmax);   /* Settings > Sound: the mixer's module through it */
 /* a station (radio.c's item): its stream played (stream.c) as an engine */
 BOOL mp_load_stream(const char *url, const char *name, const char *tag, UWORD cpu, char *err,
                     LONG errmax);
@@ -718,6 +719,7 @@ void st_use_ahi(BOOL on);                  /* Settings > Sound: AHI for streams 
 BOOL st_secure(void);           /* the stream playing came over HTTPS */
 void st_use_https(BOOL on);     /* https: streams played (Settings > Networking > HTTPS, AmiSSL) */
 BOOL st_ahi(void);
+BOOL st_paula14_wanted(void);       /* Settings > Sound: Paula at 14 bits */
 void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
 void st_use_paula14(BOOL on);            /* Paula at 14 bits, four channels */
@@ -800,6 +802,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax);  
 BOOL mx_start(UWORD master, char *err, LONG errmax);
 void mx_stop(void);
 void mx_pause(BOOL on);
+BOOL mx_output(char *err, LONG errmax);    /* on through the output Settings says now */
 void mx_volume(int v);
 BOOL mx_ended(void);
 void mx_seek_ms(ULONG ms);

@@ -6,14 +6,19 @@
  * themselves: FastTracker (XM), Scream Tracker (S3M), Impulse Tracker
  * (IT), 6- and 8-channel MODs, MTM, 669... modplug.library (Thomas Wenzel's
  * 68k port of libmodplug, LIBS:) mixes them in software into a buffer,
- * and AmigaMCE plays that on two channels (left, right) of 8-bit samples.
- * It needs a 68020 or better; how good it sounds depends on the CPU: a
- * 68030 mixes at 22 kHz, a 68040/060 at 28 kHz with interpolation.
+ * and AmigaMCE plays that as Settings > Sound says (as radio and music
+ * files): on two of Paula's channels (left, right) at 8 bits, on all four
+ * at 14 (each side's high byte at volume 64, its next 6 bits at volume 1),
+ * or through AHI at 16. It needs a 68020 or better; how good it sounds
+ * depends on the CPU: a 68030 mixes at 22 kHz, a 68040/060 at 28 kHz with
+ * interpolation. A change of output while it plays (mx_output): it goes
+ * on from where it was through the new one.
  *
- * Paula plays one half of a double buffer while a process of AmigaMCE's
- * mixes the next into the other: the channel 0 audio interrupt, as Paula
- * starts each half, points it at the other half next and wakes the
- * mixer for the one just played.
+ * It mixes 16-bit stereo into one half of a double buffer while the other
+ * plays. On Paula, the channel 0 audio interrupt, as Paula starts each
+ * half, points it at the other half next and wakes the mixer for the one
+ * just played; through AHI, its sound hook does the same with its two
+ * sounds.
  *
  * modplug.library comes without a C header here; its calls are taken from
  * the library itself (its vector table): libmodplug's API with a handle
@@ -30,9 +35,13 @@
 #include <hardware/dmabits.h>
 #include <hardware/intbits.h>
 #include <dos/dostags.h>
+#include <devices/ahi.h>
 #include <inline/macros.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/ahi.h>
+
+extern struct Library *AHIBase;     /* (stream.c's: one of the two plays at a time) */
 
 extern struct ExecBase *SysBase;
 #define CU ((volatile struct Custom *)0xDFF000)
@@ -71,11 +80,26 @@ static struct Library *ModPlugBase;
 #define HALF        4096            /* samples in each half of the buffer */
 #define NAMES       64
 
+enum { MXO_PAULA8, MXO_PAULA14, MXO_AHI };
+
 static struct {
     APTR handle, file;
     struct SignalSemaphore lock;    /* around the library's calls on the file */
-    BYTE *chip;                     /* left 0, left 1, right 0, right 1 */
-    UBYTE *tmp;                     /* what it mixes: 8-bit stereo, interleaved */
+    UBYTE out;                      /* MXO_: where it plays */
+    BYTE *chip;                     /* Paula's: left 0, left 1, right 0, right 1 (14 bits:
+                                     * then left's low bits 0, 1, right's 0, 1) */
+    ULONG chip_size;
+    WORD *mix[2];                   /* each half as mixed: 16-bit stereo, interleaved
+                                     * (AHI's two sounds themselves) */
+    /* AHI's */
+    struct MsgPort *aport;
+    struct AHIRequest *aio;
+    BOOL aopen, aplaying;
+    struct AHIAudioCtrl *actrl;
+    struct Hook ahook;
+    volatile BYTE aqueued;
+    volatile UBYTE afill_due;
+    UWORD avol;
     UWORD period;
     ULONG rate;
     struct Process *proc;
@@ -95,38 +119,76 @@ static struct {
     ULONG length_ms;
 } mx;
 
+static void paula_volumes(void);
+
 /* ---------------------------------------------------------- mixing */
+/* Half half mixed (16-bit stereo), then, on Paula, as its channels want it */
 static void mix_half(int half)
 {
-    BYTE *l = mx.chip + half * HALF, *r = mx.chip + (2 + half) * HALF;
-    const UBYTE *t = mx.tmp;
+    WORD *t = mx.mix[half];
     LONG got = 0, i, n;
-    UBYTE pl = 0, pr = 0;
+    UWORD pl = 0, pr = 0;
     if (!mx.ended) {
         ObtainSemaphore(&mx.lock);
-        got = MP_Read(mx.file, mx.tmp, HALF * 2);
+        got = MP_Read(mx.file, t, HALF * 4);
         ReleaseSemaphore(&mx.lock);
-        if (got < HALF * 2)
+        if (got < HALF * 4)
             mx.ended = TRUE;
     }
-    n = got / 2;
-    for (i = 0; i < n; i++, t += 2) {
-        BYTE a = (BYTE)(t[0] ^ 0x80), b = (BYTE)(t[1] ^ 0x80);
-        UBYTE aa = (UBYTE)(a < 0 ? -a : a), bb = (UBYTE)(b < 0 ? -b : b);
-        l[i] = a;
-        r[i] = b;
+    n = got / 4;
+    for (i = 0; i < n; i++) {
+        WORD a = t[2 * i], b = t[2 * i + 1];
+        UWORD aa = (UWORD)(a < 0 ? -a : a), bb = (UWORD)(b < 0 ? -b : b);
         if (aa > pl)
             pl = aa;
         if (bb > pr)
             pr = bb;
     }
-    for (; i < HALF; i++)
-        l[i] = r[i] = 0;
+    for (i = n; i < HALF; i++)
+        t[2 * i] = t[2 * i + 1] = 0;
+    if (mx.out == MXO_PAULA8) {
+        BYTE *l = mx.chip + half * HALF, *r = mx.chip + (2 + half) * HALF;
+        for (i = 0; i < HALF; i++) {
+            l[i] = (BYTE)(t[2 * i] >> 8);
+            r[i] = (BYTE)(t[2 * i + 1] >> 8);
+        }
+    } else if (mx.out == MXO_PAULA14) {
+        /* each side's high byte (volume 64) and next 6 bits (volume 1): the
+         * volume ours, Paula's are those */
+        BYTE *l = mx.chip + half * HALF, *r = mx.chip + (2 + half) * HALF;
+        UBYTE *ll = (UBYTE *)mx.chip + (4 + half) * HALF, *rl = (UBYTE *)mx.chip + (6 + half) * HALF;
+        LONG vol = mx.master;
+        for (i = 0; i < HALF; i++) {
+            LONG a = ((LONG)t[2 * i] * vol) >> 6, b = ((LONG)t[2 * i + 1] * vol) >> 6;
+            l[i] = (BYTE)(a >> 8);
+            r[i] = (BYTE)(b >> 8);
+            ll[i] = (UBYTE)((a & 0xff) >> 2);
+            rl[i] = (UBYTE)((b & 0xff) >> 2);
+        }
+    }
     mx.mixed += (ULONG)n;
-    if (pl > mx.peak_l)
-        mx.peak_l = pl;
-    if (pr > mx.peak_r)
-        mx.peak_r = pr;
+    if ((pl >> 8) > mx.peak_l)
+        mx.peak_l = (UBYTE)(pl >> 8);
+    if ((pr >> 8) > mx.peak_r)
+        mx.peak_r = (UBYTE)(pr >> 8);
+}
+
+/* AHI's sound hook (its interrupt): a sound starts; the other is queued
+ * after it and the mixer woken to mix it */
+static ULONG ahi_hook(register struct Hook *h __asm("a0"), register struct AHISoundMessage *sm __asm("a1"),
+                      register struct AHIAudioCtrl *a __asm("a2"))
+{
+    BYTE k = mx.aqueued < 0 ? 0 : mx.aqueued;
+    (void)h;
+    (void)sm;
+    mx.cur = (UBYTE)k;
+    mx.play_t = time_ms();
+    mx.aqueued = (BYTE)(k ^ 1);
+    AHI_SetSound(0, (UWORD)(k ^ 1), 0, 0, a, AHISF_NONE);
+    mx.afill_due |= (UBYTE)(1 << (k ^ 1));
+    if (mx.proc && mx.sig >= 0)
+        Signal(&mx.proc->pr_Task, 1UL << mx.sig);
+    return 0;
 }
 
 /* The mixer process: a half each time it is woken. */
@@ -138,8 +200,27 @@ static void mixer_main(void)
         ULONG got = Wait((s >= 0 ? 1UL << s : 0) | SIGBREAKF_CTRL_C);
         if (mx.quit || (got & SIGBREAKF_CTRL_C))
             break;
-        if (!mx.paused)
+        if (mx.out == MXO_AHI) {
+            UBYTE due;
+            int k;
+            Disable();
+            due = mx.afill_due;
+            mx.afill_due = 0;
+            Enable();
+            for (k = 0; k < 2; k++)
+                if (due & (1 << k)) {
+                    if (mx.paused)
+                        memset(mx.mix[k], 0, HALF * 4);     /* (paused: silence, the song held) */
+                    else
+                        mix_half(k);
+                }
+            if (mx.actrl && mx.avol != (mx.paused ? 0 : mx.master)) {
+                mx.avol = mx.paused ? 0 : mx.master;
+                AHI_SetVol(0, (Fixed)(((ULONG)mx.avol << 16) / 64), 0x8000, mx.actrl, AHISF_IMM);
+            }
+        } else if (!mx.paused) {
             mix_half(mx.want);
+        }
     }
     if (s >= 0)
         FreeSignal(s);
@@ -158,6 +239,10 @@ static void audio_code(void)
     next = (UBYTE)(mx.cur ^ 1);
     CU->aud[0].ac_ptr = (UWORD *)(mx.chip + next * HALF);
     CU->aud[1].ac_ptr = (UWORD *)(mx.chip + (2 + next) * HALF);
+    if (mx.out == MXO_PAULA14) {
+        CU->aud[3].ac_ptr = (UWORD *)(mx.chip + (4 + next) * HALF);
+        CU->aud[2].ac_ptr = (UWORD *)(mx.chip + (6 + next) * HALF);
+    }
     mx.want = next;
     if (mx.proc && mx.sig >= 0)
         Signal(&mx.proc->pr_Task, 1UL << mx.sig);
@@ -182,7 +267,7 @@ static void settings(void)
     mx.rate = PAULA_CLOCK / mx.period;
     s.mFlags = 0;                           /* no oversampling, noise reduction... */
     s.mChannels = 2;
-    s.mBits = 8;
+    s.mBits = 16;                           /* (Paula's 8 bits taken from it) */
     s.mFrequency = (LONG)mx.rate;
     s.mResamplingMode = fast ? 1 : 0;       /* linear, or nearest on slower CPUs */
     s.mStereoSeparation = 128;
@@ -288,18 +373,60 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
 }
 
 /* ---------------------------------------------------------- playing */
+static void ahi_end(void)
+{
+    amce_card_lock();
+    if (mx.actrl) {
+        if (mx.aplaying) {
+            struct TagItem t[2];
+            t[0].ti_Tag = AHIC_Play;
+            t[0].ti_Data = FALSE;
+            t[1].ti_Tag = TAG_DONE;
+            AHI_ControlAudioA(mx.actrl, t);
+        }
+        AHI_FreeAudio(mx.actrl);
+    }
+    if (mx.aopen)
+        CloseDevice((struct IORequest *)mx.aio);
+    if (mx.aopen || mx.actrl)
+        AHIBase = NULL;
+    amce_card_unlock();
+    if (mx.aio)
+        DeleteIORequest((struct IORequest *)mx.aio);
+    if (mx.aport)
+        DeleteMsgPort(mx.aport);
+    mx.actrl = NULL;
+    mx.aio = NULL;
+    mx.aport = NULL;
+    mx.aopen = mx.aplaying = FALSE;
+}
+
 void mx_stop(void)
 {
-    if (!mx.running && !mx.proc && !mx.int_set)
+    int k;
+    if (!mx.running && !mx.proc && !mx.int_set && !mx.actrl && !mx.aopen)
         return;
-    CU->intena = INTF_AUD0;
-    CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
-    CU->aud[0].ac_vol = 0;
-    CU->aud[1].ac_vol = 0;
-    CU->intreq = INTF_AUD0;
+    if (mx.out != MXO_AHI || mx.int_set) {
+        CU->intena = INTF_AUD0;
+        CU->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+        for (k = 0; k < 4; k++)
+            CU->aud[k].ac_vol = 0;
+        CU->intreq = INTF_AUD0;
+    }
     if (mx.int_set) {
         SetIntVector(INTB_AUD0, mx.old_aint);
         mx.int_set = FALSE;
+    }
+    if (mx.actrl && mx.aplaying) {
+        /* AHI stopped first: its hook no longer wakes the mixer */
+        struct TagItem t[2];
+        t[0].ti_Tag = AHIC_Play;
+        t[0].ti_Data = FALSE;
+        t[1].ti_Tag = TAG_DONE;
+        amce_card_lock();
+        AHI_ControlAudioA(mx.actrl, t);
+        amce_card_unlock();
+        mx.aplaying = FALSE;
     }
     if (mx.proc) {
         mx.quit = TRUE;
@@ -307,28 +434,115 @@ void mx_stop(void)
         while (mx.proc)
             Delay(1);
     }
+    if (mx.actrl || mx.aopen)
+        ahi_end();                          /* (the mixer gone: nothing calls AHI now) */
     Delay(1);                               /* Paula's last fetches from the buffer done */
     mx.running = FALSE;
     if (mx.chip) {
-        FreeMem(mx.chip, HALF * 4);
+        FreeMem(mx.chip, mx.chip_size);
         mx.chip = NULL;
     }
-    if (mx.tmp) {
-        FreeVec(mx.tmp);
-        mx.tmp = NULL;
+    for (k = 0; k < 2; k++) {
+        if (mx.mix[k])
+            FreeVec(mx.mix[k]);
+        mx.mix[k] = NULL;
     }
+}
+
+/* AHI's default mode opened and its two sounds, the first mixed and
+ * playing: FALSE if it could not be (the caller stops) */
+static BOOL ahi_begin(char *err, LONG errmax)
+{
+    struct TagItem t[8];
+    struct AHISampleInfo si;
+    int k;
+    BOOL ok = FALSE;
+    if (!(mx.aport = CreateMsgPort()) ||
+        !(mx.aio = (struct AHIRequest *)CreateIORequest(mx.aport, sizeof(struct AHIRequest))))
+        goto out;
+    mx.aio->ahir_Version = 4;
+    amce_card_lock();
+    if (OpenDevice((CONST_STRPTR)AHINAME, AHI_NO_UNIT, (struct IORequest *)mx.aio, 0)) {
+        amce_card_unlock();
+        goto out;
+    }
+    mx.aopen = TRUE;
+    AHIBase = (struct Library *)mx.aio->ahir_Std.io_Device;
+    mx.ahook.h_Entry = (HOOKFUNC)(APTR)ahi_hook;
+    mx.aqueued = -1;
+    mx.afill_due = 0;
+    t[0].ti_Tag = AHIA_AudioID;
+    t[0].ti_Data = AHI_DEFAULT_ID;
+    t[1].ti_Tag = AHIA_MixFreq;
+    t[1].ti_Data = AHI_DEFAULT_FREQ;
+    t[2].ti_Tag = AHIA_Channels;
+    t[2].ti_Data = 1;
+    t[3].ti_Tag = AHIA_Sounds;
+    t[3].ti_Data = 2;
+    t[4].ti_Tag = AHIA_SoundFunc;
+    t[4].ti_Data = (ULONG)&mx.ahook;
+    t[5].ti_Tag = TAG_DONE;
+    if (!(mx.actrl = AHI_AllocAudioA(t))) {
+        amce_card_unlock();
+        goto out;
+    }
+    for (k = 0; k < 2; k++) {
+        si.ahisi_Type = AHIST_S16S;
+        si.ahisi_Address = mx.mix[k];
+        si.ahisi_Length = HALF;
+        if (AHI_LoadSound((UWORD)k, AHIST_DYNAMICSAMPLE, &si, mx.actrl) != AHIE_OK) {
+            amce_card_unlock();
+            goto out;
+        }
+    }
+    mix_half(0);                            /* the first; the second asked for as it starts */
+    t[0].ti_Tag = AHIC_Play;
+    t[0].ti_Data = TRUE;
+    t[1].ti_Tag = TAG_DONE;
+    if (AHI_ControlAudioA(mx.actrl, t) != AHIE_OK) {
+        amce_card_unlock();
+        goto out;
+    }
+    mx.aplaying = TRUE;
+    mx.avol = mx.paused ? 0 : mx.master;
+    t[0].ti_Tag = AHIP_BeginChannel;
+    t[0].ti_Data = 0;
+    t[1].ti_Tag = AHIP_Freq;
+    t[1].ti_Data = mx.rate;
+    t[2].ti_Tag = AHIP_Vol;
+    t[2].ti_Data = ((ULONG)mx.avol << 16) / 64;
+    t[3].ti_Tag = AHIP_Pan;
+    t[3].ti_Data = 0x8000;
+    t[4].ti_Tag = AHIP_Sound;
+    t[4].ti_Data = 0;
+    t[5].ti_Tag = AHIP_EndChannel;
+    t[5].ti_Data = 0;
+    t[6].ti_Tag = TAG_DONE;
+    AHI_PlayA(mx.actrl, t);
+    amce_card_unlock();
+    mx.play_t = time_ms();
+    ok = TRUE;
+out:
+    if (!ok)
+        amce_strlcpy(err, _("AHI could not be opened (its Preferences: a mode?)"), errmax);
+    return ok;
 }
 
 /* From the start, or from where Seek put it (the channels are AmigaMCE's). */
 BOOL mx_start(UWORD master, char *err, LONG errmax)
 {
-    int i;
+    int i, k;
+    static const char *const outs[] = { "Paula, 8 bits", "Paula, 14 bits (four channels)", "AHI, 16 bits" };
     if (!mx.file)
         return FALSE;
     mx_stop();
-    mx.chip = AllocMem(HALF * 4, MEMF_CHIP | MEMF_CLEAR);
-    mx.tmp = AllocVec(HALF * 2, MEMF_ANY);
-    if (!mx.chip || !mx.tmp) {
+    mx.out = st_ahi() ? MXO_AHI : st_paula14_wanted() ? MXO_PAULA14 : MXO_PAULA8;
+    mx.chip_size = mx.out == MXO_AHI ? 0 : HALF * (mx.out == MXO_PAULA14 ? 8 : 4);
+    if (mx.chip_size)
+        mx.chip = AllocMem(mx.chip_size, MEMF_CHIP | MEMF_CLEAR);
+    for (k = 0; k < 2; k++)
+        mx.mix[k] = AllocVec(HALF * 4, MEMF_ANY | MEMF_PUBLIC | MEMF_CLEAR);
+    if ((mx.chip_size && !mx.chip) || !mx.mix[0] || !mx.mix[1]) {
         mx_stop();
         amce_strlcpy(err, _("Not enough memory to mix this module"), errmax);
         return FALSE;
@@ -345,6 +559,23 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     }
     for (i = 0; i < 50 && mx.sig < 0; i++)
         Delay(1);                           /* its signal allocated */
+    {
+        static UBYTE said = 0xFF;
+        if (said != mx.out) {
+            char m[100];
+            said = mx.out;
+            sprintf(m, "mixed at %lu Hz, played through %s", (unsigned long)mx.rate, outs[mx.out]);
+            amce_log("modplug", m);
+        }
+    }
+    if (mx.out == MXO_AHI) {
+        mx.running = TRUE;
+        if (!ahi_begin(err, errmax)) {
+            mx_stop();
+            return FALSE;
+        }
+        return TRUE;
+    }
     mix_half(0);                            /* the first half, before Paula starts */
     mx.cur = 1;                             /* the first interrupt: half 0 starts */
     mx.want = 1;
@@ -357,18 +588,45 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     CU->intreq = INTF_AUD0;
     mx.old_aint = SetIntVector(INTB_AUD0, &mx.aint);
     mx.int_set = TRUE;
-    for (i = 0; i < 2; i++) {
-        CU->aud[i].ac_ptr = (UWORD *)(mx.chip + (i ? 2 : 0) * HALF);
+    for (i = 0; i < 4; i++) {
+        /* 0 left, 1 right; at 14 bits 3 left's low bits, 2 right's */
+        int part = i == 0 ? 0 : i == 1 ? 2 : i == 3 ? 4 : 6;
+        CU->aud[i].ac_ptr = (UWORD *)(mx.chip + (i < 2 || mx.out == MXO_PAULA14 ? part : 0) * HALF);
         CU->aud[i].ac_len = HALF / 2;
         CU->aud[i].ac_per = mx.period;
-        CU->aud[i].ac_vol = master;
     }
-    CU->aud[2].ac_vol = 0;
-    CU->aud[3].ac_vol = 0;
+    paula_volumes();
     mx.running = TRUE;
     CU->intena = INTF_SETCLR | INTF_AUD0;
-    CU->dmacon = DMAF_SETCLR | DMAF_AUD0 | DMAF_AUD1;
+    CU->dmacon = DMAF_SETCLR | DMAF_AUD0 | DMAF_AUD1 | (mx.out == MXO_PAULA14 ? DMAF_AUD2 | DMAF_AUD3 : 0);
     return TRUE;
+}
+
+/* Through what Settings > Sound says now: on from where it was (FALSE: it
+ * could not; stopped) */
+BOOL mx_output(char *err, LONG errmax)
+{
+    BOOL paused = mx.paused;
+    UBYTE want = st_ahi() ? MXO_AHI : st_paula14_wanted() ? MXO_PAULA14 : MXO_PAULA8;
+    if (!mx.running || want == mx.out)
+        return TRUE;
+    if (!mx_start(mx.master, err, errmax))
+        return FALSE;
+    if (paused)
+        mx_pause(TRUE);
+    return TRUE;
+}
+
+/* Paula's volumes for the output and the state: 8 bits the master's on
+ * 0 and 1; 14 bits 64 and 1 (the volume in the samples); paused 0 */
+static void paula_volumes(void)
+{
+    UWORD hi = mx.paused ? 0 : mx.out == MXO_PAULA14 ? 64 : mx.master;
+    UWORD lo = !mx.paused && mx.out == MXO_PAULA14 ? 1 : 0;
+    CU->aud[0].ac_vol = hi;
+    CU->aud[1].ac_vol = hi;
+    CU->aud[2].ac_vol = lo;
+    CU->aud[3].ac_vol = lo;
 }
 
 void mx_pause(BOOL on)
@@ -376,17 +634,21 @@ void mx_pause(BOOL on)
     if (!mx.running || on == mx.paused)
         return;
     mx.paused = on;
-    CU->aud[0].ac_vol = on ? 0 : mx.master;
-    CU->aud[1].ac_vol = on ? 0 : mx.master;
+    if (mx.out == MXO_AHI) {
+        if (mx.proc && mx.sig >= 0)
+            Signal(&mx.proc->pr_Task, 1UL << mx.sig);   /* (the volume set by the mixer) */
+    } else {
+        paula_volumes();
+    }
 }
 
 void mx_volume(int v)
 {
     mx.master = (UWORD)v;
-    if (mx.running && !mx.paused) {
-        CU->aud[0].ac_vol = mx.master;
-        CU->aud[1].ac_vol = mx.master;
-    }
+    if (mx.running && !mx.paused && mx.out == MXO_PAULA8)
+        paula_volumes();                    /* (14 bits: in the samples; AHI: the mixer sets it) */
+    else if (mx.running && mx.out == MXO_AHI && mx.proc && mx.sig >= 0)
+        Signal(&mx.proc->pr_Task, 1UL << mx.sig);
 }
 
 BOOL mx_ended(void)
@@ -457,8 +719,8 @@ BOOL mx_loaded(void) { return mx.file != NULL; }
 UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
 {
     ULONG dec = (mx.rate + 4000) / 8000, at, k;
-    const BYTE *l, *r;
-    if (!mx.file || !mx.running || mx.paused || !mx.chip || !mx.rate)
+    const WORD *t;
+    if (!mx.file || !mx.running || mx.paused || !mx.mix[0] || !mx.rate)
         return 0;
     if (!dec)
         dec = 1;
@@ -470,21 +732,21 @@ UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
         at = HALF;
     if (at < (ULONG)n * dec)
         at = (ULONG)n * dec;
-    l = mx.chip + mx.cur * HALF;
-    r = mx.chip + (2 + mx.cur) * HALF;
+    t = mx.mix[mx.cur & 1];
     for (k = 0; k < n; k++) {
         ULONG i = at - (n - k) * dec;
-        out[k] = (WORD)(((WORD)l[i] + r[i]) << 4);
+        out[k] = (WORD)(((LONG)t[2 * i] + t[2 * i + 1]) >> 4);
     }
     *rate = mx.rate / dec;
     return n;
 }
+
 /* The last n sample frames mixed, left and right interleaved, 16-bit (amphost.c) */
 UWORD mx_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
 {
     ULONG at, k;
-    const BYTE *l, *r;
-    if (!mx.file || !mx.running || mx.paused || !mx.chip || !mx.rate)
+    const WORD *t;
+    if (!mx.file || !mx.running || mx.paused || !mx.mix[0] || !mx.rate)
         return 0;
     if (n > HALF)
         n = HALF;
@@ -496,12 +758,11 @@ UWORD mx_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
         at = HALF;
     if (at < n)
         at = n;
-    l = mx.chip + mx.cur * HALF;
-    r = mx.chip + (2 + mx.cur) * HALF;
+    t = mx.mix[mx.cur & 1];
     for (k = 0; k < n; k++) {
         ULONG i = at - n + k;
-        lr[2 * k] = (WORD)(l[i] << 8);
-        lr[2 * k + 1] = (WORD)(r[i] << 8);
+        lr[2 * k] = t[2 * i];
+        lr[2 * k + 1] = t[2 * i + 1];
     }
     *rate = mx.rate;
     return n;

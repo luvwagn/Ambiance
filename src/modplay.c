@@ -1254,9 +1254,11 @@ BOOL mp_play(char *err, LONG errmax)
     mp.chk_first = TRUE;                    /* logged once whatever it finds */
     if (!vol_set)
         mp.master = 64;
-    if (mp.engine == ENG_RADIO &&
-        (st_ahi() || (st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3"))))) {
-        /* through AHI, or MP3 by MHI: Paula's channels are theirs to take */
+    if ((mp.engine == ENG_RADIO &&
+         (st_ahi() || (st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3"))))) ||
+        (mp.engine == ENG_MIX && st_ahi())) {
+        /* through AHI (a stream, the mixer's modules), or MP3 by MHI:
+         * Paula's channels are theirs to take */
         audio_close();
     } else if (!audio_open()) {
         amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
@@ -2036,6 +2038,28 @@ static BOOL eagle_seek_ms(ULONG ms)
     sprintf(m, "seek to %lu ms: %lu ticks run on in %lu ms, at %lu ms", (unsigned long)ms,
             (unsigned long)n, (unsigned long)(time_ms() - t0), (unsigned long)(at_us / 1000));
     amce_log("eagleplayer", m);
+    return TRUE;
+}
+
+/* Settings > Sound changed: a module the mixer plays goes on through the
+ * new output from where it was (Paula's own modules play on as they are).
+ * FALSE: nothing to change, or it could not (err said, stopped). */
+BOOL mp_output_changed(char *err, LONG errmax)
+{
+    if (mp.engine != ENG_MIX || !mp.running)
+        return FALSE;
+    if (st_ahi())
+        audio_close();                      /* Paula's channels: AHI's to take */
+    else if (!audio_open()) {
+        amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
+        mx_stop();
+        mp.running = FALSE;
+        return FALSE;
+    }
+    if (!mx_output(err, errmax)) {
+        mp.running = FALSE;
+        return FALSE;
+    }
     return TRUE;
 }
 

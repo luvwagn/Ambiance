@@ -7853,15 +7853,44 @@ static BOOL sound_restart(void)
 {
     struct MpStatus st;
     BOOL paused;
+    if (mp_loaded() && !mp_is_stream() && mp_running()) {
+        /* a module the mixer plays: on through the new output */
+        char err[100];
+        err[0] = 0;
+        if (mp_output_changed(err, sizeof(err))) {
+            amce_log("sound", "Settings > Sound changed: the module on through it");
+            return TRUE;
+        }
+        if (err[0])
+            set_msg(err);
+        return FALSE;
+    }
     if (!mp_loaded() || !mp_is_stream() || !mp_running())
         return FALSE;
     paused = mp_paused();
     if (mp_is_track()) {
-        if (!np.list.pool || np.idx < 0 || np.idx >= np.list.count)
-            return FALSE;
+        ULONG ms;
         mp_status(&st);
+        ms = np.seek_due ? (ULONG)np.seek_to : st.elapsed_ms;
         amce_log("sound", "Settings > Sound changed: the track again from where it was");
-        np_seek_track(np.seek_due ? (ULONG)np.seek_to : st.elapsed_ms, 0);
+        if (np.list.pool && np.idx >= 0 && np.idx < np.list.count) {
+            np_seek_track(ms, 0);
+        } else {
+            /* (not from a list: the same file or address again, from where
+             * it was: a file's MP3 from about its byte, else by time) */
+            char path[2048], title[120], by[200], tag[24], err[100];
+            ULONG at = 0, size = st_size();
+            amce_strlcpy(path, mp_path(), sizeof(path));
+            amce_strlcpy(title, mp_stream_name(), sizeof(title));
+            amce_strlcpy(by, mp_track_by(), sizeof(by));
+            amce_strlcpy(tag, mp_tag(), sizeof(tag));
+            if (np_local() && !amce_stricmp(tag, "MP3") && st.total_ms && size)
+                at = (ULONG)(((unsigned long long)size * ms) / st.total_ms);
+            if (!path[0] || !mp_load_track(path, title, by, tag, st.total_ms, plex_decoder_cpu(), ms, at, err,
+                                           sizeof(err)) ||
+                !mp_play(err, sizeof(err)))
+                return FALSE;
+        }
     } else {
         if (!np.list.pool || np.idx < 0 || np.idx >= np.list.count)
             return FALSE;
@@ -13911,8 +13940,8 @@ static void act_action(struct Item *it)
             sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
-        set_msg(on ? _("AHI: radio, Plex and music files; modules stay on Paula")
-                : p14 ? _("Paula at 14 bits: radio, Plex and music files; modules at 8")
+        set_msg(on ? _("AHI: radio, Plex, music files, modules modplug mixes (others: Paula)")
+                : p14 ? _("Paula at 14 bits: radio, Plex, music files, modules modplug mixes")
                       : _("Paula plays everything"));
     }
     else if (it->action == ACT_FOLDERS)
