@@ -118,6 +118,8 @@ struct Smooth {
     ULONG cbuf_size;
     UWORD cmod;                 /* bytes a row of cbuf (a multiple of 16) */
     BOOL alpha_ok;              /* a graphics card's 15-32 bit screen: blending possible */
+    UBYTE read_order;           /* ReadPixelArray's ARGB as written (0), red and blue swapped
+                                   (1: some drivers' 16-bit modes), or not to be trusted (2) */
     BOOL alpha;                 /* this box blended (cbuf: coverage 0-15) */
     ULONG *argb;                /* its pixels, read and written */
     ULONG argb_size;
@@ -336,6 +338,37 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
         s->chunky = l != 0;
     }
     s->alpha_ok = g->truecolor && !g->planar && CyberGfxBase && g->depth >= 15;
+    s->read_order = 2;
+    if (s->alpha_ok) {
+        /* what ReadPixelArray gives back of what WritePixelArray wrote, on
+         * a bitmap like the screen's: on some 16-bit modes its red and
+         * blue come back swapped (text on a navy row turned brown) */
+        struct BitMap *bm = AllocBitMap(4, 1, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                                        g->rp->BitMap);
+        if (bm) {
+            struct RastPort trp;
+            ULONG wr[2] = { 0x00F80000UL, 0x000000F8UL }, rd[2] = { 0, 0 };
+            InitRastPort(&trp);
+            trp.BitMap = bm;
+            WritePixelArray(wr, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
+            ReadPixelArray(rd, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
+            WaitBlit();
+            FreeBitMap(bm);
+            if ((rd[0] & 0xF00000) == 0xF00000 && !(rd[0] & 0xF0) && (rd[1] & 0xF0) == 0xF0 &&
+                !(rd[1] & 0xF00000))
+                s->read_order = 0;
+            else if ((rd[0] & 0xF0) == 0xF0 && !(rd[0] & 0xF00000) && (rd[1] & 0xF00000) == 0xF00000 &&
+                     !(rd[1] & 0xF0))
+                s->read_order = 1;
+            {
+                char m[100];
+                sprintf(m, "ReadPixelArray gives back %08lx %08lx of 00f80000 000000f8: %s", rd[0], rd[1],
+                        s->read_order == 0 ? "as written" : s->read_order == 1 ? "red and blue swapped"
+                                                                             : "not used");
+                amce_log("smooth style", m);
+            }
+        }
+    }
     amce_log("smooth style", s->chunky ? "text drawn as chunky pixels"
                              : s->alpha_ok && alpha_allowed ? "text blended (16 steps, over what is there)"
                                                             : "text drawn with masks");
@@ -606,7 +639,7 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
     gfx_dirty();
     struct RastPort *rp = g->rp;
     UBYTE lv;
-    if (s->alpha && fg < NUM_UI_PENS && bg < NUM_UI_PENS) {
+    if (s->alpha && fg < NUM_UI_PENS && bg < NUM_UI_PENS && (opaque || s->read_order < 2)) {
         /* blended: each pixel that far from what is under it (an opaque
          * box: from bg's colour) to fg's, in sixteen steps */
         ULONG *px = s->argb, k, f[3];
@@ -629,10 +662,13 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
                 for (i = 0; i < w; i++)
                     *px++ = lut[c[i]];
         } else {
+            BOOL swap = s->read_order == 1;
             ReadPixelArray(px, 0, 0, (UWORD)(w * 4), rp, x, y, w, h, RECTFMT_ARGB);
             for (j = 0; j < h; j++, c += s->cmod)
                 for (i = 0; i < w; i++, px++) {
                     ULONG a = c[i], p = *px, v = 0;
+                    if (swap)
+                        *px = p = (p & 0xFF00FF00UL) | ((p >> 16) & 0xFF) | ((p & 0xFF) << 16);
                     if (!a)
                         continue;
                     for (ch = 16; ch >= 0; ch -= 8) {

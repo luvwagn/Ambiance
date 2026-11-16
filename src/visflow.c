@@ -59,6 +59,7 @@ static const struct Preset presets[] = {
 
 static struct {
     BOOL on, failed;
+    WORD logged_w, logged_h;    /* (the size last logged: logged again only as it changes) */
     struct Gfx *g;
     struct Screen *scr;
     WORD w, h;                  /* the place drawn, pixels */
@@ -239,6 +240,8 @@ static void line(int x0, int y0, int x1, int y1, UBYTE v)
 static void wave(const WORD *w, int n, int loud)
 {
     int i, x0 = 0, y0 = 0, mode = presets[vf.preset].wave;
+    if (mode == 1 && vf.iw > 3 * vf.ih)
+        mode = 2;                           /* (a low strip: a ring would be a dot) */
     LONG cx = vf.iw / 2, cy = vf.ih / 2, amp = vf.ih / 4 + loud * vf.ih / 512;
     UBYTE v = (UBYTE)(160 + loud > 255 ? 255 : 160 + loud);
     for (i = 0; i < n; i++) {
@@ -376,8 +379,10 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
     vf.map_row = -1;
     vf.t_preset = vf.t_pal = vf.t_beat = time_ms();
     vf.on = TRUE;
-    {
+    if (w != vf.logged_w || h != vf.logged_h) {
         char msg[120];
+        vf.logged_w = w;
+        vf.logged_h = h;
         sprintf(msg, "Flow: %ld x %ld, worked out at %ld x %ld, %s (format %lu)", (long)w, (long)h,
                 (long)vf.iw, (long)vf.ih, vf.direct ? "written straight" : "by WritePixelArray",
                 (unsigned long)vf.fmt);
