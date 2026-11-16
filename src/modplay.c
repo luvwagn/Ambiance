@@ -1504,9 +1504,10 @@ BOOL mp_subsong_step(int d)
  * and channels 2 (right) and 3 (left) are the borrower's, quiet, until
  * given back; then what played goes on. A module's replayer stops while
  * paused; a station or a track mixed to 0 and 1 plays on there unheard
- * (stream.c, mixplay.c), so 2 and 3 are free in every case. The volume
+ * (stream.c); the mixer's module stops (its 14 bits use 2 and 3) and
+ * starts again where it was, so 2 and 3 are free in every case. The volume
  * meanwhile is only noted (the module's would set all four channels'). */
-static struct { BOOL on, opened, resume; } lend;
+static struct { BOOL on, opened, resume, mixer; } lend;
 
 static void lent_quiet(void)
 {
@@ -1532,6 +1533,12 @@ BOOL mp_lend(BOOL on)
                 mp_pause(FALSE);
             return FALSE;                   /* another has Paula (AHI's driver): no sound */
         }
+        /* the mixer stopped outright, where it was (paused, its interrupt
+         * still set channels 2 and 3 going at 14 bits: the borrower's
+         * sound would be the mixer's), started again when given back */
+        lend.mixer = mp.engine == ENG_MIX && mp.running;
+        if (lend.mixer)
+            mx_stop();
         lend.on = TRUE;
         CU->intena = INTF_AUD2 | INTF_AUD3;
         CU->adkcon = 0x00EE;                /* nothing modulates 2 or 3, nor 1 them */
@@ -1544,6 +1551,17 @@ BOOL mp_lend(BOOL on)
     lend.on = FALSE;
     if (lend.opened && !mp.running)
         audio_close();
+    if (lend.mixer && mp.running && mp.engine == ENG_MIX) {
+        char e[100];
+        if (mx_start(mp.master, e, sizeof(e))) {
+            if (mp.paused)
+                mx_pause(TRUE);             /* (as the module is: Play goes on) */
+        } else {
+            mp.running = FALSE;
+            amce_log("music", e);
+        }
+    }
+    lend.mixer = FALSE;
     if (mp.mix8 && mp.running)
         mix_rings_start();                  /* all four rings again, in step */
     if (lend.resume)
