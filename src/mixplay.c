@@ -618,12 +618,19 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
 
 /* Through what Settings > Sound says now: on from where it was (FALSE: it
  * could not; stopped) */
-BOOL mx_output(char *err, LONG errmax)
+BOOL mx_output(void (*between)(void), char *err, LONG errmax)
 {
     BOOL paused = mx.paused;
     UBYTE want = st_ahi() ? MXO_AHI : st_paula14_wanted() ? MXO_PAULA14 : MXO_PAULA8;
     if (!mx.running || want == mx.out)
         return TRUE;
+    /* the old way stopped first (Paula's interrupt given back to
+     * audio.device before it is closed), then between: audio.device
+     * closed on the way to AHI. Closed while the mixer still had its
+     * interrupt, AmigaMCE hung */
+    mx_stop();
+    if (between)
+        between();
     if (!mx_start(mx.master, err, errmax))
         return FALSE;
     if (paused)

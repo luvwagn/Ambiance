@@ -2048,15 +2048,16 @@ BOOL mp_output_changed(char *err, LONG errmax)
 {
     if (mp.engine != ENG_MIX || !mp.running)
         return FALSE;
-    if (st_ahi())
-        audio_close();                      /* Paula's channels: AHI's to take */
-    else if (!audio_open()) {
+    if (st_ahi()) {
+        /* Paula's channels AHI's to take: given back once the mixer has
+         * let go of them (mx_output) */
+    } else if (!audio_open()) {
         amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
         mx_stop();
         mp.running = FALSE;
         return FALSE;
     }
-    if (!mx_output(err, errmax)) {
+    if (!mx_output(st_ahi() ? audio_close : NULL, err, errmax)) {
         mp.running = FALSE;
         return FALSE;
     }

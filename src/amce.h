@@ -803,7 +803,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax);  
 BOOL mx_start(UWORD master, char *err, LONG errmax);
 void mx_stop(void);
 void mx_pause(BOOL on);
-BOOL mx_output(char *err, LONG errmax);    /* on through the output Settings says now */
+BOOL mx_output(void (*between)(void), char *err, LONG errmax);    /* on through the output Settings says now */
 void mx_volume(int v);
 BOOL mx_ended(void);
 void mx_seek_ms(ULONG ms);
