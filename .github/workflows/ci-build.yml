@@ -15,9 +15,22 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        submodules: recursive
 
     - name: Mark git directory as safe
       run: git config --global --add safe.directory '*'
+
+    - name: GCC 16.2-rc24 (AmigaPorts' m68k-amigaos-gcc), ahead of the image's
+      shell: bash
+      run: |
+        set -euo pipefail
+        url=https://github.com/AmigaPorts/m68k-amigaos-gcc/releases/download/v16.2-rc24/m68k-amigaos-gcc-16.2-rc24-x86_64-linux.tar.xz
+        curl -fsSL -o /tmp/gcc.tar.xz "$url"
+        echo "b93b070ac47d2f01d126f57c03a8405f71fb470c8397b0bda51041217d25c100  /tmp/gcc.tar.xz" | sha256sum -c -
+        mkdir -p /opt/gcc-rc24 && tar xJf /tmp/gcc.tar.xz -C /opt/gcc-rc24 --strip-components=1
+        rm /tmp/gcc.tar.xz
+        echo /opt/gcc-rc24/bin >> "$GITHUB_PATH"
+        /opt/gcc-rc24/bin/m68k-amigaos-gcc --version | head -1
 
     - name: Build program and LHA
       run: make all

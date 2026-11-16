@@ -356,12 +356,18 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Building
 
-AmigaMCE builds with the `m68k-amigaos-gcc` 16.2 toolchain (16.2-rc23 or
-later), for the 68020 and up (`-m68020-60`); `src/cpucheck.c` alone is built
-for the 68000, so a 68000 or 68010 gets a requester saying so. The quickest way is the
-[amiga-gcc container](https://github.com/reinauer/container-amiga-gcc):
-
-    docker run --rm -v $PWD:/src -w /src stefanreinauer/amiga-gcc:16.2-rc23 make
+AmigaMCE builds with [AmigaPorts'
+`m68k-amigaos-gcc`](https://github.com/AmigaPorts/m68k-amigaos-gcc) 16.2
+(16.2-rc24 or later; the continuation of bebbo's amiga-gcc) and its libnix,
+for the 68020 and up (`-m68020-60`); `src/cpucheck.c` alone is built for the
+68000, so a 68000 or 68010 gets a requester saying so. mpegv.library and
+ac3.library are submodules (`git clone --recursive`, or
+`git submodule update --init`). The
+[amiga-gcc container](https://github.com/reinauer/container-amiga-gcc) has
+the other tools the build and tests use (vamos, lha); its newest image is
+still 16.2-rc23, so put rc24's
+[release](https://github.com/AmigaPorts/m68k-amigaos-gcc/releases/tag/v16.2-rc24)
+ahead of it on the `PATH`, as `.github/workflows/ci-build.yml` does.
 
 GCC 13.4 is not recommended: it can drop the register arguments of an
 inline OS call when a multiply helper call ends up between them (see
