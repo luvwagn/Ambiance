@@ -36,6 +36,7 @@
 #include "tspack.h"
 #include <stddef.h>
 #include <libraries/mpegv.h>
+#include <cybergraphx/cybergraphics.h>
 #include <proto/mpegv.h>
 #include "vprobe.h"
 #include "dvdplay.h"
@@ -2057,7 +2058,7 @@ static ZzU64 v_clock_on(ZzU64 m, ULONG *dry_t, ZzU64 *dry_m)
     return w > m ? w : m;
 }
 
-/* A bare MPEG-1 video stream (no packs: RiVA's, a .m1v by a .mpg name)
+/* A bare MPEG-1 video stream (no packs: a .m1v, or one by a .mpg name)
  * made a Program Stream as it is given to the card, which takes no other:
  * a pack header (its clock reckoned at 1.5 Mbit/s), a system header with
  * the first, and each 2000 bytes a video packet, the first with a time
@@ -2779,6 +2780,43 @@ BOOL st_swv_rgb(UBYTE *dst, ULONG bpr)
     if (!swv_pic(&p))
         return FALSE;
     MpvToRGB(&p, dst, bpr, MPVR_RGB24);
+    return TRUE;
+}
+
+/* A screen's pixel format (cybergraphics' PIXFMT_) as MpvToRGBScaled's
+ * (mpegv 2.3): -1 if it has none. */
+static LONG mpvr_of(ULONG pixfmt)
+{
+    switch (pixfmt) {
+    case PIXFMT_RGB15:   return MPVR_RGB555;
+    case PIXFMT_RGB15PC: return MPVR_RGB555PC;
+    case PIXFMT_BGR15:   return MPVR_BGR555;
+    case PIXFMT_BGR15PC: return MPVR_BGR555PC;
+    case PIXFMT_RGB16:   return MPVR_RGB565;
+    case PIXFMT_RGB16PC: return MPVR_RGB565PC;
+    case PIXFMT_BGR16:   return MPVR_BGR565;
+    case PIXFMT_BGR16PC: return MPVR_BGR565PC;
+    case PIXFMT_RGB24:   return MPVR_RGB24;
+    case PIXFMT_BGR24:   return MPVR_BGR24;
+    case PIXFMT_ARGB32:  return MPVR_ARGB32;
+    case PIXFMT_BGRA32:  return MPVR_BGRA32;
+    case PIXFMT_RGBA32:  return MPVR_RGBA32;
+    }
+    return -1;
+}
+
+BOOL st_swv_draws(ULONG pixfmt)
+{
+    return MpegvBase && (MpegvBase->lib_Version > 2 || MpegvBase->lib_Revision >= 3) &&
+           mpvr_of(pixfmt) >= 0;
+}
+
+BOOL st_swv_draw(UBYTE *dst, ULONG bpr, ULONG pixfmt, ULONG dw, ULONG dh)
+{
+    struct MpvPicture p;
+    if (!st_swv_draws(pixfmt) || !swv_pic(&p))
+        return FALSE;
+    MpvToRGBScaled(&p, dst, bpr, (ULONG)mpvr_of(pixfmt), dw, dh);
     return TRUE;
 }
 

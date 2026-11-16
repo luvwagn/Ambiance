@@ -43,7 +43,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/yuvdraw.c src/spu.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 VASM ?= vasmm68k_mot
 
@@ -70,7 +70,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-yuvdraw test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) lha datatype
 
@@ -184,13 +184,7 @@ check-syscalls: $(SRCS) src/amce.h build/ac3probe.h
 	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
 	@echo "  CHECK OS-call arguments ok"
 
-# yuv_draw (a CPU-decoded video's picture in the screen's own pixels): on
-# the host, with stand-in Amiga headers (tests/yuvdraw)
-build/yuvdraw_host: src/yuvdraw.c src/yuvdraw.h tests/yuvdraw/yuvdraw_host.c
-	@mkdir -p build
-	@cc -O2 -w -Itests/yuvdraw -Isrc -o $@ tests/yuvdraw/yuvdraw_host.c src/yuvdraw.c -lm
-test-yuvdraw: build/yuvdraw_host
-	@build/yuvdraw_host > /dev/null && echo "  CHECK video pictures in a screen's own pixels (host) ok"
+# a DVD's subpictures, on the host (stand-in Amiga headers: tests/yuvdraw)
 build/spu_host: src/spu.c src/spu.h tests/spu/spu_host.c
 	@mkdir -p build
 	@cc -O2 -w -Itests/yuvdraw -Isrc -o $@ tests/spu/spu_host.c src/spu.c
@@ -244,7 +238,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-yuvdraw test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt

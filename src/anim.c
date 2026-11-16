@@ -48,7 +48,6 @@
 #include "glyph.h"
 #include "dvdplay.h"
 #include <libraries/amcedvd.h>
-#include "yuvdraw.h"
 #include <libraries/mpegv.h>
 
 #include <string.h>
@@ -2847,9 +2846,9 @@ static WORD vid_was_h = -1;     /* the overlay's height last placed */
  * screen has one (the card scales them; vo_show), else made RGB here and
  * drawn (ScalePixelArray). */
 static BOOL sw_have;            /* a picture taken (st_swv_take) */
-static struct BitMap *sw_bm;    /* it at the size shown, the screen's format (yuv_draw) */
+static struct BitMap *sw_bm;    /* it at the size shown, the screen's format (st_swv_draw) */
 static ULONG sw_bmw, sw_bmh, sw_nyuv;
-static BOOL sw_yuv_no;          /* (the screen's format is not one yuv_draw writes) */
+static BOOL sw_yuv_no;          /* (the screen's format is not one st_swv_draw writes) */
 
 /* The picture drawn straight in the screen's own pixels at dw x dh into a
  * bitmap like the screen's (not the screen itself: locking what is shown
@@ -2857,12 +2856,11 @@ static BOOL sw_yuv_no;          /* (the screen's format is not one yuv_draw writ
  * (not RTG, a format it does not write), and the RGB way is taken. */
 static BOOL sw_draw_yuv(struct Gfx *g, LONG x, LONG y, LONG dw, LONG dh)
 {
-    struct MpvPicture p;
     UBYTE *base = NULL;
     ULONG bpr = 0, fmt = 0;
     APTR lk;
     BOOL ok;
-    if (sw_yuv_no || !CyberGfxBase || !st_swv_planes(&p))
+    if (sw_yuv_no || !CyberGfxBase)
         return FALSE;
     if (sw_bm && (sw_bmw != (ULONG)dw || sw_bmh != (ULONG)dh)) {
         WaitBlit();
@@ -2883,13 +2881,15 @@ static BOOL sw_draw_yuv(struct Gfx *g, LONG x, LONG y, LONG dw, LONG dh)
     if (!(lk = LockBitMapTags(sw_bm, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&bpr,
                               LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE)))
         return FALSE;
-    ok = base && bpr && yuv_draw(p.mpic_Y, p.mpic_Cb, p.mpic_Cr, p.mpic_YModulo, p.mpic_CModulo,
-                                 p.mpic_Width, p.mpic_Height, base, bpr, fmt, dw, dh);
+    /* (mpegv.library's MpvToRGBScaled: the picture's rows converted once,
+     * copied out to the columns shown) */
+    ok = base && bpr && st_swv_draw(base, bpr, fmt, dw, dh);
     UnLockBitMap(lk);
     if (!ok) {
-        if (!yuv_format_ok(fmt)) {
-            char m[80];
-            sprintf(m, "the screen's pixels (format %lu): drawn by way of RGB", (unsigned long)fmt);
+        if (!st_swv_draws(fmt)) {
+            char m[100];
+            sprintf(m, "the screen's pixels (format %lu): drawn by way of RGB (mpegv.library 2.3 "
+                       "draws them)", (unsigned long)fmt);
             amce_log("video: by the CPU", m);
             sw_yuv_no = TRUE;
         }

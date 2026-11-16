@@ -741,7 +741,14 @@ struct Library *st_mpv_open(void);
 void st_mpv_close(void);
 BOOL st_swv_rgb(UBYTE *dst, ULONG bpr);
 struct MpvPicture;
-BOOL st_swv_planes(struct MpvPicture *p);  /* its planes (yuvdraw.c draws them) */
+BOOL st_swv_planes(struct MpvPicture *p);  /* its planes */
+/* The UI's picture drawn at dst (bpr bytes a row) in a screen's own pixels
+ * (cybergraphics' PIXFMT_), scaled to dw x dh: mpegv.library 2.3's
+ * MpvToRGBScaled. FALSE: no picture, an older mpegv, a format it does not
+ * write. */
+BOOL st_swv_draw(UBYTE *dst, ULONG bpr, ULONG pixfmt, ULONG dw, ULONG dh);
+/* (pixfmt one st_swv_draw writes, with this mpegv) */
+BOOL st_swv_draws(ULONG pixfmt);
 BOOL st_swv_yuyv(UBYTE *dst, ULONG bpr);
 void st_swv_release(void);
 /* the CPU's pictures written straight onto the overlay by the playback
