@@ -158,7 +158,7 @@ static BOOL debug_on;               /* Settings > Debug: header CPU/memory reado
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
-       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
+       ACT_STYLE_PIXEL, ACT_STYLE_SMOOTH, ACT_LFONT0, ACT_LFONT_END = ACT_LFONT0 + LFONT_COUNT - 1, ACT_RFONT0, ACT_RFONT_END = ACT_RFONT0 + LFONT_COUNT - 1, ACT_JUMP, ACT_DBUF, ACT_VISUAL, ACT_ANIMSCR, ACT_ZZVIDEO, ACT_VOVERLAY, ACT_TRANS, ACT_NOWPLAYING, ACT_HTTPS, ACT_PLEXHELP, ACT_PLEXCONV, ACT_PLEXON, ACT_PLEXSET, ACT_SOUNDSET, ACT_SND_PAULA, ACT_SND_P14, ACT_SND_AHI, ACT_SND_MPEGA, ACT_SND_OWNMPEGA, ACT_SND_MHI, ACT_SND_MHI0, ACT_SND_MHI_END = ACT_SND_MHI0 + 5,
        ACT_GENSET, ACT_NETSET, ACT_SCREENSET, ACT_VIDEOSET, ACT_NICSET,
        ACT_RADIOSET, ACT_RKBPSSET, ACT_RSRVSET, ACT_BUFSET, ACT_RKBPS0, ACT_RKBPS_END = ACT_RKBPS0 + 5,
        ACT_BUF0, ACT_BUF_END = ACT_BUF0 + 2, ACT_RSRVAUTO, ACT_RSRVFAST, ACT_RSRV0,
@@ -2028,6 +2028,10 @@ static BOOL fs_assign_used(int k)
 /* Settings > Sound: what streams play through (AHI, where installed). */
 #define SOUND_VAR "AmigaMCE/SoundOutput"
 static BOOL sound_ahi;
+/* Paula at 14 bits (SoundOutput "paula14"): all four channels, each side's
+ * high byte at volume 64 and its next 6 bits at volume 1; MP3, FLAC and a
+ * video's sound (stream.c), not modules */
+static BOOL sound_p14;
 
 /* MHI: its drivers (the libraries in LIBS:MHI), and the one MP3 goes to ("":
  * a decoder with mpega's functions: AmigaMCE's own amcempega.library,
@@ -2068,9 +2072,12 @@ static void load_sound_out(void)
 {
     char v[48];
     int i;
-    sound_ahi = caps.ahi && GetVar((CONST_STRPTR)SOUND_VAR, (STRPTR)v, sizeof(v),
-                                   GVF_GLOBAL_ONLY) > 0 && !amce_stricmp(v, "ahi");
+    v[0] = 0;
+    GetVar((CONST_STRPTR)SOUND_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY);
+    sound_ahi = caps.ahi && !amce_stricmp(v, "ahi");
+    sound_p14 = !amce_stricmp(v, "paula14");
     st_use_ahi(sound_ahi);
+    st_use_paula14(sound_p14);
     nmhi = 0;
     mhi_sel[0] = 0;
     if (caps.mp3_mhi) {
@@ -2095,7 +2102,8 @@ static void load_sound_out(void)
     mhi_apply();
     {
         char m[160];
-        sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI", sound_ahi ? "AHI" : "Paula",
+        sprintf(m, "%s; MP3 by %s; %ld MHI driver%s in LIBS:MHI",
+                sound_ahi ? "AHI" : sound_p14 ? "Paula, 14 bits" : "Paula",
                 mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (AmigaMCE's own)"
                 : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)" : "mpega.library",
                 (long)nmhi, nmhi == 1 ? "" : "s");
@@ -2410,7 +2418,8 @@ static void build_settings(struct Page *p)
                 ACT_SCREENSET, MARK_ARROW);
     action_item(p, _("Video"), caps.zz9000 && !video_cpu ? "ZZ9000" : _("CPU"), ACT_VIDEOSET,
                 MARK_ARROW);
-    action_item(p, _("Sound"), sound_ahi ? "AHI" : "Paula", ACT_SOUNDSET, MARK_ARROW);
+    action_item(p, _("Sound"), sound_ahi ? "AHI" : sound_p14 ? _("Paula, 14-bit") : "Paula", ACT_SOUNDSET,
+                MARK_ARROW);
     action_item(p, _("Folders"), "", ACT_FOLDERS, MARK_ARROW);
     action_item(p, _("Networking"), !caps.net ? _("no TCP/IP stack") : net_if[0] ? net_if : "",
                 ACT_NETSET, MARK_ARROW);
@@ -2753,7 +2762,9 @@ static void build_sound_settings(struct Page *p)
      * so each under its own heading, or their radio buttons read as one */
     heading_item(p, _("Sound output"));
     action_item(p, "Paula (audio.device)", _("4 channels, up to 28kHz, 8-bit"), ACT_SND_PAULA,
-                sound_ahi ? MARK_RADIO_OFF : MARK_RADIO_ON);
+                sound_ahi || sound_p14 ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    action_item(p, _("Paula, 14-bit: radio, Plex, music files"), _("all 4 channels, cleaner quiet passages"),
+                ACT_SND_P14, sound_p14 && !sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF);
     if ((it = action_item(p, _("AHI: radio, Plex, music files"),
                           caps.ahi ? _("16-bit, its Preferences' mode") : _("not installed"),
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
@@ -13460,7 +13471,8 @@ static void plex_help(void)
                      : plex_tier() < 2 ? _("FLAC: converted to MP3 (too slow to decode here)")
                      : plex.convert ? _("FLAC: converted to MP3 (lower quality audio is on)")
                      : _("FLAC: played as stored, by flacdec.library"));
-        text_line(p, sound_ahi ? _("Sound: AHI, 16-bit") : _("Sound: Paula, 8-bit"));
+        text_line(p, sound_ahi ? _("Sound: AHI, 16-bit") : sound_p14 ? _("Sound: Paula, 14-bit")
+                                                          : _("Sound: Paula, 8-bit"));
     }
     draw_pane(TRUE);
     draw_footer();
@@ -13745,17 +13757,20 @@ static void act_action(struct Item *it)
                 : own ? _("MP3 decoded here by amcempega.library, AmigaMCE's own")
                       : _("MP3 decoded here by mpega.library"));
     }
-    else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI) {
-        BOOL on = it->action == ACT_SND_AHI;
-        if (on != sound_ahi) {
+    else if (it->action == ACT_SND_PAULA || it->action == ACT_SND_AHI || it->action == ACT_SND_P14) {
+        BOOL on = it->action == ACT_SND_AHI, p14 = it->action == ACT_SND_P14;
+        if (on != sound_ahi || p14 != sound_p14) {
             sound_ahi = on;
+            sound_p14 = p14;
             st_use_ahi(on);
-            save_setting(SOUND_VAR, on ? "ahi" : "paula");
+            st_use_paula14(p14);
+            save_setting(SOUND_VAR, on ? "ahi" : p14 ? "paula14" : "paula");
             sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
         set_msg(on ? _("AHI: radio, Plex and music files; modules stay on Paula")
-                   : _("Paula plays everything"));
+                : p14 ? _("Paula at 14 bits: radio, Plex and music files; modules at 8")
+                      : _("Paula plays everything"));
     }
     else if (it->action == ACT_FOLDERS)
         open_settings_page(_("Folders"), build_folders_settings);

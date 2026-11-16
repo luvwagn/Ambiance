@@ -261,7 +261,9 @@ static struct {
     volatile ULONG underruns;
     volatile BOOL quiet;            /* no sound meant now (a DVD's still, its sound over): no underruns */
     /* Paula */
-    BYTE *chip;                     /* left 0, left 1, right 0, right 1 */
+    BYTE *chip;                     /* left 0, left 1, right 0, right 1 (14 bits: then
+                                     * their low bits, left 0, 1, right 0, 1) */
+    BOOL paula14;                   /* Paula's 14 bits: four channels, the volume by us */
     UWORD period;
     volatile UBYTE cur, want;
     volatile BOOL started, paused;
@@ -325,6 +327,7 @@ static struct {                     /* st_start_video's */
 } vid_next;
 
 static BOOL use_ahi;                /* Settings > Sound: AHI (st_use_ahi) */
+static BOOL paula14_on;             /* Settings > Sound: Paula's 14 bits (st_use_paula14) */
 static char mhi_driver[160];        /* Settings > Sound: MP3 by this MHI driver ("" mpega) */
 static BOOL card_mpega;             /* mpega.library is the ZZ9000 SDK's: it decodes on the card */
 struct Library *MHIBase;            /* the MHI driver's (the playback process's, while it plays) */
@@ -337,19 +340,43 @@ static void fill_half(int half)
     ULONG have = st.f_in - st.f_out, n = have < HALF ? have : HALF, i, o = st.f_out;
     UBYTE pl = 0, pr = 0;
     BOOL stereo = st.dec_channels == 2;
-    for (i = 0; i < n; i++, o++) {
-        BYTE a = (BYTE)(st.fl[o & (FIFO_N - 1)] >> 8);
-        BYTE b = stereo ? (BYTE)(st.fr[o & (FIFO_N - 1)] >> 8) : a;
-        UBYTE aa = (UBYTE)(a < 0 ? -a : a), bb = (UBYTE)(b < 0 ? -b : b);
-        l[i] = a;
-        r[i] = b;
-        if (aa > pl)
-            pl = aa;
-        if (bb > pr)
-            pr = bb;
+    if (st.paula14) {
+        /* 14 bits: each channel's high byte (at volume 64) and its next 6
+         * bits (at volume 1, on a channel of its own); the volume ours,
+         * as Paula's own volumes are those */
+        UBYTE *ll = (UBYTE *)st.chip + (4 + half) * HALF, *rl = (UBYTE *)st.chip + (6 + half) * HALF;
+        LONG vol = st.master;
+        for (i = 0; i < n; i++, o++) {
+            LONG a = ((LONG)st.fl[o & (FIFO_N - 1)] * vol) >> 6;
+            LONG b = stereo ? ((LONG)st.fr[o & (FIFO_N - 1)] * vol) >> 6 : a;
+            BYTE ha = (BYTE)(a >> 8), hb = (BYTE)(b >> 8);
+            UBYTE aa = (UBYTE)(ha < 0 ? -ha : ha), bb = (UBYTE)(hb < 0 ? -hb : hb);
+            l[i] = ha;
+            r[i] = hb;
+            ll[i] = (UBYTE)((a & 0xff) >> 2);
+            rl[i] = (UBYTE)((b & 0xff) >> 2);
+            if (aa > pl)
+                pl = aa;
+            if (bb > pr)
+                pr = bb;
+        }
+        for (; i < HALF; i++)
+            l[i] = r[i] = ll[i] = rl[i] = 0;
+    } else {
+        for (i = 0; i < n; i++, o++) {
+            BYTE a = (BYTE)(st.fl[o & (FIFO_N - 1)] >> 8);
+            BYTE b = stereo ? (BYTE)(st.fr[o & (FIFO_N - 1)] >> 8) : a;
+            UBYTE aa = (UBYTE)(a < 0 ? -a : a), bb = (UBYTE)(b < 0 ? -b : b);
+            l[i] = a;
+            r[i] = b;
+            if (aa > pl)
+                pl = aa;
+            if (bb > pr)
+                pr = bb;
+        }
+        for (; i < HALF; i++)
+            l[i] = r[i] = 0;
     }
-    for (; i < HALF; i++)
-        l[i] = r[i] = 0;
     if (n < HALF && st.state == ST_PLAYING && !st.quiet)
         st.underruns++;
     st.f_out += n;
@@ -370,9 +397,24 @@ static void audio_code(void)
     next = (UBYTE)(st.cur ^ 1);
     CU->aud[0].ac_ptr = (UWORD *)(st.chip + next * HALF);
     CU->aud[1].ac_ptr = (UWORD *)(st.chip + (2 + next) * HALF);
+    if (st.paula14) {                       /* (Paula's 3 left, 2 right: the low bits) */
+        CU->aud[3].ac_ptr = (UWORD *)(st.chip + (4 + next) * HALF);
+        CU->aud[2].ac_ptr = (UWORD *)(st.chip + (6 + next) * HALF);
+    }
     st.want = next;
     if (st.proc && st.sig >= 0)
         Signal(&st.proc->pr_Task, 1UL << st.sig);
+}
+
+/* Paula's volumes: 8 bits, ours on both; 14 bits, 64 and 1 (the volume
+ * then in the samples); none while paused */
+static void paula_volumes(void)
+{
+    UWORD hi = st.paused ? 0 : st.paula14 ? 64 : st.master;
+    CU->aud[0].ac_vol = hi;
+    CU->aud[1].ac_vol = hi;
+    CU->aud[2].ac_vol = st.paula14 && !st.paused ? 1 : 0;
+    CU->aud[3].ac_vol = st.paula14 && !st.paused ? 1 : 0;
 }
 
 static void paula_start(void)
@@ -398,13 +440,19 @@ static void paula_start(void)
         CU->aud[i].ac_ptr = (UWORD *)(st.chip + (i ? 2 : 0) * HALF);
         CU->aud[i].ac_len = HALF / 2;
         CU->aud[i].ac_per = st.period;
-        CU->aud[i].ac_vol = st.paused ? 0 : st.master;
     }
-    CU->aud[2].ac_vol = 0;
-    CU->aud[3].ac_vol = 0;
+    if (st.paula14) {
+        CU->aud[3].ac_ptr = (UWORD *)(st.chip + 4 * HALF);
+        CU->aud[2].ac_ptr = (UWORD *)(st.chip + 6 * HALF);
+        for (i = 2; i < 4; i++) {
+            CU->aud[i].ac_len = HALF / 2;
+            CU->aud[i].ac_per = st.period;
+        }
+    }
+    paula_volumes();
     st.started = TRUE;
     CU->intena = INTF_SETCLR | INTF_AUD0;
-    CU->dmacon = DMAF_SETCLR | DMAF_AUD0 | DMAF_AUD1;
+    CU->dmacon = DMAF_SETCLR | DMAF_AUD0 | DMAF_AUD1 | (st.paula14 ? DMAF_AUD2 | DMAF_AUD3 : 0);
 }
 
 static void paula_stop(void)
@@ -414,6 +462,8 @@ static void paula_stop(void)
     CU->intreq = INTF_AUD0;
     CU->aud[0].ac_vol = 0;
     CU->aud[1].ac_vol = 0;
+    CU->aud[2].ac_vol = 0;
+    CU->aud[3].ac_vol = 0;
     if (st.int_set) {
         SetIntVector(INTB_AUD0, st.old_aint);
         st.int_set = FALSE;
@@ -5247,7 +5297,8 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.nb = AllocVec(NETBUF + 1, MEMF_ANY);
     st.fl = AllocVec(FIFO_N * 2, MEMF_ANY | MEMF_CLEAR);
     st.fr = AllocVec(FIFO_N * 2, MEMF_ANY | MEMF_CLEAR);
-    st.chip = AllocMem(HALF * 4, MEMF_CHIP | MEMF_CLEAR);
+    st.paula14 = paula14_on && !use_ahi;
+    st.chip = AllocMem(HALF * (st.paula14 ? 8 : 4), MEMF_CHIP | MEMF_CLEAR);
     if (!st.nb || !st.fl || !st.fr || !st.chip) {
         st_stop();
         amce_strlcpy(err, _("Not enough memory to play a station"), errmax);
@@ -5369,7 +5420,7 @@ void st_stop(void)
         paula_stop();                       /* AHI's: the process's own, stopped there */
     if (st.chip) {
         Delay(1);                           /* Paula's last fetches from it done */
-        FreeMem(st.chip, HALF * 4);
+        FreeMem(st.chip, HALF * (st.paula14 ? 8 : 4));
         st.chip = NULL;
     }
     if (st.nb) {
@@ -5387,6 +5438,14 @@ void st_stop(void)
 }
 
 /* Settings > Sound: AHI or Paula, for streams started from now on. */
+/* Settings > Sound: Paula played at 14 bits (all four channels: each
+ * side's high byte at volume 64, its next 6 bits at volume 1), for streams
+ * started from now on. */
+void st_use_paula14(BOOL on)
+{
+    paula14_on = on;
+}
+
 void st_use_ahi(BOOL on)
 {
     use_ahi = on;
@@ -5478,19 +5537,15 @@ UWORD st_pcm(WORD *out, UWORD n, ULONG *rate)
 void st_pause(BOOL on)
 {
     st.paused = on;
-    if (st.started && !st.ahi) {
-        CU->aud[0].ac_vol = on ? 0 : st.master;
-        CU->aud[1].ac_vol = on ? 0 : st.master;
-    }
+    if (st.started && !st.ahi)
+        paula_volumes();
 }
 
 void st_volume(int v)
 {
-    st.master = (UWORD)v;                   /* AHI: its next requests */
-    if (st.started && !st.paused && !st.ahi) {
-        CU->aud[0].ac_vol = st.master;
-        CU->aud[1].ac_vol = st.master;
-    }
+    st.master = (UWORD)v;                   /* AHI: its next requests; 14 bits: the next half */
+    if (st.started && !st.paused && !st.ahi)
+        paula_volumes();
 }
 
 /* A track's length as its stream says (FLAC's frames, a file's size at

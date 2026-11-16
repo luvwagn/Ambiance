@@ -702,6 +702,7 @@ void st_use_https(BOOL on);     /* https: streams played (Settings > Networking 
 BOOL st_ahi(void);
 void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
+void st_use_paula14(BOOL on);            /* Paula at 14 bits, four channels */
 void st_use_own_mpega(BOOL on);          /* MP3 by amcempega.library, AmigaMCE's own */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
