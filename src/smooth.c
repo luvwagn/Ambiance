@@ -540,10 +540,12 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
 
 /* ------------------------------------------------------------ masks */
 /* Room for SMOOTH_LEVELS masks of w x h, cleared. */
-static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h)
+static BOOL masks_begin(struct Smooth *s, UWORD w, UWORD h, BOOL opaque)
 {
     ULONG need;
-    s->alpha = s->alpha_ok && alpha_allowed && !s->chunky;
+    /* blended: over what is there where ReadPixelArray can be trusted,
+     * else only an opaque box (from its background's colour) */
+    s->alpha = s->alpha_ok && alpha_allowed && !s->chunky && (opaque || s->read_order < 2);
     if (s->alpha) {
         need = (ULONG)w * h * 4;
         if (need > s->argb_size) {
@@ -688,6 +690,7 @@ static void masks_end(struct Smooth *s, struct Gfx *g, WORD x, WORD y, UWORD w, 
         for (k = 0; k < n; k++)
             c[k] = step_of[c[k]];
         s->used = 0xFE;
+        s->alpha = FALSE;                   /* (or this again, and again: the stack gone) */
         s->chunky = TRUE;
         masks_end(s, g, x, y, w, h, fg, bg, opaque);
         s->chunky = FALSE;
@@ -825,7 +828,7 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
     }
     if (opaque && (WORD)((pen16 + 8) >> 4) > maxx)
         maxx = (WORD)((pen16 + 8) >> 4);
-    if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny))
+    if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny, opaque))
         return;
     pen16 = 0;
     for (i = 0; i < n;) {
@@ -846,7 +849,7 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
 
 void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
-    if (icon < 0 || icon >= s->icon_cnt || !masks_begin(s, s->icon_n, s->icon_n))
+    if (icon < 0 || icon >= s->icon_cnt || !masks_begin(s, s->icon_n, s->icon_n, FALSE))
         return;
     masks_put(s, s->icons + s->icon_bytes * icon, s->icon_n, s->icon_n, 0, 0);
     masks_end(s, g, x, y, s->icon_n, s->icon_n, fg, bg, FALSE);
@@ -855,7 +858,7 @@ void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg
 void sm_mark(struct Smooth *s, struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     int i = mark - MARK_ARROW;
-    if (i < 0 || i >= s->mark_cnt || !masks_begin(s, s->mark_n, s->mark_n))
+    if (i < 0 || i >= s->mark_cnt || !masks_begin(s, s->mark_n, s->mark_n, FALSE))
         return;
     masks_put(s, s->marks + s->mark_bytes * i, s->mark_n, s->mark_n, 0, 0);
     masks_end(s, g, x, y, s->mark_n, s->mark_n, fg, bg, FALSE);
