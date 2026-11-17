@@ -1,6 +1,10 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language suomi
 ## codeset 0
+MSG_420624D6
+; AmigaAMP is running: its plug-ins are its own
+MSG_603B8EB4
+; The plug-in could not be started
 MSG_2F1926C3
 ANIM-%ld-pakkausta ei tueta
 ; ANIM-%ld compression is not supported
@@ -79,6 +83,14 @@ vaatii AGA:n
 MSG_550E04D5
 ei käytettävissä
 ; not available
+MSG_7C321421
+; Midnight
+MSG_4C5F9DAD
+; Graphite
+MSG_634FC3DF
+; Emerald
+MSG_2B535442
+; Amethyst
 MSG_30386F8F
 täysvärit
 ; true colour
@@ -256,6 +268,8 @@ MP3: %s
 MSG_197B8973
 MHI-ajuri
 ; MHI driver
+MSG_1A89232E
+; amcempega.library, AmigaMCE's own
 MSG_4B721655
 ZZ9000 SDK:n mpega.library (puretaan kortilla)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -349,12 +363,20 @@ Videokansiot
 MSG_2DA81BF2
 Pehmeä: Fonts/amce-smooth ei sovi tähän AmigaMCE:hen
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_3CB0C840
+; F on Now playing starts this AmigaAMP plug-in
+MSG_6143CDF8
+; Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+MSG_3DF462B5
+; Flow
 MSG_022C9299
 Ei spektriä MHI:llä: se soittaa MP3:n itse
 ; No spectrum under MHI: it plays the MP3 itself
 MSG_0B3A7E73
 Ei spektriä: soitin ei kerro, mitä se soittaa
 ; No spectrum: this player does not say what it plays
+MSG_5E18A4A5
+; Flow: F shows it on the whole screen
 MSG_5561FD0B
 Yleiset
 ; General
@@ -442,6 +464,8 @@ Workbench-ikkuna
 MSG_3C2510A9
 CPU
 ; CPU
+MSG_31213991
+; Paula, 14-bit
 MSG_2D0EBF47
 ei TCP/IP-pinoa
 ; no TCP/IP stack
@@ -454,6 +478,8 @@ Keskikokoinen
 MSG_718B9F54
 Suuri
 ; Large
+MSG_05A06546
+; Extra large
 MSG_2C041143
 Tekstin koko
 ; Text size
@@ -472,9 +498,13 @@ Pikseli
 MSG_63678BEE
 Kaksoispuskurointi
 ; Double buffering
+MSG_1A29FF2A
+; Colours
 MSG_20B362A2
 Visualisointi
 ; Visualisation
+MSG_3311DE2D
+; Full screen visual (F)
 MSG_52325DD8
 Hyppivä vieritys (kirjaimittain)
 ; Jump scrolling (by letter)
@@ -596,6 +626,10 @@ MSG_116FD231
 MSG_1DE950F6
 4 kanavaa, enintään 28kHz, 8 bittiä
 ; 4 channels, up to 28kHz, 8-bit
+MSG_44E1D951
+; Paula, 14-bit: radio, Plex, music files
+MSG_34E4E153
+; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: radio, Plex, musiikkitiedostot
 ; AHI: radio, Plex, music files
@@ -608,12 +642,32 @@ ei asennettu
 MSG_2DA3A6A5
 MP3-dekooderi
 ; MP3 decoder
+MSG_7C47EC75
+; not installed (AmigaMCE's Libs)
+MSG_4C9B4043
+; AmigaMCE's own, decoded here
 MSG_3F71ACC2
 puretaan ZZ9000:lla
 ; decoded on the ZZ9000
 MSG_22FBBBB2
 purkaa ja soittaa
 ; decodes and plays
+MSG_55D2D3D8
+; MP3 quality
+MSG_050221B5
+; MP3 quality: automatic
+MSG_71E7648A
+; MP3 quality: high
+MSG_751F9CE1
+; MP3 quality: medium
+MSG_04A16198
+; by this Amiga's speed, measured each run
+MSG_68B10FC3
+; the most accurate
+MSG_313B727C
+; about a tenth less work
+MSG_003CBCAE
+; the decoder gives its best
 MSG_4DEE1DD3
 %ld paikka
 ; %ld place
@@ -1349,6 +1403,8 @@ plex.tv: ei kirjautunut
 MSG_0B620CC7
 MP3: purkaa MHI-ajuri %.40s
 ; MP3: decoded by the MHI driver %.40s
+MSG_36767C71
+; MP3: decoded by amcempega.library, AmigaMCE's own
 MSG_59D38C2E
 MP3: puretaan ZZ9000:lla (sen mpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1373,6 +1429,8 @@ FLAC: soitetaan sellaisenaan, flacdec.library
 MSG_586857BF
 Ääni: AHI, 16 bittiä
 ; Sound: AHI, 16-bit
+MSG_2350DA18
+; Sound: Paula, 14-bit
 MSG_0F2AADBB
 Ääni: Paula, 8 bittiä
 ; Sound: Paula, 8-bit
@@ -1445,6 +1503,10 @@ Liitäntä ei ole ylhäällä
 MSG_646AFCF3
 MHI:tä ei ole asennettu (sen ajurit LIBS:MHI:ssä)
 ; MHI is not installed (its drivers in LIBS:MHI)
+MSG_61E14706
+; amcempega.library is not in AmigaMCE's Libs
+MSG_7B5C3E86
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Tästä lähtien avatut asemaluettelot
 ; Station lists opened from now on
@@ -1457,12 +1519,21 @@ Mikään palvelin ei vastannut: Automaattinen pysyy
 MSG_7800A723
 MP3:n purkaa MHI: radio, Plex (parhaalla laadulla) ja tiedostot
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_799CE4C5
+; MP3 decoded here by amcempega.library, AmigaMCE's own
 MSG_605E617D
 MP3:n purkaa täällä mpega.library
 ; MP3 decoded here by mpega.library
-MSG_06B72AB3
-AHI: radio, Plex ja musiikkitiedostot; moduulit pysyvät Paulalla
-; AHI: radio, Plex and music files; modules stay on Paula
+MSG_3990C163
+; MP3 at high quality, at the rate this Amiga can decode it
+MSG_74E84AE4
+; MP3 at medium quality: about a tenth less work, 70 dB
+MSG_44A547DD
+; MP3 quality by this Amiga's speed, measured at the first MP3 each run
+MSG_30D664DF
+; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
+MSG_0CCDB457
+; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 Paula soittaa kaiken
 ; Paula plays everything
@@ -1481,6 +1552,16 @@ Kansio poistettu
 MSG_746B08BF
 Paina Esc uudelleen lopettaaksesi AmigaMCE:n
 ; Press Esc again to quit AmigaMCE
+MSG_6FC2F840
+; Nothing is playing
+MSG_116D42F2
+; Starting the plug-in (Esc in it to come back)
+MSG_0D724DE5
+; Flow needs a graphics card's screen (15 to 32-bit)
+MSG_4B362E27
+; Flow: this player does not say what it plays
+MSG_65839537
+; Flow could not be shown here
 MSG_16ABF123
 AmigaMCE vaatii Kickstart 3.0:n tai uudemman.\n
 ; AmigaMCE needs Kickstart 3.0 or newer.\n
@@ -1499,6 +1580,9 @@ Muisti ei riitä tämän moduulin miksaamiseen
 MSG_69F7300F
 AmigaMCE ei osaa soittaa tätä moduulia
 ; Not a module AmigaMCE can play
+MSG_523F6D57
+AHI:ta ei voitu avata (sen asetukset: tila?)
+; AHI could not be opened (its Preferences: a mode?)
 MSG_3F4BE355
 Mikseriä ei voitu käynnistää
 ; Could not start the mixer
@@ -1610,6 +1694,15 @@ Palvelin ohjasi meidät paikkaan, jonne emme voi seurata
 MSG_64F654D3
 Verkkoprosessia ei voitu käynnistää
 ; The network process could not start
+MSG_3472356C
+Arvio %s/%ld
+; Rating %s/%ld
+MSG_4270C87A
+Syntynyt %s
+; Born %s
+MSG_76AEB6B2
+Perustettu %s
+; Formed %s
 MSG_201D2C97
 %lu kuva
 ; %lu photo
@@ -1667,9 +1760,6 @@ MSG_54019F41
 MSG_07A36F34
 Ei voitu lukea
 ; Could not be read
-MSG_523F6D57
-AHI:ta ei voitu avata (sen asetukset: tila?)
-; AHI could not be opened (its Preferences: a mode?)
 MSG_59B9295C
 Aseman palvelinta ei löytynyt (DNS)
 ; The station's server could not be found (DNS)

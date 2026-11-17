@@ -4920,6 +4920,7 @@ static void pv_free_slot(int i)
         ldr_wait(j);
     pic_dispose(j->obj);
     thumb_free(j->thumb);
+    FreeVec(j->text);
     if (pv_tj == j)
         pv_tj = NULL;
     if (pv_sj == j)
@@ -5322,6 +5323,21 @@ static void pv_draw_text(struct Page *p)
          * longer than the room left (wheel or bar; Up/Down stay with the list) */
         for (i = 0; i < j->nlines; i++)
             pv_line(j->lines[i], w - U(9));
+    if (!p->pics && j->text) {
+        /* the album's review or the artist's biography (.nfo), a paragraph
+         * a line, a blank line between */
+        char *s = j->text, *e, c;
+        while (*s) {
+            for (e = s; *e && *e != '\n'; e++)
+                ;
+            c = *e;
+            *e = 0;                         /* the paragraph alone, then put back */
+            pv_line("", w - U(9));
+            pv_line(s, w - U(9));
+            *e = c;
+            s = c ? e + 1 : e;
+        }
+    }
     if (pv_list.count && max_y - y >= g.font_h) {
         pv_tb.pos = pv_tb.target = 0;
         pv_tb.focused = focus == FOCUS_PREVIEW;

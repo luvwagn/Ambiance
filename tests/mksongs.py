@@ -67,3 +67,59 @@ mk(f'{root}/Empty/Deeper/readme.txt', b'nothing')
 mk(f'{root}/Pics/a.jpg', b'\xff\xd8')
 # a folder with a cover file
 mk(f'{root}/Artist/Album/cover.png', b'\x89PNG')
+
+# Kodi's .nfo files and pictures (nfo.c): an album's album.nfo, its
+# artist's artist.nfo above it, and an album in disc folders (CD1, CD2)
+mk(f'{root}/Artist/Album/album.nfo', '''<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<!-- written by Kodi -->
+<album>
+    <title>Copper Lists</title>
+    <musicbrainzalbumid>00000000-0000-0000-0000-000000000000</musicbrainzalbumid>
+    <artistdesc>The Paula Channels</artistdesc>
+    <genre>Synth-pop</genre>
+    <genre>Chiptune</genre>
+    <style>Chiptune</style>
+    <style>Electronic</style>
+    <mood>Warm</mood>
+    <review>Their second album, and the one where the limits became the point.
+Every song fits in 512K of chip memory &amp; the stereo is hard left and right.</review>
+    <label>Copper Records</label>
+    <type>album</type>
+    <releasedate>1993-05-01</releasedate>
+    <rating max="10">8.500000</rating>
+    <thumb spoof="" cache="" aspect="thumb" preview="">folder.jpg</thumb>
+    <track>
+        <position>1</position>
+        <title>Wait for the Beam</title>
+        <duration>4:12</duration>
+    </track>
+    <albumArtistCredits>
+        <artist>The Paula Channels</artist>
+    </albumArtistCredits>
+</album>
+'''.encode('utf-8'))
+mk(f'{root}/Artist/artist.nfo', '''<?xml version="1.0" encoding="UTF-8"?>
+<artist>
+  <name>The Paula Channels</name>
+  <type>Group</type>
+  <genre>Synth-pop</genre>
+  <style>Chiptune</style>
+  <formed>1988</formed>
+  <disbanded>1996</disbanded>
+  <biography><![CDATA[A four-piece from Lancaster.
+
+They never used more than four channels <really>.]]></biography>
+  <album>
+    <title>Copper Lists</title>
+    <year>1993</year>
+  </album>
+  <thumb aspect="thumb">folder.jpg</thumb>
+</artist>
+'''.encode('utf-8'))
+mk(f'{root}/Artist/fanart.jpg', b'\xff\xd8')
+mk(f'{root}/Artist/logo.png', b'\x89PNG')
+mk(f'{root}/Artist/Album/discart.png', b'\x89PNG')
+mk(f'{root}/Band/Live/CD1/01 a.mp3', tag + xing + b'\0' * 5000)
+mk(f'{root}/Band/Live/CD2/01 b.mp3', tag + xing + b'\0' * 5000)
+mk(f'{root}/Band/Live/album.nfo', '''<album><title>Live at the Café</title><year>1995</year>
+<rating>4</rating><review>One night only.</review></album>'''.encode('utf-8'))

@@ -1,6 +1,10 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language nihongo
 ## codeset 0
+MSG_420624D6
+; AmigaAMP is running: its plug-ins are its own
+MSG_603B8EB4
+; The plug-in could not be started
 MSG_2F1926C3
 ANIM-%ld圧縮には対応していません
 ; ANIM-%ld compression is not supported
@@ -79,6 +83,14 @@ AGAが必要
 MSG_550E04D5
 使用不可
 ; not available
+MSG_7C321421
+; Midnight
+MSG_4C5F9DAD
+; Graphite
+MSG_634FC3DF
+; Emerald
+MSG_2B535442
+; Amethyst
 MSG_30386F8F
 フルカラー
 ; true colour
@@ -256,6 +268,8 @@ MP3: %s
 MSG_197B8973
 MHIドライバー
 ; MHI driver
+MSG_1A89232E
+; amcempega.library, AmigaMCE's own
 MSG_4B721655
 mpega.library (ZZ9000 SDKのもの、カードでデコード)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -349,12 +363,20 @@ MSG_7B7A30D9
 MSG_2DA81BF2
 スムーズ: Fonts/amce-smoothがこのAmigaMCEと合いません
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_3CB0C840
+; F on Now playing starts this AmigaAMP plug-in
+MSG_6143CDF8
+; Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+MSG_3DF462B5
+; Flow
 MSG_022C9299
 MHIではスペクトルなし: MHIがMP3を自分で再生します
 ; No spectrum under MHI: it plays the MP3 itself
 MSG_0B3A7E73
 スペクトルなし: このプレーヤーは再生内容を伝えません
 ; No spectrum: this player does not say what it plays
+MSG_5E18A4A5
+; Flow: F shows it on the whole screen
 MSG_5561FD0B
 全般
 ; General
@@ -442,6 +464,8 @@ Workbenchのウィンドウ
 MSG_3C2510A9
 CPU
 ; CPU
+MSG_31213991
+; Paula, 14-bit
 MSG_2D0EBF47
 TCP/IPスタックなし
 ; no TCP/IP stack
@@ -454,6 +478,8 @@ MSG_09BE5F96
 MSG_718B9F54
 大
 ; Large
+MSG_05A06546
+; Extra large
 MSG_2C041143
 文字サイズ
 ; Text size
@@ -472,9 +498,13 @@ MSG_2AB32B77
 MSG_63678BEE
 ダブルバッファリング
 ; Double buffering
+MSG_1A29FF2A
+; Colours
 MSG_20B362A2
 ビジュアライザー
 ; Visualisation
+MSG_3311DE2D
+; Full screen visual (F)
 MSG_52325DD8
 ジャンプスクロール (頭文字ごと)
 ; Jump scrolling (by letter)
@@ -596,6 +626,10 @@ MSG_116FD231
 MSG_1DE950F6
 4チャンネル、28kHzまで、8ビット
 ; 4 channels, up to 28kHz, 8-bit
+MSG_44E1D951
+; Paula, 14-bit: radio, Plex, music files
+MSG_34E4E153
+; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: ラジオ、Plex、音楽ファイル
 ; AHI: radio, Plex, music files
@@ -608,12 +642,32 @@ MSG_7EF1200C
 MSG_2DA3A6A5
 MP3デコーダー
 ; MP3 decoder
+MSG_7C47EC75
+; not installed (AmigaMCE's Libs)
+MSG_4C9B4043
+; AmigaMCE's own, decoded here
 MSG_3F71ACC2
 ZZ9000でデコード
 ; decoded on the ZZ9000
 MSG_22FBBBB2
 デコードして再生
 ; decodes and plays
+MSG_55D2D3D8
+; MP3 quality
+MSG_050221B5
+; MP3 quality: automatic
+MSG_71E7648A
+; MP3 quality: high
+MSG_751F9CE1
+; MP3 quality: medium
+MSG_04A16198
+; by this Amiga's speed, measured each run
+MSG_68B10FC3
+; the most accurate
+MSG_313B727C
+; about a tenth less work
+MSG_003CBCAE
+; the decoder gives its best
 MSG_4DEE1DD3
 %ld箇所
 ; %ld place
@@ -1349,6 +1403,8 @@ plex.tv: サインインしていません
 MSG_0B620CC7
 MP3: MHIドライバー%.40sでデコード
 ; MP3: decoded by the MHI driver %.40s
+MSG_36767C71
+; MP3: decoded by amcempega.library, AmigaMCE's own
 MSG_59D38C2E
 MP3: ZZ9000でデコード (そのmpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1373,6 +1429,8 @@ FLAC: 保存されたまま、flacdec.libraryで再生
 MSG_586857BF
 サウンド: AHI、16ビット
 ; Sound: AHI, 16-bit
+MSG_2350DA18
+; Sound: Paula, 14-bit
 MSG_0F2AADBB
 サウンド: Paula、8ビット
 ; Sound: Paula, 8-bit
@@ -1445,6 +1503,10 @@ MSG_5CBCDB5D
 MSG_646AFCF3
 MHI未インストール (ドライバーはLIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
+MSG_61E14706
+; amcempega.library is not in AmigaMCE's Libs
+MSG_7B5C3E86
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 今後開く局リストに適用
 ; Station lists opened from now on
@@ -1457,12 +1519,21 @@ MSG_415E54B9
 MSG_7800A723
 MHIでMP3をデコード: ラジオ、Plex (最高音質) とファイル
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_799CE4C5
+; MP3 decoded here by amcempega.library, AmigaMCE's own
 MSG_605E617D
 mpega.libraryでここでMP3をデコード
 ; MP3 decoded here by mpega.library
-MSG_06B72AB3
-AHI: ラジオ、Plex、音楽ファイル。MODはPaula
-; AHI: radio, Plex and music files; modules stay on Paula
+MSG_3990C163
+; MP3 at high quality, at the rate this Amiga can decode it
+MSG_74E84AE4
+; MP3 at medium quality: about a tenth less work, 70 dB
+MSG_44A547DD
+; MP3 quality by this Amiga's speed, measured at the first MP3 each run
+MSG_30D664DF
+; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
+MSG_0CCDB457
+; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 すべてPaulaで再生
 ; Paula plays everything
@@ -1481,6 +1552,16 @@ MSG_4A2FC46E
 MSG_746B08BF
 もう一度EscでAmigaMCEを終了
 ; Press Esc again to quit AmigaMCE
+MSG_6FC2F840
+; Nothing is playing
+MSG_116D42F2
+; Starting the plug-in (Esc in it to come back)
+MSG_0D724DE5
+; Flow needs a graphics card's screen (15 to 32-bit)
+MSG_4B362E27
+; Flow: this player does not say what it plays
+MSG_65839537
+; Flow could not be shown here
 MSG_16ABF123
 AmigaMCEにはKickstart 3.0以降が必要です。\n
 ; AmigaMCE needs Kickstart 3.0 or newer.\n
@@ -1499,6 +1580,9 @@ MSG_3DD51BC4
 MSG_69F7300F
 AmigaMCEで再生できないモジュールです
 ; Not a module AmigaMCE can play
+MSG_523F6D57
+AHIを開けませんでした (環境設定: モードは?)
+; AHI could not be opened (its Preferences: a mode?)
 MSG_3F4BE355
 ミキサーを開始できませんでした
 ; Could not start the mixer
@@ -1610,6 +1694,15 @@ MSG_563B6546
 MSG_64F654D3
 ネットワークプロセスを開始できませんでした
 ; The network process could not start
+MSG_3472356C
+評価 %s/%ld
+; Rating %s/%ld
+MSG_4270C87A
+生年 %s
+; Born %s
+MSG_76AEB6B2
+結成 %s
+; Formed %s
 MSG_201D2C97
 %lu枚の写真
 ; %lu photo
@@ -1667,9 +1760,6 @@ MSG_54019F41
 MSG_07A36F34
 読めませんでした
 ; Could not be read
-MSG_523F6D57
-AHIを開けませんでした (環境設定: モードは?)
-; AHI could not be opened (its Preferences: a mode?)
 MSG_59B9295C
 局のサーバーが見つかりません (DNS)
 ; The station's server could not be found (DNS)

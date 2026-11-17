@@ -70,6 +70,17 @@ of the Amiga to how fast it really is.
   length and cover (the folder's cover file, or the picture inside the
   file), which Now Playing shows too. A folder's files play in order, with
   seeking.
+- **Kodi's .nfo files:** where [Kodi](https://kodi.tv) (or a tagger that
+  writes its files) has left an `album.nfo` in an album's folder, the
+  pane beside a track or the album's folder adds the album's label,
+  genres and styles, rating and its review; an `artist.nfo` in the folder
+  above (the artist's) gives the artist's folder their genres, when they
+  formed (or were born) and their biography. The review or biography
+  scrolls in the pane with the rest. An album split into disc folders
+  (`CD1`, `Disc 2`) finds its `album.nfo` in the folder above them. Only
+  the selected folder's files are read, as covers are. Kodi's pictures
+  for an artist (`fanart.jpg`, `logo.png`) and an album (`discart.png`)
+  are found too, for the larger layouts to come.
 - **A beets library:** with a [beets](https://beets.io) database in
   `MUSIC:` (`musiclibrary.db` or `library.db`), Music gets *Music library
   (beets)*: Artists, Albums and Recently added, then an artist's albums and
