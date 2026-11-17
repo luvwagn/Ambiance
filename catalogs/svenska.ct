@@ -1849,6 +1849,27 @@ Det sparade skärmläget finns inte här: Automatiskt används
 MSG_7B47B1F3
 Klassisk
 ; Classic
+MSG_16C4FA7D
+Spår
+; Tracks
+MSG_1C27EB60
+Genre
+; Genre
+MSG_6264551E
+Stämning
+; Mood
+MSG_2B675A1E
+Född
+; Born
+MSG_6FA7EBE6
+Bildat
+; Formed
+MSG_418D3F0F
+Död
+; Died
+MSG_15974E49
+Upplöst
+; Disbanded
 MSG_14BD5320
 Layouten kunde inte öppnas: den klassiska används
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad och %ld program till lagda i C:
 MSG_04F3511D
  (%ld som redan fanns behölls)
 ;  (%ld already there kept)
+MSG_389C8A70
+Betyg
+; Rating
+MSG_6B1D7CB6
+Nästa:
+; Next:
+MSG_5E281FEB
+Pausad
+; Paused

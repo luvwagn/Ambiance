@@ -1849,6 +1849,27 @@ MSG_3D0CDD4E
 MSG_7B47B1F3
 클래식
 ; Classic
+MSG_16C4FA7D
+트랙
+; Tracks
+MSG_1C27EB60
+장르
+; Genre
+MSG_6264551E
+분위기
+; Mood
+MSG_2B675A1E
+출생
+; Born
+MSG_6FA7EBE6
+결성
+; Formed
+MSG_418D3F0F
+사망
+; Died
+MSG_15974E49
+해체
+; Disbanded
 MSG_14BD5320
 레이아웃을 열 수 없어 클래식을 사용합니다
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad와 프로그램 %ld개를 C:에 넣었습니다
 MSG_04F3511D
  (이미 있던 %ld개는 유지)
 ;  (%ld already there kept)
+MSG_389C8A70
+평점
+; Rating
+MSG_6B1D7CB6
+다음:
+; Next:
+MSG_5E281FEB
+일시정지
+; Paused

@@ -342,15 +342,103 @@ static const char *text_lines[] = { "Ambiance", "",
     "is Ambiance's own and always there (hold Left Shift as it starts)." };
 static const char *next[] = { "Paula's Lament", "Copper Bars" };
 
+static struct LItem album_rows[] = {
+    { "Copper & Chrome", "The Paula Channels", "1993", "cover-copper", LI_ALBUM, LM_ARROW, LIF_NOW, 0 },
+    { "Interference", "Sanity", "1994", "cover-interference", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Hardwired", "Crionics", "1991", "cover-hardwired", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "State of the Art", "Spaceballs", "1992", "cover-sota", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Enigma", "Phenomena", "1991", "cover-enigma", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "9 Fingers", "Spaceballs", "1993", "cover-9f", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Desert Dream", "Kefrens", "1993", "cover-dd", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Arte", "Sanity", "1993", NULL, LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Jesus on E's", "Lemon.", "1993", "cover-joe", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Hologramm", "Cascade", "1995", "cover-holo", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Elysium", "Sanity", "1991", "cover-elysium", LI_ALBUM, LM_ARROW, 0, 0 },
+    { "Mental Hangover", "Scoopex", "1990", "cover-mh", LI_ALBUM, LM_ARROW, 0, 0 },
+};
+static struct LItem track_rows[] = {
+    { "Paula's Lament", NULL, "4:12", NULL, LI_TRACK, LM_PLAYING, LIF_NOW, 0 },
+    { "Copper Bars", NULL, "3:58", NULL, LI_TRACK, LM_PLAY, 0, 0 },
+    { "Blitter Rain", NULL, "5:21", NULL, LI_TRACK, LM_PLAY, 0, 0 },
+    { "Interleaved", NULL, "4:02", NULL, LI_TRACK, LM_PLAY, 0, 0 },
+    { "Fast RAM", NULL, "3:33", NULL, LI_TRACK, LM_PLAY, 0, 0 },
+    { "Agnus Rising", NULL, "6:10", NULL, LI_TRACK, LM_PLAY, 0, 0 },
+};
+static const char *album_facts[] = { "Genre", "Electronic, Chiptune", "Style", "Tracker" };
+static const char *album_review = "Recorded on an A1200 with four Paula channels and nothing else, "
+    "Copper & Chrome is the sound of a machine pushed to its edges.\nIts second side slows down: "
+    "Agnus Rising takes six minutes to arrive, and is worth it.";
+static const char *artist_bio = "The Paula Channels were formed in 1991 in Gothenburg by two "
+    "demo-scene musicians who met at a copy party.\nThey released four albums on disk magazines "
+    "before the first on vinyl.";
+static const char *artist_facts[] = { "Formed", "1991", "Albums", "4" };
+
 static int scene;               /* which page model() gives */
 static struct LItem *rows_of;
 static const struct LItem *item(LONG i) { return &rows_of[i]; }
+
+static void crumbs(struct LPage *pg, const char *a, const char *b, const char *c)
+{
+    pg->section = LSEC_MUSIC;
+    pg->ncrumb = 0;
+    pg->crumb[pg->ncrumb++] = "Music";
+    if (a)
+        pg->crumb[pg->ncrumb++] = a;
+    if (b)
+        pg->crumb[pg->ncrumb++] = b;
+    if (c)
+        pg->crumb[pg->ncrumb++] = c;
+    pg->hint = "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back";
+}
 
 static const void *h_model(int screen)
 {
     static struct LHome home;
     static struct LPage page;
     static struct LNow now;
+    static struct LAlbum al;
+    static struct LArtist ar;
+    if (screen == LS_ALBUMS) {
+        memset(&page, 0, sizeof(page));
+        crumbs(&page, "Plex", "Albums", NULL);
+        rows_of = album_rows;
+        page.list.count = sizeof(album_rows) / sizeof(album_rows[0]);
+        page.list.sel = 6;
+        page.list.item = item;
+        return &page;
+    }
+    if (screen == LS_ALBUM) {
+        memset(&al, 0, sizeof(al));
+        crumbs(&al.page, "Plex", "Albums", "Copper & Chrome");
+        rows_of = track_rows;
+        al.page.list.count = sizeof(track_rows) / sizeof(track_rows[0]);
+        al.page.list.sel = 2;
+        al.page.list.item = item;
+        al.title = "Copper & Chrome";
+        al.artist = "The Paula Channels";
+        al.line = "1993 \xB7 Paula Records";
+        al.rating = "8.5";
+        al.art = "cover-copper";
+        al.review = album_review;
+        al.facts.n = 2;
+        al.facts.facts = album_facts;
+        return &al;
+    }
+    if (screen == LS_ARTIST) {
+        memset(&ar, 0, sizeof(ar));
+        crumbs(&ar.page, "Plex", "Artists", "The Paula Channels");
+        rows_of = album_rows;
+        ar.page.list.count = 4;
+        ar.page.list.sel = 1;
+        ar.page.list.item = item;
+        ar.name = "The Paula Channels";
+        ar.line = "Group";
+        ar.bio = artist_bio;
+        ar.art = "cover-artist";
+        ar.facts.n = 2;
+        ar.facts.facts = artist_facts;
+        return &ar;
+    }
     if (screen == LS_HOME) {
         memset(&home, 0, sizeof(home));
         home.n = 9;
@@ -535,6 +623,29 @@ static void run(int w, int h, int bits, const char *font)
             layout_engine.changed(LS_PAGE, LC_SELECT);
             CHECK(drawn_px > 0 && drawn_px < full * 3 / 4);
         }
+    }
+    {
+        static const int ms[3] = { LS_ALBUMS, LS_ALBUM, LS_ARTIST };
+        static const char *const mn[3] = { "wall", "album", "artist" };
+        int k;
+        for (k = 0; k < 3; k++) {
+            drawn_px = 0;
+            layout_engine.draw(ms[k]);
+            CHECK(drawn_px >= (long)w * h);
+            save(mn[k]);
+            drawn_px = 0;
+            layout_engine.changed(ms[k], LC_SELECT);
+            CHECK(drawn_px > 0);
+        }
+        /* the wall's keys: Right a cover, Down a row, Left at the edge back */
+        layout_engine.draw(LS_ALBUMS);
+        nacts = 0;
+        CHECK(layout_engine.input(LS_ALBUMS, LA_RIGHT, 0) == LR_DONE && nacts == 1 &&
+              acts[0][0] == LAC_SELECT && acts[0][1] == 7);
+        nacts = 0;
+        CHECK(layout_engine.input(LS_ALBUMS, LA_DOWN, 0) == LR_DONE && nacts == 1 &&
+              acts[0][0] == LAC_SELECT && acts[0][1] > 6);
+        CHECK(layout_engine.input(LS_ALBUMS, LA_FIRE, 0) == LR_UNUSED);
     }
     drawn_px = 0;
     layout_engine.draw(LS_NOW);

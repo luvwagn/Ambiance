@@ -1849,6 +1849,27 @@ Gespeicherter Bildschirmmodus hier nicht verfügbar: Automatisch wird verwendet
 MSG_7B47B1F3
 Klassisch
 ; Classic
+MSG_16C4FA7D
+Titel
+; Tracks
+MSG_1C27EB60
+Genre
+; Genre
+MSG_6264551E
+Stimmung
+; Mood
+MSG_2B675A1E
+Geboren
+; Born
+MSG_6FA7EBE6
+Gegründet
+; Formed
+MSG_418D3F0F
+Gestorben
+; Died
+MSG_15974E49
+Aufgelöst
+; Disbanded
 MSG_14BD5320
 Das Layout ließ sich nicht öffnen: das klassische wird verwendet
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad und %ld weitere Programme in C: abgelegt
 MSG_04F3511D
  (%ld bereits vorhandene behalten)
 ;  (%ld already there kept)
+MSG_389C8A70
+Bewertung
+; Rating
+MSG_6B1D7CB6
+Als Nächstes:
+; Next:
+MSG_5E281FEB
+Pausiert
+; Paused

@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.6 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.7 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.6 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.7 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 6;
+const UWORD LibRevision = 7;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -495,6 +495,9 @@ static void draw_text_body(const struct LPage *m)
 static int body_n = -1;         /* drawn with a details panel (1) or not (0); -1 text */
 static void draw_page_body(const struct LPage *m);
 
+static void draw_lines(const char *const *s, LONG n, LONG from, LONG x, LONG y, LONG w, LONG bottom,
+                       ULONG first, ULONG rest);
+
 static void draw_page(void)
 {
     const struct LPage *m = H->model(LS_PAGE);
@@ -579,6 +582,292 @@ static void draw_page_body(const struct LPage *m)
         if (m->letter && H->letter)     /* the big letter, as the list glides or jumps */
             H->letter((WORD)(x + w - X(40)), (WORD)(py + lh / 2), C_LETTER);
     }
+}
+
+/* ---------------------------------------------------------------- shared by the music screens */
+/* The page's title and its path, the left panel's way back left out */
+static void page_title(const struct LPage *m)
+{
+    char sub[160];
+    LONG i;
+    sub[0] = 0;
+    for (i = 0; i + 1 < m->ncrumb; i++)
+        join(sub, sizeof(sub), sub, " / ", m->crumb[i]);
+    title_line(m->ncrumb ? m->crumb[m->ncrumb - 1] : "", sub);
+}
+
+/* A cover s square at x, y: the picture, or a panel with the name's
+ * first letter until it is ready (or if it has none) */
+static void cover(const char *art, const char *label, LONG x, LONG y, LONG s, ULONG bg)
+{
+    const struct LImage *im = art ? H->picture(art, (UWORD)s, (UWORD)s) : NULL;
+    if (im) {
+        if (im->w < s || im->h < s)
+            H->fill((WORD)x, (WORD)y, (WORD)s, (WORD)s, bg);
+        H->image(im, (WORD)(x + (s - im->w) / 2), (WORD)(y + (s - im->h) / 2));
+        return;
+    }
+    H->rrect((WORD)x, (WORD)y, (WORD)s, (WORD)s, 4, C_PANEL, bg);
+    if (label && *label)
+        text(x + (s - tlen("M", LF_BOLD)) / 2, y + (s - FH) / 2, label, LF_BOLD, C_DIM, flat(C_PANEL),
+             tlen("M", LF_BOLD) + 2);
+}
+
+/* Paragraphs (a line each, "\n" between) into lines for draw_lines */
+static const char *para[64];
+static char parabuf[2048];
+static LONG paras(const char *t)
+{
+    LONG n = 0, k = 0;
+    if (!t)
+        return 0;
+    while (*t && n < 64 && k < (LONG)sizeof(parabuf) - 1) {
+        para[n++] = &parabuf[k];
+        while (*t && *t != '\n' && k < (LONG)sizeof(parabuf) - 1)
+            parabuf[k++] = *t++;
+        parabuf[k++] = 0;
+        if (*t == '\n')
+            t++;
+    }
+    return n;
+}
+
+/* ---------------------------------------------------------------- the album wall */
+static LONG wall_cols = 1, wall_top;    /* its columns, as drawn; its first row shown */
+
+static void draw_wall_body(const struct LPage *m)
+{
+    LONG x0 = X(30), y0 = Y(60), aw = W - x0 - X(30), bottom = HT - Y(30) - FH - Y(12);
+    LONG gap = X(18), cs = X(124), cols, ch, rows, i, sel = m->list.sel;
+    const struct LList *l = &m->list;
+    if (cs < FH * 4)
+        cs = FH * 4;
+    cols = (aw + gap) / (cs + gap);
+    if (cols < 1)
+        cols = 1;
+    cs = (aw - (cols - 1) * gap) / cols;
+    ch = cs + Y(8) + FH + Y(2) + FH + Y(14);
+    rows = (bottom - y0) / ch;
+    if (rows < 1)
+        rows = 1;
+    wall_cols = cols;
+    if (sel / cols < wall_top)
+        wall_top = sel / cols;
+    if (sel / cols >= wall_top + rows)
+        wall_top = sel / cols - rows + 1;
+    if (wall_top < 0)
+        wall_top = 0;
+    nhits = hits_base;
+    hit_sel = sel;
+    H->clip((WORD)(x0 - X(10)), (WORD)(y0 - Y(6)), (WORD)(W - X(10)), (WORD)bottom);
+    H->vgrad((WORD)(x0 - X(10)), (WORD)(y0 - Y(6)), (WORD)(W - x0), (WORD)(bottom - y0 + Y(6)),
+             grad(y0 - Y(6)), grad(bottom));
+    for (i = wall_top * cols; i < l->count && i < (wall_top + rows) * cols; i++) {
+        const struct LItem *it = l->item(i);
+        LONG cx = x0 + (i % cols) * (cs + gap), cy = y0 + (i / cols - wall_top) * ch;
+        BOOL on = i == sel;
+        ULONG bg = grad(cy);
+        if (it->flags & LIF_HEAD)
+            continue;
+        hit(cx, cy, cs, ch - Y(10), HT_ROW, it->kind, i);
+        cover(it->art, it->label, cx, cy, cs, bg);
+        if (on)
+            H->frame((WORD)(cx - 3), (WORD)(cy - 3), (WORD)(cs + 6), (WORD)(cs + 6), 3, C_ACC);
+        if (it->flags & LIF_NOW)
+            mark(LM_PLAYING, cx + cs - X(8), cy + cs - FH, C_ACC, bg);
+        text(cx, cy + cs + Y(8), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT,
+             flat(grad(cy + cs + Y(8))), cs);
+        if (it->sub || it->tag)
+            text(cx, cy + cs + Y(8) + FH + Y(2), it->sub ? it->sub : it->tag, LF_SMALL, C_SUB,
+                 flat(grad(cy + cs + Y(8) + FH)), cs);
+    }
+    if (l->count > rows * cols) {            /* where in the wall */
+        LONG nr = (l->count + cols - 1) / cols, bx = W - X(16), bh = bottom - y0;
+        LONG th = bh * rows / nr, ty = y0 + (bh - (th < Y(16) ? Y(16) : th)) * wall_top / (nr - rows > 0 ? nr - rows : 1);
+        if (th < Y(16))
+            th = Y(16);
+        H->rrect((WORD)bx, (WORD)y0, 4, (WORD)bh, 2, C_LINE, grad(y0));
+        H->rrect((WORD)bx, (WORD)ty, 4, (WORD)th, 2, C_ACC, C_LINE);
+    }
+    if (m->letter && H->letter)
+        H->letter((WORD)(W - X(60)), (WORD)(y0 + (bottom - y0) / 2), C_LETTER);
+    H->clip(0, 0, W, HT);
+}
+
+static void draw_wall(void)
+{
+    const struct LPage *m = H->model(LS_ALBUMS);
+    background();
+    top_right(FALSE);
+    if (!m)
+        return;
+    page_title(m);
+    hits_base = nhits;
+    draw_wall_body(m);
+    footer(m->hint, m->message);
+}
+
+/* ---------------------------------------------------------------- an album */
+static LONG album_x, album_w;           /* its tracks' panel, as drawn */
+
+static void draw_album(void)
+{
+    const struct LAlbum *a = H->model(LS_ALBUM);
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), cx = X(30), cs = X(240), y, i, n;
+    LONG x, w;
+    background();
+    top_right(FALSE);
+    if (!a)
+        return;
+    page_title(&a->page);
+    if (cs > bottom - py - FH * 6)
+        cs = bottom - py - FH * 6;
+    cover(a->art, a->title, cx, py, cs, grad(py));
+    y = py + cs + Y(14);
+    y += text(cx, y, a->title, LF_BOLD, C_WHITE, &bg_grad, cs) ? FH + Y(4) : 0;
+    if (a->artist && *a->artist) {
+        text(cx, y, a->artist, LF_REGULAR, C_ACC, &bg_grad, cs);
+        y += FH + Y(4);
+    }
+    if (a->line && *a->line) {
+        text(cx, y, a->line, LF_SMALL, C_SUB, &bg_grad, cs);
+        y += FH + Y(2);
+    }
+    if (a->rating && *a->rating) {
+        char b[24];
+        join(b, sizeof(b), H->tr("Rating"), ": ", a->rating);
+        text(cx, y, b, LF_SMALL, C_SUB, &bg_grad, cs);
+        y += FH + Y(2);
+    }
+    for (i = 0; i < a->facts.n && y + FH <= bottom; i++) {
+        char b[140];
+        join(b, sizeof(b), a->facts.facts[2 * i], ": ", a->facts.facts[2 * i + 1]);
+        text(cx, y, b, LF_SMALL, C_SUB, &bg_grad, cs);
+        y += FH + Y(2);
+    }
+    x = cx + cs + X(24);
+    w = W - x - X(24);
+    album_x = x;
+    album_w = w;
+    hits_base = nhits;
+    n = a->review && *a->review ? 1 : 0;
+    {
+        LONG lh = n ? (bottom - py) * 60 / 100 : bottom - py;
+        panel(x, py, w, lh, 6, C_PANEL, C_LINE, grad(py));
+        if (a->page.list.count)
+            draw_rows(&a->page, x, py, w, lh);
+        if (n) {
+            LONG dy = py + lh + Y(12), np = paras(a->review);
+            panel(x, dy, w, bottom - dy, 6, C_PANEL, C_LINE, grad(dy));
+            draw_lines(para, np, 0, x + X(18), dy + Y(12), w - X(36), bottom - Y(8), C_BODY, C_BODY);
+        }
+        if (a->page.letter && H->letter)
+            H->letter((WORD)(x + w - X(40)), (WORD)(py + lh / 2), C_LETTER);
+    }
+    footer(a->page.hint, a->page.message);
+}
+
+/* a move on an album: its tracks' panel alone */
+static void album_rows(void)
+{
+    const struct LAlbum *a = H->model(LS_ALBUM);
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12);
+    LONG lh = a && a->review && *a->review ? (bottom - py) * 60 / 100 : bottom - py;
+    if (!a)
+        return;
+    nhits = hits_base;
+    panel(album_x, py, album_w, lh, 6, C_PANEL, C_LINE, grad(py));
+    if (a->page.list.count)
+        draw_rows(&a->page, album_x, py, album_w, lh);
+    if (a->page.letter && H->letter)
+        H->letter((WORD)(album_x + album_w - X(40)), (WORD)(py + lh / 2), C_LETTER);
+}
+
+/* ---------------------------------------------------------------- an artist */
+static LONG strip_first, strip_cols = 1;   /* the albums' strip: its first shown, how many fit */
+static LONG strip_y;
+
+static void draw_strip(const struct LArtist *a)
+{
+    LONG x0 = X(30), aw = W - x0 - X(30), bottom = HT - Y(30) - FH - Y(12), gap = X(18);
+    LONG cs = X(124), cols, i, sel = a->page.list.sel, y = strip_y;
+    const struct LList *l = &a->page.list;
+    if (cs > bottom - y - FH * 2 - Y(20))
+        cs = bottom - y - FH * 2 - Y(20);
+    cols = (aw + gap) / (cs + gap);
+    if (cols < 1)
+        cols = 1;
+    strip_cols = cols;
+    if (sel < strip_first)
+        strip_first = sel;
+    if (sel >= strip_first + cols)
+        strip_first = sel - cols + 1;
+    if (strip_first > l->count - cols)
+        strip_first = l->count - cols;
+    if (strip_first < 0)
+        strip_first = 0;
+    nhits = hits_base;
+    hit_sel = sel;
+    H->vgrad((WORD)(x0 - X(10)), (WORD)(y - Y(6)), (WORD)(aw + X(20)), (WORD)(bottom - y + Y(6)),
+             grad(y - Y(6)), grad(bottom));
+    for (i = strip_first; i < l->count && i < strip_first + cols; i++) {
+        const struct LItem *it = l->item(i);
+        LONG cx = x0 + (i - strip_first) * (cs + gap);
+        BOOL on = i == sel;
+        if (it->flags & LIF_HEAD)
+            continue;
+        hit(cx, y, cs, cs + FH * 2 + Y(10), HT_ROW, it->kind, i);
+        cover(it->art, it->label, cx, y, cs, grad(y));
+        if (on)
+            H->frame((WORD)(cx - 3), (WORD)(y - 3), (WORD)(cs + 6), (WORD)(cs + 6), 3, C_ACC);
+        text(cx, y + cs + Y(8), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT,
+             flat(grad(y + cs + Y(8))), cs);
+        if (it->sub || it->tag)
+            text(cx, y + cs + Y(8) + FH + Y(2), it->tag ? it->tag : it->sub, LF_SMALL, C_SUB,
+                 flat(grad(y + cs + Y(8) + FH)), cs);
+    }
+    if (strip_first > 0)
+        mark(LM_ARROW, x0 - X(12), y + cs / 2, C_SUB, grad(y));    /* (more to the left: a chevron) */
+}
+
+static void draw_artist(void)
+{
+    const struct LArtist *a = H->model(LS_ARTIST);
+    LONG py = Y(64), cx = X(30), ps = X(180), tx, tw, y, i, np;
+    background();
+    top_right(FALSE);
+    if (!a)
+        return;
+    page_title(&a->page);
+    cover(a->art, a->name, cx, py, ps, grad(py));
+    tx = cx + ps + X(24);
+    tw = W - tx - X(30);
+    y = py;
+    text(tx, y, a->name, LF_BOLD, C_WHITE, &bg_grad, tw);
+    y += FH + Y(6);
+    if (a->line && *a->line) {
+        text(tx, y, a->line, LF_SMALL, C_ACC, &bg_grad, tw);
+        y += FH + Y(4);
+    }
+    for (i = 0; i < a->facts.n; i++) {
+        char b[140];
+        join(b, sizeof(b), a->facts.facts[2 * i], ": ", a->facts.facts[2 * i + 1]);
+        text(tx, y, b, LF_SMALL, C_SUB, &bg_grad, tw);
+        y += FH + Y(2);
+    }
+    y += Y(8);
+    np = paras(a->bio);
+    if (np) {
+        LONG bh = py + ps + Y(30) - y;
+        if (bh > FH * 2) {
+            panel(tx - X(12), y, tw + X(12), bh, 6, C_PANEL, C_LINE, grad(y));
+            draw_lines(para, np, 0, tx, y + Y(10), tw - X(12), y + bh - Y(8), C_BODY, C_BODY);
+        }
+    }
+    strip_y = py + ps + Y(50);
+    hits_base = nhits;
+    draw_strip(a);
+    footer(a->page.hint, a->page.message);
 }
 
 /* ---------------------------------------------------------------- Now playing */
@@ -704,6 +993,9 @@ static void sc_draw(int screen)
     switch (screen) {
     case LS_HOME: draw_home(); break;
     case LS_NOW: draw_now(); break;
+    case LS_ALBUMS: draw_wall(); break;
+    case LS_ALBUM: draw_album(); break;
+    case LS_ARTIST: draw_artist(); break;
     default: draw_page(); break;
     }
 }
@@ -711,6 +1003,23 @@ static void sc_draw(int screen)
 static void sc_changed(int screen, ULONG what)
 {
     const struct LPage *m;
+    if (what == LC_SELECT && screen == drawn && screen == LS_ALBUMS && (m = H->model(LS_ALBUMS))) {
+        draw_wall_body(m);      /* a move on the wall: the wall alone */
+        return;
+    }
+    if (what == LC_SELECT && screen == drawn && screen == LS_ALBUM) {
+        H->clip(0, 0, W, HT);
+        album_rows();
+        return;
+    }
+    if (what == LC_SELECT && screen == drawn && screen == LS_ARTIST) {
+        const struct LArtist *a = H->model(LS_ARTIST);
+        if (a) {
+            H->clip(0, 0, W, HT);
+            draw_strip(a);
+            return;
+        }
+    }
     if (screen == LS_PAGE && drawn == LS_PAGE && what == LC_SELECT && body_n < 0 &&
         (m = H->model(LS_PAGE)) && m->text) {
         draw_text_body(m);      /* a text gliding: its panel alone */
@@ -735,12 +1044,49 @@ static void sc_tick(ULONG ms)
     draw_bars(H->model(LS_NOW));
 }
 
+/* The keys: the program's, as in the classic layout, but on the wall and
+ * an artist's strip of albums Left and Right move along them, and on the
+ * wall Up and Down a row */
 static int sc_input(int screen, int action, LONG arg)
 {
-    (void)screen;
-    (void)action;
+    const struct LPage *m;
+    LONG sel, n, to;
     (void)arg;
-    return LR_UNUSED;           /* the program's keys, as in the classic layout */
+    if (screen != LS_ALBUMS && screen != LS_ARTIST)
+        return LR_UNUSED;
+    if (!(m = H->model(screen)))
+        return LR_UNUSED;
+    sel = m->list.sel;
+    n = m->list.count;
+    to = sel;
+    switch (action) {
+    case LA_LEFT:
+        if (screen == LS_ALBUMS ? sel % wall_cols == 0 : sel == 0)
+            return LR_UNUSED;           /* the left edge: back, as ever */
+        to = sel - 1;
+        break;
+    case LA_RIGHT:
+        if (sel + 1 >= n)
+            return LR_DONE;
+        to = sel + 1;
+        break;
+    case LA_UP:
+        if (screen != LS_ALBUMS)
+            return LR_UNUSED;
+        to = sel - wall_cols >= 0 ? sel - wall_cols : sel;
+        break;
+    case LA_DOWN:
+        if (screen != LS_ALBUMS)
+            return LR_UNUSED;
+        to = sel + wall_cols < n ? sel + wall_cols
+           : sel / wall_cols < (n - 1) / wall_cols ? n - 1 : sel;  /* (into a short last row) */
+        break;
+    default:
+        return LR_UNUSED;
+    }
+    if (to != sel)
+        H->act(LAC_SELECT, to);
+    return LR_DONE;
 }
 
 /* What can be played (a double-click plays it; one click selects it), as
@@ -814,6 +1160,8 @@ static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
 }
 
 const struct LayoutEngine layout_engine = {
-    LAYOUT_ABI, "Showcase", 15, 480, LS_BIT(LS_HOME) | LS_BIT(LS_PAGE) | LS_BIT(LS_NOW),
+    LAYOUT_ABI, "Showcase", 15, 480,
+    LS_BIT(LS_HOME) | LS_BIT(LS_PAGE) | LS_BIT(LS_NOW) | LS_BIT(LS_ALBUMS) | LS_BIT(LS_ALBUM) |
+        LS_BIT(LS_ARTIST),
     sc_open, sc_close, sc_draw, sc_changed, sc_tick, sc_input, sc_pointer
 };

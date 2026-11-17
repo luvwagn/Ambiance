@@ -1849,6 +1849,27 @@ O modo de ecrã guardado não está disponível aqui: usa-se Automático
 MSG_7B47B1F3
 Clássico
 ; Classic
+MSG_16C4FA7D
+Faixas
+; Tracks
+MSG_1C27EB60
+Género
+; Genre
+MSG_6264551E
+Ambiente
+; Mood
+MSG_2B675A1E
+Nascido
+; Born
+MSG_6FA7EBE6
+Formado
+; Formed
+MSG_418D3F0F
+Falecido
+; Died
+MSG_15974E49
+Dissolvido
+; Disbanded
 MSG_14BD5320
 Não foi possível abrir a disposição: usa-se a clássica
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad e mais %ld programas colocados em C:
 MSG_04F3511D
  (%ld já existentes mantidos)
 ;  (%ld already there kept)
+MSG_389C8A70
+Avaliação
+; Rating
+MSG_6B1D7CB6
+A seguir:
+; Next:
+MSG_5E281FEB
+Em pausa
+; Paused

@@ -1,7 +1,8 @@
 """Ambiance's translations: catalog descriptions and catalogs.
 
   python3 -I catalog.py scan  <srcdir> <catalogs-dir>
-      every _("...") and N_("...") in <srcdir>/*.c into <catalogs-dir>/Ambiance.cd,
+      every _("...") and N_("...") in <srcdir>/*.c (and host->tr("...") in its
+      layouts/*.c) into <catalogs-dir>/Ambiance.cd,
       and each <catalogs-dir>/<language>.ct brought up to date with it: new
       strings added untranslated (English as a comment), gone ones dropped
   python3 -I catalog.py build <catalogs-dir> <outdir> [language ...]
@@ -85,16 +86,18 @@ def ct_unescape(s):
     return "".join(out)
 
 
-MARK = re.compile(r'\bN?_\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)\)')
+MARK = re.compile(r'(?:\bN?_|->tr)\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)\)')
 LIT = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
 
 def scan_src(srcdir):
     """{id: (english, [where])}, in order of first use."""
     found = {}
-    for fn in sorted(os.listdir(srcdir)):
-        if not fn.endswith(".c"):
-            continue
+    files = sorted(fn for fn in os.listdir(srcdir) if fn.endswith(".c"))
+    lay = os.path.join(srcdir, "layouts")         # the layouts' host->tr("...") strings too
+    if os.path.isdir(lay):
+        files += sorted(os.path.join("layouts", fn) for fn in os.listdir(lay) if fn.endswith(".c"))
+    for fn in files:
         text = open(os.path.join(srcdir, fn), encoding="latin-1").read()
         # comments out (their newlines kept, for the line numbers)
         text = re.sub(r"/\*.*?\*/", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text,

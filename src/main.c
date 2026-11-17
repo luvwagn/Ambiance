@@ -3559,7 +3559,9 @@ static void plex_ask_rate(const char *key);
  * in RAM: (plex_art), then made for their place by the loader */
 /* AHEAD: a Plex list's neighbours' pictures, fetched while the selection
  * rests, so moving to one shows it at once (plex_ahead) */
-enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_AHEAD, ART_KINDS };   /* VW: the viewer's photo, and its next */
+enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_AHEAD, ART_LAYOUT,
+       ART_KINDS };   /* VW: the viewer's photo, and its next; LAYOUT: a layout's covers */
+static BOOL lv_art_came;            /* a layout's cover came from the server: drawn again */
 static struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
 static ULONG art_asked[ART_KINDS];     /* time_ms each was asked for (log) */
@@ -14126,6 +14128,10 @@ static void art_ready(int kind, const char *file)
     struct Page *p = cur();
     if (kind == ART_AHEAD)
         return;                             /* kept in RAM: shown if it is moved to */
+    if (kind == ART_LAYOUT) {
+        lv_art_came = TRUE;                 /* the layout asks again, and finds it */
+        return;
+    }
     if (kind == ART_VW || kind == ART_VWNEXT) {
         vw_keep(file);
         if (kind == ART_VWNEXT && vw_list && vw_cur >= 0)
@@ -17057,6 +17063,26 @@ static UWORD lv_ri;
 #define LV_ART_SONG   '\x01'       /* a music file's or folder's cover (SHOT_SONG) */
 #define LV_ART_AGS    '\x02'       /* an AGS entry's screenshot (SHOT_AGS) */
 #define LV_ART_FOLDER '\x03'       /* a Pictures folder's first picture (SHOT_FOLDER) */
+#define LV_ART_PLEX   '\x04'       /* the Plex server's picture (its thumb): fetched, then made */
+
+/* A Plex row's details (plex.c: its key, then by tabs: type, thumb, year,
+ * by, count, studio, summary): field n (1 type ... 7 summary) into out */
+static const char *lv_plex_field(const struct Item *it, int n, char *out, LONG max)
+{
+    const char *s = it && it->path ? it->path : "";
+    LONG k = 0;
+    out[0] = 0;
+    while (n-- > 0) {
+        s = strchr(s, '\t');
+        if (!s)
+            return out;
+        s++;
+    }
+    while (*s && *s != '\t' && k < max - 1)
+        out[k++] = *s++;
+    out[k] = 0;
+    return out;
+}
 static const char *lv_art_of(const struct Page *p, const struct Item *it, char *buf, LONG max)
 {
     char path[300];
@@ -17073,6 +17099,10 @@ static const char *lv_art_of(const struct Page *p, const struct Item *it, char *
     } else if (it->kind == IT_PIC && !p->plex) {
         item_path(it, buf, max);
         return buf[0] ? buf : NULL;
+    } else if (p->plex && it->kind == IT_PLEXDIR) {
+        buf[0] = LV_ART_PLEX;
+        lv_plex_field(it, 2, buf + 1, max - 1);
+        return buf[1] ? buf : NULL;
     } else {
         return NULL;
     }
@@ -17105,6 +17135,23 @@ static void lv_fill_item_art(struct LItem *li, const struct Page *p, LONG i, cha
         li->flags |= LIF_NOW;
     if (art)
         li->art = lv_art_of(p, it, art, max);
+    if (p->plex && it->kind == IT_PLEXDIR) {
+        static char subs[32][104];
+        static UWORD si;
+        char *sub = subs[si++ & 31], type[16];
+        lv_plex_field(it, 1, type, sizeof(type));
+        if (!strcmp(type, "album")) {
+            li->kind = LI_ALBUM;
+            lv_plex_field(it, 4, sub, 100);         /* by: the album's artist */
+        } else if (!strcmp(type, "artist")) {
+            li->kind = LI_ARTIST;
+            lv_plex_field(it, 5, sub, 100);         /* its albums' count */
+        }
+        if (sub[0])
+            li->sub = sub;
+    } else if (beets_page(it->path) && !strncmp(it->path, "beets:album/", 12)) {
+        li->kind = LI_ALBUM;
+    }
 }
 
 static const struct LItem *lv_item(LONG i)
@@ -17191,6 +17238,201 @@ static void lv_page(struct Page *p, struct LPage *m)
     m->letter = ov.on && ov.page == p && ov.bl ? ov.letter : 0;
 }
 
+/* ---- the music screens: which a page is, and their models */
+/* The row a page was opened from (its parent's selected one), or NULL */
+static const struct Item *lv_opened_from(const struct Page *p)
+{
+    int d;
+    for (d = 1; d < depth; d++)
+        if (&pages[d] == p) {
+            const struct Page *q = &pages[d - 1];
+            return q->sel >= 0 && q->sel < q->list.count ? &q->list.items[q->sel] : NULL;
+        }
+    return NULL;
+}
+
+/* How many of p's first rows (up to 40) are Plex rows of type t, and how
+ * many are looked at */
+static LONG lv_plex_count(const struct Page *p, const char *t, LONG *of)
+{
+    LONG i, n = 0;
+    char type[16];
+    *of = 0;
+    for (i = 0; i < p->list.count && i < 40; i++) {
+        const struct Item *it = &p->list.items[i];
+        if (it->flags & ITEM_HEAD)
+            continue;
+        (*of)++;
+        if (it->kind == IT_PLEXDIR && !strcmp(lv_plex_field(it, 1, type, sizeof(type)), t))
+            n++;
+    }
+    return n;
+}
+
+/* Which screen a list page is drawn as: the album wall (a list of albums
+ * with covers), an album (its tracks), an artist (its albums), or the
+ * generic page */
+static int lv_music_screen(const struct Page *p)
+{
+    const struct Item *from;
+    LONG i, dirs = 0, songs = 0, of = 0;
+    char type[16];
+    if (!p || p->type != PT_LIST || !p->list.count || p->pics || p->setp)
+        return LS_PAGE;
+    from = lv_opened_from(p);
+    if (p->plex && !p->photos) {
+        if (from && from->kind == IT_PLEXDIR) {
+            lv_plex_field(from, 1, type, sizeof(type));
+            if (!strcmp(type, "album"))
+                return LS_ALBUM;
+            if (!strcmp(type, "artist"))
+                return LS_ARTIST;
+        }
+        if (lv_plex_count(p, "album", &of) * 2 > of && of)
+            return LS_ALBUMS;
+        return LS_PAGE;
+    }
+    if (!p->songs)
+        return LS_PAGE;
+    if (from && from->path && beets_page(from->path)) {
+        if (!strncmp(from->path, "beets:album/", 12))
+            return LS_ALBUM;
+        if (!strncmp(from->path, "beets:artist/", 13))
+            return LS_ARTIST;
+        if (!strcmp(from->path, "beets:albums") || !strcmp(from->path, "beets:recent"))
+            return LS_ALBUMS;
+        return LS_PAGE;
+    }
+    if (!from)
+        return LS_PAGE;                     /* Music's own first page */
+    for (i = 0; i < p->list.count && i < 200; i++) {
+        UBYTE k = p->list.items[i].kind;
+        if (k == IT_DIR)
+            dirs++;
+        else if (k == IT_SONG)
+            songs++;
+    }
+    if (songs >= 2 && songs >= dirs * 2)
+        return LS_ALBUM;                    /* a folder of tracks: an album */
+    if (dirs >= 3 && !songs)
+        return LS_ALBUMS;                   /* a folder of folders: albums (or artists) */
+    return LS_PAGE;
+}
+
+/* An album's or artist's page: its picture's key, and what is said of it
+ * (a Plex row's details; a music folder's album.nfo or artist.nfo) */
+static struct {
+    const struct Page *p;           /* worked out for (and its row count) */
+    LONG count;
+    char title[100], artist[100], line[140], rating[8];
+    char art[304];
+    char *text;                     /* review or biography (nfo's, AllocVec'd), or Plex's */
+    char plextext[310];
+    const char *facts[12];
+    char fbuf[6][100];
+    WORD nfacts;
+} lvm;
+
+static void lvm_clear(void)
+{
+    if (lvm.text && lvm.text != lvm.plextext)
+        FreeVec(lvm.text);
+    memset(&lvm, 0, sizeof(lvm));
+}
+
+static void lvm_fact(const char *label, const char *value)
+{
+    if (!value || !value[0] || lvm.nfacts >= 6)
+        return;
+    amb_strlcpy(lvm.fbuf[lvm.nfacts], value, sizeof(lvm.fbuf[0]));
+    lvm.facts[2 * lvm.nfacts] = label;
+    lvm.facts[2 * lvm.nfacts + 1] = lvm.fbuf[lvm.nfacts];
+    lvm.nfacts++;
+}
+
+static void lvm_work_out(const struct Page *p, BOOL artist)
+{
+    const struct Item *from = lv_opened_from(p);
+    char path[300], v[100];
+    LONG i;
+    if (lvm.p == p && lvm.count == p->list.count)
+        return;
+    lvm_clear();
+    lvm.p = p;
+    lvm.count = p->list.count;
+    amb_strlcpy(lvm.title, p->title, sizeof(lvm.title));
+    if (p->plex && from && from->kind == IT_PLEXDIR) {
+        char thumb[200];
+        amb_strlcpy(lvm.title, from->label, sizeof(lvm.title));
+        lv_plex_field(from, 2, thumb, sizeof(thumb));
+        if (thumb[0]) {
+            lvm.art[0] = LV_ART_PLEX;
+            amb_strlcpy(lvm.art + 1, thumb, sizeof(lvm.art) - 1);
+        }
+        if (!artist)
+            lv_plex_field(from, 4, lvm.artist, sizeof(lvm.artist));
+        lv_plex_field(from, 3, v, sizeof(v));       /* year */
+        amb_strlcpy(lvm.line, v, sizeof(lvm.line));
+        lv_plex_field(from, 6, v, sizeof(v));       /* studio: the label */
+        if (v[0]) {
+            if (lvm.line[0])
+                amb_strlcat(lvm.line, " \xB7 ", sizeof(lvm.line));
+            amb_strlcat(lvm.line, v, sizeof(lvm.line));
+        }
+        lv_plex_field(from, 5, v, sizeof(v));       /* tracks or albums */
+        lvm_fact(artist ? _("Albums") : _("Tracks"), v);
+        lv_plex_field(from, 7, lvm.plextext, sizeof(lvm.plextext));
+        if (lvm.plextext[0])
+            lvm.text = lvm.plextext;
+        return;
+    }
+    /* a music folder, or a beets album: its folder is its first track's */
+    path[0] = 0;
+    for (i = 0; i < p->list.count; i++)
+        if (p->list.items[i].kind == IT_SONG || p->list.items[i].kind == IT_DIR) {
+            item_path(&p->list.items[i], path, sizeof(path));
+            break;
+        }
+    if (path[0] && !beets_page(path)) {
+        char dir[300];
+        struct Nfo n;
+        amb_strlcpy(dir, path, sizeof(dir));
+        if (p->list.items[i].kind == IT_SONG)
+            *PathPart((STRPTR)dir) = 0;             /* the album's folder (an album folder's
+                                                     * own: the artist's is the one above) */
+        lvm.art[0] = LV_ART_SONG;
+        amb_strlcpy(lvm.art + 1, path, sizeof(lvm.art) - 1);
+        memset(&n, 0, sizeof(n));
+        if (artist ? nfo_artist_of(dir, p->list.items[i].kind == IT_DIR, &n) : nfo_album_of(dir, &n)) {
+            if (n.title[0])
+                amb_strlcpy(lvm.title, n.title, sizeof(lvm.title));
+            amb_strlcpy(lvm.artist, n.artist, sizeof(lvm.artist));
+            amb_strlcpy(lvm.line, artist ? n.type : n.year, sizeof(lvm.line));
+            if (!artist && n.label[0]) {
+                if (lvm.line[0])
+                    amb_strlcat(lvm.line, " \xB7 ", sizeof(lvm.line));
+                amb_strlcat(lvm.line, n.label, sizeof(lvm.line));
+            }
+            amb_strlcpy(lvm.rating, n.rating, sizeof(lvm.rating));
+            lvm_fact(_("Genre"), n.genres);
+            lvm_fact(_("Style"), n.styles);
+            lvm_fact(_("Mood"), n.moods);
+            if (artist) {
+                lvm_fact(n.born ? _("Born") : _("Formed"), n.formed);
+                lvm_fact(n.born ? _("Died") : _("Disbanded"), n.ended);
+            }
+            lvm.text = n.text;                      /* (ours now) */
+            n.text = NULL;
+        }
+        nfo_free(&n);
+        if (!artist && !lvm.artist[0] && from && depth >= 3) {
+            const struct Page *up = &pages[depth - 3];
+            if (up->sel >= 0 && up->sel < up->list.count)
+                amb_strlcpy(lvm.artist, up->list.items[up->sel].label, sizeof(lvm.artist));
+        }
+    }
+}
+
 static const void *lv_model(int screen)
 {
     static struct LPage page;
@@ -17205,6 +17447,36 @@ static const void *lv_model(int screen)
     static char year[1];
     int i;
     switch (screen) {
+    case LS_ALBUM: case LS_ARTIST: {
+        static struct LAlbum al;
+        static struct LArtist ar;
+        struct Page *p = cur();
+        if (!p)
+            break;
+        lvm_work_out(p, screen == LS_ARTIST);
+        if (screen == LS_ALBUM) {
+            memset(&al, 0, sizeof(al));
+            lv_page(p, &al.page);
+            al.title = lvm.title;
+            al.artist = lvm.artist[0] ? lvm.artist : NULL;
+            al.line = lvm.line[0] ? lvm.line : NULL;
+            al.review = lvm.text;
+            al.rating = lvm.rating[0] ? lvm.rating : NULL;
+            al.art = lvm.art[0] && !hold_active() ? lvm.art : NULL;
+            al.facts.n = lvm.nfacts;
+            al.facts.facts = lvm.facts;
+            return &al;
+        }
+        memset(&ar, 0, sizeof(ar));
+        lv_page(p, &ar.page);
+        ar.name = lvm.title;
+        ar.line = lvm.line[0] ? lvm.line : NULL;
+        ar.bio = lvm.text;
+        ar.art = lvm.art[0] && !hold_active() ? lvm.art : NULL;
+        ar.facts.n = lvm.nfacts;
+        ar.facts.facts = lvm.facts;
+        return &ar;
+    }
     case LS_HOME:
         memset(&home, 0, sizeof(home));
         for (i = 0; i < nmenu && i < MOD_COUNT; i++) {
@@ -17407,6 +17679,7 @@ static void lv_pics_free(void)
 
 static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
 {
+    static char got[120];
     int i, k = 0;
     struct LJob *j;
     if (!file || !file[0] || !w || !h)
@@ -17423,6 +17696,31 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
         }
         if (lv_pic[i].used < lv_pic[k].used)
             k = i;
+    }
+    if (file[0] == LV_ART_PLEX) {
+        /* the server's picture: in RAM: already, or fetched (one at a time)
+         * and asked for again when it has come (lv_art_came) */
+        char req[400];
+        if (!plex_art(file + 1, w, h, req, sizeof(req), got, sizeof(got))) {
+            if (!art_nj[ART_LAYOUT])
+                art_fetch(ART_LAYOUT, file + 1, w, h, got);
+            return NULL;
+        }
+        for (i = 0; i < LV_PICS; i++)       /* the file's made already? */
+            if (lv_pic[i].w == w && lv_pic[i].h == h && !strcmp(lv_pic[i].file, got)) {
+                lv_pic[i].used = ++lv_pic_clock;
+                if (lv_pic[i].job) {
+                    if (!lv_pic[i].job->done)
+                        return NULL;
+                    lv_pic_take(i);
+                }
+                return lv_pic[i].failed ? NULL : &lv_pic[i].im;
+            }
+        file = got;                         /* (its slot keyed by the file) */
+        k = 0;
+        for (i = 1; i < LV_PICS; i++)
+            if (lv_pic[i].used < lv_pic[k].used)
+                k = i;
     }
     lv_pic_drop(k);
     amb_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
@@ -17633,6 +17931,11 @@ static int lv_screen(void)
         return LS_HOME;
     if (p && p->type == PT_PLAYER && (lv.eng->screens & LS_BIT(LS_NOW)))
         return LS_NOW;
+    {
+        int m = lv_music_screen(p);
+        if (m != LS_PAGE && (lv.eng->screens & LS_BIT(m)))
+            return m;
+    }
     return LS_PAGE;
 }
 
@@ -17647,6 +17950,10 @@ void lv_frame(void)
     now = time_ms();
     lv_pic_made = FALSE;
     lv_pics_poll();
+    if (lv_art_came) {
+        lv_art_came = FALSE;
+        lv.full = TRUE;
+    }
     if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
         lv.tick_at = now;
         lv.eng->tick(now);
@@ -17661,7 +17968,8 @@ void lv_frame(void)
         BOOL moved_only;
         for (c = msg; *c; c++)
             mh = mh * 33 + (UBYTE)*c;
-        moved_only = !lv.full && scr == LS_PAGE && lv.drawn == scr && lv.eng->changed && p &&
+        moved_only = !lv.full && (scr == LS_PAGE || scr == LS_ALBUMS || scr == LS_ALBUM ||
+                                  scr == LS_ARTIST) && lv.drawn == scr && lv.eng->changed && p &&
                      p == lv.last_p && depth == lv.last_depth && mh == lv.last_msg &&
                      (p->type == PT_LIST
                           ? p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&

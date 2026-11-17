@@ -1849,6 +1849,27 @@ Modo schermo salvato non disponibile qui: si usa Automatico
 MSG_7B47B1F3
 Classico
 ; Classic
+MSG_16C4FA7D
+Tracce
+; Tracks
+MSG_1C27EB60
+Genere
+; Genre
+MSG_6264551E
+Atmosfera
+; Mood
+MSG_2B675A1E
+Nato
+; Born
+MSG_6FA7EBE6
+Formato
+; Formed
+MSG_418D3F0F
+Morto
+; Died
+MSG_15974E49
+Sciolto
+; Disbanded
 MSG_14BD5320
 Impossibile aprire il layout: si usa quello classico
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad e altri %ld programmi messi in C:
 MSG_04F3511D
  (%ld già presenti mantenuti)
 ;  (%ld already there kept)
+MSG_389C8A70
+Voto
+; Rating
+MSG_6B1D7CB6
+Successivo:
+; Next:
+MSG_5E281FEB
+In pausa
+; Paused

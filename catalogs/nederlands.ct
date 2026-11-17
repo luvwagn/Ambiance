@@ -1849,6 +1849,27 @@ De opgeslagen schermmodus is hier niet beschikbaar: Automatisch wordt gebruikt
 MSG_7B47B1F3
 Klassiek
 ; Classic
+MSG_16C4FA7D
+Nummers
+; Tracks
+MSG_1C27EB60
+Genre
+; Genre
+MSG_6264551E
+Sfeer
+; Mood
+MSG_2B675A1E
+Geboren
+; Born
+MSG_6FA7EBE6
+Opgericht
+; Formed
+MSG_418D3F0F
+Overleden
+; Died
+MSG_15974E49
+Opgeheven
+; Disbanded
 MSG_14BD5320
 De indeling kon niet worden geopend: de klassieke wordt gebruikt
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ WHDLoad en %ld andere programma's in C: gezet
 MSG_04F3511D
  (%ld al aanwezige behouden)
 ;  (%ld already there kept)
+MSG_389C8A70
+Waardering
+; Rating
+MSG_6B1D7CB6
+Volgende:
+; Next:
+MSG_5E281FEB
+Gepauzeerd
+; Paused

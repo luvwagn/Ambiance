@@ -1849,6 +1849,27 @@ MSG_3D0CDD4E
 MSG_7B47B1F3
 Κλασική
 ; Classic
+MSG_16C4FA7D
+Κομμάτια
+; Tracks
+MSG_1C27EB60
+Είδος
+; Genre
+MSG_6264551E
+Διάθεση
+; Mood
+MSG_2B675A1E
+Γέννηση
+; Born
+MSG_6FA7EBE6
+Ιδρύθηκε
+; Formed
+MSG_418D3F0F
+Πέθανε
+; Died
+MSG_15974E49
+Διαλύθηκε
+; Disbanded
 MSG_14BD5320
 Η διάταξη δεν άνοιξε: χρησιμοποιείται η κλασική
 ; The layout could not be opened: the classic one is used
@@ -2209,3 +2230,12 @@ MSG_3160C36F
 MSG_04F3511D
  (%ld που υπήρχαν ήδη κρατήθηκαν)
 ;  (%ld already there kept)
+MSG_389C8A70
+Βαθμός
+; Rating
+MSG_6B1D7CB6
+Επόμενο:
+; Next:
+MSG_5E281FEB
+Σε παύση
+; Paused
