@@ -1085,6 +1085,39 @@ struct Screen *gfx_own_screen(const struct Gfx *g)
     return fs_scr ? fs_scr : g && !g->wb ? g->scr : NULL;
 }
 
+/* ---- colour schemes (Settings > Display > Colours): the UI's 12
+ * colours, PEN_BG to PEN_YELLOW, each 0xRRGGBB. Midnight is art.c's own
+ * (tools/mkart.py's); the others keep its roles: a dark ground, a darker
+ * header, the rule, text, dim text, white, the selection bar and its
+ * dimmed form, the accent (the logo's badge), key caps, faint, yellow. */
+const char *const ui_scheme_names[UI_SCHEMES] = { N_("Midnight"), N_("Graphite"), "WB1.3",
+                                                  N_("Emerald"), N_("Amethyst") };
+const char *const ui_scheme_keys[UI_SCHEMES] = { "midnight", "graphite", "wb13", "emerald", "amethyst" };
+static const ULONG ui_schemes[UI_SCHEMES][12] = {
+    { 0x001133, 0x000022, 0x334466, 0xCCDDEE, 0x8899BB, 0xFFFFFF,
+      0x2266CC, 0x113366, 0xFFAA00, 0x223355, 0x667799, 0xFFDD33 },
+    { 0x1C1D20, 0x111214, 0x3A3C42, 0xDEDFE2, 0x9A9CA3, 0xFFFFFF,
+      0x1F8FB0, 0x1E3D48, 0xF2A33A, 0x2C2E33, 0x6C6F77, 0xFFDD33 },
+    { 0x0055AA, 0x003A77, 0x4A7FC0, 0xFFFFFF, 0xB8D0EE, 0xFFFFFF,
+      0xFF8800, 0x0F4A8E, 0xFF8800, 0x1A4E90, 0x7FA6D6, 0xFFDD33 },
+    { 0x0B1F17, 0x06140F, 0x2B4B3D, 0xD8ECE1, 0x90B5A2, 0xFFFFFF,
+      0x2E8B57, 0x174A33, 0xFFC040, 0x1C3A2C, 0x5F8272, 0xFFE066 },
+    { 0x1B1027, 0x10081A, 0x47335C, 0xE8DFF2, 0xAA9ABE, 0xFFFFFF,
+      0x7B4CC6, 0x3A2559, 0xFF9A3C, 0x2F1F42, 0x7B6B92, 0xFFDD33 },
+};
+int ui_scheme = UI_MIDNIGHT;
+
+void ui_scheme_apply(int k)
+{
+    int i, c;
+    if (k < 0 || k >= UI_SCHEMES)
+        k = UI_MIDNIGHT;
+    ui_scheme = k;
+    for (i = 0; i < 12; i++)
+        for (c = 0; c < 3; c++)
+            ui_palette32[1 + i * 3 + c] = ((ui_schemes[k][i] >> (16 - 8 * c)) & 0xFF) * 0x01010101UL;
+}
+
 BOOL gfx_fs_on(void)
 {
     return fs_scr != NULL;

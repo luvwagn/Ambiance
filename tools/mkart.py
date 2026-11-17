@@ -479,7 +479,7 @@ def main():
         for n in markicons.ORDER:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in markicons.lores(n)) + " },\n")
         fh.write("};\n\n/* LoadRGB32 table: count<<16|first, then R,G,B as 32-bit values, then 0 */\n")
-        fh.write("const ULONG ui_palette32[] = {\n    " + pal[0] + ",\n")
+        fh.write("ULONG ui_palette32[] = {      /* (the scheme's colours put in: gfx.c ui_scheme_apply) */\n    " + pal[0] + ",\n")
         for i in range(1, len(pal) - 1, 3):
             fh.write("    " + ", ".join(pal[i:i + 3]) + ",\n")
         fh.write("    0\n};\n")

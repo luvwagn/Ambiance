@@ -285,7 +285,8 @@ Settings
                can take one), Screen mode (full screen) or Text size (a
                window), Style (a laced or RTG screen: the font, those
                whose layout fits; RTG: or Smooth), Double buffering
-               (RTG), Visualisation
+               (RTG), Colours (Midnight's navy, Graphite, WB1.3's blue,
+               Emerald or Amethyst), Visualisation
                (Now Playing's level meters, HippoPlayer's spectrum
                analyser, or Flow on graphics cards; under MHI the
                meters), Full screen visual (F on Now Playing: Flow, or

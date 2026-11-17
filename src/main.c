@@ -167,7 +167,8 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
        ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
-       ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1,
+       ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
+       ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1614,6 +1615,7 @@ static void build_sysinfo(struct Page *p)
 #define MODE_VAR "AmigaMCE/ScreenMode"
 #define WINDOW_VAR "AmigaMCE/Windowed"  /* "1" a window on Workbench, "0" full screen */
 #define TSIZE_VAR "AmigaMCE/TextSize"   /* the window's: small, medium, large */
+#define COLOURS_VAR "AmigaMCE/Colours"  /* the colour scheme: midnight, graphite, wb13, emerald, amethyst */
 #define WINBOX_VAR "AmigaMCE/WindowBox"  /* left top width height scale: where it was left */
 
 /* The icon's WINDOWED tooltype (shipped as "(WINDOWED)": in brackets, off),
@@ -1732,6 +1734,15 @@ static void load_screen_mode(void)
         gfx_text_size = !amce_stricmp(buf, "small") ? TSIZE_SMALL
                         : !amce_stricmp(buf, "large") ? TSIZE_LARGE
                         : !amce_stricmp(buf, "xlarge") ? TSIZE_XLARGE : TSIZE_MEDIUM;
+    /* the colour scheme, before the screen or window opens in it */
+    {
+        int k = UI_MIDNIGHT, i;
+        if (GetVar((CONST_STRPTR)COLOURS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            for (i = 0; i < UI_SCHEMES; i++)
+                if (!amce_stricmp(buf, ui_scheme_keys[i]))
+                    k = i;
+        ui_scheme_apply(k);
+    }
 }
 
 static void save_setting(const char *var, const char *value)
@@ -2572,6 +2583,7 @@ static void build_screen_settings(struct Page *p)
                                          * always through its buffer: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    action_item(p, _("Colours"), _(ui_scheme_names[ui_scheme]), ACT_COLOURS, MARK_ARROW);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     fullvis_scan();
     action_item(p, _("Full screen visual (F)"), fullvis[0] ? (const char *)FilePart((STRPTR)fullvis) : _("Flow"),
@@ -3138,6 +3150,18 @@ static void build_tsizes(struct Page *p)
         action_item(p, _(tsize_names[i]), "", ACT_TSIZE0 + i,
                     i == gfx_window_tsize() ? MARK_RADIO_ON : MARK_RADIO_OFF);
         if (i == gfx_window_tsize())
+            p->sel = p->list.count - 1;
+    }
+}
+
+/* Settings > Display > Colours: the schemes, the one in use ticked */
+static void build_colours(struct Page *p)
+{
+    int i;
+    for (i = 0; i < UI_SCHEMES; i++) {
+        action_item(p, _(ui_scheme_names[i]), "", ACT_COLOUR0 + i,
+                    i == ui_scheme ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        if (i == ui_scheme)
             p->sel = p->list.count - 1;
     }
 }
@@ -10424,6 +10448,8 @@ static void wb_note_fallback(void);
 /* Settings > Display > Window, or Text size: the display closed and opened
  * again as now wanted, every page rebuilt, and back on Settings > Display
  * at that row (in the list sub, if one). */
+static BOOL display_colours_row;     /* display_again: back at Colours' row */
+
 static void display_again(BOOL size_row, const char *sub_title, void (*sub)(struct Page *))
 {
     struct Page *p;
@@ -10453,6 +10479,12 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
     if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
         p->sel = size_row ? screen_row_size() : screen_row_window();
+        if (display_colours_row) {
+            LONG i;
+            for (i = 0; i < p->list.count; i++)
+                if (p->list.items[i].action == ACT_COLOURS)
+                    p->sel = i;
+        }
         if (p->sel < 0)
             p->sel = 0;
     }
@@ -11582,6 +11614,23 @@ static void apply_tsize(int i)
                             : i == TSIZE_XLARGE ? "xlarge" : "medium");
     if (g.wb)
         display_again(TRUE, _("Text size"), build_tsizes);
+}
+
+/* Settings > Display > Colours: the scheme saved, and the display opened
+ * again in it (a screen's palette, a window's Workbench pens, the smooth
+ * style's shades: all from ui_palette32 as it opens), back on the list */
+static void apply_colours(int k)
+{
+    char m[60];
+    if (k < 0 || k >= UI_SCHEMES || k == ui_scheme)
+        return;
+    ui_scheme_apply(k);
+    save_setting(COLOURS_VAR, ui_scheme_keys[k]);
+    sprintf(m, "colours: %s", ui_scheme_names[k]);
+    amce_log("window", m);
+    display_colours_row = TRUE;
+    display_again(FALSE, _("Colours"), build_colours);
+    display_colours_row = FALSE;
 }
 
 static void toggle_jump(void)
@@ -13797,6 +13846,10 @@ static void act_action(struct Item *it)
         toggle_window();
     else if (it->action == ACT_TSIZES)
         open_settings_page(_("Text size"), build_tsizes);
+    else if (it->action == ACT_COLOURS)
+        open_settings_page(_("Colours"), build_colours);
+    else if (it->action >= ACT_COLOUR0 && it->action <= ACT_COLOUR_END)
+        apply_colours(it->action - ACT_COLOUR0);
     else if (it->action >= ACT_TSIZE0 && it->action <= ACT_TSIZE_END)
         apply_tsize(it->action - ACT_TSIZE0);
     else if (it->action == ACT_STYLES)

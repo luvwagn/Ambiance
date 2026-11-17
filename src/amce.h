@@ -979,7 +979,12 @@ extern const UWORD logo_lo_w, logo_lo_h;
 extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
 extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */
-extern const ULONG ui_palette32[];
+extern ULONG ui_palette32[];        /* the colours in use (a scheme's: ui_scheme_apply) */
+enum { UI_MIDNIGHT, UI_GRAPHITE, UI_WB13, UI_EMERALD, UI_AMETHYST, UI_SCHEMES };
+extern const char *const ui_scheme_names[UI_SCHEMES];   /* (N_: translated where shown) */
+extern const char *const ui_scheme_keys[UI_SCHEMES];    /* AmigaMCE/Colours' values */
+extern int ui_scheme;
+void ui_scheme_apply(int k);        /* its colours into ui_palette32 (before a screen opens) */
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };
 

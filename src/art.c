@@ -96,7 +96,7 @@ const UWORD marks16[][11] = {
 };
 
 /* LoadRGB32 table: count<<16|first, then R,G,B as 32-bit values, then 0 */
-const ULONG ui_palette32[] = {
+ULONG ui_palette32[] = {      /* (the scheme's colours put in: gfx.c ui_scheme_apply) */
     0x00100000,
     0x00000000, 0x11111111, 0x33333333,
     0x00000000, 0x00000000, 0x22222222,
