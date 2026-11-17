@@ -87,7 +87,10 @@ int gfx_rtg_font_shown(WORD lines);
 
 /* Text faces (gfx_text, gfx_textlen). Pixel style has one font for all. */
 enum { TS_BODY, TS_BOLD, TS_SMALL, TS_FACES,
-       TS_OPAQUE = 0x10 };  /* also fill the background behind the text */
+       TS_OPAQUE = 0x10,    /* also fill the background behind the text */
+       TS_TABULAR = 0x20 }; /* each digit (and FIG_SPACE) as wide as the widest digit:
+                             * numbers that change move nothing after them */
+#define FIG_SPACE '\a'     /* (TS_TABULAR) a digit's width, nothing drawn: padding */
 
 /* Screen modes offered in Settings. */
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
@@ -176,7 +179,6 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /*
  * edges blend into it). maxw > 0 cuts it to fit; ts is TS_* (| TS_OPAQUE). */
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts);
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
-WORD gfx_textlen_digits(struct Gfx *g, const char *s, int ts);    /* each digit as the widest */
 void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, UBYTE fg,
                  WORD maxw);
 

@@ -1459,10 +1459,10 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             x = g->w - GU(g, 8) - st.cw;
         }
         if (i == BT_VUP) {                  /* the volume between - and + */
-            WORD vw = gfx_textlen(g, "100%", TS_BODY) + GU(g, 8);
+            WORD vw = gfx_textlen(g, "100%", TS_BODY | TS_TABULAR) + GU(g, 8);
             sprintf(line, "%ld%%", (long)(mp_volume() * 100 / 64));
-            gfx_text(g, x + (vw - gfx_textlen(g, line, TS_BODY)) / 2, cy - g->font_h / 2, line,
-                     PEN_TEXT, PEN_BG, 0, TS_BODY);
+            gfx_text(g, x + (vw - gfx_textlen(g, line, TS_BODY | TS_TABULAR)) / 2, cy - g->font_h / 2, line,
+                     PEN_TEXT, PEN_BG, 0, TS_BODY | TS_TABULAR);
             x += vw;
         }
         st.bx[i] = x;
@@ -1497,8 +1497,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     } else
         strcpy(line, a);
     x += GU(g, 10);
-    gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
-    x += gfx_textlen_digits(g, line, TS_BODY) + GU(g, 8);   /* (the bar kept still as the time's digits change) */
+    gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY | TS_TABULAR);
+    x += gfx_textlen(g, line, TS_BODY | TS_TABULAR) + GU(g, 8);   /* (the bar kept still) */
     st.px0 = x;
     st.px1 = (xt >= 0 ? st.bx[BT_FULL] : g->w) - 1 - GU(g, 8);
     st.cy = cy;

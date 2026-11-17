@@ -3874,7 +3874,7 @@ static WORD clock_left(void)
     if (date_ymd()) {
         char wide[48];
         sprintf(wide, "12%s30%s(%s)  00:00", date_mon_word(), date_day_word(), date_mon_word());
-        return g.w - U(8) - gfx_textlen(&g, wide, TS_SMALL) - U(4);
+        return g.w - U(8) - gfx_textlen(&g, wide, TS_SMALL | TS_TABULAR) - U(4);
     }
     for (i = 0; i < 7; i++)
         if ((w = gfx_textlen(&g, _(day_abbr[i]), TS_SMALL)) > dw)
@@ -3882,7 +3882,7 @@ static WORD clock_left(void)
     for (i = 0; i < 12; i++)
         if ((w = gfx_textlen(&g, _(mon_abbr[i]), TS_SMALL)) > mw)
             mw = w;
-    return g.w - U(8) - dw - mw - gfx_textlen(&g, " 30   00:00", TS_SMALL) - U(4);
+    return g.w - U(8) - dw - mw - gfx_textlen(&g, " 30   00:00", TS_SMALL | TS_TABULAR) - U(4);
 }
 
 /* While music plays, its dancing bars in the header, left of the clock:
@@ -3914,8 +3914,8 @@ static void draw_clock(void)
     gfx_fill(&g, clock_left(), 0, g.w - 1, U(24) - 1, PEN_BAR);
     if (!buf[0])
         return;
-    tw = gfx_textlen(&g, buf, TS_SMALL);
-    gfx_text(&g, g.w - U(8) - tw, (U(24) - g.font_h) / 2, buf, PEN_TEXT, PEN_BAR, 0, TS_SMALL);
+    tw = gfx_textlen(&g, buf, TS_SMALL | TS_TABULAR);   /* (its left edge still as the minutes go) */
+    gfx_text(&g, g.w - U(8) - tw, (U(24) - g.font_h) / 2, buf, PEN_TEXT, PEN_BAR, 0, TS_SMALL | TS_TABULAR);
 }
 
 /* Debug readout between the logo and the clock: the longest form that fits. */
@@ -4066,11 +4066,24 @@ static void scr_watch_now(const char *why)
 static char status_shown[96];
 static ULONG fps_shown, fps_flips0;     /* flips in the last second; the count then */
 
+/* v in at least w digit cells (FIG_SPACEs before it: TS_TABULAR), then
+ * unit */
+static void fig_num(char *out, LONG v, int w, const char *unit)
+{
+    char d[16];
+    int n, i = 0;
+    sprintf(d, "%ld", (long)v);
+    for (n = (int)strlen(d); n < w; n++)
+        out[i++] = FIG_SPACE;
+    strcpy(out + i, d);
+    strcat(out, unit);
+}
+
 static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
     WORD x1 = clock_left() - g.mark_px - U(8);  /* the playing bars' place kept */
-    char cpu[16], app[16], fps[24], forms[3][112];
+    char cpu[16], app[16], fps[24], ram[16], chp[16], forms[3][112];
     const char *show = "";
     ULONG chip, used;
     int i;
@@ -4083,32 +4096,36 @@ static void draw_status(void)
         return;
     }
     used = dbg_mem_used(&chip);
+    /* each number right in cells of its own (tabular, FIG_SPACE before
+     * it): one changing moves nothing after it */
     if (cpu_load < 0)
         amce_strlcpy(cpu, "--", sizeof(cpu));
     else
-        sprintf(cpu, "%ld%%", (long)cpu_load);
+        fig_num(cpu, cpu_load, 3, "%");
     if (app_load < 0)
         amce_strlcpy(app, "--", sizeof(app));
     else
-        sprintf(app, "%ld%%", (long)app_load);
+        fig_num(app, app_load, 3, "%");
+    fig_num(ram, (LONG)(used >> 10), 6, "K");
+    fig_num(chp, (LONG)(chip >> 10), 4, "K");
     /* double buffered: the flips of the last second */
     fps[0] = 0;
-    if (gfx_dbuf_active())
-        sprintf(fps, "%ld FPS  ", (long)fps_shown);
+    if (gfx_dbuf_active()) {
+        fig_num(fps, fps_shown, 3, " FPS  ");
+    }
     /* CPU = whole system (idle-task meter); app = AmigaMCE's own share */
-    sprintf(forms[0], "%sCPU %s  app %s   RAM %luK  (chip %luK)", fps, cpu, app,
-            (unsigned long)(used >> 10), (unsigned long)(chip >> 10));
-    sprintf(forms[1], "%sCPU %s  app %s  RAM %luK", fps, cpu, app, (unsigned long)(used >> 10));
-    sprintf(forms[2], "%s%s/%s %luK", fps, cpu, app, (unsigned long)(used >> 10));
+    sprintf(forms[0], "%sCPU %s  app %s   RAM %s  (chip %s)", fps, cpu, app, ram, chp);
+    sprintf(forms[1], "%sCPU %s  app %s  RAM %s", fps, cpu, app, ram);
+    sprintf(forms[2], "%s%s/%s %s", fps, cpu, app, ram);
     for (i = 0; i < 3; i++)
-        if (gfx_textlen(&g, forms[i], TS_SMALL) <= x1 - x0 || i == 2) {
+        if (gfx_textlen(&g, forms[i], TS_SMALL | TS_TABULAR) <= x1 - x0 || i == 2) {
             show = forms[i];
             break;
         }
     if (status_shown[0] && strcmp(show, status_shown) == 0)
         return;                             /* unchanged: leave it be */
     gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
-    gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL);
+    gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL | TS_TABULAR);
     amce_strlcpy(status_shown, show, sizeof(status_shown));
 }
 
@@ -6816,8 +6833,8 @@ static void np_volume_text(void)
         amce_strlcpy(m, _("Muted"), sizeof(m));
     else
         sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
-    gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
-    x += gfx_textlen(&g, m, TS_SMALL);
+    gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE | TS_TABULAR);
+    x += gfx_textlen(&g, m, TS_SMALL | TS_TABULAR);
     if (x <= end)
         gfx_fill(&g, x, y, end, y + g.font_h - 1, PEN_BG);
 }
@@ -6901,7 +6918,7 @@ static void np_layout(void)
     np.bar_w = np.w - gfx_textlen(&g, "88:88 / 88:88", TS_BODY) - U(10);
     np.by = np.time_y + row + U(4);
     np.bh = g.font_h + U(8);
-    vt = gfx_textlen(&g, _("Volume 100%"), TS_SMALL) + U(6);
+    vt = gfx_textlen(&g, _("Volume 100%"), TS_SMALL | TS_TABULAR) + U(6);
     avail = np.w - vt;                      /* buttons, gaps, and two more before volume */
     np.bw = (avail - (NB_COUNT + 1) * gap) / NB_COUNT;
     np.vol_x = 0;
@@ -7027,20 +7044,20 @@ static void np_draw_progress(BOOL full, const struct MpStatus *st)
         }
     }
     /* the time right of the bar, right-aligned */
-    lw = gfx_textlen(&g, t, TS_BODY);
+    lw = gfx_textlen(&g, t, TS_BODY | TS_TABULAR);  /* (its left edge still as digits change) */
     if (x + bw + U(4) <= end - lw)
         gfx_fill(&g, x + bw, y, end - lw, y + g.font_h - 1, PEN_BG);
     gfx_text(&g, end - lw + 1, y, t, np.seek_due ? PEN_WHITE : PEN_TEXT, PEN_BG, 0,
-             TS_BODY | TS_OPAQUE);
+             TS_BODY | TS_OPAQUE | TS_TABULAR);
     /* the position (or the buffer) on its own line under the buttons; left
      * of the cover where it comes down beside the controls */
     if (np.art_s && np.art_y <= np.pos_y)
         end = np.art_x - U(8) - 1;
-    rw = gfx_textlen(&g, pos, TS_SMALL);
+    rw = gfx_textlen(&g, pos, TS_SMALL | TS_TABULAR);     /* (Pattern and Row stay put) */
     if (rw > end - x + 1)
         rw = end - x + 1;
     if (rw)
-        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, rw, TS_SMALL | TS_OPAQUE);
+        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, rw, TS_SMALL | TS_OPAQUE | TS_TABULAR);
     if (x + rw <= end)
         gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
 }
@@ -7149,10 +7166,10 @@ static void np_pair(WORD y, const char *label, const char *value)
     w = gfx_textlen(&g, label, TS_SMALL);
     if (w < col)
         gfx_fill(&g, np.x0 + w, y, np.x0 + col - 1, y + g.font_h - 1, PEN_BG);
-    w = gfx_textlen(&g, value, TS_SMALL);
+    w = gfx_textlen(&g, value, TS_SMALL | TS_TABULAR);    /* (a bit rate that changes: nothing moves) */
     if (w > tw - col)
         w = tw - col;
-    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, tw - col, TS_SMALL | TS_OPAQUE);
+    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, tw - col, TS_SMALL | TS_OPAQUE | TS_TABULAR);
     /* cleared to the cover's edge, or the line's end where the cover is
      * not beside it: the line drawn before the cover came (a new album's,
      * the page not laid out again) went that far, and its end stayed in
@@ -15247,10 +15264,10 @@ static void np_full_controls(void)
             k = g.wb ? GL_FULL : GL_UNFULL; /* (on its own screen: back to the page) */
         }
         if (i == NF_VUP) {                  /* the volume between - and + */
-            WORD vw = gfx_textlen(&g, "100%", TS_BODY) + U(8);
+            WORD vw = gfx_textlen(&g, "100%", TS_BODY | TS_TABULAR) + U(8);
             sprintf(line, "%ld%%", (long)(mp_volume() * 100 / 64));
-            gfx_text(&g, x + (vw - gfx_textlen(&g, line, TS_BODY)) / 2, cy - g.font_h / 2, line, PEN_TEXT,
-                     PEN_BG, 0, TS_BODY);
+            gfx_text(&g, x + (vw - gfx_textlen(&g, line, TS_BODY | TS_TABULAR)) / 2, cy - g.font_h / 2, line,
+                     PEN_TEXT, PEN_BG, 0, TS_BODY | TS_TABULAR);
             x += vw;
         }
         if (i == NF_PLAY && !paused)
@@ -15273,8 +15290,8 @@ static void np_full_controls(void)
         sprintf(line, "%s / %s", a, b);
     } else
         strcpy(line, a);
-    gfx_text(&g, x, cy - g.font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
-    nf_px0 = x + gfx_textlen_digits(&g, line, TS_BODY) + U(8);   /* (the bar kept still as the time's digits change) */
+    gfx_text(&g, x, cy - g.font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY | TS_TABULAR);
+    nf_px0 = x + gfx_textlen(&g, line, TS_BODY | TS_TABULAR) + U(8);   /* (the bar kept still) */
     nf_px1 = nf_x[NF_FULL] - 1 - U(8);
     nf_cy = cy;
     nf_fill = -1;

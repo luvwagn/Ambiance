@@ -2353,29 +2353,130 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
-/* s's width with each of its digits the widest digit: room for a time
- * that changes, kept the same as its digits do (proportional figures) */
-WORD gfx_textlen_digits(struct Gfx *g, const char *s, int ts)
+/* ---- tabular figures (TS_TABULAR): the smooth fonts' digits are of
+ * different widths, so a time or a count drawn again with others moved
+ * what followed it (a bar, the next field) a pixel or two. Each run of
+ * digits gets a cell the widest digit's width for each, the digits right
+ * in it; FIG_SPACE is an empty cell. */
+static BOOL tab_digit(char c)
 {
-    char t[40], d[2];
-    WORD best = 0, w;
-    int i;
-    char wide = '0';
-    d[1] = 0;
-    for (d[0] = '0'; d[0] <= '9'; d[0]++)
-        if ((w = gfx_textlen(g, d, ts)) > best) {
-            best = w;
-            wide = d[0];
+    return (c >= '0' && c <= '9') || c == FIG_SPACE;
+}
+
+static BOOL tab_any(const char *s)
+{
+    for (; *s; s++)
+        if (tab_digit(*s))
+            return TRUE;
+    return FALSE;
+}
+
+static WORD tab_cell(struct Gfx *g, int face)
+{
+    static APTR c_sm;
+    static struct TextFont *c_font;
+    static WORD cell[TS_FACES];
+    char d[2];
+    WORD w;
+    if (face < 0 || face >= TS_FACES)
+        face = 0;
+    if (c_sm != (APTR)g->sm || c_font != g->rp->Font) {
+        memset(cell, 0, sizeof(cell));      /* (another style or font: measured again) */
+        c_sm = (APTR)g->sm;
+        c_font = g->rp->Font;
+    }
+    if (!cell[face]) {
+        d[1] = 0;
+        for (d[0] = '0'; d[0] <= '9'; d[0]++)
+            if ((w = gfx_textlen(g, d, face)) > cell[face])
+                cell[face] = w;
+    }
+    return cell[face];
+}
+
+/* the next run of s: digits (and FIG_SPACEs) or not; its length */
+static int tab_run(const char *s, char *buf, int max, BOOL *dig)
+{
+    int k = 0;
+    *dig = tab_digit(s[0]);
+    while (s[k] && tab_digit(s[k]) == *dig && k < max - 1) {
+        buf[k] = s[k];
+        k++;
+    }
+    buf[k] = 0;
+    return k;
+}
+
+static WORD tab_len(struct Gfx *g, const char *s, int ts)
+{
+    char buf[128];
+    WORD w = 0, cell = tab_cell(g, ts & 0x0F);
+    BOOL dig;
+    int k;
+    while (*s) {
+        k = tab_run(s, buf, sizeof(buf), &dig);
+        w += dig ? k * cell : gfx_textlen(g, buf, ts & 0x0F);
+        s += k;
+    }
+    return w;
+}
+
+static void tab_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts)
+{
+    char buf[128];
+    WORD cell = tab_cell(g, ts & 0x0F);
+    BOOL dig, opaque = (ts & TS_OPAQUE) != 0;
+    int k, plain = ts & ~TS_TABULAR;
+    if (maxw > 0 && tab_len(g, s, ts) > maxw) {
+        /* too long: as ever, cut short with "..." (no padding) */
+        char t[256];
+        int i, j = 0;
+        for (i = 0; s[i] && j < (int)sizeof(t) - 1; i++)
+            if (s[i] != FIG_SPACE)
+                t[j++] = s[i];
+        t[j] = 0;
+        gfx_text(g, x, y, t, fg, bg, maxw, plain);
+        return;
+    }
+    while (*s) {
+        k = tab_run(s, buf, sizeof(buf), &dig);
+        s += k;
+        if (!dig) {
+            gfx_text(g, x, y, buf, fg, bg, 0, plain);
+            x += gfx_textlen(g, buf, plain);
+            continue;
         }
-    for (i = 0; s[i] && i < (int)sizeof(t) - 1; i++)
-        t[i] = s[i] >= '0' && s[i] <= '9' ? wide : s[i];
-    t[i] = 0;
-    return gfx_textlen(g, t, ts);
+        {
+            /* the digits right in their cells (FIG_SPACEs: empty ones) */
+            char *d = buf;
+            while (*d) {
+                char run[128];
+                int n = 0;
+                BOOL fig = *d == FIG_SPACE;
+                WORD slot, w;
+                while (d[n] && (d[n] == FIG_SPACE) == fig) {
+                    run[n] = d[n];
+                    n++;
+                }
+                run[n] = 0;
+                d += n;
+                slot = n * cell;
+                w = fig ? 0 : gfx_textlen(g, run, plain);
+                if (opaque && slot > w)
+                    gfx_fill(g, x, y, x + slot - w - 1, y + g->font_h - 1, bg);
+                if (!fig)
+                    gfx_text(g, x + slot - w, y, run, fg, bg, 0, plain);
+                x += slot;
+            }
+        }
+    }
 }
 
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 {
     ULONG n = strlen(s);
+    if ((ts & TS_TABULAR) && tab_any(s) && !cjk_any(s, n))
+        return tab_len(g, s, ts);
     if (cjk_any(s, n)) {
         /* Japanese, Chinese, Korean: their glyphs, or a tag; Greek: its
          * glyphs (cjk.c) */
@@ -2429,6 +2530,10 @@ void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, 
     char tagged[300];
     if (!n)
         return;
+    if ((ts & TS_TABULAR) && tab_any(s) && !cjk_any(s, n)) {
+        tab_text(g, x, y, s, fg, bg, maxw, ts);
+        return;
+    }
     if (cjk_any(s, n)) {
         /* Japanese, Chinese, Korean: their glyphs, or a tag; Greek: its
          * glyphs (cjk.c) */
