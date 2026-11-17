@@ -16568,6 +16568,8 @@ static void lv_page(struct Page *p, struct LPage *m)
     if (p->type == PT_TEXT || p->type == PT_DETAIL) {
         const struct ItemList *l = p->tb.lines ? p->tb.lines : &p->list;
         m->text = 1;
+        if (p->tb.line_h > 0)
+            m->list.top = p->tb.target / p->tb.line_h;    /* (the first line shown) */
         for (i = 0; i < l->count && i < 256; i++)
             lv_lines[i] = l->items[i].label ? l->items[i].label : "";
         m->ndetails = (WORD)i;

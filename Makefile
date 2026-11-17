@@ -83,7 +83,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: all clean datatype leakcheck check-libs test-spu test-kodilite test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) layouts lha datatype
 
@@ -308,7 +308,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -343,6 +343,15 @@ build/lkit_host: tests/lkit_host.c src/lkcore.c src/lkcore.h
 	@$(HOSTCC) -O2 -Wall -Wextra -o $@ tests/lkit_host.c src/lkcore.c
 test-lkit: build/lkit_host
 	@build/lkit_host > build/test-lkit.txt && echo "  CHECK layout drawing kit ok" || (cat build/test-lkit.txt; exit 1)
+
+# Kodi lite's screens drawn on the host by the kit with the smooth fonts'
+# own glyphs, from made-up models: build/kodilite-<screen>-<w>x<h>.ppm to
+# look at (checked only for drawing off the screen, or not all of it).
+build/kodilite_host: tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c $(LAYOUT_HDR) tests/shim/exec/types.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c
+test-kodilite: build/kodilite_host
+	@build/kodilite_host > build/test-kodilite.txt && echo "  CHECK Kodi lite drawn" || (cat build/test-kodilite.txt; exit 1)
 
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h

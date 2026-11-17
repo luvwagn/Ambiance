@@ -81,7 +81,8 @@ struct LList {
 #define LCRUMBS 8
 struct LPage {
     UBYTE section;              /* LSEC_* */
-    UBYTE text;                 /* one long text (details only), not a list */
+    UBYTE text;                 /* one long text (details only), not a list;
+                                 * list.top: its first line shown */
     WORD ncrumb;
     const char *crumb[LCRUMBS]; /* the path, the top level first */
     struct LList list;
