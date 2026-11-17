@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.7 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.8 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.7 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.8 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 7;
+const UWORD LibRevision = 8;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -43,7 +43,7 @@ const UWORD LibRevision = 7;
 #define C_LETTER 0x2C4864UL     /* the big letter: faint, over the list */
 
 static const struct LayoutHost *H;
-static WORD W, HT, FH;          /* the screen; a line of text */
+static WORD W, HT, FH, TH;      /* the screen; a line of text; a title's (LF_TITLE) */
 static int drawn = -1;          /* the screen drawn last */
 static ULONG bars_at;           /* Now playing's bars, drawn then */
 static LONG list_top;           /* the generic page's first row shown */
@@ -189,10 +189,10 @@ static void background(void)
 static void top_right(BOOL dark)
 {
     const struct LNow *n = H->model(LS_NOW);
-    LONG x = W - X(24), cw = tlen(H->clock, LF_BOLD), y = Y(16);
+    LONG x = W - X(24), cw = tlen(H->clock, LF_TITLE), y = Y(16);
     const struct LkBg *bg = dark ? flat(C_NOWBG) : &bg_grad;
     x -= cw;
-    text(x, y, H->clock, LF_BOLD, C_WHITE, bg, 0);
+    text(x, y + (FH - TH) / 2, H->clock, LF_TITLE, C_WHITE, bg, 0);   /* the big clock */
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
         LONG tw, room = x - X(40) - W / 2;
@@ -219,7 +219,7 @@ static void top_right(BOOL dark)
 static void title_line(const char *title, const char *sub)
 {
     LONG x = X(30), y = Y(16);
-    WORD w = text(x, y, title, LF_BOLD, C_WHITE, &bg_grad, W / 2);
+    WORD w = text(x, y + (FH - TH) / 2, title, LF_TITLE, C_WHITE, &bg_grad, W / 2);
     if (sub && *sub)
         text(x + w + X(14), y, sub, LF_SMALL, C_SUB, &bg_grad, W / 2 - w - X(14));
 }
@@ -724,7 +724,7 @@ static void draw_album(void)
         cs = bottom - py - FH * 6;
     cover(a->art, a->title, cx, py, cs, grad(py));
     y = py + cs + Y(14);
-    y += text(cx, y, a->title, LF_BOLD, C_WHITE, &bg_grad, cs) ? FH + Y(4) : 0;
+    y += text(cx, y, a->title, LF_TITLE, C_WHITE, &bg_grad, cs) ? TH + Y(2) : 0;
     if (a->artist && *a->artist) {
         text(cx, y, a->artist, LF_REGULAR, C_ACC, &bg_grad, cs);
         y += FH + Y(4);
@@ -843,8 +843,8 @@ static void draw_artist(void)
     tx = cx + ps + X(24);
     tw = W - tx - X(30);
     y = py;
-    text(tx, y, a->name, LF_BOLD, C_WHITE, &bg_grad, tw);
-    y += FH + Y(6);
+    text(tx, y, a->name, LF_TITLE, C_WHITE, &bg_grad, tw);
+    y += TH + Y(4);
     if (a->line && *a->line) {
         text(tx, y, a->line, LF_SMALL, C_ACC, &bg_grad, tw);
         y += FH + Y(4);
@@ -926,8 +926,8 @@ static void draw_now(void)
         return;
     }
     y = cy;
-    text(tx, y, n->title, LF_BOLD, C_WHITE, flat(C_PANEL), tw);
-    y += FH + Y(6);
+    text(tx, y, n->title, LF_TITLE, C_WHITE, flat(C_PANEL), tw);
+    y += TH + Y(2);
     join(line, sizeof(line), n->artist, " \xB7 ", n->album);
     if (n->year && *n->year)
         join(line, sizeof(line), line, " ", n->year);
@@ -971,6 +971,9 @@ static BOOL sc_open(const struct LayoutHost *host)
     FH = host->font_h(LF_REGULAR);
     if (FH <= 0)
         FH = 16;
+    TH = host->font_h(LF_TITLE);
+    if (TH < FH)
+        TH = FH;
     bg_grad.top = C_TOP;
     bg_grad.bottom = C_BOT;
     bg_grad.y = 0;

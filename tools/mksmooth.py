@@ -58,6 +58,7 @@ RTG_LINES = 384     # the screen height the design is scaled to fit as if it had
 LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
+TITLE = (17.0, 600)     # the layouts' title face (TITL): its own cell, 17/11 of the text's
 CELL = 12           # design height of a text cell (the pixel font's)
 BASE = 9.0          # design baseline, from the cell top (the pixel font's)
 ICONS = hiicons.ICONS
@@ -291,6 +292,15 @@ def build(ttf, H, greek=None):
             for adv16, xo, yo, w, h, off in glyphs:
                 out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
             out += struct.pack(">I", len(blob)) + blob
+    # The layouts' title face: "TITL", u16 its cell's height and baseline,
+    # then one face as above (Latin-1)
+    size, wght = TITLE
+    tcell, tbase = round(CELL * k * size / FACES[0][0]), round(BASE * k * size / FACES[0][0])
+    glyphs, blob = face(ttf, size, wght, k, tcell, tbase)
+    out += b"TITL" + struct.pack(">HHHH", tcell, tbase, LO, HI)
+    for adv16, xo, yo, w, h, off in glyphs:
+        out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
+    out += struct.pack(">I", len(blob)) + blob
     return bytes(out)
 
 

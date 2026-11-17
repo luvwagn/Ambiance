@@ -189,7 +189,8 @@ enum { LR_UNUSED, LR_DONE };
 #define LC_MESSAGE 32           /* the message */
 
 /* ---------------------------------------------------------------- the tables */
-enum { LF_REGULAR, LF_BOLD, LF_SMALL };  /* the smooth fonts' faces */
+enum { LF_REGULAR, LF_BOLD, LF_SMALL, LF_TITLE };  /* the smooth fonts' faces (LF_TITLE: larger,
+                                                   * its own height: host->font_h) */
 
 struct LayoutHost {
     /* the screen */

@@ -68,8 +68,8 @@ struct Glyph { unsigned adv16; int xo, yo; unsigned w, h; unsigned long off; };
 struct Face { unsigned lo, hi; struct Glyph *gl; const unsigned char *blob; };
 static struct {
     unsigned char *data;
-    unsigned cell_h, base, nf;
-    struct Face face[4];
+    unsigned cell_h, base, nf, title_h;
+    struct Face face[4];                /* [3]: the title face (TITL), if the file has it */
     unsigned icon_n, icon_cnt;
     const unsigned char *icons;
 } F;
@@ -83,7 +83,7 @@ static unsigned long be32(const unsigned char *p)
 static int font_load(const char *path)
 {
     FILE *f = fopen(path, "rb");
-    long n, p = 4;
+    long n, p = 4, size;
     unsigned i, k;
     if (!f)
         return 0;
@@ -94,6 +94,7 @@ static int font_load(const char *path)
     for (i = 0; i < 4; i++)
         free(F.face[i].gl);
     memset(&F, 0, sizeof(F));
+    size = n;
     F.data = malloc(n);
     if (fread(F.data, 1, n, f) != (size_t)n || memcmp(F.data, "AMSM", 4)) {
         fclose(f);
@@ -126,6 +127,29 @@ static int font_load(const char *path)
     F.icon_n = be16(F.data + p);
     F.icon_cnt = be16(F.data + p + 2);
     F.icons = F.data + p + 4;
+    {
+        /* the title face: "TITL" near the end (after the rest, Greek's too) */
+        long q;
+        for (q = size - 12; q > p; q--)
+            if (!memcmp(F.data + q, "TITL", 4)) {
+                struct Face *fc = &F.face[3];
+                F.title_h = be16(F.data + q + 4);
+                fc->lo = be16(F.data + q + 8);
+                fc->hi = be16(F.data + q + 10);
+                q += 12;
+                fc->gl = calloc(fc->hi - fc->lo + 1, sizeof(struct Glyph));
+                for (i = 0; i <= fc->hi - fc->lo; i++, q += 10) {
+                    fc->gl[i].adv16 = be16(F.data + q);
+                    fc->gl[i].xo = (signed char)F.data[q + 2];
+                    fc->gl[i].yo = (signed char)F.data[q + 3];
+                    fc->gl[i].w = F.data[q + 4];
+                    fc->gl[i].h = F.data[q + 5];
+                    fc->gl[i].off = be32(F.data + q + 6);
+                }
+                fc->blob = F.data + q + 4;
+                break;
+            }
+    }
     return 1;
 }
 
@@ -136,7 +160,7 @@ static int nib(const unsigned char *d, unsigned long n)
 
 static const struct Glyph *glyph(int face, unsigned char c, const struct Face **fc)
 {
-    *fc = &F.face[face < (int)F.nf ? face : 0];
+    *fc = &F.face[face == LF_TITLE ? (F.title_h ? 3 : 1) : face < (int)F.nf ? face : 0];
     if (c < (*fc)->lo || c > (*fc)->hi)
         c = '?';
     return &(*fc)->gl[c - (*fc)->lo];
@@ -211,8 +235,7 @@ static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, co
 
 static WORD h_font_h(int face)
 {
-    (void)face;
-    return (WORD)F.cell_h;
+    return (WORD)(face == LF_TITLE && F.title_h ? F.title_h : F.cell_h);
 }
 
 static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)

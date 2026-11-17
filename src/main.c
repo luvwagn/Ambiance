@@ -17790,7 +17790,10 @@ static WORD h_fit(const char *s, LONG n, int face, WORD maxw)
 {
     return g.sm ? (WORD)sm_fit(g.sm, s, n, face, maxw) : 0;
 }
-static WORD h_font_h(int face) { (void)face; return g.sm ? (WORD)sm_cell_h(g.sm) : 0; }
+static WORD h_font_h(int face)
+{
+    return !g.sm ? 0 : face == LF_TITLE ? (WORD)sm_title_h(g.sm) : (WORD)sm_cell_h(g.sm);
+}
 static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
 {
     lk_icon(&g, &lv.out, lv_icon_of(section), x, y, fg, bg);

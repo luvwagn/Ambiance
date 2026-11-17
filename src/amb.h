@@ -246,6 +246,8 @@ void sm_mark(struct Smooth *s, struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg
 UWORD sm_icon_px(const struct Smooth *s);
 UWORD sm_mark_px(const struct Smooth *s);
 UWORD sm_cell_h(const struct Smooth *s);
+#define SM_TITLE 3             /* the layouts' title face (the file's TITL; else bold) */
+UWORD sm_title_h(const struct Smooth *s);   /* its cell's height */
 UWORD sm_scale(const struct Smooth *s);                 /* x 256 */
 UWORD sm_baseline(const struct Smooth *s);
 BOOL sm_logo(struct Smooth *s, struct Gfx *g);      /* fills g->logo_* masks and pens */
