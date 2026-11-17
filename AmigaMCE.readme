@@ -8,15 +8,15 @@ Architecture: m68k-amigaos >= 3.1.0
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi and Windows Media Center: games and demos from Amiga Game Selector
-(AGS), tracker music, internet radio, the music and photos on your Plex
+(AGS) or iGame, tracker music, internet radio, the music and photos on your Plex
 server and your pictures, all in one place, driven by keyboard, mouse or
 joystick.
 
 Copy the AmigaMCE drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
 its modules and its pictures are found by themselves. On any other Amiga,
-Settings > Folders says where your music, modules and pictures are.
-Everything plays inside AmigaMCE, on its own screen and the Amiga's own
+Settings > Folders says where your music, modules and pictures are, and
+iGame's games and demos are found where iGame is installed. Everything plays inside AmigaMCE, on its own screen and the Amiga's own
 sound.
 
 
@@ -33,6 +33,16 @@ Games and demos
   Cache drawer, so they open at once; only letters that changed are read
   again. Deleting the Cache drawer is always safe. Screenshots and fact
   sheets are read by a second process, so the list never waits for disk.
+- Without AGS, or beside it (an "iGame" folder), the games and demos of
+  iGame's list (gameslist.csv in iGame's drawer): Favourites, All, Most
+  played, By genre, By chipset, By year, with iGame's igame.iff screenshot.
+  iGame is looked for by itself the first time and its drawer kept;
+  Settings > Folders > iGame chooses another, or None. Titles start as
+  iGame starts them: WHDLoad with their icon's tooltypes. iGame's list is
+  only read.
+- Without AGS or WHDLoad, with the network up, Games offers to install
+  WHDLoad: its user package fetched from whdload.de, unpacked by
+  xadmaster.library (or LhA in C:), WHDLoad and its tools put in C:.
 
 Mods
 - Modules from the MODS: assign and up to eight folders chosen in
@@ -195,7 +205,9 @@ Screens
 Requirements
 ------------
 - Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG.
-- Amiga Game Selector 3 for Games and Demos (found through AGS:).
+- Amiga Game Selector 3 for Games and Demos (found through AGS:), or
+  iGame's list with WHDLoad. To install WHDLoad from Games:
+  xadmaster.library or LhA in C:.
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
 - For MP3: nothing more (Libs/amcempega.library is in the archive);
   mpega.library or an MHI driver may be chosen instead. For FLAC:

@@ -1115,6 +1115,10 @@ struct NetJob {
     LONG n, total;              /* entries read (-1 not Plex's XML), the server's total */
     LONG start;                 /* a long list's later part: from this entry (0 its first) */
     ULONG ms_read;
+    /* a download (file set): a 200's body written to that file as it comes,
+     * not kept (body then holds the headers alone, len 0); any size */
+    char file[160];
+    volatile ULONG got, size;   /* bytes written so far; Content-Length (0 not given) */
 };
 BOOL net_start(void);
 void net_stop(void);            /* waits for jobs out (cancel them first) */

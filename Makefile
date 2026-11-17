@@ -48,7 +48,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/lkcore.c src/lkit.c src/lhost.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
@@ -83,7 +83,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-spu test-kodilite test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: test-igame test-kodilite all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) layouts lha datatype
 
@@ -209,6 +209,18 @@ build/test_ags: tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c 
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c
 
+# iGame's list (igame.c) under vamos: iGame: the fixture drawer.
+IGTEST_SRC = tests/test_igame.c src/igame.c src/igamecsv.c src/ags.c src/dirscan.c src/util.c src/lang.c
+build/test_igame: $(IGTEST_SRC) src/igame.h src/igamecsv.h src/amce.h
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ $(IGTEST_SRC)
+
+# WHDLoad put in C: from an unpacked package (whdinst.c), archive names checked (unarc.c).
+WHDTEST_SRC = tests/test_whdinst.c src/whdinst.c src/unarc.c src/dirscan.c src/util.c src/lang.c
+build/test_whdinst: $(WHDTEST_SRC) src/whdinst.h src/unarc.h src/amce.h
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ $(WHDTEST_SRC)
+
 build/test_songs: tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c src/amce.h
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_songs.c src/songinfo.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c
@@ -308,11 +320,24 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V Videos:$(abspath tests/fixtures/Videos) -V T:$(abspath build/vt) test_ags
+	@rm -rf build/vt && mkdir -p build/vt
+	@cd build && vamos -V iGame:$(abspath tests/fixtures/iGame) -V T:$(abspath build/vt) test_igame > test-igame68k.txt 2>&1 \
+		&& grep -q "all iGame tests passed" test-igame68k.txt \
+		&& echo "  CHECK iGame's list (68000, igame.c) ok" || (grep -v WARNING test-igame68k.txt; exit 1)
+	@# a package as unpacked: WHDLoad, DIC, an icon, Patcher (one already in C: kept), WHDLoad.prf
+	@rm -rf build/vw && mkdir -p build/vw/C build/vw/S build/vw/DEVS build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C \
+		build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S
+	@printf WHDLD > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad && printf DIC > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/DIC \
+		&& printf NEW > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/Patcher && printf icon > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad.info \
+		&& printf PREF > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S/WHDLoad.prf && printf O > build/vw/C/Patcher
+	@cd build && vamos -V VW:$(abspath build/vw) -a C:VW:C -a S:VW:S -a DEVS:VW:DEVS -a T:VW:T test_whdinst > test-whdinst.txt 2>&1 \
+		&& grep -q "all WHDLoad tests passed" test-whdinst.txt \
+		&& echo "  CHECK WHDLoad installed from its package (68000, whdinst.c)" || (grep -v WARNING test-whdinst.txt; exit 1)
 	@rm -rf build/songs build/ram && mkdir -p build/ram
 	@$(PYTHON) -I tests/mksongs.py build/songs
 	@cd build && vamos -V Songs:$(abspath build/songs) -V RAM:$(abspath build/ram) test_songs > test-songs.txt \
@@ -357,6 +382,14 @@ test-kodilite: build/kodilite_host
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/radio_host.c src/radiocsv.c
+
+# iGame's gameslist.csv, tooltypes as WHDLoad arguments, demos (igamecsv.c).
+build/igame_host: tests/igame_host.c src/igamecsv.c src/igamecsv.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/igame_host.c src/igamecsv.c
+
+test-igame: build/igame_host
+	@build/igame_host > build/test-igame.txt && echo "  CHECK iGame's list ok" || (cat build/test-igame.txt; exit 1)
 
 # a Plex server's XML (plexxml.c).
 build/animdraw_host: tests/animdraw_host.c src/animdraw.c src/animdraw.h

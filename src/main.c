@@ -12,6 +12,9 @@
 #include "dvdplay.h"
 #include "dvddisc.h"
 #include "dvdiso.h"
+#include "igame.h"
+#include "unarc.h"
+#include "whdinst.h"
 #include "lhost.h"
 #include "lkit.h"
 
@@ -81,6 +84,7 @@ struct Page {
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
     UBYTE ags;                  /* a Games or Demos list (AGS's menus) */
+    UBYTE igame;                /* iGame's list (igame.c): 1, 2 most played first */
     LONG plex_more, plex_total; /* a long Plex list: its parts read (count), its total */
     ULONG plex_parts[4];        /* which parts of PLEX_PART entries are read (a bit each) */
     BOOL plex_letters;          /* its first characters asked for (placeholders labelled) */
@@ -104,6 +108,9 @@ struct Page {
 static struct Gfx g;
 static struct Caps caps;
 static struct Ags ags;
+static struct IgCat igcat;      /* iGame's list (igame.c): igcat.n 0 when none */
+static char ig_setting[256];     /* AmigaMCE/iGame as read: "" unset, "none", or a drawer */
+static BOOL ig_off(void);
 static struct Page pages[MAXDEPTH];
 static int depth;
 static int menu[MOD_COUNT], nmenu, menu_sel;
@@ -171,6 +178,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
+       ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8,    /* Classic + LV_MAX */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
@@ -1478,8 +1486,19 @@ static void build_ags_root(struct Page *p, int mod)
         }
 }
 
-static void no_ags_text(struct Page *p)
+static void no_ags_text(struct Page *p, int mod)
 {
+    if (igcat.n) {
+        /* iGame's list is read, with none of this kind in it */
+        text_para(p, mod == MOD_DEMOS ? _("iGame's list has no demos in it, and Amiga Game Selector "
+                                          "was not found.")
+                                      : _("iGame's list has no games in it, and Amiga Game Selector "
+                                          "was not found."));
+        text_line(p, "");
+        text_para(p, _("AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro "
+                     "or Diskmag, or when it is in a drawer named Demos."));
+        return;
+    }
     text_line(p, _("Amiga Game Selector was not found."));
     text_line(p, "");
     text_para(p, _("Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and "
@@ -1489,6 +1508,10 @@ static void no_ags_text(struct Page *p)
     text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));
+    text_line(p, "");
+    text_line(p, "");
+    text_para(p, _("iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame "
+                 "when it starts, or Settings > Folders > iGame says where its drawer is."));
     text_line(p, "");
     text_para(p, _("Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders "
                  "says where your music, modules, pictures and animations are."));
@@ -1584,6 +1607,20 @@ static void build_sysinfo(struct Page *p)
         /* S:AGS-Stuff did not run at boot; AmigaMCE filled the gaps. */
         text_line(p, _("Assigns AmigaMCE added (AGS-Stuff did not run):"));
         text_para(p, ags.added);
+    }
+    if (igcat.n)
+        sprintf(line, _("iGame: %.120s, %ld games, %ld demos"), igcat.dir, (long)igcat.games,
+                (long)igcat.demos);
+    else
+        sprintf(line, _("iGame: %s"), ig_off() ? _("none") : ig_setting[0] ? _("no list read")
+                                                                          : _("not found"));
+    text_line(p, line);
+    {
+        char where[64];
+        sprintf(line, _("WHDLoad: %s"), whd_present(where, sizeof(where)) ? where : _("not installed"));
+        text_line(p, line);
+        sprintf(line, _("Archives unpacked by: %s"), unarc_how() ? unarc_name(unarc_how()) : _("nothing"));
+        text_line(p, line);
     }
     sprintf(line, _("AGS machine setting (HW): %s"), ags.hw[0] ? ags.hw : _("not set"));
     text_line(p, line);
@@ -2416,13 +2453,13 @@ static void sel_off_heading(struct Page *p, LONG d)
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
-       SETP_VIDEO };
+       SETP_VIDEO, SETP_IGAME, SETP_WHD };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
-    N_("Video") };
+    N_("Video"), N_("iGame"), N_("WHDLoad") };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2944,6 +2981,8 @@ static int fs_places(int k)
 }
 
 /* Settings > Folders: where Music, Mods, Pictures and Videos find their files. */
+static const char *ig_tag(void);
+
 static void build_folders_settings(struct Page *p)
 {
     int k;
@@ -2957,6 +2996,9 @@ static void build_folders_settings(struct Page *p)
             strcpy(tag, _("none yet"));
         action_item(p, _(fs[k].name), tag, ACT_FSSET0 + k, MARK_ARROW);
     }
+    action_item(p, _("iGame"), ig_tag(), ACT_IGSET, MARK_ARROW);
+    action_item(p, "WHDLoad", whd_present(NULL, 0) ? _("installed") : _("not installed"),
+                ACT_WHDPAGE, MARK_ARROW);
 }
 
 /* Settings > Folders > Music (Modules, Pictures): the kind's assign (on or
@@ -2976,6 +3018,255 @@ static void build_folder_settings(struct Page *p)
     for (i = 0; i < f->n; i++)
         action_item(p, f->dir[i], fs_rm == i ? _("Fire again: remove") : "", ACT_FSDIR0 + i, MARK_NONE);
     action_item(p, _("Add a folder..."), f->n < FS_DIRS ? "" : _("eight at most"), ACT_FSADD, MARK_NONE);
+}
+
+/* ------------------------------------------------------------ iGame's list
+ * AmigaMCE/iGame says where iGame's drawer is (its gameslist.csv), or
+ * "none" (or "n/a") for no list. Unset, iGame is looked for at each start
+ * (igame.c), and the drawer found is saved there: from then on it is the
+ * setting, changed or turned off in Settings > Folders > iGame. Its games
+ * and demos are listed beside AGS's, or alone where there is no AGS. */
+static BOOL ig_off(void)
+{
+    return !amce_stricmp(ig_setting, "none") || !amce_stricmp(ig_setting, "n/a");
+}
+
+/* iGame's list read again as the setting says; unset, and look: iGame
+ * looked for, and the drawer found saved as the setting. */
+static void igame_start(BOOL look)
+{
+    char found[256];
+    ig_free(&igcat);
+    ig_setting[0] = 0;
+    if (GetVar((CONST_STRPTR)IG_VAR, (STRPTR)ig_setting, sizeof(ig_setting), GVF_GLOBAL_ONLY) <= 0)
+        ig_setting[0] = 0;
+    if (ig_off()) {
+        amce_log("igame", "set to none: no list");
+        return;
+    }
+    if (!ig_setting[0]) {
+        /* the hard disks searched the first time only; the usual places each start */
+        char looked[4];
+        BOOL deep = GetVar((CONST_STRPTR)IG_LOOKED_VAR, (STRPTR)looked, sizeof(looked),
+                           GVF_GLOBAL_ONLY) <= 0;
+        if (!look)
+            return;
+        if (deep)
+            save_setting(IG_LOOKED_VAR, "1");
+        if (!ig_discover(found, sizeof(found), deep))
+            return;
+        amce_strlcpy(ig_setting, found, sizeof(ig_setting));
+        save_setting(IG_VAR, found);
+    }
+    ig_load(&igcat, ig_setting);
+}
+
+/* Folders' iGame row: what it lists, or why nothing. */
+static const char *ig_tag(void)
+{
+    static char tag[48];
+    if (ig_off())
+        strcpy(tag, _("none"));
+    else if (!ig_setting[0])
+        strcpy(tag, _("not found"));
+    else if (igcat.n)
+        sprintf(tag, igcat.n == 1 ? _("%ld entry") : _("%ld entries"), (long)igcat.n);
+    else
+        strcpy(tag, _("no list there"));
+    return tag;
+}
+
+static void build_igame_settings(struct Page *p)
+{
+    char line[320];
+    p->setp = SETP_IGAME;
+    if (ig_off())
+        strcpy(line, _("No iGame list is shown."));
+    else if (!ig_setting[0])
+        strcpy(line, _("iGame was not found."));
+    else if (igcat.n)
+        sprintf(line, _("%.200s: %ld games, %ld demos"), ig_setting, (long)igcat.games,
+                (long)igcat.demos);
+    else
+        sprintf(line, _("%.200s: no gameslist.csv read"), ig_setting);
+    heading_item(p, line);
+    action_item(p, _("Choose iGame's drawer..."), "", ACT_IGCHOOSE, MARK_NONE);
+    action_item(p, _("Find iGame"), "", ACT_IGFIND, MARK_NONE);
+    action_item(p, _("None: no iGame list"), "", ACT_IGNONE, ig_off() ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+/* ------------------------------------------------------------ WHDLoad
+ * Without AGS (which carries its own) and without WHDLoad in C:, on an
+ * Amiga with its network up, Games' and Demos' first pages begin with
+ * Install WHDLoad... until it is installed or Not now is chosen; Settings
+ * > Folders > WHDLoad always leads to the same page. Download and install
+ * fetches the user package from whdload.de into T: (net.c writes it to
+ * the file as it comes), unpacks it (unarc.c: xadmaster.library, else
+ * C:LhA) and puts WHDLoad in C: (whdinst.c). */
+static struct NetJob *whd_job;      /* the package on its way, NULL none */
+static void plex_settings_again(BOOL full);
+static ULONG whd_shown = ~0UL;      /* bytes last said in the footer */
+
+static BOOL whd_declined(void)
+{
+    char v[8];
+    return GetVar((CONST_STRPTR)WHD_OFFER_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
+           !amce_stricmp(v, "no");
+}
+
+/* Games and Demos offer it: network up, no AGS, no WHDLoad, not declined. */
+static BOOL whd_offer(void)
+{
+    return caps.net && !ags.found && !whd_present(NULL, 0) && !whd_declined();
+}
+
+/* A paragraph as dim rows of a list page, passed over by the cursor. */
+static void head_para(struct Page *p, const char *s)
+{
+    LONG i, from = p->list.count;
+    text_para(p, s);
+    for (i = from; i < p->list.count; i++)
+        p->list.items[i].flags |= ITEM_HEAD;
+}
+
+static void build_whd_page(struct Page *p)
+{
+    char where[64], line[160];
+    int how = unarc_how();
+    p->setp = SETP_WHD;
+    if (whd_present(where, sizeof(where))) {
+        sprintf(line, _("WHDLoad is installed: %s"), where);
+        heading_item(p, line);
+        head_para(p, _("Games that need a Kickstart image look for it in Devs:Kickstarts "
+                       "(kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot "
+                       "supply those: they come from your own Amiga's ROM, or from Amiga Forever."));
+        return;
+    }
+    head_para(p, _("WHDLoad starts games and demos installed to hard disk, as iGame lists them. "
+                   "It is not installed on this Amiga."));
+    head_para(p, _("AmigaMCE can fetch WHDLoad's user package from its author's site, "
+                   "whdload.de (free of charge), and put WHDLoad and its tools in C:."));
+    if (how == UNARC_NONE)
+        head_para(p, _("Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) "
+                       "or LhA in C: (Aminet: util/arc/lha.run). Neither is installed."));
+    if (!caps.net)
+        heading_item(p, _("The network is not up."));
+    if (whd_job) {
+        if (whd_job->size)
+            sprintf(line, _("Downloading: %lu of %lu KB"), (unsigned long)(whd_job->got >> 10),
+                    (unsigned long)(whd_job->size >> 10));
+        else
+            sprintf(line, _("Downloading: %lu KB"), (unsigned long)(whd_job->got >> 10));
+        heading_item(p, line);
+    } else if (caps.net && how != UNARC_NONE)
+        action_item(p, _("Download and install WHDLoad"), WHD_HOST, ACT_WHDGO, MARK_NONE);
+    if (!whd_declined())
+        action_item(p, _("Not now"), _("Games stops asking"), ACT_WHDNO, MARK_NONE);
+}
+
+/* The Games or Demos page's first row: the offer. */
+static void whd_offer_row(struct Page *p)
+{
+    struct Item *it;
+    if (!whd_offer())
+        return;
+    it = list_add_first(&p->list, _("Install WHDLoad..."), _("not installed"), "", IT_ACTION);
+    if (it) {
+        it->action = ACT_WHDPAGE;
+        it->mark = MARK_ARROW;
+    }
+}
+
+static void whd_go(void)
+{
+    struct NetJob *j;
+    if (whd_job)
+        return;
+    if (!caps.net) {
+        set_msg(_("The network is not up"));
+        return;
+    }
+    if (unarc_how() == UNARC_NONE) {
+        set_msg(_("Unpacking needs xadmaster.library or C:LhA"));
+        return;
+    }
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    whd_cleanup();                          /* a try before, left behind */
+    amce_strlcpy(j->host, WHD_HOST, sizeof(j->host));
+    amce_strlcpy(j->path, WHD_PATH, sizeof(j->path));
+    amce_strlcpy(j->file, WHD_ARCHIVE, sizeof(j->file));
+    j->tls = https_ok();                    /* HTTPS where it can be; else HTTP */
+    j->wait_s = 30;
+    whd_job = j;
+    whd_shown = ~0UL;
+    amce_log("whdload: fetching", j->tls ? "https://" WHD_HOST WHD_PATH : "http://" WHD_HOST WHD_PATH);
+    net_submit(j);
+    set_msg(_("Downloading WHDLoad from whdload.de..."));
+    plex_settings_again(FALSE);
+}
+
+/* Once a second while it comes: how much, in the footer. */
+static void whd_tick(void)
+{
+    char m[80];
+    if (!whd_job || whd_job->got == whd_shown)
+        return;
+    whd_shown = whd_job->got;
+    if (whd_job->size)
+        sprintf(m, _("Downloading WHDLoad: %lu of %lu KB"), (unsigned long)(whd_shown >> 10),
+                (unsigned long)(whd_job->size >> 10));
+    else
+        sprintf(m, _("Downloading WHDLoad: %lu KB"), (unsigned long)(whd_shown >> 10));
+    set_msg(m);
+}
+
+/* The package here (or not): unpacked, installed, tidied away. */
+static void whd_done(struct NetJob *j)
+{
+    char why[120], done[120], m[200];
+    BOOL ok = FALSE;
+    whd_job = NULL;
+    if (!j->body || j->err[0]) {
+        sprintf(m, _("WHDLoad could not be downloaded: %.100s"),
+                j->err[0] ? j->err : _("no answer"));
+        amce_log("whdload", m);
+        set_msg(m);
+    } else {
+        sprintf(m, "%lu bytes from %.60s in %lu ms", (unsigned long)j->got, j->server,
+                (unsigned long)j->ms);
+        amce_log("whdload: downloaded", m);
+        busy_begin();
+        set_msg(_("Unpacking WHDLoad..."));
+        ok = unarc_extract(WHD_ARCHIVE, WHD_DIR, why, sizeof(why)) &&
+             whd_install_from(WHD_DIR, why, sizeof(why), done, sizeof(done));
+        whd_cleanup();
+        busy_end(TRUE);
+        if (ok) {
+            amce_log("whdload", done);
+            set_msg(done);
+        } else {
+            sprintf(m, _("WHDLoad was not installed: %.120s"), why);
+            amce_log("whdload", m);
+            set_msg(m);
+        }
+    }
+    if (j->body)
+        FreeVec(j->body);
+    FreeVec(j);
+    plex_settings_again(FALSE);             /* its page: installed, or the button again */
+}
+
+static void ig_said(void)
+{
+    char m[120];
+    if (igcat.n)
+        sprintf(m, _("iGame's list: %ld games, %ld demos"), (long)igcat.games, (long)igcat.demos);
+    else
+        strcpy(m, _("iGame's list could not be read"));
+    set_msg(m);
 }
 
 static void draw_footer(void);
@@ -3009,6 +3300,8 @@ static void settings_rebuild(void)
         case SETP_FOLDSET: build_folder_settings(q); break;
         case SETP_FOLDERS: build_folders_settings(q); break;
         case SETP_LANG: build_lang_settings(q); break;
+        case SETP_IGAME: build_igame_settings(q); break;
+        case SETP_WHD: build_whd_page(q); break;
         default: build_settings(q); break;
         }
         if (q->setp == SETP_FOLDSET)
@@ -3426,9 +3719,35 @@ static void build_root_pages_now(int mod)
             if (p) {
                 p->ags = 1;
                 build_ags_root(p, mod);
+                if (ig_count(&igcat, mod == MOD_DEMOS) > 0) {
+                    /* iGame's list too, a folder after AGS's */
+                    char path[64];
+                    ig_page_path(path, sizeof(path), mod == MOD_DEMOS, "root");
+                    list_add(&p->list, "iGame", path, "iGame", IT_DIR);
+                }
+            }
+        } else if (ig_count(&igcat, mod == MOD_DEMOS) > 0 &&
+                   (p = page_push(PT_LIST, _(mod_names[mod])))) {
+            /* no AGS: iGame's list in its place */
+            char path[64];
+            BOOL ordered;
+            p->ags = 1;
+            p->igame = 1;
+            ig_page_path(path, sizeof(path), mod == MOD_DEMOS, "root");
+            ig_read(&igcat, path, &p->list, &ordered);
+            whd_offer_row(p);
+        } else if (whd_offer() && (p = page_push(PT_LIST, _(mod_names[mod])))) {
+            /* nothing to list yet, and WHDLoad to offer: the offer, then why */
+            whd_offer_row(p);
+            text_line(p, "");
+            no_ags_text(p, mod);
+            {
+                LONG i;
+                for (i = 1; i < p->list.count; i++)
+                    p->list.items[i].flags |= ITEM_HEAD;
             }
         } else if ((p = page_push(PT_TEXT, _(mod_names[mod]))))
-            no_ags_text(p);
+            no_ags_text(p, mod);
         break;
     case MOD_MODS:
         build_mods_root();
@@ -4701,6 +5020,8 @@ static BOOL ov_eligible(const struct Page *p)
     LONG i, runs = 0;
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
+    if (p->igame == 2)
+        return FALSE;                       /* iGame's most played: not by title */
     if (p->radio && !p->plex)
         /* Radio: Countries alone is A to Z (this Amiga's first); stations
          * and genres come by votes, listeners or size, where a letter
@@ -4919,7 +5240,10 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     }
     if (it->kind != IT_RUN)
         return 0;
-    item_path(it, path, max);
+    if (p->igame)
+        ig_shot_base(it->path, path, max);  /* <folder>/igame: igame.iff, and no .txt */
+    else
+        item_path(it, path, max);
     *shot = SHOT_AGS;
     return LJ_ENTRY;
 }
@@ -5330,7 +5654,12 @@ static void pv_draw_text(struct Page *p)
         return;
     if (p->pics)
         pv_pics_lines(&p->list.items[p->sel], j, pv_pic_drawn && g.pic_w, w - U(9));
-    else
+    else if (p->igame) {
+        /* iGame's entry: its fields (igame.c), in place of a fact sheet */
+        LONG n = ig_facts(ig_lookup(&igcat, p->list.items[p->sel].path), fact_buf, FACT_LINES);
+        for (i = 0; i < n; i++)
+            pv_line(fact_buf[i], w - U(9));
+    } else
         /* the whole fact sheet, in a text box with a scroll bar when it is
          * longer than the room left (wheel or bar; Up/Down stay with the list) */
         for (i = 0; i < j->nlines; i++)
@@ -9401,6 +9730,22 @@ static void open_dir_now(struct Item *it)
         return;
     }
     p->ags = 1;
+    if (ig_page(it->path)) {
+        /* iGame's list: read from memory (igame.c) */
+        BOOL ordered;
+        n = ig_read(&igcat, it->path, &p->list, &ordered);
+        p->igame = ordered ? 2 : 1;
+        if (n <= 0) {
+            page_pop();
+            set_msg(n < 0 ? _("iGame's list is not read now") : _("That list is empty"));
+            return;
+        }
+        plex_shortcut_fix(p);
+        msg[0] = 0;
+        draw_pane(TRUE);
+        draw_footer();
+        return;
+    }
     n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (ch_pump) */
     if (n <= 0) {
         page_pop();
@@ -9423,7 +9768,11 @@ static void open_detail(struct Item *it)
     if (!p)
         return;
     item_path(it, p->base, sizeof(p->base));
-    n = ags_read_txt(p->base, fact_buf, FACT_LINES);
+    if (p > &pages[0] && p[-1].igame) {
+        p->igame = 1;                       /* iGame's entry: its fields */
+        n = ig_facts(ig_lookup(&igcat, p->base), fact_buf, FACT_LINES);
+    } else
+        n = ags_read_txt(p->base, fact_buf, FACT_LINES);
     if (!n)
         text_line(p, it->label);
     for (i = 0; i < n; i++)
@@ -9538,11 +9887,25 @@ static void launch(const char *base)
 {
     static const char *script = "T:AmigaMCE-run";
     BPTR con;
-    if (!ags.found)
-        return;
-    if (!ags_write_launch_script(&ags, base, script)) {
-        set_msg(_("Could not write T:AmigaMCE-run"));
-        return;
+    if (cur() && cur()->igame) {
+        /* iGame's entry: WHDLoad (its icon's tooltypes), or the program */
+        const struct IgGame *gm = ig_lookup(&igcat, base);
+        char why[100];
+        if (!gm) {
+            set_msg(_("iGame's list no longer has that entry"));
+            return;
+        }
+        if (!ig_write_launch_script(gm, script, why, sizeof(why))) {
+            set_msg(why);
+            return;
+        }
+    } else {
+        if (!ags.found)
+            return;
+        if (!ags_write_launch_script(&ags, base, script)) {
+            set_msg(_("Could not write T:AmigaMCE-run"));
+            return;
+        }
     }
     /* Give the game every byte we can. */
     amce_log("launch", base);
@@ -12481,10 +12844,17 @@ static void plink_sign_out(void)
     set_msg(_("Signed out of plex.tv"));
 }
 
+static void whd_done(struct NetJob *j);
+static struct NetJob *whd_job;
+
 static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
     int d;
+    if (j == whd_job) {
+        whd_done(j);                        /* WHDLoad's package */
+        return;
+    }
     for (d = 0; d < ART_KINDS; d++)
         if (j == art_nj[d]) {
             /* a picture of the server's: kept in RAM:, then shown */
@@ -13921,6 +14291,55 @@ static void folder_add(int k)
     draw_all();                             /* where the requester was */
 }
 
+/* Settings > Folders > iGame > Choose iGame's drawer: asl.library's
+ * requester; the drawer is kept only if a gameslist.csv is in it. */
+static void igame_choose(void)
+{
+    struct FileRequester *fr;
+    char path[256];
+    BOOL db, got = FALSE;
+    if (!AslBase && !(AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38))) {
+        set_msg("asl.library (version 38) is needed to choose a folder");
+        return;
+    }
+    db = gfx_dbuf_active();
+    if (db)
+        gfx_dbuf_stop(&g);
+    fr = (struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest, ASLFR_Window, (ULONG)g.win, ASLFR_SleepWindow, TRUE,
+        ASLFR_TitleText, (ULONG)_("iGame's drawer (with its gameslist.csv)"),
+        ASLFR_PositiveText, (ULONG)_("Use"), ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
+        (ULONG)(ig_setting[0] && !ig_off() ? ig_setting : "SYS:"), TAG_DONE);
+    if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)fr->fr_Drawer, SHARED_LOCK))) {
+            got = NameFromLock(l, (STRPTR)path, sizeof(path) - 1) != 0;
+            UnLock(l);
+        }
+        me->pr_WindowPtr = old;
+        if (!got)
+            set_msg(_("That folder could not be found"));
+    }
+    if (fr)
+        FreeAslRequest(fr);
+    if (db)
+        gfx_dbuf_start(&g);
+    if (got) {
+        if (!ig_folder_ok(path))
+            set_msg(_("No gameslist.csv there: choose iGame's own drawer, after a scan in iGame"));
+        else {
+            save_setting(IG_VAR, path);
+            igame_start(FALSE);
+            settings_rebuild();
+            ig_said();
+        }
+    }
+    draw_all();
+}
+
 static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
@@ -14144,6 +14563,48 @@ static void act_action(struct Item *it)
     } else if (it->action == ACT_FSADD) {
         fs_rm = -1;
         folder_add(fs_page);
+    } else if (it->action == ACT_WHDPAGE) {
+        open_settings_page("WHDLoad", build_whd_page);
+    } else if (it->action == ACT_WHDGO) {
+        whd_go();
+    } else if (it->action == ACT_WHDNO) {
+        save_setting(WHD_OFFER_VAR, "no");
+        set_msg(_("Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does"));
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_IGSET) {
+        open_settings_page(_("iGame"), build_igame_settings);
+    } else if (it->action == ACT_IGCHOOSE) {
+        igame_choose();
+    } else if (it->action == ACT_IGFIND) {
+        char found[256];
+        busy_begin();
+        if (ig_discover(found, sizeof(found), TRUE)) {
+            save_setting(IG_VAR, found);
+            igame_start(FALSE);
+            ig_said();
+        } else
+            set_msg(_("iGame was not found: choose its drawer"));
+        busy_end(TRUE);
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_IGNONE) {
+        if (ig_off()) {
+            char found[256];
+            save_setting(IG_VAR, "");           /* unset: looked for, everywhere */
+            busy_begin();
+            if (ig_discover(found, sizeof(found), TRUE))
+                save_setting(IG_VAR, found);
+            igame_start(FALSE);
+            busy_end(TRUE);
+            if (igcat.n)
+                ig_said();
+            else
+                set_msg(_("iGame was not found: choose its drawer"));
+        } else {
+            save_setting(IG_VAR, "none");
+            igame_start(FALSE);
+            set_msg(_("No iGame list: Games and Demos show AGS's alone"));
+        }
+        plex_settings_again(FALSE);
     } else if (it->action >= ACT_FSDIR0 && it->action <= ACT_FSDIR_END) {
         struct Folders *f = &fs[fs_page];
         int i = it->action - ACT_FSDIR0;
@@ -15978,6 +16439,7 @@ static int app_main(void)
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);
+    igame_start(TRUE);              /* iGame's list (looked for while unset) */
     build_menu();
     load_screen_mode();
     load_style();
@@ -16199,6 +16661,7 @@ static int app_main(void)
                     mp_tempo_check();
                     flac_slow_check();      /* a FLAC track running dry: said once */
                     plink_tick();           /* signing in at plex.tv: asked after */
+                    whd_tick();             /* WHDLoad coming: how much */
                     dvd_watch();            /* Videos: a DVD put in or taken out */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
@@ -16357,6 +16820,7 @@ out:
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);
+    ig_free(&igcat);
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
     if (DataTypesBase)

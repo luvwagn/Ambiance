@@ -1,7 +1,8 @@
 # AmigaMCE
 
 **A fast, full-screen media centre for the Amiga.** Games and demos from
-[Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector),
+[Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector)
+or [iGame](https://github.com/walkero-gr/iGame),
 tracker music, internet radio, your Plex music and photo libraries and your pictures,
 all in one place, driven by keyboard, mouse or joystick, in the spirit of
 Kodi and Windows Media Center.
@@ -9,7 +10,8 @@ Kodi and Windows Media Center.
 Copy its drawer anywhere and double-click it. On an AGS 3 installation it
 is a drop-in companion: AGS's games, demos, modules and pictures are found
 by themselves. On any other Amiga, Settings > Folders says where your
-music, modules and pictures are (games and demos need AGS). Everything plays inside AmigaMCE, on the
+music, modules and pictures are; games and demos come from iGame's list
+where iGame is installed. Everything plays inside AmigaMCE, on the
 Amiga's own screen and sound; it never switches you out to another program.
 
 It runs on Kickstart 3.1 and up with a 68020 or better, from a plain A1200
@@ -18,7 +20,7 @@ of the Amiga to how fast it really is.
 
 ## What it does
 
-### Games and demos (AGS)
+### Games and demos (AGS, iGame)
 
 - Browses the AGS menu tree (Games, Demos, Disk Magazines, Favourites) by
   category, with the title's screenshot and fact sheet in a pane beside
@@ -30,6 +32,20 @@ of the Amiga to how fast it really is.
   so they open at once; only letters that changed are read again.
   Screenshots and fact sheets are read by a background process, so the list
   never waits for the disk.
+- Without AGS, or beside it (an "iGame" folder at the end of Games and
+  Demos), the games and demos of [iGame](https://github.com/walkero-gr/iGame)'s
+  list (`gameslist.csv` in iGame's drawer): Favourites, All, Most played,
+  By genre, By chipset and By year, with iGame's `igame.iff` screenshot and
+  the entry's genre, year, players, chipset and times played. AmigaMCE looks
+  for iGame by itself the first time (the `iGame:` assign, the usual
+  drawers, then the hard disks), and keeps the drawer it finds; Settings >
+  Folders > iGame chooses another, or None. A title starts as iGame starts
+  it: WHDLoad with its icon's tooltypes, from its own drawer. iGame's list
+  is only read.
+- Without AGS or WHDLoad, on an Amiga with its network up, Games offers to
+  install WHDLoad: its user package fetched from whdload.de, unpacked by
+  xadmaster.library (or LhA in C:), and WHDLoad and its tools put in C:.
+  Settings > Folders > WHDLoad offers it too.
 
 ### Music
 
@@ -240,7 +256,7 @@ of the Amiga to how fast it really is.
 | | |
 |---|---|
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
-| **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign) |
+| **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign), or iGame's list (its `gameslist.csv`) with WHDLoad; to install WHDLoad from Games, xadmaster.library or LhA in C: |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
 | **For MP3 and FLAC** | mpega.library for MP3 (the installer offers it); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv) |
@@ -338,7 +354,7 @@ was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
 | General | Language, Debug |
 | Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on AmigaMCE's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
-| Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves) |
+| Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves); iGame (its drawer, found by itself at first, or None); WHDLoad (installed, or installing it from whdload.de) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |
 
 Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
@@ -377,7 +393,7 @@ inline OS call when a multiply helper call ends up between them (see
 | Target | Result |
 |---|---|
 | `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
-| `make test` | The AGS and Pictures folder readers under vamos; the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
+| `make test` | The AGS and Pictures folder readers under vamos; iGame's list (on the host and under vamos) and WHDLoad's installation from its package (under vamos); the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
 | `make dvdlib` | `build/dvdlib/amcedvd.library` (also part of `make`, into the archive's `Libs`) |
 | `make mpegvlib` | `extras/mpegv/build/mpegv.library` (also part of `make`, into the archive's `Libs`; needs the submodule: `git submodule update --init`) |
 | `make mpeg-prof MPG=file.mpg [N=60]` | A 68020's cycles for MPEG-1 pictures under vamos: through `mpegv.library`, and by function (its profiler) |

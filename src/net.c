@@ -288,11 +288,99 @@ static BOOL send_all(struct NetJob *j, LONG s, APTR c, const char *buf, LONG n)
     return TRUE;
 }
 
+/* A download (j->file): once the headers are in b (hlen bytes up to and
+ * with the blank line), a 200 that is not chunked has the rest of its
+ * body written to the file, and then each read as it comes. TRUE: so
+ * (the headers left in b); FALSE: not a download's answer (b as it was:
+ * read on into memory, a redirect or an error). *err: the file failed. */
+static BOOL to_file(struct NetJob *j, LONG s, APTR c, UBYTE *b, ULONG len, ULONG hlen, BOOL *err)
+{
+    char *p = (char *)b;
+    BPTR fh;
+    BOOL chunked = FALSE;
+    LONG status = 0;
+    *err = FALSE;
+    if (len < 12 || amce_strnicmp(p, "HTTP/", 5) || !strchr(p, ' '))
+        return FALSE;
+    {
+        char *sp = strchr(p, ' ');
+        status = (sp[1] - '0') * 100 + (sp[2] - '0') * 10 + (sp[3] - '0');
+    }
+    if (status != 200)
+        return FALSE;
+    {
+        /* Content-Length (for progress), Transfer-Encoding */
+        char save = b[hlen];
+        char *q;
+        b[hlen] = 0;
+        for (q = p; q && *q; q = strstr(q, "\r\n") ? strstr(q, "\r\n") + 2 : NULL) {
+            if (!amce_strnicmp(q, "Content-Length:", 15))
+                j->size = (ULONG)amce_num(q + 15 + strspn(q + 15, " "));
+            else if (!amce_strnicmp(q, "Transfer-Encoding:", 18) && strstr(q, "hunked"))
+                chunked = TRUE;
+        }
+        b[hlen] = save;
+    }
+    if (chunked) {
+        set_err(j, _("The server sent it in chunks, which downloads do not take"));
+        *err = TRUE;
+        return TRUE;
+    }
+    if (!(fh = Open((CONST_STRPTR)j->file, MODE_NEWFILE))) {
+        set_err(j, _("The file could not be written"));
+        *err = TRUE;
+        return TRUE;
+    }
+    j->got = 0;
+    if (len > hlen) {
+        if (Write(fh, b + hlen, len - hlen) != (LONG)(len - hlen))
+            *err = TRUE;
+        j->got = len - hlen;
+    }
+    while (!*err) {
+        LONG r;
+        int w = c && tls_pending(&tls, c) > 0 ? 1
+              : wait_sock(j, s, FALSE, j->wait_s ? j->wait_s : READ_S);
+        if (w <= 0) {
+            set_err(j, w < 0 ? _("Cancelled") : _("The server stopped answering"));
+            *err = TRUE;
+            break;
+        }
+        if (c) {
+            r = tls_read(&tls, c, b + hlen, 32768 - hlen);
+            if (r == TLS_WANT_READ || r == TLS_WANT_WRITE)
+                continue;
+        } else {
+            r = recv(s, b + hlen, 32768 - hlen, 0);
+            if (r < 0 && Errno() == EWOULDBLOCK)
+                continue;
+        }
+        if (r <= 0)
+            break;                          /* closed: all there */
+        if (Write(fh, b + hlen, r) != r) {
+            set_err(j, _("The file could not be written (a full disk?)"));
+            *err = TRUE;
+            break;
+        }
+        j->got += r;
+    }
+    Close(fh);
+    if (!*err && j->size && j->got != j->size) {
+        set_err(j, _("The download stopped short"));
+        *err = TRUE;
+    }
+    if (*err)
+        DeleteFile((CONST_STRPTR)j->file);
+    b[hlen] = 0;
+    return TRUE;
+}
+
 /* The whole response into j->body (AllocVec, 0-terminated): headers and all. */
 static BOOL read_all(struct NetJob *j, LONG s, APTR c)
 {
     ULONG cap = 32768, len = 0;
     UBYTE *b = AllocVec(cap + 1, MEMF_ANY);
+    BOOL headed = FALSE;                    /* a download's headers seen */
     if (!b) {
         set_err(j, _("Not enough memory"));
         return FALSE;
@@ -332,6 +420,24 @@ static BOOL read_all(struct NetJob *j, LONG s, APTR c)
         if (r <= 0)
             break;                          /* closed: all there */
         len += r;
+        if (j->file[0] && !headed) {
+            /* a download: to the file once the headers are in */
+            char *e;
+            b[len] = 0;
+            if ((e = strstr((char *)b, "\r\n\r\n")) != NULL) {
+                BOOL err;
+                headed = TRUE;
+                if (to_file(j, s, c, b, len, (UBYTE *)e + 4 - b, &err)) {
+                    if (err) {
+                        FreeVec(b);
+                        return FALSE;
+                    }
+                    j->body = b;            /* the headers alone: parse_response's */
+                    j->len = strlen((char *)b);
+                    return TRUE;
+                }
+            }
+        }
     }
     b[len] = 0;
     j->body = b;
