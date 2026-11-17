@@ -353,6 +353,11 @@ Not there yet
 
 History
 -------
+0.9.1.1 On AGA and other native screens, the UI draws only on the
+       bitplanes its colours need (lists scrolling, the scroll bar, the
+       footer, Now Playing's time and position, the dancing bars): less
+       blitter time on every frame. Rows saying Plex is off or has no
+       server open Settings > Networking > Plex.
 0.9.1  Flow, Now Playing's visualisation for graphics cards: the picture
        carried on and on, zoomed, turned and rippled, the sound's wave
        drawn in, at half the screen's resolution on fast Amigas (a
