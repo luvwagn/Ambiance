@@ -1053,7 +1053,7 @@ int  amce_stricmp(const char *a, const char *b);
 int  amce_strnicmp(const char *a, const char *b, LONG n);
 
 /* ---------------------------------------------------------------- HTTPS
- * tls.c: TLS by AmiSSL 5, opened by each process that uses it, for itself
+ * tls.c: TLS by AmiSSL 6 or 5, opened by each process that uses it, for itself
  * (with its own bsdsocket.library); calls on a non-blocking socket say
  * when they would wait. */
 struct TlsLib {
@@ -1062,6 +1062,7 @@ struct TlsLib {
     APTR ctx;                   /* NULL: not open */
     BOOL tried;
     BYTE certs;                 /* root certificates: 0 not loaded yet, 1 in, -1 none */
+    UBYTE v;                    /* the AmiSSL opened: 6 or 5 (0: none) */
     LONG err;                   /* the socket calls' errno: the stack's and AmiSSL's both */
     char ver[44];               /* OpenSSL's version, for the log */
     char why[128];              /* the last failure */

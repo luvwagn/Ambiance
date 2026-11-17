@@ -45,6 +45,14 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
+# AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
+# headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
+# AmiSSL 6 where it is installed, else 5 (nothing of AmiSSL linked in)
+AMISSL6_INC = extras/amissl6/include
+ifneq ($(wildcard $(AMISSL6_INC)/libraries/amisslmaster.h),)
+OBJS += build/tls6.o
+build/tls.o: CFLAGS += -DTLS_HAVE_V6
+endif
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -123,6 +131,10 @@ build/stream.o: build/ac3probe.h
 build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
 	@$(CC) $(CFLAGS) -c -o $@ $<
+
+build/tls6.o: src/tls.c src/amce.h $(VERSION_STAMP)
+	@echo "  CC    $@ (AmiSSL 6)"
+	@$(CC) -I$(AMISSL6_INC) $(CFLAGS) -DTLS_V6 -c -o $@ $<
 
 # an animation's frames, decoded and drawn each frame: for speed, not size
 # (-O2 decodes Tron2's frames in 55% of the cycles -Os does)

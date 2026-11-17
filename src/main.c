@@ -2145,7 +2145,7 @@ static void load_net_if(void)
         net_if_apply();
 }
 
-/* Settings > Networking > HTTPS: secure connections by AmiSSL 5 (tls.c),
+/* Settings > Networking > HTTPS: secure connections by AmiSSL 6 or 5 (tls.c),
  * off by default, and only with AmiSSL installed: Radio lists and plays
  * https: stations, and Plex signs in at plex.tv. */
 static BOOL radio_https;

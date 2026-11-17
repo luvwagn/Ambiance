@@ -53,7 +53,7 @@ Radio
   country first, from your Locale settings). Only stations an Amiga can
   play are listed: MP3, working, and no higher in bitrate than this Amiga
   copes with. Now Playing shows the song titles the station sends.
-- With AmiSSL 5 and Settings > Networking > HTTPS on, stations that
+- With AmiSSL 5 or 6 and Settings > Networking > HTTPS on, stations that
   stream over HTTPS are listed and play too, marked HTTPS in the lists
   and on Now Playing.
 
@@ -65,7 +65,7 @@ Music (Plex)
   fast one. On a fast Amiga with flacdec.library, MP3 and FLAC tracks
   play as stored. Plain HTTP on your own network: no AmiSSL needed.
 - Servers are found on the network by Plex's own discovery (GDM). With
-  AmiSSL 5, sign in at plex.tv by a code entered at plex.tv/link on a
+  AmiSSL 5 or 6, sign in at plex.tv by a code entered at plex.tv/link on a
   phone or computer: no token to copy, and your account's servers are
   listed too.
 
@@ -205,7 +205,7 @@ Requirements
   DeliTracker's, modplug.library and
   xfdmaster.library for more module formats (the installer offers the
   two libraries); picture datatypes; AHI for sound through a sound card;
-  AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv).
+  AmiSSL 5 or 6 for HTTPS (secure radio stations, signing in at plex.tv).
 
 
 Installation
@@ -310,7 +310,7 @@ Settings
                the MUSIC:, MODS:, PICTURES: and VIDEOS: assigns on or
                off, folders added (Add a folder...) or taken out (Fire
                twice); AGS's own drawers are found by themselves
-  Networking   HTTPS: secure connections, with AmiSSL 5 (radio stations,
+  Networking   HTTPS: secure connections, with AmiSSL 5 or 6 (radio stations,
                  signing in at plex.tv)
                Radio: the highest bitrate listed, which
                  radio-browser.info server the lists come from
@@ -331,7 +331,7 @@ Setting up Plex
 ---------------
 1. Settings > Networking > Plex: turn Plex on, then choose your server
    under Plex server (servers on the network are found for you).
-2. If the server asks for a sign-in: with AmiSSL 5 installed, turn on
+2. If the server asks for a sign-in: with AmiSSL 5 or 6 installed, turn on
    Settings > Networking > HTTPS, then choose Settings > Networking >
    Plex > Sign in at plex.tv and enter the code it shows at plex.tv/link
    on a phone or computer. Your account's servers then appear under Plex
@@ -353,22 +353,23 @@ Not there yet
 
 History
 -------
-0.9.1  Flow, Now Playing's visualisation for graphics cards: the
-       picture carried on and on, zoomed, turned and rippled, the
-       sound's wave drawn in, at half the screen's resolution on fast
-       Amigas (a quarter on others, coarser where frames come slowly);
-       F shows it on a screen of its own, with a video's controls while
-       the mouse moves. AmigaAMP's visual plug-ins run from AmigaMCE (F,
-       Settings > Display > Full screen visual). Text blended in 16
-       steps on fast Amigas with a graphics card; Extra large text in a
-       window; numbers that change (times, the Debug readout) no longer
-       shift what follows them. Colours: five schemes (Settings >
-       Display): Midnight, Graphite, WB1.3, Emerald and Amethyst. A module back at the next start plays
-       from its beginning (a track still from where it was). Modules
-       the mixer plays follow Settings > Sound: AHI, or Paula at 14
-       bits, changed as they play, and mixed 6 dB louder than before; a
-       video or anim with sound stops them meanwhile and they go on
-       after.
+0.9.1  Flow, Now Playing's visualisation for graphics cards: the picture
+       carried on and on, zoomed, turned and rippled, the sound's wave
+       drawn in, at half the screen's resolution on fast Amigas (a
+       quarter on others, coarser where frames come slowly); F shows it
+       on a screen of its own, with a video's controls while the mouse
+       moves. AmigaAMP's visual plug-ins run from AmigaMCE (F, Settings
+       > Display > Full screen visual). Text blended in 16 steps on fast
+       Amigas with a graphics card; Extra large text in a window;
+       numbers that change (times, the Debug readout) no longer shift
+       what follows them. Colours: five schemes (Settings > Display):
+       Midnight, Graphite, WB1.3, Emerald and Amethyst. HTTPS by AmiSSL
+       6 (OpenSSL 4.1) where it is installed, else AmiSSL 5. A module
+       back at the next start plays from its beginning (a track still
+       from where it was). Modules the mixer plays follow Settings >
+       Sound: AHI, or Paula at 14 bits, changed as they play, and mixed
+       6 dB louder than before; a video or anim with sound stops them
+       meanwhile and they go on after.
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it
