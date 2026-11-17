@@ -5,7 +5,7 @@
 or [iGame](https://github.com/walkero-gr/iGame),
 tracker music, internet radio, your Plex music and photo libraries and your pictures,
 all in one place, driven by keyboard, mouse or joystick, in the spirit of
-Kodi and Windows Media Center.
+Kodi® and Windows Media Center.
 
 Copy its drawer anywhere and double-click it. On an AGS 3 installation it
 is a drop-in companion: AGS's games, demos, modules and pictures are found
@@ -494,5 +494,8 @@ that opens it and calls it through those headers, so Ambiance builds may
 be distributed. See `third_party/zz9k-sdk.txt` and the SDK's own
 `LICENSING.md`.
 
-Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
-names belong to their owners; Ambiance is not affiliated with any of them.
+Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark
+of the XBMC Foundation; Windows Media Center is a trademark of Microsoft
+Corporation. Plex and Plex Media Server are trademarks of Plex and used
+under a license. AGS, WHDLoad and other names belong to their owners.
+Ambiance is not affiliated with or endorsed by any of them.

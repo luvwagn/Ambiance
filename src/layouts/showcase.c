@@ -1,11 +1,11 @@
 /*
- * Ambiance - Kodi lite, the first layout (layout.h)
+ * Ambiance - Showcase, the first layout (layout.h)
  * Copyright (c) 2026 Brian King
  *
  * After Kodi's look, without its fanart: a menu down the left, solid
  * panels, a light blue focus and a big clock, on a dark blue-grey
  * gradient. Nothing is blended and nothing large is decoded (see
- * claude/layout-engines.md, and the mockups' Kodi lite page).
+ * claude/layout-engines.md, and the mockups' Kodi-style pages).
  *
  * Laid out on an 800 x 600 design, scaled to the screen (across and down
  * apart, so a wide screen is used across); the text is the smooth fonts'
@@ -17,12 +17,12 @@
 #include <exec/types.h>
 #include "../layout.h"
 
-const char LibName[] = "kodilite.layout";
-const char LibIdString[] = "kodilite.layout 1.2 (17.11.2026) Kodi lite, for Ambiance";
+const char LibName[] = "showcase.layout";
+const char LibIdString[] = "showcase.layout 1.3 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: kodilite.layout 1.2 (17.11.2026) Kodi lite, for Ambiance";
+    "$VER: showcase.layout 1.3 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 2;
+const UWORD LibRevision = 3;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -50,7 +50,7 @@ static LONG list_count = -1;
 static const void *list_of;
 
 /* What a click lands on: the places drawn last, noted as they are drawn
- * (kl_pointer looks them up). */
+ * (sc_pointer looks them up). */
 enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE };
 struct Hit {
     WORD x, y, w, h;
@@ -629,7 +629,7 @@ static void draw_now(void)
 }
 
 /* ---------------------------------------------------------------- the engine */
-static BOOL kl_open(const struct LayoutHost *host)
+static BOOL sc_open(const struct LayoutHost *host)
 {
     H = host;
     W = host->w;
@@ -646,12 +646,12 @@ static BOOL kl_open(const struct LayoutHost *host)
     return TRUE;
 }
 
-static void kl_close(void)
+static void sc_close(void)
 {
     H = NULL;
 }
 
-static void kl_draw(int screen)
+static void sc_draw(int screen)
 {
     drawn = screen;
     nhits = 0;
@@ -663,14 +663,14 @@ static void kl_draw(int screen)
     }
 }
 
-static void kl_changed(int screen, ULONG what)
+static void sc_changed(int screen, ULONG what)
 {
     (void)what;
-    kl_draw(screen);
+    sc_draw(screen);
 }
 
 /* Now playing's bars, ~12 a second (the rest is drawn when it changes) */
-static void kl_tick(ULONG ms)
+static void sc_tick(ULONG ms)
 {
     if (drawn != LS_NOW || (LONG)(ms - bars_at) < 80)
         return;
@@ -679,7 +679,7 @@ static void kl_tick(ULONG ms)
     draw_bars(H->model(LS_NOW));
 }
 
-static int kl_input(int screen, int action, LONG arg)
+static int sc_input(int screen, int action, LONG arg)
 {
     (void)screen;
     (void)action;
@@ -699,7 +699,7 @@ static BOOL playable(int kind)
  * opened, or (what plays) selected, and played with a double-click; a
  * crumb goes back to that level; what plays (top right) opens Now
  * playing, and on Now playing the bars pause and play. */
-static int kl_pointer(int screen, WORD x, WORD y, BOOL click)
+static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
 {
     const struct Hit *t = NULL;
     int i;
@@ -758,6 +758,6 @@ static int kl_pointer(int screen, WORD x, WORD y, BOOL click)
 }
 
 const struct LayoutEngine layout_engine = {
-    LAYOUT_ABI, "Kodi lite", 15, 480, LS_BIT(LS_HOME) | LS_BIT(LS_PAGE) | LS_BIT(LS_NOW),
-    kl_open, kl_close, kl_draw, kl_changed, kl_tick, kl_input, kl_pointer
+    LAYOUT_ABI, "Showcase", 15, 480, LS_BIT(LS_HOME) | LS_BIT(LS_PAGE) | LS_BIT(LS_NOW),
+    sc_open, sc_close, sc_draw, sc_changed, sc_tick, sc_input, sc_pointer
 };

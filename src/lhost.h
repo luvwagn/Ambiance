@@ -8,8 +8,8 @@
 #include "layout.h"
 
 struct LayoutInfo {
-    char file[32];              /* "kodilite.layout" */
-    char name[32];              /* "Kodi lite" */
+    char file[32];              /* "showcase.layout" */
+    char name[32];              /* "Showcase" */
     UWORD min_bits, min_h;
 };
 

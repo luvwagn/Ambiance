@@ -222,7 +222,7 @@ struct LayoutHost {
 
 struct LayoutEngine {
     ULONG abi;                  /* LAYOUT_ABI, as built */
-    const char *name;           /* "Kodi lite" */
+    const char *name;           /* "Showcase" */
     UWORD min_bits, min_h;      /* below these the classic layout is used */
     ULONG screens;              /* LS_BIT()s of the screens it draws (the rest: LS_PAGE) */
     BOOL (*open)(const struct LayoutHost *host);

@@ -7,7 +7,7 @@ Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
 
 Ambiance is a fast, full-screen media centre for the Amiga, in the spirit
-of Kodi and Windows Media Center: games and demos from Amiga Game Selector
+of Kodi® and Windows Media Center: games and demos from Amiga Game Selector
 (AGS) or iGame, tracker music, internet radio, the music and photos on your Plex
 server and your pictures, all in one place, driven by keyboard, mouse or
 joystick.
@@ -524,5 +524,8 @@ Fonts: Pixelify Sans (c) The Pixelify Sans Project Authors, Galmuri
 Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in the Licences
 drawer. Radio's station lists come from radio-browser.info.
 
-Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
-names belong to their owners; Ambiance is not affiliated with any of them.
+Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark
+of the XBMC Foundation; Windows Media Center is a trademark of Microsoft
+Corporation. Plex and Plex Media Server are trademarks of Plex and used
+under a license. AGS, WHDLoad and other names belong to their owners.
+Ambiance is not affiliated with or endorsed by any of them.

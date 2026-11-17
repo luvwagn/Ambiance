@@ -1,4 +1,4 @@
-/* AmigaOS's basic types for host-built tests (tests/kodilite_host.c):
+/* AmigaOS's basic types for host-built tests (tests/showcase_host.c):
  * the same sizes as on the Amiga. */
 #ifndef EXEC_TYPES_H
 #define EXEC_TYPES_H

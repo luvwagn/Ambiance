@@ -1,9 +1,9 @@
-/* Host preview for the Kodi lite layout (src/layouts/kodilite.c): its
+/* Host preview for the Showcase layout (src/layouts/showcase.c): its
  * screens drawn by the drawing kit (lkcore.c) into a picture in memory
  * that keeps only what a 16, 24 or 32-bit screen keeps, with the smooth
  * fonts' own glyphs and icons (assets/Fonts/amb-smooth/<lines>) and
  * made-up models like the mockups'. Written as
- * build/kodilite-<screen>-<w>x<h>.ppm; checked only for drawing outside
+ * build/showcase-<screen>-<w>x<h>.ppm; checked only for drawing outside
  * the screen or nothing drawn. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -304,7 +304,7 @@ static struct LItem set_rows[] = {
     { "Style", NULL, "Smooth", NULL, LI_SETTING, LM_ARROW, 0, 0 },
     { "Double buffering", NULL, NULL, NULL, LI_SETTING, LM_CHECK_ON, 0, 0 },
     { "Colours", NULL, "Midnight", NULL, LI_SETTING, LM_ARROW, 0, 0 },
-    { "Layout", NULL, "Kodi lite", NULL, LI_SETTING, LM_ARROW, 0, 0 },
+    { "Layout", NULL, "Showcase", NULL, LI_SETTING, LM_ARROW, 0, 0 },
     { "Visualisation", NULL, "Spectrum", NULL, LI_SETTING, LM_CYCLE, 0, 0 },
     { "Full screen visual (F)", NULL, "Flow", NULL, LI_SETTING, LM_CYCLE, 0, 0 },
     { "Jump scrolling (by letter)", NULL, NULL, NULL, LI_SETTING, LM_CHECK_OFF, 0, 0 },
@@ -437,7 +437,7 @@ static void save(const char *name)
     char path[200];
     FILE *f;
     long i;
-    sprintf(path, "build/kodilite-%s-%dx%d.ppm", name, SW, SH);
+    sprintf(path, "build/showcase-%s-%dx%d.ppm", name, SW, SH);
     if (!(f = fopen(path, "wb")))
         return;
     fprintf(f, "P6\n%d %d\n255\n", SW, SH);
@@ -579,6 +579,6 @@ int main(void)
         printf("%d failed\n", fails);
         return 1;
     }
-    printf("Kodi lite drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32; clicks\n");
+    printf("Showcase drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32; clicks\n");
     return 0;
 }

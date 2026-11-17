@@ -4,8 +4,8 @@
  *
  * Built once per layout with src/sqlib/libinit.c's library skeleton and
  * the layout's own source, which defines layout_engine and these:
- *   LAYOUT_FILE  its file's (and library's) name, "kodilite.layout"
- *   LAYOUT_ID    its id string, "kodilite.layout 1.0 (17.11.2026)"
+ *   LAYOUT_FILE  its file's (and library's) name, "showcase.layout"
+ *   LAYOUT_ID    its id string, "showcase.layout 1.0 (17.11.2026)"
  * The layout draws only through the host's table: no C library here.
  */
 #include <exec/libraries.h>

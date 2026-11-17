@@ -16898,7 +16898,7 @@ out:
 
 static struct {
     BOOL read, skip, on, full;
-    char file[32];                  /* chosen: "kodilite.layout", "" classic */
+    char file[32];                  /* chosen: "showcase.layout", "" classic */
     char name[32];                  /* its name, once known */
     const struct LayoutEngine *eng;
     struct LkOut out;

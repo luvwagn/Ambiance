@@ -115,7 +115,7 @@ static void fake_text(struct LkOut *o, long x, long y, int n, unsigned long fg, 
     lk_cover(o, x, y, cov, w, h, w, fg, bg);
 }
 
-/* a Kodi lite screen's parts, as the layout will draw them */
+/* a Showcase screen's parts, as the layout will draw them */
 static void scene(struct LkOut *o)
 {
     struct LkBg bg, panel;

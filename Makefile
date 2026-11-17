@@ -83,7 +83,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: test-igame test-kodilite all clean leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: test-igame test-showcase all clean leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) layouts lha
 
@@ -164,7 +164,7 @@ build/lhost.o: src/lhost.h src/layout.h src/lkcore.h
 # libnix's libinit (as ambsql.library's), src/layouts/layoutlib.c (its
 # GetLayout) and the layout's own source. They draw only through the
 # program's table: no C library linked in.
-LAYOUT_NAMES = kodilite
+LAYOUT_NAMES = showcase
 LAYOUTS      = $(patsubst %,build/layouts/%.layout,$(LAYOUT_NAMES))
 LAYOUT_CC    = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wextra \
                -Wno-pointer-sign -Isrc -Isrc/sqlib
@@ -187,7 +187,7 @@ build/layouts/%.layout: build/layouts/%/libinit.o build/layouts/%/layoutlib.o bu
 layouts: $(LAYOUTS)
 
 # their finding and opening (lhost.c) on a 68020 under vamos, with
-# kodilite.layout and one built against another layout.h (named .library
+# showcase.layout and one built against another layout.h (named .library
 # there: vamos opens no other names)
 LT_DIR = build/layouttest
 $(LT_DIR)/Layouts/wrongabi.library: src/sqlib/libinit.c src/layouts/layoutlib.c tests/layout_wrong.c $(LAYOUT_HDR)
@@ -338,7 +338,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -387,14 +387,14 @@ build/lkit_host: tests/lkit_host.c src/lkcore.c src/lkcore.h
 test-lkit: build/lkit_host
 	@build/lkit_host > build/test-lkit.txt && echo "  CHECK layout drawing kit ok" || (cat build/test-lkit.txt; exit 1)
 
-# Kodi lite's screens drawn on the host by the kit with the smooth fonts'
-# own glyphs, from made-up models: build/kodilite-<screen>-<w>x<h>.ppm to
+# Showcase's screens drawn on the host by the kit with the smooth fonts'
+# own glyphs, from made-up models: build/showcase-<screen>-<w>x<h>.ppm to
 # look at (checked only for drawing off the screen, or not all of it).
-build/kodilite_host: tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c $(LAYOUT_HDR) tests/shim/exec/types.h
+build/showcase_host: tests/showcase_host.c src/lkcore.c src/layouts/showcase.c $(LAYOUT_HDR) tests/shim/exec/types.h
 	@mkdir -p build
-	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c
-test-kodilite: build/kodilite_host
-	@build/kodilite_host > build/test-kodilite.txt && echo "  CHECK Kodi lite drawn" || (cat build/test-kodilite.txt; exit 1)
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/showcase_host.c src/lkcore.c src/layouts/showcase.c
+test-showcase: build/showcase_host
+	@build/showcase_host > build/test-showcase.txt && echo "  CHECK Showcase drawn" || (cat build/test-showcase.txt; exit 1)
 
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h

@@ -1,5 +1,5 @@
 /* The layout libraries as the program finds and opens them (lhost.c), on
- * a 68020 under vamos: PROGDIR:Layouts holds kodilite and wrongabi
+ * a 68020 under vamos: PROGDIR:Layouts holds showcase and wrongabi
  * (built against another layout.h, never to be used), named .library: the
  * only names vamos opens (LAYOUT_EXT). */
 #ifndef LAYOUT_EXT
@@ -24,13 +24,13 @@ int main(void)
     const struct LayoutEngine *e;
     int n = layout_list(li, 8);
     CHECK(n == 1);
-    CHECK(n >= 1 && !strcmp(li[0].file, "kodilite" LAYOUT_EXT) && !strcmp(li[0].name, "Kodi lite"));
+    CHECK(n >= 1 && !strcmp(li[0].file, "showcase" LAYOUT_EXT) && !strcmp(li[0].name, "Showcase"));
     CHECK(n >= 1 && li[0].min_bits == 15);
     CHECK(layout_loaded() == NULL);
 
-    e = layout_load("kodilite" LAYOUT_EXT);
+    e = layout_load("showcase" LAYOUT_EXT);
     CHECK(e != NULL);
-    CHECK(e && e->abi == (ULONG)LAYOUT_ABI && !strcmp(e->name, "Kodi lite"));
+    CHECK(e && e->abi == (ULONG)LAYOUT_ABI && !strcmp(e->name, "Showcase"));
     CHECK(layout_loaded() == e);
     /* listing again with one open keeps it open */
     CHECK(layout_list(li, 8) == 1);
