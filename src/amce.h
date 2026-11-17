@@ -252,6 +252,8 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale);      /* pixel style, deep RTG: sm
 BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl);
 UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 UWORD sm_pens_used(const struct Smooth *s);     /* pens its shades and logo took */
+const UBYTE *sm_cover(struct Smooth *s, const char *str, LONG n, int face, WORD *dx, WORD *dy,
+                      UWORD *w, UWORD *h, UWORD *mod);  /* text as coverage 0-15 (lkit.c) */
 /* A picture fitted into w x h at (x, y), centred across; whole: at a whole
  * scale (1x, 2x...) when 1x fits. *drawn_h (may be NULL): its height. */
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,

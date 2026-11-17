@@ -964,37 +964,42 @@ LONG sm_fit(struct Smooth *s, const char *str, LONG n, int face, WORD maxw)
     return n;
 }
 
-void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, LONG n,
-             int face, UBYTE fg, UBYTE bg, BOOL opaque)
+/* The box every glyph's ink falls in (accents may rise above the cell),
+ * from the pen position: minx..maxx, miny..maxy; opaque: at least as
+ * wide as the text's advance. */
+static void text_box(const struct Smooth *s, const struct Face *f, const char *str, LONG n, BOOL opaque,
+                     WORD *minx, WORD *maxx, WORD *miny, WORD *maxy)
 {
-    const struct Face *f = &s->face[face < NFACES ? face : 0];
     ULONG pen16 = 0;
-    WORD minx = 0, maxx = 0, miny = 0, maxy = s->cell_h;
     LONG i;
-    if (n <= 0)
-        return;
-    /* the box every glyph's ink falls in (accents may rise above the cell) */
+    *minx = *maxx = *miny = 0;
+    *maxy = s->cell_h;
     for (i = 0; i < n;) {
         const UBYTE *b, *G = glyph_at(f, str, n, &i, &b);
         ULONG q = SNAP_Q(pen16);                /* in quarter pixels */
         WORD gx = (WORD)(q >> 2) + (BYTE)G[G_X], gy = (BYTE)G[G_Y];
         if (G[G_W]) {
-            if (gx < minx)
-                minx = gx;
-            if (gx + G[G_W] > maxx)
-                maxx = gx + G[G_W];
-            if (gy < miny)
-                miny = gy;
-            if (gy + G[G_H] > maxy)
-                maxy = gy + G[G_H];
+            if (gx < *minx)
+                *minx = gx;
+            if (gx + G[G_W] > *maxx)
+                *maxx = gx + G[G_W];
+            if (gy < *miny)
+                *miny = gy;
+            if (gy + G[G_H] > *maxy)
+                *maxy = gy + G[G_H];
         }
         pen16 += adv16(G);
     }
-    if (opaque && (WORD)((pen16 + 8) >> 4) > maxx)
-        maxx = (WORD)((pen16 + 8) >> 4);
-    if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny, opaque))
-        return;
-    pen16 = 0;
+    if (opaque && (WORD)((pen16 + 8) >> 4) > *maxx)
+        *maxx = (WORD)((pen16 + 8) >> 4);
+}
+
+/* Each glyph's coverage into the masks (or cbuf), the box's corner at
+ * minx, miny from the pen position. */
+static void text_put(struct Smooth *s, const struct Face *f, const char *str, LONG n, WORD minx, WORD miny)
+{
+    ULONG pen16 = 0;
+    LONG i;
     for (i = 0; i < n;) {
         const UBYTE *b, *G = glyph_at(f, str, n, &i, &b);
         ULONG q = SNAP_Q(pen16);
@@ -1008,7 +1013,61 @@ void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, L
         }
         pen16 += adv16(G);
     }
+}
+
+void sm_text(struct Smooth *s, struct Gfx *g, WORD x, WORD y, const char *str, LONG n,
+             int face, UBYTE fg, UBYTE bg, BOOL opaque)
+{
+    const struct Face *f = &s->face[face < NFACES ? face : 0];
+    WORD minx, maxx, miny, maxy;
+    if (n <= 0)
+        return;
+    text_box(s, f, str, n, opaque, &minx, &maxx, &miny, &maxy);
+    if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W || !masks_begin(s, maxx - minx, maxy - miny, opaque))
+        return;
+    text_put(s, f, str, n, minx, miny);
     masks_end(s, g, x + minx, y + miny, maxx - minx, maxy - miny, fg, bg, opaque);
+}
+
+/* The text's coverage, 0-15 a pixel, for the layouts' drawing kit to
+ * draw in colours of its own (lkit.c): a box *w x *h, rows *mod bytes
+ * apart, its corner (*dx, *dy) from the pen position (the cell's top
+ * left). The buffer is the Smooth's own, good until its next drawing.
+ * NULL: nothing to draw (or no memory). */
+const UBYTE *sm_cover(struct Smooth *s, const char *str, LONG n, int face, WORD *dx, WORD *dy,
+                      UWORD *w, UWORD *h, UWORD *mod)
+{
+    const struct Face *f = &s->face[face < NFACES ? face : 0];
+    WORD minx, maxx, miny, maxy;
+    BOOL alpha = s->alpha, chunky = s->chunky;
+    ULONG need;
+    if (n <= 0)
+        return NULL;
+    text_box(s, f, str, n, FALSE, &minx, &maxx, &miny, &maxy);
+    if (maxx - minx <= 0 || maxx - minx > MAX_TEXT_W)
+        return NULL;
+    *w = (UWORD)(maxx - minx);
+    *h = (UWORD)(maxy - miny);
+    s->cmod = (*w + 15) & ~15;
+    need = (ULONG)s->cmod * *h;
+    if (need > s->cbuf_size) {
+        if (s->cbuf)
+            FreeVec(s->cbuf);
+        s->cbuf_size = 0;
+        if (!(s->cbuf = AllocVec(need, MEMF_ANY)))
+            return NULL;
+        s->cbuf_size = need;
+    }
+    memset(s->cbuf, 0, need);
+    s->alpha = TRUE;                        /* (masks_put: coverage in 16 steps, into cbuf) */
+    s->chunky = FALSE;
+    text_put(s, f, str, n, minx, miny);
+    s->alpha = alpha;
+    s->chunky = chunky;
+    *dx = minx;
+    *dy = miny;
+    *mod = s->cmod;
+    return s->cbuf;
 }
 
 void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)

@@ -43,7 +43,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/lkcore.c src/lkit.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
@@ -251,7 +251,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -277,6 +277,15 @@ build/pt_host: tests/pt_host.c src/ptcore.c src/ptcore.h
 build/ptmix_host: tests/ptmix_host.c src/ptmix.c src/ptmix.h src/ptcore.c src/ptcore.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/ptmix_host.c src/ptmix.c src/ptcore.c
+
+# The layouts' drawing kit (lkcore.c): drawn into a picture in memory that
+# keeps what a 15, 16 or 24-bit screen keeps, checked; build/lkit-*.ppm to
+# look at.
+build/lkit_host: tests/lkit_host.c src/lkcore.c src/lkcore.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -Wextra -o $@ tests/lkit_host.c src/lkcore.c
+test-lkit: build/lkit_host
+	@build/lkit_host > build/test-lkit.txt && echo "  CHECK layout drawing kit ok" || (cat build/test-lkit.txt; exit 1)
 
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h
