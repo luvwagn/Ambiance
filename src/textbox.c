@@ -286,6 +286,10 @@ static void scroll_direct(struct Gfx *g, struct TextBox *tb)
  * is blanked first: the new text is copied straight over the old. */
 void tb_draw(struct Gfx *g, struct TextBox *tb)
 {
+    if (gfx_off) {
+        gfx_off_hits++;
+        return;
+    }
     WORD x1 = tb->bar_x + GU(g, 3) - 1, y1 = tb->y + tb->h - 1;
     if (!tb->open)
         return;
@@ -345,6 +349,13 @@ void tb_scroll_by(struct TextBox *tb, LONG dpx)
  * after WaitTOF(). */
 void tb_step(struct Gfx *g, struct TextBox *tb)
 {
+    if (gfx_off) {              /* a layout draws: jump, count once */
+        if (tb->pos != tb->target) {
+            tb->pos = tb->target;
+            gfx_off_hits++;
+        }
+        return;
+    }
     LONG d = tb->target - tb->pos, step;
     if (!d)
         return;
@@ -402,6 +413,8 @@ void tb_mouse_up(struct TextBox *tb)
 /* Repaint a thumb whose highlight changed without the position moving. */
 void tb_refresh_bar(struct Gfx *g, struct TextBox *tb)
 {
+    if (gfx_off)
+        return;
     if (tb->open)
         draw_bar(g, tb);
 }

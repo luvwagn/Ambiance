@@ -1070,6 +1070,35 @@ const UBYTE *sm_cover(struct Smooth *s, const char *str, LONG n, int face, WORD 
     return s->cbuf;
 }
 
+/* An icon (ICON_*) as coverage 0-15, n x n, rows mod bytes apart, as
+ * sm_cover's text (lkit.c). NULL: no such icon, or no memory. */
+const UBYTE *sm_icon_cover(struct Smooth *s, int icon, UWORD *n, UWORD *mod)
+{
+    BOOL alpha = s->alpha, chunky = s->chunky;
+    ULONG need;
+    if (icon < 0 || icon >= s->icon_cnt)
+        return NULL;
+    s->cmod = (s->icon_n + 15) & ~15;
+    need = (ULONG)s->cmod * s->icon_n;
+    if (need > s->cbuf_size) {
+        if (s->cbuf)
+            FreeVec(s->cbuf);
+        s->cbuf_size = 0;
+        if (!(s->cbuf = AllocVec(need, MEMF_ANY)))
+            return NULL;
+        s->cbuf_size = need;
+    }
+    memset(s->cbuf, 0, need);
+    s->alpha = TRUE;
+    s->chunky = FALSE;
+    masks_put(s, s->icons + s->icon_bytes * icon, s->icon_n, s->icon_n, 0, 0);
+    s->alpha = alpha;
+    s->chunky = chunky;
+    *n = s->icon_n;
+    *mod = s->cmod;
+    return s->cbuf;
+}
+
 void sm_icon(struct Smooth *s, struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     if (icon < 0 || icon >= s->icon_cnt || !masks_begin(s, s->icon_n, s->icon_n, FALSE))

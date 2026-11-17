@@ -254,6 +254,7 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 UWORD sm_pens_used(const struct Smooth *s);     /* pens its shades and logo took */
 const UBYTE *sm_cover(struct Smooth *s, const char *str, LONG n, int face, WORD *dx, WORD *dy,
                       UWORD *w, UWORD *h, UWORD *mod);  /* text as coverage 0-15 (lkit.c) */
+const UBYTE *sm_icon_cover(struct Smooth *s, int icon, UWORD *n, UWORD *mod);  /* ICON_* likewise */
 /* A picture fitted into w x h at (x, y), centred across; whole: at a whole
  * scale (1x, 2x...) when 1x fits. *drawn_h (may be NULL): its height. */
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
@@ -332,6 +333,8 @@ void gfx_dbuf_start(struct Gfx *g);
 void gfx_dbuf_stop(struct Gfx *g);
 BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
 void gfx_dirty(void);
+extern BOOL gfx_off;            /* a layout draws: the classic drawing not done (lhost.c) */
+extern ULONG gfx_off_hits;      /*   only counted: the screen would have changed */
 BOOL gfx_dbuf_active(void);
 BOOL gfx_quiet_begin(void);     /* around a small update shown without a flip */
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);

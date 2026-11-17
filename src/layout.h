@@ -44,8 +44,8 @@ enum {
 #define LS_BIT(s) (1UL << (s))
 
 /* The sections, in Home's order (the program's MOD_* as these). */
-enum { LSEC_GAMES, LSEC_DEMOS, LSEC_MUSIC, LSEC_PICTURES, LSEC_VIDEOS, LSEC_RADIO, LSEC_SETTINGS,
-       LSEC_OTHER };
+enum { LSEC_GAMES, LSEC_DEMOS, LSEC_MUSIC, LSEC_MODS, LSEC_PICTURES, LSEC_VIDEOS, LSEC_RADIO,
+       LSEC_SETTINGS, LSEC_OTHER };
 
 /* ---------------------------------------------------------------- models */
 /* A row of a list, made by the host. Its strings are the host's, good
