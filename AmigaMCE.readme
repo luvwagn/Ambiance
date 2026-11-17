@@ -8,15 +8,15 @@ Architecture: m68k-amigaos >= 3.1.0
 
 AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi and Windows Media Center: games and demos from Amiga Game Selector
-(AGS), tracker music, internet radio, the music and photos on your Plex
+(AGS) or iGame, tracker music, internet radio, the music and photos on your Plex
 server and your pictures, all in one place, driven by keyboard, mouse or
 joystick.
 
 Copy the AmigaMCE drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
 its modules and its pictures are found by themselves. On any other Amiga,
-Settings > Folders says where your music, modules and pictures are.
-Everything plays inside AmigaMCE, on its own screen and the Amiga's own
+Settings > Folders says where your music, modules and pictures are, and
+iGame's games and demos are found where iGame is installed. Everything plays inside AmigaMCE, on its own screen and the Amiga's own
 sound.
 
 
@@ -33,6 +33,16 @@ Games and demos
   Cache drawer, so they open at once; only letters that changed are read
   again. Deleting the Cache drawer is always safe. Screenshots and fact
   sheets are read by a second process, so the list never waits for disk.
+- Without AGS, or beside it (an "iGame" folder), the games and demos of
+  iGame's list (gameslist.csv in iGame's drawer): Favourites, All, Most
+  played, By genre, By chipset, By year, with iGame's igame.iff screenshot.
+  iGame is looked for by itself the first time and its drawer kept;
+  Settings > Folders > iGame chooses another, or None. Titles start as
+  iGame starts them: WHDLoad with their icon's tooltypes. iGame's list is
+  only read.
+- Without AGS or WHDLoad, with the network up, Games offers to install
+  WHDLoad: its user package fetched from whdload.de, unpacked by
+  xadmaster.library (or LhA in C:), WHDLoad and its tools put in C:.
 
 Mods
 - Modules from the MODS: assign and up to eight folders chosen in
@@ -53,7 +63,7 @@ Radio
   country first, from your Locale settings). Only stations an Amiga can
   play are listed: MP3, working, and no higher in bitrate than this Amiga
   copes with. Now Playing shows the song titles the station sends.
-- With AmiSSL 5 and Settings > Networking > HTTPS on, stations that
+- With AmiSSL 5 or 6 and Settings > Networking > HTTPS on, stations that
   stream over HTTPS are listed and play too, marked HTTPS in the lists
   and on Now Playing.
 
@@ -65,7 +75,7 @@ Music (Plex)
   fast one. On a fast Amiga with flacdec.library, MP3 and FLAC tracks
   play as stored. Plain HTTP on your own network: no AmiSSL needed.
 - Servers are found on the network by Plex's own discovery (GDM). With
-  AmiSSL 5, sign in at plex.tv by a code entered at plex.tv/link on a
+  AmiSSL 5 or 6, sign in at plex.tv by a code entered at plex.tv/link on a
   phone or computer: no token to copy, and your account's servers are
   listed too.
 
@@ -144,7 +154,7 @@ Videos
   programmes one after another (a disc of episodes); N and P, or the
   controls' |< and >|, the previous and next chapter or programme. Of
   its sound tracks, a stereo one first (MPEG audio, then AC-3), then
-  the others. Needs Libs/amcedvd.library (in the archive); no encrypted
+  the others. Needs Libs/dvdnav.library (in the archive); no encrypted
   (CSS) discs. Decoded by the CPU, a disc with menus plays from its
   start, its menus' buttons drawn over the picture: arrows or the stick
   and Return or fire, or the pointer and a click; M, a CD32 pad's green
@@ -195,7 +205,9 @@ Screens
 Requirements
 ------------
 - Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG.
-- Amiga Game Selector 3 for Games and Demos (found through AGS:).
+- Amiga Game Selector 3 for Games and Demos (found through AGS:), or
+  iGame's list with WHDLoad. To install WHDLoad from Games:
+  xadmaster.library or LhA in C:.
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
 - For MP3: nothing more (Libs/amcempega.library is in the archive);
   mpega.library or an MHI driver may be chosen instead. For FLAC:
@@ -205,7 +217,7 @@ Requirements
   DeliTracker's, modplug.library and
   xfdmaster.library for more module formats (the installer offers the
   two libraries); picture datatypes; AHI for sound through a sound card;
-  AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv).
+  AmiSSL 5 or 6 for HTTPS (secure radio stations, signing in at plex.tv).
 
 
 Installation
@@ -310,7 +322,7 @@ Settings
                the MUSIC:, MODS:, PICTURES: and VIDEOS: assigns on or
                off, folders added (Add a folder...) or taken out (Fire
                twice); AGS's own drawers are found by themselves
-  Networking   HTTPS: secure connections, with AmiSSL 5 (radio stations,
+  Networking   HTTPS: secure connections, with AmiSSL 5 or 6 (radio stations,
                  signing in at plex.tv)
                Radio: the highest bitrate listed, which
                  radio-browser.info server the lists come from
@@ -331,7 +343,7 @@ Setting up Plex
 ---------------
 1. Settings > Networking > Plex: turn Plex on, then choose your server
    under Plex server (servers on the network are found for you).
-2. If the server asks for a sign-in: with AmiSSL 5 installed, turn on
+2. If the server asks for a sign-in: with AmiSSL 5 or 6 installed, turn on
    Settings > Networking > HTTPS, then choose Settings > Networking >
    Plex > Sign in at plex.tv and enter the code it shows at plex.tv/link
    on a phone or computer. Your account's servers then appear under Plex
@@ -353,22 +365,28 @@ Not there yet
 
 History
 -------
-0.9.1  Flow, Now Playing's visualisation for graphics cards: the
-       picture carried on and on, zoomed, turned and rippled, the
-       sound's wave drawn in, at half the screen's resolution on fast
-       Amigas (a quarter on others, coarser where frames come slowly);
-       F shows it on a screen of its own, with a video's controls while
-       the mouse moves. AmigaAMP's visual plug-ins run from AmigaMCE (F,
-       Settings > Display > Full screen visual). Text blended in 16
-       steps on fast Amigas with a graphics card; Extra large text in a
-       window; numbers that change (times, the Debug readout) no longer
-       shift what follows them. Colours: five schemes (Settings >
-       Display): Midnight, Graphite, WB1.3, Emerald and Amethyst. A module back at the next start plays
-       from its beginning (a track still from where it was). Modules
-       the mixer plays follow Settings > Sound: AHI, or Paula at 14
-       bits, changed as they play, and mixed 6 dB louder than before; a
-       video or anim with sound stops them meanwhile and they go on
-       after.
+0.9.1.1 On AGA and other native screens, the UI draws only on the
+       bitplanes its colours need (lists scrolling, the scroll bar, the
+       footer, Now Playing's time and position, the dancing bars): less
+       blitter time on every frame. Rows saying Plex is off or has no
+       server open Settings > Networking > Plex.
+0.9.1  Flow, Now Playing's visualisation for graphics cards: the picture
+       carried on and on, zoomed, turned and rippled, the sound's wave
+       drawn in, at half the screen's resolution on fast Amigas (a
+       quarter on others, coarser where frames come slowly); F shows it
+       on a screen of its own, with a video's controls while the mouse
+       moves. AmigaAMP's visual plug-ins run from AmigaMCE (F, Settings
+       > Display > Full screen visual). Text blended in 16 steps on fast
+       Amigas with a graphics card; Extra large text in a window;
+       numbers that change (times, the Debug readout) no longer shift
+       what follows them. Colours: five schemes (Settings > Display):
+       Midnight, Graphite, WB1.3, Emerald and Amethyst. HTTPS by AmiSSL
+       6 (OpenSSL 4.1) where it is installed, else AmiSSL 5. A module
+       back at the next start plays from its beginning (a track still
+       from where it was). Modules the mixer plays follow Settings >
+       Sound: AHI, or Paula at 14 bits, changed as they play, and mixed
+       6 dB louder than before; a video or anim with sound stops them
+       meanwhile and they go on after.
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it
@@ -388,7 +406,7 @@ History
        RTG screens without one. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
        controls, the sound track the card plays best
-       (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
+       (Libs/dvdnav.library: libdvdread and libdvdnav). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
        (Settings > Display: Use overlay when available). One set of
        control glyphs for Now playing, the mini player, ANIMs, videos

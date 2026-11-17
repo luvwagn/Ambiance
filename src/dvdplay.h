@@ -2,7 +2,7 @@
  * AmigaMCE - DVD-Video discs: found, and their main film played (dvdplay.c)
  * Copyright (c) 2026 Brian King, MIT licence
  *
- * Through amcedvd.library (src/dvdlib), opened only while a disc is
+ * Through dvdnav.library (extras/dvdnav), opened only while a disc is
  * played. Its sectors are read from the drive (dvddisc.c), not through the
  * volume's filesystem, which only says a DVD is there; an image's from its
  * file.
@@ -29,7 +29,7 @@ LONG dvd_volumes(struct DvdVol *v, LONG max);
  * or goes (no disc is read: cheap enough to ask every second). */
 ULONG dvd_volumes_sig(void);
 
-BOOL dvd_lib_there(void);       /* amcedvd.library in PROGDIR:Libs or LIBS: */
+BOOL dvd_lib_there(void);       /* dvdnav.library in PROGDIR:Libs or LIBS: */
 
 /* ---- the main film of one */
 struct DvdPlay;
@@ -68,7 +68,7 @@ void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v);  /* v: the title now (
 void dvdplay_close(struct DvdPlay *dp);
 /* ---- the disc's own menus: from its first play, as a DVD player starts
  * one, for the CPU's decoding (AmigaMCE draws their buttons). The menus
- * it has (amcedvd.h's DVDMB_ bits; 0: none, it only plays). */
+ * it has (dvdnav.h's DVDMB_ bits; 0: none, it only plays). */
 ULONG dvdplay_menus(struct DvdPlay *dp);
 /* From the disc's start, its own navigation from now on: FALSE if not. */
 BOOL dvdplay_nav(struct DvdPlay *dp);

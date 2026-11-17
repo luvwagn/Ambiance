@@ -12,6 +12,11 @@
 #include "dvdplay.h"
 #include "dvddisc.h"
 #include "dvdiso.h"
+#include "igame.h"
+#include "unarc.h"
+#include "whdinst.h"
+#include "lhost.h"
+#include "lkit.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -79,6 +84,7 @@ struct Page {
     UBYTE setp;                 /* a Settings page: SETP_* */
     UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
     UBYTE ags;                  /* a Games or Demos list (AGS's menus) */
+    UBYTE igame;                /* iGame's list (igame.c): 1, 2 most played first */
     LONG plex_more, plex_total; /* a long Plex list: its parts read (count), its total */
     ULONG plex_parts[4];        /* which parts of PLEX_PART entries are read (a bit each) */
     BOOL plex_letters;          /* its first characters asked for (placeholders labelled) */
@@ -102,6 +108,9 @@ struct Page {
 static struct Gfx g;
 static struct Caps caps;
 static struct Ags ags;
+static struct IgCat igcat;      /* iGame's list (igame.c): igcat.n 0 when none */
+static char ig_setting[256];     /* AmigaMCE/iGame as read: "" unset, "none", or a drawer */
+static BOOL ig_off(void);
 static struct Page pages[MAXDEPTH];
 static int depth;
 static int menu[MOD_COUNT], nmenu, menu_sel;
@@ -169,6 +178,8 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
+       ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
+       ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8,    /* Classic + LV_MAX */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1475,8 +1486,19 @@ static void build_ags_root(struct Page *p, int mod)
         }
 }
 
-static void no_ags_text(struct Page *p)
+static void no_ags_text(struct Page *p, int mod)
 {
+    if (igcat.n) {
+        /* iGame's list is read, with none of this kind in it */
+        text_para(p, mod == MOD_DEMOS ? _("iGame's list has no demos in it, and Amiga Game Selector "
+                                          "was not found.")
+                                      : _("iGame's list has no games in it, and Amiga Game Selector "
+                                          "was not found."));
+        text_line(p, "");
+        text_para(p, _("AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro "
+                     "or Diskmag, or when it is in a drawer named Demos."));
+        return;
+    }
     text_line(p, _("Amiga Game Selector was not found."));
     text_line(p, "");
     text_para(p, _("Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and "
@@ -1486,6 +1508,10 @@ static void no_ags_text(struct Page *p)
     text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
                  "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));
+    text_line(p, "");
+    text_line(p, "");
+    text_para(p, _("iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame "
+                 "when it starts, or Settings > Folders > iGame says where its drawer is."));
     text_line(p, "");
     text_para(p, _("Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders "
                  "says where your music, modules, pictures and animations are."));
@@ -1581,6 +1607,20 @@ static void build_sysinfo(struct Page *p)
         /* S:AGS-Stuff did not run at boot; AmigaMCE filled the gaps. */
         text_line(p, _("Assigns AmigaMCE added (AGS-Stuff did not run):"));
         text_para(p, ags.added);
+    }
+    if (igcat.n)
+        sprintf(line, _("iGame: %.120s, %ld games, %ld demos"), igcat.dir, (long)igcat.games,
+                (long)igcat.demos);
+    else
+        sprintf(line, _("iGame: %s"), ig_off() ? _("none") : ig_setting[0] ? _("no list read")
+                                                                          : _("not found"));
+    text_line(p, line);
+    {
+        char where[64];
+        sprintf(line, _("WHDLoad: %s"), whd_present(where, sizeof(where)) ? where : _("not installed"));
+        text_line(p, line);
+        sprintf(line, _("Archives unpacked by: %s"), unarc_how() ? unarc_name(unarc_how()) : _("nothing"));
+        text_line(p, line);
     }
     sprintf(line, _("AGS machine setting (HW): %s"), ags.hw[0] ? ags.hw : _("not set"));
     text_line(p, line);
@@ -2145,7 +2185,7 @@ static void load_net_if(void)
         net_if_apply();
 }
 
-/* Settings > Networking > HTTPS: secure connections by AmiSSL 5 (tls.c),
+/* Settings > Networking > HTTPS: secure connections by AmiSSL 6 or 5 (tls.c),
  * off by default, and only with AmiSSL installed: Radio lists and plays
  * https: stations, and Plex signs in at plex.tv. */
 static BOOL radio_https;
@@ -2413,13 +2453,13 @@ static void sel_off_heading(struct Page *p, LONG d)
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
-       SETP_VIDEO };
+       SETP_VIDEO, SETP_IGAME, SETP_WHD };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
-    N_("Video") };
+    N_("Video"), N_("iGame"), N_("WHDLoad") };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2584,6 +2624,8 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Colours"), _(ui_scheme_names[ui_scheme]), ACT_COLOURS, MARK_ARROW);
+    if (gfx_mode_is_rtg(g.mode))
+        action_item(p, _("Layout"), lv_label(), ACT_LAYOUTS, MARK_ARROW);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     fullvis_scan();
     action_item(p, _("Full screen visual (F)"), fullvis[0] ? (const char *)FilePart((STRPTR)fullvis) : _("Flow"),
@@ -2939,6 +2981,8 @@ static int fs_places(int k)
 }
 
 /* Settings > Folders: where Music, Mods, Pictures and Videos find their files. */
+static const char *ig_tag(void);
+
 static void build_folders_settings(struct Page *p)
 {
     int k;
@@ -2952,6 +2996,9 @@ static void build_folders_settings(struct Page *p)
             strcpy(tag, _("none yet"));
         action_item(p, _(fs[k].name), tag, ACT_FSSET0 + k, MARK_ARROW);
     }
+    action_item(p, _("iGame"), ig_tag(), ACT_IGSET, MARK_ARROW);
+    action_item(p, "WHDLoad", whd_present(NULL, 0) ? _("installed") : _("not installed"),
+                ACT_WHDPAGE, MARK_ARROW);
 }
 
 /* Settings > Folders > Music (Modules, Pictures): the kind's assign (on or
@@ -2971,6 +3018,255 @@ static void build_folder_settings(struct Page *p)
     for (i = 0; i < f->n; i++)
         action_item(p, f->dir[i], fs_rm == i ? _("Fire again: remove") : "", ACT_FSDIR0 + i, MARK_NONE);
     action_item(p, _("Add a folder..."), f->n < FS_DIRS ? "" : _("eight at most"), ACT_FSADD, MARK_NONE);
+}
+
+/* ------------------------------------------------------------ iGame's list
+ * AmigaMCE/iGame says where iGame's drawer is (its gameslist.csv), or
+ * "none" (or "n/a") for no list. Unset, iGame is looked for at each start
+ * (igame.c), and the drawer found is saved there: from then on it is the
+ * setting, changed or turned off in Settings > Folders > iGame. Its games
+ * and demos are listed beside AGS's, or alone where there is no AGS. */
+static BOOL ig_off(void)
+{
+    return !amce_stricmp(ig_setting, "none") || !amce_stricmp(ig_setting, "n/a");
+}
+
+/* iGame's list read again as the setting says; unset, and look: iGame
+ * looked for, and the drawer found saved as the setting. */
+static void igame_start(BOOL look)
+{
+    char found[256];
+    ig_free(&igcat);
+    ig_setting[0] = 0;
+    if (GetVar((CONST_STRPTR)IG_VAR, (STRPTR)ig_setting, sizeof(ig_setting), GVF_GLOBAL_ONLY) <= 0)
+        ig_setting[0] = 0;
+    if (ig_off()) {
+        amce_log("igame", "set to none: no list");
+        return;
+    }
+    if (!ig_setting[0]) {
+        /* the hard disks searched the first time only; the usual places each start */
+        char looked[4];
+        BOOL deep = GetVar((CONST_STRPTR)IG_LOOKED_VAR, (STRPTR)looked, sizeof(looked),
+                           GVF_GLOBAL_ONLY) <= 0;
+        if (!look)
+            return;
+        if (deep)
+            save_setting(IG_LOOKED_VAR, "1");
+        if (!ig_discover(found, sizeof(found), deep))
+            return;
+        amce_strlcpy(ig_setting, found, sizeof(ig_setting));
+        save_setting(IG_VAR, found);
+    }
+    ig_load(&igcat, ig_setting);
+}
+
+/* Folders' iGame row: what it lists, or why nothing. */
+static const char *ig_tag(void)
+{
+    static char tag[48];
+    if (ig_off())
+        strcpy(tag, _("none"));
+    else if (!ig_setting[0])
+        strcpy(tag, _("not found"));
+    else if (igcat.n)
+        sprintf(tag, igcat.n == 1 ? _("%ld entry") : _("%ld entries"), (long)igcat.n);
+    else
+        strcpy(tag, _("no list there"));
+    return tag;
+}
+
+static void build_igame_settings(struct Page *p)
+{
+    char line[320];
+    p->setp = SETP_IGAME;
+    if (ig_off())
+        strcpy(line, _("No iGame list is shown."));
+    else if (!ig_setting[0])
+        strcpy(line, _("iGame was not found."));
+    else if (igcat.n)
+        sprintf(line, _("%.200s: %ld games, %ld demos"), ig_setting, (long)igcat.games,
+                (long)igcat.demos);
+    else
+        sprintf(line, _("%.200s: no gameslist.csv read"), ig_setting);
+    heading_item(p, line);
+    action_item(p, _("Choose iGame's drawer..."), "", ACT_IGCHOOSE, MARK_NONE);
+    action_item(p, _("Find iGame"), "", ACT_IGFIND, MARK_NONE);
+    action_item(p, _("None: no iGame list"), "", ACT_IGNONE, ig_off() ? MARK_CHECK_ON : MARK_CHECK_OFF);
+}
+
+/* ------------------------------------------------------------ WHDLoad
+ * Without AGS (which carries its own) and without WHDLoad in C:, on an
+ * Amiga with its network up, Games' and Demos' first pages begin with
+ * Install WHDLoad... until it is installed or Not now is chosen; Settings
+ * > Folders > WHDLoad always leads to the same page. Download and install
+ * fetches the user package from whdload.de into T: (net.c writes it to
+ * the file as it comes), unpacks it (unarc.c: xadmaster.library, else
+ * C:LhA) and puts WHDLoad in C: (whdinst.c). */
+static struct NetJob *whd_job;      /* the package on its way, NULL none */
+static void plex_settings_again(BOOL full);
+static ULONG whd_shown = ~0UL;      /* bytes last said in the footer */
+
+static BOOL whd_declined(void)
+{
+    char v[8];
+    return GetVar((CONST_STRPTR)WHD_OFFER_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
+           !amce_stricmp(v, "no");
+}
+
+/* Games and Demos offer it: network up, no AGS, no WHDLoad, not declined. */
+static BOOL whd_offer(void)
+{
+    return caps.net && !ags.found && !whd_present(NULL, 0) && !whd_declined();
+}
+
+/* A paragraph as dim rows of a list page, passed over by the cursor. */
+static void head_para(struct Page *p, const char *s)
+{
+    LONG i, from = p->list.count;
+    text_para(p, s);
+    for (i = from; i < p->list.count; i++)
+        p->list.items[i].flags |= ITEM_HEAD;
+}
+
+static void build_whd_page(struct Page *p)
+{
+    char where[64], line[160];
+    int how = unarc_how();
+    p->setp = SETP_WHD;
+    if (whd_present(where, sizeof(where))) {
+        sprintf(line, _("WHDLoad is installed: %s"), where);
+        heading_item(p, line);
+        head_para(p, _("Games that need a Kickstart image look for it in Devs:Kickstarts "
+                       "(kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot "
+                       "supply those: they come from your own Amiga's ROM, or from Amiga Forever."));
+        return;
+    }
+    head_para(p, _("WHDLoad starts games and demos installed to hard disk, as iGame lists them. "
+                   "It is not installed on this Amiga."));
+    head_para(p, _("AmigaMCE can fetch WHDLoad's user package from its author's site, "
+                   "whdload.de (free of charge), and put WHDLoad and its tools in C:."));
+    if (how == UNARC_NONE)
+        head_para(p, _("Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) "
+                       "or LhA in C: (Aminet: util/arc/lha.run). Neither is installed."));
+    if (!caps.net)
+        heading_item(p, _("The network is not up."));
+    if (whd_job) {
+        if (whd_job->size)
+            sprintf(line, _("Downloading: %lu of %lu KB"), (unsigned long)(whd_job->got >> 10),
+                    (unsigned long)(whd_job->size >> 10));
+        else
+            sprintf(line, _("Downloading: %lu KB"), (unsigned long)(whd_job->got >> 10));
+        heading_item(p, line);
+    } else if (caps.net && how != UNARC_NONE)
+        action_item(p, _("Download and install WHDLoad"), WHD_HOST, ACT_WHDGO, MARK_NONE);
+    if (!whd_declined())
+        action_item(p, _("Not now"), _("Games stops asking"), ACT_WHDNO, MARK_NONE);
+}
+
+/* The Games or Demos page's first row: the offer. */
+static void whd_offer_row(struct Page *p)
+{
+    struct Item *it;
+    if (!whd_offer())
+        return;
+    it = list_add_first(&p->list, _("Install WHDLoad..."), _("not installed"), "", IT_ACTION);
+    if (it) {
+        it->action = ACT_WHDPAGE;
+        it->mark = MARK_ARROW;
+    }
+}
+
+static void whd_go(void)
+{
+    struct NetJob *j;
+    if (whd_job)
+        return;
+    if (!caps.net) {
+        set_msg(_("The network is not up"));
+        return;
+    }
+    if (unarc_how() == UNARC_NONE) {
+        set_msg(_("Unpacking needs xadmaster.library or C:LhA"));
+        return;
+    }
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    whd_cleanup();                          /* a try before, left behind */
+    amce_strlcpy(j->host, WHD_HOST, sizeof(j->host));
+    amce_strlcpy(j->path, WHD_PATH, sizeof(j->path));
+    amce_strlcpy(j->file, WHD_ARCHIVE, sizeof(j->file));
+    j->tls = https_ok();                    /* HTTPS where it can be; else HTTP */
+    j->wait_s = 30;
+    whd_job = j;
+    whd_shown = ~0UL;
+    amce_log("whdload: fetching", j->tls ? "https://" WHD_HOST WHD_PATH : "http://" WHD_HOST WHD_PATH);
+    net_submit(j);
+    set_msg(_("Downloading WHDLoad from whdload.de..."));
+    plex_settings_again(FALSE);
+}
+
+/* Once a second while it comes: how much, in the footer. */
+static void whd_tick(void)
+{
+    char m[80];
+    if (!whd_job || whd_job->got == whd_shown)
+        return;
+    whd_shown = whd_job->got;
+    if (whd_job->size)
+        sprintf(m, _("Downloading WHDLoad: %lu of %lu KB"), (unsigned long)(whd_shown >> 10),
+                (unsigned long)(whd_job->size >> 10));
+    else
+        sprintf(m, _("Downloading WHDLoad: %lu KB"), (unsigned long)(whd_shown >> 10));
+    set_msg(m);
+}
+
+/* The package here (or not): unpacked, installed, tidied away. */
+static void whd_done(struct NetJob *j)
+{
+    char why[120], done[120], m[200];
+    BOOL ok = FALSE;
+    whd_job = NULL;
+    if (!j->body || j->err[0]) {
+        sprintf(m, _("WHDLoad could not be downloaded: %.100s"),
+                j->err[0] ? j->err : _("no answer"));
+        amce_log("whdload", m);
+        set_msg(m);
+    } else {
+        sprintf(m, "%lu bytes from %.60s in %lu ms", (unsigned long)j->got, j->server,
+                (unsigned long)j->ms);
+        amce_log("whdload: downloaded", m);
+        busy_begin();
+        set_msg(_("Unpacking WHDLoad..."));
+        ok = unarc_extract(WHD_ARCHIVE, WHD_DIR, why, sizeof(why)) &&
+             whd_install_from(WHD_DIR, why, sizeof(why), done, sizeof(done));
+        whd_cleanup();
+        busy_end(TRUE);
+        if (ok) {
+            amce_log("whdload", done);
+            set_msg(done);
+        } else {
+            sprintf(m, _("WHDLoad was not installed: %.120s"), why);
+            amce_log("whdload", m);
+            set_msg(m);
+        }
+    }
+    if (j->body)
+        FreeVec(j->body);
+    FreeVec(j);
+    plex_settings_again(FALSE);             /* its page: installed, or the button again */
+}
+
+static void ig_said(void)
+{
+    char m[120];
+    if (igcat.n)
+        sprintf(m, _("iGame's list: %ld games, %ld demos"), (long)igcat.games, (long)igcat.demos);
+    else
+        strcpy(m, _("iGame's list could not be read"));
+    set_msg(m);
 }
 
 static void draw_footer(void);
@@ -3004,6 +3300,8 @@ static void settings_rebuild(void)
         case SETP_FOLDSET: build_folder_settings(q); break;
         case SETP_FOLDERS: build_folders_settings(q); break;
         case SETP_LANG: build_lang_settings(q); break;
+        case SETP_IGAME: build_igame_settings(q); break;
+        case SETP_WHD: build_whd_page(q); break;
         default: build_settings(q); break;
         }
         if (q->setp == SETP_FOLDSET)
@@ -3421,9 +3719,35 @@ static void build_root_pages_now(int mod)
             if (p) {
                 p->ags = 1;
                 build_ags_root(p, mod);
+                if (ig_count(&igcat, mod == MOD_DEMOS) > 0) {
+                    /* iGame's list too, a folder after AGS's */
+                    char path[64];
+                    ig_page_path(path, sizeof(path), mod == MOD_DEMOS, "root");
+                    list_add(&p->list, "iGame", path, "iGame", IT_DIR);
+                }
+            }
+        } else if (ig_count(&igcat, mod == MOD_DEMOS) > 0 &&
+                   (p = page_push(PT_LIST, _(mod_names[mod])))) {
+            /* no AGS: iGame's list in its place */
+            char path[64];
+            BOOL ordered;
+            p->ags = 1;
+            p->igame = 1;
+            ig_page_path(path, sizeof(path), mod == MOD_DEMOS, "root");
+            ig_read(&igcat, path, &p->list, &ordered);
+            whd_offer_row(p);
+        } else if (whd_offer() && (p = page_push(PT_LIST, _(mod_names[mod])))) {
+            /* nothing to list yet, and WHDLoad to offer: the offer, then why */
+            whd_offer_row(p);
+            text_line(p, "");
+            no_ags_text(p, mod);
+            {
+                LONG i;
+                for (i = 1; i < p->list.count; i++)
+                    p->list.items[i].flags |= ITEM_HEAD;
             }
         } else if ((p = page_push(PT_TEXT, _(mod_names[mod]))))
-            no_ags_text(p);
+            no_ags_text(p, mod);
         break;
     case MOD_MODS:
         build_mods_root();
@@ -4310,10 +4634,18 @@ static void draw_footer(void)
     }
     if (foot_hidden)
         foot_over = TRUE;
+    /* Redrawn as the hints follow the selection: on a native screen planes
+     * 0-3 only (its pens are below 16, and nothing else draws in its
+     * place, cleared on all planes with the whole screen), half an AGA
+     * screen's. (Over the content, a window's: all of them.) */
+    if (g.planar && !foot_hidden)
+        SetWriteMask(g.rp, 0x0F);
     gfx_fill(&g, 0, fy - U(1), g.w - 1, fy - 1, PEN_RULE);
     gfx_fill(&g, 0, fy, g.w - 1, g.h - 1, PEN_BAR);
     gfx_text(&g, U(6), fy + (g.h - fy - g.font_h) / 2, msg[0] ? msg : hint_text(),
              msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12) - gfx_window_grip(&g), TS_SMALL);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
 }
 
 /* Sizing the window by its grip: pressed there, the pointer followed (by
@@ -4688,6 +5020,8 @@ static BOOL ov_eligible(const struct Page *p)
     LONG i, runs = 0;
     if (p->type != PT_LIST || p->list.count <= list_visible())
         return FALSE;
+    if (p->igame == 2)
+        return FALSE;                       /* iGame's most played: not by title */
     if (p->radio && !p->plex)
         /* Radio: Countries alone is A to Z (this Amiga's first); stations
          * and genres come by votes, listeners or size, where a letter
@@ -4906,7 +5240,10 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     }
     if (it->kind != IT_RUN)
         return 0;
-    item_path(it, path, max);
+    if (p->igame)
+        ig_shot_base(it->path, path, max);  /* <folder>/igame: igame.iff, and no .txt */
+    else
+        item_path(it, path, max);
     *shot = SHOT_AGS;
     return LJ_ENTRY;
 }
@@ -5120,7 +5457,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             pv_line(line, w);
         if (ic[q].kind == DVDI_VIDEO || ic[q].kind == DVDI_UDF) {
             if (!dvd_lib_there())
-                pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+                pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
             else {
                 pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
                 pv_line(_("N and P: the next and previous chapter or programme"), w);
@@ -5139,7 +5476,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         /* a DVD: what Fire does (the disc itself read only then) */
         pv_line(_("A DVD-Video disc"), w);
         if (!dvd_lib_there()) {
-            pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+            pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
             return;
         }
         pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
@@ -5318,7 +5655,12 @@ static void pv_draw_text(struct Page *p)
         return;
     if (p->pics)
         pv_pics_lines(&p->list.items[p->sel], j, pv_pic_drawn && g.pic_w, w - U(9));
-    else
+    else if (p->igame) {
+        /* iGame's entry: its fields (igame.c), in place of a fact sheet */
+        LONG n = ig_facts(ig_lookup(&igcat, p->list.items[p->sel].path), fact_buf, FACT_LINES);
+        for (i = 0; i < n; i++)
+            pv_line(fact_buf[i], w - U(9));
+    } else
         /* the whole fact sheet, in a text box with a scroll bar when it is
          * longer than the room left (wheel or bar; Up/Down stay with the list) */
         for (i = 0; i < j->nlines; i++)
@@ -5863,11 +6205,21 @@ static BOOL ov_over(struct Page *p)
 
 /* Stamp the letter: in its column as it is, or over the rows outlined in
  * the background's colour (so the rows' text under it does not run into
- * it). */
+ * it). On a native screen only the list's planes are written: its pens
+ * (0 and 4) and the rows' under it are below 8 (16 with a Now playing
+ * row), and planes above are clear there, in its column too (cleared on
+ * all planes before it shows): nine template blits a step on 3 planes,
+ * not 8. */
+static UBYTE list_planes(const struct Page *p);
+
 static void ov_stamp(void)
 {
+    UBYTE was;
     if (!ov.bl)
         return;
+    was = g.rp->Mask;
+    if (g.planar)
+        SetWriteMask(g.rp, list_planes(ov.page));
     if (!has_aside(ov.page)) {
         static const BYTE d[8][2] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
                                       { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };
@@ -5877,6 +6229,8 @@ static void ov_stamp(void)
             gfx_bigletter_draw(&g, ov.bl, ov.x + d[i][0] * o, ov.y + d[i][1] * o, PEN_BG);
     }
     gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
+    if (g.planar)
+        SetWriteMask(g.rp, was);
 }
 
 /* While the rows are painted in a batch, the letter waits to be stamped
@@ -6053,10 +6407,11 @@ static BOOL np_row(const struct Item *it)
 
 /* The planes a list's rows are drawn and moved on (a native screen): its
  * pens are below 8, so 0-2 (3/8 of the blitter's work), except where it
- * has a Now playing row, whose orange (pen 8) is on plane 3 too. */
+ * has a Now playing row, whose orange (pen 8) is on plane 3 too: 0-3,
+ * still half an AGA screen's (no list pen is 16 or more). */
 static UBYTE list_planes(const struct Page *p)
 {
-    return p && p->list.count && np_row(&p->list.items[0]) ? 0xFF : 0x07;
+    return p && p->list.count && np_row(&p->list.items[0]) ? 0x0F : 0x07;
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
@@ -6077,9 +6432,10 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
                mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
                ? PEN_RULE : PEN_BG;
-    /* Every list pen is below 8 and planes 3+ are clear in the list (the
-     * pane is cleared on all planes when the page is drawn), so on native
-     * screens only planes 0-2 are written: 3/8 of the blitter work. */
+    /* Every list pen is below 8 (16 with a Now playing row) and the planes
+     * above are clear in the list (the pane is cleared on all planes when
+     * the page is drawn), so on native screens only planes 0-2 (0-3) are
+     * written: 3/8 of the blitter work (half). */
     if (g.planar)
         SetWriteMask(g.rp, list_planes(p));
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
@@ -6131,7 +6487,10 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
     *ty = g.list_top + (WORD)(n > vis ? (h - t) * p->top / (n - vis) : 0);
 }
 
-static void draw_gutter(struct Page *p)
+/* planes: what a native screen writes (draw_gutter: 0-2, its pens being
+ * below 8 and the column's planes above clear once the list is drawn;
+ * draw_list_rows: all, as it draws the column the first time) */
+static void draw_gutter_planes(struct Page *p, UBYTE planes)
 {
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
@@ -6139,6 +6498,8 @@ static void draw_gutter(struct Page *p)
         return;                             /* no column */
     gut_geom(p, &bx0, &bx1, &ty, &th);
     (void)vis;
+    if (g.planar)
+        SetWriteMask(g.rp, planes);
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
     if (ty > y0)
         gfx_fill(&g, bx0, y0, bx1, ty - 1, PEN_RULE);           /* the track, above */
@@ -6146,6 +6507,15 @@ static void draw_gutter(struct Page *p)
         gfx_fill(&g, bx0, ty + th, bx1, y1, PEN_RULE);          /* and below */
     gfx_fill(&g, bx0, ty, bx1, ty + th - 1,
              gut.drag ? PEN_WHITE : mouse_mode && bar_up ? PEN_TEXT : PEN_DIM);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
+}
+
+/* The bar again as it moves (each step that scrolls the list, the mouse
+ * showing, hiding or dragging it): planes 0-2, not the screen's 8. */
+static void draw_gutter(struct Page *p)
+{
+    draw_gutter_planes(p, 0x07);
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
@@ -6314,15 +6684,16 @@ static void draw_list_rows(struct Page *p)
         ov_hold = was;
     }
     gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
-    draw_gutter(p);
+    draw_gutter_planes(p, 0xFF);
     if (!ov_hold && ov_over(p))
         ov_stamp();
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
- * screen. Native screens: a blit inside the screen bitmap, masked to
- * planes 0-2 (every list pen is below 8 and rows are painted with
- * RectFill, so planes 3+ are zero there). RTG: the same blit, unmasked;
+ * screen. Native screens: a blit inside the screen bitmap, masked to the
+ * list's planes (list_planes: every list pen is below 8, or 16 with a Now
+ * playing row, and rows are painted with RectFill, so the planes above
+ * are zero there). RTG: the same blit, unmasked;
  * the RTG system handles the overlap and accelerates it. */
 /* Right edge of what rows top..top+vis-1 have painted outside the bar:
  * the copy need go no further, since everything right of it is background
@@ -6362,6 +6733,10 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
+    if (gfx_off) {                          /* a layout draws the screen */
+        gfx_off_hits++;
+        return;
+    }
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
     LONG vis = list_visible();
     if (ov.on && has_aside(cur()) && x1 > ov.strip_x - 1)
@@ -7029,8 +7404,22 @@ static void np_layout(void)
     }
 }
 
-/* The time, the bar and the position: only what changed. */
+/* The time, the bar and the position: only what changed. Several times a
+ * second for a module (its row): on a native screen planes 0-3 only, its
+ * pens being below 16 (the bar's orange is 8) and these lines never
+ * reaching the cover, half an AGA screen's work. */
+static void np_draw_progress_(BOOL full, const struct MpStatus *st);
+
 static void np_draw_progress(BOOL full, const struct MpStatus *st)
+{
+    if (g.planar)
+        SetWriteMask(g.rp, 0x0F);
+    np_draw_progress_(full, st);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
+}
+
+static void np_draw_progress_(BOOL full, const struct MpStatus *st)
 {
     char t[160], a[64], b[24], pos[160];
     WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, bw = np.bar_w, lw, rw;
@@ -9172,6 +9561,8 @@ static void menu_select(int i)
 #define MENU_SLIDE_SLOW  40
 static void menu_slide(UWORD from, UWORD to)
 {
+    if (gfx_off)
+        return;
     ULONG t0 = time_ms(), t, tf;
     UWORD keep = g.menu_w, prev = from;
     WORD y0 = U(25), y1 = g.footer_y - 2;
@@ -9355,6 +9746,22 @@ static void open_dir_now(struct Item *it)
         return;
     }
     p->ags = 1;
+    if (ig_page(it->path)) {
+        /* iGame's list: read from memory (igame.c) */
+        BOOL ordered;
+        n = ig_read(&igcat, it->path, &p->list, &ordered);
+        p->igame = ordered ? 2 : 1;
+        if (n <= 0) {
+            page_pop();
+            set_msg(n < 0 ? _("iGame's list is not read now") : _("That list is empty"));
+            return;
+        }
+        plex_shortcut_fix(p);
+        msg[0] = 0;
+        draw_pane(TRUE);
+        draw_footer();
+        return;
+    }
     n = page_read_ags(p, it, 2 * list_visible());   /* the rest follows (ch_pump) */
     if (n <= 0) {
         page_pop();
@@ -9377,7 +9784,11 @@ static void open_detail(struct Item *it)
     if (!p)
         return;
     item_path(it, p->base, sizeof(p->base));
-    n = ags_read_txt(p->base, fact_buf, FACT_LINES);
+    if (p > &pages[0] && p[-1].igame) {
+        p->igame = 1;                       /* iGame's entry: its fields */
+        n = ig_facts(ig_lookup(&igcat, p->base), fact_buf, FACT_LINES);
+    } else
+        n = ags_read_txt(p->base, fact_buf, FACT_LINES);
     if (!n)
         text_line(p, it->label);
     for (i = 0; i < n; i++)
@@ -9436,6 +9847,7 @@ static void log_free(const char *what)
  * was is kept (nav_mem), so the same entry comes back afterwards. */
 static void release_for_launch(void)
 {
+    lv_release();                   /* (a layout: its memory too) */
     log_free("free before launch");
     if (mp_loaded())
         amce_log("music", "stopped for the game");
@@ -9491,11 +9903,25 @@ static void launch(const char *base)
 {
     static const char *script = "T:AmigaMCE-run";
     BPTR con;
-    if (!ags.found)
-        return;
-    if (!ags_write_launch_script(&ags, base, script)) {
-        set_msg(_("Could not write T:AmigaMCE-run"));
-        return;
+    if (cur() && cur()->igame) {
+        /* iGame's entry: WHDLoad (its icon's tooltypes), or the program */
+        const struct IgGame *gm = ig_lookup(&igcat, base);
+        char why[100];
+        if (!gm) {
+            set_msg(_("iGame's list no longer has that entry"));
+            return;
+        }
+        if (!ig_write_launch_script(gm, script, why, sizeof(why))) {
+            set_msg(why);
+            return;
+        }
+    } else {
+        if (!ags.found)
+            return;
+        if (!ags_write_launch_script(&ags, base, script)) {
+            set_msg(_("Could not write T:AmigaMCE-run"));
+            return;
+        }
     }
     /* Give the game every byte we can. */
     amce_log("launch", base);
@@ -9754,6 +10180,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     pv_shown = FALSE;
     pv_pending = FALSE;
     pv_let_go();                    /* the viewer takes the screen's colours over */
+    lv_hold();                      /* (a layout: the classic drawing back) */
     vw_active = TRUE;
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     gfx_window_rmb(&g, 32767);      /* (the right button: Back, not the menus) */
@@ -10093,6 +10520,7 @@ static void anim_from_page(struct Page *p)
     }
     /* on this screen it draws straight onto it: single buffered meanwhile,
      * everything drawn again after (into the back buffer, then a flip) */
+    lv_hold();                              /* (a layout: the classic drawing back) */
     gfx_dbuf_stop(&g);
     gfx_window_rmb(&g, 32767);              /* (the right button: Back, not the menus) */
     {
@@ -12432,10 +12860,17 @@ static void plink_sign_out(void)
     set_msg(_("Signed out of plex.tv"));
 }
 
+static void whd_done(struct NetJob *j);
+static struct NetJob *whd_job;
+
 static void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
     int d;
+    if (j == whd_job) {
+        whd_done(j);                        /* WHDLoad's package */
+        return;
+    }
     for (d = 0; d < ART_KINDS; d++)
         if (j == art_nj[d]) {
             /* a picture of the server's: kept in RAM:, then shown */
@@ -13872,6 +14307,55 @@ static void folder_add(int k)
     draw_all();                             /* where the requester was */
 }
 
+/* Settings > Folders > iGame > Choose iGame's drawer: asl.library's
+ * requester; the drawer is kept only if a gameslist.csv is in it. */
+static void igame_choose(void)
+{
+    struct FileRequester *fr;
+    char path[256];
+    BOOL db, got = FALSE;
+    if (!AslBase && !(AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 38))) {
+        set_msg("asl.library (version 38) is needed to choose a folder");
+        return;
+    }
+    db = gfx_dbuf_active();
+    if (db)
+        gfx_dbuf_stop(&g);
+    fr = (struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest, ASLFR_Window, (ULONG)g.win, ASLFR_SleepWindow, TRUE,
+        ASLFR_TitleText, (ULONG)_("iGame's drawer (with its gameslist.csv)"),
+        ASLFR_PositiveText, (ULONG)_("Use"), ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
+        (ULONG)(ig_setting[0] && !ig_off() ? ig_setting : "SYS:"), TAG_DONE);
+    if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
+        struct Process *me = (struct Process *)FindTask(NULL);
+        APTR old = me->pr_WindowPtr;
+        BPTR l;
+        me->pr_WindowPtr = (APTR)-1;
+        if ((l = Lock((CONST_STRPTR)fr->fr_Drawer, SHARED_LOCK))) {
+            got = NameFromLock(l, (STRPTR)path, sizeof(path) - 1) != 0;
+            UnLock(l);
+        }
+        me->pr_WindowPtr = old;
+        if (!got)
+            set_msg(_("That folder could not be found"));
+    }
+    if (fr)
+        FreeAslRequest(fr);
+    if (db)
+        gfx_dbuf_start(&g);
+    if (got) {
+        if (!ig_folder_ok(path))
+            set_msg(_("No gameslist.csv there: choose iGame's own drawer, after a scan in iGame"));
+        else {
+            save_setting(IG_VAR, path);
+            igame_start(FALSE);
+            settings_rebuild();
+            ig_said();
+        }
+    }
+    draw_all();
+}
+
 static void act_action(struct Item *it)
 {
     if (it->flags & ITEM_DISABLED) {
@@ -13901,6 +14385,10 @@ static void act_action(struct Item *it)
         open_settings_page(_("Text size"), build_tsizes);
     else if (it->action == ACT_COLOURS)
         open_settings_page(_("Colours"), build_colours);
+    else if (it->action == ACT_LAYOUTS)
+        open_settings_page(_("Layout"), lv_build_page);
+    else if (it->action >= ACT_LAYOUT0 && it->action <= ACT_LAYOUT_END)
+        lv_pick(it->action - ACT_LAYOUT0);
     else if (it->action >= ACT_COLOUR0 && it->action <= ACT_COLOUR_END)
         apply_colours(it->action - ACT_COLOUR0);
     else if (it->action >= ACT_TSIZE0 && it->action <= ACT_TSIZE_END)
@@ -14091,6 +14579,48 @@ static void act_action(struct Item *it)
     } else if (it->action == ACT_FSADD) {
         fs_rm = -1;
         folder_add(fs_page);
+    } else if (it->action == ACT_WHDPAGE) {
+        open_settings_page("WHDLoad", build_whd_page);
+    } else if (it->action == ACT_WHDGO) {
+        whd_go();
+    } else if (it->action == ACT_WHDNO) {
+        save_setting(WHD_OFFER_VAR, "no");
+        set_msg(_("Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does"));
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_IGSET) {
+        open_settings_page(_("iGame"), build_igame_settings);
+    } else if (it->action == ACT_IGCHOOSE) {
+        igame_choose();
+    } else if (it->action == ACT_IGFIND) {
+        char found[256];
+        busy_begin();
+        if (ig_discover(found, sizeof(found), TRUE)) {
+            save_setting(IG_VAR, found);
+            igame_start(FALSE);
+            ig_said();
+        } else
+            set_msg(_("iGame was not found: choose its drawer"));
+        busy_end(TRUE);
+        plex_settings_again(FALSE);
+    } else if (it->action == ACT_IGNONE) {
+        if (ig_off()) {
+            char found[256];
+            save_setting(IG_VAR, "");           /* unset: looked for, everywhere */
+            busy_begin();
+            if (ig_discover(found, sizeof(found), TRUE))
+                save_setting(IG_VAR, found);
+            igame_start(FALSE);
+            busy_end(TRUE);
+            if (igcat.n)
+                ig_said();
+            else
+                set_msg(_("iGame was not found: choose its drawer"));
+        } else {
+            save_setting(IG_VAR, "none");
+            igame_start(FALSE);
+            set_msg(_("No iGame list: Games and Demos show AGS's alone"));
+        }
+        plex_settings_again(FALSE);
     } else if (it->action >= ACT_FSDIR0 && it->action <= ACT_FSDIR_END) {
         struct Folders *f = &fs[fs_page];
         int i = it->action - ACT_FSDIR0;
@@ -15289,6 +15819,7 @@ static void np_full_enter(void)
                                  : _("Flow: this player does not say what it plays"));
         return;
     }
+    lv_hold();
     np_full = TRUE;
     np_full_fs = g.wb && gfx_fs_enter(&g);  /* a window: the whole display */
     np_full_first = TRUE;
@@ -15600,6 +16131,8 @@ static void handle_key(struct IntuiMessage *im)
         gfx_iconify_asked = TRUE;
         return;
     }
+    if (lv_key(im))
+        return;                             /* a layout's own (or the wheel, in one) */
 
     if (im->Class == IDCMP_RAWKEY) {
         if (code & IECODE_UP_PREFIX) {
@@ -15922,6 +16455,7 @@ static int app_main(void)
     load_net_if();                  /* after: the interface's address, toward the server */
     load_radio_settings();
     ags_init(&ags);
+    igame_start(TRUE);              /* iGame's list (looked for while unset) */
     build_menu();
     load_screen_mode();
     load_style();
@@ -16143,6 +16677,7 @@ static int app_main(void)
                     mp_tempo_check();
                     flac_slow_check();      /* a FLAC track running dry: said once */
                     plink_tick();           /* signing in at plex.tv: asked after */
+                    whd_tick();             /* WHDLoad coming: how much */
                     dvd_watch();            /* Videos: a DVD put in or taken out */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
@@ -16198,14 +16733,17 @@ static int app_main(void)
                     ;                       /* the grip's (a window) */
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
-                else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
-                    handle_mouse(&copy);
+                else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE) {
+                    if (!lv_mouse(&copy))
+                        handle_mouse(&copy);
+                }
                 else if (copy.Class == IDCMP_RAWKEY || copy.Class == IDCMP_VANILLAKEY)
                     handle_key(&copy);
                 if (!g.win)
                     break;      /* a launch closed and reopened the window */
             }
         }
+        lv_frame();                     /* a layout: the screen drawn again, if it changed */
         if (g.win && !np_full && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                                   ((atb = cur_tb()) && tb_animating(atb)))) {
             ULONG tp = time_ms();
@@ -16298,6 +16836,7 @@ out:
     if (ptr_blank)
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);
+    ig_free(&igcat);
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
     if (DataTypesBase)
@@ -16322,4 +16861,721 @@ out:
     if (IntuitionBase)
         CloseLibrary((struct Library *)IntuitionBase);
     return rc;
+}
+
+/* ------------------------------------------------------------ layouts (lhost.h) */
+/* A layout chosen in Settings > Display > Layout draws the screen in its
+ * own style while it can: a graphics card's 15-32 bit screen in the
+ * Smooth style, nothing else over it (the viewer, a video, Flow on the
+ * whole screen, the mini player). The program goes on as ever underneath:
+ * its drawing is only counted (gfx_off), and each pass of the main loop
+ * that counted some, the layout draws the screen again from the models
+ * below. Left Shift held as AmigaMCE starts: the classic layout this
+ * time (a layout that fails to draw can always be left). */
+#define LAYOUT_VAR "AmigaMCE/Layout"
+#define LV_MAX 8                    /* layouts offered in Settings */
+
+static struct {
+    BOOL read, skip, on, full;
+    char file[32];                  /* chosen: "kodilite.layout", "" classic */
+    char name[32];                  /* its name, once known */
+    const struct LayoutEngine *eng;
+    struct LkOut out;
+    struct LayoutHost host;
+    struct Screen *scr;             /* the screen it draws on (opened again: again) */
+    struct Window *win;
+    UWORD w, h;
+    struct Screen *tried;           /* tried there and could not: not again */
+    UWORD tried_w, tried_h;
+    int drawn;                      /* the screen drawn last (LS_*), -1 none */
+    ULONG tick_at;
+    char clock[24];
+    struct LayoutInfo found[LV_MAX];
+    int nfound;
+} lv = { .drawn = -1 };
+
+BOOL lv_on(void)
+{
+    return lv.on;
+}
+
+const char *lv_label(void)
+{
+    static char stem[32];
+    char *dot;
+    if (!lv.file[0])
+        return _("Classic");
+    if (lv.name[0])
+        return lv.name;
+    amce_strlcpy(stem, lv.file, sizeof(stem));
+    if ((dot = strrchr(stem, '.')))
+        *dot = 0;
+    return stem;
+}
+
+/* ---- the models */
+static UBYTE lv_section(int mod)
+{
+    switch (mod) {
+    case MOD_GAMES: return LSEC_GAMES;
+    case MOD_DEMOS: return LSEC_DEMOS;
+    case MOD_MUSIC: return LSEC_MUSIC;
+    case MOD_MODS: return LSEC_MODS;
+    case MOD_PICTURES: return LSEC_PICTURES;
+    case MOD_VIDEOS: return LSEC_VIDEOS;
+    case MOD_RADIO: return LSEC_RADIO;
+    case MOD_SETTINGS: return LSEC_SETTINGS;
+    }
+    return LSEC_OTHER;
+}
+
+static int lv_icon_of(int section)
+{
+    static const UBYTE icon[] = { ICON_GAMES, ICON_DEMOS, ICON_MUSIC, ICON_MODS, ICON_PICTURES,
+                                  ICON_VIDEOS, ICON_RADIO, ICON_SETTINGS, ICON_ABOUT };
+    return section >= 0 && section < (int)sizeof(icon) ? icon[section] : ICON_ABOUT;
+}
+
+static UBYTE lv_kind(const struct Item *it)
+{
+    switch (it->kind) {
+    case IT_DIR: case IT_NET: case IT_PLEXDIR: return LI_FOLDER;
+    case IT_RUN: return LI_GAME;
+    case IT_ACTION:
+        return it->mark >= MARK_CHECK_OFF && it->mark <= MARK_RADIO_ON ? LI_SETTING
+             : it->mark == MARK_CYCLE ? LI_SETTING : LI_ACTION;
+    case IT_PIC: case IT_PLEXPHOTO: return LI_PICTURE;
+    case IT_MOD: return LI_MODULE;
+    case IT_STATION: return LI_STATION;
+    case IT_PLEXTRACK: case IT_SONG: return LI_TRACK;
+    case IT_ANIM: return LI_VIDEO;
+    }
+    return LI_OTHER;
+}
+
+static UBYTE lv_mark(const struct Item *it)
+{
+    switch (it->mark) {
+    case MARK_ARROW: return LM_ARROW;
+    case MARK_CHECK_OFF: return LM_CHECK_OFF;
+    case MARK_CHECK_ON: return LM_CHECK_ON;
+    case MARK_RADIO_OFF: return LM_RADIO_OFF;
+    case MARK_RADIO_ON: return LM_RADIO_ON;
+    case MARK_PLAY: return LM_PLAY;
+    case MARK_PLAYING: return LM_PLAYING;
+    case MARK_CYCLE: return LM_CYCLE;
+    }
+    return (it->kind == IT_DIR || it->kind == IT_NET || it->kind == IT_PLEXDIR) ? LM_ARROW : LM_NONE;
+}
+
+static const struct Page *lv_lp;    /* the page item() makes rows of */
+static struct LItem lv_ring[32];
+static UWORD lv_ri;
+
+static void lv_fill_item(struct LItem *li, const struct Page *p, LONG i)
+{
+    const struct Item *it;
+    const char *tag;
+    memset(li, 0, sizeof(*li));
+    li->label = "";
+    if (!p || i < 0 || i >= p->list.count)
+        return;
+    it = &p->list.items[i];
+    li->label = it->label ? it->label : "";
+    tag = row_tag(p, it);
+    li->tag = tag && tag[0] ? tag : NULL;
+    li->kind = lv_kind(it);
+    li->mark = lv_mark(it);
+    if (it->flags & ITEM_DISABLED)
+        li->flags |= LIF_DISABLED;
+    if (it->flags & ITEM_HEAD)
+        li->flags |= LIF_HEAD;
+    if (it->mark == MARK_PLAYING)
+        li->flags |= LIF_NOW;
+}
+
+static const struct LItem *lv_item(LONG i)
+{
+    struct LItem *li = &lv_ring[lv_ri++ & 31];
+    lv_fill_item(li, lv_lp, i);
+    return li;
+}
+
+/* The selected row's picture: a picture's own file, a game's screenshot
+ * (looked for once a row). */
+static const char *lv_picture_of(struct Page *p)
+{
+    static const struct Page *for_p;
+    static LONG for_sel = -1, for_count = -1;
+    static char file[300];
+    static BOOL have;
+    struct Item *it;
+    if (!p || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
+        return NULL;
+    if (p == for_p && p->sel == for_sel && p->list.count == for_count)
+        return have ? file : NULL;
+    for_p = p;
+    for_sel = p->sel;
+    for_count = p->list.count;
+    have = FALSE;
+    it = &p->list.items[p->sel];
+    if (it->flags & ITEM_GONE)
+        return NULL;
+    if (it->kind == IT_PIC && !p->plex) {
+        item_path(it, file, sizeof(file));
+        have = TRUE;
+    } else if (it->kind == IT_RUN) {
+        char base[300];
+        have = ags_screenshot_path(item_path(it, base, sizeof(base)), file, sizeof(file));
+    }
+    return have ? file : NULL;
+}
+
+static const char *lv_lines[256];
+
+static void lv_page(struct Page *p, struct LPage *m)
+{
+    int i, mod = shown_mod >= 0 ? shown_mod : menu[menu_sel];
+    memset(m, 0, sizeof(*m));
+    m->section = lv_section(mod);
+    m->crumb[m->ncrumb++] = _(mod_names[mod]);
+    for (i = 0; i < depth && m->ncrumb < LCRUMBS; i++)
+        m->crumb[m->ncrumb++] = pages[i].title;
+    m->hint = hint_text();
+    m->message = msg[0] ? msg : NULL;
+    if (!p)
+        return;
+    if (p->type == PT_TEXT || p->type == PT_DETAIL) {
+        const struct ItemList *l = p->tb.lines ? p->tb.lines : &p->list;
+        m->text = 1;
+        if (p->tb.line_h > 0)
+            m->list.top = p->tb.target / p->tb.line_h;    /* (the first line shown) */
+        for (i = 0; i < l->count && i < 256; i++)
+            lv_lines[i] = l->items[i].label ? l->items[i].label : "";
+        m->ndetails = (WORD)i;
+        m->details = lv_lines;
+        return;
+    }
+    lv_lp = p;
+    m->list.count = p->list.count;
+    m->list.sel = p->sel;
+    m->list.top = p->top;
+    m->list.item = lv_item;
+    if (pv_tj && pv_tj->done && pv_page == p && pv_sel == p->sel) {
+        for (i = 0; i < pv_tj->nlines && i < LJ_FACTS; i++)
+            lv_lines[i] = pv_tj->lines[i];
+        m->ndetails = (WORD)i;
+        m->details = lv_lines;
+    }
+    m->picture = lv_picture_of(p);
+}
+
+static const void *lv_model(int screen)
+{
+    static struct LPage page;
+    static struct LHome home;
+    static struct LNow now;
+    static UBYTE secs[MOD_COUNT];
+    static const char *names[MOD_COUNT];
+    static struct LRow row;
+    static struct LItem rows[12];
+    static const char *next[5];
+    static char year[1];
+    int i;
+    switch (screen) {
+    case LS_HOME:
+        memset(&home, 0, sizeof(home));
+        for (i = 0; i < nmenu && i < MOD_COUNT; i++) {
+            secs[i] = lv_section(menu[i]);
+            names[i] = _(mod_names[menu[i]]);
+        }
+        home.n = (WORD)i;
+        home.sel = (WORD)menu_sel;
+        home.sections = secs;
+        home.names = names;
+        if (!pane_pending && depth >= 1 && pages[0].type == PT_LIST) {
+            for (i = 0; i < pages[0].list.count && i < 12; i++)
+                lv_fill_item(&rows[i], &pages[0], i);
+            row.title = _(mod_names[menu[menu_sel]]);
+            row.n = (WORD)i;
+            row.items = rows;
+            home.nrows = 1;
+            home.rows = &row;
+        }
+        return &home;
+    case LS_NOW: {
+        struct MpStatus st;
+        memset(&now, 0, sizeof(now));
+        if (!mp_loaded())
+            return &now;
+        mp_status(&st);
+        now.kind = mp_is_track() ? LN_TRACK : mp_is_stream() ? LN_STREAM : LN_MODULE;
+        now.paused = st.paused ? 1 : 0;
+        now.title = mp_title();
+        now.artist = mp_is_track() ? mp_track_by() : mp_author();
+        now.year = year;
+        now.format = mp_tag();
+        now.source = now.kind == LN_STREAM ? mp_stream_name() : np.folder;
+        now.art = np_art_file[0] ? np_art_file : NULL;
+        now.pos_ms = st.elapsed_ms;
+        now.len_ms = st.total_ms;
+        for (i = 0; i < 5 && np.idx + 1 + i < np.list.count; i++)
+            next[i] = np.list.items[np.idx + 1 + i].label;
+        now.nnext = (WORD)i;
+        now.next = next;
+        {
+            static UBYTE lev[4];
+            for (i = 0; i < 4; i++)
+                lev[i] = (UBYTE)(gfx_eq_lev[i] > 11 ? 255 : gfx_eq_lev[i] * 23);
+            now.nlevels = 4;
+            now.levels = lev;
+        }
+        return &now;
+    }
+    }
+    lv_page(cur(), &page);
+    return &page;
+}
+
+/* ---- what the layout asks */
+static void lv_act(int what, LONG arg)
+{
+    struct Page *p = cur();
+    switch (what) {
+    case LAC_SELECT: case LAC_OPEN: case LAC_PLAY:
+        if (focus == FOCUS_MENU) {
+            if (arg >= 0 && arg < nmenu && arg != menu_sel)
+                menu_select(arg);
+        } else if (p && p->type == PT_LIST && arg >= 0 && arg < p->list.count && arg != p->sel) {
+            act_move(arg - p->sel);
+        }
+        if (what != LAC_SELECT)
+            act_open(what == LAC_PLAY);
+        break;
+    case LAC_BACK: act_back(); break;
+    case LAC_SECTION:
+        if (focus == FOCUS_MENU && arg >= 0 && arg < nmenu && arg != menu_sel)
+            menu_select(arg);
+        break;
+    case LAC_ENTER:
+        if (focus == FOCUS_MENU)
+            act_open(FALSE);
+        break;
+    case LAC_PAUSE: if (mp_loaded()) np_press(NB_PLAY); break;
+    case LAC_NEXT: if (mp_loaded()) np_press(NB_NEXT); break;
+    case LAC_PREV: if (mp_loaded()) np_press(NB_PREV); break;
+    case LAC_NOWPLAYING: if (mp_loaded()) np_open_page(); break;
+    }
+}
+
+/* ---- pictures, made for the layout at the size it asks (one new one a
+ * frame: the rest come on the frames after) */
+#define LV_PICS 4
+static struct {
+    char file[160];
+    UWORD w, h;                     /* asked for */
+    BOOL failed;
+    ULONG used;
+    struct LImage im;
+    ULONG *px;
+} lv_pic[LV_PICS];
+static BOOL lv_pic_made;            /* this frame's made already */
+static ULONG lv_pic_clock;
+
+static void lv_pics_free(void)
+{
+    int i;
+    for (i = 0; i < LV_PICS; i++) {
+        if (lv_pic[i].px)
+            FreeVec(lv_pic[i].px);
+        memset(&lv_pic[i], 0, sizeof(lv_pic[i]));
+    }
+}
+
+static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
+{
+    int i, k = 0;
+    struct Thumb *t;
+    struct PicInfo pi;
+    if (!file || !file[0] || !w || !h)
+        return NULL;
+    for (i = 0; i < LV_PICS; i++) {
+        if (lv_pic[i].w == w && lv_pic[i].h == h && strcmp(lv_pic[i].file, file) == 0) {
+            lv_pic[i].used = ++lv_pic_clock;
+            return lv_pic[i].failed ? NULL : &lv_pic[i].im;
+        }
+        if (lv_pic[i].used < lv_pic[k].used)
+            k = i;
+    }
+    if (lv_pic_made) {
+        lv.full = TRUE;             /* drawn again next frame, with it */
+        return NULL;
+    }
+    lv_pic_made = TRUE;
+    if (lv_pic[k].px)
+        FreeVec(lv_pic[k].px);
+    memset(&lv_pic[k], 0, sizeof(lv_pic[k]));
+    amce_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
+    lv_pic[k].w = w;
+    lv_pic[k].h = h;
+    lv_pic[k].used = ++lv_pic_clock;
+    lv_pic[k].failed = TRUE;
+    if (!(t = jpeg_thumb(file, w, h, FALSE, FALSE, 256, &pi, "layout")) &&
+        !(t = ilbm_thumb(file, w, h, FALSE, FALSE, 256, &pi))) {
+        BOOL remapped = FALSE;
+        APTR o = pic_decode_fit(file, NULL, FALSE, &remapped, &pi, w, h);
+        if (o) {
+            ULONG dw, dh;
+            pic_fit(pi.w, pi.h, FALSE, w, h, FALSE, &dw, &dh);
+            t = thumb_make(o, dw, dh, 256);
+            pic_dispose(o);
+        }
+    }
+    if (!t) {
+        amce_log("layout: a picture could not be read", file);
+        return NULL;
+    }
+    if ((lv_pic[k].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
+        ULONG *d = lv_pic[k].px;
+        UWORD x, y;
+        for (y = 0; y < t->h; y++) {
+            const UBYTE *s = t->px + (ULONG)y * t->mod;
+            for (x = 0; x < t->w; x++)
+                *d++ = t->pal[s[x]] & 0xFFFFFF;
+        }
+        lv_pic[k].im.w = t->w;
+        lv_pic[k].im.h = t->h;
+        lv_pic[k].im.mod = t->w;
+        lv_pic[k].im.px = lv_pic[k].px;
+        lv_pic[k].failed = FALSE;
+    }
+    thumb_free(t);
+    return lv_pic[k].failed ? NULL : &lv_pic[k].im;
+}
+
+/* ---- the drawing calls, onto lv.out */
+static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&lv.out, x0, y0, x1, y1); }
+static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG rgb) { lk_fill(&lv.out, x, y, w, h, rgb); }
+static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_vgrad(&lv.out, x, y, w, h, a, b); }
+static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&lv.out, x, y, w, h, a, b); }
+static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)
+{
+    lk_rrect(&lv.out, x, y, w, h, r, rgb, bg);
+}
+static void h_frame(WORD x, WORD y, WORD w, WORD h, WORD t, ULONG rgb) { lk_frame(&lv.out, x, y, w, h, t, rgb); }
+static void h_image(const struct LImage *im, WORD x, WORD y)
+{
+    if (im && im->px)
+        lk_image(&lv.out, x, y, (const unsigned long *)im->px, im->w, im->h, (long)im->mod);
+}
+static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, const struct LkBg *bg,
+                   WORD maxw)
+{
+    return lk_text(&g, &lv.out, x, y, s, n, face, fg, bg, maxw);
+}
+static WORD h_textlen(const char *s, LONG n, int face) { return lk_textlen(&g, s, n, face); }
+static WORD h_fit(const char *s, LONG n, int face, WORD maxw)
+{
+    return g.sm ? (WORD)sm_fit(g.sm, s, n, face, maxw) : 0;
+}
+static WORD h_font_h(int face) { (void)face; return g.sm ? (WORD)sm_cell_h(g.sm) : 0; }
+static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
+{
+    lk_icon(&g, &lv.out, lv_icon_of(section), x, y, fg, bg);
+}
+static const char *h_tr(const char *s) { return amce_tr(s); }
+static void h_log(const char *s) { amce_log("layout", s); }
+static ULONG h_now(void) { return time_ms(); }
+
+/* ---- on and off */
+static void lv_off(BOOL redraw)
+{
+    if (!lv.on)
+        return;
+    if (lv.eng && lv.eng->close)
+        lv.eng->close();
+    lk_close(&lv.out);
+    lv_pics_free();
+    lv.on = FALSE;
+    gfx_off = FALSE;
+    lv.drawn = -1;
+    if (redraw && g.win && g.rp)
+        draw_all();             /* the classic layout, all of it */
+}
+
+static BOOL lv_suits(void)
+{
+    if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
+        return FALSE;
+    return g.sm && g.truecolor && !g.planar;
+}
+
+static void lv_activate(void)
+{
+    const struct LayoutEngine *e = layout_loaded();
+    char m[120];
+    if (lv.tried == g.scr && lv.tried_w == g.w && lv.tried_h == g.h)
+        return;                     /* not here: once is enough */
+    lv.tried = g.scr;
+    lv.tried_w = g.w;
+    lv.tried_h = g.h;
+    if (!e || !lv.name[0] || strcmp(e->name, lv.name) != 0) {
+        layout_unload();
+        e = layout_load(lv.file);
+    }
+    if (!e) {
+        set_msg(_("The layout could not be opened: the classic one is used"));
+        return;
+    }
+    amce_strlcpy(lv.name, e->name, sizeof(lv.name));
+    if (!lk_open(&g, &lv.out, TRUE))
+        return;
+    if (lv.out.bits < e->min_bits || g.h < e->min_h) {
+        sprintf(m, "%s needs %ld-bit and %ld lines; this is %ld-bit, %ld lines: classic",
+                e->name, (long)e->min_bits, (long)e->min_h, (long)lv.out.bits, (long)g.h);
+        amce_log("layout", m);
+        lk_close(&lv.out);
+        return;
+    }
+    memset(&lv.host, 0, sizeof(lv.host));
+    lv.host.w = g.w;
+    lv.host.h = g.h;
+    lv.host.bits = (UBYTE)lv.out.bits;
+    lv.host.tier = (UBYTE)plex_tier();
+    lv.host.clip = h_clip;
+    lv.host.fill = h_fill;
+    lv.host.vgrad = h_vgrad;
+    lv.host.hgrad = h_hgrad;
+    lv.host.rrect = h_rrect;
+    lv.host.frame = h_frame;
+    lv.host.image = h_image;
+    lv.host.text = h_text;
+    lv.host.textlen = h_textlen;
+    lv.host.fit = h_fit;
+    lv.host.font_h = h_font_h;
+    lv.host.icon = h_icon;
+    lv.host.icon_px = lk_icon_px(&g);
+    lv.host.picture = lv_picture;
+    lv.host.model = lv_model;
+    lv.host.act = lv_act;
+    lv.host.tr = h_tr;
+    lv.host.log = h_log;
+    lv.host.now_ms = h_now;
+    clock_text(lv.clock);
+    lv.host.clock = lv.clock;
+    if (e->open && !e->open(&lv.host)) {
+        amce_log("layout", "it would not open: classic");
+        lk_close(&lv.out);
+        return;
+    }
+    lv.eng = e;
+    lv.tried = NULL;                /* (it can: tried again whenever it is off) */
+    lv.scr = g.scr;
+    lv.win = g.win;
+    lv.w = g.w;
+    lv.h = g.h;
+    lv.on = TRUE;
+    lv.full = TRUE;
+    lv.drawn = -1;
+    gfx_off = TRUE;
+    gfx_off_hits = 0;
+    sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)lv.out.bits, (long)g.w,
+            (long)g.h, lk_canvas(&lv.out) ? ", drawn off screen" : "");
+    amce_log("layout", m);
+}
+
+static void lv_sync(void)
+{
+    if (!lv.read) {
+        char buf[32];
+        lv.read = TRUE;
+        if (GetVar((CONST_STRPTR)LAYOUT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            amce_strlcpy(lv.file, buf, sizeof(lv.file));
+        if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
+            lv.skip = TRUE;
+            amce_log("layout", "Shift held as AmigaMCE started: the classic layout this time");
+        }
+    }
+    if (lv.on && (!lv_suits() || g.scr != lv.scr || g.win != lv.win || g.w != lv.w ||
+                  g.h != lv.h || !lv.file[0])) {
+        /* gone over to something else: it draws itself, and the classic
+         * screen is drawn as it comes back; the screen itself changed:
+         * drawn again here, in the layout if it still can */
+        BOOL away = iconified || mini_on || np_full || vw_active || !g.win;
+        lv_off(!away);
+    }
+    if (!lv.on && lv.file[0] && !lv.skip && lv_suits())
+        lv_activate();
+}
+
+static int lv_screen(void)
+{
+    struct Page *p = cur();
+    if (focus == FOCUS_MENU && (lv.eng->screens & LS_BIT(LS_HOME)))
+        return LS_HOME;
+    if (p && p->type == PT_PLAYER && (lv.eng->screens & LS_BIT(LS_NOW)))
+        return LS_NOW;
+    return LS_PAGE;
+}
+
+void lv_frame(void)
+{
+    int scr;
+    ULONG now;
+    lv_sync();
+    if (!lv.on)
+        return;
+    scr = lv_screen();
+    now = time_ms();
+    lv_pic_made = FALSE;
+    if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
+        lv.tick_at = now;
+        lv.eng->tick(now);
+    }
+    if (scr != lv.drawn)
+        lv.full = TRUE;
+    if (lv.full || gfx_off_hits) {
+        lv.full = FALSE;
+        gfx_off_hits = 0;
+        lv.drawn = scr;
+        clock_text(lv.clock);
+        lv_ri = 0;
+        lk_clip(&lv.out, 0, 0, g.w, g.h);
+        lv.eng->draw(scr);
+    }
+    lk_show(&lv.out);
+}
+
+void lv_hold(void)
+{
+    lv_off(FALSE);
+}
+
+void lv_release(void)
+{
+    lv_off(FALSE);
+    layout_unload();
+    lv.tried = NULL;
+}
+
+/* ---- input */
+BOOL lv_key(struct IntuiMessage *im)
+{
+    int a = -1, scr;
+    LONG arg = 0;
+    UWORD code = im->Code;
+    if (!lv.on)
+        return FALSE;
+    if (im->Class == IDCMP_RAWKEY) {
+        if (code & IECODE_UP_PREFIX)
+            return FALSE;
+        switch (code) {
+        case 0x4C: a = LA_UP; break;
+        case 0x4D: a = LA_DOWN; break;
+        case 0x4E: a = LA_RIGHT; break;
+        case 0x4F: a = LA_LEFT; break;
+        case 0x7A: case 0x7B: {
+            /* the wheel: the classic's finds what is under the pointer
+             * by its own places, which are not the layout's */
+            int d = code == 0x7A ? -1 : 1;
+            scr = lv_screen();
+            if (!lv.eng->input || lv.eng->input(scr, d < 0 ? LA_UP : LA_DOWN, 0) != LR_DONE)
+                act_move(d);
+            return TRUE;
+        }
+        }
+        if (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
+            if (a == LA_UP)
+                a = LA_PAGEUP;
+            else if (a == LA_DOWN)
+                a = LA_PAGEDOWN;
+        }
+    } else if (im->Class == IDCMP_VANILLAKEY) {
+        if (im->Qualifier & IEQUALIFIER_NUMERICPAD)
+            return FALSE;
+        if (code == 13)
+            a = LA_RETURN;
+        else if (code == 27 || code == 8)
+            a = LA_BACK;
+        else if (code == ' ')
+            a = LA_SPACE;
+        else if ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z') ||
+                 (code >= '0' && code <= '9')) {
+            a = LA_LETTER;
+            arg = code;
+        }
+    }
+    if (a < 0 || !lv.eng->input)
+        return FALSE;
+    scr = lv_screen();
+    return lv.eng->input(scr, a, arg) == LR_DONE;
+}
+
+BOOL lv_mouse(struct IntuiMessage *im)
+{
+    if (!lv.on)
+        return FALSE;
+    if (im->Class == IDCMP_MOUSEMOVE) {
+        mouse_last = time_ms();
+        if (ptr_hidden)
+            pointer_show();
+        return TRUE;
+    }
+    if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && lv.eng->pointer)
+        lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft, im->MouseY - g.win->BorderTop,
+                        TRUE);
+    return TRUE;
+}
+
+/* ---- Settings > Display > Layout */
+void lv_build_page(struct Page *p)
+{
+    int i;
+    action_item(p, _("Classic"), "", ACT_LAYOUT0, lv.file[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    lv.nfound = layout_list(lv.found, LV_MAX);
+    for (i = 0; i < lv.nfound; i++) {
+        BOOL on = strcmp(lv.found[i].file, lv.file) == 0;
+        struct Item *it = action_item(p, lv.found[i].name, "", ACT_LAYOUT0 + 1 + i,
+                                      on ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        if (on) {
+            p->sel = p->list.count - 1;
+            amce_strlcpy(lv.name, lv.found[i].name, sizeof(lv.name));
+        }
+        if (it && (!g.truecolor || g.planar))
+            it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen only) */
+    }
+}
+
+void lv_pick(int k)
+{
+    struct Page *p = cur();
+    LONG i;
+    const char *file = k > 0 && k <= lv.nfound ? lv.found[k - 1].file : "";
+    if (k > lv.nfound || strcmp(file, lv.file) == 0)
+        return;
+    amce_strlcpy(lv.file, file, sizeof(lv.file));
+    lv.name[0] = 0;
+    if (k > 0)
+        amce_strlcpy(lv.name, lv.found[k - 1].name, sizeof(lv.name));
+    lv.skip = FALSE;
+    lv.tried = NULL;
+    save_setting(LAYOUT_VAR, file);
+    amce_log("layout chosen", k ? file : "classic");
+    if (p)
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].action >= ACT_LAYOUT0 && p->list.items[i].action <= ACT_LAYOUT_END)
+                p->list.items[i].mark = p->list.items[i].action == ACT_LAYOUT0 + k ? MARK_RADIO_ON
+                                                                                  : MARK_RADIO_OFF;
+    settings_rebuild();             /* the Display page's row says which */
+    if (lv.on) {
+        lv_off(FALSE);              /* another one, or none: */
+        layout_unload();
+    }
+    if (!k) {
+        draw_all();
+    } else {
+        draw_pane(TRUE);
+        if (!lv_suits())
+            set_msg(_("Layouts need the Smooth style on a graphics card's 15 to 32-bit screen"));
+    }
 }

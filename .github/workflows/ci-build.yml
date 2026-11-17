@@ -70,14 +70,14 @@ jobs:
           build/zzprobe
           tools/zzprobe/Bench
 
-    - name: Archive amcedvd.library (DVD navigation, GPL-2.0-or-later, see src/dvdlib/README)
+    - name: Archive dvdnav.library (DVD navigation, GPL-3.0-or-later, github.com/luvwagn/dvdnav.library)
       uses: actions/upload-artifact@v4
       with:
-        name: amcedvd.library
+        name: dvdnav.library
         path: |
-          build/dvdlib/amcedvd.library
+          extras/dvdnav/build/dvdnav.library
           build/dvd/dvd_68k
-          src/dvdlib/README
+          extras/dvdnav/README.md
 
     - name: Archive LHA
       uses: actions/upload-artifact@v4

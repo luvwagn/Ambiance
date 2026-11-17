@@ -28,8 +28,13 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Iextras/ac3/include -Iextras/mpegv/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Iextras/dvdnav/include -Iextras/ac3/include -Iextras/mpegv/include \
           -Ibuild -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
+# The layouts' interface (src/layout.h, src/lkcore.h) as a number: a
+# layout library built against other versions of them is never used
+# (lhost.c, src/layouts/layoutlib.c)
+LAYOUT_ABI := $(shell cat src/layout.h src/lkcore.h | cksum | cut -d' ' -f1)
+CFLAGS  += -DLAYOUT_ABI=$(LAYOUT_ABI)UL
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
 
@@ -43,8 +48,16 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
+# AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
+# headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
+# AmiSSL 6 where it is installed, else 5 (nothing of AmiSSL linked in)
+AMISSL6_INC = extras/amissl6/include
+ifneq ($(wildcard $(AMISSL6_INC)/libraries/amisslmaster.h),)
+OBJS += build/tls6.o
+build/tls.o: CFLAGS += -DTLS_HAVE_V6
+endif
 VASM ?= vasmm68k_mot
 
 TARGET     = AmigaMCE
@@ -70,9 +83,9 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: test-igame test-kodilite all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) lha datatype
+all: $(TARGET) layouts lha datatype
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -102,11 +115,30 @@ build/cpucheck.o: src/cpucheck.c
 	@echo "  CC    $@ (68000)"
 	@$(CC) $(filter-out $(CPU),$(CFLAGS)) -m68000 -c -o $@ $<
 
-# The ZZ9000 SDK's headers (GPL-3: third_party/zz9k-sdk/README.txt), for zz9k.c only
-ZZ9K_SDK = third_party/zz9k-sdk
-ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
+# The ZZ9000 SDK's headers, for zz9k.c only (MIT: third_party/zz9k-sdk.txt):
+# fetched from BlitterStudio's zz9000-firmware at the commit pinned here,
+# only sdk/'s three header folders and the licence texts (a sparse, shallow
+# fetch, about 600 KB), into build/zz9k-sdk, kept by make clean. To move to
+# a newer SDK, change ZZ9K_SDK_COMMIT (the next build fetches it).
+ZZ9K_SDK_REPO   = https://github.com/BlitterStudio/zz9000-firmware.git
+ZZ9K_SDK_COMMIT = 6de721a01349756211133aaffc6679b1d1596c51
+ZZ9K_SDK        = build/zz9k-sdk
+ZZ9K_SDK_STAMP  = $(ZZ9K_SDK)/.fetched-$(ZZ9K_SDK_COMMIT)
+ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/sdk/amiga/include -I$(ZZ9K_SDK)/sdk/include -I$(ZZ9K_SDK)/sdk/host/include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
+build/zz9k.o: $(ZZ9K_SDK_STAMP)
+
+$(ZZ9K_SDK_STAMP):
+	@echo "  FETCH ZZ9000 SDK headers ($(ZZ9K_SDK_COMMIT))"
+	@rm -rf $(ZZ9K_SDK) && mkdir -p $(ZZ9K_SDK)
+	@cd $(ZZ9K_SDK) && git init -q && git remote add origin $(ZZ9K_SDK_REPO) \
+		&& git sparse-checkout set --no-cone /sdk/amiga/include/ /sdk/include/ /sdk/host/include/ \
+		     /sdk/LICENSES/MIT.txt /LICENSING.md \
+		&& git fetch -q --depth 1 --filter=blob:none origin $(ZZ9K_SDK_COMMIT) \
+		&& git checkout -q FETCH_HEAD
+	@test -f $(ZZ9K_SDK)/sdk/amiga/include/proto/zz9k.h || { echo "ZZ9000 SDK headers not fetched"; exit 1; }
+	@touch $@
 
 # four frames of AC-3 (5.1, 448 kbit/s: a DVD's kind) that stream.c times
 # each AC-3 library on, to use the faster here (an FPU's build is not
@@ -124,6 +156,61 @@ build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
+build/lkit.o: src/lkit.h src/lkcore.h
+build/lkcore.o: src/lkcore.h
+build/lhost.o: src/lhost.h src/layout.h src/lkcore.h
+
+# The layouts: PROGDIR:Layouts/<name>.layout, each an Exec library with
+# libnix's libinit (as amcesql.library's), src/layouts/layoutlib.c (its
+# GetLayout) and the layout's own source. They draw only through the
+# program's table: no C library linked in.
+LAYOUT_NAMES = kodilite
+LAYOUTS      = $(patsubst %,build/layouts/%.layout,$(LAYOUT_NAMES))
+LAYOUT_CC    = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wextra \
+               -Wno-pointer-sign -Isrc -Isrc/sqlib
+LAYOUT_HDR   = src/layout.h src/lkcore.h
+build/layouts/%/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/layouts/%.c Makefile
+	@mkdir -p $(dir $@)
+	@$(LAYOUT_CC) -DLIB_RT_VERSION=$(call libver,src/layouts/$*.c) -c -o $@ $<
+build/layouts/%/layoutlib.o: src/layouts/layoutlib.c $(LAYOUT_HDR) Makefile
+	@mkdir -p $(dir $@)
+	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
+build/layouts/%/layout.o: src/layouts/%.c $(LAYOUT_HDR) Makefile
+	@mkdir -p $(dir $@)
+	@echo "  CC    $< (layout)"
+	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
+build/layouts/%.layout: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+	@echo "  LD    $@"
+	@$(LAYOUT_CC) -o $@.dbg $^ -lamiga
+	@$(STRIP) -o $@ $@.dbg
+.PRECIOUS: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+layouts: $(LAYOUTS)
+
+# their finding and opening (lhost.c) on a 68020 under vamos, with
+# kodilite.layout and one built against another layout.h (named .library
+# there: vamos opens no other names)
+LT_DIR = build/layouttest
+$(LT_DIR)/Layouts/wrongabi.library: src/sqlib/libinit.c src/layouts/layoutlib.c tests/layout_wrong.c $(LAYOUT_HDR)
+	@mkdir -p $(LT_DIR)/Layouts $(LT_DIR)/obj
+	@$(LAYOUT_CC) -DLIB_RT_VERSION=1 -c -o $(LT_DIR)/obj/libinit.o src/sqlib/libinit.c
+	@$(LAYOUT_CC) -DLAYOUT_ABI=12345UL -c -o $(LT_DIR)/obj/layoutlib.o src/layouts/layoutlib.c
+	@$(LAYOUT_CC) -DLAYOUT_ABI=12345UL -c -o $(LT_DIR)/obj/wrong.o tests/layout_wrong.c
+	@$(LAYOUT_CC) -o $@ $(LT_DIR)/obj/libinit.o $(LT_DIR)/obj/layoutlib.o $(LT_DIR)/obj/wrong.o -lamiga
+$(LT_DIR)/test_layout: tests/test_layout.c src/lhost.c src/lhost.h src/util.c $(LAYOUT_HDR) $(LAYOUTS) \
+                       $(LT_DIR)/Layouts/wrongabi.library
+	@mkdir -p $(LT_DIR)/Layouts
+	@for l in $(LAYOUT_NAMES); do cp build/layouts/$$l.layout $(LT_DIR)/Layouts/$$l.library; done
+	@$(CC) -O1 $(CPU) -noixemul -Wall -Wno-pointer-sign -DAMCE_NO_EXPUNGE -DLAYOUT_ABI=$(LAYOUT_ABI)UL \
+		'-DLAYOUT_EXT=".library"' '-DLAYOUTS_DIR="Layouts"' \
+		-o $@ tests/test_layout.c src/lhost.c src/util.c
+test-layout: $(LT_DIR)/test_layout
+	@cd $(LT_DIR) && vamos -C 68020 test_layout > ../test-layout.txt && grep -q "^0 failed" ../test-layout.txt \
+		&& echo "  CHECK layout libraries found, opened, the wrong one refused ok" || (cat ../test-layout.txt; exit 1)
+
+build/tls6.o: src/tls.c src/amce.h $(VERSION_STAMP)
+	@echo "  CC    $@ (AmiSSL 6)"
+	@$(CC) -I$(AMISSL6_INC) $(CFLAGS) -DTLS_V6 -c -o $@ $<
+
 # an animation's frames, decoded and drawn each frame: for speed, not size
 # (-O2 decodes Tron2's frames in 55% of the cycles -Os does)
 build/animdec.o build/animdraw.o: CFLAGS += -O2
@@ -140,6 +227,18 @@ $(TARGET): $(OBJS)
 build/test_ags: tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/amce.h
 	@echo "  CC    $@"
 	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ tests/test_ags.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c
+
+# iGame's list (igame.c) under vamos: iGame: the fixture drawer.
+IGTEST_SRC = tests/test_igame.c src/igame.c src/igamecsv.c src/ags.c src/dirscan.c src/util.c src/lang.c
+build/test_igame: $(IGTEST_SRC) src/igame.h src/igamecsv.h src/amce.h
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ $(IGTEST_SRC)
+
+# WHDLoad put in C: from an unpacked package (whdinst.c), archive names checked (unarc.c).
+WHDTEST_SRC = tests/test_whdinst.c src/whdinst.c src/unarc.c src/dirscan.c src/util.c src/lang.c
+build/test_whdinst: $(WHDTEST_SRC) src/whdinst.h src/unarc.h src/amce.h
+	@echo "  CC    $@"
+	@$(CC) -O1 -m68000 -noixemul -Wall -Wno-pointer-sign -o $@ $(WHDTEST_SRC)
 
 build/test_songs: tests/test_songs.c src/songinfo.c src/nfo.c src/plexxml.c src/mods.c src/ags.c src/pics.c src/dirscan.c src/index.c src/util.c src/radiocsv.c src/lang.c src/amce.h
 	@echo "  CC    $@"
@@ -167,17 +266,18 @@ ASM_DIR = build/asm
 # version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
-check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT)
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT) $(LAYOUTS)
 	@$(PYTHON) tools/check_libs.py \
-		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
+		$(DVDLIB)=extras/dvdnav/src/dvdnavlib.c=$(call hdrver,extras/dvdnav/include/libraries/dvdnav.h,DVDNAVLIB_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(AC3FPULIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMCEMPEGAVERSION) \
 		$(SQLIB)=src/sqlib/amcesql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
-		$(JDT)=datatypes/jpeg/amcejpeg.c
+		$(JDT)=datatypes/jpeg/amcejpeg.c \
+		$(foreach l,$(LAYOUT_NAMES),build/layouts/$(l).layout=src/layouts/$(l).c)
 
-check-syscalls: $(SRCS) src/amce.h build/ac3probe.h
+check-syscalls: $(SRCS) src/amce.h build/ac3probe.h $(ZZ9K_SDK_STAMP)
 	@mkdir -p $(ASM_DIR)
 	@set -e; for f in $(SRCS); do \
 		$(CC) $(CFLAGS) $$( [ $$f = src/zz9k.c ] && echo '$(ZZ9K_CFLAGS)' ) \
@@ -209,7 +309,7 @@ LC_FLAGS  = --target=m68k-unknown-linux-gnu -mcpu=68020 -fpack-struct=2 -nostdin
             -Xanalyzer -analyzer-config -Xanalyzer unix.DynamicMemoryModeling:Optimistic=true \
             -Xanalyzer -analyzer-disable-checker=deadcode \
             -D__AMIGA__ -Damigaos -D__mc68020__ \
-            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Isrc/dvdlib/include \
+            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Iextras/dvdnav/include \
             -Iextras/ac3/include -Iextras/mpegv/include \
             -isystem $(TOOLROOT)/m68k-amigaos/libnix/include \
             -isystem $(wildcard $(TOOLROOT)/lib/gcc/m68k-amigaos/*/include) \
@@ -239,11 +339,24 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
 	@cd build && vamos -V AGS:$(abspath tests/fixtures/AGS2) -V Images:$(abspath tests/fixtures/Images) -V Videos:$(abspath tests/fixtures/Videos) -V T:$(abspath build/vt) test_ags
+	@rm -rf build/vt && mkdir -p build/vt
+	@cd build && vamos -V iGame:$(abspath tests/fixtures/iGame) -V T:$(abspath build/vt) test_igame > test-igame68k.txt 2>&1 \
+		&& grep -q "all iGame tests passed" test-igame68k.txt \
+		&& echo "  CHECK iGame's list (68000, igame.c) ok" || (grep -v WARNING test-igame68k.txt; exit 1)
+	@# a package as unpacked: WHDLoad, DIC, an icon, Patcher (one already in C: kept), WHDLoad.prf
+	@rm -rf build/vw && mkdir -p build/vw/C build/vw/S build/vw/DEVS build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C \
+		build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S
+	@printf WHDLD > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad && printf DIC > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/DIC \
+		&& printf NEW > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/Patcher && printf icon > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad.info \
+		&& printf PREF > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S/WHDLoad.prf && printf O > build/vw/C/Patcher
+	@cd build && vamos -V VW:$(abspath build/vw) -a C:VW:C -a S:VW:S -a DEVS:VW:DEVS -a T:VW:T test_whdinst > test-whdinst.txt 2>&1 \
+		&& grep -q "all WHDLoad tests passed" test-whdinst.txt \
+		&& echo "  CHECK WHDLoad installed from its package (68000, whdinst.c)" || (grep -v WARNING test-whdinst.txt; exit 1)
 	@rm -rf build/songs build/ram && mkdir -p build/ram
 	@$(PYTHON) -I tests/mksongs.py build/songs
 	@cd build && vamos -V Songs:$(abspath build/songs) -V RAM:$(abspath build/ram) test_songs > test-songs.txt \
@@ -266,10 +379,36 @@ build/ptmix_host: tests/ptmix_host.c src/ptmix.c src/ptmix.h src/ptcore.c src/pt
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/ptmix_host.c src/ptmix.c src/ptcore.c
 
+# The layouts' drawing kit (lkcore.c): drawn into a picture in memory that
+# keeps what a 15, 16 or 24-bit screen keeps, checked; build/lkit-*.ppm to
+# look at.
+build/lkit_host: tests/lkit_host.c src/lkcore.c src/lkcore.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -Wextra -o $@ tests/lkit_host.c src/lkcore.c
+test-lkit: build/lkit_host
+	@build/lkit_host > build/test-lkit.txt && echo "  CHECK layout drawing kit ok" || (cat build/test-lkit.txt; exit 1)
+
+# Kodi lite's screens drawn on the host by the kit with the smooth fonts'
+# own glyphs, from made-up models: build/kodilite-<screen>-<w>x<h>.ppm to
+# look at (checked only for drawing off the screen, or not all of it).
+build/kodilite_host: tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c $(LAYOUT_HDR) tests/shim/exec/types.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/kodilite_host.c src/lkcore.c src/layouts/kodilite.c
+test-kodilite: build/kodilite_host
+	@build/kodilite_host > build/test-kodilite.txt && echo "  CHECK Kodi lite drawn" || (cat build/test-kodilite.txt; exit 1)
+
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -o $@ tests/radio_host.c src/radiocsv.c
+
+# iGame's gameslist.csv, tooltypes as WHDLoad arguments, demos (igamecsv.c).
+build/igame_host: tests/igame_host.c src/igamecsv.c src/igamecsv.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/igame_host.c src/igamecsv.c
+
+test-igame: build/igame_host
+	@build/igame_host > build/test-igame.txt && echo "  CHECK iGame's list ok" || (cat build/test-igame.txt; exit 1)
 
 # a Plex server's XML (plexxml.c).
 build/animdraw_host: tests/animdraw_host.c src/animdraw.c src/animdraw.h
@@ -316,72 +455,32 @@ anim-bench:
 	@for b in c asm; do for m in "0 100" "1 100" "1 200"; do printf "%-3s mode/scale %s: " $$b "$$m"; \
 		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench_$$b $(ANIM) $$m 2>&1 | grep "runtime end" | grep -o "total_cycles=[0-9]*"; done; done
 
-# amcedvd.library: DVD-Video navigation, libdvdread 7.1.1 and libdvdnav
-# 7.0.0 (extras/libdvd, GPL-2.0-or-later) behind AmigaMCE's own interface
-# (src/dvdlib/include and amcedvd_lib.sfd, MIT). Opened at run time only,
-# like amcesql.library. In the archive's Libs for internal test builds; a
-# public release must carry its complete source with it (src/dvdlib/README).
-DVDLIB     = build/dvdlib/amcedvd.library
-DVDREAD    = extras/libdvd/libdvdread/src
-DVDNAV     = extras/libdvd/libdvdnav/src
-DVDLIB_SRC = $(addprefix $(DVDREAD)/,bitreader.c dvd_input.c dvd_reader.c dvd_udf.c ifo_read.c \
-               logger.c md5.c nav_read.c) \
-             $(addprefix $(DVDNAV)/,dvdnav.c highlight.c logger.c navigation.c read_cache.c \
-               searching.c settings.c vm/decoder.c vm/getset.c vm/play.c vm/vm.c vm/vmcmd.c vm/vmget.c) \
-             src/dvdlib/port.c src/dvdlib/amcedvd.c
-DVDLIB_OBJ = $(patsubst %.c,build/dvdlib/obj/%.o,$(DVDLIB_SRC))
-DVDLIB_HDR = $(wildcard src/dvdlib/*.h src/dvdlib/port/*.h src/dvdlib/port/*/*.h \
-               src/dvdlib/include/libraries/*.h $(DVDREAD)/*.h $(DVDREAD)/dvdread/*.h \
-               $(DVDNAV)/*.h $(DVDNAV)/dvdnav/*.h $(DVDNAV)/vm/*.h)
-# the C library libdvd calls is port.c's (port/amiport.h, forced in);
-# each library's own headers first, as their own builds have them
-DVDLIB_FLAGS = -std=gnu11 -Wall -Wno-unused-function -Wno-attributes -DHAVE_CONFIG_H -Isrc/dvdlib/port \
-               -Isrc/dvdlib/include -Isrc/dvdlib -Isrc/sqlib -include src/dvdlib/port/amiport.h
-DVDLIB_CC  = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer
-DVD_INC    = -I$(DVDREAD) -I$(DVDNAV)
-build/dvdlib/obj/$(DVDNAV)/%.o: DVD_INC = -I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)
-# libdvd passes int32_t * where int * is declared (and back): the same 32
-# bits, but newlib's int32_t is a long, and GCC 14 on makes that an error
-DVD_UPSTREAM =
-build/dvdlib/obj/extras/%.o: DVD_UPSTREAM = -Wno-incompatible-pointer-types -Wno-discarded-qualifiers
-build/dvdlib/obj/%.o: %.c $(DVDLIB_HDR)
-	@mkdir -p $(dir $@)
-	@echo "  CC    $< (amcedvd)"
-	@$(DVDLIB_CC) $(DVDLIB_FLAGS) $(DVD_UPSTREAM) $(DVD_INC) -c -o $@ $<
-# the E-clock, apart: devices/timer.h and newlib's sys/time.h both have a timeval
-build/dvdlib/amitime.o: src/dvdlib/amitime.c
-	@mkdir -p build/dvdlib
-	@echo "  CC    $< (amcedvd)"
-	@$(DVDLIB_CC) -Wall -c -o $@ $<
-build/dvdlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/dvdlib/amcedvd.c Makefile
-	@mkdir -p build/dvdlib
-	@echo "  CC    $< (amcedvd)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/dvdlib/amcedvd.c) -c -o $@ $<
-$(DVDLIB): build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o
-	@echo "  LD    $@"
-	@$(DVDLIB_CC) -o $@.dbg build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o -lamiga
-	@$(STRIP) -o $@ $@.dbg
+# dvdnav.library: DVD-Video navigation, libdvdread 7.1.1 and libdvdnav
+# 7.0.0 behind an Amiga interface of its own: its own project (extras/dvdnav,
+# a git submodule: github.com/luvwagn/dvdnav.library, GPL-3: its source
+# there, not in the archive; its interface, include/ and dvdnav_lib.sfd,
+# MIT). Opened at run time only, like amcesql.library. Formerly
+# amcedvd.library, here (before 0.9.1.1).
+DVDLIB     = extras/dvdnav/build/dvdnav.library
+DVDLIB_INC = extras/dvdnav/include
+DVDLIB_DEPS = $(wildcard extras/dvdnav/src/*.c extras/dvdnav/src/*.h extras/dvdnav/src/port/*.h \
+               extras/dvdnav/src/port/*/*.h extras/dvdnav/include/*/*.h \
+               extras/dvdnav/third_party/*/src/*.[ch] extras/dvdnav/third_party/*/src/*/*.[ch]) \
+              extras/dvdnav/Makefile
+$(DVDLIB): $(DVDLIB_DEPS)
+	@$(MAKE) --no-print-directory -C extras/dvdnav build/dvdnav.library
 dvdlib: $(DVDLIB)
 
-# its tests (tests/dvd_test.c) on a DVD image made for them (tests/mkdvd.sh,
-# kept xz-compressed): on the host with the library's sources linked in
-# (big-endian or not, the same code), then on a 68020 under vamos through
-# the library itself, with AmigaMCE's reader (src/dvddisc.c)
+# its tests (extras/dvdnav/tests/dvd_test.c) on its DVD image
+# (extras/dvdnav/tests/mkdvd.sh): its own make test (on the host with its
+# sources linked in, then through the library on a 68020 under vamos), and
+# here once more on a 68020 with AmigaMCE's reader (src/dvddisc.c) as well
 DVD_ISO = build/dvd/test.iso
-$(DVD_ISO): tests/fixtures/dvd/test.iso.xz
+$(DVD_ISO): extras/dvdnav/tests/fixtures/dvd/test.iso.xz
 	@mkdir -p build/dvd
 	@$(PYTHON) -I -c "import lzma, sys; open(sys.argv[2], 'wb').write(lzma.open(sys.argv[1]).read())" $< $@
-build/dvd/dvd_host: tests/dvd_test.c $(DVDLIB_SRC) $(DVDLIB_HDR) tests/host/exec/types.h
-	@mkdir -p build/dvd
-	@set -e; o=""; for f in $(DVDLIB_SRC); do \
-		case $$f in $(DVDNAV)/*) i="-I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)";; *) i="-I$(DVDREAD) -I$(DVDNAV)";; esac; \
-		b=build/dvd/host_$$(echo $$f | tr / _ | sed 's/\.c$$/.o/'); \
-		$(HOSTCC) -O2 $(DVDLIB_FLAGS) -Itests/host $$i -c -o $$b $$f; o="$$o $$b"; done; \
-		$(HOSTCC) -O2 -Wall -Isrc/dvdlib/include -Itests/host -o $@ tests/dvd_test.c $$o
-test-dvd-host: build/dvd/dvd_host $(DVD_ISO)
-	@build/dvd/dvd_host $(DVD_ISO) > build/test-dvd-host.txt 2>&1 \
-		&& grep -q "dvd tests passed" build/test-dvd-host.txt \
-		&& echo "  CHECK DVD navigation (host) ok" || (cat build/test-dvd-host.txt; exit 1)
+test-dvd-host: $(DVDLIB)
+	@$(MAKE) --no-print-directory -C extras/dvdnav test
 # a DVD image's reading past 2 GB and what one holds (src/dvdiso.c), on the
 # host: the 64-bit packet as UAE's file system reads it, the test image
 build/dvd/dvdiso_host: tests/dvdiso_host.c src/dvdiso.c src/dvdiso.h tests/host/exec/types.h
@@ -391,12 +490,13 @@ test-dvdiso: build/dvd/dvdiso_host $(DVD_ISO)
 	@build/dvd/dvdiso_host $(DVD_ISO) > build/test-dvdiso.txt 2>&1 \
 		&& grep -q "dvdiso tests passed" build/test-dvdiso.txt \
 		&& echo "  CHECK DVD images: 64-bit positions, what one holds (host) ok" || (cat build/test-dvdiso.txt; exit 1)
-build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdiso.c src/dvdiso.h \
-                   src/dvdlib/include/libraries/amcedvd.h src/dvdlib/include/inline/amcedvd.h $(DVDLIB)
+build/dvd/dvd_68k: extras/dvdnav/tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdiso.c src/dvdiso.h \
+                   $(DVDLIB_INC)/libraries/dvdnav.h $(DVDLIB_INC)/inline/dvdnav.h $(DVDLIB)
 	@mkdir -p build/dvd/prog/Libs
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ tests/dvd_test.c src/dvddisc.c src/dvdiso.c -lamiga
-	@$(CC) -Os $(CPU) -noixemul -Isrc/dvdlib/include -S -o build/dvd/dvddisc.s src/dvddisc.c
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -I$(DVDLIB_INC) -Isrc -DDVD_TEST_DVDDISC -o $@ \
+		extras/dvdnav/tests/dvd_test.c src/dvddisc.c src/dvdiso.c -lamiga
+	@$(CC) -Os $(CPU) -noixemul -I$(DVDLIB_INC) -S -o build/dvd/dvddisc.s src/dvddisc.c
 	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
 	@cp $(DVDLIB) build/dvd/prog/Libs/
 	@cp $@ build/dvd/prog/
@@ -405,7 +505,7 @@ build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddi
                        src/dvdiso.c src/dvdiso.h src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -DAMCE_NO_EXPUNGE -o $@ \
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -I$(DVDLIB_INC) -DAMCE_NO_EXPUNGE -o $@ \
 		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/dvdiso.c src/util.c src/ownlib.c -lamiga
 	@cp $@ build/dvd/prog/
 test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
@@ -413,7 +513,7 @@ test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvd_68k prog:test.iso > ../test-dvd.txt 2>&1 \
 		&& grep -q "dvd tests passed" ../test-dvd.txt \
-		&& echo "  CHECK DVD navigation (68020, amcedvd.library) ok" || (cat ../test-dvd.txt; exit 1)
+		&& echo "  CHECK DVD navigation (68020, dvdnav.library, AmigaMCE's reader) ok" || (cat ../test-dvd.txt; exit 1)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvdplay_68k prog:test.iso > ../test-dvdplay.txt 2>&1 \
 		&& grep -q "dvdplay tests passed" ../test-dvdplay.txt \
@@ -623,12 +723,14 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(CJK_FILES) $(LHA_DIR)/Fonts/amce-cjk/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
+	@mkdir -p $(LHA_DIR)/Layouts
+	@cp $(LAYOUTS) $(LHA_DIR)/Layouts/
 	@mkdir -p $(LHA_DIR)/Libs
 	@cp $(SQLIB) $(LHA_DIR)/Libs/
-	@# amcedvd.library (DVDs: libdvdread and libdvdnav, GPL-2.0-or-later), for
-	@# internal test builds: a public release must carry its source too
+	@# dvdnav.library (DVDs: libdvdread and libdvdnav, GPL-3; its source
+	@# at github.com/luvwagn/dvdnav.library), extras/dvdnav
 	@cp $(DVDLIB) $(LHA_DIR)/Libs/
-	@cp extras/libdvd/libdvdnav/COPYING $(LHA_DIR)/Licences/amcedvd.library-GPL-2.txt
+	@cp extras/dvdnav/LICENSE $(LHA_DIR)/Licences/dvdnav.library.txt
 	@# ac3.library and ac3fpu.library (AC-3 sound: liba52, GPL-3; their
 	@# source at github.com/luvwagn/ac3.library), extras/ac3, for a video's
 	@# AC3 where the ZZ9000 will not decode it
@@ -667,5 +769,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/dvdlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

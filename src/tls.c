@@ -40,6 +40,15 @@
  * (a clock not set, an old chain), so theirs is not.
  *
  * Only asked for when Settings > Networking > HTTPS is on (AmiSSL found).
+ *
+ * AmiSSL 6 (OpenSSL 4) or 5 (OpenSSL 3): this file is compiled twice, once
+ * against each SDK (build/tls6.o: TLS_V6, extras/amissl6's headers), its
+ * functions named tls6_ and tls5_; the two versions' libraries are reached
+ * by different calls, so one compiled copy cannot use both. The tls5_ build
+ * also holds tls_*, which open AmiSSL 6 where it is installed (amisslmaster
+ * 6 or later, amissl_v41x), else AmiSSL 5, and pass each call to the copy
+ * that opened it (TlsLib.v). AmiSSL 6 installed alone has no AmiSSL 5
+ * libraries; installed over 5 it keeps them, and 6 is used.
  */
 #include "amce.h"
 
@@ -51,6 +60,26 @@
 #include <proto/bsdsocket.h>
 #include <libraries/bsdsocket.h>
 #include <sys/errno.h>
+
+/* this copy's names: tls6_ or tls5_ (tls_* the dispatcher's, below) */
+#ifdef TLS_V6
+#define TLSF(n) tls6_##n
+#define TLS_API AMISSL_V4xx
+#define TLS_NAME "AmiSSL 6"
+#else
+#define TLSF(n) tls5_##n
+#define TLS_API AMISSL_V3xx
+#define TLS_NAME "AmiSSL 5"
+#endif
+BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase);
+void TLSF(set_certs)(const char *path);
+void TLSF(close)(struct TlsLib *t);
+APTR TLSF(new)(struct TlsLib *t, LONG sock, const char *host, BOOL verify);
+int TLSF(handshake)(struct TlsLib *t, APTR c);
+LONG TLSF(read)(struct TlsLib *t, APTR c, APTR buf, LONG n);
+LONG TLSF(write)(struct TlsLib *t, APTR c, const void *buf, LONG n);
+LONG TLSF(pending)(struct TlsLib *t, APTR c);
+void TLSF(free)(struct TlsLib *t, APTR c);
 
 /* AmiSSL's calls take the base of the process making them */
 struct Library;
@@ -132,7 +161,7 @@ static void seed(struct TlsLib *t)
     RAND_seed(pool, sizeof(pool));
 }
 
-BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
+BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
 {
     struct Library *AmiSSLMasterBase, *ssl = NULL, *ext = NULL;
     SSL_CTX *ctx;
@@ -145,10 +174,10 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
     if (!socketbase ||
         !(AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library",
                                          AMISSLMASTER_MIN_VERSION))) {
-        amce_strlcpy(t->why, "AmiSSL 5 is not installed (amisslmaster.library)", sizeof(t->why));
+        amce_strlcpy(t->why, "AmiSSL is not installed (amisslmaster.library)", sizeof(t->why));
         return FALSE;
     }
-    if (OpenAmiSSLTags(AMISSL_V3xx,
+    if (OpenAmiSSLTags(TLS_API,
                        AmiSSL_UsesOpenSSLStructs, FALSE,
                        AmiSSL_InitAmiSSL, TRUE,
                        AmiSSL_GetAmiSSLBase, (ULONG)&ssl,
@@ -157,7 +186,7 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
                        AmiSSL_ErrNoPtr, (ULONG)&t->err,
                        TAG_DONE) != 0 || !ssl) {
         CloseLibrary(AmiSSLMasterBase);
-        amce_strlcpy(t->why, "AmiSSL could not be opened (AmiSSL 5 needed)", sizeof(t->why));
+        amce_strlcpy(t->why, "AmiSSL could not be opened (" TLS_NAME " not installed)", sizeof(t->why));
         return FALSE;
     }
     t->master = AmiSSLMasterBase;
@@ -185,11 +214,15 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
     }
     sprintf(t->ver, "%.40s", OpenSSL_version(OPENSSL_VERSION));
     t->why[0] = 0;
-    amce_log("https: AmiSSL opened", t->ver);
+    {
+        char m[80];
+        sprintf(m, TLS_NAME ", %.44s", t->ver);
+        amce_log("https: AmiSSL opened", m);
+    }
     return TRUE;
 }
 
-void tls_close(struct TlsLib *t)
+void TLSF(close)(struct TlsLib *t)
 {
     struct Library *AmiSSLMasterBase = t->master;
     BASES(t);
@@ -222,7 +255,7 @@ struct TlsConn {
 /* ---- the root certificates */
 static char certs_path[256];            /* set by the main task, read here */
 
-void tls_set_certs(const char *path)
+void TLSF(set_certs)(const char *path)
 {
     amce_strlcpy(certs_path, path ? path : "", sizeof(certs_path));
 }
@@ -355,7 +388,7 @@ static ULONG amiga_secs(void)          /* the clock, seconds since 1970 */
            (ULONG)ds.ds_Tick / TICKS_PER_SECOND;
 }
 
-APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
+APTR TLSF(new)(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
 {
     struct TlsConn *c;
     BASES(t);
@@ -381,7 +414,7 @@ APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
     SSL_set_tlsext_host_name(c->ssl, (char *)host);    /* SNI: one address, many sites */
     if (verify) {
         ULONG now = amiga_secs(), built = build_secs();
-        SSL_set1_host(c->ssl, host);        /* the certificate must be the host's */
+        X509_VERIFY_PARAM_set1_host(SSL_get0_param(c->ssl), host, 0);  /* the certificate: the host's */
         SSL_set_verify(c->ssl, SSL_VERIFY_PEER, NULL);
         if (built && now < built) {
             static BOOL said;
@@ -477,9 +510,9 @@ static LONG result(struct TlsLib *t, SSL *s, int r)
         return 0;                           /* closed without a goodbye: many servers */
     {
         long v = SSL_get_verify_result(s);
-        const char *file = NULL, *data = NULL;
+        const char *file = NULL, *data = NULL, *func = NULL;
         int line = 0, flags = 0;
-        unsigned long q = ERR_get_error_line_data(&file, &line, &data, &flags);
+        unsigned long q = ERR_get_error_all(&file, &line, &func, &data, &flags);
         if (q && ERR_GET_REASON(q) == SSL_R_CERTIFICATE_VERIFY_FAILED && v != X509_V_OK)
             sprintf(t->why, "certificate: %.80s", X509_verify_cert_error_string(v));
         else if (q) {
@@ -537,7 +570,7 @@ static LONG step(struct TlsLib *t, struct TlsConn *c, int op, APTR buf, LONG n)
     }
 }
 
-int tls_handshake(struct TlsLib *t, APTR c)
+int TLSF(handshake)(struct TlsLib *t, APTR c)
 {
     LONG r;
     t->why[0] = 0;
@@ -547,18 +580,18 @@ int tls_handshake(struct TlsLib *t, APTR c)
     return r > 0 ? 1 : r == 0 ? -1 : (int)r;
 }
 
-LONG tls_read(struct TlsLib *t, APTR c, APTR buf, LONG n)
+LONG TLSF(read)(struct TlsLib *t, APTR c, APTR buf, LONG n)
 {
     return step(t, (struct TlsConn *)c, 1, buf, n);
 }
 
-LONG tls_write(struct TlsLib *t, APTR c, const void *buf, LONG n)
+LONG TLSF(write)(struct TlsLib *t, APTR c, const void *buf, LONG n)
 {
     return step(t, (struct TlsConn *)c, 2, (APTR)buf, n);
 }
 
 /* Bytes to be had at once: decrypted already, or come and not read yet. */
-LONG tls_pending(struct TlsLib *t, APTR c)
+LONG TLSF(pending)(struct TlsLib *t, APTR c)
 {
     struct TlsConn *k = c;
     BASES(t);
@@ -567,7 +600,7 @@ LONG tls_pending(struct TlsLib *t, APTR c)
     return SSL_pending(k->ssl) + (k->starved ? 0 : (LONG)BIO_ctrl_pending(k->rb));
 }
 
-void tls_free(struct TlsLib *t, APTR c)
+void TLSF(free)(struct TlsLib *t, APTR c)
 {
     struct TlsConn *k = c;
     BASES(t);
@@ -576,3 +609,109 @@ void tls_free(struct TlsLib *t, APTR c)
     SSL_free(k->ssl);                       /* and its BIOs; no goodbye: the socket closes next */
     FreeVec(k);
 }
+
+#ifndef TLS_V6
+/* ---- the dispatcher: AmiSSL 6 where it is installed, else 5; each call
+ * to the copy that opened it */
+#ifdef TLS_HAVE_V6
+BOOL tls6_open(struct TlsLib *t, struct Library *socketbase);
+void tls6_set_certs(const char *path);
+void tls6_close(struct TlsLib *t);
+APTR tls6_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify);
+int tls6_handshake(struct TlsLib *t, APTR c);
+LONG tls6_read(struct TlsLib *t, APTR c, APTR buf, LONG n);
+LONG tls6_write(struct TlsLib *t, APTR c, const void *buf, LONG n);
+LONG tls6_pending(struct TlsLib *t, APTR c);
+void tls6_free(struct TlsLib *t, APTR c);
+#define V6(t) ((t)->v == 6)
+#else
+#define V6(t) 0
+#define tls6_close(t) ((void)0)
+#define tls6_new(t, s, h, v) NULL
+#define tls6_handshake(t, c) (-1)
+#define tls6_read(t, c, b, n) (-1)
+#define tls6_write(t, c, b, n) (-1)
+#define tls6_pending(t, c) 0
+#define tls6_free(t, c) ((void)0)
+#endif
+
+BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
+{
+    char why6[128];
+    if (t->ctx)
+        return TRUE;
+    if (t->tried)
+        return FALSE;
+    why6[0] = 0;
+#ifdef TLS_HAVE_V6
+    if (tls6_open(t, socketbase)) {
+        t->v = 6;
+        return TRUE;
+    }
+    amce_strlcpy(why6, t->why, sizeof(why6));
+    t->tried = FALSE;                       /* (5 tried next, for this process) */
+#endif
+    if (tls5_open(t, socketbase)) {
+        t->v = 5;
+        return TRUE;
+    }
+    if (why6[0]) {
+        char m[200];
+        sprintf(m, "AmiSSL 6: %.80s; AmiSSL 5: %.80s", why6, t->why);
+        amce_log("https", m);
+        if (strstr(t->why, "could not be opened"))
+            amce_strlcpy(t->why, "AmiSSL could not be opened (AmiSSL 5 or 6 needed)", sizeof(t->why));
+    }
+    return FALSE;
+}
+
+void tls_set_certs(const char *path)
+{
+    tls5_set_certs(path);
+#ifdef TLS_HAVE_V6
+    tls6_set_certs(path);
+#endif
+}
+
+void tls_close(struct TlsLib *t)
+{
+    if (V6(t))
+        tls6_close(t);
+    else
+        tls5_close(t);
+    t->v = 0;
+}
+
+APTR tls_new(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
+{
+    return V6(t) ? tls6_new(t, sock, host, verify) : tls5_new(t, sock, host, verify);
+}
+
+int tls_handshake(struct TlsLib *t, APTR c)
+{
+    return V6(t) ? tls6_handshake(t, c) : tls5_handshake(t, c);
+}
+
+LONG tls_read(struct TlsLib *t, APTR c, APTR buf, LONG n)
+{
+    return V6(t) ? tls6_read(t, c, buf, n) : tls5_read(t, c, buf, n);
+}
+
+LONG tls_write(struct TlsLib *t, APTR c, const void *buf, LONG n)
+{
+    return V6(t) ? tls6_write(t, c, buf, n) : tls5_write(t, c, buf, n);
+}
+
+LONG tls_pending(struct TlsLib *t, APTR c)
+{
+    return V6(t) ? tls6_pending(t, c) : tls5_pending(t, c);
+}
+
+void tls_free(struct TlsLib *t, APTR c)
+{
+    if (V6(t))
+        tls6_free(t, c);
+    else
+        tls5_free(t, c);
+}
+#endif

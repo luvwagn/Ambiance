@@ -1,6 +1,6 @@
 /*
  * dvdplay.c run under vamos on the test DVD's image (tests/mkdvd.sh),
- * through amcedvd.library: the film chosen (the longest title: title 1,
+ * through dvdnav.library: the film chosen (the longest title: title 1,
  * two chapters, 4 s), what the player is told of it, its packs read to
  * its end, a seek and the chapters; first what the image holds, as Videos'
  * preview reads it.
@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <proto/exec.h>
-#include <libraries/amcedvd.h>
+#include <libraries/dvdnav.h>
 
 /* what dvdplay.c uses from the rest of AmigaMCE */
 const char *amce_tr(const char *s) { return s; }

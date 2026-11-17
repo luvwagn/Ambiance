@@ -252,6 +252,9 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale);      /* pixel style, deep RTG: sm
 BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl);
 UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 UWORD sm_pens_used(const struct Smooth *s);     /* pens its shades and logo took */
+const UBYTE *sm_cover(struct Smooth *s, const char *str, LONG n, int face, WORD *dx, WORD *dy,
+                      UWORD *w, UWORD *h, UWORD *mod);  /* text as coverage 0-15 (lkit.c) */
+const UBYTE *sm_icon_cover(struct Smooth *s, int icon, UWORD *n, UWORD *mod);  /* ICON_* likewise */
 /* A picture fitted into w x h at (x, y), centred across; whole: at a whole
  * scale (1x, 2x...) when 1x fits. *drawn_h (may be NULL): its height. */
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
@@ -330,6 +333,8 @@ void gfx_dbuf_start(struct Gfx *g);
 void gfx_dbuf_stop(struct Gfx *g);
 BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
 void gfx_dirty(void);
+extern BOOL gfx_off;            /* a layout draws: the classic drawing not done (lhost.c) */
+extern ULONG gfx_off_hits;      /*   only counted: the screen would have changed */
 BOOL gfx_dbuf_active(void);
 BOOL gfx_quiet_begin(void);     /* around a small update shown without a flip */
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
@@ -1085,7 +1090,7 @@ int  amce_stricmp(const char *a, const char *b);
 int  amce_strnicmp(const char *a, const char *b, LONG n);
 
 /* ---------------------------------------------------------------- HTTPS
- * tls.c: TLS by AmiSSL 5, opened by each process that uses it, for itself
+ * tls.c: TLS by AmiSSL 6 or 5, opened by each process that uses it, for itself
  * (with its own bsdsocket.library); calls on a non-blocking socket say
  * when they would wait. */
 struct TlsLib {
@@ -1094,6 +1099,7 @@ struct TlsLib {
     APTR ctx;                   /* NULL: not open */
     BOOL tried;
     BYTE certs;                 /* root certificates: 0 not loaded yet, 1 in, -1 none */
+    UBYTE v;                    /* the AmiSSL opened: 6 or 5 (0: none) */
     LONG err;                   /* the socket calls' errno: the stack's and AmiSSL's both */
     char ver[44];               /* OpenSSL's version, for the log */
     char why[128];              /* the last failure */
@@ -1141,6 +1147,10 @@ struct NetJob {
     LONG n, total;              /* entries read (-1 not Plex's XML), the server's total */
     LONG start;                 /* a long list's later part: from this entry (0 its first) */
     ULONG ms_read;
+    /* a download (file set): a 200's body written to that file as it comes,
+     * not kept (body then holds the headers alone, len 0); any size */
+    char file[160];
+    volatile ULONG got, size;   /* bytes written so far; Content-Length (0 not given) */
 };
 BOOL net_start(void);
 void net_stop(void);            /* waits for jobs out (cancel them first) */

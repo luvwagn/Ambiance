@@ -9,7 +9,7 @@
  * DOS disk for UDF too), so the file decides; other volumes are not
  * looked in, so no hard disk or network share is read.
  *
- * Playing one: amcedvd.library (src/dvdlib), on the drive's sectors read
+ * Playing one: dvdnav.library (extras/dvdnav), on the drive's sectors read
  * through its device (dvddisc.c), the volume's DOS device giving device
  * and unit; or an image file's (a .iso in Videos), read through its file
  * system. What plays: its film, when one title is most of the disc
@@ -44,14 +44,14 @@
 
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
-#include <libraries/amcedvd.h>
+#include <libraries/dvdnav.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include <proto/amcedvd.h>
+#include <proto/dvdnav.h>
 #include <string.h>
 #include <stdio.h>
 
-struct Library *AmceDvdBase;
+struct Library *DvdNavBase;
 
 /* ---- finding them */
 
@@ -178,10 +178,10 @@ LONG dvd_volumes(struct DvdVol *out, LONG max)
     return k;
 }
 
-/* amcedvd.library where dvdplay_open looks for it (not opened) */
+/* dvdnav.library where dvdplay_open looks for it (not opened) */
 BOOL dvd_lib_there(void)
 {
-    static const char *const at[] = { "PROGDIR:Libs/" AMCEDVD_NAME, "LIBS:" AMCEDVD_NAME };
+    static const char *const at[] = { "PROGDIR:Libs/" DVDNAVLIB_NAME, "LIBS:" DVDNAVLIB_NAME };
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR was = me->pr_WindowPtr;
     BOOL there = FALSE;
@@ -232,7 +232,7 @@ struct DvdPlay {
     volatile BOOL ev_user;                  /*   a hop the viewer asked for (a button, Menu) */
     BOOL user_req;                          /* (asked: the next hop is the viewer's) */
     BOOL hop_done;
-    BOOL exact_prev;                        /* (amcedvd 1.6: no previous chapter is forbidden) */                          /* (a jump acted on when asked: its DVDE_HOP passed over) */
+    BOOL exact_prev;                        /* (dvdnav 1.6: no previous chapter is forbidden) */                          /* (a jump acted on when asked: its DVDE_HOP passed over) */
     struct { UBYTE what; LONG a, b; } asks[8];
     volatile UBYTE ask_in, ask_out;
     volatile LONG domain, vts;
@@ -510,8 +510,8 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         return NULL;
     }
     dp->disc = disc;
-    if (!AmceDvdBase && !(AmceDvdBase = amce_open_own_lib(AMCEDVD_NAME, AMCEDVD_VERSION))) {
-        fail(err, errlen, _("DVDs need amcedvd.library (in AmigaMCE's Libs)"));
+    if (!DvdNavBase && !(DvdNavBase = amce_open_own_lib(DVDNAVLIB_NAME, DVDNAVLIB_VERSION))) {
+        fail(err, errlen, _("DVDs need dvdnav.library (in AmigaMCE's Libs)"));
         dvdplay_close(dp);
         return NULL;
     }
@@ -524,11 +524,11 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         dvdplay_close(dp);
         return NULL;
     }
-    /* its menus (amcedvd.library 1.2 on) */
-    if (AmceDvdBase->lib_Version > 1 || AmceDvdBase->lib_Revision >= 2)
+    /* its menus (dvdnav.library 1.2 on) */
+    if (DvdNavBase->lib_Version > 1 || DvdNavBase->lib_Revision >= 2)
         dp->menus = DvdMenus(dp->dvd);
     /* (1.6 on: DVDU_PREV_CHAPTER also where there is no chapter before) */
-    dp->exact_prev = AmceDvdBase->lib_Version > 1 || AmceDvdBase->lib_Revision >= 6;
+    dp->exact_prev = DvdNavBase->lib_Version > 1 || DvdNavBase->lib_Revision >= 6;
     /* what plays: the film, or the programmes in order */
     DvdGetInfo(dp->dvd, &in);
     {
@@ -978,7 +978,7 @@ void dvdplay_service(struct DvdPlay *dp)
             sprintf(m, "asked %ld: %.60s", (long)what, (const char *)DvdError(dp->dvd));
             amce_log("dvd", m);
         } else if (ok == DVD_JUMPED && what != DVDQ_POINT) {
-            /* the disc jumps (amcedvd 1.5 says so at once): what is read
+            /* the disc jumps (dvdnav 1.5 says so at once): what is read
              * ahead and held let go now, not when its DVDE_HOP is read in
              * turn (seconds of the menu later) */
             dp->hop_done = TRUE;
@@ -1201,7 +1201,7 @@ BOOL dvdplay_can_chapter(struct DvdPlay *dp, int dir)
         return dp->domain == DVDD_TITLE && dp->stop_ev != DVDP_END &&
                !(dp->forbidden & (dir > 0 ? DVDU_NEXT_CHAPTER : DVDU_PREV_CHAPTER)) &&
                (dir > 0 ? dp->chapter < dp->chapters
-                        : dp->exact_prev || dp->chapter > 1); /* (before amcedvd 1.6:
+                        : dp->exact_prev || dp->chapter > 1); /* (before dvdnav 1.6:
                                                             * by its chapter number) */
     return dir > 0 ? (!dp->ended && dp->chapter < dp->chapters) || dp->idx + 1 < dp->n : TRUE;
 }
@@ -1252,5 +1252,5 @@ void dvdplay_close(struct DvdPlay *dp)
     if (dp->disc)
         dvdd_close(dp->disc);
     FreeVec(dp);
-    amce_close_own_lib(&AmceDvdBase);
+    amce_close_own_lib(&DvdNavBase);
 }

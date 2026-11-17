@@ -1,0 +1,9 @@
+AmiSSL 6.1 SDK headers (14.11.2026: OpenSSL 4.1), from AmiSSL-v6-SDK.lha's
+AmiSSL/Developer/include (only what m68k GCC uses: amissl, clib, inline,
+libraries, openssl, proto), unchanged. Apache License 2.0: AmiSSL.doc (its
+copyright and licence), http://www.apache.org/licenses/LICENSE-2.0
+
+src/tls.c is compiled against these as well as the toolchain's AmiSSL 5.27
+headers (build/tls6.o, TLS_V6): AmigaMCE uses AmiSSL 6 where it is
+installed, AmiSSL 5 otherwise. Nothing of AmiSSL is linked in: its
+libraries are opened as AmigaMCE runs.

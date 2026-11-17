@@ -144,16 +144,17 @@ sqlite-3.34.0.a-amiga). SQLite, by D. Richard Hipp and others, is in the
 public domain (Licences/SQLite.txt). AmigaMCE opens the library only when
 a beets library is set up.
 
-Libs/amcedvd.library, which reads DVDs, is libdvdread 7.1.1 and libdvdnav
+Libs/dvdnav.library, which reads DVDs, is libdvdread 7.1.1 and libdvdnav
 7.0.0 (VideoLAN, from the Ogle DVD player: Daniel Caujolle-Bert, Rich
 Wareham, Michael Roitzsch, Jean-Baptiste Kempf, Erik Hovland and others;
 their AUTHORS files are in its source) built as an Exec library, with
-three lines changed for AmigaOS. They and the library are under the GNU
-General Public License, version 2 or later
-(Licences/amcedvd.library-GPL-2.txt); the library's complete source is
-src/dvdlib and extras/libdvd in AmigaMCE's source. AmigaMCE opens it at run time, through an
-interface of its own, only when a DVD is played; none of its code is in
-AmigaMCE.
+three lines changed for AmigaOS. They are under the GNU General Public
+License, version 2 or later, and the library under version 3 or later
+(Licences/dvdnav.library.txt); its source is at
+https://github.com/luvwagn/dvdnav.library (extras/dvdnav in AmigaMCE's
+source). AmigaMCE opens it at run time, through its MIT interface, only
+when a DVD is played; none of its code is in AmigaMCE. It was called
+amcedvd.library before 0.9.1.1.
 
 Libs/ac3.library and Libs/ac3fpu.library, which decode AC-3 (Dolby
 Digital) sound, are liba52 0.8.0 (Aaron Holtzman, Michel Lespinasse and
@@ -202,7 +203,8 @@ mpega.library, or a DVD's AC-3 by ac3.library.
 
 On a ZZ9000, MPEG video is decoded by the card through zz9k.library,
 called with the ZZ9000 SDK's headers (BlitterStudio's zz9000-firmware,
-GPL-3.0-or-later): third_party/zz9k-sdk/, and its README on distribution.
+MIT; zz9k.library itself GPL-3.0-or-later, with a section 7 permission for
+programs that call it through those headers): third_party/zz9k-sdk.txt.
 
 Trademarks
 ----------

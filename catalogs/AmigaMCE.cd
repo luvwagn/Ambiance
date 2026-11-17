@@ -39,7 +39,7 @@ Not enough memory for the animation's screen
 ; beets.c:536 beets.c:557 plex.c:687
 MSG_0D3B3C12 (221985810//)
 (no name)
-; beets.c:708 main.c:12661
+; beets.c:708 main.c:13096
 MSG_027BDF10 (41672464//)
 Nothing here
 ; beets.c:719 plex.c:394
@@ -51,12 +51,12 @@ Albums
 ; beets.c:720 plex.c:396
 MSG_5BBD0EC3 (1539116739//)
 Recently added
-; dvdplay.c:509 eagle.c:961 main.c:12245
+; dvdplay.c:509 eagle.c:961 main.c:3194
 MSG_4E6387ED (1315145709//)
 Not enough memory
-; dvdplay.c:514 main.c:5123 main.c:5142
-MSG_38381E85 (943201925//)
-DVDs need amcedvd.library (in AmigaMCE's Libs)
+; dvdplay.c:514 main.c:5460 main.c:5479
+MSG_5DC5AAA0 (1573235360//)
+DVDs need dvdnav.library (in AmigaMCE's Libs)
 ; dvdplay.c:522
 MSG_3A32AEDF (976400095//)
 Not a DVD-Video disc AmigaMCE can read: %.120s
@@ -78,1551 +78,1779 @@ MSG_62F4807B (1660190843//)
 ; eagle.c:1006
 MSG_4E20BD99 (1310768537//)
 %s could not start this module
-; gfx.c:330
+; gfx.c:339
 MSG_647DD404 (1685967876//)
 needs a graphics card
-; gfx.c:332
+; gfx.c:341
 MSG_2B7EBD1D (729726237//)
 needs AGA
-; gfx.c:335
+; gfx.c:344
 MSG_550E04D5 (1426982101//)
 not available
-; gfx.c:1093
+; gfx.c:1102
 MSG_7C321421 (2083656737//)
 Midnight
-; gfx.c:1093
+; gfx.c:1102
 MSG_4C5F9DAD (1281334701//)
 Graphite
-; gfx.c:1094
+; gfx.c:1103
 MSG_634FC3DF (1666171871//)
 Emerald
-; gfx.c:1094
+; gfx.c:1103
 MSG_2B535442 (726881346//)
 Amethyst
-; gfx.c:3074
+; gfx.c:3117
 MSG_30386F8F (809004943//)
 true colour
-; gfx.c:3076
+; gfx.c:3119
 MSG_3665BBE3 (912636899//)
 64 colours, EHB
-; gfx.c:3078 main.c:1542
+; gfx.c:3121 main.c:1568
 MSG_0F6E4D56 (258886998//)
 %lu colours
-; main.c:49
-MSG_73F99D3C (1945738556//)
-Games
-; main.c:49 main.c:8992 main.c:9010
-MSG_5D4E86F0 (1565427440//)
-Mods
-; main.c:49
-MSG_0F955E3F (261447231//)
-Demos
-; main.c:49 main.c:1966 main.c:3432
-MSG_63609FED (1667276781//)
-Videos
-; main.c:49 main.c:1964 main.c:3457
-MSG_0D70FEAE (225509038//)
-Pictures
-; main.c:49 main.c:1960 main.c:3485
-MSG_584A1D74 (1481252212//)
-Music
-; main.c:49 main.c:2419 main.c:2679
-MSG_5675F954 (1450572116//)
-Radio
-; main.c:50 main.c:2418 main.c:3493
-MSG_4B058728 (1258653480//)
-Settings
-; main.c:50 main.c:3497
-MSG_58E096DE (1491113694//)
-About
-; main.c:411 main.c:412 main.c:512
-MSG_17B11033 (397479987//)
-Loading...
-; main.c:921
-MSG_542CAAAC (1412213420//)
-Low on memory: list stops at %ld entries
-; main.c:1440
-MSG_7C46D36F (2085016431//)
-All Games
-; main.c:1440
-MSG_7E40EC70 (2118184048//)
-All Demos
-; main.c:1480
-MSG_4D9D0161 (1302135137//)
-Amiga Game Selector was not found.
-; main.c:1482
-MSG_3F233512 (1059271954//)
-Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
-; main.c:1486
-MSG_017A1274 (24777332//)
-AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-; main.c:1490
-MSG_5C6E1F8B (1550720907//)
-Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
-; main.c:1505
-MSG_0C290F2C (204017452//)
-Found when AmigaMCE started:
-; main.c:1507
-MSG_6C041D54 (1812208980//)
-Machine type: %s
-; main.c:1507
-MSG_26E752CC (652694220//)
-emulator (UAE family)
-; main.c:1507
-MSG_6FE54AD0 (1877297872//)
-real Amiga
-; main.c:1520
-MSG_0C26D003 (203870211//)
-Chipset: %s%s, %s
-; main.c:1521
-MSG_55012A6E (1426139758//)
- with EHB
-; main.c:1528
-MSG_4540315A (1161834842//)
-unnamed mode
-; main.c:1532
-MSG_49947ED3 (1234468563//)
-Screen: %s
-; main.c:1540
-MSG_2C6DC5BF (745391551//)
-%lu-bit colour
-; main.c:1543
-MSG_67DA4F80 (1742360448//)
-  %lu x %lu, %s, mode ID $%08lx
-; main.c:1549
-MSG_3096D6FE (815191806//)
-Style: smooth, %lu.%02lux
-; main.c:1552
-MSG_2D957250 (764768848//)
-Style: pixel, %lux%s
-; main.c:1553
-MSG_402F4AD3 (1076841171//)
- (tall pixels: dense)
-; main.c:1556
-MSG_321FCB8C (840944524//)
-  its shades and logo: %lu pens so far
-; main.c:1561
-MSG_77468FB6 (2001113014//)
-Graphics card (RTG): %s
-; main.c:1561
-MSG_4E9F3590 (1319056784//)
-yes
-; main.c:1561
-MSG_62366FFA (1647734778//)
-no
-; main.c:1564
-MSG_7A881EB1 (2055741105//)
-ZZ9000: on Zorro %s; JPEG %s, PNG %s
-; main.c:1565 main.c:1566
-MSG_714F0E2D (1901006381//)
-decoded on the card
-; main.c:1565 main.c:1566 main.c:2887
-MSG_7AFA07FD (2063206397//)
-decoded here
-; main.c:1569
-MSG_25AF384C (632240204//)
-Free memory: %luKB chip, %luKB fast
-; main.c:1572
-MSG_2E02D31A (771937050//)
-Font: %s
-; main.c:1572
-MSG_7F759611 (2138412561//)
-amce-pixel (bundled)
-; main.c:1572
-MSG_27934164 (663961956//)
-topaz 8 (fallback)
-; main.c:1575
-MSG_6F035CA3 (1862491299//)
-Datatypes (which one reads each picture format):
-; main.c:1578
-MSG_336DE098 (862838936//)
-AGS: %s
-; main.c:1578
-MSG_64FF7B9F (1694464927//)
-found
-; main.c:1578
-MSG_40A7AEDA (1084731098//)
-not found
-; main.c:1582
-MSG_4FE02B8B (1340091275//)
-Assigns AmigaMCE added (AGS-Stuff did not run):
-; main.c:1585
-MSG_38F75BEF (955735023//)
-AGS machine setting (HW): %s
-; main.c:1585
-MSG_7FA35E26 (2141412902//)
-not set
-; main.c:1587
-MSG_1ACE6AF5 (449735413//)
-Adult entries: %s
-; main.c:1587
-MSG_4E294716 (1311328022//)
-shown
-; main.c:1587
-MSG_7618F139 (1981346105//)
-hidden
-; main.c:1589
-MSG_320E5353 (839799635//)
-Network stack: %s
-; main.c:1589
-MSG_147EB74C (343848780//)
-running
-; main.c:1589 main.c:1594
-MSG_2DA7AFDB (765964251//)
-none
-; main.c:1591
-MSG_1358A393 (324576147//)
-MP3: %s
-; main.c:1591
-MSG_197B8973 (427526515//)
-MHI driver
-; main.c:1592
-MSG_1A89232E (445195054//)
-amcempega.library, AmigaMCE's own
-; main.c:1593
-MSG_4B721655 (1265768021//)
-mpega.library, the ZZ9000 SDK's (decoded on the card)
-; main.c:1598
-MSG_578E3365 (1468937061//)
-FLAC: %s
-; main.c:1598
-MSG_3DEA7C01 (1038777345//)
-not installed (Aminet: util/libs/flacdec)
-; main.c:1599
-MSG_0CC9EBEF (214559727//)
-flacdec.library, too slow here
-; main.c:1600
-MSG_55B725DE (1438066142//)
-flacdec.library, fast enough
-; main.c:1603
-MSG_748668C9 (1954965705//)
-  Plex: FLAC converted to MP3 here
-; main.c:1605
-MSG_72380C4A (1916275786//)
-Module players: %ld (EaglePlayer, DeliTracker)
-; main.c:1607
-MSG_4662E8D4 (1180887252//)
-Module players: none (Aminet: mus/play/Eagleplayer)
-; main.c:1649
-MSG_7B5FEA5E (2069883486//)
-Project
-; main.c:1650
-MSG_3D68301C (1030238236//)
-About...
-; main.c:1651
-MSG_7D35778E (2100656014//)
-Settings...
-; main.c:1652
-MSG_4EDBBEE0 (1323024096//)
-Full screen
-; main.c:1653
-MSG_7AB09B7A (2058394490//)
-Iconify
-; main.c:1656
-MSG_47B3D356 (1202967382//)
-Quit
-; main.c:1774 main.c:2680
-MSG_0DC6B4AA (231126186//)
-Off
-; main.c:1774
-MSG_7415CC33 (1947585587//)
-Fade
-; main.c:1774
-MSG_2AAD5304 (716002052//)
-Cross-fade
-; main.c:1775
-MSG_0581156E (92345710//)
-Tiles
-; main.c:1775
-MSG_67819DA6 (1736547750//)
-Wipe
-; main.c:1826
-MSG_5FDDDD75 (1608375669//)
-Short
-; main.c:1826
-MSG_58DE2772 (1490954098//)
-Normal
-; main.c:1826
-MSG_45939473 (1167299699//)
-Long
-; main.c:1827
-MSG_43BC9D28 (1136434472//)
-starts in 0.6s
-; main.c:1827
-MSG_720CF4AD (1913451693//)
-1.2s
-; main.c:1828
-MSG_0065B852 (6666322//)
-3s, more held against dropouts
-; main.c:1960
-MSG_4DAC8901 (1303152897//)
-Music folders
-; main.c:1962 main.c:9015
-MSG_674C644A (1733059658//)
-Modules
-; main.c:1962
-MSG_7338A4A0 (1933092000//)
-Module folders
-; main.c:1965
-MSG_045F3994 (73349524//)
-Picture folders
-; main.c:1967
-MSG_7B7A30D9 (2071605465//)
-Video folders
-; main.c:2185
-MSG_2DA81BF2 (765991922//)
-Smooth: Fonts/amce-smooth does not match this AmigaMCE
-; main.c:2260
-MSG_3CB0C840 (1018218560//)
-F on Now playing starts this AmigaAMP plug-in
-; main.c:2261
-MSG_6143CDF8 (1631833592//)
-Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
-; main.c:2262 main.c:2589 vis.c:44
-MSG_3DF462B5 (1039426229//)
-Flow
-; main.c:2300
-MSG_022C9299 (36475545//)
-No spectrum under MHI: it plays the MP3 itself
-; main.c:2301
-MSG_0B3A7E73 (188382835//)
-No spectrum: this player does not say what it plays
-; main.c:2317
-MSG_5E18A4A5 (1578673317//)
-Flow: F shows it on the whole screen
-; main.c:2418 main.c:2517 main.c:13966
-MSG_5561FD0B (1432485131//)
-General
-; main.c:2418 main.c:2518 main.c:10445
-MSG_5A05D9B5 (1510332853//)
-Display
-; main.c:2419 main.c:2522 main.c:11725
-MSG_33CA9A34 (868915764//)
-Sound
-; main.c:2419 main.c:2525 main.c:11764
-MSG_1917381B (420952091//)
-Networking
-; main.c:2419 main.c:11735 main.c:11769
-MSG_30B474E4 (817132772//)
-Plex
-; main.c:2419 main.c:2689 main.c:13972
-MSG_6C2261DE (1814192606//)
-Network interface
-; main.c:2420 main.c:2733 main.c:13976
-MSG_23140C4E (588516430//)
-Highest station bitrate
-; main.c:2420 main.c:2683 main.c:13978
-MSG_360055B5 (905991605//)
-Stream buffer
-; main.c:2420 main.c:2742 main.c:13986
-MSG_18162AC4 (404105924//)
-Station list server
-; main.c:2421 main.c:2421 main.c:2524
-MSG_542FED8A (1412427146//)
-Folders
-; main.c:2421 main.c:2635 main.c:13942
-MSG_1A73DB9B (443800475//)
-Language
-; main.c:2422 main.c:2520 main.c:13970
-MSG_5B67C80C (1533528076//)
-Video
-; main.c:2471
-MSG_1B9AE0BB (463134907//)
-English
-; main.c:2471
-MSG_11100833 (286263347//)
-German
-; main.c:2472
-MSG_7CBD6CA5 (2092788901//)
-French
-; main.c:2472
-MSG_7039952B (1882821931//)
-Italian
-; main.c:2473
-MSG_3819825B (941195867//)
-Spanish
-; main.c:2473
-MSG_5605543E (1443189822//)
-Swedish
-; main.c:2474
-MSG_71231814 (1898125332//)
-Finnish
-; main.c:2474
-MSG_003478B8 (3438776//)
-Danish
-; main.c:2475
-MSG_233CA44B (591176779//)
-Norwegian
-; main.c:2475
-MSG_3297E9D1 (848816593//)
-Dutch
-; main.c:2476
-MSG_66D67D5C (1725332828//)
-Portuguese
-; main.c:2476
-MSG_140C2E0A (336342538//)
-Japanese
-; main.c:2477 main.c:2477
-MSG_2653C2A3 (643023523//)
-Greek
-; main.c:2477
-MSG_2D70BF21 (762363681//)
-Korean
-; main.c:2506
-MSG_73C73B18 (1942436632//)
-As Workbench
-; main.c:2518 main.c:2556
-MSG_70FBE876 (1895557238//)
-Workbench window
-; main.c:2520
-MSG_3C2510A9 (1009062057//)
-CPU
-; main.c:2522
-MSG_31213991 (824261009//)
-Paula, 14-bit
-; main.c:2525
-MSG_2D0EBF47 (755941191//)
-no TCP/IP stack
-; main.c:2532
-MSG_4880662C (1216374316//)
-Small
-; main.c:2532
-MSG_09BE5F96 (163471254//)
-Medium
-; main.c:2532
-MSG_718B9F54 (1904975700//)
-Large
-; main.c:2533
-MSG_05A06546 (94397766//)
-Extra large
-; main.c:2561 main.c:11632 main.c:13901
-MSG_2C041143 (738464067//)
-Text size
-; main.c:2565 main.c:10361 main.c:10450
-MSG_1624E3CC (371516364//)
-Screen mode
-; main.c:2570 main.c:2573 main.c:2577
-MSG_5467EC76 (1416096886//)
-Style
-; main.c:2573 main.c:2577 main.c:3100
-MSG_4A02D9CF (1241700815//)
-Smooth
-; main.c:2577 main.c:2579 main.c:3108
-MSG_2AB32B77 (716385143//)
-Pixel
-; main.c:2584
-MSG_63678BEE (1667730414//)
-Double buffering
-; main.c:2586 main.c:11648 main.c:13903
-MSG_1A29FF2A (438959914//)
-Colours
-; main.c:2587
-MSG_20B362A2 (548627106//)
-Visualisation
-; main.c:2589
-MSG_3311DE2D (856809005//)
-Full screen visual (F)
-; main.c:2591
-MSG_52325DD8 (1379032536//)
-Jump scrolling (by letter)
-; main.c:2594
-MSG_1CD58066 (483754086//)
-Slideshow transition
-; main.c:2606
-MSG_584F0908 (1481574664//)
-Videos on a screen of their own
-; main.c:2614
-MSG_58B78A34 (1488423476//)
-MPEG video on the ZZ9000
-; main.c:2619
-MSG_6DF6A531 (1844880689//)
-Use overlay when available (RTG)
-; main.c:2638
-MSG_71E19418 (1910608920//)
-Debug (CPU, memory, log)
-; main.c:2670
-MSG_4393028C (1133707916//)
-No TCP/IP stack running
-; main.c:2673
-MSG_4FC02885 (1337993349//)
-HTTPS (secure connections)
-; main.c:2674
-MSG_17450D60 (390401376//)
-radio stations, plex.tv
-; main.c:2674
-MSG_30C0E827 (817948711//)
-needs AmiSSL
-; main.c:2678
-MSG_4C151C1E (1276451870//)
-stations up to %s
-; main.c:2681
-MSG_424097EC (1111529452//)
-On, no server chosen
-; main.c:2688
-MSG_33774386 (863454086//)
-Automatic: %.40s
-; main.c:2688 main.c:2735 main.c:2752
-MSG_616A6784 (1634363268//)
-Automatic
-; main.c:2701
-MSG_3FCAC913 (1070254355//)
-Automatic (the stack's choice)
-; main.c:2706
-MSG_690CE026 (1762451494//)
-no address
-; main.c:2708
-MSG_589EC060 (1486798944//)
-%s, %.39s unit %ld
-; main.c:2708
-MSG_43430B20 (1128467232//)
-up
-; main.c:2708
-MSG_3DB9B915 (1035581717//)
-down
-; main.c:2719
-MSG_450E2AE8 (1158556392//)
-This TCP/IP stack does not list its interfaces
-; main.c:2730
-MSG_185E3E26 (408829478//)
-Automatic: %s
-; main.c:2738
-MSG_557E4FAB (1434341291//)
-Fastest: %s
-; main.c:2751
-MSG_50FCFDDF (1358757343//)
-for this Amiga: %s
-; main.c:2756
-MSG_33C1DFF1 (868343793//)
-Up to %lukbps
-; main.c:2758
-MSG_0EB61AED (246815469//)
-Any
-; main.c:2791
-MSG_024A57E9 (38426601//)
-one at random, as radio-browser.info asks
-; main.c:2794 main.c:2805
-MSG_4C1FEAD9 (1277160153//)
-Fastest
-; main.c:2795
-MSG_7016D0E0 (1880543456//)
-radio-browser.info's servers could not be found
-; main.c:2801
-MSG_3E7F369F (1048524447//)
-now %.30s, %ld ms
-; main.c:2803
-MSG_62CD57D2 (1657624530//)
-none answered
-; main.c:2815
-MSG_1B68D598 (459855256//)
-no answer
-; main.c:2837
-MSG_3F3927CF (1060710351//)
-Plex server
-; main.c:2839 main.c:12215 main.c:13723
-MSG_23B63BC7 (599145415//)
-none chosen
-; main.c:2843
-MSG_1A42C214 (440582676//)
-signed in
-; main.c:2844
-MSG_51A683F2 (1369867250//)
-Sign out of plex.tv
-; main.c:2845 main.c:12415
-MSG_123ED553 (306107731//)
-Sign in at plex.tv
-; main.c:2846 main.c:12411
-MSG_2D9C8A61 (765233761//)
-needs HTTPS (Settings > Networking)
-; main.c:2854
-MSG_5F6445D0 (1600406992//)
-Request lower quality audio
-; main.c:2854
-MSG_720ED4F6 (1913574646//)
-needed on this Amiga
-; main.c:2869
-MSG_116FD231 (292540977//)
-Sound output
-; main.c:2870
-MSG_1DE950F6 (501829878//)
-4 channels, up to 28kHz, 8-bit
-; main.c:2872
-MSG_44E1D951 (1155651921//)
-Paula, 14-bit: radio, Plex, music files
-; main.c:2872
-MSG_34E4E153 (887415123//)
-all 4 channels, cleaner quiet passages
-; main.c:2874
-MSG_6CB6532B (1823888171//)
-AHI: radio, Plex, music files
-; main.c:2875
-MSG_1AB0857C (447776124//)
-16-bit, its Preferences' mode
-; main.c:2875 main.c:2886 main.c:2895
-MSG_7EF1200C (2129731596//)
-not installed
-; main.c:2878
-MSG_2DA3A6A5 (765699749//)
-MP3 decoder
-; main.c:2880
-MSG_7C47EC75 (2085088373//)
-not installed (AmigaMCE's Libs)
-; main.c:2881
-MSG_4C9B4043 (1285242947//)
-AmigaMCE's own, decoded here
-; main.c:2887
-MSG_3F71ACC2 (1064414402//)
-decoded on the ZZ9000
-; main.c:2901
-MSG_22FBBBB2 (586922930//)
-decodes and plays
-; main.c:2907
-MSG_55D2D3D8 (1439880152//)
-MP3 quality
-; main.c:2909
-MSG_050221B5 (84025781//)
-MP3 quality: automatic
-; main.c:2909
-MSG_71E7648A (1910989962//)
-MP3 quality: high
-; main.c:2910
-MSG_751F9CE1 (1965006049//)
-MP3 quality: medium
-; main.c:2911
-MSG_04A16198 (77685144//)
-by this Amiga's speed, measured each run
-; main.c:2912
-MSG_68B10FC3 (1756434371//)
-the most accurate
-; main.c:2912
-MSG_313B727C (825979516//)
-about a tenth less work
-; main.c:2916
-MSG_003CBCAE (3980462//)
-the decoder gives its best
-; main.c:2950
-MSG_4DEE1DD3 (1307450835//)
-%ld place
-; main.c:2950
-MSG_4DD8A2E0 (1306043104//)
-%ld places
-; main.c:2952
-MSG_4A20BCD9 (1243659481//)
-none yet
-; main.c:2968
-MSG_765A3F9A (1985626010//)
-Use the %s assign
-; main.c:2969
-MSG_4AE004BD (1256195261//)
-assigned
-; main.c:2969
-MSG_5D2E5EC2 (1563320002//)
-not assigned now
-; main.c:2972
-MSG_68FF039F (1761543071//)
-Fire again: remove
-; main.c:2973
-MSG_30B1BFB1 (816955313//)
-Add a folder...
-; main.c:2973
-MSG_4ACE7BF4 (1255046132//)
-eight at most
-; main.c:3110
-MSG_50BCAC0E (1354542094//)
-RTG only
-; main.c:3124
-MSG_4D914B4E (1301367630//)
-Automatic: 
-; main.c:3171 main.c:10381
-MSG_0F9ADE75 (261807733//)
-Credits
-; main.c:3172 main.c:10391
-MSG_589D7E42 (1486716482//)
-System information
-; main.c:3174 main.c:13696
-MSG_345099C5 (877697477//)
-Plex in AmigaMCE
-; main.c:3187
-MSG_718F9B3E (1905236798//)
-(c) 2026 Brian King, under the MIT licence
-; main.c:3189
-MSG_1BA733E8 (463942632//)
-Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
-; main.c:3195
-MSG_2B3D5B66 (725441382//)
-Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
-; main.c:3198
-MSG_3D495145 (1028215109//)
-Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
-; main.c:3201
-MSG_3F32F17E (1060303230//)
-8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
-; main.c:3205
-MSG_7AD43A09 (2060728841//)
-Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL.
-; main.c:3208
-MSG_64ED99F8 (1693293048//)
-FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
-; main.c:3212
-MSG_56CB434E (1456161614//)
-Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
-; main.c:3214
-MSG_302861BB (807952827//)
-This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
-; main.c:3316
-MSG_07ED33C3 (132985795//)
-Pictures: %.100s
-; main.c:3371
-MSG_749CDC88 (1956437128//)
-Videos: %.100s
-; main.c:3397
-MSG_40EDAFB4 (1089318836//)
-No %s here
-; main.c:3397
-MSG_190B5576 (420173174//)
-%s is empty
-; main.c:3399
-MSG_1018D7F4 (270063604//)
-No pictures folder: Settings > Folders > Pictures
-; main.c:3445
-MSG_247DBF4F (612220751//)
-No animations found: AmigaMCE looks for them in %s.
-; main.c:3446
-MSG_6A5613A3 (1784026019//)
-%s has no animations in it.
-; main.c:3448
-MSG_7D6C1643 (2104235587//)
-No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
-; main.c:3470
-MSG_29C163F7 (700539895//)
-No pictures found: AmigaMCE looks for them in %s.
-; main.c:3471
-MSG_6A91D3DF (1787941855//)
-%s has no pictures in it.
-; main.c:3473
-MSG_5DEE87BD (1575913405//)
-No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
-; main.c:3829
-MSG_42D8D701 (1121507073//)
-Sun
-; main.c:3829
-MSG_4EA382E1 (1319338721//)
-Mon
-; main.c:3829
-MSG_7AB4F425 (2058679333//)
-Tue
-; main.c:3829
-MSG_74645757 (1952733015//)
-Wed
-; main.c:3829
-MSG_0699308C (110702732//)
-Thu
-; main.c:3830
-MSG_2663FBE8 (644086760//)
-Fri
-; main.c:3830
-MSG_38A72A77 (950479479//)
-Sat
-; main.c:3831
-MSG_46F2CEAE (1190317742//)
-Jan
-; main.c:3831
-MSG_278D4B82 (663571330//)
-Feb
-; main.c:3831
-MSG_42A7ED2B (1118301483//)
-Mar
-; main.c:3831
-MSG_03F51DF2 (66395634//)
-Apr
-; main.c:3831
-MSG_3BA7E226 (1000858150//)
-May
-; main.c:3832
-MSG_46C131E2 (1187066338//)
-Jun
-; main.c:3832
-MSG_44C12EBC (1153511100//)
-Jul
-; main.c:3832
-MSG_20EE8FD4 (552505300//)
-Aug
-; main.c:3832
-MSG_2CB1A4EF (749839599//)
-Sep
-; main.c:3832
-MSG_11D1F3E9 (298972137//)
-Oct
-; main.c:3833
-MSG_0A3DC404 (171820036//)
-Nov
-; main.c:3833
-MSG_275E7A73 (660503155//)
-Dec
-; main.c:4228 main.c:4276
-MSG_3705878B (923109259//)
-Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
-; main.c:4231
-MSG_56178B52 (1444383570//)
-Up/Down  choose      Esc twice  quit
-; main.c:4231
-MSG_11D91495 (299439253//)
-Esc twice quit
-; main.c:4233
-MSG_4B5CD1EF (1264374255//)
-Up/Down  choose      Right/Fire  open      Esc twice  quit
-; main.c:4234
-MSG_3804081F (939788319//)
-Fire open  Esc twice quit
-; main.c:4236
-MSG_2BD6BD72 (735493490//)
-Up/Down  scroll      Fire/Return  view      Left/Esc  back
-; main.c:4237 main.c:4247 main.c:4261
-MSG_4F05244A (1325737034//)
-Fire view  Esc back
-; main.c:4239
-MSG_0E23C285 (237224581//)
-Up/Down  scroll      Fire/Return  play      Left/Esc  back
-; main.c:4240 main.c:4250 main.c:4258
-MSG_67E35425 (1742951461//)
-Fire play  Esc back
-; main.c:4246 main.c:4261
-MSG_169BF20A (379318794//)
-Up/Down  move    Fire/Return  view    Left/Esc  back
-; main.c:4249 main.c:4258 main.c:4286
-MSG_6C808185 (1820361093//)
-Up/Down  move    Fire/Return  play    Left/Esc  back
-; main.c:4252
-MSG_6DAF7CE6 (1840217318//)
-Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
-; main.c:4253
-MSG_1F838A3C (528714300//)
-Fire show  Right open
-; main.c:4254
-MSG_11F23D61 (301088097//)
-Up/Down  move    Fire/Right  open    Left/Esc  back
-; main.c:4254 main.c:4271
-MSG_41738E8F (1098092175//)
-Fire open  Esc back
-; main.c:4264
-MSG_59045BF0 (1493457904//)
-Up/Down  move    Fire  use this server    Left/Esc  back
-; main.c:4265
-MSG_481DF333 (1209922355//)
-Fire use it  Esc back
-; main.c:4268
-MSG_29E8EF53 (703131475//)
-Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
-; main.c:4269
-MSG_463F7CE7 (1178565863//)
-Fire play  Right info
-; main.c:4271
-MSG_1710A7DF (386967519//)
-Up/Down  move    Right/Fire  open    Left/Esc  back
-; main.c:4273
-MSG_341D99F5 (874355189//)
-Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
-; main.c:4277
-MSG_0B4D231C (189604636//)
-Fire open  Ret play  Esc back
-; main.c:4279
-MSG_3EBC8DC1 (1052544449//)
-Fire/Return  play      Up/Down  scroll      Left/Esc  back
-; main.c:4282
-MSG_6F2C1751 (1865160529//)
-Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
-; main.c:4283
-MSG_4372AA87 (1131588231//)
-Fire press  Up/Dn vol  Esc back
-; main.c:4287
-MSG_2B8E61B8 (730751416//)
-Up/Down  scroll      Left/Esc  back
-; main.c:4287
-MSG_642000D2 (1679818962//)
-Up/Down scroll  Esc back
-; main.c:5110
-MSG_2FCA6510 (801793296//)
-A DVD-Video disc image
-; main.c:5111
-MSG_7838F274 (2016998004//)
-A disc image (UDF)
-; main.c:5112
-MSG_608D9413 (1619891219//)
-Not a DVD-Video disc image
-; main.c:5113
-MSG_754C4DD5 (1967934933//)
-This image could not be read (the log says why)
-; main.c:5125 main.c:5145
-MSG_77C67E04 (2009497092//)
-Fire plays its film, or its programmes one after another, on the ZZ9000
-; main.c:5126 main.c:5146
-MSG_5AEFD354 (1525666644//)
-N and P: the next and previous chapter or programme
-; main.c:5127 main.c:5147
-MSG_351C83CC (891061196//)
-Decoded by the CPU: its menus, M to bring them back
-; main.c:5140
-MSG_7FF7C0A9 (2146943145//)
-A DVD-Video disc
-; main.c:5187
-MSG_6B41435A (1799439194//)
-With sound
-; main.c:5187
-MSG_6524B26D (1696903789//)
-No sound
-; main.c:5189
-MSG_3D33D3EB (1026806763//)
-A transport stream
-; main.c:5191
-MSG_7EB7DE9D (2125979293//)
-A bare video stream
-; main.c:5193 video.c:260
-MSG_5E08A9DF (1577626079//)
-%s video: the ZZ9000 plays MPEG-1 and MPEG-2
-; main.c:5196 video.c:265
-MSG_50D8B3E7 (1356379111//)
-Not an MPEG video AmigaMCE can read
-; main.c:5207
-MSG_1403F9F1 (335804913//)
-%ld frames, %ld.%ld s
-; main.c:5229
-MSG_79CC558D (2043434381//)
-Changed %s
-; main.c:5239 main.c:5258
-MSG_412F4EA4 (1093619364//)
-%ld folder
-; main.c:5239 main.c:5258
-MSG_74791C75 (1954094197//)
-%ld folders
-; main.c:5243
-MSG_406E0E4E (1080954446//)
-%ld animation
-; main.c:5243
-MSG_2A406A07 (708864519//)
-%ld animations
-; main.c:5248 main.c:5266
-MSG_15840E5E (360975966//)
-Fire or Right: open
-; main.c:5250
-MSG_79550836 (2035615798//)
-No pictures in this folder.
-; main.c:5252 main.c:5261
-MSG_1D0B9D42 (487300418//)
-%ld picture
-; main.c:5252 main.c:5261
-MSG_6A487423 (1783133219//)
-%ld pictures
-; main.c:5255
-MSG_52C18255 (1388413525//)
-Fire: slideshow
-; main.c:5256
-MSG_178CD224 (395104804//)
-Right: open the folder
-; main.c:5713
-MSG_6E4CA1B5 (1850515893//)
-Not in the Fonts drawer
-; main.c:6306
-MSG_42B0DEF7 (1118887671//)
-(empty)
-; main.c:6655
-MSG_0ECC2045 (248258629//)
-Loading screenshot...
-; main.c:6873 main.c:8287
-MSG_551A6630 (1427793456//)
-Muted
-; main.c:6875
-MSG_65C00D26 (1707085094//)
-Volume %ld%%
-; main.c:6961
-MSG_17251C33 (388308019//)
-Volume 100%
-; main.c:7062
-MSG_3827BF33 (942128947//)
-Position %ld of %ld   Pattern %ld   Row %ld
-; main.c:7065
-MSG_7930ACB5 (2033233077//)
-Position %ld of %ld
-; main.c:7067
-MSG_5F643207 (1600401927//)
-Position %ld   Pattern %ld   Row %ld
-; main.c:7075
-MSG_46703B99 (1181760409//)
-Buffered %ld.%lds
-; main.c:7078
-MSG_49BCEF94 (1237118868//)
-   dropouts %ld
-; main.c:7082 main.c:7346 main.c:7385
-MSG_44D22F83 (1154625411//)
-Connecting...
-; main.c:7083 main.c:7348 main.c:7387
-MSG_6038FAB1 (1614346929//)
-Buffering...
-; main.c:7203 main.c:7279 main.c:7319
-MSG_4D72110C (1299321100//)
-Playback
-; main.c:7271
-MSG_6E6C1A7A (1852578426//)
-MHI (decoded and played by it)
-; main.c:7295 main.c:7328 main.c:11068
-MSG_7A38DB91 (2050546577//)
-(no title)
-; main.c:7299 main.c:7333
-MSG_3CB15829 (1018255401//)
-   Track %ld of %ld
-; main.c:7305
-MSG_2B183663 (723007075//)
-File
-; main.c:7310 main.c:7312 main.c:7314
-MSG_7FB0FF72 (2142306162//)
-Format
-; main.c:7310 main.c:7344 main.c:7383
-MSG_063F19EE (104798702//)
-Stopped
-; main.c:7312
-MSG_170FF847 (386922567//)
-Reading...
-; main.c:7340
-MSG_22FE7692 (587101842//)
-Original
-; main.c:7350
-MSG_504BD8C0 (1347147968//)
-sends the file as stored
-; main.c:7365
-MSG_4A129B78 (1242733432//)
-Radio   %s
-; main.c:7373 main.c:7469
-MSG_01440831 (21235761//)
-   %ld of %ld in 
-; main.c:7380
-MSG_0A088884 (168331396//)
-On air
-; main.c:7389
-MSG_44471F44 (1145511748//)
-(the station does not say)
-; main.c:7400
-MSG_0769BADE (124369630//)
-MP3 %ldkbps, %s %s
-; main.c:7403
-MSG_4670620E (1181770254//)
-\x3B played at %s %s
-; main.c:7405
-MSG_5CD70C3C (1557597244//)
-, by MHI
-; main.c:7442 main.c:11061
-MSG_716687B8 (1902544824//)
-Nothing playing
-; main.c:7461 main.c:11106
-MSG_085A357E (140129662//)
-   by %s
-; main.c:7465
-MSG_47760A7D (1198918269//)
-   subsong %ld of %ld
-; main.c:7481
-MSG_0F4A385C (256522332//)
-Samples
-; main.c:8231
-MSG_61B4DC81 (1639242881//)
-That was the last track
-; main.c:8232
-MSG_2208340A (570962954//)
-That was the last station in the list
-; main.c:8233
-MSG_3652522E (911364654//)
-That was the last module in the folder
-; main.c:8254
-MSG_1CAF7095 (481259669//)
-This module cannot be moved through
-; main.c:8282
-MSG_0B3E0086 (188612742//)
-Loop on: it plays again at its end
-; main.c:8283
-MSG_0144F316 (21295894//)
-Loop off: it stops at its end
-; main.c:8287
-MSG_230A5085 (587878533//)
-Sound on
-; main.c:8305 main.c:8797 main.c:8862
-MSG_6AA26665 (1789027941//)
-Now playing
-; main.c:8546
-MSG_7DDFAD41 (2111810881//)
-This Amiga is too slow to decode FLAC smoothly
-; main.c:8547
-MSG_0D65D8B7 (224778423//)
-Too slow for FLAC: try Request lower quality audio
-; main.c:8575
-MSG_0BBA80CF (196772047//)
-That track could not be played
-; main.c:8583
-MSG_052FF533 (87029043//)
-The track could not be started there
-; main.c:8609 stream.c:1173
-MSG_369379DB (915634651//)
-The station stopped sending
-; main.c:8994
-MSG_0D35346B (221590635//)
-No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
-; main.c:8999
-MSG_6870F104 (1752232196//)
-It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
-; main.c:9004
-MSG_2E3C8991 (775719313//)
-EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
-; main.c:9017
-MSG_1B1E85CB (454985163//)
-C64 music
-; main.c:9019
-MSG_7F6215F5 (2137134581//)
-Menu music
-; main.c:9021
-MSG_0D90C4A2 (227591330//)
-Modules (MODS:)
-; main.c:9025
-MSG_66E86F1F (1726508831//)
-Modules: %.100s
-; main.c:9029
-MSG_0B5B4D9C (190533020//)
-More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
-; main.c:9291 main.c:10270
-MSG_1361020B (325124619//)
-No pictures in that folder
-; main.c:9297 main.c:12416 main.c:12835
-MSG_46C7288D (1187457165//)
-Too many levels open
-; main.c:9308 main.c:9334 main.c:9348
-MSG_5116954E (1360434510//)
-Could not open that folder
-; main.c:9308
-MSG_6FF9045E (1878590558//)
-That folder has no pictures
-; main.c:9325
-MSG_54FCB2C5 (1425846981//)
-The music library could not be read: %.60s
-; main.c:9334
-MSG_4F992A62 (1335437922//)
-No MP3 or FLAC files in that folder
-; main.c:9348
-MSG_15E6DCFA (367451386//)
-That folder has no modules
-; main.c:9364
-MSG_6D9550B1 (1838502065//)
-Could not open that menu
-; main.c:9364
-MSG_3030A110 (808493328//)
-That menu is empty
-; main.c:9497
+; igame.c:319
+MSG_4C200E59 (1277169241//)
+Unknown
+; igame.c:362
+MSG_225EE315 (576643861//)
+Favourites
+; igame.c:363
+MSG_71D22FD0 (1909600208//)
+All demos
+; igame.c:363
+MSG_27D1E7CF (668067791//)
+All games
+; igame.c:365
+MSG_0D5177A9 (223442857//)
+Most played
+; igame.c:367
+MSG_68E1C31B (1759626011//)
+By genre
+; igame.c:369
+MSG_1AEE602E (451829806//)
+By chipset
+; igame.c:371
+MSG_2C54891D (743737629//)
+By year
+; igame.c:487
+MSG_09C3EF84 (163835780//)
+By %.80s
+; igame.c:490
+MSG_109CF70E (278722318//)
+Genre: %.80s
+; igame.c:492
+MSG_49B0A27E (1236312702//)
+Year: %lu
+; igame.c:494
+MSG_6D84AAE5 (1837411045//)
+Players: %lu
+; igame.c:496
+MSG_5CF0FA59 (1559296601//)
+Chipset: %.80s
+; igame.c:498
+MSG_6F4C5363 (1867273059//)
+Played once
+; igame.c:498
+MSG_0AB01B08 (179313416//)
+Played %lu times
+; igame.c:500
+MSG_6BFB474B (1811629899//)
+A favourite in iGame
+; igame.c:502 main.c:1620
+MSG_0F8B178C (260773772//)
+WHDLoad: %s
+; igame.c:502
+MSG_542A5985 (1412061573//)
+Program: %s
+; igame.c:594
+MSG_6C384865 (1815627877//)
+Its file is not there (rescan in iGame)
+; igame.c:606 main.c:9922
 MSG_74066526 (1946576166//)
 Could not write T:AmigaMCE-run
-; main.c:9558
+; main.c:54
+MSG_73F99D3C (1945738556//)
+Games
+; main.c:54 main.c:9381 main.c:9399
+MSG_5D4E86F0 (1565427440//)
+Mods
+; main.c:54
+MSG_0F955E3F (261447231//)
+Demos
+; main.c:54 main.c:2006 main.c:3756
+MSG_63609FED (1667276781//)
+Videos
+; main.c:54 main.c:2004 main.c:3781
+MSG_0D70FEAE (225509038//)
+Pictures
+; main.c:54 main.c:2000 main.c:3809
+MSG_584A1D74 (1481252212//)
+Music
+; main.c:54 main.c:2459 main.c:2721
+MSG_5675F954 (1450572116//)
+Radio
+; main.c:55 main.c:2458 main.c:3817
+MSG_4B058728 (1258653480//)
+Settings
+; main.c:55 main.c:3821
+MSG_58E096DE (1491113694//)
+About
+; main.c:422 main.c:423 main.c:523
+MSG_17B11033 (397479987//)
+Loading...
+; main.c:932
+MSG_542CAAAC (1412213420//)
+Low on memory: list stops at %ld entries
+; main.c:1451
+MSG_7C46D36F (2085016431//)
+All Games
+; main.c:1451
+MSG_7E40EC70 (2118184048//)
+All Demos
+; main.c:1493
+MSG_11815498 (293688472//)
+iGame's list has no demos in it, and Amiga Game Selector was not found.
+; main.c:1495
+MSG_14315CA7 (338779303//)
+iGame's list has no games in it, and Amiga Game Selector was not found.
+; main.c:1498
+MSG_68D81CDC (1758993628//)
+AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
+; main.c:1502
+MSG_4D9D0161 (1302135137//)
+Amiga Game Selector was not found.
+; main.c:1504
+MSG_3F233512 (1059271954//)
+Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
+; main.c:1508
+MSG_017A1274 (24777332//)
+AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+; main.c:1513
+MSG_1805A7D1 (403023825//)
+iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
+; main.c:1516
+MSG_5C6E1F8B (1550720907//)
+Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
+; main.c:1531
+MSG_0C290F2C (204017452//)
+Found when AmigaMCE started:
+; main.c:1533
+MSG_6C041D54 (1812208980//)
+Machine type: %s
+; main.c:1533
+MSG_26E752CC (652694220//)
+emulator (UAE family)
+; main.c:1533
+MSG_6FE54AD0 (1877297872//)
+real Amiga
+; main.c:1546
+MSG_0C26D003 (203870211//)
+Chipset: %s%s, %s
+; main.c:1547
+MSG_55012A6E (1426139758//)
+ with EHB
+; main.c:1554
+MSG_4540315A (1161834842//)
+unnamed mode
+; main.c:1558
+MSG_49947ED3 (1234468563//)
+Screen: %s
+; main.c:1566
+MSG_2C6DC5BF (745391551//)
+%lu-bit colour
+; main.c:1569
+MSG_67DA4F80 (1742360448//)
+  %lu x %lu, %s, mode ID $%08lx
+; main.c:1575
+MSG_3096D6FE (815191806//)
+Style: smooth, %lu.%02lux
+; main.c:1578
+MSG_2D957250 (764768848//)
+Style: pixel, %lux%s
+; main.c:1579
+MSG_402F4AD3 (1076841171//)
+ (tall pixels: dense)
+; main.c:1582
+MSG_321FCB8C (840944524//)
+  its shades and logo: %lu pens so far
+; main.c:1587
+MSG_77468FB6 (2001113014//)
+Graphics card (RTG): %s
+; main.c:1587
+MSG_4E9F3590 (1319056784//)
+yes
+; main.c:1587
+MSG_62366FFA (1647734778//)
+no
+; main.c:1590
+MSG_7A881EB1 (2055741105//)
+ZZ9000: on Zorro %s; JPEG %s, PNG %s
+; main.c:1591 main.c:1592
+MSG_714F0E2D (1901006381//)
+decoded on the card
+; main.c:1591 main.c:1592 main.c:2929
+MSG_7AFA07FD (2063206397//)
+decoded here
+; main.c:1595
+MSG_25AF384C (632240204//)
+Free memory: %luKB chip, %luKB fast
+; main.c:1598
+MSG_2E02D31A (771937050//)
+Font: %s
+; main.c:1598
+MSG_7F759611 (2138412561//)
+amce-pixel (bundled)
+; main.c:1598
+MSG_27934164 (663961956//)
+topaz 8 (fallback)
+; main.c:1601
+MSG_6F035CA3 (1862491299//)
+Datatypes (which one reads each picture format):
+; main.c:1604
+MSG_336DE098 (862838936//)
+AGS: %s
+; main.c:1604
+MSG_64FF7B9F (1694464927//)
+found
+; main.c:1604 main.c:1616 main.c:3071
+MSG_40A7AEDA (1084731098//)
+not found
+; main.c:1608
+MSG_4FE02B8B (1340091275//)
+Assigns AmigaMCE added (AGS-Stuff did not run):
+; main.c:1612
+MSG_268D62B2 (646800050//)
+iGame: %.120s, %ld games, %ld demos
+; main.c:1615
+MSG_6E96DE70 (1855381104//)
+iGame: %s
+; main.c:1615 main.c:1629 main.c:1634
+MSG_2DA7AFDB (765964251//)
+none
+; main.c:1615
+MSG_3FF83F26 (1073233702//)
+no list read
+; main.c:1620 main.c:2917 main.c:2928
+MSG_7EF1200C (2129731596//)
+not installed
+; main.c:1622
+MSG_23160430 (588645424//)
+Archives unpacked by: %s
+; main.c:1622
+MSG_527DAE8A (1383968394//)
+nothing
+; main.c:1625
+MSG_38F75BEF (955735023//)
+AGS machine setting (HW): %s
+; main.c:1625
+MSG_7FA35E26 (2141412902//)
+not set
+; main.c:1627
+MSG_1ACE6AF5 (449735413//)
+Adult entries: %s
+; main.c:1627
+MSG_4E294716 (1311328022//)
+shown
+; main.c:1627
+MSG_7618F139 (1981346105//)
+hidden
+; main.c:1629
+MSG_320E5353 (839799635//)
+Network stack: %s
+; main.c:1629
+MSG_147EB74C (343848780//)
+running
+; main.c:1631
+MSG_1358A393 (324576147//)
+MP3: %s
+; main.c:1631
+MSG_197B8973 (427526515//)
+MHI driver
+; main.c:1632
+MSG_1A89232E (445195054//)
+amcempega.library, AmigaMCE's own
+; main.c:1633
+MSG_4B721655 (1265768021//)
+mpega.library, the ZZ9000 SDK's (decoded on the card)
+; main.c:1638
+MSG_578E3365 (1468937061//)
+FLAC: %s
+; main.c:1638
+MSG_3DEA7C01 (1038777345//)
+not installed (Aminet: util/libs/flacdec)
+; main.c:1639
+MSG_0CC9EBEF (214559727//)
+flacdec.library, too slow here
+; main.c:1640
+MSG_55B725DE (1438066142//)
+flacdec.library, fast enough
+; main.c:1643
+MSG_748668C9 (1954965705//)
+  Plex: FLAC converted to MP3 here
+; main.c:1645
+MSG_72380C4A (1916275786//)
+Module players: %ld (EaglePlayer, DeliTracker)
+; main.c:1647
+MSG_4662E8D4 (1180887252//)
+Module players: none (Aminet: mus/play/Eagleplayer)
+; main.c:1689
+MSG_7B5FEA5E (2069883486//)
+Project
+; main.c:1690
+MSG_3D68301C (1030238236//)
+About...
+; main.c:1691
+MSG_7D35778E (2100656014//)
+Settings...
+; main.c:1692
+MSG_4EDBBEE0 (1323024096//)
+Full screen
+; main.c:1693
+MSG_7AB09B7A (2058394490//)
+Iconify
+; main.c:1696
+MSG_47B3D356 (1202967382//)
+Quit
+; main.c:1814 main.c:2722
+MSG_0DC6B4AA (231126186//)
+Off
+; main.c:1814
+MSG_7415CC33 (1947585587//)
+Fade
+; main.c:1814
+MSG_2AAD5304 (716002052//)
+Cross-fade
+; main.c:1815
+MSG_0581156E (92345710//)
+Tiles
+; main.c:1815
+MSG_67819DA6 (1736547750//)
+Wipe
+; main.c:1866
+MSG_5FDDDD75 (1608375669//)
+Short
+; main.c:1866
+MSG_58DE2772 (1490954098//)
+Normal
+; main.c:1866
+MSG_45939473 (1167299699//)
+Long
+; main.c:1867
+MSG_43BC9D28 (1136434472//)
+starts in 0.6s
+; main.c:1867
+MSG_720CF4AD (1913451693//)
+1.2s
+; main.c:1868
+MSG_0065B852 (6666322//)
+3s, more held against dropouts
+; main.c:2000
+MSG_4DAC8901 (1303152897//)
+Music folders
+; main.c:2002 main.c:9404
+MSG_674C644A (1733059658//)
+Modules
+; main.c:2002
+MSG_7338A4A0 (1933092000//)
+Module folders
+; main.c:2005
+MSG_045F3994 (73349524//)
+Picture folders
+; main.c:2007
+MSG_7B7A30D9 (2071605465//)
+Video folders
+; main.c:2225
+MSG_2DA81BF2 (765991922//)
+Smooth: Fonts/amce-smooth does not match this AmigaMCE
+; main.c:2300
+MSG_3CB0C840 (1018218560//)
+F on Now playing starts this AmigaAMP plug-in
+; main.c:2301
+MSG_6143CDF8 (1631833592//)
+Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+; main.c:2302 main.c:2631 vis.c:44
+MSG_3DF462B5 (1039426229//)
+Flow
+; main.c:2340
+MSG_022C9299 (36475545//)
+No spectrum under MHI: it plays the MP3 itself
+; main.c:2341
+MSG_0B3A7E73 (188382835//)
+No spectrum: this player does not say what it plays
+; main.c:2357
+MSG_5E18A4A5 (1578673317//)
+Flow: F shows it on the whole screen
+; main.c:2458 main.c:2557 main.c:14454
+MSG_5561FD0B (1432485131//)
+General
+; main.c:2458 main.c:2558 main.c:10873
+MSG_5A05D9B5 (1510332853//)
+Display
+; main.c:2459 main.c:2562 main.c:12153
+MSG_33CA9A34 (868915764//)
+Sound
+; main.c:2459 main.c:2565 main.c:12192
+MSG_1917381B (420952091//)
+Networking
+; main.c:2459 main.c:12163 main.c:12197
+MSG_30B474E4 (817132772//)
+Plex
+; main.c:2459 main.c:2731 main.c:14460
+MSG_6C2261DE (1814192606//)
+Network interface
+; main.c:2460 main.c:2775 main.c:14464
+MSG_23140C4E (588516430//)
+Highest station bitrate
+; main.c:2460 main.c:2725 main.c:14466
+MSG_360055B5 (905991605//)
+Stream buffer
+; main.c:2460 main.c:2784 main.c:14474
+MSG_18162AC4 (404105924//)
+Station list server
+; main.c:2461 main.c:2461 main.c:2564
+MSG_542FED8A (1412427146//)
+Folders
+; main.c:2461 main.c:2677 main.c:14430
+MSG_1A73DB9B (443800475//)
+Language
+; main.c:2462 main.c:2560 main.c:14458
+MSG_5B67C80C (1533528076//)
+Video
+; main.c:2462 main.c:2999 main.c:14591
+MSG_585459EE (1481923054//)
+iGame
+; main.c:2462
+MSG_6E156672 (1846896242//)
+WHDLoad
+; main.c:2511
+MSG_1B9AE0BB (463134907//)
+English
+; main.c:2511
+MSG_11100833 (286263347//)
+German
+; main.c:2512
+MSG_7CBD6CA5 (2092788901//)
+French
+; main.c:2512
+MSG_7039952B (1882821931//)
+Italian
+; main.c:2513
+MSG_3819825B (941195867//)
+Spanish
+; main.c:2513
+MSG_5605543E (1443189822//)
+Swedish
+; main.c:2514
+MSG_71231814 (1898125332//)
+Finnish
+; main.c:2514
+MSG_003478B8 (3438776//)
+Danish
+; main.c:2515
+MSG_233CA44B (591176779//)
+Norwegian
+; main.c:2515
+MSG_3297E9D1 (848816593//)
+Dutch
+; main.c:2516
+MSG_66D67D5C (1725332828//)
+Portuguese
+; main.c:2516
+MSG_140C2E0A (336342538//)
+Japanese
+; main.c:2517 main.c:2517
+MSG_2653C2A3 (643023523//)
+Greek
+; main.c:2517
+MSG_2D70BF21 (762363681//)
+Korean
+; main.c:2546
+MSG_73C73B18 (1942436632//)
+As Workbench
+; main.c:2558 main.c:2596
+MSG_70FBE876 (1895557238//)
+Workbench window
+; main.c:2560
+MSG_3C2510A9 (1009062057//)
+CPU
+; main.c:2562
+MSG_31213991 (824261009//)
+Paula, 14-bit
+; main.c:2565
+MSG_2D0EBF47 (755941191//)
+no TCP/IP stack
+; main.c:2572
+MSG_4880662C (1216374316//)
+Small
+; main.c:2572
+MSG_09BE5F96 (163471254//)
+Medium
+; main.c:2572
+MSG_718B9F54 (1904975700//)
+Large
+; main.c:2573
+MSG_05A06546 (94397766//)
+Extra large
+; main.c:2601 main.c:12060 main.c:14385
+MSG_2C041143 (738464067//)
+Text size
+; main.c:2605 main.c:10789 main.c:10878
+MSG_1624E3CC (371516364//)
+Screen mode
+; main.c:2610 main.c:2613 main.c:2617
+MSG_5467EC76 (1416096886//)
+Style
+; main.c:2613 main.c:2617 main.c:3398
+MSG_4A02D9CF (1241700815//)
+Smooth
+; main.c:2617 main.c:2619 main.c:3406
+MSG_2AB32B77 (716385143//)
+Pixel
+; main.c:2624
+MSG_63678BEE (1667730414//)
+Double buffering
+; main.c:2626 main.c:12076 main.c:14387
+MSG_1A29FF2A (438959914//)
+Colours
+; main.c:2628 main.c:14389
+MSG_7788421F (2005418527//)
+Layout
+; main.c:2629
+MSG_20B362A2 (548627106//)
+Visualisation
+; main.c:2631
+MSG_3311DE2D (856809005//)
+Full screen visual (F)
+; main.c:2633
+MSG_52325DD8 (1379032536//)
+Jump scrolling (by letter)
+; main.c:2636
+MSG_1CD58066 (483754086//)
+Slideshow transition
+; main.c:2648
+MSG_584F0908 (1481574664//)
+Videos on a screen of their own
+; main.c:2656
+MSG_58B78A34 (1488423476//)
+MPEG video on the ZZ9000
+; main.c:2661
+MSG_6DF6A531 (1844880689//)
+Use overlay when available (RTG)
+; main.c:2680
+MSG_71E19418 (1910608920//)
+Debug (CPU, memory, log)
+; main.c:2712
+MSG_4393028C (1133707916//)
+No TCP/IP stack running
+; main.c:2715
+MSG_4FC02885 (1337993349//)
+HTTPS (secure connections)
+; main.c:2716
+MSG_17450D60 (390401376//)
+radio stations, plex.tv
+; main.c:2716
+MSG_30C0E827 (817948711//)
+needs AmiSSL
+; main.c:2720
+MSG_4C151C1E (1276451870//)
+stations up to %s
+; main.c:2723
+MSG_424097EC (1111529452//)
+On, no server chosen
+; main.c:2730
+MSG_33774386 (863454086//)
+Automatic: %.40s
+; main.c:2730 main.c:2777 main.c:2794
+MSG_616A6784 (1634363268//)
+Automatic
+; main.c:2743
+MSG_3FCAC913 (1070254355//)
+Automatic (the stack's choice)
+; main.c:2748
+MSG_690CE026 (1762451494//)
+no address
+; main.c:2750
+MSG_589EC060 (1486798944//)
+%s, %.39s unit %ld
+; main.c:2750
+MSG_43430B20 (1128467232//)
+up
+; main.c:2750
+MSG_3DB9B915 (1035581717//)
+down
+; main.c:2761
+MSG_450E2AE8 (1158556392//)
+This TCP/IP stack does not list its interfaces
+; main.c:2772
+MSG_185E3E26 (408829478//)
+Automatic: %s
+; main.c:2780
+MSG_557E4FAB (1434341291//)
+Fastest: %s
+; main.c:2793
+MSG_50FCFDDF (1358757343//)
+for this Amiga: %s
+; main.c:2798
+MSG_33C1DFF1 (868343793//)
+Up to %lukbps
+; main.c:2800
+MSG_0EB61AED (246815469//)
+Any
+; main.c:2833
+MSG_024A57E9 (38426601//)
+one at random, as radio-browser.info asks
+; main.c:2836 main.c:2847
+MSG_4C1FEAD9 (1277160153//)
+Fastest
+; main.c:2837
+MSG_7016D0E0 (1880543456//)
+radio-browser.info's servers could not be found
+; main.c:2843
+MSG_3E7F369F (1048524447//)
+now %.30s, %ld ms
+; main.c:2845
+MSG_62CD57D2 (1657624530//)
+none answered
+; main.c:2857 main.c:3234
+MSG_1B68D598 (459855256//)
+no answer
+; main.c:2879
+MSG_3F3927CF (1060710351//)
+Plex server
+; main.c:2881 main.c:12643 main.c:14158
+MSG_23B63BC7 (599145415//)
+none chosen
+; main.c:2885
+MSG_1A42C214 (440582676//)
+signed in
+; main.c:2886
+MSG_51A683F2 (1369867250//)
+Sign out of plex.tv
+; main.c:2887 main.c:12843
+MSG_123ED553 (306107731//)
+Sign in at plex.tv
+; main.c:2888 main.c:12839
+MSG_2D9C8A61 (765233761//)
+needs HTTPS (Settings > Networking)
+; main.c:2896
+MSG_5F6445D0 (1600406992//)
+Request lower quality audio
+; main.c:2896
+MSG_720ED4F6 (1913574646//)
+needed on this Amiga
+; main.c:2911
+MSG_116FD231 (292540977//)
+Sound output
+; main.c:2912
+MSG_1DE950F6 (501829878//)
+4 channels, up to 28kHz, 8-bit
+; main.c:2914
+MSG_44E1D951 (1155651921//)
+Paula, 14-bit: radio, Plex, music files
+; main.c:2914
+MSG_34E4E153 (887415123//)
+all 4 channels, cleaner quiet passages
+; main.c:2916
+MSG_6CB6532B (1823888171//)
+AHI: radio, Plex, music files
+; main.c:2917
+MSG_1AB0857C (447776124//)
+16-bit, its Preferences' mode
+; main.c:2920
+MSG_2DA3A6A5 (765699749//)
+MP3 decoder
+; main.c:2922
+MSG_7C47EC75 (2085088373//)
+not installed (AmigaMCE's Libs)
+; main.c:2923
+MSG_4C9B4043 (1285242947//)
+AmigaMCE's own, decoded here
+; main.c:2929
+MSG_3F71ACC2 (1064414402//)
+decoded on the ZZ9000
+; main.c:2943
+MSG_22FBBBB2 (586922930//)
+decodes and plays
+; main.c:2949
+MSG_55D2D3D8 (1439880152//)
+MP3 quality
+; main.c:2951
+MSG_050221B5 (84025781//)
+MP3 quality: automatic
+; main.c:2951
+MSG_71E7648A (1910989962//)
+MP3 quality: high
+; main.c:2952
+MSG_751F9CE1 (1965006049//)
+MP3 quality: medium
+; main.c:2953
+MSG_04A16198 (77685144//)
+by this Amiga's speed, measured each run
+; main.c:2954
+MSG_68B10FC3 (1756434371//)
+the most accurate
+; main.c:2954
+MSG_313B727C (825979516//)
+about a tenth less work
+; main.c:2958
+MSG_003CBCAE (3980462//)
+the decoder gives its best
+; main.c:2994
+MSG_4DEE1DD3 (1307450835//)
+%ld place
+; main.c:2994
+MSG_4DD8A2E0 (1306043104//)
+%ld places
+; main.c:2996
+MSG_4A20BCD9 (1243659481//)
+none yet
+; main.c:3000
+MSG_441A0CA1 (1142557857//)
+installed
+; main.c:3015
+MSG_765A3F9A (1985626010//)
+Use the %s assign
+; main.c:3016
+MSG_4AE004BD (1256195261//)
+assigned
+; main.c:3016
+MSG_5D2E5EC2 (1563320002//)
+not assigned now
+; main.c:3019
+MSG_68FF039F (1761543071//)
+Fire again: remove
+; main.c:3020
+MSG_30B1BFB1 (816955313//)
+Add a folder...
+; main.c:3020
+MSG_4ACE7BF4 (1255046132//)
+eight at most
+; main.c:3073
+MSG_776C4574 (2003584372//)
+%ld entry
+; main.c:3073
+MSG_43A71E80 (1135025792//)
+%ld entries
+; main.c:3075
+MSG_1EFF5D20 (520052000//)
+no list there
+; main.c:3084
+MSG_556E6088 (1433297032//)
+No iGame list is shown.
+; main.c:3086
+MSG_051BBFA8 (85704616//)
+iGame was not found.
+; main.c:3088
+MSG_407C0CA8 (1081871528//)
+%.200s: %ld games, %ld demos
+; main.c:3091
+MSG_58489A07 (1481153031//)
+%.200s: no gameslist.csv read
+; main.c:3093
+MSG_57A7889A (1470597274//)
+Choose iGame's drawer...
+; main.c:3094
+MSG_301DA6A7 (807249575//)
+Find iGame
+; main.c:3095
+MSG_451A8225 (1159365157//)
+None: no iGame list
+; main.c:3138
+MSG_3015054E (806683982//)
+WHDLoad is installed: %s
+; main.c:3140
+MSG_33EE9E1D (871276061//)
+Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
+; main.c:3145
+MSG_776C7EC6 (2003599046//)
+WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
+; main.c:3147
+MSG_13CE4E7E (332287614//)
+AmigaMCE can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
+; main.c:3150
+MSG_4EA477C4 (1319401412//)
+Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
+; main.c:3153
+MSG_43357FD6 (1127579606//)
+The network is not up.
+; main.c:3156
+MSG_416B0131 (1097531697//)
+Downloading: %lu of %lu KB
+; main.c:3159
+MSG_6A00DB1C (1778440988//)
+Downloading: %lu KB
+; main.c:3162
+MSG_3D0E491A (1024346394//)
+Download and install WHDLoad
+; main.c:3164
+MSG_2C3D6FCE (742223822//)
+Not now
+; main.c:3164
+MSG_09E17720 (165771040//)
+Games stops asking
+; main.c:3173
+MSG_1825F809 (405141513//)
+Install WHDLoad...
+; main.c:3186
+MSG_1BC13EBC (465649340//)
+The network is not up
+; main.c:3190
+MSG_59611893 (1499535507//)
+Unpacking needs xadmaster.library or C:LhA
+; main.c:3207
+MSG_098D9D5E (160275806//)
+Downloading WHDLoad from whdload.de...
+; main.c:3219
+MSG_1992E186 (429056390//)
+Downloading WHDLoad: %lu of %lu KB
+; main.c:3222
+MSG_7B97FA5D (2073557597//)
+Downloading WHDLoad: %lu KB
+; main.c:3233
+MSG_08C3EAAD (147057325//)
+WHDLoad could not be downloaded: %.100s
+; main.c:3242
+MSG_3C373586 (1010251142//)
+Unpacking WHDLoad...
+; main.c:3251
+MSG_5919FA2F (1494874671//)
+WHDLoad was not installed: %.120s
+; main.c:3266
+MSG_72928549 (1922205001//)
+iGame's list: %ld games, %ld demos
+; main.c:3268
+MSG_7209FC67 (1913257063//)
+iGame's list could not be read
+; main.c:3408
+MSG_50BCAC0E (1354542094//)
+RTG only
+; main.c:3422
+MSG_4D914B4E (1301367630//)
+Automatic: 
+; main.c:3469 main.c:10809
+MSG_0F9ADE75 (261807733//)
+Credits
+; main.c:3470 main.c:10819
+MSG_589D7E42 (1486716482//)
+System information
+; main.c:3472 main.c:14131
+MSG_345099C5 (877697477//)
+Plex in AmigaMCE
+; main.c:3485
+MSG_718F9B3E (1905236798//)
+(c) 2026 Brian King, under the MIT licence
+; main.c:3487
+MSG_1BA733E8 (463942632//)
+Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+; main.c:3493
+MSG_2B3D5B66 (725441382//)
+Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
+; main.c:3496
+MSG_3D495145 (1028215109//)
+Spectrum analyser: HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen), with Tom Roberts' fixed-point FFT (1989).
+; main.c:3499
+MSG_3F32F17E (1060303230//)
+8-channel modules: mixed the way ProTracker 4.1's mixer does it (MIT licence, (c) 2026 Akustikrausch (Andreas Wendorf); ProTracker 4.1: github.com/akustikrausch/protracker4).
+; main.c:3503
+MSG_7AD43A09 (2060728841//)
+Used if installed, not included, each under its own licence: Amiga Game Selector, WHDLoad, AHI, MHI drivers, mpega.library, datatypes, AmiSSL.
+; main.c:3506
+MSG_64ED99F8 (1693293048//)
+FLAC: flacdec.library (c) 2026 Renaud Schweingruber, with dr_flac by David Reid (public domain or MIT-0), used if installed, not included. It is free to use and to pass on in its own unchanged archive (Aminet: util/libs/flacdec).
+; main.c:3510
+MSG_56CB434E (1456161614//)
+Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
+; main.c:3512
+MSG_302861BB (807952827//)
+This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+; main.c:3614
+MSG_07ED33C3 (132985795//)
+Pictures: %.100s
+; main.c:3669
+MSG_749CDC88 (1956437128//)
+Videos: %.100s
+; main.c:3695
+MSG_40EDAFB4 (1089318836//)
+No %s here
+; main.c:3695
+MSG_190B5576 (420173174//)
+%s is empty
+; main.c:3697
+MSG_1018D7F4 (270063604//)
+No pictures folder: Settings > Folders > Pictures
+; main.c:3769
+MSG_247DBF4F (612220751//)
+No animations found: AmigaMCE looks for them in %s.
+; main.c:3770
+MSG_6A5613A3 (1784026019//)
+%s has no animations in it.
+; main.c:3772
+MSG_7D6C1643 (2104235587//)
+No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+; main.c:3794
+MSG_29C163F7 (700539895//)
+No pictures found: AmigaMCE looks for them in %s.
+; main.c:3795
+MSG_6A91D3DF (1787941855//)
+%s has no pictures in it.
+; main.c:3797
+MSG_5DEE87BD (1575913405//)
+No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
+; main.c:4153
+MSG_42D8D701 (1121507073//)
+Sun
+; main.c:4153
+MSG_4EA382E1 (1319338721//)
+Mon
+; main.c:4153
+MSG_7AB4F425 (2058679333//)
+Tue
+; main.c:4153
+MSG_74645757 (1952733015//)
+Wed
+; main.c:4153
+MSG_0699308C (110702732//)
+Thu
+; main.c:4154
+MSG_2663FBE8 (644086760//)
+Fri
+; main.c:4154
+MSG_38A72A77 (950479479//)
+Sat
+; main.c:4155
+MSG_46F2CEAE (1190317742//)
+Jan
+; main.c:4155
+MSG_278D4B82 (663571330//)
+Feb
+; main.c:4155
+MSG_42A7ED2B (1118301483//)
+Mar
+; main.c:4155
+MSG_03F51DF2 (66395634//)
+Apr
+; main.c:4155
+MSG_3BA7E226 (1000858150//)
+May
+; main.c:4156
+MSG_46C131E2 (1187066338//)
+Jun
+; main.c:4156
+MSG_44C12EBC (1153511100//)
+Jul
+; main.c:4156
+MSG_20EE8FD4 (552505300//)
+Aug
+; main.c:4156
+MSG_2CB1A4EF (749839599//)
+Sep
+; main.c:4156
+MSG_11D1F3E9 (298972137//)
+Oct
+; main.c:4157
+MSG_0A3DC404 (171820036//)
+Nov
+; main.c:4157
+MSG_275E7A73 (660503155//)
+Dec
+; main.c:4552 main.c:4600
+MSG_3705878B (923109259//)
+Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back
+; main.c:4555
+MSG_56178B52 (1444383570//)
+Up/Down  choose      Esc twice  quit
+; main.c:4555
+MSG_11D91495 (299439253//)
+Esc twice quit
+; main.c:4557
+MSG_4B5CD1EF (1264374255//)
+Up/Down  choose      Right/Fire  open      Esc twice  quit
+; main.c:4558
+MSG_3804081F (939788319//)
+Fire open  Esc twice quit
+; main.c:4560
+MSG_2BD6BD72 (735493490//)
+Up/Down  scroll      Fire/Return  view      Left/Esc  back
+; main.c:4561 main.c:4571 main.c:4585
+MSG_4F05244A (1325737034//)
+Fire view  Esc back
+; main.c:4563
+MSG_0E23C285 (237224581//)
+Up/Down  scroll      Fire/Return  play      Left/Esc  back
+; main.c:4564 main.c:4574 main.c:4582
+MSG_67E35425 (1742951461//)
+Fire play  Esc back
+; main.c:4570 main.c:4585
+MSG_169BF20A (379318794//)
+Up/Down  move    Fire/Return  view    Left/Esc  back
+; main.c:4573 main.c:4582 main.c:4610
+MSG_6C808185 (1820361093//)
+Up/Down  move    Fire/Return  play    Left/Esc  back
+; main.c:4576
+MSG_6DAF7CE6 (1840217318//)
+Up/Down  move    Fire  slideshow    Right  open    Left/Esc  back
+; main.c:4577
+MSG_1F838A3C (528714300//)
+Fire show  Right open
+; main.c:4578
+MSG_11F23D61 (301088097//)
+Up/Down  move    Fire/Right  open    Left/Esc  back
+; main.c:4578 main.c:4595
+MSG_41738E8F (1098092175//)
+Fire open  Esc back
+; main.c:4588
+MSG_59045BF0 (1493457904//)
+Up/Down  move    Fire  use this server    Left/Esc  back
+; main.c:4589
+MSG_481DF333 (1209922355//)
+Fire use it  Esc back
+; main.c:4592
+MSG_29E8EF53 (703131475//)
+Up/Down  move    Fire/Return  play    Right  about it    Left/Esc  back
+; main.c:4593
+MSG_463F7CE7 (1178565863//)
+Fire play  Right info
+; main.c:4595
+MSG_1710A7DF (386967519//)
+Up/Down  move    Right/Fire  open    Left/Esc  back
+; main.c:4597
+MSG_341D99F5 (874355189//)
+Up/Down  move    Right  details    Fire/Return  play    Left/Esc  back
+; main.c:4601
+MSG_0B4D231C (189604636//)
+Fire open  Ret play  Esc back
+; main.c:4603
+MSG_3EBC8DC1 (1052544449//)
+Fire/Return  play      Up/Down  scroll      Left/Esc  back
+; main.c:4606
+MSG_6F2C1751 (1865160529//)
+Left/Right  choose    Fire  press    Up/Down  volume    Space  pause    Esc  back
+; main.c:4607
+MSG_4372AA87 (1131588231//)
+Fire press  Up/Dn vol  Esc back
+; main.c:4611
+MSG_2B8E61B8 (730751416//)
+Up/Down  scroll      Left/Esc  back
+; main.c:4611
+MSG_642000D2 (1679818962//)
+Up/Down scroll  Esc back
+; main.c:5447
+MSG_2FCA6510 (801793296//)
+A DVD-Video disc image
+; main.c:5448
+MSG_7838F274 (2016998004//)
+A disc image (UDF)
+; main.c:5449
+MSG_608D9413 (1619891219//)
+Not a DVD-Video disc image
+; main.c:5450
+MSG_754C4DD5 (1967934933//)
+This image could not be read (the log says why)
+; main.c:5462 main.c:5482
+MSG_77C67E04 (2009497092//)
+Fire plays its film, or its programmes one after another, on the ZZ9000
+; main.c:5463 main.c:5483
+MSG_5AEFD354 (1525666644//)
+N and P: the next and previous chapter or programme
+; main.c:5464 main.c:5484
+MSG_351C83CC (891061196//)
+Decoded by the CPU: its menus, M to bring them back
+; main.c:5477
+MSG_7FF7C0A9 (2146943145//)
+A DVD-Video disc
+; main.c:5524
+MSG_6B41435A (1799439194//)
+With sound
+; main.c:5524
+MSG_6524B26D (1696903789//)
+No sound
+; main.c:5526
+MSG_3D33D3EB (1026806763//)
+A transport stream
+; main.c:5528
+MSG_7EB7DE9D (2125979293//)
+A bare video stream
+; main.c:5530 video.c:260
+MSG_5E08A9DF (1577626079//)
+%s video: the ZZ9000 plays MPEG-1 and MPEG-2
+; main.c:5533 video.c:265
+MSG_50D8B3E7 (1356379111//)
+Not an MPEG video AmigaMCE can read
+; main.c:5544
+MSG_1403F9F1 (335804913//)
+%ld frames, %ld.%ld s
+; main.c:5566
+MSG_79CC558D (2043434381//)
+Changed %s
+; main.c:5576 main.c:5595
+MSG_412F4EA4 (1093619364//)
+%ld folder
+; main.c:5576 main.c:5595
+MSG_74791C75 (1954094197//)
+%ld folders
+; main.c:5580
+MSG_406E0E4E (1080954446//)
+%ld animation
+; main.c:5580
+MSG_2A406A07 (708864519//)
+%ld animations
+; main.c:5585 main.c:5603
+MSG_15840E5E (360975966//)
+Fire or Right: open
+; main.c:5587
+MSG_79550836 (2035615798//)
+No pictures in this folder.
+; main.c:5589 main.c:5598
+MSG_1D0B9D42 (487300418//)
+%ld picture
+; main.c:5589 main.c:5598
+MSG_6A487423 (1783133219//)
+%ld pictures
+; main.c:5592
+MSG_52C18255 (1388413525//)
+Fire: slideshow
+; main.c:5593
+MSG_178CD224 (395104804//)
+Right: open the folder
+; main.c:6055
+MSG_6E4CA1B5 (1850515893//)
+Not in the Fonts drawer
+; main.c:6676
+MSG_42B0DEF7 (1118887671//)
+(empty)
+; main.c:7030
+MSG_0ECC2045 (248258629//)
+Loading screenshot...
+; main.c:7248 main.c:8676
+MSG_551A6630 (1427793456//)
+Muted
+; main.c:7250
+MSG_65C00D26 (1707085094//)
+Volume %ld%%
+; main.c:7336
+MSG_17251C33 (388308019//)
+Volume 100%
+; main.c:7451
+MSG_3827BF33 (942128947//)
+Position %ld of %ld   Pattern %ld   Row %ld
+; main.c:7454
+MSG_7930ACB5 (2033233077//)
+Position %ld of %ld
+; main.c:7456
+MSG_5F643207 (1600401927//)
+Position %ld   Pattern %ld   Row %ld
+; main.c:7464
+MSG_46703B99 (1181760409//)
+Buffered %ld.%lds
+; main.c:7467
+MSG_49BCEF94 (1237118868//)
+   dropouts %ld
+; main.c:7471 main.c:7735 main.c:7774
+MSG_44D22F83 (1154625411//)
+Connecting...
+; main.c:7472 main.c:7737 main.c:7776
+MSG_6038FAB1 (1614346929//)
+Buffering...
+; main.c:7592 main.c:7668 main.c:7708
+MSG_4D72110C (1299321100//)
+Playback
+; main.c:7660
+MSG_6E6C1A7A (1852578426//)
+MHI (decoded and played by it)
+; main.c:7684 main.c:7717 main.c:11496
+MSG_7A38DB91 (2050546577//)
+(no title)
+; main.c:7688 main.c:7722
+MSG_3CB15829 (1018255401//)
+   Track %ld of %ld
+; main.c:7694
+MSG_2B183663 (723007075//)
+File
+; main.c:7699 main.c:7701 main.c:7703
+MSG_7FB0FF72 (2142306162//)
+Format
+; main.c:7699 main.c:7733 main.c:7772
+MSG_063F19EE (104798702//)
+Stopped
+; main.c:7701
+MSG_170FF847 (386922567//)
+Reading...
+; main.c:7729
+MSG_22FE7692 (587101842//)
+Original
+; main.c:7739
+MSG_504BD8C0 (1347147968//)
+sends the file as stored
+; main.c:7754
+MSG_4A129B78 (1242733432//)
+Radio   %s
+; main.c:7762 main.c:7858
+MSG_01440831 (21235761//)
+   %ld of %ld in 
+; main.c:7769
+MSG_0A088884 (168331396//)
+On air
+; main.c:7778
+MSG_44471F44 (1145511748//)
+(the station does not say)
+; main.c:7789
+MSG_0769BADE (124369630//)
+MP3 %ldkbps, %s %s
+; main.c:7792
+MSG_4670620E (1181770254//)
+\x3B played at %s %s
+; main.c:7794
+MSG_5CD70C3C (1557597244//)
+, by MHI
+; main.c:7831 main.c:11489
+MSG_716687B8 (1902544824//)
+Nothing playing
+; main.c:7850 main.c:11534
+MSG_085A357E (140129662//)
+   by %s
+; main.c:7854
+MSG_47760A7D (1198918269//)
+   subsong %ld of %ld
+; main.c:7870
+MSG_0F4A385C (256522332//)
+Samples
+; main.c:8620
+MSG_61B4DC81 (1639242881//)
+That was the last track
+; main.c:8621
+MSG_2208340A (570962954//)
+That was the last station in the list
+; main.c:8622
+MSG_3652522E (911364654//)
+That was the last module in the folder
+; main.c:8643
+MSG_1CAF7095 (481259669//)
+This module cannot be moved through
+; main.c:8671
+MSG_0B3E0086 (188612742//)
+Loop on: it plays again at its end
+; main.c:8672
+MSG_0144F316 (21295894//)
+Loop off: it stops at its end
+; main.c:8676
+MSG_230A5085 (587878533//)
+Sound on
+; main.c:8694 main.c:9186 main.c:9251
+MSG_6AA26665 (1789027941//)
+Now playing
+; main.c:8935
+MSG_7DDFAD41 (2111810881//)
+This Amiga is too slow to decode FLAC smoothly
+; main.c:8936
+MSG_0D65D8B7 (224778423//)
+Too slow for FLAC: try Request lower quality audio
+; main.c:8964
+MSG_0BBA80CF (196772047//)
+That track could not be played
+; main.c:8972
+MSG_052FF533 (87029043//)
+The track could not be started there
+; main.c:8998 stream.c:1173
+MSG_369379DB (915634651//)
+The station stopped sending
+; main.c:9383
+MSG_0D35346B (221590635//)
+No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
+; main.c:9388
+MSG_6870F104 (1752232196//)
+It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
+; main.c:9393
+MSG_2E3C8991 (775719313//)
+EaglePlayer was not found: for those formats, install it from Aminet (mus/play/Eagleplayer) with its own installer.
+; main.c:9406
+MSG_1B1E85CB (454985163//)
+C64 music
+; main.c:9408
+MSG_7F6215F5 (2137134581//)
+Menu music
+; main.c:9410
+MSG_0D90C4A2 (227591330//)
+Modules (MODS:)
+; main.c:9414
+MSG_66E86F1F (1726508831//)
+Modules: %.100s
+; main.c:9418
+MSG_0B5B4D9C (190533020//)
+More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
+; main.c:9682 main.c:10698
+MSG_1361020B (325124619//)
+No pictures in that folder
+; main.c:9688 main.c:12844 main.c:13270
+MSG_46C7288D (1187457165//)
+Too many levels open
+; main.c:9699 main.c:9725 main.c:9739
+MSG_5116954E (1360434510//)
+Could not open that folder
+; main.c:9699
+MSG_6FF9045E (1878590558//)
+That folder has no pictures
+; main.c:9716
+MSG_54FCB2C5 (1425846981//)
+The music library could not be read: %.60s
+; main.c:9725
+MSG_4F992A62 (1335437922//)
+No MP3 or FLAC files in that folder
+; main.c:9739
+MSG_15E6DCFA (367451386//)
+That folder has no modules
+; main.c:9756
+MSG_7722EDBF (1998777791//)
+iGame's list is not read now
+; main.c:9756
+MSG_1E5D9885 (509450373//)
+That list is empty
+; main.c:9771
+MSG_6D9550B1 (1838502065//)
+Could not open that menu
+; main.c:9771
+MSG_3030A110 (808493328//)
+That menu is empty
+; main.c:9911
+MSG_38FE5F25 (956194597//)
+iGame's list no longer has that entry
+; main.c:9984
 MSG_0C682AC4 (208153284//)
 %ld/%ld   %s   %s%s
-; main.c:9559
+; main.c:9985
 MSG_2D43D301 (759419649//)
    Slideshow
-; main.c:9562
+; main.c:9988
 MSG_359B5B48 (899373896//)
 Left/Right  previous/next    Fire  pause    Esc  back
-; main.c:9563
+; main.c:9989
 MSG_7ED0D392 (2127614866//)
 Left/Right  previous/next    Fire  slideshow    Esc  back
-; main.c:9766
+; main.c:10193
 MSG_152E3E65 (355352165//)
 Not enough memory for the viewer
-; main.c:9790
+; main.c:10217
 MSG_21238256 (555975254//)
 not sent by %.50s
-; main.c:9791 main.c:9822
+; main.c:10218 main.c:10249
 MSG_74BBD86D (1958467693//)
 Esc  back
-; main.c:9822
+; main.c:10249
 MSG_00FED3FC (16700412//)
 Loading from Plex...
-; main.c:10157
+; main.c:10585
 MSG_2DD7976F (769103727//)
 Not a picture: an IFF %s file
-; main.c:10189 main.c:12704
+; main.c:10617 main.c:13139
 MSG_4FD7ED09 (1339550985//)
 Slideshow of these %ld photos
-; main.c:10409
+; main.c:10837
 MSG_5123470D (1361266445//)
 That mode %.60s
-; main.c:10457
+; main.c:10885
 MSG_2EF5225D (787817053//)
 Could not open that screen mode
-; main.c:10514 main.c:10728
+; main.c:10942 main.c:11156
 MSG_66DF0CD5 (1725893845//)
 The window could not open: full screen
-; main.c:10873 main.c:10878
+; main.c:11301 main.c:11306
 MSG_4926346E (1227240558//)
 Iconify needs Workbench
-; main.c:10877
+; main.c:11305
 MSG_7170B5C2 (1903211970//)
 Quit AmigaMCE
-; main.c:11058
+; main.c:11486
 MSG_336326B3 (862135987//)
 Track %ld of %ld
-; main.c:11058
+; main.c:11486
 MSG_41D16C8A (1104243850//)
 %ld of %ld
-; main.c:11719
+; main.c:12147
 MSG_4C560A92 (1280707218//)
 Connections: the stack's choice of interface
-; main.c:11720
+; main.c:12148
 MSG_247B55C3 (612062659//)
 Connections go out from this interface
-; main.c:11862
+; main.c:12290
 MSG_61C33E78 (1640185464//)
 The smooth style's files could not be loaded
-; main.c:11886
+; main.c:12314
 MSG_38B5BCC0 (951434432//)
 Smooth: on RTG screens only
-; main.c:11940
+; main.c:12368
 MSG_4B65B047 (1264955463//)
 Music library (beets)
-; main.c:11945
+; main.c:12373
 MSG_5D86BD77 (1569111415//)
 Music files (MUSIC:)
-; main.c:11952
+; main.c:12380
 MSG_47B3C622 (1202964002//)
 Music files: %.100s
-; main.c:11959
+; main.c:12387
 MSG_55DB9C3A (1440455738//)
 Music files: Settings > Folders > Music
-; main.c:11969
+; main.c:12397
 MSG_75470054 (1967587412//)
 No TCP/IP stack running: Plex needs networking
-; main.c:11975
+; main.c:12403
 MSG_05BF19DC (96410076//)
 Plex is turned off (Settings > Networking > Plex)
-; main.c:11983
+; main.c:12411
 MSG_370F28B1 (923740337//)
 Other libraries on %s
-; main.c:11988
+; main.c:12416
 MSG_5CB8F506 (1555625222//)
 Plex: %s
-; main.c:11993
+; main.c:12421
 MSG_3D6359D0 (1029921232//)
 No Plex server chosen: Settings > Networking > Plex
-; main.c:12001
+; main.c:12429
 MSG_12991ED4 (312024788//)
 Top voted
-; main.c:12002
+; main.c:12430
 MSG_59DBAEB1 (1507569329//)
 Most listened to
-; main.c:12003
+; main.c:12431
 MSG_47B6B3B8 (1203155896//)
 Trending
-; main.c:12004
+; main.c:12432
 MSG_7CA786A9 (2091353769//)
 Chiptune
-; main.c:12005
+; main.c:12433
 MSG_00D1A496 (13739158//)
 Demoscene
-; main.c:12006
+; main.c:12434
 MSG_65D70EE9 (1708592873//)
 Genres
-; main.c:12007
+; main.c:12435
 MSG_2062DC6D (543349869//)
 Countries
-; main.c:12187
+; main.c:12615
 MSG_2AA3C84C (715376716//)
 Asking plex.tv for a code...  Esc to give up
-; main.c:12191
+; main.c:12619
 MSG_19C08CA4 (432049316//)
 On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
-; main.c:12203
+; main.c:12631
 MSG_4F573886 (1331116166//)
 AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
-; main.c:12208
+; main.c:12636
 MSG_3DC2D1A0 (1036177824//)
 Signed in. Asking plex.tv for this account's servers...
-; main.c:12211
+; main.c:12639
 MSG_46CB6DE4 (1187737060//)
 Signed in to plex.tv as %s.
-; main.c:12214 main.c:13723
+; main.c:12642 main.c:14158
 MSG_7445FC0C (1950743564//)
 Server: %s
-; main.c:12218
+; main.c:12646
 MSG_091E9862 (153000034//)
 Settings > Networking > Plex > Plex server lists this account's servers beside those found on the network.
-; main.c:12222
+; main.c:12650
 MSG_33545DFE (861167102//)
 Signing in did not work: %s
-; main.c:12268
+; main.c:12696
 MSG_24FC226E (620503662//)
 No TCP/IP stack is running
-; main.c:12340 main.c:12400
+; main.c:12768 main.c:12828
 MSG_6CE44B71 (1826900849//)
 The code ran out before it was entered: try again
-; main.c:12341 net.c:227 net.c:258
+; main.c:12769 net.c:227 net.c:258
 MSG_4641030F (1178665743//)
 The server did not answer
-; main.c:12348
+; main.c:12776
 MSG_7B2696DA (2066126554//)
 plex.tv sent no code
-; main.c:12432
+; main.c:12860
 MSG_1D831D65 (495132005//)
 Signed out of plex.tv
-; main.c:12650
+; main.c:13085
 MSG_6358253C (1666721084//)
 That library is gone from the server: Music lists them again
-; main.c:12656
+; main.c:13091
 MSG_7B170497 (2065106071//)
 The server wants a sign-in token: see About > Plex in AmigaMCE
-; main.c:12658
+; main.c:13093
 MSG_229E5121 (580800801//)
 The server answered with something unexpected
-; main.c:12659
+; main.c:13094
 MSG_49CF76D8 (1238333144//)
 No music libraries there
-; main.c:12660
+; main.c:13095
 MSG_3EEA8333 (1055556403//)
 No photo libraries there
-; main.c:12662
+; main.c:13097
 MSG_07C4F203 (130347523//)
 Could not reach the Plex server
-; main.c:12702
+; main.c:13137
 MSG_1CFE72A3 (486437539//)
 Show the photo
-; main.c:12729
+; main.c:13164
 MSG_7BB6085B (2075527259//)
 Nothing listed
-; main.c:12730
+; main.c:13165
 MSG_46D7374C (1188509516//)
 No stations here that AmigaMCE can play
-; main.c:12821
+; main.c:13256
 MSG_1BED60DF (468541663//)
 Still being read from the server: a moment
-; main.c:12881
+; main.c:13316
 MSG_7F58E800 (2136532992//)
 Looking for Plex servers...  Esc to give up
-; main.c:12889
+; main.c:13324
 MSG_13C1CD18 (331468056//)
 Asking %.40s...  Esc to give up
-; main.c:12894
+; main.c:13329
 MSG_04730DAC (74649004//)
 Asking radio-browser.info...  Esc to give up
-; main.c:12937
+; main.c:13372
 MSG_497165DA (1232168410//)
 Plex photos: Plex is turned off (Settings > Networking > Plex)
-; main.c:12938
+; main.c:13373
 MSG_6273A841 (1651746881//)
 Plex photos: choose a server (Settings > Networking > Plex)
-; main.c:12966
+; main.c:13401
 MSG_276888E6 (661162214//)
 Plex photos on %.80s
-; main.c:12972
+; main.c:13407
 MSG_62B4E865 (1656023141//)
 Plex: %.100s
-; main.c:13676
+; main.c:14111
 MSG_2550824B (626033227//)
 Plex server chosen
-; main.c:13700
+; main.c:14135
 MSG_35BE063F (901645887//)
 AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
-; main.c:13711
+; main.c:14146
 MSG_2FBD9CB6 (800955574//)
 Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-; main.c:13715
+; main.c:14150
 MSG_5B40D81A (1530976282//)
 Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
-; main.c:13725
+; main.c:14160
 MSG_6D54C528 (1834272040//)
 Token: set
-; main.c:13725
+; main.c:14160
 MSG_59B6EDB9 (1505160633//)
 Token: not set
-; main.c:13727
+; main.c:14162
 MSG_6A307F3D (1781563197//)
 plex.tv: signed in as %s
-; main.c:13730
+; main.c:14165
 MSG_2DD69A9C (769039004//)
 plex.tv: not signed in
-; main.c:13740
+; main.c:14175
 MSG_0B620CC7 (190975175//)
 MP3: decoded by the MHI driver %.40s
-; main.c:13742
+; main.c:14177
 MSG_36767C71 (913734769//)
 MP3: decoded by amcempega.library, AmigaMCE's own
-; main.c:13743
+; main.c:14178
 MSG_59D38C2E (1507036206//)
 MP3: decoded on the ZZ9000 (its mpega.library)
-; main.c:13744
+; main.c:14179
 MSG_1133EF71 (288616305//)
 MP3: decoded by mpega.library
-; main.c:13745
+; main.c:14180
 MSG_04F04DC5 (82857413//)
 MP3: no decoder (mpega.library or MHI)
-; main.c:13748
+; main.c:14183
 MSG_6FC4AC95 (1875160213//)
 FLAC: converted to MP3 (flacdec.library is not installed)
-; main.c:13749
+; main.c:14184
 MSG_226669D7 (577137111//)
 FLAC: converted to MP3 (too slow to decode here)
-; main.c:13750
+; main.c:14185
 MSG_3521D30E (891409166//)
 FLAC: converted to MP3 (lower quality audio is on)
-; main.c:13751
+; main.c:14186
 MSG_2B51B45B (726774875//)
 FLAC: played as stored, by flacdec.library
-; main.c:13752
+; main.c:14187
 MSG_586857BF (1483233215//)
 Sound: AHI, 16-bit
-; main.c:13752
+; main.c:14187
 MSG_2350DA18 (592501272//)
 Sound: Paula, 14-bit
-; main.c:13753
+; main.c:14188
 MSG_0F2AADBB (254455227//)
 Sound: Paula, 8-bit
-; main.c:13779
+; main.c:14214
 MSG_5353700C (1397977100//)
 Format:   %s
-; main.c:13783
+; main.c:14218
 MSG_4B7B9DA5 (1266392485//)
 Country:  %s
-; main.c:13787
+; main.c:14222
 MSG_1399F81C (328857628//)
 Votes:    %s
-; main.c:13791
+; main.c:14226
 MSG_55E8E50A (1441326346//)
 Tags:     %s
-; main.c:13796
+; main.c:14231
 MSG_64C287CF (1690470351//)
 Homepage: %s
-; main.c:13800
+; main.c:14235
 MSG_5A5309D7 (1515391447//)
 Stream:   %s
-; main.c:13803
+; main.c:14238
 MSG_18A292C0 (413307584//)
 Fire on the station in its list plays it.
-; main.c:13812
+; main.c:14247
 MSG_5143C289 (1363395209//)
 A folder of MP3 or FLAC files
-; main.c:13813
+; main.c:14248
 MSG_19FEBB54 (436124500//)
 A folder of modules
-; main.c:13813
+; main.c:14248
 MSG_20B552D8 (548754136//)
 A folder of pictures
-; main.c:13813
+; main.c:14248
 MSG_1B002318 (452993816//)
 A folder of animations
-; main.c:13814
+; main.c:14249
 MSG_5B08757B (1527281019//)
 Folder added: its music is under Music
-; main.c:13815
+; main.c:14250
 MSG_182BFE5D (405536349//)
 Folder added: its modules are under Mods
-; main.c:13816
+; main.c:14251
 MSG_082FF2F7 (137360119//)
 Folder added: its pictures are under Pictures
-; main.c:13817
+; main.c:14252
 MSG_1C78BE4C (477675084//)
 Folder added: its animations are under Videos
-; main.c:13824
+; main.c:14259
 MSG_0242E102 (37937410//)
 Eight folders at most: take one out first
-; main.c:13836
+; main.c:14271
 MSG_1DC3AA14 (499362324//)
 Add
-; main.c:13851
+; main.c:14286 main.c:14340
 MSG_2B8275A5 (729970085//)
 That folder could not be found
-; main.c:13862
+; main.c:14297
 MSG_692E7242 (1764651586//)
 That folder is there already
-; main.c:13879
+; main.c:14326
+MSG_39287765 (958953317//)
+iGame's drawer (with its gameslist.csv)
+; main.c:14327
+MSG_3A1C5C94 (974937236//)
+Use
+; main.c:14348
+MSG_0DDD9572 (232625522//)
+No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
+; main.c:14363
 MSG_2C2767AF (740779951//)
 Style: Smooth needs an RTG screen
-; main.c:13881
+; main.c:14365
 MSG_14386364 (339239780//)
 This Amiga plays Plex's lower quality: the files as stored are too much
-; main.c:13883
+; main.c:14367
 MSG_5CBCDB5D (1555880797//)
 That interface is not up
-; main.c:13887
+; main.c:14371
 MSG_646AFCF3 (1684733171//)
 MHI is not installed (its drivers in LIBS:MHI)
-; main.c:13891
+; main.c:14375
 MSG_61E14706 (1642153734//)
 amcempega.library is not in AmigaMCE's Libs
-; main.c:13893
+; main.c:14377
 MSG_7B5C3E86 (2069642886//)
 MHI and the ZZ9000's mpega.library decode MP3 at their best
-; main.c:14000
+; main.c:14488
 MSG_7AE98FE6 (2062127078//)
 Station lists opened from now on
-; main.c:14006
+; main.c:14494
 MSG_5AA18328 (1520534312//)
 The next station or track started
-; main.c:14014
+; main.c:14502
 MSG_415E54B9 (1096701113//)
 None of the servers answered: Automatic kept
-; main.c:14045
+; main.c:14533
 MSG_7800A723 (2013308707//)
 MP3 decoded by MHI: radio, Plex (at its best quality) and files
-; main.c:14046
+; main.c:14534
 MSG_799CE4C5 (2040325317//)
 MP3 decoded here by amcempega.library, AmigaMCE's own
-; main.c:14047
+; main.c:14535
 MSG_605E617D (1616798077//)
 MP3 decoded here by mpega.library
-; main.c:14057
+; main.c:14545
 MSG_3990C163 (965788003//)
 MP3 at high quality, at the rate this Amiga can decode it
-; main.c:14058
+; main.c:14546
 MSG_74E84AE4 (1961380580//)
 MP3 at medium quality: about a tenth less work, 70 dB
-; main.c:14059
+; main.c:14547
 MSG_44A547DD (1151682525//)
 MP3 quality by this Amiga's speed, measured at the first MP3 each run
-; main.c:14072
+; main.c:14560
 MSG_30D664DF (819356895//)
 AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
-; main.c:14073
+; main.c:14561
 MSG_0CCDB457 (214807639//)
 Paula at 14 bits: radio, Plex, music files, modules modplug mixes
-; main.c:14074
+; main.c:14562
 MSG_4975E21A (1232462362//)
 Paula plays everything
-; main.c:14089
+; main.c:14577
 MSG_0EE3FD77 (249822583//)
 %s used when it is assigned
-; main.c:14089
+; main.c:14577
 MSG_26D6BADA (651606746//)
 %s left out
-; main.c:14102
+; main.c:14588
+MSG_512EE424 (1362027556//)
+Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
+; main.c:14602 main.c:14617
+MSG_12706454 (309355604//)
+iGame was not found: choose its drawer
+; main.c:14621
+MSG_00B8A52C (12100908//)
+No iGame list: Games and Demos show AGS's alone
+; main.c:14632
 MSG_719F5F36 (1906270006//)
 Fire again to take this folder out (its files stay)
-; main.c:14111
+; main.c:14641
 MSG_4A2FC46E (1244644462//)
 Folder taken out
-; main.c:14725
+; main.c:15255
 MSG_746B08BF (1953171647//)
 Press Esc again to quit AmigaMCE
-; main.c:15274
+; main.c:15804
 MSG_6FC2F840 (1875048512//)
 Nothing is playing
-; main.c:15282
+; main.c:15812
 MSG_116D42F2 (292373234//)
 Starting the plug-in (Esc in it to come back)
-; main.c:15288
+; main.c:15818
 MSG_0D724DE5 (225594853//)
 Flow needs a graphics card's screen (15 to 32-bit)
-; main.c:15289
+; main.c:15819
 MSG_4B362E27 (1261841959//)
 Flow: this player does not say what it plays
-; main.c:15559
+; main.c:16090
 MSG_65839537 (1703122231//)
 Flow could not be shown here
-; main.c:15840 main.c:15846
+; main.c:16373 main.c:16379
 MSG_16ABF123 (380367139//)
 AmigaMCE needs Kickstart 3.0 or newer.\n
-; main.c:15944
+; main.c:16478
 MSG_43383FA3 (1127759779//)
 AmigaMCE could not open its screen.\n
-; main.c:15998
+; main.c:16532
 MSG_3D0CDD4E (1024253262//)
 Saved screen mode not available here: using Automatic
+; main.c:16907 main.c:17534
+MSG_7B47B1F3 (2068296179//)
+Classic
+; main.c:17327
+MSG_14BD5320 (347951904//)
+The layout could not be opened: the classic one is used
+; main.c:17579
+MSG_24B72731 (615982897//)
+Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 ; mixplay.c:329
 MSG_1767B111 (392671505//)
 This module needs a 68020 or better to be mixed
@@ -1701,13 +1929,13 @@ Not a station's address
 ; net.c:106
 MSG_415987C0 (1096386496//)
 radio-browser.info could not be found (DNS)
-; net.c:209 net.c:503 stream.c:1047
+; net.c:209 net.c:609 stream.c:1047
 MSG_34D70E8E (886509198//)
 No socket (is the TCP/IP stack running?)
 ; net.c:221
 MSG_6A2F5761 (1781487457//)
 The connection was refused
-; net.c:227 net.c:258 net.c:306
+; net.c:227 net.c:258 net.c:345
 MSG_262B09BC (640354748//)
 Cancelled
 ; net.c:239 stream.c:1094
@@ -1722,28 +1950,40 @@ The secure connection failed
 ; net.c:263
 MSG_487D4FD3 (1216171987//)
 The server's certificate was not accepted (is the Amiga's clock right?)
-; net.c:306
+; net.c:325
+MSG_24AC7706 (615282438//)
+The server sent it in chunks, which downloads do not take
+; net.c:330
+MSG_2A22BBA4 (706919332//)
+The file could not be written
+; net.c:345 net.c:394
 MSG_2ACCD57C (718067068//)
 The server stopped answering
-; net.c:586
+; net.c:361
+MSG_56B1E221 (1454498337//)
+The file could not be written (a full disk?)
+; net.c:369
+MSG_487CBFA7 (1216135079//)
+The download stopped short
+; net.c:692
 MSG_05C477DC (96761820//)
 No Plex server answered on this network
-; net.c:610 net.c:705
+; net.c:716 net.c:811
 MSG_4A212D5E (1243688286//)
 That server could not be found (DNS)
-; net.c:616 net.c:746
+; net.c:722 net.c:852
 MSG_515157E5 (1364285413//)
 The server answered %ld
-; net.c:685
+; net.c:791
 MSG_2FFE0C45 (805178437//)
 HTTPS is off (Settings > Networking)
-; net.c:730
+; net.c:836
 MSG_68C8EB43 (1757997891//)
 The server only answers over HTTPS
-; net.c:735
+; net.c:841
 MSG_563B6546 (1446733126//)
 The server sent us somewhere we cannot follow
-; net.c:837
+; net.c:943
 MSG_64F654D3 (1693865171//)
 The network process could not start
 ; nfo.c:513
@@ -1899,6 +2139,27 @@ Not enough memory to play a station
 ; stream.c:5499
 MSG_2ADCBED0 (719109840//)
 Could not start the background playback process
+; unarc.c:77
+MSG_1A9D11B3 (446501299//)
+xadmaster.library could not be opened
+; unarc.c:87
+MSG_7A620C10 (2053245968//)
+The archive could not be read (%.60s)
+; unarc.c:110
+MSG_7A3F22E2 (2050958050//)
+%.40s could not be unpacked (%.60s)
+; unarc.c:141
+MSG_7B4E1B7C (2068716412//)
+NIL: could not be opened
+; unarc.c:154
+MSG_0DC59A91 (231053969//)
+LhA could not unpack it (it returned %ld)
+; unarc.c:169
+MSG_49AE7BAE (1236171694//)
+LhA unpacks only .lha archives: install xadmaster.library
+; unarc.c:170
+MSG_1AE736A8 (451360424//)
+Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 ; video.c:237
 MSG_650CDFE1 (1695342561//)
 MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
@@ -1932,3 +2193,15 @@ Right
 ; vis.c:198
 MSG_12773890 (309803152//)
 Left
+; whdinst.c:123
+MSG_00536F32 (5467954//)
+WHDLoad was not in the package as expected
+; whdinst.c:145
+MSG_712ED6F1 (1898895089//)
+%.60s could not be written
+; whdinst.c:171
+MSG_3160C36F (828425071//)
+WHDLoad and %ld more programs put in C:
+; whdinst.c:174
+MSG_04F3511D (83054877//)
+ (%ld already there kept)

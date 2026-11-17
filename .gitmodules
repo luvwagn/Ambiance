@@ -7,3 +7,6 @@
 [submodule "extras/mpga"]
 	path = extras/mpga
 	url = https://github.com/luvwagn/mpga.library.git
+[submodule "extras/dvdnav"]
+	path = extras/dvdnav
+	url = https://github.com/luvwagn/dvdnav.library.git
