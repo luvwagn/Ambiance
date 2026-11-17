@@ -404,6 +404,7 @@ static const void *h_model(int screen)
         page.ndetails = 6;
         page.details = game_facts;
         page.picture = "shot-pinball";
+        page.letter = 'P';
     } else {
         page.section = LSEC_OTHER;
         page.ncrumb = 2;
@@ -419,6 +420,13 @@ static const void *h_model(int screen)
 
 /* what the layout asked for, as it asked */
 static int acts[64][2], nacts;
+/* a stand-in big letter: a block 40 x 80 */
+static WORD h_letter(WORD xr, WORD ym, ULONG fg)
+{
+    h_fill((WORD)(xr - 40), (WORD)(ym - 40), 40, 80, fg);
+    return 40;
+}
+
 /* a stand-in logo: 120 x 30, a blue box and white */
 static const struct LImage *h_logo(ULONG bg)
 {
@@ -503,6 +511,7 @@ static void run(int w, int h, int bits, const char *font)
     host.icon_px = F.icon_n;
     host.picture = h_picture;
     host.logo = h_logo;
+    host.letter = h_letter;
     host.model = h_model;
     host.act = h_act;
     host.tr = h_tr;
@@ -515,10 +524,17 @@ static void run(int w, int h, int bits, const char *font)
     CHECK(drawn_px >= (long)w * h);
     save("home");
     for (scene = 0; scene < 3; scene++) {
+        long full;
         drawn_px = 0;
         layout_engine.draw(LS_PAGE);
+        full = drawn_px;
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
+        if (scene == 1) {               /* a move alone: the list and details drawn again */
+            drawn_px = 0;
+            layout_engine.changed(LS_PAGE, LC_SELECT);
+            CHECK(drawn_px > 0 && drawn_px < full * 3 / 4);
+        }
     }
     drawn_px = 0;
     layout_engine.draw(LS_NOW);

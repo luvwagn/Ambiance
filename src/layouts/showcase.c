@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.5 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.6 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.5 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.6 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 5;
+const UWORD LibRevision = 6;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -40,6 +40,7 @@ const UWORD LibRevision = 5;
 #define C_NOWBG  0x02040AUL
 #define C_COVER  0x8A4B2AUL     /* no cover: a copper square */
 #define C_NEXT   0x9FB0BFUL
+#define C_LETTER 0x2C4864UL     /* the big letter: faint, over the list */
 
 static const struct LayoutHost *H;
 static WORD W, HT, FH;          /* the screen; a line of text */
@@ -478,12 +479,28 @@ static void draw_lines(const char *const *s, LONG n, LONG from, LONG x, LONG y, 
     }
 }
 
+static int hits_base;           /* the click targets before the page's body's */
+
+/* One long text: all of the panel, scrolled by pixels (text_off) */
+static void draw_text_body(const struct LPage *m)
+{
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(236), w = W - x - X(24);
+    LONG top = py + Y(14), lh = FH + Y(4);
+    panel(x, py, w, bottom - py, 6, C_PANEL, C_LINE, grad(py));
+    H->clip((WORD)(x + 2), (WORD)(py + Y(6)), (WORD)(x + w - 2), (WORD)(bottom - Y(6)));
+    draw_lines(m->details, m->ndetails, m->list.top, x + X(18), top - lh * m->text_off / 256,
+               w - X(36), bottom - Y(6) + lh, C_BODY, C_BODY);
+    H->clip(0, 0, W, HT);
+}
+static int body_n = -1;         /* drawn with a details panel (1) or not (0); -1 text */
+static void draw_page_body(const struct LPage *m);
+
 static void draw_page(void)
 {
     const struct LPage *m = H->model(LS_PAGE);
     char sub[160];
-    LONG i, n, py = Y(64), bottom = HT - Y(30) - FH - Y(12);
-    LONG lx = X(24), lw = X(196), x = X(236), w = W - x - X(24);
+    LONG i, py = Y(64), bottom = HT - Y(30) - FH - Y(12);
+    LONG lx = X(24), lw = X(196);
     background();
     top_right(FALSE);
     if (!m)
@@ -515,15 +532,26 @@ static void draw_page(void)
                  lw - X(40) - (i - 1) * X(6));
         }
     }
+    hits_base = nhits;
     if (m->text) {
-        /* one long text: all of the panel */
-        panel(x, py, w, bottom - py, 6, C_PANEL, C_LINE, grad(py));
-        draw_lines(m->details, m->ndetails, m->list.top, x + X(18), py + Y(14), w - X(36),
-                   bottom - Y(10), C_BODY, C_BODY);
+        body_n = -1;
+        draw_text_body(m);
         footer(m->hint, m->message);
         return;
     }
+    draw_page_body(m);
+    footer(m->hint, m->message);
+}
+
+/* The list's panel and the details' under it: all a move needs drawing
+ * again (changed(LC_SELECT)), as long as the details' panel is still
+ * there or still not */
+static void draw_page_body(const struct LPage *m)
+{
+    LONG n, py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(236), w = W - x - X(24);
     n = m->ndetails > 0 || m->picture ? 1 : 0;
+    body_n = (int)n;
+    nhits = hits_base;          /* the rows' click targets made again */
     {
         LONG lh = n ? (bottom - py) * 62 / 100 : bottom - py;
         LONG dy = py + lh + Y(12), dh = bottom - dy;
@@ -548,8 +576,9 @@ static void draw_page(void)
             draw_lines(m->details, m->ndetails, 0, tx, dy + Y(12), x + w - tx - X(18),
                        dy + dh - Y(8), C_WHITE, C_BODY);
         }
+        if (m->letter && H->letter)     /* the big letter, as the list glides or jumps */
+            H->letter((WORD)(x + w - X(40)), (WORD)(py + lh / 2), C_LETTER);
     }
-    footer(m->hint, m->message);
 }
 
 /* ---------------------------------------------------------------- Now playing */
@@ -681,7 +710,18 @@ static void sc_draw(int screen)
 
 static void sc_changed(int screen, ULONG what)
 {
-    (void)what;
+    const struct LPage *m;
+    if (screen == LS_PAGE && drawn == LS_PAGE && what == LC_SELECT && body_n < 0 &&
+        (m = H->model(LS_PAGE)) && m->text) {
+        draw_text_body(m);      /* a text gliding: its panel alone */
+        return;
+    }
+    if (screen == LS_PAGE && drawn == LS_PAGE && what == LC_SELECT && body_n >= 0 &&
+        (m = H->model(LS_PAGE)) && !m->text && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
+        H->clip(0, 0, W, HT);
+        draw_page_body(m);      /* a move: the list and its details, not the whole screen */
+        return;
+    }
     sc_draw(screen);
 }
 

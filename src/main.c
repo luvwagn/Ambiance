@@ -16961,6 +16961,15 @@ static struct {
     char clock[24];
     struct LayoutInfo found[LV_MAX];
     int nfound;
+    /* what the generic page was drawn with: a move alone is drawn as one
+     * (changed(LC_SELECT)), not the whole screen */
+    const struct Page *last_p;
+    const void *last_items;
+    LONG last_sel, last_count;
+    int last_depth;
+    char last_letter;
+    ULONG last_msg;
+    LONG last_pos;                  /* a text page's: where it was scrolled to */
 } lv = { .drawn = -1 };
 
 BOOL lv_on(void)
@@ -17153,8 +17162,12 @@ static void lv_page(struct Page *p, struct LPage *m)
     if (p->type == PT_TEXT || p->type == PT_DETAIL) {
         const struct ItemList *l = p->tb.lines ? p->tb.lines : &p->list;
         m->text = 1;
-        if (p->tb.line_h > 0)
-            m->list.top = p->tb.target / p->tb.line_h;    /* (the first line shown) */
+        if (p->tb.line_h > 0) {
+            /* where it is now (it glides to tb.target): its first line, and how
+             * much of that is scrolled past */
+            m->list.top = p->tb.pos / p->tb.line_h;
+            m->text_off = (UBYTE)((p->tb.pos % p->tb.line_h) * 256 / p->tb.line_h);
+        }
         for (i = 0; i < l->count && i < 256; i++)
             lv_lines[i] = l->items[i].label ? l->items[i].label : "";
         m->ndetails = (WORD)i;
@@ -17172,7 +17185,10 @@ static void lv_page(struct Page *p, struct LPage *m)
         m->ndetails = (WORD)i;
         m->details = lv_lines;
     }
-    m->picture = lv_picture_of(p);
+    /* while it glides, or a letter is up, no pictures asked for: the
+     * classic pane waits the same way */
+    m->picture = hold_active() || ov.on ? NULL : lv_picture_of(p);
+    m->letter = ov.on && ov.page == p && ov.bl ? ov.letter : 0;
 }
 
 static const void *lv_model(int screen)
@@ -17429,6 +17445,28 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     return NULL;
 }
 
+/* The big letter up (the classic one's mask, ov.bl), in rgb: a fill a run */
+static WORD h_letter(WORD xr, WORD ym, ULONG rgb)
+{
+    const struct BigLetter *bl = ov.on ? ov.bl : NULL;
+    WORD x0, y0, i, j, r;
+    if (!bl || !bl->mask)
+        return 0;
+    x0 = xr - bl->w;
+    y0 = ym - bl->h / 2;
+    for (j = 0; j < (WORD)bl->h; j++) {
+        const UBYTE *row = bl->mask + (ULONG)j * bl->bpr;
+        for (i = 0; i < (WORD)bl->w; i = r) {
+            BOOL on = (row[i >> 3] >> (7 - (i & 7))) & 1;
+            for (r = i + 1; r < (WORD)bl->w && (BOOL)((row[r >> 3] >> (7 - (r & 7))) & 1) == on; r++)
+                ;
+            if (on)
+                lk_fill(&lv.out, x0 + i, y0 + j, r - i, 1, rgb);
+        }
+    }
+    return (WORD)bl->w;
+}
+
 /* ---- the drawing calls, onto lv.out */
 static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&lv.out, x0, y0, x1, y1); }
 static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG rgb) { lk_fill(&lv.out, x, y, w, h, rgb); }
@@ -17534,6 +17572,7 @@ static void lv_activate(void)
     lv.host.icon_px = lk_icon_px(&g);
     lv.host.picture = lv_picture;
     lv.host.logo = lv_logo;
+    lv.host.letter = h_letter;
     lv.host.model = lv_model;
     lv.host.act = lv_act;
     lv.host.tr = h_tr;
@@ -17615,13 +17654,38 @@ void lv_frame(void)
     if (scr != lv.drawn)
         lv.full = TRUE;
     if (lv.full || gfx_off_hits) {
+        struct Page *p = cur();
+        ULONG mh = 5381;
+        const char *c;
+        char letter = p && ov.on && ov.page == p && ov.bl ? ov.letter : 0;
+        BOOL moved_only;
+        for (c = msg; *c; c++)
+            mh = mh * 33 + (UBYTE)*c;
+        moved_only = !lv.full && scr == LS_PAGE && lv.drawn == scr && lv.eng->changed && p &&
+                     p == lv.last_p && depth == lv.last_depth && mh == lv.last_msg &&
+                     (p->type == PT_LIST
+                          ? p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&
+                            (p->sel != lv.last_sel || letter != lv.last_letter)
+                          : (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open &&
+                            p->tb.pos != lv.last_pos);
         lv.full = FALSE;
         gfx_off_hits = 0;
         lv.drawn = scr;
         clock_text(lv.clock);
         lv_ri = 0;
         lk_clip(&lv.out, 0, 0, g.w, g.h);
-        lv.eng->draw(scr);
+        if (moved_only)
+            lv.eng->changed(scr, LC_SELECT);
+        else
+            lv.eng->draw(scr);
+        lv.last_p = p;
+        lv.last_items = p ? (const void *)p->list.items : NULL;
+        lv.last_sel = p ? p->sel : -1;
+        lv.last_count = p ? p->list.count : -1;
+        lv.last_depth = depth;
+        lv.last_letter = letter;
+        lv.last_msg = mh;
+        lv.last_pos = p && p->tb.open ? p->tb.pos : -1;
     }
     lk_show(&lv.out);
 }

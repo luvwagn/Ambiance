@@ -91,6 +91,10 @@ struct LPage {
     const char *picture;        /* the selected row's picture's file, or NULL */
     const char *hint;           /* the keys' hint for the footer */
     const char *message;        /* a message to show now, or NULL */
+    char letter;                /* the big letter up while the list glides or jumps (host->letter
+                                 * draws it), 0 none */
+    UBYTE text_off;             /* text: how much of its first line (list.top) is scrolled
+                                 * past, in 256ths of a line (it glides by pixels) */
 };
 
 /* A row on Home: a title and a few items (recently added albums, the
@@ -213,6 +217,9 @@ struct LayoutHost {
     /* Ambiance's logo, at the screen's smooth size, over bg (0xRRGGBB); NULL
      * if there is none. Good until the layout closes. */
     const struct LImage *(*logo)(ULONG bg);
+    /* the big letter that is up (LPage.letter), in fg, its right edge at
+     * xr and its middle at ym: its width, 0 if none is up */
+    WORD (*letter)(WORD xr, WORD ym, ULONG fg);
     /* the content */
     const void *(*model)(int screen);   /* struct LHome, LPage, LAlbum, LArtist or LNow */
     void (*act)(int what, LONG arg);    /* LAC_* */
