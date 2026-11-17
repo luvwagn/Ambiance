@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - opening its own libraries (Libs: amcedvd, ac3, ac3fpu, mpegv)
+ * AmigaMCE - opening its own libraries (Libs: dvdnav, ac3, ac3fpu, mpegv)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Exec finds a library already in memory by its name, whatever path is

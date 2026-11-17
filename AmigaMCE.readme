@@ -154,7 +154,7 @@ Videos
   programmes one after another (a disc of episodes); N and P, or the
   controls' |< and >|, the previous and next chapter or programme. Of
   its sound tracks, a stereo one first (MPEG audio, then AC-3), then
-  the others. Needs Libs/amcedvd.library (in the archive); no encrypted
+  the others. Needs Libs/dvdnav.library (in the archive); no encrypted
   (CSS) discs. Decoded by the CPU, a disc with menus plays from its
   start, its menus' buttons drawn over the picture: arrows or the stick
   and Return or fire, or the pointer and a click; M, a CD32 pad's green
@@ -406,7 +406,7 @@ History
        RTG screens without one. DVDs in a drive: their film, or their
        programmes one after another, chapters by N and P and the
        controls, the sound track the card plays best
-       (Libs/amcedvd.library: libdvdread and libdvdnav). The CPU's
+       (Libs/dvdnav.library: libdvdread and libdvdnav). The CPU's
        pictures go on the graphics card's YUV overlay where there is one
        (Settings > Display: Use overlay when available). One set of
        control glyphs for Now playing, the mini player, ANIMs, videos

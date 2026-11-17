@@ -46,9 +46,9 @@ MSG_5BBD0EC3
 MSG_4E6387ED
 메모리가 부족합니다
 ; Not enough memory
-MSG_38381E85
-DVD에는 amcedvd.library가 필요합니다 (AmigaMCE의 Libs)
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+DVD에는 dvdnav.library가 필요합니다 (AmigaMCE의 Libs)
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 AmigaMCE가 읽을 수 있는 DVD-Video 디스크가 아닙니다: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s

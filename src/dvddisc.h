@@ -1,17 +1,17 @@
 /*
- * AmigaMCE - reading a DVD for amcedvd.library (dvddisc.c)
+ * AmigaMCE - reading a DVD for dvdnav.library (dvddisc.c)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * A disc is read in 2048-byte sectors, from a drive (any exec device
  * that takes HD_SCSICMD: scsi.device, an ATAPI driver, a SCSI card's) or
- * from an image file. dvdd_reader() fills the DvdReader amcedvd.library
+ * from an image file. dvdd_reader() fills the DvdReader dvdnav.library
  * reads through.
  */
 #ifndef AMCE_DVDDISC_H
 #define AMCE_DVDDISC_H
 
 #include <exec/types.h>
-#include <libraries/amcedvd.h>
+#include <libraries/dvdnav.h>
 
 struct DvdDisc;
 

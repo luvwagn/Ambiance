@@ -179,7 +179,7 @@ of the Amiga to how fast it really is.
   Of its sound tracks the one the card is likeliest to play is chosen
   (MPEG audio, then AC-3 in stereo, then any AC-3), and only that one is
   sent. The disc is read through its drive's device (`HD_SCSICMD`) by
-  `Libs/amcedvd.library` (libdvdread and libdvdnav, `src/dvdlib`). No
+  `Libs/dvdnav.library` (libdvdread and libdvdnav, `extras/dvdnav`). No
   encrypted (CSS) discs.
 - DVD images: a `.iso` in Videos' folders is listed with a disc beside
   it, and Fire plays it as a disc in a drive is played (its menus too,
@@ -393,8 +393,8 @@ inline OS call when a multiply helper call ends up between them (see
 | Target | Result |
 |---|---|
 | `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
-| `make test` | The AGS and Pictures folder readers under vamos; iGame's list (on the host and under vamos) and WHDLoad's installation from its package (under vamos); the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`tests/mkdvd.sh`), on the host and through `amcedvd.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
-| `make dvdlib` | `build/dvdlib/amcedvd.library` (also part of `make`, into the archive's `Libs`) |
+| `make test` | The AGS and Pictures folder readers under vamos; iGame's list (on the host and under vamos) and WHDLoad's installation from its package (under vamos); the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`extras/dvdnav/tests/mkdvd.sh`), on the host and through `dvdnav.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
+| `make dvdlib` | `extras/dvdnav/build/dvdnav.library` (also part of `make`, into the archive's `Libs`) |
 | `make mpegvlib` | `extras/mpegv/build/mpegv.library` (also part of `make`, into the archive's `Libs`; needs the submodule: `git submodule update --init`) |
 | `make mpeg-prof MPG=file.mpg [N=60]` | A 68020's cycles for MPEG-1 pictures under vamos: through `mpegv.library`, and by function (its profiler) |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
@@ -446,14 +446,14 @@ GPL-3.0-or-later, its source there): libmpeg2 0.5.1 (GPL-2.0-or-later),
 made faster on a 68k, behind an interface for any Amiga program. AmigaMCE opens it at run time from its Libs. Clone
 with `git clone --recursive`, or `git submodule update --init` after.
 
-DVDs are read by `amcedvd.library`: libdvdread 7.1.1 and libdvdnav 7.0.0
-(VideoLAN, `extras/libdvd/`, three lines changed: `extras/libdvd/CHANGES`)
-built as an Exec library (`src/dvdlib/`, `make dvdlib`). It is
-GPL-2.0-or-later; AmigaMCE (MIT) opens it at run time through an
-interface of its own (`src/dvdlib/include`, MIT) and compiles none of its
-code. Whoever is given the library must be able to get its complete
-source: `src/dvdlib`, `extras/libdvd` and the Makefile's dvdlib part go
-with any distributed archive that holds it. See `src/dvdlib/README`.
+DVDs are read by `dvdnav.library`: libdvdread 7.1.1 and libdvdnav 7.0.0
+(VideoLAN, three lines changed) built as an Exec library behind an Amiga
+interface of its own, its own project:
+[luvwagn/dvdnav.library](https://github.com/luvwagn/dvdnav.library), the
+submodule `extras/dvdnav` (`make dvdlib`). It is GPL-3.0-or-later;
+AmigaMCE (MIT) opens it at run time through its interface (`include/`,
+MIT) and compiles none of its code. Its source is on GitHub, as its
+archive says. It was `amcedvd.library` before 0.9.1.1.
 
 AC-3 sound the ZZ9000 will not decode is decoded by `ac3.library` or
 `ac3fpu.library`: liba52 0.8.0 (VideoLAN) built as Exec libraries, for

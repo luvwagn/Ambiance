@@ -1,9 +1,9 @@
 /*
- * AmigaMCE - reading a DVD for amcedvd.library
+ * AmigaMCE - reading a DVD for dvdnav.library
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Sectors of 2048 bytes, from a drive or an image file, behind the
- * DvdReader that amcedvd.library reads the disc through (its seek and
+ * DvdReader that dvdnav.library reads the disc through (its seek and
  * read are called on the task that calls the library).
  *
  * A drive is read with SCSI commands through HD_SCSICMD, which

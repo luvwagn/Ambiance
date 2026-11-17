@@ -46,9 +46,9 @@ MSG_5BBD0EC3
 MSG_4E6387ED
 メモリが足りません
 ; Not enough memory
-MSG_38381E85
-DVDにはamcedvd.libraryが必要です（AmigaMCEのLibs）
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+DVDにはdvdnav.libraryが必要です（AmigaMCEのLibs）
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 AmigaMCEが読めるDVDビデオディスクではありません: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s

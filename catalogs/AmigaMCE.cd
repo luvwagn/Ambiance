@@ -49,8 +49,8 @@ Recently added
 MSG_4E6387ED (1315145709//)
 Not enough memory
 ; dvdplay.c:466 main.c:4939 main.c:4958
-MSG_38381E85 (943201925//)
-DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0 (1573235360//)
+DVDs need dvdnav.library (in AmigaMCE's Libs)
 ; dvdplay.c:474
 MSG_3A32AEDF (976400095//)
 Not a DVD-Video disc AmigaMCE can read: %.120s

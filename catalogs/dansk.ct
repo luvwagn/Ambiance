@@ -46,9 +46,9 @@ Senest tilføjet
 MSG_4E6387ED
 Ikke nok hukommelse
 ; Not enough memory
-MSG_38381E85
-Dvd'er kræver amcedvd.library (i AmigaMCE's Libs)
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+Dvd'er kræver dvdnav.library (i AmigaMCE's Libs)
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 Ikke en DVD-Video-disk, AmigaMCE kan læse: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s

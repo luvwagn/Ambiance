@@ -46,9 +46,9 @@ Añadidos recientemente
 MSG_4E6387ED
 No hay memoria suficiente
 ; Not enough memory
-MSG_38381E85
-Los DVD necesitan amcedvd.library (en Libs de AmigaMCE)
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+Los DVD necesitan dvdnav.library (en Libs de AmigaMCE)
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 No es un disco DVD-Video que AmigaMCE pueda leer: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s

@@ -47,7 +47,7 @@
 #include "video.h"
 #include "glyph.h"
 #include "dvdplay.h"
-#include <libraries/amcedvd.h>
+#include <libraries/dvdnav.h>
 #include <libraries/mpegv.h>
 
 #include <string.h>

@@ -46,9 +46,9 @@ MSG_5BBD0EC3
 MSG_4E6387ED
 Muisti ei riitä
 ; Not enough memory
-MSG_38381E85
-DVD:t tarvitsevat amcedvd.libraryn (AmigaMCE:n Libs-kansiossa)
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+DVD:t tarvitsevat dvdnav.libraryn (AmigaMCE:n Libs-kansiossa)
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 Ei DVD-Video-levy, jota AmigaMCE osaa lukea: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s

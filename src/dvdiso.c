@@ -7,7 +7,7 @@
  * names the root folder, and a DVD-Video disc has VIDEO_TS in it. DVDs
  * are UDF, with ISO 9660 beside it on the same files (the "UDF bridge"
  * every DVD player's disc has); an image of UDF alone is only said to be
- * UDF here (amcedvd.library reads UDF, and says when it plays).
+ * UDF here (dvdnav.library reads UDF, and says when it plays).
  *
  * Positions past 2 GB: see dvdiso.h.
  */

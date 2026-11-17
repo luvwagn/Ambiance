@@ -5456,7 +5456,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             pv_line(line, w);
         if (ic[q].kind == DVDI_VIDEO || ic[q].kind == DVDI_UDF) {
             if (!dvd_lib_there())
-                pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+                pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
             else {
                 pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
                 pv_line(_("N and P: the next and previous chapter or programme"), w);
@@ -5475,7 +5475,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         /* a DVD: what Fire does (the disc itself read only then) */
         pv_line(_("A DVD-Video disc"), w);
         if (!dvd_lib_there()) {
-            pv_line(_("DVDs need amcedvd.library (in AmigaMCE's Libs)"), w);
+            pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
             return;
         }
         pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);

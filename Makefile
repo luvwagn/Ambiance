@@ -28,7 +28,7 @@ CPU     = -m68020-60
 # a sprintf that may write past its buffer (numbers at their widest) is
 # an error, not a warning that scrolls past
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
-          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Iextras/ac3/include -Iextras/mpegv/include \
+          -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Iextras/dvdnav/include -Iextras/ac3/include -Iextras/mpegv/include \
           -Ibuild -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
 # The layouts' interface (src/layout.h, src/lkcore.h) as a number: a
 # layout library built against other versions of them is never used
@@ -268,7 +268,7 @@ ASM_DIR = build/asm
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
 check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT) $(LAYOUTS)
 	@$(PYTHON) tools/check_libs.py \
-		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
+		$(DVDLIB)=extras/dvdnav/src/dvdnavlib.c=$(call hdrver,extras/dvdnav/include/libraries/dvdnav.h,DVDNAVLIB_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(AC3FPULIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMCEMPEGAVERSION) \
@@ -309,7 +309,7 @@ LC_FLAGS  = --target=m68k-unknown-linux-gnu -mcpu=68020 -fpack-struct=2 -nostdin
             -Xanalyzer -analyzer-config -Xanalyzer unix.DynamicMemoryModeling:Optimistic=true \
             -Xanalyzer -analyzer-disable-checker=deadcode \
             -D__AMIGA__ -Damigaos -D__mc68020__ \
-            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Isrc/dvdlib/include \
+            -include $(LC_DIR)/shim.h -I$(LC_DIR)/ov -Isrc -Ibuild -Isrc/sqlib/include -Iextras/dvdnav/include \
             -Iextras/ac3/include -Iextras/mpegv/include \
             -isystem $(TOOLROOT)/m68k-amigaos/libnix/include \
             -isystem $(wildcard $(TOOLROOT)/lib/gcc/m68k-amigaos/*/include) \
@@ -455,72 +455,32 @@ anim-bench:
 	@for b in c asm; do for m in "0 100" "1 100" "1 200"; do printf "%-3s mode/scale %s: " $$b "$$m"; \
 		vamos -C 68020 -m 8192 -l machine:info build/bench/anim_bench_$$b $(ANIM) $$m 2>&1 | grep "runtime end" | grep -o "total_cycles=[0-9]*"; done; done
 
-# amcedvd.library: DVD-Video navigation, libdvdread 7.1.1 and libdvdnav
-# 7.0.0 (extras/libdvd, GPL-2.0-or-later) behind AmigaMCE's own interface
-# (src/dvdlib/include and amcedvd_lib.sfd, MIT). Opened at run time only,
-# like amcesql.library. In the archive's Libs for internal test builds; a
-# public release must carry its complete source with it (src/dvdlib/README).
-DVDLIB     = build/dvdlib/amcedvd.library
-DVDREAD    = extras/libdvd/libdvdread/src
-DVDNAV     = extras/libdvd/libdvdnav/src
-DVDLIB_SRC = $(addprefix $(DVDREAD)/,bitreader.c dvd_input.c dvd_reader.c dvd_udf.c ifo_read.c \
-               logger.c md5.c nav_read.c) \
-             $(addprefix $(DVDNAV)/,dvdnav.c highlight.c logger.c navigation.c read_cache.c \
-               searching.c settings.c vm/decoder.c vm/getset.c vm/play.c vm/vm.c vm/vmcmd.c vm/vmget.c) \
-             src/dvdlib/port.c src/dvdlib/amcedvd.c
-DVDLIB_OBJ = $(patsubst %.c,build/dvdlib/obj/%.o,$(DVDLIB_SRC))
-DVDLIB_HDR = $(wildcard src/dvdlib/*.h src/dvdlib/port/*.h src/dvdlib/port/*/*.h \
-               src/dvdlib/include/libraries/*.h $(DVDREAD)/*.h $(DVDREAD)/dvdread/*.h \
-               $(DVDNAV)/*.h $(DVDNAV)/dvdnav/*.h $(DVDNAV)/vm/*.h)
-# the C library libdvd calls is port.c's (port/amiport.h, forced in);
-# each library's own headers first, as their own builds have them
-DVDLIB_FLAGS = -std=gnu11 -Wall -Wno-unused-function -Wno-attributes -DHAVE_CONFIG_H -Isrc/dvdlib/port \
-               -Isrc/dvdlib/include -Isrc/dvdlib -Isrc/sqlib -include src/dvdlib/port/amiport.h
-DVDLIB_CC  = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer
-DVD_INC    = -I$(DVDREAD) -I$(DVDNAV)
-build/dvdlib/obj/$(DVDNAV)/%.o: DVD_INC = -I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)
-# libdvd passes int32_t * where int * is declared (and back): the same 32
-# bits, but newlib's int32_t is a long, and GCC 14 on makes that an error
-DVD_UPSTREAM =
-build/dvdlib/obj/extras/%.o: DVD_UPSTREAM = -Wno-incompatible-pointer-types -Wno-discarded-qualifiers
-build/dvdlib/obj/%.o: %.c $(DVDLIB_HDR)
-	@mkdir -p $(dir $@)
-	@echo "  CC    $< (amcedvd)"
-	@$(DVDLIB_CC) $(DVDLIB_FLAGS) $(DVD_UPSTREAM) $(DVD_INC) -c -o $@ $<
-# the E-clock, apart: devices/timer.h and newlib's sys/time.h both have a timeval
-build/dvdlib/amitime.o: src/dvdlib/amitime.c
-	@mkdir -p build/dvdlib
-	@echo "  CC    $< (amcedvd)"
-	@$(DVDLIB_CC) -Wall -c -o $@ $<
-build/dvdlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/dvdlib/amcedvd.c Makefile
-	@mkdir -p build/dvdlib
-	@echo "  CC    $< (amcedvd)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,src/dvdlib/amcedvd.c) -c -o $@ $<
-$(DVDLIB): build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o
-	@echo "  LD    $@"
-	@$(DVDLIB_CC) -o $@.dbg build/dvdlib/libinit.o $(DVDLIB_OBJ) build/dvdlib/amitime.o -lamiga
-	@$(STRIP) -o $@ $@.dbg
+# dvdnav.library: DVD-Video navigation, libdvdread 7.1.1 and libdvdnav
+# 7.0.0 behind an Amiga interface of its own: its own project (extras/dvdnav,
+# a git submodule: github.com/luvwagn/dvdnav.library, GPL-3: its source
+# there, not in the archive; its interface, include/ and dvdnav_lib.sfd,
+# MIT). Opened at run time only, like amcesql.library. Formerly
+# amcedvd.library, here (before 0.9.1.1).
+DVDLIB     = extras/dvdnav/build/dvdnav.library
+DVDLIB_INC = extras/dvdnav/include
+DVDLIB_DEPS = $(wildcard extras/dvdnav/src/*.c extras/dvdnav/src/*.h extras/dvdnav/src/port/*.h \
+               extras/dvdnav/src/port/*/*.h extras/dvdnav/include/*/*.h \
+               extras/dvdnav/third_party/*/src/*.[ch] extras/dvdnav/third_party/*/src/*/*.[ch]) \
+              extras/dvdnav/Makefile
+$(DVDLIB): $(DVDLIB_DEPS)
+	@$(MAKE) --no-print-directory -C extras/dvdnav build/dvdnav.library
 dvdlib: $(DVDLIB)
 
-# its tests (tests/dvd_test.c) on a DVD image made for them (tests/mkdvd.sh,
-# kept xz-compressed): on the host with the library's sources linked in
-# (big-endian or not, the same code), then on a 68020 under vamos through
-# the library itself, with AmigaMCE's reader (src/dvddisc.c)
+# its tests (extras/dvdnav/tests/dvd_test.c) on its DVD image
+# (extras/dvdnav/tests/mkdvd.sh): its own make test (on the host with its
+# sources linked in, then through the library on a 68020 under vamos), and
+# here once more on a 68020 with AmigaMCE's reader (src/dvddisc.c) as well
 DVD_ISO = build/dvd/test.iso
-$(DVD_ISO): tests/fixtures/dvd/test.iso.xz
+$(DVD_ISO): extras/dvdnav/tests/fixtures/dvd/test.iso.xz
 	@mkdir -p build/dvd
 	@$(PYTHON) -I -c "import lzma, sys; open(sys.argv[2], 'wb').write(lzma.open(sys.argv[1]).read())" $< $@
-build/dvd/dvd_host: tests/dvd_test.c $(DVDLIB_SRC) $(DVDLIB_HDR) tests/host/exec/types.h
-	@mkdir -p build/dvd
-	@set -e; o=""; for f in $(DVDLIB_SRC); do \
-		case $$f in $(DVDNAV)/*) i="-I$(DVDNAV) -I$(DVDNAV)/vm -I$(DVDREAD)";; *) i="-I$(DVDREAD) -I$(DVDNAV)";; esac; \
-		b=build/dvd/host_$$(echo $$f | tr / _ | sed 's/\.c$$/.o/'); \
-		$(HOSTCC) -O2 $(DVDLIB_FLAGS) -Itests/host $$i -c -o $$b $$f; o="$$o $$b"; done; \
-		$(HOSTCC) -O2 -Wall -Isrc/dvdlib/include -Itests/host -o $@ tests/dvd_test.c $$o
-test-dvd-host: build/dvd/dvd_host $(DVD_ISO)
-	@build/dvd/dvd_host $(DVD_ISO) > build/test-dvd-host.txt 2>&1 \
-		&& grep -q "dvd tests passed" build/test-dvd-host.txt \
-		&& echo "  CHECK DVD navigation (host) ok" || (cat build/test-dvd-host.txt; exit 1)
+test-dvd-host: $(DVDLIB)
+	@$(MAKE) --no-print-directory -C extras/dvdnav test
 # a DVD image's reading past 2 GB and what one holds (src/dvdiso.c), on the
 # host: the 64-bit packet as UAE's file system reads it, the test image
 build/dvd/dvdiso_host: tests/dvdiso_host.c src/dvdiso.c src/dvdiso.h tests/host/exec/types.h
@@ -530,12 +490,13 @@ test-dvdiso: build/dvd/dvdiso_host $(DVD_ISO)
 	@build/dvd/dvdiso_host $(DVD_ISO) > build/test-dvdiso.txt 2>&1 \
 		&& grep -q "dvdiso tests passed" build/test-dvdiso.txt \
 		&& echo "  CHECK DVD images: 64-bit positions, what one holds (host) ok" || (cat build/test-dvdiso.txt; exit 1)
-build/dvd/dvd_68k: tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdiso.c src/dvdiso.h \
-                   src/dvdlib/include/libraries/amcedvd.h src/dvdlib/include/inline/amcedvd.h $(DVDLIB)
+build/dvd/dvd_68k: extras/dvdnav/tests/dvd_test.c src/dvddisc.c src/dvddisc.h src/dvdiso.c src/dvdiso.h \
+                   $(DVDLIB_INC)/libraries/dvdnav.h $(DVDLIB_INC)/inline/dvdnav.h $(DVDLIB)
 	@mkdir -p build/dvd/prog/Libs
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -o $@ tests/dvd_test.c src/dvddisc.c src/dvdiso.c -lamiga
-	@$(CC) -Os $(CPU) -noixemul -Isrc/dvdlib/include -S -o build/dvd/dvddisc.s src/dvddisc.c
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -I$(DVDLIB_INC) -Isrc -DDVD_TEST_DVDDISC -o $@ \
+		extras/dvdnav/tests/dvd_test.c src/dvddisc.c src/dvdiso.c -lamiga
+	@$(CC) -Os $(CPU) -noixemul -I$(DVDLIB_INC) -S -o build/dvd/dvddisc.s src/dvddisc.c
 	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
 	@cp $(DVDLIB) build/dvd/prog/Libs/
 	@cp $@ build/dvd/prog/
@@ -544,7 +505,7 @@ build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddi
                        src/dvdiso.c src/dvdiso.h src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
 	@echo "  CC    $@"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -Isrc/dvdlib/include -DAMCE_NO_EXPUNGE -o $@ \
+	@$(CC) -O2 $(CPU) -noixemul -Wall -Wno-pointer-sign -I$(DVDLIB_INC) -DAMCE_NO_EXPUNGE -o $@ \
 		tests/dvdplay_68k.c src/dvdplay.c src/dvddisc.c src/dvdiso.c src/util.c src/ownlib.c -lamiga
 	@cp $@ build/dvd/prog/
 test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
@@ -552,7 +513,7 @@ test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvd_68k prog:test.iso > ../test-dvd.txt 2>&1 \
 		&& grep -q "dvd tests passed" ../test-dvd.txt \
-		&& echo "  CHECK DVD navigation (68020, amcedvd.library) ok" || (cat ../test-dvd.txt; exit 1)
+		&& echo "  CHECK DVD navigation (68020, dvdnav.library, AmigaMCE's reader) ok" || (cat ../test-dvd.txt; exit 1)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvdplay_68k prog:test.iso > ../test-dvdplay.txt 2>&1 \
 		&& grep -q "dvdplay tests passed" ../test-dvdplay.txt \
@@ -766,10 +727,10 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp $(LAYOUTS) $(LHA_DIR)/Layouts/
 	@mkdir -p $(LHA_DIR)/Libs
 	@cp $(SQLIB) $(LHA_DIR)/Libs/
-	@# amcedvd.library (DVDs: libdvdread and libdvdnav, GPL-2.0-or-later), for
-	@# internal test builds: a public release must carry its source too
+	@# dvdnav.library (DVDs: libdvdread and libdvdnav, GPL-3; its source
+	@# at github.com/luvwagn/dvdnav.library), extras/dvdnav
 	@cp $(DVDLIB) $(LHA_DIR)/Libs/
-	@cp extras/libdvd/libdvdnav/COPYING $(LHA_DIR)/Licences/amcedvd.library-GPL-2.txt
+	@cp extras/dvdnav/LICENSE $(LHA_DIR)/Licences/dvdnav.library.txt
 	@# ac3.library and ac3fpu.library (AC-3 sound: liba52, GPL-3; their
 	@# source at github.com/luvwagn/ac3.library), extras/ac3, for a video's
 	@# AC3 where the ZZ9000 will not decode it
@@ -808,5 +769,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/dvdlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

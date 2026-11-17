@@ -26,7 +26,7 @@ struct SpuPic {
     UWORD nx0, ny0, nx1, ny1;
 };
 
-/* A button's highlight over it (DvdHighlight's, amcedvd.h): inside the
+/* A button's highlight over it (DvdHighlight's, dvdnav.h): inside the
  * rectangle (inclusive) each value's colour and opacity are these. */
 struct SpuHl {
     BOOL on;

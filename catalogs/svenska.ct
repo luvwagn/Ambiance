@@ -46,9 +46,9 @@ Nyligen tillagda
 MSG_4E6387ED
 Inte tillräckligt med minne
 ; Not enough memory
-MSG_38381E85
-Dvd:er behöver amcedvd.library (i AmigaMCE:s Libs)
-; DVDs need amcedvd.library (in AmigaMCE's Libs)
+MSG_5DC5AAA0
+Dvd:er behöver dvdnav.library (i AmigaMCE:s Libs)
+; DVDs need dvdnav.library (in AmigaMCE's Libs)
 MSG_3A32AEDF
 Inte en DVD-Video-skiva som AmigaMCE kan läsa: %.120s
 ; Not a DVD-Video disc AmigaMCE can read: %.120s
