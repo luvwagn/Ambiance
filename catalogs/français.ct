@@ -1,6 +1,10 @@
 ## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
 ## language français
 ## codeset 0
+MSG_420624D6
+; AmigaAMP is running: its plug-ins are its own
+MSG_603B8EB4
+; The plug-in could not be started
 MSG_2F1926C3
 La compression ANIM-%ld n'est pas prise en charge
 ; ANIM-%ld compression is not supported
@@ -79,6 +83,14 @@ nécessite l'AGA
 MSG_550E04D5
 non disponible
 ; not available
+MSG_7C321421
+; Midnight
+MSG_4C5F9DAD
+; Graphite
+MSG_634FC3DF
+; Emerald
+MSG_2B535442
+; Amethyst
 MSG_30386F8F
 couleurs vraies
 ; true colour
@@ -88,6 +100,47 @@ MSG_3665BBE3
 MSG_0F6E4D56
 %lu couleurs
 ; %lu colours
+MSG_4C200E59
+; Unknown
+MSG_225EE315
+; Favourites
+MSG_71D22FD0
+; All demos
+MSG_27D1E7CF
+; All games
+MSG_0D5177A9
+; Most played
+MSG_68E1C31B
+; By genre
+MSG_1AEE602E
+; By chipset
+MSG_2C54891D
+; By year
+MSG_09C3EF84
+; By %.80s
+MSG_109CF70E
+; Genre: %.80s
+MSG_49B0A27E
+; Year: %lu
+MSG_6D84AAE5
+; Players: %lu
+MSG_5CF0FA59
+; Chipset: %.80s
+MSG_6F4C5363
+; Played once
+MSG_0AB01B08
+; Played %lu times
+MSG_6BFB474B
+; A favourite in iGame
+MSG_0F8B178C
+; WHDLoad: %s
+MSG_542A5985
+; Program: %s
+MSG_6C384865
+; Its file is not there (rescan in iGame)
+MSG_74066526
+Impossible d'écrire T:AmigaMCE-run
+; Could not write T:AmigaMCE-run
 MSG_73F99D3C
 Jeux
 ; Games
@@ -127,6 +180,12 @@ Tous les jeux
 MSG_7E40EC70
 Toutes les démos
 ; All Demos
+MSG_11815498
+; iGame's list has no demos in it, and Amiga Game Selector was not found.
+MSG_14315CA7
+; iGame's list has no games in it, and Amiga Game Selector was not found.
+MSG_68D81CDC
+; AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 Amiga Game Selector est introuvable.
 ; Amiga Game Selector was not found.
@@ -136,6 +195,8 @@ Amiga Game Selector 3 (AGS) est une collection toute prête de jeux et de démos
 MSG_017A1274
 AmigaMCE cherche l'assignation AGS:, puis un tiroir AGS2 à côté du sien et dans WHDLoad:. Installez AmigaMCE sur un système AGS 3, ou lancez AGS une fois pour que ses assignations existent.
 ; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_1805A7D1
+; iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 Musique, Mods, Images, Vidéos et Radio marchent sans lui : Réglages > Dossiers dit où sont votre musique, vos modules, vos images et vos animations.
 ; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
@@ -226,6 +287,22 @@ introuvable
 MSG_4FE02B8B
 Assignations ajoutées par AmigaMCE (AGS-Stuff n'a pas tourné) :
 ; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_268D62B2
+; iGame: %.120s, %ld games, %ld demos
+MSG_6E96DE70
+; iGame: %s
+MSG_2DA7AFDB
+aucune
+; none
+MSG_3FF83F26
+; no list read
+MSG_7EF1200C
+non installé
+; not installed
+MSG_23160430
+; Archives unpacked by: %s
+MSG_527DAE8A
+; nothing
 MSG_38F75BEF
 Réglage machine d'AGS (HW) : %s
 ; AGS machine setting (HW): %s
@@ -247,15 +324,14 @@ Pile réseau : %s
 MSG_147EB74C
 active
 ; running
-MSG_2DA7AFDB
-aucune
-; none
 MSG_1358A393
 MP3 : %s
 ; MP3: %s
 MSG_197B8973
 pilote MHI
 ; MHI driver
+MSG_1A89232E
+; amcempega.library, AmigaMCE's own
 MSG_4B721655
 mpega.library du SDK ZZ9000 (décodé sur la carte)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -349,12 +425,20 @@ Dossiers de vidéos
 MSG_2DA81BF2
 Lisse : Fonts/amce-smooth ne correspond pas à cet AmigaMCE
 ; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_3CB0C840
+; F on Now playing starts this AmigaAMP plug-in
+MSG_6143CDF8
+; Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+MSG_3DF462B5
+; Flow
 MSG_022C9299
 Pas de spectre avec MHI : il joue le MP3 lui-même
 ; No spectrum under MHI: it plays the MP3 itself
 MSG_0B3A7E73
 Pas de spectre : ce lecteur ne dit pas ce qu'il joue
 ; No spectrum: this player does not say what it plays
+MSG_5E18A4A5
+; Flow: F shows it on the whole screen
 MSG_5561FD0B
 Général
 ; General
@@ -391,6 +475,10 @@ Langue
 MSG_5B67C80C
 Vidéo
 ; Video
+MSG_585459EE
+; iGame
+MSG_6E156672
+; WHDLoad
 MSG_1B9AE0BB
 Anglais
 ; English
@@ -442,6 +530,8 @@ Fenêtre Workbench
 MSG_3C2510A9
 CPU
 ; CPU
+MSG_31213991
+; Paula, 14-bit
 MSG_2D0EBF47
 pas de pile TCP/IP
 ; no TCP/IP stack
@@ -454,6 +544,8 @@ Moyenne
 MSG_718B9F54
 Grande
 ; Large
+MSG_05A06546
+; Extra large
 MSG_2C041143
 Taille du texte
 ; Text size
@@ -472,9 +564,15 @@ Pixel
 MSG_63678BEE
 Double tampon
 ; Double buffering
+MSG_1A29FF2A
+; Colours
+MSG_7788421F
+; Layout
 MSG_20B362A2
 Visualisation
 ; Visualisation
+MSG_3311DE2D
+; Full screen visual (F)
 MSG_52325DD8
 Défilement par lettre
 ; Jump scrolling (by letter)
@@ -596,24 +694,45 @@ Sortie du son
 MSG_1DE950F6
 4 voies, jusqu'à 28kHz, 8 bits
 ; 4 channels, up to 28kHz, 8-bit
+MSG_44E1D951
+; Paula, 14-bit: radio, Plex, music files
+MSG_34E4E153
+; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI : radio, Plex, fichiers musicaux
 ; AHI: radio, Plex, music files
 MSG_1AB0857C
 16 bits, le mode de ses Préférences
 ; 16-bit, its Preferences' mode
-MSG_7EF1200C
-non installé
-; not installed
 MSG_2DA3A6A5
 Décodeur MP3
 ; MP3 decoder
+MSG_7C47EC75
+; not installed (AmigaMCE's Libs)
+MSG_4C9B4043
+; AmigaMCE's own, decoded here
 MSG_3F71ACC2
 décodé sur la ZZ9000
 ; decoded on the ZZ9000
 MSG_22FBBBB2
 décode et joue
 ; decodes and plays
+MSG_55D2D3D8
+; MP3 quality
+MSG_050221B5
+; MP3 quality: automatic
+MSG_71E7648A
+; MP3 quality: high
+MSG_751F9CE1
+; MP3 quality: medium
+MSG_04A16198
+; by this Amiga's speed, measured each run
+MSG_68B10FC3
+; the most accurate
+MSG_313B727C
+; about a tenth less work
+MSG_003CBCAE
+; the decoder gives its best
 MSG_4DEE1DD3
 %ld emplacement
 ; %ld place
@@ -623,6 +742,8 @@ MSG_4DD8A2E0
 MSG_4A20BCD9
 aucun pour l'instant
 ; none yet
+MSG_441A0CA1
+; installed
 MSG_765A3F9A
 Utiliser l'assignation %s
 ; Use the %s assign
@@ -641,6 +762,70 @@ Ajouter un dossier...
 MSG_4ACE7BF4
 huit au plus
 ; eight at most
+MSG_776C4574
+; %ld entry
+MSG_43A71E80
+; %ld entries
+MSG_1EFF5D20
+; no list there
+MSG_556E6088
+; No iGame list is shown.
+MSG_051BBFA8
+; iGame was not found.
+MSG_407C0CA8
+; %.200s: %ld games, %ld demos
+MSG_58489A07
+; %.200s: no gameslist.csv read
+MSG_57A7889A
+; Choose iGame's drawer...
+MSG_301DA6A7
+; Find iGame
+MSG_451A8225
+; None: no iGame list
+MSG_3015054E
+; WHDLoad is installed: %s
+MSG_33EE9E1D
+; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
+MSG_776C7EC6
+; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
+MSG_13CE4E7E
+; AmigaMCE can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
+MSG_4EA477C4
+; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
+MSG_43357FD6
+; The network is not up.
+MSG_416B0131
+; Downloading: %lu of %lu KB
+MSG_6A00DB1C
+; Downloading: %lu KB
+MSG_3D0E491A
+; Download and install WHDLoad
+MSG_2C3D6FCE
+; Not now
+MSG_09E17720
+; Games stops asking
+MSG_1825F809
+; Install WHDLoad...
+MSG_1BC13EBC
+; The network is not up
+MSG_59611893
+; Unpacking needs xadmaster.library or C:LhA
+MSG_098D9D5E
+; Downloading WHDLoad from whdload.de...
+MSG_1992E186
+; Downloading WHDLoad: %lu of %lu KB
+MSG_7B97FA5D
+; Downloading WHDLoad: %lu KB
+MSG_08C3EAAD
+; WHDLoad could not be downloaded: %.100s
+MSG_3C373586
+; Unpacking WHDLoad...
+MSG_5919FA2F
+; WHDLoad was not installed: %.120s
+MSG_72928549
+; iGame's list: %ld games, %ld demos
+MSG_7209FC67
+; iGame's list could not be read
 MSG_50BCAC0E
 RTG seulement
 ; RTG only
@@ -1112,15 +1297,18 @@ Aucun fichier MP3 ou FLAC dans ce dossier
 MSG_15E6DCFA
 Ce dossier ne contient aucun module
 ; That folder has no modules
+MSG_7722EDBF
+; iGame's list is not read now
+MSG_1E5D9885
+; That list is empty
 MSG_6D9550B1
 Impossible d'ouvrir ce menu
 ; Could not open that menu
 MSG_3030A110
 Ce menu est vide
 ; That menu is empty
-MSG_74066526
-Impossible d'écrire T:AmigaMCE-run
-; Could not write T:AmigaMCE-run
+MSG_38FE5F25
+; iGame's list no longer has that entry
 MSG_0C682AC4
 %ld/%ld   %s   %s%s
 ; %ld/%ld   %s   %s%s
@@ -1349,6 +1537,8 @@ plex.tv : non connecté
 MSG_0B620CC7
 MP3 : décodé par le pilote MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
+MSG_36767C71
+; MP3: decoded by amcempega.library, AmigaMCE's own
 MSG_59D38C2E
 MP3 : décodé sur la ZZ9000 (sa mpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1373,6 +1563,8 @@ FLAC : joué tel quel, par flacdec.library
 MSG_586857BF
 Son : AHI, 16 bits
 ; Sound: AHI, 16-bit
+MSG_2350DA18
+; Sound: Paula, 14-bit
 MSG_0F2AADBB
 Son : Paula, 8 bits
 ; Sound: Paula, 8-bit
@@ -1433,6 +1625,12 @@ Ce dossier est introuvable
 MSG_692E7242
 Ce dossier y est déjà
 ; That folder is there already
+MSG_39287765
+; iGame's drawer (with its gameslist.csv)
+MSG_3A1C5C94
+; Use
+MSG_0DDD9572
+; No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
 MSG_2C2767AF
 Style : Lisse nécessite un écran RTG
 ; Style: Smooth needs an RTG screen
@@ -1445,6 +1643,10 @@ Cette interface n'est pas active
 MSG_646AFCF3
 MHI n'est pas installé (ses pilotes dans LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
+MSG_61E14706
+; amcempega.library is not in AmigaMCE's Libs
+MSG_7B5C3E86
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Listes de stations ouvertes à partir de maintenant
 ; Station lists opened from now on
@@ -1457,12 +1659,21 @@ Aucun serveur n'a répondu : Automatique est conservé
 MSG_7800A723
 MP3 décodé par MHI : radio, Plex (en meilleure qualité) et fichiers
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
+MSG_799CE4C5
+; MP3 decoded here by amcempega.library, AmigaMCE's own
 MSG_605E617D
 MP3 décodé ici par mpega.library
 ; MP3 decoded here by mpega.library
-MSG_06B72AB3
-AHI : radio, Plex et fichiers musicaux ; les modules restent sur Paula
-; AHI: radio, Plex and music files; modules stay on Paula
+MSG_3990C163
+; MP3 at high quality, at the rate this Amiga can decode it
+MSG_74E84AE4
+; MP3 at medium quality: about a tenth less work, 70 dB
+MSG_44A547DD
+; MP3 quality by this Amiga's speed, measured at the first MP3 each run
+MSG_30D664DF
+; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
+MSG_0CCDB457
+; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 Paula joue tout
 ; Paula plays everything
@@ -1472,6 +1683,12 @@ MSG_0EE3FD77
 MSG_26D6BADA
 %s laissée de côté
 ; %s left out
+MSG_512EE424
+; Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
+MSG_12706454
+; iGame was not found: choose its drawer
+MSG_00B8A52C
+; No iGame list: Games and Demos show AGS's alone
 MSG_719F5F36
 Feu encore pour retirer ce dossier (ses fichiers restent)
 ; Fire again to take this folder out (its files stay)
@@ -1481,6 +1698,16 @@ Dossier retiré
 MSG_746B08BF
 Appuyez encore sur Esc pour quitter AmigaMCE
 ; Press Esc again to quit AmigaMCE
+MSG_6FC2F840
+; Nothing is playing
+MSG_116D42F2
+; Starting the plug-in (Esc in it to come back)
+MSG_0D724DE5
+; Flow needs a graphics card's screen (15 to 32-bit)
+MSG_4B362E27
+; Flow: this player does not say what it plays
+MSG_65839537
+; Flow could not be shown here
 MSG_16ABF123
 AmigaMCE nécessite Kickstart 3.0 ou plus récent.\n
 ; AmigaMCE needs Kickstart 3.0 or newer.\n
@@ -1490,6 +1717,12 @@ AmigaMCE n'a pas pu ouvrir son écran.\n
 MSG_3D0CDD4E
 Mode d'écran enregistré non disponible ici : mode automatique utilisé
 ; Saved screen mode not available here: using Automatic
+MSG_7B47B1F3
+; Classic
+MSG_14BD5320
+; The layout could not be opened: the classic one is used
+MSG_24B72731
+; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Ce module nécessite un 68020 ou mieux pour être mixé
 ; This module needs a 68020 or better to be mixed
@@ -1499,6 +1732,9 @@ Mémoire insuffisante pour mixer ce module
 MSG_69F7300F
 Ce n'est pas un module qu'AmigaMCE sait jouer
 ; Not a module AmigaMCE can play
+MSG_523F6D57
+AHI n'a pas pu être ouvert (ses Préférences : un mode ?)
+; AHI could not be opened (its Preferences: a mode?)
 MSG_3F4BE355
 Impossible de lancer le mixeur
 ; Could not start the mixer
@@ -1586,9 +1822,17 @@ La connexion sécurisée a échoué
 MSG_487D4FD3
 Le certificat du serveur n'a pas été accepté (l'horloge de l'Amiga est-elle juste ?)
 ; The server's certificate was not accepted (is the Amiga's clock right?)
+MSG_24AC7706
+; The server sent it in chunks, which downloads do not take
+MSG_2A22BBA4
+; The file could not be written
 MSG_2ACCD57C
 Le serveur ne répond plus
 ; The server stopped answering
+MSG_56B1E221
+; The file could not be written (a full disk?)
+MSG_487CBFA7
+; The download stopped short
 MSG_05C477DC
 Aucun serveur Plex n'a répondu sur ce réseau
 ; No Plex server answered on this network
@@ -1610,6 +1854,15 @@ Le serveur nous a renvoyés là où nous ne pouvons pas suivre
 MSG_64F654D3
 Le processus réseau n'a pas pu démarrer
 ; The network process could not start
+MSG_3472356C
+Note %s/%ld
+; Rating %s/%ld
+MSG_4270C87A
+Naissance : %s
+; Born %s
+MSG_76AEB6B2
+Formation : %s
+; Formed %s
 MSG_201D2C97
 %lu photo
 ; %lu photo
@@ -1667,9 +1920,6 @@ MSG_54019F41
 MSG_07A36F34
 Lecture impossible
 ; Could not be read
-MSG_523F6D57
-AHI n'a pas pu être ouvert (ses Préférences : un mode ?)
-; AHI could not be opened (its Preferences: a mode?)
 MSG_59B9295C
 Le serveur de la station est introuvable (DNS)
 ; The station's server could not be found (DNS)
@@ -1756,6 +2006,20 @@ Mémoire insuffisante pour jouer une station
 MSG_2ADCBED0
 Le processus de lecture en arrière-plan n'a pas pu démarrer
 ; Could not start the background playback process
+MSG_1A9D11B3
+; xadmaster.library could not be opened
+MSG_7A620C10
+; The archive could not be read (%.60s)
+MSG_7A3F22E2
+; %.40s could not be unpacked (%.60s)
+MSG_7B4E1B7C
+; NIL: could not be opened
+MSG_0DC59A91
+; LhA could not unpack it (it returned %ld)
+MSG_49AE7BAE
+; LhA unpacks only .lha archives: install xadmaster.library
+MSG_1AE736A8
+; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 MSG_650CDFE1
 La vidéo MPEG par le CPU nécessite mpegv.library (Libs d'AmigaMCE)
 ; MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
@@ -1788,3 +2052,11 @@ Droite
 MSG_12773890
 Gauche
 ; Left
+MSG_00536F32
+; WHDLoad was not in the package as expected
+MSG_712ED6F1
+; %.60s could not be written
+MSG_3160C36F
+; WHDLoad and %ld more programs put in C:
+MSG_04F3511D
+;  (%ld already there kept)

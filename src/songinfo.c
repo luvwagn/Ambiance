@@ -705,15 +705,22 @@ static void dir_cb(void *ctx, const char *name, BOOL isdir)
     }
 }
 
-int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG artmax,
-                   BOOL extract)
+/* A music folder's lines; text (not NULL): its .nfo looked for too, the
+ * review or biography put there (album.nfo: an album's or disc's folder;
+ * artist.nfo: an artist's). */
+static int dir_lines(const char *dir, char lines[][96], int max, char *art, LONG artmax,
+                     BOOL extract, char **text)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR old = me->pr_WindowPtr;
     struct dir_ctx c;
+    struct Nfo nfo;
+    BOOL album = FALSE, artist = FALSE;
     int n = 0;
     if (art)
         art[0] = 0;
+    if (text)
+        *text = NULL;
     if (max < 3)
         return 0;
     memset(&c, 0, sizeof(c));
@@ -730,20 +737,54 @@ int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG a
         sprintf(lines[n] + strlen(lines[n]), c.dirs == 1 ? _("%s%ld folder") : _("%s%ld folders"),
                 c.files ? ", " : "", (long)c.dirs);
     n++;
+    if (text) {
+        if (c.files && nfo_album_of(dir, &nfo))
+            album = TRUE;
+        else if (c.dirs && nfo_artist_of(dir, FALSE, &nfo))
+            artist = TRUE;
+    }
+    if (album && n + 3 < max) {
+        lines[n++][0] = 0;
+        if (nfo.artist[0])
+            amce_strlcpy(lines[n++], nfo.artist, 96);
+        if (nfo.title[0]) {
+            if (nfo.year[0])
+                sprintf(lines[n++], "%.80s (%.4s)", nfo.title, nfo.year);
+            else
+                amce_strlcpy(lines[n++], nfo.title, 96);
+        }
+        n += nfo_album_lines(&nfo, lines + n, max - n);
+    } else if (artist && n + 2 < max) {
+        lines[n++][0] = 0;
+        if (nfo.title[0] && amce_stricmp(nfo.title, lines[0]))
+            amce_strlcpy(lines[n++], nfo.title, 96);
+        n += nfo_artist_lines(&nfo, lines + n, max - n);
+    }
+    if (album || artist) {
+        *text = nfo.text;                   /* the caller's now */
+        nfo.text = NULL;
+        nfo_free(&nfo);
+    }
     if (art && !song_folder_art(dir, art, artmax) && c.files) {
         struct SongInfo si;
         char path[300];
         join(path, sizeof(path), dir, c.first);
         song_info(path, &si, art, artmax, extract);
-        if (si.album[0] && n < max) {
+        if (si.album[0] && !album && n < max) {
             lines[n++][0] = 0;
-            if (si.artist[0] || si.band[0])
+            if ((si.artist[0] || si.band[0]) && n < max)
                 amce_strlcpy(lines[n++], si.band[0] ? si.band : si.artist, 96);
             if (n < max)
                 amce_strlcpy(lines[n++], si.album, 96);
         }
     }
     return n;
+}
+
+int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG artmax,
+                   BOOL extract)
+{
+    return dir_lines(dir, lines, max, art, artmax, extract, NULL);
 }
 
 static BOOL is_dir(const char *path)
@@ -764,14 +805,43 @@ static BOOL is_dir(const char *path)
 
 /* The details pane's lines for a music file or folder (the loader), and
  * its picture's file ("" none; not copied out yet). */
-int song_details(const char *path, char lines[][96], int max, char *art, LONG artmax)
+int song_details(const char *path, char lines[][96], int max, char *art, LONG artmax,
+                 char **text)
 {
     struct SongInfo si;
+    struct Nfo nfo;
+    char dir[300];
+    int n;
+    if (text)
+        *text = NULL;
     if (is_dir(path))
-        return song_dir_lines(path, lines, max, art, artmax, FALSE);
+        return dir_lines(path, lines, max, art, artmax, FALSE, text);
     if (!song_info(path, &si, art, artmax, FALSE)) {
         amce_strlcpy(lines[0], _("Could not be read"), 96);
         return 1;
+    }
+    /* its album's album.nfo: what the tags lack, then its label, genres and
+     * styles, rating, and review */
+    amce_strlcpy(dir, path, sizeof(dir));
+    *PathPart((STRPTR)dir) = 0;
+    if (text && nfo_album_of(dir, &nfo)) {
+        if (!si.album[0])
+            amce_strlcpy(si.album, nfo.title, sizeof(si.album));
+        if (!si.year[0])
+            amce_strlcpy(si.year, nfo.year, sizeof(si.year));
+        if (!si.artist[0] && !si.band[0])
+            amce_strlcpy(si.band, nfo.artist, sizeof(si.band));
+        n = song_lines(path, &si, lines, max);
+        if (n + 2 < max) {
+            int k;
+            lines[n][0] = 0;
+            if ((k = nfo_album_lines(&nfo, lines + n + 1, max - n - 1)))
+                n += 1 + k;
+        }
+        *text = nfo.text;
+        nfo.text = NULL;
+        nfo_free(&nfo);
+        return n;
     }
     return song_lines(path, &si, lines, max);
 }

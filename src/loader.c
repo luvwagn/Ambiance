@@ -214,7 +214,8 @@ static void run(struct LJob *j)
         /* a music file's details, or a folder's; np: it has a picture,
          * first: which (not copied out here: the picture's job does that) */
         char art[300];
-        j->nlines = song_details(j->path, j->lines, LJ_FACTS, art, sizeof(art));
+        FreeVec(j->text);
+        j->nlines = song_details(j->path, j->lines, LJ_FACTS, art, sizeof(art), &j->text);
         j->np = art[0] ? 1 : 0;
         amce_strlcpy(j->first, art, sizeof(j->first));
         return;
@@ -387,6 +388,7 @@ static void orphan_free(struct LJob *j)
     pic_dispose(j->obj);
     thumb_free(j->thumb);
     FreeVec(j->buf);
+    FreeVec(j->text);
     FreeVec(j);
 }
 

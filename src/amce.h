@@ -591,8 +591,38 @@ BOOL song_folder_art(const char *dir, char *out, LONG max);
 int song_lines(const char *path, const struct SongInfo *si, char lines[][96], int max);
 int song_dir_lines(const char *dir, char lines[][96], int max, char *art, LONG artmax,
                    BOOL extract);
-int song_details(const char *path, char lines[][96], int max, char *art, LONG artmax);
+int song_details(const char *path, char lines[][96], int max, char *art, LONG artmax,
+                 char **text);  /* text: album.nfo's review or artist.nfo's biography
+                                 * (AllocVec'd, the caller's to FreeVec), else NULL */
 BOOL song_art_of(const char *path, char *art, LONG artmax, BOOL extract);
+
+/* Kodi's .nfo files and pictures beside the music (nfo.c): an album
+ * folder's album.nfo, the folder above it its artist's artist.nfo; a
+ * disc's own folder (CD1, Disc 2) is its album's. */
+enum { NFO_NONE, NFO_ALBUM, NFO_ARTIST, NFO_OTHER };
+enum { NFO_ART_FANART = 1, NFO_ART_LOGO, NFO_ART_DISC, NFO_ART_ARTIST, NFO_ART_BANNER };
+struct Nfo {
+    UBYTE kind;                 /* NFO_* (its root element) */
+    BOOL born;                  /* formed is a person's birth */
+    UWORD rating_max;           /* rating out of this (10, or 5 in old files) */
+    char title[100];            /* the album's title, or the artist's name */
+    char artist[100];           /* an album's artist */
+    char year[8];
+    char label[64];
+    char genres[100], styles[100], moods[100];  /* ", " between */
+    char rating[8];             /* "8.5"; "" none */
+    char type[24];              /* an artist's: Person, Group... */
+    char formed[32], ended[32]; /* formed or born; disbanded or died */
+    char *text;                 /* the review or biography (AllocVec'd), NULL none */
+};
+BOOL nfo_read(const char *path, struct Nfo *n);     /* one file; nfo_free after, either way */
+void nfo_free(struct Nfo *n);
+BOOL nfo_album_of(const char *dir, struct Nfo *n);  /* dir: an album's or disc's folder */
+BOOL nfo_artist_of(const char *dir, BOOL album, struct Nfo *n);  /* album: dir is an album's */
+BOOL nfo_art(const char *dir, int what, BOOL artist, char *out, LONG max);  /* NFO_ART_* */
+BOOL nfo_disc_folder(const char *name);
+int nfo_album_lines(const struct Nfo *n, char lines[][96], int max);
+int nfo_artist_lines(const struct Nfo *n, char lines[][96], int max);
 LONG mods_read_dir(const char *dir, struct ItemList *out);  /* -1 if it cannot be read */
 BOOL mods_is_module(const char *dir, const char *name);
 void mods_label(const char *name, char *out, LONG max);
@@ -920,6 +950,8 @@ struct LJob {
     struct PicInfo info;
     LONG nlines;                /* LJ_ENTRY: the fact sheet (np: 1 if it has a screenshot) */
     char lines[LJ_FACTS][96];
+    char *text;                 /* LJ_SONG: after the lines, a review or biography (.nfo),
+                                 * paragraphs a line each; AllocVec'd, freed with the job */
     LONG size, days;            /* LJ_PICTURE: file size, date (DateStamp days) */
     LONG np, nd;                /* LJ_PICFOLDER: pictures, folders; its first picture */
     char first[300];
