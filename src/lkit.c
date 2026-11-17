@@ -2,7 +2,7 @@
  * Ambiance - the layouts' drawing kit on a graphics card's screen (lkit.h)
  * Copyright (c) 2026 Brian King
  */
-#include "amce.h"
+#include "amb.h"
 #include "lkit.h"
 
 #include <proto/exec.h>

@@ -1,4 +1,4 @@
-"""Build Ambiance's Greek glyph pack (Fonts/amce-cjk/greek) for the pixel
+"""Build Ambiance's Greek glyph pack (Fonts/amb-cjk/greek) for the pixel
 style, and the Greek extract of Galmuri11 it is made from.
 
 Usage: python3 -I mkgreek.py <Galmuri11.bdf> <out file>

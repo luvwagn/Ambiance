@@ -2,8 +2,8 @@
  * Ambiance - full-screen media launcher for AmigaOS 3.1+
  * Copyright (c) 2026 Brian King
  */
-#ifndef AMCE_H
-#define AMCE_H
+#ifndef AMB_H
+#define AMB_H
 
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -15,11 +15,11 @@
 #include <graphics/rastport.h>
 
 /* The Makefile passes these from git describe and the build date. */
-#ifndef AMCE_VERSION
-#define AMCE_VERSION "0.1.0"
+#ifndef AMB_VERSION
+#define AMB_VERSION "0.1.0"
 #endif
-#ifndef AMCE_DATE
-#define AMCE_DATE    "2.11.2026"
+#ifndef AMB_DATE
+#define AMB_DATE    "2.11.2026"
 #endif
 
 /* ---------------------------------------------------------------- caps */
@@ -30,7 +30,7 @@ struct Caps {
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
     BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
-    BOOL  mpega_own;    /* Ambiance's own amcempega.library is in its Libs */
+    BOOL  mpega_own;    /* Ambiance's own ambmpega.library is in its Libs */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
     UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
@@ -64,7 +64,7 @@ extern UBYTE gfx_penmap[NUM_UI_PENS];
  *                 (1024x768 2x, smaller 1x), the pixel art in whole pixels;
  *   smooth style: exactly lines / RTG_LINES (1024x768 2x, 800x600 1.56x,
  *                 640x480 1.25x), anti-aliased text, icons and logo
- *                 pre-rendered for that size (Fonts/amce-smooth/<lines>),
+ *                 pre-rendered for that size (Fonts/amb-smooth/<lines>),
  *                 on 15/16/24/32-bit screens only. */
 enum { STYLE_PIXEL, STYLE_SMOOTH };
 
@@ -185,19 +185,19 @@ void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char 
 /* lang.c: translations. _("English") is its translation in the catalog
  * open (the Workbench's language, or Settings'), or itself; N_() marks a
  * string in a table for tools/catalog.py, translated where it is used. */
-const char *amce_tr(const char *s);
-ULONG amce_tr_id(const char *s);
-#define _(s) amce_tr(s)
+const char *amb_tr(const char *s);
+ULONG amb_tr_id(const char *s);
+#define _(s) amb_tr(s)
 #define N_(s) (s)
-void amce_lang_scan(void);
-int amce_lang_count(void);
-const char *amce_lang_name(int i);
-const char *amce_lang_wb(void);
-void amce_lang_open(const char *lang);
-void amce_lang_close(void);
-void amce_lang_quit(void);
-const char *amce_lang_now(void);
-const char *amce_lang_iso(void);
+void amb_lang_scan(void);
+int amb_lang_count(void);
+const char *amb_lang_name(int i);
+const char *amb_lang_wb(void);
+void amb_lang_open(const char *lang);
+void amb_lang_close(void);
+void amb_lang_quit(void);
+const char *amb_lang_now(void);
+const char *amb_lang_iso(void);
 
 /* cjk.c: Japanese, Chinese and Korean text, kept in strings as three bytes
  * a character (see there), drawn from glyph packs or shown as a tag; and
@@ -230,7 +230,7 @@ void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD 
 
 /* ---------------------------------------------------------------- smooth */
 #define SMOOTH_LEVELS 8         /* coverage steps: 0 none .. 7 full colour */
-struct Smooth *sm_load(UWORD lines);    /* PROGDIR:Fonts/amce-smooth/<lines> */
+struct Smooth *sm_load(UWORD lines);    /* PROGDIR:Fonts/amb-smooth/<lines> */
 void sm_free(struct Smooth *s);
 void sm_attach(struct Smooth *s, struct Gfx *g);    /* screen open: pens, metrics */
 void sm_alpha_allow(BOOL on);        /* text blended in 16 steps (fast, 15-32 bit) */
@@ -501,7 +501,7 @@ struct Item {
  * At 18 bytes it became a __mulsi3 call that GCC moved between loading
  * CopyMem's registers and the call, so CopyMem got garbage (see
  * tools/check_syscalls.py). This line fails to compile otherwise. */
-typedef char amce_item_size_is_power_of_two
+typedef char amb_item_size_is_power_of_two
     [(sizeof(struct Item) & (sizeof(struct Item) - 1)) == 0 ? 1 : -1];
 
 struct ItemList {
@@ -764,7 +764,7 @@ void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
 void st_use_paula14(BOOL on);            /* Paula at 14 bits, four channels */
 void st_mp3_quality(int pref);           /* MPEG audio: 0 by the speed measured, 1 high, 2 medium */
-void st_use_own_mpega(BOOL on);          /* MP3 by amcempega.library, Ambiance's own */
+void st_use_own_mpega(BOOL on);          /* MP3 by ambmpega.library, Ambiance's own */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
@@ -1026,8 +1026,8 @@ enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };
 
 /* ---------------------------------------------------------------- log */
-void amce_log_open(BOOL force);     /* force, or PROGDIR:Ambiance.debug exists */
-const char *amce_log_path(void);    /* where it is going, or NULL when off */
+void amb_log_open(BOOL force);     /* force, or PROGDIR:Ambiance.debug exists */
+const char *amb_log_path(void);    /* where it is going, or NULL when off */
 
 /* ---------------------------------------------------------------- debug */
 BOOL  dbg_cpu_start(void);
@@ -1043,9 +1043,9 @@ LONG  dbg_app_sample(void);         /* Ambiance's own CPU share, 0..100, -1 at f
 void  dbg_mem_baseline(void);
 void  dbg_mem_report(void);     /* (quitting: what is not back, logged) */
 ULONG dbg_mem_used(ULONG *chip);
-void amce_log(const char *what, const char *detail);
+void amb_log(const char *what, const char *detail);
 const char *fmt_khz(ULONG hz, char *out);    /* "44.1kHz" (out: 16 bytes) */
-void amce_log_close(void);
+void amb_log_close(void);
 
 /* ---------------------------------------------------------------- index */
 /* The index cache of long lists (index.c). */
@@ -1086,8 +1086,8 @@ extern void (*dir_tick)(void);  /* called as entries come, in dir_tick_task only
 extern struct Task *dir_tick_task;
 
 /* ---------------------------------------------------------------- util */
-int  amce_stricmp(const char *a, const char *b);
-int  amce_strnicmp(const char *a, const char *b, LONG n);
+int  amb_stricmp(const char *a, const char *b);
+int  amb_strnicmp(const char *a, const char *b, LONG n);
 
 /* ---------------------------------------------------------------- HTTPS
  * tls.c: TLS by AmiSSL 6 or 5, opened by each process that uses it, for itself
@@ -1233,40 +1233,40 @@ ULONG plex_stream_rate(UBYTE *body, ULONG len);
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax);
 void plex_art_file(const char *thumb, WORD w, WORD h, char *file);  /* its file alone */
 BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len);
-void amce_strlcpy(char *d, const char *s, LONG n);
-void amce_strlcat(char *d, const char *s, LONG n);
+void amb_strlcpy(char *d, const char *s, LONG n);
+void amb_strlcat(char *d, const char *s, LONG n);
 
 /* Small helpers, one copy each (util.c): */
-BOOL amce_ends_with(const char *s, const char *ext);            /* case aside */
-BOOL amce_contains_nocase(const char *hay, const char *needle);  /* Latin-1 case aside */
-LONG amce_num(const char *s);           /* the digits at s (0: none, or s NULL) */
-void amce_join_path(char *out, LONG max, const char *dir, const char *name);  /* dir/name, dir: */
-BOOL amce_exists(const char *path);     /* a file or drawer there (no requester asked) */
-void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
+BOOL amb_ends_with(const char *s, const char *ext);            /* case aside */
+BOOL amb_contains_nocase(const char *hay, const char *needle);  /* Latin-1 case aside */
+LONG amb_num(const char *s);           /* the digits at s (0: none, or s NULL) */
+void amb_join_path(char *out, LONG max, const char *dir, const char *name);  /* dir/name, dir: */
+BOOL amb_exists(const char *path);     /* a file or drawer there (no requester asked) */
+void amb_time_text(char *out, ULONG ms);   /* "m:ss" */
 /* the ZZ9000, one task at a time (util.c): around each call that reaches it */
-void amce_card_init(void);
-void amce_card_lock(void);
-void amce_card_unlock(void);
+void amb_card_init(void);
+void amb_card_lock(void);
+void amb_card_unlock(void);
 /* One of Ambiance's own libraries, from its Libs (else LIBS:): an older
  * copy left in memory, unused, put out first; logged (ownlib.c) */
-struct Library *amce_open_own_lib(const char *name, ULONG version);
-void amce_close_own_lib(struct Library **base);     /* closed, and out of memory if unused */
-void amce_flush_own_lib(const char *name);  /* out of memory now, if unused (at quitting) */
+struct Library *amb_open_own_lib(const char *name, ULONG version);
+void amb_close_own_lib(struct Library **base);     /* closed, and out of memory if unused */
+void amb_flush_own_lib(const char *name);  /* out of memory now, if unused (at quitting) */
 /* Numbers stored a byte at a time, big-endian (IFF, MP3, the index) or
  * little (WAV): read wherever they lie (no alignment). */
-static inline ULONG amce_be32(const UBYTE *p)
+static inline ULONG amb_be32(const UBYTE *p)
 {
     return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
 }
-static inline UWORD amce_be16(const UBYTE *p)
+static inline UWORD amb_be16(const UBYTE *p)
 {
     return (UWORD)((p[0] << 8) | p[1]);
 }
-static inline ULONG amce_le32(const UBYTE *p)
+static inline ULONG amb_le32(const UBYTE *p)
 {
     return ((ULONG)p[3] << 24) | ((ULONG)p[2] << 16) | ((ULONG)p[1] << 8) | p[0];
 }
-static inline UWORD amce_le16(const UBYTE *p)
+static inline UWORD amb_le16(const UBYTE *p)
 {
     return (UWORD)((p[1] << 8) | p[0]);
 }

@@ -3,8 +3,8 @@
  * Stream as it is read (tspack.c), for the ZZ9000's media session
  * Copyright (c) 2026 Brian King, MIT licence
  */
-#ifndef AMCE_TSPACK_H
-#define AMCE_TSPACK_H
+#ifndef AMB_TSPACK_H
+#define AMB_TSPACK_H
 
 #include <exec/types.h>
 

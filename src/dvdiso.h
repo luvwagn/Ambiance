@@ -6,8 +6,8 @@
  * No OS calls here (dvddisc.c makes them): tested on the host
  * (tests/dvdiso_host.c).
  */
-#ifndef AMCE_DVDISO_H
-#define AMCE_DVDISO_H
+#ifndef AMB_DVDISO_H
+#define AMB_DVDISO_H
 
 #include <exec/types.h>
 

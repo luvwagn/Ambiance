@@ -7,8 +7,8 @@
  * volume's filesystem, which only says a DVD is there; an image's from its
  * file.
  */
-#ifndef AMCE_DVDPLAY_H
-#define AMCE_DVDPLAY_H
+#ifndef AMB_DVDPLAY_H
+#define AMB_DVDPLAY_H
 
 #include <exec/types.h>
 

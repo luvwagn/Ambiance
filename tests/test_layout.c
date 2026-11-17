@@ -7,13 +7,13 @@
 #endif
 #include <stdio.h>
 #include <string.h>
-#include "../src/amce.h"
+#include "../src/amb.h"
 #include "../src/lhost.h"
 
 static int fails;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
 
-void amce_log(const char *what, const char *detail)
+void amb_log(const char *what, const char *detail)
 {
     printf("log %s: %s\n", what, detail);
 }

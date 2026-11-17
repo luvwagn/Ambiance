@@ -95,7 +95,7 @@ Music (files)
   or library.db) adds Music library (beets): Artists, Albums and Recently
   added, then an artist's albums and an album's tracks, without reading
   the folders (quick on a network share). The database is only ever read,
-  through Ambiance's own Libs/amcesql.library (SQLite). Its albums are
+  through Ambiance's own Libs/ambsql.library (SQLite). Its albums are
   read once, a few seconds on an 030, and kept in Cache until the
   database changes. Tracks in WMA, AAC or other formats Ambiance does
   not play are left out, as are file names with characters Latin-1 lacks.
@@ -170,7 +170,7 @@ Screens
   that fits the Workbench's screen), else hires on AGA, lowres before it.
 - Japanese, Chinese and Korean names (from Plex, stations and song
   tags) are shown in their own characters, at 12 or 15 pixels (without
-  Fonts/amce-cjk, as [JP], [KO] or [CJK]). Greek names too, in the smooth
+  Fonts/amb-cjk, as [JP], [KO] or [CJK]). Greek names too, in the smooth
   style's own letters or at 12 pixels.
 - Laced screens choose their pixel font (Galmuri or Pixelify Sans); big
   RTG screens scale the layout up, in a pixel look or a smooth,
@@ -209,7 +209,7 @@ Requirements
   iGame's list with WHDLoad. To install WHDLoad from Games:
   xadmaster.library or LhA in C:.
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
-- For MP3: nothing more (Libs/amcempega.library is in the archive);
+- For MP3: nothing more (Libs/ambmpega.library is in the archive);
   mpega.library or an MHI driver may be chosen instead. For FLAC:
   flacdec.library (Aminet: util/libs/flacdec; on a 68060 its 68060 build).
 - Optional: EaglePlayer's players (Aminet: mus/play/Eagleplayer, with its
@@ -241,7 +241,7 @@ speaks your Workbench's language (Locale prefs) when its catalog is
 installed;
 Settings > General > Language chooses another. Workbench 3.x has no
 Japanese or Korean locale, so they are only ever chosen there: Ambiance
-draws them with its own glyphs (Fonts/amce-cjk), needing nothing from
+draws them with its own glyphs (Fonts/amb-cjk), needing nothing from
 the system. Greek is drawn with Ambiance's own glyphs too, so it needs no
 Greek fonts or ReplaceTopaz; it is chosen by itself where Locale prefs
 put Greek first. The translations are new: corrections are
@@ -313,7 +313,7 @@ Settings
                it on a 15 to 32-bit screen; Ambiance/TextBlend "on" or
                "off" says otherwise.
   Sound        Paula, Paula at 14 bits, or AHI (16-bit) for radio,
-               Plex and music files; MP3 by amcempega.library
+               Plex and music files; MP3 by ambmpega.library
                (Ambiance's own), mpega.library or an MHI driver (which
                decodes and plays it itself); MP3 quality: automatic
                (by this Amiga's speed, measured each run), high or
@@ -395,7 +395,7 @@ History
        controls), and DVD images (.iso) in Videos' folders. AC-3 the card
        will not decode (Amiberry's emulated card) decoded by a 68040 or
        68060 instead (Libs/ac3.library, ac3fpu.library: liba52). MP3 and
-       MPEG audio by Ambiance's own Libs/amcempega.library (libmad: about
+       MPEG audio by Ambiance's own Libs/ambmpega.library (libmad: about
        83 dB from a perfect decoder, where mpega 2.4 gives 34), or
        mpega.library or MHI as before (Settings > Sound); its quality
        chosen by how fast this Amiga is, measured at the first MP3 each
@@ -474,7 +474,7 @@ History
        each beside the list. The menu folds to its icons on every screen,
        sliding where drawing is quick, and stays open while the pointer is
        in it. Settings > Screen is now Display, with Jump scrolling.
-       amcesql.library for reading beets libraries later. Faster Plex
+       ambsql.library for reading beets libraries later. Faster Plex
        slideshows; smoother hover highlights; coasting kept short.
 0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
        AHI output and MHI MP3 decoding for radio, Plex and music files.

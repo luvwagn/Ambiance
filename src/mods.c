@@ -11,7 +11,7 @@
  * out when it is played (modplay.c says why not). The label drops the
  * format's prefix or suffix when it is one of the usual ones.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <proto/exec.h>
@@ -52,7 +52,7 @@ void mods_label(const char *name, char *out, LONG max)
     LONG n;
     if (dot && dot[1] && is_kind(name, dot - name))
         name = dot + 1;
-    amce_strlcpy(out, name, max);
+    amb_strlcpy(out, name, max);
     n = strlen(out);
     last = strrchr(out, '.');
     if (last && last != out && is_kind(last + 1, n - (last + 1 - out)))
@@ -73,12 +73,12 @@ BOOL mods_is_module(const char *dir, const char *name)
     if (name[0] == '.')
         return FALSE;
     for (i = 0; not_music[i]; i++)
-        if (amce_ends_with(name, not_music[i]))
+        if (amb_ends_with(name, not_music[i]))
             return FALSE;
     /* the second file of a pair (mdat. plays, smpl. is its samples) */
-    if (!amce_stricmp(name, "smpl") || (strlen(name) > 5 && !memcmp(name, "smpl.", 5)) ||
-        (strlen(name) > 5 && !memcmp(name, "SMPL.", 5)) || amce_ends_with(name, ".smpl") ||
-        amce_ends_with(name, ".ssd") || amce_ends_with(name, ".instr"))
+    if (!amb_stricmp(name, "smpl") || (strlen(name) > 5 && !memcmp(name, "smpl.", 5)) ||
+        (strlen(name) > 5 && !memcmp(name, "SMPL.", 5)) || amb_ends_with(name, ".smpl") ||
+        amb_ends_with(name, ".ssd") || amb_ends_with(name, ".instr"))
         return FALSE;
     return TRUE;
 }
@@ -95,13 +95,13 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     char path[300], key[140], label[120];
     if (!isdir && !mods_is_module(c->dir, name))
         return;
-    amce_join_path(path, sizeof(path), c->dir, name);
+    amb_join_path(path, sizeof(path), c->dir, name);
     if (isdir)
-        amce_strlcpy(label, name, sizeof(label));
+        amb_strlcpy(label, name, sizeof(label));
     else
         mods_label(name, label, sizeof(label));
     key[0] = isdir ? '0' : '1';             /* folders first */
-    amce_strlcpy(key + 1, label, sizeof(key) - 1);
+    amb_strlcpy(key + 1, label, sizeof(key) - 1);
     if (list_add(c->out, label, path, key, isdir ? IT_DIR : IT_MOD) && !isdir)
         c->mods++;
 }
@@ -141,9 +141,9 @@ BOOL song_name_ok(const char *name)
 {
     if (name[0] == '.')
         return FALSE;
-    return (can_mp3 && amce_ends_with(name, ".mp3")) || (can_flac && amce_ends_with(name, ".flac")) ||
-           amce_ends_with(name, ".wav") || amce_ends_with(name, ".aif") || amce_ends_with(name, ".aiff") ||
-           amce_ends_with(name, ".aifc") || amce_ends_with(name, ".8svx") || amce_ends_with(name, ".svx");
+    return (can_mp3 && amb_ends_with(name, ".mp3")) || (can_flac && amb_ends_with(name, ".flac")) ||
+           amb_ends_with(name, ".wav") || amb_ends_with(name, ".aif") || amb_ends_with(name, ".aiff") ||
+           amb_ends_with(name, ".aifc") || amb_ends_with(name, ".8svx") || amb_ends_with(name, ".svx");
 }
 
 /* ---- whether a folder has music in it, anywhere below: looked through
@@ -192,7 +192,7 @@ static BOOL has_music(const char *dir, int depth, LONG *budget)
     yes = c->found;
     for (i = 0; !yes && i < c->ndirs; i++) {
         char sub[300];
-        amce_join_path(sub, sizeof(sub), dir, c->dirs[i]);
+        amb_join_path(sub, sizeof(sub), dir, c->dirs[i]);
         yes = has_music(sub, depth + 1, budget);
     }
     FreeVec(c);
@@ -225,12 +225,12 @@ static void song_cb(void *ctx, const char *name, BOOL isdir)
     char path[300], key[140], label[120], *dot;
     if (!isdir && !song_name_ok(name))
         return;
-    amce_join_path(path, sizeof(path), c->dir, name);
-    amce_strlcpy(label, name, sizeof(label));
+    amb_join_path(path, sizeof(path), c->dir, name);
+    amb_strlcpy(label, name, sizeof(label));
     if (!isdir && (dot = strrchr(label, '.')))
         *dot = 0;                           /* the name without .mp3, .flac */
     key[0] = isdir ? '0' : '1';
-    amce_strlcpy(key + 1, label, sizeof(key) - 1);
+    amb_strlcpy(key + 1, label, sizeof(key) - 1);
     if (list_add(c->out, label, path, key, isdir ? IT_DIR : IT_SONG) && !isdir)
         c->mods++;
 }
@@ -277,8 +277,8 @@ LONG songs_read_dir(const char *dir, struct ItemList *out)
 /* A music file's format, for Now Playing: "FLAC", "MP3". */
 const char *song_format(const char *path)
 {
-    return amce_ends_with(path, ".flac") ? "FLAC" : amce_ends_with(path, ".wav") ? "WAV"
-           : amce_ends_with(path, ".8svx") || amce_ends_with(path, ".svx") ? "8SVX"
-           : amce_ends_with(path, ".aif") || amce_ends_with(path, ".aiff") || amce_ends_with(path, ".aifc")
+    return amb_ends_with(path, ".flac") ? "FLAC" : amb_ends_with(path, ".wav") ? "WAV"
+           : amb_ends_with(path, ".8svx") || amb_ends_with(path, ".svx") ? "8SVX"
+           : amb_ends_with(path, ".aif") || amb_ends_with(path, ".aiff") || amb_ends_with(path, ".aifc")
              ? "AIFF" : "MP3";
 }

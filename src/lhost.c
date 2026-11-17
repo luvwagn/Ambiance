@@ -7,10 +7,10 @@
  * is its file's; its one function, GetLayout(abi), gives its table only
  * to a program built against the same layout.h (LAYOUT_ABI). Opened only
  * while it is in use, closed and put out of memory after (as
- * amce_open_own_lib's libraries are), so a new build's file is never
+ * amb_open_own_lib's libraries are), so a new build's file is never
  * shadowed by an old copy still in memory.
  */
-#include "amce.h"
+#include "amb.h"
 #include "lhost.h"
 
 #include <string.h>
@@ -22,7 +22,7 @@
 #include <inline/macros.h>
 
 
-#ifdef AMCE_NO_EXPUNGE                      /* (the tests: vamos opens a library put out of memory once only) */
+#ifdef AMB_NO_EXPUNGE                      /* (the tests: vamos opens a library put out of memory once only) */
 #undef RemLibrary
 #define RemLibrary(l) ((void)(l))
 #endif
@@ -58,7 +58,7 @@ static const struct LayoutEngine *open_one(const char *file, BOOL quiet)
     if (!(LayoutBase = OpenLibrary((CONST_STRPTR)path, 1))) {
         if (!quiet) {
             snprintf(m, sizeof(m), "%s would not open (error %ld)", path, (long)IoErr());
-            amce_log("layout", m);
+            amb_log("layout", m);
         }
         return NULL;
     }
@@ -66,14 +66,14 @@ static const struct LayoutEngine *open_one(const char *file, BOOL quiet)
     if (!e || e->abi != (ULONG)LAYOUT_ABI) {
         snprintf(m, sizeof(m), "%s %ld.%ld is for another Ambiance (its layout.h differs): not used",
                  file, (long)LayoutBase->lib_Version, (long)LayoutBase->lib_Revision);
-        amce_log("layout", m);
+        amb_log("layout", m);
         layout_unload();
         return NULL;
     }
     if (!quiet) {
         snprintf(m, sizeof(m), "%s %ld.%ld: %s", file, (long)LayoutBase->lib_Version,
                  (long)LayoutBase->lib_Revision, e->name);
-        amce_log("layout", m);
+        amb_log("layout", m);
     }
     return e;
 }
@@ -127,9 +127,9 @@ int layout_list(struct LayoutInfo *out, int max)
             size_t len = strlen(f);
             const struct LayoutEngine *e;
             if (fib->fib_DirEntryType >= 0 || len <= sizeof(LAYOUT_EXT) - 1 || len >= sizeof(out[n].file) ||
-                amce_stricmp(f + len - (sizeof(LAYOUT_EXT) - 1), LAYOUT_EXT))
+                amb_stricmp(f + len - (sizeof(LAYOUT_EXT) - 1), LAYOUT_EXT))
                 continue;
-            if (keep && !amce_stricmp(f, (const char *)keep->lib_Node.ln_Name)) {
+            if (keep && !amb_stricmp(f, (const char *)keep->lib_Node.ln_Name)) {
                 e = keep_e;                 /* the one open: as it is */
             } else {
                 if (!(e = open_one(f, TRUE)))

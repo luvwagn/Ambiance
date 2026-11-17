@@ -12,7 +12,7 @@
  * (ID3's APIC, FLAC's PICTURE), copied out to RAM:Ambiance-art/ under a
  * name made of the album and its size, so the tracks of an album share it.
  */
-#include "amce.h"
+#include "amb.h"
 #include "radiocsv.h"
 
 #include <string.h>
@@ -28,7 +28,7 @@
 static ULONG ext80(const UBYTE *b)
 {
     int e = ((b[0] & 0x7F) << 8 | b[1]) - 16383 - 31;
-    ULONG m = amce_be32(b + 2);
+    ULONG m = amb_be32(b + 2);
     if (e > 0 || e < -31)
         return 0;                           /* past 4 GHz, or under 1 Hz */
     return m >> -e;
@@ -57,23 +57,23 @@ BOOL pcm_header(const UBYTE *b, LONG n, struct PcmFmt *f)
     f->channels = 1;
     for (p = 12; p + 8 <= n;) {
         const UBYTE *c = b + p;
-        ULONG len = wav ? amce_le32(c + 4) : amce_be32(c + 4);
+        ULONG len = wav ? amb_le32(c + 4) : amb_be32(c + 4);
         const UBYTE *d = c + 8;
         LONG have = n - (p + 8);
         if (wav && !memcmp(c, "fmt ", 4) && have >= 16) {
-            UWORD tag = amce_le16(d);
+            UWORD tag = amb_le16(d);
             if (tag == 0xFFFE && len >= 26 && have >= 26)
-                tag = amce_le16(d + 24);         /* WAVE_FORMAT_EXTENSIBLE: its sub-format */
+                tag = amb_le16(d + 24);         /* WAVE_FORMAT_EXTENSIBLE: its sub-format */
             if (tag != 1)
                 return FALSE;               /* not PCM */
-            f->channels = amce_le16(d + 2);
-            f->rate = amce_le32(d + 4);
-            f->bits = amce_le16(d + 14);
+            f->channels = amb_le16(d + 2);
+            f->rate = amb_le32(d + 4);
+            f->bits = amb_le16(d + 14);
             have_fmt = TRUE;
         } else if (aiff && !memcmp(c, "COMM", 4) && have >= 18) {
-            f->channels = amce_be16(d);
-            f->frames = amce_be32(d + 2);
-            f->bits = amce_be16(d + 6);
+            f->channels = amb_be16(d);
+            f->frames = amb_be32(d + 2);
+            f->bits = amb_be16(d + 6);
             f->rate = ext80(d + 8);
             if (!memcmp(b + 8, "AIFC", 4) && have >= 22) {
                 if (!memcmp(d + 18, "sowt", 4))
@@ -83,21 +83,21 @@ BOOL pcm_header(const UBYTE *b, LONG n, struct PcmFmt *f)
             }
             have_fmt = TRUE;
         } else if (svx && !memcmp(c, "VHDR", 4) && have >= 20) {
-            f->rate = amce_be16(d + 12);
+            f->rate = amb_be16(d + 12);
             f->bits = 8;
             if (d[15])
                 return FALSE;               /* Fibonacci-delta packed */
             have_fmt = TRUE;
         } else if (svx && !memcmp(c, "CHAN", 4) && have >= 4) {
-            if (amce_be32(d) == 6)
+            if (amb_be32(d) == 6)
                 f->svx_stereo = TRUE;       /* left, then right: the left played */
         } else if ((wav && !memcmp(c, "data", 4)) || (svx && !memcmp(c, "BODY", 4))) {
             f->off = p + 8;
             f->bytes = len;
             break;
         } else if (aiff && !memcmp(c, "SSND", 4) && have >= 8) {
-            f->off = p + 8 + 8 + amce_be32(d);   /* its offset field, then the samples */
-            f->bytes = len >= 8 ? len - 8 - amce_be32(d) : 0;
+            f->off = p + 8 + 8 + amb_be32(d);   /* its offset field, then the samples */
+            f->bytes = len >= 8 ? len - 8 - amb_be32(d) : 0;
             break;
         }
         if (len > (ULONG)(n - p))
@@ -186,7 +186,7 @@ static void read_id3(BPTR fh, const UBYTE *h, struct SongInfo *si, struct Art *a
         Seek(fh, 10, OFFSET_BEGINNING);
         if (Read(fh, fb, 4) != 4)
             return;
-        pos += ver == 4 ? (LONG)syncsafe(fb) : (LONG)amce_be32(fb) + 4;
+        pos += ver == 4 ? (LONG)syncsafe(fb) : (LONG)amb_be32(fb) + 4;
     }
     while (pos + (ver == 2 ? 6 : 10) <= end) {
         char id[5];
@@ -201,8 +201,8 @@ static void read_id3(BPTR fh, const UBYTE *h, struct SongInfo *si, struct Art *a
         } else {
             memcpy(id, fb, 4);
             id[4] = 0;
-            flen = ver == 4 ? (LONG)syncsafe(fb + 4) : (LONG)amce_be32(fb + 4);
-            ffl = amce_be16(fb + 8);
+            flen = ver == 4 ? (LONG)syncsafe(fb + 4) : (LONG)amb_be32(fb + 4);
+            ffl = amb_be16(fb + 8);
         }
         if (flen <= 0 || pos + hl + flen > end)
             break;
@@ -321,7 +321,7 @@ static void read_mp3(BPTR fh, LONG from, LONG size, struct SongInfo *si)
         /* a Xing (VBR) or Info (CBR) frame: the number of frames */
         x = i + 4 + (v == 3 ? (mode == 3 ? 17 : 32) : (mode == 3 ? 9 : 17));
         if (x + 12 < n && (!memcmp(b + x, "Xing", 4) || !memcmp(b + x, "Info", 4)) &&
-            (b[x + 7] & 1) && (frames = amce_be32(b + x + 8))) {
+            (b[x + 7] & 1) && (frames = amb_be32(b + x + 8))) {
             ULONG spf = v == 3 ? 1152 : 576;
             si->ms = (ULONG)(((unsigned long long)frames * spf * 1000) / rate);
             if (si->ms)
@@ -349,7 +349,7 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
         len = (LONG)h[1] << 16 | (LONG)h[2] << 8 | h[3];
         if (type == 0 && len >= 18 && Read(fh, b, 18) == 18) {
             ULONG rate = (ULONG)b[10] << 12 | (ULONG)b[11] << 4 | b[12] >> 4;
-            unsigned long long total = ((unsigned long long)(b[13] & 0x0F) << 32) | amce_be32(b + 14);
+            unsigned long long total = ((unsigned long long)(b[13] & 0x0F) << 32) | amb_be32(b + 14);
             si->rate = rate;
             si->channels = ((b[12] >> 1) & 7) + 1;
             si->bits = (((b[12] & 1) << 4) | (b[13] >> 4)) + 1;
@@ -362,17 +362,17 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
             LONG p = pos + 4, end = pos + 4 + len, cnt, i;
             if (Read(fh, h, 4) != 4)
                 return;
-            p += 4 + amce_le32(h);
+            p += 4 + amb_le32(h);
             if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                 return;
-            cnt = amce_le32(h);
+            cnt = amb_le32(h);
             p += 4;
             for (i = 0; i < cnt && p + 4 <= end; i++) {
                 LONG cl, k;
                 char *eq;
                 if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                     return;
-                cl = amce_le32(h);
+                cl = amb_le32(h);
                 k = cl < (LONG)sizeof(b) - 1 ? cl : (LONG)sizeof(b) - 1;
                 if (cl < 0 || Read(fh, b, k) != k)
                     return;
@@ -381,19 +381,19 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
                     char *v = eq + 1;
                     LONG vn = k - (v - (char *)b);
                     *eq = 0;
-                    if (!amce_stricmp((char *)b, "TITLE"))
+                    if (!amb_stricmp((char *)b, "TITLE"))
                         set_if_empty(si->title, sizeof(si->title), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "ARTIST"))
+                    else if (!amb_stricmp((char *)b, "ARTIST"))
                         set_if_empty(si->artist, sizeof(si->artist), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "ALBUMARTIST"))
+                    else if (!amb_stricmp((char *)b, "ALBUMARTIST"))
                         set_if_empty(si->band, sizeof(si->band), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "ALBUM"))
+                    else if (!amb_stricmp((char *)b, "ALBUM"))
                         set_if_empty(si->album, sizeof(si->album), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "DATE"))
+                    else if (!amb_stricmp((char *)b, "DATE"))
                         set_if_empty(si->year, sizeof(si->year), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "TRACKNUMBER"))
+                    else if (!amb_stricmp((char *)b, "TRACKNUMBER"))
                         set_if_empty(si->track, sizeof(si->track), (UBYTE *)v, vn, 3);
-                    else if (!amce_stricmp((char *)b, "GENRE"))
+                    else if (!amb_stricmp((char *)b, "GENRE"))
                         set_if_empty(si->genre, sizeof(si->genre), (UBYTE *)v, vn, 3);
                 }
                 p += 4 + cl;
@@ -404,18 +404,18 @@ static void read_flac(BPTR fh, LONG size, struct SongInfo *si, struct Art *art)
             LONG p = pos + 4, ml, dl;
             if (Read(fh, b, 8) != 8)
                 return;
-            ml = amce_be32(b + 4);
+            ml = amb_be32(b + 4);
             if (ml < 0 || ml > 64 || Read(fh, b, ml + 4) != ml + 4)
                 return;
             b[ml] = 0;
             art->png = strstr((char *)b, "png") != NULL;
-            dl = amce_be32(b + ml);
+            dl = amb_be32(b + ml);
             p += 8 + ml + 4 + dl + 16;
             if (Seek(fh, p, OFFSET_BEGINNING) < 0 || Read(fh, h, 4) != 4)
                 return;
-            if (amce_be32(h) > 64 && p + 4 + (LONG)amce_be32(h) <= pos + 4 + len) {
+            if (amb_be32(h) > 64 && p + 4 + (LONG)amb_be32(h) <= pos + 4 + len) {
                 art->off = p + 4;
-                art->len = amce_be32(h);
+                art->len = amb_be32(h);
             }
         }
         pos += 4 + len;
@@ -456,7 +456,7 @@ static void genre_name(char *g, LONG max)
         return;
     }
     if (v < 80)
-        amce_strlcpy(g, genres[v], max);
+        amb_strlcpy(g, genres[v], max);
     else
         g[0] = 0;
 }
@@ -465,11 +465,11 @@ static void genre_name(char *g, LONG max)
 static void join(char *out, LONG max, const char *dir, const char *name)
 {
     LONG n;
-    amce_strlcpy(out, dir, max);
+    amb_strlcpy(out, dir, max);
     n = strlen(out);
     if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
+        amb_strlcat(out, "/", max);
+    amb_strlcat(out, name, max);
 }
 
 /* A folder's cover file into out: TRUE if it has one. */
@@ -481,7 +481,7 @@ BOOL song_folder_art(const char *dir, char *out, LONG max)
     int i;
     for (i = 0; names[i]; i++) {
         join(out, max, dir, names[i]);
-        if (amce_exists(out))
+        if (amb_exists(out))
             return TRUE;
     }
     out[0] = 0;
@@ -505,7 +505,7 @@ static BOOL art_out(BPTR fh, const char *path, const struct SongInfo *si, const 
     hash = hash * 33 + (ULONG)a->len;
     sprintf(out, "RAM:Ambiance-art/s%08lx.%s", (unsigned long)hash, a->png ? "png" : "jpg");
     (void)max;
-    if (amce_exists(out))
+    if (amb_exists(out))
         return TRUE;
     if (!extract)
         return TRUE;                        /* where it would be */
@@ -562,7 +562,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
         return FALSE;
     }
     if (!memcmp(h, "fLaC", 4)) {
-        amce_strlcpy(si->fmt, "FLAC", sizeof(si->fmt));
+        amb_strlcpy(si->fmt, "FLAC", sizeof(si->fmt));
         read_flac(fh, size, si, &a);
     } else {
         static UBYTE pb[2048];
@@ -575,7 +575,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
                 f.bytes = (ULONG)size > f.off ? (ULONG)size - f.off : 0;
                 f.frames = f.bytes / f.align;   /* a WAV written as it streamed */
             }
-            amce_strlcpy(si->fmt, f.kind == PCM_WAV ? "WAV" : f.kind == PCM_AIFF ? "AIFF" : "8SVX",
+            amb_strlcpy(si->fmt, f.kind == PCM_WAV ? "WAV" : f.kind == PCM_AIFF ? "AIFF" : "8SVX",
                          sizeof(si->fmt));
             si->rate = f.rate;
             si->channels = f.svx_stereo ? 1 : f.channels;
@@ -587,7 +587,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
                 /* NAME and AUTH (AIFF, 8SVX): its title and author */
                 LONG p = 12;
                 while (f.big && p + 8 <= n) {
-                    ULONG len = amce_be32(pb + p + 4);
+                    ULONG len = amb_be32(pb + p + 4);
                     if (len > (ULONG)n)
                         break;
                     if (!memcmp(pb + p, "NAME", 4))
@@ -600,7 +600,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
                 }
             }
         } else {
-            amce_strlcpy(si->fmt, "MP3", sizeof(si->fmt));
+            amb_strlcpy(si->fmt, "MP3", sizeof(si->fmt));
             tag = id3_size(h);
             if (tag)
                 read_id3(fh, h, si, &a);
@@ -611,7 +611,7 @@ BOOL song_info(const char *path, struct SongInfo *si, char *art, LONG artmax, BO
     }
     if (art) {
         LONG k;
-        amce_strlcpy(dir, path, sizeof(dir));
+        amb_strlcpy(dir, path, sizeof(dir));
         k = FilePart((STRPTR)dir) - (STRPTR)dir;
         dir[k] = 0;
         if (!song_folder_art(dir, art, artmax) && a.len)
@@ -634,22 +634,22 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
     if (max < 6)
         return 0;
     if (si->title[0]) {
-        amce_strlcpy(lines[n++], si->title, 96);
+        amb_strlcpy(lines[n++], si->title, 96);
     } else {
-        amce_strlcpy(t, FilePart((STRPTR)path), sizeof(t));
+        amb_strlcpy(t, FilePart((STRPTR)path), sizeof(t));
         if ((dot = strrchr(t, '.')))
             *dot = 0;
-        amce_strlcpy(lines[n++], t, 96);
+        amb_strlcpy(lines[n++], t, 96);
     }
     if (si->artist[0] || si->band[0])
-        amce_strlcpy(lines[n++], si->artist[0] ? si->artist : si->band, 96);
+        amb_strlcpy(lines[n++], si->artist[0] ? si->artist : si->band, 96);
     if (si->album[0]) {
         if (si->year[0])
             sprintf(lines[n++], "%.80s (%.4s)", si->album, si->year);
         else
-            amce_strlcpy(lines[n++], si->album, 96);
+            amb_strlcpy(lines[n++], si->album, 96);
     } else if (si->year[0]) {
-        amce_strlcpy(lines[n++], si->year, 96);
+        amb_strlcpy(lines[n++], si->year, 96);
     }
     lines[n++][0] = 0;
     t[0] = 0;
@@ -659,7 +659,7 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
         sprintf(t + strlen(t), "%lu:%02lu", (unsigned long)(si->ms / 60000),
                 (unsigned long)(si->ms / 1000 % 60));
     if (t[0])
-        amce_strlcpy(lines[n++], t, 96);
+        amb_strlcpy(lines[n++], t, 96);
     sprintf(t, "%s", si->fmt);
     if (si->kbps)
         sprintf(t + strlen(t), " %lukbps", (unsigned long)si->kbps);
@@ -672,7 +672,7 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
                                                                                      : _("multi"));
     if (si->bits && strcmp(si->fmt, "MP3"))
         sprintf(t + strlen(t), ", %lu-bit", (unsigned long)si->bits);
-    amce_strlcpy(lines[n++], t, 96);
+    amb_strlcpy(lines[n++], t, 96);
     if (n < max) {
         if (si->size >= 1048576)
             sprintf(lines[n++], "%lu.%luMB", (unsigned long)(si->size >> 20),
@@ -681,7 +681,7 @@ int song_lines(const char *path, const struct SongInfo *si, char lines[][96], in
             sprintf(lines[n++], "%luKB", (unsigned long)((si->size + 512) >> 10));
     }
     if (si->genre[0] && n < max)
-        amce_strlcpy(lines[n++], si->genre, 96);
+        amb_strlcpy(lines[n++], si->genre, 96);
     return n;
 }
 
@@ -727,7 +727,7 @@ static int dir_lines(const char *dir, char lines[][96], int max, char *art, LONG
     me->pr_WindowPtr = (APTR)-1;
     dir_scan(dir, dir_cb, &c);
     me->pr_WindowPtr = old;
-    amce_strlcpy(lines[n++], FilePart((STRPTR)dir), 96);
+    amb_strlcpy(lines[n++], FilePart((STRPTR)dir), 96);
     lines[n][0] = 0;
     if (c.files == 1)
         strcpy(lines[n], _("1 music file"));
@@ -746,18 +746,18 @@ static int dir_lines(const char *dir, char lines[][96], int max, char *art, LONG
     if (album && n + 3 < max) {
         lines[n++][0] = 0;
         if (nfo.artist[0])
-            amce_strlcpy(lines[n++], nfo.artist, 96);
+            amb_strlcpy(lines[n++], nfo.artist, 96);
         if (nfo.title[0]) {
             if (nfo.year[0])
                 sprintf(lines[n++], "%.80s (%.4s)", nfo.title, nfo.year);
             else
-                amce_strlcpy(lines[n++], nfo.title, 96);
+                amb_strlcpy(lines[n++], nfo.title, 96);
         }
         n += nfo_album_lines(&nfo, lines + n, max - n);
     } else if (artist && n + 2 < max) {
         lines[n++][0] = 0;
-        if (nfo.title[0] && amce_stricmp(nfo.title, lines[0]))
-            amce_strlcpy(lines[n++], nfo.title, 96);
+        if (nfo.title[0] && amb_stricmp(nfo.title, lines[0]))
+            amb_strlcpy(lines[n++], nfo.title, 96);
         n += nfo_artist_lines(&nfo, lines + n, max - n);
     }
     if (album || artist) {
@@ -773,9 +773,9 @@ static int dir_lines(const char *dir, char lines[][96], int max, char *art, LONG
         if (si.album[0] && !album && n < max) {
             lines[n++][0] = 0;
             if ((si.artist[0] || si.band[0]) && n < max)
-                amce_strlcpy(lines[n++], si.band[0] ? si.band : si.artist, 96);
+                amb_strlcpy(lines[n++], si.band[0] ? si.band : si.artist, 96);
             if (n < max)
-                amce_strlcpy(lines[n++], si.album, 96);
+                amb_strlcpy(lines[n++], si.album, 96);
         }
     }
     return n;
@@ -817,20 +817,20 @@ int song_details(const char *path, char lines[][96], int max, char *art, LONG ar
     if (is_dir(path))
         return dir_lines(path, lines, max, art, artmax, FALSE, text);
     if (!song_info(path, &si, art, artmax, FALSE)) {
-        amce_strlcpy(lines[0], _("Could not be read"), 96);
+        amb_strlcpy(lines[0], _("Could not be read"), 96);
         return 1;
     }
     /* its album's album.nfo: what the tags lack, then its label, genres and
      * styles, rating, and review */
-    amce_strlcpy(dir, path, sizeof(dir));
+    amb_strlcpy(dir, path, sizeof(dir));
     *PathPart((STRPTR)dir) = 0;
     if (text && nfo_album_of(dir, &nfo)) {
         if (!si.album[0])
-            amce_strlcpy(si.album, nfo.title, sizeof(si.album));
+            amb_strlcpy(si.album, nfo.title, sizeof(si.album));
         if (!si.year[0])
-            amce_strlcpy(si.year, nfo.year, sizeof(si.year));
+            amb_strlcpy(si.year, nfo.year, sizeof(si.year));
         if (!si.artist[0] && !si.band[0])
-            amce_strlcpy(si.band, nfo.artist, sizeof(si.band));
+            amb_strlcpy(si.band, nfo.artist, sizeof(si.band));
         n = song_lines(path, &si, lines, max);
         if (n + 2 < max) {
             int k;

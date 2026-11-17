@@ -20,7 +20,7 @@ static void check(const char *what, int ok)
         fails++;
 }
 
-void amce_log(const char *what, const char *detail)
+void amb_log(const char *what, const char *detail)
 {
     printf("  log: %s: %s\n", what, detail);
 }
@@ -56,11 +56,11 @@ int main(void)
     check("an icon not copied", size_of("C:WHDLoad.info") < 0);
     check("C:Patcher already there kept", size_of("C:Patcher") == 1);
     check("S:WHDLoad.prf copied", size_of("S:WHDLoad.prf") == 4);
-    check("DEVS:Kickstarts made", amce_exists("DEVS:Kickstarts"));
+    check("DEVS:Kickstarts made", amb_exists("DEVS:Kickstarts"));
     check("said", strstr(done, "WHDLoad and 1 more") != NULL);
 
     whd_cleanup();
-    check("the unpacked package deleted", !amce_exists(WHD_DIR));
+    check("the unpacked package deleted", !amb_exists(WHD_DIR));
 
     check("a package without WHDLoad: not installed", !whd_install_from("T:", why, sizeof(why), done,
                                                                          sizeof(done)) && why[0]);

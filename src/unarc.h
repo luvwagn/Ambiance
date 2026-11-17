@@ -3,10 +3,10 @@
  * installed (LhA, LZX, Zip and the rest it knows), else by the LhA
  * command in C:. Ambiance carries no unpacker of its own.
  */
-#ifndef AMCE_UNARC_H
-#define AMCE_UNARC_H
+#ifndef AMB_UNARC_H
+#define AMB_UNARC_H
 
-#include "amce.h"
+#include "amb.h"
 
 enum { UNARC_NONE, UNARC_XAD, UNARC_LHA };
 

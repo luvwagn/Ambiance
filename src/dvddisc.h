@@ -7,8 +7,8 @@
  * from an image file. dvdd_reader() fills the DvdReader dvdnav.library
  * reads through.
  */
-#ifndef AMCE_DVDDISC_H
-#define AMCE_DVDDISC_H
+#ifndef AMB_DVDDISC_H
+#define AMB_DVDDISC_H
 
 #include <exec/types.h>
 #include <libraries/dvdnav.h>

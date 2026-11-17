@@ -19,7 +19,7 @@
  *                 under MHI (the driver plays the sound; none comes back):
  *                 the meters are drawn there instead.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -145,7 +145,7 @@ static BOOL load_check(const struct VisCtx *c, BOOL full)
             if (ld.slow >= 2) {
                 char m[64];
                 sprintf(m, "paused: %lu frames a second while playing", (unsigned long)fps);
-                amce_log("visualisation", m);
+                amb_log("visualisation", m);
                 ld.paused = TRUE;
                 full = TRUE;
             }

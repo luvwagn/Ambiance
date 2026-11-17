@@ -1,7 +1,7 @@
 /* Host preview for the Kodi lite layout (src/layouts/kodilite.c): its
  * screens drawn by the drawing kit (lkcore.c) into a picture in memory
  * that keeps only what a 16, 24 or 32-bit screen keeps, with the smooth
- * fonts' own glyphs and icons (assets/Fonts/amce-smooth/<lines>) and
+ * fonts' own glyphs and icons (assets/Fonts/amb-smooth/<lines>) and
  * made-up models like the mockups'. Written as
  * build/kodilite-<screen>-<w>x<h>.ppm; checked only for drawing outside
  * the screen or nothing drawn. */
@@ -507,9 +507,9 @@ static void run(int w, int h, int bits, const char *font)
 
 int main(void)
 {
-    run(800, 600, 24, "assets/Fonts/amce-smooth/600");
-    run(640, 480, 16, "assets/Fonts/amce-smooth/480");
-    run(1024, 768, 32, "assets/Fonts/amce-smooth/768");
+    run(800, 600, 24, "assets/Fonts/amb-smooth/600");
+    run(640, 480, 16, "assets/Fonts/amb-smooth/480");
+    run(1024, 768, 32, "assets/Fonts/amb-smooth/768");
     if (fails) {
         printf("%d failed\n", fails);
         return 1;

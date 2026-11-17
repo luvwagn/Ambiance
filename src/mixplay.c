@@ -24,7 +24,7 @@
  * the library itself (its vector table): libmodplug's API with a handle
  * from ModPlug_Init that holds the settings.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -324,7 +324,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     mx_unload();
     if (!mx_available()) {
         FreeVec(mod);
-        amce_strlcpy(err, (SysBase->AttnFlags & AFF_68020)
+        amb_strlcpy(err, (SysBase->AttnFlags & AFF_68020)
                               ? "This module needs modplug.library, which is not installed"
                               : _("This module needs a 68020 or better to be mixed"),
                      errmax);
@@ -336,7 +336,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     }
     if (!(mx.handle = MP_Init())) {
         FreeVec(mod);
-        amce_strlcpy(err, _("Not enough memory to mix this module"), errmax);
+        amb_strlcpy(err, _("Not enough memory to mix this module"), errmax);
         return FALSE;
     }
     settings();
@@ -345,13 +345,13 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     if (!mx.file) {
         MP_Exit(mx.handle);
         mx.handle = NULL;
-        amce_strlcpy(err, _("Not a module Ambiance can play"), errmax);
+        amb_strlcpy(err, _("Not a module Ambiance can play"), errmax);
         return FALSE;
     }
     mx.title[0] = 0;
     if ((name = MP_GetName(mx.file)))
-        amce_strlcpy(mx.title, (const char *)name, sizeof(mx.title));
-    amce_strlcpy(mx.kind, type_name(MP_GetModuleType(mx.file)), sizeof(mx.kind));
+        amb_strlcpy(mx.title, (const char *)name, sizeof(mx.title));
+    amb_strlcpy(mx.kind, type_name(MP_GetModuleType(mx.file)), sizeof(mx.kind));
     mx.length_ms = (ULONG)MP_GetLength(mx.file);
     /* louder: libmodplug's own level leaves a 4-channel module's peaks
      * near -10 dB (WeNeedJungle: 10560 of 32767), its quiet passages
@@ -380,14 +380,14 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     sprintf(m, "%s, %lu channels, %lu:%02lu, mixed at %lu Hz", mx.kind,
             (unsigned long)MP_NumChannels(mx.file), (unsigned long)(mx.length_ms / 60000),
             (unsigned long)(mx.length_ms / 1000 % 60), (unsigned long)mx.rate);
-    amce_log("modplug", m);
+    amb_log("modplug", m);
     return TRUE;
 }
 
 /* ---------------------------------------------------------- playing */
 static void ahi_end(void)
 {
-    amce_card_lock();
+    amb_card_lock();
     if (mx.actrl) {
         if (mx.aplaying) {
             struct TagItem t[2];
@@ -402,7 +402,7 @@ static void ahi_end(void)
         CloseDevice((struct IORequest *)mx.aio);
     if (mx.aopen || mx.actrl)
         AHIBase = NULL;
-    amce_card_unlock();
+    amb_card_unlock();
     if (mx.aio)
         DeleteIORequest((struct IORequest *)mx.aio);
     if (mx.aport)
@@ -435,9 +435,9 @@ void mx_stop(void)
         t[0].ti_Tag = AHIC_Play;
         t[0].ti_Data = FALSE;
         t[1].ti_Tag = TAG_DONE;
-        amce_card_lock();
+        amb_card_lock();
         AHI_ControlAudioA(mx.actrl, t);
-        amce_card_unlock();
+        amb_card_unlock();
         mx.aplaying = FALSE;
     }
     if (mx.proc) {
@@ -473,9 +473,9 @@ static BOOL ahi_begin(char *err, LONG errmax)
         !(mx.aio = (struct AHIRequest *)CreateIORequest(mx.aport, sizeof(struct AHIRequest))))
         goto out;
     mx.aio->ahir_Version = 4;
-    amce_card_lock();
+    amb_card_lock();
     if (OpenDevice((CONST_STRPTR)AHINAME, AHI_NO_UNIT, (struct IORequest *)mx.aio, 0)) {
-        amce_card_unlock();
+        amb_card_unlock();
         goto out;
     }
     mx.aopen = TRUE;
@@ -495,7 +495,7 @@ static BOOL ahi_begin(char *err, LONG errmax)
     t[4].ti_Data = (ULONG)&mx.ahook;
     t[5].ti_Tag = TAG_DONE;
     if (!(mx.actrl = AHI_AllocAudioA(t))) {
-        amce_card_unlock();
+        amb_card_unlock();
         goto out;
     }
     for (k = 0; k < 2; k++) {
@@ -503,7 +503,7 @@ static BOOL ahi_begin(char *err, LONG errmax)
         si.ahisi_Address = mx.mix[k];
         si.ahisi_Length = HALF;
         if (AHI_LoadSound((UWORD)k, AHIST_DYNAMICSAMPLE, &si, mx.actrl) != AHIE_OK) {
-            amce_card_unlock();
+            amb_card_unlock();
             goto out;
         }
     }
@@ -512,7 +512,7 @@ static BOOL ahi_begin(char *err, LONG errmax)
     t[0].ti_Data = TRUE;
     t[1].ti_Tag = TAG_DONE;
     if (AHI_ControlAudioA(mx.actrl, t) != AHIE_OK) {
-        amce_card_unlock();
+        amb_card_unlock();
         goto out;
     }
     mx.aplaying = TRUE;
@@ -531,12 +531,12 @@ static BOOL ahi_begin(char *err, LONG errmax)
     t[5].ti_Data = 0;
     t[6].ti_Tag = TAG_DONE;
     AHI_PlayA(mx.actrl, t);
-    amce_card_unlock();
+    amb_card_unlock();
     mx.play_t = time_ms();
     ok = TRUE;
 out:
     if (!ok)
-        amce_strlcpy(err, _("AHI could not be opened (its Preferences: a mode?)"), errmax);
+        amb_strlcpy(err, _("AHI could not be opened (its Preferences: a mode?)"), errmax);
     return ok;
 }
 
@@ -556,7 +556,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
         mx.mix[k] = AllocVec(HALF * 4, MEMF_ANY | MEMF_PUBLIC | MEMF_CLEAR);
     if ((mx.chip_size && !mx.chip) || !mx.mix[0] || !mx.mix[1]) {
         mx_stop();
-        amce_strlcpy(err, _("Not enough memory to mix this module"), errmax);
+        amb_strlcpy(err, _("Not enough memory to mix this module"), errmax);
         return FALSE;
     }
     mx.quit = mx.ended = mx.paused = FALSE;
@@ -568,7 +568,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
                                 NP_Priority, 5, NP_StackSize, 32768, TAG_DONE);
     if (!mx.proc) {
         mx_stop();
-        amce_strlcpy(err, _("Could not start the mixer"), errmax);
+        amb_strlcpy(err, _("Could not start the mixer"), errmax);
         return FALSE;
     }
     for (i = 0; i < 50 && mx.sig < 0; i++)
@@ -579,7 +579,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
             char m[100];
             said = mx.out;
             sprintf(m, "mixed at %lu Hz, played through %s", (unsigned long)mx.rate, outs[mx.out]);
-            amce_log("modplug", m);
+            amb_log("modplug", m);
         }
     }
     if (mx.out == MXO_AHI) {
@@ -740,7 +740,7 @@ void mx_status(struct MpStatus *s, UBYTE *lev_l, UBYTE *lev_r)
                 (unsigned long)(s->elapsed_ms > 5000 ? s->elapsed_ms - 5000 : 0),
                 (unsigned long)mx.first_pk, outs[mx.out],
                 (unsigned long)(mx.out == MXO_AHI ? mx.avol : mx.master));
-        amce_log("modplug", m);
+        amb_log("modplug", m);
         mx.first_t = 0;
     }
 }

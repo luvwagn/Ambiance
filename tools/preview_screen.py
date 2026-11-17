@@ -5,7 +5,7 @@ Usage: python3 tools/preview_screen.py <art.c> <Fonts dir> <out.png> [lores|hire
                                        [games|about] [scroll pixels]
 
 Mirrors the layout constants in src/gfx.c and src/main.c, decodes the real
-amce-pixel font files and parses the generated art.c, then scales the result
+amb-pixel font files and parses the generated art.c, then scales the result
 to the Amiga's pixel aspect (lowres 3x3, hires 1.5x3) for an honest look.
 """
 import os
@@ -97,7 +97,7 @@ def main():
     W, H = {"hires": (640, 256), "lores": (320, 256), "laced": (640, 512), "rtg": (800, 600)}[mode]
     if video == "ntsc" and mode != "rtg":
         H = {256: 200, 512: 400}[H]
-    fname = "amce-pixel-hi" if hiart else "amce-pixel"
+    fname = "amb-pixel-hi" if hiart else "amb-pixel"
     # laced screens: 1.25x the layout and their own font (src/gfx.c pixel_k)
     k = 1.25 if mode == "laced" and os.environ.get("OLD_LACED") is None else 1.0
     def GU(v):
@@ -182,7 +182,7 @@ ABOUT = [("line", "Ambiance " + _version()), ("line", "(c) 2026 Brian King, unde
          ("line", ""),
          ("para", "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
                   "(c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all "
-                  "under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are "
+                  "under the SIL Open Font License 1.1. The amb-pixel and amb-galmuri fonts are "
                   "Modified Versions of Pixelify Sans and Galmuri."),
          ("line", ""), ("para", "Code: libnix C runtime (public domain). The EaglePlayer host follows "
                   "HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen)."), ("line", ""),

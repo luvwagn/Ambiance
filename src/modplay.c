@@ -24,7 +24,7 @@
  * channel n into a ring that Paula's channel n plays, a tick's worth at a
  * time in a software interrupt (Cause) after each tick.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -648,7 +648,7 @@ static BOOL timers_open(void)
             sprintf(m, "CIA-%s timer %s for the tempo%s", k == 0 ? "B" : "A",
                     mp.tick_bit == CIAICRB_TA ? "A" : "B",
                     mp.have_gap ? ", timer B for note starts" : ", note starts timed on the beam");
-            amce_log("music", m);
+            amb_log("music", m);
             return TRUE;
         }
     }
@@ -732,7 +732,7 @@ void mp_tempo_check(void)
         char m[160];
         sprintf(m, "the tempo interrupt came %ld times in %ld ms, of %ld (%ld%%); %ld ticks caught up",
                 (long)got, (long)el, (long)want, (long)(got * 100 / want), (long)caught);
-        amce_log("music", m);
+        amb_log("music", m);
         if (mp.engine == ENG_EAGLE) {
             ep_note_log();                  /* (a note player's first notes, once) */
 
@@ -802,7 +802,7 @@ void mp_paula_check(void)
                    "modulation %lx; channels %s",
                 (unsigned long)dma, (unsigned long)ien, (unsigned long)irq, (unsigned long)adk,
                 mp.audio_open ? "ours" : "given back");
-        amce_log("music", m);
+        amb_log("music", m);
         last = now;
     }
     if (dma && mp.audio_open)
@@ -858,7 +858,7 @@ static BOOL audio_open(void)
     {
         static BOOL said;
         if (!said)
-            amce_log("music", "Paula's 4 channels, from audio.device (not AHI); given back on Stop");
+            amb_log("music", "Paula's 4 channels, from audio.device (not AHI); given back on Stop");
         said = TRUE;
     }
     return TRUE;
@@ -1013,7 +1013,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh) {
-        amce_strlcpy(err, _("Could not open the module file"), errmax);
+        amb_strlcpy(err, _("Could not open the module file"), errmax);
         return FALSE;
     }
     Seek(fh, 0, OFFSET_END);
@@ -1040,7 +1040,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         }
         if (uwhy) {
             sprintf(m, _("Packed with %s, but %s"), packer[0] ? packer : _("a packer"), uwhy);
-            amce_strlcpy(err, m, errmax);
+            amb_strlcpy(err, m, errmax);
             FreeVec(mem);
             return FALSE;
         }
@@ -1065,8 +1065,8 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             if (copy && mx_load(path, copy, mlen, eerr, sizeof(eerr))) {
                 FreeVec(mem);
                 mp.engine = ENG_MIX;
-                amce_strlcpy(mp.path, path, sizeof(mp.path));
-                amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                amb_strlcpy(mp.path, path, sizeof(mp.path));
+                amb_strlcpy(mp.packer, packer, sizeof(mp.packer));
                 return TRUE;
             }
         }
@@ -1086,7 +1086,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                     sprintf(m, "%s: MMD%s, %ld positions, %ld tracks, first tempo %lu: %lu ticks",
                             FilePart((STRPTR)path), kind, (long)mt.positions, (long)mt.tracks,
                             (unsigned long)mt.tempo, (unsigned long)(mp.med_units / 16));
-                    amce_log("music", m);
+                    amb_log("music", m);
                 }
             }
             /* a MED song the mixer plays: only MED's players asked first */
@@ -1096,12 +1096,12 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                         eerr, sizeof(eerr))) {
                 FreeVec(copy);
                 mp.engine = ENG_EAGLE;
-                amce_strlcpy(mp.path, path, sizeof(mp.path));
-                amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                amb_strlcpy(mp.path, path, sizeof(mp.path));
+                amb_strlcpy(mp.packer, packer, sizeof(mp.packer));
                 sprintf(m, "%s: by an EaglePlayer player%s%s (found in %ld ms)",
                         FilePart((STRPTR)path), packer[0] ? ", unpacked from " : "", packer,
                         (long)(time_ms() - t0));
-                amce_log("music", m);
+                amb_log("music", m);
                 return TRUE;
             }
             mem = NULL;                     /* ep_load has freed it */
@@ -1109,21 +1109,21 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
                 char xerr[100];
                 if (mx_load(path, copy, mlen, xerr, sizeof(xerr))) {
                     mp.engine = ENG_MIX;
-                    amce_strlcpy(mp.path, path, sizeof(mp.path));
-                    amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+                    amb_strlcpy(mp.path, path, sizeof(mp.path));
+                    amb_strlcpy(mp.packer, packer, sizeof(mp.packer));
                     return TRUE;
                 }
             }
         }
         if ((why = layout_problem(rc, chans)))
-            amce_strlcpy(m, why, sizeof(m));
+            amb_strlcpy(m, why, sizeof(m));
         else if (pk && !eerr[0])
             sprintf(m, _("This file is %s, which Ambiance cannot play"), pk);
         else if (eerr[0])
-            amce_strlcpy(m, eerr, sizeof(m));
+            amb_strlcpy(m, eerr, sizeof(m));
         else
-            amce_strlcpy(m, _("Not a module Ambiance can play"), sizeof(m));
-        amce_strlcpy(err, m, errmax);
+            amb_strlcpy(m, _("Not a module Ambiance can play"), sizeof(m));
+        amb_strlcpy(err, m, errmax);
         return FALSE;
     }
     mp.hdr = AllocVec(mp.lay.hdr_len, MEMF_ANY);
@@ -1141,9 +1141,9 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         if (!mp.smp && mp.hdr && mp.pat && mp.pt) {
             sprintf(m, _("Not enough chip memory for its samples (%lu KB)"),
                     (unsigned long)((mp.lay.smp_len + 1023) >> 10));
-            amce_strlcpy(err, m, errmax);
+            amb_strlcpy(err, m, errmax);
         } else {
-            amce_strlcpy(err, _("Not enough memory for that module"), errmax);
+            amb_strlcpy(err, _("Not enough memory for that module"), errmax);
         }
         if (!mp.smp)
             mp.smp_size = 0;
@@ -1164,7 +1164,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
     if (mp.pt->nch > 4) {
         /* 5-8 channels: mixed onto Paula's four (ProTracker 4.1's way) */
         if (!mix_alloc(mp.pt->nch)) {
-            amce_strlcpy(err, _("Not enough memory for that module"), errmax);
+            amb_strlcpy(err, _("Not enough memory for that module"), errmax);
             module_free();
             return FALSE;
         }
@@ -1174,11 +1174,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         sprintf(m, "%s: %ld channels, mixed in pairs onto Paula's four at %lu Hz "
                    "(the mixer of ProTracker 4.1, by Andreas Wendorf)",
                 FilePart((STRPTR)path), (long)mp.pt->nch, (unsigned long)mp.pm->rate);
-        amce_log("music", m);
+        amb_log("music", m);
     }
     mp.engine = ENG_PT;
-    amce_strlcpy(mp.path, path, sizeof(mp.path));
-    amce_strlcpy(mp.packer, packer, sizeof(mp.packer));
+    amb_strlcpy(mp.path, path, sizeof(mp.path));
+    amb_strlcpy(mp.packer, packer, sizeof(mp.packer));
     sprintf(m, "%s: \"%s\" %s%s%s, %lu positions, %lu patterns, %lu KB of samples, %lu:%02lu long "
                "(read and measured in %ld ms)",
             FilePart((STRPTR)path), mp.pt->title, mp.lay.tag, packer[0] ? ", unpacked from " : "",
@@ -1186,7 +1186,7 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
             (unsigned long)mp.lay.npat, (unsigned long)(mp.lay.smp_len >> 10),
             (unsigned long)(mp.times->total_ms / 60000), (unsigned long)(mp.times->total_ms / 1000 % 60),
             (long)(time_ms() - t0));
-    amce_log("music", m);
+    amb_log("music", m);
     return TRUE;
 }
 
@@ -1198,7 +1198,7 @@ static BOOL play_eagle(char *err, LONG errmax)
     if (ep_own_timer()) {
         timers_close();                     /* it takes a CIA timer of its own */
     } else if (!mp.cia && !timers_open()) {
-        amce_strlcpy(err, _("No CIA timer free to play music with"), errmax);
+        amb_strlcpy(err, _("No CIA timer free to play music with"), errmax);
         return FALSE;
     }
     Disable();
@@ -1232,7 +1232,7 @@ static BOOL play_eagle(char *err, LONG errmax)
             sprintf(m, "a note player's %ld channels, mixed onto Paula's four at %lu Hz "
                        "(samples of any length, as the player gives them)",
                     (long)nn, (unsigned long)mp.pm->rate);
-            amce_log("music", m);
+            amb_log("music", m);
         }
     }
     mp.running = TRUE;
@@ -1246,7 +1246,7 @@ static BOOL play_eagle(char *err, LONG errmax)
 BOOL mp_play(char *err, LONG errmax)
 {
     if (!mp_loaded()) {
-        amce_strlcpy(err, _("No module loaded"), errmax);
+        amb_strlcpy(err, _("No module loaded"), errmax);
         return FALSE;
     }
     mp.anc_on = FALSE;                      /* the tempo anchored anew */
@@ -1255,13 +1255,13 @@ BOOL mp_play(char *err, LONG errmax)
     if (!vol_set)
         mp.master = 64;
     if ((mp.engine == ENG_RADIO &&
-         (st_ahi() || (st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3"))))) ||
+         (st_ahi() || (st_mhi() && (!mp.rtrack || !amb_stricmp(mp.rtag, "MP3"))))) ||
         (mp.engine == ENG_MIX && st_ahi())) {
         /* through AHI (a stream, the mixer's modules), or MP3 by MHI:
          * Paula's channels are theirs to take */
         audio_close();
     } else if (!audio_open()) {
-        amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
+        amb_strlcpy(err, _("The audio channels are in use by another program"), errmax);
         return FALSE;
     }
     if (mp.engine == ENG_EAGLE)
@@ -1286,7 +1286,7 @@ BOOL mp_play(char *err, LONG errmax)
         return TRUE;
     }
     if (!mp.cia && !timers_open()) {
-        amce_strlcpy(err, _("No CIA timer free to play music with"), errmax);
+        amb_strlcpy(err, _("No CIA timer free to play music with"), errmax);
         audio_close();
         return FALSE;
     }
@@ -1381,7 +1381,7 @@ void mp_shutdown(void)
     mx_close_library();
     audio_close();
     if (had)
-        amce_log("music", "Paula and the CIA timers let go: DMA off, volumes 0");
+        amb_log("music", "Paula and the CIA timers let go: DMA off, volumes 0");
     if (mp.silence) {
         FreeMem(mp.silence, 8);
         mp.silence = NULL;
@@ -1519,7 +1519,7 @@ static void mixer_again(void)
         return;
     if (!st_ahi() && !audio_open()) {
         mp.running = FALSE;                 /* (Paula now, and another has it) */
-        amce_log("music", "the module could not go on: the audio channels are in use");
+        amb_log("music", "the module could not go on: the audio channels are in use");
         return;
     }
     if (mx_start(mp.master, e, sizeof(e))) {
@@ -1527,7 +1527,7 @@ static void mixer_again(void)
             mx_pause(TRUE);
     } else {
         mp.running = FALSE;
-        amce_log("music", e);
+        amb_log("music", e);
     }
 }
 
@@ -1543,7 +1543,7 @@ void mp_hold(BOOL on)
             if (st_ahi())
                 audio_close();              /* (nothing of Paula kept either) */
             mix_held = TRUE;
-            amce_log("music", "the module's mixer stopped while the video plays (on from there after)");
+            amb_log("music", "the module's mixer stopped while the video plays (on from there after)");
         }
         return;
     }
@@ -1704,7 +1704,7 @@ void mp_status(struct MpStatus *s)
                     (unsigned long)s->total_ms, (unsigned long)(mp.med_units / 16),
                     (unsigned long)mp.med_cnt0, (unsigned long)mp.tick_cnt,
                     (unsigned long)mp.eclock);
-            amce_log("music", m);
+            amb_log("music", m);
         }
         s->sub = in.sub;
         s->subs = in.subs;
@@ -1859,8 +1859,8 @@ static BOOL load_stream(const char *url, const char *name, const char *tag, UWOR
     err[0] = 0;
     mp_stop();
     module_free();
-    if (!file && amce_strnicmp(url, "http", 4)) {
-        amce_strlcpy(err, _("Not a station's address"), errmax);
+    if (!file && amb_strnicmp(url, "http", 4)) {
+        amb_strlcpy(err, _("Not a station's address"), errmax);
         return FALSE;
     }
     mp.engine = ENG_RADIO;
@@ -1869,9 +1869,9 @@ static BOOL load_stream(const char *url, const char *name, const char *tag, UWOR
     mp.rtotal_ms = 0;
     mp.rbase_ms = mp.rrange = 0;
     mp.rby[0] = 0;
-    amce_strlcpy(mp.path, url, sizeof(mp.path));
-    amce_strlcpy(mp.rname, name, sizeof(mp.rname));
-    amce_strlcpy(mp.rtag, tag, sizeof(mp.rtag));
+    amb_strlcpy(mp.path, url, sizeof(mp.path));
+    amb_strlcpy(mp.rname, name, sizeof(mp.rname));
+    amb_strlcpy(mp.rtag, tag, sizeof(mp.rtag));
     {
         /* the list's HTTPS mark off: the format alone ("MP3" is compared),
          * Now Playing saying HTTPS by the connection itself (st_secure) */
@@ -1900,7 +1900,7 @@ BOOL mp_load_track(const char *url, const char *title, const char *by, const cha
     mp.rtotal_ms = total_ms;
     mp.rbase_ms = from_ms;
     mp.rrange = range_from;
-    amce_strlcpy(mp.rby, by, sizeof(mp.rby));
+    amb_strlcpy(mp.rby, by, sizeof(mp.rby));
     return TRUE;
 }
 
@@ -2027,7 +2027,7 @@ int mp_meter_count(void)
     if (mp.engine == ENG_RADIO) {
         int c = st_channels();
         if (!c)                             /* not decoding yet: what it will be */
-            c = mp.rcpu < 40 && !(st_mhi() && (!mp.rtrack || !amce_stricmp(mp.rtag, "MP3")))
+            c = mp.rcpu < 40 && !(st_mhi() && (!mp.rtrack || !amb_stricmp(mp.rtag, "MP3")))
                 ? 1 : 2;                    /*   (a 68030's decoder makes mono; MHI not) */
         return c == 1 ? 1 : 2;
     }
@@ -2091,7 +2091,7 @@ static BOOL eagle_seek_ms(ULONG ms)
         tick_run(TRUE);
     sprintf(m, "seek to %lu ms: %lu ticks run on in %lu ms, at %lu ms", (unsigned long)ms,
             (unsigned long)n, (unsigned long)(time_ms() - t0), (unsigned long)(at_us / 1000));
-    amce_log("eagleplayer", m);
+    amb_log("eagleplayer", m);
     return TRUE;
 }
 
@@ -2106,7 +2106,7 @@ BOOL mp_output_changed(char *err, LONG errmax)
         /* Paula's channels AHI's to take: given back once the mixer has
          * let go of them (mx_output) */
     } else if (!audio_open()) {
-        amce_strlcpy(err, _("The audio channels are in use by another program"), errmax);
+        amb_strlcpy(err, _("The audio channels are in use by another program"), errmax);
         mx_stop();
         mp.running = FALSE;
         return FALSE;

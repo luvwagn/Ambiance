@@ -40,7 +40,7 @@
  * as on Now playing. A short one (under 8 s) plays
  * again until stopped; a longer one goes back to the list at its end.
  */
-#include "amce.h"
+#include "amb.h"
 #include "animdec.h"
 #include "animdraw.h"
 #include "vprobe.h"
@@ -141,9 +141,9 @@ static void ahi_close(void)
         ahi_io[c] = NULL;
     }
     if (ahi_dev) {
-        amce_card_lock();                   /* (AHI's ZZ9000AX: the card) */
+        amb_card_lock();                   /* (AHI's ZZ9000AX: the card) */
         CloseDevice((struct IORequest *)ahi_dev);
-        amce_card_unlock();
+        amb_card_unlock();
         DeleteIORequest((struct IORequest *)ahi_dev);
         ahi_dev = NULL;
     }
@@ -159,9 +159,9 @@ static BOOL ahi_open(void)
         !(ahi_dev = (struct AHIRequest *)CreateIORequest(ahi_port, sizeof(struct AHIRequest))))
         goto fail;
     ahi_dev->ahir_Version = 4;
-    amce_card_lock();                       /* (AHI's ZZ9000AX: the card) */
+    amb_card_lock();                       /* (AHI's ZZ9000AX: the card) */
     c = OpenDevice((CONST_STRPTR)AHINAME, AHI_DEFAULT_UNIT, (struct IORequest *)ahi_dev, 0);
-    amce_card_unlock();
+    amb_card_unlock();
     if (c) {
         DeleteIORequest((struct IORequest *)ahi_dev);
         ahi_dev = NULL;
@@ -292,7 +292,7 @@ static void snd_tick(void)
  * 4 times, 6 channels (bits 0-3), 8 rate (0: the sound's own), 10 flags. */
 static void snd_command(const UBYTE *sc)
 {
-    UWORD n = amce_be16(sc + 2), times = amce_be16(sc + 4), mask = amce_be16(sc + 6), rate = amce_be16(sc + 8);
+    UWORD n = amb_be16(sc + 2), times = amb_be16(sc + 4), mask = amb_be16(sc + 6), rate = amb_be16(sc + 8);
     BOOL left = (mask & 9) != 0, right = (mask & 6) != 0;
     UWORD vol = sc[1] > 64 ? 64 : sc[1];
     if (!snd_on)
@@ -511,7 +511,7 @@ static void snd_load(BPTR fh, ULONG len)
     if (len & 1)
         rd_skip(1);
     for (p = b, e = b + len; p + 8 <= e;) {
-        ULONG id = amce_be32(p), cl = amce_be32(p + 4);
+        ULONG id = amb_be32(p), cl = amb_be32(p + 4);
         if (cl > (ULONG)(e - p - 8))
             cl = e - p - 8;
         if (id == ID('V', 'H', 'D', 'R') && cl >= 20)
@@ -523,7 +523,7 @@ static void snd_load(BPTR fh, ULONG len)
         p += 8 + ((cl + 1) & ~1UL);
     }
     if (vhdr && body && bl > 2) {
-        ULONG oct = amce_be32(vhdr) + amce_be32(vhdr + 4);    /* one-shot and repeat parts */
+        ULONG oct = amb_be32(vhdr) + amb_be32(vhdr + 4);    /* one-shot and repeat parts */
         BOOL packed = vhdr[15] == 1;
         n = packed ? (bl - 2) * 2 : bl;
         if (oct && oct < n)
@@ -544,8 +544,8 @@ static void snd_load(BPTR fh, ULONG len)
                 CopyMem((APTR)body, s->data, n);
             }
             s->len = n;
-            s->rate = amce_be16(vhdr + 12);
-            s->vol = (UWORD)(amce_be32(vhdr + 16) >> 10);    /* 1.0 (0x10000) = 64 */
+            s->rate = amb_be16(vhdr + 12);
+            s->vol = (UWORD)(amb_be32(vhdr + 16) >> 10);    /* 1.0 (0x10000) = 64 */
             if (!s->vol || s->vol > 64)
                 s->vol = 64;
         }
@@ -589,15 +589,15 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
     ULONG len, t0 = time_ms();
     const UBYTE *p, *e;
     for (;;) {
-        if (rd_read(h, 12) != 12 || amce_be32(h) != ID('F', 'O', 'R', 'M'))
+        if (rd_read(h, 12) != 12 || amb_be32(h) != ID('F', 'O', 'R', 'M'))
             return FALSE;
-        len = amce_be32(h + 4);
+        len = amb_be32(h + 4);
         if (len < 4)
             return FALSE;
         len -= 4;
-        if (amce_be32(h + 8) == ID('I', 'L', 'B', 'M'))
+        if (amb_be32(h + 8) == ID('I', 'L', 'B', 'M'))
             break;
-        if (amce_be32(h + 8) == ID('8', 'S', 'V', 'X') && !snd_read && nsnd < SOUNDS) {
+        if (amb_be32(h + 8) == ID('8', 'S', 'V', 'X') && !snd_read && nsnd < SOUNDS) {
             snd_load(fh, len);              /* a sound, before the first frame */
             continue;
         }
@@ -618,7 +618,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
         rd_skip(1);
     memset(f, 0, sizeof(*f));
     for (p = fbuf, e = fbuf + len; p + 8 <= e;) {
-        ULONG id = amce_be32(p), cl = amce_be32(p + 4);
+        ULONG id = amb_be32(p), cl = amb_be32(p + 4);
         const UBYTE *d = p + 8;
         if (cl > (ULONG)(e - d))
             cl = e - d;
@@ -628,7 +628,7 @@ static BOOL read_frame(BPTR fh, struct Frame *f, ULONG *readms)
             f->cmap = d;
             f->cmaplen = cl;
         } else if (id == ID('C', 'A', 'M', 'G') && cl >= 4) {
-            f->camg = amce_be32(d);
+            f->camg = amb_be32(d);
             f->has_camg = TRUE;
         } else if (id == ID('A', 'N', 'H', 'D') && cl >= 24)
             f->anhd = d;
@@ -1013,9 +1013,9 @@ static void bar_put(struct BitMap *bm, int k)
             RectFill(rp, x1, y0 + 1, x1, y1 - 1);
         }
     }
-    amce_time_text(a, bar.at_ms);
+    amb_time_text(a, bar.at_ms);
     if (bar.total_ms) {
-        amce_time_text(b, bar.total_ms);
+        amb_time_text(b, bar.total_ms);
         sprintf(t, "%s / %s", a, b);
     } else
         strcpy(t, a);
@@ -1073,16 +1073,16 @@ static ULONG anim_length(BPTR fh, const char *path, ULONG first)
         return kms;
     rd_sync();                              /* (it reads the file itself) */
     pos = Seek(fh, 0, OFFSET_CURRENT);
-    while (frames < 20000 && Read(fh, h, 12) == 12 && amce_be32(h) == ID('F', 'O', 'R', 'M')) {
-        LONG len = amce_be32(h + 4) - 4, got = 0;
+    while (frames < 20000 && Read(fh, h, 12) == 12 && amb_be32(h) == ID('F', 'O', 'R', 'M')) {
+        LONG len = amb_be32(h + 4) - 4, got = 0;
         if (len < 0)
             break;
-        if (amce_be32(h + 8) == ID('I', 'L', 'B', 'M')) {
+        if (amb_be32(h + 8) == ID('I', 'L', 'B', 'M')) {
             frames++;
             if ((got = Read(fh, h, len < (LONG)sizeof(h) ? len : (LONG)sizeof(h))) < 0)
                 break;
-            if (got >= 8 + 18 && amce_be32(h) == ID('A', 'N', 'H', 'D'))
-                jif += amce_be32(h + 8 + 14) ? amce_be32(h + 8 + 14) : 1;
+            if (got >= 8 + 18 && amb_be32(h) == ID('A', 'N', 'H', 'D'))
+                jif += amb_be32(h + 8 + 14) ? amb_be32(h + 8 + 14) : 1;
         }
         if (Seek(fh, len - got + (len & 1), OFFSET_CURRENT) < 0)
             break;
@@ -1379,9 +1379,9 @@ BOOL anim_has_sound(const char *path)
     me->pr_WindowPtr = oldwin;
     if (!fh)
         return FALSE;
-    r = Read(fh, h, 24) == 24 && amce_be32(h) == ID('F', 'O', 'R', 'M') &&
-        amce_be32(h + 8) == ID('A', 'N', 'I', 'M') && amce_be32(h + 12) == ID('F', 'O', 'R', 'M') &&
-        amce_be32(h + 20) == ID('8', 'S', 'V', 'X');
+    r = Read(fh, h, 24) == 24 && amb_be32(h) == ID('F', 'O', 'R', 'M') &&
+        amb_be32(h + 8) == ID('A', 'N', 'I', 'M') && amb_be32(h + 12) == ID('F', 'O', 'R', 'M') &&
+        amb_be32(h + 20) == ID('8', 'S', 'V', 'X');
     Close(fh);
     return r;
 }
@@ -1490,9 +1490,9 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     }
     if (xt >= 0)
         x = xt;
-    amce_time_text(a, at);
+    amb_time_text(a, at);
     if (total) {
-        amce_time_text(b, total);
+        amb_time_text(b, total);
         sprintf(line, "%s / %s", a, b);
     } else
         strcpy(line, a);
@@ -2251,7 +2251,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
             cd.mode == CARD_PLANES ? "its planes blitted by the card" :
             cd.mode == CARD_STRETCH ? "its planes stretched, then blitted by the card" :
             lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
-    amce_log("anim", m);
+    amb_log("anim", m);
     if (LowLevelBase)
         jlast = (anim_g ? gfx_joy(anim_g) : ReadJoyPort(1));
     if (nsnd && !snd_on) {
@@ -2318,7 +2318,7 @@ restart:
             if (!cd.checked) {              /* the first: the colours it should have? */
                 cd.checked = TRUE;
                 if (!card_check(g, src, lut)) {
-                    amce_log("anim", "the card's colours are not the animation's: the CPU draws it");
+                    amb_log("anim", "the card's colours are not the animation's: the CPU draws it");
                     card_free();
                     fresh = TRUE;
                     /* (the chunky buffer: made as the 68k's way draws) */
@@ -2460,7 +2460,7 @@ restart:
                           k = cd.trows[1] ? cd.tms[1] * 1000 / cd.trows[1] : 0;
                     sprintf(m, "the card %ld us a row, the 68k %ld: %s", (long)c, (long)k,
                             c <= k ? "the card draws it" : "the 68k draws it");
-                    amce_log("anim", m);
+                    amb_log("anim", m);
                     if (c <= k) {
                         cd.trial = 2;
                         lay.reblit = card_reblit;
@@ -2477,7 +2477,7 @@ restart:
                 /* full screen too much: its whole scale for this one, measured again */
                 sprintf(m, "%ld ms a frame to draw full screen, %ld wanted: at its whole scale",
                         (long)avg, (long)want);
-                amce_log("anim", m);
+                amb_log("anim", m);
                 lay_out(g, w, h, ax, ay, FALSE);
                 dw = lay.dw;
                 dh = lay.dh;
@@ -2501,7 +2501,7 @@ restart:
             } else if (avg > SLOW_MS && avg > want) {
                 sprintf(m, "%ld ms a frame to draw on Ambiance's screen, %ld wanted: frames left out",
                         (long)avg, (long)want);
-                amce_log("anim", m);
+                amb_log("anim", m);
             }
         }
     drawn:
@@ -2554,8 +2554,8 @@ restart:
                         break;              /* (its end: the last frame) */
                     sop = f->anhd ? f->anhd[0] : 0;
                     sil = f->anhd ? f->anhd[18] : 0;
-                    sbits = f->anhd ? amce_be32(f->anhd + 20) : 0;
-                    sjif = f->anhd ? amce_be32(f->anhd + 14) : 1;
+                    sbits = f->anhd ? amb_be32(f->anhd + 20) : 0;
+                    sjif = f->anhd ? amb_be32(f->anhd + 14) : 1;
                     sk = shown ^ 1;
                     if (sil == 1)
                         CopyMem(planar + shown * fsz, planar + sk * fsz, fsz);
@@ -2581,7 +2581,7 @@ restart:
                 relaid = TRUE;              /* (the frame there drawn, not the next read) */
                 sprintf(m, "seek to %lu ms: %lu frames decoded in %lu ms", (unsigned long)target,
                         (unsigned long)dec, (unsigned long)(time_ms() - tseek));
-                amce_log("anim", m);
+                amb_log("anim", m);
                 break;
             }
             if (r == 6) {
@@ -2626,7 +2626,7 @@ restart:
                 sprintf(m, "window %ld x %ld to %ld x %ld: the picture %ld x %ld, laid out in %lu ms",
                         (long)ow, (long)oh, (long)g->w, (long)g->h, (long)dw, (long)dh,
                         (unsigned long)(time_ms() - tr));
-                amce_log("anim", m);
+                amb_log("anim", m);
                 break;
             }
             if (r == 4 && lay.can_full) {   /* full screen or not: laid out again, drawn afresh */
@@ -2708,8 +2708,8 @@ restart:
             break;                          /* the end */
         op = f->anhd ? f->anhd[0] : 0;
         il = f->anhd ? f->anhd[18] : 0;
-        bits = f->anhd ? amce_be32(f->anhd + 20) : 0;
-        jif = f->anhd ? amce_be32(f->anhd + 14) : 1;
+        bits = f->anhd ? amb_be32(f->anhd + 20) : 0;
+        jif = f->anhd ? amb_be32(f->anhd + 14) : 1;
         k = shown ^ 1;
         if (op != 0 || !f->body)
             whole_only = FALSE;             /* deltas: each frame builds on the ones before */
@@ -2781,7 +2781,7 @@ restart:
             (long)(nframes ? stripms / nframes : 0), (long)readms,
             rd.dp ? "read ahead" : "read when needed", (long)rd.waitms, (long)rd.waits,
             (long)runs + 1, runs ? "s" : "");
-    amce_log("anim", m);
+    amb_log("anim", m);
     result = err[0] ? -1 : 0;
     (void)errmax;
     (void)fy;                               /* (the rows go by lay.yo) */
@@ -2827,7 +2827,7 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
         if (vid_dvd_fresh && !ms)
             at = 0;
         else if (!dvdplay_seek(vid_dvd, ms, &at)) {
-            amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+            amb_strlcpy(err, _("The DVD could not be read there"), errmax);
             return FALSE;
         }
         vid_dvd_fresh = FALSE;
@@ -2890,7 +2890,7 @@ static BOOL sw_draw_yuv(struct Gfx *g, LONG x, LONG y, LONG dw, LONG dh)
             char m[100];
             sprintf(m, "the screen's pixels (format %lu): drawn by way of RGB (mpegv.library 2.3 "
                        "draws them)", (unsigned long)fmt);
-            amce_log("video: by the CPU", m);
+            amb_log("video: by the CPU", m);
             sw_yuv_no = TRUE;
         }
         return FALSE;
@@ -3180,12 +3180,12 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     if (!g || !g->win)
         return -1;
     if ((why = video_check(path, &vid))) {
-        amce_strlcpy(err, why, errmax);
+        amb_strlcpy(err, why, errmax);
         st_mpv_close();
         return -1;
     }
     if (!g->truecolor) {
-        amce_strlcpy(err, vid.sw ? _("MPEG video plays on an RTG screen (AGA screens to come)")
+        amb_strlcpy(err, vid.sw ? _("MPEG video plays on an RTG screen (AGA screens to come)")
                                  : _("MPEG video plays on the ZZ9000's display"), errmax);
         st_mpv_close();
         return -1;
@@ -3207,7 +3207,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *
     err[0] = 0;
     anim_g = g;
     if (!g || !g->win || !g->truecolor) {
-        amce_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
+        amb_strlcpy(err, _("MPEG video plays on the ZZ9000's display"), errmax);
         return -1;
     }
     if (!(vid_dvd = image ? dvdplay_open_image(vol, &vid, err, errmax)
@@ -3216,7 +3216,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *
     {
         const char *why = video_check_dvd(&vid);    /* the card, and Picasso96 for its overlay */
         if (why) {
-            amce_strlcpy(err, why, errmax);
+            amb_strlcpy(err, why, errmax);
             dvdplay_close(vid_dvd);
             vid_dvd = NULL;
             st_mpv_close();
@@ -3279,7 +3279,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         sw = vid.w;
     vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && vid.ps
                        : (vid.mp2 || vid.ac3) && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
-    amce_strlcpy(lay_path, path, sizeof(lay_path));
+    amb_strlcpy(lay_path, path, sizeof(lay_path));
     memset(&lay, 0, sizeof(lay));
     if (!(lay.xo = AllocVec((sw + 1) * sizeof(UWORD), MEMF_ANY)) ||
         !(lay.yo = AllocVec((vid.h + 1) * sizeof(UWORD), MEMF_ANY))) {
@@ -3312,7 +3312,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             lay.full ? " (full screen)" : "",
             vid.sw ? "decoded by the CPU, on the overlay if it opens (else ScalePixelArray)"
                    : "the ZZ9000's overlay");
-    amce_log("video", m);
+    amb_log("video", m);
     st_video_show(TRUE);
     {
         /* its overlay opened and placed before the stream starts: Picasso96
@@ -3336,25 +3336,25 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             ULONG shown = 0, dropped = 0;
             st_video_counts(&shown, &dropped);
             sprintf(m, "%s: stopped after %lu pictures: %s", name, (unsigned long)shown, st_error());
-            amce_log("video", m);
+            amb_log("video", m);
             if (!shown && vid_sound && vid.ac3 && !st_ac3_by_cpu_on()) {
                 /* the card would not take its AC3 (Amiberry's emulated
                  * card decodes it only if its FFmpeg has it): the CPU's,
                  * from now on (ac3.library), where it can */
                 const char *why = st_ac3_cpu_why();
                 if (!why) {
-                    amce_log("video", "again, its AC3 decoded by the CPU (from now on)");
+                    amb_log("video", "again, its AC3 decoded by the CPU (from now on)");
                     st_ac3_by_cpu(TRUE);
                     sf.drawn = FALSE;
                     if (!vid_start(cpu, 0, err, errmax))
                         break;
                     continue;
                 }
-                amce_log("video", why);
+                amb_log("video", why);
             }
             if (!shown && vid_sound) {
                 /* the card would not take it with its sound: again without */
-                amce_log("video", "again without its sound");
+                amb_log("video", "again without its sound");
                 vid.mp2 = vid.ac3 = FALSE;
                 vid_sound = FALSE;
                 sf.drawn = FALSE;
@@ -3363,7 +3363,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 continue;
             }
             if (st_error()[0])
-                amce_strlcpy(err, st_error(), errmax);
+                amb_strlcpy(err, st_error(), errmax);
             break;
         }
         st_info(&in);
@@ -3408,14 +3408,14 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             ULONG to = 0;
             st_stop();
             if (!dvdplay_chapter(vid_dvd, 1, &to)) {
-                amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+                amb_strlcpy(err, _("The DVD could not be read there"), errmax);
                 break;
             }
             dvdplay_probe(vid_dvd, &vid);
             if (!vid_sound)
                 vid.mp2 = vid.ac3 = FALSE;      /* (without sound already: so on) */
             sprintf(m, "%s: on to it", name);
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             vid_base = to;
             if (!st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax))
                 break;
@@ -3439,7 +3439,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 /* not on the full screen's screen: back in the window, its
                  * full screen greyed for this one */
                 int focus = ctl.focus;
-                amce_log("video", "no overlay full screen: back in the window");
+                amb_log("video", "no overlay full screen: back in the window");
                 strip_cleanup(g);
                 fs_leave(g);
                 strip_setup(g);
@@ -3452,7 +3452,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 vo_retry();
                 continue;
             }
-            amce_strlcpy(err, _("The ZZ9000's overlay could not be opened on this screen"), errmax);
+            amb_strlcpy(err, _("The ZZ9000's overlay could not be opened on this screen"), errmax);
             break;
         }
         {
@@ -3481,20 +3481,20 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 /* a menu with no buttons yet (its opening moving): the
                  * click not a pause, nothing */
                 sprintf(m, "%s: its menu clicked before it has buttons to press", name);
-                amce_log("dvd", m);
+                amb_log("dvd", m);
                 r = 0;
             } else if (r == 16 && !vid_pointer(g, &px, &py)) {
                 sprintf(m, "%s: a click off the picture (at %ld, %ld of the screen)", name,
                         g->win && g->win->WScreen ? (long)g->win->WScreen->MouseX : -1L,
                         g->win && g->win->WScreen ? (long)g->win->WScreen->MouseY : -1L);
-                amce_log("dvd", m);
+                amb_log("dvd", m);
                 r = 0;                      /* (not on the picture) */
             }
             if (r)
                 dvdplay_ask(vid_dvd, q[r - 10], px, py);
             if (r == 10) {
                 sprintf(m, "%s: its menu asked for", name);
-                amce_log("dvd", m);
+                amb_log("dvd", m);
             }
             if (paused && !ended) {
                 paused = FALSE;             /* (a menu's answer to be seen) */
@@ -3528,7 +3528,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             dvdplay_now(vid_dvd, &now);
             if (!(now.forbidden & DVDU_TIME_OR_CHAPTER_SEEK)) {
                 sprintf(m, "seek to %lu ms", (unsigned long)target);
-                amce_log("video", m);
+                amb_log("video", m);
                 dvdplay_ask(vid_dvd, DVDQ_SEEK, (LONG)target, 0);
                 if (paused) {
                     paused = FALSE;
@@ -3539,7 +3539,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             if (dvdplay_can_chapter(vid_dvd, r == 7 ? 1 : -1)) {
                 dvdplay_ask(vid_dvd, DVDQ_CHAPTER, r == 7 ? 1 : -1, 0);
                 sprintf(m, "%s: %s chapter", name, r == 7 ? "next" : "previous");
-                amce_log("dvd", m);
+                amb_log("dvd", m);
             }
         } else if (r == 5 && vid.ms) {
             /* seek: the card started again from about there (playing) */
@@ -3548,12 +3548,12 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                                    (ULONG)vid.ms / (ULONG)(x1 - x0 ? x1 - x0 : 1));
             ended = paused = FALSE;
             sprintf(m, "seek to %lu ms", (unsigned long)target);
-            amce_log("video", m);
+            amb_log("video", m);
             if (!vid_start(cpu, target, err, errmax)) {
                 /* not there (nor near it, a DVD's): on from where it was,
                  * not the end of it */
                 sprintf(m, "the seek failed (%s): on from %lu ms", err, (unsigned long)at);
-                amce_log("video", m);
+                amb_log("video", m);
                 err[0] = 0;
                 target = at;
                 if (!vid_start(cpu, target, err, errmax))
@@ -3566,14 +3566,14 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             ended = paused = FALSE;
             st_stop();
             if (!dvdplay_chapter(vid_dvd, r == 7 ? 1 : -1, &to)) {
-                amce_strlcpy(err, _("The DVD could not be read there"), errmax);
+                amb_strlcpy(err, _("The DVD could not be read there"), errmax);
                 break;
             }
             dvdplay_probe(vid_dvd, &vid);      /* (another programme: its length) */
             if (!vid_sound)
                 vid.mp2 = vid.ac3 = FALSE;
             sprintf(m, "%s: %s, at %lu ms", name, r == 7 ? "next" : "previous", (unsigned long)to);
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             vid_base = to;
             if (!st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax))
                 break;
@@ -3609,7 +3609,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             vid_lay(g, sw, lay.full);
             whole = TRUE;
             sprintf(m, "its information %s", vi_want ? "shown" : "hidden");
-            amce_log("video", m);
+            amb_log("video", m);
         } else if (r == 6) {
             /* the window resized: laid out again at its new size */
             int focus = ctl.focus;
@@ -3654,12 +3654,12 @@ out:
                                                                  : "made RGB, ScalePixelArray");
             if (sw_ndraw)                   /* (none by the UI: all written onto the overlay
                                              * by the playback process, its own line says) */
-                amce_log("video: by the CPU", m);
+                amb_log("video: by the CPU", m);
             sw_nyuv = 0;
         }
         sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms", name, (unsigned long)shown,
                 (unsigned long)dropped, (unsigned long)(time_ms() - t0));
-        amce_log("video", m);
+        amb_log("video", m);
     }
     vo_hide();
     strip_cleanup(g);
@@ -3704,26 +3704,26 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh) {
-        amce_strlcpy(err, _("The animation could not be opened"), errmax);
+        amb_strlcpy(err, _("The animation could not be opened"), errmax);
         return -1;
     }
     rd_begin(fh);                           /* read ahead from here on */
-    if (rd_read(head, 12) != 12 || amce_be32(head) != ID('F', 'O', 'R', 'M') ||
-        amce_be32(head + 8) != ID('A', 'N', 'I', 'M') || !read_frame(fh, &f, &readms) ||
+    if (rd_read(head, 12) != 12 || amb_be32(head) != ID('F', 'O', 'R', 'M') ||
+        amb_be32(head + 8) != ID('A', 'N', 'I', 'M') || !read_frame(fh, &f, &readms) ||
         !f.bmhd || !f.body) {
-        amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
+        amb_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
         goto out;
     }
     loop_pos = 12;
     snd_read = TRUE;                        /* playing again: they are not read again */
-    w = amce_be16(f.bmhd);
-    h = amce_be16(f.bmhd + 2);
+    w = amb_be16(f.bmhd);
+    h = amb_be16(f.bmhd + 2);
     depth = f.bmhd[8];
     masking = f.bmhd[9];
     comp = f.bmhd[10];
     camg = f.camg;
     if (!w || !h || !depth || depth > 8 || comp > 1) {
-        amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
+        amb_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
         goto out;
     }
     /* on a 16-bit RTG screen: on Ambiance's own, unless chosen otherwise */
@@ -3770,7 +3770,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
     if (!(GetBitMapAttr(sb[0]->sb_BitMap, BMA_FLAGS) & BMF_STANDARD) ||
         !(GetBitMapAttr(sb[1]->sb_BitMap, BMA_FLAGS) & BMF_STANDARD) ||
         GetBitMapAttr(sb[0]->sb_BitMap, BMA_DEPTH) < depth) {
-        amce_strlcpy(err, _("Animations play on the Amiga's own screens, and none was found"), errmax);
+        amb_strlcpy(err, _("Animations play on the Amiga's own screens, and none was found"), errmax);
         goto out;                           /* a graphics card's: no planes to draw into */
     }
     win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, 0, WA_Top, 0,
@@ -3791,7 +3791,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
     sprintf(m, "%s: %lux%lux%lu, mode %08lx (CAMG %05lx), op %ld", FilePart((STRPTR)path),
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)id, (unsigned long)camg,
             f.anhd ? (long)f.anhd[0] : 0L);
-    amce_log("anim", m);
+    amb_log("anim", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
     if (nsnd && !snd_on) {                  /* its own sound (what played waits: main.c) */
@@ -3804,7 +3804,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
                 : snd_on ? (ahi ? "AHI could not be opened: Paula's channels 2 and 3, lent"
                                 : "Paula's channels 2 and 3, lent")
                          : "nothing to play them on (AHI has Paula?)");
-        amce_log("anim", m);
+        amb_log("anim", m);
     }
 
 restart:
@@ -3835,7 +3835,7 @@ restart:
     bar.at_ms = 0;
     bar_put(sb[k]->sb_BitMap, k);
     start_ms = t0 = time_ms();
-    jif = f.anhd ? amce_be32(f.anhd + 14) : 0;
+    jif = f.anhd ? amb_be32(f.anhd + 14) : 0;
     due = 0;
     n = 1;
     for (;;) {
@@ -3890,8 +3890,8 @@ restart:
             break;                          /* the end */
         op = f.anhd ? f.anhd[0] : 0;
         il = f.anhd ? f.anhd[18] : 0;
-        bits = f.anhd ? amce_be32(f.anhd + 20) : 0;
-        jif = f.anhd ? amce_be32(f.anhd + 14) : 1;
+        bits = f.anhd ? amb_be32(f.anhd + 20) : 0;
+        jif = f.anhd ? amb_be32(f.anhd + 14) : 1;
         k = shown ^ 1;                      /* the buffer not shown: two frames back */
         safe_done(safe, safe_wait);
         td = time_ms();
@@ -3958,12 +3958,12 @@ restart:
                 "reading %ld ms, %ld late; played %ld time%s",
                 (long)n, (long)ms, ms ? (long)(n * 1000 / ms) : 0L, (long)decms, (long)worst,
                 (long)readms, (long)lates, (long)runs, runs == 1 ? "" : "s");
-        amce_log("anim", m);
+        amb_log("anim", m);
     }
     result = 0;
     goto out;
 nomem:
-    amce_strlcpy(err, _("Not enough memory for the animation's screen"), errmax);
+    amb_strlcpy(err, _("Not enough memory for the animation's screen"), errmax);
 out:
     if (scr) {
         safe_done(safe, safe_wait);         /* nothing left in flight */
@@ -3991,7 +3991,7 @@ out:
             for (i = 0; i < 25 && !(g->win->Flags & WFLG_WINDOWACTIVE); i++)
                 WaitTOF();
             if (!(g->win->Flags & WFLG_WINDOWACTIVE))
-                amce_log("anim", "Ambiance's window not active yet after half a second");
+                amb_log("anim", "Ambiance's window not active yet after half a second");
         }
     }
     if (safe) {

@@ -25,7 +25,7 @@
  * Kari-Pekka Koljonen; see CREDITS.txt). eaglehost.s has the register
  * level.
  */
-#include "amce.h"
+#include "amb.h"
 #include "ptmix.h"
 
 #include <string.h>
@@ -275,7 +275,7 @@ static void learnt_load(void)
                 FPuts(sf, (CONST_STRPTR)"\n");
                 Close(sf);
             }
-            amce_log("eagleplayer: did not come back from its check last time (hung or crashed): "
+            amb_log("eagleplayer: did not come back from its check last time (hung or crashed): "
                      "left out from now on", line);
         }
     }
@@ -286,7 +286,7 @@ static void learnt_load(void)
         if (nl)
             *nl = 0;
         if (line[0])
-            amce_strlcpy(learnt[nlearnt++], line, sizeof(learnt[0]));
+            amb_strlcpy(learnt[nlearnt++], line, sizeof(learnt[0]));
     }
     Close(fh);
 }
@@ -320,16 +320,16 @@ static void cand_cb(void *ctx, const char *name, BOOL isdir)
 {
     UBYTE d = (UBYTE)(LONG)ctx;
     LONG i, n = strlen(name);
-    if (isdir || (n > 5 && !amce_stricmp(name + n - 5, ".info")) || n >= 40)
+    if (isdir || (n > 5 && !amb_stricmp(name + n - 5, ".info")) || n >= 40)
         return;
     for (i = 0; skip[i]; i++)
-        if (!amce_stricmp(name, skip[i]))
+        if (!amb_stricmp(name, skip[i]))
             return;
     for (i = 0; i < nlearnt; i++)
-        if (!amce_stricmp(name, learnt[i]))
+        if (!amb_stricmp(name, learnt[i]))
             return;
     for (i = 0; i < ncands; i++)
-        if (!amce_stricmp(cands[i].name, name))
+        if (!amb_stricmp(cands[i].name, name))
             return;                         /* EaglePlayer's copy first */
     if (ncands == capcands) {
         struct Cand *nc = AllocVec((capcands + 128) * sizeof(*nc), MEMF_ANY);
@@ -342,7 +342,7 @@ static void cand_cb(void *ctx, const char *name, BOOL isdir)
         cands = nc;
         capcands += 128;
     }
-    amce_strlcpy(cands[ncands].name, name, sizeof(cands[ncands].name));
+    amb_strlcpy(cands[ncands].name, name, sizeof(cands[ncands].name));
     cands[ncands].dir = d;
     ncands++;
 }
@@ -363,7 +363,7 @@ static void scan_players(void)
     {
         char m[64];
         sprintf(m, "%ld players found", (long)ncands);
-        amce_log("eagleplayers", m);
+        amb_log("eagleplayers", m);
     }
 }
 
@@ -423,8 +423,8 @@ static void map_load(void)
         if (!tab)
             continue;
         *tab = 0;
-        amce_strlcpy(map[nmap].key, line, sizeof(map[nmap].key));
-        amce_strlcpy(map[nmap].name, tab + 1, sizeof(map[nmap].name));
+        amb_strlcpy(map[nmap].key, line, sizeof(map[nmap].key));
+        amb_strlcpy(map[nmap].name, tab + 1, sizeof(map[nmap].name));
         nmap++;
     }
     Close(fh);
@@ -471,7 +471,7 @@ static void map_learn(const char *key, const char *name)
     for (i = 0; i < nmap; i++)
         if (!strcmp(map[i].key, key)) {
             if (strcmp(map[i].name, name)) {
-                amce_strlcpy(map[i].name, name, sizeof(map[i].name));
+                amb_strlcpy(map[i].name, name, sizeof(map[i].name));
                 map_save();
             }
             return;
@@ -480,8 +480,8 @@ static void map_learn(const char *key, const char *name)
         memmove(&map[0], &map[1], sizeof(map[0]) * (MAP_MAX - 1));
         nmap--;
     }
-    amce_strlcpy(map[nmap].key, key, sizeof(map[nmap].key));
-    amce_strlcpy(map[nmap].name, name, sizeof(map[nmap].name));
+    amb_strlcpy(map[nmap].key, key, sizeof(map[nmap].key));
+    amb_strlcpy(map[nmap].name, name, sizeof(map[nmap].name));
     nmap++;
     map_save();
 }
@@ -569,10 +569,10 @@ static struct Host *host_new(const char *path, UBYTE *mod, ULONG len, ULONG asiz
         return NULL;
     g = h->g;
     /* the module's name, its folder, the path array */
-    amce_strlcpy(h->file, (const char *)FilePart((STRPTR)path), sizeof(h->file));
-    amce_strlcpy(h->dir, path, sizeof(h->dir));
+    amb_strlcpy(h->file, (const char *)FilePart((STRPTR)path), sizeof(h->file));
+    amb_strlcpy(h->dir, path, sizeof(h->dir));
     h->dir[(const char *)FilePart((STRPTR)path) - path] = 0;
-    amce_strlcpy(h->path, path, sizeof(h->path));
+    amb_strlcpy(h->path, path, sizeof(h->path));
     L(g, o_DirArrayPtr) = (ULONG)h->dir;
     L(g, o_FileArrayPtr) = (ULONG)h->file;
     L(g, o_PathArrayPtr) = (ULONG)h->path;
@@ -664,7 +664,7 @@ LONG ehc_loadfile(APTR base)
     buf = unpack_read_whole(path, &len);
     if (!buf) {
         char *f;
-        amce_strlcpy(alt, path, sizeof(alt));
+        amb_strlcpy(alt, path, sizeof(alt));
         for (f = (char *)FilePart((STRPTR)alt); *f; f++)
             if (*f >= 'A' && *f <= 'Z')
                 *f |= 0x20;
@@ -692,9 +692,9 @@ void ehc_cutsuffix(APTR base)
 {
     char *p = (char *)L(base, o_PathArrayPtr);
     LONG n = strlen(p);
-    if (n > 3 && !amce_stricmp(p + n - 3, ".pp"))
+    if (n > 3 && !amb_stricmp(p + n - 3, ".pp"))
         p[n - 3] = 0;
-    else if (n > 4 && !amce_stricmp(p + n - 4, ".xpk"))
+    else if (n > 4 && !amb_stricmp(p + n - 4, ".xpk"))
         p[n - 4] = 0;
 }
 
@@ -771,7 +771,7 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
     const ULONG *t;
     ULONG fn, *var;
     LONG rc = -1;
-    amce_strlcpy(path, dir, sizeof(path));
+    amb_strlcpy(path, dir, sizeof(path));
     AddPart((STRPTR)path, (CONST_STRPTR)name, sizeof(path));
     if (!(seg = LoadSeg((CONST_STRPTR)path)))
         return FALSE;
@@ -799,7 +799,7 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
          * Amiga would look hung */
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
-        amce_log("eagleplayer: checking with", name);   /* (Debug: the last before a hang) */
+        amb_log("eagleplayer: checking with", name);   /* (Debug: the last before a hang) */
         trying(name);
         me->pr_WindowPtr = (APTR)-1;
         rc = eh_call((APTR)fn, h->g, 0, 0);
@@ -867,19 +867,19 @@ static BOOL find_player(struct Host *h, char *found, LONG fmax, BOOL quick)
                 continue;
             if (pass == 0) {
                 for (k = 0; k < 3; k++)
-                    if (want[k] && !amce_stricmp(want[k], c->name))
+                    if (want[k] && !amb_stricmp(want[k], c->name))
                         break;
                 if (k == 3)
                     continue;
             } else if (pass == 1) {
-                if (!(pre[2] && amce_contains_nocase(c->name, pre + 2)) &&
-                    !(ext[2] && amce_contains_nocase(c->name, ext + 2)) &&
-                    !(ck && amce_contains_nocase(c->name, ck)))
+                if (!(pre[2] && amb_contains_nocase(c->name, pre + 2)) &&
+                    !(ext[2] && amb_contains_nocase(c->name, ext + 2)) &&
+                    !(ck && amb_contains_nocase(c->name, ck)))
                     continue;
             }
             tried[i] = 1;
             if (try_player(h, dirs[c->dir], c->name, &ep.seg, &ep.tags)) {
-                amce_strlcpy(found, c->name, fmax);
+                amb_strlcpy(found, c->name, fmax);
                 map_learn(pre, c->name);
                 map_learn(ext, c->name);
                 if (ckey[0])
@@ -958,7 +958,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
             FreeMem(mod, asize);
         else
             FreeVec(mod);
-        amce_strlcpy(err, _("Not enough memory"), errmax);
+        amb_strlcpy(err, _("Not enough memory"), errmax);
         return FALSE;
     }
     eh_songend = 0;
@@ -974,7 +974,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     if (!find_player(ep.h, found, sizeof(found), quick)) {
         host_free(ep.h);
         ep.h = NULL;
-        amce_strlcpy(err, ncands ? _("No player Ambiance has knows this module")
+        amb_strlcpy(err, ncands ? _("No player Ambiance has knows this module")
                                  : _("Not a module Ambiance can play, and no EaglePlayer "
                                      "players were found"),
                      errmax);
@@ -982,7 +982,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     }
     copy_text(ep.name, sizeof(ep.name), (const char *)tag(ep.tags, DTP_PlayerName));
     if (!ep.name[0])
-        amce_strlcpy(ep.name, found, sizeof(ep.name));
+        amb_strlcpy(ep.name, found, sizeof(ep.name));
 
     /* as DeliTracker and HippoPlayer: config, the checks (done), ... */
     call(DTP_Config);
@@ -994,7 +994,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     }
     if (has_tag(ep.tags, DTP_ExtLoad) && call(DTP_ExtLoad) != 0) {
         sprintf(m, _("%s could not load the module's other files"), ep.name);
-        amce_strlcpy(err, m, errmax);
+        amb_strlcpy(err, m, errmax);
         ep_unload();
         return FALSE;
     }
@@ -1004,7 +1004,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     }
     if (call(DTP_InitPlayer) != 0) {
         sprintf(m, _("%s could not start this module"), ep.name);
-        amce_strlcpy(err, m, errmax);
+        amb_strlcpy(err, m, errmax);
         /* nothing to end: the player did not start */
         UnLoadSeg(ep.seg);
         ep.seg = 0;
@@ -1054,7 +1054,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
         for (c = (UBYTE *)*(APTR *)ns; c && n < 32; c = (UBYTE *)*(APTR *)c, n++)
             if (n < 8) {
                 WORD st = *(WORD *)(c + 14);
-                amce_strlcat(sides, st < 0 ? "L" : st > 0 ? "R" : "-", sizeof(sides));
+                amb_strlcat(sides, st < 0 ? "L" : st > 0 ? "R" : "-", sizeof(sides));
             }
         note_map(ns);
         nm_wide = n > 4;
@@ -1070,7 +1070,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
                     "(flags %08lx, max %lu Hz, volume %lu, %ld channels %s)",
                     (unsigned long)*(ULONG *)(ns + 4), (unsigned long)*(ULONG *)(ns + 8),
                     (unsigned long)*(UWORD *)(ns + 12), (long)n, sides);
-            amce_log("eagleplayer", m);
+            amb_log("eagleplayer", m);
         }
     }
     ep.own_int = ep.f_startint != NULL;
@@ -1088,7 +1088,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     sprintf(m, "%s: %s%s%s, %ld subsongs, %s interrupt", FilePart((STRPTR)path), ep.name,
             ep.song[0] ? ", " : "", ep.song, (long)(ep.sub_max - ep.sub_min + 1),
             ep.own_int ? "its own" : ep.f_interrupt ? "Ambiance's" : "no");
-    amce_log("eagleplayer", m);
+    amb_log("eagleplayer", m);
     return TRUE;
 }
 
@@ -1212,14 +1212,14 @@ void ep_note_log(void)
     nt_logged = TRUE;
     sprintf(m, "a note player's first %ld notes (channel, changed, start, length, repeat, "
                "its length, period or Hz, volume):", (long)n);
-    amce_log("eagleplayer", m);
+    amb_log("eagleplayer", m);
     for (i = 0; i < n; i++) {
         sprintf(m, "  %ld %02lx $%08lx %lu, $%08lx %lu, %lu, %lu", (long)nt_log[i].ch,
                 (unsigned long)nt_log[i].c, (unsigned long)nt_log[i].ss,
                 (unsigned long)nt_log[i].sl, (unsigned long)nt_log[i].rs,
                 (unsigned long)nt_log[i].rl, (unsigned long)nt_log[i].f,
                 (unsigned long)nt_log[i].vol);
-        amce_log("eagleplayer", m);
+        amb_log("eagleplayer", m);
     }
 }
 

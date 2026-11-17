@@ -9,7 +9,7 @@
  * Albums, Recently added, then an artist's albums, then an album's tracks,
  * which are ordinary music files (IT_SONG) and play as Music files do.
  *
- * The database is read through PROGDIR:Libs/amcesql.library (src/sqlib:
+ * The database is read through PROGDIR:Libs/ambsql.library (src/sqlib:
  * SQLite 3.34, read only and immutable: nothing is ever written to it),
  * opened only while it is read.
  *
@@ -32,7 +32,7 @@
  * them): "beets:" the menu, "beets:artists", "beets:albums",
  * "beets:recent", "beets:artist/<name>", "beets:album/<id>".
  */
-#include "amce.h"
+#include "amb.h"
 #include "radiocsv.h"
 
 #include <string.h>
@@ -40,9 +40,9 @@
 #include <stdlib.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include <proto/amcesql.h>
+#include <proto/ambsql.h>
 
-struct Library *AmceSqlBase;
+struct Library *AmbSqlBase;
 
 #ifndef IDX_FILE
 #define IDX_FILE  "PROGDIR:Cache/beets.idx"
@@ -137,19 +137,19 @@ BOOL beets_there(void)
 static APTR db_open(void)
 {
     APTR db;
-    if (!AmceSqlBase) {
+    if (!AmbSqlBase) {
         APTR old = quiet();
-        AmceSqlBase = amce_open_own_lib("amcesql.library", 1);
+        AmbSqlBase = amb_open_own_lib("ambsql.library", 1);
         loud(old);
-        if (!AmceSqlBase) {
-            strcpy(err, "amcesql.library");
+        if (!AmbSqlBase) {
+            strcpy(err, "ambsql.library");
             return NULL;
         }
     }
     if (!(db = SqlOpen((STRPTR)ix.db))) {
         sprintf(err, "%.60s", (const char *)SqlError(NULL));
-        CloseLibrary(AmceSqlBase);
-        AmceSqlBase = NULL;
+        CloseLibrary(AmbSqlBase);
+        AmbSqlBase = NULL;
     }
     return db;
 }
@@ -158,13 +158,13 @@ static void db_close(APTR db)
 {
     if (db)
         SqlClose(db);
-    if (AmceSqlBase) {
+    if (AmbSqlBase) {
         char m[80];
         sprintf(m, "SQLite memory at its most %lu KB", (unsigned long)(SqlMemory(1) >> 10));
-        amce_log("beets", m);
-        CloseLibrary(AmceSqlBase);  /* kept in memory: the next album's tracks soon */
+        amb_log("beets", m);
+        CloseLibrary(AmbSqlBase);  /* kept in memory: the next album's tracks soon */
     }
-    AmceSqlBase = NULL;
+    AmbSqlBase = NULL;
 }
 
 /* The spinner, as a folder read turns it (dirscan.c). */
@@ -195,7 +195,7 @@ void beets_forget(void)
 {
     ix_free();
     prefix_len = -1;
-    amce_flush_own_lib("amcesql.library");  /* (Ambiance quits: its 574 KB given back) */
+    amb_flush_own_lib("ambsql.library");  /* (Ambiance quits: its 574 KB given back) */
 }
 
 static void wr32(UBYTE *p, ULONG v)
@@ -216,18 +216,18 @@ static void wr32(UBYTE *p, ULONG v)
 
 static int cmp_artist(const struct BAlbum *x, const struct BAlbum *y)
 {
-    int c = amce_stricmp(x->artist, y->artist);
+    int c = amb_stricmp(x->artist, y->artist);
     if (c)
         return c;
     if (x->year != y->year)
         return (int)x->year - (int)y->year;
-    return amce_stricmp(x->album, y->album);
+    return amb_stricmp(x->album, y->album);
 }
 
 static int cmp_name(const struct BAlbum *x, const struct BAlbum *y)
 {
-    int c = amce_stricmp(x->album, y->album);
-    return c ? c : amce_stricmp(x->artist, y->artist);
+    int c = amb_stricmp(x->album, y->album);
+    return c ? c : amb_stricmp(x->artist, y->artist);
 }
 
 /* idx[0..n) sorted by cmp of the albums they name: a merge sort through
@@ -299,8 +299,8 @@ static BOOL ix_sort(void)
 static BOOL ix_parse(void)
 {
     const UBYTE *p = ix.buf + HEAD, *end = ix.buf + ix.buf_size;
-    LONG n = (LONG)amce_be32(ix.buf + 28), i;
-    BOOL sorted = amce_be32(ix.buf + 24) == 1;
+    LONG n = (LONG)amb_be32(ix.buf + 28), i;
+    BOOL sorted = amb_be32(ix.buf + 24) == 1;
     if (n < 0 || n > 200000 || !(ix.al = AllocVec(sizeof(struct BAlbum) * (n + 1), MEMF_ANY)) ||
         !(ix.by_name = AllocVec(sizeof(LONG) * (n + 1), MEMF_ANY)))
         return FALSE;
@@ -308,7 +308,7 @@ static BOOL ix_parse(void)
         struct BAlbum *a = &ix.al[i];
         if (p + 8 > end)
             return FALSE;
-        a->id = amce_be32(p);
+        a->id = amb_be32(p);
         a->year = (UWORD)((p[4] << 8) | p[5]);
         p += 6;
         a->artist = (const char *)p;
@@ -327,9 +327,9 @@ static BOOL ix_parse(void)
     if (!sorted)
         return ix_sort();
     for (i = 0; i < n; i++, p += 4) {
-        if (p + 4 > end || amce_be32(p) >= (ULONG)n)
+        if (p + 4 > end || amb_be32(p) >= (ULONG)n)
             return FALSE;
-        ix.by_name[i] = (LONG)amce_be32(p);
+        ix.by_name[i] = (LONG)amb_be32(p);
     }
     return TRUE;
 }
@@ -392,9 +392,9 @@ static BOOL ix_read_file(ULONG size, const struct DateStamp *date)
         ix.buf_size = (ULONG)len;
         ix.buf[len] = 0;
         Close(fh);
-        if (amce_be32(ix.buf) == IDX_MAGIC && amce_be32(ix.buf + 4) == IDX_VER && amce_be32(ix.buf + 8) == size &&
-            amce_be32(ix.buf + 12) == (ULONG)date->ds_Days && amce_be32(ix.buf + 16) == (ULONG)date->ds_Minute &&
-            amce_be32(ix.buf + 20) == (ULONG)date->ds_Tick && ix_parse())
+        if (amb_be32(ix.buf) == IDX_MAGIC && amb_be32(ix.buf + 4) == IDX_VER && amb_be32(ix.buf + 8) == size &&
+            amb_be32(ix.buf + 12) == (ULONG)date->ds_Days && amb_be32(ix.buf + 16) == (ULONG)date->ds_Minute &&
+            amb_be32(ix.buf + 20) == (ULONG)date->ds_Tick && ix_parse())
             return TRUE;
         ix_free();
         return FALSE;
@@ -430,7 +430,7 @@ static BOOL put(UBYTE **b, ULONG *len, ULONG *cap, const void *d, ULONG n)
 static void text_of(APTR st, LONG col, char *out, LONG max)
 {
     STRPTR t = SqlText(st, col);
-    amce_strlcpy(out, t ? (const char *)t : "", max);
+    amb_strlcpy(out, t ? (const char *)t : "", max);
     utf8_to_latin1(out);
 }
 
@@ -490,7 +490,7 @@ static BOOL ix_build(ULONG size, const struct DateStamp *date)
         char m[120];
         sprintf(m, "%ld albums read from %s in %lu ms", (long)ix.n, ix.db,
                 (unsigned long)(time_ms() - t0));
-        amce_log("beets", m);
+        amb_log("beets", m);
     } else {
         ix_free();
         strcpy(err, "memory");
@@ -521,7 +521,7 @@ static BOOL ix_have(void)
     if (ix_read_file(size, &date)) {
         char m[80];
         sprintf(m, "%ld albums, from %s", (long)ix.n, IDX_FILE);
-        amce_log("beets", m);
+        amb_log("beets", m);
         strcpy(ix.db, db);
         return TRUE;
     }
@@ -543,7 +543,7 @@ static LONG artists(struct ItemList *out)
     LONG i;
     char path[140];
     for (i = 0; i < ix.n; i++) {
-        if (i && !amce_stricmp(ix.al[i].artist, ix.al[i - 1].artist))
+        if (i && !amb_stricmp(ix.al[i].artist, ix.al[i - 1].artist))
             continue;
         sprintf(path, "beets:artist/%.120s", ix.al[i].artist);
         add_dir(out, ix.al[i].artist, path, "");
@@ -569,7 +569,7 @@ static LONG artist_albums(const char *name, struct ItemList *out)
 {
     LONG i;
     for (i = 0; i < ix.n; i++)
-        if (!amce_stricmp(ix.al[i].artist, name))
+        if (!amb_stricmp(ix.al[i].artist, name))
             album_row(out, &ix.al[i], FALSE);
     return out->count;
 }
@@ -631,7 +631,7 @@ static BOOL music_path(const char *p, char *out, LONG max)
     }
     for (s = p; (s = strchr(s, '/')); s++) {
         sprintf(out, "MUSIC:%.*s", (int)(max - 8), s + 1);
-        if (amce_exists(out)) {
+        if (amb_exists(out)) {
             prefix_len = (LONG)(s + 1 - p);
             if (prefix_len >= (LONG)sizeof(prefix))
                 prefix_len = -1;
@@ -640,7 +640,7 @@ static BOOL music_path(const char *p, char *out, LONG max)
                 memcpy(prefix, p, prefix_len);
                 prefix[prefix_len] = 0;
                 sprintf(m, "%.200s is MUSIC:", prefix);
-                amce_log("beets", m);
+                amb_log("beets", m);
             }
             return TRUE;
         }
@@ -656,7 +656,7 @@ static LONG album_tracks(ULONG id, struct ItemList *out)
     LONG i;
     for (i = 0; i < ix.n; i++)
         if (ix.al[i].id == id) {
-            amce_strlcpy(albumartist, ix.al[i].artist, sizeof(albumartist));
+            amb_strlcpy(albumartist, ix.al[i].artist, sizeof(albumartist));
             break;
         }
     if (!(db = db_open()))
@@ -684,10 +684,10 @@ static LONG album_tracks(ULONG id, struct ItemList *out)
         text_of(st, 0, title, sizeof(title));
         text_of(st, 2, artist, sizeof(artist));
         if (!title[0])
-            amce_strlcpy(title, name, sizeof(title));
-        if (artist[0] && amce_stricmp(artist, albumartist)) {
-            amce_strlcat(title, " - ", sizeof(title));
-            amce_strlcat(title, artist, sizeof(title));
+            amb_strlcpy(title, name, sizeof(title));
+        if (artist[0] && amb_stricmp(artist, albumartist)) {
+            amb_strlcat(title, " - ", sizeof(title));
+            amb_strlcat(title, artist, sizeof(title));
         }
         sprintf(key, "%04ld", (long)out->count);  /* the album's order, kept */
         list_add(out, title, file, key, IT_SONG);
@@ -700,7 +700,7 @@ static LONG album_tracks(ULONG id, struct ItemList *out)
         char m[120];
         sprintf(m, "album %lu: %ld of %ld tracks left out (format, or a name Latin-1 lacks)",
                 (unsigned long)id, (long)left_out, (long)n);
-        amce_log("beets", m);
+        amb_log("beets", m);
     }
     if (r < 0)
         return -1;
@@ -740,6 +740,6 @@ LONG beets_read(const char *path, struct ItemList *out)
         return artist_albums(w + 7, out);
     if (!strncmp(w, "album/", 6))
         return album_tracks(strtoul(w + 6, NULL, 10), out);
-    amce_strlcpy(err, path, sizeof(err));
+    amb_strlcpy(err, path, sizeof(err));
     return -1;
 }

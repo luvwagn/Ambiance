@@ -1,4 +1,4 @@
-"""Build Ambiance's Far East glyph packs (Fonts/amce-cjk/<name>).
+"""Build Ambiance's Far East glyph packs (Fonts/amb-cjk/<name>).
 
 Usage: python3 -I mkcjk.py <galmuri-dist> <ark-pixel-font> <outdir>
 

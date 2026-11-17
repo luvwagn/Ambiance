@@ -3,8 +3,8 @@
  * gathered from their packets, decoded, and blended into a picture (spu.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
-#ifndef AMCE_SPU_H
-#define AMCE_SPU_H
+#ifndef AMB_SPU_H
+#define AMB_SPU_H
 
 #include <exec/types.h>
 

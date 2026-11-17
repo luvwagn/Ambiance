@@ -61,7 +61,7 @@ with open(os.path.join(out, 'shim.h'), 'w') as f:
     f.write('/* make leakcheck (tools/leakcheck/mkshim.py): generated */\n'
             '#define _NO_INLINE 1\n#define __stdargs\n#define __saveds\n#define __chip\n'
             '#define __far\n#define __asm(x)\n#define __aligned __attribute__((aligned(4)))\n'
-            '#define AMCE_VERSION "leakcheck"\n#define AMCE_DATE "leakcheck"\n'
+            '#define AMB_VERSION "leakcheck"\n#define AMB_DATE "leakcheck"\n'
             '#include <exec/types.h>\n')
     for lib in ('exec', 'dos', 'graphics', 'intuition', 'diskfont', 'datatypes', 'asl', 'icon',
                 'alib', 'gadtools', 'wb', 'locale'):

@@ -1,4 +1,4 @@
-/* amcesql.library: SQLite for Ambiance, read only.
+/* ambsql.library: SQLite for Ambiance, read only.
  *
  * Ambiance reads a beets music library (a SQLite 3 database, often on a
  * file share) with it, and opens it only when one is set up, from
@@ -40,11 +40,11 @@
 #include "stabs.h"
 #include "sqlite3.h"
 
-const char LibName[] = "amcesql.library";
-const char LibIdString[] = "amcesql 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
+const char LibName[] = "ambsql.library";
+const char LibIdString[] = "ambsql 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
 /* for the Version command on the file (the ID string is for the library in memory) */
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcesql.library 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
+    "$VER: ambsql.library 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
 const UWORD LibVersion = 1;
 const UWORD LibRevision = 0;
 

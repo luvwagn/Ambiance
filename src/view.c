@@ -28,7 +28,7 @@
  * like 2 x 1 for lowres on a 640 x 256 screen, as large as fits; one too
  * big for that is shrunk to fit.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -483,7 +483,7 @@ void view_spin_hide(struct Gfx *g)
  * 2 hires, 1 superhires; height 4 non-laced, 2 laced. */
 static void src_units(const struct PicInfo *pi, ULONG *wu, ULONG *hu)
 {
-    BOOL ilbm = amce_stricmp(pi->fmt, "ILBM") == 0;
+    BOOL ilbm = amb_stricmp(pi->fmt, "ILBM") == 0;
     ULONG m = pi->mode;
     *wu = 4;
     *hu = 4;
@@ -547,7 +547,7 @@ void view_fit(UWORD gw, UWORD gh, BOOL tall, const struct PicInfo *pi, ULONG *dw
     if (!*dh)
         *dh = 1;
     if (scale)
-        amce_strlcpy(scale, t, max);
+        amb_strlcpy(scale, t, max);
 }
 
 static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, char *scale, LONG max)
@@ -761,7 +761,7 @@ static BOOL tr_fade(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw,
             /* too slow here for a fade worth the name: the rest in tiles */
             sprintf(m, "a fade's step took %lu ms (%ld x %ld): the rest in tiles",
                     (unsigned long)(time_ms() - ts), (long)uw, (long)uh);
-            amce_log("viewer", m);
+            amb_log("viewer", m);
             FreeVec(o);
             tr_tiles(g, nb, ux, uy, uw, uh, FALSE, TR_TILES_MS / 2);
             return TRUE;
@@ -772,7 +772,7 @@ static BOOL tr_fade(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw,
     tr_show(g, ux, uy, uw, uh);
     sprintf(m, "%s: %ld steps in %lu ms (%ld x %ld)", through ? "fade" : "cross-fade",
             (long)steps, (unsigned long)(time_ms() - t0), (long)uw, (long)uh);
-    amce_log("viewer", m);
+    amb_log("viewer", m);
     return TRUE;
 }
 
@@ -995,7 +995,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             /* no datatype took it (a camera's Exif JPEG, say): read by
              * Ambiance itself, in true colour */
             own_src = TRUE;
-            amce_log("viewer", "no datatype took it: the JPEG read by Ambiance (jdec)");
+            amb_log("viewer", "no datatype took it: the JPEG read by Ambiance (jdec)");
         } else {
             if (!o) {
                 sprintf(msg, _("Could not show %.80s"), label);

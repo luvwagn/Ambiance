@@ -2,8 +2,8 @@
  * Ambiance - radio-browser.info's answers: CSV, UTF-8, URL encoding
  * (radiocsv.c). No Amiga headers, so the host tests use it as it is.
  */
-#ifndef AMCE_RADIOCSV_H
-#define AMCE_RADIOCSV_H
+#ifndef AMB_RADIOCSV_H
+#define AMB_RADIOCSV_H
 
 #define CSV_MAX_FIELDS 40
 typedef int BOOLISH;

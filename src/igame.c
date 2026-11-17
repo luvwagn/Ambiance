@@ -31,8 +31,8 @@ BOOL ig_folder_ok(const char *dir)
     char f[300];
     if (!dir || !dir[0])
         return FALSE;
-    amce_join_path(f, sizeof(f), dir, LIST_FILE);
-    return amce_exists(f);
+    amb_join_path(f, sizeof(f), dir, LIST_FILE);
+    return amb_exists(f);
 }
 
 /* ------------------------------------------------------------ finding it
@@ -70,7 +70,7 @@ BOOL ig_discover(char *out, LONG max, BOOL deep)
     me->pr_WindowPtr = (APTR)-1;
     for (i = 0; usual[i] && !found; i++)
         if (ig_folder_ok(usual[i])) {
-            amce_strlcpy(out, usual[i], max);
+            amb_strlcpy(out, usual[i], max);
             found = TRUE;
         }
     if (!found && deep) {
@@ -100,11 +100,11 @@ BOOL ig_discover(char *out, LONG max, BOOL deep)
     }
     for (i = 0; i < nv && !found; i++) {
         static struct Tops t;               /* (1.5 KB: off the stack) */
-        if (!vols[i][0] || !amce_stricmp(vols[i], "RAM Disk:"))
+        if (!vols[i][0] || !amb_stricmp(vols[i], "RAM Disk:"))
             continue;
-        amce_join_path(path, sizeof(path), vols[i], "iGame");
+        amb_join_path(path, sizeof(path), vols[i], "iGame");
         if (ig_folder_ok(path)) {
-            amce_strlcpy(out, path, max);
+            amb_strlcpy(out, path, max);
             found = TRUE;
             break;
         }
@@ -113,12 +113,12 @@ BOOL ig_discover(char *out, LONG max, BOOL deep)
             continue;
         for (k = 0; k < t.n && !found; k++) {
             char d[300];
-            amce_join_path(d, sizeof(d), vols[i], t.names[k]);
-            if (!amce_stricmp(t.names[k], "iGame"))
+            amb_join_path(d, sizeof(d), vols[i], t.names[k]);
+            if (!amb_stricmp(t.names[k], "iGame"))
                 continue;                   /* (looked at above) */
-            amce_join_path(path, sizeof(path), d, "iGame");
+            amb_join_path(path, sizeof(path), d, "iGame");
             if (ig_folder_ok(path)) {
-                amce_strlcpy(out, path, max);
+                amb_strlcpy(out, path, max);
                 found = TRUE;
             }
         }
@@ -128,7 +128,7 @@ BOOL ig_discover(char *out, LONG max, BOOL deep)
         char m[320];
         sprintf(m, "%.300s", found ? out : deep ? "not found (assign, usual drawers, hard disks' tops)"
                                               : "not found (assign, usual drawers)");
-        amce_log("igame: looked for iGame", m);
+        amb_log("igame: looked for iGame", m);
     }
     return found;
 }
@@ -184,16 +184,16 @@ LONG ig_load(struct IgCat *c, const char *dir)
     LONG lines = 0, skipped = 0;
     ULONG t0 = time_ms();
     ig_free(c);
-    amce_join_path(f, sizeof(f), dir, LIST_FILE);
+    amb_join_path(f, sizeof(f), dir, LIST_FILE);
     if (!(buf = unpack_read_whole(f, &len))) {
-        amce_log("igame: cannot read", f);
+        amb_log("igame: cannot read", f);
         return -1;
     }
     if (!(c->pool = CreatePool(MEMF_ANY, 16384, 8192))) {
         FreeVec(buf);
         return -1;
     }
-    amce_strlcpy(c->dir, dir, sizeof(c->dir));
+    amb_strlcpy(c->dir, dir, sizeof(c->dir));
     for (p = (char *)buf; p < (char *)buf + len && *p; p = e) {
         struct IgRow r;
         for (e = p; *e && *e != '\n'; e++)
@@ -231,7 +231,7 @@ LONG ig_load(struct IgCat *c, const char *dir)
             gm->players = r.players > 0 && r.players < 256 ? (UBYTE)r.players : 0;
             gm->flags = (r.favourite ? IGF_FAV : 0) |
                         (ig_is_demo(r.genre, r.path) ? IGF_DEMO : 0) |
-                        (amce_ends_with(r.path, ".slave") ? IGF_SLAVE : 0);
+                        (amb_ends_with(r.path, ".slave") ? IGF_SLAVE : 0);
             if (gm->flags & IGF_DEMO)
                 c->demos++;
             else
@@ -243,7 +243,7 @@ LONG ig_load(struct IgCat *c, const char *dir)
     sprintf(m, "%ld games, %ld demos (%ld lines, %ld hidden or gone) from %.120s in %lu ms",
             (long)c->games, (long)c->demos, (long)lines, (long)skipped, f,
             (unsigned long)(time_ms() - t0));
-    amce_log("igame", m);
+    amb_log("igame", m);
     return c->n;
 }
 
@@ -264,9 +264,9 @@ BOOL ig_page(const char *path)
 
 void ig_page_path(char *out, LONG max, BOOL demos, const char *query)
 {
-    amce_strlcpy(out, IG_PREFIX, max);
-    amce_strlcat(out, demos ? "D:" : "G:", max);
-    amce_strlcat(out, query, max);
+    amb_strlcpy(out, IG_PREFIX, max);
+    amb_strlcat(out, demos ? "D:" : "G:", max);
+    amb_strlcat(out, query, max);
 }
 
 static BOOL wanted(const struct IgGame *gm, BOOL demos)
@@ -316,10 +316,10 @@ static LONG add_groups(const struct IgCat *c, struct ItemList *out, BOOL demos, 
             sprintf(q, "y=%lu", (unsigned long)gm->year);
         } else {
             const char *s = what == 'g' ? gm->genre : gm->chipset;
-            amce_strlcpy(label, s[0] ? s : _("Unknown"), sizeof(label));
+            amb_strlcpy(label, s[0] ? s : _("Unknown"), sizeof(label));
             q[0] = what;
             q[1] = '=';
-            amce_strlcpy(q + 2, s, sizeof(q) - 2);
+            amb_strlcpy(q + 2, s, sizeof(q) - 2);
         }
         add_folder(out, demos, label, q);
         n++;
@@ -391,7 +391,7 @@ LONG ig_read(const struct IgCat *c, const char *page, struct ItemList *out, BOOL
             if (gm->played) {
                 /* most played first, then by title */
                 sprintf(key, "%05lu", (unsigned long)(65535 - gm->played));
-                amce_strlcat(key, gm->title, sizeof(key));
+                amb_strlcat(key, gm->title, sizeof(key));
                 add_game(out, gm, key);
             }
         } else if (q[0] == 'g' && q[1] == '=') {
@@ -401,7 +401,7 @@ LONG ig_read(const struct IgCat *c, const char *page, struct ItemList *out, BOOL
             if (!strcmp(gm->chipset, q + 2))
                 add_game(out, gm, NULL);
         } else if (q[0] == 'y' && q[1] == '=') {
-            if (gm->year == (UWORD)amce_num(q + 2))
+            if (gm->year == (UWORD)amb_num(q + 2))
                 add_game(out, gm, NULL);
         } else
             return -1;
@@ -435,7 +435,7 @@ void ig_shot_base(const char *path, char *out, LONG max)
 {
     char dir[256], name[108];
     ig_split_path(path, dir, sizeof(dir), name, sizeof(name));
-    amce_join_path(out, max, dir, "igame");    /* + ".iff": iGame's screenshot */
+    amb_join_path(out, max, dir, "igame");    /* + ".iff": iGame's screenshot */
 }
 
 /* igame.data's "by" (who made it), read once per entry asked about. */
@@ -448,23 +448,23 @@ static const char *who_made(const char *path)
     char *p, *e;
     if (!strcmp(last, path))
         return by;
-    amce_strlcpy(last, path, sizeof(last));
+    amb_strlcpy(last, path, sizeof(last));
     by[0] = 0;
     ig_split_path(path, dir, sizeof(dir), name, sizeof(name));
-    amce_join_path(f, sizeof(f), dir, "igame.data");
-    if (!amce_exists(f) || !(buf = unpack_read_whole(f, &len)))
+    amb_join_path(f, sizeof(f), dir, "igame.data");
+    if (!amb_exists(f) || !(buf = unpack_read_whole(f, &len)))
         return by;
     for (p = (char *)buf; *p; p = e) {
         for (e = p; *e && *e != '\n'; e++)
             ;
         if (*e)
             *e++ = 0;
-        if (!amce_strnicmp(p, "by=", 3)) {
+        if (!amb_strnicmp(p, "by=", 3)) {
             char *s = p + 3;
             LONG n = strlen(s);
             while (n && (s[n - 1] == '\r' || s[n - 1] == ' '))
                 s[--n] = 0;
-            amce_strlcpy(by, s, sizeof(by));
+            amb_strlcpy(by, s, sizeof(by));
             break;
         }
     }
@@ -478,7 +478,7 @@ LONG ig_facts(const struct IgGame *gm, char lines[][96], LONG maxlines)
     const char *by;
     LONG n = 0;
     /* (sprintf is RawDoFmt's: numbers as longs; then cut to a line) */
-#define LINE(...) do { if (n < maxlines) { sprintf(t, __VA_ARGS__); amce_strlcpy(lines[n], t, 96); n++; } } while (0)
+#define LINE(...) do { if (n < maxlines) { sprintf(t, __VA_ARGS__); amb_strlcpy(lines[n], t, 96); n++; } } while (0)
     if (!gm)
         return 0;
     LINE("%.200s", gm->title);
@@ -515,7 +515,7 @@ static void info_fn(void *ctx, const char *name, BOOL isdir)
 {
     struct Infos *t = ctx;
     LONG n = strlen(name);
-    if (!isdir && n > 5 && n < (LONG)sizeof(t->names[0]) && !amce_stricmp(name + n - 5, ".info") &&
+    if (!isdir && n > 5 && n < (LONG)sizeof(t->names[0]) && !amb_stricmp(name + n - 5, ".info") &&
         t->n < 24) {
         memcpy(t->names[t->n], name, n - 5);
         t->names[t->n][n - 5] = 0;
@@ -558,7 +558,7 @@ static BOOL icon_args(const char *dir, const char *slave, char *args, LONG max)
         tt = (STRPTR *)d->do_ToolTypes;
         if (d->do_Type == WBPROJECT && tt &&
             (s = FindToolType((CONST_STRPTR *)tt, (CONST_STRPTR)"SLAVE")) != NULL &&
-            !amce_stricmp((const char *)s, slave)) {
+            !amb_stricmp((const char *)s, slave)) {
             LONG k;
             found = TRUE;
             for (k = 0; tt[k]; k++) {
@@ -568,8 +568,8 @@ static BOOL icon_args(const char *dir, const char *slave, char *args, LONG max)
                     break;
                 if (r > 0 && (LONG)(strlen(args) + 1 + strlen(a)) < max) {
                     if (args[0])
-                        amce_strlcat(args, " ", max);
-                    amce_strlcat(args, a, max);
+                        amb_strlcat(args, " ", max);
+                    amb_strlcat(args, a, max);
                 }
             }
         }
@@ -590,8 +590,8 @@ BOOL ig_write_launch_script(const struct IgGame *gm, const char *script, char *w
     BPTR fh;
     why[0] = 0;
     ig_split_path(gm->path, dir, sizeof(dir), name, sizeof(name));
-    if (!amce_exists(gm->path)) {
-        amce_strlcpy(why, _("Its file is not there (rescan in iGame)"), wmax);
+    if (!amb_exists(gm->path)) {
+        amb_strlcpy(why, _("Its file is not there (rescan in iGame)"), wmax);
         return FALSE;
     }
     if (gm->flags & IGF_SLAVE) {
@@ -603,7 +603,7 @@ BOOL ig_write_launch_script(const struct IgGame *gm, const char *script, char *w
     } else
         sprintf(line, "\"%.200s\"\n", name);
     if (!(fh = Open((CONST_STRPTR)script, MODE_NEWFILE))) {
-        amce_strlcpy(why, _("Could not write T:Ambiance-run"), wmax);
+        amb_strlcpy(why, _("Could not write T:Ambiance-run"), wmax);
         return FALSE;
     }
     FPuts(fh, (CONST_STRPTR)"; Ambiance launch script (iGame's entry) - deleted after use\n");
@@ -614,6 +614,6 @@ BOOL ig_write_launch_script(const struct IgGame *gm, const char *script, char *w
     FPuts(fh, (CONST_STRPTR)"\"\n");
     FPuts(fh, (CONST_STRPTR)line);
     Close(fh);
-    amce_log("igame: launch", line);
+    amb_log("igame: launch", line);
     return TRUE;
 }

@@ -15,7 +15,7 @@
  * the screen's, blitted. RTG only: on a palette screen there are no
  * colours to spare for it.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -387,7 +387,7 @@ static BOOL vf_start(struct Gfx *g, WORD w, WORD h)
         sprintf(msg, "Flow: %ld x %ld, worked out at %ld x %ld, %s (format %lu)", (long)w, (long)h,
                 (long)vf.iw, (long)vf.ih, vf.direct ? "written straight" : "by WritePixelArray",
                 (unsigned long)vf.fmt);
-        amce_log("visualisation", msg);
+        amb_log("visualisation", msg);
     }
     return TRUE;
 }
@@ -553,7 +553,7 @@ BOOL vf_draw(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, const WORD *wv, int 
             char m[80];
             vf.coarse++;
             sprintf(m, "Flow: frames slow here (%lu ms): worked out coarser", (unsigned long)(time_ms() - t0));
-            amce_log("visualisation", m);
+            amb_log("visualisation", m);
             vf_free();
         }
     } else {

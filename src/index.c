@@ -16,7 +16,7 @@
  * padded); then the blocks. A block holds its entries, sorted: UBYTE kind,
  * UBYTE length + label, UBYTE length + file name.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <dos/dosextens.h>
@@ -55,7 +55,7 @@ void idx_name(const char *menu, BOOL adult, char *out, LONG max)
             e[i] = hex[(h >> (28 - 4 * i)) & 15];
         strcpy(e + 8, ".idx");
     }
-    amce_strlcpy(out, t, max);
+    amb_strlcpy(out, t, max);
 }
 
 BOOL idx_date(const char *dir, struct DateStamp *ds)
@@ -84,7 +84,7 @@ BOOL idx_load(const char *file, struct Idx *ix)
     memset(ix, 0, sizeof(*ix));
     if (!(fh = Open((CONST_STRPTR)file, MODE_OLDFILE)))
         return FALSE;
-    if (Read(fh, head, IDX_HEAD) != IDX_HEAD || amce_be32(head) != IDX_MAGIC ||
+    if (Read(fh, head, IDX_HEAD) != IDX_HEAD || amb_be32(head) != IDX_MAGIC ||
         ((head[4] << 8) | head[5]) != IDX_VERSION || !(n = (head[6] << 8) | head[7])) {
         Close(fh);
         return FALSE;
@@ -103,12 +103,12 @@ BOOL idx_load(const char *file, struct Idx *ix)
     for (i = 0; i < n; i++) {
         const UBYTE *t = tab + i * IDX_SLOT;
         struct IdxLetter *L = &ix->l[i];
-        L->date.ds_Days = amce_be32(t);
-        L->date.ds_Minute = amce_be32(t + 4);
-        L->date.ds_Tick = amce_be32(t + 8);
-        L->count = (LONG)amce_be32(t + 12);
-        L->off = amce_be32(t + 16);
-        L->len = amce_be32(t + 20);
+        L->date.ds_Days = amb_be32(t);
+        L->date.ds_Minute = amb_be32(t + 4);
+        L->date.ds_Tick = amb_be32(t + 8);
+        L->count = (LONG)amb_be32(t + 12);
+        L->off = amb_be32(t + 16);
+        L->len = amb_be32(t + 20);
         memcpy(L->name, t + 24, IDX_NAME);
         L->name[IDX_NAME - 1] = 0;
     }
@@ -241,7 +241,7 @@ BOOL idx_letter(struct IdxOut *o, LONG k, const struct DateStamp *date, const ch
     put32(t + 12, count);
     put32(t + 16, off);
     put32(t + 20, len);
-    amce_strlcpy((char *)t + 24, name, IDX_NAME);
+    amb_strlcpy((char *)t + 24, name, IDX_NAME);
     return TRUE;
 }
 
@@ -267,8 +267,8 @@ BOOL idx_save(const char *file, const UBYTE *buf, LONG len)
         if (l)
             UnLock(l);
     }
-    amce_strlcpy(tmp, file, sizeof(tmp));
-    amce_strlcat(tmp, ".new", sizeof(tmp));
+    amb_strlcpy(tmp, file, sizeof(tmp));
+    amb_strlcat(tmp, ".new", sizeof(tmp));
     ok = (fh = Open((CONST_STRPTR)tmp, MODE_NEWFILE)) != 0;
     if (ok) {
         ok = Write(fh, (APTR)buf, len) == len;

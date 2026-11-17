@@ -50,7 +50,7 @@
  * that opened it (TlsLib.v). AmiSSL 6 installed alone has no AmiSSL 5
  * libraries; installed over 5 it keeps them, and 6 is used.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -174,7 +174,7 @@ BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
     if (!socketbase ||
         !(AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library",
                                          AMISSLMASTER_MIN_VERSION))) {
-        amce_strlcpy(t->why, "AmiSSL is not installed (amisslmaster.library)", sizeof(t->why));
+        amb_strlcpy(t->why, "AmiSSL is not installed (amisslmaster.library)", sizeof(t->why));
         return FALSE;
     }
     if (OpenAmiSSLTags(TLS_API,
@@ -186,7 +186,7 @@ BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
                        AmiSSL_ErrNoPtr, (ULONG)&t->err,
                        TAG_DONE) != 0 || !ssl) {
         CloseLibrary(AmiSSLMasterBase);
-        amce_strlcpy(t->why, "AmiSSL could not be opened (" TLS_NAME " not installed)", sizeof(t->why));
+        amb_strlcpy(t->why, "AmiSSL could not be opened (" TLS_NAME " not installed)", sizeof(t->why));
         return FALSE;
     }
     t->master = AmiSSLMasterBase;
@@ -197,7 +197,7 @@ BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
         CloseAmiSSL();
         CloseLibrary(AmiSSLMasterBase);
         t->master = t->ssl = t->ext = NULL;
-        amce_strlcpy(t->why, "AmiSSL could not make a TLS context", sizeof(t->why));
+        amb_strlcpy(t->why, "AmiSSL could not make a TLS context", sizeof(t->why));
         return FALSE;
     }
     ERR_clear_error();                      /* (SSL_get_error needs it empty) */
@@ -209,7 +209,7 @@ BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
         seed(t);
         sprintf(m, "random numbers %s before seeding, %s after",
                 before == 1 ? "ready" : "not ready", RAND_status() == 1 ? "ready" : "not ready");
-        amce_log("https", m);
+        amb_log("https", m);
         ERR_clear_error();
     }
     sprintf(t->ver, "%.40s", OpenSSL_version(OPENSSL_VERSION));
@@ -217,7 +217,7 @@ BOOL TLSF(open)(struct TlsLib *t, struct Library *socketbase)
     {
         char m[80];
         sprintf(m, TLS_NAME ", %.44s", t->ver);
-        amce_log("https: AmiSSL opened", m);
+        amb_log("https: AmiSSL opened", m);
     }
     return TRUE;
 }
@@ -257,7 +257,7 @@ static char certs_path[256];            /* set by the main task, read here */
 
 void TLSF(set_certs)(const char *path)
 {
-    amce_strlcpy(certs_path, path ? path : "", sizeof(certs_path));
+    amb_strlcpy(certs_path, path ? path : "", sizeof(certs_path));
 }
 
 /* A file whole into memory (AllocVec'd, 0 after it): NULL if not there. */
@@ -317,7 +317,7 @@ static BOOL certs_load(struct TlsLib *t)
     if (n > 0) {
         sprintf(m, "%ld root certificates from %.120s in %ld ms", (long)n, certs_path,
                 (long)(time_ms() - t0));
-        amce_log("https", m);
+        amb_log("https", m);
         t->certs = 1;
         return TRUE;
     }
@@ -333,7 +333,7 @@ static BOOL certs_load(struct TlsLib *t)
             UnLock(l);
             if (SSL_CTX_set_default_verify_paths((SSL_CTX *)t->ctx)) {
                 ERR_clear_error();
-                amce_log("https", "root certificates: AmiSSL's (AmiSSL:Certs)");
+                amb_log("https", "root certificates: AmiSSL's (AmiSSL:Certs)");
                 t->certs = 1;
                 return TRUE;
             }
@@ -342,7 +342,7 @@ static BOOL certs_load(struct TlsLib *t)
     }
     sprintf(m, "no root certificates: %.120s not read, no AmiSSL:Certs",
             certs_path[0] ? certs_path : "Certs/cacert.pem");
-    amce_log("https", m);
+    amb_log("https", m);
     return FALSE;
 }
 
@@ -350,7 +350,7 @@ static BOOL certs_load(struct TlsLib *t)
  * A certificate is valid between two dates, checked against the Amiga's
  * clock. One that has no battery clock, or whose emulator does not set it,
  * starts in 1978, and every certificate is "not yet valid". Ambiance was
- * built on AMCE_DATE, so now is no earlier than that: if the clock says
+ * built on AMB_DATE, so now is no earlier than that: if the clock says
  * otherwise, the check is made as of that day (the certificate still
  * checked against the root certificates, its name against the host's). */
 static ULONG days_from_civil(LONG y, LONG m, LONG d)    /* days since 1.1.1970 */
@@ -364,9 +364,9 @@ static ULONG days_from_civil(LONG y, LONG m, LONG d)    /* days since 1.1.1970 *
     return (ULONG)(era * 146097 + doe - 719468);
 }
 
-static ULONG build_secs(void)          /* AMCE_DATE ("12.11.2026"), seconds since 1970 */
+static ULONG build_secs(void)          /* AMB_DATE ("12.11.2026"), seconds since 1970 */
 {
-    const char *p = AMCE_DATE;
+    const char *p = AMB_DATE;
     LONG v[3] = { 0, 0, 0 };
     int i;
     for (i = 0; i < 3 && *p; i++) {
@@ -394,7 +394,7 @@ APTR TLSF(new)(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
     BASES(t);
     t->why[0] = 0;
     if (verify && t->ctx && !certs_load(t)) {
-        amce_strlcpy(t->why, "no root certificates to check the server's with", sizeof(t->why));
+        amb_strlcpy(t->why, "no root certificates to check the server's with", sizeof(t->why));
         return NULL;
     }
     if (!t->ctx || !(c = AllocVec(sizeof(*c), MEMF_ANY | MEMF_CLEAR)))
@@ -423,9 +423,9 @@ APTR TLSF(new)(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
                 char m[160];
                 said = TRUE;
                 sprintf(m, "the Amiga's clock says day %lu after 1.1.1970, before Ambiance was "
-                           "built (" AMCE_DATE "): certificates checked as of then",
+                           "built (" AMB_DATE "): certificates checked as of then",
                         (unsigned long)(now / 86400UL));
-                amce_log("https", m);
+                amb_log("https", m);
             }
         }
     } else {
@@ -576,7 +576,7 @@ int TLSF(handshake)(struct TlsLib *t, APTR c)
     t->why[0] = 0;
     r = step(t, (struct TlsConn *)c, 0, NULL, 0);
     if (r == 0 && !t->why[0])
-        amce_strlcpy(t->why, "the server closed the connection", sizeof(t->why));
+        amb_strlcpy(t->why, "the server closed the connection", sizeof(t->why));
     return r > 0 ? 1 : r == 0 ? -1 : (int)r;
 }
 
@@ -648,7 +648,7 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
         t->v = 6;
         return TRUE;
     }
-    amce_strlcpy(why6, t->why, sizeof(why6));
+    amb_strlcpy(why6, t->why, sizeof(why6));
     t->tried = FALSE;                       /* (5 tried next, for this process) */
 #endif
     if (tls5_open(t, socketbase)) {
@@ -658,9 +658,9 @@ BOOL tls_open(struct TlsLib *t, struct Library *socketbase)
     if (why6[0]) {
         char m[200];
         sprintf(m, "AmiSSL 6: %.80s; AmiSSL 5: %.80s", why6, t->why);
-        amce_log("https", m);
+        amb_log("https", m);
         if (strstr(t->why, "could not be opened"))
-            amce_strlcpy(t->why, "AmiSSL could not be opened (AmiSSL 5 or 6 needed)", sizeof(t->why));
+            amb_strlcpy(t->why, "AmiSSL could not be opened (AmiSSL 5 or 6 needed)", sizeof(t->why));
     }
     return FALSE;
 }

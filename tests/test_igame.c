@@ -20,7 +20,7 @@ static void check(const char *what, int ok)
         fails++;
 }
 
-void amce_log(const char *what, const char *detail)
+void amb_log(const char *what, const char *detail)
 {
     printf("  log: %s: %s\n", what, detail);
 }

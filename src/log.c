@@ -6,7 +6,7 @@
  * next to the program. Then each step is appended to Ambiance.log with a
  * 1/50 s timestamp and flushed at once, so the log survives a hang.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <stdio.h>
 #include <dos/dos.h>
@@ -22,7 +22,7 @@ static BOOL lock_ready;
 /* Opens the log when Debug is on in Settings (force) or the file
  * Ambiance.debug sits next to the program. It goes to PROGDIR, or to RAM:
  * when the program's drawer cannot be written to (a read-only drive). */
-void amce_log_open(BOOL force)
+void amb_log_open(BOOL force)
 {
     static const char *paths[] = { "PROGDIR:Ambiance.log", "RAM:Ambiance.log", NULL };
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -46,15 +46,15 @@ void amce_log_open(BOOL force)
             logpath = paths[i];
         }
     me->pr_WindowPtr = oldwin;
-    amce_log("---- Ambiance " AMCE_VERSION, "");
+    amb_log("---- Ambiance " AMB_VERSION, "");
 }
 
-const char *amce_log_path(void)
+const char *amb_log_path(void)
 {
     return logfh ? logpath : NULL;
 }
 
-void amce_log(const char *what, const char *detail)
+void amb_log(const char *what, const char *detail)
 {
     struct DateStamp ds;
     char stamp[48];
@@ -79,10 +79,10 @@ void amce_log(const char *what, const char *detail)
     ReleaseSemaphore(&loglock);
 }
 
-void amce_log_close(void)
+void amb_log_close(void)
 {
     if (logfh) {
-        amce_log("log closed", "");
+        amb_log("log closed", "");
         Close(logfh);
         logfh = 0;
     }

@@ -4,10 +4,10 @@
  * is up and WHDLoad is not installed (and AGS, which carries its own, is
  * not there).
  */
-#ifndef AMCE_WHDINST_H
-#define AMCE_WHDINST_H
+#ifndef AMB_WHDINST_H
+#define AMB_WHDINST_H
 
-#include "amce.h"
+#include "amb.h"
 
 #define WHD_HOST    "www.whdload.de"
 #define WHD_PATH    "/whdload/WHDLoad_usr_small.lha"    /* the user package, fewer doc languages */

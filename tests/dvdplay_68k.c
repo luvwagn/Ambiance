@@ -5,7 +5,7 @@
  * its end, a seek and the chapters; first what the image holds, as Videos'
  * preview reads it.
  */
-#include "../src/amce.h"
+#include "../src/amb.h"
 #include "../src/dvdplay.h"
 #include "../src/dvddisc.h"
 #include "../src/dvdiso.h"
@@ -17,8 +17,8 @@
 #include <libraries/dvdnav.h>
 
 /* what dvdplay.c uses from the rest of Ambiance */
-const char *amce_tr(const char *s) { return s; }
-void amce_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
+const char *amb_tr(const char *s) { return s; }
+void amb_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
 static ULONG fake_ticks;
 ULONG time_ticks(ULONG *hz) { if (hz) *hz = 1000; return fake_ticks += 1; }
 

@@ -19,7 +19,7 @@
  * colours. gfx_thumb draws it, taking pens then. So it can be made in
  * the loader process, and kept ahead, for little memory.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <graphics/modeid.h>

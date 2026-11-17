@@ -3,8 +3,8 @@
  * playing, the mini player, and the anim and video controls
  * Copyright (c) 2026 Brian King, MIT licence
  */
-#ifndef AMCE_GLYPH_H
-#define AMCE_GLYPH_H
+#ifndef AMB_GLYPH_H
+#define AMB_GLYPH_H
 
 #include <exec/types.h>
 

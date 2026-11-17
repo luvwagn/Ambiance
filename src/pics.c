@@ -15,7 +15,7 @@
  * its game art) are not shown: their pictures are in their parent's list,
  * among its own, as AGS's letter menus are merged in Games.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -47,7 +47,7 @@ const char *pics_format(const char *name)
     if (!dot || dot == name)
         return NULL;
     for (i = 0; i < (LONG)(sizeof(exts) / sizeof(exts[0])); i++)
-        if (amce_stricmp(dot + 1, exts[i].ext) == 0)
+        if (amb_stricmp(dot + 1, exts[i].ext) == 0)
             return exts[i].tag;
     return NULL;
 }
@@ -89,7 +89,7 @@ static const char *entry_format(const char *dir, const char *name, BOOL vids)
     const char *f = strchr(name, '.') ? pics_format(name) : NULL;
     if (f && !(vids && !strcmp(f, "ILBM")))
         return f;
-    amce_join_path(path, sizeof(path), dir, name);
+    amb_join_path(path, sizeof(path), dir, name);
     if (f) {
         const char *s = sniff(path);
         return s && !strcmp(s, "ANIM") ? s : f;
@@ -146,7 +146,7 @@ static BOOL letter_dir(const char *name)
     if (!name[1])
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
                c == '#';
-    return amce_stricmp(name, "0-9") == 0;
+    return amb_stricmp(name, "0-9") == 0;
 }
 
 /* Count dir's pictures (with those of its letter folders) and its other
@@ -170,7 +170,7 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
         if (c->top && letter_dir(name)) {
             LONG n;
             LONG na = 0;
-            amce_join_path(path, sizeof(path), c->dir, name);
+            amb_join_path(path, sizeof(path), c->dir, name);
             n = scan(path, c->ndirs, c->first, c->firstmax, FALSE, &na, c->vids);
             if (n > 0)
                 c->npics += n;
@@ -181,12 +181,12 @@ static void scan_cb(void *ctx, const char *name, BOOL isdir)
     } else if ((f = entry_format(c->dir, name, c->vids)) && moving(f)) {
         c->nanims++;                        /* played, not shown: not a slideshow's */
         if (c->first && c->firstmax && !c->first[0] && !c->npics)
-            amce_join_path(c->first, c->firstmax, c->dir, name);
+            amb_join_path(c->first, c->firstmax, c->dir, name);
     } else if (f) {
         c->npics++;
         if (c->first && c->firstmax &&
-            (!c->first[0] || amce_stricmp(name, (const char *)FilePart((STRPTR)c->first)) < 0))
-            amce_join_path(c->first, c->firstmax, c->dir, name);
+            (!c->first[0] || amb_stricmp(name, (const char *)FilePart((STRPTR)c->first)) < 0))
+            amb_join_path(c->first, c->firstmax, c->dir, name);
     }
 }
 
@@ -241,7 +241,7 @@ static void any_cb(void *ctx, const char *name, BOOL isdir)
         return;
     if (isdir) {
         if (c->depth > 0) {
-            amce_join_path(path, sizeof(path), c->dir, name);
+            amb_join_path(path, sizeof(path), c->dir, name);
             c->found = any_anim(path, c->depth - 1);
         }
     } else if ((f = entry_format(c->dir, name, TRUE)) && moving(f))
@@ -275,13 +275,13 @@ static void collect_cb(void *ctx, const char *name, BOOL isdir)
     const char *f = isdir ? NULL : entry_format(c->dir, name, c->vids);
     if (!isdir && (!f || (c->vids && !moving(f))))
         return;                             /* (Videos: animations only, no pictures) */
-    amce_join_path(path, sizeof(path), c->dir, name);
+    amb_join_path(path, sizeof(path), c->dir, name);
     if (isdir && c->top && letter_dir(name)) {
         collect(path, c->out, FALSE, c->vids);
         return;
     }
     key[0] = isdir ? '0' : '1';             /* folders first */
-    amce_strlcpy(key + 1, name, sizeof(key) - 1);
+    amb_strlcpy(key + 1, name, sizeof(key) - 1);
     list_add(c->out, name, path, key, isdir ? IT_DIR : moving(f) ? IT_ANIM : IT_PIC);
 }
 

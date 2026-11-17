@@ -1,5 +1,5 @@
 /* Host-run unit tests for the AGS reader, executed under vamos. */
-#include "../src/amce.h"
+#include "../src/amb.h"
 #include <string.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -144,7 +144,7 @@ int main(void)
         check_long("script sets Expert 0", strstr(buf, "Set Expert 0\n") != NULL, 1);
         check_long("script runs entry", strstr(buf, "Execute \"AGS:+  Games - 0-Z.ags/A.ags/Test Game.run\"") != NULL, 1);
     }
-    amce_strlcpy(a.expertperm, "1", sizeof(a.expertperm));
+    amb_strlcpy(a.expertperm, "1", sizeof(a.expertperm));
     ags_write_launch_script(&a, "AGS:x", "T:launch2");
     {
         BPTR fh = Open((CONST_STRPTR)"T:launch2", MODE_OLDFILE);

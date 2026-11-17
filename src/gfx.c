@@ -3,11 +3,11 @@
  * Copyright (c) 2026 Brian King
  *
  * Sizes are design units (a 256-line layout) times the screen's scale,
- * GU(g, v); see amce.h. The pixel style enlarges its artwork and font by
+ * GU(g, v); see amb.h. The pixel style enlarges its artwork and font by
  * whole pixels; the smooth style draws pre-rendered anti-aliased art
  * (smooth.c).
  */
-#include "amce.h"
+#include "amb.h"
 #include "video.h"
 
 #include <string.h>
@@ -140,19 +140,19 @@ WORD gfx_pane_w_wide(struct Gfx *g)
 
 static BOOL laced(const struct Gfx *g);
 
-/* The pixel style's scale (amce.h): RTG a whole factor of its lines/256;
+/* The pixel style's scale (amb.h): RTG a whole factor of its lines/256;
  * the laced screens (640 x 400/512) the size of the font chosen for them
  * (Settings > Style), whose line height over 12 sets the layout. Pixelify
  * Sans is only clean at its own size and whole multiples (24: the artwork
  * doubled too); Galmuri is a pixel font drawn at each of its sizes, so it
  * is clean at 16 and 21 lines, between them. */
 const struct LacedFont gfx_laced_fonts[LFONT_COUNT] = {
-    { "Pixelify Sans 12", "amce-pixel.font", 12, 1 },
-    { "Pixelify Sans 24", "amce-pixel.font", 24, 2 },
-    { "Galmuri11", "amce-galmuri11.font", 16, 1 },
-    { "Galmuri11 Bold", "amce-galmuri11b.font", 16, 1 },
-    { "Galmuri14", "amce-galmuri14.font", 21, 1 },
-    { "Galmuri14 Bold", "amce-galmuri14b.font", 21, 1 },
+    { "Pixelify Sans 12", "amb-pixel.font", 12, 1 },
+    { "Pixelify Sans 24", "amb-pixel.font", 24, 2 },
+    { "Galmuri11", "amb-galmuri11.font", 16, 1 },
+    { "Galmuri11 Bold", "amb-galmuri11b.font", 16, 1 },
+    { "Galmuri14", "amb-galmuri14.font", 21, 1 },
+    { "Galmuri14 Bold", "amb-galmuri14b.font", 21, 1 },
 };
 int gfx_laced_font = LFONT_DEFAULT;
 int gfx_rtg_font = -1;              /* RTG, pixel style: -1 Pixelify at its whole factor */
@@ -224,8 +224,8 @@ static void open_font(struct Gfx *g)
         if (chosen_font(g)) {
             const struct LacedFont *f = chosen_font(g);
             char name[64];
-            amce_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
-            amce_strlcat(name, f->file, sizeof(name));
+            amb_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
+            amb_strlcat(name, f->file, sizeof(name));
             ta.ta_Name = (STRPTR)name;
             ta.ta_YSize = f->ysize;
             if (!(g->font = OpenDiskFont(&ta)) && g->k != 256) {
@@ -234,10 +234,10 @@ static void open_font(struct Gfx *g)
                 layout_metrics(g);
             }
             if (g->font)
-                amce_log(laced(g) ? "laced font" : "rtg font", f->name);
+                amb_log(laced(g) ? "laced font" : "rtg font", f->name);
         }
         if (!g->font) {
-            ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+            ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amb-pixel.font";
             ta.ta_YSize = 12 * g->kint;     /* 12, 24 or 36: whole-pixel sizes */
             g->font = OpenDiskFont(&ta);
         }
@@ -311,7 +311,7 @@ int gfx_mode_from_key(const char *key)
 {
     int i;
     for (i = 0; i < SM_COUNT; i++)
-        if (amce_stricmp(key, modes[i].key) == 0)
+        if (amb_stricmp(key, modes[i].key) == 0)
             return i;
     return -1;
 }
@@ -386,7 +386,7 @@ BOOL gfx_style_possible(const struct Caps *c, int smode, int style)
         smode = gfx_mode_auto(c);
     if (modes[smode].kind != K_RTG || gfx_mode_depth(smode) < 8)
         return FALSE;
-    sprintf(path, "PROGDIR:Fonts/amce-smooth/%lu", (unsigned long)modes[smode].h);
+    sprintf(path, "PROGDIR:Fonts/amb-smooth/%lu", (unsigned long)modes[smode].h);
     me->pr_WindowPtr = (APTR)-1;
     l = Lock((CONST_STRPTR)path, SHARED_LOCK);
     me->pr_WindowPtr = oldwin;
@@ -566,7 +566,7 @@ void gfx_window_log(struct Gfx *g)
             (unsigned long)wst_n, (unsigned long)wst_all, (unsigned long)(wst_sum / wst_n),
             (unsigned long)wst_max, (unsigned long)wst_first, (unsigned long)g->w,
             (unsigned long)g->h, (unsigned long)g->depth, wbuf_where());
-    amce_log("window", m);
+    amb_log("window", m);
     wst_n = wst_sum = wst_max = 0;
 }
 
@@ -678,7 +678,7 @@ static void win_menus_for(struct Gfx *g, struct Window *w)
     if (!(win_vi = GetVisualInfo(g->scr, TAG_END)) || !(win_menu = CreateMenus(win_nm, TAG_END)) ||
         !LayoutMenus(win_menu, win_vi, GTMN_NewLookMenus, TRUE, TAG_END) ||
         !SetMenuStrip(w, win_menu)) {
-        amce_log("window", "its menus could not be made");
+        amb_log("window", "its menus could not be made");
         win_menus_off(g);
     }
 }
@@ -755,7 +755,7 @@ BOOL gfx_window_resize(struct Gfx *g)
         g->rp = olay->rp;
         g->w = ow;
         g->h = oh;
-        amce_log("window", "no memory for a buffer of its new size: as it was");
+        amb_log("window", "no memory for a buffer of its new size: as it was");
         return FALSE;
     }
     DeleteLayer(0, olay);
@@ -944,7 +944,7 @@ static void wbw_start(void)
         if (StartNotify(nr))
             wbw_nr_on |= 1 << i;
     }
-    amce_log("window", wbw_nr_on ? "Workbench's prefs watched (ScreenMode, Overscan, Font)"
+    amb_log("window", wbw_nr_on ? "Workbench's prefs watched (ScreenMode, Overscan, Font)"
                                  : "Workbench's prefs not watched (no notification)");
     /* and Workbench's own hook (V45 on), for its other ways of closing */
     if (!WorkbenchBase && !(WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 45)))
@@ -955,7 +955,7 @@ static void wbw_start(void)
     t[1].ti_Tag = TAG_DONE;
     if (WorkbenchControlA(NULL, t)) {
         wbw_hooked = TRUE;
-        amce_log("window", "Workbench's closing followed (its setup/cleanup hook)");
+        amb_log("window", "Workbench's closing followed (its setup/cleanup hook)");
     } else {
         CloseLibrary(WorkbenchBase);
         WorkbenchBase = NULL;
@@ -1169,7 +1169,7 @@ BOOL gfx_fs_enter(struct Gfx *g)
         }
         sprintf(m, "full screen: %lu of its %lu pens left free, as on Workbench", (unsigned long)nf,
                 (unsigned long)top);
-        amce_log("window", m);
+        amb_log("window", m);
     }
     if (fs_scr)
         fs_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)fs_scr, WA_Left, 0, WA_Top, 0,
@@ -1183,7 +1183,7 @@ BOOL gfx_fs_enter(struct Gfx *g)
     sprintf(m, "full screen: mode %08lx, %ld x %ld, %ld-bit, %s", (unsigned long)id,
             (long)wb->Width, (long)wb->Height, (long)g->depth,
             fs_win ? "opened" : fs_scr ? "its window would not open" : "the screen would not open");
-    amce_log("window", m);
+    amb_log("window", m);
     if (!fs_win) {
         if (fs_scr)
             CloseScreen(fs_scr);
@@ -1225,7 +1225,7 @@ void gfx_fs_leave(struct Gfx *g)
     fs_win = NULL;
     fs_scr = NULL;
     ActivateWindow(g->win);
-    amce_log("window", "full screen: back in the window");
+    amb_log("window", "full screen: back in the window");
 }
 
 static void open_finish(struct Gfx *g);
@@ -1293,7 +1293,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
                 break;
         if (win_tsize != gfx_text_size) {
             sprintf(m, "text size %ld has no room here: %ld", (long)gfx_text_size, (long)win_tsize);
-            amce_log("window", m);
+            amb_log("window", m);
         }
         if ((g->sm = sm_load(WIN_LINES))) {
             g->style = STYLE_SMOOTH;
@@ -1304,7 +1304,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
         pixel_scale(g);
         if (!k_fits(g->k, mw, mh)) {
             win_plain = TRUE;               /* the font chosen is too big here */
-            amce_log("window", "the pixel font chosen has no room here: Pixelify Sans 12");
+            amb_log("window", "the pixel font chosen has no room here: Pixelify Sans 12");
             pixel_scale(g);
         }
     }
@@ -1334,7 +1334,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
         CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     if (show) {
         if (!win_window(g, left, top, iw, ih, bw, bh)) {
-            amce_log("window", "OpenWindow failed");
+            amb_log("window", "OpenWindow failed");
             goto fail;
         }
         g->w = g->win->Width - g->win->BorderLeft - g->win->BorderRight;
@@ -1350,7 +1350,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
     wbw_start();
     wbw_open = TRUE;                        /* (Workbench's, held: let go if it resets) */
     if (!wbuf_make(g)) {
-        amce_log("window", "no memory for its buffer");
+        amb_log("window", "no memory for its buffer");
         goto fail;
     }
     win_menus_on(g);
@@ -1375,16 +1375,16 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
         strcpy(m, "UI colours in Workbench's pens");
         for (i = 0; i <= PEN_YELLOW; i++)
             sprintf(m + strlen(m), " %ld", (long)gfx_penmap[i]);
-        amce_log("window", m);
+        amb_log("window", m);
     }
     sprintf(m, "%ld x %ld inside at %ld, %ld on a %ld x %ld Workbench, %ld-bit; the buffer %s%s",
             (long)g->w, (long)g->h, (long)left, (long)top,
             (long)wb->Width, (long)wb->Height, (long)g->depth, wbuf_where(),
             show ? "" : " (iconified: not shown)");
-    amce_log("window", m);
+    amb_log("window", m);
     wst_n = wst_sum = wst_max = wst_all = 0;
     layout_metrics(g);
-    amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
+    amb_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
     open_finish(g);
     return TRUE;
 
@@ -1447,7 +1447,7 @@ BOOL gfx_window_hide(struct Gfx *g)
     win_ih = g->h;
     win_k = g->k;
     win_menus_off(g);
-    amce_log("CloseWindow", "iconified: its buffer kept");
+    amb_log("CloseWindow", "iconified: its buffer kept");
     vo_hide();
     CloseWindow(g->win);
     g->win = NULL;
@@ -1472,7 +1472,7 @@ BOOL gfx_window_unhide(struct Gfx *g)
     if (left < 0)
         left = 0;
     if (!win_window(g, left, top, g->w, g->h, bw, bh)) {
-        amce_log("window", "iconified: OpenWindow failed");
+        amb_log("window", "iconified: OpenWindow failed");
         return FALSE;
     }
     win_menus_on(g);
@@ -1481,7 +1481,7 @@ BOOL gfx_window_unhide(struct Gfx *g)
     if (iw != (WORD)g->w || ih != (WORD)g->h)
         gfx_resized_at = time_ms() ? time_ms() : 1;     /* laid out for its size */
     dirty = TRUE;
-    amce_log("window", "opened again (no longer iconified)");
+    amb_log("window", "opened again (no longer iconified)");
     return TRUE;
 }
 
@@ -1565,7 +1565,7 @@ struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top)
         !LayersBase || !(mini_li = NewLayerInfo()) ||
         !(mini_lay = CreateUpfrontLayer(mini_li, mini_bm, 0, 0, iw - 1, ih - 1, LAYERSIMPLE, NULL))) {
         mini_free(mg);
-        amce_log("mini player", "no memory for its buffer");
+        amb_log("mini player", "no memory for its buffer");
         return NULL;
     }
     mg->scr = g->scr;
@@ -1580,7 +1580,7 @@ struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top)
     mg->wb = TRUE;
     mg->truecolor = g->truecolor;
     me->pr_WindowPtr = (APTR)-1;
-    ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+    ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amb-pixel.font";
     ta.ta_YSize = 12 * kk;
     ta.ta_Style = FS_NORMAL;
     ta.ta_Flags = FPF_DESIGNED;
@@ -1613,14 +1613,14 @@ struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top)
                        TAG_END);
     if (!w) {
         mini_free(mg);
-        amce_log("mini player", "OpenWindow failed");
+        amb_log("mini player", "OpenWindow failed");
         return NULL;
     }
     mg->win = w;
     win_menus_for(g, w);
     sprintf(m, "%ld x %ld at %ld, %ld, %ldx (Pixelify Sans %ld)", (long)iw, (long)ih,
             (long)w->LeftEdge, (long)w->TopEdge, (long)kk, (long)(12 * kk));
-    amce_log("mini player", m);
+    amb_log("mini player", m);
     return w;
 }
 
@@ -1751,7 +1751,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         if (!why && win_open(g, style, TRUE))
             return TRUE;
         sprintf(m, "%s: full screen instead", why ? why : "it would not open");
-        amce_log("window", m);
+        amb_log("window", m);
     }
     if (smode == SM_AUTO || gfx_mode_problem(c, smode))
         smode = gfx_mode_auto(c);
@@ -1768,7 +1768,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         return FALSE;
     if (g->truecolor && !CyberGfxBase)
         CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
-    /* Scale (see amce.h): native 1x; RTG a whole factor of its lines/256,
+    /* Scale (see amb.h): native 1x; RTG a whole factor of its lines/256,
      * or exactly lines/256 in the smooth style. */
     g->kint = 1;
     g->style = STYLE_PIXEL;
@@ -1804,7 +1804,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         g->depth = 24;
     }
     if (!g->scr) {
-        amce_log("OpenScreen failed", modes[smode].label);
+        amb_log("OpenScreen failed", modes[smode].label);
         sm_free(g->sm);
         g->sm = NULL;
         return FALSE;
@@ -1813,9 +1813,9 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     {
         char m[80];
         sprintf(m, "%s, %ld-bit", modes[smode].label, (long)g->depth);
-        amce_log("screen open", m);
+        amb_log("screen open", m);
     }
-    amce_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
+    amb_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");
 
     LoadRGB32(&g->scr->ViewPort, (ULONG *)ui_palette32);
     g->pens_shared = FALSE;
@@ -1876,7 +1876,7 @@ static void open_finish(struct Gfx *g)
     if (g->sm && g->wb) {
         char m[80];
         sprintf(m, "%lu pens for its shades and logo so far", (unsigned long)sm_pens_used(g->sm));
-        amce_log("window: smooth", m);
+        amb_log("window: smooth", m);
     }
 }
 
@@ -2229,7 +2229,7 @@ BOOL gfx_restyle(struct Gfx *g, int style)
     fit_menu(g);
     cache_art(g);
     gfx_fill(g, 0, 0, g->w - 1, g->h - 1, PEN_BG);
-    amce_log("style", g->style == STYLE_SMOOTH ? "smooth (same screen)" : "pixel (same screen)");
+    amb_log("style", g->style == STYLE_SMOOTH ? "smooth (same screen)" : "pixel (same screen)");
     if (dbuf)
         gfx_dbuf_start(g);
     return ok;
@@ -2263,7 +2263,7 @@ void gfx_close(struct Gfx *g)
         }
     }
     if (g->win) {
-        amce_log("CloseWindow", "");
+        amb_log("CloseWindow", "");
         CloseWindow(g->win);
         g->win = NULL;
     }
@@ -2285,9 +2285,9 @@ void gfx_close(struct Gfx *g)
             for (i = POINTER_PEN0; i < POINTER_PEN0 + 3; i++)
                 ReleasePen(g->scr->ViewPort.ColorMap, i);
         }
-        amce_log("CloseScreen", "");
+        amb_log("CloseScreen", "");
         ok = CloseScreen(g->scr);
-        amce_log("CloseScreen returned", ok ? "TRUE" : "FALSE (windows still open)");
+        amb_log("CloseScreen returned", ok ? "TRUE" : "FALSE (windows still open)");
         g->scr = NULL;
     }
 }
@@ -2961,8 +2961,8 @@ struct TextFont *gfx_open_laced_font(int i)
     char name[64];
     if (!DiskfontBase)
         return NULL;
-    amce_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
-    amce_strlcat(name, f->file, sizeof(name));
+    amb_strlcpy(name, "PROGDIR:Fonts/", sizeof(name));
+    amb_strlcat(name, f->file, sizeof(name));
     ta.ta_Name = (STRPTR)name;
     ta.ta_YSize = f->ysize;
     ta.ta_Style = FS_NORMAL;
@@ -3102,9 +3102,9 @@ void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi)
     pi->fmt[0] = 0;
     pi->cls[0] = 0;
     if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_Name)
-        amce_strlcpy(pi->fmt, (const char *)dtn->dtn_Header->dth_Name, sizeof(pi->fmt));
+        amb_strlcpy(pi->fmt, (const char *)dtn->dtn_Header->dth_Name, sizeof(pi->fmt));
     if (dtn && dtn->dtn_Header && dtn->dtn_Header->dth_BaseName)
-        amce_strlcpy(pi->cls, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(pi->cls));
+        amb_strlcpy(pi->cls, (const char *)dtn->dtn_Header->dth_BaseName, sizeof(pi->cls));
 }
 
 void pic_describe(const struct PicInfo *pi, char *out, LONG max)
@@ -3120,7 +3120,7 @@ void pic_describe(const struct PicInfo *pi, char *out, LONG max)
         sprintf(c, _("%lu colours"), 1UL << pi->depth);
     char t[96];
     sprintf(t, "%lu x %lu, %s", (unsigned long)pi->w, (unsigned long)pi->h, c);
-    amce_strlcpy(out, t, max);
+    amb_strlcpy(out, t, max);
 }
 
 /* Decode a picture through the registered datatypes. remap: into scr's
@@ -3457,7 +3457,7 @@ void gfx_dbuf_start(struct Gfx *g)
         dsb[0] = NULL;
         DeleteMsgPort(dsafe);
         dsafe = NULL;
-        amce_log("double buffering", "could not get a second buffer");
+        amb_log("double buffering", "could not get a second buffer");
         return;
     }
     /* the second a copy of what is shown, made here: SB_COPY_BITMAP is not
@@ -3472,7 +3472,7 @@ void gfx_dbuf_start(struct Gfx *g)
         dlay[i] = dli[i] ? CreateUpfrontLayer(dli[i], dsb[i]->sb_BitMap, 0, 0, g->w - 1, g->h - 1,
                                               LAYERSIMPLE, NULL) : NULL;
         if (!dlay[i]) {
-            amce_log("double buffering", "could not make its layers");
+            amb_log("double buffering", "could not make its layers");
             dbuf_on = TRUE;                 /* so that stop undoes it all */
             dback = 1;
             gfx_dbuf_stop(g);
@@ -3486,7 +3486,7 @@ void gfx_dbuf_start(struct Gfx *g)
     g->rp = dlay[1]->rp;                    /* a copy of what is shown (SB_COPY_BITMAP) */
     dbuf_on = TRUE;
     dirty = FALSE;
-    amce_log("double buffering", "on");
+    amb_log("double buffering", "on");
 }
 
 /* Show what was drawn, if anything was: TRUE if it flipped (which waited
@@ -3983,7 +3983,7 @@ BOOL pic_on_card(const char *fmt)
         if (strcmp(dt_sample[i].fmt, fmt) || !(dtn = dt_of_sample(i)))
             continue;
         r = dtn->dtn_Header->dth_BaseName &&
-            !amce_stricmp((const char *)dtn->dtn_Header->dth_BaseName, "zz9k-picture");
+            !amb_stricmp((const char *)dtn->dtn_Header->dth_BaseName, "zz9k-picture");
         ReleaseDataType(dtn);
     }
     me->pr_WindowPtr = oldwin;
@@ -4032,7 +4032,7 @@ void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
         if (dtn)
             ReleaseDataType(dtn);
         if (i == 0)
-            amce_strlcat(line, "; previews read by Ambiance", sizeof(line));
+            amb_strlcat(line, "; previews read by Ambiance", sizeof(line));
         out(ctx, line);
     }
     me->pr_WindowPtr = oldwin;

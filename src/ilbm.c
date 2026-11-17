@@ -16,7 +16,7 @@
  * 28 MB): HAM ones too, made into colours here, as the datatype would read
  * the whole file. Its frames are counted on the way, a header each.
  */
-#include "amce.h"
+#include "amb.h"
 #include <stdio.h>
 #include "animdec.h"
 
@@ -184,15 +184,15 @@ void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms)
 static void count_frames(BPTR fh, struct PicInfo *pi, ULONG frames, ULONG jiffies)
 {
     UBYTE h[52];
-    while (frames < 20000 && Read(fh, h, 12) == 12 && amce_be32(h) == ID('F', 'O', 'R', 'M')) {
-        LONG len = amce_be32(h + 4) - 4, got = 0;
+    while (frames < 20000 && Read(fh, h, 12) == 12 && amb_be32(h) == ID('F', 'O', 'R', 'M')) {
+        LONG len = amb_be32(h + 4) - 4, got = 0;
         if (len < 0)
             break;
-        if (amce_be32(h + 8) == ID('I', 'L', 'B', 'M')) {
+        if (amb_be32(h + 8) == ID('I', 'L', 'B', 'M')) {
             frames++;
             got = Read(fh, h, len < (LONG)sizeof(h) ? len : (LONG)sizeof(h));
-            if (got >= 8 + 18 && amce_be32(h) == ID('A', 'N', 'H', 'D'))
-                jiffies += amce_be32(h + 8 + 14) ? amce_be32(h + 8 + 14) : 1;    /* as it plays */
+            if (got >= 8 + 18 && amb_be32(h) == ID('A', 'N', 'H', 'D'))
+                jiffies += amb_be32(h + 8 + 14) ? amb_be32(h + 8 + 14) : 1;    /* as it plays */
             if (got < 0)
                 break;
         }
@@ -215,8 +215,8 @@ BOOL ilbm_is_anim(const char *path)
     me->pr_WindowPtr = oldwin;
     if (!fh)
         return FALSE;
-    r = Read(fh, head, 12) == 12 && amce_be32(head) == ID('F', 'O', 'R', 'M') &&
-        amce_be32(head + 8) == ID('A', 'N', 'I', 'M');
+    r = Read(fh, head, 12) == 12 && amb_be32(head) == ID('F', 'O', 'R', 'M') &&
+        amb_be32(head + 8) == ID('A', 'N', 'I', 'M');
     Close(fh);
     return r;
 }
@@ -239,16 +239,16 @@ static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo
     pi->ms = 0;
     if (!fh)
         return NULL;
-    if (Read(fh, head, 12) == 12 && amce_be32(head) == ID('F', 'O', 'R', 'M') &&
-        amce_be32(head + 8) == ID('A', 'N', 'I', 'M')) {
+    if (Read(fh, head, 12) == 12 && amb_be32(head) == ID('F', 'O', 'R', 'M') &&
+        amb_be32(head + 8) == ID('A', 'N', 'I', 'M')) {
         *anim = TRUE;                       /* its first frame: FORM ILBM */
         /* its sounds first, if it has any (8SVX): passed by */
-        while (Read(fh, head, 12) == 12 && amce_be32(head) == ID('F', 'O', 'R', 'M') &&
-               amce_be32(head + 8) != ID('I', 'L', 'B', 'M') && (size = amce_be32(head + 4)) >= 4 &&
+        while (Read(fh, head, 12) == 12 && amb_be32(head) == ID('F', 'O', 'R', 'M') &&
+               amb_be32(head + 8) != ID('I', 'L', 'B', 'M') && (size = amb_be32(head + 4)) >= 4 &&
                Seek(fh, size - 4 + (size & 1), OFFSET_CURRENT) >= 0)
             ;
-        if (amce_be32(head) == ID('F', 'O', 'R', 'M') &&
-            amce_be32(head + 8) == ID('I', 'L', 'B', 'M') && (size = amce_be32(head + 4)) >= 4 &&
+        if (amb_be32(head) == ID('F', 'O', 'R', 'M') &&
+            amb_be32(head + 8) == ID('I', 'L', 'B', 'M') && (size = amb_be32(head + 4)) >= 4 &&
             (ULONG)size <= ILBM_MAX && (buf = AllocVec(size + 8, MEMF_ANY))) {
             CopyMem(head, buf, 12);
             if (Read(fh, buf + 12, size - 4) != size - 4) {
@@ -265,8 +265,8 @@ static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo
         Close(fh);
         return buf;
     }
-    if (amce_be32(head) == ID('F', 'O', 'R', 'M') &&
-        amce_be32(head + 8) == ID('I', 'L', 'B', 'M') && Seek(fh, 0, OFFSET_END) >= 0 &&
+    if (amb_be32(head) == ID('F', 'O', 'R', 'M') &&
+        amb_be32(head + 8) == ID('I', 'L', 'B', 'M') && Seek(fh, 0, OFFSET_END) >= 0 &&
         (size = Seek(fh, 0, OFFSET_BEGINNING)) > 12 && (ULONG)size <= ILBM_MAX &&
         (buf = AllocVec(size, MEMF_ANY))) {
         if (Read(fh, buf, size) != size) {
@@ -539,10 +539,10 @@ static UBYTE *anim_pick(BPTR fh, const char *path, const UBYTE *body, ULONG body
     for (n = 1; n < PICK_FRAMES && got < PICK_BYTES; n++) {
         const UBYTE *anhd = NULL, *dlta = NULL, *bd = NULL, *p, *e;
         ULONG dl = 0, bl = 0, len, sc;
-        if (Read(fh, h, 12) != 12 || amce_be32(h) != ID('F', 'O', 'R', 'M') || amce_be32(h + 4) < 4)
+        if (Read(fh, h, 12) != 12 || amb_be32(h) != ID('F', 'O', 'R', 'M') || amb_be32(h + 4) < 4)
             break;
-        len = amce_be32(h + 4) - 4;
-        if (amce_be32(h + 8) != ID('I', 'L', 'B', 'M')) {
+        len = amb_be32(h + 4) - 4;
+        if (amb_be32(h + 8) != ID('I', 'L', 'B', 'M')) {
             if (Seek(fh, len + (len & 1), OFFSET_CURRENT) < 0)
                 break;
             n--;
@@ -560,7 +560,7 @@ static UBYTE *anim_pick(BPTR fh, const char *path, const UBYTE *body, ULONG body
         got += len;
         (*frames)++;
         for (p = f, e = f + len; p + 8 <= e;) {
-            ULONG id = amce_be32(p), cl = amce_be32(p + 4);
+            ULONG id = amb_be32(p), cl = amb_be32(p + 4);
             if (cl > (ULONG)(e - p - 8))
                 cl = e - p - 8;
             if (id == ID('A', 'N', 'H', 'D') && cl >= 24)
@@ -578,14 +578,14 @@ static UBYTE *anim_pick(BPTR fh, const char *path, const UBYTE *body, ULONG body
             p += 8 + ((cl + 1) & ~1UL);
         }
         if (anhd)
-            *jif += amce_be32(anhd + 14) ? amce_be32(anhd + 14) : 1;
+            *jif += amb_be32(anhd + 14) ? amb_be32(anhd + 14) : 1;
         k = n & 1;
         if (anhd && anhd[18] == 1)          /* from the last frame, not two back */
             CopyMem(buf[!k], buf[k], fsz);
         if (anhd && anhd[0] == 0 && bd)
             animdec_body(bd, bl, &pl[k], comp, masking);
         else if (dlta && animdec_delta(dlta, dl, &pl[k], anhd ? anhd[0] : 5,
-                                       anhd ? amce_be32(anhd + 20) : 0) == -2)
+                                       anhd ? amb_be32(anhd + 20) : 0) == -2)
             break;                          /* not one this knows: the best so far */
         cur = buf[k];
         if (n % PICK_EVERY)
@@ -649,9 +649,9 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     if (!(file = read_file(path, &len, &anim, pi, &afh)))
         return NULL;
     /* the chunks */
-    e = file + (amce_be32(file + 4) + 8 < len ? amce_be32(file + 4) + 8 : len);
+    e = file + (amb_be32(file + 4) + 8 < len ? amb_be32(file + 4) + 8 : len);
     for (p = file + 12; p + 8 <= e;) {
-        ULONG id = amce_be32(p), cl = amce_be32(p + 4);
+        ULONG id = amb_be32(p), cl = amb_be32(p + 4);
         const UBYTE *d = p + 8;
         if (cl > (ULONG)(e - d))
             cl = e - d;
@@ -661,7 +661,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
             cmap = d;
             cmaplen = cl;
         } else if (id == ID('C', 'A', 'M', 'G') && cl >= 4)
-            camg = amce_be32(d);
+            camg = amb_be32(d);
         else if (id == ID('B', 'O', 'D', 'Y')) {
             body = d;
             bodylen = cl;
@@ -671,8 +671,8 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     }
     if (!bmhd || !cmap || !body)
         goto out;
-    sw = amce_be16(bmhd);
-    sh = amce_be16(bmhd + 2);
+    sw = amb_be16(bmhd);
+    sh = amb_be16(bmhd + 2);
     planes = bmhd[8];
     masking = bmhd[9];
     comp = bmhd[10];

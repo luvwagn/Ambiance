@@ -32,7 +32,7 @@
 #include <graphics/view.h>
 #include <stdio.h>
 #include <string.h>
-#include "amce.h"
+#include "amb.h"
 #include "zz9k.h"
 #include "vprobe.h"
 #include "video.h"
@@ -183,8 +183,8 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
     *pe = 0;
     sprintf(m, "opening its overlay: %ld x %ld YUV, at %ld, %ld, %ld x %ld%s", (long)v->w, (long)v->h,
             (long)x, (long)y, (long)dw, (long)dh, v->sw ? " (the CPU's pictures)" : "");
-    amce_log("video", m);
-    amce_card_lock();                       /* (the ZZ9000: one task at a time) */
+    amb_log("video", m);
+    amb_card_lock();                       /* (the ZZ9000: one task at a time) */
     w = p96PIP_OpenTags(P96PIP_SourceFormat, RGBFB_YUV422CGX, P96PIP_SourceWidth, (ULONG)v->w,
                         P96PIP_SourceHeight, (ULONG)v->h, P96PIP_Type, P96PIPT_MemoryWindow,
                         P96PIP_ErrorCode, (ULONG)pe, pub ? WA_PubScreen : WA_CustomScreen,
@@ -194,22 +194,22 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
                         TAG_DONE);
     if (w) {
         pip_black(w, v);
-        amce_log("video", "its overlay opened (black): placing it");
+        amb_log("video", "its overlay opened (black): placing it");
     }
     if (w) {
         /* the size and place asked for at opening are not reliably taken
          * (the window stays the picture's size, top left): set again */
         BOOL there = pip_move(w, x, y, dw, dh);
-        amce_card_unlock();
+        amb_card_unlock();
         sprintf(m, "overlay %ld x %ld at %ld, %ld (from %ld x %ld)%s",
                 (long)(w->Width - w->BorderLeft - w->BorderRight),
                 (long)(w->Height - w->BorderTop - w->BorderBottom), (long)w->LeftEdge,
                 (long)w->TopEdge, (long)v->w, (long)v->h, there ? "" : "; not the size asked for");
     } else {
-        amce_card_unlock();
+        amb_card_unlock();
         sprintf(m, "its overlay (PIP) could not be opened: %s (%ld)", pip_error(*pe), (long)*pe);
     }
-    amce_log("video", m);
+    amb_log("video", m);
     return w;
 }
 
@@ -231,16 +231,16 @@ static const char *video_by_cpu(struct VProbe *v, const char *why)
 {
     char m[160], ev[16];
     sprintf(m, "decoded by the CPU (%s)", why);
-    amce_log("video", m);
+    amb_log("video", m);
     if (!st_mpv_open()) {
-        amce_log("video", "no mpegv.library 2 (Ambiance's Libs, or LIBS:)");
+        amb_log("video", "no mpegv.library 2 (Ambiance's Libs, or LIBS:)");
         return _("MPEG video by the CPU needs mpegv.library (Ambiance's Libs)");
     }
     v->sw = TRUE;
     vo_failed = FALSE;
     if (GetVar((CONST_STRPTR)"Ambiance/VideoOverlay", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
         !strcmp(ev, "off")) {
-        amce_log("video", "Settings > Video: the overlay off: its pictures drawn");
+        amb_log("video", "Settings > Video: the overlay off: its pictures drawn");
         vo_off = TRUE;
     } else {
         vo_off = FALSE;
@@ -259,7 +259,7 @@ const char *video_check(const char *path, struct VProbe *v)
         if (v->h264) {
             sprintf(why, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(v));
             sprintf(m, "%s: %s", (const char *)FilePart((STRPTR)path), why);
-            amce_log("video", m);
+            amb_log("video", m);
             return why;
         }
         return _("Not an MPEG video Ambiance can read");
@@ -270,7 +270,7 @@ const char *video_check(const char *path, struct VProbe *v)
             v->ac3 ? "AC3 sound" : v->mp2 ? "MPEG audio" : "no sound", (unsigned long)v->ms,
             (unsigned long)v->bytes,
             v->ts ? " (a transport stream)" : v->ps ? "" : " (a bare video stream)");
-    amce_log("video", m);
+    amb_log("video", m);
     if (v->ts) {
         sprintf(m, "its transport stream: %ld-byte packets from byte %lu; video PID %ld (type "
                    "%02lx), sound PID %ld (type %02lx)%s%s",
@@ -278,11 +278,11 @@ const char *video_check(const char *path, struct VProbe *v)
                 (unsigned long)v->ts_vtype, (long)(v->ts_apid == 0x1FFF ? -1 : v->ts_apid),
                 (unsigned long)v->ts_atype, v->a_other ? "; also " : "",
                 v->a_other ? v->a_other : "");
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (v->a_other && !v->mp2 && !v->ac3) {
         sprintf(m, "its sound (%s) is not the card's: played without it", v->a_other);
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (v->audio_id) {
         sprintf(m, "its sound: stream %02lx, %s", (unsigned long)v->audio_id,
@@ -292,7 +292,7 @@ const char *video_check(const char *path, struct VProbe *v)
                     v->a_version == 1 ? "1" : v->a_version == 2 ? "2" : "2.5",
                     v->a_layer == 1 ? "I" : v->a_layer == 2 ? "II" : "III", (unsigned long)v->a_hz,
                     (unsigned long)v->a_kbps, v->a_chans == 1 ? "mono" : "stereo");
-        amce_log("video", m);
+        amb_log("video", m);
     }
     v->sw = FALSE;
     {
@@ -380,10 +380,10 @@ static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG
         vo_wx = ox;
         vo_wy = oy;
         pip_fit(&vo_v, vo_sw, ox + x, oy + y, w, h, &px, &py, &dw, &dh);
-        amce_card_lock();
+        amb_card_lock();
         WindowToFront(vo_win);
         pip_move(vo_win, px, py, dw, dh);
-        amce_card_unlock();
+        amb_card_unlock();
         return TRUE;
     }
     if (vo_failed || !P96Base || (v->sw && vo_off))
@@ -395,7 +395,7 @@ static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG
     if (g->wb && g->scr->ViewPort.ColorMap && g->scr->ViewPort.ColorMap->PalExtra) {
         sprintf(m, "its overlay in Ambiance's window (Workbench's free pens: %ld)",
                 (long)g->scr->ViewPort.ColorMap->PalExtra->pe_NFree);
-        amce_log("video", m);
+        amb_log("video", m);
     }
     vo_win = pip_open(g->scr, g->wb, &vo_v, ox + x, oy + y, w, h, vo_sw, &pe);
     if (!vo_win) {
@@ -431,10 +431,10 @@ void vo_hide(void)
     vo_take();
     vo_unlock();
     if (vo_win) {
-        amce_card_lock();
+        amb_card_lock();
         p96PIP_Close(vo_win);
-        amce_card_unlock();
-        amce_log("video", "its overlay taken down");
+        amb_card_unlock();
+        amb_log("video", "its overlay taken down");
     }
     vo_win = NULL;
     vo_scr = NULL;
@@ -472,7 +472,7 @@ UBYTE *vo_lock(ULONG *bpr)
         char m[120];
         sprintf(m, "its overlay's memory: %08lx, %ld bytes a row, format %ld", (unsigned long)ri.Memory,
                 (long)ri.BytesPerRow, (long)ri.RGBFormat);
-        amce_log("video", m);
+        amb_log("video", m);
         vo_logged = 1;
     }
     if (!ri.Memory || ri.BytesPerRow <= 0) {
@@ -491,7 +491,7 @@ void vo_unlock(void)
         return;                             /* (not locked) */
     p96UnlockBitMap(vo_bm, vo_lk);
     if (vo_logged < 2) {
-        amce_log("video", "its first picture written to the overlay");
+        amb_log("video", "its first picture written to the overlay");
         vo_logged = 2;
     }
     vo_bm = NULL;
@@ -505,7 +505,7 @@ void vo_end(void)
         char m[80];
         sprintf(m, "Picasso96API.library closed (open %ld times before, ours included)",
                 (long)P96Base->lib_OpenCnt);
-        amce_log("video", m);
+        amb_log("video", m);
         CloseLibrary(P96Base);
     }
     P96Base = NULL;

@@ -24,9 +24,9 @@ BOOL whd_present(char *where, LONG max)
     static const char *const places[] = { "C:WHDLoad", "SYS:C/WHDLoad", NULL };
     int i;
     for (i = 0; places[i]; i++)
-        if (amce_exists(places[i])) {
+        if (amb_exists(places[i])) {
             if (where)
-                amce_strlcpy(where, places[i], max);
+                amb_strlcpy(where, places[i], max);
             return TRUE;
         }
     if (where && max > 0)
@@ -61,14 +61,14 @@ static BOOL find_c(const char *dir, int depth, char *out, LONG max)
         return FALSE;
     if (dir_scan(dir, names_fn, t) >= 0) {
         for (i = 0; i < t->count && !found; i++)
-            if (!t->dir[i] && !amce_stricmp(t->n[i], "WHDLoad")) {
-                amce_strlcpy(out, dir, max);
+            if (!t->dir[i] && !amb_stricmp(t->n[i], "WHDLoad")) {
+                amb_strlcpy(out, dir, max);
                 found = TRUE;
             }
         for (i = 0; i < t->count && !found && depth > 0; i++)
             if (t->dir[i]) {
                 char sub[300];
-                amce_join_path(sub, sizeof(sub), dir, t->n[i]);
+                amb_join_path(sub, sizeof(sub), dir, t->n[i]);
                 found = find_c(sub, depth - 1, out, max);
             }
     }
@@ -120,65 +120,65 @@ BOOL whd_install_from(const char *dir, char *why, LONG wmax, char *done, LONG dm
     BOOL ok = TRUE;
     why[0] = done[0] = 0;
     if (!find_c(dir, 4, cdir, sizeof(cdir))) {
-        amce_strlcpy(why, _("WHDLoad was not in the package as expected"), wmax);
-        amce_log("whdload: no WHDLoad under", dir);
+        amb_strlcpy(why, _("WHDLoad was not in the package as expected"), wmax);
+        amb_log("whdload: no WHDLoad under", dir);
         return FALSE;
     }
     if (!(t = AllocVec(sizeof(*t), MEMF_ANY | MEMF_CLEAR))) {
-        amce_strlcpy(why, _("Not enough memory"), wmax);
+        amb_strlcpy(why, _("Not enough memory"), wmax);
         return FALSE;
     }
     me->pr_WindowPtr = (APTR)-1;
     dir_scan(cdir, names_fn, t);
     for (i = 0; i < t->count && ok; i++) {
-        BOOL whd = !amce_stricmp(t->n[i], "WHDLoad");
-        if (t->dir[i] || amce_ends_with(t->n[i], ".info"))
+        BOOL whd = !amb_stricmp(t->n[i], "WHDLoad");
+        if (t->dir[i] || amb_ends_with(t->n[i], ".info"))
             continue;
-        amce_join_path(from, sizeof(from), cdir, t->n[i]);
-        amce_join_path(to, sizeof(to), "C:", t->n[i]);
-        if (!whd && amce_exists(to)) {
+        amb_join_path(from, sizeof(from), cdir, t->n[i]);
+        amb_join_path(to, sizeof(to), "C:", t->n[i]);
+        if (!whd && amb_exists(to)) {
             kept++;                     /* another program of that name: left as it is */
-            amce_log("whdload: kept", to);
+            amb_log("whdload: kept", to);
             continue;
         }
         if (!copy_file(from, to)) {
             sprintf(m, _("%.60s could not be written"), to);
-            amce_strlcpy(why, m, wmax);
+            amb_strlcpy(why, m, wmax);
             ok = FALSE;
         } else {
             put++;
-            amce_log("whdload: installed", to);
+            amb_log("whdload: installed", to);
         }
     }
     if (ok) {
         /* WHDLoad.prf: in an S drawer beside the C drawer, if S: has none */
         char sdir[300], *slash;
-        amce_strlcpy(sdir, cdir, sizeof(sdir));
+        amb_strlcpy(sdir, cdir, sizeof(sdir));
         slash = strrchr(sdir, '/');
         if (slash) {
             strcpy(slash + 1, "S/WHDLoad.prf");
-            if (amce_exists(sdir) && !amce_exists("S:WHDLoad.prf") &&
+            if (amb_exists(sdir) && !amb_exists("S:WHDLoad.prf") &&
                 copy_file(sdir, "S:WHDLoad.prf"))
-                amce_log("whdload: installed", "S:WHDLoad.prf");
+                amb_log("whdload: installed", "S:WHDLoad.prf");
         }
-        if (!amce_exists("DEVS:Kickstarts")) {
+        if (!amb_exists("DEVS:Kickstarts")) {
             BPTR l = CreateDir((CONST_STRPTR)"DEVS:Kickstarts");
             if (l) {
                 UnLock(l);
-                amce_log("whdload: made", "DEVS:Kickstarts");
+                amb_log("whdload: made", "DEVS:Kickstarts");
             }
         }
         sprintf(m, _("WHDLoad and %ld more programs put in C:"), (long)(put > 0 ? put - 1 : 0));
         if (kept) {
             char k[60];
             sprintf(k, _(" (%ld already there kept)"), (long)kept);
-            amce_strlcat(m, k, sizeof(m));
+            amb_strlcat(m, k, sizeof(m));
         }
-        amce_strlcpy(done, m, dmax);
+        amb_strlcpy(done, m, dmax);
     }
     me->pr_WindowPtr = oldwin;
     FreeVec(t);
-    return ok && amce_exists("C:WHDLoad");
+    return ok && amb_exists("C:WHDLoad");
 }
 
 /* ------------------------------------------------------------ tidying */
@@ -198,7 +198,7 @@ static void delete_tree(const char *dir, int depth)
         before = t->count;
         for (i = 0; i < t->count; i++) {
             char p[300];
-            amce_join_path(p, sizeof(p), dir, t->n[i]);
+            amb_join_path(p, sizeof(p), dir, t->n[i]);
             if (t->dir[i])
                 delete_tree(p, depth - 1);
             DeleteFile((CONST_STRPTR)p);
@@ -215,7 +215,7 @@ void whd_cleanup(void)
     APTR oldwin = me->pr_WindowPtr;
     me->pr_WindowPtr = (APTR)-1;
     DeleteFile((CONST_STRPTR)WHD_ARCHIVE);
-    if (amce_exists(WHD_DIR)) {
+    if (amb_exists(WHD_DIR)) {
         delete_tree(WHD_DIR, 6);
         DeleteFile((CONST_STRPTR)WHD_DIR);
     }

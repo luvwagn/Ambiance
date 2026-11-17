@@ -32,11 +32,11 @@
  * are kept for the player to draw (spu.c).
  *
  * The library is opened by dvdplay_open and closed by dvdplay_close (it
- * stays loaded until memory is wanted, as amcesql.library does). It is
+ * stays loaded until memory is wanted, as ambsql.library does). It is
  * used by one task at a time: Ambiance's own to open, seek and close; the
  * player's process to read, only between them.
  */
-#include "amce.h"
+#include "amb.h"
 #include "dvdplay.h"
 #include "dvddisc.h"
 #include "vprobe.h"
@@ -73,7 +73,7 @@ static BOOL has(const char *s, const char *w)
 {
     LONG n = (LONG)strlen(w);
     for (; *s; s++)
-        if (!amce_strnicmp(s, w, n))
+        if (!amb_strnicmp(s, w, n))
             return TRUE;
     return FALSE;
 }
@@ -135,8 +135,8 @@ static LONG optical_volumes(struct DvdVol *v, LONG max, ULONG *sig)
                     s = s * 31 + (UBYTE)*c;
                 s = s * 31 + (ULONG)vl->dol_misc.dol_volume.dol_VolumeDate.ds_Tick;
                 if (n < max) {
-                    amce_strlcpy(v[n].vol, name, sizeof(v[n].vol));
-                    amce_strlcpy(v[n].dev, dev, sizeof(v[n].dev));
+                    amb_strlcpy(v[n].vol, name, sizeof(v[n].vol));
+                    amb_strlcpy(v[n].dev, dev, sizeof(v[n].dev));
                     v[n].unit = unit;
                     n++;
                 }
@@ -297,7 +297,7 @@ static void lib_log(APTR h, LONG level, CONST_STRPTR line)
 {
     (void)h;
     if (level <= DVDLOG_INFO)
-        amce_log("dvd", (const char *)line);
+        amb_log("dvd", (const char *)line);
 }
 
 /* Up to the film's first pack (kept in blk, given first): what comes
@@ -414,7 +414,7 @@ static void choose_audio(struct DvdPlay *dp)
     if (k < 0) {
         sprintf(m, "title %ld: no sound the card plays (%ld tracks)", (long)dp->title,
                 (long)in.audio_count);
-        amce_log("dvd", m);
+        amb_log("dvd", m);
         return;
     }
     if (k != in.audio)
@@ -437,7 +437,7 @@ static void choose_audio(struct DvdPlay *dp)
         sprintf(m, "title %ld: sound track %ld of %ld (%s, %ld channels, \"%s\")", (long)dp->title,
                 (long)(k + 1), (long)in.audio_count, dp->a_fmt == DVDA_AC3 ? "AC-3" : "MPEG",
                 (long)dp->a_ch, si[k].lang);
-    amce_log("dvd", m);
+    amb_log("dvd", m);
 }
 
 /* A pack's sound not the one chosen (or any, with none chosen): its
@@ -490,8 +490,8 @@ static BOOL start(struct DvdPlay *dp, LONG k, LONG chapter)
 
 static void fail(char *err, LONG errlen, const char *why)
 {
-    amce_strlcpy(err, why, errlen);
-    amce_log("dvd", why);
+    amb_strlcpy(err, why, errlen);
+    amb_log("dvd", why);
 }
 
 /* The disc in d (its drive or image, opened): its longest title started */
@@ -510,7 +510,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
         return NULL;
     }
     dp->disc = disc;
-    if (!DvdNavBase && !(DvdNavBase = amce_open_own_lib(DVDNAVLIB_NAME, DVDNAVLIB_VERSION))) {
+    if (!DvdNavBase && !(DvdNavBase = amb_open_own_lib(DVDNAVLIB_NAME, DVDNAVLIB_VERSION))) {
         fail(err, errlen, _("DVDs need dvdnav.library (in Ambiance's Libs)"));
         dvdplay_close(dp);
         return NULL;
@@ -539,7 +539,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
                 lens[t - 1] = 0;
         dp->n = dvdplay_choose(lens, nt, dp->list, dp->lens);
     }
-    amce_strlcpy(dp->vol, name, sizeof(dp->vol));
+    amb_strlcpy(dp->vol, name, sizeof(dp->vol));
     if (!dp->n || !start(dp, 0, 0)) {
         fail(err, errlen, _("The DVD's film could not be played"));
         dvdplay_close(dp);
@@ -555,7 +555,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
             (long)in.titles, (long)dp->chapters,
             (unsigned long)(best_ms / 1000), (long)v->w, (long)v->h, in.wide ? "16:9" : "4:3",
             v->ac3 ? "AC-3" : v->mp2 ? "MPEG" : "none the card plays");
-    amce_log("dvd", m);
+    amb_log("dvd", m);
     return dp;
 }
 
@@ -566,12 +566,12 @@ struct DvdPlay *dvdplay_open(const char *vol, struct VProbe *v, char *err, LONG 
     char name[32], m[200];
     LONG n, i;
     err[0] = 0;
-    amce_strlcpy(name, vol, sizeof(name));
+    amb_strlcpy(name, vol, sizeof(name));
     if ((n = (LONG)strlen(name)) && name[n - 1] == ':')
         name[n - 1] = 0;
     n = optical_volumes(dv, VMAX, NULL);
     for (i = 0; i < n; i++)
-        if (!amce_stricmp(dv[i].vol, name))
+        if (!amb_stricmp(dv[i].vol, name))
             break;
     if (i == n) {
         fail(err, errlen, _("The DVD is no longer in its drive"));
@@ -592,12 +592,12 @@ struct DvdPlay *dvdplay_open_image(const char *path, struct VProbe *v, char *err
     LONG n;
     err[0] = 0;
     if (!(disc = dvdd_open_image(path, err, errlen))) {
-        amce_log("dvd", err);
+        amb_log("dvd", err);
         return NULL;
     }
     /* its name without .iso, as a disc's volume is named */
-    amce_strlcpy(name, (const char *)FilePart((STRPTR)path), sizeof(name));
-    if ((n = (LONG)strlen(name)) > 4 && !amce_stricmp(name + n - 4, ".iso"))
+    amb_strlcpy(name, (const char *)FilePart((STRPTR)path), sizeof(name));
+    if ((n = (LONG)strlen(name)) > 4 && !amb_stricmp(name + n - 4, ".iso"))
         name[n - 4] = 0;
     sprintf(from, "%.60s, %lu MB, %.40s", path, (unsigned long)(dvdd_sectors(disc) / 512),
             dvdd_how(disc));
@@ -680,7 +680,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
     reader(dp, &rd);
     rd.log = lib_log;
     if (!(dp->dvd = DvdOpen(&rd, 0))) {
-        amce_log("dvd", "opened again for its menus: could not be");
+        amb_log("dvd", "opened again for its menus: could not be");
         dp->ended = TRUE;
         return FALSE;
     }
@@ -701,7 +701,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
                 other_sound_out(dp, dp->blk);
             now_fetch(dp);
             sprintf(m, "from its start: its menus (%lx)", (unsigned long)dp->menus);
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             return TRUE;
         }
         if (e == DVDE_DOMAIN) {
@@ -723,7 +723,7 @@ BOOL dvdplay_nav(struct DvdPlay *dp)
         else if (e == DVDE_STOP || e == DVDE_ERROR)
             break;
     }
-    amce_log("dvd", "from its start: nothing to play: its film instead");
+    amb_log("dvd", "from its start: nothing to play: its film instead");
     dp->nav = FALSE;
     start(dp, 0, 0);
     return FALSE;
@@ -755,7 +755,7 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
         sprintf(m, "the disc stopped%s (in %s)", dp->title ? "" : " before any title of its own",
                 dp->domain == DVDD_TITLE ? "a title" : dp->domain == DVDD_FIRSTPLAY ? "its first play"
                                                                                       : "a menu");
-        amce_log("dvd", m);
+        amb_log("dvd", m);
         dp->ended = TRUE;
         dp->stop_ev = DVDP_END;
         break;
@@ -768,7 +768,7 @@ static void nav_event(struct DvdPlay *dp, LONG e, const struct DvdEvent *ev)
                 ev->domain == DVDD_TITLE ? "a title" : ev->domain == DVDD_FIRSTPLAY ? "its first play"
                                                                                       : "a menu",
                 (long)ev->vts);
-        amce_log("dvd", m);
+        amb_log("dvd", m);
         now_fetch(dp);
         choose_audio(dp);
         hl_fetch(dp);
@@ -817,7 +817,7 @@ static BOOL nav_restarts(struct DvdPlay *dp)
             char m[100];
             sprintf(m, "its times start again (%lu ms, from %lu): played out, then on",
                     (unsigned long)(s / 90), (unsigned long)(dp->vobu_end / 90));
-            amce_log("dvd", m);
+            amb_log("dvd", m);
         }
         return TRUE;
     }
@@ -860,7 +860,7 @@ static LONG nav_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
         } else if (e == DVDE_ERROR) {
             char m[200];
             sprintf(m, "read: %.150s", (const char *)DvdError(dp->dvd));
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             dp->ended = TRUE;
             dp->stop_ev = DVDP_END;
             return got ? got : -1;
@@ -936,7 +936,7 @@ void dvdplay_service(struct DvdPlay *dp)
             ok = DvdButton(dp->dvd, DVDB_ACTIVATE, 0);
             if (ok) {
                 sprintf(m, "its menu's button %ld pressed", (long)dp->hl_button);
-                amce_log("dvd", m);
+                amb_log("dvd", m);
             }
             break;
         case DVDQ_POINT:
@@ -949,7 +949,7 @@ void dvdplay_service(struct DvdPlay *dp)
             ok = DvdPoint(dp->dvd, a, b, TRUE);
             sprintf(m, "its menu clicked at %ld, %ld: %s (button %ld before)", (long)a, (long)b,
                     ok ? "a button pressed" : "no button there", (long)was);
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             if (!ok) {
                 dp->user_req = FALSE;
                 ok = TRUE;                  /* (logged) */
@@ -976,7 +976,7 @@ void dvdplay_service(struct DvdPlay *dp)
         if (!ok) {
             dp->user_req = FALSE;
             sprintf(m, "asked %ld: %.60s", (long)what, (const char *)DvdError(dp->dvd));
-            amce_log("dvd", m);
+            amb_log("dvd", m);
         } else if (ok == DVD_JUMPED && what != DVDQ_POINT) {
             /* the disc jumps (dvdnav 1.5 says so at once): what is read
              * ahead and held let go now, not when its DVDE_HOP is read in
@@ -1099,7 +1099,7 @@ LONG dvdplay_read(struct DvdPlay *dp, volatile UBYTE *dst, LONG max)
         case DVDE_ERROR: {
             char m[200];
             sprintf(m, "read: %.150s", (const char *)DvdError(dp->dvd));
-            amce_log("dvd", m);
+            amb_log("dvd", m);
             return got ? got : -1;
         }
         default:
@@ -1141,7 +1141,7 @@ BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at)
                     sprintf(m, "a seek to %lu ms: not there, %ld s %s", (unsigned long)ms,
                             (long)(near_s[i] < 0 ? -near_s[i] : near_s[i]),
                             near_s[i] < 0 ? "before" : "after");
-                    amce_log("dvd", m);
+                    amb_log("dvd", m);
                 }
                 if (!prime(dp))
                     return FALSE;
@@ -1150,7 +1150,7 @@ BOOL dvdplay_seek(struct DvdPlay *dp, ULONG ms, ULONG *at)
             }
         }
         sprintf(m, "a seek to %lu ms: not there or within a minute of it", (unsigned long)ms);
-        amce_log("dvd", m);
+        amb_log("dvd", m);
     }
     return FALSE;
 }
@@ -1245,12 +1245,12 @@ void dvdplay_close(struct DvdPlay *dp)
                 (unsigned long)(dp->r_ticks ? (unsigned long long)dp->r_sectors * 2 * dp->r_hz / dp->r_ticks : 0),
                 (unsigned long)((unsigned long long)dp->r_slowest * 1000 / dp->r_hz),
                 (unsigned long)dp->r_slow);
-        amce_log("dvd", m);
+        amb_log("dvd", m);
     }
     if (dp->dvd)
         DvdClose(dp->dvd);
     if (dp->disc)
         dvdd_close(dp->disc);
     FreeVec(dp);
-    amce_close_own_lib(&DvdNavBase);
+    amb_close_own_lib(&DvdNavBase);
 }

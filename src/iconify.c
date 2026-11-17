@@ -24,7 +24,7 @@ static struct Library *ic_wb, *ic_icon;
 #include <proto/icon.h>
 #include <stdio.h>
 #include <string.h>
-#include "amce.h"
+#include "amb.h"
 #include "iconify.h"
 
 static struct MsgPort *ic_port;
@@ -40,7 +40,7 @@ static BOOL ic_libs(void)
         ic_wb = OpenLibrary((CONST_STRPTR)"workbench.library", 37);
         ic_icon = OpenLibrary((CONST_STRPTR)"icon.library", 37);
         if (!ic_wb || !ic_icon)
-            amce_log("iconify", "no workbench.library or icon.library: not offered");
+            amb_log("iconify", "no workbench.library or icon.library: not offered");
     }
     return ic_wb && ic_icon;
 }
@@ -75,7 +75,7 @@ BOOL icon_add(const char *label, const char *quit_label)
     if (!ic_port && !(ic_port = CreateMsgPort()))
         return FALSE;
     if (!ic_dob && !(ic_dob = ic_picture(&from))) {
-        amce_log("iconify", "no icon to show");
+        amb_log("iconify", "no icon to show");
         return FALSE;
     }
     ic_dob->do_Type = 0;                    /* (an AppIcon's: none) */
@@ -89,13 +89,13 @@ BOOL icon_add(const char *label, const char *quit_label)
         ic_app = AddAppIconA(0, 0, (CONST_STRPTR)label, ic_port, 0, ic_dob, t);
     }
     if (!ic_app) {
-        amce_log("iconify", "AddAppIcon failed (Workbench not running?)");
+        amb_log("iconify", "AddAppIcon failed (Workbench not running?)");
         return FALSE;
     }
     ic_item = AddAppMenuItemA(1, 0, (CONST_STRPTR)quit_label, ic_port, NULL);
     sprintf(m, "the AppIcon on Workbench (its picture %.60s)%s", from,
             ic_item ? ", Tools > Quit there" : "");
-    amce_log("iconify", m);
+    amb_log("iconify", m);
     return TRUE;
 }
 

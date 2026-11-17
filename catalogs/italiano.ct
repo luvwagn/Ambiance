@@ -266,9 +266,9 @@ Memoria libera: %luKB chip, %luKB fast
 MSG_2E02D31A
 Carattere: %s
 ; Font: %s
-MSG_7F759611
-amce-pixel (incluso)
-; amce-pixel (bundled)
+MSG_3464FC2D
+amb-pixel (incluso)
+; amb-pixel (bundled)
 MSG_27934164
 topaz 8 (di riserva)
 ; topaz 8 (fallback)
@@ -330,8 +330,8 @@ MP3: %s
 MSG_197B8973
 driver MHI
 ; MHI driver
-MSG_6584723A
-; amcempega.library, Ambiance's own
+MSG_71B3588E
+; ambmpega.library, Ambiance's own
 MSG_4B721655
 mpega.library dell'SDK ZZ9000 (decodificato sulla scheda)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -422,9 +422,9 @@ Cartelle delle immagini
 MSG_7B7A30D9
 Cartelle dei video
 ; Video folders
-MSG_690FAC12
-Morbido: Fonts/amce-smooth non corrisponde a questo Ambiance
-; Smooth: Fonts/amce-smooth does not match this Ambiance
+MSG_011FA544
+Morbido: Fonts/amb-smooth non corrisponde a questo Ambiance
+; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
@@ -844,9 +844,9 @@ Plex in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, con licenza MIT
 ; (c) 2026 Brian King, under the MIT licence
-MSG_1BA733E8
-Caratteri: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors e Geologica (c) 2020 The Geologisk Project Authors, tutti con SIL Open Font License 1.1. I caratteri amce-pixel e amce-galmuri sono versioni modificate (Modified Versions) di Pixelify Sans e Galmuri.
-; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_57A8AEF0
+Caratteri: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors e Geologica (c) 2020 The Geologisk Project Authors, tutti con SIL Open Font License 1.1. I caratteri amb-pixel e amb-galmuri sono versioni modificate (Modified Versions) di Pixelify Sans e Galmuri.
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amb-pixel and amb-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
 MSG_2B3D5B66
 Codice: runtime C libnix (pubblico dominio). L'host EaglePlayer segue quello di HippoPlayer (licenza MIT, (c) 2017 Kari-Pekka Koljonen).
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
@@ -1537,8 +1537,8 @@ plex.tv: non connesso
 MSG_0B620CC7
 MP3: decodificato dal driver MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
-MSG_535831ED
-; MP3: decoded by amcempega.library, Ambiance's own
+MSG_7895CD7B
+; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: decodificato sulla ZZ9000 (la sua mpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1643,8 +1643,8 @@ Quell'interfaccia non è attiva
 MSG_646AFCF3
 MHI non è installato (i suoi driver in LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_1D253CB2
-; amcempega.library is not in Ambiance's Libs
+MSG_104981CE
+; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
@@ -1659,8 +1659,8 @@ Nessun server ha risposto: resta Automatico
 MSG_7800A723
 MP3 decodificato da MHI: radio, Plex (alla migliore qualità) e file
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
-MSG_55A6C479
-; MP3 decoded here by amcempega.library, Ambiance's own
+MSG_0AFE96F7
+; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3 decodificato qui da mpega.library
 ; MP3 decoded here by mpega.library

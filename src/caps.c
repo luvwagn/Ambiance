@@ -2,7 +2,7 @@
  * Ambiance - one-time hardware and software capability detection
  * Copyright (c) 2026 Brian King
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <exec/execbase.h>
 #include <graphics/gfxbase.h>
@@ -206,7 +206,7 @@ void caps_detect(struct Caps *c)
     c->mpega_zz = c->mp3_mpega && lib_id_has("mpega.library", "ZZ9000");
     /* Ambiance's own MP3 decoder (extras/mpga): mpega's functions under
      * another name, so it never stands in for LIBS:mpega.library */
-    c->mpega_own = path_present("PROGDIR:Libs/amcempega.library");
+    c->mpega_own = path_present("PROGDIR:Libs/ambmpega.library");
     c->mp3_mhi = path_present("LIBS:MHI");
     c->ahi = path_present("DEVS:ahi.device");      /* AHI: Settings > Sound, later */
     c->flacdec = lib_present("flacdec.library", 1);  /* FLAC tracks as stored (Plex) */

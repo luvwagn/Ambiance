@@ -27,7 +27,7 @@
  * Only the folder's own files are looked at, and only when the details
  * pane asks (the loader's process), as covers are: a share can be slow.
  */
-#include "amce.h"
+#include "amb.h"
 #include "plexxml.h"
 #include "radiocsv.h"
 
@@ -44,11 +44,11 @@
 static void join(char *out, LONG max, const char *dir, const char *name)
 {
     LONG n;
-    amce_strlcpy(out, dir, max);
+    amb_strlcpy(out, dir, max);
     n = strlen(out);
     if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
+        amb_strlcat(out, "/", max);
+    amb_strlcat(out, name, max);
 }
 
 /* dir's parent into out (FALSE: a volume's root, no parent) */
@@ -56,7 +56,7 @@ static BOOL parent_of(const char *dir, char *out, LONG max)
 {
     char *pp;
     LONG n;
-    amce_strlcpy(out, dir, max);
+    amb_strlcpy(out, dir, max);
     n = strlen(out);
     while (n && out[n - 1] == '/')
         out[--n] = 0;
@@ -72,9 +72,9 @@ static BOOL parent_of(const char *dir, char *out, LONG max)
 BOOL nfo_disc_folder(const char *name)
 {
     const char *s = name;
-    if (!amce_strnicmp(s, "cd", 2))
+    if (!amb_strnicmp(s, "cd", 2))
         s += 2;
-    else if (!amce_strnicmp(s, "disc", 4) || !amce_strnicmp(s, "disk", 4))
+    else if (!amb_strnicmp(s, "disc", 4) || !amb_strnicmp(s, "disk", 4))
         s += 4;
     else
         return FALSE;
@@ -91,7 +91,7 @@ BOOL nfo_disc_folder(const char *name)
 static void album_folder(const char *dir, char *out, LONG max)
 {
     char tmp[300];
-    amce_strlcpy(tmp, dir, sizeof(tmp));
+    amb_strlcpy(tmp, dir, sizeof(tmp));
     {
         LONG n = strlen(tmp);
         while (n && tmp[n - 1] == '/')
@@ -99,7 +99,7 @@ static void album_folder(const char *dir, char *out, LONG max)
     }
     if (nfo_disc_folder((const char *)FilePart((STRPTR)tmp)) && parent_of(tmp, out, max))
         return;
-    amce_strlcpy(out, dir, max);
+    amb_strlcpy(out, dir, max);
 }
 
 /* ---- reading one */
@@ -117,9 +117,9 @@ static void add_list(char *field, LONG max, const char *v)
                 return;
             f++;
         }
-        amce_strlcat(field, ", ", max);
+        amb_strlcat(field, ", ", max);
     }
-    amce_strlcat(field, v, max);
+    amb_strlcat(field, v, max);
 }
 
 /* each of list's ", "-separated items into field, those there already passed over */
@@ -199,7 +199,7 @@ static void rating_text(const char *v, char *out, LONG max)
     }
     if (!nonzero || !n)
         t[0] = 0;
-    amce_strlcpy(out, t, max);
+    amb_strlcpy(out, t, max);
 }
 
 struct pctx {
@@ -211,7 +211,7 @@ static void leaf(struct pctx *c, const char *name, const char *attrs, char *v)
 {
     struct Nfo *n = c->n;
     xml_unescape(v);
-    if (!amce_stricmp(name, "review") || !amce_stricmp(name, "biography")) {
+    if (!amb_stricmp(name, "review") || !amb_stricmp(name, "biography")) {
         tidy(v, TRUE);
         if (v[0] && !c->text)
             c->text = v;
@@ -221,29 +221,29 @@ static void leaf(struct pctx *c, const char *name, const char *attrs, char *v)
     utf8_to_latin1(v);
     if (!v[0])
         return;
-    if (!amce_stricmp(name, "title") || !amce_stricmp(name, "name")) {
+    if (!amb_stricmp(name, "title") || !amb_stricmp(name, "name")) {
         if (!n->title[0])
-            amce_strlcpy(n->title, v, sizeof(n->title));
-    } else if (!amce_stricmp(name, "artistdesc")) {
-        amce_strlcpy(n->artist, v, sizeof(n->artist));      /* the album's credit as shown */
-    } else if (!amce_stricmp(name, "artist")) {
+            amb_strlcpy(n->title, v, sizeof(n->title));
+    } else if (!amb_stricmp(name, "artistdesc")) {
+        amb_strlcpy(n->artist, v, sizeof(n->artist));      /* the album's credit as shown */
+    } else if (!amb_stricmp(name, "artist")) {
         if (!n->artist[0])
-            amce_strlcpy(n->artist, v, sizeof(n->artist));
-    } else if (!amce_stricmp(name, "year")) {
-        amce_strlcpy(n->year, v, sizeof(n->year));
-    } else if (!amce_stricmp(name, "releasedate") || !amce_stricmp(name, "originalreleasedate")) {
+            amb_strlcpy(n->artist, v, sizeof(n->artist));
+    } else if (!amb_stricmp(name, "year")) {
+        amb_strlcpy(n->year, v, sizeof(n->year));
+    } else if (!amb_stricmp(name, "releasedate") || !amb_stricmp(name, "originalreleasedate")) {
         if (!n->year[0] && v[0] >= '0' && v[0] <= '9') {
-            amce_strlcpy(n->year, v, 5);                     /* "1993-05-01": 1993 */
+            amb_strlcpy(n->year, v, 5);                     /* "1993-05-01": 1993 */
         }
-    } else if (!amce_stricmp(name, "label")) {
-        amce_strlcpy(n->label, v, sizeof(n->label));
-    } else if (!amce_stricmp(name, "genre")) {
+    } else if (!amb_stricmp(name, "label")) {
+        amb_strlcpy(n->label, v, sizeof(n->label));
+    } else if (!amb_stricmp(name, "genre")) {
         add_list(n->genres, sizeof(n->genres), v);
-    } else if (!amce_stricmp(name, "style")) {
+    } else if (!amb_stricmp(name, "style")) {
         add_list(n->styles, sizeof(n->styles), v);
-    } else if (!amce_stricmp(name, "mood")) {
+    } else if (!amb_stricmp(name, "mood")) {
         add_list(n->moods, sizeof(n->moods), v);
-    } else if (!amce_stricmp(name, "rating")) {
+    } else if (!amb_stricmp(name, "rating")) {
         /* <rating max="10">8.5</rating>; an old one without max is out of 5 */
         const char *m = attrs ? strstr(attrs, "max=") : NULL;
         int mx = 0;
@@ -258,15 +258,15 @@ static void leaf(struct pctx *c, const char *name, const char *attrs, char *v)
             mx = 5;
         }
         n->rating_max = mx > 0 && mx < 1000 ? (UWORD)mx : 10;
-    } else if (!amce_stricmp(name, "type")) {
-        amce_strlcpy(n->type, v, sizeof(n->type));
-    } else if (!amce_stricmp(name, "formed")) {
-        amce_strlcpy(n->formed, v, sizeof(n->formed));
-    } else if (!amce_stricmp(name, "born")) {
+    } else if (!amb_stricmp(name, "type")) {
+        amb_strlcpy(n->type, v, sizeof(n->type));
+    } else if (!amb_stricmp(name, "formed")) {
+        amb_strlcpy(n->formed, v, sizeof(n->formed));
+    } else if (!amb_stricmp(name, "born")) {
         if (!n->formed[0])
-            amce_strlcpy(n->formed, v, sizeof(n->formed)), n->born = TRUE;
-    } else if (!amce_stricmp(name, "disbanded") || !amce_stricmp(name, "died")) {
-        amce_strlcpy(n->ended, v, sizeof(n->ended));
+            amb_strlcpy(n->formed, v, sizeof(n->formed)), n->born = TRUE;
+    } else if (!amb_stricmp(name, "disbanded") || !amb_stricmp(name, "died")) {
+        amb_strlcpy(n->ended, v, sizeof(n->ended));
     }
 }
 
@@ -334,7 +334,7 @@ static void parse(char *buf, struct pctx *c)
                 end = ce + 3;
                 while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
                     end++;
-                if (end[0] == '<' && end[1] == '/' && !amce_strnicmp(end + 2, name, k)) {
+                if (end[0] == '<' && end[1] == '/' && !amb_strnicmp(end + 2, name, k)) {
                     char *gt = strchr(end, '>');
                     leaf(c, name, attrs, t + 9);
                     if (!gt)
@@ -344,7 +344,7 @@ static void parse(char *buf, struct pctx *c)
                 }
                 continue;
             }
-            if ((end = strchr(t, '<')) && end[1] == '/' && !amce_strnicmp(end + 2, name, k) &&
+            if ((end = strchr(t, '<')) && end[1] == '/' && !amb_strnicmp(end + 2, name, k) &&
                 (end[2 + k] == '>' || end[2 + k] == ' ')) {
                 char *gt = strchr(end, '>');
                 *end = 0;
@@ -355,8 +355,8 @@ static void parse(char *buf, struct pctx *c)
                 depth--;
             }
         } else if (depth == 1) {
-            c->n->kind = !amce_stricmp(name, "album") ? NFO_ALBUM
-                       : !amce_stricmp(name, "artist") ? NFO_ARTIST : NFO_OTHER;
+            c->n->kind = !amb_stricmp(name, "album") ? NFO_ALBUM
+                       : !amb_stricmp(name, "artist") ? NFO_ARTIST : NFO_OTHER;
         }
     }
 }
@@ -479,14 +479,14 @@ BOOL nfo_art(const char *dir, int what, BOOL artist, char *out, LONG max)
     }
     for (i = 0; names[i]; i++) {
         join(out, max, at, names[i]);
-        if (amce_exists(out))
+        if (amb_exists(out))
             return TRUE;
     }
     if (what == NFO_ART_DISC) {
         /* a disc's own folder may hold its own */
         for (i = 0; names[i] && strcmp(a, dir); i++) {
             join(out, max, dir, names[i]);
-            if (amce_exists(out))
+            if (amb_exists(out))
                 return TRUE;
         }
     }
@@ -503,12 +503,12 @@ int nfo_album_lines(const struct Nfo *n, char lines[][96], int max)
     int k = 0;
     char t[200];
     if (n->label[0] && k < max)
-        amce_strlcpy(lines[k++], n->label, 96);
+        amb_strlcpy(lines[k++], n->label, 96);
     t[0] = 0;
     add_each(t, sizeof(t), n->genres);
     add_each(t, sizeof(t), n->styles);
     if (t[0] && k < max)
-        amce_strlcpy(lines[k++], t, 96);
+        amb_strlcpy(lines[k++], t, 96);
     if (n->rating[0] && k < max)
         sprintf(lines[k++], _("Rating %s/%ld"), n->rating, (long)n->rating_max);
     return k;
@@ -522,13 +522,13 @@ int nfo_artist_lines(const struct Nfo *n, char lines[][96], int max)
     add_each(t, sizeof(t), n->genres);
     add_each(t, sizeof(t), n->styles);
     if (t[0] && k < max)
-        amce_strlcpy(lines[k++], t, 96);
+        amb_strlcpy(lines[k++], t, 96);
     if (n->formed[0] && k < max) {
         char y[40];
-        amce_strlcpy(y, n->formed, sizeof(y));
+        amb_strlcpy(y, n->formed, sizeof(y));
         if (n->ended[0]) {
-            amce_strlcat(y, " - ", sizeof(y));
-            amce_strlcat(y, n->ended, sizeof(y));
+            amb_strlcat(y, " - ", sizeof(y));
+            amb_strlcat(y, n->ended, sizeof(y));
         }
         sprintf(lines[k++], n->born ? _("Born %s") : _("Formed %s"), y);
     }

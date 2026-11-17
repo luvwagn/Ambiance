@@ -13,9 +13,9 @@
 #include <proto/exec.h>
 #include <proto/intuition.h>
 
-int amce_cpu_ok(void);
+int amb_cpu_ok(void);
 
-int amce_cpu_ok(void)
+int amb_cpu_ok(void)
 {
     struct IntuitionBase *IntuitionBase;
     if (SysBase->AttnFlags & AFF_68020)

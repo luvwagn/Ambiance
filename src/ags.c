@@ -3,7 +3,7 @@
  * menu tree and entry files, and writing the launch script.
  * Copyright (c) 2026 Brian King
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <dos/dosextens.h>
@@ -164,14 +164,14 @@ char *item_path(const struct Item *it, char *out, LONG max)
 {
     LONG n;
     if (!(it->flags & ITEM_SPLIT)) {
-        amce_strlcpy(out, it->path, max);
+        amb_strlcpy(out, it->path, max);
         return out;
     }
-    amce_strlcpy(out, it->path, max);
+    amb_strlcpy(out, it->path, max);
     n = strlen(out);
     if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, it->sortkey, max);
+        amb_strlcat(out, "/", max);
+    amb_strlcat(out, it->sortkey, max);
     n = strlen(out);
     if (it->kind == IT_RUN && n > 4)
         out[n - 4] = 0;                 /* the base: .run/.txt/.iff hang off it */
@@ -206,7 +206,7 @@ char *list_strdup(struct ItemList *l, const char *s)
 
 static int cmp_items(const void *a, const void *b)
 {
-    return amce_stricmp(((const struct Item *)a)->sortkey, ((const struct Item *)b)->sortkey);
+    return amb_stricmp(((const struct Item *)a)->sortkey, ((const struct Item *)b)->sortkey);
 }
 
 /* Small insertion-merge sort to avoid pulling in qsort's recursion depth on
@@ -253,8 +253,8 @@ void ags_clean_name(const char *raw, char *out, LONG max)
 {
     char buf[128];
     char *p, *e;
-    amce_strlcpy(buf, raw, sizeof(buf));
-    if (amce_ends_with(buf, ".ags") || amce_ends_with(buf, ".run") || amce_ends_with(buf, ".agz") || amce_ends_with(buf, ".rub"))
+    amb_strlcpy(buf, raw, sizeof(buf));
+    if (amb_ends_with(buf, ".ags") || amb_ends_with(buf, ".run") || amb_ends_with(buf, ".agz") || amb_ends_with(buf, ".rub"))
         buf[strlen(buf) - 4] = 0;
     p = buf;
     while (*p == ' ')
@@ -268,7 +268,7 @@ void ags_clean_name(const char *raw, char *out, LONG max)
     e = p + strlen(p);
     while (e > p && e[-1] == ' ')
         *--e = 0;
-    amce_strlcpy(out, p, max);
+    amb_strlcpy(out, p, max);
 }
 
 BOOL ags_is_separator(const char *clean)
@@ -289,18 +289,18 @@ static BOOL add_entry(char *dir, const char *name, BOOL isdir, struct ItemList *
     char clean[128];
     UBYTE kind;
     if (isdir) {
-        if (!amce_ends_with(name, ".ags"))
+        if (!amb_ends_with(name, ".ags"))
             return FALSE;               /* .agz = hidden by AGS; other drawers are data */
         kind = IT_DIR;
     } else {
-        if (!amce_ends_with(name, ".run"))
+        if (!amb_ends_with(name, ".run"))
             return FALSE;               /* .txt/.iff are read with their entry; .rub = disabled */
         kind = IT_RUN;
     }
     ags_clean_name(name, clean, sizeof(clean));
     if (ags_is_separator(clean) || clean[0] == '[')
         return FALSE;                   /* AGS's own option entries */
-    if (!adult && amce_contains_nocase(clean, "adult"))
+    if (!adult && amb_contains_nocase(clean, "adult"))
         return FALSE;
     return list_add_split(out, clean, dir, name, kind) != NULL;
 }
@@ -351,7 +351,7 @@ static BOOL letter_folder(const char *label)
     if (!label[1])
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
                c == '#';
-    return amce_stricmp(label, "0-9") == 0;
+    return amb_stricmp(label, "0-9") == 0;
 }
 
 /* A folder's sub-folders are all a letter index (A-Z...): Ambiance shows
@@ -437,9 +437,9 @@ static void assign_if_missing(struct Ags *a, const char *name, const char *targe
     BPTR l;
     if (!target || !target[0])
         return;
-    amce_strlcpy(dev, name, sizeof(dev));
-    amce_strlcat(dev, ":", sizeof(dev));
-    if (amce_exists(dev))
+    amb_strlcpy(dev, name, sizeof(dev));
+    amb_strlcat(dev, ":", sizeof(dev));
+    if (amb_exists(dev))
         return;
     l = Lock((CONST_STRPTR)target, SHARED_LOCK);
     if (!l)
@@ -449,8 +449,8 @@ static void assign_if_missing(struct Ags *a, const char *name, const char *targe
         return;
     }
     if (a->added[0])
-        amce_strlcat(a->added, " ", sizeof(a->added));
-    amce_strlcat(a->added, dev, sizeof(a->added));
+        amb_strlcat(a->added, " ", sizeof(a->added));
+    amb_strlcat(a->added, dev, sizeof(a->added));
 }
 
 static void get_env(const char *name, char *buf, LONG max)
@@ -473,7 +473,7 @@ void ags_unquote_path(const char *in, char *out, LONG max)
         in++;
     if (*in == '"')
         in++;
-    amce_strlcpy(out, in, max);
+    amb_strlcpy(out, in, max);
     n = strlen(out);
     while (n > 0 && (out[n - 1] == '"' || out[n - 1] == ' '))
         out[--n] = 0;
@@ -493,7 +493,7 @@ BOOL ags_init(struct Ags *a)
     memset(a, 0, sizeof(*a));
     list_init(&a->top);
     me->pr_WindowPtr = (APTR)-1;
-    if (amce_exists("AGS:")) {
+    if (amb_exists("AGS:")) {
         a->found = TRUE;
     } else {
         for (i = 0; cands[i]; i++) {
@@ -502,7 +502,7 @@ BOOL ags_init(struct Ags *a)
                 continue;
             if (AssignLock((CONST_STRPTR)"AGS", l)) {
                 a->found = a->set_assigns = TRUE;
-                amce_strlcpy(a->added, "AGS:", sizeof(a->added));
+                amb_strlcpy(a->added, "AGS:", sizeof(a->added));
                 break;
             }
             UnLock(l);
@@ -512,11 +512,11 @@ BOOL ags_init(struct Ags *a)
         /* What S:AGS-Stuff assigns at boot (AGS 3), for systems where it
          * did not run. Each only if missing and its target exists. */
         char saves[128];
-        amce_strlcpy(a->root, "AGS:", sizeof(a->root));
+        amb_strlcpy(a->root, "AGS:", sizeof(a->root));
         assign_if_missing(a, "Scripts", "AGS:Scripts");
         assign_if_missing(a, "AGSOS", "AGS:OS");
         assign_if_missing(a, "Admin", "Scripts:Admin");
-        if (amce_exists("WHDLoad:")) {
+        if (amb_exists("WHDLoad:")) {
             assign_if_missing(a, "WHD_Games", "WHDLoad:");
             assign_if_missing(a, "WHD_Demos", "WHDLoad:");
         }
@@ -554,8 +554,8 @@ LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines)
     LONG len, n = 0, i = 0;
     BOOL last_blank = TRUE;
 
-    amce_strlcpy(path, base, sizeof(path));
-    amce_strlcat(path, ".txt", sizeof(path));
+    amb_strlcpy(path, base, sizeof(path));
+    amb_strlcat(path, ".txt", sizeof(path));
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     if (!fh)
         return 0;
@@ -589,7 +589,7 @@ LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines)
         } else {
             last_blank = FALSE;
         }
-        amce_strlcpy(lines[n++], line + s, 96);
+        amb_strlcpy(lines[n++], line + s, 96);
     }
     while (n > 0 && !lines[n - 1][0])
         n--;
@@ -598,13 +598,13 @@ LONG ags_read_txt(const char *base, char lines[][96], LONG maxlines)
 
 BOOL ags_screenshot_path(const char *base, char *out, LONG max)
 {
-    amce_strlcpy(out, base, max);
-    amce_strlcat(out, "-1.iff", max);
-    if (amce_exists(out))
+    amb_strlcpy(out, base, max);
+    amb_strlcat(out, "-1.iff", max);
+    if (amb_exists(out))
         return TRUE;
-    amce_strlcpy(out, base, max);
-    amce_strlcat(out, ".iff", max);
-    return amce_exists(out);
+    amb_strlcpy(out, base, max);
+    amb_strlcat(out, ".iff", max);
+    return amb_exists(out);
 }
 
 /* The launch script runs the entry's own .run, as AGS does:

@@ -102,7 +102,7 @@ of the Amiga to how fast it really is.
   (beets)*: Artists, Albums and Recently added, then an artist's albums and
   an album's tracks, straight from the database instead of the folders
   (`src/beets.c`). The database is only read, never written, through
-  Ambiance's own `Libs/amcesql.library` (SQLite 3.34, `src/sqlib`). Its
+  Ambiance's own `Libs/ambsql.library` (SQLite 3.34, `src/sqlib`). Its
   albums are read once and kept in `Cache/beets.idx` until the database
   changes; an album's tracks come from it each time. beets' Windows paths
   are mapped to `MUSIC:` by finding which part of the first track's path
@@ -310,11 +310,11 @@ and one `.ct` per language in FlexCat's format, kept in UTF-8. Catalogs
 are read by Ambiance itself and known by the language written in them, so
 their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
 Chinese and Korean text can go in a catalog too, drawn from the glyph packs
-in `Fonts/amce-cjk`; in Japanese and Korean the clock and file dates are written year,
+in `Fonts/amb-cjk`; in Japanese and Korean the clock and file dates are written year,
 month, day, and wrapped text keeps 、。」 and small kana off the start of a
 line. Greek is kept as two bytes a letter (`src/cjk.c`), drawn from the
 smooth style's own Greek letters (Geologica, sized to Rubik) or from
-`Fonts/amce-cjk/greek` (Galmuri11's, at 12 pixels), which is always installed.
+`Fonts/amb-cjk/greek` (Galmuri11's, at 12 pixels), which is always installed.
 Greek takes more bytes than English, and a translation may be at most
 twice its English's bytes and 16 more, so the Greek is written to fit.
 
@@ -409,9 +409,9 @@ inline OS call when a multiply helper call ends up between them (see
 | `make mpegvlib` | `extras/mpegv/build/mpegv.library` (also part of `make`, into the archive's `Libs`; needs the submodule: `git submodule update --init`) |
 | `make mpeg-prof MPG=file.mpg [N=60]` | A 68020's cycles for MPEG-1 pictures under vamos: through `mpegv.library`, and by function (its profiler) |
 | `make art` | Regenerates `src/art.c` (logo, menu icons, palette) |
-| `make fonts` | Regenerates the bitmap fonts: `amce-pixel` from Pixelify Sans, `amce-galmuri*` from Galmuri |
-| `python3 tools/mkcjk.py <galmuri-dist> <ark-pixel-font> assets/Fonts/amce-cjk` | Regenerates the Japanese, Chinese and Korean glyph packs from Galmuri's BDFs and Ark Pixel Font's 12px glyphs |
-| `python3 tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amce-cjk/greek` | Regenerates the Greek glyph pack (also part of `make fonts`) |
+| `make fonts` | Regenerates the bitmap fonts: `amb-pixel` from Pixelify Sans, `amb-galmuri*` from Galmuri |
+| `python3 tools/mkcjk.py <galmuri-dist> <ark-pixel-font> assets/Fonts/amb-cjk` | Regenerates the Japanese, Chinese and Korean glyph packs from Galmuri's BDFs and Ark Pixel Font's 12px glyphs |
+| `python3 tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amb-cjk/greek` | Regenerates the Greek glyph pack (also part of `make fonts`) |
 | `make icons` | Regenerates the Workbench icons in `docs/` |
 
 Every push to `main` is built and tested by GitHub Actions.
@@ -477,7 +477,7 @@ time through an interface of their own (`extras/ac3/include`, MIT).
 
 MP3 (and MP2) is decoded by `mpega.library` from `LIBS:` (Stéphane
 Tavenard's, a clone, or the ZZ9000's, which decodes on the card) or, as
-Settings > Sound chooses, by **`amcempega.library`**: libmad behind
+Settings > Sound chooses, by **`ambmpega.library`**: libmad behind
 mpega's functions under a name of its own, so it never clashes with the
 one in `LIBS:`, with one more of its own that writes each frame straight
 into Ambiance's FIFO. It is its own project (`extras/mpga`, a git

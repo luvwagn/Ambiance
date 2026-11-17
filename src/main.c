@@ -2,7 +2,7 @@
  * Ambiance - main program: Home Screen, navigation, input and launching
  * Copyright (c) 2026 Brian King
  */
-#include "amce.h"
+#include "amb.h"
 #include "radiocsv.h"
 #include "plexxml.h"
 #include "iconify.h"
@@ -40,7 +40,7 @@
 #include <libraries/gadtools.h>
 
 static const char version_tag[] __attribute__((used)) =
-    "$VER: Ambiance " AMCE_VERSION " (" AMCE_DATE ")";
+    "$VER: Ambiance " AMB_VERSION " (" AMB_DATE ")";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *AslBase;            /* opened for Settings > Music folders' requester */
@@ -209,7 +209,7 @@ static struct Page *page_push(UBYTE type, const char *title)
     if (!list_init(&p->list))
         return NULL;
     p->type = type;
-    amce_strlcpy(p->title, title, sizeof(p->title));
+    amb_strlcpy(p->title, title, sizeof(p->title));
     depth++;
     return p;
 }
@@ -226,7 +226,7 @@ static void page_picture(struct Page *p, WORD w, WORD h)
     struct Thumb *t;
     BOOL tall = gfx_mode_tall(g.mode);
     if (!gfx_thumbs(&g)) {
-        amce_log("page picture", "this screen shows no pictures");
+        amb_log("page picture", "this screen shows no pictures");
         return;
     }
     if (!(t = ilbm_thumb(p->pic, w, h, tall, FALSE, gfx_thumb_colours(&g), &pi)) &&
@@ -241,7 +241,7 @@ static void page_picture(struct Page *p, WORD w, WORD h)
         }
     }
     if (!t) {
-        amce_log("page picture: could not be read", p->pic);
+        amb_log("page picture: could not be read", p->pic);
         return;
     }
     if ((p->pic_bm = gfx_thumb_bitmap(&g, t))) {
@@ -249,9 +249,9 @@ static void page_picture(struct Page *p, WORD w, WORD h)
         p->pic_w = t->w;
         p->pic_h = t->h;
         sprintf(m, "%s, %ld x %ld", p->pic, (long)t->w, (long)t->h);
-        amce_log("page picture", m);
+        amb_log("page picture", m);
     } else {
-        amce_log("page picture: no memory for its bitmap", p->pic);
+        amb_log("page picture: no memory for its bitmap", p->pic);
     }
     thumb_free(t);
 }
@@ -683,7 +683,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
     int k, slot = 0;
     char m[80];
     for (k = 0; k < PICS_KEEP; k++)
-        if (pkeep[k].list.pool && dated && !amce_stricmp(pkeep[k].path, dir) &&
+        if (pkeep[k].list.pool && dated && !amb_stricmp(pkeep[k].path, dir) &&
             !CompareDates(&ds, &pkeep[k].date) && pkeep[k].vids == vids) {
             list_free(out);
             list_init(out);
@@ -700,7 +700,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
             return pics_read_dir(dir, out, vids);
         j->type = LJ_PICDIR;
         j->mode = vids ? 1 : 0;
-        amce_strlcpy(j->path, dir, sizeof(j->path));
+        amb_strlcpy(j->path, dir, sizeof(j->path));
         ldr_submit_first(j);
         pics_job = j;
         pics_t0 = time_ms();
@@ -711,7 +711,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
     pics_job = NULL;
     n = j->ran ? j->np : -1;
     sprintf(m, "%ld entries in %ld ms", (long)n, (long)(time_ms() - pics_t0));
-    amce_log("pictures read", m);
+    amb_log("pictures read", m);
     if (n >= 0 && j->list.pool) {
         list_free(out);
         list_init(out);
@@ -723,7 +723,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
                     slot = k;
             if (pkeep[slot].list.pool)
                 list_free(&pkeep[slot].list);
-            amce_strlcpy(pkeep[slot].path, dir, sizeof(pkeep[slot].path));
+            amb_strlcpy(pkeep[slot].path, dir, sizeof(pkeep[slot].path));
             pkeep[slot].date = ds;
             pkeep[slot].vids = vids;
             pkeep[slot].list = j->list;
@@ -837,7 +837,7 @@ static void ch_take(struct Page *p, LONG k, struct ItemList *got)
                 c->count++;
         if (c->first > 0 && c->count) {
             const struct Item *a = &p->list.items[c->first - 1], *b = &p->list.items[c->first];
-            if (!(a->flags & ITEM_GONE) && amce_stricmp(a->sortkey, b->sortkey) > 0)
+            if (!(a->flags & ITEM_GONE) && amb_stricmp(a->sortkey, b->sortkey) > 0)
                 ch->disorder = TRUE;        /* filed under another letter */
         }
         ch->next = k + 1;
@@ -877,9 +877,9 @@ static void ch_send(struct Page *p, LONG k)
         return;
     j->type = LJ_FOLDER;
     j->adult = ch->adult;
-    amce_strlcpy(j->path, ch->c[k].path, sizeof(j->path));
+    amb_strlcpy(j->path, ch->c[k].path, sizeof(j->path));
     if (ch->c[k].cached) {                  /* from the index file: one read */
-        amce_strlcpy(j->cache, ch->idx, sizeof(j->cache));
+        amb_strlcpy(j->cache, ch->idx, sizeof(j->cache));
         j->off = ch->c[k].coff;
         j->len = ch->c[k].clen;
     }
@@ -993,7 +993,7 @@ static void ch_save(struct Page *p)
         return;
     }
     j->type = LJ_WRITE;
-    amce_strlcpy(j->path, ch->idx, sizeof(j->path));
+    amb_strlcpy(j->path, ch->idx, sizeof(j->path));
     j->buf = o.buf;
     j->len = o.len;
     for (k = 0; k < ch->n; k++)
@@ -1016,7 +1016,7 @@ static void ch_saved(struct Page *p)
             ch->c[k].clen = ch->c[k].nlen;
             ch->c[k].cached = ch->c[k].nlen > 0;
         }
-    amce_log("index cache", j->ran && j->np > 0 ? "saved" : "could not be saved");
+    amb_log("index cache", j->ran && j->np > 0 ? "saved" : "could not be saved");
     FreeVec(j->buf);
     FreeVec(j);
 }
@@ -1045,7 +1045,7 @@ static void ch_arrived(struct Page *p, BOOL shown)
     if (was_reading && !ch_reading(p) && !ch->laying) {
         char m[64];
         sprintf(m, "%ld entries in %ld ms", (long)p->list.count, (long)(time_ms() - ch->t0));
-        amce_log("list read", m);
+        amb_log("list read", m);
     }
     ch_save(p);                             /* complete: keep its index (before letting go) */
     ch_trim(p);
@@ -1131,7 +1131,7 @@ static BOOL ch_from_index(struct Page *p)
         return FALSE;
     }
     for (k = 0; k < ch->n; k++)
-        if (amce_stricmp(ix.l[k].name, (const char *)FilePart((STRPTR)ch->c[k].path)) != 0) {
+        if (amb_stricmp(ix.l[k].name, (const char *)FilePart((STRPTR)ch->c[k].path)) != 0) {
             idx_free(&ix);
             return FALSE;
         }
@@ -1180,7 +1180,7 @@ static BOOL ch_from_index(struct Page *p)
     idx_free(&ix);
     sprintf(m, "%ld entries, %ld letters changed, %ld ms", (long)p->list.count, (long)fresh,
             (long)(time_ms() - ch->t0));
-    amce_log("list from index", m);
+    amb_log("list from index", m);
     return TRUE;
 }
 
@@ -1323,10 +1323,10 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
         word[n] = 0;
         if (!n)
             break;
-        amce_strlcpy(tryline, line, sizeof(tryline));
+        amb_strlcpy(tryline, line, sizeof(tryline));
         if (tryline[0] && spaced)
-            amce_strlcat(tryline, " ", sizeof(tryline));
-        amce_strlcat(tryline, word, sizeof(tryline));
+            amb_strlcat(tryline, " ", sizeof(tryline));
+        amb_strlcat(tryline, word, sizeof(tryline));
         if (line[0] && gfx_textlen(&g, tryline, TS_BODY) > maxw) {
             /* a mark that may not begin a line takes the character
              * before it along (kinsoku): a closing bracket or stop right
@@ -1335,22 +1335,22 @@ static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
                 (strchr(")]},.:;!?", word[0]) ||
                  (n == 3 && cjk_far_east((const UBYTE *)word, 3, &cp) && no_line_start(cp)))) {
                 char carry[96];
-                amce_strlcpy(carry, line + last, sizeof(carry));
+                amb_strlcpy(carry, line + last, sizeof(carry));
                 line[last] = 0;
                 while (last > 0 && line[last - 1] == ' ')
                     line[--last] = 0;
                 wrap_line(l, line, &more);
-                amce_strlcpy(line, carry, sizeof(line));
-                amce_strlcat(line, word, sizeof(line));
+                amb_strlcpy(line, carry, sizeof(line));
+                amb_strlcat(line, word, sizeof(line));
                 last = 0;
                 continue;
             }
             wrap_line(l, line, &more);
-            amce_strlcpy(line, word, sizeof(line));
+            amb_strlcpy(line, word, sizeof(line));
             last = 0;
         } else {
             last = strlen(tryline) - n;
-            amce_strlcpy(line, tryline, sizeof(line));
+            amb_strlcpy(line, tryline, sizeof(line));
         }
     }
     if (line[0])
@@ -1424,8 +1424,8 @@ static BOOL starts_nocase(const char *s, const char *pre, const char **rest)
 {
     char tmp[64];
     LONG n = strlen(pre);
-    amce_strlcpy(tmp, s, n + 1);
-    if (amce_stricmp(tmp, pre) != 0)
+    amb_strlcpy(tmp, s, n + 1);
+    if (amb_stricmp(tmp, pre) != 0)
         return FALSE;
     if (rest)
         *rest = s + n;
@@ -1441,26 +1441,26 @@ static int classify(const char *label, char *out, LONG max, int *prio)
     const char *rest;
     int i;
     for (i = 0; skip[i]; i++)
-        if (amce_stricmp(label, skip[i]) == 0)
+        if (amb_stricmp(label, skip[i]) == 0)
             return -1;
-    amce_strlcpy(out, label, max);
+    amb_strlcpy(out, label, max);
     if (starts_nocase(label, "Games - ", &rest) || starts_nocase(label, "Demos - ", &rest)) {
         int mod = (label[0] == 'G' || label[0] == 'g') ? MOD_GAMES : MOD_DEMOS;
-        if (amce_stricmp(rest, "0-Z") == 0) {
+        if (amb_stricmp(rest, "0-Z") == 0) {
             /* one list of every title (ITEM_FLAT), not a folder per letter */
-            amce_strlcpy(out, mod == MOD_GAMES ? _("All Games") : _("All Demos"), max);
+            amb_strlcpy(out, mod == MOD_GAMES ? _("All Games") : _("All Demos"), max);
             *prio = 1;
         } else {
-            amce_strlcpy(out, rest, max);
+            amb_strlcpy(out, rest, max);
             *prio = 2;
         }
         return mod;
     }
-    if (amce_stricmp(label, "Disk Magazines") == 0) {
+    if (amb_stricmp(label, "Disk Magazines") == 0) {
         *prio = 2;
         return MOD_DEMOS;
     }
-    if (amce_stricmp(label, "Favourites") == 0) {
+    if (amb_stricmp(label, "Favourites") == 0) {
         *prio = 0;
         return MOD_GAMES;
     }
@@ -1522,7 +1522,7 @@ static void dt_line(void *ctx, const char *s)
     text_line((struct Page *)ctx, s);
 }
 
-/* MP3 by Ambiance's own amcempega.library (Settings > Sound, load_sound_out) */
+/* MP3 by Ambiance's own ambmpega.library (Settings > Sound, load_sound_out) */
 static BOOL own_mpega;
 
 static void build_sysinfo(struct Page *p)
@@ -1551,10 +1551,10 @@ static void build_sysinfo(struct Page *p)
         struct NameInfo ni;
         char mode[DISPLAYNAMELEN + 1];
         ULONG id = GetVPModeID(&g.scr->ViewPort);
-        amce_strlcpy(mode, _("unnamed mode"), sizeof(mode));
+        amb_strlcpy(mode, _("unnamed mode"), sizeof(mode));
         if (id != (ULONG)INVALID_ID &&
             GetDisplayInfoData(NULL, (UBYTE *)&ni, sizeof(ni), DTAG_NAME, id) > 0)
-            amce_strlcpy(mode, (char *)ni.Name, sizeof(mode));
+            amb_strlcpy(mode, (char *)ni.Name, sizeof(mode));
         sprintf(line, _("Screen: %s"), mode);
         text_line(p, line);
         {
@@ -1595,7 +1595,7 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, _("Free memory: %luKB chip, %luKB fast"),
             (unsigned long)(caps.chipfree >> 10), (unsigned long)(caps.fastfree >> 10));
     text_line(p, line);
-    sprintf(line, _("Font: %s"), g.font_is_ours ? _("amce-pixel (bundled)") : _("topaz 8 (fallback)"));
+    sprintf(line, _("Font: %s"), g.font_is_ours ? _("amb-pixel (bundled)") : _("topaz 8 (fallback)"));
     text_line(p, line);
     text_line(p, "");
     text_line(p, _("Datatypes (which one reads each picture format):"));
@@ -1629,7 +1629,7 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, _("Network stack: %s"), caps.net ? _("running") : _("none"));
     text_line(p, line);
     sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver")
-                                : own_mpega ? _("amcempega.library, Ambiance's own")
+                                : own_mpega ? _("ambmpega.library, Ambiance's own")
                                 : caps.mpega_zz ? _("mpega.library, the ZZ9000 SDK's (decoded on the card)")
                                 : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
@@ -1647,7 +1647,7 @@ static void build_sysinfo(struct Page *p)
         strcpy(line, _("Module players: none (Aminet: mus/play/Eagleplayer)"));
     text_line(p, line);
     text_line(p, "");
-    sprintf(line, "Debug log: %s", amce_log_path() ? amce_log_path() : "off");
+    sprintf(line, "Debug log: %s", amb_log_path() ? amb_log_path() : "off");
     text_line(p, line);
 }
 
@@ -1771,15 +1771,15 @@ static void load_screen_mode(void)
             gfx_window_box_set((WORD)v[0], (WORD)v[1], (WORD)v[2], (WORD)v[3], (UWORD)v[4]);
     }
     if (GetVar((CONST_STRPTR)TSIZE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        gfx_text_size = !amce_stricmp(buf, "small") ? TSIZE_SMALL
-                        : !amce_stricmp(buf, "large") ? TSIZE_LARGE
-                        : !amce_stricmp(buf, "xlarge") ? TSIZE_XLARGE : TSIZE_MEDIUM;
+        gfx_text_size = !amb_stricmp(buf, "small") ? TSIZE_SMALL
+                        : !amb_stricmp(buf, "large") ? TSIZE_LARGE
+                        : !amb_stricmp(buf, "xlarge") ? TSIZE_XLARGE : TSIZE_MEDIUM;
     /* the colour scheme, before the screen or window opens in it */
     {
         int k = UI_MIDNIGHT, i;
         if (GetVar((CONST_STRPTR)COLOURS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             for (i = 0; i < UI_SCHEMES; i++)
-                if (!amce_stricmp(buf, ui_scheme_keys[i]))
+                if (!amb_stricmp(buf, ui_scheme_keys[i]))
                     k = i;
         ui_scheme_apply(k);
     }
@@ -1846,7 +1846,7 @@ static void net_if_apply(void)
     net_bind_to(ip);
     if (net_if[0]) {
         sprintf(m, "%s: %s", net_if, ip ? "connections go out from it" : "not up: the stack's choice");
-        amce_log("network interface", m);
+        amb_log("network interface", m);
     }
 }
 
@@ -1895,7 +1895,7 @@ static void rkbps_text(UWORD k, char *out)
 static void mirror_short(const char *name, char *out, LONG max)
 {
     char *d;
-    amce_strlcpy(out, name, max);
+    amb_strlcpy(out, name, max);
     if ((d = strchr(out, '.')))
         *d = 0;
 }
@@ -1941,7 +1941,7 @@ static const char *home_country(void)
     }
     for (i = 0; i < sizeof(t) / sizeof(t[0]); i++)
         if (t[i].tel == tel)
-            amce_strlcpy(iso, t[i].iso, sizeof(iso));
+            amb_strlcpy(iso, t[i].iso, sizeof(iso));
     return iso;
 }
 
@@ -1951,7 +1951,7 @@ static void load_radio_settings(void)
     int i;
     rkbps_sel = 0;
     if (GetVar((CONST_STRPTR)RKBPS_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0) {
-        if (!amce_stricmp(buf, "any"))
+        if (!amb_stricmp(buf, "any"))
             rkbps_sel = 5;
         for (i = 1; i < 5; i++)
             if ((UWORD)strtoul_(buf) == rkbps_choice[i])
@@ -1960,7 +1960,7 @@ static void load_radio_settings(void)
     buf_sel = 1;
     if (GetVar((CONST_STRPTR)BUF_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         for (i = 0; i < 3; i++)
-            if (!amce_stricmp(buf, buf_names[i]))
+            if (!amb_stricmp(buf, buf_names[i]))
                 buf_sel = i;
     st_set_buffer(buf_sel);
     rsrv[0] = 0;
@@ -1968,7 +1968,7 @@ static void load_radio_settings(void)
      * Automatic times this Amiga (plex_tier), which needs the timer, not
      * open yet here */
     if (GetVar((CONST_STRPTR)RSRV_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        amce_strlcpy(rsrv, buf, sizeof(rsrv));
+        amb_strlcpy(rsrv, buf, sizeof(rsrv));
     rsrv_apply();
     radio_set_home(home_country());
     if (rkbps_sel)
@@ -1978,7 +1978,7 @@ static void load_radio_settings(void)
     sprintf(m, "stations up to %.9s, buffer %s, list server %.60s, country %s", buf,
             buf_names[buf_sel], rsrv[0] ? rsrv : "automatic",
             home_country()[0] ? home_country() : "not known");
-    amce_log("radio", m);
+    amb_log("radio", m);
 }
 
 /* ---- Folders of music files, modules, pictures and animations (Settings >
@@ -2020,7 +2020,7 @@ static void load_folders(void)
         struct Folders *f = &fs[k];
         f->n = 0;
         f->use_assign = !(GetVar((CONST_STRPTR)f->avar, (STRPTR)buf, 8, GVF_GLOBAL_ONLY) > 0 &&
-                          !amce_stricmp(buf, "off"));
+                          !amb_stricmp(buf, "off"));
         if (GetVar((CONST_STRPTR)f->var, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) <= 0)
             continue;
         for (p = buf; *p && f->n < FS_DIRS; p = e) {
@@ -2043,8 +2043,8 @@ static void save_folders(int k)
     buf[0] = 0;
     for (i = 0; i < fs[k].n; i++) {
         if (i)
-            amce_strlcat(buf, "\n", sizeof(buf));
-        amce_strlcat(buf, fs[k].dir[i], sizeof(buf));
+            amb_strlcat(buf, "\n", sizeof(buf));
+        amb_strlcat(buf, fs[k].dir[i], sizeof(buf));
     }
     save_setting(fs[k].var, buf);
 }
@@ -2087,8 +2087,8 @@ static BOOL sound_ahi;
 static BOOL sound_p14;
 
 /* MHI: its drivers (the libraries in LIBS:MHI), and the one MP3 goes to ("":
- * a decoder with mpega's functions: Ambiance's own amcempega.library,
- * own_mpega, or LIBS:mpega.library), Ambiance/MP3Decoder ("amcempega",
+ * a decoder with mpega's functions: Ambiance's own ambmpega.library,
+ * own_mpega, or LIBS:mpega.library), Ambiance/MP3Decoder ("ambmpega",
  * "mpega" or the driver's name; not set: ours, unless LIBS:mpega.library is
  * the ZZ9000's, which decodes on the card). */
 #define MP3_VAR "Ambiance/MP3Decoder"
@@ -2106,7 +2106,7 @@ static void mhi_cb(void *ctx, const char *name, BOOL isdir)
 {
     LONG n = strlen(name);
     (void)ctx;
-    if (!isdir && nmhi < 6 && n > 8 && n < 48 && !amce_stricmp(name + n - 8, ".library"))
+    if (!isdir && nmhi < 6 && n > 8 && n < 48 && !amb_stricmp(name + n - 8, ".library"))
         strcpy(mhi_names[nmhi++], name);
 }
 
@@ -2133,8 +2133,8 @@ static void load_sound_out(void)
     int i;
     v[0] = 0;
     GetVar((CONST_STRPTR)SOUND_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY);
-    sound_ahi = caps.ahi && !amce_stricmp(v, "ahi");
-    sound_p14 = !amce_stricmp(v, "paula14");
+    sound_ahi = caps.ahi && !amb_stricmp(v, "ahi");
+    sound_p14 = !amb_stricmp(v, "paula14");
     st_use_ahi(sound_ahi);
     st_use_paula14(sound_p14);
     nmhi = 0;
@@ -2149,29 +2149,29 @@ static void load_sound_out(void)
     own_mpega = caps.mpega_own && !caps.mpega_zz;     /* (not chosen yet) */
     mp3_q = 0;
     if (GetVar((CONST_STRPTR)MP3Q_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
-        mp3_q = !amce_stricmp(v, "high") ? 1 : !amce_stricmp(v, "medium") ? 2 : 0;
+        mp3_q = !amb_stricmp(v, "high") ? 1 : !amb_stricmp(v, "medium") ? 2 : 0;
     st_mp3_quality(mp3_q);
     if (GetVar((CONST_STRPTR)MP3_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0) {
-        if (!amce_stricmp(v, "amcempega"))
+        if (!amb_stricmp(v, "ambmpega"))
             own_mpega = caps.mpega_own;
-        else if (!amce_stricmp(v, "mpega"))
+        else if (!amb_stricmp(v, "mpega"))
             own_mpega = !caps.mp3_mpega && caps.mpega_own;     /* (else nothing to play it) */
         for (i = 0; i < nmhi; i++)
-            if (!amce_stricmp(v, mhi_names[i]))
-                amce_strlcpy(mhi_sel, mhi_names[i], sizeof(mhi_sel));
+            if (!amb_stricmp(v, mhi_names[i]))
+                amb_strlcpy(mhi_sel, mhi_names[i], sizeof(mhi_sel));
     }
     if (!caps.mp3_mpega && !caps.mpega_own && !mhi_sel[0] && nmhi)
-        amce_strlcpy(mhi_sel, mhi_names[0], sizeof(mhi_sel));  /* no mpega: MHI it is */
+        amb_strlcpy(mhi_sel, mhi_names[0], sizeof(mhi_sel));  /* no mpega: MHI it is */
     mhi_apply();
     {
         char m[160];
         sprintf(m, "%s; MP3 by %s, %s quality; %ld MHI driver%s in LIBS:MHI",
                 sound_ahi ? "AHI" : sound_p14 ? "Paula, 14 bits" : "Paula",
-                mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (Ambiance's own)"
+                mhi_sel[0] ? mhi_sel : own_mpega ? "ambmpega.library (Ambiance's own)"
                 : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)" : "mpega.library",
                 mp3_q == 1 ? "high" : mp3_q == 2 ? "medium" : "automatic (measured)",
                 (long)nmhi, nmhi == 1 ? "" : "s");
-        amce_log("sound", m);
+        amb_log("sound", m);
     }
 }
 
@@ -2180,7 +2180,7 @@ static void load_net_if(void)
     char buf[20];
     net_if[0] = 0;
     if (GetVar((CONST_STRPTR)NETIF_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        amce_strlcpy(net_if, buf, sizeof(net_if));
+        amb_strlcpy(net_if, buf, sizeof(net_if));
     if (net_if[0] && caps.net)
         net_if_apply();
 }
@@ -2222,7 +2222,7 @@ static BOOL note_style(void)
 {
     if (ui_style == STYLE_SMOOTH && g.style != STYLE_SMOOTH &&
         gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
-        set_msg(_("Smooth: Fonts/amce-smooth does not match this Ambiance"));
+        set_msg(_("Smooth: Fonts/amb-smooth does not match this Ambiance"));
         return TRUE;
     }
     return FALSE;
@@ -2233,14 +2233,14 @@ static void load_style(void)
     char buf[32];
     int i;
     if (GetVar((CONST_STRPTR)STYLE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        ui_style = amce_stricmp(buf, "smooth") == 0 ? STYLE_SMOOTH : STYLE_PIXEL;
+        ui_style = amb_stricmp(buf, "smooth") == 0 ? STYLE_SMOOTH : STYLE_PIXEL;
     if (GetVar((CONST_STRPTR)LFONT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         for (i = 0; i < LFONT_COUNT; i++)
-            if (!amce_stricmp(buf, gfx_laced_fonts[i].name))
+            if (!amb_stricmp(buf, gfx_laced_fonts[i].name))
                 gfx_laced_font = i;
     if (GetVar((CONST_STRPTR)RFONT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         for (i = 0; i < LFONT_COUNT; i++)
-            if (!amce_stricmp(buf, gfx_laced_fonts[i].name))
+            if (!amb_stricmp(buf, gfx_laced_fonts[i].name))
                 gfx_rtg_font = i;
 }
 
@@ -2258,9 +2258,9 @@ static void fv_cb(void *ctx, const char *name, BOOL isdir)
 {
     LONG n = strlen(name);
     (void)ctx;
-    if (isdir || fv_n >= FULLVIS_MAX || (n > 5 && !amce_stricmp(name + n - 5, ".info")) ||
-        (n > 4 && (!amce_stricmp(name + n - 4, ".txt") || !amce_stricmp(name + n - 4, ".doc"))) ||
-        (n > 7 && !amce_stricmp(name + n - 7, ".readme")))
+    if (isdir || fv_n >= FULLVIS_MAX || (n > 5 && !amb_stricmp(name + n - 5, ".info")) ||
+        (n > 4 && (!amb_stricmp(name + n - 4, ".txt") || !amb_stricmp(name + n - 4, ".doc"))) ||
+        (n > 7 && !amb_stricmp(name + n - 7, ".readme")))
         return;
     sprintf(fv_paths[fv_n++], "%.80s%.78s", fv_dir, name);
 }
@@ -2290,10 +2290,10 @@ static void fullvis_next(void)
     int i, at = -1;
     fullvis_scan();
     for (i = 0; i < fv_n; i++)
-        if (!amce_stricmp(fv_paths[i], fullvis))
+        if (!amb_stricmp(fv_paths[i], fullvis))
             at = i;
     if (at + 1 < fv_n)
-        amce_strlcpy(fullvis, fv_paths[at + 1], sizeof(fullvis));
+        amb_strlcpy(fullvis, fv_paths[at + 1], sizeof(fullvis));
     else
         fullvis[0] = 0;                     /* round to Flow */
     save_setting(FULLVIS_VAR, fullvis[0] ? fullvis : "flow");
@@ -2310,12 +2310,12 @@ static void load_visual(void)
     vis_set_gfx(&g);
     fullvis[0] = 0;
     if (GetVar((CONST_STRPTR)FULLVIS_VAR, (STRPTR)fullvis, sizeof(fullvis), GVF_GLOBAL_ONLY) <= 0 ||
-        !amce_stricmp(fullvis, "flow"))
+        !amb_stricmp(fullvis, "flow"))
         fullvis[0] = 0;
     amp_host_start();                   /* AmigaAMP's plug-ins: they find Ambiance */
     if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-        vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM
-                   : !amce_stricmp(buf, "flow") ? VIS_FLOW : VIS_METERS);
+        vis_select(!amb_stricmp(buf, "spectrum") ? VIS_SPECTRUM
+                   : !amb_stricmp(buf, "flow") ? VIS_FLOW : VIS_METERS);
     if (GetVar((CONST_STRPTR)"Ambiance/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         play_loop = buf[0] == '1';
     /* the volume as it was left (kept at quit; muted, the volume before) */
@@ -2477,28 +2477,28 @@ static char lang_set[32];
 /* A language's name as it calls itself ("deutsch": Deutsch). */
 static void lang_name(const char *lang, char *out)
 {
-    if (!lang || !lang[0] || !amce_stricmp(lang, "english")) {
+    if (!lang || !lang[0] || !amb_stricmp(lang, "english")) {
         strcpy(out, "English");
         return;
     }
-    if (!amce_stricmp(lang, "nihongo")) {
+    if (!amb_stricmp(lang, "nihongo")) {
         /* the Japanese catalog's own name for its language, which no
          * Workbench 3.x has: "Nihongo" in its own characters (cjk.c's
          * three bytes each) */
         strcpy(out, "\214\267\245\214\274\254\221\252\236");
         return;
     }
-    if (!amce_stricmp(lang, "korean")) {
+    if (!amb_stricmp(lang, "korean")) {
         /* "Hangugeo" in Hangul (cjk.c's three bytes each) */
         strcpy(out, "\232\265\234\225\265\255\230\266\264");
         return;
     }
-    if (!amce_stricmp(lang, "greek") || !amce_stricmp(lang, "ellinika")) {
+    if (!amb_stricmp(lang, "greek") || !amb_stricmp(lang, "ellinika")) {
         /* "Ellinika" in Greek letters (cjk.c's two bytes each) */
         strcpy(out, "\200\225\200\273\200\273\200\267\200\275\200\271\200\272\200\254");
         return;
     }
-    amce_strlcpy(out, lang, 32);
+    amb_strlcpy(out, lang, 32);
     if ((UBYTE)out[0] >= 'a' && (UBYTE)out[0] <= 'z')
         out[0] -= 32;
 }
@@ -2518,7 +2518,7 @@ static const char *lang_here(const char *lang)
     };
     unsigned i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
-        if (!amce_stricmp(lang, names[i][0]))
+        if (!amb_stricmp(lang, names[i][0]))
             return _(names[i][1]);
     return "";
 }
@@ -2531,7 +2531,7 @@ static void lang_row(struct Page *p, const char *lang, int action, BOOL on)
     char own[32];
     const char *here = lang_here(lang);
     lang_name(lang, own);
-    action_item(p, own, amce_stricmp(own, here) ? here : "", action,
+    action_item(p, own, amb_stricmp(own, here) ? here : "", action,
                 on ? MARK_RADIO_ON : MARK_RADIO_OFF);
 }
 
@@ -2541,12 +2541,12 @@ static void build_lang_settings(struct Page *p)
     char t[32];
     int i;
     p->setp = SETP_LANG;
-    amce_lang_scan();                   /* a catalog put in meanwhile is here too */
-    lang_name(amce_lang_wb(), t);
+    amb_lang_scan();                   /* a catalog put in meanwhile is here too */
+    lang_name(amb_lang_wb(), t);
     action_item(p, _("As Workbench"), t, ACT_LANGWB, !lang_set[0] ? MARK_RADIO_ON : MARK_RADIO_OFF);
-    lang_row(p, "english", ACT_LANGEN, !amce_stricmp(lang_set, "english"));
-    for (i = 0; i < amce_lang_count() && i < 16; i++)
-        lang_row(p, amce_lang_name(i), ACT_LANG0 + i, !amce_stricmp(lang_set, amce_lang_name(i)));
+    lang_row(p, "english", ACT_LANGEN, !amb_stricmp(lang_set, "english"));
+    for (i = 0; i < amb_lang_count() && i < 16; i++)
+        lang_row(p, amb_lang_name(i), ACT_LANG0 + i, !amb_stricmp(lang_set, amb_lang_name(i)));
 }
 
 /* Settings: General, Display, Video, Sound, Folders, Networking (Plex
@@ -2601,7 +2601,7 @@ static void build_screen_settings(struct Page *p)
             action_item(p, _("Text size"), _(tsize_names[gfx_window_tsize()]), ACT_TSIZES,
                         MARK_ARROW);
     } else {
-        amce_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
+        amb_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
         action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
     }
     /* Style: the font on a laced screen; greyed out, showing Pixel, where
@@ -2671,11 +2671,11 @@ static void build_general_settings(struct Page *p)
     char t[32];
     struct Item *it;
     p->setp = SETP_GENERAL;
-    amce_lang_scan();                   /* a catalog put in meanwhile counts */
-    lang_name(amce_lang_now(), t);
+    amb_lang_scan();                   /* a catalog put in meanwhile counts */
+    lang_name(amb_lang_now(), t);
     /* only a choice with a catalog besides English: else just what is used */
     if ((it = action_item(p, _("Language"), t, ACT_LANGSET,
-                          amce_lang_count() ? MARK_ARROW : MARK_NONE)) && !amce_lang_count())
+                          amb_lang_count() ? MARK_ARROW : MARK_NONE)) && !amb_lang_count())
         it->flags |= ITEM_DISABLED;
     action_item(p, _("Debug (CPU, memory, log)"), "", ACT_DEBUG,
                 debug_on ? MARK_CHECK_ON : MARK_CHECK_OFF);
@@ -2857,9 +2857,9 @@ static void build_rsrv_settings(struct Page *p)
             strcpy(tag, _("no answer"));
         mirror_short(mirrors[i].name, nm, sizeof(nm));
         it = action_item(p, nm, tag, ACT_RSRV0 + i,
-                         !fast && !amce_stricmp(rsrv, mirrors[i].name) ? MARK_RADIO_ON
+                         !fast && !amb_stricmp(rsrv, mirrors[i].name) ? MARK_RADIO_ON
                                                                        : MARK_RADIO_OFF);
-        if (it && !fast && !amce_stricmp(rsrv, mirrors[i].name))
+        if (it && !fast && !amb_stricmp(rsrv, mirrors[i].name))
             p->sel = p->list.count - 1;
     }
 }
@@ -2918,7 +2918,7 @@ static void build_sound_settings(struct Page *p)
                           ACT_SND_AHI, sound_ahi ? MARK_RADIO_ON : MARK_RADIO_OFF)) && !caps.ahi)
         it->flags |= ITEM_DISABLED;
     heading_item(p, _("MP3 decoder"));
-    if ((it = action_item(p, "MP3: amcempega.library",
+    if ((it = action_item(p, "MP3: ambmpega.library",
                           !caps.mpega_own ? _("not installed (Ambiance's Libs)")
                           : _("Ambiance's own, decoded here"),
                           ACT_SND_OWNMPEGA, !mhi_sel[0] && own_mpega ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
@@ -2941,7 +2941,7 @@ static void build_sound_settings(struct Page *p)
             char label[64];
             sprintf(label, "MP3: MHI, %.40s", mhi_names[i]);
             action_item(p, label, _("decodes and plays"), ACT_SND_MHI0 + i,
-                        !amce_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
+                        !amb_stricmp(mhi_sel, mhi_names[i]) ? MARK_RADIO_ON : MARK_RADIO_OFF);
         }
     }
     /* MPEG audio's quality where the CPU decodes it (not MHI, not the
@@ -3028,7 +3028,7 @@ static void build_folder_settings(struct Page *p)
  * and demos are listed beside AGS's, or alone where there is no AGS. */
 static BOOL ig_off(void)
 {
-    return !amce_stricmp(ig_setting, "none") || !amce_stricmp(ig_setting, "n/a");
+    return !amb_stricmp(ig_setting, "none") || !amb_stricmp(ig_setting, "n/a");
 }
 
 /* iGame's list read again as the setting says; unset, and look: iGame
@@ -3041,7 +3041,7 @@ static void igame_start(BOOL look)
     if (GetVar((CONST_STRPTR)IG_VAR, (STRPTR)ig_setting, sizeof(ig_setting), GVF_GLOBAL_ONLY) <= 0)
         ig_setting[0] = 0;
     if (ig_off()) {
-        amce_log("igame", "set to none: no list");
+        amb_log("igame", "set to none: no list");
         return;
     }
     if (!ig_setting[0]) {
@@ -3055,7 +3055,7 @@ static void igame_start(BOOL look)
             save_setting(IG_LOOKED_VAR, "1");
         if (!ig_discover(found, sizeof(found), deep))
             return;
-        amce_strlcpy(ig_setting, found, sizeof(ig_setting));
+        amb_strlcpy(ig_setting, found, sizeof(ig_setting));
         save_setting(IG_VAR, found);
     }
     ig_load(&igcat, ig_setting);
@@ -3111,7 +3111,7 @@ static BOOL whd_declined(void)
 {
     char v[8];
     return GetVar((CONST_STRPTR)WHD_OFFER_VAR, (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
-           !amce_stricmp(v, "no");
+           !amb_stricmp(v, "no");
 }
 
 /* Games and Demos offer it: network up, no AGS, no WHDLoad, not declined. */
@@ -3195,14 +3195,14 @@ static void whd_go(void)
         return;
     }
     whd_cleanup();                          /* a try before, left behind */
-    amce_strlcpy(j->host, WHD_HOST, sizeof(j->host));
-    amce_strlcpy(j->path, WHD_PATH, sizeof(j->path));
-    amce_strlcpy(j->file, WHD_ARCHIVE, sizeof(j->file));
+    amb_strlcpy(j->host, WHD_HOST, sizeof(j->host));
+    amb_strlcpy(j->path, WHD_PATH, sizeof(j->path));
+    amb_strlcpy(j->file, WHD_ARCHIVE, sizeof(j->file));
     j->tls = https_ok();                    /* HTTPS where it can be; else HTTP */
     j->wait_s = 30;
     whd_job = j;
     whd_shown = ~0UL;
-    amce_log("whdload: fetching", j->tls ? "https://" WHD_HOST WHD_PATH : "http://" WHD_HOST WHD_PATH);
+    amb_log("whdload: fetching", j->tls ? "https://" WHD_HOST WHD_PATH : "http://" WHD_HOST WHD_PATH);
     net_submit(j);
     set_msg(_("Downloading WHDLoad from whdload.de..."));
     plex_settings_again(FALSE);
@@ -3232,12 +3232,12 @@ static void whd_done(struct NetJob *j)
     if (!j->body || j->err[0]) {
         sprintf(m, _("WHDLoad could not be downloaded: %.100s"),
                 j->err[0] ? j->err : _("no answer"));
-        amce_log("whdload", m);
+        amb_log("whdload", m);
         set_msg(m);
     } else {
         sprintf(m, "%lu bytes from %.60s in %lu ms", (unsigned long)j->got, j->server,
                 (unsigned long)j->ms);
-        amce_log("whdload: downloaded", m);
+        amb_log("whdload: downloaded", m);
         busy_begin();
         set_msg(_("Unpacking WHDLoad..."));
         ok = unarc_extract(WHD_ARCHIVE, WHD_DIR, why, sizeof(why)) &&
@@ -3245,11 +3245,11 @@ static void whd_done(struct NetJob *j)
         whd_cleanup();
         busy_end(TRUE);
         if (ok) {
-            amce_log("whdload", done);
+            amb_log("whdload", done);
             set_msg(done);
         } else {
             sprintf(m, _("WHDLoad was not installed: %.120s"), why);
-            amce_log("whdload", m);
+            amb_log("whdload", m);
             set_msg(m);
         }
     }
@@ -3305,9 +3305,9 @@ static void settings_rebuild(void)
         default: build_settings(q); break;
         }
         if (q->setp == SETP_FOLDSET)
-            amce_strlcpy(q->title, _(fs[fs_page].title), sizeof(q->title));
+            amb_strlcpy(q->title, _(fs[fs_page].title), sizeof(q->title));
         else if (q->setp < (int)(sizeof(setp_titles) / sizeof(setp_titles[0])))
-            amce_strlcpy(q->title, _(setp_titles[q->setp]), sizeof(q->title));
+            amb_strlcpy(q->title, _(setp_titles[q->setp]), sizeof(q->title));
         q->sel = qs < q->list.count ? qs : q->list.count - 1;
         sel_off_heading(q, 1);
     }
@@ -3419,14 +3419,14 @@ static void build_screenmodes(struct Page *p)
         if (why && gfx_mode_is_rtg(m) && m != screen_mode)
             continue;           /* RTG sizes are listed only when the card has them */
         if (m == SM_AUTO) {
-            amce_strlcpy(label, _("Automatic: "), sizeof(label));
-            amce_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
+            amb_strlcpy(label, _("Automatic: "), sizeof(label));
+            amb_strlcat(label, gfx_mode_label(gfx_mode_auto(&caps)), sizeof(label));
         } else {
-            amce_strlcpy(label, gfx_mode_label(m), sizeof(label));
+            amb_strlcpy(label, gfx_mode_label(m), sizeof(label));
             if (gfx_mode_is_rtg(m) && !why) {
                 char bits[16];
                 sprintf(bits, "  %lu-bit", (unsigned long)gfx_mode_depth(m));
-                amce_strlcat(label, bits, sizeof(label));
+                amb_strlcat(label, bits, sizeof(label));
             }
         }
         action_item(p, label, why ? why : "", ACT_MODE0 + m,
@@ -3466,7 +3466,7 @@ static void build_colours(struct Page *p)
 
 static void build_about_menu(struct Page *p)
 {
-    action_item(p, _("Credits"), "Ambiance " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
+    action_item(p, _("Credits"), "Ambiance " AMB_VERSION, ACT_CREDITS, MARK_ARROW);
     action_item(p, _("System information"), "", ACT_SYSINFO, MARK_ARROW);
     if (caps.net)
         action_item(p, _("Plex in Ambiance"), "", ACT_PLEXHELP, MARK_ARROW);
@@ -3480,14 +3480,14 @@ static void build_credits(struct Page *p)
 {
     char line[96];
     int i;
-    sprintf(line, "Ambiance %s", AMCE_VERSION);
+    sprintf(line, "Ambiance %s", AMB_VERSION);
     text_line(p, line);
     text_line(p, _("(c) 2026 Brian King, under the MIT licence"));
     text_line(p, "");
     text_para(p, _("Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
                  "(c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The "
                  "Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, "
-                 "all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts "
+                 "all under the SIL Open Font License 1.1. The amb-pixel and amb-galmuri fonts "
                  "are Modified Versions of Pixelify Sans and Galmuri."));
     text_line(p, "");
     text_para(p, _("Code: libnix C runtime (public domain). The EaglePlayer host follows "
@@ -3518,7 +3518,7 @@ static void build_credits(struct Page *p)
         me->pr_WindowPtr = (APTR)-1;
         if ((l = Lock((CONST_STRPTR)ags_splash[i], SHARED_LOCK))) {
             UnLock(l);
-            amce_strlcpy(p->pic, ags_splash[i], sizeof(p->pic));
+            amb_strlcpy(p->pic, ags_splash[i], sizeof(p->pic));
         }
         me->pr_WindowPtr = old;
     }
@@ -3536,7 +3536,7 @@ static BOOL np_art_want;            /* the Plex track playing has a cover */
 /* A track playing from a file on this Amiga (Music folders), not a server. */
 static BOOL np_local(void)
 {
-    return mp_is_track() && mp_path()[0] && amce_strnicmp(mp_path(), "http", 4);
+    return mp_is_track() && mp_path()[0] && amb_strnicmp(mp_path(), "http", 4);
 }
 static void build_radio_root(struct Page *p);
 static void build_music_root(struct Page *p);
@@ -3682,7 +3682,7 @@ static BOOL is_dvd_row(const struct Item *it)
 static BOOL is_dvd_image(const struct Item *it)
 {
     LONG n = (LONG)strlen(it->path);
-    return is_dvd_row(it) && n > 4 && !amce_stricmp(it->path + n - 4, ".iso");
+    return is_dvd_row(it) && n > 4 && !amb_stricmp(it->path + n - 4, ".iso");
 }
 
 /* Pictures' first page with nothing of its own (the server's rows follow). */
@@ -3848,7 +3848,7 @@ static void trail_now(struct NavTrail *t)
         struct Page *p = &pages[d];
         t->lv[n].sel = p->sel;
         t->lv[n].top = p->top;
-        amce_strlcpy(t->lv[n].label, p->list.count ? p->list.items[p->sel].label : "", 64);
+        amb_strlcpy(t->lv[n].label, p->list.count ? p->list.items[p->sel].label : "", 64);
     }
     t->n = n;
 }
@@ -4127,7 +4127,7 @@ static void nav_load(int *at, BOOL *in_list)
             int n = nav_mem[m].n;
             nav_mem[m].lv[n].sel = nav_num(s);
             nav_mem[m].lv[n].top = nav_num(t + 1);
-            amce_strlcpy(nav_mem[m].lv[n].label, strchr(t + 1, '\t') + 1, 64);
+            amb_strlcpy(nav_mem[m].lv[n].label, strchr(t + 1, '\t') + 1, 64);
             nav_mem[m].n = n + 1;
             left--;
         }
@@ -4161,18 +4161,18 @@ static const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr
  * Korean wol and il (cjk.c's three bytes each). */
 static BOOL date_ymd(void)
 {
-    const char *iso = amce_lang_iso();
+    const char *iso = amb_lang_iso();
     return !strcmp(iso, "ja") || !strcmp(iso, "ko");
 }
 
 static const char *date_mon_word(void)
 {
-    return !strcmp(amce_lang_iso(), "ko") ? "\230\273\224 " : "\214\274\210";
+    return !strcmp(amb_lang_iso(), "ko") ? "\230\273\224 " : "\214\274\210";
 }
 
 static const char *date_day_word(void)
 {
-    return !strcmp(amce_lang_iso(), "ko") ? "\230\275\274 " : "\214\267\245";
+    return !strcmp(amb_lang_iso(), "ko") ? "\230\275\274 " : "\214\267\245";
 }
 
 static void clock_text(char *buf)
@@ -4303,7 +4303,7 @@ static void dbg_load_log(void)
                 mod_names[menu[menu_sel]], p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
                 mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
     }
-    amce_log("load", m);
+    amb_log("load", m);
     n = 0;
     cpu_sum = app_sum = 0;
     wakes0 = loop_wakes;
@@ -4313,9 +4313,9 @@ static void dbg_load_log(void)
  * is in front, the display's DMA, the UI's colours, the copper lists, and
  * what the screen really shows (pixels read back). Made to find a blank
  * screen after gliding to a long list's end and back (blit_rows wrote past
- * the screen's bitmap); built only with -DAMCE_SCREEN_WATCH, should the
+ * the screen's bitmap); built only with -DAMB_SCREEN_WATCH, should the
  * like come back. */
-#ifdef AMCE_SCREEN_WATCH
+#ifdef AMB_SCREEN_WATCH
 static const char *scr_why;
 static void scr_watch(void)
 {
@@ -4326,7 +4326,7 @@ static void scr_watch(void)
     struct Page *p = cur();
     ULONG rgb[3 * 8];
     int i;
-    if (!amce_log_path())
+    if (!amb_log_path())
         return;                         /* no log: none of this work (pixels read back) */
     cols[0] = 0;
     if (g.scr) {
@@ -4375,10 +4375,10 @@ static void scr_watch(void)
                 p && p->type == PT_LIST && p->list.count && p->top >= p->list.count
                     ? ", LIST PAST ITS END" : "");
     }
-    amce_strlcat(m, "; ", sizeof(m));
-    amce_strlcat(m, dsp, sizeof(m));
+    amb_strlcat(m, "; ", sizeof(m));
+    amb_strlcat(m, dsp, sizeof(m));
     if (strcmp(m, last) || scr_why) {
-        amce_strlcpy(last, m, sizeof(last));
+        amb_strlcpy(last, m, sizeof(last));
         sprintf(m + strlen(m), "; chip free %luK (largest %luK)",
                 (unsigned long)(AvailMem(MEMF_CHIP) >> 10),
                 (unsigned long)(AvailMem(MEMF_CHIP | MEMF_LARGEST) >> 10));
@@ -4389,7 +4389,7 @@ static void scr_watch(void)
             sprintf(m + strlen(m), "; %.30s: sel %ld top %ld of %ld%s%s", p->title, (long)p->sel,
                     (long)p->top, (long)p->list.count, ov.on ? ", letter up" : "",
                     pane_pending ? ", pane pending" : "");
-        amce_log("screen", m);
+        amb_log("screen", m);
     }
 }
 
@@ -4447,11 +4447,11 @@ static void draw_status(void)
     /* each number right in cells of its own (tabular, FIG_SPACE before
      * it): one changing moves nothing after it */
     if (cpu_load < 0)
-        amce_strlcpy(cpu, "--", sizeof(cpu));
+        amb_strlcpy(cpu, "--", sizeof(cpu));
     else
         fig_num(cpu, cpu_load, 3, "%");
     if (app_load < 0)
-        amce_strlcpy(app, "--", sizeof(app));
+        amb_strlcpy(app, "--", sizeof(app));
     else
         fig_num(app, app_load, 3, "%");
     fig_num(ram, (LONG)(used >> 10), 6, "K");
@@ -4474,7 +4474,7 @@ static void draw_status(void)
         return;                             /* unchanged: leave it be */
     gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
     gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL | TS_TABULAR);
-    amce_strlcpy(status_shown, show, sizeof(status_shown));
+    amb_strlcpy(status_shown, show, sizeof(status_shown));
 }
 
 static void set_debug(BOOL on)
@@ -4482,10 +4482,10 @@ static void set_debug(BOOL on)
     debug_on = on;
     if (on) {
         dbg_cpu_start();
-        amce_log_open(TRUE);
+        amb_log_open(TRUE);
     } else {
         dbg_cpu_stop();
-        amce_log_close();
+        amb_log_close();
     }
     cpu_load = app_load = -1;
 }
@@ -4652,7 +4652,7 @@ static void draw_footer(void)
  * the screen's position, the window moving under it) until let go. */
 static void set_msg(const char *m)
 {
-    amce_strlcpy(msg, m ? m : "", sizeof(msg));
+    amb_strlcpy(msg, m ? m : "", sizeof(msg));
     if (!np_full)
         draw_footer();                      /* (Flow on the whole screen: shown as it goes) */
 }
@@ -4786,10 +4786,10 @@ static void draw_title(struct Page *p)
         w = gfx_textlen(&g, p->title, TS_BOLD);
         gfx_text(&g, x, U(28), p->title, PEN_ACCENT, PEN_BG, maxw, TS_BOLD | TS_OPAQUE);
         x += w < maxw ? w : maxw;
-        amce_strlcpy(from, _(mod_names[np_src]), sizeof(from));
+        amb_strlcpy(from, _(mod_names[np_src]), sizeof(from));
         if (np_src_list[0] && strcmp(np_src_list, from)) {
-            amce_strlcat(from, " > ", sizeof(from));
-            amce_strlcat(from, np_src_list, sizeof(from));
+            amb_strlcat(from, " > ", sizeof(from));
+            amb_strlcat(from, np_src_list, sizeof(from));
         }
         room = g.pane_x + maxw - x - sep;
         if (room > 0) {
@@ -5219,12 +5219,12 @@ static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
         /* a music file or folder: its details, and its picture */
         if ((it->kind != IT_SONG && it->kind != IT_DIR) || beets_page(it->path))
             return 0;                       /* a beets page: no folder to look in */
-        amce_strlcpy(path, it->path, max);
+        amb_strlcpy(path, it->path, max);
         *shot = SHOT_SONG;
         return LJ_SONG;
     }
     if (p->pics) {
-        amce_strlcpy(path, it->path, max);
+        amb_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
             if (!(it->kind == IT_ANIM && it->sortkey &&
                   (!strcmp(it->sortkey, "MPEG") || !strcmp(it->sortkey, "DVD"))))
@@ -5367,7 +5367,7 @@ static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahea
         return NULL;
     j->type = type;
     j->mode = mode;
-    amce_strlcpy(j->path, path, sizeof(j->path));
+    amb_strlcpy(j->path, path, sizeof(j->path));
     j->scr = g.scr;
     j->remap = g.truecolor;
     j->want_pic = FALSE;                    /* pictures are LJ_SHOT jobs of their own */
@@ -5440,9 +5440,9 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             char err[160];
             q = ic_next;
             ic_next = (ic_next + 1) & 3;
-            amce_strlcpy(ic[q].path, it->path, sizeof(ic[q].path));
+            amb_strlcpy(ic[q].path, it->path, sizeof(ic[q].path));
             if ((ic[q].kind = dvdd_image_kind(it->path, &ic[q].sectors, err, sizeof(err))) < 0)
-                amce_log("dvd", err);
+                amb_log("dvd", err);
         }
         pv_line(ic[q].kind == DVDI_VIDEO ? _("A DVD-Video disc image")
                 : ic[q].kind == DVDI_UDF ? _("A disc image (UDF)")
@@ -5505,7 +5505,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         if (q == 8) {
             q = pc_next;
             pc_next = (pc_next + 1) & 7;
-            amce_strlcpy(pc[q].path, it->path, sizeof(pc[q].path));
+            amb_strlcpy(pc[q].path, it->path, sizeof(pc[q].path));
             pc[q].ok = vprobe(it->path, &pc[q].vp, 64UL * 1024);
         }
         ok = pc[q].ok;
@@ -5518,7 +5518,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
                         (long)(vp.fps_milli % 1000 / 10));
             pv_line(line, w);
             if (vp.ms) {
-                amce_time_text(t, vp.ms);
+                amb_time_text(t, vp.ms);
                 pv_line(t, w);
             }
             pv_line(vp.mp2 || vp.ac3 ? _("With sound") : _("No sound"), w);
@@ -5549,7 +5549,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         if (j->size >= 0) {
             char kb[24];
             sprintf(kb, "  -  %ldKB", (long)((j->size + 1023) / 1024));
-            amce_strlcat(line, kb, sizeof(line));
+            amb_strlcat(line, kb, sizeof(line));
         }
         pv_line(line, w);
         pv_line("", w);
@@ -5557,7 +5557,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             const char *e = strrchr(it->path, '/');
             if (!e)
                 e = strchr(it->path, ':');
-            amce_strlcpy(line, it->path, e ? (LONG)(e - it->path) + 1 + (*e == ':') : (LONG)sizeof(line));
+            amb_strlcpy(line, it->path, e ? (LONG)(e - it->path) + 1 + (*e == ':') : (LONG)sizeof(line));
             if (line[0])
                 pv_line(line, w);
         }
@@ -5705,7 +5705,7 @@ static BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
     if (!gfx_picture_move(&g, x + (w - g.pic_w) / 2, y))
         return FALSE;
     if (pv_onscr.x != x || pv_onscr.y != y)
-        amce_log("preview", "the cover on screen moved across, not read again");
+        amb_log("preview", "the cover on screen moved across, not read again");
     pv_onscr.x = x;
     pv_onscr.y = y;
     pv_onscr.w = w;
@@ -5736,17 +5736,17 @@ static void pv_shot_key(UBYTE shot, const char *path, char *key)
     int i;
     key[0] = 0;
     if (shot == SHOT_FILE) {
-        amce_strlcpy(key, path, 300);
+        amb_strlcpy(key, path, 300);
     } else if (shot == SHOT_AGS) {
         key[0] = 1;                         /* an entry's screenshot: never a file's key */
-        amce_strlcpy(key + 1, path, 299);
+        amb_strlcpy(key + 1, path, 299);
     } else if (shot == SHOT_FOLDER || shot == SHOT_SONG) {
         for (i = 0; i < PV_SLOTS; i++) {
             struct LJob *j = pv_slot[i];
             if (j && j->done && j->first[0] && !strcmp(j->path, path) &&
                 (j->type == LJ_PICFOLDER || j->type == LJ_SONG ||
                  (j->type == LJ_SHOT && j->mode == shot))) {
-                amce_strlcpy(key, j->first, 300);
+                amb_strlcpy(key, j->first, 300);
                 return;
             }
         }
@@ -5808,13 +5808,13 @@ static void pv_draw_picture(void)
                 (unsigned long)gfx_draw_ms[0], (unsigned long)gfx_draw_ms[1],
                 (unsigned long)gfx_draw_ms[2],
                 (unsigned long)(now - pv_since), "", "", "");
-        amce_log("preview", m);
+        amb_log("preview", m);
         if (j->ms_parts[0] + j->ms_parts[1] + j->ms_parts[2] + j->ms_parts[3]) {
             sprintf(m, "made in: reading the picture %lu ms, counting its colours %lu, "
                        "choosing %lu, mapping %lu",
                     (unsigned long)j->ms_parts[0], (unsigned long)j->ms_parts[1],
                     (unsigned long)j->ms_parts[2], (unsigned long)j->ms_parts[3]);
-            amce_log("preview", m);
+            amb_log("preview", m);
         }
     } else if (j && j->obj) {
         ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
@@ -5822,7 +5822,7 @@ static void pv_draw_picture(void)
     pv_onscr.key[0] = 0;
     if (ok && j) {
         if (j->mode == SHOT_FOLDER || j->mode == SHOT_SONG)
-            amce_strlcpy(pv_onscr.key, j->first, sizeof(pv_onscr.key));
+            amb_strlcpy(pv_onscr.key, j->first, sizeof(pv_onscr.key));
         else
             pv_shot_key(j->mode, j->path, pv_onscr.key);
         pv_onscr.x = x0;
@@ -7245,7 +7245,7 @@ static void np_volume_text(void)
     if (np.art_s && np.art_y <= np.by + np.bh)
         end = np.art_x - U(8) - 1;          /* the cover beside it */
     if (np_muted())
-        amce_strlcpy(m, _("Muted"), sizeof(m));
+        amb_strlcpy(m, _("Muted"), sizeof(m));
     else
         sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
     gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE | TS_TABULAR);
@@ -7441,8 +7441,8 @@ static void np_draw_progress_(BOOL full, const struct MpStatus *st)
     np.s_total = st->total_ms;
     np.s_order = st->order;
     np.s_row = st->row;
-    amce_time_text(a, at);
-    amce_time_text(b, st->total_ms);
+    amb_time_text(a, at);
+    amb_time_text(b, st->total_ms);
     if (st->total_ms)
         sprintf(t, "%s / %s", a, b);
     else
@@ -7465,10 +7465,10 @@ static void np_draw_progress_(BOOL full, const struct MpStatus *st)
                     (long)(in.buffer_ms % 1000 / 100));
             if (in.underruns) {
                 sprintf(a, _("   dropouts %ld"), (long)in.underruns);
-                amce_strlcat(pos, a, sizeof(pos));
+                amb_strlcat(pos, a, sizeof(pos));
             }
         } else {
-            amce_strlcpy(pos, in.state == ST_CONNECTING ? _("Connecting...") :
+            amb_strlcpy(pos, in.state == ST_CONNECTING ? _("Connecting...") :
                               in.state == ST_BUFFERING ? _("Buffering...") : "", sizeof(pos));
         }
     }
@@ -7627,27 +7627,27 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
             { "ape", "Monkey's Audio" }, { "wavpack", "WavPack" }, { NULL, NULL } };
         up[0] = 0;
         for (i = 0; names[i][0]; i++)
-            if (!amce_stricmp(codec, names[i][0]))
-                amce_strlcpy(up, names[i][1], sizeof(up));
+            if (!amb_stricmp(codec, names[i][0]))
+                amb_strlcpy(up, names[i][1], sizeof(up));
         if (!up[0]) {
             for (i = 0; codec[i] && i < 15; i++)
                 up[i] = codec[i] >= 'a' && codec[i] <= 'z' ? codec[i] - 32 : codec[i];
             up[i] = 0;
         }
     }
-    amce_strlcpy(v, up, sizeof(v));
+    amb_strlcpy(v, up, sizeof(v));
     if (kbps) {
         sprintf(part, "%s%lukbps", v[0] ? " " : "", (unsigned long)kbps);
-        amce_strlcat(v, part, sizeof(v));
+        amb_strlcat(v, part, sizeof(v));
     }
     if (rate) {
         char k[16];
         sprintf(part, "%s%s", v[0] ? ", " : "", fmt_khz(rate, k));
-        amce_strlcat(v, part, sizeof(v));
+        amb_strlcat(v, part, sizeof(v));
     }
     if (ch) {
         sprintf(part, " %s", ch == 1 ? "mono" : ch == 2 ? "stereo" : "multichannel");
-        amce_strlcat(v, part, sizeof(v));
+        amb_strlcat(v, part, sizeof(v));
     }
     np_pair(y, label, v);
 }
@@ -7657,7 +7657,7 @@ static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kb
 static void np_playback_line(WORD y, const struct StInfo *in)
 {
     char v[64];
-    amce_strlcpy(v, in->mhi ? _("MHI (decoded and played by it)") : in->ahi ? "AHI 16-bit"
+    amb_strlcpy(v, in->mhi ? _("MHI (decoded and played by it)") : in->ahi ? "AHI 16-bit"
                                                                           : "Paula 8-bit",
                  sizeof(v));
     if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels)) {
@@ -7683,10 +7683,10 @@ static void np_draw_station(void)
         ULONG len = st_length_ms(), kbps = in.bitrate;
         np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
                 TS_BOLD);
-        amce_strlcpy(info, mp_track_by(), sizeof(info));
+        amb_strlcpy(info, mp_track_by(), sizeof(info));
         if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
             sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
-            amce_strlcat(info, part, sizeof(info));
+            amb_strlcat(info, part, sizeof(info));
         }
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
@@ -7716,11 +7716,11 @@ static void np_draw_station(void)
         /* a Plex track: its title, artist and album, where in the list, how it plays */
         np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
                 TS_BOLD);
-        amce_strlcpy(info, mp_track_by(), sizeof(info));
+        amb_strlcpy(info, mp_track_by(), sizeof(info));
         if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
             /* the album is named already: only where in it */
             sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
-            amce_strlcat(info, part, sizeof(info));
+            amb_strlcat(info, part, sizeof(info));
         }
         np_line(np.info_y, info, PEN_DIM, TS_SMALL);
         if (y + lh * 3 > bottom)
@@ -7755,13 +7755,13 @@ static void np_draw_station(void)
     if (st_secure()) {
         /* the stream's connection, whatever the address asked for said */
         if (info[strlen(info) - 1] != ' ')
-            amce_strlcat(info, ",", sizeof(info));
-        amce_strlcat(info, " HTTPS", sizeof(info));
+            amb_strlcat(info, ",", sizeof(info));
+        amb_strlcat(info, " HTTPS", sizeof(info));
     }
     if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
         sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
-        amce_strlcat(info, part, sizeof(info));
-        amce_strlcat(info, np.folder, sizeof(info));
+        amb_strlcat(info, part, sizeof(info));
+        amb_strlcat(info, np.folder, sizeof(info));
     }
     np_line(np.info_y, info, PEN_DIM, TS_SMALL);
     if (y + lh * 5 > bottom)
@@ -7791,7 +7791,7 @@ static void np_draw_station(void)
         if (in.dec_freq != in.freq || in.dec_channels != in.channels)
             sprintf(part + strlen(part), _("; played at %s %s"), fmt_khz(in.dec_freq, k),
                     in.dec_channels == 2 ? "stereo" : "mono");
-        amce_strlcat(part, in.mhi ? _(", by MHI") : in.ahi ? ", AHI" : "", sizeof(part));
+        amb_strlcat(part, in.mhi ? _(", by MHI") : in.ahi ? ", AHI" : "", sizeof(part));
         np_line(y, part, PEN_DIM, TS_SMALL);
         y += lh;
     }
@@ -7848,16 +7848,16 @@ static void np_draw(BOOL full)
             sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
             if (mp_author()[0]) {
                 sprintf(part, _("   by %s"), mp_author());
-                amce_strlcat(info, part, sizeof(info));
+                amb_strlcat(info, part, sizeof(info));
             }
             if (subs > 1) {
                 sprintf(part, _("   subsong %ld of %ld"), (long)sub, (long)subs);
-                amce_strlcat(info, part, sizeof(info));
+                amb_strlcat(info, part, sizeof(info));
             }
             if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
                 sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
-                amce_strlcat(info, part, sizeof(info));
-                amce_strlcat(info, np.folder, sizeof(info));
+                amb_strlcat(info, part, sizeof(info));
+                amb_strlcat(info, np.folder, sizeof(info));
             }
         }
         gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG,
@@ -7961,10 +7961,10 @@ static void np_mark_lists(BOOL redraw)
         for (i = 0; i < p->list.count; i++) {
             struct Item *it = &p->list.items[i];
             if (it->kind == IT_SONG)
-                it->mark = now[0] && np_local() && it->path && !amce_stricmp(it->path, now)
+                it->mark = now[0] && np_local() && it->path && !amb_stricmp(it->path, now)
                            ? MARK_PLAYING : MARK_NONE;
             else if (it->kind == IT_MOD)
-                it->mark = (now[0] && it->path && !amce_stricmp(it->path, now)) ? MARK_PLAYING
+                it->mark = (now[0] && it->path && !amb_stricmp(it->path, now)) ? MARK_PLAYING
                                                                                 : MARK_NONE;
             else if (it->kind == IT_STATION) {
                 char url[256];
@@ -8037,7 +8037,7 @@ static BOOL np_start(LONG idx)
     if (!ok && msg[0] && np.list.pool && idx >= 0 && idx < np.list.count) {
         char m[220];
         sprintf(m, "%.100s: %.100s", np.list.items[idx].label, msg);
-        amce_log("music: not played", m);
+        amb_log("music: not played", m);
     }
     return ok;
 }
@@ -8103,8 +8103,8 @@ static BOOL np_start_now(LONG idx)
         radio_field(it, 3, by, sizeof(by));
         radio_field(it, 4, album, sizeof(album));
         if (album[0]) {
-            amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
-            amce_strlcat(by, album, sizeof(by));
+            amb_strlcat(by, by[0] ? "   " : "", sizeof(by));
+            amb_strlcat(by, album, sizeof(by));
         }
         {
             ULONG v = 0;
@@ -8128,13 +8128,13 @@ static BOOL np_start_now(LONG idx)
         char by[220], art[300];
         song_info(it->path, &si, art, sizeof(art), TRUE);
         if (si.artist[0] || si.band[0] || si.album[0]) {
-            amce_strlcpy(by, si.artist[0] ? si.artist : si.band, sizeof(by));
+            amb_strlcpy(by, si.artist[0] ? si.artist : si.band, sizeof(by));
             if (si.album[0]) {
-                amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
-                amce_strlcat(by, si.album, sizeof(by));
+                amb_strlcat(by, by[0] ? "   " : "", sizeof(by));
+                amb_strlcat(by, si.album, sizeof(by));
             }
         } else {
-            amce_strlcpy(by, np.folder, sizeof(by));
+            amb_strlcpy(by, np.folder, sizeof(by));
         }
         if (!mp_load_track(it->path, si.title[0] ? si.title : it->label, by,
                            song_format(it->path), 0, plex_decoder_cpu(), 0, 0, err,
@@ -8151,7 +8151,7 @@ static BOOL np_start_now(LONG idx)
         if (art[0]) {
             np_local_art = TRUE;
             np_layout();                    /* its square */
-            amce_strlcpy(np_art_file, art, sizeof(np_art_file));
+            amb_strlcpy(np_art_file, art, sizeof(np_art_file));
             if (np.art_s && !(np_on() && pic_take(art, np.art_x, np.art_y, np.art_s, np.art_h)))
                 np_art_load(art);
             else if (np.art_s)
@@ -8266,8 +8266,8 @@ static void np_track_from(LONG idx, ULONG ms, ULONG total, ULONG size, const cha
         char title[120];
         if (mp3 && total && size)
             at = (ULONG)(((unsigned long long)size * ms) / total);
-        amce_strlcpy(title, title_was, sizeof(title));      /* its tags' names, kept */
-        amce_strlcpy(by, by_was, sizeof(by));
+        amb_strlcpy(title, title_was, sizeof(title));      /* its tags' names, kept */
+        amb_strlcpy(by, by_was, sizeof(by));
         if (!mp_load_track(it->path, title, by, song_format(it->path), total,
                            plex_decoder_cpu(), ms, at, err, sizeof(err)) ||
             !mp_play(err, sizeof(err)))
@@ -8278,8 +8278,8 @@ static void np_track_from(LONG idx, ULONG ms, ULONG total, ULONG size, const cha
     radio_field(it, 3, by, sizeof(by));
     radio_field(it, 4, album, sizeof(album));
     if (album[0]) {
-        amce_strlcat(by, by[0] ? "   " : "", sizeof(by));
-        amce_strlcat(by, album, sizeof(by));
+        amb_strlcat(by, by[0] ? "   " : "", sizeof(by));
+        amb_strlcat(by, album, sizeof(by));
     }
     if (!mp_load_track(url, it->label, by, plex_tag(it), total, plex_decoder_cpu(), ms,
                        plex_converts(it) ? 0 : plex_track_byte(it, ms), err, sizeof(err)) ||
@@ -8304,7 +8304,7 @@ static BOOL sound_restart(void)
         char err[100];
         err[0] = 0;
         if (mp_output_changed(err, sizeof(err))) {
-            amce_log("sound", "Settings > Sound changed: the module on through it");
+            amb_log("sound", "Settings > Sound changed: the module on through it");
             return TRUE;
         }
         if (err[0])
@@ -8318,7 +8318,7 @@ static BOOL sound_restart(void)
         ULONG ms;
         mp_status(&st);
         ms = np.seek_due ? (ULONG)np.seek_to : st.elapsed_ms;
-        amce_log("sound", "Settings > Sound changed: the track again from where it was");
+        amb_log("sound", "Settings > Sound changed: the track again from where it was");
         if (np.list.pool && np.idx >= 0 && np.idx < np.list.count) {
             np_seek_track(ms, 0);
         } else {
@@ -8326,11 +8326,11 @@ static BOOL sound_restart(void)
              * it was: a file's MP3 from about its byte, else by time) */
             char path[2048], title[120], by[200], tag[24], err[100];
             ULONG at = 0, size = st_size();
-            amce_strlcpy(path, mp_path(), sizeof(path));
-            amce_strlcpy(title, mp_stream_name(), sizeof(title));
-            amce_strlcpy(by, mp_track_by(), sizeof(by));
-            amce_strlcpy(tag, mp_tag(), sizeof(tag));
-            if (np_local() && !amce_stricmp(tag, "MP3") && st.total_ms && size)
+            amb_strlcpy(path, mp_path(), sizeof(path));
+            amb_strlcpy(title, mp_stream_name(), sizeof(title));
+            amb_strlcpy(by, mp_track_by(), sizeof(by));
+            amb_strlcpy(tag, mp_tag(), sizeof(tag));
+            if (np_local() && !amb_stricmp(tag, "MP3") && st.total_ms && size)
                 at = (ULONG)(((unsigned long long)size * ms) / st.total_ms);
             if (!path[0] || !mp_load_track(path, title, by, tag, st.total_ms, plex_decoder_cpu(), ms, at, err,
                                            sizeof(err)) ||
@@ -8340,7 +8340,7 @@ static BOOL sound_restart(void)
     } else {
         if (!np.list.pool || np.idx < 0 || np.idx >= np.list.count)
             return FALSE;
-        amce_log("sound", "Settings > Sound changed: the station started again");
+        amb_log("sound", "Settings > Sound changed: the station started again");
         if (!np_start(np.idx))
             return FALSE;
     }
@@ -8434,7 +8434,7 @@ static void resume_store(void)
     Close(fh);
     sprintf(line, "%.80s, at %lu ms: kept for the next start", np.list.items[np.idx].label,
             (unsigned long)st.elapsed_ms);
-    amce_log("resume", line);
+    amb_log("resume", line);
 }
 
 static ULONG resume_num(char **s)
@@ -8490,13 +8490,13 @@ static void resume_load(void)
         list_free(&np.list);
     list_init(&np.list);
     if ((s = nav_line(buf, len, &pos)))
-        amce_strlcpy(np.folder, s, sizeof(np.folder));
+        amb_strlcpy(np.folder, s, sizeof(np.folder));
     if ((s = nav_line(buf, len, &pos)))
-        amce_strlcpy(np_src_list, s, sizeof(np_src_list));
+        amb_strlcpy(np_src_list, s, sizeof(np_src_list));
     np_trail_n = 0;
     for (i = 0; i < trail && (s = nav_line(buf, len, &pos)); i++)
         if (np_trail_n < MAXDEPTH)
-            amce_strlcpy(np_trail[np_trail_n++], s, sizeof(np_trail[0]));
+            amb_strlcpy(np_trail[np_trail_n++], s, sizeof(np_trail[0]));
     for (i = 0; i < n; i++) {
         char *k, *label, *path, *key;
         ULONG kind, flags, action;
@@ -8540,7 +8540,7 @@ static void resume_load(void)
     }
     np_no_play = FALSE;
     msg[0] = 0;
-    amce_log("resume", m);
+    amb_log("resume", m);
 }
 
 /* Play on what the last run left loaded: from where it was. FALSE: played
@@ -8717,7 +8717,7 @@ static void mods_play_item(struct Page *p)
         list_free(&np.list);
     list_init(&np.list);
     np.idx = -1;
-    amce_strlcpy(np.folder, p->title, sizeof(np.folder));
+    amb_strlcpy(np.folder, p->title, sizeof(np.folder));
     {
         /* where this was started, for Now playing opened from elsewhere */
         int d;
@@ -8727,9 +8727,9 @@ static void mods_play_item(struct Page *p)
             struct Page *q = &pages[d];
             if (q->type != PT_LIST || q->sel < 0 || q->sel >= q->list.count)
                 break;
-            amce_strlcpy(np_trail[np_trail_n++], q->list.items[q->sel].label, sizeof(np_trail[0]));
+            amb_strlcpy(np_trail[np_trail_n++], q->list.items[q->sel].label, sizeof(np_trail[0]));
         }
-        amce_strlcpy(np_src_list, depth > 1 ? p->title : "", sizeof(np_src_list));
+        amb_strlcpy(np_src_list, depth > 1 ? p->title : "", sizeof(np_src_list));
     }
     for (i = 0; i < p->list.count; i++) {
         struct Item *it = &p->list.items[i];
@@ -8931,7 +8931,7 @@ static void flac_slow_check(void)
     if (!in.flac || in.state != ST_PLAYING || in.underruns < 3 || in.played_ms < 3000)
         return;
     told = mp_serial();
-    amce_log("track", "FLAC: dropouts - this Amiga cannot decode it in time");
+    amb_log("track", "FLAC: dropouts - this Amiga cannot decode it in time");
     set_msg(np_local() ? _("This Amiga is too slow to decode FLAC smoothly")
                        : _("Too slow for FLAC: try Request lower quality audio"));
 }
@@ -8958,9 +8958,9 @@ static void np_tick(void)
         /* a track played to its end (or failed): the next in its list */
         BOOL failed = st_state() == ST_FAILED;
         char why[100];
-        amce_strlcpy(why, st_error(), sizeof(why));
+        amb_strlcpy(why, st_error(), sizeof(why));
         if (failed) {
-            amce_log("plex", why[0] ? why : "the track failed");
+            amb_log("plex", why[0] ? why : "the track failed");
             set_msg(why[0] ? why : _("That track could not be played"));
         }
         if (failed && np.seeked) {
@@ -8995,12 +8995,12 @@ static void np_tick(void)
         if (mp_running() && mp_ended()) {
             /* a station gone quiet: said why, not the next one */
             char why[100];
-            amce_strlcpy(why, st_error()[0] ? st_error() : _("The station stopped sending"),
+            amb_strlcpy(why, st_error()[0] ? st_error() : _("The station stopped sending"),
                          sizeof(why));
             mp_stop();
             np_mark_lists(TRUE);
             set_msg(why);
-            amce_log("radio", why);
+            amb_log("radio", why);
             state = -1;
         }
         if (st_title_seq() != np.s_rseq || state != np.s_rstate) {
@@ -9287,8 +9287,8 @@ static void plex_pos_save(const struct Page *p)
         k = plex_pos_next;
         plex_pos_next = (plex_pos_next + 1) % PLEX_POS_KEPT;
     }
-    amce_strlcpy(plex_pos[k].key, p->base, sizeof(plex_pos[k].key));
-    amce_strlcpy(plex_pos[k].label, p->list.items[p->sel].label, sizeof(plex_pos[k].label));
+    amb_strlcpy(plex_pos[k].key, p->base, sizeof(plex_pos[k].key));
+    amb_strlcpy(plex_pos[k].label, p->list.items[p->sel].label, sizeof(plex_pos[k].label));
     plex_pos[k].sel = p->sel;
     plex_pos[k].row = p->sel - p->top;
 }
@@ -9343,12 +9343,12 @@ static void np_shortcut_sync(void)
     has = it && it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
     want[0] = 0;
     if (playing)
-        amce_strlcpy(want, mp_is_stream() ? mp_stream_name() : mp_title(), sizeof(want));
+        amb_strlcpy(want, mp_is_stream() ? mp_stream_name() : mp_title(), sizeof(want));
     if (has == playing && (!has || !strcmp(it->path, want) || !mp_is_stream()))
         return;                             /* as it is: nothing to do */
     sel[0] = 0;
     if (p->sel >= 0 && p->sel < p->list.count)
-        amce_strlcpy(sel, p->list.items[p->sel].label, sizeof(sel));
+        amb_strlcpy(sel, p->list.items[p->sel].label, sizeof(sel));
     if (p->radio || p->plex) {
         list_free(&p->list);
         list_init(&p->list);
@@ -9374,7 +9374,7 @@ static void np_shortcut_sync(void)
 static void build_mods_root(void)
 {
     struct Page *p;
-    BOOL mods = amce_exists(MODS_ROOT), menu_music = amce_exists(MODS_MENU), sid = amce_exists(MODS_SID);
+    BOOL mods = amb_exists(MODS_ROOT), menu_music = amb_exists(MODS_MENU), sid = amb_exists(MODS_SID);
     BOOL asg = fs_assign_used(FS_MODS);
     int i;
     if (!mods && !menu_music && !sid && !asg && !fs[FS_MODS].n && !mp_loaded()) {
@@ -9478,7 +9478,7 @@ static void dvd_watch(void)
     if (s == dvd_sig)
         return;
     dvd_sig = s;                            /* (once a change, built or not) */
-    amce_log("dvd", "a CD/DVD volume came or went: Videos built again");
+    amb_log("dvd", "a CD/DVD volume came or went: Videos built again");
     pane_pending = TRUE;
     pane_settle();
 }
@@ -9607,7 +9607,7 @@ static void menu_slide(UWORD from, UWORD to)
         char m[80];
         sprintf(m, "%s in %ld frames, %ld ms (menu drawn in %ld ms)", to > from ? "opened" : "closed",
                 (long)frames, (long)(time_ms() - t0), (long)menu_draw_ms);
-        amce_log("menu slide", m);
+        amb_log("menu slide", m);
     }
 }
 
@@ -9840,7 +9840,7 @@ static void log_free(const char *what)
     char buf[64];
     sprintf(buf, "chip %luK, fast %luK", (unsigned long)(AvailMem(MEMF_CHIP) >> 10),
             (unsigned long)(AvailMem(MEMF_FAST) >> 10));
-    amce_log(what, buf);
+    amb_log(what, buf);
 }
 
 /* Before a game: everything Ambiance can rebuild goes. Where each section
@@ -9850,7 +9850,7 @@ static void release_for_launch(void)
     lv_release();                   /* (a layout: its memory too) */
     log_free("free before launch");
     if (mp_loaded())
-        amce_log("music", "stopped for the game");
+        amb_log("music", "stopped for the game");
     mp_shutdown();                  /* the game gets Paula and the CIA timers */
     np_mark_lists(FALSE);
     save_nav();
@@ -9924,7 +9924,7 @@ static void launch(const char *base)
         }
     }
     /* Give the game every byte we can. */
-    amce_log("launch", base);
+    amb_log("launch", base);
     nav_store(FALSE);               /* should it not come back */
     radio_stop();                   /* no network process under a game */
     if (debug_on)
@@ -10019,7 +10019,7 @@ static void vw_start(const char *path, BOOL first)
     if (!(vw_job = AllocVec(sizeof(*vw_job), MEMF_ANY | MEMF_CLEAR)))
         return;
     vw_job->type = LJ_PICTURE;
-    amce_strlcpy(vw_job->path, path, sizeof(vw_job->path));
+    amb_strlcpy(vw_job->path, path, sizeof(vw_job->path));
     vw_job->scr = g.truecolor ? g.scr : NULL;
     vw_job->remap = g.truecolor;
     vw_job->want_pic = TRUE;
@@ -10076,7 +10076,7 @@ static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct P
                         (unsigned long)info->depth, (unsigned long)vw_job->ms_decode,
                         (unsigned long)(*t)->w, (unsigned long)(*t)->h,
                         (unsigned long)(*t)->ncol, (unsigned long)vw_job->ms_thumb);
-                amce_log("viewer, read ahead", m);
+                amb_log("viewer, read ahead", m);
             }
         }
         vw_drop();
@@ -10112,7 +10112,7 @@ static void vw_keep(const char *file)
             return;
     if (vw_kept[vw_kept_next][0])
         DeleteFile((CONST_STRPTR)vw_kept[vw_kept_next]);  /* the oldest: well behind */
-    amce_strlcpy(vw_kept[vw_kept_next], file, sizeof(vw_kept[0]));
+    amb_strlcpy(vw_kept[vw_kept_next], file, sizeof(vw_kept[0]));
     vw_kept_next = (vw_kept_next + 1) % VW_KEEP;
 }
 
@@ -10274,7 +10274,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                         (unsigned long)pi.w, (unsigned long)pi.h, (unsigned long)pi.depth,
                         (unsigned long)(time_ms() - t0),
                         pre || pre_t ? " (read ahead)" : "", pi.cls[0] ? pi.cls : "?");
-                amce_log("viewer", m);
+                amb_log("viewer", m);
             }
             shown = want;
             asked = -1;
@@ -10505,11 +10505,11 @@ static void anim_from_page(struct Page *p)
             track = mp_is_track();
             was_paused = mp_paused();
             size = st_size();
-            amce_strlcpy(title, mp_stream_name(), sizeof(title));
-            amce_strlcpy(by, mp_track_by(), sizeof(by));
+            amb_strlcpy(title, mp_stream_name(), sizeof(title));
+            amb_strlcpy(by, mp_track_by(), sizeof(by));
             mp_stop();
             stream = TRUE;
-            amce_log("anim", track ? "the track stopped while it plays" : "the station stopped while it plays");
+            amb_log("anim", track ? "the track stopped while it plays" : "the station stopped while it plays");
         } else {
             if (mp_playing()) {
                 mp_pause(TRUE);
@@ -10532,14 +10532,14 @@ static void anim_from_page(struct Page *p)
         } else if (dvd) {
             char vol[40];
             const char *c = strchr(it->path, ':');
-            amce_strlcpy(vol, it->path, c ? (LONG)(c - it->path) + 1 : (LONG)sizeof(vol));
+            amb_strlcpy(vol, it->path, c ? (LONG)(c - it->path) + 1 : (LONG)sizeof(vol));
             if (anim_play_dvd(&g, vol, FALSE, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
             if (anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
-            amce_log("anim", err);
+            amb_log("anim", err);
             set_msg(err);
         }
         if (play_loop != loop_was)          /* (its loop button: the one setting) */
@@ -10654,7 +10654,7 @@ static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow)
     busy_end(FALSE);                        /* the viewer covers it */
     sprintf(m, "%ld photos, asked for at %ld x %ld, listed in %ld ms", (long)l.count, (long)w,
             (long)h, (long)(time_ms() - t0));
-    amce_log("plex: viewer", m);
+    amb_log("plex: viewer", m);
     vw_remote = TRUE;
     vw_failed = FALSE;
     vw_list = &l;
@@ -11034,7 +11034,7 @@ static void caps_wb_read(void)
         sprintf(m, "%s, %lu x %lu, %lu-bit", caps.wb_rtg ? "RTG" : "native chipset",
                 (unsigned long)caps.wb_w, (unsigned long)caps.wb_h,
                 (unsigned long)GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH));
-        amce_log("Workbench screen", m);
+        amb_log("Workbench screen", m);
         UnlockPubScreen(NULL, wb);
     }
 }
@@ -11089,9 +11089,9 @@ static void wb_follow(void)
         vis_stop();
         ptr_hidden = NULL;              /* a new window comes with its pointer */
         gfx_close(&g);
-        amce_log("window", "Workbench is closing: closed until it is back");
+        amb_log("window", "Workbench is closing: closed until it is back");
     } else {
-        amce_log("window", "Workbench's prefs changed: a window again, if it can be one now");
+        amb_log("window", "Workbench's prefs changed: a window again, if it can be one now");
     }
     gfx_wb_gone();
     while (gfx_wb_event() != GFX_WB_BACK && time_ms() - t0 < WB_BACK_WAIT) {
@@ -11105,13 +11105,13 @@ static void wb_follow(void)
     SetSignal(0, gfx_wb_sigmask());     /* (a prefs file's other notifications meanwhile) */
     sprintf(m, "%s after %lu ms", running && time_ms() - t0 < WB_BACK_WAIT ? "Workbench back" :
             "Workbench not back", (unsigned long)(time_ms() - t0));
-    amce_log("window", m);
+    amb_log("window", m);
     caps_wb_read();
     if (!was_window) {
         const char *why = gfx_window_problem(&caps);
         if (why) {
             sprintf(m, "%.80s: full screen still", why);
-            amce_log("window", m);
+            amb_log("window", m);
             return;
         }
         layout_let_go();                /* the full screen closed for the window */
@@ -11137,7 +11137,7 @@ static void wb_follow(void)
             } else {
                 ScreenToBack(g.scr);
                 iconic_screen = TRUE;
-                amce_log("iconify", "no window on the new Workbench: full screen, behind it");
+                amb_log("iconify", "no window on the new Workbench: full screen, behind it");
             }
         }
         wb_note_fallback();
@@ -11207,7 +11207,7 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0)
     sprintf(m, "%ld x %ld to %ld x %ld (%ld x %ld design units): laid out again in %lu ms, on %.60s",
             (long)ow, (long)oh, (long)g.w, (long)g.h, (long)g.w * 256 / g.k, (long)g.h * 256 / g.k,
             (unsigned long)(time_ms() - t0), cur() ? cur()->title : "the menu");
-    amce_log("window: resized", m);
+    amb_log("window: resized", m);
 }
 
 /* A double-click on the window's title bar: full screen. Intuition keeps
@@ -11265,7 +11265,7 @@ static void window_title_watch(void)
         if (first && DoubleClick(s0, m0, s1, m1)) {
             first = FALSE;
             down = FALSE;
-            amce_log("window", "title bar double-clicked: full screen");
+            amb_log("window", "title bar double-clicked: full screen");
             toggle_window();
             return;
         }
@@ -11286,7 +11286,7 @@ static void window_title_watch(void)
  * labels (menus, the icon's) in English then. */
 static BOOL wb_text_english(void)
 {
-    const char *iso = amce_lang_iso();
+    const char *iso = amb_lang_iso();
     return iso && (!strncmp(iso, "ja", 2) || !strncmp(iso, "zh", 2) || !strncmp(iso, "ko", 2));
 }
 
@@ -11310,18 +11310,18 @@ static void iconify(void)
     ov.on = FALSE;
     if (mini_on) {
         mini_drop_window();             /* the mini player's window, back on the icon */
-        amce_log("iconify", "the mini player closed, an AppIcon on Workbench: the music plays on");
+        amb_log("iconify", "the mini player closed, an AppIcon on Workbench: the music plays on");
     } else if (g.wb) {
         if (!gfx_window_hide(&g)) {
             icon_remove();
             return;
         }
         ptr_hidden = NULL;              /* (a new window comes with its pointer) */
-        amce_log("iconify", "the window closed, an AppIcon on Workbench: the music plays on");
+        amb_log("iconify", "the window closed, an AppIcon on Workbench: the music plays on");
     } else {
         ScreenToBack(g.scr);
         iconic_screen = TRUE;
-        amce_log("iconify", "the screen behind Workbench's, an AppIcon on it: the music plays on");
+        amb_log("iconify", "the screen behind Workbench's, an AppIcon on it: the music plays on");
     }
     iconified = TRUE;
 }
@@ -11355,7 +11355,7 @@ static void uniconify(const char *why)
         return;
     icon_remove();
     iconified = FALSE;
-    amce_log("iconify", why);
+    amb_log("iconify", why);
     if (mini_on) {
         if (mini_window())
             return;                     /* the mini player again */
@@ -11492,7 +11492,7 @@ static void mini_lines(char *l1, char *l2, char *l3)
     if (mp_is_stream()) {
         const char *by = mp_track_by(), *p;
         char *o = l3;
-        amce_strlcpy(l2, mp_stream_name()[0] ? mp_stream_name()
+        amb_strlcpy(l2, mp_stream_name()[0] ? mp_stream_name()
                                               : mp_is_track() ? _("(no title)") : _("Radio"), 160);
         if (!mp_is_track()) {
             /* a station: what is on air, or how it is */
@@ -11504,7 +11504,7 @@ static void mini_lines(char *l1, char *l2, char *l3)
                 now = _("Connecting...");
             else if (stt == ST_BUFFERING)
                 now = _("Buffering...");
-            amce_strlcpy(l3, now, 200);
+            amb_strlcpy(l3, now, 200);
             return;
         }
         /* a track: its artist and album ("   " between) as "artist - album" */
@@ -11527,12 +11527,12 @@ static void mini_lines(char *l1, char *l2, char *l3)
         while (*t == ' ')
             t++;
         mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
-        amce_strlcpy(l2, t[0] ? t : label, 160);
-        amce_strlcpy(l3, mp_tag(), 200);
+        amb_strlcpy(l2, t[0] ? t : label, 160);
+        amb_strlcpy(l3, mp_tag(), 200);
         if (mp_author()[0]) {
             char part[120];
             sprintf(part, _("   by %s"), mp_author());
-            amce_strlcat(l3, part, 200);
+            amb_strlcat(l3, part, 200);
         }
     }
 }
@@ -11660,12 +11660,12 @@ static void mini_art(BOOL full)
         if (l)
             UnLock(l);
         mini_art_free();
-        amce_strlcpy(mn.art_file, f, sizeof(mn.art_file));
+        amb_strlcpy(mn.art_file, f, sizeof(mn.art_file));
         if (f[0] && gfx_thumbs(&g) && (mn.aj = AllocVec(sizeof(*mn.aj), MEMF_ANY | MEMF_CLEAR))) {
             struct LJob *j = mn.aj;
             j->type = LJ_SHOT;
             j->mode = SHOT_FILE;
-            amce_strlcpy(j->path, f, sizeof(j->path));
+            amb_strlcpy(j->path, f, sizeof(j->path));
             j->scr = g.scr;
             j->tw = j->th = mn.art_s;
             j->maxcol = 256;
@@ -11725,7 +11725,7 @@ static void mini_draw(BOOL full)
     if (full || strcmp(l3, mn.s_l3)) {
         gfx_fill(&mg, mn.tx, mn.r3, right - 1, mn.r3 + mg.font_h - 1, PEN_BG);
         mini_text(mn.tx, mn.r3, mn.tw, l3, PEN_DIM);
-        amce_strlcpy(mn.s_l3, l3, sizeof(mn.s_l3));
+        amb_strlcpy(mn.s_l3, l3, sizeof(mn.s_l3));
         mn.drawn = TRUE;
     }
     /* the time, and its bar */
@@ -11738,10 +11738,10 @@ static void mini_draw(BOOL full)
     if (full || (LONG)(at / 1000) != mn.s_sec || (LONG)st.total_ms != mn.s_total || fill != mn.s_fill) {
         gfx_fill(&mg, mn.tx, mn.ty, right - 1, mn.ty + mg.font_h - 1, PEN_BG);
         if (mp_loaded()) {
-            amce_time_text(a, at);
+            amb_time_text(a, at);
             mini_text(mn.tx, mn.ty, mn.tw_time + MK(4), a, PEN_TEXT);
             if (st.total_ms) {
-                amce_time_text(b, st.total_ms);
+                amb_time_text(b, st.total_ms);
                 mini_text(right - TextLength(mg.rp, (CONST_STRPTR)b, strlen(b)), mn.ty,
                           mn.tw_time + MK(4), b, PEN_DIM);
             }
@@ -11818,7 +11818,7 @@ static void mini_enter(void)
         gfx_present(&g);
         return;
     }
-    amce_log("mini player", "the window's zoom gadget: the mini player");
+    amb_log("mini player", "the window's zoom gadget: the mini player");
 }
 
 /* Its window closed (iconified, or quitting): mini_on stays as it was. */
@@ -11843,7 +11843,7 @@ static void mini_leave(const char *why)
     if (!mini_on)
         return;
     mini_drop();
-    amce_log("mini player", why);
+    amb_log("mini player", why);
     if (!gfx_window_unhide(&g)) {
         display_reopen();
         return;
@@ -12027,12 +12027,12 @@ static void window_menu(UWORD code)
             code = MENUNULL;
         }
         if (what == WM_FULL) {
-            amce_log("window", "Project > Full screen (the menu, or Right-Amiga-F)");
+            amb_log("window", "Project > Full screen (the menu, or Right-Amiga-F)");
             toggle_window();                /* full screen, and kept */
             return;
         }
         if (what == WM_ICONIFY) {
-            amce_log("iconify", "Project > Iconify (the menu, or Right-Amiga-I)");
+            amb_log("iconify", "Project > Iconify (the menu, or Right-Amiga-I)");
             gfx_iconify_asked = TRUE;       /* (the main loop's, once these are read) */
             return;
         }
@@ -12071,7 +12071,7 @@ static void apply_colours(int k)
     ui_scheme_apply(k);
     save_setting(COLOURS_VAR, ui_scheme_keys[k]);
     sprintf(m, "colours: %s", ui_scheme_names[k]);
-    amce_log("window", m);
+    amb_log("window", m);
     display_colours_row = TRUE;
     display_again(FALSE, _("Colours"), build_colours);
     display_colours_row = FALSE;
@@ -12123,15 +12123,15 @@ static void open_settings_page(const char *title, void (*build)(struct Page *))
 static void choose_language(const char *lang)
 {
     char t[32];
-    amce_strlcpy(lang_set, lang, sizeof(lang_set));
+    amb_strlcpy(lang_set, lang, sizeof(lang_set));
     save_setting(LANG_VAR, lang_set);
-    amce_lang_open(lang_set);
+    amb_lang_open(lang_set);
     gfx_menu_refit(&g);
     window_menus_make();                    /* (the window's, in it too) */
     gfx_window_menus_again(&g);
     settings_rebuild();
     draw_all();
-    lang_name(amce_lang_now(), t);
+    lang_name(amb_lang_now(), t);
     set_msg(t);
 }
 
@@ -12140,7 +12140,7 @@ static void choose_nic(int i)
 {
     if (i >= 0 && (i >= nnic || !nics[i].up || !nics[i].ip))
         return;
-    amce_strlcpy(net_if, i < 0 ? "" : nics[i].name, sizeof(net_if));
+    amb_strlcpy(net_if, i < 0 ? "" : nics[i].name, sizeof(net_if));
     save_setting(NETIF_VAR, net_if);
     net_bind_to(i < 0 ? 0 : nics[i].ip);
     plex_settings_again(FALSE);
@@ -12198,7 +12198,7 @@ static void goto_plex_settings(void)
             build_plex_settings(p);
     }
     focus = FOCUS_CONTENT;
-    amce_log("navigation", "to Settings > Networking > Plex (from a row about Plex)");
+    amb_log("navigation", "to Settings > Networking > Plex (from a row about Plex)");
     draw_all();
 }
 
@@ -12509,11 +12509,11 @@ static void plex_more_ask(struct Page *p)
         return;
     if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
-    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
     if (!p->plex_letters) {
         /* first: where each letter starts (/firstCharacter, the list's type) */
-        amce_strlcpy(key, p->base, sizeof(key));
+        amb_strlcpy(key, p->base, sizeof(key));
         if ((q = strstr(key, "/all")))
             memmove(q + 15, q + 4, strlen(q + 4) + 1), memcpy(q, "/firstCharacter", 15);
         plex_request(key, j->path, sizeof(j->path));
@@ -12524,7 +12524,7 @@ static void plex_more_ask(struct Page *p)
         j->parse = 1;
         j->wait_s = PLEX_WAIT_S;          /* a NAS's server may think for a while */
         j->start = k * PLEX_PART + 1;       /* +1: never 0, which is a first part */
-        amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
+        amb_strlcpy(j->pkey, p->base, sizeof(j->pkey));
     }
     j->seq = ++rq_seq;
     p->more_seq = j->seq;
@@ -12659,9 +12659,9 @@ static void plink_show(void)
 
 static void plink_fail(const char *why)
 {
-    amce_strlcpy(plink.why, why, sizeof(plink.why));
+    amb_strlcpy(plink.why, why, sizeof(plink.why));
     plink.state = PL_FAILED;
-    amce_log("plex: signing in", why);
+    amb_log("plex: signing in", why);
     plink_show();
 }
 
@@ -12673,7 +12673,7 @@ static void plink_ask(UBYTE state)
         plink_fail(_("Not enough memory"));
         return;
     }
-    amce_strlcpy(j->host, PLEX_TV, sizeof(j->host));
+    amb_strlcpy(j->host, PLEX_TV, sizeof(j->host));
     j->port = 443;
     j->tls = 1;
     plex_tv_headers(j->extra, sizeof(j->extra), state == PL_USER || state == PL_SERVERS);
@@ -12750,7 +12750,7 @@ static void plink_servers(UBYTE *body, ULONG len)
     if (!found && !plex.token[0])
         plex_set_token(plex.account);       /* the owner's token opens the owner's servers */
     sprintf(m, "signed in; %ld server%s on the account", (long)n, n == 1 ? "" : "s");
-    amce_log("plex: plex.tv", m);
+    amb_log("plex: plex.tv", m);
 }
 
 /* plex.tv answered. */
@@ -12780,7 +12780,7 @@ static void plink_came(struct NetJob *j)
         plink.next_ms = time_ms() + PLINK_POLL_MS;
         plink.until_ms = time_ms() + (plex_tv_value(j->body, "expiresIn", v, sizeof(v)) &&
                                       plink_num(v) > 60 ? plink_num(v) : 900UL) * 1000UL;
-        amce_log("plex: signing in", "a code to enter at plex.tv/link");
+        amb_log("plex: signing in", "a code to enter at plex.tv/link");
         plink_show();
         break;
     case PL_CHECK:
@@ -12855,7 +12855,7 @@ static void plink_sign_out(void)
     plink_stop();
     plex_set_account("", "");
     plex_set_token("");                     /* the server's, which came with it */
-    amce_log("plex: plex.tv", "signed out");
+    amb_log("plex: plex.tv", "signed out");
     plex_settings_again(TRUE);
     set_msg(_("Signed out of plex.tv"));
 }
@@ -12890,14 +12890,14 @@ static void radio_done(struct NetJob *j)
                     char t[60];
                     sprintf(t, "; asked %lu ms after the move",
                             (unsigned long)(art_asked[d] - pv_since));
-                    amce_strlcat(m, t, sizeof(m));
+                    amb_strlcat(m, t, sizeof(m));
                 }
-                amce_log("plex: picture", m);
+                amb_log("plex: picture", m);
                 art_ready(d, art_want[d]);
             } else {
                 char m[80];
                 sprintf(m, "not sent (%ld)%s%.40s", (long)j->status, j->err[0] ? ": " : "", j->err);
-                amce_log("plex: picture", m);
+                amb_log("plex: picture", m);
                 if (d == ART_VW)
                     vw_failed = TRUE;       /* the viewer goes on without it */
             }
@@ -12964,7 +12964,7 @@ static void radio_done(struct NetJob *j)
             p->plex_more++;
             sprintf(m, "%.40s: part %ld read (%ld entries from %ld), in %ld ms", p->title,
                     (long)k + 1, (long)n, (long)j->start - 1, (long)j->ms);
-            amce_log("plex", m);
+            amb_log("plex", m);
             np_mark_lists(FALSE);
             if (p->photos)
                 plex_slides_label(p);       /* its count: these photos too */
@@ -13006,17 +13006,17 @@ static void radio_done(struct NetJob *j)
                 if (a->kind != IT_PLEXDIR)
                     continue;
                 sprintf(line, "%s%.60s\t%.80s", v[0] ? "\n" : "", a->path, a->label);
-                amce_strlcat(v, line, sizeof(v));
+                amb_strlcat(v, line, sizeof(v));
             }
             plex_set_photo_libs(v);
             pictures_root_again();
             if (n == 1) {
-                amce_strlcpy(sec, p->list.items[0].path, sizeof(sec));
-                amce_strlcpy(p->title, p->list.items[0].label, sizeof(p->title));
+                amb_strlcpy(sec, p->list.items[0].path, sizeof(sec));
+                amb_strlcpy(p->title, p->list.items[0].label, sizeof(p->title));
                 list_free(&p->list);
                 list_init(&p->list);
                 sprintf(m, "photos: one photo library, %s", sec);
-                amce_log("plex", m);
+                amb_log("plex", m);
                 plex_refetch(p, sec);
                 if (j->body)
                     FreeVec(j->body);
@@ -13034,9 +13034,9 @@ static void radio_done(struct NetJob *j)
             plex_section_menu(sec + 1, &p->list);
             plex_set_library(sec + 1, 1);
             music_root_again();
-            amce_strlcpy(p->base, "@", sizeof(p->base));
+            amb_strlcpy(p->base, "@", sizeof(p->base));
             sprintf(m, "%s: one music library, %s", p->title, sec + 1);
-            amce_log("plex", m);
+            amb_log("plex", m);
             if (p == cur() && !pane_pending) {
                 msg[0] = 0;
                 draw_pane(TRUE);
@@ -13055,13 +13055,13 @@ static void radio_done(struct NetJob *j)
             if (!strcmp(type, "album")) {
                 char key[300], title[96];
                 radio_field(a, 0, key, sizeof(key));
-                amce_strlcpy(p->plex_label, a->label, sizeof(p->plex_label));
-                amce_strlcpy(p->plex_meta, a->path, sizeof(p->plex_meta));
+                amb_strlcpy(p->plex_label, a->label, sizeof(p->plex_label));
+                amb_strlcpy(p->plex_meta, a->path, sizeof(p->plex_meta));
                 sprintf(title, "%.44s - %.44s", p->title, a->label);
-                amce_strlcpy(p->title, title, sizeof(p->title));
+                amb_strlcpy(p->title, title, sizeof(p->title));
                 list_free(&p->list);
                 list_init(&p->list);
-                amce_log("plex: one album", key);
+                amb_log("plex: one album", key);
                 plex_refetch(p, key);
                 if (j->body)
                     FreeVec(j->body);
@@ -13079,7 +13079,7 @@ static void radio_done(struct NetJob *j)
             if (!strncmp(p->base, lib, strlen(lib))) {
                 sprintf(m, "%s: library %.40s not on the server now: forgotten", p->title,
                         plex.library);
-                amce_log("plex", m);
+                amb_log("plex", m);
                 plex_set_library("", 0);
                 music_root_again();
                 gone = _("That library is gone from the server: Music lists them again");
@@ -13143,7 +13143,7 @@ static void radio_done(struct NetJob *j)
                 }
             }
         }
-        amce_log("plex", m);
+        amb_log("plex", m);
         np_mark_lists(FALSE);               /* what plays, marked in the new list too */
         plex_shortcut_fix(p);               /* a library's list: Now playing first */
         plex_pos_restore(p);                /* back where it was left */
@@ -13166,11 +13166,11 @@ static void radio_done(struct NetJob *j)
             list_add(&p->list, why[0] ? why : "Could not reach radio-browser.info", "", "",
                      IT_TEXT);
             sprintf(m, "%s: %s", p->title, why);
-            amce_log("radio", m);
+            amb_log("radio", m);
         } else {
             sprintf(m, "%s: %ld listed, %ld left out, from %s in %ld ms", p->title, (long)n,
                     (long)skipped, j->server, (long)j->ms);
-            amce_log("radio", m);
+            amb_log("radio", m);
             plex_shortcut_fix(p);           /* Now playing first, while a station plays */
         }
         if (p == cur() && !pane_pending) {
@@ -13297,15 +13297,15 @@ static void radio_open(struct Item *it)
         return;
     }
     p->radio = 1;
-    amce_strlcpy(p->base, it->path, sizeof(p->base));
+    amb_strlcpy(p->base, it->path, sizeof(p->base));
     if (it->kind == IT_PLEXDIR) {
         p->plex = 1;
         p->photos = photos;
         radio_field(it, 0, p->base, sizeof(p->base));  /* its key; the rest is its details */
         if (strstr(it->path, "\talbum\t")) {
             /* an album: its details stay beside its tracks */
-            amce_strlcpy(p->plex_label, it->label, sizeof(p->plex_label));
-            amce_strlcpy(p->plex_meta, it->path, sizeof(p->plex_meta));
+            amb_strlcpy(p->plex_label, it->label, sizeof(p->plex_label));
+            amb_strlcpy(p->plex_meta, it->path, sizeof(p->plex_meta));
         }
         if (!strcmp(p->base, "#gdm")) {
             j->gdm = 1;
@@ -13313,20 +13313,20 @@ static void radio_open(struct Item *it)
                 j->tls = 1;                 /* the account's servers too, from plex.tv */
                 plex_tv_headers(j->extra, sizeof(j->extra), TRUE);
             }
-            amce_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
+            amb_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
         } else {
-            amce_strlcpy(j->host, plex.host, sizeof(j->host));
+            amb_strlcpy(j->host, plex.host, sizeof(j->host));
             j->port = plex.port;
             plex_request(p->base, j->path, sizeof(j->path));
             j->parse = 1;                   /* read in the network process */
             j->wait_s = PLEX_WAIT_S;        /* a NAS's server may think for a while */
-            amce_strlcpy(j->pkey, p->base, sizeof(j->pkey));
+            amb_strlcpy(j->pkey, p->base, sizeof(j->pkey));
             sprintf(msg, _("Asking %.40s...  Esc to give up"), plex.name[0] ? plex.name : plex.host);
         }
     } else {
         radio_set_max_kbps(rkbps_now());
         radio_request(p->base, https_ok(), j->path, sizeof(j->path));
-        amce_strlcpy(msg, _("Asking radio-browser.info...  Esc to give up"), sizeof(msg));
+        amb_strlcpy(msg, _("Asking radio-browser.info...  Esc to give up"), sizeof(msg));
     }
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
@@ -13366,7 +13366,7 @@ static int pictures_plex_rows(struct Page *p)
     struct Item *it;
     int n = 0, i;
     if (!caps.net || !plex.on || !plex.host[0]) {
-        amce_log("pictures: no Plex rows", !caps.net ? "no TCP/IP stack" : !plex.on
+        amb_log("pictures: no Plex rows", !caps.net ? "no TCP/IP stack" : !plex.on
                                            ? "Plex is turned off" : "no Plex server chosen");
         if (caps.net && (it = list_add_first(&p->list, !plex.on
                                              ? _("Plex photos: Plex is turned off (Settings > Networking > Plex)")
@@ -13377,7 +13377,7 @@ static int pictures_plex_rows(struct Page *p)
         }
         return 0;
     }
-    amce_strlcpy(lines, plex_photo_libs(), sizeof(lines));
+    amb_strlcpy(lines, plex_photo_libs(), sizeof(lines));
     for (l = lines; *l && n < 6; l = e) {
         e = strchr(l, '\n');
         if (e)
@@ -13387,15 +13387,15 @@ static int pictures_plex_rows(struct Page *p)
         if (!(t = strchr(l, '\t')))
             continue;
         *t++ = 0;
-        amce_strlcpy(keys[n], l, sizeof(keys[n]));
-        amce_strlcpy(titles[n], t, sizeof(titles[n]));
+        amb_strlcpy(keys[n], l, sizeof(keys[n]));
+        amb_strlcpy(titles[n], t, sizeof(titles[n]));
         n++;
     }
     {
         char m[120];
         sprintf(m, "%ld photo librar%s known on %.60s", (long)n, n == 1 ? "y" : "ies",
                 plex.name[0] ? plex.name : plex.host);
-        amce_log("pictures: Plex rows", m);
+        amb_log("pictures: Plex rows", m);
     }
     if (!n) {
         sprintf(label, _("Plex photos on %.80s"), plex.name[0] ? plex.name : plex.host);
@@ -13438,13 +13438,13 @@ static void plex_refetch(struct Page *p, const char *key)
     struct NetJob *j;
     if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
-    amce_strlcpy(p->base, key, sizeof(p->base));
-    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    amb_strlcpy(p->base, key, sizeof(p->base));
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
     plex_request(key, j->path, sizeof(j->path));
     j->parse = 1;
     j->wait_s = PLEX_WAIT_S;
-    amce_strlcpy(j->pkey, key, sizeof(j->pkey));
+    amb_strlcpy(j->pkey, key, sizeof(j->pkey));
     j->seq = ++rq_seq;
     p->net_seq = j->seq;
     rq = j;
@@ -13470,7 +13470,7 @@ static void plex_ask_rate(const char *key)
     }
     if (!plex.host[0] || !net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
-    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
     plex_request(key, j->path, sizeof(j->path));
     j->seq = 0;
@@ -13502,7 +13502,7 @@ static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
         if (kind == ART_PV && !strcmp(art_want[ART_AHEAD], file)) {
             /* on its way already, fetched ahead: this kind's now */
             art_nj[kind] = art_nj[ART_AHEAD];
-            amce_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
+            amb_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
             art_asked[kind] = art_asked[ART_AHEAD];
             art_nj[ART_AHEAD] = NULL;
             return FALSE;
@@ -13515,11 +13515,11 @@ static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
     }
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return FALSE;
-    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
-    amce_strlcpy(j->path, req, sizeof(j->path));
+    amb_strlcpy(j->path, req, sizeof(j->path));
     j->seq = 0;
-    amce_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
+    amb_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
     art_asked[kind] = time_ms();
     art_nj[kind] = j;
     net_submit(j);
@@ -13565,7 +13565,7 @@ static void np_art_load(const char *file)
         return;
     j->type = LJ_SHOT;
     j->mode = SHOT_FILE;
-    amce_strlcpy(j->path, file, sizeof(j->path));
+    amb_strlcpy(j->path, file, sizeof(j->path));
     j->scr = g.scr;
     j->remap = g.truecolor;
     j->want_pic = FALSE;
@@ -13604,7 +13604,7 @@ static void np_art_draw(void)
         np_aj->obj = NULL;                  /* the screen has it (its pens) */
     if (g.pic_w) {
         /* what is on screen, and where: the album's pane takes it back */
-        amce_strlcpy(pv_onscr.key, np_aj->path, sizeof(pv_onscr.key));
+        amb_strlcpy(pv_onscr.key, np_aj->path, sizeof(pv_onscr.key));
         pv_onscr.x = np.art_x;
         pv_onscr.y = np.art_y;
         pv_onscr.w = np.art_s;
@@ -13626,7 +13626,7 @@ static void np_art_start(const struct Item *it)
     if (!strcmp(thumb, shown) && thumb[0] &&
         (np_aj || art_nj[ART_NP] || (g.pic_w && !strcmp(np_art_file, pv_onscr.key))))
         return;                             /* the same album: its cover stays as it is */
-    amce_strlcpy(shown, thumb, sizeof(shown));
+    amb_strlcpy(shown, thumb, sizeof(shown));
     np_art_free();
     np_art_file[0] = 0;
     np_art_want = thumb[0] != 0;            /* a cover to show: its square kept */
@@ -13642,7 +13642,7 @@ static void np_art_start(const struct Item *it)
      * which can then go across as it is (pic_take) */
     s = np_art_size();
     if (art_fetch(ART_NP, thumb, s, s, file)) {
-        amce_strlcpy(np_art_file, file, sizeof(np_art_file));
+        amb_strlcpy(np_art_file, file, sizeof(np_art_file));
         if (np_on() && pic_take(file, np.art_x, np.art_y, np.art_s, np.art_h)) {
             np_art_drawn = TRUE;            /* the one on screen: moved */
             return;
@@ -13651,7 +13651,7 @@ static void np_art_start(const struct Item *it)
             return;                         /* in the pane: taken when the page opens */
         np_art_load(file);
     } else {
-        amce_strlcpy(np_art_file, file, sizeof(np_art_file));     /* asked for: art_ready */
+        amb_strlcpy(np_art_file, file, sizeof(np_art_file));     /* asked for: art_ready */
     }
 }
 
@@ -13767,7 +13767,7 @@ static void plex_sum_find(const struct Item *it, char *out, LONG max)
         return;
     for (i = 0; i < SUM_KEPT; i++)
         if (sum_kept[i].key[0] && !strcmp(sum_kept[i].key, k)) {
-            amce_strlcpy(out, sum_kept[i].text, max);
+            amb_strlcpy(out, sum_kept[i].text, max);
             return;
         }
 }
@@ -13794,10 +13794,10 @@ static void plex_sum_ask(const struct Item *it, WORD y)
     }
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
-    amce_strlcpy(j->host, plex.host, sizeof(j->host));
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
     j->port = plex.port;
     plex_request(k, j->path, sizeof(j->path));
-    amce_strlcpy(sum_want, k, sizeof(sum_want));
+    amb_strlcpy(sum_want, k, sizeof(sum_want));
     sum_y = y;
     plex_sj = j;
     net_submit(j);
@@ -13818,8 +13818,8 @@ static void plex_sum_came(struct NetJob *j)
         plex_summary(j->body, j->len, text, sizeof(text));
     else if (!j->body)
         return;                             /* not reached: asked again next time */
-    amce_strlcpy(sum_kept[i].key, sum_want, sizeof(sum_kept[i].key));
-    amce_strlcpy(sum_kept[i].text, text, sizeof(sum_kept[i].text));
+    amb_strlcpy(sum_kept[i].key, sum_want, sizeof(sum_kept[i].key));
+    amb_strlcpy(sum_kept[i].text, text, sizeof(sum_kept[i].text));
     sum_next = (sum_next + 1) % SUM_KEPT;
     if (!text[0] || !p || !p->plex || p != pv_page || p->sel != pv_sel || !pv_shown ||
         pane_pending || !plex_pv_src(p, p->sel, &src) || !sum_key(&src, k, sizeof(k)) ||
@@ -13898,7 +13898,7 @@ static void pv_photo_keep(const char *file)
             return;
     if (pv_photo_file[pv_photo_next][0])
         DeleteFile((CONST_STRPTR)pv_photo_file[pv_photo_next]);
-    amce_strlcpy(pv_photo_file[pv_photo_next], file, sizeof(pv_photo_file[0]));
+    amb_strlcpy(pv_photo_file[pv_photo_next], file, sizeof(pv_photo_file[0]));
     pv_photo_next = (pv_photo_next + 1) % PV_PHOTOS_KEPT;
 }
 
@@ -14000,7 +14000,7 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
     }
-    amce_strlcpy(last, key, sizeof(plex_shown));
+    amb_strlcpy(last, key, sizeof(plex_shown));
     radio_field(&src, 3, year, sizeof(year));
     radio_field(&src, 4, by, sizeof(by));
     radio_field(&src, 5, count, sizeof(count));
@@ -14030,14 +14030,14 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     }
     line[0] = 0;
     if (year[0])
-        amce_strlcat(line, year, sizeof(line));
+        amb_strlcat(line, year, sizeof(line));
     if (count[0]) {
-        amce_strlcat(line, line[0] ? "   " : "", sizeof(line));
-        amce_strlcat(line, count, sizeof(line));
+        amb_strlcat(line, line[0] ? "   " : "", sizeof(line));
+        amb_strlcat(line, count, sizeof(line));
     }
     if (studio[0]) {
-        amce_strlcat(line, line[0] ? "   " : "", sizeof(line));
-        amce_strlcat(line, studio, sizeof(line));
+        amb_strlcat(line, line[0] ? "   " : "", sizeof(line));
+        amb_strlcat(line, studio, sizeof(line));
     }
     if (line[0]) {
         gfx_text(&g, x0, y, line, PEN_DIM, PEN_BG, w, TS_SMALL);
@@ -14089,7 +14089,7 @@ static void plex_choose(struct Item *it)
     UWORD port = 32400;
     radio_field(it, 0, hp, sizeof(hp));
     radio_field(it, 1, name, sizeof(name));
-    amce_strlcpy(host, hp, sizeof(host));
+    amb_strlcpy(host, hp, sizeof(host));
     if ((c = strchr(host, ':'))) {
         LONG v = 0;
         const char *d = c + 1;
@@ -14103,7 +14103,7 @@ static void plex_choose(struct Item *it)
     radio_field(it, 2, name, sizeof(name));
     if (name[0])
         plex_set_token(name);               /* the account's server: its own token */
-    amce_log("plex: server chosen", hp);
+    amb_log("plex: server chosen", hp);
     if (depth >= 2 && menu_sel >= 0 && menu[menu_sel] == MOD_SETTINGS) {
         /* chosen in Settings > Plex: back there, the row naming it */
         page_pop();
@@ -14174,7 +14174,7 @@ static void plex_help(void)
         if (mp3)
             sprintf(line, _("MP3: decoded by the MHI driver %.40s"), mp3);
         else
-            amce_strlcpy(line, own_mpega ? _("MP3: decoded by amcempega.library, Ambiance's own")
+            amb_strlcpy(line, own_mpega ? _("MP3: decoded by ambmpega.library, Ambiance's own")
                                : caps.mpega_zz ? _("MP3: decoded on the ZZ9000 (its mpega.library)")
                                : caps.mp3_mpega ? _("MP3: decoded by mpega.library")
                                : _("MP3: no decoder (mpega.library or MHI)"),
@@ -14209,7 +14209,7 @@ static void radio_station(struct Item *it)
     radio_field(it, 5, line, sizeof(line));
     if (br > 0) {
         sprintf(f, "%s, %ldkbps", line, (long)br);
-        amce_strlcpy(line, f, sizeof(line));
+        amb_strlcpy(line, f, sizeof(line));
     }
     sprintf(f, _("Format:   %s"), line);
     text_line(p, f);
@@ -14291,12 +14291,12 @@ static void folder_add(int k)
         gfx_dbuf_start(&g);
     if (got) {
         for (i = 0; i < f->n; i++)
-            if (!amce_stricmp(f->dir[i], path))
+            if (!amb_stricmp(f->dir[i], path))
                 break;
         if (i < f->n) {
             set_msg(_("That folder is there already"));
         } else {
-            amce_strlcpy(f->dir[f->n++], path, sizeof(f->dir[0]));
+            amb_strlcpy(f->dir[f->n++], path, sizeof(f->dir[0]));
             save_folders(k);
             settings_rebuild();
             if (cur() && cur()->setp == SETP_FOLDSET)
@@ -14372,7 +14372,7 @@ static void act_action(struct Item *it)
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         else if (it->action == ACT_SND_OWNMPEGA)
-            set_msg(_("amcempega.library is not in Ambiance's Libs"));
+            set_msg(_("ambmpega.library is not in Ambiance's Libs"));
         else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END)
             set_msg(_("MHI and the ZZ9000's mpega.library decode MP3 at their best"));
         return;
@@ -14429,9 +14429,9 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_LANGSET)
         open_settings_page(_("Language"), build_lang_settings);
     else if (it->action == ACT_LANGWB || it->action == ACT_LANGEN ||
-             (it->action >= ACT_LANG0 && it->action < ACT_LANG0 + amce_lang_count()))
+             (it->action >= ACT_LANG0 && it->action < ACT_LANG0 + amb_lang_count()))
         choose_language(it->action == ACT_LANGWB ? "" : it->action == ACT_LANGEN
-                        ? "english" : amce_lang_name(it->action - ACT_LANG0));
+                        ? "english" : amb_lang_name(it->action - ACT_LANG0));
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
     else if (it->action == ACT_HTTPS)
@@ -14507,7 +14507,7 @@ static void act_action(struct Item *it)
             int i = it->action - ACT_RSRV0;
             if (i >= nmirror)
                 return;
-            amce_strlcpy(rsrv, mirrors[i].name, sizeof(rsrv));
+            amb_strlcpy(rsrv, mirrors[i].name, sizeof(rsrv));
         }
         save_setting(RSRV_VAR, rsrv);
         rsrv_apply();
@@ -14522,16 +14522,16 @@ static void act_action(struct Item *it)
         const char *d = it->action == ACT_SND_MPEGA || it->action == ACT_SND_OWNMPEGA
                         ? "" : mhi_names[it->action - ACT_SND_MHI0];
         BOOL own = it->action == ACT_SND_OWNMPEGA;
-        if (amce_stricmp(d, mhi_sel) || own != own_mpega) {
-            amce_strlcpy(mhi_sel, d, sizeof(mhi_sel));
+        if (amb_stricmp(d, mhi_sel) || own != own_mpega) {
+            amb_strlcpy(mhi_sel, d, sizeof(mhi_sel));
             own_mpega = own;
-            save_setting(MP3_VAR, d[0] ? d : own ? "amcempega" : "mpega");
+            save_setting(MP3_VAR, d[0] ? d : own ? "ambmpega" : "mpega");
             mhi_apply();
             sound_restart();                /* what plays: through it now */
             plex_settings_again(FALSE);
         }
         set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
-                : own ? _("MP3 decoded here by amcempega.library, Ambiance's own")
+                : own ? _("MP3 decoded here by ambmpega.library, Ambiance's own")
                       : _("MP3 decoded here by mpega.library"));
     }
     else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END) {
@@ -14769,7 +14769,7 @@ static void hold_stop(void)
                 (long)hold.cmoved, (long)(time_ms() - hold.cstart), (long)hold.cv0,
                 p && p->type == PT_LIST ? (long)p->sel : -1L,
                 p && p->type == PT_LIST ? (long)p->list.count : -1L);
-        amce_log("coast", m);
+        amb_log("coast", m);
     }
     if (hold.dir && hold.held_ms > HOLD_DELAY && p && p->type == PT_LIST) {
         char m[320];
@@ -14782,7 +14782,7 @@ static void hold_stop(void)
                 (long)(time_ms() - hold.t_down), (long)hold.worst, (long)hold.slow,
                 (long)hold.move_ms, (long)hold.present_ms, (long)ov_n,
                 (long)ov_ms, (long)p->sel, (long)p->top, (long)p->list.count);
-        amce_log(g.wb ? "glide (in a window)" : "glide", m);
+        amb_log(g.wb ? "glide (in a window)" : "glide", m);
         scr_watch_now("the glide's end");
     }
     hold.dir = 0;
@@ -15519,7 +15519,7 @@ static void handle_mouse(struct IntuiMessage *im)
     if (im->Class == IDCMP_MOUSEBUTTONS && (im->Code == SELECTDOWN || im->Code == MENUDOWN) &&
         coast_interrupt()) {
         if (debug_on)
-            amce_log("click", "it stopped a coast, and did nothing else");
+            amb_log("click", "it stopped a coast, and did nothing else");
         return;                             /* a click during a coast only stops it */
     }
     if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top)) {
@@ -15580,7 +15580,7 @@ static void handle_mouse(struct IntuiMessage *im)
                 (long)click_opened, (long)last_click, (unsigned long)im->Seconds,
                 (unsigned long)im->Micros, (unsigned long)last_secs, (unsigned long)last_mics,
                 (unsigned long)(time_ms() - last_ms));
-        amce_log("click", m);
+        amb_log("click", m);
     }
     nav_moved();
     disarm();
@@ -15651,7 +15651,7 @@ static void handle_mouse(struct IntuiMessage *im)
                     if (it->kind == IT_SONG || it->kind == IT_MOD || it->kind == IT_PIC ||
                         it->kind == IT_ANIM || it->kind == IT_RUN || it->kind == IT_PLEXTRACK || it->kind == IT_PLEXPHOTO) {
                         if (debug_on)
-                            amce_log("click: double on the pane", it->label);
+                            amb_log("click: double on the pane", it->label);
                         set_focus(FOCUS_CONTENT);
                         act_open(FALSE);
                     }
@@ -15688,7 +15688,7 @@ static void handle_mouse(struct IntuiMessage *im)
                     char m[160];
                     sprintf(m, "row %ld: %.80s (kind %ld), %s, %s", (long)idx, it->label,
                             (long)it->kind, playable ? "playable" : "opens", dbl ? "double" : "single");
-                    amce_log("click", m);
+                    amb_log("click", m);
                 }
                 if (dbl || !playable) {
                     ch_wait_item(p, idx, TRUE);
@@ -15792,7 +15792,7 @@ static void np_full_exit(void)
         gfx_fs_leave(&g);                   /* the window again */
     np_full_fs = FALSE;
     vf_stop();                              /* (its full-size maps given back) */
-    amce_log("visualisation", "Flow: the whole screen left");
+    amb_log("visualisation", "Flow: the whole screen left");
     draw_all();
 }
 
@@ -15827,7 +15827,7 @@ static void np_full_enter(void)
     np_full_serial = mp_serial();
     np_full_ctl = 0;
     nf_pointer(FALSE);
-    amce_log("visualisation", np_full_fs ? "Flow: full screen (Esc, a click on it or fire: back)"
+    amb_log("visualisation", np_full_fs ? "Flow: full screen (Esc, a click on it or fire: back)"
                                          : "Flow: the whole screen (Esc, a click on it or fire: back)");
 }
 
@@ -15927,9 +15927,9 @@ static void np_full_controls(void)
             x += nf_w;
     }
     x = nf_x[NF_VUP] + nf_w + U(10);        /* the time, after the buttons on the left */
-    amce_time_text(a, st.elapsed_ms);
+    amb_time_text(a, st.elapsed_ms);
     if (st.total_ms) {
-        amce_time_text(b, st.total_ms);
+        amb_time_text(b, st.total_ms);
         sprintf(line, "%s / %s", a, b);
     } else
         strcpy(line, a);
@@ -16119,7 +16119,7 @@ static void handle_key(struct IntuiMessage *im)
      * a PC keyboard's Windows key under UAE, as a key) */
     if ((im->Class == IDCMP_VANILLAKEY ? (code == 'f' || code == 'F') : code == 0x23) &&
         (im->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
-        amce_log("window", g.wb ? "Amiga-F (a key): full screen" : "Amiga-F (a key): the window");
+        amb_log("window", g.wb ? "Amiga-F (a key): full screen" : "Amiga-F (a key): the window");
         if (window_offered())
             toggle_window();
         return;
@@ -16127,7 +16127,7 @@ static void handle_key(struct IntuiMessage *im)
     /* Amiga-I, either Amiga: iconified (full screen too) */
     if ((im->Class == IDCMP_VANILLAKEY ? (code == 'i' || code == 'I') : code == 0x17) &&
         (im->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
-        amce_log("iconify", "Amiga-I (a key)");
+        amb_log("iconify", "Amiga-I (a key)");
         gfx_iconify_asked = TRUE;
         return;
     }
@@ -16329,12 +16329,12 @@ static struct StackSwapStruct main_sss;
 static APTR main_stack;
 static int main_rc;
 
-int amce_cpu_ok(void);              /* cpucheck.c: built for the 68000 */
+int amb_cpu_ok(void);              /* cpucheck.c: built for the 68000 */
 
 int main(void)
 {
     struct Task *me;
-    if (!amce_cpu_ok())
+    if (!amb_cpu_ok())
         return 20;                          /* a 68000/010: said in a requester */
     me = FindTask(NULL);
     if ((ULONG)me->tc_SPUpper - (ULONG)me->tc_SPLower >= MAIN_STACK)
@@ -16363,9 +16363,9 @@ static int app_main(void)
         /* the language first: everything said from here on is in it */
         char buf[32];
         if (GetVar((CONST_STRPTR)LANG_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-            amce_strlcpy(lang_set, buf, sizeof(lang_set));
-        amce_lang_scan();
-        amce_lang_open(lang_set);
+            amb_strlcpy(lang_set, buf, sizeof(lang_set));
+        amb_lang_scan();
+        amb_lang_open(lang_set);
     }
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 39);
@@ -16380,7 +16380,7 @@ static int app_main(void)
         rc = 20;
         goto out;
     }
-    amce_card_init();               /* (before any process that reaches the card) */
+    amb_card_init();               /* (before any process that reaches the card) */
     load_debug();
     dbg_mem_baseline();
     read_start_args();
@@ -16391,7 +16391,7 @@ static int app_main(void)
     load_https();
     load_jump();
     load_visual();
-    amce_log_open(debug_on);
+    amb_log_open(debug_on);
     open_extra_libs();
     {
         /* PROGDIR:Ambiance.noloader: do the reading in the UI (to compare) */
@@ -16405,7 +16405,7 @@ static int app_main(void)
         me->pr_WindowPtr = oldwin;
         if (l) {
             UnLock(l);
-            amce_log("loader", "off (Ambiance.noloader)");
+            amb_log("loader", "off (Ambiance.noloader)");
         } else if (ldr_start()) {
             extern struct Task *ldr_task, *ldr_task2, *ldr_task3;
             char m[128];
@@ -16413,9 +16413,9 @@ static int app_main(void)
                        "picture now %08lx)",
                     (unsigned long)FindTask(NULL), (unsigned long)ldr_task, (unsigned long)ldr_task2,
                     (unsigned long)ldr_task3);
-            amce_log("loader", m);
+            amb_log("loader", m);
         } else {
-            amce_log("loader", "could not start: reading in the UI");
+            amb_log("loader", "could not start: reading in the UI");
         }
     }
 
@@ -16447,7 +16447,7 @@ static int app_main(void)
                 caps.mpega_zz ? "the ZZ9000 SDK's" : caps.mp3_mpega ? "not the card's" : "absent",
                 plex.jpeg_card ? "by zz9k-picture.datatype" : "by another datatype",
                 pic_on_card("PNG") ? "by zz9k-picture.datatype" : "by another datatype");
-        amce_log("zz9000", m);
+        amb_log("zz9000", m);
     }
     load_sound_out();
     load_folders();
@@ -16464,13 +16464,13 @@ static int app_main(void)
     }
 
     gfx_menu_labels((const char *const *)mod_names, MOD_COUNT);
-    amce_log("window: chosen by", win_chosen_by);
+    amb_log("window: chosen by", win_chosen_by);
     {
         BOOL opened = gfx_open(&g, &caps, screen_mode, ui_style) ||
                       (screen_mode != SM_AUTO && gfx_open(&g, &caps, SM_AUTO, ui_style));
         if (!opened && caps.wb_rtg) {
             /* Automatic on the card would not open: the chipset's, as before */
-            amce_log("screen", "the graphics card's mode would not open: a native one");
+            amb_log("screen", "the graphics card's mode would not open: a native one");
             caps.wb_rtg = FALSE;
             opened = gfx_open(&g, &caps, SM_AUTO, ui_style);
         }
@@ -16501,7 +16501,7 @@ static int app_main(void)
         char v[8];
         BOOL on = plex_tier() >= 2;
         if (GetVar((CONST_STRPTR)"Ambiance/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
-            on = !amce_stricmp(v, "on");
+            on = !amb_stricmp(v, "on");
         sm_alpha_allow(on);
     }
 
@@ -16522,7 +16522,7 @@ static int app_main(void)
             (cur()->type != PT_LIST || cur()->list.count) && !section_inert())
             focus = FOCUS_CONTENT;
         if (at >= 0)
-            amce_log("navigation", in_list ? "back where the last run left off (in the list)"
+            amb_log("navigation", in_list ? "back where the last run left off (in the list)"
                                             : "back where the last run left off (in the menu)");
         nav_sum_seen = nav_sum_written = nav_sum();
     }
@@ -16579,7 +16579,7 @@ static int app_main(void)
         if (sig & isig) {
             int a = icon_poll();
             if (a == ICON_QUIT) {
-                amce_log("iconify", "Workbench's Tools > Quit Ambiance");
+                amb_log("iconify", "Workbench's Tools > Quit Ambiance");
                 break;
             }
             if (a == ICON_OPEN)
@@ -16771,9 +16771,9 @@ out:
     {
         char m[64];
         sprintf(m, "%ld read ahead, %ld waited for", (long)pv_ready, (long)pv_waited);
-        amce_log("previews", m);
+        amb_log("previews", m);
     }
-    amce_log("quitting", "");
+    amb_log("quitting", "");
     amp_host_end();                 /* (a plug-in asked to go, its port taken down) */
     resume_store();                 /* what plays now, for the next start */
     vo_end();                       /* (Picasso96API.library, if a video opened it) */
@@ -16800,14 +16800,14 @@ out:
         DeleteIORequest((struct IORequest *)treq);
     if (tport)
         DeleteMsgPort(tport);
-    amce_log("timer closed", "");
+    amb_log("timer closed", "");
     mini_art_free();                /* (the mini player's cover: before the loader stops) */
     pv_flush();
     pics_forget();
     ldr_stop();
     anim_fact_forget();             /* (after the loader's processes: they read it) */
     pages_clear();
-    amce_log("pages freed", "");
+    amb_log("pages freed", "");
     beets_forget();
     mp_shutdown();
     if (np.list.pool)
@@ -16820,7 +16820,7 @@ out:
     if (mini_on)
         mini_drop_window();         /* (the mini player's window, on Workbench) */
     gfx_close(&g);
-    amce_log("screen closed", "");
+    amb_log("screen closed", "");
     {
         WORD l, t, w, h;
         UWORD k;
@@ -16849,15 +16849,15 @@ out:
         CloseLibrary(LayersBase);
     if (GfxBase)
         CloseLibrary((struct Library *)GfxBase);
-    amce_lang_quit();
+    amb_lang_quit();
     vis_stop();
     /* (no flush_memory first: putting idle libraries out put out ahi.device
      * while the ZZ9000AX's driver stayed, and the next program's sound hung
      * the Amiga as it began; what stays in memory is listed instead) */
     if (debug_on)
         dbg_mem_report();
-    amce_log("libraries closed, exiting", "");
-    amce_log_close();
+    amb_log("libraries closed, exiting", "");
+    amb_log_close();
     if (IntuitionBase)
         CloseLibrary((struct Library *)IntuitionBase);
     return rc;
@@ -16907,7 +16907,7 @@ const char *lv_label(void)
         return _("Classic");
     if (lv.name[0])
         return lv.name;
-    amce_strlcpy(stem, lv.file, sizeof(stem));
+    amb_strlcpy(stem, lv.file, sizeof(stem));
     if ((dot = strrchr(stem, '.')))
         *dot = 0;
     return stem;
@@ -17215,7 +17215,7 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     if (lv_pic[k].px)
         FreeVec(lv_pic[k].px);
     memset(&lv_pic[k], 0, sizeof(lv_pic[k]));
-    amce_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
+    amb_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
     lv_pic[k].w = w;
     lv_pic[k].h = h;
     lv_pic[k].used = ++lv_pic_clock;
@@ -17232,7 +17232,7 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
         }
     }
     if (!t) {
-        amce_log("layout: a picture could not be read", file);
+        amb_log("layout: a picture could not be read", file);
         return NULL;
     }
     if ((lv_pic[k].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
@@ -17283,8 +17283,8 @@ static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
 {
     lk_icon(&g, &lv.out, lv_icon_of(section), x, y, fg, bg);
 }
-static const char *h_tr(const char *s) { return amce_tr(s); }
-static void h_log(const char *s) { amce_log("layout", s); }
+static const char *h_tr(const char *s) { return amb_tr(s); }
+static void h_log(const char *s) { amb_log("layout", s); }
 static ULONG h_now(void) { return time_ms(); }
 
 /* ---- on and off */
@@ -17327,13 +17327,13 @@ static void lv_activate(void)
         set_msg(_("The layout could not be opened: the classic one is used"));
         return;
     }
-    amce_strlcpy(lv.name, e->name, sizeof(lv.name));
+    amb_strlcpy(lv.name, e->name, sizeof(lv.name));
     if (!lk_open(&g, &lv.out, TRUE))
         return;
     if (lv.out.bits < e->min_bits || g.h < e->min_h) {
         sprintf(m, "%s needs %ld-bit and %ld lines; this is %ld-bit, %ld lines: classic",
                 e->name, (long)e->min_bits, (long)e->min_h, (long)lv.out.bits, (long)g.h);
-        amce_log("layout", m);
+        amb_log("layout", m);
         lk_close(&lv.out);
         return;
     }
@@ -17364,7 +17364,7 @@ static void lv_activate(void)
     clock_text(lv.clock);
     lv.host.clock = lv.clock;
     if (e->open && !e->open(&lv.host)) {
-        amce_log("layout", "it would not open: classic");
+        amb_log("layout", "it would not open: classic");
         lk_close(&lv.out);
         return;
     }
@@ -17381,7 +17381,7 @@ static void lv_activate(void)
     gfx_off_hits = 0;
     sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)lv.out.bits, (long)g.w,
             (long)g.h, lk_canvas(&lv.out) ? ", drawn off screen" : "");
-    amce_log("layout", m);
+    amb_log("layout", m);
 }
 
 static void lv_sync(void)
@@ -17390,10 +17390,10 @@ static void lv_sync(void)
         char buf[32];
         lv.read = TRUE;
         if (GetVar((CONST_STRPTR)LAYOUT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
-            amce_strlcpy(lv.file, buf, sizeof(lv.file));
+            amb_strlcpy(lv.file, buf, sizeof(lv.file));
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
-            amce_log("layout", "Shift held as Ambiance started: the classic layout this time");
+            amb_log("layout", "Shift held as Ambiance started: the classic layout this time");
         }
     }
     if (lv.on && (!lv_suits() || g.scr != lv.scr || g.win != lv.win || g.w != lv.w ||
@@ -17539,7 +17539,7 @@ void lv_build_page(struct Page *p)
                                       on ? MARK_RADIO_ON : MARK_RADIO_OFF);
         if (on) {
             p->sel = p->list.count - 1;
-            amce_strlcpy(lv.name, lv.found[i].name, sizeof(lv.name));
+            amb_strlcpy(lv.name, lv.found[i].name, sizeof(lv.name));
         }
         if (it && (!g.truecolor || g.planar))
             it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen only) */
@@ -17553,14 +17553,14 @@ void lv_pick(int k)
     const char *file = k > 0 && k <= lv.nfound ? lv.found[k - 1].file : "";
     if (k > lv.nfound || strcmp(file, lv.file) == 0)
         return;
-    amce_strlcpy(lv.file, file, sizeof(lv.file));
+    amb_strlcpy(lv.file, file, sizeof(lv.file));
     lv.name[0] = 0;
     if (k > 0)
-        amce_strlcpy(lv.name, lv.found[k - 1].name, sizeof(lv.name));
+        amb_strlcpy(lv.name, lv.found[k - 1].name, sizeof(lv.name));
     lv.skip = FALSE;
     lv.tried = NULL;
     save_setting(LAYOUT_VAR, file);
-    amce_log("layout chosen", k ? file : "classic");
+    amb_log("layout chosen", k ? file : "classic");
     if (p)
         for (i = 0; i < p->list.count; i++)
             if (p->list.items[i].action >= ACT_LAYOUT0 && p->list.items[i].action <= ACT_LAYOUT_END)

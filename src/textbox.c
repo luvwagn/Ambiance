@@ -43,7 +43,7 @@
  * The same direct mode is the fallback when chip RAM for the bitmap runs
  * out on a native screen.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <graphics/gfxbase.h>

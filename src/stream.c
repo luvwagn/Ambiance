@@ -30,7 +30,7 @@
  * Networking > HTTPS on, AmiSSL installed) goes through AmiSSL (tls.c),
  * which the process likewise opens for itself, the first time one plays.
  */
-#include "amce.h"
+#include "amb.h"
 #include "radiocsv.h"
 #include "zz9k.h"
 #include "tspack.h"
@@ -154,22 +154,22 @@ typedef struct {
 #define MPEGA_decode_frame_(s, p) \
     LP2(42, LONG, MPEGA_decode_frame, MPEGA_STREAM *, s, a0, WORD **, p, a1, , MPEGABase)
 /* the ZZ9000 SDK's mpega.library streams to the card: each call under the
- * card lock (amce_card_lock: one task at a time) */
+ * card lock (amb_card_lock: one task at a time) */
 #define MPEGA_open(n, c) \
-    ({ MPEGA_STREAM *r_; amce_card_lock(); r_ = MPEGA_open_(n, c); amce_card_unlock(); r_; })
+    ({ MPEGA_STREAM *r_; amb_card_lock(); r_ = MPEGA_open_(n, c); amb_card_unlock(); r_; })
 #define MPEGA_close(s) \
-    do { amce_card_lock(); MPEGA_close_(s); amce_card_unlock(); } while (0)
+    do { amb_card_lock(); MPEGA_close_(s); amb_card_unlock(); } while (0)
 #define MPEGA_decode_frame(s, p) \
-    ({ LONG r_; amce_card_lock(); r_ = MPEGA_decode_frame_(s, p); amce_card_unlock(); r_; })
+    ({ LONG r_; amb_card_lock(); r_ = MPEGA_decode_frame_(s, p); amb_card_unlock(); r_; })
 
 typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
 
-/* amcempega.library (extras/mpga, Ambiance's Libs): mpega's functions under
+/* ambmpega.library (extras/mpga, Ambiance's Libs): mpega's functions under
  * a name of its own (libmad inside), and one more of its own after them,
  * MPGA_decode_to: each frame straight into our FIFO (16-bit rings), its
  * peaks and clipped samples with it. Settings > Sound chooses it or
  * LIBS:mpega.library (st_use_own_mpega). */
-#define AMCEMPEGANAME   "amcempega.library"
+#define AMBMPEGANAME   "ambmpega.library"
 #define MPGA_FMT_S16    0
 struct MpgaOut {
     ULONG mo_Format;
@@ -181,16 +181,16 @@ struct MpgaOut {
 typedef char mpgaout_size_check[sizeof(struct MpgaOut) == 36 ? 1 : -1];
 #define MPGA_decode_to(s, o) \
     LP2(72, LONG, MPGA_decode_to, MPEGA_STREAM *, s, a0, struct MpgaOut *, o, a1, , MPEGABase)
-static BOOL own_mpega;              /* Settings > Sound: MP3 by amcempega.library */
+static BOOL own_mpega;              /* Settings > Sound: MP3 by ambmpega.library */
 static BOOL mpega_is_own;           /* MPEGABase is it, this stream */
 
-/* the MP3 decoder chosen: amcempega.library from Ambiance's Libs, or
+/* the MP3 decoder chosen: ambmpega.library from Ambiance's Libs, or
  * LIBS:mpega.library (and that, if ours will not open) */
 static struct Library *mpega_open(void)
 {
     struct Library *l = NULL;
     mpega_is_own = FALSE;
-    if (own_mpega && (l = amce_open_own_lib(AMCEMPEGANAME, 1)))
+    if (own_mpega && (l = amb_open_own_lib(AMBMPEGANAME, 1)))
         mpega_is_own = TRUE;
     else
         l = OpenLibrary((CONST_STRPTR)"mpega.library", 2);
@@ -200,7 +200,7 @@ static struct Library *mpega_open(void)
 static void mpega_close(void)
 {
     if (mpega_is_own)
-        amce_close_own_lib(&MPEGABase);
+        amb_close_own_lib(&MPEGABase);
     else if (MPEGABase)
         CloseLibrary(MPEGABase);
     MPEGABase = NULL;
@@ -209,7 +209,7 @@ static void mpega_close(void)
 
 /* ---------------------------------------------------------- how fast MPEG audio decodes here
  * Measured, not judged from the CPU's name: a 68030 under an emulator's
- * JIT can be faster than a real 68060, and a 68060 does amcempega's
+ * JIT can be faster than a real 68060, and a 68060 does ambmpega's
  * 64-bit multiplies in 68060.library's software. The first time a stream
  * needs it in a run, the decoder in use decodes src/mpaprobe.h (128
  * kbit/s joint stereo at 44.1 kHz, synthetic) at each step of a ladder,
@@ -762,7 +762,7 @@ static void ahi_level_log(void)
     AHI_GetAudioAttrsA(AHI_INVALID_ID, ah.ctrl, t);
     sprintf(m, "AHI's mode: %s%s%s, %lu channels at most", stereo ? "stereo" : "mono",
             pan ? ", panning" : "", hifi ? ", HiFi" : "", (unsigned long)maxch);
-    amce_log("sound", m);
+    amb_log("sound", m);
 }
 
 static BOOL ahi_start_(void)
@@ -852,7 +852,7 @@ static BOOL ahi_start_(void)
                "16-bit %s",
             name[0] ? name : "?", (unsigned long)mix, (long)(st.dec_freq ? st.dec_freq : 22050),
             st.dec_channels == 1 ? "mono" : "stereo");
-    amce_log("sound", m);
+    amb_log("sound", m);
     ahi_level_log();
     return TRUE;
 }
@@ -861,9 +861,9 @@ static BOOL ahi_start_(void)
 static BOOL ahi_start(void)
 {
     BOOL r;
-    amce_card_lock();
+    amb_card_lock();
     r = ahi_start_();
-    amce_card_unlock();
+    amb_card_unlock();
     return r;
 }
 
@@ -871,9 +871,9 @@ static void ahi_stop_(void);
 
 static void ahi_stop(void)
 {
-    amce_card_lock();
+    amb_card_lock();
     ahi_stop_();
-    amce_card_unlock();
+    amb_card_unlock();
 }
 
 static void ahi_stop_(void)
@@ -916,7 +916,7 @@ static void out_start(void)
         if (!ahi_start()) {
             ahi_stop();
             if (!st.err[0])
-                amce_strlcpy(st.err, _("AHI could not be opened (its Preferences: a mode?)"),
+                amb_strlcpy(st.err, _("AHI could not be opened (its Preferences: a mode?)"),
                              sizeof(st.err));
             st.state = ST_FAILED;
             st.quit = TRUE;
@@ -947,9 +947,9 @@ static void out_take(void)
 static void fail(const char *why)
 {
     if (!st.err[0]) {
-        amce_strlcpy(st.err, why, sizeof(st.err));
+        amb_strlcpy(st.err, why, sizeof(st.err));
         if (st.local)
-            amce_log("track: not played", why);     /* a file here: why, for the log */
+            amb_log("track: not played", why);     /* a file here: why, for the log */
     }
     st.state = ST_FAILED;
 }
@@ -1006,8 +1006,8 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port, char 
 {
     const char *h, *slash, *colon;
     LONG n;
-    BOOL secure = !amce_strnicmp(url, "https://", 8);
-    if (amce_strnicmp(url, "http://", 7) && !secure)
+    BOOL secure = !amb_strnicmp(url, "https://", 8);
+    if (amb_strnicmp(url, "http://", 7) && !secure)
         return FALSE;
     h = url + (secure ? 8 : 7);
     slash = strchr(h, '/');
@@ -1026,7 +1026,7 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port, char 
         return FALSE;
     memcpy(host, h, n);
     host[n] = 0;
-    amce_strlcpy(path, slash ? slash : "/", pmax);
+    amb_strlcpy(path, slash ? slash : "/", pmax);
     return TRUE;
 }
 
@@ -1089,7 +1089,7 @@ static BOOL sock_open(const char *host, UWORD port, BOOL secure)
     if (!secure)
         return TRUE;
     if (!tls_open(&st_tls, st_SocketBase)) {
-        amce_log("radio: https", st_tls.why);
+        amb_log("radio: https", st_tls.why);
         sock_close();
         fail(_("HTTPS needs AmiSSL 5"));
         return FALSE;
@@ -1107,7 +1107,7 @@ static BOOL sock_open(const char *host, UWORD port, BOOL secure)
         }
         if (r != TLS_WANT_READ && r != TLS_WANT_WRITE) {
             sprintf(m, "%.60s: %.120s", host, st_tls.why);
-            amce_log("radio: https", m);
+            amb_log("radio: https", m);
             sock_close();
             fail(_("The secure connection failed"));
             return FALSE;
@@ -1230,7 +1230,7 @@ static BOOL header(const char *hdr, const char *name, char *out, LONG max)
     LONG n = strlen(name);
     const char *p = hdr;
     while (p && *p) {
-        if (!amce_strnicmp(p, name, n) && p[n] == ':') {
+        if (!amb_strnicmp(p, name, n) && p[n] == ':') {
             const char *v = p + n + 1, *e;
             while (*v == ' ')
                 v++;
@@ -1287,7 +1287,7 @@ static void log_refusal(LONG status)
     {
         char t[240];
         sprintf(t, "%ld: %.200s", (long)status, m[0] ? m : "(nothing said)");
-        amce_log("track: refused", t);
+        amb_log("track: refused", t);
     }
 }
 
@@ -1297,7 +1297,7 @@ static char stop_url[1024];
 
 void st_set_stop_url(const char *url)
 {
-    amce_strlcpy(stop_url, url ? url : "", sizeof(stop_url));
+    amb_strlcpy(stop_url, url ? url : "", sizeof(stop_url));
 }
 
 /* A GET whose answer is not wanted, only that it was asked: quietly, a
@@ -1310,15 +1310,15 @@ static void ping_url(const char *url)
     LONG status = 0;
     if (!split_url(url, host, sizeof(host), &port, path, sizeof(path)))
         return;
-    if (sock_open(host, port, !amce_strnicmp(url, "https:", 6))) {
-        sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
+    if (sock_open(host, port, !amb_strnicmp(url, "https:", 6))) {
+        sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMB_VERSION
                      "\r\nConnection: close\r\n\r\n", path, host);
         if (sock_send(req))
             status = read_headers(hdr, sizeof(hdr));
         sock_close();
     }
     sprintf(m, "the conversion before stopped: %ld", (long)status);
-    amce_log("plex", m);
+    amb_log("plex", m);
     st.err[0] = 0;                          /* its failure, if it failed, not the stream's */
     st.state = ST_CONNECTING;
     st.nb_pos = st.nb_len = 0;
@@ -1331,7 +1331,7 @@ static BOOL open_stream(void)
     char host[96], hdr[2048], v[160], range[40];
     UWORD port;
     int hop;
-    amce_strlcpy(url, st.url, sizeof(url));
+    amb_strlcpy(url, st.url, sizeof(url));
     if (st.v_dvd) {
         st.clen = 0;                        /* a DVD: read by dvdplay.c, no file */
         st.nb_pos = st.nb_len = 0;
@@ -1361,7 +1361,7 @@ static BOOL open_stream(void)
     }
     for (hop = 0; hop < 4; hop++) {
         LONG status;
-        BOOL secure = !amce_strnicmp(url, "https:", 6);
+        BOOL secure = !amb_strnicmp(url, "https:", 6);
         if (secure && !https_on) {
             fail(_("This station only streams over HTTPS: turn on Settings > Networking > HTTPS"));
             return FALSE;
@@ -1378,7 +1378,7 @@ static BOOL open_stream(void)
         else
             range[0] = 0;
         sprintf(req,
-                "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
+                "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMB_VERSION
                 "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
                 path, host, st.finite ? "" : "Icy-MetaData: 1\r\n", range);
         if (!sock_send(req)) {
@@ -1392,7 +1392,7 @@ static BOOL open_stream(void)
         }
         if (status >= 300 && status < 400 && header(hdr, "Location", v, sizeof(v))) {
             sock_close();
-            amce_strlcpy(url, v, sizeof(url));
+            amb_strlcpy(url, v, sizeof(url));
             continue;
         }
         if (status >= 400 && st.finite)
@@ -1402,7 +1402,7 @@ static BOOL open_stream(void)
              * the start, the frames before the time passed over here */
             sock_close();
             st.skipping = no_offset = TRUE;
-            amce_log("track", "the server would not start part way in: seeking by reading");
+            amb_log("track", "the server would not start part way in: seeking by reading");
             hop--;
             continue;
         }
@@ -1414,19 +1414,19 @@ static BOOL open_stream(void)
         if (header(hdr, "icy-name", v, sizeof(v))) {
             utf8_to_latin1(v);
             squeeze_spaces(v);
-            amce_strlcpy(st.name, v, sizeof(st.name));
+            amb_strlcpy(st.name, v, sizeof(st.name));
         }
         if (header(hdr, "icy-genre", v, sizeof(v))) {
             utf8_to_latin1(v);
             squeeze_spaces(v);
-            amce_strlcpy(st.genre, v, sizeof(st.genre));
+            amb_strlcpy(st.genre, v, sizeof(st.genre));
         }
         if (header(hdr, "icy-br", v, sizeof(v))) {
-            st.bitrate = amce_num(v);
+            st.bitrate = amb_num(v);
             st.icy_br = TRUE;
         }
-        st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? amce_num(v) + st.range_from : 0;
-        st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? amce_num(v) : 0;
+        st.clen = header(hdr, "Content-Length", v, sizeof(v)) ? amb_num(v) + st.range_from : 0;
+        st.metaint = header(hdr, "icy-metaint", v, sizeof(v)) ? amb_num(v) : 0;
         st.meta_left = st.metaint;
         if (header(hdr, "Content-Type", v, sizeof(v))) {
             if (strstr(v, "mpegurl") || strstr(v, "scpls") || strstr(v, "x-mpegURL")) {
@@ -1449,7 +1449,7 @@ static BOOL open_stream(void)
                 for (e = p; *e && *e != '\r' && *e != '\n'; e++)
                     ;
                 *e = 0;
-                amce_strlcpy(url, p, sizeof(url));
+                amb_strlcpy(url, p, sizeof(url));
                 sock_close();
                 continue;
             }
@@ -1501,12 +1501,12 @@ static void title_show(const char *t)
 {
     if (!strcmp(t, st.title))
         return;
-    amce_strlcpy(st.title, t, sizeof(st.title));
+    amb_strlcpy(st.title, t, sizeof(st.title));
     st.title_seq++;
     if (!st.finite && t[0]) {
         char m[200];
         sprintf(m, "%.60s: %.120s", st.name[0] ? st.name : "a station", t);
-        amce_log("radio: on air", m);
+        amb_log("radio: on air", m);
     }
 }
 
@@ -1548,7 +1548,7 @@ static void take_meta(const char *m)
             tq_head = (UWORD)((tq_head + 1) % TITLES);
         }
         tq[tq_tail].at = titles_in_ms();
-        amce_strlcpy(tq[tq_tail].t, t, sizeof(tq[0].t));
+        amb_strlcpy(tq[tq_tail].t, t, sizeof(tq[0].t));
         tq_tail = next;
     }
     titles_due();
@@ -1821,7 +1821,7 @@ static BOOL mp3_resync(void)
             if (skipped) {
                 char m[80];
                 sprintf(m, "%lu bytes before the first whole frame let go", (unsigned long)skipped);
-                amce_log("track: seek", m);
+                amb_log("track: seek", m);
             }
             return TRUE;
         }
@@ -1848,7 +1848,7 @@ static const char *log_name(void)
 {
     static char u[120];
     char *q;
-    amce_strlcpy(u, (const char *)FilePart((STRPTR)st.url), sizeof(u));
+    amb_strlcpy(u, (const char *)FilePart((STRPTR)st.url), sizeof(u));
     if ((q = strchr(u, '?')))
         *q = 0;
     return u;
@@ -1859,7 +1859,7 @@ static ULONG dec_full, dec_samples;     /* mpega's samples at full scale, of all
 
 /* One frame of MPEG audio into the FIFO at st.f_in (room there for
  * MPEGA_PCM_SIZE), for music, radio and Plex (decode_loop) and a video's
- * sound alike: through amcempega.library straight into the FIFO's rings
+ * sound alike: through ambmpega.library straight into the FIFO's rings
  * (MPGA_decode_to), else mpega.library's frame copied in. The samples
  * clipped counted (dec_full), and all (dec_samples). both: a mono
  * stream's samples in both rings (a video's sound). The samples, or
@@ -2155,18 +2155,18 @@ static void flac_play(void)
         ULONG r = info.fdi_SampleRate;
         ULONG frame = (st.skip_ms / 1000) * r + (st.skip_ms % 1000) * r / 1000;
         if (!FLACDecSeek(dec, frame))
-            amce_log("track", "FLAC: could not seek there; from the start");
+            amb_log("track", "FLAC: could not seek there; from the start");
     }
     {
         char m[360], u[200], *q;
-        amce_strlcpy(u, st.url, sizeof(u));
+        amb_strlcpy(u, st.url, sizeof(u));
         if ((q = strchr(u, '?')))
             *q = 0;
         sprintf(m, "%s: FLAC %ld Hz %ld-bit, %ld channel%s, decoded at %ld Hz %s",
                 u, (long)info.fdi_SampleRate, (long)info.fdi_BitsPerSample,
                 (long)info.fdi_Channels, info.fdi_Channels == 1 ? "" : "s", (long)st.dec_freq,
                 mono ? "mono" : "stereo");
-        amce_log("track", m);
+        amb_log("track", m);
     }
     st.state = ST_BUFFERING;
     pcm_loop(flac_frames, dec, info.fdi_Channels, div, mono);
@@ -2275,7 +2275,7 @@ static void pcm_play(void)
                 log_name(), pf.kind == PCM_WAV ? "WAV" : pf.kind == PCM_AIFF ? "AIFF"
                 : "8SVX", (long)pf.rate, (long)pf.bits, (long)pf.channels,
                 pf.channels == 1 ? "" : "s", (long)st.dec_freq, mono ? "mono" : "stereo");
-        amce_log("track", m);
+        amb_log("track", m);
     }
     st.state = ST_BUFFERING;
     pcm_loop(pcm_frames, NULL, pf.channels, div, mono);
@@ -2397,7 +2397,7 @@ static BOOL sys_fix(volatile UBYTE *b, ULONG n)
             sprintf(m, "its first system header said %lu audio, %lu video streams: %lu and %lu given",
                     (unsigned long)(a >> 2), (unsigned long)(v & 0x1F),
                     (unsigned long)(b[i + 9] >> 2), (unsigned long)(b[i + 10] & 0x1F));
-            amce_log("video", m);
+            amb_log("video", m);
         }
         return TRUE;
     }
@@ -2531,7 +2531,7 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
         }
         tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);
         sprintf(m, "from byte %lu (a transport stream's packet)", (unsigned long)at);
-        amce_log("video", m);
+        amb_log("video", m);
         return TRUE;
     }
     if (!b)
@@ -2556,7 +2556,7 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
     if (!v_from_back && (n < 0 || at < 0)) {
         sprintf(m, "a seek to byte %lu: no %s after it", (unsigned long)st.range_from,
                 st.v_es ? "sequence header" : "pack");
-        amce_log("video", m);
+        amb_log("video", m);
         fail(_("The file could not be read"));
         goto done;
     }
@@ -2581,7 +2581,7 @@ static BOOL v_seek(struct ZzBuf *in, ULONG *pend)
     sprintf(m, "from byte %lu (asked %lu%s), its first %lu bytes of headers first",
             (unsigned long)(st.range_from + at), (unsigned long)st.range_from,
             v_from_back ? ": the picture group before it" : "", (unsigned long)*pend);
-    amce_log("video", m);
+    amb_log("video", m);
     ok = TRUE;
 done:
     FreeVec(b);
@@ -2636,7 +2636,7 @@ const char *st_ac3_cpu_why(void)
     if (!(SysBase->AttnFlags & (AFF_68040 | AFF_68060)))
         return "AC3 by the CPU needs a 68040 or 68060";
     for (i = 0; i < 4; i++)
-        if (amce_exists(at[i]))
+        if (amb_exists(at[i]))
             return NULL;
     return "no ac3.library (Ambiance's Libs or LIBS:)";
 }
@@ -2658,7 +2658,7 @@ static ULONG a3_time(const char *name)
     struct Ac3Info ai;
     APTR dec;
     ULONG hz = 0, t = 0, n = 0, i, at = 0;
-    if (!(Ac3Base = amce_open_own_lib(name, AC3VERSION)))
+    if (!(Ac3Base = amb_open_own_lib(name, AC3VERSION)))
         return 0;
     if ((dec = Ac3Open(AC3_STEREO, 0))) {
         for (i = 0; at + AC3_HEADER <= sizeof(ac3probe); i++) {
@@ -2679,7 +2679,7 @@ static ULONG a3_time(const char *name)
         }
         Ac3Close(dec);
     }
-    amce_close_own_lib(&Ac3Base);
+    amb_close_own_lib(&Ac3Base);
     return n && hz ? (ULONG)((unsigned long long)t * 1000000ULL / hz / n) : 0;
 }
 
@@ -2699,7 +2699,7 @@ static void a3_choose(void)
     sprintf(m, "AC3, a 5.1 frame: %s %lu.%02lu ms, %s %lu.%02lu ms: %s used", AC3FPUNAME,
             (unsigned long)(f / 1000), (unsigned long)(f % 1000 / 10), AC3NAME,
             (unsigned long)(i / 1000), (unsigned long)(i % 1000 / 10), a3_lib);
-    amce_log("video", m);
+    amb_log("video", m);
 }
 
 /* The library and a decoder (stereo): FALSE if not. */
@@ -2709,9 +2709,9 @@ static BOOL a3_open(char *m)
     a3.pts0 = ZZ_NO_PTS;
     a3_choose();
     if (!Ac3Base)
-        Ac3Base = amce_open_own_lib(a3_lib, AC3VERSION);
+        Ac3Base = amb_open_own_lib(a3_lib, AC3VERSION);
     if (!Ac3Base && strcmp(a3_lib, AC3NAME))
-        Ac3Base = amce_open_own_lib(AC3NAME, AC3VERSION);
+        Ac3Base = amb_open_own_lib(AC3NAME, AC3VERSION);
     if (!Ac3Base) {
         strcpy(m, "no ac3.library: played without its sound");
         return FALSE;
@@ -2733,7 +2733,7 @@ static void a3_close(void)
         FreeVec(a3.q);
     a3.dec = NULL;
     a3.q = NULL;
-    amce_close_own_lib(&Ac3Base);
+    amb_close_own_lib(&Ac3Base);
 }
 
 static void a3_put(const volatile UBYTE *b, ULONG n)
@@ -3038,13 +3038,13 @@ struct Library *MpegvBase;
 struct Library *st_mpv_open(void)
 {
     if (!MpegvBase)
-        MpegvBase = amce_open_own_lib(MPEGVNAME, MPEGVVERSION);
+        MpegvBase = amb_open_own_lib(MPEGVNAME, MPEGVVERSION);
     return MpegvBase;
 }
 
 void st_mpv_close(void)
 {
-    amce_close_own_lib(&MpegvBase);
+    amb_close_own_lib(&MpegvBase);
 }
 
 /* The newest picture given to show, if one is (FALSE: none new since the
@@ -3279,7 +3279,7 @@ static BOOL sw_seek_prep(void)
         v_from_back = FALSE;
         sprintf(m, "from byte %lu (a transport stream's packet), its first %lu bytes of headers first",
                 (unsigned long)pk, (unsigned long)k);
-        amce_log("video: by the CPU", m);
+        amb_log("video: by the CPU", m);
         ok = TRUE;
         goto done;
     }
@@ -3309,13 +3309,13 @@ static BOOL sw_seek_prep(void)
     sprintf(m, "from byte %lu (asked %lu%s), its first %lu bytes of headers first",
             (unsigned long)(st.range_from + at), (unsigned long)st.range_from,
             v_from_back ? ": the picture group before it" : "", (unsigned long)k);
-    amce_log("video: by the CPU", m);
+    amb_log("video: by the CPU", m);
     ok = TRUE;
 done:
     FreeVec(b);
     if (!ok) {
         sprintf(m, "a seek to byte %lu: no sequence header or pack found", (unsigned long)st.range_from);
-        amce_log("video: by the CPU", m);
+        amb_log("video: by the CPU", m);
     }
     return ok;
 }
@@ -3669,7 +3669,7 @@ static void swv_run(void)
             a3_close();                     /* (whatever it did open) */
             sw_ac3 = FALSE;
         }
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (st.v_ts && !st.range_from)
         tsp_begin(st.v_ts, st.v_vpid, st.v_apid, st.v_ac3, st.v_mpeg2);    /* (packed as read) */
@@ -3746,13 +3746,13 @@ static void swv_run(void)
         int k;
         char pm[600];
         if (!MPEGABase && !(MPEGABase = mpega_open())) {
-            amce_log("video", "no mpega.library: its sound left out");
+            amb_log("video", "no mpega.library: its sound left out");
             sw_sound = FALSE;
         } else {
             if (!(card_mpega && !mpega_is_own) &&
                 mpa_choose(f, st.ahi ? 48000 : 28000, 20, !st.ahi && !st.paula14, &q, &div, &mono, pm)) {
-                amce_log("video", "its sound: MPEG audio decoding here, measured a probe frame (26 ms of sound):");
-                amce_log("video", pm);
+                amb_log("video", "its sound: MPEG audio decoding here, measured a probe frame (26 ms of sound):");
+                amb_log("video", pm);
             } else {
                 while (div < 4 && f / div > fmax)
                     div *= 2;
@@ -3772,7 +3772,7 @@ static void swv_run(void)
             }
             sw_on = TRUE;                   /* (the hook: from the queue) */
             if (!(ms = MPEGA_open((char *)"Ambiance video", &ctrl))) {
-                amce_log("video", "mpega.library would not take its sound: left out");
+                amb_log("video", "mpega.library would not take its sound: left out");
                 sw_sound = FALSE;
             } else {
                 st.freq = ms->frequency;
@@ -3792,13 +3792,13 @@ static void swv_run(void)
             (long)st.v_h, st.v_mpeg2 ? 2L : 1L, (const char *)MpvVersion(),
             st.v_dvd ? ", a DVD's" : st.v_ts ? ", a transport stream packed as it is read"
                                            : st.v_es ? ", a bare video stream" : "",
-            sw_sound ? (mpega_is_own ? "its sound by amcempega.library" : "its sound by mpega.library") : sw_ac3 ? "its sound (AC3) by the CPU" : "no sound");
-    amce_log("video", m);
+            sw_sound ? (mpega_is_own ? "its sound by ambmpega.library" : "its sound by mpega.library") : sw_ac3 ? "its sound (AC3) by the CPU" : "no sound");
+    amb_log("video", m);
     if (sw_sound) {
         sprintf(m, "its sound: %ld Hz %s, decoded at %ld Hz %s through %s", (long)st.freq,
                 st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
                 st.dec_channels == 2 ? "stereo" : "mono", st.ahi ? "AHI" : "Paula");
-        amce_log("video", m);
+        amb_log("video", m);
     }
     st.state = ST_BUFFERING;
     pre = (ULONG)st.dec_freq * 300 / 1000;
@@ -3816,7 +3816,7 @@ static void swv_run(void)
                     (unsigned long)(time_ms() - seg_t0),                             \
                     (unsigned long)(nd && hz ? (t_dec - seg_tdec) * 1000 / hz / nd : 0), \
                     (unsigned long)(st.underruns - seg_under));                      \
-            amce_log("video: by the CPU", m);                                        \
+            amb_log("video: by the CPU", m);                                        \
         }                                                                            \
         seg_shown = st.v_shown;                                                      \
         seg_drop = st.v_dropped;                                                     \
@@ -3890,7 +3890,7 @@ static void swv_run(void)
                 if (n_redraw++ < 4) {
                     sprintf(m, "a new overlay: the picture again, %s: %s (%lu tries)", how,
                             drawn ? "drawn" : "not drawn", (unsigned long)redraw_tries);
-                    amce_log("video: by the CPU", m);
+                    amb_log("video: by the CPU", m);
                 }
                 redraw_tries = 0;
             }
@@ -3987,7 +3987,7 @@ static void swv_run(void)
                             (unsigned long)ai.ai_Channels, (unsigned long)ai.ai_LFE,
                             (unsigned long)(rate / adiv), st.ahi ? "AHI" : "Paula",
                             (unsigned long)(a3.pts0 / 90));
-                    amce_log("video", m);
+                    amb_log("video", m);
                 }
                 a3_to_fifo(got, adiv, &pcm_peak);
                 busy = TRUE;
@@ -4066,7 +4066,7 @@ static void swv_run(void)
                     if (st.range_from && !sw_nav) {
                         sprintf(m, "after the seek: %lu pictures before its first I picture not shown",
                                 (unsigned long)i_skipped);
-                        amce_log("video: by the CPU", m);
+                        amb_log("video: by the CPU", m);
                     }
                 }
                 swv[s].pts = (f->mpic_Flags & MPVPF_PTS) ? f->mpic_PTS : f->mpic_Time;
@@ -4127,7 +4127,7 @@ static void swv_run(void)
                 sprintf(m, "playing%s: the first picture at %lu ms, its sound's at %lu ms, %s",
                         n_seg > 1 ? " again" : "", (unsigned long)(pts0 / 90),
                         (unsigned long)(origin / 90), st.started ? "timed by its sound" : "timed by the clock");
-                amce_log("video", m);
+                amb_log("video", m);
             }
         }
         /* a DVD's menu: its sound come after its first picture, from here */
@@ -4168,7 +4168,7 @@ static void swv_run(void)
                         b_need = b_need < 960 ? b_need * 2 : b_need;
                     if (b_turns <= 3) {
                         sprintf(m, "behind at %lu ms: B pictures passed over", (unsigned long)(pts / 90));
-                        amce_log("video: by the CPU", m);
+                        amb_log("video: by the CPU", m);
                     }
                 }
             } else {
@@ -4268,7 +4268,7 @@ static void swv_run(void)
                     why[0] = sw_last_why ? sw_last_why : '?';
                     why[1] = 0;
                     sprintf(m, "a still: its picture could not be kept whole (%s)", why);
-                    amce_log("video: by the CPU", m);
+                    amb_log("video: by the CPU", m);
                 }
                 still_on = TRUE;
                 still_t0 = time_ms();
@@ -4291,7 +4291,7 @@ static void swv_run(void)
                     (unsigned long)(st.f_in - st.f_out), (unsigned long)MpvControl(sw_mpv, MPVC_HELD, 0),
                     (long)MpvControl(sw_mpv, MPVC_ENDED, 0),
                     (long)(sw_nav ? dvdplay_pending(st.v_dvd, NULL, NULL) : -1), (long)st.v_drift);
-            amce_log("video: by the CPU", m);
+            amb_log("video: by the CPU", m);
         }
         if (!busy)
             v_wait(3000);
@@ -4312,7 +4312,7 @@ static void swv_run(void)
             log_name(), (unsigned long)st.v_shown, (unsigned long)st.v_dropped,
             (unsigned long)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0), (unsigned long)b_turns, b_turns == 1 ? "" : "s",
             (unsigned long)st.underruns);
-    amce_log("video", m);
+    amb_log("video", m);
     m[0] = 0;
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
     sw_stat(m, "copied", t_conv, n_conv, hz);
@@ -4322,7 +4322,7 @@ static void swv_run(void)
     sprintf(m + strlen(m), "; a picture every %lu.%02lu ms; %s 680%ld",
             (unsigned long)(period / 90), (unsigned long)(period % 90 * 100 / 90),
             (SysBase->AttnFlags & AFF_68060) || st.cpu < 60 ? "a" : "as fast as a", (long)st.cpu);
-    amce_log("video: by the CPU", m);
+    amb_log("video: by the CPU", m);
     /* of those (each includes what it read): the decoding of its AC3
      * alone, and the reading (the file, the disc) */
     m[0] = 0;
@@ -4332,13 +4332,13 @@ static void swv_run(void)
     if (hz)
         sprintf(m + strlen(m), ": %lu ms in %lu s", (unsigned long)(sw_tread * 1000 / hz),
                 (unsigned long)((time_ms() - sw_t_start) / 1000));
-    amce_log("video: by the CPU", m);
+    amb_log("video: by the CPU", m);
     if (sw_ac3) {
         sprintf(m, "its AC3 by the CPU: %lu frames decoded, %lu of them bad, %lu bytes lost (too far "
                    "ahead), %lu left; peak %lu of 32767",
                 (unsigned long)a3.frames, (unsigned long)a3.bad, (unsigned long)a3.lost,
                 (unsigned long)(a3.qin - a3.qout), (unsigned long)pcm_peak);
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (sw_nav) {
         ULONG dec = 0, bad = 0;
@@ -4347,14 +4347,14 @@ static void swv_run(void)
                    "%lu with something over them (%lu: its band alone)",
                 (unsigned long)n_seg, (unsigned long)n_hop, (unsigned long)n_still, (unsigned long)dec,
                 (unsigned long)bad, (unsigned long)sw_ncomposed, (unsigned long)sw_nband);
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (st.v_ts) {
         ULONG rs, cut, pr;
         tsp_counts(&rs, &cut, &pr);
         sprintf(m, "its transport stream: %lu times out of step, %lu PES packets not read",
                 (unsigned long)rs, (unsigned long)cut);
-        amce_log("video", m);
+        amb_log("video", m);
     }
 out:
     sw_on = FALSE;
@@ -4432,13 +4432,13 @@ static void video_run(void)
     if (sound && st.v_ac3 && st.v_ac3cpu) {
         /* the card would not decode its AC3: the CPU does, the card none */
         csound = a3_open(m);
-        amce_log("video", m);
+        amb_log("video", m);
         if (!csound)
             a3_close();
         sound = FALSE;
     }
     if (sound && zz_alloc(V_PCM_BYTES, &pcm) != ZZ_OK && zz_alloc(V_PCM_BYTES / 2, &pcm) != ZZ_OK) {
-        amce_log("video", "no room on the card for its sound: played without it");
+        amb_log("video", "no room on the card for its sound: played without it");
         sound = FALSE;
     }
     {
@@ -4466,7 +4466,7 @@ static void video_run(void)
             st.v_es ? ", a bare video stream packed as it goes"
                     : st.v_ts ? ", a transport stream packed as it goes" : "",
             (unsigned long)session);
-    amce_log("video", m);
+    amb_log("video", m);
     st.state = ST_BUFFERING;
     st.v_ms = 0;
     if (st.range_from && !v_seek(&in, &pend_len))
@@ -4544,7 +4544,7 @@ static void video_run(void)
                         eof_sent = TRUE;
                     else if (s != ZZ_BUSY) {
                         sprintf(m, "the end of the file not taken (%s)", zz_name(s));
-                        amce_log("video", m);
+                        amb_log("video", m);
                         eof_sent = TRUE;
                     }
                     break;
@@ -4556,12 +4556,12 @@ static void video_run(void)
             s = zz_audio_read(session, ack, &au);
             if (s != ZZ_OK) {
                 sprintf(m, "its sound could not be read (%s): on without it", zz_name(s));
-                amce_log("video", m);
+                amb_log("video", m);
                 sound = FALSE;
             } else {
                 if (au.rate && !rate) {
                     if (au.format != 2 || (au.channels != 1 && au.channels != 2)) {
-                        amce_log("video", "its sound is in a form Ambiance does not play: on without it");
+                        amb_log("video", "its sound is in a form Ambiance does not play: on without it");
                         sound = FALSE;
                     } else {
                         rate = au.rate;
@@ -4580,7 +4580,7 @@ static void video_run(void)
                         sprintf(m, "its sound: MP2 %lu Hz %s, played at %lu Hz through %s",
                                 (unsigned long)rate, chans == 2 ? "stereo" : "mono",
                                 (unsigned long)(rate / div), st.ahi ? "AHI" : "Paula");
-                        amce_log("video", m);
+                        amb_log("video", m);
                     }
                 }
                 if (sound && rate && au.produced > ack) {
@@ -4626,7 +4626,7 @@ static void video_run(void)
                 if (sound && !said_audio && origin != ZZ_NO_PTS) {
                     said_audio = TRUE;
                     sprintf(m, "its sound begins at %lu ms", (unsigned long)(origin / 90));
-                    amce_log("video", m);
+                    amb_log("video", m);
                 }
             }
         }
@@ -4670,7 +4670,7 @@ static void video_run(void)
                             (unsigned long)ai.ai_Channels, (unsigned long)ai.ai_LFE,
                             (unsigned long)(rate / div), st.ahi ? "AHI" : "Paula",
                             (unsigned long)(origin / 90));
-                    amce_log("video", m);
+                    amb_log("video", m);
                     said_audio = TRUE;
                 }
                 a3_to_fifo(got, div, &pcm_peak);
@@ -4708,7 +4708,7 @@ static void video_run(void)
                 if (!starved_at)
                     starved_at = time_ms() | 1;
                 else if (time_ms() - starved_at > 3000) {
-                    amce_log("video", "the card wanted more after the end: taken as the end");
+                    amb_log("video", "the card wanted more after the end: taken as the end");
                     done = TRUE;
                 }
             }
@@ -4734,14 +4734,14 @@ static void video_run(void)
             sprintf(m, "playing: the first picture at %lu ms, %s; volume %ld", (unsigned long)(held.pts / 90),
                     st.started ? "timed by its sound" : sound || csound ? "by the clock till its sound comes"
                                                           : "timed by the clock", (long)st.master);
-            amce_log("video", m);
+            amb_log("video", m);
         }
         if (on && (sound || csound) && rate && !st.started && !out_paused &&
             st.f_in - st.f_out >= (ULONG)st.dec_freq / 5) {
             out_start();                    /* its sound, come late: on from here */
             sprintf(m, "its sound started %lu ms after the first picture",
                     (unsigned long)(time_ms() - t0));
-            amce_log("video", m);
+            amb_log("video", m);
         }
         /* the held picture: shown on time, let go if late */
         if (on && held_now) {
@@ -4799,13 +4799,13 @@ static void video_run(void)
                "from %s, peak %lu of 32767", log_name(),
             (unsigned long)st.v_shown, (unsigned long)st.v_dropped, (unsigned long)st.underruns,
             (unsigned long)pcm_frames, csound ? "the CPU's AC3" : "the card", (unsigned long)pcm_peak);
-    amce_log("video", m);
+    amb_log("video", m);
     if (csound) {
         sprintf(m, "its AC3 by the CPU: %lu frames decoded, %lu of them bad, %lu bytes lost (too far "
                    "ahead), %lu left",
                 (unsigned long)a3.frames, (unsigned long)a3.bad, (unsigned long)a3.lost,
                 (unsigned long)(a3.qin - a3.qout));
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (st.v_ts) {
         ULONG rs, cut, pre;
@@ -4813,7 +4813,7 @@ static void video_run(void)
         sprintf(m, "its transport stream: %lu times out of step, %lu PES packets not read, "
                    "%lu bytes of video before its sound's first left out",
                 (unsigned long)rs, (unsigned long)cut, (unsigned long)pre);
-        amce_log("video", m);
+        amb_log("video", m);
     }
     if (st.v_mp2 && !csound) {
         sprintf(m, "the card's sound at the end: state %lu, flags %08lx, %lu Hz, %lu channels, "
@@ -4821,7 +4821,7 @@ static void video_run(void)
                 (unsigned long)au.state, (unsigned long)au.flags, (unsigned long)au.rate,
                 (unsigned long)au.channels, (unsigned long)au.format, (unsigned long)au.produced,
                 (unsigned long)au.acknowledged);
-        amce_log("video", m);
+        amb_log("video", m);
     }
 out:
     if (session) {
@@ -4840,7 +4840,7 @@ out:
         if (s != ZZ_OK) {
             sprintf(m, "its session %lu could not be closed (%s)", (unsigned long)session,
                     zz_name(s));
-            amce_log("video", m);
+            amb_log("video", m);
         }
     }
     if (csound)
@@ -5096,9 +5096,9 @@ static void mhi_play(LONG freq)
         fail(_("The MHI driver could not be opened (Settings > Sound)"));
         return;
     }
-    amce_card_lock();                       /* (mhizz9000: the card's) */
+    amb_card_lock();                       /* (mhizz9000: the card's) */
     mhs.h = MHIAllocDecoder(FindTask(NULL), 1UL << st.sig);
-    amce_card_unlock();
+    amb_card_unlock();
     if (!mhs.h) {
         mhs.h = NULL;
         fail(_("The MHI driver's decoder is in use, or not there"));
@@ -5122,7 +5122,7 @@ static void mhi_play(LONG freq)
                 st.finite ? log_name() : st.name[0] ? st.name : "a station",
                 (long)st.bitrate, (long)freq, ch == 1 ? "mono" : "stereo",
                 (const char *)FilePart((STRPTR)mhi_driver));
-        amce_log(st.finite ? "track" : "radio", m);
+        amb_log(st.finite ? "track" : "radio", m);
     }
     memset(&mh, 0, sizeof(mh));
     mh.gtop = MH_GTOP_START * 256;
@@ -5220,15 +5220,15 @@ done:
                 (unsigned long)(mh_ms() / 1000), (unsigned long)st.underruns,
                 st.underruns == 1 ? "" : "s", (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms / 1000),
                 (unsigned long)(low_ms == 0xFFFFFFFFUL ? 0 : low_ms % 1000 / 100));
-        amce_log(st.finite ? "track" : "radio", m);
+        amb_log(st.finite ? "track" : "radio", m);
     }
     if (mhs.h) {
         APTR hh = mhs.h;
         mhs.h = NULL;                           /* serve no more */
-        amce_card_lock();
+        amb_card_lock();
         MHIStop(hh);
         MHIFreeDecoder(hh);
-        amce_card_unlock();
+        amb_card_unlock();
     }
     st.started = FALSE;
     for (i = 0; i < MHI_BUFS; i++)
@@ -5333,8 +5333,8 @@ static void playback_main(void)
             goto out;
         }
         if (!card && mpa_choose(f, st.ahi ? 48000 : 28000, 50, !st.ahi && !st.paula14, &q, &div, &mono, pm)) {
-            amce_log("sound", "MP3 decoding here, measured a probe frame (26 ms of sound):");
-            amce_log("sound", pm);
+            amb_log("sound", "MP3 decoding here, measured a probe frame (26 ms of sound):");
+            amb_log("sound", pm);
         } else {
             while (div < 4 && f / div > fmax)
                 div *= 2;                   /* 44.1 kHz: 22050 on a 68030 */
@@ -5369,15 +5369,15 @@ static void playback_main(void)
         /* named by its station, else its URL without the query: a Plex
          * track's carries the sign-in token, which stays out of the log */
         char m[360], u[200], *q;
-        amce_strlcpy(u, st.url, sizeof(u));
+        amb_strlcpy(u, st.url, sizeof(u));
         if ((q = strchr(u, '?')))
             *q = 0;
         sprintf(m, "%s: MP3 %ld kbit/s %ld Hz %s, decoded at %ld Hz %s (quality %ld)%s",
                 st.name[0] && !st.finite ? st.name : u, (long)st.bitrate, (long)st.freq,
                 st.channels == 2 ? "stereo" : "mono", (long)st.dec_freq,
                 st.dec_channels == 2 ? "stereo" : "mono", (long)ms->dec_quality,
-                mpega_is_own ? " by amcempega.library" : card_mpega ? " on the ZZ9000" : "");
-        amce_log(st.finite ? "track" : "radio", m);
+                mpega_is_own ? " by ambmpega.library" : card_mpega ? " on the ZZ9000" : "");
+        amb_log(st.finite ? "track" : "radio", m);
     }
     dec_full = dec_samples = 0;
     decode_loop(ms);
@@ -5392,7 +5392,7 @@ static void playback_main(void)
                 (unsigned long)(dec_samples / (st.dec_freq ? st.dec_freq : 22050)),
                 (unsigned long)st.underruns, st.underruns == 1 ? "" : "s",
                 (unsigned long)dec_full, (unsigned long)per, st.ahi ? "AHI" : "Paula");
-        amce_log(st.finite ? "track" : "radio", m);
+        amb_log(st.finite ? "track" : "radio", m);
     }
 out:
     out_stop();
@@ -5432,7 +5432,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.finite = finite;
     st.range_from = range_from;
     st.skip_ms = skip_ms;
-    st.local = finite && amce_strnicmp(url, "http://", 7) && amce_strnicmp(url, "https://", 8);
+    st.local = finite && amb_strnicmp(url, "http://", 7) && amb_strnicmp(url, "https://", 8);
     st.fh = 0;
     st.len_ms = 0;
     st.skipping = FALSE;
@@ -5477,7 +5477,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.v_shown = st.v_dropped = 0;
     st.v_ms = 0;
     memset(&vid_next, 0, sizeof(vid_next));
-    amce_strlcpy(st.url, url, sizeof(st.url));
+    amb_strlcpy(st.url, url, sizeof(st.url));
     st.fifo_n = fifo_sizes[buf_level];
     st.nb = AllocVec(NETBUF + 1, MEMF_ANY);
     st.fl = AllocVec(FIFO_N * 2, MEMF_ANY | MEMF_CLEAR);
@@ -5486,7 +5486,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     st.chip = AllocMem(HALF * (st.paula14 ? 8 : 4), MEMF_CHIP | MEMF_CLEAR);
     if (!st.nb || !st.fl || !st.fr || !st.chip) {
         st_stop();
-        amce_strlcpy(err, _("Not enough memory to play a station"), errmax);
+        amb_strlcpy(err, _("Not enough memory to play a station"), errmax);
         return FALSE;
     }
     st.state = ST_CONNECTING;
@@ -5496,7 +5496,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
                                 TAG_DONE);
     if (!st.proc) {
         st_stop();
-        amce_strlcpy(err, _("Could not start the background playback process"), errmax);
+        amb_strlcpy(err, _("Could not start the background playback process"), errmax);
         return FALSE;
     }
     return TRUE;
@@ -5658,10 +5658,10 @@ BOOL st_paula14_wanted(void)
  * mpega.library), for streams started from now on. */
 void st_use_mhi(const char *driver)
 {
-    amce_strlcpy(mhi_driver, driver ? driver : "", sizeof(mhi_driver));
+    amb_strlcpy(mhi_driver, driver ? driver : "", sizeof(mhi_driver));
 }
 
-/* Settings > Sound: MP3 (and MPEG video's sound) by amcempega.library,
+/* Settings > Sound: MP3 (and MPEG video's sound) by ambmpega.library,
  * Ambiance's own (else LIBS:mpega.library), for streams started from now
  * on. */
 void st_use_own_mpega(BOOL on)

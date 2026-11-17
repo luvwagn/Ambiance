@@ -266,9 +266,9 @@ Ledig minne: %luKB chip, %luKB fast
 MSG_2E02D31A
 Skrift: %s
 ; Font: %s
-MSG_7F759611
-amce-pixel (følger med)
-; amce-pixel (bundled)
+MSG_3464FC2D
+amb-pixel (følger med)
+; amb-pixel (bundled)
 MSG_27934164
 topaz 8 (reserve)
 ; topaz 8 (fallback)
@@ -330,8 +330,8 @@ MP3: %s
 MSG_197B8973
 MHI-driver
 ; MHI driver
-MSG_6584723A
-; amcempega.library, Ambiance's own
+MSG_71B3588E
+; ambmpega.library, Ambiance's own
 MSG_4B721655
 mpega.library fra ZZ9000-SDK (dekodes på kortet)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -422,9 +422,9 @@ Bildemapper
 MSG_7B7A30D9
 Videomapper
 ; Video folders
-MSG_690FAC12
-Myk: Fonts/amce-smooth passer ikke til denne Ambiance
-; Smooth: Fonts/amce-smooth does not match this Ambiance
+MSG_011FA544
+Myk: Fonts/amb-smooth passer ikke til denne Ambiance
+; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
@@ -844,9 +844,9 @@ Plex i Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, under MIT-lisensen
 ; (c) 2026 Brian King, under the MIT licence
-MSG_1BA733E8
-Skrifter: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors og Geologica (c) 2020 The Geologisk Project Authors, alle under SIL Open Font License 1.1. Skriftene amce-pixel og amce-galmuri er endrede versjoner (Modified Versions) av Pixelify Sans og Galmuri.
-; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_57A8AEF0
+Skrifter: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors og Geologica (c) 2020 The Geologisk Project Authors, alle under SIL Open Font License 1.1. Skriftene amb-pixel og amb-galmuri er endrede versjoner (Modified Versions) av Pixelify Sans og Galmuri.
+; Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amb-pixel and amb-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
 MSG_2B3D5B66
 Kode: C-biblioteket libnix (fri bruk). EaglePlayer-verten følger HippoPlayer sin (MIT-lisens, (c) 2017 Kari-Pekka Koljonen).
 ; Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
@@ -1537,8 +1537,8 @@ plex.tv: ikke logget inn
 MSG_0B620CC7
 MP3: dekodes av MHI-driveren %.40s
 ; MP3: decoded by the MHI driver %.40s
-MSG_535831ED
-; MP3: decoded by amcempega.library, Ambiance's own
+MSG_7895CD7B
+; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: dekodes på ZZ9000 (dens mpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1643,8 +1643,8 @@ Det grensesnittet er ikke oppe
 MSG_646AFCF3
 MHI er ikke installert (driverne i LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_1D253CB2
-; amcempega.library is not in Ambiance's Libs
+MSG_104981CE
+; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
@@ -1659,8 +1659,8 @@ Ingen av serverne svarte: Automatisk beholdes
 MSG_7800A723
 MP3 dekodet av MHI: radio, Plex (i beste kvalitet) og filer
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
-MSG_55A6C479
-; MP3 decoded here by amcempega.library, Ambiance's own
+MSG_0AFE96F7
+; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3 dekodet her av mpega.library
 ; MP3 decoded here by mpega.library

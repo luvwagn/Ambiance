@@ -3,8 +3,8 @@
  * as a WHDLoad argument, games told from demos (igamecsv.c). No Amiga
  * headers, so the host tests use it as it is.
  */
-#ifndef AMCE_IGAMECSV_H
-#define AMCE_IGAMECSV_H
+#ifndef AMB_IGAMECSV_H
+#define AMB_IGAMECSV_H
 
 /* One line of gameslist.csv, its fields pointing into the line (changed
  * in place). iGame 2.3.1 and later quote the strings and add user_title,

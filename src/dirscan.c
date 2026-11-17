@@ -12,7 +12,7 @@
  * (main.c: the spinner turns while a slow folder, a network share, is
  * read); other tasks' scans leave it alone.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <dos/exall.h>
 #include <dos/dosextens.h>

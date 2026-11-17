@@ -196,7 +196,7 @@ def logo(ttf, k):
 
 
 def gu(v, k256):
-    """GU() of amce.h: design units to pixels."""
+    """GU() of amb.h: design units to pixels."""
     return (v * k256 + 128) >> 8
 
 

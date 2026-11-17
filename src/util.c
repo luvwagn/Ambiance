@@ -4,7 +4,7 @@
  * here once, not copied into each
  * Copyright (c) 2026 Brian King
  */
-#include "amce.h"
+#include "amb.h"
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <dos/dosextens.h>
@@ -21,7 +21,7 @@ static UBYTE fold(UBYTE c)
     return c;
 }
 
-int amce_stricmp(const char *a, const char *b)
+int amb_stricmp(const char *a, const char *b)
 {
     const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)b;
     for (;;) {
@@ -33,7 +33,7 @@ int amce_stricmp(const char *a, const char *b)
     }
 }
 
-int amce_strnicmp(const char *a, const char *b, LONG n)
+int amb_strnicmp(const char *a, const char *b, LONG n)
 {
     const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)b;
     while (n-- > 0) {
@@ -66,7 +66,7 @@ static void cut_whole(UBYTE *d0, UBYTE *d)
     }
 }
 
-void amce_strlcpy(char *d, const char *s, LONG n)
+void amb_strlcpy(char *d, const char *s, LONG n)
 {
     char *d0 = d;
     if (n <= 0)
@@ -78,13 +78,13 @@ void amce_strlcpy(char *d, const char *s, LONG n)
         cut_whole((UBYTE *)d0, (UBYTE *)d);
 }
 
-void amce_strlcat(char *d, const char *s, LONG n)
+void amb_strlcat(char *d, const char *s, LONG n)
 {
     while (n > 0 && *d) {
         d++;
         n--;
     }
-    amce_strlcpy(d, s, n);
+    amb_strlcpy(d, s, n);
 }
 
 /* A sample rate as kHz, its decimals only as many as it has: 44100
@@ -103,13 +103,13 @@ const char *fmt_khz(ULONG hz, char *out)
     return out;
 }
 
-BOOL amce_ends_with(const char *s, const char *ext)
+BOOL amb_ends_with(const char *s, const char *ext)
 {
     LONG a = strlen(s), b = strlen(ext);
-    return a > b && amce_stricmp(s + a - b, ext) == 0;
+    return a > b && amb_stricmp(s + a - b, ext) == 0;
 }
 
-BOOL amce_contains_nocase(const char *hay, const char *needle)
+BOOL amb_contains_nocase(const char *hay, const char *needle)
 {
     const UBYTE *h = (const UBYTE *)hay, *n = (const UBYTE *)needle;
     LONG i, j;
@@ -124,7 +124,7 @@ BOOL amce_contains_nocase(const char *hay, const char *needle)
     return FALSE;
 }
 
-LONG amce_num(const char *s)
+LONG amb_num(const char *s)
 {
     LONG v = 0;
     while (s && *s >= '0' && *s <= '9')
@@ -132,17 +132,17 @@ LONG amce_num(const char *s)
     return v;
 }
 
-void amce_join_path(char *out, LONG max, const char *dir, const char *name)
+void amb_join_path(char *out, LONG max, const char *dir, const char *name)
 {
     LONG n;
-    amce_strlcpy(out, dir, max);
+    amb_strlcpy(out, dir, max);
     n = strlen(out);
     if (n && out[n - 1] != ':' && out[n - 1] != '/')
-        amce_strlcat(out, "/", max);
-    amce_strlcat(out, name, max);
+        amb_strlcat(out, "/", max);
+    amb_strlcat(out, name, max);
 }
 
-BOOL amce_exists(const char *path)
+BOOL amb_exists(const char *path)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR old = me->pr_WindowPtr;
@@ -155,7 +155,7 @@ BOOL amce_exists(const char *path)
     return l != 0;
 }
 
-void amce_time_text(char *out, ULONG ms)
+void amb_time_text(char *out, ULONG ms)
 {
     ULONG s = ms / 1000;
     sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
@@ -166,12 +166,12 @@ void amce_time_text(char *out, ULONG ms)
  * set up or fed, zz9k.library's calls. Picasso96 opening an overlay while
  * the background playback process began the sound hung the Amiga. A
  * task may take it again inside (a semaphore nests); none waits for
- * another task while holding it. Before amce_card_init (the tests), a
+ * another task while holding it. Before amb_card_init (the tests), a
  * no-op. */
 static struct SignalSemaphore card_sem;
 static BOOL card_ready;
 
-void amce_card_init(void)
+void amb_card_init(void)
 {
     if (!card_ready) {
         InitSemaphore(&card_sem);
@@ -179,13 +179,13 @@ void amce_card_init(void)
     }
 }
 
-void amce_card_lock(void)
+void amb_card_lock(void)
 {
     if (card_ready)
         ObtainSemaphore(&card_sem);
 }
 
-void amce_card_unlock(void)
+void amb_card_unlock(void)
 {
     if (card_ready)
         ReleaseSemaphore(&card_sem);

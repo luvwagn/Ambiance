@@ -2,8 +2,8 @@
  * Ambiance - an MPEG file's headers (vprobe.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
-#ifndef AMCE_VPROBE_H
-#define AMCE_VPROBE_H
+#ifndef AMB_VPROBE_H
+#define AMB_VPROBE_H
 
 #include <exec/types.h>
 

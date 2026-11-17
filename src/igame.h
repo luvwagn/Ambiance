@@ -2,10 +2,10 @@
  * Ambiance - iGame's list of games and demos (igame.c): found, read, shown
  * under Games and Demos, and launched. Beside AGS, or in its place.
  */
-#ifndef AMCE_IGAME_H
-#define AMCE_IGAME_H
+#ifndef AMB_IGAME_H
+#define AMB_IGAME_H
 
-#include "amce.h"
+#include "amb.h"
 
 #define IGF_FAV     1       /* a favourite in iGame */
 #define IGF_DEMO    2       /* listed under Demos, not Games */

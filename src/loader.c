@@ -17,7 +17,7 @@
  *
  * Without the process (it could not start) jobs run at once, in the UI.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <dos/dostags.h>
@@ -159,13 +159,13 @@ static void run(struct LJob *j)
             if (pics_scan(j->path, &nd, shot, sizeof(shot)) <= 0)
                 return;
             src = shot;
-            amce_strlcpy(j->first, shot, sizeof(j->first));    /* which picture it shows */
+            amb_strlcpy(j->first, shot, sizeof(j->first));    /* which picture it shows */
         } else if (j->mode == SHOT_SONG) {
             /* a music file's picture (its folder's, or copied out of it) */
             if (!song_art_of(j->path, shot, sizeof(shot), TRUE))
                 return;
             src = shot;
-            amce_strlcpy(j->first, shot, sizeof(j->first));
+            amb_strlcpy(j->first, shot, sizeof(j->first));
         }
         if (!j->cancel)
             decode(j, src);
@@ -217,7 +217,7 @@ static void run(struct LJob *j)
         FreeVec(j->text);
         j->nlines = song_details(j->path, j->lines, LJ_FACTS, art, sizeof(art), &j->text);
         j->np = art[0] ? 1 : 0;
-        amce_strlcpy(j->first, art, sizeof(j->first));
+        amb_strlcpy(j->first, art, sizeof(j->first));
         return;
     }
     if (j->type == LJ_PICDIR) {

@@ -15,7 +15,7 @@
  * ("128k"), path the stream's URL and, after tabs, its country code, tags,
  * homepage, votes, codec, bitrate (radio_field picks one out).
  */
-#include "amce.h"
+#include "amb.h"
 #include "radiocsv.h"
 
 #include <string.h>
@@ -35,33 +35,33 @@ void radio_set_max_kbps(UWORD kbps)
 
 void radio_set_home(const char *iso)
 {
-    amce_strlcpy(home_cc, iso ? iso : "", sizeof(home_cc));
+    amb_strlcpy(home_cc, iso ? iso : "", sizeof(home_cc));
 }
 
 /* The request for a query (an IT_NET item's path) into out. */
 void radio_request(const char *query, BOOL https, char *out, LONG max)
 {
     if (!strcmp(query, RADIO_TAGS)) {
-        amce_strlcpy(out, "/csv/tags?order=stationcount&reverse=true&hidebroken=true&limit=150",
+        amb_strlcpy(out, "/csv/tags?order=stationcount&reverse=true&hidebroken=true&limit=150",
                      max);
     } else if (!strcmp(query, RADIO_COUNTRIES)) {
-        amce_strlcpy(out, "/csv/countries?order=stationcount&reverse=true&hidebroken=true",
+        amb_strlcpy(out, "/csv/countries?order=stationcount&reverse=true&hidebroken=true",
                      max);
     } else {
         char n[32];
         sprintf(n, "%ld", (long)STATIONS_MAX);
-        amce_strlcpy(out, "/csv/stations/search?codec=MP3&hidebroken=true&limit=", max);
-        amce_strlcat(out, n, max);
+        amb_strlcpy(out, "/csv/stations/search?codec=MP3&hidebroken=true&limit=", max);
+        amb_strlcat(out, n, max);
         if (!https)
-            amce_strlcat(out, "&is_https=false", max);
+            amb_strlcat(out, "&is_https=false", max);
         if (max_kbps) {
             /* asked of the server, so the list is the 200 best that fit */
             sprintf(n, "&bitrateMax=%lu", (unsigned long)max_kbps);
-            amce_strlcat(out, n, max);
+            amb_strlcat(out, n, max);
         }
         if (query[0]) {
-            amce_strlcat(out, "&", max);
-            amce_strlcat(out, query, max);
+            amb_strlcat(out, "&", max);
+            amb_strlcat(out, query, max);
         }
     }
 }
@@ -82,17 +82,17 @@ static const char *col(char **f, int n, int c)
 
 static BOOL is_scheme(const char *u, const char *s)
 {
-    return !amce_strnicmp(u, s, strlen(s));
+    return !amb_strnicmp(u, s, strlen(s));
 }
 
 static int station_row(struct fill *x, char **f, int n)
 {
     const char *url = col(f, n, x->c_urlr), *codec = col(f, n, x->c_codec);
     char name[96], tags[120], home[160], path[600], tag[24];
-    LONG i, br = amce_num(col(f, n, x->c_bitrate));
+    LONG i, br = amb_num(col(f, n, x->c_bitrate));
     if (!url[0])
         url = col(f, n, x->c_url);
-    if (amce_num(col(f, n, x->c_hls)) || amce_stricmp(codec, "MP3") || (max_kbps && br > max_kbps) ||
+    if (amb_num(col(f, n, x->c_hls)) || amb_stricmp(codec, "MP3") || (max_kbps && br > max_kbps) ||
         !(is_scheme(url, "http://") || (x->https && is_scheme(url, "https://")))) {
         x->skipped++;
         return 1;
@@ -103,24 +103,24 @@ static int station_row(struct fill *x, char **f, int n)
             x->skipped++;
             return 1;
         }
-    amce_strlcpy(name, col(f, n, x->c_name), sizeof(name));
+    amb_strlcpy(name, col(f, n, x->c_name), sizeof(name));
     utf8_to_latin1(name);
     squeeze_spaces(name);
     if (!name[0])
-        amce_strlcpy(name, _("(no name)"), sizeof(name));
-    amce_strlcpy(tags, col(f, n, x->c_tags), sizeof(tags));
+        amb_strlcpy(name, _("(no name)"), sizeof(name));
+    amb_strlcpy(tags, col(f, n, x->c_tags), sizeof(tags));
     utf8_to_latin1(tags);
     squeeze_spaces(tags);
-    amce_strlcpy(home, col(f, n, x->c_home), sizeof(home));
+    amb_strlcpy(home, col(f, n, x->c_home), sizeof(home));
     squeeze_spaces(home);
     sprintf(path, "%s\t%s\t%s\t%s\t%ld\t%s\t%ld", url, col(f, n, x->c_cc), tags, home,
-            (long)amce_num(col(f, n, x->c_votes)), codec, (long)br);
+            (long)amb_num(col(f, n, x->c_votes)), codec, (long)br);
     if (br > 0)
         sprintf(tag, "%ldk", (long)br);
     else
-        amce_strlcpy(tag, codec, sizeof(tag));
+        amb_strlcpy(tag, codec, sizeof(tag));
     if (is_scheme(url, "https://"))
-        amce_strlcat(tag, " HTTPS", sizeof(tag));     /* a secure stream (AmiSSL) */
+        amb_strlcat(tag, " HTTPS", sizeof(tag));     /* a secure stream (AmiSSL) */
     if (!list_add(x->l, name, path, tag, IT_STATION))
         return 0;
     return x->l->count < STATIONS_MAX;
@@ -129,9 +129,9 @@ static int station_row(struct fill *x, char **f, int n)
 static int folder_row(struct fill *x, char **f, int n)
 {
     char name[64], q[240], enc[160], count[16];
-    LONG c = amce_num(col(f, n, x->c_count));
+    LONG c = amb_num(col(f, n, x->c_count));
     struct Item *it;
-    amce_strlcpy(name, col(f, n, x->c_name), sizeof(name));
+    amb_strlcpy(name, col(f, n, x->c_name), sizeof(name));
     utf8_to_latin1(name);
     squeeze_spaces(name);
     if (!name[0] || c < 3)
@@ -200,14 +200,14 @@ LONG radio_fill(const char *query, UBYTE *body, ULONG len, struct ItemList *l, B
         struct Item t;
         for (i = 1; i < l->count; i++) {
             t = l->items[i];
-            for (k = i; k > 0 && amce_stricmp(l->items[k - 1].label, t.label) > 0; k--)
+            for (k = i; k > 0 && amb_stricmp(l->items[k - 1].label, t.label) > 0; k--)
                 l->items[k] = l->items[k - 1];
             l->items[k] = t;
         }
         if (home_cc[0]) {
             sprintf(want, "countrycode=%s&", home_cc);
             for (i = 0; i < l->count && home < 0; i++)
-                if (!amce_strnicmp(l->items[i].path, want, strlen(want)))
+                if (!amb_strnicmp(l->items[i].path, want, strlen(want)))
                     home = i;
         }
         if (home > 0) {
@@ -240,7 +240,7 @@ char *radio_field(const struct Item *it, int i, char *out, LONG max)
         memcpy(out, p, e - p);
         out[e - p] = 0;
     } else {
-        amce_strlcpy(out, p, max);
+        amb_strlcpy(out, p, max);
     }
     return out;
 }

@@ -6,8 +6,8 @@
  * Makefile: third_party/zz9k-sdk.txt); the rest of Ambiance sees these
  * types of its own.
  */
-#ifndef AMCE_ZZ9K_H
-#define AMCE_ZZ9K_H
+#ifndef AMB_ZZ9K_H
+#define AMB_ZZ9K_H
 
 #include <exec/types.h>
 

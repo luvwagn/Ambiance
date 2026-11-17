@@ -45,7 +45,7 @@
  * Plex's own profiles' MusicCodec, scopeName mp3): on audioCodec they were
  * let pass (stereo came back); scopeName * unencoded was a 400.
  */
-#include "amce.h"
+#include "amb.h"
 #include "plexxml.h"
 #include "radiocsv.h"
 
@@ -129,9 +129,9 @@ void plex_load(UWORD cpu)
     get_var(ACCT_VAR, plex.account, sizeof(plex.account));
     get_var(USER_VAR, plex.user, sizeof(plex.user));
     get_var(CONV_VAR, v, sizeof(v));
-    plex.convert = amce_stricmp(v, "off") != 0;     /* on unless turned off */
+    plex.convert = amb_stricmp(v, "off") != 0;     /* on unless turned off */
     get_var(ON_VAR, v, sizeof(v));
-    plex.on = amce_stricmp(v, "off") != 0;
+    plex.on = amb_stricmp(v, "off") != 0;
     if (GetVar((CONST_STRPTR)PHOTO_VAR, (STRPTR)photo_libs, sizeof(photo_libs),
                GVF_GLOBAL_ONLY) < 0)
         photo_libs[0] = 0;
@@ -140,9 +140,9 @@ void plex_load(UWORD cpu)
         char *sp = strchr(v, ' ');
         if (sp) {
             *sp = 0;
-            plex.libraries = (UWORD)amce_num(sp + 1);
+            plex.libraries = (UWORD)amb_num(sp + 1);
         }
-        amce_strlcpy(plex.library, v, sizeof(plex.library));
+        amb_strlcpy(plex.library, v, sizeof(plex.library));
     }
     if (!plex.cid[0]) {
         /* who this Ambiance is, to the server: made up once, then kept */
@@ -158,7 +158,7 @@ void plex_set_server(const char *host, UWORD port, const char *name)
     sprintf(v, "%s:%lu", host, (unsigned long)port);
     take_server(v);
     set_var(SERVER_VAR, v);
-    amce_strlcpy(plex.name, name[0] ? name : host, sizeof(plex.name));
+    amb_strlcpy(plex.name, name[0] ? name : host, sizeof(plex.name));
     set_var(NAME_VAR, plex.name);
     plex_set_library("", 0);                /* another server: its libraries not known */
     plex_set_photo_libs("");
@@ -173,7 +173,7 @@ const char *plex_photo_libs(void)
 
 void plex_set_photo_libs(const char *v)
 {
-    amce_strlcpy(photo_libs, v, sizeof(photo_libs));
+    amb_strlcpy(photo_libs, v, sizeof(photo_libs));
     set_var(PHOTO_VAR, photo_libs);
 }
 
@@ -194,26 +194,26 @@ void plex_request(const char *key, char *out, LONG max)
 void plex_request_from(const char *key, LONG start, char *out, LONG max)
 {
     char n[64];
-    amce_strlcpy(out, key, max);
-    amce_strlcat(out, strchr(key, '?') ? "&" : "?", max);
-    amce_strlcat(out, "X-Plex-Product=Ambiance&X-Plex-Version=" AMCE_VERSION
+    amb_strlcpy(out, key, max);
+    amb_strlcat(out, strchr(key, '?') ? "&" : "?", max);
+    amb_strlcat(out, "X-Plex-Product=Ambiance&X-Plex-Version=" AMB_VERSION
                       "&X-Plex-Platform=AmigaOS&X-Plex-Client-Identifier=", max);
-    amce_strlcat(out, plex.cid, max);
+    amb_strlcat(out, plex.cid, max);
     /* the language Ambiance shows: what the server makes itself, in it */
-    amce_strlcat(out, "&X-Plex-Language=", max);
-    amce_strlcat(out, amce_lang_iso(), max);
+    amb_strlcat(out, "&X-Plex-Language=", max);
+    amb_strlcat(out, amb_lang_iso(), max);
     if (plex.token[0]) {
-        amce_strlcat(out, "&X-Plex-Token=", max);
-        amce_strlcat(out, plex.token, max);
+        amb_strlcat(out, "&X-Plex-Token=", max);
+        amb_strlcat(out, plex.token, max);
     }
     sprintf(n, "&X-Plex-Container-Start=%ld&X-Plex-Container-Size=%ld", (long)start,
             (long)LIST_MAX);
-    amce_strlcat(out, n, max);
+    amb_strlcat(out, n, max);
     if (strstr(key, "/all?type="))
         /* a library's artists or albums: without their biographies and
          * reviews (over 1.5 MB for 900 artists, seconds to read on a
          * 68030); the one shown is asked for its own (plex_summary) */
-        amce_strlcat(out, "&excludeFields=summary", max);
+        amb_strlcat(out, "&excludeFields=summary", max);
 }
 
 /* The music library Music opens on (key; count: the server's music
@@ -221,7 +221,7 @@ void plex_request_from(const char *key, LONG start, char *out, LONG max)
 void plex_set_library(const char *key, UWORD count)
 {
     char v[40];
-    amce_strlcpy(plex.library, key, sizeof(plex.library));
+    amb_strlcpy(plex.library, key, sizeof(plex.library));
     plex.libraries = count;
     sprintf(v, "%s %lu", key, (unsigned long)count);
     set_var(LIB_VAR, v);
@@ -265,7 +265,7 @@ int plex_tier(void)
             tier = 2;
         sprintf(m, "%lu thousand multiplies a second, a 680%02ld: tier %ld", (unsigned long)speed,
                 (long)plex.cpu, (long)tier);
-        amce_log("plex: this Amiga", m);
+        amb_log("plex: this Amiga", m);
     }
     return tier;
 }
@@ -283,12 +283,12 @@ ULONG plex_track_byte(const struct Item *it, ULONG from_ms)
     char f[16];
     ULONG size, total;
     radio_field(it, 1, f, sizeof(f));
-    if (amce_stricmp(f, "mp3"))
+    if (amb_stricmp(f, "mp3"))
         return 0;                           /* FLAC: seeks by its frames, from the start */
     radio_field(it, 10, f, sizeof(f));
-    size = amce_num(f);
+    size = amb_num(f);
     radio_field(it, 2, f, sizeof(f));
-    total = amce_num(f);
+    total = amb_num(f);
     if (!size || !total || from_ms >= total)
         return 0;
     return (size / 1000) * (from_ms / 10) / (total / 10000);
@@ -302,9 +302,9 @@ BOOL plex_converts(const struct Item *it)
     radio_field(it, 5, key, sizeof(key));
     if (!key[0])
         return FALSE;
-    if (amce_stricmp(codec, "mp3") && !(plex.flac && !amce_stricmp(codec, "flac")))
+    if (amb_stricmp(codec, "mp3") && !(plex.flac && !amb_stricmp(codec, "flac")))
         return TRUE;                        /* MP3, and FLAC with flacdec.library, as stored */
-    if ((plex.mhi || plex.mp3_card) && !amce_stricmp(codec, "mp3"))
+    if ((plex.mhi || plex.mp3_card) && !amb_stricmp(codec, "mp3"))
         return plex.convert;                /* MHI or the ZZ9000 decodes it, however fast the Amiga */
     return plex.convert || plex_tier() < 2;     /* a slower Amiga: always converted */
 }
@@ -318,21 +318,21 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
     BOOL mono = tier == 0;
     (void)cpu;
     sprintf(port, ":%lu", (unsigned long)plex.port);
-    amce_strlcpy(out, "http://", max);
-    amce_strlcat(out, plex.host, max);
-    amce_strlcat(out, port, max);
+    amb_strlcpy(out, "http://", max);
+    amb_strlcat(out, plex.host, max);
+    amb_strlcat(out, port, max);
     if (plex_converts(it)) {
         radio_field(it, 5, key, sizeof(key));
         url_encode(key, enc, sizeof(enc));
-        amce_strlcat(out, "/music/:/transcode/universal/start.mp3?path=", max);
-        amce_strlcat(out, enc, max);
+        amb_strlcat(out, "/music/:/transcode/universal/start.mp3?path=", max);
+        amb_strlcat(out, enc, max);
         sprintf(n, "&mediaIndex=0&partIndex=0&protocol=http&directPlay=0&directStream=0"
                    "&hasMDE=1&download=0&musicBitrate=%ld",
                 (long)(tier == 0 ? 64 : tier == 1 ? 112 : tier == 2 ? 160 : 256));
-        amce_strlcat(out, n, max);
+        amb_strlcat(out, n, max);
         if (from_ms) {
             sprintf(n, "&offset=%lu", (unsigned long)(from_ms / 1000));    /* a seek */
-            amce_strlcat(out, n, max);
+            amb_strlcat(out, n, max);
         }
         if (last_session[0]) {
             /* the one before stopped first (the stream process asks): Plex
@@ -349,16 +349,16 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
              * own players do; another session for it is refused (400) */
             sprintf(n, "&session=%s", last_session);
         } else {
-            sprintf(n, "&session=amce%lu-%.30s", (unsigned long)++sessions, plex.cid + 9);
-            amce_strlcpy(last_session, n + 9, sizeof(last_session));
+            sprintf(n, "&session=amb%lu-%.30s", (unsigned long)++sessions, plex.cid + 9);
+            amb_strlcpy(last_session, n + 9, sizeof(last_session));
         }
-        amce_strlcpy(last_item, key, sizeof(last_item));
-        amce_strlcat(out, n, max);
-        amce_strlcat(out, "&X-Plex-Session-Identifier=", max);
-        amce_strlcat(out, n + 9, max);
-        amce_strlcat(out, "&X-Plex-Client-Identifier=", max);
-        amce_strlcat(out, plex.cid, max);
-        amce_strlcat(out, "&X-Plex-Product=Ambiance&X-Plex-Version=" AMCE_VERSION
+        amb_strlcpy(last_item, key, sizeof(last_item));
+        amb_strlcat(out, n, max);
+        amb_strlcat(out, "&X-Plex-Session-Identifier=", max);
+        amb_strlcat(out, n + 9, max);
+        amb_strlcat(out, "&X-Plex-Client-Identifier=", max);
+        amb_strlcat(out, plex.cid, max);
+        amb_strlcat(out, "&X-Plex-Product=Ambiance&X-Plex-Version=" AMB_VERSION
                           "&X-Plex-Platform=Generic&X-Plex-Platform-Version=3"
                           "&X-Plex-Device=Amiga&X-Plex-Model=Amiga"
                           "&X-Plex-Client-Profile-Extra="
@@ -367,23 +367,23 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
                           "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
                           "%26type%3DupperBound%26name%3Daudio.samplingRate%26value%3D",
                     max);
-        amce_strlcat(out, mono ? "22050)" : tier >= 3 ? "48000)" : "24000)", max);
+        amb_strlcat(out, mono ? "22050)" : tier >= 3 ? "48000)" : "24000)", max);
         if (mono)
-            amce_strlcat(out, "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
+            amb_strlcat(out, "%2Badd-limitation(scope%3DmusicCodec%26scopeName%3Dmp3"
                               "%26type%3DupperBound%26name%3Daudio.channels%26value%3D1)",
                          max);
         if (plex.token[0]) {
-            amce_strlcat(out, "&X-Plex-Token=", max);
-            amce_strlcat(out, plex.token, max);
+            amb_strlcat(out, "&X-Plex-Token=", max);
+            amb_strlcat(out, plex.token, max);
         }
         return;
     }
     radio_field(it, 0, key, sizeof(key));
-    amce_strlcat(out, key, max);
+    amb_strlcat(out, key, max);
     if (plex.token[0]) {
-        amce_strlcat(out, strchr(key, '?') ? "&" : "?", max);
-        amce_strlcat(out, "X-Plex-Token=", max);
-        amce_strlcat(out, plex.token, max);
+        amb_strlcat(out, strchr(key, '?') ? "&" : "?", max);
+        amb_strlcat(out, "X-Plex-Token=", max);
+        amb_strlcat(out, plex.token, max);
     }
 }
 
@@ -418,7 +418,7 @@ static void dur_text(ULONG ms, char *out)
 
 static void text(const char *in, char *out, LONG max)
 {
-    amce_strlcpy(out, in ? in : "", max);
+    amb_strlcpy(out, in ? in : "", max);
     utf8_to_latin1(out);
     squeeze_spaces(out);
 }
@@ -427,7 +427,7 @@ static void text(const char *in, char *out, LONG max)
 static void summary_text(const char *in, char *out, LONG max)
 {
     char *r, *w;
-    amce_strlcpy(out, in ? in : "", max);
+    amb_strlcpy(out, in ? in : "", max);
     utf8_to_latin1(out);
     for (r = w = out; *r; r++) {
         if (r[0] == '\\' && r[1] && strchr("\\`*_{}[]()#+-.!&<>|~", r[1]))
@@ -505,7 +505,7 @@ static void flush_track(struct fill *x)
         x->full = TRUE;
         return;
     }
-    if (amce_stricmp(x->t_codec, "mp3") && !(plex.flac && !amce_stricmp(x->t_codec, "flac")) &&
+    if (amb_stricmp(x->t_codec, "mp3") && !(plex.flac && !amb_stricmp(x->t_codec, "flac")) &&
         !x->t_key[0])
         it->flags |= ITEM_DISABLED;         /* not playable as stored, and no key to convert it by */
     x->added++;
@@ -523,20 +523,20 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
     if (x->ph && depth <= x->ph_depth)
         flush_photo(x);
     if (x->ph && !strcmp(name, "Media")) {
-        x->ph_w = amce_num(xml_attr(a, n, "width"));
-        x->ph_h = amce_num(xml_attr(a, n, "height"));
+        x->ph_w = amb_num(xml_attr(a, n, "width"));
+        x->ph_h = amb_num(xml_attr(a, n, "height"));
         return 1;
     }
     if (x->ph && !strcmp(name, "Part")) {
         if (!x->ph_part[0] && (v = xml_attr(a, n, "key")))
-            amce_strlcpy(x->ph_part, v, sizeof(x->ph_part));
+            amb_strlcpy(x->ph_part, v, sizeof(x->ph_part));
         return 1;
     }
     if (!strcmp(name, "Photo") && depth == 1) {
         x->ph = TRUE;
         x->ph_depth = depth;
         text(xml_attr(a, n, "title"), x->ph_title, sizeof(x->ph_title));
-        amce_strlcpy(x->ph_thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
+        amb_strlcpy(x->ph_thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
                      sizeof(x->ph_thumb));
         text(xml_attr(a, n, "originallyAvailableAt"), x->ph_date, sizeof(x->ph_date));
         if (!x->ph_date[0])
@@ -547,29 +547,29 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         return 1;
     }
     if (!strcmp(name, "MediaContainer")) {
-        x->total = amce_num(xml_attr(a, n, "totalSize"));
+        x->total = amb_num(xml_attr(a, n, "totalSize"));
         if (!x->total)
-            x->total = amce_num(xml_attr(a, n, "size"));
+            x->total = amb_num(xml_attr(a, n, "size"));
         return 1;
     }
     if (x->track && !strcmp(name, "Media")) {
         text(xml_attr(a, n, "audioCodec"), x->t_codec, sizeof(x->t_codec));
         if (!x->t_ms)
-            x->t_ms = amce_num(xml_attr(a, n, "duration"));
-        x->t_kbps = amce_num(xml_attr(a, n, "bitrate"));
-        x->t_ch = amce_num(xml_attr(a, n, "audioChannels"));
+            x->t_ms = amb_num(xml_attr(a, n, "duration"));
+        x->t_kbps = amb_num(xml_attr(a, n, "bitrate"));
+        x->t_ch = amb_num(xml_attr(a, n, "audioChannels"));
         return 1;
     }
-    if (x->track && !strcmp(name, "Stream") && amce_num(xml_attr(a, n, "streamType")) == 2) {
-        x->t_rate = amce_num(xml_attr(a, n, "samplingRate"));
+    if (x->track && !strcmp(name, "Stream") && amb_num(xml_attr(a, n, "streamType")) == 2) {
+        x->t_rate = amb_num(xml_attr(a, n, "samplingRate"));
         if (!x->t_ch)
-            x->t_ch = amce_num(xml_attr(a, n, "channels"));
+            x->t_ch = amb_num(xml_attr(a, n, "channels"));
         return 1;
     }
     if (x->track && !strcmp(name, "Part")) {
         if (!x->t_part[0] && (v = xml_attr(a, n, "key"))) {
-            amce_strlcpy(x->t_part, v, sizeof(x->t_part));
-            x->t_size = amce_num(xml_attr(a, n, "size"));
+            amb_strlcpy(x->t_part, v, sizeof(x->t_part));
+            x->t_size = amb_num(xml_attr(a, n, "size"));
         }
         return 1;
     }
@@ -582,16 +582,16 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             text(xml_attr(a, n, "grandparentTitle"), x->t_by, sizeof(x->t_by));
         text(xml_attr(a, n, "parentTitle"), x->t_album, sizeof(x->t_album));
         x->t_codec[0] = x->t_part[0] = 0;
-        amce_strlcpy(x->t_key, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "",
+        amb_strlcpy(x->t_key, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "",
                      sizeof(x->t_key));
         v = xml_attr(a, n, "parentThumb");      /* the album's cover, else its own */
         if (!v || !v[0])
             v = xml_attr(a, n, "thumb");
-        amce_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
+        amb_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
         /* its album and artist, so their rows can show it playing */
         text(xml_attr(a, n, "parentRatingKey"), x->t_album_rk, sizeof(x->t_album_rk));
         text(xml_attr(a, n, "grandparentRatingKey"), x->t_artist_rk, sizeof(x->t_artist_rk));
-        x->t_ms = amce_num(xml_attr(a, n, "duration"));
+        x->t_ms = amb_num(xml_attr(a, n, "duration"));
         x->t_kbps = x->t_ch = x->t_rate = x->t_size = 0;
         return 1;
     }
@@ -617,7 +617,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         }
         text(xml_attr(a, n, "title"), title, sizeof(title));
         key[0] = '@';
-        amce_strlcpy(key + 1, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "", sizeof(key) - 1);
+        amb_strlcpy(key + 1, xml_attr(a, n, "key") ? xml_attr(a, n, "key") : "", sizeof(key) - 1);
         tag[0] = 0;
     } else {
         const char *k = xml_attr(a, n, "key");
@@ -631,12 +631,12 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             char by[100];
             text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
             if (by[0]) {
-                amce_strlcat(title, " - ", sizeof(title));
-                amce_strlcat(title, by, sizeof(title));
+                amb_strlcat(title, " - ", sizeof(title));
+                amb_strlcat(title, by, sizeof(title));
             }
         }
         if (k[0] == '/') {
-            amce_strlcpy(key, k, sizeof(key));
+            amb_strlcpy(key, k, sizeof(key));
         } else {
             /* relative: under the request's own key, its query left off */
             const char *q = strchr(x->base, '?');
@@ -646,41 +646,41 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
             memcpy(key, x->base, bl);
             key[bl] = 0;
             if (bl && key[bl - 1] != '/')
-                amce_strlcat(key, "/", sizeof(key));
-            amce_strlcat(key, k, sizeof(key));
+                amb_strlcat(key, "/", sizeof(key));
+            amb_strlcat(key, k, sizeof(key));
         }
         tag[0] = 0;
         if ((v = xml_attr(a, n, "year")))
-            amce_strlcpy(tag, v, sizeof(tag));
-        else if (photo && (v = xml_attr(a, n, "leafCount")) && amce_num(v))
-            sprintf(tag, amce_num(v) == 1 ? _("%lu photo") : _("%lu photos"), (unsigned long)amce_num(v));
-        else if (photo && (v = xml_attr(a, n, "childCount")) && amce_num(v))
-            sprintf(tag, amce_num(v) == 1 ? _("%lu item") : _("%lu items"), (unsigned long)amce_num(v));
-        else if ((v = xml_attr(a, n, "leafCount")) && amce_num(v))
-            sprintf(tag, amce_num(v) == 1 ? _("%lu track") : _("%lu tracks"), (unsigned long)amce_num(v));
+            amb_strlcpy(tag, v, sizeof(tag));
+        else if (photo && (v = xml_attr(a, n, "leafCount")) && amb_num(v))
+            sprintf(tag, amb_num(v) == 1 ? _("%lu photo") : _("%lu photos"), (unsigned long)amb_num(v));
+        else if (photo && (v = xml_attr(a, n, "childCount")) && amb_num(v))
+            sprintf(tag, amb_num(v) == 1 ? _("%lu item") : _("%lu items"), (unsigned long)amb_num(v));
+        else if ((v = xml_attr(a, n, "leafCount")) && amb_num(v))
+            sprintf(tag, amb_num(v) == 1 ? _("%lu track") : _("%lu tracks"), (unsigned long)amb_num(v));
         {
             /* what the details pane shows of it: after the key, by tabs */
             static char more[700];
             char type[16], thumb[160], year[8], by[100], count[24], studio[60], summary[300];
             text(xml_attr(a, n, "type"), type, sizeof(type));
-            amce_strlcpy(thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
+            amb_strlcpy(thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "",
                          sizeof(thumb));
             text(xml_attr(a, n, "year"), year, sizeof(year));
             text(xml_attr(a, n, "parentTitle"), by, sizeof(by));
             count[0] = 0;
-            if (!strcmp(type, "artist") && amce_num(xml_attr(a, n, "childCount")))
-                sprintf(count, amce_num(xml_attr(a, n, "childCount")) == 1 ? _("%lu album") : _("%lu albums"),
-                        (unsigned long)amce_num(xml_attr(a, n, "childCount")));
+            if (!strcmp(type, "artist") && amb_num(xml_attr(a, n, "childCount")))
+                sprintf(count, amb_num(xml_attr(a, n, "childCount")) == 1 ? _("%lu album") : _("%lu albums"),
+                        (unsigned long)amb_num(xml_attr(a, n, "childCount")));
             else if (!strcmp(type, "photo"))
-                amce_strlcpy(count, tag, sizeof(count));    /* photos, or items */
-            else if (amce_num(xml_attr(a, n, "leafCount")))
-                sprintf(count, amce_num(xml_attr(a, n, "leafCount")) == 1 ? _("%lu track") : _("%lu tracks"),
-                        (unsigned long)amce_num(xml_attr(a, n, "leafCount")));
+                amb_strlcpy(count, tag, sizeof(count));    /* photos, or items */
+            else if (amb_num(xml_attr(a, n, "leafCount")))
+                sprintf(count, amb_num(xml_attr(a, n, "leafCount")) == 1 ? _("%lu track") : _("%lu tracks"),
+                        (unsigned long)amb_num(xml_attr(a, n, "leafCount")));
             text(xml_attr(a, n, "studio"), studio, sizeof(studio));
             summary_text(xml_attr(a, n, "summary"), summary, sizeof(summary));
             sprintf(more, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s", type, thumb, year, by, count, studio,
                     summary);
-            amce_strlcat(key, more, sizeof(key));
+            amb_strlcat(key, more, sizeof(key));
         }
     }
     {
@@ -743,29 +743,29 @@ BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max)
 /* ------------------------------------------------------------ plex.tv */
 void plex_tv_headers(char *out, LONG max, BOOL token)
 {
-    amce_strlcpy(out, "X-Plex-Product: Ambiance\r\nX-Plex-Version: " AMCE_VERSION
+    amb_strlcpy(out, "X-Plex-Product: Ambiance\r\nX-Plex-Version: " AMB_VERSION
                       "\r\nX-Plex-Platform: AmigaOS\r\nX-Plex-Device-Name: Amiga"
                       "\r\nX-Plex-Client-Identifier: ", max);
-    amce_strlcat(out, plex.cid, max);
-    amce_strlcat(out, "\r\n", max);
+    amb_strlcat(out, plex.cid, max);
+    amb_strlcat(out, "\r\n", max);
     if (token && plex.account[0]) {
-        amce_strlcat(out, "X-Plex-Token: ", max);
-        amce_strlcat(out, plex.account, max);
-        amce_strlcat(out, "\r\n", max);
+        amb_strlcat(out, "X-Plex-Token: ", max);
+        amb_strlcat(out, plex.account, max);
+        amb_strlcat(out, "\r\n", max);
     }
 }
 
 void plex_set_account(const char *token, const char *user)
 {
-    amce_strlcpy(plex.account, token, sizeof(plex.account));
-    amce_strlcpy(plex.user, user, sizeof(plex.user));
+    amb_strlcpy(plex.account, token, sizeof(plex.account));
+    amb_strlcpy(plex.user, user, sizeof(plex.user));
     set_var(ACCT_VAR, plex.account);
     set_var(USER_VAR, plex.user);
 }
 
 void plex_set_token(const char *token)
 {
-    amce_strlcpy(plex.token, token, sizeof(plex.token));
+    amb_strlcpy(plex.token, token, sizeof(plex.token));
     set_var(TOKEN_VAR, plex.token);
 }
 
@@ -794,7 +794,7 @@ LONG plex_fill_servers(UBYTE *body, ULONG len, struct ItemList *l)
         if (t3)
             sprintf(tag, "%.20s, plex.tv", line);
         else
-            amce_strlcpy(tag, line, sizeof(tag));
+            amb_strlcpy(tag, line, sizeof(tag));
         if (list_add(l, t2[0] ? t2 : line, path, tag, IT_PLEXSRV))
             n++;
     }
@@ -805,8 +805,8 @@ static int rate_el(void *ctx, const char *name, char **a, int n, int depth)
 {
     ULONG *r = ctx;
     (void)depth;
-    if (!strcmp(name, "Stream") && amce_num(xml_attr(a, n, "streamType")) == 2) {
-        *r = amce_num(xml_attr(a, n, "samplingRate"));
+    if (!strcmp(name, "Stream") && amb_num(xml_attr(a, n, "streamType")) == 2) {
+        *r = amb_num(xml_attr(a, n, "samplingRate"));
         return 0;
     }
     return 1;
@@ -863,8 +863,8 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
             (long)w, (long)h, jpg ? "jpeg" : "png");
     {
         char k[520];
-        amce_strlcpy(k, n, sizeof(k));
-        amce_strlcat(k, enc, sizeof(k));
+        amb_strlcpy(k, n, sizeof(k));
+        amb_strlcat(k, enc, sizeof(k));
         plex_request(k, req, rmax);
     }
     if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
@@ -970,7 +970,7 @@ static void art_trim(void)
         sprintf(m, "%ld pictures let go (%lu KB); %lu KB kept, budget %lu KB of %lu KB free",
                 (long)gone, (unsigned long)(freed >> 10), (unsigned long)(total >> 10),
                 (unsigned long)(budget >> 10), (unsigned long)(AvailMem(MEMF_ANY) >> 10));
-        amce_log("pictures: RAM", m);
+        amb_log("pictures: RAM", m);
     }
 }
 

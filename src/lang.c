@@ -19,7 +19,7 @@
  * found by a binary search, behind a small cache by the English's address
  * (a literal, at one address for good).
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -49,7 +49,7 @@ static struct {
     const char *en, *tr;
 } cache[TR_CACHE];
 
-ULONG amce_tr_id(const char *s)
+ULONG amb_tr_id(const char *s)
 {
     ULONG h = 2166136261UL;
     const UBYTE *p = (const UBYTE *)s;
@@ -73,7 +73,7 @@ static const char *lookup(ULONG id)
     return NULL;
 }
 
-const char *amce_tr(const char *s)
+const char *amb_tr(const char *s)
 {
     ULONG k;
     const char *t;
@@ -84,7 +84,7 @@ const char *amce_tr(const char *s)
     Forbid();
     if (cache[k].en != s) {
         cache[k].en = s;
-        t = lookup(amce_tr_id(s));
+        t = lookup(amb_tr_id(s));
         /* at most twice its English and 16 bytes more: what the buffers
          * text is formatted into are sized for (a Japanese character is
          * three bytes); a longer one is left in English */
@@ -111,7 +111,7 @@ static BOOL cat_language(const char *path, char *lang)
     if (n < 20 || memcmp(b, "FORM", 4) || memcmp(b + 8, "CTLG", 4))
         return FALSE;
     for (i = 12; i + 8 <= n;) {
-        ULONG len = amce_be32(b + i + 4);
+        ULONG len = amb_be32(b + i + 4);
         if (!memcmp(b + i, "LANG", 4)) {
             ULONG k;
             for (k = 0; k < len && k < 31 && i + 8 + (LONG)k < n && b[i + 8 + k]; k++)
@@ -149,15 +149,15 @@ static void scan_dir(const char *dir)
                         else
                             o += sprintf(o, "<%02lx>", (unsigned long)*q);
                     strcpy(o, ": no catalog read from it");
-                    amce_log("language drawer", m);
+                    amb_log("language drawer", m);
                     continue;
                 }
-                for (i = 0; i < ncats && amce_stricmp(cats[i].lang, lang); i++)
+                for (i = 0; i < ncats && amb_stricmp(cats[i].lang, lang); i++)
                     ;
                 if (i < ncats)
                     continue;                   /* PROGDIR's first */
-                amce_strlcpy(cats[ncats].lang, lang, sizeof(cats[0].lang));
-                amce_strlcpy(cats[ncats].path, path, sizeof(cats[0].path));
+                amb_strlcpy(cats[ncats].lang, lang, sizeof(cats[0].lang));
+                amb_strlcpy(cats[ncats].path, path, sizeof(cats[0].path));
                 ncats++;
             }
         UnLock(l);
@@ -166,7 +166,7 @@ static void scan_dir(const char *dir)
 }
 
 /* The catalogs there are, by their languages. */
-void amce_lang_scan(void)
+void amb_lang_scan(void)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR old = me->pr_WindowPtr;
@@ -177,12 +177,12 @@ void amce_lang_scan(void)
     me->pr_WindowPtr = old;
 }
 
-int amce_lang_count(void)
+int amb_lang_count(void)
 {
     return ncats;
 }
 
-const char *amce_lang_name(int i)
+const char *amb_lang_name(int i)
 {
     return i >= 0 && i < ncats ? cats[i].lang : "";
 }
@@ -197,13 +197,13 @@ static int wb_languages(char out[][32], int max)
         return 0;
     if ((loc = OpenLocale(NULL))) {
         for (; n < max && n < 10 && loc->loc_PrefLanguages[n]; n++)
-            amce_strlcpy(out[n], (const char *)loc->loc_PrefLanguages[n], 32);
+            amb_strlcpy(out[n], (const char *)loc->loc_PrefLanguages[n], 32);
         CloseLocale(loc);
     }
     return n;
 }
 
-const char *amce_lang_wb(void)
+const char *amb_lang_wb(void)
 {
     static char l[4][32];
     return wb_languages(l, 4) ? l[0] : "";
@@ -216,12 +216,12 @@ static BOOL same_lang(const char *a, const char *b)
 {
     static const char *const greek[] = { "greek", "ellinika" };
     int i, ia = -1, ib = -1;
-    if (!amce_stricmp(a, b))
+    if (!amb_stricmp(a, b))
         return TRUE;
     for (i = 0; i < 2; i++) {
-        if (!amce_stricmp(a, greek[i]))
+        if (!amb_stricmp(a, greek[i]))
             ia = i;
-        if (!amce_stricmp(b, greek[i]))
+        if (!amb_stricmp(b, greek[i]))
             ib = i;
     }
     return ia >= 0 && ib >= 0;
@@ -238,25 +238,25 @@ static BOOL load(int k)
     if (cat_size < 20 || cat_size > 400000 || !(cat_buf = AllocVec(cat_size + 1, MEMF_ANY)) ||
         Read(fh, cat_buf, cat_size) != (LONG)cat_size) {
         Close(fh);
-        amce_lang_close();
+        amb_lang_close();
         return FALSE;
     }
     Close(fh);
     /* the STRS chunk: ID, length (its NUL counted as written), the string,
      * padded to 4 */
     for (i = 12; i + 8 <= cat_size;) {
-        ULONG len = amce_be32(cat_buf + i + 4);
+        ULONG len = amb_be32(cat_buf + i + 4);
         if (!memcmp(cat_buf + i, "STRS", 4) && i + 8 + len <= cat_size) {
             UBYTE *p = cat_buf + i + 8, *e = p + len;
             cap = len / 12 + 1;
             cat_ids = AllocVec(cap * sizeof(ULONG), MEMF_ANY);
             cat_strs = AllocVec(cap * sizeof(char *), MEMF_ANY);
             if (!cat_ids || !cat_strs) {
-                amce_lang_close();
+                amb_lang_close();
                 return FALSE;
             }
             while (p + 8 <= e && n < cap) {
-                ULONG id = amce_be32(p), sl = amce_be32(p + 4), j;
+                ULONG id = amb_be32(p), sl = amb_be32(p + 4), j;
                 const char *s = (const char *)(p + 8);
                 if (p + 8 + sl > e)
                     break;
@@ -275,19 +275,19 @@ static BOOL load(int k)
         i += 8 + len + (len & 1);
     }
     cat_n = n;
-    amce_strlcpy(cat_lang, cats[k].lang, sizeof(cat_lang));
+    amb_strlcpy(cat_lang, cats[k].lang, sizeof(cat_lang));
     return n > 0;
 }
 
 /* The catalog for lang (a language as Locale names it: "deutsch"), or the
  * Workbench's first that has one (NULL or ""), or none ("english"). */
-void amce_lang_open(const char *lang)
+void amb_lang_open(const char *lang)
 {
     char m[200];
     int i, k = -1;
-    amce_lang_close();
-    if (lang && !amce_stricmp(lang, "english")) {
-        amce_log("language", "English, as chosen");
+    amb_lang_close();
+    if (lang && !amb_stricmp(lang, "english")) {
+        amb_log("language", "English, as chosen");
         return;
     }
     if (lang && *lang) {
@@ -298,7 +298,7 @@ void amce_lang_open(const char *lang)
         char wb[10][32];
         int n = wb_languages(wb, 10), j;
         for (j = 0; j < n && k < 0; j++) {
-            if (!amce_stricmp(wb[j], "english"))
+            if (!amb_stricmp(wb[j], "english"))
                 break;                      /* English comes first there */
             for (i = 0; i < ncats && k < 0; i++)
                 if (same_lang(cats[i].lang, wb[j]))
@@ -307,13 +307,13 @@ void amce_lang_open(const char *lang)
     }
     if (k >= 0 && load(k)) {
         sprintf(m, "%.31s (%lu strings, %.100s)", cat_lang, (unsigned long)cat_n, cats[k].path);
-        amce_log("language", m);
+        amb_log("language", m);
     } else {
-        amce_log("language", lang && *lang ? "no catalog for it: English" : "English");
+        amb_log("language", lang && *lang ? "no catalog for it: English" : "English");
     }
 }
 
-void amce_lang_close(void)
+void amb_lang_close(void)
 {
     if (cat_ids)
         FreeVec(cat_ids);
@@ -329,23 +329,23 @@ void amce_lang_close(void)
     memset(cache, 0, sizeof(cache));
 }
 
-void amce_lang_quit(void)
+void amb_lang_quit(void)
 {
-    amce_lang_close();
+    amb_lang_close();
     if (LocaleBase)
         CloseLibrary((struct Library *)LocaleBase);
     LocaleBase = NULL;
 }
 
 /* The catalog's language, "" if English. */
-const char *amce_lang_now(void)
+const char *amb_lang_now(void)
 {
     return cat_n ? cat_lang : "";
 }
 
 /* The language shown, as an ISO 639-1 code ("de"): for servers that can
  * answer in it (Plex's X-Plex-Language). */
-const char *amce_lang_iso(void)
+const char *amb_lang_iso(void)
 {
     static const struct { const char *name, *iso; } map[] = {
         { "deutsch", "de" }, { "fran\347ais", "fr" }, { "italiano", "it" },
@@ -358,7 +358,7 @@ const char *amce_lang_iso(void)
     if (!cat_n)
         return "en";
     for (i = 0; i < sizeof(map) / sizeof(map[0]); i++)
-        if (!amce_stricmp(cat_lang, map[i].name))
+        if (!amb_stricmp(cat_lang, map[i].name))
             return map[i].iso;
     return "en";
 }

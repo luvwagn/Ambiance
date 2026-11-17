@@ -16,7 +16,7 @@
  * where it came from (a game, a picture, a music cover, a streamed one),
  * why, and its path, so we know which of them need progressive support.
  */
-#include "amce.h"
+#include "amb.h"
 #include "jdec/jdec.h"
 
 #include <string.h>
@@ -90,7 +90,7 @@ static void note(const char *kind, const char *why, const char *path)
         Close(fh);
     }
     ReleaseSemaphore(&note_lock);
-    amce_log("jpeg thumbnail, by datatype", line);
+    amb_log("jpeg thumbnail, by datatype", line);
 }
 
 /* ---- jdec's input, memory and output */
@@ -295,7 +295,7 @@ struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap
             char m[96];             /* (what the datatypes may not have known it by) */
             sprintf(m, "%lu x %lu, its first marker FF%02lx, read at 1/%ld", (unsigned long)info.width,
                     (unsigned long)info.height, (unsigned long)sig[3], (long)(1 << scale));
-            amce_log("viewer: jdec", m);
+            amb_log("viewer: jdec", m);
         }
     }
 out:

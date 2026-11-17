@@ -699,13 +699,13 @@ int main(void)
     DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
     /* Ambiance's font at its RTG size, from beside the program (the build
      * folder holds the Ambiance drawer), else topaz */
-    ta.ta_Name = (STRPTR)"PROGDIR:Ambiance/Fonts/amce-pixel.font";
+    ta.ta_Name = (STRPTR)"PROGDIR:Ambiance/Fonts/amb-pixel.font";
     ta.ta_YSize = h >= 512 ? 24 : 12;
     ta.ta_Style = 0;
     ta.ta_Flags = 0;
     font = DiskfontBase ? OpenDiskFont(&ta) : NULL;
     if (!font) {
-        ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amce-pixel.font";
+        ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amb-pixel.font";
         font = DiskfontBase ? OpenDiskFont(&ta) : NULL;
     }
     if (!font) {

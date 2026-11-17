@@ -1,9 +1,9 @@
 ; $VER: Install-Ambiance 1.7 (14.11.2026)
 ;
 ; Installer script for Ambiance: the program with its fonts, licences and
-; its own libraries in Ambiance/Libs (amcesql.library for beets,
+; its own libraries in Ambiance/Libs (ambsql.library for beets,
 ; dvdnav.library for DVDs, ac3.library and ac3fpu.library for AC-3 sound,
-; mpegv.library for MPEG video, amcempega.library for MP3: opened from
+; mpegv.library for MPEG video, ambmpega.library for MP3: opened from
 ; there, never put in LIBS:),
 ; and the languages chosen: the Workbench's own (none besides English on
 ; an English one), all thirteen at once, or ticked one by one.

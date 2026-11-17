@@ -27,7 +27,7 @@
  * by reverse lookup (the Host the server answers to); a server that fails
  * gives way to the next.
  */
-#include "amce.h"
+#include "amb.h"
 #include "plexxml.h"
 
 #include <string.h>
@@ -77,7 +77,7 @@ static struct {
 static void set_err(struct NetJob *j, const char *s)
 {
     if (!j->err[0])
-        amce_strlcpy(j->err, s, sizeof(j->err));
+        amb_strlcpy(j->err, s, sizeof(j->err));
 }
 
 /* Settings > Networking > Radio > Station list server: the one asked
@@ -89,7 +89,7 @@ static ULONG pref_seen;
 
 void net_radio_server(const char *name)
 {
-    amce_strlcpy(api_pref, name ? name : "", sizeof(api_pref));
+    amb_strlcpy(api_pref, name ? name : "", sizeof(api_pref));
     pref_seq++;
 }
 
@@ -124,29 +124,29 @@ static BOOL find_api(struct NetJob *j)
         LONG k = strlen(nm);
         /* a server's own name (de1.api.radio-browser.info); a hosting
          * provider's name would not be one it answers to */
-        if (k < 24 || amce_stricmp(nm + k - 23, ".api.radio-browser.info"))
+        if (k < 24 || amb_stricmp(nm + k - 23, ".api.radio-browser.info"))
             nm = API_ALL;
-        amce_strlcpy(api.name[i], nm, sizeof(api.name[i]));
+        amb_strlcpy(api.name[i], nm, sizeof(api.name[i]));
     }
     if (api_pref[0] && n) {
         /* the one chosen first, the rest after it should it fail; not among
          * them (a name gone from the list): looked up itself */
         int k;
-        for (k = 0; k < n && amce_stricmp(api.name[k], api_pref); k++)
+        for (k = 0; k < n && amb_stricmp(api.name[k], api_pref); k++)
             ;
         if (k == n && (h = gethostbyname((STRPTR)api_pref)) && h->h_length == 4) {
             k = n < MAX_HOSTS ? n++ : n - 1;
             memcpy(&api.addr[k], h->h_addr_list[0], 4);
-            amce_strlcpy(api.name[k], api_pref, sizeof(api.name[k]));
+            amb_strlcpy(api.name[k], api_pref, sizeof(api.name[k]));
         }
         if (k < n && k > 0) {
             ULONG a = api.addr[k];
             char nm[64];
-            amce_strlcpy(nm, api.name[k], sizeof(nm));
+            amb_strlcpy(nm, api.name[k], sizeof(nm));
             memmove(&api.addr[1], &api.addr[0], k * sizeof(ULONG));
             memmove(api.name[1], api.name[0], k * sizeof(api.name[0]));
             api.addr[0] = a;
-            amce_strlcpy(api.name[0], nm, sizeof(api.name[0]));
+            amb_strlcpy(api.name[0], nm, sizeof(api.name[0]));
         }
     }
     api.n = n;
@@ -198,7 +198,7 @@ static void bind_out(LONG s)
     la.sin_family = AF_INET;
     memcpy(&la.sin_addr, &ip, 4);
     if (bind(s, (struct sockaddr *)&la, sizeof(la)) < 0)
-        amce_log("network", "could not go out from the interface chosen: the stack's choice");
+        amb_log("network", "could not go out from the interface chosen: the stack's choice");
 }
 
 static LONG open_conn(struct NetJob *j, ULONG addr, UWORD port_no)
@@ -237,12 +237,12 @@ static APTR tls_start(struct NetJob *j, LONG s, const char *host)
     char m[200];
     if (!tls_open(&tls, SocketBase)) {
         set_err(j, _("HTTPS needs AmiSSL 5"));
-        amce_log("network: https", tls.why);
+        amb_log("network: https", tls.why);
         return NULL;
     }
     if (!(c = tls_new(&tls, s, host, TRUE))) {
         if (tls.why[0])
-            amce_log("network: https", tls.why);
+            amb_log("network: https", tls.why);
         set_err(j, tls.why[0] ? _("Ambiance's certificates are missing (its Certs drawer)")
                               : _("Not enough memory"));
         return NULL;
@@ -258,7 +258,7 @@ static APTR tls_start(struct NetJob *j, LONG s, const char *host)
             set_err(j, w < 0 ? _("Cancelled") : _("The server did not answer"));
         } else {
             sprintf(m, "%.60s: %.120s", host, tls.why);
-            amce_log("network: https", m);
+            amb_log("network: https", m);
             set_err(j, strncmp(tls.why, "certificate", 11) ? _("The secure connection failed")
                      : _("The server's certificate was not accepted (is the Amiga's clock right?)"));
         }
@@ -300,7 +300,7 @@ static BOOL to_file(struct NetJob *j, LONG s, APTR c, UBYTE *b, ULONG len, ULONG
     BOOL chunked = FALSE;
     LONG status = 0;
     *err = FALSE;
-    if (len < 12 || amce_strnicmp(p, "HTTP/", 5) || !strchr(p, ' '))
+    if (len < 12 || amb_strnicmp(p, "HTTP/", 5) || !strchr(p, ' '))
         return FALSE;
     {
         char *sp = strchr(p, ' ');
@@ -314,9 +314,9 @@ static BOOL to_file(struct NetJob *j, LONG s, APTR c, UBYTE *b, ULONG len, ULONG
         char *q;
         b[hlen] = 0;
         for (q = p; q && *q; q = strstr(q, "\r\n") ? strstr(q, "\r\n") + 2 : NULL) {
-            if (!amce_strnicmp(q, "Content-Length:", 15))
-                j->size = (ULONG)amce_num(q + 15 + strspn(q + 15, " "));
-            else if (!amce_strnicmp(q, "Transfer-Encoding:", 18) && strstr(q, "hunked"))
+            if (!amb_strnicmp(q, "Content-Length:", 15))
+                j->size = (ULONG)amb_num(q + 15 + strspn(q + 15, " "));
+            else if (!amb_strnicmp(q, "Transfer-Encoding:", 18) && strstr(q, "hunked"))
                 chunked = TRUE;
         }
         b[hlen] = save;
@@ -471,7 +471,7 @@ static ULONG dechunk(UBYTE *b, ULONG len)
 static BOOL header_is(const char *line, const char *name)
 {
     LONG n = strlen(name);
-    return !amce_strnicmp(line, name, n) && line[n] == ':';
+    return !amb_strnicmp(line, name, n) && line[n] == ':';
 }
 
 /* Status and headers taken off j->body; the body left in their place.
@@ -482,7 +482,7 @@ static LONG parse_response(struct NetJob *j, char *loc, LONG locmax)
     LONG status = 0;
     BOOL chunked = FALSE;
     loc[0] = 0;
-    if (j->len < 12 || amce_strnicmp(p, "HTTP/", 5))
+    if (j->len < 12 || amb_strnicmp(p, "HTTP/", 5))
         return 0;
     hdr_end = strstr(p, "\r\n\r\n");
     if (!hdr_end)
@@ -499,7 +499,7 @@ static LONG parse_response(struct NetJob *j, char *loc, LONG locmax)
             char *v = p + 9;
             while (*v == ' ')
                 v++;
-            amce_strlcpy(loc, v, locmax);
+            amb_strlcpy(loc, v, locmax);
         } else if (header_is(p, "Transfer-Encoding") && strstr(p + 18, "hunked")) {
             chunked = TRUE;
         }
@@ -520,8 +520,8 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port_no, ch
 {
     const char *h, *slash, *colon;
     LONG n;
-    *secure = !amce_strnicmp(url, "https://", 8);
-    if (amce_strnicmp(url, "http://", 7) && !*secure)
+    *secure = !amb_strnicmp(url, "https://", 8);
+    if (amb_strnicmp(url, "http://", 7) && !*secure)
         return FALSE;
     h = url + (*secure ? 8 : 7);
     slash = strchr(h, '/');
@@ -540,7 +540,7 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port_no, ch
         return FALSE;
     memcpy(host, h, n);
     host[n] = 0;
-    amce_strlcpy(path, slash ? slash : "/", pmax);
+    amb_strlcpy(path, slash ? slash : "/", pmax);
     return TRUE;
 }
 
@@ -560,7 +560,7 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
     /* HTTP/1.1 over HTTPS: plex.tv refuses 1.0 ("426 Upgrade Required");
      * Connection: close all the same, chunked answers put together */
     sprintf(req,
-            "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
+            "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: Ambiance/" AMB_VERSION
             "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
             j->post ? "POST" : "GET", path, secure ? "1" : "0", host,
             j->post ? "Content-Length: 0\r\n" : "", j->extra);
@@ -650,7 +650,7 @@ static void gdm(struct NetJob *j)
             continue;                       /* answered twice (multicast and broadcast) */
         seen[nseen++] = addr;
         name[0] = 0;
-        amce_strlcpy(port, "32400", sizeof(port));
+        amb_strlcpy(port, "32400", sizeof(port));
         {
             char *p = buf;
             while (p && *p) {
@@ -665,10 +665,10 @@ static void gdm(struct NetJob *j)
                     for (z = t + strlen(t); z > t && (z[-1] == '\r' || z[-1] == ' '); z--)
                         ;
                     *z = 0;
-                    if (!amce_stricmp(p, "Name"))
-                        amce_strlcpy(name, t, sizeof(name));
-                    else if (!amce_stricmp(p, "Port"))
-                        amce_strlcpy(port, t, sizeof(port));
+                    if (!amb_stricmp(p, "Name"))
+                        amb_strlcpy(name, t, sizeof(name));
+                    else if (!amb_stricmp(p, "Port"))
+                        amb_strlcpy(port, t, sizeof(port));
                 }
                 p = e ? e + 1 : NULL;
             }
@@ -707,7 +707,7 @@ static void gdm_account(struct NetJob *j)
     ULONG glen = j->len, len, addr;
     char err[96], loc[8];
     const char *p, *e;
-    amce_strlcpy(err, j->err, sizeof(err));
+    amb_strlcpy(err, j->err, sizeof(err));
     j->body = NULL;
     j->len = 0;
     j->err[0] = 0;
@@ -725,13 +725,13 @@ static void gdm_account(struct NetJob *j)
         FreeVec(j->body);
     }
     if (j->err[0])
-        amce_log("plex: the account's servers", j->err);
+        amb_log("plex: the account's servers", j->err);
     j->body = NULL;
     j->len = 0;
     if (!acc[0] || !(out = AllocVec(strlen(acc) + glen + 1, MEMF_ANY))) {
         j->body = g;                        /* GDM's alone, as they were */
         j->len = glen;
-        amce_strlcpy(j->err, g ? "" : err, sizeof(j->err));
+        amb_strlcpy(j->err, g ? "" : err, sizeof(j->err));
         return;
     }
     strcpy((char *)out, acc);
@@ -791,7 +791,7 @@ static void run(struct NetJob *j)
         set_err(j, _("HTTPS is off (Settings > Networking)"));
         return;
     }
-    amce_strlcpy(path, j->path, sizeof(path));
+    amb_strlcpy(path, j->path, sizeof(path));
     for (hop = 0; hop <= REDIRECTS; hop++) {
         tries = 1;
         if (is_api && hop == 0) {
@@ -802,10 +802,10 @@ static void run(struct NetJob *j)
         while (tries-- > 0) {
             if (is_api && hop == 0) {
                 addr = api.addr[api.next];
-                amce_strlcpy(host, api.name[api.next], sizeof(host));
+                amb_strlcpy(host, api.name[api.next], sizeof(host));
                 port_no = 80;
             } else if (hop == 0) {
-                amce_strlcpy(host, j->host, sizeof(host));
+                amb_strlcpy(host, j->host, sizeof(host));
                 port_no = j->port ? j->port : secure ? 443 : 80;
                 if (!resolve(host, &addr)) {
                     set_err(j, _("That server could not be found (DNS)"));
@@ -829,10 +829,10 @@ static void run(struct NetJob *j)
             j->body = NULL;
             j->len = 0;
             if (loc[0] == '/') {            /* the same server, another path */
-                amce_strlcpy(path, loc, sizeof(path));
+                amb_strlcpy(path, loc, sizeof(path));
                 continue;
             }
-            if (!amce_strnicmp(loc, "https:", 6) && !use_https) {
+            if (!amb_strnicmp(loc, "https:", 6) && !use_https) {
                 set_err(j, _("The server only answers over HTTPS"));
                 return;
             }
@@ -856,7 +856,7 @@ static void run(struct NetJob *j)
         j->len = 0;
     }
     if (j->body)
-        amce_strlcpy(j->server, host, sizeof(j->server));
+        amb_strlcpy(j->server, host, sizeof(j->server));
     j->ms = time_ms() - t0;
 }
 
@@ -921,7 +921,7 @@ BOOL net_start(void)
     start_sig = -1;
     running = proc && port;
     if (running)
-        amce_log("network", "process started");
+        amb_log("network", "process started");
     return running;
 }
 
@@ -940,7 +940,7 @@ void net_submit(struct NetJob *j)
         j->busy = FALSE;
         j->done = TRUE;
         j->body = NULL;
-        amce_strlcpy(j->err, _("The network process could not start"), sizeof(j->err));
+        amb_strlcpy(j->err, _("The network process could not start"), sizeof(j->err));
         return;
     }
     out++;
@@ -992,7 +992,7 @@ void net_stop(void)
     port = NULL;
     DeleteMsgPort(reply_port);
     reply_port = NULL;
-    amce_log("network", "process stopped");
+    amb_log("network", "process stopped");
 }
 
 /* Every job out told to stop (net_stop then waits for them). */
@@ -1050,13 +1050,13 @@ int net_interfaces(struct NetIf *out, int max, const char *toward, ULONG *in_use
                                    (ULONG)&state, IFQ_DeviceName, (ULONG)&dev, IFQ_DeviceUnit,
                                    (ULONG)&unit, TAG_END);
                 memset(f, 0, sizeof(*f));
-                amce_strlcpy(f->name, nd->ln_Name, sizeof(f->name));
+                amb_strlcpy(f->name, nd->ln_Name, sizeof(f->name));
                 memcpy(&f->ip, &a.sin_addr, 4);
                 if (is_loop(f->name, f->ip))
                     continue;
                 f->up = state == SM_Up;
                 if (dev)
-                    amce_strlcpy(f->dev, (const char *)FilePart(dev), sizeof(f->dev));
+                    amb_strlcpy(f->dev, (const char *)FilePart(dev), sizeof(f->dev));
                 f->unit = unit;
                 n++;
             }
@@ -1164,9 +1164,9 @@ int net_radio_mirrors(struct NetMirror *out, int max)
         memset(m, 0, sizeof(*m));
         m->addr = addr[i];
         m->ms = -1;
-        if (k < 24 || amce_stricmp(nm + k - 23, ".api.radio-browser.info"))
+        if (k < 24 || amb_stricmp(nm + k - 23, ".api.radio-browser.info"))
             nm = "";                        /* no name of its own: left out below */
-        amce_strlcpy(m->name, nm, sizeof(m->name));
+        amb_strlcpy(m->name, nm, sizeof(m->name));
         if ((s = socket(AF_INET, SOCK_STREAM, 0)) >= 0) {
             struct sockaddr_in sa;
             ULONG t0 = time_ms();

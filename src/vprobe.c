@@ -14,7 +14,7 @@
 #include <proto/dos.h>
 #include <stdio.h>
 #include <string.h>
-#include "amce.h"
+#include "amb.h"
 #include "vprobe.h"
 
 #define PROBE_BYTES (192UL * 1024)

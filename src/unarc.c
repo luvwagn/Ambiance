@@ -29,7 +29,7 @@ BOOL unarc_safe_name(const char *name)
 
 static BOOL lha_there(void)
 {
-    return amce_exists("C:LhA");
+    return amb_exists("C:LhA");
 }
 
 int unarc_how(void)
@@ -52,7 +52,7 @@ static void make_dirs(const char *path)
 {
     char d[300];
     char *s;
-    amce_strlcpy(d, path, sizeof(d));
+    amb_strlcpy(d, path, sizeof(d));
     s = strchr(d, ':');
     s = s ? s + 1 : d;
     while ((s = strchr(s, '/')) != NULL) {
@@ -74,18 +74,18 @@ static BOOL xad_extract(const char *archive, const char *dest, char *why, LONG w
     BOOL ok = TRUE;
     char m[200];
     if (!(xadMasterBase = (struct xadMasterBase *)OpenLibrary((CONST_STRPTR)"xadmaster.library", 12))) {
-        amce_strlcpy(why, _("xadmaster.library could not be opened"), wmax);
+        amb_strlcpy(why, _("xadmaster.library could not be opened"), wmax);
         return FALSE;
     }
     if (!(ai = (struct xadArchiveInfo *)xadAllocObjectA(XADOBJ_ARCHIVEINFO, NULL))) {
         CloseLibrary((struct Library *)xadMasterBase);
         xadMasterBase = NULL;
-        amce_strlcpy(why, _("Not enough memory"), wmax);
+        amb_strlcpy(why, _("Not enough memory"), wmax);
         return FALSE;
     }
     if ((e = xadGetInfo(ai, XAD_INFILENAME, (ULONG)archive, TAG_DONE)) != XADERR_OK) {
         sprintf(m, _("The archive could not be read (%.60s)"), (const char *)xadGetErrorText(e));
-        amce_strlcpy(why, m, wmax);
+        amb_strlcpy(why, m, wmax);
         ok = FALSE;
     } else {
         for (fi = ai->xai_FileInfo; fi && ok; fi = fi->xfi_Next) {
@@ -93,10 +93,10 @@ static BOOL xad_extract(const char *archive, const char *dest, char *why, LONG w
             const char *name = (const char *)fi->xfi_FileName;
             if (!unarc_safe_name(name) || (fi->xfi_Flags & XADFIF_LINK)) {
                 skipped++;
-                amce_log("unarc: left out", name ? name : "(no name)");
+                amb_log("unarc: left out", name ? name : "(no name)");
                 continue;
             }
-            amce_join_path(out, sizeof(out), dest, name);
+            amb_join_path(out, sizeof(out), dest, name);
             if (fi->xfi_Flags & XADFIF_DIRECTORY) {
                 char d[304];
                 sprintf(d, "%.300s/", out);
@@ -109,7 +109,7 @@ static BOOL xad_extract(const char *archive, const char *dest, char *why, LONG w
             if (e != XADERR_OK) {
                 sprintf(m, _("%.40s could not be unpacked (%.60s)"), name,
                         (const char *)xadGetErrorText(e));
-                amce_strlcpy(why, m, wmax);
+                amb_strlcpy(why, m, wmax);
                 ok = FALSE;
             } else
                 files++;
@@ -121,7 +121,7 @@ static BOOL xad_extract(const char *archive, const char *dest, char *why, LONG w
     xadMasterBase = NULL;
     sprintf(m, "%.120s: %ld files by xadmaster.library, %ld left out%s", archive, (long)files,
             (long)skipped, ok ? "" : " (failed)");
-    amce_log("unarc", m);
+    amb_log("unarc", m);
     return ok;
 }
 
@@ -131,14 +131,14 @@ static BOOL lha_extract(const char *archive, const char *dest, char *why, LONG w
     LONG rc;
     BPTR nil;
     LONG n;
-    amce_strlcpy(d, dest, sizeof(d));
+    amb_strlcpy(d, dest, sizeof(d));
     n = strlen(d);
     if (n && d[n - 1] != ':' && d[n - 1] != '/')
-        amce_strlcat(d, "/", sizeof(d));        /* LhA takes a drawer with its '/' */
+        amb_strlcat(d, "/", sizeof(d));        /* LhA takes a drawer with its '/' */
     make_dirs(d);
     sprintf(cmd, "C:LhA x \"%.290s\" \"%.300s\"", archive, d);    /* (into a new drawer: no questions) */
     if (!(nil = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE))) {
-        amce_strlcpy(why, _("NIL: could not be opened"), wmax);
+        amb_strlcpy(why, _("NIL: could not be opened"), wmax);
         return FALSE;
     }
     rc = SystemTags((CONST_STRPTR)cmd, SYS_Input, 0, SYS_Output, (ULONG)nil, NP_StackSize, 16384,
@@ -147,12 +147,12 @@ static BOOL lha_extract(const char *archive, const char *dest, char *why, LONG w
     {
         char m[760];
         sprintf(m, "%.700s: returned %ld", cmd, (long)rc);
-        amce_log("unarc", m);
+        amb_log("unarc", m);
     }
     if (rc != 0) {
         char m[80];
         sprintf(m, _("LhA could not unpack it (it returned %ld)"), (long)rc);
-        amce_strlcpy(why, m, wmax);
+        amb_strlcpy(why, m, wmax);
         return FALSE;
     }
     return TRUE;
@@ -164,9 +164,9 @@ BOOL unarc_extract(const char *archive, const char *dest, char *why, LONG wmax)
     why[0] = 0;
     if (how == UNARC_XAD)
         return xad_extract(archive, dest, why, wmax);
-    if (how == UNARC_LHA && amce_ends_with(archive, ".lha"))
+    if (how == UNARC_LHA && amb_ends_with(archive, ".lha"))
         return lha_extract(archive, dest, why, wmax);
-    amce_strlcpy(why, how == UNARC_LHA ? _("LhA unpacks only .lha archives: install xadmaster.library")
+    amb_strlcpy(why, how == UNARC_LHA ? _("LhA unpacks only .lha archives: install xadmaster.library")
                                        : _("Nothing here unpacks archives: install xadmaster.library "
                                            "(Aminet util/arc/xadmaster000.lha)"),
                  wmax);

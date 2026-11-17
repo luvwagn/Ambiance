@@ -24,7 +24,7 @@
  */
 #include <stdio.h>
 #include <string.h>
-#include "amce.h"
+#include "amb.h"
 
 #include <exec/tasks.h>
 #include <dos/dosextens.h>
@@ -198,7 +198,7 @@ static void snap_take(struct List *l)
 {
     struct Node *n;
     for (n = l->lh_Head; n->ln_Succ && snap_n < SNAP_MAX; n = n->ln_Succ)
-        amce_strlcpy(snap[snap_n++], n->ln_Name ? n->ln_Name : "", sizeof(snap[0]));
+        amb_strlcpy(snap[snap_n++], n->ln_Name ? n->ln_Name : "", sizeof(snap[0]));
 }
 
 static BOOL snap_has(const char *name)
@@ -273,7 +273,7 @@ void dbg_mem_report(void)
     int k;
     sprintf(m, "%ld bytes of chip RAM and %ld of fast not back since the start (the log's own "
                "file still open)", (long)dc, (long)df);
-    amce_log("memory", m);
+    amb_log("memory", m);
     /* where it may be: libraries and devices brought in and kept, RAM: */
     ls[0] = &eb->LibList;
     ls[1] = &eb->DeviceList;
@@ -297,10 +297,10 @@ void dbg_mem_report(void)
             sum++;
         }
     Permit();
-    amce_log("memory: in memory now, not at the start", sum ? kept : "nothing");
+    amb_log("memory: in memory now, not at the start", sum ? kept : "nothing");
     if (ram0 >= 0 && ram1 >= 0) {
         sprintf(m, "RAM: (ENV:, T:) holds %ld bytes more than at the start", (long)(ram1 - ram0));
-        amce_log("memory", m);
+        amb_log("memory", m);
     }
 }
 

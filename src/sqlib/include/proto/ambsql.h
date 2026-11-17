@@ -1,9 +1,9 @@
 /* Automatically generated header (sfdc 1.13)! Do not edit! */
 
-#ifndef PROTO_AMCESQL_H
-#define PROTO_AMCESQL_H
+#ifndef PROTO_AMBSQL_H
+#define PROTO_AMBSQL_H
 
-#include <clib/amcesql_protos.h>
+#include <clib/ambsql_protos.h>
 
 #if defined(_CONST_BASES)
 # ifndef __CONSTLIBBASEDECL__
@@ -14,9 +14,9 @@
 # endif /* __SEGMENTLIBBASEDECL__ */
 #endif /* _CONST_BASES */
 #ifdef __amigaos4__
-# include <interfaces/amcesql.h>
+# include <interfaces/ambsql.h>
 # ifndef __NOGLOBALIFACE__
-   extern struct AmceSqlIFace *IAmceSql;
+   extern struct AmbSqlIFace *IAmbSql;
 # endif /* __NOGLOBALIFACE__*/
 #endif /* !__amigaos4__ */
 #ifndef __NOLIBBASE__
@@ -24,7 +24,7 @@
 # ifdef __CONSTLIBBASEDECL__
    __CONSTLIBBASEDECL__
 # endif /* __CONSTLIBBASEDECL__ */
-  AmceSqlBase
+  AmbSqlBase
 # ifdef __SEGMENTLIBBASEDECL__
  __SEGMENTLIBBASEDECL__
 # endif /* __SEGMENTLIBBASEDECL__ */
@@ -34,13 +34,13 @@
 #ifndef _NO_INLINE
 # if defined(__GNUC__)
 #  ifdef __AROS__
-#   include <defines/amcesql.h>
+#   include <defines/ambsql.h>
 #  else
-#   include <inline/amcesql.h>
+#   include <inline/ambsql.h>
 #  endif
 # else
-#  include <pragmas/amcesql_pragmas.h>
+#  include <pragmas/ambsql_pragmas.h>
 # endif
 #endif /* _NO_INLINE */
 
-#endif /* !PROTO_AMCESQL_H */
+#endif /* !PROTO_AMBSQL_H */

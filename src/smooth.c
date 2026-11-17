@@ -4,7 +4,7 @@
  *
  * Used on RTG screens, 8-bit ones too. Everything is pre-rendered by
  * tools/mksmooth.py at the exact size this screen needs, from Rubik and the
- * vector icon shapes, into PROGDIR:Fonts/amce-smooth/<lines>; nothing is
+ * vector icon shapes, into PROGDIR:Fonts/amb-smooth/<lines>; nothing is
  * scaled or rasterised here. Greek, which Rubik lacks, comes from
  * Geologica, sized to Rubik's: its letters are cjk.c's two bytes.
  *
@@ -42,7 +42,7 @@
  * The logo is a small palette image: one mask per colour, like the pixel
  * style's logo.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -60,7 +60,7 @@ static BOOL alpha_allowed;      /* fast enough (main.c, by the speed measured) *
 void sm_alpha_allow(BOOL on)
 {
     alpha_allowed = on;
-    amce_log("smooth style", on ? "text blended in 16 steps where the screen is 15 to 32-bit (fast here)"
+    amb_log("smooth style", on ? "text blended in 16 steps where the screen is 15 to 32-bit (fast here)"
                                 : "text with masks (not fast enough here, or Ambiance/TextBlend off)");
 }
 
@@ -154,11 +154,11 @@ static BOOL parse(struct Smooth *s)
 {
     const UBYTE *p = s->data, *end = s->data + s->size;
     int f;
-    if (s->size < 14 || memcmp(p, "AMSM", 4) || amce_be16(p + 4) != 3 || amce_be16(p + 12) != NFACES)
+    if (s->size < 14 || memcmp(p, "AMSM", 4) || amb_be16(p + 4) != 3 || amb_be16(p + 12) != NFACES)
         return FALSE;
-    s->k = amce_be16(p + 6);
-    s->cell_h = amce_be16(p + 8);
-    s->base = amce_be16(p + 10);
+    s->k = amb_be16(p + 6);
+    s->cell_h = amb_be16(p + 8);
+    s->base = amb_be16(p + 10);
     p += 14;
     for (f = 0; f < NFACES; f++) {
         struct Face *fc = &s->face[f];
@@ -166,8 +166,8 @@ static BOOL parse(struct Smooth *s)
         UBYTE c;
         if (p + 4 > end)
             return FALSE;
-        fc->lo = amce_be16(p);
-        fc->hi = amce_be16(p + 2);
+        fc->lo = amb_be16(p);
+        fc->hi = amb_be16(p + 2);
         if (fc->hi < fc->lo || fc->lo > '?' || fc->hi < 'Z')
             return FALSE;
         p += 4;
@@ -175,7 +175,7 @@ static BOOL parse(struct Smooth *s)
         p += (ULONG)(fc->hi - fc->lo + 1) * GLYPH_BYTES;
         if (p + 4 > end)
             return FALSE;
-        n = amce_be32(p);
+        n = amb_be32(p);
         p += 4;
         fc->blob = p;
         p += n;
@@ -190,25 +190,25 @@ static BOOL parse(struct Smooth *s)
     }
     if (p + 4 > end)
         return FALSE;
-    s->icon_n = amce_be16(p);
-    s->icon_cnt = amce_be16(p + 2);
+    s->icon_n = amb_be16(p);
+    s->icon_cnt = amb_be16(p + 2);
     p += 4;
     s->icons = p;
     s->icon_bytes = ((ULONG)s->icon_n * s->icon_n + 1) / 2;
     p += s->icon_bytes * s->icon_cnt;
     if (p + 4 > end)
         return FALSE;
-    s->mark_n = amce_be16(p);
-    s->mark_cnt = amce_be16(p + 2);
+    s->mark_n = amb_be16(p);
+    s->mark_cnt = amb_be16(p + 2);
     p += 4;
     s->marks = p;
     s->mark_bytes = ((ULONG)s->mark_n * s->mark_n + 1) / 2;
     p += s->mark_bytes * s->mark_cnt;
     if (p + 6 > end)
         return FALSE;
-    s->logo_w = amce_be16(p);
-    s->logo_h = amce_be16(p + 2);
-    s->logo_nc = amce_be16(p + 4);
+    s->logo_w = amb_be16(p);
+    s->logo_h = amb_be16(p + 2);
+    s->logo_nc = amb_be16(p + 4);
     p += 6;
     s->logo_pal = p;
     p += 3 * (ULONG)s->logo_nc;
@@ -216,8 +216,8 @@ static BOOL parse(struct Smooth *s)
     p += (ULONG)s->logo_w * s->logo_h;
     if (p + 4 > end)
         return FALSE;
-    s->nletters = amce_be16(p);
-    s->letter_cell_w = amce_be16(p + 2);
+    s->nletters = amb_be16(p);
+    s->letter_cell_w = amb_be16(p + 2);
     p += 4;
     if (s->nletters != 27)
         return FALSE;
@@ -225,7 +225,7 @@ static BOOL parse(struct Smooth *s)
         if (p + 8 > end)
             return FALSE;
         s->letter[f] = p;
-        p += 8 + amce_be32(p + 4);
+        p += 8 + amb_be32(p + 4);
     }
     /* Greek glyphs, if the file has them: "GREK", then per face u16 lo, hi,
      * the glyphs, u32 bytes, the coverage data (as above). A file
@@ -237,8 +237,8 @@ static BOOL parse(struct Smooth *s)
             ULONG n;
             if (q + 4 > end)
                 break;
-            gf[f].glo = amce_be16(q);
-            gf[f].ghi = amce_be16(q + 2);
+            gf[f].glo = amb_be16(q);
+            gf[f].ghi = amb_be16(q + 2);
             if (gf[f].ghi < gf[f].glo || gf[f].glo < 0x380 || gf[f].ghi > 0x3FF)
                 break;
             q += 4;
@@ -246,7 +246,7 @@ static BOOL parse(struct Smooth *s)
             q += (ULONG)(gf[f].ghi - gf[f].glo + 1) * GLYPH_BYTES;
             if (q + 4 > end)
                 break;
-            n = amce_be32(q);
+            n = amb_be32(q);
             q += 4;
             gf[f].gblob = q;
             q += n;
@@ -281,12 +281,12 @@ struct Smooth *sm_load(UWORD lines)
     BPTR fh;
     LONG size;
 
-    sprintf(path, "PROGDIR:Fonts/amce-smooth/%lu", (unsigned long)lines);
+    sprintf(path, "PROGDIR:Fonts/amb-smooth/%lu", (unsigned long)lines);
     me->pr_WindowPtr = (APTR)-1;            /* no "insert volume" requester */
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh) {
-        amce_log("smooth style: no file", path);
+        amb_log("smooth style: no file", path);
         return NULL;
     }
     Seek(fh, 0, OFFSET_END);
@@ -296,12 +296,12 @@ struct Smooth *sm_load(UWORD lines)
         s->size = size;
         if (Read(fh, s->data, size) == size && parse(s)) {
             Close(fh);
-            amce_log("smooth style loaded", path);
+            amb_log("smooth style loaded", path);
             return s;
         }
     }
     Close(fh);
-    amce_log("smooth style: bad file", path);
+    amb_log("smooth style: bad file", path);
     sm_free(s);
     return NULL;
 }
@@ -369,11 +369,11 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
                 sprintf(m, "ReadPixelArray gives back %08lx %08lx of 00f80000 000000f8: %s", rd[0], rd[1],
                         s->read_order == 0 ? "as written" : s->read_order == 1 ? "red and blue swapped"
                                                                              : "not used");
-                amce_log("smooth style", m);
+                amb_log("smooth style", m);
             }
         }
     }
-    amce_log("smooth style", s->chunky ? "text drawn as chunky pixels"
+    amb_log("smooth style", s->chunky ? "text drawn as chunky pixels"
                              : s->alpha_ok && alpha_allowed ? "text blended (16 steps, over what is there)"
                                                             : "text drawn with masks");
 }
@@ -390,7 +390,7 @@ void sm_detach(struct Smooth *s)
         char m[80];
         sprintf(m, "%lu pens for its shades and logo (%lu below 32 kept unused)",
                 (unsigned long)(s->ngot - s->held_low), (unsigned long)s->held_low);
-        amce_log("smooth style", m);
+        amb_log("smooth style", m);
         for (i = 0; i < s->ngot; i++)
             ReleasePen(s->g->scr->ViewPort.ColorMap, s->got[i]);
     }
@@ -535,7 +535,7 @@ UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE lv)
                   : (lv * 2 >= SMOOTH_LEVELS - 1 ? fg : bg);
         if (!s->ran_out) {
             s->ran_out = TRUE;
-            amce_log("smooth style", "out of pens for shades: the nearest colours used");
+            amb_log("smooth style", "out of pens for shades: the nearest colours used");
         }
     }
     *slot = pen;
@@ -767,7 +767,7 @@ static BOOL alpha_direct(struct Smooth *s, struct RastPort *rp, WORD x, WORD y, 
         s->direct_said = TRUE;
         sprintf(m, "text blended straight in the bitmap's own pixels (format %lu, %lu bytes a pixel)",
                 (unsigned long)fmt, (unsigned long)bpp);
-        amce_log("smooth style", m);
+        amb_log("smooth style", m);
     }
     return TRUE;
 }
@@ -921,7 +921,7 @@ static const UBYTE *glyph_at(const struct Face *f, const char *str, LONG n, LONG
             *i += 2;
             if (cp >= f->glo && cp <= f->ghi) {
                 const UBYTE *G = f->ggl + (ULONG)(cp - f->glo) * GLYPH_BYTES;
-                if (amce_be16(G)) {
+                if (amb_be16(G)) {
                     *blob = f->gblob;
                     return G;
                 }
@@ -935,7 +935,7 @@ static const UBYTE *glyph_at(const struct Face *f, const char *str, LONG n, LONG
 
 /* Text is laid out in 1/16 pixels, each glyph drawn from the stored
  * quarter-pixel position nearest its true one. */
-static UWORD adv16(const UBYTE *G) { return amce_be16(G); }
+static UWORD adv16(const UBYTE *G) { return amb_be16(G); }
 
 WORD sm_textlen(struct Smooth *s, const char *str, LONG n, int face)
 {
@@ -1006,7 +1006,7 @@ static void text_put(struct Smooth *s, const struct Face *f, const char *str, LO
         UWORD w = G[G_W], h = G[G_H];
         if (w) {
             UWORD bytes = (UWORD)(((ULONG)w * h + 1) >> 1), ph = (UWORD)(q & 3);
-            const UBYTE *d = b + amce_be32(G + 6);
+            const UBYTE *d = b + amb_be32(G + 6);
             while (ph--)
                 d += bytes;
             masks_put(s, d, w, h, (WORD)(q >> 2) + (BYTE)G[G_X] - minx, (BYTE)G[G_Y] - miny);
@@ -1178,7 +1178,7 @@ BOOL sm_logo(struct Smooth *s, struct Gfx *g)
 }
 
 /* The pixel style on a deep RTG screen: the smooth logo at its whole scale
- * (PROGDIR:Fonts/amce-smooth/logo<scale>), its colours in pens 32 up. */
+ * (PROGDIR:Fonts/amb-smooth/logo<scale>), its colours in pens 32 up. */
 BOOL sm_logo_file(struct Gfx *g, UWORD scale)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -1189,7 +1189,7 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale)
     BPTR fh;
     LONG size;
     BOOL ok = FALSE;
-    sprintf(path, "PROGDIR:Fonts/amce-smooth/logo%lu", (unsigned long)scale);
+    sprintf(path, "PROGDIR:Fonts/amb-smooth/logo%lu", (unsigned long)scale);
     me->pr_WindowPtr = (APTR)-1;
     fh = Open((CONST_STRPTR)path, MODE_OLDFILE);
     me->pr_WindowPtr = oldwin;
@@ -1198,8 +1198,8 @@ BOOL sm_logo_file(struct Gfx *g, UWORD scale)
     Seek(fh, 0, OFFSET_END);
     size = Seek(fh, 0, OFFSET_BEGINNING);
     if (size > 12 && (data = AllocVec(size, MEMF_ANY)) && Read(fh, data, size) == size &&
-        !memcmp(data, "AMLG", 4) && amce_be16(data + 4) == 1) {
-        UWORD w = amce_be16(data + 6), h = amce_be16(data + 8), nc = amce_be16(data + 10), c;
+        !memcmp(data, "AMLG", 4) && amb_be16(data + 4) == 1) {
+        UWORD w = amb_be16(data + 6), h = amb_be16(data + 8), nc = amb_be16(data + 10), c;
         const UBYTE *pal = data + 12, *idx = pal + 3 * (ULONG)nc;
         if (nc <= 32 && idx + (ULONG)w * h <= data + size &&
             cm && cm->Count >= FIRST_PEN + nc) {
@@ -1256,8 +1256,8 @@ BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl)
         L = s->letter[26];
     else
         return FALSE;
-    w = amce_be16(L);
-    h = amce_be16(L + 2);
+    w = amb_be16(L);
+    h = amb_be16(L + 2);
     r = L + 8;
     if (!w || !h)
         return FALSE;

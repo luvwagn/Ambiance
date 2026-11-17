@@ -20,7 +20,7 @@
 #include "proto/zz9k.h"
 #include "zz9k/request.h"
 #include "zz9k/reply.h"
-#include "amce.h"
+#include "amb.h"
 #include "zz9k.h"
 
 struct Library *ZZ9KBase;
@@ -32,7 +32,7 @@ BOOL zz_open(void)
         return ZZ9KBase != NULL;
     ZZ9KBase = OpenLibrary((CONST_STRPTR)ZZ9K_LIBRARY_NAME, ZZ9K_LIBRARY_VERSION);
     if (!ZZ9KBase)
-        amce_log("zz9k", "zz9k.library 2 could not be opened");
+        amb_log("zz9k", "zz9k.library 2 could not be opened");
     return ZZ9KBase != NULL;
 }
 
@@ -71,17 +71,17 @@ const char *zz_video_check(BOOL mpeg2, BOOL mp2)
         return "zz9k.library is not there";
     memset(&caps, 0, sizeof(caps));
     memset(&svc, 0, sizeof(svc));
-    amce_card_lock();
+    amb_card_lock();
     s = ZZ9KQueryCaps(&caps);
-    amce_card_unlock();
+    amb_card_unlock();
     if (s != ZZ9K_STATUS_OK) {
         sprintf(m, "the card's capabilities could not be read (%s)", zz_name(s));
-        amce_log("zz9k", m);
+        amb_log("zz9k", m);
         return "The ZZ9000 did not answer";
     }
-    amce_card_lock();
+    amb_card_lock();
     s = ZZ9KQueryService(ZZ9K_SERVICE_VIDEO, &svc);
-    amce_card_unlock();
+    amb_card_unlock();
     if (!said) {
         said = 1;
         sprintf(m, "zz9k.library %ld.%ld, ABI %ld.%ld, firmware %08lx, caps %08lx; video service "
@@ -92,7 +92,7 @@ const char *zz_video_check(BOOL mpeg2, BOOL mp2)
                 (unsigned long)svc.flags,
                 ZZ9KBase->lib_Version == 2 && ZZ9KBase->lib_Revision >= 2 && ZZ9KBase->lib_Revision < 34
                     ? "; its replies waited for by Ambiance (before 2.34 its timeout is 250 polls)" : "");
-        amce_log("zz9k", m);
+        amb_log("zz9k", m);
     }
     if ((caps.capability_bits & (ZZ9K_CAP_VIDEO_DECODE | ZZ9K_CAP_MEDIA_SESSION)) !=
             (ZZ9K_CAP_VIDEO_DECODE | ZZ9K_CAP_MEDIA_SESSION) ||
@@ -114,15 +114,15 @@ int zz_alloc(ULONG length, struct ZzBuf *b)
     int s;
     memset(&sb, 0, sizeof(sb));
     memset(b, 0, sizeof(*b));
-    amce_card_lock();
+    amb_card_lock();
     s = ZZ9KAllocShared(length, 64, ZZ9K_ALLOC_HOST_WINDOW, &sb);
     if (s == ZZ9K_STATUS_OK && !sb.data) {
         if (sb.handle)
             ZZ9KFreeShared(sb.handle);
-        amce_card_unlock();
+        amb_card_unlock();
         return ZZ9K_STATUS_NO_MEMORY;
     }
-    amce_card_unlock();
+    amb_card_unlock();
     b->handle = sb.handle;
     b->data = (volatile UBYTE *)sb.data;
     b->length = sb.length;
@@ -132,9 +132,9 @@ int zz_alloc(ULONG length, struct ZzBuf *b)
 void zz_free(struct ZzBuf *b)
 {
     if (b->handle) {
-        amce_card_lock();
+        amb_card_lock();
         ZZ9KFreeShared(b->handle);
-        amce_card_unlock();
+        amb_card_unlock();
     }
     memset(b, 0, sizeof(*b));
 }
@@ -170,16 +170,16 @@ static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
     ULONG n, done;
     int s;
     if (ZZ9KBase->lib_Version > 2 || ZZ9KBase->lib_Revision >= 34 || ZZ9KBase->lib_Revision < 2) {
-        amce_card_lock();                   /* (2.34 on: its timeout is ticks; before 2.2 no cancel) */
+        amb_card_lock();                   /* (2.34 on: its timeout is ticks; before 2.2 no cancel) */
         s = ZZ9KCall(rq, reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
-        amce_card_unlock();
+        amb_card_unlock();
         return s;
     }
     memset(&a, 0, sizeof(a));
-    amce_card_lock();
+    amb_card_lock();
     s = ZZ9KCallAsync(&a, rq, NULL, NULL);
     if (s != ZZ9K_STATUS_QUEUED) {
-        amce_card_unlock();
+        amb_card_unlock();
         return s;
     }
     for (n = 0;; n++) {
@@ -201,7 +201,7 @@ static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
     }
     if (a.queued && !a.completed)
         ZZ9KCancelAsync(&a);
-    amce_card_unlock();
+    amb_card_unlock();
     return s;
 }
 

@@ -13,7 +13,7 @@
  * header for it in the NDK, so its two structures and calls are here,
  * from xfdmaster.i (37.1).
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <exec/libraries.h>
@@ -105,7 +105,7 @@ UBYTE *unpack_buffer(UBYTE *buf, ULONG *len, char *packer, LONG pmax, const char
             break;                          /* not packed (any more) */
         }
         if (packer && pmax && !packer[0] && bi->PackerName)
-            amce_strlcpy(packer, (const char *)bi->PackerName, pmax);
+            amb_strlcpy(packer, (const char *)bi->PackerName, pmax);
         if (bi->PackerFlags & (1 << 4) || bi->PackerFlags & (3 << 6)) {
             *why = "it is packed with a password";
             xfdFreeObject(bi);

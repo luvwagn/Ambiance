@@ -6,28 +6,28 @@ The fonts below keep their own licence, the SIL Open Font Licence 1.1.
 
 Fonts
 -----
-The amce-pixel bitmap fonts are derived from Pixelify Sans,
+The amb-pixel bitmap fonts are derived from Pixelify Sans,
 (c) The Pixelify Sans Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-PixelifySans.txt). The derived fonts are released
 under the same licence.
 
-The amce-galmuri bitmap fonts (for laced screens) are converted from
+The amb-galmuri bitmap fonts (for laced screens) are converted from
 Galmuri11, Galmuri11 Bold and Galmuri14, (c) 2019-2025 Lee Minseo,
 licensed under the SIL Open Font Licence 1.1 (see OFL-Galmuri.txt).
-amce-galmuri14b is Galmuri14 thickened by a pixel. The converted fonts
+amb-galmuri14b is Galmuri14 thickened by a pixel. The converted fonts
 are released under the same licence.
 
 Japanese, Chinese and Korean names are drawn from glyphs copied from
 Galmuri11 and Galmuri14 (above) and, for the Chinese characters Galmuri
 has not, Ark Pixel Font 12px, (c) 2021 TakWolf, licensed under the SIL
 Open Font Licence 1.1 (see OFL-ArkPixel.txt). The glyph packs in
-Fonts/amce-cjk are released under the same licence.
+Fonts/amb-cjk are released under the same licence.
 
 Greek is drawn from glyphs copied from Galmuri11 (above), in
-Fonts/amce-cjk/greek, and on RTG screens in the smooth style from
+Fonts/amb-cjk/greek, and on RTG screens in the smooth style from
 Geologica, (c) 2020 The Geologisk Project Authors, licensed under the
 SIL Open Font Licence 1.1 (see OFL-Geologica.txt), rendered with the
-Rubik text into Fonts/amce-smooth. Both are released under the same
+Rubik text into Fonts/amb-smooth. Both are released under the same
 licence.
 
 The Ambiance logo lettering is rendered from Rubik Bold,
@@ -137,7 +137,7 @@ offers to install where they are missing or older (never on AGS):
     redistribute XFD, you have to keep all files together."
 So Ambiance's archive, with these in it, is not to be sold.
 
-Libs/amcesql.library, which reads beets music libraries, is Ambiance's own
+Libs/ambsql.library, which reads beets music libraries, is Ambiance's own
 small wrapper (src/sqlib, MIT) around SQLite 3.34.0, linked from the
 libsqlite3.a of Steffen Gutmann's AmigaOS 3 port (Aminet: biz/dbase/
 sqlite-3.34.0.a-amiga). SQLite, by D. Richard Hipp and others, is in the
@@ -181,13 +181,13 @@ interface (five functions) and carries none of its files.
 Radio's station lists come from radio-browser.info, a free directory of
 internet radio stations kept by its community (https://www.radio-browser.info).
 
-Libs/amcempega.library, which decodes MP3 (and MPEG audio's Layers I and
+Libs/ambmpega.library, which decodes MP3 (and MPEG audio's Layers I and
 II) when Settings > Sound chooses it, is libmad 0.15.1b (Robert Leslie,
 Underbit Technologies; with Debian's security fixes) behind mpega.library's
 functions, Ambiance's own project (extras/mpga,
 https://github.com/luvwagn/mpga.library): libmad is under the GNU General
 Public License, version 2 or later, the library version 3 or later
-(Licences/amcempega.library.txt), its source at that address, not in this
+(Licences/ambmpega.library.txt), its source at that address, not in this
 archive. Ambiance opens it at run time; none of its code is in Ambiance.
 
 Video

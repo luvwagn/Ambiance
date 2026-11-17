@@ -19,7 +19,7 @@
  * It says goodbye with the same message, its mask 0, and waits for the
  * reply. A plug-in is asked to go with Ctrl-C.
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -176,13 +176,13 @@ static void track_info(void)
     const char *t = mp_is_stream() ? (st_title()[0] ? st_title() : mp_stream_name()) : mp_title();
     const char *by = mp_is_stream() ? mp_stream_name() : mp_track_by();
     memset(&ah_.ti, 0, sizeof(ah_.ti));
-    amce_strlcpy(ah_.title, t ? t : "", sizeof(ah_.title));
-    amce_strlcpy(ah_.artist, by && (!t || strcmp(by, t)) ? by : "", sizeof(ah_.artist));
+    amb_strlcpy(ah_.title, t ? t : "", sizeof(ah_.title));
+    amb_strlcpy(ah_.artist, by && (!t || strcmp(by, t)) ? by : "", sizeof(ah_.artist));
     ah_.album[0] = 0;
     if (ah_.artist[0])
         sprintf(ah_.text, "%.90s - %.90s", ah_.artist, ah_.title);
     else
-        amce_strlcpy(ah_.text, ah_.title, sizeof(ah_.text));
+        amb_strlcpy(ah_.text, ah_.title, sizeof(ah_.text));
     ah_.ti.TrackInfoText = ah_.text;
     ah_.ti.ID3title = ah_.title;
     ah_.ti.ID3artist = ah_.artist;
@@ -212,7 +212,7 @@ BOOL amp_host_start(void)
     Forbid();
     if (FindPort((CONST_STRPTR)AMP_PORT)) {
         Permit();
-        amce_log("visualisation", "AmigaAMP's plug-in port is AmigaAMP's own here: not hosted");
+        amb_log("visualisation", "AmigaAMP's plug-in port is AmigaAMP's own here: not hosted");
         return FALSE;
     }
     if ((ah_.port = CreateMsgPort())) {
@@ -229,7 +229,7 @@ static void detach(const char *why)
     char m[120];
     sprintf(m, "AmigaAMP plug-in %.40s gone (%s), %lu frames", ah_.name[0] ? ah_.name : "", why,
             (unsigned long)ah_.frames);
-    amce_log("visualisation", m);
+    amb_log("visualisation", m);
     ah_.task = NULL;
     ah_.mask = ah_.info_mask = 0;
     ah_.ours = FALSE;
@@ -274,13 +274,13 @@ static void messages(void)
         if (pm->msg.mn_Length >= V13_LEN && pm->SampleRaw)
             *pm->SampleRaw = ah_.samples;
         pm->Accepted = TRUE;
-        amce_strlcpy(ah_.name, ah_.task->tc_Node.ln_Name ? ah_.task->tc_Node.ln_Name : "", sizeof(ah_.name));
+        amb_strlcpy(ah_.name, ah_.task->tc_Node.ln_Name ? ah_.task->tc_Node.ln_Name : "", sizeof(ah_.name));
         {
             char m[120];
             sprintf(m, "AmigaAMP plug-in %.40s attached (its message %lu bytes: kit 1.%ld)", ah_.name,
                     (unsigned long)pm->msg.mn_Length,
                     (long)(pm->msg.mn_Length >= V13_LEN ? 3 : pm->msg.mn_Length >= V12_LEN ? 2 : 0));
-            amce_log("visualisation", m);
+            amb_log("visualisation", m);
         }
         ReplyMsg(&pm->msg);
         if (ah_.info_mask)
@@ -355,7 +355,7 @@ BOOL amp_launch(const char *path, char *err, LONG errmax)
     BPTR in, out;
     LONG r;
     if (!amp_host_start()) {
-        amce_strlcpy(err, _("AmigaAMP is running: its plug-ins are its own"), errmax);
+        amb_strlcpy(err, _("AmigaAMP is running: its plug-ins are its own"), errmax);
         return FALSE;
     }
     if (ah_.task)
@@ -368,7 +368,7 @@ BOOL amp_launch(const char *path, char *err, LONG errmax)
             Close(in);
         if (out)
             Close(out);
-        amce_strlcpy(err, _("The plug-in could not be started"), errmax);
+        amb_strlcpy(err, _("The plug-in could not be started"), errmax);
         return FALSE;
     }
     r = SystemTags((CONST_STRPTR)cmd, SYS_Input, (ULONG)in, SYS_Output, (ULONG)out, SYS_Asynch, TRUE,
@@ -376,7 +376,7 @@ BOOL amp_launch(const char *path, char *err, LONG errmax)
     if (r == -1) {
         Close(in);
         Close(out);
-        amce_strlcpy(err, _("The plug-in could not be started"), errmax);
+        amb_strlcpy(err, _("The plug-in could not be started"), errmax);
         return FALSE;
     }
     ah_.launched = time_ms();
@@ -385,7 +385,7 @@ BOOL amp_launch(const char *path, char *err, LONG errmax)
     {
         char m[200];
         sprintf(m, "AmigaAMP plug-in started: %.160s", path);
-        amce_log("visualisation", m);
+        amb_log("visualisation", m);
     }
     return TRUE;
 }

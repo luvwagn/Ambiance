@@ -1,7 +1,7 @@
 /* vamos test for Music's own files: songinfo.c's tags and headers, and
  * mods.c's lists (folders without music left out). Run in build/ with
  * Songs: the folder tests/mksongs.py made, RAM: a scratch folder. */
-#include "../src/amce.h"
+#include "../src/amb.h"
 #include <stdio.h>
 #include <string.h>
 #include <proto/exec.h>
@@ -17,7 +17,7 @@ static void check(const char *what, int ok)
 }
 
 /* lang.c logs which language it opened: not needed here */
-void amce_log(const char *what, const char *detail)
+void amb_log(const char *what, const char *detail)
 {
     (void)what;
     (void)detail;

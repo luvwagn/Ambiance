@@ -12,7 +12,7 @@ A library's version is in three places, and they must agree:
     "name V.R" in it (its id string, the text a Version() function returns).
 
 And the version Ambiance asks for (its header's define, or the number in
-amce_open_own_lib's call) must be no newer than the library. mpegv.library
+amb_open_own_lib's call) must be no newer than the library. mpegv.library
 2.0 once went out with rt_Version 1 (a stale object) and would not open on
 a real Amiga while every test passed.
 

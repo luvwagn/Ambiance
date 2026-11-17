@@ -2,8 +2,8 @@
  * Ambiance - MPEG video, played by the ZZ9000 (video.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
-#ifndef AMCE_VIDEO_H
-#define AMCE_VIDEO_H
+#ifndef AMB_VIDEO_H
+#define AMB_VIDEO_H
 
 #include <exec/types.h>
 

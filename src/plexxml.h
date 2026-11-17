@@ -2,8 +2,8 @@
  * Ambiance - a Plex server's XML, read just enough (plexxml.c). No Amiga
  * headers, so the host tests use it as it is.
  */
-#ifndef AMCE_PLEXXML_H
-#define AMCE_PLEXXML_H
+#ifndef AMB_PLEXXML_H
+#define AMB_PLEXXML_H
 
 #define XML_MAX_ATTRS 40
 

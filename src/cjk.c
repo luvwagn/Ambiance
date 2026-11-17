@@ -19,12 +19,12 @@
  * 0x80 or 0x81, is one no Far East character begins with (theirs are all
  * U+1100 or more: 0x82 up), so the two never mix. Greek is drawn from
  * the smooth style's own Greek glyphs where it has them, else from a
- * small pack of its own (PROGDIR:Fonts/amce-cjk/greek, from Galmuri11),
+ * small pack of its own (PROGDIR:Fonts/amb-cjk/greek, from Galmuri11),
  * which is always there: Greek is never a tag. Unlike the Far East
  * characters it is written in words, so a line is not broken inside it.
  *
  * Drawn from glyph packs (tools/mkcjk.py: Galmuri, Ark Pixel), in
- * PROGDIR:Fonts/amce-cjk: 12 (12 pixels) and 15 (Galmuri14's). A screen's
+ * PROGDIR:Fonts/amb-cjk: 12 (12 pixels) and 15 (Galmuri14's). A screen's
  * packs are a chain, the first that has the character drawing it: 15 then
  * 12 on screens whose lines are 20 pixels or more, otherwise 12 (with
  * Galmuri11 Bold too: one weight for all of a name's characters). Each glyph is
@@ -34,7 +34,7 @@
  * small cache. Without the packs a tag stands for each run instead: [JP],
  * [KO] or [CJK].
  */
-#include "amce.h"
+#include "amb.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -192,7 +192,7 @@ static BOOL pack_load(int k)
     if (p->tried)
         return p->ok;
     p->tried = TRUE;
-    sprintf(path, "PROGDIR:Fonts/amce-cjk/%s", pack_name[k]);
+    sprintf(path, "PROGDIR:Fonts/amb-cjk/%s", pack_name[k]);
     if (!(p->fh = Open((STRPTR)path, MODE_OLDFILE)))
         return FALSE;
     if (Read(p->fh, hdr, 14) != 14 || memcmp(hdr, "ACJK", 4) || hdr[5] != 1 || hdr[7] > 17 ||
@@ -229,12 +229,12 @@ static BOOL pack_load(int k)
         char m[120];
         sprintf(m, "%s: %lu glyphs, %lu x %lu%s", pack_name[k], (unsigned long)n,
                 (unsigned long)p->cw, (unsigned long)p->ch, p->rows ? ", all read" : ", read as drawn");
-        amce_log("far east font", m);
+        amb_log("far east font", m);
     }
     p->ok = TRUE;
     return TRUE;
 bad:
-    amce_log("far east font: not usable", path);
+    amb_log("far east font: not usable", path);
     if (p->codes)
         FreeVec(p->codes);
     p->codes = NULL;
@@ -302,7 +302,7 @@ void cjk_open(struct Gfx *g)
     nchain = 0;
     /* every screen's text is 12 pixels or more: the characters fit (tall
      * on 640 x 200/256, as its letters are); tags only without the packs */
-    tags = !(l = Lock((STRPTR) "PROGDIR:Fonts/amce-cjk/12", ACCESS_READ));
+    tags = !(l = Lock((STRPTR) "PROGDIR:Fonts/amb-cjk/12", ACCESS_READ));
     if (l)
         UnLock(l);
     if (!tags) {

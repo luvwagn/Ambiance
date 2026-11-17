@@ -9,8 +9,8 @@
  * FLUSH). So a copy in memory that nothing has open is put out first (its
  * expunge, as Avail FLUSH does), and the one opened is logged. Closed, it
  * is put out at once if nothing else has it open: Exec would keep it in
- * memory till memory was wanted (a delayed expunge), amcesql.library's
- * 574 KB among them. (Built for vamos's tests with AMCE_NO_EXPUNGE: vamos
+ * memory till memory was wanted (a delayed expunge), ambsql.library's
+ * 574 KB among them. (Built for vamos's tests with AMB_NO_EXPUNGE: vamos
  * cannot open a native library again once it has been put out.)
  */
 #include <string.h>
@@ -19,15 +19,15 @@
 #include <proto/exec.h>
 #include <stdio.h>
 #include <proto/dos.h>
-#include "amce.h"
+#include "amb.h"
 
-#ifdef AMCE_NO_EXPUNGE
+#ifdef AMB_NO_EXPUNGE
 #define RemLibrary(l) ((void)(l))
 #endif
 
 extern struct ExecBase *SysBase;
 
-struct Library *amce_open_own_lib(const char *name, ULONG version)
+struct Library *amb_open_own_lib(const char *name, ULONG version)
 {
     struct Library *l;
     char path[80], m[160];
@@ -45,7 +45,7 @@ struct Library *amce_open_own_lib(const char *name, ULONG version)
     if (l) {
         sprintf(m, "%s %ld.%ld%s", name, (long)l->lib_Version, (long)l->lib_Revision,
                 flushed ? " (an older copy in memory put out first)" : "");
-        amce_log("library", m);
+        amb_log("library", m);
     } else {
         /* why not: one in memory already (too old, and still open), or
          * the file's own (its version, or it would not load) */
@@ -70,15 +70,15 @@ struct Library *amce_open_own_lib(const char *name, ULONG version)
         } else
             sprintf(m, "%s %ld wanted: %s would not load (error %ld)", name, (long)version, path,
                     (long)err);
-        amce_log("library", m);
+        amb_log("library", m);
     }
     return l;
 }
 
 /* One no longer open (closed, kept in memory meanwhile) put out of it now:
- * at quitting, for one opened and closed again and again (amcesql.library,
+ * at quitting, for one opened and closed again and again (ambsql.library,
  * an album's tracks each time: kept between, not loaded again). */
-void amce_flush_own_lib(const char *name)
+void amb_flush_own_lib(const char *name)
 {
     struct Library *l;
     Forbid();
@@ -87,7 +87,7 @@ void amce_flush_own_lib(const char *name)
     Permit();
 }
 
-void amce_close_own_lib(struct Library **base)
+void amb_close_own_lib(struct Library **base)
 {
     struct Library *l = *base;
     char name[48];

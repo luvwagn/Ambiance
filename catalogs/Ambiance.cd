@@ -298,8 +298,8 @@ Free memory: %luKB chip, %luKB fast
 MSG_2E02D31A (771937050//)
 Font: %s
 ; main.c:1598
-MSG_7F759611 (2138412561//)
-amce-pixel (bundled)
+MSG_3464FC2D (879033389//)
+amb-pixel (bundled)
 ; main.c:1598
 MSG_27934164 (663961956//)
 topaz 8 (fallback)
@@ -367,8 +367,8 @@ MP3: %s
 MSG_197B8973 (427526515//)
 MHI driver
 ; main.c:1632
-MSG_6584723A (1703178810//)
-amcempega.library, Ambiance's own
+MSG_71B3588E (1907579022//)
+ambmpega.library, Ambiance's own
 ; main.c:1633
 MSG_4B721655 (1265768021//)
 mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -460,8 +460,8 @@ Picture folders
 MSG_7B7A30D9 (2071605465//)
 Video folders
 ; main.c:2225
-MSG_690FAC12 (1762634770//)
-Smooth: Fonts/amce-smooth does not match this Ambiance
+MSG_011FA544 (18851140//)
+Smooth: Fonts/amb-smooth does not match this Ambiance
 ; main.c:2300
 MSG_3CB0C840 (1018218560//)
 F on Now playing starts this AmigaAMP plug-in
@@ -940,8 +940,8 @@ Plex in Ambiance
 MSG_718F9B3E (1905236798//)
 (c) 2026 Brian King, under the MIT licence
 ; main.c:3487
-MSG_1BA733E8 (463942632//)
-Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amce-pixel and amce-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
+MSG_57A8AEF0 (1470672624//)
+Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik (c) 2015 The Rubik Project Authors, and Geologica (c) 2020 The Geologisk Project Authors, all under the SIL Open Font License 1.1. The amb-pixel and amb-galmuri fonts are Modified Versions of Pixelify Sans and Galmuri.
 ; main.c:3493
 MSG_2B3D5B66 (725441382//)
 Code: libnix C runtime (public domain). The EaglePlayer host follows HippoPlayer's (MIT licence, (c) 2017 Kari-Pekka Koljonen).
@@ -1642,8 +1642,8 @@ plex.tv: not signed in
 MSG_0B620CC7 (190975175//)
 MP3: decoded by the MHI driver %.40s
 ; main.c:14177
-MSG_535831ED (1398288877//)
-MP3: decoded by amcempega.library, Ambiance's own
+MSG_7895CD7B (2023083387//)
+MP3: decoded by ambmpega.library, Ambiance's own
 ; main.c:14178
 MSG_59D38C2E (1507036206//)
 MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1753,8 +1753,8 @@ That interface is not up
 MSG_646AFCF3 (1684733171//)
 MHI is not installed (its drivers in LIBS:MHI)
 ; main.c:14375
-MSG_1D253CB2 (488979634//)
-amcempega.library is not in Ambiance's Libs
+MSG_104981CE (273252814//)
+ambmpega.library is not in Ambiance's Libs
 ; main.c:14377
 MSG_7B5C3E86 (2069642886//)
 MHI and the ZZ9000's mpega.library decode MP3 at their best
@@ -1771,8 +1771,8 @@ None of the servers answered: Automatic kept
 MSG_7800A723 (2013308707//)
 MP3 decoded by MHI: radio, Plex (at its best quality) and files
 ; main.c:14534
-MSG_55A6C479 (1436992633//)
-MP3 decoded here by amcempega.library, Ambiance's own
+MSG_0AFE96F7 (184456951//)
+MP3 decoded here by ambmpega.library, Ambiance's own
 ; main.c:14535
 MSG_605E617D (1616798077//)
 MP3 decoded here by mpega.library

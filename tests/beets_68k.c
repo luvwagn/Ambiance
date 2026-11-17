@@ -3,7 +3,7 @@
  * MUSIC: holding its files (tests/mkbeets.py): the pages it makes, and
  * the mapping of beets' Windows paths to MUSIC:.
  */
-#include "../src/amce.h"
+#include "../src/amb.h"
 #include <stdio.h>
 #include <string.h>
 #include <proto/exec.h>
@@ -11,13 +11,13 @@
 /* what beets.c uses from the rest of Ambiance */
 void (*dir_tick)(void);
 struct Task *dir_tick_task;
-const char *amce_tr(const char *s) { return s; }
-void amce_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
+const char *amb_tr(const char *s) { return s; }
+void amb_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
 ULONG time_ms(void) { return 0; }
 BOOL song_name_ok(const char *name)
 {
     const char *d = strrchr(name, '.');
-    return d && (!amce_stricmp(d, ".mp3") || !amce_stricmp(d, ".flac"));
+    return d && (!amb_stricmp(d, ".mp3") || !amb_stricmp(d, ".flac"));
 }
 static struct { char label[200], path[300]; UBYTE kind; } rows[100];
 struct Item *list_add(struct ItemList *l, const char *label, const char *path, const char *key,
@@ -26,8 +26,8 @@ struct Item *list_add(struct ItemList *l, const char *label, const char *path, c
     static struct Item it;
     (void)key;
     if (l->count < 100) {
-        amce_strlcpy(rows[l->count].label, label, 200);
-        amce_strlcpy(rows[l->count].path, path, 300);
+        amb_strlcpy(rows[l->count].label, label, 200);
+        amb_strlcpy(rows[l->count].path, path, 300);
         rows[l->count].kind = kind;
     }
     l->count++;

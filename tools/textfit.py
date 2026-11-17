@@ -13,8 +13,8 @@ layout_metrics and fit_menu, main.c's footer hints):
   - one-line text wider than the pane (paragraphs wrap, so are not checked),
     or for a status message (set_msg, errors) wider than the screen
 Glyphs are measured as TextLength does: each character's kern + space; Far
-East characters at their advance in the glyph pack (Fonts/amce-cjk/12),
-Greek at its own (Fonts/amce-cjk/greek).
+East characters at their advance in the glyph pack (Fonts/amb-cjk/12),
+Greek at its own (Fonts/amb-cjk/greek).
 """
 import os
 import struct
@@ -89,9 +89,9 @@ CJK = {}        # the 12 pack: all three screens' fonts are under 20 pixels
 
 SCREENS = [
     # name, width, font, k (design units: x * k / 256)
-    ("320x256", 320, "amce-pixel/12", 256),
-    ("640x256", 640, "amce-pixel/12", 256),
-    ("640x512 Galmuri11 Bold", 640, "amce-galmuri11b/16", 16 * 256 // 12),
+    ("320x256", 320, "amb-pixel/12", 256),
+    ("640x256", 640, "amb-pixel/12", 256),
+    ("640x512 Galmuri11 Bold", 640, "amb-galmuri11b/16", 16 * 256 // 12),
 ]
 
 
@@ -111,7 +111,7 @@ def status_strings(srcdir):
         for i, l in enumerate(lines):
             ctx = " ".join(lines[max(0, i - 2):i + 1])
             if not any(k in ctx for k in ("set_msg(", "err,", "errmax", "fail(", "why",
-                                           "st.err", "amce_strlcpy(m,", "sprintf(m,")):
+                                           "st.err", "amb_strlcpy(m,", "sprintf(m,")):
                 continue
             for m in catalog.MARK.finditer(l):
                 out.add("".join(catalog.c_unescape(x) for x in lit.findall(m.group(1))))
@@ -164,8 +164,8 @@ def check(lang, tr, cd_en, fonts_dir):
 def main():
     catdir, fonts_dir = sys.argv[1:3]
     want = sys.argv[3:]
-    CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "12")))
-    CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "greek")))
+    CJK.update(read_pack(os.path.join(fonts_dir, "amb-cjk", "12")))
+    CJK.update(read_pack(os.path.join(fonts_dir, "amb-cjk", "greek")))
     STATUS.update(status_strings(os.path.join(os.path.dirname(os.path.abspath(catdir)), "src")))
     cd = catalog.read_cd(os.path.join(catdir, "Ambiance.cd"))
     total = 0
