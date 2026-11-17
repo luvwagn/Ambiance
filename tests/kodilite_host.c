@@ -417,10 +417,20 @@ static const void *h_model(int screen)
     return &page;
 }
 
-static void h_act(int what, LONG arg) { (void)what; (void)arg; }
+/* what the layout asked for, as it asked */
+static int acts[64][2], nacts;
+static void h_act(int what, LONG arg)
+{
+    if (nacts < 64) {
+        acts[nacts][0] = what;
+        acts[nacts][1] = (int)arg;
+        nacts++;
+    }
+}
 static const char *h_tr(const char *s) { return s; }
 static void h_log(const char *s) { printf("layout: %s\n", s); }
-static ULONG h_now(void) { return 1000; }
+static ULONG clock_ms = 1000;
+static ULONG h_now(void) { return clock_ms; }
 
 static void save(const char *name)
 {
@@ -438,6 +448,8 @@ static void save(const char *name)
     }
     fclose(f);
 }
+
+static void clicks(int w, int h);
 
 static void run(int w, int h, int bits, const char *font)
 {
@@ -502,7 +514,60 @@ static void run(int w, int h, int bits, const char *font)
     layout_engine.tick(5000);
     save("now");
     CHECK(layout_engine.input(LS_HOME, LA_DOWN, 0) == LR_UNUSED);
+    clicks(w, h);
     layout_engine.close();
+}
+
+/* the first act a click at x, y asks for (-1: none), a second apart */
+static int click_at(int screen, int x, int y, int *arg)
+{
+    nacts = 0;
+    clock_ms += 1000;
+    layout_engine.pointer(screen, (WORD)x, (WORD)y, TRUE);
+    if (arg)
+        *arg = nacts ? acts[0][1] : -1;
+    return nacts ? acts[0][0] : -1;
+}
+
+/* Clicks: Home's sections go in, a setting opens, a game is selected and
+ * played with a double-click, a crumb goes back, the bars pause, what
+ * plays opens Now playing */
+static void clicks(int w, int h)
+{
+    int y, x, a, last = -1, seen = 0, ok;
+    layout_engine.draw(LS_HOME);
+    for (y = 0; y < h; y++)                 /* the sections, top to bottom */
+        if (click_at(LS_HOME, 100 * w / 800, y, &a) == LAC_SECTION && a != last) {
+            CHECK(a == last + 1 && nacts == 2 && acts[1][0] == LAC_ENTER);
+            last = a;
+            seen++;
+        }
+    CHECK(seen == 9);
+    for (ok = 0, x = w / 2; x < w && !ok; x++)
+        ok = click_at(LS_HOME, x, 16 * h / 600 + 6, NULL) == LAC_NOWPLAYING;
+    CHECK(ok);
+    scene = 0;                              /* Settings > Display: a row opens */
+    layout_engine.draw(LS_PAGE);
+    for (ok = 0, y = 0; y < h && !ok; y++)
+        ok = click_at(LS_PAGE, 500 * w / 800, y, &a) == LAC_OPEN;
+    CHECK(ok);
+    scene = 1;                              /* a game: selected, then played */
+    layout_engine.draw(LS_PAGE);
+    for (ok = 0, y = 0; y < h && !ok; y++)
+        if (click_at(LS_PAGE, 500 * w / 800, y, &a) == LAC_SELECT && a == 8) {
+            clock_ms += 200;                /* a double-click */
+            nacts = 0;
+            layout_engine.pointer(LS_PAGE, (WORD)(500 * w / 800), (WORD)y, TRUE);
+            ok = nacts == 1 && acts[0][0] == LAC_OPEN && acts[0][1] == 8;
+        }
+    CHECK(ok);
+    for (ok = 0, y = 0; y < h && !ok; y++) /* the crumb "All games": back once */
+        if (click_at(LS_PAGE, 120 * w / 800, y, NULL) == LAC_BACK)
+            ok = nacts == 1;
+    CHECK(ok);
+    layout_engine.draw(LS_NOW);
+    CHECK(click_at(LS_NOW, w / 2, h / 2, NULL) == LAC_PAUSE);
+    CHECK(click_at(LS_NOW, 2, h - 2, NULL) == -1);
 }
 
 int main(void)
@@ -514,6 +579,6 @@ int main(void)
         printf("%d failed\n", fails);
         return 1;
     }
-    printf("Kodi lite drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32\n");
+    printf("Kodi lite drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32; clicks\n");
     return 0;
 }

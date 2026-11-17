@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "kodilite.layout";
-const char LibIdString[] = "kodilite.layout 1.1 (17.11.2026) Kodi lite, for Ambiance";
+const char LibIdString[] = "kodilite.layout 1.2 (17.11.2026) Kodi lite, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: kodilite.layout 1.1 (17.11.2026) Kodi lite, for Ambiance";
+    "$VER: kodilite.layout 1.2 (17.11.2026) Kodi lite, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 1;
+const UWORD LibRevision = 2;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -48,6 +48,36 @@ static ULONG bars_at;           /* Now playing's bars, drawn then */
 static LONG list_top;           /* the generic page's first row shown */
 static LONG list_count = -1;
 static const void *list_of;
+
+/* What a click lands on: the places drawn last, noted as they are drawn
+ * (kl_pointer looks them up). */
+enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE };
+struct Hit {
+    WORD x, y, w, h;
+    UBYTE what;                 /* HT_* */
+    UBYTE kind;                 /* a row's or tile's LI_* */
+    LONG arg;                   /* its index (a crumb: its level) */
+};
+#define MAX_HITS 64
+static struct Hit hits[MAX_HITS];
+static int nhits;
+static LONG hit_sel = -1;       /* the list's selected row, as drawn */
+static LONG click_row = -1;     /* a double-click: the row clicked last, and when */
+static ULONG click_ms;
+
+static void hit(LONG x, LONG y, LONG w, LONG h, int what, int kind, LONG arg)
+{
+    if (nhits < MAX_HITS && w > 0 && h > 0) {
+        struct Hit *t = &hits[nhits++];
+        t->x = (WORD)x;
+        t->y = (WORD)y;
+        t->w = (WORD)w;
+        t->h = (WORD)h;
+        t->what = (UBYTE)what;
+        t->kind = (UBYTE)kind;
+        t->arg = arg;
+    }
+}
 
 /* ---------------------------------------------------------------- little helpers */
 static LONG X(LONG v) { return v * W / 800; }
@@ -174,6 +204,7 @@ static void top_right(BOOL dark)
         if (tw > 0) {
             x -= X(10) + tw;
             text(x, y, n->title, LF_SMALL, C_SUB, bg, tw);
+            hit(x - X(8) - FH, y - Y(4), W - X(24) - cw - (x - X(8) - FH), FH + Y(8), HT_NOWPLAYING, 0, 0);
             /* the play triangle */
             {
                 LONG s = FH / 2, ty = y + (FH - s) / 2, i;
@@ -272,6 +303,7 @@ static void draw_home(void)
         BOOL sel = i == m->sel;
         LONG x = X(18), y = y0 + i * (ih + gap), w = X(172), tx = x + X(14);
         ULONG bg = sel ? C_FOCUS : C_PANEL2;
+        hit(x, y, w, ih, HT_SECTION, 0, i);
         if (sel) {
             H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)ih, 4, C_FOCUS, C_PANEL2);
             H->fill((WORD)x, (WORD)(y + 2), 3, (WORD)(ih - 4), C_ACC);
@@ -307,6 +339,8 @@ static void draw_home(void)
                     continue;
                 }
                 panel(cx, cy, cw, ch, 4, C_PANEL, C_LINE, grad(cy));
+                if (!(it->flags & LIF_DISABLED))
+                    hit(cx, cy, cw, ch, HT_TILE, it->kind, k);
                 text(cx + X(12), cy + Y(8), it->label, LF_REGULAR,
                      (it->flags & LIF_DISABLED) ? C_DIM : C_TEXT, flat(C_PANEL), cw - X(24));
                 if (it->tag || it->sub)
@@ -345,6 +379,7 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
         list_top = l->count - fit;
     if (list_top < 0)
         list_top = 0;
+    hit_sel = l->sel;
     for (i = 0; i < fit && list_top + i < l->count; i++) {
         const struct LItem *it = l->item(list_top + i);
         BOOL sel = list_top + i == l->sel;
@@ -355,6 +390,8 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
             text(rx + X(8), ry + rh - FH - Y(4), it->label, LF_SMALL, C_SUB, flat(C_PANEL), rw);
             continue;
         }
+        if (!(it->flags & LIF_DISABLED))
+            hit(rx, ry, rw, rh, HT_ROW, it->kind, list_top + i);
         if (sel) {
             H->rrect((WORD)rx, (WORD)ry, (WORD)rw, (WORD)(rh - 2), 4, C_FOCUS, C_PANEL);
             H->frame((WORD)rx, (WORD)ry, (WORD)rw, (WORD)(rh - 2), 2, C_ACC);
@@ -455,6 +492,8 @@ static void draw_page(void)
             BOOL last = i == m->ncrumb - 1;
             if (last)
                 H->rrect((WORD)(lx + X(8)), (WORD)y, (WORD)(lw - X(16)), (WORD)rh, 4, C_FOCUS, C_PANEL2);
+            else
+                hit(lx + X(8), y, lw - X(16), rh, HT_CRUMB, 0, i);
             text(lx + X(8) + X(12) + (i - 1) * X(6), y + (rh - FH) / 2, m->crumb[i],
                  LF_REGULAR, last ? C_WHITE : C_SUB, flat(last ? C_FOCUS : C_PANEL2),
                  lw - X(40) - (i - 1) * X(6));
@@ -533,6 +572,8 @@ static void draw_now(void)
     top_right(TRUE);
     draw_bars(n);
     bars_at = H->now_ms();
+    if (n && n->kind != LN_NONE)
+        hit(X(20), Y(52), W - 2 * X(20), Y(412) - Y(52), HT_PAUSE, 0, 0);
     H->fill(0, (WORD)py, W, (WORD)(HT - py), C_PANEL);
     H->fill(0, (WORD)py, W, 1, C_LINE);
     if (s > HT - cy - Y(12))
@@ -613,6 +654,8 @@ static void kl_close(void)
 static void kl_draw(int screen)
 {
     drawn = screen;
+    nhits = 0;
+    hit_sel = -1;
     switch (screen) {
     case LS_HOME: draw_home(); break;
     case LS_NOW: draw_now(); break;
@@ -644,13 +687,74 @@ static int kl_input(int screen, int action, LONG arg)
     return LR_UNUSED;           /* the program's keys, as in the classic layout */
 }
 
+/* What can be played (a double-click plays it; one click selects it), as
+ * the classic layout has it; anything else opens with one click. */
+static BOOL playable(int kind)
+{
+    return kind == LI_TRACK || kind == LI_MODULE || kind == LI_STATION || kind == LI_PICTURE ||
+           kind == LI_VIDEO || kind == LI_GAME;
+}
+
+/* A click, as in the classic layout: a section goes in; a row or tile is
+ * opened, or (what plays) selected, and played with a double-click; a
+ * crumb goes back to that level; what plays (top right) opens Now
+ * playing, and on Now playing the bars pause and play. */
 static int kl_pointer(int screen, WORD x, WORD y, BOOL click)
 {
-    (void)screen;
-    (void)x;
-    (void)y;
-    (void)click;
-    return LR_UNUSED;
+    const struct Hit *t = NULL;
+    int i;
+    BOOL dbl;
+    ULONG now;
+    if (!click || !H)
+        return LR_UNUSED;
+    for (i = nhits - 1; i >= 0; i--)
+        if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) {
+            t = &hits[i];
+            break;
+        }
+    if (!t)
+        return LR_UNUSED;
+    now = H->now_ms();
+    dbl = (t->what == HT_ROW || t->what == HT_TILE) && t->arg == click_row && now - click_ms < 500;
+    click_row = t->what == HT_ROW || t->what == HT_TILE ? t->arg : -1;
+    click_ms = now;
+    switch (t->what) {
+    case HT_SECTION:
+        H->act(LAC_SECTION, t->arg);
+        H->act(LAC_ENTER, 0);
+        click_row = -1;
+        break;
+    case HT_TILE:               /* the chosen section's: into it, at that row */
+        H->act(LAC_ENTER, 0);
+        H->act(playable(t->kind) ? LAC_SELECT : LAC_OPEN, t->arg);
+        click_row = -1;
+        break;
+    case HT_ROW:
+        if (!playable(t->kind)) {
+            H->act(LAC_OPEN, t->arg);
+            click_row = -1;
+        } else if (dbl && t->arg == hit_sel) {
+            H->act(LAC_OPEN, t->arg);
+            click_row = -1;
+        } else {
+            H->act(LAC_SELECT, t->arg);
+        }
+        break;
+    case HT_CRUMB: {            /* back to that level */
+        const struct LPage *m = H->model(screen);
+        LONG n = m ? m->ncrumb - 1 - t->arg : 0;
+        while (n-- > 0)
+            H->act(LAC_BACK, 0);
+        break;
+    }
+    case HT_NOWPLAYING:
+        H->act(LAC_NOWPLAYING, 0);
+        break;
+    case HT_PAUSE:
+        H->act(LAC_PAUSE, 0);
+        break;
+    }
+    return LR_DONE;
 }
 
 const struct LayoutEngine layout_engine = {

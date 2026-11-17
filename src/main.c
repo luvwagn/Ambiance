@@ -2623,7 +2623,11 @@ static void build_screen_settings(struct Page *p)
                                          * always through its buffer: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    action_item(p, _("Colours"), _(ui_scheme_names[ui_scheme]), ACT_COLOURS, MARK_ARROW);
+    /* a layout has colours of its own: the scheme is not used while it
+     * draws, so the row is greyed out, saying whose they are */
+    if ((it = action_item(p, _("Colours"), lv_on() ? lv_label() : _(ui_scheme_names[ui_scheme]),
+                          ACT_COLOURS, MARK_ARROW)) && lv_on())
+        it->flags |= ITEM_DISABLED;
     if (gfx_mode_is_rtg(g.mode))
         action_item(p, _("Layout"), lv_label(), ACT_LAYOUTS, MARK_ARROW);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
@@ -17538,9 +17542,18 @@ BOOL lv_mouse(struct IntuiMessage *im)
             pointer_show();
         return TRUE;
     }
-    if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && lv.eng->pointer)
+    if (im->Class != IDCMP_MOUSEBUTTONS)
+        return TRUE;
+    mouse_last = time_ms();
+    if (ptr_hidden)
+        pointer_show();
+    if (im->Code == MENUDOWN) {             /* the right button: back, whatever the layout */
+        disarm();
+        act_back();
+    } else if (im->Code == SELECTDOWN && lv.eng->pointer) {
         lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft, im->MouseY - g.win->BorderTop,
                         TRUE);
+    }
     return TRUE;
 }
 
