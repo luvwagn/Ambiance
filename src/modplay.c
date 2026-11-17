@@ -1508,6 +1508,50 @@ BOOL mp_subsong_step(int d)
  * starts again where it was, so 2 and 3 are free in every case. The volume
  * meanwhile is only noted (the module's would set all four channels'). */
 static struct { BOOL on, opened, resume, mixer; } lend;
+static BOOL mix_held;                   /* mp_hold: the mixer stopped while a video plays */
+
+/* The mixer started again where it stopped (mx_stop), paused if the
+ * module is */
+static void mixer_again(void)
+{
+    char e[100];
+    if (!mp.running || mp.engine != ENG_MIX)
+        return;
+    if (!st_ahi() && !audio_open()) {
+        mp.running = FALSE;                 /* (Paula now, and another has it) */
+        amce_log("music", "the module could not go on: the audio channels are in use");
+        return;
+    }
+    if (mx_start(mp.master, e, sizeof(e))) {
+        if (mp.paused)
+            mx_pause(TRUE);
+    } else {
+        mp.running = FALSE;
+        amce_log("music", e);
+    }
+}
+
+/* A video or an anim with a sound of its own: the mixer's module stopped
+ * outright where it was, AHI (or Paula) let go, and started again after.
+ * Paused only, it held AHI's audio, playing silence: a second AHI client
+ * on the ZZ9000AX as the video's sound began froze the Amiga. */
+void mp_hold(BOOL on)
+{
+    if (on) {
+        if (!mix_held && mp.engine == ENG_MIX && mp.running) {
+            mx_stop();
+            if (st_ahi())
+                audio_close();              /* (nothing of Paula kept either) */
+            mix_held = TRUE;
+            amce_log("music", "the module's mixer stopped while the video plays (on from there after)");
+        }
+        return;
+    }
+    if (!mix_held)
+        return;
+    mix_held = FALSE;
+    mixer_again();
+}
 
 static void lent_quiet(void)
 {
@@ -1536,7 +1580,7 @@ BOOL mp_lend(BOOL on)
         /* the mixer stopped outright, where it was (paused, its interrupt
          * still set channels 2 and 3 going at 14 bits: the borrower's
          * sound would be the mixer's), started again when given back */
-        lend.mixer = mp.engine == ENG_MIX && mp.running;
+        lend.mixer = mp.engine == ENG_MIX && mp.running && !mix_held;
         if (lend.mixer)
             mx_stop();
         lend.on = TRUE;
@@ -1551,16 +1595,8 @@ BOOL mp_lend(BOOL on)
     lend.on = FALSE;
     if (lend.opened && !mp.running)
         audio_close();
-    if (lend.mixer && mp.running && mp.engine == ENG_MIX) {
-        char e[100];
-        if (mx_start(mp.master, e, sizeof(e))) {
-            if (mp.paused)
-                mx_pause(TRUE);             /* (as the module is: Play goes on) */
-        } else {
-            mp.running = FALSE;
-            amce_log("music", e);
-        }
-    }
+    if (lend.mixer)
+        mixer_again();                      /* (paused, as the module is: Play goes on) */
     lend.mixer = FALSE;
     if (mp.mix8 && mp.running)
         mix_rings_start();                  /* all four rings again, in step */

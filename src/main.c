@@ -10043,9 +10043,12 @@ static void anim_from_page(struct Page *p)
             mp_stop();
             stream = TRUE;
             amce_log("anim", track ? "the track stopped while it plays" : "the station stopped while it plays");
-        } else if (mp_playing()) {
-            mp_pause(TRUE);
-            module = TRUE;
+        } else {
+            if (mp_playing()) {
+                mp_pause(TRUE);
+                module = TRUE;
+            }
+            mp_hold(TRUE);                  /* (the mixer's: AHI let go, paused or not) */
         }
     }
     /* on this screen it draws straight onto it: single buffered meanwhile,
@@ -10082,6 +10085,7 @@ static void anim_from_page(struct Page *p)
     draw_all();
     gfx_dirty();
     gfx_present(&g);
+    mp_hold(FALSE);
     if (module)
         mp_pause(FALSE);
     if (stream) {
