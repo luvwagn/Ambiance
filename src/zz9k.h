@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Only zz9k.c includes the ZZ9000 SDK's headers (third_party/zz9k-sdk,
- * GPL-3.0-or-later: see its README before distributing a build); the rest
+ * MIT: see its README); the rest
  * of AmigaMCE sees these types of its own.
  */
 #ifndef AMCE_ZZ9K_H

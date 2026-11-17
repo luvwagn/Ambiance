@@ -202,7 +202,8 @@ mpega.library, or a DVD's AC-3 by ac3.library.
 
 On a ZZ9000, MPEG video is decoded by the card through zz9k.library,
 called with the ZZ9000 SDK's headers (BlitterStudio's zz9000-firmware,
-GPL-3.0-or-later): third_party/zz9k-sdk/, and its README on distribution.
+MIT; zz9k.library itself GPL-3.0-or-later, with a section 7 permission for
+programs that call it through those headers): third_party/zz9k-sdk/.
 
 Trademarks
 ----------

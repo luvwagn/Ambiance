@@ -115,7 +115,7 @@ build/cpucheck.o: src/cpucheck.c
 	@echo "  CC    $@ (68000)"
 	@$(CC) $(filter-out $(CPU),$(CFLAGS)) -m68000 -c -o $@ $<
 
-# The ZZ9000 SDK's headers (GPL-3: third_party/zz9k-sdk/README.txt), for zz9k.c only
+# The ZZ9000 SDK's headers (MIT: third_party/zz9k-sdk/README.txt), for zz9k.c only
 ZZ9K_SDK = third_party/zz9k-sdk
 ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
               -Wno-unused-function -Wno-sign-compare

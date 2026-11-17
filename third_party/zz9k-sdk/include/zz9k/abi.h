@@ -1,7 +1,8 @@
 /*
  * ZZ9000 SDK v2 shared ABI definitions.
  *
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2024-2026 Dimitris Panokostas / BlitterStudio
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef ZZ9K_ABI_H
@@ -125,6 +126,7 @@ enum ZZ9KStatus {
   ZZ9K_STATUS_NOT_FOUND = 10,
   ZZ9K_STATUS_MODULE_MISSING = 11,
   ZZ9K_STATUS_MODULE_MISMATCH = 12,
+  ZZ9K_STATUS_LIBRARY_TOO_OLD = 13,
   ZZ9K_STATUS_INTERNAL_ERROR = 0xffff
 };
 
@@ -133,7 +135,13 @@ enum ZZ9KEntryFlags {
   ZZ9K_ENTRY_BUFFER_PAYLOAD = 1U << 1,
   ZZ9K_ENTRY_ASYNC = 1U << 2,
   ZZ9K_ENTRY_NEEDS_IRQ = 1U << 3,
-  ZZ9K_ENTRY_CANCEL_REQUEST = 1U << 4
+  ZZ9K_ENTRY_CANCEL_REQUEST = 1U << 4,
+  /*
+   * A nonzero client id occupies the otherwise-reserved high eleven bits.
+   * Untagged requests remain ABI-compatible unowned requests.
+   */
+  ZZ9K_ENTRY_CLIENT_ID_SHIFT = 5,
+  ZZ9K_ENTRY_CLIENT_ID_MASK = 0xffe0U
 };
 
 enum ZZ9KService {
@@ -151,8 +159,7 @@ enum ZZ9KService {
   ZZ9K_SERVICE_VIDEO = 0x0b00,
   ZZ9K_SERVICE_APP = 0x0c00,
   ZZ9K_SERVICE_VENDOR = 0x8000,
-  /* Vendor service: the AmiNetXDuo console encoder (RFB tile stream of the
-   * displayed framebuffer). */
+  /* Console encoder in the vendor range (AmiNetXDuo). */
   ZZ9K_SERVICE_CONSOLE = 0x8200
 };
 
@@ -163,6 +170,11 @@ enum ZZ9KOpcode {
   ZZ9K_OP_CANCEL = ZZ9K_SERVICE_CORE + 0x03,
   ZZ9K_OP_QUERY_SERVICE = ZZ9K_SERVICE_CORE + 0x04,
   ZZ9K_OP_QUERY_APERTURE_LAYOUT = ZZ9K_SERVICE_CORE + 0x05,
+  /*
+   * Reclaim every resource owned by the tagged client. The client id is in
+   * ZZ9K_ENTRY_CLIENT_ID_MASK; no payload is carried.
+   */
+  ZZ9K_OP_CLIENT_RELEASE = ZZ9K_SERVICE_CORE + 0x06,
 
   ZZ9K_OP_ALLOC_SHARED = ZZ9K_SERVICE_MEMORY + 0x00,
   ZZ9K_OP_FREE_SHARED = ZZ9K_SERVICE_MEMORY + 0x01,
@@ -667,39 +679,45 @@ typedef struct ZZ9KServiceInfoPayload {
   uint8_t name[20];
 } ZZ9KServiceInfoPayload;
 
-/* ZZ9K_OP_CONSOLE_ENCODE: encode tile rows [ty0, ty1) of the surface into
- * the shared buffer as an RFB stream.  width .. format are the client's
- * encoder geometry and must match the surface (format RGB565 of a BGRA8888
- * surface is converted at bytes_per_row).  A new owner (output handle),
- * geometry or encoder flags, or ZZ9K_CONSOLE_ENCODE_RESET, starts a new
- * session whose band 0 is a keyframe. */
-#define ZZ9K_CONSOLE_ENCODE_RESET          0x0001U
-#define ZZ9K_CONSOLE_ENCODE_RESULT_KEYFRAME 0x0001U
+/* Console encoder request (ZZ9K_OP_CONSOLE_ENCODE).
+ *
+ * The card encodes the tile rows from ty0 up to, but not including, ty1 of
+ * surface_handle as an RFB stream into the shared buffer out_handle, which
+ * holds out_capacity bytes. width, height, bytes_per_row, depth, tile_w,
+ * tile_h and format describe the client's encoder and have to agree with the
+ * surface; an RGB565 format on a BGRA8888 surface is converted while encoding.
+ * The card begins a new session, and sends the first band as a keyframe, when
+ * the output handle, the geometry or enc_flags change, or when flags has
+ * ZZ9K_CONSOLE_ENCODE_RESET. Multi-byte fields are big-endian. */
+#define ZZ9K_CONSOLE_ENCODE_RESET          0x0001U /* request flags */
+#define ZZ9K_CONSOLE_ENCODE_RESULT_KEYFRAME 0x0001U /* reply flags */
 #define ZZ9K_CONSOLE_CODEC_NONE            0U
 
 typedef struct ZZ9KConsoleEncodePayload {
-  uint8_t surface_handle[4];
-  uint8_t out_handle[4];
-  uint8_t out_capacity[4];
-  uint8_t enc_flags[4];
-  uint8_t width[2];
-  uint8_t height[2];
-  uint8_t bytes_per_row[2];
-  uint8_t ty0[2];
-  uint8_t ty1[2];
-  uint8_t flags[2];
-  uint8_t codec[2];
-  uint8_t depth;
-  uint8_t tile_w;
-  uint8_t tile_h;
-  uint8_t format;
+  uint8_t surface_handle[4]; /* offset 0 */
+  uint8_t out_handle[4];     /* 4 */
+  uint8_t out_capacity[4];   /* 8 */
+  uint8_t enc_flags[4];      /* 12 */
+  uint8_t width[2];          /* 16 */
+  uint8_t height[2];         /* 18 */
+  uint8_t bytes_per_row[2];  /* 20 */
+  uint8_t ty0[2];            /* 22 */
+  uint8_t ty1[2];            /* 24 */
+  uint8_t flags[2];          /* 26 */
+  uint8_t codec[2];          /* 28 */
+  uint8_t depth;             /* 30 */
+  uint8_t tile_w;            /* 31 */
+  uint8_t tile_h;            /* 32 */
+  uint8_t format;            /* 33 */
   uint8_t reserved[14];
 } ZZ9KConsoleEncodePayload;
 
+/* Console encoder reply: bytes written to the output buffer, the codec used,
+ * and the reply flags. */
 typedef struct ZZ9KConsoleEncodeResultPayload {
-  uint8_t out_len[4];
-  uint8_t codec[2];
-  uint8_t flags[2];
+  uint8_t out_len[4];        /* offset 0 */
+  uint8_t codec[2];          /* 4 */
+  uint8_t flags[2];          /* 6 */
   uint8_t reserved[40];
 } ZZ9KConsoleEncodeResultPayload;
 

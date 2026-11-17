@@ -477,10 +477,10 @@ it, except where `LIBS:mpega.library` is the ZZ9000's.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (`third_party/zz9k-sdk/`, BlitterStudio's zz9000-firmware), which
-are GPL-3.0-or-later. Their author has agreed a GPL-3 section 7 exception
-for programs that only call zz9k.library; until it is published, builds
-containing that code are for testing and are not to be distributed. See
-`third_party/zz9k-sdk/README.txt`.
+are MIT. zz9k.library itself is GPL-3.0-or-later, with a published section 7
+permission for any program that opens it and calls it through those
+headers, so AmigaMCE builds may be distributed. See
+`third_party/zz9k-sdk/README.txt` and its copy of the SDK's `LICENSING.md`.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
 names belong to their owners; AmigaMCE is not affiliated with any of them.
