@@ -30,6 +30,11 @@ CPU     = -m68020-60
 CFLAGS  = -Os $(CPU) -noixemul -Wall -Wextra -Wno-pointer-sign \
           -Werror=format-overflow=2 -Werror=format-truncation=2 -Isrc/sqlib/include -Isrc/dvdlib/include -Iextras/ac3/include -Iextras/mpegv/include \
           -Ibuild -DAMCE_VERSION="\"$(FULL_VERSION)\"" -DAMCE_DATE="\"$(ADATE)\""
+# The layouts' interface (src/layout.h, src/lkcore.h) as a number: a
+# layout library built against other versions of them is never used
+# (lhost.c, src/layouts/layoutlib.c)
+LAYOUT_ABI := $(shell cat src/layout.h src/lkcore.h | cksum | cut -d' ' -f1)
+CFLAGS  += -DLAYOUT_ABI=$(LAYOUT_ABI)UL
 LDFLAGS = -noixemul $(CPU)
 LIBS    = -lamiga -lm
 
@@ -43,7 +48,7 @@ SRCS = src/main.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loa
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/lkcore.c src/lkit.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/lkcore.c src/lkit.c src/lhost.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/jdec.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
@@ -80,7 +85,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
 
 .PHONY: all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) lha datatype
+all: $(TARGET) layouts lha datatype
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -132,6 +137,57 @@ build/%.o: src/%.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@"
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
+build/lkit.o: src/lkit.h src/lkcore.h
+build/lkcore.o: src/lkcore.h
+build/lhost.o: src/lhost.h src/layout.h src/lkcore.h
+
+# The layouts: PROGDIR:Layouts/<name>.layout, each an Exec library with
+# libnix's libinit (as amcesql.library's), src/layouts/layoutlib.c (its
+# GetLayout) and the layout's own source. They draw only through the
+# program's table: no C library linked in.
+LAYOUT_NAMES = kodilite
+LAYOUTS      = $(patsubst %,build/layouts/%.layout,$(LAYOUT_NAMES))
+LAYOUT_CC    = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wextra \
+               -Wno-pointer-sign -Isrc -Isrc/sqlib
+LAYOUT_HDR   = src/layout.h src/lkcore.h
+build/layouts/%/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/layouts/%.c Makefile
+	@mkdir -p $(dir $@)
+	@$(LAYOUT_CC) -DLIB_RT_VERSION=$(call libver,src/layouts/$*.c) -c -o $@ $<
+build/layouts/%/layoutlib.o: src/layouts/layoutlib.c $(LAYOUT_HDR) Makefile
+	@mkdir -p $(dir $@)
+	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
+build/layouts/%/layout.o: src/layouts/%.c $(LAYOUT_HDR) Makefile
+	@mkdir -p $(dir $@)
+	@echo "  CC    $< (layout)"
+	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
+build/layouts/%.layout: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+	@echo "  LD    $@"
+	@$(LAYOUT_CC) -o $@.dbg $^ -lamiga
+	@$(STRIP) -o $@ $@.dbg
+.PRECIOUS: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+layouts: $(LAYOUTS)
+
+# their finding and opening (lhost.c) on a 68020 under vamos, with
+# kodilite.layout and one built against another layout.h (named .library
+# there: vamos opens no other names)
+LT_DIR = build/layouttest
+$(LT_DIR)/Layouts/wrongabi.library: src/sqlib/libinit.c src/layouts/layoutlib.c tests/layout_wrong.c $(LAYOUT_HDR)
+	@mkdir -p $(LT_DIR)/Layouts $(LT_DIR)/obj
+	@$(LAYOUT_CC) -DLIB_RT_VERSION=1 -c -o $(LT_DIR)/obj/libinit.o src/sqlib/libinit.c
+	@$(LAYOUT_CC) -DLAYOUT_ABI=12345UL -c -o $(LT_DIR)/obj/layoutlib.o src/layouts/layoutlib.c
+	@$(LAYOUT_CC) -DLAYOUT_ABI=12345UL -c -o $(LT_DIR)/obj/wrong.o tests/layout_wrong.c
+	@$(LAYOUT_CC) -o $@ $(LT_DIR)/obj/libinit.o $(LT_DIR)/obj/layoutlib.o $(LT_DIR)/obj/wrong.o -lamiga
+$(LT_DIR)/test_layout: tests/test_layout.c src/lhost.c src/lhost.h src/util.c $(LAYOUT_HDR) $(LAYOUTS) \
+                       $(LT_DIR)/Layouts/wrongabi.library
+	@mkdir -p $(LT_DIR)/Layouts
+	@for l in $(LAYOUT_NAMES); do cp build/layouts/$$l.layout $(LT_DIR)/Layouts/$$l.library; done
+	@$(CC) -O1 $(CPU) -noixemul -Wall -Wno-pointer-sign -DAMCE_NO_EXPUNGE -DLAYOUT_ABI=$(LAYOUT_ABI)UL \
+		'-DLAYOUT_EXT=".library"' '-DLAYOUTS_DIR="Layouts"' \
+		-o $@ tests/test_layout.c src/lhost.c src/util.c
+test-layout: $(LT_DIR)/test_layout
+	@cd $(LT_DIR) && vamos -C 68020 test_layout > ../test-layout.txt && grep -q "^0 failed" ../test-layout.txt \
+		&& echo "  CHECK layout libraries found, opened, the wrong one refused ok" || (cat ../test-layout.txt; exit 1)
+
 build/tls6.o: src/tls.c src/amce.h $(VERSION_STAMP)
 	@echo "  CC    $@ (AmiSSL 6)"
 	@$(CC) -I$(AMISSL6_INC) $(CFLAGS) -DTLS_V6 -c -o $@ $<
@@ -179,7 +235,7 @@ ASM_DIR = build/asm
 # version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
-check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT)
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT) $(LAYOUTS)
 	@$(PYTHON) tools/check_libs.py \
 		$(DVDLIB)=src/dvdlib/amcedvd.c=$(call hdrver,src/dvdlib/include/libraries/amcedvd.h,AMCEDVD_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
@@ -187,7 +243,8 @@ check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(J
 		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMCEMPEGAVERSION) \
 		$(SQLIB)=src/sqlib/amcesql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
-		$(JDT)=datatypes/jpeg/amcejpeg.c
+		$(JDT)=datatypes/jpeg/amcejpeg.c \
+		$(foreach l,$(LAYOUT_NAMES),build/layouts/$(l).layout=src/layouts/$(l).c)
 
 check-syscalls: $(SRCS) src/amce.h build/ac3probe.h
 	@mkdir -p $(ASM_DIR)
@@ -251,7 +308,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_songs build/test_fft test-replayer test-radio test-plex test-lkit test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -644,6 +701,8 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp $(SMOOTH_FILES) $(LHA_DIR)/Fonts/amce-smooth/
 	@cp $(CJK_FILES) $(LHA_DIR)/Fonts/amce-cjk/
 	@cp $(LICENCES) $(LHA_DIR)/Licences/
+	@mkdir -p $(LHA_DIR)/Layouts
+	@cp $(LAYOUTS) $(LHA_DIR)/Layouts/
 	@mkdir -p $(LHA_DIR)/Libs
 	@cp $(SQLIB) $(LHA_DIR)/Libs/
 	@# amcedvd.library (DVDs: libdvdread and libdvdnav, GPL-2.0-or-later), for
