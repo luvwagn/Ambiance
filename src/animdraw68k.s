@@ -1,4 +1,4 @@
-; AmigaMCE - an ANIM's rows drawn as 16-bit pixels, the common cases by
+; Ambiance - an ANIM's rows drawn as 16-bit pixels, the common cases by
 ; hand (animdraw.c's ad_row_put calls it, and does the rest itself).
 ; Copyright (c) 2026 Brian King
 ;

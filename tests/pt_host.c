@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - ptcore.c on the build machine: a module played through a
+ * Ambiance - ptcore.c on the build machine: a module played through a
  * model of Paula into a WAV file, and checked.
  *
  *   cc -O2 -o pt_host tests/pt_host.c src/ptcore.c

@@ -1,7 +1,7 @@
 /*
- * AmigaMCE - archives unpacked (unarc.c): by xadmaster.library where it is
+ * Ambiance - archives unpacked (unarc.c): by xadmaster.library where it is
  * installed (LhA, LZX, Zip and the rest it knows), else by the LhA
- * command in C:. AmigaMCE carries no unpacker of its own.
+ * command in C:. Ambiance carries no unpacker of its own.
  */
 #ifndef AMCE_UNARC_H
 #define AMCE_UNARC_H

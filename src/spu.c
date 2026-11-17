@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a DVD's subpictures: its menus' buttons and its subtitles
+ * Ambiance - a DVD's subpictures: its menus' buttons and its subtitles
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * A subpicture unit comes in private stream 1's packets (substreams

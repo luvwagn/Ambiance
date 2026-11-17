@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - DVD images: what one holds, and the 64-bit DOS packet that
+ * Ambiance - DVD images: what one holds, and the 64-bit DOS packet that
  * positions in one
  * Copyright (c) 2026 Brian King, MIT licence
  *

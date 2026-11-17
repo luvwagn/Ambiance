@@ -1,9 +1,9 @@
 /*
- * AmigaMCE - opt-in timing log for diagnosing slow starts and exits
+ * Ambiance - opt-in timing log for diagnosing slow starts and exits
  * Copyright (c) 2026 Brian King
  *
- * Off unless Debug is on in Settings or a file named AmigaMCE.debug sits
- * next to the program. Then each step is appended to AmigaMCE.log with a
+ * Off unless Debug is on in Settings or a file named Ambiance.debug sits
+ * next to the program. Then each step is appended to Ambiance.log with a
  * 1/50 s timestamp and flushed at once, so the log survives a hang.
  */
 #include "amce.h"
@@ -20,11 +20,11 @@ static struct SignalSemaphore loglock;  /* the playback process logs too */
 static BOOL lock_ready;
 
 /* Opens the log when Debug is on in Settings (force) or the file
- * AmigaMCE.debug sits next to the program. It goes to PROGDIR, or to RAM:
+ * Ambiance.debug sits next to the program. It goes to PROGDIR, or to RAM:
  * when the program's drawer cannot be written to (a read-only drive). */
 void amce_log_open(BOOL force)
 {
-    static const char *paths[] = { "PROGDIR:AmigaMCE.log", "RAM:AmigaMCE.log", NULL };
+    static const char *paths[] = { "PROGDIR:Ambiance.log", "RAM:Ambiance.log", NULL };
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
     BPTR l;
@@ -36,7 +36,7 @@ void amce_log_open(BOOL force)
         lock_ready = TRUE;
     }
     me->pr_WindowPtr = (APTR)-1;
-    if (!force && (l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.debug", SHARED_LOCK))) {
+    if (!force && (l = Lock((CONST_STRPTR)"PROGDIR:Ambiance.debug", SHARED_LOCK))) {
         UnLock(l);
         force = TRUE;
     }
@@ -46,7 +46,7 @@ void amce_log_open(BOOL force)
             logpath = paths[i];
         }
     me->pr_WindowPtr = oldwin;
-    amce_log("---- AmigaMCE " AMCE_VERSION, "");
+    amce_log("---- Ambiance " AMCE_VERSION, "");
 }
 
 const char *amce_log_path(void)
@@ -65,7 +65,7 @@ void amce_log(const char *what, const char *detail)
     /* amiga.lib sprintf is RawDoFmt: every number is %l with a long. Only
      * the time stamp is formatted into a buffer; the text is written as it
      * is, however long (a line once overran a 200-byte buffer here and
-     * crashed AmigaMCE with #80000003). */
+     * crashed Ambiance with #80000003). */
     sprintf(stamp, "%02ld:%02ld:%02ld.%02ld  ", (long)ds.ds_Minute / 60, (long)ds.ds_Minute % 60,
             (long)ds.ds_Tick / 50, (long)(ds.ds_Tick % 50) * 2);
     FPuts(logfh, (CONST_STRPTR)stamp);

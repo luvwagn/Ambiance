@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - ptmix.c on the build machine: an 8-channel module played by
+ * Ambiance - ptmix.c on the build machine: an 8-channel module played by
  * ptcore.c through the mixer, checked sample for sample against Paula
  * modelled plainly at the mixer's rate.
  *

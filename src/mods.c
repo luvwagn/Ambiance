@@ -1,9 +1,9 @@
 /*
- * AmigaMCE - Mods: folders of music modules
+ * Ambiance - Mods: folders of music modules
  * Copyright (c) 2026 Brian King
  *
  * A Mods list holds folders (IT_DIR) and music files (IT_MOD), folders
- * first, each part sorted by name. With EaglePlayer's players AmigaMCE
+ * first, each part sorted by name. With EaglePlayer's players Ambiance
  * plays hundreds of formats, named every which way ("MED.title",
  * "title.mod", "mdat.title", "TFMX.title", no suffix at all), so every file
  * is listed but icons, texts, archives, pictures and the files that go
@@ -126,7 +126,7 @@ LONG mods_read_dir(const char *dir, struct ItemList *out)
 }
 
 /* ---- Music's own files (Settings > Sound > Music folders): folders with
- * music somewhere inside, and the files AmigaMCE plays (MP3 with
+ * music somewhere inside, and the files Ambiance plays (MP3 with
  * mpega.library, FLAC with flacdec.library, WAV, AIFF and 8SVX always),
  * folders first, by name. */
 static BOOL can_mp3 = TRUE, can_flac = TRUE;

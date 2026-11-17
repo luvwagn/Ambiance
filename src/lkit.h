@@ -1,8 +1,8 @@
 /*
- * AmigaMCE - the layouts' drawing kit on a graphics card's screen
+ * Ambiance - the layouts' drawing kit on a graphics card's screen
  * Copyright (c) 2026 Brian King
  *
- * lkcore.c's drawing sent to the screen AmigaMCE has open: fills by
+ * lkcore.c's drawing sent to the screen Ambiance has open: fills by
  * FillPixelArray, blocks of pixels by WritePixelArray, both on the Gfx's
  * RastPort of the moment (a double buffer's while one is used), so the
  * layer clips them as it clips everything else. Only on 15 to 32-bit

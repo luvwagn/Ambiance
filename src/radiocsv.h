@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - radio-browser.info's answers: CSV, UTF-8, URL encoding
+ * Ambiance - radio-browser.info's answers: CSV, UTF-8, URL encoding
  * (radiocsv.c). No Amiga headers, so the host tests use it as it is.
  */
 #ifndef AMCE_RADIOCSV_H

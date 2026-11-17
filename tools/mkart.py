@@ -3,15 +3,14 @@
 
 Usage: python3 tools/mkart.py <Rubik-Bold.ttf> <out art.c>
 
-The lowres logo is drawn crisp at the screen's real pixel size and snapped
-to fixed palette pens; the hires logo is redrawn from the same shapes on the
-hires grid (see logo_hires). Both are stored as chunky pen indices. Icons
+The logo is hand-drawn pixel art in palette pens (pixel_logo), stored as
+chunky pen indices and enlarged on screens with bigger pixels. Icons
 are 1-bit masks drawn in the current text colour: 16x16 hand-drawn for
 lowres, 32x16 drawn from vector shapes for hires (tools/hiicons.py).
 """
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 import hiicons
 import markicons
@@ -45,101 +44,10 @@ def ocs(c):
     return tuple(round(v / 17) * 17 for v in c)
 
 
-# Only pens 0-15 are AmigaMCE's. Pens 16-31 keep the screen's own colours:
+# Only pens 0-15 are Ambiance's. Pens 16-31 keep the screen's own colours:
 # 17-19 are the mouse pointer's, set by Intuition from the user's pointer
 # preferences, so the pointer stays the default Amiga one.
 PALETTE = UI                               # 16 entries
-LOGO_PENS = [1, 5, 6, 8, 0]                # pens a logo pixel may use
-
-# ------------------------------------------------------------ logo
-# Rendered at the screen's real pixel size with crisp (non-smoothed) edges:
-# smoothing a 14-pixel wordmark only makes it fuzzy. The hires logo doubles
-# every column, so it has the same shape on screen as the lowres one.
-
-
-def snap(img):
-    px = img.load()
-    out = []
-    for y in range(img.height):
-        for x in range(img.width):
-            c = px[x, y][:3]
-            pen = min(LOGO_PENS, key=lambda p: sum((PALETTE[p][i] - c[i]) ** 2 for i in range(3)))
-            out.append(pen)
-    return out
-
-
-def logo(ttf, h=16, size_a=14, size_m=11):
-    img = Image.new("RGB", (160, h), BG)
-    d = ImageDraw.Draw(img)
-    d.fontmode = "1"
-    d.rectangle([0, 1, 13, 14], fill=BLUE)
-    for xy in [(0, 1), (13, 1), (0, 14), (13, 14)]:
-        img.putpixel(xy, BG)
-    d.polygon([(4, 4), (10, 7.5), (4, 11)], fill=WHITE)
-    fa = ImageFont.truetype(ttf, size_a)
-    x = 17
-    d.text((x, 13), "Amiga", font=fa, fill=WHITE, anchor="ls")
-    x += int(d.textlength("Amiga", font=fa)) + 3
-    fm = ImageFont.truetype(ttf, size_m)
-    tw = int(d.textlength("MCE", font=fm))
-    d.rectangle([x, 1, x + tw + 5, 14], fill=ORANGE)
-    d.text((x + 3, 12), "MCE", font=fm, fill=NAVY, anchor="ls")
-    img = img.crop((0, 0, x + tw + 6, h))
-    lo = snap(img)
-    w = img.width
-    return (w, h, lo), logo_hires(ttf, w, h, size_a, size_m)
-
-
-# The hires logo is redrawn from the same vector shapes on the real hires
-# grid (twice as many columns), not column-doubled. Each layer is drawn
-# anti-aliased on a fine canvas, averaged down to whole hires pixels and
-# thresholded at 50% coverage, so edges stay crisp but fall on half-lowres
-# positions: smoother curves and truer stems, same size on screen.
-S = 8   # canvas units per lowres pixel, both axes
-
-
-def layer_mask(w, h, draw_fn):
-    big = Image.new("L", (w * S, h * S), 0)
-    draw_fn(ImageDraw.Draw(big))
-    small = big.resize((w * 2, h), Image.BOX)
-    return [v >= 128 for v in small.get_flattened_data()] if hasattr(small, "get_flattened_data") \
-        else [v >= 128 for v in small.getdata()]
-
-
-def logo_hires(ttf, w, h, size_a, size_m):
-    fa = ImageFont.truetype(ttf, size_a * S)
-    fm = ImageFont.truetype(ttf, size_m * S)
-    fa_lo = ImageFont.truetype(ttf, size_a)
-    fm_lo = ImageFont.truetype(ttf, size_m)
-    probe = ImageDraw.Draw(Image.new("RGB", (4, 4)))
-    x_badge = 17 + int(probe.textlength("Amiga", font=fa_lo)) + 3
-    tw = int(probe.textlength("MCE", font=fm_lo))
-
-    def box(d):
-        d.rounded_rectangle([0, 1 * S, 14 * S - 1, 15 * S - 1], radius=int(1.6 * S), fill=255)
-
-    def tri(d):
-        d.polygon([(4 * S, 4 * S), (10.5 * S, 8 * S), (4 * S, 12 * S)], fill=255)
-
-    def amiga(d):
-        d.text((17 * S, 13 * S), "Amiga", font=fa, fill=255, anchor="ls")
-
-    def badge(d):
-        d.rounded_rectangle([x_badge * S, 1 * S, (x_badge + tw + 6) * S - 1, 15 * S - 1],
-                            radius=int(1.2 * S), fill=255)
-
-    def mce(d):
-        d.text(((x_badge + 3) * S, 12 * S), "MCE", font=fm, fill=255, anchor="ls")
-
-    pens = [1] * (w * 2 * h)                # PEN_BAR background
-    for fn, pen in ((box, 6), (tri, 5), (amiga, 5), (badge, 8), (mce, 0)):
-        for i, on in enumerate(layer_mask(w, h, fn)):
-            if on:
-                pens[i] = pen
-    return (w * 2, h, pens)
-
-
-
 
 # ------------------------------------------------------------ pixel logo
 # Hand-drawn: 2-pixel stems on one grid, a symmetric play arrow. Pens:
@@ -163,16 +71,16 @@ LOGO_GLYPHS = {   # rows from the top of the text area; '#' = ink
            "##..##..##",
            "##..##..##"]),
  "i": (3, ["##", "##", "..", "##", "##", "##", "##", "##", "##", "##"]),
- "g": (6, [".#######",
+ "b": (3, ["##......",
+           "##......",
+           "##......",
+           "#######.",
            "##....##",
            "##....##",
            "##....##",
            "##....##",
            "##....##",
-           ".#######",
-           "......##",
-           "##....##",
-           ".######."]),
+           "#######."]),
  "a": (6, [".######.",
            "......##",
            "......##",
@@ -180,48 +88,49 @@ LOGO_GLYPHS = {   # rows from the top of the text area; '#' = ink
            "##....##",
            "##....##",
            ".#######"]),
- "M": (4, ["##......##",
-           "###....###",
-           "####..####",
-           "##.####.##",
-           "##..##..##",
-           "##......##",
-           "##......##",
-           "##......##"]),
- "C": (4, [".######",
-           "##.....",
+ "n": (6, ["#######.",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##",
+           "##....##"]),
+ "c": (6, [".######",
            "##.....",
            "##.....",
            "##.....",
            "##.....",
            "##.....",
            ".######"]),
- "E": (4, ["######",
-           "##....",
-           "##....",
-           "#####.",
-           "##....",
-           "##....",
-           "##....",
-           "######"]),
+ "e": (6, [".######.",
+           "##....##",
+           "##....##",
+           "########",
+           "##......",
+           "##......",
+           ".#######"]),
 }
-LP_BAR, LP_NAVY, LP_WHITE, LP_BLUE, LP_ORANGE = 1, 0, 5, 6, 8
-LOGO_H = 16
+LP_BAR, LP_NAVY, LP_WHITE, LP_BLUE, LP_GLOW = 1, 0, 5, 6, 7
+LOGO_H = 18     # 16 rows of art and a row of halo above and below
 
 
 def pixel_logo():
-    """The logo as pixel art, 16 rows: the native screens' logo (a font
-    rasterised this small came out jagged and uneven)."""
-    cols = []                   # list of columns, each H pens
-    def blank(n, pen=LP_BAR):
+    """The logo as pixel art: the Play badge and "Ambiance", hand-drawn
+    (a font rasterised this small came out jagged and uneven), with a
+    one-pixel glow around them in pen 7 (the scheme's dim selection
+    colour) and navy at the glow's corners. The letters' insides stay
+    dark, so they read; the gaps between them glow."""
+    H = 16
+    cols, boxes = [], []        # columns of H pens; each letter's ink box
+    def blank(n):
         for _ in range(n):
-            cols.append([pen] * LOGO_H)
+            cols.append([LP_BAR] * H)
     # play box: 14 wide, rows 1..14, corners rounded, triangle centred
     # 10 rows, one step a row, nudged right of centre (a triangle's weight
     # sits left of its middle)
     tri = {3 + i: (5, 5 + w - 1) for i, w in enumerate([2, 3, 4, 5, 6, 6, 5, 4, 3, 2])}
     for x in range(14):
-        c = [LP_BAR] * LOGO_H
+        c = [LP_BAR] * H
         for y in range(1, 15):
             corner = (x in (0, 13)) and (y in (1, 14))
             if not corner:
@@ -230,38 +139,41 @@ def pixel_logo():
                 c[y] = LP_WHITE
         cols.append(c)
     blank(4)
-    def word(text, fg, bg, gap):
-        for k, ch in enumerate(text):
-            top, rows = LOGO_GLYPHS[ch]
-            w = len(rows[0])
-            for x in range(w):
-                c = [bg] * LOGO_H
-                for j, r in enumerate(rows):
-                    if r[x] == "#":
-                        c[top + j] = fg
-                cols.append(c)
-            if k < len(text) - 1:
-                for _ in range(gap):
-                    cols.append([bg] * LOGO_H)
-    word("Amiga", LP_WHITE, LP_BAR, 2)
-    blank(4)
-    start = len(cols)
-    for _ in range(3):
-        cols.append([LP_BAR] + [LP_ORANGE] * 14 + [LP_BAR])
-    word("MCE", LP_NAVY, LP_BAR, 2)
-    for _ in range(3):
-        cols.append([LP_BAR] + [LP_ORANGE] * 14 + [LP_BAR])
-    # the badge: orange behind the letters, rows 1..14, corners rounded
-    for x in range(start, len(cols)):
-        for y in range(1, 15):
-            if cols[x][y] == LP_BAR:
-                cols[x][y] = LP_ORANGE
-        for y in (0, 15):
-            cols[x][y] = LP_BAR
-    cols[start][1] = cols[start][14] = LP_BAR
-    cols[-1][1] = cols[-1][14] = LP_BAR
-    w = len(cols)
-    return w, LOGO_H, [cols[x][y] for y in range(LOGO_H) for x in range(w)]
+    for k, ch in enumerate("Ambiance"):
+        top, rows = LOGO_GLYPHS[ch]
+        x0 = len(cols)
+        for x in range(len(rows[0])):
+            c = [LP_BAR] * H
+            for j, r in enumerate(rows):
+                if r[x] == "#":
+                    c[top + j] = LP_WHITE
+            cols.append(c)
+        boxes.append((x0, len(cols) - 1, top, top + len(rows) - 1))
+        if k < 7:
+            blank(2)
+    # the glow: one pixel all round, so one more column each side and a
+    # row above and below
+    w = len(cols) + 2
+    art = [[LP_BAR] * w for _ in range(LOGO_H)]
+    for x, c in enumerate(cols):
+        for y, p in enumerate(c):
+            art[y + 1][x + 1] = p
+    def ink(x, y):
+        return 0 <= x < w and 0 <= y < LOGO_H and art[y][x] != LP_BAR
+    def inside(x, y):           # a letter's own space: its counters and gaps
+        return any(x0 + 1 <= x <= x1 + 1 and t + 1 <= y <= b + 1 for x0, x1, t, b in boxes)
+    glow = []
+    for y in range(LOGO_H):
+        for x in range(w):
+            if art[y][x] != LP_BAR or inside(x, y):
+                continue
+            if any(ink(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                glow.append((x, y, LP_GLOW))
+            elif any(ink(x + dx, y + dy) for dx, dy in ((1, 1), (1, -1), (-1, 1), (-1, -1))):
+                glow.append((x, y, LP_NAVY))
+    for x, y, p in glow:
+        art[y][x] = p
+    return w, LOGO_H, [art[y][x] for y in range(LOGO_H) for x in range(w)]
 
 
 # ------------------------------------------------------------ icons

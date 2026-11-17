@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - what every layout library is around its layout (layout.h)
+ * Ambiance - what every layout library is around its layout (layout.h)
  * Copyright (c) 2026 Brian King
  *
  * Built once per layout with src/sqlib/libinit.c's library skeleton and

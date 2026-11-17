@@ -1,4 +1,4 @@
-"""Build AmigaMCE's Far East glyph packs (Fonts/amce-cjk/<name>).
+"""Build Ambiance's Far East glyph packs (Fonts/amce-cjk/<name>).
 
 Usage: python3 -I mkcjk.py <galmuri-dist> <ark-pixel-font> <outdir>
 
@@ -20,7 +20,7 @@ The file, big-endian (the 68k's own):
   count UWORDs (the code points, sorted), count UBYTEs (advances),
   a pad byte if count is odd, then count x cell_h UWORDs (the glyphs).
 
-Only code points in the ranges AmigaMCE keeps as Far East text are taken
+Only code points in the ranges Ambiance keeps as Far East text are taken
 (src/cjk.c: cjk_wanted, keep in step).
 """
 import glob

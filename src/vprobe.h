@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - an MPEG file's headers (vprobe.c)
+ * Ambiance - an MPEG file's headers (vprobe.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
 #ifndef AMCE_VPROBE_H

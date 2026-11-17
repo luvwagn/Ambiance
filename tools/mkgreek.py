@@ -1,11 +1,11 @@
-"""Build AmigaMCE's Greek glyph pack (Fonts/amce-cjk/greek) for the pixel
+"""Build Ambiance's Greek glyph pack (Fonts/amce-cjk/greek) for the pixel
 style, and the Greek extract of Galmuri11 it is made from.
 
 Usage: python3 -I mkgreek.py <Galmuri11.bdf> <out file>
        python3 -I mkgreek.py --extract <Galmuri11.bdf> <out .bdf>
 
 The pack is mkcjk.py's format (see there), with Galmuri11's Greek letters,
-U+0384-U+03CE: what modern Greek is written with. AmigaMCE keeps a Greek
+U+0384-U+03CE: what modern Greek is written with. Ambiance keeps a Greek
 letter as two bytes (src/cjk.c) and draws it from this pack on screens
 whose own font has no Greek (the pixel style's, and smooth files made
 without --greek). It is small and always installed: Greek is never shown

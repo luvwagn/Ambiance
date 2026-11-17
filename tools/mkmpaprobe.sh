@@ -1,5 +1,5 @@
 #!/bin/sh
-# src/mpaprobe.h: the MP3 AmigaMCE times its MPEG audio decoder with
+# src/mpaprobe.h: the MP3 Ambiance times its MPEG audio decoder with
 # (stream.c's mpa_measure): 14 frames, a third of a second, of 128 kbit/s
 # joint stereo at 44.1 kHz, as most MP3s are. Synthetic (a chord that
 # moves, its two sides apart, and some noise), so the program carries no

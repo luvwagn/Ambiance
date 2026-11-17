@@ -1,6 +1,6 @@
-/* amcesql.library: SQLite for AmigaMCE, read only.
+/* amcesql.library: SQLite for Ambiance, read only.
  *
- * AmigaMCE reads a beets music library (a SQLite 3 database, often on a
+ * Ambiance reads a beets music library (a SQLite 3 database, often on a
  * file share) with it, and opens it only when one is set up, from
  * PROGDIR:Libs, so the program itself stays small. Inside is SQLite 3.34.0
  * as built for AmigaOS 3 by Steffen Gutmann (Aminet: biz/dbase/
@@ -20,10 +20,10 @@
  * (small: a list of names). Everything comes from exec through malloc
  * below, counted (SqlMemory). SqlRelease gives back an open database's
  * cache; closed, nothing is held but the library's code, which exec
- * expunges as any library's: when memory runs short, or when AmigaMCE
+ * expunges as any library's: when memory runs short, or when Ambiance
  * asks (RemLibrary) before a game or a module, with no opener left.
  *
- * One AmigaMCE at a time: the library's data is shared by its openers
+ * One Ambiance at a time: the library's data is shared by its openers
  * (libnix's libinit, not the per-opener libinitr: libsqlite3.a is not
  * base-relative), and SQLite is used from one process.
  *
@@ -41,10 +41,10 @@
 #include "sqlite3.h"
 
 const char LibName[] = "amcesql.library";
-const char LibIdString[] = "amcesql 1.0 (07.11.2026) SQLite 3.34.0, read only, for AmigaMCE";
+const char LibIdString[] = "amcesql 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
 /* for the Version command on the file (the ID string is for the library in memory) */
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: amcesql.library 1.0 (07.11.2026) SQLite 3.34.0, read only, for AmigaMCE";
+    "$VER: amcesql.library 1.0 (07.11.2026) SQLite 3.34.0, read only, for Ambiance";
 const UWORD LibVersion = 1;
 const UWORD LibRevision = 0;
 

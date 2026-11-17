@@ -1,11 +1,11 @@
 /*
- * AmigaMCE - opening its own libraries (Libs: dvdnav, ac3, ac3fpu, mpegv)
+ * Ambiance - opening its own libraries (Libs: dvdnav, ac3, ac3fpu, mpegv)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Exec finds a library already in memory by its name, whatever path is
- * asked for: a library AmigaMCE opened before, since closed but not yet
+ * asked for: a library Ambiance opened before, since closed but not yet
  * put out of memory, would be opened again in place of a newer file in
- * AmigaMCE's Libs (a new build's fixes not there until a reboot or Avail
+ * Ambiance's Libs (a new build's fixes not there until a reboot or Avail
  * FLUSH). So a copy in memory that nothing has open is put out first (its
  * expunge, as Avail FLUSH does), and the one opened is logged. Closed, it
  * is put out at once if nothing else has it open: Exec would keep it in

@@ -1,4 +1,4 @@
-name: AmigaMCE Draft Release
+name: Ambiance Draft Release
 
 on:
   push:
@@ -45,8 +45,8 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            AmigaMCE
-            amigamce-*.lha
+            Ambiance
+            ambiance-*.lha
           if-no-files-found: error
 
   release:
@@ -65,4 +65,4 @@ jobs:
         with:
           draft: true
           files: |
-            artifacts/amigamce-*.lha
+            artifacts/ambiance-*.lha

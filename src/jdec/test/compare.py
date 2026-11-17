@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Decode the corpus with jtest and compare with libjpeg (Pillow).
-AmigaMCE, MIT.
+Ambiance, MIT.
 
     python3 compare.py <corpus dir> <jtest> [runner...]
 

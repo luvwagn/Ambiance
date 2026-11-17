@@ -1,11 +1,11 @@
-"""AmigaMCE's translations: catalog descriptions and catalogs.
+"""Ambiance's translations: catalog descriptions and catalogs.
 
   python3 -I catalog.py scan  <srcdir> <catalogs-dir>
-      every _("...") and N_("...") in <srcdir>/*.c into <catalogs-dir>/AmigaMCE.cd,
+      every _("...") and N_("...") in <srcdir>/*.c into <catalogs-dir>/Ambiance.cd,
       and each <catalogs-dir>/<language>.ct brought up to date with it: new
       strings added untranslated (English as a comment), gone ones dropped
   python3 -I catalog.py build <catalogs-dir> <outdir> [language ...]
-      each .ct (or those named) into <outdir>/<language>/AmigaMCE.catalog,
+      each .ct (or those named) into <outdir>/<language>/Ambiance.catalog,
       after checking that each translation keeps its English's % formats
   python3 -I catalog.py check <catalogs-dir>
       counts per language, and what is untranslated
@@ -13,7 +13,7 @@
 A string's ID is a hash of its English (FNV-1a, 31 bits, as src/lang.c
 computes it at run time), named MSG_<hex> in the .cd and .ct files, which
 are FlexCat's formats. The .ct files are kept in UTF-8 here; the catalogs
-are Latin-1, with Japanese, Chinese and Korean characters in AmigaMCE's own
+are Latin-1, with Japanese, Chinese and Korean characters in Ambiance's own
 three bytes and Greek letters in two (src/cjk.c), so any of those languages
 can be added too.
 """
@@ -157,8 +157,8 @@ def name_of(i):
 def cmd_scan(srcdir, catdir):
     found = scan_src(srcdir)
     os.makedirs(catdir, exist_ok=True)
-    with open(os.path.join(catdir, "AmigaMCE.cd"), "w", encoding="utf-8") as fh:
-        fh.write("; AmigaMCE's catalog description: made by tools/catalog.py scan from\n"
+    with open(os.path.join(catdir, "Ambiance.cd"), "w", encoding="utf-8") as fh:
+        fh.write("; Ambiance's catalog description: made by tools/catalog.py scan from\n"
                  "; the _() and N_() strings in src/. Do not edit: edit the source.\n")
         for i, (en, where) in found.items():
             fh.write("; %s\n%s (%d//)\n%s\n" % (" ".join(where[:3]), name_of(i), i, ct_escape(en)))
@@ -172,7 +172,7 @@ def update_ct(path, found):
     tr, hdr = read_ct(path)
     lang = os.path.basename(path)[:-3]
     if not hdr:
-        hdr = ["## version $VER: AmigaMCE.catalog 1.0 (%s)" % time.strftime("%d.%m.%Y"),
+        hdr = ["## version $VER: Ambiance.catalog 1.0 (%s)" % time.strftime("%d.%m.%Y"),
                "## language %s" % lang, "## codeset 0", ";"]
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(hdr) + "\n")
@@ -189,7 +189,7 @@ def formats(s):
 
 
 def amiga_bytes(s):
-    """Latin-1, the Far East characters as AmigaMCE's three bytes, Greek as
+    """Latin-1, the Far East characters as Ambiance's three bytes, Greek as
     its two."""
     out = bytearray()
     for ch in s:
@@ -227,7 +227,7 @@ def cstr4(b):
 
 
 def cmd_build(catdir, outdir, langs):
-    cd = read_cd(os.path.join(catdir, "AmigaMCE.cd"))
+    cd = read_cd(os.path.join(catdir, "Ambiance.cd"))
     bad = 0
     for fn in sorted(os.listdir(catdir)):
         if not fn.endswith(".ct"):
@@ -237,7 +237,7 @@ def cmd_build(catdir, outdir, langs):
             continue
         tr, hdr = read_ct(os.path.join(catdir, fn))
         ver = next((h[11:].strip() for h in hdr if h.startswith("## version")),
-                   "$VER: AmigaMCE.catalog 1.0")
+                   "$VER: Ambiance.catalog 1.0")
         strs = b""
         n = 0
         for name in sorted(tr, key=lambda k: int(k[4:], 16)):
@@ -266,13 +266,13 @@ def cmd_build(catdir, outdir, langs):
         form = b"CTLG" + chunk(b"FVER", cstr4(ver.encode("latin-1"))) + \
             chunk(b"LANG", cstr4(lang.encode("latin-1"))) + \
             chunk(b"CSET", struct.pack(">L", 0) + b"\0" * 28) + chunk(b"STRS", strs)
-        # the drawer's name in ASCII ("francais"): AmigaMCE knows a catalog by
+        # the drawer's name in ASCII ("francais"): Ambiance knows a catalog by
         # the language in its LANG chunk, and an ASCII name survives any
         # file system (an emulator's host folder spelled "français" otherwise)
         ascii_name = unicodedata.normalize("NFKD", lang).encode("ascii", "ignore").decode()
         d = os.path.join(outdir.encode(), ascii_name.encode())
         os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, b"AmigaMCE.catalog"), "wb") as fh:
+        with open(os.path.join(d, b"Ambiance.catalog"), "wb") as fh:
             fh.write(b"FORM" + struct.pack(">L", len(form)) + form)
         print("%s: %d of %d translated" % (lang, n, len(cd)))
     if bad:
@@ -280,7 +280,7 @@ def cmd_build(catdir, outdir, langs):
 
 
 def cmd_check(catdir):
-    cd = read_cd(os.path.join(catdir, "AmigaMCE.cd"))
+    cd = read_cd(os.path.join(catdir, "Ambiance.cd"))
     for fn in sorted(os.listdir(catdir)):
         if fn.endswith(".ct"):
             tr, _ = read_ct(os.path.join(catdir, fn))

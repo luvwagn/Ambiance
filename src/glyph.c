@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the playback controls' glyphs
+ * Ambiance - the playback controls' glyphs
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * One set, drawn by Now playing's buttons, the mini player's, the controls

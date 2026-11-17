@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a DVD's subpictures (its menus' buttons, its subtitles):
+ * Ambiance - a DVD's subpictures (its menus' buttons, its subtitles):
  * gathered from their packets, decoded, and blended into a picture (spu.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */

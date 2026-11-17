@@ -1,10 +1,10 @@
 /*
- * AmigaMCE - Radio: stations from radio-browser.info
+ * Ambiance - Radio: stations from radio-browser.info
  * Copyright (c) 2026 Brian King
  *
  * radio-browser.info is a free, community-kept directory of internet radio
  * stations with an open API; every station there has its codec, bitrate,
- * country, tags and whether it passed the last check. AmigaMCE asks it for
+ * country, tags and whether it passed the last check. Ambiance asks it for
  * lists (net.c does the asking) in CSV and keeps the stations an Amiga can
  * play: MP3 (mpega.library's format), working, not HLS, and plain http:
  * unless Settings allows HTTPS (that needs AmiSSL).

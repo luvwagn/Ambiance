@@ -64,7 +64,7 @@ int main(void)
     check("flac tags", !strcmp(si.title, "Flac Song") && !strcmp(si.artist, "Flac Artist") &&
                        !strcmp(si.album, "Flac Album") && !strcmp(si.year, "2001"));
     check("flac stream", si.rate == 44100 && si.channels == 2 && si.bits == 16 && si.ms == 10000);
-    check("flac picture copied out", !strncmp(art, "RAM:AmigaMCE-art/s", 18) &&
+    check("flac picture copied out", !strncmp(art, "RAM:Ambiance-art/s", 18) &&
                                      strstr(art, ".jpg") != NULL);
     {
         BPTR fh = Open((CONST_STRPTR)art, MODE_OLDFILE);

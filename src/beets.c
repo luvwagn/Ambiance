@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a beets music library (its SQLite database) as Music pages
+ * Ambiance - a beets music library (its SQLite database) as Music pages
  * Copyright (c) 2026 Brian King
  *
  * beets (https://beets.io) keeps a music collection's tags in one SQLite 3
@@ -13,7 +13,7 @@
  * SQLite 3.34, read only and immutable: nothing is ever written to it),
  * opened only while it is read.
  *
- * The albums are read once into an index of AmigaMCE's own (id, year,
+ * The albums are read once into an index of Ambiance's own (id, year,
  * album artist, album), kept in PROGDIR:Cache/beets.idx with the
  * database's size and date and read from there while they are unchanged:
  * reading the albums table took a few seconds of an 030 (its "added" is a
@@ -26,7 +26,7 @@
  * the first track's path from each of its folders down until a file is
  * there; the rest are mapped the same way. A path with characters Latin-1
  * lacks cannot be reached through the emulator's shared folder, and is left
- * out, as are formats AmigaMCE cannot play (WMA, AAC).
+ * out, as are formats Ambiance cannot play (WMA, AAC).
  *
  * Pages are opened by their path (IT_DIR, so the folder machinery opens
  * them): "beets:" the menu, "beets:artists", "beets:albums",
@@ -54,7 +54,7 @@ struct Library *AmceSqlBase;
 struct BAlbum {
     ULONG id;
     UWORD year;
-    const char *artist, *album;     /* AmigaMCE's text (Latin-1, cjk.c's bytes) */
+    const char *artist, *album;     /* Ambiance's text (Latin-1, cjk.c's bytes) */
 };
 
 static const char *const db_names[] = { "MUSIC:musiclibrary.db", "MUSIC:library.db" };
@@ -195,7 +195,7 @@ void beets_forget(void)
 {
     ix_free();
     prefix_len = -1;
-    amce_flush_own_lib("amcesql.library");  /* (AmigaMCE quits: its 574 KB given back) */
+    amce_flush_own_lib("amcesql.library");  /* (Ambiance quits: its 574 KB given back) */
 }
 
 static void wr32(UBYTE *p, ULONG v)
@@ -426,7 +426,7 @@ static BOOL put(UBYTE **b, ULONG *len, ULONG *cap, const void *d, ULONG n)
     return TRUE;
 }
 
-/* A text column as AmigaMCE's text, at most max - 1 bytes. */
+/* A text column as Ambiance's text, at most max - 1 bytes. */
 static void text_of(APTR st, LONG col, char *out, LONG max)
 {
     STRPTR t = SqlText(st, col);

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - medtime.c on the build machine: a MED module's length.
+ * Ambiance - medtime.c on the build machine: a MED module's length.
  *   medtime_host <module> [timer E-clocks a tick at its first tempo]
  */
 #include <stdio.h>

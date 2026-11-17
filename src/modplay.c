@@ -1,12 +1,12 @@
 /*
- * AmigaMCE - modules played on Paula
+ * Ambiance - modules played on Paula
  * Copyright (c) 2026 Brian King
  *
  * ptcore.c plays the song; this is the Amiga around it. The four audio
  * channels are taken from audio.device (at the top priority, so nothing
  * steals them mid-song), then driven directly, as trackers do. A CIA-B
  * timer interrupt runs the song at its tempo (50 ticks a second at 125
- * BPM), wherever AmigaMCE is and however busy its drawing: the music
+ * BPM), wherever Ambiance is and however busy its drawing: the music
  * never waits for the screen.
  *
  * Starting a note on Paula takes three steps a little apart, as the
@@ -356,7 +356,7 @@ static BOOL mix_alloc(int nch)
     pm_init(mp.pm, nch, period, (pt_s8 *)mp.vt, (pt_s8 *const *)r, MIX_RING);
     mp.mix_int.is_Node.ln_Type = NT_INTERRUPT;
     mp.mix_int.is_Node.ln_Pri = 0;
-    mp.mix_int.is_Node.ln_Name = (char *)"AmigaMCE music (8 channels)";
+    mp.mix_int.is_Node.ln_Name = (char *)"Ambiance music (8 channels)";
     mp.mix_int.is_Data = NULL;
     mp.mix_int.is_Code = (void (*)())mix_code;
     mp.mix8 = TRUE;
@@ -629,15 +629,15 @@ static BOOL timers_open(void)
             continue;
         mp.cia_base = base[k];
         Disable();
-        if (take_timer(CIAICRB_TA, &mp.tick_int, tick_code, "AmigaMCE music")) {
+        if (take_timer(CIAICRB_TA, &mp.tick_int, tick_code, "Ambiance music")) {
             mp.have_tick = TRUE;
             mp.tick_bit = CIAICRB_TA;
             CIAREG(mp.cia_base, R_CRA) = (UBYTE)(CIAREG(mp.cia_base, R_CRA) & 0xC0);
-            if (take_timer(CIAICRB_TB, &mp.gap_int, gap_code, "AmigaMCE music (notes)")) {
+            if (take_timer(CIAICRB_TB, &mp.gap_int, gap_code, "Ambiance music (notes)")) {
                 mp.have_gap = TRUE;
                 CIAREG(mp.cia_base, R_CRB) = (UBYTE)(CIAREG(mp.cia_base, R_CRB) & 0x80);
             }
-        } else if (take_timer(CIAICRB_TB, &mp.tick_int, tick_code, "AmigaMCE music")) {
+        } else if (take_timer(CIAICRB_TB, &mp.tick_int, tick_code, "Ambiance music")) {
             mp.have_tick = TRUE;
             mp.tick_bit = CIAICRB_TB;
             CIAREG(mp.cia_base, R_CRB) = (UBYTE)(CIAREG(mp.cia_base, R_CRB) & 0x80);
@@ -1118,11 +1118,11 @@ BOOL mp_load(const char *path, char *err, LONG errmax)
         if ((why = layout_problem(rc, chans)))
             amce_strlcpy(m, why, sizeof(m));
         else if (pk && !eerr[0])
-            sprintf(m, _("This file is %s, which AmigaMCE cannot play"), pk);
+            sprintf(m, _("This file is %s, which Ambiance cannot play"), pk);
         else if (eerr[0])
             amce_strlcpy(m, eerr, sizeof(m));
         else
-            amce_strlcpy(m, _("Not a module AmigaMCE can play"), sizeof(m));
+            amce_strlcpy(m, _("Not a module Ambiance can play"), sizeof(m));
         amce_strlcpy(err, m, errmax);
         return FALSE;
     }
@@ -1368,7 +1368,7 @@ void mp_stop(void)
     audio_close();
 }
 
-/* Let go of the hardware and the module (a game is starting, or AmigaMCE
+/* Let go of the hardware and the module (a game is starting, or Ambiance
  * is quitting). */
 void mp_shutdown(void)
 {

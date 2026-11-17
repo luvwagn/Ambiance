@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - an MPEG file's headers: what the ZZ9000's media session is
+ * Ambiance - an MPEG file's headers: what the ZZ9000's media session is
  * begun with, and what the preview pane says (vprobe.h)
  * Copyright (c) 2026 Brian King, MIT licence
  *

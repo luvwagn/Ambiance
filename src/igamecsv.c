@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - iGame's files read (see igamecsv.h)
+ * Ambiance - iGame's files read (see igamecsv.h)
  * Copyright (c) 2026 Brian King
  *
  * gameslist.csv is iGame's list of everything it found, one line an entry:

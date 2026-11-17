@@ -1,4 +1,4 @@
-name: AmigaMCE CI
+name: Ambiance CI
 
 on:
   push:
@@ -44,13 +44,13 @@ jobs:
     - name: Find release filenames
       id: files
       run: |
-        echo "lha=$(ls amigamce-*.lha)" >> $GITHUB_OUTPUT
+        echo "lha=$(ls ambiance-*.lha)" >> $GITHUB_OUTPUT
 
     - name: Archive program
       uses: actions/upload-artifact@v4
       with:
-        name: AmigaMCE Program
-        path: AmigaMCE
+        name: Ambiance Program
+        path: Ambiance
 
     - name: Archive zzprobe
       uses: actions/upload-artifact@v4

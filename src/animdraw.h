@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - an ANIM's frames drawn as 15 or 16-bit pixels
+ * Ambiance - an ANIM's frames drawn as 15 or 16-bit pixels
  * Copyright (c) 2026 Brian King
  *
  * Plain C with no Amiga headers, so the tests build it on the host too.

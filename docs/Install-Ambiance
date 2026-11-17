@@ -1,19 +1,19 @@
-; $VER: Install-AmigaMCE 1.7 (14.11.2026)
+; $VER: Install-Ambiance 1.7 (14.11.2026)
 ;
-; Installer script for AmigaMCE: the program with its fonts, licences and
-; its own libraries in AmigaMCE/Libs (amcesql.library for beets,
+; Installer script for Ambiance: the program with its fonts, licences and
+; its own libraries in Ambiance/Libs (amcesql.library for beets,
 ; dvdnav.library for DVDs, ac3.library and ac3fpu.library for AC-3 sound,
 ; mpegv.library for MPEG video, amcempega.library for MP3: opened from
 ; there, never put in LIBS:),
 ; and the languages chosen: the Workbench's own (none besides English on
 ; an English one), all thirteen at once, or ticked one by one.
 ; English is built into the program. Each language is a catalog in
-; AmigaMCE/Catalogs; AmigaMCE knows a catalog by the language written in
+; Ambiance/Catalogs; Ambiance knows a catalog by the language written in
 ; it, so its drawer's name (francais, espanol) does not matter.
 ; Japanese and Korean are never ticked to begin with: Workbench 3.x has
-; no Japanese or Korean locale. It is chosen in AmigaMCE (Settings > General > Language), whose
+; no Japanese or Korean locale. It is chosen in Ambiance (Settings > General > Language), whose
 ; own glyphs draw them. Greek needs nothing from the Workbench either (no
-; Greek fonts or ReplaceTopaz): AmigaMCE draws it with its own glyphs too.
+; Greek fonts or ReplaceTopaz): Ambiance draws it with its own glyphs too.
 ; It is ticked where the Workbench's language is Greek, by either name
 ; it goes by ("greek" or "ellinika").
 ;
@@ -28,17 +28,17 @@
 ;
 ; This file is Latin-1 (Français, Español, Português).
 
-(set @app-name "AmigaMCE")
-(welcome "Welcome to AmigaMCE, a media centre for the Amiga.\n\nThis installs AmigaMCE and the languages you choose. Settings on an earlier installation are kept.")
+(set @app-name "Ambiance")
+(welcome "Welcome to Ambiance, a media centre for the Amiga.\n\nThis installs Ambiance and the languages you choose. Settings on an earlier installation are kept.")
 
 (set #where
   (askdir
-    (prompt "Where should AmigaMCE go?\n\nA drawer called AmigaMCE is made there, or brought up to date if it is there already.")
+    (prompt "Where should Ambiance go?\n\nA drawer called Ambiance is made there, or brought up to date if it is there already.")
     (help @askdir-help)
     (default @default-dest)
   )
 )
-(set #dest (tackon #where "AmigaMCE"))
+(set #dest (tackon #where "Ambiance"))
 (set @default-dest #dest)
 
 ; the Workbench's language (Japanese and Korean are never assumed: chosen, or all)
@@ -62,7 +62,7 @@
 (set #how
   (askchoice
     (prompt "Which languages, besides English (always there)?\n\nWith more than one, Settings > General > Language chooses.")
-    (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
+    (help "Each language is a catalog of about 20K, in Ambiance/Catalogs. One left out now can be copied there later from this archive's Ambiance/Catalogs drawer.")
     (choices
       (if #def (cat "Your Workbench's: " #wbname) "None: English only")
       "All thirteen"
@@ -76,7 +76,7 @@
   (set #langs
     (askoptions
       (prompt "Which languages, besides English (always there)?\n\nYour Workbench's language is ticked. With more than one, Settings > General > Language chooses.")
-      (help "Each language is a catalog of about 20K, in AmigaMCE/Catalogs. One left out now can be copied there later from this archive's AmigaMCE/Catalogs drawer.")
+      (help "Each language is a catalog of about 20K, in Ambiance/Catalogs. One left out now can be copied there later from this archive's Ambiance/Catalogs drawer.")
       (choices "Deutsch" "Français" "Italiano" "Español" "Svenska" "Suomi" "Dansk" "Norsk" "Nederlands" "Português" "Nihongo (Japanese)" "Ellinika (Greek)" "Hangugeo (Korean)")
       (default #def)
     )
@@ -84,19 +84,19 @@
 )
 
 (if (= (exists #dest) 0)
-  (makedir #dest (prompt "Making the AmigaMCE drawer") (help @makedir-help))
+  (makedir #dest (prompt "Making the Ambiance drawer") (help @makedir-help))
 )
 (copyfiles
-  (prompt "Copying AmigaMCE")
+  (prompt "Copying Ambiance")
   (help @copyfiles-help)
-  (source "AmigaMCE.info")
+  (source "Ambiance.info")
   (dest #where)
 )
 (complete 10)
 (copyfiles
-  (prompt "Copying AmigaMCE, its fonts, libraries and licences")
+  (prompt "Copying Ambiance, its fonts, libraries and licences")
   (help @copyfiles-help)
-  (source "AmigaMCE")
+  (source "Ambiance")
   (dest #dest)
   (pattern "~(Catalogs)")
   (infos)
@@ -112,7 +112,7 @@
   (copyfiles
     (prompt "Copying a language")
     (help @copyfiles-help)
-    (source (tackon "AmigaMCE/Catalogs" #drawer))
+    (source (tackon "Ambiance/Catalogs" #drawer))
     (dest #to)
     (all)
   )
@@ -170,7 +170,7 @@
     (if #def
       (set #libs
         (askoptions
-          (prompt "AmigaMCE plays more with these libraries from Aminet. Which should be installed in LIBS:? Those missing, or older than these, are ticked.")
+          (prompt "Ambiance plays more with these libraries from Aminet. Which should be installed in LIBS:? Those missing, or older than these, are ticked.")
           (help (cat "modplug.library (public domain) mixes XM, S3M, IT and multichannel MODs on a 68020 or better.\n\n"
                      "mpega.library 2.4 (Stéphane Tavenard, giftware) decodes MP3 for radio, Plex and music files: "
                      "its 68040 build on a 68040 or 68060, its 68020 build otherwise.\n\n"
@@ -222,11 +222,11 @@
 (complete 100)
 
 ; EaglePlayer's players play hundreds of module formats; AGS has them, and
-; EaglePlayer's own installer makes the Eagleplayer2: assign AmigaMCE uses.
+; EaglePlayer's own installer makes the Eagleplayer2: assign Ambiance uses.
 (set #more "")
 (if (= (exists "AGS:" (noreq)) 0)
   (if (= (exists "Eagleplayer2:" (noreq)) 0)
     (set #more "\n\nFor module formats beyond ProTracker, XM, S3M and IT (OctaMED, TFMX, Future Composer...), install EaglePlayer from Aminet (mus/play/Eagleplayer) with its own installer.")
   )
 )
-(exit (cat "AmigaMCE is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are." #more))
+(exit (cat "Ambiance is installed. Double-click it in its drawer to start (on AGS, from Workbench). Without AGS, Settings > Folders says where your music, modules and pictures are." #more))

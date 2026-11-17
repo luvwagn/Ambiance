@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Flow, Now Playing's visualisation for graphics cards: the
+ * Ambiance - Flow, Now Playing's visualisation for graphics cards: the
  * picture of a moment ago carried a little further each frame (zoomed,
  * turned, swirled, rippled), blurred and fading as it goes, with the
  * sound's wave drawn into it and its colours from a palette that drifts

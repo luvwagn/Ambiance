@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the Home Screen on the host the way AmigaMCE draws it.
+"""Render the Home Screen on the host the way Ambiance draws it.
 
 Usage: python3 tools/preview_screen.py <art.c> <Fonts dir> <out.png> [lores|hires] [pal|ntsc]
                                        [games|about] [scroll pixels]
@@ -178,7 +178,7 @@ def _version():
         return "0.0.0"
 
 
-ABOUT = [("line", "AmigaMCE " + _version()), ("line", "(c) 2026 Brian King, under the MIT licence"),
+ABOUT = [("line", "Ambiance " + _version()), ("line", "(c) 2026 Brian King, under the MIT licence"),
          ("line", ""),
          ("para", "Fonts: Pixelify Sans (c) 2021 The Pixelify Sans Project Authors, Galmuri "
                   "(c) 2019-2025 Lee Minseo, and Rubik (c) 2015 The Rubik Project Authors, all "

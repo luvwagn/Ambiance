@@ -1,12 +1,12 @@
 /*
- * rtgbench - AmigaMCE's drawing on an RTG screen, 8-bit against 16-bit
+ * rtgbench - Ambiance's drawing on an RTG screen, 8-bit against 16-bit
  * Copyright (c) 2026 Brian King, MIT
  *
  *   rtgbench [WIDTH n] [HEIGHT n] [DEEP] [QUICK]
  *
  * Opens an RTG screen of the size asked (640 x 480 if none) at 8 bits,
  * then at 16 (and with DEEP at 24/32 too), and times on each what
- * AmigaMCE does: clearing, text, a page of list rows, the scroll a glide
+ * Ambiance does: clearing, text, a page of list rows, the scroll a glide
  * makes, whole-screen copies (double buffering's), flips, covers and
  * full-screen pictures (8-bit: colours reduced, WriteChunkyPixels; deeper:
  * WritePixelArray from RGB and WriteLUTPixelArray as thumbnails are), the
@@ -121,7 +121,7 @@ static ULONG find_mode(WORD w, WORD h, int d, char *name, int namemax)
 
 static void colours(void)
 {
-    /* a dark blue interface, as AmigaMCE's */
+    /* a dark blue interface, as Ambiance's */
     static const ULONG rgb[8][3] = { { 0x00, 0x10, 0x30 }, { 0xEE, 0xEE, 0xEE }, { 0x30, 0x70, 0xE0 },
                                      { 0x80, 0x90, 0xB0 }, { 0x10, 0x20, 0x50 }, { 0xFF, 0xB0, 0x00 },
                                      { 0x40, 0xC0, 0x60 }, { 0xC0, 0x30, 0x30 } };
@@ -155,7 +155,7 @@ static void make_picture(UBYTE *rgb, int w, int h)
         }
 }
 
-/* AmigaMCE's colour reduction, in outline: count the 12-bit colours, keep
+/* Ambiance's colour reduction, in outline: count the 12-bit colours, keep
  * the most used ncol, map each pixel to its nearest (a cache per 12-bit
  * colour). Only an 8-bit screen needs it. */
 static void reduce(const UBYTE *rgb, int n, UBYTE *chunky, ULONG *pal, int ncol, UBYTE first)
@@ -337,7 +337,7 @@ static void t_cpu(void)                  /* the CPU writing the card's memory it
 
 /* ---- an animation's frame from its planes (6, 384 x 290): by the card
  * (BltBitMap from a planar bitmap, Picasso96 converting it through the
- * screen's colours), against AmigaMCE's own (animdraw.c, its 68020
+ * screen's colours), against Ambiance's own (animdraw.c, its 68020
  * assembler) into a bitmap of the card's, then blitted */
 #define PW 384
 #define PH 290
@@ -416,17 +416,17 @@ static void ours(int ham)
     BltBitMapRastPort(pbm, 0, 0, rp, 20, 40, PW, PH, 0xC0);
 }
 
-static void t_ours(void)                 /* AmigaMCE's: 64 colours */
+static void t_ours(void)                 /* Ambiance's: 64 colours */
 {
     ours(0);
 }
 
-static void t_ours_ham(void)             /* AmigaMCE's: HAM6 (the card cannot) */
+static void t_ours_ham(void)             /* Ambiance's: HAM6 (the card cannot) */
 {
     ours(1);
 }
 
-/* Does the card's planar blit draw what AmigaMCE's own does? Both read
+/* Does the card's planar blit draw what Ambiance's own does? Both read
  * back as RGB and compared, to the screen's bits (5-6-5): the pixels that
  * differ, and the first. */
 static void p_check(char *line)
@@ -455,12 +455,12 @@ static void p_check(char *line)
                 first = i;
         }
     if (n)
-        sprintf(line, "  the card's planar blit: %ld of %ld pixels differ from AmigaMCE's (the first at "
-                "%ld,%ld: %02x%02x%02x, AmigaMCE %02x%02x%02x)\n", (long)n, (long)PW * PH,
+        sprintf(line, "  the card's planar blit: %ld of %ld pixels differ from Ambiance's (the first at "
+                "%ld,%ld: %02x%02x%02x, Ambiance %02x%02x%02x)\n", (long)n, (long)PW * PH,
                 (long)(first % PW), (long)(first / PW), a[first * 3], a[first * 3 + 1],
                 a[first * 3 + 2], b[first * 3], b[first * 3 + 1], b[first * 3 + 2]);
     else
-        sprintf(line, "  the card's planar blit: every pixel the same as AmigaMCE's (%ld)\n",
+        sprintf(line, "  the card's planar blit: every pixel the same as Ambiance's (%ld)\n",
                 (long)PW * PH);
     FreeVec(a);
     FreeVec(b);
@@ -697,9 +697,9 @@ int main(void)
     }
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
-    /* AmigaMCE's font at its RTG size, from beside the program (the build
-     * folder holds the AmigaMCE drawer), else topaz */
-    ta.ta_Name = (STRPTR)"PROGDIR:AmigaMCE/Fonts/amce-pixel.font";
+    /* Ambiance's font at its RTG size, from beside the program (the build
+     * folder holds the Ambiance drawer), else topaz */
+    ta.ta_Name = (STRPTR)"PROGDIR:Ambiance/Fonts/amce-pixel.font";
     ta.ta_YSize = h >= 512 ? 24 : 12;
     ta.ta_Style = 0;
     ta.ta_Flags = 0;
@@ -729,7 +729,7 @@ int main(void)
     for (i = 0; i < 48; i++)
         lut[16 + i] = cover_pal[i];
 
-    say("AmigaMCE RTG benchmark 1.1\n");
+    say("Ambiance RTG benchmark 1.1\n");
     sprintf(line, "68%s0%s, Kickstart %ld, graphics %ld, cybergraphics %s, fast RAM %ld KB, chip %ld KB\n",
             SysBase->AttnFlags & (1 << 7) ? "06" : SysBase->AttnFlags & AFF_68040 ? "04" :
             SysBase->AttnFlags & AFF_68030 ? "03" : SysBase->AttnFlags & AFF_68020 ? "02" : "00",
@@ -783,7 +783,7 @@ int main(void)
             int pc = NT - 3, po = NT - 2, ph = NT - 1;
             if (result[d][pc] > 0 && result[d][po] > 0) {
                 sprintf(line, "An animation's frame, 384 x 290 x 6, %ld-bit: the card's planar blit %ld.%01ld ms, "
-                        "AmigaMCE's 68k %ld.%01ld ms (HAM6 %ld.%01ld ms)\n", (long)depths[d],
+                        "Ambiance's 68k %ld.%01ld ms (HAM6 %ld.%01ld ms)\n", (long)depths[d],
                         (long)(result[d][pc] / 1000), (long)(result[d][pc] % 1000 / 100),
                         (long)(result[d][po] / 1000), (long)(result[d][po] % 1000 / 100),
                         (long)(result[d][ph] / 1000), (long)(result[d][ph] % 1000 / 100));

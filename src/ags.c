@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Amiga Game Selector 3 integration: finding AGS, reading its
+ * Ambiance - Amiga Game Selector 3 integration: finding AGS, reading its
  * menu tree and entry files, and writing the launch script.
  * Copyright (c) 2026 Brian King
  */
@@ -354,7 +354,7 @@ static BOOL letter_folder(const char *label)
     return amce_stricmp(label, "0-9") == 0;
 }
 
-/* A folder's sub-folders are all a letter index (A-Z...): AmigaMCE shows
+/* A folder's sub-folders are all a letter index (A-Z...): Ambiance shows
  * their entries as one list. */
 BOOL ags_letter_menu(const struct ItemList *subs)
 {
@@ -368,7 +368,7 @@ BOOL ags_letter_menu(const struct ItemList *subs)
     return dirs > 0;
 }
 
-/* A menu as AmigaMCE shows it: one whose sub-folders are all a letter
+/* A menu as Ambiance shows it: one whose sub-folders are all a letter
  * index (AGA, Beta, NTSC... split A-Z) is one flat sorted list of their
  * entries; any other (By Genre, By Publisher...) keeps its folders. */
 LONG ags_read_menu(const char *dir, struct ItemList *out, BOOL adult)
@@ -609,7 +609,7 @@ BOOL ags_screenshot_path(const char *base, char *out, LONG max)
 
 /* The launch script runs the entry's own .run, as AGS does:
  *  - Play 0 keeps the .run from restarting AGS's background player,
- *    because AmigaMCE plays its own menu music;
+ *    because Ambiance plays its own menu music;
  *  - Expert is reset to 0 unless the user made it permanent, exactly as
  *    AGS's Start_AGS does when AGS starts. */
 BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *script)
@@ -617,7 +617,7 @@ BOOL ags_write_launch_script(const struct Ags *a, const char *base, const char *
     BPTR fh = Open((CONST_STRPTR)script, MODE_NEWFILE);
     if (!fh)
         return FALSE;
-    FPuts(fh, (CONST_STRPTR)"; AmigaMCE launch script - deleted after use\n");
+    FPuts(fh, (CONST_STRPTR)"; Ambiance launch script - deleted after use\n");
     FPuts(fh, (CONST_STRPTR)"FailAt 21\n");
     FPuts(fh, (CONST_STRPTR)"Path AGSOS:C C: SYS:Utilities SYS:System S: SYS:Prefs SYS:Tools ADD\n");
     FPuts(fh, (CONST_STRPTR)"FailAt 10\n");

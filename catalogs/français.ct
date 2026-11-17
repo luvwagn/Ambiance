@@ -1,4 +1,4 @@
-## version $VER: AmigaMCE.catalog 1.0 (06.11.2026)
+## version $VER: Ambiance.catalog 1.0 (06.11.2026)
 ## language français
 ## codeset 0
 MSG_420624D6
@@ -50,24 +50,24 @@ Ajouts récents
 MSG_4E6387ED
 Mémoire insuffisante
 ; Not enough memory
-MSG_5DC5AAA0
-Les DVD ont besoin d'dvdnav.library (dans Libs d'AmigaMCE)
-; DVDs need dvdnav.library (in AmigaMCE's Libs)
-MSG_3A32AEDF
-Pas un disque DVD-Vidéo qu'AmigaMCE sait lire : %.120s
-; Not a DVD-Video disc AmigaMCE can read: %.120s
+MSG_33E78AD0
+Les DVD ont besoin d'dvdnav.library (dans Libs d'Ambiance)
+; DVDs need dvdnav.library (in Ambiance's Libs)
+MSG_3A57C757
+Pas un disque DVD-Vidéo qu'Ambiance sait lire : %.120s
+; Not a DVD-Video disc Ambiance can read: %.120s
 MSG_57CA60FE
 Le film du DVD n'a pas pu être lu
 ; The DVD's film could not be played
 MSG_50A1D5F7
 Le DVD n'est plus dans son lecteur
 ; The DVD is no longer in its drive
-MSG_1592F849
-Aucun lecteur d'AmigaMCE ne connaît ce module
-; No player AmigaMCE has knows this module
-MSG_3EE87411
-Ce n'est pas un module qu'AmigaMCE sait jouer, et aucun lecteur EaglePlayer n'a été trouvé
-; Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_20C22E79
+Aucun lecteur d'Ambiance ne connaît ce module
+; No player Ambiance has knows this module
+MSG_66769F89
+Ce n'est pas un module qu'Ambiance sait jouer, et aucun lecteur EaglePlayer n'a été trouvé
+; Not a module Ambiance can play, and no EaglePlayer players were found
 MSG_62F4807B
 %s n'a pas pu charger les autres fichiers du module
 ; %s could not load the module's other files
@@ -138,9 +138,9 @@ MSG_542A5985
 ; Program: %s
 MSG_6C384865
 ; Its file is not there (rescan in iGame)
-MSG_74066526
-Impossible d'écrire T:AmigaMCE-run
-; Could not write T:AmigaMCE-run
+MSG_7EBB5FFE
+Impossible d'écrire T:Ambiance-run
+; Could not write T:Ambiance-run
 MSG_73F99D3C
 Jeux
 ; Games
@@ -184,25 +184,25 @@ MSG_11815498
 ; iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7
 ; iGame's list has no games in it, and Amiga Game Selector was not found.
-MSG_68D81CDC
-; AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
+MSG_575792EC
+; Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 Amiga Game Selector est introuvable.
 ; Amiga Game Selector was not found.
-MSG_3F233512
-Amiga Game Selector 3 (AGS) est une collection toute prête de jeux et de démos WHDLoad, avec captures d'écran et descriptions. Une fois installé, ils sont listés ici et se lancent depuis AmigaMCE.
-; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
-MSG_017A1274
-AmigaMCE cherche l'assignation AGS:, puis un tiroir AGS2 à côté du sien et dans WHDLoad:. Installez AmigaMCE sur un système AGS 3, ou lancez AGS une fois pour que ses assignations existent.
-; AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
-MSG_1805A7D1
-; iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
+MSG_1CEB5C4E
+Amiga Game Selector 3 (AGS) est une collection toute prête de jeux et de démos WHDLoad, avec captures d'écran et descriptions. Une fois installé, ils sont listés ici et se lancent depuis Ambiance.
+; Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from Ambiance.
+MSG_07BE5AE8
+Ambiance cherche l'assignation AGS:, puis un tiroir AGS2 à côté du sien et dans WHDLoad:. Installez Ambiance sur un système AGS 3, ou lancez AGS une fois pour que ses assignations existent.
+; Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_195350C5
+; iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 Musique, Mods, Images, Vidéos et Radio marchent sans lui : Réglages > Dossiers dit où sont votre musique, vos modules, vos images et vos animations.
 ; Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
-MSG_0C290F2C
-Trouvé au démarrage d'AmigaMCE :
-; Found when AmigaMCE started:
+MSG_78764318
+Trouvé au démarrage d'Ambiance :
+; Found when Ambiance started:
 MSG_6C041D54
 Type de machine : %s
 ; Machine type: %s
@@ -284,9 +284,9 @@ trouvé
 MSG_40A7AEDA
 introuvable
 ; not found
-MSG_4FE02B8B
-Assignations ajoutées par AmigaMCE (AGS-Stuff n'a pas tourné) :
-; Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_74EC33B7
+Assignations ajoutées par Ambiance (AGS-Stuff n'a pas tourné) :
+; Assigns Ambiance added (AGS-Stuff did not run):
 MSG_268D62B2
 ; iGame: %.120s, %ld games, %ld demos
 MSG_6E96DE70
@@ -330,8 +330,8 @@ MP3 : %s
 MSG_197B8973
 pilote MHI
 ; MHI driver
-MSG_1A89232E
-; amcempega.library, AmigaMCE's own
+MSG_6584723A
+; amcempega.library, Ambiance's own
 MSG_4B721655
 mpega.library du SDK ZZ9000 (décodé sur la carte)
 ; mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -422,13 +422,13 @@ Dossiers d'images
 MSG_7B7A30D9
 Dossiers de vidéos
 ; Video folders
-MSG_2DA81BF2
-Lisse : Fonts/amce-smooth ne correspond pas à cet AmigaMCE
-; Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_690FAC12
+Lisse : Fonts/amce-smooth ne correspond pas à cet Ambiance
+; Smooth: Fonts/amce-smooth does not match this Ambiance
 MSG_3CB0C840
 ; F on Now playing starts this AmigaAMP plug-in
-MSG_6143CDF8
-; Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+MSG_1B723F84
+; Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 MSG_3DF462B5
 ; Flow
 MSG_022C9299
@@ -707,10 +707,10 @@ MSG_1AB0857C
 MSG_2DA3A6A5
 Décodeur MP3
 ; MP3 decoder
-MSG_7C47EC75
-; not installed (AmigaMCE's Libs)
-MSG_4C9B4043
-; AmigaMCE's own, decoded here
+MSG_2EEBD2B9
+; not installed (Ambiance's Libs)
+MSG_6695A193
+; Ambiance's own, decoded here
 MSG_3F71ACC2
 décodé sur la ZZ9000
 ; decoded on the ZZ9000
@@ -784,12 +784,12 @@ MSG_451A8225
 ; None: no iGame list
 MSG_3015054E
 ; WHDLoad is installed: %s
-MSG_33EE9E1D
-; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
+MSG_67935CAD
+; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 MSG_776C7EC6
 ; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
-MSG_13CE4E7E
-; AmigaMCE can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
+MSG_5610C80E
+; Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 MSG_4EA477C4
 ; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
 MSG_43357FD6
@@ -838,9 +838,9 @@ Crédits
 MSG_589D7E42
 Informations système
 ; System information
-MSG_345099C5
-Plex dans AmigaMCE
-; Plex in AmigaMCE
+MSG_692FB19D
+Plex dans Ambiance
+; Plex in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, sous licence MIT
 ; (c) 2026 Brian King, under the MIT licence
@@ -883,24 +883,24 @@ MSG_190B5576
 MSG_1018D7F4
 Aucun dossier d'images : Réglages > Dossiers > Images
 ; No pictures folder: Settings > Folders > Pictures
-MSG_247DBF4F
-Aucune animation trouvée : AmigaMCE les cherche dans %s.
-; No animations found: AmigaMCE looks for them in %s.
+MSG_299412DB
+Aucune animation trouvée : Ambiance les cherche dans %s.
+; No animations found: Ambiance looks for them in %s.
 MSG_6A5613A3
 %s ne contient aucune animation.
 ; %s has no animations in it.
-MSG_7D6C1643
-Aucune animation trouvée. AmigaMCE lit les IFF ANIM de VIDEOS:, des dossiers de Réglages > Dossiers > Vidéos et, avec AGS, de %s.
-; No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
-MSG_29C163F7
-Aucune image trouvée : AmigaMCE les cherche dans %s.
-; No pictures found: AmigaMCE looks for them in %s.
+MSG_18130437
+Aucune animation trouvée. Ambiance lit les IFF ANIM de VIDEOS:, des dossiers de Réglages > Dossiers > Vidéos et, avec AGS, de %s.
+; No animations found. Ambiance plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_481007A3
+Aucune image trouvée : Ambiance les cherche dans %s.
+; No pictures found: Ambiance looks for them in %s.
 MSG_6A91D3DF
 %s ne contient aucune image.
 ; %s has no pictures in it.
-MSG_5DEE87BD
-Aucune image trouvée. AmigaMCE les cherche dans PICTURES:, dans les dossiers de Réglages > Dossiers > Images et, avec AGS, dans %s.
-; No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
+MSG_5A0D1EB1
+Aucune image trouvée. Ambiance les cherche dans PICTURES:, dans les dossiers de Réglages > Dossiers > Images et, avec AGS, dans %s.
+; No pictures found. Ambiance looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
 MSG_42D8D701
 Dim
 ; Sun
@@ -1073,8 +1073,8 @@ MSG_7EB7DE9D
 ; A bare video stream
 MSG_5E08A9DF
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_50D8B3E7
-; Not an MPEG video AmigaMCE can read
+MSG_20C6E823
+; Not an MPEG video Ambiance can read
 MSG_1403F9F1
 %ld images, %ld,%ld s
 ; %ld frames, %ld.%ld s
@@ -1252,9 +1252,9 @@ La piste n'a pas pu démarrer à cet endroit
 MSG_369379DB
 La station a cessé d'émettre
 ; The station stopped sending
-MSG_0D35346B
-Aucun module trouvé. AmigaMCE les cherche dans MODS:, dans les dossiers de Réglages > Dossiers > Modules et, avec AGS, dans %s et %s (sa musique de menu).
-; No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
+MSG_50DE0E1B
+Aucun module trouvé. Ambiance les cherche dans MODS:, dans les dossiers de Réglages > Dossiers > Modules et, avec AGS, dans %s et %s (sa musique de menu).
+; No modules found. Ambiance looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 MSG_6870F104
 Il joue lui-même les modules ProTracker, et des centaines d'autres formats (OctaMED, TFMX, Future Composer, SID...) avec les lecteurs d'EaglePlayer et de DeliTracker, le tout sur le son propre de l'Amiga.
 ; It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
@@ -1351,9 +1351,9 @@ La fenêtre n'a pas pu s'ouvrir : plein écran
 MSG_4926346E
 L'iconification nécessite le Workbench
 ; Iconify needs Workbench
-MSG_7170B5C2
-Quitter AmigaMCE
-; Quit AmigaMCE
+MSG_32414422
+Quitter Ambiance
+; Quit Ambiance
 MSG_336326B3
 Piste %ld sur %ld
 ; Track %ld of %ld
@@ -1426,9 +1426,9 @@ Demande d'un code à plex.tv...  Esc pour abandonner
 MSG_19C08CA4
 Sur un téléphone ou un ordinateur, allez sur plex.tv/link, connectez-vous à Plex si demandé, et saisissez ce code :
 ; On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
-MSG_4F573886
-AmigaMCE attend qu'il soit saisi (le code est valable 15 minutes). Esc pour abandonner.
-; AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
+MSG_5E69FFD6
+Ambiance attend qu'il soit saisi (le code est valable 15 minutes). Esc pour abandonner.
+; Ambiance is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
 MSG_3DC2D1A0
 Connecté. Demande à plex.tv des serveurs de ce compte...
 ; Signed in. Asking plex.tv for this account's servers...
@@ -1462,9 +1462,9 @@ Déconnecté de plex.tv
 MSG_6358253C
 Cette bibliothèque n'est plus sur le serveur : Musique les liste à nouveau
 ; That library is gone from the server: Music lists them again
-MSG_7B170497
-Le serveur demande un jeton de connexion : voir À propos > Plex dans AmigaMCE
-; The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_733CFA2B
+Le serveur demande un jeton de connexion : voir À propos > Plex dans Ambiance
+; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Le serveur a répondu quelque chose d'inattendu
 ; The server answered with something unexpected
@@ -1483,9 +1483,9 @@ Montrer la photo
 MSG_7BB6085B
 Rien dans la liste
 ; Nothing listed
-MSG_46D7374C
-Aucune station ici qu'AmigaMCE sache jouer
-; No stations here that AmigaMCE can play
+MSG_4F0474B8
+Aucune station ici qu'Ambiance sache jouer
+; No stations here that Ambiance can play
 MSG_1BED60DF
 Lecture en cours depuis le serveur : un instant
 ; Still being read from the server: a moment
@@ -1513,15 +1513,15 @@ Plex : %.100s
 MSG_2550824B
 Serveur Plex choisi
 ; Plex server chosen
-MSG_35BE063F
-AmigaMCE joue la musique d'un Plex Media Server de votre réseau : ses bibliothèques musicales, par artiste et par album, avec leurs pochettes. Le serveur fait de chaque piste un MP3 que cet Amiga peut jouer : 22kHz mono pour un 68020/030, 24kHz stéréo pour un 68040/060, davantage pour un rapide, et sa meilleure qualité quand un pilote MHI décode le MP3 (Réglages > Son). Sur un Amiga rapide, ou avec MHI, désactiver Réglages > Réseau > Plex > Demander un son de qualité réduite joue les fichiers MP3 tels quels, et sur un Amiga rapide les fichiers FLAC aussi si flacdec.library est installée ; les autres formats sont toujours convertis. Réglages > Réseau > Plex > Plex désactive le tout.
-; AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
-MSG_2FBD9CB6
-Trouver un serveur : Réglages > Réseau > Plex > Serveur Plex interroge le réseau (le GDM de Plex) ; choisissez-en un et il est gardé. Ou définissez son adresse depuis le Shell : SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
-MSG_5B40D81A
-Connexion : avec AmiSSL 5 installé et Réglages > Réseau > HTTPS activé, Réglages > Réseau > Plex > Se connecter à plex.tv affiche un code à saisir sur plex.tv/link depuis un téléphone ou un ordinateur. Les serveurs du compte sont alors listés avec ceux trouvés sur le réseau, chacun avec son propre jeton. Sans AmiSSL, définissez le jeton d'un serveur depuis le Shell : trouvez-le dans Plex Web (Infos > Voir le XML d'un élément : le X-Plex-Token dans l'adresse), puis SetEnv SAVE AmigaMCE/PlexToken <jeton>.
-; Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
+MSG_06F0678F
+Ambiance joue la musique d'un Plex Media Server de votre réseau : ses bibliothèques musicales, par artiste et par album, avec leurs pochettes. Le serveur fait de chaque piste un MP3 que cet Amiga peut jouer : 22kHz mono pour un 68020/030, 24kHz stéréo pour un 68040/060, davantage pour un rapide, et sa meilleure qualité quand un pilote MHI décode le MP3 (Réglages > Son). Sur un Amiga rapide, ou avec MHI, désactiver Réglages > Réseau > Plex > Demander un son de qualité réduite joue les fichiers MP3 tels quels, et sur un Amiga rapide les fichiers FLAC aussi si flacdec.library est installée ; les autres formats sont toujours convertis. Réglages > Réseau > Plex > Plex désactive le tout.
+; Ambiance plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_4569D662
+Trouver un serveur : Réglages > Réseau > Plex > Serveur Plex interroge le réseau (le GDM de Plex) ; choisissez-en un et il est gardé. Ou définissez son adresse depuis le Shell : SetEnv SAVE Ambiance/PlexServer 192.168.1.10:32400
+; Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE Ambiance/PlexServer 192.168.1.10:32400
+MSG_26B94016
+Connexion : avec AmiSSL 5 installé et Réglages > Réseau > HTTPS activé, Réglages > Réseau > Plex > Se connecter à plex.tv affiche un code à saisir sur plex.tv/link depuis un téléphone ou un ordinateur. Les serveurs du compte sont alors listés avec ceux trouvés sur le réseau, chacun avec son propre jeton. Sans AmiSSL, définissez le jeton d'un serveur depuis le Shell : trouvez-le dans Plex Web (Infos > Voir le XML d'un élément : le X-Plex-Token dans l'adresse), puis SetEnv SAVE Ambiance/PlexToken <jeton>.
+; Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE Ambiance/PlexToken <token>.
 MSG_6D54C528
 Jeton : défini
 ; Token: set
@@ -1537,8 +1537,8 @@ plex.tv : non connecté
 MSG_0B620CC7
 MP3 : décodé par le pilote MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
-MSG_36767C71
-; MP3: decoded by amcempega.library, AmigaMCE's own
+MSG_535831ED
+; MP3: decoded by amcempega.library, Ambiance's own
 MSG_59D38C2E
 MP3 : décodé sur la ZZ9000 (sa mpega.library)
 ; MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1643,8 +1643,8 @@ Cette interface n'est pas active
 MSG_646AFCF3
 MHI n'est pas installé (ses pilotes dans LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
-MSG_61E14706
-; amcempega.library is not in AmigaMCE's Libs
+MSG_1D253CB2
+; amcempega.library is not in Ambiance's Libs
 MSG_7B5C3E86
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
@@ -1659,8 +1659,8 @@ Aucun serveur n'a répondu : Automatique est conservé
 MSG_7800A723
 MP3 décodé par MHI : radio, Plex (en meilleure qualité) et fichiers
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
-MSG_799CE4C5
-; MP3 decoded here by amcempega.library, AmigaMCE's own
+MSG_55A6C479
+; MP3 decoded here by amcempega.library, Ambiance's own
 MSG_605E617D
 MP3 décodé ici par mpega.library
 ; MP3 decoded here by mpega.library
@@ -1695,9 +1695,9 @@ Feu encore pour retirer ce dossier (ses fichiers restent)
 MSG_4A2FC46E
 Dossier retiré
 ; Folder taken out
-MSG_746B08BF
-Appuyez encore sur Esc pour quitter AmigaMCE
-; Press Esc again to quit AmigaMCE
+MSG_3BD64F13
+Appuyez encore sur Esc pour quitter Ambiance
+; Press Esc again to quit Ambiance
 MSG_6FC2F840
 ; Nothing is playing
 MSG_116D42F2
@@ -1708,12 +1708,12 @@ MSG_4B362E27
 ; Flow: this player does not say what it plays
 MSG_65839537
 ; Flow could not be shown here
-MSG_16ABF123
-AmigaMCE nécessite Kickstart 3.0 ou plus récent.\n
-; AmigaMCE needs Kickstart 3.0 or newer.\n
-MSG_43383FA3
-AmigaMCE n'a pas pu ouvrir son écran.\n
-; AmigaMCE could not open its screen.\n
+MSG_018386B3
+Ambiance nécessite Kickstart 3.0 ou plus récent.\n
+; Ambiance needs Kickstart 3.0 or newer.\n
+MSG_10DE8133
+Ambiance n'a pas pu ouvrir son écran.\n
+; Ambiance could not open its screen.\n
 MSG_3D0CDD4E
 Mode d'écran enregistré non disponible ici : mode automatique utilisé
 ; Saved screen mode not available here: using Automatic
@@ -1729,9 +1729,9 @@ Ce module nécessite un 68020 ou mieux pour être mixé
 MSG_3DD51BC4
 Mémoire insuffisante pour mixer ce module
 ; Not enough memory to mix this module
-MSG_69F7300F
-Ce n'est pas un module qu'AmigaMCE sait jouer
-; Not a module AmigaMCE can play
+MSG_18986B07
+Ce n'est pas un module qu'Ambiance sait jouer
+; Not a module Ambiance can play
 MSG_523F6D57
 AHI n'a pas pu être ouvert (ses Préférences : un mode ?)
 ; AHI could not be opened (its Preferences: a mode?)
@@ -1777,9 +1777,9 @@ Compressé avec %s, mais %s
 MSG_59FF2336
 un compresseur
 ; a packer
-MSG_0CB7D3B5
-Ce fichier est %s, qu'AmigaMCE ne sait pas jouer
-; This file is %s, which AmigaMCE cannot play
+MSG_64B0B115
+Ce fichier est %s, qu'Ambiance ne sait pas jouer
+; This file is %s, which Ambiance cannot play
 MSG_3575C0BB
 Mémoire chip insuffisante pour ses échantillons (%lu Ko)
 ; Not enough chip memory for its samples (%lu KB)
@@ -1813,9 +1813,9 @@ Annulé
 MSG_11341467
 HTTPS nécessite AmiSSL 5
 ; HTTPS needs AmiSSL 5
-MSG_7CD9BEE0
-Les certificats d'AmigaMCE manquent (son tiroir Certs)
-; AmigaMCE's certificates are missing (its Certs drawer)
+MSG_7C6F1E50
+Les certificats d'Ambiance manquent (son tiroir Certs)
+; Ambiance's certificates are missing (its Certs drawer)
 MSG_68A35804
 La connexion sécurisée a échoué
 ; The secure connection failed
@@ -1944,9 +1944,9 @@ Le fichier n'a pas pu être ouvert
 MSG_294C1997
 Cette station ne diffuse qu'en HTTPS : activez Réglages > Réseau > HTTPS
 ; This station only streams over HTTPS: turn on Settings > Networking > HTTPS
-MSG_103190A0
-AmigaMCE ne peut pas suivre l'adresse de cette station
-; The station's address is not one AmigaMCE can follow
+MSG_01A286D0
+Ambiance ne peut pas suivre l'adresse de cette station
+; The station's address is not one Ambiance can follow
 MSG_65B74193
 %s a répondu %ld
 ; %s answered %ld
@@ -1956,9 +1956,9 @@ Le serveur
 MSG_3B0705F8
 La station
 ; The station
-MSG_37840EF9
-La liste de lecture de la station n'a aucun flux qu'AmigaMCE sache jouer
-; The station's playlist has no stream AmigaMCE can play
+MSG_78E355BD
+La liste de lecture de la station n'a aucun flux qu'Ambiance sache jouer
+; The station's playlist has no stream Ambiance can play
 MSG_47FA6F71
 %s envoie du %s, pas du MP3
 ; %s sends %s, not MP3
@@ -1971,9 +1971,9 @@ Le flux n'a pas pu être décodé
 MSG_10039953
 Seuls les fichiers musicaux de cet Amiga se jouent en WAV, AIFF ou 8SVX
 ; Only music files on this Amiga play as WAV, AIFF or 8SVX
-MSG_3E5CE903
-Pas un type de WAV, AIFF ou 8SVX qu'AmigaMCE joue (compressé ?)
-; Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_2E5C4593
+Pas un type de WAV, AIFF ou 8SVX qu'Ambiance joue (compressé ?)
+; Not a kind of WAV, AIFF or 8SVX that Ambiance plays (compressed?)
 MSG_00ABC308
 La vidéo MPEG par le CPU nécessite mpegv.library
 ; MPEG video by the CPU needs mpegv.library
@@ -2020,9 +2020,9 @@ MSG_49AE7BAE
 ; LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8
 ; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
-MSG_650CDFE1
-La vidéo MPEG par le CPU nécessite mpegv.library (Libs d'AmigaMCE)
-; MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
+MSG_7DFAF53D
+La vidéo MPEG par le CPU nécessite mpegv.library (Libs d'Ambiance)
+; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 MSG_5EF81658
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3

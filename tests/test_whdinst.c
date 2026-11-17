@@ -3,7 +3,7 @@
  * other programs put beside it (one already there kept), WHDLoad.prf into
  * S:, Devs:Kickstarts made, the leftovers deleted; and the names an
  * archive may not use. Run in build/ with C:, S:, DEVS: and T: scratch
- * folders (T:AmigaMCE-WHDLoad made by the Makefile as a package would be). */
+ * folders (T:Ambiance-WHDLoad made by the Makefile as a package would be). */
 #include "../src/whdinst.h"
 #include "../src/unarc.h"
 #include <stdio.h>

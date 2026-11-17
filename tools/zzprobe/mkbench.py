@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Make zzprobe's test files: Bench/test.jpg, test.png, test.webp, test.mp3.
 
-AmigaMCE, MIT. Needs Pillow (with WebP), numpy and ffmpeg with libmp3lame.
+Ambiance, MIT. Needs Pillow (with WebP), numpy and ffmpeg with libmp3lame.
 
     python3 tools/zzprobe/mkbench.py tools/zzprobe/Bench
 

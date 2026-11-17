@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - smooth style: anti-aliased text, icons, markers and logo
+ * Ambiance - smooth style: anti-aliased text, icons, markers and logo
  * Copyright (c) 2026 Brian King
  *
  * Used on RTG screens, 8-bit ones too. Everything is pre-rendered by
@@ -29,7 +29,7 @@
  * is always drawn as if opaque over its own box: the callers draw it on
  * the flat colour they name as its background. It was no faster in
  * practice (the glide's time was its speed curve, not drawing) and the
- * text looked worse, so it is only used with PROGDIR:AmigaMCE.chunkytext.
+ * text looked worse, so it is only used with PROGDIR:Ambiance.chunkytext.
  *
  * On a fast Amiga with a graphics card's 15 to 32-bit screen (as
  * measured, sm_alpha_allow: not by the CPU's name, a 25 MHz 68030 keeps
@@ -61,7 +61,7 @@ void sm_alpha_allow(BOOL on)
 {
     alpha_allowed = on;
     amce_log("smooth style", on ? "text blended in 16 steps where the screen is 15 to 32-bit (fast here)"
-                                : "text with masks (not fast enough here, or AmigaMCE/TextBlend off)");
+                                : "text with masks (not fast enough here, or Ambiance/TextBlend off)");
 }
 
 #define NFACES      3
@@ -333,7 +333,7 @@ void sm_attach(struct Smooth *s, struct Gfx *g)
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
-        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.chunkytext", SHARED_LOCK);
+        l = Lock((CONST_STRPTR)"PROGDIR:Ambiance.chunkytext", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l)
             UnLock(l);
@@ -707,7 +707,7 @@ static void px_put(ULONG fmt, UBYTE *p, ULONG r, ULONG gg, ULONG b)
 
 /* The box blended straight in the bitmap's memory, in its own pixels (no
  * ReadPixelArray, no ARGB on the way): where the RastPort's layer is the
- * only one on its bitmap, at its corner, with no clip region (AmigaMCE's
+ * only one on its bitmap, at its corner, with no clip region (Ambiance's
  * window buffer, its double buffers), so its pixels are the bitmap's.
  * FALSE: not so here (the caller goes by Read/WritePixelArray). Nothing
  * else is drawn while the bitmap is locked. */

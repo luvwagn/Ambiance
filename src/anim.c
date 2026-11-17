@@ -1,10 +1,10 @@
 /*
- * AmigaMCE - IFF ANIM player (Videos)
+ * Ambiance - IFF ANIM player (Videos)
  * Copyright (c) 2026 Brian King
  *
  * An ANIM plays on a screen of its own, in its own display mode (HAM,
  * extra halfbrite, interlace, overscan: what it was drawn for), opened in
- * front of AmigaMCE's, which waits behind it as it was. Its frames come
+ * front of Ambiance's, which waits behind it as it was. Its frames come
  * from the file one at a time, never the whole of it (Tron2 is 28 MB),
  * and are decoded straight into the bitplanes (animdec.c), two buffers
  * shown in turn as the format intends: a frame changes the one two back.
@@ -755,7 +755,7 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
  * decoded into that buffer, as the deltas build on what was there. */
 #define BAR_HIDE 2500           /* ms after the mouse stops, playing */
 /* (BT_PREV, BT_NEXT: a DVD's, in place of BT_RESTART and BT_LOOP; BT_MENU: a
- * DVD's own menus, when AmigaMCE draws them; full: AmigaMCE's) */
+ * DVD's own menus, when Ambiance draws them; full: Ambiance's) */
 enum { BT_RESTART, BT_PREV, BT_PLAY, BT_NEXT, BT_STOP, BT_MENU, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };
 
 static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
@@ -797,7 +797,7 @@ static struct {
  * Left and Right move it, Return or fire presses it. Hidden, the focus
  * goes back to play/pause, so Return or fire pauses, as ever; Space
  * always does, Up and Down set the volume, Esc stops. Each player draws
- * them its own way: AmigaMCE's screen beneath the picture, fading in and
+ * them its own way: Ambiance's screen beneath the picture, fading in and
  * out; a screen of its own over the picture's foot, in its colours. */
 enum { CM_NONE, CM_MOUSE, CM_KEY };
 static struct {
@@ -1172,10 +1172,10 @@ static int ctl_enter(void)
 }
 
 /* Input while it plays: 1 stop, 2 pause or go on, 3 from the start, 4
- * full screen or not (AmigaMCE's screen), 0 nothing; the volume set here, the mouse's moves noted (the controls).
+ * full screen or not (Ambiance's screen), 0 nothing; the volume set here, the mouse's moves noted (the controls).
  * hit: the button at a click (BT_*), -1 none (the picture: pause), -2 on
  * the controls but no button. */
-static struct Gfx *anim_g;      /* AmigaMCE's screen or window, while playing on it */
+static struct Gfx *anim_g;      /* Ambiance's screen or window, while playing on it */
 #define RESIZE_SETTLE 150       /* ms after a window's last NEWSIZE (as main.c's) */
 
 /* A video's information (the "i" key): a slice beneath its controls, its
@@ -1269,7 +1269,7 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 volume(VOL_STEP);                   /* it repeats), the wheel: its sound's */
             else if ((code == 0x4D || code == 0x7B) && (nsnd || vid_sound))
                 volume(-VOL_STEP);
-        } else if (cl == IDCMP_VANILLAKEY) {   /* AmigaMCE's own window has these too */
+        } else if (cl == IDCMP_VANILLAKEY) {   /* Ambiance's own window has these too */
             if (code == 27 || code == 8 || code == 'q' || code == 'Q')
                 r = 1;
             else if (code == ' ' && !r)
@@ -1386,14 +1386,14 @@ BOOL anim_has_sound(const char *path)
     return r;
 }
 
-/* ---- playing on AmigaMCE's own screen (RTG, 16-bit): the frames decoded
+/* ---- playing on Ambiance's own screen (RTG, 16-bit): the frames decoded
  * into bitplanes in ordinary memory, as on a screen of their own, each
  * then made chunky (a byte a pixel) and drawn by the graphics card, its
  * colours from the frame's colour table (WriteLUTPixelArray), HAM made
  * into RGB pixel by pixel, fringes and all (WritePixelArray). Scaled by
  * whole numbers to fit, its pixels' shape kept (lowres twice as wide as
  * high-res, non-laced twice as tall as laced); the controls beneath it,
- * AmigaMCE's own. No mode switch, and no colours shared with anything.
+ * Ambiance's own. No mode switch, and no colours shared with anything.
  *
  * Where the screen's memory can be had (LockBitMapTags, a 15 or 16-bit
  * format), the pixels are written straight into it, and only where the
@@ -1412,7 +1412,7 @@ BOOL anim_has_sound(const char *path)
 #define SLOW_MS     50
 #define SKIP_MS    250
 
-/* Where the picture goes on AmigaMCE's screen: dw x dh at vx, vy; source
+/* Where the picture goes on Ambiance's screen: dw x dh at vx, vy; source
  * pixel x at xo[x] (to xo[x + 1]), row y at yo[y] (to yo[y + 1]); fx, fy
  * the whole scales, or 0. Full: as large as the screen allows, its shape
  * kept, under the controls when they show; else the largest whole scale
@@ -2041,7 +2041,7 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
 
 /* Full screen from a window: a screen of its own in Workbench's mode, size
  * and depth (the monitor does not change mode), with Workbench's colours
- * (the pens AmigaMCE has there draw the same), in place of the window for
+ * (the pens Ambiance has there draw the same), in place of the window for
  * as long as it is chosen. The picture's bitmap is made again for it. */
 static BOOL pb_direct;          /* written straight (into lay.pbm), not made chunky */
 
@@ -2245,7 +2245,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         } else
             cd.ncol = 0;
     }
-    sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on AmigaMCE's screen at %ld x %ld%s, %s", name,
+    sprintf(m, "%s: %lux%lux%lu (CAMG %05lx), on Ambiance's screen at %ld x %ld%s, %s", name,
             (unsigned long)w, (unsigned long)h, (unsigned long)depth, (unsigned long)camg,
             (long)dw, (long)dh, lay.full ? " (full screen)" : "",
             cd.mode == CARD_PLANES ? "its planes blitted by the card" :
@@ -2499,7 +2499,7 @@ restart:
                         ctl.focus = BT_VUP;
                 }
             } else if (avg > SLOW_MS && avg > want) {
-                sprintf(m, "%ld ms a frame to draw on AmigaMCE's screen, %ld wanted: frames left out",
+                sprintf(m, "%ld ms a frame to draw on Ambiance's screen, %ld wanted: frames left out",
                         (long)avg, (long)want);
                 amce_log("anim", m);
             }
@@ -2773,7 +2773,7 @@ restart:
         goto restart;
     }
     (void)loop;
-    sprintf(m, "%ld frames on AmigaMCE's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
+    sprintf(m, "%ld frames on Ambiance's screen, %ld drawn in %ld ms each (%ld at the most, %ld rows "
             "each), %ld not drawn (behind; %ld of them not decoded); decoding %ld ms; controls %ld ms "
             "each; reading %ld ms (%s: %ld ms waited for %ld pieces); played %ld time%s",
             (long)nframes, (long)nconv, (long)(nconv ? convms / nconv : 0), (long)worst,
@@ -3224,7 +3224,7 @@ LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *
         }
     }
     if (vid.sw && dvdplay_menus(vid_dvd) && dvdplay_nav(vid_dvd)) {
-        /* its own menus (the CPU's pictures, AmigaMCE drawing their
+        /* its own menus (the CPU's pictures, Ambiance drawing their
          * buttons): the disc from its start, as a DVD player plays it; its
          * sound AC-3, as menus' is (its length each title's, as it comes) */
         vid.ac3 = TRUE;
@@ -3307,7 +3307,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     strip_setup(g);
     ctl.nbtn = BT_N;
     vid_lay(g, sw, anim_full);
-    sprintf(m, "%s: on AmigaMCE's %s at %ld x %ld%s, %s", name,
+    sprintf(m, "%s: on Ambiance's %s at %ld x %ld%s, %s", name,
             g->wb && !gfx_fs_on() ? "window" : "screen", (long)lay.dw, (long)lay.dh,
             lay.full ? " (full screen)" : "",
             vid.sw ? "decoded by the CPU, on the overlay if it opens (else ScalePixelArray)"
@@ -3580,7 +3580,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             at = to;
         } else if (r == 4) {
             /* full screen or not: a window's is a screen of its own (the
-             * overlay made again there), AmigaMCE's screen's the whole of it */
+             * overlay made again there), Ambiance's screen's the whole of it */
             int focus = ctl.focus;
             anim_full = g->wb || gfx_fs_on() ? !gfx_fs_on() : !lay.full;
             if (vid.sw)
@@ -3726,7 +3726,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
         amce_strlcpy(err, _("Not an IFF ANIM this can play"), errmax);
         goto out;
     }
-    /* on a 16-bit RTG screen: on AmigaMCE's own, unless chosen otherwise */
+    /* on a 16-bit RTG screen: on Ambiance's own, unless chosen otherwise */
     if (g && g->truecolor && g->win && CyberGfxBase && !classic) {
         LONG r = play_on_screen(g, fh, &f, path, ahi, w, h, depth, masking, comp, camg,
                                 f.has_camg, err, errmax);
@@ -3761,7 +3761,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
                          SA_Left, left, SA_Top, top, SA_DClip, (ULONG)&clip,
                          SA_Colors32, (ULONG)tab, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
                          SA_Behind, TRUE, SA_Draggable, FALSE, SA_Exclusive, TRUE,
-                         SA_Title, (ULONG)"AmigaMCE", TAG_DONE);
+                         SA_Title, (ULONG)"Ambiance", TAG_DONE);
     if (!scr || !(sb[0] = AllocScreenBuffer(scr, NULL, SB_SCREEN_BITMAP)) ||
         !(sb[1] = AllocScreenBuffer(scr, NULL, SB_COPY_BITMAP)) || !(safe = CreateMsgPort()))
         goto nomem;
@@ -3983,7 +3983,7 @@ out:
         if (g && g->scr)
             ScreenToFront(g->scr);
         if (g && g->win) {
-            /* AmigaMCE's window active again before going back to it: Intuition
+            /* Ambiance's window active again before going back to it: Intuition
              * does it later, and until then a click only activates it (the
              * first of a double-click lost: the next animation did not open) */
             int i;
@@ -3991,7 +3991,7 @@ out:
             for (i = 0; i < 25 && !(g->win->Flags & WFLG_WINDOWACTIVE); i++)
                 WaitTOF();
             if (!(g->win->Flags & WFLG_WINDOWACTIVE))
-                amce_log("anim", "AmigaMCE's window not active yet after half a second");
+                amce_log("anim", "Ambiance's window not active yet after half a second");
         }
     }
     if (safe) {

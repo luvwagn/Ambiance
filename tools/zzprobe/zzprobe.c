@@ -1,5 +1,5 @@
 /*
- * zzprobe - what a ZZ9000 offers this Amiga, and how fast, as AmigaMCE uses it
+ * zzprobe - what a ZZ9000 offers this Amiga, and how fast, as Ambiance uses it
  * Copyright (c) 2026 Brian King, MIT
  *
  *   zzprobe [JPEG file] [PNG file] [WEBP file] [MP3 file] [QUICK] [NOBENCH]
@@ -15,12 +15,12 @@
  *     installed inactive in SYS:Storage/DataTypes), and which datatype
  *     reads each picture and sound format here;
  *   - the card's own report: the SDK's zz9k-info and zz9k-services, run.
- * Then times what AmigaMCE does with them:
+ * Then times what Ambiance does with them:
  *   - pictures, as one table: the datatype the system picks for each
  *     format; for JPEG also WarpJPEG and jfif.datatype (their classes used
- *     directly), and jdec built into zzprobe (AmigaMCE's own decoder,
+ *     directly), and jdec built into zzprobe (Ambiance's own decoder,
  *     alone, from memory);
- *   - MP3 decoded by mpega.library, as AmigaMCE asks a 68k for this CPU,
+ *   - MP3 decoded by mpega.library, as Ambiance asks a 68k for this CPU,
  *     and at full quality (what it asks of the card's).
  * Default test files: PROGDIR:Bench/test.jpg, test.png, test.webp, test.mp3
  * (made by mkbench.py beside this file; the Bench drawer goes beside zzprobe).
@@ -1083,9 +1083,9 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     if (exists(jpeg))
         bench_builtin_jpeg(jpeg);
     bench_system("PNG", png, NULL, NULL);
-    strcpy(row_new("PNG", "AmigaMCE's own")->note, "not written yet");
+    strcpy(row_new("PNG", "Ambiance's own")->note, "not written yet");
     bench_system("WebP", webp, NULL, NULL);
-    strcpy(row_new("WebP", "AmigaMCE's own")->note, "not written yet");
+    strcpy(row_new("WebP", "Ambiance's own")->note, "not written yet");
     if (exists(webp) && webp_odd(webp))
         note_add("test.webp has chunks after its image without a VP8X header (C2PA or EXIF "
                  "added later?): strict decoders refuse it");
@@ -1129,7 +1129,7 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
 
 /* ------------------------------------------------------------ bench: MP3 by mpega.library */
 /* mpega.library has no C header here; its structures and calls as in
- * AmigaMCE's stream.c, from its documentation. */
+ * Ambiance's stream.c, from its documentation. */
 typedef struct { WORD freq_div, quality; LONG freq_max; } MPEGA_OUTPUT;
 typedef struct { WORD force_mono; MPEGA_OUTPUT mono, stereo; } MPEGA_LAYER;
 typedef struct {
@@ -1224,12 +1224,12 @@ static void bench_mp3(const char *path)
         sayf("  MP3: mpega.library is not installed");
         return;
     }
-    /* what AmigaMCE asks of a 68k mpega for this CPU (Paula: up to 28 kHz) */
+    /* what Ambiance asks of a 68k mpega for this CPU (Paula: up to 28 kHz) */
     q = cpu >= 40 ? 1 : 0;
     fmax = cpu >= 40 ? 28000 : cpu >= 30 ? 24000 : 12000;
-    bench_mp3_one(path, "as AmigaMCE asks a 68k", q, cpu < 40, fmax);
+    bench_mp3_one(path, "as Ambiance asks a 68k", q, cpu < 40, fmax);
     /* what it asks of the card's: stereo, best quality, the whole rate (AHI) */
-    bench_mp3_one(path, "full quality (as AmigaMCE asks the card's)", 2, 0, 48000);
+    bench_mp3_one(path, "full quality (as Ambiance asks the card's)", 2, 0, 48000);
     if (mpega_card)
         sayf("  (the card decodes: these times are the 68k waiting on the card, not working)");
     CloseLibrary(MPEGABase);
@@ -1239,16 +1239,16 @@ static void bench_mp3(const char *path)
 /* ------------------------------------------------------------ summary */
 static void summary(void)
 {
-    heading("What AmigaMCE will use");
+    heading("What Ambiance will use");
     sayf(zz_zorro ? (zz_zorro == 3 ? "  ZZ9000 found, on Zorro III" : "  ZZ9000 found, on Zorro II")
                   : "  No ZZ9000 found");
     sayf(mpega_card ? "  MP3: decoded on the card (its mpega.library), stereo, best quality"
          : mhizz ? "  MP3: the card's MHI driver can decode it (Settings > Sound > MP3: MHI, mhizz9000.library)"
          : mpega_any ? "  MP3: decoded by the 68k (install the ZZ9000 SDK's mpega.library for the card)"
          : "  MP3: no decoder");
-    sayf(amissl_acc ? "  HTTPS (when AmigaMCE offers it): through the card's accelerated AmiSSL"
-                    : "  HTTPS (when AmigaMCE offers it): AmiSSL as installed");
-    sayf("  JPEG thumbnails: AmigaMCE's own decoder (jdec), at 1/2 to 1/8 when that is enough");
+    sayf(amissl_acc ? "  HTTPS (when Ambiance offers it): through the card's accelerated AmiSSL"
+                    : "  HTTPS (when Ambiance offers it): AmiSSL as installed");
+    sayf("  JPEG thumbnails: Ambiance's own decoder (jdec), at 1/2 to 1/8 when that is enough");
     if (jpeg_cls[0]) {
         char l[120];
         sprintf(l, "  JPEG at full size, and any jdec declines: %.40s.datatype", jpeg_cls);

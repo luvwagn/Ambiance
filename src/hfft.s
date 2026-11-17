@@ -1,4 +1,4 @@
-; AmigaMCE - the spectrum's FFT: HippoPlayer's (hippo_fft.s), unchanged
+; Ambiance - the spectrum's FFT: HippoPlayer's (hippo_fft.s), unchanged
 ; but for the C entry points at the end.
 ;
 ; From HippoPlayer, MIT licence, (c) 2017 Kari-Pekka Koljonen

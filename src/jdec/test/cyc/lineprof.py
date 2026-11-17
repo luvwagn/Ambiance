@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Per-line and per-function profile of jdec on the 68020 (Musashi PC sampling).
-AmigaMCE, MIT.
+Ambiance, MIT.
 
     python3 lineprof.py <cyc.elf built with -g> <cyc.bin> <file.jpg> <scales, e.g. 0,3> [lines]
 

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - an ANIM's frames drawn as 15 or 16-bit pixels (animdraw.h)
+ * Ambiance - an ANIM's frames drawn as 15 or 16-bit pixels (animdraw.h)
  * Copyright (c) 2026 Brian King
  *
  * Bitplanes as pixels in a graphics card's format, a row at a time: the

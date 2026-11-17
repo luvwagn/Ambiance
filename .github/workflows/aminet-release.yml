@@ -45,21 +45,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          mapfile -t lha_files < <(find . -maxdepth 1 -type f -name 'amigamce-*.lha' -printf '%f\n' | sort)
+          mapfile -t lha_files < <(find . -maxdepth 1 -type f -name 'ambiance-*.lha' -printf '%f\n' | sort)
           if [ "${#lha_files[@]}" -ne 1 ]; then
-            echo "::error::Expected one amigamce-*.lha archive, found ${#lha_files[@]}"
+            echo "::error::Expected one ambiance-*.lha archive, found ${#lha_files[@]}"
             exit 1
           fi
-          cp "${lha_files[0]}" dist/AmigaMCE.lha
-          cp AmigaMCE.readme dist/AmigaMCE.readme
+          cp "${lha_files[0]}" dist/Ambiance.lha
+          cp Ambiance.readme dist/Ambiance.readme
 
       - name: Upload Aminet artifact
         uses: actions/upload-artifact@v4
         with:
           name: aminet-upload
           path: |
-            dist/AmigaMCE.lha
-            dist/AmigaMCE.readme
+            dist/Ambiance.lha
+            dist/Ambiance.readme
           if-no-files-found: error
 
   publish:
@@ -79,7 +79,7 @@ jobs:
       - name: Upload to Aminet
         uses: sidick/aminet-release-action@v1
         with:
-          filename: dist/AmigaMCE.lha
-          readme: dist/AmigaMCE.readme
+          filename: dist/Ambiance.lha
+          readme: dist/Ambiance.readme
           category: util/wb
           inject-version: true

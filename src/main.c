@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - main program: Home Screen, navigation, input and launching
+ * Ambiance - main program: Home Screen, navigation, input and launching
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"
@@ -40,7 +40,7 @@
 #include <libraries/gadtools.h>
 
 static const char version_tag[] __attribute__((used)) =
-    "$VER: AmigaMCE " AMCE_VERSION " (" AMCE_DATE ")";
+    "$VER: Ambiance " AMCE_VERSION " (" AMCE_DATE ")";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *AslBase;            /* opened for Settings > Music folders' requester */
@@ -109,7 +109,7 @@ static struct Gfx g;
 static struct Caps caps;
 static struct Ags ags;
 static struct IgCat igcat;      /* iGame's list (igame.c): igcat.n 0 when none */
-static char ig_setting[256];     /* AmigaMCE/iGame as read: "" unset, "none", or a drawer */
+static char ig_setting[256];     /* Ambiance/iGame as read: "" unset, "none", or a drawer */
 static BOOL ig_off(void);
 static struct Page pages[MAXDEPTH];
 static int depth;
@@ -1495,7 +1495,7 @@ static void no_ags_text(struct Page *p, int mod)
                                       : _("iGame's list has no games in it, and Amiga Game Selector "
                                           "was not found."));
         text_line(p, "");
-        text_para(p, _("AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro "
+        text_para(p, _("Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro "
                      "or Diskmag, or when it is in a drawer named Demos."));
         return;
     }
@@ -1503,14 +1503,14 @@ static void no_ags_text(struct Page *p, int mod)
     text_line(p, "");
     text_para(p, _("Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and "
                  "demos, with screenshots and descriptions. With it installed, they are listed "
-                 "here and start from AmigaMCE."));
+                 "here and start from Ambiance."));
     text_line(p, "");
-    text_para(p, _("AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own "
-                 "drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once "
+    text_para(p, _("Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own "
+                 "drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once "
                  "so its assigns exist."));
     text_line(p, "");
     text_line(p, "");
-    text_para(p, _("iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame "
+    text_para(p, _("iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame "
                  "when it starts, or Settings > Folders > iGame says where its drawer is."));
     text_line(p, "");
     text_para(p, _("Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders "
@@ -1522,13 +1522,13 @@ static void dt_line(void *ctx, const char *s)
     text_line((struct Page *)ctx, s);
 }
 
-/* MP3 by AmigaMCE's own amcempega.library (Settings > Sound, load_sound_out) */
+/* MP3 by Ambiance's own amcempega.library (Settings > Sound, load_sound_out) */
 static BOOL own_mpega;
 
 static void build_sysinfo(struct Page *p)
 {
     char line[200];
-    text_line(p, _("Found when AmigaMCE started:"));
+    text_line(p, _("Found when Ambiance started:"));
     text_line(p, "");
     sprintf(line, _("Machine type: %s"), caps.emulator ? _("emulator (UAE family)") : _("real Amiga"));
     text_line(p, line);
@@ -1604,8 +1604,8 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, _("AGS: %s"), ags.found ? _("found") : _("not found"));
     text_line(p, line);
     if (ags.added[0]) {
-        /* S:AGS-Stuff did not run at boot; AmigaMCE filled the gaps. */
-        text_line(p, _("Assigns AmigaMCE added (AGS-Stuff did not run):"));
+        /* S:AGS-Stuff did not run at boot; Ambiance filled the gaps. */
+        text_line(p, _("Assigns Ambiance added (AGS-Stuff did not run):"));
         text_para(p, ags.added);
     }
     if (igcat.n)
@@ -1629,7 +1629,7 @@ static void build_sysinfo(struct Page *p)
     sprintf(line, _("Network stack: %s"), caps.net ? _("running") : _("none"));
     text_line(p, line);
     sprintf(line, _("MP3: %s"), caps.mp3_mhi ? _("MHI driver")
-                                : own_mpega ? _("amcempega.library, AmigaMCE's own")
+                                : own_mpega ? _("amcempega.library, Ambiance's own")
                                 : caps.mpega_zz ? _("mpega.library, the ZZ9000 SDK's (decoded on the card)")
                                 : caps.mp3_mpega ? "mpega.library" : _("none"));
     text_line(p, line);
@@ -1652,11 +1652,11 @@ static void build_sysinfo(struct Page *p)
 }
 
 /* ------------------------------------------------------------ settings */
-#define MODE_VAR "AmigaMCE/ScreenMode"
-#define WINDOW_VAR "AmigaMCE/Windowed"  /* "1" a window on Workbench, "0" full screen */
-#define TSIZE_VAR "AmigaMCE/TextSize"   /* the window's: small, medium, large */
-#define COLOURS_VAR "AmigaMCE/Colours"  /* the colour scheme: midnight, graphite, wb13, emerald, amethyst */
-#define WINBOX_VAR "AmigaMCE/WindowBox"  /* left top width height scale: where it was left */
+#define MODE_VAR "Ambiance/ScreenMode"
+#define WINDOW_VAR "Ambiance/Windowed"  /* "1" a window on Workbench, "0" full screen */
+#define TSIZE_VAR "Ambiance/TextSize"   /* the window's: small, medium, large */
+#define COLOURS_VAR "Ambiance/Colours"  /* the colour scheme: midnight, graphite, wb13, emerald, amethyst */
+#define WINBOX_VAR "Ambiance/WindowBox"  /* left top width height scale: where it was left */
 
 /* The icon's WINDOWED tooltype (shipped as "(WINDOWED)": in brackets, off),
  * or WINDOWED from a Shell: the window unless Settings has saved a choice,
@@ -1734,8 +1734,8 @@ static void ensure_dir(const char *path)
         UnLock(l);
 }
 
-/* Remembered in ENV: and ENVARC: (AmigaMCE/ScreenMode), like AGS's own
- * settings. Delete ENVARC:AmigaMCE/ScreenMode to go back to Automatic. */
+/* Remembered in ENV: and ENVARC: (Ambiance/ScreenMode), like AGS's own
+ * settings. Delete ENVARC:Ambiance/ScreenMode to go back to Automatic. */
 static void load_screen_mode(void)
 {
     char buf[32];
@@ -1790,8 +1790,8 @@ static void save_setting(const char *var, const char *value)
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR oldwin = me->pr_WindowPtr;
     me->pr_WindowPtr = (APTR)-1;
-    ensure_dir("ENV:AmigaMCE");
-    ensure_dir("ENVARC:AmigaMCE");
+    ensure_dir("ENV:Ambiance");
+    ensure_dir("ENVARC:Ambiance");
     SetVar((CONST_STRPTR)var, (CONST_STRPTR)value, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
     me->pr_WindowPtr = oldwin;
 }
@@ -1801,22 +1801,22 @@ static void save_screen_mode(void)
     save_setting(MODE_VAR, gfx_mode_key(screen_mode));
 }
 
-#define DEBUG_VAR "AmigaMCE/Debug"
-#define STYLE_VAR "AmigaMCE/Style"
-#define LFONT_VAR "AmigaMCE/LacedFont"
-#define RFONT_VAR "AmigaMCE/RTGFont"    /* RTG's pixel style: a font of gfx_laced_fonts */
-#define JUMP_VAR  "AmigaMCE/JumpScroll"
-#define ANIMSCR_VAR "AmigaMCE/AnimScreen"  /* "own": animations on their own screen */
-#define VDEC_VAR "AmigaMCE/VideoDecoder"   /* "CPU": MPEG by the CPU on a ZZ9000 too (video.c) */
-#define VOVL_VAR "AmigaMCE/VideoOverlay"   /* "off": the CPU's pictures drawn, not on the overlay */
-#define TRANS_VAR "AmigaMCE/Transition"    /* a slideshow's: off fade crossfade tiles wipe */
+#define DEBUG_VAR "Ambiance/Debug"
+#define STYLE_VAR "Ambiance/Style"
+#define LFONT_VAR "Ambiance/LacedFont"
+#define RFONT_VAR "Ambiance/RTGFont"    /* RTG's pixel style: a font of gfx_laced_fonts */
+#define JUMP_VAR  "Ambiance/JumpScroll"
+#define ANIMSCR_VAR "Ambiance/AnimScreen"  /* "own": animations on their own screen */
+#define VDEC_VAR "Ambiance/VideoDecoder"   /* "CPU": MPEG by the CPU on a ZZ9000 too (video.c) */
+#define VOVL_VAR "Ambiance/VideoOverlay"   /* "off": the CPU's pictures drawn, not on the overlay */
+#define TRANS_VAR "Ambiance/Transition"    /* a slideshow's: off fade crossfade tiles wipe */
 static const char *const trans_keys[VT_COUNT] = { "off", "fade", "crossfade", "tiles", "wipe" };
 static const char *const trans_names[VT_COUNT] = { N_("Off"), N_("Fade"), N_("Cross-fade"),
                                                    N_("Tiles"), N_("Wipe") };
-#define DBUF_VAR  "AmigaMCE/DoubleBuffer"
-#define VISUAL_VAR "AmigaMCE/Visual"    /* Now playing: "meters", "spectrum" or "flow" */
-#define HTTPS_VAR "AmigaMCE/RadioHTTPS"
-#define NETIF_VAR "AmigaMCE/NetInterface"
+#define DBUF_VAR  "Ambiance/DoubleBuffer"
+#define VISUAL_VAR "Ambiance/Visual"    /* Now playing: "meters", "spectrum" or "flow" */
+#define HTTPS_VAR "Ambiance/RadioHTTPS"
+#define NETIF_VAR "Ambiance/NetInterface"
 
 /* Settings > Networking > the interface to go out from: its name ("" the
  * stack's choice); the stack's list as last asked. */
@@ -1853,9 +1853,9 @@ static void net_if_apply(void)
 static ULONG strtoul_(const char *s);
 
 /* ---- Settings > Networking > Radio, and the stream buffer */
-#define RKBPS_VAR "AmigaMCE/RadioMaxKbps"   /* "" automatic, a number, "any" */
-#define RSRV_VAR  "AmigaMCE/RadioServer"    /* "" automatic, "fastest:<name>", "<name>" */
-#define BUF_VAR   "AmigaMCE/StreamBuffer"   /* short, normal, long */
+#define RKBPS_VAR "Ambiance/RadioMaxKbps"   /* "" automatic, a number, "any" */
+#define RSRV_VAR  "Ambiance/RadioServer"    /* "" automatic, "fastest:<name>", "<name>" */
+#define BUF_VAR   "Ambiance/StreamBuffer"   /* short, normal, long */
 
 static const UWORD rkbps_choice[6] = { 0xFFFF, 64, 96, 128, 192, 0 }; /* automatic .. any */
 static int rkbps_sel;               /* 0 automatic */
@@ -1997,13 +1997,13 @@ static struct Folders {
     int n;
     BOOL use_assign;
 } fs[FS_COUNT] = {
-    { "AmigaMCE/MusicFolders", "AmigaMCE/MusicAssign", "MUSIC:", N_("Music"), N_("Music folders"),
+    { "Ambiance/MusicFolders", "Ambiance/MusicAssign", "MUSIC:", N_("Music"), N_("Music folders"),
       { { 0 } }, 0, TRUE },
-    { "AmigaMCE/ModFolders", "AmigaMCE/ModAssign", "MODS:", N_("Modules"), N_("Module folders"),
+    { "Ambiance/ModFolders", "Ambiance/ModAssign", "MODS:", N_("Modules"), N_("Module folders"),
       { { 0 } }, 0, TRUE },
-    { "AmigaMCE/PictureFolders", "AmigaMCE/PictureAssign", "PICTURES:", N_("Pictures"),
+    { "Ambiance/PictureFolders", "Ambiance/PictureAssign", "PICTURES:", N_("Pictures"),
       N_("Picture folders"), { { 0 } }, 0, TRUE },
-    { "AmigaMCE/VideoFolders", "AmigaMCE/VideoAssign", "VIDEOS:", N_("Videos"),
+    { "Ambiance/VideoFolders", "Ambiance/VideoAssign", "VIDEOS:", N_("Videos"),
       N_("Video folders"), { { 0 } }, 0, TRUE },
 };
 #define music_dirs (fs[FS_MUSIC].dir)
@@ -2079,7 +2079,7 @@ static BOOL fs_assign_used(int k)
 #define VIDS_ROOT  "Media:Animations"
 
 /* Settings > Sound: what streams play through (AHI, where installed). */
-#define SOUND_VAR "AmigaMCE/SoundOutput"
+#define SOUND_VAR "Ambiance/SoundOutput"
 static BOOL sound_ahi;
 /* Paula at 14 bits (SoundOutput "paula14"): all four channels, each side's
  * high byte at volume 64 and its next 6 bits at volume 1; MP3, FLAC and a
@@ -2087,15 +2087,15 @@ static BOOL sound_ahi;
 static BOOL sound_p14;
 
 /* MHI: its drivers (the libraries in LIBS:MHI), and the one MP3 goes to ("":
- * a decoder with mpega's functions: AmigaMCE's own amcempega.library,
- * own_mpega, or LIBS:mpega.library), AmigaMCE/MP3Decoder ("amcempega",
+ * a decoder with mpega's functions: Ambiance's own amcempega.library,
+ * own_mpega, or LIBS:mpega.library), Ambiance/MP3Decoder ("amcempega",
  * "mpega" or the driver's name; not set: ours, unless LIBS:mpega.library is
  * the ZZ9000's, which decodes on the card). */
-#define MP3_VAR "AmigaMCE/MP3Decoder"
-/* MPEG audio's quality (AmigaMCE/MP3Quality "high" or "medium"; not set:
+#define MP3_VAR "Ambiance/MP3Decoder"
+/* MPEG audio's quality (Ambiance/MP3Quality "high" or "medium"; not set:
  * automatic, by how fast the decoder measures at its first stream each
  * run, stream.c's mpa_choose; the measurement itself is never saved) */
-#define MP3Q_VAR "AmigaMCE/MP3Quality"
+#define MP3Q_VAR "Ambiance/MP3Quality"
 static int mp3_q;                   /* 0 automatic, 1 high, 2 medium */
 static const char *const mp3q_val[3] = { "auto", "high", "medium" };
 static char mhi_names[6][48];
@@ -2167,7 +2167,7 @@ static void load_sound_out(void)
         char m[160];
         sprintf(m, "%s; MP3 by %s, %s quality; %ld MHI driver%s in LIBS:MHI",
                 sound_ahi ? "AHI" : sound_p14 ? "Paula, 14 bits" : "Paula",
-                mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (AmigaMCE's own)"
+                mhi_sel[0] ? mhi_sel : own_mpega ? "amcempega.library (Ambiance's own)"
                 : caps.mpega_zz ? "mpega.library (ZZ9000 SDK: on the card)" : "mpega.library",
                 mp3_q == 1 ? "high" : mp3_q == 2 ? "medium" : "automatic (measured)",
                 (long)nmhi, nmhi == 1 ? "" : "s");
@@ -2216,13 +2216,13 @@ static BOOL video_no_overlay;
 static void set_msg(const char *m);
 
 /* Smooth chosen, the screen could show it, but its file would not load
- * (missing, or from another AmigaMCE version): say so, rather than
+ * (missing, or from another Ambiance version): say so, rather than
  * quietly drawing the pixel style. TRUE when it said something. */
 static BOOL note_style(void)
 {
     if (ui_style == STYLE_SMOOTH && g.style != STYLE_SMOOTH &&
         gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
-        set_msg(_("Smooth: Fonts/amce-smooth does not match this AmigaMCE"));
+        set_msg(_("Smooth: Fonts/amce-smooth does not match this Ambiance"));
         return TRUE;
     }
     return FALSE;
@@ -2245,9 +2245,9 @@ static void load_style(void)
 }
 
 /* F on Now playing: Flow, or one of AmigaAMP's visual plug-ins (amphost.c)
- * from PROGDIR:Visuals or AmigaAMP:Plugins, AmigaMCE/FullVisual its path
+ * from PROGDIR:Visuals or AmigaAMP:Plugins, Ambiance/FullVisual its path
  * ("" or not set: Flow) */
-#define FULLVIS_VAR "AmigaMCE/FullVisual"
+#define FULLVIS_VAR "Ambiance/FullVisual"
 #define FULLVIS_MAX 16
 static char fullvis[200];
 static char fv_paths[FULLVIS_MAX][160];
@@ -2298,7 +2298,7 @@ static void fullvis_next(void)
         fullvis[0] = 0;                     /* round to Flow */
     save_setting(FULLVIS_VAR, fullvis[0] ? fullvis : "flow");
     set_msg(fullvis[0] ? _("F on Now playing starts this AmigaAMP plug-in")
-            : !fv_n ? _("Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)")
+            : !fv_n ? _("Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)")
                     : _("Flow"));
 }
 
@@ -2312,14 +2312,14 @@ static void load_visual(void)
     if (GetVar((CONST_STRPTR)FULLVIS_VAR, (STRPTR)fullvis, sizeof(fullvis), GVF_GLOBAL_ONLY) <= 0 ||
         !amce_stricmp(fullvis, "flow"))
         fullvis[0] = 0;
-    amp_host_start();                   /* AmigaAMP's plug-ins: they find AmigaMCE */
+    amp_host_start();                   /* AmigaAMP's plug-ins: they find Ambiance */
     if (GetVar((CONST_STRPTR)VISUAL_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         vis_select(!amce_stricmp(buf, "spectrum") ? VIS_SPECTRUM
                    : !amce_stricmp(buf, "flow") ? VIS_FLOW : VIS_METERS);
-    if (GetVar((CONST_STRPTR)"AmigaMCE/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+    if (GetVar((CONST_STRPTR)"Ambiance/Loop", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
         play_loop = buf[0] == '1';
     /* the volume as it was left (kept at quit; muted, the volume before) */
-    if (GetVar((CONST_STRPTR)"AmigaMCE/Volume", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
+    if (GetVar((CONST_STRPTR)"Ambiance/Volume", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
         buf[0] >= '0' && buf[0] <= '9') {
         LONG v = 0;
         StrToLong((CONST_STRPTR)buf, &v);
@@ -2379,7 +2379,7 @@ static void load_jump(void)
 }
 
 /* Settings > Double buffering (RTG screens): on, by the setting; without
- * one, the old way (PROGDIR:AmigaMCE.dbuf there). */
+ * one, the old way (PROGDIR:Ambiance.dbuf there). */
 static void load_dbuf(void)
 {
     char buf[8];
@@ -2390,7 +2390,7 @@ static void load_dbuf(void)
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         me->pr_WindowPtr = (APTR)-1;
-        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.dbuf", SHARED_LOCK);
+        l = Lock((CONST_STRPTR)"PROGDIR:Ambiance.dbuf", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l)
             UnLock(l);
@@ -2471,7 +2471,7 @@ static void build_nic_settings(struct Page *p);
 
 /* ---- the language: the Workbench's (Locale prefs), English, or one
  * whose catalog is in PROGDIR:Catalogs (lang.c) */
-#define LANG_VAR "AmigaMCE/Language"    /* "" the Workbench's, "english", or a language */
+#define LANG_VAR "Ambiance/Language"    /* "" the Workbench's, "english", or a language */
 static char lang_set[32];
 
 /* A language's name as it calls itself ("deutsch": Deutsch). */
@@ -2504,7 +2504,7 @@ static void lang_name(const char *lang, char *out)
 }
 
 /* A language's name in the language shown ("deutsch": German, or
- * Allemand in French), "" for one AmigaMCE does not know. */
+ * Allemand in French), "" for one Ambiance does not know. */
 static const char *lang_here(const char *lang)
 {
     static const char *const names[][2] = {
@@ -2919,8 +2919,8 @@ static void build_sound_settings(struct Page *p)
         it->flags |= ITEM_DISABLED;
     heading_item(p, _("MP3 decoder"));
     if ((it = action_item(p, "MP3: amcempega.library",
-                          !caps.mpega_own ? _("not installed (AmigaMCE's Libs)")
-                          : _("AmigaMCE's own, decoded here"),
+                          !caps.mpega_own ? _("not installed (Ambiance's Libs)")
+                          : _("Ambiance's own, decoded here"),
                           ACT_SND_OWNMPEGA, !mhi_sel[0] && own_mpega ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
         !caps.mpega_own)
         it->flags |= ITEM_DISABLED;
@@ -3021,7 +3021,7 @@ static void build_folder_settings(struct Page *p)
 }
 
 /* ------------------------------------------------------------ iGame's list
- * AmigaMCE/iGame says where iGame's drawer is (its gameslist.csv), or
+ * Ambiance/iGame says where iGame's drawer is (its gameslist.csv), or
  * "none" (or "n/a") for no list. Unset, iGame is looked for at each start
  * (igame.c), and the drawer found is saved there: from then on it is the
  * setting, changed or turned off in Settings > Folders > iGame. Its games
@@ -3138,13 +3138,13 @@ static void build_whd_page(struct Page *p)
         sprintf(line, _("WHDLoad is installed: %s"), where);
         heading_item(p, line);
         head_para(p, _("Games that need a Kickstart image look for it in Devs:Kickstarts "
-                       "(kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot "
+                       "(kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot "
                        "supply those: they come from your own Amiga's ROM, or from Amiga Forever."));
         return;
     }
     head_para(p, _("WHDLoad starts games and demos installed to hard disk, as iGame lists them. "
                    "It is not installed on this Amiga."));
-    head_para(p, _("AmigaMCE can fetch WHDLoad's user package from its author's site, "
+    head_para(p, _("Ambiance can fetch WHDLoad's user package from its author's site, "
                    "whdload.de (free of charge), and put WHDLoad and its tools in C:."));
     if (how == UNARC_NONE)
         head_para(p, _("Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) "
@@ -3466,21 +3466,21 @@ static void build_colours(struct Page *p)
 
 static void build_about_menu(struct Page *p)
 {
-    action_item(p, _("Credits"), "AmigaMCE " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
+    action_item(p, _("Credits"), "Ambiance " AMCE_VERSION, ACT_CREDITS, MARK_ARROW);
     action_item(p, _("System information"), "", ACT_SYSINFO, MARK_ARROW);
     if (caps.net)
-        action_item(p, _("Plex in AmigaMCE"), "", ACT_PLEXHELP, MARK_ARROW);
+        action_item(p, _("Plex in Ambiance"), "", ACT_PLEXHELP, MARK_ARROW);
 }
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
- * itself, never copied into AmigaMCE. The first of these that exists. */
+ * itself, never copied into Ambiance. The first of these that exists. */
 static const char *const ags_splash[] = { "AGS:Images/logo.iff", NULL };
 
 static void build_credits(struct Page *p)
 {
     char line[96];
     int i;
-    sprintf(line, "AmigaMCE %s", AMCE_VERSION);
+    sprintf(line, "Ambiance %s", AMCE_VERSION);
     text_line(p, line);
     text_line(p, _("(c) 2026 Brian King, under the MIT licence"));
     text_line(p, "");
@@ -3766,10 +3766,10 @@ static void build_root_pages_now(int mod)
                 if ((p = page_push(PT_TEXT, _("Videos")))) {
                     char t[260];
                     if (src)
-                        sprintf(t, n < 0 ? _("No animations found: AmigaMCE looks for them in %s.")
+                        sprintf(t, n < 0 ? _("No animations found: Ambiance looks for them in %s.")
                                          : _("%s has no animations in it."), src);
                     else
-                        sprintf(t, _("No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, "
+                        sprintf(t, _("No animations found. Ambiance plays IFF ANIMs from VIDEOS:, "
                                      "the folders of Settings > Folders > Videos, and on AGS %s."),
                                 VIDS_ROOT);
                     text_para(p, t);
@@ -3791,10 +3791,10 @@ static void build_root_pages_now(int mod)
                 if ((p = page_push(PT_TEXT, _("Pictures")))) {
                     char t[240];
                     if (src)
-                        sprintf(t, n < 0 ? _("No pictures found: AmigaMCE looks for them in %s.")
+                        sprintf(t, n < 0 ? _("No pictures found: Ambiance looks for them in %s.")
                                          : _("%s has no pictures in it."), src);
                     else
-                        sprintf(t, _("No pictures found. AmigaMCE looks for them in PICTURES:, in "
+                        sprintf(t, _("No pictures found. Ambiance looks for them in PICTURES:, in "
                                      "the folders of Settings > Folders > Pictures, and on AGS in %s."),
                                 PICS_ROOT);
                     text_para(p, t);
@@ -3961,15 +3961,15 @@ static void restore_nav(int mod)
     }
 }
 
-/* The trail kept across runs too: written when AmigaMCE quits (and
+/* The trail kept across runs too: written when Ambiance quits (and
  * before a game starts, in case it never comes back), read when it
  * starts. A text file, one line each:
- *   AmigaMCE navigation 1
+ *   Ambiance navigation 1
  *   at <section>\t<menu|list>        where the user was, and in which pane
  *   section <section>\t<levels>      then, for each level of that trail,
  *   <sel>\t<top>\t<label>
  * Sections by name, so a new menu order keeps working. */
-#define NAV_FILE "ENVARC:AmigaMCE/Nav"
+#define NAV_FILE "ENVARC:Ambiance/Nav"
 #define NAV_MAX  16384
 
 static int mod_by_name(const char *s, LONG n)
@@ -3999,12 +3999,12 @@ static void nav_store(BOOL quitting)
         in_list = TRUE;
     }
     me->pr_WindowPtr = (APTR)-1;
-    ensure_dir("ENVARC:AmigaMCE");
+    ensure_dir("ENVARC:Ambiance");
     fh = Open((CONST_STRPTR)NAV_FILE, MODE_NEWFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh)
         return;
-    FPuts(fh, (CONST_STRPTR)"AmigaMCE navigation 1\n");
+    FPuts(fh, (CONST_STRPTR)"Ambiance navigation 1\n");
     if (at >= 0) {
         sprintf(line, "at %s\t%s\n", mod_names[at], in_list ? "list" : "menu");
         FPuts(fh, (CONST_STRPTR)line);
@@ -4108,9 +4108,9 @@ static void nav_load(int *at, BOOL *in_list)
     }
     buf[len] = 0;
     s = nav_line(buf, len, &pos);
-    if (!s || strcmp(s, "AmigaMCE navigation 1") != 0) {
+    if (!s || strcmp(s, "Ambiance navigation 1") != 0) {
         FreeVec(buf);
-        return;                     /* not one this AmigaMCE knows */
+        return;                     /* not one this Ambiance knows */
     }
     while ((s = nav_line(buf, len, &pos))) {
         if (!strncmp(s, "at ", 3) && (t = strchr(s + 3, '\t'))) {
@@ -4270,7 +4270,7 @@ static void draw_clock(void)
 static LONG cpu_load = -1, app_load = -1;
 static ULONG loop_wakes;                /* the main loop's turns (Debug's log) */
 
-/* Debug: every 5 s the loads in the log, with where AmigaMCE is and how
+/* Debug: every 5 s the loads in the log, with where Ambiance is and how
  * often its loop woke, so a load that follows a page can be traced. */
 static void dbg_load_log(void)
 {
@@ -4298,7 +4298,7 @@ static void dbg_load_log(void)
                 sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame", (long)(t / fr / 10),
                         (long)(t / fr % 10));
         }
-        sprintf(m, "system %ld%%, AmigaMCE %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
+        sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
                 (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),
                 mod_names[menu[menu_sel]], p ? p->title : "-", focus == FOCUS_MENU ? " (menu)" : "",
                 mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
@@ -4461,7 +4461,7 @@ static void draw_status(void)
     if (gfx_dbuf_active()) {
         fig_num(fps, fps_shown, 3, " FPS  ");
     }
-    /* CPU = whole system (idle-task meter); app = AmigaMCE's own share */
+    /* CPU = whole system (idle-task meter); app = Ambiance's own share */
     sprintf(forms[0], "%sCPU %s  app %s   RAM %s  (chip %s)", fps, cpu, app, ram, chp);
     sprintf(forms[1], "%sCPU %s  app %s  RAM %s", fps, cpu, app, ram);
     sprintf(forms[2], "%s%s/%s %s", fps, cpu, app, ram);
@@ -5457,7 +5457,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             pv_line(line, w);
         if (ic[q].kind == DVDI_VIDEO || ic[q].kind == DVDI_UDF) {
             if (!dvd_lib_there())
-                pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
+                pv_line(_("DVDs need dvdnav.library (in Ambiance's Libs)"), w);
             else {
                 pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
                 pv_line(_("N and P: the next and previous chapter or programme"), w);
@@ -5476,7 +5476,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
         /* a DVD: what Fire does (the disc itself read only then) */
         pv_line(_("A DVD-Video disc"), w);
         if (!dvd_lib_there()) {
-            pv_line(_("DVDs need dvdnav.library (in AmigaMCE's Libs)"), w);
+            pv_line(_("DVDs need dvdnav.library (in Ambiance's Libs)"), w);
             return;
         }
         pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
@@ -5530,7 +5530,7 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
             sprintf(line, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(&vp));
             pv_line(line, w);
         } else {
-            pv_line(_("Not an MPEG video AmigaMCE can read"), w);
+            pv_line(_("Not an MPEG video Ambiance can read"), w);
         }
     }
     if (it->kind == IT_PIC || it->kind == IT_ANIM) {
@@ -5783,12 +5783,12 @@ static void pv_draw_picture(void)
         char by[64];
         ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
         now = time_ms();
-        /* who read it: AmigaMCE's own readers (ILBM, JPEG by jdec), or a
+        /* who read it: Ambiance's own readers (ILBM, JPEG by jdec), or a
          * datatype (its class named), and the format */
         if (!strcmp(j->info.cls, "jdec"))
-            strcpy(by, "JPEG read by AmigaMCE (jdec)");
+            strcpy(by, "JPEG read by Ambiance (jdec)");
         else if (j->own)
-            sprintf(by, "%.8s read by AmigaMCE", j->info.fmt[0] ? j->info.fmt : "ILBM");
+            sprintf(by, "%.8s read by Ambiance", j->info.fmt[0] ? j->info.fmt : "ILBM");
         else if (j->info.cls[0])
             sprintf(by, "decoded by %.40s.datatype", j->info.cls);
         else
@@ -6538,7 +6538,7 @@ static void hover_set(WORD row, WORD menu_i)
         return;
     /* drawn and shown as a small update, no flip: a flip waits for the
      * vertical blank, and the mouse's moves came quicker than that (the
-     * highlight followed it in jerks, AmigaMCE busy at 40%) */
+     * highlight followed it in jerks, Ambiance busy at 40%) */
     if (p && p->type == PT_LIST) {
         WORD col = mark_column(p), x0 = g.pane_x - U(4), x1 = list_xr(p) + U(2);
         WORD r[2];
@@ -7045,7 +7045,7 @@ static void set_focus(int f);
 /* ------------------------------------------------------------ music
  * Mods: the folders of modules (mods.c) and the Now Playing page
  * (PT_PLAYER), the music itself on Paula (modplay.c). The music plays on
- * wherever AmigaMCE goes, until it is stopped or a game starts; at the end
+ * wherever Ambiance goes, until it is stopped or a game starts; at the end
  * of a song the next module in its folder follows.
  *
  * The page: the module's title, what it is, a bar of the time played, the
@@ -7062,10 +7062,10 @@ enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB
        NB_COUNT };
 
 /* Loop: what plays, again at its end (a module from its start, a track or
- * file played again, a video: anim.c), kept (AmigaMCE/Loop). A station
+ * file played again, a video: anim.c), kept (Ambiance/Loop). A station
  * has none. */
 BOOL play_loop;
-#define LOOP_VAR "AmigaMCE/Loop"
+#define LOOP_VAR "Ambiance/Loop"
 
 static struct {
     struct ItemList list;       /* the playlist: the modules of the folder played from */
@@ -7151,7 +7151,7 @@ static BOOL np_live(void)
 }
 
 /* Muted: the volume it had, given back when unmuted (-1: not muted).
- * Not kept past a quit: AmigaMCE starts at its volume, never silent. */
+ * Not kept past a quit: Ambiance starts at its volume, never silent. */
 static int vol_unmuted = -1;
 
 static BOOL np_muted(void)
@@ -8379,10 +8379,10 @@ static void np_redraw_all(void)
     }
 }
 
-/* ---- what was playing when AmigaMCE quit, and where: kept, loaded at
+/* ---- what was playing when Ambiance quit, and where: kept, loaded at
  * the next start (stopped), so Now playing's row is there and Play goes on
  * from where it was. Its playlist, its place, where it was started from. */
-#define RESUME_FILE "ENVARC:AmigaMCE/Resume"
+#define RESUME_FILE "ENVARC:Ambiance/Resume"
 #define RESUME_MAX  (512L * 1024)
 
 static void resume_store(void)
@@ -8400,12 +8400,12 @@ static void resume_store(void)
         return;
     }
     mp_status(&st);
-    ensure_dir("ENVARC:AmigaMCE");
+    ensure_dir("ENVARC:Ambiance");
     fh = Open((CONST_STRPTR)RESUME_FILE, MODE_NEWFILE);
     me->pr_WindowPtr = oldwin;
     if (!fh)
         return;
-    FPuts(fh, (CONST_STRPTR)"AmigaMCE resume 1\n");
+    FPuts(fh, (CONST_STRPTR)"Ambiance resume 1\n");
     sprintf(line, "%ld\t%lu\t%lu\t%lu\t%ld\t%ld\t%ld\n", (long)np.idx,
             (unsigned long)(mp_is_stream() && !mp_is_track() ? 0 : st.elapsed_ms),
             (unsigned long)st.total_ms, (unsigned long)(mp_is_track() ? st_size() : 0),
@@ -8474,7 +8474,7 @@ static void resume_load(void)
         return;
     }
     buf[len] = 0;
-    if (!(s = nav_line(buf, len, &pos)) || strcmp(s, "AmigaMCE resume 1") != 0 ||
+    if (!(s = nav_line(buf, len, &pos)) || strcmp(s, "Ambiance resume 1") != 0 ||
         !(s = nav_line(buf, len, &pos))) {
         FreeVec(buf);
         return;
@@ -9380,7 +9380,7 @@ static void build_mods_root(void)
     if (!mods && !menu_music && !sid && !asg && !fs[FS_MODS].n && !mp_loaded()) {
         if ((p = page_push(PT_TEXT, _("Mods")))) {
             char t[400];
-            sprintf(t, _("No modules found. AmigaMCE looks for them in MODS:, in the folders of "
+            sprintf(t, _("No modules found. Ambiance looks for them in MODS:, in the folders of "
                          "Settings > Folders > Modules, and on AGS in %s and %s (its menu music)."),
                     MODS_ROOT, MODS_MENU);
             text_para(p, t);
@@ -9798,7 +9798,7 @@ static void open_detail(struct Item *it)
 }
 
 /* ------------------------------------------------------------ launching */
-/* Libraries AmigaMCE can do without while a game runs (closed then, so the
+/* Libraries Ambiance can do without while a game runs (closed then, so the
  * system can unload them, picture datatypes and all). */
 static void open_extra_libs(void)
 {
@@ -9843,7 +9843,7 @@ static void log_free(const char *what)
     amce_log(what, buf);
 }
 
-/* Before a game: everything AmigaMCE can rebuild goes. Where each section
+/* Before a game: everything Ambiance can rebuild goes. Where each section
  * was is kept (nav_mem), so the same entry comes back afterwards. */
 static void release_for_launch(void)
 {
@@ -9901,7 +9901,7 @@ static BOOL restore_after_launch(void)
 
 static void launch(const char *base)
 {
-    static const char *script = "T:AmigaMCE-run";
+    static const char *script = "T:Ambiance-run";
     BPTR con;
     if (cur() && cur()->igame) {
         /* iGame's entry: WHDLoad (its icon's tooltypes), or the program */
@@ -9919,7 +9919,7 @@ static void launch(const char *base)
         if (!ags.found)
             return;
         if (!ags_write_launch_script(&ags, base, script)) {
-            set_msg(_("Could not write T:AmigaMCE-run"));
+            set_msg(_("Could not write T:Ambiance-run"));
             return;
         }
     }
@@ -9930,9 +9930,9 @@ static void launch(const char *base)
     if (debug_on)
         dbg_cpu_stop();
     release_for_launch();
-    con = Open((CONST_STRPTR)"CON:0/0/640/200/AmigaMCE/AUTO/CLOSE", MODE_OLDFILE);
+    con = Open((CONST_STRPTR)"CON:0/0/640/200/Ambiance/AUTO/CLOSE", MODE_OLDFILE);
     if (con) {
-        SystemTags((CONST_STRPTR)"Execute T:AmigaMCE-run",
+        SystemTags((CONST_STRPTR)"Execute T:Ambiance-run",
                    SYS_Input, (ULONG)con, SYS_Output, 0, SYS_UserShell, TRUE,
                    NP_StackSize, 16384, TAG_END);
         Close(con);
@@ -9946,7 +9946,7 @@ static void launch(const char *base)
 }
 
 /* ------------------------------------------------------------ picture viewer
- * Full screen on AmigaMCE's own screen (view.c). Left/Right (or Up/Down,
+ * Full screen on Ambiance's own screen (view.c). Left/Right (or Up/Down,
  * the joystick, a click) step through the pictures of the list, Fire,
  * Return or Space start and pause the slideshow, Esc, Backspace, the right
  * mouse button or the second fire button go back. The info bar shows for
@@ -10306,7 +10306,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             ReplyMsg((struct Message *)im);
             if (gfx_window_msg(&g, cl, code)) {
                 if (gfx_close_asked || gfx_iconify_asked)
-                    quit = TRUE;            /* the close gadget: out, then AmigaMCE quits;
+                    quit = TRUE;            /* the close gadget: out, then Ambiance quits;
                                              * iconify: out, then iconified */
             } else if (cl == IDCMP_MENUPICK) {
                 /* Amiga-F comes as Project > Full screen: here, the
@@ -10483,7 +10483,7 @@ static void layout_let_go(void);
 static void window_relaid(WORD ow, WORD oh, ULONG t0);
 
 /* An animation of a Videos (or Pictures) list, played on a screen of its
- * own in front of AmigaMCE's (anim.c), which comes back as it was. */
+ * own in front of Ambiance's (anim.c), which comes back as it was. */
 static void anim_from_page(struct Page *p)
 {
     char err[160], title[120], by[200];
@@ -11302,7 +11302,7 @@ static void iconify(void)
         return;
     }
     UnlockPubScreen(NULL, wb);
-    if (!icon_add("AmigaMCE", wb_text_english() ? "Quit AmigaMCE" : _("Quit AmigaMCE"))) {
+    if (!icon_add("Ambiance", wb_text_english() ? "Quit Ambiance" : _("Quit Ambiance"))) {
         set_msg(_("Iconify needs Workbench"));
         return;
     }
@@ -12417,7 +12417,7 @@ static void build_music_root(struct Page *p)
         if ((it = list_add(&p->list, label, "/library/sections", "", IT_PLEXDIR)))
             it->mark = MARK_ARROW;
     } else {
-        /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
+        /* the server is chosen in Settings (About > Plex in Ambiance says more) */
         action_item(p, _("No Plex server chosen: Settings > Networking > Plex"), "", ACT_GOPLEX, MARK_ARROW);
     }
     music_file_rows(p);
@@ -12628,7 +12628,7 @@ static void plink_show(void)
         line[k] = 0;
         text_line(p, line);
         text_line(p, "");
-        text_para(p, _("AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). "
+        text_para(p, _("Ambiance is waiting for it to be entered (the code lasts 15 minutes). "
                        "Esc gives up."));
         break;
     case PL_USER:
@@ -13088,7 +13088,7 @@ static void radio_done(struct NetJob *j)
         if (!j->body || n <= 0) {
             const char *why = gone ? gone
                               : !j->body && strstr(j->err, " 401")
-                              ? _("The server wants a sign-in token: see About > Plex in AmigaMCE")
+                              ? _("The server wants a sign-in token: see About > Plex in Ambiance")
                               : !j->body ? j->err
                               : n < 0 ? _("The server answered with something unexpected")
                               : !strcmp(p->base, "/library/sections") ? _("No music libraries there")
@@ -13162,7 +13162,7 @@ static void radio_done(struct NetJob *j)
             const char *why = !j->body ? j->err
                               : n < 0 ? "radio-browser.info answered with something unexpected"
                               : p->base[0] == '#' ? _("Nothing listed")
-                                                  : _("No stations here that AmigaMCE can play");
+                                                  : _("No stations here that Ambiance can play");
             list_add(&p->list, why[0] ? why : "Could not reach radio-browser.info", "", "",
                      IT_TEXT);
             sprintf(m, "%s: %s", p->title, why);
@@ -14125,14 +14125,14 @@ static void plex_choose(struct Item *it)
     radio_open(&tmp);
 }
 
-/* About > Plex in AmigaMCE: what it plays, and how to connect. */
+/* About > Plex in Ambiance: what it plays, and how to connect. */
 static void plex_help(void)
 {
-    struct Page *p = page_push(PT_TEXT, _("Plex in AmigaMCE"));
+    struct Page *p = page_push(PT_TEXT, _("Plex in Ambiance"));
     char line[200];
     if (!p)
         return;
-    text_para(p, _("AmigaMCE plays music from a Plex Media Server on your network: its "
+    text_para(p, _("Ambiance plays music from a Plex Media Server on your network: its "
                    "music libraries, by artist and album, with their covers. The server makes "
                    "each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz "
                    "stereo for a 68040/060, more for a fast one, and its best quality when an "
@@ -14145,7 +14145,7 @@ static void plex_help(void)
     text_line(p, "");
     text_para(p, _("Finding a server: Settings > Networking > Plex > Plex server asks the "
                  "network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: "
-                 "SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400"));
+                 "SetEnv SAVE Ambiance/PlexServer 192.168.1.10:32400"));
     text_line(p, "");
     text_para(p, _("Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, "
                    "Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at "
@@ -14153,7 +14153,7 @@ static void plex_help(void)
                    "with those found on the network, each with its own token. Without AmiSSL, "
                    "set a server's token from the Shell: find it in Plex Web (an item's Get "
                    "Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE "
-                   "AmigaMCE/PlexToken <token>."));
+                   "Ambiance/PlexToken <token>."));
     text_line(p, "");
     sprintf(line, _("Server: %s"), plex.host[0] ? plex.host : _("none chosen"));
     text_line(p, line);
@@ -14174,7 +14174,7 @@ static void plex_help(void)
         if (mp3)
             sprintf(line, _("MP3: decoded by the MHI driver %.40s"), mp3);
         else
-            amce_strlcpy(line, own_mpega ? _("MP3: decoded by amcempega.library, AmigaMCE's own")
+            amce_strlcpy(line, own_mpega ? _("MP3: decoded by amcempega.library, Ambiance's own")
                                : caps.mpega_zz ? _("MP3: decoded on the ZZ9000 (its mpega.library)")
                                : caps.mp3_mpega ? _("MP3: decoded by mpega.library")
                                : _("MP3: no decoder (mpega.library or MHI)"),
@@ -14241,7 +14241,7 @@ static void radio_station(struct Item *it)
 }
 
 /* Settings > Folders > (a kind) > Add a folder: asl.library's requester,
- * for folders only, on AmigaMCE's screen. */
+ * for folders only, on Ambiance's screen. */
 static void folder_add(int k)
 {
     static const char *const req[FS_COUNT] = { N_("A folder of MP3 or FLAC files"),
@@ -14272,7 +14272,7 @@ static void folder_add(int k)
         ASLFR_DrawersOnly, TRUE, ASLFR_InitialDrawer,
         (ULONG)(f->n ? f->dir[f->n - 1] : "SYS:"), TAG_DONE);
     if (fr && AslRequest(fr, NULL) && fr->fr_Drawer && fr->fr_Drawer[0]) {
-        /* made whole (a name typed may be relative to where AmigaMCE runs) */
+        /* made whole (a name typed may be relative to where Ambiance runs) */
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
         BPTR l;
@@ -14372,7 +14372,7 @@ static void act_action(struct Item *it)
         else if (it->action == ACT_SND_MPEGA)
             set_msg("mpega.library is not installed: MP3s cannot be played");
         else if (it->action == ACT_SND_OWNMPEGA)
-            set_msg(_("amcempega.library is not in AmigaMCE's Libs"));
+            set_msg(_("amcempega.library is not in Ambiance's Libs"));
         else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END)
             set_msg(_("MHI and the ZZ9000's mpega.library decode MP3 at their best"));
         return;
@@ -14531,7 +14531,7 @@ static void act_action(struct Item *it)
             plex_settings_again(FALSE);
         }
         set_msg(d[0] ? _("MP3 decoded by MHI: radio, Plex (at its best quality) and files")
-                : own ? _("MP3 decoded here by amcempega.library, AmigaMCE's own")
+                : own ? _("MP3 decoded here by amcempega.library, Ambiance's own")
                       : _("MP3 decoded here by mpega.library"));
     }
     else if (it->action >= ACT_SND_MQ0 && it->action <= ACT_SND_MQ_END) {
@@ -14662,7 +14662,7 @@ static void act_action(struct Item *it)
 
 /* Holding Up/Down in a list or text page scrolls faster the longer it is
  * held, without skipping anything: lists still move one entry at a time,
- * only more often, and text glides at a rising pixel speed. AmigaMCE paces
+ * only more often, and text glides at a rising pixel speed. Ambiance paces
  * this itself, one step per video frame at most, from key-down until
  * key-up (the keyboard's own repeat is fixed at about 10 a second), and
  * eases off near the end so it settles on the last entry.
@@ -15252,7 +15252,7 @@ static void act_back(void)
             return;
         }
         quit_armed = TRUE;
-        set_msg(_("Press Esc again to quit AmigaMCE"));
+        set_msg(_("Press Esc again to quit Ambiance"));
         return;
     }
     if (depth > 1) {
@@ -15714,8 +15714,8 @@ static void handle_mouse(struct IntuiMessage *im)
 }
 
 /* ------------------------------------------------------------ AmigaAMP's plug-ins */
-/* Each tick: the attached plug-in fed; one AmigaMCE started puts
- * AmigaMCE's screen behind as it comes, and in front again as it goes
+/* Each tick: the attached plug-in fed; one Ambiance started puts
+ * Ambiance's screen behind as it comes, and in front again as it goes
  * (Esc in it, the music over) */
 static void amp_frame(void)
 {
@@ -15751,7 +15751,7 @@ static void amp_frame(void)
  * written over it for a few seconds (and again as it changes); a key, a
  * click or the fire button and the page is back. The music goes on as
  * ever (np_tick between frames: the next track, a station's titles). */
-/* Flow on the whole screen: from a window, AmigaMCE's own full screen (as
+/* Flow on the whole screen: from a window, Ambiance's own full screen (as
  * the picture viewer's), back to the window as it ends. Its controls, over
  * the bottom, while the mouse moves: previous, play/pause, next, volume
  * down and up, and full screen or the window. */
@@ -15806,7 +15806,7 @@ static void np_full_enter(void)
     }
     if (fullvis[0]) {
         /* an AmigaAMP plug-in: its own window on Workbench (or the default
-         * public screen), AmigaMCE's screen behind it as it attaches */
+         * public screen), Ambiance's screen behind it as it attaches */
         char err[100];
         if (amp_launch(fullvis, err, sizeof(err)))
             set_msg(_("Starting the plug-in (Esc in it to come back)"));
@@ -16322,7 +16322,7 @@ static int app_main(void);
 /* Picture datatypes decode on the stack of whoever asks, and the viewer
  * asks from this task: WarpJPEG needs far more than the 4 KB a Workbench
  * icon or a plain CLI gives (an overflow crashed with #80000003). So
- * AmigaMCE runs on a stack of its own, MAIN_STACK bytes, whatever it was
+ * Ambiance runs on a stack of its own, MAIN_STACK bytes, whatever it was
  * started with. Statics, not locals: the stack moves under them. */
 #define MAIN_STACK (128UL * 1024)
 static struct StackSwapStruct main_sss;
@@ -16370,13 +16370,13 @@ static int app_main(void)
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 39);
     if (!IntuitionBase || !GfxBase) {
-        say(_("AmigaMCE needs Kickstart 3.0 or newer.\n"));
+        say(_("Ambiance needs Kickstart 3.0 or newer.\n"));
         rc = 20;
         goto out;
     }
     LayersBase = OpenLibrary((CONST_STRPTR)"layers.library", 39);
     if (!LayersBase) {
-        say(_("AmigaMCE needs Kickstart 3.0 or newer.\n"));
+        say(_("Ambiance needs Kickstart 3.0 or newer.\n"));
         rc = 20;
         goto out;
     }
@@ -16394,22 +16394,22 @@ static int app_main(void)
     amce_log_open(debug_on);
     open_extra_libs();
     {
-        /* PROGDIR:AmigaMCE.noloader: do the reading in the UI (to compare) */
+        /* PROGDIR:Ambiance.noloader: do the reading in the UI (to compare) */
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
         dir_tick_task = FindTask(NULL);
         dir_tick = busy_dir_tick;
         me->pr_WindowPtr = (APTR)-1;
-        l = Lock((CONST_STRPTR)"PROGDIR:AmigaMCE.noloader", SHARED_LOCK);
+        l = Lock((CONST_STRPTR)"PROGDIR:Ambiance.noloader", SHARED_LOCK);
         me->pr_WindowPtr = oldwin;
         if (l) {
             UnLock(l);
-            amce_log("loader", "off (AmigaMCE.noloader)");
+            amce_log("loader", "off (Ambiance.noloader)");
         } else if (ldr_start()) {
             extern struct Task *ldr_task, *ldr_task2, *ldr_task3;
             char m[128];
-            sprintf(m, "started (tasks: AmigaMCE %08lx, loader %08lx, pictures %08lx, "
+            sprintf(m, "started (tasks: Ambiance %08lx, loader %08lx, pictures %08lx, "
                        "picture now %08lx)",
                     (unsigned long)FindTask(NULL), (unsigned long)ldr_task, (unsigned long)ldr_task2,
                     (unsigned long)ldr_task3);
@@ -16475,7 +16475,7 @@ static int app_main(void)
             opened = gfx_open(&g, &caps, SM_AUTO, ui_style);
         }
         if (!opened) {
-            say(_("AmigaMCE could not open its screen.\n"));
+            say(_("Ambiance could not open its screen.\n"));
             rc = 20;
             goto out;
         }
@@ -16497,10 +16497,10 @@ static int app_main(void)
         /* the smooth style's text blended in 16 steps where this Amiga is
          * fast (as measured, so after the timer: a JIT's 68030 too, never a
          * 25 MHz one), on a graphics card's 15-32 bit screen;
-         * AmigaMCE/TextBlend "on" or "off" says otherwise */
+         * Ambiance/TextBlend "on" or "off" says otherwise */
         char v[8];
         BOOL on = plex_tier() >= 2;
-        if (GetVar((CONST_STRPTR)"AmigaMCE/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
+        if (GetVar((CONST_STRPTR)"Ambiance/TextBlend", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0)
             on = !amce_stricmp(v, "on");
         sm_alpha_allow(on);
     }
@@ -16579,7 +16579,7 @@ static int app_main(void)
         if (sig & isig) {
             int a = icon_poll();
             if (a == ICON_QUIT) {
-                amce_log("iconify", "Workbench's Tools > Quit AmigaMCE");
+                amce_log("iconify", "Workbench's Tools > Quit Ambiance");
                 break;
             }
             if (a == ICON_OPEN)
@@ -16783,7 +16783,7 @@ out:
         char v[16];
         int vol = vol_unmuted >= 0 ? vol_unmuted : mp_volume();
         sprintf(v, "%ld", (long)(vol > 0 ? vol : 32));
-        save_setting("AmigaMCE/Volume", v);
+        save_setting("Ambiance/Volume", v);
     }
     radio_stop();
     if (depth)
@@ -16870,9 +16870,9 @@ out:
  * whole screen, the mini player). The program goes on as ever underneath:
  * its drawing is only counted (gfx_off), and each pass of the main loop
  * that counted some, the layout draws the screen again from the models
- * below. Left Shift held as AmigaMCE starts: the classic layout this
+ * below. Left Shift held as Ambiance starts: the classic layout this
  * time (a layout that fails to draw can always be left). */
-#define LAYOUT_VAR "AmigaMCE/Layout"
+#define LAYOUT_VAR "Ambiance/Layout"
 #define LV_MAX 8                    /* layouts offered in Settings */
 
 static struct {
@@ -17393,7 +17393,7 @@ static void lv_sync(void)
             amce_strlcpy(lv.file, buf, sizeof(lv.file));
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
-            amce_log("layout", "Shift held as AmigaMCE started: the classic layout this time");
+            amce_log("layout", "Shift held as Ambiance started: the classic layout this time");
         }
     }
     if (lv.on && (!lv_suits() || g.scr != lv.scr || g.win != lv.win || g.w != lv.w ||

@@ -1,10 +1,10 @@
 /*
- * AmigaMCE - WHDLoad itself, found or installed (see whdinst.h)
+ * Ambiance - WHDLoad itself, found or installed (see whdinst.h)
  * Copyright (c) 2026 Brian King
  *
  * WHDLoad (Bert Jahn's, free of charge since 18.2) is fetched from its own
- * site at the user's word, never carried by AmigaMCE. Its package has an
- * Installer script; AmigaMCE does what the user part of it comes to
+ * site at the user's word, never carried by Ambiance. Its package has an
+ * Installer script; Ambiance does what the user part of it comes to
  * without asking questions on a screen it cannot show: the programs of
  * the package's C drawer (WHDLoad, and DIC, RawDIC, Patcher... where they
  * are) into C:, its WHDLoad.prf into S: where there is none, and the

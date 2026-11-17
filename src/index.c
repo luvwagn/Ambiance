@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the index cache of long AGS lists
+ * Ambiance - the index cache of long AGS lists
  * Copyright (c) 2026 Brian King
  *
  * Counting a long list means reading every file in its letter folders,

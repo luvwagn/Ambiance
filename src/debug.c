@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - debug overlay measurements: CPU load and the app's memory
+ * Ambiance - debug overlay measurements: CPU load and the app's memory
  * Copyright (c) 2026 Brian King
  *
  * CPU load. AmigaOS 3.x keeps no per-task CPU time, so this measures the
@@ -14,10 +14,10 @@
  * chipset display (8 bitplanes, hires, interlace) leaves the emulated CPU
  * fewer cycles, which the idle task also reads as load. So the app's own
  * share is measured as well, directly: the timer's E-clock is read around
- * every point where AmigaMCE sleeps (Wait, WaitTOF), and the time spent
- * outside those is AmigaMCE's own work.
+ * every point where Ambiance sleeps (Wait, WaitTOF), and the time spent
+ * outside those is Ambiance's own work.
  *
- * Memory. AmigaMCE's own use is its code (the loaded segments) plus the
+ * Memory. Ambiance's own use is its code (the loaded segments) plus the
  * memory that has left the free pool since it started, chip shown apart.
  * Other programs allocating or freeing meanwhile shift the figure, so it
  * is a close estimate, not an exact count.
@@ -66,7 +66,7 @@ BOOL dbg_cpu_start(void)
     parent = FindTask(NULL);
     idle_quit = FALSE;
     idle_count = last_count = 0;
-    idle_task = CreateTask((CONST_STRPTR)"AmigaMCE idle meter", -128, (APTR)idle_entry, 4096);
+    idle_task = CreateTask((CONST_STRPTR)"Ambiance idle meter", -128, (APTR)idle_entry, 4096);
     if (!idle_task) {
         FreeSignal(done_sig);
         done_sig = -1;
@@ -165,7 +165,7 @@ void dbg_sleep_end(void)
     sleeping = FALSE;
 }
 
-/* Percent of the time since the last call that AmigaMCE was not asleep,
+/* Percent of the time since the last call that Ambiance was not asleep,
  * or -1 on the first call. */
 LONG dbg_app_sample(void)
 {
@@ -187,7 +187,7 @@ LONG dbg_app_sample(void)
 }
 
 /* What was in memory at the baseline: the libraries' and devices' names
- * (those still there at quit, not there then, are what AmigaMCE brought
+ * (those still there at quit, not there then, are what Ambiance brought
  * in and the system kept), and how much RAM: held (ENV: is there). */
 #define SNAP_MAX 200
 static char snap[SNAP_MAX][28];
@@ -304,7 +304,7 @@ void dbg_mem_report(void)
     }
 }
 
-/* Bytes AmigaMCE is using: total, and how much of it is chip RAM. */
+/* Bytes Ambiance is using: total, and how much of it is chip RAM. */
 ULONG dbg_mem_used(ULONG *chip)
 {
     ULONG c = AvailMem(MEMF_CHIP), f = AvailMem(MEMF_FAST);

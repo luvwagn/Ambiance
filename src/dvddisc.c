@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - reading a DVD for dvdnav.library
+ * Ambiance - reading a DVD for dvdnav.library
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Sectors of 2048 bytes, from a drive or an image file, behind the
@@ -16,7 +16,7 @@
  * still spinning up ("not ready") is given up to ten seconds.
  *
  * A disc may be read from any task, one at a time (the player's process
- * while a film plays, AmigaMCE's own between): its requests come back to
+ * while a film plays, Ambiance's own between): its requests come back to
  * a port that signals whichever task sent them, with SIGF_SINGLE, exec's
  * signal for waiting on one thing.
  *

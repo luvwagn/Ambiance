@@ -1,5 +1,5 @@
 /*
- * AmigaMCE tests: how long an ANIM's frames take, decoded (animdec.c) and
+ * Ambiance tests: how long an ANIM's frames take, decoded (animdec.c) and
  * drawn as 16-bit pixels (animdraw.c), on a 68k (run under vamos).
  *
  *   anim_bench file.anim mode scale%

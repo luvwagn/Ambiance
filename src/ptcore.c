@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a ProTracker replayer: the song, without the hardware
+ * Ambiance - a ProTracker replayer: the song, without the hardware
  * Copyright (c) 2026 Brian King
  *
  * This follows the ProTracker 2.3D play routine step by step, quirks and

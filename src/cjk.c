@@ -1,8 +1,8 @@
 /*
- * AmigaMCE - Far East text: Japanese, Chinese and Korean names
+ * Ambiance - Far East text: Japanese, Chinese and Korean names
  * Copyright (c) 2026 Brian King
  *
- * AmigaMCE's strings are Latin-1, as the Amiga's are. A Japanese, Chinese
+ * Ambiance's strings are Latin-1, as the Amiga's are. A Japanese, Chinese
  * or Korean character (the ranges in cjk_wanted, from UTF-8: radiocsv.c's
  * utf8_to_latin1) is kept in them as three bytes no Latin-1 text has:
  *
@@ -10,7 +10,7 @@
  *
  * The first is a C1 control (0x80-0x9F), the others 0x80-0xBF: none is
  * ASCII (a tab, a slash, a quote), none is NUL, and none is changed by
- * Latin-1 upper- or lower-casing, so the rest of AmigaMCE passes them
+ * Latin-1 upper- or lower-casing, so the rest of Ambiance passes them
  * along untouched. Text is only read from its start, so the second and
  * third bytes need not differ from a first.
  *

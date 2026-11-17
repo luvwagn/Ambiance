@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a ProTracker replayer: the song, without the hardware
+ * Ambiance - a ProTracker replayer: the song, without the hardware
  * Copyright (c) 2026 Brian King
  *
  * Plain C with no AmigaOS headers, so the same code plays on Paula

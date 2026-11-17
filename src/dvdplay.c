@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - DVD-Video discs: found, and their main film played
+ * Ambiance - DVD-Video discs: found, and their main film played
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Finding them: the DOS list's volumes that belong to a CD/DVD filesystem
@@ -33,7 +33,7 @@
  *
  * The library is opened by dvdplay_open and closed by dvdplay_close (it
  * stays loaded until memory is wanted, as amcesql.library does). It is
- * used by one task at a time: AmigaMCE's own to open, seek and close; the
+ * used by one task at a time: Ambiance's own to open, seek and close; the
  * player's process to read, only between them.
  */
 #include "amce.h"
@@ -216,7 +216,7 @@ struct DvdPlay {
     char a_lang[4];                         /*   its language ("en"), "" not given */
     LONG a_track, a_tracks;                 /*   which of how many (from 1) */
     char vol[32];
-    volatile LONG chapter, chapters;        /* (dvdplay_read's, read by AmigaMCE) */
+    volatile LONG chapter, chapters;        /* (dvdplay_read's, read by Ambiance) */
     ULONG ms;                               /* the title's length */
     BOOL pend;                              /* a pack in blk still to give */
     BOOL pend_nav;                          /*   (a NAV pack) */
@@ -511,7 +511,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     }
     dp->disc = disc;
     if (!DvdNavBase && !(DvdNavBase = amce_open_own_lib(DVDNAVLIB_NAME, DVDNAVLIB_VERSION))) {
-        fail(err, errlen, _("DVDs need dvdnav.library (in AmigaMCE's Libs)"));
+        fail(err, errlen, _("DVDs need dvdnav.library (in Ambiance's Libs)"));
         dvdplay_close(dp);
         return NULL;
     }
@@ -519,7 +519,7 @@ static struct DvdPlay *open_disc(struct DvdDisc *disc, const char *name, const c
     rd.log = lib_log;
     dvdd_log(dp->disc, lib_log);            /* (an image's sector out of reach) */
     if (!(dp->dvd = DvdOpen(&rd, 0))) {
-        sprintf(m, _("Not a DVD-Video disc AmigaMCE can read: %.120s"), (const char *)DvdError(NULL));
+        sprintf(m, _("Not a DVD-Video disc Ambiance can read: %.120s"), (const char *)DvdError(NULL));
         fail(err, errlen, m);
         dvdplay_close(dp);
         return NULL;

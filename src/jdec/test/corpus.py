@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Make jdec's test corpus: JPEGs of every kind jdec decodes, and some it
-should refuse cleanly. AmigaMCE, MIT. Needs Pillow, numpy, ffmpeg.
+should refuse cleanly. Ambiance, MIT. Needs Pillow, numpy, ffmpeg.
 
     python3 corpus.py <dir>
 

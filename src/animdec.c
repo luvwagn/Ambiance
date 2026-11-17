@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - IFF ANIM frames decoded into bitplanes (animdec.h)
+ * Ambiance - IFF ANIM frames decoded into bitplanes (animdec.h)
  * Copyright (c) 2026 Brian King
  *
  * The deltas are vertical: a plane at a time, a column (a byte, word or

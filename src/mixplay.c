@@ -1,12 +1,12 @@
 /*
- * AmigaMCE - modules mixed by modplug.library, streamed to Paula
+ * Ambiance - modules mixed by modplug.library, streamed to Paula
  * Copyright (c) 2026 Brian King
  *
  * For what Paula's four channels and the EaglePlayer players cannot play
  * themselves: FastTracker (XM), Scream Tracker (S3M), Impulse Tracker
  * (IT), 6- and 8-channel MODs, MTM, 669... modplug.library (Thomas Wenzel's
  * 68k port of libmodplug, LIBS:) mixes them in software into a buffer,
- * and AmigaMCE plays that as Settings > Sound says (as radio and music
+ * and Ambiance plays that as Settings > Sound says (as radio and music
  * files): on two of Paula's channels (left, right) at 8 bits, on all four
  * at 14 (each side's high byte at volume 64, its next 6 bits at volume 1),
  * or through AHI at 16. It needs a 68020 or better; how good it sounds
@@ -345,7 +345,7 @@ BOOL mx_load(const char *path, UBYTE *mod, ULONG len, char *err, LONG errmax)
     if (!mx.file) {
         MP_Exit(mx.handle);
         mx.handle = NULL;
-        amce_strlcpy(err, _("Not a module AmigaMCE can play"), errmax);
+        amce_strlcpy(err, _("Not a module Ambiance can play"), errmax);
         return FALSE;
     }
     mx.title[0] = 0;
@@ -540,7 +540,7 @@ out:
     return ok;
 }
 
-/* From the start, or from where Seek put it (the channels are AmigaMCE's). */
+/* From the start, or from where Seek put it (the channels are Ambiance's). */
 BOOL mx_start(UWORD master, char *err, LONG errmax)
 {
     int i, k;
@@ -564,7 +564,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     mx.first_pk = 0;
     mx.first_t = time_ms();
     mx.master = master;
-    mx.proc = CreateNewProcTags(NP_Entry, (ULONG)mixer_main, NP_Name, (ULONG)"AmigaMCE mixer",
+    mx.proc = CreateNewProcTags(NP_Entry, (ULONG)mixer_main, NP_Name, (ULONG)"Ambiance mixer",
                                 NP_Priority, 5, NP_StackSize, 32768, TAG_DONE);
     if (!mx.proc) {
         mx_stop();
@@ -595,7 +595,7 @@ BOOL mx_start(UWORD master, char *err, LONG errmax)
     mx.want = 1;
     mx.aint.is_Node.ln_Type = NT_INTERRUPT;
     mx.aint.is_Node.ln_Pri = 0;
-    mx.aint.is_Node.ln_Name = (char *)"AmigaMCE mixer";
+    mx.aint.is_Node.ln_Name = (char *)"Ambiance mixer";
     mx.aint.is_Data = NULL;
     mx.aint.is_Code = (void (*)())audio_code;
     CU->intena = INTF_AUD0;
@@ -627,7 +627,7 @@ BOOL mx_output(void (*between)(void), char *err, LONG errmax)
     /* the old way stopped first (Paula's interrupt given back to
      * audio.device before it is closed), then between: audio.device
      * closed on the way to AHI. Closed while the mixer still had its
-     * interrupt, AmigaMCE hung */
+     * interrupt, Ambiance hung */
     mx_stop();
     if (between)
         between();

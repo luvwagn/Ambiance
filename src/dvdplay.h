@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - DVD-Video discs: found, and their main film played (dvdplay.c)
+ * Ambiance - DVD-Video discs: found, and their main film played (dvdplay.c)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Through dvdnav.library (extras/dvdnav), opened only while a disc is
@@ -67,7 +67,7 @@ BOOL dvdplay_next_title(struct DvdPlay *dp);    /* another programme after this 
 void dvdplay_probe(struct DvdPlay *dp, struct VProbe *v);  /* v: the title now (size, length) */
 void dvdplay_close(struct DvdPlay *dp);
 /* ---- the disc's own menus: from its first play, as a DVD player starts
- * one, for the CPU's decoding (AmigaMCE draws their buttons). The menus
+ * one, for the CPU's decoding (Ambiance draws their buttons). The menus
  * it has (dvdnav.h's DVDMB_ bits; 0: none, it only plays). */
 ULONG dvdplay_menus(struct DvdPlay *dp);
 /* From the disc's start, its own navigation from now on: FALSE if not. */

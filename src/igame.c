@@ -1,9 +1,9 @@
 /*
- * AmigaMCE - iGame's list of games and demos (see igame.h)
+ * Ambiance - iGame's list of games and demos (see igame.h)
  * Copyright (c) 2026 Brian King
  *
  * iGame (George Sokianos, GPL-3.0) keeps everything it found in one file
- * in its own drawer, gameslist.csv (igamecsv.c reads a line). AmigaMCE
+ * in its own drawer, gameslist.csv (igamecsv.c reads a line). Ambiance
  * reads that file and nothing of iGame's code: no folders are walked, so
  * no index is kept. The screenshot is igame.iff in the game's folder, as
  * iGame shows it; igame.data there may name who made it. A WHDLoad entry
@@ -603,10 +603,10 @@ BOOL ig_write_launch_script(const struct IgGame *gm, const char *script, char *w
     } else
         sprintf(line, "\"%.200s\"\n", name);
     if (!(fh = Open((CONST_STRPTR)script, MODE_NEWFILE))) {
-        amce_strlcpy(why, _("Could not write T:AmigaMCE-run"), wmax);
+        amce_strlcpy(why, _("Could not write T:Ambiance-run"), wmax);
         return FALSE;
     }
-    FPuts(fh, (CONST_STRPTR)"; AmigaMCE launch script (iGame's entry) - deleted after use\n");
+    FPuts(fh, (CONST_STRPTR)"; Ambiance launch script (iGame's entry) - deleted after use\n");
     FPuts(fh, (CONST_STRPTR)"FailAt 21\n");
     FPuts(fh, (CONST_STRPTR)"Stack 20000\n");
     FPuts(fh, (CONST_STRPTR)"CD \"");

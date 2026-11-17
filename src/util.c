@@ -1,6 +1,6 @@
 /*
- * AmigaMCE - small string helpers (no C library string locale dependence),
- * and the other small helpers more than one part of AmigaMCE uses: kept
+ * Ambiance - small string helpers (no C library string locale dependence),
+ * and the other small helpers more than one part of Ambiance uses: kept
  * here once, not copied into each
  * Copyright (c) 2026 Brian King
  */
@@ -161,7 +161,7 @@ void amce_time_text(char *out, ULONG ms)
     sprintf(out, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
 }
 
-/* The ZZ9000 asked one thing at a time from AmigaMCE's tasks: Picasso96's
+/* The ZZ9000 asked one thing at a time from Ambiance's tasks: Picasso96's
  * overlay (opened, moved, closed), the SDK's mpega.library, AHI and MHI
  * set up or fed, zz9k.library's calls. Picasso96 opening an overlay while
  * the background playback process began the sound hung the Amiga. A

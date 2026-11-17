@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Count jdec's 68020 cycles (Musashi, through machine68k).
-AmigaMCE, MIT.
+Ambiance, MIT.
 
     python3 cyc.py <cyc.bin> <entry (hex)> <jtest (host)> file.jpg [file.jpg...]
 
@@ -9,7 +9,7 @@ AmigaMCE, MIT.
 Each file is decoded at every scale on a bare 68020 (no caches, no wait
 states: Musashi's own timings), its output checked byte for byte against
 the host build's, and the cycles shown, with what they come to on a
-50 MHz 68030 (a TwelveGauge, AmigaMCE's usual test machine: the same
+50 MHz 68030 (a TwelveGauge, Ambiance's usual test machine: the same
 timings, give or take the 030's data cache).
 """
 import subprocess

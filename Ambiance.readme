@@ -6,17 +6,17 @@ Version:      [VERSION]
 Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
 
-AmigaMCE is a fast, full-screen media centre for the Amiga, in the spirit
+Ambiance is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi and Windows Media Center: games and demos from Amiga Game Selector
 (AGS) or iGame, tracker music, internet radio, the music and photos on your Plex
 server and your pictures, all in one place, driven by keyboard, mouse or
 joystick.
 
-Copy the AmigaMCE drawer anywhere and double-click it. On an Amiga Game
+Copy the Ambiance drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
 its modules and its pictures are found by themselves. On any other Amiga,
 Settings > Folders says where your music, modules and pictures are, and
-iGame's games and demos are found where iGame is installed. Everything plays inside AmigaMCE, on its own screen and the Amiga's own
+iGame's games and demos are found where iGame is installed. Everything plays inside Ambiance, on its own screen and the Amiga's own
 sound.
 
 
@@ -27,7 +27,7 @@ Games and demos
   category, never as one giant flat list. On screens 640 or more wide the
   selected title's screenshot and fact sheet sit in a pane beside it.
 - Launches titles through their AGS .run scripts, honouring the AGS
-  Expert, ExpertPerm and Adult settings. While a game runs AmigaMCE frees
+  Expert, ExpertPerm and Adult settings. While a game runs Ambiance frees
   everything it can, and comes back on the same entry afterwards.
 - Long lists (All Games, menus split A-Z) are kept in an index in the
   Cache drawer, so they open at once; only letters that changed are read
@@ -47,7 +47,7 @@ Games and demos
 Mods
 - Modules from the MODS: assign and up to eight folders chosen in
   Settings > Folders > Modules, and on AGS from ST-00:Modules,
-  ST-00:C64Music and AGS:Mods (its menu music). ProTracker modules play on AmigaMCE's own replayer, after the
+  ST-00:C64Music and AGS:Mods (its menu music). ProTracker modules play on Ambiance's own replayer, after the
   ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
   formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play
   through EaglePlayer's and DeliTracker's players where they are
@@ -95,9 +95,9 @@ Music (files)
   or library.db) adds Music library (beets): Artists, Albums and Recently
   added, then an artist's albums and an album's tracks, without reading
   the folders (quick on a network share). The database is only ever read,
-  through AmigaMCE's own Libs/amcesql.library (SQLite). Its albums are
+  through Ambiance's own Libs/amcesql.library (SQLite). Its albums are
   read once, a few seconds on an 030, and kept in Cache until the
-  database changes. Tracks in WMA, AAC or other formats AmigaMCE does
+  database changes. Tracks in WMA, AAC or other formats Ambiance does
   not play are left out, as are file names with characters Latin-1 lacks.
 
 Now Playing
@@ -114,7 +114,7 @@ Pictures
 - Browses the PICTURES: assign, up to eight folders chosen in Settings >
   Folders > Pictures and AGS's Media:Images, with a preview of the picture
   or folder selected,
-  shows pictures full screen on AmigaMCE's own screen (no mode switch) and
+  shows pictures full screen on Ambiance's own screen (no mode switch) and
   plays folders as slideshows, in the pictures' own colours where the
   screen allows. Pictures are decoded by the installed datatypes.
   Moving the mouse shows the pointer and buttons for the previous
@@ -178,7 +178,7 @@ Screens
 - Or a window on Workbench, when Workbench is on a graphics card at 15
   bits or more: Settings > Display > Workbench window, the icon's WINDOWED
   tooltype (shipped as (WINDOWED): take the brackets away), or
-  AmigaMCE WINDOWED from a Shell; a choice made in Settings comes first.
+  Ambiance WINDOWED from a Shell; a choice made in Settings comes first.
   Its text is Small, Medium or Large (512 x 384, 640 x 480 or 800 x 600
   at first, as far as Workbench has room); in the pixel style the font
   is the size. Resize it (its grip, bottom right) and the layout
@@ -187,7 +187,7 @@ Screens
   bar): About, Settings, Full screen, Iconify, Quit. Iconify (Amiga-I,
   or the title bar's gadget on OS 3.2; full screen too) leaves an
   AppIcon on Workbench and the music playing: double-click it to come
-  back; Workbench's Tools > Quit AmigaMCE quits. Its zoom gadget swaps
+  back; Workbench's Tools > Quit Ambiance quits. Its zoom gadget swaps
   it for a mini player (the cover, what plays, the time, the buttons,
   mute, the volume, a meter; 1x, 2x or 3x by Workbench's size); its own
   zoom gadget, a click on the cover, Esc or Return bring the window
@@ -222,27 +222,27 @@ Requirements
 
 Installation
 ------------
-Double-click Install-AmigaMCE: it asks where AmigaMCE should go and which
+Double-click Install-Ambiance: it asks where Ambiance should go and which
 languages to install, your Workbench's ticked, and keeps the settings of
 an earlier installation. Not on AGS (which has them), it then offers
 modplug.library, mpega.library and xfdmaster.library from Aminet, ticked
-where LIBS: has none or an older one; a newer one is never replaced. Or copy the AmigaMCE drawer to your hard drive
+where LIBS: has none or an older one; a newer one is never replaced. Or copy the Ambiance drawer to your hard drive
 yourself (all its languages come along), keeping its Fonts drawer next to
 the program.
 
 On AGS, if it boots straight into its own menu, quit AGS to Workbench
-first, then double-click AmigaMCE.
+first, then double-click Ambiance.
 
 Languages
 ---------
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
-Norsk, Nederlands, Português, Japanese, Greek and Korean. AmigaMCE
+Norsk, Nederlands, Português, Japanese, Greek and Korean. Ambiance
 speaks your Workbench's language (Locale prefs) when its catalog is
 installed;
 Settings > General > Language chooses another. Workbench 3.x has no
-Japanese or Korean locale, so they are only ever chosen there: AmigaMCE
+Japanese or Korean locale, so they are only ever chosen there: Ambiance
 draws them with its own glyphs (Fonts/amce-cjk), needing nothing from
-the system. Greek is drawn with AmigaMCE's own glyphs too, so it needs no
+the system. Greek is drawn with Ambiance's own glyphs too, so it needs no
 Greek fonts or ReplaceTopaz; it is chosen by itself where Locale prefs
 put Greek first. The translations are new: corrections are
 welcome (catalogs/*.ct in the source, FlexCat's format).
@@ -302,19 +302,19 @@ Settings
                (Now Playing's level meters, HippoPlayer's spectrum
                analyser, or Flow on graphics cards; under MHI the
                meters), Full screen visual (F on Now Playing: Flow, or
-               one of AmigaAMP's visual plug-ins put in AmigaMCE's
-               Visuals drawer or AmigaAMP:Plugins; AmigaMCE answers on
+               one of AmigaAMP's visual plug-ins put in Ambiance's
+               Visuals drawer or AmigaAMP:Plugins; Ambiance answers on
                their port as AmigaAMP does, and its screen goes behind
                while one runs: Esc in it to come back), Jump scrolling
                (very long lists step a letter at a time). Text size, in
                a window: Small, Medium, Large or Extra large (a big
                Workbench). On a fast Amiga (as measured) the smooth
                style's text is blended in 16 steps over what is under
-               it on a 15 to 32-bit screen; AmigaMCE/TextBlend "on" or
+               it on a 15 to 32-bit screen; Ambiance/TextBlend "on" or
                "off" says otherwise.
   Sound        Paula, Paula at 14 bits, or AHI (16-bit) for radio,
                Plex and music files; MP3 by amcempega.library
-               (AmigaMCE's own), mpega.library or an MHI driver (which
+               (Ambiance's own), mpega.library or an MHI driver (which
                decodes and plays it itself); MP3 quality: automatic
                (by this Amiga's speed, measured each run), high or
                medium; FLAC by flacdec.library
@@ -331,11 +331,11 @@ Settings
                Stream buffer: short, normal or long
                Network interface: which one connections go out from
 
-Settings are saved in ENVARC:AmigaMCE/. If a screen mode does not suit
-your display, delete ENVARC:AmigaMCE/ScreenMode to go back to Automatic.
+Settings are saved in ENVARC:Ambiance/. If a screen mode does not suit
+your display, delete ENVARC:Ambiance/ScreenMode to go back to Automatic.
 
 Debug shows the CPU load and memory use in the header and writes a timing
-log to AmigaMCE.log next to the program (RAM:AmigaMCE.log if that drawer
+log to Ambiance.log next to the program (RAM:Ambiance.log if that drawer
 is read-only).
 
 
@@ -348,8 +348,8 @@ Setting up Plex
    Plex > Sign in at plex.tv and enter the code it shows at plex.tv/link
    on a phone or computer. Your account's servers then appear under Plex
    server. Without AmiSSL, set your Plex token from the Shell:
-     SetEnv SAVE AmigaMCE/PlexToken <token>
-   About > Plex in AmigaMCE says where to find it.
+     SetEnv SAVE Ambiance/PlexToken <token>
+   About > Plex in Ambiance says where to find it.
 3. Your music libraries appear under Music, photo libraries at the top
    of Pictures.
 
@@ -375,7 +375,7 @@ History
        drawn in, at half the screen's resolution on fast Amigas (a
        quarter on others, coarser where frames come slowly); F shows it
        on a screen of its own, with a video's controls while the mouse
-       moves. AmigaAMP's visual plug-ins run from AmigaMCE (F, Settings
+       moves. AmigaAMP's visual plug-ins run from Ambiance (F, Settings
        > Display > Full screen visual). Text blended in 16 steps on fast
        Amigas with a graphics card; Extra large text in a window;
        numbers that change (times, the Debug readout) no longer shift
@@ -395,7 +395,7 @@ History
        controls), and DVD images (.iso) in Videos' folders. AC-3 the card
        will not decode (Amiberry's emulated card) decoded by a 68040 or
        68060 instead (Libs/ac3.library, ac3fpu.library: liba52). MP3 and
-       MPEG audio by AmigaMCE's own Libs/amcempega.library (libmad: about
+       MPEG audio by Ambiance's own Libs/amcempega.library (libmad: about
        83 dB from a perfect decoder, where mpega 2.4 gives 34), or
        mpega.library or MHI as before (Settings > Sound); its quality
        chosen by how fast this Amiga is, measured at the first MP3 each
@@ -419,11 +419,11 @@ History
        The mini player's meters across.
 0.8.5  Iconify: the window's gadget on OS 3.2, Project > Iconify or
        Amiga-I (full screen too) leave an AppIcon with a musical note on
-       Workbench, the music playing on; double-clicked, AmigaMCE is back
+       Workbench, the music playing on; double-clicked, Ambiance is back
        where it was. Workbench's Tools menu quits it meanwhile. A mini
        player on the window's zoom gadget. Mute on Now playing (M). Sound
        output changed in Settings applies to what plays at once. JPEGs
-       no datatype takes (a camera's, from Plex) read by AmigaMCE.
+       no datatype takes (a camera's, from Plex) read by Ambiance.
 0.8.1  Now playing at the top of every section's lists, its label in
        orange; what was playing at quit back at the next start, stopped,
        Play going on from where it was. MED songs (MED_note): their
@@ -460,9 +460,9 @@ History
        signs in at plex.tv by a code (plex.tv/link), the account's
        servers listed with their own tokens. Radio: titles in time with
        the music, smoother over MHI, Now playing in its lists. 6- and
-       8-channel MODs on AmigaMCE's own replayer, mixed onto Paula (after
+       8-channel MODs on Ambiance's own replayer, mixed onto Paula (after
        ProTracker 4.1's mixer). ZZ9000: found, and MP3 decoded on the
-       card. JPEG thumbnails decoded by AmigaMCE itself (jdec), faster
+       card. JPEG thumbnails decoded by Ambiance itself (jdec), faster
        than a datatype. Greek. Lists: the scroll bar always, the letter
        over the rows, tags kept while scrolling; the menu stays open until
        a list is gone into; a joystick for Games.
@@ -498,7 +498,7 @@ History
 
 Credits and licences
 --------------------
-AmigaMCE (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
+Ambiance (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
 Its EaglePlayer host follows HippoPlayer's, and its spectrum analyser is
 HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
 6- and 8-channel modules are mixed the way ProTracker 4.1's 8-channel
@@ -511,7 +511,7 @@ libmodplug, which is in the public domain), mpega_library (mpega.library
 2.4 (c) 1997-99 Stephane Tavenard, giftware) and xfdmaster (xfdmaster
 1.38, library 39.15, (c) Georg Hoermann and Dirk Stoecker). mpega and xfd
 are free to pass on but not for profit, their files together and
-unchanged: AmigaMCE with them may not be sold.
+unchanged: Ambiance with them may not be sold.
 
 FLAC is decoded by flacdec.library (c) 2026 Renaud Schweingruber, with
 dr_flac by David Reid (public domain or MIT-0), where it is installed. It
@@ -525,4 +525,4 @@ Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in 
 drawer. Radio's station lists come from radio-browser.info.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
-names belong to their owners; AmigaMCE is not affiliated with any of them.
+names belong to their owners; Ambiance is not affiliated with any of them.

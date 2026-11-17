@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the ZZ9000's zz9k.library: its media sessions (MPEG video
+ * Ambiance - the ZZ9000's zz9k.library: its media sessions (MPEG video
  * decoded on the card, shown on its overlay, its sound given back)
  * Copyright (c) 2026 Brian King, MIT licence
  *
@@ -91,7 +91,7 @@ const char *zz_video_check(BOOL mpeg2, BOOL mp2)
                 (unsigned long)caps.capability_bits, s == ZZ9K_STATUS_OK ? "there" : zz_name(s),
                 (unsigned long)svc.flags,
                 ZZ9KBase->lib_Version == 2 && ZZ9KBase->lib_Revision >= 2 && ZZ9KBase->lib_Revision < 34
-                    ? "; its replies waited for by AmigaMCE (before 2.34 its timeout is 250 polls)" : "");
+                    ? "; its replies waited for by Ambiance (before 2.34 its timeout is 250 polls)" : "");
         amce_log("zz9k", m);
     }
     if ((caps.capability_bits & (ZZ9K_CAP_VIDEO_DECODE | ZZ9K_CAP_MEDIA_SESSION)) !=

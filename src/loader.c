@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the loader: a second process that does the disk work
+ * Ambiance - the loader: a second process that does the disk work
  * Copyright (c) 2026 Brian King
  *
  * Reading a fact sheet and decoding a screenshot take long enough on a
@@ -46,9 +46,9 @@ static struct Worker {
     const char *name;
     LONG pri;
 } workers[WORKERS] = {
-    { NULL, NULL, "AmigaMCE loader", -2 },
-    { NULL, NULL, "AmigaMCE pictures", -3 },
-    { NULL, NULL, "AmigaMCE picture now", PRI_URGENT },
+    { NULL, NULL, "Ambiance loader", -2 },
+    { NULL, NULL, "Ambiance pictures", -3 },
+    { NULL, NULL, "Ambiance picture now", PRI_URGENT },
 };
 static struct Worker *starting;     /* the one being started (its process reads it) */
 static struct MsgPort *reply_port;  /* ours */
@@ -78,7 +78,7 @@ static struct Worker *worker_for(const struct LJob *j)
  * jdec leaves to the datatypes */
 static const char *pic_kind(const struct LJob *j, const char *src)
 {
-    if (!strncmp(src, "RAM:AmigaMCE-art/", 17))
+    if (!strncmp(src, "RAM:Ambiance-art/", 17))
         return "streamed cover (Plex)";
     if (j->type == LJ_ENTRY || (j->type == LJ_SHOT && j->mode == SHOT_AGS))
         return "game screenshot";
@@ -248,7 +248,7 @@ static void loader_main(void)
         while ((j = (struct LJob *)GetMsg(port))) {
             if (j->type == LJ_QUIT) {
                 DeleteMsgPort(port);
-                Forbid();               /* gone before AmigaMCE can unload */
+                Forbid();               /* gone before Ambiance can unload */
                 ReplyMsg(&j->msg);
                 return;
             }

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Plex: a Plex Media Server's music, browsed and played
+ * Ambiance - Plex: a Plex Media Server's music, browsed and played
  * Copyright (c) 2026 Brian King
  *
  * A Plex Media Server on the home network answers plain HTTP on port
@@ -8,16 +8,16 @@
  * radio-browser.info (net.c), and its MP3 files play as the radio's
  * streams do (stream.c), with an end. The server is found on the network
  * by GDM (net.c: a UDP "M-SEARCH" the servers answer), or named in
- * ENVARC:AmigaMCE/PlexServer ("address:port"). Its sign-in token, which a
+ * ENVARC:Ambiance/PlexServer ("address:port"). Its sign-in token, which a
  * server asks for unless it lets this address in without one, is
- * ENVARC:AmigaMCE/PlexToken (from the Shell: SetEnv SAVE AmigaMCE/PlexToken
+ * ENVARC:Ambiance/PlexToken (from the Shell: SetEnv SAVE Ambiance/PlexToken
  * ...), or comes from signing in at plex.tv (HTTPS, so AmiSSL): Plex's
  * own way for a device without a keyboard to speak of, a code asked for
  * (POST /api/v2/pins), entered by the user at plex.tv/link on a phone or
  * computer, the code then asked after until its authToken comes. The
  * account's servers (/api/resources) are then offered beside those GDM
  * finds, each with its own token. The account's token is
- * ENVARC:AmigaMCE/PlexAccount; no token is ever logged.
+ * ENVARC:Ambiance/PlexAccount; no token is ever logged.
  *
  * The lists are pages of items, as Radio's: IT_PLEXDIR rows open another
  * list (path: the server's key for it, "@<n>" a music library's own menu,
@@ -55,16 +55,16 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 
-#define SERVER_VAR "AmigaMCE/PlexServer"
-#define NAME_VAR   "AmigaMCE/PlexName"
-#define TOKEN_VAR  "AmigaMCE/PlexToken"
-#define CID_VAR    "AmigaMCE/PlexClient"
-#define CONV_VAR   "AmigaMCE/PlexLowAudio"     /* was PlexConvert: on again by default */
-#define ON_VAR     "AmigaMCE/Plex"
-#define LIB_VAR    "AmigaMCE/PlexLibrary"
-#define PHOTO_VAR  "AmigaMCE/PlexPhotos"    /* its photo libraries: "key\ttitle" lines */
-#define ACCT_VAR   "AmigaMCE/PlexAccount"   /* plex.tv: the account's token */
-#define USER_VAR   "AmigaMCE/PlexUser"      /* ...and its name */
+#define SERVER_VAR "Ambiance/PlexServer"
+#define NAME_VAR   "Ambiance/PlexName"
+#define TOKEN_VAR  "Ambiance/PlexToken"
+#define CID_VAR    "Ambiance/PlexClient"
+#define CONV_VAR   "Ambiance/PlexLowAudio"     /* was PlexConvert: on again by default */
+#define ON_VAR     "Ambiance/Plex"
+#define LIB_VAR    "Ambiance/PlexLibrary"
+#define PHOTO_VAR  "Ambiance/PlexPhotos"    /* its photo libraries: "key\ttitle" lines */
+#define ACCT_VAR   "Ambiance/PlexAccount"   /* plex.tv: the account's token */
+#define USER_VAR   "Ambiance/PlexUser"      /* ...and its name */
 #define LIST_MAX   1000         /* entries asked for at once */
 
 struct PlexConf plex;
@@ -87,13 +87,13 @@ static void set_var(const char *name, const char *value)
     APTR oldwin = me->pr_WindowPtr;
     BPTR l;
     me->pr_WindowPtr = (APTR)-1;
-    if ((l = Lock((CONST_STRPTR)"ENVARC:AmigaMCE", SHARED_LOCK)))
+    if ((l = Lock((CONST_STRPTR)"ENVARC:Ambiance", SHARED_LOCK)))
         UnLock(l);
-    else if ((l = CreateDir((CONST_STRPTR)"ENVARC:AmigaMCE")))
+    else if ((l = CreateDir((CONST_STRPTR)"ENVARC:Ambiance")))
         UnLock(l);
-    if ((l = Lock((CONST_STRPTR)"ENV:AmigaMCE", SHARED_LOCK)))
+    if ((l = Lock((CONST_STRPTR)"ENV:Ambiance", SHARED_LOCK)))
         UnLock(l);
-    else if ((l = CreateDir((CONST_STRPTR)"ENV:AmigaMCE")))
+    else if ((l = CreateDir((CONST_STRPTR)"ENV:Ambiance")))
         UnLock(l);
     SetVar((CONST_STRPTR)name, (CONST_STRPTR)value, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
     me->pr_WindowPtr = oldwin;
@@ -145,9 +145,9 @@ void plex_load(UWORD cpu)
         amce_strlcpy(plex.library, v, sizeof(plex.library));
     }
     if (!plex.cid[0]) {
-        /* who this AmigaMCE is, to the server: made up once, then kept */
+        /* who this Ambiance is, to the server: made up once, then kept */
         ULONG a = time_ms() ^ (ULONG)FindTask(NULL), b = (ULONG)AvailMem(MEMF_ANY) * 2654435761UL;
-        sprintf(plex.cid, "amigamce-%08lx%08lx", (unsigned long)a, (unsigned long)b);
+        sprintf(plex.cid, "ambiance-%08lx%08lx", (unsigned long)a, (unsigned long)b);
         set_var(CID_VAR, plex.cid);
     }
 }
@@ -196,10 +196,10 @@ void plex_request_from(const char *key, LONG start, char *out, LONG max)
     char n[64];
     amce_strlcpy(out, key, max);
     amce_strlcat(out, strchr(key, '?') ? "&" : "?", max);
-    amce_strlcat(out, "X-Plex-Product=AmigaMCE&X-Plex-Version=" AMCE_VERSION
+    amce_strlcat(out, "X-Plex-Product=Ambiance&X-Plex-Version=" AMCE_VERSION
                       "&X-Plex-Platform=AmigaOS&X-Plex-Client-Identifier=", max);
     amce_strlcat(out, plex.cid, max);
-    /* the language AmigaMCE shows: what the server makes itself, in it */
+    /* the language Ambiance shows: what the server makes itself, in it */
     amce_strlcat(out, "&X-Plex-Language=", max);
     amce_strlcat(out, amce_lang_iso(), max);
     if (plex.token[0]) {
@@ -358,7 +358,7 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
         amce_strlcat(out, n + 9, max);
         amce_strlcat(out, "&X-Plex-Client-Identifier=", max);
         amce_strlcat(out, plex.cid, max);
-        amce_strlcat(out, "&X-Plex-Product=AmigaMCE&X-Plex-Version=" AMCE_VERSION
+        amce_strlcat(out, "&X-Plex-Product=Ambiance&X-Plex-Version=" AMCE_VERSION
                           "&X-Plex-Platform=Generic&X-Plex-Platform-Version=3"
                           "&X-Plex-Device=Amiga&X-Plex-Model=Amiga"
                           "&X-Plex-Client-Profile-Extra="
@@ -743,7 +743,7 @@ BOOL plex_summary(UBYTE *body, ULONG len, char *out, LONG max)
 /* ------------------------------------------------------------ plex.tv */
 void plex_tv_headers(char *out, LONG max, BOOL token)
 {
-    amce_strlcpy(out, "X-Plex-Product: AmigaMCE\r\nX-Plex-Version: " AMCE_VERSION
+    amce_strlcpy(out, "X-Plex-Product: Ambiance\r\nX-Plex-Version: " AMCE_VERSION
                       "\r\nX-Plex-Platform: AmigaOS\r\nX-Plex-Device-Name: Amiga"
                       "\r\nX-Plex-Client-Identifier: ", max);
     amce_strlcat(out, plex.cid, max);
@@ -834,7 +834,7 @@ void plex_art_file(const char *thumb, WORD w, WORD h, char *file)
     const char *s;
     for (s = thumb; *s; s++)
         hash = hash * 33 + (UBYTE)*s;
-    sprintf(file, "RAM:AmigaMCE-art/%08lx-%ldx%ld-in.jpg", (unsigned long)hash, (long)w, (long)h);
+    sprintf(file, "RAM:Ambiance-art/%08lx-%ldx%ld-in.jpg", (unsigned long)hash, (long)w, (long)h);
 }
 
 BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *file, LONG fmax)
@@ -842,11 +842,11 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
     char enc[400], n[96];
     BPTR l;
     BOOL jpg;
-    if ((l = Lock((CONST_STRPTR)"RAM:AmigaMCE-art", SHARED_LOCK)))
+    if ((l = Lock((CONST_STRPTR)"RAM:Ambiance-art", SHARED_LOCK)))
         UnLock(l);
-    else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
+    else if ((l = CreateDir((CONST_STRPTR)"RAM:Ambiance-art")))
         UnLock(l);
-    /* JPEG at every size: AmigaMCE decodes it itself (jdec, jpgthumb.c),
+    /* JPEG at every size: Ambiance decodes it itself (jdec, jpgthumb.c),
      * with no datatype (none of Warp's shareware requesters), several times
      * faster than WarpJPEG, and the server's are baseline, which jdec
      * reads; a tenth of a PNG's size besides. PNG was asked for below 640
@@ -875,9 +875,9 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
 }
 
 /* A picture the server sent (plex_art) kept in file. */
-/* ---- RAM:AmigaMCE-art kept within a budget
+/* ---- RAM:Ambiance-art kept within a budget
  * Every picture fetched (covers, artists, photos, fetched ahead) and every
- * cover copied out of a song is kept in RAM:AmigaMCE-art, and RAM: is
+ * cover copied out of a song is kept in RAM:Ambiance-art, and RAM: is
  * memory: the folder was never trimmed. It now has a budget, an eighth of
  * the memory free (256 KB to 16 MB), worked out again each time; past it,
  * the oldest pictures go until it is three quarters full. With under 2 MB
@@ -885,7 +885,7 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
  * screen, the viewer's next photo); one open (being read) is skipped, its
  * DeleteFile failing. Checked after each picture saved here; the folder
  * read only when the running total says it may be over. */
-#define ART_DIR       "RAM:AmigaMCE-art"
+#define ART_DIR       "RAM:Ambiance-art"
 #define ART_KEEP_NEW  8
 #define ART_MAX_FILES 600
 

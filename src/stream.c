@@ -1,10 +1,10 @@
 /*
- * AmigaMCE - internet radio: an MP3 stream decoded and played on Paula
+ * Ambiance - internet radio: an MP3 stream decoded and played on Paula
  * Copyright (c) 2026 Brian King
  *
  * A station's stream is an endless MP3 file sent over HTTP (Icecast and
  * SHOUTcast servers; SHOUTcast answers "ICY 200 OK"). A process of its own
- * ("AmigaMCE playback") connects, asks for the stream with its titles
+ * ("Ambiance playback") connects, asks for the stream with its titles
  * ("Icy-MetaData: 1": every icy-metaint bytes a little block saying what
  * plays), and gives the MP3 to mpega.library through a bitstream hook:
  * the decoder asks for bytes, the hook reads them off the socket and takes
@@ -164,7 +164,7 @@ typedef struct {
 
 typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
 
-/* amcempega.library (extras/mpga, AmigaMCE's Libs): mpega's functions under
+/* amcempega.library (extras/mpga, Ambiance's Libs): mpega's functions under
  * a name of its own (libmad inside), and one more of its own after them,
  * MPGA_decode_to: each frame straight into our FIFO (16-bit rings), its
  * peaks and clipped samples with it. Settings > Sound chooses it or
@@ -184,7 +184,7 @@ typedef char mpgaout_size_check[sizeof(struct MpgaOut) == 36 ? 1 : -1];
 static BOOL own_mpega;              /* Settings > Sound: MP3 by amcempega.library */
 static BOOL mpega_is_own;           /* MPEGABase is it, this stream */
 
-/* the MP3 decoder chosen: amcempega.library from AmigaMCE's Libs, or
+/* the MP3 decoder chosen: amcempega.library from Ambiance's Libs, or
  * LIBS:mpega.library (and that, if ours will not open) */
 static struct Library *mpega_open(void)
 {
@@ -299,7 +299,7 @@ static ULONG mpa_measure(const struct MpaStep *s)
     }
     pcm[0] = p0;
     pcm[1] = p1;
-    if (!(ms = MPEGA_open((char *)"AmigaMCE speed", &c)))
+    if (!(ms = MPEGA_open((char *)"Ambiance speed", &c)))
         return ~0UL;
     if (MPEGA_decode_frame(ms, pcm) >= 0) {
         while (n < MPA_PROBE_FRAMES - 2) {
@@ -608,7 +608,7 @@ static void paula_start(void)
     st.want = 1;
     st.aint.is_Node.ln_Type = NT_INTERRUPT;
     st.aint.is_Node.ln_Pri = 0;
-    st.aint.is_Node.ln_Name = (char *)"AmigaMCE playback";
+    st.aint.is_Node.ln_Name = (char *)"Ambiance playback";
     st.aint.is_Data = NULL;
     st.aint.is_Code = (void (*)())audio_code;
     CU->intena = INTF_AUD0;
@@ -1311,7 +1311,7 @@ static void ping_url(const char *url)
     if (!split_url(url, host, sizeof(host), &port, path, sizeof(path)))
         return;
     if (sock_open(host, port, !amce_strnicmp(url, "https:", 6))) {
-        sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+        sprintf(req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
                      "\r\nConnection: close\r\n\r\n", path, host);
         if (sock_send(req))
             status = read_headers(hdr, sizeof(hdr));
@@ -1367,7 +1367,7 @@ static BOOL open_stream(void)
             return FALSE;
         }
         if (!split_url(url, host, sizeof(host), &port, path, sizeof(path))) {
-            fail(_("The station's address is not one AmigaMCE can follow"));
+            fail(_("The station's address is not one Ambiance can follow"));
             return FALSE;
         }
         st.state = ST_CONNECTING;
@@ -1378,7 +1378,7 @@ static BOOL open_stream(void)
         else
             range[0] = 0;
         sprintf(req,
-                "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+                "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
                 "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
                 path, host, st.finite ? "" : "Icy-MetaData: 1\r\n", range);
         if (!sock_send(req)) {
@@ -1443,7 +1443,7 @@ static BOOL open_stream(void)
                         p = q;              /* the first address, secure too */
                 }
                 if (!p) {
-                    fail(_("The station's playlist has no stream AmigaMCE can play"));
+                    fail(_("The station's playlist has no stream Ambiance can play"));
                     return FALSE;
                 }
                 for (e = p; *e && *e != '\r' && *e != '\n'; e++)
@@ -2237,7 +2237,7 @@ static void pcm_play(void)
         return;
     }
     if (!pcm_header(hdr, n, &pf)) {
-        fail(_("Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)"));
+        fail(_("Not a kind of WAV, AIFF or 8SVX that Ambiance plays (compressed?)"));
         return;
     }
     if (st.clen && pf.off + pf.bytes > st.clen) {
@@ -2593,7 +2593,7 @@ done:
  * ZZ9000 cannot), the card is given it without sound and shows its
  * pictures, and the CPU decodes the AC3 instead (ac3fpu.library on a
  * 68040/68060 with its FPU, else ac3.library: liba52, GPL, opened at run
- * time from AmigaMCE's Libs or LIBS:), the pictures timed by it as by the
+ * time from Ambiance's Libs or LIBS:), the pictures timed by it as by the
  * card's sound. Its bytes come out of the Program Stream as it is given to
  * the card (a file's, a DVD's, a transport stream's as packed): private
  * stream 1, its first AC3 substream (80-87), whole packets passed over,
@@ -2638,7 +2638,7 @@ const char *st_ac3_cpu_why(void)
     for (i = 0; i < 4; i++)
         if (amce_exists(at[i]))
             return NULL;
-    return "no ac3.library (AmigaMCE's Libs or LIBS:)";
+    return "no ac3.library (Ambiance's Libs or LIBS:)";
 }
 
 /* Which AC3 library is the faster here, found once a run: with an FPU,
@@ -3028,9 +3028,9 @@ static BOOL sw_to_overlay(const struct MpvPicture *f)
     return TRUE;
 }
 
-/* mpegv.library (AmigaMCE's Libs, else LIBS:): opened by the UI when a
+/* mpegv.library (Ambiance's Libs, else LIBS:): opened by the UI when a
  * video is to be decoded by the CPU (video_check: its PROGDIR: is
- * AmigaMCE's), used by the playback process and the UI alike, let go after
+ * Ambiance's), used by the playback process and the UI alike, let go after
  * each video (st_mpv_close: anim_play_video, once the playback process has
  * stopped), and at quitting. NULL if it is not there. */
 struct Library *MpegvBase;
@@ -3771,7 +3771,7 @@ static void swv_run(void)
                 ls[k]->stereo = ls[k]->mono;
             }
             sw_on = TRUE;                   /* (the hook: from the queue) */
-            if (!(ms = MPEGA_open((char *)"AmigaMCE video", &ctrl))) {
+            if (!(ms = MPEGA_open((char *)"Ambiance video", &ctrl))) {
                 amce_log("video", "mpega.library would not take its sound: left out");
                 sw_sound = FALSE;
             } else {
@@ -4561,7 +4561,7 @@ static void video_run(void)
             } else {
                 if (au.rate && !rate) {
                     if (au.format != 2 || (au.channels != 1 && au.channels != 2)) {
-                        amce_log("video", "its sound is in a form AmigaMCE does not play: on without it");
+                        amce_log("video", "its sound is in a form Ambiance does not play: on without it");
                         sound = FALSE;
                     } else {
                         rate = au.rate;
@@ -5351,7 +5351,7 @@ static void playback_main(void)
     }
     ctrl.check_mpeg = 0;
     ctrl.stream_buffer_size = 0;
-    if (!(ms = MPEGA_open((char *)"AmigaMCE playback", &ctrl))) {
+    if (!(ms = MPEGA_open((char *)"Ambiance playback", &ctrl))) {
         fail(st.err[0] ? st.err : "The stream is not MP3 that mpega.library can decode");
         goto out;
     }
@@ -5491,7 +5491,7 @@ BOOL st_start(const char *url, UWORD master, UWORD cpu, BOOL finite, ULONG range
     }
     st.state = ST_CONNECTING;
     st.cpu = cpu;
-    st.proc = CreateNewProcTags(NP_Entry, (ULONG)playback_main, NP_Name, (ULONG)"AmigaMCE playback",
+    st.proc = CreateNewProcTags(NP_Entry, (ULONG)playback_main, NP_Name, (ULONG)"Ambiance playback",
                                 NP_Priority, 3, NP_StackSize, 65536, NP_WindowPtr, (ULONG)-1,
                                 TAG_DONE);
     if (!st.proc) {
@@ -5662,7 +5662,7 @@ void st_use_mhi(const char *driver)
 }
 
 /* Settings > Sound: MP3 (and MPEG video's sound) by amcempega.library,
- * AmigaMCE's own (else LIBS:mpega.library), for streams started from now
+ * Ambiance's own (else LIBS:mpega.library), for streams started from now
  * on. */
 void st_use_own_mpega(BOOL on)
 {

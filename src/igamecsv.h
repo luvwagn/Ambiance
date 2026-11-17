@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - iGame's files read: a gameslist.csv line, an icon's tooltype
+ * Ambiance - iGame's files read: a gameslist.csv line, an icon's tooltype
  * as a WHDLoad argument, games told from demos (igamecsv.c). No Amiga
  * headers, so the host tests use it as it is.
  */

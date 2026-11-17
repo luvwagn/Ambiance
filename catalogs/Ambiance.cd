@@ -1,4 +1,4 @@
-; AmigaMCE's catalog description: made by tools/catalog.py scan from
+; Ambiance's catalog description: made by tools/catalog.py scan from
 ; the _() and N_() strings in src/. Do not edit: edit the source.
 ; amphost.c:358
 MSG_420624D6 (1107698902//)
@@ -55,11 +55,11 @@ Recently added
 MSG_4E6387ED (1315145709//)
 Not enough memory
 ; dvdplay.c:514 main.c:5460 main.c:5479
-MSG_5DC5AAA0 (1573235360//)
-DVDs need dvdnav.library (in AmigaMCE's Libs)
+MSG_33E78AD0 (870812368//)
+DVDs need dvdnav.library (in Ambiance's Libs)
 ; dvdplay.c:522
-MSG_3A32AEDF (976400095//)
-Not a DVD-Video disc AmigaMCE can read: %.120s
+MSG_3A57C757 (978831191//)
+Not a DVD-Video disc Ambiance can read: %.120s
 ; dvdplay.c:544
 MSG_57CA60FE (1472880894//)
 The DVD's film could not be played
@@ -67,45 +67,45 @@ The DVD's film could not be played
 MSG_50A1D5F7 (1352783351//)
 The DVD is no longer in its drive
 ; eagle.c:977
-MSG_1592F849 (361953353//)
-No player AmigaMCE has knows this module
+MSG_20C22E79 (549596793//)
+No player Ambiance has knows this module
 ; eagle.c:978
-MSG_3EE87411 (1055421457//)
-Not a module AmigaMCE can play, and no EaglePlayer players were found
+MSG_66769F89 (1719050121//)
+Not a module Ambiance can play, and no EaglePlayer players were found
 ; eagle.c:996
 MSG_62F4807B (1660190843//)
 %s could not load the module's other files
 ; eagle.c:1006
 MSG_4E20BD99 (1310768537//)
 %s could not start this module
-; gfx.c:339
+; gfx.c:338
 MSG_647DD404 (1685967876//)
 needs a graphics card
-; gfx.c:341
+; gfx.c:340
 MSG_2B7EBD1D (729726237//)
 needs AGA
-; gfx.c:344
+; gfx.c:343
 MSG_550E04D5 (1426982101//)
 not available
-; gfx.c:1102
+; gfx.c:1101
 MSG_7C321421 (2083656737//)
 Midnight
-; gfx.c:1102
+; gfx.c:1101
 MSG_4C5F9DAD (1281334701//)
 Graphite
-; gfx.c:1103
+; gfx.c:1102
 MSG_634FC3DF (1666171871//)
 Emerald
-; gfx.c:1103
+; gfx.c:1102
 MSG_2B535442 (726881346//)
 Amethyst
-; gfx.c:3117
+; gfx.c:3116
 MSG_30386F8F (809004943//)
 true colour
-; gfx.c:3119
+; gfx.c:3118
 MSG_3665BBE3 (912636899//)
 64 colours, EHB
-; gfx.c:3121 main.c:1568
+; gfx.c:3120 main.c:1568
 MSG_0F6E4D56 (258886998//)
 %lu colours
 ; igame.c:319
@@ -166,8 +166,8 @@ Program: %s
 MSG_6C384865 (1815627877//)
 Its file is not there (rescan in iGame)
 ; igame.c:606 main.c:9922
-MSG_74066526 (1946576166//)
-Could not write T:AmigaMCE-run
+MSG_7EBB5FFE (2126209022//)
+Could not write T:Ambiance-run
 ; main.c:54
 MSG_73F99D3C (1945738556//)
 Games
@@ -214,26 +214,26 @@ iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7 (338779303//)
 iGame's list has no games in it, and Amiga Game Selector was not found.
 ; main.c:1498
-MSG_68D81CDC (1758993628//)
-AmigaMCE takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
+MSG_575792EC (1465357036//)
+Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 ; main.c:1502
 MSG_4D9D0161 (1302135137//)
 Amiga Game Selector was not found.
 ; main.c:1504
-MSG_3F233512 (1059271954//)
-Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from AmigaMCE.
+MSG_1CEB5C4E (485186638//)
+Amiga Game Selector 3 (AGS) is a ready-made collection of WHDLoad games and demos, with screenshots and descriptions. With it installed, they are listed here and start from Ambiance.
 ; main.c:1508
-MSG_017A1274 (24777332//)
-AmigaMCE looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install AmigaMCE on an AGS 3 system, or start AGS once so its assigns exist.
+MSG_07BE5AE8 (129915624//)
+Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
 ; main.c:1513
-MSG_1805A7D1 (403023825//)
-iGame's list is shown here too, or in AGS's place: AmigaMCE looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
+MSG_195350C5 (424890565//)
+iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 ; main.c:1516
 MSG_5C6E1F8B (1550720907//)
 Music, Mods, Pictures, Videos and Radio work without it: Settings > Folders says where your music, modules, pictures and animations are.
 ; main.c:1531
-MSG_0C290F2C (204017452//)
-Found when AmigaMCE started:
+MSG_78764318 (2021016344//)
+Found when Ambiance started:
 ; main.c:1533
 MSG_6C041D54 (1812208980//)
 Machine type: %s
@@ -316,8 +316,8 @@ found
 MSG_40A7AEDA (1084731098//)
 not found
 ; main.c:1608
-MSG_4FE02B8B (1340091275//)
-Assigns AmigaMCE added (AGS-Stuff did not run):
+MSG_74EC33B7 (1961636791//)
+Assigns Ambiance added (AGS-Stuff did not run):
 ; main.c:1612
 MSG_268D62B2 (646800050//)
 iGame: %.120s, %ld games, %ld demos
@@ -367,8 +367,8 @@ MP3: %s
 MSG_197B8973 (427526515//)
 MHI driver
 ; main.c:1632
-MSG_1A89232E (445195054//)
-amcempega.library, AmigaMCE's own
+MSG_6584723A (1703178810//)
+amcempega.library, Ambiance's own
 ; main.c:1633
 MSG_4B721655 (1265768021//)
 mpega.library, the ZZ9000 SDK's (decoded on the card)
@@ -460,14 +460,14 @@ Picture folders
 MSG_7B7A30D9 (2071605465//)
 Video folders
 ; main.c:2225
-MSG_2DA81BF2 (765991922//)
-Smooth: Fonts/amce-smooth does not match this AmigaMCE
+MSG_690FAC12 (1762634770//)
+Smooth: Fonts/amce-smooth does not match this Ambiance
 ; main.c:2300
 MSG_3CB0C840 (1018218560//)
 F on Now playing starts this AmigaAMP plug-in
 ; main.c:2301
-MSG_6143CDF8 (1631833592//)
-Flow (AmigaAMP plug-ins: put them in AmigaMCE's Visuals drawer)
+MSG_1B723F84 (460472196//)
+Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 ; main.c:2302 main.c:2631 vis.c:44
 MSG_3DF462B5 (1039426229//)
 Flow
@@ -760,11 +760,11 @@ MSG_1AB0857C (447776124//)
 MSG_2DA3A6A5 (765699749//)
 MP3 decoder
 ; main.c:2922
-MSG_7C47EC75 (2085088373//)
-not installed (AmigaMCE's Libs)
+MSG_2EEBD2B9 (787206841//)
+not installed (Ambiance's Libs)
 ; main.c:2923
-MSG_4C9B4043 (1285242947//)
-AmigaMCE's own, decoded here
+MSG_6695A193 (1721082259//)
+Ambiance's own, decoded here
 ; main.c:2929
 MSG_3F71ACC2 (1064414402//)
 decoded on the ZZ9000
@@ -859,14 +859,14 @@ None: no iGame list
 MSG_3015054E (806683982//)
 WHDLoad is installed: %s
 ; main.c:3140
-MSG_33EE9E1D (871276061//)
-Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). AmigaMCE cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
+MSG_67935CAD (1737710765//)
+Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 ; main.c:3145
 MSG_776C7EC6 (2003599046//)
 WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
 ; main.c:3147
-MSG_13CE4E7E (332287614//)
-AmigaMCE can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
+MSG_5610C80E (1443940366//)
+Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 ; main.c:3150
 MSG_4EA477C4 (1319401412//)
 Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
@@ -934,8 +934,8 @@ Credits
 MSG_589D7E42 (1486716482//)
 System information
 ; main.c:3472 main.c:14131
-MSG_345099C5 (877697477//)
-Plex in AmigaMCE
+MSG_692FB19D (1764733341//)
+Plex in Ambiance
 ; main.c:3485
 MSG_718F9B3E (1905236798//)
 (c) 2026 Brian King, under the MIT licence
@@ -979,23 +979,23 @@ MSG_190B5576 (420173174//)
 MSG_1018D7F4 (270063604//)
 No pictures folder: Settings > Folders > Pictures
 ; main.c:3769
-MSG_247DBF4F (612220751//)
-No animations found: AmigaMCE looks for them in %s.
+MSG_299412DB (697570011//)
+No animations found: Ambiance looks for them in %s.
 ; main.c:3770
 MSG_6A5613A3 (1784026019//)
 %s has no animations in it.
 ; main.c:3772
-MSG_7D6C1643 (2104235587//)
-No animations found. AmigaMCE plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_18130437 (403899447//)
+No animations found. Ambiance plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
 ; main.c:3794
-MSG_29C163F7 (700539895//)
-No pictures found: AmigaMCE looks for them in %s.
+MSG_481007A3 (1209010083//)
+No pictures found: Ambiance looks for them in %s.
 ; main.c:3795
 MSG_6A91D3DF (1787941855//)
 %s has no pictures in it.
 ; main.c:3797
-MSG_5DEE87BD (1575913405//)
-No pictures found. AmigaMCE looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
+MSG_5A0D1EB1 (1510809265//)
+No pictures found. Ambiance looks for them in PICTURES:, in the folders of Settings > Folders > Pictures, and on AGS in %s.
 ; main.c:4153
 MSG_42D8D701 (1121507073//)
 Sun
@@ -1174,8 +1174,8 @@ A bare video stream
 MSG_5E08A9DF (1577626079//)
 %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 ; main.c:5533 video.c:265
-MSG_50D8B3E7 (1356379111//)
-Not an MPEG video AmigaMCE can read
+MSG_20C6E823 (549906467//)
+Not an MPEG video Ambiance can read
 ; main.c:5544
 MSG_1403F9F1 (335804913//)
 %ld frames, %ld.%ld s
@@ -1354,8 +1354,8 @@ The track could not be started there
 MSG_369379DB (915634651//)
 The station stopped sending
 ; main.c:9383
-MSG_0D35346B (221590635//)
-No modules found. AmigaMCE looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
+MSG_50DE0E1B (1356729883//)
+No modules found. Ambiance looks for them in MODS:, in the folders of Settings > Folders > Modules, and on AGS in %s and %s (its menu music).
 ; main.c:9388
 MSG_6870F104 (1752232196//)
 It plays ProTracker modules itself, and hundreds of other formats (OctaMED, TFMX, Future Composer, SID...) with EaglePlayer's and DeliTracker's players, all on the Amiga's own sound.
@@ -1456,8 +1456,8 @@ The window could not open: full screen
 MSG_4926346E (1227240558//)
 Iconify needs Workbench
 ; main.c:11305
-MSG_7170B5C2 (1903211970//)
-Quit AmigaMCE
+MSG_32414422 (843138082//)
+Quit Ambiance
 ; main.c:11486
 MSG_336326B3 (862135987//)
 Track %ld of %ld
@@ -1531,8 +1531,8 @@ Asking plex.tv for a code...  Esc to give up
 MSG_19C08CA4 (432049316//)
 On a phone or computer, go to plex.tv/link, sign in to Plex if it asks, and enter this code:
 ; main.c:12631
-MSG_4F573886 (1331116166//)
-AmigaMCE is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
+MSG_5E69FFD6 (1584005078//)
+Ambiance is waiting for it to be entered (the code lasts 15 minutes). Esc gives up.
 ; main.c:12636
 MSG_3DC2D1A0 (1036177824//)
 Signed in. Asking plex.tv for this account's servers...
@@ -1567,8 +1567,8 @@ Signed out of plex.tv
 MSG_6358253C (1666721084//)
 That library is gone from the server: Music lists them again
 ; main.c:13091
-MSG_7B170497 (2065106071//)
-The server wants a sign-in token: see About > Plex in AmigaMCE
+MSG_733CFA2B (1933376043//)
+The server wants a sign-in token: see About > Plex in Ambiance
 ; main.c:13093
 MSG_229E5121 (580800801//)
 The server answered with something unexpected
@@ -1588,8 +1588,8 @@ Show the photo
 MSG_7BB6085B (2075527259//)
 Nothing listed
 ; main.c:13165
-MSG_46D7374C (1188509516//)
-No stations here that AmigaMCE can play
+MSG_4F0474B8 (1325692088//)
+No stations here that Ambiance can play
 ; main.c:13256
 MSG_1BED60DF (468541663//)
 Still being read from the server: a moment
@@ -1618,14 +1618,14 @@ Plex: %.100s
 MSG_2550824B (626033227//)
 Plex server chosen
 ; main.c:14135
-MSG_35BE063F (901645887//)
-AmigaMCE plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
+MSG_06F0678F (116418447//)
+Ambiance plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
 ; main.c:14146
-MSG_2FBD9CB6 (800955574//)
-Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE AmigaMCE/PlexServer 192.168.1.10:32400
+MSG_4569D662 (1164564066//)
+Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE Ambiance/PlexServer 192.168.1.10:32400
 ; main.c:14150
-MSG_5B40D81A (1530976282//)
-Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE AmigaMCE/PlexToken <token>.
+MSG_26B94016 (649674774//)
+Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE Ambiance/PlexToken <token>.
 ; main.c:14160
 MSG_6D54C528 (1834272040//)
 Token: set
@@ -1642,8 +1642,8 @@ plex.tv: not signed in
 MSG_0B620CC7 (190975175//)
 MP3: decoded by the MHI driver %.40s
 ; main.c:14177
-MSG_36767C71 (913734769//)
-MP3: decoded by amcempega.library, AmigaMCE's own
+MSG_535831ED (1398288877//)
+MP3: decoded by amcempega.library, Ambiance's own
 ; main.c:14178
 MSG_59D38C2E (1507036206//)
 MP3: decoded on the ZZ9000 (its mpega.library)
@@ -1753,8 +1753,8 @@ That interface is not up
 MSG_646AFCF3 (1684733171//)
 MHI is not installed (its drivers in LIBS:MHI)
 ; main.c:14375
-MSG_61E14706 (1642153734//)
-amcempega.library is not in AmigaMCE's Libs
+MSG_1D253CB2 (488979634//)
+amcempega.library is not in Ambiance's Libs
 ; main.c:14377
 MSG_7B5C3E86 (2069642886//)
 MHI and the ZZ9000's mpega.library decode MP3 at their best
@@ -1771,8 +1771,8 @@ None of the servers answered: Automatic kept
 MSG_7800A723 (2013308707//)
 MP3 decoded by MHI: radio, Plex (at its best quality) and files
 ; main.c:14534
-MSG_799CE4C5 (2040325317//)
-MP3 decoded here by amcempega.library, AmigaMCE's own
+MSG_55A6C479 (1436992633//)
+MP3 decoded here by amcempega.library, Ambiance's own
 ; main.c:14535
 MSG_605E617D (1616798077//)
 MP3 decoded here by mpega.library
@@ -1816,8 +1816,8 @@ Fire again to take this folder out (its files stay)
 MSG_4A2FC46E (1244644462//)
 Folder taken out
 ; main.c:15255
-MSG_746B08BF (1953171647//)
-Press Esc again to quit AmigaMCE
+MSG_3BD64F13 (1003900691//)
+Press Esc again to quit Ambiance
 ; main.c:15804
 MSG_6FC2F840 (1875048512//)
 Nothing is playing
@@ -1834,11 +1834,11 @@ Flow: this player does not say what it plays
 MSG_65839537 (1703122231//)
 Flow could not be shown here
 ; main.c:16373 main.c:16379
-MSG_16ABF123 (380367139//)
-AmigaMCE needs Kickstart 3.0 or newer.\n
+MSG_018386B3 (25396915//)
+Ambiance needs Kickstart 3.0 or newer.\n
 ; main.c:16478
-MSG_43383FA3 (1127759779//)
-AmigaMCE could not open its screen.\n
+MSG_10DE8133 (283017523//)
+Ambiance could not open its screen.\n
 ; main.c:16532
 MSG_3D0CDD4E (1024253262//)
 Saved screen mode not available here: using Automatic
@@ -1858,8 +1858,8 @@ This module needs a 68020 or better to be mixed
 MSG_3DD51BC4 (1037376452//)
 Not enough memory to mix this module
 ; mixplay.c:348 modplay.c:1125
-MSG_69F7300F (1777807375//)
-Not a module AmigaMCE can play
+MSG_18986B07 (412642055//)
+Not a module Ambiance can play
 ; mixplay.c:539 stream.c:919
 MSG_523F6D57 (1379888471//)
 AHI could not be opened (its Preferences: a mode?)
@@ -1906,8 +1906,8 @@ Packed with %s, but %s
 MSG_59FF2336 (1509892918//)
 a packer
 ; modplay.c:1121
-MSG_0CB7D3B5 (213373877//)
-This file is %s, which AmigaMCE cannot play
+MSG_64B0B115 (1689301269//)
+This file is %s, which Ambiance cannot play
 ; modplay.c:1142
 MSG_3575C0BB (896909499//)
 Not enough chip memory for its samples (%lu KB)
@@ -1942,8 +1942,8 @@ Cancelled
 MSG_11341467 (288625767//)
 HTTPS needs AmiSSL 5
 ; net.c:246
-MSG_7CD9BEE0 (2094644960//)
-AmigaMCE's certificates are missing (its Certs drawer)
+MSG_7C6F1E50 (2087657040//)
+Ambiance's certificates are missing (its Certs drawer)
 ; net.c:262 stream.c:1112
 MSG_68A35804 (1755535364//)
 The secure connection failed
@@ -2077,8 +2077,8 @@ The file could not be opened
 MSG_294C1997 (692853143//)
 This station only streams over HTTPS: turn on Settings > Networking > HTTPS
 ; stream.c:1370
-MSG_103190A0 (271683744//)
-The station's address is not one AmigaMCE can follow
+MSG_01A286D0 (27428560//)
+The station's address is not one Ambiance can follow
 ; stream.c:1410
 MSG_65B74193 (1706508691//)
 %s answered %ld
@@ -2089,8 +2089,8 @@ The server
 MSG_3B0705F8 (990316024//)
 The station
 ; stream.c:1446
-MSG_37840EF9 (931401465//)
-The station's playlist has no stream AmigaMCE can play
+MSG_78E355BD (2028164541//)
+The station's playlist has no stream Ambiance can play
 ; stream.c:1458
 MSG_47FA6F71 (1207594865//)
 %s sends %s, not MP3
@@ -2104,8 +2104,8 @@ The stream could not be decoded
 MSG_10039953 (268671315//)
 Only music files on this Amiga play as WAV, AIFF or 8SVX
 ; stream.c:2240
-MSG_3E5CE903 (1046276355//)
-Not a kind of WAV, AIFF or 8SVX that AmigaMCE plays (compressed?)
+MSG_2E5C4593 (777799059//)
+Not a kind of WAV, AIFF or 8SVX that Ambiance plays (compressed?)
 ; stream.c:3659
 MSG_00ABC308 (11256584//)
 MPEG video by the CPU needs mpegv.library
@@ -2161,8 +2161,8 @@ LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8 (451360424//)
 Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 ; video.c:237
-MSG_650CDFE1 (1695342561//)
-MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)
+MSG_7DFAF53D (2113598781//)
+MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 ; video.c:317 video.c:341
 MSG_5EF81658 (1593316952//)
 MPEG video needs Picasso96 (Picasso96API.library)

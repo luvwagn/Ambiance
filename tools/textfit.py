@@ -1,5 +1,5 @@
 """Will the translations fit? Measures every string of each catalog in the
-fonts AmigaMCE draws with, on the screens it opens, and flags where a
+fonts Ambiance draws with, on the screens it opens, and flags where a
 translation runs out of room that its English had.
 
 Usage: python3 -I textfit.py <catalogs-dir> <fonts-dir> [language ...]
@@ -167,7 +167,7 @@ def main():
     CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "12")))
     CJK.update(read_pack(os.path.join(fonts_dir, "amce-cjk", "greek")))
     STATUS.update(status_strings(os.path.join(os.path.dirname(os.path.abspath(catdir)), "src")))
-    cd = catalog.read_cd(os.path.join(catdir, "AmigaMCE.cd"))
+    cd = catalog.read_cd(os.path.join(catdir, "Ambiance.cd"))
     total = 0
     for fn in sorted(os.listdir(catdir)):
         if not fn.endswith(".ct"):

@@ -1,13 +1,13 @@
 /*
- * AmigaMCE - translations (catalogs)
+ * Ambiance - translations (catalogs)
  * Copyright (c) 2026 Brian King
  *
  * Text the user sees is written in English in the source, as _("...")
  * (or N_("...") in a table, translated where it is used). Its catalog ID
  * is a hash of that English text (FNV-1a, 31 bits), so the source needs no
  * list of numbers: tools/catalog.py finds every _() and N_(), writes
- * catalogs/AmigaMCE.cd from them and builds each language's .ct into
- * Catalogs/<language>/AmigaMCE.catalog. A string with no translation, or
+ * catalogs/Ambiance.cd from them and builds each language's .ct into
+ * Catalogs/<language>/Ambiance.catalog. A string with no translation, or
  * no catalog at all, is the English itself.
  *
  * The catalogs are locale.library's (IFF CTLG), but read here: each found
@@ -137,7 +137,7 @@ static void scan_dir(const char *dir)
                 int i;
                 if (fib->fib_DirEntryType <= 0)
                     continue;
-                sprintf(path, "%s/%.40s/AmigaMCE.catalog", dir, (char *)fib->fib_FileName);
+                sprintf(path, "%s/%.40s/Ambiance.catalog", dir, (char *)fib->fib_FileName);
                 if (!cat_language(path, lang)) {
                     /* say what the drawer is called, byte by byte where not
                      * ASCII (a host folder can name it otherwise) */

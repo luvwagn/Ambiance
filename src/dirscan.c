@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - reading a folder's entries quickly
+ * Ambiance - reading a folder's entries quickly
  * Copyright (c) 2026 Brian King
  *
  * ExNext hands over one entry per call, each a round trip to the file

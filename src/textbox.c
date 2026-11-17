@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - smooth-scrolling, flicker-free text box with a scroll bar
+ * Ambiance - smooth-scrolling, flicker-free text box with a scroll bar
  * Copyright (c) 2026 Brian King
  *
  * The text is rendered once into an off-screen bitmap. Scrolling then

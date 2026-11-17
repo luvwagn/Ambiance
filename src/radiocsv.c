@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - radio-browser.info's answers: CSV, UTF-8, URL encoding
+ * Ambiance - radio-browser.info's answers: CSV, UTF-8, URL encoding
  * Copyright (c) 2026 Brian King
  *
  * Plain C and nothing of the Amiga's, so the tests build it on the host
@@ -89,7 +89,7 @@ int csv_col(char **hdr, int n, const char *name)
     return -1;
 }
 
-/* Japanese, Chinese and Korean characters AmigaMCE keeps (cjk.c draws
+/* Japanese, Chinese and Korean characters Ambiance keeps (cjk.c draws
  * them; keep in step with tools/mkcjk.py's RANGES). */
 static int cjk_wanted(unsigned long c)
 {

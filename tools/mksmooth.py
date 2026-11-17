@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smooth-style artwork for AmigaMCE's RTG screens, one file per screen height.
+"""Smooth-style artwork for Ambiance's RTG screens, one file per screen height.
 
 Usage: python3 tools/mksmooth.py <Rubik-VF.ttf> <out dir> [heights...] [--greek <Geologica-VF.ttf>]
 
@@ -21,7 +21,7 @@ with anti-aliased edges:
     sit between Rubik's x-height and cap height
 
 Glyphs, icons and markers are coverage maps, 4 bits a pixel (0 = none, 15 =
-full); AmigaMCE blends them between the text colour and the background with
+full); Ambiance blends them between the text colour and the background with
 in-between pens. The logo is a palette image; index 255 is transparent.
 
 File layout (big-endian), written to <out dir>/<H>:
@@ -46,7 +46,7 @@ import os
 import struct
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hiicons      # noqa: E402
@@ -152,28 +152,36 @@ def shape(draw_fn, units, n, centre=True):
 
 
 def logo(ttf, k):
-    """The logo drawn smooth at scale k, as (w, h, palette, indices)."""
-    def f(size, wght):
-        ft = ImageFont.truetype(ttf, round(size * k))
-        ft.set_variation_by_axes([wght])
-        return ft
-    fa, fm = f(14, 700), f(11, 700)
+    """The logo drawn smooth at scale k, as (w, h, palette, indices): the
+    Play badge and "Ambiance" in Rubik Bold, with a soft blue glow behind
+    them (pixel_logo in mkart.py is the native screens' version)."""
+    ft = ImageFont.truetype(ttf, round(14 * k))
+    ft.set_variation_by_axes([700])
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    ax = 17 * k
-    bx = ax + probe.textlength("Amiga", font=fa) + 3 * k
-    tw = probe.textlength("MCE", font=fm)
-    w, h = int(bx + tw + 6 * k) + 1, round(16 * k)
+    m = 2 * k                                # room for the glow, each side
+    ax = m + 17 * k
+    w = int(ax + probe.textlength("Ambiance", font=ft) + m) + 1
+    h = round(16 * k + 2 * m)
     ss = 4                                   # supersample for the shapes
-    img = Image.new("RGB", (w * ss, h * ss), BAR)
-    d = ImageDraw.Draw(img)
     K = k * ss
-    d.rounded_rectangle([0, 1 * K, 14 * K, 15 * K], radius=2.2 * K, fill=HL)
-    d.polygon([(4.5 * K, 4.5 * K), (10.8 * K, 8 * K), (4.5 * K, 11.5 * K)], fill=WHITE)
-    d.rounded_rectangle([bx * ss, 1 * K, (bx + tw + 6 * k) * ss, 15 * K], radius=1.8 * K, fill=ACCENT)
-    img = img.resize((w, h), Image.LANCZOS)
+    def at(x, y):
+        return ((m + x * k) * ss, (m + y * k) * ss)
+    # the shapes' coverage, for the glow: badge and letters
+    cover = Image.new("L", (w * ss, h * ss), 0)
+    d = ImageDraw.Draw(cover)
+    d.rounded_rectangle([*at(0, 1), *at(14, 15)], radius=2.2 * K, fill=255)
+    big = ImageFont.truetype(ttf, round(14 * K))
+    big.set_variation_by_axes([700])
+    d.text((ax * ss, (m + 13.4 * k) * ss), "Ambiance", font=big, fill=255, anchor="ls")
+    glow = cover.filter(ImageFilter.MaxFilter(3 if K < 12 else 5)).filter(ImageFilter.GaussianBlur(1.3 * K))
+    glow = glow.point(lambda v: min(255, v * 2))
+    img = Image.new("RGB", (w * ss, h * ss), BAR)
+    img.paste(Image.new("RGB", img.size, HL), (0, 0), glow.point(lambda v: v * 3 // 5))
     d = ImageDraw.Draw(img)
-    d.text((ax, 13.4 * k), "Amiga", font=fa, fill=WHITE, anchor="ls")
-    d.text((bx + 3 * k, 12.5 * k), "MCE", font=fm, fill=NAVY, anchor="ls")
+    d.rounded_rectangle([*at(0, 1), *at(14, 15)], radius=2.2 * K, fill=HL)
+    d.polygon([at(4.5, 4.5), at(10.8, 8), at(4.5, 11.5)], fill=WHITE)
+    img = img.resize((w, h), Image.LANCZOS)
+    ImageDraw.Draw(img).text((ax, m + 13.4 * k), "Ambiance", font=ft, fill=WHITE, anchor="ls")
     q = img.quantize(colors=24, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     pal = q.getpalette()[:24 * 3]
     colours = [tuple(pal[i:i + 3]) for i in range(0, len(pal), 3)]

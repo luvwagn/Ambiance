@@ -1,11 +1,11 @@
 /*
- * AmigaMCE - packed files unpacked, with xfdmaster.library
+ * Ambiance - packed files unpacked, with xfdmaster.library
  * Copyright (c) 2026 Brian King
  *
  * Module collections are full of packed files: PowerPacker ("PP20", the
  * mod.name.pp of old), XPK (through xfd's xPK slave and xpkmaster), and
  * the dozens of crunchers xfdmaster's slaves know. When a file is not
- * something AmigaMCE can read as it is, it is read whole and given to
+ * something Ambiance can read as it is, it is read whole and given to
  * xfdmaster to recognise and unpack, a few layers deep if need be. Without
  * xfdmaster.library nothing is unpacked, and the file is taken as it is.
  *

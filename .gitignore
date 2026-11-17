@@ -1,6 +1,6 @@
 /build/
-/AmigaMCE
-/amigamce-*.lha
-/amigamce-*.adf
+/Ambiance
+/ambiance-*.lha
+/ambiance-*.adf
 __pycache__/
 *.o

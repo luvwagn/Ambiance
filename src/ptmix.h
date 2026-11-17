@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - eight channels on Paula's four (ptmix.c)
+ * Ambiance - eight channels on Paula's four (ptmix.c)
  * Copyright (c) 2026 Brian King
  * The design is ProTracker 4.1's 8-channel mixer, (c) 2026 Akustikrausch
  * (Andreas Wendorf), MIT licence: https://github.com/akustikrausch/protracker4

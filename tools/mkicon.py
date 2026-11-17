@@ -7,12 +7,12 @@ for the program and the drawer a GlowIcon too (OS 3.5+ shows it instead:
 
 Usage: python3 tools/mkicon.py <outdir>
 Writes:
-  AmigaMCE.info   tool icon for the program (stack 32768): the logo's play
+  Ambiance.info   tool icon for the program (stack 32768): the logo's play
                   badge, a classic image and a GlowIcon (FORM ICON: FACE and
                   two IMAG chunks, run-length coded, after the classic data)
-  drawer.info     drawer icon for the AmigaMCE drawer in the LHA
+  drawer.info     drawer icon for the Ambiance drawer in the LHA
   readme.info     project icon for readme.txt (default tool SYS:Utilities/MultiView)
-  appicon.info    the AppIcon AmigaMCE shows on Workbench while iconified
+  appicon.info    the AppIcon Ambiance shows on Workbench while iconified
                   (Icons/AppIcon.info in its drawer): the badge with a
                   musical note in place of the play triangle
   install.info    project icon for the Installer script (default tool Installer,
@@ -412,14 +412,14 @@ def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
     files = {
-        "AmigaMCE.info": diskobject(WBTOOL, badge_art(), stack=32768,
+        "Ambiance.info": diskobject(WBTOOL, badge_art(), stack=32768,
                                     tooltypes=["DONOTWAIT", "(WINDOWED)"], glow=glowicon(*tool_glow())),
         "drawer.info": diskobject(WBDRAWER, DRAWER_ART, glow=glowicon(*drawer_glow())),
         "readme.info": diskobject(WBPROJECT, README_ART, default_tool="SYS:Utilities/MultiView"),
         # the AppIcon while iconified (PROGDIR:Icons/AppIcon.info): a note
         "appicon.info": diskobject(WBTOOL, badge_art("note"), glow=glowicon(*tool_glow("note"))),
         "install.info": diskobject(WBPROJECT, badge_art(), default_tool="Installer", stack=16384,
-                                   tooltypes=["APPNAME=AmigaMCE", "MINUSER=AVERAGE"],
+                                   tooltypes=["APPNAME=Ambiance", "MINUSER=AVERAGE"],
                                    glow=glowicon(*tool_glow())),
     }
     for name, data in files.items():

@@ -1,7 +1,7 @@
-AmigaMCE credits
+Ambiance credits
 ================
 
-AmigaMCE (c) 2026 Brian King, released under the MIT licence (LICENSE).
+Ambiance (c) 2026 Brian King, released under the MIT licence (LICENSE).
 The fonts below keep their own licence, the SIL Open Font Licence 1.1.
 
 Fonts
@@ -30,14 +30,14 @@ SIL Open Font Licence 1.1 (see OFL-Geologica.txt), rendered with the
 Rubik text into Fonts/amce-smooth. Both are released under the same
 licence.
 
-The AmigaMCE logo lettering is rendered from Rubik Bold,
+The Ambiance logo lettering is rendered from Rubik Bold,
 (c) The Rubik Project Authors, licensed under the SIL Open Font
 Licence 1.1 (see OFL-Rubik.txt).
 
 Pictures
 --------
-AmigaMCE's JPEG decoder, jdec (src/jdec/jdec.c), was written for
-AmigaMCE and is under AmigaMCE's MIT licence; it contains no code from
+Ambiance's JPEG decoder, jdec (src/jdec/jdec.c), was written for
+Ambiance and is under Ambiance's MIT licence; it contains no code from
 libjpeg or libjpeg-turbo. It follows the methods they use and document,
 so that its pictures match theirs: the Arai-Agui-Nakajima fast inverse
 DCT (as in the Independent JPEG Group's jidctfst.c), libjpeg's "fancy"
@@ -53,7 +53,7 @@ The module replayer follows the ProTracker 2.3D play routine; its period
 table is the one from the ProTracker 2.1A play routine.
 
 Other formats are played by EaglePlayer's and DeliTracker's player modules,
-where they are installed; they are not part of AmigaMCE. AmigaMCE's host for
+where they are installed; they are not part of Ambiance. Ambiance's host for
 them (src/eagle.c, src/eaglehost.s) follows HippoPlayer's, and Now
 Playing's spectrum analyser is HippoPlayer's (src/vis.c; its FFT, src/hfft.s,
 is HippoPlayer's hippo_fft.s, Tom Roberts' fix_fft.c of 1989 in assembler),
@@ -118,12 +118,12 @@ the licence: https://mozilla.org/MPL/2.0/). The file is unchanged.
 
 HTTPS (secure radio stations, signing in at plex.tv) is by AmiSSL 5
 (AmiSSL Open Source Team, Apache License 2.0; OpenSSL), where it is
-installed. It is not part of AmigaMCE or its archive: get it from Aminet
+installed. It is not part of Ambiance or its archive: get it from Aminet
 (util/libs/AmiSSL-5.x-OS3) or https://github.com/jens-maus/amissl.
 
 Packed modules are unpacked with xfdmaster.library, MP3 is decoded by
 mpega.library and XM, S3M and IT are mixed by modplug.library, where they
-are installed. They are not part of AmigaMCE. Its archive's Extras drawer
+are installed. They are not part of Ambiance. Its archive's Extras drawer
 holds their Aminet archives whole and unchanged, which the installer
 offers to install where they are missing or older (never on AGS):
   modplug-68k: modplug.library 1.0 by Thomas Wenzel, a port of
@@ -135,13 +135,13 @@ offers to install where they are missing or older (never on AGS):
   xfdmaster: xfdmaster 1.38 (library 39.15), (c) Georg Hoermann and Dirk
     Stoecker: "freely distributable for noncommercial use. If you
     redistribute XFD, you have to keep all files together."
-So AmigaMCE's archive, with these in it, is not to be sold.
+So Ambiance's archive, with these in it, is not to be sold.
 
-Libs/amcesql.library, which reads beets music libraries, is AmigaMCE's own
+Libs/amcesql.library, which reads beets music libraries, is Ambiance's own
 small wrapper (src/sqlib, MIT) around SQLite 3.34.0, linked from the
 libsqlite3.a of Steffen Gutmann's AmigaOS 3 port (Aminet: biz/dbase/
 sqlite-3.34.0.a-amiga). SQLite, by D. Richard Hipp and others, is in the
-public domain (Licences/SQLite.txt). AmigaMCE opens the library only when
+public domain (Licences/SQLite.txt). Ambiance opens the library only when
 a beets library is set up.
 
 Libs/dvdnav.library, which reads DVDs, is libdvdread 7.1.1 and libdvdnav
@@ -151,9 +151,9 @@ their AUTHORS files are in its source) built as an Exec library, with
 three lines changed for AmigaOS. They are under the GNU General Public
 License, version 2 or later, and the library under version 3 or later
 (Licences/dvdnav.library.txt); its source is at
-https://github.com/luvwagn/dvdnav.library (extras/dvdnav in AmigaMCE's
-source). AmigaMCE opens it at run time, through its MIT interface, only
-when a DVD is played; none of its code is in AmigaMCE. It was called
+https://github.com/luvwagn/dvdnav.library (extras/dvdnav in Ambiance's
+source). Ambiance opens it at run time, through its MIT interface, only
+when a DVD is played; none of its code is in Ambiance. It was called
 amcedvd.library before 0.9.1.1.
 
 Libs/ac3.library and Libs/ac3fpu.library, which decode AC-3 (Dolby
@@ -166,16 +166,16 @@ under the GNU General Public License, version 2 or later, the libraries
 version 3 or later (Licences/ac3.library.txt), their source at that
 address, not in this archive (what was changed in liba52:
 third_party/liba52/CHANGES there). Their interface (include/,
-ac3_lib.sfd, ac3.doc) is MIT, for any program. AmigaMCE opens one at run
+ac3_lib.sfd, ac3.doc) is MIT, for any program. Ambiance opens one at run
 time, through that interface, only for a video's AC3 the ZZ9000 will not
-decode; none of their code is in AmigaMCE.
+decode; none of their code is in Ambiance.
 
 FLAC (Plex tracks as stored, and the files in Music folders) is decoded by
 flacdec.library where it is installed; it is not included in the archive.
 flacdec.library is (c) 2026 Renaud Schweingruber, "free to use and to
 redistribute in this unchanged archive" (Aminet: util/libs/flacdec). It
 contains dr_flac by David Reid, public domain or MIT-0
-(https://github.com/mackron/dr_libs). AmigaMCE uses only its published
+(https://github.com/mackron/dr_libs). Ambiance uses only its published
 interface (five functions) and carries none of its files.
 
 Radio's station lists come from radio-browser.info, a free directory of
@@ -184,11 +184,11 @@ internet radio stations kept by its community (https://www.radio-browser.info).
 Libs/amcempega.library, which decodes MP3 (and MPEG audio's Layers I and
 II) when Settings > Sound chooses it, is libmad 0.15.1b (Robert Leslie,
 Underbit Technologies; with Debian's security fixes) behind mpega.library's
-functions, AmigaMCE's own project (extras/mpga,
+functions, Ambiance's own project (extras/mpga,
 https://github.com/luvwagn/mpga.library): libmad is under the GNU General
 Public License, version 2 or later, the library version 3 or later
 (Licences/amcempega.library.txt), its source at that address, not in this
-archive. AmigaMCE opens it at run time; none of its code is in AmigaMCE.
+archive. Ambiance opens it at run time; none of its code is in Ambiance.
 
 Video
 -----
@@ -198,7 +198,7 @@ https://github.com/luvwagn/mpegv.library), GPL-3.0-or-later
 (Licences/mpegv.library.txt), its source at that address, not in this
 archive: libmpeg2 0.5.1, by Aaron Holtzman, Michel Lespinasse and others
 (GPL-2.0-or-later), made faster for a 68k (its CHANGES says how), its
-pictures the same. AmigaMCE opens it at run time. Its sound is decoded by
+pictures the same. Ambiance opens it at run time. Its sound is decoded by
 mpega.library, or a DVD's AC-3 by ac3.library.
 
 On a ZZ9000, MPEG video is decoded by the card through zz9k.library,
@@ -210,4 +210,4 @@ Trademarks
 ----------
 Amiga is a trademark of Amiga Corporation. AGS (Amiga Game Selector),
 WHDLoad, Picasso96, ZZ9000 and other names are the property of their
-respective owners. AmigaMCE is not affiliated with any of them.
+respective owners. Ambiance is not affiliated with any of them.

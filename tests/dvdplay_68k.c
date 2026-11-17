@@ -16,7 +16,7 @@
 #include <proto/exec.h>
 #include <libraries/dvdnav.h>
 
-/* what dvdplay.c uses from the rest of AmigaMCE */
+/* what dvdplay.c uses from the rest of Ambiance */
 const char *amce_tr(const char *s) { return s; }
 void amce_log(const char *what, const char *m) { printf("  log: %s: %s\n", what, m); }
 static ULONG fake_ticks;

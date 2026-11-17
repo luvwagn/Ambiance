@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the program's side of the layout engines: finding, opening
+ * Ambiance - the program's side of the layout engines: finding, opening
  * and closing the layout libraries (lhost.h, layout.h)
  * Copyright (c) 2026 Brian King
  *
@@ -64,7 +64,7 @@ static const struct LayoutEngine *open_one(const char *file, BOOL quiet)
     }
     e = GetLayout((ULONG)LAYOUT_ABI);
     if (!e || e->abi != (ULONG)LAYOUT_ABI) {
-        snprintf(m, sizeof(m), "%s %ld.%ld is for another AmigaMCE (its layout.h differs): not used",
+        snprintf(m, sizeof(m), "%s %ld.%ld is for another Ambiance (its layout.h differs): not used",
                  file, (long)LayoutBase->lib_Version, (long)LayoutBase->lib_Revision);
         amce_log("layout", m);
         layout_unload();

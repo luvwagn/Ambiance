@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - iGame's list of games and demos (igame.c): found, read, shown
+ * Ambiance - iGame's list of games and demos (igame.c): found, read, shown
  * under Games and Demos, and launched. Beside AGS, or in its place.
  */
 #ifndef AMCE_IGAME_H
@@ -31,12 +31,12 @@ struct IgCat {
 /* A list page of iGame's has a path that begins so: never a real path. */
 #define IG_PREFIX "\001ig:"
 
-/* AmigaMCE/iGame: iGame's drawer; "none" (or "n/a") for no list; unset
+/* Ambiance/iGame: iGame's drawer; "none" (or "n/a") for no list; unset
  * until found or chosen. */
-#define IG_VAR "AmigaMCE/iGame"
-/* AmigaMCE/iGameLooked: "1" once the hard disks were searched (the first
+#define IG_VAR "Ambiance/iGame"
+/* Ambiance/iGameLooked: "1" once the hard disks were searched (the first
  * start): later starts look only at the assign and the usual drawers. */
-#define IG_LOOKED_VAR "AmigaMCE/iGameLooked"
+#define IG_LOOKED_VAR "Ambiance/iGameLooked"
 
 BOOL ig_folder_ok(const char *dir);         /* gameslist.csv in it */
 BOOL ig_discover(char *out, LONG max, BOOL deep);   /* iGame looked for: its drawer;

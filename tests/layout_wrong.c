@@ -4,7 +4,7 @@
 #include "../src/layout.h"
 
 const char LibName[] = "wrongabi.layout";
-const char LibIdString[] = "wrongabi.layout 1.0 (17.11.2026) for AmigaMCE's tests";
+const char LibIdString[] = "wrongabi.layout 1.0 (17.11.2026) for Ambiance's tests";
 static const char __attribute__((used)) LibVerTag[] = "$VER: wrongabi.layout 1.0 (17.11.2026)";
 const UWORD LibVersion = 1;
 const UWORD LibRevision = 0;

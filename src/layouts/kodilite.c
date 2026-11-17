@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Kodi lite, the first layout (layout.h)
+ * Ambiance - Kodi lite, the first layout (layout.h)
  * Copyright (c) 2026 Brian King
  *
  * After Kodi's look, without its fanart: a menu down the left, solid
@@ -18,9 +18,9 @@
 #include "../layout.h"
 
 const char LibName[] = "kodilite.layout";
-const char LibIdString[] = "kodilite.layout 1.1 (17.11.2026) Kodi lite, for AmigaMCE";
+const char LibIdString[] = "kodilite.layout 1.1 (17.11.2026) Kodi lite, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: kodilite.layout 1.1 (17.11.2026) Kodi lite, for AmigaMCE";
+    "$VER: kodilite.layout 1.1 (17.11.2026) Kodi lite, for Ambiance";
 const UWORD LibVersion = 1;
 const UWORD LibRevision = 1;
 

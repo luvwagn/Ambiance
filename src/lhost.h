@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the program's side of the layout engines (layout.h)
+ * Ambiance - the program's side of the layout engines (layout.h)
  * Copyright (c) 2026 Brian King
  */
 #ifndef LHOST_H

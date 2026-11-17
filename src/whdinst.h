@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - WHDLoad itself, found or installed (whdinst.c). Games and
+ * Ambiance - WHDLoad itself, found or installed (whdinst.c). Games and
  * Demos offer to fetch its user package from whdload.de where the network
  * is up and WHDLoad is not installed (and AGS, which carries its own, is
  * not there).
@@ -11,12 +11,12 @@
 
 #define WHD_HOST    "www.whdload.de"
 #define WHD_PATH    "/whdload/WHDLoad_usr_small.lha"    /* the user package, fewer doc languages */
-#define WHD_ARCHIVE "T:AmigaMCE-WHDLoad.lha"
-#define WHD_DIR     "T:AmigaMCE-WHDLoad"
+#define WHD_ARCHIVE "T:Ambiance-WHDLoad.lha"
+#define WHD_DIR     "T:Ambiance-WHDLoad"
 
-/* AmigaMCE/WHDLoadOffer: "no" once Not now was chosen (Games stops offering;
+/* Ambiance/WHDLoadOffer: "no" once Not now was chosen (Games stops offering;
  * Settings > Folders > WHDLoad still does). */
-#define WHD_OFFER_VAR "AmigaMCE/WHDLoadOffer"
+#define WHD_OFFER_VAR "Ambiance/WHDLoadOffer"
 
 BOOL whd_present(char *where, LONG max);    /* WHDLoad in C: (or SYS:C): where */
 

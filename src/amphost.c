@@ -1,8 +1,8 @@
 /*
- * AmigaMCE - AmigaAMP's visual plug-ins, hosted: AmigaMCE answers on the
+ * Ambiance - AmigaAMP's visual plug-ins, hosted: Ambiance answers on the
  * port they look for, "AmigaAMP plugin port", as AmigaAMP 2.7 and later
  * do (its Plugin Development Kit 1.4, Thomas Wenzel), so the plug-ins
- * written for it show what AmigaMCE plays. No code of the kit's is used:
+ * written for it show what Ambiance plays. No code of the kit's is used:
  * only its messages' layout, which is what the plug-ins expect.
  * Copyright (c) 2026 Brian King
  *
@@ -63,7 +63,7 @@ static struct {
     struct MsgPort *port;       /* ours, public (NULL: not ours: AmigaAMP itself is running) */
     struct Task *task;          /* the plug-in attached (NULL: none) */
     ULONG mask, info_mask;
-    BOOL ours;                  /* started by AmigaMCE (amp_launch) */
+    BOOL ours;                  /* started by Ambiance (amp_launch) */
     ULONG launched;             /* ...when (it attaches within 15 s, or it is not ours) */
     ULONG serial;               /* what plays, as last told */
     ULONG frames;

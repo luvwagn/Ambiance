@@ -1,15 +1,15 @@
 /*
- * AmigaMCE - the layout engines' interface
+ * Ambiance - the layout engines' interface
  * Copyright (c) 2026 Brian King
  *
- * A layout draws every screen of AmigaMCE in a style of its own, on a
+ * A layout draws every screen of Ambiance in a style of its own, on a
  * graphics card's 15 to 32-bit screen: Home, a generic page (any list
  * with its details: Settings, Radio, a folder...), and the dedicated
  * screens it has (an album wall, an artist, an album, Now playing...).
  * Each is a library, PROGDIR:Layouts/<name>.layout, opened only while it
- * is in use; the classic list layout is AmigaMCE's own, built in.
+ * is in use; the classic list layout is Ambiance's own, built in.
  *
- * Only AmigaMCE's own layouts, built from the same tree with the same
+ * Only Ambiance's own layouts, built from the same tree with the same
  * compiler: the interface is internal and may change at any time. The
  * library's one function, GetLayout(abi), gives its table only if abi is
  * the program's LAYOUT_ABI (a checksum of this file, made by the

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a MED/OctaMED song's length (medtime.c)
+ * Ambiance - a MED/OctaMED song's length (medtime.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
 #ifndef MEDTIME_H

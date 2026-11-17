@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - IFF ANIM frames decoded into bitplanes
+ * Ambiance - IFF ANIM frames decoded into bitplanes
  * Copyright (c) 2026 Brian King
  *
  * Plain C with no Amiga headers, so the tests build it on the host too

@@ -4,7 +4,7 @@
  * FillPixelArray, then read back with ReadPixelArray (ARGB, RGBA, RGB),
  * ReadRGBPixel and straight from the bitmap's memory (LockBitMapTags),
  * on bitmaps like Workbench's of several sizes and in a window on it.
- * AmigaMCE's diagnostic for its blended text (ReadPixelArray's colours
+ * Ambiance's diagnostic for its blended text (ReadPixelArray's colours
  * coming back wrong on an emulated ZZ9000's 16-bit Workbench).
  *
  *   rpatest            writes to the console and to rpatest.log here (or,
@@ -37,7 +37,7 @@ static const ULONG colours[N] = {
     0x000000F8, /* blue */
     0x00FFFFFF, /* white */
     0x00123456, /* mixed */
-    0x000A1530, /* AmigaMCE's navy */
+    0x000A1530, /* Ambiance's navy */
     0x00000000, /* black */
     0x00808080, /* grey */
 };
@@ -327,7 +327,7 @@ int main(void)
             fmtname(GetCyberIDAttr(CYBRIDATTR_PIXFMT, id)));
 
     {
-        /* AmigaMCE's own test, as it does it: a 4 x 1 friend, red and blue */
+        /* Ambiance's own test, as it does it: a 4 x 1 friend, red and blue */
         struct BitMap *bm = AllocBitMap(4, 1, GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH), BMF_MINPLANES,
                                         scr->RastPort.BitMap);
         if (bm) {
@@ -338,7 +338,7 @@ int main(void)
             WritePixelArray(wr, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
             ReadPixelArray(rd, 0, 0, 8, &trp, 0, 0, 2, 1, RECTFMT_ARGB);
             WaitBlit();
-            say("\n== AmigaMCE's own test (a 4 x 1 friend): wrote 00f80000 000000f8, read %08lx %08lx\n", rd[0],
+            say("\n== Ambiance's own test (a 4 x 1 friend): wrote 00f80000 000000f8, read %08lx %08lx\n", rd[0],
                 rd[1]);
             say("  bitmap: %ld x %ld, CyberGraphX %s, format %s\n", (LONG)GetBitMapAttr(bm, BMA_WIDTH),
                 (LONG)GetBitMapAttr(bm, BMA_HEIGHT), GetCyberMapAttr(bm, CYBRMATTR_ISCYBERGFX) ? "yes" : "no",

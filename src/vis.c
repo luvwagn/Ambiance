@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Now Playing's visualizations: plug-ins drawn in the place of
+ * Ambiance - Now Playing's visualizations: plug-ins drawn in the place of
  * the level meters. Each says what it needs of the playing engine (VF_*,
  * from mp_vis_feed) and draws only what changed since its last frame.
  * Copyright (c) 2026 Brian King
@@ -15,7 +15,7 @@
  *                 in hfft.s): a 128-point FFT of the sound at about 8 kHz,
  *                 0-4 kHz across. Paula's voices are mixed from their
  *                 samples where they play now, as HippoPlayer mixes them;
- *                 what AmigaMCE decodes itself comes as samples. Not
+ *                 what Ambiance decodes itself comes as samples. Not
  *                 under MHI (the driver plays the sound; none comes back):
  *                 the meters are drawn there instead.
  */

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Pictures: folders of picture files
+ * Ambiance - Pictures: folders of picture files
  * Copyright (c) 2026 Brian King
  *
  * A Pictures list holds folders (IT_DIR), picture files (IT_PIC) and IFF

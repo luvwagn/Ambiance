@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Where jdec's 68020 cycles go: the PC sampled every N cycles.
-AmigaMCE, MIT.   python3 prof.py <cyc.elf> <cyc.bin> file.jpg scale"""
+Ambiance, MIT.   python3 prof.py <cyc.elf> <cyc.bin> file.jpg scale"""
 import bisect
 import subprocess
 import sys

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the layouts' drawing kit on a graphics card's screen (lkit.h)
+ * Ambiance - the layouts' drawing kit on a graphics card's screen (lkit.h)
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"

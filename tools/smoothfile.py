@@ -1,10 +1,10 @@
 """Reader for the smooth-style files written by tools/mksmooth.py, used by
 the preview tool and to check the files. Draws text, icons and markers the
-way AmigaMCE does: coverage quantised to LEVELS steps, each step blended
+way Ambiance does: coverage quantised to LEVELS steps, each step blended
 between the colour and the background."""
 import struct
 
-LEVELS = 8          # AmigaMCE draws 8 steps: 0 (none) .. 7 (full colour)
+LEVELS = 8          # Ambiance draws 8 steps: 0 (none) .. 7 (full colour)
 
 
 def _unpack(blob, off, n):

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a MED/OctaMED song's length (MMD0-MMD3), by walking it
+ * Ambiance - a MED/OctaMED song's length (MMD0-MMD3), by walking it
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * EaglePlayer's players (MED_note) say nothing of how long a song is, so

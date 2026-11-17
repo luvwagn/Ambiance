@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Music's own files: what is in them (tags, format, length)
+ * Ambiance - Music's own files: what is in them (tags, format, length)
  * and their pictures
  * Copyright (c) 2026 Brian King
  *
@@ -9,7 +9,7 @@
  * and PICTURE blocks, WAV, AIFF and 8SVX headers (pcm_header, also what
  * stream.c plays them by). A file's picture is its folder's cover file
  * (cover, folder, front: PNG before JPEG) or else the one inside it
- * (ID3's APIC, FLAC's PICTURE), copied out to RAM:AmigaMCE-art/ under a
+ * (ID3's APIC, FLAC's PICTURE), copied out to RAM:Ambiance-art/ under a
  * name made of the album and its size, so the tracks of an album share it.
  */
 #include "amce.h"
@@ -503,15 +503,15 @@ static BOOL art_out(BPTR fh, const char *path, const struct SongInfo *si, const 
     for (s = si->band[0] ? si->band : si->artist; *s; s++)
         hash = hash * 33 + (UBYTE)*s;
     hash = hash * 33 + (ULONG)a->len;
-    sprintf(out, "RAM:AmigaMCE-art/s%08lx.%s", (unsigned long)hash, a->png ? "png" : "jpg");
+    sprintf(out, "RAM:Ambiance-art/s%08lx.%s", (unsigned long)hash, a->png ? "png" : "jpg");
     (void)max;
     if (amce_exists(out))
         return TRUE;
     if (!extract)
         return TRUE;                        /* where it would be */
-    if ((l = Lock((CONST_STRPTR)"RAM:AmigaMCE-art", SHARED_LOCK)))
+    if ((l = Lock((CONST_STRPTR)"RAM:Ambiance-art", SHARED_LOCK)))
         UnLock(l);
-    else if ((l = CreateDir((CONST_STRPTR)"RAM:AmigaMCE-art")))
+    else if ((l = CreateDir((CONST_STRPTR)"RAM:Ambiance-art")))
         UnLock(l);
     if (a->len > 4L << 20 || Seek(fh, a->off, OFFSET_BEGINNING) < 0 ||
         !(o = Open((CONST_STRPTR)out, MODE_NEWFILE))) {

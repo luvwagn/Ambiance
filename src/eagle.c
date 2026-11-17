@@ -1,11 +1,11 @@
 /*
- * AmigaMCE - EaglePlayer and DeliTracker players, hosted in AmigaMCE
+ * Ambiance - EaglePlayer and DeliTracker players, hosted in Ambiance
  * Copyright (c) 2026 Brian King
  *
  * The hundreds of formats the Amiga's other music players know (OctaMED,
  * TFMX, Future Composer, Jochen Hippel, Rob Hubbard, AHX, SoundMon...) are
  * played by the player modules EaglePlayer and DeliTracker use: small
- * replayers, each in a file of its own, with one interface. AmigaMCE loads
+ * replayers, each in a file of its own, with one interface. Ambiance loads
  * the one that recognises a module and runs it itself, on its own CIA
  * timer and its own claim on the audio channels: no other program.
  *
@@ -17,7 +17,7 @@
  * one says yes; players named like the module's prefix or suffix ("MED.",
  * ".tfmx") first, and the one that played a module of that kind before
  * first of all (remembered in PROGDIR:Cache/EaglePlayers). Players that
- * need parts of EaglePlayer AmigaMCE does not have (amplifiers, format
+ * need parts of EaglePlayer Ambiance does not have (amplifiers, format
  * loaders) and custom players (modules that are programs) are passed over.
  *
  * The calls made, their order and the callbacks provided follow
@@ -230,7 +230,7 @@ static struct {
 } ep;
 
 /* ---------------------------------------------------------- the players */
-/* Where players are: AmigaMCE's own drawer; EaglePlayer2:, the assign
+/* Where players are: Ambiance's own drawer; EaglePlayer2:, the assign
  * EaglePlayer's installer puts in S:User-Startup; then where AGS keeps it
  * (Work:Eagleplayer) and where its archive unpacks without the installer
  * (Eagleplayer_2.06, on Work: or SYS:); DeliTracker's likewise. A name
@@ -243,7 +243,7 @@ static const char *const dirs[] = {
     NULL
 };
 
-/* Players known to hang on a check or need what AmigaMCE has not
+/* Players known to hang on a check or need what Ambiance has not
  * (PlaySid and DeliSID, the C64 SID players: their checks never came back
  * here, on a module of another kind). */
 static const char *const skip[] = { "Core Design", "PlaySid", "DeliSID", NULL };
@@ -795,7 +795,7 @@ static BOOL try_player(struct Host *h, const char *dir, const char *name, BPTR *
         fn = tag(t, EP_Check5);
     if (fn) {
         /* no DOS requesters meanwhile: one asking for a disk or a library
-         * a check wants could wait behind AmigaMCE's screen, and the
+         * a check wants could wait behind Ambiance's screen, and the
          * Amiga would look hung */
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
@@ -974,8 +974,8 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     if (!find_player(ep.h, found, sizeof(found), quick)) {
         host_free(ep.h);
         ep.h = NULL;
-        amce_strlcpy(err, ncands ? _("No player AmigaMCE has knows this module")
-                                 : _("Not a module AmigaMCE can play, and no EaglePlayer "
+        amce_strlcpy(err, ncands ? _("No player Ambiance has knows this module")
+                                 : _("Not a module Ambiance can play, and no EaglePlayer "
                                      "players were found"),
                      errmax);
         return FALSE;
@@ -1066,7 +1066,7 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
         nt_logged = FALSE;
 {
             char m[160];
-            sprintf(m, "a note player: its notes played on Paula by AmigaMCE "
+            sprintf(m, "a note player: its notes played on Paula by Ambiance "
                     "(flags %08lx, max %lu Hz, volume %lu, %ld channels %s)",
                     (unsigned long)*(ULONG *)(ns + 4), (unsigned long)*(ULONG *)(ns + 8),
                     (unsigned long)*(UWORD *)(ns + 12), (long)n, sides);
@@ -1087,12 +1087,12 @@ BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err, LON
     ep.timer = W(ep.h->g, o_Timer);
     sprintf(m, "%s: %s%s%s, %ld subsongs, %s interrupt", FilePart((STRPTR)path), ep.name,
             ep.song[0] ? ", " : "", ep.song, (long)(ep.sub_max - ep.sub_min + 1),
-            ep.own_int ? "its own" : ep.f_interrupt ? "AmigaMCE's" : "no");
+            ep.own_int ? "its own" : ep.f_interrupt ? "Ambiance's" : "no");
     amce_log("eagleplayer", m);
     return TRUE;
 }
 
-/* Sound started (the channels are AmigaMCE's by now): TRUE if AmigaMCE's
+/* Sound started (the channels are Ambiance's by now): TRUE if Ambiance's
  * timer is to call ep_tick, *count its CIA count. */
 BOOL ep_start(UWORD *count)
 {
@@ -1113,14 +1113,14 @@ BOOL ep_start(UWORD *count)
     return ep.f_interrupt != NULL;
 }
 
-/* AmigaMCE's timer tick (an interrupt): the player's routine. */
+/* Ambiance's timer tick (an interrupt): the player's routine. */
 /* ---------------------------------------------------------- note players
  * A note player (DTP_NoteStruct: MED_note, ...) plays nothing itself: each
  * tick it says in its NoteStruct what each channel should play (DeliTracker's
  * DeliPlayer.h), and the host plays it. Here, on Paula: the channels in its
  * list are Paula's 0-3; a sample started (NCHF_Sample) from its start, then
  * its repeat (or silence); its period, or a frequency made one; its volume
- * to Paula's 64, at AmigaMCE's own. 8-bit samples only (Paula's). */
+ * to Paula's 64, at Ambiance's own. 8-bit samples only (Paula's). */
 #define CU ((volatile struct Custom *)0xDFF000)
 #define NST_CHANNELS 0              /* struct NoteStruct */
 #define NST_FLAGS 4
@@ -1602,7 +1602,7 @@ void ep_info(struct EpInfo *in)
 /* The meters: each channel's volume when it last started a note. And
  * for the spectrum (v): where each voice's sample is, as HippoPlayer
  * follows them (puu016.s, scopeinterrupt): from the player's UPS where it
- * fills one, else from what it pokes into Paula through AmigaMCE. */
+ * fills one, else from what it pokes into Paula through Ambiance. */
 BOOL ep_levels(UBYTE *hit, UBYTE *vol, struct EpVoice *v, UBYTE *trig)
 {
     int i;

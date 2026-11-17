@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - Kodi's .nfo files and artwork beside the music
+ * Ambiance - Kodi's .nfo files and artwork beside the music
  * Copyright (c) 2026 Brian King
  *
  * Kodi keeps what it scraped about an album or an artist in XML files

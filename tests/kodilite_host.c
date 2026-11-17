@@ -334,12 +334,12 @@ static struct LItem game_rows[] = {
 static const char *game_facts[] = { "Pinball Fantasies", "Digital Illusions, 1992",
                                     "Genre: Pinball", "Players: 1-8", "Chipset: AGA, ECS",
                                     "Four tables: Partyland, Speed Devils, Billion Dollar Gameshow, Stones 'n' Bones." };
-static const char *text_lines[] = { "AmigaMCE", "",
+static const char *text_lines[] = { "Ambiance", "",
     "A media centre for the Amiga: games and demos from AGS, music, modules,",
     "pictures, videos, radio and Plex, on a TV with a joystick or the keys.",
     "", "Copyright (c) 2026 Brian King.", "",
     "The layouts draw the screen in a style of their own; the classic layout",
-    "is AmigaMCE's own and always there (hold Left Shift as it starts)." };
+    "is Ambiance's own and always there (hold Left Shift as it starts)." };
 static const char *next[] = { "Paula's Lament", "Copper Bars" };
 
 static int scene;               /* which page model() gives */
@@ -408,11 +408,11 @@ static const void *h_model(int screen)
         page.section = LSEC_OTHER;
         page.ncrumb = 2;
         page.crumb[0] = "About";
-        page.crumb[1] = "AmigaMCE";
+        page.crumb[1] = "Ambiance";
         page.text = 1;
         page.ndetails = sizeof(text_lines) / sizeof(text_lines[0]);
         page.details = text_lines;
-        page.message = "Press Esc again to quit AmigaMCE";
+        page.message = "Press Esc again to quit Ambiance";
     }
     return &page;
 }

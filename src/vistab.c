@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the spectrum's tables (vis.c), apart so the FFT can be
+ * Ambiance - the spectrum's tables (vis.c), apart so the FFT can be
  * tested with them under vamos (tests/test_fft.c)
  * Copyright (c) 2026 Brian King
  */

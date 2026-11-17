@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - eight channels on Paula's four: channels 5-8 mixed in
+ * Ambiance - eight channels on Paula's four: channels 5-8 mixed in
  * Copyright (c) 2026 Brian King
  *
  * Adapted from ProTracker 4.1's 8-channel mixer (src/engine/mixer.asm),
@@ -11,7 +11,7 @@
  * scale through a volume table, a tick's worth at a time, a few ticks
  * ahead of Paula, in a software interrupt after the replayer's tick.
  *
- * Here the channels are AmigaMCE's own replayer's (ptcore.c), so what is
+ * Here the channels are Ambiance's own replayer's (ptcore.c), so what is
  * mixed is eight Paulas in software: each takes its start and length when
  * its DMA is switched on and again each time it reaches the end of what it
  * was playing, as the hardware does, so the replayer drives them exactly

@@ -1,6 +1,6 @@
 # Album cover decode times: JPEG baseline
 
-Taken from AmigaMCE.log on 2026-11-05, before covers were asked for as PNG.
+Taken from Ambiance.log on 2026-11-05, before covers were asked for as PNG.
 Machine: Amiberry A1200, 68030 (cycle-exact), plex tier 0; 640 x 512 PAL hires laced.
 Each row is one decode (repeats of the same result, a picture read ahead and
 shown again, left out). `decode` is the datatype's (WarpJPEG; a few covers the

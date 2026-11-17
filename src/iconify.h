@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - iconified: an AppIcon on Workbench (iconify.c)
+ * Ambiance - iconified: an AppIcon on Workbench (iconify.c)
  * Copyright (c) 2026 Brian King, MIT licence
  */
 #ifndef ICONIFY_H

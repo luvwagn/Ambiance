@@ -1,5 +1,5 @@
 """A small beets library for tests/beets_68k.c: <dir>/music/musiclibrary.db
-with beets' albums and items columns AmigaMCE reads, Windows paths as
+with beets' albums and items columns Ambiance reads, Windows paths as
 beets on a PC writes them, and the files a few of them name in <dir>/music.
 
 Usage: python3 -I mkbeets.py <dir>

@@ -4,7 +4,7 @@
  * default; a datatype runs on whatever its caller has. A stack that runs
  * over corrupts the task's saved exception frame when exec switches
  * away from it: "8000 000E" (Format Error) when it is switched back.
- * AmigaMCE, MIT.
+ * Ambiance, MIT.
  *
  * Returns f's result. If the stack cannot be had, f runs where it is.
  * Everything f needs goes through arg: the caller's locals are not on

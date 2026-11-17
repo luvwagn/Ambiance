@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - JPEG thumbnails without a datatype
+ * Ambiance - JPEG thumbnails without a datatype
  * Copyright (c) 2026 Brian King, MIT
  *
  * A JPEG made into a thumbnail by jdec (src/jdec/jdec.c), built in:
@@ -12,7 +12,7 @@
  *
  * What jdec does not decode (progressive, CMYK, 12-bit, arithmetic
  * coding) goes to the datatypes as before, and is noted once per file in
- * AmigaMCE-jpeg.txt beside the program (or in RAM: on a read-only drive):
+ * Ambiance-jpeg.txt beside the program (or in RAM: on a read-only drive):
  * where it came from (a game, a picture, a music cover, a streamed one),
  * why, and its path, so we know which of them need progressive support.
  */
@@ -56,7 +56,7 @@ static ULONG path_hash(const char *s)
 
 static void note(const char *kind, const char *why, const char *path)
 {
-    static const char *const files[] = { "PROGDIR:AmigaMCE-jpeg.txt", "RAM:AmigaMCE-jpeg.txt", NULL };
+    static const char *const files[] = { "PROGDIR:Ambiance-jpeg.txt", "RAM:Ambiance-jpeg.txt", NULL };
     char line[420], date[LEN_DATSTRING], clock[LEN_DATSTRING];
     struct DateTime dt;
     ULONG h = path_hash(path);

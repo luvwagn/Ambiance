@@ -1,8 +1,8 @@
-; AmigaMCE - the register-level side of hosting EaglePlayer/DeliTracker
+; Ambiance - the register-level side of hosting EaglePlayer/DeliTracker
 ; players (eagle.c has the rest)
 ; Copyright (c) 2026 Brian King
 ;
-; Players are called with A5 pointing at the globals AmigaMCE gives them,
+; Players are called with A5 pointing at the globals Ambiance gives them,
 ; and call back through the function pointers in it and through the jump
 ; table below it (6-byte JMPs at negative offsets), with their arguments in
 ; registers. The calls in, the callbacks and the jump table targets are
@@ -140,7 +140,7 @@ append:
 	moveq	#0,d0
 	rts
 
-; AudioAlloc, AudioFree, StartInt, StopInt, LockScreen...: AmigaMCE holds
+; AudioAlloc, AudioFree, StartInt, StopInt, LockScreen...: Ambiance holds
 ; the channels and runs the timer itself; D0 = 0 (fine / none)
 _ehs_ok:
 	moveq	#0,d0
@@ -280,7 +280,7 @@ enpp_pokeper:
 	movem.l	(sp)+,d1/a0
 	rts
 
-; PokeVol(D0 = volume, D1 = channel): AmigaMCE's volume applied
+; PokeVol(D0 = volume, D1 = channel): Ambiance's volume applied
 enpp_pokevol:
 	movem.l	d0/d1/a0,-(sp)
 	and.w	#3,d1

@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - archives unpacked (see unarc.h)
+ * Ambiance - archives unpacked (see unarc.h)
  * Copyright (c) 2026 Brian King
  *
  * xadmaster.library (Dirk Stöcker's, Aminet util/arc/xadmaster000.lha) is

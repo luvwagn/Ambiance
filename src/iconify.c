@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - iconified: an AppIcon on Workbench while the window is away
+ * Ambiance - iconified: an AppIcon on Workbench while the window is away
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * main.c closes the window (or puts its screen behind Workbench) and the
@@ -52,7 +52,7 @@ BOOL icon_available(void)
 
 static struct DiskObject *ic_picture(const char **from)
 {
-    static const char *const names[] = { "PROGDIR:Icons/AppIcon", "PROGDIR:AmigaMCE" };
+    static const char *const names[] = { "PROGDIR:Icons/AppIcon", "PROGDIR:Ambiance" };
     struct DiskObject *d;
     int i;
     for (i = 0; i < 2; i++)
@@ -100,7 +100,7 @@ BOOL icon_add(const char *label, const char *quit_label)
 }
 
 /* What Workbench asked: ICON_OPEN (the icon double-clicked, or Open),
- * ICON_QUIT (Tools > Quit AmigaMCE), ICON_NONE. Everything else (files
+ * ICON_QUIT (Tools > Quit Ambiance), ICON_NONE. Everything else (files
  * dropped on it, for now) answered and let go. */
 int icon_poll(void)
 {

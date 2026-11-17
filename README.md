@@ -1,4 +1,4 @@
-# AmigaMCE
+# Ambiance
 
 **A fast, full-screen media centre for the Amiga.** Games and demos from
 [Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector)
@@ -11,7 +11,7 @@ Copy its drawer anywhere and double-click it. On an AGS 3 installation it
 is a drop-in companion: AGS's games, demos, modules and pictures are found
 by themselves. On any other Amiga, Settings > Folders says where your
 music, modules and pictures are; games and demos come from iGame's list
-where iGame is installed. Everything plays inside AmigaMCE, on the
+where iGame is installed. Everything plays inside Ambiance, on the
 Amiga's own screen and sound; it never switches you out to another program.
 
 It runs on Kickstart 3.1 and up with a 68020 or better, from a plain A1200
@@ -26,7 +26,7 @@ of the Amiga to how fast it really is.
   category, with the title's screenshot and fact sheet in a pane beside
   the list on screens 640 pixels wide or more.
 - Launches titles through their AGS `.run` scripts, honouring the AGS
-  Expert, ExpertPerm and Adult settings. While a game runs AmigaMCE gives
+  Expert, ExpertPerm and Adult settings. While a game runs Ambiance gives
   back everything it can, and comes back on the same entry afterwards.
 - Long lists such as All Games (thousands of entries) are kept in an index,
   so they open at once; only letters that changed are read again.
@@ -36,7 +36,7 @@ of the Amiga to how fast it really is.
   Demos), the games and demos of [iGame](https://github.com/walkero-gr/iGame)'s
   list (`gameslist.csv` in iGame's drawer): Favourites, All, Most played,
   By genre, By chipset and By year, with iGame's `igame.iff` screenshot and
-  the entry's genre, year, players, chipset and times played. AmigaMCE looks
+  the entry's genre, year, players, chipset and times played. Ambiance looks
   for iGame by itself the first time (the `iGame:` assign, the usual
   drawers, then the hard disks), and keeps the drawer it finds; Settings >
   Folders > iGame chooses another, or None. A title starts as iGame starts
@@ -49,7 +49,7 @@ of the Amiga to how fast it really is.
 
 ### Music
 
-- **Mods:** ProTracker modules played by AmigaMCE's own replayer, after the
+- **Mods:** ProTracker modules played by Ambiance's own replayer, after the
   ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
   formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play through
   EaglePlayer and DeliTracker player modules where they are installed (AGS
@@ -102,11 +102,11 @@ of the Amiga to how fast it really is.
   (beets)*: Artists, Albums and Recently added, then an artist's albums and
   an album's tracks, straight from the database instead of the folders
   (`src/beets.c`). The database is only read, never written, through
-  AmigaMCE's own `Libs/amcesql.library` (SQLite 3.34, `src/sqlib`). Its
+  Ambiance's own `Libs/amcesql.library` (SQLite 3.34, `src/sqlib`). Its
   albums are read once and kept in `Cache/beets.idx` until the database
   changes; an album's tracks come from it each time. beets' Windows paths
   are mapped to `MUSIC:` by finding which part of the first track's path
-  is there. Formats AmigaMCE cannot play (WMA, AAC) and file names Latin-1
+  is there. Formats Ambiance cannot play (WMA, AAC) and file names Latin-1
   cannot spell are left out.
 - **Now Playing:** title, artist, album and cover; a level meter per channel;
   a position bar you can click to seek; previous, back, play/pause, stop,
@@ -118,7 +118,7 @@ of the Amiga to how fast it really is.
 
 - Browses the `PICTURES:` assign, the folders of Settings > Folders >
   Pictures and AGS's `Media:Images`, with a preview of the selected picture or folder,
-  shows pictures full screen on AmigaMCE's own screen (no mode switch), and
+  shows pictures full screen on Ambiance's own screen (no mode switch), and
   plays folders as slideshows. Pictures are decoded by the installed
   datatypes and shown in their own colours where the screen allows it.
   Moving the mouse shows the pointer and buttons for the previous picture,
@@ -159,7 +159,7 @@ of the Amiga to how fast it really is.
   screen in Workbench's own mode (no mode switch), and back.
 - On a ZZ9000 it also plays MPEG video: `.mpg`, `.mpeg`, `.vob` (MPEG-1 or
   MPEG-2 Program Streams, and bare MPEG-1 video), and transport streams
-  (`.ts`, `.m2ts`, `.mts`) with MPEG-2 video, which AmigaMCE repacks as it
+  (`.ts`, `.m2ts`, `.mts`) with MPEG-2 video, which Ambiance repacks as it
   reads them. The card decodes the pictures and shows them on its overlay,
   freely scaled to fill the picture's place, with the same controls, keys
   and full screen as an ANIM; its sound (MPEG audio, or AC3) comes back
@@ -169,7 +169,7 @@ of the Amiga to how fast it really is.
   `Libs/ac3.library` or `Libs/ac3fpu.library` (liba52), the card showing
   the pictures. Clicking the line of how far it has got goes there.
   It needs the card's firmware with media sessions, Picasso96, and
-  AmigaMCE's screen or window on the card (16-bit or more). H.264, HEVC
+  Ambiance's screen or window on the card (16-bit or more). H.264, HEVC
   and AAC are not the card's: the preview says so (AAC: played without
   its sound).
 - Without a ZZ9000 (or with Settings > Display > MPEG video on the ZZ9000
@@ -202,7 +202,7 @@ of the Amiga to how fast it really is.
   system answers: a folder of the host's mounted as a volume plays an
   image of any size. A file system that does not answer them is
   positioned by `Seek` in two steps, which reaches 4 GB at most if it
-  takes positions past 2 GB at all; `AmigaMCE.log` says when an image
+  takes positions past 2 GB at all; `Ambiance.log` says when an image
   cannot be read.
 - DVD menus: when the CPU decodes a DVD (Settings > Video: MPEG on the
   ZZ9000 off, or no ZZ9000) and the disc has menus, Fire plays it from
@@ -227,7 +227,7 @@ of the Amiga to how fast it really is.
 - Or a window on Workbench, when Workbench is on a graphics card at 15 bits
   or more: Settings > Display > Workbench window, or the program icon's `WINDOWED`
   tooltype (shipped commented out as `(WINDOWED)`; take the brackets away),
-  or `AmigaMCE WINDOWED` from a Shell. A choice made in Settings comes first.
+  or `Ambiance WINDOWED` from a Shell. A choice made in Settings comes first.
   Its text is Small, Medium or Large (the window 512 x 384, 640 x 480 or
   800 x 600 at first, as far as Workbench has room); in the pixel style the
   font is the size. Resize it by the grip in its bottom right corner and
@@ -240,8 +240,8 @@ of the Amiga to how fast it really is.
   screen too) closes the window, or puts the full screen behind
   Workbench's, and leaves an AppIcon with a musical note on Workbench: the
   music plays on, a video stops and the viewer closes. Double-click the
-  icon (or its Open) to bring AmigaMCE back where it was; Workbench's
-  Tools > Quit AmigaMCE quits. Its zoom gadget swaps the window for a mini
+  icon (or its Open) to bring Ambiance back where it was; Workbench's
+  Tools > Quit Ambiance quits. Its zoom gadget swaps the window for a mini
   player: the cover, what plays and where it is in its album or list, the
   time and its bar (click it to go there), Previous, Play, Stop, Next,
   mute, the volume and a meter, in the pixel font at 1x, 2x or 3x by
@@ -252,7 +252,7 @@ of the Amiga to how fast it really is.
   change mode. When Workbench's screen mode is changed (ScreenMode prefs),
   the window closes as Workbench does, so no "Intuition is attempting to
   reset the Workbench screen" requester, and opens again on the new
-  screen, or full screen if a window cannot be there now. AmigaMCE watches
+  screen, or full screen if a window cannot be there now. Ambiance watches
   the ScreenMode, Overscan and Font prefs in ENV:Sys as IPrefs does, and
   closes its window as soon as one changes (Intuition asks for windows to
   be closed before Workbench is told anything). Full screen because
@@ -267,7 +267,7 @@ of the Amiga to how fast it really is.
 | | |
 |---|---|
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
-| **For Games and Demos** | Amiga Game Selector 3 (AmigaMCE finds it through the `AGS:` assign), or iGame's list (its `gameslist.csv`) with WHDLoad; to install WHDLoad from Games, xadmaster.library or LhA in C: |
+| **For Games and Demos** | Amiga Game Selector 3 (Ambiance finds it through the `AGS:` assign), or iGame's list (its `gameslist.csv`) with WHDLoad; to install WHDLoad from Games, xadmaster.library or LhA in C: |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
 | **For MP3 and FLAC** | mpega.library for MP3 (the installer offers it); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv) |
@@ -279,23 +279,23 @@ Paula.
 
 ## Installing
 
-1. Double-click `Install-AmigaMCE` in the archive. It asks where AmigaMCE
+1. Double-click `Install-Ambiance` in the archive. It asks where Ambiance
    should go and which languages to install (your Workbench's is ticked).
-   Or copy the `AmigaMCE` drawer to your hard drive yourself, all languages
+   Or copy the `Ambiance` drawer to your hard drive yourself, all languages
    included; keep its `Fonts` drawer next to the program.
 2. On AGS, if it boots straight into its own menu, quit AGS to Workbench first.
-3. Double-click AmigaMCE.
+3. Double-click Ambiance.
 
 ## Languages
 
 English, Deutsch, Français, Italiano, Español, Svenska, Suomi, Dansk,
 Norsk, Nederlands, Português, 日本語 (Japanese), Ελληνικά (Greek) and 한국어
-(Korean). AmigaMCE follows the
+(Korean). Ambiance follows the
 Workbench's language (Locale prefs) when its catalog is installed;
 Settings › General › Language picks another, and is greyed out showing the
 one in use when no other is installed. Workbench 3.x has no Japanese or
 Korean locale, so they are only ever picked there (their catalogs'
-languages are `nihongo`, a name of AmigaMCE's own, and `korean`); AmigaMCE
+languages are `nihongo`, a name of Ambiance's own, and `korean`); Ambiance
 draws them with its own glyph packs and needs nothing from the system for
 them. Korean keeps to the 2,350 Hangul syllables of KS X 1001, all of which
 the 15-pixel pack has. Greek likewise needs no
@@ -305,9 +305,9 @@ itself.
 
 Text in the source is written in English as `_("...")`, or `N_("...")` in a
 table. A string's catalog ID is a hash of its English, so nothing else
-needs numbering. `catalogs/` holds `AmigaMCE.cd`, made from the source,
+needs numbering. `catalogs/` holds `Ambiance.cd`, made from the source,
 and one `.ct` per language in FlexCat's format, kept in UTF-8. Catalogs
-are read by AmigaMCE itself and known by the language written in them, so
+are read by Ambiance itself and known by the language written in them, so
 their drawers have plain ASCII names (`Catalogs/francais`). Japanese,
 Chinese and Korean text can go in a catalog too, drawn from the glyph packs
 in `Fonts/amce-cjk`; in Japanese and Korean the clock and file dates are written year,
@@ -322,8 +322,8 @@ twice its English's bytes and 16 more, so the Greek is written to fit.
 |---|---|
 | `python3 tools/catalog.py scan src catalogs` | After changing `_()` strings: the `.cd` again, and each `.ct` given the new strings untranslated |
 | `python3 tools/catalog.py check catalogs` | How much of each language is translated |
-| `make catalogs` | Builds `build/catalogs/<language>/AmigaMCE.catalog`, refusing a translation whose `%` formats differ from its English |
-| `python3 tools/textfit.py catalogs assets/Fonts` | Measures each translation in AmigaMCE's fonts on 320×256, 640×256 and 640×512: the menu column, the footer hints, text wider than the pane |
+| `make catalogs` | Builds `build/catalogs/<language>/Ambiance.catalog`, refusing a translation whose `%` formats differ from its English |
+| `python3 tools/textfit.py catalogs assets/Fonts` | Measures each translation in Ambiance's fonts on 320×256, 640×256 and 640×512: the menu column, the footer hints, text wider than the pane |
 
 ## Using it
 
@@ -339,9 +339,9 @@ twice its English's bytes and 16 more, so the Greek is written to fit.
 
 A Now playing row at the top of the lists (Games, Demos, Mods, Music,
 Pictures, Videos, Radio and Plex's) takes you back to what is playing.
-What was playing when AmigaMCE quit comes back at its next start, loaded
+What was playing when Ambiance quit comes back at its next start, loaded
 and stopped, with its playlist and the row: Play goes on from where it
-was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
+was (a station from now). It is kept in `ENVARC:Ambiance/Resume`.
 
 ### Setting up Plex
 
@@ -352,8 +352,8 @@ was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
    Sign in at plex.tv. It shows a short code: enter it at
    [plex.tv/link](https://plex.tv/link) on a phone or computer. Your
    account's servers then appear under Plex server, each with its own token.
-   Without AmiSSL, give AmigaMCE your Plex token from the Shell:
-   `SetEnv SAVE AmigaMCE/PlexToken <token>`. About > Plex in AmigaMCE
+   Without AmiSSL, give Ambiance your Plex token from the Shell:
+   `SetEnv SAVE Ambiance/PlexToken <token>`. About > Plex in Ambiance
    explains where to find it.
 3. Your music libraries appear under Music, your photo libraries at the
    top of Pictures.
@@ -363,13 +363,13 @@ was (a station from now). It is kept in `ENVARC:AmigaMCE/Resume`.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on AmigaMCE's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
+| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on Ambiance's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves); iGame (its drawer, found by itself at first, or None); WHDLoad (installed, or installing it from whdload.de) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |
 
-Settings are saved in `ENVARC:AmigaMCE/`. Debug shows the CPU load and
-memory use in the header and writes a timing log to `AmigaMCE.log` next to
+Settings are saved in `ENVARC:Ambiance/`. Debug shows the CPU load and
+memory use in the header and writes a timing log to `Ambiance.log` next to
 the program, which is the first thing to look at if something misbehaves.
 
 ## Not there yet
@@ -384,7 +384,7 @@ the program, which is the first thing to look at if something misbehaves.
 
 ## Building
 
-AmigaMCE builds with [AmigaPorts'
+Ambiance builds with [AmigaPorts'
 `m68k-amigaos-gcc`](https://github.com/AmigaPorts/m68k-amigaos-gcc) 16.2
 (16.2-rc24 or later; the continuation of bebbo's amiga-gcc) and its libnix,
 for the 68020 and up (`-m68020-60`); `src/cpucheck.c` alone is built for the
@@ -403,7 +403,7 @@ inline OS call when a multiply helper call ends up between them (see
 
 | Target | Result |
 |---|---|
-| `make` | `AmigaMCE` and `amigamce-<version>.lha` (with the languages and `Install-AmigaMCE`) |
+| `make` | `Ambiance` and `ambiance-<version>.lha` (with the languages and `Install-Ambiance`) |
 | `make test` | The AGS and Pictures folder readers under vamos; iGame's list (on the host and under vamos) and WHDLoad's installation from its package (under vamos); the replayer, radio CSV and Plex XML readers on the host; DVD navigation on a test disc (`extras/dvdnav/tests/mkdvd.sh`), on the host and through `dvdnav.library` under vamos; MPEG-1 and MPEG-2 decoding, `mpegv.library`'s pictures against libmpeg2's own C, on the host and under vamos |
 | `make dvdlib` | `extras/dvdnav/build/dvdnav.library` (also part of `make`, into the archive's `Libs`) |
 | `make mpegvlib` | `extras/mpegv/build/mpegv.library` (also part of `make`, into the archive's `Libs`; needs the submodule: `git submodule update --init`) |
@@ -434,12 +434,12 @@ attached. Publishing that release uploads it to Aminet.
     tools/          host-side generators for the art, fonts and icons
     assets/         the Amiga fonts, their sources and their licences
     docs/           Workbench icons and the Installer script
-    catalogs/       the translations (AmigaMCE.cd and a .ct per language)
+    catalogs/       the translations (Ambiance.cd and a .ct per language)
     notes/          measurements kept for later work
 
 ## Licence and credits
 
-AmigaMCE © 2026 Brian King, under the [MIT licence](LICENSE).
+Ambiance © 2026 Brian King, under the [MIT licence](LICENSE).
 
 The fonts (Pixelify Sans, Galmuri, Ark Pixel Font, Rubik and Geologica, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT
@@ -454,7 +454,7 @@ MPEG-1 and MPEG-2 video without a ZZ9000 (files, transport streams and
 DVDs) is decoded by `mpegv.library` 2, a project of its own (`extras/mpegv`,
 a git submodule: [mpegv.library](https://github.com/luvwagn/mpegv.library),
 GPL-3.0-or-later, its source there): libmpeg2 0.5.1 (GPL-2.0-or-later),
-made faster on a 68k, behind an interface for any Amiga program. AmigaMCE opens it at run time from its Libs. Clone
+made faster on a 68k, behind an interface for any Amiga program. Ambiance opens it at run time from its Libs. Clone
 with `git clone --recursive`, or `git submodule update --init` after.
 
 DVDs are read by `dvdnav.library`: libdvdread 7.1.1 and libdvdnav 7.0.0
@@ -462,7 +462,7 @@ DVDs are read by `dvdnav.library`: libdvdread 7.1.1 and libdvdnav 7.0.0
 interface of its own, its own project:
 [luvwagn/dvdnav.library](https://github.com/luvwagn/dvdnav.library), the
 submodule `extras/dvdnav` (`make dvdlib`). It is GPL-3.0-or-later;
-AmigaMCE (MIT) opens it at run time through its interface (`include/`,
+Ambiance (MIT) opens it at run time through its interface (`include/`,
 MIT) and compiles none of its code. Its source is on GitHub, as its
 archive says. It was `amcedvd.library` before 0.9.1.1.
 
@@ -480,7 +480,7 @@ Tavenard's, a clone, or the ZZ9000's, which decodes on the card) or, as
 Settings > Sound chooses, by **`amcempega.library`**: libmad behind
 mpega's functions under a name of its own, so it never clashes with the
 one in `LIBS:`, with one more of its own that writes each frame straight
-into AmigaMCE's FIFO. It is its own project (`extras/mpga`, a git
+into Ambiance's FIFO. It is its own project (`extras/mpga`, a git
 submodule: [luvwagn/mpga.library](https://github.com/luvwagn/mpga.library),
 GPL-3.0-or-later), built by its own Makefile (`make mpgalib`, tested by
 `make test`). Unless Settings > Sound says otherwise, MP3 is decoded by
@@ -490,9 +490,9 @@ The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (BlitterStudio's zz9000-firmware, fetched by the Makefile at a
 pinned commit into `build/zz9k-sdk`), which are MIT. zz9k.library itself
 is GPL-3.0-or-later, with a published section 7 permission for any program
-that opens it and calls it through those headers, so AmigaMCE builds may
+that opens it and calls it through those headers, so Ambiance builds may
 be distributed. See `third_party/zz9k-sdk.txt` and the SDK's own
 `LICENSING.md`.
 
 Amiga is a trademark of Amiga Corporation. AGS, WHDLoad, Plex and other
-names belong to their owners; AmigaMCE is not affiliated with any of them.
+names belong to their owners; Ambiance is not affiliated with any of them.

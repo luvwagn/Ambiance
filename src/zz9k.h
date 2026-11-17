@@ -1,9 +1,9 @@
 /*
- * AmigaMCE - the ZZ9000's zz9k.library, as AmigaMCE uses it (zz9k.c)
+ * Ambiance - the ZZ9000's zz9k.library, as Ambiance uses it (zz9k.c)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * Only zz9k.c includes the ZZ9000 SDK's headers (MIT, fetched by the
- * Makefile: third_party/zz9k-sdk.txt); the rest of AmigaMCE sees these
+ * Makefile: third_party/zz9k-sdk.txt); the rest of Ambiance sees these
  * types of its own.
  */
 #ifndef AMCE_ZZ9K_H

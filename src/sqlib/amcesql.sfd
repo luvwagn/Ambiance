@@ -1,5 +1,5 @@
 ==id $Id: amcesql.sfd,v 1.1 2026/11/07 $
-* amcesql.library: SQLite 3.34.0, read only, for AmigaMCE (beets music
+* amcesql.library: SQLite 3.34.0, read only, for Ambiance (beets music
 * libraries). Loaded only when one is set up: PROGDIR:Libs/amcesql.library.
 ==base _AmceSqlBase
 ==basetype struct Library *

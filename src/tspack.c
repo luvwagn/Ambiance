@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - an MPEG transport stream (.ts, .m2ts) packed as a Program
+ * Ambiance - an MPEG transport stream (.ts, .m2ts) packed as a Program
  * Stream as it is read, for the ZZ9000's media session (which takes
  * Program Streams and WebM): tspack.h
  * Copyright (c) 2026 Brian King, MIT licence

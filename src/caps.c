@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - one-time hardware and software capability detection
+ * Ambiance - one-time hardware and software capability detection
  * Copyright (c) 2026 Brian King
  */
 #include "amce.h"
@@ -200,11 +200,11 @@ void caps_detect(struct Caps *c)
     c->rtg = any_rtg_mode();
     c->net = lib_present("bsdsocket.library", 4);
     c->mp3_mpega = lib_present("mpega.library", 0);
-    /* The ZZ9000 SDK's mpega.library decodes on the card: AmigaMCE need
+    /* The ZZ9000 SDK's mpega.library decodes on the card: Ambiance need
      * not ask it for less than a fast Amiga would (stream.c, plex.c). */
     c->zz9000 = zz9000_detect();
     c->mpega_zz = c->mp3_mpega && lib_id_has("mpega.library", "ZZ9000");
-    /* AmigaMCE's own MP3 decoder (extras/mpga): mpega's functions under
+    /* Ambiance's own MP3 decoder (extras/mpga): mpega's functions under
      * another name, so it never stands in for LIBS:mpega.library */
     c->mpega_own = path_present("PROGDIR:Libs/amcempega.library");
     c->mp3_mhi = path_present("LIBS:MHI");

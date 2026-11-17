@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a Plex server's XML, read just enough (plexxml.c). No Amiga
+ * Ambiance - a Plex server's XML, read just enough (plexxml.c). No Amiga
  * headers, so the host tests use it as it is.
  */
 #ifndef AMCE_PLEXXML_H

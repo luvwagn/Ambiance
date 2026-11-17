@@ -1,4 +1,4 @@
-/* Host test for plexxml.c: a Plex server's XML, as AmigaMCE reads it. */
+/* Host test for plexxml.c: a Plex server's XML, as Ambiance reads it. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,11 +66,11 @@ int main(void)
     {
         /* plex.tv: a code (XML and JSON), and an account's servers */
         static const char pin_xml[] =
-            "<?xml version=\"1.0\"?>\n<pin id=\"123456789\" code=\"AB12\" product=\"AmigaMCE\" "
-            "trusted=\"0\" clientIdentifier=\"amigamce-1\" expiresIn=\"900\" authToken=\"\"/>";
+            "<?xml version=\"1.0\"?>\n<pin id=\"123456789\" code=\"AB12\" product=\"Ambiance\" "
+            "trusted=\"0\" clientIdentifier=\"ambiance-1\" expiresIn=\"900\" authToken=\"\"/>";
         static const char pin_json[] =
-            "{\"id\":987654,\"code\":\"ZQ9X\",\"product\":\"AmigaMCE\",\"expiresIn\": 1800,"
-            "\"authToken\":null,\"clientIdentifier\":\"amigamce-1\"}";
+            "{\"id\":987654,\"code\":\"ZQ9X\",\"product\":\"Ambiance\",\"expiresIn\": 1800,"
+            "\"authToken\":null,\"clientIdentifier\":\"ambiance-1\"}";
         static const char pin_done[] = "{\"id\":987654,\"code\":\"ZQ9X\",\"authToken\":\"tok-ABC_123\"}";
         static const char res[] =
             "<MediaContainer size=\"3\">\n"

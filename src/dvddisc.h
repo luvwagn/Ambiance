@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - reading a DVD for dvdnav.library (dvddisc.c)
+ * Ambiance - reading a DVD for dvdnav.library (dvddisc.c)
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * A disc is read in 2048-byte sectors, from a drive (any exec device

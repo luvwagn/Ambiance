@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the playback controls' glyphs (glyph.c): one set for Now
+ * Ambiance - the playback controls' glyphs (glyph.c): one set for Now
  * playing, the mini player, and the anim and video controls
  * Copyright (c) 2026 Brian King, MIT licence
  */

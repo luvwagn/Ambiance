@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fuzz jdec: damaged JPEGs must decode or be refused, never crash, hang,
-leak or touch memory they should not. AmigaMCE, MIT.
+leak or touch memory they should not. Ambiance, MIT.
 
     python3 fuzz.py <corpus dir> <jtest built with -fsanitize=address,undefined> [runs] [seed]
 

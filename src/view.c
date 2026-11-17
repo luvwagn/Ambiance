@@ -1,8 +1,8 @@
 /*
- * AmigaMCE - the full-screen picture viewer
+ * Ambiance - the full-screen picture viewer
  * Copyright (c) 2026 Brian King
  *
- * Pictures are shown on AmigaMCE's own screen, so a monitor never sees a
+ * Pictures are shown on Ambiance's own screen, so a monitor never sees a
  * mode change. On a screen with a colour table (native, 8-bit RTG) the
  * picture gets that table while it is shown:
  *
@@ -993,9 +993,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         }
         if (!o && !clut && (src = jpeg_bitmap(path, g->w, g->h, g->rp->BitMap, &sw, &sh, pi))) {
             /* no datatype took it (a camera's Exif JPEG, say): read by
-             * AmigaMCE itself, in true colour */
+             * Ambiance itself, in true colour */
             own_src = TRUE;
-            amce_log("viewer", "no datatype took it: the JPEG read by AmigaMCE (jdec)");
+            amce_log("viewer", "no datatype took it: the JPEG read by Ambiance (jdec)");
         } else {
             if (!o) {
                 sprintf(msg, _("Could not show %.80s"), label);

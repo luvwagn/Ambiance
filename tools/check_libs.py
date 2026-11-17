@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Each library (and datatype) AmigaMCE builds, as AmigaOS will see it.
+"""Each library (and datatype) Ambiance builds, as AmigaOS will see it.
 
 A library's version is in three places, and they must agree:
 
@@ -11,7 +11,7 @@ A library's version is in three places, and they must agree:
   - its $VER string, which Version and the Workbench show, and any other
     "name V.R" in it (its id string, the text a Version() function returns).
 
-And the version AmigaMCE asks for (its header's define, or the number in
+And the version Ambiance asks for (its header's define, or the number in
 amce_open_own_lib's call) must be no newer than the library. mpegv.library
 2.0 once went out with rt_Version 1 (a stale object) and would not open on
 a real Amiga while every test passed.
@@ -19,7 +19,7 @@ a real Amiga while every test passed.
 Usage: check_libs.py library=source[=wanted] ...
   library  the built file (extras/ac3/build/ac3.library)
   source   the C file with LibVersion, LibRevision and the $VER string
-  wanted   the version AmigaMCE asks for (optional)
+  wanted   the version Ambiance asks for (optional)
 Exit 1 if any disagree.
 """
 import re
@@ -82,7 +82,7 @@ def main(args):
                 why.append("%r says %d.%d" % (m.group(0).decode("latin-1"), other[0], other[1]))
                 break
         if wanted is not None and sv is not None and wanted > sv:
-            why.append("AmigaMCE asks for %d, the library is %d" % (wanted, sv))
+            why.append("Ambiance asks for %d, the library is %d" % (wanted, sv))
         if why:
             bad += 1
             print("  %s: %s" % (name, "; ".join(why)))

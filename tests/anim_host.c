@@ -1,5 +1,5 @@
 /*
- * AmigaMCE tests: IFF ANIM decoding (src/animdec.c) on the host.
+ * Ambiance tests: IFF ANIM decoding (src/animdec.c) on the host.
  *
  *   anim_host file.anim [out-prefix [frame...]]
  *

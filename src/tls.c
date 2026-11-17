@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - HTTPS: TLS over a socket, by AmiSSL
+ * Ambiance - HTTPS: TLS over a socket, by AmiSSL
  * Copyright (c) 2026 Brian King
  *
  * AmiSSL (amisslmaster.library, AmiSSL 5: OpenSSL 3) is opened by each
@@ -26,7 +26,7 @@
  * (loading the certificates) made a read that only had to wait look like
  * a failure, every connection given up at its first wait.
  *
- * The root certificates a server's is checked against are AmigaMCE's own,
+ * The root certificates a server's is checked against are Ambiance's own,
  * Certs/cacert.pem (Mozilla's, from certifi), read here and given to
  * OpenSSL from memory, the first time a check is wanted; AmiSSL's own
  * (AmiSSL:Certs) only without them, and only where that assign exists:
@@ -322,7 +322,7 @@ static BOOL certs_load(struct TlsLib *t)
         return TRUE;
     }
     {
-        /* AmigaMCE's not there: AmiSSL's, if its assign is */
+        /* Ambiance's not there: AmiSSL's, if its assign is */
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR oldwin = me->pr_WindowPtr;
         BPTR l;
@@ -349,7 +349,7 @@ static BOOL certs_load(struct TlsLib *t)
 /* ---- the time a certificate is checked at
  * A certificate is valid between two dates, checked against the Amiga's
  * clock. One that has no battery clock, or whose emulator does not set it,
- * starts in 1978, and every certificate is "not yet valid". AmigaMCE was
+ * starts in 1978, and every certificate is "not yet valid". Ambiance was
  * built on AMCE_DATE, so now is no earlier than that: if the clock says
  * otherwise, the check is made as of that day (the certificate still
  * checked against the root certificates, its name against the host's). */
@@ -422,7 +422,7 @@ APTR TLSF(new)(struct TlsLib *t, LONG sock, const char *host, BOOL verify)
             if (!said) {
                 char m[160];
                 said = TRUE;
-                sprintf(m, "the Amiga's clock says day %lu after 1.1.1970, before AmigaMCE was "
+                sprintf(m, "the Amiga's clock says day %lu after 1.1.1970, before Ambiance was "
                            "built (" AMCE_DATE "): certificates checked as of then",
                         (unsigned long)(now / 86400UL));
                 amce_log("https", m);

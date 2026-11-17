@@ -1,6 +1,6 @@
 # jdec
 
-AmigaMCE's own JPEG decoder, built into AmigaMCE for JPEG thumbnails and
+Ambiance's own JPEG decoder, built into Ambiance for JPEG thumbnails and
 cover art (src/jpgthumb.c). Written for 68020+ CPUs without an FPU. MIT
 licence.
 

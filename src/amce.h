@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - full-screen media launcher for AmigaOS 3.1+
+ * Ambiance - full-screen media launcher for AmigaOS 3.1+
  * Copyright (c) 2026 Brian King
  */
 #ifndef AMCE_H
@@ -30,7 +30,7 @@ struct Caps {
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
     BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
-    BOOL  mpega_own;    /* AmigaMCE's own amcempega.library is in its Libs */
+    BOOL  mpega_own;    /* Ambiance's own amcempega.library is in its Libs */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */
     UWORD wb_w, wb_h;   /* ...and its size (Automatic follows it there) */
@@ -45,10 +45,10 @@ const char *caps_release_name(UWORD version);
 enum {
     PEN_BG = 0, PEN_BAR, PEN_RULE, PEN_TEXT, PEN_DIM, PEN_WHITE, PEN_HL,
     PEN_SELDIM, PEN_ACCENT, PEN_KEYCAP, PEN_FAINT, PEN_YELLOW,
-    NUM_UI_PENS = 16,    /* AmigaMCE's pens are 0-15; 16-31 keep the screen's colours */
+    NUM_UI_PENS = 16,    /* Ambiance's pens are 0-15; 16-31 keep the screen's colours */
     POINTER_PEN0 = 17    /* 17-19: the mouse pointer's colours, from the user's prefs */
 };
-/* The pen a UI colour is drawn with: itself on AmigaMCE's own screen; in a
+/* The pen a UI colour is drawn with: itself on Ambiance's own screen; in a
  * window on Workbench, the Workbench pen obtained for it (gfx.c). Every
  * SetAPen / SetBPen of a UI colour goes through this; pens that are not UI
  * colours (32 up: smooth's shades, a picture's) pass through as they are. */
@@ -292,7 +292,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: c
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
 /* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it
  * decodes: use the datatypes); kind says where it came from, for the
- * note of those it does not (AmigaMCE-jpeg.txt) */
+ * note of those it does not (Ambiance-jpeg.txt) */
 struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi, const char *kind);
 void jpeg_thumb_init(void);
@@ -302,7 +302,7 @@ void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */
 void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the last one made */
-/* An IFF ILBM read by AmigaMCE itself (ilbm.c), straight into a thumbnail
+/* An IFF ILBM read by Ambiance itself (ilbm.c), straight into a thumbnail
  * for a w x h box (pic_fit): no datatype. NULL: not an ILBM it reads (HAM,
  * deep, PBM...) or no memory; try the datatype then. */
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
@@ -314,17 +314,17 @@ void anim_fact_put(BPTR fh, const char *path, ULONG frames, ULONG ms);    /* an 
 void anim_fact_forget(void);    /* (quitting) */
 /* An IFF ANIM played on a screen of its own (anim.c): 0 played (err ""), -1 not;
  * its sound by AHI (ahi) or Paula's channels 2 and 3; on a 16-bit RTG screen on
- * AmigaMCE's own unless classic (Settings > Display > Animations) */
+ * Ambiance's own unless classic (Settings > Display > Animations) */
 LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *err, LONG errmax);
 /* An MPEG video played by the ZZ9000 the same way, its overlay the picture
- * (AmigaMCE's RTG screen or window on the card) */
+ * (Ambiance's RTG screen or window on the card) */
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
 /* A DVD's film: the disc in volume vol, or (image) in the image file vol */
 LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
 BOOL gfx_thumbs(struct Gfx *g);
 struct BitMap *gfx_thumb_bitmap(struct Gfx *g, const struct Thumb *t);  /* see gfx.c */
-/* Double buffering (RTG; prototype: PROGDIR:AmigaMCE.dbuf): drawing goes
+/* Double buffering (RTG; prototype: PROGDIR:Ambiance.dbuf): drawing goes
  * into the buffer not shown; gfx_present shows it, if gfx_dirty was said. */
 extern BOOL gfx_dbuf_wanted;
 extern ULONG gfx_present_ms;
@@ -338,7 +338,7 @@ extern ULONG gfx_off_hits;      /*   only counted: the screen would have changed
 BOOL gfx_dbuf_active(void);
 BOOL gfx_quiet_begin(void);     /* around a small update shown without a flip */
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1);
-/* A window on Workbench (gfx.c): wanted (AmigaMCE/Windowed), and why it
+/* A window on Workbench (gfx.c): wanted (Ambiance/Windowed), and why it
  * cannot be had here (NULL: it can). */
 extern BOOL gfx_window_wanted;
 const char *gfx_window_problem(const struct Caps *c);
@@ -421,7 +421,7 @@ LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h);
-/* The full-screen picture viewer, on AmigaMCE's own screen (view.c). On
+/* The full-screen picture viewer, on Ambiance's own screen (view.c). On
  * 256-colour and native screens a picture gets the screen's whole palette
  * while it is shown, and the info bar takes its colours from the picture.
  * view_end leaves the screen black; redraw it, then view_restore. */
@@ -517,7 +517,7 @@ struct Ags {
     BOOL set_assigns;           /* we had to create AGS: ourselves */
     char root[256];             /* "AGS:" when present */
     char hw[16], adult[4], expertperm[4];
-    char added[160];            /* assigns AmigaMCE made because they were missing */
+    char added[160];            /* assigns Ambiance made because they were missing */
     struct ItemList top;            /* top-level .ags folders */
 };
 
@@ -715,7 +715,7 @@ BOOL amp_host_start(void);          /* its port (FALSE: AmigaAMP's own is up) */
 void amp_host_end(void);            /* (a plug-in asked to go first) */
 BOOL amp_launch(const char *path, char *err, LONG errmax);
 BOOL amp_attached(void);
-BOOL amp_ours(void);                /* attached, and started by AmigaMCE */
+BOOL amp_ours(void);                /* attached, and started by Ambiance */
 void amp_tick(void);                /* each frame: its messages; the sound, the plug-in told */
 void amp_stop(ULONG wait_ms);
 /* visflow.c: Flow, on graphics cards */
@@ -764,7 +764,7 @@ void st_use_mhi(const char *driver);
 void st_use_card_mpega(BOOL on);         /* mpega.library is the ZZ9000 SDK's */
 void st_use_paula14(BOOL on);            /* Paula at 14 bits, four channels */
 void st_mp3_quality(int pref);           /* MPEG audio: 0 by the speed measured, 1 high, 2 medium */
-void st_use_own_mpega(BOOL on);          /* MP3 by amcempega.library, AmigaMCE's own */
+void st_use_own_mpega(BOOL on);          /* MP3 by amcempega.library, Ambiance's own */
 void st_set_stop_url(const char *url);     /* asked before the next stream (Plex: stop) */       /* Settings > Sound: MP3 by MHI ("" mpega) */
 BOOL st_mhi(void);      /* 0 short, 1 normal, 2 long: the next stream */
 BOOL st_mhi_now(void);  /* the stream playing is decoded by MHI: no samples to see */
@@ -875,7 +875,7 @@ LONG ep_players(void);
 BOOL ep_installed(void);
 BOOL ep_load(const char *path, UBYTE *mod, ULONG len, BOOL quick, char *err,
              LONG errmax);  /* mod: AllocVec, taken; quick: only players named like it */
-BOOL ep_start(UWORD *count);    /* TRUE: AmigaMCE's timer calls ep_tick, every *count */
+BOOL ep_start(UWORD *count);    /* TRUE: Ambiance's timer calls ep_tick, every *count */
 void ep_tick(void);
 void ep_stop(void);
 void ep_pause(BOOL on);
@@ -1019,14 +1019,14 @@ extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 extern ULONG ui_palette32[];        /* the colours in use (a scheme's: ui_scheme_apply) */
 enum { UI_MIDNIGHT, UI_GRAPHITE, UI_WB13, UI_EMERALD, UI_AMETHYST, UI_SCHEMES };
 extern const char *const ui_scheme_names[UI_SCHEMES];   /* (N_: translated where shown) */
-extern const char *const ui_scheme_keys[UI_SCHEMES];    /* AmigaMCE/Colours' values */
+extern const char *const ui_scheme_keys[UI_SCHEMES];    /* Ambiance/Colours' values */
 extern int ui_scheme;
 void ui_scheme_apply(int k);        /* its colours into ui_palette32 (before a screen opens) */
 enum { ICON_GAMES, ICON_MODS, ICON_DEMOS, ICON_VIDEOS, ICON_PICTURES, ICON_MUSIC,
        ICON_RADIO, ICON_SETTINGS, ICON_ABOUT, ICON_COUNT };
 
 /* ---------------------------------------------------------------- log */
-void amce_log_open(BOOL force);     /* force, or PROGDIR:AmigaMCE.debug exists */
+void amce_log_open(BOOL force);     /* force, or PROGDIR:Ambiance.debug exists */
 const char *amce_log_path(void);    /* where it is going, or NULL when off */
 
 /* ---------------------------------------------------------------- debug */
@@ -1039,7 +1039,7 @@ ULONG time_ms(void);                /* E-clock milliseconds, 0 without a timer *
 ULONG time_ticks(ULONG *hz);        /* E-clock ticks (their rate at *hz): measuring */
 void  dbg_sleep_begin(void);        /* around every Wait / WaitTOF */
 void  dbg_sleep_end(void);
-LONG  dbg_app_sample(void);         /* AmigaMCE's own CPU share, 0..100, -1 at first */
+LONG  dbg_app_sample(void);         /* Ambiance's own CPU share, 0..100, -1 at first */
 void  dbg_mem_baseline(void);
 void  dbg_mem_report(void);     /* (quitting: what is not back, logged) */
 ULONG dbg_mem_used(ULONG *chip);
@@ -1247,7 +1247,7 @@ void amce_time_text(char *out, ULONG ms);   /* "m:ss" */
 void amce_card_init(void);
 void amce_card_lock(void);
 void amce_card_unlock(void);
-/* One of AmigaMCE's own libraries, from its Libs (else LIBS:): an older
+/* One of Ambiance's own libraries, from its Libs (else LIBS:): an older
  * copy left in memory, unused, put out first; logged (ownlib.c) */
 struct Library *amce_open_own_lib(const char *name, ULONG version);
 void amce_close_own_lib(struct Library **base);     /* closed, and out of memory if unused */

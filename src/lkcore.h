@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the layouts' drawing kit: fills, gradients, rounded boxes,
+ * Ambiance - the layouts' drawing kit: fills, gradients, rounded boxes,
  * frames, pictures and text over a known background
  * Copyright (c) 2026 Brian King
  *

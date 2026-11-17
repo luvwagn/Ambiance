@@ -1,7 +1,7 @@
-# AmigaMCE Makefile for GCC (m68k-amigaos), modelled on xSysInfo
+# Ambiance Makefile for GCC (m68k-amigaos), modelled on xSysInfo
 # Copyright (c) 2026 Brian King
 #
-#   make            build AmigaMCE and the LHA archive (with its installer)
+#   make            build Ambiance and the LHA archive (with its installer)
 #   make test       run the AGS parser tests under vamos
 #   make art        regenerate src/art.c (logo, icons, palette)
 #   make fonts      regenerate the bitmap fonts (amce-pixel 12/24/36, Galmuri)
@@ -60,9 +60,9 @@ build/tls.o: CFLAGS += -DTLS_HAVE_V6
 endif
 VASM ?= vasmm68k_mot
 
-TARGET     = AmigaMCE
-LHA_DIR    = build/lha/AmigaMCE
-LHA_NAME   = amigamce-$(FULL_VERSION).lha
+TARGET     = Ambiance
+LHA_DIR    = build/lha/Ambiance
+LHA_NAME   = ambiance-$(FULL_VERSION).lha
 LHA_OPTS  ?=
 
 FONT_FILES = assets/Fonts/amce-pixel.font assets/Fonts/amce-pixel/12 \
@@ -78,7 +78,7 @@ SMOOTH_FILES = assets/Fonts/amce-smooth/384 assets/Fonts/amce-smooth/480 assets/
 # Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel),
 # and Greek (tools/mkgreek.py: Galmuri11)
 CJK_FILES  = assets/Fonts/amce-cjk/12 assets/Fonts/amce-cjk/15 assets/Fonts/amce-cjk/greek
-ICONS      = docs/AmigaMCE.info docs/drawer.info docs/readme.info docs/appicon.info
+ICONS      = docs/Ambiance.info docs/drawer.info docs/readme.info docs/appicon.info
 LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.txt \
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
@@ -263,7 +263,7 @@ check-formats:
 # generated code stays as a guard against a regression.
 ASM_DIR = build/asm
 # every library and datatype built, as AmigaOS will see it: its Resident's
-# version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
+# version, LibVersion.LibRevision and $VER agree, and Ambiance asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
 check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(LAYOUTS)
@@ -291,7 +291,7 @@ build/spu_host: src/spu.c src/spu.h tests/spu/spu_host.c
 test-spu: build/spu_host
 	@build/spu_host > /dev/null && echo "  CHECK a DVD's subpictures decoded and blended (host) ok"
 
-# leakcheck: clang's static analyser over AmigaMCE's own sources, the NDK's
+# leakcheck: clang's static analyser over Ambiance's own sources, the NDK's
 # acquire/release pairs (AllocVec/FreeVec, Open/Close, Lock/UnLock,
 # OpenLibrary/CloseLibrary, AllocBitMap/FreeBitMap...) declared to it as
 # ownership (tools/leakcheck/mkshim.py): a path that drops what it acquired
@@ -322,7 +322,7 @@ leakcheck: build/ac3probe.h
 		'$(CLANG) $(LC_FLAGS) -o /dev/null {} > $(LC_DIR)/$$(basename {}).txt 2>&1 || true'
 	@cat $(LC_DIR)/*.c.txt | grep -E "warning: .*(leak|freed|free |released)" || echo "  CHECK no leak found"
 
-# rtgbench: AmigaMCE's drawing timed on RTG screens, 8-bit against 16-bit
+# rtgbench: Ambiance's drawing timed on RTG screens, 8-bit against 16-bit
 build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/animdraw68k.o
 	@mkdir -p build
 	@echo "  CC    $<"
@@ -330,7 +330,7 @@ build/rtgbench: tools/rtgbench/rtgbench.c src/animdraw.c src/animdraw.h build/an
 rtgbench: build/rtgbench
 
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
-# the card's own report) and how fast AmigaMCE's uses of it are
+# the card's own report) and how fast Ambiance's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
 build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h
 	@mkdir -p build
@@ -348,11 +348,11 @@ test: check-formats check-syscalls check-libs test-spu build/test_ags build/test
 		&& grep -q "all iGame tests passed" test-igame68k.txt \
 		&& echo "  CHECK iGame's list (68000, igame.c) ok" || (grep -v WARNING test-igame68k.txt; exit 1)
 	@# a package as unpacked: WHDLoad, DIC, an icon, Patcher (one already in C: kept), WHDLoad.prf
-	@rm -rf build/vw && mkdir -p build/vw/C build/vw/S build/vw/DEVS build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C \
-		build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S
-	@printf WHDLD > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad && printf DIC > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/DIC \
-		&& printf NEW > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/Patcher && printf icon > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/C/WHDLoad.info \
-		&& printf PREF > build/vw/T/AmigaMCE-WHDLoad/WHDLoad/S/WHDLoad.prf && printf O > build/vw/C/Patcher
+	@rm -rf build/vw && mkdir -p build/vw/C build/vw/S build/vw/DEVS build/vw/T/Ambiance-WHDLoad/WHDLoad/C \
+		build/vw/T/Ambiance-WHDLoad/WHDLoad/S
+	@printf WHDLD > build/vw/T/Ambiance-WHDLoad/WHDLoad/C/WHDLoad && printf DIC > build/vw/T/Ambiance-WHDLoad/WHDLoad/C/DIC \
+		&& printf NEW > build/vw/T/Ambiance-WHDLoad/WHDLoad/C/Patcher && printf icon > build/vw/T/Ambiance-WHDLoad/WHDLoad/C/WHDLoad.info \
+		&& printf PREF > build/vw/T/Ambiance-WHDLoad/WHDLoad/S/WHDLoad.prf && printf O > build/vw/C/Patcher
 	@cd build && vamos -V VW:$(abspath build/vw) -a C:VW:C -a S:VW:S -a DEVS:VW:DEVS -a T:VW:T test_whdinst > test-whdinst.txt 2>&1 \
 		&& grep -q "all WHDLoad tests passed" test-whdinst.txt \
 		&& echo "  CHECK WHDLoad installed from its package (68000, whdinst.c)" || (grep -v WARNING test-whdinst.txt; exit 1)
@@ -473,7 +473,7 @@ dvdlib: $(DVDLIB)
 # its tests (extras/dvdnav/tests/dvd_test.c) on its DVD image
 # (extras/dvdnav/tests/mkdvd.sh): its own make test (on the host with its
 # sources linked in, then through the library on a 68020 under vamos), and
-# here once more on a 68020 with AmigaMCE's reader (src/dvddisc.c) as well
+# here once more on a 68020 with Ambiance's reader (src/dvddisc.c) as well
 DVD_ISO = build/dvd/test.iso
 $(DVD_ISO): extras/dvdnav/tests/fixtures/dvd/test.iso.xz
 	@mkdir -p build/dvd
@@ -499,7 +499,7 @@ build/dvd/dvd_68k: extras/dvdnav/tests/dvd_test.c src/dvddisc.c src/dvddisc.h sr
 	@$(PYTHON) tools/check_syscalls.py build/dvd/dvddisc.s
 	@cp $(DVDLIB) build/dvd/prog/Libs/
 	@cp $@ build/dvd/prog/
-# AmigaMCE's side (src/dvdplay.c): the film chosen and read as the player reads it
+# Ambiance's side (src/dvdplay.c): the film chosen and read as the player reads it
 build/dvd/dvdplay_68k: tests/dvdplay_68k.c src/dvdplay.c src/dvdplay.h src/dvddisc.c src/dvddisc.h src/spu.h \
                        src/dvdiso.c src/dvdiso.h src/util.c src/ownlib.c src/amce.h $(DVDLIB)
 	@mkdir -p build/dvd/prog
@@ -512,7 +512,7 @@ test-dvd: build/dvd/dvd_68k build/dvd/dvdplay_68k $(DVD_ISO)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvd_68k prog:test.iso > ../test-dvd.txt 2>&1 \
 		&& grep -q "dvd tests passed" ../test-dvd.txt \
-		&& echo "  CHECK DVD navigation (68020, dvdnav.library, AmigaMCE's reader) ok" || (cat ../test-dvd.txt; exit 1)
+		&& echo "  CHECK DVD navigation (68020, dvdnav.library, Ambiance's reader) ok" || (cat ../test-dvd.txt; exit 1)
 	@cd build/dvd && vamos -C 68020 -m 8192 -s 48 -V prog:$(abspath build/dvd/prog) \
 		prog:dvdplay_68k prog:test.iso > ../test-dvdplay.txt 2>&1 \
 		&& grep -q "dvdplay tests passed" ../test-dvdplay.txt \
@@ -631,11 +631,11 @@ preview: src/art.c $(FONT_FILES)
 
 # ------------------------------------------------------------------ release
 # The translations: catalogs/*.ct built into build/catalogs/<language>/
-# AmigaMCE.catalog (tools/catalog.py checks each keeps its English's %
+# Ambiance.catalog (tools/catalog.py checks each keeps its English's %
 # formats). After changing _() strings in src/: python3 tools/catalog.py
 # scan src catalogs, then translate what is new in each .ct.
 CT_FILES   = $(wildcard catalogs/*.ct)
-build/catalogs/.built: $(CT_FILES) catalogs/AmigaMCE.cd tools/catalog.py
+build/catalogs/.built: $(CT_FILES) catalogs/Ambiance.cd tools/catalog.py
 	@echo "  CAT   $(words $(CT_FILES)) languages"
 	@rm -rf build/catalogs
 	@$(PYTHON) tools/catalog.py build catalogs build/catalogs > /dev/null
@@ -643,14 +643,14 @@ build/catalogs/.built: $(CT_FILES) catalogs/AmigaMCE.cd tools/catalog.py
 
 catalogs: build/catalogs/.built
 
-# The release archive: the AmigaMCE drawer with every language in it, and
+# The release archive: the Ambiance drawer with every language in it, and
 # an Installer script beside it that copies the drawer and the languages
 # chosen (the Workbench's ticked).
 # Aminet's own archives, as they are there: modplug.library (public domain),
 # mpega.library and xfdmaster.library (free to pass on, not for profit,
 # all files together and unchanged)
 # amcesql.library: SQLite (Aminet's 68k libsqlite3.a) for beets libraries,
-# loaded by AmigaMCE only when one is set up (PROGDIR:Libs)
+# loaded by Ambiance only when one is set up (PROGDIR:Libs)
 SQLIB     = build/sqlib/amcesql.library
 SQLIB_CC  = $(CC) -O2 -m68020 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-array-bounds
 build/sqlib/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/sqlib/amcesql.c Makefile
@@ -663,7 +663,7 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a e
 		extras/sqlite/libsqlite3.a -lm -lamiga
 	@$(STRIP) -o $@ $@.dbg
 
-# jdec, AmigaMCE's JPEG decoder (src/jdec), built in for JPEG thumbnails
+# jdec, Ambiance's JPEG decoder (src/jdec), built in for JPEG thumbnails
 # (src/jpgthumb.c); -O2: it is the hot path
 build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@mkdir -p build
@@ -671,7 +671,7 @@ build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
-lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
+lha: $(TARGET) Ambiance.readme $(ICONS) docs/install.info docs/Install-Ambiance $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPEGVLIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
@@ -680,7 +680,7 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 		$(LHA_DIR)/Licences $(LHA_DIR)/Visuals
 	@cp docs/Visuals-ReadMe.txt $(LHA_DIR)/Visuals/ReadMe.txt
 	@cp $(TARGET) $(LHA_DIR)/
-	@cp docs/AmigaMCE.info $(LHA_DIR)/
+	@cp docs/Ambiance.info $(LHA_DIR)/
 	@# the AppIcon shown while iconified (iconify.c): no drawer icon, unseen
 	@mkdir -p $(LHA_DIR)/Icons
 	@cp docs/appicon.info $(LHA_DIR)/Icons/AppIcon.info
@@ -721,23 +721,23 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@cp assets/certs/cacert.pem $(LHA_DIR)/Certs/
 	@cp assets/certs/LICENSE-certifi.txt $(LHA_DIR)/Licences/Mozilla-CA-certificates.txt
 	@awk -v version="$(FULL_VERSION)" '{ gsub(/\[VERSION\]/, version); print }' \
-		AmigaMCE.readme > $(LHA_DIR)/readme.txt
+		Ambiance.readme > $(LHA_DIR)/readme.txt
 	@cp docs/readme.info $(LHA_DIR)/readme.txt.info
-	@cp docs/drawer.info build/lha/AmigaMCE.info
+	@cp docs/drawer.info build/lha/Ambiance.info
 	@mkdir -p $(LHA_DIR)/Catalogs
 	@cp -R build/catalogs/* $(LHA_DIR)/Catalogs/
-	@cp docs/Install-AmigaMCE build/lha/Install-AmigaMCE
+	@cp docs/Install-Ambiance build/lha/Install-Ambiance
 	@# Aminet's libraries for more of the music, each archive's files whole
 	@# and unchanged (their terms: kept together, not changed), for the
 	@# installer to offer where they are missing or older (never on AGS)
 	@mkdir -p build/lha/Extras
 	@for a in $(EXTRAS); do (cd build/lha/Extras && lha xq ../../../$$a); done
-	@cp docs/install.info build/lha/Install-AmigaMCE.info
+	@cp docs/install.info build/lha/Install-Ambiance.info
 	@rm -f $(LHA_NAME)
-	@cd build/lha && lha aqo5 $(LHA_OPTS) ../../$(LHA_NAME) AmigaMCE AmigaMCE.info \
-		Install-AmigaMCE Install-AmigaMCE.info Extras
+	@cd build/lha && lha aqo5 $(LHA_OPTS) ../../$(LHA_NAME) Ambiance Ambiance.info \
+		Install-Ambiance Install-Ambiance.info Extras
 	@echo "Created $(LHA_NAME)"
 
 clean:
 	rm -rf build/*.o build/lha build/sqlib build/dvd build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
-		amigamce-*.lha
+		ambiance-*.lha

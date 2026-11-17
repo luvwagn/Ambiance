@@ -1,5 +1,5 @@
 /*
- * AmigaMCE tests: an ANIM's frames drawn as 16-bit pixels (src/animdraw.c),
+ * Ambiance tests: an ANIM's frames drawn as 16-bit pixels (src/animdraw.c),
  * on the host, against every pixel worked out by hand: random planes of
  * each depth, widths not a whole number of words, plain, extra halfbrite,
  * HAM6 and HAM8 colours, whole and part scales, four pixel formats; and a

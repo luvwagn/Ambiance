@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the network process: HTTP requests off the UI
+ * Ambiance - the network process: HTTP requests off the UI
  * Copyright (c) 2026 Brian King
  *
  * Asking radio-browser.info for a list of stations takes a DNS lookup, a
@@ -243,7 +243,7 @@ static APTR tls_start(struct NetJob *j, LONG s, const char *host)
     if (!(c = tls_new(&tls, s, host, TRUE))) {
         if (tls.why[0])
             amce_log("network: https", tls.why);
-        set_err(j, tls.why[0] ? _("AmigaMCE's certificates are missing (its Certs drawer)")
+        set_err(j, tls.why[0] ? _("Ambiance's certificates are missing (its Certs drawer)")
                               : _("Not enough memory"));
         return NULL;
     }
@@ -560,7 +560,7 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
     /* HTTP/1.1 over HTTPS: plex.tv refuses 1.0 ("426 Upgrade Required");
      * Connection: close all the same, chunked answers put together */
     sprintf(req,
-            "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: AmigaMCE/" AMCE_VERSION
+            "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: Ambiance/" AMCE_VERSION
             "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
             j->post ? "POST" : "GET", path, secure ? "1" : "0", host,
             j->post ? "Content-Length: 0\r\n" : "", j->extra);
@@ -881,7 +881,7 @@ static void net_main(void)
                     CloseLibrary(SocketBase);
                 SocketBase = NULL;
                 DeleteMsgPort(p);
-                Forbid();                   /* gone before AmigaMCE can unload */
+                Forbid();                   /* gone before Ambiance can unload */
                 ReplyMsg(&j->msg);
                 return;
             }
@@ -912,7 +912,7 @@ BOOL net_start(void)
     port = NULL;
     SetSignal(0, 1UL << start_sig);
     proc = (struct Task *)CreateNewProcTags(NP_Entry, (ULONG)net_main,
-                                            NP_Name, (ULONG)"AmigaMCE network",
+                                            NP_Name, (ULONG)"Ambiance network",
                                             NP_StackSize, 65536, NP_Priority, -1,
                                             NP_WindowPtr, (ULONG)-1, TAG_END);
     if (proc)

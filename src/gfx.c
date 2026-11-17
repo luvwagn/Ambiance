@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - screen, palette, font and drawing primitives
+ * Ambiance - screen, palette, font and drawing primitives
  * Copyright (c) 2026 Brian King
  *
  * Sizes are design units (a 256-line layout) times the screen's scale,
@@ -345,7 +345,7 @@ const char *gfx_mode_problem(const struct Caps *c, int sm)
 }
 
 /* What "Automatic" means. Workbench on the graphics card: the card too,
- * the largest of AmigaMCE's RTG sizes that fits the Workbench's screen
+ * the largest of Ambiance's RTG sizes that fits the Workbench's screen
  * (a 1920 x 1080 Workbench: 1024 x 768), 640 x 480 if it is smaller than
  * all of them - no switch between the card and the chipset on start and
  * exit. Otherwise hires on AGA, lowres before it, in the machine's own
@@ -403,7 +403,7 @@ static void blk_reserve(struct Gfx *g);
  * at 1x, as on a 640 x 480 screen), 640 x 480 inside if the Workbench has
  * room. Only on a 15-bit or deeper Workbench on the graphics card:
  * pictures, thumbnails and video go to it as RGB, needing no pens, and
- * AmigaMCE's 16 colours are pens obtained from Workbench (gfx_penmap)
+ * Ambiance's 16 colours are pens obtained from Workbench (gfx_penmap)
  * rather than its own 0-15, which are Workbench's there. Everything is
  * drawn into a buffer of our own (a layer on a bitmap in the Workbench's
  * format, so the blits that write g->rp->BitMap straight land in it) and
@@ -873,7 +873,7 @@ BOOL gfx_window_sizing(struct Gfx *g, ULONG cls, UWORD code, WORD mx, WORD my)
  * Intuition can close Workbench's screen only with no windows but its
  * drawers on it, and says so with a requester otherwise. workbench.library
  * (V45 on: OS 3.5, 3.9, 3.2) calls a hook before it shuts down and when it
- * is back: here, in Workbench's process, the first signals AmigaMCE and
+ * is back: here, in Workbench's process, the first signals Ambiance and
  * waits (3 s at most) for its window to close, so the screen closes
  * cleanly; the second signals it to open again on the new one. */
 struct Library *WorkbenchBase;
@@ -1079,14 +1079,14 @@ void gfx_window_box_set(WORD l, WORD t, WORD w, WORD h, UWORD k)
 
 /* Full screen from the window (video's, the viewer's): a screen of its own
  * in Workbench's mode, size and depth, so the monitor does not change mode,
- * with Workbench's colours (the pens AmigaMCE has there draw the same), in
+ * with Workbench's colours (the pens Ambiance has there draw the same), in
  * place of the window (g's screen, window, RastPort and size) until left.
  * Drawn on straight: g->wb is FALSE meanwhile. */
 static struct Screen *fs_scr;
 static struct Window *fs_win;
 static struct { struct Screen *scr; struct Window *win; struct RastPort *rp; WORD w, h; } fs_was;
 
-/* AmigaMCE's own screen in front now (its full screen from a window, or
+/* Ambiance's own screen in front now (its full screen from a window, or
  * the screen it opened): NULL for a window on Workbench. */
 struct Screen *gfx_own_screen(const struct Gfx *g)
 {
@@ -1150,11 +1150,11 @@ BOOL gfx_fs_enter(struct Gfx *g)
     fs_scr = OpenScreenTags(NULL, SA_DisplayID, id, SA_Width, wb->Width, SA_Height, wb->Height,
                             SA_Depth, g->depth, SA_Colors32, (ULONG)tab, SA_Quiet, TRUE,
                             SA_ShowTitle, FALSE, SA_Type, CUSTOMSCREEN, SA_Behind, TRUE,
-                            SA_Draggable, FALSE, SA_Exclusive, TRUE, SA_Title, (ULONG)"AmigaMCE",
+                            SA_Draggable, FALSE, SA_Exclusive, TRUE, SA_Title, (ULONG)"Ambiance",
                             SA_SharePens, TRUE, TAG_DONE);
     FreeVec(tab);
     if (fs_scr) {
-        /* its pens as Workbench's: those taken there (AmigaMCE's among them)
+        /* its pens as Workbench's: those taken there (Ambiance's among them)
          * taken here too, those free there left free (a video overlay's
          * colour key takes one; without SA_SharePens none were) */
         struct ColorMap *fc = fs_scr->ViewPort.ColorMap;
@@ -1246,7 +1246,7 @@ static BOOL win_window(struct Gfx *g, WORD left, WORD top, WORD iw, WORD ih, WOR
     g->win = OpenWindowTags(NULL,
                             WA_PubScreen, (ULONG)g->scr, WA_Left, left, WA_Top, top,
                             WA_InnerWidth, iw, WA_InnerHeight, ih, WA_AutoAdjust, TRUE,
-                            WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
+                            WA_Title, (ULONG)"Ambiance", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
                             WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE,
                             WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE,
                             WA_NewLookMenus, TRUE,     /* (sized by our own grip: gfx_window_grip) */
@@ -1354,7 +1354,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
         goto fail;
     }
     win_menus_on(g);
-    /* AmigaMCE's colours: Workbench's pens of those colours, or free ones
+    /* Ambiance's colours: Workbench's pens of those colours, or free ones
      * made them (shared with anyone wanting the same) */
     cm = wb->ViewPort.ColorMap;
     wb_npen = 0;
@@ -1601,7 +1601,7 @@ struct Window *gfx_mini_open(struct Gfx *g, struct Gfx *mg, WORD left, WORD top)
     w = OpenWindowTags(NULL,
                        WA_PubScreen, (ULONG)g->scr, WA_Left, left, WA_Top, top,
                        WA_InnerWidth, iw, WA_InnerHeight, ih,
-                       WA_Title, (ULONG)"AmigaMCE", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
+                       WA_Title, (ULONG)"Ambiance", WA_DragBar, TRUE, WA_DepthGadget, TRUE,
                        WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, FALSE,
                        WA_SimpleRefresh, TRUE, WA_ReportMouse, TRUE, WA_NewLookMenus, TRUE,
                        icon ? WA_IconifyGadget : TAG_IGNORE, TRUE,
@@ -1732,7 +1732,7 @@ void gfx_window_show(struct Gfx *g)
 
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
 {
-    /* The screen's DrawInfo pens, in AmigaMCE's colours (ui_palette32): a
+    /* The screen's DrawInfo pens, in Ambiance's colours (ui_palette32): a
      * system requester on it (ASL's, to add a folder) light text on a dark
      * blue, not Intuition's defaults for its depth, which on these colours
      * were dark text (pen 1) on dark (pen 0), unreadable. In order:
@@ -1792,7 +1792,7 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
         g->scr = OpenScreenTags(NULL,
                                 SA_Width, g->w, SA_Height, g->h, SA_Depth, g->depth,
                                 SA_DisplayID, mode, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
-                                SA_Type, CUSTOMSCREEN, SA_Title, (ULONG)"AmigaMCE",
+                                SA_Type, CUSTOMSCREEN, SA_Title, (ULONG)"Ambiance",
                                 SA_Pens, (ULONG)pens, SA_SharePens, TRUE,
                                 SA_Draggable, FALSE, SA_Interleaved, TRUE,
                                 /* deep RTG: room for the smooth style's in-between pens */
@@ -3405,7 +3405,7 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
 ULONG gfx_draw_ms[3];   /* the last gfx_thumb: colours, pixels, copy to the screen */
 ULONG gfx_flips;        /* gfx_present's flips, ever (the debug readout's FPS) */
 ULONG gfx_present_ms;   /* the last gfx_present: flip and copy */
-/* ---- double buffering (RTG screens; a prototype, PROGDIR:AmigaMCE.dbuf)
+/* ---- double buffering (RTG screens; a prototype, PROGDIR:Ambiance.dbuf)
  * Two buffers of the screen (AllocScreenBuffer): everything is drawn into
  * the one not shown, through a RastPort of our own on it (g->rp), and
  * gfx_present shows it at the next vertical blank (ChangeScreenBuffer):
@@ -3918,7 +3918,7 @@ BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h
 /* ---- which datatype reads each picture format (System Information).
  * datatypes.library is asked about a tiny file of each format, written to
  * T: and deleted again: the descriptor it picks, and the class behind it
- * (with its version), are what AmigaMCE will get for such a picture. */
+ * (with its version), are what Ambiance will get for such a picture. */
 static const UBYTE s_ilbm[] = { 'F','O','R','M', 0,0,0,46, 'I','L','B','M',
     'B','M','H','D', 0,0,0,20, 0,1, 0,1, 0,0, 0,0, 1, 0, 0, 0, 0,0, 10, 11, 0,1, 0,1,
     'C','M','A','P', 0,0,0,6, 0,0,0, 255,255,255, 'B','O','D','Y', 0,0,0,2, 0,0 };
@@ -3949,7 +3949,7 @@ static struct DataType *dt_of_sample(LONG i)
     struct DataType *dtn = NULL;
     char file[40];
     BPTR fh, l;
-    sprintf(file, "T:AmigaMCE-probe.%s", dt_sample[i].ext);
+    sprintf(file, "T:Ambiance-probe.%s", dt_sample[i].ext);
     if ((fh = Open((CONST_STRPTR)file, MODE_NEWFILE))) {
         Write(fh, (APTR)dt_sample[i].data, dt_sample[i].len);
         Close(fh);
@@ -4032,7 +4032,7 @@ void pic_datatypes(void (*out)(void *ctx, const char *line), void *ctx)
         if (dtn)
             ReleaseDataType(dtn);
         if (i == 0)
-            amce_strlcat(line, "; previews read by AmigaMCE", sizeof(line));
+            amce_strlcat(line, "; previews read by Ambiance", sizeof(line));
         out(ctx, line);
     }
     me->pr_WindowPtr = oldwin;

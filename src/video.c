@@ -1,19 +1,19 @@
 /*
- * AmigaMCE - MPEG video in Videos, played by the ZZ9000
+ * Ambiance - MPEG video in Videos, played by the ZZ9000
  * Copyright (c) 2026 Brian King, MIT licence
  *
  * The card decodes an MPEG Program Stream and shows it on its overlay: a
- * Picasso96 PIP window (YUV) over AmigaMCE's display, borderless, where the
+ * Picasso96 PIP window (YUV) over Ambiance's display, borderless, where the
  * anim player puts its picture (anim.c: anim_play_video), so a video looks
  * and acts as an ANIM does there: its controls beneath, full screen, the
  * same keys. The playback process feeds the card and paces its pictures
  * against the sound, which comes back from the card and plays as music
  * does (stream.c: video_run). Here: the checks before it plays, and the
- * overlay's window: shown where it is asked for, moved with AmigaMCE's
- * window, and taken down before AmigaMCE's window or screen goes.
+ * overlay's window: shown where it is asked for, moved with Ambiance's
+ * window, and taken down before Ambiance's window or screen goes.
  *
  * Needs the ZZ9000's firmware with media sessions (zz9k.c's checks) and
- * AmigaMCE's screen (or Workbench, in a window) on the ZZ9000 itself.
+ * Ambiance's screen (or Workbench, in a window) on the ZZ9000 itself.
  *
  * MPEG-1 decoded by the CPU (stream.c: swv_run) uses the same overlay where
  * it opens, its pictures written into its memory as packed YUV (vo_lock);
@@ -43,8 +43,8 @@ static struct Window *vo_win;           /* the overlay's window, NULL none */
 static struct Screen *vo_scr;           /* the screen it is on */
 static struct VProbe vo_v;              /* the picture it shows */
 static LONG vo_sw;                      /* its width for its height, as meant to be seen */
-static LONG vo_x, vo_y, vo_w, vo_h;     /* its place, in AmigaMCE's coordinates */
-static LONG vo_wx = -1, vo_wy = -1;     /* AmigaMCE's window, where it was last seen */
+static LONG vo_x, vo_y, vo_w, vo_h;     /* its place, in Ambiance's coordinates */
+static LONG vo_wx = -1, vo_wy = -1;     /* Ambiance's window, where it was last seen */
 static ULONG vo_cs, vo_cm;              /* the last click (a double click) */
 static BOOL vo_failed;                  /* it could not be opened for this video */
 static BOOL vo_off;                     /* the CPU's pictures not to go on it (Settings) */
@@ -214,12 +214,12 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
 }
 
 
-/* Settings > Video: MPEG video on the ZZ9000 off (ENV:AmigaMCE/VideoDecoder
+/* Settings > Video: MPEG video on the ZZ9000 off (ENV:Ambiance/VideoDecoder
  * "cpu"): decoded by the CPU even where there is a card. */
 static BOOL video_cpu_chosen(void)
 {
     char ev[16];
-    return GetVar((CONST_STRPTR)"AmigaMCE/VideoDecoder", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+    return GetVar((CONST_STRPTR)"Ambiance/VideoDecoder", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
            (ev[0] == 'c' || ev[0] == 'C');
 }
 
@@ -233,12 +233,12 @@ static const char *video_by_cpu(struct VProbe *v, const char *why)
     sprintf(m, "decoded by the CPU (%s)", why);
     amce_log("video", m);
     if (!st_mpv_open()) {
-        amce_log("video", "no mpegv.library 2 (AmigaMCE's Libs, or LIBS:)");
-        return _("MPEG video by the CPU needs mpegv.library (AmigaMCE's Libs)");
+        amce_log("video", "no mpegv.library 2 (Ambiance's Libs, or LIBS:)");
+        return _("MPEG video by the CPU needs mpegv.library (Ambiance's Libs)");
     }
     v->sw = TRUE;
     vo_failed = FALSE;
-    if (GetVar((CONST_STRPTR)"AmigaMCE/VideoOverlay", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+    if (GetVar((CONST_STRPTR)"Ambiance/VideoOverlay", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
         !strcmp(ev, "off")) {
         amce_log("video", "Settings > Video: the overlay off: its pictures drawn");
         vo_off = TRUE;
@@ -262,7 +262,7 @@ const char *video_check(const char *path, struct VProbe *v)
             amce_log("video", m);
             return why;
         }
-        return _("Not an MPEG video AmigaMCE can read");
+        return _("Not an MPEG video Ambiance can read");
     }
     sprintf(m, "%s: %s %ld x %ld, aspect %ld, %ld.%03ld fps, %s, %lu ms, %lu bytes%s",
             (const char *)FilePart((STRPTR)path), vprobe_kind(v), (long)v->w, (long)v->h,
@@ -343,7 +343,7 @@ const char *video_check_dvd(struct VProbe *v)
     return NULL;
 }
 
-/* Where AmigaMCE's coordinates are on the screen. */
+/* Where Ambiance's coordinates are on the screen. */
 static void vo_origin(struct Gfx *g, LONG *ox, LONG *oy)
 {
     *ox = g->win ? g->win->LeftEdge + g->win->BorderLeft : 0;
@@ -393,7 +393,7 @@ static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG
     if (vo_sw <= 0)
         vo_sw = v->w;
     if (g->wb && g->scr->ViewPort.ColorMap && g->scr->ViewPort.ColorMap->PalExtra) {
-        sprintf(m, "its overlay in AmigaMCE's window (Workbench's free pens: %ld)",
+        sprintf(m, "its overlay in Ambiance's window (Workbench's free pens: %ld)",
                 (long)g->scr->ViewPort.ColorMap->PalExtra->pe_NFree);
         amce_log("video", m);
     }
@@ -412,7 +412,7 @@ static BOOL vo_show_(struct Gfx *g, const struct VProbe *v, LONG x, LONG y, LONG
     vo_wx = ox;
     vo_wy = oy;
     if (g->win)
-        ActivateWindow(g->win);             /* the keys stay AmigaMCE's */
+        ActivateWindow(g->win);             /* the keys stay Ambiance's */
     return TRUE;
 }
 

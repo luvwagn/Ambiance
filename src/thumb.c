@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - pictures made small, in colours of their own
+ * Ambiance - pictures made small, in colours of their own
  * Copyright (c) 2026 Brian King
  *
  * A picture with more colours than a colour-table screen can give it (a

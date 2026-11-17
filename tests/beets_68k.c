@@ -8,7 +8,7 @@
 #include <string.h>
 #include <proto/exec.h>
 
-/* what beets.c uses from the rest of AmigaMCE */
+/* what beets.c uses from the rest of Ambiance */
 void (*dir_tick)(void);
 struct Task *dir_tick_task;
 const char *amce_tr(const char *s) { return s; }

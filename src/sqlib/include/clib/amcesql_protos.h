@@ -19,7 +19,7 @@ extern "C" {
 #endif /* __cplusplus */
 
 
-/* amcesql.library: SQLite 3.34.0, read only, for AmigaMCE (beets music */
+/* amcesql.library: SQLite 3.34.0, read only, for Ambiance (beets music */
 /* libraries). Loaded only when one is set up: PROGDIR:Libs/amcesql.library. */
 APTR SqlOpen(STRPTR path);
 VOID SqlClose(APTR db);

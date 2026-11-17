@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - the layouts' drawing kit (see lkcore.h)
+ * Ambiance - the layouts' drawing kit (see lkcore.h)
  * Copyright (c) 2026 Brian King
  */
 #include "lkcore.h"

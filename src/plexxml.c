@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - a Plex server's answers: its XML, read just enough
+ * Ambiance - a Plex server's answers: its XML, read just enough
  * Copyright (c) 2026 Brian King
  *
  * A Plex Media Server answers in XML: a MediaContainer of Directory,

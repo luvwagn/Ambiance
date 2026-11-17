@@ -1,5 +1,5 @@
 /*
- * AmigaMCE - IFF ILBM pictures, read without a datatype
+ * Ambiance - IFF ILBM pictures, read without a datatype
  * Copyright (c) 2026 Brian King
  *
  * AGS's screenshots (320 x 128, up to 64 colours) and many Pictures are
@@ -48,7 +48,7 @@ static struct SignalSemaphore af_sem;
 
 /* No "write protected" or "please insert" requester for the Cache: on a
  * read-only volume a write just fails (for the pane's loader process it
- * would come up on the Workbench screen, behind AmigaMCE, and wait). */
+ * would come up on the Workbench screen, behind Ambiance, and wait). */
 static APTR quiet_on(void)
 {
     struct Process *me = (struct Process *)FindTask(NULL);

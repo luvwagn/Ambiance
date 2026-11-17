@@ -11,7 +11,7 @@
  * entries make the multiply a shift and pass. tools/check_syscalls.py
  * finds this pattern in compiled code.
  *
- * The list code is a copy of AmigaMCE's (src/ags.c list_add / list_sort),
+ * The list code is a copy of Ambiance's (src/ags.c list_add / list_sort),
  * instantiated once per entry layout. Results: PROGDIR:AlignTest.log and a
  * console window.
  */
@@ -123,7 +123,7 @@ static LONG run_##T(const char *name)                                           
     char lab[32];                                                                      \
     for (round = 0; round < ROUNDS; round++) {                                         \
         struct L_##T l, other;                                                         \
-        /* a small list made and freed first, as Settings is in AmigaMCE */            \
+        /* a small list made and freed first, as Settings is in Ambiance */            \
         other.pool = CreatePool(MEMF_ANY, 8192, 4096);                                 \
         other.items = NULL; other.count = other.cap = 0;                               \
         for (i = 0; i < 9; i++) {                                                      \
