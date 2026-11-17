@@ -176,6 +176,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg);   /*
  * edges blend into it). maxw > 0 cuts it to fit; ts is TS_* (| TS_OPAQUE). */
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts);
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts);
+WORD gfx_textlen_digits(struct Gfx *g, const char *s, int ts);    /* each digit as the widest */
 void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char *s, UBYTE fg,
                  WORD maxw);
 

@@ -1498,7 +1498,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
         strcpy(line, a);
     x += GU(g, 10);
     gfx_text(g, x, cy - g->font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
-    x += gfx_textlen(g, line, TS_BODY) + GU(g, 8);
+    x += gfx_textlen_digits(g, line, TS_BODY) + GU(g, 8);   /* (the bar kept still as the time's digits change) */
     st.px0 = x;
     st.px1 = (xt >= 0 ? st.bx[BT_FULL] : g->w) - 1 - GU(g, 8);
     st.cy = cy;

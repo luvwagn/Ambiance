@@ -15274,7 +15274,7 @@ static void np_full_controls(void)
     } else
         strcpy(line, a);
     gfx_text(&g, x, cy - g.font_h / 2, line, PEN_TEXT, PEN_BG, 0, TS_BODY);
-    nf_px0 = x + gfx_textlen(&g, line, TS_BODY) + U(8);
+    nf_px0 = x + gfx_textlen_digits(&g, line, TS_BODY) + U(8);   /* (the bar kept still as the time's digits change) */
     nf_px1 = nf_x[NF_FULL] - 1 - U(8);
     nf_cy = cy;
     nf_fill = -1;

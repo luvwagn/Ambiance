@@ -2353,6 +2353,26 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
     RectFill(g->rp, x0, y0, x1, y1);
 }
 
+/* s's width with each of its digits the widest digit: room for a time
+ * that changes, kept the same as its digits do (proportional figures) */
+WORD gfx_textlen_digits(struct Gfx *g, const char *s, int ts)
+{
+    char t[40], d[2];
+    WORD best = 0, w;
+    int i;
+    char wide = '0';
+    d[1] = 0;
+    for (d[0] = '0'; d[0] <= '9'; d[0]++)
+        if ((w = gfx_textlen(g, d, ts)) > best) {
+            best = w;
+            wide = d[0];
+        }
+    for (i = 0; s[i] && i < (int)sizeof(t) - 1; i++)
+        t[i] = s[i] >= '0' && s[i] <= '9' ? wide : s[i];
+    t[i] = 0;
+    return gfx_textlen(g, t, ts);
+}
+
 WORD gfx_textlen(struct Gfx *g, const char *s, int ts)
 {
     ULONG n = strlen(s);
