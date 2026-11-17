@@ -36,6 +36,15 @@
 #include <stdio.h>
 #include "../datatypes/jpeg/amcejpeg.h"
 
+/* A layout draws the screen (lhost.c, layout.h): the classic drawing is
+ * not done, only counted (gfx_off_hits), so the layout knows the screen
+ * would have changed and draws it again. Every drawing call here that
+ * reaches the screen starts with OFF_VOID or OFF_RET. */
+BOOL gfx_off;
+ULONG gfx_off_hits;
+#define OFF_VOID do { if (gfx_off) { gfx_off_hits++; return; } } while (0)
+#define OFF_RET(v) do { if (gfx_off) { gfx_off_hits++; return (v); } } while (0)
+
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase, *LowLevelBase;
 struct Library *CyberGfxBase;   /* true-colour screens: thumbnails (WriteLUTPixelArray) */
@@ -2079,6 +2088,7 @@ static void clear_old(struct Gfx *g, const struct Beam *b, WORD x0, WORD y0, WOR
  * upper planes first, and a picture shows garbled until the rest go). */
 void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    OFF_VOID;
     struct Beam b;
     if (!g->scr)
         return;
@@ -2089,6 +2099,7 @@ void gfx_clear_beam(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 /* Copy bm (w x h) to x, y on the screen without a half-drawn frame. */
 void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WORD h)
 {
+    OFF_VOID;
     struct Beam b;
     beam_init(g, &b);
     band_blit(g, &b, bm, x, y, w, h);
@@ -2099,6 +2110,7 @@ void gfx_blit_beam(struct Gfx *g, struct BitMap *bm, WORD x, WORD y, WORD w, WOR
  * remapped again. FALSE (and left as it was) if it cannot be. */
 BOOL gfx_picture_move(struct Gfx *g, WORD x, WORD y)
 {
+    OFF_RET(TRUE);
     struct BitMap *tmp;
     struct Beam b;
     WORD w = g->pic_w, h = g->pic_h;
@@ -2128,6 +2140,7 @@ BOOL gfx_picture_move(struct Gfx *g, WORD x, WORD y)
  * another picture meanwhile. */
 void gfx_picture_clear(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    OFF_VOID;
     struct Beam b;
     if (g->pic_w && g->scr) {
         beam_init(g, &b);
@@ -2282,6 +2295,7 @@ void gfx_close(struct Gfx *g)
 
 void gfx_fill(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1, UBYTE pen)
 {
+    OFF_VOID;
     dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
@@ -2302,6 +2316,7 @@ static WORD isqrt_round(LONG v)
 
 void gfx_rrect(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
 {
+    OFF_VOID;
     WORD k;
     if (w <= 0 || h <= 0)
         return;
@@ -2332,6 +2347,7 @@ void gfx_rrect(struct Gfx *g, WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, 
  * pixel style it is whole pixels. */
 void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
 {
+    OFF_VOID;
     dirty = TRUE;
     LONG rx8, ry8, lim;                     /* radii in eighths of a pixel */
     WORD x, y, ry;
@@ -2374,6 +2390,7 @@ void gfx_dot(struct Gfx *g, WORD cx, WORD cy, WORD r, UBYTE pen, UBYTE bg)
 
 void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    OFF_VOID;
     dirty = TRUE;
     if (x1 < x0 || y1 < y0)
         return;
@@ -2560,6 +2577,7 @@ void gfx_text_rp(struct Gfx *g, struct RastPort *rp, WORD x, WORD y, const char 
 
 void gfx_text(struct Gfx *g, WORD x, WORD y, const char *s, UBYTE fg, UBYTE bg, WORD maxw, int ts)
 {
+    OFF_VOID;
     dirty = TRUE;
     struct TextExtent te;
     ULONG n = strlen(s);
@@ -2724,6 +2742,7 @@ icons:
 
 void gfx_logo(struct Gfx *g, WORD x, WORD y)
 {
+    OFF_VOID;
     dirty = TRUE;
     UWORD p;
     if (!g->logo_masks)
@@ -2742,6 +2761,7 @@ void gfx_logo(struct Gfx *g, WORD x, WORD y)
  * the marker's 11 design units), low and still when the music is paused. */
 UBYTE gfx_eq_frame;
 BOOL gfx_eq_still;
+
 UBYTE gfx_eq_kind;
 UBYTE gfx_eq_lev[4];
 
@@ -2793,6 +2813,11 @@ static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
 
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
+    if (gfx_off) {
+        if (mark != MARK_PLAYING)
+            gfx_off_hits++;     /* (the bars' dance: the layout has its own) */
+        return;
+    }
     dirty = TRUE;
     PLANEPTR m;
     if (mark == MARK_PLAYING) {
@@ -2876,6 +2901,7 @@ void gfx_disc_glyph(struct Gfx *g, WORD x, WORD y, WORD px, UBYTE rim, UBYTE bod
 
 void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
+    OFF_VOID;
     dirty = TRUE;
     PLANEPTR m;
     if (g->sm) {
@@ -2895,6 +2921,7 @@ void gfx_icon(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, UBYTE bg)
  * font whose artwork is another size). */
 void gfx_icon_sized(struct Gfx *g, int icon, WORD x, WORD y, UBYTE fg, WORD px)
 {
+    OFF_VOID;
     UBYTE *src, *buf;
     WORD bpr = ((px + 15) >> 4) << 1, r, c, sc;
     ULONG size = (ULONG)bpr * px;
@@ -3054,6 +3081,7 @@ const struct BigLetter *gfx_bigletter(struct Gfx *g, UBYTE c, WORD ink_h)
  * smooth style its edges are not worth a stamp per shade. */
 void gfx_bigletter_draw(struct Gfx *g, const struct BigLetter *bl, WORD x, WORD y, UBYTE pen)
 {
+    OFF_VOID;
     dirty = TRUE;
     if (!bl || !bl->mask)
         return;
@@ -3614,6 +3642,7 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h)
 {
+    OFF_RET(TRUE);
     return thumb_draw(g, t, pi, x, y, w, h, drawn_h, NULL);
 }
 
@@ -3783,6 +3812,7 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
 BOOL gfx_picture_obj(struct Gfx *g, APTR obj, BOOL remapped, WORD x, WORD y, WORD w, WORD h,
                      BOOL whole, WORD *drawn_h, BOOL *taken)
 {
+    OFF_RET(TRUE);
     dirty = TRUE;
     Object *o = obj;
     struct BitMapHeader *bmh = NULL;
@@ -3871,6 +3901,7 @@ void pic_dispose(APTR obj)
 BOOL gfx_picture(struct Gfx *g, const char *path, WORD x, WORD y, WORD w, WORD h, BOOL whole,
                  WORD *drawn_h)
 {
+    OFF_RET(TRUE);
     struct PicInfo pi;
     BOOL remapped = FALSE;
     APTR o;

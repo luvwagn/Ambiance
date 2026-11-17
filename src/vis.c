@@ -533,6 +533,8 @@ int vis_marker(UBYTE *lev)
 /* ------------------------------------------------------------ the plug-ins' host */
 void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full)
 {
+    if (gfx_off)                /* a layout has its own levels */
+        return;
     int a = vis_active();
     if (load_check(c, full))
         return;

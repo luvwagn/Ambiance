@@ -15,6 +15,8 @@
 #include "igame.h"
 #include "unarc.h"
 #include "whdinst.h"
+#include "lhost.h"
+#include "lkit.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -177,6 +179,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
+       ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8,    /* Classic + LV_MAX */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -2621,6 +2624,8 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Double buffering"), "", ACT_DBUF,
                     gfx_dbuf_wanted ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Colours"), _(ui_scheme_names[ui_scheme]), ACT_COLOURS, MARK_ARROW);
+    if (gfx_mode_is_rtg(g.mode))
+        action_item(p, _("Layout"), lv_label(), ACT_LAYOUTS, MARK_ARROW);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     fullvis_scan();
     action_item(p, _("Full screen visual (F)"), fullvis[0] ? (const char *)FilePart((STRPTR)fullvis) : _("Flow"),
@@ -6712,6 +6717,10 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
+    if (gfx_off) {                          /* a layout draws the screen */
+        gfx_off_hits++;
+        return;
+    }
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
     LONG vis = list_visible();
     if (ov.on && has_aside(cur()) && x1 > ov.strip_x - 1)
@@ -9536,6 +9545,8 @@ static void menu_select(int i)
 #define MENU_SLIDE_SLOW  40
 static void menu_slide(UWORD from, UWORD to)
 {
+    if (gfx_off)
+        return;
     ULONG t0 = time_ms(), t, tf;
     UWORD keep = g.menu_w, prev = from;
     WORD y0 = U(25), y1 = g.footer_y - 2;
@@ -9820,6 +9831,7 @@ static void log_free(const char *what)
  * was is kept (nav_mem), so the same entry comes back afterwards. */
 static void release_for_launch(void)
 {
+    lv_release();                   /* (a layout: its memory too) */
     log_free("free before launch");
     if (mp_loaded())
         amce_log("music", "stopped for the game");
@@ -10152,6 +10164,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     pv_shown = FALSE;
     pv_pending = FALSE;
     pv_let_go();                    /* the viewer takes the screen's colours over */
+    lv_hold();                      /* (a layout: the classic drawing back) */
     vw_active = TRUE;
     gfx_dbuf_stop(&g);              /* it draws straight onto the screen */
     gfx_window_rmb(&g, 32767);      /* (the right button: Back, not the menus) */
@@ -10491,6 +10504,7 @@ static void anim_from_page(struct Page *p)
     }
     /* on this screen it draws straight onto it: single buffered meanwhile,
      * everything drawn again after (into the back buffer, then a flip) */
+    lv_hold();                              /* (a layout: the classic drawing back) */
     gfx_dbuf_stop(&g);
     gfx_window_rmb(&g, 32767);              /* (the right button: Back, not the menus) */
     {
@@ -14355,6 +14369,10 @@ static void act_action(struct Item *it)
         open_settings_page(_("Text size"), build_tsizes);
     else if (it->action == ACT_COLOURS)
         open_settings_page(_("Colours"), build_colours);
+    else if (it->action == ACT_LAYOUTS)
+        open_settings_page(_("Layout"), lv_build_page);
+    else if (it->action >= ACT_LAYOUT0 && it->action <= ACT_LAYOUT_END)
+        lv_pick(it->action - ACT_LAYOUT0);
     else if (it->action >= ACT_COLOUR0 && it->action <= ACT_COLOUR_END)
         apply_colours(it->action - ACT_COLOUR0);
     else if (it->action >= ACT_TSIZE0 && it->action <= ACT_TSIZE_END)
@@ -15785,6 +15803,7 @@ static void np_full_enter(void)
                                  : _("Flow: this player does not say what it plays"));
         return;
     }
+    lv_hold();
     np_full = TRUE;
     np_full_fs = g.wb && gfx_fs_enter(&g);  /* a window: the whole display */
     np_full_first = TRUE;
@@ -16096,6 +16115,8 @@ static void handle_key(struct IntuiMessage *im)
         gfx_iconify_asked = TRUE;
         return;
     }
+    if (lv_key(im))
+        return;                             /* a layout's own (or the wheel, in one) */
 
     if (im->Class == IDCMP_RAWKEY) {
         if (code & IECODE_UP_PREFIX) {
@@ -16696,14 +16717,17 @@ static int app_main(void)
                     ;                       /* the grip's (a window) */
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
-                else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE)
-                    handle_mouse(&copy);
+                else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE) {
+                    if (!lv_mouse(&copy))
+                        handle_mouse(&copy);
+                }
                 else if (copy.Class == IDCMP_RAWKEY || copy.Class == IDCMP_VANILLAKEY)
                     handle_key(&copy);
                 if (!g.win)
                     break;      /* a launch closed and reopened the window */
             }
         }
+        lv_frame();                     /* a layout: the screen drawn again, if it changed */
         if (g.win && !np_full && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
                                   ((atb = cur_tb()) && tb_animating(atb)))) {
             ULONG tp = time_ms();
@@ -16821,4 +16845,721 @@ out:
     if (IntuitionBase)
         CloseLibrary((struct Library *)IntuitionBase);
     return rc;
+}
+
+/* ------------------------------------------------------------ layouts (lhost.h) */
+/* A layout chosen in Settings > Display > Layout draws the screen in its
+ * own style while it can: a graphics card's 15-32 bit screen in the
+ * Smooth style, nothing else over it (the viewer, a video, Flow on the
+ * whole screen, the mini player). The program goes on as ever underneath:
+ * its drawing is only counted (gfx_off), and each pass of the main loop
+ * that counted some, the layout draws the screen again from the models
+ * below. Left Shift held as AmigaMCE starts: the classic layout this
+ * time (a layout that fails to draw can always be left). */
+#define LAYOUT_VAR "AmigaMCE/Layout"
+#define LV_MAX 8                    /* layouts offered in Settings */
+
+static struct {
+    BOOL read, skip, on, full;
+    char file[32];                  /* chosen: "kodilite.layout", "" classic */
+    char name[32];                  /* its name, once known */
+    const struct LayoutEngine *eng;
+    struct LkOut out;
+    struct LayoutHost host;
+    struct Screen *scr;             /* the screen it draws on (opened again: again) */
+    struct Window *win;
+    UWORD w, h;
+    struct Screen *tried;           /* tried there and could not: not again */
+    UWORD tried_w, tried_h;
+    int drawn;                      /* the screen drawn last (LS_*), -1 none */
+    ULONG tick_at;
+    char clock[24];
+    struct LayoutInfo found[LV_MAX];
+    int nfound;
+} lv = { .drawn = -1 };
+
+BOOL lv_on(void)
+{
+    return lv.on;
+}
+
+const char *lv_label(void)
+{
+    static char stem[32];
+    char *dot;
+    if (!lv.file[0])
+        return _("Classic");
+    if (lv.name[0])
+        return lv.name;
+    amce_strlcpy(stem, lv.file, sizeof(stem));
+    if ((dot = strrchr(stem, '.')))
+        *dot = 0;
+    return stem;
+}
+
+/* ---- the models */
+static UBYTE lv_section(int mod)
+{
+    switch (mod) {
+    case MOD_GAMES: return LSEC_GAMES;
+    case MOD_DEMOS: return LSEC_DEMOS;
+    case MOD_MUSIC: return LSEC_MUSIC;
+    case MOD_MODS: return LSEC_MODS;
+    case MOD_PICTURES: return LSEC_PICTURES;
+    case MOD_VIDEOS: return LSEC_VIDEOS;
+    case MOD_RADIO: return LSEC_RADIO;
+    case MOD_SETTINGS: return LSEC_SETTINGS;
+    }
+    return LSEC_OTHER;
+}
+
+static int lv_icon_of(int section)
+{
+    static const UBYTE icon[] = { ICON_GAMES, ICON_DEMOS, ICON_MUSIC, ICON_MODS, ICON_PICTURES,
+                                  ICON_VIDEOS, ICON_RADIO, ICON_SETTINGS, ICON_ABOUT };
+    return section >= 0 && section < (int)sizeof(icon) ? icon[section] : ICON_ABOUT;
+}
+
+static UBYTE lv_kind(const struct Item *it)
+{
+    switch (it->kind) {
+    case IT_DIR: case IT_NET: case IT_PLEXDIR: return LI_FOLDER;
+    case IT_RUN: return LI_GAME;
+    case IT_ACTION:
+        return it->mark >= MARK_CHECK_OFF && it->mark <= MARK_RADIO_ON ? LI_SETTING
+             : it->mark == MARK_CYCLE ? LI_SETTING : LI_ACTION;
+    case IT_PIC: case IT_PLEXPHOTO: return LI_PICTURE;
+    case IT_MOD: return LI_MODULE;
+    case IT_STATION: return LI_STATION;
+    case IT_PLEXTRACK: case IT_SONG: return LI_TRACK;
+    case IT_ANIM: return LI_VIDEO;
+    }
+    return LI_OTHER;
+}
+
+static UBYTE lv_mark(const struct Item *it)
+{
+    switch (it->mark) {
+    case MARK_ARROW: return LM_ARROW;
+    case MARK_CHECK_OFF: return LM_CHECK_OFF;
+    case MARK_CHECK_ON: return LM_CHECK_ON;
+    case MARK_RADIO_OFF: return LM_RADIO_OFF;
+    case MARK_RADIO_ON: return LM_RADIO_ON;
+    case MARK_PLAY: return LM_PLAY;
+    case MARK_PLAYING: return LM_PLAYING;
+    case MARK_CYCLE: return LM_CYCLE;
+    }
+    return (it->kind == IT_DIR || it->kind == IT_NET || it->kind == IT_PLEXDIR) ? LM_ARROW : LM_NONE;
+}
+
+static const struct Page *lv_lp;    /* the page item() makes rows of */
+static struct LItem lv_ring[32];
+static UWORD lv_ri;
+
+static void lv_fill_item(struct LItem *li, const struct Page *p, LONG i)
+{
+    const struct Item *it;
+    const char *tag;
+    memset(li, 0, sizeof(*li));
+    li->label = "";
+    if (!p || i < 0 || i >= p->list.count)
+        return;
+    it = &p->list.items[i];
+    li->label = it->label ? it->label : "";
+    tag = row_tag(p, it);
+    li->tag = tag && tag[0] ? tag : NULL;
+    li->kind = lv_kind(it);
+    li->mark = lv_mark(it);
+    if (it->flags & ITEM_DISABLED)
+        li->flags |= LIF_DISABLED;
+    if (it->flags & ITEM_HEAD)
+        li->flags |= LIF_HEAD;
+    if (it->mark == MARK_PLAYING)
+        li->flags |= LIF_NOW;
+}
+
+static const struct LItem *lv_item(LONG i)
+{
+    struct LItem *li = &lv_ring[lv_ri++ & 31];
+    lv_fill_item(li, lv_lp, i);
+    return li;
+}
+
+/* The selected row's picture: a picture's own file, a game's screenshot
+ * (looked for once a row). */
+static const char *lv_picture_of(struct Page *p)
+{
+    static const struct Page *for_p;
+    static LONG for_sel = -1, for_count = -1;
+    static char file[300];
+    static BOOL have;
+    struct Item *it;
+    if (!p || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
+        return NULL;
+    if (p == for_p && p->sel == for_sel && p->list.count == for_count)
+        return have ? file : NULL;
+    for_p = p;
+    for_sel = p->sel;
+    for_count = p->list.count;
+    have = FALSE;
+    it = &p->list.items[p->sel];
+    if (it->flags & ITEM_GONE)
+        return NULL;
+    if (it->kind == IT_PIC && !p->plex) {
+        item_path(it, file, sizeof(file));
+        have = TRUE;
+    } else if (it->kind == IT_RUN) {
+        char base[300];
+        have = ags_screenshot_path(item_path(it, base, sizeof(base)), file, sizeof(file));
+    }
+    return have ? file : NULL;
+}
+
+static const char *lv_lines[256];
+
+static void lv_page(struct Page *p, struct LPage *m)
+{
+    int i, mod = shown_mod >= 0 ? shown_mod : menu[menu_sel];
+    memset(m, 0, sizeof(*m));
+    m->section = lv_section(mod);
+    m->crumb[m->ncrumb++] = _(mod_names[mod]);
+    for (i = 0; i < depth && m->ncrumb < LCRUMBS; i++)
+        m->crumb[m->ncrumb++] = pages[i].title;
+    m->hint = hint_text();
+    m->message = msg[0] ? msg : NULL;
+    if (!p)
+        return;
+    if (p->type == PT_TEXT || p->type == PT_DETAIL) {
+        const struct ItemList *l = p->tb.lines ? p->tb.lines : &p->list;
+        m->text = 1;
+        if (p->tb.line_h > 0)
+            m->list.top = p->tb.target / p->tb.line_h;    /* (the first line shown) */
+        for (i = 0; i < l->count && i < 256; i++)
+            lv_lines[i] = l->items[i].label ? l->items[i].label : "";
+        m->ndetails = (WORD)i;
+        m->details = lv_lines;
+        return;
+    }
+    lv_lp = p;
+    m->list.count = p->list.count;
+    m->list.sel = p->sel;
+    m->list.top = p->top;
+    m->list.item = lv_item;
+    if (pv_tj && pv_tj->done && pv_page == p && pv_sel == p->sel) {
+        for (i = 0; i < pv_tj->nlines && i < LJ_FACTS; i++)
+            lv_lines[i] = pv_tj->lines[i];
+        m->ndetails = (WORD)i;
+        m->details = lv_lines;
+    }
+    m->picture = lv_picture_of(p);
+}
+
+static const void *lv_model(int screen)
+{
+    static struct LPage page;
+    static struct LHome home;
+    static struct LNow now;
+    static UBYTE secs[MOD_COUNT];
+    static const char *names[MOD_COUNT];
+    static struct LRow row;
+    static struct LItem rows[12];
+    static const char *next[5];
+    static char year[1];
+    int i;
+    switch (screen) {
+    case LS_HOME:
+        memset(&home, 0, sizeof(home));
+        for (i = 0; i < nmenu && i < MOD_COUNT; i++) {
+            secs[i] = lv_section(menu[i]);
+            names[i] = _(mod_names[menu[i]]);
+        }
+        home.n = (WORD)i;
+        home.sel = (WORD)menu_sel;
+        home.sections = secs;
+        home.names = names;
+        if (!pane_pending && depth >= 1 && pages[0].type == PT_LIST) {
+            for (i = 0; i < pages[0].list.count && i < 12; i++)
+                lv_fill_item(&rows[i], &pages[0], i);
+            row.title = _(mod_names[menu[menu_sel]]);
+            row.n = (WORD)i;
+            row.items = rows;
+            home.nrows = 1;
+            home.rows = &row;
+        }
+        return &home;
+    case LS_NOW: {
+        struct MpStatus st;
+        memset(&now, 0, sizeof(now));
+        if (!mp_loaded())
+            return &now;
+        mp_status(&st);
+        now.kind = mp_is_track() ? LN_TRACK : mp_is_stream() ? LN_STREAM : LN_MODULE;
+        now.paused = st.paused ? 1 : 0;
+        now.title = mp_title();
+        now.artist = mp_is_track() ? mp_track_by() : mp_author();
+        now.year = year;
+        now.format = mp_tag();
+        now.source = now.kind == LN_STREAM ? mp_stream_name() : np.folder;
+        now.art = np_art_file[0] ? np_art_file : NULL;
+        now.pos_ms = st.elapsed_ms;
+        now.len_ms = st.total_ms;
+        for (i = 0; i < 5 && np.idx + 1 + i < np.list.count; i++)
+            next[i] = np.list.items[np.idx + 1 + i].label;
+        now.nnext = (WORD)i;
+        now.next = next;
+        {
+            static UBYTE lev[4];
+            for (i = 0; i < 4; i++)
+                lev[i] = (UBYTE)(gfx_eq_lev[i] > 11 ? 255 : gfx_eq_lev[i] * 23);
+            now.nlevels = 4;
+            now.levels = lev;
+        }
+        return &now;
+    }
+    }
+    lv_page(cur(), &page);
+    return &page;
+}
+
+/* ---- what the layout asks */
+static void lv_act(int what, LONG arg)
+{
+    struct Page *p = cur();
+    switch (what) {
+    case LAC_SELECT: case LAC_OPEN: case LAC_PLAY:
+        if (focus == FOCUS_MENU) {
+            if (arg >= 0 && arg < nmenu && arg != menu_sel)
+                menu_select(arg);
+        } else if (p && p->type == PT_LIST && arg >= 0 && arg < p->list.count && arg != p->sel) {
+            act_move(arg - p->sel);
+        }
+        if (what != LAC_SELECT)
+            act_open(what == LAC_PLAY);
+        break;
+    case LAC_BACK: act_back(); break;
+    case LAC_SECTION:
+        if (focus == FOCUS_MENU && arg >= 0 && arg < nmenu && arg != menu_sel)
+            menu_select(arg);
+        break;
+    case LAC_ENTER:
+        if (focus == FOCUS_MENU)
+            act_open(FALSE);
+        break;
+    case LAC_PAUSE: if (mp_loaded()) np_press(NB_PLAY); break;
+    case LAC_NEXT: if (mp_loaded()) np_press(NB_NEXT); break;
+    case LAC_PREV: if (mp_loaded()) np_press(NB_PREV); break;
+    case LAC_NOWPLAYING: if (mp_loaded()) np_open_page(); break;
+    }
+}
+
+/* ---- pictures, made for the layout at the size it asks (one new one a
+ * frame: the rest come on the frames after) */
+#define LV_PICS 4
+static struct {
+    char file[160];
+    UWORD w, h;                     /* asked for */
+    BOOL failed;
+    ULONG used;
+    struct LImage im;
+    ULONG *px;
+} lv_pic[LV_PICS];
+static BOOL lv_pic_made;            /* this frame's made already */
+static ULONG lv_pic_clock;
+
+static void lv_pics_free(void)
+{
+    int i;
+    for (i = 0; i < LV_PICS; i++) {
+        if (lv_pic[i].px)
+            FreeVec(lv_pic[i].px);
+        memset(&lv_pic[i], 0, sizeof(lv_pic[i]));
+    }
+}
+
+static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
+{
+    int i, k = 0;
+    struct Thumb *t;
+    struct PicInfo pi;
+    if (!file || !file[0] || !w || !h)
+        return NULL;
+    for (i = 0; i < LV_PICS; i++) {
+        if (lv_pic[i].w == w && lv_pic[i].h == h && strcmp(lv_pic[i].file, file) == 0) {
+            lv_pic[i].used = ++lv_pic_clock;
+            return lv_pic[i].failed ? NULL : &lv_pic[i].im;
+        }
+        if (lv_pic[i].used < lv_pic[k].used)
+            k = i;
+    }
+    if (lv_pic_made) {
+        lv.full = TRUE;             /* drawn again next frame, with it */
+        return NULL;
+    }
+    lv_pic_made = TRUE;
+    if (lv_pic[k].px)
+        FreeVec(lv_pic[k].px);
+    memset(&lv_pic[k], 0, sizeof(lv_pic[k]));
+    amce_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
+    lv_pic[k].w = w;
+    lv_pic[k].h = h;
+    lv_pic[k].used = ++lv_pic_clock;
+    lv_pic[k].failed = TRUE;
+    if (!(t = jpeg_thumb(file, w, h, FALSE, FALSE, 256, &pi, "layout")) &&
+        !(t = ilbm_thumb(file, w, h, FALSE, FALSE, 256, &pi))) {
+        BOOL remapped = FALSE;
+        APTR o = pic_decode_fit(file, NULL, FALSE, &remapped, &pi, w, h);
+        if (o) {
+            ULONG dw, dh;
+            pic_fit(pi.w, pi.h, FALSE, w, h, FALSE, &dw, &dh);
+            t = thumb_make(o, dw, dh, 256);
+            pic_dispose(o);
+        }
+    }
+    if (!t) {
+        amce_log("layout: a picture could not be read", file);
+        return NULL;
+    }
+    if ((lv_pic[k].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
+        ULONG *d = lv_pic[k].px;
+        UWORD x, y;
+        for (y = 0; y < t->h; y++) {
+            const UBYTE *s = t->px + (ULONG)y * t->mod;
+            for (x = 0; x < t->w; x++)
+                *d++ = t->pal[s[x]] & 0xFFFFFF;
+        }
+        lv_pic[k].im.w = t->w;
+        lv_pic[k].im.h = t->h;
+        lv_pic[k].im.mod = t->w;
+        lv_pic[k].im.px = lv_pic[k].px;
+        lv_pic[k].failed = FALSE;
+    }
+    thumb_free(t);
+    return lv_pic[k].failed ? NULL : &lv_pic[k].im;
+}
+
+/* ---- the drawing calls, onto lv.out */
+static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&lv.out, x0, y0, x1, y1); }
+static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG rgb) { lk_fill(&lv.out, x, y, w, h, rgb); }
+static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_vgrad(&lv.out, x, y, w, h, a, b); }
+static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&lv.out, x, y, w, h, a, b); }
+static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)
+{
+    lk_rrect(&lv.out, x, y, w, h, r, rgb, bg);
+}
+static void h_frame(WORD x, WORD y, WORD w, WORD h, WORD t, ULONG rgb) { lk_frame(&lv.out, x, y, w, h, t, rgb); }
+static void h_image(const struct LImage *im, WORD x, WORD y)
+{
+    if (im && im->px)
+        lk_image(&lv.out, x, y, (const unsigned long *)im->px, im->w, im->h, (long)im->mod);
+}
+static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, const struct LkBg *bg,
+                   WORD maxw)
+{
+    return lk_text(&g, &lv.out, x, y, s, n, face, fg, bg, maxw);
+}
+static WORD h_textlen(const char *s, LONG n, int face) { return lk_textlen(&g, s, n, face); }
+static WORD h_fit(const char *s, LONG n, int face, WORD maxw)
+{
+    return g.sm ? (WORD)sm_fit(g.sm, s, n, face, maxw) : 0;
+}
+static WORD h_font_h(int face) { (void)face; return g.sm ? (WORD)sm_cell_h(g.sm) : 0; }
+static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
+{
+    lk_icon(&g, &lv.out, lv_icon_of(section), x, y, fg, bg);
+}
+static const char *h_tr(const char *s) { return amce_tr(s); }
+static void h_log(const char *s) { amce_log("layout", s); }
+static ULONG h_now(void) { return time_ms(); }
+
+/* ---- on and off */
+static void lv_off(BOOL redraw)
+{
+    if (!lv.on)
+        return;
+    if (lv.eng && lv.eng->close)
+        lv.eng->close();
+    lk_close(&lv.out);
+    lv_pics_free();
+    lv.on = FALSE;
+    gfx_off = FALSE;
+    lv.drawn = -1;
+    if (redraw && g.win && g.rp)
+        draw_all();             /* the classic layout, all of it */
+}
+
+static BOOL lv_suits(void)
+{
+    if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
+        return FALSE;
+    return g.sm && g.truecolor && !g.planar;
+}
+
+static void lv_activate(void)
+{
+    const struct LayoutEngine *e = layout_loaded();
+    char m[120];
+    if (lv.tried == g.scr && lv.tried_w == g.w && lv.tried_h == g.h)
+        return;                     /* not here: once is enough */
+    lv.tried = g.scr;
+    lv.tried_w = g.w;
+    lv.tried_h = g.h;
+    if (!e || !lv.name[0] || strcmp(e->name, lv.name) != 0) {
+        layout_unload();
+        e = layout_load(lv.file);
+    }
+    if (!e) {
+        set_msg(_("The layout could not be opened: the classic one is used"));
+        return;
+    }
+    amce_strlcpy(lv.name, e->name, sizeof(lv.name));
+    if (!lk_open(&g, &lv.out, TRUE))
+        return;
+    if (lv.out.bits < e->min_bits || g.h < e->min_h) {
+        sprintf(m, "%s needs %ld-bit and %ld lines; this is %ld-bit, %ld lines: classic",
+                e->name, (long)e->min_bits, (long)e->min_h, (long)lv.out.bits, (long)g.h);
+        amce_log("layout", m);
+        lk_close(&lv.out);
+        return;
+    }
+    memset(&lv.host, 0, sizeof(lv.host));
+    lv.host.w = g.w;
+    lv.host.h = g.h;
+    lv.host.bits = (UBYTE)lv.out.bits;
+    lv.host.tier = (UBYTE)plex_tier();
+    lv.host.clip = h_clip;
+    lv.host.fill = h_fill;
+    lv.host.vgrad = h_vgrad;
+    lv.host.hgrad = h_hgrad;
+    lv.host.rrect = h_rrect;
+    lv.host.frame = h_frame;
+    lv.host.image = h_image;
+    lv.host.text = h_text;
+    lv.host.textlen = h_textlen;
+    lv.host.fit = h_fit;
+    lv.host.font_h = h_font_h;
+    lv.host.icon = h_icon;
+    lv.host.icon_px = lk_icon_px(&g);
+    lv.host.picture = lv_picture;
+    lv.host.model = lv_model;
+    lv.host.act = lv_act;
+    lv.host.tr = h_tr;
+    lv.host.log = h_log;
+    lv.host.now_ms = h_now;
+    clock_text(lv.clock);
+    lv.host.clock = lv.clock;
+    if (e->open && !e->open(&lv.host)) {
+        amce_log("layout", "it would not open: classic");
+        lk_close(&lv.out);
+        return;
+    }
+    lv.eng = e;
+    lv.tried = NULL;                /* (it can: tried again whenever it is off) */
+    lv.scr = g.scr;
+    lv.win = g.win;
+    lv.w = g.w;
+    lv.h = g.h;
+    lv.on = TRUE;
+    lv.full = TRUE;
+    lv.drawn = -1;
+    gfx_off = TRUE;
+    gfx_off_hits = 0;
+    sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)lv.out.bits, (long)g.w,
+            (long)g.h, lk_canvas(&lv.out) ? ", drawn off screen" : "");
+    amce_log("layout", m);
+}
+
+static void lv_sync(void)
+{
+    if (!lv.read) {
+        char buf[32];
+        lv.read = TRUE;
+        if (GetVar((CONST_STRPTR)LAYOUT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            amce_strlcpy(lv.file, buf, sizeof(lv.file));
+        if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
+            lv.skip = TRUE;
+            amce_log("layout", "Shift held as AmigaMCE started: the classic layout this time");
+        }
+    }
+    if (lv.on && (!lv_suits() || g.scr != lv.scr || g.win != lv.win || g.w != lv.w ||
+                  g.h != lv.h || !lv.file[0])) {
+        /* gone over to something else: it draws itself, and the classic
+         * screen is drawn as it comes back; the screen itself changed:
+         * drawn again here, in the layout if it still can */
+        BOOL away = iconified || mini_on || np_full || vw_active || !g.win;
+        lv_off(!away);
+    }
+    if (!lv.on && lv.file[0] && !lv.skip && lv_suits())
+        lv_activate();
+}
+
+static int lv_screen(void)
+{
+    struct Page *p = cur();
+    if (focus == FOCUS_MENU && (lv.eng->screens & LS_BIT(LS_HOME)))
+        return LS_HOME;
+    if (p && p->type == PT_PLAYER && (lv.eng->screens & LS_BIT(LS_NOW)))
+        return LS_NOW;
+    return LS_PAGE;
+}
+
+void lv_frame(void)
+{
+    int scr;
+    ULONG now;
+    lv_sync();
+    if (!lv.on)
+        return;
+    scr = lv_screen();
+    now = time_ms();
+    lv_pic_made = FALSE;
+    if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
+        lv.tick_at = now;
+        lv.eng->tick(now);
+    }
+    if (scr != lv.drawn)
+        lv.full = TRUE;
+    if (lv.full || gfx_off_hits) {
+        lv.full = FALSE;
+        gfx_off_hits = 0;
+        lv.drawn = scr;
+        clock_text(lv.clock);
+        lv_ri = 0;
+        lk_clip(&lv.out, 0, 0, g.w, g.h);
+        lv.eng->draw(scr);
+    }
+    lk_show(&lv.out);
+}
+
+void lv_hold(void)
+{
+    lv_off(FALSE);
+}
+
+void lv_release(void)
+{
+    lv_off(FALSE);
+    layout_unload();
+    lv.tried = NULL;
+}
+
+/* ---- input */
+BOOL lv_key(struct IntuiMessage *im)
+{
+    int a = -1, scr;
+    LONG arg = 0;
+    UWORD code = im->Code;
+    if (!lv.on)
+        return FALSE;
+    if (im->Class == IDCMP_RAWKEY) {
+        if (code & IECODE_UP_PREFIX)
+            return FALSE;
+        switch (code) {
+        case 0x4C: a = LA_UP; break;
+        case 0x4D: a = LA_DOWN; break;
+        case 0x4E: a = LA_RIGHT; break;
+        case 0x4F: a = LA_LEFT; break;
+        case 0x7A: case 0x7B: {
+            /* the wheel: the classic's finds what is under the pointer
+             * by its own places, which are not the layout's */
+            int d = code == 0x7A ? -1 : 1;
+            scr = lv_screen();
+            if (!lv.eng->input || lv.eng->input(scr, d < 0 ? LA_UP : LA_DOWN, 0) != LR_DONE)
+                act_move(d);
+            return TRUE;
+        }
+        }
+        if (im->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) {
+            if (a == LA_UP)
+                a = LA_PAGEUP;
+            else if (a == LA_DOWN)
+                a = LA_PAGEDOWN;
+        }
+    } else if (im->Class == IDCMP_VANILLAKEY) {
+        if (im->Qualifier & IEQUALIFIER_NUMERICPAD)
+            return FALSE;
+        if (code == 13)
+            a = LA_RETURN;
+        else if (code == 27 || code == 8)
+            a = LA_BACK;
+        else if (code == ' ')
+            a = LA_SPACE;
+        else if ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z') ||
+                 (code >= '0' && code <= '9')) {
+            a = LA_LETTER;
+            arg = code;
+        }
+    }
+    if (a < 0 || !lv.eng->input)
+        return FALSE;
+    scr = lv_screen();
+    return lv.eng->input(scr, a, arg) == LR_DONE;
+}
+
+BOOL lv_mouse(struct IntuiMessage *im)
+{
+    if (!lv.on)
+        return FALSE;
+    if (im->Class == IDCMP_MOUSEMOVE) {
+        mouse_last = time_ms();
+        if (ptr_hidden)
+            pointer_show();
+        return TRUE;
+    }
+    if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && lv.eng->pointer)
+        lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft, im->MouseY - g.win->BorderTop,
+                        TRUE);
+    return TRUE;
+}
+
+/* ---- Settings > Display > Layout */
+void lv_build_page(struct Page *p)
+{
+    int i;
+    action_item(p, _("Classic"), "", ACT_LAYOUT0, lv.file[0] ? MARK_RADIO_OFF : MARK_RADIO_ON);
+    lv.nfound = layout_list(lv.found, LV_MAX);
+    for (i = 0; i < lv.nfound; i++) {
+        BOOL on = strcmp(lv.found[i].file, lv.file) == 0;
+        struct Item *it = action_item(p, lv.found[i].name, "", ACT_LAYOUT0 + 1 + i,
+                                      on ? MARK_RADIO_ON : MARK_RADIO_OFF);
+        if (on) {
+            p->sel = p->list.count - 1;
+            amce_strlcpy(lv.name, lv.found[i].name, sizeof(lv.name));
+        }
+        if (it && (!g.truecolor || g.planar))
+            it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen only) */
+    }
+}
+
+void lv_pick(int k)
+{
+    struct Page *p = cur();
+    LONG i;
+    const char *file = k > 0 && k <= lv.nfound ? lv.found[k - 1].file : "";
+    if (k > lv.nfound || strcmp(file, lv.file) == 0)
+        return;
+    amce_strlcpy(lv.file, file, sizeof(lv.file));
+    lv.name[0] = 0;
+    if (k > 0)
+        amce_strlcpy(lv.name, lv.found[k - 1].name, sizeof(lv.name));
+    lv.skip = FALSE;
+    lv.tried = NULL;
+    save_setting(LAYOUT_VAR, file);
+    amce_log("layout chosen", k ? file : "classic");
+    if (p)
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].action >= ACT_LAYOUT0 && p->list.items[i].action <= ACT_LAYOUT_END)
+                p->list.items[i].mark = p->list.items[i].action == ACT_LAYOUT0 + k ? MARK_RADIO_ON
+                                                                                  : MARK_RADIO_OFF;
+    settings_rebuild();             /* the Display page's row says which */
+    if (lv.on) {
+        lv_off(FALSE);              /* another one, or none: */
+        layout_unload();
+    }
+    if (!k) {
+        draw_all();
+    } else {
+        draw_pane(TRUE);
+        if (!lv_suits())
+            set_msg(_("Layouts need the Smooth style on a graphics card's 15 to 32-bit screen"));
+    }
 }
