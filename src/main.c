@@ -4310,10 +4310,18 @@ static void draw_footer(void)
     }
     if (foot_hidden)
         foot_over = TRUE;
+    /* Redrawn as the hints follow the selection: on a native screen planes
+     * 0-3 only (its pens are below 16, and nothing else draws in its
+     * place, cleared on all planes with the whole screen), half an AGA
+     * screen's. (Over the content, a window's: all of them.) */
+    if (g.planar && !foot_hidden)
+        SetWriteMask(g.rp, 0x0F);
     gfx_fill(&g, 0, fy - U(1), g.w - 1, fy - 1, PEN_RULE);
     gfx_fill(&g, 0, fy, g.w - 1, g.h - 1, PEN_BAR);
     gfx_text(&g, U(6), fy + (g.h - fy - g.font_h) / 2, msg[0] ? msg : hint_text(),
              msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12) - gfx_window_grip(&g), TS_SMALL);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
 }
 
 /* Sizing the window by its grip: pressed there, the pointer followed (by
@@ -5847,11 +5855,21 @@ static BOOL ov_over(struct Page *p)
 
 /* Stamp the letter: in its column as it is, or over the rows outlined in
  * the background's colour (so the rows' text under it does not run into
- * it). */
+ * it). On a native screen only the list's planes are written: its pens
+ * (0 and 4) and the rows' under it are below 8 (16 with a Now playing
+ * row), and planes above are clear there, in its column too (cleared on
+ * all planes before it shows): nine template blits a step on 3 planes,
+ * not 8. */
+static UBYTE list_planes(const struct Page *p);
+
 static void ov_stamp(void)
 {
+    UBYTE was;
     if (!ov.bl)
         return;
+    was = g.rp->Mask;
+    if (g.planar)
+        SetWriteMask(g.rp, list_planes(ov.page));
     if (!has_aside(ov.page)) {
         static const BYTE d[8][2] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
                                       { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };
@@ -5861,6 +5879,8 @@ static void ov_stamp(void)
             gfx_bigletter_draw(&g, ov.bl, ov.x + d[i][0] * o, ov.y + d[i][1] * o, PEN_BG);
     }
     gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
+    if (g.planar)
+        SetWriteMask(g.rp, was);
 }
 
 /* While the rows are painted in a batch, the letter waits to be stamped
@@ -6037,10 +6057,11 @@ static BOOL np_row(const struct Item *it)
 
 /* The planes a list's rows are drawn and moved on (a native screen): its
  * pens are below 8, so 0-2 (3/8 of the blitter's work), except where it
- * has a Now playing row, whose orange (pen 8) is on plane 3 too. */
+ * has a Now playing row, whose orange (pen 8) is on plane 3 too: 0-3,
+ * still half an AGA screen's (no list pen is 16 or more). */
 static UBYTE list_planes(const struct Page *p)
 {
-    return p && p->list.count && np_row(&p->list.items[0]) ? 0xFF : 0x07;
+    return p && p->list.count && np_row(&p->list.items[0]) ? 0x0F : 0x07;
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
@@ -6061,9 +6082,10 @@ static void draw_list_row(struct Page *p, LONG idx, WORD col)
     UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
                mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
                ? PEN_RULE : PEN_BG;
-    /* Every list pen is below 8 and planes 3+ are clear in the list (the
-     * pane is cleared on all planes when the page is drawn), so on native
-     * screens only planes 0-2 are written: 3/8 of the blitter work. */
+    /* Every list pen is below 8 (16 with a Now playing row) and the planes
+     * above are clear in the list (the pane is cleared on all planes when
+     * the page is drawn), so on native screens only planes 0-2 (0-3) are
+     * written: 3/8 of the blitter work (half). */
     if (g.planar)
         SetWriteMask(g.rp, list_planes(p));
     gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
@@ -6115,7 +6137,10 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
     *ty = g.list_top + (WORD)(n > vis ? (h - t) * p->top / (n - vis) : 0);
 }
 
-static void draw_gutter(struct Page *p)
+/* planes: what a native screen writes (draw_gutter: 0-2, its pens being
+ * below 8 and the column's planes above clear once the list is drawn;
+ * draw_list_rows: all, as it draws the column the first time) */
+static void draw_gutter_planes(struct Page *p, UBYTE planes)
 {
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
@@ -6123,6 +6148,8 @@ static void draw_gutter(struct Page *p)
         return;                             /* no column */
     gut_geom(p, &bx0, &bx1, &ty, &th);
     (void)vis;
+    if (g.planar)
+        SetWriteMask(g.rp, planes);
     gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
     if (ty > y0)
         gfx_fill(&g, bx0, y0, bx1, ty - 1, PEN_RULE);           /* the track, above */
@@ -6130,6 +6157,15 @@ static void draw_gutter(struct Page *p)
         gfx_fill(&g, bx0, ty + th, bx1, y1, PEN_RULE);          /* and below */
     gfx_fill(&g, bx0, ty, bx1, ty + th - 1,
              gut.drag ? PEN_WHITE : mouse_mode && bar_up ? PEN_TEXT : PEN_DIM);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
+}
+
+/* The bar again as it moves (each step that scrolls the list, the mouse
+ * showing, hiding or dragging it): planes 0-2, not the screen's 8. */
+static void draw_gutter(struct Page *p)
+{
+    draw_gutter_planes(p, 0x07);
 }
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col);
@@ -6298,15 +6334,16 @@ static void draw_list_rows(struct Page *p)
         ov_hold = was;
     }
     gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
-    draw_gutter(p);
+    draw_gutter_planes(p, 0xFF);
     if (!ov_hold && ov_over(p))
         ov_stamp();
 }
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
- * screen. Native screens: a blit inside the screen bitmap, masked to
- * planes 0-2 (every list pen is below 8 and rows are painted with
- * RectFill, so planes 3+ are zero there). RTG: the same blit, unmasked;
+ * screen. Native screens: a blit inside the screen bitmap, masked to the
+ * list's planes (list_planes: every list pen is below 8, or 16 with a Now
+ * playing row, and rows are painted with RectFill, so the planes above
+ * are zero there). RTG: the same blit, unmasked;
  * the RTG system handles the overlap and accelerates it. */
 /* Right edge of what rows top..top+vis-1 have painted outside the bar:
  * the copy need go no further, since everything right of it is background
@@ -7013,8 +7050,22 @@ static void np_layout(void)
     }
 }
 
-/* The time, the bar and the position: only what changed. */
+/* The time, the bar and the position: only what changed. Several times a
+ * second for a module (its row): on a native screen planes 0-3 only, its
+ * pens being below 16 (the bar's orange is 8) and these lines never
+ * reaching the cover, half an AGA screen's work. */
+static void np_draw_progress_(BOOL full, const struct MpStatus *st);
+
 static void np_draw_progress(BOOL full, const struct MpStatus *st)
+{
+    if (g.planar)
+        SetWriteMask(g.rp, 0x0F);
+    np_draw_progress_(full, st);
+    if (g.planar)
+        SetWriteMask(g.rp, 0xFF);
+}
+
+static void np_draw_progress_(BOOL full, const struct MpStatus *st)
 {
     char t[160], a[64], b[24], pos[160];
     WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, bw = np.bar_w, lw, rw;
