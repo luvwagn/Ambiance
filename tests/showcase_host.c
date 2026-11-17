@@ -291,9 +291,9 @@ static struct LItem music_rows[] = {
     { "Albums", NULL, "312", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
     { "Songs", NULL, "3,904", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
     { "Genres", NULL, "28", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
-    { "Recently added", NULL, NULL, NULL, LI_FOLDER, LM_ARROW, 0, 0 },
+    { "Recently added", NULL, NULL, "cover-recent", LI_FOLDER, LM_ARROW, 0, 0 },
     { "Now playing", NULL, "Amiga Dreams", NULL, LI_ACTION, LM_PLAYING, LIF_NOW, 0 },
-    { "Music folders", NULL, "Work:Music", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
+    { "Music folders", NULL, "Work:Music", "cover-folders", LI_FOLDER, LM_ARROW, 0, 0 },
     { "Plex", NULL, "Living room", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
 };
 static const struct LRow row = { "Music", 8, music_rows };

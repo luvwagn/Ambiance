@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.4 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.5 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.4 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.5 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 4;
+const UWORD LibRevision = 5;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -337,7 +337,7 @@ static void draw_home(void)
             y += FH + Y(10);
             for (k = 0; k < row->n; k++) {
                 const struct LItem *it = &row->items[k];
-                LONG cx = x0 + (k % cols) * (cw + g), cy = y + (k / cols) * (ch + g);
+                LONG cx = x0 + (k % cols) * (cw + g), cy = y + (k / cols) * (ch + g), tx;
                 if (cy + ch > HT - Y(24))
                     break;
                 if (it->flags & LIF_HEAD) {
@@ -347,11 +347,21 @@ static void draw_home(void)
                 panel(cx, cy, cw, ch, 4, C_PANEL, C_LINE, grad(cy));
                 if (!(it->flags & LIF_DISABLED))
                     hit(cx, cy, cw, ch, HT_TILE, it->kind, k);
-                text(cx + X(12), cy + Y(8), it->label, LF_REGULAR,
-                     (it->flags & LIF_DISABLED) ? C_DIM : C_TEXT, flat(C_PANEL), cw - X(24));
+                tx = cx + X(12);
+                if (it->art) {          /* its picture: a square at the left */
+                    LONG s = ch - Y(12);
+                    const struct LImage *im = H->picture(it->art, (UWORD)s, (UWORD)s);
+                    if (im)
+                        H->image(im, (WORD)(cx + Y(6) + (s - im->w) / 2), (WORD)(cy + Y(6) + (s - im->h) / 2));
+                    else
+                        H->fill((WORD)(cx + Y(6)), (WORD)(cy + Y(6)), (WORD)s, (WORD)s, C_PANEL2);
+                    tx = cx + Y(6) + s + X(10);
+                }
+                text(tx, cy + Y(8), it->label, LF_REGULAR,
+                     (it->flags & LIF_DISABLED) ? C_DIM : C_TEXT, flat(C_PANEL), cx + cw - tx - X(12));
                 if (it->tag || it->sub)
-                    text(cx + X(12), cy + Y(8) + FH + Y(4), it->tag ? it->tag : it->sub, LF_SMALL,
-                         C_SUB, flat(C_PANEL), cw - X(24));
+                    text(tx, cy + Y(8) + FH + Y(4), it->tag ? it->tag : it->sub, LF_SMALL,
+                         C_SUB, flat(C_PANEL), cx + cw - tx - X(12));
                 if (it->flags & LIF_NOW)
                     mark(LM_PLAYING, cx + cw - X(10), cy + Y(8) + FH / 2, C_ACC, C_PANEL);
             }

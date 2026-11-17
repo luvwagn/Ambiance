@@ -10519,7 +10519,9 @@ static void viewer_done(void)
      * drawn it, it seems), only what was drawn later showing */
     gfx_dbuf_start(&g);
     plex_shortcut_fix(cur());       /* (its Now playing row, held while it was viewed) */
+    lv_resume();                    /* a layout: on again first (the classic one only counted) */
     draw_all();
+    lv_frame();
     gfx_dirty();
     gfx_present(&g);
     view_restore(&g);
@@ -10596,7 +10598,9 @@ static void anim_from_page(struct Page *p)
         }
     }
     gfx_dbuf_start(&g);
+    lv_resume();                            /* a layout: on again first */
     draw_all();
+    lv_frame();
     gfx_dirty();
     gfx_present(&g);
     mp_hold(FALSE);
@@ -15856,7 +15860,9 @@ static void np_full_exit(void)
     np_full_fs = FALSE;
     vf_stop();                              /* (its full-size maps given back) */
     amb_log("visualisation", "Flow: the whole screen left");
+    lv_resume();                            /* a layout: on again first */
     draw_all();
+    lv_frame();
 }
 
 static void np_full_enter(void)
@@ -17033,9 +17039,42 @@ static UBYTE lv_mark(const struct Item *it)
 
 static const struct Page *lv_lp;    /* the page item() makes rows of */
 static struct LItem lv_ring[32];
+static char lv_ring_art[32][304];
 static UWORD lv_ri;
 
-static void lv_fill_item(struct LItem *li, const struct Page *p, LONG i)
+/* A row's picture, as a key lv_picture() reads: a file, or a first byte
+ * saying how the loader finds it (LV_ART_*) and then a path. The finding
+ * (a folder's cover, a game's screenshot) is the loader's, off the UI. */
+#define LV_ART_SONG   '\x01'       /* a music file's or folder's cover (SHOT_SONG) */
+#define LV_ART_AGS    '\x02'       /* an AGS entry's screenshot (SHOT_AGS) */
+#define LV_ART_FOLDER '\x03'       /* a Pictures folder's first picture (SHOT_FOLDER) */
+static const char *lv_art_of(const struct Page *p, const struct Item *it, char *buf, LONG max)
+{
+    char path[300];
+    if (!it || (it->flags & ITEM_GONE) || max < 8)
+        return NULL;
+    buf[0] = 0;
+    if (it->kind == IT_RUN) {
+        buf[0] = LV_ART_AGS;
+    } else if (p->songs && !p->plex && (it->kind == IT_SONG || it->kind == IT_DIR) &&
+               !beets_page(it->path)) {
+        buf[0] = LV_ART_SONG;
+    } else if (p->pics && !p->plex && it->kind == IT_DIR) {
+        buf[0] = LV_ART_FOLDER;
+    } else if (it->kind == IT_PIC && !p->plex) {
+        item_path(it, buf, max);
+        return buf[0] ? buf : NULL;
+    } else {
+        return NULL;
+    }
+    item_path(it, path, sizeof(path));
+    if (!path[0])
+        return NULL;
+    amb_strlcpy(buf + 1, path, max - 1);
+    return buf;
+}
+
+static void lv_fill_item_art(struct LItem *li, const struct Page *p, LONG i, char *art, LONG max)
 {
     const struct Item *it;
     const char *tag;
@@ -17055,12 +17094,15 @@ static void lv_fill_item(struct LItem *li, const struct Page *p, LONG i)
         li->flags |= LIF_HEAD;
     if (it->mark == MARK_PLAYING)
         li->flags |= LIF_NOW;
+    if (art)
+        li->art = lv_art_of(p, it, art, max);
 }
 
 static const struct LItem *lv_item(LONG i)
 {
-    struct LItem *li = &lv_ring[lv_ri++ & 31];
-    lv_fill_item(li, lv_lp, i);
+    UWORD k = lv_ri++ & 31;
+    struct LItem *li = &lv_ring[k];
+    lv_fill_item_art(li, lv_lp, i, lv_ring_art[k], sizeof(lv_ring_art[k]));
     return li;
 }
 
@@ -17142,6 +17184,7 @@ static const void *lv_model(int screen)
     static const char *names[MOD_COUNT];
     static struct LRow row;
     static struct LItem rows[12];
+    static char rows_art[12][304];
     static const char *next[5];
     static char year[1];
     int i;
@@ -17158,7 +17201,7 @@ static const void *lv_model(int screen)
         home.names = names;
         if (!pane_pending && depth >= 1 && pages[0].type == PT_LIST) {
             for (i = 0; i < pages[0].list.count && i < 12; i++)
-                lv_fill_item(&rows[i], &pages[0], i);
+                lv_fill_item_art(&rows[i], &pages[0], i, rows_art[i], sizeof(rows_art[i]));
             row.title = _(mod_names[menu[menu_sel]]);
             row.n = (WORD)i;
             row.items = rows;
@@ -17231,18 +17274,20 @@ static void lv_act(int what, LONG arg)
     }
 }
 
-/* ---- pictures, made for the layout at the size it asks (one new one a
- * frame: the rest come on the frames after) */
-#define LV_PICS 4
+/* ---- pictures, made for the layout at the size it asks: by the loader's
+ * picture process (decoded off the UI's back, as the classic pane's), the
+ * layout drawn again when one is ready */
+#define LV_PICS 16
 static struct {
-    char file[160];
+    char file[304];                 /* the key asked for (lv_art_of) */
     UWORD w, h;                     /* asked for */
     BOOL failed;
     ULONG used;
+    struct LJob *job;               /* out at the loader, or back and not yet taken */
     struct LImage im;
     ULONG *px;
 } lv_pic[LV_PICS];
-static BOOL lv_pic_made;            /* this frame's made already */
+static BOOL lv_pic_made;            /* (kept for the frame's count) */
 static ULONG lv_pic_clock;
 
 /* Ambiance's logo for a layout: the smooth one, over the layout's colour */
@@ -17274,6 +17319,65 @@ static const struct LImage *lv_logo(ULONG bg)
     return &lv_logo_im;
 }
 
+/* slot i emptied: its job given up if still out (it holds no pens) */
+static void lv_pic_drop(int i)
+{
+    struct LJob *j = lv_pic[i].job;
+    if (j) {
+        if (j->busy) {
+            ldr_orphan(j);
+        } else {
+            pic_dispose(j->obj);
+            thumb_free(j->thumb);
+            FreeVec(j);
+        }
+    }
+    if (lv_pic[i].px)
+        FreeVec(lv_pic[i].px);
+    memset(&lv_pic[i], 0, sizeof(lv_pic[i]));
+}
+
+/* slot i's job back: its thumbnail as the layout's pixels */
+static void lv_pic_take(int i)
+{
+    struct LJob *j = lv_pic[i].job;
+    struct Thumb *t = j ? j->thumb : NULL;
+    lv_pic[i].job = NULL;
+    lv_pic[i].failed = TRUE;
+    if (t && (lv_pic[i].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
+        ULONG *d = lv_pic[i].px;
+        UWORD x, y;
+        for (y = 0; y < t->h; y++) {
+            const UBYTE *src = t->px + (ULONG)y * t->mod;
+            for (x = 0; x < t->w; x++)
+                *d++ = t->pal[src[x]] & 0xFFFFFF;
+        }
+        lv_pic[i].im.w = t->w;
+        lv_pic[i].im.h = t->h;
+        lv_pic[i].im.mod = t->w;
+        lv_pic[i].im.px = lv_pic[i].px;
+        lv_pic[i].failed = FALSE;
+    } else if (!t) {
+        amb_log("layout: a picture could not be read", lv_pic[i].file);
+    }
+    if (j) {
+        pic_dispose(j->obj);
+        thumb_free(j->thumb);
+        FreeVec(j);
+    }
+}
+
+/* Each frame: a picture back from the loader has the layout drawn again */
+static void lv_pics_poll(void)
+{
+    int i;
+    for (i = 0; i < LV_PICS; i++)
+        if (lv_pic[i].job && lv_pic[i].job->done) {
+            lv_pic_take(i);
+            lv.full = TRUE;
+        }
+}
+
 static void lv_pics_free(void)
 {
     int i;
@@ -17281,72 +17385,48 @@ static void lv_pics_free(void)
         FreeVec(lv_logo_px);
         lv_logo_px = NULL;
     }
-    for (i = 0; i < LV_PICS; i++) {
-        if (lv_pic[i].px)
-            FreeVec(lv_pic[i].px);
-        memset(&lv_pic[i], 0, sizeof(lv_pic[i]));
-    }
+    for (i = 0; i < LV_PICS; i++)
+        lv_pic_drop(i);
 }
 
 static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
 {
     int i, k = 0;
-    struct Thumb *t;
-    struct PicInfo pi;
+    struct LJob *j;
     if (!file || !file[0] || !w || !h)
         return NULL;
     for (i = 0; i < LV_PICS; i++) {
         if (lv_pic[i].w == w && lv_pic[i].h == h && strcmp(lv_pic[i].file, file) == 0) {
             lv_pic[i].used = ++lv_pic_clock;
+            if (lv_pic[i].job) {
+                if (!lv_pic[i].job->done)
+                    return NULL;            /* still being made: drawn when it is */
+                lv_pic_take(i);
+            }
             return lv_pic[i].failed ? NULL : &lv_pic[i].im;
         }
         if (lv_pic[i].used < lv_pic[k].used)
             k = i;
     }
-    if (lv_pic_made) {
-        lv.full = TRUE;             /* drawn again next frame, with it */
-        return NULL;
-    }
-    lv_pic_made = TRUE;
-    if (lv_pic[k].px)
-        FreeVec(lv_pic[k].px);
-    memset(&lv_pic[k], 0, sizeof(lv_pic[k]));
+    lv_pic_drop(k);
     amb_strlcpy(lv_pic[k].file, file, sizeof(lv_pic[k].file));
     lv_pic[k].w = w;
     lv_pic[k].h = h;
     lv_pic[k].used = ++lv_pic_clock;
     lv_pic[k].failed = TRUE;
-    if (!(t = jpeg_thumb(file, w, h, FALSE, FALSE, 256, &pi, "layout")) &&
-        !(t = ilbm_thumb(file, w, h, FALSE, FALSE, 256, &pi))) {
-        BOOL remapped = FALSE;
-        APTR o = pic_decode_fit(file, NULL, FALSE, &remapped, &pi, w, h);
-        if (o) {
-            ULONG dw, dh;
-            pic_fit(pi.w, pi.h, FALSE, w, h, FALSE, &dw, &dh);
-            t = thumb_make(o, dw, dh, 256);
-            pic_dispose(o);
-        }
-    }
-    if (!t) {
-        amb_log("layout: a picture could not be read", file);
+    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return NULL;
-    }
-    if ((lv_pic[k].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
-        ULONG *d = lv_pic[k].px;
-        UWORD x, y;
-        for (y = 0; y < t->h; y++) {
-            const UBYTE *s = t->px + (ULONG)y * t->mod;
-            for (x = 0; x < t->w; x++)
-                *d++ = t->pal[s[x]] & 0xFFFFFF;
-        }
-        lv_pic[k].im.w = t->w;
-        lv_pic[k].im.h = t->h;
-        lv_pic[k].im.mod = t->w;
-        lv_pic[k].im.px = lv_pic[k].px;
-        lv_pic[k].failed = FALSE;
-    }
-    thumb_free(t);
-    return lv_pic[k].failed ? NULL : &lv_pic[k].im;
+    j->type = LJ_SHOT;
+    j->mode = file[0] == LV_ART_SONG ? SHOT_SONG : file[0] == LV_ART_AGS ? SHOT_AGS
+            : file[0] == LV_ART_FOLDER ? SHOT_FOLDER : SHOT_FILE;
+    amb_strlcpy(j->path, j->mode == SHOT_FILE ? file : file + 1, sizeof(j->path));
+    j->scr = g.scr;
+    j->tw = w;
+    j->th = h;
+    j->maxcol = 256;
+    lv_pic[k].job = j;
+    ldr_submit(j);
+    return NULL;
 }
 
 /* ---- the drawing calls, onto lv.out */
@@ -17527,6 +17607,7 @@ void lv_frame(void)
     scr = lv_screen();
     now = time_ms();
     lv_pic_made = FALSE;
+    lv_pics_poll();
     if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
         lv.tick_at = now;
         lv.eng->tick(now);
@@ -17548,6 +17629,13 @@ void lv_frame(void)
 void lv_hold(void)
 {
     lv_off(FALSE);
+}
+
+/* Back from the viewer or a video: the layout on again before anything is
+ * drawn, so the classic screen never shows for a frame */
+void lv_resume(void)
+{
+    lv_sync();
 }
 
 void lv_release(void)

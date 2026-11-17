@@ -39,6 +39,7 @@ BOOL lv_key(struct IntuiMessage *im);    /* TRUE: the layout's (or the wheel's),
 BOOL lv_mouse(struct IntuiMessage *im);  /* TRUE: taken (the classic hit tests would be wrong) */
 void lv_hold(void);             /* the screen about to be taken over: classic drawing back */
 void lv_release(void);          /* ...and the layout's memory let go (a game's launch) */
+void lv_resume(void);           /* back from the viewer or a video: on again before drawing */
 void lv_build_page(struct Page *p);  /* Settings > Display > Layout */
 void lv_pick(int k);            /* its row k: 0 classic, then the layouts found */
 const char *lv_label(void);     /* the one chosen, for the Display page */
