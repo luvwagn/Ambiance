@@ -34,7 +34,6 @@
 #include <proto/wb.h>
 #include <dos/notify.h>
 #include <stdio.h>
-#include "../datatypes/jpeg/amcejpeg.h"
 
 /* A layout draws the screen (lhost.c, layout.h): the classic drawing is
  * not done, only counted (gfx_off_hits), so the layout knows the screen
@@ -3138,15 +3137,12 @@ APTR pic_decode(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped
     return pic_decode_fit(path, scr, remap, remapped, pi, 0, 0);
 }
 
-/* pic_decode, for a picture that will be shown no bigger than fitw x fith:
- * amcejpeg.datatype (datatypes/jpeg) then decodes a JPEG at 1/2, 1/4 or
- * 1/8 where that is still at least that big, much faster; other datatypes
- * ignore the tags. pi has the picture's own size either way; the object's
- * bitmap header, what was decoded. */
+/* pic_decode, for a picture that will be shown no bigger than fitw x fith
+ * (a thumbnail): a deep one, not remapped, skips the layout, its pixels
+ * read from the object as RGB (thumb.c). */
 APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *remapped,
                     struct PicInfo *pi, ULONG fitw, ULONG fith)
 {
-    ULONG fullw = 0, fullh = 0;
     struct BitMapHeader *bmh = NULL;
     Object *o;
     if (!DataTypesBase)
@@ -3154,12 +3150,10 @@ APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *rema
     if (remap)
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE,
                         PDTA_Screen, (ULONG)scr, PDTA_Remap, TRUE,
-                        PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE,
-                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
+                        PDTA_DestMode, PMODE_V43, OBP_Precision, PRECISION_IMAGE, TAG_END);
     else
         o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE,
-                        PDTA_DestMode, PMODE_V43,
-                        JDTA_FitWidth, fitw, JDTA_FitHeight, fith, TAG_END);
+                        PDTA_DestMode, PMODE_V43, TAG_END);
     if (!o)
         return NULL;
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
@@ -3182,11 +3176,6 @@ APTR pic_decode_fit(const char *path, struct Screen *scr, BOOL remap, BOOL *rema
         return pic_decode_fit(path, scr, TRUE, remapped, pi, fitw, fith);
     }
     pic_info(o, bmh, pi);
-    GetDTAttrs(o, JDTA_FullWidth, (ULONG)&fullw, JDTA_FullHeight, (ULONG)&fullh, TAG_END);
-    if (fullw && fullh) {               /* decoded smaller: its own size */
-        pi->w = (UWORD)fullw;
-        pi->h = (UWORD)fullh;
-    }
     *remapped = remap;
     return o;
 }

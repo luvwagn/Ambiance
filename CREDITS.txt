@@ -36,7 +36,7 @@ Licence 1.1 (see OFL-Rubik.txt).
 
 Pictures
 --------
-amcejpeg.datatype's JPEG decoder (datatypes/jpeg/jdec.c) was written for
+AmigaMCE's JPEG decoder, jdec (src/jdec/jdec.c), was written for
 AmigaMCE and is under AmigaMCE's MIT licence; it contains no code from
 libjpeg or libjpeg-turbo. It follows the methods they use and document,
 so that its pictures match theirs: the Arai-Agui-Nakajima fast inverse

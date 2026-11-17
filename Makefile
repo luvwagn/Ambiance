@@ -83,9 +83,9 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: test-igame test-kodilite all clean datatype leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: test-igame test-kodilite all clean leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
-all: $(TARGET) layouts lha datatype
+all: $(TARGET) layouts lha
 
 # Compiler flags are not file dependencies: rebuild only when the
 # embedded version or date actually changes.
@@ -266,7 +266,7 @@ ASM_DIR = build/asm
 # version, LibVersion.LibRevision and $VER agree, and AmigaMCE asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
-check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(JDT) $(LAYOUTS)
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(LAYOUTS)
 	@$(PYTHON) tools/check_libs.py \
 		$(DVDLIB)=extras/dvdnav/src/dvdnavlib.c=$(call hdrver,extras/dvdnav/include/libraries/dvdnav.h,DVDNAVLIB_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
@@ -274,7 +274,6 @@ check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(J
 		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMCEMPEGAVERSION) \
 		$(SQLIB)=src/sqlib/amcesql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
-		$(JDT)=datatypes/jpeg/amcejpeg.c \
 		$(foreach l,$(LAYOUT_NAMES),build/layouts/$(l).layout=src/layouts/$(l).c)
 
 check-syscalls: $(SRCS) src/amce.h build/ac3probe.h $(ZZ9K_SDK_STAMP)
@@ -333,10 +332,10 @@ rtgbench: build/rtgbench
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast AmigaMCE's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
-build/zzprobe: tools/zzprobe/zzprobe.c datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
+build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< datatypes/jpeg/jdec.c -lamiga
+	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
 test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-kodilite test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
@@ -664,41 +663,12 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/amcesql.c extras/sqlite/libsqlite3.a e
 		extras/sqlite/libsqlite3.a -lm -lamiga
 	@$(STRIP) -o $@ $@.dbg
 
-# jdec, the JPEG decoder (datatypes/jpeg), built into AmigaMCE for JPEG
-# thumbnails (src/jpgthumb.c); -O2, as in the datatype: it is the hot path
-build/jdec.o: datatypes/jpeg/jdec.c datatypes/jpeg/jdec.h
+# jdec, AmigaMCE's JPEG decoder (src/jdec), built in for JPEG thumbnails
+# (src/jpgthumb.c); -O2: it is the hot path
+build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@mkdir -p build
 	@echo "  CC    $<"
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
-
-# amcejpeg.datatype (datatypes/jpeg): JPEG for every program that loads
-# pictures through datatypes, on jdec; libnix's libinit as amcesql's. With
-# its descriptor (DEVS:DataTypes) and dtjpeg, a test that loads a picture
-# through datatypes and times it.
-JDT_DIR   = build/amcejpeg
-JDT       = $(JDT_DIR)/amcejpeg.datatype
-JDT_DESC  = $(JDT_DIR)/AmigaMCE-JPEG
-JDT_CC    = $(CC) -O2 -m68020-60 -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wno-pointer-sign
-JDT_SRC   = datatypes/jpeg/amcejpeg.c datatypes/jpeg/jdec.c
-datatype: $(JDT) $(JDT_DESC) $(JDT_DIR)/dtjpeg
-$(JDT_DIR)/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h datatypes/jpeg/amcejpeg.c Makefile
-	@mkdir -p $(JDT_DIR)
-	@echo "  CC    $< (amcejpeg)"
-	@$(SQLIB_CC) -Isrc/sqlib -DLIB_RT_VERSION=$(call libver,datatypes/jpeg/amcejpeg.c) -c -o $@ $<
-$(JDT): $(JDT_DIR)/libinit.o $(JDT_SRC) datatypes/jpeg/jdec.h datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
-	@mkdir -p $(JDT_DIR)
-	@echo "  LD    $@"
-	@$(JDT_CC) -Idatatypes/jpeg -DDT_DATE="\"$(ADATE)\"" -o $@.dbg $(JDT_DIR)/libinit.o $(JDT_SRC) -lamiga
-	@$(STRIP) -o $@ $@.dbg
-$(JDT_DESC): tools/mkdtdesc.py
-	@mkdir -p $(JDT_DIR)
-	@echo "  DTYP  $@"
-	@$(PYTHON) tools/mkdtdesc.py $@ --name AmigaMCE-JPEG --base amcejpeg --group pict --id jpeg \
-		--recog "ff d8 ff" --priority 5 --version '$$VER: AmigaMCE-JPEG 46.0 ($(ADATE))'
-$(JDT_DIR)/dtjpeg: datatypes/jpeg/test/dtjpeg.c datatypes/jpeg/amcejpeg.h datatypes/jpeg/stackcall.h
-	@mkdir -p $(JDT_DIR)
-	@echo "  CC    $@"
-	@$(CC) -Os $(CPU) -noixemul -Wall -Wno-pointer-sign -o $@ $< -lamiga
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE $(FONT_FILES) \
@@ -769,5 +739,5 @@ lha: $(TARGET) AmigaMCE.readme $(ICONS) docs/install.info docs/Install-AmigaMCE 
 	@echo "Created $(LHA_NAME)"
 
 clean:
-	rm -rf build/*.o build/lha build/sqlib build/dvd build/amcejpeg build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
+	rm -rf build/*.o build/lha build/sqlib build/dvd build/beets build/beets_68k build/catalogs build/vt build/test_ags build/test_songs build/songs build/ram $(VERSION_STAMP) $(TARGET) \
 		amigamce-*.lha

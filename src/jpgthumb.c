@@ -2,7 +2,7 @@
  * AmigaMCE - JPEG thumbnails without a datatype
  * Copyright (c) 2026 Brian King, MIT
  *
- * A JPEG made into a thumbnail by jdec (datatypes/jpeg/jdec.c), built in:
+ * A JPEG made into a thumbnail by jdec (src/jdec/jdec.c), built in:
  * decoded straight at 1/2, 1/4 or 1/8 of its size where that is still at
  * least the thumbnail's, from memory, with no datatype object, layout or
  * remapping. On OS 3.2 (68030) a 300 x 300 cover at 1/8 took 3 ms this
@@ -17,7 +17,7 @@
  * why, and its path, so we know which of them need progressive support.
  */
 #include "amce.h"
-#include "../datatypes/jpeg/jdec.h"
+#include "jdec/jdec.h"
 
 #include <string.h>
 #include <stdio.h>

@@ -52,16 +52,6 @@ jobs:
         name: AmigaMCE Program
         path: AmigaMCE
 
-    - name: Archive JPEG datatype
-      uses: actions/upload-artifact@v4
-      with:
-        name: amcejpeg.datatype
-        path: |
-          build/amcejpeg/amcejpeg.datatype
-          build/amcejpeg/AmigaMCE-JPEG
-          build/amcejpeg/dtjpeg
-          datatypes/jpeg/README.md
-
     - name: Archive zzprobe
       uses: actions/upload-artifact@v4
       with:
