@@ -356,15 +356,17 @@ History
        picture carried on and on, zoomed, turned and rippled, the
        sound's wave drawn in, at half the screen's resolution on fast
        Amigas (a quarter on others, coarser where frames come slowly);
-       F shows it on a screen of its own, its controls there while the
-       mouse moves. AmigaAMP's
-       visual plug-ins run from AmigaMCE (F, Settings > Display > Full
-       screen visual). Text blended in 16 steps on fast Amigas with a
-       graphics card; Extra large text in a window. A module back at
-       the next start plays from its beginning (a track still from
-       where it was). Modules the mixer plays follow Settings > Sound:
-       AHI, or Paula at 14 bits, changed as they play, and mixed 6 dB
-       louder than before.
+       F shows it on a screen of its own, with a video's controls while
+       the mouse moves. AmigaAMP's visual plug-ins run from AmigaMCE (F,
+       Settings > Display > Full screen visual). Text blended in 16
+       steps on fast Amigas with a graphics card; Extra large text in a
+       window; numbers that change (times, the Debug readout) no longer
+       shift what follows them. A module back at the next start plays
+       from its beginning (a track still from where it was). Modules
+       the mixer plays follow Settings > Sound: AHI, or Paula at 14
+       bits, changed as they play, and mixed 6 dB louder than before; a
+       video or anim with sound stops them meanwhile and they go on
+       after.
 0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
        screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
        fast where there is no overlay; B pictures passed over while it
