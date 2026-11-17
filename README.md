@@ -192,8 +192,9 @@ of the Amiga to how fast it really is.
 
 ### Screens and looks
 
-- Native screens: 320x200/256 lowres, 640x200/256 hires and 640x400/512
-  laced on OCS, ECS and AGA. RTG: 640x480, 800x600 and 1024x768.
+- Native screens: 320x200/256 lowres in 32 colours on OCS and ECS; on AGA,
+  256 colours and also 640x200/256 hires and 640x400/512 laced. RTG:
+  640x480, 800x600 and 1024x768.
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
 - Or a window on Workbench, when Workbench is on a graphics card at 15 bits
