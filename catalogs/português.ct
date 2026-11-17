@@ -2,8 +2,10 @@
 ## language português
 ## codeset 0
 MSG_420624D6
+O AmigaAMP está a correr: os plug-ins são dele
 ; AmigaAMP is running: its plug-ins are its own
 MSG_603B8EB4
+Não foi possível iniciar o plug-in
 ; The plug-in could not be started
 MSG_2F1926C3
 A compressão ANIM-%ld não é suportada
@@ -12,10 +14,13 @@ MSG_5799A183
 Não foi possível ler o DVD nesse ponto
 ; The DVD could not be read there
 MSG_48EC1181
+O vídeo MPEG reproduz-se num ecrã RTG (AGA mais tarde)
 ; MPEG video plays on an RTG screen (AGA screens to come)
 MSG_21CB4B97
+O vídeo MPEG reproduz-se no ecrã da ZZ9000
 ; MPEG video plays on the ZZ9000's display
 MSG_612F22BA
+Não foi possível abrir o overlay da ZZ9000 neste ecrã
 ; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 Não foi possível abrir a animação
@@ -84,12 +89,16 @@ MSG_550E04D5
 não disponível
 ; not available
 MSG_7C321421
+Meia-noite
 ; Midnight
 MSG_4C5F9DAD
+Grafite
 ; Graphite
 MSG_634FC3DF
+Esmeralda
 ; Emerald
 MSG_2B535442
+Ametista
 ; Amethyst
 MSG_30386F8F
 cor verdadeira
@@ -101,42 +110,61 @@ MSG_0F6E4D56
 %lu cores
 ; %lu colours
 MSG_4C200E59
+Desconhecido
 ; Unknown
 MSG_225EE315
+Favoritos
 ; Favourites
 MSG_71D22FD0
+Todas as demos
 ; All demos
 MSG_27D1E7CF
+Todos os jogos
 ; All games
 MSG_0D5177A9
+Mais jogados
 ; Most played
 MSG_68E1C31B
+Por género
 ; By genre
 MSG_1AEE602E
+Por chipset
 ; By chipset
 MSG_2C54891D
+Por ano
 ; By year
 MSG_09C3EF84
+Por %.80s
 ; By %.80s
 MSG_109CF70E
+Género: %.80s
 ; Genre: %.80s
 MSG_49B0A27E
+Ano: %lu
 ; Year: %lu
 MSG_6D84AAE5
+Jogadores: %lu
 ; Players: %lu
 MSG_5CF0FA59
+Chipset: %.80s
 ; Chipset: %.80s
 MSG_6F4C5363
+Jogado uma vez
 ; Played once
 MSG_0AB01B08
+Jogado %lu vezes
 ; Played %lu times
 MSG_6BFB474B
+Um favorito no iGame
 ; A favourite in iGame
 MSG_0F8B178C
+WHDLoad: %s
 ; WHDLoad: %s
 MSG_542A5985
+Programa: %s
 ; Program: %s
 MSG_6C384865
+O ficheiro não está lá (volte a analisar no iGame)
 ; Its file is not there (rescan in iGame)
 MSG_7EBB5FFE
 Não foi possível escrever T:Ambiance-run
@@ -181,10 +209,13 @@ MSG_7E40EC70
 Todas as demos
 ; All Demos
 MSG_11815498
+A lista do iGame não tem demos, e o Amiga Game Selector não foi encontrado.
 ; iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7
+A lista do iGame não tem jogos, e o Amiga Game Selector não foi encontrado.
 ; iGame's list has no games in it, and Amiga Game Selector was not found.
 MSG_575792EC
+O Ambiance considera uma entrada uma demo quando o seu género no iGame é Demo, Intro ou Diskmag, ou quando está numa gaveta chamada Demos.
 ; Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 O Amiga Game Selector não foi encontrado.
@@ -196,6 +227,7 @@ MSG_07BE5AE8
 O Ambiance procura a atribuição AGS:, depois uma gaveta AGS2 ao lado da sua e em WHDLoad:. Instale o Ambiance num sistema AGS 3, ou inicie o AGS uma vez para que as suas atribuições existam.
 ; Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
 MSG_195350C5
+A lista do iGame também aparece aqui, ou em vez do AGS: o Ambiance procura o iGame ao arrancar, ou Definições > Pastas > iGame indica a sua gaveta.
 ; iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 Música, Mods, Imagens, Vídeos e Rádio funcionam sem ele: Definições > Pastas diz onde estão a sua música, módulos, imagens e animações.
@@ -288,20 +320,25 @@ MSG_74EC33B7
 Atribuições adicionadas pelo Ambiance (o AGS-Stuff não correu):
 ; Assigns Ambiance added (AGS-Stuff did not run):
 MSG_268D62B2
+iGame: %.120s, %ld jogos, %ld demos
 ; iGame: %.120s, %ld games, %ld demos
 MSG_6E96DE70
+iGame: %s
 ; iGame: %s
 MSG_2DA7AFDB
 nenhuma
 ; none
 MSG_3FF83F26
+nenhuma lista lida
 ; no list read
 MSG_7EF1200C
 não instalado
 ; not installed
 MSG_23160430
+Arquivos descompactados por: %s
 ; Archives unpacked by: %s
 MSG_527DAE8A
+nada
 ; nothing
 MSG_38F75BEF
 Definição de máquina do AGS (HW): %s
@@ -331,6 +368,7 @@ MSG_197B8973
 controlador MHI
 ; MHI driver
 MSG_71B3588E
+ambmpega.library, a do Ambiance
 ; ambmpega.library, Ambiance's own
 MSG_4B721655
 mpega.library do SDK da ZZ9000 (descodificado na placa)
@@ -426,10 +464,13 @@ MSG_011FA544
 Suave: Fonts/amb-smooth não corresponde a este Ambiance
 ; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
+F em A tocar inicia este plug-in do AmigaAMP
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
+Flow (plug-ins do AmigaAMP: coloque-os na gaveta Visuals do Ambiance)
 ; Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 MSG_3DF462B5
+Flow
 ; Flow
 MSG_022C9299
 Sem espetro com MHI: ele toca o MP3 sozinho
@@ -438,6 +479,7 @@ MSG_0B3A7E73
 Sem espetro: este leitor não diz o que toca
 ; No spectrum: this player does not say what it plays
 MSG_5E18A4A5
+Flow: F mostra-o em ecrã inteiro
 ; Flow: F shows it on the whole screen
 MSG_5561FD0B
 Geral
@@ -476,8 +518,10 @@ MSG_5B67C80C
 Vídeo
 ; Video
 MSG_585459EE
+iGame
 ; iGame
 MSG_6E156672
+WHDLoad
 ; WHDLoad
 MSG_1B9AE0BB
 Inglês
@@ -531,6 +575,7 @@ MSG_3C2510A9
 CPU
 ; CPU
 MSG_31213991
+Paula, 14 bits
 ; Paula, 14-bit
 MSG_2D0EBF47
 sem pilha TCP/IP
@@ -545,6 +590,7 @@ MSG_718B9F54
 Grande
 ; Large
 MSG_05A06546
+Muito grande
 ; Extra large
 MSG_2C041143
 Tamanho do texto
@@ -565,13 +611,16 @@ MSG_63678BEE
 Duplo buffer
 ; Double buffering
 MSG_1A29FF2A
+Cores
 ; Colours
 MSG_7788421F
+Disposição
 ; Layout
 MSG_20B362A2
 Visualização
 ; Visualisation
 MSG_3311DE2D
+Visualização em ecrã inteiro (F)
 ; Full screen visual (F)
 MSG_52325DD8
 Deslocamento aos saltos (por letra)
@@ -583,8 +632,10 @@ MSG_584F0908
 Vídeos num ecrã próprio
 ; Videos on a screen of their own
 MSG_58B78A34
+Vídeo MPEG na ZZ9000
 ; MPEG video on the ZZ9000
 MSG_6DF6A531
+Usar overlay quando disponível (RTG)
 ; Use overlay when available (RTG)
 MSG_71E19418
 Depuração (CPU, memória, registo)
@@ -695,8 +746,10 @@ MSG_1DE950F6
 4 canais, até 28kHz, 8 bits
 ; 4 channels, up to 28kHz, 8-bit
 MSG_44E1D951
+Paula, 14 bits: rádio, Plex, ficheiros de música
 ; Paula, 14-bit: radio, Plex, music files
 MSG_34E4E153
+os 4 canais, passagens calmas mais limpas
 ; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: rádio, Plex, ficheiros de música
@@ -708,8 +761,10 @@ MSG_2DA3A6A5
 Descodificador MP3
 ; MP3 decoder
 MSG_2EEBD2B9
+não instalada (Libs do Ambiance)
 ; not installed (Ambiance's Libs)
 MSG_6695A193
+a do Ambiance, descodificado aqui
 ; Ambiance's own, decoded here
 MSG_3F71ACC2
 descodificado na ZZ9000
@@ -718,20 +773,28 @@ MSG_22FBBBB2
 descodifica e toca
 ; decodes and plays
 MSG_55D2D3D8
+Qualidade MP3
 ; MP3 quality
 MSG_050221B5
+Qualidade MP3: automática
 ; MP3 quality: automatic
 MSG_71E7648A
+Qualidade MP3: alta
 ; MP3 quality: high
 MSG_751F9CE1
+Qualidade MP3: média
 ; MP3 quality: medium
 MSG_04A16198
+pela velocidade deste Amiga, medida a cada arranque
 ; by this Amiga's speed, measured each run
 MSG_68B10FC3
+a mais precisa
 ; the most accurate
 MSG_313B727C
+cerca de um décimo menos de trabalho
 ; about a tenth less work
 MSG_003CBCAE
+o descodificador dá o seu melhor
 ; the decoder gives its best
 MSG_4DEE1DD3
 %ld local
@@ -743,6 +806,7 @@ MSG_4A20BCD9
 nenhum ainda
 ; none yet
 MSG_441A0CA1
+instalado
 ; installed
 MSG_765A3F9A
 Usar a atribuição %s
@@ -763,68 +827,100 @@ MSG_4ACE7BF4
 oito no máximo
 ; eight at most
 MSG_776C4574
+%ld entrada
 ; %ld entry
 MSG_43A71E80
+%ld entradas
 ; %ld entries
 MSG_1EFF5D20
+nenhuma lista aí
 ; no list there
 MSG_556E6088
+Nenhuma lista do iGame é mostrada.
 ; No iGame list is shown.
 MSG_051BBFA8
+O iGame não foi encontrado.
 ; iGame was not found.
 MSG_407C0CA8
+%.200s: %ld jogos, %ld demos
 ; %.200s: %ld games, %ld demos
 MSG_58489A07
+%.200s: nenhum gameslist.csv lido
 ; %.200s: no gameslist.csv read
 MSG_57A7889A
+Escolher a gaveta do iGame...
 ; Choose iGame's drawer...
 MSG_301DA6A7
+Procurar o iGame
 ; Find iGame
 MSG_451A8225
+Nenhuma: sem lista do iGame
 ; None: no iGame list
 MSG_3015054E
+O WHDLoad está instalado: %s
 ; WHDLoad is installed: %s
 MSG_67935CAD
+Os jogos que precisam de uma imagem Kickstart procuram-na em Devs:Kickstarts (kick34005.A500 para 1.3, kick40068.A1200 para 3.1). O Ambiance não as pode fornecer: vêm da ROM do seu próprio Amiga, ou do Amiga Forever.
 ; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 MSG_776C7EC6
+O WHDLoad inicia jogos e demos instalados no disco rígido, tal como o iGame os lista. Não está instalado neste Amiga.
 ; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
 MSG_5610C80E
+O Ambiance pode obter o pacote de utilizador do WHDLoad no site do seu autor, whdload.de (gratuito), e colocar o WHDLoad e as suas ferramentas em C:.
 ; Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 MSG_4EA477C4
+Para o descompactar é preciso a xadmaster.library (Aminet: util/arc/xadmaster000.lha) ou o LhA em C: (Aminet: util/arc/lha.run). Nenhum está instalado.
 ; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
 MSG_43357FD6
+A rede não está ativa.
 ; The network is not up.
 MSG_416B0131
+A transferir: %lu de %lu KB
 ; Downloading: %lu of %lu KB
 MSG_6A00DB1C
+A transferir: %lu KB
 ; Downloading: %lu KB
 MSG_3D0E491A
+Transferir e instalar o WHDLoad
 ; Download and install WHDLoad
 MSG_2C3D6FCE
+Agora não
 ; Not now
 MSG_09E17720
+Jogos deixa de perguntar
 ; Games stops asking
 MSG_1825F809
+Instalar o WHDLoad...
 ; Install WHDLoad...
 MSG_1BC13EBC
+A rede não está ativa
 ; The network is not up
 MSG_59611893
+Descompactar precisa de xadmaster.library ou C:LhA
 ; Unpacking needs xadmaster.library or C:LhA
 MSG_098D9D5E
+A transferir o WHDLoad de whdload.de...
 ; Downloading WHDLoad from whdload.de...
 MSG_1992E186
+A transferir o WHDLoad: %lu de %lu KB
 ; Downloading WHDLoad: %lu of %lu KB
 MSG_7B97FA5D
+A transferir o WHDLoad: %lu KB
 ; Downloading WHDLoad: %lu KB
 MSG_08C3EAAD
+Não foi possível transferir o WHDLoad: %.100s
 ; WHDLoad could not be downloaded: %.100s
 MSG_3C373586
+A descompactar o WHDLoad...
 ; Unpacking WHDLoad...
 MSG_5919FA2F
+O WHDLoad não foi instalado: %.120s
 ; WHDLoad was not installed: %.120s
 MSG_72928549
+Lista do iGame: %ld jogos, %ld demos
 ; iGame's list: %ld games, %ld demos
 MSG_7209FC67
+Não foi possível ler a lista do iGame
 ; iGame's list could not be read
 MSG_50BCAC0E
 só RTG
@@ -1064,16 +1160,22 @@ MSG_7FF7C0A9
 Um disco DVD-Vídeo
 ; A DVD-Video disc
 MSG_6B41435A
+Com som
 ; With sound
 MSG_6524B26D
+Sem som
 ; No sound
 MSG_3D33D3EB
+Um fluxo de transporte
 ; A transport stream
 MSG_7EB7DE9D
+Um fluxo de vídeo simples
 ; A bare video stream
 MSG_5E08A9DF
+Vídeo %s: a ZZ9000 reproduz MPEG-1 e MPEG-2
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_20C6E823
+Não é um vídeo MPEG que o Ambiance consiga ler
 ; Not an MPEG video Ambiance can read
 MSG_1403F9F1
 %ld fotogramas, %ld,%ld s
@@ -1298,8 +1400,10 @@ MSG_15E6DCFA
 Essa pasta não tem módulos
 ; That folder has no modules
 MSG_7722EDBF
+A lista do iGame não está lida agora
 ; iGame's list is not read now
 MSG_1E5D9885
+Essa lista está vazia
 ; That list is empty
 MSG_6D9550B1
 Não foi possível abrir esse menu
@@ -1308,6 +1412,7 @@ MSG_3030A110
 Esse menu está vazio
 ; That menu is empty
 MSG_38FE5F25
+A lista do iGame já não tem essa entrada
 ; iGame's list no longer has that entry
 MSG_0C682AC4
 %ld/%ld   %s   %s%s
@@ -1538,6 +1643,7 @@ MSG_0B620CC7
 MP3: descodificado pelo controlador MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
 MSG_7895CD7B
+MP3: descodificado pela ambmpega.library, a do Ambiance
 ; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: descodificado na ZZ9000 (a sua mpega.library)
@@ -1564,6 +1670,7 @@ MSG_586857BF
 Som: AHI, 16 bits
 ; Sound: AHI, 16-bit
 MSG_2350DA18
+Som: Paula, 14 bits
 ; Sound: Paula, 14-bit
 MSG_0F2AADBB
 Som: Paula, 8 bits
@@ -1626,10 +1733,13 @@ MSG_692E7242
 Essa pasta já lá está
 ; That folder is there already
 MSG_39287765
+A gaveta do iGame (com o seu gameslist.csv)
 ; iGame's drawer (with its gameslist.csv)
 MSG_3A1C5C94
+Usar
 ; Use
 MSG_0DDD9572
+Não há gameslist.csv aí: escolha a gaveta do próprio iGame, depois de uma análise no iGame
 ; No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
 MSG_2C2767AF
 Estilo: Suave precisa de um ecrã RTG
@@ -1644,8 +1754,10 @@ MSG_646AFCF3
 O MHI não está instalado (os seus controladores em LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
 MSG_104981CE
+A ambmpega.library não está em Libs do Ambiance
 ; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
+O MHI e a mpega.library da ZZ9000 descodificam MP3 com a melhor qualidade
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Listas de estações abertas a partir de agora
@@ -1660,19 +1772,25 @@ MSG_7800A723
 MP3 descodificado pelo MHI: rádio, Plex (na melhor qualidade) e ficheiros
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
 MSG_0AFE96F7
+MP3 descodificado aqui pela ambmpega.library, a do Ambiance
 ; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3 descodificado aqui pela mpega.library
 ; MP3 decoded here by mpega.library
 MSG_3990C163
+MP3 em alta qualidade, à taxa que este Amiga consegue descodificar
 ; MP3 at high quality, at the rate this Amiga can decode it
 MSG_74E84AE4
+MP3 em qualidade média: cerca de um décimo menos de trabalho, 70 dB
 ; MP3 at medium quality: about a tenth less work, 70 dB
 MSG_44A547DD
+Qualidade MP3 pela velocidade deste Amiga, medida no primeiro MP3 de cada arranque
 ; MP3 quality by this Amiga's speed, measured at the first MP3 each run
 MSG_30D664DF
+AHI: rádio, Plex, ficheiros de música, módulos que o modplug mistura (outros: Paula)
 ; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
 MSG_0CCDB457
+Paula a 14 bits: rádio, Plex, ficheiros de música, módulos que o modplug mistura
 ; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 A Paula toca tudo
@@ -1684,10 +1802,13 @@ MSG_26D6BADA
 %s deixada de fora
 ; %s left out
 MSG_512EE424
+Jogos já não oferece o WHDLoad: Definições > Pastas > WHDLoad continua a oferecer
 ; Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
 MSG_12706454
+O iGame não foi encontrado: escolha a sua gaveta
 ; iGame was not found: choose its drawer
 MSG_00B8A52C
+Sem lista do iGame: Jogos e Demos mostram só o AGS
 ; No iGame list: Games and Demos show AGS's alone
 MSG_719F5F36
 Disparo outra vez para retirar esta pasta (os ficheiros ficam)
@@ -1699,14 +1820,19 @@ MSG_3BD64F13
 Prima Esc outra vez para sair do Ambiance
 ; Press Esc again to quit Ambiance
 MSG_6FC2F840
+Nada está a tocar
 ; Nothing is playing
 MSG_116D42F2
+A iniciar o plug-in (Esc nele para voltar)
 ; Starting the plug-in (Esc in it to come back)
 MSG_0D724DE5
+O Flow precisa de um ecrã de placa gráfica (15 a 32 bits)
 ; Flow needs a graphics card's screen (15 to 32-bit)
 MSG_4B362E27
+Flow: este leitor não diz o que está a tocar
 ; Flow: this player does not say what it plays
 MSG_65839537
+Não foi possível mostrar o Flow aqui
 ; Flow could not be shown here
 MSG_018386B3
 O Ambiance precisa do Kickstart 3.0 ou mais recente.\n
@@ -1718,10 +1844,13 @@ MSG_3D0CDD4E
 O modo de ecrã guardado não está disponível aqui: usa-se Automático
 ; Saved screen mode not available here: using Automatic
 MSG_7B47B1F3
+Clássico
 ; Classic
 MSG_14BD5320
+Não foi possível abrir a disposição: usa-se a clássica
 ; The layout could not be opened: the classic one is used
 MSG_24B72731
+As disposições precisam do estilo Suave num ecrã de placa gráfica de 15 a 32 bits
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Este módulo precisa de um 68020 ou melhor para ser misturado
@@ -1823,15 +1952,19 @@ MSG_487D4FD3
 O certificado do servidor não foi aceite (o relógio do Amiga está certo?)
 ; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_24AC7706
+O servidor enviou-o em blocos, que as transferências não aceitam
 ; The server sent it in chunks, which downloads do not take
 MSG_2A22BBA4
+Não foi possível escrever o ficheiro
 ; The file could not be written
 MSG_2ACCD57C
 O servidor deixou de responder
 ; The server stopped answering
 MSG_56B1E221
+Não foi possível escrever o ficheiro (disco cheio?)
 ; The file could not be written (a full disk?)
 MSG_487CBFA7
+A transferência parou antes do fim
 ; The download stopped short
 MSG_05C477DC
 Nenhum servidor Plex respondeu nesta rede
@@ -1978,6 +2111,7 @@ MSG_00ABC308
 O vídeo MPEG pelo CPU precisa de mpegv.library
 ; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
+Não foi possível ler o ficheiro aí
 ; The file could not be read there
 MSG_52A6DB2B
 Não foi possível abrir o controlador MHI (Definições > Som)
@@ -2007,23 +2141,31 @@ MSG_2ADCBED0
 Não foi possível iniciar o processo de reprodução em segundo plano
 ; Could not start the background playback process
 MSG_1A9D11B3
+Não foi possível abrir a xadmaster.library
 ; xadmaster.library could not be opened
 MSG_7A620C10
+Não foi possível ler o arquivo (%.60s)
 ; The archive could not be read (%.60s)
 MSG_7A3F22E2
+Não foi possível descompactar %.40s (%.60s)
 ; %.40s could not be unpacked (%.60s)
 MSG_7B4E1B7C
+Não foi possível abrir NIL:
 ; NIL: could not be opened
 MSG_0DC59A91
+O LhA não o conseguiu descompactar (devolveu %ld)
 ; LhA could not unpack it (it returned %ld)
 MSG_49AE7BAE
+O LhA só descompacta arquivos .lha: instale a xadmaster.library
 ; LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8
+Nada aqui descompacta arquivos: instale a xadmaster.library (Aminet util/arc/xadmaster000.lha)
 ; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 MSG_7DFAF53D
 O vídeo MPEG pelo CPU precisa de mpegv.library (Libs do Ambiance)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 MSG_5EF81658
+O vídeo MPEG precisa do Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
 A carregar %.80s
@@ -2053,10 +2195,14 @@ MSG_12773890
 Esquerdo
 ; Left
 MSG_00536F32
+O WHDLoad não estava no pacote como esperado
 ; WHDLoad was not in the package as expected
 MSG_712ED6F1
+Não foi possível escrever %.60s
 ; %.60s could not be written
 MSG_3160C36F
+WHDLoad e mais %ld programas colocados em C:
 ; WHDLoad and %ld more programs put in C:
 MSG_04F3511D
+ (%ld já existentes mantidos)
 ;  (%ld already there kept)

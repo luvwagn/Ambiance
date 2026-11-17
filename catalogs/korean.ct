@@ -2,8 +2,10 @@
 ## language korean
 ## codeset 0
 MSG_420624D6
+AmigaAMP 실행 중: 플러그인은 AmigaAMP 전용입니다
 ; AmigaAMP is running: its plug-ins are its own
 MSG_603B8EB4
+플러그인을 시작할 수 없습니다
 ; The plug-in could not be started
 MSG_2F1926C3
 ANIM-%ld 압축은 지원하지 않습니다
@@ -12,10 +14,13 @@ MSG_5799A183
 DVD의 그 위치를 읽을 수 없습니다
 ; The DVD could not be read there
 MSG_48EC1181
+MPEG 비디오는 RTG 화면에서 재생됩니다 (AGA는 추후 지원)
 ; MPEG video plays on an RTG screen (AGA screens to come)
 MSG_21CB4B97
+MPEG 비디오는 ZZ9000 화면에서 재생됩니다
 ; MPEG video plays on the ZZ9000's display
 MSG_612F22BA
+이 화면에서는 ZZ9000 오버레이를 열 수 없습니다
 ; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 애니메이션을 열 수 없습니다
@@ -84,12 +89,16 @@ MSG_550E04D5
 사용할 수 없음
 ; not available
 MSG_7C321421
+미드나이트
 ; Midnight
 MSG_4C5F9DAD
+그래파이트
 ; Graphite
 MSG_634FC3DF
+에메랄드
 ; Emerald
 MSG_2B535442
+자수정
 ; Amethyst
 MSG_30386F8F
 트루 컬러
@@ -101,42 +110,61 @@ MSG_0F6E4D56
 %lu색
 ; %lu colours
 MSG_4C200E59
+알 수 없음
 ; Unknown
 MSG_225EE315
+즐겨찾기
 ; Favourites
 MSG_71D22FD0
+모든 데모
 ; All demos
 MSG_27D1E7CF
+모든 게임
 ; All games
 MSG_0D5177A9
+많이 플레이한 항목
 ; Most played
 MSG_68E1C31B
+장르별
 ; By genre
 MSG_1AEE602E
+칩셋별
 ; By chipset
 MSG_2C54891D
+연도별
 ; By year
 MSG_09C3EF84
+%.80s별
 ; By %.80s
 MSG_109CF70E
+장르: %.80s
 ; Genre: %.80s
 MSG_49B0A27E
+연도: %lu
 ; Year: %lu
 MSG_6D84AAE5
+플레이어: %lu
 ; Players: %lu
 MSG_5CF0FA59
+칩셋: %.80s
 ; Chipset: %.80s
 MSG_6F4C5363
+1회 플레이
 ; Played once
 MSG_0AB01B08
+%lu회 플레이
 ; Played %lu times
 MSG_6BFB474B
+iGame 즐겨찾기
 ; A favourite in iGame
 MSG_0F8B178C
+WHDLoad: %s
 ; WHDLoad: %s
 MSG_542A5985
+프로그램: %s
 ; Program: %s
 MSG_6C384865
+파일이 없습니다 (iGame에서 다시 검색)
 ; Its file is not there (rescan in iGame)
 MSG_7EBB5FFE
 T:Ambiance-run을 쓸 수 없습니다
@@ -181,10 +209,13 @@ MSG_7E40EC70
 모든 데모
 ; All Demos
 MSG_11815498
+iGame 목록에 데모가 없고 Amiga Game Selector도 찾지 못했습니다.
 ; iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7
+iGame 목록에 게임이 없고 Amiga Game Selector도 찾지 못했습니다.
 ; iGame's list has no games in it, and Amiga Game Selector was not found.
 MSG_575792EC
+iGame 장르가 Demo, Intro, Diskmag인 항목이나 Demos라는 서랍에 있는 항목을 Ambiance는 데모로 취급합니다.
 ; Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 Amiga Game Selector를 찾지 못했습니다.
@@ -196,6 +227,7 @@ MSG_07BE5AE8
 Ambiance는 AGS: 어사인을 찾고, 다음으로 자기 서랍 옆과 WHDLoad:에서 AGS2 서랍을 찾습니다. Ambiance를 AGS 3 시스템에 설치하거나, AGS를 한 번 실행해 어사인을 만드세요.
 ; Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
 MSG_195350C5
+iGame 목록도 여기에 또는 AGS 대신 표시됩니다. Ambiance는 시작할 때 iGame을 찾으며, 설정 > 폴더 > iGame에서 서랍을 지정할 수도 있습니다.
 ; iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 음악, 모듈, 사진, 비디오, 라디오는 AGS 없이도 됩니다. 설정 > 폴더에서 음악, 모듈, 사진, 애니메이션의 위치를 정하세요.
@@ -288,20 +320,25 @@ MSG_74EC33B7
 Ambiance가 추가한 어사인 (AGS-Stuff가 실행되지 않음):
 ; Assigns Ambiance added (AGS-Stuff did not run):
 MSG_268D62B2
+iGame: %.120s, 게임 %ld개, 데모 %ld개
 ; iGame: %.120s, %ld games, %ld demos
 MSG_6E96DE70
+iGame: %s
 ; iGame: %s
 MSG_2DA7AFDB
 없음
 ; none
 MSG_3FF83F26
+읽은 목록 없음
 ; no list read
 MSG_7EF1200C
 설치 안 됨
 ; not installed
 MSG_23160430
+압축 해제: %s
 ; Archives unpacked by: %s
 MSG_527DAE8A
+없음
 ; nothing
 MSG_38F75BEF
 AGS 기계 설정 (HW): %s
@@ -331,6 +368,7 @@ MSG_197B8973
 MHI 드라이버
 ; MHI driver
 MSG_71B3588E
+ambmpega.library (Ambiance 자체)
 ; ambmpega.library, Ambiance's own
 MSG_4B721655
 mpega.library, ZZ9000 SDK용 (카드에서 디코딩)
@@ -426,10 +464,13 @@ MSG_011FA544
 스무스: Fonts/amb-smooth가 이 Ambiance와 맞지 않습니다
 ; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
+지금 재생 중에서 F를 누르면 이 AmigaAMP 플러그인이 시작됩니다
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
+Flow (AmigaAMP 플러그인: Ambiance의 Visuals 서랍에 넣으세요)
 ; Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 MSG_3DF462B5
+Flow
 ; Flow
 MSG_022C9299
 MHI에서는 스펙트럼 없음: MP3를 직접 재생합니다
@@ -438,6 +479,7 @@ MSG_0B3A7E73
 스펙트럼 없음: 이 플레이어는 재생 내용을 알려주지 않습니다
 ; No spectrum: this player does not say what it plays
 MSG_5E18A4A5
+Flow: F를 누르면 전체 화면으로 표시
 ; Flow: F shows it on the whole screen
 MSG_5561FD0B
 일반
@@ -476,8 +518,10 @@ MSG_5B67C80C
 비디오
 ; Video
 MSG_585459EE
+iGame
 ; iGame
 MSG_6E156672
+WHDLoad
 ; WHDLoad
 MSG_1B9AE0BB
 영어
@@ -531,6 +575,7 @@ MSG_3C2510A9
 CPU
 ; CPU
 MSG_31213991
+Paula, 14비트
 ; Paula, 14-bit
 MSG_2D0EBF47
 TCP/IP 스택 없음
@@ -545,6 +590,7 @@ MSG_718B9F54
 크게
 ; Large
 MSG_05A06546
+아주 크게
 ; Extra large
 MSG_2C041143
 글자 크기
@@ -565,13 +611,16 @@ MSG_63678BEE
 더블 버퍼링
 ; Double buffering
 MSG_1A29FF2A
+색상
 ; Colours
 MSG_7788421F
+레이아웃
 ; Layout
 MSG_20B362A2
 시각화
 ; Visualisation
 MSG_3311DE2D
+전체 화면 시각화 (F)
 ; Full screen visual (F)
 MSG_52325DD8
 점프 스크롤 (글자별)
@@ -583,8 +632,10 @@ MSG_584F0908
 비디오를 전용 화면에서
 ; Videos on a screen of their own
 MSG_58B78A34
+ZZ9000에서 MPEG 비디오
 ; MPEG video on the ZZ9000
 MSG_6DF6A531
+가능하면 오버레이 사용 (RTG)
 ; Use overlay when available (RTG)
 MSG_71E19418
 디버그 (CPU, 메모리, 로그)
@@ -695,8 +746,10 @@ MSG_1DE950F6
 4채널, 최대 28kHz, 8비트
 ; 4 channels, up to 28kHz, 8-bit
 MSG_44E1D951
+Paula, 14비트: 라디오, Plex, 음악 파일
 ; Paula, 14-bit: radio, Plex, music files
 MSG_34E4E153
+4채널 모두 사용, 조용한 부분이 더 깨끗함
 ; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: 라디오, Plex, 음악 파일
@@ -708,8 +761,10 @@ MSG_2DA3A6A5
 MP3 디코더
 ; MP3 decoder
 MSG_2EEBD2B9
+설치되지 않음 (Ambiance의 Libs)
 ; not installed (Ambiance's Libs)
 MSG_6695A193
+Ambiance 자체, 여기서 디코딩
 ; Ambiance's own, decoded here
 MSG_3F71ACC2
 ZZ9000에서 디코딩
@@ -718,20 +773,28 @@ MSG_22FBBBB2
 디코딩하고 재생
 ; decodes and plays
 MSG_55D2D3D8
+MP3 품질
 ; MP3 quality
 MSG_050221B5
+MP3 품질: 자동
 ; MP3 quality: automatic
 MSG_71E7648A
+MP3 품질: 높음
 ; MP3 quality: high
 MSG_751F9CE1
+MP3 품질: 중간
 ; MP3 quality: medium
 MSG_04A16198
+이 Amiga의 속도에 따라, 실행할 때마다 측정
 ; by this Amiga's speed, measured each run
 MSG_68B10FC3
+가장 정확
 ; the most accurate
 MSG_313B727C
+작업량 약 10% 감소
 ; about a tenth less work
 MSG_003CBCAE
+디코더 최고 품질
 ; the decoder gives its best
 MSG_4DEE1DD3
 %ld곳
@@ -743,6 +806,7 @@ MSG_4A20BCD9
 아직 없음
 ; none yet
 MSG_441A0CA1
+설치됨
 ; installed
 MSG_765A3F9A
 %s 어사인 사용
@@ -763,68 +827,100 @@ MSG_4ACE7BF4
 최대 8개
 ; eight at most
 MSG_776C4574
+%ld개 항목
 ; %ld entry
 MSG_43A71E80
+%ld개 항목
 ; %ld entries
 MSG_1EFF5D20
+그곳에 목록 없음
 ; no list there
 MSG_556E6088
+iGame 목록을 표시하지 않습니다.
 ; No iGame list is shown.
 MSG_051BBFA8
+iGame을 찾지 못했습니다.
 ; iGame was not found.
 MSG_407C0CA8
+%.200s: 게임 %ld개, 데모 %ld개
 ; %.200s: %ld games, %ld demos
 MSG_58489A07
+%.200s: gameslist.csv를 읽지 못함
 ; %.200s: no gameslist.csv read
 MSG_57A7889A
+iGame 서랍 선택...
 ; Choose iGame's drawer...
 MSG_301DA6A7
+iGame 찾기
 ; Find iGame
 MSG_451A8225
+없음: iGame 목록 사용 안 함
 ; None: no iGame list
 MSG_3015054E
+WHDLoad 설치됨: %s
 ; WHDLoad is installed: %s
 MSG_67935CAD
+Kickstart 이미지가 필요한 게임은 Devs:Kickstarts에서 찾습니다 (1.3은 kick34005.A500, 3.1은 kick40068.A1200). Ambiance는 이를 제공할 수 없으며, 직접 가진 Amiga의 ROM이나 Amiga Forever에서 얻어야 합니다.
 ; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 MSG_776C7EC6
+WHDLoad는 하드 디스크에 설치된 게임과 데모를 iGame 목록대로 실행합니다. 이 Amiga에는 설치되어 있지 않습니다.
 ; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
 MSG_5610C80E
+Ambiance는 제작자 사이트 whdload.de에서 WHDLoad 사용자 패키지(무료)를 받아 WHDLoad와 도구를 C:에 넣을 수 있습니다.
 ; Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 MSG_4EA477C4
+압축을 풀려면 xadmaster.library(Aminet: util/arc/xadmaster000.lha)나 C:의 LhA(Aminet: util/arc/lha.run)가 필요합니다. 둘 다 설치되어 있지 않습니다.
 ; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
 MSG_43357FD6
+네트워크가 연결되어 있지 않습니다.
 ; The network is not up.
 MSG_416B0131
+다운로드 중: %lu / %lu KB
 ; Downloading: %lu of %lu KB
 MSG_6A00DB1C
+다운로드 중: %lu KB
 ; Downloading: %lu KB
 MSG_3D0E491A
+WHDLoad 다운로드 및 설치
 ; Download and install WHDLoad
 MSG_2C3D6FCE
+나중에
 ; Not now
 MSG_09E17720
+게임에서 더 이상 묻지 않음
 ; Games stops asking
 MSG_1825F809
+WHDLoad 설치...
 ; Install WHDLoad...
 MSG_1BC13EBC
+네트워크가 연결되어 있지 않음
 ; The network is not up
 MSG_59611893
+압축 해제에는 xadmaster.library 또는 C:LhA 필요
 ; Unpacking needs xadmaster.library or C:LhA
 MSG_098D9D5E
+whdload.de에서 WHDLoad 다운로드 중...
 ; Downloading WHDLoad from whdload.de...
 MSG_1992E186
+WHDLoad 다운로드 중: %lu / %lu KB
 ; Downloading WHDLoad: %lu of %lu KB
 MSG_7B97FA5D
+WHDLoad 다운로드 중: %lu KB
 ; Downloading WHDLoad: %lu KB
 MSG_08C3EAAD
+WHDLoad를 다운로드할 수 없습니다: %.100s
 ; WHDLoad could not be downloaded: %.100s
 MSG_3C373586
+WHDLoad 압축 푸는 중...
 ; Unpacking WHDLoad...
 MSG_5919FA2F
+WHDLoad가 설치되지 않았습니다: %.120s
 ; WHDLoad was not installed: %.120s
 MSG_72928549
+iGame 목록: 게임 %ld개, 데모 %ld개
 ; iGame's list: %ld games, %ld demos
 MSG_7209FC67
+iGame 목록을 읽을 수 없습니다
 ; iGame's list could not be read
 MSG_50BCAC0E
 RTG 전용
@@ -1064,16 +1160,22 @@ MSG_7FF7C0A9
 DVD-Video 디스크
 ; A DVD-Video disc
 MSG_6B41435A
+소리 있음
 ; With sound
 MSG_6524B26D
+소리 없음
 ; No sound
 MSG_3D33D3EB
+트랜스포트 스트림
 ; A transport stream
 MSG_7EB7DE9D
+비디오 전용 스트림
 ; A bare video stream
 MSG_5E08A9DF
+%s 비디오: ZZ9000은 MPEG-1과 MPEG-2를 재생합니다
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_20C6E823
+Ambiance가 읽을 수 있는 MPEG 비디오가 아닙니다
 ; Not an MPEG video Ambiance can read
 MSG_1403F9F1
 %ld프레임, %ld.%ld초
@@ -1298,8 +1400,10 @@ MSG_15E6DCFA
 그 폴더에는 모듈이 없습니다
 ; That folder has no modules
 MSG_7722EDBF
+지금은 iGame 목록을 읽지 않았습니다
 ; iGame's list is not read now
 MSG_1E5D9885
+목록이 비어 있습니다
 ; That list is empty
 MSG_6D9550B1
 그 메뉴를 열 수 없습니다
@@ -1308,6 +1412,7 @@ MSG_3030A110
 그 메뉴는 비어 있습니다
 ; That menu is empty
 MSG_38FE5F25
+iGame 목록에 더 이상 그 항목이 없습니다
 ; iGame's list no longer has that entry
 MSG_0C682AC4
 %ld/%ld   %s   %s%s
@@ -1538,6 +1643,7 @@ MSG_0B620CC7
 MP3: MHI 드라이버 %.40s가 디코딩
 ; MP3: decoded by the MHI driver %.40s
 MSG_7895CD7B
+MP3: ambmpega.library(Ambiance 자체)로 디코딩
 ; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: ZZ9000에서 디코딩 (그 mpega.library)
@@ -1564,6 +1670,7 @@ MSG_586857BF
 사운드: AHI, 16비트
 ; Sound: AHI, 16-bit
 MSG_2350DA18
+사운드: Paula, 14비트
 ; Sound: Paula, 14-bit
 MSG_0F2AADBB
 사운드: Paula, 8비트
@@ -1626,10 +1733,13 @@ MSG_692E7242
 그 폴더는 이미 있습니다
 ; That folder is there already
 MSG_39287765
+iGame 서랍 (gameslist.csv가 있는 곳)
 ; iGame's drawer (with its gameslist.csv)
 MSG_3A1C5C94
+사용
 ; Use
 MSG_0DDD9572
+그곳에 gameslist.csv가 없습니다. iGame에서 검색한 뒤 iGame 자체 서랍을 선택하세요
 ; No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
 MSG_2C2767AF
 스타일: 스무스는 RTG 화면이 필요합니다
@@ -1644,8 +1754,10 @@ MSG_646AFCF3
 MHI가 설치되어 있지 않습니다 (드라이버는 LIBS:MHI에)
 ; MHI is not installed (its drivers in LIBS:MHI)
 MSG_104981CE
+ambmpega.library가 Ambiance의 Libs에 없습니다
 ; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
+MHI와 ZZ9000의 mpega.library는 MP3를 최고 품질로 디코딩합니다
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 지금부터 여는 방송국 목록
@@ -1660,19 +1772,25 @@ MSG_7800A723
 MHI가 MP3 디코딩: 라디오, Plex (최고 음질), 파일
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
 MSG_0AFE96F7
+MP3는 여기서 ambmpega.library(Ambiance 자체)로 디코딩됩니다
 ; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3를 여기서 mpega.library로 디코딩
 ; MP3 decoded here by mpega.library
 MSG_3990C163
+MP3를 높은 품질로, 이 Amiga가 디코딩할 수 있는 속도로
 ; MP3 at high quality, at the rate this Amiga can decode it
 MSG_74E84AE4
+MP3 중간 품질: 작업량 약 10% 감소, 70 dB
 ; MP3 at medium quality: about a tenth less work, 70 dB
 MSG_44A547DD
+이 Amiga의 속도에 따른 MP3 품질, 실행할 때마다 첫 MP3에서 측정
 ; MP3 quality by this Amiga's speed, measured at the first MP3 each run
 MSG_30D664DF
+AHI: 라디오, Plex, 음악 파일, modplug가 믹스하는 모듈 (나머지: Paula)
 ; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
 MSG_0CCDB457
+Paula 14비트: 라디오, Plex, 음악 파일, modplug가 믹스하는 모듈
 ; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 Paula가 모두 재생
@@ -1684,10 +1802,13 @@ MSG_26D6BADA
 %s 제외
 ; %s left out
 MSG_512EE424
+게임에서는 더 이상 WHDLoad를 제안하지 않습니다. 설정 > 폴더 > WHDLoad에서는 계속 가능합니다
 ; Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
 MSG_12706454
+iGame을 찾지 못했습니다: 서랍을 선택하세요
 ; iGame was not found: choose its drawer
 MSG_00B8A52C
+iGame 목록 없음: 게임과 데모는 AGS만 표시
 ; No iGame list: Games and Demos show AGS's alone
 MSG_719F5F36
 버튼을 다시 누르면 이 폴더를 뺍니다 (파일은 남음)
@@ -1699,14 +1820,19 @@ MSG_3BD64F13
 Esc를 한 번 더 누르면 Ambiance를 종료합니다
 ; Press Esc again to quit Ambiance
 MSG_6FC2F840
+재생 중인 항목 없음
 ; Nothing is playing
 MSG_116D42F2
+플러그인 시작 중 (Esc를 누르면 돌아옵니다)
 ; Starting the plug-in (Esc in it to come back)
 MSG_0D724DE5
+Flow에는 그래픽 카드 화면(15~32비트)이 필요합니다
 ; Flow needs a graphics card's screen (15 to 32-bit)
 MSG_4B362E27
+Flow: 이 플레이어는 재생 중인 내용을 알려주지 않습니다
 ; Flow: this player does not say what it plays
 MSG_65839537
+여기에서는 Flow를 표시할 수 없습니다
 ; Flow could not be shown here
 MSG_018386B3
 Ambiance에는 Kickstart 3.0 이상이 필요합니다.\n
@@ -1718,10 +1844,13 @@ MSG_3D0CDD4E
 저장된 화면 모드를 여기서 쓸 수 없음: 자동 사용
 ; Saved screen mode not available here: using Automatic
 MSG_7B47B1F3
+클래식
 ; Classic
 MSG_14BD5320
+레이아웃을 열 수 없어 클래식을 사용합니다
 ; The layout could not be opened: the classic one is used
 MSG_24B72731
+레이아웃은 그래픽 카드의 15~32비트 화면에서 스무스 스타일이 필요합니다
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 MSG_1767B111
 이 모듈을 믹싱하려면 68020 이상이 필요합니다
@@ -1823,15 +1952,19 @@ MSG_487D4FD3
 서버 인증서가 승인되지 않았습니다 (Amiga 시계가 맞나요?)
 ; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_24AC7706
+서버가 청크 방식으로 보냈지만 다운로드는 이를 지원하지 않습니다
 ; The server sent it in chunks, which downloads do not take
 MSG_2A22BBA4
+파일을 쓸 수 없습니다
 ; The file could not be written
 MSG_2ACCD57C
 서버가 응답을 멈췄습니다
 ; The server stopped answering
 MSG_56B1E221
+파일을 쓸 수 없습니다 (디스크가 가득 찼나요?)
 ; The file could not be written (a full disk?)
 MSG_487CBFA7
+다운로드가 중간에 멈췄습니다
 ; The download stopped short
 MSG_05C477DC
 이 네트워크에서 응답한 Plex 서버가 없습니다
@@ -1978,6 +2111,7 @@ MSG_00ABC308
 CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다
 ; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
+그 위치에서 파일을 읽을 수 없습니다
 ; The file could not be read there
 MSG_52A6DB2B
 MHI 드라이버를 열 수 없습니다 (설정 > 사운드)
@@ -2007,23 +2141,31 @@ MSG_2ADCBED0
 백그라운드 재생 프로세스를 시작할 수 없습니다
 ; Could not start the background playback process
 MSG_1A9D11B3
+xadmaster.library를 열 수 없습니다
 ; xadmaster.library could not be opened
 MSG_7A620C10
+압축 파일을 읽을 수 없습니다 (%.60s)
 ; The archive could not be read (%.60s)
 MSG_7A3F22E2
+%.40s의 압축을 풀 수 없습니다 (%.60s)
 ; %.40s could not be unpacked (%.60s)
 MSG_7B4E1B7C
+NIL:을 열 수 없습니다
 ; NIL: could not be opened
 MSG_0DC59A91
+LhA로 압축을 풀 수 없습니다 (반환값 %ld)
 ; LhA could not unpack it (it returned %ld)
 MSG_49AE7BAE
+LhA는 .lha 압축 파일만 풉니다. xadmaster.library를 설치하세요
 ; LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8
+압축을 풀 프로그램이 없습니다. xadmaster.library를 설치하세요 (Aminet util/arc/xadmaster000.lha)
 ; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 MSG_7DFAF53D
 CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다 (Ambiance의 Libs)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 MSG_5EF81658
+MPEG 비디오에는 Picasso96(Picasso96API.library)이 필요합니다
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
 %.80s 불러오는 중
@@ -2053,10 +2195,14 @@ MSG_12773890
 왼쪽
 ; Left
 MSG_00536F32
+패키지에 예상한 WHDLoad가 없습니다
 ; WHDLoad was not in the package as expected
 MSG_712ED6F1
+%.60s을(를) 쓸 수 없습니다
 ; %.60s could not be written
 MSG_3160C36F
+WHDLoad와 프로그램 %ld개를 C:에 넣었습니다
 ; WHDLoad and %ld more programs put in C:
 MSG_04F3511D
+ (이미 있던 %ld개는 유지)
 ;  (%ld already there kept)

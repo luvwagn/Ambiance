@@ -2,8 +2,10 @@
 ## language greek
 ## codeset 0
 MSG_420624D6
+Το AmigaAMP τρέχει: τα plug-in του είναι δικά του
 ; AmigaAMP is running: its plug-ins are its own
 MSG_603B8EB4
+Το plug-in δεν ξεκίνησε
 ; The plug-in could not be started
 MSG_2F1926C3
 Η συμπίεση ANIM-%ld δεν υποστηρίζεται
@@ -12,10 +14,13 @@ MSG_5799A183
 Το DVD δεν διαβάστηκε σε εκείνο το σημείο
 ; The DVD could not be read there
 MSG_48EC1181
+Το βίντεο MPEG παίζει σε οθόνη RTG (AGA αργότερα)
 ; MPEG video plays on an RTG screen (AGA screens to come)
 MSG_21CB4B97
+Το βίντεο MPEG παίζει στην οθόνη της ZZ9000
 ; MPEG video plays on the ZZ9000's display
 MSG_612F22BA
+Το overlay της ZZ9000 δεν άνοιξε σε αυτή την οθόνη
 ; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 Το animation δεν άνοιξε
@@ -84,12 +89,16 @@ MSG_550E04D5
 δεν υπάρχει
 ; not available
 MSG_7C321421
+Μεσάνυχτα
 ; Midnight
 MSG_4C5F9DAD
+Γραφίτης
 ; Graphite
 MSG_634FC3DF
+Σμαράγδι
 ; Emerald
 MSG_2B535442
+Αμέθυστος
 ; Amethyst
 MSG_30386F8F
 true colour
@@ -101,42 +110,61 @@ MSG_0F6E4D56
 %lu χρώματα
 ; %lu colours
 MSG_4C200E59
+Άγνωστο
 ; Unknown
 MSG_225EE315
+Αγαπημένα
 ; Favourites
 MSG_71D22FD0
+Όλα τα demos
 ; All demos
 MSG_27D1E7CF
+Όλα τα παιχνίδια
 ; All games
 MSG_0D5177A9
+Πιο πολυπαιγμένα
 ; Most played
 MSG_68E1C31B
+Ανά είδος
 ; By genre
 MSG_1AEE602E
+Ανά chipset
 ; By chipset
 MSG_2C54891D
+Ανά έτος
 ; By year
 MSG_09C3EF84
+Ανά %.80s
 ; By %.80s
 MSG_109CF70E
+Είδος: %.80s
 ; Genre: %.80s
 MSG_49B0A27E
+Έτος: %lu
 ; Year: %lu
 MSG_6D84AAE5
+Παίκτες: %lu
 ; Players: %lu
 MSG_5CF0FA59
+Chipset: %.80s
 ; Chipset: %.80s
 MSG_6F4C5363
+Παίχτηκε μία φορά
 ; Played once
 MSG_0AB01B08
+Παίχτηκε %lu φορές
 ; Played %lu times
 MSG_6BFB474B
+Αγαπημένο στο iGame
 ; A favourite in iGame
 MSG_0F8B178C
+WHDLoad: %s
 ; WHDLoad: %s
 MSG_542A5985
+Πρόγραμμα: %s
 ; Program: %s
 MSG_6C384865
+Το αρχείο του δεν είναι εκεί (νέα σάρωση στο iGame)
 ; Its file is not there (rescan in iGame)
 MSG_7EBB5FFE
 Δεν γράφτηκε το T:Ambiance-run
@@ -181,10 +209,13 @@ MSG_7E40EC70
 Όλα τα demos
 ; All Demos
 MSG_11815498
+Η λίστα του iGame δεν έχει demos και το Amiga Game Selector δεν βρέθηκε.
 ; iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7
+Η λίστα του iGame δεν έχει παιχνίδια και το Amiga Game Selector δεν βρέθηκε.
 ; iGame's list has no games in it, and Amiga Game Selector was not found.
 MSG_575792EC
+Το Ambiance θεωρεί μια εγγραφή demo όταν το είδος της στο iGame είναι Demo, Intro ή Diskmag, ή όταν βρίσκεται σε συρτάρι με όνομα Demos.
 ; Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 Λείπει το Amiga Game Selector.
@@ -196,6 +227,7 @@ MSG_07BE5AE8
 Το Ambiance ψάχνει το assign AGS:, μετά ένα συρτάρι AGS2 δίπλα στο δικό του και στο WHDLoad:. Βάλτε το Ambiance σε σύστημα AGS 3 ή ξεκινήστε μία φορά το AGS για τα assigns του.
 ; Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
 MSG_195350C5
+Η λίστα του iGame εμφανίζεται κι εδώ, ή στη θέση του AGS: το Ambiance ψάχνει το iGame στην εκκίνηση, ή Ρυθμίσεις > Φάκελοι > iGame ορίζει το συρτάρι του.
 ; iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 Μουσική, Modules, Εικόνες, Βίντεο και Ραδιόφωνο δουλεύουν και χωρίς αυτό: οι Ρυθμίσεις > Φάκελοι λένε πού είναι.
@@ -288,20 +320,25 @@ MSG_74EC33B7
 Assigns του Ambiance (το AGS-Stuff δεν έτρεξε):
 ; Assigns Ambiance added (AGS-Stuff did not run):
 MSG_268D62B2
+iGame: %.120s, %ld παιχνίδια, %ld demos
 ; iGame: %.120s, %ld games, %ld demos
 MSG_6E96DE70
+iGame: %s
 ; iGame: %s
 MSG_2DA7AFDB
 κανένα
 ; none
 MSG_3FF83F26
+δεν διαβάστηκε λίστα
 ; no list read
 MSG_7EF1200C
 λείπει
 ; not installed
 MSG_23160430
+Αποσυμπίεση αρχείων από: %s
 ; Archives unpacked by: %s
 MSG_527DAE8A
+τίποτα
 ; nothing
 MSG_38F75BEF
 Ρύθμιση μηχανής AGS (HW): %s
@@ -331,6 +368,7 @@ MSG_197B8973
 driver MHI
 ; MHI driver
 MSG_71B3588E
+ambmpega.library, του Ambiance
 ; ambmpega.library, Ambiance's own
 MSG_4B721655
 mpega.library του ZZ9000 SDK (στην κάρτα)
@@ -426,10 +464,13 @@ MSG_011FA544
 Smooth: το Fonts/amb-smooth δεν ταιριάζει
 ; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
+Το F στο Παίζει τώρα ξεκινά αυτό το plug-in του AmigaAMP
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
+Flow (plug-in του AmigaAMP: βάλτε τα στο συρτάρι Visuals του Ambiance)
 ; Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 MSG_3DF462B5
+Flow
 ; Flow
 MSG_022C9299
 Χωρίς φάσμα με MHI: παίζει μόνο του το MP3
@@ -438,6 +479,7 @@ MSG_0B3A7E73
 Χωρίς φάσμα: ο player δεν λέει τι παίζει
 ; No spectrum: this player does not say what it plays
 MSG_5E18A4A5
+Flow: το F το δείχνει σε όλη την οθόνη
 ; Flow: F shows it on the whole screen
 MSG_5561FD0B
 Γενικά
@@ -476,8 +518,10 @@ MSG_5B67C80C
 Βίντεο
 ; Video
 MSG_585459EE
+iGame
 ; iGame
 MSG_6E156672
+WHDLoad
 ; WHDLoad
 MSG_1B9AE0BB
 Αγγλικά
@@ -531,6 +575,7 @@ MSG_3C2510A9
 CPU
 ; CPU
 MSG_31213991
+Paula, 14-bit
 ; Paula, 14-bit
 MSG_2D0EBF47
 χωρίς TCP/IP
@@ -545,6 +590,7 @@ MSG_718B9F54
 Μεγάλο
 ; Large
 MSG_05A06546
+Πολύ μεγάλο
 ; Extra large
 MSG_2C041143
 Μέγεθος κειμένου
@@ -565,13 +611,16 @@ MSG_63678BEE
 Διπλό buffer
 ; Double buffering
 MSG_1A29FF2A
+Χρώματα
 ; Colours
 MSG_7788421F
+Διάταξη
 ; Layout
 MSG_20B362A2
 Οπτικοποίηση
 ; Visualisation
 MSG_3311DE2D
+Οπτικοποίηση σε όλη την οθόνη (F)
 ; Full screen visual (F)
 MSG_52325DD8
 Άλμα ανά γράμμα
@@ -583,8 +632,10 @@ MSG_584F0908
 Βίντεο σε δική τους οθόνη
 ; Videos on a screen of their own
 MSG_58B78A34
+Βίντεο MPEG στη ZZ9000
 ; MPEG video on the ZZ9000
 MSG_6DF6A531
+Χρήση overlay όταν υπάρχει (RTG)
 ; Use overlay when available (RTG)
 MSG_71E19418
 Debug (CPU, μνήμη, log)
@@ -695,8 +746,10 @@ MSG_1DE950F6
 4 κανάλια, έως 28kHz, 8-bit
 ; 4 channels, up to 28kHz, 8-bit
 MSG_44E1D951
+Paula, 14-bit: ραδιόφωνο, Plex, αρχεία μουσικής
 ; Paula, 14-bit: radio, Plex, music files
 MSG_34E4E153
+και τα 4 κανάλια, καθαρότερα ήσυχα σημεία
 ; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: ραδιόφωνο, Plex, αρχεία
@@ -708,8 +761,10 @@ MSG_2DA3A6A5
 Αποκωδικοποίηση MP3
 ; MP3 decoder
 MSG_2EEBD2B9
+δεν είναι εγκατεστημένο (Libs του Ambiance)
 ; not installed (Ambiance's Libs)
 MSG_6695A193
+του Ambiance, αποκωδικοποίηση εδώ
 ; Ambiance's own, decoded here
 MSG_3F71ACC2
 στην ZZ9000
@@ -718,20 +773,28 @@ MSG_22FBBBB2
 αποκωδ. και παίζει
 ; decodes and plays
 MSG_55D2D3D8
+Ποιότητα MP3
 ; MP3 quality
 MSG_050221B5
+Ποιότητα MP3: αυτόματη
 ; MP3 quality: automatic
 MSG_71E7648A
+Ποιότητα MP3: υψηλή
 ; MP3 quality: high
 MSG_751F9CE1
+Ποιότητα MP3: μεσαία
 ; MP3 quality: medium
 MSG_04A16198
+κατά ταχύτητα Amiga, μέτρηση ανά εκκίνηση
 ; by this Amiga's speed, measured each run
 MSG_68B10FC3
+η πιο ακριβής
 ; the most accurate
 MSG_313B727C
+~10% λιγότερη δουλειά
 ; about a tenth less work
 MSG_003CBCAE
+η καλύτερη ποιότητα
 ; the decoder gives its best
 MSG_4DEE1DD3
 %ld θέση
@@ -743,6 +806,7 @@ MSG_4A20BCD9
 καμία ακόμα
 ; none yet
 MSG_441A0CA1
+εγκατεστημένο
 ; installed
 MSG_765A3F9A
 Χρήση του assign %s
@@ -763,68 +827,100 @@ MSG_4ACE7BF4
 έως οκτώ
 ; eight at most
 MSG_776C4574
+%ld εγγραφή
 ; %ld entry
 MSG_43A71E80
+%ld εγγραφές
 ; %ld entries
 MSG_1EFF5D20
+καμία λίστα εκεί
 ; no list there
 MSG_556E6088
+Δεν εμφανίζεται λίστα του iGame.
 ; No iGame list is shown.
 MSG_051BBFA8
+Το iGame δεν βρέθηκε.
 ; iGame was not found.
 MSG_407C0CA8
+%.200s: %ld παιχνίδια, %ld demos
 ; %.200s: %ld games, %ld demos
 MSG_58489A07
+%.200s: δεν διαβάστηκε gameslist.csv
 ; %.200s: no gameslist.csv read
 MSG_57A7889A
+Επιλογή συρταριού του iGame...
 ; Choose iGame's drawer...
 MSG_301DA6A7
+Εύρεση iGame
 ; Find iGame
 MSG_451A8225
+Κανένα: χωρίς λίστα iGame
 ; None: no iGame list
 MSG_3015054E
+Το WHDLoad είναι εγκατεστημένο: %s
 ; WHDLoad is installed: %s
 MSG_67935CAD
+Τα παιχνίδια που θέλουν εικόνα Kickstart την ψάχνουν στο Devs:Kickstarts (kick34005.A500 για 1.3, kick40068.A1200 για 3.1). Το Ambiance δεν μπορεί να τις δώσει: προέρχονται από τη ROM του δικού σας Amiga ή από το Amiga Forever.
 ; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 MSG_776C7EC6
+Το WHDLoad ξεκινά παιχνίδια και demos εγκατεστημένα στον σκληρό δίσκο, όπως τα δείχνει το iGame. Δεν είναι εγκατεστημένο σε αυτό το Amiga.
 ; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
 MSG_5610C80E
+Το Ambiance μπορεί να φέρει το πακέτο χρήστη του WHDLoad από τον ιστότοπο του δημιουργού του, whdload.de (δωρεάν), και να βάλει το WHDLoad και τα εργαλεία του στο C:.
 ; Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 MSG_4EA477C4
+Για την αποσυμπίεση χρειάζεται το xadmaster.library (Aminet: util/arc/xadmaster000.lha) ή το LhA στο C: (Aminet: util/arc/lha.run). Κανένα δεν είναι εγκατεστημένο.
 ; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
 MSG_43357FD6
+Το δίκτυο δεν είναι ενεργό.
 ; The network is not up.
 MSG_416B0131
+Λήψη: %lu από %lu KB
 ; Downloading: %lu of %lu KB
 MSG_6A00DB1C
+Λήψη: %lu KB
 ; Downloading: %lu KB
 MSG_3D0E491A
+Λήψη και εγκατάσταση του WHDLoad
 ; Download and install WHDLoad
 MSG_2C3D6FCE
+Όχι τώρα
 ; Not now
 MSG_09E17720
+Όχι άλλη ερώτηση
 ; Games stops asking
 MSG_1825F809
+Εγκατάσταση WHDLoad...
 ; Install WHDLoad...
 MSG_1BC13EBC
+Το δίκτυο δεν είναι ενεργό
 ; The network is not up
 MSG_59611893
+Η αποσυμπίεση θέλει xadmaster.library ή C:LhA
 ; Unpacking needs xadmaster.library or C:LhA
 MSG_098D9D5E
+Λήψη του WHDLoad από το whdload.de...
 ; Downloading WHDLoad from whdload.de...
 MSG_1992E186
+Λήψη WHDLoad: %lu από %lu KB
 ; Downloading WHDLoad: %lu of %lu KB
 MSG_7B97FA5D
+Λήψη WHDLoad: %lu KB
 ; Downloading WHDLoad: %lu KB
 MSG_08C3EAAD
+Το WHDLoad δεν κατέβηκε: %.100s
 ; WHDLoad could not be downloaded: %.100s
 MSG_3C373586
+Αποσυμπίεση WHDLoad...
 ; Unpacking WHDLoad...
 MSG_5919FA2F
+Το WHDLoad δεν εγκαταστάθηκε: %.120s
 ; WHDLoad was not installed: %.120s
 MSG_72928549
+Λίστα του iGame: %ld παιχνίδια, %ld demos
 ; iGame's list: %ld games, %ld demos
 MSG_7209FC67
+Η λίστα του iGame δεν διαβάστηκε
 ; iGame's list could not be read
 MSG_50BCAC0E
 μόνο RTG
@@ -1064,16 +1160,22 @@ MSG_7FF7C0A9
 Ένας δίσκος DVD-Video
 ; A DVD-Video disc
 MSG_6B41435A
+Με ήχο
 ; With sound
 MSG_6524B26D
+Χωρίς ήχο
 ; No sound
 MSG_3D33D3EB
+Ροή μεταφοράς
 ; A transport stream
 MSG_7EB7DE9D
+Σκέτη ροή βίντεο
 ; A bare video stream
 MSG_5E08A9DF
+Βίντεο %s: η ZZ9000 παίζει MPEG-1 και MPEG-2
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_20C6E823
+Δεν είναι βίντεο MPEG που διαβάζει το Ambiance
 ; Not an MPEG video Ambiance can read
 MSG_1403F9F1
 %ld καρέ, %ld,%ld s
@@ -1298,8 +1400,10 @@ MSG_15E6DCFA
 Ο φάκελος δεν έχει modules
 ; That folder has no modules
 MSG_7722EDBF
+Η λίστα του iGame δεν έχει διαβαστεί τώρα
 ; iGame's list is not read now
 MSG_1E5D9885
+Η λίστα είναι άδεια
 ; That list is empty
 MSG_6D9550B1
 Το μενού δεν άνοιξε
@@ -1308,6 +1412,7 @@ MSG_3030A110
 Το μενού είναι άδειο
 ; That menu is empty
 MSG_38FE5F25
+Η λίστα του iGame δεν έχει πια αυτή την εγγραφή
 ; iGame's list no longer has that entry
 MSG_0C682AC4
 %ld/%ld   %s   %s%s
@@ -1538,6 +1643,7 @@ MSG_0B620CC7
 MP3: από τον driver MHI %.40s
 ; MP3: decoded by the MHI driver %.40s
 MSG_7895CD7B
+MP3: αποκωδικοποίηση από το ambmpega.library, του Ambiance
 ; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: στην ZZ9000 (mpega.library της)
@@ -1564,6 +1670,7 @@ MSG_586857BF
 Ήχος: AHI, 16-bit
 ; Sound: AHI, 16-bit
 MSG_2350DA18
+Ήχος: Paula, 14-bit
 ; Sound: Paula, 14-bit
 MSG_0F2AADBB
 Ήχος: Paula, 8-bit
@@ -1626,10 +1733,13 @@ MSG_692E7242
 Ο φάκελος υπάρχει ήδη
 ; That folder is there already
 MSG_39287765
+Το συρτάρι του iGame (με το gameslist.csv του)
 ; iGame's drawer (with its gameslist.csv)
 MSG_3A1C5C94
+Χρήση
 ; Use
 MSG_0DDD9572
+Δεν υπάρχει gameslist.csv εκεί: επιλέξτε το συρτάρι του ίδιου του iGame, μετά από σάρωση στο iGame
 ; No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
 MSG_2C2767AF
 Το στυλ Smooth θέλει οθόνη RTG
@@ -1644,8 +1754,10 @@ MSG_646AFCF3
 Το MHI λείπει (οι drivers του στο LIBS:MHI)
 ; MHI is not installed (its drivers in LIBS:MHI)
 MSG_104981CE
+Το ambmpega.library δεν είναι στα Libs του Ambiance
 ; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
+Το MHI και το mpega.library της ZZ9000 αποκωδικοποιούν MP3 στο καλύτερό τους
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Για λίστες σταθμών από τώρα
@@ -1660,19 +1772,25 @@ MSG_7800A723
 MP3 με MHI: ραδιόφωνο, Plex (άριστη ποιότητα) και αρχεία
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
 MSG_0AFE96F7
+Το MP3 αποκωδικοποιείται εδώ από το ambmpega.library, του Ambiance
 ; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3 εδώ με mpega.library
 ; MP3 decoded here by mpega.library
 MSG_3990C163
+MP3 σε υψηλή ποιότητα, στον ρυθμό που αποκωδικοποιεί αυτό το Amiga
 ; MP3 at high quality, at the rate this Amiga can decode it
 MSG_74E84AE4
+MP3 σε μεσαία ποιότητα: περίπου ένα δέκατο λιγότερη δουλειά, 70 dB
 ; MP3 at medium quality: about a tenth less work, 70 dB
 MSG_44A547DD
+Ποιότητα MP3 με βάση την ταχύτητα αυτού του Amiga, μετριέται στο πρώτο MP3 κάθε εκκίνησης
 ; MP3 quality by this Amiga's speed, measured at the first MP3 each run
 MSG_30D664DF
+AHI: ραδιόφωνο, Plex, αρχεία μουσικής, modules που μιξάρει το modplug (τα άλλα: Paula)
 ; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
 MSG_0CCDB457
+Paula στα 14 bit: ραδιόφωνο, Plex, αρχεία μουσικής, modules που μιξάρει το modplug
 ; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 Η Paula παίζει τα πάντα
@@ -1684,10 +1802,13 @@ MSG_26D6BADA
 %s εκτός
 ; %s left out
 MSG_512EE424
+Τα Παιχνίδια δεν προτείνουν πια WHDLoad: Ρυθμίσεις > Φάκελοι > WHDLoad ακόμα το κάνει
 ; Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
 MSG_12706454
+Το iGame δεν βρέθηκε: επιλέξτε το συρτάρι του
 ; iGame was not found: choose its drawer
 MSG_00B8A52C
+Χωρίς λίστα iGame: Παιχνίδια και Demos δείχνουν μόνο το AGS
 ; No iGame list: Games and Demos show AGS's alone
 MSG_719F5F36
 Fire ξανά: βγαίνει ο φάκελος (όχι τα αρχεία)
@@ -1699,14 +1820,19 @@ MSG_3BD64F13
 Esc ξανά για έξοδο
 ; Press Esc again to quit Ambiance
 MSG_6FC2F840
+Δεν παίζει τίποτα
 ; Nothing is playing
 MSG_116D42F2
+Εκκίνηση του plug-in (Esc μέσα του για επιστροφή)
 ; Starting the plug-in (Esc in it to come back)
 MSG_0D724DE5
+Το Flow θέλει οθόνη κάρτας γραφικών (15 έως 32 bit)
 ; Flow needs a graphics card's screen (15 to 32-bit)
 MSG_4B362E27
+Flow: αυτό το πρόγραμμα δεν λέει τι παίζει
 ; Flow: this player does not say what it plays
 MSG_65839537
+Το Flow δεν εμφανίστηκε εδώ
 ; Flow could not be shown here
 MSG_018386B3
 Το Ambiance θέλει Kickstart 3.0 ή νεότερο.\n
@@ -1718,10 +1844,13 @@ MSG_3D0CDD4E
 Η αποθηκευμένη οθόνη λείπει εδώ: Αυτόματα
 ; Saved screen mode not available here: using Automatic
 MSG_7B47B1F3
+Κλασική
 ; Classic
 MSG_14BD5320
+Η διάταξη δεν άνοιξε: χρησιμοποιείται η κλασική
 ; The layout could not be opened: the classic one is used
 MSG_24B72731
+Οι διατάξεις θέλουν το στυλ Smooth σε οθόνη κάρτας γραφικών 15 έως 32 bit
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Το module θέλει 68020 ή καλύτερο για μίξη
@@ -1823,15 +1952,19 @@ MSG_487D4FD3
 Το πιστοποιητικό του server δεν έγινε δεκτό (είναι σωστό το ρολόι του Amiga;)
 ; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_24AC7706
+Ο διακομιστής το έστειλε σε κομμάτια, κάτι που οι λήψεις δεν δέχονται
 ; The server sent it in chunks, which downloads do not take
 MSG_2A22BBA4
+Το αρχείο δεν γράφτηκε
 ; The file could not be written
 MSG_2ACCD57C
 Ο server σταμάτησε να απαντά
 ; The server stopped answering
 MSG_56B1E221
+Το αρχείο δεν γράφτηκε (γεμάτος δίσκος;)
 ; The file could not be written (a full disk?)
 MSG_487CBFA7
+Η λήψη σταμάτησε πρόωρα
 ; The download stopped short
 MSG_05C477DC
 Κανένας server Plex στο δίκτυο
@@ -1978,6 +2111,7 @@ MSG_00ABC308
 Το MPEG με τη CPU θέλει mpegv.library
 ; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
+Το αρχείο δεν διαβάστηκε εκεί
 ; The file could not be read there
 MSG_52A6DB2B
 Ο driver MHI δεν άνοιξε (Ρυθμίσεις > Ήχος)
@@ -2007,23 +2141,31 @@ MSG_2ADCBED0
 Η διεργασία αναπαραγωγής στο παρασκήνιο δεν ξεκίνησε
 ; Could not start the background playback process
 MSG_1A9D11B3
+Το xadmaster.library δεν άνοιξε
 ; xadmaster.library could not be opened
 MSG_7A620C10
+Το αρχείο συμπίεσης δεν διαβάστηκε (%.60s)
 ; The archive could not be read (%.60s)
 MSG_7A3F22E2
+Το %.40s δεν αποσυμπιέστηκε (%.60s)
 ; %.40s could not be unpacked (%.60s)
 MSG_7B4E1B7C
+Το NIL: δεν άνοιξε
 ; NIL: could not be opened
 MSG_0DC59A91
+Το LhA δεν το αποσυμπίεσε (επέστρεψε %ld)
 ; LhA could not unpack it (it returned %ld)
 MSG_49AE7BAE
+Το LhA αποσυμπιέζει μόνο αρχεία .lha: εγκαταστήστε το xadmaster.library
 ; LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8
+Τίποτα εδώ δεν αποσυμπιέζει αρχεία: εγκαταστήστε το xadmaster.library (Aminet util/arc/xadmaster000.lha)
 ; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 MSG_7DFAF53D
 Το MPEG με τη CPU θέλει mpegv.library (Libs)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 MSG_5EF81658
+Το βίντεο MPEG θέλει Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
 Φόρτωση %.80s
@@ -2053,10 +2195,14 @@ MSG_12773890
 Αριστερό
 ; Left
 MSG_00536F32
+Το WHDLoad δεν ήταν στο πακέτο όπως αναμενόταν
 ; WHDLoad was not in the package as expected
 MSG_712ED6F1
+Το %.60s δεν γράφτηκε
 ; %.60s could not be written
 MSG_3160C36F
+Το WHDLoad και %ld ακόμα προγράμματα μπήκαν στο C:
 ; WHDLoad and %ld more programs put in C:
 MSG_04F3511D
+ (%ld που υπήρχαν ήδη κρατήθηκαν)
 ;  (%ld already there kept)

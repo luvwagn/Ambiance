@@ -2,8 +2,10 @@
 ## language suomi
 ## codeset 0
 MSG_420624D6
+AmigaAMP on käynnissä: sen liitännäiset ovat sen omia
 ; AmigaAMP is running: its plug-ins are its own
 MSG_603B8EB4
+Liitännäistä ei voitu käynnistää
 ; The plug-in could not be started
 MSG_2F1926C3
 ANIM-%ld-pakkausta ei tueta
@@ -12,10 +14,13 @@ MSG_5799A183
 DVD:tä ei voitu lukea siitä kohdasta
 ; The DVD could not be read there
 MSG_48EC1181
+MPEG-video toistuu RTG-näytöllä (AGA tulossa)
 ; MPEG video plays on an RTG screen (AGA screens to come)
 MSG_21CB4B97
+MPEG-video toistuu ZZ9000:n näytöllä
 ; MPEG video plays on the ZZ9000's display
 MSG_612F22BA
+ZZ9000:n overlayta ei voitu avata tällä näytöllä
 ; The ZZ9000's overlay could not be opened on this screen
 MSG_282FBBDC
 Animaatiota ei voitu avata
@@ -84,12 +89,16 @@ MSG_550E04D5
 ei käytettävissä
 ; not available
 MSG_7C321421
+Keskiyö
 ; Midnight
 MSG_4C5F9DAD
+Grafiitti
 ; Graphite
 MSG_634FC3DF
+Smaragdi
 ; Emerald
 MSG_2B535442
+Ametisti
 ; Amethyst
 MSG_30386F8F
 täysvärit
@@ -101,42 +110,61 @@ MSG_0F6E4D56
 %lu väriä
 ; %lu colours
 MSG_4C200E59
+Tuntematon
 ; Unknown
 MSG_225EE315
+Suosikit
 ; Favourites
 MSG_71D22FD0
+Kaikki demot
 ; All demos
 MSG_27D1E7CF
+Kaikki pelit
 ; All games
 MSG_0D5177A9
+Eniten pelatut
 ; Most played
 MSG_68E1C31B
+Lajityypeittäin
 ; By genre
 MSG_1AEE602E
+Piirisarjoittain
 ; By chipset
 MSG_2C54891D
+Vuosittain
 ; By year
 MSG_09C3EF84
+%.80s mukaan
 ; By %.80s
 MSG_109CF70E
+Lajityyppi: %.80s
 ; Genre: %.80s
 MSG_49B0A27E
+Vuosi: %lu
 ; Year: %lu
 MSG_6D84AAE5
+Pelaajia: %lu
 ; Players: %lu
 MSG_5CF0FA59
+Piirisarja: %.80s
 ; Chipset: %.80s
 MSG_6F4C5363
+Pelattu kerran
 ; Played once
 MSG_0AB01B08
+Pelattu %lu kertaa
 ; Played %lu times
 MSG_6BFB474B
+Suosikki iGamessa
 ; A favourite in iGame
 MSG_0F8B178C
+WHDLoad: %s
 ; WHDLoad: %s
 MSG_542A5985
+Ohjelma: %s
 ; Program: %s
 MSG_6C384865
+Tiedostoa ei ole (skannaa uudelleen iGamessa)
 ; Its file is not there (rescan in iGame)
 MSG_7EBB5FFE
 T:Ambiance-run-tiedostoa ei voitu kirjoittaa
@@ -181,10 +209,13 @@ MSG_7E40EC70
 Kaikki demot
 ; All Demos
 MSG_11815498
+iGamen luettelossa ei ole demoja, eikä Amiga Game Selectoria löytynyt.
 ; iGame's list has no demos in it, and Amiga Game Selector was not found.
 MSG_14315CA7
+iGamen luettelossa ei ole pelejä, eikä Amiga Game Selectoria löytynyt.
 ; iGame's list has no games in it, and Amiga Game Selector was not found.
 MSG_575792EC
+Ambiance pitää merkintää demona, kun sen lajityyppi iGamessa on Demo, Intro tai Diskmag tai kun se on Demos-nimisessä laatikossa.
 ; Ambiance takes an entry as a demo when iGame's genre for it is Demo, Intro or Diskmag, or when it is in a drawer named Demos.
 MSG_4D9D0161
 Amiga Game Selectoria ei löytynyt.
@@ -196,6 +227,7 @@ MSG_07BE5AE8
 Ambiance etsii AGS:-liitosta, sitten AGS2-kansiota omansa vierestä ja WHDLoad:ista. Asenna Ambiance AGS 3 -järjestelmään tai käynnistä AGS kerran, jotta sen liitokset ovat olemassa.
 ; Ambiance looks for the AGS: assign, then for an AGS2 drawer next to its own drawer and in WHDLoad:. Install Ambiance on an AGS 3 system, or start AGS once so its assigns exist.
 MSG_195350C5
+iGamen luettelo näkyy myös täällä tai AGS:n tilalla: Ambiance etsii iGamea käynnistyessään, tai Asetukset > Kansiot > iGame kertoo sen laatikon.
 ; iGame's list is shown here too, or in AGS's place: Ambiance looks for iGame when it starts, or Settings > Folders > iGame says where its drawer is.
 MSG_5C6E1F8B
 Musiikki, Modit, Kuvat, Videot ja Radio toimivat ilmankin: Asetukset > Kansiot kertoo, missä musiikkisi, moduulisi, kuvasi ja animaatiosi ovat.
@@ -288,20 +320,25 @@ MSG_74EC33B7
 Ambiance:n lisäämät liitokset (AGS-Stuff ei ollut käynnissä):
 ; Assigns Ambiance added (AGS-Stuff did not run):
 MSG_268D62B2
+iGame: %.120s, %ld peliä, %ld demoa
 ; iGame: %.120s, %ld games, %ld demos
 MSG_6E96DE70
+iGame: %s
 ; iGame: %s
 MSG_2DA7AFDB
 ei mitään
 ; none
 MSG_3FF83F26
+luetteloa ei luettu
 ; no list read
 MSG_7EF1200C
 ei asennettu
 ; not installed
 MSG_23160430
+Arkistot purkaa: %s
 ; Archives unpacked by: %s
 MSG_527DAE8A
+ei mikään
 ; nothing
 MSG_38F75BEF
 AGS:n konevalinta (HW): %s
@@ -331,6 +368,7 @@ MSG_197B8973
 MHI-ajuri
 ; MHI driver
 MSG_71B3588E
+ambmpega.library, Ambiancen oma
 ; ambmpega.library, Ambiance's own
 MSG_4B721655
 ZZ9000 SDK:n mpega.library (puretaan kortilla)
@@ -426,10 +464,13 @@ MSG_011FA544
 Pehmeä: Fonts/amb-smooth ei sovi tähän Ambiance:hen
 ; Smooth: Fonts/amb-smooth does not match this Ambiance
 MSG_3CB0C840
+F Nyt soi -näkymässä käynnistää tämän AmigaAMP-liitännäisen
 ; F on Now playing starts this AmigaAMP plug-in
 MSG_1B723F84
+Flow (AmigaAMP-liitännäiset: Ambiancen Visuals-laatikkoon)
 ; Flow (AmigaAMP plug-ins: put them in Ambiance's Visuals drawer)
 MSG_3DF462B5
+Flow
 ; Flow
 MSG_022C9299
 Ei spektriä MHI:llä: se soittaa MP3:n itse
@@ -438,6 +479,7 @@ MSG_0B3A7E73
 Ei spektriä: soitin ei kerro, mitä se soittaa
 ; No spectrum: this player does not say what it plays
 MSG_5E18A4A5
+Flow: F näyttää sen koko näytöllä
 ; Flow: F shows it on the whole screen
 MSG_5561FD0B
 Yleiset
@@ -476,8 +518,10 @@ MSG_5B67C80C
 Video
 ; Video
 MSG_585459EE
+iGame
 ; iGame
 MSG_6E156672
+WHDLoad
 ; WHDLoad
 MSG_1B9AE0BB
 Englanti
@@ -531,6 +575,7 @@ MSG_3C2510A9
 CPU
 ; CPU
 MSG_31213991
+Paula, 14 bittiä
 ; Paula, 14-bit
 MSG_2D0EBF47
 ei TCP/IP-pinoa
@@ -545,6 +590,7 @@ MSG_718B9F54
 Suuri
 ; Large
 MSG_05A06546
+Erittäin suuri
 ; Extra large
 MSG_2C041143
 Tekstin koko
@@ -565,13 +611,16 @@ MSG_63678BEE
 Kaksoispuskurointi
 ; Double buffering
 MSG_1A29FF2A
+Värit
 ; Colours
 MSG_7788421F
+Asettelu
 ; Layout
 MSG_20B362A2
 Visualisointi
 ; Visualisation
 MSG_3311DE2D
+Koko näytön visualisointi (F)
 ; Full screen visual (F)
 MSG_52325DD8
 Hyppivä vieritys (kirjaimittain)
@@ -583,8 +632,10 @@ MSG_584F0908
 Videot omalla näytöllään
 ; Videos on a screen of their own
 MSG_58B78A34
+MPEG-video ZZ9000:lla
 ; MPEG video on the ZZ9000
 MSG_6DF6A531
+Käytä overlayta, kun saatavilla (RTG)
 ; Use overlay when available (RTG)
 MSG_71E19418
 Vianetsintä (CPU, muisti, loki)
@@ -695,8 +746,10 @@ MSG_1DE950F6
 4 kanavaa, enintään 28kHz, 8 bittiä
 ; 4 channels, up to 28kHz, 8-bit
 MSG_44E1D951
+Paula, 14 bittiä: radio, Plex, musiikkitiedostot
 ; Paula, 14-bit: radio, Plex, music files
 MSG_34E4E153
+kaikki 4 kanavaa, puhtaammat hiljaiset kohdat
 ; all 4 channels, cleaner quiet passages
 MSG_6CB6532B
 AHI: radio, Plex, musiikkitiedostot
@@ -708,8 +761,10 @@ MSG_2DA3A6A5
 MP3-dekooderi
 ; MP3 decoder
 MSG_2EEBD2B9
+ei asennettu (Ambiancen Libs)
 ; not installed (Ambiance's Libs)
 MSG_6695A193
+Ambiancen oma, puretaan täällä
 ; Ambiance's own, decoded here
 MSG_3F71ACC2
 puretaan ZZ9000:lla
@@ -718,20 +773,28 @@ MSG_22FBBBB2
 purkaa ja soittaa
 ; decodes and plays
 MSG_55D2D3D8
+MP3-laatu
 ; MP3 quality
 MSG_050221B5
+MP3-laatu: automaattinen
 ; MP3 quality: automatic
 MSG_71E7648A
+MP3-laatu: korkea
 ; MP3 quality: high
 MSG_751F9CE1
+MP3-laatu: keskitaso
 ; MP3 quality: medium
 MSG_04A16198
+tämän Amigan nopeuden mukaan, mitataan joka käynnistyksellä
 ; by this Amiga's speed, measured each run
 MSG_68B10FC3
+tarkin
 ; the most accurate
 MSG_313B727C
+noin kymmenesosan vähemmän työtä
 ; about a tenth less work
 MSG_003CBCAE
+purkaja antaa parhaansa
 ; the decoder gives its best
 MSG_4DEE1DD3
 %ld paikka
@@ -743,6 +806,7 @@ MSG_4A20BCD9
 ei vielä yhtään
 ; none yet
 MSG_441A0CA1
+asennettu
 ; installed
 MSG_765A3F9A
 Käytä %s-liitosta
@@ -763,68 +827,100 @@ MSG_4ACE7BF4
 enintään kahdeksan
 ; eight at most
 MSG_776C4574
+%ld merkintä
 ; %ld entry
 MSG_43A71E80
+%ld merkintää
 ; %ld entries
 MSG_1EFF5D20
+ei luetteloa siellä
 ; no list there
 MSG_556E6088
+iGame-luetteloa ei näytetä.
 ; No iGame list is shown.
 MSG_051BBFA8
+iGamea ei löytynyt.
 ; iGame was not found.
 MSG_407C0CA8
+%.200s: %ld peliä, %ld demoa
 ; %.200s: %ld games, %ld demos
 MSG_58489A07
+%.200s: gameslist.csv-tiedostoa ei luettu
 ; %.200s: no gameslist.csv read
 MSG_57A7889A
+Valitse iGamen laatikko...
 ; Choose iGame's drawer...
 MSG_301DA6A7
+Etsi iGame
 ; Find iGame
 MSG_451A8225
+Ei mitään: ei iGame-luetteloa
 ; None: no iGame list
 MSG_3015054E
+WHDLoad on asennettu: %s
 ; WHDLoad is installed: %s
 MSG_67935CAD
+Pelit, jotka tarvitsevat Kickstart-levykuvan, etsivät sitä kansiosta Devs:Kickstarts (kick34005.A500 versiolle 1.3, kick40068.A1200 versiolle 3.1). Ambiance ei voi toimittaa niitä: ne tulevat oman Amigasi ROMista tai Amiga Foreverista.
 ; Games that need a Kickstart image look for it in Devs:Kickstarts (kick34005.A500 for 1.3, kick40068.A1200 for 3.1). Ambiance cannot supply those: they come from your own Amiga's ROM, or from Amiga Forever.
 MSG_776C7EC6
+WHDLoad käynnistää kiintolevylle asennetut pelit ja demot, kuten iGame ne luettelee. Sitä ei ole asennettu tähän Amigaan.
 ; WHDLoad starts games and demos installed to hard disk, as iGame lists them. It is not installed on this Amiga.
 MSG_5610C80E
+Ambiance voi hakea WHDLoadin käyttäjäpaketin tekijän sivustolta whdload.de (maksutta) ja asentaa WHDLoadin ja sen työkalut C:hen.
 ; Ambiance can fetch WHDLoad's user package from its author's site, whdload.de (free of charge), and put WHDLoad and its tools in C:.
 MSG_4EA477C4
+Purkamiseen tarvitaan xadmaster.library (Aminet: util/arc/xadmaster000.lha) tai LhA C:ssä (Aminet: util/arc/lha.run). Kumpaakaan ei ole asennettu.
 ; Unpacking it needs xadmaster.library (Aminet: util/arc/xadmaster000.lha) or LhA in C: (Aminet: util/arc/lha.run). Neither is installed.
 MSG_43357FD6
+Verkko ei ole käytössä.
 ; The network is not up.
 MSG_416B0131
+Ladataan: %lu / %lu kt
 ; Downloading: %lu of %lu KB
 MSG_6A00DB1C
+Ladataan: %lu kt
 ; Downloading: %lu KB
 MSG_3D0E491A
+Lataa ja asenna WHDLoad
 ; Download and install WHDLoad
 MSG_2C3D6FCE
+Ei nyt
 ; Not now
 MSG_09E17720
+Pelit lakkaa kysymästä
 ; Games stops asking
 MSG_1825F809
+Asenna WHDLoad...
 ; Install WHDLoad...
 MSG_1BC13EBC
+Verkko ei ole käytössä
 ; The network is not up
 MSG_59611893
+Purkaminen vaatii xadmaster.libraryn tai C:LhA:n
 ; Unpacking needs xadmaster.library or C:LhA
 MSG_098D9D5E
+Ladataan WHDLoadia sivustolta whdload.de...
 ; Downloading WHDLoad from whdload.de...
 MSG_1992E186
+Ladataan WHDLoadia: %lu / %lu kt
 ; Downloading WHDLoad: %lu of %lu KB
 MSG_7B97FA5D
+Ladataan WHDLoadia: %lu kt
 ; Downloading WHDLoad: %lu KB
 MSG_08C3EAAD
+WHDLoadia ei voitu ladata: %.100s
 ; WHDLoad could not be downloaded: %.100s
 MSG_3C373586
+Puretaan WHDLoadia...
 ; Unpacking WHDLoad...
 MSG_5919FA2F
+WHDLoadia ei asennettu: %.120s
 ; WHDLoad was not installed: %.120s
 MSG_72928549
+iGamen luettelo: %ld peliä, %ld demoa
 ; iGame's list: %ld games, %ld demos
 MSG_7209FC67
+iGamen luetteloa ei voitu lukea
 ; iGame's list could not be read
 MSG_50BCAC0E
 vain RTG
@@ -1064,16 +1160,22 @@ MSG_7FF7C0A9
 DVD-Video-levy
 ; A DVD-Video disc
 MSG_6B41435A
+Äänellä
 ; With sound
 MSG_6524B26D
+Ilman ääntä
 ; No sound
 MSG_3D33D3EB
+Siirtovirta
 ; A transport stream
 MSG_7EB7DE9D
+Pelkkä videovirta
 ; A bare video stream
 MSG_5E08A9DF
+%s-video: ZZ9000 toistaa MPEG-1:tä ja MPEG-2:ta
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
 MSG_20C6E823
+Ei MPEG-videota, jota Ambiance osaa lukea
 ; Not an MPEG video Ambiance can read
 MSG_1403F9F1
 %ld kuvaa, %ld,%ld s
@@ -1298,8 +1400,10 @@ MSG_15E6DCFA
 Kansiossa ei ole moduuleja
 ; That folder has no modules
 MSG_7722EDBF
+iGamen luetteloa ei ole nyt luettu
 ; iGame's list is not read now
 MSG_1E5D9885
+Luettelo on tyhjä
 ; That list is empty
 MSG_6D9550B1
 Valikkoa ei voitu avata
@@ -1308,6 +1412,7 @@ MSG_3030A110
 Valikko on tyhjä
 ; That menu is empty
 MSG_38FE5F25
+iGamen luettelossa ei enää ole tätä merkintää
 ; iGame's list no longer has that entry
 MSG_0C682AC4
 %ld/%ld   %s   %s%s
@@ -1538,6 +1643,7 @@ MSG_0B620CC7
 MP3: purkaa MHI-ajuri %.40s
 ; MP3: decoded by the MHI driver %.40s
 MSG_7895CD7B
+MP3: purkaa ambmpega.library, Ambiancen oma
 ; MP3: decoded by ambmpega.library, Ambiance's own
 MSG_59D38C2E
 MP3: puretaan ZZ9000:lla (sen mpega.library)
@@ -1564,6 +1670,7 @@ MSG_586857BF
 Ääni: AHI, 16 bittiä
 ; Sound: AHI, 16-bit
 MSG_2350DA18
+Ääni: Paula, 14 bittiä
 ; Sound: Paula, 14-bit
 MSG_0F2AADBB
 Ääni: Paula, 8 bittiä
@@ -1626,10 +1733,13 @@ MSG_692E7242
 Kansio on jo mukana
 ; That folder is there already
 MSG_39287765
+iGamen laatikko (jossa sen gameslist.csv)
 ; iGame's drawer (with its gameslist.csv)
 MSG_3A1C5C94
+Käytä
 ; Use
 MSG_0DDD9572
+Siellä ei ole gameslist.csv:tä: valitse iGamen oma laatikko, kun olet skannannut iGamessa
 ; No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
 MSG_2C2767AF
 Tyyli: Pehmeä vaatii RTG-näytön
@@ -1644,8 +1754,10 @@ MSG_646AFCF3
 MHI:tä ei ole asennettu (sen ajurit LIBS:MHI:ssä)
 ; MHI is not installed (its drivers in LIBS:MHI)
 MSG_104981CE
+ambmpega.library ei ole Ambiancen Libs-kansiossa
 ; ambmpega.library is not in Ambiance's Libs
 MSG_7B5C3E86
+MHI ja ZZ9000:n mpega.library purkavat MP3:n parhaalla laadulla
 ; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Tästä lähtien avatut asemaluettelot
@@ -1660,19 +1772,25 @@ MSG_7800A723
 MP3:n purkaa MHI: radio, Plex (parhaalla laadulla) ja tiedostot
 ; MP3 decoded by MHI: radio, Plex (at its best quality) and files
 MSG_0AFE96F7
+MP3 puretaan täällä ambmpega.librarylla, Ambiancen omalla
 ; MP3 decoded here by ambmpega.library, Ambiance's own
 MSG_605E617D
 MP3:n purkaa täällä mpega.library
 ; MP3 decoded here by mpega.library
 MSG_3990C163
+MP3 korkealla laadulla, sillä taajuudella, jonka tämä Amiga ehtii purkaa
 ; MP3 at high quality, at the rate this Amiga can decode it
 MSG_74E84AE4
+MP3 keskitason laadulla: noin kymmenesosan vähemmän työtä, 70 dB
 ; MP3 at medium quality: about a tenth less work, 70 dB
 MSG_44A547DD
+MP3-laatu tämän Amigan nopeuden mukaan, mitataan joka käynnistyksen ensimmäisestä MP3:sta
 ; MP3 quality by this Amiga's speed, measured at the first MP3 each run
 MSG_30D664DF
+AHI: radio, Plex, musiikkitiedostot, modplugin miksaamat moduulit (muut: Paula)
 ; AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
 MSG_0CCDB457
+Paula 14 bitillä: radio, Plex, musiikkitiedostot, modplugin miksaamat moduulit
 ; Paula at 14 bits: radio, Plex, music files, modules modplug mixes
 MSG_4975E21A
 Paula soittaa kaiken
@@ -1684,10 +1802,13 @@ MSG_26D6BADA
 %s jätetään pois
 ; %s left out
 MSG_512EE424
+Pelit ei enää tarjoa WHDLoadia: Asetukset > Kansiot > WHDLoad tarjoaa yhä
 ; Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
 MSG_12706454
+iGamea ei löytynyt: valitse sen laatikko
 ; iGame was not found: choose its drawer
 MSG_00B8A52C
+Ei iGame-luetteloa: Pelit ja Demot näyttävät vain AGS:n
 ; No iGame list: Games and Demos show AGS's alone
 MSG_719F5F36
 Tulita uudelleen poistaaksesi kansion (sen tiedostot jäävät)
@@ -1699,14 +1820,19 @@ MSG_3BD64F13
 Paina Esc uudelleen lopettaaksesi Ambiance:n
 ; Press Esc again to quit Ambiance
 MSG_6FC2F840
+Mikään ei soi
 ; Nothing is playing
 MSG_116D42F2
+Käynnistetään liitännäistä (Esc palaa takaisin)
 ; Starting the plug-in (Esc in it to come back)
 MSG_0D724DE5
+Flow vaatii näytönohjaimen näytön (15-32 bittiä)
 ; Flow needs a graphics card's screen (15 to 32-bit)
 MSG_4B362E27
+Flow: tämä soitin ei kerro, mitä se soittaa
 ; Flow: this player does not say what it plays
 MSG_65839537
+Flow'ta ei voitu näyttää tässä
 ; Flow could not be shown here
 MSG_018386B3
 Ambiance vaatii Kickstart 3.0:n tai uudemman.\n
@@ -1718,10 +1844,13 @@ MSG_3D0CDD4E
 Tallennettu näyttötila ei ole käytettävissä täällä: käytetään Automaattista
 ; Saved screen mode not available here: using Automatic
 MSG_7B47B1F3
+Klassinen
 ; Classic
 MSG_14BD5320
+Asettelua ei voitu avata: käytetään klassista
 ; The layout could not be opened: the classic one is used
 MSG_24B72731
+Asettelut vaativat Pehmeä-tyylin näytönohjaimen 15-32-bittisellä näytöllä
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Tämä moduuli vaatii 68020:n tai paremman miksaukseen
@@ -1823,15 +1952,19 @@ MSG_487D4FD3
 Palvelimen varmennetta ei hyväksytty (onko Amigan kello oikeassa?)
 ; The server's certificate was not accepted (is the Amiga's clock right?)
 MSG_24AC7706
+Palvelin lähetti sen paloina, mitä lataukset eivät hyväksy
 ; The server sent it in chunks, which downloads do not take
 MSG_2A22BBA4
+Tiedostoa ei voitu kirjoittaa
 ; The file could not be written
 MSG_2ACCD57C
 Palvelin lakkasi vastaamasta
 ; The server stopped answering
 MSG_56B1E221
+Tiedostoa ei voitu kirjoittaa (levy täynnä?)
 ; The file could not be written (a full disk?)
 MSG_487CBFA7
+Lataus katkesi kesken
 ; The download stopped short
 MSG_05C477DC
 Mikään Plex-palvelin ei vastannut tässä verkossa
@@ -1978,6 +2111,7 @@ MSG_00ABC308
 MPEG-video suorittimella vaatii mpegv.libraryn
 ; MPEG video by the CPU needs mpegv.library
 MSG_7BA5A883
+Tiedostoa ei voitu lukea siitä kohdasta
 ; The file could not be read there
 MSG_52A6DB2B
 MHI-ajuria ei voitu avata (Asetukset > Ääni)
@@ -2007,23 +2141,31 @@ MSG_2ADCBED0
 Taustatoistoprosessia ei voitu käynnistää
 ; Could not start the background playback process
 MSG_1A9D11B3
+xadmaster.librarya ei voitu avata
 ; xadmaster.library could not be opened
 MSG_7A620C10
+Arkistoa ei voitu lukea (%.60s)
 ; The archive could not be read (%.60s)
 MSG_7A3F22E2
+%.40s ei purkautunut (%.60s)
 ; %.40s could not be unpacked (%.60s)
 MSG_7B4E1B7C
+NIL:ää ei voitu avata
 ; NIL: could not be opened
 MSG_0DC59A91
+LhA ei voinut purkaa sitä (palautti %ld)
 ; LhA could not unpack it (it returned %ld)
 MSG_49AE7BAE
+LhA purkaa vain .lha-arkistoja: asenna xadmaster.library
 ; LhA unpacks only .lha archives: install xadmaster.library
 MSG_1AE736A8
+Mikään täällä ei pura arkistoja: asenna xadmaster.library (Aminet util/arc/xadmaster000.lha)
 ; Nothing here unpacks archives: install xadmaster.library (Aminet util/arc/xadmaster000.lha)
 MSG_7DFAF53D
 MPEG-video suorittimella vaatii mpegv.libraryn (Ambiance:n Libs)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
 MSG_5EF81658
+MPEG-video vaatii Picasso96:n (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
 MSG_6A5609A3
 Ladataan %.80s
@@ -2053,10 +2195,14 @@ MSG_12773890
 Vasen
 ; Left
 MSG_00536F32
+WHDLoad ei ollut paketissa odotetusti
 ; WHDLoad was not in the package as expected
 MSG_712ED6F1
+%.60s ei voitu kirjoittaa
 ; %.60s could not be written
 MSG_3160C36F
+WHDLoad ja %ld muuta ohjelmaa asennettu C:hen
 ; WHDLoad and %ld more programs put in C:
 MSG_04F3511D
+ (%ld jo olemassa ollutta säilytetty)
 ;  (%ld already there kept)
