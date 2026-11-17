@@ -10840,6 +10840,23 @@ static void apply_screen_mode(int sm)
     }
     if (sm == screen_mode)
         return;
+    /* The screen already open is the one asked for (Automatic and the mode
+     * it stands for, either way round): the setting changes, the screen
+     * is kept, without closing and opening it again (a flash). */
+    if (!g.wb && (sm == SM_AUTO ? gfx_mode_auto(&caps) : sm) == g.mode) {
+        struct Page *p = cur();
+        screen_mode = sm;
+        save_screen_mode();
+        settings_rebuild();         /* the Display page's row says which */
+        if (p && p->type == PT_LIST) {
+            for (i = 0; i < p->list.count; i++)
+                if (p->list.items[i].action >= ACT_MODE0 && p->list.items[i].action < ACT_MODE0 + SM_COUNT)
+                    p->list.items[i].mark = p->list.items[i].action == ACT_MODE0 + sm ? MARK_RADIO_ON
+                                                                                      : MARK_RADIO_OFF;
+            draw_list_rows(p);      /* the radio marks only: no flash */
+        }
+        return;
+    }
     pages_clear();
     pv_flush();                     /* decoded for this screen */
     ptr_hidden = NULL;              /* a new window comes with its pointer */
