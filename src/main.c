@@ -168,7 +168,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
        ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
-       ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1,
+       ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -11724,6 +11724,40 @@ static void open_plex_settings(void)
     draw_footer();
 }
 
+/* A row saying Plex is off or has no server, chosen: Settings >
+ * Networking > Plex itself, opened as if gone there by hand (the section
+ * left remembered as ever, Back going up through Networking). */
+static void goto_plex_settings(void)
+{
+    struct Page *p;
+    LONG i;
+    int m;
+    for (m = 0; m < nmenu && menu[m] != MOD_SETTINGS; m++)
+        ;
+    if (m >= nmenu)
+        return;
+    menu_sel = m;
+    build_root(MOD_SETTINGS);
+    while (depth > 1)
+        page_pop();                         /* (Settings as left before: its root) */
+    if (!(p = cur()))
+        return;
+    for (i = 0; i < p->list.count; i++)
+        if (p->list.items[i].kind == IT_ACTION && p->list.items[i].action == ACT_NETSET)
+            p->sel = i;
+    if ((p = page_push(PT_LIST, _("Networking")))) {
+        build_net_settings(p);
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].kind == IT_ACTION && p->list.items[i].action == ACT_PLEXSET)
+                p->sel = i;
+        if ((p = page_push(PT_LIST, _("Plex"))))
+            build_plex_settings(p);
+    }
+    focus = FOCUS_CONTENT;
+    amce_log("navigation", "to Settings > Networking > Plex (from a row about Plex)");
+    draw_all();
+}
+
 static void toggle_https(void)
 {
     struct Page *p = cur();
@@ -11921,7 +11955,8 @@ static void build_music_root(struct Page *p)
         return;
     }
     if (!plex.on) {
-        list_add(&p->list, _("Plex is turned off (Settings > Networking > Plex)"), "", "", IT_TEXT);
+        /* (chosen: there, Settings > Networking > Plex) */
+        action_item(p, _("Plex is turned off (Settings > Networking > Plex)"), "", ACT_GOPLEX, MARK_ARROW);
         music_file_rows(p);
         return;
     }
@@ -11939,7 +11974,7 @@ static void build_music_root(struct Page *p)
             it->mark = MARK_ARROW;
     } else {
         /* the server is chosen in Settings (About > Plex in AmigaMCE says more) */
-        list_add(&p->list, _("No Plex server chosen: Settings > Networking > Plex"), "", "", IT_TEXT);
+        action_item(p, _("No Plex server chosen: Settings > Networking > Plex"), "", ACT_GOPLEX, MARK_ARROW);
     }
     music_file_rows(p);
 }
@@ -12792,7 +12827,7 @@ static void radio_open(struct Item *it)
         return;
     }
     if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
-        set_msg(_("No Plex server chosen: Settings > Networking > Plex"));
+        goto_plex_settings();               /* (no server: where one is chosen) */
         return;
     }
     photos = cur() && (cur()->photos || cur()->pics);  /* Pictures' Plex pages */
@@ -12885,8 +12920,10 @@ static int pictures_plex_rows(struct Page *p)
         if (caps.net && (it = list_add_first(&p->list, !plex.on
                                              ? _("Plex photos: Plex is turned off (Settings > Networking > Plex)")
                                              : _("Plex photos: choose a server (Settings > Networking > Plex)"),
-                                             "", "", IT_TEXT)))
-            it->flags |= ITEM_DISABLED;
+                                             "", "", IT_ACTION))) {
+            it->action = ACT_GOPLEX;        /* (chosen: there) */
+            it->mark = MARK_ARROW;
+        }
         return 0;
     }
     amce_strlcpy(lines, plex_photo_libs(), sizeof(lines));
@@ -13905,6 +13942,8 @@ static void act_action(struct Item *it)
         toggle_plex_on();
     else if (it->action == ACT_PLEXSET)
         open_plex_settings();
+    else if (it->action == ACT_GOPLEX)
+        goto_plex_settings();
     else if (it->action == ACT_SOUNDSET)
         open_sound_settings();
     else if (it->action == ACT_GENSET)
