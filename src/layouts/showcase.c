@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.3 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.4 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.3 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.4 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 3;
+const UWORD LibRevision = 4;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -285,20 +285,26 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
 static void draw_home(void)
 {
     const struct LHome *m = H->model(LS_HOME);
-    LONG mw = X(204), ih = Y(48), gap = Y(4), n, y0, i, ip = H->icon_px;
+    LONG mw = X(204), ih = Y(48), gap = Y(4), n, y0, i, ip = H->icon_px, top = Y(20);
+    const struct LImage *logo;
     if (ih < FH + Y(16))
         ih = FH + Y(16);
     background();
     top_right(FALSE);
     if (!m)
         return;
-    /* the menu: its own solid column */
+    /* the menu: its own solid column, Ambiance's logo at its top */
     H->fill(0, 0, (WORD)mw, HT, C_PANEL2);
     H->fill((WORD)(mw - 1), 0, 1, HT, C_LINE);
+    logo = H->logo ? H->logo(C_PANEL2) : NULL;
+    if (logo && logo->w <= mw - X(18)) {
+        H->image(logo, (WORD)X(14), (WORD)Y(10));
+        top = Y(10) + logo->h + Y(10);
+    }
     n = m->n;
-    while (n > 1 && n * ih + (n - 1) * gap > HT - Y(40))
+    while (n > 1 && n * ih + (n - 1) * gap > HT - top - Y(20))
         ih--;                   /* (a short screen: rows a little closer) */
-    y0 = (HT - (n * ih + (n - 1) * gap)) / 2;
+    y0 = top + (HT - top - Y(20) - (n * ih + (n - 1) * gap)) / 2;
     for (i = 0; i < n; i++) {
         BOOL sel = i == m->sel;
         LONG x = X(18), y = y0 + i * (ih + gap), w = X(172), tx = x + X(14);

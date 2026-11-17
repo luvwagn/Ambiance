@@ -100,6 +100,7 @@ struct Page {
     WORD pic_w, pic_h;          /*   as large as fits there, */
     WORD pic_x, pic_y;          /*   drawn there (pic_y < 0: not drawn) */
     const char *note;           /*   and a line or two above it (fixed, not scrolled) */
+    UBYTE plexmark;             /* PT_TEXT: "Works with" Plex's logo at the bottom (Credits) */
 };
 
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
@@ -3515,6 +3516,7 @@ static void build_credits(struct Page *p)
                  "to their authors. Licence texts are in the Licences drawer."));
     p->note = _("This front-end would not be possible without the immense efforts of Paul Vince "
               "and Amiga Game Selector.");
+    p->plexmark = 1;
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
@@ -6888,10 +6890,18 @@ static void np_draw(BOOL full);
  * the top; under it, fixed, the note and the picture, as large as fits in
  * up to two fifths of the pane. The box's height (the picture made first,
  * at its size). */
+/* Credits' "Works with" Plex's logo, under everything: its height */
+static WORD plexmark_h(void)
+{
+    return U(6) + plex_lo_h * g.kint + U(3) + g.font_h;
+}
+
 static WORD text_box_h(struct Page *p, WORD y0, WORD *note_lines)
 {
     WORD avail = g.footer_y - 2 - y0, lh = g.font_h + U(1), note_h = 0, ph;
     *note_lines = 0;
+    if (p->type == PT_TEXT && p->plexmark)
+        avail -= plexmark_h();
     if (p->type != PT_TEXT || !p->pic[0])
         return avail;
     if (p->note) {
@@ -6920,10 +6930,42 @@ static void open_textbox(struct Page *p, WORD y0)
 }
 
 /* The note and the picture under a text page's box. */
+/* Plex's logo (art.c's, in its pens), k times larger, top left at x, y:
+ * a row's runs of one pen each a fill */
+static void draw_plex_logo(WORD x, WORD y)
+{
+    WORD k = g.kint, i, j, r;
+    for (j = 0; j < (WORD)plex_lo_h; j++)
+        for (i = 0; i < (WORD)plex_lo_w; i = r) {
+            UBYTE pen = plex_lo[j * plex_lo_w + i];
+            for (r = i + 1; r < (WORD)plex_lo_w && plex_lo[j * plex_lo_w + r] == pen; r++)
+                ;
+            if (pen != 255)
+                gfx_fill(&g, x + i * k, y + j * k, x + r * k - 1, y + j * k + k - 1, pen);
+        }
+}
+
+/* Credits: "Works with" Plex's logo, as Plex's guidelines allow (to show
+ * that Ambiance works with Plex), and their attribution under it */
+static void draw_plexmark(void)
+{
+    WORD y = g.footer_y - 2 - plexmark_h() + U(6), x = g.pane_x, w;
+    const char *with = _("Works with:");
+    gfx_text(&g, x, y + (plex_lo_h * g.kint - g.font_h) / 2, with, PEN_DIM, PEN_BG, textbox_w(), TS_BODY);
+    x += gfx_textlen(&g, with, TS_BODY) + U(6);
+    draw_plex_logo(x, y);
+    w = plex_lo_w * g.kint;
+    gfx_text(&g, x + w + U(1), y, "*", PEN_DIM, PEN_BG, U(10), TS_BODY);
+    gfx_text(&g, g.pane_x, y + plex_lo_h * g.kint + U(3), "* used under license from Plex", PEN_FAINT,
+             PEN_BG, textbox_w(), TS_BODY);
+}
+
 static void draw_text_picture(struct Page *p)
 {
     WORD lines, lh = g.font_h + U(1), y, i;
     WORD box_h = text_box_h(p, g.list_top, &lines);
+    if (p->plexmark)
+        draw_plexmark();
     if (!p->pic[0])
         return;
     /* a rule under the text, as the title has one over it */
@@ -17203,9 +17245,42 @@ static struct {
 static BOOL lv_pic_made;            /* this frame's made already */
 static ULONG lv_pic_clock;
 
+/* Ambiance's logo for a layout: the smooth one, over the layout's colour */
+static struct LImage lv_logo_im;
+static ULONG *lv_logo_px, lv_logo_bg;
+
+static const struct LImage *lv_logo(ULONG bg)
+{
+    UWORD w, h, nc;
+    const UBYTE *pal, *idx = sm_logo_data(g.sm, &w, &h, &nc, &pal);
+    ULONG i, n;
+    if (!idx)
+        return NULL;
+    if (lv_logo_px && lv_logo_bg == bg)
+        return &lv_logo_im;
+    n = (ULONG)w * h;
+    if (!lv_logo_px && !(lv_logo_px = AllocVec(n * 4, MEMF_ANY)))
+        return NULL;
+    for (i = 0; i < n; i++) {
+        UBYTE v = idx[i];
+        lv_logo_px[i] = v < nc ? ((ULONG)pal[3 * v] << 16) | ((ULONG)pal[3 * v + 1] << 8) | pal[3 * v + 2]
+                               : bg;
+    }
+    lv_logo_bg = bg;
+    lv_logo_im.w = w;
+    lv_logo_im.h = h;
+    lv_logo_im.mod = w;
+    lv_logo_im.px = lv_logo_px;
+    return &lv_logo_im;
+}
+
 static void lv_pics_free(void)
 {
     int i;
+    if (lv_logo_px) {
+        FreeVec(lv_logo_px);
+        lv_logo_px = NULL;
+    }
     for (i = 0; i < LV_PICS; i++) {
         if (lv_pic[i].px)
             FreeVec(lv_pic[i].px);
@@ -17320,6 +17395,7 @@ static void lv_off(BOOL redraw)
     lv.on = FALSE;
     gfx_off = FALSE;
     lv.drawn = -1;
+    settings_rebuild();         /* Display's Colours row: the scheme's again */
     if (redraw && g.win && g.rp)
         draw_all();             /* the classic layout, all of it */
 }
@@ -17377,6 +17453,7 @@ static void lv_activate(void)
     lv.host.icon = h_icon;
     lv.host.icon_px = lk_icon_px(&g);
     lv.host.picture = lv_picture;
+    lv.host.logo = lv_logo;
     lv.host.model = lv_model;
     lv.host.act = lv_act;
     lv.host.tr = h_tr;
@@ -17400,6 +17477,7 @@ static void lv_activate(void)
     lv.drawn = -1;
     gfx_off = TRUE;
     gfx_off_hits = 0;
+    settings_rebuild();         /* Display's Colours row: greyed, the layout's */
     sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)lv.out.bits, (long)g.w,
             (long)g.h, lk_canvas(&lv.out) ? ", drawn off screen" : "");
     amb_log("layout", m);

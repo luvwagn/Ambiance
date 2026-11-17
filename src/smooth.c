@@ -1163,6 +1163,17 @@ static BOOL logo_masks(struct Gfx *g, UWORD w, UWORD h, UWORD nc, const UBYTE *i
     return TRUE;
 }
 
+const UBYTE *sm_logo_data(struct Smooth *s, UWORD *w, UWORD *h, UWORD *nc, const UBYTE **pal)
+{
+    if (!s || !s->logo_w || !s->logo_h)
+        return NULL;
+    *w = s->logo_w;
+    *h = s->logo_h;
+    *nc = s->logo_nc;
+    *pal = s->logo_pal;
+    return s->logo_idx;
+}
+
 BOOL sm_logo(struct Smooth *s, struct Gfx *g)
 {
     UBYTE pens[32];

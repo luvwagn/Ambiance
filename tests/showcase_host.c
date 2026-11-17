@@ -419,6 +419,17 @@ static const void *h_model(int screen)
 
 /* what the layout asked for, as it asked */
 static int acts[64][2], nacts;
+/* a stand-in logo: 120 x 30, a blue box and white */
+static const struct LImage *h_logo(ULONG bg)
+{
+    static ULONG lp[120 * 30];
+    static struct LImage im = { 120, 30, 120, lp };
+    int i;
+    for (i = 0; i < 120 * 30; i++)
+        lp[i] = (i % 120) < 30 ? 0x2266CC : (i / 120 > 8 && i / 120 < 22) ? 0xFFFFFF : bg;
+    return &im;
+}
+
 static void h_act(int what, LONG arg)
 {
     if (nacts < 64) {
@@ -491,6 +502,7 @@ static void run(int w, int h, int bits, const char *font)
     host.icon = h_icon;
     host.icon_px = F.icon_n;
     host.picture = h_picture;
+    host.logo = h_logo;
     host.model = h_model;
     host.act = h_act;
     host.tr = h_tr;

@@ -1124,6 +1124,15 @@ void ui_scheme_apply(int k)
     for (i = 0; i < 12; i++)
         for (c = 0; c < 3; c++)
             ui_palette32[1 + i * 3 + c] = ((ui_schemes[k][i] >> (16 - 8 * c)) & 0xFF) * 0x01010101UL;
+    /* Plex's logo's edges: white and Plex's yellow halved with this
+     * scheme's ground (its yellow is Plex's own, whatever the scheme) */
+    for (c = 0; c < 3; c++) {
+        ULONG bg = (ui_schemes[k][PEN_BG] >> (16 - 8 * c)) & 0xFF;
+        ULONG y = (0xEBAF00UL >> (16 - 8 * c)) & 0xFF;
+        ui_palette32[1 + PEN_PLEX * 3 + c] = y * 0x01010101UL;
+        ui_palette32[1 + PEN_PLEX_W2 * 3 + c] = ((0xFF + bg) / 2) * 0x01010101UL;
+        ui_palette32[1 + PEN_PLEX_Y2 * 3 + c] = ((y + bg) / 2) * 0x01010101UL;
+    }
 }
 
 BOOL gfx_fs_on(void)
@@ -1360,7 +1369,7 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
     wb_npen = 0;
     for (i = 0; i < NUM_UI_PENS; i++) {
         LONG p = -1;
-        if (i > PEN_YELLOW) {               /* (not used: no pen taken for them) */
+        if (i > PEN_PLEX_Y2) {              /* (not used: no pen taken for them) */
             gfx_penmap[i] = gfx_penmap[PEN_BG];
             continue;
         }

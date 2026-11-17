@@ -45,6 +45,7 @@ const char *caps_release_name(UWORD version);
 enum {
     PEN_BG = 0, PEN_BAR, PEN_RULE, PEN_TEXT, PEN_DIM, PEN_WHITE, PEN_HL,
     PEN_SELDIM, PEN_ACCENT, PEN_KEYCAP, PEN_FAINT, PEN_YELLOW,
+    PEN_PLEX, PEN_PLEX_W2, PEN_PLEX_Y2,    /* Plex's logo: its yellow; white and yellow halved with PEN_BG */
     NUM_UI_PENS = 16,    /* Ambiance's pens are 0-15; 16-31 keep the screen's colours */
     POINTER_PEN0 = 17    /* 17-19: the mouse pointer's colours, from the user's prefs */
 };
@@ -249,6 +250,8 @@ UWORD sm_scale(const struct Smooth *s);                 /* x 256 */
 UWORD sm_baseline(const struct Smooth *s);
 BOOL sm_logo(struct Smooth *s, struct Gfx *g);      /* fills g->logo_* masks and pens */
 BOOL sm_logo_file(struct Gfx *g, UWORD scale);      /* pixel style, deep RTG: smooth logo */
+/* the smooth logo as it is stored: w x h indices into nc colours (r, g, b), 255 none */
+const UBYTE *sm_logo_data(struct Smooth *s, UWORD *w, UWORD *h, UWORD *nc, const UBYTE **pal);
 BOOL sm_bigletter(struct Smooth *s, UBYTE c, WORD ink_h, struct BigLetter *bl);
 UBYTE sm_pen(struct Smooth *s, struct Gfx *g, UBYTE fg, UBYTE bg, UBYTE level);
 UWORD sm_pens_used(const struct Smooth *s);     /* pens its shades and logo took */
@@ -1013,6 +1016,8 @@ void tb_refresh_bar(struct Gfx *g, struct TextBox *tb);
 /* ---------------------------------------------------------------- art */
 extern const UBYTE logo_lo[];
 extern const UWORD logo_lo_w, logo_lo_h;
+extern const UBYTE plex_lo[];          /* Plex's logo in pens (255: none), for Credits */
+extern const UWORD plex_lo_w, plex_lo_h;
 extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
 extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */

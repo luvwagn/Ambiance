@@ -210,6 +210,9 @@ struct LayoutHost {
     /* pictures: prepared in the background, NULL until ready (then
      * changed(LC_IMAGE)); good until the layout's call returns */
     const struct LImage *(*picture)(const char *file, UWORD w, UWORD h);
+    /* Ambiance's logo, at the screen's smooth size, over bg (0xRRGGBB); NULL
+     * if there is none. Good until the layout closes. */
+    const struct LImage *(*logo)(ULONG bg);
     /* the content */
     const void *(*model)(int screen);   /* struct LHome, LPage, LAlbum, LArtist or LNow */
     void (*act)(int what, LONG arg);    /* LAC_* */
