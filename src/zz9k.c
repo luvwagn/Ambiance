@@ -3,9 +3,10 @@
  * decoded on the card, shown on its overlay, its sound given back)
  * Copyright (c) 2026 Brian King, MIT licence
  *
- * The only file built with the ZZ9000 SDK's headers (third_party/zz9k-sdk:
- * MIT; zz9k.library itself is GPL-3, with a section 7 permission for any
- * program that opens it and calls it through these headers). Its request builders and reply decoders
+ * The only file built with the ZZ9000 SDK's headers (MIT, fetched by the
+ * Makefile: third_party/zz9k-sdk.txt; zz9k.library itself is GPL-3, with a
+ * section 7 permission for any program that opens it and calls it through
+ * these headers). Its request builders and reply decoders
  * (zz9k/request.h, reply.h) make each call; zz9k.library carries it
  * (ZZ9KCall; before 2.34, zz_call's own wait), shared safely with the
  * card's picture datatype, mpega and AmiSSL. The UI and the playback process both call it: the library

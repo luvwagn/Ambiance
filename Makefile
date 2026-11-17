@@ -115,11 +115,30 @@ build/cpucheck.o: src/cpucheck.c
 	@echo "  CC    $@ (68000)"
 	@$(CC) $(filter-out $(CPU),$(CFLAGS)) -m68000 -c -o $@ $<
 
-# The ZZ9000 SDK's headers (MIT: third_party/zz9k-sdk/README.txt), for zz9k.c only
-ZZ9K_SDK = third_party/zz9k-sdk
-ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/amiga-include -I$(ZZ9K_SDK)/include -I$(ZZ9K_SDK)/host-include \
+# The ZZ9000 SDK's headers, for zz9k.c only (MIT: third_party/zz9k-sdk.txt):
+# fetched from BlitterStudio's zz9000-firmware at the commit pinned here,
+# only sdk/'s three header folders and the licence texts (a sparse, shallow
+# fetch, about 600 KB), into build/zz9k-sdk, kept by make clean. To move to
+# a newer SDK, change ZZ9K_SDK_COMMIT (the next build fetches it).
+ZZ9K_SDK_REPO   = https://github.com/BlitterStudio/zz9000-firmware.git
+ZZ9K_SDK_COMMIT = 6de721a01349756211133aaffc6679b1d1596c51
+ZZ9K_SDK        = build/zz9k-sdk
+ZZ9K_SDK_STAMP  = $(ZZ9K_SDK)/.fetched-$(ZZ9K_SDK_COMMIT)
+ZZ9K_CFLAGS = -I$(ZZ9K_SDK)/sdk/amiga/include -I$(ZZ9K_SDK)/sdk/include -I$(ZZ9K_SDK)/sdk/host/include \
               -Wno-unused-function -Wno-sign-compare
 build/zz9k.o: CFLAGS += $(ZZ9K_CFLAGS)
+build/zz9k.o: $(ZZ9K_SDK_STAMP)
+
+$(ZZ9K_SDK_STAMP):
+	@echo "  FETCH ZZ9000 SDK headers ($(ZZ9K_SDK_COMMIT))"
+	@rm -rf $(ZZ9K_SDK) && mkdir -p $(ZZ9K_SDK)
+	@cd $(ZZ9K_SDK) && git init -q && git remote add origin $(ZZ9K_SDK_REPO) \
+		&& git sparse-checkout set --no-cone /sdk/amiga/include/ /sdk/include/ /sdk/host/include/ \
+		     /sdk/LICENSES/MIT.txt /LICENSING.md \
+		&& git fetch -q --depth 1 --filter=blob:none origin $(ZZ9K_SDK_COMMIT) \
+		&& git checkout -q FETCH_HEAD
+	@test -f $(ZZ9K_SDK)/sdk/amiga/include/proto/zz9k.h || { echo "ZZ9000 SDK headers not fetched"; exit 1; }
+	@touch $@
 
 # four frames of AC-3 (5.1, 448 kbit/s: a DVD's kind) that stream.c times
 # each AC-3 library on, to use the faster here (an FPU's build is not
@@ -258,7 +277,7 @@ check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(J
 		$(JDT)=datatypes/jpeg/amcejpeg.c \
 		$(foreach l,$(LAYOUT_NAMES),build/layouts/$(l).layout=src/layouts/$(l).c)
 
-check-syscalls: $(SRCS) src/amce.h build/ac3probe.h
+check-syscalls: $(SRCS) src/amce.h build/ac3probe.h $(ZZ9K_SDK_STAMP)
 	@mkdir -p $(ASM_DIR)
 	@set -e; for f in $(SRCS); do \
 		$(CC) $(CFLAGS) $$( [ $$f = src/zz9k.c ] && echo '$(ZZ9K_CFLAGS)' ) \

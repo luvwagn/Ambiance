@@ -1,0 +1,23 @@
+ZZ9000 SDK headers (BlitterStudio's zz9000-firmware, sdk/), for AmigaMCE's
+ZZ9000 video player (src/zz9k.c) only. Not kept in this repository: the
+Makefile fetches them, unchanged, at the commit it pins (ZZ9K_SDK_COMMIT),
+into build/zz9k-sdk:
+
+  sdk/amiga/include   zz9k.library's and mpega.library's proto, clib,
+                      inline, pragmas
+  sdk/include         zz9k/abi.h and the SDK's types
+  sdk/host/include    zz9k/request.h, reply.h: the media session's request
+                      builders and reply decoders
+  sdk/LICENSES/MIT.txt, LICENSING.md
+
+https://github.com/BlitterStudio/zz9000-firmware
+
+LICENCE: these headers are MIT (each file's SPDX line), except
+sdk/include/zz9k/module.h and service_registry.h (GPL; fetched with the
+folder, not included by AmigaMCE). zz9k.library and mpega.library
+themselves are GPL-3.0-or-later, with an additional permission under GPL-3
+section 7 that lets any program, whatever its licence, open them with
+OpenLibrary() and call their public functions through the MIT headers
+(LICENSING.md). AmigaMCE compiles in only those headers and opens
+zz9k.library at run time; no library source or object code (zz9k_host.o
+included) is built in.
