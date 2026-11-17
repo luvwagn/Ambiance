@@ -2379,9 +2379,14 @@ void gfx_fill_bg(struct Gfx *g, WORD x0, WORD y0, WORD x1, WORD y1)
         return;
     SetAPen(g->rp, GPEN(PEN_BG));
     if (g->planar && g->depth > 3) {
+        /* the high planes, then the low ones: each plane written once (a
+         * second fill of all of them wrote planes 3+ twice) */
         SetWriteMask(g->rp, 0xF8);
         RectFill(g->rp, x0, y0, x1, y1);
+        SetWriteMask(g->rp, 0x07);
+        RectFill(g->rp, x0, y0, x1, y1);
         SetWriteMask(g->rp, 0xFF);
+        return;
     }
     RectFill(g->rp, x0, y0, x1, y1);
 }
@@ -2749,6 +2754,12 @@ static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
     static const UBYTE still[4] = { 3, 5, 4, 6 };
     WORD n = g->mark_px, bw = n * 2 / 11, gap, i, left;
     const UBYTE *h = gfx_eq_still ? still : gfx_eq_kind == 1 ? gfx_eq_lev : dance[gfx_eq_frame & 7];
+    UBYTE was = g->rp->Mask;
+    /* A frame every 120 ms, in the header and a playing row: their pens are
+     * below 8 and the planes above clear there, so on a native screen
+     * planes 0-2 only (within what the caller allows) */
+    if (g->planar && fg < 8 && bg < 8)
+        SetWriteMask(g->rp, was & 0x07);
     if (gfx_eq_kind == 2 && !gfx_eq_still) {
         /* the meters': left and right, two bars across, from the left */
         WORD th = n * 3 / 11 > 1 ? n * 3 / 11 : 1, y0 = y + n * 2 / 11, y1 = y + n * 6 / 11;
@@ -2759,6 +2770,8 @@ static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
                 len = 1;
             gfx_fill(g, x, yy, x + len - 1, yy + th - 1, fg);
         }
+        if (g->planar)
+            SetWriteMask(g->rp, was);
         return;
     }
     if (bw < 1)
@@ -2774,6 +2787,8 @@ static void eq_bars(struct Gfx *g, WORD x, WORD y, UBYTE fg, UBYTE bg)
             bh = 1;
         gfx_fill(g, bx, y + n - bh, bx + bw - 1, y + n - 1, fg);
     }
+    if (g->planar)
+        SetWriteMask(g->rp, was);
 }
 
 void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
