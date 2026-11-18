@@ -2086,6 +2086,31 @@ static void nb_glyph(int b, BOOL playing, LONG cx, LONG cy, LONG s, ULONG c)
         H->frame((WORD)(cx - w / 2), (WORD)(cy - s / 3), (WORD)w, (WORD)(s * 2 / 3), t * 2 / 3 > 1 ? t * 2 / 3 : 1, c);
         tri(cx + w / 6, cy - s / 3, s / 2, 1, c);
         break;
+    case LNB_MENU:              /* three lines */
+        H->fill((WORD)(cx - w / 2), (WORD)(cy - s / 3 - t / 2), (WORD)w, (WORD)t, c);
+        H->fill((WORD)(cx - w / 2), (WORD)(cy - t / 2), (WORD)w, (WORD)t, c);
+        H->fill((WORD)(cx - w / 2), (WORD)(cy + s / 3 - t / 2), (WORD)w, (WORD)t, c);
+        break;
+    case LNB_FULL: {            /* four corners: out (to full screen), or in (playing: back) */
+        LONG L = s / 3, k, a = s / 2, g2 = s / 8 + t / 2;
+        for (k = 0; k < 4; k++) {
+            LONG dx = k & 1 ? 1 : -1, dy = k & 2 ? 1 : -1, ex, ey, hx, vy;
+            if (!playing) {     /* out: the corners' points outwards, arms inwards */
+                ex = cx + dx * a;
+                ey = cy + dy * a;
+                dx = -dx;
+                dy = -dy;
+            } else {            /* in: their points by the middle, arms outwards */
+                ex = cx + dx * g2;
+                ey = cy + dy * g2;
+            }
+            hx = dx > 0 ? ex : ex - L + 1;
+            vy = dy > 0 ? ey : ey - L + 1;
+            H->fill((WORD)hx, (WORD)(dy > 0 ? ey : ey - t + 1), (WORD)L, (WORD)t, c);
+            H->fill((WORD)(dx > 0 ? ex : ex - t + 1), (WORD)vy, (WORD)t, (WORD)L, c);
+        }
+        break;
+    }
     case LNB_MUTE: case LNB_VDOWN: case LNB_VUP: {
         LONG gw = s * 6 / 5, bx = cx - gw / 2, a = s / 5 > 2 ? s / 5 : 2, cw = s * 2 / 5, j;
         LONG sx = bx + a + cw + s / 6, sw = bx + gw - sx;
@@ -2108,6 +2133,21 @@ static void nb_glyph(int b, BOOL playing, LONG cx, LONG cy, LONG s, ULONG c)
 }
 
 /* The buttons: round, the transport in the middle, the volume at the right */
+/* A button: a glass bead s across at x, y (big: Play's, the chosen blue),
+ * a lit rim, a face lighter at its top, a gleam; foc: in its glow */
+static void bead(LONG x, LONG y, LONG s, BOOL big, BOOL foc)
+{
+    ULONG bgc = grad(y + s / 2), face = big ? C_FOCUS : foc ? C_HOVER : C_BTN;
+    ULONG rim = mix(C_ACC, face, 2, 5), outc = foc ? mix(mix(C_ACC, C_FOCUS, 1, 2), bgc, 1, 8) : OUT_GRAD;
+    LONG gw = s * 3 / 5, gh = s / 4;
+    if (foc)
+        glow(x, y, s, s, s / 2, bgc);
+    rsmooth(x, y, s, s, s / 2, mix(rim, C_WHITE, 1, 4), rim, outc);
+    rsmooth(x + 1, y + 1, s - 2, s - 2, s / 2 - 1, mix(face, C_WHITE, 1, 5), mix(face, C_BOT, 1, 3), rim);
+    rsmooth(x + (s - gw) / 2, y + s / 14 + 1, gw, gh, gh / 2, mix(face, C_WHITE, 2, 5), mix(face, C_WHITE, 1, 8),
+            mix(face, C_WHITE, 1, 5));
+}
+
 static void now_buttons(const struct LNow *n, LONG by, LONG bh)
 {
     static const signed char order[LNB_COUNT] = { LNB_PREV, LNB_BACK, LNB_PLAY, LNB_STOP, LNB_FWD,
@@ -2124,8 +2164,7 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
         BOOL off = (n->off & LNB_BIT(b)) != 0, on = (n->on & LNB_BIT(b)) != 0;
         BOOL isbig = b == LNB_PLAY, foc = n->btn == b || HOVER(HT_BUTTON, b);
         LONG s = isbig ? big : bh, yy = by + bh / 2 - s / 2;
-        ULONG bgc = grad(yy + s / 2);
-        ULONG face = isbig ? C_FOCUS : C_BTN, fg = off ? C_DIM : on ? C_ACC : C_WHITE;
+        ULONG fg = off ? C_DIM : on ? C_ACC : C_WHITE;
         if (i < 6) {
             x = x0;
             x0 += s + gap;
@@ -2141,19 +2180,7 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
                 rx += vw + gap;
             }
         }
-        /* a glass bead: a lit rim, a face lighter at its top, a gleam */
-        if (foc)
-            glow(x, yy, s, s, s / 2, bgc);
-        if (foc && !isbig)
-            face = C_HOVER;
-        {
-            ULONG rim = mix(C_ACC, face, 2, 5), outc = foc ? mix(mix(C_ACC, C_FOCUS, 1, 2), bgc, 1, 8) : OUT_GRAD;
-            LONG gw = s * 3 / 5, gh = s / 4;
-            rsmooth(x, yy, s, s, s / 2, mix(rim, C_WHITE, 1, 4), rim, outc);
-            rsmooth(x + 1, yy + 1, s - 2, s - 2, s / 2 - 1, mix(face, C_WHITE, 1, 5), mix(face, C_BOT, 1, 3), rim);
-            rsmooth(x + (s - gw) / 2, yy + s / 14 + 1, gw, gh, gh / 2, mix(face, C_WHITE, 2, 5),
-                    mix(face, C_WHITE, 1, 8), mix(face, C_WHITE, 1, 5));
-        }
+        bead(x, yy, s, isbig, foc);
         nb_glyph(b, isbig && !n->paused && !n->stopped, x + s / 2, yy + s / 2, s * 2 / 5, fg);
         if (!off)
             hit(x, yy, s, s, HT_BUTTON, 0, b);
@@ -2192,6 +2219,130 @@ static void now_time(const struct LNow *n, BOOL with_hit)
         tnum(tx + tw - zw, ty, z, LF_SMALL, C_BODY, &bg_grad);
     } else {
         text(tx, ty, lower(H->tr("Stopped: Play starts it again")), LF_SMALL, C_SUB, &bg_grad, tw);
+    }
+}
+
+/* ---------------------------------------------------------------- a slideshow's and a video's controls
+ * Along the foot of the screen, as Now playing's: the gradient there and a
+ * horizon over it; what is shown, and a video's time and bar, in a line;
+ * under it the buttons, glass beads, the transport in the middle, the
+ * volume and full screen at the right. */
+#define CT_BH Y(34)
+static LONG ct_tx, ct_ty = -1, ct_tw;   /* the time row, as drawn */
+static WORD hz_controls_h(BOOL timed)
+{
+    (void)timed;
+    return (WORD)(Y(14) + FH + Y(14) + CT_BH / 6 + CT_BH + CT_BH / 6 + Y(12));
+}
+
+static BOOL ct_right(int b)
+{
+    return b == LNB_LOOP || b == LNB_MUTE || b == LNB_VDOWN || b == LNB_VUP || b == LNB_FULL;
+}
+
+/* A video's time: where it is, a bar, how long (the bar: its seek place) */
+static void ct_time(struct LControls *c)
+{
+    char b1[16], b2[16];
+    const char *a = mmss(c->at_ms, b1), *z = c->total_ms ? mmss(c->total_ms, b2) : "";
+    LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = ct_tx + aw + X(10);
+    LONG bw = ct_tx + ct_tw - zw - X(10) - bx, bby = ct_ty + FH / 2 - 1;
+    tnum(ct_tx, ct_ty, a, LF_SMALL, C_BODY, &bg_grad);
+    c->seek_w = 0;
+    if (bw > 8) {
+        H->fill((WORD)bx, (WORD)bby, (WORD)bw, 2, C_FAINT);
+        if (c->total_ms) {
+            LONG f = (LONG)((c->at_ms / 100) * bw / (c->total_ms / 100 ? c->total_ms / 100 : 1));
+            if (f > bw)
+                f = bw;
+            if (f > 0)
+                H->fill((WORD)bx, (WORD)bby, (WORD)f, 2, C_ACC);
+            rshape(bx + f - 4, bby - 3, 8, 8, 4, C_WHITE);
+            c->seek_x = (WORD)bx;
+            c->seek_y = (WORD)(ct_ty - Y(2));
+            c->seek_w = (WORD)bw;
+            c->seek_h = (WORD)(FH + Y(4));
+        }
+    }
+    if (*z)
+        tnum(ct_tx + ct_tw - zw, ct_ty, z, LF_SMALL, C_BODY, &bg_grad);
+}
+
+static void hz_controls(struct LControls *c, ULONG what)
+{
+    LONG x0 = c->x, y0 = c->y, w = c->w, ty = y0 + Y(14), bh = CT_BH, big = bh + bh / 3;
+    LONG by = ty + FH + Y(14) + bh / 6, gap = X(12), vw = X(64), cw = 0, rw = 0, i, x, rx, lx = x0 + X(28);
+    if (what == LC_PLAYING) {
+        if (c->timed && ct_ty >= 0) {   /* the time alone, over what was there (clear of the glows) */
+            back_at(ct_tx, ct_ty - Y(4), ct_tx + ct_tw, ct_ty + FH + Y(2));
+            ct_time(c);
+        }
+        return;
+    }
+    back_at(x0, y0, x0 + w, y0 + c->h);
+    horizon_line(x0, y0, w);
+    /* the line: what it is, then the time, or the picture's details at the right */
+    {
+        LONG tw = tlen(c->title ? c->title : "", LF_BOLD), most = c->timed ? w * 35 / 100 : w / 2;
+        if (tw > most)
+            tw = most;
+        text(lx, ty, c->title, LF_BOLD, C_TEXT, &bg_grad, tw);
+        ct_ty = -1;
+        if (c->timed) {
+            ct_tx = lx + tw + X(24);
+            ct_ty = ty;
+            ct_tw = x0 + w - X(28) - ct_tx;
+            ct_time(c);
+        } else if (c->detail && *c->detail) {
+            LONG dw = tlen(c->detail, LF_SMALL), room = x0 + w - X(28) - (lx + tw + X(24));
+            if (dw > room)
+                dw = room;
+            if (dw > 0)
+                text(x0 + w - X(28) - dw, ty, c->detail, LF_SMALL, C_SUB, &bg_grad, dw);
+        }
+    }
+    /* the buttons: the transport's width, and the right's (the volume between - and +) */
+    for (i = 0; i < c->n; i++) {
+        LONG s = c->btn[i] == LNB_PLAY ? big : bh;
+        if (ct_right(c->btn[i]))
+            rw += s + gap + (c->btn[i] == LNB_VDOWN && c->has_volume ? vw + gap : 0);
+        else
+            cw += s + gap;
+    }
+    cw -= gap;
+    rx = x0 + w - X(28) - (rw - gap);
+    x = x0 + (w - cw) / 2;
+    if (x + cw + gap > rx)
+        x = rx - gap - cw;
+    if (x < lx)
+        x = lx;
+    for (i = 0; i < c->n; i++) {
+        int b = c->btn[i];
+        BOOL off = (c->off & LNB_BIT(b)) != 0, on = (c->on & LNB_BIT(b)) != 0, isbig = b == LNB_PLAY;
+        BOOL foc = !off && (c->focus == i || c->hover == i);
+        LONG s = isbig ? big : bh, yy = by + bh / 2 - s / 2, bx;
+        ULONG fg = off ? C_DIM : on && b != LNB_FULL ? C_ACC : C_WHITE;
+        if (ct_right(b)) {
+            bx = rx;
+            rx += s + gap;
+            if (b == LNB_VDOWN && c->has_volume) {
+                LONG vy = by + bh / 2 - 1, f = vw * c->volume / 64;
+                H->fill((WORD)rx, (WORD)vy, (WORD)vw, 2, C_FAINT);
+                if (f > 0)
+                    H->fill((WORD)rx, (WORD)vy, (WORD)f, 2, C_ACC);
+                rsmooth(rx + f - 4, vy - 3, 9, 8, 4, C_WHITE, C_SUB, OUT_GRAD);
+                rx += vw + gap;
+            }
+        } else {
+            bx = x;
+            x += s + gap;
+        }
+        bead(bx, yy, s, isbig, foc);
+        nb_glyph(b, b == LNB_FULL ? on : isbig && !c->paused, bx + s / 2, yy + s / 2, s * 2 / 5, fg);
+        c->at[i].x = (WORD)bx;
+        c->at[i].y = (WORD)yy;
+        c->at[i].w = (WORD)s;
+        c->at[i].h = (WORD)s;
     }
 }
 
@@ -2909,5 +3060,5 @@ const struct LayoutEngine layout_engine = {
     LAYOUT_ABI, "Horizon", 15, 480,
     LS_BIT(LS_HOME) | LS_BIT(LS_PAGE) | LS_BIT(LS_NOW) | LS_BIT(LS_ALBUMS) | LS_BIT(LS_ALBUM) |
         LS_BIT(LS_ARTIST),
-    hz_open, hz_close, hz_draw, hz_changed, hz_tick, hz_input, hz_pointer
+    hz_open, hz_close, hz_draw, hz_changed, hz_tick, hz_input, hz_pointer, hz_controls_h, hz_controls
 };

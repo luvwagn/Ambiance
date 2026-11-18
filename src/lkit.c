@@ -19,6 +19,8 @@ struct LkTarget {
     struct BitMap *bm;
     struct RastPort rp;
     long x0, y0, x1, y1;        /* changed: x0 > x1 when nothing */
+    long oy;                    /* a strip's (lk_open_strip): the screen's row its top is */
+    BOOL own;                   /* bm is the output's own (the canvas), freed with it */
 };
 
 static struct RastPort *target_rp(struct LkTarget *t)
@@ -53,14 +55,14 @@ static void rtg_fill(void *ctx, long x, long y, long w, long h, unsigned long rg
 {
     struct LkTarget *t = ctx;
     touched(t, x, y, w, h);
-    FillPixelArray(target_rp(t), (UWORD)x, (UWORD)y, (UWORD)w, (UWORD)h, (ULONG)rgb);
+    FillPixelArray(target_rp(t), (UWORD)x, (UWORD)(y - t->oy), (UWORD)w, (UWORD)h, (ULONG)rgb);
 }
 
 static void rtg_rows(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
 {
     struct LkTarget *t = ctx;
     touched(t, x, y, w, h);
-    WritePixelArray((APTR)px, 0, 0, (UWORD)(mod * 4), target_rp(t), (UWORD)x, (UWORD)y, (UWORD)w,
+    WritePixelArray((APTR)px, 0, 0, (UWORD)(mod * 4), target_rp(t), (UWORD)x, (UWORD)(y - t->oy), (UWORD)w,
                     (UWORD)h, RECTFMT_ARGB);
 }
 
@@ -70,8 +72,8 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 {
     struct LkTarget *t = ctx;
     if (t->bm) {
-        BltBitMap(t->bm, (WORD)x, (WORD)y, t->bm, (WORD)(x + dx), (WORD)(y + dy), (WORD)w, (WORD)h, 0xC0, 0xFF,
-                  NULL);
+        BltBitMap(t->bm, (WORD)x, (WORD)(y - t->oy), t->bm, (WORD)(x + dx), (WORD)(y + dy - t->oy), (WORD)w,
+                  (WORD)h, 0xC0, 0xFF, NULL);
         touched(t, x + dx, y + dy, w, h);
     } else {
         ClipBlit(t->g->rp, (WORD)x, (WORD)y, t->g->rp, (WORD)(x + dx), (WORD)(y + dy), (WORD)w, (WORD)h, 0xC0);
@@ -104,6 +106,7 @@ BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
         } else {
             InitRastPort(&t->rp);
             t->rp.BitMap = t->bm;
+            t->own = TRUE;
         }
     }
     o->ctx = t;
@@ -120,10 +123,48 @@ BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
     return TRUE;
 }
 
+/* An output onto bm, a strip of the screen (a friend of its bitmap, w x
+ * h): drawn at the screen's rows y0..y0+h-1, it lands in bm's 0..h-1, the
+ * clip kept inside it. bm stays the caller's. */
+BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h)
+{
+    struct BitMap *sb = g->rp ? g->rp->BitMap : NULL;
+    struct LkTarget *t;
+    ULONG bits;
+    o->buf = NULL;
+    o->ctx = NULL;
+    if (!CyberGfxBase || !bm || !sb || g->planar || !g->truecolor || !GetCyberMapAttr(sb, CYBRMATTR_ISCYBERGFX))
+        return FALSE;
+    bits = GetCyberMapAttr(sb, CYBRMATTR_DEPTH);
+    if (bits < 15 || bits > 32)
+        return FALSE;
+    if (!(t = AllocVec(sizeof(*t), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    t->g = g;
+    t->x0 = 1;
+    t->x1 = 0;
+    t->bm = bm;
+    t->oy = y0;
+    InitRastPort(&t->rp);
+    t->rp.BitMap = bm;
+    o->ctx = t;
+    o->fill = rtg_fill;
+    o->rows = rtg_rows;
+    o->copy = rtg_copy;
+    o->bits = (int)bits;
+    o->bufn = (long)w * 16;
+    if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
+        lk_close(o);
+        return FALSE;
+    }
+    lk_clip(o, 0, y0, w, y0 + h);
+    return TRUE;
+}
+
 void lk_show(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
-    if (!t || !t->bm || t->x0 > t->x1)
+    if (!t || !t->bm || !t->own || t->x0 > t->x1)
         return;
     gfx_dirty();
     BltBitMapRastPort(t->bm, (WORD)t->x0, (WORD)t->y0, t->g->rp, (WORD)t->x0, (WORD)t->y0,
@@ -142,7 +183,7 @@ void lk_close(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
     if (t) {
-        if (t->bm) {
+        if (t->bm && t->own) {
             WaitBlit();
             FreeBitMap(t->bm);
         }

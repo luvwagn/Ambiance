@@ -41,6 +41,7 @@
  * again until stopped; a longer one goes back to the list at its end.
  */
 #include "amb.h"
+#include "lhost.h"
 #include "animdec.h"
 #include "animdraw.h"
 #include "vprobe.h"
@@ -1437,6 +1438,23 @@ static struct {
     WORD bx[BT_N];                  /* each button's left */
 } st;
 
+/* The controls as the layout's (LControls), where a layout is chosen and
+ * this is a graphics card's screen: drawn by it into the strip's bitmap
+ * (sf.bm, or lvbm without it), in its own style, as its Now playing's */
+static BOOL st_lv;
+static struct LControls vc;
+static UBYTE vc_bt[LCB_MAX];        /* each of its buttons: BT_* */
+static struct BitMap *lvbm;
+static ULONG vc_q;                  /* the time drawn last (a quarter second), between whole ones */
+
+/* The strip's height: the layout's, or the classic one's */
+static WORD strip_height(struct Gfx *g)
+{
+    WORD h = 0;
+    st_lv = lv_controls_ok() && (h = lv_controls_h(TRUE)) > 0 && h < g->h / 4;
+    return st_lv ? h : (WORD)(g->font_h + GU(g, 12));
+}
+
 static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const char *name)
 {
     WORD x, cy = st.y + st.h / 2, i, xt = -1;
@@ -1588,11 +1606,95 @@ static void strip_clear(struct Gfx *g)
     }
 }
 
+/* The layout's: all of it, or the time alone (a quarter second on) */
+static void strip_lv(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG total, const char *name,
+                     BOOL *changed)
+{
+    static const UBYTE lnb[BT_N] = { LNB_PREV, LNB_PREV, LNB_PLAY, LNB_NEXT, LNB_STOP, LNB_MENU, LNB_LOOP,
+                                     LNB_VDOWN, LNB_VUP, LNB_FULL };
+    struct BitMap *bm = sf.bm;
+    int i;
+    if (!bm) {
+        if (lvbm && (GetBitMapAttr(lvbm, BMA_WIDTH) < (ULONG)g->w || GetBitMapAttr(lvbm, BMA_HEIGHT) < (ULONG)st.h)) {
+            WaitBlit();
+            FreeBitMap(lvbm);
+            lvbm = NULL;
+        }
+        if (!lvbm)
+            lvbm = AllocBitMap(g->w, st.h, GetBitMapAttr(g->rp->BitMap, BMA_DEPTH), BMF_MINPLANES,
+                               g->rp->BitMap);
+        if (!(bm = lvbm))
+            return;
+    }
+    if (!full && (vc.y != st.y || vc.w != g->w || vc.h != st.h))
+        full = TRUE;                        /* (moved, or another size: all of it again) */
+    if (!full) {
+        if (!total || at / 250 == vc_q)
+            return;
+        vc_q = at / 250;
+        vc.at_ms = at;
+        vc.total_ms = total;
+        if (!lv_controls_draw(&vc, LC_PLAYING, bm))
+            return;
+    } else {
+        memset(&vc, 0, sizeof(vc));
+        vc.x = 0;
+        vc.y = st.y;
+        vc.w = g->w;
+        vc.h = st.h;
+        vc.title = name;
+        vc.focus = vc.hover = -1;
+        for (i = 0; i < ctl.nbtn && vc.n < LCB_MAX; i++) {
+            if (btn_hidden(i))
+                continue;
+            if (i == ctl.focus && ctl_ring())
+                vc.focus = (BYTE)vc.n;
+            if (ctl.off & (1 << i))
+                vc.off |= LNB_BIT(lnb[i]);
+            if (i == BT_VDOWN || i == BT_VUP)
+                vc.has_volume = 1;
+            vc_bt[vc.n] = (UBYTE)i;
+            vc.btn[vc.n++] = lnb[i];
+        }
+        if (play_loop)
+            vc.on |= LNB_BIT(LNB_LOOP);
+        if (lay.full || gfx_fs_on())
+            vc.on |= LNB_BIT(LNB_FULL);
+        vc.volume = (UBYTE)mp_volume();
+        vc.paused = paused;
+        vc.timed = 1;
+        vc.at_ms = at;
+        vc.total_ms = total;
+        vc_q = at / 250;
+        if (!lv_controls_draw(&vc, 0, bm))
+            return;
+        st.ring = ctl_ring();
+        st.focus = ctl.focus;
+        st.full = lay.full;
+        st.off = ctl.off;
+        st.loop = play_loop;
+        st.sec = at / 1000;
+        st.vol = mp_volume();
+        st.paused = paused;
+        st.bar = vc.seek_w > 0;
+        st.px0 = vc.seek_x;         /* (a click on the bar: its place there, as the classic's) */
+        st.px1 = vc.seek_x + vc.seek_w;
+    }
+    if (!sf.bm)
+        BltBitMapRastPort(lvbm, 0, 0, g->rp, 0, st.y, g->w, st.h, 0xC0);
+    *changed = TRUE;
+    sf.rgb_ok = FALSE;
+}
+
 static void strip_render(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG total,
                          const char *name, BOOL *changed)
 {
     struct RastPort *keep = g->rp;
     WORD y = st.y;
+    if (st_lv) {
+        strip_lv(g, full, paused, at, total, name, changed);
+        return;
+    }
     if (sf.bm) {
         g->rp = &sf.rp;
         st.y = 0;
@@ -1649,7 +1751,7 @@ static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
         }
     }
     if (lv > 0 || target > 0) {
-        if (!sf.drawn || at / 1000 != st.sec || paused != st.paused || mp_volume() != st.vol ||
+        if (!sf.drawn || (!st_lv && at / 1000 != st.sec) || paused != st.paused || mp_volume() != st.vol ||
             ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
             ctl.off != st.off || play_loop != st.loop) {
             strip_render(g, TRUE, paused, at, total, name, &changed);
@@ -1710,6 +1812,9 @@ static void strip_cleanup(struct Gfx *g)
 {
     ClearPointer(g->win);
     WaitBlit();
+    if (lvbm)
+        FreeBitMap(lvbm);
+    lvbm = NULL;
     if (sf.bm)
         FreeBitMap(sf.bm);
     FreeVec(sf.rgb);
@@ -1730,6 +1835,18 @@ static int strip_hit(WORD x, WORD y)
         return -2;                          /* a video's information: nothing */
     if (!ctl.shown)
         return -1;                          /* hidden: anywhere pauses */
+    if (st_lv) {                            /* the layout's: where it put them */
+        for (i = 0; i < vc.n; i++)
+            if (x >= vc.at[i].x && x < vc.at[i].x + vc.at[i].w && y >= vc.at[i].y &&
+                y < vc.at[i].y + vc.at[i].h)
+                return vc_bt[i];
+        if (vc.seek_w > 0 && x >= vc.seek_x - 4 && x <= vc.seek_x + vc.seek_w + 4 && y >= vc.seek_y &&
+            y < vc.seek_y + vc.seek_h) {
+            seek_x = x;
+            return -3;
+        }
+        return -2;
+    }
     for (i = 0; i < ctl.nbtn; i++)
         if (x >= st.bx[i] && x < st.bx[i] + st.cw)
             return i;
@@ -2119,7 +2236,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
         ax = (camg & (HIRES | SUPERHIRES)) ? 1 : 2;
         ay = (camg & LACE) ? 1 : 2;
     }
-    st.h = g->font_h + GU(g, 12);
+    st.h = strip_height(g);
     st.y = g->h - st.h - vi.h;
     memset(&lay, 0, sizeof(lay));
     if (!(lay.xo = AllocVec((w + 1) * sizeof(UWORD), MEMF_ANY)) ||
@@ -3291,7 +3408,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     memset(&vi, 0, sizeof(vi));
     vi_keys = TRUE;
     vi.h = vi_want ? vi_height(g) : 0;
-    st.h = g->font_h + GU(g, 12);
+    st.h = strip_height(g);
     st.y = g->h - st.h - vi.h;
     st.cw = st.h + GU(g, 6);
     st.x0 = GU(g, 8);

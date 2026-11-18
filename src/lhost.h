@@ -46,4 +46,17 @@ void lv_build_page(struct Page *p);  /* Settings > Display > Layout */
 void lv_pick(int k);            /* its row k: 0 classic, then the layouts found */
 const char *lv_label(void);     /* the one chosen, for the Display page */
 
+/* A slideshow's and a video's controls, drawn by the layout chosen in its
+ * own style (LControls) on a graphics card's screen of 15 to 32 bits: the
+ * screen as it is now (a window, full screen). lv_controls_ok: it can (the
+ * layout opened for them, if a viewer or video closed it); _h: their
+ * height; _draw: into bm (the screen's width x c->h, a friend of its
+ * bitmap) standing for the screen's rows from c->y, what 0 all or
+ * LC_PLAYING the time (FALSE: not drawn); _end: done with them. */
+struct BitMap;
+BOOL lv_controls_ok(void);
+WORD lv_controls_h(BOOL timed);
+BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm);
+void lv_controls_end(void);
+
 #endif

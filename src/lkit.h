@@ -29,6 +29,10 @@ void lk_close(struct LkOut *o);
  * RastPort of the moment). Nothing to do when drawing went straight to
  * the screen. */
 void lk_show(struct LkOut *o);
+/* An output onto bm, a w x h strip standing for the screen's rows y0 on
+ * (a slideshow's or video's controls, drawn by a layout): not shown by
+ * lk_show, bm left to the caller at lk_close */
+BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h);
 BOOL lk_canvas(const struct LkOut *o);
 
 /* Text in the smooth fonts (face: 0 regular, 1 bold, 2 small), its

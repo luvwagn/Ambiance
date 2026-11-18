@@ -944,6 +944,70 @@ static void run(int w, int h, int bits, const char *font)
     }
     layout_engine.tick(5000);
     save("now");
+    if (layout_engine.controls && layout_engine.controls_h) {
+        /* a video's controls at the foot, over what was drawn; their time
+         * drawn alone as a whole draw draws it; a slideshow's */
+        static struct LControls c;
+        static const UBYTE vb[] = { LNB_PREV, LNB_PLAY, LNB_STOP, LNB_LOOP, LNB_VDOWN, LNB_VUP, LNB_FULL };
+        unsigned long *was = malloc((size_t)w * h * sizeof(*was));
+        long i, diff = 0;
+        memset(&c, 0, sizeof(c));
+        c.h = layout_engine.controls_h(TRUE);
+        CHECK(c.h > 0 && c.h < h / 4);
+        c.y = (WORD)(h - c.h);
+        c.w = (WORD)w;
+        c.title = "Frog.anim";
+        c.n = sizeof(vb);
+        memcpy(c.btn, vb, sizeof(vb));
+        c.focus = 1;
+        c.hover = -1;
+        c.timed = 1;
+        c.has_volume = 1;
+        c.volume = 40;
+        c.on = LNB_BIT(LNB_LOOP);
+        c.at_ms = 62000;
+        c.total_ms = 200000;
+        layout_engine.controls(&c, 0);
+        CHECK(c.at[1].w > 0 && c.at[6].x + c.at[6].w <= w && c.seek_w > 0);
+        memcpy(was, px, (size_t)w * h * sizeof(*was));
+        c.at_ms = 61000;
+        layout_engine.controls(&c, 0);
+        c.at_ms = 62000;
+        layout_engine.controls(&c, LC_PLAYING);
+        {
+            long x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (i = 0; i < (long)w * h; i++)
+                if (was[i] != px[i]) {
+                    diff++;
+                    if (i % w < x0) x0 = i % w;
+                    if (i % w > x1) x1 = i % w;
+                    if (i / w < y0) y0 = i / w;
+                    if (i / w > y1) y1 = i / w;
+                }
+            if (diff)
+                printf("  (the controls' time drawn alone: %ld pixels unlike them drawn whole, %ld,%ld-%ld,%ld)\n",
+                       diff, x0, y0, x1, y1);
+        }
+        CHECK(diff == 0);
+        save("controls-video");
+        memset(&c, 0, sizeof(c));
+        c.h = layout_engine.controls_h(FALSE);
+        c.y = (WORD)(h - c.h);
+        c.w = (WORD)w;
+        c.title = "Amiga Artwork";
+        c.detail = "3/12   ILBM 320 x 256, 32 colours   2x";
+        c.btn[c.n++] = LNB_PREV;
+        c.btn[c.n++] = LNB_PLAY;
+        c.btn[c.n++] = LNB_NEXT;
+        c.btn[c.n++] = LNB_FULL;
+        c.on = LNB_BIT(LNB_FULL);
+        c.focus = -1;
+        c.hover = 2;
+        c.paused = 1;
+        layout_engine.controls(&c, 0);
+        save("controls-pictures");
+        free(was);
+    }
     CHECK(layout_engine.input(LS_HOME, LA_DOWN, 0) == LR_UNUSED);
     clicks(w, h);
     layout_engine.close();

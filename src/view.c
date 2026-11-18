@@ -29,6 +29,7 @@
  * big for that is shrunk to fit.
  */
 #include "amb.h"
+#include "lhost.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -75,6 +76,10 @@ static BOOL kept;               /* the last one left up, for the transition to t
 static struct BitMap *bar_bm;   /* what the bar covers */
 static WORD bar_y, bar_h;
 static WORD spin_x = -1;            /* the bar's spinner: its centre (-1: none) */
+static BOOL bar_lv;                 /* the bar is the layout's (its controls, LControls) */
+static struct LControls vc;         /*   as drawn: where its buttons are */
+static struct BitMap *lv_bm;        /*   drawn into, then put on the screen */
+static WORD lv_bm_w, lv_bm_h;
 static struct BitMap *spin_bm;      /* what the corner spinner covers */
 static WORD spin_cx, spin_cy, spin_s;
 
@@ -240,6 +245,65 @@ void view_bar_hide(struct Gfx *g)
     WaitBlit();
     FreeBitMap(bar_bm);
     bar_bm = NULL;
+    bar_lv = FALSE;
+}
+
+/* The layout's controls as the bar (a graphics card's screen, a layout
+ * chosen): what is shown, its details, previous, play or pause, next,
+ * full screen (from a window, or back); the mouse's and the keys' alike.
+ * FALSE: not (the bar as ever). */
+static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
+{
+    WORD h;
+    if (clut || !lv_controls_ok() || (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
+        return FALSE;
+    if (bar_bm && (!bar_lv || bar_h != h))
+        view_bar_hide(g);           /* (the other bar, or another height: put back first) */
+    bar_h = h;
+    bar_y = g->h - bar_h;
+    if (lv_bm && (lv_bm_w != g->w || lv_bm_h != h)) {
+        WaitBlit();
+        FreeBitMap(lv_bm);
+        lv_bm = NULL;
+    }
+    if (!lv_bm) {
+        if (!(lv_bm = AllocBitMap(g->w, h, g->depth, BMF_MINPLANES, g->rp->BitMap)))
+            return FALSE;
+        lv_bm_w = g->w;
+        lv_bm_h = h;
+    }
+    if (!bar_bm) {
+        if (!(bar_bm = AllocBitMap(g->w, bar_h, g->depth, 0, g->rp->BitMap)))
+            return FALSE;
+        BltBitMap(g->rp->BitMap, 0, bar_y, bar_bm, 0, 0, g->w, bar_h, 0xC0, 0xFF, NULL);
+    }
+    memset(&vc, 0, sizeof(vc));
+    vc.x = 0;
+    vc.y = bar_y;
+    vc.w = g->w;
+    vc.h = bar_h;
+    vc.title = title;
+    vc.detail = detail;
+    vc.btn[vc.n++] = LNB_PREV;
+    vc.btn[vc.n++] = LNB_PLAY;
+    vc.btn[vc.n++] = LNB_NEXT;
+    if (btn_full) {
+        vc.btn[vc.n++] = LNB_FULL;
+        if (btn_full == 2)
+            vc.on |= LNB_BIT(LNB_FULL);
+    }
+    vc.paused = !btn_playing;
+    vc.focus = vc.hover = -1;
+    if (!lv_controls_draw(&vc, 0, lv_bm)) {
+        view_bar_hide(g);
+        return FALSE;
+    }
+    gfx_dirty();
+    BltBitMapRastPort(lv_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);
+    bar_lv = TRUE;
+    btn_n = 0;
+    spin_x = -1;                    /* (a spinner: in the corner over it) */
+    return TRUE;
 }
 
 static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg);
@@ -253,6 +317,10 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
         bg = 0;
         fg = dim = ncolors - 1;
     }
+    if (bar_layout(g, title, detail))
+        return;
+    if (bar_lv)
+        view_bar_hide(g);                   /* (the layout's was up: put back first) */
     bar_h = g->font_h + GU(g, 5);
     bar_y = g->h - bar_h;
     if (!bar_bm) {
@@ -374,6 +442,14 @@ BOOL view_bar_has_buttons(void)
 int view_bar_hit(struct Gfx *g, WORD x, WORD y)
 {
     int i;
+    if (bar_bm && bar_lv && y >= bar_y) {
+        static const int vb[] = { VB_PREV, VB_PLAY, VB_NEXT, VB_FULL };
+        for (i = 0; i < vc.n && i < 4; i++)
+            if (x >= vc.at[i].x && x < vc.at[i].x + vc.at[i].w && y >= vc.at[i].y &&
+                y < vc.at[i].y + vc.at[i].h)
+                return vb[i];
+        return -1;
+    }
     if (!bar_bm || !btns || y < bar_y || y >= g->h)
         return -1;
     for (i = 0; i < btn_n; i++)
@@ -441,7 +517,7 @@ void view_spin(struct Gfx *g, UWORD phase)
     bar_pens(&bg, &fg, &dim);
     gfx_dirty();
     SetWriteMask(g->rp, 0xFF);
-    if (bar_bm || (!has_pic && spin_x >= 0 && bar_h)) {
+    if (!bar_lv && (bar_bm || (!has_pic && spin_x >= 0 && bar_h))) {
         WORD r = bar_h / 3;
         if (spin_x < 0)
             return;
@@ -453,7 +529,7 @@ void view_spin(struct Gfx *g, UWORD phase)
     if (!spin_bm) {
         spin_s = g->font_h + GU(g, 4);
         spin_cx = g->w - GU(g, 6) - spin_s / 2;
-        spin_cy = g->h - GU(g, 4) - spin_s / 2;
+        spin_cy = (bar_lv && bar_bm ? bar_y : g->h) - GU(g, 4) - spin_s / 2;   /* (over the layout's bar) */
         if (!(spin_bm = AllocBitMap(spin_s, spin_s, g->depth, 0, g->rp->BitMap)))
             return;
         BltBitMap(g->rp->BitMap, spin_cx - spin_s / 2, spin_cy - spin_s / 2, spin_bm, 0, 0,
@@ -1113,6 +1189,11 @@ void view_end(struct Gfx *g)
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
     view_spin_hide(g);
     view_bar_hide(g);
+    if (lv_bm) {
+        WaitBlit();
+        FreeBitMap(lv_bm);
+        lv_bm = NULL;
+    }
     if (clut && has_pic)
         fade(g, shown, FALSE);
     if (obj) {

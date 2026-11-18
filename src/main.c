@@ -17196,6 +17196,74 @@ BOOL lv_on(void)
     return lv.on;
 }
 
+/* While a slideshow's or video's controls are drawn (lv_controls_draw):
+ * their strip, which nothing goes outside (h_clip) */
+static struct { BOOL on; WORD x0, y0, x1, y1; } lv_ctl;
+
+/* ---- a slideshow's and a video's controls, drawn by the layout in its
+ * style (LControls) where it has them and the screen is a graphics card's
+ * of 15 to 32 bits (g as it is now: a window, full screen, Ambiance's) */
+static BOOL lv_ctl_open;            /* the layout opened for them alone (a viewer, a video: lv_hold
+                                     * closed it) */
+BOOL lv_controls_ok(void)
+{
+    const struct LayoutEngine *e;
+    if (!g.truecolor || g.planar || !g.rp || !g.sm)
+        return FALSE;
+    if (lv.on || lv_ctl_open)
+        return lv.eng && lv.eng->controls && lv.eng->controls_h;
+    /* a layout chosen, and opened before on this run (its host set up):
+     * opened again, as it was, for the controls alone */
+    e = layout_loaded();
+    if (!lv.file[0] || !e || !e->controls || !e->controls_h || !lv.host.fill || strcmp(e->name, lv.name))
+        return FALSE;
+    lv.host.w = g.w;
+    lv.host.h = g.h;
+    clock_text(lv.clock);
+    if (e->open && !e->open(&lv.host))
+        return FALSE;
+    lv.eng = e;
+    lv_ctl_open = TRUE;
+    return TRUE;
+}
+
+/* The viewer or a video done with them: the layout closed again (lv_resume
+ * opens it as ever) */
+void lv_controls_end(void)
+{
+    if (lv_ctl_open && lv.eng && lv.eng->close)
+        lv.eng->close();
+    lv_ctl_open = FALSE;
+}
+
+WORD lv_controls_h(BOOL timed)
+{
+    return lv_controls_ok() ? lv.eng->controls_h(timed) : 0;
+}
+
+/* Drawn into bm (g.w x c->h, a friend of the screen's bitmap), which
+ * stands for the screen's rows from c->y; what: 0 all, LC_PLAYING the
+ * time. FALSE: not drawn. */
+BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
+{
+    struct LkOut keep, o;
+    if (!lv_controls_ok() || !bm || !lk_open_strip(&g, &o, bm, c->y, g.w, c->h))
+        return FALSE;
+    keep = lv.out;
+    lv.out = o;
+    lv_ctl.on = TRUE;
+    lv_ctl.x0 = c->x;
+    lv_ctl.y0 = c->y;
+    lv_ctl.x1 = c->x + c->w;
+    lv_ctl.y1 = c->y + c->h;
+    lk_clip(&lv.out, lv_ctl.x0, lv_ctl.y0, lv_ctl.x1, lv_ctl.y1);
+    lv.eng->controls(c, what);
+    lv_ctl.on = FALSE;
+    lk_close(&lv.out);
+    lv.out = keep;
+    return TRUE;
+}
+
 const char *lv_label(void)
 {
     static char stem[32];
@@ -18256,7 +18324,16 @@ static WORD h_letter(WORD xr, WORD ym, ULONG rgb)
 }
 
 /* ---- the drawing calls, onto lv.out */
-static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&lv.out, x0, y0, x1, y1); }
+static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1)
+{
+    if (lv_ctl.on) {
+        x0 = x0 > lv_ctl.x0 ? x0 : lv_ctl.x0;
+        y0 = y0 > lv_ctl.y0 ? y0 : lv_ctl.y0;
+        x1 = x1 < lv_ctl.x1 ? x1 : lv_ctl.x1;
+        y1 = y1 < lv_ctl.y1 ? y1 : lv_ctl.y1;
+    }
+    lk_clip(&lv.out, x0, y0, x1, y1);
+}
 static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG rgb) { lk_fill(&lv.out, x, y, w, h, rgb); }
 static BOOL h_copy(WORD x, WORD y, WORD w, WORD h, WORD dx, WORD dy)
 {
@@ -18686,6 +18763,7 @@ void lv_hold(void)
  * drawn, so the classic screen never shows for a frame */
 void lv_resume(void)
 {
+    lv_controls_end();                      /* (opened for a viewer's or video's controls: closed) */
     lv_sync();
 }
 
