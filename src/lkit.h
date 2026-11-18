@@ -40,6 +40,8 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
 /* the layout's background gradient over the whole screen (an 8-bit
  * screen's: drawn with pens of its own, smooth; elsewhere nothing) */
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
+/* a whole draw begins: an 8-bit screen's pens for flat colours free again */
+void lk_fresh(struct LkOut *o);
 BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h);
 BOOL lk_canvas(const struct LkOut *o);
 

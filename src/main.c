@@ -19057,7 +19057,7 @@ static void lv_frame_(void)
         else if (details_only)
             lv.eng->changed(scr, LC_DETAILS), lvt_parts++;
         else
-            lv.eng->draw(scr), lvt_whole++;
+            lk_fresh(&lv.out), lv.eng->draw(scr), lvt_whole++;
         lv.last_now = nsig;
         lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;
