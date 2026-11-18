@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Skrifttyper
+; Fonts
 MSG_1B9AE0BB
 Engelsk
 ; English
@@ -592,21 +595,21 @@ Stor
 MSG_05A06546
 Ekstra stor
 ; Extra large
-MSG_2C041143
-Tekststørrelse
-; Text size
-MSG_1624E3CC
-Skjermmodus
-; Screen mode
-MSG_5467EC76
-Stil
-; Style
 MSG_4A02D9CF
 Myk
 ; Smooth
 MSG_2AB32B77
 Piksel
 ; Pixel
+MSG_2C041143
+Tekststørrelse
+; Text size
+MSG_5467EC76
+Stil
+; Style
+MSG_1624E3CC
+Skjermmodus
+; Screen mode
 MSG_63678BEE
 Dobbelbuffer
 ; Double buffering
@@ -1873,6 +1876,9 @@ Oppløst
 MSG_14BD5320
 Oppsettet kunne ikke åpnes: det klassiske brukes
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+En eldre versjon av et oppsett er fortsatt i minnet: start Amigaen på nytt for å se den nye.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Oppsett krever stilen Myk på en grafikkortskjerm med 15 til 32 bit
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

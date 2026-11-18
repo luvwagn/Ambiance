@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Polices
+; Fonts
 MSG_1B9AE0BB
 Anglais
 ; English
@@ -592,21 +595,21 @@ Grande
 MSG_05A06546
 Très grande
 ; Extra large
-MSG_2C041143
-Taille du texte
-; Text size
-MSG_1624E3CC
-Mode d'écran
-; Screen mode
-MSG_5467EC76
-Style
-; Style
 MSG_4A02D9CF
 Lisse
 ; Smooth
 MSG_2AB32B77
 Pixel
 ; Pixel
+MSG_2C041143
+Taille du texte
+; Text size
+MSG_5467EC76
+Style
+; Style
+MSG_1624E3CC
+Mode d'écran
+; Screen mode
 MSG_63678BEE
 Double tampon
 ; Double buffering
@@ -1873,6 +1876,9 @@ Séparé
 MSG_14BD5320
 La disposition n'a pas pu s'ouvrir : la classique est utilisée
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Une ancienne version d'une disposition est encore en mémoire : redémarrez l'Amiga pour voir la nouvelle.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Les dispositions nécessitent le style Lisse sur un écran de carte graphique de 15 à 32 bits
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

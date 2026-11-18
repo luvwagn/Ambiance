@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Schriften
+; Fonts
 MSG_1B9AE0BB
 Englisch
 ; English
@@ -592,21 +595,21 @@ Groß
 MSG_05A06546
 Sehr groß
 ; Extra large
-MSG_2C041143
-Textgröße
-; Text size
-MSG_1624E3CC
-Bildschirmmodus
-; Screen mode
-MSG_5467EC76
-Stil
-; Style
 MSG_4A02D9CF
 Glatt
 ; Smooth
 MSG_2AB32B77
 Pixel
 ; Pixel
+MSG_2C041143
+Textgröße
+; Text size
+MSG_5467EC76
+Stil
+; Style
+MSG_1624E3CC
+Bildschirmmodus
+; Screen mode
 MSG_63678BEE
 Doppelpufferung
 ; Double buffering
@@ -1873,6 +1876,9 @@ Aufgelöst
 MSG_14BD5320
 Das Layout ließ sich nicht öffnen: das klassische wird verwendet
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Eine ältere Version eines Layouts ist noch im Speicher: Amiga neu starten, um die neue zu sehen.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Layouts brauchen den Stil Glatt auf dem 15- bis 32-Bit-Bildschirm einer Grafikkarte
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

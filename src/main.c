@@ -176,7 +176,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_FOLDERS, ACT_FSSET0, ACT_FSSET_END = ACT_FSSET0 + 3, ACT_FSASSIGN, ACT_FSADD, ACT_FSDIR0,
        ACT_FSDIR_END = ACT_FSDIR0 + 7,
        ACT_PLEXSLIDES, ACT_LANGSET, ACT_LANGWB, ACT_LANGEN, ACT_LANG0, ACT_LANG_END = ACT_LANG0 + 15,
-       ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_TSIZE0,
+       ACT_PLEXLINK, ACT_PLEXOUT, ACT_WINDOW, ACT_TSIZES, ACT_FONTS, ACT_TSIZE0,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
@@ -2454,13 +2454,13 @@ static void sel_off_heading(struct Page *p, LONG d)
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
-       SETP_VIDEO, SETP_IGAME, SETP_WHD };
+       SETP_VIDEO, SETP_IGAME, SETP_WHD, SETP_FONTS };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
-    N_("Video"), N_("iGame"), N_("WHDLoad") };
+    N_("Video"), N_("iGame"), N_("WHDLoad"), N_("Fonts") };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2582,29 +2582,37 @@ static BOOL window_offered(void)
 /* Settings > Display's rows, in order: the Window row where offered, then
  * Text size (a window, smooth) or Screen mode (full screen), then Style. */
 static int screen_row_window(void) { return window_offered() ? 0 : -1; }
-static int screen_row_size(void) { return window_offered() ? 1 : 0; }
-static int screen_row_style(void)
+static int screen_row_mode(void) { return window_offered() ? 1 : 0; }  /* (full screen) */
+static int screen_row_fonts(void) { return (window_offered() ? 1 : 0) + (g.wb ? 0 : 1); }
+/* on Settings > Display > Fonts: the text size's row (a window, smooth),
+ * and the style's after it */
+static int fonts_row_size(void) { return 0; }
+static int fonts_row_style(void) { return g.wb && g.style == STYLE_SMOOTH ? 1 : 0; }
+
+/* What the Fonts row says: the style, and a window's text size */
+static const char *fonts_tag(void)
 {
-    return screen_row_size() + (g.wb && g.style != STYLE_SMOOTH ? 0 : 1);
+    static char tag[64];
+    if (gfx_laced(g.mode) || (gfx_mode_is_rtg(g.mode) && g.style != STYLE_SMOOTH))
+        amb_strlcpy(tag, gfx_laced_fonts[gfx_laced(g.mode) ? gfx_laced_font : gfx_font_shown(&g)].name,
+                    sizeof(tag));
+    else
+        amb_strlcpy(tag, g.style == STYLE_SMOOTH ? _("Smooth") : _("Pixel"), sizeof(tag));
+    if (g.wb && g.style == STYLE_SMOOTH) {
+        amb_strlcat(tag, ", ", sizeof(tag));
+        amb_strlcat(tag, _(tsize_names[gfx_window_tsize()]), sizeof(tag));
+    }
+    return tag;
 }
 
-static void build_screen_settings(struct Page *p)
+/* Settings > Display > Fonts: a window's text size (smooth; the pixel
+ * style's size is its font), and the style */
+static void build_font_settings(struct Page *p)
 {
-    char tag[64];
     struct Item *it;
-    p->setp = SETP_SCREEN;
-    if (window_offered())
-        action_item(p, _("Workbench window"), "", ACT_WINDOW,    /* (two ways: a checkbox) */
-                    g.wb ? MARK_CHECK_ON : MARK_CHECK_OFF);
-    if (g.wb) {
-        /* the text's size, smooth (the pixel style's is its font: Style) */
-        if (g.style == STYLE_SMOOTH)
-            action_item(p, _("Text size"), _(tsize_names[gfx_window_tsize()]), ACT_TSIZES,
-                        MARK_ARROW);
-    } else {
-        amb_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
-        action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
-    }
+    p->setp = SETP_FONTS;
+    if (g.wb && g.style == STYLE_SMOOTH)
+        action_item(p, _("Text size"), _(tsize_names[gfx_window_tsize()]), ACT_TSIZES, MARK_ARROW);
     /* Style: the font on a laced screen; greyed out, showing Pixel, where
      * this screen can only be pixel (other native modes, 8-bit RTG) */
     if (gfx_laced(g.mode)) {
@@ -2620,6 +2628,21 @@ static void build_screen_settings(struct Page *p)
     } else if ((it = action_item(p, _("Style"), _("Pixel"), ACT_STYLES, MARK_ARROW))) {
         it->flags |= ITEM_DISABLED;
     }
+}
+
+static void build_screen_settings(struct Page *p)
+{
+    char tag[64];
+    struct Item *it;
+    p->setp = SETP_SCREEN;
+    if (window_offered())
+        action_item(p, _("Workbench window"), "", ACT_WINDOW,    /* (two ways: a checkbox) */
+                    g.wb ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if (!g.wb) {
+        amb_strlcpy(tag, gfx_mode_label(g.mode), sizeof(tag));
+        action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
+    }
+    action_item(p, _("Fonts"), fonts_tag(), ACT_FONTS, MARK_ARROW);
     if (!g.planar && !g.wb)             /* native screens draw straight on, a window
                                          * always through its buffer: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
@@ -3296,6 +3319,7 @@ static void settings_rebuild(void)
         case SETP_NET: build_net_settings(q); break;
         case SETP_GENERAL: build_general_settings(q); break;
         case SETP_SCREEN: build_screen_settings(q); break;
+        case SETP_FONTS: build_font_settings(q); break;
         case SETP_VIDEO: build_video_settings(q); break;
         case SETP_NIC: build_nic_settings(q); break;
         case SETP_RADIO: build_radio_settings(q); break;
@@ -10942,7 +10966,7 @@ static void apply_screen_mode(int sm)
         struct Page *p = page_push(PT_LIST, _("Display"));
         if (p) {
             build_screen_settings(p);
-            p->sel = screen_row_size();
+            p->sel = screen_row_mode();
         }
         if ((p = page_push(PT_LIST, _("Screen mode"))))
             build_screenmodes(p);
@@ -10991,7 +11015,7 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
         cur()->sel = SETTINGS_SCREEN_ROW;
     if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
-        p->sel = size_row ? screen_row_size() : screen_row_window();
+        p->sel = size_row ? screen_row_fonts() : screen_row_window();
         if (display_colours_row) {
             LONG i;
             for (i = 0; i < p->list.count; i++)
@@ -11000,6 +11024,10 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
         }
         if (p->sel < 0)
             p->sel = 0;
+    }
+    if (size_row && (p = page_push(PT_LIST, _("Fonts")))) {
+        build_font_settings(p);     /* (Text size is under Fonts) */
+        p->sel = fonts_row_size();
     }
     if (sub && (p = page_push(PT_LIST, sub_title)))
         sub(p);
@@ -12347,7 +12375,11 @@ static void restyle(void)
         cur()->sel = SETTINGS_SCREEN_ROW;
     if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
-        p->sel = screen_row_style();
+        p->sel = screen_row_fonts();
+    }
+    if ((p = page_push(PT_LIST, _("Fonts")))) {
+        build_font_settings(p);
+        p->sel = fonts_row_style();
     }
     if ((p = page_push(PT_LIST, _("Style"))))
         build_styles(p);
@@ -14456,6 +14488,8 @@ static void act_action(struct Item *it)
         toggle_window();
     else if (it->action == ACT_TSIZES)
         open_settings_page(_("Text size"), build_tsizes);
+    else if (it->action == ACT_FONTS)
+        open_settings_page(_("Fonts"), build_font_settings);
     else if (it->action == ACT_COLOURS)
         open_settings_page(_("Colours"), build_colours);
     else if (it->action == ACT_LAYOUTS)
@@ -16849,6 +16883,8 @@ out:
         amb_log("previews", m);
     }
     amb_log("quitting", "");
+    lv_release();                   /* a layout closed and put out of memory: left open, the
+                                     * next Ambiance (a newer one) was handed the old one */
     amp_host_end();                 /* (a plug-in asked to go, its port taken down) */
     resume_store();                 /* what plays now, for the next start */
     vo_end();                       /* (Picasso96API.library, if a video opened it) */
@@ -18114,6 +18150,11 @@ void lv_build_page(struct Page *p)
         }
         if (it && (!g.truecolor || g.planar))
             it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen only) */
+    }
+    if (layout_stale) {
+        /* an older copy of a layout is still in memory, open (an Ambiance
+         * before 0.9.1.1-28 left it so): Exec hands it out by its name */
+        head_para(p, _("An older version of a layout is still in memory: restart the Amiga to see the new one."));
     }
 }
 

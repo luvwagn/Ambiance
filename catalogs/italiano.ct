@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Caratteri
+; Fonts
 MSG_1B9AE0BB
 Inglese
 ; English
@@ -592,21 +595,21 @@ Grande
 MSG_05A06546
 Molto grande
 ; Extra large
-MSG_2C041143
-Dimensione del testo
-; Text size
-MSG_1624E3CC
-Modo schermo
-; Screen mode
-MSG_5467EC76
-Stile
-; Style
 MSG_4A02D9CF
 Morbido
 ; Smooth
 MSG_2AB32B77
 Pixel
 ; Pixel
+MSG_2C041143
+Dimensione del testo
+; Text size
+MSG_5467EC76
+Stile
+; Style
+MSG_1624E3CC
+Modo schermo
+; Screen mode
 MSG_63678BEE
 Doppio buffer
 ; Double buffering
@@ -1873,6 +1876,9 @@ Sciolto
 MSG_14BD5320
 Impossibile aprire il layout: si usa quello classico
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Una versione precedente di un layout è ancora in memoria: riavvia l'Amiga per vedere quella nuova.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 I layout richiedono lo stile Morbido su uno schermo di scheda grafica da 15 a 32 bit
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

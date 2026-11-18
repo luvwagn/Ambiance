@@ -43,6 +43,8 @@ static const struct LayoutEngine *engine;
 #define GetLayout(abi) \
     LP1(0x1e, const struct LayoutEngine *, GetLayout, ULONG, abi, d0, , LayoutBase)
 
+BOOL layout_stale;                  /* a layout's older copy is in memory, open */
+
 /* file opened (an unused copy in memory put out first), its table asked
  * for; the library left open in LayoutBase, or NULL */
 static const struct LayoutEngine *open_one(const char *file, BOOL quiet)
@@ -64,9 +66,12 @@ static const struct LayoutEngine *open_one(const char *file, BOOL quiet)
     }
     e = GetLayout((ULONG)LAYOUT_ABI);
     if (!e || e->abi != (ULONG)LAYOUT_ABI) {
-        snprintf(m, sizeof(m), "%s %ld.%ld is for another Ambiance (its layout.h differs): not used",
-                 file, (long)LayoutBase->lib_Version, (long)LayoutBase->lib_Revision);
+        snprintf(m, sizeof(m), "%s %ld.%ld is for another Ambiance (its layout.h differs): not used%s",
+                 file, (long)LayoutBase->lib_Version, (long)LayoutBase->lib_Revision,
+                 LayoutBase->lib_OpenCnt > 1 ? " (an older one still in memory, open: restart the Amiga)" : "");
         amb_log("layout", m);
+        if (LayoutBase->lib_OpenCnt > 1)
+            layout_stale = TRUE;            /* (Settings > Display > Layout says so) */
         layout_unload();
         return NULL;
     }

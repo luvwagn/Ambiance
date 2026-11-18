@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Fontit
+; Fonts
 MSG_1B9AE0BB
 Englanti
 ; English
@@ -592,21 +595,21 @@ Suuri
 MSG_05A06546
 Erittäin suuri
 ; Extra large
-MSG_2C041143
-Tekstin koko
-; Text size
-MSG_1624E3CC
-Näyttötila
-; Screen mode
-MSG_5467EC76
-Tyyli
-; Style
 MSG_4A02D9CF
 Pehmeä
 ; Smooth
 MSG_2AB32B77
 Pikseli
 ; Pixel
+MSG_2C041143
+Tekstin koko
+; Text size
+MSG_5467EC76
+Tyyli
+; Style
+MSG_1624E3CC
+Näyttötila
+; Screen mode
 MSG_63678BEE
 Kaksoispuskurointi
 ; Double buffering
@@ -1873,6 +1876,9 @@ Hajosi
 MSG_14BD5320
 Asettelua ei voitu avata: käytetään klassista
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Asettelun vanhempi versio on yhä muistissa: käynnistä Amiga uudelleen nähdäksesi uuden.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Asettelut vaativat Pehmeä-tyylin näytönohjaimen 15-32-bittisellä näytöllä
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

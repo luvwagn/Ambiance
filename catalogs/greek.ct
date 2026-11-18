@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Γράμματα
+; Fonts
 MSG_1B9AE0BB
 Αγγλικά
 ; English
@@ -592,21 +595,21 @@ MSG_718B9F54
 MSG_05A06546
 Πολύ μεγάλο
 ; Extra large
-MSG_2C041143
-Μέγεθος κειμένου
-; Text size
-MSG_1624E3CC
-Λειτουργία οθόνης
-; Screen mode
-MSG_5467EC76
-Στυλ
-; Style
 MSG_4A02D9CF
 Smooth
 ; Smooth
 MSG_2AB32B77
 Pixel
 ; Pixel
+MSG_2C041143
+Μέγεθος κειμένου
+; Text size
+MSG_5467EC76
+Στυλ
+; Style
+MSG_1624E3CC
+Λειτουργία οθόνης
+; Screen mode
 MSG_63678BEE
 Διπλό buffer
 ; Double buffering
@@ -1873,6 +1876,9 @@ MSG_15974E49
 MSG_14BD5320
 Η διάταξη δεν άνοιξε: χρησιμοποιείται η κλασική
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Μια παλαιότερη έκδοση διάταξης είναι ακόμα στη μνήμη: επανεκκινήστε το Amiga για να δείτε τη νέα.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Οι διατάξεις θέλουν το στυλ Smooth σε οθόνη κάρτας γραφικών 15 έως 32 bit
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

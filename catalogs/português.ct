@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Tipos de letra
+; Fonts
 MSG_1B9AE0BB
 Inglês
 ; English
@@ -592,21 +595,21 @@ Grande
 MSG_05A06546
 Muito grande
 ; Extra large
-MSG_2C041143
-Tamanho do texto
-; Text size
-MSG_1624E3CC
-Modo de ecrã
-; Screen mode
-MSG_5467EC76
-Estilo
-; Style
 MSG_4A02D9CF
 Suave
 ; Smooth
 MSG_2AB32B77
 Píxel
 ; Pixel
+MSG_2C041143
+Tamanho do texto
+; Text size
+MSG_5467EC76
+Estilo
+; Style
+MSG_1624E3CC
+Modo de ecrã
+; Screen mode
 MSG_63678BEE
 Duplo buffer
 ; Double buffering
@@ -1873,6 +1876,9 @@ Dissolvido
 MSG_14BD5320
 Não foi possível abrir a disposição: usa-se a clássica
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Uma versão antiga de uma disposição ainda está na memória: reinicie o Amiga para ver a nova.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 As disposições precisam do estilo Suave num ecrã de placa gráfica de 15 a 32 bits
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+Lettertypen
+; Fonts
 MSG_1B9AE0BB
 Engels
 ; English
@@ -592,21 +595,21 @@ Groot
 MSG_05A06546
 Extra groot
 ; Extra large
-MSG_2C041143
-Tekstgrootte
-; Text size
-MSG_1624E3CC
-Schermmodus
-; Screen mode
-MSG_5467EC76
-Stijl
-; Style
 MSG_4A02D9CF
 Zacht
 ; Smooth
 MSG_2AB32B77
 Pixel
 ; Pixel
+MSG_2C041143
+Tekstgrootte
+; Text size
+MSG_5467EC76
+Stijl
+; Style
+MSG_1624E3CC
+Schermmodus
+; Screen mode
 MSG_63678BEE
 Dubbele buffer
 ; Double buffering
@@ -1873,6 +1876,9 @@ Opgeheven
 MSG_14BD5320
 De indeling kon niet worden geopend: de klassieke wordt gebruikt
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+Een oudere versie van een indeling staat nog in het geheugen: herstart de Amiga om de nieuwe te zien.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 Indelingen vereisen de stijl Zacht op een scherm van 15 tot 32 bits van een grafische kaart
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen

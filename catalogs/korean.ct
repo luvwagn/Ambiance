@@ -523,6 +523,9 @@ iGame
 MSG_6E156672
 WHDLoad
 ; WHDLoad
+MSG_68A32CF9
+글꼴
+; Fonts
 MSG_1B9AE0BB
 영어
 ; English
@@ -592,21 +595,21 @@ MSG_718B9F54
 MSG_05A06546
 아주 크게
 ; Extra large
-MSG_2C041143
-글자 크기
-; Text size
-MSG_1624E3CC
-화면 모드
-; Screen mode
-MSG_5467EC76
-스타일
-; Style
 MSG_4A02D9CF
 스무스
 ; Smooth
 MSG_2AB32B77
 픽셀
 ; Pixel
+MSG_2C041143
+글자 크기
+; Text size
+MSG_5467EC76
+스타일
+; Style
+MSG_1624E3CC
+화면 모드
+; Screen mode
 MSG_63678BEE
 더블 버퍼링
 ; Double buffering
@@ -1873,6 +1876,9 @@ MSG_15974E49
 MSG_14BD5320
 레이아웃을 열 수 없어 클래식을 사용합니다
 ; The layout could not be opened: the classic one is used
+MSG_03105558
+이전 버전의 레이아웃이 아직 메모리에 있습니다. 새 버전을 보려면 Amiga를 다시 시작하세요.
+; An older version of a layout is still in memory: restart the Amiga to see the new one.
 MSG_24B72731
 레이아웃은 그래픽 카드의 15~32비트 화면에서 스무스 스타일이 필요합니다
 ; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
