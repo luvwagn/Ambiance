@@ -1438,6 +1438,33 @@ static LONG text_from(const struct LPage *m, LONG vh, LONG *dy)
     return i;
 }
 
+/* A note, wrapped to w and each line centred in it, from y; its colour c
+ * over bg */
+static void note_centred(const char *t, LONG x, LONG y, LONG w, ULONG c, const struct LkBg *bg)
+{
+    LONG len = slen(t), lh = FH + Y(4);
+    while (len > 0) {
+        LONG k = H->fit(t, len, LF_REGULAR, (WORD)w), j, tw;
+        if (k <= 0)
+            k = 1;
+        if (k < len) {
+            for (j = k; j > 0 && t[j] != ' '; j--)
+                ;
+            if (j > 0)
+                k = j;
+        }
+        tw = H->textlen(t, k, LF_REGULAR);
+        H->text((WORD)(x + (tw < w ? (w - tw) / 2 : 0)), (WORD)y, t, k, LF_REGULAR, c, bg, 0);
+        y += lh;
+        t += k;
+        len -= k;
+        while (len > 0 && *t == ' ') {
+            t++;
+            len--;
+        }
+    }
+}
+
 /* One long text, scrolled by pixels; a note, a picture and Plex's mark
  * under it on a page that has them. full: all of it; else (a glide) the
  * text and its bar alone. */
@@ -1468,11 +1495,8 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
                 im = H->picture(m->picture, (UWORD)w, (UWORD)ph);
             y = under - ph - nh - Y(8);
             horizon_line(x, y - Y(8), w);
-            if (m->note) {
-                const char *one[1];
-                one[0] = m->note;
-                draw_lines(one, 1, 0, x, y, w, y + nh, C_SUB, C_SUB);
-            }
+            if (m->note)            /* centred, over the picture */
+                note_centred(m->note, x, y, w, C_SUB, &bg_grad);
             if (im)
                 H->image(im, (WORD)(x + (w - im->w) / 2), (WORD)(y + nh + Y(4) + (ph - im->h) / 2));
             under = y - Y(16);

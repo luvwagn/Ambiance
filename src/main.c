@@ -7140,9 +7140,11 @@ static void draw_text_picture(struct Page *p)
         struct ItemList l;
         if (list_init(&l)) {
             wrap_into(&l, p->note, textbox_w());
-            for (i = 0; i < l.count; i++)
-                gfx_text(&g, g.pane_x, y + i * lh, l.items[i].label, PEN_DIM, PEN_BG, textbox_w(),
-                         TS_BODY);
+            for (i = 0; i < l.count; i++) {     /* centred, over the picture */
+                WORD tw = gfx_textlen(&g, l.items[i].label, TS_BODY);
+                gfx_text(&g, g.pane_x + (tw < textbox_w() ? (textbox_w() - tw) / 2 : 0), y + i * lh,
+                         l.items[i].label, PEN_DIM, PEN_BG, textbox_w(), TS_BODY);
+            }
             list_free(&l);
         }
         y += lines * lh + U(4);

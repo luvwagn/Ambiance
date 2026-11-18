@@ -957,7 +957,7 @@ static void text_measure(const struct LPage *m, LONG w, LONG lh)
     tl_total = 0;
     for (i = 0; i < n; i++) {
         const char *p = m->details[i];
-        tl_h[i] = p && *p ? wrapped(p, w, LF_REGULAR) * lh : lh / 2;
+        tl_h[i] = p && *p ? wrapped(p, w, LF_REGULAR) * lh : lh;    /* (a blank: a line, as draw_lines) */
         tl_total += tl_h[i];
     }
 }
@@ -970,6 +970,33 @@ static LONG text_from(const struct LPage *m, LONG vh, LONG *dy)
         acc += tl_h[i++];
     *dy = -(off - acc);
     return i;
+}
+
+/* A note, wrapped to w and each line centred in it, from y; its colour c
+ * over bg */
+static void note_centred(const char *t, LONG x, LONG y, LONG w, ULONG c, const struct LkBg *bg)
+{
+    LONG len = slen(t), lh = FH + Y(4);
+    while (len > 0) {
+        LONG k = H->fit(t, len, LF_REGULAR, (WORD)w), j, tw;
+        if (k <= 0)
+            k = 1;
+        if (k < len) {
+            for (j = k; j > 0 && t[j] != ' '; j--)
+                ;
+            if (j > 0)
+                k = j;
+        }
+        tw = H->textlen(t, k, LF_REGULAR);
+        H->text((WORD)(x + (tw < w ? (w - tw) / 2 : 0)), (WORD)y, t, k, LF_REGULAR, c, bg, 0);
+        y += lh;
+        t += k;
+        len -= k;
+        while (len > 0 && *t == ' ') {
+            t++;
+            len--;
+        }
+    }
 }
 
 /* One long text: its panel's top part, scrolled by pixels (text_off),
@@ -1008,11 +1035,8 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
                 im = H->picture(m->picture, (UWORD)(w - X(36)), (UWORD)ph);
             y = under - (ph ? ph : 0) - nh - Y(8);
             H->fill((WORD)(x + X(18)), (WORD)(y - Y(6)), (WORD)(w - X(36)), 1, C_LINE);
-            if (m->note) {
-                const char *one[1];
-                one[0] = m->note;
-                draw_lines(one, 1, 0, x + X(18), y, w - X(36), y + nh, C_SUB, C_SUB);
-            }
+            if (m->note)            /* centred, over the picture */
+                note_centred(m->note, x + X(18), y, w - X(36), C_SUB, flat(C_PANEL));
             if (im)
                 H->image(im, (WORD)(x + (w - im->w) / 2), (WORD)(y + nh + Y(4) + (ph - im->h) / 2));
             under = y - Y(12);
