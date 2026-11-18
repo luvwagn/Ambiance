@@ -384,6 +384,9 @@ static LONG band_top(void)
     return HT - Y(10) - (FH + Y(14)) - X(6) - 2;
 }
 
+static void draw_wall_body(const struct LPage *m);
+static void footer_paint(int want);
+
 /* The band drawn as it should be now; force: whatever it showed */
 static void footer_draw(BOOL force)
 {
@@ -395,11 +398,24 @@ static void footer_draw(BOOL force)
         want = 2;
     if (!force && want == ft_shown && (want != 1 || ft_shown_hash == ft_hash))
         return;
-    {
+    H->clip(0, 0, W, HT);
+    if (drawn == LS_ALBUMS) {
+        /* the wall runs under the band: drawn again there, not cleared */
+        const struct LPage *wm = H->model(LS_ALBUMS);
+        if (wm)
+            draw_wall_body(wm);
+    } else {
         LONG y0 = band_top();
-        H->clip(0, 0, W, HT);
         H->vgrad(0, (WORD)y0, W, (WORD)(HT - y0), grad(y0), C_BOT);
     }
+    footer_paint(want);
+}
+
+/* The band's toast or hint, over what is there */
+static void footer_paint(int want)
+{
+    ULONG now;
+    (void)now;
     if (want == 1) {
         LONG tw = tlen(ft_msg, LF_REGULAR), h = FH + Y(14), w = tw + X(36), x, y = HT - Y(10) - h;
         if (w > W - X(60)) {
@@ -411,7 +427,15 @@ static void footer_draw(BOOL force)
         rshape(x, y, w, h, h / 2, C_FOCUS);
         text(x + X(18), y + Y(7), ft_msg, LF_REGULAR, C_WHITE, flat(C_FOCUS), tw);
     } else if (want == 2) {
-        text(X(30), HT - Y(18) - FH, ft_hint, LF_SMALL, C_SUB, &bg_grad, W - X(60));
+        /* the keys' hint: a quieter pill, over whatever is under it */
+        LONG tw = tlen(ft_hint, LF_SMALL), h = FH + Y(10), w = tw + X(28), x, y = HT - Y(10) - h;
+        if (w > W - X(60)) {
+            w = W - X(60);
+            tw = w - X(28);
+        }
+        x = (W - w) / 2;
+        rshape(x, y, w, h, h / 2, C_PANEL2);
+        text(x + X(14), y + Y(5), ft_hint, LF_SMALL, C_SUB, flat(C_PANEL2), tw);
     }
     ft_shown = want;
     ft_shown_hash = ft_hash;
@@ -488,6 +512,7 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
 
 /* ---------------------------------------------------------------- Home */
 static void scroll_bar(LONG bx, LONG by, LONG bh, LONG ty, LONG th, ULONG bg);
+static LONG page_trail(const struct LPage *m, BOOL named);
 static LONG home_cols = 1, home_top;   /* Home's tiles: across, the first row shown */
 static void draw_home(void)
 {
@@ -794,7 +819,7 @@ static LONG wrapped(const char *p, LONG w, int face)
 static LONG tx_bottom;          /* the text's part's bottom, as drawn whole */
 static void draw_text_body_as(const struct LPage *m, BOOL full)
 {
-    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(236), w = W - x - X(24);
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(24), w = W - x - X(24);
     LONG top = py + Y(14), lh = FH + Y(4), tb = bottom - Y(6), vis, sbx = x + w - X(12);
     if (full) {
         const struct LImage *pm = m->plexmark && H->plexmark ? H->plexmark(C_PANEL) : NULL;
@@ -888,16 +913,17 @@ static void draw_page(void)
 {
     const struct LPage *m = H->model(LS_PAGE);
     char sub[160];
-    LONG i, py = Y(64), bottom = HT - Y(30) - FH - Y(12);
-    LONG lx = X(24), lw = X(196);
+    LONG i, lx = X(24), lw = X(196);
     background();
     top_right(FALSE);
     if (!m)
         return;
-    /* the top: the logo, and the page's title below its section (the
-     * section, and the way here, are the panel's at the left) */
+    /* the top: the logo, the page's title, and the way here (each step a
+     * click back); the page itself all the width below */
     (void)sub;
-    i = title_line(m->ncrumb > 1 ? m->crumb[m->ncrumb - 1] : NULL, NULL);
+    (void)lx;
+    (void)lw;
+    i = page_trail(m, TRUE);
     spin_x = -1;
     if (m->waiting && m->list.count) {
         /* rows there, and more coming (a folder still being read): the
@@ -906,28 +932,6 @@ static void draw_page(void)
         spin_y = title_cy;
         spin_bg = grad(spin_y);
         wait_spinner(m);
-    }
-    /* left: the section and the way here */
-    panel(lx, py, lw, bottom - py, 6, C_PANEL2, C_PANEL2, grad(py));
-    {
-        LONG y = py + Y(14), ip = H->icon_px, tx = lx + X(16), rh = FH + Y(18);
-        if (ip) {
-            H->icon(m->section, (WORD)tx, (WORD)y, C_ACC, flat(C_PANEL2));
-            tx += ip + X(10);
-        }
-        text(tx, y + (ip > FH ? (ip - FH) / 2 : 0), m->ncrumb ? m->crumb[0] : "", LF_BOLD, C_WHITE,
-             flat(C_PANEL2), lx + lw - tx - X(8));
-        y += (ip > FH ? ip : FH) + Y(16);
-        for (i = 1; i < m->ncrumb && y + rh < bottom - Y(8); i++, y += rh + Y(2)) {
-            BOOL last = i == m->ncrumb - 1;
-            if (last)
-                H->rrect((WORD)(lx + X(8)), (WORD)y, (WORD)(lw - X(16)), (WORD)rh, 4, C_FOCUS, C_PANEL2);
-            else
-                hit(lx + X(8), y, lw - X(16), rh, HT_CRUMB, 0, i);
-            text(lx + X(8) + X(12) + (i - 1) * X(6), y + (rh - FH) / 2, m->crumb[i],
-                 LF_REGULAR, last ? C_WHITE : C_SUB, flat(last ? C_FOCUS : C_PANEL2),
-                 lw - X(40) - (i - 1) * X(6));
-        }
     }
     hits_base = nhits;
     if (m->text) {
@@ -945,7 +949,7 @@ static void draw_page(void)
  * there or still not */
 static void draw_page_body(const struct LPage *m)
 {
-    LONG n, py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(236), w = W - x - X(24);
+    LONG n, py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(24), w = W - x - X(24);
     n = m->ndetails > 0 || m->picture ? 1 : 0;
     body_n = (int)n;
     nhits = hits_base;          /* the rows' click targets made again */
@@ -991,26 +995,31 @@ static void draw_page_body(const struct LPage *m)
 
 /* ---------------------------------------------------------------- shared by the music screens */
 /* The page's title and its path, the left panel's way back left out */
-/* The top for a page that says its own name large (an album, an
- * artist): the way to it, small, without its name */
+/* The top of a page: the logo, its name large (named: the page says it
+ * large itself, an album or an artist, so not again), and the way to it
+ * small after, each step a click back to there */
+static LONG page_trail(const struct LPage *m, BOOL named)
+{
+    LONG x = title_line(named && m->ncrumb ? m->crumb[m->ncrumb - 1] : NULL, NULL), i, y, w;
+    LONG lim = tr_left - X(24) < W * 3 / 5 ? tr_left - X(24) : W * 3 / 5;
+    y = title_cy - FH / 2;
+    for (i = 0; i + 1 < m->ncrumb && lim - x > X(30); i++) {
+        if (i) {
+            x += text(x, y, "/", LF_SMALL, C_DIM, &bg_grad, 0) + X(6);
+        }
+        w = text(x, y, m->crumb[i], LF_SMALL, C_SUB, &bg_grad, lim - x);
+        hit(x - X(2), y - Y(4), w + X(4), FH + Y(8), HT_CRUMB, 0, i);
+        x += w + X(6);
+    }
+    return x;
+}
 static void page_path(const struct LPage *m)
 {
-    char sub[160];
-    LONG i;
-    sub[0] = 0;
-    for (i = 0; i + 1 < m->ncrumb; i++)
-        join(sub, sizeof(sub), sub, " / ", m->crumb[i]);
-    title_line(NULL, sub);
+    page_trail(m, FALSE);
 }
-
 static void page_title(const struct LPage *m)
 {
-    char sub[160];
-    LONG i;
-    sub[0] = 0;
-    for (i = 0; i + 1 < m->ncrumb; i++)
-        join(sub, sizeof(sub), sub, " / ", m->crumb[i]);
-    title_line(m->ncrumb ? m->crumb[m->ncrumb - 1] : "", sub);
+    page_trail(m, TRUE);
 }
 
 /* A shiny disc (a DVD) s square at x, y over bg: a row at a time, each
@@ -1133,9 +1142,9 @@ static void cover_wh(const char *art, const char *label, LONG x, LONG y, LONG w,
         return;
     }
     H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)h, 4, C_PANEL, bg);
-    if (label && *label)
-        text(x + (w - tlen("M", LF_BOLD)) / 2, y + (h - FH) / 2, label, LF_BOLD, C_DIM, flat(C_PANEL),
-             tlen("M", LF_BOLD) + 2);
+    if (label && *label)                /* its first letter, until its picture comes */
+        H->text((WORD)(x + (w - H->textlen(label, 1, LF_BOLD)) / 2), (WORD)(y + (h - FH) / 2), label, 1,
+                LF_BOLD, C_DIM, flat(C_PANEL), 0);
 }
 static void cover(const char *art, const char *label, LONG x, LONG y, LONG s, ULONG bg)
 {
@@ -1164,10 +1173,16 @@ static LONG paras(const char *t)
 /* ---------------------------------------------------------------- the album wall */
 static LONG wall_cols = 1, wall_top;    /* its columns, as drawn; its first row shown */
 
+/* The wall scrolls by pixels: wall_px now, wall_tgt where it is going
+ * (the chosen cover's row in view, a little of the next showing); the
+ * tick eases it there. Its rows run on past the bottom of the screen. */
+static LONG wall_px, wall_tgt;
+static const void *wall_of;
+static LONG wall_count = -1;
 static void draw_wall_body(const struct LPage *m)
 {
-    LONG x0 = X(30), y0 = Y(70), aw = W - x0 - X(30), bottom = HT - Y(30) - FH - Y(12);
-    LONG gap = X(18), cs = X(124), cols, ch, rows, i, sel = m->list.sel, th;
+    LONG x0 = X(30), y0 = Y(70), aw = W - x0 - X(30), bottom = HT;
+    LONG gap = X(18), cs = X(124), cols, ch, rows, i, sel = m->list.sel, th, viewh, nr, maxpx, r0;
     const struct LList *l = &m->list;
     if (cs < FH * 4)
         cs = FH * 4;
@@ -1177,29 +1192,63 @@ static void draw_wall_body(const struct LPage *m)
     cs = (aw - (cols - 1) * gap) / cols;
     th = m->frames ? cs * 3 / 4 : cs;  /* pictures and videos: 4:3 frames */
     ch = th + Y(8) + FH + Y(2) + FH + Y(14);
-    rows = (bottom - y0) / ch;
+    viewh = bottom - y0;
+    rows = viewh / ch;
     if (rows < 1)
         rows = 1;
     wall_cols = cols;
-    if (sel / cols < wall_top)
-        wall_top = sel / cols;
-    if (sel / cols >= wall_top + rows)
-        wall_top = sel / cols - rows + 1;
-    if (wall_top < 0)
-        wall_top = 0;
+    nr = (l->count + cols - 1) / cols;
+    maxpx = nr * ch - viewh + Y(10);
+    if (maxpx < 0)
+        maxpx = 0;
+    if (sel >= 0) {
+        LONG top = (sel / cols) * ch, peek = ch / 4;
+        if (top - (sel >= cols ? peek : 0) < wall_tgt)
+            wall_tgt = top - (sel >= cols ? peek : 0);
+        if (top + ch + peek > wall_tgt + viewh)
+            wall_tgt = top + ch + peek - viewh;
+    }
+    if (wall_tgt > maxpx)
+        wall_tgt = maxpx;
+    if (wall_tgt < 0)
+        wall_tgt = 0;
+    if (wall_of != (const void *)l->item || wall_count < 0 || l->count < wall_count) {
+        wall_px = wall_tgt;             /* another list: there at once */
+        wall_of = (const void *)l->item;
+    }
+    wall_count = l->count;
+    wall_top = wall_px / ch;
+    r0 = wall_top;
     nhits = hits_base;
     hit_sel = sel;
     H->clip((WORD)(x0 - X(10)), (WORD)(y0 - Y(6)), (WORD)(W - X(10)), (WORD)bottom);
     H->vgrad((WORD)(x0 - X(10)), (WORD)(y0 - Y(6)), (WORD)(W - x0), (WORD)(bottom - y0 + Y(6)),
              grad(y0 - Y(6)), grad(bottom));
-    for (i = wall_top * cols; i < l->count && i < (wall_top + rows) * cols; i++) {
+    spin_x = -1;
+    if (!l->count) {
+        /* nothing yet: its albums being asked for (the spinner), or none */
+        if (m->waiting) {
+            spin_x = x0 + FH / 2 + FH / 4;
+            spin_y = y0 + FH / 2;
+            spin_bg = grad(spin_y);
+            wait_spinner(m);
+            text(spin_x + FH, y0, m->waiting, LF_REGULAR, C_SUB, &bg_grad, aw - FH * 2);
+        } else {
+            text(x0, y0, H->tr("Nothing here"), LF_REGULAR, C_SUB, &bg_grad, aw);
+        }
+        H->clip(0, 0, W, HT);
+        return;
+    }
+    for (i = r0 * cols; i < l->count && (i / cols) * ch - wall_px < viewh; i++) {
         const struct LItem *it = l->item(i);
-        LONG cx = x0 + (i % cols) * (cs + gap), cy = y0 + (i / cols - wall_top) * ch;
+        LONG cx = x0 + (i % cols) * (cs + gap), cy = y0 + (i / cols) * ch - wall_px;
         BOOL on = i == sel;
         ULONG bg = grad(cy);
         if (it->flags & LIF_HEAD)
             continue;
-        hit(cx, cy, cs, ch - Y(10), HT_ROW, it->kind, i);
+        if (cy + ch - Y(10) > y0)           /* (the part below the title clicks) */
+            hit(cx, cy > y0 - Y(6) ? cy : y0 - Y(6), cs, cy + ch - Y(10) - (cy > y0 - Y(6) ? cy : y0 - Y(6)),
+                HT_ROW, it->kind, i);
         if (it->kind == LI_DISC) {
             H->fill((WORD)cx, (WORD)cy, (WORD)cs, (WORD)th, bg);
             disc(cx + (cs - th) / 2, cy, th, bg);
@@ -1222,15 +1271,18 @@ static void draw_wall_body(const struct LPage *m)
             text(cx, cy + th + Y(8) + FH + Y(2), it->sub ? it->sub : it->tag, LF_SMALL, C_SUB,
                  flat(grad(cy + th + Y(8) + FH)), cs);
     }
-    if (l->count > rows * cols) {            /* where in the wall */
-        LONG nr = (l->count + cols - 1) / cols, bx = W - X(16), bh = bottom - y0;
-        LONG th = bh * rows / nr, ty = y0 + (bh - (th < Y(16) ? Y(16) : th)) * wall_top / (nr - rows > 0 ? nr - rows : 1);
-        if (th < Y(16))
-            th = Y(16);
-        scroll_bar(bx, y0, bh, ty, th, grad(y0));
+    if (maxpx > 0) {                    /* where in the wall */
+        LONG bx = W - X(16), bh = HT - Y(16) - y0, tot = nr * ch + Y(10);
+        LONG bt = bh * viewh / (tot > 0 ? tot : 1), ty;
+        if (bt < Y(16))
+            bt = Y(16);
+        if (bt > bh)
+            bt = bh;
+        ty = y0 + (bh - bt) * wall_px / maxpx;
+        scroll_bar(bx, y0, bh, ty, bt, grad(y0));
     }
     if (m->letter && H->letter)
-        H->letter((WORD)(W - X(60)), (WORD)(y0 + (bottom - y0) / 2), C_LETTER);
+        H->letter((WORD)(W - X(60)), (WORD)(y0 + (HT - Y(40) - y0) / 2), C_LETTER);
     H->clip(0, 0, W, HT);
 }
 
@@ -1762,8 +1814,8 @@ static void sc_changed_body(int screen, ULONG what)
 {
     const struct LPage *m;
     if (what == LC_WAIT) {
-        if (screen == drawn && screen == LS_PAGE && spin_x >= 0 && (m = H->model(LS_PAGE)) &&
-            m->waiting) {
+        if (screen == drawn && (screen == LS_PAGE || screen == LS_ALBUMS) && spin_x >= 0 &&
+            (m = H->model(screen)) && m->waiting) {
             H->clip(0, 0, W, HT);
             wait_spinner(m);    /* the spinner's step: it alone */
         }
@@ -1804,6 +1856,21 @@ static void sc_changed_body(int screen, ULONG what)
  * drawn when it changes) */
 static void sc_tick(ULONG ms)
 {
+    if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
+        /* the wall gliding to the chosen cover's row: a third of the way a
+         * tick (at least a few pixels), the band's toast over it again */
+        const struct LPage *m = H->model(LS_ALBUMS);
+        LONG d = wall_tgt - wall_px, st = d / 3;
+        if (st > -4 && st < 4)
+            st = d > 0 ? (d < 4 ? d : 4) : (d > -4 ? d : -4);
+        wall_px += st;
+        if (m) {
+            H->clip(0, 0, W, HT);
+            draw_wall_body(m);
+            if (ft_shown)
+                footer_paint(ft_shown);
+        }
+    }
     if (ft_screen)
         footer_draw(FALSE);     /* a toast or a hint over: drawn away */
     if (drawn != LS_NOW || (LONG)(ms - bars_at) < 40)

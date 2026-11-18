@@ -17409,6 +17409,10 @@ static int lv_music_screen(const struct Page *p)
     const struct Item *from;
     LONG i, dirs = 0, songs = 0, of = 0;
     char type[16];
+    if (p && p->type == PT_LIST && !p->list.count && p->plex && !p->photos &&
+        (strstr(p->base, "type=9") || strstr(p->base, "/recentlyAdded")))
+        return LS_ALBUMS;               /* (its albums still coming: the wall waits, so the
+                                         * screen does not change when they come) */
     if (!p || p->type != PT_LIST || !p->list.count || p->setp)
         return LS_PAGE;
     if (p->pics) {
@@ -18235,11 +18239,12 @@ void lv_frame(void)
     }
     if (scr != lv.drawn)
         lv.full = TRUE;
-    if (!lv.full && !gfx_off_hits && scr == LS_PAGE && lv.eng->changed && lv_waiting(cur()) &&
+    if (!lv.full && !gfx_off_hits && (scr == LS_PAGE || scr == LS_ALBUMS) && lv.eng->changed &&
+        lv_waiting(cur()) &&
         lv_wait_step() != lv.wait_phase) {
         lv.wait_phase = lv_wait_step();     /* the spinner turned: it alone drawn again */
         lk_clip(&lv.out, 0, 0, g.w, g.h);
-        lv.eng->changed(LS_PAGE, LC_WAIT);
+        lv.eng->changed(scr, LC_WAIT);
     }
     if (lv.full || gfx_off_hits) {
         struct Page *p = cur();

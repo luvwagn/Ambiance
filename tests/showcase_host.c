@@ -808,9 +808,10 @@ static void clicks(int w, int h)
             ok = nacts == 1 && acts[0][0] == LAC_OPEN && acts[0][1] == 8;
         }
     CHECK(ok);
-    for (ok = 0, y = 0; y < h && !ok; y++) /* the crumb "All games": back once */
-        if (click_at(LS_PAGE, 120 * w / 800, y, NULL) == LAC_BACK)
-            ok = nacts == 1;
+    for (ok = 0, y = 0; y < h / 8 && !ok; y += 2)  /* the crumb "All games", at the top: back once */
+        for (x = w / 5; x < w / 2 && !ok; x += 3)
+            if (click_at(LS_PAGE, x, y, NULL) == LAC_BACK)
+                ok = nacts == 1;
     CHECK(ok);
     layout_engine.draw(LS_NOW);
     CHECK(click_at(LS_NOW, w / 2, h / 2, NULL) == LAC_PAUSE);
