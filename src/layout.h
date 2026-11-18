@@ -270,6 +270,9 @@ struct LayoutHost {
     const struct LImage *(*plexmark)(ULONG bg);
     const char *debug;          /* Settings > Debug on: the CPU and memory line to show
                                  * at the top ("" off); as the clock, kept up to date */
+    /* what is drawn at x, y (w x h) moved by dx, dy, inside the clip (a
+     * glide: the rest drawn again, not all); FALSE if it cannot be */
+    BOOL (*copy)(WORD x, WORD y, WORD w, WORD h, WORD dx, WORD dy);
 };
 
 struct LayoutEngine {

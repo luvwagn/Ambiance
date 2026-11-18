@@ -82,6 +82,23 @@ void lk_fill(struct LkOut *o, long x, long y, long w, long h, unsigned long rgb)
         o->fill(o->ctx, x, y, w, h, rgb & 0xFFFFFFUL);
 }
 
+int lk_copy(struct LkOut *o, long x, long y, long w, long h, long dx, long dy)
+{
+    long sx, sy, sw, sh;
+    if (!o->copy)
+        return 0;
+    /* the source inside the clip, then its destination inside it too */
+    if (!clip(o, &x, &y, &w, &h))
+        return 1;
+    sx = x + dx;
+    sy = y + dy;
+    sw = w;
+    sh = h;
+    if (!clip(o, &sx, &sy, &sw, &sh))
+        return 1;
+    return o->copy(o->ctx, sx - dx, sy - dy, sw, sh, dx, dy);
+}
+
 /* the colour c as the four dithered pixels of row y (x = 0..3 mod 4) */
 static void dither4(const struct LkOut *o, unsigned long c, long y, unsigned long *d)
 {

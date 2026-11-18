@@ -26,6 +26,9 @@ struct LkOut {
     void (*fill)(void *ctx, long x, long y, long w, long h, unsigned long rgb);
     /* w x h pixels (0x00RRGGBB) at x, y (already clipped), mod pixels a row */
     void (*rows)(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod);
+    /* the w x h block at x, y moved by dx, dy (both inside the screen); 0
+     * if it cannot be (NULL: never) */
+    int (*copy)(void *ctx, long x, long y, long w, long h, long dx, long dy);
     int bits;                   /* the screen's: 15, 16, 24 or 32 */
     long cx0, cy0, cx1, cy1;    /* drawn only inside x cx0..cx1-1, y cy0..cy1-1 */
     unsigned long *buf;         /* scratch pixels for rows being made, */
@@ -50,6 +53,9 @@ unsigned long lk_bg_at(const struct LkBg *bg, long y);
 void lk_bg_flat(struct LkBg *bg, unsigned long rgb);
 
 void lk_fill(struct LkOut *o, long x, long y, long w, long h, unsigned long rgb);
+/* what is drawn at x, y (w x h) moved by dx, dy, inside the clip (what would
+ * come from outside it is left out): 0 if the output cannot */
+int lk_copy(struct LkOut *o, long x, long y, long w, long h, long dx, long dy);
 void lk_vgrad(struct LkOut *o, long x, long y, long w, long h, unsigned long top, unsigned long bottom);
 void lk_hgrad(struct LkOut *o, long x, long y, long w, long h, unsigned long left, unsigned long right);
 /* r: the corners' radius; bg: the colour around the box, for smooth

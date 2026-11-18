@@ -17901,14 +17901,16 @@ static void lv_pic_take(int i)
     }
 }
 
-/* Each frame: a picture back from the loader has the layout drawn again */
+/* Each frame: a picture back from the loader: the layout told
+ * (changed(LC_IMAGE): it draws what was waiting for it, not all) */
+static BOOL lv_img;
 static void lv_pics_poll(void)
 {
     int i;
     for (i = 0; i < LV_PICS; i++)
         if (lv_pic[i].job && lv_pic[i].job->done) {
             lv_pic_take(i);
-            lv.full = TRUE;
+            lv_img = TRUE;
         }
 }
 
@@ -18014,6 +18016,10 @@ static WORD h_letter(WORD xr, WORD ym, ULONG rgb)
 /* ---- the drawing calls, onto lv.out */
 static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&lv.out, x0, y0, x1, y1); }
 static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG rgb) { lk_fill(&lv.out, x, y, w, h, rgb); }
+static BOOL h_copy(WORD x, WORD y, WORD w, WORD h, WORD dx, WORD dy)
+{
+    return lk_copy(&lv.out, x, y, w, h, dx, dy) ? TRUE : FALSE;
+}
 static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_vgrad(&lv.out, x, y, w, h, a, b); }
 static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&lv.out, x, y, w, h, a, b); }
 static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)
@@ -18144,6 +18150,7 @@ static void lv_activate(void)
     lv.host.tier = (UBYTE)plex_tier();
     lv.host.clip = h_clip;
     lv.host.fill = h_fill;
+    lv.host.copy = h_copy;
     lv.host.vgrad = h_vgrad;
     lv.host.hgrad = h_hgrad;
     lv.host.rrect = h_rrect;
@@ -18261,7 +18268,7 @@ void lv_frame(void)
     lv_pics_poll();
     if (lv_art_came) {
         lv_art_came = FALSE;
-        lv.full = TRUE;
+        lv_img = TRUE;              /* (the layout asks again, and finds it) */
     }
     if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
         lv.tick_at = now;
@@ -18269,6 +18276,15 @@ void lv_frame(void)
     }
     if (scr != lv.drawn)
         lv.full = TRUE;
+    if (lv_img) {
+        lv_img = FALSE;
+        if (!lv.full && !gfx_off_hits && lv.eng->changed) {
+            lk_clip(&lv.out, 0, 0, g.w, g.h);
+            lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
+        } else {
+            lv.full = TRUE;
+        }
+    }
     if (!lv.full && !gfx_off_hits && (scr == LS_PAGE || scr == LS_ALBUMS) && lv.eng->changed &&
         lv_waiting(cur()) &&
         lv_wait_step() != lv.wait_phase) {
@@ -18334,6 +18350,10 @@ void lv_release(void)
     lv.tried = NULL;
 }
 
+/* The wheel's notches as they come (the log says when several come at
+ * once: a driver sending more than one a notch) */
+static ULONG wheel_last, wheel_t0, wheel_burst, wheel_said;
+
 /* ---- input */
 BOOL lv_key(struct IntuiMessage *im)
 {
@@ -18351,12 +18371,33 @@ BOOL lv_key(struct IntuiMessage *im)
         case 0x4E: a = LA_RIGHT; break;
         case 0x4F: a = LA_LEFT; break;
         case 0x7A: case 0x7B: {
-            /* the wheel: the classic's finds what is under the pointer
-             * by its own places, which are not the layout's */
+            /* the wheel: a notch one entry on, in the list's own order
+             * (a wall's Up and Down are a row, or stop at a column's end:
+             * not the wheel's). Home and Now playing: the layout's Up and
+             * Down (Home's sections). The classic's finds what is under
+             * the pointer by its own places, which are not the layout's. */
             int d = code == 0x7A ? -1 : 1;
+            ULONG now = time_ms();
             scr = lv_screen();
-            if (!lv.eng->input || lv.eng->input(scr, d < 0 ? LA_UP : LA_DOWN, 0) != LR_DONE)
-                act_move(d);
+            if (now - wheel_last < 25) {
+                wheel_burst++;              /* (notches closer than a hand turns: the driver's?) */
+            } else {
+                if (wheel_burst >= 2 && wheel_said < 5) {
+                    char m[80];
+                    sprintf(m, "%ld notches within %ld ms", (long)wheel_burst + 1, (long)(wheel_last - wheel_t0));
+                    amb_log("wheel", m);
+                    wheel_said++;
+                }
+                wheel_burst = 0;
+                wheel_t0 = now;
+            }
+            wheel_last = now;
+            if (scr == LS_PAGE || scr == LS_ALBUMS || scr == LS_ALBUM || scr == LS_ARTIST ||
+                !lv.eng->input || lv.eng->input(scr, d < 0 ? LA_UP : LA_DOWN, 0) != LR_DONE) {
+                struct Page *wp = cur();
+                act_move(focus == FOCUS_CONTENT && wp && wp->type != PT_LIST && wp->type != PT_PLAYER
+                         ? d * 3 : d);       /* (a text: three lines a notch, as the classic's) */
+            }
             return TRUE;
         }
         }

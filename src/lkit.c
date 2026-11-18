@@ -64,6 +64,22 @@ static void rtg_rows(void *ctx, long x, long y, long w, long h, const unsigned l
                     (UWORD)h, RECTFMT_ARGB);
 }
 
+/* A block moved (a layout's wall gliding): the card's blitter, the canvas
+ * to itself (BltBitMap minds the overlap), or the screen to itself */
+static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
+{
+    struct LkTarget *t = ctx;
+    if (t->bm) {
+        BltBitMap(t->bm, (WORD)x, (WORD)y, t->bm, (WORD)(x + dx), (WORD)(y + dy), (WORD)w, (WORD)h, 0xC0, 0xFF,
+                  NULL);
+        touched(t, x + dx, y + dy, w, h);
+    } else {
+        ClipBlit(t->g->rp, (WORD)x, (WORD)y, t->g->rp, (WORD)(x + dx), (WORD)(y + dy), (WORD)w, (WORD)h, 0xC0);
+        gfx_dirty();
+    }
+    return 1;
+}
+
 BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
 {
     struct BitMap *bm = g->rp ? g->rp->BitMap : NULL;
@@ -93,6 +109,7 @@ BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
     o->ctx = t;
     o->fill = rtg_fill;
     o->rows = rtg_rows;
+    o->copy = rtg_copy;
     o->bits = (int)bits;
     o->bufn = (long)g->w * 16;
     if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {

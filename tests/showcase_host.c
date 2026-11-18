@@ -36,7 +36,7 @@ static int SW, SH, BITS;
 static unsigned long *px;
 static unsigned long scratch[2048 * 16];
 static struct LkOut out;
-static long drawn_px;
+static long drawn_px, copied_px;
 
 static unsigned long keep(unsigned long c)
 {
@@ -62,6 +62,26 @@ static void s_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
         for (i = 0; i < w; i++)
             px[(y + j) * SW + x + i] = keep(rgb);
     drawn_px += w * h;
+}
+
+static int s_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
+{
+    long j;
+    (void)ctx;
+    if (x < 0 || y < 0 || x + w > SW || y + h > SH || x + dx < 0 || y + dy < 0 || x + dx + w > SW ||
+        y + dy + h > SH) {
+        printf("FAIL copy outside the screen: %ld,%ld %ldx%ld by %ld,%ld\n", x, y, w, h, dx, dy);
+        fails++;
+        return 0;
+    }
+    if (dy > 0)
+        for (j = h - 1; j >= 0; j--)
+            memmove(&px[(y + j + dy) * SW + x + dx], &px[(y + j) * SW + x], (size_t)w * sizeof(*px));
+    else
+        for (j = 0; j < h; j++)
+            memmove(&px[(y + j + dy) * SW + x + dx], &px[(y + j) * SW + x], (size_t)w * sizeof(*px));
+    copied_px += w * h;
+    return 1;
 }
 
 static void s_rows(void *ctx, long x, long y, long w, long h, const unsigned long *p, long mod)
@@ -272,6 +292,10 @@ static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
 /* ---------------------------------------------------------------- the rest of the host */
 static void h_clip(WORD x0, WORD y0, WORD x1, WORD y1) { lk_clip(&out, x0, y0, x1, y1); }
 static void h_fill(WORD x, WORD y, WORD w, WORD h, ULONG c) { lk_fill(&out, x, y, w, h, c); }
+static BOOL h_copy(WORD x, WORD y, WORD w, WORD h, WORD dx, WORD dy)
+{
+    return lk_copy(&out, x, y, w, h, dx, dy) ? TRUE : FALSE;
+}
 static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_vgrad(&out, x, y, w, h, a, b); }
 static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&out, x, y, w, h, a, b); }
 static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG c, ULONG bg) { lk_rrect(&out, x, y, w, h, r, c, bg); }
@@ -433,6 +457,7 @@ static void crumbs(struct LPage *pg, const char *a, const char *b, const char *c
 }
 
 static int frames_wall;
+static LONG wall_sel = 6;       /* the wall's chosen cover */
 static LONG home_tile = -1;    /* Home's tiles in use: the one chosen */         /* the wall drawn as Videos' (4:3 frames) */
 static const void *h_model(int screen)
 {
@@ -446,7 +471,7 @@ static const void *h_model(int screen)
         crumbs(&page, "Plex", "Albums", NULL);
         rows_of = album_rows;
         page.list.count = sizeof(album_rows) / sizeof(album_rows[0]);
-        page.list.sel = 6;
+        page.list.sel = wall_sel;
         page.list.item = item;
         page.frames = (UBYTE)frames_wall;
         if (frames_wall == 2) {         /* a wall of games' screenshots */
@@ -665,6 +690,7 @@ static void run(int w, int h, int bits, const char *font)
     memset(&out, 0, sizeof(out));
     out.fill = s_fill;
     out.rows = s_rows;
+    out.copy = s_copy;
     out.bits = bits;
     out.buf = scratch;
     out.bufn = sizeof(scratch) / sizeof(scratch[0]);
@@ -676,6 +702,7 @@ static void run(int w, int h, int bits, const char *font)
     host.tier = 3;
     host.clip = h_clip;
     host.fill = h_fill;
+    host.copy = h_copy;
     host.vgrad = h_vgrad;
     host.hgrad = h_hgrad;
     host.rrect = h_rrect;
@@ -803,6 +830,38 @@ static void run(int w, int h, int bits, const char *font)
         CHECK(layout_engine.input(LS_ALBUMS, LA_DOWN, 0) == LR_DONE && nacts == 1 &&
               acts[0][0] == LAC_SELECT && acts[0][1] > 6);
         CHECK(layout_engine.input(LS_ALBUMS, LA_FIRE, 0) == LR_UNUSED);
+        {
+            /* a move to the far end: the wall glides there (Horizon: what
+             * is drawn moved along, the rest drawn in), and comes out as
+             * drawn whole there */
+            unsigned long *was;
+            long n = (long)w * h, k, diff = 0;
+            int t;
+            layout_engine.draw(LS_ALBUMS);
+            wall_sel = (LONG)(sizeof(album_rows) / sizeof(album_rows[0])) - 1;
+            copied_px = 0;
+            layout_engine.changed(LS_ALBUMS, LC_SELECT);
+            for (t = 0; t < 30; t++) {
+                clock_ms += 40;
+                layout_engine.tick(clock_ms);
+            }
+            save("wall-glided");
+            was = malloc((size_t)n * sizeof(*was));
+            memcpy(was, px, (size_t)n * sizeof(*was));
+            layout_engine.draw(LS_ALBUMS);
+            save("wall-whole");
+            for (k = 0; k < n; k++)
+                if (was[k] != px[k])
+                    diff++;
+            if (diff)
+                printf("  (the glided wall: %ld pixels unlike the wall drawn whole)\n", diff);
+            CHECK(diff == 0);
+#ifdef HORIZON
+            CHECK(copied_px > 0);
+#endif
+            free(was);
+            wall_sel = 6;
+        }
     }
     drawn_px = 0;
     layout_engine.draw(LS_NOW);

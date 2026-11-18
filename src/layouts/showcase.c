@@ -1876,8 +1876,9 @@ static void sc_changed_body(int screen, ULONG what)
         }
         return;
     }
-    if (what == LC_SELECT && screen == drawn && screen == LS_ALBUMS && (m = H->model(LS_ALBUMS))) {
-        draw_wall_body(m);      /* a move on the wall: the wall alone */
+    if ((what == LC_SELECT || what == LC_IMAGE) && screen == drawn && screen == LS_ALBUMS &&
+        (m = H->model(LS_ALBUMS))) {
+        draw_wall_body(m);      /* a move on the wall, or covers came: the wall alone */
         return;
     }
     if (what == LC_SELECT && screen == drawn && screen == LS_ALBUM) {

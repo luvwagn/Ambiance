@@ -1341,101 +1341,312 @@ static void draw_page(void)
 /* ---------------------------------------------------------------- the wall: covers, sideways */
 /* Its covers in columns of as many as fit down, the columns running on to
  * the right past the screen's edge; a move glides it sideways (wall_px)
- * so the chosen cover's column shows, a little of the next beside it. */
+ * so the chosen cover's column shows, a little of the next beside it.
+ * Drawn whole only when it must be: a glide moves what is drawn along
+ * (H->copy) and draws the strip that comes in; a move, the pointer or a
+ * cover coming draw the covers they touch. */
 static LONG wall_rows = 1, wall_px, wall_tgt, wall_count = -1;
 static const void *wall_of;
-static LONG wall_cw, wall_ch, wall_x0, wall_y0, wall_th;
+static struct {
+    LONG x0, y0, bottom, viewh, gap, cs, th, ch, ncol, maxpx, viewe;
+} wg;
+static LONG wall_sel_drawn = -1, wall_hov_drawn = -1;  /* drawn chosen, under the pointer */
+static char wall_letter;                /* the big letter drawn over it (0 none) */
+static LONG wall_lx0, wall_lx1;         /* ...where */
+#define WALL_PH 64
+static LONG wall_ph[WALL_PH];           /* covers drawn waiting for their picture */
+static int wall_nph;
 
-static void draw_wall_body(const struct LPage *m)
+/* Where everything goes; where the glide is going (the chosen one shown) */
+static void wall_geom(const struct LPage *m)
 {
     const struct LList *l = &m->list;
-    LONG x0 = X(30), y0 = BODY_Y, bottom = body_bottom(), viewh = bottom - y0, gap = X(18);
-    LONG cs, th, ch, rows, ncol, maxpx, viewe = W - X(24) - x0, i, sel = l->sel;
+    LONG cs, th, ch, rows, sel = l->sel;
+    wg.x0 = X(30);
+    wg.y0 = BODY_Y;
+    wg.bottom = body_bottom();
+    wg.viewh = wg.bottom - wg.y0;
+    wg.gap = X(18);
+    wg.viewe = W - X(24) - wg.x0;
     cs = Y(118);
     th = m->frames ? cs * 3 / 4 : cs;
     ch = th + Y(6) + FH * 2 + Y(12);
-    rows = (viewh + Y(8)) / ch;
+    rows = (wg.viewh + Y(8)) / ch;
     if (rows < 1)
         rows = 1;
-    if (rows > 1 && rows * ch > viewh) {    /* (a little more room each) */
-        cs = (viewh / rows - Y(6) - FH * 2 - Y(12)) * (m->frames ? 4 : 3) / (m->frames ? 3 : 3);
-    }
+    if (rows > 1 && rows * ch > wg.viewh)       /* (a little smaller, to fit) */
+        cs = (wg.viewh / rows - Y(6) - FH * 2 - Y(12));
     th = m->frames ? cs * 3 / 4 : cs;
     if (m->frames)
         cs = th * 4 / 3;
-    ch = viewh / rows;
+    wg.cs = cs;
+    wg.th = th;
+    wg.ch = wg.viewh / rows;
     wall_rows = rows;
-    wall_cw = cs;
-    wall_th = th;
-    wall_ch = ch;
-    wall_x0 = x0;
-    wall_y0 = y0;
-    ncol = (l->count + rows - 1) / rows;
-    maxpx = ncol * (cs + gap) - viewe;
-    if (maxpx < 0)
-        maxpx = 0;
+    wg.ncol = (l->count + rows - 1) / rows;
+    wg.maxpx = wg.ncol * (cs + wg.gap) - wg.viewe;
+    if (wg.maxpx < 0)
+        wg.maxpx = 0;
     if (sel >= 0) {
-        LONG left = (sel / rows) * (cs + gap), peek = cs / 3;
+        LONG left = (sel / rows) * (cs + wg.gap), peek = cs / 3;
         if (left - (sel >= rows ? peek : 0) < wall_tgt)
             wall_tgt = left - (sel >= rows ? peek : 0);
-        if (left + cs + peek > wall_tgt + viewe)
-            wall_tgt = left + cs + peek - viewe;
+        if (left + cs + peek > wall_tgt + wg.viewe)
+            wall_tgt = left + cs + peek - wg.viewe;
     }
-    if (wall_tgt > maxpx)
-        wall_tgt = maxpx;
+    if (wall_tgt > wg.maxpx)
+        wall_tgt = wg.maxpx;
     if (wall_tgt < 0)
         wall_tgt = 0;
+    wall_tgt &= ~3L;                    /* (whole steps of the 16-bit dither: a copied wall
+                                         * and what is drawn beside it match) */
     if (wall_of != (const void *)l->item || wall_count < 0 || l->count < wall_count) {
-        wall_px = wall_tgt;
+        wall_px = wall_tgt;             /* another list: there at once */
         wall_of = (const void *)l->item;
     }
     wall_count = l->count;
-    nhits = hits_base;
-    hit_sel = sel;
-    H->clip(0, (WORD)(y0 - Y(10)), W, (WORD)(bottom + Y(10)));
-    H->vgrad(0, (WORD)(y0 - Y(10)), W, (WORD)(viewh + Y(20)), grad(y0 - Y(10)), grad(bottom + Y(10)));
-    spin_x = -1;
-    if (!l->count) {
-        waiting_or_none(m, x0, y0, viewe);
-        H->clip(0, 0, W, HT);
+}
+
+/* the band the covers are drawn in (the bar under it apart) */
+#define WALL_TOP (wg.y0 - Y(10))
+#define WALL_GLOW (X(7) + 3)
+
+/* The band's background where x0..x1, y0..y1 (inside it): the one
+ * gradient the whole is drawn with, so a piece drawn again is as it was */
+static void wall_bg(LONG xa, LONG ya, LONG xb, LONG yb)
+{
+    if (ya < WALL_TOP)
+        ya = WALL_TOP;
+    if (yb > wg.bottom)
+        yb = wg.bottom;
+    if (xa < 0)
+        xa = 0;
+    if (xb > W)
+        xb = W;
+    if (xb <= xa || yb <= ya)
         return;
+    H->clip((WORD)xa, (WORD)ya, (WORD)xb, (WORD)yb);
+    H->vgrad(0, (WORD)WALL_TOP, W, (WORD)(wg.viewh + Y(20)), grad(WALL_TOP), grad(wg.bottom + Y(10)));
+}
+
+static LONG wall_cx(LONG i) { return wg.x0 + (i / wall_rows) * (wg.cs + wg.gap) - wall_px; }
+static LONG wall_cy(LONG i) { return wg.y0 + (i % wall_rows) * wg.ch; }
+
+/* Cover i where it is now; clear: its place painted first */
+static void wall_tile(const struct LPage *m, LONG i, BOOL clear)
+{
+    const struct LItem *it;
+    LONG cx = wall_cx(i), cy = wall_cy(i), cs = wg.cs, th = wg.th;
+    BOOL on = i == m->list.sel, hov = HOVER(HT_ROW, i);
+    if (i < 0 || i >= m->list.count || cx >= W || cx + cs + WALL_GLOW <= 0)
+        return;
+    if (clear) {
+        wall_bg(cx - WALL_GLOW, cy - WALL_GLOW, cx + cs + WALL_GLOW, cy + th + Y(6) + FH * 2 + 2);
+        H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
     }
-    for (i = (wall_px / (cs + gap)) * rows; i < l->count; i++) {
-        const struct LItem *it = l->item(i);
-        LONG cx = x0 + (i / rows) * (cs + gap) - wall_px, cy = y0 + (i % rows) * ch;
-        BOOL on = i == sel, hov = HOVER(HT_ROW, i);
+    it = m->list.item(i);
+    if (it->flags & LIF_HEAD)
+        return;
+    if (on || hov)
+        glow(cx - 2, cy - 2, cs + 4, th + 4, Y(4), grad(cy));
+    if (it->kind == LI_DISC) {
+        disc(cx + (cs - th) / 2, cy, th, grad(cy + th / 2));
+    } else if (!cover_at(it->art, it->label, cx, cy, cs, th, 0) && it->art && wall_nph < WALL_PH) {
+        int k;
+        for (k = 0; k < wall_nph && wall_ph[k] != i; k++)
+            ;
+        if (k == wall_nph)
+            wall_ph[wall_nph++] = i;    /* (drawn again when pictures come) */
+    }
+    if (on)
+        H->frame((WORD)(cx - 1), (WORD)(cy - 1), (WORD)(cs + 2), (WORD)(th + 2), 2, C_ACC);
+    if (it->flags & LIF_NOW)
+        mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, grad(cy + th - FH));
+    text(cx, cy + th + Y(6), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
+    if (it->sub || it->tag)
+        text(cx, cy + th + Y(6) + FH, it->sub ? it->sub : it->tag, LF_SMALL, C_SUB, &bg_grad, cs);
+}
+
+/* The covers whose places cross x .. x1 (the band clipped there first) */
+static void wall_tiles_in(const struct LPage *m, LONG xa, LONG xb)
+{
+    LONG c, r, pitch = wg.cs + wg.gap;
+    if (xa < 0)
+        xa = 0;
+    if (xb > W)
+        xb = W;
+    if (xb <= xa)
+        return;
+    wall_bg(xa, WALL_TOP, xb, wg.bottom);       /* (and clipped there: the covers in it) */
+    for (c = (xa - wg.x0 + wall_px - wg.cs - WALL_GLOW) / pitch; c * pitch + wg.x0 - wall_px - WALL_GLOW < xb; c++) {
+        if (c < 0)
+            continue;
+        for (r = 0; r < wall_rows; r++)
+            wall_tile(m, c * wall_rows + r, FALSE);
+    }
+}
+
+/* The hits of the covers where they are now, and the bar under them */
+static void wall_hits_bar(const struct LPage *m)
+{
+    LONG i, sel = m->list.sel;
+    nhits = hits_base;
+    nsbar = 0;
+    hit_sel = sel;
+    for (i = (wall_px / (wg.cs + wg.gap)) * wall_rows; i < m->list.count; i++) {
+        LONG cx = wall_cx(i);
         if (cx >= W)
             break;
-        if (it->flags & LIF_HEAD)
-            continue;
-        hit(cx, cy, cs, th + FH * 2 + Y(6), HT_ROW, it->kind, i);
-        if (on || hov)
-            glow(cx - 2, cy - 2, cs + 4, th + 4, Y(4), grad(cy));
-        if (it->kind == LI_DISC)
-            disc(cx + (cs - th) / 2, cy, th, grad(cy + th / 2));
-        else
-            cover_at(it->art, it->label, cx, cy, cs, th, 0);
-        if (on)
-            H->frame((WORD)(cx - 1), (WORD)(cy - 1), (WORD)(cs + 2), (WORD)(th + 2), 2, C_ACC);
-        if (it->flags & LIF_NOW)
-            mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, grad(cy + th - FH));
-        text(cx, cy + th + Y(6), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
-        if (it->sub || it->tag)
-            text(cx, cy + th + Y(6) + FH, it->sub ? it->sub : it->tag, LF_SMALL, C_SUB, &bg_grad, cs);
+        if (!(m->list.item(i)->flags & LIF_HEAD))
+            hit(cx, wall_cy(i), wg.cs, wg.th + FH * 2 + Y(6), HT_ROW, m->list.item(i)->kind, i);
     }
-    if (maxpx > 0) {
-        LONG bw = viewe, tl = bw * viewe / (ncol * (cs + gap) > 0 ? ncol * (cs + gap) : 1), t;
+    H->clip(0, (WORD)wg.bottom, W, (WORD)(wg.bottom + Y(10)));
+    H->vgrad(0, (WORD)WALL_TOP, W, (WORD)(wg.viewh + Y(20)), grad(WALL_TOP), grad(wg.bottom + Y(10)));
+    if (wg.maxpx > 0) {
+        LONG bw = wg.viewe, all = wg.ncol * (wg.cs + wg.gap), tl = bw * wg.viewe / (all > 0 ? all : 1), t;
         if (tl < X(24))
             tl = X(24);
         if (tl > bw)
             tl = bw;
-        t = x0 + (bw - tl) * wall_px / maxpx;
-        scroll_units(sel, rows * (viewe / (cs + gap) > 1 ? viewe / (cs + gap) : 1), l->count - 1);
-        scroll_bar(x0, bottom + Y(2), bw, t, tl, TRUE);
+        t = wg.x0 + (bw - tl) * wall_px / wg.maxpx;
+        scroll_units(sel, wall_rows * (wg.viewe / (wg.cs + wg.gap) > 1 ? wg.viewe / (wg.cs + wg.gap) : 1),
+                     m->list.count - 1);
+        scroll_bar(wg.x0, wg.bottom + Y(2), bw, t, tl, TRUE);
     }
-    if (m->letter && H->letter)
-        H->letter((WORD)(W - X(60)), (WORD)(y0 + viewh / 2), C_LETTER);
     H->clip(0, 0, W, HT);
+}
+
+/* The big letter over the covers, as the host has it up; the covers under
+ * where it was drawn again first (also where a glide moved it to: by) */
+static void wall_letter_update(const struct LPage *m, LONG by)
+{
+    if (wall_letter) {
+        LONG a = wall_lx0, b = wall_lx1;
+        if (by < 0)
+            a += by;
+        else
+            b += by;
+        wall_letter = 0;
+        wall_tiles_in(m, a, b);
+    }
+    if (m->letter && H->letter) {
+        LONG w;
+        H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+        w = H->letter((WORD)(W - X(60)), (WORD)(wg.y0 + wg.viewh / 2), C_LETTER);
+        if (w > 0) {
+            wall_letter = m->letter;
+            wall_lx0 = W - X(60) - w - 2;
+            wall_lx1 = W - X(60) + 2;
+        }
+    }
+    H->clip(0, 0, W, HT);
+}
+
+static void draw_wall_body(const struct LPage *m)
+{
+    const struct LList *l = &m->list;
+    LONG i;
+    wall_geom(m);
+    wall_nph = 0;
+    wall_letter = 0;
+    wall_sel_drawn = l->sel;
+    wall_hov_drawn = hov_what == HT_ROW ? hov_arg : -1;
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)(wg.bottom + Y(10)));
+    H->vgrad(0, (WORD)WALL_TOP, W, (WORD)(wg.viewh + Y(20)), grad(WALL_TOP), grad(wg.bottom + Y(10)));
+    spin_x = -1;
+    nhits = hits_base;
+    if (!l->count) {
+        waiting_or_none(m, wg.x0, wg.y0, wg.viewe);
+        H->clip(0, 0, W, HT);
+        return;
+    }
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+    for (i = (wall_px / (wg.cs + wg.gap)) * wall_rows; i < l->count && wall_cx(i) < W; i++)
+        wall_tile(m, i, FALSE);
+    wall_hits_bar(m);
+    wall_letter_update(m, 0);
+}
+
+/* The chosen one moved, or the pointer: those covers alone (the glide,
+ * if it must move, follows in the ticks) */
+static void wall_moved(const struct LPage *m)
+{
+    LONG was = wall_sel_drawn, hw = wall_hov_drawn, hn = hov_what == HT_ROW ? hov_arg : -1, k;
+    LONG redo[4];
+    int n = 0, j;
+    wall_geom(m);
+    redo[n++] = was;
+    redo[n++] = m->list.sel;
+    redo[n++] = hw;
+    redo[n++] = hn;
+    wall_sel_drawn = m->list.sel;
+    wall_hov_drawn = hn;
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+    for (j = 0; j < n; j++) {
+        for (k = 0; k < j && redo[k] != redo[j]; k++)
+            ;
+        if (k == j && redo[j] >= 0)
+            wall_tile(m, redo[j], TRUE);
+    }
+    wall_hits_bar(m);
+    if (wall_letter || m->letter)
+        wall_letter_update(m, 0);
+}
+
+/* Pictures came: the covers that waited for one */
+static void wall_pictures(const struct LPage *m)
+{
+    LONG ph[WALL_PH];
+    int n = wall_nph, k;
+    for (k = 0; k < n; k++)
+        ph[k] = wall_ph[k];
+    wall_nph = 0;
+    wall_geom(m);
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+    for (k = 0; k < n; k++)
+        if (wall_cx(ph[k]) < W && wall_cx(ph[k]) + wg.cs > 0)
+            wall_tile(m, ph[k], TRUE);
+    if (wall_letter)
+        wall_letter_update(m, 0);
+    H->clip(0, 0, W, HT);
+}
+
+/* A step of the glide, from where it was drawn (old): what is drawn moved
+ * along, the strip that comes in drawn; without the host's copy, all */
+static void wall_glide_step(const struct LPage *m, LONG old)
+{
+    LONG d = wall_px - old;
+    if (!d)
+        return;
+    if (!H->copy || d >= W || -d >= W || wall_nph >= WALL_PH) {
+        draw_wall_body(m);
+        return;
+    }
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+    if (!H->copy(0, (WORD)WALL_TOP, W, (WORD)(wg.bottom - WALL_TOP), (WORD)-d, 0)) {
+        draw_wall_body(m);
+        return;
+    }
+    {
+        /* what waited for a picture moved too: still waiting, where it is now */
+        int k, n = 0;
+        for (k = 0; k < wall_nph; k++)
+            if (wall_cx(wall_ph[k]) < W && wall_cx(wall_ph[k]) + wg.cs + WALL_GLOW > 0)
+                wall_ph[n++] = wall_ph[k];
+        wall_nph = n;
+    }
+    if (d > 0)
+        wall_tiles_in(m, W - d, W);
+    else
+        wall_tiles_in(m, 0, -d);
+    if (wall_letter) {
+        wall_lx0 -= d;              /* (the copy took it along: drawn away from there, and up again) */
+        wall_lx1 -= d;
+        wall_letter_update(m, d);
+    } else if (m->letter) {
+        wall_letter_update(m, 0);
+    }
+    wall_hits_bar(m);
 }
 
 static void draw_wall(void)
@@ -1445,9 +1656,9 @@ static void draw_wall(void)
     page_head(m, TRUE);
     if (!m)
         return;
+    now_inset();                /* (before the wall: its hits drawn again alone, the last) */
     hits_base = nhits;
     draw_wall_body(m);
-    now_inset();
     footer_keep(m->hint, m->message, m->waiting != NULL);
 }
 
@@ -1936,6 +2147,21 @@ static void hz_changed_body(int screen, ULONG what)
         }
         return;
     }
+    if (what == LC_IMAGE && screen == drawn) {
+        H->clip(0, 0, W, HT);
+        if (screen == LS_ALBUMS && (m = H->model(LS_ALBUMS)) && wall_count == m->list.count) {
+            wall_pictures(m);           /* the covers that waited for them */
+            return;
+        }
+        if (screen == LS_HOME) {
+            const struct LHome *h = H->model(LS_HOME);
+            if (h && h->sel == home_sec) {
+                nhits = hits_base;
+                home_tiles(h);
+                return;
+            }
+        }
+    }
     if (what == LC_SELECT && screen == drawn) {
         H->clip(0, 0, W, HT);
         switch (screen) {
@@ -1950,9 +2176,8 @@ static void hz_changed_body(int screen, ULONG what)
             break;
         }
         case LS_ALBUMS:
-            if ((m = H->model(LS_ALBUMS))) {
-                draw_wall_body(m);
-                now_inset();
+            if ((m = H->model(LS_ALBUMS)) && m->list.count && wall_count == m->list.count) {
+                wall_moved(m);          /* (the covers it touches: the glide follows) */
                 return;
             }
             break;
@@ -2017,13 +2242,13 @@ static void hz_tick(ULONG ms)
 {
     if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
         const struct LPage *m = H->model(LS_ALBUMS);
+        LONG old = wall_px;
         wall_px = glide(&wall_g, wall_px, wall_tgt, ms);
+        if (wall_px != wall_tgt)
+            wall_px &= ~3L;             /* (whole dither steps, as its goal) */
         if (m) {
             H->clip(0, 0, W, HT);
-            draw_wall_body(m);
-            now_inset();
-            if (ft_shown)
-                footer_paint(ft_shown);
+            wall_glide_step(m, old);    /* (what is drawn moved along; the strip that comes in) */
         }
     }
     if (drawn == LS_HOME && home_px != home_tgt) {
@@ -2148,8 +2373,10 @@ static void hover_redraw(int screen)
         now_inset();
         break;
     case LS_ALBUMS:
-        draw_wall_body(m);
-        now_inset();
+        if (((const struct LPage *)m)->list.count && wall_count == ((const struct LPage *)m)->list.count)
+            wall_moved(m);              /* (the covers under the pointer, before and now) */
+        else
+            draw_wall_body(m);
         break;
     case LS_ALBUM:
         album_rows();
