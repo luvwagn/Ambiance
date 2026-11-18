@@ -472,15 +472,6 @@ Flow（AmigaAMPプラグイン：AmbianceのVisuals引き出しに入れます�
 MSG_3DF462B5
 Flow
 ; Flow
-MSG_49459BDD
-再生中でFを押すと、Ambiance独自の全画面ビジュアライザーFlowを表示します。
-; F on Now playing shows Flow, Ambiance's own full screen visual.
-MSG_05AA8776
-代わりにAmigaAMPのビジュアルプラグインも使えます。AmbianceのVisuals引き出し（またはAmigaAMP:Plugins）に入れて、ここで選んでください。Aminetのmus/playにあります（AmigaAMP-VisualPluginsなど）。
-; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
-MSG_734C3A9C
-ほとんどはWorkbenchの画面に開くため、その画面が表示できるものが必要です。多くはグラフィックカードの画面、一部はWarp3DやPowerPCが必要です。
-; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 MHIではスペクトルなし: MHIがMP3を自分で再生します
 ; No spectrum under MHI: it plays the MP3 itself
@@ -790,15 +781,9 @@ MSG_22FBBBB2
 MSG_55D2D3D8
 MP3品質
 ; MP3 quality
-MSG_050221B5
-MP3品質: 自動
-; MP3 quality: automatic
-MSG_71E7648A
-MP3品質: 高
-; MP3 quality: high
-MSG_751F9CE1
-MP3品質: 中
-; MP3 quality: medium
+MSG_3E0A061D
+高
+; High
 MSG_04A16198
 このAmigaの速度で決定、起動ごとに測定
 ; by this Amiga's speed, measured each run
@@ -808,9 +793,9 @@ MSG_68B10FC3
 MSG_313B727C
 処理が約1割少ない
 ; about a tenth less work
-MSG_003CBCAE
-デコーダーの最高品質
-; the decoder gives its best
+MSG_7B5C3E86
+MHIとZZ9000のmpega.libraryはMP3を最高品質でデコードします
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_4DEE1DD3
 %ld箇所
 ; %ld place
@@ -871,6 +856,15 @@ iGameを探す
 MSG_451A8225
 なし: iGameリストを使わない
 ; None: no iGame list
+MSG_49459BDD
+再生中でFを押すと、Ambiance独自の全画面ビジュアライザーFlowを表示します。
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+代わりにAmigaAMPのビジュアルプラグインも使えます。AmbianceのVisuals引き出し（またはAmigaAMP:Plugins）に入れて、ここで選んでください。Aminetのmus/playにあります（AmigaAMP-VisualPluginsなど）。
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+ほとんどはWorkbenchの画面に開くため、その画面が表示できるものが必要です。多くはグラフィックカードの画面、一部はWarp3DやPowerPCが必要です。
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_3015054E
 WHDLoadはインストール済み: %s
 ; WHDLoad is installed: %s
@@ -1774,9 +1768,6 @@ MHI未インストール (ドライバーはLIBS:MHI)
 MSG_104981CE
 ambmpega.libraryがAmbianceのLibsにありません
 ; ambmpega.library is not in Ambiance's Libs
-MSG_7B5C3E86
-MHIとZZ9000のmpega.libraryはMP3を最高品質でデコードします
-; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 今後開く局リストに適用
 ; Station lists opened from now on
@@ -2254,9 +2245,12 @@ MSG_04F3511D
 MSG_389C8A70
 評価
 ; Rating
-MSG_6B1D7CB6
-次:
-; Next:
 MSG_5E281FEB
 一時停止中
 ; Paused
+MSG_720E34D8
+停止中: 再生で再開します
+; Stopped: Play starts it again
+MSG_6B1D7CB6
+次:
+; Next:

@@ -51,7 +51,8 @@ enum { LSEC_GAMES, LSEC_DEMOS, LSEC_MUSIC, LSEC_MODS, LSEC_PICTURES, LSEC_VIDEOS
 /* A row of a list, made by the host. Its strings are the host's, good
  * until the layout's call returns. */
 enum { LI_OTHER, LI_FOLDER, LI_ALBUM, LI_ARTIST, LI_TRACK, LI_MODULE, LI_STATION, LI_PICTURE,
-       LI_VIDEO, LI_GAME, LI_ACTION, LI_SETTING };
+       LI_VIDEO, LI_GAME, LI_ACTION, LI_SETTING,
+       LI_DISC };                       /* a DVD in a drive: plays as a video, drawn as a disc */
 enum { LM_NONE, LM_ARROW, LM_PLAY, LM_PLAYING, LM_CHECK_ON, LM_CHECK_OFF, LM_RADIO_ON, LM_RADIO_OFF,
        LM_CYCLE };
 #define LIF_HEAD     1  /* a heading among the rows (not chosen) */
@@ -99,6 +100,11 @@ struct LPage {
                                  * what to say in their place ("Searching..."), or NULL */
     UBYTE wait_phase;           /* waiting: a spinner's step, 0-7 (changed(LC_WAIT) as
                                  * it turns) */
+    /* text: under the text, a note (a paragraph, NULL none) over picture
+     * (above: the page's own, as Credits' AGS logo), and at the bottom
+     * Plex's "Works with" mark (host->plexmark) */
+    const char *note;
+    UBYTE plexmark;
 };
 
 /* A row on Home: a title and a few items (recently added albums, the
@@ -154,7 +160,18 @@ struct LNow {
     const char *const *next;    /* what plays next */
     WORD nlevels;
     const UBYTE *levels;        /* the spectrum, 0-255 a band, or NULL */
+    UBYTE stopped;              /* there, not playing (stopped, or left so by the last run):
+                                 * Play starts it */
+    UBYTE volume;               /* 0-64 */
+    WORD btn;                   /* the button chosen with the keys (LNB_*), -1 none shown */
+    UWORD off;                  /* LNB_BIT()s greyed (nothing to do for what plays) */
+    UWORD on;                   /* LNB_BIT()s lit as on: Loop, Mute */
 };
+
+/* Now playing's buttons, as the classic layout's (LAC_BUTTON presses one) */
+enum { LNB_PREV, LNB_BACK, LNB_PLAY, LNB_STOP, LNB_FWD, LNB_NEXT, LNB_LOOP, LNB_MUTE, LNB_VDOWN,
+       LNB_VUP, LNB_COUNT };
+#define LNB_BIT(b) (1U << (b))
 
 /* A picture, prepared by the host at the size asked for (0x00RRGGBB). */
 struct LImage {
@@ -174,7 +191,9 @@ enum {
     LAC_ENTER,                  /* into the chosen section */
     LAC_PAUSE,                  /* playback: pause or play */
     LAC_NEXT, LAC_PREV,         /* playback: the next or previous track */
-    LAC_NOWPLAYING              /* Now playing */
+    LAC_NOWPLAYING,             /* Now playing */
+    LAC_HOME,                   /* Home: every level closed, the sections' menu */
+    LAC_BUTTON                  /* arg: Now playing's button pressed (LNB_*) */
 };
 
 /* Input given to the layout (input's action): the program's keys, the
@@ -234,6 +253,11 @@ struct LayoutHost {
     void (*log)(const char *what);
     ULONG (*now_ms)(void);
     const char *clock;          /* the clock's text, as the header shows it */
+    /* Plex's logo ("Works with", Credits' LPage.plexmark) about two lines
+     * tall, over bg; NULL if none */
+    const struct LImage *(*plexmark)(ULONG bg);
+    const char *debug;          /* Settings > Debug on: the CPU and memory line to show
+                                 * at the top ("" off); as the clock, kept up to date */
 };
 
 struct LayoutEngine {

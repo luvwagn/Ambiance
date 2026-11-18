@@ -1789,18 +1789,37 @@ void mp_status(struct MpStatus *s)
     meters(s, hit, vol);
 }
 
+/* A tracker's stand-in for no name ("<unnamed>": OctaMED's own; "untitled"):
+ * no name, so the file's is shown */
+static const char *named(const char *t)
+{
+    const char *s = t ? t : "";
+    char b[16];
+    int n = 0;
+    while (*s == ' ' || *s == '<' || *s == '(' || *s == '[')
+        s++;
+    while (s[n] && n < 15 && s[n] != '>' && s[n] != ')' && s[n] != ']' && s[n] != ' ') {
+        b[n] = (char)(s[n] >= 'A' && s[n] <= 'Z' ? s[n] + 32 : s[n]);
+        n++;
+    }
+    b[n] = 0;
+    if (!strcmp(b, "unnamed") || !strcmp(b, "untitled") || !strcmp(b, "noname") || !strcmp(b, "no_name"))
+        return "";
+    return t ? t : "";
+}
+
 const char *mp_title(void)
 {
     if (mp.engine == ENG_EAGLE) {
         struct EpInfo in;
         ep_info(&in);
-        return in.song ? in.song : "";
+        return named(in.song);
     }
     if (mp.engine == ENG_MIX)
-        return mx_title();
+        return named(mx_title());
     if (mp.engine == ENG_RADIO)
         return mp.rname;
-    return mp.pt ? mp.pt->title : "";
+    return mp.pt ? named(mp.pt->title) : "";
 }
 
 /* What it is: the ProTracker tag ("M.K."), or the player's name. */

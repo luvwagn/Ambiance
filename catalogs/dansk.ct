@@ -472,15 +472,6 @@ Flow (AmigaAMP-plugins: læg dem i Ambiance's skuffe Visuals)
 MSG_3DF462B5
 Flow
 ; Flow
-MSG_49459BDD
-F på Spiller nu viser Flow, Ambiance's egen visualisering i fuld skærm.
-; F on Now playing shows Flow, Ambiance's own full screen visual.
-MSG_05AA8776
-AmigaAMP's visuelle plugins kan bruges i stedet: læg dem i Ambiance's skuffe Visuals (eller AmigaAMP:Plugins), og vælg så et her. Aminet har dem i mus/play (AmigaAMP-VisualPlugins og andre).
-; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
-MSG_734C3A9C
-De fleste åbner på Workbenchs skærm og kræver det, den kan vise: et grafikkorts skærm for de fleste, Warp3D eller en PowerPC for nogle.
-; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Intet spektrum med MHI: den spiller selv MP3'en
 ; No spectrum under MHI: it plays the MP3 itself
@@ -790,15 +781,9 @@ afkoder og afspiller
 MSG_55D2D3D8
 MP3-kvalitet
 ; MP3 quality
-MSG_050221B5
-MP3-kvalitet: automatisk
-; MP3 quality: automatic
-MSG_71E7648A
-MP3-kvalitet: høj
-; MP3 quality: high
-MSG_751F9CE1
-MP3-kvalitet: middel
-; MP3 quality: medium
+MSG_3E0A061D
+Høj
+; High
 MSG_04A16198
 efter denne Amigas hastighed, målt ved hver start
 ; by this Amiga's speed, measured each run
@@ -808,9 +793,9 @@ mest nøjagtig
 MSG_313B727C
 omkring en tiendedel mindre arbejde
 ; about a tenth less work
-MSG_003CBCAE
-dekoderen giver sit bedste
-; the decoder gives its best
+MSG_7B5C3E86
+MHI og ZZ9000's mpega.library afkoder MP3 bedst muligt
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_4DEE1DD3
 %ld sted
 ; %ld place
@@ -871,6 +856,15 @@ Find iGame
 MSG_451A8225
 Ingen: ingen iGame-liste
 ; None: no iGame list
+MSG_49459BDD
+F på Spiller nu viser Flow, Ambiance's egen visualisering i fuld skærm.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+AmigaAMP's visuelle plugins kan bruges i stedet: læg dem i Ambiance's skuffe Visuals (eller AmigaAMP:Plugins), og vælg så et her. Aminet har dem i mus/play (AmigaAMP-VisualPlugins og andre).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+De fleste åbner på Workbenchs skærm og kræver det, den kan vise: et grafikkorts skærm for de fleste, Warp3D eller en PowerPC for nogle.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_3015054E
 WHDLoad er installeret: %s
 ; WHDLoad is installed: %s
@@ -1774,9 +1768,6 @@ MHI er ikke installeret (dets drivere i LIBS:MHI)
 MSG_104981CE
 ambmpega.library er ikke i Ambiance's Libs
 ; ambmpega.library is not in Ambiance's Libs
-MSG_7B5C3E86
-MHI og ZZ9000's mpega.library afkoder MP3 bedst muligt
-; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Stationslister åbnet fra nu af
 ; Station lists opened from now on
@@ -2254,9 +2245,12 @@ MSG_04F3511D
 MSG_389C8A70
 Vurdering
 ; Rating
-MSG_6B1D7CB6
-Næste:
-; Next:
 MSG_5E281FEB
 På pause
 ; Paused
+MSG_720E34D8
+Stoppet: Afspil starter den igen
+; Stopped: Play starts it again
+MSG_6B1D7CB6
+Næste:
+; Next:

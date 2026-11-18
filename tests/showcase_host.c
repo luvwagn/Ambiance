@@ -318,8 +318,9 @@ static struct LItem music_rows[] = {
     { "Now playing", NULL, "Amiga Dreams", NULL, LI_ACTION, LM_PLAYING, LIF_NOW, 0 },
     { "Music folders", NULL, "Work:Music", "cover-folders", LI_FOLDER, LM_ARROW, 0, 0 },
     { "Plex", NULL, "Living room", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
+    { "DF0_DVD", NULL, "DVD", NULL, LI_DISC, LM_NONE, 0, 0 },
 };
-static const struct LRow row = { "Music", 8, music_rows };
+static const struct LRow row = { "Music", 9, music_rows };
 
 static struct LItem set_rows[] = {
     { "Screen", NULL, NULL, NULL, LI_OTHER, 0, LIF_HEAD, 0 },
@@ -489,6 +490,10 @@ static const void *h_model(int screen)
         now.next = next;
         now.nlevels = 4;
         now.levels = lev;
+        now.volume = 44;
+        now.btn = LNB_PLAY;
+        now.off = LNB_BIT(LNB_BACK) | LNB_BIT(LNB_FWD);
+        now.on = LNB_BIT(LNB_LOOP);
         return &now;
     }
     memset(&page, 0, sizeof(page));
@@ -534,6 +539,9 @@ static const void *h_model(int screen)
         page.ndetails = sizeof(text_lines) / sizeof(text_lines[0]);
         page.details = text_lines;
         page.message = "Press Esc again to quit Ambiance";
+        page.picture = "shot-pinball";
+        page.note = "This front-end would not be possible without the immense efforts of the AGS team.";
+        page.plexmark = 1;
     }
     return &page;
 }
@@ -555,6 +563,17 @@ static const struct LImage *h_logo(ULONG bg)
     int i;
     for (i = 0; i < 120 * 30; i++)
         lp[i] = (i % 120) < 30 ? 0x2266CC : (i / 120 > 8 && i / 120 < 22) ? 0xFFFFFF : bg;
+    return &im;
+}
+
+/* a stand-in Plex mark: 86 x 40, yellow */
+static const struct LImage *h_plexmark(ULONG bg)
+{
+    static ULONG pp[86 * 40];
+    static struct LImage im = { 86, 40, 86, pp };
+    int i;
+    for (i = 0; i < 86 * 40; i++)
+        pp[i] = (i % 86) > 60 ? 0xEBAF00 : (i / 86 > 8 && i / 86 < 32) ? 0xFFFFFF : bg;
     return &im;
 }
 
@@ -631,6 +650,8 @@ static void run(int w, int h, int bits, const char *font)
     host.icon_px = F.icon_n;
     host.picture = h_picture;
     host.logo = h_logo;
+    host.plexmark = h_plexmark;
+    host.debug = "CPU \a12%  app  3%   RAM 41023K  (chip 812K)";
     host.letter = h_letter;
     host.model = h_model;
     host.act = h_act;

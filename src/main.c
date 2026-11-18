@@ -507,12 +507,27 @@ static void busy_begin(void)
     }
 }
 
+static BOOL lv_busy;                /* a layout is drawing a busy wait's spinner */
+static void lv_busy_frame(void);
+
 static void busy_tick(void)
 {
     struct Page *p = cur();
     ULONG now = time_ms();
     if (!busy.depth || !g.win)
         return;
+    if (lv_on()) {
+        /* a layout draws: its own small spinner, where the list goes (the
+         * classic one would be drawn under the layout, unseen) */
+        if (!busy.on) {
+            if ((LONG)(now - busy.since) < SPIN_AFTER)
+                return;
+            busy.on = TRUE;
+            lv_busy = TRUE;
+        }
+        lv_busy_frame();
+        return;
+    }
     if (!busy.on) {
         WORD ring, ringy, r, ry, x1;
         if ((LONG)(now - busy.since) < SPIN_AFTER)
@@ -564,6 +579,7 @@ static void busy_end(BOOL redraw)
 {
     if (busy.depth && --busy.depth == 0 && busy.on) {
         busy.on = FALSE;
+        lv_busy = FALSE;
         busy_was_shown = TRUE;
         plex_shown[0] = 0;                  /* the spinner may have been over them */
         if (redraw && g.win && cur())
@@ -2934,6 +2950,7 @@ static void build_plex_settings(struct Page *p)
 /* Settings > Sound: what plays the sound and what decodes MP3. Paula and mpega.library are all there is yet;
  * AHI and MHI are shown, greyed, when installed (they come later, and
  * with AHI other rates than Paula's). */
+static void head_para(struct Page *p, const char *s);
 static void build_sound_settings(struct Page *p)
 {
     struct Item *it;
@@ -2980,17 +2997,20 @@ static void build_sound_settings(struct Page *p)
      * ZZ9000's mpega.library, which give their best) */
     heading_item(p, _("MP3 quality"));
     {
-        static const char *const lab[3] = { N_("MP3 quality: automatic"), N_("MP3 quality: high"),
-                                            N_("MP3 quality: medium") };
+        /* the heading says what they are: the rows say which (three rows
+         * each "MP3 quality: ..." read as three settings); MHI or the
+         * ZZ9000 decoding: none to choose, a line saying so */
+        static const char *const lab[3] = { N_("Automatic"), N_("High"), N_("Medium") };
         static const char *const sub[3] = { N_("by this Amiga's speed, measured each run"),
                                             N_("the most accurate"), N_("about a tenth less work") };
         BOOL here = !mhi_sel[0] && (own_mpega || !caps.mpega_zz);
         int i;
-        for (i = 0; i < 3; i++)
-            if ((it = action_item(p, _(lab[i]), here ? _(sub[i]) : _("the decoder gives its best"),
-                                  ACT_SND_MQ0 + i, mp3_q == i ? MARK_RADIO_ON : MARK_RADIO_OFF)) &&
-                !here)
-                it->flags |= ITEM_DISABLED;
+        if (!here)
+            head_para(p, _("MHI and the ZZ9000's mpega.library decode MP3 at their best"));
+        else
+            for (i = 0; i < 3; i++)
+                action_item(p, _(lab[i]), _(sub[i]), ACT_SND_MQ0 + i,
+                            mp3_q == i ? MARK_RADIO_ON : MARK_RADIO_OFF);
     }
     /* FLAC has nothing to choose: flacdec.library is used where it is
      * installed, and whether this Amiga is fast enough is measured at
@@ -4477,6 +4497,7 @@ static void fig_num(char *out, LONG v, int w, const char *unit)
     strcat(out, unit);
 }
 
+static char lv_debug[112];          /* a layout's copy of the Debug line ("" off) */
 static void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
@@ -4491,6 +4512,7 @@ static void draw_status(void)
         if (status_shown[0])
             gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
         status_shown[0] = 0;
+        lv_debug[0] = 0;
         return;
     }
     used = dbg_mem_used(&chip);
@@ -4515,6 +4537,7 @@ static void draw_status(void)
     sprintf(forms[0], "%sCPU %s  app %s   RAM %s  (chip %s)", fps, cpu, app, ram, chp);
     sprintf(forms[1], "%sCPU %s  app %s  RAM %s", fps, cpu, app, ram);
     sprintf(forms[2], "%s%s/%s %s", fps, cpu, app, ram);
+    amb_strlcpy(lv_debug, forms[0], sizeof(lv_debug));     /* (a layout shows it whole) */
     for (i = 0; i < 3; i++)
         if (gfx_textlen(&g, forms[i], TS_SMALL | TS_TABULAR) <= x1 - x0 || i == 2) {
             show = forms[i];
@@ -7150,6 +7173,10 @@ static void set_focus(int f);
 
 enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB_VDOWN, NB_VUP,
        NB_COUNT };
+/* (a layout presses them by these numbers: LAC_BUTTON) */
+typedef char lnb_as_nb[(int)LNB_PREV == (int)NB_PREV && (int)LNB_PLAY == (int)NB_PLAY &&
+                       (int)LNB_LOOP == (int)NB_LOOP && (int)LNB_VUP == (int)NB_VUP &&
+                       (int)LNB_COUNT == (int)NB_COUNT ? 1 : -1];
 
 /* Loop: what plays, again at its end (a module from its start, a track or
  * file played again, a video: anim.c), kept (Ambiance/Loop). A station
@@ -17089,7 +17116,7 @@ static UBYTE lv_kind(const struct Item *it)
     case IT_MOD: return LI_MODULE;
     case IT_STATION: return LI_STATION;
     case IT_PLEXTRACK: case IT_SONG: return LI_TRACK;
-    case IT_ANIM: return LI_VIDEO;
+    case IT_ANIM: return is_dvd_row(it) ? LI_DISC : LI_VIDEO;
     }
     return LI_OTHER;
 }
@@ -17192,6 +17219,8 @@ static void lv_fill_item_art(struct LItem *li, const struct Page *p, LONG i, cha
     li->tag = tag && tag[0] ? tag : NULL;
     li->kind = lv_kind(it);
     li->mark = lv_mark(it);
+    if (li->kind == LI_DISC && !li->tag)
+        li->tag = "DVD";                    /* (the classic row's disc glyph says it) */
     if (it->flags & ITEM_DISABLED)
         li->flags |= LIF_DISABLED;
     if (it->flags & ITEM_HEAD)
@@ -17263,7 +17292,7 @@ static const char *lv_lines[256];
  * servers) and have not come; the spinner's step, one every SPIN_FRAME */
 static BOOL lv_waiting(const struct Page *p)
 {
-    return p && p->type == PT_LIST && p->radio && p->net_seq && !p->list.count;
+    return p && p->type == PT_LIST && ((p->radio && p->net_seq && !p->list.count) || lv_busy);
 }
 static int lv_wait_step(void)
 {
@@ -17277,7 +17306,9 @@ static void lv_page(struct Page *p, struct LPage *m)
     m->section = lv_section(mod);
     m->crumb[m->ncrumb++] = _(mod_names[mod]);
     for (i = 0; i < depth && m->ncrumb < LCRUMBS; i++)
-        m->crumb[m->ncrumb++] = pages[i].title;
+        if (strcmp(pages[i].title, m->crumb[m->ncrumb - 1]))
+            m->crumb[m->ncrumb++] = pages[i].title;     /* (a section's first page is
+                                                         * titled as it: once, not twice) */
     m->hint = hint_text();
     m->message = msg[0] ? msg : NULL;
     if (!p)
@@ -17295,6 +17326,11 @@ static void lv_page(struct Page *p, struct LPage *m)
             lv_lines[i] = l->items[i].label ? l->items[i].label : "";
         m->ndetails = (WORD)i;
         m->details = lv_lines;
+        if (p->type == PT_TEXT) {           /* (Credits': AGS's logo, the thanks, Plex's mark) */
+            m->picture = p->pic[0] ? p->pic : NULL;
+            m->note = p->note;
+            m->plexmark = p->plexmark;
+        }
         return;
     }
     lv_lp = p;
@@ -17315,7 +17351,7 @@ static void lv_page(struct Page *p, struct LPage *m)
     if (lv_waiting(p)) {
         /* its rows asked for and not come: the layout's small spinner,
          * and "Nothing here" only once the answer says so */
-        m->waiting = !strcmp(p->base, "#gdm") ? _("Searching...") : _("Loading...");
+        m->waiting = !lv_busy && !strcmp(p->base, "#gdm") ? _("Searching...") : _("Loading...");
         m->wait_phase = (UBYTE)lv_wait_step();
     }
 }
@@ -17515,6 +17551,7 @@ static void lvm_work_out(const struct Page *p, BOOL artist)
     }
 }
 
+#define LV_HOME_TILES 36            /* Home's tiles: the layout draws as many as fit */
 static const void *lv_model(int screen)
 {
     static struct LPage page;
@@ -17523,8 +17560,8 @@ static const void *lv_model(int screen)
     static UBYTE secs[MOD_COUNT];
     static const char *names[MOD_COUNT];
     static struct LRow row;
-    static struct LItem rows[12];
-    static char rows_art[12][304];
+    static struct LItem rows[LV_HOME_TILES];
+    static char rows_art[LV_HOME_TILES][304];
     static const char *next[5];
     static char year[1];
     int i;
@@ -17570,7 +17607,7 @@ static const void *lv_model(int screen)
         home.sections = secs;
         home.names = names;
         if (!pane_pending && depth >= 1 && pages[0].type == PT_LIST) {
-            for (i = 0; i < pages[0].list.count && i < 12; i++)
+            for (i = 0; i < pages[0].list.count && i < LV_HOME_TILES; i++)
                 lv_fill_item_art(&rows[i], &pages[0], i, rows_art[i], sizeof(rows_art[i]));
             row.title = _(mod_names[menu[menu_sel]]);
             row.n = (WORD)i;
@@ -17600,12 +17637,34 @@ static const void *lv_model(int screen)
         now.nnext = (WORD)i;
         now.next = next;
         {
-            static UBYTE lev[4];
-            for (i = 0; i < 4; i++)
-                lev[i] = (UBYTE)(gfx_eq_lev[i] > 11 ? 255 : gfx_eq_lev[i] * 23);
-            now.nlevels = 4;
+            /* the spectrum, 32 bands (as the classic's bars); the four
+             * meters where it cannot be had */
+            static UBYTE lev[32];
+            if (!st.paused && cur() && cur()->type == PT_PLAYER && vis_spectrum(lev, 32)) {
+                now.nlevels = 32;
+            } else {
+                for (i = 0; i < 4; i++)
+                    lev[i] = (UBYTE)(gfx_eq_lev[i] > 11 ? 255 : gfx_eq_lev[i] * 23);
+                now.nlevels = 4;
+            }
             now.levels = lev;
         }
+        /* the buttons, as the classic page's (np_button) */
+        now.stopped = !mp_playing() && !mp_paused() ? 1 : 0;
+        now.volume = (UBYTE)mp_volume();
+        now.btn = np_focus_shown() ? (WORD)np.btn : -1;
+        now.off = 0;
+        if (!mp_can_step(-1))
+            now.off |= LNB_BIT(LNB_BACK);
+        if (!mp_can_step(1))
+            now.off |= LNB_BIT(LNB_FWD);
+        if (mp_is_stream() && !mp_is_track())
+            now.off |= LNB_BIT(LNB_LOOP);
+        if (mp_volume() == 0)
+            now.off |= LNB_BIT(LNB_VDOWN);
+        if (mp_volume() >= 64)
+            now.off |= LNB_BIT(LNB_VUP);
+        now.on = (UWORD)((play_loop ? LNB_BIT(LNB_LOOP) : 0) | (np_muted() ? LNB_BIT(LNB_MUTE) : 0));
         return &now;
     }
     }
@@ -17641,13 +17700,26 @@ static void lv_act(int what, LONG arg)
     case LAC_NEXT: if (mp_loaded()) np_press(NB_NEXT); break;
     case LAC_PREV: if (mp_loaded()) np_press(NB_PREV); break;
     case LAC_NOWPLAYING: if (mp_loaded()) np_open_page(); break;
+    case LAC_BUTTON:                        /* Now playing's, clicked */
+        if (arg >= 0 && arg < NB_COUNT)
+            np_press((int)arg);
+        break;
+    case LAC_HOME:                          /* (the logo clicked) */
+        if (focus == FOCUS_MENU)
+            break;
+        pane_settle();
+        while (depth > 1)
+            page_pop();                     /* closed at once, none drawn on the way */
+        np_shortcut_sync();
+        set_focus(FOCUS_MENU);
+        break;
     }
 }
 
 /* ---- pictures, made for the layout at the size it asks: by the loader's
  * picture process (decoded off the UI's back, as the classic pane's), the
  * layout drawn again when one is ready */
-#define LV_PICS 16
+#define LV_PICS 32                  /* (Home's tiles and a wall's covers on screen at once) */
 static struct {
     char file[304];                 /* the key asked for (lv_art_of) */
     UWORD w, h;                     /* asked for */
@@ -17881,6 +17953,44 @@ static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
     lk_icon(&g, &lv.out, lv_icon_of(section), x, y, fg, bg);
 }
 static const char *h_tr(const char *s) { return amb_tr(s); }
+
+/* Plex's logo (art.c's, in its pens) for a layout: k times larger, about
+ * two lines tall, in its colours over bg */
+static struct LImage lv_plex_im;
+static ULONG *lv_plex_px, lv_plex_bg;
+static const struct LImage *h_plexmark(ULONG bg)
+{
+    WORD k = g.sm ? (WORD)((sm_cell_h(g.sm) * 2 + plex_lo_h / 2) / plex_lo_h) : 1, x, y, i, j;
+    UWORD w, h;
+    if (k < 1)
+        k = 1;
+    w = (UWORD)(plex_lo_w * k);
+    h = (UWORD)(plex_lo_h * k);
+    if (lv_plex_px && lv_plex_bg == bg && lv_plex_im.w == w)
+        return &lv_plex_im;
+    if (lv_plex_px && lv_plex_im.w != w) {
+        FreeVec(lv_plex_px);
+        lv_plex_px = NULL;
+    }
+    if (!lv_plex_px && !(lv_plex_px = AllocVec((ULONG)w * h * 4, MEMF_ANY)))
+        return NULL;
+    for (y = 0; y < (WORD)plex_lo_h; y++)
+        for (x = 0; x < (WORD)plex_lo_w; x++) {
+            UBYTE pen = plex_lo[y * plex_lo_w + x];
+            ULONG c = pen == PEN_WHITE ? 0xFFFFFF : pen == PEN_PLEX ? 0xEBAF00
+                    : pen == PEN_PLEX_W2 ? lk_mix(0xFFFFFF, bg, 1, 2)
+                    : pen == PEN_PLEX_Y2 ? lk_mix(0xEBAF00, bg, 1, 2) : bg;
+            for (j = 0; j < k; j++)
+                for (i = 0; i < k; i++)
+                    lv_plex_px[(ULONG)(y * k + j) * w + x * k + i] = c;
+        }
+    lv_plex_bg = bg;
+    lv_plex_im.w = w;
+    lv_plex_im.h = h;
+    lv_plex_im.mod = w;
+    lv_plex_im.px = lv_plex_px;
+    return &lv_plex_im;
+}
 static void h_log(const char *s) { amb_log("layout", s); }
 static ULONG h_now(void) { return time_ms(); }
 
@@ -17963,6 +18073,8 @@ static void lv_activate(void)
     lv.host.now_ms = h_now;
     clock_text(lv.clock);
     lv.host.clock = lv.clock;
+    lv.host.plexmark = h_plexmark;
+    lv.host.debug = lv_debug;
     if (e->open && !e->open(&lv.host)) {
         amb_log("layout", "it would not open: classic");
         lk_close(&lv.out);
@@ -18022,6 +18134,17 @@ static int lv_screen(void)
             return m;
     }
     return LS_PAGE;
+}
+
+/* A busy wait's frame (busy_tick, the main loop not running): the
+ * layout drawn as it is now, the first time whole, then its spinner */
+static void lv_busy_frame(void)
+{
+    if (!lv.on || !lv.eng)
+        return;
+    if (lv.wait_phase < 0)
+        lv.full = TRUE;                     /* (no spinner up yet: all of it) */
+    lv_frame();
 }
 
 void lv_frame(void)

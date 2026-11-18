@@ -472,15 +472,6 @@ Flow (AmigaAMP 플러그인: Ambiance의 Visuals 서랍에 넣으세요)
 MSG_3DF462B5
 Flow
 ; Flow
-MSG_49459BDD
-지금 재생 중에서 F를 누르면 Ambiance 자체의 전체 화면 시각화인 Flow가 나타납니다.
-; F on Now playing shows Flow, Ambiance's own full screen visual.
-MSG_05AA8776
-대신 AmigaAMP의 시각화 플러그인을 쓸 수 있습니다. Ambiance의 Visuals 서랍(또는 AmigaAMP:Plugins)에 넣은 뒤 여기서 고르세요. Aminet의 mus/play에 있습니다(AmigaAMP-VisualPlugins 등).
-; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
-MSG_734C3A9C
-대부분 Workbench 화면에서 열리므로 그 화면이 보여 줄 수 있어야 합니다. 대부분은 그래픽 카드 화면, 일부는 Warp3D나 PowerPC가 필요합니다.
-; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 MHI에서는 스펙트럼 없음: MP3를 직접 재생합니다
 ; No spectrum under MHI: it plays the MP3 itself
@@ -790,15 +781,9 @@ MSG_22FBBBB2
 MSG_55D2D3D8
 MP3 품질
 ; MP3 quality
-MSG_050221B5
-MP3 품질: 자동
-; MP3 quality: automatic
-MSG_71E7648A
-MP3 품질: 높음
-; MP3 quality: high
-MSG_751F9CE1
-MP3 품질: 중간
-; MP3 quality: medium
+MSG_3E0A061D
+높음
+; High
 MSG_04A16198
 이 Amiga의 속도에 따라, 실행할 때마다 측정
 ; by this Amiga's speed, measured each run
@@ -808,9 +793,9 @@ MSG_68B10FC3
 MSG_313B727C
 작업량 약 10% 감소
 ; about a tenth less work
-MSG_003CBCAE
-디코더 최고 품질
-; the decoder gives its best
+MSG_7B5C3E86
+MHI와 ZZ9000의 mpega.library는 MP3를 최고 품질로 디코딩합니다
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_4DEE1DD3
 %ld곳
 ; %ld place
@@ -871,6 +856,15 @@ iGame 찾기
 MSG_451A8225
 없음: iGame 목록 사용 안 함
 ; None: no iGame list
+MSG_49459BDD
+지금 재생 중에서 F를 누르면 Ambiance 자체의 전체 화면 시각화인 Flow가 나타납니다.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+대신 AmigaAMP의 시각화 플러그인을 쓸 수 있습니다. Ambiance의 Visuals 서랍(또는 AmigaAMP:Plugins)에 넣은 뒤 여기서 고르세요. Aminet의 mus/play에 있습니다(AmigaAMP-VisualPlugins 등).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+대부분 Workbench 화면에서 열리므로 그 화면이 보여 줄 수 있어야 합니다. 대부분은 그래픽 카드 화면, 일부는 Warp3D나 PowerPC가 필요합니다.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_3015054E
 WHDLoad 설치됨: %s
 ; WHDLoad is installed: %s
@@ -1774,9 +1768,6 @@ MHI가 설치되어 있지 않습니다 (드라이버는 LIBS:MHI에)
 MSG_104981CE
 ambmpega.library가 Ambiance의 Libs에 없습니다
 ; ambmpega.library is not in Ambiance's Libs
-MSG_7B5C3E86
-MHI와 ZZ9000의 mpega.library는 MP3를 최고 품질로 디코딩합니다
-; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 지금부터 여는 방송국 목록
 ; Station lists opened from now on
@@ -2254,9 +2245,12 @@ MSG_04F3511D
 MSG_389C8A70
 평점
 ; Rating
-MSG_6B1D7CB6
-다음:
-; Next:
 MSG_5E281FEB
 일시정지
 ; Paused
+MSG_720E34D8
+정지됨: 재생을 누르면 다시 시작합니다
+; Stopped: Play starts it again
+MSG_6B1D7CB6
+다음:
+; Next:

@@ -472,15 +472,6 @@ Flow (plug-ins de AmigaAMP: póngalos en el cajón Visuals de Ambiance)
 MSG_3DF462B5
 Flow
 ; Flow
-MSG_49459BDD
-F en Reproduciendo muestra Flow, la visualización a pantalla completa propia de Ambiance.
-; F on Now playing shows Flow, Ambiance's own full screen visual.
-MSG_05AA8776
-En su lugar se pueden usar los plug-ins visuales de AmigaAMP: póngalos en el cajón Visuals de Ambiance (o en AmigaAMP:Plugins) y elija uno aquí. Aminet los tiene en mus/play (AmigaAMP-VisualPlugins y otros).
-; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
-MSG_734C3A9C
-La mayoría se abre en la pantalla del Workbench y necesita lo que esta pueda mostrar: una pantalla de tarjeta gráfica para la mayoría, Warp3D o un PowerPC para algunos.
-; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Sin espectro con MHI: reproduce el MP3 por sí mismo
 ; No spectrum under MHI: it plays the MP3 itself
@@ -790,15 +781,9 @@ decodifica y reproduce
 MSG_55D2D3D8
 Calidad MP3
 ; MP3 quality
-MSG_050221B5
-Calidad MP3: automática
-; MP3 quality: automatic
-MSG_71E7648A
-Calidad MP3: alta
-; MP3 quality: high
-MSG_751F9CE1
-Calidad MP3: media
-; MP3 quality: medium
+MSG_3E0A061D
+Alta
+; High
 MSG_04A16198
 según la velocidad de este Amiga, medida en cada arranque
 ; by this Amiga's speed, measured each run
@@ -808,9 +793,9 @@ la más precisa
 MSG_313B727C
 alrededor de una décima parte menos de trabajo
 ; about a tenth less work
-MSG_003CBCAE
-el decodificador da lo mejor de sí
-; the decoder gives its best
+MSG_7B5C3E86
+MHI y la mpega.library de la ZZ9000 decodifican MP3 a su mejor calidad
+; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_4DEE1DD3
 %ld lugar
 ; %ld place
@@ -871,6 +856,15 @@ Buscar iGame
 MSG_451A8225
 Ninguna: sin lista de iGame
 ; None: no iGame list
+MSG_49459BDD
+F en Reproduciendo muestra Flow, la visualización a pantalla completa propia de Ambiance.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+En su lugar se pueden usar los plug-ins visuales de AmigaAMP: póngalos en el cajón Visuals de Ambiance (o en AmigaAMP:Plugins) y elija uno aquí. Aminet los tiene en mus/play (AmigaAMP-VisualPlugins y otros).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+La mayoría se abre en la pantalla del Workbench y necesita lo que esta pueda mostrar: una pantalla de tarjeta gráfica para la mayoría, Warp3D o un PowerPC para algunos.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_3015054E
 WHDLoad está instalado: %s
 ; WHDLoad is installed: %s
@@ -1774,9 +1768,6 @@ MHI no está instalado (sus controladores en LIBS:MHI)
 MSG_104981CE
 ambmpega.library no está en Libs de Ambiance
 ; ambmpega.library is not in Ambiance's Libs
-MSG_7B5C3E86
-MHI y la mpega.library de la ZZ9000 decodifican MP3 a su mejor calidad
-; MHI and the ZZ9000's mpega.library decode MP3 at their best
 MSG_7AE98FE6
 Listas de emisoras abiertas desde ahora
 ; Station lists opened from now on
@@ -2254,9 +2245,12 @@ MSG_04F3511D
 MSG_389C8A70
 Valoración
 ; Rating
-MSG_6B1D7CB6
-Siguiente:
-; Next:
 MSG_5E281FEB
 En pausa
 ; Paused
+MSG_720E34D8
+Detenido: Reproducir lo inicia de nuevo
+; Stopped: Play starts it again
+MSG_6B1D7CB6
+Siguiente:
+; Next:

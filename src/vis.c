@@ -488,6 +488,28 @@ UWORD vis_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
     return n;
 }
 
+/* The spectrum for a layout's Now playing: n bands (BINS a multiple of
+ * n), each the loudest of its bins, 0-255 as the classic bars' heights
+ * (SP_FLOOR to SP_TOP), analysed again when 40 ms old. FALSE: nothing
+ * to analyse (no memory). */
+BOOL vis_spectrum(UBYTE *out, int n)
+{
+    int i, j, per;
+    if (n <= 0 || n > BINS)
+        return FALSE;
+    if (time_ms() - sp.lev_t >= 40 && !sp_analyse())
+        return FALSE;
+    per = BINS / n;
+    for (i = 0; i < n; i++) {
+        UBYTE m = 0;
+        for (j = 0; j < per; j++)
+            if (sp.lev[i * per + j] > m)
+                m = sp.lev[i * per + j];
+        out[i] = (UBYTE)(m <= SP_FLOOR ? 0 : m >= SP_TOP ? 255 : (m - SP_FLOOR) * 255 / (SP_TOP - SP_FLOOR));
+    }
+    return TRUE;
+}
+
 /* ------------------------------------------------------------ the playing marker */
 /* MARK_PLAYING (the header's, a list's playing row) as the visualization
  * shown: four of the spectrum's bands, or the meters' left and right.

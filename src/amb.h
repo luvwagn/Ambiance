@@ -740,6 +740,7 @@ int  vis_rows(void);                /* rows the active one wants (0: the meters'
 void vis_draw(const struct VisCtx *c, const struct MpStatus *st, BOOL full);
 void vis_stop(void);                /* its memory back (a game, quitting) */
 int  vis_marker(UBYTE *lev);        /* the playing marker's: VIS_*, lev 0-11 (4 or 2) */
+BOOL vis_spectrum(UBYTE *out, int n);  /* n bands, 0-255 (a layout's Now playing) */
 void vis_timing(ULONG *frames, ULONG *ms100);  /* spectrum frames, their time (0.1 ms) */
 void vis_tables(WORD *sine);        /* vistab.c: the FFT's sine (1024) */
 void vis_loud_table(ULONG *t);      /* ...and the 64 loudness steps */

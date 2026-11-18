@@ -139,6 +139,20 @@ static void scan_dir(const char *dir)
                     continue;
                 sprintf(path, "%s/%.40s/Ambiance.catalog", dir, (char *)fib->fib_FileName);
                 if (!cat_language(path, lang)) {
+                    /* LOCALE:'s drawers are every program's: most have no
+                     * Ambiance.catalog, as they should not. Ours (PROGDIR's)
+                     * should: said, once a run each (this is scanned again
+                     * whenever Settings > General is drawn) */
+                    static char said[MAX_CATS][32];
+                    static int nsaid;
+                    int k;
+                    if (strncmp(dir, "PROGDIR:", 8))
+                        continue;
+                    for (k = 0; k < nsaid && strcmp(said[k], (char *)fib->fib_FileName); k++)
+                        ;
+                    if (k < nsaid || nsaid >= MAX_CATS)
+                        continue;
+                    amb_strlcpy(said[nsaid++], (char *)fib->fib_FileName, sizeof(said[0]));
                     /* say what the drawer is called, byte by byte where not
                      * ASCII (a host folder can name it otherwise) */
                     char m[160], *o = m;
