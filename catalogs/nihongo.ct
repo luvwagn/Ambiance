@@ -1579,9 +1579,6 @@ plex.tvからサインアウトしました
 MSG_6358253C
 そのライブラリはサーバーにありません: 音楽で一覧を出し直します
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-サーバーがサインイン用トークンを求めています: 情報 > AmbianceでのPlexを参照
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 サーバーから予期しない応答がありました
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ MSG_49CF76D8
 MSG_3EEA8333
 そこに写真ライブラリーはありません
 ; No photo libraries there
+MSG_73606314
+サーバーはサインインを求めています: 設定 > ネットワーク > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Plexサーバーに接続できませんでした
 ; Could not reach the Plex server

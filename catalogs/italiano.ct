@@ -1579,9 +1579,6 @@ Uscito da plex.tv
 MSG_6358253C
 Questa libreria non è più sul server: Musica le elenca di nuovo
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-Il server vuole un token di accesso: vedi Info > Plex in Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Il server ha risposto con qualcosa di inatteso
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ Nessuna libreria musicale lì
 MSG_3EEA8333
 Nessuna libreria di foto lì
 ; No photo libraries there
+MSG_73606314
+Il server chiede l'accesso: Impostazioni > Rete > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Impossibile raggiungere il server Plex
 ; Could not reach the Plex server

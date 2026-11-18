@@ -13233,14 +13233,19 @@ static void radio_done(struct NetJob *j)
         }
         if (!j->body || n <= 0) {
             const char *why = gone ? gone
-                              : !j->body && strstr(j->err, " 401")
-                              ? _("The server wants a sign-in token: see About > Plex in Ambiance")
                               : !j->body ? j->err
                               : n < 0 ? _("The server answered with something unexpected")
                               : !strcmp(p->base, "/library/sections") ? _("No music libraries there")
                               : plex_photo_sections(p->base) ? _("No photo libraries there")
                                                              : _("Nothing here");
-            list_add(&p->list, why[0] ? why : _("Could not reach the Plex server"), "", "", IT_TEXT);
+            if (!gone && !j->body && strstr(j->err, " 401")) {
+                /* signing in is what it wants: the row goes where that is
+                 * done (Settings > Networking > Plex: Sign in at plex.tv) */
+                why = _("The server wants you signed in: Settings > Networking > Plex");
+                action_item(p, why, "", ACT_GOPLEX, MARK_ARROW);
+            } else {
+                list_add(&p->list, why[0] ? why : _("Could not reach the Plex server"), "", "", IT_TEXT);
+            }
             sprintf(m, "%s: %s", p->title, why);
         } else {
             if (servers)

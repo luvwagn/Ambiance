@@ -1579,9 +1579,6 @@ MSG_1D831D65
 MSG_6358253C
 Η βιβλιοθήκη λείπει από τον server: η Μουσική τις δείχνει ξανά
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-Ο server θέλει token: δείτε Σχετικά > Plex στο Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Ο server απάντησε κάτι απρόσμενο
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ MSG_49CF76D8
 MSG_3EEA8333
 Δεν έχει φωτογραφίες
 ; No photo libraries there
+MSG_73606314
+Ο server θέλει σύνδεση: Ρυθμίσεις > Δίκτυο > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Ο server Plex δεν βρέθηκε
 ; Could not reach the Plex server

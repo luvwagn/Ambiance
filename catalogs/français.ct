@@ -1579,9 +1579,6 @@ Déconnecté de plex.tv
 MSG_6358253C
 Cette bibliothèque n'est plus sur le serveur : Musique les liste à nouveau
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-Le serveur demande un jeton de connexion : voir À propos > Plex dans Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Le serveur a répondu quelque chose d'inattendu
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ Aucune bibliothèque musicale ici
 MSG_3EEA8333
 Aucune bibliothèque de photos ici
 ; No photo libraries there
+MSG_73606314
+Le serveur demande une connexion : Réglages > Réseau > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Impossible de joindre le serveur Plex
 ; Could not reach the Plex server

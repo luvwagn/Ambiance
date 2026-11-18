@@ -1579,9 +1579,6 @@ Sesión cerrada en plex.tv
 MSG_6358253C
 Esa biblioteca ya no está en el servidor: Música las vuelve a listar
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-El servidor pide un token de acceso: ver Acerca de > Plex en Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 El servidor respondió algo inesperado
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ No hay bibliotecas de música ahí
 MSG_3EEA8333
 No hay bibliotecas de fotos ahí
 ; No photo libraries there
+MSG_73606314
+El servidor quiere que inicie sesión: Ajustes > Red > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 No se pudo contactar con el servidor Plex
 ; Could not reach the Plex server

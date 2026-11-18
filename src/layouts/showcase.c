@@ -138,9 +138,20 @@ static const struct LkBg *flat(ULONG c)
 
 static WORD text(LONG x, LONG y, const char *s, int face, ULONG fg, const struct LkBg *bg, LONG maxw)
 {
+    LONG n;
     if (!s || !*s || maxw < 0)
         return 0;
-    return H->text((WORD)x, (WORD)y, s, slen(s), face, fg, bg, (WORD)maxw);
+    n = slen(s);
+    if (maxw > 0 && H->textlen(s, n, face) > maxw) {
+        /* too long: cut where "..." still fits after it, and the "..." */
+        LONG ew = H->textlen("...", 3, face), k = maxw > ew ? H->fit(s, n, face, (WORD)(maxw - ew)) : 0;
+        WORD w;
+        while (k > 0 && s[k - 1] == ' ')
+            k--;
+        w = k > 0 ? H->text((WORD)x, (WORD)y, s, k, face, fg, bg, 0) : 0;
+        return (WORD)(w + H->text((WORD)(x + w), (WORD)y, "...", 3, face, fg, bg, 0));
+    }
+    return H->text((WORD)x, (WORD)y, s, n, face, fg, bg, (WORD)maxw);
 }
 
 static WORD tlen(const char *s, int face)
@@ -266,6 +277,7 @@ static void background(void)
 }
 
 /* top right: what plays (if anything) and the clock */
+static LONG tr_left;            /* top_right's left edge, as drawn: a title stops short of it */
 static void top_right(BOOL dark)
 {
     const struct LNow *n = H->model(LS_NOW);
@@ -273,21 +285,29 @@ static void top_right(BOOL dark)
     const struct LkBg *bg = dark ? flat(C_NOWBG) : &bg_grad;
     x -= cw;
     tnum(x, y + (FH - TH) / 2, H->clock, LF_TITLE, C_WHITE, bg);     /* the big clock */
+    tr_left = x;
     if (H->debug && *H->debug)  /* Settings > Debug: the CPU and memory, under the clock */
         tnum(W - X(24) - tnum_len(H->debug, LF_SMALL), y + TH + Y(1), H->debug, LF_SMALL, C_ACC, bg);
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
-        LONG tw, room = x - X(40) - W / 2;
+        LONG tw, room;
         const char *t = mmss(n->pos_ms, b);
         x -= X(18) + tnum_len(t, LF_SMALL);
         tnum(x, y, t, LF_SMALL, C_SUB, bg);
+        tr_left = x;
+        /* the title in what is left of the right half: none at all where
+         * only a few letters of it would fit */
+        room = x - X(10) - X(8) - FH - (W / 2 + X(20));
         tw = tlen(n->title, LF_SMALL);
         if (tw > room)
             tw = room;
+        if (tw < X(70))
+            tw = 0;
         if (tw > 0) {
             x -= X(10) + tw;
             text(x, y, n->title, LF_SMALL, C_SUB, bg, tw);
             hit(x - X(8) - FH, y - Y(4), W - X(24) - cw - (x - X(8) - FH), FH + Y(8), HT_NOWPLAYING, 0, 0);
+            tr_left = x - X(8) - FH;
             /* the play triangle */
             {
                 LONG s = FH / 2, ty = y + (FH - s) / 2, i;
@@ -312,12 +332,17 @@ static LONG title_line(const char *title, const char *sub)
         y = LOGO_Y + logo->h / 2 - FH / 2;  /* (the title beside it, on its middle) */
     }
     title_cy = y + FH / 2;
-    if (title && *title) {
-        w = text(x, y + (FH - TH) / 2, title, LF_TITLE, C_WHITE, &bg_grad, W / 2 - x);
-        x += w + X(14);
+    {
+        /* up to what is at the top right (what plays, the clock), never
+         * over it; the right half at most */
+        LONG lim = tr_left - X(24) < W * 3 / 5 ? tr_left - X(24) : W * 3 / 5;
+        if (title && *title && lim - x > X(40)) {
+            w = text(x, y + (FH - TH) / 2, title, LF_TITLE, C_WHITE, &bg_grad, lim - x);
+            x += w + X(14);
+        }
+        if (sub && *sub && lim - x > X(60))
+            x += text(x, y, sub, LF_SMALL, C_SUB, &bg_grad, lim - x) + X(14);
     }
-    if (sub && *sub && W / 2 - x > X(40))
-        x += text(x, y, sub, LF_SMALL, C_SUB, &bg_grad, W / 2 - x) + X(14);
     return x;
 }
 
@@ -901,6 +926,18 @@ static void draw_page_body(const struct LPage *m)
 
 /* ---------------------------------------------------------------- shared by the music screens */
 /* The page's title and its path, the left panel's way back left out */
+/* The top for a page that says its own name large (an album, an
+ * artist): the way to it, small, without its name */
+static void page_path(const struct LPage *m)
+{
+    char sub[160];
+    LONG i;
+    sub[0] = 0;
+    for (i = 0; i + 1 < m->ncrumb; i++)
+        join(sub, sizeof(sub), sub, " / ", m->crumb[i]);
+    title_line(NULL, sub);
+}
+
 static void page_title(const struct LPage *m)
 {
     char sub[160];
@@ -1158,7 +1195,7 @@ static void draw_album(void)
     top_right(FALSE);
     if (!a)
         return;
-    page_title(&a->page);
+    page_path(&a->page);        /* (its name is under its cover, large) */
     if (cs > bottom - py - FH * 6)
         cs = bottom - py - FH * 6;
     cover(a->art, a->title, cx, py, cs, grad(py));
@@ -1277,7 +1314,7 @@ static void draw_artist(void)
     top_right(FALSE);
     if (!a)
         return;
-    page_title(&a->page);
+    page_path(&a->page);       /* (the name is beside the picture, large) */
     cover(a->art, a->name, cx, py, ps, grad(py));
     tx = cx + ps + X(24);
     tw = W - tx - X(30);
@@ -1789,6 +1826,12 @@ static void hover_redraw(int screen)
         break;
     case LS_ALBUMS:
         draw_wall_body((const struct LPage *)m);
+        break;
+    case LS_ALBUM:
+        album_rows();           /* its tracks (a move redraws them so too) */
+        break;
+    case LS_ARTIST:
+        draw_strip((const struct LArtist *)m);
         break;
     case LS_NOW: {
         LONG by = HT - Y(14) - NOW_BH, e = X(6) + 2;

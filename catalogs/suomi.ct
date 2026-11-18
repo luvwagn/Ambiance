@@ -1579,9 +1579,6 @@ Kirjauduttu ulos plex.tv:stä
 MSG_6358253C
 Kirjastoa ei enää ole palvelimella: Musiikki luettelee ne uudelleen
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-Palvelin vaatii kirjautumistunnuksen: katso Tietoja > Plex Ambiance:ssä
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Palvelin vastasi jotain odottamatonta
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ Siellä ei ole musiikkikirjastoja
 MSG_3EEA8333
 Siellä ei ole kuvakirjastoja
 ; No photo libraries there
+MSG_73606314
+Palvelin haluaa kirjautumisen: Asetukset > Verkko > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Plex-palvelimeen ei saatu yhteyttä
 ; Could not reach the Plex server

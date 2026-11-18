@@ -1579,9 +1579,6 @@ Logget ut av plex.tv
 MSG_6358253C
 Biblioteket finnes ikke lenger på serveren: Musikk viser dem igjen
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-Serveren vil ha et innloggingstoken: se Om > Plex i Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 Serveren svarte noe uventet
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ Ingen musikkbiblioteker der
 MSG_3EEA8333
 Ingen fotobiblioteker der
 ; No photo libraries there
+MSG_73606314
+Serveren vil at du logger inn: Innstillinger > Nettverk > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Plex-serveren kunne ikke nås
 ; Could not reach the Plex server

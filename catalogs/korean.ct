@@ -1579,9 +1579,6 @@ plex.tv에서 로그아웃했습니다
 MSG_6358253C
 그 라이브러리는 서버에서 사라졌습니다: 음악에 다시 나열됩니다
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-서버가 로그인 토큰을 요구합니다: 정보 > Ambiance의 Plex를 보세요
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 서버가 예상하지 못한 응답을 했습니다
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ MSG_49CF76D8
 MSG_3EEA8333
 사진 라이브러리가 없습니다
 ; No photo libraries there
+MSG_73606314
+서버에 로그인이 필요합니다: 설정 > 네트워크 > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 Plex 서버에 연결할 수 없습니다
 ; Could not reach the Plex server

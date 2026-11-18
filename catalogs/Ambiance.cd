@@ -39,13 +39,13 @@ Not enough memory for the animation's screen
 ; beets.c:536 beets.c:557 plex.c:687
 MSG_0D3B3C12 (221985810//)
 (no name)
-; beets.c:708 main.c:13242 layouts/showcase.c:874
+; beets.c:708 main.c:13240 layouts/showcase.c:879
 MSG_027BDF10 (41672464//)
 Nothing here
 ; beets.c:719 plex.c:394
 MSG_441552F7 (1142248183//)
 Artists
-; beets.c:719 main.c:17520 plex.c:395
+; beets.c:719 main.c:17525 plex.c:395
 MSG_5C7535ED (1551185389//)
 Albums
 ; beets.c:720 plex.c:396
@@ -480,7 +480,7 @@ No spectrum: this player does not say what it plays
 ; main.c:2375
 MSG_5E18A4A5 (1578673317//)
 Flow: F shows it on the whole screen
-; main.c:2476 main.c:2576 main.c:14608
+; main.c:2476 main.c:2576 main.c:14613
 MSG_5561FD0B (1432485131//)
 General
 ; main.c:2476 main.c:2577 main.c:11011
@@ -495,28 +495,28 @@ Networking
 ; main.c:2477 main.c:12305 main.c:12339
 MSG_30B474E4 (817132772//)
 Plex
-; main.c:2477 main.c:2779 main.c:14614
+; main.c:2477 main.c:2779 main.c:14619
 MSG_6C2261DE (1814192606//)
 Network interface
-; main.c:2478 main.c:2823 main.c:14618
+; main.c:2478 main.c:2823 main.c:14623
 MSG_23140C4E (588516430//)
 Highest station bitrate
-; main.c:2478 main.c:2773 main.c:14620
+; main.c:2478 main.c:2773 main.c:14625
 MSG_360055B5 (905991605//)
 Stream buffer
-; main.c:2478 main.c:2832 main.c:14628
+; main.c:2478 main.c:2832 main.c:14633
 MSG_18162AC4 (404105924//)
 Station list server
 ; main.c:2479 main.c:2479 main.c:2583
 MSG_542FED8A (1412427146//)
 Folders
-; main.c:2479 main.c:2725 main.c:14584
+; main.c:2479 main.c:2725 main.c:14589
 MSG_1A73DB9B (443800475//)
 Language
-; main.c:2480 main.c:2579 main.c:14612
+; main.c:2480 main.c:2579 main.c:14617
 MSG_5B67C80C (1533528076//)
 Video
-; main.c:2480 main.c:3051 main.c:14745
+; main.c:2480 main.c:3051 main.c:14750
 MSG_585459EE (1481923054//)
 iGame
 ; main.c:2480
@@ -525,7 +525,7 @@ WHDLoad
 ; main.c:2480 main.c:2663 main.c:11073
 MSG_68A32CF9 (1755524345//)
 Fonts
-; main.c:2481 main.c:14562
+; main.c:2481 main.c:14567
 MSG_00AC8B5C (11307868//)
 Full screen visual
 ; main.c:2530
@@ -603,7 +603,7 @@ Smooth
 ; main.c:2618 main.c:2644 main.c:2646
 MSG_2AB32B77 (716385143//)
 Pixel
-; main.c:2633 main.c:12202 main.c:14535
+; main.c:2633 main.c:12202 main.c:14540
 MSG_2C041143 (738464067//)
 Text size
 ; main.c:2637 main.c:2640 main.c:2644
@@ -615,10 +615,10 @@ Screen mode
 ; main.c:2666
 MSG_63678BEE (1667730414//)
 Double buffering
-; main.c:2670 main.c:12218 main.c:14539
+; main.c:2670 main.c:12218 main.c:14544
 MSG_1A29FF2A (438959914//)
 Colours
-; main.c:2674 main.c:14541
+; main.c:2674 main.c:14546
 MSG_7788421F (2005418527//)
 Layout
 ; main.c:2675
@@ -723,7 +723,7 @@ no answer
 ; main.c:2927
 MSG_3F3927CF (1060710351//)
 Plex server
-; main.c:2929 main.c:12789 main.c:14308
+; main.c:2929 main.c:12789 main.c:14313
 MSG_23B63BC7 (599145415//)
 none chosen
 ; main.c:2933
@@ -792,7 +792,7 @@ the most accurate
 ; main.c:3005
 MSG_313B727C (825979516//)
 about a tenth less work
-; main.c:3009 main.c:14527
+; main.c:3009 main.c:14532
 MSG_7B5C3E86 (2069642886//)
 MHI and the ZZ9000's mpega.library decode MP3 at their best
 ; main.c:3046
@@ -942,7 +942,7 @@ Credits
 ; main.c:3537 main.c:10940
 MSG_589D7E42 (1486716482//)
 System information
-; main.c:3539 main.c:14281
+; main.c:3539 main.c:14286
 MSG_692FB19D (1764733341//)
 Plex in Ambiance
 ; main.c:3552
@@ -1227,7 +1227,7 @@ Not in the Fonts drawer
 ; main.c:6749
 MSG_42B0DEF7 (1118887671//)
 (empty)
-; main.c:7020 layouts/showcase.c:709
+; main.c:7020 layouts/showcase.c:714
 MSG_070B058B (118162827//)
 Works with:
 ; main.c:7143
@@ -1392,7 +1392,7 @@ More formats: EaglePlayer, from Aminet (mus/play/Eagleplayer)
 ; main.c:9799 main.c:10819
 MSG_1361020B (325124619//)
 No pictures in that folder
-; main.c:9805 main.c:12990 main.c:13416
+; main.c:9805 main.c:12990 main.c:13421
 MSG_46C7288D (1187457165//)
 Too many levels open
 ; main.c:9816 main.c:9842 main.c:9856
@@ -1452,7 +1452,7 @@ Loading from Plex...
 ; main.c:10706
 MSG_2DD7976F (769103727//)
 Not a picture: an IFF %s file
-; main.c:10738 main.c:13285
+; main.c:10738 main.c:13290
 MSG_4FD7ED09 (1339550985//)
 Slideshow of these %ld photos
 ; main.c:10958
@@ -1551,7 +1551,7 @@ Signed in. Asking plex.tv for this account's servers...
 ; main.c:12785
 MSG_46CB6DE4 (1187737060//)
 Signed in to plex.tv as %s.
-; main.c:12788 main.c:14308
+; main.c:12788 main.c:14313
 MSG_7445FC0C (1950743564//)
 Server: %s
 ; main.c:12792
@@ -1579,312 +1579,312 @@ Signed out of plex.tv
 MSG_6358253C (1666721084//)
 That library is gone from the server: Music lists them again
 ; main.c:13237
-MSG_733CFA2B (1933376043//)
-The server wants a sign-in token: see About > Plex in Ambiance
-; main.c:13239
 MSG_229E5121 (580800801//)
 The server answered with something unexpected
-; main.c:13240
+; main.c:13238
 MSG_49CF76D8 (1238333144//)
 No music libraries there
-; main.c:13241
+; main.c:13239
 MSG_3EEA8333 (1055556403//)
 No photo libraries there
-; main.c:13243
+; main.c:13244
+MSG_73606314 (1935696660//)
+The server wants you signed in: Settings > Networking > Plex
+; main.c:13247
 MSG_07C4F203 (130347523//)
 Could not reach the Plex server
-; main.c:13283
+; main.c:13288
 MSG_1CFE72A3 (486437539//)
 Show the photo
-; main.c:13310
+; main.c:13315
 MSG_7BB6085B (2075527259//)
 Nothing listed
-; main.c:13311
+; main.c:13316
 MSG_4F0474B8 (1325692088//)
 No stations here that Ambiance can play
-; main.c:13402
+; main.c:13407
 MSG_1BED60DF (468541663//)
 Still being read from the server: a moment
-; main.c:13462
+; main.c:13467
 MSG_7F58E800 (2136532992//)
 Looking for Plex servers...  Esc to give up
-; main.c:13470
+; main.c:13475
 MSG_13C1CD18 (331468056//)
 Asking %.40s...  Esc to give up
-; main.c:13475
+; main.c:13480
 MSG_04730DAC (74649004//)
 Asking radio-browser.info...  Esc to give up
-; main.c:13518
+; main.c:13523
 MSG_497165DA (1232168410//)
 Plex photos: Plex is turned off (Settings > Networking > Plex)
-; main.c:13519
+; main.c:13524
 MSG_6273A841 (1651746881//)
 Plex photos: choose a server (Settings > Networking > Plex)
-; main.c:13547
+; main.c:13552
 MSG_276888E6 (661162214//)
 Plex photos on %.80s
-; main.c:13553
+; main.c:13558
 MSG_62B4E865 (1656023141//)
 Plex: %.100s
-; main.c:14261
+; main.c:14266
 MSG_2550824B (626033227//)
 Plex server chosen
-; main.c:14285
+; main.c:14290
 MSG_06F0678F (116418447//)
 Ambiance plays music from a Plex Media Server on your network: its music libraries, by artist and album, with their covers. The server makes each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz stereo for a 68040/060, more for a fast one, and its best quality when an MHI driver decodes MP3 (Settings > Sound). On a fast Amiga, or with MHI, turning off Settings > Networking > Plex > Request lower quality audio plays MP3 files as stored, and on a fast Amiga FLAC files too where flacdec.library is installed; other formats are converted either way. Settings > Networking > Plex > Plex turns it all off.
-; main.c:14296
+; main.c:14301
 MSG_4569D662 (1164564066//)
 Finding a server: Settings > Networking > Plex > Plex server asks the network (Plex's GDM); choose one and it is kept. Or set its address from the Shell: SetEnv SAVE Ambiance/PlexServer 192.168.1.10:32400
-; main.c:14300
+; main.c:14305
 MSG_26B94016 (649674774//)
 Signing in: with AmiSSL 5 installed and Settings > Networking > HTTPS on, Settings > Networking > Plex > Sign in at plex.tv shows a code to enter at plex.tv/link on a phone or computer. The account's servers are then listed with those found on the network, each with its own token. Without AmiSSL, set a server's token from the Shell: find it in Plex Web (an item's Get Info > View XML: the X-Plex-Token in the address), then SetEnv SAVE Ambiance/PlexToken <token>.
-; main.c:14310
+; main.c:14315
 MSG_6D54C528 (1834272040//)
 Token: set
-; main.c:14310
+; main.c:14315
 MSG_59B6EDB9 (1505160633//)
 Token: not set
-; main.c:14312
+; main.c:14317
 MSG_6A307F3D (1781563197//)
 plex.tv: signed in as %s
-; main.c:14315
+; main.c:14320
 MSG_2DD69A9C (769039004//)
 plex.tv: not signed in
-; main.c:14325
+; main.c:14330
 MSG_0B620CC7 (190975175//)
 MP3: decoded by the MHI driver %.40s
-; main.c:14327
+; main.c:14332
 MSG_7895CD7B (2023083387//)
 MP3: decoded by ambmpega.library, Ambiance's own
-; main.c:14328
+; main.c:14333
 MSG_59D38C2E (1507036206//)
 MP3: decoded on the ZZ9000 (its mpega.library)
-; main.c:14329
+; main.c:14334
 MSG_1133EF71 (288616305//)
 MP3: decoded by mpega.library
-; main.c:14330
+; main.c:14335
 MSG_04F04DC5 (82857413//)
 MP3: no decoder (mpega.library or MHI)
-; main.c:14333
+; main.c:14338
 MSG_6FC4AC95 (1875160213//)
 FLAC: converted to MP3 (flacdec.library is not installed)
-; main.c:14334
+; main.c:14339
 MSG_226669D7 (577137111//)
 FLAC: converted to MP3 (too slow to decode here)
-; main.c:14335
+; main.c:14340
 MSG_3521D30E (891409166//)
 FLAC: converted to MP3 (lower quality audio is on)
-; main.c:14336
+; main.c:14341
 MSG_2B51B45B (726774875//)
 FLAC: played as stored, by flacdec.library
-; main.c:14337
+; main.c:14342
 MSG_586857BF (1483233215//)
 Sound: AHI, 16-bit
-; main.c:14337
+; main.c:14342
 MSG_2350DA18 (592501272//)
 Sound: Paula, 14-bit
-; main.c:14338
+; main.c:14343
 MSG_0F2AADBB (254455227//)
 Sound: Paula, 8-bit
-; main.c:14364
+; main.c:14369
 MSG_5353700C (1397977100//)
 Format:   %s
-; main.c:14368
+; main.c:14373
 MSG_4B7B9DA5 (1266392485//)
 Country:  %s
-; main.c:14372
+; main.c:14377
 MSG_1399F81C (328857628//)
 Votes:    %s
-; main.c:14376
+; main.c:14381
 MSG_55E8E50A (1441326346//)
 Tags:     %s
-; main.c:14381
+; main.c:14386
 MSG_64C287CF (1690470351//)
 Homepage: %s
-; main.c:14385
+; main.c:14390
 MSG_5A5309D7 (1515391447//)
 Stream:   %s
-; main.c:14388
+; main.c:14393
 MSG_18A292C0 (413307584//)
 Fire on the station in its list plays it.
-; main.c:14397
+; main.c:14402
 MSG_5143C289 (1363395209//)
 A folder of MP3 or FLAC files
-; main.c:14398
+; main.c:14403
 MSG_19FEBB54 (436124500//)
 A folder of modules
-; main.c:14398
+; main.c:14403
 MSG_20B552D8 (548754136//)
 A folder of pictures
-; main.c:14398
+; main.c:14403
 MSG_1B002318 (452993816//)
 A folder of animations
-; main.c:14399
+; main.c:14404
 MSG_5B08757B (1527281019//)
 Folder added: its music is under Music
-; main.c:14400
+; main.c:14405
 MSG_182BFE5D (405536349//)
 Folder added: its modules are under Mods
-; main.c:14401
+; main.c:14406
 MSG_082FF2F7 (137360119//)
 Folder added: its pictures are under Pictures
-; main.c:14402
+; main.c:14407
 MSG_1C78BE4C (477675084//)
 Folder added: its animations are under Videos
-; main.c:14409
+; main.c:14414
 MSG_0242E102 (37937410//)
 Eight folders at most: take one out first
-; main.c:14421
+; main.c:14426
 MSG_1DC3AA14 (499362324//)
 Add
-; main.c:14436 main.c:14490
+; main.c:14441 main.c:14495
 MSG_2B8275A5 (729970085//)
 That folder could not be found
-; main.c:14447
+; main.c:14452
 MSG_692E7242 (1764651586//)
 That folder is there already
-; main.c:14476
+; main.c:14481
 MSG_39287765 (958953317//)
 iGame's drawer (with its gameslist.csv)
-; main.c:14477
+; main.c:14482
 MSG_3A1C5C94 (974937236//)
 Use
-; main.c:14498
+; main.c:14503
 MSG_0DDD9572 (232625522//)
 No gameslist.csv there: choose iGame's own drawer, after a scan in iGame
-; main.c:14513
+; main.c:14518
 MSG_2C2767AF (740779951//)
 Style: Smooth needs an RTG screen
-; main.c:14515
+; main.c:14520
 MSG_14386364 (339239780//)
 This Amiga plays Plex's lower quality: the files as stored are too much
-; main.c:14517
+; main.c:14522
 MSG_5CBCDB5D (1555880797//)
 That interface is not up
-; main.c:14521
+; main.c:14526
 MSG_646AFCF3 (1684733171//)
 MHI is not installed (its drivers in LIBS:MHI)
-; main.c:14525
+; main.c:14530
 MSG_104981CE (273252814//)
 ambmpega.library is not in Ambiance's Libs
-; main.c:14642
+; main.c:14647
 MSG_7AE98FE6 (2062127078//)
 Station lists opened from now on
-; main.c:14648
+; main.c:14653
 MSG_5AA18328 (1520534312//)
 The next station or track started
-; main.c:14656
+; main.c:14661
 MSG_415E54B9 (1096701113//)
 None of the servers answered: Automatic kept
-; main.c:14687
+; main.c:14692
 MSG_7800A723 (2013308707//)
 MP3 decoded by MHI: radio, Plex (at its best quality) and files
-; main.c:14688
+; main.c:14693
 MSG_0AFE96F7 (184456951//)
 MP3 decoded here by ambmpega.library, Ambiance's own
-; main.c:14689
+; main.c:14694
 MSG_605E617D (1616798077//)
 MP3 decoded here by mpega.library
-; main.c:14699
+; main.c:14704
 MSG_3990C163 (965788003//)
 MP3 at high quality, at the rate this Amiga can decode it
-; main.c:14700
+; main.c:14705
 MSG_74E84AE4 (1961380580//)
 MP3 at medium quality: about a tenth less work, 70 dB
-; main.c:14701
+; main.c:14706
 MSG_44A547DD (1151682525//)
 MP3 quality by this Amiga's speed, measured at the first MP3 each run
-; main.c:14714
+; main.c:14719
 MSG_30D664DF (819356895//)
 AHI: radio, Plex, music files, modules modplug mixes (others: Paula)
-; main.c:14715
+; main.c:14720
 MSG_0CCDB457 (214807639//)
 Paula at 14 bits: radio, Plex, music files, modules modplug mixes
-; main.c:14716
+; main.c:14721
 MSG_4975E21A (1232462362//)
 Paula plays everything
-; main.c:14731
+; main.c:14736
 MSG_0EE3FD77 (249822583//)
 %s used when it is assigned
-; main.c:14731
+; main.c:14736
 MSG_26D6BADA (651606746//)
 %s left out
-; main.c:14742
+; main.c:14747
 MSG_512EE424 (1362027556//)
 Games no longer offers WHDLoad: Settings > Folders > WHDLoad still does
-; main.c:14756 main.c:14771
+; main.c:14761 main.c:14776
 MSG_12706454 (309355604//)
 iGame was not found: choose its drawer
-; main.c:14775
+; main.c:14780
 MSG_00B8A52C (12100908//)
 No iGame list: Games and Demos show AGS's alone
-; main.c:14786
+; main.c:14791
 MSG_719F5F36 (1906270006//)
 Fire again to take this folder out (its files stay)
-; main.c:14795
+; main.c:14800
 MSG_4A2FC46E (1244644462//)
 Folder taken out
-; main.c:15409
+; main.c:15414
 MSG_3BD64F13 (1003900691//)
 Press Esc again to quit Ambiance
-; main.c:15960 layouts/showcase.c:1495
+; main.c:15965 layouts/showcase.c:1567
 MSG_6FC2F840 (1875048512//)
 Nothing is playing
-; main.c:15968
+; main.c:15973
 MSG_116D42F2 (292373234//)
 Starting the plug-in (Esc in it to come back)
-; main.c:15974
+; main.c:15979
 MSG_0D724DE5 (225594853//)
 Flow needs a graphics card's screen (15 to 32-bit)
-; main.c:15975
+; main.c:15980
 MSG_4B362E27 (1261841959//)
 Flow: this player does not say what it plays
-; main.c:16246
+; main.c:16251
 MSG_65839537 (1703122231//)
 Flow could not be shown here
-; main.c:16529 main.c:16535
+; main.c:16534 main.c:16540
 MSG_018386B3 (25396915//)
 Ambiance needs Kickstart 3.0 or newer.\n
-; main.c:16634
+; main.c:16639
 MSG_10DE8133 (283017523//)
 Ambiance could not open its screen.\n
-; main.c:16694
+; main.c:16699
 MSG_3D0CDD4E (1024253262//)
 Saved screen mode not available here: using Automatic
-; main.c:17081 main.c:18347
+; main.c:17086 main.c:18352
 MSG_7B47B1F3 (2068296179//)
 Classic
-; main.c:17361
+; main.c:17366
 MSG_2889B573 (680113523//)
 Searching...
-; main.c:17520
+; main.c:17525
 MSG_16C4FA7D (382007933//)
 Tracks
-; main.c:17554
+; main.c:17559
 MSG_1C27EB60 (472378208//)
 Genre
-; main.c:17556
+; main.c:17561
 MSG_6264551E (1650742558//)
 Mood
-; main.c:17558
+; main.c:17563
 MSG_2B675A1E (728193566//)
 Born
-; main.c:17558
+; main.c:17563
 MSG_6FA7EBE6 (1873275878//)
 Formed
-; main.c:17559
+; main.c:17564
 MSG_418D3F0F (1099775759//)
 Died
-; main.c:17559
+; main.c:17564
 MSG_15974E49 (362237513//)
 Disbanded
-; main.c:18058
+; main.c:18063
 MSG_14BD5320 (347951904//)
 The layout could not be opened: the classic one is used
-; main.c:18363
+; main.c:18368
 MSG_03105558 (51402072//)
 An older version of a layout is still in memory: restart the Amiga to see the new one.
-; main.c:18396
+; main.c:18401
 MSG_24B72731 (615982897//)
 Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 ; mixplay.c:329
@@ -2241,15 +2241,15 @@ WHDLoad and %ld more programs put in C:
 ; whdinst.c:174
 MSG_04F3511D (83054877//)
  (%ld already there kept)
-; layouts/showcase.c:1106
+; layouts/showcase.c:1177
 MSG_389C8A70 (949783152//)
 Rating
-; layouts/showcase.c:1461
+; layouts/showcase.c:1533
 MSG_5E281FEB (1579687915//)
 Paused
-; layouts/showcase.c:1525
+; layouts/showcase.c:1597
 MSG_720E34D8 (1913533656//)
 Stopped: Play starts it again
-; layouts/showcase.c:1530
+; layouts/showcase.c:1602
 MSG_6B1D7CB6 (1797094582//)
 Next:

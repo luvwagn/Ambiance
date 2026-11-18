@@ -1579,9 +1579,6 @@ Afgemeld bij plex.tv
 MSG_6358253C
 Die bibliotheek staat niet meer op de server: Muziek toont ze opnieuw
 ; That library is gone from the server: Music lists them again
-MSG_733CFA2B
-De server wil een aanmeldtoken: zie Over > Plex in Ambiance
-; The server wants a sign-in token: see About > Plex in Ambiance
 MSG_229E5121
 De server antwoordde iets onverwachts
 ; The server answered with something unexpected
@@ -1591,6 +1588,9 @@ Daar zijn geen muziekbibliotheken
 MSG_3EEA8333
 Daar zijn geen fotobibliotheken
 ; No photo libraries there
+MSG_73606314
+De server wil dat u aanmeldt: Instellingen > Netwerk > Plex
+; The server wants you signed in: Settings > Networking > Plex
 MSG_07C4F203
 De Plex-server was niet bereikbaar
 ; Could not reach the Plex server
