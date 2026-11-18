@@ -656,6 +656,9 @@ static LONG wrapped(const char *p, LONG w, int face)
     return n;
 }
 
+/* The playing mark's bars, percent of its height: low, middle, high */
+static UBYTE pm_lv[3] = { 66, 100, 50 };
+
 /* a row's mark, its right edge at x, centred on cy; its width */
 static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
 {
@@ -682,10 +685,15 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
         return s;
     case LM_PLAY: case LM_PLAYING:
         if (m == LM_PLAYING) {
-            LONG bw = s / 4 > 1 ? s / 4 : 2;
-            H->fill((WORD)(x - 3 * bw - 4), (WORD)(y + s / 3), (WORD)bw, (WORD)(s - s / 3), C_ACC);
-            H->fill((WORD)(x - 2 * bw - 2), (WORD)y, (WORD)bw, (WORD)s, C_ACC);
-            H->fill((WORD)(x - bw), (WORD)(y + s / 2), (WORD)bw, (WORD)(s - s / 2), C_ACC);
+            /* three bars, as high as the sound's low, middle and high
+             * (pm_lv: moved in the ticks while it plays) */
+            LONG bw = s / 4 > 1 ? s / 4 : 2, k;
+            for (k = 0; k < 3; k++) {
+                LONG bh = s * pm_lv[k] / 100;
+                if (bh < 2)
+                    bh = 2;
+                H->fill((WORD)(x - (3 - k) * bw - (2 - k) * 2), (WORD)(y + s - bh), (WORD)bw, (WORD)bh, C_ACC);
+            }
             return 3 * bw + 4;
         }
         for (i = 0; i < s; i++)
@@ -1039,6 +1047,8 @@ static LONG home_max(const struct LHome *m)
 #define HOME_Y0 (tile_y0 - X(10))
 #define HOME_Y1 (tile_y0 + tile_h + FH * 2 + LABEL_GAP + Y(8))
 
+static LONG pm_home_k = -1;      /* Home's tile with the playing mark, -1 none */
+
 /* Tile k where it is now (no clearing: its place is) */
 static void home_tile(const struct LHome *m, LONG k)
 {
@@ -1068,8 +1078,10 @@ static void home_tile(const struct LHome *m, LONG k)
             H->icon(m->sections[m->sel], (WORD)(cx + (tile_w - H->icon_px) / 2),
                     (WORD)(y + (tile_h - H->icon_px) / 2), (it->flags & LIF_DISABLED) ? C_DIM : C_SUB, &bgt);
         }
-        if (it->flags & LIF_NOW)
+        if (it->flags & LIF_NOW) {
             mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
+            pm_home_k = k;          /* (its bars move in the ticks) */
+        }
     }
     if (on)
         H->frame((WORD)(cx - 1), (WORD)(y - 1), (WORD)(tile_w + 2), (WORD)(tile_h + 2), 2, C_ACC);
@@ -1230,11 +1242,17 @@ static void draw_home(void)
     horizon_line(X(30), ys + tile_h / 2 + lab + Y(6), W - X(60));
     {
         /* what plays is a tile of this row (Music's): the tile, not the inset too */
+        static BOOL was_off;
         const struct LRow *row = m->nrows ? &m->rows[0] : NULL;
         LONG k;
-        for (k = 0; row && k < row->n && k < 8 && !inset_off; k++)
-            if (row->item(k)->flags & LIF_NOW)
-                inset_off = TRUE;
+        if (!row || !row->n) {
+            inset_off = was_off;    /* (the row still coming: as it was, not a flash of the inset) */
+        } else {
+            for (k = 0; k < row->n && k < 8 && !inset_off; k++)
+                if (row->item(k)->flags & LIF_NOW)
+                    inset_off = TRUE;
+        }
+        was_off = inset_off;
     }
     now_inset();                /* (before the tiles: their hits drawn again alone, the last) */
     hits_base = nhits;
@@ -2239,6 +2257,7 @@ static void hz_draw(int screen)
 {
     drawn = screen;
     inset_off = FALSE;
+    pm_home_k = -1;
     ft_screen = FALSE;
     nhits = 0;
     hits_base = 0;
@@ -2371,6 +2390,41 @@ static LONG glide(struct Glide *g, LONG at, LONG to, ULONG ms)
     return g->from + (to - g->from) * p / 256;
 }
 static struct Glide wall_g, home_g;
+static ULONG pm_at;
+
+/* The playing mark's bars from what plays: the spectrum's low, middle and
+ * high thirds (or the meters); falling a little a step. TRUE if moved. */
+static BOOL pm_step(const struct LNow *n)
+{
+    UBYTE want[3];
+    LONG k, i;
+    BOOL moved = FALSE;
+    if (!n->levels || !n->nlevels || n->paused || n->stopped) {
+        want[0] = 66;
+        want[1] = 100;
+        want[2] = 50;
+    } else {
+        for (k = 0; k < 3; k++) {
+            LONG a = k * n->nlevels / 3, b = (k + 1) * n->nlevels / 3, mx = 0;
+            if (b <= a)
+                b = a + 1;
+            for (i = a; i < b && i < n->nlevels; i++)
+                if (n->levels[i] > mx)
+                    mx = n->levels[i];
+            want[k] = (UBYTE)(15 + mx * 85 / 255);
+        }
+    }
+    for (k = 0; k < 3; k++) {
+        LONG v = want[k];
+        if (v < pm_lv[k] - 15 && !(n->paused || n->stopped))
+            v = pm_lv[k] - 15;
+        if (v != pm_lv[k]) {
+            pm_lv[k] = (UBYTE)v;
+            moved = TRUE;
+        }
+    }
+    return moved;
+}
 static void hz_tick(ULONG ms)
 {
     if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
@@ -2393,6 +2447,16 @@ static void hz_tick(ULONG ms)
         if (m) {
             H->clip(0, 0, W, HT);
             home_glide_step(m, old);    /* (what is drawn moved along; the strip that comes in) */
+        }
+    }
+    if (drawn == LS_HOME && pm_home_k >= 0 && (LONG)(ms - pm_at) >= 100) {
+        /* Home's playing mark: its bars as the sound goes */
+        const struct LNow *n = H->model(LS_NOW);
+        const struct LHome *m = H->model(LS_HOME);
+        pm_at = ms;
+        if (n && m && m->nrows && pm_home_k < m->rows[0].n && pm_step(n)) {
+            LONG cx = tile_x0 + pm_home_k * (tile_w + tile_gap) - home_px;
+            home_tiles_in(m, cx + tile_w - X(8) - FH, cx + tile_w);
         }
     }
     if (ft_screen)

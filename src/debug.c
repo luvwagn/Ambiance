@@ -37,6 +37,8 @@
 #include <proto/dos.h>
 #include <proto/timer.h>
 #include <clib/alib_protos.h>
+#include <exec/interrupts.h>
+#include <hardware/intbits.h>
 
 struct Device *TimerBase;       /* set from the open timer request */
 
@@ -57,10 +59,172 @@ static void idle_entry(void)
     Signal(parent, 1UL << done_sig);
 }
 
+/* ---- which tasks have the CPU: a sampler on the vertical blank
+ * Each frame's interrupt notes the task it interrupted (exec's ThisTask);
+ * over five seconds that is some 250 samples, a share each. Work done in
+ * interrupts (a sound card's, the blitter's) is not a task's: it falls to
+ * whichever task it interrupted (mostly the idle meter), so it shows as
+ * the system's load less the tasks' shares. A task woken by the vertical
+ * blank itself (WaitTOF) runs just after the sample: its share reads low
+ * (Ambiance's own is measured apart, by the clock). */
+#define PROF_N 32
+static struct Interrupt prof_int;
+static BOOL prof_on;
+static struct Task *volatile prof_t[PROF_N];
+static volatile ULONG prof_c[PROF_N], prof_total, prof_other;
+
+static ULONG prof_code(void)
+{
+    struct Task *t = SysBase->ThisTask;
+    int i;
+    prof_total++;
+    for (i = 0; i < PROF_N; i++) {
+        if (prof_t[i] == t) {
+            prof_c[i]++;
+            return 0;
+        }
+        if (!prof_t[i]) {
+            prof_t[i] = t;
+            prof_c[i] = 1;
+            return 0;
+        }
+    }
+    prof_other++;
+    return 0;
+}
+
+static void prof_start(void)
+{
+    int i;
+    if (prof_on)
+        return;
+    for (i = 0; i < PROF_N; i++) {
+        prof_t[i] = NULL;
+        prof_c[i] = 0;
+    }
+    prof_total = prof_other = 0;
+    prof_int.is_Node.ln_Type = NT_INTERRUPT;
+    prof_int.is_Node.ln_Pri = -60;
+    prof_int.is_Node.ln_Name = (char *)"Ambiance task sampler";
+    prof_int.is_Data = NULL;
+    prof_int.is_Code = (void (*)())prof_code;
+    AddIntServer(INTB_VERTB, &prof_int);
+    prof_on = TRUE;
+}
+
+static void prof_stop(void)
+{
+    if (!prof_on)
+        return;
+    RemIntServer(INTB_VERTB, &prof_int);
+    prof_on = FALSE;
+}
+
+/* t still a task (in exec's lists, or running): its name into out */
+static BOOL prof_name(struct Task *t, char *out, LONG max)
+{
+    struct Node *n;
+    struct List *ls[2];
+    int k;
+    BOOL found = t == SysBase->ThisTask;
+    ls[0] = &SysBase->TaskReady;
+    ls[1] = &SysBase->TaskWait;
+    for (k = 0; k < 2 && !found; k++)
+        for (n = ls[k]->lh_Head; n->ln_Succ && !found; n = n->ln_Succ)
+            if ((struct Task *)n == t)
+                found = TRUE;
+    if (!found)
+        return FALSE;
+    out[0] = 0;
+    if (t->tc_Node.ln_Type == NT_PROCESS && ((struct Process *)t)->pr_CLI) {
+        struct CommandLineInterface *cli = BADDR(((struct Process *)t)->pr_CLI);
+        UBYTE *b = cli ? (UBYTE *)BADDR(cli->cli_CommandName) : NULL;
+        if (b && b[0]) {
+            LONG len = b[0] < max - 1 ? b[0] : max - 1;
+            memcpy(out, b + 1, len);
+            out[len] = 0;
+        }
+    }
+    if (!out[0]) {
+        const char *nm = t->tc_Node.ln_Name ? t->tc_Node.ln_Name : "?";
+        strncpy(out, nm, max - 1);
+        out[max - 1] = 0;
+    }
+    return TRUE;
+}
+
+/* The tasks' shares since the last call, the busiest first, into out ("" if
+ * none); *busy: their sum, in percent (the idle meter apart) */
+BOOL dbg_tasks_report(char *out, LONG max, LONG *busy)
+{
+    struct { ULONG c; char name[32]; } e[PROF_N];
+    ULONG c[PROF_N], total, other;
+    struct Task *t[PROF_N];
+    int i, j, n = 0;
+    LONG sum = 0;
+    out[0] = 0;
+    *busy = 0;
+    if (!prof_on)
+        return FALSE;
+    Disable();
+    for (i = 0; i < PROF_N; i++) {
+        t[i] = prof_t[i];
+        c[i] = prof_c[i];
+        prof_t[i] = NULL;
+        prof_c[i] = 0;
+    }
+    total = prof_total;
+    other = prof_other;
+    prof_total = prof_other = 0;
+    Enable();
+    if (!total)
+        return FALSE;
+    Forbid();
+    for (i = 0; i < PROF_N; i++) {
+        if (!t[i] || !c[i] || t[i] == idle_task)
+            continue;
+        if (!prof_name(t[i], e[n].name, sizeof(e[n].name)))
+            strcpy(e[n].name, "(gone)");
+        e[n].c = c[i];
+        n++;
+    }
+    Permit();
+    for (i = 1; i < n; i++)                 /* the busiest first */
+        for (j = i; j > 0 && e[j].c > e[j - 1].c; j--) {
+            ULONG tc = e[j].c;
+            char tn[32];
+            strcpy(tn, e[j].name);
+            e[j].c = e[j - 1].c;
+            strcpy(e[j].name, e[j - 1].name);
+            e[j - 1].c = tc;
+            strcpy(e[j - 1].name, tn);
+        }
+    sprintf(out, "%lu samples:", (unsigned long)total);
+    for (i = 0; i < n; i++) {
+        LONG pc10 = (LONG)(e[i].c * 1000 / total);
+        char one[60];
+        sum += pc10;
+        if (i < 8 && pc10 >= 5) {
+            sprintf(one, " %s %ld.%ld%%,", e[i].name, (long)(pc10 / 10), (long)(pc10 % 10));
+            if ((LONG)(strlen(out) + strlen(one)) < max - 1)
+                strcat(out, one);
+        }
+    }
+    if (other) {
+        char one[40];
+        sprintf(one, " (%lu more)", (unsigned long)other);
+        if ((LONG)(strlen(out) + strlen(one)) < max - 1)
+            strcat(out, one);
+    }
+    *busy = sum / 10;
+    return TRUE;
+}
+
 BOOL dbg_cpu_start(void)
 {
     if (idle_task)
         return TRUE;
+    prof_start();
     if ((done_sig = AllocSignal(-1)) < 0)
         return FALSE;
     parent = FindTask(NULL);
@@ -77,6 +241,7 @@ BOOL dbg_cpu_start(void)
 
 void dbg_cpu_stop(void)
 {
+    prof_stop();
     if (!idle_task)
         return;
     SetSignal(0, 1UL << done_sig);

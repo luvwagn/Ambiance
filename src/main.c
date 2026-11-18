@@ -4393,6 +4393,18 @@ static void dbg_load_log(void)
                 mp_loaded() ? (mp_is_stream() ? ", radio on" : ", music on") : "");
     }
     amb_log("load", m);
+    {
+        /* which tasks had the CPU (sampled each frame); what the system's
+         * load has beyond them was in interrupts (a sound card's driver,
+         * the blitter's) or too short to be caught */
+        char t[300];
+        LONG busy;
+        if (dbg_tasks_report(t, sizeof(t) - 60, &busy)) {
+            if (cpu_sum / n > busy)
+                sprintf(t + strlen(t), " interrupts and the rest about %ld%%", (long)(cpu_sum / n - busy));
+            amb_log("tasks", t);
+        }
+    }
     n = 0;
     cpu_sum = app_sum = 0;
     wakes0 = loop_wakes;
@@ -5878,6 +5890,8 @@ static void fill_around_pic(WORD x0, WORD y0, WORD x1, WORD y1)
 }
 
 static char np_art_file[120];       /* the cover Now playing shows (or will) */
+static char np_art_key[170];        /* ...a Plex track's: its thumb as a layout's picture key
+                                     * ("\x04" thumb), fetched at the size the layout shows it */
 
 /* The picture file a preview of path (shot: SHOT_*) shows, into key ("":
  * not known yet, a folder not scanned). */
@@ -6298,6 +6312,12 @@ static void plex_ahead(struct Page *p);
 static void preview_tick(void)
 {
     struct Page *p = cur();
+    if (gfx_off) {
+        /* a layout draws: the classic pane's picture (fetched and read at its
+         * 327 square, and its neighbours ahead) would be for nothing */
+        pv_pending = FALSE;
+        return;
+    }
     if (!pv_pending) {
         if (p)
             plex_ahead(p);                  /* at rest: the neighbours' pictures */
@@ -13861,6 +13881,11 @@ static void np_art_start(const struct Item *it)
     amb_strlcpy(shown, thumb, sizeof(shown));
     np_art_free();
     np_art_file[0] = 0;
+    np_art_key[0] = 0;
+    if (thumb[0]) {
+        np_art_key[0] = '\x04';            /* (LV_ART_PLEX) */
+        amb_strlcpy(np_art_key + 1, thumb, sizeof(np_art_key) - 1);
+    }
     np_art_want = thumb[0] != 0;            /* a cover to show: its square kept */
     np_layout();                            /* the square's size */
     if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
@@ -17351,8 +17376,8 @@ static const struct LItem *lv_item(LONG i)
     lv_fill_item_art(li, lv_lp, i, lv_ring_art[k], sizeof(lv_ring_art[k]));
     li->letter = lv_lp && lv_lp->type == PT_LIST ? (UBYTE)ov_letter_in(lv_lp->list.items, lv_lp->list.count, i) : 0;
     if (!li->art && lv_lp && lv_lp->type == PT_LIST && i >= 0 && i < lv_lp->list.count &&
-        np_row(&lv_lp->list.items[i]) && np_art_file[0] && mp_loaded())
-        li->art = np_art_file;          /* the Now playing row: what plays, its cover */
+        np_row(&lv_lp->list.items[i]) && (np_art_key[0] || np_art_file[0]) && mp_loaded())
+        li->art = np_art_key[0] ? np_art_key : np_art_file;     /* the Now playing row: its cover */
     return li;
 }
 
@@ -17871,7 +17896,10 @@ static const void *lv_model(int screen)
         now.year = year;
         now.format = mp_tag();
         now.source = now.kind == LN_STREAM ? mp_stream_name() : np.folder;
-        now.art = np_art_file[0] ? np_art_file : NULL;
+        /* a Plex track's cover as the server's picture (made at the size the
+         * layout shows it); else the file (the classic's, 327 square: blurred,
+         * made larger) */
+        now.art = np_art_key[0] && mp_is_track() ? np_art_key : np_art_file[0] ? np_art_file : NULL;
         now.pos_ms = st.elapsed_ms;
         now.len_ms = st.total_ms;
         for (i = 0; i < 5 && np.idx + 1 + i < np.list.count; i++)

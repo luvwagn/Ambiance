@@ -1042,6 +1042,7 @@ const char *amb_log_path(void);    /* where it is going, or NULL when off */
 /* ---------------------------------------------------------------- debug */
 BOOL  dbg_cpu_start(void);
 void  dbg_cpu_stop(void);
+BOOL  dbg_tasks_report(char *out, LONG max, LONG *busy);  /* the tasks' shares since (Debug's log) */
 LONG  dbg_cpu_sample(void);         /* 0..100 once a second, -1 at first */
 void  dbg_set_timer(struct Device *timer);
 LONG st_busy_sample(void);         /* stream.c: the playback process, % busy (debug) */
