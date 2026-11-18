@@ -34,7 +34,10 @@ struct LkTarget {
     unsigned long ramp_a, ramp_b;
     UBYTE *pool;                /* ...a pen for each colour flat fills used, by its 5-6-5
                                  * bits (0: none yet); CK_POOLN of them a whole draw */
+    UBYTE *near;                /* ...one of them for each 4-4-4 bits (the nearest there is,
+                                 * for text's edges and pictures of many colours) */
     int npool;
+    BOOL pic_own;               /* a picture of few colours drawn: its own pens (lk_image) */
 };
 
 static struct RastPort *target_rp(struct LkTarget *t)
@@ -108,12 +111,14 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 #define CK_GREY0 20
 #define CK_RAMP0 28
 #define CK_RAMPN 12
-#define CK_POOL0 40                 /* pens made the colours flat fills ask for (ck_fill_pen) */
-#define CK_POOLN 66
-#define CK_CUBE0 106                /* a 5 x 6 x 5 cube (red, green, blue) */
+#define CK_POOL0 40                 /* pens made the colours flat fills and pictures of few
+                                     * colours ask for (ck_fill_pen) */
+#define CK_POOLN 180
+#define CK_CUBE0 220                /* a 3 x 4 x 3 cube (red, green, blue): what is left over */
 static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 static UBYTE ck_q6[16][256];         /* a value's level of 6, by the dither's step */
-static UBYTE ck_q5[16][256];         /* ...of 5 */
+static UBYTE ck_q4[16][256];         /* ...of 4 */
+static UBYTE ck_q3[16][256];         /* ...of 3 */
 static UBYTE ck_q8[16][256];         /* ...of 8 (the greys) */
 static BOOL ck_made;
 
@@ -125,7 +130,8 @@ static void ck_tables(void)
     for (d = 0; d < 16; d++)
         for (v = 0; v < 256; v++) {
             ck_q6[d][v] = (UBYTE)((v * 5 * 16 + d * 255 + 8) / (255 * 16));
-            ck_q5[d][v] = (UBYTE)((v * 4 * 16 + d * 255 + 8) / (255 * 16));
+            ck_q4[d][v] = (UBYTE)((v * 3 * 16 + d * 255 + 8) / (255 * 16));
+            ck_q3[d][v] = (UBYTE)((v * 2 * 16 + d * 255 + 8) / (255 * 16));
             ck_q8[d][v] = (UBYTE)((v * 7 * 16 + d * 255 + 8) / (255 * 16));
         }
     ck_made = TRUE;
@@ -137,7 +143,7 @@ static UBYTE ck_pen(unsigned long rgb, int d)
     int mx = r > gg ? (r > b ? r : b) : (gg > b ? gg : b), mn = r < gg ? (r < b ? r : b) : (gg < b ? gg : b);
     if (mx - mn <= 10)                  /* about grey: the finer ramp */
         return (UBYTE)(CK_GREY0 + ck_q8[d][(r * 77 + gg * 150 + b * 29) >> 8]);
-    return (UBYTE)(CK_CUBE0 + ck_q5[d][r] * 30 + ck_q6[d][gg] * 5 + ck_q5[d][b]);
+    return (UBYTE)(CK_CUBE0 + ck_q3[d][r] * 12 + ck_q4[d][gg] * 3 + ck_q3[d][b]);
 }
 
 /* Is c row y's background colour (within a step or two: a gradient over
@@ -180,15 +186,26 @@ static UBYTE ck_fill_pen(struct LkTarget *t, unsigned long rgb)
         return 0;
     pen = (UBYTE)(CK_POOL0 + t->npool++);
     t->pool[k] = pen;
+    {
+        UWORD n = (UWORD)(((rgb >> 12) & 0xF00) | ((rgb >> 8) & 0x0F0) | ((rgb >> 4) & 0x00F));
+        if (!t->near[n])
+            t->near[n] = pen;
+    }
     SetRGB32(&t->g->scr->ViewPort, pen, ((rgb >> 16) & 255) * 0x01010101UL, ((rgb >> 8) & 255) * 0x01010101UL,
              (rgb & 255) * 0x01010101UL);
     return pen;
 }
 
-/* ...one already made, for a pixel of a picture or of text's edges */
+/* ...one already made, or the nearest of them, for a pixel of a picture or
+ * of text's edges (0: none near) */
 static UBYTE ck_pool_pen(const struct LkTarget *t, unsigned long rgb)
 {
-    return t->pool ? t->pool[(((rgb >> 8) & 0xF800) | ((rgb >> 5) & 0x07E0) | ((rgb >> 3) & 0x001F))] : 0;
+    UBYTE pen;
+    if (!t->pool)
+        return 0;
+    if ((pen = t->pool[(((rgb >> 8) & 0xF800) | ((rgb >> 5) & 0x07E0) | ((rgb >> 3) & 0x001F))]))
+        return pen;
+    return t->near[(((rgb >> 12) & 0xF00) | ((rgb >> 8) & 0x0F0) | ((rgb >> 4) & 0x00F))];
 }
 
 static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
@@ -254,6 +271,7 @@ static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned lo
         for (i = 0; i < w; i++) {
             UBYTE pp;
             d[i] = ck_is_bg(t, y + j, s[i]) ? ck_ramp_pen(t, x + i, y + j)
+                 : t->pic_own && (pp = ck_fill_pen(t, s[i])) ? pp
                  : (pp = ck_pool_pen(t, s[i])) ? pp : ck_pen(s[i], br[(x + i) & 3]);
         }
     }
@@ -294,9 +312,10 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     t->ch = AllocVec((ULONG)g->w * g->h, MEMF_ANY | MEMF_CLEAR);
     t->pal_was = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     t->pool = AllocVec(65536, MEMF_ANY | MEMF_CLEAR);
+    t->near = AllocVec(4096, MEMF_ANY | MEMF_CLEAR);
     pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     o->ctx = t;
-    if (!t->ch || !t->pal_was || !pal) {
+    if (!t->ch || !t->pal_was || !pal || !t->pool || !t->near) {
         if (pal)
             FreeVec(pal);
         lk_close(o);
@@ -313,11 +332,11 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
         ULONG v = (ULONG)(i * 255 / 7) * 0x01010101UL;
         pal[1 + (CK_GREY0 + i) * 3] = pal[2 + (CK_GREY0 + i) * 3] = pal[3 + (CK_GREY0 + i) * 3] = v;
     }
-    for (i = 0; i < 150; i++) {
+    for (i = 0; i < 36; i++) {
         int k = CK_CUBE0 + i;
-        pal[1 + k * 3] = (ULONG)((i / 30) * 255 / 4) * 0x01010101UL;
-        pal[2 + k * 3] = (ULONG)((i / 5 % 6) * 51) * 0x01010101UL;
-        pal[3 + k * 3] = (ULONG)((i % 5) * 255 / 4) * 0x01010101UL;
+        pal[1 + k * 3] = (ULONG)((i / 12) * 255 / 2) * 0x01010101UL;
+        pal[2 + k * 3] = (ULONG)((i / 3 % 4) * 85) * 0x01010101UL;
+        pal[3 + k * 3] = (ULONG)((i % 3) * 255 / 2) * 0x01010101UL;
     }
     LoadRGB32(vp, pal);
     FreeVec(pal);
@@ -369,7 +388,34 @@ void lk_fresh(struct LkOut *o)
     if (!t || !t->pool)
         return;
     memset(t->pool, 0, 65536);
+    memset(t->near, 0, 4096);
     t->npool = 0;
+}
+
+/* A picture drawn: on an 8-bit screen, one of few colours (a game's
+ * screenshot, a cover made of 32) gets pens of its own, exact; one of
+ * many (a photo, a reflection) the nearest there are, or dithered */
+void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
+{
+    struct LkTarget *t = o->ctx;
+    static ULONG seen[2048];            /* (65536 bits: the 5-6-5 colours met) */
+    long i, j, n = 0;
+    if (t && t->ch && t->pool && t->npool < CK_POOLN) {
+        memset(seen, 0, sizeof(seen));
+        for (j = 0; j < h && n <= 64; j++)
+            for (i = 0; i < w && n <= 64; i++) {
+                unsigned long c = px[j * mod + i];
+                ULONG k = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F);
+                if (!(seen[k >> 5] & (1UL << (k & 31)))) {
+                    seen[k >> 5] |= 1UL << (k & 31);
+                    n++;
+                }
+            }
+        t->pic_own = n <= 64;
+    }
+    lk_image(o, x, y, px, w, h, mod);
+    if (t)
+        t->pic_own = FALSE;
 }
 
 BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
@@ -497,6 +543,8 @@ void lk_close(struct LkOut *o)
             FreeVec(t->rowc);
         if (t->pool)
             FreeVec(t->pool);
+        if (t->near)
+            FreeVec(t->near);
         if (t->pal_was) {
             if (t->g->scr)              /* (the classic's colours back) */
                 LoadRGB32(&t->g->scr->ViewPort, t->pal_was);

@@ -18542,7 +18542,8 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     j->scr = g.scr;
     j->tw = w;
     j->th = h;
-    j->maxcol = THUMB_DEEP;                /* true colour: a layout draws it so */
+    j->maxcol = g.truecolor ? THUMB_DEEP   /* true colour: a layout draws it so */
+                            : 32;          /* (an 8-bit screen: 32 colours, given pens of their own) */
     lv_pic[k].job = j;
     ldr_submit(j);
     return NULL;
@@ -18601,7 +18602,7 @@ static void h_frame(WORD x, WORD y, WORD w, WORD h, WORD t, ULONG rgb) { lk_fram
 static void h_image(const struct LImage *im, WORD x, WORD y)
 {
     if (im && im->px)
-        lk_image(&lv.out, x, y, (const unsigned long *)im->px, im->w, im->h, (long)im->mod);
+        lk_picture(&lv.out, x, y, (const unsigned long *)im->px, im->w, im->h, (long)im->mod);
 }
 static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, const struct LkBg *bg,
                    WORD maxw)

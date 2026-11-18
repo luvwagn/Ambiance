@@ -42,6 +42,8 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
 /* a whole draw begins: an 8-bit screen's pens for flat colours free again */
 void lk_fresh(struct LkOut *o);
+/* a picture (as lk_image; an 8-bit screen's of few colours: pens of its own) */
+void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod);
 BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h);
 BOOL lk_canvas(const struct LkOut *o);
 
