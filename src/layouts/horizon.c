@@ -1061,46 +1061,33 @@ static void home_tiles(const struct LHome *m)
             hit(cx, y, tile_w, tile_h + lab, HT_TILE, it->kind, k);
         if (on || hov)
             glow(cx - 2, y - 2, tile_w + 4, tile_h + 4, Y(4), grad(y));
-        if (it->kind == LI_DISC) {
-            H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, C_TILE2, C_TILE);
-            disc(cx + (tile_w - tile_h) / 2 + Y(4), y + Y(4), tile_h - Y(8), mix(C_TILE2, C_TILE, 1, 2));
-        } else if (it->art) {
-            if (!cover_at(it->art, NULL, cx, y, tile_w, tile_h, 0))
-                H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, C_TILE2, C_TILE);
-        } else {
-            /* no picture: a tile of colour (by its place: neighbours
-             * differ), the section's sign at its top, its words inside */
-            static const ULONG hue[6] = { 0x2A6FD6, 0x1E9C8E, 0x7A52CC, 0xC4683A, 0x3E9450, 0xB24C82 };
-            ULONG c = hue[(k + (m->sections ? m->sections[m->sel] : 0)) % 6];   /* (neighbours differ) */
-            ULONG t1 = mix(c, C_WHITE, on ? 2 : 1, 7), t2 = mix(c, C_BOT, on ? 1 : 3, 6);
-            if (it->flags & LIF_DISABLED) {
-                t1 = C_TILE2;
-                t2 = C_TILE;
-            }
+        {
+            /* every tile alike: a glassy tile, what it has to show inside it
+             * (a picture fitted, a disc, else the section's sign), its words
+             * under it */
+            ULONG t1 = on ? mix(C_TILE2, C_FOCUS2, 1, 2) : C_TILE2, t2 = on ? mix(C_TILE, C_FOCUS, 1, 2) : C_TILE;
+            LONG pad = Y(6);
+            const struct LImage *im;
             H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, t1, t2);
-            H->fill((WORD)cx, (WORD)y, (WORD)tile_w, 1, mix(t1, C_WHITE, 1, 3));    /* (its lit top edge) */
-            {
+            H->fill((WORD)cx, (WORD)y, (WORD)tile_w, 1, mix(t1, C_WHITE, 1, 4));     /* (its lit top edge) */
+            if (it->kind == LI_DISC) {
+                disc(cx + (tile_w - tile_h) / 2 + pad, y + pad, tile_h - 2 * pad, mix(t1, t2, 1, 2));
+            } else if (it->art && (im = H->picture(it->art, (UWORD)(tile_w - 2 * pad), (UWORD)(tile_h - 2 * pad)))) {
+                H->image(im, (WORD)(cx + (tile_w - im->w) / 2), (WORD)(y + (tile_h - im->h) / 2));
+            } else if (H->icon && m->sections && m->sel >= 0) {
                 const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h, 0 };
-                if (H->icon && m->sections && m->sel >= 0)
-                    H->icon(m->sections[m->sel], (WORD)(cx + X(10)), (WORD)(y + Y(10)), mix(t1, C_WHITE, 1, 2), &bgt);
-                text(cx + X(10), y + tile_h - FH * 2 - Y(10), lower(it->label), LF_BOLD,
-                     (it->flags & LIF_DISABLED) ? C_DIM : C_WHITE, &bgt, tile_w - X(20));
-                if (it->tag || it->sub)
-                    text(cx + X(10), y + tile_h - FH - Y(8), it->tag ? it->tag : it->sub, LF_SMALL,
-                         mix(C_WHITE, t2, 1, 4), &bgt, tile_w - X(20));
+                H->icon(m->sections[m->sel], (WORD)(cx + (tile_w - H->icon_px) / 2),
+                        (WORD)(y + (tile_h - H->icon_px) / 2), (it->flags & LIF_DISABLED) ? C_DIM : C_SUB, &bgt);
             }
             if (it->flags & LIF_NOW)
                 mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
-            continue;
         }
         if (on)
             H->frame((WORD)(cx - 1), (WORD)(y - 1), (WORD)(tile_w + 2), (WORD)(tile_h + 2), 2, C_ACC);
-        text(cx, y + tile_h + Y(6), it->label, on ? LF_BOLD : LF_REGULAR,
+        text(cx, y + tile_h + Y(6), lower(it->label), on ? LF_BOLD : LF_REGULAR,
              (it->flags & LIF_DISABLED) ? C_DIM : on ? C_WHITE : C_TEXT, &bg_grad, tile_w);
         if (it->tag || it->sub)
             text(cx, y + tile_h + Y(6) + FH, it->tag ? it->tag : it->sub, LF_SMALL, C_SUB, &bg_grad, tile_w);
-        if (it->flags & LIF_NOW)
-            mark(LM_PLAYING, cx + tile_w - X(8), y + tile_h - FH, C_ACC, grad(y + tile_h - FH));
     }
     H->clip(0, 0, W, HT);
 }
@@ -1895,7 +1882,7 @@ static void draw_bars(const struct LNow *n, BOOL full)
     bw = (bars_w - (nb - 1) * gap) / nb;
     fall = bars_h / 20 > 1 ? bars_h / 20 : 1;
     if (full) {
-        H->vgrad((WORD)bars_x, (WORD)bars_y, (WORD)bars_w, (WORD)bars_h, grad(bars_y), grad(bottom));
+        back_at(bars_x, bars_y, bars_x + bars_w, bottom);
         for (i = 0; i < NBARS; i++)
             bar_h[i] = 0;
     }
@@ -1913,9 +1900,8 @@ static void draw_bars(const struct LNow *n, BOOL full)
             want = old - fall;
         if (want > old)             /* (one fill: a gradient a row is many calls a frame) */
             H->fill((WORD)x, (WORD)(bottom - want), (WORD)bw, (WORD)(want - old), bar_col[i * 12 / nb]);
-        else if (want < old)
-            H->vgrad((WORD)x, (WORD)(bottom - old), (WORD)bw, (WORD)(old - want), grad(bottom - old),
-                     grad(bottom - want));
+        else if (want < old)        /* (the screen's own gradient: a part's own left marks) */
+            back_at(x, bottom - old, x + bw, bottom - want);
         bar_h[i] = (WORD)want;
     }
 }

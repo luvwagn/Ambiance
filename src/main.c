@@ -17153,6 +17153,7 @@ static struct {
     ULONG last_msg;
     LONG last_pos;                  /* a text page's: where it was scrolled to */
     ULONG last_now;                 /* what plays, as drawn (lv_now_sig): its time apart */
+    ULONG last_time;                /* ...its time, the clock, the Debug line as drawn */
     int wait_phase;                 /* the waiting spinner's step drawn, -1 none */
 } lv = { .drawn = -1, .wait_phase = -1 };
 
@@ -17673,10 +17674,123 @@ static void lvm_work_out(const struct Page *p, BOOL artist)
 static BOOL lv_home_list(void);
 
 /* Home's tiles are the section's first level's rows */
+/* Home's tiles' pictures, where they have none of their own: the one
+ * chosen last in the page each opens (Albums: the album; Artists: the
+ * artist), remembered across runs (ENVARC:Ambiance/TileArt) */
+#define TILEART_VAR "Ambiance/TileArt"
+#define LV_TA 24
+static struct { UBYTE sec; char label[40]; char art[160]; } lv_ta[LV_TA];
+static int lv_nta, lv_ta_next;
+static BOOL lv_ta_loaded, lv_ta_dirty;
+static void lv_ta_load(void)
+{
+    static char buf[LV_TA * 210];
+    char *p, *e;
+    LONG n;
+    lv_ta_loaded = TRUE;
+    if ((n = GetVar((CONST_STRPTR)TILEART_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY)) <= 0)
+        return;
+    for (p = buf; *p && lv_nta < LV_TA; p = e) {
+        char *t1, *t2;
+        for (e = p; *e && *e != '\n'; e++)
+            ;
+        if (*e)
+            *e++ = 0;
+        if (!(t1 = strchr(p, '\t')) || !(t2 = strchr(t1 + 1, '\t')))
+            continue;
+        *t1++ = 0;
+        *t2++ = 0;
+        lv_ta[lv_nta].sec = (UBYTE)(p[0] >= '0' && p[0] <= '9' ? (p[1] >= '0' && p[1] <= '9' ? (p[0] - '0') * 10 + p[1] - '0' : p[0] - '0') : 0);
+        amb_strlcpy(lv_ta[lv_nta].label, t1, sizeof(lv_ta[0].label));
+        amb_strlcpy(lv_ta[lv_nta].art, t2, sizeof(lv_ta[0].art));
+        lv_nta++;
+    }
+    lv_ta_next = lv_nta % LV_TA;
+}
+static void lv_ta_save(void)
+{
+    static char buf[LV_TA * 210];
+    int i;
+    if (!lv_ta_dirty)
+        return;
+    lv_ta_dirty = FALSE;
+    buf[0] = 0;
+    for (i = 0; i < lv_nta; i++) {
+        char line[210];
+        sprintf(line, "%lu\t%s\t%s\n", (unsigned long)lv_ta[i].sec, lv_ta[i].label, lv_ta[i].art);
+        amb_strlcat(buf, line, sizeof(buf));
+    }
+    save_setting(TILEART_VAR, buf);
+}
+static const char *lv_ta_find(int sec, const char *label)
+{
+    int i;
+    if (!lv_ta_loaded)
+        lv_ta_load();
+    for (i = 0; i < lv_nta; i++)
+        if (lv_ta[i].sec == sec && !strcmp(lv_ta[i].label, label))
+            return lv_ta[i].art;
+    return NULL;
+}
+static void lv_ta_note(int sec, const char *label, const char *art)
+{
+    int i;
+    if (!label || !*label || !art || !*art || strlen(art) >= sizeof(lv_ta[0].art) || strchr(art, '\n') ||
+        strchr(art, '\t'))
+        return;
+    if (!lv_ta_loaded)
+        lv_ta_load();
+    for (i = 0; i < lv_nta; i++)
+        if (lv_ta[i].sec == sec && !strcmp(lv_ta[i].label, label))
+            break;
+    if (i == lv_nta) {
+        if (lv_nta < LV_TA)
+            i = lv_nta++;
+        else
+            i = lv_ta_next++ % LV_TA;
+    } else if (!strcmp(lv_ta[i].art, art)) {
+        return;
+    }
+    lv_ta[i].sec = (UBYTE)sec;
+    amb_strlcpy(lv_ta[i].label, label, sizeof(lv_ta[0].label));
+    amb_strlcpy(lv_ta[i].art, art, sizeof(lv_ta[0].art));
+    lv_ta_dirty = TRUE;
+}
+/* The page opened from a tile, its chosen one's picture noted for the tile */
+static void lv_ta_watch(void)
+{
+    static const struct Page *was_p;
+    static LONG was_sel = -1;
+    struct Page *p1;
+    const struct Item *from;
+    struct LItem li;
+    char art[200];
+    if (depth < 2 || !nmenu || pages[0].type != PT_LIST || pages[0].sel < 0 || pages[0].sel >= pages[0].list.count)
+        return;
+    p1 = &pages[1];
+    if (p1->type != PT_LIST || p1->sel < 0 || p1->sel >= p1->list.count)
+        return;
+    if (p1 == was_p && p1->sel == was_sel)
+        return;
+    was_p = p1;
+    was_sel = p1->sel;
+    from = &pages[0].list.items[pages[0].sel];
+    lv_fill_item_art(&li, p1, p1->sel, art, sizeof(art));
+    if (li.art && from->label && !np_row(from))
+        lv_ta_note(menu[menu_sel], from->label, li.art);
+}
+
 static const struct LItem *lv_home_item(LONG i)
 {
+    const struct LItem *li;
     lv_lp = &pages[0];
-    return lv_item(i);
+    li = lv_item(i);
+    if (!li->art && nmenu && li->label && *li->label) {
+        const char *a = lv_ta_find(menu[menu_sel], li->label);
+        if (a)
+            ((struct LItem *)li)->art = a;      /* (the ring's own: ours to set) */
+    }
+    return li;
 }
 
 static const void *lv_model(int screen)
@@ -18412,11 +18526,19 @@ static void lv_frame_(void)
          * was drawn: the layout's own of those alone (what plays the same) */
         lv_playing_hit = FALSE;
         if (!lv.full && !gfx_off_hits && lv.drawn == scr && lv.eng->changed) {
-            ULONG nsig = lv_now_sig();
+            ULONG nsig = lv_now_sig(), tsig;
+            const struct LNow *n = lv_model(LS_NOW);
+            char ck[40];
+            clock_text(ck);
+            tsig = lv_sig_s(lv_sig_s((n->pos_ms / 1000) * 7 + n->kind, ck), lv_debug);
             if (nsig == lv.last_now) {
-                lk_clip(&lv.out, 0, 0, g.w, g.h);
-                lv.eng->changed(scr, LC_PLAYING);
-                lvt_parts++;
+                if (tsig != lv.last_time) {     /* (what it shows changed: a second, a minute) */
+                    lv.last_time = tsig;
+                    clock_text(lv.clock);
+                    lk_clip(&lv.out, 0, 0, g.w, g.h);
+                    lv.eng->changed(scr, LC_PLAYING);
+                    lvt_parts++;
+                }
             } else {
                 lv.full = TRUE;
             }
@@ -18479,6 +18601,7 @@ static void lv_frame_(void)
         lv.last_pos = p && p->tb.open ? p->tb.pos : -1;
     }
     lk_show(&lv.out);
+    lv_ta_watch();
 }
 
 void lv_hold(void)
@@ -18495,6 +18618,7 @@ void lv_resume(void)
 
 void lv_release(void)
 {
+    lv_ta_save();                           /* (Home's tiles' pictures, for the next run) */
     lv_off(FALSE);
     layout_unload();
     lv.tried = NULL;
