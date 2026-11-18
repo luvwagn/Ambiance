@@ -810,6 +810,20 @@ static void top_right(void)
     }
 }
 
+/* The clock again (a minute on), over what was there */
+static void top_right_again(void)
+{
+    LONG y = LOGO_Y + logo_h / 2 - FH / 2, x0 = tr_left - X(8), h = FH + 4;
+    if (H->debug && *H->debug) {
+        LONG dl = W - X(28) - tnum_len(H->debug, LF_SMALL) - X(8);
+        if (dl < x0)
+            x0 = dl;
+        h += FH + Y(2);         /* (the Debug line under it, as it changes) */
+    }
+    H->vgrad((WORD)x0, (WORD)(y - 2), (WORD)(W - x0), (WORD)h, grad(y - 2), grad(y - 2 + h));
+    top_right();
+}
+
 /* What plays, in an inset at the bottom right of the browsing screens
  * (clicked: Now playing); its top, HT where none */
 #define INSET_W X(260)
@@ -819,7 +833,12 @@ static LONG inset_top(void)
     const struct LNow *n = H->model(LS_NOW);
     return n && n->kind != LN_NONE ? HT - Y(16) - INSET_H : HT;
 }
+static void now_inset_as(BOOL with_hit);
 static void now_inset(void)
+{
+    now_inset_as(TRUE);
+}
+static void now_inset_as(BOOL with_hit)
 {
     const struct LNow *n = H->model(LS_NOW);
     LONG w = INSET_W, h = INSET_H, x = W - X(24) - w, y = HT - Y(16) - h, s = h - Y(12), tx, tw;
@@ -830,7 +849,8 @@ static void now_inset(void)
         glow(x, y, w, h, Y(8), grad(y));
     rshape(x, y, w, h, Y(8), C_INSET);
     H->fill((WORD)(x + Y(8)), (WORD)y, (WORD)(w - 2 * Y(8)), 1, C_LINE);
-    hit(x, y, w, h, HT_NOWPLAYING, 0, 0);
+    if (with_hit)
+        hit(x, y, w, h, HT_NOWPLAYING, 0, 0);
     {
         const struct LImage *im = n->art ? H->picture(n->art, (UWORD)s, (UWORD)s) : NULL;
         if (im)
@@ -1977,11 +1997,47 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
     }
 }
 
+/* Now playing's time and its bar (drawn again alone as it goes: LC_PLAYING) */
+static LONG nt_x, nt_y = -1, nt_w;
+static void now_time(const struct LNow *n, BOOL with_hit)
+{
+    LONG tx = nt_x, ty = nt_y, tw = nt_w;
+    char b1[16], b2[16];
+    if (ty < 0)
+        return;
+    if (!with_hit)
+        H->vgrad((WORD)tx, (WORD)(ty - Y(4)), (WORD)tw, (WORD)(FH + Y(8)), grad(ty - Y(4)), grad(ty + FH + Y(4)));
+    if (!n->stopped) {
+        const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
+        LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
+        LONG bw = tx + tw - zw - X(10) - bx, bby = ty + FH / 2 - 1;
+        tnum(tx, ty, a, LF_SMALL, C_BODY, &bg_grad);
+        if (bw > 8) {
+            if (n->len_ms && with_hit)
+                hit(bx, ty - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
+            H->fill((WORD)bx, (WORD)bby, (WORD)bw, 2, C_FAINT);
+            if (n->len_ms) {
+                LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
+                if (f > bw)
+                    f = bw;
+                if (f > 0) {
+                    H->fill((WORD)bx, (WORD)bby, (WORD)f, 2, C_ACC);
+                    rshape(bx + f - 4, bby - 3, 8, 8, 4, C_WHITE);
+                }
+            }
+        }
+        tnum(tx + tw - zw, ty, z, LF_SMALL, C_BODY, &bg_grad);
+    } else {
+        text(tx, ty, lower(H->tr("Stopped: Play starts it again")), LF_SMALL, C_SUB, &bg_grad, tw);
+    }
+}
+
 static void draw_now(void)
 {
     const struct LNow *n = H->model(LS_NOW);
     LONG cs = Y(290), x = X(46), y, tx, tw, ty, bh = NOW_BH, by = HT - Y(22) - bh, refl;
-    char b1[16], b2[16], line[200];
+    char line[200];
+    nt_y = -1;
     background();
     top_left();
     top_right();
@@ -2015,29 +2071,10 @@ static void draw_now(void)
         ty += FH + Y(2);
     }
     ty += Y(14);
-    if (!n->stopped) {
-        const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
-        LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
-        LONG bw = tx + tw - zw - X(10) - bx, bby = ty + FH / 2 - 1;
-        tnum(tx, ty, a, LF_SMALL, C_BODY, &bg_grad);
-        if (bw > 8) {
-            if (n->len_ms)
-                hit(bx, ty - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
-            H->fill((WORD)bx, (WORD)bby, (WORD)bw, 2, C_FAINT);
-            if (n->len_ms) {
-                LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
-                if (f > bw)
-                    f = bw;
-                if (f > 0) {
-                    H->fill((WORD)bx, (WORD)bby, (WORD)f, 2, C_ACC);
-                    rshape(bx + f - 4, bby - 3, 8, 8, 4, C_WHITE);
-                }
-            }
-        }
-        tnum(tx + tw - zw, ty, z, LF_SMALL, C_BODY, &bg_grad);
-    } else {
-        text(tx, ty, lower(H->tr("Stopped: Play starts it again")), LF_SMALL, C_SUB, &bg_grad, tw);
-    }
+    nt_x = tx;
+    nt_y = ty;
+    nt_w = tw;
+    now_time(n, TRUE);
     ty += FH + Y(10);
     line[0] = 0;
     if (n->nnext > 0)
@@ -2146,6 +2183,21 @@ static void hz_changed_body(int screen, ULONG what)
             wait_spinner(m);
         }
         return;
+    }
+    if (what == LC_PLAYING && screen == drawn) {
+        /* the time went on: it alone (the clock with it) */
+        const struct LNow *n = H->model(LS_NOW);
+        H->clip(0, 0, W, HT);
+        top_right_again();
+        if (screen == LS_NOW) {
+            if (n && n->kind != LN_NONE)
+                now_time(n, FALSE);
+            return;
+        }
+        if (screen != LS_HOME || n) {
+            now_inset_as(FALSE);
+            return;
+        }
     }
     if (what == LC_IMAGE && screen == drawn) {
         H->clip(0, 0, W, HT);
@@ -2272,6 +2324,57 @@ static void hz_tick(ULONG ms)
  * the row and Up and Down to the sections above and below; on the wall
  * Up and Down move in a column, Left and Right a column; on an artist's
  * strip Left and Right */
+/* A key held on a wall (its repeats coming close together): after a few
+ * moves, several at a time; held longer, a letter at a time (to the first
+ * of the next letter, or back to the first of this one, then the last) */
+static ULONG acc_ms;
+static int acc_dir, acc_run;
+static int accel(int dir)
+{
+    ULONG now = H->now_ms();
+    if (dir == acc_dir && now - acc_ms < 300)
+        acc_run++;
+    else
+        acc_run = 0;
+    acc_dir = dir;
+    acc_ms = now;
+    return acc_run;
+}
+static char initial(const struct LList *l, LONG i)
+{
+    const struct LItem *it = l->item(i);
+    const char *s = it->label;
+    if (it->letter)
+        return (char)it->letter;        /* (the host's: as the list is sorted) */
+    if (!s)
+        return 0;
+    while (*s && !((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9')))
+        s++;
+    if (*s >= '0' && *s <= '9')
+        return '#';
+    return (char)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
+}
+static LONG letter_jump(const struct LList *l, LONG sel, int dir)
+{
+    LONG i = sel, n = l->count, lim = 2000;
+    char c = initial(l, sel);
+    if (dir > 0) {
+        while (i < n - 1 && lim-- > 0 && initial(l, i) == c)
+            i++;
+        return i;
+    }
+    while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
+        i--;
+    if (i < sel)
+        return i;                       /* (to this letter's first) */
+    if (i > 0) {
+        c = initial(l, --i);
+        while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
+            i--;
+    }
+    return i;
+}
+
 static int hz_input(int screen, int action, LONG arg)
 {
     const struct LPage *m;
@@ -2318,12 +2421,22 @@ static int hz_input(int screen, int action, LONG arg)
     case LA_LEFT:
         if (screen == LS_ALBUMS ? sel < wall_rows : sel == 0)
             return LR_UNUSED;               /* the left edge: back, as ever */
-        to = screen == LS_ALBUMS ? sel - wall_rows : sel - 1;
+        if (screen == LS_ALBUMS) {
+            int run = accel(-1);
+            to = run >= 10 ? letter_jump(&m->list, sel, -1) : sel - wall_rows * (run >= 4 ? 3 : 1);
+            if (to < 0)
+                to = 0;
+        } else {
+            to = sel - 1;
+        }
         break;
     case LA_RIGHT:
         if (screen == LS_ALBUMS) {
-            if (sel + wall_rows < n)
-                to = sel + wall_rows;
+            int run = accel(1);
+            if (run >= 10)
+                to = letter_jump(&m->list, sel, 1);
+            else if (sel + wall_rows * (run >= 4 ? 3 : 1) < n)
+                to = sel + wall_rows * (run >= 4 ? 3 : 1);
             else if (sel / wall_rows < (n - 1) / wall_rows)
                 to = n - 1;                 /* (into a short last column) */
         } else if (sel + 1 < n) {

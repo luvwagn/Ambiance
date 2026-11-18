@@ -866,6 +866,11 @@ static void run(int w, int h, int bits, const char *font)
     drawn_px = 0;
     layout_engine.draw(LS_NOW);
     CHECK(drawn_px >= (long)w * h);
+#ifdef HORIZON
+    drawn_px = 0;                       /* the time going on: it alone, not the screen */
+    layout_engine.changed(LS_NOW, LC_PLAYING);
+    CHECK(drawn_px > 0 && drawn_px < (long)w * h / 8);
+#endif
     layout_engine.tick(5000);
     save("now");
     CHECK(layout_engine.input(LS_HOME, LA_DOWN, 0) == LR_UNUSED);

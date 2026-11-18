@@ -4307,6 +4307,10 @@ static WORD clock_left(void)
  * a sign from anywhere that something is playing. */
 static BOOL hdr_np_on;
 
+/* A layout on: the time, the clock or the Debug line would have been
+ * drawn (the classic's own, not drawn): the layout's LC_PLAYING */
+static BOOL lv_playing_hit;
+
 static void hdr_np_draw(BOOL quiet)
 {
     WORD n = g.mark_px, x = clock_left() - n - U(2), y = (U(24) - n) / 2;
@@ -4328,6 +4332,10 @@ static void draw_clock(void)
 {
     char buf[40];
     WORD tw;
+    if (gfx_off) {
+        lv_playing_hit = TRUE;
+        return;
+    }
     clock_text(buf);
     gfx_fill(&g, clock_left(), 0, g.w - 1, U(24) - 1, PEN_BAR);
     if (!buf[0])
@@ -4549,6 +4557,10 @@ static void draw_status(void)
         }
     if (status_shown[0] && strcmp(show, status_shown) == 0)
         return;                             /* unchanged: leave it be */
+    if (gfx_off) {
+        lv_playing_hit = TRUE;              /* (a layout's own line) */
+        return;
+    }
     gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
     gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL | TS_TABULAR);
     amb_strlcpy(status_shown, show, sizeof(status_shown));
@@ -5089,6 +5101,60 @@ static char ov_letter_of(const char *s)
         }
     }
     return 0;
+}
+
+/* A title's letter without its article ("The Dogs": D), 0 if it has none */
+static char ov_letter_bare(const char *s)
+{
+    static const char *const art[] = { "the ", "a ", "an " };
+    int k;
+    for (k = 0; k < 3; k++) {
+        const char *a = art[k], *t = s;
+        while (*a && (*t == *a || *t == *a - 32))
+            a++, t++;
+        if (!*a && *t)
+            return ov_letter_of(t);
+    }
+    return 0;
+}
+
+/* The letter of entry i as its list is sorted: a server sorting by title
+ * without "The" (Plex's titleSort) files The Dogs under D, a folder's
+ * names under T. Which, worked out once a list: the way that keeps the
+ * letters in order more often. So the big letter only goes on. */
+static const struct Item *ovs_items;
+static LONG ovs_count = -1;
+static BOOL ovs_bare;
+static char ov_letter_in(const struct Item *it, LONG n, LONG i)
+{
+    char raw, bare;
+    if (i < 0 || i >= n || !it[i].label)
+        return 0;
+    if (it != ovs_items || n != ovs_count) {
+        LONG k, back_raw = 0, back_bare = 0;
+        char pr = 0, pb = 0;
+        for (k = 0; k < n; k++) {
+            char r = it[k].label ? ov_letter_of(it[k].label) : 0, b;
+            if (!r)
+                continue;
+            b = ov_letter_bare(it[k].label);
+            if (!b)
+                b = r;
+            if (pr && r < pr)
+                back_raw++;
+            if (pb && b < pb)
+                back_bare++;
+            pr = r;
+            pb = b;
+        }
+        ovs_items = it;
+        ovs_count = n;
+        ovs_bare = back_bare < back_raw;
+    }
+    raw = ov_letter_of(it[i].label);
+    if (ovs_bare && (bare = ov_letter_bare(it[i].label)))
+        return bare;
+    return raw;
 }
 
 /* Long and mostly titles: the kind of list the letter helps with. */
@@ -6343,7 +6409,7 @@ static void ov_rows_under(struct Page *p)
 
 static void ov_show(struct Page *p)
 {
-    char c = ov_letter_of(p->list.items[p->sel].label);
+    char c = ov_letter_in(p->list.items, p->list.count, p->sel);
     ov.page = p;
     if (!c || !ov_build(c))
         return;
@@ -8048,6 +8114,10 @@ controls:
 static void np_update(void)
 {
     BOOL was;
+    if (gfx_off) {
+        lv_playing_hit = TRUE;              /* (a layout's own Now playing: its time alone) */
+        return;
+    }
     if (np.w && mp_loaded() && (np_meter_rows() != np.rows ||
                                 (np.cyc_x1 > np.cyc_x0 && np.cyc_off == vis_available(VIS_SPECTRUM)))) {
         /* the sound has more or fewer channels than the page was laid out
@@ -10875,7 +10945,7 @@ static void act_move(LONG d)
             LONG old = p->sel, old_top = p->top;
             p->sel = s;
             if (ov.on && ov.page == p)
-                ov_relabel(ov_letter_of(p->list.items[s].label));
+                ov_relabel(ov_letter_in(p->list.items, p->list.count, s));
             draw_title_count(p);    /* only the number changes */
             draw_list_move(p, old, old_top);
         }
@@ -14957,21 +15027,21 @@ static LONG letter_step(struct Page *p, LONG from, LONG dir)
 {
     const struct Item *it = p->list.items;
     LONG i = from, n = p->list.count;
-    char c = ov_letter_of(it[from].label);
+    char c = ov_letter_in(it, n, from);
     if (dir > 0) {
-        while (i < n && ov_letter_of(it[i].label) == c)
+        while (i < n && ov_letter_in(it, n, i) == c)
             i++;
         return i < n ? i : from;
     }
-    if (i > 0 && ov_letter_of(it[i - 1].label) == c) {
-        while (i > 0 && ov_letter_of(it[i - 1].label) == c)
+    if (i > 0 && ov_letter_in(it, n, i - 1) == c) {
+        while (i > 0 && ov_letter_in(it, n, i - 1) == c)
             i--;
         return i;
     }
     if (i == 0)
         return from;
-    c = ov_letter_of(it[--i].label);
-    while (i > 0 && ov_letter_of(it[i - 1].label) == c)
+    c = ov_letter_in(it, n, --i);
+    while (i > 0 && ov_letter_in(it, n, i - 1) == c)
         i--;
     return i;
 }
@@ -15644,7 +15714,7 @@ static void gut_drag_to(WORD my)
     if (p->sel > top + vis - 1)
         p->sel = top + vis - 1;
     if (ov.on && ov.page == p)
-        ov_relabel(ov_letter_of(p->list.items[p->sel].label));
+        ov_relabel(ov_letter_in(p->list.items, p->list.count, p->sel));
     draw_title_count(p);
     draw_list_rows(p);
 }
@@ -17075,6 +17145,7 @@ static struct {
     char last_letter;
     ULONG last_msg;
     LONG last_pos;                  /* a text page's: where it was scrolled to */
+    ULONG last_now;                 /* what plays, as drawn (lv_now_sig): its time apart */
     int wait_phase;                 /* the waiting spinner's step drawn, -1 none */
 } lv = { .drawn = -1, .wait_phase = -1 };
 
@@ -17270,6 +17341,7 @@ static const struct LItem *lv_item(LONG i)
     UWORD k = lv_ri++ & 31;
     struct LItem *li = &lv_ring[k];
     lv_fill_item_art(li, lv_lp, i, lv_ring_art[k], sizeof(lv_ring_art[k]));
+    li->letter = lv_lp && lv_lp->type == PT_LIST ? (UBYTE)ov_letter_in(lv_lp->list.items, lv_lp->list.count, i) : 0;
     return li;
 }
 
@@ -17731,7 +17803,7 @@ static void lv_letter_touch(struct Page *p)
     if (!(ov.on && ov.page == p))
         ov_show(p);
     else
-        ov_relabel(ov_letter_of(p->list.items[p->sel].label));
+        ov_relabel(ov_letter_in(p->list.items, p->list.count, p->sel));
     ov.linger = 25;
 }
 
@@ -18255,6 +18327,36 @@ static void lv_busy_frame(void)
     lv_frame();
 }
 
+/* What plays, all but its time: a change in it is drawn whole; only
+ * the time going on (and the clock, the meters) is LC_PLAYING's */
+static ULONG lv_sig_s(ULONG h, const char *t)
+{
+    if (t)
+        for (; *t; t++)
+            h = h * 33 + (UBYTE)*t;
+    return h * 33 + 1;
+}
+static ULONG lv_now_sig(void)
+{
+    const struct LNow *n = lv_model(LS_NOW);
+    ULONG h = 5381;
+    h = lv_sig_s(h, n->title);
+    h = lv_sig_s(h, n->artist);
+    h = lv_sig_s(h, n->album);
+    h = lv_sig_s(h, n->art);
+    h = lv_sig_s(h, n->format);
+    h = lv_sig_s(h, n->source);
+    h = lv_sig_s(h, n->nnext > 0 ? n->next[0] : NULL);
+    h = h * 33 + n->kind;
+    h = h * 33 + (n->paused ? 1 : 0) + (n->stopped ? 2 : 0);
+    h = h * 33 + (ULONG)(n->btn + 1);
+    h = h * 33 + n->off;
+    h = h * 33 + n->on;
+    h = h * 33 + n->volume;
+    h = h * 33 + (n->len_ms / 1000);
+    return h;
+}
+
 void lv_frame(void)
 {
     int scr;
@@ -18276,6 +18378,20 @@ void lv_frame(void)
     }
     if (scr != lv.drawn)
         lv.full = TRUE;
+    if (lv_playing_hit) {
+        /* the time, the clock or the Debug line went on, and nothing else
+         * was drawn: the layout's own of those alone (what plays the same) */
+        lv_playing_hit = FALSE;
+        if (!lv.full && !gfx_off_hits && lv.drawn == scr && lv.eng->changed) {
+            ULONG nsig = lv_now_sig();
+            if (nsig == lv.last_now) {
+                lk_clip(&lv.out, 0, 0, g.w, g.h);
+                lv.eng->changed(scr, LC_PLAYING);
+            } else {
+                lv.full = TRUE;
+            }
+        }
+    }
     if (lv_img) {
         lv_img = FALSE;
         if (!lv.full && !gfx_off_hits && lv.eng->changed) {
@@ -18298,8 +18414,10 @@ void lv_frame(void)
         const char *c;
         char letter = p && ov.on && ov.page == p && ov.bl ? ov.letter : 0;
         BOOL moved_only;
+        ULONG nsig;
         for (c = msg; *c; c++)
             mh = mh * 33 + (UBYTE)*c;
+        nsig = lv_now_sig();
         moved_only = !lv.full && (scr == LS_PAGE || scr == LS_ALBUMS || scr == LS_ALBUM ||
                                   scr == LS_ARTIST) && lv.drawn == scr && lv.eng->changed && p &&
                      p == lv.last_p && depth == lv.last_depth && mh == lv.last_msg &&
@@ -18314,10 +18432,11 @@ void lv_frame(void)
         clock_text(lv.clock);
         lv_ri = 0;
         lk_clip(&lv.out, 0, 0, g.w, g.h);
-        if (moved_only)
+        if (moved_only && nsig == lv.last_now)
             lv.eng->changed(scr, LC_SELECT);
         else
             lv.eng->draw(scr);
+        lv.last_now = nsig;
         lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;
         lv.last_items = p ? (const void *)p->list.items : NULL;

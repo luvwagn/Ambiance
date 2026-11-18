@@ -67,7 +67,8 @@ struct LItem {
     UBYTE kind;                 /* LI_* */
     UBYTE mark;                 /* LM_* */
     UBYTE flags;                /* LIF_* */
-    UBYTE pad;
+    UBYTE letter;               /* its letter as the list is sorted (The Dogs: D, where the
+                                 * server sorts without "The"); 0 none */
 };
 
 /* A list: count rows, the selected one and the first shown (as the

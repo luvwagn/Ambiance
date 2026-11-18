@@ -1957,6 +1957,57 @@ static void sc_tick(ULONG ms)
 /* The keys: the program's, as in the classic layout, but on the wall and
  * an artist's strip of albums Left and Right move along them, and on the
  * wall Up and Down a row */
+/* A key held on a wall (its repeats coming close together): after a few
+ * moves, several at a time; held longer, a letter at a time (to the first
+ * of the next letter, or back to the first of this one, then the last) */
+static ULONG acc_ms;
+static int acc_dir, acc_run;
+static int accel(int dir)
+{
+    ULONG now = H->now_ms();
+    if (dir == acc_dir && now - acc_ms < 300)
+        acc_run++;
+    else
+        acc_run = 0;
+    acc_dir = dir;
+    acc_ms = now;
+    return acc_run;
+}
+static char initial(const struct LList *l, LONG i)
+{
+    const struct LItem *it = l->item(i);
+    const char *s = it->label;
+    if (it->letter)
+        return (char)it->letter;        /* (the host's: as the list is sorted) */
+    if (!s)
+        return 0;
+    while (*s && !((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9')))
+        s++;
+    if (*s >= '0' && *s <= '9')
+        return '#';
+    return (char)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
+}
+static LONG letter_jump(const struct LList *l, LONG sel, int dir)
+{
+    LONG i = sel, n = l->count, lim = 2000;
+    char c = initial(l, sel);
+    if (dir > 0) {
+        while (i < n - 1 && lim-- > 0 && initial(l, i) == c)
+            i++;
+        return i;
+    }
+    while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
+        i--;
+    if (i < sel)
+        return i;                       /* (to this letter's first) */
+    if (i > 0) {
+        c = initial(l, --i);
+        while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
+            i--;
+    }
+    return i;
+}
+
 static int sc_input(int screen, int action, LONG arg)
 {
     const struct LPage *m;
@@ -2018,13 +2069,22 @@ static int sc_input(int screen, int action, LONG arg)
     case LA_UP:
         if (screen != LS_ALBUMS)
             return LR_UNUSED;
-        to = sel - wall_cols >= 0 ? sel - wall_cols : sel;
+        {
+            int run = accel(-1);
+            LONG st = wall_cols * (run >= 4 ? 3 : 1);
+            to = run >= 10 ? letter_jump(&m->list, sel, -1) : sel - st >= 0 ? sel - st : sel - wall_cols >= 0 ? 0 : sel;
+        }
         break;
     case LA_DOWN:
         if (screen != LS_ALBUMS)
             return LR_UNUSED;
-        to = sel + wall_cols < n ? sel + wall_cols
-           : sel / wall_cols < (n - 1) / wall_cols ? n - 1 : sel;  /* (into a short last row) */
+        {
+            int run = accel(1);
+            LONG st = wall_cols * (run >= 4 ? 3 : 1);
+            to = run >= 10 ? letter_jump(&m->list, sel, 1)
+               : sel + st < n ? sel + st
+               : sel / wall_cols < (n - 1) / wall_cols ? n - 1 : sel;  /* (into a short last row) */
+        }
         break;
     default:
         return LR_UNUSED;
