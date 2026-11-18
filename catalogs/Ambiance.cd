@@ -39,13 +39,13 @@ Not enough memory for the animation's screen
 ; beets.c:536 beets.c:557 plex.c:687
 MSG_0D3B3C12 (221985810//)
 (no name)
-; beets.c:708 main.c:13240 layouts/showcase.c:969
+; beets.c:708 main.c:13240 layouts/horizon.c:921
 MSG_027BDF10 (41672464//)
 Nothing here
 ; beets.c:719 plex.c:394
 MSG_441552F7 (1142248183//)
 Artists
-; beets.c:719 main.c:17526 plex.c:395
+; beets.c:719 main.c:17531 plex.c:395
 MSG_5C7535ED (1551185389//)
 Albums
 ; beets.c:720 plex.c:396
@@ -1227,7 +1227,7 @@ Not in the Fonts drawer
 ; main.c:6749
 MSG_42B0DEF7 (1118887671//)
 (empty)
-; main.c:7020 layouts/showcase.c:805
+; main.c:7020 layouts/horizon.c:1194 layouts/showcase.c:830
 MSG_070B058B (118162827//)
 Works with:
 ; main.c:7143
@@ -1827,7 +1827,7 @@ Folder taken out
 ; main.c:15414
 MSG_3BD64F13 (1003900691//)
 Press Esc again to quit Ambiance
-; main.c:15965 layouts/showcase.c:1668
+; main.c:15965 layouts/horizon.c:1703 layouts/showcase.c:1732
 MSG_6FC2F840 (1875048512//)
 Nothing is playing
 ; main.c:15973
@@ -1851,40 +1851,40 @@ Ambiance could not open its screen.\n
 ; main.c:16699
 MSG_3D0CDD4E (1024253262//)
 Saved screen mode not available here: using Automatic
-; main.c:17087 main.c:18389
+; main.c:17087 main.c:18401
 MSG_7B47B1F3 (2068296179//)
 Classic
-; main.c:17367
+; main.c:17368
 MSG_2889B573 (680113523//)
 Searching...
-; main.c:17526
+; main.c:17531
 MSG_16C4FA7D (382007933//)
 Tracks
-; main.c:17560
+; main.c:17565
 MSG_1C27EB60 (472378208//)
 Genre
-; main.c:17562
+; main.c:17567
 MSG_6264551E (1650742558//)
 Mood
-; main.c:17564
+; main.c:17569
 MSG_2B675A1E (728193566//)
 Born
-; main.c:17564
+; main.c:17569
 MSG_6FA7EBE6 (1873275878//)
 Formed
-; main.c:17565
+; main.c:17570
 MSG_418D3F0F (1099775759//)
 Died
-; main.c:17565
+; main.c:17570
 MSG_15974E49 (362237513//)
 Disbanded
-; main.c:18088
+; main.c:18097
 MSG_14BD5320 (347951904//)
 The layout could not be opened: the classic one is used
-; main.c:18405
+; main.c:18417
 MSG_03105558 (51402072//)
 An older version of a layout is still in memory: restart the Amiga to see the new one.
-; main.c:18438
+; main.c:18450
 MSG_24B72731 (615982897//)
 Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
 ; mixplay.c:329
@@ -2241,15 +2241,15 @@ WHDLoad and %ld more programs put in C:
 ; whdinst.c:174
 MSG_04F3511D (83054877//)
  (%ld already there kept)
-; layouts/showcase.c:1278
-MSG_389C8A70 (949783152//)
-Rating
-; layouts/showcase.c:1634
+; layouts/horizon.c:787 layouts/showcase.c:1698
 MSG_5E281FEB (1579687915//)
 Paused
-; layouts/showcase.c:1698
+; layouts/horizon.c:1740 layouts/showcase.c:1762
 MSG_720E34D8 (1913533656//)
 Stopped: Play starts it again
-; layouts/showcase.c:1703
+; layouts/horizon.c:1745 layouts/showcase.c:1767
 MSG_6B1D7CB6 (1797094582//)
 Next:
+; layouts/showcase.c:1356
+MSG_389C8A70 (949783152//)
+Rating

@@ -2242,9 +2242,6 @@ WHDLoad og %ld andre programmer lagt i C:
 MSG_04F3511D
  (%ld, der allerede var der, beholdt)
 ;  (%ld already there kept)
-MSG_389C8A70
-Vurdering
-; Rating
 MSG_5E281FEB
 På pause
 ; Paused
@@ -2254,3 +2251,6 @@ Stoppet: Afspil starter den igen
 MSG_6B1D7CB6
 Næste:
 ; Next:
+MSG_389C8A70
+Vurdering
+; Rating

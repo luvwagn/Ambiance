@@ -2242,9 +2242,6 @@ WHDLoad y %ld programas más puestos en C:
 MSG_04F3511D
  (%ld ya presentes conservados)
 ;  (%ld already there kept)
-MSG_389C8A70
-Valoración
-; Rating
 MSG_5E281FEB
 En pausa
 ; Paused
@@ -2254,3 +2251,6 @@ Detenido: Reproducir lo inicia de nuevo
 MSG_6B1D7CB6
 Siguiente:
 ; Next:
+MSG_389C8A70
+Valoración
+; Rating

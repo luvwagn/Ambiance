@@ -83,7 +83,7 @@ LICENCES   = assets/fonts-src/OFL-PixelifySans.txt assets/fonts-src/OFL-Rubik.tx
              assets/fonts-src/OFL-Galmuri.txt assets/fonts-src/OFL-ArkPixel.txt \
              assets/fonts-src/OFL-Geologica.txt CREDITS.txt LICENSE
 
-.PHONY: test-igame test-showcase all clean leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
+.PHONY: test-igame test-showcase test-horizon all clean leakcheck check-libs test-spu test test-replayer test-animdraw test-beets dvdlib test-dvd test-dvd-host test-dvdiso ac3lib test-ac3 mpgalib test-mpga mpegvlib test-mpegv anim-bench mpeg-prof check-formats check-syscalls art fonts smooth icons preview lha catalogs FORCE_VERSION
 
 all: $(TARGET) layouts lha
 
@@ -164,7 +164,7 @@ build/lhost.o: src/lhost.h src/layout.h src/lkcore.h
 # libnix's libinit (as ambsql.library's), src/layouts/layoutlib.c (its
 # GetLayout) and the layout's own source. They draw only through the
 # program's table: no C library linked in.
-LAYOUT_NAMES = showcase
+LAYOUT_NAMES = showcase horizon
 LAYOUTS      = $(patsubst %,build/layouts/%.layout,$(LAYOUT_NAMES))
 LAYOUT_CC    = $(CC) -O2 $(CPU) -noixemul -nostartfiles -fomit-frame-pointer -Wall -Wextra \
                -Wno-pointer-sign -Isrc -Isrc/sqlib
@@ -338,7 +338,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -395,6 +395,13 @@ build/showcase_host: tests/showcase_host.c src/lkcore.c src/layouts/showcase.c $
 	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/showcase_host.c src/lkcore.c src/layouts/showcase.c
 test-showcase: build/showcase_host
 	@build/showcase_host > build/test-showcase.txt && echo "  CHECK Showcase drawn" || (cat build/test-showcase.txt; exit 1)
+
+# Horizon's, the same way: build/horizon-<screen>-<w>x<h>.ppm
+build/horizon_host: tests/showcase_host.c src/lkcore.c src/layouts/horizon.c $(LAYOUT_HDR) tests/shim/exec/types.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -DHORIZON '-DLNAME="horizon"' '-DLTITLE="Horizon"' -o $@ tests/showcase_host.c src/lkcore.c src/layouts/horizon.c
+test-horizon: build/horizon_host
+	@build/horizon_host > build/test-horizon.txt && echo "  CHECK Horizon drawn" || (cat build/test-horizon.txt; exit 1)
 
 # radio-browser.info's CSV, UTF-8 to Latin-1, URL encoding (radiocsv.c).
 build/radio_host: tests/radio_host.c src/radiocsv.c src/radiocsv.h

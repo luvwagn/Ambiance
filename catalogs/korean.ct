@@ -2242,9 +2242,6 @@ WHDLoad와 프로그램 %ld개를 C:에 넣었습니다
 MSG_04F3511D
  (이미 있던 %ld개는 유지)
 ;  (%ld already there kept)
-MSG_389C8A70
-평점
-; Rating
 MSG_5E281FEB
 일시정지
 ; Paused
@@ -2254,3 +2251,6 @@ MSG_720E34D8
 MSG_6B1D7CB6
 다음:
 ; Next:
+MSG_389C8A70
+평점
+; Rating

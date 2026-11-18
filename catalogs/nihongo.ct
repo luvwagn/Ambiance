@@ -2242,9 +2242,6 @@ WHDLoadと他%ld個のプログラムをC:に入れました
 MSG_04F3511D
 （既存の%ld個はそのまま）
 ;  (%ld already there kept)
-MSG_389C8A70
-評価
-; Rating
 MSG_5E281FEB
 一時停止中
 ; Paused
@@ -2254,3 +2251,6 @@ MSG_720E34D8
 MSG_6B1D7CB6
 次:
 ; Next:
+MSG_389C8A70
+評価
+; Rating

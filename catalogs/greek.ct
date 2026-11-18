@@ -2242,9 +2242,6 @@ MSG_3160C36F
 MSG_04F3511D
  (%ld που υπήρχαν ήδη κρατήθηκαν)
 ;  (%ld already there kept)
-MSG_389C8A70
-Βαθμός
-; Rating
 MSG_5E281FEB
 Σε παύση
 ; Paused
@@ -2254,3 +2251,6 @@ MSG_720E34D8
 MSG_6B1D7CB6
 Επόμενο:
 ; Next:
+MSG_389C8A70
+Βαθμός
+; Rating

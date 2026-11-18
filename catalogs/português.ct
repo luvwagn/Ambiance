@@ -2242,9 +2242,6 @@ WHDLoad e mais %ld programas colocados em C:
 MSG_04F3511D
  (%ld já existentes mantidos)
 ;  (%ld already there kept)
-MSG_389C8A70
-Avaliação
-; Rating
 MSG_5E281FEB
 Em pausa
 ; Paused
@@ -2254,3 +2251,6 @@ Parado: Reproduzir volta a iniciá-lo
 MSG_6B1D7CB6
 A seguir:
 ; Next:
+MSG_389C8A70
+Avaliação
+; Rating

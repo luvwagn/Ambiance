@@ -2242,9 +2242,6 @@ WHDLoad et %ld autres programmes mis dans C:
 MSG_04F3511D
  (%ld déjà présents conservés)
 ;  (%ld already there kept)
-MSG_389C8A70
-Note
-; Rating
 MSG_5E281FEB
 En pause
 ; Paused
@@ -2254,3 +2251,6 @@ Arrêté : Lecture le relance
 MSG_6B1D7CB6
 Ensuite :
 ; Next:
+MSG_389C8A70
+Note
+; Rating

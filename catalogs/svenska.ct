@@ -2242,9 +2242,6 @@ WHDLoad och %ld program till lagda i C:
 MSG_04F3511D
  (%ld som redan fanns behölls)
 ;  (%ld already there kept)
-MSG_389C8A70
-Betyg
-; Rating
 MSG_5E281FEB
 Pausad
 ; Paused
@@ -2254,3 +2251,6 @@ Stoppad: Spela startar den igen
 MSG_6B1D7CB6
 Nästa:
 ; Next:
+MSG_389C8A70
+Betyg
+; Rating

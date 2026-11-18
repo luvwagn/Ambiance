@@ -2242,9 +2242,6 @@ WHDLoad en %ld andere programma's in C: gezet
 MSG_04F3511D
  (%ld al aanwezige behouden)
 ;  (%ld already there kept)
-MSG_389C8A70
-Waardering
-; Rating
 MSG_5E281FEB
 Gepauzeerd
 ; Paused
@@ -2254,3 +2251,6 @@ Gestopt: Afspelen start het opnieuw
 MSG_6B1D7CB6
 Volgende:
 ; Next:
+MSG_389C8A70
+Waardering
+; Rating

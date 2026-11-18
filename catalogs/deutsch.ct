@@ -2242,9 +2242,6 @@ WHDLoad und %ld weitere Programme in C: abgelegt
 MSG_04F3511D
  (%ld bereits vorhandene behalten)
 ;  (%ld already there kept)
-MSG_389C8A70
-Bewertung
-; Rating
 MSG_5E281FEB
 Pausiert
 ; Paused
@@ -2254,3 +2251,6 @@ Gestoppt: Abspielen startet es wieder
 MSG_6B1D7CB6
 Als Nächstes:
 ; Next:
+MSG_389C8A70
+Bewertung
+; Rating

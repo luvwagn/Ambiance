@@ -2242,9 +2242,6 @@ WHDLoad ja %ld muuta ohjelmaa asennettu C:hen
 MSG_04F3511D
  (%ld jo olemassa ollutta säilytetty)
 ;  (%ld already there kept)
-MSG_389C8A70
-Arvio
-; Rating
 MSG_5E281FEB
 Tauolla
 ; Paused
@@ -2254,3 +2251,6 @@ Pysäytetty: Toista käynnistää sen uudelleen
 MSG_6B1D7CB6
 Seuraavaksi:
 ; Next:
+MSG_389C8A70
+Arvio
+; Rating

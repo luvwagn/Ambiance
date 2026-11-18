@@ -5,6 +5,22 @@
  * made-up models like the mockups'. Written as
  * build/showcase-<screen>-<w>x<h>.ppm; checked only for drawing outside
  * the screen or nothing drawn. */
+/* The layout drawn (Showcase unless built for another): its files'
+ * prefix, and where its ways differ */
+#ifndef LNAME
+#define LNAME "showcase"
+#define LTITLE "Showcase"
+#endif
+#ifdef HORIZON
+#define WALL_RIGHT(a) ((a) > 7)                 /* (a column: the wall runs sideways) */
+#define NOW_Y (h - 50 * h / 600)                /* (what plays: an inset at the bottom right) */
+#define HOME_SOME 1                             /* (Home: the sections near the chosen one) */
+#else
+#define WALL_RIGHT(a) ((a) == 7)
+#define NOW_Y (16 * h / 600 + 6)
+#define HOME_SOME 0
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -617,7 +633,7 @@ static void save(const char *name)
     char path[200];
     FILE *f;
     long i;
-    sprintf(path, "build/showcase-%s-%dx%d.ppm", name, SW, SH);
+    sprintf(path, "build/" LNAME "-%s-%dx%d.ppm", name, SW, SH);
     if (!(f = fopen(path, "wb")))
         return;
     fprintf(f, "P6\n%d %d\n255\n", SW, SH);
@@ -630,6 +646,7 @@ static void save(const char *name)
 }
 
 static void clicks(int w, int h);
+
 
 static void run(int w, int h, int bits, const char *font)
 {
@@ -768,7 +785,7 @@ static void run(int w, int h, int bits, const char *font)
         layout_engine.draw(LS_ALBUMS);
         nacts = 0;
         CHECK(layout_engine.input(LS_ALBUMS, LA_RIGHT, 0) == LR_DONE && nacts == 1 &&
-              acts[0][0] == LAC_SELECT && acts[0][1] == 7);
+              acts[0][0] == LAC_SELECT && WALL_RIGHT(acts[0][1]));
         nacts = 0;
         CHECK(layout_engine.input(LS_ALBUMS, LA_DOWN, 0) == LR_DONE && nacts == 1 &&
               acts[0][0] == LAC_SELECT && acts[0][1] > 6);
@@ -804,13 +821,13 @@ static void clicks(int w, int h)
     layout_engine.draw(LS_HOME);
     for (y = 0; y < h; y++)                 /* the sections, top to bottom */
         if (click_at(LS_HOME, 100 * w / 800, y, &a) == LAC_SECTION && a != last) {
-            CHECK(a == last + 1 && nacts == 2 && acts[1][0] == LAC_ENTER);
+            CHECK((a == last + 1 || (HOME_SOME && last < 0)) && nacts == 2 && acts[1][0] == LAC_ENTER);
             last = a;
             seen++;
         }
-    CHECK(seen == 9);
+    CHECK(HOME_SOME ? seen >= 5 : seen == 9);
     for (ok = 0, x = w / 2; x < w && !ok; x++)
-        ok = click_at(LS_HOME, x, 16 * h / 600 + 6, NULL) == LAC_NOWPLAYING;
+        ok = click_at(LS_HOME, x, NOW_Y, NULL) == LAC_NOWPLAYING;
     CHECK(ok);
     scene = 0;                              /* Settings > Display: a row opens */
     layout_engine.draw(LS_PAGE);
@@ -846,6 +863,6 @@ int main(void)
         printf("%d failed\n", fails);
         return 1;
     }
-    printf("Showcase drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32; clicks\n");
+    printf(LTITLE " drawn: 5 screens at 800x600/24, 640x480/16, 1024x768/32; clicks\n");
     return 0;
 }
