@@ -425,6 +425,8 @@ static UWORD spin_phase(ULONG since)
  * caller has cleared the area). */
 static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
 {
+    if (lv_drives())
+        return;                             /* (a layout: its own spinner, LC_WAIT) */
     static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
                                    PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
     /* the dots' places on a circle of radius 12 design pixels */
@@ -5817,6 +5819,8 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 /* The spinner in the picture's place (its place cleared the first time). */
 static void pv_spinner(BOOL first)
 {
+    if (lv_drives())
+        return;                             /* (a layout: no picture place of the classic's) */
     WORD x0 = aside_x(), w = aside_width() - U(4);
     if (first)
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
@@ -6440,8 +6444,8 @@ static UBYTE list_planes(const struct Page *p);
 static void ov_stamp(void)
 {
     UBYTE was;
-    if (!ov.bl)
-        return;
+    if (!ov.bl || lv_drives())
+        return;                             /* (a layout: its own letter, from ov.letter) */
     was = g.rp->Mask;
     if (g.planar)
         SetWriteMask(g.rp, list_planes(ov.page));
@@ -6564,6 +6568,10 @@ static void ov_relabel_(char c)
     if (!ov_build(c)) {
         if (old)
             gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
+        return;
+    }
+    if (lv_drives()) {                      /* (the letter's: the layout's own, ov.letter) */
+        lv_note_what(LC_SELECT);
         return;
     }
     x0 = ov.x;
