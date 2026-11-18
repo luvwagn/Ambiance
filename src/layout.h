@@ -105,6 +105,8 @@ struct LPage {
      * Plex's "Works with" mark (host->plexmark) */
     const char *note;
     UBYTE plexmark;
+    UBYTE frames;               /* a wall (LS_ALBUMS) of pictures and videos: its tiles
+                                 * 4:3 frames, not square covers */
 };
 
 /* A row on Home: a title and a few items (recently added albums, the
@@ -193,7 +195,8 @@ enum {
     LAC_NEXT, LAC_PREV,         /* playback: the next or previous track */
     LAC_NOWPLAYING,             /* Now playing */
     LAC_HOME,                   /* Home: every level closed, the sections' menu */
-    LAC_BUTTON                  /* arg: Now playing's button pressed (LNB_*) */
+    LAC_BUTTON,                 /* arg: Now playing's button pressed (LNB_*) */
+    LAC_SEEK                    /* arg: to there in what plays, in 65536ths of its length */
 };
 
 /* Input given to the layout (input's action): the program's keys, the

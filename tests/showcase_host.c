@@ -415,6 +415,7 @@ static void crumbs(struct LPage *pg, const char *a, const char *b, const char *c
     pg->hint = "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back";
 }
 
+static int frames_wall;         /* the wall drawn as Videos' (4:3 frames) */
 static const void *h_model(int screen)
 {
     static struct LHome home;
@@ -429,6 +430,7 @@ static const void *h_model(int screen)
         page.list.count = sizeof(album_rows) / sizeof(album_rows[0]);
         page.list.sel = 6;
         page.list.item = item;
+        page.frames = (UBYTE)frames_wall;
         return &page;
     }
     if (screen == LS_ALBUM) {
@@ -671,6 +673,13 @@ static void run(int w, int h, int bits, const char *font)
         full = drawn_px;
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
+        if (scene == 0) {               /* the pointer over a row: its glow */
+            drawn_px = 0;
+            CHECK(layout_engine.pointer(LS_PAGE, (WORD)(w * 6 / 10), (WORD)(h * 37 / 100), FALSE) == LR_DONE);
+            CHECK(drawn_px > 0);
+            save("hover");
+            layout_engine.pointer(LS_PAGE, 2, 2, FALSE);
+        }
         if (scene == 3) {               /* the spinner's step alone */
             drawn_px = 0;
             layout_engine.changed(LS_PAGE, LC_WAIT);
@@ -695,6 +704,12 @@ static void run(int w, int h, int bits, const char *font)
             layout_engine.changed(ms[k], LC_SELECT);
             CHECK(drawn_px > 0);
         }
+        frames_wall = 1;                /* Videos' wall: 4:3 frames */
+        drawn_px = 0;
+        layout_engine.draw(LS_ALBUMS);
+        CHECK(drawn_px >= (long)w * h);
+        save("frames");
+        frames_wall = 0;
         /* the wall's keys: Right a cover, Down a row, Left at the edge back */
         layout_engine.draw(LS_ALBUMS);
         nacts = 0;

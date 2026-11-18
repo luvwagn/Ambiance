@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.9 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.11 (18.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.9 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.11 (18.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 9;
+const UWORD LibRevision = 11;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -40,11 +40,16 @@ const UWORD LibRevision = 9;
 #define C_NOWBG  0x02040AUL
 #define C_COVER  0x8A4B2AUL     /* no cover: a copper square */
 #define C_NEXT   0x9FB0BFUL
+#define C_HOVER  0x18293CUL     /* a row under the pointer (between the panel and the focus) */
 #define C_LETTER 0x2C4864UL     /* the big letter: faint, over the list */
 
 static const struct LayoutHost *H;
 static WORD W, HT, FH, TH;      /* the screen; a line of text; a title's (LF_TITLE) */
 static void disc(LONG x, LONG y, LONG s, ULONG bg);
+static void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg);
+static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c);
+static void inner_glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg, ULONG face);
+#define NOW_BH     Y(38)            /* Now playing: its buttons' height (at the bottom) */
 #define NOW_PANEL  Y(392)           /* Now playing: its panel's top; the bars end above it */
 static int drawn = -1;          /* the screen drawn last */
 static ULONG bars_at;           /* Now playing's bars, drawn then */
@@ -54,7 +59,7 @@ static const void *list_of;
 
 /* What a click lands on: the places drawn last, noted as they are drawn
  * (sc_pointer looks them up). */
-enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE, HT_HOME, HT_BUTTON };
+enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE, HT_HOME, HT_BUTTON, HT_SEEK };
 struct Hit {
     WORD x, y, w, h;
     UBYTE what;                 /* HT_* */
@@ -68,6 +73,11 @@ static LONG hit_sel = -1;       /* the list's selected row, as drawn */
 static LONG click_row = -1;     /* a double-click: the row clicked last, and when */
 static ULONG click_ms;
 
+/* What the pointer is over (a row, tile, section or button: HT_*, its
+ * arg), drawn with a glow; -1 none (the keys in use) */
+static int hov_what = -1;
+static LONG hov_arg = -1;
+#define HOVER(w, a) (hov_what == (w) && hov_arg == (a))
 static void hit(LONG x, LONG y, LONG w, LONG h, int what, int kind, LONG arg)
 {
     if (nhits < MAX_HITS && w > 0 && h > 0) {
@@ -262,7 +272,7 @@ static void top_right(BOOL dark)
     x -= cw;
     tnum(x, y + (FH - TH) / 2, H->clock, LF_TITLE, C_WHITE, bg);     /* the big clock */
     if (H->debug && *H->debug)  /* Settings > Debug: the CPU and memory, under the clock */
-        tnum(W - X(24) - tnum_len(H->debug, LF_SMALL), y + TH + Y(4), H->debug, LF_SMALL, C_ACC, bg);
+        tnum(W - X(24) - tnum_len(H->debug, LF_SMALL), y + TH + Y(1), H->debug, LF_SMALL, C_ACC, bg);
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
         LONG tw, room = x - X(40) - W / 2;
@@ -306,13 +316,92 @@ static LONG title_line(const char *title, const char *sub)
     return x;
 }
 
+/* The bottom: no bar at rest. A message is a toast, a pill with a glow,
+ * for TOAST_MS after it comes (while the page waits for the network, as
+ * long as it waits); the keys' hint shows for HINT_MS after a key, never
+ * for the pointer. Kept here (copies) so that a toast or hint ending is
+ * drawn away by the tick, the band alone. */
+#define TOAST_MS 4000
+#define HINT_MS  4000
+static char ft_msg[160], ft_hint[160];
+static ULONG ft_hash, ft_at, ft_key;
+static BOOL ft_keep;            /* the page waits: the toast stays */
+static int ft_shown;            /* what the band shows: 0 nothing, 1 the toast, 2 the hint */
+static ULONG ft_shown_hash;
+static BOOL ft_screen;          /* the screen drawn has the band */
+
+static void scopy(char *d, const char *s, LONG max)
+{
+    LONG i = 0;
+    if (s)
+        for (; s[i] && i < max - 1; i++)
+            d[i] = s[i];
+    d[i] = 0;
+}
+static ULONG shash(const char *s)
+{
+    ULONG h = 5381;
+    if (s)
+        for (; *s; s++)
+            h = h * 33 + (UBYTE)*s;
+    return h;
+}
+
+static LONG band_top(void)
+{
+    return HT - Y(10) - (FH + Y(14)) - X(6) - 2;
+}
+
+/* The band drawn as it should be now; force: whatever it showed */
+static void footer_draw(BOOL force)
+{
+    ULONG now = H->now_ms();
+    int want = 0;
+    if (ft_msg[0] && (ft_keep || now - ft_at < TOAST_MS))
+        want = 1;
+    else if (ft_hint[0] && ft_key && now - ft_key < HINT_MS)
+        want = 2;
+    if (!force && want == ft_shown && (want != 1 || ft_shown_hash == ft_hash))
+        return;
+    {
+        LONG y0 = band_top();
+        H->clip(0, 0, W, HT);
+        H->vgrad(0, (WORD)y0, W, (WORD)(HT - y0), grad(y0), C_BOT);
+    }
+    if (want == 1) {
+        LONG tw = tlen(ft_msg, LF_REGULAR), h = FH + Y(14), w = tw + X(36), x, y = HT - Y(10) - h;
+        if (w > W - X(60)) {
+            w = W - X(60);
+            tw = w - X(36);
+        }
+        x = (W - w) / 2;
+        glow(x, y, w, h, h / 2, grad(y));
+        rshape(x, y, w, h, h / 2, C_FOCUS);
+        text(x + X(18), y + Y(7), ft_msg, LF_REGULAR, C_WHITE, flat(C_FOCUS), tw);
+    } else if (want == 2) {
+        text(X(30), HT - Y(18) - FH, ft_hint, LF_SMALL, C_SUB, &bg_grad, W - X(60));
+    }
+    ft_shown = want;
+    ft_shown_hash = ft_hash;
+}
+
+static void footer_keep(const char *hint, const char *message, BOOL keep)
+{
+    ULONG h = shash(message);
+    if (message && *message) {
+        if (h != ft_hash || !ft_msg[0])
+            ft_at = H->now_ms();        /* a new message: its toast from now */
+    }
+    ft_hash = message && *message ? h : 0;
+    scopy(ft_msg, message, sizeof(ft_msg));
+    scopy(ft_hint, hint, sizeof(ft_hint));
+    ft_keep = keep;
+    ft_screen = TRUE;
+    footer_draw(TRUE);
+}
 static void footer(const char *hint, const char *message)
 {
-    LONG y = HT - Y(18) - FH;
-    if (message && *message)
-        text(X(30), y, message, LF_SMALL, C_ACC, &bg_grad, W - X(60));
-    else
-        text(X(30), y, hint, LF_SMALL, C_SUB, &bg_grad, W - X(60));
+    footer_keep(hint, message, FALSE);
 }
 
 /* a row's mark, its right edge at x, centred on cy; its width */
@@ -397,6 +486,9 @@ static void draw_home(void)
         if (sel) {
             H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)ih, 4, C_FOCUS, C_PANEL2);
             H->fill((WORD)x, (WORD)(y + 2), 3, (WORD)(ih - 4), C_ACC);
+        } else if (HOVER(HT_SECTION, i)) {
+            bg = C_HOVER;
+            inner_glow(x, y, w, ih, 4, C_PANEL2, bg);
         }
         if (ip) {
             H->icon(m->sections[i], (WORD)tx, (WORD)(y + (ih - ip) / 2), sel ? C_WHITE : C_SUB, flat(bg));
@@ -428,7 +520,9 @@ static void draw_home(void)
                     text(cx + X(4), cy + (ch - FH) / 2, it->label, LF_SMALL, C_SUB, &bg_grad, cw);
                     continue;
                 }
-                panel(cx, cy, cw, ch, 4, C_PANEL, C_LINE, grad(cy));
+                if (HOVER(HT_TILE, k))      /* the pointer over it */
+                    glow(cx, cy, cw, ch, 4, grad(cy));
+                panel(cx, cy, cw, ch, 4, C_PANEL, HOVER(HT_TILE, k) ? C_ACC : C_LINE, grad(cy));
                 if (!(it->flags & LIF_DISABLED))
                     hit(cx, cy, cw, ch, HT_TILE, it->kind, k);
                 tx = cx + X(12);
@@ -499,6 +593,9 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
         if (sel) {
             H->rrect((WORD)rx, (WORD)ry, (WORD)rw, (WORD)(rh - 2), 4, C_FOCUS, C_PANEL);
             H->frame((WORD)rx, (WORD)ry, (WORD)rw, (WORD)(rh - 2), 2, C_ACC);
+        } else if (HOVER(HT_ROW, list_top + i) && !(it->flags & LIF_DISABLED)) {
+            bg = C_HOVER;       /* the pointer over it: a glow inside its edge */
+            inner_glow(rx, ry, rw, rh - 2, 4, C_PANEL, bg);
         } else if (i + 1 < fit && list_top + i + 1 < l->count) {
             H->fill((WORD)(rx + X(8)), (WORD)(ry + rh - 1), (WORD)(rw - X(16)), 1, C_LINE);
         }
@@ -745,7 +842,7 @@ static void draw_page(void)
         return;
     }
     draw_page_body(m);
-    footer(m->hint, m->message);
+    footer_keep(m->hint, m->message, m->waiting != NULL);
 }
 
 /* The list's panel and the details' under it: all a move needs drawing
@@ -828,44 +925,114 @@ static LONG isqrt(LONG v)
     }
     return r;
 }
+/* The disc's colour at an angle (a 24th of a turn, 0 to the right, going
+ * round clockwise): silver, brighter towards two opposite sides, with a
+ * rainbow sheen on the two quarters between them (as light on a DVD) */
+static ULONG disc_sector(int a)
+{
+    static const WORD c2[12] = { 256, 222, 128, 0, -128, -222, -256, -222, -128, 0, 128, 222 };
+    LONG lit = (c2[a % 12] + 256) / 2, w = c2[(a + 9) % 12];     /* cos 2t; sin 2t */
+    ULONG silver = mix(0x8C96A2, 0xF2F5F8, lit, 256), hue;
+    int h = (a * 2) % 12, k;
+    ULONG r, g, b;
+    if (w <= 0)
+        return silver;
+    /* the hue round the colour wheel, twice a turn: 12 steps of 30 degrees */
+    k = h % 2 ? 128 : 0;
+    switch (h / 2) {
+    case 0: r = 255; g = k; b = 0; break;
+    case 1: r = 255 - k; g = 255; b = 0; break;
+    case 2: r = 0; g = 255; b = k; break;
+    case 3: r = 0; g = 255 - k; b = 255; break;
+    case 4: r = k; g = 0; b = 255; break;
+    default: r = 255; g = 0; b = 255 - k; break;
+    }
+    hue = (r << 16) | (g << 8) | b;
+    return mix(silver, hue, w * w / 256, 256 * 2);
+}
+
+/* Which 48th of a turn (dx, dy) is in, near enough (no floats here) */
+static int disc_angle(LONG dx, LONG dy)
+{
+    LONG ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy, deg;
+    if (!ax && !ay)
+        return 0;
+    deg = ax >= ay ? ay * 45 / ax : 90 - ax * 45 / ay;     /* 0-90 in its quadrant */
+    if (dx < 0 && dy >= 0)
+        deg = 180 - deg;
+    else if (dx < 0 && dy < 0)
+        deg = 180 + deg;
+    else if (dx >= 0 && dy < 0)
+        deg = 360 - deg;
+    return (int)((deg * 2 + 7) / 15) % 48;     /* (48ths: 7.5 degrees) */
+}
+
+/* A shiny disc (a DVD) s square at x, y over bg: its data side in silver
+ * and rainbow by angle, a darker rim, the clear ring round the hub, the
+ * hub's ring, and the hole; drawn a run of one colour at a time */
 static void disc(LONG x, LONG y, LONG s, ULONG bg)
 {
-    LONG R = s / 2 - 1, cx = x + s / 2, cy = y + s / 2, j, hub = R * 36 / 100, hole = R * 13 / 100;
+    LONG R = s / 2 - 1, cx = x + s / 2, cy = y + s / 2, j, i;
+    LONG hub = R * 40 / 100, clear = R * 30 / 100, hole = R * 12 / 100;
+    ULONG sec[48];
     if (R < 4)
         return;
+    for (i = 0; i < 48; i++)            /* the 24 colours, and halfway between them */
+        sec[i] = i % 2 ? mix(disc_sector(i / 2), disc_sector((i / 2 + 1) % 24), 1, 2)
+                       : disc_sector(i / 2);
     H->fill((WORD)x, (WORD)y, (WORD)s, (WORD)s, bg);
     for (j = -R; j <= R; j++) {
-        LONG half = isqrt(R * R - j * j), t = j + R;
-        ULONG l = mix(0xE6EEF6, 0x8E9CAE, t, 2 * R), r = mix(0x8C9AB0, 0xF2F6FA, t, 2 * R);
-        if (half <= 0)
-            continue;
-        H->hgrad((WORD)(cx - half), (WORD)(cy + j), (WORD)(2 * half + 1), 1, l, r);
-        if (j > -hub && j < hub) {
-            LONG hh = isqrt(hub * hub - j * j);
-            H->fill((WORD)(cx - hh), (WORD)(cy + j), (WORD)(2 * hh + 1), 1, 0xC9D2DC);
-            if (j > -hole && j < hole) {
-                LONG oh = isqrt(hole * hole - j * j);
-                H->fill((WORD)(cx - oh), (WORD)(cy + j), (WORD)(2 * oh + 1), 1, bg);
+        LONG half = isqrt(R * R - j * j), run = -half;
+        ULONG cur = 0;
+        BOOL have = FALSE;
+        for (i = -half; i <= half + 1; i++) {
+            ULONG c = bg;
+            if (i <= half) {
+                LONG d2 = i * i + j * j;
+                if (d2 >= (R - 1) * (R - 1))
+                    c = 0x9AA4AE;                       /* the rim */
+                else if (d2 >= hub * hub)
+                    c = sec[disc_angle(i, j)];          /* the data side */
+                else if (d2 >= (hub - 1) * (hub - 1) || (d2 < (clear + 1) * (clear + 1) && d2 >= clear * clear))
+                    c = 0x7C8692;                       /* the hub's rings */
+                else if (d2 >= clear * clear)
+                    c = mix(0xC9D0D8, bg, 1, 3);        /* the clear plastic */
+                else if (d2 >= hole * hole)
+                    c = 0xB4BCC6;                       /* the hub */
+            }
+            if (!have) {
+                cur = c;
+                run = i;
+                have = TRUE;
+            } else if (c != cur || i > half) {
+                if (cur != bg)
+                    H->fill((WORD)(cx + run), (WORD)(cy + j), (WORD)(i - run), 1, cur);
+                cur = c;
+                run = i;
             }
         }
     }
 }
 
-/* A cover s square at x, y: the picture, or a panel with the name's
- * first letter until it is ready (or if it has none) */
-static void cover(const char *art, const char *label, LONG x, LONG y, LONG s, ULONG bg)
+/* A cover w x h at x, y: the picture (fitted, the rest bg), or a panel
+ * with the name's first letter until it is ready (or if it has none) */
+static void cover_wh(const char *art, const char *label, LONG x, LONG y, LONG w, LONG h, ULONG bg)
 {
-    const struct LImage *im = art ? H->picture(art, (UWORD)s, (UWORD)s) : NULL;
+    const struct LImage *im = art ? H->picture(art, (UWORD)w, (UWORD)h) : NULL;
     if (im) {
-        if (im->w < s || im->h < s)
-            H->fill((WORD)x, (WORD)y, (WORD)s, (WORD)s, bg);
-        H->image(im, (WORD)(x + (s - im->w) / 2), (WORD)(y + (s - im->h) / 2));
+        if (im->w < w || im->h < h)
+            H->fill((WORD)x, (WORD)y, (WORD)w, (WORD)h, bg);
+        H->image(im, (WORD)(x + (w - im->w) / 2), (WORD)(y + (h - im->h) / 2));
         return;
     }
-    H->rrect((WORD)x, (WORD)y, (WORD)s, (WORD)s, 4, C_PANEL, bg);
+    H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)h, 4, C_PANEL, bg);
     if (label && *label)
-        text(x + (s - tlen("M", LF_BOLD)) / 2, y + (s - FH) / 2, label, LF_BOLD, C_DIM, flat(C_PANEL),
+        text(x + (w - tlen("M", LF_BOLD)) / 2, y + (h - FH) / 2, label, LF_BOLD, C_DIM, flat(C_PANEL),
              tlen("M", LF_BOLD) + 2);
+}
+static void cover(const char *art, const char *label, LONG x, LONG y, LONG s, ULONG bg)
+{
+    cover_wh(art, label, x, y, s, s, bg);
 }
 
 /* Paragraphs (a line each, "\n" between) into lines for draw_lines */
@@ -892,8 +1059,8 @@ static LONG wall_cols = 1, wall_top;    /* its columns, as drawn; its first row 
 
 static void draw_wall_body(const struct LPage *m)
 {
-    LONG x0 = X(30), y0 = Y(60), aw = W - x0 - X(30), bottom = HT - Y(30) - FH - Y(12);
-    LONG gap = X(18), cs = X(124), cols, ch, rows, i, sel = m->list.sel;
+    LONG x0 = X(30), y0 = Y(70), aw = W - x0 - X(30), bottom = HT - Y(30) - FH - Y(12);
+    LONG gap = X(18), cs = X(124), cols, ch, rows, i, sel = m->list.sel, th;
     const struct LList *l = &m->list;
     if (cs < FH * 4)
         cs = FH * 4;
@@ -901,7 +1068,8 @@ static void draw_wall_body(const struct LPage *m)
     if (cols < 1)
         cols = 1;
     cs = (aw - (cols - 1) * gap) / cols;
-    ch = cs + Y(8) + FH + Y(2) + FH + Y(14);
+    th = m->frames ? cs * 3 / 4 : cs;  /* pictures and videos: 4:3 frames */
+    ch = th + Y(8) + FH + Y(2) + FH + Y(14);
     rows = (bottom - y0) / ch;
     if (rows < 1)
         rows = 1;
@@ -925,19 +1093,27 @@ static void draw_wall_body(const struct LPage *m)
         if (it->flags & LIF_HEAD)
             continue;
         hit(cx, cy, cs, ch - Y(10), HT_ROW, it->kind, i);
-        if (it->kind == LI_DISC)
-            disc(cx, cy, cs, bg);
-        else
-            cover(it->art, it->label, cx, cy, cs, bg);
+        if (it->kind == LI_DISC) {
+            H->fill((WORD)cx, (WORD)cy, (WORD)cs, (WORD)th, bg);
+            disc(cx + (cs - th) / 2, cy, th, bg);
+        } else {
+            cover_wh(it->art, it->label, cx, cy, cs, th, bg);
+        }
         if (on)
-            H->frame((WORD)(cx - 3), (WORD)(cy - 3), (WORD)(cs + 6), (WORD)(cs + 6), 3, C_ACC);
+            H->frame((WORD)(cx - 3), (WORD)(cy - 3), (WORD)(cs + 6), (WORD)(th + 6), 3, C_ACC);
+        else if (HOVER(HT_ROW, i)) {        /* the pointer over it: a glow round it */
+            LONG k, n = X(5) > 3 ? X(5) : 3;
+            for (k = n; k >= 1; k--)
+                H->frame((WORD)(cx - k), (WORD)(cy - k), (WORD)(cs + 2 * k), (WORD)(th + 2 * k), 1,
+                         mix(C_ACC, bg, k, n + 1));
+        }
         if (it->flags & LIF_NOW)
-            mark(LM_PLAYING, cx + cs - X(8), cy + cs - FH, C_ACC, bg);
-        text(cx, cy + cs + Y(8), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT,
-             flat(grad(cy + cs + Y(8))), cs);
+            mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, bg);
+        text(cx, cy + th + Y(8), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT,
+             flat(grad(cy + th + Y(8))), cs);
         if (it->sub || it->tag)
-            text(cx, cy + cs + Y(8) + FH + Y(2), it->sub ? it->sub : it->tag, LF_SMALL, C_SUB,
-                 flat(grad(cy + cs + Y(8) + FH)), cs);
+            text(cx, cy + th + Y(8) + FH + Y(2), it->sub ? it->sub : it->tag, LF_SMALL, C_SUB,
+                 flat(grad(cy + th + Y(8) + FH)), cs);
     }
     if (l->count > rows * cols) {            /* where in the wall */
         LONG nr = (l->count + cols - 1) / cols, bx = W - X(16), bh = bottom - y0;
@@ -1142,7 +1318,7 @@ static const ULONG bar_col[12] = {
 static WORD bar_h[NBARS];
 static void draw_bars(const struct LNow *n, BOOL full)
 {
-    LONG x0 = X(20), y0 = Y(52), aw = W - 2 * x0, ah = NOW_PANEL - Y(12) - y0, nb, gap, bw, i, fall;
+    LONG x0 = X(20), y0 = Y(60), aw = W - 2 * x0, ah = NOW_PANEL - Y(12) - y0, nb, gap, bw, i, fall;
     LONG bottom = y0 + ah;
     static const UBYTE shape[12] = { 9, 12, 15, 13, 11, 14, 10, 8, 12, 9, 7, 10 };
     BOOL spectrum = n && n->nlevels >= 8;
@@ -1209,6 +1385,17 @@ static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c)
         if (w - 2 * in > 0)
             H->fill((WORD)(x + in), (WORD)(y + j), (WORD)(w - 2 * in), 1, c);
     }
+}
+
+/* A glow inside a rounded box's edge: the accent at its edge fading into
+ * face inwards; the rest face (a row under the pointer) */
+static void inner_glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg, ULONG face)
+{
+    LONG k, n = X(4) > 2 ? X(4) : 2;
+    H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)h, (WORD)r, mix(C_ACC, face, 1, 2), bg);
+    for (k = 1; k <= n; k++)
+        rshape(x + k, y + k, w - 2 * k, h - 2 * k, r > k ? r - k : 1, mix(C_ACC, face, k + 1, n + 2));
+    rshape(x + n + 1, y + n + 1, w - 2 * n - 2, h - 2 * n - 2, r > n ? r - n : 1, face);
 }
 
 /* A glow round a rounded box: rings a pixel each, the accent fading into
@@ -1307,7 +1494,7 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
     for (i = 0; i < LNB_COUNT; i++) {
         int b = order[i];
         BOOL off = (n->off & LNB_BIT(b)) != 0, on = (n->on & LNB_BIT(b)) != 0;
-        BOOL big = b == LNB_PLAY, foc = n->btn == b;
+        BOOL big = b == LNB_PLAY, foc = n->btn == b || HOVER(HT_BUTTON, b);
         LONG w = big ? bw + bh / 2 : bw, r = big ? bh / 2 : bh / 4;
         ULONG face = big ? C_ACC : C_PANEL2, fg = big ? C_NOWBG : off ? C_DIM : on ? C_ACC : C_TEXT;
         if (i < 6) {
@@ -1347,7 +1534,7 @@ static void draw_now(void)
 {
     const struct LNow *n = H->model(LS_NOW);
     LONG py = NOW_PANEL, s = Y(112), cx = X(28), cy = py + Y(18), tx, tw, y;
-    LONG bh = Y(38), by = HT - Y(14) - bh;
+    LONG bh = NOW_BH, by = HT - Y(14) - bh;
     char b1[16], b2[16], line[200];
     H->clip(0, 0, W, HT);
     H->fill(0, 0, W, HT, C_NOWBG);
@@ -1356,7 +1543,7 @@ static void draw_now(void)
     draw_bars(n, TRUE);
     bars_at = H->now_ms();
     if (n && n->kind != LN_NONE)
-        hit(X(20), Y(52), W - 2 * X(20), NOW_PANEL - Y(12) - Y(52), HT_PAUSE, 0, 0);
+        hit(X(20), Y(60), W - 2 * X(20), NOW_PANEL - Y(12) - Y(60), HT_PAUSE, 0, 0);
     H->fill(0, (WORD)py, W, (WORD)(HT - py), C_PANEL);
     H->fill(0, (WORD)py, W, 1, C_LINE);
     if (s > by - Y(12) - cy)
@@ -1388,6 +1575,8 @@ static void draw_now(void)
         LONG bw = tx + tw - zw - X(10) - bx, bby = y + FH / 2 - 2;
         tnum(tx, y, a, LF_SMALL, C_BODY, flat(C_PANEL));
         if (bw > 8) {
+            if (n->len_ms)      /* clicked: there (a band taller than the bar, to hit) */
+                hit(bx, y - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
             H->rrect((WORD)bx, (WORD)bby, (WORD)bw, 4, 2, C_LINE, C_PANEL);
             if (n->len_ms) {
                 LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
@@ -1442,6 +1631,7 @@ static void sc_close(void)
 static void sc_draw(int screen)
 {
     drawn = screen;
+    ft_screen = FALSE;          /* (footer() says it has the band) */
     nhits = 0;
     hit_sel = -1;
     switch (screen) {
@@ -1454,7 +1644,14 @@ static void sc_draw(int screen)
     }
 }
 
+static void sc_changed_body(int screen, ULONG what);
 static void sc_changed(int screen, ULONG what)
+{
+    sc_changed_body(screen, what);
+    if (ft_screen && screen == drawn)
+        footer_draw(FALSE);     /* (a key's hint, a toast's end) */
+}
+static void sc_changed_body(int screen, ULONG what)
 {
     const struct LPage *m;
     if (what == LC_WAIT) {
@@ -1500,6 +1697,8 @@ static void sc_changed(int screen, ULONG what)
  * drawn when it changes) */
 static void sc_tick(ULONG ms)
 {
+    if (ft_screen)
+        footer_draw(FALSE);     /* a toast or a hint over: drawn away */
     if (drawn != LS_NOW || (LONG)(ms - bars_at) < 40)
         return;
     bars_at = ms;
@@ -1515,6 +1714,9 @@ static int sc_input(int screen, int action, LONG arg)
     const struct LPage *m;
     LONG sel, n, to;
     (void)arg;
+    hov_what = -1;              /* the keys in use: no hover shown */
+    hov_arg = -1;
+    ft_key = H->now_ms();       /* ...and their hint, for a while */
     if (screen != LS_ALBUMS && screen != LS_ARTIST)
         return LR_UNUSED;
     if (!(m = H->model(screen)))
@@ -1564,14 +1766,61 @@ static BOOL playable(int kind)
  * opened, or (what plays) selected, and played with a double-click; a
  * crumb goes back to that level; what plays (top right) opens Now
  * playing, and on Now playing the bars pause and play. */
+/* The pointer's hover moved: what shows it drawn again, as a move is */
+static void hover_redraw(int screen)
+{
+    const void *m;
+    if (screen != drawn || !(m = H->model(screen)))
+        return;
+    H->clip(0, 0, W, HT);
+    switch (screen) {
+    case LS_HOME:
+        sc_draw(LS_HOME);
+        break;
+    case LS_PAGE:
+        if (body_n >= 0 && !((const struct LPage *)m)->text)
+            draw_page_body((const struct LPage *)m);
+        break;
+    case LS_ALBUMS:
+        draw_wall_body((const struct LPage *)m);
+        break;
+    case LS_NOW: {
+        LONG by = HT - Y(14) - NOW_BH, e = X(6) + 2;
+        H->fill(0, (WORD)(by - e), W, (WORD)(NOW_BH + 2 * e), C_PANEL);
+        now_buttons((const struct LNow *)m, by, NOW_BH);
+        break;
+    }
+    }
+}
+
 static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
 {
     const struct Hit *t = NULL;
     int i;
     BOOL dbl;
     ULONG now;
-    if (!click || !H)
+    if (!H)
         return LR_UNUSED;
+    if (!click) {
+        /* a move: what it is over, glowing (rows, tiles, sections, buttons) */
+        int w = -1;
+        LONG a = -1;
+        for (i = nhits - 1; i >= 0; i--)
+            if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) {
+                if (hits[i].what == HT_ROW || hits[i].what == HT_TILE || hits[i].what == HT_SECTION ||
+                    hits[i].what == HT_BUTTON) {
+                    w = hits[i].what;
+                    a = hits[i].arg;
+                }
+                break;
+            }
+        if (w == hov_what && a == hov_arg)
+            return LR_UNUSED;
+        hov_what = w;
+        hov_arg = a;
+        hover_redraw(screen);
+        return LR_DONE;
+    }
     for (i = nhits - 1; i >= 0; i--)
         if (x >= hits[i].x && x < hits[i].x + hits[i].w && y >= hits[i].y && y < hits[i].y + hits[i].h) {
             t = &hits[i];
@@ -1623,6 +1872,9 @@ static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
         break;
     case HT_BUTTON:             /* Now playing's */
         H->act(LAC_BUTTON, t->arg);
+        break;
+    case HT_SEEK:               /* its bar: to there */
+        H->act(LAC_SEEK, (x - t->x) * 65536 / (t->w > 0 ? t->w : 1));
         break;
     }
     return LR_DONE;

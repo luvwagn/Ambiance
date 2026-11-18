@@ -16664,6 +16664,8 @@ static int app_main(void)
     if (debug_on)
         dbg_cpu_start();
     resume_load();                  /* what was playing at the last quit: loaded, stopped */
+    lv_resume();                    /* a layout: on before anything is drawn (the classic
+                                     * screen showed for a few frames first) */
     {
         /* where the last run left off: its section, its trail, its pane */
         int at, i;
@@ -16683,6 +16685,10 @@ static int app_main(void)
         nav_sum_seen = nav_sum_written = nav_sum();
     }
     draw_all();
+    if (lv_on()) {
+        lv_frame();                 /* the layout's first frame, now */
+        gfx_present(&g);
+    }
     if (screen_mode != SM_AUTO && g.mode != screen_mode && !g.wb) {
         screen_mode = SM_AUTO;      /* not saved: the choice comes back if it works again */
         set_msg(_("Saved screen mode not available here: using Automatic"));
@@ -17348,6 +17354,7 @@ static void lv_page(struct Page *p, struct LPage *m)
      * classic pane waits the same way */
     m->picture = hold_active() || ov.on ? NULL : lv_picture_of(p);
     m->letter = ov.on && ov.page == p && ov.bl ? ov.letter : 0;
+    m->frames = p->pics ? 1 : 0;
     if (lv_waiting(p)) {
         /* its rows asked for and not come: the layout's small spinner,
          * and "Nothing here" only once the answer says so */
@@ -17395,8 +17402,20 @@ static int lv_music_screen(const struct Page *p)
     const struct Item *from;
     LONG i, dirs = 0, songs = 0, of = 0;
     char type[16];
-    if (!p || p->type != PT_LIST || !p->list.count || p->pics || p->setp)
+    if (!p || p->type != PT_LIST || !p->list.count || p->setp)
         return LS_PAGE;
+    if (p->pics) {
+        /* Pictures and Videos: a wall of their pictures (a folder's: its
+         * first), when most rows have one to show */
+        for (i = 0; i < p->list.count && i < 200; i++) {
+            const struct Item *it = &p->list.items[i];
+            if (it->kind == IT_PIC || it->kind == IT_ANIM || it->kind == IT_DIR)
+                dirs++;
+            else if (!np_row(it))
+                songs++;
+        }
+        return !p->plex && dirs >= 2 && dirs >= songs * 2 ? LS_ALBUMS : LS_PAGE;
+    }
     from = lv_opened_from(p);
     if (p->plex && !p->photos) {
         if (from && from->kind == IT_PLEXDIR) {
@@ -17700,6 +17719,10 @@ static void lv_act(int what, LONG arg)
     case LAC_NEXT: if (mp_loaded()) np_press(NB_NEXT); break;
     case LAC_PREV: if (mp_loaded()) np_press(NB_PREV); break;
     case LAC_NOWPLAYING: if (mp_loaded()) np_open_page(); break;
+    case LAC_SEEK:                          /* Now playing's bar, clicked */
+        if (mp_loaded() && arg >= 0 && arg <= 65536)
+            np_seek_part((ULONG)arg, 65536UL);
+        break;
     case LAC_BUTTON:                        /* Now playing's, clicked */
         if (arg >= 0 && arg < NB_COUNT)
             np_press((int)arg);
@@ -18293,6 +18316,13 @@ BOOL lv_mouse(struct IntuiMessage *im)
         mouse_last = time_ms();
         if (ptr_hidden)
             pointer_show();
+        /* what the pointer is over: the layout's hover glow */
+        if (lv.eng->pointer && g.win) {
+            lk_clip(&lv.out, 0, 0, g.w, g.h);
+            if (lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft,
+                                im->MouseY - g.win->BorderTop, FALSE) == LR_DONE)
+                lk_show(&lv.out);
+        }
         return TRUE;
     }
     if (im->Class != IDCMP_MOUSEBUTTONS)
