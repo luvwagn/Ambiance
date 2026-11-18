@@ -49,6 +49,8 @@ static void disc(LONG x, LONG y, LONG s, ULONG bg);
 static void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg);
 static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c);
 static void inner_glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg, ULONG face);
+#define LOGO_X     X(18)            /* Ambiance's logo: the same place on every screen */
+#define LOGO_Y     Y(12)
 #define NOW_BH     Y(38)            /* Now playing: its buttons' height (at the bottom) */
 #define NOW_PANEL  Y(392)           /* Now playing: its panel's top; the bars end above it */
 static int drawn = -1;          /* the screen drawn last */
@@ -298,15 +300,18 @@ static void top_right(BOOL dark)
 
 /* The top left: Ambiance's logo, then the page's title (none: the logo
  * alone, the section's name being beside the list) and the way to it */
+static LONG title_cy;           /* the title line's middle, as drawn */
 static LONG title_line(const char *title, const char *sub)
 {
     LONG x = X(24), y = Y(16), w;
-    const struct LImage *logo = H->logo ? H->logo(grad(y + FH / 2)) : NULL;
+    const struct LImage *logo = H->logo ? H->logo(grad(LOGO_Y + Y(10))) : NULL;
     if (logo && logo->w < W / 3) {
-        H->image(logo, (WORD)x, (WORD)(y + FH / 2 - logo->h / 2));
-        hit(x - X(4), y + FH / 2 - logo->h / 2 - Y(4), logo->w + X(8), logo->h + Y(8), HT_HOME, 0, 0);
-        x += logo->w + X(16);
+        H->image(logo, (WORD)LOGO_X, (WORD)LOGO_Y);
+        hit(LOGO_X - X(4), LOGO_Y - Y(4), logo->w + X(8), logo->h + Y(8), HT_HOME, 0, 0);
+        x = LOGO_X + logo->w + X(16);
+        y = LOGO_Y + logo->h / 2 - FH / 2;  /* (the title beside it, on its middle) */
     }
+    title_cy = y + FH / 2;
     if (title && *title) {
         w = text(x, y + (FH - TH) / 2, title, LF_TITLE, C_WHITE, &bg_grad, W / 2 - x);
         x += w + X(14);
@@ -471,8 +476,8 @@ static void draw_home(void)
     H->fill((WORD)(mw - 1), 0, 1, HT, C_LINE);
     logo = H->logo ? H->logo(C_PANEL2) : NULL;
     if (logo && logo->w <= mw - X(18)) {
-        H->image(logo, (WORD)X(14), (WORD)Y(10));
-        top = Y(10) + logo->h + Y(10);
+        H->image(logo, (WORD)LOGO_X, (WORD)LOGO_Y);
+        top = LOGO_Y + logo->h + Y(10);
     }
     n = m->n;
     while (n > 1 && n * ih + (n - 1) * gap > HT - top - Y(20))
@@ -808,7 +813,7 @@ static void draw_page(void)
         /* rows there, and more coming (a folder still being read): the
          * spinner beside the title, the rows left as they are */
         spin_x = i + FH / 2;
-        spin_y = Y(16) + FH / 2;
+        spin_y = title_cy;
         spin_bg = grad(spin_y);
         wait_spinner(m);
     }
@@ -1361,9 +1366,10 @@ static void title_now(void)
     LONG x = X(24), y = Y(16);
     const struct LImage *logo = H->logo ? H->logo(C_NOWBG) : NULL;
     if (logo && logo->w < W / 3) {
-        H->image(logo, (WORD)x, (WORD)(y + FH / 2 - logo->h / 2));
-        hit(x - X(4), y + FH / 2 - logo->h / 2 - Y(4), logo->w + X(8), logo->h + Y(8), HT_HOME, 0, 0);
-        x += logo->w + X(16);
+        H->image(logo, (WORD)LOGO_X, (WORD)LOGO_Y);
+        hit(LOGO_X - X(4), LOGO_Y - Y(4), logo->w + X(8), logo->h + Y(8), HT_HOME, 0, 0);
+        x = LOGO_X + logo->w + X(16);
+        y = LOGO_Y + logo->h / 2 - FH / 2;
     }
     text(x, y, H->tr("Now playing"), LF_SMALL, C_NEXT, flat(C_NOWBG), W / 2 - x);
 }
