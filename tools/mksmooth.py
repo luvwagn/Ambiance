@@ -156,23 +156,21 @@ def logo(ttf, k):
     """The logo drawn smooth at scale k, as (w, h, palette, indices): the
     Play badge and "Ambiance" in Rubik Bold, with a soft blue glow behind
     them (pixel_logo in mkart.py is the native screens' version)."""
-    ft = ImageFont.truetype(ttf, round(14 * k))
-    ft.set_variation_by_axes([700])
+    ss = 4                                   # supersample for the shapes and letters
+    K = k * ss
+    big = ImageFont.truetype(ttf, round(14 * K))
+    big.set_variation_by_axes([700])
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     m = 2 * k                                # room for the glow, each side
     ax = m + 17 * k
-    w = int(ax + probe.textlength("Ambiance", font=ft) + m) + 1
+    w = int(ax + probe.textlength("Ambiance", font=big) / ss + m) + 1
     h = round(16 * k + 2 * m)
-    ss = 4                                   # supersample for the shapes
-    K = k * ss
     def at(x, y):
         return ((m + x * k) * ss, (m + y * k) * ss)
     # the shapes' coverage, for the glow: badge and letters
     cover = Image.new("L", (w * ss, h * ss), 0)
     d = ImageDraw.Draw(cover)
     d.rounded_rectangle([*at(0, 1), *at(14, 15)], radius=2.2 * K, fill=255)
-    big = ImageFont.truetype(ttf, round(14 * K))
-    big.set_variation_by_axes([700])
     d.text((ax * ss, (m + 13.4 * k) * ss), "Ambiance", font=big, fill=255, anchor="ls")
     glow = cover.filter(ImageFilter.MaxFilter(3 if K < 12 else 5)).filter(ImageFilter.GaussianBlur(1.3 * K))
     glow = glow.point(lambda v: min(255, v * 2))
@@ -181,8 +179,14 @@ def logo(ttf, k):
     d = ImageDraw.Draw(img)
     d.rounded_rectangle([*at(0, 1), *at(14, 15)], radius=2.2 * K, fill=HL)
     d.polygon([at(4.5, 4.5), at(10.8, 8), at(4.5, 11.5)], fill=WHITE)
+    # the letters drawn big and reduced like the badge: drawn at the
+    # final size, FreeType's hinting put each on a whole pixel and the
+    # gaps between them came out uneven ("Am bi ance")
+    letters = Image.new("L", img.size, 0)
+    ImageDraw.Draw(letters).text((ax * ss, (m + 13.4 * k) * ss), "Ambiance", font=big, fill=255,
+                                 anchor="ls")
+    img.paste(Image.new("RGB", img.size, WHITE), (0, 0), letters)
     img = img.resize((w, h), Image.LANCZOS)
-    ImageDraw.Draw(img).text((ax, m + 13.4 * k), "Ambiance", font=ft, fill=WHITE, anchor="ls")
     q = img.quantize(colors=24, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     pal = q.getpalette()[:24 * 3]
     colours = [tuple(pal[i:i + 3]) for i in range(0, len(pal), 3)]

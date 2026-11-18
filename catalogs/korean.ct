@@ -472,6 +472,15 @@ Flow (AmigaAMP 플러그인: Ambiance의 Visuals 서랍에 넣으세요)
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+지금 재생 중에서 F를 누르면 Ambiance 자체의 전체 화면 시각화인 Flow가 나타납니다.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+대신 AmigaAMP의 시각화 플러그인을 쓸 수 있습니다. Ambiance의 Visuals 서랍(또는 AmigaAMP:Plugins)에 넣은 뒤 여기서 고르세요. Aminet의 mus/play에 있습니다(AmigaAMP-VisualPlugins 등).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+대부분 Workbench 화면에서 열리므로 그 화면이 보여 줄 수 있어야 합니다. 대부분은 그래픽 카드 화면, 일부는 Warp3D나 PowerPC가 필요합니다.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 MHI에서는 스펙트럼 없음: MP3를 직접 재생합니다
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 글꼴
 ; Fonts
+MSG_00AC8B5C
+전체 화면 시각화
+; Full screen visual
 MSG_1B9AE0BB
 영어
 ; English
@@ -1852,6 +1864,9 @@ MSG_3D0CDD4E
 MSG_7B47B1F3
 클래식
 ; Classic
+MSG_2889B573
+찾는 중...
+; Searching...
 MSG_16C4FA7D
 트랙
 ; Tracks

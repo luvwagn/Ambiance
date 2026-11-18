@@ -329,7 +329,7 @@ static struct LItem set_rows[] = {
     { "Colours", NULL, "Midnight", NULL, LI_SETTING, LM_ARROW, 0, 0 },
     { "Layout", NULL, "Showcase", NULL, LI_SETTING, LM_ARROW, 0, 0 },
     { "Visualisation", NULL, "Spectrum", NULL, LI_SETTING, LM_CYCLE, 0, 0 },
-    { "Full screen visual (F)", NULL, "Flow", NULL, LI_SETTING, LM_CYCLE, 0, 0 },
+    { "Full screen visual (F)", NULL, "Flow", NULL, LI_ACTION, LM_ARROW, 0, 0 },
     { "Jump scrolling (by letter)", NULL, NULL, NULL, LI_SETTING, LM_CHECK_OFF, 0, 0 },
     { "Slideshow transition", NULL, "Fade", NULL, LI_SETTING, LM_CYCLE, 0, 0 },
     { "Window", NULL, NULL, NULL, LI_OTHER, 0, LIF_HEAD, 0 },
@@ -516,6 +516,15 @@ static const void *h_model(int screen)
         page.details = game_facts;
         page.picture = "shot-pinball";
         page.letter = 'P';
+    } else if (scene == 3) {
+        page.section = LSEC_SETTINGS;   /* Plex's servers being looked for */
+        page.ncrumb = 3;
+        page.crumb[0] = "Settings";
+        page.crumb[1] = "Plex";
+        page.crumb[2] = "Plex server";
+        page.message = "Looking for Plex servers...  Esc to give up";
+        page.waiting = "Searching...";
+        page.wait_phase = 3;
     } else {
         page.section = LSEC_OTHER;
         page.ncrumb = 2;
@@ -584,7 +593,7 @@ static void clicks(int w, int h);
 static void run(int w, int h, int bits, const char *font)
 {
     struct LayoutHost host;
-    static const char *names[] = { "settings", "games", "text" };
+    static const char *names[] = { "settings", "games", "text", "waiting" };
     SW = w;
     SH = h;
     BITS = bits;
@@ -634,13 +643,18 @@ static void run(int w, int h, int bits, const char *font)
     layout_engine.draw(LS_HOME);
     CHECK(drawn_px >= (long)w * h);
     save("home");
-    for (scene = 0; scene < 3; scene++) {
+    for (scene = 0; scene < 4; scene++) {
         long full;
         drawn_px = 0;
         layout_engine.draw(LS_PAGE);
         full = drawn_px;
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
+        if (scene == 3) {               /* the spinner's step alone */
+            drawn_px = 0;
+            layout_engine.changed(LS_PAGE, LC_WAIT);
+            CHECK(drawn_px > 0 && drawn_px < full / 20);
+        }
         if (scene == 1) {               /* a move alone: the list and details drawn again */
             drawn_px = 0;
             layout_engine.changed(LS_PAGE, LC_SELECT);

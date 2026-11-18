@@ -472,6 +472,15 @@ Flow (AmigaAMP-plugin: lägg dem i Ambiance:s låda Visuals)
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+F på Spelas nu visar Flow, Ambiance:s egen visualisering i helskärm.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+AmigaAMP:s visuella plugin kan användas i stället: lägg dem i Ambiance:s låda Visuals (eller AmigaAMP:Plugins) och välj ett här. Aminet har dem i mus/play (AmigaAMP-VisualPlugins med flera).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+De flesta öppnas på Workbenchs skärm och kräver det den kan visa: ett grafikkorts skärm för de flesta, Warp3D eller en PowerPC för några.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Inget spektrum med MHI: det spelar MP3:n själv
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 Typsnitt
 ; Fonts
+MSG_00AC8B5C
+Visualisering i helskärm
+; Full screen visual
 MSG_1B9AE0BB
 Engelska
 ; English
@@ -1852,6 +1864,9 @@ Det sparade skärmläget finns inte här: Automatiskt används
 MSG_7B47B1F3
 Klassisk
 ; Classic
+MSG_2889B573
+Söker...
+; Searching...
 MSG_16C4FA7D
 Spår
 ; Tracks

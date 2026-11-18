@@ -181,6 +181,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8,    /* Classic + LV_MAX */
+       ACT_FULLVISHELP,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -2454,13 +2455,14 @@ static void sel_off_heading(struct Page *p, LONG d)
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
-       SETP_VIDEO, SETP_IGAME, SETP_WHD, SETP_FONTS };
+       SETP_VIDEO, SETP_IGAME, SETP_WHD, SETP_FONTS, SETP_FULLVIS };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
-    N_("Video"), N_("iGame"), N_("WHDLoad"), N_("Fonts") };
+    N_("Video"), N_("iGame"), N_("WHDLoad"), N_("Fonts"),
+    N_("Full screen visual") };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2656,8 +2658,10 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Layout"), lv_label(), ACT_LAYOUTS, MARK_ARROW);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     fullvis_scan();
+    /* AmigaAMP plug-ins to choose from: the row goes round them and Flow;
+     * none: Flow is all there is, and the row says how to add some */
     action_item(p, _("Full screen visual (F)"), fullvis[0] ? (const char *)FilePart((STRPTR)fullvis) : _("Flow"),
-                ACT_FULLVIS, MARK_CYCLE);
+                fv_n ? ACT_FULLVIS : ACT_FULLVISHELP, fv_n ? MARK_CYCLE : MARK_ARROW);
     action_item(p, _("Jump scrolling (by letter)"), "", ACT_JUMP,
                 jump_scroll ? MARK_CHECK_ON : MARK_CHECK_OFF);
     /* a slideshow's way from one picture to the next */
@@ -3157,6 +3161,19 @@ static void head_para(struct Page *p, const char *s)
         p->list.items[i].flags |= ITEM_HEAD;
 }
 
+/* Settings > Display > Full screen visual, with no plug-ins to choose:
+ * what F does, and how to have more */
+static void build_fullvis_page(struct Page *p)
+{
+    p->setp = SETP_FULLVIS;
+    head_para(p, _("F on Now playing shows Flow, Ambiance's own full screen visual."));
+    head_para(p, _("AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals "
+                   "drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play "
+                   "(AmigaAMP-VisualPlugins and others)."));
+    head_para(p, _("Most open on Workbench's screen, so they want what it can show: a graphics card's "
+                   "screen for most, Warp3D or a PowerPC for some."));
+}
+
 static void build_whd_page(struct Page *p)
 {
     char where[64], line[160];
@@ -3320,6 +3337,7 @@ static void settings_rebuild(void)
         case SETP_GENERAL: build_general_settings(q); break;
         case SETP_SCREEN: build_screen_settings(q); break;
         case SETP_FONTS: build_font_settings(q); break;
+        case SETP_FULLVIS: build_fullvis_page(q); break;
         case SETP_VIDEO: build_video_settings(q); break;
         case SETP_NIC: build_nic_settings(q); break;
         case SETP_RADIO: build_radio_settings(q); break;
@@ -14513,6 +14531,8 @@ static void act_action(struct Item *it)
     else if (it->action == ACT_VISUAL) {
         next_visual();
         plex_settings_again(FALSE);
+    } else if (it->action == ACT_FULLVISHELP) {
+        open_settings_page(_("Full screen visual"), build_fullvis_page);
     } else if (it->action == ACT_FULLVIS) {
         fullvis_next();
         plex_settings_again(FALSE);
@@ -17012,7 +17032,8 @@ static struct {
     char last_letter;
     ULONG last_msg;
     LONG last_pos;                  /* a text page's: where it was scrolled to */
-} lv = { .drawn = -1 };
+    int wait_phase;                 /* the waiting spinner's step drawn, -1 none */
+} lv = { .drawn = -1, .wait_phase = -1 };
 
 BOOL lv_on(void)
 {
@@ -17119,6 +17140,14 @@ static const char *lv_plex_field(const struct Item *it, int n, char *out, LONG m
     out[k] = 0;
     return out;
 }
+/* An IFF ANIM, whose first frame is its picture (an MPEG file or a DVD
+ * has none: the classic pane's rule) */
+static BOOL lv_anim_shot(const struct Item *it)
+{
+    return it->kind == IT_ANIM && !(it->sortkey && (!strcmp(it->sortkey, "MPEG") ||
+                                                    !strcmp(it->sortkey, "DVD")));
+}
+
 static const char *lv_art_of(const struct Page *p, const struct Item *it, char *buf, LONG max)
 {
     char path[300];
@@ -17132,8 +17161,8 @@ static const char *lv_art_of(const struct Page *p, const struct Item *it, char *
         buf[0] = LV_ART_SONG;
     } else if (p->pics && !p->plex && it->kind == IT_DIR) {
         buf[0] = LV_ART_FOLDER;
-    } else if (it->kind == IT_PIC && !p->plex) {
-        item_path(it, buf, max);
+    } else if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
+        item_path(it, buf, max);            /* (an animation: its first frame) */
         return buf[0] ? buf : NULL;
     } else if (p->plex && it->kind == IT_PLEXDIR) {
         buf[0] = LV_ART_PLEX;
@@ -17218,7 +17247,7 @@ static const char *lv_picture_of(struct Page *p)
     it = &p->list.items[p->sel];
     if (it->flags & ITEM_GONE)
         return NULL;
-    if (it->kind == IT_PIC && !p->plex) {
+    if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
         item_path(it, file, sizeof(file));
         have = TRUE;
     } else if (it->kind == IT_RUN) {
@@ -17229,6 +17258,17 @@ static const char *lv_picture_of(struct Page *p)
 }
 
 static const char *lv_lines[256];
+
+/* A list whose rows are asked for over the network (Plex, Radio, Plex's
+ * servers) and have not come; the spinner's step, one every SPIN_FRAME */
+static BOOL lv_waiting(const struct Page *p)
+{
+    return p && p->type == PT_LIST && p->radio && p->net_seq && !p->list.count;
+}
+static int lv_wait_step(void)
+{
+    return (int)((time_ms() / SPIN_FRAME) & 7);
+}
 
 static void lv_page(struct Page *p, struct LPage *m)
 {
@@ -17272,6 +17312,12 @@ static void lv_page(struct Page *p, struct LPage *m)
      * classic pane waits the same way */
     m->picture = hold_active() || ov.on ? NULL : lv_picture_of(p);
     m->letter = ov.on && ov.page == p && ov.bl ? ov.letter : 0;
+    if (lv_waiting(p)) {
+        /* its rows asked for and not come: the layout's small spinner,
+         * and "Nothing here" only once the answer says so */
+        m->waiting = !strcmp(p->base, "#gdm") ? _("Searching...") : _("Loading...");
+        m->wait_phase = (UBYTE)lv_wait_step();
+    }
 }
 
 /* ---- the music screens: which a page is, and their models */
@@ -17999,6 +18045,12 @@ void lv_frame(void)
     }
     if (scr != lv.drawn)
         lv.full = TRUE;
+    if (!lv.full && !gfx_off_hits && scr == LS_PAGE && lv.eng->changed && lv_waiting(cur()) &&
+        lv_wait_step() != lv.wait_phase) {
+        lv.wait_phase = lv_wait_step();     /* the spinner turned: it alone drawn again */
+        lk_clip(&lv.out, 0, 0, g.w, g.h);
+        lv.eng->changed(LS_PAGE, LC_WAIT);
+    }
     if (lv.full || gfx_off_hits) {
         struct Page *p = cur();
         ULONG mh = 5381;
@@ -18025,6 +18077,7 @@ void lv_frame(void)
             lv.eng->changed(scr, LC_SELECT);
         else
             lv.eng->draw(scr);
+        lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;
         lv.last_items = p ? (const void *)p->list.items : NULL;
         lv.last_sel = p ? p->sel : -1;
@@ -18179,10 +18232,9 @@ void lv_pick(int k)
                 p->list.items[i].mark = p->list.items[i].action == ACT_LAYOUT0 + k ? MARK_RADIO_ON
                                                                                   : MARK_RADIO_OFF;
     settings_rebuild();             /* the Display page's row says which */
-    if (lv.on) {
-        lv_off(FALSE);              /* another one, or none: */
-        layout_unload();
-    }
+    lv_release();                   /* another one, or none: the old one closed and put
+                                     * out of memory, on or not (chosen on a screen that
+                                     * did not suit it, it was open all the same) */
     if (!k) {
         draw_all();
     } else {

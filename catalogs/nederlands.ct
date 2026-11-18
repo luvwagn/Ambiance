@@ -472,6 +472,15 @@ Flow (AmigaAMP-plug-ins: zet ze in de lade Visuals van Ambiance)
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+F bij Speelt nu toont Flow, de eigen schermvullende visualisatie van Ambiance.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+In plaats daarvan kunnen de visuele plug-ins van AmigaAMP worden gebruikt: zet ze in de lade Visuals van Ambiance (of AmigaAMP:Plugins) en kies er hier een. Aminet heeft ze in mus/play (AmigaAMP-VisualPlugins en andere).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+De meeste openen op het Workbench-scherm en vragen wat dat kan tonen: het scherm van een grafische kaart voor de meeste, Warp3D of een PowerPC voor sommige.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Geen spectrum met MHI: die speelt de MP3 zelf
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 Lettertypen
 ; Fonts
+MSG_00AC8B5C
+Schermvullende visualisatie
+; Full screen visual
 MSG_1B9AE0BB
 Engels
 ; English
@@ -1852,6 +1864,9 @@ De opgeslagen schermmodus is hier niet beschikbaar: Automatisch wordt gebruikt
 MSG_7B47B1F3
 Klassiek
 ; Classic
+MSG_2889B573
+Zoeken...
+; Searching...
 MSG_16C4FA7D
 Nummers
 ; Tracks

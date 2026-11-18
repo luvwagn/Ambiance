@@ -472,6 +472,15 @@ Flow (plug-ins de AmigaAMP: póngalos en el cajón Visuals de Ambiance)
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+F en Reproduciendo muestra Flow, la visualización a pantalla completa propia de Ambiance.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+En su lugar se pueden usar los plug-ins visuales de AmigaAMP: póngalos en el cajón Visuals de Ambiance (o en AmigaAMP:Plugins) y elija uno aquí. Aminet los tiene en mus/play (AmigaAMP-VisualPlugins y otros).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+La mayoría se abre en la pantalla del Workbench y necesita lo que esta pueda mostrar: una pantalla de tarjeta gráfica para la mayoría, Warp3D o un PowerPC para algunos.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Sin espectro con MHI: reproduce el MP3 por sí mismo
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 Fuentes
 ; Fonts
+MSG_00AC8B5C
+Visualización a pantalla completa
+; Full screen visual
 MSG_1B9AE0BB
 Inglés
 ; English
@@ -1852,6 +1864,9 @@ El modo de pantalla guardado no está disponible aquí: se usa Automático
 MSG_7B47B1F3
 Clásico
 ; Classic
+MSG_2889B573
+Buscando...
+; Searching...
 MSG_16C4FA7D
 Pistas
 ; Tracks

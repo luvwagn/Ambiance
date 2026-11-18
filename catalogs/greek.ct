@@ -472,6 +472,15 @@ Flow (plug-in του AmigaAMP: βάλτε τα στο συρτάρι Visuals τ�
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+Το F στο Παίζει τώρα δείχνει το Flow, την οπτικοποίηση όλης της οθόνης του Ambiance.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+Μπορούν να χρησιμοποιηθούν αντί γι' αυτό τα οπτικά plug-in του AmigaAMP: βάλτε τα στο συρτάρι Visuals του Ambiance (ή στο AmigaAMP:Plugins) και επιλέξτε ένα εδώ. Το Aminet τα έχει στο mus/play (AmigaAMP-VisualPlugins και άλλα).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+Τα περισσότερα ανοίγουν στην οθόνη του Workbench και θέλουν ό,τι μπορεί να δείξει: οθόνη κάρτας γραφικών τα περισσότερα, Warp3D ή PowerPC μερικά.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Χωρίς φάσμα με MHI: παίζει μόνο του το MP3
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 Γράμματα
 ; Fonts
+MSG_00AC8B5C
+Οπτικά πλήρους οθόνης
+; Full screen visual
 MSG_1B9AE0BB
 Αγγλικά
 ; English
@@ -1852,6 +1864,9 @@ MSG_3D0CDD4E
 MSG_7B47B1F3
 Κλασική
 ; Classic
+MSG_2889B573
+Αναζήτηση...
+; Searching...
 MSG_16C4FA7D
 Κομμάτια
 ; Tracks

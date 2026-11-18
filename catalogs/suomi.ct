@@ -472,6 +472,15 @@ Flow (AmigaAMP-liitännäiset: Ambiancen Visuals-laatikkoon)
 MSG_3DF462B5
 Flow
 ; Flow
+MSG_49459BDD
+F Nyt soi -näkymässä näyttää Flow'n, Ambiancen oman koko näytön visualisoinnin.
+; F on Now playing shows Flow, Ambiance's own full screen visual.
+MSG_05AA8776
+Sen sijaan voi käyttää AmigaAMPin visualisointiliitännäisiä: laita ne Ambiancen Visuals-laatikkoon (tai AmigaAMP:Plugins) ja valitse yksi tästä. Aminetissa ne ovat kohdassa mus/play (AmigaAMP-VisualPlugins ja muita).
+; AmigaAMP's visual plug-ins can be used instead: put them in Ambiance's Visuals drawer (or AmigaAMP:Plugins), then choose one here. Aminet has them in mus/play (AmigaAMP-VisualPlugins and others).
+MSG_734C3A9C
+Useimmat avautuvat Workbenchin näytölle ja tarvitsevat sitä, mitä se voi näyttää: useimmat näytönohjaimen näytön, jotkin Warp3D:n tai PowerPC:n.
+; Most open on Workbench's screen, so they want what it can show: a graphics card's screen for most, Warp3D or a PowerPC for some.
 MSG_022C9299
 Ei spektriä MHI:llä: se soittaa MP3:n itse
 ; No spectrum under MHI: it plays the MP3 itself
@@ -526,6 +535,9 @@ WHDLoad
 MSG_68A32CF9
 Fontit
 ; Fonts
+MSG_00AC8B5C
+Koko näytön visualisointi
+; Full screen visual
 MSG_1B9AE0BB
 Englanti
 ; English
@@ -1852,6 +1864,9 @@ Tallennettu näyttötila ei ole käytettävissä täällä: käytetään Automaa
 MSG_7B47B1F3
 Klassinen
 ; Classic
+MSG_2889B573
+Etsitään...
+; Searching...
 MSG_16C4FA7D
 Kappaleet
 ; Tracks

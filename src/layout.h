@@ -95,6 +95,10 @@ struct LPage {
                                  * draws it), 0 none */
     UBYTE text_off;             /* text: how much of its first line (list.top) is scrolled
                                  * past, in 256ths of a line (it glides by pixels) */
+    const char *waiting;        /* its rows asked for over the network and not come yet:
+                                 * what to say in their place ("Searching..."), or NULL */
+    UBYTE wait_phase;           /* waiting: a spinner's step, 0-7 (changed(LC_WAIT) as
+                                 * it turns) */
 };
 
 /* A row on Home: a title and a few items (recently added albums, the
@@ -187,6 +191,7 @@ enum { LR_UNUSED, LR_DONE };
 #define LC_IMAGE    8           /* a picture asked for is ready */
 #define LC_PLAYING 16           /* the track or its time */
 #define LC_MESSAGE 32           /* the message */
+#define LC_WAIT    64           /* LPage.wait_phase: the spinner alone */
 
 /* ---------------------------------------------------------------- the tables */
 enum { LF_REGULAR, LF_BOLD, LF_SMALL, LF_TITLE };  /* the smooth fonts' faces (LF_TITLE: larger,

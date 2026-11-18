@@ -18,11 +18,11 @@
 #include "../layout.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.8 (17.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.9 (17.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.8 (17.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.9 (17.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 8;
+const UWORD LibRevision = 9;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -270,14 +270,15 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
         for (i = 0; i < s; i++)
             H->fill((WORD)(x - s + i / 2), (WORD)(y + i / 2), 1, (WORD)(s - i), fg);
         return s;
-    case LM_CYCLE:              /* two small arrows: < > */
+    case LM_CYCLE:              /* two chevrons apart, < >, as the arrow's
+                                 * (touching, they had made a diamond) */
         for (i = 0; i < s / 2; i++) {
-            H->fill((WORD)(x - s + s / 2 - i / 2 - 1), (WORD)(y + i), 1, 1, fg);
-            H->fill((WORD)(x - s + s / 2 - i / 2 - 1), (WORD)(y + s - 1 - i), 1, 1, fg);
-            H->fill((WORD)(x - s / 2 + i / 2), (WORD)(y + i), 1, 1, fg);
-            H->fill((WORD)(x - s / 2 + i / 2), (WORD)(y + s - 1 - i), 1, 1, fg);
+            H->fill((WORD)(x - s * 3 / 2 + s / 4 - i / 2), (WORD)(y + i), 2, 1, fg);   /* < */
+            H->fill((WORD)(x - s * 3 / 2 + s / 4 - i / 2), (WORD)(y + s - 1 - i), 2, 1, fg);
+            H->fill((WORD)(x - 2 - s / 4 + i / 2), (WORD)(y + i), 2, 1, fg);          /* > */
+            H->fill((WORD)(x - 2 - s / 4 + i / 2), (WORD)(y + s - 1 - i), 2, 1, fg);
         }
-        return s;
+        return s * 3 / 2;
     }
     return 0;
 }
@@ -546,6 +547,28 @@ static void draw_page(void)
     footer(m->hint, m->message);
 }
 
+/* Waiting for a list's rows: a small spinner (eight dots in a ring, the
+ * one at the step lit, the two before it fading) and the host's word
+ * beside it, where the rows will go; spin_x/spin_y its ring's place, for
+ * changed(LC_WAIT) to turn it alone */
+static LONG spin_x = -1, spin_y;
+static void wait_spinner(const struct LPage *m)
+{
+    static const signed char dx[8] = { 0, 7, 10, 7, 0, -7, -10, -7 };
+    static const signed char dy[8] = { -10, -7, 0, 7, 10, 7, 0, -7 };
+    LONG d = FH / 4 > 3 ? FH / 4 : 3, r = FH / 2, i;
+    if (spin_x < 0)
+        return;
+    H->fill((WORD)(spin_x - r - d), (WORD)(spin_y - r - d), (WORD)(2 * (r + d) + 1),
+            (WORD)(2 * (r + d) + 1), C_PANEL);
+    for (i = 0; i < 8; i++) {
+        int back = (m->wait_phase - i) & 7;
+        ULONG c = back == 0 ? C_ACC : back == 1 ? C_SUB : back == 2 ? C_DIM : C_LINE;
+        LONG cx = spin_x + dx[i] * r / 10, cy = spin_y + dy[i] * r / 10;
+        H->rrect((WORD)(cx - d / 2), (WORD)(cy - d / 2), (WORD)d, (WORD)d, (WORD)(d / 2), c, C_PANEL);
+    }
+}
+
 /* The list's panel and the details' under it: all a move needs drawing
  * again (changed(LC_SELECT)), as long as the details' panel is still
  * there or still not */
@@ -559,10 +582,19 @@ static void draw_page_body(const struct LPage *m)
         LONG lh = n ? (bottom - py) * 62 / 100 : bottom - py;
         LONG dy = py + lh + Y(12), dh = bottom - dy;
         panel(x, py, w, lh, 6, C_PANEL, C_LINE, grad(py));
-        if (m->list.count)
+        spin_x = -1;
+        if (m->list.count) {
             draw_rows(m, x, py, w, lh);
-        else
+        } else if (m->waiting) {
+            /* still asking: the spinner and its word, not "Nothing here" */
+            spin_x = x + X(22) + FH / 2 + FH / 4;
+            spin_y = py + Y(18) + FH / 2;
+            wait_spinner(m);
+            text(spin_x + FH, py + Y(18), m->waiting, LF_REGULAR, C_SUB, flat(C_PANEL),
+                 w - (spin_x + FH - x) - X(12));
+        } else {
             text(x + X(22), py + Y(18), H->tr("Nothing here"), LF_REGULAR, C_SUB, flat(C_PANEL), w);
+        }
         if (n && dh > FH * 2) {
             LONG tx = x + X(18);
             panel(x, dy, w, dh, 6, C_PANEL, C_LINE, grad(dy));
@@ -1006,6 +1038,14 @@ static void sc_draw(int screen)
 static void sc_changed(int screen, ULONG what)
 {
     const struct LPage *m;
+    if (what == LC_WAIT) {
+        if (screen == drawn && screen == LS_PAGE && spin_x >= 0 && (m = H->model(LS_PAGE)) &&
+            m->waiting) {
+            H->clip(0, 0, W, HT);
+            wait_spinner(m);    /* the spinner's step: it alone */
+        }
+        return;
+    }
     if (what == LC_SELECT && screen == drawn && screen == LS_ALBUMS && (m = H->model(LS_ALBUMS))) {
         draw_wall_body(m);      /* a move on the wall: the wall alone */
         return;
