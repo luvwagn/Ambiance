@@ -17352,6 +17352,9 @@ static struct {
     ULONG last_now;                 /* what plays, as drawn (lv_now_sig): its time apart */
     ULONG last_time;                /* ...its time, the clock, the Debug line as drawn */
     int wait_phase;                 /* the waiting spinner's step drawn, -1 none */
+    struct Smooth *sm;              /* the smooth font lent to g.sm while it draws, where the
+                                     * classic style is Pixel (a layout's text is smooth
+                                     * whatever the classic's style): NULL none */
 } lv = { .drawn = -1, .wait_phase = -1 };
 
 BOOL lv_on(void)
@@ -18629,6 +18632,7 @@ static void h_log(const char *s) { amb_log("layout", s); }
 static ULONG h_now(void) { return time_ms(); }
 
 /* ---- on and off */
+static void lv_give_back_font(void);
 static void lv_off(BOOL redraw)
 {
     if (!lv.on)
@@ -18640,6 +18644,7 @@ static void lv_off(BOOL redraw)
     lv.on = FALSE;
     gfx_off = FALSE;
     lv.drawn = -1;
+    lv_give_back_font();            /* (the font lent it: the classic's Pixel style again) */
     settings_rebuild();         /* Display's Colours row: the scheme's again */
     if (redraw && g.win && g.rp)
         draw_all();             /* the classic layout, all of it */
@@ -18649,7 +18654,36 @@ static BOOL lv_suits(void)
 {
     if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
         return FALSE;
-    return g.sm && g.truecolor && !g.planar;
+    return g.truecolor && !g.planar;    /* (in either style: the Pixel one's lent a smooth font) */
+}
+
+/* The classic style is Pixel (no smooth font open): the smooth set for
+ * this screen's height, or the nearest under it, lent to g.sm while the
+ * layout draws (lv_off takes it back). FALSE: none to be had. */
+static BOOL lv_lend_font(void)
+{
+    static const UWORD sizes[] = { 768, 600, 480, 384 };
+    int i;
+    if (g.sm)
+        return TRUE;
+    for (i = 0; i < 4 && !lv.sm; i++)
+        if (sizes[i] <= g.h || i == 3)
+            lv.sm = sm_load(sizes[i]);
+    if (!lv.sm)
+        return FALSE;
+    g.sm = lv.sm;
+    amb_log("layout", "the Pixel style is chosen: a smooth font lent to the layout");
+    return TRUE;
+}
+
+static void lv_give_back_font(void)
+{
+    if (lv.sm) {
+        if (g.sm == lv.sm)
+            g.sm = NULL;
+        sm_free(lv.sm);
+        lv.sm = NULL;
+    }
 }
 
 static void lv_activate(void)
@@ -18670,13 +18704,20 @@ static void lv_activate(void)
         return;
     }
     amb_strlcpy(lv.name, e->name, sizeof(lv.name));
-    if (!lk_open(&g, &lv.out, TRUE))
+    if (!lv_lend_font()) {
+        amb_log("layout", "no smooth font for this screen (Fonts/amb-smooth): classic");
         return;
+    }
+    if (!lk_open(&g, &lv.out, TRUE)) {
+        lv_give_back_font();
+        return;
+    }
     if (lv.out.bits < e->min_bits || g.h < e->min_h) {
         sprintf(m, "%s needs %ld-bit and %ld lines; this is %ld-bit, %ld lines: classic",
                 e->name, (long)e->min_bits, (long)e->min_h, (long)lv.out.bits, (long)g.h);
         amb_log("layout", m);
         lk_close(&lv.out);
+        lv_give_back_font();
         return;
     }
     memset(&lv.host, 0, sizeof(lv.host));
@@ -18713,6 +18754,7 @@ static void lv_activate(void)
     if (e->open && !e->open(&lv.host)) {
         amb_log("layout", "it would not open: classic");
         lk_close(&lv.out);
+        lv_give_back_font();
         return;
     }
     lv.eng = e;
