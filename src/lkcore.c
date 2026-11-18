@@ -287,6 +287,18 @@ void lk_cover(struct LkOut *o, long x, long y, const unsigned char *cov, long w,
         for (j = 0; j < n; j++) {
             const unsigned char *c = cov + (r + j) * mod;
             unsigned long *p = o->buf + j * w, b = lk_bg_at(bg, y + r + j);
+            if (dithered(o) && bg && bg->top != bg->bottom && bg->h > 1 && !bg->rows_flat) {
+                /* over a dithered gradient (lk_vgrad on 15/16-bit): the same
+                 * dither under the text, or it sits in a box of its own */
+                unsigned long d[4];
+                dither4(o, b, y + r + j, d);
+                for (i = 0; i < w; i++) {
+                    int a = c[i] & 15;
+                    unsigned long under = d[(x + i) & 3];
+                    p[i] = a == 0 ? under : a == 15 ? fg : lk_mix(under, fg, a, 15);
+                }
+                continue;
+            }
             if (b != last) {
                 for (i = 0; i < 16; i++)
                     lut[i] = lk_mix(b, fg, i, 15);

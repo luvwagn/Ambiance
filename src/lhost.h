@@ -34,6 +34,7 @@ const struct LayoutEngine *layout_loaded(void); /* the one open, or NULL */
 struct Page;
 struct IntuiMessage;
 void lv_frame(void);            /* chosen, possible, shown: drawn if anything changed */
+void lv_timing(ULONG *ms, ULONG *whole, ULONG *parts);   /* its time since last asked (Debug) */
 BOOL lv_on(void);               /* a layout draws the screen now */
 BOOL lv_key(struct IntuiMessage *im);    /* TRUE: the layout's (or the wheel's), done */
 BOOL lv_mouse(struct IntuiMessage *im);  /* TRUE: taken (the classic hit tests would be wrong) */

@@ -4355,7 +4355,7 @@ static void dbg_load_log(void)
     static int n;
     static ULONG wakes0;
     static LONG cpu_sum, app_sum;
-    char m[420];
+    char m[520];
     struct Page *p = cur();
     if (cpu_load >= 0)
         cpu_sum += cpu_load;
@@ -4365,7 +4365,7 @@ static void dbg_load_log(void)
         return;
     {
         LONG rb = st_busy_sample();
-        char rp[160];
+        char rp[260];
         rp[0] = 0;
         if (rb >= 0)
             sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
@@ -4379,6 +4379,13 @@ static void dbg_load_log(void)
                         "loudest step %lu)", (long)(t / fr / 10), (long)(t / fr % 10), (unsigned long)pk,
                         (unsigned long)none, (unsigned long)fr, (unsigned long)top);
             }
+        }
+        {
+            ULONG lms, lw, lp;
+            lv_timing(&lms, &lw, &lp);
+            if (lms || lw || lp)        /* a layout's: its time drawing, and how */
+                sprintf(rp + strlen(rp), ", layout %lu ms (%lu whole, %lu in part)", (unsigned long)lms,
+                        (unsigned long)lw, (unsigned long)lp);
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
                 (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),
@@ -17342,6 +17349,9 @@ static const struct LItem *lv_item(LONG i)
     struct LItem *li = &lv_ring[k];
     lv_fill_item_art(li, lv_lp, i, lv_ring_art[k], sizeof(lv_ring_art[k]));
     li->letter = lv_lp && lv_lp->type == PT_LIST ? (UBYTE)ov_letter_in(lv_lp->list.items, lv_lp->list.count, i) : 0;
+    if (!li->art && lv_lp && lv_lp->type == PT_LIST && i >= 0 && i < lv_lp->list.count &&
+        np_row(&lv_lp->list.items[i]) && np_art_file[0] && mp_loaded())
+        li->art = np_art_file;          /* the Now playing row: what plays, its cover */
     return li;
 }
 
@@ -18357,7 +18367,26 @@ static ULONG lv_now_sig(void)
     return h;
 }
 
+/* The layout's time (Debug's load line): ms in lv_frame, whole draws and
+ * parts (changed) since lv_timing last asked */
+static ULONG lvt_ms, lvt_whole, lvt_parts;
+void lv_timing(ULONG *ms, ULONG *whole, ULONG *parts)
+{
+    *ms = lvt_ms;
+    *whole = lvt_whole;
+    *parts = lvt_parts;
+    lvt_ms = lvt_whole = lvt_parts = 0;
+}
+
+static void lv_frame_(void);
 void lv_frame(void)
+{
+    ULONG t0 = time_ms();
+    lv_frame_();
+    lvt_ms += time_ms() - t0;
+}
+
+static void lv_frame_(void)
 {
     int scr;
     ULONG now;
@@ -18387,6 +18416,7 @@ void lv_frame(void)
             if (nsig == lv.last_now) {
                 lk_clip(&lv.out, 0, 0, g.w, g.h);
                 lv.eng->changed(scr, LC_PLAYING);
+                lvt_parts++;
             } else {
                 lv.full = TRUE;
             }
@@ -18397,6 +18427,7 @@ void lv_frame(void)
         if (!lv.full && !gfx_off_hits && lv.eng->changed) {
             lk_clip(&lv.out, 0, 0, g.w, g.h);
             lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
+            lvt_parts++;
         } else {
             lv.full = TRUE;
         }
@@ -18433,9 +18464,9 @@ void lv_frame(void)
         lv_ri = 0;
         lk_clip(&lv.out, 0, 0, g.w, g.h);
         if (moved_only && nsig == lv.last_now)
-            lv.eng->changed(scr, LC_SELECT);
+            lv.eng->changed(scr, LC_SELECT), lvt_parts++;
         else
-            lv.eng->draw(scr);
+            lv.eng->draw(scr), lvt_whole++;
         lv.last_now = nsig;
         lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;

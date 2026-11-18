@@ -866,11 +866,38 @@ static void run(int w, int h, int bits, const char *font)
     drawn_px = 0;
     layout_engine.draw(LS_NOW);
     CHECK(drawn_px >= (long)w * h);
-#ifdef HORIZON
-    drawn_px = 0;                       /* the time going on: it alone, not the screen */
-    layout_engine.changed(LS_NOW, LC_PLAYING);
-    CHECK(drawn_px > 0 && drawn_px < (long)w * h / 8);
-#endif
+    {
+        /* the time going on: it alone, not the screen, and as the screen
+         * drawn whole has it (Now playing; a page: the top right or inset) */
+        static const int scr[2] = { LS_NOW, LS_PAGE };
+        long n = (long)w * h, k, diff;
+        unsigned long *was = malloc((size_t)n * sizeof(*was));
+        int q;
+        for (q = 0; q < 2; q++) {
+            layout_engine.draw(scr[q]);
+            memcpy(was, px, (size_t)n * sizeof(*was));
+            drawn_px = 0;
+            layout_engine.changed(scr[q], LC_PLAYING);
+            CHECK(drawn_px > 0 && drawn_px < (long)w * h / 8);
+            for (diff = 0, k = 0; k < n; k++)
+                if (was[k] != px[k])
+                    diff++;
+            if (diff) {
+                long x0 = w, y0 = h, x1 = -1, y1 = -1;
+                for (k = 0; k < n; k++)
+                    if (was[k] != px[k]) {
+                        if (k % w < x0) x0 = k % w;
+                        if (k % w > x1) x1 = k % w;
+                        if (k / w < y0) y0 = k / w;
+                        if (k / w > y1) y1 = k / w;
+                    }
+                printf("  (the time drawn alone, screen %d: %ld pixels unlike the screen drawn whole, %ld,%ld-%ld,%ld)\n",
+                       scr[q], diff, x0, y0, x1, y1);
+            }
+            CHECK(diff == 0);
+        }
+        free(was);
+    }
     layout_engine.tick(5000);
     save("now");
     CHECK(layout_engine.input(LS_HOME, LA_DOWN, 0) == LR_UNUSED);
@@ -922,8 +949,15 @@ static void clicks(int w, int h)
               acts[0][0] == LAC_ENTER);
     }
 #endif
+#ifdef HORIZON
+    /* (Home's Music row has what plays as a tile: the inset is on the pages) */
+    layout_engine.draw(LS_PAGE);
+    for (ok = 0, x = w / 2; x < w && !ok; x++)
+        ok = click_at(LS_PAGE, x, NOW_Y, NULL) == LAC_NOWPLAYING;
+#else
     for (ok = 0, x = w / 2; x < w && !ok; x++)
         ok = click_at(LS_HOME, x, NOW_Y, NULL) == LAC_NOWPLAYING;
+#endif
     CHECK(ok);
     scene = 0;                              /* Settings > Display: a row opens */
     layout_engine.draw(LS_PAGE);

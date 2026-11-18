@@ -280,7 +280,42 @@ static void background(void)
 
 /* top right: what plays (if anything) and the clock */
 static LONG tr_left;            /* top_right's left edge, as drawn: a title stops short of it */
+static void top_right_as(BOOL dark, BOOL with_hit);
 static void top_right(BOOL dark)
+{
+    top_right_as(dark, TRUE);
+}
+
+/* It again alone (the time and the clock went on: LC_PLAYING), over what
+ * was there; its click place as it was */
+static void top_right_again(BOOL dark)
+{
+    LONG y = Y(16), x0 = tr_left - X(8), y0 = y + (FH - TH) / 2 - Y(2), h = TH + Y(4);
+    if (H->debug && *H->debug) {
+        LONG dl = W - X(24) - tnum_len(H->debug, LF_SMALL) - X(8);
+        if (dl < x0)
+            x0 = dl;
+        h = y + TH + Y(1) + FH + Y(2) - y0;
+    }
+    if (x0 < W / 2)
+        x0 = W / 2;
+    {
+        /* what is under it (Now playing's bars, a page's panels) is drawn
+         * after it and over it: it ends where they begin, as drawn whole */
+        LONG lim = dark ? Y(60) : Y(64);
+        if (y0 + h > lim)
+            h = lim - y0;
+        H->clip((WORD)x0, (WORD)y0, W, (WORD)(y0 + h));
+        if (dark)
+            H->fill((WORD)x0, (WORD)y0, (WORD)(W - x0), (WORD)h, C_NOWBG);
+        else
+            H->vgrad(0, 0, W, HT, C_TOP, C_BOT);    /* (the screen's one gradient, as drawn whole) */
+        top_right_as(dark, FALSE);
+        H->clip(0, 0, W, HT);
+    }
+}
+
+static void top_right_as(BOOL dark, BOOL with_hit)
 {
     const struct LNow *n = H->model(LS_NOW);
     LONG x = W - X(24), cw = tnum_len(H->clock, LF_TITLE), y = Y(16);
@@ -308,7 +343,8 @@ static void top_right(BOOL dark)
         if (tw > 0) {
             x -= X(10) + tw;
             text(x, y, n->title, LF_SMALL, C_SUB, bg, tw);
-            hit(x - X(8) - FH, y - Y(4), W - X(24) - cw - (x - X(8) - FH), FH + Y(8), HT_NOWPLAYING, 0, 0);
+            if (with_hit)
+                hit(x - X(8) - FH, y - Y(4), W - X(24) - cw - (x - X(8) - FH), FH + Y(8), HT_NOWPLAYING, 0, 0);
             tr_left = x - X(8) - FH;
             /* the play triangle */
             {
@@ -1744,12 +1780,46 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
     }
 }
 
+/* Now playing's time and its bar (drawn again alone as it goes: LC_PLAYING) */
+static LONG nt_x, nt_y = -1, nt_w;
+static void now_time(const struct LNow *n, BOOL with_hit)
+{
+    LONG tx = nt_x, y = nt_y, tw = nt_w;
+    char b1[16], b2[16];
+    if (y < 0)
+        return;
+    if (!with_hit)
+        H->fill((WORD)tx, (WORD)(y - Y(3)), (WORD)tw, (WORD)(FH + Y(6)), C_PANEL);
+    if (!n->stopped) {
+        const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
+        LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
+        LONG bw = tx + tw - zw - X(10) - bx, bby = y + FH / 2 - 2;
+        tnum(tx, y, a, LF_SMALL, C_BODY, flat(C_PANEL));
+        if (bw > 8) {
+            if (n->len_ms && with_hit)      /* clicked: there (a band taller than the bar, to hit) */
+                hit(bx, y - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
+            H->rrect((WORD)bx, (WORD)bby, (WORD)bw, 4, 2, C_LINE, C_PANEL);
+            if (n->len_ms) {
+                LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
+                if (f > bw)
+                    f = bw;
+                if (f > 0)
+                    H->rrect((WORD)bx, (WORD)bby, (WORD)f, 4, 2, C_ACC, C_LINE);
+            }
+        }
+        tnum(tx + tw - zw, y, z, LF_SMALL, C_BODY, flat(C_PANEL));
+    } else {
+        text(tx, y, H->tr("Stopped: Play starts it again"), LF_SMALL, C_SUB, flat(C_PANEL), tw);
+    }
+}
+
 static void draw_now(void)
 {
     const struct LNow *n = H->model(LS_NOW);
     LONG py = NOW_PANEL, s = Y(112), cx = X(28), cy = py + Y(18), tx, tw, y;
     LONG bh = NOW_BH, by = HT - Y(14) - bh;
-    char b1[16], b2[16], line[200];
+    char line[200];
+    nt_y = -1;
     H->clip(0, 0, W, HT);
     H->fill(0, 0, W, HT, C_NOWBG);
     title_now();
@@ -1783,27 +1853,10 @@ static void draw_now(void)
         join(line, sizeof(line), line, " ", n->year);
     text(tx, y, line, LF_REGULAR, C_ACC, flat(C_PANEL), tw);
     y += FH + Y(10);
-    if (!n->stopped) {
-        const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
-        LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
-        LONG bw = tx + tw - zw - X(10) - bx, bby = y + FH / 2 - 2;
-        tnum(tx, y, a, LF_SMALL, C_BODY, flat(C_PANEL));
-        if (bw > 8) {
-            if (n->len_ms)      /* clicked: there (a band taller than the bar, to hit) */
-                hit(bx, y - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
-            H->rrect((WORD)bx, (WORD)bby, (WORD)bw, 4, 2, C_LINE, C_PANEL);
-            if (n->len_ms) {
-                LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
-                if (f > bw)
-                    f = bw;
-                if (f > 0)
-                    H->rrect((WORD)bx, (WORD)bby, (WORD)f, 4, 2, C_ACC, C_LINE);
-            }
-        }
-        tnum(tx + tw - zw, y, z, LF_SMALL, C_BODY, flat(C_PANEL));
-    } else {
-        text(tx, y, H->tr("Stopped: Play starts it again"), LF_SMALL, C_SUB, flat(C_PANEL), tw);
-    }
+    nt_x = tx;
+    nt_y = y;
+    nt_w = tw;
+    now_time(n, TRUE);
     y += FH + Y(8);
     line[0] = 0;
     if (n->nnext > 0)
@@ -1868,6 +1921,15 @@ static void sc_changed(int screen, ULONG what)
 static void sc_changed_body(int screen, ULONG what)
 {
     const struct LPage *m;
+    if (what == LC_PLAYING && screen == drawn) {
+        /* the time went on (the clock, the Debug line): they alone */
+        const struct LNow *n = H->model(LS_NOW);
+        H->clip(0, 0, W, HT);
+        top_right_again(screen == LS_NOW);
+        if (screen == LS_NOW && n && n->kind != LN_NONE)
+            now_time(n, FALSE);
+        return;
+    }
     if (what == LC_WAIT) {
         if (screen == drawn && (screen == LS_PAGE || screen == LS_ALBUMS) && spin_x >= 0 &&
             (m = H->model(screen)) && m->waiting) {

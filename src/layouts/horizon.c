@@ -401,6 +401,7 @@ static void pill(LONG x, LONG y, LONG w, LONG h, BOOL chosen, ULONG bg)
         pill_bg.bottom = C_FOCUS;
         pill_bg.y = y;
         pill_bg.h = h;
+        pill_bg.rows_flat = 1;          /* (rgrad: a colour a row, no dither) */
     } else {
         rshape(x, y, w, h, r, C_HOVER);
         pill_bg.top = pill_bg.bottom = C_HOVER;
@@ -773,6 +774,16 @@ static void background(void)
     H->vgrad(0, 0, W, HT, C_TOP, C_BOT);
 }
 
+/* The background again where x0..x1, y0..y1: the screen's one gradient,
+ * clipped there, so it is as it was drawn whole (a part's own gradient
+ * rounds differently) */
+static void back_at(LONG x0, LONG y0, LONG x1, LONG y1)
+{
+    H->clip((WORD)x0, (WORD)y0, (WORD)x1, (WORD)y1);
+    H->vgrad(0, 0, W, HT, C_TOP, C_BOT);
+    H->clip(0, 0, W, HT);
+}
+
 /* Top left: the logo (Home, clicked); its right edge */
 #define LOGO_X X(24)
 #define LOGO_Y Y(14)
@@ -820,7 +831,7 @@ static void top_right_again(void)
             x0 = dl;
         h += FH + Y(2);         /* (the Debug line under it, as it changes) */
     }
-    H->vgrad((WORD)x0, (WORD)(y - 2), (WORD)(W - x0), (WORD)h, grad(y - 2), grad(y - 2 + h));
+    back_at(x0, y - 2, W, y - 2 + h);
     top_right();
 }
 
@@ -828,9 +839,12 @@ static void top_right_again(void)
  * (clicked: Now playing); its top, HT where none */
 #define INSET_W X(260)
 #define INSET_H Y(62)
+static BOOL inset_off;          /* Home's row has what plays as a tile of its own: no inset */
 static LONG inset_top(void)
 {
     const struct LNow *n = H->model(LS_NOW);
+    if (inset_off)
+        return HT;
     return n && n->kind != LN_NONE ? HT - Y(16) - INSET_H : HT;
 }
 static void now_inset_as(BOOL with_hit);
@@ -840,6 +854,8 @@ static void now_inset(void)
 }
 static void now_inset_as(BOOL with_hit)
 {
+    if (inset_off)
+        return;
     const struct LNow *n = H->model(LS_NOW);
     LONG w = INSET_W, h = INSET_H, x = W - X(24) - w, y = HT - Y(16) - h, s = h - Y(12), tx, tw;
     char b[16];
@@ -1052,16 +1068,26 @@ static void home_tiles(const struct LHome *m)
             if (!cover_at(it->art, NULL, cx, y, tile_w, tile_h, 0))
                 H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, C_TILE2, C_TILE);
         } else {
-            /* no picture: a tile of light with its words inside */
-            ULONG t1 = on ? C_FOCUS2 : C_TILE2, t2 = on ? C_FOCUS : C_TILE;
+            /* no picture: a tile of colour (by its place: neighbours
+             * differ), the section's sign at its top, its words inside */
+            static const ULONG hue[6] = { 0x2A6FD6, 0x1E9C8E, 0x7A52CC, 0xC4683A, 0x3E9450, 0xB24C82 };
+            ULONG c = hue[(k + (m->sections ? m->sections[m->sel] : 0)) % 6];   /* (neighbours differ) */
+            ULONG t1 = mix(c, C_WHITE, on ? 2 : 1, 7), t2 = mix(c, C_BOT, on ? 1 : 3, 6);
+            if (it->flags & LIF_DISABLED) {
+                t1 = C_TILE2;
+                t2 = C_TILE;
+            }
             H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, t1, t2);
+            H->fill((WORD)cx, (WORD)y, (WORD)tile_w, 1, mix(t1, C_WHITE, 1, 3));    /* (its lit top edge) */
             {
-                const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h };
+                const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h, 0 };
+                if (H->icon && m->sections && m->sel >= 0)
+                    H->icon(m->sections[m->sel], (WORD)(cx + X(10)), (WORD)(y + Y(10)), mix(t1, C_WHITE, 1, 2), &bgt);
                 text(cx + X(10), y + tile_h - FH * 2 - Y(10), lower(it->label), LF_BOLD,
                      (it->flags & LIF_DISABLED) ? C_DIM : C_WHITE, &bgt, tile_w - X(20));
                 if (it->tag || it->sub)
-                    text(cx + X(10), y + tile_h - FH - Y(8), it->tag ? it->tag : it->sub, LF_SMALL, C_SUB,
-                         &bgt, tile_w - X(20));
+                    text(cx + X(10), y + tile_h - FH - Y(8), it->tag ? it->tag : it->sub, LF_SMALL,
+                         mix(C_WHITE, t2, 1, 4), &bgt, tile_w - X(20));
             }
             if (it->flags & LIF_NOW)
                 mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
@@ -1154,6 +1180,14 @@ static void draw_home(void)
         }
     }
     horizon_line(X(30), ys + tile_h / 2 + lab + Y(6), W - X(60));
+    {
+        /* what plays is a tile of this row (Music's): the tile, not the inset too */
+        const struct LRow *row = m->nrows ? &m->rows[0] : NULL;
+        LONG k;
+        for (k = 0; row && k < row->n && k < 8 && !inset_off; k++)
+            if (row->item(k)->flags & LIF_NOW)
+                inset_off = TRUE;
+    }
     now_inset();                /* (before the tiles: their hits drawn again alone, the last) */
     hits_base = nhits;
     home_tiles(m);
@@ -1877,9 +1911,8 @@ static void draw_bars(const struct LNow *n, BOOL full)
             want = bars_h;
         if (want < old - fall)
             want = old - fall;
-        if (want > old)
-            H->vgrad((WORD)x, (WORD)(bottom - want), (WORD)bw, (WORD)(want - old), bar_col[i * 12 / nb],
-                     mix(bar_col[i * 12 / nb], C_FOCUS, 1, 2));
+        if (want > old)             /* (one fill: a gradient a row is many calls a frame) */
+            H->fill((WORD)x, (WORD)(bottom - want), (WORD)bw, (WORD)(want - old), bar_col[i * 12 / nb]);
         else if (want < old)
             H->vgrad((WORD)x, (WORD)(bottom - old), (WORD)bw, (WORD)(old - want), grad(bottom - old),
                      grad(bottom - want));
@@ -2006,7 +2039,7 @@ static void now_time(const struct LNow *n, BOOL with_hit)
     if (ty < 0)
         return;
     if (!with_hit)
-        H->vgrad((WORD)tx, (WORD)(ty - Y(4)), (WORD)tw, (WORD)(FH + Y(8)), grad(ty - Y(4)), grad(ty + FH + Y(4)));
+        back_at(tx, ty - Y(4), tx + tw, ty + FH + Y(4));
     if (!n->stopped) {
         const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
         LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
@@ -2158,6 +2191,7 @@ static void hz_close(void)
 static void hz_draw(int screen)
 {
     drawn = screen;
+    inset_off = FALSE;
     ft_screen = FALSE;
     nhits = 0;
     hits_base = 0;

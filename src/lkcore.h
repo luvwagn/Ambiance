@@ -40,6 +40,7 @@ struct LkOut {
 struct LkBg {
     unsigned long top, bottom;
     long y, h;
+    long rows_flat;             /* nonzero: drawn a colour a row (not lk_vgrad's dither) */
 };
 
 void lk_clip(struct LkOut *o, long x0, long y0, long x1, long y1);   /* x1, y1: one past */
