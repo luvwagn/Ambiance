@@ -4827,6 +4827,8 @@ static void draw_title(struct Page *p);
  * ends either side are filled. */
 static void title_band_rest(WORD x0, WORD x1, WORD right_from)
 {
+    if (lv_drives())
+        return;
     WORD ty0 = U(28), ty1 = U(28) + g.font_h - 1, l = g.pane_x - U(2);
     if (ty0 > U(26))
         gfx_fill(&g, l, U(26), g.w - 1, ty0 - 1, PEN_BG);
@@ -6162,6 +6164,8 @@ static void preview_draw(struct Page *p)
         pv_pic_drawn = TRUE;
     if (!pv_tj) {
         tb_close(&pv_tb);
+        if (lv_drives())
+            return;
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
         return;
@@ -6171,9 +6175,9 @@ static void preview_draw(struct Page *p)
     else
         pv_waited++;
     if (keep) {
-        if (!pv_tj->done)                   /* the picture stays; the text place cleared */
+        if (!pv_tj->done && !lv_drives())   /* the picture stays; the text place cleared */
             gfx_fill_bg(&g, x0, pv_box_y + pv_box_h, g.w - 1, max_y);
-    } else if (!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) {
+    } else if ((!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) && !lv_drives()) {
         /* not all here: nothing of the entry before stays up meanwhile */
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, pv_tj->done ? g.list_top + pv_box_h - 1 : max_y);
@@ -6352,18 +6356,20 @@ static void preview_touch(struct Page *p)
      * click made meanwhile is lost: double-clicks did nothing) */
     if (pv_clicked && settle < dc_time())
         settle = dc_time();
-    else if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel))
+    else if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel) && !lv_drives())
         /* a page just shown (opened, or back to it): a picture left from
          * the page before goes now, unless it is this entry's too */
         gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
     if (pv_shown && pv_page == p && !hold_active() && !ov.on && !pv_keeps(p, p->sel)) {
         /* the entry before's picture goes now, not when this one's comes:
          * it never stands next to this one's text */
-        gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+        if (!lv_drives())
+            gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
         if (settle != PREVIEW_READY) {
             /* not read yet: its text goes now too */
             tb_close(&pv_tb);
-            gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+            if (!lv_drives())
+                gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
             pv_shown = FALSE;
             pv_tj = pv_sj = NULL;
         }
@@ -6503,9 +6509,14 @@ static void ov_show(struct Page *p)
     ov.on = TRUE;
     ov.linger = 0;
     if (has_aside(p)) {
-        gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
+        if (!lv_drives())
+            gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
         tb_close(&pv_tb);
         pv_shown = FALSE;
+    }
+    if (lv_drives()) {
+        lv_note_what(LC_SELECT);            /* (the layout's letter) */
+        return;
     }
     if (has_aside(p))
         gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
@@ -7897,6 +7908,8 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
  * line filled): drawn again unchanged, nothing on screen changes. */
 static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 {
+    if (lv_drives())
+        return;                             /* (a layout: its Now playing, from lv_now_sig) */
     WORD x1 = np.x0 + np.w, w = gfx_textlen(&g, s, ts);
     if (y == np.info_y && np.cyc_x0 > np.x0)
         x1 = np.cyc_x0 - U(6);              /* the cycle gadget at its end */
@@ -7910,6 +7923,8 @@ static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 /* label, then value at the column after the longest label (Playback). */
 static void np_pair(WORD y, const char *label, const char *value)
 {
+    if (lv_drives())
+        return;
     WORD col = gfx_textlen(&g, _("Playback"), TS_SMALL) + U(8), w;
     WORD tw = np.art_s ? np.w - np.art_s - U(8) : np.w, x1 = np.x0 + tw;
     gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
@@ -7994,6 +8009,8 @@ static void np_playback_line(WORD y, const struct StInfo *in)
  * song), so it is drawn line by line over itself, never cleared first. */
 static void np_draw_station(void)
 {
+    if (lv_drives())
+        return;
     struct StInfo in;
     char info[320], part[160];
     const char *now = st_title();
@@ -9177,6 +9194,17 @@ static void np_eq_tick(void)
     static ULONG last;
     BOOL still = !mp_playing();
     ULONG now = time_ms();
+    if (lv_drives()) {
+        /* a layout: its own marks move (from the spectrum); the classic's
+         * dancing marks are neither stepped nor drawn. Started, stopped or
+         * paused: the layout's told (what plays changed) */
+        if (still != gfx_eq_still || mp_loaded() != hdr_np_on) {
+            gfx_eq_still = still;
+            hdr_np_on = mp_loaded();
+            lv_note();
+        }
+        return;
+    }
     if (still != gfx_eq_still) {
         gfx_eq_still = still;
         np_eq_redraw();
@@ -9842,6 +9870,10 @@ static void pane_tick(void)
 static void pane_preview(BOOL first)
 {
     const char *t = _(mod_names[menu[menu_sel]]);
+    if (lv_drives()) {                      /* (a layout: Home shows the section moved to) */
+        lv_note_what(LC_SELECT);
+        return;
+    }
     if (first) {
         /* all but the title band (title_band_rest); a picture cleared
          * first, then its pens let go (filled over, it flashed) */
