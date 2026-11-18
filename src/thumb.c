@@ -440,6 +440,8 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
     struct Box *box;
     LONG nb;
     ULONG pal[256];
+    if (maxcol <= THUMB_DEEP)
+        return TRUE;                        /* (true colour asked for: as many as it has) */
     q5_init();
     memset(used, 0, sizeof(used));
     for (y = 0; y < t->h; y++) {
@@ -503,11 +505,86 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol)
     return TRUE;
 }
 
+/* A deep picture made small in its own colours (THUMB_DEEP: the layouts',
+ * drawn in true colour, so not cut down to a palette): each small pixel
+ * the average of the big ones it covers (one, picked, when enlarging),
+ * as quantise averages. o or mem as get_rows takes them. */
+static struct Thumb *deep_thumb(Object *o, const UBYTE *mem, ULONG sw, ULONG sh, ULONG dw, ULONG dh)
+{
+    struct Thumb *t;
+    UBYTE *rows = NULL;
+    UWORD *xb = NULL;
+    ULONG *sum = NULL, x, y, rmax = (sh + dh - 1) / dh + 1, t0 = time_ms();
+    if (!dw || !dh || !(t = AllocVec(sizeof(struct Thumb) + dw * dh * 4, MEMF_ANY | MEMF_CLEAR)))
+        return NULL;
+    t->w = dw;
+    t->h = dh;
+    t->mod = dw;
+    t->argb = (ULONG *)(t + 1);
+    rows = AllocVec(sw * rmax * 3, MEMF_ANY);
+    xb = AllocVec((dw + 1) * sizeof(UWORD), MEMF_ANY);
+    sum = AllocVec(dw * 4 * sizeof(ULONG), MEMF_ANY);
+    if (!rows || !xb || !sum)
+        goto fail;
+    for (x = 0; x <= dw; x++)
+        xb[x] = x * sw / dw;
+    for (y = 0; y < dh; y++) {
+        ULONG sy0 = y * sh / dh, sy1 = (y + 1) * sh / dh, r, *d = t->argb + y * dw;
+        if (sy1 <= sy0)
+            sy1 = sy0 + 1;
+        if (sy1 > sh)
+            sy1 = sh;
+        if (sy1 - sy0 > rmax)
+            sy1 = sy0 + rmax;
+        if (!get_rows(o, mem, rows, sw, sy0, sy1 - sy0, TRUE))
+            goto fail;
+        if (sw == dw && sy1 - sy0 == 1) {
+            const UBYTE *p = rows;
+            for (x = 0; x < dw; x++, p += 3)
+                d[x] = ((ULONG)p[0] << 16) | ((ULONG)p[1] << 8) | p[2];
+            continue;
+        }
+        memset(sum, 0, dw * 4 * sizeof(ULONG));
+        for (r = 0; r < sy1 - sy0; r++) {
+            const UBYTE *p = rows + r * sw * 3;
+            for (x = 0; x < dw; x++) {
+                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
+                const UBYTE *q = p + k * 3;
+                if (e <= k)
+                    e = k + 1;
+                s[3] += e - k;
+                for (; k < e; k++, q += 3) {
+                    s[0] += q[0];
+                    s[1] += q[1];
+                    s[2] += q[2];
+                }
+            }
+        }
+        for (x = 0; x < dw; x++) {
+            ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1;
+            d[x] = ((s[0] + n / 2) / n << 16) | ((s[1] + n / 2) / n << 8) | (s[2] + n / 2) / n;
+        }
+    }
+    tm_cells = time_ms() - t0;
+    FreeVec(rows);
+    FreeVec(xb);
+    FreeVec(sum);
+    return t;
+fail:
+    FreeVec(rows);
+    FreeVec(xb);
+    FreeVec(sum);
+    FreeVec(t);
+    return NULL;
+}
+
 /* A thumbnail of a picture decoded into memory (RGB, sw * 3 a row):
  * jpgthumb.c's, made as thumb_make makes a deep picture's */
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol)
 {
     tm_read = tm_cells = tm_cut = tm_map = 0;
+    if (maxcol <= THUMB_DEEP)
+        return deep_thumb(NULL, rgb, sw, sh, dw, dh);
     return quantise(NULL, rgb, sw, sh, dw, dh, NULL, maxcol);
 }
 
@@ -518,12 +595,13 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
     ULONG *cregs = NULL, ncol = 0, mode = 0, sw, sh, i, n;
     ULONG rgb[256];
     BOOL deep;
+    BOOL true_col = maxcol <= THUMB_DEEP;
     tm_read = tm_cells = tm_cut = tm_map = 0;
     if (!o || !dw || !dh)
         return NULL;
     if (maxcol > 256)
         maxcol = 256;
-    if (maxcol < 2)
+    if (maxcol < 2 && !true_col)
         maxcol = 2;
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_CRegs, (ULONG)&cregs,
                PDTA_NumColors, (ULONG)&ncol, PDTA_ModeID, (ULONG)&mode, TAG_END);
@@ -535,7 +613,7 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
     sh = bmh->bmh_Height;
     deep = bmh->bmh_Depth > 8 || (mode & HAM_KEY) || !cregs || !ncol;
     if (deep)
-        return quantise(o, NULL, sw, sh, dw, dh, NULL, maxcol);
+        return true_col ? deep_thumb(o, NULL, sw, sh, dw, dh) : quantise(o, NULL, sw, sh, dw, dh, NULL, maxcol);
 
     /* the colour table, 8 bits a gun; extra halfbrite: the dark half too */
     memset(rgb, 0, sizeof(rgb));

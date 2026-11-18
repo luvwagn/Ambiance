@@ -248,6 +248,8 @@ UWORD sm_mark_px(const struct Smooth *s);
 UWORD sm_cell_h(const struct Smooth *s);
 #define SM_TITLE 3             /* the layouts' title face (the file's TITL; else bold) */
 UWORD sm_title_h(const struct Smooth *s);   /* its cell's height */
+#define SM_TINY 4              /* the layouts' fine print (the file's TINY; else small) */
+UWORD sm_tiny_h(const struct Smooth *s);    /* its cell's height */
 UWORD sm_scale(const struct Smooth *s);                 /* x 256 */
 UWORD sm_baseline(const struct Smooth *s);
 BOOL sm_logo(struct Smooth *s, struct Gfx *g);      /* fills g->logo_* masks and pens */
@@ -292,7 +294,10 @@ struct Thumb {
     UWORD ncol;
     ULONG pal[256];             /* 0xRRGGBB */
     UBYTE *px;
+    ULONG *argb;                /* maxcol THUMB_DEEP: its colours themselves, 0xRRGGBB, w a
+                                 * row (px NULL); else NULL */
 };
+#define THUMB_DEEP 0            /* maxcol: no colours of its own, true colour (the layouts') */
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
 /* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it

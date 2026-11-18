@@ -91,8 +91,10 @@ struct Smooth {
     UBYTE *data;
     ULONG size;
     UWORD k, cell_h, base;
-    struct Face face[NFACES + 1];   /* the last: the layouts' title face (TITL), if there */
+    struct Face face[NFACES + 2];   /* then the layouts' title face (TITL) and fine
+                                     * print (TINY), if there */
     UWORD title_h, title_base;      /* its cell, 0: none */
+    UWORD tiny_h, tiny_base;        /* TINY's */
     UWORD icon_n, icon_cnt, mark_n, mark_cnt;
     const UBYTE *icons, *marks;
     ULONG icon_bytes, mark_bytes;
@@ -151,11 +153,54 @@ static UBYTE nib(const UBYTE *d, ULONG i)
 }
 
 /* ------------------------------------------------------------ loading */
-/* Face face (TS_*, or SM_TITLE: the layouts' title face, else bold) */
+/* A face of its own cell after the others ("TITL", "TINY"): read into fc
+ * if p is one, *h and *base its cell (left 0 if not there). Where the
+ * next starts. */
+static const UBYTE *extra_face(struct Smooth *s, const UBYTE *p, const UBYTE *end, const char *tag,
+                               struct Face *fc, UWORD *h, UWORD *base)
+{
+    UWORD th, tb;
+    const UBYTE *q;
+    ULONG n;
+    (void)s;
+    if (p + 12 > end || memcmp(p, tag, 4))
+        return p;
+    th = amb_be16(p + 4);
+    tb = amb_be16(p + 6);
+    q = p + 8;
+    fc->lo = amb_be16(q);
+    fc->hi = amb_be16(q + 2);
+    q += 4;
+    fc->gl = q;
+    q += (ULONG)(fc->hi - fc->lo + 1) * GLYPH_BYTES;
+    if (fc->hi < fc->lo || fc->lo > '?' || fc->hi < 'Z' || q + 4 > end)
+        return end;
+    n = amb_be32(q);
+    fc->blob = q + 4;
+    if (fc->blob + n > end)
+        return end;
+    {
+        UBYTE c;
+        fc->widest_cap = 0;
+        for (c = 'A'; c <= 'Z'; c++)
+            if (fc->gl[(c - fc->lo) * GLYPH_BYTES + G_W] > fc->widest_cap)
+                fc->widest_cap = fc->gl[(c - fc->lo) * GLYPH_BYTES + G_W];
+    }
+    fc->glo = fc->ghi = 0;
+    fc->ggl = fc->gblob = NULL;
+    *h = th;
+    *base = tb;
+    return fc->blob + n;
+}
+
+/* Face face (TS_*, or SM_TITLE: the layouts' title face, else bold; SM_TINY:
+ * their fine print, else small) */
 static const struct Face *face_of(const struct Smooth *s, int face)
 {
     if (face == SM_TITLE)
         return &s->face[s->title_h ? NFACES : 1];
+    if (face == SM_TINY)
+        return &s->face[s->tiny_h ? NFACES + 1 : 2];
     return &s->face[face >= 0 && face < NFACES ? face : 0];
 }
 
@@ -272,35 +317,12 @@ static BOOL parse(struct Smooth *s)
             p = q;
         }
     }
-    /* the layouts' title face, if the file has it: "TITL", u16 its cell's
-     * height and baseline, then a face as above */
-    s->title_h = 0;
-    if (p + 12 <= end && !memcmp(p, "TITL", 4)) {
-        struct Face *fc = &s->face[NFACES];
-        UWORD th = amb_be16(p + 4), tb = amb_be16(p + 6);
-        const UBYTE *q = p + 8;
-        ULONG n;
-        fc->lo = amb_be16(q);
-        fc->hi = amb_be16(q + 2);
-        q += 4;
-        fc->gl = q;
-        q += (ULONG)(fc->hi - fc->lo + 1) * GLYPH_BYTES;
-        if (fc->hi >= fc->lo && fc->lo <= '?' && fc->hi >= 'Z' && q + 4 <= end) {
-            n = amb_be32(q);
-            fc->blob = q + 4;
-            if (fc->blob + n <= end) {
-                UBYTE c;
-                fc->widest_cap = 0;
-                for (c = 'A'; c <= 'Z'; c++)
-                    if (fc->gl[(c - fc->lo) * GLYPH_BYTES + G_W] > fc->widest_cap)
-                        fc->widest_cap = fc->gl[(c - fc->lo) * GLYPH_BYTES + G_W];
-                fc->glo = fc->ghi = 0;
-                fc->ggl = fc->gblob = NULL;
-                s->title_h = th;
-                s->title_base = tb;
-            }
-        }
-    }
+    /* the layouts' title face, then their fine print, if the file has them:
+     * "TITL" and "TINY", each u16 its cell's height and baseline, then a
+     * face as above */
+    s->title_h = s->tiny_h = 0;
+    p = extra_face(s, p, end, "TITL", &s->face[NFACES], &s->title_h, &s->title_base);
+    p = extra_face(s, p, end, "TINY", &s->face[NFACES + 1], &s->tiny_h, &s->tiny_base);
     return p <= end && s->icon_cnt >= ICON_COUNT && s->mark_cnt >= MARK_RADIO_ON &&
            s->logo_nc <= 32;
 }
@@ -308,6 +330,11 @@ static BOOL parse(struct Smooth *s)
 UWORD sm_title_h(const struct Smooth *s)
 {
     return s && s->title_h ? s->title_h : s ? s->cell_h : 0;
+}
+
+UWORD sm_tiny_h(const struct Smooth *s)
+{
+    return s && s->tiny_h ? s->tiny_h : s ? s->cell_h : 0;
 }
 
 BOOL sm_greek(const struct Smooth *s)
@@ -1016,7 +1043,7 @@ static void text_box(const struct Smooth *s, const struct Face *f, const char *s
     ULONG pen16 = 0;
     LONG i;
     *minx = *maxx = *miny = 0;
-    *maxy = f == &s->face[NFACES] ? s->title_h : s->cell_h;
+    *maxy = f == &s->face[NFACES] ? s->title_h : f == &s->face[NFACES + 1] ? s->tiny_h : s->cell_h;
     for (i = 0; i < n;) {
         const UBYTE *b, *G = glyph_at(f, str, n, &i, &b);
         ULONG q = SNAP_Q(pen16);                /* in quarter pixels */

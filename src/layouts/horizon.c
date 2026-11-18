@@ -1419,13 +1419,13 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
         const struct LImage *pm = m->plexmark && H->plexmark ? H->plexmark(grad(bottom - Y(40))) : NULL;
         LONG under = bottom;
         if (pm) {
-            LONG my = under - FH - Y(4) - pm->h, mx = x;
+            LONG fine = H->font_h(LF_TINY), my = under - fine - Y(4) - pm->h, mx = x;
             const char *with = H->tr("Works with:");
             text(mx, my + (pm->h - FH) / 2, with, LF_REGULAR, C_SUB, &bg_grad, w / 2);
             mx += tlen(with, LF_REGULAR) + X(10);
             H->image(pm, (WORD)mx, (WORD)my);
             text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, &bg_grad, 0);
-            text(x, under - FH, "* used under license from Plex", LF_SMALL, C_DIM, &bg_grad, w);
+            text(x, under - fine, "* used under license from Plex", LF_TINY, C_DIM, &bg_grad, w);
             under = my - Y(12);
         }
         if (m->picture || m->note) {

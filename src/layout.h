@@ -228,8 +228,10 @@ enum { LP_MOVE, LP_PRESS, LP_RELEASE };
 #define LC_WAIT    64           /* LPage.wait_phase: the spinner alone */
 
 /* ---------------------------------------------------------------- the tables */
-enum { LF_REGULAR, LF_BOLD, LF_SMALL, LF_TITLE };  /* the smooth fonts' faces (LF_TITLE: larger,
-                                                   * its own height: host->font_h) */
+enum { LF_REGULAR, LF_BOLD, LF_SMALL, LF_TITLE, LF_TINY };  /* the smooth fonts' faces (LF_TITLE:
+                                                   * larger, LF_TINY: fine print, a quarter
+                                                   * under small; each its own height:
+                                                   * host->font_h) */
 
 struct LayoutHost {
     /* the screen */

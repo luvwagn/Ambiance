@@ -923,13 +923,13 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
         LONG under = bottom - Y(10);
         panel(x, py, w, bottom - py, 6, C_PANEL, C_LINE, grad(py));
         if (pm) {               /* "Works with:" Plex's mark, and its attribution under it */
-            LONG my = under - FH - Y(4) - pm->h, mx = x + X(18);
+            LONG fine = H->font_h(LF_TINY), my = under - fine - Y(4) - pm->h, mx = x + X(18);
             const char *with = H->tr("Works with:");
             text(mx, my + (pm->h - FH) / 2, with, LF_REGULAR, C_SUB, flat(C_PANEL), w / 2);
             mx += tlen(with, LF_REGULAR) + X(10);
             H->image(pm, (WORD)mx, (WORD)my);
             text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, flat(C_PANEL), 0);
-            text(x + X(18), under - FH, "* used under license from Plex", LF_SMALL, C_DIM, flat(C_PANEL),
+            text(x + X(18), under - fine, "* used under license from Plex", LF_TINY, C_DIM, flat(C_PANEL),
                  w - X(36));
             under = my - Y(12);
         }

@@ -100,7 +100,7 @@ struct Page {
     WORD pic_w, pic_h;          /*   as large as fits there, */
     WORD pic_x, pic_y;          /*   drawn there (pic_y < 0: not drawn) */
     const char *note;           /*   and a line or two above it (fixed, not scrolled) */
-    UBYTE plexmark;             /* PT_TEXT: "Works with" Plex's logo at the bottom (Credits) */
+    UBYTE plexmark;             /* PT_TEXT: "Works with" Plex's logo at the bottom (Plex in Ambiance) */
 };
 
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
@@ -3577,7 +3577,6 @@ static void build_credits(struct Page *p)
     text_para(p, _("Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer."));
     p->note = _("This front-end inspired by the efforts of Paul Vince's Amiga Game Selector");
-    p->plexmark = 1;
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
         APTR old = me->pr_WindowPtr;
@@ -7055,7 +7054,7 @@ static void np_draw(BOOL full);
  * the top; under it, fixed, the note and the picture, as large as fits in
  * up to two fifths of the pane. The box's height (the picture made first,
  * at its size). */
-/* Credits' "Works with" Plex's logo, under everything: its height */
+/* Plex in Ambiance's "Works with" Plex's logo, under everything: its height */
 static WORD plexmark_h(void)
 {
     return U(6) + plex_lo_h * g.kint + U(3) + g.font_h;
@@ -7110,7 +7109,7 @@ static void draw_plex_logo(WORD x, WORD y)
         }
 }
 
-/* Credits: "Works with" Plex's logo, as Plex's guidelines allow (to show
+/* Plex in Ambiance: "Works with" Plex's logo, as Plex's guidelines allow (to show
  * that Ambiance works with Plex), and their attribution under it */
 static void draw_plexmark(void)
 {
@@ -7122,7 +7121,7 @@ static void draw_plexmark(void)
     w = plex_lo_w * g.kint;
     gfx_text(&g, x + w + U(1), y, "*", PEN_DIM, PEN_BG, U(10), TS_BODY);
     gfx_text(&g, g.pane_x, y + plex_lo_h * g.kint + U(3), "* used under license from Plex", PEN_FAINT,
-             PEN_BG, textbox_w(), TS_BODY);
+             PEN_BG, textbox_w(), g.sm ? SM_TINY : TS_BODY);   /* (fine print where it can be) */
 }
 
 static void draw_text_picture(struct Page *p)
@@ -14402,6 +14401,7 @@ static void plex_help(void)
     char line[200];
     if (!p)
         return;
+    p->plexmark = 1;                        /* "Works with" Plex's logo, at the bottom */
     text_para(p, _("Ambiance plays music from a Plex Media Server on your network: its "
                    "music libraries, by artist and album, with their covers. The server makes "
                    "each track an MP3 this Amiga can play: 22kHz mono for a 68020/030, 24kHz "
@@ -18119,10 +18119,14 @@ static void lv_pic_take(int i)
     if (t && (lv_pic[i].px = AllocVec((ULONG)t->w * t->h * 4, MEMF_ANY))) {
         ULONG *d = lv_pic[i].px;
         UWORD x, y;
-        for (y = 0; y < t->h; y++) {
-            const UBYTE *src = t->px + (ULONG)y * t->mod;
-            for (x = 0; x < t->w; x++)
-                *d++ = t->pal[src[x]] & 0xFFFFFF;
+        if (t->argb) {
+            CopyMem(t->argb, d, (ULONG)t->w * t->h * 4);    /* (true colour, THUMB_DEEP) */
+        } else {
+            for (y = 0; y < t->h; y++) {
+                const UBYTE *src = t->px + (ULONG)y * t->mod;
+                for (x = 0; x < t->w; x++)
+                    *d++ = t->pal[src[x]] & 0xFFFFFF;
+            }
         }
         lv_pic[i].im.w = t->w;
         lv_pic[i].im.h = t->h;
@@ -18223,7 +18227,7 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     j->scr = g.scr;
     j->tw = w;
     j->th = h;
-    j->maxcol = 256;
+    j->maxcol = THUMB_DEEP;                /* true colour: a layout draws it so */
     lv_pic[k].job = j;
     ldr_submit(j);
     return NULL;
@@ -18282,7 +18286,8 @@ static WORD h_fit(const char *s, LONG n, int face, WORD maxw)
 }
 static WORD h_font_h(int face)
 {
-    return !g.sm ? 0 : face == LF_TITLE ? (WORD)sm_title_h(g.sm) : (WORD)sm_cell_h(g.sm);
+    return !g.sm ? 0 : face == LF_TITLE ? (WORD)sm_title_h(g.sm) : face == LF_TINY ? (WORD)sm_tiny_h(g.sm)
+                                                                                   : (WORD)sm_cell_h(g.sm);
 }
 static void h_icon(int section, WORD x, WORD y, ULONG fg, const struct LkBg *bg)
 {

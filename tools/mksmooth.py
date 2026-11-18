@@ -41,6 +41,9 @@ File layout (big-endian), written to <out dir>/<H>:
       over 255 is written 255, 0, rest
   with --greek: "GREK", then per face u16 lo, u16 hi and its glyphs and
       coverage data as above (src/smooth.c reads a file with or without it)
+  "TITL" (the layouts' title face), then "TINY" (their fine print): each
+      u16 cell_h, u16 baseline, u16 lo, u16 hi, its glyphs and coverage data
+      as above (older files end before either; smooth.c then uses bold, small)
 """
 import os
 import struct
@@ -59,6 +62,7 @@ LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 # (design size in 256-line pixels, weight) per face: body, bold, small
 FACES = [(11.0, 400), (11.5, 500), (10.0, 400)]
 TITLE = (17.0, 600)     # the layouts' title face (TITL): its own cell, 17/11 of the text's
+TINY = (7.5, 400)       # the layouts' fine print (TINY): a quarter under small, its own cell
 CELL = 12           # design height of a text cell (the pixel font's)
 BASE = 9.0          # design baseline, from the cell top (the pixel font's)
 ICONS = hiicons.ICONS
@@ -305,6 +309,14 @@ def build(ttf, H, greek=None):
     for adv16, xo, yo, w, h, off in glyphs:
         out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
     out += struct.pack(">I", len(blob)) + blob
+    # The layouts' fine print: "TINY", as TITL
+    for tag, (size, wght) in ((b"TINY", TINY),):
+        tcell, tbase = round(CELL * k * size / FACES[0][0]), round(BASE * k * size / FACES[0][0])
+        glyphs, blob = face(ttf, size, wght, k, tcell, tbase)
+        out += tag + struct.pack(">HHHH", tcell, tbase, LO, HI)
+        for adv16, xo, yo, w, h, off in glyphs:
+            out += struct.pack(">HbbBBI", adv16, xo, yo, w, h, off)
+        out += struct.pack(">I", len(blob)) + blob
     return bytes(out)
 
 
