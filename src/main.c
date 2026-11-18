@@ -18572,7 +18572,8 @@ static void lv_frame_(void)
             mh = mh * 33 + (UBYTE)*c;
         nsig = lv_now_sig();
         moved_only = !lv.full && (scr == LS_PAGE || scr == LS_ALBUMS || scr == LS_ALBUM ||
-                                  scr == LS_ARTIST) && lv.drawn == scr && lv.eng->changed && p &&
+                                  scr == LS_ARTIST || (scr == LS_HOME && focus != FOCUS_MENU)) &&
+                     lv.drawn == scr && lv.eng->changed && p &&
                      p == lv.last_p && depth == lv.last_depth && mh == lv.last_msg &&
                      (p->type == PT_LIST
                           ? p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&

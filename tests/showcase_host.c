@@ -862,6 +862,41 @@ static void run(int w, int h, int bits, const char *font)
             free(was);
             wall_sel = 6;
         }
+#ifdef HORIZON
+        {
+            /* Home's row: a tile far along chosen, the row glides there
+             * (moved along by copies), and comes out as drawn whole */
+            unsigned long *was;
+            long n = (long)w * h, k, diff = 0;
+            int t;
+            home_tile = 0;
+            layout_engine.draw(LS_HOME);
+            home_tile = 5;
+            copied_px = 0;
+            layout_engine.changed(LS_HOME, LC_SELECT);
+            for (t = 0; t < 30; t++) {
+                clock_ms += 40;
+                layout_engine.tick(clock_ms);
+            }
+            save("home-glided");
+            was = malloc((size_t)n * sizeof(*was));
+            memcpy(was, px, (size_t)n * sizeof(*was));
+            layout_engine.draw(LS_HOME);
+            for (k = 0; k < n; k++)
+                if (was[k] != px[k])
+                    diff++;
+            if (diff)
+                printf("  (the glided row: %ld pixels unlike Home drawn whole)\n", diff);
+            CHECK(diff == 0 && copied_px > 0);
+            free(was);
+            home_tile = -1;             /* (back to the menu: the row glides home) */
+            layout_engine.draw(LS_HOME);
+            for (t = 0; t < 30; t++) {
+                clock_ms += 40;
+                layout_engine.tick(clock_ms);
+            }
+        }
+#endif
     }
     drawn_px = 0;
     layout_engine.draw(LS_NOW);

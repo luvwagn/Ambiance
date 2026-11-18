@@ -339,6 +339,7 @@ static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c)
 /* A soft glow round a rounded box: rings a pixel each, the accent fading
  * into bg outwards (wider than Showcase's: this style's selection is its
  * glow) */
+#define LABEL_GAP (X(7) + 5)    /* words under a tile: below its glow (drawn opaque, they cut it) */
 static void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg)
 {
     LONG k, n = X(7) > 4 ? X(7) : 4;
@@ -1033,63 +1034,122 @@ static LONG home_max(const struct LHome *m)
     return mx > 0 ? mx : 0;
 }
 
-static void home_tiles(const struct LHome *m)
+/* Home's row: the band it is drawn in */
+#define HOME_X0 (tile_x0 - X(10))
+#define HOME_Y0 (tile_y0 - X(10))
+#define HOME_Y1 (tile_y0 + tile_h + FH * 2 + LABEL_GAP + Y(8))
+
+/* Tile k where it is now (no clearing: its place is) */
+static void home_tile(const struct LHome *m, LONG k)
+{
+    const struct LRow *row = &m->rows[0];
+    const struct LItem *it = row->item(k);
+    LONG cx = tile_x0 + k * (tile_w + tile_gap) - home_px, y = tile_y0;
+    BOOL on = m->tile_sel >= 0 && m->tile_shown && k == m->tile_sel, hov = HOVER(HT_TILE, k);
+    if (it->flags & LIF_HEAD)
+        return;
+    if (on || hov)
+        glow(cx - 2, y - 2, tile_w + 4, tile_h + 4, Y(4), grad(y));
+    {
+        /* every tile alike: a glassy tile, what it has to show inside it
+         * (a picture fitted, a disc, else the section's sign), its words
+         * under it */
+        ULONG t1 = on ? mix(C_TILE2, C_FOCUS2, 1, 2) : C_TILE2, t2 = on ? mix(C_TILE, C_FOCUS, 1, 2) : C_TILE;
+        LONG pad = Y(6);
+        const struct LImage *im;
+        H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, t1, t2);
+        H->fill((WORD)cx, (WORD)y, (WORD)tile_w, 1, mix(t1, C_WHITE, 1, 4));     /* (its lit top edge) */
+        if (it->kind == LI_DISC) {
+            disc(cx + (tile_w - tile_h) / 2 + pad, y + pad, tile_h - 2 * pad, mix(t1, t2, 1, 2));
+        } else if (it->art && (im = H->picture(it->art, (UWORD)(tile_w - 2 * pad), (UWORD)(tile_h - 2 * pad)))) {
+            H->image(im, (WORD)(cx + (tile_w - im->w) / 2), (WORD)(y + (tile_h - im->h) / 2));
+        } else if (H->icon && m->sections && m->sel >= 0) {
+            const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h, 0 };
+            H->icon(m->sections[m->sel], (WORD)(cx + (tile_w - H->icon_px) / 2),
+                    (WORD)(y + (tile_h - H->icon_px) / 2), (it->flags & LIF_DISABLED) ? C_DIM : C_SUB, &bgt);
+        }
+        if (it->flags & LIF_NOW)
+            mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
+    }
+    if (on)
+        H->frame((WORD)(cx - 1), (WORD)(y - 1), (WORD)(tile_w + 2), (WORD)(tile_h + 2), 2, C_ACC);
+    text(cx, y + tile_h + LABEL_GAP, lower(it->label), on ? LF_BOLD : LF_REGULAR,
+         (it->flags & LIF_DISABLED) ? C_DIM : on ? C_WHITE : C_TEXT, &bg_grad, tile_w);
+    if (it->tag || it->sub)
+        text(cx, y + tile_h + LABEL_GAP + FH, it->tag ? it->tag : it->sub, LF_SMALL, C_SUB, &bg_grad, tile_w);
+}
+
+/* The row's tiles that cross xa..xb, over the screen's own background */
+static void home_tiles_in(const struct LHome *m, LONG xa, LONG xb)
 {
     const struct LRow *row = m->nrows ? &m->rows[0] : NULL;
-    LONG k, y = tile_y0, lab = FH * 2 + Y(10), maxpx;
-    BOOL shown = m->tile_sel >= 0 && m->tile_shown;
-    H->clip((WORD)(tile_x0 - X(10)), (WORD)(y - X(10)), W, (WORD)(y + tile_h + lab + Y(4)));
-    H->vgrad((WORD)(tile_x0 - X(10)), (WORD)(y - X(10)), (WORD)(W - tile_x0 + X(10)),
-             (WORD)(tile_h + lab + X(10) + Y(4)), grad(y - X(10)), grad(y + tile_h + lab + Y(4)));
-    if (!row || !row->n) {
-        H->clip(0, 0, W, HT);
+    LONG k, pitch = tile_w + tile_gap;
+    if (xa < HOME_X0)
+        xa = HOME_X0;
+    if (xb > W)
+        xb = W;
+    if (xb <= xa)
         return;
-    }
-    maxpx = home_max(m);
-    if (home_px > maxpx)
-        home_px = maxpx;
-    hit(tile_x0 - X(10), y - X(10), W - tile_x0 + X(10), tile_h + lab + X(10), HT_STRIP, 0, 0);
+    H->clip((WORD)xa, (WORD)HOME_Y0, (WORD)xb, (WORD)HOME_Y1);
+    H->vgrad(0, 0, W, HT, C_TOP, C_BOT);
+    if (row)
+        for (k = (xa - tile_x0 + home_px - tile_w - X(10)) / pitch; k < row->n; k++) {
+            LONG cx = tile_x0 + k * pitch - home_px;
+            if (k < 0)
+                continue;
+            if (cx - X(10) >= xb)
+                break;
+            home_tile(m, k);
+        }
+    H->clip(0, 0, W, HT);
+}
+
+/* The row's click places where its tiles are now */
+static void home_hits(const struct LHome *m)
+{
+    const struct LRow *row = m->nrows ? &m->rows[0] : NULL;
+    LONG k;
+    nhits = hits_base;
+    if (!row || !row->n)
+        return;
+    hit(HOME_X0, HOME_Y0, W - HOME_X0, HOME_Y1 - HOME_Y0, HT_STRIP, 0, 0);
     for (k = home_px / (tile_w + tile_gap); k < row->n; k++) {
         const struct LItem *it = row->item(k);
         LONG cx = tile_x0 + k * (tile_w + tile_gap) - home_px;
-        BOOL on = shown && k == m->tile_sel, hov = HOVER(HT_TILE, k);
         if (cx >= W)
             break;
-        if (it->flags & LIF_HEAD)
-            continue;
-        if (!(it->flags & LIF_DISABLED))
-            hit(cx, y, tile_w, tile_h + lab, HT_TILE, it->kind, k);
-        if (on || hov)
-            glow(cx - 2, y - 2, tile_w + 4, tile_h + 4, Y(4), grad(y));
-        {
-            /* every tile alike: a glassy tile, what it has to show inside it
-             * (a picture fitted, a disc, else the section's sign), its words
-             * under it */
-            ULONG t1 = on ? mix(C_TILE2, C_FOCUS2, 1, 2) : C_TILE2, t2 = on ? mix(C_TILE, C_FOCUS, 1, 2) : C_TILE;
-            LONG pad = Y(6);
-            const struct LImage *im;
-            H->vgrad((WORD)cx, (WORD)y, (WORD)tile_w, (WORD)tile_h, t1, t2);
-            H->fill((WORD)cx, (WORD)y, (WORD)tile_w, 1, mix(t1, C_WHITE, 1, 4));     /* (its lit top edge) */
-            if (it->kind == LI_DISC) {
-                disc(cx + (tile_w - tile_h) / 2 + pad, y + pad, tile_h - 2 * pad, mix(t1, t2, 1, 2));
-            } else if (it->art && (im = H->picture(it->art, (UWORD)(tile_w - 2 * pad), (UWORD)(tile_h - 2 * pad)))) {
-                H->image(im, (WORD)(cx + (tile_w - im->w) / 2), (WORD)(y + (tile_h - im->h) / 2));
-            } else if (H->icon && m->sections && m->sel >= 0) {
-                const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h, 0 };
-                H->icon(m->sections[m->sel], (WORD)(cx + (tile_w - H->icon_px) / 2),
-                        (WORD)(y + (tile_h - H->icon_px) / 2), (it->flags & LIF_DISABLED) ? C_DIM : C_SUB, &bgt);
-            }
-            if (it->flags & LIF_NOW)
-                mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
-        }
-        if (on)
-            H->frame((WORD)(cx - 1), (WORD)(y - 1), (WORD)(tile_w + 2), (WORD)(tile_h + 2), 2, C_ACC);
-        text(cx, y + tile_h + Y(6), lower(it->label), on ? LF_BOLD : LF_REGULAR,
-             (it->flags & LIF_DISABLED) ? C_DIM : on ? C_WHITE : C_TEXT, &bg_grad, tile_w);
-        if (it->tag || it->sub)
-            text(cx, y + tile_h + Y(6) + FH, it->tag ? it->tag : it->sub, LF_SMALL, C_SUB, &bg_grad, tile_w);
+        if (!(it->flags & (LIF_HEAD | LIF_DISABLED)))
+            hit(cx, tile_y0, tile_w, tile_h + FH * 2 + LABEL_GAP, HT_TILE, it->kind, k);
     }
-    H->clip(0, 0, W, HT);
+}
+
+static void home_tiles(const struct LHome *m)
+{
+    LONG maxpx = home_max(m);
+    if (home_px > maxpx)
+        home_px = maxpx;
+    home_hits(m);
+    home_tiles_in(m, HOME_X0, W);
+}
+
+/* A step of the row's glide from old: what is drawn moved along, the strip
+ * that comes in drawn */
+static void home_glide_step(const struct LHome *m, LONG old)
+{
+    LONG d = home_px - old;
+    if (!d)
+        return;
+    H->clip((WORD)HOME_X0, (WORD)HOME_Y0, W, (WORD)HOME_Y1);
+    if (!H->copy || d >= W - HOME_X0 || -d >= W - HOME_X0 ||
+        !H->copy((WORD)HOME_X0, (WORD)HOME_Y0, (WORD)(W - HOME_X0), (WORD)(HOME_Y1 - HOME_Y0), (WORD)-d, 0)) {
+        home_tiles(m);
+        return;
+    }
+    if (d > 0)
+        home_tiles_in(m, W - d, W);
+    else
+        home_tiles_in(m, HOME_X0, HOME_X0 - d);
+    home_hits(m);
 }
 
 /* Where the tiles go, and where the row glides to for the chosen one */
@@ -1118,6 +1178,7 @@ static void home_place(const struct LHome *m)
             home_tgt = r + tile_w / 3 - (W - X(24) - tile_x0);
         if (home_tgt < 0)
             home_tgt = 0;
+        home_tgt &= ~3L;            /* (whole 16-bit dither steps: the copied row matches) */
     } else if (m->tile_sel < 0 && home_was_tiles) {
         home_tgt = 0;               /* (back to the menu from the tiles: the row from its start) */
     }                               /* (else where the mouse left it) */
@@ -1127,7 +1188,7 @@ static void home_place(const struct LHome *m)
 static void draw_home(void)
 {
     const struct LHome *m = H->model(LS_HOME);
-    LONG pitch = TH + Y(22), ys, i, nx = X(56), lab = FH * 2 + Y(10);
+    LONG pitch = TH + Y(22), ys, i, nx = X(56), lab = FH * 2 + LABEL_GAP + Y(4);
     background();
     top_left();
     top_right();
@@ -1411,12 +1472,12 @@ static void wall_geom(const struct LPage *m)
     wg.viewe = W - X(24) - wg.x0;
     cs = Y(118);
     th = m->frames ? cs * 3 / 4 : cs;
-    ch = th + Y(6) + FH * 2 + Y(12);
+    ch = th + LABEL_GAP + FH * 2 + Y(12);
     rows = (wg.viewh + Y(8)) / ch;
     if (rows < 1)
         rows = 1;
     if (rows > 1 && rows * ch > wg.viewh)       /* (a little smaller, to fit) */
-        cs = (wg.viewh / rows - Y(6) - FH * 2 - Y(12));
+        cs = (wg.viewh / rows - LABEL_GAP - FH * 2 - Y(12));
     th = m->frames ? cs * 3 / 4 : cs;
     if (m->frames)
         cs = th * 4 / 3;
@@ -1482,7 +1543,7 @@ static void wall_tile(const struct LPage *m, LONG i, BOOL clear)
     if (i < 0 || i >= m->list.count || cx >= W || cx + cs + WALL_GLOW <= 0)
         return;
     if (clear) {
-        wall_bg(cx - WALL_GLOW, cy - WALL_GLOW, cx + cs + WALL_GLOW, cy + th + Y(6) + FH * 2 + 2);
+        wall_bg(cx - WALL_GLOW, cy - WALL_GLOW, cx + cs + WALL_GLOW, cy + th + LABEL_GAP + FH * 2 + 2);
         H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
     }
     it = m->list.item(i);
@@ -1503,9 +1564,9 @@ static void wall_tile(const struct LPage *m, LONG i, BOOL clear)
         H->frame((WORD)(cx - 1), (WORD)(cy - 1), (WORD)(cs + 2), (WORD)(th + 2), 2, C_ACC);
     if (it->flags & LIF_NOW)
         mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, grad(cy + th - FH));
-    text(cx, cy + th + Y(6), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
+    text(cx, cy + th + LABEL_GAP, it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
     if (it->sub || it->tag)
-        text(cx, cy + th + Y(6) + FH, it->sub ? it->sub : it->tag, LF_SMALL, C_SUB, &bg_grad, cs);
+        text(cx, cy + th + LABEL_GAP + FH, it->sub ? it->sub : it->tag, LF_SMALL, C_SUB, &bg_grad, cs);
 }
 
 /* The covers whose places cross x .. x1 (the band clipped there first) */
@@ -1539,7 +1600,7 @@ static void wall_hits_bar(const struct LPage *m)
         if (cx >= W)
             break;
         if (!(m->list.item(i)->flags & LIF_HEAD))
-            hit(cx, wall_cy(i), wg.cs, wg.th + FH * 2 + Y(6), HT_ROW, m->list.item(i)->kind, i);
+            hit(cx, wall_cy(i), wg.cs, wg.th + FH * 2 + LABEL_GAP, HT_ROW, m->list.item(i)->kind, i);
     }
     H->clip(0, (WORD)wg.bottom, W, (WORD)(wg.bottom + Y(10)));
     H->vgrad(0, (WORD)WALL_TOP, W, (WORD)(wg.viewh + Y(20)), grad(WALL_TOP), grad(wg.bottom + Y(10)));
@@ -1802,15 +1863,15 @@ static void draw_strip(const struct LArtist *a)
         BOOL on = i == sel, hov = HOVER(HT_ROW, i);
         if (it->flags & LIF_HEAD)
             continue;
-        hit(cx, y, cs, cs + FH * 2 + Y(6), HT_ROW, it->kind, i);
+        hit(cx, y, cs, cs + FH * 2 + LABEL_GAP, HT_ROW, it->kind, i);
         if (on || hov)
             glow(cx - 2, y - 2, cs + 4, cs + 4, Y(4), grad(y));
         cover_at(it->art, it->label, cx, y, cs, cs, 0);
         if (on)
             H->frame((WORD)(cx - 1), (WORD)(y - 1), (WORD)(cs + 2), (WORD)(cs + 2), 2, C_ACC);
-        text(cx, y + cs + Y(6), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
+        text(cx, y + cs + LABEL_GAP, it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
         if (it->tag || it->sub)
-            text(cx, y + cs + Y(6) + FH, it->tag ? it->tag : it->sub, LF_SMALL, C_SUB, &bg_grad, cs);
+            text(cx, y + cs + LABEL_GAP + FH, it->tag ? it->tag : it->sub, LF_SMALL, C_SUB, &bg_grad, cs);
     }
 }
 
@@ -2325,10 +2386,13 @@ static void hz_tick(ULONG ms)
     }
     if (drawn == LS_HOME && home_px != home_tgt) {
         const struct LHome *m = H->model(LS_HOME);
+        LONG old = home_px;
         home_px = glide(&home_g, home_px, home_tgt, ms);
+        if (home_px != home_tgt)
+            home_px &= ~3L;             /* (whole dither steps, as its goal) */
         if (m) {
-            nhits = hits_base;
-            home_tiles(m);
+            H->clip(0, 0, W, HT);
+            home_glide_step(m, old);    /* (what is drawn moved along; the strip that comes in) */
         }
     }
     if (ft_screen)
@@ -2490,6 +2554,7 @@ static BOOL playable(int kind)
 }
 
 /* The pointer's hover moved: what shows it drawn again */
+static int hov_was = -1;        /* what the pointer was over (HT_*), before this move */
 static void hover_redraw(int screen)
 {
     const void *m;
@@ -2498,7 +2563,12 @@ static void hover_redraw(int screen)
     H->clip(0, 0, W, HT);
     switch (screen) {
     case LS_HOME:
-        hz_draw(LS_HOME);
+        if (hov_was != HT_SECTION && hov_what != HT_SECTION && home_sec == ((const struct LHome *)m)->sel) {
+            nhits = hits_base;          /* (a tile's, or none: the row alone) */
+            home_tiles(m);
+        } else {
+            hz_draw(LS_HOME);
+        }
         break;
     case LS_PAGE:
         if (body_n >= 0 && !((const struct LPage *)m)->text)
@@ -2556,10 +2626,15 @@ static void strip_follow(LONG x)
         px = 0;
     if (px > mx)
         px = mx;
-    home_px = home_tgt = px;
-    H->clip(0, 0, W, HT);
-    nhits = hits_base;
-    home_tiles(m);
+    px &= ~3L;                      /* (whole dither steps) */
+    if (px == home_px)
+        return;
+    {
+        LONG old = home_px;
+        home_px = home_tgt = px;
+        H->clip(0, 0, W, HT);
+        home_glide_step(m, old);    /* (dragged: moved along, the strip that comes in drawn) */
+    }
 }
 
 static int hz_pointer(int screen, WORD x, WORD y, BOOL click)
@@ -2585,7 +2660,7 @@ static int hz_pointer(int screen, WORD x, WORD y, BOOL click)
                 }
             } else if (m && H->now_ms() - strip_lt < 120) {
                 LONG to = home_px + strip_v * 12, mx = home_max(m);   /* (flung: on a little way) */
-                home_tgt = to < 0 ? 0 : to > mx ? mx : to;
+                home_tgt = (to < 0 ? 0 : to > mx ? mx : to) & ~3L;
             }
             return LR_DONE;
         }
@@ -2613,6 +2688,7 @@ static int hz_pointer(int screen, WORD x, WORD y, BOOL click)
             }
         if (w == hov_what && a == hov_arg)
             return LR_UNUSED;
+        hov_was = hov_what;
         hov_what = w;
         hov_arg = a;
         hover_redraw(screen);
