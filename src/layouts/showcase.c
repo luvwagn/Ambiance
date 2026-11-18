@@ -61,7 +61,7 @@ static const void *list_of;
 
 /* What a click lands on: the places drawn last, noted as they are drawn
  * (sc_pointer looks them up). */
-enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE, HT_HOME, HT_BUTTON, HT_SEEK };
+enum { HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE, HT_HOME, HT_BUTTON, HT_SEEK, HT_SCROLL };
 struct Hit {
     WORD x, y, w, h;
     UBYTE what;                 /* HT_* */
@@ -80,6 +80,8 @@ static ULONG click_ms;
 static int hov_what = -1;
 static LONG hov_arg = -1;
 #define HOVER(w, a) (hov_what == (w) && hov_arg == (a))
+static void hit(LONG x, LONG y, LONG w, LONG h, int what, int kind, LONG arg);
+
 static void hit(LONG x, LONG y, LONG w, LONG h, int what, int kind, LONG arg)
 {
     if (nhits < MAX_HITS && w > 0 && h > 0) {
@@ -485,6 +487,8 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
 }
 
 /* ---------------------------------------------------------------- Home */
+static void scroll_bar(LONG bx, LONG by, LONG bh, LONG ty, LONG th, ULONG bg);
+static LONG home_cols = 1, home_top;   /* Home's tiles: across, the first row shown */
 static void draw_home(void)
 {
     const struct LHome *m = H->model(LS_HOME);
@@ -511,10 +515,11 @@ static void draw_home(void)
     for (i = 0; i < n; i++) {
         BOOL sel = i == m->sel;
         LONG x = X(18), y = y0 + i * (ih + gap), w = X(172), tx = x + X(14);
-        ULONG bg = sel ? C_FOCUS : C_PANEL2;
+        ULONG bg = sel ? (m->tile_sel >= 0 ? C_HOVER : C_FOCUS) : C_PANEL2;  /* (tiles in use: the
+                                                                             * section dimmer) */
         hit(x, y, w, ih, HT_SECTION, 0, i);
         if (sel) {
-            H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)ih, 4, C_FOCUS, C_PANEL2);
+            H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)ih, 4, bg, C_PANEL2);
             H->fill((WORD)x, (WORD)(y + 2), 3, (WORD)(ih - 4), C_ACC);
         } else if (HOVER(HT_SECTION, i)) {
             bg = C_HOVER;
@@ -532,7 +537,7 @@ static void draw_home(void)
         LONG x0 = X(228), y = Y(72), aw = W - x0 - X(24), r;
         for (r = 0; r < m->nrows; r++) {
             const struct LRow *row = &m->rows[r];
-            LONG cw = X(170), ch = FH * 2 + Y(22), g = X(12), cols, k;
+            LONG cw = X(170), ch = FH * 2 + Y(22), g = X(12), cols, k, first, last;
             if (cw < tlen("Mmmmmmmmmm", LF_REGULAR))
                 cw = tlen("Mmmmmmmmmm", LF_REGULAR);
             cols = (aw + g) / (cw + g);
@@ -541,24 +546,41 @@ static void draw_home(void)
             cw = (aw - (cols - 1) * g) / cols;
             text(x0, y, row->title, LF_REGULAR, C_SUB, &bg_grad, aw);
             y += FH + Y(10);
-            for (k = 0; k < row->n; k++) {
-                const struct LItem *it = &row->items[k];
-                LONG cx = x0 + (k % cols) * (cw + g), cy = y + (k / cols) * (ch + g), tx;
-                if (cy + ch > HT - Y(24))
-                    break;
+            home_cols = cols;
+            {
+                /* the rows of tiles that fit; the chosen one kept among them */
+                LONG fit = (HT - Y(24) - y + g) / (ch + g);
+                if (fit < 1)
+                    fit = 1;
+                if (m->tile_sel >= 0) {
+                    if (m->tile_sel / cols < home_top)
+                        home_top = m->tile_sel / cols;
+                    if (m->tile_sel / cols >= home_top + fit)
+                        home_top = m->tile_sel / cols - fit + 1;
+                } else {
+                    home_top = 0;
+                }
+                first = home_top * cols;
+                last = first + fit * cols;
+            }
+            for (k = first; k < row->n && k < last; k++) {
+                const struct LItem *it = row->item(k);
+                LONG cx = x0 + ((k - first) % cols) * (cw + g), cy = y + ((k - first) / cols) * (ch + g), tx;
+                BOOL on = k == m->tile_sel;
                 if (it->flags & LIF_HEAD) {
                     text(cx + X(4), cy + (ch - FH) / 2, it->label, LF_SMALL, C_SUB, &bg_grad, cw);
                     continue;
                 }
-                if (HOVER(HT_TILE, k))      /* the pointer over it */
+                if (on || HOVER(HT_TILE, k))    /* chosen with the keys, or the pointer over it */
                     glow(cx, cy, cw, ch, 4, grad(cy));
-                panel(cx, cy, cw, ch, 4, C_PANEL, HOVER(HT_TILE, k) ? C_ACC : C_LINE, grad(cy));
+                panel(cx, cy, cw, ch, 4, on ? C_FOCUS : C_PANEL, on || HOVER(HT_TILE, k) ? C_ACC : C_LINE,
+                      grad(cy));
                 if (!(it->flags & LIF_DISABLED))
                     hit(cx, cy, cw, ch, HT_TILE, it->kind, k);
                 tx = cx + X(12);
                 if (it->kind == LI_DISC) {  /* a DVD: a disc where a picture goes */
                     LONG s = ch - Y(12);
-                    disc(cx + Y(6), cy + Y(6), s, C_PANEL);
+                    disc(cx + Y(6), cy + Y(6), s, on ? C_FOCUS : C_PANEL);
                     tx = cx + Y(6) + s + X(10);
                 } else if (it->art) {   /* its picture: a square at the left */
                     LONG s = ch - Y(12);
@@ -569,17 +591,62 @@ static void draw_home(void)
                         H->fill((WORD)(cx + Y(6)), (WORD)(cy + Y(6)), (WORD)s, (WORD)s, C_PANEL2);
                     tx = cx + Y(6) + s + X(10);
                 }
-                text(tx, cy + Y(8), it->label, LF_REGULAR,
-                     (it->flags & LIF_DISABLED) ? C_DIM : C_TEXT, flat(C_PANEL), cx + cw - tx - X(12));
+                text(tx, cy + Y(8), it->label, on ? LF_BOLD : LF_REGULAR,
+                     (it->flags & LIF_DISABLED) ? C_DIM : on ? C_WHITE : C_TEXT, flat(on ? C_FOCUS : C_PANEL),
+                     cx + cw - tx - X(12));
                 if (it->tag || it->sub)
                     text(tx, cy + Y(8) + FH + Y(4), it->tag ? it->tag : it->sub, LF_SMALL,
-                         C_SUB, flat(C_PANEL), cx + cw - tx - X(12));
+                         on ? C_ACC : C_SUB, flat(on ? C_FOCUS : C_PANEL), cx + cw - tx - X(12));
                 if (it->flags & LIF_NOW)
-                    mark(LM_PLAYING, cx + cw - X(10), cy + Y(8) + FH / 2, C_ACC, C_PANEL);
+                    mark(LM_PLAYING, cx + cw - X(10), cy + Y(8) + FH / 2, C_ACC, on ? C_FOCUS : C_PANEL);
             }
-            y += ((row->n + cols - 1) / cols) * (ch + g) + Y(14);
+            if (row->n > last - first || first > 0) {   /* more than fit: where among them */
+                LONG nr = (row->n + cols - 1) / cols, fr = (last - first) / cols, bh = HT - Y(24) - y;
+                LONG th = bh * fr / (nr > 0 ? nr : 1), ty;
+                if (th < Y(16))
+                    th = Y(16);
+                ty = y + (bh - th) * home_top / (nr - fr > 0 ? nr - fr : 1);
+                if (ty > y + bh - th)
+                    ty = y + bh - th;
+                scroll_bar(W - X(12), y, bh, ty, th, grad(y));
+            }
+            y += ((last - first + cols - 1) / cols) * (ch + g) + Y(14);
         }
     }
+}
+
+/* The scroll bars drawn (a few a screen): their track and thumb, each a
+ * click target wider than it looks; a press on one drags it (or, off its
+ * thumb, puts the thumb's middle there), moves follow until release */
+static struct { LONG y, h, ty, th; } sbar[4];
+static int nsbar;
+static int sb_drag = -1;        /* the bar being dragged, -1 none */
+static LONG sb_off;             /* where in the thumb it was taken */
+static void scroll_bar(LONG bx, LONG by, LONG bh, LONG ty, LONG th, ULONG bg)
+{
+    int k = nsbar++ & 3;
+    BOOL drag = sb_drag == k;
+    sbar[k].y = by;
+    sbar[k].h = bh;
+    sbar[k].ty = ty;
+    sbar[k].th = th;
+    H->rrect((WORD)bx, (WORD)by, 4, (WORD)bh, 2, C_LINE, bg);
+    H->rrect((WORD)(drag ? bx - 1 : bx), (WORD)ty, (WORD)(drag ? 6 : 4), (WORD)th, 2,
+             drag ? C_WHITE : C_ACC, C_LINE);
+    hit(bx - X(8), by, 4 + X(16), bh, HT_SCROLL, 0, k);
+}
+static void scroll_to(LONG y)
+{
+    LONG span, pos;
+    if (sb_drag < 0)
+        return;
+    span = sbar[sb_drag].h - sbar[sb_drag].th;
+    pos = y - sb_off - sbar[sb_drag].y;
+    if (pos < 0)
+        pos = 0;
+    if (pos > span)
+        pos = span;
+    H->act(LAC_SCROLLTO, span > 0 ? pos * 65536 / span : 0);
 }
 
 /* ---------------------------------------------------------------- the generic page */
@@ -650,8 +717,7 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
             th = Y(16);
         if (ty + th > by + bh)
             ty = by + bh - th;
-        H->rrect((WORD)bx, (WORD)by, 4, (WORD)bh, 2, C_LINE, C_PANEL);
-        H->rrect((WORD)bx, (WORD)ty, 4, (WORD)th, 2, C_ACC, C_LINE);
+        scroll_bar(bx, by, bh, ty, th, C_PANEL);
     }
 }
 
@@ -782,8 +848,7 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
         ty = top + (bh - th) * m->list.top / (m->ndetails - vis > 0 ? m->ndetails - vis : 1);
         if (ty > top + bh - th)
             ty = top + bh - th;
-        H->rrect((WORD)sbx, (WORD)top, 4, (WORD)bh, 2, C_LINE, C_PANEL);
-        H->rrect((WORD)sbx, (WORD)ty, 4, (WORD)th, 2, C_ACC, C_LINE);
+        scroll_bar(sbx, top, bh, ty, th, C_PANEL);
     }
 }
 static void draw_text_body(const struct LPage *m)
@@ -1162,8 +1227,7 @@ static void draw_wall_body(const struct LPage *m)
         LONG th = bh * rows / nr, ty = y0 + (bh - (th < Y(16) ? Y(16) : th)) * wall_top / (nr - rows > 0 ? nr - rows : 1);
         if (th < Y(16))
             th = Y(16);
-        H->rrect((WORD)bx, (WORD)y0, 4, (WORD)bh, 2, C_LINE, grad(y0));
-        H->rrect((WORD)bx, (WORD)ty, 4, (WORD)th, 2, C_ACC, C_LINE);
+        scroll_bar(bx, y0, bh, ty, th, grad(y0));
     }
     if (m->letter && H->letter)
         H->letter((WORD)(W - X(60)), (WORD)(y0 + (bottom - y0) / 2), C_LETTER);
@@ -1760,6 +1824,38 @@ static int sc_input(int screen, int action, LONG arg)
     hov_what = -1;              /* the keys in use: no hover shown */
     hov_arg = -1;
     ft_key = H->now_ms();       /* ...and their hint, for a while */
+    if (screen == LS_HOME) {
+        /* the section's list as tiles in use: the arrows move among them
+         * (Left at the left edge, as Back, to the menu) */
+        const struct LHome *h = H->model(LS_HOME);
+        if (!h || h->tile_sel < 0 || !h->nrows)
+            return LR_UNUSED;
+        sel = h->tile_sel;
+        n = h->rows[0].n;
+        to = sel;
+        switch (action) {
+        case LA_LEFT:
+            if (sel % home_cols == 0)
+                return LR_UNUSED;
+            to = sel - 1;
+            break;
+        case LA_RIGHT:
+            to = sel + 1 < n ? sel + 1 : sel;
+            break;
+        case LA_UP:
+            to = sel - home_cols >= 0 ? sel - home_cols : sel;
+            break;
+        case LA_DOWN:
+            to = sel + home_cols < n ? sel + home_cols
+               : sel / home_cols < (n - 1) / home_cols ? n - 1 : sel;
+            break;
+        default:
+            return LR_UNUSED;
+        }
+        if (to != sel)
+            H->act(LAC_SELECT, to);
+        return LR_DONE;
+    }
     if (screen != LS_ALBUMS && screen != LS_ARTIST)
         return LR_UNUSED;
     if (!(m = H->model(screen)))
@@ -1850,6 +1946,17 @@ static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
     ULONG now;
     if (!H)
         return LR_UNUSED;
+    if (click == LP_RELEASE) {
+        if (sb_drag >= 0) {
+            sb_drag = -1;           /* (the thumb drawn as at rest with the next frame) */
+            return LR_DONE;
+        }
+        return LR_UNUSED;
+    }
+    if (!click && sb_drag >= 0) {
+        scroll_to(y);               /* a scroll bar dragged: the list or text follows */
+        return LR_DONE;
+    }
     if (!click) {
         /* a move: what it is over, glowing (rows, tiles, sections, buttons) */
         int w = -1;
@@ -1877,6 +1984,13 @@ static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
         }
     if (!t)
         return LR_UNUSED;
+    if (t->what == HT_SCROLL) {
+        int k = (int)t->arg & 3;
+        sb_drag = k;
+        sb_off = y >= sbar[k].ty && y < sbar[k].ty + sbar[k].th ? y - sbar[k].ty : sbar[k].th / 2;
+        scroll_to(y);
+        return LR_DONE;
+    }
     now = H->now_ms();
     dbl = (t->what == HT_ROW || t->what == HT_TILE) && t->arg == click_row && now - click_ms < 500;
     click_row = t->what == HT_ROW || t->what == HT_TILE ? t->arg : -1;

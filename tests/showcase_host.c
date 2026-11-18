@@ -320,7 +320,8 @@ static struct LItem music_rows[] = {
     { "Plex", NULL, "Living room", NULL, LI_FOLDER, LM_ARROW, 0, 0 },
     { "DF0_DVD", NULL, "DVD", NULL, LI_DISC, LM_NONE, 0, 0 },
 };
-static const struct LRow row = { "Music", 9, music_rows };
+static const struct LItem *music_item(LONG i) { return &music_rows[i]; }
+static const struct LRow row = { "Music", 9, music_item };
 
 static struct LItem set_rows[] = {
     { "Screen", NULL, NULL, NULL, LI_OTHER, 0, LIF_HEAD, 0 },
@@ -415,7 +416,8 @@ static void crumbs(struct LPage *pg, const char *a, const char *b, const char *c
     pg->hint = "Up/Down  move    Right/Fire  open    Return  play    Left/Esc  back";
 }
 
-static int frames_wall;         /* the wall drawn as Videos' (4:3 frames) */
+static int frames_wall;
+static LONG home_tile = -1;    /* Home's tiles in use: the one chosen */         /* the wall drawn as Videos' (4:3 frames) */
 static const void *h_model(int screen)
 {
     static struct LHome home;
@@ -473,6 +475,7 @@ static const void *h_model(int screen)
         home.names = mods;
         home.nrows = 1;
         home.rows = &row;
+        home.tile_sel = home_tile;
         return &home;
     }
     if (screen == LS_NOW) {
@@ -666,6 +669,15 @@ static void run(int w, int h, int bits, const char *font)
     layout_engine.draw(LS_HOME);
     CHECK(drawn_px >= (long)w * h);
     save("home");
+    home_tile = 4;                      /* the section's list in use: its tiles */
+    drawn_px = 0;
+    layout_engine.draw(LS_HOME);
+    save("home-tiles");
+    nacts = 0;
+    CHECK(layout_engine.input(LS_HOME, LA_RIGHT, 0) == LR_DONE && nacts == 1 && acts[0][1] == 5);
+    nacts = 0;
+    CHECK(layout_engine.input(LS_HOME, LA_LEFT, 0) == LR_DONE && acts[0][1] == 3);
+    home_tile = -1;
     for (scene = 0; scene < 4; scene++) {
         long full;
         drawn_px = 0;
@@ -673,6 +685,28 @@ static void run(int w, int h, int bits, const char *font)
         full = drawn_px;
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
+        if (scene == 0) {               /* the list's bar: pressed, dragged, let go */
+            int px, found = 0;
+            for (px = w - 1; px > w / 2 && !found; px--) {
+                nacts = 0;
+                if (layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)(h / 2), LP_PRESS) == LR_DONE && nacts &&
+                    acts[0][0] == LAC_SCROLLTO)
+                    found = 1;
+                else if (nacts == 0)
+                    continue;
+                else
+                    layout_engine.draw(LS_PAGE);    /* (something else pressed: as it was) */
+            }
+            CHECK(found);
+            nacts = 0;
+            CHECK(layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)(h - 1), LP_MOVE) == LR_DONE && nacts == 1 &&
+                  acts[0][0] == LAC_SCROLLTO && acts[0][1] == 65536);
+            CHECK(layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)(h - 1), LP_RELEASE) == LR_DONE);
+            nacts = 0;
+            layout_engine.pointer(LS_PAGE, (WORD)px, 2, LP_MOVE);
+            CHECK(nacts == 0);          /* (let go: a move drags no more) */
+            layout_engine.draw(LS_PAGE);
+        }
         if (scene == 0) {               /* the pointer over a row: its glow */
             drawn_px = 0;
             CHECK(layout_engine.pointer(LS_PAGE, (WORD)(w * 6 / 10), (WORD)(h * 37 / 100), FALSE) == LR_DONE);

@@ -113,8 +113,8 @@ struct LPage {
  * sources...). */
 struct LRow {
     const char *title;
-    WORD n;
-    const struct LItem *items;
+    LONG n;
+    const struct LItem *(*item)(LONG i);   /* row i (as LList's) */
 };
 
 struct LHome {
@@ -122,7 +122,10 @@ struct LHome {
     const UBYTE *sections;      /* LSEC_* each */
     const char *const *names;   /* their names, translated */
     WORD nrows;
-    const struct LRow *rows;    /* the chosen section's rows (may be none yet) */
+    const struct LRow *rows;    /* the chosen section's rows (may be none yet): its own
+                                 * list, as tiles */
+    LONG tile_sel;              /* the section's list in use (its first level): the tile
+                                 * chosen; -1 the sections' menu in use */
 };
 
 /* Pairs of label and value: facts[2 * i], facts[2 * i + 1]. */
@@ -196,7 +199,9 @@ enum {
     LAC_NOWPLAYING,             /* Now playing */
     LAC_HOME,                   /* Home: every level closed, the sections' menu */
     LAC_BUTTON,                 /* arg: Now playing's button pressed (LNB_*) */
-    LAC_SEEK                    /* arg: to there in what plays, in 65536ths of its length */
+    LAC_SEEK,                   /* arg: to there in what plays, in 65536ths of its length */
+    LAC_SCROLLTO                /* arg: the list (to that row) or text (that far) at that
+                                 * part of its length, in 65536ths: a scroll bar dragged */
 };
 
 /* Input given to the layout (input's action): the program's keys, the
@@ -205,6 +210,8 @@ enum { LA_UP, LA_DOWN, LA_LEFT, LA_RIGHT, LA_FIRE, LA_RETURN, LA_BACK, LA_PAGEUP
        LA_FIRST, LA_LAST, LA_LETTER /* arg: the letter */, LA_SPACE };
 /* What input or pointer did with it. */
 enum { LR_UNUSED, LR_DONE };
+/* pointer()'s click: a move, the left button pressed, released (a drag ends) */
+enum { LP_MOVE, LP_PRESS, LP_RELEASE };
 
 /* What changed (changed's what): the screen is drawn again in part. */
 #define LC_LIST     1           /* the list (rows came, a letter was read) */
@@ -274,7 +281,7 @@ struct LayoutEngine {
     void (*changed)(int screen, ULONG what);    /* LC_*: what to draw again */
     void (*tick)(ULONG ms);     /* about 25 times a second while shown */
     int (*input)(int screen, int action, LONG arg);  /* LR_* */
-    int (*pointer)(int screen, WORD x, WORD y, BOOL click);
+    int (*pointer)(int screen, WORD x, WORD y, BOOL click);   /* click: LP_* */
 };
 
 #endif

@@ -402,6 +402,13 @@ void tb_mouse_move(struct TextBox *tb, WORD my)
     tb->target = clamp_pos(tb, ty * max_pos(tb) / span);
 }
 
+/* To part frac (65536ths) of the way down (a layout's scroll bar dragged) */
+void tb_scroll_frac(struct TextBox *tb, ULONG frac)
+{
+    if (tb->open)
+        tb->target = clamp_pos(tb, (LONG)((ULONG)max_pos(tb) / 64 * (frac > 65536 ? 65536 : frac) / 1024));
+}
+
 void tb_mouse_up(struct TextBox *tb)
 {
     if (tb->dragging) {

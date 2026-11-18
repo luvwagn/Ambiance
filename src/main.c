@@ -17576,7 +17576,15 @@ static void lvm_work_out(const struct Page *p, BOOL artist)
     }
 }
 
-#define LV_HOME_TILES 36            /* Home's tiles: the layout draws as many as fit */
+static BOOL lv_home_list(void);
+
+/* Home's tiles are the section's first level's rows */
+static const struct LItem *lv_home_item(LONG i)
+{
+    lv_lp = &pages[0];
+    return lv_item(i);
+}
+
 static const void *lv_model(int screen)
 {
     static struct LPage page;
@@ -17585,8 +17593,6 @@ static const void *lv_model(int screen)
     static UBYTE secs[MOD_COUNT];
     static const char *names[MOD_COUNT];
     static struct LRow row;
-    static struct LItem rows[LV_HOME_TILES];
-    static char rows_art[LV_HOME_TILES][304];
     static const char *next[5];
     static char year[1];
     int i;
@@ -17631,14 +17637,15 @@ static const void *lv_model(int screen)
         home.sel = (WORD)menu_sel;
         home.sections = secs;
         home.names = names;
+        home.tile_sel = -1;
         if (!pane_pending && depth >= 1 && pages[0].type == PT_LIST) {
-            for (i = 0; i < pages[0].list.count && i < LV_HOME_TILES; i++)
-                lv_fill_item_art(&rows[i], &pages[0], i, rows_art[i], sizeof(rows_art[i]));
             row.title = _(mod_names[menu[menu_sel]]);
-            row.n = (WORD)i;
-            row.items = rows;
+            row.n = pages[0].list.count;
+            row.item = lv_home_item;            /* (the section's own list: its tiles) */
             home.nrows = 1;
             home.rows = &row;
+            if (lv_home_list())
+                home.tile_sel = pages[0].sel;
         }
         return &home;
     case LS_NOW: {
@@ -17725,6 +17732,23 @@ static void lv_act(int what, LONG arg)
     case LAC_NEXT: if (mp_loaded()) np_press(NB_NEXT); break;
     case LAC_PREV: if (mp_loaded()) np_press(NB_PREV); break;
     case LAC_NOWPLAYING: if (mp_loaded()) np_open_page(); break;
+    case LAC_SCROLLTO:                      /* a scroll bar dragged, or clicked */
+        if (p && p->type == PT_LIST && p->list.count > 1 && arg >= 0) {
+            LONG to = (LONG)((ULONG)arg * (ULONG)(p->list.count - 1) / 65536UL);
+            if (to >= p->list.count)
+                to = p->list.count - 1;
+            if (focus == FOCUS_MENU) {
+                act_open(FALSE);            /* (Home's tiles' bar: into the section first) */
+                p = cur();
+                if (focus == FOCUS_MENU || !p || p->type != PT_LIST || to >= p->list.count)
+                    break;
+            }
+            if (to != p->sel)
+                act_move(to - p->sel);
+        } else if (p && (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open && arg >= 0) {
+            tb_scroll_frac(&p->tb, (ULONG)arg);
+        }
+        break;
     case LAC_SEEK:                          /* Now playing's bar, clicked */
         if (mp_loaded() && arg >= 0 && arg <= 65536)
             np_seek_part((ULONG)arg, 65536UL);
@@ -18150,10 +18174,19 @@ static void lv_sync(void)
         lv_activate();
 }
 
+/* A section's first level in use, a list: Home shows it, as its tiles
+ * (Home and that list were two screens of the same rows) */
+static BOOL lv_home_list(void)
+{
+    struct Page *p = cur();
+    return focus == FOCUS_CONTENT && depth == 1 && !pane_pending && p == &pages[0] &&
+           p->type == PT_LIST && p->list.count > 0;
+}
+
 static int lv_screen(void)
 {
     struct Page *p = cur();
-    if (focus == FOCUS_MENU && (lv.eng->screens & LS_BIT(LS_HOME)))
+    if ((focus == FOCUS_MENU || lv_home_list()) && (lv.eng->screens & LS_BIT(LS_HOME)))
         return LS_HOME;
     if (p && p->type == PT_PLAYER && (lv.eng->screens & LS_BIT(LS_NOW)))
         return LS_NOW;
@@ -18326,7 +18359,7 @@ BOOL lv_mouse(struct IntuiMessage *im)
         if (lv.eng->pointer && g.win) {
             lk_clip(&lv.out, 0, 0, g.w, g.h);
             if (lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft,
-                                im->MouseY - g.win->BorderTop, FALSE) == LR_DONE)
+                                im->MouseY - g.win->BorderTop, LP_MOVE) == LR_DONE)
                 lk_show(&lv.out);
         }
         return TRUE;
@@ -18341,7 +18374,10 @@ BOOL lv_mouse(struct IntuiMessage *im)
         act_back();
     } else if (im->Code == SELECTDOWN && lv.eng->pointer) {
         lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft, im->MouseY - g.win->BorderTop,
-                        TRUE);
+                        LP_PRESS);
+    } else if (im->Code == SELECTUP && lv.eng->pointer) {
+        lv.eng->pointer(lv_screen(), im->MouseX - g.win->BorderLeft, im->MouseY - g.win->BorderTop,
+                        LP_RELEASE);                /* (a scroll bar's drag ends) */
     }
     return TRUE;
 }

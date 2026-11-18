@@ -1009,6 +1009,7 @@ void tb_close(struct TextBox *tb);
 void tb_draw(struct Gfx *g, struct TextBox *tb);
 BOOL tb_animating(const struct TextBox *tb);
 void tb_scroll_by(struct TextBox *tb, LONG dpx);
+void tb_scroll_frac(struct TextBox *tb, ULONG frac);  /* 65536ths of the way down */
 LONG tb_remaining(const struct TextBox *tb, LONG dir);
 void tb_step(struct Gfx *g, struct TextBox *tb);
 BOOL tb_mouse_down(struct TextBox *tb, WORD mx, WORD my);
