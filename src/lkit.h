@@ -46,5 +46,6 @@ WORD lk_icon(struct Gfx *g, struct LkOut *o, int icon, WORD x, WORD y, ULONG fg,
 WORD lk_icon_px(struct Gfx *g);
 /* How wide that would be. */
 WORD lk_textlen(struct Gfx *g, const char *s, LONG n, int face);
+LONG lk_fit(struct Gfx *g, const char *s, LONG n, int face, WORD maxw);    /* the bytes that fit */
 
 #endif

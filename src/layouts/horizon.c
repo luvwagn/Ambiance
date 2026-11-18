@@ -656,8 +656,24 @@ static LONG wrapped(const char *p, LONG w, int face)
     return n;
 }
 
-/* The playing mark's bars, percent of its height: low, middle, high */
+/* The playing mark's bars, percent of its height: low, middle, high (a
+ * row's: still; the top right's: moved in the ticks as the sound goes) */
+static const UBYTE pm_still[3] = { 66, 100, 50 };
 static UBYTE pm_lv[3] = { 66, 100, 50 };
+
+/* Three bars, their right edge at x, s tall from y, as high as lv says;
+ * their width */
+static LONG play_bars(LONG x, LONG y, LONG s, const UBYTE *lv)
+{
+    LONG bw = s / 4 > 1 ? s / 4 : 2, k;
+    for (k = 0; k < 3; k++) {
+        LONG bh = s * lv[k] / 100;
+        if (bh < 2)
+            bh = 2;
+        H->fill((WORD)(x - (3 - k) * bw - (2 - k) * 2), (WORD)(y + s - bh), (WORD)bw, (WORD)bh, C_ACC);
+    }
+    return 3 * bw + 4;
+}
 
 /* a row's mark, its right edge at x, centred on cy; its width */
 static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
@@ -684,18 +700,8 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
             H->rrect((WORD)(x - s + 4), (WORD)(y + 4), (WORD)(s - 8), (WORD)(s - 8), (WORD)(s / 2 - 4), C_ACC, bg);
         return s;
     case LM_PLAY: case LM_PLAYING:
-        if (m == LM_PLAYING) {
-            /* three bars, as high as the sound's low, middle and high
-             * (pm_lv: moved in the ticks while it plays) */
-            LONG bw = s / 4 > 1 ? s / 4 : 2, k;
-            for (k = 0; k < 3; k++) {
-                LONG bh = s * pm_lv[k] / 100;
-                if (bh < 2)
-                    bh = 2;
-                H->fill((WORD)(x - (3 - k) * bw - (2 - k) * 2), (WORD)(y + s - bh), (WORD)bw, (WORD)bh, C_ACC);
-            }
-            return 3 * bw + 4;
-        }
+        if (m == LM_PLAYING)
+            return play_bars(x, y, s, pm_still);   /* (still: the top right's move) */
         for (i = 0; i < s; i++)
             H->fill((WORD)(x - s + i / 2), (WORD)(y + i / 2), 1, (WORD)(s - i), fg);
         return s;
@@ -815,19 +821,48 @@ static void top_left(void)
     BODY_Y = TITLE_Y + TH + Y(18);
 }
 
-/* Top right: the clock, light (and the Debug line under it) */
+/* Top right: what plays, if anything (its bars moving with the sound,
+ * its title; clicked: Now playing), then the clock, light (and the Debug
+ * line under it). Not on Now playing itself. */
 static LONG tr_left, dbg_left;
-static void top_right(void)
+static LONG pb_x = -1, pb_y, pb_s;  /* the bars' place, as drawn (-1: none) */
+static void top_right_as(BOOL with_hit)
 {
+    const struct LNow *n = H->model(LS_NOW);
     LONG cw = tnum_len(H->clock, LF_REGULAR), x = W - X(28) - cw, y = LOGO_Y + logo_h / 2 - FH / 2;
     tnum(x, y, H->clock, LF_REGULAR, C_SUB, &bg_grad);
     tr_left = dbg_left = x;
+    pb_x = -1;
+    if (drawn != LS_NOW && n && n->kind != LN_NONE && !n->stopped && n->title && *n->title) {
+        LONG s = FH * 2 / 3, bw = 3 * (s / 4 > 1 ? s / 4 : 2) + 4, right = x - X(16);
+        LONG room = right - bw - X(10) - (W / 2 + X(20)), tw = tlen(n->title, LF_SMALL);
+        if (tw > room)
+            tw = room;
+        if (tw < X(70))
+            tw = 0;                 /* (only a few letters of it would fit: the bars alone) */
+        if (tw > 0) {
+            text(right - tw, y, n->title, LF_SMALL, C_SUB, &bg_grad, tw);
+            right -= tw + X(10);
+        }
+        pb_x = right - bw;
+        pb_y = y + (FH - s) / 2;
+        pb_s = s;
+        play_bars(right, pb_y, s, pm_lv);
+        if (with_hit)
+            hit(pb_x - X(6), y - Y(4), x - X(8) - (pb_x - X(6)), FH + Y(8), HT_NOWPLAYING, 0, 0);
+        tr_left = pb_x;
+    }
     if (H->debug && *H->debug) {
         dbg_left = W - X(28) - tnum_len(H->debug, LF_SMALL);
         if (TITLE_Y > y + FH + Y(2) + FH)
             dbg_left = W;       /* (the line ends above the title) */
         tnum(W - X(28) - tnum_len(H->debug, LF_SMALL), y + FH + Y(2), H->debug, LF_SMALL, C_ACC, &bg_grad);
     }
+}
+
+static void top_right(void)
+{
+    top_right_as(TRUE);
 }
 
 /* The clock again (a minute on), over what was there */
@@ -841,7 +876,7 @@ static void top_right_again(void)
         h += FH + Y(2);         /* (the Debug line under it, as it changes) */
     }
     back_at(x0, y - 2, W, y - 2 + h);
-    top_right();
+    top_right_as(FALSE);
 }
 
 /* What plays, in an inset at the bottom right of the browsing screens
@@ -1047,7 +1082,6 @@ static LONG home_max(const struct LHome *m)
 #define HOME_Y0 (tile_y0 - X(10))
 #define HOME_Y1 (tile_y0 + tile_h + FH * 2 + LABEL_GAP + Y(8))
 
-static LONG pm_home_k = -1;      /* Home's tile with the playing mark, -1 none */
 
 /* Tile k where it is now (no clearing: its place is) */
 static void home_tile(const struct LHome *m, LONG k)
@@ -1077,10 +1111,6 @@ static void home_tile(const struct LHome *m, LONG k)
             const struct LkBg bgt = { t1, t2, (WORD)y, (WORD)tile_h, 0 };
             H->icon(m->sections[m->sel], (WORD)(cx + (tile_w - H->icon_px) / 2),
                     (WORD)(y + (tile_h - H->icon_px) / 2), (it->flags & LIF_DISABLED) ? C_DIM : C_SUB, &bgt);
-        }
-        if (it->flags & LIF_NOW) {
-            mark(LM_PLAYING, cx + tile_w - X(8), y + Y(8) + FH / 2, C_ACC, t1);
-            pm_home_k = k;          /* (its bars move in the ticks) */
         }
     }
     if (on)
@@ -1617,8 +1647,6 @@ static void wall_tile(const struct LPage *m, LONG i, BOOL clear)
     }
     if (on)
         H->frame((WORD)(cx - 1), (WORD)(cy - 1), (WORD)(cs + 2), (WORD)(th + 2), 2, C_ACC);
-    if (it->flags & LIF_NOW)
-        mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, grad(cy + th - FH));
     text(cx, cy + th + LABEL_GAP, it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT, &bg_grad, cs);
     if (it->sub || it->tag)
         text(cx, cy + th + LABEL_GAP + FH, it->sub ? it->sub : it->tag, LF_SMALL, C_SUB, &bg_grad, cs);
@@ -2293,8 +2321,8 @@ static void hz_close(void)
 static void hz_draw(int screen)
 {
     drawn = screen;
+    pb_x = -1;                      /* (the playing bars: where top_right puts them, if it does) */
     inset_off = FALSE;
-    pm_home_k = -1;
     ft_screen = FALSE;
     nhits = 0;
     hits_base = 0;
@@ -2486,14 +2514,14 @@ static void hz_tick(ULONG ms)
             home_glide_step(m, old);    /* (what is drawn moved along; the strip that comes in) */
         }
     }
-    if (drawn == LS_HOME && pm_home_k >= 0 && (LONG)(ms - pm_at) >= 100) {
-        /* Home's playing mark: its bars as the sound goes */
+    if (pb_x >= 0 && (LONG)(ms - pm_at) >= 100) {
+        /* the top right's playing bars, as the sound goes: they alone */
         const struct LNow *n = H->model(LS_NOW);
-        const struct LHome *m = H->model(LS_HOME);
         pm_at = ms;
-        if (n && m && m->nrows && pm_home_k < m->rows[0].n && pm_step(n)) {
-            LONG cx = tile_x0 + pm_home_k * (tile_w + tile_gap) - home_px;
-            home_tiles_in(m, cx + tile_w - X(8) - FH, cx + tile_w);
+        if (n && pm_step(n)) {
+            LONG bw = 3 * (pb_s / 4 > 1 ? pb_s / 4 : 2) + 4;
+            back_at(pb_x, pb_y, pb_x + bw, pb_y + pb_s);
+            play_bars(pb_x + bw, pb_y, pb_s, pm_lv);
         }
     }
     if (ft_screen)

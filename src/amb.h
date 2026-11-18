@@ -206,6 +206,10 @@ const char *amb_lang_iso(void);
 int cjk_dec(const UBYTE *s, ULONG n, ULONG *cp);        /* 2 Greek, 3 Far East, 0 */
 int cjk_far_east(const UBYTE *s, ULONG n, ULONG *cp);   /* 3 Far East, else 0 */
 BOOL cjk_any(const char *s, ULONG n);
+/* the layouts' text (lkit.c): a character's glyph (rows of 16 bits, NULL
+ * none), and how much of s the smooth font draws before one */
+const UWORD *cjk_glyph(ULONG cp, UWORD *cw, UWORD *ch, UWORD *asc, UWORD *adv);
+ULONG cjk_latin_run(struct Gfx *g, const char *s, ULONG n);
 ULONG cjk_tagged(const char *s, ULONG n, char *out, ULONG max);
 void cjk_open(struct Gfx *g);
 void cjk_close(void);

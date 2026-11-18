@@ -180,8 +180,38 @@ struct LNow {
 
 /* Now playing's buttons, as the classic layout's (LAC_BUTTON presses one) */
 enum { LNB_PREV, LNB_BACK, LNB_PLAY, LNB_STOP, LNB_FWD, LNB_NEXT, LNB_LOOP, LNB_MUTE, LNB_VDOWN,
-       LNB_VUP, LNB_COUNT };
+       LNB_VUP, LNB_COUNT,
+       /* the controls' alone (LControls): a DVD's menu; full screen (on: it is,
+        * so the button comes back out of it) */
+       LNB_MENU = LNB_COUNT, LNB_FULL, LNB_ALL };
 #define LNB_BIT(b) (1U << (b))
+
+/* The controls a slideshow or a video shows, along the foot of the screen,
+ * drawn by the layout in its own style, as its Now playing's (controls()).
+ * The host plays them: it passes what they show, the layout draws them
+ * and says where each button went, and the host's clicks and keys go by
+ * that. */
+#define LCB_MAX 12
+struct LControls {
+    WORD x, y, w, h;            /* their place on the screen (h: controls_h()'s) */
+    const char *title;          /* what is shown (bold, at the left) */
+    const char *detail;         /* a picture's: where in the list, its size... (NULL none) */
+    UBYTE n;                    /* buttons, in order: */
+    UBYTE btn[LCB_MAX];         /*   LNB_* (LNB_PLAY: the big one) */
+    UWORD off;                  /* LNB_BIT()s greyed */
+    UWORD on;                   /* LNB_BIT()s lit (Loop), LNB_FULL: full screen now */
+    BYTE focus;                 /* the button chosen with the keys (an index in btn), -1 none */
+    BYTE hover;                 /* under the pointer (an index in btn), -1 none */
+    UBYTE paused;               /* Play shows play, else pause */
+    UBYTE timed;                /* a time row (a video): at_ms of total_ms (0: not known) */
+    UBYTE has_volume;           /* the volume shown (0-64), between Volume down and up */
+    UBYTE volume;
+    ULONG at_ms, total_ms;
+    /* drawn, for the host: where each button is, and the progress line
+     * (seek_w 0: none) */
+    struct { WORD x, y, w, h; } at[LCB_MAX];
+    WORD seek_x, seek_y, seek_w, seek_h;
+};
 
 /* A picture, prepared by the host at the size asked for (0x00RRGGBB). */
 struct LImage {
@@ -292,6 +322,13 @@ struct LayoutEngine {
     void (*tick)(ULONG ms);     /* about 25 times a second while shown */
     int (*input)(int screen, int action, LONG arg);  /* LR_* */
     int (*pointer)(int screen, WORD x, WORD y, BOOL click);   /* click: LP_* */
+    /* A slideshow's or video's controls (LControls), NULL: the classic
+     * ones. controls_h: their height on this screen (timed: with a time
+     * row). controls: drawn in c->x, y, w, h, nothing outside it, no click
+     * targets of the layout's own (c->at says where they are); what: 0, all,
+     * or LC_PLAYING: only the time row changed (drawn as a whole draw would) */
+    WORD (*controls_h)(BOOL timed);
+    void (*controls)(struct LControls *c, ULONG what);
 };
 
 #endif

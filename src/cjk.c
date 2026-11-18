@@ -341,6 +341,23 @@ BOOL cjk_tags(void)
     return tags;
 }
 
+/* For the layouts' text (lkit.c): cp's glyph from the chain's packs, rows
+ * of 16 bits, its left pixel the top bit; cw x ch, asc its ascent, adv
+ * its advance. NULL: no pack has it (or none here). */
+const UWORD *cjk_glyph(ULONG cp, UWORD *cw, UWORD *ch, UWORD *asc, UWORD *adv)
+{
+    int pk;
+    LONG gi;
+    const UWORD *rows;
+    if (!find(cp, &pk, &gi) || !(rows = glyph_rows(pk, gi)))
+        return NULL;
+    *cw = packs[pk].cw;
+    *ch = packs[pk].ch;
+    *asc = packs[pk].asc;
+    *adv = packs[pk].adv[gi];
+    return rows;
+}
+
 /* ---- measuring and drawing mixed text (gfx_text, gfx_textlen) */
 
 static WORD latin_len(struct Gfx *g, struct RastPort *rp, const char *s, ULONG n, int face)
@@ -366,6 +383,12 @@ static WORD char_w(struct Gfx *g, struct RastPort *rp, ULONG cp, int face)
 /* The length of the run at s the screen's own font draws: Latin-1, and
  * Greek too where the smooth style has its glyphs (up to a character the
  * packs draw). */
+static ULONG latin_run(struct Gfx *g, const UBYTE *s, ULONG n);
+ULONG cjk_latin_run(struct Gfx *g, const char *s, ULONG n)
+{
+    return latin_run(g, (const UBYTE *)s, n);
+}
+
 static ULONG latin_run(struct Gfx *g, const UBYTE *s, ULONG n)
 {
     ULONG i = 0;

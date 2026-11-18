@@ -18282,7 +18282,7 @@ static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, co
 static WORD h_textlen(const char *s, LONG n, int face) { return lk_textlen(&g, s, n, face); }
 static WORD h_fit(const char *s, LONG n, int face, WORD maxw)
 {
-    return g.sm ? (WORD)sm_fit(g.sm, s, n, face, maxw) : 0;
+    return (WORD)lk_fit(&g, s, n, face, maxw);     /* (Far East characters too) */
 }
 static WORD h_font_h(int face)
 {

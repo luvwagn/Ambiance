@@ -278,6 +278,61 @@ static void background(void)
     H->vgrad(0, 0, W, HT, C_TOP, C_BOT);
 }
 
+/* The playing bars, percent of their height: low, middle, high (a row's:
+ * still; the top right's: moved in the ticks as the sound goes) */
+static const UBYTE pm_still[3] = { 66, 100, 50 };
+static UBYTE pm_lv[3] = { 66, 100, 50 };
+static LONG pb_x = -1, pb_y, pb_s;  /* the top right's, as drawn (-1: none) */
+static BOOL pb_dark;
+
+/* Three bars, their right edge at x, s tall from y, as high as lv says;
+ * their width */
+static LONG play_bars(LONG x, LONG y, LONG s, const UBYTE *lv)
+{
+    LONG bw = s / 4 > 1 ? s / 4 : 2, k;
+    for (k = 0; k < 3; k++) {
+        LONG bh = s * lv[k] / 100;
+        if (bh < 2)
+            bh = 2;
+        H->fill((WORD)(x - (3 - k) * bw - (2 - k) * 2), (WORD)(y + s - bh), (WORD)bw, (WORD)bh, C_ACC);
+    }
+    return 3 * bw + 4;
+}
+
+/* The bars from what plays: the spectrum's low, middle and high thirds;
+ * falling a little a step. TRUE if moved. */
+static BOOL pm_step(const struct LNow *n)
+{
+    UBYTE want[3];
+    LONG k, i;
+    BOOL moved = FALSE;
+    if (!n->levels || !n->nlevels || n->paused || n->stopped) {
+        want[0] = pm_still[0];
+        want[1] = pm_still[1];
+        want[2] = pm_still[2];
+    } else {
+        for (k = 0; k < 3; k++) {
+            LONG a = k * n->nlevels / 3, b = (k + 1) * n->nlevels / 3, mx = 0;
+            if (b <= a)
+                b = a + 1;
+            for (i = a; i < b && i < n->nlevels; i++)
+                if (n->levels[i] > mx)
+                    mx = n->levels[i];
+            want[k] = (UBYTE)(15 + mx * 85 / 255);
+        }
+    }
+    for (k = 0; k < 3; k++) {
+        LONG v = want[k];
+        if (v < pm_lv[k] - 15 && !(n->paused || n->stopped))
+            v = pm_lv[k] - 15;
+        if (v != pm_lv[k]) {
+            pm_lv[k] = (UBYTE)v;
+            moved = TRUE;
+        }
+    }
+    return moved;
+}
+
 /* top right: what plays (if anything) and the clock */
 static LONG tr_left;            /* top_right's left edge, as drawn: a title stops short of it */
 static void top_right_as(BOOL dark, BOOL with_hit);
@@ -325,6 +380,7 @@ static void top_right_as(BOOL dark, BOOL with_hit)
     tr_left = x;
     if (H->debug && *H->debug)  /* Settings > Debug: the CPU and memory, under the clock */
         tnum(W - X(24) - tnum_len(H->debug, LF_SMALL), y + TH + Y(1), H->debug, LF_SMALL, C_ACC, bg);
+    pb_x = -1;
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
         LONG tw, room;
@@ -346,12 +402,18 @@ static void top_right_as(BOOL dark, BOOL with_hit)
             if (with_hit)
                 hit(x - X(8) - FH, y - Y(4), W - X(24) - cw - (x - X(8) - FH), FH + Y(8), HT_NOWPLAYING, 0, 0);
             tr_left = x - X(8) - FH;
-            /* the play triangle */
-            {
-                LONG s = FH / 2, ty = y + (FH - s) / 2, i;
-                for (i = 0; i < s; i++)
-                    H->fill((WORD)(x - X(8) - s + i / 2), (WORD)(ty + i / 2), 1, (WORD)(s - i), C_ACC);
-            }
+        }
+        if (!n->stopped) {
+            /* the playing bars, moving with the sound (sc_tick) */
+            LONG s = FH * 2 / 3, bw = 3 * (s / 4 > 1 ? s / 4 : 2) + 4;
+            pb_x = x - X(8) - bw;
+            pb_y = y + (FH - s) / 2;
+            pb_s = s;
+            pb_dark = dark;
+            play_bars(x - X(8), pb_y, s, pm_lv);
+            if (tw <= 0 && with_hit)
+                hit(pb_x - X(6), y - Y(4), W - X(24) - cw - (pb_x - X(6)), FH + Y(8), HT_NOWPLAYING, 0, 0);
+            tr_left = pb_x;
         }
     }
 }
@@ -523,13 +585,8 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
                      (WORD)(s / 2 - 4), C_ACC, bg);
         return s;
     case LM_PLAY: case LM_PLAYING:  /* a play triangle; playing: three bars */
-        if (m == LM_PLAYING) {
-            LONG bw = s / 4 > 1 ? s / 4 : 2;
-            H->fill((WORD)(x - 3 * bw - 4), (WORD)(y + s / 3), (WORD)bw, (WORD)(s - s / 3), C_ACC);
-            H->fill((WORD)(x - 2 * bw - 2), (WORD)y, (WORD)bw, (WORD)s, C_ACC);
-            H->fill((WORD)(x - bw), (WORD)(y + s / 2), (WORD)bw, (WORD)(s - s / 2), C_ACC);
-            return 3 * bw + 4;
-        }
+        if (m == LM_PLAYING)
+            return play_bars(x, y, s, pm_still);
         for (i = 0; i < s; i++)
             H->fill((WORD)(x - s + i / 2), (WORD)(y + i / 2), 1, (WORD)(s - i), fg);
         return s;
@@ -599,7 +656,7 @@ static void draw_home(void)
         LONG x0 = X(228), y = Y(72), aw = W - x0 - X(24), r;
         for (r = 0; r < m->nrows; r++) {
             const struct LRow *row = &m->rows[r];
-            LONG cw = X(170), ch = FH * 2 + Y(22), g = X(12), cols, k, first, last;
+            LONG cw = X(170), ch = FH * 2 + Y(22), g = X(12), cols, k, first, last, peek, bottom = HT - Y(12);
             if (cw < tlen("Mmmmmmmmmm", LF_REGULAR))
                 cw = tlen("Mmmmmmmmmm", LF_REGULAR);
             cols = (aw + g) / (cw + g);
@@ -610,8 +667,10 @@ static void draw_home(void)
             y += FH + Y(10);
             home_cols = cols;
             {
-                /* the rows of tiles that fit; the chosen one kept among them */
-                LONG fit = (HT - Y(24) - y + g) / (ch + g);
+                /* the rows of tiles that fit; the chosen one kept among them;
+                 * more under them: as much of the next as there is room for,
+                 * cut off at the foot, so it is seen that there are more */
+                LONG fit = (bottom - y + g) / (ch + g);
                 if (fit < 1)
                     fit = 1;
                 if (m->tile_sel >= 0) {
@@ -624,10 +683,15 @@ static void draw_home(void)
                 }
                 first = home_top * cols;
                 last = first + fit * cols;
+                peek = last;
+                if (row->n > last && y + fit * (ch + g) + Y(16) <= bottom)
+                    peek = last + cols;
             }
-            for (k = first; k < row->n && k < last; k++) {
+            H->clip(0, 0, W, (WORD)bottom);
+            for (k = first; k < row->n && k < peek; k++) {
                 const struct LItem *it = row->item(k);
                 LONG cx = x0 + ((k - first) % cols) * (cw + g), cy = y + ((k - first) / cols) * (ch + g), tx;
+                LONG hh = cy + ch > bottom ? bottom - cy : ch;     /* (the row cut off: as much as shows) */
                 BOOL on = k == m->tile_sel && m->tile_shown;
                 if (it->flags & LIF_HEAD) {
                     text(cx + X(4), cy + (ch - FH) / 2, it->label, LF_SMALL, C_SUB, &bg_grad, cw);
@@ -638,7 +702,7 @@ static void draw_home(void)
                 panel(cx, cy, cw, ch, 4, on ? C_FOCUS : C_PANEL, on || HOVER(HT_TILE, k) ? C_ACC : C_LINE,
                       grad(cy));
                 if (!(it->flags & LIF_DISABLED))
-                    hit(cx, cy, cw, ch, HT_TILE, it->kind, k);
+                    hit(cx, cy, cw, hh, HT_TILE, it->kind, k);
                 tx = cx + X(12);
                 if (it->kind == LI_DISC) {  /* a DVD: a disc where a picture goes */
                     LONG s = ch - Y(12);
@@ -659,11 +723,10 @@ static void draw_home(void)
                 if (it->tag || it->sub)
                     text(tx, cy + Y(8) + FH + Y(4), it->tag ? it->tag : it->sub, LF_SMALL,
                          on ? C_ACC : C_SUB, flat(on ? C_FOCUS : C_PANEL), cx + cw - tx - X(12));
-                if (it->flags & LIF_NOW)
-                    mark(LM_PLAYING, cx + cw - X(10), cy + Y(8) + FH / 2, C_ACC, on ? C_FOCUS : C_PANEL);
             }
+            H->clip(0, 0, W, HT);
             if (row->n > last - first || first > 0) {   /* more than fit: where among them */
-                LONG nr = (row->n + cols - 1) / cols, fr = (last - first) / cols, bh = HT - Y(24) - y;
+                LONG nr = (row->n + cols - 1) / cols, fr = (last - first) / cols, bh = bottom - y;
                 LONG th = bh * fr / (nr > 0 ? nr : 1), ty;
                 if (th < Y(16))
                     th = Y(16);
@@ -1372,8 +1435,6 @@ static void draw_wall_body(const struct LPage *m)
                 H->frame((WORD)(cx - k), (WORD)(cy - k), (WORD)(cs + 2 * k), (WORD)(th + 2 * k), 1,
                          mix(C_ACC, bg, k, n + 1));
         }
-        if (it->flags & LIF_NOW)
-            mark(LM_PLAYING, cx + cs - X(8), cy + th - FH, C_ACC, bg);
         text(cx, cy + th + Y(8), it->label, on ? LF_BOLD : LF_REGULAR, on ? C_WHITE : C_TEXT,
              flat(grad(cy + th + Y(8))), cs);
         if (it->sub || it->tag)
@@ -1936,6 +1997,7 @@ static void sc_close(void)
 static void sc_draw(int screen)
 {
     drawn = screen;
+    pb_x = -1;                  /* (the playing bars: where top_right puts them, if it does) */
     ft_screen = FALSE;          /* (footer() says it has the band) */
     nhits = 0;
     hit_sel = -1;
@@ -2031,8 +2093,25 @@ static LONG glide(struct Glide *g, LONG at, LONG to, ULONG ms)
     return g->from + (to - g->from) * p / 256;
 }
 static struct Glide wall_g;
+static ULONG pm_at;
 static void sc_tick(ULONG ms)
 {
+    if (pb_x >= 0 && (LONG)(ms - pm_at) >= 100) {
+        /* the top right's playing bars, as the sound goes: they alone, over
+         * what is under them as drawn whole */
+        const struct LNow *n = H->model(LS_NOW);
+        pm_at = ms;
+        if (n && pm_step(n)) {
+            LONG bw = 3 * (pb_s / 4 > 1 ? pb_s / 4 : 2) + 4;
+            H->clip((WORD)pb_x, (WORD)pb_y, (WORD)(pb_x + bw), (WORD)(pb_y + pb_s));
+            if (pb_dark)
+                H->fill((WORD)pb_x, (WORD)pb_y, (WORD)bw, (WORD)pb_s, C_NOWBG);
+            else
+                H->vgrad(0, 0, W, HT, C_TOP, C_BOT);    /* (the screen's one gradient) */
+            play_bars(pb_x + bw, pb_y, pb_s, pm_lv);
+            H->clip(0, 0, W, HT);
+        }
+    }
     if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
         /* the wall gliding to the chosen cover's row, the band's toast over
          * it again */
