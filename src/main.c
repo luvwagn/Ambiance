@@ -16977,6 +16977,7 @@ out:
     anim_fact_forget();             /* (after the loader's processes: they read it) */
     pages_clear();
     amb_log("pages freed", "");
+    plex_art_forget();              /* (RAM:'s covers and photos: memory, not kept) */
     beets_forget();
     mp_shutdown();
     if (np.list.pool)

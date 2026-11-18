@@ -974,6 +974,48 @@ static void art_trim(void)
     }
 }
 
+/* Quitting: every picture kept in RAM:Ambiance-art let go, and the
+ * folder (RAM: is memory; the next start fetches what it shows again).
+ * Called after the loader's processes have stopped (none is reading). */
+void plex_art_forget(void)
+{
+    struct FileInfoBlock *fib;
+    BPTR dl;
+    char names[32][40], path[80];
+    ULONG bytes = 0;
+    LONG n, i, gone = 0;
+    if (!(fib = AllocDosObject(DOS_FIB, NULL)))
+        return;
+    do {                                    /* (a batch at a time: deleting while
+                                             * ExNext walks the folder is not safe) */
+        n = 0;
+        if ((dl = Lock((CONST_STRPTR)ART_DIR, SHARED_LOCK))) {
+            if (Examine(dl, fib))
+                while (n < 32 && ExNext(dl, fib))
+                    if (fib->fib_DirEntryType < 0 && strlen((char *)fib->fib_FileName) < sizeof(names[0])) {
+                        strcpy(names[n++], (char *)fib->fib_FileName);
+                        bytes += (ULONG)fib->fib_Size;
+                    }
+            UnLock(dl);
+        }
+        for (i = 0; i < n; i++) {
+            sprintf(path, ART_DIR "/%.39s", names[i]);
+            if (DeleteFile((CONST_STRPTR)path))
+                gone++;
+            else
+                n = 0;                      /* (one would not go: stop, not loop) */
+        }
+    } while (n == 32);
+    FreeDosObject(DOS_FIB, fib);
+    DeleteFile((CONST_STRPTR)ART_DIR);      /* (empty now; if not, it stays) */
+    art_total = 0xFFFFFFFFUL;
+    if (gone) {
+        char m[80];
+        sprintf(m, "%ld pictures let go at the end (%lu KB)", (long)gone, (unsigned long)(bytes >> 10));
+        amb_log("pictures: RAM", m);
+    }
+}
+
 BOOL plex_art_save(const char *file, const UBYTE *body, ULONG len)
 {
     BPTR fh = Open((CONST_STRPTR)file, MODE_NEWFILE);
