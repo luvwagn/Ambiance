@@ -5712,13 +5712,13 @@ UWORD st_pcm(WORD *out, UWORD n, ULONG *rate)
             return 0;
         for (k = 0; k < n; k++) {
             ULONG i = at - (n - k) * dec;
-            out[k] = (WORD)(((LONG)b[2 * i] + b[2 * i + 1]) >> 4);
+            out[k] = (WORD)(((LONG)b[2 * i] + b[2 * i + 1]) >> 1);     /* (full scale, as the voices mix) */
         }
     } else {
         const BYTE *l = st.chip + st.cur * HALF, *rr = st.chip + (2 + st.cur) * HALF;
         for (k = 0; k < n; k++) {
             ULONG i = at - (n - k) * dec;
-            out[k] = (WORD)(((WORD)l[i] + rr[i]) << 4);
+            out[k] = (WORD)(((WORD)l[i] + rr[i]) << 7);
         }
     }
     *rate = r / dec;

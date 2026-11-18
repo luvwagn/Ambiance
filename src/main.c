@@ -4365,11 +4365,11 @@ static void dbg_load_log(void)
             ULONG fr, t;
             vis_timing(&fr, &t);
             if (fr) {                   /* the spectrum's time a frame, and what it heard */
-                ULONG pk, none;
-                vis_input(&pk, &none);
-                sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame (sound to it: peak %lu, %lu of %lu frames none)",
-                        (long)(t / fr / 10), (long)(t / fr % 10), (unsigned long)pk, (unsigned long)none,
-                        (unsigned long)fr);
+                ULONG pk, none, top;
+                vis_input(&pk, &none, &top);
+                sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame (sound to it: peak %lu, %lu of %lu frames none, "
+                        "loudest step %lu)", (long)(t / fr / 10), (long)(t / fr % 10), (unsigned long)pk,
+                        (unsigned long)none, (unsigned long)fr, (unsigned long)top);
             }
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
@@ -17414,9 +17414,9 @@ static int lv_music_screen(const struct Page *p)
     LONG i, dirs = 0, songs = 0, of = 0;
     char type[16];
     if (p && p->type == PT_LIST && !p->list.count && p->plex && !p->photos &&
-        (strstr(p->base, "type=9") || strstr(p->base, "/recentlyAdded")))
-        return LS_ALBUMS;               /* (its albums still coming: the wall waits, so the
-                                         * screen does not change when they come) */
+        (strstr(p->base, "type=9") || strstr(p->base, "type=8") || strstr(p->base, "/recentlyAdded")))
+        return LS_ALBUMS;               /* (its albums or artists still coming: the wall waits,
+                                         * so the screen does not change when they come) */
     if (!p || p->type != PT_LIST || !p->list.count || p->setp)
         return LS_PAGE;
     if (p->pics) {
@@ -17442,6 +17442,8 @@ static int lv_music_screen(const struct Page *p)
         }
         if (lv_plex_count(p, "album", &of) * 2 > of && of)
             return LS_ALBUMS;
+        if (lv_plex_count(p, "artist", &of) * 2 > of && of)
+            return LS_ALBUMS;               /* (artists too: a wall of their pictures) */
         return LS_PAGE;
     }
     if (!p->songs)
@@ -17451,7 +17453,8 @@ static int lv_music_screen(const struct Page *p)
             return LS_ALBUM;
         if (!strncmp(from->path, "beets:artist/", 13))
             return LS_ARTIST;
-        if (!strcmp(from->path, "beets:albums") || !strcmp(from->path, "beets:recent"))
+        if (!strcmp(from->path, "beets:albums") || !strcmp(from->path, "beets:recent") ||
+            !strcmp(from->path, "beets:artists"))
             return LS_ALBUMS;
         return LS_PAGE;
     }
@@ -17716,6 +17719,22 @@ static const void *lv_model(int screen)
 }
 
 /* ---- what the layout asks */
+/* The big letter, as the layout moves through a long list by itself (its
+ * wall's keys held, a scroll bar dragged or paged): up, or the letter of
+ * where it is now, lingering a second after the last move (as the held
+ * Up and Down keys' glide shows it) */
+static ULONG lv_sel_ms;
+static void lv_letter_touch(struct Page *p)
+{
+    if (!p || p->type != PT_LIST || !p->list.count || !ov_eligible(p))
+        return;
+    if (!(ov.on && ov.page == p))
+        ov_show(p);
+    else
+        ov_relabel(ov_letter_of(p->list.items[p->sel].label));
+    ov.linger = 25;
+}
+
 static void lv_act(int what, LONG arg)
 {
     struct Page *p = cur();
@@ -17725,7 +17744,12 @@ static void lv_act(int what, LONG arg)
             if (arg >= 0 && arg < nmenu && arg != menu_sel)
                 menu_select(arg);
         } else if (p && p->type == PT_LIST && arg >= 0 && arg < p->list.count && arg != p->sel) {
+            ULONG now = time_ms();
+            BOOL quick = what == LAC_SELECT && now - lv_sel_ms < 400;  /* (a key held: moves in a row) */
+            lv_sel_ms = what == LAC_SELECT ? now : 0;
             act_move(arg - p->sel);
+            if (quick)
+                lv_letter_touch(p);
         }
         if (what != LAC_SELECT)
             act_open(what == LAC_PLAY);
@@ -17756,8 +17780,10 @@ static void lv_act(int what, LONG arg)
                 if (focus == FOCUS_MENU || !p || p->type != PT_LIST || to >= p->list.count)
                     break;
             }
-            if (to != p->sel)
+            if (to != p->sel) {
                 act_move(to - p->sel);
+                lv_letter_touch(p);
+            }
         } else if (p && (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open && arg >= 0) {
             tb_scroll_frac(&p->tb, (ULONG)arg);
         }

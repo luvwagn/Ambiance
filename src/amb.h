@@ -742,7 +742,7 @@ void vis_stop(void);                /* its memory back (a game, quitting) */
 int  vis_marker(UBYTE *lev);        /* the playing marker's: VIS_*, lev 0-11 (4 or 2) */
 BOOL vis_spectrum(UBYTE *out, int n);  /* n bands, 0-255 (a layout's Now playing) */
 void vis_timing(ULONG *frames, ULONG *ms100);  /* spectrum frames, their time (0.1 ms) */
-void vis_input(ULONG *peak, ULONG *none);  /* the spectrum's loudest sample since, frames without sound */
+void vis_input(ULONG *peak, ULONG *none, ULONG *top);  /* the spectrum's loudest sample since, frames without sound, its loudest bin's step */
 void vis_tables(WORD *sine);        /* vistab.c: the FFT's sine (1024) */
 void vis_loud_table(ULONG *t);      /* ...and the 64 loudness steps */
 void mp_paula_check(void);          /* once a second: audio DMA left on while stopped */           /* level meters: 4 (Paula's channels), 2 stereo, 1 mono */

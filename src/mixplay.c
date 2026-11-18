@@ -768,7 +768,7 @@ UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
     t = mx.mix[mx.cur & 1];
     for (k = 0; k < n; k++) {
         ULONG i = at - (n - k) * dec;
-        out[k] = (WORD)(((LONG)t[2 * i] + t[2 * i + 1]) >> 4);
+        out[k] = (WORD)(((LONG)t[2 * i] + t[2 * i + 1]) >> 1);     /* (full scale, as the voices mix) */
     }
     *rate = mx.rate / dec;
     return n;

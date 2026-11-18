@@ -356,6 +356,7 @@ static void loudness(UBYTE *lev)
  * line): its loudest sample, and the frames that had no sound to see */
 static UWORD sp_peak;
 static ULONG sp_none;
+static UBYTE sp_top;            /* (its loudest bin's step: the bars show SP_FLOOR to SP_TOP) */
 
 static BOOL sp_analyse(void)
 {
@@ -381,6 +382,9 @@ static BOOL sp_analyse(void)
     hfft_window(sp.re, sp.sine);
     hfft_fft(sp.re, sp.im, sp.sine);
     loudness(sp.lev);
+    for (k = 1; k < BINS; k++)
+        if (sp.lev[k] > sp_top)
+            sp_top = sp.lev[k];
     sp.lev_t = time_ms();
     sp.ms += sp.lev_t - t0;
     sp.frames++;
@@ -609,10 +613,12 @@ void vis_stop(void)
     drawn = -1;
 }
 
-void vis_input(ULONG *peak, ULONG *none)
+void vis_input(ULONG *peak, ULONG *none, ULONG *top)
 {
     *peak = sp_peak;
     *none = sp_none;
+    *top = sp_top;
+    sp_top = 0;
     sp_peak = 0;
     sp_none = 0;
 }
