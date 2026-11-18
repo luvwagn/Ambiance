@@ -37,6 +37,9 @@ void lk_show(struct LkOut *o);
  * 40-255, the screen's colours put back at lk_close), on a canvas shown
  * with WriteChunkyPixels (graphics.library 40) */
 BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
+/* the layout's background gradient over the whole screen (an 8-bit
+ * screen's: drawn with pens of its own, smooth; elsewhere nothing) */
+void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
 BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h);
 BOOL lk_canvas(const struct LkOut *o);
 

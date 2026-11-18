@@ -6285,6 +6285,8 @@ static void style_preview(struct Page *p)
     pv_sel = p->sel;
     pv_shown = TRUE;
     pv_pending = FALSE;
+    if (lv_drives())
+        return;                             /* (a layout: no classic menu shown in the font) */
     gfx_fill_bg(&g, x0, y0, x1, y1);
     if (p->sel < 0 || p->sel >= LFONT_COUNT)
         return;
@@ -18584,7 +18586,12 @@ static BOOL h_copy(WORD x, WORD y, WORD w, WORD h, WORD dx, WORD dy)
 {
     return lk_copy(&lv.out, x, y, w, h, dx, dy) ? TRUE : FALSE;
 }
-static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_vgrad(&lv.out, x, y, w, h, a, b); }
+static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b)
+{
+    if (x == 0 && y == 0 && w == (WORD)g.w && h == (WORD)g.h)
+        lk_ramp(&lv.out, a, b);     /* (the background: an 8-bit screen draws it smooth) */
+    lk_vgrad(&lv.out, x, y, w, h, a, b);
+}
 static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&lv.out, x, y, w, h, a, b); }
 static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)
 {

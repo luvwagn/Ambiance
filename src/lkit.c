@@ -29,6 +29,9 @@ struct LkTarget {
                                  * pixel, the screen's size; shown with WriteChunkyPixels */
     long cw, chh;
     ULONG *pal_was;             /* ...the screen's colours before, put back at lk_close */
+    ULONG *rowc;                /* ...the background's colour on each row (lk_ramp), drawn
+                                 * with the ramp's pens; NULL: none yet */
+    unsigned long ramp_a, ramp_b;
 };
 
 static struct RastPort *target_rp(struct LkTarget *t)
@@ -94,14 +97,18 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 /* ---- an 8-bit screen (an experiment: AGA, or a card's 8-bit mode). The
  * layout draws in true colour as ever; each pixel is made a pen as it is
  * drawn, ordered-dithered (4 x 4) to a palette of the layout's own: a
- * 6 x 6 x 6 cube at pens 40-255 and 16 greys at 20-35 (0-19 and 36-39
- * kept: the classic's own pens, the pointer's at 17-19). The pens go to
- * a canvas a byte a pixel, shown with WriteChunkyPixels. */
+ * 6 x 6 x 6 cube at pens 40-255, 8 greys at 20-27, and at 28-39 twelve
+ * steps of the layout's background gradient (lk_ramp: its rows are drawn
+ * with them, dithered only between neighbours, so it looks smooth); 0-19
+ * kept (the classic's own pens, the pointer's at 17-19). The pens go to a
+ * canvas a byte a pixel, shown with WriteChunkyPixels. */
 #define CK_GREY0 20
+#define CK_RAMP0 28
+#define CK_RAMPN 12
 #define CK_CUBE0 40
 static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 static UBYTE ck_q6[16][256];         /* a value's level of 6, by the dither's step */
-static UBYTE ck_q16[16][256];        /* ...of 16 (the greys) */
+static UBYTE ck_q8[16][256];         /* ...of 8 (the greys) */
 static BOOL ck_made;
 
 static void ck_tables(void)
@@ -112,7 +119,7 @@ static void ck_tables(void)
     for (d = 0; d < 16; d++)
         for (v = 0; v < 256; v++) {
             ck_q6[d][v] = (UBYTE)((v * 5 * 16 + d * 255 + 8) / (255 * 16));
-            ck_q16[d][v] = (UBYTE)((v * 15 * 16 + d * 255 + 8) / (255 * 16));
+            ck_q8[d][v] = (UBYTE)((v * 7 * 16 + d * 255 + 8) / (255 * 16));
         }
     ck_made = TRUE;
 }
@@ -122,8 +129,33 @@ static UBYTE ck_pen(unsigned long rgb, int d)
     int r = (rgb >> 16) & 255, gg = (rgb >> 8) & 255, b = rgb & 255;
     int mx = r > gg ? (r > b ? r : b) : (gg > b ? gg : b), mn = r < gg ? (r < b ? r : b) : (gg < b ? gg : b);
     if (mx - mn <= 10)                  /* about grey: the finer ramp */
-        return (UBYTE)(CK_GREY0 + ck_q16[d][(r * 77 + gg * 150 + b * 29) >> 8]);
+        return (UBYTE)(CK_GREY0 + ck_q8[d][(r * 77 + gg * 150 + b * 29) >> 8]);
     return (UBYTE)(CK_CUBE0 + ck_q6[d][r] * 36 + ck_q6[d][gg] * 6 + ck_q6[d][b]);
+}
+
+/* Is c row y's background colour (within a step or two: a gradient over
+ * part of the screen, made from the whole one's colours, rounds a little
+ * differently)? */
+static BOOL ck_is_bg(const struct LkTarget *t, long y, unsigned long c)
+{
+    ULONG b;
+    int dr, dg, db;
+    if (!t->rowc)
+        return FALSE;
+    b = t->rowc[y];
+    dr = (int)((c >> 16) & 255) - (int)((b >> 16) & 255);
+    dg = (int)((c >> 8) & 255) - (int)((b >> 8) & 255);
+    db = (int)(c & 255) - (int)(b & 255);
+    return dr >= -2 && dr <= 2 && dg >= -2 && dg <= 2 && db >= -2 && db <= 2;
+}
+
+/* Row y's background colour, drawn with the ramp: its pen at x, y */
+static UBYTE ck_ramp_pen(const struct LkTarget *t, long x, long y)
+{
+    long pos = t->chh > 1 ? y * (CK_RAMPN - 1) * 16 / (t->chh - 1) : 0, i = pos >> 4;
+    if (i >= CK_RAMPN - 1)
+        return CK_RAMP0 + CK_RAMPN - 1;
+    return (UBYTE)(CK_RAMP0 + i + (ck_bayer[y & 3][x & 3] < (pos & 15) ? 1 : 0));
 }
 
 static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
@@ -157,6 +189,11 @@ static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb
     for (j = 0; j < h; j++) {
         UBYTE *d = t->ch + (y + j) * t->cw + x;
         const UBYTE *pr = pat[(y + j) & 3];
+        if (ck_is_bg(t, y + j, rgb)) {
+            for (i = 0; i < w; i++)     /* the background's own colour there: the ramp */
+                d[i] = ck_ramp_pen(t, x + i, y + j);
+            continue;
+        }
         for (i = 0; i < w; i++)
             d[i] = pr[(x + i) & 3];
     }
@@ -172,7 +209,7 @@ static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned lo
         const unsigned long *s = px + j * mod;
         const UBYTE *br = ck_bayer[(y + j) & 3];
         for (i = 0; i < w; i++)
-            d[i] = ck_pen(s[i], br[(x + i) & 3]);
+            d[i] = ck_is_bg(t, y + j, s[i]) ? ck_ramp_pen(t, x + i, y + j) : ck_pen(s[i], br[(x + i) & 3]);
     }
 }
 
@@ -225,8 +262,8 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     GetRGB32(vp->ColorMap, 0, 256, t->pal_was + 1);
     t->pal_was[1 + 256 * 3] = 0;
     memcpy(pal, t->pal_was, (1 + 256 * 3 + 1) * 4);
-    for (i = 0; i < 16; i++) {
-        ULONG v = (ULONG)(i * 17) * 0x01010101UL;
+    for (i = 0; i < 8; i++) {
+        ULONG v = (ULONG)(i * 255 / 7) * 0x01010101UL;
         pal[1 + (CK_GREY0 + i) * 3] = pal[2 + (CK_GREY0 + i) * 3] = pal[3 + (CK_GREY0 + i) * 3] = v;
     }
     for (i = 0; i < 216; i++) {
@@ -248,6 +285,33 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     }
     lk_clip(o, 0, 0, g->w, g->h);
     return TRUE;
+}
+
+/* The layout's background: a gradient over the whole screen, top to
+ * bottom (an 8-bit screen's: its twelve ramp pens made those colours, and
+ * the background's rows drawn with them) */
+void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom)
+{
+    struct LkTarget *t = o->ctx;
+    ULONG pal[1 + CK_RAMPN * 3 + 1];
+    long y, i;
+    if (!t || !t->ch || (t->rowc && t->ramp_a == top && t->ramp_b == bottom))
+        return;
+    if (!t->rowc && !(t->rowc = AllocVec((ULONG)t->chh * sizeof(ULONG), MEMF_ANY)))
+        return;
+    t->ramp_a = top;
+    t->ramp_b = bottom;
+    for (y = 0; y < t->chh; y++)
+        t->rowc[y] = lk_vgrad_at(top, bottom, t->chh, y) & 0xFFFFFF;
+    pal[0] = ((ULONG)CK_RAMPN << 16) | CK_RAMP0;
+    for (i = 0; i < CK_RAMPN; i++) {
+        unsigned long c = lk_vgrad_at(top, bottom, CK_RAMPN, i);
+        pal[1 + i * 3] = ((c >> 16) & 255) * 0x01010101UL;
+        pal[2 + i * 3] = ((c >> 8) & 255) * 0x01010101UL;
+        pal[3 + i * 3] = (c & 255) * 0x01010101UL;
+    }
+    pal[1 + CK_RAMPN * 3] = 0;
+    LoadRGB32(&t->g->scr->ViewPort, pal);
 }
 
 BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
@@ -371,6 +435,8 @@ void lk_close(struct LkOut *o)
         }
         if (t->ch)
             FreeVec(t->ch);
+        if (t->rowc)
+            FreeVec(t->rowc);
         if (t->pal_was) {
             if (t->g->scr)              /* (the classic's colours back) */
                 LoadRGB32(&t->g->scr->ViewPort, t->pal_was);
