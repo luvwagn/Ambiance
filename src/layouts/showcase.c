@@ -1368,6 +1368,8 @@ static LONG paras(const char *t)
 
 /* ---------------------------------------------------------------- the album wall */
 static LONG wall_cols = 1, wall_top;    /* its columns, as drawn; its first row shown */
+static LONG wall_lead = -1;     /* a letter's first, gone to with the keys: it leads the wall
+                                 * (its row at the top, the letter filling the view) */
 
 /* The wall scrolls by pixels: wall_px now, wall_tgt where it is going
  * (the chosen cover's row in view, a little of the next showing); the
@@ -1399,6 +1401,10 @@ static void draw_wall_body(const struct LPage *m)
         maxpx = 0;
     if (sel >= 0) {
         LONG top = (sel / cols) * ch, peek = ch / 4;
+        if (sel == wall_lead) {
+            wall_tgt = top - (sel >= cols ? peek : 0);      /* the letter fills the view */
+            wall_lead = -1;
+        }
         if (top - (sel >= cols ? peek : 0) < wall_tgt)
             wall_tgt = top - (sel >= cols ? peek : 0);
         if (top + ch + peek > wall_tgt + viewh)
@@ -2428,6 +2434,8 @@ static int sc_input(int screen, int action, LONG arg)
             int run = accel(-1);
             LONG st = wall_cols * (run >= 4 ? 3 : 1);
             to = run >= 10 ? letter_jump(&m->list, sel, -1) : sel - st >= 0 ? sel - st : sel - wall_cols >= 0 ? 0 : sel;
+            if (run >= 10)
+                wall_lead = to;
         }
         break;
     case LA_DOWN:
@@ -2439,6 +2447,8 @@ static int sc_input(int screen, int action, LONG arg)
             to = run >= 10 ? letter_jump(&m->list, sel, 1)
                : sel + st < n ? sel + st
                : sel / wall_cols < (n - 1) / wall_cols ? n - 1 : sel;  /* (into a short last row) */
+            if (run >= 10)
+                wall_lead = to;
         }
         break;
     default:

@@ -360,6 +360,7 @@ static void set_msg(const char *m);
  * classic's drawing is done. gfx_off stays as a safety net: a drawing call
  * that still comes is not done, and is counted and logged ("unseen"). */
 static BOOL lv_drives(void);
+static BOOL lv_chosen(void);                /* a layout is chosen (on or not) */
 static void lv_redraw(void);                /* the screen itself changed: all of it, shown whole */
 static void lv_note(void);                  /* anything: the layout works out what */
 static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
@@ -11247,6 +11248,12 @@ static void apply_screen_mode(int sm)
     ov_bm_free();
     screen_close();
     screen_mode = sm;
+    if (lv_chosen() && ui_style == STYLE_PIXEL && gfx_style_possible(&caps, sm, STYLE_SMOOTH)) {
+        /* a layout chosen, and a mode that can show it: Smooth again (a
+         * native mode had made it Pixel) */
+        ui_style = STYLE_SMOOTH;
+        save_setting(STYLE_VAR, "smooth");
+    }
     if (!gfx_open(&g, &caps, sm, ui_style)) {
         failed = TRUE;
         screen_mode = old;
@@ -14394,6 +14401,9 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     file[0] = 0;
     pv_has_box = FALSE;
     pv_text_drawn = TRUE;
+    if (lv_drives())
+        return;                             /* (a layout: its details from the items; nothing
+                                             * here for it) */
     if (!plex_pv_src(p, p->sel, &src)) {
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
@@ -17362,6 +17372,11 @@ BOOL lv_on(void)
     return lv.on;
 }
 
+static BOOL lv_chosen(void)
+{
+    return lv.file[0] != 0;
+}
+
 /* The layout is the view driven (the classic's drawing functions return
  * at once, noting it); and the note: it draws again (lv_frame) */
 static BOOL lv_dirty;
@@ -18662,12 +18677,12 @@ static BOOL lv_suits(void)
  * layout draws (lv_off takes it back). FALSE: none to be had. */
 static BOOL lv_lend_font(void)
 {
-    static const UWORD sizes[] = { 768, 600, 480, 384 };
+    static const UWORD sizes[] = { 1200, 1080, 1024, 768, 720, 600, 480, 384 };
     int i;
     if (g.sm)
         return TRUE;
-    for (i = 0; i < 4 && !lv.sm; i++)
-        if (sizes[i] <= g.h || i == 3)
+    for (i = 0; i < 8 && !lv.sm; i++)
+        if (sizes[i] <= g.h || i == 7)
             lv.sm = sm_load(sizes[i]);
     if (!lv.sm)
         return FALSE;
@@ -18969,6 +18984,17 @@ static void lv_frame_(void)
                        mh == lv.last_msg && nsig == lv.last_now && p->type == PT_LIST &&
                        p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&
                        p->sel == lv.last_sel && letter == lv.last_letter;
+        /* only classic drawing that slipped past the gates came (counted
+         * by gfx_off, logged as "unseen"), and nothing the layout shows
+         * changed: nothing to draw (it once meant drawing it all) */
+        if (!lv.full && !lv_dirty && lv.drawn == scr && p && p == lv.last_p && depth == lv.last_depth &&
+            mh == lv.last_msg && nsig == lv.last_now && letter == lv.last_letter &&
+            (p->type == PT_LIST ? p->list.count == lv.last_count &&
+                                      (const void *)p->list.items == lv.last_items && p->sel == lv.last_sel
+                                : !p->tb.open || p->tb.pos == lv.last_pos)) {
+            gfx_off_hits = 0;
+            goto shown;
+        }
         lv.full = FALSE;
         lv_dirty = FALSE;
         lv_what = 0;
@@ -18994,6 +19020,7 @@ static void lv_frame_(void)
         lv.last_msg = mh;
         lv.last_pos = p && p->tb.open ? p->tb.pos : -1;
     }
+shown:
     lk_show(&lv.out);
     lv_ta_watch();
 }
@@ -19184,9 +19211,11 @@ void lv_pick(int k)
                                      * did not suit it, it was open all the same) */
     if (!k) {
         draw_all();
+    } else if (ui_style != STYLE_SMOOTH && g.truecolor && gfx_style_possible(&caps, g.mode, STYLE_SMOOTH)) {
+        apply_style(STYLE_SMOOTH);  /* a layout chosen: the Smooth style with it, where it can be */
     } else {
         draw_pane(TRUE);
         if (!lv_suits())
-            set_msg(_("Layouts need the Smooth style on a graphics card's 15 to 32-bit screen"));
+            set_msg(_("Layouts need a graphics card's 15 to 32-bit screen"));
     }
 }

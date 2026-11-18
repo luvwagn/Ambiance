@@ -339,6 +339,12 @@ static const struct {
     { "rtg-640",    "640 x 480  RTG",            640, 480, K_RTG,   0 },
     { "rtg-800",    "800 x 600  RTG",            800, 600, K_RTG,   0 },
     { "rtg-1024",   "1024 x 768  RTG",           1024, 768, K_RTG,  0 },
+    /* the large ones: listed where the card has them (Automatic keeps to
+     * 1024 x 768 and under: a full redraw grows with the pixels) */
+    { "rtg-1280x720",  "1280 x 720  RTG",        1280, 720, K_RTG,  0 },
+    { "rtg-1280",      "1280 x 1024  RTG",       1280, 1024, K_RTG, 0 },
+    { "rtg-1920x1080", "1920 x 1080  RTG",       1920, 1080, K_RTG, 0 },
+    { "rtg-1920",      "1920 x 1200  RTG",       1920, 1200, K_RTG, 0 },
 };
 
 static BOOL laced(const struct Gfx *g)

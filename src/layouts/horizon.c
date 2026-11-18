@@ -1562,6 +1562,8 @@ static struct {
     LONG x0, y0, bottom, viewh, gap, cs, th, ch, ncol, maxpx, viewe;
 } wg;
 static LONG wall_sel_drawn = -1, wall_hov_drawn = -1;  /* drawn chosen, under the pointer */
+static LONG wall_lead = -1;     /* a letter's first, gone to with the keys: it leads the wall
+                                 * (its column at the left, the letter filling the view) */
 static char wall_letter;                /* the big letter drawn over it (0 none) */
 static LONG wall_lx0, wall_lx1;         /* ...where */
 #define WALL_PH 64
@@ -1600,6 +1602,10 @@ static void wall_geom(const struct LPage *m)
         wg.maxpx = 0;
     if (sel >= 0) {
         LONG left = (sel / rows) * (cs + wg.gap), peek = cs / 3;
+        if (sel == wall_lead) {
+            wall_tgt = left - (sel >= rows ? peek : 0);     /* the letter fills the view */
+            wall_lead = -1;
+        }
         if (left - (sel >= rows ? peek : 0) < wall_tgt)
             wall_tgt = left - (sel >= rows ? peek : 0);
         if (left + cs + peek > wall_tgt + wg.viewe)
@@ -2821,6 +2827,8 @@ static int hz_input(int screen, int action, LONG arg)
             to = run >= 10 ? letter_jump(&m->list, sel, -1) : sel - wall_rows * (run >= 4 ? 3 : 1);
             if (to < 0)
                 to = 0;
+            if (run >= 10)
+                wall_lead = to;             /* (a letter: it leads the wall, at the left) */
         } else {
             to = sel - 1;
         }
@@ -2829,7 +2837,7 @@ static int hz_input(int screen, int action, LONG arg)
         if (screen == LS_ALBUMS) {
             int run = accel(1);
             if (run >= 10)
-                to = letter_jump(&m->list, sel, 1);
+                wall_lead = to = letter_jump(&m->list, sel, 1);
             else if (sel + wall_rows * (run >= 4 ? 3 : 1) < n)
                 to = sel + wall_rows * (run >= 4 ? 3 : 1);
             else if (sel / wall_rows < (n - 1) / wall_rows)

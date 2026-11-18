@@ -95,7 +95,8 @@ enum { TS_BODY, TS_BOLD, TS_SMALL, TS_FACES,
 
 /* Screen modes offered in Settings. */
 enum { SM_AUTO, SM_NTSC_LORES, SM_PAL_LORES, SM_NTSC_HIRES, SM_PAL_HIRES,
-       SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024, SM_COUNT };
+       SM_NTSC_LACED, SM_PAL_LACED, SM_RTG_640, SM_RTG_800, SM_RTG_1024,
+       SM_RTG_1280_720, SM_RTG_1280, SM_RTG_1920_1080, SM_RTG_1920, SM_COUNT };
 
 /* What a decoded picture is (gfx_picture, view_show). */
 struct PicInfo {

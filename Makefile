@@ -73,7 +73,8 @@ FONT_FILES += $(foreach f,$(GALMURI),assets/Fonts/$(word 1,$(subst :, ,$(f))).fo
               assets/Fonts/$(subst :,/,$(f)))
 # Smooth style, one file per RTG screen height (tools/mksmooth.py)
 SMOOTH_FILES = assets/Fonts/amb-smooth/384 assets/Fonts/amb-smooth/480 assets/Fonts/amb-smooth/600 \
-               assets/Fonts/amb-smooth/768 assets/Fonts/amb-smooth/logo1 \
+               assets/Fonts/amb-smooth/720 assets/Fonts/amb-smooth/768 assets/Fonts/amb-smooth/1024 \
+               assets/Fonts/amb-smooth/1080 assets/Fonts/amb-smooth/1200 assets/Fonts/amb-smooth/logo1 \
                assets/Fonts/amb-smooth/logo2 assets/Fonts/amb-smooth/logo3
 # Japanese, Chinese and Korean glyphs (tools/mkcjk.py: Galmuri, Ark Pixel),
 # and Greek (tools/mkgreek.py: Galmuri11)
@@ -622,7 +623,7 @@ fonts:
 	$(PYTHON) tools/mkgreek.py assets/fonts-src/Galmuri11-greek.bdf assets/Fonts/amb-cjk/greek
 
 smooth:
-	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amb-smooth 384 480 600 768 \
+	$(PYTHON) tools/mksmooth.py assets/fonts-src/Rubik-VF.ttf assets/Fonts/amb-smooth 384 480 600 720 768 1024 1080 1200 \
 		--greek assets/fonts-src/Geologica-VF.ttf
 
 icons:
