@@ -17245,6 +17245,7 @@ static void lv_fill_item_art(struct LItem *li, const struct Page *p, LONG i, cha
         static char subs[32][104];
         static UWORD si;
         char *sub = subs[si++ & 31], type[16];
+        sub[0] = 0;                 /* (a ring: what it held is another row's) */
         lv_plex_field(it, 1, type, sizeof(type));
         if (!strcmp(type, "album")) {
             li->kind = LI_ALBUM;
