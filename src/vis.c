@@ -352,9 +352,15 @@ static void loudness(UBYTE *lev)
 }
 
 /* The sound now, analysed: each bin's loudness in sp.lev. */
+/* What the spectrum was given, since vis_input last asked (the log's load
+ * line): its loudest sample, and the frames that had no sound to see */
+static UWORD sp_peak;
+static ULONG sp_none;
+
 static BOOL sp_analyse(void)
 {
     ULONG t0 = time_ms();
+    int k;
     if (!sp_start())
         return FALSE;
     mp_vis_feed(&sp.feed, VF_VOICES | VF_PCM);
@@ -364,6 +370,12 @@ static BOOL sp_analyse(void)
         memcpy(sp.re, sp.feed.pcm, FFT_N * 2);
     } else {
         memset(sp.re, 0, FFT_N * 2);        /* paused, or nothing yet */
+        sp_none++;
+    }
+    for (k = 0; k < FFT_N; k++) {
+        UWORD a = (UWORD)(sp.re[k] < 0 ? -sp.re[k] : sp.re[k]);
+        if (a > sp_peak)
+            sp_peak = a;
     }
     memcpy(sp.wave, sp.re, FFT_N * 2);
     hfft_window(sp.re, sp.sine);
@@ -595,6 +607,14 @@ void vis_stop(void)
         FreeVec(sp.mem);
     sp.mem = NULL;
     drawn = -1;
+}
+
+void vis_input(ULONG *peak, ULONG *none)
+{
+    *peak = sp_peak;
+    *none = sp_none;
+    sp_peak = 0;
+    sp_none = 0;
 }
 
 void vis_timing(ULONG *frames, ULONG *ms100)

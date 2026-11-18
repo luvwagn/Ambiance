@@ -4347,7 +4347,7 @@ static void dbg_load_log(void)
     static int n;
     static ULONG wakes0;
     static LONG cpu_sum, app_sum;
-    char m[300];
+    char m[420];
     struct Page *p = cur();
     if (cpu_load >= 0)
         cpu_sum += cpu_load;
@@ -4357,16 +4357,20 @@ static void dbg_load_log(void)
         return;
     {
         LONG rb = st_busy_sample();
-        char rp[96];
+        char rp[160];
         rp[0] = 0;
         if (rb >= 0)
             sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
         {
             ULONG fr, t;
             vis_timing(&fr, &t);
-            if (fr)                     /* the spectrum's time a frame */
-                sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame", (long)(t / fr / 10),
-                        (long)(t / fr % 10));
+            if (fr) {                   /* the spectrum's time a frame, and what it heard */
+                ULONG pk, none;
+                vis_input(&pk, &none);
+                sprintf(rp + strlen(rp), ", spectrum %ld.%ld ms a frame (sound to it: peak %lu, %lu of %lu frames none)",
+                        (long)(t / fr / 10), (long)(t / fr % 10), (unsigned long)pk, (unsigned long)none,
+                        (unsigned long)fr);
+            }
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
                 (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),

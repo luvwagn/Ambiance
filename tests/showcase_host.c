@@ -720,18 +720,31 @@ static void run(int w, int h, int bits, const char *font)
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
         if (scene == 0) {               /* the list's bar: pressed, dragged, let go */
-            int px, found = 0;
+            int px, py = h / 2, found = 0, paged = 0, r;
+            /* the bar: off its thumb a page that way, on it the thumb taken */
             for (px = w - 1; px > w / 2 && !found; px--) {
                 nacts = 0;
-                if (layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)(h / 2), LP_PRESS) == LR_DONE && nacts &&
-                    acts[0][0] == LAC_SCROLLTO)
+                r = layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)py, LP_PRESS);
+                if (r == LR_DONE && nacts && acts[0][0] == LAC_SCROLLTO)
+                    found = paged = 1;
+                else if (r == LR_DONE && !nacts)
                     found = 1;
-                else if (nacts == 0)
-                    continue;
-                else
+                else if (nacts)
                     layout_engine.draw(LS_PAGE);    /* (something else pressed: as it was) */
             }
             CHECK(found);
+            px++;
+            if (paged) {                /* the thumb, further up the bar */
+                CHECK(acts[0][1] > 0);
+                for (found = 0, py = h / 2; py > 0 && !found; py--) {
+                    nacts = 0;
+                    if (layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)py, LP_PRESS) == LR_DONE && !nacts)
+                        found = 1;
+                    else if (nacts)
+                        CHECK(acts[0][0] == LAC_SCROLLTO);      /* (above it: a page up) */
+                }
+                CHECK(found);
+            }
             nacts = 0;
             CHECK(layout_engine.pointer(LS_PAGE, (WORD)px, (WORD)(h - 1), LP_MOVE) == LR_DONE && nacts == 1 &&
                   acts[0][0] == LAC_SCROLLTO && acts[0][1] == 65536);
@@ -826,6 +839,25 @@ static void clicks(int w, int h)
             seen++;
         }
     CHECK(HOME_SOME ? seen >= 5 : seen == 9);
+#ifdef HORIZON
+    {
+        /* Home's row: dragged along by the mouse (nothing chosen), and a
+         * tile pressed and let go where it was: chosen */
+        int tx = 420 * w / 800, ty = 232 * h / 600;
+        layout_engine.draw(LS_HOME);
+        nacts = 0;
+        CHECK(layout_engine.pointer(LS_HOME, (WORD)tx, (WORD)ty, LP_PRESS) == LR_DONE && !nacts);
+        drawn_px = 0;
+        CHECK(layout_engine.pointer(LS_HOME, (WORD)(tx - 150 * w / 800), (WORD)ty, LP_MOVE) == LR_DONE &&
+              drawn_px > 0);
+        save("home-dragged");
+        CHECK(layout_engine.pointer(LS_HOME, (WORD)(tx - 150 * w / 800), (WORD)ty, LP_RELEASE) == LR_DONE &&
+              !nacts);
+        layout_engine.pointer(LS_HOME, (WORD)tx, (WORD)ty, LP_PRESS);
+        CHECK(layout_engine.pointer(LS_HOME, (WORD)tx, (WORD)ty, LP_RELEASE) == LR_DONE && nacts == 2 &&
+              acts[0][0] == LAC_ENTER);
+    }
+#endif
     for (ok = 0, x = w / 2; x < w && !ok; x++)
         ok = click_at(LS_HOME, x, NOW_Y, NULL) == LAC_NOWPLAYING;
     CHECK(ok);

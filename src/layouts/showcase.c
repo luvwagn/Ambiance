@@ -512,6 +512,7 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
 
 /* ---------------------------------------------------------------- Home */
 static void scroll_bar(LONG bx, LONG by, LONG bh, LONG ty, LONG th, ULONG bg);
+static void scroll_units(LONG cur, LONG page, LONG last);
 static LONG page_trail(const struct LPage *m, BOOL named);
 static LONG home_cols = 1, home_top;   /* Home's tiles: across, the first row shown */
 static void draw_home(void)
@@ -633,6 +634,7 @@ static void draw_home(void)
                 ty = y + (bh - th) * home_top / (nr - fr > 0 ? nr - fr : 1);
                 if (ty > y + bh - th)
                     ty = y + bh - th;
+                scroll_units(m->tile_sel >= 0 ? m->tile_sel : home_top * cols, fr * cols, row->n - 1);
                 scroll_bar(W - X(12), y, bh, ty, th, grad(y));
             }
             y += ((last - first + cols - 1) / cols) * (ch + g) + Y(14);
@@ -643,7 +645,17 @@ static void draw_home(void)
 /* The scroll bars drawn (a few a screen): their track and thumb, each a
  * click target wider than it looks; a press on one drags it (or, off its
  * thumb, puts the thumb's middle there), moves follow until release */
-static struct { LONG y, h, ty, th; } sbar[4];
+static struct { LONG y, h, ty, th, cur, page, last; } sbar[4];
+/* (each bar knows where its list is: the row chosen, or a text's first
+ * line; a page of it; and its last place, LAC_SCROLLTO's whole way. Set
+ * before it is drawn.) */
+static LONG sb_cur, sb_page, sb_last;
+static void scroll_units(LONG cur, LONG page, LONG last)
+{
+    sb_cur = cur;
+    sb_page = page > 1 ? page : 1;
+    sb_last = last;
+}
 static int nsbar;
 static int sb_drag = -1;        /* the bar being dragged, -1 none */
 static LONG sb_off;             /* where in the thumb it was taken */
@@ -655,10 +667,25 @@ static void scroll_bar(LONG bx, LONG by, LONG bh, LONG ty, LONG th, ULONG bg)
     sbar[k].h = bh;
     sbar[k].ty = ty;
     sbar[k].th = th;
+    sbar[k].cur = sb_cur;
+    sbar[k].page = sb_page;
+    sbar[k].last = sb_last;
     H->rrect((WORD)bx, (WORD)by, 4, (WORD)bh, 2, C_LINE, bg);
     H->rrect((WORD)(drag ? bx - 1 : bx), (WORD)ty, (WORD)(drag ? 6 : 4), (WORD)th, 2,
              drag ? C_WHITE : C_ACC, C_LINE);
     hit(bx - X(8), by, 4 + X(16), bh, HT_SCROLL, 0, k);
+}
+/* Pressed off its thumb: a page up or down (not a jump there) */
+static void scroll_page(int k, int dir)
+{
+    LONG to = sbar[k].cur + dir * sbar[k].page, last = sbar[k].last;
+    if (last <= 0)
+        return;
+    if (to < 0)
+        to = 0;
+    if (to > last)
+        to = last;
+    H->act(LAC_SCROLLTO, (to * 65536 + last - 1) / last);
 }
 static void scroll_to(LONG y)
 {
@@ -742,6 +769,7 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
             th = Y(16);
         if (ty + th > by + bh)
             ty = by + bh - th;
+        scroll_units(l->sel, fit, l->count - 1);
         scroll_bar(bx, by, bh, ty, th, C_PANEL);
     }
 }
@@ -873,6 +901,7 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
         ty = top + (bh - th) * m->list.top / (m->ndetails - vis > 0 ? m->ndetails - vis : 1);
         if (ty > top + bh - th)
             ty = top + bh - th;
+        scroll_units(m->list.top, vis - 1, m->ndetails - vis);
         scroll_bar(sbx, top, bh, ty, th, C_PANEL);
     }
 }
@@ -1285,6 +1314,7 @@ static void draw_wall_body(const struct LPage *m)
         if (bt > bh)
             bt = bh;
         ty = y0 + (bh - bt) * wall_px / maxpx;
+        scroll_units(sel, cols * (viewh / ch > 1 ? viewh / ch : 1), l->count - 1);
         scroll_bar(bx, y0, bh, ty, bt, grad(y0));
     }
     if (m->letter && H->letter)
@@ -1542,6 +1572,21 @@ static void title_now(void)
 /* A rounded box filled a row at a time, nothing outside it touched (the
  * host's rrect paints its corners in a background colour: over a glow,
  * that showed as a square) */
+/* How far in from the side a rounded box's row j is (h rows, corners of
+ * radius r), in 16ths of a pixel: each row measured at its middle */
+static LONG rinset16(LONG j, LONG h, LONG r)
+{
+    LONG dy2, v;
+    if (j < r)
+        dy2 = 2 * (r - j) - 1;
+    else if (j >= h - r)
+        dy2 = 2 * (j - (h - r)) + 1;
+    else
+        return 0;
+    v = 256 * r * r - 64 * dy2 * dy2;
+    return 16 * r - isqrt(v > 0 ? v : 0);
+}
+
 static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c)
 {
     LONG j;
@@ -1550,9 +1595,7 @@ static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c)
     if (r * 2 > w)
         r = w / 2;
     for (j = 0; j < h; j++) {
-        LONG d = j < r ? r - j : j >= h - r ? j - (h - r) + 1 : 0, in = 0;
-        if (d > 0)
-            in = r - isqrt(r * r - (d - 1) * (d - 1) > 0 ? r * r - (d - 1) * (d - 1) : 0);
+        LONG in = (rinset16(j, h, r) + 8) / 16;
         if (w - 2 * in > 0)
             H->fill((WORD)(x + in), (WORD)(y + j), (WORD)(w - 2 * in), 1, c);
     }
@@ -1866,16 +1909,34 @@ static void sc_changed_body(int screen, ULONG what)
 
 /* Now playing's bars, up to 25 a second, only their changes (the rest is
  * drawn when it changes) */
+/* A glide: from where it was to where it is going in GLIDE_MS, fast at
+ * first and settling (however long each frame takes to draw: a slow
+ * screen takes fewer steps, not longer). A new goal starts one from
+ * where it is. */
+#define GLIDE_MS 180
+struct Glide { LONG from, to; ULONG t0; };
+static LONG glide(struct Glide *g, LONG at, LONG to, ULONG ms)
+{
+    LONG p;
+    if (to != g->to || ms - g->t0 > 4 * GLIDE_MS) {
+        g->from = at;
+        g->to = to;
+        g->t0 = ms - 40;        /* (a tick's worth in already: it moves at once) */
+    }
+    p = (LONG)(ms - g->t0) * 256 / GLIDE_MS;
+    if (p >= 256)
+        return to;
+    p = 256 - (256 - p) * (256 - p) / 256;
+    return g->from + (to - g->from) * p / 256;
+}
+static struct Glide wall_g;
 static void sc_tick(ULONG ms)
 {
     if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
-        /* the wall gliding to the chosen cover's row: a third of the way a
-         * tick (at least a few pixels), the band's toast over it again */
+        /* the wall gliding to the chosen cover's row, the band's toast over
+         * it again */
         const struct LPage *m = H->model(LS_ALBUMS);
-        LONG d = wall_tgt - wall_px, st = d / 3;
-        if (st > -4 && st < 4)
-            st = d > 0 ? (d < 4 ? d : 4) : (d > -4 ? d : -4);
-        wall_px += st;
+        wall_px = glide(&wall_g, wall_px, wall_tgt, ms);
         if (m) {
             H->clip(0, 0, W, HT);
             draw_wall_body(m);
@@ -2065,9 +2126,12 @@ static int sc_pointer(int screen, WORD x, WORD y, BOOL click)
         return LR_UNUSED;
     if (t->what == HT_SCROLL) {
         int k = (int)t->arg & 3;
+        if (y < sbar[k].ty || y >= sbar[k].ty + sbar[k].th) {
+            scroll_page(k, y < sbar[k].ty ? -1 : 1);    /* off the thumb: a page that way */
+            return LR_DONE;
+        }
         sb_drag = k;
-        sb_off = y >= sbar[k].ty && y < sbar[k].ty + sbar[k].th ? y - sbar[k].ty : sbar[k].th / 2;
-        scroll_to(y);
+        sb_off = y - sbar[k].ty;
         return LR_DONE;
     }
     now = H->now_ms();
