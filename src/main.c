@@ -360,6 +360,7 @@ static void set_msg(const char *m);
  * classic's drawing is done. gfx_off stays as a safety net: a drawing call
  * that still comes is not done, and is counted and logged ("unseen"). */
 static BOOL lv_drives(void);
+static void lv_redraw(void);                /* the screen itself changed: all of it, shown whole */
 static void lv_note(void);                  /* anything: the layout works out what */
 static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
 
@@ -12593,6 +12594,7 @@ static void toggle_dbuf(void)
     (void)sel;
     plex_settings_again(FALSE);
     status_shown[0] = 0;
+    lv_redraw();                    /* (a layout: drawn whole onto the other buffer arrangement) */
     draw_all();
 }
 
@@ -17330,6 +17332,15 @@ static void lv_note_what(ULONG what)
 static void lv_note(void)
 {
     lv_note_what(LV_WHOLE);
+}
+
+/* The screen under the layout changed (double buffering on or off, its
+ * buffers swapped for others): all of it drawn and shown again, whatever
+ * else moved */
+static void lv_redraw(void)
+{
+    lv_note();
+    lv.full = TRUE;
 }
 
 /* While a slideshow's or video's controls are drawn (lv_controls_draw):
