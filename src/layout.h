@@ -126,6 +126,8 @@ struct LHome {
                                  * list, as tiles */
     LONG tile_sel;              /* the section's list in use (its first level): the tile
                                  * chosen; -1 the sections' menu in use */
+    UBYTE tile_shown;           /* ...drawn as chosen: the keys in use (the pointer in use:
+                                 * its hover alone shows) */
 };
 
 /* Pairs of label and value: facts[2 * i], facts[2 * i + 1]. */

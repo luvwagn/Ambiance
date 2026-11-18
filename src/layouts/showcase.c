@@ -566,7 +566,7 @@ static void draw_home(void)
             for (k = first; k < row->n && k < last; k++) {
                 const struct LItem *it = row->item(k);
                 LONG cx = x0 + ((k - first) % cols) * (cw + g), cy = y + ((k - first) / cols) * (ch + g), tx;
-                BOOL on = k == m->tile_sel;
+                BOOL on = k == m->tile_sel && m->tile_shown;
                 if (it->flags & LIF_HEAD) {
                     text(cx + X(4), cy + (ch - FH) / 2, it->label, LF_SMALL, C_SUB, &bg_grad, cw);
                     continue;

@@ -476,6 +476,7 @@ static const void *h_model(int screen)
         home.nrows = 1;
         home.rows = &row;
         home.tile_sel = home_tile;
+        home.tile_shown = 1;
         return &home;
     }
     if (screen == LS_NOW) {

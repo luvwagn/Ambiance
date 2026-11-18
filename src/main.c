@@ -17647,6 +17647,8 @@ static const void *lv_model(int screen)
             home.rows = &row;
             if (lv_home_list())
                 home.tile_sel = pages[0].sel;
+            home.tile_shown = !mouse_mode;  /* (come in with the mouse: nothing chosen
+                                             * shows, the hover does) */
         }
         return &home;
     case LS_NOW: {
@@ -17722,6 +17724,8 @@ static void lv_act(int what, LONG arg)
         break;
     case LAC_BACK: act_back(); break;
     case LAC_SECTION:
+        if (focus == FOCUS_CONTENT && lv_home_list())
+            set_focus(FOCUS_MENU);          /* (a section's tiles in use: the menu clicked) */
         if (focus == FOCUS_MENU && arg >= 0 && arg < nmenu && arg != menu_sel)
             menu_select(arg);
         break;
@@ -18356,6 +18360,7 @@ BOOL lv_mouse(struct IntuiMessage *im)
         mouse_last = time_ms();
         if (ptr_hidden)
             pointer_show();
+        set_mouse_mode(TRUE);               /* (the keys' choice shown no more) */
         /* what the pointer is over: the layout's hover glow */
         if (lv.eng->pointer && g.win) {
             lk_clip(&lv.out, 0, 0, g.w, g.h);
@@ -18368,6 +18373,7 @@ BOOL lv_mouse(struct IntuiMessage *im)
     if (im->Class != IDCMP_MOUSEBUTTONS)
         return TRUE;
     mouse_last = time_ms();
+    set_mouse_mode(TRUE);
     if (ptr_hidden)
         pointer_show();
     if (im->Code == MENUDOWN) {             /* the right button: back, whatever the layout */
