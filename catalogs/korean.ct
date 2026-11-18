@@ -622,6 +622,9 @@ MSG_1A29FF2A
 MSG_7788421F
 레이아웃
 ; Layout
+MSG_71EEEF46
+네이티브 화면에서 레이아웃 (실험적)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 시각화
 ; Visualisation
@@ -1885,9 +1888,9 @@ MSG_14BD5320
 MSG_03105558
 이전 버전의 레이아웃이 아직 메모리에 있습니다. 새 버전을 보려면 Amiga를 다시 시작하세요.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-레이아웃은 그래픽 카드의 15~32비트 화면에서 스무스 스타일이 필요합니다
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+레이아웃에는 그래픽 카드의 15~32비트 화면이 필요합니다
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 이 모듈을 믹싱하려면 68020 이상이 필요합니다
 ; This module needs a 68020 or better to be mixed

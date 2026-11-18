@@ -622,6 +622,9 @@ Färger
 MSG_7788421F
 Layout
 ; Layout
+MSG_71EEEF46
+Layouter på inbyggda skärmar (experimentellt)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisering
 ; Visualisation
@@ -1885,9 +1888,9 @@ Layouten kunde inte öppnas: den klassiska används
 MSG_03105558
 En äldre version av en layout finns kvar i minnet: starta om Amigan för att se den nya.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Layouter kräver stilen Mjuk på ett grafikkorts skärm med 15 till 32 bitar
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Layouter behöver ett grafikkorts skärm med 15 till 32 bitar
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Den här modulen kräver en 68020 eller bättre för att mixas
 ; This module needs a 68020 or better to be mixed

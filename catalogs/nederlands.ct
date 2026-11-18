@@ -622,6 +622,9 @@ Kleuren
 MSG_7788421F
 Indeling
 ; Layout
+MSG_71EEEF46
+Indelingen op native schermen (experimenteel)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisatie
 ; Visualisation
@@ -1885,9 +1888,9 @@ De indeling kon niet worden geopend: de klassieke wordt gebruikt
 MSG_03105558
 Een oudere versie van een indeling staat nog in het geheugen: herstart de Amiga om de nieuwe te zien.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Indelingen vereisen de stijl Zacht op een scherm van 15 tot 32 bits van een grafische kaart
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Indelingen hebben een 15- tot 32-bits scherm van een grafische kaart nodig
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Deze module vereist een 68020 of beter om gemengd te worden
 ; This module needs a 68020 or better to be mixed

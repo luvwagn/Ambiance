@@ -622,6 +622,9 @@ MSG_1A29FF2A
 MSG_7788421F
 レイアウト
 ; Layout
+MSG_71EEEF46
+ネイティブ画面でのレイアウト（実験的）
+; Layouts on native screens (experimental)
 MSG_20B362A2
 ビジュアライザー
 ; Visualisation
@@ -1885,9 +1888,9 @@ MSG_14BD5320
 MSG_03105558
 古いバージョンのレイアウトがまだメモリにあります。新しいものを見るにはAmigaを再起動してください。
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-レイアウトにはグラフィックカードの15〜32ビット画面でスムーズスタイルが必要です
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+レイアウトにはグラフィックカードの15〜32ビット画面が必要です
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 このモジュールのミックスには68020以上が必要です
 ; This module needs a 68020 or better to be mixed

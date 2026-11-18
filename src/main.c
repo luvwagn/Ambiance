@@ -180,7 +180,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_TSIZE_END = ACT_TSIZE0 + TSIZE_COUNT - 1, ACT_COLOURS, ACT_COLOUR0,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
-       ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8,    /* Classic + LV_MAX */
+       ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8, ACT_LVNATIVE,    /* Classic + LV_MAX */
        ACT_FULLVISHELP,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
@@ -361,6 +361,12 @@ static void set_msg(const char *m);
  * that still comes is not done, and is counted and logged ("unseen"). */
 static BOOL lv_drives(void);
 static BOOL lv_chosen(void);                /* a layout is chosen (on or not) */
+/* Settings > Display > "Layouts on native screens (experimental)": a
+ * layout on an 8-bit screen too (AGA, or a card's 8-bit mode), dithered
+ * to a palette of its own (lk_open_chunky) */
+static BOOL lv_native;
+#define LVNATIVE_VAR "Ambiance/LayoutNative"
+static void lv_native_changed(void);
 static void lv_redraw(void);                /* the screen itself changed: all of it, shown whole */
 static void lv_note(void);                  /* anything: the layout works out what */
 static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
@@ -2686,8 +2692,11 @@ static void build_screen_settings(struct Page *p)
     if ((it = action_item(p, _("Colours"), lv_on() ? lv_label() : _(ui_scheme_names[ui_scheme]),
                           ACT_COLOURS, MARK_ARROW)) && lv_on())
         it->flags |= ITEM_DISABLED;
-    if (gfx_mode_is_rtg(g.mode))
+    if (gfx_mode_is_rtg(g.mode) || lv_native)
         action_item(p, _("Layout"), lv_label(), ACT_LAYOUTS, MARK_ARROW);
+    if (!g.wb)
+        action_item(p, _("Layouts on native screens (experimental)"), "", ACT_LVNATIVE,
+                    lv_native ? MARK_CHECK_ON : MARK_CHECK_OFF);
     action_item(p, _("Visualisation"), _(vis_name(vis_selected())), ACT_VISUAL, MARK_CYCLE);
     fullvis_scan();
     /* AmigaAMP plug-ins to choose from: the row goes round them and Flow;
@@ -12649,6 +12658,24 @@ static void toggle_dbuf(void)
     draw_all();
 }
 
+/* Settings > Display > Layouts on native screens: on, a layout chosen
+ * shows on an 8-bit screen too (tried again here); off, such a one goes */
+static void toggle_lv_native(void)
+{
+    struct Page *p = cur();
+    LONG i;
+    lv_native = !lv_native;
+    save_setting(LVNATIVE_VAR, lv_native ? "1" : "0");
+    lv_native_changed();
+    if (p && p->type == PT_LIST) {
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].action == ACT_LVNATIVE)
+                p->list.items[i].mark = lv_native ? MARK_CHECK_ON : MARK_CHECK_OFF;
+    }
+    settings_rebuild();
+    draw_all();
+}
+
 static void toggle_debug(void)
 {
     struct Page *p = cur();
@@ -14881,6 +14908,8 @@ static void act_action(struct Item *it)
                         ? "english" : amb_lang_name(it->action - ACT_LANG0));
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
+    else if (it->action == ACT_LVNATIVE)
+        toggle_lv_native();
     else if (it->action == ACT_HTTPS)
         toggle_https();
     else if (it->action == ACT_PLEXCONV)
@@ -17377,6 +17406,13 @@ static BOOL lv_chosen(void)
     return lv.file[0] != 0;
 }
 
+/* Layouts on native screens turned on or off: tried again on this screen
+ * (on), or off it (off: lv_sync finds it no longer suits) */
+static void lv_native_changed(void)
+{
+    lv.tried = NULL;
+}
+
 /* The layout is the view driven (the classic's drawing functions return
  * at once, noting it); and the note: it draws again (lv_frame) */
 static BOOL lv_dirty;
@@ -18669,7 +18705,9 @@ static BOOL lv_suits(void)
 {
     if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
         return FALSE;
-    return g.truecolor && !g.planar;    /* (in either style: the Pixel one's lent a smooth font) */
+    if (g.truecolor && !g.planar)
+        return TRUE;                    /* (in either style: the Pixel one's lent a smooth font) */
+    return lv_native && !g.truecolor && g.depth == 8 && !g.wb;     /* (the experiment) */
 }
 
 /* The classic style is Pixel (no smooth font open): the smooth set for
@@ -18723,7 +18761,9 @@ static void lv_activate(void)
         amb_log("layout", "no smooth font for this screen (Fonts/amb-smooth): classic");
         return;
     }
-    if (!lk_open(&g, &lv.out, TRUE)) {
+    if (!(g.truecolor ? lk_open(&g, &lv.out, TRUE) : lk_open_chunky(&g, &lv.out))) {
+        if (!g.truecolor)
+            amb_log("layout", "an 8-bit screen: no room for its canvas, or graphics.library before 40");
         lv_give_back_font();
         return;
     }
@@ -18796,6 +18836,8 @@ static void lv_sync(void)
         lv.read = TRUE;
         if (GetVar((CONST_STRPTR)LAYOUT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             amb_strlcpy(lv.file, buf, sizeof(lv.file));
+        if (GetVar((CONST_STRPTR)LVNATIVE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lv_native = buf[0] == '1';
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
             amb_log("layout", "Shift held as Ambiance started: the classic layout this time");

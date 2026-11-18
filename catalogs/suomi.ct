@@ -622,6 +622,9 @@ Värit
 MSG_7788421F
 Asettelu
 ; Layout
+MSG_71EEEF46
+Asettelut alkuperäisnäytöillä (kokeellinen)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisointi
 ; Visualisation
@@ -1885,9 +1888,9 @@ Asettelua ei voitu avata: käytetään klassista
 MSG_03105558
 Asettelun vanhempi versio on yhä muistissa: käynnistä Amiga uudelleen nähdäksesi uuden.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Asettelut vaativat Pehmeä-tyylin näytönohjaimen 15-32-bittisellä näytöllä
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Asettelut tarvitsevat näytönohjaimen 15–32-bittisen näytön
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Tämä moduuli vaatii 68020:n tai paremman miksaukseen
 ; This module needs a 68020 or better to be mixed

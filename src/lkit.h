@@ -32,6 +32,11 @@ void lk_show(struct LkOut *o);
 /* An output onto bm, a w x h strip standing for the screen's rows y0 on
  * (a slideshow's or video's controls, drawn by a layout): not shown by
  * lk_show, bm left to the caller at lk_close */
+/* An 8-bit screen (an experiment: AGA, or a card's 8-bit mode): the
+ * layout's true colour dithered to a palette of its own (pens 20-35 and
+ * 40-255, the screen's colours put back at lk_close), on a canvas shown
+ * with WriteChunkyPixels (graphics.library 40) */
+BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
 BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, WORD w, WORD h);
 BOOL lk_canvas(const struct LkOut *o);
 

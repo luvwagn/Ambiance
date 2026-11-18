@@ -9,8 +9,12 @@
 #include <proto/graphics.h>
 #include <proto/cybergraphics.h>
 #include <cybergraphx/cybergraphics.h>
+#include <graphics/gfxbase.h>
+
+#include <string.h>
 
 extern struct Library *CyberGfxBase;
+extern struct GfxBase *GfxBase;
 
 /* Where an output draws: the screen (rp NULL: the Gfx's RastPort of the
  * moment) or the canvas; what has changed on the canvas since lk_show. */
@@ -21,6 +25,10 @@ struct LkTarget {
     long x0, y0, x1, y1;        /* changed: x0 > x1 when nothing */
     long oy;                    /* a strip's (lk_open_strip): the screen's row its top is */
     BOOL own;                   /* bm is the output's own (the canvas), freed with it */
+    UBYTE *ch;                  /* an 8-bit screen's (lk_open_chunky): its pens, a byte a
+                                 * pixel, the screen's size; shown with WriteChunkyPixels */
+    long cw, chh;
+    ULONG *pal_was;             /* ...the screen's colours before, put back at lk_close */
 };
 
 static struct RastPort *target_rp(struct LkTarget *t)
@@ -80,6 +88,166 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
         gfx_dirty();
     }
     return 1;
+}
+
+
+/* ---- an 8-bit screen (an experiment: AGA, or a card's 8-bit mode). The
+ * layout draws in true colour as ever; each pixel is made a pen as it is
+ * drawn, ordered-dithered (4 x 4) to a palette of the layout's own: a
+ * 6 x 6 x 6 cube at pens 40-255 and 16 greys at 20-35 (0-19 and 36-39
+ * kept: the classic's own pens, the pointer's at 17-19). The pens go to
+ * a canvas a byte a pixel, shown with WriteChunkyPixels. */
+#define CK_GREY0 20
+#define CK_CUBE0 40
+static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+static UBYTE ck_q6[16][256];         /* a value's level of 6, by the dither's step */
+static UBYTE ck_q16[16][256];        /* ...of 16 (the greys) */
+static BOOL ck_made;
+
+static void ck_tables(void)
+{
+    int d, v;
+    if (ck_made)
+        return;
+    for (d = 0; d < 16; d++)
+        for (v = 0; v < 256; v++) {
+            ck_q6[d][v] = (UBYTE)((v * 5 * 16 + d * 255 + 8) / (255 * 16));
+            ck_q16[d][v] = (UBYTE)((v * 15 * 16 + d * 255 + 8) / (255 * 16));
+        }
+    ck_made = TRUE;
+}
+
+static UBYTE ck_pen(unsigned long rgb, int d)
+{
+    int r = (rgb >> 16) & 255, gg = (rgb >> 8) & 255, b = rgb & 255;
+    int mx = r > gg ? (r > b ? r : b) : (gg > b ? gg : b), mn = r < gg ? (r < b ? r : b) : (gg < b ? gg : b);
+    if (mx - mn <= 10)                  /* about grey: the finer ramp */
+        return (UBYTE)(CK_GREY0 + ck_q16[d][(r * 77 + gg * 150 + b * 29) >> 8]);
+    return (UBYTE)(CK_CUBE0 + ck_q6[d][r] * 36 + ck_q6[d][gg] * 6 + ck_q6[d][b]);
+}
+
+static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
+{
+    if (t->x0 > t->x1) {
+        t->x0 = x;
+        t->y0 = y;
+        t->x1 = x + w - 1;
+        t->y1 = y + h - 1;
+        return;
+    }
+    if (x < t->x0)
+        t->x0 = x;
+    if (y < t->y0)
+        t->y0 = y;
+    if (x + w - 1 > t->x1)
+        t->x1 = x + w - 1;
+    if (y + h - 1 > t->y1)
+        t->y1 = y + h - 1;
+}
+
+static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
+{
+    struct LkTarget *t = ctx;
+    UBYTE pat[4][4];
+    long i, j;
+    ck_touch(t, x, y, w, h);
+    for (j = 0; j < 4; j++)             /* the colour's 4 x 4 pattern, once */
+        for (i = 0; i < 4; i++)
+            pat[j][i] = ck_pen(rgb, ck_bayer[j][i]);
+    for (j = 0; j < h; j++) {
+        UBYTE *d = t->ch + (y + j) * t->cw + x;
+        const UBYTE *pr = pat[(y + j) & 3];
+        for (i = 0; i < w; i++)
+            d[i] = pr[(x + i) & 3];
+    }
+}
+
+static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
+{
+    struct LkTarget *t = ctx;
+    long i, j;
+    ck_touch(t, x, y, w, h);
+    for (j = 0; j < h; j++) {
+        UBYTE *d = t->ch + (y + j) * t->cw + x;
+        const unsigned long *s = px + j * mod;
+        const UBYTE *br = ck_bayer[(y + j) & 3];
+        for (i = 0; i < w; i++)
+            d[i] = ck_pen(s[i], br[(x + i) & 3]);
+    }
+}
+
+static int ck_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
+{
+    struct LkTarget *t = ctx;
+    long j;
+    if (dy > 0) {                       /* (rows from the bottom: they overlap) */
+        for (j = h - 1; j >= 0; j--)
+            memmove(t->ch + (y + j + dy) * t->cw + x + dx, t->ch + (y + j) * t->cw + x, (size_t)w);
+    } else {
+        for (j = 0; j < h; j++)
+            memmove(t->ch + (y + j + dy) * t->cw + x + dx, t->ch + (y + j) * t->cw + x, (size_t)w);
+    }
+    ck_touch(t, x + dx, y + dy, w, h);
+    return 1;
+}
+
+BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
+{
+    struct LkTarget *t;
+    struct ViewPort *vp;
+    ULONG *pal;
+    int i;
+    o->buf = NULL;
+    o->ctx = NULL;
+    if (!g->scr || !g->rp || g->truecolor || g->depth != 8 || g->wb || GfxBase->LibNode.lib_Version < 40)
+        return FALSE;
+    if (!(t = AllocVec(sizeof(*t), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    t->g = g;
+    t->x0 = 1;
+    t->x1 = 0;
+    t->cw = g->w;
+    t->chh = g->h;
+    t->ch = AllocVec((ULONG)g->w * g->h, MEMF_ANY | MEMF_CLEAR);
+    t->pal_was = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
+    pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
+    o->ctx = t;
+    if (!t->ch || !t->pal_was || !pal) {
+        if (pal)
+            FreeVec(pal);
+        lk_close(o);
+        return FALSE;
+    }
+    ck_tables();
+    /* the colours as they were (put back at lk_close), then the layout's */
+    vp = &g->scr->ViewPort;
+    t->pal_was[0] = 256UL << 16;
+    GetRGB32(vp->ColorMap, 0, 256, t->pal_was + 1);
+    t->pal_was[1 + 256 * 3] = 0;
+    memcpy(pal, t->pal_was, (1 + 256 * 3 + 1) * 4);
+    for (i = 0; i < 16; i++) {
+        ULONG v = (ULONG)(i * 17) * 0x01010101UL;
+        pal[1 + (CK_GREY0 + i) * 3] = pal[2 + (CK_GREY0 + i) * 3] = pal[3 + (CK_GREY0 + i) * 3] = v;
+    }
+    for (i = 0; i < 216; i++) {
+        int k = CK_CUBE0 + i;
+        pal[1 + k * 3] = (ULONG)((i / 36) * 51) * 0x01010101UL;
+        pal[2 + k * 3] = (ULONG)((i / 6 % 6) * 51) * 0x01010101UL;
+        pal[3 + k * 3] = (ULONG)((i % 6) * 51) * 0x01010101UL;
+    }
+    LoadRGB32(vp, pal);
+    FreeVec(pal);
+    o->fill = ck_fill;
+    o->rows = ck_rows;
+    o->copy = ck_copy;
+    o->bits = 24;                       /* (dithered here, as each pixel is made a pen) */
+    o->bufn = (long)g->w * 16;
+    if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
+        lk_close(o);
+        return FALSE;
+    }
+    lk_clip(o, 0, 0, g->w, g->h);
+    return TRUE;
 }
 
 BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
@@ -164,6 +332,20 @@ BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, W
 void lk_show(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
+    if (t && t->ch) {
+        if (t->x0 > t->x1)
+            return;
+        if (t->x0 < 0) t->x0 = 0;
+        if (t->y0 < 0) t->y0 = 0;
+        if (t->x1 >= t->cw) t->x1 = t->cw - 1;
+        if (t->y1 >= t->chh) t->y1 = t->chh - 1;
+        gfx_dirty();
+        WriteChunkyPixels(t->g->rp, (ULONG)t->x0, (ULONG)t->y0, (ULONG)t->x1, (ULONG)t->y1,
+                          t->ch + t->y0 * t->cw + t->x0, t->cw);
+        t->x0 = 1;
+        t->x1 = 0;
+        return;
+    }
     if (!t || !t->bm || !t->own || t->x0 > t->x1)
         return;
     gfx_dirty();
@@ -176,7 +358,7 @@ void lk_show(struct LkOut *o)
 BOOL lk_canvas(const struct LkOut *o)
 {
     const struct LkTarget *t = o->ctx;
-    return t && t->bm;
+    return t && (t->bm || t->ch);
 }
 
 void lk_close(struct LkOut *o)
@@ -186,6 +368,13 @@ void lk_close(struct LkOut *o)
         if (t->bm && t->own) {
             WaitBlit();
             FreeBitMap(t->bm);
+        }
+        if (t->ch)
+            FreeVec(t->ch);
+        if (t->pal_was) {
+            if (t->g->scr)              /* (the classic's colours back) */
+                LoadRGB32(&t->g->scr->ViewPort, t->pal_was);
+            FreeVec(t->pal_was);
         }
         FreeVec(t);
     }

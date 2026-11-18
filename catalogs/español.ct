@@ -622,6 +622,9 @@ Colores
 MSG_7788421F
 Diseño
 ; Layout
+MSG_71EEEF46
+Diseños en pantallas nativas (experimental)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualización
 ; Visualisation
@@ -1885,9 +1888,9 @@ No se pudo abrir el diseño: se usa el clásico
 MSG_03105558
 Una versión anterior de un diseño sigue en memoria: reinicie el Amiga para ver la nueva.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Los diseños necesitan el estilo Suave en una pantalla de tarjeta gráfica de 15 a 32 bits
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Los diseños necesitan una pantalla de tarjeta gráfica de 15 a 32 bits
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Este módulo necesita un 68020 o superior para mezclarse
 ; This module needs a 68020 or better to be mixed

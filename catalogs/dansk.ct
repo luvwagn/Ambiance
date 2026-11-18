@@ -622,6 +622,9 @@ Farver
 MSG_7788421F
 Layout
 ; Layout
+MSG_71EEEF46
+Layouts på native skærme (eksperimentelt)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisering
 ; Visualisation
@@ -1885,9 +1888,9 @@ Layoutet kunne ikke åbnes: det klassiske bruges
 MSG_03105558
 En ældre version af et layout er stadig i hukommelsen: genstart Amigaen for at se den nye.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Layouts kræver stilen Blød på et grafikkorts skærm med 15 til 32 bit
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Layouts kræver en grafikkorts skærm med 15 til 32 bit
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Dette modul kræver en 68020 eller bedre for at blive mixet
 ; This module needs a 68020 or better to be mixed

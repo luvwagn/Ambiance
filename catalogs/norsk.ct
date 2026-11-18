@@ -622,6 +622,9 @@ Farger
 MSG_7788421F
 Oppsett
 ; Layout
+MSG_71EEEF46
+Oppsett på native skjermer (eksperimentelt)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisering
 ; Visualisation
@@ -1885,9 +1888,9 @@ Oppsettet kunne ikke åpnes: det klassiske brukes
 MSG_03105558
 En eldre versjon av et oppsett er fortsatt i minnet: start Amigaen på nytt for å se den nye.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Oppsett krever stilen Myk på en grafikkortskjerm med 15 til 32 bit
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Oppsett trenger en 15- til 32-biters skjerm fra et grafikkort
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Denne modulen krever en 68020 eller bedre for å mikses
 ; This module needs a 68020 or better to be mixed

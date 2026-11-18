@@ -622,6 +622,9 @@ Couleurs
 MSG_7788421F
 Disposition
 ; Layout
+MSG_71EEEF46
+Dispositions sur écrans natifs (expérimental)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Visualisation
 ; Visualisation
@@ -1885,9 +1888,9 @@ La disposition n'a pas pu s'ouvrir : la classique est utilisée
 MSG_03105558
 Une ancienne version d'une disposition est encore en mémoire : redémarrez l'Amiga pour voir la nouvelle.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Les dispositions nécessitent le style Lisse sur un écran de carte graphique de 15 à 32 bits
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Les dispositions demandent un écran de carte graphique de 15 à 32 bits
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Ce module nécessite un 68020 ou mieux pour être mixé
 ; This module needs a 68020 or better to be mixed

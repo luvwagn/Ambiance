@@ -622,6 +622,9 @@ MSG_1A29FF2A
 MSG_7788421F
 Διάταξη
 ; Layout
+MSG_71EEEF46
+Διατάξεις σε εγγενείς οθόνες (πειραματικό)
+; Layouts on native screens (experimental)
 MSG_20B362A2
 Οπτικοποίηση
 ; Visualisation
@@ -1885,9 +1888,9 @@ MSG_14BD5320
 MSG_03105558
 Μια παλαιότερη έκδοση διάταξης είναι ακόμα στη μνήμη: επανεκκινήστε το Amiga για να δείτε τη νέα.
 ; An older version of a layout is still in memory: restart the Amiga to see the new one.
-MSG_24B72731
-Οι διατάξεις θέλουν το στυλ Smooth σε οθόνη κάρτας γραφικών 15 έως 32 bit
-; Layouts need the Smooth style on a graphics card's 15 to 32-bit screen
+MSG_1676F56A
+Οι διατάξεις χρειάζονται οθόνη κάρτας γραφικών 15 έως 32 bit
+; Layouts need a graphics card's 15 to 32-bit screen
 MSG_1767B111
 Το module θέλει 68020 ή καλύτερο για μίξη
 ; This module needs a 68020 or better to be mixed
