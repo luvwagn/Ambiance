@@ -457,6 +457,7 @@ static void crumbs(struct LPage *pg, const char *a, const char *b, const char *c
 }
 
 static int frames_wall;
+static ULONG text_frac;         /* the text page: how far through it */
 static LONG wall_sel = 6;       /* the wall's chosen cover */
 static LONG home_tile = -1;    /* Home's tiles in use: the one chosen */         /* the wall drawn as Videos' (4:3 frames) */
 static const void *h_model(int screen)
@@ -599,6 +600,7 @@ static const void *h_model(int screen)
         page.crumb[0] = "About";
         page.crumb[1] = "Ambiance";
         page.text = 1;
+        page.text_frac = text_frac;
         page.ndetails = sizeof(text_lines) / sizeof(text_lines[0]);
         page.details = text_lines;
         page.message = "Press Esc again to quit Ambiance";
@@ -746,6 +748,13 @@ static void run(int w, int h, int bits, const char *font)
         full = drawn_px;
         CHECK(drawn_px >= (long)w * h);
         save(names[scene]);
+        if (scene == 2) {               /* the text at its end: its last line shown */
+            text_frac = 65536;
+            layout_engine.draw(LS_PAGE);
+            save("text-end");
+            text_frac = 0;
+            layout_engine.draw(LS_PAGE);
+        }
         if (scene == 0) {               /* the list's bar: pressed, dragged, let go */
             int px, py = h / 2, found = 0, paged = 0, r;
             /* the bar: off its thumb a page that way, on it the thumb taken */

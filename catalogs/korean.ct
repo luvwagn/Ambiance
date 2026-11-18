@@ -970,9 +970,9 @@ FLAC: flacdec.library (c) 2026 Renaud Schweingruber, David Reid의 dr_flac 사�
 MSG_56CB434E
 Amiga는 그 소유자의 상표입니다. 게임, 데모, 음악, 사진은 그 저작자의 것입니다. 라이선스 문서는 Licences 서랍에 있습니다.
 ; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
-MSG_302861BB
-이 프론트엔드는 Paul Vince와 Amiga Game Selector의 엄청난 노력이 없었다면 불가능했을 것입니다.
-; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_5263208D
+이 프론트엔드는 Paul Vince의 Amiga Game Selector에서 영감을 받았습니다
+; This front-end inspired by the efforts of Paul Vince's Amiga Game Selector
 MSG_07ED33C3
 사진: %.100s
 ; Pictures: %.100s

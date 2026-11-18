@@ -3576,8 +3576,7 @@ static void build_credits(struct Page *p)
     text_line(p, "");
     text_para(p, _("Amiga is a trademark of its owner. Games, demos, music and pictures belong "
                  "to their authors. Licence texts are in the Licences drawer."));
-    p->note = _("This front-end would not be possible without the immense efforts of Paul Vince "
-              "and Amiga Game Selector.");
+    p->note = _("This front-end inspired by the efforts of Paul Vince's Amiga Game Selector");
     p->plexmark = 1;
     for (i = 0; ags_splash[i] && !p->pic[0]; i++) {
         struct Process *me = (struct Process *)FindTask(NULL);
@@ -17447,6 +17446,11 @@ static void lv_page(struct Page *p, struct LPage *m)
             m->list.top = p->tb.pos / p->tb.line_h;
             m->text_off = (UBYTE)((p->tb.pos % p->tb.line_h) * 256 / p->tb.line_h);
         }
+        {
+            LONG mx = p->tb.content_h - p->tb.h;    /* (textbox.c's max_pos) */
+            m->text_frac = mx <= 0 ? 0 : p->tb.pos >= mx ? 65536UL
+                         : (ULONG)(p->tb.pos * 1024L / mx) * 64UL;
+        }
         for (i = 0; i < l->count && i < 256; i++)
             lv_lines[i] = l->items[i].label ? l->items[i].label : "";
         m->ndetails = (WORD)i;
@@ -18282,12 +18286,16 @@ static struct LImage lv_plex_im;
 static ULONG *lv_plex_px, lv_plex_bg;
 static const struct LImage *h_plexmark(ULONG bg)
 {
-    WORD k = g.sm ? (WORD)((sm_cell_h(g.sm) * 2 + plex_lo_h / 2) / plex_lo_h) : 1, x, y, i, j;
-    UWORD w, h;
-    if (k < 1)
-        k = 1;
-    w = (UWORD)(plex_lo_w * k);
-    h = (UWORD)(plex_lo_h * k);
+    /* the wordmark's coverage (art.c's plex_hi, 64 high) averaged down to
+     * two lines' height, white and Plex's yellow over bg: smooth, as the
+     * smooth fonts are (the pens' pixel logo, made larger, was blocky) */
+    UWORD h = (UWORD)(g.sm ? sm_cell_h(g.sm) * 2 : plex_hi_h / 2), w;
+    LONG x, y;
+    if (h < 8)
+        h = 8;
+    if (h > plex_hi_h)
+        h = plex_hi_h;
+    w = (UWORD)(((LONG)plex_hi_w * h + plex_hi_h / 2) / plex_hi_h);
     if (lv_plex_px && lv_plex_bg == bg && lv_plex_im.w == w)
         return &lv_plex_im;
     if (lv_plex_px && lv_plex_im.w != w) {
@@ -18296,16 +18304,37 @@ static const struct LImage *h_plexmark(ULONG bg)
     }
     if (!lv_plex_px && !(lv_plex_px = AllocVec((ULONG)w * h * 4, MEMF_ANY)))
         return NULL;
-    for (y = 0; y < (WORD)plex_lo_h; y++)
-        for (x = 0; x < (WORD)plex_lo_w; x++) {
-            UBYTE pen = plex_lo[y * plex_lo_w + x];
-            ULONG c = pen == PEN_WHITE ? 0xFFFFFF : pen == PEN_PLEX ? 0xEBAF00
-                    : pen == PEN_PLEX_W2 ? lk_mix(0xFFFFFF, bg, 1, 2)
-                    : pen == PEN_PLEX_Y2 ? lk_mix(0xEBAF00, bg, 1, 2) : bg;
-            for (j = 0; j < k; j++)
-                for (i = 0; i < k; i++)
-                    lv_plex_px[(ULONG)(y * k + j) * w + x * k + i] = c;
+    for (y = 0; y < h; y++) {
+        LONG y0 = y * plex_hi_h / h, y1 = (y + 1) * plex_hi_h / h;
+        if (y1 <= y0)
+            y1 = y0 + 1;
+        for (x = 0; x < w; x++) {
+            LONG x0 = x * plex_hi_w / w, x1 = (x + 1) * plex_hi_w / w, i, j, ink = 0, yel = 0, n;
+            ULONG c;
+            if (x1 <= x0)
+                x1 = x0 + 1;
+            for (j = y0; j < y1; j++)
+                for (i = x0; i < x1; i++) {
+                    UBYTE v = plex_hi[j * plex_hi_w + i];
+                    ink += v >> 4;
+                    yel += v & 15;
+                }
+            n = (y1 - y0) * (x1 - x0) * 15;
+            /* bg where no ink, white where the ink is not the chevron's,
+             * Plex's yellow where it is */
+            if (yel > ink)
+                yel = ink;
+            {
+                int sh;
+                c = 0;
+                for (sh = 0; sh <= 16; sh += 8) {
+                    LONG b = (LONG)((bg >> sh) & 255), yv = (LONG)((0xEBAF00UL >> sh) & 255);
+                    c |= (ULONG)((b * (n - ink) + 255 * (ink - yel) + yv * yel) / n) << sh;
+                }
+            }
+            lv_plex_px[(ULONG)y * w + x] = c;
         }
+    }
     lv_plex_bg = bg;
     lv_plex_im.w = w;
     lv_plex_im.h = h;

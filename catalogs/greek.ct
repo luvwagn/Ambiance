@@ -970,9 +970,9 @@ FLAC: flacdec.library (c) 2026 Renaud Schweingruber, με το dr_flac του Da
 MSG_56CB434E
 Το Amiga είναι εμπορικό σήμα του κατόχου του. Παιχνίδια, demos, μουσική και εικόνες ανήκουν στους δημιουργούς τους. Οι άδειες είναι στο συρτάρι Licences.
 ; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
-MSG_302861BB
-Αυτό το front-end δεν θα υπήρχε χωρίς την τεράστια δουλειά του Paul Vince και το Amiga Game Selector.
-; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_5263208D
+Αυτό το front-end είναι εμπνευσμένο από τη δουλειά του Paul Vince στο Amiga Game Selector
+; This front-end inspired by the efforts of Paul Vince's Amiga Game Selector
 MSG_07ED33C3
 Εικόνες: %.100s
 ; Pictures: %.100s

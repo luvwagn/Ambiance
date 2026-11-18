@@ -970,9 +970,9 @@ FLAC: flacdec.library (c) 2026 Renaud Schweingruber, med dr_flac af David Reid (
 MSG_56CB434E
 Amiga er et varemærke tilhørende sin ejer. Spil, demoer, musik og billeder tilhører deres ophavsmænd. Licensteksterne ligger i skuffen Licences.
 ; Amiga is a trademark of its owner. Games, demos, music and pictures belong to their authors. Licence texts are in the Licences drawer.
-MSG_302861BB
-Denne brugerflade ville ikke være mulig uden det enorme arbejde fra Paul Vince og Amiga Game Selector.
-; This front-end would not be possible without the immense efforts of Paul Vince and Amiga Game Selector.
+MSG_5263208D
+Denne brugerflade er inspireret af Paul Vinces arbejde med Amiga Game Selector
+; This front-end inspired by the efforts of Paul Vince's Amiga Game Selector
 MSG_07ED33C3
 Billeder: %.100s
 ; Pictures: %.100s

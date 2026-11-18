@@ -97,6 +97,8 @@ struct LPage {
                                  * draws it), 0 none */
     UBYTE text_off;             /* text: how much of its first line (list.top) is scrolled
                                  * past, in 256ths of a line (it glides by pixels) */
+    ULONG text_frac;            /* text: how far through it, 0 (its start) to 65536 (its
+                                 * end shown): a layout wrapping it its own way goes by this */
     const char *waiting;        /* its rows asked for over the network and not come yet:
                                  * what to say in their place ("Searching..."), or NULL */
     UBYTE wait_phase;           /* waiting: a spinner's step, 0-7 (changed(LC_WAIT) as

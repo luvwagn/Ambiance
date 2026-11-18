@@ -1023,6 +1023,8 @@ extern const UBYTE logo_lo[];
 extern const UWORD logo_lo_w, logo_lo_h;
 extern const UBYTE plex_lo[];          /* Plex's logo in pens (255: none), for Credits */
 extern const UWORD plex_lo_w, plex_lo_h;
+extern const UBYTE plex_hi[];          /* ...as coverage (ink << 4 | yellow), for the layouts */
+extern const UWORD plex_hi_w, plex_hi_h;
 extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
 extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */

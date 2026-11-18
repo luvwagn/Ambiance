@@ -1375,6 +1375,39 @@ static void draw_page_body(const struct LPage *m)
         H->letter((WORD)(x + lw - X(40)), (WORD)(y + (bottom - y) / 2), C_LETTER);
 }
 
+/* A long text as this layout wraps it: each line's height (a blank one
+ * half), and the whole; worked out once a text and width. The host scrolls
+ * its own wrapping of it (the classic's lines and box), so where it is goes
+ * by the fraction of the way (LPage.text_frac): its end is the end here. */
+#define TL_N 256
+static LONG tl_h[TL_N], tl_n = -1, tl_w, tl_total;
+static const void *tl_of;
+static void text_measure(const struct LPage *m, LONG w, LONG lh)
+{
+    LONG i, n = m->ndetails < TL_N ? m->ndetails : TL_N;
+    if ((const void *)m->details == tl_of && n == tl_n && w == tl_w)
+        return;
+    tl_of = (const void *)m->details;
+    tl_n = n;
+    tl_w = w;
+    tl_total = 0;
+    for (i = 0; i < n; i++) {
+        const char *p = m->details[i];
+        tl_h[i] = p && *p ? wrapped(p, w, LF_REGULAR) * lh : lh / 2;
+        tl_total += tl_h[i];
+    }
+}
+/* Where it is drawn from for a view vh tall: its first line, and the y
+ * (from the view's top) that line starts at */
+static LONG text_from(const struct LPage *m, LONG vh, LONG *dy)
+{
+    LONG off = tl_total > vh ? (LONG)((m->text_frac >> 4) * (ULONG)(tl_total - vh) / 4096) : 0, acc = 0, i = 0;
+    while (i < tl_n && acc + tl_h[i] <= off)
+        acc += tl_h[i++];
+    *dy = -(off - acc);
+    return i;
+}
+
 /* One long text, scrolled by pixels; a note, a picture and Plex's mark
  * under it on a page that has them. full: all of it; else (a glide) the
  * text and its bar alone. */
@@ -1416,21 +1449,25 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
         }
         tx_bottom = under;
     }
-    vis = (tx_bottom - top) / lh;
-    H->vgrad((WORD)x, (WORD)top, (WORD)(w + 2), (WORD)(tx_bottom - top), grad(top), grad(tx_bottom));
-    H->clip((WORD)x, (WORD)top, (WORD)(sbx - X(6)), (WORD)tx_bottom);
-    draw_lines(m->details, m->ndetails, m->list.top, x, top - lh * m->text_off / 256, sbx - X(14) - x,
-               tx_bottom + lh, C_BODY, C_BODY);
-    H->clip(0, 0, W, HT);
-    if (m->ndetails > vis && vis > 0) {
-        LONG bh = tx_bottom - top, th = bh * vis / m->ndetails, ty;
-        if (th < Y(16))
-            th = Y(16);
-        ty = top + (bh - th) * m->list.top / (m->ndetails - vis > 0 ? m->ndetails - vis : 1);
-        if (ty > top + bh - th)
-            ty = top + bh - th;
-        scroll_units(m->list.top, vis - 1, m->ndetails - vis);
-        scroll_bar(sbx, top, bh, ty, th, FALSE);
+    {
+        LONG vh = tx_bottom - top, dy, from;
+        (void)vis;
+        text_measure(m, sbx - X(14) - x, lh);
+        from = text_from(m, vh, &dy);
+        back_at(x, top, x + w + 2, tx_bottom);
+        H->clip((WORD)x, (WORD)top, (WORD)(sbx - X(6)), (WORD)tx_bottom);
+        draw_lines(m->details, m->ndetails, from, x, top + dy, sbx - X(14) - x, tx_bottom + lh, C_BODY, C_BODY);
+        H->clip(0, 0, W, HT);
+        if (tl_total > vh && vh > 0) {
+            LONG bh = vh, th = bh * vh / tl_total, ty;
+            if (th < Y(16))
+                th = Y(16);
+            ty = top + (LONG)((bh - th) * (m->text_frac >> 4) / 4096);
+            if (ty > top + bh - th)
+                ty = top + bh - th;
+            scroll_units((LONG)(m->text_frac * 1000 / 65536), vh * 1000 / (tl_total - vh), 1000);
+            scroll_bar(sbx, top, bh, ty, th, FALSE);
+        }
     }
 }
 

@@ -222,6 +222,32 @@ def plex_logo(height=20):
     return w, height, out
 
 
+def plex_logo_smooth(height=64):
+    """The wordmark as coverage, for the layouts' smooth screens: a byte a
+    pixel, its ink's coverage (high nibble, 0-15) and the yellow chevron's
+    (low nibble), made smaller with an area average where it is shown."""
+    sc = 100
+    with tempfile.TemporaryDirectory() as d:
+        png = os.path.join(d, "plex.png")
+        subprocess.run(["rsvg-convert", "-w", str(24 * sc), "-h", str(24 * sc), PLEX_SVG, "-o", png],
+                       check=True)
+        full = Image.open(png).convert("RGBA").split()[-1]
+    box = full.getbbox()
+    full = full.crop(box)
+    chev = Image.new("L", full.size, 0)
+    ImageDraw.Draw(chev).polygon([(x * sc - box[0], y * sc - box[1]) for x, y in PLEX_CHEVRON], fill=255)
+    w = round(full.width * height / full.height)
+    f = full.resize((w, height), Image.BOX).load()
+    c = chev.resize((w, height), Image.BOX).load()
+    out = []
+    for y in range(height):
+        for x in range(w):
+            a = f[x, y]
+            ch = min(c[x, y], a)
+            out.append((round(a * 15 / 255) << 4) | round(ch * 15 / 255))
+    return w, height, out
+
+
 # ------------------------------------------------------------ icons
 # Hand-drawn 16x16 pixel art, one string per row ('#' = ink).
 ICON_ART = {
@@ -434,6 +460,11 @@ def main():
                  " * guidelines (assets/plex) */\n")
         fh.write(f"const UWORD plex_lo_w = {pw}, plex_lo_h = {ph};\n\n")
         fh.write(c_bytes("plex_lo", pl))
+        sw, sh, sl = plex_logo_smooth()
+        fh.write("\n/* ...and as coverage for the layouts (smooth): each byte its ink's\n"
+                 " * coverage 0-15 (high nibble), the yellow chevron's (low) */\n")
+        fh.write(f"const UWORD plex_hi_w = {sw}, plex_hi_h = {sh};\n\n")
+        fh.write(c_bytes("plex_hi", sl))
         fh.write("\nconst UWORD icons16[][16] = {\n")
         for rows in icons:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in rows) + " },\n")
