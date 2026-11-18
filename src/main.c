@@ -10212,6 +10212,16 @@ static void log_free(const char *what)
     amb_log(what, buf);
 }
 
+/* The screen (or window) closed, to be opened again or not: a layout's off
+ * first (its canvas and its library's drawing belong to this screen, and
+ * nothing of it may draw onto the next one); lv_frame puts it on again
+ * where the new screen suits it (lv_sync) */
+static void screen_close(void)
+{
+    lv_hold();
+    gfx_close(&g);
+}
+
 /* Before a game: everything Ambiance can rebuild goes. Where each section
  * was is kept (nav_mem), so the same entry comes back afterwards. */
 static void release_for_launch(void)
@@ -10237,7 +10247,7 @@ static void release_for_launch(void)
     spin_free();
     ov_bm_free();
     vis_stop();                     /* the spectrum's tables */
-    gfx_close(&g);                  /* screen, fonts, artwork, smooth style, letters */
+    screen_close();                 /* screen, fonts, artwork, smooth style, letters */
     close_extra_libs();
     flush_memory();
     log_free("free for the game");
@@ -11235,7 +11245,7 @@ static void apply_screen_mode(int sm)
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();
-    gfx_close(&g);
+    screen_close();
     screen_mode = sm;
     if (!gfx_open(&g, &caps, sm, ui_style)) {
         failed = TRUE;
@@ -11270,6 +11280,7 @@ static void apply_screen_mode(int sm)
     }
     focus = FOCUS_CONTENT;
     msg[0] = 0;
+    lv_resume();                    /* a layout: on again first, if this screen suits it */
     draw_all();
     if (failed)
         set_msg(_("Could not open that screen mode"));
@@ -11294,7 +11305,7 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
     ptr_hidden = NULL;              /* a new window comes with its pointer */
     spin_free();
     ov_bm_free();
-    gfx_close(&g);
+    screen_close();
     if (!(ok = gfx_open(&g, &caps, screen_mode, ui_style)) && gfx_window_wanted) {
         gfx_window_wanted = FALSE;  /* full screen, as it was */
         ok = gfx_open(&g, &caps, screen_mode, ui_style);
@@ -11330,6 +11341,7 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
         sub(p);
     focus = FOCUS_CONTENT;
     msg[0] = 0;
+    lv_resume();                    /* a layout: on again first, if this screen suits it */
     draw_all();
     wb_note_fallback();
     if (gfx_window_wanted && !g.wb)
@@ -11482,7 +11494,7 @@ static void wb_follow(void)
         ov_bm_free();
         vis_stop();
         ptr_hidden = NULL;              /* a new window comes with its pointer */
-        gfx_close(&g);
+        screen_close();
         amb_log("window", "Workbench is closing: closed until it is back");
     } else {
         amb_log("window", "Workbench's prefs changed: a window again, if it can be one now");
@@ -11514,7 +11526,7 @@ static void wb_follow(void)
         ov_bm_free();
         vis_stop();
         ptr_hidden = NULL;
-        gfx_close(&g);
+        screen_close();
     }
     tl = time_ms();
     if (iconified) {
@@ -11732,7 +11744,7 @@ static void display_reopen(void)
     ov_bm_free();
     vis_stop();
     ptr_hidden = NULL;
-    gfx_close(&g);
+    screen_close();
     if (!gfx_open(&g, &caps, screen_mode, ui_style) && !gfx_open(&g, &caps, SM_AUTO, ui_style)) {
         running = FALSE;
         return;
@@ -12656,7 +12668,7 @@ static void restyle(void)
     if (g.wb) {
         /* a window: opened again, its size following the new scale */
         ptr_hidden = NULL;
-        gfx_close(&g);
+        screen_close();
         if (!gfx_open(&g, &caps, screen_mode, ui_style)) {
             running = FALSE;
             return;
@@ -17255,7 +17267,7 @@ out:
     ov_bm_free();
     if (mini_on)
         mini_drop_window();         /* (the mini player's window, on Workbench) */
-    gfx_close(&g);
+    screen_close();
     amb_log("screen closed", "");
     {
         WORD l, t, w, h;
