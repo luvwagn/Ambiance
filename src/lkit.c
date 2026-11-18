@@ -32,7 +32,7 @@ struct LkTarget {
     ULONG *rowc;                /* ...the background's colour on each row (lk_ramp), drawn
                                  * with the ramp's pens; NULL: none yet */
     unsigned long ramp_a, ramp_b;
-    UBYTE *pool;                /* ...a pen for each colour flat fills used, by its 5-6-5
+    UBYTE *pool;                /* ...a pen for each colour flat fills used, by its 5-5-5
                                  * bits (0: none yet); CK_POOLN of them a whole draw */
     UBYTE *near;                /* ...one of them for each 4-4-4 bits (the nearest there is,
                                  * for text's edges and pictures of many colours) */
@@ -113,12 +113,12 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 #define CK_RAMPN 12
 #define CK_POOL0 40                 /* pens made the colours flat fills and pictures of few
                                      * colours ask for (ck_fill_pen) */
-#define CK_POOLN 180
-#define CK_CUBE0 220                /* a 3 x 4 x 3 cube (red, green, blue): what is left over */
+#define CK_POOLN 204
+#define CK_CUBE0 244                /* a 2 x 3 x 2 cube (red, green, blue): what is left over */
 static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 static UBYTE ck_q6[16][256];         /* a value's level of 6, by the dither's step */
-static UBYTE ck_q4[16][256];         /* ...of 4 */
 static UBYTE ck_q3[16][256];         /* ...of 3 */
+static UBYTE ck_q2[16][256];         /* ...of 2 */
 static UBYTE ck_q8[16][256];         /* ...of 8 (the greys) */
 static BOOL ck_made;
 
@@ -130,8 +130,8 @@ static void ck_tables(void)
     for (d = 0; d < 16; d++)
         for (v = 0; v < 256; v++) {
             ck_q6[d][v] = (UBYTE)((v * 5 * 16 + d * 255 + 8) / (255 * 16));
-            ck_q4[d][v] = (UBYTE)((v * 3 * 16 + d * 255 + 8) / (255 * 16));
             ck_q3[d][v] = (UBYTE)((v * 2 * 16 + d * 255 + 8) / (255 * 16));
+            ck_q2[d][v] = (UBYTE)((v * 1 * 16 + d * 255 + 8) / (255 * 16));
             ck_q8[d][v] = (UBYTE)((v * 7 * 16 + d * 255 + 8) / (255 * 16));
         }
     ck_made = TRUE;
@@ -143,7 +143,7 @@ static UBYTE ck_pen(unsigned long rgb, int d)
     int mx = r > gg ? (r > b ? r : b) : (gg > b ? gg : b), mn = r < gg ? (r < b ? r : b) : (gg < b ? gg : b);
     if (mx - mn <= 10)                  /* about grey: the finer ramp */
         return (UBYTE)(CK_GREY0 + ck_q8[d][(r * 77 + gg * 150 + b * 29) >> 8]);
-    return (UBYTE)(CK_CUBE0 + ck_q3[d][r] * 12 + ck_q4[d][gg] * 3 + ck_q3[d][b]);
+    return (UBYTE)(CK_CUBE0 + ck_q2[d][r] * 6 + ck_q3[d][gg] * 2 + ck_q2[d][b]);
 }
 
 /* Is c row y's background colour (within a step or two: a gradient over
@@ -176,7 +176,7 @@ static UBYTE ck_ramp_pen(const struct LkTarget *t, long x, long y)
  * pills and panels are solid; 0 when there are none left */
 static UBYTE ck_fill_pen(struct LkTarget *t, unsigned long rgb)
 {
-    UWORD k = (UWORD)(((rgb >> 8) & 0xF800) | ((rgb >> 5) & 0x07E0) | ((rgb >> 3) & 0x001F));
+    UWORD k = (UWORD)(((rgb >> 9) & 0x7C00) | ((rgb >> 6) & 0x03E0) | ((rgb >> 3) & 0x001F));
     UBYTE pen;
     if (!t->pool)
         return 0;
@@ -203,7 +203,7 @@ static UBYTE ck_pool_pen(const struct LkTarget *t, unsigned long rgb)
     UBYTE pen;
     if (!t->pool)
         return 0;
-    if ((pen = t->pool[(((rgb >> 8) & 0xF800) | ((rgb >> 5) & 0x07E0) | ((rgb >> 3) & 0x001F))]))
+    if ((pen = t->pool[(((rgb >> 9) & 0x7C00) | ((rgb >> 6) & 0x03E0) | ((rgb >> 3) & 0x001F))]))
         return pen;
     return t->near[(((rgb >> 12) & 0xF00) | ((rgb >> 8) & 0x0F0) | ((rgb >> 4) & 0x00F))];
 }
@@ -311,7 +311,7 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     t->chh = g->h;
     t->ch = AllocVec((ULONG)g->w * g->h, MEMF_ANY | MEMF_CLEAR);
     t->pal_was = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
-    t->pool = AllocVec(65536, MEMF_ANY | MEMF_CLEAR);
+    t->pool = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
     t->near = AllocVec(4096, MEMF_ANY | MEMF_CLEAR);
     pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     o->ctx = t;
@@ -332,11 +332,11 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
         ULONG v = (ULONG)(i * 255 / 7) * 0x01010101UL;
         pal[1 + (CK_GREY0 + i) * 3] = pal[2 + (CK_GREY0 + i) * 3] = pal[3 + (CK_GREY0 + i) * 3] = v;
     }
-    for (i = 0; i < 36; i++) {
+    for (i = 0; i < 12; i++) {
         int k = CK_CUBE0 + i;
-        pal[1 + k * 3] = (ULONG)((i / 12) * 255 / 2) * 0x01010101UL;
-        pal[2 + k * 3] = (ULONG)((i / 3 % 4) * 85) * 0x01010101UL;
-        pal[3 + k * 3] = (ULONG)((i % 3) * 255 / 2) * 0x01010101UL;
+        pal[1 + k * 3] = (ULONG)((i / 6) * 255) * 0x01010101UL;
+        pal[2 + k * 3] = (ULONG)((i / 2 % 3) * 255 / 2) * 0x01010101UL;
+        pal[3 + k * 3] = (ULONG)((i % 2) * 255) * 0x01010101UL;
     }
     LoadRGB32(vp, pal);
     FreeVec(pal);
@@ -344,6 +344,7 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     o->rows = ck_rows;
     o->copy = ck_copy;
     o->bits = 24;                       /* (dithered here, as each pixel is made a pen) */
+    o->cov_steps = 4;                   /* text's edges in 4 steps: few pens, none dithered */
     o->bufn = (long)g->w * 16;
     if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
         lk_close(o);
@@ -387,7 +388,7 @@ void lk_fresh(struct LkOut *o)
     struct LkTarget *t = o->ctx;
     if (!t || !t->pool)
         return;
-    memset(t->pool, 0, 65536);
+    memset(t->pool, 0, 32768);
     memset(t->near, 0, 4096);
     t->npool = 0;
 }
@@ -398,20 +399,20 @@ void lk_fresh(struct LkOut *o)
 void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
 {
     struct LkTarget *t = o->ctx;
-    static ULONG seen[2048];            /* (65536 bits: the 5-6-5 colours met) */
+    static ULONG seen[1024];            /* (32768 bits: the 5-5-5 colours met) */
     long i, j, n = 0;
     if (t && t->ch && t->pool && t->npool < CK_POOLN) {
         memset(seen, 0, sizeof(seen));
-        for (j = 0; j < h && n <= 64; j++)
-            for (i = 0; i < w && n <= 64; i++) {
+        for (j = 0; j < h && n <= 128; j++)
+            for (i = 0; i < w && n <= 128; i++) {
                 unsigned long c = px[j * mod + i];
-                ULONG k = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F);
+                ULONG k = ((c >> 9) & 0x7C00) | ((c >> 6) & 0x03E0) | ((c >> 3) & 0x001F);
                 if (!(seen[k >> 5] & (1UL << (k & 31)))) {
                     seen[k >> 5] |= 1UL << (k & 31);
                     n++;
                 }
             }
-        t->pic_own = n <= 64;
+        t->pic_own = n <= 128;
     }
     lk_image(o, x, y, px, w, h, mod);
     if (t)
@@ -450,6 +451,7 @@ BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
     o->rows = rtg_rows;
     o->copy = rtg_copy;
     o->bits = (int)bits;
+    o->cov_steps = 0;
     o->bufn = (long)g->w * 16;
     if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
         lk_close(o);
@@ -488,6 +490,7 @@ BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, W
     o->rows = rtg_rows;
     o->copy = rtg_copy;
     o->bits = (int)bits;
+    o->cov_steps = 0;
     o->bufn = (long)w * 16;
     if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
         lk_close(o);
@@ -704,7 +707,14 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
         n = sm_fit(g->sm, s, n, face, maxw);
     if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
         return 0;
-    lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
+    {
+        struct LkTarget *t = o->ctx;
+        if (t && t->ch)
+            t->pic_own = TRUE;          /* (an 8-bit screen: its colour and 2 edge steps, pens) */
+        lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
+        if (t)
+            t->pic_own = FALSE;
+    }
     return sm_textlen(g->sm, s, n, face);
 }
 

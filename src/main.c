@@ -18543,7 +18543,8 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     j->tw = w;
     j->th = h;
     j->maxcol = g.truecolor ? THUMB_DEEP   /* true colour: a layout draws it so */
-                            : 32;          /* (an 8-bit screen: 32 colours, given pens of their own) */
+              : (LONG)w * h >= 200L * 200 ? 96 : 32;  /* (an 8-bit screen: a few colours, given
+                                                       * pens of their own; a big one more) */
     lv_pic[k].job = j;
     ldr_submit(j);
     return NULL;

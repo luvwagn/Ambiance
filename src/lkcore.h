@@ -33,6 +33,8 @@ struct LkOut {
     long cx0, cy0, cx1, cy1;    /* drawn only inside x cx0..cx1-1, y cy0..cy1-1 */
     unsigned long *buf;         /* scratch pixels for rows being made, */
     long bufn;                  /*   bufn of them (at least the widest row) */
+    int cov_steps;              /* text's edges in this many steps (0: all 16; an 8-bit
+                                 * screen's 4, so they take few pens) */
 };
 
 /* What is under text: a vertical gradient from top (at row y) to bottom

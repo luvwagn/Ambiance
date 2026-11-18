@@ -300,8 +300,12 @@ void lk_cover(struct LkOut *o, long x, long y, const unsigned char *cov, long w,
                 continue;
             }
             if (b != last) {
-                for (i = 0; i < 16; i++)
-                    lut[i] = lk_mix(b, fg, i, 15);
+                for (i = 0; i < 16; i++) {
+                    int a = i;
+                    if (o->cov_steps > 1)   /* (fewer steps: each a whole share) */
+                        a = (i * (o->cov_steps - 1) + 7) / 15 * 15 / (o->cov_steps - 1);
+                    lut[i] = lk_mix(b, fg, a, 15);
+                }
                 last = b;
             }
             for (i = 0; i < w; i++)

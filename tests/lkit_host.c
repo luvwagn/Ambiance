@@ -67,6 +67,7 @@ static void out_for(struct LkOut *o, struct Screen *s, int bits)
     o->bits = bits;
     o->buf = scratch;
     o->bufn = W * 16;
+    o->cov_steps = 0;
     lk_clip(o, 0, 0, W, H);
 }
 
