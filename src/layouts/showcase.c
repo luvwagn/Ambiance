@@ -2237,7 +2237,7 @@ static void sc_changed_body(int screen, ULONG what)
         draw_text_body_as(m, FALSE);    /* a text gliding: its lines and bar alone */
         return;
     }
-    if (screen == LS_PAGE && drawn == LS_PAGE && what == LC_SELECT && body_n >= 0 &&
+    if (screen == LS_PAGE && drawn == LS_PAGE && (what == LC_SELECT || what == LC_DETAILS) && body_n >= 0 &&
         (m = H->model(LS_PAGE)) && !m->text && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
         H->clip(0, 0, W, HT);
         draw_page_body(m);      /* a move: the list and its details, not the whole screen */

@@ -360,7 +360,8 @@ static void set_msg(const char *m);
  * classic's drawing is done. gfx_off stays as a safety net: a drawing call
  * that still comes is not done, and is counted and logged ("unseen"). */
 static BOOL lv_drives(void);
-static void lv_note(void);
+static void lv_note(void);                  /* anything: the layout works out what */
+static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
 
 static BOOL np_full;                /* Flow on the whole screen: the page draws nothing */
 static WORD list_visible(void);
@@ -4767,7 +4768,7 @@ static void draw_footer(void)
 {
     WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
     if (lv_drives()) {
-        lv_note();
+        lv_note_what(LC_MESSAGE);
         return;
     }
     hint_shown = msg[0] ? NULL : hint_text();
@@ -4840,7 +4841,7 @@ static void draw_title_count(struct Page *p)
     preview_touch(p);
     ch_pump(p);                             /* letters around the selection, ahead */
     if (lv_drives()) {
-        lv_note();
+        lv_note_what(LC_SELECT);
         return;
     }
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
@@ -5854,7 +5855,7 @@ static void pv_draw_text(struct Page *p)
 {
     WORD x0, w, max_y;
     if (lv_drives()) {                      /* the details came: the layout's (lv_model's) */
-        lv_note();
+        lv_note_what(LC_DETAILS);
         return;
     }
     x0 = aside_x();
@@ -5996,7 +5997,7 @@ static void pv_draw_picture(void)
     struct LJob *j = pv_sj;
     BOOL taken = FALSE, ok = FALSE;
     if (lv_drives()) {
-        lv_note();
+        lv_note_what(LC_DETAILS);
         return;
     }
     x0 = aside_x();
@@ -6641,7 +6642,7 @@ static UBYTE list_planes(const struct Page *p)
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     if (lv_drives()) {
-        lv_note();
+        lv_note_what(LC_SELECT);
         return;
     }
     struct Item *it = &p->list.items[idx];
@@ -6721,7 +6722,7 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 static void draw_gutter_planes(struct Page *p, UBYTE planes)
 {
     if (lv_drives()) {
-        lv_note();
+        lv_note_what(LC_SELECT);
         return;
     }
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
@@ -6895,7 +6896,7 @@ static void draw_list_rows(struct Page *p)
     WORD vis, r, col;
     if (lv_drives()) {
         list_follow(p);
-        lv_note();
+        lv_note_what(LC_SELECT | LC_LIST);
         return;
     }
     vis = list_visible();
@@ -7017,7 +7018,7 @@ static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
     if (lv_drives()) {
         list_follow(p);
-        lv_note();
+        lv_note_what(LC_SELECT);
         return;
     }
     if (ov_over(p)) {
@@ -17307,13 +17308,20 @@ BOOL lv_on(void)
 /* The layout is the view driven (the classic's drawing functions return
  * at once, noting it); and the note: it draws again (lv_frame) */
 static BOOL lv_dirty;
+static ULONG lv_what;                       /* what was noted (LC_*; LV_WHOLE: anything) */
+#define LV_WHOLE 0x80000000UL
 static BOOL lv_drives(void)
 {
     return lv.on;
 }
-static void lv_note(void)
+static void lv_note_what(ULONG what)
 {
     lv_dirty = TRUE;
+    lv_what |= what;
+}
+static void lv_note(void)
+{
+    lv_note_what(LV_WHOLE);
 }
 
 /* While a slideshow's or video's controls are drawn (lv_controls_draw):
@@ -18835,7 +18843,7 @@ static void lv_frame_(void)
         ULONG mh = 5381;
         const char *c;
         char letter = p && ov.on && ov.page == p && ov.bl ? ov.letter : 0;
-        BOOL moved_only;
+        BOOL moved_only, details_only;
         ULONG nsig;
         for (c = msg; *c; c++)
             mh = mh * 33 + (UBYTE)*c;
@@ -18849,8 +18857,16 @@ static void lv_frame_(void)
                             (p->sel != lv.last_sel || letter != lv.last_letter)
                           : (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open &&
                             p->tb.pos != lv.last_pos);
+        /* only the details came (the selection where it was, nothing else
+         * noted): the layout's page body alone */
+        details_only = !lv.full && !moved_only && lv_what == LC_DETAILS && scr == LS_PAGE &&
+                       lv.drawn == scr && lv.eng->changed && p && p == lv.last_p && depth == lv.last_depth &&
+                       mh == lv.last_msg && nsig == lv.last_now && p->type == PT_LIST &&
+                       p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&
+                       p->sel == lv.last_sel && letter == lv.last_letter;
         lv.full = FALSE;
         lv_dirty = FALSE;
+        lv_what = 0;
         gfx_off_hits = 0;
         lv.drawn = scr;
         clock_text(lv.clock);
@@ -18858,6 +18874,8 @@ static void lv_frame_(void)
         lk_clip(&lv.out, 0, 0, g.w, g.h);
         if (moved_only && nsig == lv.last_now)
             lv.eng->changed(scr, LC_SELECT), lvt_parts++;
+        else if (details_only)
+            lv.eng->changed(scr, LC_DETAILS), lvt_parts++;
         else
             lv.eng->draw(scr), lvt_whole++;
         lv.last_now = nsig;

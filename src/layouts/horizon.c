@@ -2554,6 +2554,13 @@ static void hz_changed_body(int screen, ULONG what)
             }
         }
     }
+    if (what == LC_DETAILS && screen == drawn && screen == LS_PAGE && (m = H->model(LS_PAGE)) && !m->text &&
+        body_n >= 0 && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
+        H->clip(0, 0, W, HT);
+        draw_page_body(m);              /* the details came: the body alone, as a move draws it */
+        now_inset();
+        return;
+    }
     if (what == LC_SELECT && screen == drawn) {
         H->clip(0, 0, W, HT);
         switch (screen) {
