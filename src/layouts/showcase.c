@@ -954,13 +954,15 @@ static void draw_page_body(const struct LPage *m)
     body_n = (int)n;
     nhits = hits_base;          /* the rows' click targets made again */
     {
-        LONG lh = n ? (bottom - py) * 62 / 100 : bottom - py;
-        LONG dy = py + lh + Y(12), dh = bottom - dy;
-        panel(x, py, w, lh, 6, C_PANEL, C_LINE, grad(py));
+        /* with details (a game's screenshot and facts): the list at the
+         * left, they at the right, side by side; else the list alone */
+        LONG lw = n ? w * 46 / 100 : w, lh = bottom - py;
+        LONG dx = x + lw + X(14), dw = x + w - dx;
+        panel(x, py, lw, lh, 6, C_PANEL, C_LINE, grad(py));
         if (!(m->waiting && m->list.count))
             spin_x = -1;            /* (rows there and still coming: the title's) */
         if (m->list.count) {
-            draw_rows(m, x, py, w, lh);
+            draw_rows(m, x, py, lw, lh);
         } else if (m->waiting) {
             spin_bg = C_PANEL;
             /* still asking: the spinner and its word, not "Nothing here" */
@@ -968,28 +970,32 @@ static void draw_page_body(const struct LPage *m)
             spin_y = py + Y(18) + FH / 2;
             wait_spinner(m);
             text(spin_x + FH, py + Y(18), m->waiting, LF_REGULAR, C_SUB, flat(C_PANEL),
-                 w - (spin_x + FH - x) - X(12));
+                 lw - (spin_x + FH - x) - X(12));
         } else {
-            text(x + X(22), py + Y(18), H->tr("Nothing here"), LF_REGULAR, C_SUB, flat(C_PANEL), w);
+            text(x + X(22), py + Y(18), H->tr("Nothing here"), LF_REGULAR, C_SUB, flat(C_PANEL), lw);
         }
-        if (n && dh > FH * 2) {
-            LONG tx = x + X(18);
-            panel(x, dy, w, dh, 6, C_PANEL, C_LINE, grad(dy));
+        if (n && dw > X(120)) {
+            LONG tx = dx + X(18), tw = dw - X(36), ty = py + Y(16);
+            panel(dx, py, dw, lh, 6, C_PANEL, C_LINE, grad(py));
             if (m->picture) {
-                LONG ph = dh - Y(24), pw = ph * 4 / 3;
-                const struct LImage *im = H->picture(m->picture, (UWORD)pw, (UWORD)ph);
-                if (im) {
-                    H->image(im, (WORD)(tx + (pw - im->w) / 2), (WORD)(dy + Y(12) + (ph - im->h) / 2));
-                } else {
-                    H->fill((WORD)tx, (WORD)(dy + Y(12)), (WORD)pw, (WORD)ph, C_PANEL2);
+                /* the picture as wide as the panel (4:3), at most half its height */
+                LONG pw = tw, ph = pw * 3 / 4;
+                const struct LImage *im;
+                if (ph > lh / 2) {
+                    ph = lh / 2;
+                    pw = ph * 4 / 3;
                 }
-                tx += pw + X(18);
+                im = H->picture(m->picture, (UWORD)pw, (UWORD)ph);
+                if (im)
+                    H->image(im, (WORD)(tx + (tw - im->w) / 2), (WORD)(ty + (ph - im->h) / 2));
+                else
+                    H->rrect((WORD)(tx + (tw - pw) / 2), (WORD)ty, (WORD)pw, (WORD)ph, 4, C_PANEL2, C_PANEL);
+                ty += ph + Y(16);
             }
-            draw_lines(m->details, m->ndetails, 0, tx, dy + Y(12), x + w - tx - X(18),
-                       dy + dh - Y(8), C_WHITE, C_BODY);
+            draw_lines(m->details, m->ndetails, 0, tx, ty, tw, py + lh - Y(10), C_WHITE, C_BODY);
         }
         if (m->letter && H->letter)     /* the big letter, as the list glides or jumps */
-            H->letter((WORD)(x + w - X(40)), (WORD)(py + lh / 2), C_LETTER);
+            H->letter((WORD)(x + lw - X(40)), (WORD)(py + lh / 2), C_LETTER);
     }
 }
 
@@ -1304,57 +1310,64 @@ static LONG album_x, album_w;           /* its tracks' panel, as drawn */
 
 static void draw_album(void)
 {
+    /* as a list with details (a game's): its tracks at the left, and at
+     * the right a panel of the album, its cover with what is said of it
+     * beside it, and its review under them */
     const struct LAlbum *a = H->model(LS_ALBUM);
-    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), cx = X(30), cs = X(240), y, i, n;
-    LONG x, w;
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(24), w = W - x - X(24);
+    LONG lw = w * 46 / 100, lh = bottom - py, dx, dw, cs, tx, tw, y, i;
     background();
     top_right(FALSE);
     if (!a)
         return;
-    page_path(&a->page);        /* (its name is under its cover, large) */
-    if (cs > bottom - py - FH * 6)
-        cs = bottom - py - FH * 6;
-    cover(a->art, a->title, cx, py, cs, grad(py));
-    y = py + cs + Y(14);
-    y += text(cx, y, a->title, LF_TITLE, C_WHITE, &bg_grad, cs) ? TH + Y(2) : 0;
+    page_path(&a->page);        /* (its name is in its panel, large) */
+    album_x = x;
+    album_w = lw;
+    hits_base = nhits;
+    panel(x, py, lw, lh, 6, C_PANEL, C_LINE, grad(py));
+    if (a->page.list.count)
+        draw_rows(&a->page, x, py, lw, lh);
+    if (a->page.letter && H->letter)
+        H->letter((WORD)(x + lw - X(40)), (WORD)(py + lh / 2), C_LETTER);
+    dx = x + lw + X(14);
+    dw = x + w - dx;
+    panel(dx, py, dw, lh, 6, C_PANEL, C_LINE, grad(py));
+    /* its name across the top of the panel (long ones need the room),
+     * then the cover with the rest beside it */
+    y = py + Y(14);
+    if (text(dx + X(18), y, a->title, LF_TITLE, C_WHITE, flat(C_PANEL), dw - X(36)))
+        y += TH + Y(10);
+    cs = (dw - X(36)) * 45 / 100;
+    if (cs > lh * 42 / 100)
+        cs = lh * 42 / 100;
+    cover(a->art, a->title, dx + X(18), y, cs, C_PANEL);
+    tx = dx + X(18) + cs + X(16);
+    tw = dx + dw - X(18) - tx;
     if (a->artist && *a->artist) {
-        text(cx, y, a->artist, LF_REGULAR, C_ACC, &bg_grad, cs);
+        text(tx, y, a->artist, LF_REGULAR, C_ACC, flat(C_PANEL), tw);
         y += FH + Y(4);
     }
     if (a->line && *a->line) {
-        text(cx, y, a->line, LF_SMALL, C_SUB, &bg_grad, cs);
+        text(tx, y, a->line, LF_SMALL, C_SUB, flat(C_PANEL), tw);
         y += FH + Y(2);
     }
     if (a->rating && *a->rating) {
         char b[24];
         join(b, sizeof(b), H->tr("Rating"), ": ", a->rating);
-        text(cx, y, b, LF_SMALL, C_SUB, &bg_grad, cs);
+        text(tx, y, b, LF_SMALL, C_SUB, flat(C_PANEL), tw);
         y += FH + Y(2);
     }
-    for (i = 0; i < a->facts.n && y + FH <= bottom; i++) {
+    for (i = 0; i < a->facts.n && y + FH <= py + Y(14) + TH + Y(10) + cs; i++) {
         char b[140];
         join(b, sizeof(b), a->facts.facts[2 * i], ": ", a->facts.facts[2 * i + 1]);
-        text(cx, y, b, LF_SMALL, C_SUB, &bg_grad, cs);
+        text(tx, y, b, LF_SMALL, C_SUB, flat(C_PANEL), tw);
         y += FH + Y(2);
     }
-    x = cx + cs + X(24);
-    w = W - x - X(24);
-    album_x = x;
-    album_w = w;
-    hits_base = nhits;
-    n = a->review && *a->review ? 1 : 0;
-    {
-        LONG lh = n ? (bottom - py) * 60 / 100 : bottom - py;
-        panel(x, py, w, lh, 6, C_PANEL, C_LINE, grad(py));
-        if (a->page.list.count)
-            draw_rows(&a->page, x, py, w, lh);
-        if (n) {
-            LONG dy = py + lh + Y(12), np = paras(a->review);
-            panel(x, dy, w, bottom - dy, 6, C_PANEL, C_LINE, grad(dy));
-            draw_lines(para, np, 0, x + X(18), dy + Y(12), w - X(36), bottom - Y(8), C_BODY, C_BODY);
-        }
-        if (a->page.letter && H->letter)
-            H->letter((WORD)(x + w - X(40)), (WORD)(py + lh / 2), C_LETTER);
+    if (a->review && *a->review) {
+        LONG ry = py + Y(14) + TH + Y(10) + cs + Y(16), np = paras(a->review);
+        if (y + Y(8) > ry)
+            ry = y + Y(8);
+        draw_lines(para, np, 0, dx + X(18), ry, dw - X(36), py + lh - Y(10), C_BODY, C_BODY);
     }
     footer(a->page.hint, a->page.message);
 }
@@ -1363,8 +1376,7 @@ static void draw_album(void)
 static void album_rows(void)
 {
     const struct LAlbum *a = H->model(LS_ALBUM);
-    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12);
-    LONG lh = a && a->review && *a->review ? (bottom - py) * 60 / 100 : bottom - py;
+    LONG py = Y(64), bottom = HT - Y(30) - FH - Y(12), lh = bottom - py;
     if (!a)
         return;
     nhits = hits_base;

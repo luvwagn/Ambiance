@@ -433,6 +433,22 @@ static const void *h_model(int screen)
         page.list.sel = 6;
         page.list.item = item;
         page.frames = (UBYTE)frames_wall;
+        if (frames_wall == 2) {         /* a wall of games' screenshots */
+            static struct LItem gw[sizeof(game_rows) / sizeof(game_rows[0])];
+            static const char *shots[] = { "shot-a", "shot-b", "shot-c", "shot-d" };
+            unsigned k;
+            for (k = 0; k < sizeof(gw) / sizeof(gw[0]); k++) {
+                gw[k] = game_rows[k];
+                gw[k].art = shots[k % 4];
+            }
+            memset(&page, 0, sizeof(page));
+            crumbs(&page, "Games", "All games", NULL);
+            rows_of = gw;
+            page.list.count = sizeof(gw) / sizeof(gw[0]);
+            page.list.sel = 8;
+            page.list.item = item;
+            page.frames = 1;
+        }
         return &page;
     }
     if (screen == LS_ALBUM) {
@@ -744,6 +760,9 @@ static void run(int w, int h, int bits, const char *font)
         layout_engine.draw(LS_ALBUMS);
         CHECK(drawn_px >= (long)w * h);
         save("frames");
+        frames_wall = 2;
+        layout_engine.draw(LS_ALBUMS);
+        save("games-wall");
         frames_wall = 0;
         /* the wall's keys: Right a cover, Down a row, Left at the edge back */
         layout_engine.draw(LS_ALBUMS);
@@ -800,11 +819,11 @@ static void clicks(int w, int h)
     CHECK(ok);
     scene = 1;                              /* a game: selected, then played */
     layout_engine.draw(LS_PAGE);
-    for (ok = 0, y = 0; y < h && !ok; y++)
-        if (click_at(LS_PAGE, 500 * w / 800, y, &a) == LAC_SELECT && a == 8) {
+    for (ok = 0, y = 0; y < h && !ok; y++)  /* (the list at the left: its details beside it) */
+        if (click_at(LS_PAGE, 200 * w / 800, y, &a) == LAC_SELECT && a == 8) {
             clock_ms += 200;                /* a double-click */
             nacts = 0;
-            layout_engine.pointer(LS_PAGE, (WORD)(500 * w / 800), (WORD)y, TRUE);
+            layout_engine.pointer(LS_PAGE, (WORD)(200 * w / 800), (WORD)y, TRUE);
             ok = nacts == 1 && acts[0][0] == LAC_OPEN && acts[0][1] == 8;
         }
     CHECK(ok);
