@@ -4404,6 +4404,14 @@ static void dbg_load_log(void)
             amb_log("tasks", t);
         }
     }
+    if (lv_on()) {
+        /* the classic's drawing under the layout, by where it was called
+         * (from lv_frame: build/Ambiance.dbg and main.o give the place) */
+        char t[300];
+        gfx_off_report(t, sizeof(t), (const void *)lv_frame);
+        if (t[0])
+            amb_log("unseen", t);
+    }
     n = 0;
     cpu_sum = app_sum = 0;
     wakes0 = loop_wakes;
@@ -6078,8 +6086,8 @@ static void preview_draw(struct Page *p)
         return;
     }
     k = p->list.count ? pv_kind(p, p->sel, path, sizeof(path), &shot) : 0;
-    if (!pv_pictures())
-        shot = 0;
+    if (!pv_pictures() || gfx_off)
+        shot = 0;   /* (a layout: its own pictures, at its own sizes; the facts still read) */
     pv_box_y = g.list_top;
     pv_box_h = (max_y - g.list_top) / 2;
     pv_has_box = shot != 0;
@@ -6311,12 +6319,6 @@ static void plex_ahead(struct Page *p);
 static void preview_tick(void)
 {
     struct Page *p = cur();
-    if (gfx_off) {
-        /* a layout draws: the classic pane's picture (fetched and read at its
-         * 327 square, and its neighbours ahead) would be for nothing */
-        pv_pending = FALSE;
-        return;
-    }
     if (!pv_pending) {
         if (p)
             plex_ahead(p);                  /* at rest: the neighbours' pictures */
@@ -6903,7 +6905,7 @@ static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 static void blit_rows(LONG src, LONG dst, LONG n)
 {
     if (gfx_off) {                          /* a layout draws the screen */
-        gfx_off_hits++;
+        gfx_off_hit(__builtin_return_address(0));
         return;
     }
     WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
@@ -9160,8 +9162,9 @@ static void np_tick(void)
     np_repeat();
     if (!np_full)
         np_eq_tick();                       /* (Flow on the whole screen: no marker under it) */
-    if (mp_is_track() && mp_running() && np_on() && np.w) {
-        /* the average bitrate settling: its line again when it moves */
+    if (mp_is_track() && mp_running() && np_on() && np.w && !gfx_off) {
+        /* the average bitrate settling: its line again when it moves (a
+         * layout shows no such line: under one, nothing to draw) */
         static ULONG shown;
         ULONG k = st_avg_kbps();
         if (k != shown && (k > shown + 1 || k + 1 < shown || !shown || !k)) {
@@ -13810,6 +13813,9 @@ static WORD np_art_size(void)
 /* The cover's file to the loader, made for the square. */
 static void np_art_load(const char *file)
 {
+    if (gfx_off)
+        return;     /* a layout draws: the classic page's cover (read into its pens) is
+                     * for nothing; the page reads it when it is drawn again (np_draw) */
     struct LJob *j;
     np_art_free();
     if (!np.art_s || !pv_pictures() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
@@ -14190,6 +14196,8 @@ static void plex_ahead(struct Page *p)
     if (!pv_shown || pv_page != p || pv_sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
         plex_sj)
         return;                             /* not at rest, or the server busy for it */
+    if (gfx_off)
+        return;                             /* (a layout: it asks for its own, at its sizes) */
     if (AvailMem(MEMF_ANY) < 2UL << 20)
         return;                             /* not ahead with under 2 MB free (RAM:'s
                                              * pictures are trimmed to a budget: plex.c) */
@@ -14267,7 +14275,7 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     pv_box_y = g.list_top;
     pv_box_h = s;
     y = g.list_top;
-    if (thumb[0] && pv_pictures()) {
+    if (thumb[0] && pv_pictures() && !gfx_off) {     /* (a layout: its own pictures) */
         pv_has_box = TRUE;
         y = pv_box_y + pv_box_h + U(4);
         if (!keep && art_fetch(ART_PV, thumb, s, s, file)) {
@@ -14330,6 +14338,8 @@ static void art_ready(int kind, const char *file)
             np_art_load(file);
         return;
     }
+    if (gfx_off)
+        return;                             /* (the classic pane's picture: a layout draws) */
     if (p && p->plex && p == pv_page && p->sel == pv_sel && pv_shown && !pv_sj && pv_has_box &&
         !pane_pending) {
         pv_colour_cap = plex_colours();

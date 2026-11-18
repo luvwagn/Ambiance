@@ -219,6 +219,7 @@ build/animdraw.o: CFLAGS += -DAD_ASM
 $(TARGET): $(OBJS)
 	@echo "  LINK  $@"
 	@$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+	@cp $@ build/Ambiance.dbg       # (its symbols: Debug's "unseen" offsets read against it)
 	@echo "  STRIP $@"
 	@$(STRIP) $@
 	@wc -c < "$@" | awk '{printf "$@ successfully compiled (%s bytes)\n", $$1}'

@@ -287,7 +287,7 @@ static void scroll_direct(struct Gfx *g, struct TextBox *tb)
 void tb_draw(struct Gfx *g, struct TextBox *tb)
 {
     if (gfx_off) {
-        gfx_off_hits++;
+        gfx_off_hit(__builtin_return_address(0));
         return;
     }
     WORD x1 = tb->bar_x + GU(g, 3) - 1, y1 = tb->y + tb->h - 1;
@@ -352,7 +352,7 @@ void tb_step(struct Gfx *g, struct TextBox *tb)
     if (gfx_off) {              /* a layout draws: jump, count once */
         if (tb->pos != tb->target) {
             tb->pos = tb->target;
-            gfx_off_hits++;
+            gfx_off_hit(__builtin_return_address(0));
         }
         return;
     }

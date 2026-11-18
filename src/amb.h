@@ -338,6 +338,8 @@ void gfx_dbuf_start(struct Gfx *g);
 void gfx_dbuf_stop(struct Gfx *g);
 BOOL gfx_present(struct Gfx *g);     /* TRUE: it flipped (a frame waited) */
 void gfx_dirty(void);
+void gfx_off_hit(const void *at);           /* a classic drawing call under a layout, unseen */
+void gfx_off_report(char *out, LONG max, const void *base);   /* who made them (Debug) */
 extern BOOL gfx_off;            /* a layout draws: the classic drawing not done (lhost.c) */
 extern ULONG gfx_off_hits;      /*   only counted: the screen would have changed */
 BOOL gfx_dbuf_active(void);

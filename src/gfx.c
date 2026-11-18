@@ -41,8 +41,66 @@
  * reaches the screen starts with OFF_VOID or OFF_RET. */
 BOOL gfx_off;
 ULONG gfx_off_hits;
-#define OFF_VOID do { if (gfx_off) { gfx_off_hits++; return; } } while (0)
-#define OFF_RET(v) do { if (gfx_off) { gfx_off_hits++; return (v); } } while (0)
+#define OFF_VOID do { if (gfx_off) { gfx_off_hit(__builtin_return_address(0)); return; } } while (0)
+#define OFF_RET(v) do { if (gfx_off) { gfx_off_hit(__builtin_return_address(0)); return (v); } } while (0)
+
+/* Who still draws the classic screen under a layout (Debug's log): each
+ * drawing call that returned unseen, by the place that called it, so what
+ * does the classic's work for nothing can be found and stopped */
+#define OFFH_N 16
+static struct { const void *at; ULONG n; } offh[OFFH_N];
+static ULONG offh_more;
+void gfx_off_hit(const void *at)
+{
+    int i;
+    gfx_off_hits++;
+    for (i = 0; i < OFFH_N; i++) {
+        if (offh[i].at == at) {
+            offh[i].n++;
+            return;
+        }
+        if (!offh[i].at) {
+            offh[i].at = at;
+            offh[i].n = 1;
+            return;
+        }
+    }
+    offh_more++;
+}
+
+/* The busiest callers since the last call, as offsets from base (a known
+ * function's address: the map file gives the rest), into out */
+void gfx_off_report(char *out, LONG max, const void *base)
+{
+    int i, j, k;
+    out[0] = 0;
+    for (k = 0; k < 8; k++) {
+        ULONG best = 0;
+        int bi = -1;
+        char one[40];
+        for (i = 0; i < OFFH_N; i++)
+            if (offh[i].at && offh[i].n > best) {
+                best = offh[i].n;
+                bi = i;
+            }
+        if (bi < 0)
+            break;
+        sprintf(one, "%s%+ld x%lu", out[0] ? ", " : "", (long)((const char *)offh[bi].at - (const char *)base),
+                (unsigned long)offh[bi].n);
+        if ((LONG)(strlen(out) + strlen(one)) < max - 1)
+            strcat(out, one);
+        offh[bi].n = 0;
+    }
+    for (j = 0; j < OFFH_N; j++)
+        offh[j].at = NULL, offh[j].n = 0;
+    if (offh_more) {
+        char one[30];
+        sprintf(one, " (%lu more)", (unsigned long)offh_more);
+        if ((LONG)(strlen(out) + strlen(one)) < max - 1)
+            strcat(out, one);
+        offh_more = 0;
+    }
+}
 
 extern struct GfxBase *GfxBase;
 extern struct Library *DiskfontBase, *DataTypesBase, *LayersBase, *LowLevelBase;
@@ -2823,7 +2881,7 @@ void gfx_mark(struct Gfx *g, int mark, WORD x, WORD y, UBYTE fg, UBYTE bg)
 {
     if (gfx_off) {
         if (mark != MARK_PLAYING)
-            gfx_off_hits++;     /* (the bars' dance: the layout has its own) */
+            gfx_off_hit(__builtin_return_address(0));  /* (the bars' dance: the layout has its own) */
         return;
     }
     dirty = TRUE;
@@ -3551,6 +3609,10 @@ BOOL gfx_quiet_begin(void)
 
 void gfx_quiet_end(struct Gfx *g, BOOL was, WORD x0, WORD y0, WORD x1, WORD y1)
 {
+    if (gfx_off) {
+        dirty = was;                /* (a layout draws: no classic part to copy across) */
+        return;
+    }
     if (g->wb && wbuf_bm) {
         if (x1 >= x0 && y1 >= y0 && g->win) {
             WaitBlit();
