@@ -88,7 +88,7 @@ void gfx_off_report(char *out, LONG max, const void *base)
         {
             /* (libnix's sprintf has no "+" flag: the sign by hand) */
             long d = (long)((const char *)offh[bi].at - (const char *)base);
-            sprintf(one, "%s%c%ld x%lu", out[0] ? ", " : "", d < 0 ? '-' : '+', d < 0 ? -d : d,
+            sprintf(one, "%s%s%ld x%lu", out[0] ? ", " : "", d < 0 ? "-" : "+", d < 0 ? -d : d,
                     (unsigned long)offh[bi].n);
         }
         if ((LONG)(strlen(out) + strlen(one)) < max - 1)

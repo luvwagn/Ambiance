@@ -351,6 +351,17 @@ struct Chunks {
 };
 
 static void set_msg(const char *m);
+
+/* ---- the view driven: the classic one (the draw_* functions here) or a
+ * layout (lv.on). One at a time: under a layout, each classic drawing
+ * function does only what the program keeps (where a list is scrolled to,
+ * a text box's lines, what the preview asks the loader for), notes that
+ * the layout is to draw again (lv_note), and returns; none of the
+ * classic's drawing is done. gfx_off stays as a safety net: a drawing call
+ * that still comes is not done, and is counted and logged ("unseen"). */
+static BOOL lv_drives(void);
+static void lv_note(void);
+
 static BOOL np_full;                /* Flow on the whole screen: the page draws nothing */
 static WORD list_visible(void);
 static void draw_list_rows(struct Page *p);
@@ -4315,6 +4326,11 @@ static void hdr_np_draw(BOOL quiet)
     BOOL on = mp_loaded(), was = FALSE;
     if (!on && !hdr_np_on)
         return;
+    if (lv_drives()) {                      /* (playing or not: the layout's, from its model) */
+        hdr_np_on = on;
+        lv_note();
+        return;
+    }
     if (quiet)
         was = gfx_quiet_begin();
     if (on)
@@ -4606,6 +4622,10 @@ static void set_debug(BOOL on)
 
 static void draw_header(void)
 {
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     gfx_fill(&g, 0, 0, g.w - 1, U(24) - 1, PEN_BAR);
     gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
     status_shown[0] = 0;                    /* the readout was just cleared */
@@ -4619,6 +4639,10 @@ static void draw_header(void)
 static void draw_menu_row(int i)
 {
     WORD y = g.top + i * g.row_h;
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     BOOL sel = i == menu_sel;
     UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) :
                i == hover_menu && mouse_mode ? PEN_RULE : PEN_BG;
@@ -4642,6 +4666,10 @@ static void draw_menu(void)
 {
     ULONG t0 = time_ms();
     int i;
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     gfx_fill(&g, 0, U(25), g.menu_w + U(2), g.footer_y - 2, PEN_BG);
     for (i = 0; i < nmenu; i++)
         draw_menu_row(i);
@@ -4738,6 +4766,10 @@ static ULONG foot_since;            /* shown (with the mouse in use) since */
 static void draw_footer(void)
 {
     WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     hint_shown = msg[0] ? NULL : hint_text();
     if (foot_hidden && !msg[0]) {
         if (foot_over) {                    /* a message's footer gone: what it covered */
@@ -4807,6 +4839,10 @@ static void draw_title_count(struct Page *p)
     char count[24];
     preview_touch(p);
     ch_pump(p);                             /* letters around the selection, ahead */
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
         draw_footer();              /* the hints follow the selection */
     if (p->title_wide && !ch_reading(p)) {
@@ -4859,7 +4895,12 @@ static void draw_title(struct Page *p)
 {
     char widest[24];
     int i;
-    WORD cw = 0, maxw, x, sep = gfx_textlen(&g, " > ", TS_BOLD), dots;
+    WORD cw = 0, maxw, x, sep, dots;
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
+    sep = gfx_textlen(&g, " > ", TS_BOLD);
     if (p->type == PT_LIST && p->list.count) {
         /* room for the widest count this list can show, so a growing
          * number never runs into the breadcrumb */
@@ -5811,7 +5852,14 @@ static BOOL pv_spinning(void)
 /* The text, under the picture's place (or at the top with no picture). */
 static void pv_draw_text(struct Page *p)
 {
-    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2;
+    WORD x0, w, max_y;
+    if (lv_drives()) {                      /* the details came: the layout's (lv_model's) */
+        lv_note();
+        return;
+    }
+    x0 = aside_x();
+    w = aside_width() - U(4);
+    max_y = g.footer_y - 2;
     WORD y = pv_has_box ? pv_box_y + pv_box_h + U(6) : g.list_top;
     struct LJob *j = pv_tj;
     LONG i;
@@ -5944,9 +5992,15 @@ static BOOL pv_keeps(struct Page *p, LONG idx)
 /* The picture in its place, the rest of the place cleared. */
 static void pv_draw_picture(void)
 {
-    WORD x0 = aside_x(), w = aside_width() - U(4), dh = 0;
+    WORD x0, w, dh = 0;
     struct LJob *j = pv_sj;
     BOOL taken = FALSE, ok = FALSE;
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
+    x0 = aside_x();
+    w = aside_width() - U(4);
     if (j && j->thumb) {
         char m[400];
         ULONG t0 = time_ms(), now;
@@ -6586,6 +6640,10 @@ static UBYTE list_planes(const struct Page *p)
 
 static void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     struct Item *it = &p->list.items[idx];
     WORD y = g.list_top + (idx - p->top) * g.list_row_h;
     WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
@@ -6662,6 +6720,10 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
  * draw_list_rows: all, as it draws the column the first time) */
 static void draw_gutter_planes(struct Page *p, UBYTE planes)
 {
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
     if (!list_overflows(p))
@@ -6830,7 +6892,14 @@ static void set_mouse_mode(BOOL on)
 
 static void draw_list_rows(struct Page *p)
 {
-    WORD vis = list_visible(), r, col = mark_column(p);
+    WORD vis, r, col;
+    if (lv_drives()) {
+        list_follow(p);
+        lv_note();
+        return;
+    }
+    vis = list_visible();
+    col = mark_column(p);
     list_follow(p);
     if (!p->list.count) {
         /* the list's own place: beside it a pane (an album's cover, kept)
@@ -6946,6 +7015,11 @@ static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 
 static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
+    if (lv_drives()) {
+        list_follow(p);
+        lv_note();
+        return;
+    }
     if (ov_over(p)) {
         /* the letter over the rows: they move without it stamped each
          * time, then those under it are painted again (what was copied
@@ -7126,6 +7200,10 @@ static void draw_plexmark(void)
 
 static void draw_text_picture(struct Page *p)
 {
+    if (lv_drives()) {
+        lv_note();
+        return;
+    }
     WORD lines, lh = g.font_h + U(1), y, i;
     WORD box_h = text_box_h(p, g.list_top, &lines);
     if (p->plexmark)
@@ -7168,6 +7246,23 @@ static void draw_pane(BOOL full)
     BOOL took = FALSE;                      /* a cover moved into the pane: its text now too */
     if (!p)
         return;
+    if (lv_drives()) {
+        /* the layout's: what the program keeps of it, no drawing */
+        if (full) {
+            pv_shown = FALSE;               /* (previewed again, as the classic's) */
+            tb_close(&pv_tb);
+        }
+        if (p->type == PT_LIST) {
+            list_follow(p);
+        } else if (p->type == PT_TEXT && (full || !p->tb.open)) {
+            open_textbox(p, g.list_top);    /* (its lines: the keys scroll them) */
+        } else if (p->type == PT_DETAIL && (full || !p->tb.open)) {
+            p->facts_y = g.list_top;
+            open_textbox(p, p->facts_y);
+        }
+        lv_note();
+        return;
+    }
     if (full) {
         pv_shown = FALSE;           /* the pane is cleared: preview again */
         tb_close(&pv_tb);
@@ -8020,6 +8115,12 @@ static void np_draw(BOOL full)
     struct MpStatus st;
     char info[320];
     int i;
+    if (lv_drives()) {
+        if (full)
+            plex_shown[0] = 0;              /* (the pane's details: gone under this page) */
+        lv_note();
+        return;
+    }
     mp_status(&st);
     if (!np.w)
         full = TRUE;                        /* not laid out yet */
@@ -9644,6 +9745,11 @@ static void pane_settle(void);
 
 static void draw_all(void)
 {
+    if (lv_drives()) {
+        pane_settle();                      /* (the section built, if still to be) */
+        lv_note();
+        return;
+    }
     if (foot_hidden && (!g.wb || g.footer_y != g.h)) {
         foot_hidden = foot_over = FALSE;    /* opened again (its metrics anew): shown */
         foot_since = mouse_mode ? time_ms() : 0;
@@ -17198,6 +17304,18 @@ BOOL lv_on(void)
     return lv.on;
 }
 
+/* The layout is the view driven (the classic's drawing functions return
+ * at once, noting it); and the note: it draws again (lv_frame) */
+static BOOL lv_dirty;
+static BOOL lv_drives(void)
+{
+    return lv.on;
+}
+static void lv_note(void)
+{
+    lv_dirty = TRUE;
+}
+
 /* While a slideshow's or video's controls are drawn (lv_controls_draw):
  * their strip, which nothing goes outside (h_clip) */
 static struct { BOOL on; WORD x0, y0, x1, y1; } lv_ctl;
@@ -18676,7 +18794,7 @@ static void lv_frame_(void)
         /* the time, the clock or the Debug line went on, and nothing else
          * was drawn: the layout's own of those alone (what plays the same) */
         lv_playing_hit = FALSE;
-        if (!lv.full && !gfx_off_hits && lv.drawn == scr && lv.eng->changed) {
+        if (!lv.full && !lv_dirty && !gfx_off_hits && lv.drawn == scr && lv.eng->changed) {
             ULONG nsig = lv_now_sig(), tsig;
             const struct LNow *n = lv_model(LS_NOW);
             char ck[40];
@@ -18697,7 +18815,7 @@ static void lv_frame_(void)
     }
     if (lv_img) {
         lv_img = FALSE;
-        if (!lv.full && !gfx_off_hits && lv.eng->changed) {
+        if (!lv.full && !lv_dirty && !gfx_off_hits && lv.eng->changed) {
             lk_clip(&lv.out, 0, 0, g.w, g.h);
             lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
             lvt_parts++;
@@ -18705,14 +18823,14 @@ static void lv_frame_(void)
             lv.full = TRUE;
         }
     }
-    if (!lv.full && !gfx_off_hits && (scr == LS_PAGE || scr == LS_ALBUMS) && lv.eng->changed &&
+    if (!lv.full && !lv_dirty && !gfx_off_hits && (scr == LS_PAGE || scr == LS_ALBUMS) && lv.eng->changed &&
         lv_waiting(cur()) &&
         lv_wait_step() != lv.wait_phase) {
         lv.wait_phase = lv_wait_step();     /* the spinner turned: it alone drawn again */
         lk_clip(&lv.out, 0, 0, g.w, g.h);
         lv.eng->changed(scr, LC_WAIT);
     }
-    if (lv.full || gfx_off_hits) {
+    if (lv.full || lv_dirty || gfx_off_hits) {
         struct Page *p = cur();
         ULONG mh = 5381;
         const char *c;
@@ -18732,6 +18850,7 @@ static void lv_frame_(void)
                           : (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open &&
                             p->tb.pos != lv.last_pos);
         lv.full = FALSE;
+        lv_dirty = FALSE;
         gfx_off_hits = 0;
         lv.drawn = scr;
         clock_text(lv.clock);
