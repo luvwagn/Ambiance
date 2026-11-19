@@ -17427,10 +17427,13 @@ static const char *lv_picture_of(struct Page *p)
         return NULL;
     if (p == for_p && p->sel == for_sel && p->list.count == for_count)
         return have ? lv_pof_file : NULL;
-    for_p = p;
-    for_sel = p->sel;
-    for_count = p->list.count;
     have = lv_pic_file(p, p->sel, lv_pof_file, sizeof(lv_pof_file));
+    if (have || !(p->list.items[p->sel].flags & ITEM_GONE)) {
+        for_p = p;                          /* (kept: an entry not held yet - its letter
+                                             * being read - asked again until it is) */
+        for_sel = p->sel;
+        for_count = p->list.count;
+    }
     return have ? lv_pof_file : NULL;
 }
 

@@ -409,6 +409,19 @@ void det_tick(void)
     if (!det.pending) {
         if (p)
             app_plex_ahead(p);              /* at rest: the neighbours' pictures */
+        if (p && det.shown && det.page == p && det.sel == p->sel && !det.tj && !det.sj && !p->plex &&
+            !p->style_pv && V && V->has_pane(p)) {
+            /* shown as having none: has it some now? (a list come back to
+             * at the start: its entries from the index, not yet held - the
+             * restored one was given none, and nothing asked again until a
+             * move) */
+            char path[300];
+            UBYTE shot;
+            if (det_kind(p, p->sel, path, sizeof(path), &shot)) {
+                det.shown = FALSE;
+                det_touch(p);
+            }
+        }
         return;
     }
     if (!p || !V || !V->has_pane(p) || app_pane_pending()) {
