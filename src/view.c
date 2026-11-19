@@ -317,7 +317,7 @@ static LONG cop_per_line(void)
     if (GetVar((CONST_STRPTR)"Ambiance/BarCopper", (STRPTR)b, sizeof(b), GVF_GLOBAL_ONLY) > 0 && b[0] >= '1' &&
         b[0] <= '9')
         return (b[1] >= '0' && b[1] <= '9') ? (b[0] - '0') * 10 + b[1] - '0' : b[0] - '0';
-    return 10;
+    return 8;
 }
 
 /* An AGA screen's controls (lv_bm: gap rows, if any, then the layout's, in
@@ -379,13 +379,16 @@ static BOOL bar_fit(LONG gap, LONG step, LONG mpl, const ULONG *rows, WORD nrows
         LONG nbb = nb + (b != bank_of ? 1 : 0), extra = s < nl && bgw[s] ? 2 : 0;
         cost = 2 * (k + 1) + 2 * nbb + (extra ? extra + 2 : 0);   /* (a run: BPLCON3, highs,
                                          * BPLCON3, lows; the background's a run of its own) */
-        if (cost > (dl == s ? BAR_BLANK : mpl)) {
+        if (cost > mpl) {
             s++;                            /* (the next scanline) */
             k = 0;
             bank_of = -1;
             nbb = 1;
         }
-        if (s > dl)
+        /* a scanline before the first row that wants it, at least: not in
+         * that row's blanking (how many writes fall there before its pixels
+         * is the display's to say: its left end showed them late) */
+        if (s >= dl && !(BAR_BLANK > 13 && s == dl))
             return FALSE;
         line[pn] = (UBYTE)s;
         nb = nbb;
