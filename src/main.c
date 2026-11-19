@@ -53,11 +53,19 @@ struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 
 /* ------------------------------------------------------------ modules */
 enum { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_VIDEOS, MOD_PICTURES, MOD_MUSIC,
-       MOD_RADIO, MOD_SETTINGS, MOD_ABOUT, MOD_COUNT };
+       MOD_RADIO, MOD_SETTINGS, MOD_ABOUT,
+       MOD_NOWPLAYING,      /* the menu's first entry while something plays (or is paused) */
+       MOD_COUNT };
 static const char *mod_names[MOD_COUNT] = {
     N_("Games"), N_("Mods"), N_("Demos"), N_("Videos"), N_("Pictures"), N_("Music"), N_("Radio"),
-    N_("Settings"), N_("About")
+    N_("Settings"), N_("About"), N_("Now playing")
 };
+/* A section's menu icon (the icons are the sections', in their order;
+ * Now playing has Music's) */
+static int mod_icon(int m)
+{
+    return m == MOD_NOWPLAYING ? ICON_MUSIC : m;
+}
 
 enum { FOCUS_MENU, FOCUS_CONTENT,
        FOCUS_PREVIEW };     /* the preview pane's fact sheet: Up/Down scroll it */
@@ -3786,6 +3794,7 @@ static void pics_root_empty(struct Page *p, LONG n, const char *src)
 }
 
 static void build_root_pages_now(int mod);
+static void np_play_btn(void);
 
 static void build_root_pages(int mod)
 {
@@ -3908,6 +3917,10 @@ static void build_root_pages_now(int mod)
         if ((p = page_push(PT_LIST, _("About"))))
             build_about_menu(p);
         break;
+    case MOD_NOWPLAYING:
+        if (page_push(PT_PLAYER, _("Now playing")))
+            np_play_btn();                  /* (its Play button chosen) */
+        break;
     }
 }
 
@@ -3942,7 +3955,7 @@ static void trail_now(struct NavTrail *t)
 
 static void save_nav(void)
 {
-    if (shown_mod < 0 || !depth)
+    if (shown_mod < 0 || !depth || shown_mod == MOD_NOWPLAYING)
         return;
     trail_now(&nav_mem[shown_mod]);
 }
@@ -3960,7 +3973,7 @@ static struct {
 
 static void nav_back_begin(int f)
 {
-    if (nav_snap.on || shown_mod < 0 || !depth || f == FOCUS_MENU)
+    if (nav_snap.on || shown_mod < 0 || !depth || f == FOCUS_MENU || shown_mod == MOD_NOWPLAYING)
         return;
     nav_snap.on = TRUE;
     nav_snap.mod = shown_mod;
@@ -4682,7 +4695,7 @@ static void cl_draw_menu_row(int i)
     if (g.planar)
         SetWriteMask(g.rp, 0x07);
     gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
-    gfx_icon(&g, menu[i], U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
+    gfx_icon(&g, mod_icon(menu[i]), U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
     if (g.menu_w > U(30))                   /* not icons alone (menu_layout) */
         gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, _(mod_names[menu[i]]), fg, bg,
                  g.menu_w - U(24), TS_BOLD);
@@ -6082,7 +6095,7 @@ static void style_preview(struct Page *p)
         UBYTE bg = i == menu_sel ? PEN_HL : PEN_BG;
         const char *s = spv_label(menu[i]);
         gfx_fill(&g, x0, y, x0 + mw - 1, y + rh - 1, bg);
-        gfx_icon_sized(&g, menu[i], x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
+        gfx_icon_sized(&g, mod_icon(menu[i]), x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
         SetFont(g.rp, f);
         n = TextFit(g.rp, (CONST_STRPTR)s, strlen(s), &te, NULL, 1, mw - SU(24),
                     f->tf_YSize + 1);
@@ -8748,6 +8761,11 @@ static void np_press(int b)
         np_update();
 }
 
+static void np_play_btn(void)
+{
+    np.btn = NB_PLAY;
+}
+
 static void np_open_page(void)
 {
     struct Page *p;
@@ -9238,13 +9256,17 @@ static BOOL np_click(WORD x, WORD y)
     return FALSE;
 }
 
+/* Now playing rows at the top of lists: none now (Now playing is the
+ * menu's first entry while something plays); 1 brings them back. */
+#define NP_ROWS 0
+
 /* "Now playing" at the top of the Mods and Radio pages while something
  * plays (a module or a station), its tag the title or the station. */
 static void np_shortcut(struct Page *p)
 {
     const char *t;
     char label[120];
-    if (!mp_loaded())
+    if (!NP_ROWS || !mp_loaded())
         return;
     if (mp_is_stream()) {
         t = mp_stream_name();
@@ -9301,7 +9323,7 @@ static BOOL plex_shortcut_fix(struct Page *p)
     struct Item *it;
     const char *t;
     char label[120];
-    BOOL has, playing = mp_loaded();
+    BOOL has, playing = NP_ROWS && mp_loaded();
     if (!np_row_list(p) || !p->list.pool)
         return FALSE;
     it = p->list.count ? &p->list.items[0] : NULL;
@@ -9409,7 +9431,7 @@ static void np_shortcut_sync(void)
     }
     struct Item *it;
     char want[120], sel[96];
-    BOOL has, playing = mp_loaded();
+    BOOL has, playing = NP_ROWS && mp_loaded();
     LONG i;
     if (depth != 1 || !p || p->type != PT_LIST || !(p->mods || p->radio || p->plex || p->songs))
         return;
@@ -16533,12 +16555,44 @@ static void build_menu(void)
                                  MOD_PICTURES, MOD_VIDEOS, MOD_SETTINGS, MOD_ABOUT };
     int i, m;
     nmenu = 0;
+    if (mp_loaded())
+        menu[nmenu++] = MOD_NOWPLAYING;     /* (while something plays or is paused) */
     for (i = 0; i < (int)(sizeof(order) / sizeof(order[0])); i++) {
         m = order[i];
         if (m == MOD_RADIO && !(caps.net && (caps.mp3_mhi || caps.mp3_mpega || caps.mpega_own)))
             continue;           /* needs a network stack and an MP3 path */
         menu[nmenu++] = m;
     }
+}
+
+/* The menu's Now playing entry as playback is now: there while something
+ * plays or is paused, gone when nothing is. The section chosen stays
+ * chosen; Now playing gone from under the selection leaves the first
+ * section's chosen (not while its page is open: it goes once that's left,
+ * so a Stop on it doesn't throw the page away). */
+static void np_menu_sync(void)
+{
+    BOOL on = mp_loaded(), has = nmenu > 0 && menu[0] == MOD_NOWPLAYING;
+    int m, i;
+    if (on == has)
+        return;
+    m = nmenu ? menu[menu_sel] : -1;
+    if (!on && m == MOD_NOWPLAYING && focus != FOCUS_MENU)
+        return;
+    build_menu();
+    menu_sel = 0;
+    for (i = 0; i < nmenu; i++)
+        if (menu[i] == m)
+            menu_sel = i;
+    if (!on && m == MOD_NOWPLAYING) {
+        amb_log("navigation", "Now playing gone from the menu: its first section chosen");
+        pane_pending = FALSE;
+        build_root(menu[menu_sel]);
+        draw_all();
+        return;
+    }
+    amb_log("navigation", on ? "Now playing in the menu" : "Now playing gone from the menu");
+    draw_menu();
 }
 
 static void say(const char *s)
@@ -16802,6 +16856,7 @@ static int app_main(void)
     while (running) {
         if (gfx_close_asked)
             break;                  /* the window's close gadget (the viewer saw it, say) */
+        np_menu_sync();             /* (the menu's Now playing entry) */
         if (gfx_iconify_asked) {
             gfx_iconify_asked = FALSE;  /* its gadget, Project > Iconify, Amiga-I */
             iconify();
@@ -17472,6 +17527,7 @@ static UBYTE lv_section(int mod)
     case MOD_VIDEOS: return LSEC_VIDEOS;
     case MOD_RADIO: return LSEC_RADIO;
     case MOD_SETTINGS: return LSEC_SETTINGS;
+    case MOD_NOWPLAYING: return LSEC_MUSIC;
     }
     return LSEC_OTHER;
 }
