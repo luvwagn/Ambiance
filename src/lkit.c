@@ -1039,6 +1039,10 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
             if (acc >= half)
                 break;
         }
+        if (k >= box[bi].n - 1)
+            k = box[bi].n - 2;          /* (half its pixels one colour, the last: that one
+                                         * alone - not an empty box and the same one cut again
+                                         * and again, Arcade Pool's felt leaving it 3 colours) */
         box[nb].at = box[bi].at + k + 1;
         box[nb].n = box[bi].n - k - 1;
         box[bi].n = k + 1;
