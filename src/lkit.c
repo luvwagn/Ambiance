@@ -12,7 +12,11 @@
 #include <graphics/gfxbase.h>
 #include <graphics/clip.h>
 #include <graphics/layers.h>
+#include <graphics/copper.h>
+#include <graphics/view.h>
+#include <proto/intuition.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,6 +24,7 @@ extern struct Library *CyberGfxBase;
 
 /* Time spent (Debug's load line): showing an 8-bit canvas (WriteChunkyPixels),
  * cutting pictures' colours down, how many pixels shown, looks for free pens */
+BOOL lk_copper_ok = TRUE;               /* (Ambiance/LayoutCopper: 0, the dithered ramp) */
 static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc, lkt_short, lkt_free = 999;
 void lk_pens(ULONG *short_of, ULONG *least_free)
 {
@@ -54,6 +59,9 @@ struct LkTarget {
     ULONG *rowc;                /* ...the background's colour on each row (lk_ramp), drawn
                                  * with the ramp's pens; NULL: none yet */
     unsigned long ramp_a, ramp_b;
+    BOOL copper;                /* ...the background one pen (CK_RAMP0), its colour set by
+                                 * the copper each line (ck_copper_on): smooth, and a row
+                                 * copied up or down takes the shade of where it lands */
     UBYTE *pool;                /* ...the pen for each 5-5-5 colour asked for (0: not yet) */
     UBYTE *near;                /* ...the nearest pen for each 4-4-4 colour (pictures of
                                  * many colours, drawn with the pens there are) */
@@ -163,8 +171,8 @@ static void ck_lives(struct LkTarget *t)
     for (k = CK_GREY0; k < CK_RAMP0; k++)
         t->lives[n++] = (UBYTE)k;
     if (t->rowc)
-        for (k = CK_RAMP0; k < CK_RAMP0 + CK_RAMPN; k++)
-            t->lives[n++] = (UBYTE)k;
+        for (k = t->copper ? CK_RAMP0 + 1 : CK_RAMP0; k < CK_RAMP0 + CK_RAMPN; k++)
+            t->lives[n++] = (UBYTE)k;   /* (the copper's pen: no one colour, never "nearest") */
     for (k = CK_POOL0; k < 256; k++)
         if (t->live[k])
             t->lives[n++] = (UBYTE)k;
@@ -286,7 +294,11 @@ static BOOL ck_is_bg(const struct LkTarget *t, long y, unsigned long c)
 /* Row y's background colour, drawn with the ramp: its pen at x, y */
 static UBYTE ck_ramp_pen(const struct LkTarget *t, long x, long y)
 {
-    long pos = t->chh > 1 ? y * (CK_RAMPN - 1) * 16 / (t->chh - 1) : 0, i = pos >> 4;
+    long pos, i;
+    if (t->copper)
+        return CK_RAMP0;                /* (its colour the copper's, line by line) */
+    pos = t->chh > 1 ? y * (CK_RAMPN - 1) * 16 / (t->chh - 1) : 0;
+    i = pos >> 4;
     if (i >= CK_RAMPN - 1)
         return CK_RAMP0 + CK_RAMPN - 1;
     return (UBYTE)(CK_RAMP0 + i + (ck_bayer[y & 3][x & 3] < (pos & 15) ? 1 : 0));
@@ -439,6 +451,96 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
 /* The layout's background: a gradient over the whole screen, top to
  * bottom (an 8-bit screen's: its twelve ramp pens made those colours, and
  * the background's rows drawn with them) */
+/* ---- the background's gradient by the copper (AGA): one pen (CK_RAMP0)
+ * made each line's colour by a user copper list on the screen's ViewPort -
+ * 24 bits (BPLCON3's LOCT: the high nibbles, then the low), every line.
+ * No dither, and a row copied up or down (a list scrolled by a blit) takes
+ * the shade of the line it lands on. BPLCON3's other bits are the
+ * system's, read from the copper list it shows. */
+#define CK_CUSTOM(off) ((APTR)(0xDFF000UL + (off)))
+#define CK_BPLCON3 0x106
+#define CK_COLOR(n) (0x180 + (n) * 2)
+
+static BOOL ck_bplcon3(UWORD *base)
+{
+    struct View *v = GfxBase->ActiView;
+    UWORD *c;
+    LONG i;
+    if (!v || !v->LOFCprList || !(c = v->LOFCprList->start))
+        return FALSE;
+    for (i = 0; i < v->LOFCprList->MaxCount && i < 8000; i++, c += 2) {
+        if (c[0] == 0xFFFF && c[1] == 0xFFFE)
+            break;
+        if (c[0] == CK_BPLCON3) {
+            *base = c[1] & (UWORD)~0xE200;  /* (its bank and LOCT are ours to set) */
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void ck_copper_off(struct LkTarget *t)
+{
+    struct ViewPort *vp;
+    if (!t->copper)
+        return;
+    t->copper = FALSE;
+    if (!t->g->scr)
+        return;
+    vp = &t->g->scr->ViewPort;
+    if (vp->UCopIns) {
+        FreeVPortCopLists(vp);              /* (the user list with the rest: made again) */
+        RemakeDisplay();
+    }
+}
+
+static BOOL ck_copper_on(struct LkTarget *t)
+{
+    struct ViewPort *vp = &t->g->scr->ViewPort;
+    struct UCopList *ucl;
+    UWORD base;
+    LONG lines, step, y;
+    char m[96];
+    if (!(GfxBase->ChipRevBits0 & GFXF_AA_ALICE) || !t->rowc || vp->UCopIns || !ck_bplcon3(&base))
+        return FALSE;
+    step = (vp->Modes & LACE) ? 2 : 1;      /* (a user list's lines: a field's) */
+    lines = t->chh / step;
+    if (!(ucl = AllocMem(sizeof(*ucl), MEMF_PUBLIC | MEMF_CLEAR)))
+        return FALSE;
+    if (!UCopperListInit(ucl, lines * 5 + 2)) {
+        FreeMem(ucl, sizeof(*ucl));
+        return FALSE;
+    }
+    for (y = 0; y < lines; y++) {
+        ULONG c = t->rowc[y * step];
+        UWORD hi = (UWORD)((((c >> 20) & 15) << 8) | (((c >> 12) & 15) << 4) | ((c >> 4) & 15));
+        UWORD lo = (UWORD)((((c >> 16) & 15) << 8) | (((c >> 8) & 15) << 4) | (c & 15));
+        CWait(ucl, y, 0);
+        CBump(ucl);
+        CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
+        CBump(ucl);
+        CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0)), hi);
+        CBump(ucl);
+        CMove(ucl, CK_CUSTOM(CK_BPLCON3), base | 0x0200);
+        CBump(ucl);
+        CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0)), lo);
+        CBump(ucl);
+    }
+    CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
+    CBump(ucl);
+    CWait(ucl, 10000, 255);                 /* (CEND) */
+    CBump(ucl);
+    Forbid();
+    vp->UCopIns = ucl;
+    Permit();
+    MakeScreen(t->g->scr);
+    RethinkDisplay();
+    t->copper = TRUE;
+    sprintf(m, "the background by the copper: %ld lines, BPLCON3 %04lx", (long)lines, (unsigned long)base);
+    amb_log("layout", m);
+    return TRUE;
+}
+
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom)
 {
     struct LkTarget *t = o->ctx;
@@ -462,6 +564,9 @@ void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom)
     }
     pal[1 + CK_RAMPN * 3] = 0;
     LoadRGB32(&t->g->scr->ViewPort, pal);
+    ck_copper_off(t);                   /* (another gradient: its list made again) */
+    if (lk_copper_ok)
+        ck_copper_on(t);
     memset(t->pool, 0, 32768);          /* (nearest looked up again, the ramp among them) */
     memset(t->near, 0, 4096);
     ck_lives(t);
@@ -946,6 +1051,7 @@ void lk_close(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
     if (t) {
+        ck_copper_off(t);               /* (the copper's gradient off the screen first) */
         if (t->bm && t->own) {
             WaitBlit();
             FreeBitMap(t->bm);

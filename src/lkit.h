@@ -42,6 +42,7 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
 /* a whole draw begins: an 8-bit screen's pens for flat colours free again */
 void lk_fresh(struct LkOut *o);
+extern BOOL lk_copper_ok;            /* an AGA screen's background by the copper (default) */
 void lk_pens(ULONG *short_of, ULONG *least_free);
 void lk_timing(ULONG *show_ms, ULONG *pic_ms, ULONG *kpx, ULONG *gcs);
 /* a picture (as lk_image; an 8-bit screen's of few colours: pens of its own) */

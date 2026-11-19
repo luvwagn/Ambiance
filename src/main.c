@@ -18635,6 +18635,9 @@ static void lv_sync(void)
             amb_strlcpy(lv.file, buf, sizeof(lv.file));
         if (GetVar((CONST_STRPTR)LVNATIVE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lv_native = buf[0] == '1';
+        /* (an AGA screen's background by the copper unless Ambiance/LayoutCopper is 0) */
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutCopper", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lk_copper_ok = buf[0] != '0';
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
             amb_log("layout", "Shift held as Ambiance started: the classic layout this time");
