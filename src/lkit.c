@@ -1287,6 +1287,12 @@ static BOOL ck_blit(struct LkTarget *t, long x, long y, long w, long h, long dx,
     }
     if (t->blitting)
         WaitBlit();
+    /* the CPU's own writes to the planes (the c2p's, just before) out of its
+     * data cache into chip RAM first: a 68040/060's copyback cache still
+     * holding some, the blitter read the planes as they were before them -
+     * and the cache wrote them out later, over what it moved (an old
+     * highlight copied along a list, there until drawn again) */
+    CacheClearU();
     /* one bitmap, overlapping: BltBitMap picks the direction. It returns
      * with the last blit started; the CPU's next writes to the planes
      * (ck_c2p, WriteChunkyPixels) wait for it (t->blitting) */
