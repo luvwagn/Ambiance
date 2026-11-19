@@ -49,6 +49,7 @@ void lk_pens(ULONG *short_of, ULONG *least_free);
 void lk_prof(char *buf);
 /* the big letter by hardware sprites (AGA, an 8-bit layout): TRUE if so */
 extern BOOL lk_sprites_ok;
+extern BOOL lk_show_up;          /* the next lk_show from the bottom up (a list's selection went up) */
 BOOL lk_letter_sprites(struct LkOut *o, const UBYTE *mask, UWORD w, UWORD h, UWORD bpr, UWORD cw, WORD x,
                        WORD y, ULONG rgb);
 void lk_letter_sprites_off(struct LkOut *o);         /* the 8-bit drawing by kind: calls and ms since the last (text: its rows within) */

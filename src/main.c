@@ -18975,6 +18975,10 @@ static void lv_frame_(void)
         lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;
         lv.last_items = p ? (const void *)p->list.items : NULL;
+        if (p && p == lv.last_p && p->sel != lv.last_sel)
+            lk_show_up = p->sel < lv.last_sel;  /* (shown from the bottom up when it went up:
+                                                 * the old highlight gone before the new one
+                                                 * comes, never two a moment) */
         lv.last_sel = p ? p->sel : -1;
         lv.last_count = p ? p->list.count : -1;
         lv.last_depth = depth;

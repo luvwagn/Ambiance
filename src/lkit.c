@@ -1233,7 +1233,7 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
     x1 |= 31L;
     if (x1 >= t->cw)
         x1 = t->cw - 1;
-    for (y = y0; y <= y1; y++) {
+    for (y = lk_show_up ? y1 : y0; lk_show_up ? y >= y0 : y <= y1; y += lk_show_up ? -1 : 1) {
         const UBYTE *s = t->ch + y * t->cw;
         ULONG row = (ULONG)(y + oy) * bm->BytesPerRow;
         for (x = x0; x + 31 <= x1; x += 32) {
@@ -1263,7 +1263,11 @@ static BOOL ck_blit(struct LkTarget *t, long x, long y, long w, long h, long dx,
     struct BitMap *bm;
     struct Layer *ly;
     long ox, oy, j;
-    if (!lk_blit_ok || w <= 0 || h <= 0 || t->nbq >= 8 || !ck_direct(t, &bm, &ly, &ox, &oy))
+    /* across only (a glide): a list scrolled up or down by the blitter
+     * showed, while it moved, its old highlight copied along before the
+     * rows over it were drawn - the CPU's c2p of the whole shows it as it
+     * ends up, top to bottom */
+    if (dy || !lk_blit_ok || w <= 0 || h <= 0 || t->nbq >= 8 || !ck_direct(t, &bm, &ly, &ox, &oy))
         return FALSE;
     if (ly)
         UnlockLayerRom(ly);
@@ -1371,6 +1375,7 @@ BOOL lk_canvas(const struct LkOut *o)
 
 /* ---- the big letter by hardware sprites (AGA) ------------------------- */
 BOOL lk_sprites_ok = TRUE;
+BOOL lk_show_up;                /* shown from the bottom up (a list's selection went up) */
 
 static ULONG ck_vc_get(struct ViewPort *vp, ULONG tag, ULONG dflt)
 {
