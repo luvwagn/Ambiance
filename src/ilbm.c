@@ -628,6 +628,40 @@ static UBYTE *anim_pick(BPTR fh, const char *path, const UBYTE *body, ULONG body
     return a;
 }
 
+/* A filter's taps, for making sn pixels dn (fewer): each small pixel's
+ * first big one (first[]) and how much of it and the next ones it takes
+ * (wt[], k of them, in 256ths of a pixel). The window is the small pixel's
+ * share of the big ones, but never under two: a screenshot dithered in
+ * stripes or checks of two pixels averages out, wherever it falls. */
+static int ilbm_taps_n(ULONG sn, ULONG dn)
+{
+    ULONG s256 = sn * 256 / dn, win = s256 < 512 ? 512 : s256;
+    return (int)(win / 256 + 2);
+}
+
+static void ilbm_taps(ULONG sn, ULONG dn, UWORD *first, UWORD *wt, int k)
+{
+    ULONG s256 = sn * 256 / dn, win = s256 < 512 ? 512 : s256, d;
+    for (d = 0; d < dn; d++) {
+        LONG c = (LONG)((2 * d + 1) * sn * 128 / dn), a = c - (LONG)win / 2, b = c + (LONG)win / 2, i0;
+        int j;
+        if (a < 0)
+            a = 0;
+        if (b > (LONG)(sn * 256))
+            b = (LONG)(sn * 256);
+        i0 = a >> 8;
+        first[d] = (UWORD)i0;
+        for (j = 0; j < k; j++) {
+            LONG lo = (i0 + j) * 256, hi = lo + 256;
+            if (lo < a)
+                lo = a;
+            if (hi > b)
+                hi = b;
+            wt[d * k + j] = (UWORD)(hi > lo ? hi - lo : 0);
+        }
+    }
+}
+
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi)
 {
@@ -744,18 +778,27 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     np = planes + (masking == 1 ? 1 : 0);
     if (maxcol <= THUMB_DEEP && dw <= sw && dh <= sh && (dw < sw || dh < sh)) {
         /* true colour (a layout's), made smaller: each small pixel the
-         * average of the big ones it covers, as deep_thumb's are. Picked
-         * one in so many, a screenshot's fine lines and dithered shades
-         * broke into specks (a game's at 60%: Mutant League Hockey's ice) */
+         * weighted average of the big ones under it, over at least two of
+         * them each way (ilbm_taps). Picked one in so many, a screenshot's
+         * dithered shades broke into specks; averaged in whole pixels (1 or
+         * 2 each, at 320 -> 197), a 64-colour screenshot's dither still
+         * showed in the ones that got one (Chaos Engine's stone). */
         struct Thumb *d = AllocVec(sizeof(struct Thumb) + dw * dh * 4, MEMF_ANY | MEMF_CLEAR);
-        ULONG *sum = AllocVec(dw * 4 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR), cy = 0;
-        UWORD *dx = AllocVec(sw * sizeof(UWORD), MEMF_ANY);
+        int kx = ilbm_taps_n(sw, dw), ky = ilbm_taps_n(sh, dh);
+        UWORD *fx = AllocVec(dw * sizeof(UWORD), MEMF_ANY), *fy = AllocVec(dh * sizeof(UWORD), MEMF_ANY);
+        UWORD *wx = AllocVec(dw * kx * sizeof(UWORD), MEMF_ANY), *wy = AllocVec(dh * ky * sizeof(UWORD), MEMF_ANY);
+        ULONG *srow = AllocVec(sw * 4, MEMF_ANY), *tmp = AllocVec(dw * sh * 4, MEMF_ANY | MEMF_CLEAR);
+        LONG k;
         row = AllocVec(rb * np, MEMF_ANY);
         chunky = AllocVec(rb * 8, MEMF_ANY);
-        if (!d || !sum || !dx || !row || !chunky) {
+        if (!d || !fx || !fy || !wx || !wy || !srow || !tmp || !row || !chunky) {
             FreeVec(d);
-            FreeVec(sum);
-            FreeVec(dx);
+            FreeVec(fx);
+            FreeVec(fy);
+            FreeVec(wx);
+            FreeVec(wy);
+            FreeVec(srow);
+            FreeVec(tmp);
             thumb_free(t);
             t = NULL;
             goto out;
@@ -764,21 +807,21 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         d->h = dh;
         d->mod = dw;
         d->argb = (ULONG *)(d + 1);
-        for (x = 0; x < sw; x++)
-            dx[x] = (UWORD)(x * dw / sw);
+        ilbm_taps(sw, dw, fx, wx, kx);
+        ilbm_taps(sh, dh, fy, wy, ky);
         c2p_init();
         p = body;
         e = body + bodylen;
-        for (sy = 0; sy < sh; sy++) {
+        for (sy = 0; sy < sh; sy++) {       /* each row: its colours, then made narrow */
             const UBYTE *cc = (const UBYTE *)chunky;
-            ULONG ty = sy * dh / sh, rgb = ham ? base[0] : 0, bits = planes == 8 ? 6 : 4, lo = (1UL << bits) - 1;
+            ULONG rgb = ham ? base[0] : 0, bits = planes == 8 ? 6 : 4, lo = (1UL << bits) - 1;
+            ULONG *tr = tmp + sy * dw;
             if (img)
                 CopyMem(img + sy * rb * planes, row, rb * planes);
             else if (!unpack(&p, e, row, rb * np, comp == 1))
                 break;                      /* cut short: the rest stays black */
             row_chunky(row, rb, planes, chunky);
             for (x = 0; x < sw; x++) {
-                ULONG *a = sum + dx[x] * 4, c;
                 if (ham) {
                     ULONG v = cc[x] & lo, ctl = cc[x] >> bits;
                     v = bits == 4 ? v * 17 : (v << 2) | (v >> 4);
@@ -790,28 +833,55 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
                         rgb = (rgb & 0x00FFFF) | (v << 16);
                     else
                         rgb = (rgb & 0xFF00FF) | (v << 8);
-                    c = rgb;
+                    srow[x] = rgb;
                 } else {
-                    c = t->pal[cc[x]];
+                    srow[x] = t->pal[cc[x]];
                 }
-                a[0] += (c >> 16) & 255;
-                a[1] += (c >> 8) & 255;
-                a[2] += c & 255;
-                a[3]++;
             }
-            if (sy + 1 == sh || (sy + 1) * dh / sh != ty) {
-                ULONG *o = d->argb + ty * dw;   /* the row done: its averages */
-                for (x = 0; x < dw; x++) {
-                    ULONG *a = sum + x * 4, k = a[3] ? a[3] : 1;
-                    o[x] = ((a[0] + k / 2) / k << 16) | ((a[1] + k / 2) / k << 8) | (a[2] + k / 2) / k;
+            for (x = 0; x < dw; x++) {
+                ULONG r = 0, g = 0, bl = 0, wsum = 0;
+                const UWORD *w = wx + x * kx;
+                for (k = 0; k < kx; k++) {
+                    ULONG i = fx[x] + k, c;
+                    if (!w[k] || i >= sw)
+                        continue;
+                    c = srow[i];
+                    r += ((c >> 16) & 255) * w[k];
+                    g += ((c >> 8) & 255) * w[k];
+                    bl += (c & 255) * w[k];
+                    wsum += w[k];
                 }
-                memset(sum, 0, dw * 4 * sizeof(ULONG));
-                cy = ty + 1;
+                if (!wsum)
+                    wsum = 1;
+                tr[x] = ((r + wsum / 2) / wsum << 16) | ((g + wsum / 2) / wsum << 8) | (bl + wsum / 2) / wsum;
             }
         }
-        (void)cy;
-        FreeVec(sum);
-        FreeVec(dx);
+        for (sy = 0; sy < dh; sy++) {       /* then made short, a column at a time */
+            const UWORD *w = wy + sy * ky;
+            ULONG *o = d->argb + sy * dw;
+            for (x = 0; x < dw; x++) {
+                ULONG r = 0, g = 0, bl = 0, wsum = 0;
+                for (k = 0; k < ky; k++) {
+                    ULONG i = fy[sy] + k, c;
+                    if (!w[k] || i >= sh)
+                        continue;
+                    c = tmp[i * dw + x];
+                    r += ((c >> 16) & 255) * w[k];
+                    g += ((c >> 8) & 255) * w[k];
+                    bl += (c & 255) * w[k];
+                    wsum += w[k];
+                }
+                if (!wsum)
+                    wsum = 1;
+                o[x] = ((r + wsum / 2) / wsum << 16) | ((g + wsum / 2) / wsum << 8) | (bl + wsum / 2) / wsum;
+            }
+        }
+        FreeVec(fx);
+        FreeVec(fy);
+        FreeVec(wx);
+        FreeVec(wy);
+        FreeVec(srow);
+        FreeVec(tmp);
         thumb_free(t);
         t = d;
         goto told;
