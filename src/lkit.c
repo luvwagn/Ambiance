@@ -477,7 +477,7 @@ void lk_fresh(struct LkOut *o)
 }
 
 /* A picture on an 8-bit screen: its colours cut down to as many as there
- * are pens for (96 a big one, 24 or 16 a small one; median cut, by 5-5-5
+ * are pens for (16 to 96, by its size; median cut, by 5-5-5
  * colour), each a pen made its colour, every pixel its box's pen -
  * nothing dithered. A picture of many colours when no pens are left (a
  * reflection, a wall's later covers): the nearest pens there are.
@@ -626,14 +626,18 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
             ck_draw_mapped(o, t, x, y, px, w, h, mod);
             return;
         }
-    /* how many colours: a big picture (Now playing's cover, a page's) up to
-     * 96, a small one (a wall's) 24 or 16, while pens are free, leaving some
-     * for what is drawn after; a strip (a reflection, faded into the
-     * background) none of its own */
-    if (w * h >= 40000)
-        want = t->nfree - 24 < 96 ? t->nfree - 24 : 96;
-    else
-        want = t->nfree >= 96 ? 24 : t->nfree >= 40 ? 16 : t->nfree - 24;
+    /* how many colours: one for each 300 pixels, 16 to 96 (a wall's cover
+     * at 90 x 90, 27; a game's screenshot in a page's details at 200 x 160,
+     * 96 - it had 24, as a small one, its shades posterised), while pens
+     * are free, leaving some for what is drawn after; a strip (a
+     * reflection, faded into the background) none of its own */
+    want = w * h / 300;
+    if (want < 16)
+        want = 16;
+    if (want > 96)
+        want = 96;
+    if (want > t->nfree - 24)
+        want = t->nfree - 24;
     if ((ULONG)t->nfree < lkt_free)
         lkt_free = (ULONG)t->nfree;
     if (w >= 3 * h)

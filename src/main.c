@@ -370,6 +370,7 @@ static void lv_native_changed(void);
 static void lv_redraw(void);                /* the screen itself changed: all of it, shown whole */
 static void lv_note(void);                  /* anything: the layout works out what */
 static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
+static void lv_who_report(void);
 
 static BOOL np_full;                /* Flow on the whole screen: the page draws nothing */
 static WORD list_visible(void);
@@ -4456,6 +4457,7 @@ static void dbg_load_log(void)
         gfx_off_report(t, sizeof(t), (const void *)lv_frame);
         if (t[0])
             amb_log("unseen", t);
+        lv_who_report();
     }
     n = 0;
     cpu_sum = app_sum = 0;
@@ -17464,9 +17466,44 @@ static void lv_note_what(ULONG what)
     lv_dirty = TRUE;
     lv_what |= what;
 }
-static void lv_note(void)
+/* Who asked for whole draws (Debug's "wholes" line: by where they were
+ * called from, as "unseen"): a whole draw is the slow kind */
+#define LV_WHO 6
+static const void *lv_who_at[LV_WHO];
+static ULONG lv_who_n[LV_WHO];
+static __attribute__((noinline)) void lv_note(void)
 {
+    const void *at = __builtin_return_address(0);
+    int i, k = -1;
     lv_note_what(LV_WHOLE);
+    for (i = 0; i < LV_WHO; i++)
+        if (lv_who_at[i] == at || (!lv_who_at[i] && k < 0)) {
+            if (lv_who_at[i] == at) {
+                k = i;
+                break;
+            }
+            k = i;
+        }
+    if (k >= 0) {
+        lv_who_at[k] = at;
+        lv_who_n[k]++;
+    }
+}
+static void lv_who_report(void)
+{
+    char t[200];
+    int i;
+    t[0] = 0;
+    for (i = 0; i < LV_WHO && lv_who_at[i]; i++) {
+        LONG d = (LONG)((const UBYTE *)lv_who_at[i] - (const UBYTE *)lv_frame);
+        if (strlen(t) < sizeof(t) - 30)
+            sprintf(t + strlen(t), "%s%s%ld x%lu", t[0] ? ", " : "", d < 0 ? "-" : "+", (long)(d < 0 ? -d : d),
+                    (unsigned long)lv_who_n[i]);
+        lv_who_at[i] = NULL;
+        lv_who_n[i] = 0;
+    }
+    if (t[0])
+        amb_log("wholes", t);
 }
 
 /* The screen under the layout changed (double buffering on or off, its
