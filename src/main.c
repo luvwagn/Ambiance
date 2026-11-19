@@ -16474,12 +16474,15 @@ static int main_rc;
 
 int amb_cpu_ok(void);              /* cpucheck.c: built for the 68000 */
 
-int main(void)
+/* One Ambiance at a time: a second started (a double-click, a script)
+ * gives way. Two at once fought over Paula's interrupt - the first to
+ * quit put back the vector the second had saved, the second then put
+ * back the first's, its code gone - and crashed after quitting. */
+#define ONE_PORT "Ambiance.running"
+static struct MsgPort *one_port;
+static int main_stacked(void)
 {
-    struct Task *me;
-    if (!amb_cpu_ok())
-        return 20;                          /* a 68000/010: said in a requester */
-    me = FindTask(NULL);
+    struct Task *me = FindTask(NULL);
     if ((ULONG)me->tc_SPUpper - (ULONG)me->tc_SPLower >= MAIN_STACK)
         return app_main();
     if (!(main_stack = AllocVec(MAIN_STACK, MEMF_ANY)))
@@ -16492,6 +16495,30 @@ int main(void)
     StackSwap(&main_sss);
     FreeVec(main_stack);
     return main_rc;
+}
+
+int main(void)
+{
+    int rc;
+    if (!amb_cpu_ok())
+        return 20;                          /* a 68000/010: said in a requester */
+    Forbid();
+    if (FindPort((CONST_STRPTR)ONE_PORT)) {
+        Permit();
+        return 5;                           /* (another runs: it is the one) */
+    }
+    if ((one_port = CreateMsgPort())) {
+        one_port->mp_Node.ln_Name = (char *)ONE_PORT;
+        one_port->mp_Node.ln_Pri = -128;
+        AddPort(one_port);
+    }
+    Permit();
+    rc = main_stacked();
+    if (one_port) {
+        RemPort(one_port);
+        DeleteMsgPort(one_port);
+    }
+    return rc;
 }
 
 static int app_main(void)
