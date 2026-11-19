@@ -353,6 +353,9 @@ static BOOL lv_native;
 static void lv_native_changed(void);
 static void lv_redraw(void);                /* the screen itself changed: all of it, shown whole */
 static void lv_note(void);                  /* anything: the layout works out what */
+static BOOL lp_open_all(void);              /* Home's launchpad (below): its "All" tile opened */
+static BOOL lp_back(void);                  /* ...back from its list to the row */
+static void lp_note_open(const struct Page *p); /* ...a file opened: a recent one */
 static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_DETAILS...) */
 static void lv_who_report(void);
 
@@ -15366,6 +15369,9 @@ static void act_open(BOOL play)
     }
     if (!p)
         return;
+    if (lp_open_all())
+        return;                     /* (Home's "All ..." tile: the section's whole list) */
+    lp_note_open(p);
     if (p->type == PT_LIST && p->list.count) {
         struct Item *it;
         busy_begin();
@@ -15455,6 +15461,8 @@ static void act_right(void)
 
 static void act_back(void)
 {
+    if (lp_back())
+        return;                     /* (the section's whole list: back to Home's row) */
     pane_settle();
     nav_back_begin(focus);
     if (focus == FOCUS_PREVIEW) {   /* out of the details pane, back to the list */
@@ -18090,6 +18098,219 @@ static const struct LItem *lv_home_item(LONG i)
     return li;
 }
 
+/* ---- Home's launchpad. A section whose first level is a long flat list
+ * of files (Videos: the films themselves) shows on Home not every file -
+ * a row of hundreds, a tile a key, no letters - but its folders and other
+ * rows (now playing, a disc), the few files opened last, and "All ..." :
+ * the section's whole list as a page, its letters and details as any
+ * list's. Esc or Back there: the row again. */
+#define LP_LEAVES 6                 /* more files than this at the first level: a launchpad */
+#define LP_RECENT 4
+#define LP_ALL (-1)
+#define LP_MAX 40
+#define RECENT_VAR "Ambiance/HomeRecent"
+static LONG lp_map[LP_MAX];         /* each tile: its row of the first level, or LP_ALL */
+static int lp_n = -1;               /* tiles (-1: no launchpad, the rows themselves) */
+static int lp_sel, lp_sec = -1;     /* the tile chosen; the section it was made for */
+static LONG lp_files;               /* the files of the first level */
+static BOOL lp_all;                 /* the section's whole list shown (its "All" tile opened) */
+static const void *lp_items;        /* (made for this list: items, count) */
+static LONG lp_count = -1;
+static struct { UBYTE sec; char label[48]; } lp_rec[24];
+static int lp_nrec;
+static BOOL lp_rec_loaded;
+
+static BOOL lp_file(const struct Item *it)
+{
+    if (np_row(it) || it->mark == MARK_DISC)
+        return FALSE;                       /* (now playing, a disc in a drive: their own tiles) */
+    switch (it->kind) {
+    case IT_PIC: case IT_MOD: case IT_SONG: case IT_ANIM: case IT_RUN: case IT_PLEXTRACK:
+    case IT_PLEXPHOTO: case IT_STATION:
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void lp_rec_load(void)
+{
+    static char buf[24 * 56];
+    char *q, *e;
+    lp_rec_loaded = TRUE;
+    if (GetVar((CONST_STRPTR)RECENT_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) <= 0)
+        return;
+    for (q = buf; *q && lp_nrec < 24; q = e) {
+        char *t;
+        for (e = q; *e && *e != '\n'; e++)
+            ;
+        if (*e)
+            *e++ = 0;
+        if (!(t = strchr(q, '\t')))
+            continue;
+        *t++ = 0;
+        lp_rec[lp_nrec].sec = (UBYTE)(q[0] >= '0' && q[0] <= '9' ? (q[1] >= '0' && q[1] <= '9' ? (q[0] - '0') * 10 + q[1] - '0' : q[0] - '0') : 0);
+        amb_strlcpy(lp_rec[lp_nrec].label, t, sizeof(lp_rec[0].label));
+        lp_nrec++;
+    }
+}
+
+static void lp_rec_save(void)
+{
+    static char buf[24 * 56];
+    int i;
+    buf[0] = 0;
+    for (i = 0; i < lp_nrec; i++) {
+        char line[60];
+        sprintf(line, "%lu\t%s\n", (unsigned long)lp_rec[i].sec, lp_rec[i].label);
+        amb_strlcat(buf, line, sizeof(buf));
+    }
+    save_setting(RECENT_VAR, buf);
+}
+
+/* A file of a section's first level opened: first of its recent ones */
+static void lp_note_open(const struct Page *p)
+{
+    const struct Item *it;
+    int sec, i, j, kept = 0;
+    if (!nmenu || depth != 1 || p != &pages[0] || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
+        return;
+    it = &p->list.items[p->sel];
+    if (!lp_file(it) || !it->label || !*it->label || strchr(it->label, '\n') || strchr(it->label, '\t'))
+        return;
+    if (!lp_rec_loaded)
+        lp_rec_load();
+    sec = menu[menu_sel];
+    for (i = j = 0; i < lp_nrec; i++)       /* (it out, and the section's beyond its few) */
+        if (!(lp_rec[i].sec == sec &&
+              (!strcmp(lp_rec[i].label, it->label) || ++kept >= LP_RECENT)))
+            lp_rec[j++] = lp_rec[i];
+    lp_nrec = j < 23 ? j : 23;
+    memmove(&lp_rec[1], &lp_rec[0], (size_t)lp_nrec * sizeof(lp_rec[0]));
+    lp_rec[0].sec = (UBYTE)sec;
+    amb_strlcpy(lp_rec[0].label, it->label, sizeof(lp_rec[0].label));
+    lp_nrec++;
+    lp_rec_save();
+    lp_items = NULL;                        /* (the row made again) */
+}
+
+/* The launchpad's tiles for the section shown (lp_n -1: none) */
+static void lp_build(void)
+{
+    const struct Page *p = &pages[0];
+    LONG i, k;
+    int sec = nmenu ? menu[menu_sel] : -1;
+    if (sec != lp_sec) {
+        lp_sec = sec;
+        lp_all = FALSE;
+        lp_sel = 0;
+        lp_items = NULL;
+    }
+    if (depth < 1 || p->type != PT_LIST || !p->list.count) {
+        lp_n = -1;
+        return;
+    }
+    if (lp_items == (const void *)p->list.items && lp_count == p->list.count)
+        return;
+    lp_items = (const void *)p->list.items;
+    lp_count = p->list.count;
+    for (i = 0, lp_files = 0; i < p->list.count; i++)
+        if (lp_file(&p->list.items[i]))
+            lp_files++;
+    if (lp_files <= LP_LEAVES) {
+        lp_n = -1;
+        return;
+    }
+    lp_n = 0;
+    for (i = 0; i < p->list.count && lp_n < LP_MAX - LP_RECENT - 1; i++)
+        if (!lp_file(&p->list.items[i]))
+            lp_map[lp_n++] = i;             /* (its folders, now playing, a disc) */
+    if (!lp_rec_loaded)
+        lp_rec_load();
+    for (k = 0; k < lp_nrec; k++)           /* (its files opened last, still there) */
+        if (lp_rec[k].sec == sec)
+            for (i = 0; i < p->list.count; i++)
+                if (lp_file(&p->list.items[i]) && p->list.items[i].label &&
+                    !strcmp(p->list.items[i].label, lp_rec[k].label)) {
+                    lp_map[lp_n++] = i;
+                    break;
+                }
+    lp_map[lp_n++] = LP_ALL;
+    if (lp_sel >= lp_n)
+        lp_sel = lp_n - 1;
+    for (k = 0; k < lp_n; k++)              /* (the row chosen before, if it has a tile) */
+        if (lp_map[k] == p->sel) {
+            lp_sel = (int)k;
+            break;
+        }
+}
+
+/* Home's row: the launchpad's (its tiles, chosen, and not its whole list) */
+static BOOL lp_on(void)
+{
+    lp_build();
+    return lp_n > 0 && !lp_all;
+}
+
+static const struct LItem *lp_item(LONG i)
+{
+    static struct LItem all;
+    static char lab[48], sub[24];
+    if (i >= 0 && i < lp_n && lp_map[i] >= 0)
+        return lv_home_item(lp_map[i]);
+    memset(&all, 0, sizeof(all));
+    sprintf(lab, "%.20s %.24s", _("All"), nmenu ? _(mod_names[menu[menu_sel]]) : "");
+    sprintf(sub, "%ld", (long)lp_files);
+    all.label = lab;
+    all.sub = sub;
+    all.kind = LI_FOLDER;
+    return &all;
+}
+
+/* A tile chosen (LAC_SELECT), opened or played: the launchpad's own */
+static BOOL lp_act(int what, LONG arg)
+{
+    struct Page *p = &pages[0];
+    if (!lv_home_list() || !lp_on() || arg < 0 || arg >= lp_n)
+        return FALSE;
+    lp_sel = (int)arg;
+    if (lp_map[arg] >= 0 && lp_map[arg] != p->sel)
+        act_move(lp_map[arg] - p->sel);
+    lv_note_what(LC_SELECT);
+    if (what != LAC_SELECT)
+        act_open(what == LAC_PLAY);
+    return TRUE;
+}
+
+/* The section's whole list shown as a page (its "All" tile opened) */
+static BOOL lp_on_list(void)
+{
+    lp_build();
+    return lp_n > 0 && lp_all;
+}
+
+static BOOL lp_open_all(void)
+{
+    if (!lv_on() || !lv_home_list() || !lp_on() || lp_sel < 0 || lp_sel >= lp_n)
+        return FALSE;
+    if (lp_map[lp_sel] != LP_ALL) {
+        if (lp_map[lp_sel] != pages[0].sel)
+            act_move(lp_map[lp_sel] - pages[0].sel);    /* (the tile's own row, opened) */
+        return FALSE;
+    }
+    lp_all = TRUE;
+    lv_note();
+    return TRUE;
+}
+
+static BOOL lp_back(void)
+{
+    if (!lp_all || depth != 1 || focus != FOCUS_CONTENT)
+        return FALSE;
+    lp_all = FALSE;
+    lv_note();
+    return TRUE;
+}
+
 static const void *lv_model(int screen)
 {
     static struct LPage page;
@@ -18149,8 +18370,12 @@ static const void *lv_model(int screen)
             row.item = lv_home_item;            /* (the section's own list: its tiles) */
             home.nrows = 1;
             home.rows = &row;
+            if (lp_on()) {                      /* (a long flat list: the launchpad's) */
+                row.n = lp_n;
+                row.item = lp_item;
+            }
             if (lv_home_list())
-                home.tile_sel = pages[0].sel;
+                home.tile_sel = lp_on() ? lp_sel : pages[0].sel;
             home.tile_shown = !mouse_mode;  /* (come in with the mouse: nothing chosen
                                              * shows, the hover does) */
         }
@@ -18236,6 +18461,8 @@ static void lv_act(int what, LONG arg)
     struct Page *p = cur();
     switch (what) {
     case LAC_SELECT: case LAC_OPEN: case LAC_PLAY:
+        if (focus == FOCUS_CONTENT && lp_act(what, arg))
+            break;                          /* (Home's launchpad: its own tiles) */
         if (focus == FOCUS_MENU) {
             if (arg >= 0 && arg < nmenu && arg != menu_sel)
                 menu_select(arg);
@@ -18750,7 +18977,10 @@ static BOOL lv_home_list(void)
 static int lv_screen(void)
 {
     struct Page *p = cur();
-    if ((focus == FOCUS_MENU || lv_home_list()) && (lv.eng->screens & LS_BIT(LS_HOME)))
+    if (focus == FOCUS_MENU)
+        lp_all = FALSE;                     /* (a launchpad's whole list: left with its section) */
+    if ((focus == FOCUS_MENU || (lv_home_list() && !(lp_all && lp_on_list()))) &&
+        (lv.eng->screens & LS_BIT(LS_HOME)))
         return LS_HOME;
     if (p && p->type == PT_PLAYER && (lv.eng->screens & LS_BIT(LS_NOW)))
         return LS_NOW;
