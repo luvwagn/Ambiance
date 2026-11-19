@@ -18708,6 +18708,8 @@ static void lv_sync(void)
         /* (the big letter by sprites on AGA unless Ambiance/LayoutSprites is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutSprites", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_sprites_ok = buf[0] != '0';
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutSkip", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lk_skip_ok = buf[0] != '0';
         /* (an AGA screen's copies by the blitter unless Ambiance/LayoutBlit is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutBlit", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_blit_ok = buf[0] != '0';

@@ -50,7 +50,8 @@ void lk_prof(char *buf);
 /* the big letter by hardware sprites (AGA, an 8-bit layout): TRUE if so */
 extern BOOL lk_sprites_ok;
 extern BOOL lk_show_up;
-extern BOOL lk_pic_own;          /* lk_picture: the host's own picture (pens of its own, however wide) */          /* the next lk_show from the bottom up (a list's selection went up) */
+extern BOOL lk_pic_own;
+extern BOOL lk_skip_ok;          /* c2p leaves groups of 32 the planes show already (Ambiance/LayoutSkip=0: not) */          /* lk_picture: the host's own picture (pens of its own, however wide) */          /* the next lk_show from the bottom up (a list's selection went up) */
 BOOL lk_letter_sprites(struct LkOut *o, const UBYTE *mask, UWORD w, UWORD h, UWORD bpr, UWORD cw, WORD x,
                        WORD y, ULONG rgb);
 void lk_letter_sprites_off(struct LkOut *o);         /* the 8-bit drawing by kind: calls and ms since the last (text: its rows within) */

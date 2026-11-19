@@ -29,7 +29,8 @@ extern struct Library *CyberGfxBase;
 BOOL lk_copper_ok = TRUE;               /* (Ambiance/LayoutCopper: 0, the dithered ramp) */
 BOOL lk_blit_ok = TRUE;                 /* (Ambiance/LayoutBlit: 0, a copy c2p'd again) */
 static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc, lkt_short, lkt_free = 999;
-static ULONG lkt_blits, lkt_bpx;        /* copies the blitter made, pixels they moved */
+static ULONG lkt_blits, lkt_bpx;
+static ULONG lkt_same;                  /* groups of 32 left as the planes had them (ck_c2p) */        /* copies the blitter made, pixels they moved */
 void lk_blits(ULONG *n, ULONG *kpx)
 {
     *n = lkt_blits;
@@ -70,6 +71,11 @@ void lk_prof(char *buf)
         sprintf(buf + strlen(buf), "%s%s %lu (%lu ms)", *buf ? ", " : "", name[k], (unsigned long)lkp_n[k],
                 lkp_hz ? (unsigned long)(lkp_t[k] / (lkp_hz / 1000 ? lkp_hz / 1000 : 1)) : 0UL);
         lkp_n[k] = lkp_t[k] = 0;
+    }
+    if (lkt_same) {
+        sprintf(buf + strlen(buf), "%sunchanged %lu K pixels not converted", *buf ? ", " : "",
+                (unsigned long)(lkt_same * 32 / 1000));
+        lkt_same = 0;
     }
 }
 
@@ -113,6 +119,10 @@ struct LkTarget {
     UWORD *list;                /* ...the colours it has */
     UBYTE *pmapb;               /* ...each one's pen */
     UBYTE *pmap;                /* pmapb while a picture is drawn, else NULL */
+    UBYTE *sh;                  /* what the screen's planes show, a byte a pixel (ck_c2p):
+                                 * a group of 32 the same not converted again; NULL: none */
+    BOOL sh_all;                /* ...the next show converts all it shows (a whole draw:
+                                 * the screen may have been drawn over by others) */
     UBYTE held[256];            /* pens kept from the pool: the sprites' colours (AGA) */
     /* the big letter by hardware sprites (lk_letter_sprites): over the
      * picture, never drawn into it - a glide under it moves nothing of it */
@@ -562,6 +572,9 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     t->tmp = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->list = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->pmapb = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
+    if (lk_skip_ok)
+        t->sh = AllocVec((ULONG)g->w * g->h, MEMF_ANY);     /* (none: everything converted) */
+    t->sh_all = TRUE;
     pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     o->ctx = t;
     if (!t->ch || !t->pal_was || !pal || !t->pool || !t->near || !t->hist || !t->list || !t->pmapb || !t->tmp) {
@@ -789,6 +802,8 @@ void lk_fresh(struct LkOut *o)
     struct LkTarget *t = o->ctx;
     if (t && t->ch && t->pool)
         ck_gc(t);
+    if (t && t->ch)
+        t->sh_all = TRUE;
 }
 
 /* A picture on an 8-bit screen: its colours cut down to as many as there
@@ -1236,13 +1251,29 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
     for (y = lk_show_up ? y1 : y0; lk_show_up ? y >= y0 : y <= y1; y += lk_show_up ? -1 : 1) {
         const UBYTE *s = t->ch + y * t->cw;
         ULONG row = (ULONG)(y + oy) * bm->BytesPerRow;
+        ULONG *sl = t->sh ? (ULONG *)(t->sh + y * t->cw) : NULL;
         for (x = x0; x + 31 <= x1; x += 32) {
             ULONG at = row + (ULONG)(x + ox) / 8;
+            if (sl) {
+                /* the same 32 the planes show already: left (most of a
+                 * list's rows is its background, the same pen) */
+                const ULONG *c = (const ULONG *)(s + x);
+                ULONG *m = sl + x / 4;
+                if (!t->sh_all && c[0] == m[0] && c[1] == m[1] && c[2] == m[2] && c[3] == m[3] &&
+                    c[4] == m[4] && c[5] == m[5] && c[6] == m[6] && c[7] == m[7]) {
+                    lkt_same++;
+                    continue;
+                }
+                m[0] = c[0]; m[1] = c[1]; m[2] = c[2]; m[3] = c[3];
+                m[4] = c[4]; m[5] = c[5]; m[6] = c[6]; m[7] = c[7];
+            }
             ck_c2p32(s + x, out);
             for (p = 0; p < 8; p++)
                 *(ULONG *)(bm->Planes[p] + at) = out[p];
         }
     }
+    if (x0 == 0 && y0 == 0 && x1 >= t->cw - 1 && y1 >= t->chh - 1)
+        t->sh_all = FALSE;              /* (all of it as the canvas now: groups compared after) */
     if (ly)
         UnlockLayerRom(ly);
     return TRUE;
@@ -1312,6 +1343,17 @@ static BOOL ck_blits_run(struct LkTarget *t)
     if (t->blitting)
         WaitBlit();
     CacheClearU();                      /* (the CPU's writes to the planes out to chip RAM first) */
+    if (t->sh)                          /* (what the planes show, moved as they are) */
+        for (i = 0; i < t->nbq; i++) {
+            long j, x = t->bq[i].x, y = t->bq[i].y, w = t->bq[i].w, h = t->bq[i].h, dx = t->bq[i].dx,
+                 dy = t->bq[i].dy;
+            if (dy > 0)
+                for (j = h - 1; j >= 0; j--)
+                    memmove(t->sh + (y + j + dy) * t->cw + x + dx, t->sh + (y + j) * t->cw + x, (size_t)w);
+            else
+                for (j = 0; j < h; j++)
+                    memmove(t->sh + (y + j + dy) * t->cw + x + dx, t->sh + (y + j) * t->cw + x, (size_t)w);
+        }
     for (i = 0; i < t->nbq; i++)        /* (one bitmap, overlapping: BltBitMap picks the direction) */
         BltBitMap(bm, (WORD)(t->bq[i].x + ox), (WORD)(t->bq[i].y + oy), bm,
                   (WORD)(t->bq[i].x + t->bq[i].dx + ox), (WORD)(t->bq[i].y + t->bq[i].dy + oy), t->bq[i].w,
@@ -1348,6 +1390,7 @@ void lk_show(struct LkOut *o)
             }
             WriteChunkyPixels(t->g->rp, (ULONG)t->x0, (ULONG)t->y0, (ULONG)t->x1, (ULONG)t->y1,
                               t->ch + t->y0 * t->cw + t->x0, t->cw);
+            t->sh_all = TRUE;           /* (covered: what shows is not known - all, next time) */
         }
         lkt_show += time_ms() - t0;
         lkt_px += (ULONG)(t->x1 - t->x0 + 1) * (ULONG)(t->y1 - t->y0 + 1);
@@ -1375,6 +1418,7 @@ BOOL lk_canvas(const struct LkOut *o)
 
 /* ---- the big letter by hardware sprites (AGA) ------------------------- */
 BOOL lk_sprites_ok = TRUE;
+BOOL lk_skip_ok = TRUE;         /* unchanged groups of 32 not converted (Ambiance/LayoutSkip=0: all) */
 BOOL lk_pic_own;                /* the picture drawn is the host's: its own pens, however wide */
 BOOL lk_show_up;                /* shown from the bottom up (a list's selection went up) */
 
@@ -1591,6 +1635,8 @@ void lk_close(struct LkOut *o)
             FreeVec(t->list);
         if (t->pmapb)
             FreeVec(t->pmapb);
+        if (t->sh)
+            FreeVec(t->sh);
         if (t->tmp)
             FreeVec(t->tmp);
         if (t->ch)
