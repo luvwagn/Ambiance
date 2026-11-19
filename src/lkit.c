@@ -126,6 +126,8 @@ struct LkTarget {
     BOOL sh_all;                /* ...the next show converts all it shows (a whole draw:
                                  * the screen may have been drawn over by others) */
     UBYTE held[256];            /* pens kept from the pool: the sprites' colours (AGA) */
+    ULONG *mpx;                 /* a strip drawn in memory (lk_open_mem): its pixels, the
+                                 * caller's, cw a row, row 0 the screen's oy */
     /* the big letter by hardware sprites (lk_letter_sprites): over the
      * picture, never drawn into it - a glide under it moves nothing of it */
     struct ExtSprite *sp_sd[8];
@@ -562,6 +564,182 @@ static int ck_copy_(void *ctx, long x, long y, long w, long h, long dx, long dy)
     }
     ck_touch(t, x + dx, y + dy, w, h);
     return 1;
+}
+
+/* ---- a strip drawn in memory, then made a few pens (lk_open_mem,
+ * lk_mem_pens): a layout's controls over a picture on an AGA screen, where
+ * the picture has every colour register but a few kept for them. Drawn in
+ * true colour first (text's edges, gradients as they are), then the few
+ * colours that suit what was drawn chosen and each pixel the nearest. */
+static void mem_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
+{
+    struct LkTarget *t = ctx;
+    long i, j;
+    for (j = 0; j < h; j++) {
+        ULONG *d = t->mpx + (y - t->oy + j) * t->cw + x;
+        for (i = 0; i < w; i++)
+            d[i] = rgb;
+    }
+}
+
+static void mem_rows(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
+{
+    struct LkTarget *t = ctx;
+    long i, j;
+    for (j = 0; j < h; j++) {
+        ULONG *d = t->mpx + (y - t->oy + j) * t->cw + x;
+        const unsigned long *s = px + j * mod;
+        for (i = 0; i < w; i++)
+            d[i] = s[i] & 0xFFFFFF;
+    }
+}
+
+BOOL lk_open_mem(struct Gfx *g, struct LkOut *o, ULONG *px, WORD y0, WORD w, WORD h)
+{
+    struct LkTarget *t;
+    o->buf = NULL;
+    o->ctx = NULL;
+    if (!px || w <= 0 || h <= 0 || !(t = AllocVec(sizeof(*t), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    t->g = g;
+    t->x0 = 1;
+    t->x1 = 0;
+    t->mpx = px;
+    t->cw = w;
+    t->chh = h;
+    t->oy = y0;
+    o->ctx = t;
+    o->fill = mem_fill;
+    o->rows = mem_rows;
+    o->copy = NULL;
+    o->bits = 24;
+    o->cov_steps = 0;
+    o->bufn = (long)w * 16;
+    if (!(o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY))) {
+        lk_close(o);
+        return FALSE;
+    }
+    lk_clip(o, 0, y0, w, y0 + h);
+    return TRUE;
+}
+
+static ULONG mp_dist(UWORD a, UWORD b)
+{
+    LONG dr = (LONG)(a >> 10) - (LONG)(b >> 10), dg = (LONG)((a >> 5) & 31) - (LONG)((b >> 5) & 31),
+         db = (LONG)(a & 31) - (LONG)(b & 31);
+    return (ULONG)(dr * dr * 3 + dg * dg * 4 + db * db * 2);
+}
+
+BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0, int n, ULONG *rgb, BOOL pick)
+{
+    ULONG *hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
+    UWORD *keys = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
+    ULONG *mind = AllocVec(32768 * sizeof(ULONG), MEMF_ANY);
+    UBYTE *near = AllocVec(32768, MEMF_ANY);
+    UBYTE *out = AllocVec((ULONG)w * h, MEMF_ANY);
+    LONG np = (LONG)w * h, nk = 0, i, c;
+    UWORD chosen[16];
+    int nc = 0;
+    BOOL ok = FALSE;
+    struct RastPort rp;
+    if (!hist || !keys || !mind || !near || !out || n < 1 || n > 16 || !bm)
+        goto done;
+    for (i = 0; i < np; i++) {
+        UWORD k = (UWORD)CK555(px[i]);
+        if (!hist[k]++)
+            keys[nk++] = k;
+    }
+    if (pick || !rgb[0]) {
+        /* the colours: the commonest first, then each time the one that
+         * most pixels are furthest from those chosen (the text, the bar's
+         * colours, its accent: none lost to the background's many) */
+        LONG best = 0;
+        for (i = 1; i < nk; i++)
+            if (hist[keys[i]] > hist[keys[best]])
+                best = i;
+        if (nk)
+            chosen[nc++] = keys[best];
+        for (i = 0; i < nk; i++)
+            mind[i] = nk ? mp_dist(keys[i], chosen[0]) : 0;
+        while (nc < n && nc < nk) {
+            ULONG bv = 0;
+            best = -1;
+            for (i = 0; i < nk; i++) {
+                ULONG v = (mind[i] > 0xFFFF ? 0xFFFF : mind[i]) * (hist[keys[i]] > 0xFFFF ? 0xFFFF : hist[keys[i]]);
+                if (v > bv) {
+                    bv = v;
+                    best = i;
+                }
+            }
+            if (best < 0)
+                break;
+            chosen[nc] = keys[best];
+            for (i = 0; i < nk; i++) {
+                ULONG d = mp_dist(keys[i], chosen[nc]);
+                if (d < mind[i])
+                    mind[i] = d;
+            }
+            nc++;
+        }
+        /* each the average of the colours nearest it */
+        {
+            ULONG sr[16], sg[16], sb[16], sp[16];
+            for (c = 0; c < nc; c++)
+                sr[c] = sg[c] = sb[c] = sp[c] = 0;
+            for (i = 0; i < nk; i++) {
+                UWORD k = keys[i];
+                ULONG bd = ~0UL, cnt = hist[k];
+                int bc = 0;
+                for (c = 0; c < nc; c++) {
+                    ULONG d = mp_dist(k, chosen[c]);
+                    if (d < bd) {
+                        bd = d;
+                        bc = (int)c;
+                    }
+                }
+                sr[bc] += ((k >> 10) * 8 + 4) * cnt;
+                sg[bc] += (((k >> 5) & 31) * 8 + 4) * cnt;
+                sb[bc] += ((k & 31) * 8 + 4) * cnt;
+                sp[bc] += cnt;
+            }
+            for (c = 0; c < n; c++) {
+                int f = c < nc ? (int)c : 0;
+                ULONG p = sp[f] ? sp[f] : 1;
+                rgb[c] = nc ? ((sr[f] / p) << 16) | ((sg[f] / p) << 8) | (sb[f] / p) : 0;
+            }
+        }
+    }
+    /* each pixel the nearest of them */
+    memset(near, 0xFF, 32768);
+    for (i = 0; i < np; i++) {
+        UWORD k = (UWORD)CK555(px[i]);
+        if (near[k] == 0xFF) {
+            LONG bd = 0x7FFFFFFF, d;
+            int r = (int)((px[i] >> 16) & 255), gg = (int)((px[i] >> 8) & 255), b = (int)(px[i] & 255);
+            near[k] = 0;
+            for (c = 0; c < n; c++) {
+                LONG dr = r - (LONG)((rgb[c] >> 16) & 255), dg = gg - (LONG)((rgb[c] >> 8) & 255),
+                     db = b - (LONG)(rgb[c] & 255);
+                d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+                if (d < bd) {
+                    bd = d;
+                    near[k] = (UBYTE)c;
+                }
+            }
+        }
+        out[i] = (UBYTE)(pen0 + near[k]);
+    }
+    InitRastPort(&rp);
+    rp.BitMap = bm;
+    WriteChunkyPixels(&rp, 0, 0, (ULONG)(w - 1), (ULONG)(h - 1), out, (LONG)w);
+    ok = TRUE;
+done:
+    FreeVec(hist);
+    FreeVec(keys);
+    FreeVec(mind);
+    FreeVec(near);
+    FreeVec(out);
+    return ok;
 }
 
 BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)

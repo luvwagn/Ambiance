@@ -10111,7 +10111,7 @@ static void vw_start(const char *path, BOOL first)
         vw_job->th = g.h;
         vw_job->tall = gfx_mode_tall(g.mode);
         vw_job->viewfit = TRUE;
-        vw_job->maxcol = (1 << (g.depth > 8 ? 8 : g.depth)) - 1;
+        vw_job->maxcol = view_pic_colours(&g);
     }
     if (first)
         ldr_submit_first(vw_job);
@@ -17271,17 +17271,38 @@ static struct LvClip lv_ctl;
  * of 15 to 32 bits (g as it is now: a window, full screen, Ambiance's) */
 static BOOL lv_ctl_open;            /* the layout opened for them alone (a viewer, a video: lv_hold
                                      * closed it) */
+static BOOL lv_screen_can(void);
+static BOOL lv_lend_font(void);
+static ULONG *lv_mem;               /* the controls drawn in memory first (an AGA screen) */
+static LONG lv_mem_n;
+static ULONG lv_ctl_rgb[VW_BAR_PENS];
+static BOOL lv_ctl_8(void)
+{
+    return !g.truecolor && g.depth == 8 && g.scr && lv_screen_can();
+}
+BOOL lv_controls_keep(void)
+{
+    return lv_ctl_8() && lv.file[0];
+}
+const ULONG *lv_controls_rgb(void)
+{
+    return lv_ctl_rgb;
+}
 BOOL lv_controls_ok(void)
 {
     const struct LayoutEngine *e;
-    if (!g.truecolor || g.planar || !g.rp || !g.sm)
+    if (!g.rp || !((g.truecolor && !g.planar) || lv_ctl_8()))
+        return FALSE;
+    if (!g.sm && !lv_ctl_8())
         return FALSE;
     if (lv.on || lv_ctl_open)
-        return lv.eng && lv.eng->controls && lv.eng->controls_h;
+        return g.sm && lv.eng && lv.eng->controls && lv.eng->controls_h;
     /* a layout chosen, and opened before on this run (its host set up):
      * opened again, as it was, for the controls alone */
     e = layout_loaded();
     if (!lv.file[0] || !e || !e->controls || !e->controls_h || !lv.host.fill || strcmp(e->name, lv.name))
+        return FALSE;
+    if (!g.sm && !lv_lend_font())       /* (AGA's Pixel style: the smooth font lent again) */
         return FALSE;
     lv.host.w = g.w;
     lv.host.h = g.h;
@@ -17313,8 +17334,23 @@ WORD lv_controls_h(BOOL timed)
 BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
 {
     struct LkOut keep, o;
-    if (!lv_controls_ok() || !bm || !lk_open_strip(&g, &o, bm, c->y, g.w, c->h))
+    BOOL mem = !g.truecolor;
+    if (!lv_controls_ok() || !bm)
         return FALSE;
+    if (mem) {                              /* (AGA: in memory, then the kept registers) */
+        LONG n = (LONG)g.w * c->h;
+        if (n > lv_mem_n) {
+            FreeVec(lv_mem);
+            lv_mem_n = 0;
+            if (!(lv_mem = AllocVec((ULONG)n * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)))
+                return FALSE;
+            lv_mem_n = n;
+        }
+        if (!lk_open_mem(&g, &o, lv_mem, c->y, g.w, c->h))
+            return FALSE;
+    } else if (!lk_open_strip(&g, &o, bm, c->y, g.w, c->h)) {
+        return FALSE;
+    }
     keep = lv.out;
     lv.out = o;
     lv_ctl.on = TRUE;
@@ -17328,6 +17364,8 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lk_close(&lv.out);
     lv_sp_up = FALSE;
     lv.out = keep;
+    if (mem && !lk_mem_pens(lv_mem, g.w, c->h, bm, VW_BAR_PEN0, VW_BAR_PENS, lv_ctl_rgb, what == 0))
+        return FALSE;
     return TRUE;
 }
 
@@ -18958,10 +18996,15 @@ void lv_resume(void)
 {
     lv_controls_end();                      /* (opened for a viewer's or video's controls: closed) */
     lv_sync();
+    if (!lv.on)
+        lv_give_back_font();                /* (lent for the controls: the classic's Pixel again) */
 }
 
 void lv_release(void)
 {
+    FreeVec(lv_mem);                        /* (the controls' memory strip) */
+    lv_mem = NULL;
+    lv_mem_n = 0;
     lv_ta_save();                           /* (Home's tiles' pictures, for the next run) */
     lv_off(FALSE);
     layout_unload();

@@ -56,6 +56,12 @@ int view_transition = VT_FADE;
 #define FADE_STEPS 8
 
 static BOOL clut;               /* the screen has a colour table we take over */
+static BOOL resv;               /* ...but VW_BAR_PENS registers kept for a layout's controls
+                                 * (lhost.h): no picture uses them */
+static UBYTE resv_held[VW_BAR_PENS];    /* ...those obtained (a remapped picture's pens
+                                 * chosen around them) */
+static ULONG bar_rgb[VW_BAR_PENS];      /* ...their colours, once the controls were drawn */
+static BOOL bar_rgb_ok;
 static UWORD ncolors;           /* its size */
 static ULONG *saved;            /* the UI's colours: LoadRGB32 table */
 static ULONG *shown;            /* the colours on screen now (count*3) */
@@ -150,6 +156,34 @@ static void pick_bar_pens(const UBYTE *pens, LONG n)
     }
 }
 
+/* The kept registers' colours in shown (what fades in and out), and on
+ * the screen now unless faded out */
+static void resv_colours(struct Gfx *g, BOOL now)
+{
+    int i;
+    if (!resv || !bar_rgb_ok || !shown)
+        return;
+    for (i = 0; i < VW_BAR_PENS; i++) {
+        ULONG c = bar_rgb[i], r = ((c >> 16) & 255) * 0x01010101UL, gg = ((c >> 8) & 255) * 0x01010101UL,
+              b = (c & 255) * 0x01010101UL;
+        shown[(VW_BAR_PEN0 + i) * 3] = r;
+        shown[(VW_BAR_PEN0 + i) * 3 + 1] = gg;
+        shown[(VW_BAR_PEN0 + i) * 3 + 2] = b;
+        if (now)
+            SetRGB32(&g->scr->ViewPort, VW_BAR_PEN0 + i, r, gg, b);
+    }
+}
+
+/* How many colours a picture may have here (the loader's read-ahead too):
+ * the screen's but the border's, and the kept registers */
+LONG view_pic_colours(const struct Gfx *g)
+{
+    LONG n = 1L << (g->depth > 8 ? 8 : g->depth);
+    if (!g->truecolor && n == 256 && lv_controls_keep())
+        return VW_BAR_PEN0 - 1;             /* (1..246: 247-254 kept, 255 spare) */
+    return n - 1;
+}
+
 /* ---- pens */
 static void pens_release(struct Gfx *g)
 {
@@ -221,6 +255,14 @@ BOOL view_begin(struct Gfx *g)
         all_black(g);
         pens_release(g);
         pen0_held = ObtainPen(cm, 0, 0, 0, 0, PEN_EXCLUSIVE) == 0;
+        resv = ncolors == 256 && lv_controls_keep();
+        bar_rgb_ok = FALSE;
+        if (resv) {
+            int i;
+            for (i = 0; i < VW_BAR_PENS; i++)
+                resv_held[i] = ObtainPen(cm, VW_BAR_PEN0 + i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR) ==
+                               (ULONG)(VW_BAR_PEN0 + i);
+        }
         fill(g, 0);
     } else {
         black_pen = ObtainBestPen(cm, 0, 0, 0, OBP_Precision, PRECISION_EXACT, TAG_END);
@@ -255,7 +297,7 @@ void view_bar_hide(struct Gfx *g)
 static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
 {
     WORD h;
-    if (clut || !lv_controls_ok() || (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
+    if ((clut && !resv) || !lv_controls_ok() || (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
         return FALSE;
     if (bar_bm && (!bar_lv || bar_h != h))
         view_bar_hide(g);           /* (the other bar, or another height: put back first) */
@@ -297,6 +339,11 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
     if (!lv_controls_draw(&vc, 0, lv_bm)) {
         view_bar_hide(g);
         return FALSE;
+    }
+    if (clut) {                     /* (AGA: the colours chosen for it, in the kept registers) */
+        CopyMem((APTR)lv_controls_rgb(), bar_rgb, sizeof(bar_rgb));
+        bar_rgb_ok = TRUE;
+        resv_colours(g, TRUE);
     }
     gfx_dirty();
     BltBitMapRastPort(lv_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);
@@ -956,7 +1003,8 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             if (mode == (ULONG)INVALID_ID)
                 mode = 0;
             if (bmh && bmh->bmh_Width && bmh->bmh_Height && cregs && ncol &&
-                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= ncolors && !(mode & HAM_KEY)) {
+                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= (resv ? (ULONG)VW_BAR_PEN0 : ncolors) &&
+                !(mode & HAM_KEY)) {
                 sw = bmh->bmh_Width;
                 sh = bmh->bmh_Height;
                 src = direct_bitmap(g, o, sw, sh, &own_src);
@@ -1000,6 +1048,11 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         }
     }
 
+    /* (made ahead with more colours than leave the kept registers: not used) */
+    if (pre_thumb && resv && pre_thumb->ncol > VW_BAR_PEN0 - 1) {
+        thumb_free(pre_thumb);
+        pre_thumb = NULL;
+    }
     /* own: its own colours at the size it is shown */
     if (!direct && (deep || pre_thumb)) {
         struct Thumb *t = NULL;
@@ -1017,7 +1070,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             } else {
                 pic_info(deep, bmh, pi);
                 fit(g, pi, &dw, &dh, scale, scalemax);
-                t = thumb_make(deep, dw, dh, ncolors - 1);
+                t = thumb_make(deep, dw, dh, resv ? VW_BAR_PEN0 - 1 : ncolors - 1);
             }
             if (t &&
                 (target = AllocVec(ncolors * 3 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) &&
@@ -1149,6 +1202,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         } else if (target) {
             CopyMem(target, shown, ncolors * 3 * sizeof(ULONG));
         }
+        resv_colours(g, FALSE);             /* (the layout's controls keep theirs) */
         pick_bar_pens(pens, npens);
     } else if (!kept && view_transition != VT_CUT) {
         fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));    /* (faded in from black) */
@@ -1206,6 +1260,13 @@ void view_end(struct Gfx *g)
         if (pen0_held)
             ReleasePen(cm, 0);
         pen0_held = FALSE;
+        if (resv) {
+            int i;
+            for (i = 0; i < VW_BAR_PENS; i++)
+                if (resv_held[i])
+                    ReleasePen(cm, VW_BAR_PEN0 + i);
+        }
+        resv = FALSE;
         pens_reclaim(g);
     } else if (black_pen >= 0) {
         ReleasePen(cm, black_pen);

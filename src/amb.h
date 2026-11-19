@@ -451,6 +451,7 @@ extern int view_transition;
 BOOL view_begin(struct Gfx *g);
 /* pre: decoded ahead; or pre_thumb (made ahead for the screen, given
  * up to view_show), pre_info: what it is */
+LONG view_pic_colours(const struct Gfx *g);    /* a picture's most colours here (the viewer's) */
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
                char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
                struct Thumb *pre_thumb, const struct PicInfo *pre_info);

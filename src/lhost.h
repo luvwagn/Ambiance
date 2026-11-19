@@ -47,7 +47,8 @@ void lv_pick(int k);            /* its row k: 0 classic, then the layouts found 
 const char *lv_label(void);     /* the one chosen, for the Display page */
 
 /* A slideshow's and a video's controls, drawn by the layout chosen in its
- * own style (LControls) on a graphics card's screen of 15 to 32 bits: the
+ * own style (LControls) on a graphics card's screen of 15 to 32 bits, or
+ * an AGA one of 256 colours (in the registers kept for them): the
  * screen as it is now (a window, full screen). lv_controls_ok: it can (the
  * layout opened for them, if a viewer or video closed it); _h: their
  * height; _draw: into bm (the screen's width x c->h, a friend of its
@@ -58,5 +59,15 @@ BOOL lv_controls_ok(void);
 WORD lv_controls_h(BOOL timed);
 BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm);
 void lv_controls_end(void);
+/* On an AGA screen of 256 colours with a layout chosen, the controls are
+ * drawn in VW_BAR_PENS colour registers kept from the pictures (always, so
+ * a picture's colours never shift as they come and go): from
+ * VW_BAR_PEN0, under the last register (the border's or the loading
+ * bar's). lv_controls_keep: they are kept; lv_controls_rgb: the colours
+ * the last full draw chose for them. */
+#define VW_BAR_PENS 8
+#define VW_BAR_PEN0 (255 - VW_BAR_PENS)
+BOOL lv_controls_keep(void);
+const ULONG *lv_controls_rgb(void);
 
 #endif

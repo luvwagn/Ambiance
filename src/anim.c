@@ -1451,7 +1451,8 @@ static ULONG vc_q;                  /* the time drawn last (a quarter second), b
 static WORD strip_height(struct Gfx *g)
 {
     WORD h = 0;
-    st_lv = lv_controls_ok() && (h = lv_controls_h(TRUE)) > 0 && h < g->h / 4;
+    st_lv = g->truecolor && lv_controls_ok() && (h = lv_controls_h(TRUE)) > 0 && h < g->h / 4;
+                                    /* (AGA's: the viewer's alone, in registers it keeps) */
     return st_lv ? h : (WORD)(g->font_h + GU(g, 12));
 }
 
