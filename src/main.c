@@ -18433,10 +18433,18 @@ static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)
     lk_rrect(&lv.out, x, y, w, h, r, rgb, bg);
 }
 static void h_frame(WORD x, WORD y, WORD w, WORD h, WORD t, ULONG rgb) { lk_frame(&lv.out, x, y, w, h, t, rgb); }
+static struct LImage lv_plex_im;    /* (Plex's mark: made below) */
 static void h_image(const struct LImage *im, WORD x, WORD y)
 {
-    if (im && im->px)
+    if (im && im->px) {
+        /* the host's own (the logo, Plex's mark, a picture made for the
+         * layout) its own pens, however wide: a layout's own wide one is a
+         * reflection, drawn with the pens there are (the logo, 181 x 40,
+         * had come out grey, no blue pen up yet to be nearest) */
+        lk_pic_own = im == &lv_logo_im || im == &lv_plex_im || (im >= &lv_pic[0].im && im <= &lv_pic[LV_PICS - 1].im);
         lk_picture(&lv.out, x, y, (const unsigned long *)im->px, im->w, im->h, (long)im->mod);
+        lk_pic_own = FALSE;
+    }
 }
 static WORD h_text(WORD x, WORD y, const char *s, LONG n, int face, ULONG fg, const struct LkBg *bg,
                    WORD maxw)

@@ -955,7 +955,7 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
         want = t->nfree - 24;
     if ((ULONG)t->nfree < lkt_free)
         lkt_free = (ULONG)t->nfree;
-    if (w >= 3 * h)
+    if (w >= 3 * h && !lk_pic_own)
         want = 0;
     else if (want < 6)
         lkt_short++;
@@ -1375,6 +1375,7 @@ BOOL lk_canvas(const struct LkOut *o)
 
 /* ---- the big letter by hardware sprites (AGA) ------------------------- */
 BOOL lk_sprites_ok = TRUE;
+BOOL lk_pic_own;                /* the picture drawn is the host's: its own pens, however wide */
 BOOL lk_show_up;                /* shown from the bottom up (a list's selection went up) */
 
 static ULONG ck_vc_get(struct ViewPort *vp, ULONG tag, ULONG dflt)
