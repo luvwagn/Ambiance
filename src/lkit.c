@@ -1822,6 +1822,24 @@ static BOOL ck_cover(struct LkOut *o, long x, long y, const UBYTE *cov, long w, 
     return TRUE;
 }
 
+/* A gradient's colour: its own pen while there are plenty (a tile's
+ * gradient in three bands, its colours a 5-5-5 cell's apart, came out
+ * striped); short of them, the pool's as near as makes no difference */
+static UBYTE ck_pen_exact(struct LkTarget *t, unsigned long rgb)
+{
+    int i;
+    rgb &= 0xFFFFFF;
+    for (i = 0; i < t->nlive; i++)
+        if (t->lives[i] >= CK_POOL0 && t->rgbof[t->lives[i]] == rgb)
+            return t->lives[i];
+    if (t->nfree > 120) {
+        UBYTE made = ck_new(t, rgb);
+        if (made)
+            return made;
+    }
+    return ck_pen_for(t, rgb);
+}
+
 /* A vertical gradient straight onto the 8-bit canvas: a row at a time,
  * each the background's pen where it is the copper's line (or its shade),
  * else a pen of its own - not a fill a row (a list's rows drawn again
@@ -1847,7 +1865,7 @@ BOOL lk_vgrad8(struct LkOut *o, long x, long y, long w, long h, unsigned long a,
         UBYTE bp = ck_bg_pen(t, x0, j, c);      /* (the copper's: the row's own) */
         if (!bp) {
             if (c != last || !pen) {
-                pen = ck_pen_for(t, c);
+                pen = ck_pen_exact(t, c);
                 last = c;
             }
             bp = pen;
