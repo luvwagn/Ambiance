@@ -299,13 +299,21 @@ static BOOL env_on(const char *name, BOOL dflt)
     return dflt;
 }
 
+static LONG env_num(const char *name, LONG dflt)
+{
+    char b[8];
+    if (GetVar((CONST_STRPTR)name, (STRPTR)b, sizeof(b), GVF_GLOBAL_ONLY) > 0 && b[0] >= '1' && b[0] <= '9')
+        return (b[1] >= '0' && b[1] <= '9') ? (b[0] - '0') * 10 + b[1] - '0' : b[0] - '0';
+    return dflt;
+}
+
 static LONG cop_per_line(void)
 {
     char b[8];
     if (GetVar((CONST_STRPTR)"Ambiance/BarCopper", (STRPTR)b, sizeof(b), GVF_GLOBAL_ONLY) > 0 && b[0] >= '1' &&
         b[0] <= '9')
         return (b[1] >= '0' && b[1] <= '9') ? (b[0] - '0') * 10 + b[1] - '0' : b[0] - '0';
-    return 16;
+    return 10;
 }
 
 /* An AGA screen's controls (lv_bm: gap rows, if any, then the layout's, in
@@ -382,7 +390,7 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     WORD dom, nrows;
     LONG i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need, nl, np;
     BOOL same;
-    bar_blank = env_on("Ambiance/BarEarly", FALSE) ? 20 : 13;
+    bar_blank = env_on("Ambiance/BarEarly", FALSE) ? 20 : env_num("Ambiance/BarBlank", 8);
     rows = lv_controls_rows(&dom, &nrows);
     if (!env_on("Ambiance/BarGradient", TRUE))
         nrows = 0;                          /* (the background one colour: its pen's) */
