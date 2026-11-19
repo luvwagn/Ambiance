@@ -18185,6 +18185,19 @@ static void lv_pics_poll(void)
     int i;
     for (i = 0; i < LV_PICS; i++)
         if (lv_pic[i].job && lv_pic[i].job->done) {
+            struct LJob *j = lv_pic[i].job;
+            if (j->ran && j->thumb) {
+                /* (Debug: how each of the layout's pictures was read: Ambiance's
+                 * own reader or a datatype, and how big it was and is) */
+                char m[420];
+                const char *f = strrchr(j->path, '/');
+                sprintf(m, "%.120s: %ldx%ld %ld-bit%s -> %ldx%ld, %s%s%s, %ld ms", f ? f + 1 : j->path,
+                        (long)j->info.w, (long)j->info.h, (long)j->info.depth,
+                        (j->info.mode & HAM_KEY) ? " HAM" : "", (long)j->thumb->w, (long)j->thumb->h,
+                        j->own ? "own reader" : "datatype ", j->own ? "" : j->info.fmt,
+                        j->own || !j->info.cls[0] ? "" : " (class)", (long)j->ms_decode);
+                amb_log("layout picture", m);
+            }
             lv_pic_take(i);
             lv_img = TRUE;
         }
