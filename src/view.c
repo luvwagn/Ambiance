@@ -66,8 +66,9 @@ static LONG bar_nprev;          /* ...the list up's writes (bar_prev), 0: none *
 static UWORD bar_pressed;       /* the layout's buttons pressed by their keys (LNB_BIT()s) */
 static ULONG bar_press_until;   /* ...till then (0: from when it is next drawn: the bar not
                                  * up yet, or a new picture's on its way) */
-static char bar_title[128], bar_detail[160];    /* the layout's bar as last drawn (drawn again
-                                 * pressed, or not) */
+static int bar_press_vb = -1;   /* ...which (VB_*), for the classic bar */
+static char bar_title[128], bar_detail[160], bar_hint[80];  /* the bar as last drawn (drawn
+                                 * again pressed, or not) */
 static BOOL bar_keep;           /* ...kept up while the picture under them changes: what is
                                  * drawn under the bar goes into what it keeps (bar_bm) */
 static UWORD ncolors;           /* its size */
@@ -606,6 +607,7 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
 }
 
 static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg);
+void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint);
 
 /* A key pressed one of the layout's buttons (VB_*): drawn pressed a moment
  * (a yellow glow), through a picture changed under it; view_bar_tick puts
@@ -616,17 +618,19 @@ void view_bar_press(struct Gfx *g, int vb)
     if (vb < 0 || vb >= VB_COUNT)
         return;
     bar_pressed = (UWORD)LNB_BIT(lnb[vb]);
+    bar_press_vb = vb;
     bar_press_until = 0;                    /* (its moment from when it is drawn) */
-    if (bar_lv && bar_bm)
-        bar_layout(g, bar_title, bar_detail);
+    if (bar_bm)
+        view_bar(g, bar_title, bar_detail, bar_hint);
 }
 
 void view_bar_tick(struct Gfx *g)
 {
     if (bar_pressed && bar_press_until && (LONG)(time_ms() - bar_press_until) >= 0) {
         bar_pressed = 0;
-        if (bar_lv && bar_bm)
-            bar_layout(g, bar_title, bar_detail);   /* (raised again) */
+        bar_press_vb = -1;
+        if (bar_bm)
+            view_bar(g, bar_title, bar_detail, bar_hint);   /* (raised again) */
     }
 }
 
@@ -635,12 +639,30 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
     UBYTE bg = clut ? pen_bg : PEN_BAR, fg = clut ? pen_fg : PEN_WHITE,
           dim = clut ? pen_dim : PEN_TEXT;
     WORD x = GU(g, 6), ty, tw, hw = 0;
+    BOOL press = FALSE, show_btns;
     if (clut && !has_pic) {                 /* nothing up: the "loading" pens */
         bg = 0;
         fg = dim = ncolors - 1;
     }
+    if (title != bar_title)
+        amb_strlcpy(bar_title, title ? title : "", sizeof(bar_title));
+    if (detail != bar_detail)
+        amb_strlcpy(bar_detail, detail ? detail : "", sizeof(bar_detail));
+    if (hint != bar_hint)
+        amb_strlcpy(bar_hint, hint ? hint : "", sizeof(bar_hint));
+    title = bar_title;
+    detail = bar_detail;
+    hint = bar_hint;
     if (bar_layout(g, title, detail))
         return;
+    /* the classic's: a button pressed (its key, or clicked) shows framed a
+     * moment, the buttons shown for it with the keys too */
+    if (bar_pressed && bar_press_vb >= 0) {
+        if (!bar_press_until)
+            bar_press_until = time_ms() + PRESS_MS;
+        press = (LONG)(time_ms() - bar_press_until) < 0;
+    }
+    show_btns = btns || press;
     if (bar_lv)
         view_bar_hide(g);                   /* (the layout's was up: put back first) */
     bar_h = g->font_h + GU(g, 5);
@@ -660,7 +682,7 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
     }
     ty = bar_y + (bar_h - g->font_h + GU(g, 1)) / 2;
     tw = gfx_textlen(g, title, TS_BOLD);
-    if (btns) {
+    if (show_btns) {
         /* the mouse's: previous, play or pause, next at the right end,
          * where the keys' hint would be */
         WORD b0;
@@ -668,22 +690,35 @@ void view_bar(struct Gfx *g, const char *title, const char *detail, const char *
         btn_n = btn_full ? VB_COUNT : VB_FULL;
         b0 = g->w - GU(g, 4) - btn_n * btn_cw;
         bar_buttons(g, b0, fg);
+        if (press && bar_press_vb < btn_n) {
+            /* the pressed one framed: yellow where the UI's colours are, else
+             * the picture's lightest (its own colours are all there are) */
+            WORD fx = btn_x[bar_press_vb], fy = bar_y + GU(g, 1) + 1, k;
+            SetAPen(g->rp, GPEN(clut ? fg : PEN_YELLOW));
+            for (k = 0; k < (GU(g, 1) > 1 ? 2 : 1); k++) {
+                Move(g->rp, fx + 1 + k, fy + k);
+                Draw(g->rp, fx + btn_cw - 2 - k, fy + k);
+                Draw(g->rp, fx + btn_cw - 2 - k, g->h - 2 - k);
+                Draw(g->rp, fx + 1 + k, g->h - 2 - k);
+                Draw(g->rp, fx + 1 + k, fy + k);
+            }
+        }
         hw = g->w - b0;                     /* (what the text keeps clear of) */
         hint = NULL;
     } else if (hint && hint[0])
         hw = gfx_textlen(g, hint, TS_SMALL);
-    gfx_text(g, x, ty, title, fg, bg, g->w - x - (btns ? hw + GU(g, 6) : x), TS_BOLD);
+    gfx_text(g, x, ty, title, fg, bg, g->w - x - (show_btns ? hw + GU(g, 6) : x), TS_BOLD);
     x += tw + GU(g, 10);
-    if (detail && detail[0] && x < g->w - GU(g, 6) - (btns ? hw : 0)) {
+    if (detail && detail[0] && x < g->w - GU(g, 6) - (show_btns ? hw : 0)) {
         WORD dw = gfx_textlen(g, detail, TS_SMALL);
-        gfx_text(g, x, ty, detail, dim, bg, g->w - GU(g, 6) - (btns ? hw : 0) - x, TS_SMALL);
+        gfx_text(g, x, ty, detail, dim, bg, g->w - GU(g, 6) - (show_btns ? hw : 0) - x, TS_SMALL);
         x += dw + GU(g, 12);
     }
     if (hint && hw && x + hw <= g->w - GU(g, 6))
         gfx_text(g, g->w - GU(g, 6) - hw, ty, hint, dim, bg, 0, TS_SMALL);
     /* the spinner's place, if one turns: left of the hint (or the
      * buttons), after the text */
-    spin_x = g->w - (btns ? hw : GU(g, 6) + (hw ? hw + GU(g, 10) : 0)) - bar_h / 2;
+    spin_x = g->w - (show_btns ? hw : GU(g, 6) + (hw ? hw + GU(g, 10) : 0)) - bar_h / 2;
     if (spin_x - bar_h / 2 < x)
         spin_x = -1;
 }

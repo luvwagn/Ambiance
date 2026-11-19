@@ -32,6 +32,7 @@ const UWORD LibRevision = 11;
 #define C_FOCUS  0x1E3A55UL
 #define C_LINE   0x22364BUL
 #define C_ACC    0x7FD3FFUL
+#define C_PRESS  0xFFD24AUL     /* a button pressed by its key or a click: a yellow glow */
 #define C_SUB    0xB9C7D3UL
 #define C_DIM    0x5F7183UL
 #define C_TEXT   0xE6EEF4UL
@@ -1910,16 +1911,27 @@ static void nb_glyph(int b, BOOL playing, LONG cx, LONG cy, LONG s, ULONG c)
 
 /* A button w x h at x, y on the panel: Play's (big) the accent, the rest
  * darker; foc: in its glow */
-static void sbutton(LONG x, LONG y, LONG w, LONG h, BOOL big, BOOL foc)
+static void sbutton_p(LONG x, LONG y, LONG w, LONG h, BOOL big, BOOL foc, BOOL pressed)
 {
     LONG r = big ? h / 2 : h / 4;
     ULONG face = big ? C_ACC : C_PANEL2;
+    if (pressed) {                      /* a yellow glow, its face darker: pushed in */
+        LONG k, n = X(5) > 3 ? X(5) : 3;
+        for (k = n; k >= 1; k--)
+            rshape(x - k, y - k, w + 2 * k, h + 2 * k, r + k, mix(C_PRESS, C_PANEL, k, n + 1));
+        rshape(x, y, w, h, r, mix(face, C_NOWBG, 1, 3));
+        return;
+    }
     if (foc) {
         glow(x, y, w, h, r, C_PANEL);
         rshape(x, y, w, h, r, big ? face : C_FOCUS);
     } else {
         H->rrect((WORD)x, (WORD)y, (WORD)w, (WORD)h, (WORD)r, face, C_PANEL);
     }
+}
+static void sbutton(LONG x, LONG y, LONG w, LONG h, BOOL big, BOOL foc)
+{
+    sbutton_p(x, y, w, h, big, foc, FALSE);
 }
 
 /* The buttons' row: the transport in the middle, the volume's at the
@@ -2109,8 +2121,12 @@ static void sc_controls(struct LControls *c, ULONG what)
             bx = x;
             x += s + gap;
         }
-        sbutton(bx, by, s, bh, big, foc);
-        nb_glyph(b, b == LNB_FULL ? on : big && !c->paused, bx + s / 2, by + bh / 2, bh * 9 / 20, fg);
+        {
+            BOOL pr = !off && (c->pressed & LNB_BIT(b)) != 0;
+            sbutton_p(bx, by, s, bh, big, foc, pr);
+            nb_glyph(b, b == LNB_FULL ? on : big && !c->paused, bx + s / 2, by + bh / 2 + (pr ? 1 : 0),
+                     bh * 9 / 20, fg);
+        }
         c->at[i].x = (WORD)bx;
         c->at[i].y = (WORD)by;
         c->at[i].w = (WORD)s;
