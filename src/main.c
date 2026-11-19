@@ -10374,9 +10374,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 vw_ahead(l, shown, dir);
             }
             next_at = time_ms() + SLIDE_MS;
-            if (ok && (bar_due || keep)) {
+            if (ok && (bar_due || keep || view_bar_shown())) {
+                /* (a bar kept up through the change: the new picture's, its
+                 * time to go as it was) */
+                BOOL through = !bar_due && !keep;
                 viewer_bar(l, shown, &pi, scale, slideshow);
-                if (!keep)
+                if (!keep && !through)
                     bar_until = time_ms() + BAR_MS;
             }
             bar_due = !slideshow;
@@ -17278,6 +17281,11 @@ static ULONG *lv_mem;               /* the controls drawn in memory first (an AG
 static LONG lv_mem_n;
 static ULONG lv_ctl_rgb[VW_BAR_PENS];
 static WORD lv_ctl_first[VW_BAR_PENS];  /* ...each one's first row in the controls (-1: none) */
+#define LV_CTL_ROWS 256
+static ULONG lv_ctl_row[LV_CTL_ROWS];   /* ...each row's colour of the background pen */
+static WORD lv_ctl_dom, lv_ctl_h;       /* ...which pen that is; the rows */
+static BOOL lv_ctl_pick = TRUE;         /* ...the colours chosen at the next whole draw (once
+                                         * a viewer: kept, so the copper's list stays the same) */
 static BOOL lv_ctl_8(void)
 {
     return !g.truecolor && g.depth == 8 && g.scr && lv_screen_can();
@@ -17293,6 +17301,16 @@ const ULONG *lv_controls_rgb(void)
 const WORD *lv_controls_first(void)
 {
     return lv_ctl_first;
+}
+const ULONG *lv_controls_rows(WORD *dom, WORD *n)
+{
+    *dom = lv_ctl_dom;
+    *n = lv_ctl_h;
+    return lv_ctl_row;
+}
+void lv_controls_fresh(void)
+{
+    lv_ctl_pick = TRUE;
 }
 BOOL lv_controls_ok(void)
 {
@@ -17370,9 +17388,15 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lk_close(&lv.out);
     lv_sp_up = FALSE;
     lv.out = keep;
-    if (mem && !lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
-                            VW_BAR_PENS, lv_ctl_rgb, what == 0, lv_ctl_first))
-        return FALSE;                       /* (its rows the bitmap's last: a band's gap over them) */
+    if (mem) {
+        BOOL pick = what == 0 && lv_ctl_pick;
+        lv_ctl_h = c->h <= LV_CTL_ROWS ? c->h : 0;
+        if (!lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
+                         VW_BAR_PENS, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
+            return FALSE;                   /* (its rows the bitmap's last: a band's gap over them) */
+        if (pick)
+            lv_ctl_pick = FALSE;
+    }
     return TRUE;
 }
 

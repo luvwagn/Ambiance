@@ -15,6 +15,11 @@ struct CopPlan *cop_plan(struct Screen *scr, LONG max);
 /* From screen line y down, register pen is rgb (0xRRGGBB). A line's
  * writes are made in the order asked: the first in its blanking. */
 void cop_color(struct CopPlan *p, LONG y, UBYTE pen, ULONG rgb);
+/* A line's writes begun at the end of the line before it in its field
+ * (once its pixels are done: the whole blanking, about twice as many
+ * writes before the line's pixels). For bands under a picture whose last
+ * lines' right edge is the display window's. */
+void cop_early(struct CopPlan *p, BOOL on);
 /* Made the screen's user copper list (replacing any), and shown */
 BOOL cop_commit(struct CopPlan *p);
 void cop_plan_free(struct CopPlan *p);

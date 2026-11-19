@@ -44,7 +44,9 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
  * copper makes theirs. */
 BOOL lk_open_mem(struct Gfx *g, struct LkOut *o, ULONG *px, WORD y0, WORD w, WORD h);
 BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
-                 BOOL pick, WORD *first);  /* first[]: each pen's first row (-1: unused), or NULL */
+                 BOOL pick, WORD *first, ULONG *rowbg, WORD *domp);
+/* (first[]: each pen's first row, -1 unused; rowbg[h]: each row's own colour
+ * of the commonest pen, *domp which that is; any of them NULL: not wanted) */
 /* the layout's background gradient over the whole screen (an 8-bit
  * screen's: drawn with pens of its own, smooth; elsewhere nothing) */
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);

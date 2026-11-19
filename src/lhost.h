@@ -70,5 +70,10 @@ void lv_controls_end(void);
 BOOL lv_controls_keep(void);
 const ULONG *lv_controls_rgb(void);
 const WORD *lv_controls_first(void);    /* ...each one's first row in them (-1: not used) */
+/* ...each row's colour of the background (the commonest) pen, *dom which
+ * that is (0..VW_BAR_PENS-1), *n the rows (0: none); lv_controls_fresh: the
+ * colours chosen again at the next whole draw (a viewer begun) */
+const ULONG *lv_controls_rows(WORD *dom, WORD *n);
+void lv_controls_fresh(void);
 
 #endif

@@ -53,7 +53,13 @@ struct CopPlan {
     struct Screen *scr;
     struct CopWrite *w;
     LONG n, max;
+    BOOL early;                 /* each line's writes begun at the end of the line before
+                                 * in its field (after its pixels): its whole blanking */
 };
+
+/* The end of a line's pixels, in the copper's horizontal positions (colour
+ * clocks): a standard display window's right edge (0x1C1 lores pixels) */
+#define CP_LINE_END 0xE0
 
 /* BPLCON3 as the system's copper list sets it (bank and LOCT ours) */
 static BOOL cop_bplcon3(UWORD *base)
@@ -105,6 +111,12 @@ void cop_color(struct CopPlan *p, LONG y, UBYTE pen, ULONG rgb)
     p->n++;
 }
 
+void cop_early(struct CopPlan *p, BOOL on)
+{
+    if (p)
+        p->early = on;
+}
+
 void cop_plan_free(struct CopPlan *p)
 {
     if (p) {
@@ -131,10 +143,13 @@ LONG cop_lines_for(struct Screen *scr, LONG nw, LONG per_line)
 
 /* One wait and its writes: in the order given, consecutive ones of one
  * bank as a run (their high nibbles, then their low) */
-static void cop_emit(struct UCopList *ucl, LONG y, const struct CopWrite *w, LONG n, UWORD base)
+static void cop_emit(struct UCopList *ucl, LONG y, const struct CopWrite *w, LONG n, UWORD base, LONG before)
 {
     LONG i = 0, j, k;
-    CWait(ucl, y, 0);
+    if (before > 0 && y - before >= 0)
+        CWait(ucl, y - before, CP_LINE_END);    /* (the line before's end: all its blanking) */
+    else
+        CWait(ucl, y, 0);
     CBump(ucl);
     while (i < n) {
         UWORD bank = (UWORD)((w[i].pen >> 5) << 13);
@@ -197,9 +212,9 @@ BOOL cop_commit(struct CopPlan *p)
     for (i = 0; i < p->n; i = j) {
         for (j = i; j < p->n && p->w[j].y == p->w[i].y; j++)
             ;
-        cop_emit(ucl, p->w[i].y, p->w + i, j - i, base);
+        cop_emit(ucl, p->w[i].y, p->w + i, j - i, base, p->early ? (lace ? 2 : 1) : 0);
         if (lace)                           /* (the other field's line too) */
-            cop_emit(ucl, p->w[i].y + 1, p->w + i, j - i, base);
+            cop_emit(ucl, p->w[i].y + 1, p->w + i, j - i, base, p->early ? 2 : 0);
     }
     CWait(ucl, 10000, 255);                 /* (CEND) */
     CBump(ucl);

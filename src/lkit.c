@@ -631,7 +631,7 @@ static ULONG mp_dist(UWORD a, UWORD b)
 }
 
 BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
-                 BOOL pick, WORD *first)
+                 BOOL pick, WORD *first, ULONG *rowbg, WORD *domp)
 {
     ULONG *hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     UWORD *keys = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
@@ -735,6 +735,35 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UB
         out[i] = (UBYTE)(pen0 + near[k]);
         if (first && first[near[k]] < 0)
             first[near[k]] = (WORD)(i / w);
+    }
+    /* the commonest pen (the background), and each row's own colour of it:
+     * what its pixels were before they were made it (a gradient's, which
+     * the copper gives the pen line by line) */
+    if (rowbg && domp) {
+        ULONG cnt[64];
+        int dom = 0;
+        LONG j;
+        for (c = 0; c < n; c++)
+            cnt[c] = 0;
+        for (i = 0; i < np; i++)
+            cnt[out[i] - pen0]++;
+        for (c = 1; c < n; c++)
+            if (cnt[c] > cnt[dom])
+                dom = (int)c;
+        *domp = (WORD)dom;
+        for (j = 0; j < h; j++) {
+            ULONG sr = 0, sg = 0, sb = 0, k = 0;
+            const ULONG *r = px + j * w;
+            const UBYTE *o2 = out + j * w;
+            for (i = 0; i < w; i++)
+                if (o2[i] == pen0 + dom) {
+                    sr += (r[i] >> 16) & 255;
+                    sg += (r[i] >> 8) & 255;
+                    sb += r[i] & 255;
+                    k++;
+                }
+            rowbg[j] = k ? ((sr / k) << 16) | ((sg / k) << 8) | (sb / k) : (j ? rowbg[j - 1] : rgb[dom]);
+        }
     }
     InitRastPort(&rp);
     rp.BitMap = bm;

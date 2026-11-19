@@ -59,6 +59,9 @@ int view_transition = VT_FADE;
 static BOOL clut;               /* the screen has a colour table we take over */
 static BOOL bar_cop;            /* a layout's controls in a copper band of their own colours
                                  * (AGA: registers VW_BAR_PEN0.. theirs from the bar down) */
+static LONG bar_np = -1;        /* ...the list made (bar_cop), as asked: -1 none */
+static BOOL bar_keep;           /* ...kept up while the picture under them changes: what is
+                                 * drawn under the bar goes into what it keeps (bar_bm) */
 static UWORD ncolors;           /* its size */
 static ULONG *saved;            /* the UI's colours: LoadRGB32 table */
 static ULONG *shown;            /* the colours on screen now (count*3) */
@@ -194,11 +197,34 @@ static void fill(struct Gfx *g, UBYTE pen)
     RectFill(g->rp, 0, 0, g->w - 1, g->h - 1);
 }
 
+/* The whole screen one pen, but a bar kept up: above it, and what it
+ * keeps under it */
+static void fill_pic(struct Gfx *g, UBYTE pen)
+{
+    struct RastPort rp;
+    if (!bar_keep || !bar_bm) {
+        fill(g, pen);
+        return;
+    }
+    gfx_dirty();
+    SetWriteMask(g->rp, 0xFF);
+    SetAPen(g->rp, pen);
+    if (bar_y > 0)
+        RectFill(g->rp, 0, 0, g->w - 1, bar_y - 1);
+    InitRastPort(&rp);
+    rp.BitMap = bar_bm;
+    SetAPen(&rp, pen);
+    RectFill(&rp, 0, 0, g->w - 1, bar_h - 1);
+}
+
 BOOL view_begin(struct Gfx *g)
 {
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
     clut = !g->truecolor;
     ncolors = clut ? 1 << (g->depth > 8 ? 8 : g->depth) : 0;
+    bar_np = -1;
+    bar_keep = FALSE;
+    lv_controls_fresh();                    /* (the controls' colours chosen again, once) */
     gfx_picture_free(g);                    /* the preview's pens go */
     has_pic = FALSE;
     obj = NULL;
@@ -252,6 +278,7 @@ void view_bar_hide(struct Gfx *g)
         cop_off(g->scr);                    /* (the band's colours: the picture's again) */
         bar_cop = FALSE;
     }
+    bar_np = -1;
     if (!bar_bm)
         return;
     gfx_dirty();
@@ -274,102 +301,141 @@ static LONG cop_per_line(void)
 }
 
 /* An AGA screen's controls (lv_bm: gap rows, if any, then the layout's, in
- * registers VW_BAR_PEN0..): the copper makes each register the bar's
- * colour before the first row that uses it - not all before the bar: its
- * first rows are mostly its background, so the writes fall over them, the
- * ones the first rows need in the blanking before them. Registers the bar
- * does not use are not written. Only when the first rows need more than
- * that leaves time for are gap rows put over it (the bar's background
- * colour): how many is returned (more than gap: drawn again with them),
- * -1 if the copper could not be had. The picture above keeps every
- * register of its own. */
-#define BAR_BLANK 13                /* copper moves that fall in a line's blanking */
+ * registers VW_BAR_PEN0..), in a copper band of their own:
+ *
+ *   - the background pen (the commonest) is each row's own colour, written
+ *     line by line where it changes (the layout's gradient, exactly);
+ *   - every other register the bar uses is written before the first row
+ *     that uses it - over the bar's first rows, which are its background -
+ *     those the first rows need in the blanking just before them; unused
+ *     ones not at all;
+ *   - each line's writes begin at the end of the line before (cop_early).
+ *
+ * Only if the first rows need more than that leaves time for are gap rows
+ * put over the bar (its background): how many is returned (more than gap:
+ * drawn again with them), -1 if the copper could not be had. The picture
+ * above keeps every register of its own. The list made is kept: drawn the
+ * same again (a picture changed under the bar), the screen is left as it
+ * is. */
+#define BAR_BLANK 20                /* copper moves in a line's blanking, begun at the line before's end */
+#define BAR_LINES 160
+static struct { UBYTE pen; WORD y; ULONG rgb; } bar_plan[VW_BAR_PENS + BAR_LINES];
+/* Whether the writes fit with gap rows over the bar: the background's
+ * colour each scanline (bgc, bgw: written there), each pen's scanline */
+static BOOL bar_fit(LONG gap, LONG step, LONG mpl, const ULONG *rows, WORD nrows, ULONG bg0, const WORD *first,
+                    const UBYTE *ord, LONG n, UBYTE *line, ULONG *bgc, UBYTE *bgw, LONG *nlp)
+{
+    LONG s, i, k = 0, nb = 0, bank_of = -1, cost, nl;
+    ULONG was = 0xFFFFFFFFUL;
+    nl = (nrows + gap + step - 1) / step;
+    if (nl > BAR_LINES)
+        nl = BAR_LINES;
+    if (nl < 1)
+        nl = 1;
+    for (s = 0; s < nl; s++) {          /* (its gap rows the first row's colour) */
+        LONG r = s * step - gap;
+        ULONG c = nrows ? rows[r < 0 ? 0 : r >= nrows ? nrows - 1 : r] : bg0;
+        bgc[s] = c;
+        bgw[s] = c != was;
+        was = c;
+    }
+    *nlp = nl;
+    s = 0;
+    for (i = 0; i < n; i++) {
+        LONG pn = ord[i], dl = (gap + first[pn]) / step, b = (VW_BAR_PEN0 + pn) >> 5;
+        LONG nbb = nb + (b != bank_of ? 1 : 0), extra = s < nl && bgw[s] ? 4 : 0;
+        cost = 2 * (k + 1) + 1 + 2 * nbb + extra;
+        if (cost > (dl == s ? BAR_BLANK : mpl)) {
+            s++;                            /* (the next scanline) */
+            k = 0;
+            bank_of = -1;
+            nbb = 1;
+        }
+        if (s > dl)
+            return FALSE;
+        line[pn] = (UBYTE)s;
+        nb = nbb;
+        bank_of = b;
+        k++;
+    }
+    return TRUE;
+}
+
 static WORD bar_band(struct Gfx *g, WORD gap)
 {
     struct RastPort rp;
     struct CopPlan *p;
-    const ULONG *rgb = lv_controls_rgb();
+    const ULONG *rgb = lv_controls_rgb(), *rows;
     const WORD *first = lv_controls_first();
-    UBYTE ord[VW_BAR_PENS], line[VW_BAR_PENS];
-    LONG dom, i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need;
-    InitRastPort(&rp);
-    rp.BitMap = lv_bm;
-    /* the bar's own background: the colour most of it is (a gap's colour) */
-    {
-        UWORD cnt[VW_BAR_PENS];
-        LONG x, y;
-        memset(cnt, 0, sizeof(cnt));
-        for (y = gap; y < lv_bm_h; y += 3)
-            for (x = 4; x < g->w; x += 16) {
-                LONG pn = ReadPixel(&rp, x, y) - VW_BAR_PEN0;
-                if (pn >= 0 && pn < VW_BAR_PENS)
-                    cnt[pn]++;
-            }
-        for (dom = 0, i = 1; i < VW_BAR_PENS; i++)
-            if (cnt[i] > cnt[dom])
-                dom = i;
-    }
-    /* the pens used, by their first row */
+    UBYTE ord[VW_BAR_PENS], line[VW_BAR_PENS], bgw[BAR_LINES];
+    ULONG bgc[BAR_LINES];
+    WORD dom, nrows;
+    LONG i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need, nl, np;
+    BOOL same;
+    rows = lv_controls_rows(&dom, &nrows);
+    if (dom < 0 || dom >= VW_BAR_PENS)
+        dom = 0;
+    /* the pens used but the background, by their first row */
     for (i = 0; i < VW_BAR_PENS; i++)
-        if (first[i] >= 0 || i == dom) {
-            for (j = n; j > 0 && (first[ord[j - 1]] < 0 ? 0 : first[ord[j - 1]]) >
-                                  (first[i] < 0 ? 0 : first[i]); j--)
+        if (first[i] >= 0 && i != dom) {
+            for (j = n; j > 0 && first[ord[j - 1]] > first[i]; j--)
                 ord[j] = ord[j - 1];
             ord[j] = (UBYTE)i;
             n++;
         }
-    for (i = 0; i < n && ord[i] != dom; i++)
-        ;
-    for (; i > 0; i--)                      /* (the background first: in the first blanking) */
-        ord[i] = ord[i - 1];
-    ord[0] = (UBYTE)dom;
-    /* the fewest gap rows the writes fit with: each pen written on a
-     * scanline before its first, or in the blanking of that one */
-    for (need = 0; need <= 64; need += step) {
-        LONG s = 0, k = 0, banks = 0, bank_of = -1, cost;
-        BOOL ok = TRUE;
-        for (i = 0; i < n && ok; i++) {
-            LONG pn = ord[i], row = pn == dom && need ? 0 : need + (first[pn] < 0 ? 0 : first[pn]),
-                 dl = row / step, b = (VW_BAR_PEN0 + pn) >> 5, nb = banks + (b != bank_of ? 1 : 0);
-            cost = 2 * (k + 1) + 1 + 2 * nb;
-            if (cost > (dl == s ? BAR_BLANK : mpl)) {
-                s++;                        /* (the next scanline) */
-                k = 0;
-                nb = 1;
-                bank_of = -1;
-            }
-            if (s > dl)
-                ok = FALSE;
-            else {
-                line[pn] = (UBYTE)s;
-                if (b != bank_of) {
-                    banks = nb;
-                    bank_of = b;
-                }
-                k++;
-            }
-        }
-        if (ok)
+    /* the fewest gap rows the writes fit with; then the writes made for
+     * the gap the bar has (as many or more: the same fit, later rows) */
+    for (need = 0; need <= 64; need += step)
+        if (bar_fit(need, step, mpl, rows, nrows, rgb[dom], first, ord, n, line, bgc, bgw, &nl))
             break;
-    }
+    if (need <= gap)
+        bar_fit(gap, step, mpl, rows, nrows, rgb[dom], first, ord, n, line, bgc, bgw, &nl);
     if (need > gap)
         return need;                        /* (drawn again with that gap) */
+    InitRastPort(&rp);
+    rp.BitMap = lv_bm;
     if (gap > 0) {
         SetAPen(&rp, (UBYTE)(VW_BAR_PEN0 + dom));
         RectFill(&rp, 0, 0, g->w - 1, gap - 1);
     }
+    /* the list: the background's writes first on each line, then the pens' */
+    np = 0;
+    for (i = 0; i < nl; i++)
+        if (bgw[i] && np < (LONG)(sizeof(bar_plan) / sizeof(bar_plan[0]))) {
+            bar_plan[np].pen = (UBYTE)(VW_BAR_PEN0 + dom);
+            bar_plan[np].y = (WORD)(bar_y + i * step);
+            bar_plan[np].rgb = bgc[i];
+            np++;
+        }
+    for (i = 0; i < n && np < (LONG)(sizeof(bar_plan) / sizeof(bar_plan[0])); i++) {
+        LONG pn = ord[i];
+        bar_plan[np].pen = (UBYTE)(VW_BAR_PEN0 + pn);
+        bar_plan[np].y = (WORD)(bar_y + line[pn] * step);
+        bar_plan[np].rgb = rgb[pn];
+        np++;
+    }
+    {
+        static ULONG last_sum;
+        ULONG sum = (ULONG)np * 2654435761UL;
+        for (i = 0; i < np; i++)
+            sum = sum * 31 + bar_plan[i].pen + ((ULONG)bar_plan[i].y << 8) + bar_plan[i].rgb * 7;
+        same = bar_cop && bar_np == np && sum == last_sum;
+        last_sum = sum;
+    }
+    if (same)
+        return need;                        /* (the list already up: nothing to do) */
     if (bar_cop) {
         cop_off(g->scr);
         bar_cop = FALSE;
     }
-    if (!(p = cop_plan(g->scr, VW_BAR_PENS)))
+    if (!(p = cop_plan(g->scr, np)))
         return -1;
-    for (i = 0; i < n; i++) {
-        LONG pn = ord[i];
-        cop_color(p, bar_y + line[pn] * step, (UBYTE)(VW_BAR_PEN0 + pn), rgb[pn]);
-    }
+    cop_early(p, TRUE);
+    for (i = 0; i < np; i++)
+        cop_color(p, bar_plan[i].y, bar_plan[i].pen, bar_plan[i].rgb);
     bar_cop = cop_commit(p);
     cop_plan_free(p);
+    bar_np = bar_cop ? np : -1;
     return bar_cop ? need : -1;
 }
 
@@ -779,9 +845,11 @@ static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, c
 }
 
 /* ---- showing a picture */
+static void fill_pic(struct Gfx *g, UBYTE pen);
 static void drop_picture(struct Gfx *g)
 {
-    view_bar_hide(g);
+    if (!bar_keep)
+        view_bar_hide(g);
     if (clut && has_pic)
         fade(g, shown, FALSE);
     if (obj) {
@@ -791,7 +859,7 @@ static void drop_picture(struct Gfx *g)
     has_pic = FALSE;
     if (clut) {
         all_black(g);
-        fill(g, 0);
+        fill_pic(g, 0);
     } else {
         fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
     }
@@ -856,7 +924,8 @@ static void show_message(struct Gfx *g, const char *s)
         shown[(ncolors - 1) * 3] = shown[(ncolors - 1) * 3 + 1] = shown[(ncolors - 1) * 3 + 2] = grey;
     }
     view_bar(g, s, "", "");
-    if (bar_bm) {                           /* nothing under it worth keeping */
+    if (bar_bm && !bar_keep) {              /* nothing under it worth keeping (kept up: the
+                                             * new picture's part goes there) */
         FreeBitMap(bar_bm);
         bar_bm = NULL;
     }
@@ -1059,8 +1128,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         gfx_present(g);
     }
     spin_forget();
-    if (clut && bar_cop)
-        view_bar_hide(g);                   /* (the band off before the colours change) */
+    /* AGA: a layout's controls up stay up through the change (their colours
+     * the copper's: neither the fade nor the new colours reach them) */
+    bar_keep = clut && bar_cop && bar_lv && bar_bm;
     if (has_pic && !clut && view_transition != VT_CUT) {
         /* left up, for the transition to this one */
         if (obj) {
@@ -1290,7 +1360,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
 
     if (clut) {
         all_black(g);                       /* drawn unseen, then faded in */
-        fill(g, pen_border);
+        fill_pic(g, pen_border);
         if (direct) {
             CopyMem(target, shown, ncolors * 3 * sizeof(ULONG));
             if (pen_border == ncolors - 1 && (1UL << pi->depth) < ncolors)
@@ -1306,12 +1376,21 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     }
     gfx_dirty();
     if (!transition(g, tmp, (WORD)bsa.bsa_DestWidth, (WORD)bsa.bsa_DestHeight)) {
+        WORD bx = (WORD)((g->w - bsa.bsa_DestWidth) / 2), by = (WORD)((g->h - bsa.bsa_DestHeight) / 2),
+             bw = (WORD)bsa.bsa_DestWidth, bh = (WORD)bsa.bsa_DestHeight;
         if (kept)
             fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));
-        BltBitMapRastPort(tmp, 0, 0, g->rp, (g->w - bsa.bsa_DestWidth) / 2,
-                          (g->h - bsa.bsa_DestHeight) / 2, bsa.bsa_DestWidth, bsa.bsa_DestHeight,
-                          0xC0);
+        if (bar_keep && bar_bm && by + bh > bar_y) {
+            /* the part under the bar into what the bar keeps, the rest on screen */
+            WORD under = by < bar_y ? bar_y : by;
+            BltBitMap(tmp, 0, under - by, bar_bm, bx, under - bar_y, bw, by + bh - under, 0xC0, 0xFF, NULL);
+            if (under > by)
+                BltBitMapRastPort(tmp, 0, 0, g->rp, bx, by, bw, under - by, 0xC0);
+        } else {
+            BltBitMapRastPort(tmp, 0, 0, g->rp, bx, by, bw, bh, 0xC0);
+        }
     }
+    bar_keep = FALSE;
     kept = FALSE;
     pic_x = (WORD)((g->w - bsa.bsa_DestWidth) / 2);
     pic_y = (WORD)((g->h - bsa.bsa_DestHeight) / 2);
