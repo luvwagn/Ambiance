@@ -1332,6 +1332,22 @@ static LONG body_bottom(void)
 static const void *rows_of;
 static LONG rows_count = -1, rows_top, rows_sel, rows_x, rows_y, rows_w, rows_h;
 static BOOL rows_ok;                    /* (FALSE: drawn by nothing yet, or over) */
+static ULONG rows_key[64];              /* what each slot showed (row_key): a row whose
+                                         * entry came since (its name read) drawn again */
+static ULONG row_key(const struct LItem *it)
+{
+    ULONG k = (ULONG)it->kind * 7 + it->mark * 131 + it->flags * 1031;
+    const char *const s3[3] = { it->label, it->sub, it->tag };
+    int j;
+    for (j = 0; j < 3; j++) {
+        const char *s = s3[j];
+        k = k * 31 + (s ? 1 : 0);
+        if (s)
+            while (*s)
+                k = k * 33 + (UBYTE)*s++;
+    }
+    return k | 1;
+}
 static BOOL rows_hov;                   /* (a row under the pointer when they were drawn) */
 
 static void draw_row(const struct LPage *m, LONG idx, LONG rx, LONG ry, LONG rw, LONG rh)
@@ -1442,6 +1458,16 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
             if (ns + k >= 0 && ns + k < fit)
                 want[ns + k] = 1;
         }
+        /* a row whose entry changed since it was drawn (its name come, a
+         * mark): drawn again too - the keys moved as the rows were */
+        {
+            ULONG was[64];
+            for (k = 0; k < fit; k++)
+                was[k] = k + d >= 0 && k + d < fit ? rows_key[k + d] : 0;
+            for (k = 0; k < fit && list_top + k < l->count; k++)
+                if (row_key(l->item(list_top + k)) != was[k])
+                    want[k] = 1;
+        }
         /* (the margins above and below: a first or last row's glow reaches them) */
         rows_bg(x, y, w, h, cx, y - X(8), cw, X(8));
         rows_bg(x, y, w, h, cx, y + fit * rh, cw, h + X(8) - fit * rh);
@@ -1454,8 +1480,12 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
         if (ns >= 0 && ns < fit && list_top + ns < l->count)
             draw_row(m, list_top + ns, x, y + ns * rh, rw, rh);
     }
+    for (i = 0; i < 64; i++)
+        rows_key[i] = 0;
     for (i = 0; i < fit && list_top + i < l->count; i++) {    /* (where a click goes: every row) */
         const struct LItem *it = l->item(list_top + i);
+        if (i < 64)
+            rows_key[i] = row_key(it);
         if (!(it->flags & (LIF_HEAD | LIF_DISABLED)))
             hit(x, y + i * rh, rw, rh, HT_ROW, it->kind, list_top + i);
     }

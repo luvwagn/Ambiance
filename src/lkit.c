@@ -92,6 +92,9 @@ struct LkTarget {
     BOOL copper;                /* ...the background one pen (CK_RAMP0), its colour set by
                                  * the copper each line (ck_copper_on): smooth, and a row
                                  * copied up or down takes the shade of where it lands */
+    struct { WORD x, y, w, h, dx, dy; } bq[8];  /* copies on the canvas still to be made on
+                                         * the screen by the blitter (lk_show) */
+    WORD nbq;
     BOOL blitting;              /* a copy by the blitter (ck_blit) maybe still under way:
                                  * WaitBlit before the CPU writes the planes */
     UBYTE *pool;                /* ...the pen for each 5-5-5 colour asked for (0: not yet) */
@@ -1248,36 +1251,22 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
 /* A copy on the canvas made on the screen too, by the blitter: what is
  * there already moved in chip RAM instead of c2p'd again (a glide's step
  * moves some 200,000 pixels: the CPU's c2p of them 20-25 ms without the
- * JIT; the blitter's alongside the CPU). What waited to be shown is shown
- * first (the blit moves the screen's pixels, so they must be the
- * canvas's), then the canvas moved as the screen will be. FALSE: not
- * here (the window covered, Ambiance/LayoutBlit 0): the caller's way */
+ * JIT; the blitter's alongside the CPU). The canvas moved now; the
+ * screen's blit kept for lk_show, made there just before what was drawn
+ * is shown - blitted at once, the rows copied showed a moment before
+ * those drawn over them (a list's old highlight twice, while it
+ * scrolled). What waits to be shown is moved with the copy: its place
+ * and where it went both shown. FALSE: not here (the window covered,
+ * Ambiance/LayoutBlit 0, too many waiting): the caller's way */
 static BOOL ck_blit(struct LkTarget *t, long x, long y, long w, long h, long dx, long dy)
 {
     struct BitMap *bm;
     struct Layer *ly;
     long ox, oy, j;
-    ULONG t0;
-    if (!lk_blit_ok || w <= 0 || h <= 0 || !ck_direct(t, &bm, &ly, &ox, &oy))
+    if (!lk_blit_ok || w <= 0 || h <= 0 || t->nbq >= 8 || !ck_direct(t, &bm, &ly, &ox, &oy))
         return FALSE;
     if (ly)
-        UnlockLayerRom(ly);             /* (ck_c2p locks it again) */
-    t0 = time_ms();
-    if (t->x0 <= t->x1) {
-        /* drawn and not yet shown: shown now, from the canvas as it is */
-        if (t->x0 < 0) t->x0 = 0;
-        if (t->y0 < 0) t->y0 = 0;
-        if (t->x1 >= t->cw) t->x1 = t->cw - 1;
-        if (t->y1 >= t->chh) t->y1 = t->chh - 1;
-        if (!ck_c2p(t, t->x0, t->y0, t->x1, t->y1))
-            return FALSE;               /* (covered since: the caller's way, shown later) */
-        lkt_px += (ULONG)(t->x1 - t->x0 + 1) * (ULONG)(t->y1 - t->y0 + 1);
-        t->x0 = 1;
-        t->x1 = 0;
-    }
-    if (!ck_direct(t, &bm, &ly, &ox, &oy))
-        return FALSE;                   /* (all shown now: the caller's copy marks its part) */
-    gfx_dirty();
+        UnlockLayerRom(ly);
     if (dy > 0) {                       /* (the canvas as the screen will be) */
         for (j = h - 1; j >= 0; j--)
             memmove(t->ch + (y + j + dy) * t->cw + x + dx, t->ch + (y + j) * t->cw + x, (size_t)w);
@@ -1285,25 +1274,48 @@ static BOOL ck_blit(struct LkTarget *t, long x, long y, long w, long h, long dx,
         for (j = 0; j < h; j++)
             memmove(t->ch + (y + j + dy) * t->cw + x + dx, t->ch + (y + j) * t->cw + x, (size_t)w);
     }
-    if (t->blitting)
-        WaitBlit();
-    /* the CPU's own writes to the planes (the c2p's, just before) out of its
-     * data cache into chip RAM first: a 68040/060's copyback cache still
-     * holding some, the blitter read the planes as they were before them -
-     * and the cache wrote them out later, over what it moved (an old
-     * highlight copied along a list, there until drawn again) */
-    CacheClearU();
-    /* one bitmap, overlapping: BltBitMap picks the direction. It returns
-     * with the last blit started; the CPU's next writes to the planes
-     * (ck_c2p, WriteChunkyPixels) wait for it (t->blitting) */
-    BltBitMap(bm, (WORD)(x + ox), (WORD)(y + oy), bm, (WORD)(x + dx + ox), (WORD)(y + dy + oy), (WORD)w, (WORD)h,
-              0xC0, 0xFF, NULL);
-    t->blitting = TRUE;
-    if (ly)
-        UnlockLayerRom(ly);
+    if (t->x0 <= t->x1)                 /* (what waits, where the copy took it too) */
+        ck_touch(t, t->x0 + dx, t->y0 + dy, t->x1 - t->x0 + 1, t->y1 - t->y0 + 1);
+    t->bq[t->nbq].x = (WORD)x;
+    t->bq[t->nbq].y = (WORD)y;
+    t->bq[t->nbq].w = (WORD)w;
+    t->bq[t->nbq].h = (WORD)h;
+    t->bq[t->nbq].dx = (WORD)dx;
+    t->bq[t->nbq].dy = (WORD)dy;
+    t->nbq++;
     lkt_blits++;
     lkt_bpx += (ULONG)w * (ULONG)h;
-    lkt_show += time_ms() - t0;
+    return TRUE;
+}
+
+/* The copies kept (ck_blit) made on the screen, in order; FALSE if they
+ * cannot be now (the window covered since): their places to be shown
+ * from the canvas instead */
+static BOOL ck_blits_run(struct LkTarget *t)
+{
+    struct BitMap *bm;
+    struct Layer *ly;
+    long ox, oy;
+    WORD i;
+    if (!t->nbq)
+        return TRUE;
+    if (!ck_direct(t, &bm, &ly, &ox, &oy)) {
+        for (i = 0; i < t->nbq; i++)
+            ck_touch(t, t->bq[i].x + t->bq[i].dx, t->bq[i].y + t->bq[i].dy, t->bq[i].w, t->bq[i].h);
+        t->nbq = 0;
+        return FALSE;
+    }
+    if (t->blitting)
+        WaitBlit();
+    CacheClearU();                      /* (the CPU's writes to the planes out to chip RAM first) */
+    for (i = 0; i < t->nbq; i++)        /* (one bitmap, overlapping: BltBitMap picks the direction) */
+        BltBitMap(bm, (WORD)(t->bq[i].x + ox), (WORD)(t->bq[i].y + oy), bm,
+                  (WORD)(t->bq[i].x + t->bq[i].dx + ox), (WORD)(t->bq[i].y + t->bq[i].dy + oy), t->bq[i].w,
+                  t->bq[i].h, 0xC0, 0xFF, NULL);
+    t->blitting = TRUE;                 /* (the c2p after waits for it) */
+    t->nbq = 0;
+    if (ly)
+        UnlockLayerRom(ly);
     return TRUE;
 }
 
@@ -1311,6 +1323,12 @@ void lk_show(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
     if (t && t->ch) {
+        if (t->nbq) {
+            ULONG tb = time_ms();
+            gfx_dirty();
+            ck_blits_run(t);
+            lkt_show += time_ms() - tb;
+        }
         if (t->x0 > t->x1)
             return;
         if (t->x0 < 0) t->x0 = 0;
