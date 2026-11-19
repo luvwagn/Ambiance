@@ -43,6 +43,8 @@ void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
 /* a whole draw begins: an 8-bit screen's pens for flat colours free again */
 void lk_fresh(struct LkOut *o);
 extern BOOL lk_copper_ok;            /* an AGA screen's background by the copper (default) */
+extern BOOL lk_blit_ok;              /* an AGA screen's copies by the blitter (default) */
+void lk_blits(ULONG *n, ULONG *kpx); /* copies the blitter made, K pixels moved (since last) */
 void lk_pens(ULONG *short_of, ULONG *least_free);
 void lk_prof(char *buf);
 /* the big letter by hardware sprites (AGA, an 8-bit layout): TRUE if so */
