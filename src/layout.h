@@ -110,6 +110,8 @@ struct LPage {
     UBYTE plexmark;
     UBYTE frames;               /* a wall (LS_ALBUMS) of pictures and videos: its tiles
                                  * 4:3 frames, not square covers */
+    UBYTE aside;                /* its rows have details (a game's, a picture's): their
+                                 * column kept from the start, before they come */
 };
 
 /* A row on Home: a title and a few items (recently added albums, the

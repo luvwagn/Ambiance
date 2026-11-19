@@ -1088,7 +1088,7 @@ static ULONG page_key(const struct LPage *m)
 static int page_split(const struct LPage *m)
 {
     ULONG k = page_key(m);
-    if (m->ndetails > 0 || m->picture) {
+    if (m->ndetails > 0 || m->picture || m->aside) {
         split_key = k;
         return 1;
     }

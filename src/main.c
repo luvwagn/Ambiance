@@ -905,7 +905,11 @@ static void ch_send(struct Page *p, LONG k)
     }
     ch->job = j;
     ch->job_k = k;
-    ldr_submit(j);
+    if ((ch->c[k].first <= p->sel && p->sel < ch->c[k].first + ch->c[k].count) ||
+        (ch->c[k].first < p->top + list_visible() && ch->c[k].first + ch->c[k].count > p->top))
+        ldr_submit_first(j);                /* (on screen: before pictures, read-aheads) */
+    else
+        ldr_submit(j);
 }
 
 /* What to read next, if anything: a letter on screen not held (let go,
@@ -1076,8 +1080,11 @@ static void ch_arrived(struct Page *p, BOOL shown)
         if (ch->frozen != frozen || before < p->top + vis ||
             (!was_held && c->first < p->top + vis && c->first + c->count > p->top))
             draw_list_rows(p);              /* rows that were empty or blank, or re-sorted */
-        if (p->sel >= c->first && p->sel < c->first + c->count)
+        if (p->sel >= c->first && p->sel < c->first + c->count) {
+            if (det.page == p && det.sel == p->sel && !det.tj && !det.sj)
+                det.shown = FALSE;          /* given none while not held: asked again */
             det_touch(p);
+        }
     }
     ch_pump(p);
 }
@@ -17073,6 +17080,7 @@ static void lv_note_what(ULONG what)
  * called from, as "unseen"): a whole draw is the slow kind */
 #define LV_WHO 6
 static const void *lv_who_at[LV_WHO];
+static ULONG lvp_n[4], lvp_ms[4];      /* drawn in part: what plays, pictures, a move, details */
 static ULONG lvw_why[8], lvw_what;     /* whole draws: full, noted, unseen, else (of those:
                                          * the message, what plays, the page, the selection
                                          * the same), and what was noted */
@@ -17119,6 +17127,14 @@ static void lv_who_report(void)
     }
     if (t[0])
         amb_log("wholes", t);
+    if (lvp_n[0] || lvp_n[1] || lvp_n[2] || lvp_n[3]) {
+        sprintf(t, "what plays %lu (%lu ms), pictures %lu (%lu ms), moves %lu (%lu ms), details %lu (%lu ms)",
+                (unsigned long)lvp_n[0], (unsigned long)lvp_ms[0], (unsigned long)lvp_n[1], (unsigned long)lvp_ms[1],
+                (unsigned long)lvp_n[2], (unsigned long)lvp_ms[2], (unsigned long)lvp_n[3], (unsigned long)lvp_ms[3]);
+        amb_log("parts", t);
+        memset(lvp_n, 0, sizeof(lvp_n));
+        memset(lvp_ms, 0, sizeof(lvp_ms));
+    }
 }
 
 /* The screen under the layout changed (double buffering on or off, its
@@ -17503,6 +17519,7 @@ static void lv_page(struct Page *p, struct LPage *m)
     /* while it glides, or a letter is up, no pictures asked for: the
      * classic pane waits the same way */
     m->picture = hold_active() || ov.on ? NULL : lv_picture_of(p);
+    m->aside = has_aside(p);                /* (its details' column from the start) */
     m->letter = ov.on && ov.page == p && ov.bl ? ov.letter : 0;
     m->frames = p->pics ? 1 : 0;
     if (lv_waiting(p)) {
@@ -18745,7 +18762,12 @@ static void lv_frame_(void)
                     lv.last_time = tsig;
                     clock_text(lv.clock);
                     lk_clip(&lv.out, 0, 0, g.w, g.h);
-                    lv.eng->changed(scr, LC_PLAYING);
+                    {
+                        ULONG t0 = time_ms();
+                        lv.eng->changed(scr, LC_PLAYING);
+                        lvp_n[0]++;
+                        lvp_ms[0] += time_ms() - t0;
+                    }
                     lvt_parts++;
                 }
             } else {
@@ -18763,7 +18785,12 @@ static void lv_frame_(void)
         } else {
             lv_img = FALSE;
             lk_clip(&lv.out, 0, 0, g.w, g.h);
-            lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
+            {
+                ULONG t0 = time_ms();
+                lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
+                lvp_n[1]++;
+                lvp_ms[1] += time_ms() - t0;
+            }
             lvt_parts++;
         }
     } else if (lv_img) {
@@ -18847,12 +18874,20 @@ static void lv_frame_(void)
         clock_text(lv.clock);
         lv_ri = 0;
         lk_clip(&lv.out, 0, 0, g.w, g.h);
-        if (moved_only && nsig == lv.last_now)
-            lv.eng->changed(scr, LC_SELECT), lvt_parts++;
-        else if (details_only)
-            lv.eng->changed(scr, LC_DETAILS), lvt_parts++;
-        else
-            lk_fresh(&lv.out), lv.eng->draw(scr), lvt_whole++;
+        {
+            ULONG t0 = time_ms();
+            int k = -1;
+            if (moved_only && nsig == lv.last_now)
+                lv.eng->changed(scr, LC_SELECT), lvt_parts++, k = 2;
+            else if (details_only)
+                lv.eng->changed(scr, LC_DETAILS), lvt_parts++, k = 3;
+            else
+                lk_fresh(&lv.out), lv.eng->draw(scr), lvt_whole++;
+            if (k >= 0) {
+                lvp_n[k]++;
+                lvp_ms[k] += time_ms() - t0;
+            }
+        }
         lv.last_now = nsig;
         lv.wait_phase = lv_waiting(p) ? lv_wait_step() : -1;
         lv.last_p = p;
