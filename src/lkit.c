@@ -487,6 +487,10 @@ static void ck_rows_(void *ctx, long x, long y, long w, long h, const unsigned l
 {
     struct LkTarget *t = ctx;
     long i, j;
+    /* the host's own picture drawn with its own colours (a cover, a
+     * screenshot): not looked at pixel by pixel for the background's
+     * colour - that is a reflection's (faded into it), a layout's own */
+    BOOL opaque = t->pmap && lk_pic_own;
     ck_touch(t, x, y, w, h);
     for (j = 0; j < h; j++) {
         UBYTE *d = t->ch + (y + j) * t->cw + x;
@@ -497,7 +501,9 @@ static void ck_rows_(void *ctx, long x, long y, long w, long h, const unsigned l
             UBYTE bp;
             /* (the background's or not, a colour's once a row: only the
              * ramp's dither differs along it) */
-            if (s[i] == mc && (!mp || t->copper))
+            if (opaque)
+                bp = 0;                 /* (a cover's own colours: no background in it) */
+            else if (s[i] == mc && (!mp || t->copper))
                 bp = mp;
             else
                 mc = s[i], bp = mp = ck_bg_pen(t, x + i, y + j, s[i]);
