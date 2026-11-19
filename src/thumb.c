@@ -614,6 +614,14 @@ struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol)
     deep = bmh->bmh_Depth > 8 || (mode & HAM_KEY) || !cregs || !ncol;
     if (deep)
         return true_col ? deep_thumb(o, NULL, sw, sh, dw, dh) : quantise(o, NULL, sw, sh, dw, dh, NULL, maxcol);
+    if (true_col && (dw < sw || dh < sh)) {
+        /* true colour (a layout's) made smaller: averaged, as a deep one
+         * (picked pixel for pixel, a game's screenshot's dithered shades
+         * and fine lines broke into specks: Chaos Engine's stone) */
+        struct Thumb *t = deep_thumb(o, NULL, sw, sh, dw, dh);
+        if (t)
+            return t;
+    }
 
     /* the colour table, 8 bits a gun; extra halfbrite: the dark half too */
     memset(rgb, 0, sizeof(rgb));
