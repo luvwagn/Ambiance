@@ -263,6 +263,11 @@ int plex_tier(void)
         tier = (plex.cpu >= 40 || speed >= 30000) ? 1 : 0;
         if (speed >= 120000)
             tier = 2;
+        if (speed >= 200000)
+            tier = 3;                       /* far past any 68060 (an emulator's JIT, an
+                                             * 080): converted at the whole rate, as for
+                                             * MHI and the ZZ9000 (MP3 at 44.1 kHz, high
+                                             * quality: a few percent of it) */
         sprintf(m, "%lu thousand multiplies a second, a 680%02ld: tier %ld", (unsigned long)speed,
                 (long)plex.cpu, (long)tier);
         amb_log("plex: this Amiga", m);

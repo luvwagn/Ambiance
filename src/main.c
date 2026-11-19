@@ -15053,6 +15053,7 @@ static void act_action(struct Item *it)
             st_mp3_quality(q);
             save_setting(MP3Q_VAR, mp3q_val[q]);
             sound_restart();                /* what plays: at it now */
+            plex_settings_again(FALSE);     /* (its radio buttons: the new one on) */
         }
         set_msg(q == 1 ? _("MP3 at high quality, at the rate this Amiga can decode it")
                 : q == 2 ? _("MP3 at medium quality: about a tenth less work, 70 dB")
