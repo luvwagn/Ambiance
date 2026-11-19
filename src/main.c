@@ -17404,10 +17404,10 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
         }
         for (k = 0; k < VW_BAR_PENS; k++)
             lv_ctl_first[k] = -1;           /* (the pens past ncol: none) */
-        lv_ctl_n = ncol;
+        lv_ctl_n = ncol - 1;                /* (and one more register: the gradient's second) */
         lv_ctl_h = c->h <= LV_CTL_ROWS ? c->h : 0;
         if (!lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
-                         ncol, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
+                         ncol - 1, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
             return FALSE;                   /* (its rows the bitmap's last: a band's gap over them) */
         if (pick)
             lv_ctl_pick = FALSE;
