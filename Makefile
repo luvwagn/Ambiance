@@ -44,7 +44,7 @@ LIBS    = -lamiga -lm
 # (tools/check_libs.py checks every library built).
 libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 
-SRCS = src/main.c src/details.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
+SRCS = src/main.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
@@ -160,7 +160,7 @@ build/%.o: src/%.c src/amb.h $(VERSION_STAMP)
 build/lkit.o: src/lkit.h src/lkcore.h
 # (LAYOUT_ABI is the checksum of these: the objects that check or use it)
 build/lhost.o build/main.o: src/layout.h src/lkcore.h
-build/main.o build/details.o: src/app.h src/details.h
+build/main.o build/details.o build/lvhost.o: src/app.h src/details.h src/lvhost.h src/layout.h src/lkcore.h
 build/lkcore.o: src/lkcore.h
 build/lhost.o: src/lhost.h src/layout.h src/lkcore.h
 
