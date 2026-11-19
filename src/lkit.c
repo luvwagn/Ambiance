@@ -128,6 +128,10 @@ struct LkTarget {
     BOOL sh_all;                /* ...the next show converts all it shows (a whole draw:
                                  * the screen may have been drawn over by others) */
     UBYTE held[256];            /* pens kept from the pool: the sprites' colours (AGA) */
+    BOOL pens;                  /* Classic's own pens (lk_open_pens): no canvas, no pool -
+                                 * each colour the UI pen it is, or the nearest */
+    UWORD *pnc;                 /* ...the UI pen for each 5-5-5 colour, plus one (0: not yet) */
+    UBYTE *pnrow;               /* ...a row of pens, for WriteChunkyPixels */
     ULONG *mpx;                 /* a strip drawn in memory (lk_open_mem): its pixels, the
                                  * caller's, cw a row, row 0 the screen's oy */
     /* the big letter by hardware sprites (lk_letter_sprites): over the
@@ -566,6 +570,126 @@ static int ck_copy_(void *ctx, long x, long y, long w, long h, long dx, long dy)
     }
     ck_touch(t, x + dx, y + dy, w, h);
     return 1;
+}
+
+/* ---- Classic's own pens (lk_open_pens) ----------------------------------
+ * The canvas's third backend, for Classic drawn as a layout: the screen as
+ * Classic draws it, with its UI pens (ui_palette32, through GPEN: on its own
+ * screen the pens themselves, in a window on Workbench the ones obtained
+ * for them). Any screen: AGA's planes, a graphics card's, a window. A
+ * colour asked for is the UI pen that is that colour, else the nearest UI
+ * pen; a picture's pixels the same (Classic's pictures keep their own
+ * route: the host's picture calls, not these). No canvas: drawn straight
+ * on the RastPort of the moment (the double buffer's back one), so nothing
+ * to show at lk_show, and no copies (a layout draws instead). */
+static void pn_load(struct LkTarget *t)
+{
+    int i;
+    for (i = 0; i < NUM_UI_PENS; i++)
+        t->rgbof[i] = ((ui_palette32[1 + i * 3] >> 24) << 16) | ((ui_palette32[2 + i * 3] >> 24) << 8) |
+                      (ui_palette32[3 + i * 3] >> 24);
+    if (t->pnc)
+        memset(t->pnc, 0, 32768 * sizeof(UWORD));
+}
+
+/* The UI pen (0..NUM_UI_PENS-1) nearest a colour */
+static UBYTE pn_near(struct LkTarget *t, unsigned long rgb)
+{
+    UWORD k = (UWORD)CK555(rgb), v = t->pnc[k];
+    LONG best = 0x7FFFFFFF, d;
+    int i, r = (rgb >> 16) & 255, gg = (rgb >> 8) & 255, b = rgb & 255;
+    UBYTE pen = 0;
+    if (v)
+        return (UBYTE)(v - 1);
+    for (i = 0; i < NUM_UI_PENS; i++) {
+        ULONG c = t->rgbof[i];
+        LONG dr = r - (LONG)((c >> 16) & 255), dg = gg - (LONG)((c >> 8) & 255), db = b - (LONG)(c & 255);
+        d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (d < best) {
+            best = d;
+            pen = (UBYTE)i;
+        }
+    }
+    t->pnc[k] = (UWORD)(pen + 1);
+    return pen;
+}
+
+/* ...the UI pen that is exactly that colour first (two UI colours may
+ * share a 5-5-5 cell: a fill is Classic's own colour, asked for exactly) */
+static UBYTE pn_pen(struct LkTarget *t, unsigned long rgb)
+{
+    int i;
+    rgb &= 0xFFFFFF;
+    for (i = 0; i < NUM_UI_PENS; i++)
+        if (t->rgbof[i] == rgb)
+            return (UBYTE)i;
+    return pn_near(t, rgb);
+}
+
+static void pn_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
+{
+    struct LkTarget *t = ctx;
+    struct RastPort *rp = t->g->rp;
+    LKP_BEGIN;
+    if (!rp)
+        return;
+    gfx_dirty();
+    SetAPen(rp, GPEN(pn_pen(t, rgb)));
+    RectFill(rp, (WORD)x, (WORD)y, (WORD)(x + w - 1), (WORD)(y + h - 1));
+    LKP_END(LKP_FILL);
+}
+
+static void pn_rows(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
+{
+    struct LkTarget *t = ctx;
+    struct RastPort *rp = t->g->rp;
+    long i, j;
+    LKP_BEGIN;
+    if (!rp || w > t->cw)
+        return;
+    gfx_dirty();
+    for (j = 0; j < h; j++) {
+        const unsigned long *s = px + j * mod;
+        UBYTE *d = t->pnrow;
+        for (i = 0; i < w; i++)
+            d[i] = GPEN(pn_near(t, s[i]));
+        WriteChunkyPixels(rp, (ULONG)x, (ULONG)(y + j), (ULONG)(x + w - 1), (ULONG)(y + j), d, (LONG)w);
+    }
+    LKP_END(LKP_ROWS);
+}
+
+BOOL lk_open_pens(struct Gfx *g, struct LkOut *o)
+{
+    struct LkTarget *t;
+    o->buf = NULL;
+    o->ctx = NULL;
+    if (!g->rp || g->w <= 0 || GfxBase->LibNode.lib_Version < 40)
+        return FALSE;
+    if (!(t = AllocVec(sizeof(*t), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    t->g = g;
+    t->pens = TRUE;
+    t->x0 = 1;
+    t->x1 = 0;
+    t->cw = g->w;
+    t->chh = g->h;
+    o->ctx = t;
+    t->pnc = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
+    t->pnrow = AllocVec((ULONG)g->w, MEMF_ANY);
+    o->bufn = (long)g->w * 16;
+    o->buf = AllocVec((ULONG)o->bufn * 4, MEMF_ANY);
+    if (!t->pnc || !t->pnrow || !o->buf) {
+        lk_close(o);
+        return FALSE;
+    }
+    pn_load(t);
+    o->fill = pn_fill;
+    o->rows = pn_rows;
+    o->copy = NULL;                     /* (none: the layout draws it) */
+    o->bits = 24;                       /* (any colour asked for: the nearest pen made of it) */
+    o->cov_steps = 4;                   /* (text's edges: few steps, each a pen) */
+    lk_clip(o, 0, 0, g->w, g->h);
+    return TRUE;
 }
 
 /* ---- a strip drawn in memory, then made a few pens (lk_open_mem,
@@ -1069,6 +1193,8 @@ void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom)
 void lk_fresh(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
+    if (t && t->pens)
+        pn_load(t);                     /* (a scheme's colours may have changed) */
     if (t && t->ch && t->pool)
         ck_gc(t);
     if (t && t->ch)
@@ -1968,6 +2094,10 @@ void lk_close(struct LkOut *o)
             FreeVec(t->rx0);
         if (t->tmp)
             FreeVec(t->tmp);
+        if (t->pnc)
+            FreeVec(t->pnc);
+        if (t->pnrow)
+            FreeVec(t->pnrow);
         if (t->ch)
             ck_cuts_free();             /* (the cuts' pens are this screen's) */
         lk_cover_cache_free();          /* (the font may go with it) */

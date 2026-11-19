@@ -37,6 +37,9 @@ void lk_show(struct LkOut *o);
  * 40-255, the screen's colours put back at lk_close), on a canvas shown
  * with WriteChunkyPixels (graphics.library 40) */
 BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
+/* Classic's own pens on any screen (its UI colours, the nearest of them for
+ * any other): no canvas, drawn straight on the RastPort (classic.layout) */
+BOOL lk_open_pens(struct Gfx *g, struct LkOut *o);
 /* A strip drawn into memory (px: w x h, the caller's; row 0 the screen's
  * y0), then made n pens (64 at most) pen0.. into bm's rows from by: pick,
  * the n colours chosen from it into rgb[] (else rgb[] as before). A

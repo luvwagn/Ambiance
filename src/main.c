@@ -15561,16 +15561,19 @@ static void lv_off(BOOL redraw)
 
 /* Whether a layout can draw on a screen like this one at all (lv_suits,
  * whatever else is up) */
+static BOOL lv_pens_test;           /* Ambiance/LayoutPens=1: a layout drawn with Classic's
+                                     * pens (lk_open_pens), on any screen - a test of the
+                                     * backend classic.layout will draw with */
 static BOOL lv_screen_can(void)
 {
-    return (g.truecolor && !g.planar) || (lv_native && !g.truecolor && g.depth == 8 && !g.wb);
+    return lv_pens_test || (g.truecolor && !g.planar) || (lv_native && !g.truecolor && g.depth == 8 && !g.wb);
 }
 
 static BOOL lv_suits(void)
 {
     if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
         return FALSE;
-    if (g.truecolor && !g.planar)
+    if (lv_pens_test || (g.truecolor && !g.planar))
         return TRUE;                    /* (in either style: the Pixel one's lent a smooth font) */
     return lv_native && !g.truecolor && g.depth == 8 && !g.wb;     /* (the experiment) */
 }
@@ -15626,7 +15629,8 @@ static void lv_activate(void)
         amb_log("layout", "no smooth font for this screen (Fonts/amb-smooth): classic");
         return;
     }
-    if (!(g.truecolor ? lk_open(&g, &lv.out, TRUE) : lk_open_chunky(&g, &lv.out))) {
+    if (!(lv_pens_test ? lk_open_pens(&g, &lv.out)
+                       : g.truecolor ? lk_open(&g, &lv.out, TRUE) : lk_open_chunky(&g, &lv.out))) {
         if (!g.truecolor)
             amb_log("layout", "an 8-bit screen: no room for its canvas, or graphics.library before 40");
         lv_give_back_font();
@@ -15702,6 +15706,8 @@ static void lv_sync(void)
             lk_sprites_ok = buf[0] != '0';
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutSkip", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_skip_ok = buf[0] != '0';
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutPens", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lv_pens_test = buf[0] == '1';
         /* (an AGA screen's copies by the blitter unless Ambiance/LayoutBlit is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutBlit", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_blit_ok = buf[0] != '0';
