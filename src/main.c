@@ -17470,6 +17470,9 @@ static void lv_note_what(ULONG what)
  * called from, as "unseen"): a whole draw is the slow kind */
 #define LV_WHO 6
 static const void *lv_who_at[LV_WHO];
+static ULONG lvw_why[8], lvw_what;     /* whole draws: full, noted, unseen, else (of those:
+                                         * the message, what plays, the page, the selection
+                                         * the same), and what was noted */
 static ULONG lv_who_n[LV_WHO];
 static __attribute__((noinline)) void lv_note(void)
 {
@@ -17491,7 +17494,7 @@ static __attribute__((noinline)) void lv_note(void)
 }
 static void lv_who_report(void)
 {
-    char t[200];
+    char t[360];
     int i;
     t[0] = 0;
     for (i = 0; i < LV_WHO && lv_who_at[i]; i++) {
@@ -17501,6 +17504,15 @@ static void lv_who_report(void)
                     (unsigned long)lv_who_n[i]);
         lv_who_at[i] = NULL;
         lv_who_n[i] = 0;
+    }
+    if (lvw_why[0] || lvw_why[1] || lvw_why[2] || lvw_why[3]) {
+        sprintf(t + strlen(t), "%sasked whole %lu, noted %lu, unseen %lu, else %lu (message %lu, playing %lu, "
+                "page %lu, selection kept %lu; noted %lx)", t[0] ? "; " : "", (unsigned long)lvw_why[0],
+                (unsigned long)lvw_why[1], (unsigned long)lvw_why[2], (unsigned long)lvw_why[3],
+                (unsigned long)lvw_why[4], (unsigned long)lvw_why[5], (unsigned long)lvw_why[6],
+                (unsigned long)lvw_why[7], (unsigned long)lvw_what);
+        memset(lvw_why, 0, sizeof(lvw_why));
+        lvw_what = 0;
     }
     if (t[0])
         amb_log("wholes", t);
@@ -19069,15 +19081,22 @@ static void lv_frame_(void)
             }
         }
     }
-    if (lv_img) {
-        lv_img = FALSE;
-        if (!lv.full && !lv_dirty && !gfx_off_hits && lv.eng->changed) {
+    if (lv_img && !lv.full && lv.eng->changed) {
+        if (lv_dirty || gfx_off_hits) {
+            /* something else to draw too (the details came with it, a
+             * move): that first, the picture's own after - a whole draw
+             * for the two (each game's details and screenshot, a
+             * moment apart: 360 ms each without the JIT) was most of
+             * Games' slowness */
+        } else {
+            lv_img = FALSE;
             lk_clip(&lv.out, 0, 0, g.w, g.h);
             lv.eng->changed(scr, LC_IMAGE);     /* pictures came: what waited for them */
             lvt_parts++;
-        } else {
-            lv.full = TRUE;
         }
+    } else if (lv_img) {
+        lv_img = FALSE;                         /* (a whole draw: it draws them) */
+        lv.full = TRUE;
     }
     if (!lv.full && !lv_dirty && !gfx_off_hits && (scr == LS_PAGE || scr == LS_ALBUMS) && lv.eng->changed &&
         lv_waiting(cur()) &&
@@ -19122,6 +19141,27 @@ static void lv_frame_(void)
                                 : !p->tb.open || p->tb.pos == lv.last_pos)) {
             gfx_off_hits = 0;
             goto shown;
+        }
+        if (!(moved_only && nsig == lv.last_now) && !details_only) {
+            /* (why a whole draw: Debug's "wholes" line) */
+            if (lv.full)
+                lvw_why[0]++;
+            else if (lv_what & LV_WHOLE)
+                lvw_why[1]++;
+            else if (!lv_dirty)
+                lvw_why[2]++;
+            else {
+                lvw_why[3]++;
+                lvw_what |= lv_what;
+                if (mh != lv.last_msg)
+                    lvw_why[4]++;
+                if (nsig != lv.last_now)
+                    lvw_why[5]++;
+                if (p && p != lv.last_p)
+                    lvw_why[6]++;
+                if (p && p == lv.last_p && p->sel == lv.last_sel)
+                    lvw_why[7]++;
+            }
         }
         lv.full = FALSE;
         lv_dirty = FALSE;
