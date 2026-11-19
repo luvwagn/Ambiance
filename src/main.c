@@ -8517,12 +8517,15 @@ static BOOL np_start_now(LONG idx)
             else if (np.art_s)
                 np_art_drawn = TRUE;        /* the pane's: moved across */
         }
-    } else if (!mp_load(it->path, err, sizeof(err))) {
-        busy_end(FALSE);
-        np.idx = idx;
-        set_msg(err);
-        np_mark_lists(FALSE);
-        return FALSE;
+    } else {
+        np_art_start(NULL);                 /* a module: no cover (the last track's goes) */
+        if (!mp_load(it->path, err, sizeof(err))) {
+            busy_end(FALSE);
+            np.idx = idx;
+            set_msg(err);
+            np_mark_lists(FALSE);
+            return FALSE;
+        }
     }
     busy_end(FALSE);
     np.idx = idx;

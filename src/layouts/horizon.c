@@ -1293,6 +1293,30 @@ static void draw_home(void)
 static LONG list_top, list_count = -1;
 static const void *list_of;
 static int body_n = -1;         /* drawn with details (1), without (0), a text (-1) */
+
+/* Whether a page has its details' column: once a list has shown details,
+ * it keeps the column while the next row's are fetched (a move on Games
+ * would otherwise widen the list and narrow it again each step) */
+static ULONG split_key;
+static ULONG page_key(const struct LPage *m)
+{
+    ULONG k = (ULONG)m->list.count * 31 + m->section + (ULONG)m->ncrumb * 7;
+    const char *s = m->ncrumb > 0 ? m->crumb[m->ncrumb - 1] : NULL;
+    if (s)
+        while (*s)
+            k = k * 33 + (UBYTE)*s++;
+    return k | 1;
+}
+static int page_split(const struct LPage *m)
+{
+    ULONG k = page_key(m);
+    if (m->ndetails > 0 || m->picture) {
+        split_key = k;
+        return 1;
+    }
+    return k == split_key ? 1 : 0;
+}
+
 static LONG body_bottom(void)
 {
     LONG t = inset_top();
@@ -1383,7 +1407,7 @@ static void details_at(const char *picture, const char *const *lines, LONG nl, L
 static void draw_page_body(const struct LPage *m)
 {
     LONG x = X(30), y = BODY_Y, bottom = body_bottom(), w = W - x - X(30), n, lw;
-    n = m->ndetails > 0 || m->picture ? 1 : 0;
+    n = page_split(m);
     body_n = (int)n;
     nhits = hits_base;
     lw = n ? w * 50 / 100 : w;
@@ -2561,7 +2585,7 @@ static void hz_changed_body(int screen, ULONG what)
         }
     }
     if (what == LC_DETAILS && screen == drawn && screen == LS_PAGE && (m = H->model(LS_PAGE)) && !m->text &&
-        body_n >= 0 && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
+        body_n >= 0 && page_split(m) == body_n) {
         H->clip(0, 0, W, HT);
         draw_page_body(m);              /* the details came: the body alone, as a move draws it */
         now_inset();
@@ -2604,7 +2628,7 @@ static void hz_changed_body(int screen, ULONG what)
                 draw_text_body_as(m, FALSE);
                 return;
             }
-            if (!m->text && body_n >= 0 && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
+            if (!m->text && body_n >= 0 && page_split(m) == body_n) {
                 draw_page_body(m);
                 now_inset();
                 return;

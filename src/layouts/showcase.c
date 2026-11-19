@@ -1071,6 +1071,30 @@ static void draw_text_body(const struct LPage *m)
     draw_text_body_as(m, TRUE);
 }
 static int body_n = -1;         /* drawn with a details panel (1) or not (0); -1 text */
+
+/* Whether a page has its details' column: once a list has shown details,
+ * it keeps the column while the next row's are fetched (a move on Games
+ * would otherwise widen the list and narrow it again each step) */
+static ULONG split_key;
+static ULONG page_key(const struct LPage *m)
+{
+    ULONG k = (ULONG)m->list.count * 31 + m->section + (ULONG)m->ncrumb * 7;
+    const char *s = m->ncrumb > 0 ? m->crumb[m->ncrumb - 1] : NULL;
+    if (s)
+        while (*s)
+            k = k * 33 + (UBYTE)*s++;
+    return k | 1;
+}
+static int page_split(const struct LPage *m)
+{
+    ULONG k = page_key(m);
+    if (m->ndetails > 0 || m->picture) {
+        split_key = k;
+        return 1;
+    }
+    return k == split_key ? 1 : 0;
+}
+
 static void draw_page_body(const struct LPage *m);
 
 static void draw_lines(const char *const *s, LONG n, LONG from, LONG x, LONG y, LONG w, LONG bottom,
@@ -1140,7 +1164,7 @@ static void draw_page(void)
 static void draw_page_body(const struct LPage *m)
 {
     LONG n, py = Y(64), bottom = HT - Y(30) - FH - Y(12), x = X(24), w = W - x - X(24);
-    n = m->ndetails > 0 || m->picture ? 1 : 0;
+    n = page_split(m);
     body_n = (int)n;
     nhits = hits_base;          /* the rows' click targets made again */
     {
@@ -2244,7 +2268,7 @@ static void sc_changed_body(int screen, ULONG what)
         return;
     }
     if (screen == LS_PAGE && drawn == LS_PAGE && (what == LC_SELECT || what == LC_DETAILS) && body_n >= 0 &&
-        (m = H->model(LS_PAGE)) && !m->text && (m->ndetails > 0 || m->picture ? 1 : 0) == body_n) {
+        (m = H->model(LS_PAGE)) && !m->text && page_split(m) == body_n) {
         H->clip(0, 0, W, HT);
         draw_page_body(m);      /* a move: the list and its details, not the whole screen */
         return;
