@@ -60,6 +60,8 @@ static BOOL clut;               /* the screen has a colour table we take over */
 static BOOL bar_cop;            /* a layout's controls in a copper band of their own colours
                                  * (AGA: registers VW_BAR_PEN0.. theirs from the bar down) */
 static LONG bar_np = -1;        /* ...the list made (bar_cop), as asked: -1 none */
+static UBYTE bar_prev_line[VW_BAR_PENS];    /* ...the scanline each pen is made on (0xFF: not) */
+static WORD bar_prev_gap = -1, bar_prev_dom = -1;
 static BOOL bar_keep;           /* ...kept up while the picture under them changes: what is
                                  * drawn under the bar goes into what it keeps (bar_bm) */
 static UWORD ncolors;           /* its size */
@@ -223,6 +225,7 @@ BOOL view_begin(struct Gfx *g)
     clut = !g->truecolor;
     ncolors = clut ? 1 << (g->depth > 8 ? 8 : g->depth) : 0;
     bar_np = -1;
+    bar_prev_gap = -1;
     bar_keep = FALSE;
     lv_controls_fresh();                    /* (the controls' colours chosen again, once) */
     gfx_picture_free(g);                    /* the preview's pens go */
@@ -279,6 +282,7 @@ void view_bar_hide(struct Gfx *g)
         bar_cop = FALSE;
     }
     bar_np = -1;
+    bar_prev_gap = -1;
     if (!bar_bm)
         return;
     gfx_dirty();
@@ -373,7 +377,8 @@ static BOOL bar_fit(LONG gap, LONG step, LONG mpl, const ULONG *rows, WORD nrows
     for (i = 0; i < n; i++) {
         LONG pn = ord[i], dl = (gap + first[pn]) / step, b = (VW_BAR_PEN0 + pn) >> 5;
         LONG nbb = nb + (b != bank_of ? 1 : 0), extra = s < nl && bgw[s] ? 2 : 0;
-        cost = 2 * (k + 1) + 2 * nbb + extra;   /* (a run: BPLCON3, highs, BPLCON3, lows) */
+        cost = 2 * (k + 1) + 2 * nbb + (extra ? extra + 2 : 0);   /* (a run: BPLCON3, highs,
+                                         * BPLCON3, lows; the background's a run of its own) */
         if (cost > (dl == s ? BAR_BLANK : mpl)) {
             s++;                            /* (the next scanline) */
             k = 0;
@@ -397,6 +402,7 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     const ULONG *rgb = lv_controls_rgb(), *rows;
     const WORD *first = lv_controls_first();
     UBYTE ord[VW_BAR_PENS], line[VW_BAR_PENS], bgw[BAR_LINES];
+    WORD dl_of[VW_BAR_PENS];
     ULONG bgc[BAR_LINES];
     WORD dom, nrows;
     LONG i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need, nl, np;
@@ -407,14 +413,24 @@ static WORD bar_band(struct Gfx *g, WORD gap)
         nrows = 0;                          /* (the background one colour: its pen's) */
     if (dom < 0 || dom >= VW_BAR_PENS)
         dom = 0;
-    /* the pens used but the background, by their first row */
-    for (i = 0; i < VW_BAR_PENS; i++)
-        if (first[i] >= 0 && i != dom) {
-            for (j = n; j > 0 && first[ord[j - 1]] > first[i]; j--)
-                ord[j] = ord[j - 1];
-            ord[j] = (UBYTE)i;
-            n++;
-        }
+    /* every pen but the background, by the first row that uses it (those
+     * this draw does not use: last, by the bar's end - written anyway, so
+     * a bar drawn again with other words finds them made) */
+    {
+        LONG ncol = lv_controls_ncol();
+        if (ncol > VW_BAR_PENS)
+            ncol = VW_BAR_PENS;
+        for (i = 0; i < ncol; i++)
+            dl_of[i] = first[i] >= 0 ? first[i] : (nrows > 0 ? nrows - 1 : 0);
+        for (i = 0; i < ncol; i++)
+            if (i != dom) {
+                for (j = n; j > 0 && dl_of[ord[j - 1]] > dl_of[i]; j--)
+                    ord[j] = ord[j - 1];
+                ord[j] = (UBYTE)i;
+                n++;
+            }
+    }
+    first = dl_of;
     /* the fewest gap rows the writes fit with; then the writes made for
      * the gap the bar has (as many or more: the same fit, later rows) */
     for (need = 0; need <= 64; need += step)
@@ -424,6 +440,19 @@ static WORD bar_band(struct Gfx *g, WORD gap)
         bar_fit(gap, step, mpl, rows, nrows, rgb[dom], first, ord, n, line, bgc, bgw, &nl);
     if (need > gap)
         return need;                        /* (drawn again with that gap) */
+    /* the list up still serves (each pen made by the row it is first
+     * wanted, the gradient as it was): left as it is - a list made again
+     * shows for a frame without it, the bar in the picture's colours */
+    if (bar_cop && bar_prev_gap == gap && bar_prev_dom == dom) {
+        BOOL serves = TRUE;
+        for (i = 0; i < n && serves; i++) {
+            LONG pn = ord[i];
+            if (bar_prev_line[pn] == 0xFF || bar_prev_line[pn] > (gap + first[pn]) / step)
+                serves = FALSE;
+        }
+        if (serves)
+            return need;
+    }
     InitRastPort(&rp);
     rp.BitMap = lv_bm;
     if (gap > 0) {
@@ -456,11 +485,8 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     }
     if (same)
         return need;                        /* (the list already up: nothing to do) */
-    if (bar_cop) {
-        cop_off(g->scr);
-        bar_cop = FALSE;
-    }
-    if (!(p = cop_plan(g->scr, np)))
+    if (!(p = cop_plan(g->scr, np)))        /* (made in place of the one up, at once: not taken
+                                             * off first, which showed as a flicker) */
         return -1;
     cop_early(p, bar_blank > 13);
     for (i = 0; i < np; i++)
@@ -468,6 +494,11 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     bar_cop = cop_commit(p);
     cop_plan_free(p);
     bar_np = bar_cop ? np : -1;
+    memset(bar_prev_line, 0xFF, sizeof(bar_prev_line));
+    for (i = 0; i < n; i++)
+        bar_prev_line[ord[i]] = line[ord[i]];
+    bar_prev_gap = gap;
+    bar_prev_dom = dom;
     return bar_cop ? need : -1;
 }
 

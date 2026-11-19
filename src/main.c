@@ -17284,6 +17284,7 @@ static WORD lv_ctl_first[VW_BAR_PENS];  /* ...each one's first row in the contro
 #define LV_CTL_ROWS 256
 static ULONG lv_ctl_row[LV_CTL_ROWS];   /* ...each row's colour of the background pen */
 static WORD lv_ctl_dom, lv_ctl_h;       /* ...which pen that is; the rows */
+static int lv_ctl_n = VW_BAR_PENS / 2;  /* ...how many colours the controls have */
 static BOOL lv_ctl_pick = TRUE;         /* ...the colours chosen at the next whole draw (once
                                          * a viewer: kept, so the copper's list stays the same) */
 static BOOL lv_ctl_8(void)
@@ -17301,6 +17302,10 @@ const ULONG *lv_controls_rgb(void)
 const WORD *lv_controls_first(void)
 {
     return lv_ctl_first;
+}
+int lv_controls_ncol(void)
+{
+    return lv_ctl_n;
 }
 const ULONG *lv_controls_rows(WORD *dom, WORD *n)
 {
@@ -17399,6 +17404,7 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
         }
         for (k = 0; k < VW_BAR_PENS; k++)
             lv_ctl_first[k] = -1;           /* (the pens past ncol: none) */
+        lv_ctl_n = ncol;
         lv_ctl_h = c->h <= LV_CTL_ROWS ? c->h : 0;
         if (!lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
                          ncol, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))

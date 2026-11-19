@@ -75,5 +75,6 @@ const WORD *lv_controls_first(void);    /* ...each one's first row in them (-1: 
  * colours chosen again at the next whole draw (a viewer begun) */
 const ULONG *lv_controls_rows(WORD *dom, WORD *n);
 void lv_controls_fresh(void);
+int lv_controls_ncol(void);             /* ...how many colours (pens VW_BAR_PEN0..) they have */
 
 #endif

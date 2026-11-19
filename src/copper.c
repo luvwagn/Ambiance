@@ -153,7 +153,10 @@ static void cop_emit(struct UCopList *ucl, LONG y, const struct CopWrite *w, LON
     CBump(ucl);
     while (i < n) {
         UWORD bank = (UWORD)((w[i].pen >> 5) << 13);
-        for (j = i + 1; j < n && (UWORD)((w[j].pen >> 5) << 13) == bank; j++)
+        /* (the line's first write a run of its own, its low nibbles done
+         * before any other's high: a background changed on a line whose
+         * pixels it fills, not half made at its left end) */
+        for (j = i + 1; i > 0 && j < n && (UWORD)((w[j].pen >> 5) << 13) == bank; j++)
             ;
         CMove(ucl, CP_CUSTOM(CP_BPLCON3), base | bank);
         CBump(ucl);
