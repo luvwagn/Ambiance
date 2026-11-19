@@ -1679,6 +1679,7 @@ void lk_close(struct LkOut *o)
             FreeVec(t->tmp);
         if (t->ch)
             ck_cuts_free();             /* (the cuts' pens are this screen's) */
+        lk_cover_cache_free();          /* (the font may go with it) */
         if (t->pal_was) {
             if (t->g->scr) {            /* (the classic's colours back: first the screen
                                          * cleared, or the layout's pens show in them
@@ -1914,6 +1915,76 @@ BOOL lk_vgrad8(struct LkOut *o, long x, long y, long w, long h, unsigned long a,
     return TRUE;
 }
 
+/* Text's coverage as sm_cover made it, kept for the same text again (a
+ * list's labels drawn again as its rows move): 48 of them, the oldest
+ * going; another font, all go */
+#define LKC_N 48
+static struct {
+    const void *sm;
+    int face;
+    LONG n;
+    char s[96];
+    UWORD w, h, mod;
+    WORD dx, dy;
+    UBYTE *cov;
+    ULONG used;
+} lkc[LKC_N];
+static ULONG lkc_clock;
+static const UBYTE *lk_cover_of(struct Gfx *g, const char *s, LONG n, int face, WORD *dx, WORD *dy, UWORD *w,
+                                UWORD *h, UWORD *mod)
+{
+    int i, old = 0;
+    const UBYTE *cov;
+    ULONG bytes;
+    if (n > 0 && n < (LONG)sizeof(lkc[0].s))
+        for (i = 0; i < LKC_N; i++) {
+            if (lkc[i].cov && lkc[i].sm == (const void *)g->sm && lkc[i].face == face && lkc[i].n == n &&
+                !memcmp(lkc[i].s, s, (size_t)n)) {
+                lkc[i].used = ++lkc_clock;
+                *dx = lkc[i].dx;
+                *dy = lkc[i].dy;
+                *w = lkc[i].w;
+                *h = lkc[i].h;
+                *mod = lkc[i].mod;
+                return lkc[i].cov;
+            }
+            if (lkc[i].used < lkc[old].used)
+                old = i;
+        }
+    if (!(cov = sm_cover(g->sm, s, n, face, dx, dy, w, h, mod)))
+        return NULL;
+    bytes = (ULONG)*mod * *h;
+    if (n > 0 && n < (LONG)sizeof(lkc[0].s) && bytes <= 16384) {
+        if (lkc[old].cov)
+            FreeVec(lkc[old].cov);
+        if ((lkc[old].cov = AllocVec(bytes, MEMF_ANY))) {
+            memcpy(lkc[old].cov, cov, bytes);
+            lkc[old].sm = (const void *)g->sm;
+            lkc[old].face = face;
+            lkc[old].n = n;
+            memcpy(lkc[old].s, s, (size_t)n);
+            lkc[old].w = *w;
+            lkc[old].h = *h;
+            lkc[old].mod = *mod;
+            lkc[old].dx = *dx;
+            lkc[old].dy = *dy;
+            lkc[old].used = ++lkc_clock;
+        }
+    }
+    return cov;
+}
+
+void lk_cover_cache_free(void)
+{
+    int i;
+    for (i = 0; i < LKC_N; i++) {
+        if (lkc[i].cov)
+            FreeVec(lkc[i].cov);
+        lkc[i].cov = NULL;
+        lkc[i].sm = NULL;
+    }
+}
+
 WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG n, int face,
              ULONG fg, const struct LkBg *bg, WORD maxw)
 {
@@ -1960,7 +2031,7 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
     {
         LKP_BEGIN;
         ULONG tg = time_ticks(&lkp_hz);
-        if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
+        if (!(cov = lk_cover_of(g, s, n, face, &dx, &dy, &w, &h, &mod)))
             return 0;
         if (o->ctx && o->fill == ck_fill)
             lkp_n[LKP_GLYPHS]++, lkp_t[LKP_GLYPHS] += time_ticks(&lkp_hz) - tg;
