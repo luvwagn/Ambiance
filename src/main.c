@@ -4385,7 +4385,7 @@ static void dbg_load_log(void)
     static int n;
     static ULONG wakes0;
     static LONG cpu_sum, app_sum;
-    char m[520];
+    char m[680];
     struct Page *p = cur();
     if (cpu_load >= 0)
         cpu_sum += cpu_load;
@@ -4395,7 +4395,7 @@ static void dbg_load_log(void)
         return;
     {
         LONG rb = st_busy_sample();
-        char rp[260];
+        char rp[420];
         rp[0] = 0;
         if (rb >= 0)
             sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
@@ -4419,9 +4419,16 @@ static void dbg_load_log(void)
                         (unsigned long)lms, (unsigned long)lw, (unsigned long)lp, (unsigned long)lvt_worst);
                 lvt_worst = 0;
                 lk_timing(&ss, &ps, &kpx, &gcs);
-                if (ss || ps || gcs)    /* (8-bit: shown with WriteChunkyPixels, pictures' colours) */
-                    sprintf(rp + strlen(rp), " [8-bit: shown %lu ms, %lu K pixels; pictures %lu ms; %lu pen looks]",
+                if (ss || ps || gcs) {  /* (8-bit: shown, pictures' colours, pens) */
+                    ULONG sh, lf;
+                    lk_pens(&sh, &lf);
+                    sprintf(rp + strlen(rp), " [8-bit: shown %lu ms, %lu K pixels; pictures %lu ms; %lu pen looks",
                             (unsigned long)ss, (unsigned long)kpx, (unsigned long)ps, (unsigned long)gcs);
+                    if (lf < 999)
+                        sprintf(rp + strlen(rp), "; fewest pens free %lu, %lu pictures short of them",
+                                (unsigned long)lf, (unsigned long)sh);
+                    strcat(rp, "]");
+                }
             }
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
@@ -18570,9 +18577,10 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     j->scr = g.scr;
     j->tw = w;
     j->th = h;
-    j->maxcol = g.truecolor ? THUMB_DEEP   /* true colour: a layout draws it so */
-              : (LONG)w * h >= 200L * 200 ? 96 : 32;  /* (an 8-bit screen: a few colours, given
-                                                       * pens of their own; a big one more) */
+    j->maxcol = THUMB_DEEP;     /* true colour: a layout draws it so (on an 8-bit screen,
+                                 * lk_picture cuts its colours down to pens, undithered: cut
+                                 * to 32 or 96 here first, it was cut twice, the loader's
+                                 * dithered) */
     lv_pic[k].job = j;
     ldr_submit(j);
     return NULL;

@@ -20,7 +20,14 @@ extern struct Library *CyberGfxBase;
 
 /* Time spent (Debug's load line): showing an 8-bit canvas (WriteChunkyPixels),
  * cutting pictures' colours down, how many pixels shown, looks for free pens */
-static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc;
+static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc, lkt_short, lkt_free = 999;
+void lk_pens(ULONG *short_of, ULONG *least_free)
+{
+    *short_of = lkt_short;          /* pictures drawn with the nearest pens: none free */
+    *least_free = lkt_free;         /* the fewest free pens a picture found */
+    lkt_short = 0;
+    lkt_free = 999;
+}
 void lk_timing(ULONG *show_ms, ULONG *pic_ms, ULONG *kpx, ULONG *gcs)
 {
     *show_ms = lkt_show;
@@ -559,8 +566,12 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
         want = t->nfree - 24 < 96 ? t->nfree - 24 : 96;
     else
         want = t->nfree >= 96 ? 24 : t->nfree >= 40 ? 16 : t->nfree - 24;
+    if ((ULONG)t->nfree < lkt_free)
+        lkt_free = (ULONG)t->nfree;
     if (w >= 3 * h)
         want = 0;
+    else if (want < 6)
+        lkt_short++;
     if (want < 6) {
         t->no_new = TRUE;               /* (no pens to spare: the nearest) */
         lk_image(o, x, y, px, w, h, mod);
