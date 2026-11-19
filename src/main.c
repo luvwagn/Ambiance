@@ -17,6 +17,8 @@
 #include "whdinst.h"
 #include "lhost.h"
 #include "lkit.h"
+#include "app.h"
+#include "details.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -55,53 +57,12 @@ static const char *mod_names[MOD_COUNT] = {
     N_("Settings"), N_("About")
 };
 
-enum { PT_LIST, PT_TEXT, PT_DETAIL, PT_PLAYER };
 enum { FOCUS_MENU, FOCUS_CONTENT,
        FOCUS_PREVIEW };     /* the preview pane's fact sheet: Up/Down scroll it */
 #define MAXDEPTH 12
 #define FACT_LINES 24
 
-struct Chunks;
 static void ch_free(struct Chunks *ch);
-
-struct Page {
-    UBYTE type;
-    char title[64];
-    struct ItemList list;
-    LONG sel, top;
-    char base[256];
-    WORD facts_y;
-    struct TextBox tb;          /* PT_TEXT and PT_DETAIL */
-    UBYTE aside;                /* letter column: 0 not worked out yet, 1 none, 2 yes */
-    UBYTE style_pv;             /* Settings > Style on a laced screen: the aside shows
-                                 * the Home menu in the selected font */
-    UBYTE pics;                 /* a Pictures folder (pics.c): IT_DIR and IT_PIC rows */
-    UBYTE mods;                 /* a Mods folder (mods.c): IT_DIR and IT_MOD rows */
-    UBYTE radio;                /* a Radio list (radio.c): IT_NET and IT_STATION rows; */
-    UBYTE plex;                 /* a Plex list (plex.c; radio too when asked over the network) */
-    UBYTE plexlink;             /* PT_TEXT: signing in at plex.tv (its code, then the outcome) */
-    char plex_label[96];        /* a Plex album's page: the album (its details pane) */
-    UBYTE setp;                 /* a Settings page: SETP_* */
-    UBYTE songs;                /* Music's own files: IT_DIR and IT_SONG rows (mods.c) */
-    UBYTE ags;                  /* a Games or Demos list (AGS's menus) */
-    UBYTE igame;                /* iGame's list (igame.c): 1, 2 most played first */
-    LONG plex_more, plex_total; /* a long Plex list: its parts read (count), its total */
-    ULONG plex_parts[4];        /* which parts of PLEX_PART entries are read (a bit each) */
-    BOOL plex_letters;          /* its first characters asked for (placeholders labelled) */
-    LONG plex_n0;               /* entries of its first part shown (some may be left out) */
-    UBYTE photos;               /* a Plex photo library's (Pictures): albums, IT_PLEXPHOTO */
-    char plex_meta[720];
-    ULONG net_seq;              /*   its request out (base: the query), 0 none */
-    ULONG more_seq;             /*   a long list's part out (not waited for: it shows) */
-    struct Chunks *ch;          /* a long list held a letter at a time (see Chunk) */
-    UBYTE title_wide;           /* title drawn with room for a growing count */
-    char pic[160];              /* PT_TEXT: a picture under the text box ("" none), */
-    struct BitMap *pic_bm;      /*   made for the screen when the page is first drawn, */
-    WORD pic_w, pic_h;          /*   as large as fits there, */
-    WORD pic_x, pic_y;          /*   drawn there (pic_y < 0: not drawn) */
-    const char *note;           /*   and a line or two above it (fixed, not scrolled) */
-    UBYTE plexmark;             /* PT_TEXT: "Works with" Plex's logo at the bottom (Plex in Ambiance) */
-};
 
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
 #define BAR_MS    3000          /* the viewer's info bar, after a change */
@@ -126,11 +87,7 @@ static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on RTG screens) */
 static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
 static struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
-static struct Page *pv_page;        /* what the preview shows: page and entry */
-static LONG pv_sel;
-static BOOL pv_shown;               /* FALSE once the pane is cleared or left */
 static struct ItemList pv_list;     /* its wrapped lines */
-static struct LJob *pv_tj, *pv_sj;  /* the text and picture the pane shows or waits for */
 static BOOL mouse_mode;             /* the mouse was used last */
 /* Mouse mode: the row under the pointer, highlighted softly (PEN_RULE;
  * the selection stays where it is until a click). Kept as a place on
@@ -198,8 +155,8 @@ static struct Page *page_push(UBYTE type, const char *title)
     nav_moved();
     ov.on = FALSE;
     tb_close(&pv_tb);
-    pv_shown = FALSE;
-    pv_tj = pv_sj = NULL;
+    det.shown = FALSE;
+    det.tj = det.sj = NULL;
     if (focus == FOCUS_PREVIEW)
         focus = FOCUS_CONTENT;
     struct Page *p;
@@ -274,8 +231,8 @@ static void page_pop(void)
     }
     ov.on = FALSE;
     tb_close(&pv_tb);
-    pv_shown = FALSE;
-    pv_tj = pv_sj = NULL;
+    det.shown = FALSE;
+    det.tj = det.sj = NULL;
     if (focus == FOCUS_PREVIEW)
         focus = FOCUS_CONTENT;
     if (!depth)
@@ -377,9 +334,6 @@ static WORD list_visible(void);
 static void draw_list_rows(struct Page *p);
 static void draw_title(struct Page *p);
 static void draw_title_count(struct Page *p);
-static void preview_touch(struct Page *p);
-static BOOL pv_roomy(void);
-static LONG pv_dir;
 
 /* ---- the spinner: eight round dots on a circle, the bright one going
  * round with a fading tail, and "Loading..." under it. In the details pane
@@ -757,7 +711,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
         list_free(out);
         list_init(out);
         pics_copy(&j->list, out);
-        if (dated && pv_roomy()) {          /* kept for the next visit */
+        if (dated && det_roomy()) {          /* kept for the next visit */
             for (k = 1; k < PICS_KEEP; k++)
                 if (!pkeep[k].list.pool ||
                     (pkeep[slot].list.pool && pkeep[k].stamp < pkeep[slot].stamp))
@@ -840,7 +794,7 @@ static void ch_trim(struct Page *p)
 {
     struct Chunks *ch = p->ch;
     LONG at, vis = list_visible();
-    if (!ch || ch->frozen || pv_roomy())
+    if (!ch || ch->frozen || det_roomy())
         return;
     at = ch_of(ch, p->sel);
     while (AvailMem(MEMF_ANY) < CH_LOW) {
@@ -941,7 +895,7 @@ static void ch_pump(struct Page *p)
     if (!ch || ch->job || ch->laying || ch->frozen)
         return;
     vis = list_visible();
-    roomy = pv_roomy();
+    roomy = det_roomy();
     for (k = 0; k < ch->n; k++) {
         struct Chunk *c = &ch->c[k];
         if (c->first >= 0 && c->count && !c->held && c->first < p->top + vis &&
@@ -951,7 +905,7 @@ static void ch_pump(struct Page *p)
         }
     }
     if ((at = ch_of(ch, p->sel)) >= 0) {
-        LONG d = pv_dir >= 0 ? 1 : -1, s;
+        LONG d = det.dir >= 0 ? 1 : -1, s;
         for (s = 0; s < 2; s++, d = -d) {
             struct Chunk *c;
             if (at + d < 0 || at + d >= ch->n)
@@ -1098,7 +1052,7 @@ static void ch_arrived(struct Page *p, BOOL shown)
             (!was_held && c->first < p->top + vis && c->first + c->count > p->top))
             draw_list_rows(p);              /* rows that were empty or blank, or re-sorted */
         if (p->sel >= c->first && p->sel < c->first + c->count)
-            preview_touch(p);
+            det_touch(p);
     }
     ch_pump(p);
 }
@@ -4842,7 +4796,6 @@ static void set_msg(const char *m)
  * title row every step flickered on 8-plane screens. */
 static WORD count_left = -1;    /* left edge of the count drawn last */
 
-static void preview_touch(struct Page *p);
 
 static void draw_title(struct Page *p);
 
@@ -4871,7 +4824,7 @@ static void title_band_rest(WORD x0, WORD x1, WORD right_from)
 static void draw_title_count(struct Page *p)
 {
     char count[24];
-    preview_touch(p);
+    det_touch(p);
     ch_pump(p);                             /* letters around the selection, ahead */
     if (lv_drives()) {
         lv_note_what(LC_SELECT);
@@ -5377,17 +5330,10 @@ static WORD list_xr(struct Page *p)
     return e;
 }
 
-/* ---- the preview of the selected game, drawn once the selection settles */
-#define PREVIEW_SETTLE 100     /* ms the selection rests before its preview is read */
-static BOOL pv_clicked;         /* the selection made by a click (preview_touch) */
+/* ---- the preview of the selected game, drawn once the selection settles:
+ * Classic's pane, the view of the entry details service (details.c) */
 static ULONG dc_time(void);
-#define PLEX_SETTLE    150     /* ...a Plex entry's: its picture asked for, then decoded
-                                * (350 while a datatype decoded it; jdec takes ~25 ms, and
-                                * a request given up stops at once) */
-#define PREVIEW_READY   30     /* ...or drawn, if it was read ahead already */
 static BOOL hold_active(void);
-static BOOL pv_pending;
-static ULONG pv_due;
 
 /* "12-Mar-1994" from a DateStamp's days ("1994-03-12" in Japanese). */
 static void date_text(LONG days, char *out)
@@ -5421,133 +5367,28 @@ static void pv_line(const char *s, WORD w)
         wrap_into(&pv_list, s, w);
 }
 
-/* ---- preview jobs: read by the loader (loader.c). Each entry is two jobs,
- * its text (fact sheet, file details) and its picture, so the text is up
- * at once and the picture follows; what the pane waits for goes ahead of
- * the loader's queue. The entries next to the one shown are read ahead,
- * so a steady pace of Down finds each ready. With memory to spare
- * (pv_roomy), speed comes first: two entries ahead and one behind are
- * read, and entries shown stay decoded for going back, up to PV_SLOTS
- * jobs. Short of memory, only the one shown and the next one ahead. */
-#define PV_SLOTS 12
-#define PV_TIGHT 4
 #define PV_SPIN_AFTER SPIN_AFTER    /* ms without its picture before the spinner */
-static struct LJob *pv_slot[PV_SLOTS];
-static ULONG pv_clock;              /* cache order */
-static BOOL pv_text_drawn, pv_pic_drawn, pv_has_box, pv_spin_on;
 static WORD pv_box_y, pv_box_h;     /* where the picture goes */
-static ULONG pv_since;              /* when the selection moved to what the pane shows */
+static BOOL pv_spin_on;
 static UWORD pv_spin_phase;
 static ULONG pv_spin_since;         /* when it began turning */
-
-static BOOL pv_roomy(void)
-{
-    return AvailMem(MEMF_ANY) >= 3UL * 1024 * 1024 && AvailMem(MEMF_CHIP) >= 768UL * 1024;
-}
-static LONG pv_dir = 1;             /* the way the list last moved */
-static LONG pv_ready, pv_waited;    /* previews found read ahead, or waited for (log) */
-
-/* What the pane shows for entry idx: its text job's type and path (0 if
- * none), and how its picture is found (*shot SHOT_*, 0 if it has none). */
-static int pv_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
-{
-    struct Item *it;
-    *shot = 0;
-    if (idx < 0 || idx >= p->list.count)
-        return 0;
-    it = &p->list.items[idx];
-    if (it->flags & ITEM_GONE)
-        return 0;                           /* not held now: previewed once read again */
-    if (p->songs && !p->plex) {
-        /* a music file or folder: its details, and its picture */
-        if ((it->kind != IT_SONG && it->kind != IT_DIR) || beets_page(it->path))
-            return 0;                       /* a beets page: no folder to look in */
-        amb_strlcpy(path, it->path, max);
-        *shot = SHOT_SONG;
-        return LJ_SONG;
-    }
-    if (p->pics) {
-        amb_strlcpy(path, it->path, max);
-        if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            if (!(it->kind == IT_ANIM && it->sortkey &&
-                  (!strcmp(it->sortkey, "MPEG") || !strcmp(it->sortkey, "DVD"))))
-                *shot = SHOT_FILE;          /* an animation: its first frame (MPEG, DVD: none) */
-            return LJ_PICTURE;
-        }
-        if (it->kind == IT_DIR) {
-            if (!(it->flags & ITEM_DISABLED))
-                *shot = SHOT_FOLDER;
-            return LJ_PICFOLDER;
-        }
-        return 0;
-    }
-    if (it->kind != IT_RUN)
-        return 0;
-    if (p->igame)
-        ig_shot_base(it->path, path, max);  /* <folder>/igame: igame.iff, and no .txt */
-    else
-        item_path(it, path, max);
-    *shot = SHOT_AGS;
-    return LJ_ENTRY;
-}
-
-static void pv_free_slot(int i)
-{
-    struct LJob *j = pv_slot[i];
-    if (!j)
-        return;
-    if (j->busy)
-        ldr_wait(j);
-    pic_dispose(j->obj);
-    thumb_free(j->thumb);
-    FreeVec(j->text);
-    if (pv_tj == j)
-        pv_tj = NULL;
-    if (pv_sj == j)
-        pv_sj = NULL;
-    FreeVec(j);
-    pv_slot[i] = NULL;
-}
 
 /* Every job back and freed: before the screen closes or a game runs. */
 static void pv_flush(void)
 {
-    int i;
-    for (i = 0; i < PV_SLOTS; i++)
-        pv_free_slot(i);
-    pv_tj = pv_sj = NULL;
+    det_flush();
     np_art_free();                          /* Now playing's cover too */
 }
 
-/* The pane's jobs let go without waiting for them, for the viewer: one
- * still out is orphaned (one not begun never runs, one begun is freed
- * when it ends), where it holds nothing of the screen's (a colour-table
- * screen: decoded unremapped, no pens). Waiting, as pv_flush does, could
- * take minutes: every preview queued ran first, each a JPEG of seconds,
- * and a station playing takes half the CPU. */
+/* The details' jobs let go without waiting for them, for the viewer: one
+ * still out is orphaned where it holds nothing of the screen's (a
+ * colour-table screen: decoded unremapped, no pens) - waiting could take
+ * minutes (every preview queued ran first, each a JPEG of seconds) */
 static void pv_let_go(void)
 {
-    int i;
-    for (i = 0; i < PV_SLOTS; i++) {
-        struct LJob *j = pv_slot[i];
-        if (j && j->busy && !g.truecolor) {
-            ldr_orphan(j);
-            pv_slot[i] = NULL;
-        } else {
-            pv_free_slot(i);
-        }
-    }
-    pv_tj = pv_sj = NULL;
+    det_let_go(!g.truecolor);
 }
 
-static BOOL pv_current(const struct LJob *j)
-{
-    return j == pv_tj || j == pv_sj;
-}
-
-/* The job for (type, mode, path): one already out or back, else a new one.
- * NULL if every slot is busy (a read-ahead is then skipped). first: the
- * pane waits for it, so it goes ahead of the loader's queue. */
 /* Colours a picture may have (0: as many as the screen gives): fewer for a
  * Plex cover on a slower Amiga, less to reduce and to set. */
 static int pv_colour_cap;
@@ -5556,111 +5397,9 @@ static int plex_colours(void)
     return plex_tier() == 0 ? 48 : plex_tier() == 1 ? 64 : 0;
 }
 
-static struct LJob *pv_request(int type, UBYTE mode, const char *path, BOOL ahead, BOOL first)
-{
-    int i, free_i = -1;
-    struct LJob *j;
-    int limit = pv_roomy() ? PV_SLOTS : PV_TIGHT, used = 0;
-    for (i = 0; i < PV_SLOTS; i++) {
-        j = pv_slot[i];
-        if (j && j->type == type && j->mode == mode && strcmp(j->path, path) == 0) {
-            if (!j->busy && (j->spent || !j->ran)) {
-                pv_free_slot(i);        /* its picture went to the screen, or it was
-                                         * skipped: read it again */
-                break;
-            }
-            j->cancel = FALSE;
-            j->stamp = ++pv_clock;
-            if (first && j->busy)
-                ldr_submit_first(j);    /* not started yet: to the front */
-            return j;
-        }
-    }
-    for (i = 0; i < PV_SLOTS; i++)
-        if (pv_slot[i])
-            used++;
-    for (i = 0; i < PV_SLOTS && free_i < 0 && used < limit; i++)
-        if (!pv_slot[i])
-            free_i = i;
-    while (free_i < 0) {
-        /* the longest unused one that is back */
-        int old = -1;
-        for (i = 0; i < PV_SLOTS; i++)
-            if (pv_slot[i] && !pv_slot[i]->busy && !pv_current(pv_slot[i]) &&
-                (old < 0 || pv_slot[i]->stamp < pv_slot[old]->stamp))
-                old = i;
-        if (old < 0)
-            break;
-        pv_free_slot(old);
-        if (--used < limit)
-            free_i = old;
-    }
-    if (free_i < 0) {
-        /* every one is still out: a read-ahead waits its turn; the one
-         * asked for goes past the limit (never waited for here) */
-        if (ahead)
-            return NULL;
-        for (i = 0; i < PV_SLOTS && free_i < 0; i++)
-            if (!pv_slot[i])
-                free_i = i;
-        if (free_i < 0)
-            return NULL;
-    }
-    if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
-        return NULL;
-    j->type = type;
-    j->mode = mode;
-    amb_strlcpy(j->path, path, sizeof(j->path));
-    j->scr = g.scr;
-    j->remap = g.truecolor;
-    j->want_pic = FALSE;                    /* pictures are LJ_SHOT jobs of their own */
-    if (type == LJ_SHOT && gfx_thumbs(&g)) {
-        /* made small in the loader, in colours of its own (thumb.c) */
-        j->remap = FALSE;
-        j->tw = aside_width() - U(4);
-        j->th = pv_box_h;
-        j->tall = gfx_mode_tall(g.mode);
-        j->maxcol = gfx_thumb_colours(&g);
-        if (pv_colour_cap && j->maxcol > pv_colour_cap)
-            j->maxcol = pv_colour_cap;
-    }
-    j->stamp = ++pv_clock;
-    pv_slot[free_i] = j;
-    if (first)
-        ldr_submit_first(j);
-    else
-        ldr_submit(j);
-    return j;
-}
-
-static void pv_release(struct LJob *j)
-{
-    int i;
-    for (i = 0; i < PV_SLOTS; i++)
-        if (j && pv_slot[i] == j)
-            pv_free_slot(i);
-}
-
 static BOOL pv_pictures(void)
 {
     return g.pens_shared || g.truecolor;
-}
-
-/* Read the entries around this one ahead: the next one the way the list
- * moves; with memory to spare, the one after it and the one behind too. */
-static void pv_read_ahead(struct Page *p)
-{
-    static const LONG near[] = { 1, 2, -1 };
-    char path[300];
-    int i, n = pv_roomy() ? 3 : 1;
-    UBYTE shot;
-    for (i = 0; i < n; i++) {
-        int k = pv_kind(p, p->sel + near[i] * pv_dir, path, sizeof(path), &shot);
-        if (!k || !pv_request(k, 0, path, TRUE, FALSE))
-            break;
-        if (shot && pv_pictures() && !lv_drives() && !pv_request(LJ_SHOT, shot, path, TRUE, FALSE))
-            break;                          /* (a layout's are its own: lv_pics_ahead) */
-    }
 }
 
 /* A Pictures row's lines: what it is and, for a folder, what Fire and
@@ -5862,11 +5601,11 @@ static void pv_spinner(BOOL first)
 static void pv_spin_tick(void)
 {
     struct Page *p = cur();
-    if (!pv_shown || !p || p != pv_page || p->sel != pv_sel || !has_aside(p) || pv_pic_drawn ||
-        !pv_has_box || hold_active() || ov.on || pane_pending)
+    if (!det.shown || !p || p != det.page || p->sel != det.sel || !has_aside(p) || det.pic_shown ||
+        !det.has_box || hold_active() || ov.on || pane_pending)
         return;
     if (!pv_spin_on) {
-        if ((LONG)(time_ms() - pv_since) < PV_SPIN_AFTER)
+        if ((LONG)(time_ms() - det.since) < PV_SPIN_AFTER)
             return;
         pv_spin_on = TRUE;
         pv_spin_phase = 0;
@@ -5882,7 +5621,7 @@ static void pv_spin_tick(void)
 
 static BOOL pv_spinning(void)
 {
-    return pv_shown && pv_has_box && !pv_pic_drawn && (pv_sj || pv_tj);
+    return det.shown && det.has_box && !det.pic_shown && (det.sj || det.tj);
 }
 
 /* The text, under the picture's place (or at the top with no picture). */
@@ -5896,17 +5635,17 @@ static void pv_draw_text(struct Page *p)
     x0 = aside_x();
     w = aside_width() - U(4);
     max_y = g.footer_y - 2;
-    WORD y = pv_has_box ? pv_box_y + pv_box_h + U(6) : g.list_top;
-    struct LJob *j = pv_tj;
+    WORD y = det.has_box ? pv_box_y + pv_box_h + U(6) : g.list_top;
+    struct LJob *j = det.tj;
     LONG i;
     tb_close(&pv_tb);
-    gfx_fill_bg(&g, x0, pv_has_box ? pv_box_y + pv_box_h : g.list_top, g.w - 1, max_y);
+    gfx_fill_bg(&g, x0, det.has_box ? pv_box_y + pv_box_h : g.list_top, g.w - 1, max_y);
     if (pv_list.pool)
         list_free(&pv_list);
     if (!list_init(&pv_list))
         return;
     if (p->pics)
-        pv_pics_lines(&p->list.items[p->sel], j, pv_pic_drawn && g.pic_w, w - U(9));
+        pv_pics_lines(&p->list.items[p->sel], j, det.pic_shown && g.pic_w, w - U(9));
     else if (p->igame) {
         /* iGame's entry: its fields (igame.c), in place of a fact sheet */
         LONG n = ig_facts(ig_lookup(&igcat, p->list.items[p->sel].path), fact_buf, FACT_LINES);
@@ -5987,7 +5726,6 @@ static char np_art_key[170];        /* ...a Plex track's: its thumb as a layout'
  * not known yet, a folder not scanned). */
 static void pv_shot_key(UBYTE shot, const char *path, char *key)
 {
-    int i;
     key[0] = 0;
     if (shot == SHOT_FILE) {
         amb_strlcpy(key, path, 300);
@@ -5995,15 +5733,7 @@ static void pv_shot_key(UBYTE shot, const char *path, char *key)
         key[0] = 1;                         /* an entry's screenshot: never a file's key */
         amb_strlcpy(key + 1, path, 299);
     } else if (shot == SHOT_FOLDER || shot == SHOT_SONG) {
-        for (i = 0; i < PV_SLOTS; i++) {
-            struct LJob *j = pv_slot[i];
-            if (j && j->done && j->first[0] && !strcmp(j->path, path) &&
-                (j->type == LJ_PICFOLDER || j->type == LJ_SONG ||
-                 (j->type == LJ_SHOT && j->mode == shot))) {
-                amb_strlcpy(key, j->first, 300);
-                return;
-            }
-        }
+        det_first(shot, path, key);
     }
 }
 
@@ -6016,7 +5746,7 @@ static BOOL pv_keeps(struct Page *p, LONG idx)
     if (p->plex)
         return has_aside(p) && plex_keeps(p, idx);
     if (!g.pic_w || !pv_onscr.key[0] || !has_aside(p) || !pv_pictures() ||
-        !pv_kind(p, idx, path, sizeof(path), &shot) || !shot)
+        !det_kind(p, idx, path, sizeof(path), &shot) || !shot)
         return FALSE;
     pv_shot_key(shot, path, key);
     return key[0] && !strcmp(key, pv_onscr.key) && pv_onscr.x == aside_x() &&
@@ -6029,7 +5759,7 @@ static BOOL pv_keeps(struct Page *p, LONG idx)
 static void pv_draw_picture(void)
 {
     WORD x0, w, dh = 0;
-    struct LJob *j = pv_sj;
+    struct LJob *j = det.sj;
     BOOL taken = FALSE, ok = FALSE;
     if (lv_drives()) {
         lv_note_what(LC_DETAILS);
@@ -6067,7 +5797,7 @@ static void pv_draw_picture(void)
                 (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
                 (unsigned long)gfx_draw_ms[0], (unsigned long)gfx_draw_ms[1],
                 (unsigned long)gfx_draw_ms[2],
-                (unsigned long)(now - pv_since), "", "", "");
+                (unsigned long)(now - det.since), "", "", "");
         amb_log("preview", m);
         if (j->ms_parts[0] + j->ms_parts[1] + j->ms_parts[2] + j->ms_parts[3]) {
             sprintf(m, "made in: reading the picture %lu ms, counting its colours %lu, "
@@ -6105,115 +5835,113 @@ static void pv_draw_picture(void)
     }
 }
 
-/* Draw what has come back for the pane: the text as soon as it is here,
- * then the picture; when both are up, read the neighbours ahead. */
-static void pv_progress(struct Page *p)
+/* ---- Classic's pane as the details' view (details.h): what each step
+ * of reading an entry's details draws */
+static BOOL cv_has_pane(struct Page *p)
 {
-    char path[300];
-    UBYTE shot;
-    int k;
-    if (pv_tj && pv_tj->done && !pv_tj->ran) {      /* skipped: ask again */
-        k = pv_kind(p, p->sel, path, sizeof(path), &shot);
-        pv_release(pv_tj);
-        pv_tj = k ? pv_request(k, 0, path, FALSE, TRUE) : NULL;
-    }
-    if (pv_sj && pv_sj->done && !pv_sj->ran) {
-        k = pv_kind(p, p->sel, path, sizeof(path), &shot);
-        pv_release(pv_sj);
-        pv_sj = shot ? pv_request(LJ_SHOT, shot, path, FALSE, TRUE) : NULL;
-    }
-    if (pv_tj && pv_tj->done && !pv_text_drawn) {
-        /* an entry without a screenshot, an empty folder: no picture place */
-        if (pv_has_box && pv_tj->type != LJ_PICTURE && pv_tj->np <= 0) {
-            pv_has_box = FALSE;
-            if (pv_sj)
-                pv_sj->cancel = TRUE;
-            pv_sj = NULL;
-            gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-        }
-        pv_draw_text(p);
-        pv_text_drawn = TRUE;
-    }
-    if (pv_text_drawn && pv_sj && pv_sj->done && !pv_pic_drawn) {
-        pv_draw_picture();
-        pv_pic_drawn = TRUE;
-        pv_spin_on = FALSE;
-        if (p->pics)
-            pv_draw_text(p);                /* now with the picture's size */
-    }
-    if (pv_text_drawn && (pv_pic_drawn || !pv_has_box)) {
-        if (!pv_roomy()) {
-            struct LJob *t = pv_tj, *s2 = pv_sj;
-            pv_tj = pv_sj = NULL;           /* short of memory: keep only what is ahead */
-            pv_release(t);
-            pv_release(s2);
-        }
-        pv_read_ahead(p);
+    return has_aside(p);
+}
+static BOOL cv_shots(void)
+{
+    return pv_pictures() && !gfx_off;
+}
+static void cv_job(struct LJob *j)
+{
+    j->scr = g.scr;
+    j->remap = g.truecolor;
+    if (j->type == LJ_SHOT && gfx_thumbs(&g)) {
+        /* made small in the loader, in colours of its own (thumb.c) */
+        j->remap = FALSE;
+        j->tw = aside_width() - U(4);
+        j->th = pv_box_h;
+        j->tall = gfx_mode_tall(g.mode);
+        j->maxcol = gfx_thumb_colours(&g);
+        if (pv_colour_cap && j->maxcol > pv_colour_cap)
+            j->maxcol = pv_colour_cap;
     }
 }
-
-/* Preview the selected entry: its text and picture at once if they were
- * read ahead, else as the loader brings them (text first); the old ones
- * go at once, and a spinner shows if the picture takes a while. */
-static void preview_draw(struct Page *p)
+static void cv_clear_picture(struct Page *p)
 {
-    char path[300];
-    UBYTE shot = 0;
-    int k;
-    BOOL keep;
-    WORD x0 = aside_x(), max_y = g.footer_y - 2;
-    BOOL was_shown = pv_shown && pv_page == p;
-    pv_pending = FALSE;
-    pv_page = p;
-    pv_sel = p->sel;
-    pv_shown = TRUE;
-    pv_tj = pv_sj = NULL;
-    pv_text_drawn = pv_pic_drawn = pv_spin_on = FALSE;
+    (void)p;
+    gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+}
+static void cv_clear_all(struct Page *p)
+{
+    (void)p;
     tb_close(&pv_tb);
-    if (p->plex) {
-        plex_pv_draw(p, was_shown);         /* the server's details (plex_pv_draw) */
-        return;
-    }
-    k = p->list.count ? pv_kind(p, p->sel, path, sizeof(path), &shot) : 0;
-    if (!pv_pictures() || gfx_off)
-        shot = 0;   /* (a layout: its own pictures, at its own sizes; the facts still read) */
+    gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+}
+static void cv_start(struct Page *p)
+{
+    (void)p;
+    pv_spin_on = FALSE;
+    tb_close(&pv_tb);
     pv_box_y = g.list_top;
-    pv_box_h = (max_y - g.list_top) / 2;
-    pv_has_box = shot != 0;
-    if (lv_drives())
-        shot = 0;                           /* (a layout reads its own, at its size: lv_picture) */
-    keep = shot && pv_keeps(p, p->sel);     /* the picture on screen is this one's */
-    if (!pv_since)
-        pv_since = time_ms();
-    if (k) {
-        if (shot && !keep)
-            pv_sj = pv_request(LJ_SHOT, shot, path, FALSE, TRUE);
-        pv_tj = pv_request(k, 0, path, FALSE, TRUE);   /* last in: first out */
-    }
-    if (keep && pv_tj)
-        pv_pic_drawn = TRUE;
-    if (!pv_tj) {
-        tb_close(&pv_tb);
-        if (lv_drives())
-            return;
-        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
-        return;
-    }
-    if (pv_tj->done && (!pv_sj || pv_sj->done))
-        pv_ready++;
-    else
-        pv_waited++;
+    pv_box_h = (g.footer_y - 2 - g.list_top) / 2;
+}
+static void cv_empty(struct Page *p)
+{
+    WORD x0 = aside_x(), max_y = g.footer_y - 2;
+    (void)p;
+    tb_close(&pv_tb);
+    gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
+    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
+}
+static void cv_begin(struct Page *p, BOOL keep)
+{
+    WORD x0 = aside_x(), max_y = g.footer_y - 2;
+    (void)p;
     if (keep) {
-        if (!pv_tj->done && !lv_drives())   /* the picture stays; the text place cleared */
+        if (!det.tj->done)                  /* the picture stays; the text place cleared */
             gfx_fill_bg(&g, x0, pv_box_y + pv_box_h, g.w - 1, max_y);
-    } else if ((!pv_tj->done || (pv_sj && !pv_sj->done) || !pv_sj) && !lv_drives()) {
+    } else if (!det.tj->done || (det.sj && !det.sj->done) || !det.sj) {
         /* not all here: nothing of the entry before stays up meanwhile */
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, pv_tj->done ? g.list_top + pv_box_h - 1 : max_y);
+        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, det.tj->done ? g.list_top + pv_box_h - 1 : max_y);
     }
-    pv_progress(p);
+}
+static void cv_no_picture(struct Page *p)
+{
+    (void)p;
+    gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
+}
+static void cv_text(struct Page *p)
+{
+    pv_draw_text(p);
+}
+static void cv_picture(struct Page *p)
+{
+    pv_draw_picture();
+    pv_spin_on = FALSE;
+    if (p->pics)
+        pv_draw_text(p);                    /* now with the picture's size */
+}
+static void cv_tick(struct Page *p)
+{
+    (void)p;
     pv_spin_tick();                         /* waited 0.25 s already: the spinner now */
+}
+static void style_preview(struct Page *p);
+static const struct DetView classic_view = {
+    cv_has_pane, cv_start, cv_shots, cv_job, pv_keeps, cv_clear_picture, cv_clear_all, style_preview,
+    cv_begin, plex_pv_draw, cv_empty, cv_no_picture, cv_text, cv_picture, cv_tick
+};
+
+/* ---- a layout as the details' view: only told the text came (lv_model
+ * reads det.tj); its pictures are its own (lv_picture, at its size) */
+static void lvd_text(struct Page *p)
+{
+    (void)p;
+    lv_note_what(LC_DETAILS);
+}
+static const struct DetView layout_view = {
+    cv_has_pane, NULL, NULL, cv_job, NULL, NULL, NULL, NULL, NULL, plex_pv_draw, NULL, NULL, lvd_text, NULL,
+    NULL
+};
+
+static void preview_draw(struct Page *p)
+{
+    det_begin(p);
 }
 
 /* Jobs came back from the loader: letters of long lists, previews. */
@@ -6231,26 +5959,14 @@ static void preview_arrived(void)
     }
     if (np_aj && np_aj->done && !np_art_drawn)
         np_art_draw();                      /* Now playing's cover is made */
-    if (!pv_tj && !pv_sj)
-        return;
-    if (!((pv_tj && pv_tj->done && !pv_text_drawn) || (pv_sj && pv_sj->done && !pv_pic_drawn) ||
-          (pv_tj && pv_tj->done && !pv_tj->ran)))
-        return;
-    if (p && p == pv_page && p->sel == pv_sel && has_aside(p) && !pane_pending &&
-        !hold_active() && !ov.on)
-        pv_progress(p);
-    else if (p && (p != pv_page || p->sel != pv_sel)) {
-        pv_shown = FALSE;                   /* moved on: preview again when it rests */
-        pv_tj = pv_sj = NULL;
-        preview_touch(p);
-    }
+    det_arrived(p);                         /* the entry's details: to the view */
 }
 
 /* A job back but not dealt with (collected while waiting for another). */
 static BOOL loader_due(void)
 {
     int d;
-    if ((pv_tj && pv_tj->done && !pv_text_drawn) || (pv_sj && pv_sj->done && !pv_pic_drawn))
+    if (det_due())
         return TRUE;
     for (d = 0; d < depth; d++)
         if (pages[d].ch && ((pages[d].ch->job && pages[d].ch->job->done) ||
@@ -6264,8 +5980,8 @@ static BOOL loader_due(void)
 static void preview_now(struct Page *p)
 {
     preview_draw(p);
-    if (pv_tj && !pv_text_drawn) {
-        ldr_wait(pv_tj);
+    if (det.tj && !det.text_shown) {
+        ldr_wait(det.tj);
         preview_arrived();
     }
 }
@@ -6301,10 +6017,10 @@ static void style_preview(struct Page *p)
     struct TextExtent te;
     LONG k, longest = 0, w, rh, mw, ipx, y, i, n;
 #define SU(v) ((WORD)(((LONG)(v) * k + 128) >> 8))
-    pv_page = p;
-    pv_sel = p->sel;
-    pv_shown = TRUE;
-    pv_pending = FALSE;
+    det.page = p;
+    det.sel = p->sel;
+    det.shown = TRUE;
+    det.pending = FALSE;
     if (lv_drives())
         return;                             /* (a layout: no classic menu shown in the font) */
     gfx_fill_bg(&g, x0, y0, x1, y1);
@@ -6353,82 +6069,6 @@ static void style_preview(struct Page *p)
 }
 
 static BOOL plex_art_kept(struct Page *p, LONG idx);
-
-static void preview_touch(struct Page *p)
-{
-    char path[300];
-    UBYTE shot;
-    int k, i, found = 0, want;
-    ULONG settle = PREVIEW_SETTLE;
-    if (!has_aside(p) || (pv_shown && pv_page == p && pv_sel == p->sel))
-        return;                             /* already showing this one */
-    if (p->style_pv) {
-        style_preview(p);                   /* no reading: drawn at once */
-        return;
-    }
-    if (p->plex)
-        settle = plex_art_kept(p, p->sel) ? PREVIEW_READY   /* fetched ahead: only a decode */
-                                          : PLEX_SETTLE;    /* asked of the server: rest first */
-    /* read ahead and back already: drawing it is only a copy, so sooner */
-    if ((k = pv_kind(p, p->sel, path, sizeof(path), &shot))) {
-        want = shot && pv_pictures() && !lv_drives() ? 2 : 1;
-        for (i = 0; i < PV_SLOTS; i++) {
-            struct LJob *j = pv_slot[i];
-            if (j && j->done && j->ran && !j->spent && strcmp(j->path, path) == 0 &&
-                ((j->type == k && !j->mode) || (j->type == LJ_SHOT && j->mode == shot)))
-                found++;
-        }
-        if (found >= want)
-            settle = PREVIEW_READY;
-    }
-    if (!pv_shown && p->plex && plex_movable(p, p->sel))
-        settle = PREVIEW_READY;             /* its cover is on screen: only moved */
-    /* chosen by a click: not read until a second click could have come
-     * (reading a big file, the emulator's Amiga stops a moment, and a
-     * click made meanwhile is lost: double-clicks did nothing) */
-    if (pv_clicked && settle < dc_time())
-        settle = dc_time();
-    else if (!pv_shown && g.pic_w && !pv_keeps(p, p->sel) && !lv_drives())
-        /* a page just shown (opened, or back to it): a picture left from
-         * the page before goes now, unless it is this entry's too */
-        gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-    if (pv_shown && pv_page == p && !hold_active() && !ov.on && !pv_keeps(p, p->sel)) {
-        /* the entry before's picture goes now, not when this one's comes:
-         * it never stands next to this one's text */
-        if (!lv_drives())
-            gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-        if (settle != PREVIEW_READY) {
-            /* not read yet: its text goes now too */
-            tb_close(&pv_tb);
-            if (!lv_drives())
-                gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-            pv_shown = FALSE;
-            pv_tj = pv_sj = NULL;
-        }
-    }
-    pv_pending = TRUE;
-    pv_since = time_ms();
-    pv_due = pv_since + settle;
-}
-
-static void plex_ahead(struct Page *p);
-
-static void preview_tick(void)
-{
-    struct Page *p = cur();
-    if (!pv_pending) {
-        if (p)
-            plex_ahead(p);                  /* at rest: the neighbours' pictures */
-        return;
-    }
-    if (!p || !has_aside(p) || pane_pending) {
-        pv_pending = FALSE;
-        return;
-    }
-    if (hold_active() || ov.on || (LONG)(time_ms() - pv_due) < 0)
-        return;                             /* still moving, or the letter is up */
-    preview_draw(p);
-}
 
 static void ov_free(void)
 {
@@ -6544,7 +6184,7 @@ static void ov_show(struct Page *p)
         if (!lv_drives())
             gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
         tb_close(&pv_tb);
-        pv_shown = FALSE;
+        det.shown = FALSE;
     }
     if (lv_drives()) {
         lv_note_what(LC_SELECT);            /* (the layout's letter) */
@@ -6663,8 +6303,8 @@ static void ov_hide(void)
     if (has_aside(p)) {
         if (ov.bl)                  /* the column is the letter's alone: clear it */
             gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
-        preview_touch(p);           /* and the preview comes back */
-        pv_due = time_ms();
+        det_touch(p);           /* and the preview comes back */
+        det.due = time_ms();
     } else if (ov.bl) {
         ov_rows_under(p);           /* the rows it lay over, without it */
     }
@@ -7302,13 +6942,13 @@ static void draw_pane(BOOL full)
     if (lv_drives()) {
         /* the layout's: what the program keeps of it, no drawing */
         if (full) {
-            pv_shown = FALSE;               /* (previewed again, as the classic's) */
+            det.shown = FALSE;               /* (previewed again, as the classic's) */
             tb_close(&pv_tb);
         }
         if (p->type == PT_LIST) {
             list_follow(p);
             if (!pane_pending)
-                preview_touch(p);           /* (its details: as draw_all) */
+                det_touch(p);           /* (its details: as draw_all) */
         } else if (p->type == PT_TEXT && (full || !p->tb.open)) {
             open_textbox(p, g.list_top);    /* (its lines: the keys scroll them) */
         } else if (p->type == PT_DETAIL && (full || !p->tb.open)) {
@@ -7319,7 +6959,7 @@ static void draw_pane(BOOL full)
         return;
     }
     if (full) {
-        pv_shown = FALSE;           /* the pane is cleared: preview again */
+        det.shown = FALSE;           /* the pane is cleared: preview again */
         tb_close(&pv_tb);
         WORD px = g.menu_w + U(3), pb = g.footer_y - 2;
         if (p->type == PT_TEXT) {
@@ -9824,7 +9464,7 @@ static void draw_all(void)
         struct Page *p;
         pane_settle();                      /* (the section built, if still to be) */
         if ((p = cur()) && p->type == PT_LIST && !pane_pending)
-            preview_touch(p);               /* its details asked for (the classic's draw_title_count
+            det_touch(p);               /* its details asked for (the classic's draw_title_count
                                              * does it: a layout skips that, so a list come back to
                                              * at the start had none until moved in) */
         lv_note();
@@ -10282,7 +9922,7 @@ static void release_for_launch(void)
     tb_close(&pv_tb);
     if (pv_list.pool)
         list_free(&pv_list);
-    pv_shown = pv_pending = FALSE;
+    det.shown = det.pending = FALSE;
     ov.on = FALSE;
     ov.bl = NULL;
     ptr_hidden = NULL;              /* a new window comes with its pointer */
@@ -10598,8 +10238,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
     hold_stop();
     ov.on = FALSE;
     tb_close(&pv_tb);
-    pv_shown = FALSE;
-    pv_pending = FALSE;
+    det.shown = FALSE;
+    det.pending = FALSE;
     pv_let_go();                    /* the viewer takes the screen's colours over */
     lv_hold();                      /* (a layout: the classic drawing back) */
     vw_active = TRUE;
@@ -11154,7 +10794,7 @@ static void act_move(LONG d)
     if (p->type == PT_LIST) {
         LONG s;
         if (d)
-            pv_dir = d > 0 ? 1 : -1;
+            det.dir = d > 0 ? 1 : -1;
         if (d > 0 && ch_reading(p) && p->sel + d >= p->list.count) {
             busy_begin();
             ch_wait_until(p, p->sel + d + 1, TRUE);    /* outran the reading: wait for it */
@@ -11422,7 +11062,7 @@ static void layout_let_go(void)
     hold_stop();
     ov.on = FALSE;
     tb_close(&pv_tb);
-    pv_shown = FALSE;
+    det.shown = FALSE;
     for (i = 0; i < depth; i++) {
         struct Page *p = &pages[i];
         tb_close(&p->tb);
@@ -13381,7 +13021,7 @@ static void radio_done(struct NetJob *j)
                 if (d == ART_PV) {
                     char t[60];
                     sprintf(t, "; asked %lu ms after the move",
-                            (unsigned long)(art_asked[d] - pv_since));
+                            (unsigned long)(art_asked[d] - det.since));
                     amb_strlcat(m, t, sizeof(m));
                 }
                 amb_log("plex: picture", m);
@@ -14326,7 +13966,7 @@ static void plex_sum_came(struct NetJob *j)
     amb_strlcpy(sum_kept[i].key, sum_want, sizeof(sum_kept[i].key));
     amb_strlcpy(sum_kept[i].text, text, sizeof(sum_kept[i].text));
     sum_next = (sum_next + 1) % SUM_KEPT;
-    if (!text[0] || !p || !p->plex || p != pv_page || p->sel != pv_sel || !pv_shown ||
+    if (!text[0] || !p || !p->plex || p != det.page || p->sel != det.sel || !det.shown ||
         pane_pending || !plex_pv_src(p, p->sel, &src) || !sum_key(&src, k, sizeof(k)) ||
         strcmp(k, sum_want))
         return;
@@ -14436,7 +14076,7 @@ static void plex_ahead(struct Page *p)
     if (!p->plex || p->type != PT_LIST || !has_aside(p) || !pv_pictures() || !g.pic_w ||
         hold_active() || ov.on || pane_pending)
         return;
-    if (!pv_shown || pv_page != p || pv_sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
+    if (!det.shown || det.page != p || det.sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
         plex_sj)
         return;                             /* not at rest, or the server busy for it */
     if (gfx_off)
@@ -14473,8 +14113,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     char key[260];
     BOOL keep = plex_keeps(p, p->sel);
     file[0] = 0;
-    pv_has_box = FALSE;
-    pv_text_drawn = TRUE;
+    det.has_box = FALSE;
+    det.text_shown = TRUE;
     if (lv_drives())
         return;                             /* (a layout: its details from the items; nothing
                                              * here for it) */
@@ -14499,8 +14139,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
         }
     }
     if (keep) {
-        pv_has_box = TRUE;
-        pv_pic_drawn = TRUE;
+        det.has_box = TRUE;
+        det.pic_shown = TRUE;
         pv_box_y = g.list_top;
         pv_box_h = s;
         if (!strcmp(key, last))
@@ -14522,11 +14162,11 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     pv_box_h = s;
     y = g.list_top;
     if (thumb[0] && pv_pictures() && !gfx_off) {     /* (a layout: its own pictures) */
-        pv_has_box = TRUE;
+        det.has_box = TRUE;
         y = pv_box_y + pv_box_h + U(4);
         if (!keep && art_fetch(ART_PV, thumb, s, s, file)) {
             pv_colour_cap = plex_colours();
-            pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+            det.sj = det_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
             pv_colour_cap = 0;
         }
         if (src.kind == IT_PLEXPHOTO && file[0])
@@ -14559,8 +14199,8 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     } else {
         plex_sum_ask(&src, y);              /* asked for: written here when it comes */
     }
-    if (pv_sj && pv_sj->done)
-        pv_progress(p);
+    if (det.sj && det.sj->done)
+        det_progress(p);
 }
 
 /* A picture of the server's is here (kept in file). */
@@ -14586,13 +14226,13 @@ static void art_ready(int kind, const char *file)
     }
     if (gfx_off)
         return;                             /* (the classic pane's picture: a layout draws) */
-    if (p && p->plex && p == pv_page && p->sel == pv_sel && pv_shown && !pv_sj && pv_has_box &&
+    if (p && p->plex && p == det.page && p->sel == det.sel && det.shown && !det.sj && det.has_box &&
         !pane_pending) {
         pv_colour_cap = plex_colours();
-        pv_sj = pv_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
+        det.sj = det_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
         pv_colour_cap = 0;
-        if (pv_sj && pv_sj->done)
-            pv_progress(p);
+        if (det.sj && det.sj->done)
+            det_progress(p);
     }
 }
 
@@ -15751,7 +15391,7 @@ static void act_right(void)
                 open_detail(&p->list.items[p->sel]);
             return;
         }
-        if (pv_pending || !pv_shown || !pv_text_drawn) {    /* not shown yet: show it now */
+        if (det.pending || !det.shown || !det.text_shown) {    /* not shown yet: show it now */
             ov.on = FALSE;
             preview_now(p);
         }
@@ -15932,7 +15572,7 @@ static void act_letter_step(LONG dir)
         busy_end(TRUE);
     }
     if ((to = letter_step(p, p->sel, dir)) != p->sel) {
-        pv_dir = dir;
+        det.dir = dir;
         act_move(to - p->sel);
     }
 }
@@ -16193,10 +15833,10 @@ static void handle_mouse(struct IntuiMessage *im)
                 set_focus(FOCUS_CONTENT);
             if (p->sel != idx) {
                 p->sel = idx;
-                pv_clicked = TRUE;          /* its preview waits for a second click */
+                det.clicked = TRUE;          /* its preview waits for a second click */
                 draw_title_count(p);
                 draw_list_rows(p);
-                pv_clicked = FALSE;
+                det.clicked = FALSE;
             }
             {
                 /* one click opens what cannot be played (a folder, a
@@ -16885,6 +16525,7 @@ static int app_main(void)
     ULONG next_sec = 0, tick_us = 40000;
     int rc = 0;
 
+    det_view(&classic_view);        /* the entry details' view (a layout's, once one is on) */
     {
         /* the language first: everything said from here on is in it */
         char buf[32];
@@ -17090,7 +16731,7 @@ static int app_main(void)
         /* While a text box glides, poll instead of sleeping; WaitTOF below
          * paces the loop to one step per frame. */
         BOOL busy = !iconified && !mini_on && !np_full &&
-                    ((atb && tb_animating(atb)) || hold_active() || pane_pending || pv_pending ||
+                    ((atb && tb_animating(atb)) || hold_active() || pane_pending || det.pending ||
                      tb_animating(&pv_tb));
         ULONG sig;
         if (!np_full) {
@@ -17276,7 +16917,7 @@ static int app_main(void)
             }
         }
         lv_frame();                     /* a layout: the screen drawn again, if it changed */
-        if (g.win && !np_full && (hold_active() || pane_pending || pv_pending || tb_animating(&pv_tb) ||
+        if (g.win && !np_full && (hold_active() || pane_pending || det.pending || tb_animating(&pv_tb) ||
                                   ((atb = cur_tb()) && tb_animating(atb)))) {
             ULONG tp = time_ms();
             BOOL flipped = gfx_present(&g);
@@ -17288,7 +16929,7 @@ static int app_main(void)
                 dbg_sleep_end();
             }
             pane_tick();
-            preview_tick();
+            det_tick();
             if (tb_animating(&pv_tb))
                 tb_step(&g, &pv_tb);
             hold_tick();
@@ -17302,7 +16943,7 @@ static int app_main(void)
 out:
     {
         char m[64];
-        sprintf(m, "%ld read ahead, %ld waited for", (long)pv_ready, (long)pv_waited);
+        sprintf(m, "%ld read ahead, %ld waited for", (long)det.ready, (long)det.waited);
         amb_log("previews", m);
     }
     amb_log("quitting", "");
@@ -17897,9 +17538,9 @@ static void lv_page(struct Page *p, struct LPage *m)
     m->list.sel = p->sel;
     m->list.top = p->top;
     m->list.item = lv_item;
-    if (pv_tj && pv_tj->done && pv_page == p && pv_sel == p->sel) {
-        for (i = 0; i < pv_tj->nlines && i < LJ_FACTS; i++)
-            lv_lines[i] = pv_tj->lines[i];
+    if (det.tj && det.tj->done && det.page == p && det.sel == p->sel) {
+        for (i = 0; i < det.tj->nlines && i < LJ_FACTS; i++)
+            lv_lines[i] = det.tj->lines[i];
         m->ndetails = (WORD)i;
         m->details = lv_lines;
     }
@@ -18688,7 +18329,7 @@ static void lv_pics_ahead(void)
     struct Page *p = cur();
     char file[300];
     int i;
-    if (!p || p->type != PT_LIST || !lv_pof_w || hold_active() || ov.on || pane_pending || !pv_roomy())
+    if (!p || p->type != PT_LIST || !lv_pof_w || hold_active() || ov.on || pane_pending || !det_roomy())
         return;
     if (p != for_p || p->sel != for_sel) {
         for_p = p;
@@ -18702,7 +18343,7 @@ static void lv_pics_ahead(void)
             return;
     if (!lv_picture_of(p) || !lv_pic_done_for(lv_pof_file))
         return;                             /* (the one shown first) */
-    if (lv_pic_file(p, p->sel + near[step] * pv_dir, file, sizeof(file)))
+    if (lv_pic_file(p, p->sel + near[step] * det.dir, file, sizeof(file)))
         lv_picture(file, lv_pof_w, lv_pof_h);   /* (made, or asked for: drawn from there) */
     step++;
 }
@@ -18859,6 +18500,7 @@ static void lv_off(BOOL redraw)
     lk_close(&lv.out);
     lv_pics_free();
     lv.on = FALSE;
+    det_view(&classic_view);                /* (the entry details: Classic's pane's again) */
     gfx_off = FALSE;
     lv.drawn = -1;
     lv_give_back_font();            /* (the font lent it: the classic's Pixel style again) */
@@ -18985,6 +18627,7 @@ static void lv_activate(void)
     lv.w = g.w;
     lv.h = g.h;
     lv.on = TRUE;
+    det_view(&layout_view);                 /* (the entry details: told to the layout) */
     lv.full = TRUE;
     lv.drawn = -1;
     gfx_off = TRUE;
@@ -19271,8 +18914,8 @@ shown:
         /* a list's details not shown, nor asked for: asked for now (the
          * classic asks as it draws the title or moves; come back to at the
          * start, nothing did, and the pane stayed empty until a move) */
-        if (p && p->type == PT_LIST && p->sel >= 0 && p->sel < p->list.count && !pv_pending && !pane_pending &&
-            !(pv_shown && pv_page == p && pv_sel == p->sel) && !hold_active() && has_aside(p)) {
+        if (p && p->type == PT_LIST && p->sel >= 0 && p->sel < p->list.count && !det.pending && !pane_pending &&
+            !(det.shown && det.page == p && det.sel == p->sel) && !hold_active() && has_aside(p)) {
             static const struct Page *told;
             if (told != p) {
                 char m[80];
@@ -19280,7 +18923,7 @@ shown:
                 sprintf(m, "details asked for (none were): row %ld%s", (long)p->sel, ov.on ? ", letter up" : "");
                 amb_log("layout", m);
             }
-            preview_touch(p);
+            det_touch(p);
         }
         lv_pics_ahead();
     }
@@ -19479,4 +19122,34 @@ void lv_pick(int k)
         if (!lv_suits())
             set_msg(_("Layouts need a graphics card's 15 to 32-bit screen"));
     }
+}
+
+/* ---- app.h: main.c's answers to the services (details.c) */
+struct Page *app_cur(void)
+{
+    return cur();
+}
+BOOL app_moving(void)
+{
+    return hold_active() || ov.on;
+}
+BOOL app_pane_pending(void)
+{
+    return pane_pending;
+}
+ULONG app_dc_time(void)
+{
+    return dc_time();
+}
+BOOL app_plex_art_kept(struct Page *p, LONG idx)
+{
+    return plex_art_kept(p, idx);
+}
+BOOL app_plex_movable(struct Page *p, LONG idx)
+{
+    return plex_movable(p, idx);
+}
+void app_plex_ahead(struct Page *p)
+{
+    plex_ahead(p);
 }
