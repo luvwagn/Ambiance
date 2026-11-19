@@ -10,6 +10,8 @@
 #include <proto/cybergraphics.h>
 #include <cybergraphx/cybergraphics.h>
 #include <graphics/gfxbase.h>
+#include <graphics/clip.h>
+#include <graphics/layers.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -711,6 +713,85 @@ BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, W
     return TRUE;
 }
 
+/* ---- showing an 8-bit canvas on an AGA screen: chunky to planar here,
+ * straight into the screen's planes (WriteChunkyPixels converts a pixel
+ * at a time: the Home row's and the wall's glides moved some 150,000
+ * pixels a step). 32 pixels at a time: eight longwords of pens made the
+ * eight planes' longwords by five rounds of swapping bits between pairs
+ * (each swaps one bit of which longword with one bit of where in it). */
+#define CK_MERGE(x, y, s, m) { ULONG t_ = (((x) >> (s)) ^ (y)) & (m); (y) ^= t_; (x) ^= t_ << (s); }
+static void ck_c2p32(const UBYTE *px, ULONG *out)
+{
+    ULONG a0, a1, a2, a3, a4, a5, a6, a7;
+    const ULONG *q = (const ULONG *)px;     /* (big-endian: the first pixel the top byte) */
+    a0 = q[7]; a1 = q[6]; a2 = q[5]; a3 = q[4];
+    a4 = q[3]; a5 = q[2]; a6 = q[1]; a7 = q[0];
+    CK_MERGE(a0, a4, 16, 0x0000FFFFUL); CK_MERGE(a1, a5, 16, 0x0000FFFFUL);
+    CK_MERGE(a2, a6, 16, 0x0000FFFFUL); CK_MERGE(a3, a7, 16, 0x0000FFFFUL);
+    CK_MERGE(a0, a2, 8, 0x00FF00FFUL); CK_MERGE(a1, a3, 8, 0x00FF00FFUL);
+    CK_MERGE(a4, a6, 8, 0x00FF00FFUL); CK_MERGE(a5, a7, 8, 0x00FF00FFUL);
+    CK_MERGE(a0, a1, 4, 0x0F0F0F0FUL); CK_MERGE(a2, a3, 4, 0x0F0F0F0FUL);
+    CK_MERGE(a4, a5, 4, 0x0F0F0F0FUL); CK_MERGE(a6, a7, 4, 0x0F0F0F0FUL);
+    CK_MERGE(a0, a4, 2, 0x33333333UL); CK_MERGE(a1, a5, 2, 0x33333333UL);
+    CK_MERGE(a2, a6, 2, 0x33333333UL); CK_MERGE(a3, a7, 2, 0x33333333UL);
+    CK_MERGE(a0, a2, 1, 0x55555555UL); CK_MERGE(a1, a3, 1, 0x55555555UL);
+    CK_MERGE(a4, a6, 1, 0x55555555UL); CK_MERGE(a5, a7, 1, 0x55555555UL);
+    /* longword (j2 j1 j0) holds plane j0 j2 j1 */
+    out[0] = a0; out[2] = a4; out[4] = a1; out[6] = a5;
+    out[1] = a2; out[3] = a6; out[5] = a3; out[7] = a7;
+}
+
+/* Shown by ck_c2p, if the screen is one it can write to: 8 planes of a
+ * standard bitmap, longword-aligned, the window's layer not covered by
+ * anything (a requester over it: WriteChunkyPixels, which minds it) */
+static BOOL ck_c2p(struct LkTarget *t, long x0, long y0, long x1, long y1)
+{
+    struct RastPort *rp = t->g->rp;
+    struct BitMap *bm = rp ? rp->BitMap : NULL;
+    struct Layer *ly = rp ? rp->Layer : NULL;
+    long ox = 0, oy = 0, x, y, p;
+    ULONG out[8];
+    if (!bm || bm->Depth != 8 || (t->cw & 31) || (bm->BytesPerRow & 3) ||
+        !(GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD))
+        return FALSE;
+    for (p = 0; p < 8; p++)
+        if (!bm->Planes[p] || ((ULONG)bm->Planes[p] & 3))
+            return FALSE;
+    if (ly) {
+        LockLayerRom(ly);
+        if (!ly->ClipRect || ly->ClipRect->Next || ly->ClipRect->obscured ||
+            ly->ClipRect->bounds.MinX != ly->bounds.MinX || ly->ClipRect->bounds.MinY != ly->bounds.MinY ||
+            ly->ClipRect->bounds.MaxX != ly->bounds.MaxX || ly->ClipRect->bounds.MaxY != ly->bounds.MaxY ||
+            (ly->bounds.MinX & 31)) {
+            UnlockLayerRom(ly);
+            return FALSE;
+        }
+        ox = ly->bounds.MinX;
+        oy = ly->bounds.MinY;
+        if (ox + t->cw - 1 > ly->bounds.MaxX || oy + t->chh - 1 > ly->bounds.MaxY) {
+            UnlockLayerRom(ly);
+            return FALSE;
+        }
+    }
+    x0 &= ~31L;
+    x1 |= 31L;
+    if (x1 >= t->cw)
+        x1 = t->cw - 1;
+    for (y = y0; y <= y1; y++) {
+        const UBYTE *s = t->ch + y * t->cw;
+        ULONG row = (ULONG)(y + oy) * bm->BytesPerRow;
+        for (x = x0; x + 31 <= x1; x += 32) {
+            ULONG at = row + (ULONG)(x + ox) / 8;
+            ck_c2p32(s + x, out);
+            for (p = 0; p < 8; p++)
+                *(ULONG *)(bm->Planes[p] + at) = out[p];
+        }
+    }
+    if (ly)
+        UnlockLayerRom(ly);
+    return TRUE;
+}
+
 void lk_show(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
@@ -723,8 +804,9 @@ void lk_show(struct LkOut *o)
         if (t->y1 >= t->chh) t->y1 = t->chh - 1;
         ULONG t0 = time_ms();
         gfx_dirty();
-        WriteChunkyPixels(t->g->rp, (ULONG)t->x0, (ULONG)t->y0, (ULONG)t->x1, (ULONG)t->y1,
-                          t->ch + t->y0 * t->cw + t->x0, t->cw);
+        if (!ck_c2p(t, t->x0, t->y0, t->x1, t->y1))
+            WriteChunkyPixels(t->g->rp, (ULONG)t->x0, (ULONG)t->y0, (ULONG)t->x1, (ULONG)t->y1,
+                              t->ch + t->y0 * t->cw + t->x0, t->cw);
         lkt_show += time_ms() - t0;
         lkt_px += (ULONG)(t->x1 - t->x0 + 1) * (ULONG)(t->y1 - t->y0 + 1);
         t->x0 = 1;

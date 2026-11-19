@@ -12723,6 +12723,9 @@ static void restyle(void)
         }
         restyled = ui_style != STYLE_SMOOTH || g.style == STYLE_SMOOTH;
     } else {
+        lv_hold();                  /* a layout's off first: the smooth font lent it is one
+                                     * gfx_restyle frees (then freed again at the end: a
+                                     * crash on quitting; meanwhile lists drawn with none) */
         restyled = gfx_restyle(&g, ui_style);
     }
     for (i = 0; i < nmenu; i++)
