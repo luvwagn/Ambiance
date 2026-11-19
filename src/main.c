@@ -18134,10 +18134,32 @@ static const struct LImage *lv_logo(ULONG bg)
     n = (ULONG)w * h;
     if (!lv_logo_px && !(lv_logo_px = AllocVec(n * 4, MEMF_ANY)))
         return NULL;
-    for (i = 0; i < n; i++) {
-        UBYTE v = idx[i];
-        lv_logo_px[i] = v < nc ? ((ULONG)pal[3 * v] << 16) | ((ULONG)pal[3 * v + 1] << 8) | pal[3 * v + 2]
-                               : bg;
+    {
+        /* the logo was made over the classic bar's dark navy (0, 0, 34): its
+         * glow and its edges are that navy and the ink mixed. Each colour's
+         * share of ink (by its blue, the navy's 34 to the badge's 204) put
+         * over the layout's colour instead - over a lighter background the
+         * navy showed as a black halo */
+        ULONG col[256];
+        UWORD c;
+        for (c = 0; c < nc && c < 256; c++) {
+            LONG r = pal[3 * c], gg = pal[3 * c + 1], b = pal[3 * c + 2], a = (b - 34) * 256 / (204 - 34), k;
+            LONG br = (LONG)((bg >> 16) & 255), bgg = (LONG)((bg >> 8) & 255), bb = (LONG)(bg & 255);
+            if (a < 0)
+                a = 0;
+            if (a > 256)
+                a = 256;
+            k = 256 - a;                    /* (the navy's share: the layout's colour there) */
+            r += (br - 0) * k / 256;
+            gg += (bgg - 0) * k / 256;
+            b += (bb - 34) * k / 256;
+            col[c] = ((ULONG)(r < 0 ? 0 : r > 255 ? 255 : r) << 16) |
+                     ((ULONG)(gg < 0 ? 0 : gg > 255 ? 255 : gg) << 8) | (ULONG)(b < 0 ? 0 : b > 255 ? 255 : b);
+        }
+        for (i = 0; i < n; i++) {
+            UBYTE v = idx[i];
+            lv_logo_px[i] = v < nc ? col[v] : bg;
+        }
     }
     lv_logo_bg = bg;
     lv_logo_im.w = w;
