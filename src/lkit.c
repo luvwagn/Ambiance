@@ -121,6 +121,8 @@ struct LkTarget {
     UBYTE *pmap;                /* pmapb while a picture is drawn, else NULL */
     UBYTE *sh;                  /* what the screen's planes show, a byte a pixel (ck_c2p):
                                  * a group of 32 the same not converted again; NULL: none */
+    WORD *rx0, *rx1;            /* ...each row's changed span (rx1 < rx0: none): rows
+                                 * not drawn on not even compared */
     BOOL sh_all;                /* ...the next show converts all it shows (a whole draw:
                                  * the screen may have been drawn over by others) */
     UBYTE held[256];            /* pens kept from the pool: the sprites' colours (AGA) */
@@ -410,6 +412,15 @@ static UBYTE ck_bg_pen(const struct LkTarget *t, long x, long y, unsigned long c
 
 static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
 {
+    if (t->rx0 && w > 0 && h > 0) {
+        long r, r1 = y + h, xe = x + w - 1;
+        if (y < 0) y = 0;
+        if (r1 > t->chh) r1 = t->chh;
+        for (r = y; r < r1; r++) {
+            if (x < t->rx0[r]) t->rx0[r] = (WORD)(x < 0 ? 0 : x);
+            if (xe > t->rx1[r]) t->rx1[r] = (WORD)(xe >= t->cw ? t->cw - 1 : xe);
+        }
+    }
     if (t->x0 > t->x1) {
         t->x0 = x;
         t->y0 = y;
@@ -578,8 +589,16 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     t->tmp = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->list = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->pmapb = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
-    if (lk_skip_ok)
+    if (lk_skip_ok) {
         t->sh = AllocVec((ULONG)g->w * g->h, MEMF_ANY);     /* (none: everything converted) */
+        if ((t->rx0 = AllocVec((ULONG)g->h * 2 * sizeof(WORD), MEMF_ANY))) {
+            t->rx1 = t->rx0 + g->h;
+            for (i = 0; i < g->h; i++) {
+                t->rx0[i] = 0x7FFF;
+                t->rx1[i] = -1;
+            }
+        }
+    }
     t->sh_all = TRUE;
     pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     o->ctx = t;
@@ -1258,7 +1277,18 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
         const UBYTE *s = t->ch + y * t->cw;
         ULONG row = (ULONG)(y + oy) * bm->BytesPerRow;
         ULONG *sl = t->sh ? (ULONG *)(t->sh + y * t->cw) : NULL;
-        for (x = x0; x + 31 <= x1; x += 32) {
+        long xa = x0, xb = x1;
+        if (t->rx0) {                   /* (this row's own changed span) */
+            if (t->rx1[y] < t->rx0[y])
+                continue;
+            if (t->rx0[y] > xa)
+                xa = t->rx0[y] & ~31L;
+            if (t->rx1[y] < xb)
+                xb = t->rx1[y] | 31L;
+            t->rx0[y] = 0x7FFF;
+            t->rx1[y] = -1;
+        }
+        for (x = xa; x + 31 <= xb; x += 32) {
             ULONG at = row + (ULONG)(x + ox) / 8;
             if (sl) {
                 /* the same 32 the planes show already: left (most of a
@@ -1643,6 +1673,8 @@ void lk_close(struct LkOut *o)
             FreeVec(t->pmapb);
         if (t->sh)
             FreeVec(t->sh);
+        if (t->rx0)
+            FreeVec(t->rx0);
         if (t->tmp)
             FreeVec(t->tmp);
         if (t->ch)
