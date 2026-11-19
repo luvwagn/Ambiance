@@ -43,8 +43,10 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
  * layout's controls over a picture on an AGA screen, in registers the
  * copper makes theirs. */
 BOOL lk_open_mem(struct Gfx *g, struct LkOut *o, ULONG *px, WORD y0, WORD w, WORD h);
-BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
-                 BOOL pick, WORD *first, ULONG *rowbg, WORD *domp);
+BOOL lk_mem_pens(const ULONG *px, const ULONG *probe, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0,
+                 int n, ULONG *rgb, BOOL pick, WORD *first, ULONG *rowbg, WORD *domp);
+/* (probe: the strip drawn as it may come to show - its buttons pressed -
+ * its colours chosen too, and its pens' first rows; NULL none) */
 /* (first[]: each pen's first row, -1 unused; rowbg[h]: each row's own colour
  * of the commonest pen, *domp which that is; any of them NULL: not wanted) */
 /* the layout's background gradient over the whole screen (an 8-bit

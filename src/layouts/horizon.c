@@ -27,6 +27,8 @@ const UWORD LibRevision = 0;
 #define C_TOP    0x0B3270UL     /* the gradient: a deep blue */
 #define C_BOT    0x03122DUL
 #define C_FOCUS  0x1C67C4UL     /* what is chosen: a blue pill */
+#define C_PRESS  0xFFD24AUL     /* a button pressed by its key: a yellow glow (the keys' colour,
+                                 * as the classic's frame) */
 #define C_FOCUS2 0x3E8FE6UL     /* ...its lit top edge */
 #define C_ACC    0x63C9FFUL     /* the glow, and what is lit */
 #define C_HOVER  0x174A8AUL     /* under the pointer: a quieter pill */
@@ -2397,17 +2399,32 @@ static void nb_glyph(int b, BOOL playing, LONG cx, LONG cy, LONG s, ULONG c)
 /* The buttons: round, the transport in the middle, the volume at the right */
 /* A button: a glass bead s across at x, y (big: Play's, the chosen blue),
  * a lit rim, a face lighter at its top, a gleam; foc: in its glow */
-static void bead(LONG x, LONG y, LONG s, BOOL big, BOOL foc)
+static void bead_p(LONG x, LONG y, LONG s, BOOL big, BOOL foc, BOOL pressed)
 {
     ULONG bgc = grad(y + s / 2), face = big ? C_FOCUS : foc ? C_HOVER : C_BTN;
     ULONG rim = mix(C_ACC, face, 2, 5), outc = foc ? mix(mix(C_ACC, C_FOCUS, 1, 2), bgc, 1, 8) : OUT_GRAD;
     LONG gw = s * 3 / 5, gh = s / 4;
+    if (pressed) {
+        /* pressed: a yellow glow round it, its face darker, its shine lower
+         * (pushed in) */
+        LONG k, n = X(7) > 4 ? X(7) : 4;
+        for (k = n; k >= 1; k--)
+            rshape(x - k, y - k, s + 2 * k, s + 2 * k, s / 2 + k, mix(C_PRESS, bgc, k, n + 1));
+        rim = mix(C_PRESS, face, 1, 2);
+        rsmooth(x, y, s, s, s / 2, rim, mix(rim, C_BOT, 1, 3), mix(C_PRESS, bgc, 1, n + 1));
+        rsmooth(x + 1, y + 1, s - 2, s - 2, s / 2 - 1, mix(face, C_BOT, 1, 3), mix(face, C_WHITE, 1, 6), rim);
+        return;
+    }
     if (foc)
         glow(x, y, s, s, s / 2, bgc);
     rsmooth(x, y, s, s, s / 2, mix(rim, C_WHITE, 1, 4), rim, outc);
     rsmooth(x + 1, y + 1, s - 2, s - 2, s / 2 - 1, mix(face, C_WHITE, 1, 5), mix(face, C_BOT, 1, 3), rim);
     rsmooth(x + (s - gw) / 2, y + s / 14 + 1, gw, gh, gh / 2, mix(face, C_WHITE, 2, 5), mix(face, C_WHITE, 1, 8),
             mix(face, C_WHITE, 1, 5));
+}
+static void bead(LONG x, LONG y, LONG s, BOOL big, BOOL foc)
+{
+    bead_p(x, y, s, big, foc, FALSE);
 }
 
 static void now_buttons(const struct LNow *n, LONG by, LONG bh)
@@ -2599,8 +2616,12 @@ static void hz_controls(struct LControls *c, ULONG what)
             bx = x;
             x += s + gap;
         }
-        bead(bx, yy, s, isbig, foc);
-        nb_glyph(b, b == LNB_FULL ? on : isbig && !c->paused, bx + s / 2, yy + s / 2, s * 2 / 5, fg);
+        {
+            BOOL pr = !off && (c->pressed & LNB_BIT(b)) != 0;
+            bead_p(bx, yy, s, isbig, foc, pr);
+            nb_glyph(b, b == LNB_FULL ? on : isbig && !c->paused, bx + s / 2, yy + s / 2 + (pr ? 1 : 0), s * 2 / 5,
+                     fg);
+        }
         c->at[i].x = (WORD)bx;
         c->at[i].y = (WORD)yy;
         c->at[i].w = (WORD)s;

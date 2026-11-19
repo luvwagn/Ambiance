@@ -467,6 +467,8 @@ void view_bar_hide(struct Gfx *g);
 /* The mouse's buttons in the bar (instead of the keys' hint), for the next
  * view_bar: previous, play/pause the slideshow, next. */
 enum { VB_PREV, VB_PLAY, VB_NEXT, VB_FULL, VB_COUNT };
+void view_bar_press(struct Gfx *g, int vb);     /* a key pressed that button: drawn pressed a moment */
+void view_bar_tick(struct Gfx *g);              /* (its moment over: drawn raised again) */
 void view_bar_buttons(BOOL on, BOOL playing, int full);    /* full: 0 none, 1 to, 2 back */
 BOOL view_bar_has_buttons(void);
 int  view_bar_hit(struct Gfx *g, WORD x, WORD y);  /* VB_*, -1 none */

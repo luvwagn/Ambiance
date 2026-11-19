@@ -62,6 +62,10 @@ static BOOL bar_cop;            /* a layout's controls in a copper band of their
 
 
 static LONG bar_nprev;          /* ...the list up's writes (bar_prev), 0: none */
+static UWORD bar_pressed;       /* the layout's buttons pressed by their keys (LNB_BIT()s) */
+static ULONG bar_press_until;   /* ...till then */
+static char bar_title[128], bar_detail[160];    /* the layout's bar as last drawn (drawn again
+                                 * pressed, or not) */
 static BOOL bar_keep;           /* ...kept up while the picture under them changes: what is
                                  * drawn under the bar goes into what it keeps (bar_bm) */
 static UWORD ncolors;           /* its size */
@@ -557,6 +561,14 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
     }
     vc.paused = !btn_playing;
     vc.focus = vc.hover = -1;
+    if (bar_pressed && (LONG)(time_ms() - bar_press_until) < 0)
+        vc.pressed = bar_pressed;
+    if (title != bar_title)
+        amb_strlcpy(bar_title, title ? title : "", sizeof(bar_title));
+    if (detail != bar_detail)
+        amb_strlcpy(bar_detail, detail ? detail : "", sizeof(bar_detail));
+    vc.title = bar_title;
+    vc.detail = bar_detail[0] ? bar_detail : NULL;
     if (!lv_controls_draw(&vc, 0, lv_bm)) {
         view_bar_hide(g);
         return FALSE;
@@ -586,6 +598,30 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
 }
 
 static void bar_buttons(struct Gfx *g, WORD x0, UBYTE fg);
+
+/* A key pressed one of the layout's buttons (VB_*): drawn pressed a moment
+ * (a yellow glow), through a picture changed under it; view_bar_tick puts
+ * it back */
+#define PRESS_MS 300
+void view_bar_press(struct Gfx *g, int vb)
+{
+    static const UBYTE lnb[] = { LNB_PREV, LNB_PLAY, LNB_NEXT, LNB_FULL };
+    if (vb < 0 || vb >= VB_COUNT)
+        return;
+    bar_pressed = (UWORD)LNB_BIT(lnb[vb]);
+    bar_press_until = time_ms() + PRESS_MS;
+    if (bar_lv && bar_bm)
+        bar_layout(g, bar_title, bar_detail);
+}
+
+void view_bar_tick(struct Gfx *g)
+{
+    if (bar_pressed && (LONG)(time_ms() - bar_press_until) >= 0) {
+        bar_pressed = 0;
+        if (bar_lv && bar_bm)
+            bar_layout(g, bar_title, bar_detail);   /* (raised again) */
+    }
+}
 
 void view_bar(struct Gfx *g, const char *title, const char *detail, const char *hint)
 {

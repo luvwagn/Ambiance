@@ -630,8 +630,8 @@ static ULONG mp_dist(UWORD a, UWORD b)
     return (ULONG)(dr * dr * 3 + dg * dg * 4 + db * db * 2);
 }
 
-BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
-                 BOOL pick, WORD *first, ULONG *rowbg, WORD *domp)
+BOOL lk_mem_pens(const ULONG *px, const ULONG *probe, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0,
+                 int n, ULONG *rgb, BOOL pick, WORD *first, ULONG *rowbg, WORD *domp)
 {
     ULONG *hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     UWORD *keys = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
@@ -650,6 +650,12 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UB
         if (!hist[k]++)
             keys[nk++] = k;
     }
+    if (probe && pick)                  /* (what it may come to show: its colours wanted too) */
+        for (i = 0; i < np; i++) {
+            UWORD k = (UWORD)CK555(probe[i]);
+            if (!hist[k]++)
+                keys[nk++] = k;
+        }
     if (pick || !rgb[0]) {
         /* the colours: the commonest first, then each time the one that
          * most pixels are furthest from those chosen (the text, the bar's
@@ -736,6 +742,28 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UB
         if (first && first[near[k]] < 0)
             first[near[k]] = (WORD)(i / w);
     }
+    if (probe && first)                 /* (and the probe's: a pen it uses made by then too) */
+        for (i = 0; i < np; i++) {
+            UWORD k = (UWORD)CK555(probe[i]);
+            LONG pn;
+            if (near[k] == 0xFF) {
+                LONG bd = 0x7FFFFFFF, d;
+                int r = (int)((probe[i] >> 16) & 255), gg = (int)((probe[i] >> 8) & 255), b = (int)(probe[i] & 255);
+                near[k] = 0;
+                for (c = 0; c < n; c++) {
+                    LONG dr = r - (LONG)((rgb[c] >> 16) & 255), dg = gg - (LONG)((rgb[c] >> 8) & 255),
+                         db = b - (LONG)(rgb[c] & 255);
+                    d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+                    if (d < bd) {
+                        bd = d;
+                        near[k] = (UBYTE)c;
+                    }
+                }
+            }
+            pn = near[k];
+            if (first[pn] < 0 || first[pn] > (WORD)(i / w))
+                first[pn] = (WORD)(i / w);
+        }
     /* the commonest pen (the background), and each row's own colour of it:
      * what its pixels were before they were made it (a gradient's, which
      * the copper gives the pen line by line) */

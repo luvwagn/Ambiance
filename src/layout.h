@@ -213,6 +213,8 @@ struct LControls {
      * (seek_w 0: none) */
     struct { WORD x, y, w, h; } at[LCB_MAX];
     WORD seek_x, seek_y, seek_w, seek_h;
+    UWORD pressed;              /* LNB_BIT()s pressed by their key a moment ago: drawn pressed
+                                 * (a layout that does not know it: as ever) */
 };
 
 /* A picture, prepared by the host at the size asked for (0x00RRGGBB). */

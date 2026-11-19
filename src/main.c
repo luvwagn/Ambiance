@@ -10411,9 +10411,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             } else if (cl == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
                 keyed = TRUE;
                 switch (code) {
-                case 0x4F: case 0x4C: step--; break;            /* left, up */
-                case 0x4E: case 0x4D: step++; break;            /* right, down */
-                case 0x43: case 0x44: toggle = !toggle; break;  /* enter, return */
+                case 0x4F: case 0x4C: step--; view_bar_press(&g, VB_PREV); break;   /* left, up */
+                case 0x4E: case 0x4D: step++; view_bar_press(&g, VB_NEXT); break;   /* right, down */
+                case 0x43: case 0x44:                                               /* enter, return */
+                    toggle = !toggle;
+                    view_bar_press(&g, VB_PLAY);
+                    break;
                 case 0x45: case 0x41: quit = TRUE; break;       /* esc, backspace */
                 case 0x23: full = TRUE; break;                  /* F, Amiga-F */
                 default: poke = TRUE; break;
@@ -10422,8 +10425,10 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 keyed = TRUE;
                 if (code == 27 || code == 8)
                     quit = TRUE;
-                else if (code == 13 || code == ' ')
+                else if (code == 13 || code == ' ') {
                     toggle = !toggle;
+                    view_bar_press(&g, VB_PLAY);
+                }
                 else if (code == 'f' || code == 'F')
                     full = TRUE;            /* (Amiga-F comes as its raw key) */
                 else
@@ -10527,6 +10532,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             viewer_bar(l, shown, &pi, scale, slideshow);
             bar_until = now + BAR_MS;
         }
+        view_bar_tick(&g);                  /* (a button a key pressed: raised again) */
         if (view_bar_shown() && ok && (LONG)(now - bar_until) >= 0) {
             view_bar_hide(&g);
             vw_mouse = FALSE;
@@ -17363,17 +17369,17 @@ WORD lv_controls_h(BOOL timed)
 BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
 {
     struct LkOut keep, o;
-    BOOL mem = !g.truecolor;
+    BOOL mem = !g.truecolor, probe = FALSE;
+    LONG n = (LONG)g.w * c->h;
     if (!lv_controls_ok() || !bm)
         return FALSE;
     if (mem) {                              /* (AGA: in memory, then the kept registers) */
-        LONG n = (LONG)g.w * c->h;
-        if (n > lv_mem_n) {
+        if (n * 2 > lv_mem_n) {             /* (and as much again: the probe) */
             FreeVec(lv_mem);
             lv_mem_n = 0;
-            if (!(lv_mem = AllocVec((ULONG)n * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)))
+            if (!(lv_mem = AllocVec((ULONG)n * 2 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)))
                 return FALSE;
-            lv_mem_n = n;
+            lv_mem_n = n * 2;
         }
         if (!lk_open_mem(&g, &o, lv_mem, c->y, g.w, c->h))
             return FALSE;
@@ -17389,8 +17395,23 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lv_ctl.y1 = c->y + c->h;
     lk_clip(&lv.out, lv_ctl.x0, lv_ctl.y0, lv_ctl.x1, lv_ctl.y1);
     lv.eng->controls(c, what);
-    lv_ctl.on = FALSE;
     lk_close(&lv.out);
+    /* AGA, the colours to be chosen: drawn again with every button pressed
+     * (its glow's yellows), unseen, so they are among them from the start
+     * and a key's press needs no new copper list */
+    if (mem && what == 0 && lv_ctl_pick && lk_open_mem(&g, &o, lv_mem + n, c->y, g.w, c->h)) {
+        UWORD was = c->pressed;
+        int b;
+        lv.out = o;
+        lk_clip(&lv.out, lv_ctl.x0, lv_ctl.y0, lv_ctl.x1, lv_ctl.y1);
+        for (b = 0; b < c->n; b++)
+            c->pressed |= (UWORD)LNB_BIT(c->btn[b]);
+        lv.eng->controls(c, 0);
+        c->pressed = was;
+        lk_close(&lv.out);
+        probe = TRUE;
+    }
+    lv_ctl.on = FALSE;
     lv_sp_up = FALSE;
     lv.out = keep;
     if (mem) {
@@ -17406,7 +17427,7 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
             lv_ctl_first[k] = -1;           /* (the pens past ncol: none) */
         lv_ctl_n = ncol - 1;                /* (and one more register: the gradient's second) */
         lv_ctl_h = c->h <= LV_CTL_ROWS ? c->h : 0;
-        if (!lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
+        if (!lk_mem_pens(lv_mem, probe ? lv_mem + n : NULL, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
                          ncol - 1, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
             return FALSE;                   /* (its rows the bitmap's last: a band's gap over them) */
         if (pick)
