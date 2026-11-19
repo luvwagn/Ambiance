@@ -15,6 +15,18 @@
 #include <string.h>
 
 extern struct Library *CyberGfxBase;
+
+/* Time spent (Debug's load line): showing an 8-bit canvas (WriteChunkyPixels),
+ * cutting pictures' colours down, how many pixels shown, looks for free pens */
+static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc;
+void lk_timing(ULONG *show_ms, ULONG *pic_ms, ULONG *kpx, ULONG *gcs)
+{
+    *show_ms = lkt_show;
+    *pic_ms = lkt_pic;
+    *kpx = lkt_px / 1000;
+    *gcs = lkt_gc;
+    lkt_show = lkt_pic = lkt_px = lkt_gc = 0;
+}
 extern struct GfxBase *GfxBase;
 
 /* Where an output draws: the screen (rp NULL: the Gfx's RastPort of the
@@ -41,6 +53,10 @@ struct LkTarget {
                                  * through for the nearest */
     int nlive, nfree, hunt;
     BOOL asked;                 /* ...pens made or wanted since ck_gc last looked */
+    ULONG gen;                  /* ...ck_gc's count (a pen map made before it: stale) */
+    const unsigned long *cut_px;    /* the picture pmapb was made for (drawn again: kept) */
+    long cut_w, cut_h, cut_mod;
+    ULONG cut_sum, cut_gen;
     BOOL no_new;                /* a picture of many colours drawn (a photo, a reflection):
                                  * the nearest pens there are, none made for it */
     ULONG rgbof[256];           /* each pen's colour (greys, ramp, the pool's) */
@@ -157,6 +173,8 @@ static void ck_gc(struct LkTarget *t)
     UBYTE seen[256];
     const UBYTE *p = t->ch, *e = t->ch + t->cw * t->chh;
     int k;
+    lkt_gc++;
+    t->gen++;
     memset(seen, 0, sizeof(seen));
     while (p + 8 <= e) {
         seen[p[0]] = 1; seen[p[1]] = 1; seen[p[2]] = 1; seen[p[3]] = 1;
@@ -498,14 +516,38 @@ static void ck_box_measure(const struct LkTarget *t, struct CkBox *b)
         }
 }
 
+static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod);
 void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
+{
+    ULONG t0 = time_ms();
+    lk_picture_(o, x, y, px, w, h, mod);
+    lkt_pic += time_ms() - t0;
+}
+static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
 {
     struct LkTarget *t = o->ctx;
     static struct CkBox box[128];
     long i, j, n = 0, want, nb;
+    if (w <= 0 || h <= 0)
+        return;
     if (!t || !t->ch || !t->hist) {
         lk_image(o, x, y, px, w, h, mod);
         return;
+    }
+    {   /* the same picture as the last cut (a list's details drawn again
+         * each move): its pens as they were */
+        ULONG sum = 0;
+        for (j = 0; j < 16; j++)
+            sum = sum * 31 + px[(j * (h - 1) / 15) * mod + (j * 7 % 16) * (w - 1) / 15];
+        if (px == t->cut_px && w == t->cut_w && h == t->cut_h && mod == t->cut_mod && sum == t->cut_sum &&
+            t->gen == t->cut_gen) {
+            t->pmap = t->pmapb;
+            lk_image(o, x, y, px, w, h, mod);
+            t->pmap = NULL;
+            return;
+        }
+        t->cut_px = NULL;
+        t->cut_sum = sum;
     }
     /* how many colours: a big picture (Now playing's cover, a page's) up to
      * 96, a small one (a wall's) 24 or 16, while pens are free, leaving some
@@ -578,6 +620,11 @@ void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w
         for (i = 0; i < box[j].n; i++)
             t->pmapb[t->list[box[j].at + i]] = pen;
     }
+    t->cut_px = px;
+    t->cut_w = w;
+    t->cut_h = h;
+    t->cut_mod = mod;
+    t->cut_gen = t->gen;
     t->pmap = t->pmapb;
     lk_image(o, x, y, px, w, h, mod);
     t->pmap = NULL;
@@ -674,9 +721,12 @@ void lk_show(struct LkOut *o)
         if (t->y0 < 0) t->y0 = 0;
         if (t->x1 >= t->cw) t->x1 = t->cw - 1;
         if (t->y1 >= t->chh) t->y1 = t->chh - 1;
+        ULONG t0 = time_ms();
         gfx_dirty();
         WriteChunkyPixels(t->g->rp, (ULONG)t->x0, (ULONG)t->y0, (ULONG)t->x1, (ULONG)t->y1,
                           t->ch + t->y0 * t->cw + t->x0, t->cw);
+        lkt_show += time_ms() - t0;
+        lkt_px += (ULONG)(t->x1 - t->x0 + 1) * (ULONG)(t->y1 - t->y0 + 1);
         t->x0 = 1;
         t->x1 = 0;
         if (t->asked && t->nfree < 64)  /* (the canvas is what is on screen now: the pens
@@ -722,8 +772,15 @@ void lk_close(struct LkOut *o)
         if (t->pmapb)
             FreeVec(t->pmapb);
         if (t->pal_was) {
-            if (t->g->scr)              /* (the classic's colours back) */
+            if (t->g->scr) {            /* (the classic's colours back: first the screen
+                                         * cleared, or the layout's pens show in them
+                                         * a moment - quitting, a flash of garbage) */
+                if (t->g->rp) {
+                    SetAPen(t->g->rp, 0);
+                    RectFill(t->g->rp, 0, 0, (WORD)(t->cw - 1), (WORD)(t->chh - 1));
+                }
                 LoadRGB32(&t->g->scr->ViewPort, t->pal_was);
+            }
             FreeVec(t->pal_was);
         }
         FreeVec(t);

@@ -3650,7 +3650,8 @@ static BOOL lv_art_came;            /* a layout's cover came from the server: dr
 static struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
 static ULONG art_asked[ART_KINDS];     /* time_ms each was asked for (log) */
-static ULONG art_lv_wanted;             /* time_ms a layout last wanted a server's picture */
+static ULONG art_lv_wanted;
+static ULONG lvt_worst;                 /* the longest lv_frame since the load line (log) */             /* time_ms a layout last wanted a server's picture */
 static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
 static void art_ready(int kind, const char *file);
 static struct LJob *np_aj;          /* Now playing's cover, made for its square */
@@ -4412,9 +4413,16 @@ static void dbg_load_log(void)
         {
             ULONG lms, lw, lp;
             lv_timing(&lms, &lw, &lp);
-            if (lms || lw || lp)        /* a layout's: its time drawing, and how */
-                sprintf(rp + strlen(rp), ", layout %lu ms (%lu whole, %lu in part)", (unsigned long)lms,
-                        (unsigned long)lw, (unsigned long)lp);
+            if (lms || lw || lp) {      /* a layout's: its time drawing, and how */
+                ULONG ss, ps, kpx, gcs;
+                sprintf(rp + strlen(rp), ", layout %lu ms (%lu whole, %lu in part, longest %lu ms)",
+                        (unsigned long)lms, (unsigned long)lw, (unsigned long)lp, (unsigned long)lvt_worst);
+                lvt_worst = 0;
+                lk_timing(&ss, &ps, &kpx, &gcs);
+                if (ss || ps || gcs)    /* (8-bit: shown with WriteChunkyPixels, pictures' colours) */
+                    sprintf(rp + strlen(rp), " [8-bit: shown %lu ms, %lu K pixels; pictures %lu ms; %lu pen looks]",
+                            (unsigned long)ss, (unsigned long)kpx, (unsigned long)ps, (unsigned long)gcs);
+            }
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
                 (long)(app_sum / n), rp, (long)((loop_wakes - wakes0) / n),
@@ -18850,7 +18858,7 @@ static void lv_activate(void)
     gfx_off = TRUE;
     gfx_off_hits = 0;
     settings_rebuild();         /* Display's Colours row: greyed, the layout's */
-    sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)lv.out.bits, (long)g.w,
+    sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)(g.truecolor ? lv.out.bits : g.depth), (long)g.w,
             (long)g.h, lk_canvas(&lv.out) ? ", drawn off screen" : "");
     amb_log("layout", m);
 }
@@ -18960,9 +18968,12 @@ void lv_timing(ULONG *ms, ULONG *whole, ULONG *parts)
 static void lv_frame_(void);
 void lv_frame(void)
 {
-    ULONG t0 = time_ms();
+    ULONG t0 = time_ms(), d;
     lv_frame_();
-    lvt_ms += time_ms() - t0;
+    d = time_ms() - t0;
+    lvt_ms += d;
+    if (d > lvt_worst)
+        lvt_worst = d;
 }
 
 static void lv_frame_(void)
