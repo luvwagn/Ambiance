@@ -2694,6 +2694,10 @@ static void hz_draw(int screen)
     hits_base = 0;
     nsbar = 0;
     hit_sel = -1;
+    rows_ok = FALSE;                /* (a whole draw: every row again - an album's tracks,
+                                     * back from Now playing, were drawn as a move: the rows
+                                     * either side of the chosen one alone) */
+    col_key = ~0UL;
     switch (screen) {
     case LS_HOME: draw_home(); break;
     case LS_NOW: draw_now(); break;
