@@ -18546,6 +18546,13 @@ static void lv_off(BOOL redraw)
         draw_all();             /* the classic layout, all of it */
 }
 
+/* Whether a layout can draw on a screen like this one at all (lv_suits,
+ * whatever else is up) */
+static BOOL lv_screen_can(void)
+{
+    return (g.truecolor && !g.planar) || (lv_native && !g.truecolor && g.depth == 8 && !g.wb);
+}
+
 static BOOL lv_suits(void)
 {
     if (iconified || mini_on || np_full || vw_active || !g.win || !g.rp || !g.scr)
@@ -19181,8 +19188,11 @@ void lv_build_page(struct Page *p)
             p->sel = p->list.count - 1;
             amb_strlcpy(lv.name, lv.found[i].name, sizeof(lv.name));
         }
-        if (it && (!g.truecolor || g.planar))
-            it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen only) */
+        if (it && !lv_screen_can())
+            it->flags |= ITEM_DISABLED;     /* (a graphics card's 15-32 bit screen, or an 8-bit
+                                             * native one with Layouts on native screens on;
+                                             * greyed there too, a layout could be left for the
+                                             * classic and never chosen again) */
     }
     if (layout_stale) {
         /* an older copy of a layout is still in memory, open (an Ambiance
