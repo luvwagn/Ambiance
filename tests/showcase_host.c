@@ -37,6 +37,8 @@ static unsigned long *px;
 static unsigned long scratch[2048 * 16];
 static struct LkOut out;
 static long drawn_px, copied_px;
+static LONG games_sel = 8;      /* the games page's selection (moves drawn in part) */
+static int no_vcopy;            /* copies up or down refused (as over a graphics card's gradient) */
 
 static unsigned long keep(unsigned long c)
 {
@@ -68,6 +70,8 @@ static int s_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 {
     long j;
     (void)ctx;
+    if (dy && no_vcopy)
+        return 0;
     if (x < 0 || y < 0 || x + w > SW || y + h > SH || x + dx < 0 || y + dy < 0 || x + dx + w > SW ||
         y + dy + h > SH) {
         printf("FAIL copy outside the screen: %ld,%ld %ldx%ld by %ld,%ld\n", x, y, w, h, dx, dy);
@@ -579,7 +583,7 @@ static const void *h_model(int screen)
         page.crumb[2] = "P";
         rows_of = game_rows;
         page.list.count = sizeof(game_rows) / sizeof(game_rows[0]);
-        page.list.sel = 8;
+        page.list.sel = games_sel;
         page.list.item = item;
         page.ndetails = 6;
         page.details = game_facts;
@@ -806,6 +810,48 @@ static void run(int w, int h, int bits, const char *font)
             drawn_px = 0;
             layout_engine.changed(LS_PAGE, LC_SELECT);
             CHECK(drawn_px > 0 && drawn_px < full * 3 / 4);
+#ifdef HORIZON
+            {   /* moves drawn in part (the rows that changed; scrolled, the
+                 * copy refused as over a gradient): as a whole draw, pixel
+                 * for pixel */
+                static const LONG to[] = { 9, 10, 9, 0, 1, 11, 12, 5, 8 };
+                unsigned long *was = malloc((size_t)w * h * sizeof(*px));
+                int k, bad = 0;
+                no_vcopy = 1;
+                for (k = 0; k < (int)(sizeof(to) / sizeof(to[0])) && was; k++) {
+                    long d;
+                    games_sel = to[k];
+                    layout_engine.changed(LS_PAGE, LC_SELECT);
+                    memcpy(was, px, (size_t)w * h * sizeof(*px));
+                    layout_engine.draw(LS_PAGE);
+                    for (d = 0; d < (long)w * h; d++)
+                        if (was[d] != px[d]) {
+                            printf("FAIL move to %ld: %ld,%ld differs from a whole draw (%06lx, whole %06lx)\n",
+                                   (long)to[k], d % w, d / w, was[d] & 0xFFFFFFUL, px[d] & 0xFFFFFFUL);
+                            if (getenv("HZ_DIFF") && !getenv("HZ_DONE")) {
+                                setenv("HZ_DONE", "1", 1);
+                                FILE *f = fopen("build/hz-part.raw", "wb");
+                                if (f) {
+                                    fwrite(was, sizeof(*px), (size_t)w * h, f);
+                                    fclose(f);
+                                }
+                                f = fopen("build/hz-whole.raw", "wb");
+                                if (f) {
+                                    fwrite(px, sizeof(*px), (size_t)w * h, f);
+                                    fclose(f);
+                                }
+                            }
+                            bad = 1;
+                            break;
+                        }
+                }
+                CHECK(was && !bad);
+                free(was);
+                no_vcopy = 0;
+                games_sel = 8;
+                layout_engine.draw(LS_PAGE);
+            }
+#endif
         }
     }
     {

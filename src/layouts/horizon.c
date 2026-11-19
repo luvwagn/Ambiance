@@ -1323,10 +1323,63 @@ static LONG body_bottom(void)
     return t < HT ? t - Y(14) : HT - Y(30) - FH;
 }
 
+/* A list's rows. The last drawn is kept (rows_*): a move draws again only
+ * the rows that changed - the one left, the one come to and theirs either
+ * side (the glow reaches into them) - and, scrolled, copies the rest up or
+ * down (H->copy) and draws the ones come in. The host refuses an up or
+ * down copy over a gradient that would show (a graphics card's): then,
+ * and for anything else changed, all of them as before. */
+static const void *rows_of;
+static LONG rows_count = -1, rows_top, rows_sel, rows_x, rows_y, rows_w, rows_h;
+static BOOL rows_ok;                    /* (FALSE: drawn by nothing yet, or over) */
+static BOOL rows_hov;                   /* (a row under the pointer when they were drawn) */
+
+static void draw_row(const struct LPage *m, LONG idx, LONG rx, LONG ry, LONG rw, LONG rh)
+{
+    const struct LList *l = &m->list;
+    const struct LItem *it = l->item(idx);
+    BOOL sel = idx == l->sel, hov = HOVER(HT_ROW, idx) && !(it->flags & LIF_DISABLED);
+    LONG right = rx + rw - X(14), tw, mw;
+    const struct LkBg *tb = &bg_grad;
+    ULONG bgc = grad(ry + rh / 2);
+    if (it->flags & LIF_HEAD) {
+        text(rx + X(14), ry + rh - FH - Y(2), lower(it->label), LF_SMALL, C_ACC, &bg_grad, rw);
+        return;
+    }
+    if (sel || hov) {
+        pill(rx, ry + 2, rw, rh - 4, sel, bgc);
+        tb = &pill_bg;
+        bgc = sel ? C_FOCUS : C_HOVER;
+    }
+    mw = mark(it->mark, right, ry + rh / 2, sel ? C_WHITE : C_SUB, bgc);
+    if (mw)
+        right -= mw + X(10);
+    if (it->tag && *it->tag) {
+        tw = tlen(it->tag, LF_REGULAR);
+        if (tw > rw / 2)
+            tw = rw / 2;
+        text(right - tw, ry + (rh - FH) / 2, it->tag, LF_REGULAR, sel ? C_WHITE : C_SUB, tb, tw);
+        right -= tw + X(14);
+    }
+    text(rx + X(14), ry + (rh - FH) / 2, it->label, sel ? LF_BOLD : LF_REGULAR,
+         (it->flags & LIF_DISABLED) ? C_DIM : sel ? C_WHITE : C_TEXT, tb, right - rx - X(14));
+}
+
+/* Part of the rows' background again, exactly as the whole of it is drawn
+ * (the same gradient over the same place, clipped to the part) */
+static void rows_bg(LONG x, LONG y, LONG w, LONG h, LONG px, LONG py, LONG pw, LONG ph)
+{
+    H->clip((WORD)px, (WORD)py, (WORD)(px + pw), (WORD)(py + ph));
+    H->vgrad((WORD)(x - X(12)), (WORD)(y - X(8)), (WORD)(w + X(24)), (WORD)(h + X(16)), grad(y - X(8)),
+             grad(y + h + X(8)));
+    H->clip(0, 0, W, HT);
+}
+
 static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
 {
-    LONG rh = FH + Y(18), fit, i;
+    LONG rh = FH + Y(18), fit, i, d = 0, rw;
     const struct LList *l = &m->list;
+    BOOL bar, part;
     fit = h / rh;
     if (fit < 1)
         fit = 1;
@@ -1344,46 +1397,88 @@ static void draw_rows(const struct LPage *m, LONG x, LONG y, LONG w, LONG h)
     if (list_top < 0)
         list_top = 0;
     hit_sel = l->sel;
-    H->vgrad((WORD)(x - X(12)), (WORD)(y - X(8)), (WORD)(w + X(24)), (WORD)(h + X(16)), grad(y - X(8)),
-             grad(y + h + X(8)));
-    for (i = 0; i < fit && list_top + i < l->count; i++) {
-        const struct LItem *it = l->item(list_top + i);
-        BOOL sel = list_top + i == l->sel, hov = HOVER(HT_ROW, list_top + i) && !(it->flags & LIF_DISABLED);
-        LONG ry = y + i * rh, rx = x, rw = w - (l->count > fit ? X(16) : 0), right = rx + rw - X(14), tw, mw;
-        const struct LkBg *tb = &bg_grad;
-        ULONG bgc = grad(ry + rh / 2);
-        if (it->flags & LIF_HEAD) {
-            text(rx + X(14), ry + rh - FH - Y(2), lower(it->label), LF_SMALL, C_ACC, &bg_grad, rw);
-            continue;
+    bar = l->count > fit;
+    rw = w - (bar ? X(16) : 0);
+    /* the rows that changed only: the same list, place and pointer, scrolled
+     * less than a page (copied, if the host can) */
+    part = rows_ok && rows_of == (const void *)l->item && rows_count == l->count && rows_x == x &&
+           rows_y == y && rows_w == w && rows_h == h && hov_what != HT_ROW && !rows_hov;
+    if (part) {
+        d = list_top - rows_top;
+        if (d >= fit || -d >= fit)
+            part = FALSE;
+        else if (d) {
+            LONG cx = x - X(12), cw = rw + X(12) + X(7);
+            part = d > 0 ? H->copy && H->copy((WORD)cx, (WORD)(y + d * rh), (WORD)cw, (WORD)((fit - d) * rh), 0,
+                                              (WORD)(-d * rh))
+                         : H->copy && H->copy((WORD)cx, (WORD)y, (WORD)cw, (WORD)((fit + d) * rh), 0,
+                                              (WORD)(-d * rh));
         }
-        if (!(it->flags & LIF_DISABLED))
-            hit(rx, ry, rw, rh, HT_ROW, it->kind, list_top + i);
-        if (sel || hov) {
-            pill(rx, ry + 2, rw, rh - 4, sel, bgc);
-            tb = &pill_bg;
-            bgc = sel ? C_FOCUS : C_HOVER;
-        }
-        mw = mark(it->mark, right, ry + rh / 2, sel ? C_WHITE : C_SUB, bgc);
-        if (mw)
-            right -= mw + X(10);
-        if (it->tag && *it->tag) {
-            tw = tlen(it->tag, LF_REGULAR);
-            if (tw > rw / 2)
-                tw = rw / 2;
-            text(right - tw, ry + (rh - FH) / 2, it->tag, LF_REGULAR, sel ? C_WHITE : C_SUB, tb, tw);
-            right -= tw + X(14);
-        }
-        text(rx + X(14), ry + (rh - FH) / 2, it->label, sel ? LF_BOLD : LF_REGULAR,
-             (it->flags & LIF_DISABLED) ? C_DIM : sel ? C_WHITE : C_TEXT, tb, right - rx - X(14));
     }
-    if (l->count > fit) {
-        LONG bh = fit * rh, th = bh * fit / l->count, ty;
+    if (!part) {
+        H->vgrad((WORD)(x - X(12)), (WORD)(y - X(8)), (WORD)(w + X(24)), (WORD)(h + X(16)), grad(y - X(8)),
+                 grad(y + h + X(8)));
+        for (i = 0; i < fit && list_top + i < l->count; i++)
+            draw_row(m, list_top + i, x, y + i * rh, rw, rh);
+    } else {
+        /* the slots to draw: come in (scrolled), the one left and the one
+         * come to, and theirs either side; the selection's last (its glow
+         * over them) */
+        UBYTE want[64];
+        LONG os = rows_sel - list_top, ns = l->sel - list_top, k, cx = x - X(12), cw = rw + X(12) + X(7);
+        if (fit > 64)
+            fit = 64;
+        for (k = 0; k < 64; k++)
+            want[k] = 0;
+        if (d > 0)
+            for (k = fit - d; k < fit; k++)
+                want[k] = 1;
+        else if (d < 0)
+            for (k = 0; k < -d; k++)
+                want[k] = 1;
+        for (k = -1; k <= 1; k++) {
+            if (os + k >= 0 && os + k < fit)
+                want[os + k] = 1;
+            if (ns + k >= 0 && ns + k < fit)
+                want[ns + k] = 1;
+        }
+        /* (the margins above and below: a first or last row's glow reaches them) */
+        rows_bg(x, y, w, h, cx, y - X(8), cw, X(8));
+        rows_bg(x, y, w, h, cx, y + fit * rh, cw, h + X(8) - fit * rh);
+        for (k = 0; k < fit; k++)
+            if (want[k])
+                rows_bg(x, y, w, h, cx, y + k * rh, cw, rh);
+        for (k = 0; k < fit && list_top + k < l->count; k++)
+            if (want[k] && k != ns)
+                draw_row(m, list_top + k, x, y + k * rh, rw, rh);
+        if (ns >= 0 && ns < fit && list_top + ns < l->count)
+            draw_row(m, list_top + ns, x, y + ns * rh, rw, rh);
+    }
+    for (i = 0; i < fit && list_top + i < l->count; i++) {    /* (where a click goes: every row) */
+        const struct LItem *it = l->item(list_top + i);
+        if (!(it->flags & (LIF_HEAD | LIF_DISABLED)))
+            hit(x, y + i * rh, rw, rh, HT_ROW, it->kind, list_top + i);
+    }
+    if (bar) {
+        LONG bh = fit * rh, th = bh * fit / l->count, ty, bx = x + w - X(6);
         if (th < Y(16))
             th = Y(16);
         ty = y + (bh - th) * list_top / (l->count - fit);
+        if (part)                       /* (its column: the thumb moved) */
+            rows_bg(x, y, w, h, bx - X(3), y, X(9) + 6, bh);
         scroll_units(l->sel, fit, l->count - 1);
-        scroll_bar(x + w - X(6), y, bh, ty, th, FALSE);
+        scroll_bar(bx, y, bh, ty, th, FALSE);
     }
+    rows_of = (const void *)l->item;
+    rows_count = l->count;
+    rows_top = list_top;
+    rows_sel = l->sel;
+    rows_x = x;
+    rows_y = y;
+    rows_w = w;
+    rows_h = h;
+    rows_hov = hov_what == HT_ROW;
+    rows_ok = TRUE;
 }
 
 /* The details at the right of a list: the picture standing on its
@@ -1442,8 +1537,10 @@ static void draw_page_body(const struct LPage *m)
         else
             details_at(m->picture, m->details, m->ndetails, dx, y + Y(6), dw, bottom);
     }
-    if (!n && m->letter && H->letter)
+    if (!n && m->letter && H->letter) {
         H->letter((WORD)(x + lw - X(40)), (WORD)(y + (bottom - y) / 2), C_LETTER);
+        rows_ok = FALSE;                /* (over the rows: all of them again next) */
+    }
 }
 
 /* A long text as this layout wraps it: each line's height (a blank one
@@ -1585,6 +1682,7 @@ static void draw_page(void)
         draw_text_body_as(m, TRUE);
     } else {
         col_key = ~0UL;                 /* (a whole draw: the column too) */
+        rows_ok = FALSE;                /* (and every row) */
         draw_page_body(m);
     }
     now_inset();

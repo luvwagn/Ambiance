@@ -128,6 +128,9 @@ static void rtg_rows(void *ctx, long x, long y, long w, long h, const unsigned l
 static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 {
     struct LkTarget *t = ctx;
+    if (dy)
+        return 0;                       /* (up or down over the gradient: a row would carry
+                                         * the shade of where it was) */
     if (t->bm) {
         BltBitMap(t->bm, (WORD)x, (WORD)(y - t->oy), t->bm, (WORD)(x + dx), (WORD)(y + dy - t->oy), (WORD)w,
                   (WORD)h, 0xC0, 0xFF, NULL);
@@ -374,6 +377,8 @@ static int ck_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 {
     struct LkTarget *t = ctx;
     long j;
+    if (dy && !t->copper)
+        return 0;                       /* (up or down over the dithered ramp: it would show) */
     if (dy > 0) {                       /* (rows from the bottom: they overlap) */
         for (j = h - 1; j >= 0; j--)
             memmove(t->ch + (y + j + dy) * t->cw + x + dx, t->ch + (y + j) * t->cw + x, (size_t)w);
