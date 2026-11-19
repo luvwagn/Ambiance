@@ -1770,6 +1770,58 @@ static WORD cjk_draw(struct Gfx *g, struct LkOut *o, WORD x, WORD y, ULONG cp, i
     return (WORD)(adv * k);
 }
 
+/* Text's coverage straight into the canvas: each row's sixteen shades
+ * (the background under it to fg) given their pens once, then a pen a
+ * pixel by its coverage - not made colours a pixel at a time and each
+ * looked up again (lk_cover then ck_rows: four fifths of the text's
+ * time). FALSE: not here (the dithered ramp: its pen a pixel's own) */
+static BOOL ck_cover(struct LkOut *o, long x, long y, const UBYTE *cov, long w, long h, long mod,
+                     unsigned long fg, const struct LkBg *bg)
+{
+    struct LkTarget *t = o->ctx;
+    long x0 = x, x1 = x + w, y0 = y, y1 = y + h, i, j, k;
+    UBYTE pl[16];
+    ULONG last = 0xFFFFFFFFUL;
+    if (!bg || (t->rowc && !t->copper))
+        return FALSE;
+    if (x0 < o->cx0) x0 = o->cx0;
+    if (y0 < o->cy0) y0 = o->cy0;
+    if (x1 > o->cx1) x1 = o->cx1;
+    if (y1 > o->cy1) y1 = o->cy1;
+    if (x1 <= x0 || y1 <= y0)
+        return TRUE;
+    ck_touch(t, x0, y0, x1 - x0, y1 - y0);
+    for (j = y0; j < y1; j++) {
+        ULONG b = lk_bg_at(bg, j) & 0xFFFFFF;
+        const UBYTE *c = cov + (j - y) * mod + (x0 - x);
+        UBYTE *d = t->ch + j * t->cw + x0;
+        if (b != last || t->copper) {   /* (the copper's: whether a shade is the background's
+                                         * is the row's own) */
+            long pa = -1;
+            for (k = 0; k < 16; k++) {
+                long a = k;
+                ULONG cc;
+                UBYTE pen;
+                if (o->cov_steps > 1)
+                    a = (k * (o->cov_steps - 1) + 7) / 15 * 15 / (o->cov_steps - 1);
+                if (a == pa) {
+                    pl[k] = pl[k - 1];      /* (the same step as the one before) */
+                    continue;
+                }
+                pa = a;
+                cc = lk_mix(b, fg, a, 15) & 0xFFFFFF;
+                if (!(pen = ck_bg_pen(t, x0, j, cc)))
+                    pen = ck_pen_for(t, cc);
+                pl[k] = pen;
+            }
+            last = b;
+        }
+        for (i = 0; i < x1 - x0; i++)
+            d[i] = pl[c[i] & 15];
+    }
+    return TRUE;
+}
+
 WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG n, int face,
              ULONG fg, const struct LkBg *bg, WORD maxw)
 {
@@ -1820,7 +1872,8 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
             return 0;
         if (o->ctx && o->fill == ck_fill)
             lkp_n[LKP_GLYPHS]++, lkp_t[LKP_GLYPHS] += time_ticks(&lkp_hz) - tg;
-        lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
+        if (!(o->ctx && o->fill == ck_fill && ck_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg)))
+            lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
         if (o->ctx && o->fill == ck_fill)
             LKP_END(LKP_TEXT);
     }
@@ -1834,7 +1887,8 @@ WORD lk_icon(struct Gfx *g, struct LkOut *o, int icon, WORD x, WORD y, ULONG fg,
     UWORD n, mod;
     if (!g->sm || !(cov = sm_icon_cover(g->sm, icon, &n, &mod)))
         return 0;
-    lk_cover(o, x, y, cov, n, n, mod, fg, bg);
+    if (!(o->ctx && o->fill == ck_fill && ck_cover(o, x, y, cov, n, n, mod, fg, bg)))
+        lk_cover(o, x, y, cov, n, n, mod, fg, bg);
     return (WORD)n;
 }
 
