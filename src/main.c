@@ -6601,6 +6601,8 @@ static void set_mouse_mode(BOOL on)
         hover_none();                       /* the joystick: no pointer to follow */
     if (np_on())
         np_update();                        /* the yellow frame, or the mouse's light */
+    if (lv_on())
+        lv_note_what(LC_SELECT);            /* (a layout: Home's chosen tile shown, or not) */
 }
 
 static void draw_list_rows(struct Page *p);  /* the program's: state, then the view (ui) */
@@ -6864,12 +6866,53 @@ static WORD text_box_h(struct Page *p, WORD y0, WORD *note_lines)
     return avail - note_h - (p->pic_bm ? p->pic_h : 0) - U(8);
 }
 
+/* A layout's measure of a text page (LAC_TEXTFIT): its view's height and
+ * the whole text's, in its pixels. The text box (not drawn under a layout)
+ * takes the same proportion - its height that part of its text's - so its
+ * keys, wheel and scroll bar go the layout's whole way. */
+static struct Page *lv_tfit_p;
+static ULONG lv_tfit;
+static BOOL lv_tfit_apply(struct Page *p)
+{
+    LONG vis, tot, h, mx;
+    if (!p || p != lv_tfit_p || !p->tb.open || !lv_tfit)
+        return FALSE;
+    vis = (LONG)(lv_tfit >> 16);
+    tot = (LONG)(lv_tfit & 0xFFFF);
+    h = tot > vis && vis > 0 ? (LONG)((p->tb.content_h * (ULONG)vis) / (ULONG)tot) : p->tb.content_h;
+    if (h < p->tb.line_h)
+        h = p->tb.line_h;
+    if (h > 32767)
+        h = 32767;
+    if (h == p->tb.h)
+        return FALSE;
+    p->tb.h = (WORD)h;
+    mx = p->tb.content_h - h;
+    if (mx < 0)
+        mx = 0;
+    if (p->tb.pos > mx)
+        p->tb.pos = mx;
+    if (p->tb.target > mx)
+        p->tb.target = mx;
+    return TRUE;
+}
+
 static void open_textbox(struct Page *p, WORD y0)
 {
     WORD lines;
+    LONG pos = p->tb.pos, target = p->tb.target;
+    BOOL was = p->tb.open;
     p->tb.pic = NULL;                       /* the picture is under the box, not in it */
     tb_open(&g, &p->tb, g.pane_x, y0, textbox_w(), text_box_h(p, y0, &lines), &p->list,
             p->type == PT_DETAIL);
+    if (!was && p == lv_tfit_p)
+        lv_tfit = 0;                        /* (another page in that place: its own measure) */
+    if (lv_on() && was && p == lv_tfit_p && lv_tfit && p->tb.open) {
+        p->tb.pos = pos;                    /* (where it was, by the layout's measure) */
+        p->tb.target = target;
+        p->tb.h = 0;
+        lv_tfit_apply(p);
+    }
 }
 
 /* The note and the picture under a text page's box. */
@@ -8071,6 +8114,10 @@ static BOOL np_start_now(LONG idx)
             set_msg(err);
             return FALSE;
         }
+        plex_now[0] = 0;                    /* (no Plex track now) */
+        plex_now_in[0][0] = plex_now_in[1][0] = 0;
+        np_local_art = FALSE;
+        np_art_start(NULL);                 /* a station: the last track's cover goes */
     } else if (it->kind == IT_PLEXTRACK) {
         char url[2048], by[200], album[100], ms[16];
         BOOL ok_track;
@@ -10508,6 +10555,20 @@ static void viewer_done(void)
      * drawn it, it seems), only what was drawn later showing */
     gfx_dbuf_start(&g);
     plex_shortcut_fix(cur());       /* (its Now playing row, held while it was viewed) */
+    if (lv_chosen() && !g.truecolor && g.rp) {
+        /* a layout on an 8-bit screen: the screen cleared while it is still
+         * black, the UI's colours back at once, then the layout opened (its
+         * own colours made from those) - faded in after, they went over
+         * the layout's pens */
+        SetRast(g.rp, 0);
+        view_restore_now(&g);
+        lv_resume();
+        draw_all();
+        lv_frame();
+        gfx_dirty();
+        gfx_present(&g);
+        return;
+    }
     lv_resume();                    /* a layout: on again first (the classic one only counted) */
     draw_all();
     lv_frame();
@@ -16275,6 +16336,12 @@ static void handle_key(struct IntuiMessage *im)
         gfx_iconify_asked = TRUE;
         return;
     }
+    if (im->Class == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && code != 0x7A && code != 0x7B &&
+        (code < 0x60 || code > 0x67) && lv_on()) {
+        pointer_hide();                     /* the keyboard in use, for a layout's keys too
+                                             * (its Home row's choice shows again) */
+        set_mouse_mode(FALSE);
+    }
     if (lv_key(im))
         return;                             /* a layout's own (or the wheel, in one) */
 
@@ -18108,6 +18175,16 @@ static void lv_act(int what, LONG arg)
             }
         } else if (p && (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open && arg >= 0) {
             tb_scroll_frac(&p->tb, (ULONG)arg);
+        }
+        break;
+    case LAC_TEXTFIT:                       /* the layout's measure of the text drawn */
+        if (p && (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open &&
+            (p != lv_tfit_p || (ULONG)arg != lv_tfit)) {
+            LONG was = p->tb.pos;
+            lv_tfit_p = p;
+            lv_tfit = (ULONG)arg;
+            if (lv_tfit_apply(p) && was)
+                lv_note();                  /* (the same place is a new fraction: drawn again) */
         }
         break;
     case LAC_SEEK:                          /* Now playing's bar, clicked */

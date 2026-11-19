@@ -163,8 +163,22 @@ static const char *lower(const char *s)
     LONG i = 0;
     if (!s)
         return NULL;
-    for (; s[i] && i < (LONG)sizeof(lowbuf[0]) - 1; i++)
+    for (; s[i] && i < (LONG)sizeof(lowbuf[0]) - 1; i++) {
+        /* (a name stays one: "Plex in Ambiance", not "...ambiance") */
+        if (s[i] == 'A' && (i == 0 || s[i - 1] == ' ') && i + 8 < (LONG)sizeof(lowbuf[0]) - 1) {
+            static const char nm[] = "Ambiance";
+            int k = 0;
+            while (k < 8 && s[i + k] == nm[k])
+                k++;
+            if (k == 8 && (s[i + 8] < 'a' || s[i + 8] > 'z')) {
+                for (k = 0; k < 8; k++)
+                    b[i + k] = nm[k];
+                i += 7;
+                continue;
+            }
+        }
         b[i] = (char)(s[i] >= 'A' && s[i] <= 'Z' ? s[i] + 32 : s[i]);
+    }
     b[i] = 0;
     return b;
 }
@@ -1690,6 +1704,9 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
             scroll_units((LONG)(m->text_frac * 1000 / 65536), vh * 1000 / (tl_total - vh), 1000);
             scroll_bar(sbx, top, bh, ty, th, FALSE);
         }
+        if (vh > 0)                     /* (the host's keys go by this measure) */
+            H->act(LAC_TEXTFIT, (LONG)(((ULONG)(vh > 65535 ? 65535 : vh) << 16) |
+                                       (ULONG)(tl_total > 65535 ? 65535 : tl_total)));
     }
 }
 

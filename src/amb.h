@@ -477,6 +477,7 @@ void view_spin_hide(struct Gfx *g);
 BOOL view_bar_shown(void);
 void view_end(struct Gfx *g);
 void view_restore(struct Gfx *g);
+void view_restore_now(struct Gfx *g);    /* the same at once, no fade (a layout loads its own after) */
 void pic_describe(const struct PicInfo *pi, char *out, LONG max);   /* "320 x 256, 32 colours" */
 struct BitMapHeader;
 void pic_info(APTR o, const struct BitMapHeader *bmh, struct PicInfo *pi);   /* o: a datatype */

@@ -1219,6 +1219,19 @@ void view_end(struct Gfx *g)
     }
 }
 
+/* The UI's colours back at once, no fade (a layout comes back over a
+ * cleared screen and loads its own: faded in after it, these went over
+ * the layout's pens - the slideshow left Home in stripes) */
+void view_restore_now(struct Gfx *g)
+{
+    if (clut && saved)
+        LoadRGB32(&g->scr->ViewPort, saved);
+    FreeVec(saved);
+    FreeVec(shown);
+    FreeVec(work);
+    saved = shown = work = NULL;
+}
+
 void view_restore(struct Gfx *g)
 {
     if (clut && saved) {

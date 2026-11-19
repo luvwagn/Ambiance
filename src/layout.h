@@ -237,8 +237,12 @@ enum {
     LAC_HOME,                   /* Home: every level closed, the sections' menu */
     LAC_BUTTON,                 /* arg: Now playing's button pressed (LNB_*) */
     LAC_SEEK,                   /* arg: to there in what plays, in 65536ths of its length */
-    LAC_SCROLLTO                /* arg: the list (to that row) or text (that far) at that
+    LAC_SCROLLTO,               /* arg: the list (to that row) or text (that far) at that
                                  * part of its length, in 65536ths: a scroll bar dragged */
+    LAC_TEXTFIT                 /* arg: a text page as this layout wraps it, in its pixels:
+                                 * the view's height << 16 | the whole text's (each at most
+                                 * 65535). The host's keys and wheel scroll it by that
+                                 * measure, not by its own wrapping's. */
 };
 
 /* Input given to the layout (input's action): the program's keys, the
