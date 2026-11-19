@@ -4372,7 +4372,7 @@ static void dbg_load_log(void)
     static int n;
     static ULONG wakes0;
     static LONG cpu_sum, app_sum;
-    char m[680];
+    char m[760];
     struct Page *p = cur();
     if (cpu_load >= 0)
         cpu_sum += cpu_load;
@@ -4382,7 +4382,7 @@ static void dbg_load_log(void)
         return;
     {
         LONG rb = st_busy_sample();
-        char rp[420];
+        char rp[480];
         rp[0] = 0;
         if (rb >= 0)
             sprintf(rp, " (its music process %ld%%)", (long)(rb > 100 ? 100 : rb));
@@ -4414,6 +4414,13 @@ static void dbg_load_log(void)
                     if (lf < 999)
                         sprintf(rp + strlen(rp), "; fewest pens free %lu, %lu pictures short of them",
                                 (unsigned long)lf, (unsigned long)sh);
+                    {
+                        ULONG bn, bk;
+                        lk_blits(&bn, &bk);
+                        if (bn)         /* (copies the blitter made, not c2p'd again) */
+                            sprintf(rp + strlen(rp), "; blitter %lu copies, %lu K pixels",
+                                    (unsigned long)bn, (unsigned long)bk);
+                    }
                     strcat(rp, "]");
                 }
             }
@@ -18638,6 +18645,9 @@ static void lv_sync(void)
         /* (an AGA screen's background by the copper unless Ambiance/LayoutCopper is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutCopper", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_copper_ok = buf[0] != '0';
+        /* (an AGA screen's copies by the blitter unless Ambiance/LayoutBlit is 0) */
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutBlit", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lk_blit_ok = buf[0] != '0';
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
             amb_log("layout", "Shift held as Ambiance started: the classic layout this time");
