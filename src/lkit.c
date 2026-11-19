@@ -163,6 +163,10 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 #define CK_TOL   (9 * 7 * 7)        /* as near as this (about 7 a channel): the same pen */
 static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 
+/* The background darkened (a cover's reflection of black, a shadow): pens
+ * 29-32, the copper's too, each line's shade times these (256ths) */
+#define CK_SHADES 4
+static const UWORD ck_shade[CK_SHADES] = { 236, 210, 184, 158 };
 #define CK555(c) ((((c) >> 9) & 0x7C00) | (((c) >> 6) & 0x03E0) | (((c) >> 3) & 0x001F))
 #define CK444(c) ((((c) >> 12) & 0xF00) | (((c) >> 8) & 0x0F0) | (((c) >> 4) & 0x00F))
 
@@ -173,9 +177,10 @@ static void ck_lives(struct LkTarget *t)
     int k, n = 0;
     for (k = CK_GREY0; k < CK_RAMP0; k++)
         t->lives[n++] = (UBYTE)k;
-    if (t->rowc)
-        for (k = t->copper ? CK_RAMP0 + 1 : CK_RAMP0; k < CK_RAMP0 + CK_RAMPN; k++)
-            t->lives[n++] = (UBYTE)k;   /* (the copper's pen: no one colour, never "nearest") */
+    if (t->rowc && !t->copper)          /* (the copper's: its pen no one colour, and the ramp's
+                                         * steps unused - a line's shade is not theirs) */
+        for (k = CK_RAMP0; k < CK_RAMP0 + CK_RAMPN; k++)
+            t->lives[n++] = (UBYTE)k;
     for (k = CK_POOL0; k < 256; k++)
         if (t->live[k])
             t->lives[n++] = (UBYTE)k;
@@ -291,6 +296,13 @@ static BOOL ck_is_bg(const struct LkTarget *t, long y, unsigned long c)
     dr = (int)((c >> 16) & 255) - (int)((b >> 16) & 255);
     dg = (int)((c >> 8) & 255) - (int)((b >> 8) & 255);
     db = (int)(c & 255) - (int)(b & 255);
+    if (t->copper && t->no_new) {
+        /* a picture faded into the background (a cover's reflection), drawn
+         * with the pens there are: its faint part the background's own pen,
+         * the copper's shade of each line - not a pen of one colour, which
+         * showed as a block of the wrong shade */
+        return dr >= -12 && dr <= 12 && dg >= -12 && dg <= 12 && db >= -12 && db <= 12;
+    }
     return dr >= -2 && dr <= 2 && dg >= -2 && dg <= 2 && db >= -2 && db <= 2;
 }
 
@@ -305,6 +317,40 @@ static UBYTE ck_ramp_pen(const struct LkTarget *t, long x, long y)
     if (i >= CK_RAMPN - 1)
         return CK_RAMP0 + CK_RAMPN - 1;
     return (UBYTE)(CK_RAMP0 + i + (ck_bayer[y & 3][x & 3] < (pos & 15) ? 1 : 0));
+}
+
+/* The pen for a colour that is the background's at row y (the ramp's, or
+ * the copper's), or the background darkened by one of the copper's shades
+ * (CK_SHADES); 0: neither */
+static UBYTE ck_bg_pen(const struct LkTarget *t, long x, long y, unsigned long c)
+{
+    ULONG b;
+    LONG cs, bs, f, tol;
+    int k;
+    if (!t->rowc)
+        return 0;
+    if (ck_is_bg(t, y, c))
+        return ck_ramp_pen(t, x, y);
+    if (!t->copper)
+        return 0;
+    b = t->rowc[y];
+    cs = (LONG)((c >> 16) & 255) + (LONG)((c >> 8) & 255) + (LONG)(c & 255);
+    bs = (LONG)((b >> 16) & 255) + (LONG)((b >> 8) & 255) + (LONG)(b & 255);
+    if (!bs || cs >= bs)
+        return 0;
+    f = cs * 256 / bs;                      /* how dark: its share of the background */
+    tol = t->no_new ? 10 : 3;
+    for (k = 0; k < CK_SHADES; k++)
+        if (f >= ck_shade[k] - 13 && f < ck_shade[k] + 13) {
+            ULONG v = ((((b >> 16) & 255) * ck_shade[k] >> 8) << 16) |
+                      ((((b >> 8) & 255) * ck_shade[k] >> 8) << 8) | ((b & 255) * ck_shade[k] >> 8);
+            LONG dr = (LONG)((c >> 16) & 255) - (LONG)((v >> 16) & 255),
+                 dg = (LONG)((c >> 8) & 255) - (LONG)((v >> 8) & 255), db = (LONG)(c & 255) - (LONG)(v & 255);
+            if (dr >= -tol && dr <= tol && dg >= -tol && dg <= tol && db >= -tol && db <= tol)
+                return (UBYTE)(CK_RAMP0 + 1 + k);
+            return 0;
+        }
+    return 0;
 }
 
 static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
@@ -334,9 +380,10 @@ static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb
     ck_touch(t, x, y, w, h);
     for (j = 0; j < h; j++) {
         UBYTE *d = t->ch + (y + j) * t->cw + x;
-        if (ck_is_bg(t, y + j, rgb)) {
-            for (i = 0; i < w; i++)     /* the background's own colour there: the ramp */
-                d[i] = ck_ramp_pen(t, x + i, y + j);
+        if (ck_bg_pen(t, x, y + j, rgb)) {
+            for (i = 0; i < w; i++)     /* the background's own colour there: the ramp's,
+                                         * or the copper's (or its shade) */
+                d[i] = ck_bg_pen(t, x + i, y + j, rgb);
             continue;
         }
         if (!pen)
@@ -356,8 +403,9 @@ static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned lo
         unsigned long last = 0xFFFFFFFFUL;
         UBYTE lp = 0;
         for (i = 0; i < w; i++) {
-            if (ck_is_bg(t, y + j, s[i])) {
-                d[i] = ck_ramp_pen(t, x + i, y + j);
+            UBYTE bp;
+            if ((bp = ck_bg_pen(t, x + i, y + j, s[i]))) {
+                d[i] = bp;
                 continue;
             }
             if (t->pmap) {              /* a picture's own colours */
@@ -508,28 +556,43 @@ static BOOL ck_copper_on(struct LkTarget *t)
     char m[96];
     if (!(GfxBase->ChipRevBits0 & GFXF_AA_ALICE) || !t->rowc || vp->UCopIns || !ck_bplcon3(&base))
         return FALSE;
-    step = (vp->Modes & LACE) ? 2 : 1;      /* (a user list's lines: a field's) */
-    lines = t->chh / step;
+    /* a user list's lines are the screen's (laced: MrgCop gives each field
+     * its own half; taken as a field's, the gradient covered the top half
+     * and stopped) */
+    step = 1;
+    lines = t->chh;
+    (void)vp->Modes;
     if (!(ucl = AllocMem(sizeof(*ucl), MEMF_PUBLIC | MEMF_CLEAR)))
         return FALSE;
-    if (!UCopperListInit(ucl, lines * 5 + 2)) {
+    if (!UCopperListInit(ucl, lines * (4 + 2 * (1 + CK_SHADES)) + 2)) {
         FreeMem(ucl, sizeof(*ucl));
         return FALSE;
     }
     for (y = 0; y < lines; y++) {
-        ULONG c = t->rowc[y * step];
-        UWORD hi = (UWORD)((((c >> 20) & 15) << 8) | (((c >> 12) & 15) << 4) | ((c >> 4) & 15));
-        UWORD lo = (UWORD)((((c >> 16) & 15) << 8) | (((c >> 8) & 15) << 4) | (c & 15));
+        ULONG c = t->rowc[y * step], sc[1 + CK_SHADES];
+        int k;
+        sc[0] = c;
+        for (k = 0; k < CK_SHADES; k++)
+            sc[1 + k] = ((((c >> 16) & 255) * ck_shade[k] >> 8) << 16) |
+                        ((((c >> 8) & 255) * ck_shade[k] >> 8) << 8) | ((c & 255) * ck_shade[k] >> 8);
         CWait(ucl, y, 0);
         CBump(ucl);
         CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
         CBump(ucl);
-        CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0)), hi);
-        CBump(ucl);
+        for (k = 0; k <= CK_SHADES; k++) {     /* (the background's first: it is at the left edge) */
+            ULONG v = sc[k];
+            CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0 + k)),
+                  (UWORD)((((v >> 20) & 15) << 8) | (((v >> 12) & 15) << 4) | ((v >> 4) & 15)));
+            CBump(ucl);
+        }
         CMove(ucl, CK_CUSTOM(CK_BPLCON3), base | 0x0200);
         CBump(ucl);
-        CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0)), lo);
-        CBump(ucl);
+        for (k = 0; k <= CK_SHADES; k++) {
+            ULONG v = sc[k];
+            CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0 + k)),
+                  (UWORD)((((v >> 16) & 15) << 8) | (((v >> 8) & 15) << 4) | (v & 15)));
+            CBump(ucl);
+        }
     }
     CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
     CBump(ucl);
