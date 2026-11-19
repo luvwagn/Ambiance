@@ -18452,7 +18452,8 @@ static void h_vgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b)
 {
     if (x == 0 && y == 0 && w == (WORD)g.w && h == (WORD)g.h)
         lk_ramp(&lv.out, a, b);     /* (the background: an 8-bit screen draws it smooth) */
-    lk_vgrad(&lv.out, x, y, w, h, a, b);
+    if (!lk_vgrad8(&lv.out, x, y, w, h, a, b))
+        lk_vgrad(&lv.out, x, y, w, h, a, b);
 }
 static void h_hgrad(WORD x, WORD y, WORD w, WORD h, ULONG a, ULONG b) { lk_hgrad(&lv.out, x, y, w, h, a, b); }
 static void h_rrect(WORD x, WORD y, WORD w, WORD h, WORD r, ULONG rgb, ULONG bg)

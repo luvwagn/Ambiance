@@ -47,6 +47,7 @@ extern BOOL lk_blit_ok;              /* an AGA screen's copies by the blitter (d
 void lk_blits(ULONG *n, ULONG *kpx); /* copies the blitter made, K pixels moved (since last) */
 void lk_pens(ULONG *short_of, ULONG *least_free);
 void lk_prof(char *buf);
+BOOL lk_vgrad8(struct LkOut *o, long x, long y, long w, long h, unsigned long a, unsigned long b);
 /* the big letter by hardware sprites (AGA, an 8-bit layout): TRUE if so */
 extern BOOL lk_sprites_ok;
 extern BOOL lk_show_up;

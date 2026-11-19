@@ -56,13 +56,13 @@ extern struct GfxBase *GfxBase;
 
 /* Where the 8-bit drawing's time goes, by E-clock ticks: each kind's calls
  * and time (text: its glyphs made and drawn, its rows within it) */
-enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_GLYPHS, LKP_N };
+enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_GLYPHS, LKP_GRAD, LKP_N };
 static ULONG lkp_n[LKP_N], lkp_t[LKP_N], lkp_hz;
 #define LKP_BEGIN ULONG lkp_t0 = time_ticks(&lkp_hz)
 #define LKP_END(k) (lkp_n[k]++, lkp_t[k] += time_ticks(&lkp_hz) - lkp_t0)
 void lk_prof(char *buf)
 {
-    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies", "glyphs" };
+    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies", "glyphs", "gradients" };
     int k;
     *buf = 0;
     for (k = 0; k < LKP_N; k++) {
@@ -1819,6 +1819,42 @@ static BOOL ck_cover(struct LkOut *o, long x, long y, const UBYTE *cov, long w, 
         for (i = 0; i < x1 - x0; i++)
             d[i] = pl[c[i] & 15];
     }
+    return TRUE;
+}
+
+/* A vertical gradient straight onto the 8-bit canvas: a row at a time,
+ * each the background's pen where it is the copper's line (or its shade),
+ * else a pen of its own - not a fill a row (a list's rows drawn again
+ * made some 400 fills a move). FALSE: not here (the dithered ramp) */
+BOOL lk_vgrad8(struct LkOut *o, long x, long y, long w, long h, unsigned long a, unsigned long b)
+{
+    struct LkTarget *t = o ? o->ctx : NULL;
+    long x0 = x, x1 = x + w, y0 = y, y1 = y + h, j;
+    ULONG last = 0xFFFFFFFFUL;
+    UBYTE pen = 0;
+    LKP_BEGIN;
+    if (!t || !t->ch || o->fill != ck_fill || (t->rowc && !t->copper) || h <= 1 || a == b)
+        return FALSE;
+    if (x0 < o->cx0) x0 = o->cx0;
+    if (y0 < o->cy0) y0 = o->cy0;
+    if (x1 > o->cx1) x1 = o->cx1;
+    if (y1 > o->cy1) y1 = o->cy1;
+    if (x1 <= x0 || y1 <= y0)
+        return TRUE;
+    ck_touch(t, x0, y0, x1 - x0, y1 - y0);
+    for (j = y0; j < y1; j++) {
+        ULONG c = lk_vgrad_at(a, b, h, j - y) & 0xFFFFFF;
+        UBYTE bp = ck_bg_pen(t, x0, j, c);      /* (the copper's: the row's own) */
+        if (!bp) {
+            if (c != last || !pen) {
+                pen = ck_pen_for(t, c);
+                last = c;
+            }
+            bp = pen;
+        }
+        memset(t->ch + j * t->cw + x0, bp, (size_t)(x1 - x0));
+    }
+    LKP_END(LKP_GRAD);
     return TRUE;
 }
 
