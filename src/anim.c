@@ -758,6 +758,8 @@ static void safe_done(struct MsgPort *safe, BOOL *wait)
 /* (BT_PREV, BT_NEXT: a DVD's, in place of BT_RESTART and BT_LOOP; BT_MENU: a
  * DVD's own menus, when Ambiance draws them; full: Ambiance's) */
 enum { BT_RESTART, BT_PREV, BT_PLAY, BT_NEXT, BT_STOP, BT_MENU, BT_LOOP, BT_VDOWN, BT_VUP, BT_FULL, BT_N };
+static BOOL press_shows(int b);     /* a button drawn pressed now (below) */
+static void press_tick(void);
 
 static BOOL vid_sound;          /* a video (MPEG) with sound: its volume's buttons too */
 static struct DvdPlay *vid_dvd; /* a DVD's film playing (dvdplay.c): its chapters by N, P */
@@ -833,6 +835,7 @@ static BOOL ctl_want(BOOL paused)
 {
     ULONG now = time_ms();
     BOOL want, ptr;
+    press_tick();
     if (ctl.moved && ctl.moved != ctl.moved_seen) {
         ctl.moved_seen = ctl.moved;
         ctl.mode = CM_MOUSE;
@@ -1003,8 +1006,14 @@ static void bar_put(struct BitMap *bm, int k)
         }
         bar.bx[i] = x;
         ix = x + (bar.cw - s * bar.sx) / 2 - 2;
-        ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
-                  TRUE, bar.fg, bar.dim);
+        if (press_shows(i)) {               /* pressed: the cell filled, its glyph dark */
+            SetAPen(rp, bar.fg);
+            RectFill(rp, ix - 2, bar.y + 1, ix + s * bar.sx + 1, bar.y + bar.h - 1);
+            ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
+                      TRUE, bar.bg, bar.bg);
+        } else
+            ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
+                      TRUE, bar.fg, bar.dim);
         if (i == ctl.focus && ctl_ring()) {     /* the focus: a ring, its corners off */
             WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s * bar.sx + 1, y1 = bar.y + bar.h - 1;
             SetAPen(rp, bar.fg);
@@ -1099,6 +1108,35 @@ static ULONG anim_length(BPTR fh, const char *path, ULONG first)
 
 static BOOL bar_redraw;         /* the controls to be drawn again (the volume changed) */
 
+/* A button pressed (a key, a click, the pad's): drawn pressed a moment,
+ * PRESS_MS from when it is first drawn so (the controls may not be up) */
+#define PRESS_MS 300
+static int press_b = -1;        /* BT_*, -1 none */
+static ULONG press_until;       /* 0: from when it is drawn */
+static void press_note(int b)
+{
+    press_b = b;
+    press_until = 0;
+    bar_redraw = TRUE;
+}
+/* Shown pressed now (drawn: its moment begins) */
+static BOOL press_shows(int b)
+{
+    if (b < 0 || b != press_b)
+        return FALSE;
+    if (!press_until)
+        press_until = time_ms() + PRESS_MS;
+    return (LONG)(time_ms() - press_until) < 0;
+}
+/* Its moment over: drawn raised again */
+static void press_tick(void)
+{
+    if (press_b >= 0 && press_until && (LONG)(time_ms() - press_until) >= 0) {
+        press_b = -1;
+        bar_redraw = TRUE;
+    }
+}
+
 static void volume(int d)
 {
     int v = mp_volume() + d;
@@ -1114,6 +1152,8 @@ static int ctl_press(int b)
 {
     if (b >= 0 && (ctl.off & (1 << b)))
         return 0;                           /* greyed */
+    if (b >= 0 && b < BT_N)
+        press_note(b);
     switch (b) {
     case BT_RESTART:
         return 3;
@@ -1248,8 +1288,10 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
         if (cl == IDCMP_RAWKEY) {
             if (code == 0x45 || code == 0x41 || code == 0x10)   /* Esc, Backspace, Q */
                 r = 1;
-            else if (code == 0x40 && !r)            /* Space */
+            else if (code == 0x40 && !r) {          /* Space */
                 r = 2;
+                press_note(BT_PLAY);
+            }
             else if ((code == 0x44 || code == 0x43) && !r)  /* Return, Enter */
                 r = ctl_enter();
             else if (code == 0x23 && !r)            /* F: full screen or not */
@@ -1266,16 +1308,20 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 ctl_move(-1);
             else if (code == 0x4E)
                 ctl_move(1);
-            else if ((code == 0x4C || code == 0x7A) && (nsnd || vid_sound)) /* Up (held: */
+            else if ((code == 0x4C || code == 0x7A) && (nsnd || vid_sound)) { /* Up (held: */
                 volume(VOL_STEP);                   /* it repeats), the wheel: its sound's */
-            else if ((code == 0x4D || code == 0x7B) && (nsnd || vid_sound))
+                press_note(BT_VUP);
+            } else if ((code == 0x4D || code == 0x7B) && (nsnd || vid_sound)) {
                 volume(-VOL_STEP);
+                press_note(BT_VDOWN);
+            }
         } else if (cl == IDCMP_VANILLAKEY) {   /* Ambiance's own window has these too */
             if (code == 27 || code == 8 || code == 'q' || code == 'Q')
                 r = 1;
-            else if (code == ' ' && !r)
+            else if (code == ' ' && !r) {
                 r = 2;
-            else if (code == 13 && !r)
+                press_note(BT_PLAY);
+            } else if (code == 13 && !r)
                 r = ctl_enter();
             else if ((code == 'f' || code == 'F') && !r)
                 r = ctl_press(BT_FULL);
@@ -1433,7 +1479,7 @@ static struct {
     ULONG sec;
     UWORD vol;
     BOOL paused, bar, ring, full, loop;
-    int focus;
+    int focus, press;               /* (press: the button drawn pressed, -1 none) */
     UWORD off;
     WORD bx[BT_N];                  /* each button's left */
 } st;
@@ -1463,6 +1509,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     gfx_fill(g, 0, st.y, g->w - 1, st.y + st.h - 1, PEN_BG);
     st.ring = ctl_ring();
     st.focus = ctl.focus;
+    st.press = press_b;
     st.full = lay.full;
     st.off = ctl.off;
     st.loop = play_loop;
@@ -1492,7 +1539,7 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             ry = ry / 2 > 1 ? ry / 2 : 1;
         rx = ry * sx;
         {
-            UBYTE face = PEN_BAR;
+            UBYTE face = press_shows(i) ? PEN_YELLOW : PEN_BAR;     /* (pressed: filled yellow) */
             if (st.ring && i == st.focus && !(st.off & (1 << i))) {    /* the focus: a yellow ring */
                 WORD ft = GU(g, 2) > 1 ? GU(g, 2) : 1, fx = ft * sx;
                 gfx_rrect(g, bx, by, bw, bh, rx, ry, PEN_YELLOW);
@@ -1502,7 +1549,8 @@ static void strip_draw(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
                 gfx_rrect(g, bx, by, bw, bh, rx, ry, face);
         }
         {
-            UBYTE fg = st.off & (1 << i) ? PEN_RULE : PEN_WHITE;    /* greyed, as Now playing's */
+            UBYTE fg = st.off & (1 << i) ? PEN_RULE : i == press_b && press_shows(i) ? PEN_BAR : PEN_WHITE;
+                                                                    /* greyed, as Now playing's */
             ctl_glyph(g->rp, i, bx + bw / 2, by + bh / 2, glyph_rows(bh), sx, paused,
                       lay.full || gfx_fs_on(), GPEN(fg), GPEN(fg == PEN_RULE ? PEN_RULE : PEN_DIM));
         }
@@ -1650,6 +1698,8 @@ static void strip_lv(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG tota
                 continue;
             if (i == ctl.focus && ctl_ring())
                 vc.focus = (BYTE)vc.n;
+            if (press_shows(i))
+                vc.pressed |= (UWORD)LNB_BIT(lnb[i]);
             if (ctl.off & (1 << i))
                 vc.off |= LNB_BIT(lnb[i]);
             if (i == BT_VDOWN || i == BT_VUP)
@@ -1671,6 +1721,7 @@ static void strip_lv(struct Gfx *g, BOOL full, BOOL paused, ULONG at, ULONG tota
             return;
         st.ring = ctl_ring();
         st.focus = ctl.focus;
+        st.press = press_b;
         st.full = lay.full;
         st.off = ctl.off;
         st.loop = play_loop;
@@ -1754,7 +1805,7 @@ static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
     if (lv > 0 || target > 0) {
         if (!sf.drawn || (!st_lv && at / 1000 != st.sec) || paused != st.paused || mp_volume() != st.vol ||
             ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
-            ctl.off != st.off || play_loop != st.loop) {
+            ctl.off != st.off || play_loop != st.loop || press_b != st.press) {
             strip_render(g, TRUE, paused, at, total, name, &changed);
             sf.drawn = TRUE;
         } else
