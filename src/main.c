@@ -4416,6 +4416,12 @@ static void dbg_load_log(void)
                                 (unsigned long)lf, (unsigned long)sh);
                     strcat(rp, "]");
                 }
+                {
+                    char pf[200];
+                    lk_prof(pf);
+                    if (pf[0])
+                        amb_log("8-bit time", pf);
+                }
             }
         }
         sprintf(m, "system %ld%%, Ambiance %ld%%%s, %ld wakes/s; %.20s > %.60s%s%s", (long)(cpu_sum / n),
@@ -17080,7 +17086,8 @@ static void lv_note_what(ULONG what)
  * called from, as "unseen"): a whole draw is the slow kind */
 #define LV_WHO 6
 static const void *lv_who_at[LV_WHO];
-static ULONG lvp_n[4], lvp_ms[4];      /* drawn in part: what plays, pictures, a move, details */
+static ULONG lvp_n[5], lvp_ms[5];      /* drawn in part: what plays, pictures, a move, details;
+                                         * the layout's ticks that drew (a glide's steps) */
 static ULONG lvw_why[8], lvw_what;     /* whole draws: full, noted, unseen, else (of those:
                                          * the message, what plays, the page, the selection
                                          * the same), and what was noted */
@@ -17127,10 +17134,12 @@ static void lv_who_report(void)
     }
     if (t[0])
         amb_log("wholes", t);
-    if (lvp_n[0] || lvp_n[1] || lvp_n[2] || lvp_n[3]) {
-        sprintf(t, "what plays %lu (%lu ms), pictures %lu (%lu ms), moves %lu (%lu ms), details %lu (%lu ms)",
+    if (lvp_n[0] || lvp_n[1] || lvp_n[2] || lvp_n[3] || lvp_n[4]) {
+        sprintf(t, "what plays %lu (%lu ms), pictures %lu (%lu ms), moves %lu (%lu ms), details %lu (%lu ms), "
+                "glide steps %lu (%lu ms)",
                 (unsigned long)lvp_n[0], (unsigned long)lvp_ms[0], (unsigned long)lvp_n[1], (unsigned long)lvp_ms[1],
-                (unsigned long)lvp_n[2], (unsigned long)lvp_ms[2], (unsigned long)lvp_n[3], (unsigned long)lvp_ms[3]);
+                (unsigned long)lvp_n[2], (unsigned long)lvp_ms[2], (unsigned long)lvp_n[3], (unsigned long)lvp_ms[3],
+                (unsigned long)lvp_n[4], (unsigned long)lvp_ms[4]);
         amb_log("parts", t);
         memset(lvp_n, 0, sizeof(lvp_n));
         memset(lvp_ms, 0, sizeof(lvp_ms));
@@ -18758,8 +18767,13 @@ static void lv_frame_(void)
         lv_img = TRUE;              /* (the layout asks again, and finds it) */
     }
     if (lv.eng->tick && (LONG)(now - lv.tick_at) >= 40) {
+        ULONG t0 = time_ms(), dt;
         lv.tick_at = now;
         lv.eng->tick(now);
+        if ((dt = time_ms() - t0) >= 2) {      /* (one that drew: a glide's step) */
+            lvp_n[4]++;
+            lvp_ms[4] += dt;
+        }
     }
     if (scr != lv.drawn)
         lv.full = TRUE;

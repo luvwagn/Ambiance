@@ -43,6 +43,26 @@ void lk_timing(ULONG *show_ms, ULONG *pic_ms, ULONG *kpx, ULONG *gcs)
 }
 extern struct GfxBase *GfxBase;
 
+/* Where the 8-bit drawing's time goes, by E-clock ticks: each kind's calls
+ * and time (text: its glyphs made and drawn, its rows within it) */
+enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_N };
+static ULONG lkp_n[LKP_N], lkp_t[LKP_N], lkp_hz;
+#define LKP_BEGIN ULONG lkp_t0 = time_ticks(&lkp_hz)
+#define LKP_END(k) (lkp_n[k]++, lkp_t[k] += time_ticks(&lkp_hz) - lkp_t0)
+void lk_prof(char *buf)
+{
+    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies" };
+    int k;
+    *buf = 0;
+    for (k = 0; k < LKP_N; k++) {
+        if (!lkp_n[k])
+            continue;
+        sprintf(buf + strlen(buf), "%s%s %lu (%lu ms)", *buf ? ", " : "", name[k], (unsigned long)lkp_n[k],
+                lkp_hz ? (unsigned long)(lkp_t[k] / (lkp_hz / 1000 ? lkp_hz / 1000 : 1)) : 0UL);
+        lkp_n[k] = lkp_t[k] = 0;
+    }
+}
+
 /* Where an output draws: the screen (rp NULL: the Gfx's RastPort of the
  * moment) or the canvas; what has changed on the canvas since lk_show. */
 struct LkTarget {
@@ -372,7 +392,14 @@ static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
         t->y1 = y + h - 1;
 }
 
+static void ck_fill_(void *ctx, long x, long y, long w, long h, unsigned long rgb);
 static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
+{
+    LKP_BEGIN;
+    ck_fill_(ctx, x, y, w, h, rgb);
+    LKP_END(LKP_FILL);
+}
+static void ck_fill_(void *ctx, long x, long y, long w, long h, unsigned long rgb)
 {
     struct LkTarget *t = ctx;
     UBYTE pen = 0;
@@ -392,7 +419,14 @@ static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb
     }
 }
 
+static void ck_rows_(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod);
 static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
+{
+    LKP_BEGIN;
+    ck_rows_(ctx, x, y, w, h, px, mod);
+    LKP_END(LKP_ROWS);
+}
+static void ck_rows_(void *ctx, long x, long y, long w, long h, const unsigned long *px, long mod)
 {
     struct LkTarget *t = ctx;
     long i, j;
@@ -421,7 +455,16 @@ static void ck_rows(void *ctx, long x, long y, long w, long h, const unsigned lo
     }
 }
 
+static int ck_copy_(void *ctx, long x, long y, long w, long h, long dx, long dy);
 static int ck_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
+{
+    int r;
+    LKP_BEGIN;
+    r = ck_copy_(ctx, x, y, w, h, dx, dy);
+    LKP_END(LKP_COPY);
+    return r;
+}
+static int ck_copy_(void *ctx, long x, long y, long w, long h, long dx, long dy)
 {
     struct LkTarget *t = ctx;
     long j;
@@ -1071,7 +1114,16 @@ static void ck_c2p32(const UBYTE *px, ULONG *out)
 /* Shown by ck_c2p, if the screen is one it can write to: 8 planes of a
  * standard bitmap, longword-aligned, the window's layer not covered by
  * anything (a requester over it: WriteChunkyPixels, which minds it) */
+static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1);
 static BOOL ck_c2p(struct LkTarget *t, long x0, long y0, long x1, long y1)
+{
+    BOOL r;
+    LKP_BEGIN;
+    r = ck_c2p_(t, x0, y0, x1, y1);
+    LKP_END(LKP_C2P);
+    return r;
+}
+static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
 {
     struct RastPort *rp = t->g->rp;
     struct BitMap *bm = rp ? rp->BitMap : NULL;
@@ -1357,9 +1409,14 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
             (maxw > 0 && x + maxw + 8 <= o->cx0))
             return sm_textlen(g->sm, s, n, face);
     }
-    if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
-        return 0;
-    lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
+    {
+        LKP_BEGIN;
+        if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
+            return 0;
+        lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
+        if (o->ctx && o->fill == ck_fill)
+            LKP_END(LKP_TEXT);
+    }
     return sm_textlen(g->sm, s, n, face);
 }
 

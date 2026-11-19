@@ -1987,12 +1987,25 @@ static void wall_pictures(const struct LPage *m)
     wall_nph = 0;
     wall_geom(m);
     H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
-    for (k = 0; k < n; k++)
-        if (wall_cx(ph[k]) < W && wall_cx(ph[k]) + wg.cs > 0) {
-            wall_tile(m, ph[k], TRUE);
-            if (wall_letter_kept(m))
-                wall_letter_over(ph[k]);
+    for (k = 0; k < n; k++) {
+        LONG i = ph[k], cx = wall_cx(i), cy = wall_cy(i);
+        const struct LItem *it;
+        if (cx >= W || cx + wg.cs <= 0 || i < 0 || i >= m->list.count)
+            continue;
+        it = m->list.item(i);
+        if (!it->art || !H->picture(it->art, (UWORD)wg.cs, (UWORD)wg.th)) {
+            if (wall_nph < WALL_PH)
+                wall_ph[wall_nph++] = i;    /* (still to come: its place left as it is) */
+            continue;
         }
+        /* come: the cover alone over its place (its name, the glow round it
+         * as they were), the frame of the chosen one again over its edge */
+        cover_at(it->art, it->label, cx, cy, wg.cs, wg.th, 0);
+        if (i == m->list.sel)
+            H->frame((WORD)(cx - 1), (WORD)(cy - 1), (WORD)(wg.cs + 2), (WORD)(wg.th + 2), 2, C_ACC);
+        if (wall_letter_kept(m))
+            wall_letter_over(i);
+    }
     if (wall_letter && !wall_letter_kept(m))
         wall_letter_update(m, 0);
     H->clip(0, 0, W, HT);

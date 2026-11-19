@@ -44,6 +44,7 @@ void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);
 void lk_fresh(struct LkOut *o);
 extern BOOL lk_copper_ok;            /* an AGA screen's background by the copper (default) */
 void lk_pens(ULONG *short_of, ULONG *least_free);
+void lk_prof(char *buf);         /* the 8-bit drawing by kind: calls and ms since the last (text: its rows within) */
 void lk_timing(ULONG *show_ms, ULONG *pic_ms, ULONG *kpx, ULONG *gcs);
 /* a picture (as lk_image; an 8-bit screen's of few colours: pens of its own) */
 void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod);
