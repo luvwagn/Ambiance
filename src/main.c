@@ -10439,6 +10439,8 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                      * on the picture, the next one */
                     int b = view_bar_hit(&g, mx, my);
                     moused = TRUE;
+                    if (b >= 0 && b < VB_COUNT)
+                        view_bar_press(&g, b);      /* (clicked: shown pressed, as by its key) */
                     if (b == VB_PREV)
                         step--;
                     else if (b == VB_NEXT)
