@@ -173,8 +173,8 @@ static void cop_emit(struct UCopList *ucl, LONG y, const struct CopWrite *w, LON
         }
         i = j;
     }
-    CMove(ucl, CP_CUSTOM(CP_BPLCON3), base);    /* (the system's again) */
-    CBump(ucl);
+    /* (BPLCON3 left as the last run set it: its bank and LOCT matter to
+     * colour writes alone; the system's again once, at the list's end) */
 }
 
 BOOL cop_commit(struct CopPlan *p)
@@ -216,6 +216,8 @@ BOOL cop_commit(struct CopPlan *p)
         if (lace)                           /* (the other field's line too) */
             cop_emit(ucl, p->w[i].y + 1, p->w + i, j - i, base, p->early ? 2 : 0);
     }
+    CMove(ucl, CP_CUSTOM(CP_BPLCON3), base);    /* (the system's again) */
+    CBump(ucl);
     CWait(ucl, 10000, 255);                 /* (CEND) */
     CBump(ucl);
     if (vp->UCopIns)

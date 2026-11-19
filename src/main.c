@@ -17390,9 +17390,18 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lv.out = keep;
     if (mem) {
         BOOL pick = what == 0 && lv_ctl_pick;
+        int ncol = VW_BAR_PENS / 2, k;
+        char eb[4];
+        if (GetVar((CONST_STRPTR)"Ambiance/BarColours", (STRPTR)eb, sizeof(eb), GVF_GLOBAL_ONLY) > 0) {
+            ncol = (eb[0] - '0') * (eb[1] >= '0' && eb[1] <= '9' ? 10 : 1) + (eb[1] >= '0' && eb[1] <= '9' ? eb[1] - '0' : 0);
+            if (ncol < 8 || ncol > VW_BAR_PENS)
+                ncol = VW_BAR_PENS / 2;
+        }
+        for (k = 0; k < VW_BAR_PENS; k++)
+            lv_ctl_first[k] = -1;           /* (the pens past ncol: none) */
         lv_ctl_h = c->h <= LV_CTL_ROWS ? c->h : 0;
         if (!lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
-                         VW_BAR_PENS, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
+                         ncol, lv_ctl_rgb, pick, lv_ctl_first, lv_ctl_h ? lv_ctl_row : NULL, &lv_ctl_dom))
             return FALSE;                   /* (its rows the bitmap's last: a band's gap over them) */
         if (pick)
             lv_ctl_pick = FALSE;

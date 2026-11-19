@@ -351,18 +351,29 @@ static BOOL bar_fit(LONG gap, LONG step, LONG mpl, const ULONG *rows, WORD nrows
     if (nl < 1)
         nl = 1;
     for (s = 0; s < nl; s++) {          /* (its gap rows the first row's colour) */
-        LONG r = s * step - gap;
+        LONG r = s * step - gap, d;
         ULONG c = nrows ? rows[r < 0 ? 0 : r >= nrows ? nrows - 1 : r] : bg0;
-        bgc[s] = c;
-        bgw[s] = c != was;
-        was = c;
+        /* written where it has moved by enough to see (a subtle gradient's
+         * every line cost the line's writes half their room) */
+        d = was == 0xFFFFFFFFUL ? 255 : 0;
+        if (!d) {
+            LONG dr = (LONG)((c >> 16) & 255) - (LONG)((was >> 16) & 255), dg = (LONG)((c >> 8) & 255) - (LONG)((was >> 8) & 255),
+                 db = (LONG)(c & 255) - (LONG)(was & 255);
+            d = dr < 0 ? -dr : dr;
+            if ((dg < 0 ? -dg : dg) > d) d = dg < 0 ? -dg : dg;
+            if ((db < 0 ? -db : db) > d) d = db < 0 ? -db : db;
+        }
+        bgw[s] = d >= 3;
+        if (bgw[s])
+            was = c;
+        bgc[s] = was;
     }
     *nlp = nl;
     s = 0;
     for (i = 0; i < n; i++) {
         LONG pn = ord[i], dl = (gap + first[pn]) / step, b = (VW_BAR_PEN0 + pn) >> 5;
-        LONG nbb = nb + (b != bank_of ? 1 : 0), extra = s < nl && bgw[s] ? 4 : 0;
-        cost = 2 * (k + 1) + 1 + 2 * nbb + extra;
+        LONG nbb = nb + (b != bank_of ? 1 : 0), extra = s < nl && bgw[s] ? 2 : 0;
+        cost = 2 * (k + 1) + 2 * nbb + extra;   /* (a run: BPLCON3, highs, BPLCON3, lows) */
         if (cost > (dl == s ? BAR_BLANK : mpl)) {
             s++;                            /* (the next scanline) */
             k = 0;
