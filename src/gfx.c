@@ -1395,6 +1395,19 @@ static BOOL win_open(struct Gfx *g, int style, BOOL show)
         iw = (WORD)((LONG)WIN_MIN_DW * g->k / 256);
     if (ih < (WORD)((LONG)WIN_MIN_DH * g->k / 256))
         ih = (WORD)((LONG)WIN_MIN_DH * g->k / 256);
+    {
+        /* a layout chosen (Ambiance/Layout): the window tall enough for it
+         * (Horizon and Showcase want 480 lines; less, and the classic was
+         * drawn - Pixelify's 512 x 384 window), 4:3, room allowing */
+        char lv[64];
+        if (GetVar((CONST_STRPTR)"Ambiance/Layout", (STRPTR)lv, sizeof(lv), GVF_GLOBAL_ONLY) > 0 && lv[0] &&
+            ih < 480 && mh >= 480) {
+            ih = 480;
+            if (iw < 640)
+                iw = 640;
+            amb_log("window", "a layout chosen: the window 480 lines at least");
+        }
+    }
     if (iw > mw)
         iw = mw;
     if (ih > mh)
