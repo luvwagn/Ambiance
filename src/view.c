@@ -30,6 +30,7 @@
  */
 #include "amb.h"
 #include "lhost.h"
+#include "copper.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -56,12 +57,8 @@ int view_transition = VT_FADE;
 #define FADE_STEPS 8
 
 static BOOL clut;               /* the screen has a colour table we take over */
-static BOOL resv;               /* ...but VW_BAR_PENS registers kept for a layout's controls
-                                 * (lhost.h): no picture uses them */
-static UBYTE resv_held[VW_BAR_PENS];    /* ...those obtained (a remapped picture's pens
-                                 * chosen around them) */
-static ULONG bar_rgb[VW_BAR_PENS];      /* ...their colours, once the controls were drawn */
-static BOOL bar_rgb_ok;
+static BOOL bar_cop;            /* a layout's controls in a copper band of their own colours
+                                 * (AGA: registers VW_BAR_PEN0.. theirs from the bar down) */
 static UWORD ncolors;           /* its size */
 static ULONG *saved;            /* the UI's colours: LoadRGB32 table */
 static ULONG *shown;            /* the colours on screen now (count*3) */
@@ -156,32 +153,11 @@ static void pick_bar_pens(const UBYTE *pens, LONG n)
     }
 }
 
-/* The kept registers' colours in shown (what fades in and out), and on
- * the screen now unless faded out */
-static void resv_colours(struct Gfx *g, BOOL now)
-{
-    int i;
-    if (!resv || !bar_rgb_ok || !shown)
-        return;
-    for (i = 0; i < VW_BAR_PENS; i++) {
-        ULONG c = bar_rgb[i], r = ((c >> 16) & 255) * 0x01010101UL, gg = ((c >> 8) & 255) * 0x01010101UL,
-              b = (c & 255) * 0x01010101UL;
-        shown[(VW_BAR_PEN0 + i) * 3] = r;
-        shown[(VW_BAR_PEN0 + i) * 3 + 1] = gg;
-        shown[(VW_BAR_PEN0 + i) * 3 + 2] = b;
-        if (now)
-            SetRGB32(&g->scr->ViewPort, VW_BAR_PEN0 + i, r, gg, b);
-    }
-}
-
 /* How many colours a picture may have here (the loader's read-ahead too):
- * the screen's but the border's, and the kept registers */
+ * the screen's but the border's (the controls' band has its own) */
 LONG view_pic_colours(const struct Gfx *g)
 {
-    LONG n = 1L << (g->depth > 8 ? 8 : g->depth);
-    if (!g->truecolor && n == 256 && lv_controls_keep())
-        return VW_BAR_PEN0 - 1;             /* (1..246: 247-254 kept, 255 spare) */
-    return n - 1;
+    return (1L << (g->depth > 8 ? 8 : g->depth)) - 1;
 }
 
 /* ---- pens */
@@ -255,14 +231,6 @@ BOOL view_begin(struct Gfx *g)
         all_black(g);
         pens_release(g);
         pen0_held = ObtainPen(cm, 0, 0, 0, 0, PEN_EXCLUSIVE) == 0;
-        resv = ncolors == 256 && lv_controls_keep();
-        bar_rgb_ok = FALSE;
-        if (resv) {
-            int i;
-            for (i = 0; i < VW_BAR_PENS; i++)
-                resv_held[i] = ObtainPen(cm, VW_BAR_PEN0 + i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR) ==
-                               (ULONG)(VW_BAR_PEN0 + i);
-        }
         fill(g, 0);
     } else {
         black_pen = ObtainBestPen(cm, 0, 0, 0, OBP_Precision, PRECISION_EXACT, TAG_END);
@@ -280,6 +248,10 @@ BOOL view_bar_shown(void)
 void view_bar_hide(struct Gfx *g)
 {
     spin_x = -1;
+    if (bar_cop) {
+        cop_off(g->scr);                    /* (the band's colours: the picture's again) */
+        bar_cop = FALSE;
+    }
     if (!bar_bm)
         return;
     gfx_dirty();
@@ -290,6 +262,54 @@ void view_bar_hide(struct Gfx *g)
     bar_lv = FALSE;
 }
 
+/* Copper moves a scanline, for the band's gap (Ambiance/BarCopper: a
+ * measured figure; else a cautious guess) */
+static LONG cop_per_line(void)
+{
+    char b[8];
+    if (GetVar((CONST_STRPTR)"Ambiance/BarCopper", (STRPTR)b, sizeof(b), GVF_GLOBAL_ONLY) > 0 && b[0] >= '1' &&
+        b[0] <= '9')
+        return (b[1] >= '0' && b[1] <= '9') ? (b[0] - '0') * 10 + b[1] - '0' : b[0] - '0';
+    return 16;
+}
+
+/* An AGA screen's controls (lv_bm: gap rows, then the layout's, in
+ * registers VW_BAR_PEN0..): the gap made the colour of the bar's top row,
+ * and the copper told to make those registers the bar's from its first
+ * line down - that colour first, in the line's blanking, the rest over the
+ * gap's lines, which show it alone. The picture's colours above are its
+ * own, all of them. */
+static BOOL bar_band(struct Gfx *g, WORD gap)
+{
+    struct RastPort rp;
+    struct CopPlan *p;
+    const ULONG *rgb = lv_controls_rgb();
+    LONG top, i, y2;
+    InitRastPort(&rp);
+    rp.BitMap = lv_bm;
+    top = ReadPixel(&rp, g->w / 2, gap);
+    if (top < VW_BAR_PEN0 || top >= VW_BAR_PEN0 + VW_BAR_PENS)
+        top = VW_BAR_PEN0;
+    if (gap > 0) {
+        SetAPen(&rp, (UBYTE)top);
+        RectFill(&rp, 0, 0, g->w - 1, gap - 1);
+    }
+    if (bar_cop) {
+        cop_off(g->scr);
+        bar_cop = FALSE;
+    }
+    if (!(p = cop_plan(g->scr, VW_BAR_PENS + 1)))
+        return FALSE;
+    cop_color(p, bar_y, (UBYTE)top, rgb[top - VW_BAR_PEN0]);
+    y2 = bar_y + ((g->scr->ViewPort.Modes & LACE) ? 2 : 1);     /* (the next line of each field) */
+    for (i = 0; i < VW_BAR_PENS; i++)
+        if (VW_BAR_PEN0 + i != top)
+            cop_color(p, y2, (UBYTE)(VW_BAR_PEN0 + i), rgb[i]);
+    bar_cop = cop_commit(p);
+    cop_plan_free(p);
+    return bar_cop;
+}
+
 /* The layout's controls as the bar (a graphics card's screen, a layout
  * chosen): what is shown, its details, previous, play or pause, next,
  * full screen (from a window, or back); the mouse's and the keys' alike.
@@ -297,8 +317,13 @@ void view_bar_hide(struct Gfx *g)
 static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
 {
     WORD h;
-    if ((clut && !resv) || !lv_controls_ok() || (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
+    WORD gap = 0;
+    if ((clut && (ncolors < VW_BAR_PEN0 + VW_BAR_PENS || !lv_controls_keep())) || !lv_controls_ok() ||
+        (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
         return FALSE;
+    if (clut)                       /* (the copper's writes: lines of the bar's own colour first) */
+        gap = (WORD)cop_lines_for(g->scr, VW_BAR_PENS, cop_per_line());
+    h += gap;
     if (bar_bm && (!bar_lv || bar_h != h))
         view_bar_hide(g);           /* (the other bar, or another height: put back first) */
     bar_h = h;
@@ -321,9 +346,9 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
     }
     memset(&vc, 0, sizeof(vc));
     vc.x = 0;
-    vc.y = bar_y;
+    vc.y = bar_y + gap;             /* (under the band's gap) */
     vc.w = g->w;
-    vc.h = bar_h;
+    vc.h = bar_h - gap;
     vc.title = title;
     vc.detail = detail;
     vc.btn[vc.n++] = LNB_PREV;
@@ -340,10 +365,9 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
         view_bar_hide(g);
         return FALSE;
     }
-    if (clut) {                     /* (AGA: the colours chosen for it, in the kept registers) */
-        CopyMem((APTR)lv_controls_rgb(), bar_rgb, sizeof(bar_rgb));
-        bar_rgb_ok = TRUE;
-        resv_colours(g, TRUE);
+    if (clut && !bar_band(g, gap)) {
+        view_bar_hide(g);
+        return FALSE;
     }
     gfx_dirty();
     BltBitMapRastPort(lv_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);
@@ -959,6 +983,8 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         gfx_present(g);
     }
     spin_forget();
+    if (clut && bar_cop)
+        view_bar_hide(g);                   /* (the band off before the colours change) */
     if (has_pic && !clut && view_transition != VT_CUT) {
         /* left up, for the transition to this one */
         if (obj) {
@@ -1003,8 +1029,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             if (mode == (ULONG)INVALID_ID)
                 mode = 0;
             if (bmh && bmh->bmh_Width && bmh->bmh_Height && cregs && ncol &&
-                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= (resv ? (ULONG)VW_BAR_PEN0 : ncolors) &&
-                !(mode & HAM_KEY)) {
+                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= ncolors && !(mode & HAM_KEY)) {
                 sw = bmh->bmh_Width;
                 sh = bmh->bmh_Height;
                 src = direct_bitmap(g, o, sw, sh, &own_src);
@@ -1048,11 +1073,6 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         }
     }
 
-    /* (made ahead with more colours than leave the kept registers: not used) */
-    if (pre_thumb && resv && pre_thumb->ncol > VW_BAR_PEN0 - 1) {
-        thumb_free(pre_thumb);
-        pre_thumb = NULL;
-    }
     /* own: its own colours at the size it is shown */
     if (!direct && (deep || pre_thumb)) {
         struct Thumb *t = NULL;
@@ -1070,7 +1090,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             } else {
                 pic_info(deep, bmh, pi);
                 fit(g, pi, &dw, &dh, scale, scalemax);
-                t = thumb_make(deep, dw, dh, resv ? VW_BAR_PEN0 - 1 : ncolors - 1);
+                t = thumb_make(deep, dw, dh, ncolors - 1);
             }
             if (t &&
                 (target = AllocVec(ncolors * 3 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) &&
@@ -1202,7 +1222,6 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         } else if (target) {
             CopyMem(target, shown, ncolors * 3 * sizeof(ULONG));
         }
-        resv_colours(g, FALSE);             /* (the layout's controls keep theirs) */
         pick_bar_pens(pens, npens);
     } else if (!kept && view_transition != VT_CUT) {
         fill(g, black_pen >= 0 ? black_pen : GPEN(PEN_BG));    /* (faded in from black) */
@@ -1260,13 +1279,7 @@ void view_end(struct Gfx *g)
         if (pen0_held)
             ReleasePen(cm, 0);
         pen0_held = FALSE;
-        if (resv) {
-            int i;
-            for (i = 0; i < VW_BAR_PENS; i++)
-                if (resv_held[i])
-                    ReleasePen(cm, VW_BAR_PEN0 + i);
-        }
-        resv = FALSE;
+
         pens_reclaim(g);
     } else if (black_pen >= 0) {
         ReleasePen(cm, black_pen);

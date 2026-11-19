@@ -38,11 +38,13 @@ void lk_show(struct LkOut *o);
  * with WriteChunkyPixels (graphics.library 40) */
 BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o);
 /* A strip drawn into memory (px: w x h, the caller's; row 0 the screen's
- * y0), then made n pens pen0.. into bm (w x h): pick, the n colours chosen
- * from it into rgb[] (else rgb[] as before). A layout's controls over a
- * picture on an AGA screen, in the registers kept for them. */
+ * y0), then made n pens (64 at most) pen0.. into bm's rows from by: pick,
+ * the n colours chosen from it into rgb[] (else rgb[] as before). A
+ * layout's controls over a picture on an AGA screen, in registers the
+ * copper makes theirs. */
 BOOL lk_open_mem(struct Gfx *g, struct LkOut *o, ULONG *px, WORD y0, WORD w, WORD h);
-BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0, int n, ULONG *rgb, BOOL pick);
+BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
+                 BOOL pick);
 /* the layout's background gradient over the whole screen (an 8-bit
  * screen's: drawn with pens of its own, smooth; elsewhere nothing) */
 void lk_ramp(struct LkOut *o, unsigned long top, unsigned long bottom);

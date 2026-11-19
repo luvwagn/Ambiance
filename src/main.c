@@ -20,6 +20,7 @@
 #include "app.h"
 #include "details.h"
 #include "lvhost.h"
+#include "copper.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -17282,7 +17283,7 @@ static BOOL lv_ctl_8(void)
 }
 BOOL lv_controls_keep(void)
 {
-    return lv_ctl_8() && lv.file[0];
+    return lv_ctl_8() && lv.file[0] && cop_ok(g.scr);
 }
 const ULONG *lv_controls_rgb(void)
 {
@@ -17364,8 +17365,9 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lk_close(&lv.out);
     lv_sp_up = FALSE;
     lv.out = keep;
-    if (mem && !lk_mem_pens(lv_mem, g.w, c->h, bm, VW_BAR_PEN0, VW_BAR_PENS, lv_ctl_rgb, what == 0))
-        return FALSE;
+    if (mem && !lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
+                            VW_BAR_PENS, lv_ctl_rgb, what == 0))
+        return FALSE;                       /* (its rows the bitmap's last: a band's gap over them) */
     return TRUE;
 }
 

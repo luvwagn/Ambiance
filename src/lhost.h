@@ -59,14 +59,14 @@ BOOL lv_controls_ok(void);
 WORD lv_controls_h(BOOL timed);
 BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm);
 void lv_controls_end(void);
-/* On an AGA screen of 256 colours with a layout chosen, the controls are
- * drawn in VW_BAR_PENS colour registers kept from the pictures (always, so
- * a picture's colours never shift as they come and go): from
- * VW_BAR_PEN0, under the last register (the border's or the loading
- * bar's). lv_controls_keep: they are kept; lv_controls_rgb: the colours
- * the last full draw chose for them. */
-#define VW_BAR_PENS 8
-#define VW_BAR_PEN0 (255 - VW_BAR_PENS)
+/* On an AGA screen with a layout chosen, the controls are drawn in
+ * VW_BAR_PENS colours of their own at registers VW_BAR_PEN0.. (over the
+ * sprites' 16-31, so the pointer keeps its colours), which the copper
+ * makes theirs from the bar's top line down (copper.c): the picture keeps
+ * every register. lv_controls_keep: they can be; lv_controls_rgb: the
+ * colours the last full draw chose. */
+#define VW_BAR_PENS 64
+#define VW_BAR_PEN0 32
 BOOL lv_controls_keep(void);
 const ULONG *lv_controls_rgb(void);
 

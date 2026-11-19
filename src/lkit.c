@@ -630,7 +630,8 @@ static ULONG mp_dist(UWORD a, UWORD b)
     return (ULONG)(dr * dr * 3 + dg * dg * 4 + db * db * 2);
 }
 
-BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0, int n, ULONG *rgb, BOOL pick)
+BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
+                 BOOL pick)
 {
     ULONG *hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     UWORD *keys = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
@@ -638,11 +639,11 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0,
     UBYTE *near = AllocVec(32768, MEMF_ANY);
     UBYTE *out = AllocVec((ULONG)w * h, MEMF_ANY);
     LONG np = (LONG)w * h, nk = 0, i, c;
-    UWORD chosen[16];
+    UWORD chosen[64];
     int nc = 0;
     BOOL ok = FALSE;
     struct RastPort rp;
-    if (!hist || !keys || !mind || !near || !out || n < 1 || n > 16 || !bm)
+    if (!hist || !keys || !mind || !near || !out || n < 1 || n > 64 || !bm)
         goto done;
     for (i = 0; i < np; i++) {
         UWORD k = (UWORD)CK555(px[i]);
@@ -683,7 +684,7 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0,
         }
         /* each the average of the colours nearest it */
         {
-            ULONG sr[16], sg[16], sb[16], sp[16];
+            ULONG sr[64], sg[64], sb[64], sp[64];
             for (c = 0; c < nc; c++)
                 sr[c] = sg[c] = sb[c] = sp[c] = 0;
             for (i = 0; i < nk; i++) {
@@ -731,7 +732,7 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, UBYTE pen0,
     }
     InitRastPort(&rp);
     rp.BitMap = bm;
-    WriteChunkyPixels(&rp, 0, 0, (ULONG)(w - 1), (ULONG)(h - 1), out, (LONG)w);
+    WriteChunkyPixels(&rp, 0, (ULONG)by, (ULONG)(w - 1), (ULONG)(by + h - 1), out, (LONG)w);
     ok = TRUE;
 done:
     FreeVec(hist);
