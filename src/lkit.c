@@ -532,6 +532,16 @@ static BOOL ck_bplcon3(UWORD *base)
     return FALSE;
 }
 
+/* A background colour and its copper shades (sc[0] the colour itself) */
+static void ck_shades(ULONG c, ULONG *sc)
+{
+    int k;
+    sc[0] = c & 0xFFFFFF;
+    for (k = 0; k < CK_SHADES; k++)
+        sc[1 + k] = ((((c >> 16) & 255) * ck_shade[k] >> 8) << 16) |
+                    ((((c >> 8) & 255) * ck_shade[k] >> 8) << 8) | ((c & 255) * ck_shade[k] >> 8);
+}
+
 static void ck_copper_off(struct LkTarget *t)
 {
     struct ViewPort *vp;
@@ -558,44 +568,77 @@ static BOOL ck_copper_on(struct LkTarget *t)
         return FALSE;
     /* a user list's lines are the screen's (laced: MrgCop gives each field
      * its own half; taken as a field's, the gradient covered the top half
-     * and stopped) */
-    step = 1;
+     * and stopped). Only what changed since the line before in the same
+     * field is written: all thirteen moves a line ran into the picture, its
+     * left part showing the high nibbles alone. The pens start at line 0's
+     * colours (the ColorMap's, loaded before the screen's first line). */
     lines = t->chh;
-    (void)vp->Modes;
+    step = (vp->Modes & LACE) ? 2 : 1;
     if (!(ucl = AllocMem(sizeof(*ucl), MEMF_PUBLIC | MEMF_CLEAR)))
         return FALSE;
-    if (!UCopperListInit(ucl, lines * (4 + 2 * (1 + CK_SHADES)) + 2)) {
+    if (!UCopperListInit(ucl, lines * (6 + 2 * (1 + CK_SHADES)) + 4)) {
         FreeMem(ucl, sizeof(*ucl));
         return FALSE;
     }
-    for (y = 0; y < lines; y++) {
-        ULONG c = t->rowc[y * step], sc[1 + CK_SHADES];
-        int k;
-        sc[0] = c;
-        for (k = 0; k < CK_SHADES; k++)
-            sc[1 + k] = ((((c >> 16) & 255) * ck_shade[k] >> 8) << 16) |
-                        ((((c >> 8) & 255) * ck_shade[k] >> 8) << 8) | ((c & 255) * ck_shade[k] >> 8);
-        CWait(ucl, y, 0);
-        CBump(ucl);
-        CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
-        CBump(ucl);
-        for (k = 0; k <= CK_SHADES; k++) {     /* (the background's first: it is at the left edge) */
-            ULONG v = sc[k];
-            CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0 + k)),
-                  (UWORD)((((v >> 20) & 15) << 8) | (((v >> 12) & 15) << 4) | ((v >> 4) & 15)));
-            CBump(ucl);
-        }
-        CMove(ucl, CK_CUSTOM(CK_BPLCON3), base | 0x0200);
-        CBump(ucl);
+    {
+        ULONG was[2][1 + CK_SHADES], sc[1 + CK_SHADES], pal[1 + 3 * (1 + CK_SHADES) + 1];
+        int k, f;
+        ck_shades(t->rowc[0], sc);
+        pal[0] = ((ULONG)(1 + CK_SHADES) << 16) | CK_RAMP0;
         for (k = 0; k <= CK_SHADES; k++) {
-            ULONG v = sc[k];
-            CMove(ucl, CK_CUSTOM(CK_COLOR(CK_RAMP0 + k)),
-                  (UWORD)((((v >> 16) & 15) << 8) | (((v >> 8) & 15) << 4) | (v & 15)));
+            was[0][k] = was[1][k] = sc[k];
+            pal[1 + k * 3] = ((sc[k] >> 16) & 255) * 0x01010101UL;
+            pal[2 + k * 3] = ((sc[k] >> 8) & 255) * 0x01010101UL;
+            pal[3 + k * 3] = (sc[k] & 255) * 0x01010101UL;
+        }
+        pal[1 + 3 * (1 + CK_SHADES)] = 0;
+        LoadRGB32(vp, pal);
+        for (y = 1; y < lines; y++) {
+            UBYTE hi = 0, lo = 0;       /* (bits: the pens whose high / low nibbles changed) */
+            UWORD cur = 0xFFFF;
+            f = step == 2 ? (int)(y & 1) : 0;
+            ck_shades(t->rowc[y], sc);
+            for (k = 0; k <= CK_SHADES; k++) {
+                if ((sc[k] & 0xF0F0F0) != (was[f][k] & 0xF0F0F0))
+                    hi |= (UBYTE)(1 << k), lo |= (UBYTE)(1 << k);   /* (a high write sets both) */
+                else if ((sc[k] & 0x0F0F0F) != (was[f][k] & 0x0F0F0F))
+                    lo |= (UBYTE)(1 << k);
+                was[f][k] = sc[k];
+            }
+            if (!lo)
+                continue;
+            CWait(ucl, y, 0);
+            CBump(ucl);
+            for (k = 0; k <= CK_SHADES; k++)
+                if (hi & (1 << k)) {
+                    UWORD p = (UWORD)(CK_RAMP0 + k), v = base | (UWORD)((p >> 5) << 13);
+                    ULONG c = sc[k];
+                    if (v != cur) {
+                        CMove(ucl, CK_CUSTOM(CK_BPLCON3), v);
+                        CBump(ucl);
+                        cur = v;
+                    }
+                    CMove(ucl, CK_CUSTOM(CK_COLOR(p & 31)),
+                          (UWORD)((((c >> 20) & 15) << 8) | (((c >> 12) & 15) << 4) | ((c >> 4) & 15)));
+                    CBump(ucl);
+                }
+            for (k = 0; k <= CK_SHADES; k++)
+                if (lo & (1 << k)) {
+                    UWORD p = (UWORD)(CK_RAMP0 + k), v = base | 0x0200 | (UWORD)((p >> 5) << 13);
+                    ULONG c = sc[k];
+                    if (v != cur) {
+                        CMove(ucl, CK_CUSTOM(CK_BPLCON3), v);
+                        CBump(ucl);
+                        cur = v;
+                    }
+                    CMove(ucl, CK_CUSTOM(CK_COLOR(p & 31)),
+                          (UWORD)((((c >> 16) & 15) << 8) | (((c >> 8) & 15) << 4) | (c & 15)));
+                    CBump(ucl);
+                }
+            CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);    /* (the system's again) */
             CBump(ucl);
         }
     }
-    CMove(ucl, CK_CUSTOM(CK_BPLCON3), base);
-    CBump(ucl);
     CWait(ucl, 10000, 255);                 /* (CEND) */
     CBump(ucl);
     Forbid();
@@ -1306,6 +1349,14 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
     }
     if (maxw > 0)
         n = sm_fit(g->sm, s, n, face, maxw);
+    {
+        /* all of it outside where drawing goes (a cover's label beside a
+         * strip drawn again): not made, only measured */
+        long hm = (long)sm_title_h(g->sm) + (long)sm_cell_h(g->sm);
+        if (y - hm >= o->cy1 || y + 2 * hm <= o->cy0 || x - 8 >= o->cx1 ||
+            (maxw > 0 && x + maxw + 8 <= o->cx0))
+            return sm_textlen(g->sm, s, n, face);
+    }
     if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
         return 0;
     lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);

@@ -1897,6 +1897,32 @@ static void wall_letter_update(const struct LPage *m, LONG by)
     H->clip(0, 0, W, HT);
 }
 
+/* Cover i drawn again under the big letter, that letter still up: the
+ * letter again over that cover's place alone (it is solid: the rest of it
+ * stays as it is) - not every cover under it drawn again */
+static BOOL wall_letter_kept(const struct LPage *m)
+{
+    return wall_letter && wall_letter == m->letter && H->letter;
+}
+static void wall_letter_over(LONG i)
+{
+    LONG cx = wall_cx(i), cy = wall_cy(i), xa = cx - WALL_GLOW, xb = cx + wg.cs + WALL_GLOW;
+    LONG ya = cy - WALL_GLOW, yb = cy + wg.th + LABEL_GAP + FH * 2 + 2;
+    if (xa < wall_lx0)
+        xa = wall_lx0;
+    if (xb > wall_lx1)
+        xb = wall_lx1;
+    if (ya < WALL_TOP)
+        ya = WALL_TOP;
+    if (yb > wg.bottom)
+        yb = wg.bottom;
+    if (xb <= xa || yb <= ya)
+        return;
+    H->clip((WORD)xa, (WORD)ya, (WORD)xb, (WORD)yb);
+    H->letter((WORD)(W - X(60)), (WORD)(wg.y0 + wg.viewh / 2), C_LETTER);
+    H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
+}
+
 static void draw_wall_body(const struct LPage *m)
 {
     const struct LList *l = &m->list;
@@ -1940,11 +1966,14 @@ static void wall_moved(const struct LPage *m)
     for (j = 0; j < n; j++) {
         for (k = 0; k < j && redo[k] != redo[j]; k++)
             ;
-        if (k == j && redo[j] >= 0)
+        if (k == j && redo[j] >= 0) {
             wall_tile(m, redo[j], TRUE);
+            if (wall_letter_kept(m))
+                wall_letter_over(redo[j]);
+        }
     }
     wall_hits_bar(m);
-    if (wall_letter || m->letter)
+    if ((wall_letter || m->letter) && !wall_letter_kept(m))
         wall_letter_update(m, 0);
 }
 
@@ -1959,9 +1988,12 @@ static void wall_pictures(const struct LPage *m)
     wall_geom(m);
     H->clip(0, (WORD)WALL_TOP, W, (WORD)wg.bottom);
     for (k = 0; k < n; k++)
-        if (wall_cx(ph[k]) < W && wall_cx(ph[k]) + wg.cs > 0)
+        if (wall_cx(ph[k]) < W && wall_cx(ph[k]) + wg.cs > 0) {
             wall_tile(m, ph[k], TRUE);
-    if (wall_letter)
+            if (wall_letter_kept(m))
+                wall_letter_over(ph[k]);
+        }
+    if (wall_letter && !wall_letter_kept(m))
         wall_letter_update(m, 0);
     H->clip(0, 0, W, HT);
 }
