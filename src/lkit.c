@@ -56,13 +56,13 @@ extern struct GfxBase *GfxBase;
 
 /* Where the 8-bit drawing's time goes, by E-clock ticks: each kind's calls
  * and time (text: its glyphs made and drawn, its rows within it) */
-enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_N };
+enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_GLYPHS, LKP_N };
 static ULONG lkp_n[LKP_N], lkp_t[LKP_N], lkp_hz;
 #define LKP_BEGIN ULONG lkp_t0 = time_ticks(&lkp_hz)
 #define LKP_END(k) (lkp_n[k]++, lkp_t[k] += time_ticks(&lkp_hz) - lkp_t0)
 void lk_prof(char *buf)
 {
-    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies" };
+    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies", "glyphs" };
     int k;
     *buf = 0;
     for (k = 0; k < LKP_N; k++) {
@@ -1815,8 +1815,11 @@ WORD lk_text(struct Gfx *g, struct LkOut *o, WORD x, WORD y, const char *s, LONG
     }
     {
         LKP_BEGIN;
+        ULONG tg = time_ticks(&lkp_hz);
         if (!(cov = sm_cover(g->sm, s, n, face, &dx, &dy, &w, &h, &mod)))
             return 0;
+        if (o->ctx && o->fill == ck_fill)
+            lkp_n[LKP_GLYPHS]++, lkp_t[LKP_GLYPHS] += time_ticks(&lkp_hz) - tg;
         lk_cover(o, x + dx, y + dy, cov, w, h, mod, fg, bg);
         if (o->ctx && o->fill == ck_fill)
             LKP_END(LKP_TEXT);
