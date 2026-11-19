@@ -395,9 +395,20 @@ static void ck_touch(struct LkTarget *t, long x, long y, long w, long h)
 static void ck_fill_(void *ctx, long x, long y, long w, long h, unsigned long rgb);
 static void ck_fill(void *ctx, long x, long y, long w, long h, unsigned long rgb)
 {
-    LKP_BEGIN;
-    ck_fill_(ctx, x, y, w, h, rgb);
-    LKP_END(LKP_FILL);
+    /* (thousands a second: one in eight timed, eight times that counted -
+     * the clock read each time cost more than many of them) */
+    static UBYTE every;
+    if (++every & 7) {
+        ck_fill_(ctx, x, y, w, h, rgb);
+        lkp_n[LKP_FILL]++;
+        return;
+    }
+    {
+        ULONG t0 = time_ticks(&lkp_hz);
+        ck_fill_(ctx, x, y, w, h, rgb);
+        lkp_n[LKP_FILL]++;
+        lkp_t[LKP_FILL] += (time_ticks(&lkp_hz) - t0) * 8;
+    }
 }
 static void ck_fill_(void *ctx, long x, long y, long w, long h, unsigned long rgb)
 {
@@ -407,10 +418,21 @@ static void ck_fill_(void *ctx, long x, long y, long w, long h, unsigned long rg
     ck_touch(t, x, y, w, h);
     for (j = 0; j < h; j++) {
         UBYTE *d = t->ch + (y + j) * t->cw + x;
-        if (ck_bg_pen(t, x, y + j, rgb)) {
-            for (i = 0; i < w; i++)     /* the background's own colour there: the ramp's,
-                                         * or the copper's (or its shade) */
-                d[i] = ck_bg_pen(t, x + i, y + j, rgb);
+        UBYTE bp = ck_bg_pen(t, x, y + j, rgb);
+        if (bp) {
+            /* the background's own colour there: the copper's (or its
+             * shade), a pen the whole row; the ramp's, dithered in fours
+             * (once a pixel, the background drawn again was most of a
+             * glide's time) */
+            if (t->copper) {
+                memset(d, bp, (size_t)w);
+            } else {
+                UBYTE q[4];
+                for (i = 0; i < 4; i++)
+                    q[i] = ck_bg_pen(t, x + i, y + j, rgb);
+                for (i = 0; i < w; i++)
+                    d[i] = q[i & 3];
+            }
             continue;
         }
         if (!pen)
@@ -434,11 +456,17 @@ static void ck_rows_(void *ctx, long x, long y, long w, long h, const unsigned l
     for (j = 0; j < h; j++) {
         UBYTE *d = t->ch + (y + j) * t->cw + x;
         const unsigned long *s = px + j * mod;
-        unsigned long last = 0xFFFFFFFFUL;
-        UBYTE lp = 0;
+        unsigned long last = 0xFFFFFFFFUL, mc = 0xFFFFFFFFUL;
+        UBYTE lp = 0, mp = 0;
         for (i = 0; i < w; i++) {
             UBYTE bp;
-            if ((bp = ck_bg_pen(t, x + i, y + j, s[i]))) {
+            /* (the background's or not, a colour's once a row: only the
+             * ramp's dither differs along it) */
+            if (s[i] == mc && (!mp || t->copper))
+                bp = mp;
+            else
+                mc = s[i], bp = mp = ck_bg_pen(t, x + i, y + j, s[i]);
+            if (bp) {
                 d[i] = bp;
                 continue;
             }
