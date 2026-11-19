@@ -98,6 +98,9 @@ static void load_table(struct Gfx *g, const ULONG *rgb, ULONG scale)
         ULONG v = ((rgb[i] >> 24) * scale) >> 3;     /* scale 0..8 */
         work[1 + i] = v * 0x01010101UL;
     }
+    if (saved && ncolors > POINTER_PEN0 + 2)       /* (the pointer's own, always: no fade, no picture's) */
+        for (i = POINTER_PEN0 * 3; i < (POINTER_PEN0 + 3) * 3; i++)
+            work[1 + i] = saved[1 + i];
     work[1 + ncolors * 3] = 0;
     LoadRGB32(&g->scr->ViewPort, work);
 }
@@ -160,7 +163,8 @@ static void pick_bar_pens(const UBYTE *pens, LONG n)
  * the screen's but the border's (the controls' band has its own) */
 LONG view_pic_colours(const struct Gfx *g)
 {
-    return (1L << (g->depth > 8 ? 8 : g->depth)) - 1;
+    LONG n = 1L << (g->depth > 8 ? 8 : g->depth);
+    return !g->truecolor && n > POINTER_PEN0 + 3 ? n - 4 : n - 1;  /* (the pointer's three not a picture's) */
 }
 
 /* ---- pens */
@@ -171,9 +175,7 @@ static void pens_release(struct Gfx *g)
     if (!g->pens_shared)
         return;
     for (i = 0; i < NUM_UI_PENS; i++)
-        ReleasePen(cm, i);
-    for (i = POINTER_PEN0; i < POINTER_PEN0 + 3; i++)
-        ReleasePen(cm, i);
+        ReleasePen(cm, i);              /* (the pointer's kept: its colours its own) */
 }
 
 static void pens_reclaim(struct Gfx *g)
@@ -183,8 +185,6 @@ static void pens_reclaim(struct Gfx *g)
     if (!g->pens_shared)
         return;
     for (i = 0; i < NUM_UI_PENS; i++)
-        ObtainPen(cm, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
-    for (i = POINTER_PEN0; i < POINTER_PEN0 + 3; i++)
         ObtainPen(cm, i, 0, 0, 0, PEN_EXCLUSIVE | PEN_NO_SETCOLOR);
 }
 
@@ -291,6 +291,14 @@ void view_bar_hide(struct Gfx *g)
 
 /* Copper moves a scanline, for the band's gap (Ambiance/BarCopper: a
  * measured figure; else a cautious guess) */
+static BOOL env_on(const char *name, BOOL dflt)
+{
+    char b[4];
+    if (GetVar((CONST_STRPTR)name, (STRPTR)b, sizeof(b), GVF_GLOBAL_ONLY) > 0)
+        return b[0] == '1';
+    return dflt;
+}
+
 static LONG cop_per_line(void)
 {
     char b[8];
@@ -317,7 +325,9 @@ static LONG cop_per_line(void)
  * above keeps every register of its own. The list made is kept: drawn the
  * same again (a picture changed under the bar), the screen is left as it
  * is. */
-#define BAR_BLANK 20                /* copper moves in a line's blanking, begun at the line before's end */
+static LONG bar_blank = 13;     /* copper moves in a line's blanking (begun at the line before's end:
+                                 * about 20) */
+#define BAR_BLANK bar_blank
 #define BAR_LINES 160
 static struct { UBYTE pen; WORD y; ULONG rgb; } bar_plan[VW_BAR_PENS + BAR_LINES];
 /* Whether the writes fit with gap rows over the bar: the background's
@@ -372,7 +382,10 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     WORD dom, nrows;
     LONG i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need, nl, np;
     BOOL same;
+    bar_blank = env_on("Ambiance/BarEarly", FALSE) ? 20 : 13;
     rows = lv_controls_rows(&dom, &nrows);
+    if (!env_on("Ambiance/BarGradient", TRUE))
+        nrows = 0;                          /* (the background one colour: its pen's) */
     if (dom < 0 || dom >= VW_BAR_PENS)
         dom = 0;
     /* the pens used but the background, by their first row */
@@ -430,7 +443,7 @@ static WORD bar_band(struct Gfx *g, WORD gap)
     }
     if (!(p = cop_plan(g->scr, np)))
         return -1;
-    cop_early(p, TRUE);
+    cop_early(p, bar_blank > 13);
     for (i = 0; i < np; i++)
         cop_color(p, bar_plan[i].y, bar_plan[i].pen, bar_plan[i].rgb);
     bar_cop = cop_commit(p);
@@ -1175,7 +1188,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             if (mode == (ULONG)INVALID_ID)
                 mode = 0;
             if (bmh && bmh->bmh_Width && bmh->bmh_Height && cregs && ncol &&
-                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= ncolors && !(mode & HAM_KEY)) {
+                bmh->bmh_Depth <= 8 && (1UL << bmh->bmh_Depth) <= ncolors && !(mode & HAM_KEY) &&
+                ((1UL << bmh->bmh_Depth) <= POINTER_PEN0 || ncolors <= POINTER_PEN0 + 3)) {
+                /* (more colours: the own route, its registers round the pointer's) */
                 sw = bmh->bmh_Width;
                 sh = bmh->bmh_Height;
                 src = direct_bitmap(g, o, sw, sh, &own_src);
@@ -1236,21 +1251,28 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
             } else {
                 pic_info(deep, bmh, pi);
                 fit(g, pi, &dw, &dh, scale, scalemax);
-                t = thumb_make(deep, dw, dh, ncolors - 1);
+                t = thumb_make(deep, dw, dh, view_pic_colours(g));
             }
             if (t &&
                 (target = AllocVec(ncolors * 3 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) &&
                 (src = AllocBitMap(dw, dh, g->depth, BMF_CLEAR, g->rp->BitMap))) {
                 ULONG n = (ULONG)t->mod * t->h;
-                for (i = 0; i < t->ncol; i++) {
+                UBYTE map[256];
+                for (i = 0; i < t->ncol && i < 256; i++) {
                     ULONG c = t->pal[i];
-                    target[(i + 1) * 3] = ((c >> 16) & 255) * 0x01010101UL;
-                    target[(i + 1) * 3 + 1] = ((c >> 8) & 255) * 0x01010101UL;
-                    target[(i + 1) * 3 + 2] = (c & 255) * 0x01010101UL;
-                    pens[npens++] = i + 1;
+                    LONG pn = i + 1;        /* register 0 is the border's; the pointer's skipped */
+                    if (ncolors > POINTER_PEN0 + 3 && pn >= POINTER_PEN0)
+                        pn += 3;
+                    if (pn >= ncolors)
+                        pn = ncolors - 1;
+                    map[i] = (UBYTE)pn;
+                    target[pn * 3] = ((c >> 16) & 255) * 0x01010101UL;
+                    target[pn * 3 + 1] = ((c >> 8) & 255) * 0x01010101UL;
+                    target[pn * 3 + 2] = (c & 255) * 0x01010101UL;
+                    pens[npens++] = (UBYTE)pn;
                 }
                 for (i = 0; i < (LONG)n; i++)
-                    t->px[i]++;             /* register 0 is the border's */
+                    t->px[i] = map[t->px[i]];
                 gfx_chunky(g, src, t->px, dw, dh, t->mod);
                 own_src = TRUE;
                 pen_border = 0;
