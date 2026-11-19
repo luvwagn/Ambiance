@@ -1404,9 +1404,20 @@ static void details_at(const char *picture, const char *const *lines, LONG nl, L
     draw_lines(lines, nl, 0, x, y, w, bottom, C_WHITE, C_BODY);
 }
 
+/* What the details' column showed (drawn again only when it changes: a
+ * move redraws the rows; the column, its picture and text, only when they
+ * are another's). ~0: drawn by nothing yet (a whole draw sets it so). */
+static ULONG col_key = ~0UL;
+static ULONG details_key(const struct LPage *m)
+{
+    return (ULONG)m->picture ^ ((ULONG)m->ndetails << 24) ^ (m->ndetails ? (ULONG)m->details[0] : 0) ^
+           ((ULONG)(UBYTE)m->letter << 16) ^ ((ULONG)body_n << 30);
+}
+
 static void draw_page_body(const struct LPage *m)
 {
     LONG x = X(30), y = BODY_Y, bottom = body_bottom(), w = W - x - X(30), n, lw;
+    ULONG key;
     n = page_split(m);
     body_n = (int)n;
     nhits = hits_base;
@@ -1419,13 +1430,19 @@ static void draw_page_body(const struct LPage *m)
         H->vgrad((WORD)x, (WORD)y, (WORD)lw, (WORD)(FH * 2), grad(y), grad(y + FH * 2));
         waiting_or_none(m, x + X(14), y + Y(6), lw);
     }
-    if (n) {
+    if (n && (key = details_key(m)) != col_key) {
         LONG dx = x + lw + X(36), dw = x + w - dx;
+        col_key = key;
         H->vgrad((WORD)(dx - X(8)), (WORD)(y - X(8)), (WORD)(dw + X(16)), (WORD)(bottom - y + X(16)),
                  grad(y - X(8)), grad(bottom + X(8)));
-        details_at(m->picture, m->details, m->ndetails, dx, y + Y(6), dw, bottom);
+        if (m->letter && H->letter)
+            /* gliding: the letter in the details' place (none are read
+             * meanwhile), the rows clear of it - drawn once a letter */
+            H->letter((WORD)(dx + dw * 3 / 4), (WORD)(y + (bottom - y) / 2), C_LETTER);
+        else
+            details_at(m->picture, m->details, m->ndetails, dx, y + Y(6), dw, bottom);
     }
-    if (m->letter && H->letter)
+    if (!n && m->letter && H->letter)
         H->letter((WORD)(x + lw - X(40)), (WORD)(y + (bottom - y) / 2), C_LETTER);
 }
 
@@ -1567,6 +1584,7 @@ static void draw_page(void)
         body_n = -1;
         draw_text_body_as(m, TRUE);
     } else {
+        col_key = ~0UL;                 /* (a whole draw: the column too) */
         draw_page_body(m);
     }
     now_inset();
@@ -2582,6 +2600,15 @@ static void hz_changed_body(int screen, ULONG what)
                 home_tiles(h);
                 return;
             }
+        }
+        if (screen == LS_PAGE && (m = H->model(LS_PAGE)) && !m->text && body_n >= 0 &&
+            page_split(m) == body_n) {
+            /* the details' picture came: the column alone (was a whole
+             * draw: 370 ms without the JIT, each game) */
+            col_key = ~0UL;
+            draw_page_body(m);
+            now_inset();
+            return;
         }
     }
     if (what == LC_DETAILS && screen == drawn && screen == LS_PAGE && (m = H->model(LS_PAGE)) && !m->text &&
