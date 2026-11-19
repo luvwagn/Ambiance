@@ -15170,10 +15170,14 @@ static void hold_tick(void)
             hold.worst = dt;
         if (dt > 40)
             hold.slow++;
-        if (dt > 250)
-            dt = 250;               /* a slow frame is made up for, a stall is not */
         hold.last_ms = now;
-        hold.held_ms += dt;
+        /* how long it has been held, by the clock: the speeding up the
+         * same however slowly the frames come (it was the frames' clipped
+         * times added up, slower on a slow screen) */
+        hold.held_ms += dt > 2000 ? 2000 : dt;
+        if (dt > 600)
+            dt = 600;               /* a slow frame is made up for (one of 330 ms lost a
+                                     * quarter of its distance at 250), a stall is not */
         if (hold.held_ms < HOLD_DELAY)
             return;
         glide = hold.held_ms - HOLD_DELAY;
@@ -17086,6 +17090,7 @@ static void lv_note_what(ULONG what)
  * called from, as "unseen"): a whole draw is the slow kind */
 #define LV_WHO 6
 static const void *lv_who_at[LV_WHO];
+static BOOL lv_sp_up;          /* the big letter up by sprites (h_letter; lk_close frees them) */
 static ULONG lvp_n[5], lvp_ms[5];      /* drawn in part: what plays, pictures, a move, details;
                                          * the layout's ticks that drew (a glide's steps) */
 static ULONG lvw_why[8], lvw_what;     /* whole draws: full, noted, unseen, else (of those:
@@ -17219,6 +17224,7 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lv.eng->controls(c, what);
     lv_ctl.on = FALSE;
     lk_close(&lv.out);
+    lv_sp_up = FALSE;
     lv.out = keep;
     return TRUE;
 }
@@ -18352,6 +18358,11 @@ static WORD h_letter(WORD xr, WORD ym, ULONG rgb)
         return 0;
     x0 = xr - bl->w;
     y0 = ym - bl->h / 2;
+    if (lk_letter_sprites(&lv.out, bl->mask, bl->w, bl->h, bl->bpr, bl->cell_w, x0, y0, rgb)) {
+        lv_sp_up = TRUE;
+        return 0;               /* (by sprites, over the picture: nothing drawn, nothing to
+                                 * draw again under it as what is under it moves) */
+    }
     for (j = 0; j < (WORD)bl->h; j++) {
         const UBYTE *row = bl->mask + (ULONG)j * bl->bpr;
         for (i = 0; i < (WORD)bl->w; i = r) {
@@ -18493,6 +18504,7 @@ static void lv_off(BOOL redraw)
     if (lv.eng && lv.eng->close)
         lv.eng->close();
     lk_close(&lv.out);
+    lv_sp_up = FALSE;
     lv_pics_free();
     lv.on = FALSE;
     det_view(&classic_view);                /* (the entry details: Classic's pane's again) */
@@ -18576,6 +18588,7 @@ static void lv_activate(void)
                 e->name, (long)e->min_bits, (long)e->min_h, (long)lv.out.bits, (long)g.h);
         amb_log("layout", m);
         lk_close(&lv.out);
+        lv_sp_up = FALSE;
         lv_give_back_font();
         return;
     }
@@ -18613,6 +18626,7 @@ static void lv_activate(void)
     if (e->open && !e->open(&lv.host)) {
         amb_log("layout", "it would not open: classic");
         lk_close(&lv.out);
+        lv_sp_up = FALSE;
         lv_give_back_font();
         return;
     }
@@ -18647,6 +18661,9 @@ static void lv_sync(void)
         /* (an AGA screen's background by the copper unless Ambiance/LayoutCopper is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutCopper", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_copper_ok = buf[0] != '0';
+        /* (the big letter by sprites on AGA unless Ambiance/LayoutSprites is 0) */
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutSprites", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lk_sprites_ok = buf[0] != '0';
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
             amb_log("layout", "Shift held as Ambiance started: the classic layout this time");
@@ -18760,6 +18777,10 @@ static void lv_frame_(void)
         return;
     scr = lv_screen();
     now = time_ms();
+    if (lv_sp_up && !(ov.on && ov.page == cur() && ov.bl)) {
+        lk_letter_sprites_off(&lv.out);     /* (the letter by sprites down with the letter) */
+        lv_sp_up = FALSE;
+    }
     lv_pic_made = FALSE;
     lv_pics_poll();
     if (lv_art_came) {

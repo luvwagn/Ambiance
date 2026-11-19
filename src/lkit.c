@@ -14,6 +14,8 @@
 #include <graphics/layers.h>
 #include <graphics/copper.h>
 #include <graphics/view.h>
+#include <graphics/sprite.h>
+#include <graphics/videocontrol.h>
 #include <proto/intuition.h>
 
 #include <stdio.h>
@@ -98,6 +100,15 @@ struct LkTarget {
     UWORD *list;                /* ...the colours it has */
     UBYTE *pmapb;               /* ...each one's pen */
     UBYTE *pmap;                /* pmapb while a picture is drawn, else NULL */
+    UBYTE held[256];            /* pens kept from the pool: the sprites' colours (AGA) */
+    /* the big letter by hardware sprites (lk_letter_sprites): over the
+     * picture, never drawn into it - a glide under it moves nothing of it */
+    struct ExtSprite *sp_sd[8];
+    WORD sp_num[8], sp_n, sp_x, sp_y;
+    const UBYTE *sp_of;
+    ULONG sp_rgb;
+    BOOL sp_based;              /* the sprites' colours moved to CK_SPBASE (sp_eb, sp_ob were) */
+    ULONG sp_eb, sp_ob;
 };
 
 static struct RastPort *target_rp(struct LkTarget *t)
@@ -180,6 +191,7 @@ static int rtg_copy(void *ctx, long x, long y, long w, long h, long dx, long dy)
 #define CK_RAMPN 12
 #define CK_POOL0 40
 #define CK_POOLN 216                /* (40-255) */
+#define CK_SPBASE 240               /* the sprites' colours (AGA, the big letter by them) */
 #define CK_TOL   (9 * 7 * 7)        /* as near as this (about 7 a channel): the same pen */
 static const UBYTE ck_bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 
@@ -202,7 +214,7 @@ static void ck_lives(struct LkTarget *t)
         for (k = CK_RAMP0; k < CK_RAMP0 + CK_RAMPN; k++)
             t->lives[n++] = (UBYTE)k;
     for (k = CK_POOL0; k < 256; k++)
-        if (t->live[k])
+        if (t->live[k] && !t->held[k])
             t->lives[n++] = (UBYTE)k;
     t->nlive = n;
 }
@@ -226,8 +238,8 @@ static void ck_gc(struct LkTarget *t)
         seen[*p++] = 1;
     t->nfree = 0;
     for (k = CK_POOL0; k < 256; k++) {
-        t->live[k] = seen[k];
-        if (!seen[k])
+        t->live[k] = seen[k] | t->held[k];
+        if (!t->live[k])
             t->nfree++;
     }
     memset(t->pool, 0, 32768);
@@ -555,6 +567,16 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
         t->rgbof[CK_GREY0 + i] = (v << 16) | (v << 8) | v;
     }
     t->nfree = CK_POOLN;
+    if (GfxBase->ChipRevBits0 & GFXF_AA_ALICE) {
+        /* the sprites' colours, moved up here for the big letter (the
+         * pointer's three, each other pair's first): not the pool's */
+        static const UBYTE sp[] = { CK_SPBASE + 1, CK_SPBASE + 2, CK_SPBASE + 3, CK_SPBASE + 5,
+                                    CK_SPBASE + 9, CK_SPBASE + 13 };
+        for (i = 0; i < (int)sizeof(sp); i++) {
+            t->held[sp[i]] = t->live[sp[i]] = 1;
+            t->nfree--;
+        }
+    }
     ck_lives(t);
     LoadRGB32(vp, pal);
     FreeVec(pal);
@@ -1238,11 +1260,189 @@ BOOL lk_canvas(const struct LkOut *o)
     return t && (t->bm || t->ch);
 }
 
+/* ---- the big letter by hardware sprites (AGA) ------------------------- */
+BOOL lk_sprites_ok = TRUE;
+
+static ULONG ck_vc_get(struct ViewPort *vp, ULONG tag, ULONG dflt)
+{
+    struct TagItem tg[2];
+    tg[0].ti_Tag = tag;
+    tg[0].ti_Data = dflt;
+    tg[1].ti_Tag = TAG_DONE;
+    tg[1].ti_Data = 0;
+    if (VideoControl(vp->ColorMap, tg))
+        return dflt;
+    return tg[0].ti_Data;
+}
+
+static void ck_sprites_free(struct LkTarget *t)
+{
+    WORD i;
+    for (i = 0; i < t->sp_n; i++) {
+        if (t->sp_num[i] >= 0)
+            FreeSprite(t->sp_num[i]);
+        if (t->sp_sd[i])
+            FreeSpriteData(t->sp_sd[i]);
+        t->sp_sd[i] = NULL;
+        t->sp_num[i] = -1;
+    }
+    t->sp_n = 0;
+    t->sp_of = NULL;
+}
+
+void lk_letter_sprites_off(struct LkOut *o)
+{
+    struct LkTarget *t = o ? o->ctx : NULL;
+    if (t && t->sp_n)
+        ck_sprites_free(t);
+}
+
+/* The big letter (mask w x h, bpr bytes a row; cw the widest letter's
+ * width, so the sprites' count stays as letters change) with its top left
+ * at x, y in rgb, by sprites over the screen: TRUE if so (nothing drawn),
+ * FALSE if it must be drawn (not AGA, not enough sprites, sprites of a
+ * finer resolution than the screen's) */
+BOOL lk_letter_sprites(struct LkOut *o, const UBYTE *mask, UWORD w, UWORD h, UWORD bpr, UWORD cw, WORD x,
+                       WORD y, ULONG rgb)
+{
+    struct LkTarget *t = o ? o->ctx : NULL;
+    struct ViewPort *vp;
+    LONG res, xl, spx, sw, ly, sh, n, i, r, c;
+    char m[120];
+    if (!t || !t->ch || !lk_sprites_ok || !t->g->scr || !(GfxBase->ChipRevBits0 & GFXF_AA_ALICE) ||
+        GfxBase->LibNode.lib_Version < 39 || !mask)
+        return FALSE;
+    vp = &t->g->scr->ViewPort;
+    xl = (vp->Modes & SUPERHIRES) ? 4 : (vp->Modes & HIRES) ? 2 : 1;   /* (the screen's pixels a lores one) */
+    res = (LONG)ck_vc_get(vp, VTAG_SPRITERESN_GET, (ULONG)SPRITERESN_DEFAULT);
+    if (res == SPRITERESN_DEFAULT)
+        res = (LONG)ck_vc_get(vp, VTAG_DEFSPRITERESN_GET, (ULONG)SPRITERESN_ECS);
+    spx = res == SPRITERESN_35NS ? xl / 4 : res == SPRITERESN_70NS ? xl / 2 : xl;   /* a sprite pixel's */
+    sw = GfxBase->SpriteWidth ? (LONG)GfxBase->SpriteWidth * 16 : 16;
+    ly = (vp->Modes & LACE) ? 2 : 1;
+    if (spx < 1 || cw < w)
+        cw = w;
+    if (spx < 1)
+        return FALSE;
+    n = ((cw + spx - 1) / spx + sw - 1) / sw;
+    sh = (h + ly - 1) / ly;
+    if (n > 7 || sh < 1)
+        return FALSE;
+    if (t->sp_n && (t->sp_n != n))
+        ck_sprites_free(t);
+    if (!t->sp_based) {
+        /* the sprites' colours from 240 (the pointer's copied there): the
+         * layout's own pens below are left alone */
+        struct TagItem tg[3];
+        ULONG pc[3 * 3];
+        t->sp_eb = ck_vc_get(vp, VTAG_SPEVEN_BASE_GET, 16);
+        t->sp_ob = ck_vc_get(vp, VTAG_SPODD_BASE_GET, 16);
+        GetRGB32(vp->ColorMap, t->sp_eb + 1, 3, pc);
+        for (i = 0; i < 3; i++)
+            SetRGB32(vp, CK_SPBASE + 1 + i, pc[i * 3], pc[i * 3 + 1], pc[i * 3 + 2]);
+        tg[0].ti_Tag = VTAG_SPEVEN_BASE_SET;
+        tg[0].ti_Data = CK_SPBASE;
+        tg[1].ti_Tag = VTAG_SPODD_BASE_SET;
+        tg[1].ti_Data = CK_SPBASE;
+        tg[2].ti_Tag = TAG_DONE;
+        VideoControl(vp->ColorMap, tg);
+        MakeScreen(t->g->scr);
+        RethinkDisplay();
+        t->sp_based = TRUE;
+    }
+    if (mask != t->sp_of) {
+        /* the letter's sprites made again: its mask cut in n strips sw
+         * sprite pixels wide (a laced screen's every other row: a sprite's
+         * line is two of its lines) */
+        for (i = 0; i < n; i++) {
+            struct BitMap *bm = AllocBitMap((ULONG)sw, (ULONG)sh, 2, BMF_CLEAR, NULL);
+            struct ExtSprite *sd;
+            struct TagItem tg[2];
+            if (!bm) {
+                ck_sprites_free(t);
+                return FALSE;
+            }
+            for (r = 0; r < sh; r++) {
+                const UBYTE *src = mask + (ULONG)(r * ly) * bpr;
+                UBYTE *dst = bm->Planes[0] + r * bm->BytesPerRow;
+                for (c = 0; c < sw; c++) {
+                    LONG sx = (i * sw + c) * spx;
+                    if (sx < (LONG)w && (src[sx >> 3] & (0x80 >> (sx & 7))))
+                        dst[c >> 3] |= (UBYTE)(0x80 >> (c & 7));
+                }
+            }
+            tg[0].ti_Tag = SPRITEA_Width;
+            tg[0].ti_Data = (ULONG)sw;
+            tg[1].ti_Tag = TAG_DONE;
+            sd = AllocSpriteDataA(bm, tg);
+            WaitBlit();
+            FreeBitMap(bm);
+            if (!sd) {
+                ck_sprites_free(t);
+                return FALSE;
+            }
+            if (i < t->sp_n && t->sp_sd[i]) {
+                ChangeExtSpriteA(vp, t->sp_sd[i], sd, NULL);
+                FreeSpriteData(t->sp_sd[i]);
+                t->sp_sd[i] = sd;
+            } else {
+                LONG num = GetExtSpriteA(sd, NULL);
+                if (num < 0) {
+                    FreeSpriteData(sd);
+                    t->sp_n = i;
+                    ck_sprites_free(t);
+                    amb_log("layout", "the big letter: not enough sprites free, drawn instead");
+                    lk_sprites_ok = FALSE;
+                    return FALSE;
+                }
+                t->sp_sd[i] = sd;
+                t->sp_num[i] = (WORD)num;
+                t->sp_n = (WORD)(i + 1);
+            }
+        }
+        if (!t->sp_of) {
+            sprintf(m, "the big letter by %ld sprites %ld wide (a sprite pixel %ld, laced %ld): %d %d %d",
+                    (long)n, (long)sw, (long)spx, (long)(ly - 1), t->sp_num[0], n > 1 ? t->sp_num[1] : -1,
+                    n > 2 ? t->sp_num[2] : -1);
+            amb_log("layout", m);
+        }
+        t->sp_of = mask;
+        t->sp_x = -1000;                /* (placed again) */
+        t->sp_rgb = ~rgb;
+    }
+    if (rgb != t->sp_rgb) {
+        t->sp_rgb = rgb;
+        for (i = 0; i < n; i++)
+            SetRGB32(vp, CK_SPBASE + ((t->sp_num[i] & 6) << 1) + 1, ((rgb >> 16) & 255) * 0x01010101UL,
+                     ((rgb >> 8) & 255) * 0x01010101UL, (rgb & 255) * 0x01010101UL);
+    }
+    if (x != t->sp_x || y != t->sp_y) {
+        /* (where sprites go: lores pixels, a laced screen's lines in twos) */
+        t->sp_x = x;
+        t->sp_y = y;
+        for (i = 0; i < n; i++)
+            MoveSprite(vp, (struct SimpleSprite *)t->sp_sd[i], (WORD)((x + i * sw * spx) / xl), (WORD)(y / ly));
+    }
+    return TRUE;
+}
+
 void lk_close(struct LkOut *o)
 {
     struct LkTarget *t = o->ctx;
     if (t) {
         ck_copper_off(t);               /* (the copper's gradient off the screen first) */
+        ck_sprites_free(t);
+        if (t->sp_based && t->g->scr) {  /* (the sprites' colours where they were) */
+            struct TagItem tg[3];
+            tg[0].ti_Tag = VTAG_SPEVEN_BASE_SET;
+            tg[0].ti_Data = t->sp_eb;
+            tg[1].ti_Tag = VTAG_SPODD_BASE_SET;
+            tg[1].ti_Data = t->sp_ob;
+            tg[2].ti_Tag = TAG_DONE;
+            VideoControl(t->g->scr->ViewPort.ColorMap, tg);
+            MakeScreen(t->g->scr);
+            RethinkDisplay();
+        }
         if (t->bm && t->own) {
             WaitBlit();
             FreeBitMap(t->bm);
