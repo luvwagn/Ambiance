@@ -19266,8 +19266,24 @@ static void lv_frame_(void)
 shown:
     lk_show(&lv.out);
     lv_ta_watch();
-    if (scr == LS_PAGE)
+    if (scr == LS_PAGE) {
+        struct Page *p = cur();
+        /* a list's details not shown, nor asked for: asked for now (the
+         * classic asks as it draws the title or moves; come back to at the
+         * start, nothing did, and the pane stayed empty until a move) */
+        if (p && p->type == PT_LIST && p->sel >= 0 && p->sel < p->list.count && !pv_pending && !pane_pending &&
+            !(pv_shown && pv_page == p && pv_sel == p->sel) && !hold_active() && has_aside(p)) {
+            static const struct Page *told;
+            if (told != p) {
+                char m[80];
+                told = p;
+                sprintf(m, "details asked for (none were): row %ld%s", (long)p->sel, ov.on ? ", letter up" : "");
+                amb_log("layout", m);
+            }
+            preview_touch(p);
+        }
         lv_pics_ahead();
+    }
 }
 
 void lv_hold(void)
