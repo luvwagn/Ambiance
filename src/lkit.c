@@ -62,10 +62,7 @@ struct LkTarget {
                                  * through for the nearest */
     int nlive, nfree, hunt;
     BOOL asked;                 /* ...pens made or wanted since ck_gc last looked */
-    ULONG gen;                  /* ...ck_gc's count (a pen map made before it: stale) */
-    const unsigned long *cut_px;    /* the picture pmapb was made for (drawn again: kept) */
-    long cut_w, cut_h, cut_mod;
-    ULONG cut_sum, cut_gen;
+    UWORD *tmp;                 /* ...a box's colours, sorted (lk_picture) */
     BOOL no_new;                /* a picture of many colours drawn (a photo, a reflection):
                                  * the nearest pens there are, none made for it */
     ULONG rgbof[256];           /* each pen's colour (greys, ramp, the pool's) */
@@ -183,7 +180,6 @@ static void ck_gc(struct LkTarget *t)
     const UBYTE *p = t->ch, *e = t->ch + t->cw * t->chh;
     int k;
     lkt_gc++;
-    t->gen++;
     memset(seen, 0, sizeof(seen));
     while (p + 8 <= e) {
         seen[p[0]] = 1; seen[p[1]] = 1; seen[p[2]] = 1; seen[p[3]] = 1;
@@ -398,12 +394,13 @@ BOOL lk_open_chunky(struct Gfx *g, struct LkOut *o)
     t->pal_was = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     t->pool = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
     t->near = AllocVec(4096, MEMF_ANY | MEMF_CLEAR);
-    t->hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY);
+    t->hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);   /* (kept clear) */
+    t->tmp = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->list = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
     t->pmapb = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
     pal = AllocVec((1 + 256 * 3 + 1) * 4, MEMF_ANY);
     o->ctx = t;
-    if (!t->ch || !t->pal_was || !pal || !t->pool || !t->near || !t->hist || !t->list || !t->pmapb) {
+    if (!t->ch || !t->pal_was || !pal || !t->pool || !t->near || !t->hist || !t->list || !t->pmapb || !t->tmp) {
         if (pal)
             FreeVec(pal);
         lk_close(o);
@@ -480,17 +477,59 @@ void lk_fresh(struct LkOut *o)
 }
 
 /* A picture on an 8-bit screen: its colours cut down to as many as there
- * are pens for (96 a big one, 32 a small one; median cut, by 5-5-5 colour),
- * each a pen made exactly its colour, every pixel the nearest of them -
+ * are pens for (96 a big one, 24 or 16 a small one; median cut, by 5-5-5
+ * colour), each a pen made its colour, every pixel its box's pen -
  * nothing dithered. A picture of many colours when no pens are left (a
- * reflection, a wall's later covers): the nearest pens there are. */
-static int ck_axis;
-static int ck_cmp(const void *a, const void *b)
+ * reflection, a wall's later covers): the nearest pens there are.
+ *
+ * What a cut made is kept (CK_CUTS of them, CK_CUT_BYTES at the most):
+ * each colour of the picture and its pen. A picture drawn again (a wall's
+ * glide brings a cover's strip in, a move draws its glow) is drawn with
+ * them as long as its pens are still those colours - not cut again. */
+#define CK_CUTS      48
+#define CK_CUT_BYTES (240L * 1024)
+struct CkCut {
+    const unsigned long *px;    /* the picture (NULL: a free slot) */
+    long w, h, mod;
+    ULONG sum;                  /* (16 of its pixels: the same picture at the address) */
+    ULONG used;                 /* (the clock: the oldest goes) */
+    UWORD n;                    /* its colours */
+    UWORD *key;                 /* ...each one's 5-5-5 bits */
+    UBYTE *pen;                 /* ...and pen */
+    UBYTE npens;
+    UBYTE pens[96];             /* the pens it took, and their colours then: */
+    ULONG prgb[96];             /* (still so: the cut still good) */
+};
+static struct CkCut ck_cut[CK_CUTS];
+static ULONG ck_cut_clock, ck_cut_bytes;
+
+static void ck_cut_drop(struct CkCut *c)
 {
-    UWORD ka = *(const UWORD *)a, kb = *(const UWORD *)b;
-    int va = ck_axis == 0 ? ka >> 10 : ck_axis == 1 ? (ka >> 5) & 31 : ka & 31;
-    int vb = ck_axis == 0 ? kb >> 10 : ck_axis == 1 ? (kb >> 5) & 31 : kb & 31;
-    return va - vb;
+    if (c->key) {
+        FreeVec(c->key);
+        ck_cut_bytes -= (ULONG)c->n * 3;
+    }
+    memset(c, 0, sizeof(*c));
+}
+
+/* All cuts forgotten (the target closed) */
+static void ck_cuts_free(void)
+{
+    int i;
+    for (i = 0; i < CK_CUTS; i++)
+        ck_cut_drop(&ck_cut[i]);
+    ck_cut_bytes = 0;
+}
+
+static BOOL ck_cut_good(const struct LkTarget *t, const struct CkCut *c)
+{
+    int i;
+    for (i = 0; i < c->npens; i++) {
+        UBYTE p = c->pens[i];
+        if ((p >= CK_POOL0 && !t->live[p]) || t->rgbof[p] != c->prgb[i])
+            return FALSE;
+    }
+    return TRUE;
 }
 
 struct CkBox {
@@ -506,14 +545,13 @@ static void ck_box_measure(const struct LkTarget *t, struct CkBox *b)
     b->pop = 0;
     for (i = 0; i < b->n; i++) {
         UWORD k = t->list[b->at + i];
-        int v[3];
-        v[0] = k >> 10;
-        v[1] = (k >> 5) & 31;
-        v[2] = k & 31;
-        for (a = 0; a < 3; a++) {
-            if (v[a] < lo[a]) lo[a] = v[a];
-            if (v[a] > hi[a]) hi[a] = v[a];
-        }
+        int v0 = k >> 10, v1 = (k >> 5) & 31, v2 = k & 31;
+        if (v0 < lo[0]) lo[0] = v0;
+        if (v0 > hi[0]) hi[0] = v0;
+        if (v1 < lo[1]) lo[1] = v1;
+        if (v1 > hi[1]) hi[1] = v1;
+        if (v2 < lo[2]) lo[2] = v2;
+        if (v2 > hi[2]) hi[2] = v2;
         b->pop += t->hist[k];
     }
     b->axis = 0;
@@ -525,6 +563,23 @@ static void ck_box_measure(const struct LkTarget *t, struct CkBox *b)
         }
 }
 
+/* A box's colours in order along its axis (counting: 32 values) */
+static void ck_box_sort(struct LkTarget *t, const struct CkBox *b)
+{
+    ULONG cnt[33];
+    long i;
+    int sh = b->axis == 0 ? 10 : b->axis == 1 ? 5 : 0;
+    UWORD *l = t->list + b->at;
+    memset(cnt, 0, sizeof(cnt));
+    for (i = 0; i < b->n; i++)
+        cnt[((l[i] >> sh) & 31) + 1]++;
+    for (i = 1; i < 33; i++)
+        cnt[i] += cnt[i - 1];
+    for (i = 0; i < b->n; i++)
+        t->tmp[cnt[(l[i] >> sh) & 31]++] = l[i];
+    memcpy(l, t->tmp, (size_t)b->n * sizeof(UWORD));
+}
+
 static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod);
 void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
 {
@@ -532,32 +587,45 @@ void lk_picture(struct LkOut *o, long x, long y, const unsigned long *px, long w
     lk_picture_(o, x, y, px, w, h, mod);
     lkt_pic += time_ms() - t0;
 }
+
+static void ck_draw_mapped(struct LkOut *o, struct LkTarget *t, long x, long y, const unsigned long *px,
+                           long w, long h, long mod)
+{
+    t->pmap = t->pmapb;
+    lk_image(o, x, y, px, w, h, mod);
+    t->pmap = NULL;
+}
+
 static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px, long w, long h, long mod)
 {
     struct LkTarget *t = o->ctx;
     static struct CkBox box[128];
+    struct CkCut *c = NULL;
     long i, j, n = 0, want, nb;
+    ULONG sum = 0;
     if (w <= 0 || h <= 0)
         return;
     if (!t || !t->ch || !t->hist) {
         lk_image(o, x, y, px, w, h, mod);
         return;
     }
-    {   /* the same picture as the last cut (a list's details drawn again
-         * each move): its pens as they were */
-        ULONG sum = 0;
-        for (j = 0; j < 16; j++)
-            sum = sum * 31 + px[(j * (h - 1) / 15) * mod + (j * 7 % 16) * (w - 1) / 15];
-        if (px == t->cut_px && w == t->cut_w && h == t->cut_h && mod == t->cut_mod && sum == t->cut_sum &&
-            t->gen == t->cut_gen) {
-            t->pmap = t->pmapb;
-            lk_image(o, x, y, px, w, h, mod);
-            t->pmap = NULL;
+    for (j = 0; j < 16; j++)
+        sum = sum * 31 + px[(j * (h - 1) / 15) * mod + (j * 7 % 16) * (w - 1) / 15];
+    for (i = 0; i < CK_CUTS; i++)       /* cut before, its pens still its colours: drawn so */
+        if (ck_cut[i].px == px && ck_cut[i].w == w && ck_cut[i].h == h && ck_cut[i].mod == mod &&
+            ck_cut[i].sum == sum) {
+            c = &ck_cut[i];
+            if (!ck_cut_good(t, c)) {
+                ck_cut_drop(c);
+                c = NULL;
+                break;
+            }
+            c->used = ++ck_cut_clock;
+            for (j = 0; j < c->n; j++)
+                t->pmapb[c->key[j]] = c->pen[j];
+            ck_draw_mapped(o, t, x, y, px, w, h, mod);
             return;
         }
-        t->cut_px = NULL;
-        t->cut_sum = sum;
-    }
     /* how many colours: a big picture (Now playing's cover, a page's) up to
      * 96, a small one (a wall's) 24 or 16, while pens are free, leaving some
      * for what is drawn after; a strip (a reflection, faded into the
@@ -578,14 +646,17 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
         t->no_new = FALSE;
         return;
     }
-    memset(t->hist, 0, 32768 * sizeof(ULONG));
-    for (j = 0; j < h; j++)
+    for (j = 0; j < h; j++) {           /* its colours, and how many of each */
+        const unsigned long *r = px + j * mod;
         for (i = 0; i < w; i++) {
-            ULONG k = CK555(px[j * mod + i]);
+            ULONG k = CK555(r[i]);
             if (!t->hist[k]++)
                 t->list[n++] = (UWORD)k;
         }
+    }
     if (n <= want) {                    /* few colours (a game's screenshot): each its own */
+        for (i = 0; i < n; i++)
+            t->hist[t->list[i]] = 0;
         lk_image(o, x, y, px, w, h, mod);
         return;
     }
@@ -602,8 +673,7 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
             }
         if (bi < 0)
             break;
-        ck_axis = box[bi].axis;
-        qsort(t->list + box[bi].at, (size_t)box[bi].n, sizeof(UWORD), ck_cmp);
+        ck_box_sort(t, &box[bi]);
         half = box[bi].pop / 2;
         for (k = 0, acc = 0; k < box[bi].n - 1; k++) {
             acc += t->hist[t->list[box[bi].at + k]];
@@ -616,31 +686,57 @@ static void lk_picture_(struct LkOut *o, long x, long y, const unsigned long *px
         ck_box_measure(t, &box[bi]);
         ck_box_measure(t, &box[nb]);
     }
+    /* kept: the oldest slot (or one free), if there is room */
+    if (ck_cut_bytes + (ULONG)n * 3 <= CK_CUT_BYTES) {
+        long k = 0;
+        for (i = 1; i < CK_CUTS; i++)
+            if (ck_cut[i].used < ck_cut[k].used)
+                k = i;
+        c = &ck_cut[k];
+        ck_cut_drop(c);
+        if ((c->key = AllocVec((ULONG)n * 3, MEMF_ANY))) {
+            c->pen = (UBYTE *)(c->key + n);
+            c->n = (UWORD)n;
+            ck_cut_bytes += (ULONG)n * 3;
+            c->px = px;
+            c->w = w;
+            c->h = h;
+            c->mod = mod;
+            c->sum = sum;
+            c->used = ++ck_cut_clock;
+        } else {
+            c = NULL;
+        }
+    }
     for (j = 0; j < nb; j++) {          /* each box: its pixels' average, a pen */
         ULONG sr = 0, sg = 0, sb = 0, pop = 0;
         UBYTE pen;
         for (i = 0; i < box[j].n; i++) {
             UWORD k = t->list[box[j].at + i];
-            ULONG c = t->hist[k];
-            sr += ((k >> 10) * 8 + 4) * c;
-            sg += (((k >> 5) & 31) * 8 + 4) * c;
-            sb += ((k & 31) * 8 + 4) * c;
-            pop += c;
+            ULONG cnt = t->hist[k];
+            sr += ((k >> 10) * 8 + 4) * cnt;
+            sg += (((k >> 5) & 31) * 8 + 4) * cnt;
+            sb += ((k & 31) * 8 + 4) * cnt;
+            pop += cnt;
         }
         if (!pop)
             pop = 1;
         pen = ck_pen_for(t, ((sr / pop) << 16) | ((sg / pop) << 8) | (sb / pop));
-        for (i = 0; i < box[j].n; i++)
-            t->pmapb[t->list[box[j].at + i]] = pen;
+        for (i = 0; i < box[j].n; i++) {
+            UWORD k = t->list[box[j].at + i];
+            t->pmapb[k] = pen;
+            t->hist[k] = 0;             /* (cleared as it goes: none left for the next) */
+            if (c) {
+                c->key[box[j].at + i] = k;
+                c->pen[box[j].at + i] = pen;
+            }
+        }
+        if (c && c->npens < 96) {
+            c->pens[c->npens] = pen;
+            c->prgb[c->npens++] = t->rgbof[pen];
+        }
     }
-    t->cut_px = px;
-    t->cut_w = w;
-    t->cut_h = h;
-    t->cut_mod = mod;
-    t->cut_gen = t->gen;
-    t->pmap = t->pmapb;
-    lk_image(o, x, y, px, w, h, mod);
-    t->pmap = NULL;
+    ck_draw_mapped(o, t, x, y, px, w, h, mod);
 }
 
 BOOL lk_open(struct Gfx *g, struct LkOut *o, BOOL canvas)
@@ -864,6 +960,10 @@ void lk_close(struct LkOut *o)
             FreeVec(t->list);
         if (t->pmapb)
             FreeVec(t->pmapb);
+        if (t->tmp)
+            FreeVec(t->tmp);
+        if (t->ch)
+            ck_cuts_free();             /* (the cuts' pens are this screen's) */
         if (t->pal_was) {
             if (t->g->scr) {            /* (the classic's colours back: first the screen
                                          * cleared, or the layout's pens show in them

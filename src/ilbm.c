@@ -740,9 +740,83 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         t->ncol = 256;
     }
 
-    /* the rows, one after another; the ones the thumbnail needs, sampled */
     rb = ((sw + 15) >> 4) << 1;
     np = planes + (masking == 1 ? 1 : 0);
+    if (maxcol <= THUMB_DEEP && dw <= sw && dh <= sh && (dw < sw || dh < sh)) {
+        /* true colour (a layout's), made smaller: each small pixel the
+         * average of the big ones it covers, as deep_thumb's are. Picked
+         * one in so many, a screenshot's fine lines and dithered shades
+         * broke into specks (a game's at 60%: Mutant League Hockey's ice) */
+        struct Thumb *d = AllocVec(sizeof(struct Thumb) + dw * dh * 4, MEMF_ANY | MEMF_CLEAR);
+        ULONG *sum = AllocVec(dw * 4 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR), cy = 0;
+        UWORD *dx = AllocVec(sw * sizeof(UWORD), MEMF_ANY);
+        row = AllocVec(rb * np, MEMF_ANY);
+        chunky = AllocVec(rb * 8, MEMF_ANY);
+        if (!d || !sum || !dx || !row || !chunky) {
+            FreeVec(d);
+            FreeVec(sum);
+            FreeVec(dx);
+            thumb_free(t);
+            t = NULL;
+            goto out;
+        }
+        d->w = dw;
+        d->h = dh;
+        d->mod = dw;
+        d->argb = (ULONG *)(d + 1);
+        for (x = 0; x < sw; x++)
+            dx[x] = (UWORD)(x * dw / sw);
+        c2p_init();
+        p = body;
+        e = body + bodylen;
+        for (sy = 0; sy < sh; sy++) {
+            const UBYTE *cc = (const UBYTE *)chunky;
+            ULONG ty = sy * dh / sh, rgb = ham ? base[0] : 0, bits = planes == 8 ? 6 : 4, lo = (1UL << bits) - 1;
+            if (img)
+                CopyMem(img + sy * rb * planes, row, rb * planes);
+            else if (!unpack(&p, e, row, rb * np, comp == 1))
+                break;                      /* cut short: the rest stays black */
+            row_chunky(row, rb, planes, chunky);
+            for (x = 0; x < sw; x++) {
+                ULONG *a = sum + dx[x] * 4, c;
+                if (ham) {
+                    ULONG v = cc[x] & lo, ctl = cc[x] >> bits;
+                    v = bits == 4 ? v * 17 : (v << 2) | (v >> 4);
+                    if (ctl == 0)
+                        rgb = base[cc[x] & lo];
+                    else if (ctl == 1)
+                        rgb = (rgb & 0xFFFF00) | v;
+                    else if (ctl == 2)
+                        rgb = (rgb & 0x00FFFF) | (v << 16);
+                    else
+                        rgb = (rgb & 0xFF00FF) | (v << 8);
+                    c = rgb;
+                } else {
+                    c = t->pal[cc[x]];
+                }
+                a[0] += (c >> 16) & 255;
+                a[1] += (c >> 8) & 255;
+                a[2] += c & 255;
+                a[3]++;
+            }
+            if (sy + 1 == sh || (sy + 1) * dh / sh != ty) {
+                ULONG *o = d->argb + ty * dw;   /* the row done: its averages */
+                for (x = 0; x < dw; x++) {
+                    ULONG *a = sum + x * 4, k = a[3] ? a[3] : 1;
+                    o[x] = ((a[0] + k / 2) / k << 16) | ((a[1] + k / 2) / k << 8) | (a[2] + k / 2) / k;
+                }
+                memset(sum, 0, dw * 4 * sizeof(ULONG));
+                cy = ty + 1;
+            }
+        }
+        (void)cy;
+        FreeVec(sum);
+        FreeVec(dx);
+        thumb_free(t);
+        t = d;
+        goto told;
+    }
+    /* the rows, one after another; the ones the thumbnail needs, sampled */
     row = AllocVec(rb * np, MEMF_ANY);
     xoff = AllocVec(dw * sizeof(UWORD), MEMF_ANY);
     chunky = AllocVec(rb * 8, MEMF_ANY);
@@ -797,6 +871,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         t = NULL;
         goto out;
     }
+told:
     pi->w = sw;
     pi->h = sh;
     pi->depth = planes;
