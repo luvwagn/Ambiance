@@ -5658,8 +5658,8 @@ static void pv_read_ahead(struct Page *p)
         int k = pv_kind(p, p->sel + near[i] * pv_dir, path, sizeof(path), &shot);
         if (!k || !pv_request(k, 0, path, TRUE, FALSE))
             break;
-        if (shot && pv_pictures() && !pv_request(LJ_SHOT, shot, path, TRUE, FALSE))
-            break;
+        if (shot && pv_pictures() && !lv_drives() && !pv_request(LJ_SHOT, shot, path, TRUE, FALSE))
+            break;                          /* (a layout's are its own: lv_pics_ahead) */
     }
 }
 
@@ -6180,6 +6180,8 @@ static void preview_draw(struct Page *p)
     pv_box_y = g.list_top;
     pv_box_h = (max_y - g.list_top) / 2;
     pv_has_box = shot != 0;
+    if (lv_drives())
+        shot = 0;                           /* (a layout reads its own, at its size: lv_picture) */
     keep = shot && pv_keeps(p, p->sel);     /* the picture on screen is this one's */
     if (!pv_since)
         pv_since = time_ms();
@@ -6369,7 +6371,7 @@ static void preview_touch(struct Page *p)
                                           : PLEX_SETTLE;    /* asked of the server: rest first */
     /* read ahead and back already: drawing it is only a copy, so sooner */
     if ((k = pv_kind(p, p->sel, path, sizeof(path), &shot))) {
-        want = shot && pv_pictures() ? 2 : 1;
+        want = shot && pv_pictures() && !lv_drives() ? 2 : 1;
         for (i = 0; i < PV_SLOTS; i++) {
             struct LJob *j = pv_slot[i];
             if (j && j->done && j->ran && !j->spent && strcmp(j->path, path) == 0 &&
@@ -7305,6 +7307,8 @@ static void draw_pane(BOOL full)
         }
         if (p->type == PT_LIST) {
             list_follow(p);
+            if (!pane_pending)
+                preview_touch(p);           /* (its details: as draw_all) */
         } else if (p->type == PT_TEXT && (full || !p->tb.open)) {
             open_textbox(p, g.list_top);    /* (its lines: the keys scroll them) */
         } else if (p->type == PT_DETAIL && (full || !p->tb.open)) {
@@ -9817,7 +9821,12 @@ static void pane_settle(void);
 static void draw_all(void)
 {
     if (lv_drives()) {
+        struct Page *p;
         pane_settle();                      /* (the section built, if still to be) */
+        if ((p = cur()) && p->type == PT_LIST && !pane_pending)
+            preview_touch(p);               /* its details asked for (the classic's draw_title_count
+                                             * does it: a layout skips that, so a list come back to
+                                             * at the start had none until moved in) */
         lv_note();
         return;
     }
@@ -17791,32 +17800,44 @@ static const struct LItem *lv_item(LONG i)
 
 /* The selected row's picture: a picture's own file, a game's screenshot
  * (looked for once a row). */
+/* Entry idx's picture for a page's details (a picture file, a game's
+ * screenshot): its file, or FALSE */
+static BOOL lv_pic_file(struct Page *p, LONG idx, char *file, LONG max)
+{
+    struct Item *it;
+    if (!p || p->type != PT_LIST || idx < 0 || idx >= p->list.count)
+        return FALSE;
+    it = &p->list.items[idx];
+    if (it->flags & ITEM_GONE)
+        return FALSE;
+    if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
+        item_path(it, file, max);
+        return TRUE;
+    }
+    if (it->kind == IT_RUN) {
+        char base[300];
+        return ags_screenshot_path(item_path(it, base, sizeof(base)), file, max);
+    }
+    return FALSE;
+}
+
+static char lv_pof_file[300];               /* lv_picture_of's (lv_picture knows it by it) */
+static UWORD lv_pof_w, lv_pof_h;            /* the size the layout asked it at (lv_pics_ahead) */
+
 static const char *lv_picture_of(struct Page *p)
 {
     static const struct Page *for_p;
     static LONG for_sel = -1, for_count = -1;
-    static char file[300];
     static BOOL have;
-    struct Item *it;
     if (!p || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
         return NULL;
     if (p == for_p && p->sel == for_sel && p->list.count == for_count)
-        return have ? file : NULL;
+        return have ? lv_pof_file : NULL;
     for_p = p;
     for_sel = p->sel;
     for_count = p->list.count;
-    have = FALSE;
-    it = &p->list.items[p->sel];
-    if (it->flags & ITEM_GONE)
-        return NULL;
-    if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
-        item_path(it, file, sizeof(file));
-        have = TRUE;
-    } else if (it->kind == IT_RUN) {
-        char base[300];
-        have = ags_screenshot_path(item_path(it, base, sizeof(base)), file, sizeof(file));
-    }
-    return have ? file : NULL;
+    have = lv_pic_file(p, p->sel, lv_pof_file, sizeof(lv_pof_file));
+    return have ? lv_pof_file : NULL;
 }
 
 static const char *lv_lines[256];
@@ -18573,6 +18594,10 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     struct LJob *j;
     if (!file || !file[0] || !w || !h)
         return NULL;
+    if (file == lv_pof_file) {
+        lv_pof_w = w;                       /* (the details' size: its neighbours read ahead so) */
+        lv_pof_h = h;
+    }
     for (i = 0; i < LV_PICS; i++) {
         if (lv_pic[i].w == w && lv_pic[i].h == h && strcmp(lv_pic[i].file, file) == 0) {
             lv_pic[i].used = ++lv_pic_clock;
@@ -18632,8 +18657,54 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
                                  * to 32 or 96 here first, it was cut twice, the loader's
                                  * dithered) */
     lv_pic[k].job = j;
-    ldr_submit(j);
+    if (file == lv_pof_file)
+        ldr_submit_first(j);                /* (the one shown: before those read ahead) */
+    else
+        ldr_submit(j);
     return NULL;
+}
+
+/* A picture of the layout's for file, made (or failed): not still out */
+static BOOL lv_pic_done_for(const char *file)
+{
+    int i;
+    for (i = 0; i < LV_PICS; i++)
+        if (lv_pic[i].file[0] && !strcmp(lv_pic[i].file, file))
+            return !lv_pic[i].job || lv_pic[i].job->done;
+    return FALSE;
+}
+
+/* A list page's details picture: the entries next to the one shown read
+ * ahead at the layout's size, as the classic pane's previews are (the
+ * next one the way the list moves, the one after, the one behind), one
+ * at a time while the loader has none of the layout's out - so a steady
+ * Down finds each game's screenshot made */
+static void lv_pics_ahead(void)
+{
+    static const struct Page *for_p;
+    static LONG for_sel = -1;
+    static int step;
+    static const LONG near[] = { 1, 2, -1 };
+    struct Page *p = cur();
+    char file[300];
+    int i;
+    if (!p || p->type != PT_LIST || !lv_pof_w || hold_active() || ov.on || pane_pending || !pv_roomy())
+        return;
+    if (p != for_p || p->sel != for_sel) {
+        for_p = p;
+        for_sel = p->sel;
+        step = 0;
+    }
+    if (step >= 3)
+        return;
+    for (i = 0; i < LV_PICS; i++)           /* (one of the layout's out: after it) */
+        if (lv_pic[i].job && !lv_pic[i].job->done)
+            return;
+    if (!lv_picture_of(p) || !lv_pic_done_for(lv_pof_file))
+        return;                             /* (the one shown first) */
+    if (lv_pic_file(p, p->sel + near[step] * pv_dir, file, sizeof(file)))
+        lv_picture(file, lv_pof_w, lv_pof_h);   /* (made, or asked for: drawn from there) */
+    step++;
 }
 
 /* The big letter up (the classic one's mask, ov.bl), in rgb: a fill a run */
@@ -19121,7 +19192,11 @@ static void lv_frame_(void)
                      p == lv.last_p && depth == lv.last_depth && mh == lv.last_msg &&
                      (p->type == PT_LIST
                           ? p->list.count == lv.last_count && (const void *)p->list.items == lv.last_items &&
-                            (p->sel != lv.last_sel || letter != lv.last_letter)
+                            (p->sel != lv.last_sel || letter != lv.last_letter ||
+                             /* a row drawn again, the count (a read ahead's preview, the
+                              * list's letters): the page's body, not all - each was a
+                              * whole draw, 2-3 a second at the start */
+                             (lv_what && !(lv_what & ~(ULONG)(LC_SELECT | LC_LIST | LC_DETAILS))))
                           : (p->type == PT_TEXT || p->type == PT_DETAIL) && p->tb.open &&
                             p->tb.pos != lv.last_pos);
         /* only the details came (the selection where it was, nothing else
@@ -19191,6 +19266,8 @@ static void lv_frame_(void)
 shown:
     lk_show(&lv.out);
     lv_ta_watch();
+    if (scr == LS_PAGE)
+        lv_pics_ahead();
 }
 
 void lv_hold(void)
