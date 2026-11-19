@@ -273,25 +273,31 @@ static LONG cop_per_line(void)
     return 16;
 }
 
-/* An AGA screen's controls (lv_bm: gap rows, then the layout's, in
- * registers VW_BAR_PEN0..): the gap made the colour of the bar's top row,
- * and the copper told to make those registers the bar's from its first
- * line down - that colour first, in the line's blanking, the rest over the
- * gap's lines, which show it alone. The picture's colours above are its
- * own, all of them. */
-static BOOL bar_band(struct Gfx *g, WORD gap)
+/* An AGA screen's controls (lv_bm: gap rows, if any, then the layout's, in
+ * registers VW_BAR_PEN0..): the copper makes each register the bar's
+ * colour before the first row that uses it - not all before the bar: its
+ * first rows are mostly its background, so the writes fall over them, the
+ * ones the first rows need in the blanking before them. Registers the bar
+ * does not use are not written. Only when the first rows need more than
+ * that leaves time for are gap rows put over it (the bar's background
+ * colour): how many is returned (more than gap: drawn again with them),
+ * -1 if the copper could not be had. The picture above keeps every
+ * register of its own. */
+#define BAR_BLANK 13                /* copper moves that fall in a line's blanking */
+static WORD bar_band(struct Gfx *g, WORD gap)
 {
     struct RastPort rp;
     struct CopPlan *p;
     const ULONG *rgb = lv_controls_rgb();
-    LONG top, i, y2;
+    const WORD *first = lv_controls_first();
+    UBYTE ord[VW_BAR_PENS], line[VW_BAR_PENS];
+    LONG dom, i, j, n = 0, step = (g->scr->ViewPort.Modes & LACE) ? 2 : 1, mpl = cop_per_line(), need;
     InitRastPort(&rp);
     rp.BitMap = lv_bm;
-    /* the gap's colour: the bar's own background, the colour most of it
-     * is (its top row is a highlight's: a band of it stood over the bar) */
+    /* the bar's own background: the colour most of it is (a gap's colour) */
     {
         UWORD cnt[VW_BAR_PENS];
-        LONG x, y, best = 0;
+        LONG x, y;
         memset(cnt, 0, sizeof(cnt));
         for (y = gap; y < lv_bm_h; y += 3)
             for (x = 4; x < g->w; x += 16) {
@@ -299,29 +305,72 @@ static BOOL bar_band(struct Gfx *g, WORD gap)
                 if (pn >= 0 && pn < VW_BAR_PENS)
                     cnt[pn]++;
             }
-        for (i = 1; i < VW_BAR_PENS; i++)
-            if (cnt[i] > cnt[best])
-                best = i;
-        top = VW_BAR_PEN0 + best;
+        for (dom = 0, i = 1; i < VW_BAR_PENS; i++)
+            if (cnt[i] > cnt[dom])
+                dom = i;
     }
+    /* the pens used, by their first row */
+    for (i = 0; i < VW_BAR_PENS; i++)
+        if (first[i] >= 0 || i == dom) {
+            for (j = n; j > 0 && (first[ord[j - 1]] < 0 ? 0 : first[ord[j - 1]]) >
+                                  (first[i] < 0 ? 0 : first[i]); j--)
+                ord[j] = ord[j - 1];
+            ord[j] = (UBYTE)i;
+            n++;
+        }
+    for (i = 0; i < n && ord[i] != dom; i++)
+        ;
+    for (; i > 0; i--)                      /* (the background first: in the first blanking) */
+        ord[i] = ord[i - 1];
+    ord[0] = (UBYTE)dom;
+    /* the fewest gap rows the writes fit with: each pen written on a
+     * scanline before its first, or in the blanking of that one */
+    for (need = 0; need <= 64; need += step) {
+        LONG s = 0, k = 0, banks = 0, bank_of = -1, cost;
+        BOOL ok = TRUE;
+        for (i = 0; i < n && ok; i++) {
+            LONG pn = ord[i], row = pn == dom && need ? 0 : need + (first[pn] < 0 ? 0 : first[pn]),
+                 dl = row / step, b = (VW_BAR_PEN0 + pn) >> 5, nb = banks + (b != bank_of ? 1 : 0);
+            cost = 2 * (k + 1) + 1 + 2 * nb;
+            if (cost > (dl == s ? BAR_BLANK : mpl)) {
+                s++;                        /* (the next scanline) */
+                k = 0;
+                nb = 1;
+                bank_of = -1;
+            }
+            if (s > dl)
+                ok = FALSE;
+            else {
+                line[pn] = (UBYTE)s;
+                if (b != bank_of) {
+                    banks = nb;
+                    bank_of = b;
+                }
+                k++;
+            }
+        }
+        if (ok)
+            break;
+    }
+    if (need > gap)
+        return need;                        /* (drawn again with that gap) */
     if (gap > 0) {
-        SetAPen(&rp, (UBYTE)top);
+        SetAPen(&rp, (UBYTE)(VW_BAR_PEN0 + dom));
         RectFill(&rp, 0, 0, g->w - 1, gap - 1);
     }
     if (bar_cop) {
         cop_off(g->scr);
         bar_cop = FALSE;
     }
-    if (!(p = cop_plan(g->scr, VW_BAR_PENS + 1)))
-        return FALSE;
-    cop_color(p, bar_y, (UBYTE)top, rgb[top - VW_BAR_PEN0]);
-    y2 = bar_y + ((g->scr->ViewPort.Modes & LACE) ? 2 : 1);     /* (the next line of each field) */
-    for (i = 0; i < VW_BAR_PENS; i++)
-        if (VW_BAR_PEN0 + i != top)
-            cop_color(p, y2, (UBYTE)(VW_BAR_PEN0 + i), rgb[i]);
+    if (!(p = cop_plan(g->scr, VW_BAR_PENS)))
+        return -1;
+    for (i = 0; i < n; i++) {
+        LONG pn = ord[i];
+        cop_color(p, bar_y + line[pn] * step, (UBYTE)(VW_BAR_PEN0 + pn), rgb[pn]);
+    }
     bar_cop = cop_commit(p);
     cop_plan_free(p);
-    return bar_cop;
+    return bar_cop ? need : -1;
 }
 
 /* The layout's controls as the bar (a graphics card's screen, a layout
@@ -330,13 +379,14 @@ static BOOL bar_band(struct Gfx *g, WORD gap)
  * FALSE: not (the bar as ever). */
 static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
 {
-    WORD h;
+    static WORD bar_gap;            /* (AGA: the gap the copper's writes needed last) */
+    WORD h, need;
     WORD gap = 0;
     if ((clut && (ncolors < VW_BAR_PEN0 + VW_BAR_PENS || !lv_controls_keep())) || !lv_controls_ok() ||
         (h = lv_controls_h(FALSE)) <= 0 || h > g->h / 3)
         return FALSE;
-    if (clut)                       /* (the copper's writes: lines of the bar's own colour first) */
-        gap = (WORD)cop_lines_for(g->scr, VW_BAR_PENS, cop_per_line());
+    if (clut)
+        gap = bar_gap;
     h += gap;
     if (bar_bm && (!bar_lv || bar_h != h))
         view_bar_hide(g);           /* (the other bar, or another height: put back first) */
@@ -379,9 +429,21 @@ static BOOL bar_layout(struct Gfx *g, const char *title, const char *detail)
         view_bar_hide(g);
         return FALSE;
     }
-    if (clut && !bar_band(g, gap)) {
-        view_bar_hide(g);
-        return FALSE;
+    if (clut) {
+        if ((need = bar_band(g, gap)) < 0) {
+            view_bar_hide(g);
+            return FALSE;
+        }
+        if (need != bar_gap) {
+            char m[60];
+            sprintf(m, "the controls' copper band: a gap of %ld lines", (long)need);
+            amb_log("viewer", m);
+        }
+        bar_gap = need;
+        if (need > gap) {           /* (the first rows needed more time: drawn again over a gap) */
+            view_bar_hide(g);
+            return bar_layout(g, title, detail);
+        }
     }
     gfx_dirty();
     BltBitMapRastPort(lv_bm, 0, 0, g->rp, 0, bar_y, g->w, bar_h, 0xC0);

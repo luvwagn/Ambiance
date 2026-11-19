@@ -69,5 +69,6 @@ void lv_controls_end(void);
 #define VW_BAR_PEN0 32
 BOOL lv_controls_keep(void);
 const ULONG *lv_controls_rgb(void);
+const WORD *lv_controls_first(void);    /* ...each one's first row in them (-1: not used) */
 
 #endif

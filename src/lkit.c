@@ -631,7 +631,7 @@ static ULONG mp_dist(UWORD a, UWORD b)
 }
 
 BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UBYTE pen0, int n, ULONG *rgb,
-                 BOOL pick)
+                 BOOL pick, WORD *first)
 {
     ULONG *hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     UWORD *keys = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
@@ -710,7 +710,11 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UB
             }
         }
     }
-    /* each pixel the nearest of them */
+    /* each pixel the nearest of them (and each pen's first row: the copper
+     * makes it its colour only before then) */
+    if (first)
+        for (c = 0; c < n; c++)
+            first[c] = -1;
     memset(near, 0xFF, 32768);
     for (i = 0; i < np; i++) {
         UWORD k = (UWORD)CK555(px[i]);
@@ -729,6 +733,8 @@ BOOL lk_mem_pens(const ULONG *px, WORD w, WORD h, struct BitMap *bm, WORD by, UB
             }
         }
         out[i] = (UBYTE)(pen0 + near[k]);
+        if (first && first[near[k]] < 0)
+            first[near[k]] = (WORD)(i / w);
     }
     InitRastPort(&rp);
     rp.BitMap = bm;

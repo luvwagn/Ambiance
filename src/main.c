@@ -17277,6 +17277,7 @@ static BOOL lv_lend_font(void);
 static ULONG *lv_mem;               /* the controls drawn in memory first (an AGA screen) */
 static LONG lv_mem_n;
 static ULONG lv_ctl_rgb[VW_BAR_PENS];
+static WORD lv_ctl_first[VW_BAR_PENS];  /* ...each one's first row in the controls (-1: none) */
 static BOOL lv_ctl_8(void)
 {
     return !g.truecolor && g.depth == 8 && g.scr && lv_screen_can();
@@ -17288,6 +17289,10 @@ BOOL lv_controls_keep(void)
 const ULONG *lv_controls_rgb(void)
 {
     return lv_ctl_rgb;
+}
+const WORD *lv_controls_first(void)
+{
+    return lv_ctl_first;
 }
 BOOL lv_controls_ok(void)
 {
@@ -17366,7 +17371,7 @@ BOOL lv_controls_draw(struct LControls *c, ULONG what, struct BitMap *bm)
     lv_sp_up = FALSE;
     lv.out = keep;
     if (mem && !lk_mem_pens(lv_mem, g.w, c->h, bm, (WORD)(GetBitMapAttr(bm, BMA_HEIGHT) - c->h), VW_BAR_PEN0,
-                            VW_BAR_PENS, lv_ctl_rgb, what == 0))
+                            VW_BAR_PENS, lv_ctl_rgb, what == 0, lv_ctl_first))
         return FALSE;                       /* (its rows the bitmap's last: a band's gap over them) */
     return TRUE;
 }
