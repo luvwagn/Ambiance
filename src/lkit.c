@@ -28,6 +28,7 @@ extern struct Library *CyberGfxBase;
  * cutting pictures' colours down, how many pixels shown, looks for free pens */
 BOOL lk_copper_ok = TRUE;               /* (Ambiance/LayoutCopper: 0, the dithered ramp) */
 BOOL lk_blit_ok = TRUE;                 /* (Ambiance/LayoutBlit: 0, a copy c2p'd again) */
+BOOL lk_beam_ok = TRUE;                 /* (Ambiance/LayoutBeam: 0, the planes changed whenever) */
 static ULONG lkt_show, lkt_pic, lkt_px, lkt_gc, lkt_short, lkt_free = 999;
 static ULONG lkt_blits, lkt_bpx;
 static ULONG lkt_same;                  /* groups of 32 left as the planes had them (ck_c2p) */        /* copies the blitter made, pixels they moved */
@@ -56,13 +57,14 @@ extern struct GfxBase *GfxBase;
 
 /* Where the 8-bit drawing's time goes, by E-clock ticks: each kind's calls
  * and time (text: its glyphs made and drawn, its rows within it) */
-enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_GLYPHS, LKP_GRAD, LKP_N };
+enum { LKP_FILL, LKP_ROWS, LKP_TEXT, LKP_C2P, LKP_COPY, LKP_GLYPHS, LKP_GRAD, LKP_BLIT, LKP_BEAM, LKP_N };
 static ULONG lkp_n[LKP_N], lkp_t[LKP_N], lkp_hz;
 #define LKP_BEGIN ULONG lkp_t0 = time_ticks(&lkp_hz)
 #define LKP_END(k) (lkp_n[k]++, lkp_t[k] += time_ticks(&lkp_hz) - lkp_t0)
 void lk_prof(char *buf)
 {
-    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies", "glyphs", "gradients" };
+    static const char *const name[LKP_N] = { "fills", "rows", "text", "c2p", "copies", "glyphs", "gradients",
+                                             "blitter", "beam waits" };
     int k;
     *buf = 0;
     for (k = 0; k < LKP_N; k++) {
@@ -1608,6 +1610,30 @@ static BOOL ck_blit(struct LkTarget *t, long x, long y, long w, long h, long dx,
 /* The copies kept (ck_blit) made on the screen, in order; FALSE if they
  * cannot be now (the window covered since): their places to be shown
  * from the canvas instead */
+/* The display's beam past rows y0..y1 (the screen's) before they are
+ * changed: the change then has the rest of the field, the beam's way round
+ * to them again, to be made in (made while the beam drew them, a glide
+ * showed torn: part the old place, part the new). A field at most. */
+static void ck_beam_past(struct LkTarget *t, long y0, long y1)
+{
+    struct ViewPort *vp;
+    struct View *v = GfxBase->ActiView;
+    LONG sh, b1, n = 0;
+    ULONG t0;
+    LKP_BEGIN;
+    if (!lk_beam_ok || !t->g->scr || !v || y1 < y0)
+        return;
+    vp = &t->g->scr->ViewPort;
+    sh = (vp->Modes & LACE) ? 1 : 0;
+    b1 = v->DyOffset + ((vp->DyOffset + y1) >> sh) + 1;
+    t0 = time_ms();
+    while ((LONG)VBeamPos() <= b1 && (LONG)VBeamPos() >= b1 - (((y1 - y0) >> sh) + 2) - 160) {
+        if (++n > 200000 || time_ms() - t0 > 22)
+            break;                          /* (a field's time at most) */
+    }
+    LKP_END(LKP_BEAM);
+}
+
 static BOOL ck_blits_run(struct LkTarget *t)
 {
     struct BitMap *bm;
@@ -1624,6 +1650,20 @@ static BOOL ck_blits_run(struct LkTarget *t)
     }
     if (t->blitting)
         WaitBlit();
+    {
+        /* the rows the copies and the conversion after them change: the
+         * beam past them first */
+        long y0 = t->y0 <= t->y1 ? t->y0 : 32767, y1 = t->y0 <= t->y1 ? t->y1 : -1;
+        for (i = 0; i < t->nbq; i++) {
+            long a = t->bq[i].y + (t->bq[i].dy < 0 ? t->bq[i].dy : 0),
+                 b = t->bq[i].y + t->bq[i].h - 1 + (t->bq[i].dy > 0 ? t->bq[i].dy : 0);
+            if (a < y0)
+                y0 = a;
+            if (b > y1)
+                y1 = b;
+        }
+        ck_beam_past(t, y0, y1);
+    }
     CacheClearU();                      /* (the CPU's writes to the planes out to chip RAM first) */
     if (t->sh)                          /* (what the planes show, moved as they are) */
         for (i = 0; i < t->nbq; i++) {
@@ -1636,10 +1676,15 @@ static BOOL ck_blits_run(struct LkTarget *t)
                 for (j = 0; j < h; j++)
                     memmove(t->sh + (y + j + dy) * t->cw + x + dx, t->sh + (y + j) * t->cw + x, (size_t)w);
         }
-    for (i = 0; i < t->nbq; i++)        /* (one bitmap, overlapping: BltBitMap picks the direction) */
-        BltBitMap(bm, (WORD)(t->bq[i].x + ox), (WORD)(t->bq[i].y + oy), bm,
-                  (WORD)(t->bq[i].x + t->bq[i].dx + ox), (WORD)(t->bq[i].y + t->bq[i].dy + oy), t->bq[i].w,
-                  t->bq[i].h, 0xC0, 0xFF, NULL);
+    {
+        LKP_BEGIN;                      /* (the blitter's time: its copies, to the end of them) */
+        for (i = 0; i < t->nbq; i++)    /* (one bitmap, overlapping: BltBitMap picks the direction) */
+            BltBitMap(bm, (WORD)(t->bq[i].x + ox), (WORD)(t->bq[i].y + oy), bm,
+                      (WORD)(t->bq[i].x + t->bq[i].dx + ox), (WORD)(t->bq[i].y + t->bq[i].dy + oy), t->bq[i].w,
+                      t->bq[i].h, 0xC0, 0xFF, NULL);
+        WaitBlit();
+        LKP_END(LKP_BLIT);
+    }
     t->blitting = TRUE;                 /* (the c2p after waits for it) */
     t->nbq = 0;
     if (ly)

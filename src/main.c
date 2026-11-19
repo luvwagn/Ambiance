@@ -18719,6 +18719,8 @@ static void lv_sync(void)
         /* (an AGA screen's copies by the blitter unless Ambiance/LayoutBlit is 0) */
         if (GetVar((CONST_STRPTR)"Ambiance/LayoutBlit", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
             lk_blit_ok = buf[0] != '0';
+        if (GetVar((CONST_STRPTR)"Ambiance/LayoutBeam", (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+            lk_beam_ok = buf[0] != '0';
         if (lv.file[0] && LowLevelBase && (key_is_down(0x60) || key_is_down(0x61))) {
             lv.skip = TRUE;
             amb_log("layout", "Shift held as Ambiance started: the classic layout this time");

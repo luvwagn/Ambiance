@@ -62,6 +62,7 @@ void lk_prof(char *buf);
 void lk_cover_cache_free(void);  /* text coverage kept (lk_text): let go (another font) */
 BOOL lk_vgrad8(struct LkOut *o, long x, long y, long w, long h, unsigned long a, unsigned long b);
 /* the big letter by hardware sprites (AGA, an 8-bit layout): TRUE if so */
+extern BOOL lk_beam_ok;     /* (changes made after the display's beam: Ambiance/LayoutBeam=0 off) */
 extern BOOL lk_sprites_ok;
 extern BOOL lk_show_up;
 extern BOOL lk_pic_own;
