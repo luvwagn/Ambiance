@@ -64,6 +64,31 @@ enum { FOCUS_MENU, FOCUS_CONTENT,
 
 static void ch_free(struct Chunks *ch);
 
+/* The view driven (Classic's, or a layout's): what the program asks to be
+ * shown again. The program's own state (where the list is scrolled, the
+ * details asked for) is done before, in the program's functions of the
+ * same names (draw_pane...); the view only shows, or notes for its next
+ * frame. Classic's: the cl_ functions; a layout's: the ly_ ones. */
+struct UiView {
+    void (*header)(void);
+    void (*menu)(void);
+    void (*menu_row)(int i);
+    void (*footer)(void);
+    void (*title)(struct Page *p);
+    void (*title_count)(struct Page *p);
+    void (*list_row)(struct Page *p, LONG idx, WORD col);
+    void (*gutter_planes)(struct Page *p, UBYTE planes);
+    void (*list_rows)(struct Page *p);
+    void (*list_move)(struct Page *p, LONG old_sel, LONG old_top);
+    void (*text_picture)(struct Page *p);
+    void (*pane)(BOOL full);
+    void (*np)(BOOL full);
+    void (*all)(void);
+    void (*pane_preview)(BOOL first);
+};
+static const struct UiView classic_ui, layout_ui;
+static const struct UiView *ui = &classic_ui;
+
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
 #define BAR_MS    3000          /* the viewer's info bar, after a change */
 
@@ -4606,12 +4631,9 @@ static void set_debug(BOOL on)
     cpu_load = app_load = -1;
 }
 
-static void draw_header(void)
+static void draw_header(void);  /* the program's: state, then the view (ui) */
+static void cl_draw_header(void)
 {
-    if (lv_drives()) {
-        lv_note();
-        return;
-    }
     gfx_fill(&g, 0, 0, g.w - 1, U(24) - 1, PEN_BAR);
     gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
     status_shown[0] = 0;                    /* the readout was just cleared */
@@ -4622,13 +4644,10 @@ static void draw_header(void)
     draw_clock();
 }
 
-static void draw_menu_row(int i)
+static void draw_menu_row(int i);  /* the program's: state, then the view (ui) */
+static void cl_draw_menu_row(int i)
 {
     WORD y = g.top + i * g.row_h;
-    if (lv_drives()) {
-        lv_note();
-        return;
-    }
     BOOL sel = i == menu_sel;
     UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) :
                i == hover_menu && mouse_mode ? PEN_RULE : PEN_BG;
@@ -4648,14 +4667,11 @@ static void draw_menu_row(int i)
 
 static ULONG menu_draw_ms = 1000;           /* the last whole menu's drawing (menu_slide) */
 
-static void draw_menu(void)
+static void draw_menu(void);  /* the program's: state, then the view (ui) */
+static void cl_draw_menu(void)
 {
     ULONG t0 = time_ms();
     int i;
-    if (lv_drives()) {
-        lv_note();
-        return;
-    }
     gfx_fill(&g, 0, U(25), g.menu_w + U(2), g.footer_y - 2, PEN_BG);
     for (i = 0; i < nmenu; i++)
         draw_menu_row(i);
@@ -4749,13 +4765,10 @@ static const char *hint_shown;      /* the hint in the footer now */
 static BOOL foot_hidden, foot_over, foot_redraw;
 static ULONG foot_since;            /* shown (with the mouse in use) since */
 
-static void draw_footer(void)
+static void draw_footer(void);  /* the program's: state, then the view (ui) */
+static void cl_draw_footer(void)
 {
     WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
-    if (lv_drives()) {
-        lv_note_what(LC_MESSAGE);
-        return;
-    }
     hint_shown = msg[0] ? NULL : hint_text();
     if (foot_hidden && !msg[0]) {
         if (foot_over) {                    /* a message's footer gone: what it covered */
@@ -4821,15 +4834,10 @@ static void title_band_rest(WORD x0, WORD x1, WORD right_from)
         gfx_fill(&g, x1, ty0, right_from - 1, ty1, PEN_BG);
 }
 
-static void draw_title_count(struct Page *p)
+static void draw_title_count(struct Page *p);  /* the program's: state, then the view (ui) */
+static void cl_draw_title_count(struct Page *p)
 {
     char count[24];
-    det_touch(p);
-    ch_pump(p);                             /* letters around the selection, ahead */
-    if (lv_drives()) {
-        lv_note_what(LC_SELECT);
-        return;
-    }
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
         draw_footer();              /* the hints follow the selection */
     if (p->title_wide && !ch_reading(p)) {
@@ -4878,15 +4886,12 @@ static BOOL np_away(void)
            mp_loaded();
 }
 
-static void draw_title(struct Page *p)
+static void draw_title(struct Page *p);  /* the program's: state, then the view (ui) */
+static void cl_draw_title(struct Page *p)
 {
     char widest[24];
     int i;
     WORD cw = 0, maxw, x, sep, dots;
-    if (lv_drives()) {
-        lv_note();
-        return;
-    }
     sep = gfx_textlen(&g, " > ", TS_BOLD);
     if (p->type == PT_LIST && p->list.count) {
         /* room for the widest count this list can show, so a growing
@@ -6331,12 +6336,9 @@ static UBYTE list_planes(const struct Page *p)
     return p && p->list.count && np_row(&p->list.items[0]) ? 0x0F : 0x07;
 }
 
-static void draw_list_row(struct Page *p, LONG idx, WORD col)
+static void draw_list_row(struct Page *p, LONG idx, WORD col);  /* the program's: state, then the view (ui) */
+static void cl_draw_list_row(struct Page *p, LONG idx, WORD col)
 {
-    if (lv_drives()) {
-        lv_note_what(LC_SELECT);
-        return;
-    }
     struct Item *it = &p->list.items[idx];
     WORD y = g.list_top + (idx - p->top) * g.list_row_h;
     WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
@@ -6411,12 +6413,9 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 /* planes: what a native screen writes (draw_gutter: 0-2, its pens being
  * below 8 and the column's planes above clear once the list is drawn;
  * draw_list_rows: all, as it draws the column the first time) */
-static void draw_gutter_planes(struct Page *p, UBYTE planes)
+static void draw_gutter_planes(struct Page *p, UBYTE planes);  /* the program's: state, then the view (ui) */
+static void cl_draw_gutter_planes(struct Page *p, UBYTE planes)
 {
-    if (lv_drives()) {
-        lv_note_what(LC_SELECT);
-        return;
-    }
     WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
     LONG vis = list_visible();
     if (!list_overflows(p))
@@ -6583,14 +6582,10 @@ static void set_mouse_mode(BOOL on)
         np_update();                        /* the yellow frame, or the mouse's light */
 }
 
-static void draw_list_rows(struct Page *p)
+static void draw_list_rows(struct Page *p);  /* the program's: state, then the view (ui) */
+static void cl_draw_list_rows(struct Page *p)
 {
     WORD vis, r, col;
-    if (lv_drives()) {
-        list_follow(p);
-        lv_note_what(LC_SELECT | LC_LIST);
-        return;
-    }
     vis = list_visible();
     col = mark_column(p);
     list_follow(p);
@@ -6706,13 +6701,9 @@ static void blit_rows(LONG src, LONG dst, LONG n)
  * edge of the list never moves at all). */
 static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 
-static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top);  /* the program's: state, then the view (ui) */
+static void cl_draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
-    if (lv_drives()) {
-        list_follow(p);
-        lv_note_what(LC_SELECT);
-        return;
-    }
     if (ov_over(p)) {
         /* the letter over the rows: they move without it stamped each
          * time, then those under it are painted again (what was copied
@@ -6891,12 +6882,9 @@ static void draw_plexmark(void)
              PEN_BG, textbox_w(), g.sm ? SM_TINY : TS_BODY);   /* (fine print where it can be) */
 }
 
-static void draw_text_picture(struct Page *p)
+static void draw_text_picture(struct Page *p);  /* the program's: state, then the view (ui) */
+static void cl_draw_text_picture(struct Page *p)
 {
-    if (lv_drives()) {
-        lv_note();
-        return;
-    }
     WORD lines, lh = g.font_h + U(1), y, i;
     WORD box_h = text_box_h(p, g.list_top, &lines);
     if (p->plexmark)
@@ -6933,31 +6921,13 @@ static struct TextBox *cur_tb(void)
     return (p && p->type != PT_LIST && p->tb.open) ? &p->tb : NULL;
 }
 
-static void draw_pane(BOOL full)
+static void draw_pane(BOOL full);  /* the program's: state, then the view (ui) */
+static void cl_draw_pane(BOOL full)
 {
     struct Page *p = cur();
     BOOL took = FALSE;                      /* a cover moved into the pane: its text now too */
     if (!p)
         return;
-    if (lv_drives()) {
-        /* the layout's: what the program keeps of it, no drawing */
-        if (full) {
-            det.shown = FALSE;               /* (previewed again, as the classic's) */
-            tb_close(&pv_tb);
-        }
-        if (p->type == PT_LIST) {
-            list_follow(p);
-            if (!pane_pending)
-                det_touch(p);           /* (its details: as draw_all) */
-        } else if (p->type == PT_TEXT && (full || !p->tb.open)) {
-            open_textbox(p, g.list_top);    /* (its lines: the keys scroll them) */
-        } else if (p->type == PT_DETAIL && (full || !p->tb.open)) {
-            p->facts_y = g.list_top;
-            open_textbox(p, p->facts_y);
-        }
-        lv_note();
-        return;
-    }
     if (full) {
         det.shown = FALSE;           /* the pane is cleared: preview again */
         tb_close(&pv_tb);
@@ -7811,17 +7781,12 @@ static void np_draw_station(void)
         gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);   /* lines there before */
 }
 
-static void np_draw(BOOL full)
+static void np_draw(BOOL full);  /* the program's: state, then the view (ui) */
+static void cl_np_draw(BOOL full)
 {
     struct MpStatus st;
     char info[320];
     int i;
-    if (lv_drives()) {
-        if (full)
-            plex_shown[0] = 0;              /* (the pane's details: gone under this page) */
-        lv_note();
-        return;
-    }
     mp_status(&st);
     if (!np.w)
         full = TRUE;                        /* not laid out yet */
@@ -9458,18 +9423,9 @@ static void build_mods_root(void)
 
 static void pane_settle(void);
 
-static void draw_all(void)
+static void draw_all(void);  /* the program's: state, then the view (ui) */
+static void cl_draw_all(void)
 {
-    if (lv_drives()) {
-        struct Page *p;
-        pane_settle();                      /* (the section built, if still to be) */
-        if ((p = cur()) && p->type == PT_LIST && !pane_pending)
-            det_touch(p);               /* its details asked for (the classic's draw_title_count
-                                             * does it: a layout skips that, so a list come back to
-                                             * at the start had none until moved in) */
-        lv_note();
-        return;
-    }
     if (foot_hidden && (!g.wb || g.footer_y != g.h)) {
         foot_hidden = foot_over = FALSE;    /* opened again (its metrics anew): shown */
         foot_since = mouse_mode ? time_ms() : 0;
@@ -9549,13 +9505,10 @@ static void pane_tick(void)
 }
 
 /* The pane while the selection is moving: blank, with the section's name. */
-static void pane_preview(BOOL first)
+static void pane_preview(BOOL first);  /* the program's: state, then the view (ui) */
+static void cl_pane_preview(BOOL first)
 {
     const char *t = _(mod_names[menu[menu_sel]]);
-    if (lv_drives()) {                      /* (a layout: Home shows the section moved to) */
-        lv_note_what(LC_SELECT);
-        return;
-    }
     if (first) {
         /* all but the title band (title_band_rest); a picture cleared
          * first, then its pens let go (filled over, it flashed) */
@@ -18501,6 +18454,7 @@ static void lv_off(BOOL redraw)
     lv_pics_free();
     lv.on = FALSE;
     det_view(&classic_view);                /* (the entry details: Classic's pane's again) */
+    ui = &classic_ui;                       /* (and everything else) */
     gfx_off = FALSE;
     lv.drawn = -1;
     lv_give_back_font();            /* (the font lent it: the classic's Pixel style again) */
@@ -18628,6 +18582,7 @@ static void lv_activate(void)
     lv.h = g.h;
     lv.on = TRUE;
     det_view(&layout_view);                 /* (the entry details: told to the layout) */
+    ui = &layout_ui;                        /* (and everything else: noted for its frame) */
     lv.full = TRUE;
     lv.drawn = -1;
     gfx_off = TRUE;
@@ -18914,6 +18869,28 @@ shown:
         /* a list's details not shown, nor asked for: asked for now (the
          * classic asks as it draws the title or moves; come back to at the
          * start, nothing did, and the pane stayed empty until a move) */
+        static ULONG unshown_since;
+        static const struct Page *diag;
+        /* (Debug: a list's details not given to the layout for 3 s, at rest:
+         * why, once a page) */
+        if (p && p->type == PT_LIST && p->sel >= 0 && p->sel < p->list.count &&
+            !(det.page == p && det.sel == p->sel && det.text_shown)) {
+            if (!unshown_since)
+                unshown_since = time_ms();
+            else if (time_ms() - unshown_since > 3000 && diag != p) {
+                char m[200];
+                diag = p;
+                sprintf(m, "no details yet for row %ld: pending %ld, due in %ld ms, shown %ld (this %ld), "
+                        "text %s, pane pending %ld, moving %ld, letter %ld, has pane %ld",
+                        (long)p->sel, (long)det.pending, (long)(det.due - time_ms()), (long)det.shown,
+                        (long)(det.page == p && det.sel == p->sel),
+                        !det.tj ? "none" : det.tj->done ? "back" : "out", (long)pane_pending,
+                        (long)hold_active(), (long)ov.on, (long)has_aside(p));
+                amb_log("layout", m);
+            }
+        } else {
+            unshown_since = 0;
+        }
         if (p && p->type == PT_LIST && p->sel >= 0 && p->sel < p->list.count && !det.pending && !pane_pending &&
             !(det.shown && det.page == p && det.sel == p->sel) && !hold_active() && has_aside(p)) {
             static const struct Page *told;
@@ -19122,6 +19099,186 @@ void lv_pick(int k)
         if (!lv_suits())
             set_msg(_("Layouts need a graphics card's 15 to 32-bit screen"));
     }
+}
+
+/* ---- the views (struct UiView): Classic's draws at once (cl_), a
+ * layout's notes what changed for its next frame (ly_) */
+static void ly_draw_header(void)
+{
+    lv_note();
+}
+static void ly_draw_menu(void)
+{
+    lv_note();
+}
+static void ly_draw_menu_row(int i)
+{
+    (void)i;
+    lv_note();
+}
+static void ly_draw_footer(void)
+{
+    lv_note_what(LC_MESSAGE);
+}
+static void ly_draw_title(struct Page *p)
+{
+    (void)p;
+    lv_note();
+}
+static void ly_draw_title_count(struct Page *p)
+{
+    (void)p;
+    lv_note_what(LC_SELECT);
+}
+static void ly_draw_list_row(struct Page *p, LONG idx, WORD col)
+{
+    (void)p;
+    (void)idx;
+    (void)col;
+    lv_note_what(LC_SELECT);
+}
+static void ly_draw_gutter_planes(struct Page *p, UBYTE planes)
+{
+    (void)p;
+    (void)planes;
+    lv_note_what(LC_SELECT);
+}
+static void ly_draw_list_rows(struct Page *p)
+{
+    (void)p;
+    lv_note_what(LC_SELECT | LC_LIST);
+}
+static void ly_draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+{
+    (void)p;
+    (void)old_sel;
+    (void)old_top;
+    lv_note_what(LC_SELECT);
+}
+static void ly_draw_text_picture(struct Page *p)
+{
+    (void)p;
+    lv_note();
+}
+static void ly_draw_pane(BOOL full)
+{
+    struct Page *p = cur();
+    /* a text page's lines in a text box of the classic's geometry (the
+     * keys scroll it, and LPage.text_frac comes from it) */
+    if (p && p->type == PT_TEXT && (full || !p->tb.open)) {
+        open_textbox(p, g.list_top);
+    } else if (p && p->type == PT_DETAIL && (full || !p->tb.open)) {
+        p->facts_y = g.list_top;
+        open_textbox(p, p->facts_y);
+    }
+    lv_note();
+}
+static void ly_np_draw(BOOL full)
+{
+    if (full)
+        plex_shown[0] = 0;                  /* (the pane's details: gone under this page) */
+    lv_note();
+}
+static void ly_draw_all(void)
+{
+    lv_note();
+}
+static void ly_pane_preview(BOOL first)
+{
+    (void)first;
+    lv_note_what(LC_SELECT);                /* (Home shows the section moved to) */
+}
+
+static const struct UiView classic_ui = {
+    cl_draw_header, cl_draw_menu, cl_draw_menu_row, cl_draw_footer, cl_draw_title, cl_draw_title_count,
+    cl_draw_list_row, cl_draw_gutter_planes, cl_draw_list_rows, cl_draw_list_move, cl_draw_text_picture,
+    cl_draw_pane, cl_np_draw, cl_draw_all, cl_pane_preview
+};
+static const struct UiView layout_ui = {
+    ly_draw_header, ly_draw_menu, ly_draw_menu_row, ly_draw_footer, ly_draw_title, ly_draw_title_count,
+    ly_draw_list_row, ly_draw_gutter_planes, ly_draw_list_rows, ly_draw_list_move, ly_draw_text_picture,
+    ly_draw_pane, ly_np_draw, ly_draw_all, ly_pane_preview
+};
+
+/* ---- the program's side of each: its state, then the view driven */
+static void draw_header(void)
+{
+    ui->header();
+}
+static void draw_menu(void)
+{
+    ui->menu();
+}
+static void draw_menu_row(int i)
+{
+    ui->menu_row(i);
+}
+static void draw_footer(void)
+{
+    ui->footer();
+}
+static void draw_title(struct Page *p)
+{
+    ui->title(p);
+}
+static void draw_title_count(struct Page *p)
+{
+    det_touch(p);                           /* its details, once it rests */
+    ch_pump(p);                             /* letters around the selection, ahead */
+    ui->title_count(p);
+}
+static void draw_list_row(struct Page *p, LONG idx, WORD col)
+{
+    ui->list_row(p, idx, col);
+}
+static void draw_gutter_planes(struct Page *p, UBYTE planes)
+{
+    ui->gutter_planes(p, planes);
+}
+static void draw_list_rows(struct Page *p)
+{
+    list_follow(p);                         /* where the list is scrolled to */
+    ui->list_rows(p);
+}
+static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+{
+    list_follow(p);
+    ui->list_move(p, old_sel, old_top);
+}
+static void draw_text_picture(struct Page *p)
+{
+    ui->text_picture(p);
+}
+static void draw_pane(BOOL full)
+{
+    struct Page *p = cur();
+    if (!p)
+        return;
+    if (full) {
+        det.shown = FALSE;                  /* the pane anew: its details asked for again */
+        tb_close(&pv_tb);
+    }
+    if (p->type == PT_LIST)
+        list_follow(p);
+    ui->pane(full);
+    if (p->type == PT_LIST && !pane_pending)
+        det_touch(p);                       /* (its details: Classic's title asks too) */
+}
+static void np_draw(BOOL full)
+{
+    ui->np(full);
+}
+static void draw_all(void)
+{
+    struct Page *p;
+    pane_settle();                          /* (the section built, if still to be) */
+    ui->all();
+    if ((p = cur()) && p->type == PT_LIST && !pane_pending)
+        det_touch(p);                       /* its details asked for */
+}
+static void pane_preview(BOOL first)
+{
+    ui->pane_preview(first);
 }
 
 /* ---- app.h: main.c's answers to the services (details.c) */
