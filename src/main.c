@@ -3650,6 +3650,7 @@ static BOOL lv_art_came;            /* a layout's cover came from the server: dr
 static struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
 static ULONG art_asked[ART_KINDS];     /* time_ms each was asked for (log) */
+static ULONG art_lv_wanted;             /* time_ms a layout last wanted a server's picture */
 static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
 static void art_ready(int kind, const char *file);
 static struct LJob *np_aj;          /* Now playing's cover, made for its square */
@@ -12955,6 +12956,18 @@ static void plex_more_ask(struct Page *p)
     char key[300], *q;
     if (rq_more || !p->plex_total || AvailMem(MEMF_ANY) < 400000UL)
         return;
+    /* the pictures on screen first: a long list's next part (a third of a
+     * second or more, the network's one at a time) waits while any are
+     * being fetched or still wanted (the first page's covers came one a
+     * part, Albums' 8450 in 9 parts) - the tick asks again */
+    if (p->plex_letters) {
+        int d;
+        for (d = 0; d < ART_KINDS; d++)
+            if (art_nj[d] && d != ART_AHEAD)
+                return;
+        if (time_ms() - art_lv_wanted < 500)
+            return;
+    }
     if (p->plex_letters && (k = plex_part_wanted(p)) < 0)
         return;
     if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
@@ -18510,6 +18523,7 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
          * and asked for again when it has come (lv_art_came) */
         char req[400];
         if (!plex_art(file + 1, w, h, req, sizeof(req), got, sizeof(got))) {
+            art_lv_wanted = time_ms();      /* (a list's next part waits: plex_more_ask) */
             if (!art_nj[ART_LAYOUT])
                 art_fetch(ART_LAYOUT, file + 1, w, h, got);
             return NULL;
