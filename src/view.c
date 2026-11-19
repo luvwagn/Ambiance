@@ -287,9 +287,23 @@ static BOOL bar_band(struct Gfx *g, WORD gap)
     LONG top, i, y2;
     InitRastPort(&rp);
     rp.BitMap = lv_bm;
-    top = ReadPixel(&rp, g->w / 2, gap);
-    if (top < VW_BAR_PEN0 || top >= VW_BAR_PEN0 + VW_BAR_PENS)
-        top = VW_BAR_PEN0;
+    /* the gap's colour: the bar's own background, the colour most of it
+     * is (its top row is a highlight's: a band of it stood over the bar) */
+    {
+        UWORD cnt[VW_BAR_PENS];
+        LONG x, y, best = 0;
+        memset(cnt, 0, sizeof(cnt));
+        for (y = gap; y < lv_bm_h; y += 3)
+            for (x = 4; x < g->w; x += 16) {
+                LONG pn = ReadPixel(&rp, x, y) - VW_BAR_PEN0;
+                if (pn >= 0 && pn < VW_BAR_PENS)
+                    cnt[pn]++;
+            }
+        for (i = 1; i < VW_BAR_PENS; i++)
+            if (cnt[i] > cnt[best])
+                best = i;
+        top = VW_BAR_PEN0 + best;
+    }
     if (gap > 0) {
         SetAPen(&rp, (UBYTE)top);
         RectFill(&rp, 0, 0, g->w - 1, gap - 1);
