@@ -3660,6 +3660,9 @@ static BOOL np_art_drawn;
 static void np_art_draw(void);
 static void np_art_free(void);
 static void np_art_start(const struct Item *it);
+static char np_album_thumb[160];    /* the playlist's album's cover (its row's), for a track without one */
+static const struct Item *lv_opened_from(const struct Page *p);
+static const char *lv_plex_field(const struct Item *it, int n, char *out, LONG max);
 static void np_art_load(const char *file);
 static WORD plex_art_side(void);
 static void plex_pv_draw(struct Page *p, BOOL was_shown);
@@ -8600,6 +8603,7 @@ static void resume_load(void)
     if (np.list.pool)
         list_free(&np.list);
     list_init(&np.list);
+    np_album_thumb[0] = 0;
     if ((s = nav_line(buf, len, &pos)))
         amb_strlcpy(np.folder, s, sizeof(np.folder));
     if ((s = nav_line(buf, len, &pos)))
@@ -8834,6 +8838,12 @@ static void mods_play_item(struct Page *p)
     list_init(&np.list);
     np.idx = -1;
     amb_strlcpy(np.folder, p->title, sizeof(np.folder));
+    np_album_thumb[0] = 0;
+    if (kind == IT_PLEXTRACK && p->plex) {  /* an album's tracks: its row's cover */
+        const struct Item *from = lv_opened_from(p);
+        if (from && from->kind == IT_PLEXDIR)
+            lv_plex_field(from, 2, np_album_thumb, sizeof(np_album_thumb));
+    }
     {
         /* where this was started, for Now playing opened from elsewhere */
         int d;
@@ -13879,6 +13889,8 @@ static void np_art_start(const struct Item *it)
         radio_field(it, 9, thumb, sizeof(thumb));
     else
         thumb[0] = 0;
+    if (it && !thumb[0])                    /* (Plex gave the track none: its album's) */
+        amb_strlcpy(thumb, np_album_thumb, sizeof(thumb));
     if (!strcmp(thumb, shown) && thumb[0] &&
         (np_aj || art_nj[ART_NP] || (g.pic_w && !strcmp(np_art_file, pv_onscr.key))))
         return;                             /* the same album: its cover stays as it is */
