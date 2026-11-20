@@ -26,6 +26,9 @@ extern const struct LayoutHost *H;
 extern WORD W, HT, FH, TH;      /* the screen; a line of text; a title's (LF_TITLE) */
 extern const ULONG ls_top, ls_bottom, ls_acc;
 extern const struct LkBg *const ls_lines_bg;   /* what draw_lines' text is over */
+extern const ULONG ls_body;                    /* body text */
+extern const ULONG ls_glow;                    /* the glow round what is chosen (glow) */
+extern const WORD ls_glow_w, ls_glow_min;      /*   its width: design units, and pixels at least */
 extern const BOOL ls_blank_half;               /* a blank line in a text: half a line (else a whole one) */
 
 /* ---- shared state */
@@ -83,6 +86,10 @@ extern const void *tl_of;
 #define GLIDE_MS 180
 struct Glide { LONG from, to; ULONG t0; };
 
+/* Waiting for a list's rows: the spinner's ring's centre (spin_x -1: none),
+ * for changed(LC_WAIT) to turn it alone */
+extern LONG spin_x, spin_y;
+
 /* A key held on a wall (its repeats coming close together): after a few
  * moves, several at a time; held longer, a letter at a time (to the first
  * of the next letter, or back to the first of this one, then the last) */
@@ -135,6 +142,17 @@ void text_measure(const struct LPage *m, LONG w, LONG lh);
 LONG draw_lines(const char *const *s, LONG n, LONG from, LONG x, LONG y, LONG w, LONG bottom, ULONG first,
                 ULONG rest);
 void disc(LONG x, LONG y, LONG s, ULONG bg);
+void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg);
+void wait_spinner(const struct LPage *m);
+/* the layout's own: the spinner's square cleared, a dot; its colours (lit
+ * first, fading) */
+void spin_back(LONG x, LONG y, LONG s);
+void spin_dot(LONG x, LONG y, LONG d, ULONG c);
+extern const ULONG ls_spin[4];
+void time_row(LONG x, LONG y, LONG w, ULONG at, ULONG total, BOOL knob_at_start, LONG *pbx, LONG *pbw);
+/* the layout's own: the time row's bar at bx over bw, f of it played (-1:
+ * no length); knob_at_start: its knob shown at 0 too */
+void time_bar(LONG bx, LONG ty, LONG bw, LONG f, BOOL knob_at_start);
 void scroll_to(LONG p);
 
 #endif

@@ -23,6 +23,7 @@ int nsbar;
 int sb_drag = -1;
 LONG sb_off;
 static struct LkBg bg_flat;    /* (flat's) */
+LONG spin_x = -1, spin_y;
 ULONG acc_ms;
 int acc_dir, acc_run;
 
@@ -807,5 +808,61 @@ void disc(LONG x, LONG y, LONG s, ULONG bg)
                 run = i;
             }
         }
+    }
+}
+
+/* A time row at x, y, w wide (Now playing's, the viewer controls'): where
+ * it is, the layout's bar (time_bar), and how long, in tabular digits over
+ * ls_lines_bg. The bar's place comes back in *pbx, *pbw when a click on it
+ * can seek (the length known); else *pbw is 0. */
+void time_row(LONG x, LONG y, LONG w, ULONG at, ULONG total, BOOL knob_at_start, LONG *pbx, LONG *pbw)
+{
+    char b1[16], b2[16];
+    const char *a = mmss(at, b1), *z = total ? mmss(total, b2) : "";
+    LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = x + aw + X(10);
+    LONG bw = x + w - zw - X(10) - bx;
+    *pbx = bx;
+    *pbw = 0;
+    tnum(x, y, a, LF_SMALL, ls_body, ls_lines_bg);
+    if (bw > 8) {
+        LONG f = -1;
+        if (total) {
+            f = (LONG)((at / 100) * bw / (total / 100 ? total / 100 : 1));
+            if (f > bw)
+                f = bw;
+            *pbw = bw;
+        }
+        time_bar(bx, y, bw, f, knob_at_start);
+    }
+    if (*z)
+        tnum(x + w - zw, y, z, LF_SMALL, ls_body, ls_lines_bg);
+}
+
+/* A soft glow round a rounded box (what is chosen, the pointer's hover):
+ * rings a pixel each, the layout's ls_glow fading into bg outwards over
+ * ls_glow_w design units (ls_glow_min pixels at least); the box itself is
+ * then drawn over its middle */
+void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg)
+{
+    LONG k, n = X(ls_glow_w) > ls_glow_min ? X(ls_glow_w) : ls_glow_min;
+    for (k = n; k >= 1; k--)
+        rshape(x - k, y - k, w + 2 * k, h + 2 * k, r + k, mix(ls_glow, bg, k, n + 1));
+}
+
+/* Waiting for a list's rows: a small spinner, eight dots in a ring at
+ * spin_x, spin_y (the one at the step lit, the ones before it fading:
+ * ls_spin), over the layout's spin_back, each dot its spin_dot */
+void wait_spinner(const struct LPage *m)
+{
+    static const signed char dx[8] = { 0, 7, 10, 7, 0, -7, -10, -7 };
+    static const signed char dy[8] = { -10, -7, 0, 7, 10, 7, 0, -7 };
+    LONG d = FH / 4 > 3 ? FH / 4 : 3, r = FH / 2, i;
+    if (spin_x < 0)
+        return;
+    spin_back(spin_x - r - d, spin_y - r - d, 2 * (r + d) + 1);
+    for (i = 0; i < 8; i++) {
+        int back = (m->wait_phase - i) & 7;
+        LONG cx = spin_x + dx[i] * r / 10, cy = spin_y + dy[i] * r / 10;
+        spin_dot(cx - d / 2, cy - d / 2, d, ls_spin[back < 3 ? back : 3]);
     }
 }

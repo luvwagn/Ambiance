@@ -67,6 +67,12 @@ static LONG hov_arg = -1;
 
 static struct LkBg bg_grad;
 const struct LkBg *const ls_lines_bg = &bg_grad;
+const ULONG ls_body = C_BODY;
+/* the glow round what is chosen: halfway from the accent to the focus's
+ * blue (mix 1:2), 7 design units wide (wider than Showcase's: this
+ * style's selection is its glow) */
+const ULONG ls_glow = 0x4098E2UL;
+const WORD ls_glow_w = 7, ls_glow_min = 4;
 const BOOL ls_blank_half = TRUE;
 
 /* The style's words are lowercase ("music", "now playing"): a copy with
@@ -101,18 +107,7 @@ static const char *lower(const char *s)
 }
 
 /* ---------------------------------------------------------------- shapes */
-/* A rounded box filled a row at a time, nothing outside it touched */
-
-/* A soft glow round a rounded box: rings a pixel each, the accent fading
- * into bg outwards (wider than Showcase's: this style's selection is its
- * glow) */
 #define LABEL_GAP (X(7) + 5)    /* words under a tile: below its glow (drawn opaque, they cut it) */
-static void glow(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG bg)
-{
-    LONG k, n = X(7) > 4 ? X(7) : 4;
-    for (k = n; k >= 1; k--)
-        rshape(x - k, y - k, w + 2 * k, h + 2 * k, r + k, mix(mix(C_ACC, C_FOCUS, 1, 2), bg, k, n + 1));
-}
 
 /* A rounded box shaded from top to bottom, a row at a time */
 static void rgrad(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG top, ULONG bot)
@@ -523,22 +518,15 @@ static void footer_keep(const char *hint, const char *message, BOOL keep)
 }
 
 /* ---------------------------------------------------------------- the waiting spinner */
-static LONG spin_x = -1, spin_y;
-static void wait_spinner(const struct LPage *m)
+/* lshare.c's wait_spinner, over the gradient; its dots round, dimmest faint */
+const ULONG ls_spin[4] = { C_ACC, C_SUB, C_DIM, C_FAINT };
+void spin_back(LONG x, LONG y, LONG s)
 {
-    static const signed char dx[8] = { 0, 7, 10, 7, 0, -7, -10, -7 };
-    static const signed char dy[8] = { -10, -7, 0, 7, 10, 7, 0, -7 };
-    LONG d = FH / 4 > 3 ? FH / 4 : 3, r = FH / 2, i;
-    if (spin_x < 0)
-        return;
-    H->vgrad((WORD)(spin_x - r - d), (WORD)(spin_y - r - d), (WORD)(2 * (r + d) + 1), (WORD)(2 * (r + d) + 1),
-             grad(spin_y - r - d), grad(spin_y + r + d));
-    for (i = 0; i < 8; i++) {
-        int back = (m->wait_phase - i) & 7;
-        ULONG c = back == 0 ? C_ACC : back == 1 ? C_SUB : back == 2 ? C_DIM : C_FAINT;
-        LONG cx = spin_x + dx[i] * r / 10, cy = spin_y + dy[i] * r / 10;
-        rshape(cx - d / 2, cy - d / 2, d, d, d / 2, c);
-    }
+    H->vgrad((WORD)x, (WORD)y, (WORD)s, (WORD)s, grad(y), grad(y + s - 1));
+}
+void spin_dot(LONG x, LONG y, LONG d, ULONG c)
+{
+    rshape(x, y, d, d, d / 2, c);
 }
 static void waiting_or_none(const struct LPage *m, LONG x, LONG y, LONG w)
 {
@@ -1781,34 +1769,29 @@ static void now_buttons(const struct LNow *n, LONG by, LONG bh)
 
 /* Now playing's time and its bar (drawn again alone as it goes: LC_PLAYING) */
 static LONG nt_x, nt_y = -1, nt_w;
+/* The time row's bar (lshare.c's time_row): a thin line, what has played
+ * lit, and a white knob where it is (f -1: no length, the line alone) */
+void time_bar(LONG bx, LONG ty, LONG bw, LONG f, BOOL knob_at_start)
+{
+    LONG by = ty + FH / 2 - 1;
+    H->fill((WORD)bx, (WORD)by, (WORD)bw, 2, C_FAINT);
+    if (f > 0)
+        H->fill((WORD)bx, (WORD)by, (WORD)f, 2, C_ACC);
+    if (f > 0 || (f == 0 && knob_at_start))
+        rshape(bx + f - 4, by - 3, 8, 8, 4, C_WHITE);
+}
 static void now_time(const struct LNow *n, BOOL with_hit)
 {
     LONG tx = nt_x, ty = nt_y, tw = nt_w;
-    char b1[16], b2[16];
     if (ty < 0)
         return;
     if (!with_hit)
         back_at(tx, ty - Y(4), tx + tw, ty + FH + Y(4));
     if (!n->stopped) {
-        const char *a = mmss(n->pos_ms, b1), *z = n->len_ms ? mmss(n->len_ms, b2) : "";
-        LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = tx + aw + X(10);
-        LONG bw = tx + tw - zw - X(10) - bx, bby = ty + FH / 2 - 1;
-        tnum(tx, ty, a, LF_SMALL, C_BODY, &bg_grad);
-        if (bw > 8) {
-            if (n->len_ms && with_hit)
-                hit(bx, ty - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
-            H->fill((WORD)bx, (WORD)bby, (WORD)bw, 2, C_FAINT);
-            if (n->len_ms) {
-                LONG f = (LONG)((n->pos_ms / 100) * bw / (n->len_ms / 100 ? n->len_ms / 100 : 1));
-                if (f > bw)
-                    f = bw;
-                if (f > 0) {
-                    H->fill((WORD)bx, (WORD)bby, (WORD)f, 2, C_ACC);
-                    rshape(bx + f - 4, bby - 3, 8, 8, 4, C_WHITE);
-                }
-            }
-        }
-        tnum(tx + tw - zw, ty, z, LF_SMALL, C_BODY, &bg_grad);
+        LONG bx, bw;
+        time_row(tx, ty, tw, n->pos_ms, n->len_ms, FALSE, &bx, &bw);
+        if (bw && with_hit)
+            hit(bx, ty - Y(2), bw, FH + Y(4), HT_SEEK, 0, 0);
     } else {
         text(tx, ty, lower(H->tr("Stopped: Play starts it again")), LF_SMALL, C_SUB, &bg_grad, tw);
     }
@@ -1830,29 +1813,15 @@ static WORD hz_controls_h(BOOL timed)
 /* A video's time: where it is, a bar, how long (the bar: its seek place) */
 static void ct_time(struct LControls *c)
 {
-    char b1[16], b2[16];
-    const char *a = mmss(c->at_ms, b1), *z = c->total_ms ? mmss(c->total_ms, b2) : "";
-    LONG aw = tnum_len(a, LF_SMALL), zw = tnum_len(z, LF_SMALL), bx = ct_tx + aw + X(10);
-    LONG bw = ct_tx + ct_tw - zw - X(10) - bx, bby = ct_ty + FH / 2 - 1;
-    tnum(ct_tx, ct_ty, a, LF_SMALL, C_BODY, &bg_grad);
+    LONG bx, bw;
+    time_row(ct_tx, ct_ty, ct_tw, c->at_ms, c->total_ms, TRUE, &bx, &bw);
     c->seek_w = 0;
-    if (bw > 8) {
-        H->fill((WORD)bx, (WORD)bby, (WORD)bw, 2, C_FAINT);
-        if (c->total_ms) {
-            LONG f = (LONG)((c->at_ms / 100) * bw / (c->total_ms / 100 ? c->total_ms / 100 : 1));
-            if (f > bw)
-                f = bw;
-            if (f > 0)
-                H->fill((WORD)bx, (WORD)bby, (WORD)f, 2, C_ACC);
-            rshape(bx + f - 4, bby - 3, 8, 8, 4, C_WHITE);
-            c->seek_x = (WORD)bx;
-            c->seek_y = (WORD)(ct_ty - Y(2));
-            c->seek_w = (WORD)bw;
-            c->seek_h = (WORD)(FH + Y(4));
-        }
+    if (bw) {
+        c->seek_x = (WORD)bx;
+        c->seek_y = (WORD)(ct_ty - Y(2));
+        c->seek_w = (WORD)bw;
+        c->seek_h = (WORD)(FH + Y(4));
     }
-    if (*z)
-        tnum(ct_tx + ct_tw - zw, ct_ty, z, LF_SMALL, C_BODY, &bg_grad);
 }
 
 static void hz_controls(struct LControls *c, ULONG what)
