@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <exec/types.h>
 #include "../layout.h"
+#include "lshare.h"
 
 const char LibName[] = "horizon.layout";
 const char LibIdString[] = "horizon.layout 1.0 (18.11.2026) Horizon, for Ambiance";
@@ -46,21 +47,14 @@ const UWORD LibRevision = 0;
 #define C_LETTER 0x2B5E9EUL     /* the big letter: faint, over the list */
 #define C_BTN    0x15488DUL     /* Now playing's buttons */
 
-static const struct LayoutHost *H;
-static WORD W, HT, FH, TH;      /* the screen; a line of text; a title's (LF_TITLE) */
+const ULONG ls_top = C_TOP, ls_bottom = C_BOT, ls_acc = C_ACC;   /* (lshare.c's) */
+const struct LayoutHost *H;
+WORD W, HT, FH, TH;      /* the screen; a line of text; a title's (LF_TITLE) */
 static int drawn = -1;          /* the screen drawn last */
 
 /* What a click lands on, noted as it is drawn */
 enum { HT_STRIP, HT_SECTION, HT_TILE, HT_ROW, HT_CRUMB, HT_NOWPLAYING, HT_PAUSE, HT_HOME, HT_BUTTON, HT_SEEK, HT_SCROLL };
-struct Hit {
-    WORD x, y, w, h;
-    UBYTE what;                 /* HT_* */
-    UBYTE kind;                 /* a row's or tile's LI_* */
-    LONG arg;                   /* its index (a crumb: its level) */
-};
-#define MAX_HITS 80
-static struct Hit hits[MAX_HITS];
-static int nhits, hits_base;
+static int hits_base;
 static LONG hit_sel = -1;       /* the list's selected row, as drawn */
 static LONG click_row = -1;     /* a double-click: the row clicked last, and when */
 static ULONG click_ms;
@@ -71,88 +65,9 @@ static int hov_what = -1;
 static LONG hov_arg = -1;
 #define HOVER(w, a) (hov_what == (w) && hov_arg == (a))
 
-static void hit(LONG x, LONG y, LONG w, LONG h, int what, int kind, LONG arg)
-{
-    if (nhits < MAX_HITS && w > 0 && h > 0) {
-        struct Hit *t = &hits[nhits++];
-        t->x = (WORD)x;
-        t->y = (WORD)y;
-        t->w = (WORD)w;
-        t->h = (WORD)h;
-        t->what = (UBYTE)what;
-        t->kind = (UBYTE)kind;
-        t->arg = arg;
-    }
-}
-
-/* ---------------------------------------------------------------- little helpers */
-static LONG X(LONG v) { return v * W / 800; }
-static LONG Y(LONG v) { return v * HT / 600; }
-
-static LONG slen(const char *s)
-{
-    LONG n = 0;
-    if (s)
-        while (s[n])
-            n++;
-    return n;
-}
-
-static ULONG mix(ULONG a, ULONG b, LONG num, LONG den)
-{
-    ULONG o = 0;
-    int sh;
-    if (den <= 0)
-        return a;
-    if (num < 0)
-        num = 0;
-    if (num > den)
-        num = den;
-    for (sh = 0; sh <= 16; sh += 8) {
-        LONG ca = (a >> sh) & 255, cb = (b >> sh) & 255;
-        o |= (ULONG)(ca + (cb - ca) * num / den) << sh;
-    }
-    return o;
-}
-
-/* the gradient's colour at row y */
-static ULONG grad(LONG y)
-{
-    return mix(C_TOP, C_BOT, y, HT - 1);
-}
-
-static struct LkBg bg_grad, bg_flat;
-
-static const struct LkBg *flat(ULONG c)
-{
-    bg_flat.top = bg_flat.bottom = c;
-    bg_flat.y = 0;
-    bg_flat.h = 1;
-    return &bg_flat;
-}
-
-static WORD text(LONG x, LONG y, const char *s, int face, ULONG fg, const struct LkBg *bg, LONG maxw)
-{
-    LONG n;
-    if (!s || !*s || maxw < 0)
-        return 0;
-    n = slen(s);
-    if (maxw > 0 && H->textlen(s, n, face) > maxw) {
-        /* too long: cut where "..." still fits after it, and the "..." */
-        LONG ew = H->textlen("...", 3, face), k = maxw > ew ? H->fit(s, n, face, (WORD)(maxw - ew)) : 0;
-        WORD w;
-        while (k > 0 && s[k - 1] == ' ')
-            k--;
-        w = k > 0 ? H->text((WORD)x, (WORD)y, s, k, face, fg, bg, 0) : 0;
-        return (WORD)(w + H->text((WORD)(x + w), (WORD)y, "...", 3, face, fg, bg, 0));
-    }
-    return H->text((WORD)x, (WORD)y, s, n, face, fg, bg, (WORD)maxw);
-}
-
-static WORD tlen(const char *s, int face)
-{
-    return s && *s ? H->textlen(s, slen(s), face) : 0;
-}
+static struct LkBg bg_grad;
+const struct LkBg *const ls_lines_bg = &bg_grad;
+const BOOL ls_blank_half = TRUE;
 
 /* The style's words are lowercase ("music", "now playing"): a copy with
  * A-Z lowered (other letters as they are: a catalogue's may be more than
@@ -185,172 +100,8 @@ static const char *lower(const char *s)
     return b;
 }
 
-/* Numbers that change as they are shown (a time, the clock): each digit
- * in a cell the widest digit's width, so nothing beside them moves */
-static WORD dcell[4];
-static WORD digit_cell(int face)
-{
-    if (face < 0 || face > 3)
-        face = 0;
-    if (!dcell[face]) {
-        char d[2] = { '0', 0 };
-        for (; d[0] <= '9'; d[0]++) {
-            WORD w = H->textlen(d, 1, face);
-            if (w > dcell[face])
-                dcell[face] = w;
-        }
-    }
-    return dcell[face];
-}
-static LONG tnum_len(const char *s, int face)
-{
-    LONG w = 0;
-    if (!s)
-        return 0;
-    while (*s) {
-        LONG k = 0;
-        if ((*s >= '0' && *s <= '9') || *s == '\a') {
-            w += digit_cell(face);
-            s++;
-            continue;
-        }
-        while (s[k] && !(s[k] >= '0' && s[k] <= '9') && s[k] != '\a')
-            k++;
-        w += H->textlen(s, k, face);
-        s += k;
-    }
-    return w;
-}
-static LONG tnum(LONG x, LONG y, const char *s, int face, ULONG fg, const struct LkBg *bg)
-{
-    LONG x0 = x, cell = digit_cell(face);
-    if (!s)
-        return 0;
-    while (*s) {
-        LONG k = 0;
-        if (*s == '\a') {      /* (FIG_SPACE: a digit's room, empty) */
-            x += cell;
-            s++;
-            continue;
-        }
-        if (*s >= '0' && *s <= '9') {
-            LONG w = H->textlen(s, 1, face);
-            H->text((WORD)(x + (cell - w) / 2), (WORD)y, s, 1, face, fg, bg, 0);
-            x += cell;
-            s++;
-            continue;
-        }
-        while (s[k] && !(s[k] >= '0' && s[k] <= '9') && s[k] != '\a')
-            k++;
-        H->text((WORD)x, (WORD)y, s, k, face, fg, bg, 0);
-        x += H->textlen(s, k, face);
-        s += k;
-    }
-    return x - x0;
-}
-
-/* "m:ss" */
-static char *mmss(ULONG ms, char *b)
-{
-    ULONG s = ms / 1000, m = s / 60;
-    char t[12];
-    int n = 0, i = 0;
-    s %= 60;
-    do {
-        t[n++] = (char)('0' + m % 10);
-        m /= 10;
-    } while (m);
-    while (n)
-        b[i++] = t[--n];
-    b[i++] = ':';
-    b[i++] = (char)('0' + s / 10);
-    b[i++] = (char)('0' + s % 10);
-    b[i] = 0;
-    return b;
-}
-
-/* s + sep + t into b (max bytes) */
-static const char *join(char *b, LONG max, const char *s, const char *sep, const char *t)
-{
-    LONG n = 0;
-    const char *p;
-    for (p = s; p && *p && n < max - 1; p++)
-        b[n++] = *p;
-    if (s && *s && t && *t)
-        for (p = sep; *p && n < max - 1; p++)
-            b[n++] = *p;
-    for (p = t; p && *p && n < max - 1; p++)
-        b[n++] = *p;
-    b[n] = 0;
-    return b;
-}
-
-static void scopy(char *d, const char *s, LONG max)
-{
-    LONG i = 0;
-    if (s)
-        for (; s[i] && i < max - 1; i++)
-            d[i] = s[i];
-    d[i] = 0;
-}
-static ULONG shash(const char *s)
-{
-    ULONG h = 5381;
-    if (s)
-        for (; *s; s++)
-            h = h * 33 + (UBYTE)*s;
-    return h;
-}
-
-static LONG isqrt(LONG v)
-{
-    LONG r = 0, b = 1L << 30;
-    if (v <= 0)
-        return 0;
-    while (b > v)
-        b >>= 2;
-    while (b) {
-        if (v >= r + b) {
-            v -= r + b;
-            r = (r >> 1) + b;
-        } else {
-            r >>= 1;
-        }
-        b >>= 2;
-    }
-    return r;
-}
-
 /* ---------------------------------------------------------------- shapes */
 /* A rounded box filled a row at a time, nothing outside it touched */
-/* How far in from the side a rounded box's row j is (h rows, corners of
- * radius r), in 16ths of a pixel: each row measured at its middle */
-static LONG rinset16(LONG j, LONG h, LONG r)
-{
-    LONG dy2, v;
-    if (j < r)
-        dy2 = 2 * (r - j) - 1;
-    else if (j >= h - r)
-        dy2 = 2 * (j - (h - r)) + 1;
-    else
-        return 0;
-    v = 256 * r * r - 64 * dy2 * dy2;
-    return 16 * r - isqrt(v > 0 ? v : 0);
-}
-
-static void rshape(LONG x, LONG y, LONG w, LONG h, LONG r, ULONG c)
-{
-    LONG j;
-    if (r * 2 > h)
-        r = h / 2;
-    if (r * 2 > w)
-        r = w / 2;
-    for (j = 0; j < h; j++) {
-        LONG in = (rinset16(j, h, r) + 8) / 16;
-        if (w - 2 * in > 0)
-            H->fill((WORD)(x + in), (WORD)(y + j), (WORD)(w - 2 * in), 1, c);
-    }
-}
 
 /* A soft glow round a rounded box: rings a pixel each, the accent fading
  * into bg outwards (wider than Showcase's: this style's selection is its
@@ -438,18 +189,6 @@ static void horizon_line(LONG x, LONG y, LONG w)
     H->hgrad((WORD)(x + w / 2), (WORD)(y + 1), (WORD)(w / 3), 1, mix(mid, grad(y + 1), 1, 2), grad(y + 1));
 }
 
-/* A triangle pointing right (dir 1) or left (-1), its flat side at x */
-static void tri(LONG x, LONG cy, LONG h, int dir, ULONG c)
-{
-    LONG i, w = h * 4 / 5;
-    for (i = 0; i < h; i++) {
-        LONG d = i < h / 2 ? i : h - 1 - i, len = w * (2 * d + 1) / h + 1;
-        if (len > w)
-            len = w;
-        H->fill((WORD)(dir > 0 ? x : x - len), (WORD)(cy - h / 2 + i), (WORD)len, 1, c);
-    }
-}
-
 /* ---------------------------------------------------------------- pictures */
 /* A picture's reflection under it: its bottom rows upside down, fading
  * into the background (bg at its top, bg2 at its bottom), h tall at most.
@@ -483,85 +222,6 @@ static void reflect(const struct LImage *im, LONG x, LONG y, LONG h)
     H->image(&r, (WORD)x, (WORD)y);
 }
 
-/* The colour of a disc at an angle (48ths of a turn): silver with a
- * rainbow sheen (as Showcase's) */
-static ULONG disc_sector(int a)
-{
-    static const WORD c2[12] = { 256, 222, 128, 0, -128, -222, -256, -222, -128, 0, 128, 222 };
-    LONG lit = (c2[a % 12] + 256) / 2, w = c2[(a + 9) % 12];
-    ULONG silver = mix(0x8C96A2, 0xF2F5F8, lit, 256), hue;
-    int h = (a * 2) % 12, k;
-    ULONG r, g, b;
-    if (w <= 0)
-        return silver;
-    k = h % 2 ? 128 : 0;
-    switch (h / 2) {
-    case 0: r = 255; g = k; b = 0; break;
-    case 1: r = 255 - k; g = 255; b = 0; break;
-    case 2: r = 0; g = 255; b = k; break;
-    case 3: r = 0; g = 255 - k; b = 255; break;
-    case 4: r = k; g = 0; b = 255; break;
-    default: r = 255; g = 0; b = 255 - k; break;
-    }
-    hue = (r << 16) | (g << 8) | b;
-    return mix(silver, hue, w * w / 256, 256 * 2);
-}
-static int disc_angle(LONG dx, LONG dy)
-{
-    LONG ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy, deg;
-    if (!ax && !ay)
-        return 0;
-    deg = ax >= ay ? ay * 45 / ax : 90 - ax * 45 / ay;
-    if (dx < 0 && dy >= 0)
-        deg = 180 - deg;
-    else if (dx < 0 && dy < 0)
-        deg = 180 + deg;
-    else if (dx >= 0 && dy < 0)
-        deg = 360 - deg;
-    return (int)((deg * 2 + 7) / 15) % 48;
-}
-/* A DVD: a shiny disc s square at x, y over bg */
-static void disc(LONG x, LONG y, LONG s, ULONG bg)
-{
-    LONG R = s / 2 - 1, cx = x + s / 2, cy = y + s / 2, j, i;
-    LONG hub = R * 40 / 100, clear = R * 30 / 100, hole = R * 12 / 100;
-    ULONG sec[48];
-    if (R < 4)
-        return;
-    for (i = 0; i < 48; i++)
-        sec[i] = i % 2 ? mix(disc_sector(i / 2), disc_sector((i / 2 + 1) % 24), 1, 2) : disc_sector(i / 2);
-    for (j = -R; j <= R; j++) {
-        LONG half = isqrt(R * R - j * j), run = -half;
-        ULONG cur = 0;
-        BOOL have = FALSE;
-        for (i = -half; i <= half + 1; i++) {
-            ULONG c = bg;
-            if (i <= half) {
-                LONG d2 = i * i + j * j;
-                if (d2 >= (R - 1) * (R - 1))
-                    c = 0x9AA4AE;
-                else if (d2 >= hub * hub)
-                    c = sec[disc_angle(i, j)];
-                else if (d2 >= (hub - 1) * (hub - 1) || (d2 < (clear + 1) * (clear + 1) && d2 >= clear * clear))
-                    c = 0x7C8692;
-                else if (d2 >= clear * clear)
-                    c = mix(0xC9D0D8, bg, 1, 3);
-                else if (d2 >= hole * hole)
-                    c = 0xB4BCC6;
-            }
-            if (!have) {
-                cur = c;
-                run = i;
-                have = TRUE;
-            } else if (c != cur || i > half) {
-                if (cur != bg)
-                    H->fill((WORD)(cx + run), (WORD)(cy + j), (WORD)(i - run), 1, cur);
-                cur = c;
-                run = i;
-            }
-        }
-    }
-}
 
 /* A cover w x h at x, y (fitted, the rest left as it is); none yet: a
  * tile with the name's first letter. refl: its reflection under it, that
@@ -589,149 +249,6 @@ static const struct LImage *cover_at(const char *art, const char *label, LONG x,
     return NULL;
 }
 
-/* Paragraphs (a line each, "\n" between) into lines for draw_lines */
-static const char *para[64];
-static char parabuf[2048];
-static LONG paras(const char *t)
-{
-    LONG n = 0, k = 0;
-    if (!t)
-        return 0;
-    while (*t && n < 64 && k < (LONG)sizeof(parabuf) - 1) {
-        para[n++] = &parabuf[k];
-        while (*t && *t != '\n' && k < (LONG)sizeof(parabuf) - 1)
-            parabuf[k++] = *t++;
-        parabuf[k++] = 0;
-        if (*t == '\n')
-            t++;
-    }
-    return n;
-}
-
-/* Lines of text from line from, each wrapped at w, down to bottom, over
- * the gradient; the first in first's colour (bold if it differs). The y
- * after them. */
-static LONG draw_lines(const char *const *s, LONG n, LONG from, LONG x, LONG y, LONG w, LONG bottom,
-                       ULONG first, ULONG rest)
-{
-    LONG i, lh = FH + Y(4);
-    for (i = from; i < n && y + lh <= bottom; i++) {
-        const char *p = s[i];
-        LONG len = slen(p);
-        int face = i == 0 && first != rest ? LF_BOLD : LF_REGULAR;
-        ULONG c = i == 0 ? first : rest;
-        if (!len) {
-            y += lh / 2;
-            continue;
-        }
-        while (len > 0 && y + lh <= bottom) {
-            LONG k = H->fit(p, len, face, (WORD)w), j;
-            if (k <= 0)
-                k = 1;
-            if (k < len) {
-                for (j = k; j > 0 && p[j] != ' '; j--)
-                    ;
-                if (j > 0)
-                    k = j;
-            }
-            H->text((WORD)x, (WORD)y, p, k, face, c, &bg_grad, 0);
-            y += lh;
-            p += k;
-            len -= k;
-            while (len > 0 && *p == ' ') {
-                p++;
-                len--;
-            }
-        }
-    }
-    return y;
-}
-
-/* Lines s takes wrapped to w */
-static LONG wrapped(const char *p, LONG w, int face)
-{
-    LONG len = slen(p), n = 0;
-    while (len > 0) {
-        LONG k = H->fit(p, len, face, (WORD)w), j;
-        if (k <= 0)
-            k = 1;
-        if (k < len) {
-            for (j = k; j > 0 && p[j] != ' '; j--)
-                ;
-            if (j > 0)
-                k = j;
-        }
-        n++;
-        p += k;
-        len -= k;
-        while (len > 0 && *p == ' ') {
-            p++;
-            len--;
-        }
-    }
-    return n;
-}
-
-/* The playing mark's bars, percent of its height: low, middle, high (a
- * row's: still; the top right's: moved in the ticks as the sound goes) */
-static const UBYTE pm_still[3] = { 66, 100, 50 };
-static UBYTE pm_lv[3] = { 66, 100, 50 };
-
-/* Three bars, their right edge at x, s tall from y, as high as lv says;
- * their width */
-static LONG play_bars(LONG x, LONG y, LONG s, const UBYTE *lv)
-{
-    LONG bw = s / 4 > 1 ? s / 4 : 2, k;
-    for (k = 0; k < 3; k++) {
-        LONG bh = s * lv[k] / 100;
-        if (bh < 2)
-            bh = 2;
-        H->fill((WORD)(x - (3 - k) * bw - (2 - k) * 2), (WORD)(y + s - bh), (WORD)bw, (WORD)bh, C_ACC);
-    }
-    return 3 * bw + 4;
-}
-
-/* a row's mark, its right edge at x, centred on cy; its width */
-static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
-{
-    LONG s = FH * 2 / 3, y = cy - s / 2, i;
-    if (s < 6)
-        s = 6;
-    switch (m) {
-    case LM_ARROW:
-        for (i = 0; i < s / 2; i++) {
-            H->fill((WORD)(x - s / 2 + i / 2), (WORD)(y + i), 2, 1, fg);
-            H->fill((WORD)(x - s / 2 + i / 2), (WORD)(y + s - 1 - i), 2, 1, fg);
-        }
-        return s / 2 + 2;
-    case LM_CHECK_ON: case LM_CHECK_OFF:
-        H->frame((WORD)(x - s), (WORD)y, (WORD)s, (WORD)s, 1, fg);
-        if (m == LM_CHECK_ON)
-            H->fill((WORD)(x - s + 3), (WORD)(y + 3), (WORD)(s - 6), (WORD)(s - 6), C_ACC);
-        return s;
-    case LM_RADIO_ON: case LM_RADIO_OFF:
-        H->rrect((WORD)(x - s), (WORD)y, (WORD)s, (WORD)s, (WORD)(s / 2), fg, bg);
-        H->rrect((WORD)(x - s + 1), (WORD)(y + 1), (WORD)(s - 2), (WORD)(s - 2), (WORD)(s / 2 - 1), bg, fg);
-        if (m == LM_RADIO_ON)
-            H->rrect((WORD)(x - s + 4), (WORD)(y + 4), (WORD)(s - 8), (WORD)(s - 8), (WORD)(s / 2 - 4), C_ACC, bg);
-        return s;
-    case LM_PLAY: case LM_PLAYING:
-        if (m == LM_PLAYING)
-            return play_bars(x, y, s, pm_still);   /* (still: the top right's move) */
-        for (i = 0; i < s; i++)
-            H->fill((WORD)(x - s + i / 2), (WORD)(y + i / 2), 1, (WORD)(s - i), fg);
-        return s;
-    case LM_CYCLE:
-        for (i = 0; i < s / 2; i++) {
-            H->fill((WORD)(x - s * 3 / 2 + s / 4 - i / 2), (WORD)(y + i), 2, 1, fg);
-            H->fill((WORD)(x - s * 3 / 2 + s / 4 - i / 2), (WORD)(y + s - 1 - i), 2, 1, fg);
-            H->fill((WORD)(x - 2 - s / 4 + i / 2), (WORD)(y + i), 2, 1, fg);
-            H->fill((WORD)(x - 2 - s / 4 + i / 2), (WORD)(y + s - 1 - i), 2, 1, fg);
-        }
-        return s * 3 / 2;
-    }
-    return 0;
-}
 
 /* ---------------------------------------------------------------- scroll bars */
 /* As Showcase's: a click target wider than they look; pressed on the
@@ -740,17 +257,6 @@ static LONG mark(int m, LONG x, LONG cy, ULONG fg, ULONG bg)
  * Across (a wall that scrolls sideways) or down. Each knows where its
  * list is (cur: the row chosen, or a text's first line), a page of it,
  * and its last place (LAC_SCROLLTO's whole way). */
-static struct { LONG at, len, t, tl; BOOL across; LONG cur, page, last; } sbar[4];
-static LONG sb_cur, sb_page, sb_last;   /* the next bar's: set before drawing it */
-static void scroll_units(LONG cur, LONG page, LONG last)
-{
-    sb_cur = cur;
-    sb_page = page > 1 ? page : 1;
-    sb_last = last;
-}
-static int nsbar;
-static int sb_drag = -1;
-static LONG sb_off;
 static void scroll_bar(LONG bx, LONG by, LONG blen, LONG t, LONG tl, BOOL across)
 {
     int k = nsbar++ & 3;
@@ -772,37 +278,6 @@ static void scroll_bar(LONG bx, LONG by, LONG blen, LONG t, LONG tl, BOOL across
         rshape(bx - (drag ? 1 : 0), t, drag ? 5 : 3, tl, 1, drag ? C_WHITE : C_ACC);
         hit(bx - X(8), by, 3 + X(16), blen, HT_SCROLL, 0, k);
     }
-}
-static void scroll_page(int k, int dir)
-{
-    LONG to = sbar[k].cur + dir * sbar[k].page, last = sbar[k].last;
-    if (last <= 0)
-        return;
-    if (to < 0)
-        to = 0;
-    if (to > last)
-        to = last;
-    H->act(LAC_SCROLLTO, (to * 65536 + last - 1) / last);
-}
-static void scroll_to(LONG p)
-{
-    LONG span, pos;
-    if (sb_drag < 0)
-        return;
-    span = sbar[sb_drag].len - sbar[sb_drag].tl;
-    pos = p - sb_off - sbar[sb_drag].at;
-    if (pos < 0)
-        pos = 0;
-    if (pos > span)
-        pos = span;
-    H->act(LAC_SCROLLTO, span > 0 ? pos * 65536 / span : 0);
-}
-
-/* ---------------------------------------------------------------- the frame of a screen */
-static void background(void)
-{
-    H->clip(0, 0, W, HT);
-    H->vgrad(0, 0, W, HT, C_TOP, C_BOT);
 }
 
 /* The background again where x0..x1, y0..y1: the screen's one gradient,
@@ -1098,7 +573,6 @@ static LONG home_max(const struct LHome *m)
 #define HOME_Y0 (tile_y0 - X(10))
 #define HOME_Y1 (tile_y0 + tile_h + FH * 2 + LABEL_GAP + Y(8))
 
-
 /* Tile k where it is now (no clearing: its place is) */
 static void home_tile(const struct LHome *m, LONG k)
 {
@@ -1313,25 +787,6 @@ static int body_n = -1;         /* drawn with details (1), without (0), a text (
 /* Whether a page has its details' column: once a list has shown details,
  * it keeps the column while the next row's are fetched (a move on Games
  * would otherwise widen the list and narrow it again each step) */
-static ULONG split_key;
-static ULONG page_key(const struct LPage *m)
-{
-    ULONG k = (ULONG)m->list.count * 31 + m->section + (ULONG)m->ncrumb * 7;
-    const char *s = m->ncrumb > 0 ? m->crumb[m->ncrumb - 1] : NULL;
-    if (s)
-        while (*s)
-            k = k * 33 + (UBYTE)*s++;
-    return k | 1;
-}
-static int page_split(const struct LPage *m)
-{
-    ULONG k = page_key(m);
-    if (m->ndetails > 0 || m->picture || m->aside) {
-        split_key = k;
-        return 1;
-    }
-    return k == split_key ? 1 : 0;
-}
 
 static LONG body_bottom(void)
 {
@@ -1586,66 +1041,6 @@ static void draw_page_body(const struct LPage *m)
     if (!n && m->letter && H->letter) {
         H->letter((WORD)(x + lw - X(40)), (WORD)(y + (bottom - y) / 2), C_LETTER);
         rows_ok = FALSE;                /* (over the rows: all of them again next) */
-    }
-}
-
-/* A long text as this layout wraps it: each line's height (a blank one
- * half), and the whole; worked out once a text and width. The host scrolls
- * its own wrapping of it (the classic's lines and box), so where it is goes
- * by the fraction of the way (LPage.text_frac): its end is the end here. */
-#define TL_N 256
-static LONG tl_h[TL_N], tl_n = -1, tl_w, tl_total;
-static const void *tl_of;
-static void text_measure(const struct LPage *m, LONG w, LONG lh)
-{
-    LONG i, n = m->ndetails < TL_N ? m->ndetails : TL_N;
-    if ((const void *)m->details == tl_of && n == tl_n && w == tl_w)
-        return;
-    tl_of = (const void *)m->details;
-    tl_n = n;
-    tl_w = w;
-    tl_total = 0;
-    for (i = 0; i < n; i++) {
-        const char *p = m->details[i];
-        tl_h[i] = p && *p ? wrapped(p, w, LF_REGULAR) * lh : lh / 2;
-        tl_total += tl_h[i];
-    }
-}
-/* Where it is drawn from for a view vh tall: its first line, and the y
- * (from the view's top) that line starts at */
-static LONG text_from(const struct LPage *m, LONG vh, LONG *dy)
-{
-    LONG off = tl_total > vh ? (LONG)((m->text_frac >> 4) * (ULONG)(tl_total - vh) / 4096) : 0, acc = 0, i = 0;
-    while (i < tl_n && acc + tl_h[i] <= off)
-        acc += tl_h[i++];
-    *dy = -(off - acc);
-    return i;
-}
-
-/* A note, wrapped to w and each line centred in it, from y; its colour c
- * over bg */
-static void note_centred(const char *t, LONG x, LONG y, LONG w, ULONG c, const struct LkBg *bg)
-{
-    LONG len = slen(t), lh = FH + Y(4);
-    while (len > 0) {
-        LONG k = H->fit(t, len, LF_REGULAR, (WORD)w), j, tw;
-        if (k <= 0)
-            k = 1;
-        if (k < len) {
-            for (j = k; j > 0 && t[j] != ' '; j--)
-                ;
-            if (j > 0)
-                k = j;
-        }
-        tw = H->textlen(t, k, LF_REGULAR);
-        H->text((WORD)(x + (tw < w ? (w - tw) / 2 : 0)), (WORD)y, t, k, LF_REGULAR, c, bg, 0);
-        y += lh;
-        t += k;
-        len -= k;
-        while (len > 0 && *t == ' ') {
-            t++;
-            len--;
-        }
     }
 }
 
@@ -2314,88 +1709,6 @@ static void draw_bars(const struct LNow *n, BOOL full)
     }
 }
 
-/* A button's glyph, s tall, centred at cx, cy (as Showcase's) */
-static void nb_glyph(int b, BOOL playing, LONG cx, LONG cy, LONG s, ULONG c)
-{
-    LONG t = s / 6 > 2 ? s / 6 : 2, w = s * 4 / 5;
-    switch (b) {
-    case LNB_PLAY:
-        if (playing) {
-            H->fill((WORD)(cx - w / 2), (WORD)(cy - s / 2), (WORD)(w / 3), (WORD)s, c);
-            H->fill((WORD)(cx + w / 2 - w / 3), (WORD)(cy - s / 2), (WORD)(w / 3), (WORD)s, c);
-        } else {
-            tri(cx - w / 2 + s / 10, cy, s, 1, c);
-        }
-        break;
-    case LNB_STOP:
-        H->fill((WORD)(cx - s * 2 / 5), (WORD)(cy - s * 2 / 5), (WORD)(s * 4 / 5), (WORD)(s * 4 / 5), c);
-        break;
-    case LNB_PREV:
-        H->fill((WORD)(cx - w / 2), (WORD)(cy - s / 2), (WORD)t, (WORD)s, c);
-        tri(cx + w / 2, cy, s, -1, c);
-        break;
-    case LNB_NEXT:
-        tri(cx - w / 2, cy, s, 1, c);
-        H->fill((WORD)(cx + w / 2 - t), (WORD)(cy - s / 2), (WORD)t, (WORD)s, c);
-        break;
-    case LNB_BACK:
-        tri(cx, cy, s * 3 / 4, -1, c);
-        tri(cx + s * 3 / 5, cy, s * 3 / 4, -1, c);
-        break;
-    case LNB_FWD:
-        tri(cx - s * 3 / 5, cy, s * 3 / 4, 1, c);
-        tri(cx, cy, s * 3 / 4, 1, c);
-        break;
-    case LNB_LOOP:
-        H->frame((WORD)(cx - w / 2), (WORD)(cy - s / 3), (WORD)w, (WORD)(s * 2 / 3), t * 2 / 3 > 1 ? t * 2 / 3 : 1, c);
-        tri(cx + w / 6, cy - s / 3, s / 2, 1, c);
-        break;
-    case LNB_MENU:              /* three lines */
-        H->fill((WORD)(cx - w / 2), (WORD)(cy - s / 3 - t / 2), (WORD)w, (WORD)t, c);
-        H->fill((WORD)(cx - w / 2), (WORD)(cy - t / 2), (WORD)w, (WORD)t, c);
-        H->fill((WORD)(cx - w / 2), (WORD)(cy + s / 3 - t / 2), (WORD)w, (WORD)t, c);
-        break;
-    case LNB_FULL: {            /* four corners: out (to full screen), or in (playing: back) */
-        LONG L = s / 3, k, a = s / 2, g2 = s / 8 + t / 2;
-        for (k = 0; k < 4; k++) {
-            LONG dx = k & 1 ? 1 : -1, dy = k & 2 ? 1 : -1, ex, ey, hx, vy;
-            if (!playing) {     /* out: the corners' points outwards, arms inwards */
-                ex = cx + dx * a;
-                ey = cy + dy * a;
-                dx = -dx;
-                dy = -dy;
-            } else {            /* in: their points by the middle, arms outwards */
-                ex = cx + dx * g2;
-                ey = cy + dy * g2;
-            }
-            hx = dx > 0 ? ex : ex - L + 1;
-            vy = dy > 0 ? ey : ey - L + 1;
-            H->fill((WORD)hx, (WORD)(dy > 0 ? ey : ey - t + 1), (WORD)L, (WORD)t, c);
-            H->fill((WORD)(dx > 0 ? ex : ex - t + 1), (WORD)vy, (WORD)t, (WORD)L, c);
-        }
-        break;
-    }
-    case LNB_MUTE: case LNB_VDOWN: case LNB_VUP: {
-        LONG gw = s * 6 / 5, bx = cx - gw / 2, a = s / 5 > 2 ? s / 5 : 2, cw = s * 2 / 5, j;
-        LONG sx = bx + a + cw + s / 6, sw = bx + gw - sx;
-        H->fill((WORD)bx, (WORD)(cy - s / 6), (WORD)a, (WORD)(s / 3 > 2 ? s / 3 : 2), c);
-        for (j = 0; j < cw; j++) {
-            LONG hh = s / 3 + (s - s / 3) * (j + 1) / cw;
-            H->fill((WORD)(bx + a + j), (WORD)(cy - hh / 2), 1, (WORD)hh, c);
-        }
-        if (b == LNB_MUTE) {
-            H->fill((WORD)sx, (WORD)(cy - s / 5), (WORD)t, (WORD)(s * 2 / 5), c);
-            H->fill((WORD)(sx + t * 2), (WORD)(cy - s * 2 / 5), (WORD)t, (WORD)(s * 4 / 5), c);
-        } else {
-            H->fill((WORD)sx, (WORD)(cy - t / 2), (WORD)sw, (WORD)t, c);
-            if (b == LNB_VUP)
-                H->fill((WORD)(sx + (sw - t) / 2), (WORD)(cy - sw / 2), (WORD)t, (WORD)sw, c);
-        }
-        break;
-    }
-    }
-}
-
 /* The buttons: round, the transport in the middle, the volume at the right */
 /* A button: a glass bead s across at x, y (big: Play's, the chosen blue),
  * a lit rim, a face lighter at its top, a gleam; foc: in its glow */
@@ -2512,11 +1825,6 @@ static WORD hz_controls_h(BOOL timed)
 {
     (void)timed;
     return (WORD)(Y(14) + FH + Y(14) + CT_BH / 6 + CT_BH + CT_BH / 6 + Y(12));
-}
-
-static BOOL ct_right(int b)
-{
-    return b == LNB_LOOP || b == LNB_MUTE || b == LNB_VDOWN || b == LNB_VUP || b == LNB_FULL;
 }
 
 /* A video's time: where it is, a bar, how long (the bar: its seek place) */
@@ -2888,62 +2196,9 @@ static void hz_changed(int screen, ULONG what)
 }
 
 /* the glides (the wall, Home's row), toasts ending, Now playing's bars */
-/* A glide: from where it was to where it is going in GLIDE_MS, fast at
- * first and settling (however long each frame takes to draw: a slow
- * screen takes fewer steps, not longer). A new goal starts one from
- * where it is. */
-#define GLIDE_MS 180
-struct Glide { LONG from, to; ULONG t0; };
-static LONG glide(struct Glide *g, LONG at, LONG to, ULONG ms)
-{
-    LONG p;
-    if (to != g->to || ms - g->t0 > 4 * GLIDE_MS) {
-        g->from = at;
-        g->to = to;
-        g->t0 = ms - 40;        /* (a tick's worth in already: it moves at once) */
-    }
-    p = (LONG)(ms - g->t0) * 256 / GLIDE_MS;
-    if (p >= 256)
-        return to;
-    p = 256 - (256 - p) * (256 - p) / 256;
-    return g->from + (to - g->from) * p / 256;
-}
 static struct Glide wall_g, home_g;
 static ULONG pm_at;
 
-/* The playing mark's bars from what plays: the spectrum's low, middle and
- * high thirds (or the meters); falling a little a step. TRUE if moved. */
-static BOOL pm_step(const struct LNow *n)
-{
-    UBYTE want[3];
-    LONG k, i;
-    BOOL moved = FALSE;
-    if (!n->levels || !n->nlevels || n->paused || n->stopped) {
-        want[0] = 66;
-        want[1] = 100;
-        want[2] = 50;
-    } else {
-        for (k = 0; k < 3; k++) {
-            LONG a = k * n->nlevels / 3, b = (k + 1) * n->nlevels / 3, mx = 0;
-            if (b <= a)
-                b = a + 1;
-            for (i = a; i < b && i < n->nlevels; i++)
-                if (n->levels[i] > mx)
-                    mx = n->levels[i];
-            want[k] = (UBYTE)(15 + mx * 85 / 255);
-        }
-    }
-    for (k = 0; k < 3; k++) {
-        LONG v = want[k];
-        if (v < pm_lv[k] - 15 && !(n->paused || n->stopped))
-            v = pm_lv[k] - 15;
-        if (v != pm_lv[k]) {
-            pm_lv[k] = (UBYTE)v;
-            moved = TRUE;
-        }
-    }
-    return moved;
-}
 static void hz_tick(ULONG ms)
 {
     if (drawn == LS_ALBUMS && wall_px != wall_tgt) {
@@ -2991,56 +2246,6 @@ static void hz_tick(ULONG ms)
  * the row and Up and Down to the sections above and below; on the wall
  * Up and Down move in a column, Left and Right a column; on an artist's
  * strip Left and Right */
-/* A key held on a wall (its repeats coming close together): after a few
- * moves, several at a time; held longer, a letter at a time (to the first
- * of the next letter, or back to the first of this one, then the last) */
-static ULONG acc_ms;
-static int acc_dir, acc_run;
-static int accel(int dir)
-{
-    ULONG now = H->now_ms();
-    if (dir == acc_dir && now - acc_ms < 300)
-        acc_run++;
-    else
-        acc_run = 0;
-    acc_dir = dir;
-    acc_ms = now;
-    return acc_run;
-}
-static char initial(const struct LList *l, LONG i)
-{
-    const struct LItem *it = l->item(i);
-    const char *s = it->label;
-    if (it->letter)
-        return (char)it->letter;        /* (the host's: as the list is sorted) */
-    if (!s)
-        return 0;
-    while (*s && !((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9')))
-        s++;
-    if (*s >= '0' && *s <= '9')
-        return '#';
-    return (char)(*s >= 'a' && *s <= 'z' ? *s - 32 : *s);
-}
-static LONG letter_jump(const struct LList *l, LONG sel, int dir)
-{
-    LONG i = sel, n = l->count, lim = 2000;
-    char c = initial(l, sel);
-    if (dir > 0) {
-        while (i < n - 1 && lim-- > 0 && initial(l, i) == c)
-            i++;
-        return i;
-    }
-    while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
-        i--;
-    if (i < sel)
-        return i;                       /* (to this letter's first) */
-    if (i > 0) {
-        c = initial(l, --i);
-        while (i > 0 && lim-- > 0 && initial(l, i - 1) == c)
-            i--;
-    }
-    return i;
-}
 
 static int hz_input(int screen, int action, LONG arg)
 {
@@ -3130,12 +2335,6 @@ static int hz_input(int screen, int action, LONG arg)
     if (to != sel)
         H->act(LAC_SELECT, to);
     return LR_DONE;
-}
-
-static BOOL playable(int kind)
-{
-    return kind == LI_TRACK || kind == LI_MODULE || kind == LI_STATION || kind == LI_PICTURE ||
-           kind == LI_VIDEO || kind == LI_GAME || kind == LI_DISC;
 }
 
 /* The pointer's hover moved: what shows it drawn again */

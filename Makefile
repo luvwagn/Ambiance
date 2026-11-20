@@ -215,15 +215,20 @@ build/layouts/%/libinit.o: src/sqlib/libinit.c src/sqlib/libinit.h src/layouts/%
 build/layouts/%/layoutlib.o: src/layouts/layoutlib.c $(LAYOUT_HDR) Makefile
 	@mkdir -p $(dir $@)
 	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
-build/layouts/%/layout.o: src/layouts/%.c $(LAYOUT_HDR) Makefile
+build/layouts/%/layout.o: src/layouts/%.c src/layouts/lshare.h $(LAYOUT_HDR) Makefile
 	@mkdir -p $(dir $@)
 	@echo "  CC    $< (layout)"
 	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
-build/layouts/%.layout: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+# what the layouts share (src/layouts/lshare.c), compiled into each
+build/layouts/%/lshare.o: src/layouts/lshare.c src/layouts/lshare.h $(LAYOUT_HDR) Makefile
+	@mkdir -p $(dir $@)
+	@$(LAYOUT_CC) -DLAYOUT_ABI=$(LAYOUT_ABI)UL -c -o $@ $<
+build/layouts/%.layout: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o \
+                        build/layouts/%/lshare.o
 	@echo "  LD    $@"
 	@$(LAYOUT_CC) -o $@.dbg $^ -lamiga
 	@$(STRIP) -o $@ $@.dbg
-.PRECIOUS: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o
+.PRECIOUS: build/layouts/%/libinit.o build/layouts/%/layoutlib.o build/layouts/%/layout.o build/layouts/%/lshare.o
 layouts: $(LAYOUTS)
 
 # their finding and opening (lhost.c) on a 68020 under vamos, with
@@ -432,16 +437,20 @@ test-lkit: build/lkit_host
 # Showcase's screens drawn on the host by the kit with the smooth fonts'
 # own glyphs, from made-up models: build/showcase-<screen>-<w>x<h>.ppm to
 # look at (checked only for drawing off the screen, or not all of it).
-build/showcase_host: tests/showcase_host.c src/lkcore.c src/layouts/showcase.c $(LAYOUT_HDR) tests/shim/exec/types.h
+build/showcase_host: tests/showcase_host.c src/lkcore.c src/layouts/showcase.c src/layouts/lshare.c src/layouts/lshare.h \
+                     $(LAYOUT_HDR) tests/shim/exec/types.h
 	@mkdir -p build
-	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/showcase_host.c src/lkcore.c src/layouts/showcase.c
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -o $@ tests/showcase_host.c src/lkcore.c \
+	  src/layouts/showcase.c src/layouts/lshare.c
 test-showcase: build/showcase_host
 	@build/showcase_host > build/test-showcase.txt && echo "  CHECK Showcase drawn" || (cat build/test-showcase.txt; exit 1)
 
 # Horizon's, the same way: build/horizon-<screen>-<w>x<h>.ppm
-build/horizon_host: tests/showcase_host.c src/lkcore.c src/layouts/horizon.c $(LAYOUT_HDR) tests/shim/exec/types.h
+build/horizon_host: tests/showcase_host.c src/lkcore.c src/layouts/horizon.c src/layouts/lshare.c src/layouts/lshare.h \
+                    $(LAYOUT_HDR) tests/shim/exec/types.h
 	@mkdir -p build
-	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -DHORIZON '-DLNAME="horizon"' '-DLTITLE="Horizon"' -o $@ tests/showcase_host.c src/lkcore.c src/layouts/horizon.c
+	@$(HOSTCC) -O2 -Wall -Wextra -Itests/shim -DLAYOUT_ABI=1UL -DHORIZON '-DLNAME="horizon"' '-DLTITLE="Horizon"' -o $@ \
+	  tests/showcase_host.c src/lkcore.c src/layouts/horizon.c src/layouts/lshare.c
 test-horizon: build/horizon_host
 	@build/horizon_host > build/test-horizon.txt && echo "  CHECK Horizon drawn" || (cat build/test-horizon.txt; exit 1)
 
