@@ -43,6 +43,7 @@ static BOOL mt_sem_ready, mt_tried;
 #define MT_TRIES    60                      /* decodes for an I picture from each place */
 #define MT_BLANK    900                     /* of 1000 points one colour: blank */
 #define MT_DARK     (24 * 12)               /* mean under about 24 of 255: too dark */
+#define MT_LIMIT    4000                    /* ms at the most, a picture or none */
 #define MT_BUDGET   1500                    /* ms of looking, then the best seen (a slow Amiga, a big
                                              * MPEG-2's pictures: a few looked at, not eight) */
 
@@ -79,23 +80,34 @@ void mpeg_thumb_forget(void)
 }
 
 /* ---- the file */
+struct MtSrc {
+    BPTR fh;
+    volatile UBYTE *cancel;                 /* the job's: set, the file ends here (decoding stops) */
+    ULONG t0;                               /* (MT_LIMIT ms after it, too) */
+};
+
 static ULONG mt_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
                      register struct MpvRead *r __asm("a1"))
 {
+    struct MtSrc *src = (struct MtSrc *)h->h_Data;
     LONG n;
     (void)mpv;
-    n = Read((BPTR)h->h_Data, r->mr_Buffer, r->mr_Length);
+    if ((src->cancel && *src->cancel) || time_ms() - src->t0 > MT_LIMIT)
+        return 0;
+    n = Read(src->fh, r->mr_Buffer, r->mr_Length);
     return n > 0 ? (ULONG)n : 0;
 }
 
 /* An MPEG stream mpegv decodes: a Program Stream's pack header, or a
  * bare video stream's sequence header, first */
-static BOOL mt_is_mpeg(BPTR fh)
+static ULONG mt_is_mpeg(BPTR fh)
 {
     UBYTE b[4];
-    if (Read(fh, b, 4) != 4)
-        return FALSE;
-    return b[0] == 0 && b[1] == 0 && b[2] == 1 && (b[3] == 0xBA || b[3] == 0xB3);
+    if (Read(fh, b, 4) != 4 || b[0] || b[1] || b[2] != 1)
+        return 0;
+    /* (said, not left to mpegv to find: read from the middle, its first
+     * bytes are not a pack's or a sequence's) */
+    return b[3] == 0xBA ? MPVS_PROGRAM + 1 : b[3] == 0xB3 ? MPVS_VIDEO + 1 : 0;
 }
 
 static ULONG mt_hash(const char *s)
@@ -222,7 +234,7 @@ static ULONG mt_blank(const struct MpvPicture *p, ULONG *lit, UWORD *hist)
 
 /* The picture to show, chosen and made RGB (kw x kh): NULL if none could
  * be decoded */
-static UBYTE *mt_pick(BPTR fh, ULONG size, struct MtHead *k, ULONG *looked, volatile UBYTE *cancel,
+static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *looked, volatile UBYTE *cancel,
                       const char **why)
 {
     struct Hook rh;
@@ -234,10 +246,14 @@ static UBYTE *mt_pick(BPTR fh, ULONG size, struct MtHead *k, ULONG *looked, vola
     if (!hist)
         return NULL;
     memset(&rh, 0, sizeof(rh));
+    struct MtSrc src;
+    src.fh = fh;
+    src.cancel = cancel;
+    src.t0 = t0;
     rh.h_Entry = (HOOKFUNC)(APTR)mt_read;
-    rh.h_Data = (APTR)fh;
+    rh.h_Data = (APTR)&src;
     Seek(fh, 0, OFFSET_BEGINNING);
-    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, MPVS_AUTO, MPVA_SkipB, TRUE, TAG_DONE))) {
+    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, type, MPVA_SkipB, TRUE, TAG_DONE))) {
         FreeVec(hist);
         *why = "mpegv could not open it";
         return NULL;
@@ -248,8 +264,11 @@ static UBYTE *mt_pick(BPTR fh, ULONG size, struct MtHead *k, ULONG *looked, vola
             *why = "given up (not wanted any more)";
             break;
         }
-        if (rgb && time_ms() - t0 > MT_BUDGET)
+        if (time_ms() - t0 > (rgb ? MT_BUDGET : MT_LIMIT)) {
+            if (!rgb)
+                *why = "too slow here";
             break;                          /* (long enough: the best seen) */
+        }
         ULONG at = (ULONG)((unsigned long long)size * (2 + i) / 20), lit, s;
         LONG e = 0, tries;
         struct MpvPicture *p = NULL;
@@ -323,6 +342,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
                          struct PicInfo *pi, BOOL *is_mpeg, volatile UBYTE *cancel)
 {
     const char *why = "";
+    ULONG type;
     struct MtHead key, k;
     struct Thumb *t = NULL;
     UBYTE *rgb;
@@ -335,7 +355,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     mt_loud(q);
     if (!fh)
         return NULL;
-    if (!mt_is_mpeg(fh) || !mt_key(fh, path, &key)) {
+    if (!(type = mt_is_mpeg(fh)) || !mt_key(fh, path, &key)) {
         Close(fh);
         return NULL;                        /* (a transport stream: none yet) */
     }
@@ -345,7 +365,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         kept = TRUE;
     else if (!mt_open())
         why = "no mpegv.library";
-    else if ((rgb = mt_pick(fh, key.size, &k, &looked, cancel, &why)) && !(cancel && *cancel))
+    else if ((rgb = mt_pick(fh, type - 1, key.size, &k, &looked, cancel, &why)) && !(cancel && *cancel))
         mt_save(&k, rgb);
     Close(fh);
     if (!rgb) {

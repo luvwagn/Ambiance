@@ -3950,6 +3950,39 @@ static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULO
     va_nconv++;
 }
 
+/* Its first picture's pens and planes timed apart, alone (Forbid: the
+ * decoder's process and the sound's cannot come between, as they do
+ * while it plays, so the times are the work's own), into bm (the screen's
+ * buffer not shown, made again after): a few passes, logged */
+static void va_bench(const struct MpvPicture *p, struct BitMap *bm, ULONG bw, WORD x0, WORD y0, WORD h)
+{
+    ULONG y, n, hz = 0, tp = 0, tq = 0, t0, t1, t2, cp, cq;
+    char m[160];
+    if (!va_all && !(va_all = AllocVec(bw * p->mpic_Height + 32, MEMF_ANY)))
+        return;
+    if (h > (WORD)p->mpic_Height)
+        h = (WORD)p->mpic_Height;
+    Forbid();
+    for (n = 0; n < 3; n++) {
+        t0 = time_ticks(&hz);
+        for (y = 0; y < (ULONG)h; y++)
+            va_pens_row(p, y, va_all + y * bw, bw);
+        t1 = time_ticks(&hz);
+        for (y = 0; y < (ULONG)h; y++)
+            va_planes_row(va_all + y * bw, bw, bm, x0, y0 + y);
+        t2 = time_ticks(&hz);
+        tp += t1 - t0;
+        tq += t2 - t1;
+    }
+    Permit();
+    cp = hz ? (ULONG)((unsigned long long)tp * 100000ULL / hz / 3) : 0;
+    cq = hz ? (ULONG)((unsigned long long)tq * 100000ULL / hz / 3) : 0;
+    sprintf(m, "a picture's pens %lu.%02lu ms, its planes %lu.%02lu ms (alone, 3 passes of %ld rows)",
+            (unsigned long)(cp / 100), (unsigned long)(cp % 100), (unsigned long)(cq / 100),
+            (unsigned long)(cq % 100), (long)h);
+    amb_log("video: AGA", m);
+}
+
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                          LONG errmax)
 {
@@ -4102,6 +4135,8 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 safe_done(safe, safe_wait);
                 /* (the rows under its controls, while they are up, not made:
                  * what they cover is put back from this picture's next) */
+                if (!nframes)
+                    va_bench(&p, sb[k]->sb_BitMap, bw, vx, vy, (WORD)h);
                 va_put(&p, sb[k]->sb_BitMap, rb, bw, vx, vy,
                        (WORD)(bar.on && bar.ok && bar.y - vy < (WORD)h ? (bar.y - vy > 0 ? bar.y - vy : 0)
                                                                          : (WORD)h));
