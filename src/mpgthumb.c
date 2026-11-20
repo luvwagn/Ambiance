@@ -39,7 +39,8 @@ static BOOL mt_sem_ready, mt_tried;
 
 #define MT_MAGIC    0x414D5654UL            /* "AMVT" */
 #define MT_KEEP_W   192                     /* the picture kept: this wide at the most */
-#define MT_POINTS   8                       /* places looked at: 10%, 15% ... 45% of the way */
+#define MT_POINTS   9                       /* places looked at: its start (its sequence header:
+                                             * mpegv decodes nothing without it), then 10% ... 45% */
 #define MT_TRIES    60                      /* decodes for an I picture from each place */
 #define MT_BLANK    900                     /* of 1000 points one colour: blank */
 #define MT_DARK     (24 * 12)               /* mean under about 24 of 255: too dark */
@@ -98,16 +99,26 @@ static ULONG mt_read(register struct Hook *h __asm("a0"), register APTR mpv __as
     return n > 0 ? (ULONG)n : 0;
 }
 
-/* An MPEG stream mpegv decodes: a Program Stream's pack header, or a
- * bare video stream's sequence header, first */
-static ULONG mt_is_mpeg(BPTR fh)
+/* An MPEG stream mpegv decodes: its first start code (after any zero
+ * bytes of padding) a Program Stream's pack header, or a bare video
+ * stream's sequence header. Its kind + 1; 0: not one (a transport
+ * stream, *first its first bytes, for the log) */
+static ULONG mt_is_mpeg(BPTR fh, char *first)
 {
-    UBYTE b[4];
-    if (Read(fh, b, 4) != 4 || b[0] || b[1] || b[2] != 1)
-        return 0;
-    /* (said, not left to mpegv to find: read from the middle, its first
-     * bytes are not a pack's or a sequence's) */
-    return b[3] == 0xBA ? MPVS_PROGRAM + 1 : b[3] == 0xB3 ? MPVS_VIDEO + 1 : 0;
+    UBYTE b[2048];
+    LONG n = Read(fh, b, sizeof(b)), i;
+    sprintf(first, "%02lx %02lx %02lx %02lx", (unsigned long)(n > 0 ? b[0] : 0),
+            (unsigned long)(n > 1 ? b[1] : 0), (unsigned long)(n > 2 ? b[2] : 0),
+            (unsigned long)(n > 3 ? b[3] : 0));
+    for (i = 0; i + 3 < n; i++) {
+        if (b[i])
+            return 0;                       /* (not zero padding, and no start code yet) */
+        if (b[i + 1] == 0 && b[i + 2] == 1)
+            /* (said, not left to mpegv to find: read from the middle, its
+             * first bytes are not a pack's or a sequence's) */
+            return b[i + 3] == 0xBA ? MPVS_PROGRAM + 1 : b[i + 3] == 0xB3 ? MPVS_VIDEO + 1 : 0;
+    }
+    return 0;
 }
 
 static ULONG mt_hash(const char *s)
@@ -269,7 +280,7 @@ static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *
                 *why = "too slow here";
             break;                          /* (long enough: the best seen) */
         }
-        ULONG at = (ULONG)((unsigned long long)size * (2 + i) / 20), lit, s;
+        ULONG at = i ? (ULONG)((unsigned long long)size * (1 + i) / 20) : 0, lit, s;
         LONG e = 0, tries;
         struct MpvPicture *p = NULL;
         if (i || at) {
@@ -343,6 +354,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
 {
     const char *why = "";
     ULONG type;
+    char first[16];
     struct MtHead key, k;
     struct Thumb *t = NULL;
     UBYTE *rgb;
@@ -355,8 +367,12 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     mt_loud(q);
     if (!fh)
         return NULL;
-    if (!(type = mt_is_mpeg(fh)) || !mt_key(fh, path, &key)) {
+    if (!(type = mt_is_mpeg(fh, first)) || !mt_key(fh, path, &key)) {
+        char m[200];
         Close(fh);
+        sprintf(m, "%.80s: none (not a Program Stream or video stream mpegv reads: it begins %s)",
+                (const char *)FilePart((STRPTR)path), first);
+        amb_log("video picture", m);
         return NULL;                        /* (a transport stream: none yet) */
     }
     *is_mpeg = TRUE;
