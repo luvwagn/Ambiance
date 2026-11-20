@@ -23,4 +23,17 @@ LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max);
  * bytes passed over before its sound's first, so far. */
 void tsp_counts(ULONG *resyncs, ULONG *packets, ULONG *before_sound);
 
+/* The same with one of the caller's own (the three above use one of
+ * tspack.c's, the playback process's): its memory tsp_size() bytes, any
+ * kind, begun with tsp_begin_in. For a second stream read at the same
+ * time (a video's picture made while another plays). */
+struct Tsp;
+ULONG tsp_size(void);
+void tsp_begin_in(struct Tsp *t, UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2);
+LONG tsp_pack_in(struct Tsp *t, TspRead rd, void *ctx, UBYTE *out, ULONG max);
+void tsp_counts_in(struct Tsp *t, ULONG *resyncs, ULONG *packets, ULONG *before_sound);
+/* After a seek: the file read from elsewhere, its video from its next PES
+ * packet on (its decoder has a sequence header already: from its start) */
+void tsp_seek_in(struct Tsp *t);
+
 #endif

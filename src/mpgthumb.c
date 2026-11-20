@@ -18,6 +18,8 @@
  * it plays), kept until quitting (mpeg_thumb_forget).
  */
 #include "amb.h"
+#include "vprobe.h"
+#include "tspack.h"
 
 #define MpegvBase mt_MpegvBase              /* (our own base: proto/mpegv.h's calls through it) */
 #include <libraries/mpegv.h>
@@ -81,11 +83,32 @@ void mpeg_thumb_forget(void)
 }
 
 /* ---- the file */
+/* A transport stream (vprobe's reading of it): its video packed as a
+ * Program Stream as it is read (tspack.c, an instance of its own: what
+ * plays may be reading one too), its sound left out */
+struct MtTs {
+    UBYTE size;                             /* 188, or 192 (M2TS: a time before each) */
+    UWORD vpid;
+    BOOL mpeg2;
+    ULONG first;                            /* its first packet's offset */
+};
+
 struct MtSrc {
     BPTR fh;
     volatile UBYTE *cancel;                 /* the job's: set, the file ends here (decoding stops) */
     ULONG t0;                               /* (MT_LIMIT ms after it, too) */
+    struct Tsp *tsp;                        /* a transport stream's packing, or NULL */
 };
+
+#define MT_READ 16384                       /* (mpegv's reads: tspack wants 4192 or more) */
+
+static LONG mt_file(void *ctx, UBYTE *b, LONG n)
+{
+    struct MtSrc *src = (struct MtSrc *)ctx;
+    if ((src->cancel && *src->cancel) || time_ms() - src->t0 > MT_LIMIT)
+        return 0;
+    return Read(src->fh, b, n);
+}
 
 static ULONG mt_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
                      register struct MpvRead *r __asm("a1"))
@@ -93,9 +116,10 @@ static ULONG mt_read(register struct Hook *h __asm("a0"), register APTR mpv __as
     struct MtSrc *src = (struct MtSrc *)h->h_Data;
     LONG n;
     (void)mpv;
-    if ((src->cancel && *src->cancel) || time_ms() - src->t0 > MT_LIMIT)
-        return 0;
-    n = Read(src->fh, r->mr_Buffer, r->mr_Length);
+    if (src->tsp)
+        n = tsp_pack_in(src->tsp, mt_file, src, r->mr_Buffer, (ULONG)r->mr_Length);
+    else
+        n = mt_file(src, r->mr_Buffer, r->mr_Length);
     return n > 0 ? (ULONG)n : 0;
 }
 
@@ -245,8 +269,8 @@ static ULONG mt_blank(const struct MpvPicture *p, ULONG *lit, UWORD *hist)
 
 /* The picture to show, chosen and made RGB (kw x kh): NULL if none could
  * be decoded */
-static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *looked, volatile UBYTE *cancel,
-                      const char **why)
+static UBYTE *mt_pick(BPTR fh, ULONG type, const struct MtTs *ts, ULONG size, struct MtHead *k, ULONG *looked,
+                      volatile UBYTE *cancel, const char **why)
 {
     struct Hook rh;
     APTR mpv;
@@ -261,11 +285,22 @@ static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *
     src.fh = fh;
     src.cancel = cancel;
     src.t0 = t0;
+    src.tsp = NULL;
+    if (ts) {
+        if (!(src.tsp = AllocVec(tsp_size(), MEMF_ANY))) {
+            FreeVec(hist);
+            return NULL;
+        }
+        tsp_begin_in(src.tsp, ts->size, ts->vpid, 0x1FFF, FALSE, ts->mpeg2);
+        type = MPVS_PROGRAM;                /* (what tspack makes of it) */
+    }
     rh.h_Entry = (HOOKFUNC)(APTR)mt_read;
     rh.h_Data = (APTR)&src;
-    Seek(fh, 0, OFFSET_BEGINNING);
-    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, type, MPVA_SkipB, TRUE, TAG_DONE))) {
+    Seek(fh, ts ? (LONG)ts->first : 0, OFFSET_BEGINNING);
+    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, type, MPVA_ReadSize, MT_READ,
+                            MPVA_SkipB, TRUE, TAG_DONE))) {
         FreeVec(hist);
+        FreeVec(src.tsp);
         *why = "mpegv could not open it";
         return NULL;
     }
@@ -284,6 +319,14 @@ static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *
         LONG e = 0, tries;
         struct MpvPicture *p = NULL;
         if (i || at) {
+            if (ts) {
+                /* (on a packet's start; packed from there, from its video's
+                 * next PES packet) */
+                if (at < ts->first)
+                    at = ts->first;
+                at = ts->first + (at - ts->first) / ts->size * ts->size;
+                tsp_seek_in(src.tsp);       /* (the decoder has its start's sequence header) */
+            }
             if (Seek(fh, (LONG)at, OFFSET_BEGINNING) < 0)
                 break;
             MpvControl(mpv, MPVC_FLUSH, 0);
@@ -332,6 +375,7 @@ static UBYTE *mt_pick(BPTR fh, ULONG type, ULONG size, struct MtHead *k, ULONG *
     }
     MpvClose(mpv);
     FreeVec(hist);
+    FreeVec(src.tsp);
     return rgb;
 }
 
@@ -355,6 +399,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     const char *why = "";
     ULONG type;
     char first[16];
+    struct MtTs tsi, *ts = NULL;
     struct MtHead key, k;
     struct Thumb *t = NULL;
     UBYTE *rgb;
@@ -367,13 +412,41 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     mt_loud(q);
     if (!fh)
         return NULL;
-    if (!(type = mt_is_mpeg(fh, first)) || !mt_key(fh, path, &key)) {
+    if (!(type = mt_is_mpeg(fh, first))) {
+        /* a transport stream (.ts, .m2ts, or one called .mpg): what vprobe
+         * finds in it (its packets, its video's PID and kind) */
+        struct VProbe v;
         char m[200];
+        BOOL found = vprobe(path, &v, 0);
+        if (v.ts && v.h264) {
+            sprintf(m, "%.80s: none (%s video in a transport stream: mpegv decodes MPEG-1 and MPEG-2)",
+                    (const char *)FilePart((STRPTR)path), vprobe_kind(&v));
+            amb_log("video picture", m);
+            Close(fh);
+            *is_mpeg = TRUE;
+            return NULL;
+        }
+        if (!v.ts || !found || v.ts_vpid == 0x1FFF) {
+            if (v.ts)
+                sprintf(m, "%.80s: none (a transport stream, no MPEG video's sequence header found in it)",
+                        (const char *)FilePart((STRPTR)path));
+            else
+                sprintf(m, "%.80s: none (not an MPEG stream mpegv reads: it begins %s)",
+                        (const char *)FilePart((STRPTR)path), first);
+            amb_log("video picture", m);
+            Close(fh);
+            return NULL;
+        }
+        tsi.size = v.ts;
+        tsi.vpid = v.ts_vpid;
+        tsi.mpeg2 = v.mpeg2;
+        tsi.first = v.ts_first;
+        ts = &tsi;
+        type = MPVS_PROGRAM + 1;
+    }
+    if (!mt_key(fh, path, &key)) {
         Close(fh);
-        sprintf(m, "%.80s: none (not a Program Stream or video stream mpegv reads: it begins %s)",
-                (const char *)FilePart((STRPTR)path), first);
-        amb_log("video picture", m);
-        return NULL;                        /* (a transport stream: none yet) */
+        return NULL;
     }
     *is_mpeg = TRUE;
     k = key;
@@ -381,7 +454,7 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         kept = TRUE;
     else if (!mt_open())
         why = "no mpegv.library";
-    else if ((rgb = mt_pick(fh, type - 1, key.size, &k, &looked, cancel, &why)) && !(cancel && *cancel))
+    else if ((rgb = mt_pick(fh, type - 1, ts, key.size, &k, &looked, cancel, &why)) && !(cancel && *cancel))
         mt_save(&k, rgb);
     Close(fh);
     if (!rgb) {
@@ -405,9 +478,11 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     if (!kept) {
         char m[200];
         const char *f = (const char *)FilePart((STRPTR)path);
-        sprintf(m, "%.80s: %s, %lu I pictures looked at (%lux%lu), %lu ms", f,
+        sprintf(m, "%.80s: %s, %lu I pictures looked at (%lux%lu%s), %lu ms", f,
                 t ? "a picture chosen" : "none could be made", (unsigned long)looked,
-                (unsigned long)k.sw, (unsigned long)k.sh, (unsigned long)(time_ms() - t0));
+                (unsigned long)k.sw, (unsigned long)k.sh,
+                ts ? (ts->size == 192 ? ", M2TS" : ", a transport stream") : "",
+                (unsigned long)(time_ms() - t0));
         amb_log("video picture", m);
     }
     return t;

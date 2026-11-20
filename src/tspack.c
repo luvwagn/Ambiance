@@ -26,7 +26,7 @@
 #define TSP_HOLD    (128L * 1024)
 enum { P_SEQ, P_SOUND, P_ON };
 
-static struct {
+struct Tsp {
     UBYTE size, lead;           /* packet size, the bytes before its 0x47 */
     UWORD pid[2];               /* 0 video, 1 sound */
     UBYTE sid[2];               /* their Program Stream ids */
@@ -49,33 +49,35 @@ static struct {
     ULONG hlen, hoff;
     ULONG bytes;                /* written so far (the packs' clock) */
     ULONG resyncs, cut;
-} tsp;
+};
 
-void tsp_begin(UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2)
+static struct Tsp tsp_one;           /* (tsp_begin's, tsp_pack's: the playback process's) */
+
+void tsp_begin_in(struct Tsp *T, UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2)
 {
-    memset(&tsp, 0, sizeof(tsp));
-    tsp.size = size;
-    tsp.lead = size == 192 ? 4 : 0;
-    tsp.pid[0] = vpid;
-    tsp.pid[1] = apid;
-    tsp.sid[0] = 0xE0;
-    tsp.sid[1] = ac3 ? 0xBD : 0xC0;
-    tsp.ac3 = ac3;
-    tsp.mpeg2 = mpeg2;
-    tsp.prime = P_SEQ;
+    memset(T, 0, sizeof(*T));
+    T->size = size;
+    T->lead = size == 192 ? 4 : 0;
+    T->pid[0] = vpid;
+    T->pid[1] = apid;
+    T->sid[0] = 0xE0;
+    T->sid[1] = ac3 ? 0xBD : 0xC0;
+    T->ac3 = ac3;
+    T->mpeg2 = mpeg2;
+    T->prime = P_SEQ;
 }
 
-void tsp_counts(ULONG *resyncs, ULONG *packets, ULONG *before_sound)
+void tsp_counts_in(struct Tsp *T, ULONG *resyncs, ULONG *packets, ULONG *before_sound)
 {
-    *resyncs = tsp.resyncs;
-    *packets = tsp.cut;
-    *before_sound = tsp.primed;
+    *resyncs = T->resyncs;
+    *packets = T->cut;
+    *before_sound = T->primed;
 }
 
 /* A pack header (MPEG-2), and before the first packet the system header. */
-static ULONG pack_header(UBYTE *o)
+static ULONG pack_header(struct Tsp *T, UBYTE *o)
 {
-    ULONG k = 0, scr = (ULONG)(((unsigned long long)tsp.bytes * 90000ULL) / (TSP_RATE * 50UL));
+    ULONG k = 0, scr = (ULONG)(((unsigned long long)T->bytes * 90000ULL) / (TSP_RATE * 50UL));
     o[k++] = 0; o[k++] = 0; o[k++] = 1; o[k++] = 0xBA;
     o[k++] = (UBYTE)(0x44 | ((scr >> 27) & 0x38) | ((scr >> 28) & 0x03));
     o[k++] = (UBYTE)(scr >> 20);
@@ -87,9 +89,9 @@ static ULONG pack_header(UBYTE *o)
     o[k++] = (UBYTE)(TSP_RATE >> 6);
     o[k++] = (UBYTE)(((TSP_RATE & 0x3F) << 2) | 0x03);
     o[k++] = 0xF8;                          /* (no stuffing) */
-    if (!tsp.sys) {
-        BOOL snd = tsp.pid[1] != 0x1FFF;
-        tsp.sys = TRUE;
+    if (!T->sys) {
+        BOOL snd = T->pid[1] != 0x1FFF;
+        T->sys = TRUE;
         o[k++] = 0; o[k++] = 0; o[k++] = 1; o[k++] = 0xBB;
         o[k++] = 0; o[k++] = (UBYTE)(snd ? 12 : 9);
         o[k++] = (UBYTE)(0x80 | (TSP_RATE >> 15));
@@ -100,8 +102,8 @@ static ULONG pack_header(UBYTE *o)
         o[k++] = 0xFF;
         o[k++] = 0xE0; o[k++] = 0xE0; o[k++] = 232;    /* video: 232 KB */
         if (snd) {
-            o[k++] = tsp.sid[1];
-            if (tsp.ac3) {
+            o[k++] = T->sid[1];
+            if (T->ac3) {
                 o[k++] = 0xE0; o[k++] = 58;             /* AC3: 58 KB */
             } else {
                 o[k++] = 0xC0; o[k++] = 32;             /* MPEG audio: 4 KB */
@@ -112,26 +114,26 @@ static ULONG pack_header(UBYTE *o)
 }
 
 /* Stream i's chunk out as a Program Stream packet (after a pack header). */
-static ULONG put_chunk(int i, UBYTE *o)
+static ULONG put_chunk(struct Tsp *T, int i, UBYTE *o)
 {
-    ULONG k = pack_header(o), len, hl, j;
-    UWORD n = tsp.s[i].n;
-    BOOL first = tsp.s[i].first;
-    hl = first ? (tsp.s[i].flags == 0xC0 ? 10 : tsp.s[i].flags == 0x80 ? 5 : 0) : 0;
-    len = 3 + hl + (tsp.ac3 && i ? 4 : 0) + n;
-    o[k++] = 0; o[k++] = 0; o[k++] = 1; o[k++] = tsp.sid[i];
+    ULONG k = pack_header(T, o), len, hl, j;
+    UWORD n = T->s[i].n;
+    BOOL first = T->s[i].first;
+    hl = first ? (T->s[i].flags == 0xC0 ? 10 : T->s[i].flags == 0x80 ? 5 : 0) : 0;
+    len = 3 + hl + (T->ac3 && i ? 4 : 0) + n;
+    o[k++] = 0; o[k++] = 0; o[k++] = 1; o[k++] = T->sid[i];
     o[k++] = (UBYTE)(len >> 8);
     o[k++] = (UBYTE)len;
-    o[k++] = (UBYTE)(0x80 | (first ? tsp.s[i].align : 0));
-    o[k++] = (UBYTE)(hl ? tsp.s[i].flags : 0);
+    o[k++] = (UBYTE)(0x80 | (first ? T->s[i].align : 0));
+    o[k++] = (UBYTE)(hl ? T->s[i].flags : 0);
     o[k++] = (UBYTE)hl;
     for (j = 0; j < hl; j++)
-        o[k++] = tsp.s[i].ts[j];
-    if (tsp.ac3 && i) {
+        o[k++] = T->s[i].ts[j];
+    if (T->ac3 && i) {
         /* a DVD's AC3: substream 0x80, the frames that begin here, and
          * where the first does (from the byte after these four, plus 1) */
         ULONG f = 0, at = 0;
-        const UBYTE *b = tsp.s[i].buf;
+        const UBYTE *b = T->s[i].buf;
         for (j = 0; j + 1 < n; j++)
             if (b[j] == 0x0B && b[j + 1] == 0x77) {
                 if (!f)
@@ -143,27 +145,27 @@ static ULONG put_chunk(int i, UBYTE *o)
         o[k++] = (UBYTE)(at >> 8);
         o[k++] = (UBYTE)at;
     }
-    memcpy(o + k, tsp.s[i].buf, n);
+    memcpy(o + k, T->s[i].buf, n);
     k += n;
-    tsp.s[i].n = 0;
-    tsp.s[i].first = FALSE;
-    tsp.bytes += k;
+    T->s[i].n = 0;
+    T->s[i].first = FALSE;
+    T->bytes += k;
     return k;
 }
 
 /* The video's chunk into the hold (its sound's first awaited); full, the
  * sound given up: what is held goes out as it is. 0 (nothing out yet). */
-static ULONG hold_chunk(void)
+static ULONG hold_chunk(struct Tsp *T)
 {
-    if (tsp.hlen + TSP_CHUNK + 80 > TSP_HOLD)
-        tsp.prime = P_ON;                   /* (no sound soon enough) */
-    tsp.hlen += put_chunk(0, tsp.hold + tsp.hlen);
+    if (T->hlen + TSP_CHUNK + 80 > TSP_HOLD)
+        T->prime = P_ON;                   /* (no sound soon enough) */
+    T->hlen += put_chunk(T, 0, T->hold + T->hlen);
     return 0;
 }
 
 /* A PES packet's start in a transport packet's payload: its header kept,
  * the bytes after it (its data) at *data. FALSE if it is not one. */
-static BOOL pes_start(int i, const UBYTE *p, LONG n, LONG *data)
+static BOOL pes_start(struct Tsp *T, int i, const UBYTE *p, LONG n, LONG *data)
 {
     LONG hl;
     if (n < 9 || p[0] || p[1] || p[2] != 1)
@@ -173,13 +175,13 @@ static BOOL pes_start(int i, const UBYTE *p, LONG n, LONG *data)
     hl = p[8];
     if (9 + hl > n)
         return FALSE;                       /* (its header cut: not here) */
-    tsp.s[i].flags = (UBYTE)(p[7] & 0xC0);
-    if (tsp.s[i].flags == 0x40)
-        tsp.s[i].flags = 0;                 /* (forbidden) */
-    if ((tsp.s[i].flags == 0x80 && hl < 5) || (tsp.s[i].flags == 0xC0 && hl < 10))
-        tsp.s[i].flags = 0;
-    memcpy(tsp.s[i].ts, p + 9, tsp.s[i].flags == 0xC0 ? 10 : tsp.s[i].flags ? 5 : 0);
-    tsp.s[i].align = (UBYTE)(p[6] & 0x04);
+    T->s[i].flags = (UBYTE)(p[7] & 0xC0);
+    if (T->s[i].flags == 0x40)
+        T->s[i].flags = 0;                 /* (forbidden) */
+    if ((T->s[i].flags == 0x80 && hl < 5) || (T->s[i].flags == 0xC0 && hl < 10))
+        T->s[i].flags = 0;
+    memcpy(T->s[i].ts, p + 9, T->s[i].flags == 0xC0 ? 10 : T->s[i].flags ? 5 : 0);
+    T->s[i].align = (UBYTE)(p[6] & 0x04);
     *data = 9 + hl;
     return TRUE;
 }
@@ -200,23 +202,23 @@ static BOOL has_seq(const UBYTE *p, LONG n)
  * that packet's first bytes go out first, then what was held. So the two
  * begin together and both show in the first few KB (Amiberry's emulated
  * card looks only at its first 4 KB to find its streams). */
-LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max)
+LONG tsp_pack_in(struct Tsp *T, TspRead rd, void *ctx, UBYTE *out, ULONG max)
 {
     ULONG o = 0;
-    if (tsp.ended)
+    if (T->ended)
         return 0;
     while (o + 2 * (TSP_CHUNK + 80) <= max) {
-        if (tsp.hoff < tsp.hlen) {
+        if (T->hoff < T->hlen) {
             /* what was held, out now */
-            ULONG c = tsp.hlen - tsp.hoff, room = max - o - 2 * (TSP_CHUNK + 80);
+            ULONG c = T->hlen - T->hoff, room = max - o - 2 * (TSP_CHUNK + 80);
             if (c > room)
                 c = room;
-            memcpy(out + o, tsp.hold + tsp.hoff, c);
+            memcpy(out + o, T->hold + T->hoff, c);
             o += c;
-            tsp.hoff += c;
-            if (tsp.hoff < tsp.hlen)
+            T->hoff += c;
+            if (T->hoff < T->hlen)
                 break;
-            tsp.hoff = tsp.hlen = 0;
+            T->hoff = T->hlen = 0;
             continue;
         }
         const UBYTE *p;
@@ -224,41 +226,41 @@ LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max)
         UWORD pid;
         BOOL pusi;
         int i;
-        if (tsp.ilen - tsp.ipos < tsp.size && !tsp.eof) {
+        if (T->ilen - T->ipos < T->size && !T->eof) {
             LONG got;
-            if (tsp.ipos)
-                memmove(tsp.in, tsp.in + tsp.ipos, tsp.ilen - tsp.ipos);
-            tsp.ilen -= tsp.ipos;
-            tsp.ipos = 0;
-            got = rd(ctx, tsp.in + tsp.ilen, TSP_IN - tsp.ilen);
+            if (T->ipos)
+                memmove(T->in, T->in + T->ipos, T->ilen - T->ipos);
+            T->ilen -= T->ipos;
+            T->ipos = 0;
+            got = rd(ctx, T->in + T->ilen, TSP_IN - T->ilen);
             if (got < 0)
                 return -1;
             if (got == 0)
-                tsp.eof = TRUE;
-            tsp.ilen += got;
+                T->eof = TRUE;
+            T->ilen += got;
         }
-        if (tsp.ilen - tsp.ipos < tsp.size) {
+        if (T->ilen - T->ipos < T->size) {
             /* its end: what is held put out, then the end code */
-            if (tsp.hlen) {
-                tsp.prime = P_ON;           /* (its sound never came) */
+            if (T->hlen) {
+                T->prime = P_ON;           /* (its sound never came) */
                 continue;
             }
             for (i = 0; i < 2; i++)
-                if (tsp.s[i].on && tsp.s[i].n)
-                    o += put_chunk(i, out + o);
+                if (T->s[i].on && T->s[i].n)
+                    o += put_chunk(T, i, out + o);
             out[o++] = 0; out[o++] = 0; out[o++] = 1; out[o++] = 0xB9;
-            tsp.ended = TRUE;
+            T->ended = TRUE;
             break;
         }
-        p = tsp.in + tsp.ipos + tsp.lead;
+        p = T->in + T->ipos + T->lead;
         if (p[0] != 0x47) {
-            tsp.ipos++;                     /* out of step: found again */
-            tsp.resyncs++;
+            T->ipos++;                     /* out of step: found again */
+            T->resyncs++;
             continue;
         }
-        tsp.ipos += tsp.size;
+        T->ipos += T->size;
         pid = (UWORD)(((p[1] & 0x1F) << 8) | p[2]);
-        i = pid == tsp.pid[0] ? 0 : pid == tsp.pid[1] && pid != 0x1FFF ? 1 : -1;
+        i = pid == T->pid[0] ? 0 : pid == T->pid[1] && pid != 0x1FFF ? 1 : -1;
         if (i < 0 || (p[1] & 0x80))
             continue;                       /* (another stream's, or marked in error) */
         k = 4;
@@ -269,44 +271,82 @@ LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max)
         n = 188 - k;
         pusi = (p[1] & 0x40) != 0;
         p += k;
-        if (tsp.prime == P_SEQ) {
+        if (T->prime == P_SEQ) {
             /* waiting for a video PES packet with a sequence header */
-            if (i == 1 || !pusi || !pes_start(i, p, n, &data) || !has_seq(p + data, n - data)) {
-                tsp.primed += tsp.size;
-                if (tsp.primed < TSP_PRIME)
+            if (i == 1 || !pusi || !pes_start(T, i, p, n, &data) || !has_seq(p + data, n - data)) {
+                T->primed += T->size;
+                if (T->primed < TSP_PRIME)
                     continue;
             }
-            tsp.prime = tsp.pid[1] != 0x1FFF ? P_SOUND : P_ON;
-        } else if (tsp.prime == P_SOUND && i == 1 && !pusi)
+            T->prime = T->pid[1] != 0x1FFF ? P_SOUND : P_ON;
+        } else if (T->prime == P_SOUND && i == 1 && !pusi)
             continue;                       /* (its sound from its next PES packet) */
         if (pusi) {
             /* a PES packet begins: what was held of the one before put out */
-            if (tsp.s[i].on && tsp.s[i].n)
-                o += i == 0 && tsp.prime == P_SOUND ? hold_chunk() : put_chunk(i, out + o);
-            if (!pes_start(i, p, n, &data)) {
-                tsp.s[i].on = FALSE;        /* (not one we can read: to the next) */
-                tsp.cut++;
+            if (T->s[i].on && T->s[i].n)
+                o += i == 0 && T->prime == P_SOUND ? hold_chunk(T) : put_chunk(T, i, out + o);
+            if (!pes_start(T, i, p, n, &data)) {
+                T->s[i].on = FALSE;        /* (not one we can read: to the next) */
+                T->cut++;
                 continue;
             }
-            tsp.s[i].on = TRUE;
-            tsp.s[i].first = TRUE;
-            tsp.s[i].n = 0;
-        } else if (!tsp.s[i].on)
+            T->s[i].on = TRUE;
+            T->s[i].first = TRUE;
+            T->s[i].n = 0;
+        } else if (!T->s[i].on)
             continue;                       /* (its start not seen: after a seek) */
         while (data < n) {
-            LONG c = n - data, room = TSP_CHUNK - tsp.s[i].n;
+            LONG c = n - data, room = TSP_CHUNK - T->s[i].n;
             if (c > room)
                 c = room;
-            memcpy(tsp.s[i].buf + tsp.s[i].n, p + data, c);
-            tsp.s[i].n += (UWORD)c;
+            memcpy(T->s[i].buf + T->s[i].n, p + data, c);
+            T->s[i].n += (UWORD)c;
             data += c;
-            if (tsp.s[i].n == TSP_CHUNK)
-                o += i == 0 && tsp.prime == P_SOUND ? hold_chunk() : put_chunk(i, out + o);
+            if (T->s[i].n == TSP_CHUNK)
+                o += i == 0 && T->prime == P_SOUND ? hold_chunk(T) : put_chunk(T, i, out + o);
         }
-        if (tsp.prime == P_SOUND && i == 1 && tsp.s[1].n) {
-            o += put_chunk(1, out + o);     /* the sound's first, now: then what was held */
-            tsp.prime = P_ON;
+        if (T->prime == P_SOUND && i == 1 && T->s[1].n) {
+            o += put_chunk(T, 1, out + o);     /* the sound's first, now: then what was held */
+            T->prime = P_ON;
         }
     }
     return (LONG)o;
+}
+
+/* After a seek (the file read from elsewhere): what was half read let go,
+ * its streams and their PIDs kept, and its video taken from its next PES
+ * packet on, not waited for until a sequence header (its decoder has the
+ * one from its start: a file may have no other). With sound, still held
+ * until the sound's next PES packet. */
+void tsp_seek_in(struct Tsp *T)
+{
+    memset(T->s, 0, sizeof(T->s));
+    T->ipos = T->ilen = 0;
+    T->eof = T->ended = FALSE;
+    T->hlen = T->hoff = 0;
+    T->primed = 0;
+    T->prime = T->pid[1] != 0x1FFF ? P_SOUND : P_ON;
+}
+
+/* ---- the one the playback process has (tspack.h's first three) */
+void tsp_begin(UBYTE size, UWORD vpid, UWORD apid, BOOL ac3, BOOL mpeg2)
+{
+    tsp_begin_in(&tsp_one, size, vpid, apid, ac3, mpeg2);
+}
+
+LONG tsp_pack(TspRead rd, void *ctx, UBYTE *out, ULONG max)
+{
+    return tsp_pack_in(&tsp_one, rd, ctx, out, max);
+}
+
+void tsp_counts(ULONG *resyncs, ULONG *packets, ULONG *before_sound)
+{
+    tsp_counts_in(&tsp_one, resyncs, packets, before_sound);
+}
+
+/* ---- one of its own (a picture's maker, beside what plays): its
+ * memory the caller's, tsp_size() bytes (about 180 KB) */
+ULONG tsp_size(void)
+{
+    return (ULONG)sizeof(struct Tsp);
 }
