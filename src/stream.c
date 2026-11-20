@@ -5832,14 +5832,20 @@ UWORD st_pcm(WORD *out, UWORD n, ULONG *rate)
         if (!b)
             return 0;
         for (k = 0; k < n; k++) {
-            ULONG i = at - (n - k) * dec;
-            out[k] = (WORD)(((LONG)b[2 * i] + b[2 * i + 1]) >> 1);     /* (full scale, as the voices mix) */
+            ULONG i = at - (n - k) * dec, d;
+            LONG sum = 0;
+            for (d = 0; d < dec; d++)       /* (averaged: what is above the rate kept out) */
+                sum += (LONG)b[2 * (i + d)] + b[2 * (i + d) + 1];
+            out[k] = (WORD)(sum / (LONG)(2 * dec));     /* (full scale, as the voices mix) */
         }
     } else {
         const BYTE *l = st.chip + st.cur * HALF, *rr = st.chip + (2 + st.cur) * HALF;
         for (k = 0; k < n; k++) {
-            ULONG i = at - (n - k) * dec;
-            out[k] = (WORD)(((WORD)l[i] + rr[i]) << 7);
+            ULONG i = at - (n - k) * dec, d;
+            LONG sum = 0;
+            for (d = 0; d < dec; d++)
+                sum += (WORD)l[i + d] + rr[i + d];
+            out[k] = (WORD)((sum << 7) / (LONG)dec);
         }
     }
     *rate = r / dec;

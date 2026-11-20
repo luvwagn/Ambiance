@@ -767,8 +767,11 @@ UWORD mx_pcm(WORD *out, UWORD n, ULONG *rate)
         at = (ULONG)n * dec;
     t = mx.mix[mx.cur & 1];
     for (k = 0; k < n; k++) {
-        ULONG i = at - (n - k) * dec;
-        out[k] = (WORD)(((LONG)t[2 * i] + t[2 * i + 1]) >> 1);     /* (full scale, as the voices mix) */
+        ULONG i = at - (n - k) * dec, d;
+        LONG sum = 0;
+        for (d = 0; d < dec; d++)           /* (averaged: what is above the rate kept out) */
+            sum += (LONG)t[2 * (i + d)] + t[2 * (i + d) + 1];
+        out[k] = (WORD)(sum / (LONG)(2 * dec));     /* (full scale, as the voices mix) */
     }
     *rate = mx.rate / dec;
     return n;

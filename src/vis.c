@@ -504,23 +504,67 @@ UWORD vis_pcm_lr(WORD *lr, UWORD n, ULONG *rate)
     return n;
 }
 
-/* The spectrum for a layout's Now playing: n bands (BINS a multiple of
- * n), each the loudest of its bins, 0-255 as the classic bars' heights
- * (SP_FLOOR to SP_TOP), analysed again when 40 ms old. FALSE: nothing
- * to analyse (no memory). */
+/* The spectrum for a layout's Now playing: n bands, 0-255 as the classic
+ * bars' heights (SP_FLOOR to SP_TOP), analysed again when 40 ms old.
+ * FALSE: nothing to analyse (no memory).
+ *
+ * The bins are 62.5 Hz each, 0-4 kHz. Music's loudness falls with
+ * frequency (about 3 dB an octave, more above 2 kHz), so even bands of
+ * two bins each left the upper half under SP_FLOOR. Two changes, as
+ * analysers for music have them:
+ *   - the bands widen as they go up (one bin each low down, then
+ *     logarithmic: the last few cover 1.7-4 kHz between them);
+ *   - each bin is lifted by about 4 dB an octave above 250 Hz (three
+ *     loudness steps of 1.4 dB an octave: 11 steps at 4 kHz). */
+static UBYTE sp_edge[BINS + 1];     /* band i: bins sp_edge[i] to sp_edge[i + 1] - 1 */
+static int sp_edge_n;
+static UBYTE sp_tilt[BINS];
+
+static void sp_bands(int n)
+{
+    int i, k;
+    sp_edge_n = n;
+    for (k = 0; k < BINS; k++) {    /* steps of 2^(1/3): (4 * 2^(j/3))^3 = 64 << j */
+        ULONG c = (ULONG)k * k * k;
+        int j = 0;
+        while (j < 15 && c >= (64UL << (j + 1)))
+            j++;
+        sp_tilt[k] = (UBYTE)(k > 4 ? j : 0);
+    }
+    /* edges at BINS^(i/n) (bin 1 to BINS), each band a bin at least; i/n
+     * in 1/4096ths, 2^x by a doubling and a cubic for the fraction */
+    sp_edge[0] = 1;
+    for (i = 1; i <= n; i++) {
+        ULONG x = (ULONG)i * 6 * 4096 / n;      /* log2(64) = 6 */
+        ULONG f = x & 4095, e;
+        /* 2^f, f in [0,1): 1 + 0.6957f + 0.2262f^2 + 0.0781f^3 (to 0.1%) */
+        ULONG p = 4096 + (2850 * f + ((926 * f / 4096) * f) + (((320 * f / 4096) * f / 4096) * f)) / 4096;
+        e = (p << (x >> 12)) / 4096;
+        if (e < (ULONG)sp_edge[i - 1] + 1)
+            e = sp_edge[i - 1] + 1;
+        if (e > (ULONG)(BINS - (n - i)))
+            e = BINS - (n - i);
+        sp_edge[i] = (UBYTE)e;
+    }
+    sp_edge[n] = BINS;
+}
+
 BOOL vis_spectrum(UBYTE *out, int n)
 {
-    int i, j, per;
-    if (n <= 0 || n > BINS)
+    int i, b;
+    if (n <= 0 || n > BINS - 1)
         return FALSE;
     if (time_ms() - sp.lev_t >= 40 && !sp_analyse())
         return FALSE;
-    per = BINS / n;
+    if (n != sp_edge_n)
+        sp_bands(n);
     for (i = 0; i < n; i++) {
-        UBYTE m = 0;
-        for (j = 0; j < per; j++)
-            if (sp.lev[i * per + j] > m)
-                m = sp.lev[i * per + j];
+        int m = 0;
+        for (b = sp_edge[i]; b < sp_edge[i + 1]; b++) {
+            int v = sp.lev[b] ? sp.lev[b] + sp_tilt[b] : 0;
+            if (v > m)
+                m = v;
+        }
         out[i] = (UBYTE)(m <= SP_FLOOR ? 0 : m >= SP_TOP ? 255 : (m - SP_FLOOR) * 255 / (SP_TOP - SP_FLOOR));
     }
     return TRUE;
