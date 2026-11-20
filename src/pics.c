@@ -222,6 +222,63 @@ LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax)
     return n;
 }
 
+/* A folder's picture, for its tile: its first picture by name; else its
+ * first animation or video (a frame of it, as the loader makes one); else,
+ * down to two folders more, that of the first of its folders by name that
+ * has one (Amiga Artwork: only folders in it; Media:Videos: only videos). */
+#define FA_SUBS 8
+struct fa_ctx {
+    char name[FA_SUBS][108];        /* its first folders by name, sorted */
+    int n;
+};
+
+static void fa_cb(void *ctx, const char *name, BOOL isdir)
+{
+    struct fa_ctx *c = ctx;
+    int i, j;
+    if (!isdir)
+        return;
+    for (i = c->n; i > 0 && amb_stricmp(name, c->name[i - 1]) < 0; i--)
+        ;
+    if (i >= FA_SUBS)
+        return;
+    for (j = c->n < FA_SUBS ? c->n : FA_SUBS - 1; j > i; j--)
+        memcpy(c->name[j], c->name[j - 1], sizeof(c->name[0]));
+    amb_strlcpy(c->name[i], name, sizeof(c->name[0]));
+    if (c->n < FA_SUBS)
+        c->n++;
+}
+
+static BOOL folder_art(const char *dir, char *out, LONG max, int depth)
+{
+    struct fa_ctx *c;
+    char path[300];
+    LONG nd = 0;
+    int i;
+    out[0] = 0;
+    if (scan(dir, &nd, out, max, TRUE, NULL, TRUE) < 0)
+        return FALSE;
+    if (out[0])
+        return TRUE;
+    if (depth <= 0 || nd <= 0 || !(c = AllocVec(sizeof(*c), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;               /* (on the heap: the loader's stack, recursed) */
+    dir_scan(dir, fa_cb, c);
+    for (i = 0; i < c->n && !out[0]; i++) {
+        amb_join_path(path, sizeof(path), dir, c->name[i]);
+        folder_art(path, out, max, depth - 1);
+    }
+    FreeVec(c);
+    return out[0] != 0;
+}
+
+BOOL pics_folder_art(const char *dir, char *out, LONG max)
+{
+    APTR old = req_off();
+    BOOL r = max > 0 && folder_art(dir, out, max, 2);
+    req_on(old);
+    return r;
+}
+
 /* An animation anywhere in dir, down to depth folders more (Videos: a
  * folder with none in it is not listed). */
 struct anim_ctx {

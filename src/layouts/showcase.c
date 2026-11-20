@@ -385,9 +385,16 @@ static void top_right_as(BOOL dark, BOOL with_hit)
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
         LONG tw, room;
-        const char *t = mmss(n->pos_ms, b);
-        x -= X(18) + tnum_len(t, LF_SMALL);
-        tnum(x, y, t, LF_SMALL, C_SUB, bg);
+        const char *t;
+        if (n->stopped) {                   /* (no time to show: that it is stopped) */
+            t = H->tr("Stopped");
+            x -= X(18) + tlen(t, LF_SMALL);
+            text(x, y, t, LF_SMALL, C_SUB, bg, tlen(t, LF_SMALL));
+        } else {
+            t = mmss(n->pos_ms, b);
+            x -= X(18) + tnum_len(t, LF_SMALL);
+            tnum(x, y, t, LF_SMALL, C_SUB, bg);
+        }
         tr_left = x;
         /* the title in what is left of the right half: none at all where
          * only a few letters of it would fit */
@@ -415,6 +422,8 @@ static void top_right_as(BOOL dark, BOOL with_hit)
             if (tw <= 0 && with_hit)
                 hit(pb_x - X(6), y - Y(4), W - X(24) - cw - (pb_x - X(6)), FH + Y(8), HT_NOWPLAYING, 0, 0);
             tr_left = pb_x;
+        } else if (tw <= 0 && with_hit) {
+            hit(x - X(6), y - Y(4), W - X(24) - cw - (x - X(6)), FH + Y(8), HT_NOWPLAYING, 0, 0);
         }
     }
 }

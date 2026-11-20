@@ -17646,6 +17646,8 @@ static BOOL lv_anim_shot(const struct Item *it)
     return it->kind == IT_ANIM && !(it->sortkey && !strcmp(it->sortkey, "DVD"));
 }
 
+static BOOL lv_pic_failed(const char *file);
+
 static const char *lv_art_of(const struct Page *p, const struct Item *it, char *buf, LONG max)
 {
     char path[300];
@@ -17698,8 +17700,11 @@ static void lv_fill_item_art(struct LItem *li, const struct Page *p, LONG i, cha
         li->flags |= LIF_HEAD;
     if (it->mark == MARK_PLAYING)
         li->flags |= LIF_NOW;
-    if (art)
+    if (art) {
         li->art = lv_art_of(p, it, art, max);
+        if (li->art && lv_pic_failed(li->art))
+            li->art = NULL;                 /* (none to be had: drawn as one without) */
+    }
     if (p->plex && it->kind == IT_PLEXDIR) {
         static char subs[32][104];
         static UWORD si;
@@ -18184,7 +18189,7 @@ static const struct LItem *lv_home_item(LONG i)
     li = lv_item(i);
     if (!li->art && nmenu && li->label && *li->label) {
         const char *a = lv_ta_find(menu[menu_sel], li->label);
-        if (a)
+        if (a && !lv_pic_failed(a))
             ((struct LItem *)li)->art = a;      /* (the ring's own: ours to set) */
     }
     return li;
@@ -18885,6 +18890,18 @@ static const struct LImage *lv_picture(const char *file, UWORD w, UWORD h)
     else
         ldr_submit(j);
     return NULL;
+}
+
+/* A picture the layout asked for that could not be had (none in the
+ * folder, a file that cannot be read): its row then offers none, so a
+ * layout draws its look without one, not an empty frame for good */
+static BOOL lv_pic_failed(const char *file)
+{
+    int i;
+    for (i = 0; i < LV_PICS; i++)
+        if (lv_pic[i].file[0] && !lv_pic[i].job && lv_pic[i].failed && !strcmp(lv_pic[i].file, file))
+            return TRUE;
+    return FALSE;
 }
 
 /* A picture of the layout's for file, made (or failed): not still out */

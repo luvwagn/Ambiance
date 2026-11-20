@@ -159,14 +159,13 @@ static void run(struct LJob *j)
          * folder's first picture (its text is a job of its own) */
         char shot[300];
         const char *src = j->path;
-        LONG nd;
         if (j->mode == SHOT_AGS) {
             if (!ags_screenshot_path(j->path, shot, sizeof(shot)))
                 return;
             src = shot;
         } else if (j->mode == SHOT_FOLDER) {
-            if (pics_scan(j->path, &nd, shot, sizeof(shot)) <= 0)
-                return;
+            if (!pics_folder_art(j->path, shot, sizeof(shot)))
+                return;                     /* (a picture, else a video's frame, maybe a folder down) */
             src = shot;
             amb_strlcpy(j->first, shot, sizeof(j->first));    /* which picture it shows */
         } else if (j->mode == SHOT_SONG) {

@@ -592,6 +592,7 @@ const char *pics_iff_kind(const char *path);            /* an IFF file's FORM ("
 /* Pictures in dir, its letter folders' included (-1: unreadable); *ndirs:
  * its other folders; first: the path of its first picture by name. */
 LONG pics_scan(const char *dir, LONG *ndirs, char *first, LONG firstmax);
+BOOL pics_folder_art(const char *dir, char *out, LONG max);   /* a folder's tile picture */
 
 /* ---------------------------------------------------------------- unpack */
 /* Packed files (PowerPacker, XPK, ...) through xfdmaster.library (unpack.c). */
