@@ -988,6 +988,7 @@ static void run(int w, int h, int bits, const char *font)
         }
         free(was);
     }
+    layout_engine.draw(LS_NOW);             /* (the loop above left the page drawn last) */
     layout_engine.tick(5000);
     save("now");
     if (layout_engine.controls && layout_engine.controls_h) {
