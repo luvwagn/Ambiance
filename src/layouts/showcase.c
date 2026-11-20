@@ -336,6 +336,7 @@ static BOOL pm_step(const struct LNow *n)
 
 /* top right: what plays (if anything) and the clock */
 static LONG tr_left;            /* top_right's left edge, as drawn: a title stops short of it */
+static LONG dbg_left = 0x7fff;  /* the Debug line's under the clock (W: none): it too */
 static void top_right_as(BOOL dark, BOOL with_hit);
 static void top_right(BOOL dark)
 {
@@ -353,8 +354,8 @@ static void top_right_again(BOOL dark)
             x0 = dl;
         h = y + TH + Y(1) + FH + Y(2) - y0;
     }
-    if (x0 < W / 2)
-        x0 = W / 2;
+    if (x0 < 0)
+        x0 = 0;
     {
         /* what is under it (Now playing's bars, a page's panels) is drawn
          * after it and over it: it ends where they begin, as drawn whole */
@@ -379,8 +380,11 @@ static void top_right_as(BOOL dark, BOOL with_hit)
     x -= cw;
     tnum(x, y + (FH - TH) / 2, H->clock, LF_TITLE, C_WHITE, bg);     /* the big clock */
     tr_left = x;
-    if (H->debug && *H->debug)  /* Settings > Debug: the CPU and memory, under the clock */
-        tnum(W - X(24) - tnum_len(H->debug, LF_SMALL), y + TH + Y(1), H->debug, LF_SMALL, C_ACC, bg);
+    dbg_left = W;
+    if (H->debug && *H->debug) {        /* Settings > Debug: the CPU and memory, under the clock */
+        dbg_left = W - X(24) - tnum_len(H->debug, LF_SMALL);
+        tnum(dbg_left, y + TH + Y(1), H->debug, LF_SMALL, C_ACC, bg);
+    }
     pb_x = -1;
     if (n && n->kind != LN_NONE && n->title && *n->title) {
         char b[16];
@@ -428,6 +432,15 @@ static void top_right_as(BOOL dark, BOOL with_hit)
     }
 }
 
+/* Where a title stops: short of what is at the top right (what plays, the
+ * clock, the Debug line under it, which a large title reaches down to),
+ * the right two fifths left to them at least */
+static LONG title_lim(void)
+{
+    LONG r = (dbg_left < tr_left ? dbg_left : tr_left) - X(24);
+    return r < W * 3 / 5 ? r : W * 3 / 5;
+}
+
 /* The top left: Ambiance's logo, then the page's title (none: the logo
  * alone, the section's name being beside the list) and the way to it */
 static LONG title_cy;           /* the title line's middle, as drawn */
@@ -445,7 +458,7 @@ static LONG title_line(const char *title, const char *sub)
     {
         /* up to what is at the top right (what plays, the clock), never
          * over it; the right half at most */
-        LONG lim = tr_left - X(24) < W * 3 / 5 ? tr_left - X(24) : W * 3 / 5;
+        LONG lim = title_lim();
         if (title && *title && lim - x > X(40)) {
             w = text(x, y + (FH - TH) / 2, title, LF_TITLE, C_WHITE, &bg_grad, lim - x);
             x += w + X(14);
@@ -1231,12 +1244,18 @@ static void draw_page_body(const struct LPage *m)
 static LONG page_trail(const struct LPage *m, BOOL named)
 {
     LONG x = title_line(named && m->ncrumb ? m->crumb[m->ncrumb - 1] : NULL, NULL), i, y, w;
-    LONG lim = tr_left - X(24) < W * 3 / 5 ? tr_left - X(24) : W * 3 / 5;
+    LONG lim = title_lim();
     y = title_cy - FH / 2;
     for (i = 0; i + 1 < m->ncrumb && lim - x > X(30); i++) {
-        if (i) {
-            x += text(x, y, "/", LF_SMALL, C_DIM, &bg_grad, 0) + X(6);
-        }
+        LONG at = x;
+        if (i)
+            at += tlen("/", LF_SMALL) + X(6);
+        /* a step whole, or cut where enough of it shows to read: else none */
+        if (tlen(m->crumb[i], LF_SMALL) > lim - at && lim - at < X(60))
+            break;
+        if (i)
+            text(x, y, "/", LF_SMALL, C_DIM, &bg_grad, 0);
+        x = at;
         w = text(x, y, m->crumb[i], LF_SMALL, C_SUB, &bg_grad, lim - x);
         hit(x - X(2), y - Y(4), w + X(4), FH + Y(8), HT_CRUMB, 0, i);
         x += w + X(6);

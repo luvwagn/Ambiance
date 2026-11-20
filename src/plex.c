@@ -453,6 +453,7 @@ struct fill {
     int track_depth;
     char t_title[128], t_by[200], t_album[100], t_codec[16], t_part[300], t_key[120];
     char t_thumb[160], t_album_rk[16], t_artist_rk[16];
+    char c_thumb[160];          /* the list's own (an album's tracks: the album's cover) */
     ULONG t_ms, t_kbps, t_ch, t_rate, t_size;
     /* a photo, while its Media and Part come */
     BOOL ph;
@@ -555,6 +556,7 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         x->total = amb_num(xml_attr(a, n, "totalSize"));
         if (!x->total)
             x->total = amb_num(xml_attr(a, n, "size"));
+        amb_strlcpy(x->c_thumb, xml_attr(a, n, "thumb") ? xml_attr(a, n, "thumb") : "", sizeof(x->c_thumb));
         return 1;
     }
     if (x->track && !strcmp(name, "Media")) {
@@ -592,6 +594,8 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
         v = xml_attr(a, n, "parentThumb");      /* the album's cover, else its own */
         if (!v || !v[0])
             v = xml_attr(a, n, "thumb");
+        if ((!v || !v[0]) && x->c_thumb[0])
+            v = x->c_thumb;                     /* (some tracks carry neither: the list's) */
         amb_strlcpy(x->t_thumb, v ? v : "", sizeof(x->t_thumb));
         /* its album and artist, so their rows can show it playing */
         text(xml_attr(a, n, "parentRatingKey"), x->t_album_rk, sizeof(x->t_album_rk));
