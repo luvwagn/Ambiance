@@ -259,7 +259,11 @@ const char *video_check(const char *path, struct VProbe *v)
     char m[200];
     if (!vprobe(path, v, 0)) {
         if (v->h264) {
-            sprintf(why, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(v));
+            if (video_cpu_only)             /* (an AGA screen: mpegv.library's, MPEG-1 and MPEG-2) */
+                sprintf(why, _("%s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2"),
+                        vprobe_kind(v));
+            else
+                sprintf(why, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(v));
             sprintf(m, "%s: %s", (const char *)FilePart((STRPTR)path), why);
             amb_log("video", m);
             return why;

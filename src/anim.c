@@ -49,6 +49,7 @@
 #include "glyph.h"
 #include "dvdplay.h"
 #include "copper.h"
+#include "tspack.h"
 #include <libraries/dvdnav.h>
 #include <libraries/mpegv.h>
 #include <proto/mpegv.h>
@@ -3592,14 +3593,68 @@ static UWORD va_cell(LONG y, LONG u, LONG v)
     return (UWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
 }
 
+/* A transport stream's video, packed as a Program Stream as it is read
+ * (tspack.c: an instance of its own, the playback process's apart), its
+ * sound left out; NULL for a Program Stream or a bare video stream */
+static struct Tsp *va_tsp;
+
+static LONG va_file(void *ctx, UBYTE *b, LONG n)
+{
+    (void)ctx;
+    return Read(va_fh, b, n);
+}
+
 static ULONG va_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
                      register struct MpvRead *r __asm("a1"))
 {
     LONG n;
     (void)h;
     (void)mpv;
-    n = Read(va_fh, r->mr_Buffer, r->mr_Length);
+    if (va_tsp)
+        n = tsp_pack_in(va_tsp, va_file, NULL, r->mr_Buffer, (ULONG)r->mr_Length);
+    else
+        n = Read(va_fh, r->mr_Buffer, r->mr_Length);
     return n > 0 ? (ULONG)n : 0;
+}
+
+#define VA_READ 16384                       /* (mpegv's reads: tspack wants 4192 or more) */
+
+/* va_fh (open) read from its start for mpegv: the stream's kind for it
+ * (a transport stream's, packed, is a Program Stream's); ~0: no memory */
+static ULONG va_stream(void)
+{
+    if (!vid.ts)
+        return vid.ps ? MPVS_PROGRAM : MPVS_VIDEO;
+    if (!va_tsp && !(va_tsp = AllocVec(tsp_size(), MEMF_ANY)))
+        return ~0UL;
+    tsp_begin_in(va_tsp, vid.ts, vid.ts_vpid, 0x1FFF, FALSE, vid.mpeg2);
+    Seek(va_fh, (LONG)vid.ts_first, OFFSET_BEGINNING);
+    return MPVS_PROGRAM;
+}
+
+/* va_fh from byte at (a transport stream's: from a packet's start, its
+ * video from its next PES packet); mpegv's held bytes dropped */
+static BOOL va_seek(APTR mpv, ULONG at)
+{
+    if (va_tsp) {
+        if (at < vid.ts_first)
+            at = vid.ts_first;
+        at = vid.ts_first + (at - vid.ts_first) / vid.ts * vid.ts;
+        tsp_seek_in(va_tsp);                /* (mpegv has its start's sequence header) */
+    }
+    if (Seek(va_fh, (LONG)at, OFFSET_BEGINNING) < 0)
+        return FALSE;
+    MpvControl(mpv, MPVC_FLUSH, 0);
+    return TRUE;
+}
+
+static void va_stream_close(void)
+{
+    if (va_fh)
+        Close(va_fh);
+    va_fh = 0;
+    FreeVec(va_tsp);
+    va_tsp = NULL;
 }
 
 /* A picture counted: every other pixel of every other row, its cell */
@@ -3746,21 +3801,22 @@ static BOOL va_palette(const char *path, const char *name)
         cellof[i] = va_cell((LONG)((i >> 10) << 2) + 2, (LONG)(((i >> 5) & 31) << 3) + 4,
                             (LONG)((i & 31) << 3) + 4);
     /* sampled: its I pictures from points spread through it */
-    if ((vid.ps || !vid.ts) && (va_fh = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+    if ((!vid.ts || vid.ts_vpid != 0x1FFF) && (va_fh = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+        ULONG kind;
         memset(&rh, 0, sizeof(rh));
         rh.h_Entry = (HOOKFUNC)(APTR)va_read;
         if (Seek(va_fh, 0, OFFSET_END) >= 0)
             size = (ULONG)Seek(va_fh, 0, OFFSET_BEGINNING);
-        mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, vid.ps ? MPVS_PROGRAM : MPVS_VIDEO,
-                          MPVA_SkipB, TRUE, TAG_DONE);
+        if ((kind = va_stream()) != ~0UL)   /* (a transport stream's video packed as it is read) */
+            mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, kind, MPVA_ReadSize, VA_READ,
+                              MPVA_SkipB, TRUE, TAG_DONE);
         for (k = 0; mpv && k < VA_SAMPLES; k++) {
             LONG e = 0, tries;
             struct MpvPicture *p = NULL;
             if (k) {
                 ULONG at = (ULONG)((unsigned long long)size * k / VA_SAMPLES);
-                if (!size || Seek(va_fh, (LONG)at, OFFSET_BEGINNING) < 0)
+                if (!size || !va_seek(mpv, at))
                     break;
-                MpvControl(mpv, MPVC_FLUSH, 0);
             }
             for (tries = 0; tries < 40; tries++) {
                 p = MpvDecode(mpv, &e);
@@ -3777,8 +3833,7 @@ static BOOL va_palette(const char *path, const char *name)
         }
         if (mpv)
             MpvClose(mpv);
-        Close(va_fh);
-        va_fh = 0;
+        va_stream_close();
     }
     if (got)
         ncol = (ULONG)thumb_cut(hist, VA_COLS, pal, lut555);
@@ -4042,14 +4097,15 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
     char m[200];
     if (!va_all && !(va_all = AllocVec(bw * (ULONG)h + 32, MEMF_ANY)))
         return;
+    ULONG kind;
     if (!(va_fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
         return;
     memset(&rh, 0, sizeof(rh));
     rh.h_Entry = (HOOKFUNC)(APTR)va_read;
-    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, vid.ps ? MPVS_PROGRAM : MPVS_VIDEO,
+    if ((kind = va_stream()) == ~0UL ||
+        !(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, kind, MPVA_ReadSize, VA_READ,
                             MPVA_SkipB, mode == 2, TAG_DONE))) {
-        Close(va_fh);
-        va_fh = 0;
+        va_stream_close();
         return;
     }
     sprintf(m, "%s: decoded and shown as fast as it goes (%s), no sound, no clock: Esc stops it", name,
@@ -4098,8 +4154,7 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
     }
     va_bench_log(name, n, types, time_ms() - t0, td, tp, tq, tf, hz, TRUE);
     MpvClose(mpv);
-    Close(va_fh);
-    va_fh = 0;
+    va_stream_close();
 }
 
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
@@ -4185,7 +4240,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     if (!win)
         goto nomem;
     ctl_begin(win, blank);
-    vid_sound = vid.mp2 && !vid.ac3 && vid.ps;
+    vid_sound = vid.mp2 && !vid.ac3 && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
     bar_setup(scr, sb[0]->sb_BitMap, sw, sh, 8, id, 0, &clip, left, top, path);
     bar.total_ms = vid.ms;
     bar_redraw = FALSE;
@@ -4483,7 +4538,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     sw = (UWORD)video_shown_w(&vid);
     if (!sw)
         sw = vid.w;
-    vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && vid.ps
+    vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF))
                        : (vid.mp2 || vid.ac3) && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
     amb_strlcpy(lay_path, path, sizeof(lay_path));
     memset(&lay, 0, sizeof(lay));

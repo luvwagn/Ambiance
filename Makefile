@@ -175,6 +175,8 @@ build/%.o: src/%.c src/amb.h $(VERSION_STAMP)
 
 build/lkit.o: src/lkit.h src/lkcore.h
 build/view.o build/copper.o build/anim.o: src/copper.h
+build/anim.o build/mpgthumb.o build/stream.o build/tspack.o: src/tspack.h
+build/anim.o build/mpgthumb.o build/video.o build/vprobe.o: src/vprobe.h
 # (LAYOUT_ABI is the checksum of these: the objects that check or use it)
 build/lhost.o build/main.o: src/layout.h src/lkcore.h
 build/main.o build/details.o build/lvhost.o: src/app.h src/details.h src/lvhost.h src/layout.h src/lkcore.h
@@ -360,7 +362,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -509,6 +511,17 @@ $(DVD_ISO): extras/dvdnav/tests/fixtures/dvd/test.iso.xz
 	@$(PYTHON) -I -c "import lzma, sys; open(sys.argv[2], 'wb').write(lzma.open(sys.argv[1]).read())" $< $@
 test-dvd-host: $(DVDLIB)
 	@$(MAKE) --no-print-directory -C extras/dvdnav test
+# transport streams packed as Program Streams (src/tspack.c), on the host,
+# against ffmpeg's own reading of streams it makes (needs ffmpeg, ffprobe)
+build/tspack/tspack_host: tests/tspack_host.c src/tspack.c src/tspack.h tests/host/exec/types.h
+	@mkdir -p build/tspack
+	@$(HOSTCC) -O2 -Wall -Itests/host -Isrc -o $@ tests/tspack_host.c src/tspack.c
+test-tspack: build/tspack/tspack_host
+	@sh tests/tspack_test.sh build/tspack $(abspath build/tspack/tspack_host) $(abspath extras/mpegv/build/host/mpv_test) \
+		> build/test-tspack.txt 2>&1 \
+		&& grep -q "tspack tests passed" build/test-tspack.txt \
+		&& echo "  CHECK transport streams packed as Program Streams, two at once (host, against ffmpeg) ok" \
+		|| (cat build/test-tspack.txt; exit 1)
 # a DVD image's reading past 2 GB and what one holds (src/dvdiso.c), on the
 # host: the 64-bit packet as UAE's file system reads it, the test image
 build/dvd/dvdiso_host: tests/dvdiso_host.c src/dvdiso.c src/dvdiso.h tests/host/exec/types.h
