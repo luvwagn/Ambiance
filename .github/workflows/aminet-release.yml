@@ -50,16 +50,18 @@ jobs:
             echo "::error::Expected one ambiance-*.lha archive, found ${#lha_files[@]}"
             exit 1
           fi
-          cp "${lha_files[0]}" dist/Ambiance.lha
-          cp Ambiance.readme dist/Ambiance.readme
+          # (Aminet's own Ambiance.lha is a module in mods/atmos: ours is
+          # AmbianceMC, the readme's base name the archive's)
+          cp "${lha_files[0]}" dist/AmbianceMC.lha
+          cp Ambiance.readme dist/AmbianceMC.readme
 
       - name: Upload Aminet artifact
         uses: actions/upload-artifact@v4
         with:
           name: aminet-upload
           path: |
-            dist/Ambiance.lha
-            dist/Ambiance.readme
+            dist/AmbianceMC.lha
+            dist/AmbianceMC.readme
           if-no-files-found: error
 
   publish:
@@ -76,10 +78,37 @@ jobs:
           name: aminet-upload
           path: dist
 
+      # The uploader's address: the repository secret AMINET_EMAIL (Settings >
+      # Secrets and variables > Actions), not kept in the public readme.
+      # Aminet wants it readable in the readme's Uploader: line, and it is
+      # the FTP password.
+      - name: The uploader's address into the readme
+        shell: bash
+        env:
+          AMINET_EMAIL: ${{ secrets.AMINET_EMAIL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AMINET_EMAIL" ]; then
+            echo "::error::Set the repository secret AMINET_EMAIL (the uploader's address)"
+            exit 1
+          fi
+          sed -i -E "s|^Uploader:( *).*$|Uploader:\1${AMINET_EMAIL} (Brian King)|" dist/AmbianceMC.readme
+          grep -q "^Uploader: *${AMINET_EMAIL}" dist/AmbianceMC.readme
+
+      - name: Check the readme first (no upload)
+        uses: sidick/aminet-release-action@v1
+        with:
+          filename: dist/AmbianceMC.lha
+          readme: dist/AmbianceMC.readme
+          category: mus/play
+          inject-version: true
+          validate-only: true
+
       - name: Upload to Aminet
         uses: sidick/aminet-release-action@v1
         with:
-          filename: dist/Ambiance.lha
-          readme: dist/Ambiance.readme
-          category: util/wb
+          filename: dist/AmbianceMC.lha
+          readme: dist/AmbianceMC.readme
+          category: mus/play
+          uploader-email: ${{ secrets.AMINET_EMAIL }}
           inject-version: true

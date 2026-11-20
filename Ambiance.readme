@@ -1,7 +1,7 @@
 Short:        Full-screen media centre for the Amiga
 Author:       Brian King
 Uploader:     Brian King
-Type:         util/wb
+Type:         mus/play
 Version:      [VERSION]
 Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
