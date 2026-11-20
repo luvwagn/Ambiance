@@ -5,19 +5,20 @@ Type:         util/wb
 Version:      [VERSION]
 Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
+Distribution: Aminet
 
 Ambiance is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi® and Windows Media Center: games and demos from Amiga Game Selector
-(AGS) or iGame, tracker music, internet radio, the music and photos on your Plex
-server and your pictures, all in one place, driven by keyboard, mouse or
-joystick.
+(AGS) or iGame, tracker music, internet radio, the music and photos on
+your Plex server and your pictures, all in one place, driven by keyboard,
+mouse or joystick.
 
 Copy the Ambiance drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
 its modules and its pictures are found by themselves. On any other Amiga,
 Settings > Folders says where your music, modules and pictures are, and
-iGame's games and demos are found where iGame is installed. Everything plays inside Ambiance, on its own screen and the Amiga's own
-sound.
+iGame's games and demos are found where iGame is installed. Everything
+plays inside Ambiance, on its own screen and the Amiga's own sound.
 
 
 Features
@@ -45,17 +46,17 @@ Games and demos
   xadmaster.library (or LhA in C:), WHDLoad and its tools put in C:.
 
 Mods
-- Modules from the MODS: assign and up to eight folders chosen in
-  Settings > Folders > Modules, and on AGS from ST-00:Modules,
-  ST-00:C64Music and AGS:Mods (its menu music). ProTracker modules play on Ambiance's own replayer, after the
-  ProTracker 2.3D play routine and timed by a CIA timer. Hundreds of other
-  formats (OctaMED, TFMX, Future Composer, Hippel, AHX, SID...) play
-  through EaglePlayer's and DeliTracker's players where they are
-  installed (AGS has them). 6- and 8-channel MODs play on the same
-  replayer, channels 5 to 8 mixed onto Paula's four the way ProTracker
-  4.1 does (its mixer, by Andreas Wendorf). XM, S3M, IT, MTM and 669
-  are mixed by modplug.library on a 68020 or better. Packed modules
-  (PowerPacker, XPK...) are unpacked with xfdmaster.library.
+- Modules from the MODS: assign and up to eight folders chosen in Settings >
+  Folders > Modules, and on AGS from ST-00:Modules, ST-00:C64Music and
+  AGS:Mods (its menu music). ProTracker modules play on Ambiance's own
+  replayer, after the ProTracker 2.3D play routine and timed by a CIA timer.
+  Hundreds of other formats (OctaMED, TFMX, Future Composer, Hippel, AHX,
+  SID...) play through EaglePlayer's and DeliTracker's players where they
+  are installed (AGS has them). 6- and 8-channel MODs play on the same
+  replayer, channels 5 to 8 mixed onto Paula's four the way ProTracker 4.1
+  does (its mixer, by Andreas Wendorf). XM, S3M, IT, MTM and 669 are mixed
+  by modplug.library on a 68020 or better. Packed modules (PowerPacker,
+  XPK...) are unpacked with xfdmaster.library.
 
 Radio
 - Internet radio from radio-browser.info: top voted, most listened to,
@@ -226,9 +227,9 @@ Double-click Install-Ambiance: it asks where Ambiance should go and which
 languages to install, your Workbench's ticked, and keeps the settings of
 an earlier installation. Not on AGS (which has them), it then offers
 modplug.library, mpega.library and xfdmaster.library from Aminet, ticked
-where LIBS: has none or an older one; a newer one is never replaced. Or copy the Ambiance drawer to your hard drive
-yourself (all its languages come along), keeping its Fonts drawer next to
-the program.
+where LIBS: has none or an older one; a newer one is never replaced. Or
+copy the Ambiance drawer to your hard drive yourself (all its languages
+come along), keeping its Fonts drawer next to the program.
 
 On AGS, if it boots straight into its own menu, quit AGS to Workbench
 first, then double-click Ambiance.
@@ -286,8 +287,8 @@ Controls
                back. Opened
                from another section (a module's page from Music), its
                title says where the music is from: a click there, or G,
-               goes to that folder; Esc goes back where you were. Esc goes back, the
-               music playing on.
+               goes to that folder; Esc goes back where you were. Esc
+               goes back, the music playing on.
 
 
 Settings
@@ -538,8 +539,9 @@ unchanged archive.
 Fonts: Pixelify Sans (c) The Pixelify Sans Project Authors, Galmuri
 (c) 2019-2025 Lee Minseo, Ark Pixel Font (c) 2021 TakWolf, Rubik
 (c) The Rubik Project Authors and Geologica (c) 2020 The Geologisk
-Project Authors, all under the SIL Open Font Licence 1.1; the full texts are in the Licences
-drawer. Radio's station lists come from radio-browser.info.
+Project Authors, all under the SIL Open Font Licence 1.1; the full texts
+are in the Licences drawer. Radio's station lists come from
+radio-browser.info.
 
 Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark
 of the XBMC Foundation; Windows Media Center is a trademark of Microsoft
