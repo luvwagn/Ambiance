@@ -18190,6 +18190,49 @@ static const struct LItem *lv_home_item(LONG i)
     return li;
 }
 
+/* ---- Home's row for Now playing (its first level the player, not a list):
+ * what is loaded - its cover, its title, who by or the station, or that it
+ * is paused - then what plays next. A tile chosen: the player's page. */
+#define NPH_NEXT 7
+static LONG np_home_count(void)
+{
+    LONG n;
+    if (!mp_loaded())
+        return 0;
+    n = np.list.count - (np.idx + 1);
+    if (n < 0 || np.idx < 0)
+        n = 0;
+    return 1 + (n > NPH_NEXT ? NPH_NEXT : n);
+}
+
+static const struct LItem *np_home_item(LONG i)
+{
+    static struct LItem li;
+    const char *t, *by;
+    UBYTE kind = mp_is_track() ? LI_TRACK : mp_is_stream() ? LI_STATION : LI_MODULE;
+    memset(&li, 0, sizeof(li));
+    li.kind = kind;
+    if (i > 0) {                            /* what plays next */
+        LONG k = np.idx + i;
+        li.label = k >= 0 && k < np.list.count ? np.list.items[k].label : "";
+        return &li;
+    }
+    t = mp_title();
+    by = mp_is_track() ? mp_track_by() : mp_is_stream() ? NULL : mp_author();
+    if (mp_is_stream() && mp_stream_name() && *mp_stream_name()) {
+        if (!t || !*t)
+            t = mp_stream_name();
+        else if (!by || !*by)
+            by = mp_stream_name();          /* (the song as its title, the station under it) */
+    }
+    li.label = t && *t ? t : _(mod_names[MOD_NOWPLAYING]);
+    li.sub = mp_paused() ? _("paused") : !mp_playing() ? _("stopped") : by && *by ? by : NULL;
+    li.art = np_art_key[0] && mp_is_track() ? np_art_key : np_art_file[0] ? np_art_file : NULL;
+    li.mark = mp_playing() && !mp_paused() ? LM_PLAYING : LM_NONE;
+    li.flags = LIF_NOW;
+    return &li;
+}
+
 /* ---- Home's launchpad. A section whose first level is a long flat list
  * of files (Videos: the films themselves) shows on Home not every file -
  * a row of hundreds, a tile a key, no letters - but its folders and other
@@ -18482,6 +18525,14 @@ static const void *lv_model(int screen)
                 home.tile_sel = lp_on() ? lp_sel : pages[0].sel;
             home.tile_shown = !mouse_mode;  /* (come in with the mouse: nothing chosen
                                              * shows, the hover does) */
+        } else if (!pane_pending && depth >= 1 && pages[0].type == PT_PLAYER &&
+                   menu[menu_sel] == MOD_NOWPLAYING && mp_loaded()) {
+            row.title = _(mod_names[MOD_NOWPLAYING]);
+            row.n = np_home_count();        /* (the player's: what is loaded, what is next) */
+            row.item = np_home_item;
+            home.nrows = 1;
+            home.rows = &row;
+            home.tile_shown = !mouse_mode;
         }
         return &home;
     case LS_NOW: {
