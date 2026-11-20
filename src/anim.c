@@ -3983,6 +3983,111 @@ static void va_bench(const struct MpvPicture *p, struct BitMap *bm, ULONG bw, WO
     amb_log("video: AGA", m);
 }
 
+/* ENV:Ambiance/VideoBench (1: every picture, B too; 2: B pictures passed
+ * over): the video decoded and shown as fast as it goes, for measuring:
+ * no sound, no clock, no controls, here in this task (not the playback
+ * process). Each picture decoded, made pens, made planes into the buffer
+ * not shown, then shown (not waited for: drawn into again if the last
+ * change has not been taken). Each part timed; logged every 300
+ * pictures and at the end. Esc or a click stops it. */
+static int va_bench_mode(void)
+{
+    char ev[8];
+    if (GetVar((CONST_STRPTR)"Ambiance/VideoBench", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+        (ev[0] == '1' || ev[0] == '2'))
+        return ev[0] - '0';
+    return 0;
+}
+
+static void va_bench_log(const char *name, ULONG n, const ULONG *types, ULONG ms, ULONG td, ULONG tp, ULONG tq,
+                         ULONG tf, ULONG hz, BOOL end)
+{
+    char m[320];
+    ULONG d = n && hz ? (ULONG)((unsigned long long)td * 100000ULL / hz / n) : 0,
+          p = n && hz ? (ULONG)((unsigned long long)tp * 100000ULL / hz / n) : 0,
+          q = n && hz ? (ULONG)((unsigned long long)tq * 100000ULL / hz / n) : 0,
+          f = n && hz ? (ULONG)((unsigned long long)tf * 100000ULL / hz / n) : 0,
+          fps = ms ? (ULONG)((unsigned long long)n * 100000ULL / ms) : 0;
+    sprintf(m, "%s%s: %lu pictures (I %lu, P %lu, B %lu) in %lu ms: %lu.%02lu a second; a picture: "
+               "decoded %lu.%02lu ms, pens %lu.%02lu, planes %lu.%02lu, shown %lu.%02lu",
+            end ? "" : "so far, ", name, (unsigned long)n, (unsigned long)types[1], (unsigned long)types[2],
+            (unsigned long)types[3], (unsigned long)ms, (unsigned long)(fps / 100), (unsigned long)(fps % 100),
+            (unsigned long)(d / 100), (unsigned long)(d % 100), (unsigned long)(p / 100),
+            (unsigned long)(p % 100), (unsigned long)(q / 100), (unsigned long)(q % 100),
+            (unsigned long)(f / 100), (unsigned long)(f % 100));
+    amb_log("video: bench", m);
+}
+
+static void va_bench_run(int mode, const char *path, const char *name, struct Screen *scr, struct Window *win,
+                         struct ScreenBuffer **sb, struct MsgPort *safe, BOOL *safe_wait, int *shown, ULONG bw,
+                         WORD vx, WORD vy, WORD h)
+{
+    struct Hook rh;
+    APTR mpv;
+    ULONG n = 0, types[4] = { 0, 0, 0, 0 }, hz = 0, td = 0, tp = 0, tq = 0, tf = 0, t0 = time_ms(), jlast = 0;
+    char m[200];
+    if (!va_all && !(va_all = AllocVec(bw * (ULONG)h + 32, MEMF_ANY)))
+        return;
+    if (!(va_fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
+        return;
+    memset(&rh, 0, sizeof(rh));
+    rh.h_Entry = (HOOKFUNC)(APTR)va_read;
+    if (!(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, vid.ps ? MPVS_PROGRAM : MPVS_VIDEO,
+                            MPVA_SkipB, mode == 2, TAG_DONE))) {
+        Close(va_fh);
+        va_fh = 0;
+        return;
+    }
+    sprintf(m, "%s: decoded and shown as fast as it goes (%s), no sound, no clock: Esc stops it", name,
+            mode == 2 ? "B pictures passed over" : "every picture");
+    amb_log("video: bench", m);
+    if (LowLevelBase)
+        jlast = ReadJoyPort(1);
+    (void)time_ticks(&hz);
+    for (;;) {
+        struct MpvPicture *p;
+        LONG e = 0, rows;
+        ULONG a, b, c, d, y;
+        int k;
+        if (input(win, &jlast) == 1)
+            break;
+        a = time_ticks(&hz);
+        p = MpvDecode(mpv, &e);
+        b = time_ticks(&hz);
+        td += b - a;
+        if (!p) {
+            if (e == MPVE_OK || e == MPVE_MORE)
+                continue;
+            break;                          /* (its end) */
+        }
+        k = *shown ^ 1;
+        safe_done(safe, safe_wait);
+        rows = p->mpic_Height < (UWORD)h ? p->mpic_Height : h;
+        b = time_ticks(&hz);
+        for (y = 0; y < (ULONG)rows; y++)
+            va_pens_row(p, y, va_all + y * bw, bw);
+        c = time_ticks(&hz);
+        for (y = 0; y < (ULONG)rows; y++)
+            va_planes_row(va_all + y * bw, bw, sb[k]->sb_BitMap, vx, vy + y);
+        d = time_ticks(&hz);
+        if (ChangeScreenBuffer(scr, sb[k])) {
+            safe_wait[*shown] = TRUE;
+            *shown = k;
+        }                                   /* (not taken yet: drawn into again, not waited for) */
+        tp += c - b;
+        tq += d - c;
+        tf += time_ticks(&hz) - d;
+        n++;
+        types[p->mpic_Type <= 3 ? p->mpic_Type : 0]++;
+        if (!(n % 300))
+            va_bench_log(name, n, types, time_ms() - t0, td, tp, tq, tf, hz, FALSE);
+    }
+    va_bench_log(name, n, types, time_ms() - t0, td, tp, tq, tf, hz, TRUE);
+    MpvClose(mpv);
+    Close(va_fh);
+    va_fh = 0;
+}
+
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                          LONG errmax)
 {
@@ -4075,6 +4180,14 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     amb_log("video: AGA", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
+    {
+        int bm = va_bench_mode();
+        if (bm) {
+            va_bench_run(bm, path, name, scr, win, sb, safe, safe_wait, &shown, bw, vx, vy, (WORD)h);
+            result = 0;
+            goto out;
+        }
+    }
     amb_strlcpy(lay_path, path, sizeof(lay_path));
     st_video_direct(FALSE);
     st_video_show(TRUE);
