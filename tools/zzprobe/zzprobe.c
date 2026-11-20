@@ -4,8 +4,10 @@
  *
  *   zzprobe [JPEG file] [PNG file] [WEBP file] [MP3 file] [QUICK] [NOBENCH]
  *
- * Probes, without the ZZ9000 SDK's headers (they are GPL-3; nothing of
- * theirs is compiled in):
+ *   zzprobe PATHS [DT] [PICS file file ...]   (the picture paths alone: paths.c)
+ *
+ * Probes (the ZZ9000 SDK's headers, MIT, only for the picture paths'
+ * calls to zz9k.library):
  *   - the machine, and the ZZ9000 board (Zorro II or III) by its IDs;
  *   - zz9k.library, mpega.library (the SDK's, decoding on the card, or the
  *     68k one), MHI drivers, AHI and the ZZ9000AX driver, AmiSSL (and the
@@ -59,7 +61,7 @@
 #include "stackcall.h"
 
 /* used: nothing reads it, but Version finds it in the file (unused, it was dropped) */
-static const char __attribute__((used)) version[] = "$VER: zzprobe 1.15 (17.11.2026)";
+static const char __attribute__((used)) version[] = "$VER: zzprobe 1.16 (19.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -1127,6 +1129,9 @@ static void bench_pictures(const char *jpeg, const char *png, const char *webp)
     time_parts();
 }
 
+/* ------------------------------------------------------------ bench: picture paths */
+#include "paths.c"
+
 /* ------------------------------------------------------------ bench: MP3 by mpega.library */
 /* mpega.library has no C header here; its structures and calls as in
  * Ambiance's stream.c, from its documentation. */
@@ -1263,8 +1268,8 @@ static void summary(void)
 /* ------------------------------------------------------------ main */
 static ULONG run(void *unused)
 {
-    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S";
-    LONG args[6] = { 0, 0, 0, 0, 0, 0 };
+    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S,PATHS/S,PICS/M,DT/S";
+    LONG args[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     struct RDArgs *ra = ReadArgs((CONST_STRPTR)tmpl, args, NULL);
     const char *jpeg = "PROGDIR:Bench/test.jpg", *png = "PROGDIR:Bench/test.png",
                *webp = "PROGDIR:Bench/test.webp", *mp3 = "PROGDIR:Bench/test.mp3";
@@ -1315,10 +1320,23 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.14, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.16, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
+        if (ra && args[6]) {            /* PATHS: the picture paths alone */
+            const char *const *pics = (const char *const *)args[7];
+            int n = 0;
+            if (pics)
+                while (pics[n])
+                    n++;
+            pb_zzdt = args[8] != 0;
+            if (n)
+                bench_paths(pics, n);
+            else
+                bench_paths(&jpeg, 1);
+            goto done;
+        }
         software();
         datatypes(jpeg, png, webp);
         if (exists("C:zz9k-info"))
@@ -1331,6 +1349,7 @@ static ULONG run(void *unused)
             bench_mp3(mp3);
         }
         summary();
+    done:
         me->pr_WindowPtr = oldwin;
     }
     if (out && (fh = Open((CONST_STRPTR)"PROGDIR:zzprobe.txt", MODE_READWRITE))) {

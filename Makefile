@@ -370,10 +370,11 @@ rtgbench: build/rtgbench
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast Ambiance's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
-build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h
+build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h \
+               $(ZZ9K_SDK_STAMP)
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign -s -o $@ $< src/jdec/jdec.c -lamiga
+	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
 test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
