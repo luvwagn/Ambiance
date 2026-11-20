@@ -18,6 +18,7 @@
 #include "lhost.h"
 #include "lkit.h"
 #include "app.h"
+#include "classic/classic.h"
 #include "details.h"
 #include "lvhost.h"
 #include "copper.h"
@@ -51,127 +52,55 @@ struct Library *AslBase;            /* opened for Settings > Music folders' requ
 struct GfxBase *GfxBase;
 struct Library *DiskfontBase, *DataTypesBase, *LowLevelBase, *LayersBase;
 
-/* ------------------------------------------------------------ modules */
-enum { MOD_GAMES, MOD_MODS, MOD_DEMOS, MOD_VIDEOS, MOD_PICTURES, MOD_MUSIC,
-       MOD_RADIO, MOD_SETTINGS, MOD_ABOUT,
-       MOD_NOWPLAYING,      /* the menu's first entry while something plays (or is paused) */
-       MOD_COUNT };
-static const char *mod_names[MOD_COUNT] = {
+const char *mod_names[MOD_COUNT] = {
     N_("Games"), N_("Mods"), N_("Demos"), N_("Videos"), N_("Pictures"), N_("Music"), N_("Radio"),
     N_("Settings"), N_("About"), N_("Now playing")
 };
-/* A section's menu icon (the icons are the sections', in their order;
- * Now playing has Music's) */
-static int mod_icon(int m)
-{
-    return m == MOD_NOWPLAYING ? ICON_MUSIC : m;
-}
 
-enum { FOCUS_MENU, FOCUS_CONTENT,
-       FOCUS_PREVIEW };     /* the preview pane's fact sheet: Up/Down scroll it */
-#define MAXDEPTH 12
-#define FACT_LINES 24
 
 static void ch_free(struct Chunks *ch);
 
-/* The view driven (Classic's, or a layout's): what the program asks to be
- * shown again. The program's own state (where the list is scrolled, the
- * details asked for) is done before, in the program's functions of the
- * same names (draw_pane...); the view only shows, or notes for its next
- * frame. Classic's: the cl_ functions; a layout's: the ly_ ones. */
-struct UiView {
-    void (*header)(void);
-    void (*menu)(void);
-    void (*menu_row)(int i);
-    void (*footer)(void);
-    void (*title)(struct Page *p);
-    void (*title_count)(struct Page *p);
-    void (*list_row)(struct Page *p, LONG idx, WORD col);
-    void (*gutter_planes)(struct Page *p, UBYTE planes);
-    void (*list_rows)(struct Page *p);
-    void (*list_move)(struct Page *p, LONG old_sel, LONG old_top);
-    void (*text_picture)(struct Page *p);
-    void (*pane)(BOOL full);
-    void (*np)(BOOL full);
-    void (*all)(void);
-    void (*pane_preview)(BOOL first);
-    /* program logic's calls into the view (step 3a): each turn of the main
-     * loop (the spinners), a busy wait's spinner, the header's readouts,
-     * the big letter, Now playing's parts. The classic draws them; a
-     * layout is told (a note) or has nothing to do. */
-    void (*tick)(void);
-    void (*busy)(ULONG now);
-    void (*header_np)(BOOL quiet, BOOL on);
-    void (*clock)(void);
-    void (*status)(const char *show);       /* NULL: the Debug line off */
-    void (*letter_show)(struct Page *p);
-    void (*letter_relabel)(char c);
-    void (*letter_hide)(struct Page *p);
-    void (*np_station)(void);
-    void (*eq_tick)(void);
-    void (*np_visual)(void);
-    void (*np_art)(void);
-};
-static const struct UiView classic_ui, layout_ui;
-static const struct UiView *ui = &classic_ui;
+const struct UiView *ui = &classic_ui;
 
 #define SLIDE_MS  5000          /* slideshow: each picture this long */
 #define BAR_MS    3000          /* the viewer's info bar, after a change */
 
-static struct Gfx g;
+struct Gfx g;
 static struct Caps caps;
 static struct Ags ags;
-static struct IgCat igcat;      /* iGame's list (igame.c): igcat.n 0 when none */
+struct IgCat igcat;      /* iGame's list (igame.c): igcat.n 0 when none */
 static char ig_setting[256];     /* Ambiance/iGame as read: "" unset, "none", or a drawer */
 static BOOL ig_off(void);
-static struct Page pages[MAXDEPTH];
-static int depth;
-static int menu[MOD_COUNT], nmenu, menu_sel;
-static int focus = FOCUS_MENU;
+struct Page pages[MAXDEPTH];
+int depth;
+int menu[MOD_COUNT], nmenu, menu_sel;
+int focus = FOCUS_MENU;
 static BOOL plex_shortcut_fix(struct Page *p);  /* a list's Now playing row, as playback is */
 static BOOL vw_active;          /* the viewer is up: its list's rows keep their places */
 static BOOL running = TRUE, quit_armed;
-static char msg[160];
-static char fact_buf[FACT_LINES][96];
+char msg[160];
+char fact_buf[FACT_LINES][96];
 static LONG last_minute = -1;
 static int screen_mode = SM_AUTO;   /* as chosen in Settings, may be SM_AUTO */
 static int ui_style = STYLE_PIXEL;  /* Settings > Style (smooth only on RTG screens) */
-static BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
-static struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
-static struct ItemList pv_list;     /* its wrapped lines */
-static BOOL mouse_mode;             /* the mouse was used last */
+BOOL pane_pending;           /* menu moved, its section not built yet (see pane_settle) */
+struct TextBox pv_tb;        /* the preview pane's fact sheet (scrolls) */
+struct ItemList pv_list;     /* its wrapped lines */
+BOOL mouse_mode;             /* the mouse was used last */
 /* Mouse mode: the row under the pointer, highlighted softly (PEN_RULE;
  * the selection stays where it is until a click). Kept as a place on
  * screen, so a list scrolling under a still pointer stays right. */
-static WORD hover_row = -1;         /* content list: screen row, -1 none */
+WORD hover_row = -1;         /* content list: screen row, -1 none */
 static BOOL hover_strip;            /* the pointer in the menu's column (menu_layout) */
-static WORD hover_menu = -1;        /* main menu: entry, -1 none */
+WORD hover_menu = -1;        /* main menu: entry, -1 none */
 /* The keyboard or joystick moving: the pointer hides (an empty sprite)
  * and so does its highlight, until the mouse moves. */
 static struct Window *ptr_hidden;   /* the window whose pointer is hidden, or NULL */
 static UWORD *ptr_blank;            /* the empty pointer (chip RAM) */
 
-/* Design units (a 256-line layout) to pixels on this screen. */
-#define U(v) GU(&g, v)
-/* A lowres-narrow display, for the layout's choices (the letter column,
- * the gutter, the screenshot, the cycle gadget's label). A screen tests its
- * pixels, as ever: lowres is the one under 640 (a laced screen in a large
- * font is as few design units across, but its pixels are fine ones). A
- * window, whose pixels no longer say how much fits, tests design units:
- * 512 across at any text size, 480 at the least. */
-#define DW ((WORD)((LONG)g.w * 256 / g.k))
-#define NARROW (g.wb ? DW < 400 : g.w < 640)
 
 /* Big-letter overlay on long content lists while they glide (see below). */
-static struct {
-    BOOL  on;
-    struct Page *page;
-    char  letter;
-    const struct BigLetter *bl;     /* gfx.c owns it */
-    WORD  x, y;
-    WORD  strip_x;          /* left edge of the letter's strip; rows stop before it */
-    UWORD linger;           /* timer ticks left before hiding, 0 = not counting */
-} ov;
+struct Overlay ov;
 static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
@@ -197,7 +126,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
 typedef char act_mode0_clear[ACT_COUNT <= ACT_MODE0 && ACT_MODE0 + SM_COUNT <= 255 ? 1 : -1];
 
 /* ------------------------------------------------------------ pages */
-static struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
+struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
 
 static void nav_moved(void);
 
@@ -224,9 +153,9 @@ static struct Page *page_push(UBYTE type, const char *title)
     return p;
 }
 
-static WORD textbox_w(void);
-static BOOL has_aside(struct Page *p);
-static WORD aside_x(void);
+WORD textbox_w(void);
+BOOL has_aside(struct Page *p);
+WORD aside_x(void);
 
 /* A text page's picture (Page.pic), made for this screen: as wide as the
  * text and no taller than the box, in pens of its own (gfx_thumb_bitmap). */
@@ -268,8 +197,8 @@ static void page_picture(struct Page *p, WORD w, WORD h)
 
 static void radio_page_gone(struct Page *p);
 static void style_preview_free(void);
-static BOOL has_aside(struct Page *p);
-static WORD aside_x(void);
+BOOL has_aside(struct Page *p);
+WORD aside_x(void);
 static void radio_stop(void);
 
 static void plex_pos_save(const struct Page *p);
@@ -358,7 +287,7 @@ struct Chunks {
     ULONG t0;                       /* when it was opened (log) */
 };
 
-static void set_msg(const char *m);
+void set_msg(const char *m);
 
 /* ---- the view driven: the classic one or a layout (lv.on), one at a time,
  * through ui (struct UiView). The program does what it keeps (where a list
@@ -383,45 +312,24 @@ static void lv_note_what(ULONG what);       /* LC_*: what it was (LC_SELECT, LC_
 static void lv_who_report(void);
 
 static BOOL np_full;                /* Flow on the whole screen: the page draws nothing */
-static WORD list_visible(void);
-static void draw_list_rows(struct Page *p);
-static void draw_title(struct Page *p);
-static void draw_title_count(struct Page *p);
+WORD list_visible(void);
+void draw_list_rows(struct Page *p);
+void draw_title(struct Page *p);
+void draw_title_count(struct Page *p);
 
-/* ---- the spinner: eight round dots on a circle, the bright one going
- * round with a fading tail, and "Loading..." under it. In the details pane
- * while its picture comes, and over the content pane for any navigation
- * that keeps you waiting (busy_*), after SPIN_AFTER ms. */
-#define SPIN_AFTER 200
-#define SPIN_FRAME  80              /* ms a step: a turn in 0.64 s */
 
-static BOOL has_aside(struct Page *p);
-static WORD aside_x(void);
-static void draw_pane(BOOL full);
+BOOL has_aside(struct Page *p);
+WORD aside_x(void);
+void draw_pane(BOOL full);
 
-/* The spinner's size around its centre: dots ring (rx, ry) and dot radius. */
-static void spin_metrics(WORD *ring, WORD *ringy, WORD *r, WORD *ry)
-{
-    WORD sy = gfx_mode_tall(g.mode) ? 2 : 1;    /* tall pixels: half as many down */
-    *r = U(3);
-    *ring = U(12);
-    if (*r < 2)
-        *r = 2;
-    if (sy == 2 && *r < 4) {
-        *r = 4;                                 /* rows enough to look round, */
-        *ring = *ring * 4 / 3;                  /* and room for them on the ring */
-    }
-    *ry = (*r + sy - 1) / sy;
-    *ringy = *ring / sy;
-}
 
 /* Each step is drawn off screen, then copied up in one go with the beam
  * (gfx_blit_beam): cleared and drawn dot by dot on the screen, it was
  * seen half done, a flicker. */
-static struct BitMap *spin_bm;
-static WORD spin_bw, spin_bh;
+struct BitMap *spin_bm;
+WORD spin_bw, spin_bh;
 
-static void spin_free(void)
+void spin_free(void)
 {
     if (spin_bm) {
         WaitBlit();
@@ -430,98 +338,22 @@ static void spin_free(void)
     }
 }
 
-/* The step the spinner is at, since: one every SPIN_FRAME ms, so it
- * turns evenly however often it is asked. */
-static UWORD spin_phase(ULONG since)
-{
-    return (UWORD)(((time_ms() - since) / SPIN_FRAME) & 7);
-}
 
-/* The spinner centred on (cx, cy) at a step; first: with its label (the
- * caller has cleared the area). */
-static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
-{
-    static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
-                                   PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
-    /* the dots' places on a circle of radius 12 design pixels */
-    static const BYTE dx[8] = { 0, 8, 12, 8, 0, -8, -12, -8 };
-    static const BYTE dy[8] = { -12, -8, 0, 8, 12, 8, 0, -8 };
-    WORD ring, ringy, r, ry, i, sy = gfx_mode_tall(g.mode) ? 2 : 1;
-    spin_metrics(&ring, &ringy, &r, &ry);
-    if (first) {
-        WORD tw = gfx_textlen(&g, _("Loading..."), TS_SMALL);
-        gfx_text(&g, cx - tw / 2, cy + ringy + ry + U(6), _("Loading..."), PEN_DIM, PEN_BG, 0,
-                 TS_SMALL);
-    }
-    {
-        WORD x0 = cx - ring - r, y0 = cy - ringy - ry;
-        WORD w = 2 * (ring + r) + 1, h = 2 * (ringy + ry) + 1;
-        struct RastPort orp, *screen_rp = g.rp;
-        if (!spin_bm || spin_bw != w || spin_bh != h) {
-            spin_free();
-            spin_bm = AllocBitMap(w, h, g.depth, BMF_CLEAR, g.rp->BitMap);
-            spin_bw = w;
-            spin_bh = h;
-        }
-        if (spin_bm) {
-            InitRastPort(&orp);
-            orp.BitMap = spin_bm;
-            g.rp = &orp;                    /* drawn off screen */
-            cx -= x0;
-            cy -= y0;
-        }
-        gfx_fill(&g, cx - ring - r, cy - ringy - ry, cx + ring + r, cy + ringy + ry, PEN_BG);
-        for (i = 0; i < 8; i++)
-            gfx_dot(&g, cx + U(dx[i]) * ring / U(12), cy + U(dy[i]) * ring / U(12) / sy, r,
-                    pens[(phase - i) & 7], PEN_BG);   /* the tail behind */
-        g.rp = screen_rp;
-        if (spin_bm)
-            gfx_blit_beam(&g, spin_bm, x0, y0, w, h);
-    }
-}
 
-/* A Radio list waiting for radio-browser.info: the spinner turns in the
- * middle of its (empty) pane until the answer comes; Back gives it up.
- * rsp.on: drawn since the pane was (draw_pane starts it anew). */
-static struct { BOOL on; ULONG since; UWORD phase; WORD cx, cy; } rsp;
 
-static BOOL radio_waiting(void)
+BOOL radio_waiting(void)
 {
     struct Page *p = cur();
     return p && p->type == PT_LIST && p->radio && p->net_seq && !pane_pending &&
            focus != FOCUS_MENU;
 }
 
-static void radio_spin(void)
-{
-    if (!radio_waiting() || !g.win) {
-        rsp.on = FALSE;
-        return;
-    }
-    if (!rsp.on) {
-        WORD ring, ringy, r, ry;
-        spin_metrics(&ring, &ringy, &r, &ry);
-        rsp.cx = g.pane_x + g.pane_w / 2;
-        if (has_aside(cur()))               /* the list's half: never over the pane's picture */
-            rsp.cx = g.pane_x + (aside_x() - g.pane_x) / 2;
-        rsp.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
-        rsp.on = TRUE;
-        rsp.since = time_ms();
-        rsp.phase = 0;
-        spin_draw(rsp.cx, rsp.cy, 0, TRUE);    /* the pane under it is clear */
-        return;
-    }
-    if (spin_phase(rsp.since) != rsp.phase) {
-        rsp.phase = spin_phase(rsp.since);
-        spin_draw(rsp.cx, rsp.cy, rsp.phase, FALSE);
-    }
-}
 
 /* Navigation that may keep you waiting: busy_begin ... busy_end around it,
  * waits inside it through ui_wait. After SPIN_AFTER ms the spinner turns
  * in the middle of the content pane; at the end the pane is drawn again
  * where it was (redraw), unless what comes next covers the screen. */
-static struct { int depth; BOOL on; ULONG since, last; UWORD phase; WORD cx, cy; } busy;
+struct Busy busy;
 static BOOL ui_aborted;             /* a wait in busy gave way to input */
 static ULONG ui_joy0;               /* the joystick when the busy began */
 
@@ -550,7 +382,6 @@ static void ly_busy(ULONG now)
     lv_busy_frame();
 }
 
-static void cl_busy(ULONG now);
 static void busy_tick(void)
 {
     if (!busy.depth || !g.win)
@@ -558,40 +389,10 @@ static void busy_tick(void)
     ui->busy(time_ms());
 }
 
-/* the classic's: in the middle of the list's half */
-static void cl_busy(ULONG now)
-{
-    struct Page *p = cur();
-    if (!busy.on) {
-        WORD ring, ringy, r, ry, x1;
-        if ((LONG)(now - busy.since) < SPIN_AFTER)
-            return;
-        spin_metrics(&ring, &ringy, &r, &ry);
-        x1 = p && has_aside(p) ? aside_x() - U(6) : g.pane_x + g.pane_w;
-        busy.cx = (g.pane_x + x1) / 2;
-        busy.cy = (g.list_top + g.footer_y - 2) / 2 - U(8);
-        {
-            WORD tw = gfx_textlen(&g, _("Loading..."), TS_SMALL), hw = ring + r + U(4);
-            if (tw / 2 + U(4) > hw)
-                hw = tw / 2 + U(4);
-            gfx_fill(&g, busy.cx - hw, busy.cy - ringy - ry - U(4), busy.cx + hw,
-                     busy.cy + ringy + ry + U(8) + g.font_h, PEN_BG);
-        }
-        busy.on = TRUE;
-        busy.phase = 0;
-        busy.last = now;
-        spin_draw(busy.cx, busy.cy, 0, TRUE);
-        return;
-    }
-    if (spin_phase(busy.last) != busy.phase) {
-        busy.phase = spin_phase(busy.last);
-        spin_draw(busy.cx, busy.cy, busy.phase, FALSE);
-    }
-}
 
 /* The Plex details on screen under the cover (their entry's name and
  * cover), or "" when that part of the pane was cleared. */
-static char plex_shown[260];
+char plex_shown[260];
 
 static BOOL busy_was_shown;         /* the last busy_end took a spinner off the screen */
 
@@ -791,7 +592,7 @@ static LONG pics_read_ui(const char *dir, struct ItemList *out)
 
 /* Letters still to be read the first time: the count is still growing
  * (only when there was no index cache for it). */
-static BOOL ch_reading(const struct Page *p)
+BOOL ch_reading(const struct Page *p)
 {
     return p->ch && !p->ch->cut && p->ch->next < p->ch->n;
 }
@@ -1313,7 +1114,7 @@ static void text_line(struct Page *p, const char *s)
 }
 
 /* Text box width: the pane less room for the scroll bar (gap + bar + gap). */
-static WORD textbox_w(void)
+WORD textbox_w(void)
 {
     /* wrapped to the pane beside the menu's labels: it fits either way */
     WORD w = gfx_pane_w_wide(&g);
@@ -1355,7 +1156,7 @@ static void wrap_line(struct ItemList *l, const char *line, BOOL *more)
     *more = TRUE;
 }
 
-static void wrap_into(struct ItemList *l, const char *s, WORD maxw)
+void wrap_into(struct ItemList *l, const char *s, WORD maxw)
 {
     char line[256], word[96];
     LONG last = 0;                      /* where line's last word begins */
@@ -2273,7 +2074,7 @@ static BOOL anim_classic;
 static BOOL video_cpu;
 static BOOL video_no_overlay;
 
-static void set_msg(const char *m);
+void set_msg(const char *m);
 
 /* Smooth chosen, the screen could show it, but its file would not load
  * (missing, or from another Ambiance version): say so, rather than
@@ -2388,10 +2189,9 @@ static void load_visual(void)
     }
 }
 
-static void np_draw(BOOL full);
-static BOOL np_on(void);
+void np_draw(BOOL full);
+BOOL np_on(void);
 
-static void np_visual_changed(void);
 
 static void next_visual(void)
 {
@@ -3379,8 +3179,8 @@ static void ig_said(void)
     set_msg(m);
 }
 
-static void draw_footer(void);
-static void draw_list_rows(struct Page *p);
+void draw_footer(void);
+void draw_list_rows(struct Page *p);
 
 /* A setting changed: the Settings pages open built again (the selections
  * kept): Settings itself says what is chosen in its rows. */
@@ -3425,8 +3225,8 @@ static void settings_rebuild(void)
     }
 }
 
-static void draw_list_row(struct Page *p, LONG idx, WORD col);
-static WORD mark_column(const struct Page *p);
+void draw_list_row(struct Page *p, LONG idx, WORD col);
+WORD mark_column(const struct Page *p);
 
 /* What a row shows (its words, value, mark, greying), to tell a row that
  * changed from one that did not. */
@@ -3645,7 +3445,7 @@ static void np_mark_lists(BOOL redraw);
 static BOOL np_local_art;           /* the music file playing has a picture */
 static BOOL np_art_want;            /* the Plex track playing has a cover */
 /* A track playing from a file on this Amiga (Music folders), not a server. */
-static BOOL np_local(void)
+BOOL np_local(void)
 {
     return mp_is_track() && mp_path()[0] && amb_strnicmp(mp_path(), "http", 4);
 }
@@ -3655,41 +3455,30 @@ static char plex_now[300];      /* the Plex track playing: its file's key (lists
 static char plex_now_in[2][48]; /* ...its album's and artist's keys (their rows marked too) */
 /* ...and its file as stored, for Now playing: the rate asked of the server
  * when an album's answer did not have it (plex_dj) */
-static struct { char codec[16]; ULONG kbps, ch, rate; BOOL conv; } plex_orig;
+struct PlexOrig plex_orig;
 static struct NetJob *plex_dj;
-static struct NetJob *plex_sj;      /* an artist's or album's summary asked for (plex_sum_ask) */
+struct NetJob *plex_sj;      /* an artist's or album's summary asked for (plex_sum_ask) */
 static void plex_sum_came(struct NetJob *j);
 static void plex_ask_rate(const char *key);
-/* Pictures of the server's (an album's cover): asked for (art_fetch), kept
- * in RAM: (plex_art), then made for their place by the loader */
-/* AHEAD: a Plex list's neighbours' pictures, fetched while the selection
- * rests, so moving to one shows it at once (plex_ahead) */
-enum { ART_NP, ART_PV, ART_VW, ART_VWNEXT, ART_AHEAD, ART_LAYOUT,
-       ART_KINDS };   /* VW: the viewer's photo, and its next; LAYOUT: a layout's covers */
 static BOOL lv_art_came;            /* a layout's cover came from the server: drawn again */
-static struct NetJob *art_nj[ART_KINDS];
+struct NetJob *art_nj[ART_KINDS];
 static char art_want[ART_KINDS][120];
 static ULONG art_asked[ART_KINDS];     /* time_ms each was asked for (log) */
 static ULONG art_lv_wanted;
 static ULONG lvt_worst;                 /* the longest lv_frame since the load line (log) */             /* time_ms a layout last wanted a server's picture */
-static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
+BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file);
 static void art_ready(int kind, const char *file);
-static struct LJob *np_aj;          /* Now playing's cover, made for its square */
-static BOOL np_art_drawn;
-static void np_art_draw(void);
+struct LJob *np_aj;          /* Now playing's cover, made for its square */
+BOOL np_art_drawn;
 static void np_art_free(void);
 static void np_art_start(const struct Item *it);
 static char np_album_thumb[160];    /* the playlist's album's cover (its row's), for a track without one */
 static const struct Item *lv_opened_from(const struct Page *p);
 static const char *lv_plex_field(const struct Item *it, int n, char *out, LONG max);
-static void np_art_load(const char *file);
-static WORD plex_art_side(void);
-static void plex_pv_draw(struct Page *p, BOOL was_shown);
-static BOOL plex_text_kept(struct Page *p);
-static BOOL plex_keeps(struct Page *p, LONG idx);
-static BOOL plex_movable(struct Page *p, LONG idx);
-static BOOL plex_take(struct Page *p);
-static WORD plex_art_side(void);
+void np_art_load(const char *file);
+WORD plex_art_side(void);
+BOOL plex_movable(struct Page *p, LONG idx);
+WORD plex_art_side(void);
 static void plex_refetch(struct Page *p, const char *key);
 static void np_soft_redraw(void);
 static void np_seek_track(ULONG ms, ULONG delay);
@@ -3827,12 +3616,12 @@ static LONG vids_root_fill(struct Page *p, const char **src)
 }
 
 /* A DVD's row: a disc in a drive, or a DVD's image (a .iso, pics.c) */
-static BOOL is_dvd_row(const struct Item *it)
+BOOL is_dvd_row(const struct Item *it)
 {
     return it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "DVD");
 }
 
-static BOOL is_dvd_image(const struct Item *it)
+BOOL is_dvd_image(const struct Item *it)
 {
     LONG n = (LONG)strlen(it->path);
     return is_dvd_row(it) && n > 4 && !amb_stricmp(it->path + n - 4, ".iso");
@@ -4085,7 +3874,7 @@ static BOOL push_dir_quiet(struct Item *it)
     return TRUE;                    /* restore_nav reads on to the remembered entry */
 }
 
-static WORD list_visible(void);
+WORD list_visible(void);
 
 static void restore_nav(int mod)
 {
@@ -4302,7 +4091,7 @@ static void build_root(int mod)
 }
 
 /* ------------------------------------------------------------ drawing */
-static WORD list_visible(void)
+WORD list_visible(void)
 {
     return (g.footer_y - 2 - g.list_top) / g.list_row_h;
 }
@@ -4310,14 +4099,14 @@ static WORD list_visible(void)
 /* Days and months, short (the clock, file dates), translated where used. */
 static const char *const day_abbr[] = { N_("Sun"), N_("Mon"), N_("Tue"), N_("Wed"), N_("Thu"),
                                         N_("Fri"), N_("Sat") };
-static const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"),
+const char *const mon_abbr[] = { N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"),
                                         N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"), N_("Oct"),
                                         N_("Nov"), N_("Dec") };
 
 /* Dates the Japanese and Korean way round (year, month, day), the month
  * and day as numbers, each followed by its word: Japanese tsuki and hi,
  * Korean wol and il (cjk.c's three bytes each). */
-static BOOL date_ymd(void)
+BOOL date_ymd(void)
 {
     const char *iso = amb_lang_iso();
     return !strcmp(iso, "ja") || !strcmp(iso, "ko");
@@ -4333,7 +4122,7 @@ static const char *date_day_word(void)
     return !strcmp(amb_lang_iso(), "ko") ? "\230\275\274 " : "\214\267\245";
 }
 
-static void clock_text(char *buf)
+void clock_text(char *buf)
 {
     static const UBYTE md[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     struct DateStamp ds;
@@ -4372,7 +4161,7 @@ static void clock_text(char *buf)
 }
 
 /* Left edge of the clock's part of the header (room for the widest date). */
-static WORD clock_left(void)
+WORD clock_left(void)
 {
     /* the widest day and month in this language */
     WORD dw = 0, mw = 0, w;
@@ -4393,55 +4182,19 @@ static WORD clock_left(void)
 
 /* While music plays, its dancing bars in the header, left of the clock:
  * a sign from anywhere that something is playing. */
-static BOOL hdr_np_on;
+BOOL hdr_np_on;
 
 /* A layout on: the time, the clock or the Debug line would have been
  * drawn (the classic's own, not drawn): the layout's LC_PLAYING */
-static BOOL lv_playing_hit;
+BOOL lv_playing_hit;
 
-static void hdr_np_draw(BOOL quiet)
-{
-    BOOL on = mp_loaded();
-    if (!on && !hdr_np_on)
-        return;
-    ui->header_np(quiet, on);               /* (a layout: from its model, told) */
-    hdr_np_on = on;
-}
 
-static void cl_header_np(BOOL quiet, BOOL on)
-{
-    WORD n = g.mark_px, x = clock_left() - n - U(2), y = (U(24) - n) / 2;
-    BOOL was = FALSE;
-    if (quiet)
-        was = gfx_quiet_begin();
-    if (on)
-        gfx_mark(&g, MARK_PLAYING, x, y, PEN_TEXT, PEN_BAR);
-    else
-        gfx_fill(&g, x, y, x + n - 1, y + n - 1, PEN_BAR);
-    if (quiet)
-        gfx_quiet_end(&g, was, x, y, x + n - 1, y + n - 1);
-}
 
-static void draw_clock(void)
+void draw_clock(void)
 {
     ui->clock();
 }
 
-static void cl_clock(void)
-{
-    char buf[40];
-    WORD tw;
-    if (gfx_off) {
-        lv_playing_hit = TRUE;
-        return;
-    }
-    clock_text(buf);
-    gfx_fill(&g, clock_left(), 0, g.w - 1, U(24) - 1, PEN_BAR);
-    if (!buf[0])
-        return;
-    tw = gfx_textlen(&g, buf, TS_SMALL | TS_TABULAR);   /* (its left edge still as the minutes go) */
-    gfx_text(&g, g.w - U(8) - tw, (U(24) - g.font_h) / 2, buf, PEN_TEXT, PEN_BAR, 0, TS_SMALL | TS_TABULAR);
-}
 
 /* Debug readout between the logo and the clock: the longest form that fits. */
 static LONG cpu_load = -1, app_load = -1;
@@ -4647,7 +4400,7 @@ static void scr_watch_now(const char *why)
 
 /* What the readout shows now, so a second that changes nothing redraws
  * nothing. Cleared when the header is drawn afresh. */
-static char status_shown[96];
+char status_shown[96];
 static ULONG fps_shown, fps_flips0;     /* flips in the last second; the count then */
 
 /* v in at least w digit cells (FIG_SPACEs before it: TS_TABULAR), then
@@ -4664,7 +4417,7 @@ static void fig_num(char *out, LONG v, int w, const char *unit)
 }
 
 static char lv_debug[112];          /* a layout's copy of the Debug line ("" off) */
-static void draw_status(void)
+void draw_status(void)
 {
     WORD x0 = U(6) + g.logo_w + U(10);
     WORD x1 = clock_left() - g.mark_px - U(8);  /* the playing bars' place kept */
@@ -4710,26 +4463,6 @@ static void draw_status(void)
     ui->status(show);                       /* (a layout: its own line, from lv_debug) */
 }
 
-static void cl_status(const char *show)
-{
-    WORD x0 = U(6) + g.logo_w + U(10);
-    WORD x1 = clock_left() - g.mark_px - U(8);
-    if (!show) {
-        if (status_shown[0])
-            gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
-        status_shown[0] = 0;
-        return;
-    }
-    if (status_shown[0] && strcmp(show, status_shown) == 0)
-        return;                             /* unchanged: leave it be */
-    if (gfx_off) {
-        lv_playing_hit = TRUE;
-        return;
-    }
-    gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
-    gfx_text(&g, x0, (U(24) - g.font_h) / 2, show, PEN_ACCENT, PEN_BAR, x1 - x0, TS_SMALL | TS_TABULAR);
-    amb_strlcpy(status_shown, show, sizeof(status_shown));
-}
 
 static void set_debug(BOOL on)
 {
@@ -4744,56 +4477,12 @@ static void set_debug(BOOL on)
     cpu_load = app_load = -1;
 }
 
-static void draw_header(void);  /* the program's: state, then the view (ui) */
-static void cl_draw_header(void)
-{
-    gfx_fill(&g, 0, 0, g.w - 1, U(24) - 1, PEN_BAR);
-    gfx_fill(&g, 0, U(24), g.w - 1, U(25) - 1, PEN_RULE);
-    status_shown[0] = 0;                    /* the readout was just cleared */
-    gfx_logo(&g, U(6), (U(24) - g.logo_h) / 2);
-    hdr_np_on = FALSE;                      /* the header was just cleared */
-    hdr_np_draw(FALSE);
-    draw_status();
-    draw_clock();
-}
 
-static void draw_menu_row(int i);  /* the program's: state, then the view (ui) */
-static void cl_draw_menu_row(int i)
-{
-    WORD y = g.top + i * g.row_h;
-    BOOL sel = i == menu_sel;
-    UBYTE bg = sel ? (focus == FOCUS_MENU ? PEN_HL : PEN_SELDIM) :
-               i == hover_menu && mouse_mode ? PEN_RULE : PEN_BG;
-    UBYTE fg = PEN_WHITE;       /* the menu stands out like the list headers */
-    /* the menu's pens are all below 8 and its planes 3+ are clear, so on
-     * native screens only planes 0-2 are written: 3/8 of the work */
-    if (g.planar)
-        SetWriteMask(g.rp, 0x07);
-    gfx_fill(&g, 0, y, g.menu_w - 1, y + g.row_h - 1, bg);
-    gfx_icon(&g, mod_icon(menu[i]), U(3), y + (g.row_h - g.icon_px) / 2, fg, bg);
-    if (g.menu_w > U(30))                   /* not icons alone (menu_layout) */
-        gfx_text(&g, U(23), y + (g.row_h - g.font_h) / 2, _(mod_names[menu[i]]), fg, bg,
-                 g.menu_w - U(24), TS_BOLD);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-}
 
-static ULONG menu_draw_ms = 1000;           /* the last whole menu's drawing (menu_slide) */
+ULONG menu_draw_ms = 1000;           /* the last whole menu's drawing (menu_slide) */
 
-static void draw_menu(void);  /* the program's: state, then the view (ui) */
-static void cl_draw_menu(void)
-{
-    ULONG t0 = time_ms();
-    int i;
-    gfx_fill(&g, 0, U(25), g.menu_w + U(2), g.footer_y - 2, PEN_BG);
-    for (i = 0; i < nmenu; i++)
-        draw_menu_row(i);
-    gfx_fill(&g, g.menu_w + U(2), U(25), g.menu_w + U(3) - 1, g.footer_y - 2, PEN_RULE);
-    if (t0)
-        menu_draw_ms = time_ms() - t0;
-}
 
-static BOOL has_aside(struct Page *p);
+BOOL has_aside(struct Page *p);
 
 /* A section that is only a note (none now: Videos plays animations):
  * nothing in it to go to, so the menu keeps the focus. */
@@ -4802,7 +4491,7 @@ static BOOL section_inert(void)
     return FALSE;
 }
 
-static const char *hint_text(void)
+const char *hint_text(void)
 {
     struct Page *p = cur();
     /* the long hints when the widest of them fits */
@@ -4868,300 +4557,52 @@ static const char *hint_text(void)
     return hi ? _("Up/Down  scroll      Left/Esc  back") : _("Up/Down scroll  Esc back");
 }
 
-static const char *hint_shown;      /* the hint in the footer now */
+const char *hint_shown;      /* the hint in the footer now */
 
 /* In a window, used by the mouse, the footer's tips go once seen
  * (FOOT_SEEN_MS), the content taking its room; keys bring them back. A
  * message meanwhile shows in a footer drawn over the content's foot, and
  * the content is drawn again when it goes. */
 #define FOOT_SEEN_MS 4000
-static BOOL foot_hidden, foot_over, foot_redraw;
-static ULONG foot_since;            /* shown (with the mouse in use) since */
+BOOL foot_hidden, foot_over, foot_redraw;
+ULONG foot_since;            /* shown (with the mouse in use) since */
 
-static void draw_footer(void);  /* the program's: state, then the view (ui) */
-static void cl_draw_footer(void)
-{
-    WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
-    hint_shown = msg[0] ? NULL : hint_text();
-    if (foot_hidden && !msg[0]) {
-        if (foot_over) {                    /* a message's footer gone: what it covered */
-            foot_over = FALSE;
-            foot_redraw = TRUE;
-        }
-        return;
-    }
-    if (foot_hidden)
-        foot_over = TRUE;
-    /* Redrawn as the hints follow the selection: on a native screen planes
-     * 0-3 only (its pens are below 16, and nothing else draws in its
-     * place, cleared on all planes with the whole screen), half an AGA
-     * screen's. (Over the content, a window's: all of them.) */
-    if (g.planar && !foot_hidden)
-        SetWriteMask(g.rp, 0x0F);
-    gfx_fill(&g, 0, fy - U(1), g.w - 1, fy - 1, PEN_RULE);
-    gfx_fill(&g, 0, fy, g.w - 1, g.h - 1, PEN_BAR);
-    gfx_text(&g, U(6), fy + (g.h - fy - g.font_h) / 2, msg[0] ? msg : hint_text(),
-             msg[0] ? PEN_ACCENT : PEN_DIM, PEN_BAR, g.w - U(12) - gfx_window_grip(&g), TS_SMALL);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-}
 
 /* Sizing the window by its grip: pressed there, the pointer followed (by
  * the screen's position, the window moving under it) until let go. */
-static void set_msg(const char *m)
+void set_msg(const char *m)
 {
     amb_strlcpy(msg, m ? m : "", sizeof(msg));
     if (!np_full)
         draw_footer();                      /* (Flow on the whole screen: shown as it goes) */
 }
 
-/* The list's "n/total" at the right of the title row. Only this changes
- * while a list scrolls, so it is redrawn alone: drawn with its background
- * in one pass (JAM2) over the old digits, never cleared first, and only
- * the sliver a shorter number leaves behind is cleared. Clearing the whole
- * title row every step flickered on 8-plane screens. */
-static WORD count_left = -1;    /* left edge of the count drawn last */
 
 
-static void draw_title(struct Page *p);
+void draw_title(struct Page *p);
 
-/* The title band (U(26) to the rule at U(41)) is never cleared whole
- * before it is drawn: the text goes on opaque, over what was there, and
- * only the rows above and below it and the ends of its line are filled.
- * Drawn again unchanged, nothing on screen changes; a clear and then the
- * text flashed the title on every redraw (a section built after the menu
- * settled drew it twice). Text runs from x0 to x1 (exclusive); the line's
- * ends either side are filled. */
-static void title_band_rest(WORD x0, WORD x1, WORD right_from)
-{
-    WORD ty0 = U(28), ty1 = U(28) + g.font_h - 1, l = g.pane_x - U(2);
-    if (ty0 > U(26))
-        gfx_fill(&g, l, U(26), g.w - 1, ty0 - 1, PEN_BG);
-    if (ty1 + 1 <= U(41) - 1)
-        gfx_fill(&g, l, ty1 + 1, g.w - 1, U(41) - 1, PEN_BG);
-    if (x0 > l)
-        gfx_fill(&g, l, ty0, x0 - 1, ty1, PEN_BG);
-    if (x1 < right_from)
-        gfx_fill(&g, x1, ty0, right_from - 1, ty1, PEN_BG);
-}
 
-static void draw_title_count(struct Page *p);  /* the program's: state, then the view (ui) */
-static void cl_draw_title_count(struct Page *p)
-{
-    char count[24];
-    if (!msg[0] && hint_shown && hint_text() != hint_shown)
-        draw_footer();              /* the hints follow the selection */
-    if (p->title_wide && !ch_reading(p)) {
-        draw_title(p);              /* fully read: the breadcrumb gets its room back */
-        return;
-    }
-    WORD right = g.pane_x + g.pane_w, tw, x;
-    if (p->type != PT_LIST || !p->list.count)
-        return;
-    sprintf(count, ch_reading(p) ? "%ld/%ld..." : "%ld/%ld", (long)p->sel + 1,
-            (long)p->list.count);   /* "...": still counting (no index yet) */
-    tw = gfx_textlen(&g, count, TS_SMALL);
-    x = right - tw;
-    if (count_left >= 0 && count_left < x)
-        gfx_fill(&g, count_left, U(28), x - 1, U(28) + g.font_h - 1, PEN_BG);
-    if (g.planar)
-        SetWriteMask(g.rp, 0x07);           /* pens 0 and 4 only */
-    gfx_text(&g, x, U(28), count, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-    count_left = x;
-}
 
 /* The breadcrumb: each level's title, the earlier ones links back to
  * their level (a click, or hover in mouse mode, as list rows). A long
  * one loses its first levels to "...". crumb[]: where each is drawn. */
-static struct { WORD x0, x1; } crumb[MAXDEPTH];
-static int crumb_first;             /* the first level shown (before it: "...") */
-static int crumb_hover = -1;        /* the level under the pointer, -1 none */
+struct CrumbAt crumb[MAXDEPTH];
+int crumb_first;             /* the first level shown (before it: "...") */
+int crumb_hover = -1;        /* the level under the pointer, -1 none */
 
-/* Where the music playing was started: its section (MOD_*), the rows
- * chosen down to its list, and that list's title. Now playing opened from
- * another section is a page on its own there, "Now playing" and where it
- * is from, a link that goes there; Esc goes back where you were. */
-#define CRUMB_SRC MAXDEPTH          /* crumb_at/crumb_hover: that link */
-static int np_src = -1;
+int np_src = -1;
 static char np_trail[MAXDEPTH][64];
 static int np_trail_n;
-static char np_src_list[64];
-static WORD np_src_x0 = -1, np_src_x1 = -1;
+char np_src_list[64];
+WORD np_src_x0 = -1, np_src_x1 = -1;
 static void np_goto_source(void);
 
-static BOOL np_away(void)
+BOOL np_away(void)
 {
     return np_src >= 0 && menu_sel >= 0 && menu_sel < nmenu && np_src != menu[menu_sel] &&
            mp_loaded();
 }
 
-static void draw_title(struct Page *p);  /* the program's: state, then the view (ui) */
-static void cl_draw_title(struct Page *p)
-{
-    char widest[24];
-    int i;
-    WORD cw = 0, maxw, x, sep, dots;
-    sep = gfx_textlen(&g, " > ", TS_BOLD);
-    if (p->type == PT_LIST && p->list.count) {
-        /* room for the widest count this list can show, so a growing
-         * number never runs into the breadcrumb */
-        p->title_wide = ch_reading(p);
-        if (p->title_wide)
-            strcpy(widest, "88888/88888...");   /* still growing */
-        else
-            sprintf(widest, "%ld/%ld", (long)p->list.count, (long)p->list.count);
-        cw = gfx_textlen(&g, widest, TS_SMALL);
-    }
-    count_left = -1;
-    maxw = g.pane_w - cw - U(8);
-    dots = gfx_textlen(&g, "...", TS_BOLD) + sep;
-    /* the levels that fit, the last ones first */
-    {
-        WORD total = 0;
-        crumb_first = depth - 1;
-        total = gfx_textlen(&g, pages[depth - 1].title, TS_BOLD);
-        while (crumb_first > 0) {
-            WORD w = gfx_textlen(&g, pages[crumb_first - 1].title, TS_BOLD) + sep;
-            if (total + w + (crumb_first > 1 ? dots : 0) > maxw)
-                break;
-            total += w;
-            crumb_first--;
-        }
-    }
-    x = g.pane_x;
-    np_src_x0 = np_src_x1 = -1;
-    if (p->type == PT_PLAYER && np_away()) {
-        /* Now playing from another section: itself, then where it is from
-         * (a link there), not this section's path, which it is not part of */
-        char from[140];
-        BOOL hov = crumb_hover == CRUMB_SRC && mouse_mode;
-        WORD w, room;
-        for (i = 0; i < depth; i++)
-            crumb[i].x0 = crumb[i].x1 = -1;
-        crumb_first = 0;
-        w = gfx_textlen(&g, p->title, TS_BOLD);
-        gfx_text(&g, x, U(28), p->title, PEN_ACCENT, PEN_BG, maxw, TS_BOLD | TS_OPAQUE);
-        x += w < maxw ? w : maxw;
-        amb_strlcpy(from, _(mod_names[np_src]), sizeof(from));
-        if (np_src_list[0] && strcmp(np_src_list, from)) {
-            amb_strlcat(from, " > ", sizeof(from));
-            amb_strlcat(from, np_src_list, sizeof(from));
-        }
-        room = g.pane_x + maxw - x - sep;
-        if (room > 0) {
-            gfx_text(&g, x, U(28), "  \267  ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
-            x += gfx_textlen(&g, "  \267  ", TS_BOLD);
-            room = g.pane_x + maxw - x;
-            w = gfx_textlen(&g, from, TS_BOLD);
-            if (w > room)
-                w = room;
-            if (w > 0) {
-                if (hov)
-                    gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-                gfx_text(&g, x, U(28), from, PEN_TEXT, hov ? PEN_RULE : PEN_BG, room,
-                         TS_BOLD | TS_OPAQUE);
-                np_src_x0 = x;
-                np_src_x1 = x + w - 1;
-                x += w;
-            }
-        }
-        title_band_rest(g.pane_x, x, g.w);
-        draw_title_count(p);
-        gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
-        return;
-    }
-    if (p->type == PT_PLAYER && depth > 2) {
-        /* Now playing: its section, "..." (the list it came from: what is
-         * playing is on the page below, not spelt out twice), and itself */
-        static const char *const dots_s = "...";
-        int lv[3];
-        const char *txt[3];
-        int k;
-        lv[0] = 0;
-        txt[0] = pages[0].title;
-        lv[1] = depth - 2;
-        txt[1] = dots_s;
-        lv[2] = depth - 1;
-        txt[2] = pages[depth - 1].title;
-        for (i = 0; i < depth; i++)
-            crumb[i].x0 = crumb[i].x1 = -1;
-        for (k = 0; k < 3; k++) {
-            BOOL last = k == 2, hov = !last && lv[k] == crumb_hover && mouse_mode;
-            WORD w = gfx_textlen(&g, txt[k], TS_BOLD), room = g.pane_x + maxw - x;
-            if (room <= 0)
-                break;
-            if (w > room)
-                w = room;
-            if (hov)
-                gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-            gfx_text(&g, x, U(28), txt[k], last ? PEN_ACCENT : PEN_TEXT, hov ? PEN_RULE : PEN_BG,
-                     room, TS_BOLD | TS_OPAQUE);     /* (the last: Now playing, in its orange) */
-            crumb[lv[k]].x0 = x;
-            crumb[lv[k]].x1 = x + w - 1;
-            x += w;
-            if (!last) {
-                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
-                x += sep;
-            }
-        }
-        crumb_first = 0;
-        title_band_rest(g.pane_x, x, g.w);
-        draw_title_count(p);
-        gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
-        return;
-    }
-    if (crumb_first > 0) {
-        gfx_text(&g, x, U(28), "...", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
-        x += gfx_textlen(&g, "...", TS_BOLD);
-        gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
-        x += sep;
-    }
-    for (i = 0; i < depth; i++) {
-        crumb[i].x0 = crumb[i].x1 = -1;
-        if (i < crumb_first)
-            continue;
-        {
-            BOOL last = i == depth - 1, hov = !last && i == crumb_hover && mouse_mode;
-            WORD w = gfx_textlen(&g, pages[i].title, TS_BOLD), room = g.pane_x + maxw - x;
-            UBYTE bg = hov ? PEN_RULE : PEN_BG;
-            if (room <= 0)
-                break;
-            if (w > room)
-                w = room;
-            if (hov)
-                gfx_fill(&g, x - U(2), U(27), x + w + U(1), U(28) + g.font_h, PEN_RULE);
-            gfx_text(&g, x, U(28), pages[i].title,
-                     pages[i].type == PT_PLAYER ? PEN_ACCENT : last ? PEN_WHITE : PEN_TEXT, bg, room,
-                     TS_BOLD | TS_OPAQUE);          /* (Now playing: in its orange) */
-            crumb[i].x0 = x;
-            crumb[i].x1 = x + w - 1;
-            x += w;
-            if (!last) {
-                gfx_text(&g, x, U(28), " > ", PEN_DIM, PEN_BG, 0, TS_BOLD | TS_OPAQUE);
-                x += sep;
-            }
-        }
-    }
-    {
-        /* the rest of the band; the count (draw_title_count) keeps its place */
-        WORD right = g.w;
-        if (p->type == PT_LIST && p->list.count) {
-            char count[24];
-            sprintf(count, ch_reading(p) ? "%ld/%ld..." : "%ld/%ld", (long)p->sel + 1,
-                    (long)p->list.count);
-            right = g.pane_x + g.pane_w - gfx_textlen(&g, count, TS_SMALL);
-            count_left = right;
-            if (g.pane_x + g.pane_w < g.w)
-                gfx_fill(&g, g.pane_x + g.pane_w, U(28), g.w - 1, U(28) + g.font_h - 1,
-                         PEN_BG);
-        }
-        title_band_rest(g.pane_x, x, right);
-    }
-    draw_title_count(p);
-    gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
-}
 
 /* The breadcrumb level at (x, y), -1 if none (the current level is not a link). */
 static int crumb_at(WORD x, WORD y)
@@ -5177,7 +4618,7 @@ static int crumb_at(WORD x, WORD y)
     return -1;
 }
 
-static void pane_settle(void);
+void pane_settle(void);
 
 /* Back to level i of the breadcrumb (0: the section's top). */
 static void crumb_go(int level)
@@ -5204,7 +4645,7 @@ static void crumb_go(int level)
  * label. The column is the same width whatever the markers' state, so
  * ticking a box or picking a radio button never moves the text; lists
  * without markers have no column. */
-static WORD mark_column(const struct Page *p)
+WORD mark_column(const struct Page *p)
 {
     const struct ItemList *l = &p->list;
     LONG i;
@@ -5217,7 +4658,7 @@ static WORD mark_column(const struct Page *p)
 }
 
 /* Keep the selection inside the visible rows; TRUE if the list scrolled. */
-static BOOL list_follow(struct Page *p)
+BOOL list_follow(struct Page *p)
 {
     WORD vis = list_visible();
     LONG top = p->top;
@@ -5357,16 +4798,16 @@ static BOOL ov_eligible(const struct Page *p)
  * long list glides, the same space shows the index letter; rows never
  * touch it, so neither ever covers a title. Lowres screens keep the
  * full-width list, with the letter over its right side. */
-static WORD aside_w = -1;           /* -1: work out (after a screen opens) */
+WORD aside_w = -1;           /* -1: work out (after a screen opens) */
 
-static WORD aside_width(void)
+WORD aside_width(void)
 {
     if (aside_w < 0)
         aside_w = !NARROW ? g.pane_w / 2 : 0;
     return aside_w;
 }
 
-static BOOL has_aside(struct Page *p)
+BOOL has_aside(struct Page *p)
 {
     if (!p || p->type != PT_LIST)
         return FALSE;
@@ -5402,43 +4843,32 @@ static BOOL has_aside(struct Page *p)
 }
 
 /* Left edge of the letter column. */
-static WORD aside_x(void)
+WORD aside_x(void)
 {
     return g.pane_x + g.pane_w - aside_width();
 }
 
-/* ---- a long list's column at its right edge: a scroll bar, always, from
- * the moment the list is shown and whatever moves it (keyboard, joystick,
- * pad or mouse): its thumb says how long the list is and where in it this
- * is. The mouse can click above or below the thumb to page, or drag it;
- * while the mouse is in use the thumb is bright, at rest it is dimmer. */
-/* the column: gap, bar, gap; on a lowres screen (320 wide, its pixels
- * twice as wide as hires ones) narrower, 1 + 3 + 1, for the rows' room */
-#define GUT_LO  NARROW
-#define GUT_W   (GUT_LO ? 5 : U(9))
-#define GUT_GAP (GUT_LO ? 1 : U(2))
-#define GUT_BAR (GUT_LO ? 3 : U(5))
-static struct { BOOL drag; WORD off; } gut;
-static BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
+struct Gutter gut;
+BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
 static ULONG mouse_last;            /* when the mouse last moved or clicked */
 #define BAR_HIDE 1500               /* ms the mouse rests before the bar and the
                                      * pointer go */
 
-static WORD list_visible(void);
+WORD list_visible(void);
 
-static BOOL list_overflows(struct Page *p)
+BOOL list_overflows(struct Page *p)
 {
     return p && p->type == PT_LIST && p->list.count > list_visible();
 }
 
 /* The right edge of a list's area, its column included. */
-static WORD list_edge(struct Page *p)
+WORD list_edge(struct Page *p)
 {
     return has_aside(p) ? aside_x() - U(6) - 1 : g.w - 1;
 }
 
 /* Last x a list row may paint. */
-static WORD list_xr(struct Page *p)
+WORD list_xr(struct Page *p)
 {
     WORD e = list_edge(p);
     if (list_overflows(p))
@@ -5449,45 +4879,10 @@ static WORD list_xr(struct Page *p)
 /* ---- the preview of the selected game, drawn once the selection settles:
  * Classic's pane, the view of the entry details service (details.c) */
 static ULONG dc_time(void);
-static BOOL hold_active(void);
+BOOL hold_active(void);
 
-/* "12-Mar-1994" from a DateStamp's days ("1994-03-12" in Japanese). */
-static void date_text(LONG days, char *out)
-{
-    static const UBYTE mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    LONG y = 1978, m = 0;
-    for (;;) {
-        LONG yd = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
-        if (days < yd)
-            break;
-        days -= yd;
-        y++;
-    }
-    for (m = 0; m < 11; m++) {
-        LONG md = mdays[m] + (m == 1 && y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
-        if (days < md)
-            break;
-        days -= md;
-    }
-    if (date_ymd())
-        sprintf(out, "%ld-%02ld-%02ld", (long)y, (long)m + 1, (long)days + 1);
-    else
-        sprintf(out, "%ld-%s-%ld", (long)days + 1, _(mon_abbr[m]), (long)y);
-}
 
-static void pv_line(const char *s, WORD w)
-{
-    if (!s[0])
-        list_add(&pv_list, "", "", "", IT_TEXT);
-    else
-        wrap_into(&pv_list, s, w);
-}
 
-#define PV_SPIN_AFTER SPIN_AFTER    /* ms without its picture before the spinner */
-static WORD pv_box_y, pv_box_h;     /* where the picture goes */
-static BOOL pv_spin_on;
-static UWORD pv_spin_phase;
-static ULONG pv_spin_since;         /* when it began turning */
 
 /* Every job back and freed: before the screen closes or a game runs. */
 static void pv_flush(void)
@@ -5507,13 +4902,13 @@ static void pv_let_go(void)
 
 /* Colours a picture may have (0: as many as the screen gives): fewer for a
  * Plex cover on a slower Amiga, less to reduce and to set. */
-static int pv_colour_cap;
-static int plex_colours(void)
+int pv_colour_cap;
+int plex_colours(void)
 {
     return plex_tier() == 0 ? 48 : plex_tier() == 1 ? 64 : 0;
 }
 
-static BOOL pv_pictures(void)
+BOOL pv_pictures(void)
 {
     return g.pens_shared || g.truecolor;
 }
@@ -5521,285 +4916,26 @@ static BOOL pv_pictures(void)
 /* A Pictures row's lines: what it is and, for a folder, what Fire and
  * Right do there (the picture's size once it is drawn). */
 
-static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
-{
-    char line[120];
-    pv_line(it->label, w);
-    if (is_dvd_image(it)) {
-        /* a DVD's image: what its first sectors say, and its size (some
-         * 12 KB read once an image, the last 4 kept) */
-        static struct { char path[256]; LONG kind; ULONG sectors; } ic[4];
-        static int ic_next;
-        int q;
-        for (q = 0; q < 4; q++)
-            if (ic[q].path[0] && !strcmp(ic[q].path, it->path))
-                break;
-        if (q == 4) {
-            char err[160];
-            q = ic_next;
-            ic_next = (ic_next + 1) & 3;
-            amb_strlcpy(ic[q].path, it->path, sizeof(ic[q].path));
-            if ((ic[q].kind = dvdd_image_kind(it->path, &ic[q].sectors, err, sizeof(err))) < 0)
-                amb_log("dvd", err);
-        }
-        pv_line(ic[q].kind == DVDI_VIDEO ? _("A DVD-Video disc image")
-                : ic[q].kind == DVDI_UDF ? _("A disc image (UDF)")
-                : ic[q].kind >= 0 ? _("Not a DVD-Video disc image")
-                : _("This image could not be read (the log says why)"), w);
-        if (ic[q].sectors >= 524288)
-            sprintf(line, "%lu.%02lu GB", (unsigned long)(ic[q].sectors / 524288),
-                    (unsigned long)(ic[q].sectors % 524288 * 100 / 524288));
-        else
-            sprintf(line, "%lu MB", (unsigned long)(ic[q].sectors / 512));
-        if (ic[q].sectors)
-            pv_line(line, w);
-        if (ic[q].kind == DVDI_VIDEO || ic[q].kind == DVDI_UDF) {
-            if (!dvd_lib_there())
-                pv_line(_("DVDs need dvdnav.library (in Ambiance's Libs)"), w);
-            else {
-                pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
-                pv_line(_("N and P: the next and previous chapter or programme"), w);
-                pv_line(_("Decoded by the CPU: its menus, M to bring them back"), w);
-            }
-        }
-        if (j && j->days > 0) {             /* (j->size: -1 for 2 GB and more) */
-            char date[32];
-            pv_line("", w);
-            date_text(j->days, date);
-            pv_line(date, w);
-        }
-        return;
-    }
-    if (is_dvd_row(it)) {
-        /* a DVD: what Fire does (the disc itself read only then) */
-        pv_line(_("A DVD-Video disc"), w);
-        if (!dvd_lib_there()) {
-            pv_line(_("DVDs need dvdnav.library (in Ambiance's Libs)"), w);
-            return;
-        }
-        pv_line(_("Fire plays its film, or its programmes one after another, on the ZZ9000"), w);
-        pv_line(_("N and P: the next and previous chapter or programme"), w);
-        pv_line(_("Decoded by the CPU: its menus, M to bring them back"), w);
-        if (j && j->size >= 0) {
-            char date[32];
-            pv_line("", w);
-            date_text(j->days, date);
-            pv_line(date, w);
-        }
-        return;
-    }
-    if (it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "MPEG")) {
-        /* an MPEG file: what its headers say (64 KB of its start and end
-         * read once a file, the last 8 kept: a list moved through is not
-         * read again) */
-        static struct { char path[256]; struct VProbe vp; BOOL ok; } pc[8];
-        static int pc_next;
-        int q;
-        BOOL ok;
-        struct VProbe vp;
-        for (q = 0; q < 8; q++)
-            if (pc[q].path[0] && !strcmp(pc[q].path, it->path))
-                break;
-        if (q == 8) {
-            q = pc_next;
-            pc_next = (pc_next + 1) & 7;
-            amb_strlcpy(pc[q].path, it->path, sizeof(pc[q].path));
-            pc[q].ok = vprobe(it->path, &pc[q].vp, 64UL * 1024);
-        }
-        ok = pc[q].ok;
-        vp = pc[q].vp;
-        if (ok) {
-            char t[16];
-            sprintf(line, "%s, %ld x %ld", vprobe_kind(&vp), (long)vp.w, (long)vp.h);
-            if (vp.fps_milli)
-                sprintf(line + strlen(line), ", %ld.%02ld fps", (long)(vp.fps_milli / 1000),
-                        (long)(vp.fps_milli % 1000 / 10));
-            pv_line(line, w);
-            if (vp.ms) {
-                amb_time_text(t, vp.ms);
-                pv_line(t, w);
-            }
-            pv_line(vp.mp2 || vp.ac3 ? _("With sound") : _("No sound"), w);
-            if (vp.ts)
-                pv_line(_("A transport stream"), w);
-            else if (!vp.ps)
-                pv_line(_("A bare video stream"), w);
-        } else if (vp.h264) {
-            sprintf(line, _("%s video: the ZZ9000 plays MPEG-1 and MPEG-2"), vprobe_kind(&vp));
-            pv_line(line, w);
-        } else {
-            pv_line(_("Not an MPEG video Ambiance can read"), w);
-        }
-    }
-    if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-        char date[32];
-        if (drawn) {
-            pic_describe(&g.pic, line, sizeof(line));
-            pv_line(line, w);
-        }
-        if (it->kind == IT_ANIM && drawn && g.pic.frames) {
-            ULONG ds = (g.pic.ms + 50) / 100;
-            sprintf(line, _("%ld frames, %ld.%ld s"), (long)g.pic.frames, (long)(ds / 10),
-                    (long)(ds % 10));
-            pv_line(line, w);
-        }
-        sprintf(line, "%s", drawn && g.pic.fmt[0] ? g.pic.fmt : it->sortkey);
-        if (j->size >= 0) {
-            char kb[24];
-            sprintf(kb, "  -  %ldKB", (long)((j->size + 1023) / 1024));
-            amb_strlcat(line, kb, sizeof(line));
-        }
-        pv_line(line, w);
-        pv_line("", w);
-        {
-            const char *e = strrchr(it->path, '/');
-            if (!e)
-                e = strchr(it->path, ':');
-            amb_strlcpy(line, it->path, e ? (LONG)(e - it->path) + 1 + (*e == ':') : (LONG)sizeof(line));
-            if (line[0])
-                pv_line(line, w);
-        }
-        if (j->size >= 0) {
-            date_text(j->days, date);
-            sprintf(line, _("Changed %s"), date);
-            pv_line(line, w);
-        }
-    } else if (cur() && cur()->pics == 2) {     /* Videos: its animations, not its pictures */
-        LONG na = 0;
-        const char *c = it->sortkey;
-        while (c && *c >= '0' && *c <= '9')
-            na = na * 10 + (*c++ - '0');    /* its count, as its row's tag */
-        line[0] = 0;
-        if (j->nd > 0)
-            sprintf(line, j->nd == 1 ? _("%ld folder") : _("%ld folders"), (long)j->nd);
-        if (na > 0) {
-            if (line[0])
-                strcat(line, ", ");
-            sprintf(line + strlen(line), na == 1 ? _("%ld animation") : _("%ld animations"), (long)na);
-        }
-        if (line[0])
-            pv_line(line, w);
-        pv_line("", w);
-        pv_line(_("Fire or Right: open"), w);
-    } else if ((it->flags & ITEM_DISABLED) || (j->np <= 0 && j->nd == 0)) {
-        pv_line(_("No pictures in this folder."), w);
-    } else if (j->nd == 0) {
-        sprintf(line, j->np == 1 ? _("%ld picture") : _("%ld pictures"), (long)j->np);
-        pv_line(line, w);
-        pv_line("", w);
-        pv_line(_("Fire: slideshow"), w);
-        pv_line(_("Right: open the folder"), w);
-    } else {
-        sprintf(line, j->nd == 1 ? _("%ld folder") : _("%ld folders"), (long)j->nd);
-        if (j->np > 0) {
-            strcat(line, ", ");
-            sprintf(line + strlen(line), j->np == 1 ? _("%ld picture") : _("%ld pictures"),
-                    (long)j->np);
-        }
-        pv_line(line, w);
-        pv_line("", w);
-        pv_line(_("Fire or Right: open"), w);
-    }
-}
 
-/* The spinner in the picture's place (its place cleared the first time). */
-static void pv_spinner(BOOL first)
-{
-    WORD x0 = aside_x(), w = aside_width() - U(4);
-    if (first)
-        gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-    spin_draw(x0 + w / 2, pv_box_y + pv_box_h / 2 - U(8), pv_spin_phase, first);
-}
 
-/* The timer: turn the spinner while the picture is not there yet. */
-static void pv_spin_tick(void)
-{
-    struct Page *p = cur();
-    if (!det.shown || !p || p != det.page || p->sel != det.sel || !has_aside(p) || det.pic_shown ||
-        !det.has_box || hold_active() || ov.on || pane_pending)
-        return;
-    if (!pv_spin_on) {
-        if ((LONG)(time_ms() - det.since) < PV_SPIN_AFTER)
-            return;
-        pv_spin_on = TRUE;
-        pv_spin_phase = 0;
-        pv_spin_since = time_ms();
-        pv_spinner(TRUE);
-        return;
-    }
-    if (spin_phase(pv_spin_since) != pv_spin_phase) {
-        pv_spin_phase = spin_phase(pv_spin_since);
-        pv_spinner(FALSE);
-    }
-}
 
 static BOOL pv_spinning(void)
 {
     return det.shown && det.has_box && !det.pic_shown && (det.sj || det.tj);
 }
 
-/* The text, under the picture's place (or at the top with no picture). */
-static void pv_draw_text(struct Page *p)
-{
-    WORD x0, w, max_y;
-    x0 = aside_x();
-    w = aside_width() - U(4);
-    max_y = g.footer_y - 2;
-    WORD y = det.has_box ? pv_box_y + pv_box_h + U(6) : g.list_top;
-    struct LJob *j = det.tj;
-    LONG i;
-    tb_close(&pv_tb);
-    gfx_fill_bg(&g, x0, det.has_box ? pv_box_y + pv_box_h : g.list_top, g.w - 1, max_y);
-    if (pv_list.pool)
-        list_free(&pv_list);
-    if (!list_init(&pv_list))
-        return;
-    if (p->pics)
-        pv_pics_lines(&p->list.items[p->sel], j, det.pic_shown && g.pic_w, w - U(9));
-    else if (p->igame) {
-        /* iGame's entry: its fields (igame.c), in place of a fact sheet */
-        LONG n = ig_facts(ig_lookup(&igcat, p->list.items[p->sel].path), fact_buf, FACT_LINES);
-        for (i = 0; i < n; i++)
-            pv_line(fact_buf[i], w - U(9));
-    } else
-        /* the whole fact sheet, in a text box with a scroll bar when it is
-         * longer than the room left (wheel or bar; Up/Down stay with the list) */
-        for (i = 0; i < j->nlines; i++)
-            pv_line(j->lines[i], w - U(9));
-    if (!p->pics && j->text) {
-        /* the album's review or the artist's biography (.nfo), a paragraph
-         * a line, a blank line between */
-        char *s = j->text, *e, c;
-        while (*s) {
-            for (e = s; *e && *e != '\n'; e++)
-                ;
-            c = *e;
-            *e = 0;                         /* the paragraph alone, then put back */
-            pv_line("", w - U(9));
-            pv_line(s, w - U(9));
-            *e = c;
-            s = c ? e + 1 : e;
-        }
-    }
-    if (pv_list.count && max_y - y >= g.font_h) {
-        pv_tb.pos = pv_tb.target = 0;
-        pv_tb.focused = focus == FOCUS_PREVIEW;
-        if (tb_open(&g, &pv_tb, x0, y, w - U(9), max_y - y + 1, &pv_list, TRUE))
-            tb_draw(&g, &pv_tb);
-    }
-}
 
 /* What the picture place shows now: the file (a folder's: its first
  * picture) and the place, so an entry that shows the same picture in the
  * same place (a folder, then its first picture inside it; and back) keeps
  * it on screen: not cleared, read or drawn again. */
-static struct { char key[300]; WORD x, y, w, h; } pv_onscr;
+struct OnScreen pv_onscr;
 
 /* The picture on screen is file's: moved into the box x, y, w x h (centred
  * across, at its top), as it would be drawn there, and counted as there.
  * A cover going from an album's pane to Now playing and back: copied
  * across, not asked for, decoded and remapped again. */
-static BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
+BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
 {
     if (!file[0] || !g.pic_w || strcmp(file, pv_onscr.key) || g.pic_w > w || g.pic_h > h)
         return FALSE;
@@ -5814,144 +4950,21 @@ static BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
     return TRUE;
 }
 
-/* x0,y0..x1,y1 cleared but for the picture on screen. */
-static void fill_around_pic(WORD x0, WORD y0, WORD x1, WORD y1)
-{
-    WORD px1 = g.pic_x + g.pic_w - 1, py1 = g.pic_y + g.pic_h - 1;
-    if (g.pic_y > y0)
-        gfx_fill_bg(&g, x0, y0, x1, g.pic_y - 1);
-    if (g.pic_x > x0)
-        gfx_fill_bg(&g, x0, g.pic_y, g.pic_x - 1, py1);
-    if (px1 < x1)
-        gfx_fill_bg(&g, px1 + 1, g.pic_y, x1, py1);
-    if (py1 < y1)
-        gfx_fill_bg(&g, x0, py1 + 1, x1, y1);
-}
 
-static char np_art_file[120];       /* the cover Now playing shows (or will) */
+char np_art_file[120];       /* the cover Now playing shows (or will) */
 static char np_art_key[170];        /* ...a Plex track's: its thumb as a layout's picture key
                                      * ("\x04" thumb), fetched at the size the layout shows it */
 
-/* The picture file a preview of path (shot: SHOT_*) shows, into key ("":
- * not known yet, a folder not scanned). */
-static void pv_shot_key(UBYTE shot, const char *path, char *key)
-{
-    key[0] = 0;
-    if (shot == SHOT_FILE) {
-        amb_strlcpy(key, path, 300);
-    } else if (shot == SHOT_AGS) {
-        key[0] = 1;                         /* an entry's screenshot: never a file's key */
-        amb_strlcpy(key + 1, path, 299);
-    } else if (shot == SHOT_FOLDER || shot == SHOT_SONG) {
-        det_first(shot, path, key);
-    }
-}
 
-/* Entry idx of p would show the picture on screen now, where it is. */
-static BOOL pv_keeps(struct Page *p, LONG idx)
-{
-    char path[300], key[300];
-    UBYTE shot;
-    WORD max_y = g.footer_y - 2;
-    if (p->plex)
-        return has_aside(p) && plex_keeps(p, idx);
-    if (!g.pic_w || !pv_onscr.key[0] || !has_aside(p) || !pv_pictures() ||
-        !det_kind(p, idx, path, sizeof(path), &shot) || !shot)
-        return FALSE;
-    pv_shot_key(shot, path, key);
-    return key[0] && !strcmp(key, pv_onscr.key) && pv_onscr.x == aside_x() &&
-           pv_onscr.y == g.list_top && pv_onscr.w == aside_width() - U(4) &&
-           pv_onscr.h == (max_y - g.list_top) / 2 && g.pic_x >= aside_x() &&
-           g.pic_y >= g.list_top && g.pic_y + g.pic_h <= g.list_top + pv_onscr.h;
-}
 
-/* The picture in its place, the rest of the place cleared. */
-static void pv_draw_picture(void)
-{
-    WORD x0, w, dh = 0;
-    struct LJob *j = det.sj;
-    BOOL taken = FALSE, ok = FALSE;
-    x0 = aside_x();
-    w = aside_width() - U(4);
-    if (j && j->thumb) {
-        char m[400];
-        ULONG t0 = time_ms(), now;
-        char by[64];
-        ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
-        now = time_ms();
-        /* who read it: Ambiance's own readers (ILBM, JPEG by jdec), or a
-         * datatype (its class named), and the format */
-        if (!strcmp(j->info.cls, "jdec"))
-            strcpy(by, "JPEG read by Ambiance (jdec)");
-        else if (j->own)
-            sprintf(by, "%.8s read by Ambiance", j->info.fmt[0] ? j->info.fmt : "ILBM");
-        else if (j->info.cls[0])
-            sprintf(by, "decoded by %.40s.datatype", j->info.cls);
-        else
-            strcpy(by, "decoded by a datatype");
-        /* where the time went: waiting for the loader, reading, making,
-         * drawing; and in all since the selection came to rest */
-        sprintf(m, "%.60s, %lu x %lu, depth %lu: %s%lu ms to start, %s in %lu ms, "
-                   "made %lu x %lu, %lu colours, in %lu ms, drawn in %lu ms "
-                   "(colours %lu, pixels %lu, copy up %lu); "
-                   "shown %lu ms after the move%s%s%s",
-                FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
-                (unsigned long)j->info.depth, j->urgent ? "" : "read ahead, ",
-                (unsigned long)(j->t_begun - j->t_sent), by,
-                (unsigned long)j->ms_decode, (unsigned long)j->thumb->w,
-                (unsigned long)j->thumb->h, (unsigned long)j->thumb->ncol,
-                (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
-                (unsigned long)gfx_draw_ms[0], (unsigned long)gfx_draw_ms[1],
-                (unsigned long)gfx_draw_ms[2],
-                (unsigned long)(now - det.since), "", "", "");
-        amb_log("preview", m);
-        if (j->ms_parts[0] + j->ms_parts[1] + j->ms_parts[2] + j->ms_parts[3]) {
-            sprintf(m, "made in: reading the picture %lu ms, counting its colours %lu, "
-                       "choosing %lu, mapping %lu",
-                    (unsigned long)j->ms_parts[0], (unsigned long)j->ms_parts[1],
-                    (unsigned long)j->ms_parts[2], (unsigned long)j->ms_parts[3]);
-            amb_log("preview", m);
-        }
-    } else if (j && j->obj) {
-        ok = gfx_picture_obj(&g, j->obj, j->remapped, x0, pv_box_y, w, pv_box_h, TRUE, &dh, &taken);
-    }
-    pv_onscr.key[0] = 0;
-    if (ok && j) {
-        if (j->mode == SHOT_FOLDER || j->mode == SHOT_SONG)
-            amb_strlcpy(pv_onscr.key, j->first, sizeof(pv_onscr.key));
-        else
-            pv_shot_key(j->mode, j->path, pv_onscr.key);
-        pv_onscr.x = x0;
-        pv_onscr.y = pv_box_y;
-        pv_onscr.w = w;
-        pv_onscr.h = pv_box_h;
-    }
-    if (ok) {
-        gfx_fill_bg(&g, x0, pv_box_y, g.pic_x - 1, pv_box_y + dh - 1);
-        gfx_fill_bg(&g, g.pic_x + g.pic_w, pv_box_y, g.w - 1, pv_box_y + dh - 1);
-        if (dh < pv_box_h)
-            gfx_fill_bg(&g, x0, pv_box_y + dh, g.w - 1, pv_box_y + pv_box_h - 1);
-    } else {
-        gfx_picture_clear(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-        gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
-    }
-    if (taken) {
-        j->obj = NULL;                      /* the screen has it now (its pens) */
-        j->spent = TRUE;
-    }
-}
 
 /* ---- Classic's pane as the details' view (details.h): what each step
  * of reading an entry's details draws */
-static BOOL cv_has_pane(struct Page *p)
+BOOL cv_has_pane(struct Page *p)
 {
     return has_aside(p);
 }
-static BOOL cv_shots(void)
-{
-    return pv_pictures() && !gfx_off;
-}
-static void cv_job(struct LJob *j)
+void cv_job(struct LJob *j)
 {
     j->scr = g.scr;
     j->remap = g.truecolor;
@@ -5966,72 +4979,6 @@ static void cv_job(struct LJob *j)
             j->maxcol = pv_colour_cap;
     }
 }
-static void cv_clear_picture(struct Page *p)
-{
-    (void)p;
-    gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-}
-static void cv_clear_all(struct Page *p)
-{
-    (void)p;
-    tb_close(&pv_tb);
-    gfx_fill_bg(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-}
-static void cv_start(struct Page *p)
-{
-    (void)p;
-    pv_spin_on = FALSE;
-    tb_close(&pv_tb);
-    pv_box_y = g.list_top;
-    pv_box_h = (g.footer_y - 2 - g.list_top) / 2;
-}
-static void cv_empty(struct Page *p)
-{
-    WORD x0 = aside_x(), max_y = g.footer_y - 2;
-    (void)p;
-    tb_close(&pv_tb);
-    gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-    gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
-}
-static void cv_begin(struct Page *p, BOOL keep)
-{
-    WORD x0 = aside_x(), max_y = g.footer_y - 2;
-    (void)p;
-    if (keep) {
-        if (!det.tj->done)                  /* the picture stays; the text place cleared */
-            gfx_fill_bg(&g, x0, pv_box_y + pv_box_h, g.w - 1, max_y);
-    } else if (!det.tj->done || (det.sj && !det.sj->done) || !det.sj) {
-        /* not all here: nothing of the entry before stays up meanwhile */
-        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, det.tj->done ? g.list_top + pv_box_h - 1 : max_y);
-    }
-}
-static void cv_no_picture(struct Page *p)
-{
-    (void)p;
-    gfx_picture_clear(&g, aside_x(), g.list_top, g.w - 1, g.footer_y - 2);
-}
-static void cv_text(struct Page *p)
-{
-    pv_draw_text(p);
-}
-static void cv_picture(struct Page *p)
-{
-    pv_draw_picture();
-    pv_spin_on = FALSE;
-    if (p->pics)
-        pv_draw_text(p);                    /* now with the picture's size */
-}
-static void cv_tick(struct Page *p)
-{
-    (void)p;
-    pv_spin_tick();                         /* waited 0.25 s already: the spinner now */
-}
-static void style_preview(struct Page *p);
-static const struct DetView classic_view = {
-    cv_has_pane, cv_start, cv_shots, cv_job, pv_keeps, cv_clear_picture, cv_clear_all, style_preview,
-    cv_begin, plex_pv_draw, cv_empty, cv_no_picture, cv_text, cv_picture, cv_tick
-};
 
 /* ---- a layout as the details' view: only told the text came (lv_model
  * reads det.tj); its pictures are its own (lv_picture, at its size) */
@@ -6054,7 +5001,7 @@ static const struct DetView layout_view = {
     NULL
 };
 
-static void preview_draw(struct Page *p)
+void preview_draw(struct Page *p)
 {
     det_begin(p);
 }
@@ -6105,8 +5052,8 @@ static void preview_now(struct Page *p)
 /* ---- Settings > Style on a laced screen: beside the list of fonts, the
  * Home menu as it would look in the one selected, at its own size (its
  * row height, margins and icons scaled as the layout would be). */
-static struct TextFont *spv_font;   /* the font previewed, open */
-static int spv_idx = -1;
+struct TextFont *spv_font;   /* the font previewed, open */
+int spv_idx = -1;
 
 static void style_preview_free(void)
 {
@@ -6116,70 +5063,7 @@ static void style_preview_free(void)
     spv_idx = -1;
 }
 
-/* A menu label for the preview: the font shown has no Far East
- * characters, so a Japanese label is shown in English there. */
-static const char *spv_label(int mod)
-{
-    const char *s = _(mod_names[mod]);
-    return cjk_any(s, strlen(s)) ? mod_names[mod] : s;
-}
 
-static void style_preview(struct Page *p)
-{
-    WORD x0 = aside_x(), x1 = g.w - 1, y0 = g.list_top, y1 = g.footer_y - 2;
-    const struct LacedFont *lf;
-    struct TextFont *f;
-    struct TextExtent te;
-    LONG k, longest = 0, w, rh, mw, ipx, y, i, n;
-#define SU(v) ((WORD)(((LONG)(v) * k + 128) >> 8))
-    det.page = p;
-    det.sel = p->sel;
-    det.shown = TRUE;
-    det.pending = FALSE;
-    gfx_fill_bg(&g, x0, y0, x1, y1);
-    if (p->sel < 0 || p->sel >= LFONT_COUNT)
-        return;
-    lf = &gfx_laced_fonts[p->sel];
-    if (spv_idx != p->sel) {
-        if (spv_font)
-            CloseFont(spv_font);
-        spv_font = gfx_open_laced_font(p->sel);
-        spv_idx = p->sel;
-    }
-    if (!(f = spv_font)) {
-        gfx_text(&g, x0, y0, _("Not in the Fonts drawer"), PEN_DIM, PEN_BG, x1 - x0, TS_BODY);
-        return;
-    }
-    k = ((LONG)lf->ysize << 8) / 12;
-    rh = SU(18);
-    ipx = 16 * lf->kint;
-    SetFont(g.rp, f);
-    for (i = 0; i < nmenu; i++)
-        if ((w = TextLength(g.rp, (CONST_STRPTR)spv_label(menu[i]),
-                            strlen(spv_label(menu[i])))) > longest)
-            longest = w;
-    mw = SU(23) + longest + SU(6);
-    if (mw > x1 - x0 - SU(3))
-        mw = x1 - x0 - SU(3);
-    for (i = 0, y = y0; i < nmenu && y + rh - 1 <= y1; i++, y += rh) {
-        UBYTE bg = i == menu_sel ? PEN_HL : PEN_BG;
-        const char *s = spv_label(menu[i]);
-        gfx_fill(&g, x0, y, x0 + mw - 1, y + rh - 1, bg);
-        gfx_icon_sized(&g, mod_icon(menu[i]), x0 + SU(3), y + (rh - ipx) / 2, PEN_WHITE, ipx);
-        SetFont(g.rp, f);
-        n = TextFit(g.rp, (CONST_STRPTR)s, strlen(s), &te, NULL, 1, mw - SU(24),
-                    f->tf_YSize + 1);
-        SetAPen(g.rp, GPEN(PEN_WHITE));
-        SetDrMd(g.rp, JAM1);
-        Move(g.rp, x0 + SU(23), y + (rh - f->tf_YSize) / 2 + f->tf_Baseline);
-        if (n > 0)
-            Text(g.rp, (CONST_STRPTR)s, n);
-    }
-    if (y > y0)
-        gfx_fill(&g, x0 + mw + SU(2), y0, x0 + mw + SU(3) - 1, y - 1, PEN_RULE);
-    SetFont(g.rp, g.font);
-#undef SU
-}
 
 static BOOL plex_art_kept(struct Page *p, LONG idx);
 
@@ -6192,7 +5076,7 @@ static void ov_free(void)
 
 /* Build the big letter for c, its ink about 40% of the list's height
  * (gfx_bigletter: the font's glyph in whole pixels, or smooth). */
-static BOOL ov_build(char ch)
+BOOL ov_build(char ch)
 {
     WORD rows_h = list_visible() * g.list_row_h;
     const struct BigLetter *bl = gfx_bigletter(&g, (UBYTE)ch, rows_h * 2 / 5);
@@ -6216,13 +5100,8 @@ static BOOL ov_build(char ch)
 }
 
 
-static void draw_list_rows(struct Page *p);
+void draw_list_rows(struct Page *p);
 
-/* The letter over the rows (a list with no column beside it). */
-static BOOL ov_over(struct Page *p)
-{
-    return ov.on && ov.bl && ov.page == p && !has_aside(p);
-}
 
 /* Stamp the letter: in its column as it is, or over the rows outlined in
  * the background's colour (so the rows' text under it does not run into
@@ -6231,59 +5110,12 @@ static BOOL ov_over(struct Page *p)
  * row), and planes above are clear there, in its column too (cleared on
  * all planes before it shows): nine template blits a step on 3 planes,
  * not 8. */
-static UBYTE list_planes(const struct Page *p);
 
-static void ov_stamp(void)
-{
-    UBYTE was;
-    if (!ov.bl)
-        return;
-    was = g.rp->Mask;
-    if (g.planar)
-        SetWriteMask(g.rp, list_planes(ov.page));
-    if (!has_aside(ov.page)) {
-        static const BYTE d[8][2] = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
-                                      { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } };
-        WORD o = U(1) > 0 ? U(1) : 1;
-        int i;
-        for (i = 0; i < 8; i++)
-            gfx_bigletter_draw(&g, ov.bl, ov.x + d[i][0] * o, ov.y + d[i][1] * o, PEN_BG);
-    }
-    gfx_bigletter_draw(&g, ov.bl, ov.x, ov.y, PEN_DIM);
-    if (g.planar)
-        SetWriteMask(g.rp, was);
-}
 
-/* While the rows are painted in a batch, the letter waits to be stamped
- * once at its end (draw_list_row stamps it after a row of its own). */
-static BOOL ov_hold;
-static WORD mark_column(const struct Page *p);
-static void draw_list_row(struct Page *p, LONG idx, WORD col);
+WORD mark_column(const struct Page *p);
+void draw_list_row(struct Page *p, LONG idx, WORD col);
 
-/* The rows between y0 and y1 (screen lines) painted again, then the letter
- * over them, if it shows. */
-static void ov_rows(struct Page *p, WORD y0, WORD y1)
-{
-    WORD vis = list_visible(), r, col = mark_column(p);
-    BOOL was = ov_hold;
-    ov_hold = TRUE;
-    for (r = 0; r < vis && p->top + r < p->list.count; r++) {
-        WORD ry = g.list_top + r * g.list_row_h;
-        if (ry + g.list_row_h - 1 >= y0 && ry <= y1)
-            draw_list_row(p, p->top + r, col);
-    }
-    ov_hold = was;
-    if (!ov_hold && ov_over(p))
-        ov_stamp();
-}
 
-/* The rows under the letter, outline and all, again (then the letter). */
-static void ov_rows_under(struct Page *p)
-{
-    WORD o = U(1) > 0 ? U(1) : 1;
-    if (ov.bl)
-        ov_rows(p, ov.y - o, ov.y + ov.bl->h - 1 + o);
-}
 
 static void ov_show(struct Page *p)
 {
@@ -6298,15 +5130,6 @@ static void ov_show(struct Page *p)
     ui->letter_show(p);
 }
 
-static void cl_letter_show(struct Page *p)
-{
-    if (has_aside(p)) {
-        gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
-        tb_close(&pv_tb);
-        gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
-    }
-    ov_stamp();                             /* (over the rows: they are as they were) */
-}
 
 /* a layout: its own letter (LPage.letter), told */
 static void ly_letter_show(struct Page *p)
@@ -6335,10 +5158,10 @@ static void ly_letter_hide(struct Page *p)
  * cleared and the new letter stamped there, then copied up in one go with
  * the beam (gfx_blit_beam). Cleared and stamped on the screen, the letter
  * flickered: a smooth glide changes it nearly every frame. */
-static struct BitMap *ov_bm;
-static WORD ov_bw, ov_bh;
+struct BitMap *ov_bm;
+WORD ov_bw, ov_bh;
 
-static void ov_bm_free(void)
+void ov_bm_free(void)
 {
     if (ov_bm) {
         WaitBlit();
@@ -6369,66 +5192,6 @@ static void ov_relabel_(char c)
     ui->letter_relabel(c);
 }
 
-static void cl_letter_relabel(char c)
-{
-    const struct BigLetter *old = ov.bl;
-    WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
-    if (!has_aside(ov.page)) {
-        /* over the rows: those under the old letter and the new painted
-         * again, the new one stamped over them */
-        WORD o = U(1) > 0 ? U(1) : 1, top = oy, bot = old ? oy + old->h - 1 : oy;
-        if (!ov_build(c)) {
-            ov.bl = NULL;
-            if (old)
-                ov_rows(ov.page, top - o, bot + o);
-            return;
-        }
-        if (!old || ov.y < top)
-            top = ov.y;
-        if (ov.y + ov.bl->h - 1 > bot)
-            bot = ov.y + ov.bl->h - 1;
-        ov_rows(ov.page, top - o, bot + o);
-        return;
-    }
-    if (!ov_build(c)) {
-        if (old)
-            gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
-        return;
-    }
-    x0 = ov.x;
-    y0 = ov.y;
-    x1 = ov.x + ov.bl->w - 1;
-    y1 = ov.y + ov.bl->h - 1;
-    if (old) {
-        if (ox < x0) x0 = ox;
-        if (oy < y0) y0 = oy;
-        if (ox + old->w - 1 > x1) x1 = ox + old->w - 1;
-        if (oy + old->h - 1 > y1) y1 = oy + old->h - 1;
-    }
-    w = x1 - x0 + 1;
-    h = y1 - y0 + 1;
-    if (!ov_bm || ov_bw < w || ov_bh < h) {
-        WORD nw = ov_bm && ov_bw > w ? ov_bw : w, nh = ov_bm && ov_bh > h ? ov_bh : h;
-        ov_bm_free();
-        ov_bm = AllocBitMap(nw, nh, g.depth, BMF_CLEAR, g.rp->BitMap);
-        ov_bw = nw;
-        ov_bh = nh;
-    }
-    if (ov_bm) {
-        struct RastPort orp, *screen_rp = g.rp;
-        InitRastPort(&orp);
-        orp.BitMap = ov_bm;
-        g.rp = &orp;                        /* drawn off screen */
-        gfx_fill(&g, 0, 0, w - 1, h - 1, PEN_BG);
-        gfx_bigletter_draw(&g, ov.bl, ov.x - x0, ov.y - y0, PEN_DIM);
-        g.rp = screen_rp;
-        gfx_blit_beam(&g, ov_bm, x0, y0, w, h);
-    } else {
-        if (old)
-            gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
-        ov_stamp();
-    }
-}
 
 static void ov_hide(void)
 {
@@ -6444,98 +5207,23 @@ static void ov_hide(void)
     }
 }
 
-static void cl_letter_hide(struct Page *p)
-{
-    if (has_aside(p)) {
-        if (ov.bl)                  /* the column is the letter's alone: clear it */
-            gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
-    } else if (ov.bl) {
-        ov_rows_under(p);           /* the rows it lay over, without it */
-    }
-}
 
 /* One row of the list in its slot, background and all. Rows are painted
  * one by one over what was there, never after clearing the whole list,
  * so fast scrolling does not flash. */
-static const char *row_tag(const struct Page *p, const struct Item *it);
+const char *row_tag(const struct Page *p, const struct Item *it);
 
 /* The Now playing row at a list's top (Mods, Music, Radio, Plex): drawn
  * in the accent's orange, so it does not read as one of the list's. */
-static BOOL np_row(const struct Item *it)
+BOOL np_row(const struct Item *it)
 {
     return it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
 }
 
-/* The planes a list's rows are drawn and moved on (a native screen): its
- * pens are below 8, so 0-2 (3/8 of the blitter's work), except where it
- * has a Now playing row, whose orange (pen 8) is on plane 3 too: 0-3,
- * still half an AGA screen's (no list pen is 16 or more). */
-static UBYTE list_planes(const struct Page *p)
-{
-    return p && p->list.count && np_row(&p->list.items[0]) ? 0x0F : 0x07;
-}
 
-static void draw_list_row(struct Page *p, LONG idx, WORD col);  /* the program's: state, then the view (ui) */
-static void cl_draw_list_row(struct Page *p, LONG idx, WORD col)
-{
-    struct Item *it = &p->list.items[idx];
-    WORD y = g.list_top + (idx - p->top) * g.list_row_h;
-    WORD ty = y + (g.list_row_h - g.font_h) / 2, right = g.pane_x + g.pane_w - U(2);
-    WORD lx = g.pane_x + col;
-    WORD xr = list_xr(p);                   /* never into the letter's space */
-    if (it->kind == IT_TEXT && p->setp)
-        lx = g.pane_x;                      /* a Settings note: does nothing, so a heading */
-    if (right > xr - U(2))
-        right = xr - U(2);
-    BOOL sel = idx == p->sel;
-    BOOL off = (it->flags & ITEM_DISABLED) != 0;    /* greyed out */
-    BOOL np = np_row(it);
-    UBYTE fg = off || (it->flags & ITEM_HEAD) ? PEN_DIM : np ? PEN_ACCENT : sel ? PEN_WHITE : PEN_TEXT;
-    UBYTE bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM) :
-               mouse_mode && idx - p->top == hover_row && p == cur() && !(it->flags & ITEM_HEAD)
-               ? PEN_RULE : PEN_BG;
-    /* Every list pen is below 8 (16 with a Now playing row) and the planes
-     * above are clear in the list (the pane is cleared on all planes when
-     * the page is drawn), so on native screens only planes 0-2 (0-3) are
-     * written: 3/8 of the blitter work (half). */
-    if (g.planar)
-        SetWriteMask(g.rp, list_planes(p));
-    gfx_fill(&g, g.pane_x - U(2), y, xr, y + g.list_row_h - 1, bg);
-    if (it->flags & ITEM_GONE) {            /* its letter is being read again */
-        if (g.planar)
-            SetWriteMask(g.rp, 0xFF);
-        return;
-    }
-    if (it->mark == MARK_CYCLE)
-        gfx_cycle_glyph(&g, g.pane_x, y + (g.list_row_h - g.mark_px) / 2, g.mark_px,
-                        sel ? PEN_WHITE : PEN_TEXT);
-    else if (it->mark == MARK_DISC)
-        gfx_disc_glyph(&g, g.pane_x, y + (g.list_row_h - g.mark_px) / 2, g.mark_px, PEN_TEXT,
-                       PEN_DIM, PEN_WHITE);
-    else if (it->mark != MARK_NONE)
-        gfx_mark(&g, it->mark, g.pane_x, y + (g.list_row_h - g.mark_px) / 2,
-                 off ? PEN_RULE : sel ? PEN_WHITE : it->mark == MARK_ARROW ? PEN_DIM : PEN_TEXT, bg);
-    {
-        /* the tag at the right: a setting's value; a picture's format or
-         * a playable folder's picture count (pics.c keeps it in sortkey) */
-        const char *tag = row_tag(p, it);
-        if (tag[0]) {
-            WORD tagw = gfx_textlen(&g, tag, TS_SMALL);
-            gfx_text(&g, right - tagw, ty, tag, off ? PEN_RULE : sel ? PEN_WHITE : PEN_DIM, bg, 0,
-                     TS_SMALL);
-            right -= tagw + U(8);
-        }
-    }
-    gfx_text(&g, lx, ty, it->label, fg, bg, right - lx, TS_BODY);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-    if (!ov_hold && ov_over(p) && y + g.list_row_h > ov.y - U(1) - 1 &&
-        y <= ov.y + ov.bl->h + U(1))
-        ov_stamp();                         /* a row under the letter: the letter again */
-}
 
 /* The bar's place and its thumb's. */
-static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
+void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
 {
     LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
     *bx0 = list_edge(p) - GUT_W + 1 + GUT_GAP;
@@ -6549,41 +5237,17 @@ static void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
     *ty = g.list_top + (WORD)(n > vis ? (h - t) * p->top / (n - vis) : 0);
 }
 
-/* planes: what a native screen writes (draw_gutter: 0-2, its pens being
- * below 8 and the column's planes above clear once the list is drawn;
- * draw_list_rows: all, as it draws the column the first time) */
-static void draw_gutter_planes(struct Page *p, UBYTE planes);  /* the program's: state, then the view (ui) */
-static void cl_draw_gutter_planes(struct Page *p, UBYTE planes)
-{
-    WORD bx0, bx1, ty, th, y0 = g.list_top, y1 = g.footer_y - 2;
-    LONG vis = list_visible();
-    if (!list_overflows(p))
-        return;                             /* no column */
-    gut_geom(p, &bx0, &bx1, &ty, &th);
-    (void)vis;
-    if (g.planar)
-        SetWriteMask(g.rp, planes);
-    gfx_fill(&g, list_edge(p) - GUT_W + 1, y0, list_edge(p), y1, PEN_BG);
-    if (ty > y0)
-        gfx_fill(&g, bx0, y0, bx1, ty - 1, PEN_RULE);           /* the track, above */
-    if (ty + th <= y1)
-        gfx_fill(&g, bx0, ty + th, bx1, y1, PEN_RULE);          /* and below */
-    gfx_fill(&g, bx0, ty, bx1, ty + th - 1,
-             gut.drag ? PEN_WHITE : mouse_mode && bar_up ? PEN_TEXT : PEN_DIM);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-}
 
 /* The bar again as it moves (each step that scrolls the list, the mouse
  * showing, hiding or dragging it): planes 0-2, not the screen's 8. */
-static void draw_gutter(struct Page *p)
+void draw_gutter(struct Page *p)
 {
     draw_gutter_planes(p, 0x07);
 }
 
-static void draw_list_row(struct Page *p, LONG idx, WORD col);
-static void draw_menu_row(int i);
-static WORD mark_column(const struct Page *p);
+void draw_list_row(struct Page *p, LONG idx, WORD col);
+void draw_menu_row(int i);
+WORD mark_column(const struct Page *p);
 
 static BOOL menu_layout(void);
 
@@ -6699,8 +5363,8 @@ static void pointer_show(void)
     ptr_hidden = NULL;
 }
 
-static BOOL np_on(void);
-static void np_update(void);
+BOOL np_on(void);
+void np_update(void);
 
 static void foot_show(BOOL on);
 
@@ -6723,39 +5387,6 @@ static void set_mouse_mode(BOOL on)
         lv_note_what(LC_SELECT);            /* (a layout: Home's chosen tile shown, or not) */
 }
 
-static void draw_list_rows(struct Page *p);  /* the program's: state, then the view (ui) */
-static void cl_draw_list_rows(struct Page *p)
-{
-    WORD vis, r, col;
-    vis = list_visible();
-    col = mark_column(p);
-    list_follow(p);
-    if (!p->list.count) {
-        /* the list's own place: beside it a pane (an album's cover, kept)
-         * is the preview's to clear; filled over, the cover flashed in the
-         * UI's colours and was gone while still counted as shown */
-        gfx_fill(&g, g.pane_x - U(2), g.list_top, has_aside(p) ? aside_x() - 1 : g.w - 1,
-                 g.footer_y - 2, PEN_BG);
-        if (p->radio && p->net_seq) {
-            rsp.on = FALSE;
-            radio_spin();           /* still asking: the spinner, not "(empty)" */
-            return;
-        }
-        gfx_text(&g, g.pane_x, g.list_top + U(2), _("(empty)"), PEN_DIM, PEN_BG, 0, TS_BODY);
-        return;
-    }
-    {
-        BOOL was = ov_hold;
-        ov_hold = TRUE;                     /* the letter once, after them all */
-        for (r = 0; r < vis && p->top + r < p->list.count; r++)
-            draw_list_row(p, p->top + r, col);
-        ov_hold = was;
-    }
-    gfx_fill(&g, g.pane_x - U(2), g.list_top + r * g.list_row_h, list_xr(p), g.footer_y - 2, PEN_BG);
-    draw_gutter_planes(p, 0xFF);
-    if (!ov_hold && ov_over(p))
-        ov_stamp();
-}
 
 /* Copy n visible rows from screen row src to screen row dst, in place on
  * screen. Native screens: a blit inside the screen bitmap, masked to the
@@ -6769,7 +5400,7 @@ static void cl_draw_list_rows(struct Page *p)
  * stay read-only here. */
 /* The tag a row shows at its right (a setting's value, a picture's format,
  * a folder's count, a station's bitrate): "" none. */
-static const char *row_tag(const struct Page *p, const struct Item *it)
+const char *row_tag(const struct Page *p, const struct Item *it)
 {
     if (is_dvd_row(it))
         return "";                          /* (its disc says it) */
@@ -6777,57 +5408,8 @@ static const char *row_tag(const struct Page *p, const struct Item *it)
          : (p->pics || p->radio || it->kind == IT_PLEXDIR) ? it->sortkey : "";
 }
 
-static WORD rows_right(struct Page *p, LONG top, WORD col)
-{
-    WORD vis = list_visible(), r, right = g.pane_x;
-    for (r = 0; r < vis && top + r < p->list.count; r++) {
-        struct Item *it = &p->list.items[top + r];
-        WORD e;
-        if (row_tag(p, it)[0]) {
-            right = g.w - 1;                /* a tag at the right (a count, a value):
-                                             * the whole row, or it stays behind */
-            break;
-        }
-        e = g.pane_x + col + gfx_textlen(&g, it->label, TS_BODY) + U(1);
-        if (e > right)
-            right = e;
-    }
-    if (right > list_xr(p))
-        right = list_xr(p);                 /* the letter's space is never copied */
-    return right;
-}
 
-static WORD copy_right = 0;     /* right edge for blit_rows, set per move */
 
-static void blit_rows(LONG src, LONG dst, LONG n)
-{
-    if (gfx_off) {                          /* a layout draws the screen */
-        gfx_off_hit(__builtin_return_address(0));
-        return;
-    }
-    WORD x0 = g.pane_x - U(2), x1 = copy_right > x0 ? copy_right : list_xr(cur());
-    LONG vis = list_visible();
-    if (ov.on && has_aside(cur()) && x1 > ov.strip_x - 1)
-        x1 = ov.strip_x - 1;                /* never into the letter's column */
-    struct BitMap *bm = g.rp->BitMap;
-    /* The copy goes straight to the screen's bitmap, which clips nothing:
-     * never outside the list's rows. Rows copied past them once went past
-     * the bitmap's end, into chip RAM after it (the display's copper list:
-     * a blank screen, after gliding to a list's end and back). */
-    if (src < 0 || dst < 0)
-        return;
-    if (src + n > vis)
-        n = vis - src;
-    if (dst + n > vis)
-        n = vis - dst;
-    if (n <= 0 || src == dst || x1 < x0)
-        return;
-    gfx_dirty();
-    LockLayerRom(g.rp->Layer);             /* the window's, or a double buffer's */
-    BltBitMap(bm, x0, g.list_top + src * g.list_row_h, bm, x0, g.list_top + dst * g.list_row_h,
-              x1 - x0 + 1, n * g.list_row_h, 0xC0, g.planar ? list_planes(cur()) : 0xFF, NULL);
-    UnlockLayerRom(g.rp->Layer);
-}
 
 /* After the selection moved from old_sel (list top was old_top): repaint
  * just the old and new rows when the list did not scroll; when it scrolled
@@ -6840,126 +5422,23 @@ static void blit_rows(LONG src, LONG dst, LONG n)
  * old selection moves into is painted plain, and the bar's own row is
  * repainted in place (in the same colour, so a highlight pinned at the
  * edge of the list never moves at all). */
-static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top);
 
-static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top);  /* the program's: state, then the view (ui) */
-static void cl_draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
-{
-    if (ov_over(p)) {
-        /* the letter over the rows: they move without it stamped each
-         * time, then those under it are painted again (what was copied
-         * there carries the letter, moved), and it over them */
-        BOOL was = ov_hold;
-        LONG k;
-        ov_hold = TRUE;
-        draw_list_move2(p, old_sel, old_top);   /* (it moves p->top to follow) */
-        ov_hold = was;
-        k = p->top - old_top;
-        if (k) {
-            /* the copy took the letter's pixels k rows along with the rows
-             * (up for k > 0, down for k < 0): those rows too, or a sliver
-             * of it is left there and carried further each move */
-            WORD o = U(1) > 0 ? U(1) : 1, y0 = ov.y - o, y1 = ov.y + ov.bl->h - 1 + o;
-            if (k > 0)
-                y0 -= (WORD)(k * g.list_row_h);
-            else
-                y1 += (WORD)(-k * g.list_row_h);
-            ov_rows(p, y0, y1);
-        } else {
-            ov_stamp();
-        }
-    } else {
-        draw_list_move2(p, old_sel, old_top);
-    }
-    if (p->top != old_top) {
-        draw_gutter(p);                     /* the thumb or the arrows */
-        if (hover_row >= 0 && p == cur()) {
-            /* the copy took the soft highlight along with its row: back
-             * under the pointer, gone from where it went */
-            WORD vis = list_visible(), col = mark_column(p), moved = hover_row - (WORD)(p->top - old_top);
-            if (moved >= 0 && moved < vis && p->top + moved < p->list.count)
-                draw_list_row(p, p->top + moved, col);
-            if (p->top + hover_row < p->list.count)
-                draw_list_row(p, p->top + hover_row, col);
-        }
-    }
-}
 
-static void draw_list_move2(struct Page *p, LONG old_sel, LONG old_top)
-{
-    WORD vis = list_visible(), col;
-    LONG k, i, first, last, r_old, n_old;
-    list_follow(p);
-    k = p->top - old_top;
-    col = mark_column(p);
-    if (!k || p->list.count <= vis) {
-        if (k)
-            draw_list_rows(p);
-        else {
-            if (old_sel >= p->top && old_sel < p->top + vis && old_sel < p->list.count)
-                draw_list_row(p, old_sel, col);
-            draw_list_row(p, p->sel, col);
-        }
-        return;
-    }
-    if (k >= vis || -k >= vis) {
-        draw_list_rows(p);
-        return;
-    }
-    copy_right = rows_right(p, old_top, col);   /* text extent of the rows being moved */
-    r_old = old_sel - old_top;              /* the bar's screen row before the move */
-    if (r_old < 0 || r_old >= vis)
-        r_old = -1;
-    if (k > 0) {                            /* rows move up: dst row d <- src row d + k */
-        if (r_old < 0) {
-            blit_rows(k, 0, vis - k);
-        } else {
-            blit_rows(k, 0, r_old - k);                     /* rows above the bar */
-            blit_rows(r_old + 1, r_old + 1 - k, vis - 1 - r_old);   /* rows below it */
-        }
-        first = p->top + vis - k;
-        last = p->top + vis - 1;
-    } else {                                /* rows move down: dst row d <- src row d - |k| */
-        LONG m = -k;
-        if (r_old < 0) {
-            blit_rows(0, m, vis - m);
-        } else {
-            blit_rows(r_old + 1, r_old + 1 + m, vis - 1 - r_old - m);   /* below the bar */
-            /* above it: only as many as land inside the list (the bar on
-             * the bottom row, at a list's end: r_old rows would land m - 1
-             * rows past it) */
-            blit_rows(0, m, r_old < vis - m ? r_old : vis - m);
-        }
-        first = p->top;
-        last = p->top + m - 1;
-    }
-    /* Order matters: plain rows first, the new highlight last, so the old
-     * bar is gone before the new one appears (never two at once). */
-    n_old = old_sel - p->top;               /* the row the old selection moved into */
-    if (r_old >= 0 && n_old >= 0 && n_old < vis && old_sel < p->list.count && old_sel != p->sel)
-        draw_list_row(p, old_sel, col);
-    if (r_old >= 0 && p->top + r_old < p->list.count && p->top + r_old != p->sel)
-        draw_list_row(p, p->top + r_old, col);     /* the row under the old bar */
-    for (i = first; i <= last && i < p->list.count; i++)   /* rows scrolled into view */
-        if (i != p->sel && i != p->top + r_old)
-            draw_list_row(p, i, col);
-    draw_list_row(p, p->sel, col);
-}
 
 /* (Re)build the page's text box below y0, keeping its scroll position. */
-static void np_draw(BOOL full);
+void np_draw(BOOL full);
 
 /* A text page with a picture (the credits): the text scrolls in a box at
  * the top; under it, fixed, the note and the picture, as large as fits in
  * up to two fifths of the pane. The box's height (the picture made first,
  * at its size). */
 /* Plex in Ambiance's "Works with" Plex's logo, under everything: its height */
-static WORD plexmark_h(void)
+WORD plexmark_h(void)
 {
     return U(6) + plex_lo_h * g.kint + U(3) + g.font_h;
 }
 
-static WORD text_box_h(struct Page *p, WORD y0, WORD *note_lines)
+WORD text_box_h(struct Page *p, WORD y0, WORD *note_lines)
 {
     WORD avail = g.footer_y - 2 - y0, lh = g.font_h + U(1), note_h = 0, ph;
     *note_lines = 0;
@@ -7015,7 +5494,7 @@ static BOOL lv_tfit_apply(struct Page *p)
     return TRUE;
 }
 
-static void open_textbox(struct Page *p, WORD y0)
+void open_textbox(struct Page *p, WORD y0)
 {
     WORD lines;
     LONG pos = p->tb.pos, target = p->tb.target;
@@ -7033,69 +5512,8 @@ static void open_textbox(struct Page *p, WORD y0)
     }
 }
 
-/* The note and the picture under a text page's box. */
-/* Plex's logo (art.c's, in its pens), k times larger, top left at x, y:
- * a row's runs of one pen each a fill */
-static void draw_plex_logo(WORD x, WORD y)
-{
-    WORD k = g.kint, i, j, r;
-    for (j = 0; j < (WORD)plex_lo_h; j++)
-        for (i = 0; i < (WORD)plex_lo_w; i = r) {
-            UBYTE pen = plex_lo[j * plex_lo_w + i];
-            for (r = i + 1; r < (WORD)plex_lo_w && plex_lo[j * plex_lo_w + r] == pen; r++)
-                ;
-            if (pen != 255)
-                gfx_fill(&g, x + i * k, y + j * k, x + r * k - 1, y + j * k + k - 1, pen);
-        }
-}
 
-/* Plex in Ambiance: "Works with" Plex's logo, as Plex's guidelines allow (to show
- * that Ambiance works with Plex), and their attribution under it */
-static void draw_plexmark(void)
-{
-    WORD y = g.footer_y - 2 - plexmark_h() + U(6), x = g.pane_x, w;
-    const char *with = _("Works with:");
-    gfx_text(&g, x, y + (plex_lo_h * g.kint - g.font_h) / 2, with, PEN_DIM, PEN_BG, textbox_w(), TS_BODY);
-    x += gfx_textlen(&g, with, TS_BODY) + U(6);
-    draw_plex_logo(x, y);
-    w = plex_lo_w * g.kint;
-    gfx_text(&g, x + w + U(1), y, "*", PEN_DIM, PEN_BG, U(10), TS_BODY);
-    gfx_text(&g, g.pane_x, y + plex_lo_h * g.kint + U(3), "* used under license from Plex", PEN_FAINT,
-             PEN_BG, textbox_w(), g.sm ? SM_TINY : TS_BODY);   /* (fine print where it can be) */
-}
 
-static void draw_text_picture(struct Page *p);  /* the program's: state, then the view (ui) */
-static void cl_draw_text_picture(struct Page *p)
-{
-    WORD lines, lh = g.font_h + U(1), y, i;
-    WORD box_h = text_box_h(p, g.list_top, &lines);
-    if (p->plexmark)
-        draw_plexmark();
-    if (!p->pic[0])
-        return;
-    /* a rule under the text, as the title has one over it */
-    gfx_fill(&g, g.pane_x, g.list_top + box_h + U(3), g.pane_x + g.pane_w - 1,
-             g.list_top + box_h + U(4) - 1, PEN_RULE);
-    y = g.list_top + box_h + U(8);
-    if (p->note && lines) {
-        struct ItemList l;
-        if (list_init(&l)) {
-            wrap_into(&l, p->note, textbox_w());
-            for (i = 0; i < l.count; i++) {     /* centred, over the picture */
-                WORD tw = gfx_textlen(&g, l.items[i].label, TS_BODY);
-                gfx_text(&g, g.pane_x + (tw < textbox_w() ? (textbox_w() - tw) / 2 : 0), y + i * lh,
-                         l.items[i].label, PEN_DIM, PEN_BG, textbox_w(), TS_BODY);
-            }
-            list_free(&l);
-        }
-        y += lines * lh + U(4);
-    }
-    if (p->pic_bm && y + p->pic_h <= g.footer_y - 2) {
-        p->pic_x = g.pane_x + (textbox_w() - p->pic_w) / 2;
-        p->pic_y = y;
-        gfx_blit_beam(&g, p->pic_bm, p->pic_x, p->pic_y, p->pic_w, p->pic_h);
-    }
-}
 
 static struct TextBox *cur_tb(void)
 {
@@ -7103,96 +5521,6 @@ static struct TextBox *cur_tb(void)
     return (p && p->type != PT_LIST && p->tb.open) ? &p->tb : NULL;
 }
 
-static void draw_pane(BOOL full);  /* the program's: state, then the view (ui) */
-static void cl_draw_pane(BOOL full)
-{
-    struct Page *p = cur();
-    BOOL took = FALSE;                      /* a cover moved into the pane: its text now too */
-    if (!p)
-        return;
-    if (full) {
-        det.shown = FALSE;           /* the pane is cleared: preview again */
-        tb_close(&pv_tb);
-        WORD px = g.menu_w + U(3), pb = g.footer_y - 2;
-        if (p->type == PT_TEXT) {
-            /* Clear around the text box, not under it: tb_draw copies the
-             * new text straight over the old, so there is no blank frame. */
-            struct TextBox *tb = &p->tb;
-            WORD bx1;
-            open_textbox(p, g.list_top);
-            bx1 = tb->bar_x + U(3) - 1;
-            gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
-            gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
-            gfx_fill_bg(&g, px, U(42), g.w - 1, tb->y - 1);
-            gfx_fill_bg(&g, px, tb->y, tb->x - 1, tb->y + tb->h - 1);
-            gfx_fill_bg(&g, bx1 + 1, tb->y, g.w - 1, tb->y + tb->h - 1);
-            gfx_fill_bg(&g, px, tb->y + tb->h, g.w - 1, pb);
-        } else if (p->type != PT_PLAYER) {          /* the player clears its own */
-            gfx_fill_bg(&g, px, U(25), g.w - 1, U(26) - 1);   /* the title band: draw_title */
-            gfx_fill_bg(&g, px, U(26), g.pane_x - U(2) - 1, U(42) - 1);
-            if (g.pic_w && p->type == PT_LIST && p->plex && has_aside(p) && !plex_keeps(p, p->sel))
-                took = plex_take(p);    /* back from Now playing: its cover into the pane, now */
-            if (g.pic_w && p->type == PT_LIST && has_aside(p) && g.pic_x >= aside_x() &&
-                g.pic_y >= U(42)) {
-                /* a picture in the preview's place: left there, for the
-                 * preview to keep (the same one) or clear; filled over, it
-                 * flashed in the UI's colours plane by plane */
-                WORD ax = aside_x(), py1 = g.pic_y + g.pic_h - 1;
-                BOOL text = plex_text_kept(p);  /* an album's details: the same, left */
-                gfx_fill_bg(&g, px, U(42), ax - 1, pb);
-                gfx_fill_bg(&g, ax, U(42), g.w - 1, g.pic_y - 1);
-                gfx_fill_bg(&g, ax, g.pic_y, g.pic_x - 1, py1);
-                gfx_fill_bg(&g, g.pic_x + g.pic_w, g.pic_y, g.w - 1, py1);
-                if (!text) {
-                    gfx_fill_bg(&g, ax, py1 + 1, g.w - 1, pb);
-                    plex_shown[0] = 0;
-                }
-            } else {
-                if (g.pic_w)                /* cleared first, then its pens go */
-                    gfx_picture_clear(&g, px, U(42), g.w - 1, pb);
-                gfx_fill_bg(&g, px, U(42), g.w - 1, pb);
-            }
-        }
-    }
-    draw_title(p);
-    switch (p->type) {
-    case PT_LIST:
-        draw_list_rows(p);          /* (a Radio list still asking: its spinner) */
-        if (took)
-            preview_draw(p);        /* its details with it, not when the pane settles */
-        break;
-    case PT_TEXT:
-        if (!p->tb.open)
-            open_textbox(p, g.list_top);
-        if (full || !p->tb.drawn)
-            tb_draw(&g, &p->tb);    /* a focus change alone leaves the box alone */
-        if (full)
-            draw_text_picture(p);   /* the credits' AGS logo, under the box */
-        break;
-    case PT_PLAYER:
-        np_draw(full);
-        break;
-    case PT_DETAIL:
-        if (full) {
-            char shot[300];
-            /* screenshot box: AGS's are 320 x 128 lowres, so 128 design
-             * lines shows them at their own size where the pane is wide
-             * enough (lowres); 85 elsewhere, twice that on laced screens */
-            WORD ph = NARROW ? U(128) : (g.k == 256 && g.h >= 400) ? 170 : U(85), dh = 0;
-            p->facts_y = g.list_top;
-            if ((g.pens_shared || g.truecolor) && ags_screenshot_path(p->base, shot, sizeof(shot))) {
-                set_msg(_("Loading screenshot..."));
-                if (gfx_picture(&g, shot, g.pane_x, g.list_top, g.pane_w, ph, TRUE, &dh))
-                    p->facts_y = g.list_top + dh + U(6);
-                set_msg(NULL);
-            }
-            open_textbox(p, p->facts_y);
-        }
-        if (full || !p->tb.drawn)
-            tb_draw(&g, &p->tb);
-        break;
-    }
-}
 
 static void set_focus(int f);
 
@@ -7212,8 +5540,6 @@ static void set_focus(int f);
  * only what changed, and (double-buffered) without a flip. */
 #define VOL_STEP   4
 
-enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB_VDOWN, NB_VUP,
-       NB_COUNT };
 /* (a layout presses them by these numbers: LAC_BUTTON) */
 typedef char lnb_as_nb[(int)LNB_PREV == (int)NB_PREV && (int)LNB_PLAY == (int)NB_PLAY &&
                        (int)LNB_LOOP == (int)NB_LOOP && (int)LNB_VUP == (int)NB_VUP &&
@@ -7225,43 +5551,9 @@ typedef char lnb_as_nb[(int)LNB_PREV == (int)NB_PREV && (int)LNB_PLAY == (int)NB
 BOOL play_loop;
 #define LOOP_VAR "Ambiance/Loop"
 
-static struct {
-    struct ItemList list;       /* the playlist: the modules of the folder played from */
-    LONG idx;                   /* the one loaded */
-    char folder[64];
-    int btn;                    /* the button chosen with the keyboard or joystick */
-    BOOL ended_seen;            /* the song's end acted on */
-    /* where things are on the page */
-    WORD x0, w, title_y, info_y, prog_y, prog_h, time_y, meter_y, meter_h, name_w;
-    WORD bx[NB_COUNT], by, bw, bh, vol_x, samples_y;
-    WORD art_x, art_y, art_s;               /* a Plex track's cover: its square (0 none) */
-    WORD art_h;                             /* its rows (half on hires: tall pixels) */
-    WORD bar_w, pos_y;                      /* the bar's width (the time right of it); the
-                                             * position line, under the buttons */
-    LONG seek_to;                           /* a track's seek waiting (ms, -1 none) */
-    BOOL seeked;                            /* the track started again part way (a seek) */
-    ULONG seek_due;
-    /* what is drawn there now: only changes are drawn again */
-    LONG s_ms, s_total, s_order, s_row, s_fill;
-    int s_state, s_vol, s_btn, s_flash, s_steps, s_loop;
-    BOOL s_focus;
-    int flash;                  /* the button just pressed (-1 none): lit briefly */
-    ULONG flash_until;
-    int hov, s_hov;             /* what the mouse is over: a button, NB_SLIDER, -1 */
-    int rep, rep_src, s_rep;    /* the button held down, repeating (-1 none) */
-    ULONG rep_next;
-    BOOL sl_on, sl_drag, s_slhot; /* the volume slider (when there is room) */
-    WORD sl_x0, sl_x1;
-    int rows;                   /* the meters' rows laid out for: the page as tall as they need */
-    WORD cyc_x0, cyc_x1, cyc_y0, cyc_y1;    /* the visualization's cycle gadget (V) */
-    BOOL cyc_off;               /* ...greyed: one only can be drawn for this music (MHI) */
-    BOOL cyc_label;             /* ...with its name (not on lowres: the glyph alone) */
-    ULONG s_rseq;               /* a station: its title and state drawn */
-    int s_rstate;
-} np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
+struct NowPlaying np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
          .rep = -1, .s_rep = -1 };
 
-#define NB_SLIDER  NB_COUNT         /* np.hov: the slider */
 #define NB_CYCLE   (NB_COUNT + 1)   /* np.hov: the visualization's cycle gadget */
 #define FLASH_MS   80               /* how long a pressed button stays lit */
 #define REP_DELAY  400              /* a button held: it repeats after this, */
@@ -7270,7 +5562,7 @@ enum { REP_MOUSE, REP_JOY };
 
 /* The button Fire presses (chosen with Left/Right) has a yellow rounded
  * frame; with the mouse there is none: what it is over lights up instead. */
-static BOOL np_focus_shown(void)
+BOOL np_focus_shown(void)
 {
     return focus == FOCUS_CONTENT && !mouse_mode;
 }
@@ -7285,7 +5577,7 @@ static BOOL np_repeats(int b)
 
 /* A rounded frame t thick just inside x,y w x h (or, solid, the corners
  * the rounding takes off the button). */
-static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
+void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
 {
     gfx_rrect(&g, x, y, w, h, rx, ry, pen);
 }
@@ -7296,7 +5588,7 @@ static void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen
 static BOOL np_full_first;
 static ULONG np_full_since, np_full_serial;
 
-static BOOL np_on(void)
+BOOL np_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
     return p && p->type == PT_PLAYER && !np_full;
@@ -7312,7 +5604,7 @@ static BOOL np_live(void)
  * Not kept past a quit: Ambiance starts at its volume, never silent. */
 static int vol_unmuted = -1;
 
-static BOOL np_muted(void)
+BOOL np_muted(void)
 {
     return vol_unmuted >= 0;
 }
@@ -7331,122 +5623,22 @@ static void np_mute(BOOL on)
     }
 }
 
-static int np_state(void)
+int np_state(void)
 {
     return !mp_loaded() ? 0 : mp_playing() ? 1 : mp_paused() ? 2 : 3;
 }
 
-static void np_button(int i)
-{
-    BOOL lit = i == np.flash || i == np.rep;    /* just pressed, or held */
-    BOOL ring = np_focus_shown() && i == np.btn;
-    BOOL hov = mouse_mode && i == np.hov;       /* the mouse over it */
-    UBYTE bg = lit ? PEN_HL : hov ? PEN_SELDIM : PEN_BAR, fg = lit || hov ? PEN_WHITE : PEN_TEXT;
-    WORD x = np.bx[i], y = np.by, w = np.bw, h = np.bh;
-    BOOL tall = gfx_mode_tall(g.mode);
-    WORD sx = tall ? 2 : 1;                     /* pixels across for one down, to look square */
-    WORD gh, cx, cy, rx, ry;
-    if (i == NB_VDOWN || i == NB_VUP) {
-        if ((i == NB_VDOWN && mp_volume() == 0) || (i == NB_VUP && mp_volume() >= 64))
-            fg = lit ? PEN_TEXT : PEN_DIM;
-    }
-    if (i == NB_MUTE && np_muted() && !lit && !hov)
-        fg = PEN_ACCENT;                    /* muted: the speaker in orange */
-    if ((i == NB_BACK || i == NB_FWD) && !mp_can_step(i == NB_FWD ? 1 : -1)) {
-        bg = PEN_BAR;                       /* not for this module: greyed, never lit */
-        fg = PEN_RULE;
-    }
-    if (i == NB_LOOP) {
-        if (mp_is_stream()) {
-            bg = PEN_BAR;                   /* a station: nothing to loop */
-            fg = PEN_RULE;
-        }
-    }
-    /* the glyph (glyph.c): an odd number of rows, about three fifths of
-     * the button, so each triangle has a one-row tip */
-    gh = glyph_rows(h);
-    cx = x + w / 2;
-    cy = y + h / 2;
-    /* the button: rounded by about a fifth of its height; the focus ring
-     * (yellow) is its outer t rows, the face inside it */
-    ry = h / 5 > 2 ? h / 5 : 2;
-    if (h <= 16)
-        ry = 1;                             /* small: its corners' one pixel off, not steps */
-    if (tall)
-        ry = ry / 2 > 1 ? ry / 2 : 1;
-    rx = tall ? ry * 2 : ry;
-    gfx_fill(&g, x, y, x + w - 1, y + h - 1, PEN_BG);
-    if (ring) {
-        WORD ft = U(2) > 1 ? U(2) : 1, fx = ft * sx;
-        np_rrect(x, y, w, h, rx, ry, PEN_YELLOW);
-        np_rrect(x + fx, y + ft, w - 2 * fx, h - 2 * ft, rx > fx ? rx - fx : 1,
-                 ry > ft ? ry - ft : 1, bg);
-    } else {
-        np_rrect(x, y, w, h, rx, ry, bg);
-    }
-    {
-        static const UBYTE kind[] = { GL_PREV, GL_BACK, GL_PLAY, GL_STOP, GL_FWD, GL_NEXT, GL_LOOP,
-                                      GL_MUTE, GL_VDOWN, GL_VUP };
-        int k = i == NB_PLAY && mp_playing() ? GL_PAUSE : i <= NB_VUP ? kind[i] : -1;
-        UWORD f = (i == NB_LOOP && play_loop) || (i == NB_MUTE && np_muted()) ? GLF_ON : 0;
-        if (k >= 0)
-            glyph_draw(g.rp, k, cx, cy, gh, sx, GPEN(fg), GPEN(fg == PEN_RULE ? PEN_RULE : PEN_DIM), f);
-    }
-}
 
-static void np_volume_text(void)
-{
-    char m[64];
-    WORD x = np.vol_x, y = np.by + (np.bh - g.font_h) / 2, end = np.x0 + np.w - 1;
-    if (x < 0)
-        return;
-    if (np.art_s && np.art_y <= np.by + np.bh)
-        end = np.art_x - U(8) - 1;          /* the cover beside it */
-    if (np_muted())
-        amb_strlcpy(m, _("Muted"), sizeof(m));
-    else
-        sprintf(m, _("Volume %ld%%"), (long)(mp_volume() * 100 / 64));
-    gfx_text(&g, x, y, m, PEN_DIM, PEN_BG, 0, TS_SMALL | TS_OPAQUE | TS_TABULAR);
-    x += gfx_textlen(&g, m, TS_SMALL | TS_TABULAR);
-    if (x <= end)
-        gfx_fill(&g, x, y, end, y + g.font_h - 1, PEN_BG);
-}
 
 /* The volume slider: -----*----- between - and +. */
-static WORD np_knob_w(void)
+WORD np_knob_w(void)
 {
     WORD k = U(3) > 2 ? U(3) : 2;
     return gfx_mode_tall(g.mode) ? k * 2 : k;
 }
 
-static WORD np_knob_x(int v)
-{
-    return np.sl_x0 + (WORD)((LONG)(np.sl_x1 - np.sl_x0 + 1 - np_knob_w()) * v / 64);
-}
 
-static BOOL np_slider_hot(void)
-{
-    return np.sl_drag || (mouse_mode && np.hov == NB_SLIDER);
-}
 
-static void np_slider(void)
-{
-    WORD y = np.by, h = np.bh, kw = np_knob_w(), kx, th, ty, kh;
-    BOOL hot = np_slider_hot();
-    if (!np.sl_on)
-        return;
-    kx = np_knob_x(mp_volume());
-    th = U(2) > 1 ? U(2) : 1;
-    ty = y + (h - th) / 2;
-    kh = h * 6 / 10;
-    gfx_fill(&g, np.sl_x0, y, np.sl_x1, y + h - 1, PEN_BG);
-    if (kx > np.sl_x0)                      /* the part up to the volume */
-        gfx_fill(&g, np.sl_x0, ty, kx - 1, ty + th - 1, hot ? PEN_TEXT : PEN_DIM);
-    if (kx + kw <= np.sl_x1)                /* the rest */
-        gfx_fill(&g, kx + kw, ty, np.sl_x1, ty + th - 1, PEN_RULE);
-    gfx_fill(&g, kx, y + (h - kh) / 2, kx + kw - 1, y + (h - kh) / 2 + kh - 1,
-             hot ? PEN_WHITE : PEN_TEXT);
-}
 
 /* The volume for a point on the slider. */
 static int np_slider_vol(WORD x)
@@ -7471,7 +5663,7 @@ static int np_meter_rows(void)
     return mp_is_stream() ? 2 : mp_meter_count();
 }
 
-static void np_layout(void)
+void np_layout(void)
 {
     WORD row = g.font_h + U(3), gap = U(3), vt, i, avail;
     np.x0 = g.pane_x;
@@ -7566,111 +5758,11 @@ static void np_layout(void)
  * second for a module (its row): on a native screen planes 0-3 only, its
  * pens being below 16 (the bar's orange is 8) and these lines never
  * reaching the cover, half an AGA screen's work. */
-static void np_draw_progress_(BOOL full, const struct MpStatus *st);
 
-static void np_draw_progress(BOOL full, const struct MpStatus *st)
-{
-    if (g.planar)
-        SetWriteMask(g.rp, 0x0F);
-    np_draw_progress_(full, st);
-    if (g.planar)
-        SetWriteMask(g.rp, 0xFF);
-}
 
-static void np_draw_progress_(BOOL full, const struct MpStatus *st)
-{
-    char t[160], a[64], b[24], pos[160];
-    WORD x = np.x0, y = np.time_y, end = np.x0 + np.w - 1, bw = np.bar_w, lw, rw;
-    ULONG at = np.seek_due ? (ULONG)np.seek_to : st->elapsed_ms;   /* a seek: where to */
-    LONG fill = st->total_ms ? (LONG)((ULONG)bw * (at / 100) / ((st->total_ms + 99) / 100)) : 0;
-    if (fill > bw)
-        fill = bw;
-    if (full || fill != np.s_fill) {
-        if (fill > 0)
-            gfx_fill(&g, x, np.prog_y, x + fill - 1, np.prog_y + np.prog_h - 1, PEN_ACCENT);
-        if (fill < bw)
-            gfx_fill(&g, x + fill, np.prog_y, x + bw - 1, np.prog_y + np.prog_h - 1, PEN_RULE);
-        np.s_fill = fill;
-    }
-    if (!full && at / 1000 == (ULONG)np.s_ms / 1000 && st->order == np.s_order &&
-        st->row == np.s_row && (LONG)st->total_ms == np.s_total)
-        return;
-    np.s_ms = at;
-    np.s_total = st->total_ms;
-    np.s_order = st->order;
-    np.s_row = st->row;
-    amb_time_text(a, at);
-    amb_time_text(b, st->total_ms);
-    if (st->total_ms)
-        sprintf(t, "%s / %s", a, b);
-    else
-        strcpy(t, a);                       /* its length is not known */
-    if (st->songlen && st->pattern >= 0)
-        sprintf(pos, _("Position %ld of %ld   Pattern %ld   Row %ld"), (long)st->order + 1,
-                (long)st->songlen, (long)st->pattern, (long)st->row);
-    else if (st->songlen)
-        sprintf(pos, _("Position %ld of %ld"), (long)st->order + 1, (long)st->songlen);
-    else if (st->pattern >= 0 && mp_running())
-        sprintf(pos, _("Position %ld   Pattern %ld   Row %ld"), (long)st->order + 1,
-                (long)st->pattern, (long)st->row);     /* mixed: its length in positions unknown */
-    else
-        pos[0] = 0;
-    if (mp_is_stream() && mp_running()) {
-        struct StInfo in;
-        st_info(&in);
-        if (in.state == ST_PLAYING) {
-            sprintf(pos, _("Buffered %ld.%lds"), (long)(in.buffer_ms / 1000),
-                    (long)(in.buffer_ms % 1000 / 100));
-            if (in.underruns) {
-                sprintf(a, _("   dropouts %ld"), (long)in.underruns);
-                amb_strlcat(pos, a, sizeof(pos));
-            }
-        } else {
-            amb_strlcpy(pos, in.state == ST_CONNECTING ? _("Connecting...") :
-                              in.state == ST_BUFFERING ? _("Buffering...") : "", sizeof(pos));
-        }
-    }
-    /* the time right of the bar, right-aligned */
-    lw = gfx_textlen(&g, t, TS_BODY | TS_TABULAR);  /* (its left edge still as digits change) */
-    if (x + bw + U(4) <= end - lw)
-        gfx_fill(&g, x + bw, y, end - lw, y + g.font_h - 1, PEN_BG);
-    gfx_text(&g, end - lw + 1, y, t, np.seek_due ? PEN_WHITE : PEN_TEXT, PEN_BG, 0,
-             TS_BODY | TS_OPAQUE | TS_TABULAR);
-    /* the position (or the buffer) on its own line under the buttons; left
-     * of the cover where it comes down beside the controls */
-    if (np.art_s && np.art_y <= np.pos_y)
-        end = np.art_x - U(8) - 1;
-    rw = gfx_textlen(&g, pos, TS_SMALL | TS_TABULAR);     /* (Pattern and Row stay put) */
-    if (rw > end - x + 1)
-        rw = end - x + 1;
-    if (rw)
-        gfx_text(&g, x, np.pos_y, pos, PEN_DIM, PEN_BG, rw, TS_SMALL | TS_OPAQUE | TS_TABULAR);
-    if (x + rw <= end)
-        gfx_fill(&g, x + rw, np.pos_y, end, np.pos_y + g.font_h - 1, PEN_BG);
-}
 
-/* The visualization's cycle gadget, as Intuition's: its glyph, and the one
- * chosen, at the top right of the meters' place (the end of the line
- * above it), drawn as the buttons are. A click, or V, goes to the next.
- * On lowres the glyph alone. */
-static void np_cycle_layout(void)
-{
-    WORD box = g.font_h, right = np.x0 + np.w - 1, w, nw = 0;
-    int i;
-    np.cyc_label = g.wb ? DW > 320 : g.w > 320;
-    for (i = 0; np.cyc_label && i < VIS_COUNT; i++) {
-        WORD t = gfx_textlen(&g, _(vis_name(i)), TS_SMALL);
-        if (t > nw)
-            nw = t;
-    }
-    w = U(3) + box + U(3) + (np.cyc_label ? U(3) + 1 + U(4) + nw + U(4) : 0);
-    np.cyc_x1 = right;
-    np.cyc_x0 = right - w + 1;
-    np.cyc_y0 = np.info_y - U(1);
-    np.cyc_y1 = np.info_y + g.font_h;
-}
 
-static void np_draw_cycle(void)
+void np_draw_cycle(void)
 {
     WORD x0 = np.cyc_x0, x1 = np.cyc_x1, y0 = np.cyc_y0, y1 = np.cyc_y1, box = g.font_h;
     WORD ry = gfx_mode_tall(g.mode) ? 1 : 2;
@@ -7698,392 +5790,17 @@ static void np_draw_cycle(void)
     }
 }
 
-/* Another visualization chosen: the same place, the other one in it; that
- * and the gadget drawn, not the page. */
-static void np_visual_changed(void)
-{
-    if (np_on() && np.w && np.cyc_x1 > np.cyc_x0) {
-        BOOL was = gfx_quiet_begin();
-        np_draw_cycle();
-        gfx_quiet_end(&g, was, np.cyc_x0, np.cyc_y0, np.cyc_x1, np.cyc_y1);
-        np_update();
-    } else if (np_on()) {
-        np_draw(TRUE);
-    }
-}
 
-/* The meters' place: the visualization chosen (vis.c), the level meters
- * where the engine cannot give what it needs. */
-static void np_draw_meters(BOOL full, const struct MpStatus *st)
-{
-    struct VisCtx c;
-    c.g = &g;
-    c.x = np.x0;
-    c.y = np.meter_y;
-    c.w = np.w;
-    c.row_h = np.meter_h;
-    c.rows = np.rows;
-    c.gap = U(2);
-    c.label_w = np.name_w;
-    vis_draw(&c, st, full);
-}
 
-/* A station's page: its name; what plays now; what it is and how it is
- * played (in the place of a module's samples). */
-/* A line of the page drawn over what was there (opaque, the rest of the
- * line filled): drawn again unchanged, nothing on screen changes. */
-static void np_line(WORD y, const char *s, UBYTE fg, int ts)
-{
-    WORD x1 = np.x0 + np.w, w = gfx_textlen(&g, s, ts);
-    if (y == np.info_y && np.cyc_x0 > np.x0)
-        x1 = np.cyc_x0 - U(6);              /* the cycle gadget at its end */
-    if (w > x1 - np.x0)
-        w = x1 - np.x0;
-    gfx_text(&g, np.x0, y, s, fg, PEN_BG, x1 - np.x0, ts | TS_OPAQUE);
-    if (np.x0 + w < x1)
-        gfx_fill(&g, np.x0 + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
-}
 
-/* label, then value at the column after the longest label (Playback). */
-static void np_pair(WORD y, const char *label, const char *value)
-{
-    WORD col = gfx_textlen(&g, _("Playback"), TS_SMALL) + U(8), w;
-    WORD tw = np.art_s ? np.w - np.art_s - U(8) : np.w, x1 = np.x0 + tw;
-    gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
-    w = gfx_textlen(&g, label, TS_SMALL);
-    if (w < col)
-        gfx_fill(&g, np.x0 + w, y, np.x0 + col - 1, y + g.font_h - 1, PEN_BG);
-    w = gfx_textlen(&g, value, TS_SMALL | TS_TABULAR);    /* (a bit rate that changes: nothing moves) */
-    if (w > tw - col)
-        w = tw - col;
-    gfx_text(&g, np.x0 + col, y, value, PEN_TEXT, PEN_BG, tw - col, TS_SMALL | TS_OPAQUE | TS_TABULAR);
-    /* cleared to the cover's edge, or the line's end where the cover is
-     * not beside it: the line drawn before the cover came (a new album's,
-     * the page not laid out again) went that far, and its end stayed in
-     * the gap before the cover */
-    if (np.art_s && y < np.art_y + np.art_h && y + g.font_h > np.art_y)
-        x1 = np.art_x;
-    else
-        x1 = np.x0 + np.w;
-    if (np.x0 + col + w < x1)
-        gfx_fill(&g, np.x0 + col + w, y, x1 - 1, y + g.font_h - 1, PEN_BG);
-}
 
-/* "MP3 320kbps, 44100Hz stereo", what of it is known. */
-static void np_audio_line(WORD y, const char *label, const char *codec, ULONG kbps, ULONG rate,
-                          ULONG ch)
-{
-    char v[96], part[32], up[16];
-    int i;
-    {
-        /* Plex's codec names (audioCodec) as people know them */
-        static const char *const names[][2] = {
-            { "wmalossless", "WMA Lossless" }, { "wmapro", "WMA Pro" }, { "wmav2", "WMA" },
-            { "wma", "WMA" }, { "alac", "Apple Lossless" }, { "aac", "AAC" },
-            { "vorbis", "Ogg Vorbis" }, { "opus", "Opus" }, { "ac3", "AC-3" },
-            { "eac3", "E-AC-3" }, { "dca", "DTS" }, { "pcm", "PCM" }, { "aiff", "AIFF" },
-            { "ape", "Monkey's Audio" }, { "wavpack", "WavPack" }, { NULL, NULL } };
-        up[0] = 0;
-        for (i = 0; names[i][0]; i++)
-            if (!amb_stricmp(codec, names[i][0]))
-                amb_strlcpy(up, names[i][1], sizeof(up));
-        if (!up[0]) {
-            for (i = 0; codec[i] && i < 15; i++)
-                up[i] = codec[i] >= 'a' && codec[i] <= 'z' ? codec[i] - 32 : codec[i];
-            up[i] = 0;
-        }
-    }
-    amb_strlcpy(v, up, sizeof(v));
-    if (kbps) {
-        sprintf(part, "%s%lukbps", v[0] ? " " : "", (unsigned long)kbps);
-        amb_strlcat(v, part, sizeof(v));
-    }
-    if (rate) {
-        char k[16];
-        sprintf(part, "%s%s", v[0] ? ", " : "", fmt_khz(rate, k));
-        amb_strlcat(v, part, sizeof(v));
-    }
-    if (ch) {
-        sprintf(part, " %s", ch == 1 ? "mono" : ch == 2 ? "stereo" : "multichannel");
-        amb_strlcat(v, part, sizeof(v));
-    }
-    np_pair(y, label, v);
-}
 
-/* How it plays: through Paula (8-bit), AHI (16-bit) or MHI; its rate and
- * channels only where they are not the source's. */
-static void np_playback_line(WORD y, const struct StInfo *in)
-{
-    char v[64];
-    amb_strlcpy(v, in->mhi ? _("MHI (decoded and played by it)") : in->ahi ? "AHI 16-bit"
-                                                                          : "Paula 8-bit",
-                 sizeof(v));
-    if (in->dec_freq && (in->dec_freq != in->freq || in->dec_channels != in->channels)) {
-        char k[16];
-        sprintf(v + strlen(v), ", %s %s", fmt_khz(in->dec_freq, k),
-                in->dec_channels == 1 ? "mono" : "stereo");
-    }
-    np_pair(y, _("Playback"), v);
-}
 
-/* A station's part of the page: what it is, and what is on air. Its
- * state and title change while it plays (connecting, buffering, a new
- * song), so it is drawn line by line over itself, never cleared first. */
-static void np_draw_station(void)
-{
-    struct StInfo in;
-    char info[320], part[160];
-    const char *now = st_title();
-    WORD lh = g.font_h + U(1), y = np.samples_y, bottom = g.footer_y - 2;
-    st_info(&in);
-    if (np_local()) {
-        /* a music file: its name, folder, where in it, what it is, how it plays */
-        ULONG len = st_length_ms(), kbps = in.bitrate;
-        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
-                TS_BOLD);
-        amb_strlcpy(info, mp_track_by(), sizeof(info));
-        if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-            sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
-            amb_strlcat(info, part, sizeof(info));
-        }
-        np_line(np.info_y, info, PEN_DIM, TS_SMALL);
-        if (y + lh * 3 > bottom)
-            return;
-        np_pair(y, _("File"), FilePart((STRPTR)mp_path()));
-        y += lh;
-        if (!kbps && len >= 1000 && st_size())
-            kbps = st_size() / (len / 8);   /* FLAC: bytes / (ms / 8) = kbit/s */
-        if (!mp_running())
-            np_pair(y, _("Format"), st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped"));
-        else if (!in.freq)
-            np_pair(y, _("Format"), _("Reading..."));
-        else
-            np_audio_line(y, _("Format"), mp_tag(), kbps, in.freq, in.channels);
-        y += lh;
-        if (mp_running() && in.dec_freq)
-            np_playback_line(y, &in);
-        else
-            np_pair(y, _("Playback"), "");
-        y += lh;
-        if (y <= bottom)                    /* the picture's square left alone */
-            gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
-                     PEN_BG);
-        return;
-    }
-    if (mp_is_track()) {
-        /* a Plex track: its title, artist and album, where in the list, how it plays */
-        np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("(no title)"), PEN_WHITE,
-                TS_BOLD);
-        amb_strlcpy(info, mp_track_by(), sizeof(info));
-        if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-            /* the album is named already: only where in it */
-            sprintf(part, _("   Track %ld of %ld"), (long)np.idx + 1, (long)np.list.count);
-            amb_strlcat(info, part, sizeof(info));
-        }
-        np_line(np.info_y, info, PEN_DIM, TS_SMALL);
-        if (y + lh * 3 > bottom)
-            return;
-        /* the file as stored, as the server sends it, as the Amiga plays it */
-        np_audio_line(y, _("Original"), plex_orig.codec, plex_orig.kbps, plex_orig.rate,
-                      plex_orig.ch);
-        y += lh;
-        if (!mp_running())
-            np_pair(y, "Plex", st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped"));
-        else if (in.state == ST_CONNECTING)
-            np_pair(y, "Plex", _("Connecting..."));
-        else if (in.state == ST_BUFFERING)
-            np_pair(y, "Plex", _("Buffering..."));
-        else if (!plex_orig.conv)
-            np_pair(y, "Plex", _("sends the file as stored"));
-        else
-            np_audio_line(y, "Plex", "MP3", in.avg_kbps, in.freq, in.channels);
-        y += lh;
-        if (mp_running() && in.dec_freq)
-            np_playback_line(y, &in);
-        else
-            np_pair(y, _("Playback"), "");
-        y += lh;
-        if (y <= bottom)                    /* the cover's square left alone */
-            gfx_fill(&g, np.x0, y, np.x0 + (np.art_s ? np.w - np.art_s - U(8) : np.w) - 1, bottom,
-                     PEN_BG);
-        return;
-    }
-    np_line(np.title_y, mp_stream_name()[0] ? mp_stream_name() : _("Radio"), PEN_WHITE, TS_BOLD);
-    sprintf(info, _("Radio   %s"), mp_tag());
-    if (st_secure()) {
-        /* the stream's connection, whatever the address asked for said */
-        if (info[strlen(info) - 1] != ' ')
-            amb_strlcat(info, ",", sizeof(info));
-        amb_strlcat(info, " HTTPS", sizeof(info));
-    }
-    if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-        sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
-        amb_strlcat(info, part, sizeof(info));
-        amb_strlcat(info, np.folder, sizeof(info));
-    }
-    np_line(np.info_y, info, PEN_DIM, TS_SMALL);
-    if (y + lh * 5 > bottom)
-        return;
-    np_line(y, _("On air"), PEN_DIM, TS_BOLD);
-    y += lh;
-    if (!mp_running())
-        now = st_state() == ST_FAILED && st_error()[0] ? st_error() : _("Stopped");
-    else if (in.state == ST_CONNECTING)
-        now = _("Connecting...");
-    else if (in.state == ST_BUFFERING)
-        now = _("Buffering...");
-    else if (!now[0])
-        now = _("(the station does not say)");
-    np_line(y, now, PEN_TEXT, TS_SMALL);
-    gfx_fill(&g, np.x0, y + g.font_h, np.x0 + np.w - 1, y + lh * 2 - 1, PEN_BG);
-    y += lh * 2;
-    if (in.name[0] || in.genre[0]) {
-        sprintf(part, "%s%s%s", in.name, in.name[0] && in.genre[0] ? "   " : "", in.genre);
-        np_line(y, part, PEN_DIM, TS_SMALL);
-        y += lh;
-    }
-    if (in.dec_freq && y + lh <= bottom) {
-        char k[16];
-        sprintf(part, _("MP3 %ldkbps, %s %s"), (long)in.bitrate, fmt_khz(in.freq, k),
-                in.channels == 2 ? "stereo" : "mono");
-        if (in.dec_freq != in.freq || in.dec_channels != in.channels)
-            sprintf(part + strlen(part), _("; played at %s %s"), fmt_khz(in.dec_freq, k),
-                    in.dec_channels == 2 ? "stereo" : "mono");
-        amb_strlcat(part, in.mhi ? _(", by MHI") : in.ahi ? ", AHI" : "", sizeof(part));
-        np_line(y, part, PEN_DIM, TS_SMALL);
-        y += lh;
-    }
-    if (y <= bottom)
-        gfx_fill(&g, np.x0, y, np.x0 + np.w - 1, bottom, PEN_BG);   /* lines there before */
-}
 
-static void np_draw(BOOL full);  /* the program's: state, then the view (ui) */
-static void cl_np_draw(BOOL full)
-{
-    struct MpStatus st;
-    char info[320];
-    int i;
-    mp_status(&st);
-    if (!np.w)
-        full = TRUE;                        /* not laid out yet */
-    if (full) {
-        const char *t = mp_title();
-        char label[120];
-        np_layout();
-        np_cycle_layout();
-        plex_shown[0] = 0;                  /* the pane's details: gone under this page */
-        if (mp_is_track() && np.art_s && pic_take(np_art_file, np.art_x, np.art_y, np.art_s,
-                                                  np.art_h)) {
-            /* the cover on screen already (the album's pane): moved into
-             * its square, the rest cleared around it */
-            fill_around_pic(g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
-            np_art_drawn = TRUE;
-        } else {
-            if (g.pic_w)                    /* a cover there: cleared, then its pens go */
-                gfx_picture_clear(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
-            np_art_drawn = FALSE;
-            gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
-            if (mp_is_track() && np.art_s && !np_aj && np_art_file[0] && !art_nj[ART_NP])
-                np_art_load(np_art_file);   /* left to the pane, and gone from it since */
-        }
-        if (!mp_loaded()) {
-            gfx_text(&g, np.x0, np.title_y, _("Nothing playing"), PEN_DIM, PEN_BG, np.w, TS_BOLD);
-            return;
-        }
-        if (mp_is_stream()) {
-            np_draw_station();
-            np_art_draw();
-            goto controls;
-        }
-        mods_label(FilePart((STRPTR)mp_path()), label, sizeof(label));
-        while (*t == ' ')
-            t++;
-        gfx_text(&g, np.x0, np.title_y, t[0] ? t : label, PEN_WHITE, PEN_BG, np.w, TS_BOLD);
-        {
-            /* the file, what plays it (or its kind), the subsong, where in the folder */
-            int sub, subs;
-            char part[160];
-            mp_subsongs(&sub, &subs);
-            sprintf(info, "%s   %s", FilePart((STRPTR)mp_path()), mp_tag());
-            if (mp_author()[0]) {
-                sprintf(part, _("   by %s"), mp_author());
-                amb_strlcat(info, part, sizeof(info));
-            }
-            if (subs > 1) {
-                sprintf(part, _("   subsong %ld of %ld"), (long)sub, (long)subs);
-                amb_strlcat(info, part, sizeof(info));
-            }
-            if (np.list.pool && np.idx >= 0 && np.list.count > 1) {
-                sprintf(part, _("   %ld of %ld in "), (long)np.idx + 1, (long)np.list.count);
-                amb_strlcat(info, part, sizeof(info));
-                amb_strlcat(info, np.folder, sizeof(info));
-            }
-        }
-        gfx_text(&g, np.x0, np.info_y, info, PEN_DIM, PEN_BG,
-                 np.cyc_x0 > np.x0 ? np.cyc_x0 - U(6) - np.x0 : np.w, TS_SMALL);
-        /* the sample names, in two columns where they fit */
-        {
-            WORD lh = g.font_h + U(1), cols = np.w >= U(300) ? 2 : 1, cw = np.w / cols;
-            WORD rows = (g.footer_y - 2 - np.samples_y - lh) / lh, n = 0, k;
-            if (rows > 0 && mp_samples() > 0) {
-                gfx_text(&g, np.x0, np.samples_y, _("Samples"), PEN_DIM, PEN_BG, 0, TS_BOLD);
-                for (k = 0; k < mp_samples() && n < rows * cols; k++) {
-                    BOOL used;
-                    const char *sn = mp_sample_name(k, &used);
-                    char line[40];
-                    if (!sn[0] && !used)
-                        continue;
-                    sprintf(line, "%2ld  %s", (long)k + 1, sn);
-                    gfx_text(&g, np.x0 + (n / rows) * cw, np.samples_y + lh + (n % rows) * lh, line,
-                             used ? PEN_TEXT : PEN_DIM, PEN_BG, cw - U(6), TS_SMALL);
-                    n++;
-                }
-            }
-        }
-    }
-controls:
-    if (!mp_loaded())
-        return;
-    np_draw_progress(full, &st);
-    np_draw_meters(full, &st);
-    if (full)
-        np_draw_cycle();
-    {
-        int state = np_state();
-        int steps = (mp_can_step(-1) ? 1 : 0) | (mp_can_step(1) ? 2 : 0);
-        BOOL foc = np_focus_shown(), hot = np_slider_hot();
-        if (np.flash >= 0 && (LONG)(time_ms() - np.flash_until) >= 0)
-            np.flash = -1;                  /* its moment is over */
-        for (i = 0; i < NB_COUNT; i++)
-            if (full || foc != np.s_focus || (i == NB_PLAY && state != np.s_state) ||
-                ((i == np.btn || i == np.s_btn) && np.btn != np.s_btn) ||
-                ((i == np.hov || i == np.s_hov) && np.hov != np.s_hov) ||
-                ((i == np.flash || i == np.s_flash) && np.flash != np.s_flash) ||
-                ((i == np.rep || i == np.s_rep) && np.rep != np.s_rep) ||
-                ((i == NB_VDOWN || i == NB_VUP || i == NB_MUTE) && mp_volume() != np.s_vol) ||
-                ((i == NB_BACK || i == NB_FWD) && steps != np.s_steps) ||
-                (i == NB_LOOP && play_loop != np.s_loop))
-                np_button(i);
-        if (full || mp_volume() != np.s_vol || hot != np.s_slhot)
-            np_slider();
-        if (full || mp_volume() != np.s_vol)
-            np_volume_text();
-        np.s_state = state;
-        np.s_steps = steps;
-        np.s_loop = play_loop;
-        np.s_btn = np.btn;
-        np.s_hov = np.hov;
-        np.s_flash = np.flash;
-        np.s_rep = np.rep;
-        np.s_focus = foc;
-        np.s_slhot = hot;
-        np.s_vol = mp_volume();
-    }
-}
 
 /* Brought up to date (the timer tick): drawn into the hidden buffer and
  * copied up, no flip. */
-static void np_update(void)
+void np_update(void)
 {
     BOOL was;
     if (gfx_off) {
@@ -8108,7 +5825,7 @@ static void np_update(void)
     }
 }
 
-static BOOL np_row(const struct Item *it);
+BOOL np_row(const struct Item *it);
 
 /* The playing module marked in any Mods list open (redraw: and the list
  * on screen drawn again, when the music moved on by itself). */
@@ -8941,7 +6658,7 @@ static void mods_play_item(struct Page *p)
  * Music's own folders; a Plex or Radio list is asked of the network, so
  * the way stops at its section), the playing entry selected. */
 static void open_dir_now(struct Item *it);
-static void draw_all(void);
+void draw_all(void);
 static void menu_select_now(int i, BOOL now);
 
 static void np_goto_source(void)
@@ -8987,40 +6704,12 @@ static void np_goto_source(void)
 }
 
 /* A Mods list on screen with the playing module in it. */
-static BOOL np_list_on(void)
+BOOL np_list_on(void)
 {
     struct Page *p = pane_pending ? NULL : cur();
     return p && p->type == PT_LIST && (p->mods || p->radio || p->plex || p->songs) && mp_loaded();
 }
 
-/* The bars by the playing module (and Now playing) drawn again: the next
- * frame of their dance, or still. Just the markers, without a flip. */
-static void np_eq_redraw(void)
-{
-    struct Page *p = cur();
-    LONG i, end;
-    if (!np_list_on())
-        return;
-    end = p->top + list_visible();
-    if (end > p->list.count)
-        end = p->list.count;
-    for (i = p->top; i < end; i++) {
-        struct Item *it = &p->list.items[i];
-        WORD y;
-        BOOL sel, was;
-        UBYTE bg;
-        if (it->mark != MARK_PLAYING)
-            continue;
-        y = g.list_top + (i - p->top) * g.list_row_h + (g.list_row_h - g.mark_px) / 2;
-        sel = i == p->sel;
-        bg = sel ? (focus == FOCUS_CONTENT ? PEN_HL : PEN_SELDIM)
-                 : mouse_mode && i - p->top == hover_row ? PEN_RULE : PEN_BG;
-        was = gfx_quiet_begin();
-        gfx_mark(&g, MARK_PLAYING, g.pane_x, y,
-                 sel ? PEN_WHITE : PEN_TEXT, bg);
-        gfx_quiet_end(&g, was, g.pane_x, y, g.pane_x + g.mark_px - 1, y + g.mark_px - 1);
-    }
-}
 
 /* The bars' dance: a frame every 120 ms while the music plays. */
 static void np_eq_tick(void)
@@ -9041,29 +6730,6 @@ static void ly_eq_tick(void)
     }
 }
 
-static void cl_eq_tick(void)
-{
-    static ULONG last;
-    BOOL still = !mp_playing();
-    ULONG now = time_ms();
-    if (still != gfx_eq_still) {
-        gfx_eq_still = still;
-        np_eq_redraw();
-        hdr_np_draw(TRUE);
-    } else if (!still && now - last >= 120) {
-        int k;
-        last = now;
-        gfx_eq_frame++;
-        /* as the visualization shown moves (not while it is paused for
-         * the CPU's sake: the dance then) */
-        k = vis_paused() ? -1 : vis_marker(gfx_eq_lev);
-        gfx_eq_kind = (UBYTE)(k == VIS_SPECTRUM ? 1 : k == VIS_METERS ? 2 : 0);
-        np_eq_redraw();
-        hdr_np_draw(TRUE);
-    } else if (mp_loaded() != hdr_np_on) {
-        hdr_np_draw(TRUE);                  /* started or stopped */
-    }
-}
 
 /* The timer tick: the next module at a song's end, the page kept up. */
 static int np_button_at(WORD x, WORD y)
@@ -9151,7 +6817,7 @@ static void np_tick(void)
         if (k != shown && (k > shown + 1 || k + 1 < shown || !shown || !k)) {
             BOOL was = gfx_quiet_begin();
             shown = k;
-            np_draw_station();
+            ui->np_station();
             gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
         }
     }
@@ -9624,25 +7290,8 @@ static void build_mods_root(void)
                  "", "", IT_TEXT);
 }
 
-static void pane_settle(void);
+void pane_settle(void);
 
-static void draw_all(void);  /* the program's: state, then the view (ui) */
-static void cl_draw_all(void)
-{
-    if (foot_hidden && (!g.wb || g.footer_y != g.h)) {
-        foot_hidden = foot_over = FALSE;    /* opened again (its metrics anew): shown */
-        foot_since = mouse_mode ? time_ms() : 0;
-    }
-    aside_w = -1;               /* the screen may be new: work the column out again */
-    pane_settle();
-    gfx_fill(&g, 0, 0, g.w - 1, g.h - 1, PEN_BG);
-    if (g.pic_w)
-        gfx_picture_free(&g);   /* filled over just now: its pens go too */
-    draw_header();
-    draw_menu();
-    draw_pane(TRUE);
-    draw_footer();
-}
 
 /* ------------------------------------------------------------ actions */
 /* Moving through the main menu only moves the highlight and shows the
@@ -9655,7 +7304,7 @@ static void cl_draw_all(void)
 static BOOL key_is_down(UWORD rawkey);
 static ULONG pane_due;
 
-static void pane_settle(void)
+void pane_settle(void)
 {
     if (!pane_pending)
         return;
@@ -9707,24 +7356,6 @@ static void pane_tick(void)
         pane_settle();
 }
 
-/* The pane while the selection is moving: blank, with the section's name. */
-static void pane_preview(BOOL first);  /* the program's: state, then the view (ui) */
-static void cl_pane_preview(BOOL first)
-{
-    const char *t = _(mod_names[menu[menu_sel]]);
-    if (first) {
-        /* all but the title band (title_band_rest); a picture cleared
-         * first, then its pens let go (filled over, it flashed) */
-        if (g.pic_w)
-            gfx_picture_clear(&g, g.menu_w + U(3), U(25), g.w - 1, g.footer_y - 2);
-        gfx_fill_bg(&g, g.menu_w + U(3), U(25), g.w - 1, U(26) - 1);
-        gfx_fill_bg(&g, g.menu_w + U(3), U(26), g.pane_x - U(2) - 1, U(42) - 1);
-        gfx_fill_bg(&g, g.menu_w + U(3), U(42), g.w - 1, g.footer_y - 2);
-    }
-    gfx_text(&g, g.pane_x, U(28), t, PEN_WHITE, PEN_BG, g.pane_w, TS_BOLD | TS_OPAQUE);
-    title_band_rest(g.pane_x, g.pane_x + gfx_textlen(&g, t, TS_BOLD), g.w);
-    gfx_fill(&g, g.pane_x, U(41), g.pane_x + g.pane_w - 1, U(42) - 1, PEN_RULE);
-}
 
 /* now: build the section straight away (a click), not once it settles */
 static void menu_select_now(int i, BOOL now)
@@ -13184,7 +10815,7 @@ static void plink_sign_out(void)
 static void whd_done(struct NetJob *j);
 static struct NetJob *whd_job;
 
-static void radio_done(struct NetJob *j)
+void radio_done(struct NetJob *j)
 {
     struct Page *p = NULL;
     int d;
@@ -13809,7 +11440,7 @@ static void plex_ask_rate(const char *key)
 /* The server's picture thumb made w x h, for kind: TRUE, and its file in
  * file, when it is kept already; else asked for (whatever kind asked for
  * before given up), and art_ready comes when it is here. */
-static BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
+BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
 {
     struct NetJob *j;
     char req[400];
@@ -13883,7 +11514,7 @@ static WORD np_art_size(void)
 }
 
 /* The cover's file to the loader, made for the square. */
-static void np_art_load(const char *file)
+void np_art_load(const char *file)
 {
     if (gfx_off)
         return;     /* a layout draws: the classic page's cover (read into its pens) is
@@ -13910,37 +11541,6 @@ static void np_art_load(const char *file)
     ldr_submit_first(j);
 }
 
-/* The cover in its square, when it is made. */
-static void np_art_draw(void)
-{
-    WORD dh = 0;
-    BOOL taken = FALSE;
-    if (!np_aj || !np_aj->done || !np_on() || !mp_is_track() || !np.art_s || np_art_drawn)
-        return;
-    if (np_aj->thumb &&
-        gfx_thumb(&g, np_aj->thumb, &np_aj->info, np.art_x, np.art_y, np.art_s, np.art_h, &dh)) {
-        /* the square around a cover not square (the one before may show there) */
-        if (g.pic_x > np.art_x)
-            gfx_fill_bg(&g, np.art_x, np.art_y, g.pic_x - 1, np.art_y + np.art_h - 1);
-        if (g.pic_x + g.pic_w < np.art_x + np.art_s)
-            gfx_fill_bg(&g, g.pic_x + g.pic_w, np.art_y, np.art_x + np.art_s - 1,
-                        np.art_y + np.art_h - 1);
-        if (dh < np.art_h)
-            gfx_fill_bg(&g, g.pic_x, np.art_y + dh, g.pic_x + g.pic_w - 1, np.art_y + np.art_h - 1);
-    }
-    else if (np_aj->obj && gfx_picture_obj(&g, np_aj->obj, np_aj->remapped, np.art_x, np.art_y,
-                                           np.art_s, np.art_h, TRUE, &dh, &taken) && taken)
-        np_aj->obj = NULL;                  /* the screen has it (its pens) */
-    if (g.pic_w) {
-        /* what is on screen, and where: the album's pane takes it back */
-        amb_strlcpy(pv_onscr.key, np_aj->path, sizeof(pv_onscr.key));
-        pv_onscr.x = np.art_x;
-        pv_onscr.y = np.art_y;
-        pv_onscr.w = np.art_s;
-        pv_onscr.h = np.art_h;
-    }
-    np_art_drawn = TRUE;
-}
 
 /* A Plex track starting: its cover asked for (or loaded, if kept). */
 static void np_art_start(const struct Item *it)
@@ -13993,7 +11593,7 @@ static void np_art_start(const struct Item *it)
 
 /* ---- the details pane of a Plex list (artists, albums): the picture
  * above (the server's, made for the place), the details below */
-static void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen)
+void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen)
 {
     char line[160];
     WORD lh = g.font_h + U(1);
@@ -14028,7 +11628,7 @@ static void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pe
 
 /* What a Plex page's details pane shows for entry idx: the entry (an
  * artist, an album) or, on an album's own page, the album. */
-static BOOL plex_pv_src(struct Page *p, LONG idx, struct Item *out)
+BOOL plex_pv_src(struct Page *p, LONG idx, struct Item *out)
 {
     memset(out, 0, sizeof(*out));
     if (idx >= 0 && idx < p->list.count &&
@@ -14049,42 +11649,22 @@ static BOOL plex_pv_src(struct Page *p, LONG idx, struct Item *out)
 /* The cover's square: as much of the pane's top half as fits, less on a
  * slower Amiga (a 68030 decodes and reduces each pixel of a JPEG: 160
  * pixels a side is half the work of 220). */
-static WORD plex_art_side(void)
+WORD plex_art_side(void)
 {
     WORD w = aside_width() - U(4), h = (g.footer_y - 2 - g.list_top) / 2, s = w < h ? w : h;
     WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
     return s > cap ? cap : s;
 }
 
-/* Entry idx shows the picture on screen now, where it is (an album's
- * tracks all show its cover: kept, not drawn again). */
-static BOOL plex_keeps(struct Page *p, LONG idx)
-{
-    struct Item src;
-    char thumb[160], req[400], file[120];
-    WORD s = plex_art_side();
-    if (!g.pic_w || !pv_onscr.key[0] || !plex_pv_src(p, idx, &src))
-        return FALSE;
-    radio_field(&src, 2, thumb, sizeof(thumb));
-    if (!thumb[0])
-        return FALSE;
-    plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
-    return !strcmp(file, pv_onscr.key) && pv_onscr.x == aside_x() && pv_onscr.y == g.list_top &&
-           pv_onscr.h == s;
-}
 
-/* ---- an artist's biography, an album's review: left out of a library's
- * long lists (excludeFields), so asked for alone when the pane shows one,
- * and kept for the last few shown */
-#define SUM_KEPT 8
-static struct { char key[120]; char text[300]; } sum_kept[SUM_KEPT];
+struct SumKept sum_kept[SUM_KEPT];
 static int sum_next;
-static char sum_want[120];          /* its key */
-static WORD sum_y;                  /* where its text goes in the pane */
+char sum_want[120];          /* its key */
+WORD sum_y;                  /* where its text goes in the pane */
 
 /* The item's own key: /library/metadata/<n> (its list key without
  * /children); FALSE where it has none (not an artist or album). */
-static BOOL sum_key(const struct Item *it, char *out, LONG max)
+BOOL sum_key(const struct Item *it, char *out, LONG max)
 {
     char *c;
     radio_field(it, 0, out, max);
@@ -14095,51 +11675,7 @@ static BOOL sum_key(const struct Item *it, char *out, LONG max)
     return TRUE;
 }
 
-static void plex_sum_find(const struct Item *it, char *out, LONG max)
-{
-    char k[120];
-    int i;
-    if (!sum_key(it, k, sizeof(k)))
-        return;
-    for (i = 0; i < SUM_KEPT; i++)
-        if (sum_kept[i].key[0] && !strcmp(sum_kept[i].key, k)) {
-            amb_strlcpy(out, sum_kept[i].text, max);
-            return;
-        }
-}
 
-static void plex_sum_ask(const struct Item *it, WORD y)
-{
-    struct NetJob *j;
-    char k[120];
-    int i;
-    if (!sum_key(it, k, sizeof(k)) || !plex.host[0])
-        return;
-    for (i = 0; i < SUM_KEPT; i++)
-        if (sum_kept[i].key[0] && !strcmp(sum_kept[i].key, k))
-            return;                         /* asked before: it has none */
-    if (plex_sj) {
-        if (!strcmp(sum_want, k)) {
-            sum_y = y;
-            return;                         /* on its way */
-        }
-        net_cancel(plex_sj);
-        plex_sj->orphan = TRUE;             /* freed when it comes back */
-        plex_sj->seq = 0;
-        plex_sj = NULL;
-    }
-    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
-        return;
-    amb_strlcpy(j->host, plex.host, sizeof(j->host));
-    j->port = plex.port;
-    plex_request(k, j->path, sizeof(j->path));
-    amb_strlcpy(sum_want, k, sizeof(sum_want));
-    sum_y = y;
-    plex_sj = j;
-    net_submit(j);
-    if (j->done && !j->busy)
-        radio_done(j);
-}
 
 /* Its answer: kept, and written in the pane if it still shows that one. */
 static void plex_sum_came(struct NetJob *j)
@@ -14167,29 +11703,11 @@ static void plex_sum_came(struct NetJob *j)
     }
 }
 
-static BOOL plex_pv_key(struct Page *p, char *key)
-{
-    struct Item src;
-    char thumb[160];
-    if (!plex_pv_src(p, p->sel, &src))
-        return FALSE;
-    radio_field(&src, 2, thumb, sizeof(thumb));
-    sprintf(key, "%.90s\t%.160s", src.label, thumb);
-    return TRUE;
-}
 
-/* The details on screen are this page's too (into an album from its
- * entry, or back): left as they are, cover and text. */
-static BOOL plex_text_kept(struct Page *p)
-{
-    char key[260];
-    return p->plex && plex_shown[0] && plex_keeps(p, p->sel) && plex_pv_key(p, key) &&
-           !strcmp(key, plex_shown);
-}
 
 /* The picture on screen (anywhere: Now playing's square) is the one entry
  * idx shows, and fits the pane: plex_pv_draw moves it rather than clear it. */
-static BOOL plex_movable(struct Page *p, LONG idx)
+BOOL plex_movable(struct Page *p, LONG idx)
 {
     struct Item src;
     char thumb[160], req[400], file[120];
@@ -14203,40 +11721,8 @@ static BOOL plex_movable(struct Page *p, LONG idx)
     return !strcmp(file, pv_onscr.key) && g.pic_w <= aside_width() - U(4) && g.pic_h <= s;
 }
 
-/* The cover on screen moved into the pane (plex_movable), not drawn again:
- * TRUE if it was. */
-static BOOL plex_take(struct Page *p)
-{
-    struct Item src;
-    char thumb[160], req[400], file[120];
-    WORD s = plex_art_side();
-    if (!plex_movable(p, p->sel) || !plex_pv_src(p, p->sel, &src))
-        return FALSE;
-    radio_field(&src, 2, thumb, sizeof(thumb));
-    plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
-    if (!pic_take(file, aside_x(), g.list_top, aside_width() - U(4), s))
-        return FALSE;
-    plex_shown[0] = 0;          /* what was under it is another page's: the text written again */
-    return TRUE;
-}
 
-/* Photos' pictures for the pane, kept in RAM: for the last few only (a
- * library of thousands would fill it); albums' covers stay, as Music's. */
-#define PV_PHOTOS_KEPT 12
-static char pv_photo_file[PV_PHOTOS_KEPT][120];
-static int pv_photo_next;
 
-static void pv_photo_keep(const char *file)
-{
-    int i;
-    for (i = 0; i < PV_PHOTOS_KEPT; i++)
-        if (!strcmp(pv_photo_file[i], file))
-            return;
-    if (pv_photo_file[pv_photo_next][0])
-        DeleteFile((CONST_STRPTR)pv_photo_file[pv_photo_next]);
-    amb_strlcpy(pv_photo_file[pv_photo_next], file, sizeof(pv_photo_file[0]));
-    pv_photo_next = (pv_photo_next + 1) % PV_PHOTOS_KEPT;
-}
 
 /* Entry idx's picture, at the preview's size, kept in RAM already. */
 static BOOL plex_art_kept(struct Page *p, LONG idx)
@@ -14295,101 +11781,6 @@ static void plex_ahead(struct Page *p)
     }
 }
 
-static void plex_pv_draw(struct Page *p, BOOL was_shown)
-{
-    char *last = plex_shown;
-    WORD x0 = aside_x(), w = aside_width() - U(4), max_y = g.footer_y - 2, y, s = plex_art_side();
-    struct Item src;
-    char thumb[160], year[8], by[100], count[24], studio[60], summary[300], line[200], file[120];
-    char key[260];
-    BOOL keep = plex_keeps(p, p->sel);
-    file[0] = 0;
-    det.has_box = FALSE;
-    det.text_shown = TRUE;
-    if (!plex_pv_src(p, p->sel, &src)) {
-        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
-        last[0] = 0;
-        return;
-    }
-    (void)was_shown;
-    radio_field(&src, 2, thumb, sizeof(thumb));
-    sprintf(key, "%.90s\t%.160s", src.label, thumb);
-    if (!keep && thumb[0] && pv_pictures() && g.pic_w) {
-        /* the cover on screen elsewhere (back from Now playing): moved
-         * here as it is, the pane cleared around it */
-        char req[400];
-        plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
-        if (pic_take(file, x0, g.list_top, w, s)) {
-            fill_around_pic(x0, g.list_top, g.w - 1, max_y);
-            last[0] = 0;                    /* the text below it: written again */
-            keep = TRUE;
-        }
-    }
-    if (keep) {
-        det.has_box = TRUE;
-        det.pic_shown = TRUE;
-        pv_box_y = g.list_top;
-        pv_box_h = s;
-        if (!strcmp(key, last))
-            return;                         /* the same album's: nothing changes */
-        gfx_fill_bg(&g, x0, g.list_top + s, g.w - 1, max_y);
-    } else {
-        gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
-        gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
-    }
-    amb_strlcpy(last, key, sizeof(plex_shown));
-    radio_field(&src, 3, year, sizeof(year));
-    radio_field(&src, 4, by, sizeof(by));
-    radio_field(&src, 5, count, sizeof(count));
-    radio_field(&src, 6, studio, sizeof(studio));
-    radio_field(&src, 7, summary, sizeof(summary));
-    if (!summary[0])
-        plex_sum_find(&src, summary, sizeof(summary));  /* left out of a library's list */
-    pv_box_y = g.list_top;
-    pv_box_h = s;
-    y = g.list_top;
-    if (thumb[0] && pv_pictures() && !gfx_off) {     /* (a layout: its own pictures) */
-        det.has_box = TRUE;
-        y = pv_box_y + pv_box_h + U(4);
-        if (!keep && art_fetch(ART_PV, thumb, s, s, file)) {
-            pv_colour_cap = plex_colours();
-            det.sj = det_request(LJ_SHOT, SHOT_FILE, file, FALSE, TRUE);
-            pv_colour_cap = 0;
-        }
-        if (src.kind == IT_PLEXPHOTO && file[0])
-            pv_photo_keep(file);            /* deleted when a dozen more have come */
-    }
-    gfx_text(&g, x0, y, src.label, PEN_WHITE, PEN_BG, w, TS_BOLD);
-    y += g.font_h + U(2);
-    if (by[0]) {
-        gfx_text(&g, x0, y, by, PEN_TEXT, PEN_BG, w, TS_SMALL);
-        y += g.font_h + U(1);
-    }
-    line[0] = 0;
-    if (year[0])
-        amb_strlcat(line, year, sizeof(line));
-    if (count[0]) {
-        amb_strlcat(line, line[0] ? "   " : "", sizeof(line));
-        amb_strlcat(line, count, sizeof(line));
-    }
-    if (studio[0]) {
-        amb_strlcat(line, line[0] ? "   " : "", sizeof(line));
-        amb_strlcat(line, studio, sizeof(line));
-    }
-    if (line[0]) {
-        gfx_text(&g, x0, y, line, PEN_DIM, PEN_BG, w, TS_SMALL);
-        y += g.font_h + U(1);
-    }
-    if (summary[0]) {
-        y += U(3);
-        pv_wrap(x0, &y, w, max_y, summary, PEN_DIM);
-    } else {
-        plex_sum_ask(&src, y);              /* asked for: written here when it comes */
-    }
-    if (det.sj && det.sj->done)
-        det_progress(p);
-}
 
 /* A picture of the server's is here (kept in file). */
 static void art_ready(int kind, const char *file)
@@ -15344,7 +12735,7 @@ static void coast_tick(void)
     }
 }
 
-static BOOL hold_active(void)
+BOOL hold_active(void)
 {
     return hold.dir != 0 || hold.coast;     /* a coast is a glide too: previews wait */
 }
@@ -19833,19 +17224,6 @@ static void ly_pane_preview(BOOL first)
     lv_note_what(LC_SELECT);                /* (Home shows the section moved to) */
 }
 
-/* the classic's turn of the loop: the preview's spinner, a Radio list's */
-static void cl_tick(void)
-{
-    pv_spin_tick();
-    radio_spin();
-}
-static const struct UiView classic_ui = {
-    cl_draw_header, cl_draw_menu, cl_draw_menu_row, cl_draw_footer, cl_draw_title, cl_draw_title_count,
-    cl_draw_list_row, cl_draw_gutter_planes, cl_draw_list_rows, cl_draw_list_move, cl_draw_text_picture,
-    cl_draw_pane, cl_np_draw, cl_draw_all, cl_pane_preview,
-    cl_tick, cl_busy, cl_header_np, cl_clock, cl_status, cl_letter_show, cl_letter_relabel,
-    cl_letter_hide, np_draw_station, cl_eq_tick, np_visual_changed, np_art_draw
-};
 static void ly_tick(void)
 {
 }
@@ -19875,7 +17253,7 @@ static void ly_np_visual(void)
 static void ly_np_art(void)
 {
 }
-static const struct UiView layout_ui = {
+const struct UiView layout_ui = {
     ly_draw_header, ly_draw_menu, ly_draw_menu_row, ly_draw_footer, ly_draw_title, ly_draw_title_count,
     ly_draw_list_row, ly_draw_gutter_planes, ly_draw_list_rows, ly_draw_list_move, ly_draw_text_picture,
     ly_draw_pane, ly_np_draw, ly_draw_all, ly_pane_preview,
@@ -19884,55 +17262,51 @@ static const struct UiView layout_ui = {
 };
 
 /* ---- the program's side of each: its state, then the view driven */
-static void draw_header(void)
+void draw_header(void)
 {
     ui->header();
 }
-static void draw_menu(void)
+void draw_menu(void)
 {
     ui->menu();
 }
-static void draw_menu_row(int i)
+void draw_menu_row(int i)
 {
     ui->menu_row(i);
 }
-static void draw_footer(void)
+void draw_footer(void)
 {
     ui->footer();
 }
-static void draw_title(struct Page *p)
+void draw_title(struct Page *p)
 {
     ui->title(p);
 }
-static void draw_title_count(struct Page *p)
+void draw_title_count(struct Page *p)
 {
     det_touch(p);                           /* its details, once it rests */
     ch_pump(p);                             /* letters around the selection, ahead */
     ui->title_count(p);
 }
-static void draw_list_row(struct Page *p, LONG idx, WORD col)
+void draw_list_row(struct Page *p, LONG idx, WORD col)
 {
     ui->list_row(p, idx, col);
 }
-static void draw_gutter_planes(struct Page *p, UBYTE planes)
+void draw_gutter_planes(struct Page *p, UBYTE planes)
 {
     ui->gutter_planes(p, planes);
 }
-static void draw_list_rows(struct Page *p)
+void draw_list_rows(struct Page *p)
 {
     list_follow(p);                         /* where the list is scrolled to */
     ui->list_rows(p);
 }
-static void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
+void draw_list_move(struct Page *p, LONG old_sel, LONG old_top)
 {
     list_follow(p);
     ui->list_move(p, old_sel, old_top);
 }
-static void draw_text_picture(struct Page *p)
-{
-    ui->text_picture(p);
-}
-static void draw_pane(BOOL full)
+void draw_pane(BOOL full)
 {
     struct Page *p = cur();
     if (!p)
@@ -19947,11 +17321,11 @@ static void draw_pane(BOOL full)
     if (p->type == PT_LIST && !pane_pending)
         det_touch(p);                       /* (its details: Classic's title asks too) */
 }
-static void np_draw(BOOL full)
+void np_draw(BOOL full)
 {
     ui->np(full);
 }
-static void draw_all(void)
+void draw_all(void)
 {
     struct Page *p;
     pane_settle();                          /* (the section built, if still to be) */
@@ -19959,7 +17333,7 @@ static void draw_all(void)
     if ((p = cur()) && p->type == PT_LIST && !pane_pending)
         det_touch(p);                       /* its details asked for */
 }
-static void pane_preview(BOOL first)
+void pane_preview(BOOL first)
 {
     ui->pane_preview(first);
 }

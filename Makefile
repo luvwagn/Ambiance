@@ -48,7 +48,7 @@ SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
-       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c
+       src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c src/classic/classic.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
@@ -185,7 +185,10 @@ build/stream.o: build/ac3probe.h
 
 build/%.o: src/%.c src/amb.h $(VERSION_STAMP)
 	@echo "  CC    $@"
+	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c -o $@ $<
+
+build/main.o build/classic/classic.o: src/classic/classic.h src/app.h src/details.h
 
 build/lkit.o: src/lkit.h src/lkcore.h
 build/view.o build/copper.o build/anim.o: src/copper.h
@@ -319,7 +322,7 @@ check-syscalls: $(SRCS) src/amb.h build/ac3probe.h $(ZZ9K_SDK_STAMP)
 	@set -e; for f in $(SRCS); do \
 		$(CC) $(CFLAGS) $$( [ $$f = src/zz9k.c ] && echo '$(ZZ9K_CFLAGS)' ) \
 		  -S -o $(ASM_DIR)/$$(basename $$f .c).s $$f; done
-	@$(PYTHON) tools/check_syscalls.py $(patsubst src/%.c,$(ASM_DIR)/%.s,$(SRCS))
+	@$(PYTHON) tools/check_syscalls.py $(addprefix $(ASM_DIR)/,$(notdir $(SRCS:.c=.s)))
 	@echo "  CHECK OS-call arguments ok"
 
 # a DVD's subpictures, on the host (stand-in Amiga headers: tests/yuvdraw)
