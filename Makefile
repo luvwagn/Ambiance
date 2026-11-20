@@ -49,7 +49,7 @@ SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/jdec.o
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
 # AmiSSL 6 where it is installed, else 5 (nothing of AmiSSL linked in)
@@ -108,6 +108,19 @@ build/c2p68k.o: src/c2p68k.s
 
 src/c2p68k.s: tools/c2pgen/c2pgen.py
 	@$(PYTHON) tools/c2pgen/c2pgen.py $@
+
+build/pens68k.o: src/pens68k.s
+	@mkdir -p build
+	@echo "  ASM   $@"
+	@$(VASM) -Fhunk -m68020 -quiet -o $@ $<
+
+build/pens_test: tests/pens_test.c build/pens68k.o
+	@$(CC) -O2 $(CPU) -noixemul -Wall -o $@ tests/pens_test.c build/pens68k.o
+
+# the assembler's pens (AGA video) against the C, on a 68020
+test-pens: build/pens_test
+	@cd build && vamos -C 68020 -m 8192 pens_test > test-pens.txt && grep -q " 0 failed" test-pens.txt \
+		&& echo "  CHECK video pens (68020 assembler) ok" || (cat test-pens.txt; exit 1)
 
 build/c2p_test: tests/c2p_test.c build/c2p68k.o
 	@$(CC) -O2 $(CPU) -noixemul -Wall -o $@ tests/c2p_test.c build/c2p68k.o
