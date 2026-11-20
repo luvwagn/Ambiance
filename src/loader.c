@@ -94,6 +94,11 @@ static const char *pic_kind(const struct LJob *j, const char *src)
 static void decode(struct LJob *j, const char *src)
 {
     ULONG t0 = time_ms(), dw, dh;
+    if (j->vw && (j->thumb = view_own_read(src, j->vw_w, j->vw_h, j->tall, j->vw_true, j->maxcol, &j->info))) {
+        j->ms_decode = time_ms() - t0;      /* the viewer's, by Ambiance's own reader */
+        j->own = TRUE;
+        return;
+    }
     if (j->tw && !j->viewfit &&
         (j->thumb = ilbm_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info))) {
         j->ms_decode = time_ms() - t0;      /* an ILBM: read here, no datatype */

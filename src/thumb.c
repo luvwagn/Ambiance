@@ -67,6 +67,31 @@ void thumb_free(struct Thumb *t)
     FreeVec(t);
 }
 
+struct Thumb *thumb_pick(const struct Thumb *s, ULONG dw, ULONG dh)
+{
+    struct Thumb *t;
+    UWORD *xs;
+    ULONG x, y;
+    if (!s || !s->px || !dw || !dh || !(t = thumb_new(dw, dh)))
+        return NULL;
+    if (!(xs = AllocVec(dw * sizeof(UWORD), MEMF_ANY))) {
+        thumb_free(t);
+        return NULL;
+    }
+    for (x = 0; x < dw; x++)
+        xs[x] = (UWORD)((x * s->w + s->w / 2) / dw);
+    for (y = 0; y < dh; y++) {
+        const UBYTE *sr = s->px + ((y * s->h + s->h / 2) / dh) * s->mod;
+        UBYTE *dr = t->px + y * t->mod;
+        for (x = 0; x < dw; x++)
+            dr[x] = sr[xs[x]];
+    }
+    FreeVec(xs);
+    CopyMem((APTR)s->pal, t->pal, sizeof(t->pal));
+    t->ncol = s->ncol;
+    return t;
+}
+
 /* Colours as they fit in: shrunk (or enlarged) pixel for pixel. */
 static struct Thumb *exact(Object *o, ULONG sw, ULONG sh, ULONG dw, ULONG dh,
                            const ULONG *rgb, ULONG n)

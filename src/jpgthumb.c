@@ -148,8 +148,10 @@ static const char *why_not(int r)
     }
 }
 
-struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
-                         struct PicInfo *pi, const char *kind)
+/* view: the viewer's (w x h the screen, view_fit), else a thumbnail's
+ * (w x h its box, pic_fit) */
+static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                               struct PicInfo *pi, const char *kind, BOOL view)
 {
     struct JSrc s;
     struct Thumb *t = NULL;
@@ -191,7 +193,16 @@ struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
 
     /* the thumbnail's size from the picture's own, then the smallest
      * scale still at least that big */
-    pic_fit((ULONG)info.width, (ULONG)info.height, tall, w, h, whole, &dw, &dh);
+    memset(pi, 0, sizeof(*pi));
+    pi->w = (UWORD)info.width;
+    pi->h = (UWORD)info.height;
+    pi->depth = info.ncomp == 1 ? 8 : 24;
+    strcpy(pi->fmt, "JPEG");
+    strcpy(pi->cls, "jdec");                /* built in, as ilbm.c's are "" */
+    if (view)
+        view_fit((UWORD)w, (UWORD)h, tall, pi, &dw, &dh, NULL, 0);
+    else
+        pic_fit((ULONG)info.width, (ULONG)info.height, tall, w, h, whole, &dw, &dh);
     scale = jd_scale_for(&info, (int32_t)dw, (int32_t)dh);
     jd_out_size(&info, scale, &ow, &oh);
     s.w = (ULONG)ow;
@@ -203,14 +214,22 @@ struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
             note(kind ? kind : "picture", why, path);
         goto out;
     }
-    if (!(t = thumb_from_rgb(s.rgb, s.w, s.h, dw, dh, maxcol)))
+    if (view && maxcol <= THUMB_DEEP && (dw > s.w || dh > s.h)) {
+        /* true colour, to be made larger: as decoded, the screen's scaler
+         * then (averaging makes nothing larger) */
+        ULONG i, n = s.w * s.h;
+        if (!(t = AllocVec(sizeof(struct Thumb) + n * 4, MEMF_ANY | MEMF_CLEAR)))
+            goto out;
+        t->w = (UWORD)s.w;
+        t->h = (UWORD)s.h;
+        t->mod = (UWORD)s.w;
+        t->argb = (ULONG *)(t + 1);
+        for (i = 0; i < n; i++)
+            t->argb[i] = ((ULONG)s.rgb[i * 3] << 16) | ((ULONG)s.rgb[i * 3 + 1] << 8) | s.rgb[i * 3 + 2];
+        t->raw = 1;
+    } else if (!(t = thumb_from_rgb(s.rgb, s.w, s.h, dw, dh, maxcol))) {
         goto out;
-    memset(pi, 0, sizeof(*pi));
-    pi->w = (UWORD)info.width;
-    pi->h = (UWORD)info.height;
-    pi->depth = info.ncomp == 1 ? 8 : 24;
-    strcpy(pi->fmt, "JPEG");
-    strcpy(pi->cls, "jdec");                /* built in, as ilbm.c's are "" */
+    }
 out:
     if (d)
         jd_close(d);
@@ -218,6 +237,18 @@ out:
     FreeVec(file);
     Close(s.fh);
     return t;
+}
+
+struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                         struct PicInfo *pi, const char *kind)
+{
+    return jpeg_read(path, w, h, tall, whole, maxcol, pi, kind, FALSE);
+}
+
+struct Thumb *jpeg_view_read(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
+                             struct PicInfo *pi)
+{
+    return jpeg_read(path, (WORD)gw, (WORD)gh, tall, FALSE, maxcol, pi, "picture (viewer)", TRUE);
 }
 
 /* The viewer's JPEG when no datatype takes it (on a true-colour screen):

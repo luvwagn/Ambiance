@@ -988,6 +988,28 @@ static void fit(struct Gfx *g, const struct PicInfo *pi, ULONG *dw, ULONG *dh, c
     view_fit(g->w, g->h, gfx_mode_tall(g->mode), pi, dw, dh, scale, max);
 }
 
+/* ---- Ambiance's own readers first, the datatypes for the rest (PNG, GIF,
+ * a progressive JPEG, a HAM or deep IFF, a format the user added): the
+ * same picture, quicker, and a PBM, which no datatype here reads. A big
+ * JPEG is decoded at 1/2, 1/4 or 1/8 straight away (the datatype made all
+ * of it first). */
+BOOL view_jpeg_card, view_last_own, view_own_off;
+
+struct Thumb *view_own_read(const char *path, UWORD gw, UWORD gh, BOOL tall, BOOL truecol, LONG maxcol,
+                            struct PicInfo *pi)
+{
+    struct Thumb *t;
+    if (view_own_off)
+        return NULL;
+    if ((t = ilbm_thumb(path, 0, 0, FALSE, TRUE, 256, pi))) {
+        t->raw = 1;                         /* its own size and colours: shown as they fit */
+        return t;
+    }
+    if (view_jpeg_card)
+        return NULL;                        /* (the card's: quicker than the 68k) */
+    return jpeg_view_read(path, gw, gh, tall, truecol ? THUMB_DEEP : maxcol, pi);
+}
+
 /* ---- showing a picture */
 static void fill_pic(struct Gfx *g, UBYTE pen);
 static void drop_picture(struct Gfx *g)
@@ -1255,8 +1277,9 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     struct BitMap *src = NULL, *tmp;
     struct BitScaleArgs bsa;
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
-    BOOL direct = FALSE, own_src = FALSE, made = FALSE;
+    BOOL direct = FALSE, own_src = FALSE, made = FALSE, own = FALSE;
     Object *deep = NULL;                    /* decoded, for the own route */
+    struct PicInfo own_pi;
     ULONG *target = NULL, sw, sh, dw, dh;
     UBYTE pens[256];
     LONG npens = 0, i;
@@ -1291,18 +1314,108 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         pic_dispose(pre);
         return FALSE;
     }
-    if (pre_thumb && !clut) {
-        thumb_free(pre_thumb);
-        pre_thumb = NULL;
-    }
     if (!pre && !pre_thumb && !kept) {
         sprintf(msg, _("Loading %.80s"), label);
         show_message(g, msg);
     }
+    /* Ambiance's own readers first (not read ahead: read now) */
+    if (!pre && !pre_thumb &&
+        (pre_thumb = view_own_read(path, g->w, g->h, gfx_mode_tall(g->mode), !clut, view_pic_colours(g),
+                                   &own_pi)))
+        pre_info = &own_pi;
+    view_last_own = pre_thumb && (pre_thumb->raw || !strcmp(pre_info->cls, "jdec"));
+
+    /* an own reader's, at its own size: its colours register for register
+     * where they fit (as the datatype's, the direct route below), else made
+     * to fit and its colours cut down (the own route) */
+    if (clut && pre_thumb && pre_thumb->raw) {
+        struct Thumb *t = pre_thumb;
+        ULONG nreg = 1UL << (pre_info->depth <= 8 ? pre_info->depth : 8);
+        pre_thumb = NULL;
+        if (nreg <= ncolors && (nreg <= POINTER_PEN0 || ncolors <= POINTER_PEN0 + 3) &&
+            (target = AllocVec(ncolors * 3 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) &&
+            (src = AllocBitMap(t->w, t->h, g->depth, BMF_CLEAR, g->rp->BitMap))) {
+            gfx_chunky(g, src, t->px, t->w, t->h, t->mod);
+            own_src = TRUE;
+            sw = t->w;
+            sh = t->h;
+            *pi = *pre_info;
+            for (i = 0; i < (LONG)nreg; i++) {
+                ULONG c = t->pal[i];
+                target[i * 3] = ((c >> 16) & 255) * 0x01010101UL;
+                target[i * 3 + 1] = ((c >> 8) & 255) * 0x01010101UL;
+                target[i * 3 + 2] = (c & 255) * 0x01010101UL;
+                pens[npens++] = (UBYTE)i;
+            }
+            if (nreg < ncolors) {
+                pen_border = ncolors - 1;
+            } else {
+                ULONG lo = ~0UL;
+                for (i = 0; i < npens; i++)
+                    if (luma(target + pens[i] * 3) < lo) {
+                        lo = luma(target + pens[i] * 3);
+                        pen_border = pens[i];
+                    }
+            }
+            direct = TRUE;
+        } else {
+            ULONG fw, fh;
+            struct Thumb *f;
+            FreeVec(target);
+            target = NULL;
+            fit(g, pre_info, &fw, &fh, scale, scalemax);
+            f = thumb_pick(t, fw, fh);
+            if (f && !thumb_reduce(f, view_pic_colours(g))) {
+                thumb_free(f);
+                f = NULL;
+            }
+            pre_thumb = f;                  /* (the own route's, as one the loader made) */
+        }
+        thumb_free(t);
+    }
+    /* a true-colour screen: an own reader's pixels into a bitmap like it */
+    if (!clut && pre_thumb) {
+        struct Thumb *t = pre_thumb;
+        pre_thumb = NULL;
+        if (CyberGfxBase && (src = AllocBitMap(t->w, t->h, g->depth, BMF_MINPLANES, g->rp->BitMap))) {
+            struct RastPort rp;
+            ULONG *row = NULL, x, y;
+            InitRastPort(&rp);
+            rp.BitMap = src;
+            if (t->argb) {
+                WritePixelArray(t->argb, 0, 0, (UWORD)(t->w * 4), &rp, 0, 0, t->w, t->h, RECTFMT_ARGB);
+            } else if ((row = AllocVec((ULONG)t->w * 4, MEMF_ANY))) {
+                for (y = 0; y < t->h; y++) {
+                    const UBYTE *p = t->px + y * t->mod;
+                    for (x = 0; x < t->w; x++)
+                        row[x] = t->pal[p[x]];
+                    WritePixelArray(row, 0, 0, (UWORD)(t->w * 4), &rp, 0, (UWORD)y, t->w, 1, RECTFMT_ARGB);
+                }
+                FreeVec(row);
+            } else {
+                FreeBitMap(src);
+                src = NULL;
+            }
+            if (src) {
+                WaitBlit();
+                own = own_src = TRUE;
+                sw = t->w;
+                sh = t->h;
+                *pi = *pre_info;
+                fit(g, pi, &dw, &dh, scale, scalemax);
+                if (!t->raw) {
+                    made = TRUE;            /* made to fit already (averaged, by jdec's reader) */
+                    dw = t->w;
+                    dh = t->h;
+                }
+            }
+        }
+        thumb_free(t);
+    }
 
     /* direct: a picture that fits the colour table, not remapped (pre: one
      * the loader decoded ahead, unremapped on a colour-table screen) */
-    if (clut && !pre_thumb && (!pre || !pre_remapped)) {
+    if (clut && !direct && !pre_thumb && (!pre || !pre_remapped)) {
         if (pre) {
             o = pre;
             pre = NULL;
@@ -1423,7 +1536,7 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     thumb_free(pre_thumb);                  /* not used (cannot be) */
 
     /* remap: into the screen's free pens (or its true colour) */
-    if (!direct) {
+    if (!direct && !own) {
         bmh = NULL;
         if (pre && pre_remapped && !clut) {
             o = pre;                        /* decoded ahead into true colour */

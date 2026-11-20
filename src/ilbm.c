@@ -742,7 +742,12 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
         afh = 0;
     }
 
-    pic_fit(sw, sh, tall, w, h, whole, &dw, &dh);
+    if (!w && !h) {
+        dw = sw;                            /* (0 x 0: at its own size, its own colours: the viewer's) */
+        dh = sh;
+    } else {
+        pic_fit(sw, sh, tall, w, h, whole, &dw, &dh);
+    }
     if (!(t = thumb_new(dw, dh)))
         goto out;
     /* the colours; old 4-bit ones (0xF0) widened to 8 */

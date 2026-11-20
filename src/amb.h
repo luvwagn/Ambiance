@@ -301,16 +301,25 @@ struct Thumb {
     UBYTE *px;
     ULONG *argb;                /* maxcol THUMB_DEEP: its colours themselves, 0xRRGGBB, w a
                                  * row (px NULL); else NULL */
+    UBYTE raw;                  /* the viewer's (view_own_read): the picture at its own
+                                 * size (or jdec's nearest), not yet made to fit */
 };
 #define THUMB_DEEP 0            /* maxcol: no colours of its own, true colour (the layouts') */
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
+/* t (colour numbers) at dw x dh, pixel for pixel; its colour table kept */
+struct Thumb *thumb_pick(const struct Thumb *t, ULONG dw, ULONG dh);
 /* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it
  * decodes: use the datatypes); kind says where it came from, for the
  * note of those it does not (Ambiance-jpeg.txt) */
 struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi, const char *kind);
 void jpeg_thumb_init(void);
+/* The viewer's JPEG by jdec, for a gw x gh screen (view_fit): maxcol
+ * colours made to fit it, or (THUMB_DEEP) true colour at jdec's nearest
+ * scale, raw (made to fit by the screen's scaler) */
+struct Thumb *jpeg_view_read(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
+                             struct PicInfo *pi);
 /* mpgthumb.c: an MPEG video's picture (an I picture through it, not blank:
  * decoded once, then kept in PROGDIR:Cache). *is_mpeg: the file is one
  * mpegv decodes (NULL back: it could not be decoded). */
@@ -327,9 +336,10 @@ BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to max
  * colours, lut every cell's colour number (thumb.c). Returns how many. */
 LONG thumb_cut(const ULONG *hist, LONG maxcol, ULONG *pal, UBYTE *lut);
 void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the last one made */
-/* An IFF ILBM read by Ambiance itself (ilbm.c), straight into a thumbnail
- * for a w x h box (pic_fit): no datatype. NULL: not an ILBM it reads (HAM,
- * deep, PBM...) or no memory; try the datatype then. */
+/* An IFF ILBM (or PBM) read by Ambiance itself (ilbm.c), straight into a
+ * thumbnail for a w x h box (pic_fit): no datatype; 0 x 0: at its own size
+ * and colours. NULL: not one it reads (a HAM still, deep...) or no memory;
+ * try the datatype then. */
 struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi);
 BOOL ilbm_is_anim(const char *path);
@@ -464,6 +474,15 @@ BOOL view_begin(struct Gfx *g);
 /* pre: decoded ahead; or pre_thumb (made ahead for the screen, given
  * up to view_show), pre_info: what it is */
 LONG view_pic_colours(const struct Gfx *g);    /* a picture's most colours here (the viewer's) */
+/* The viewer's picture by Ambiance's own readers (IFF of up to 8 planes and
+ * PBM; a baseline JPEG unless view_jpeg_card), for a gw x gh screen (true:
+ * a true-colour one; else maxcol colours): NULL, the datatypes then.
+ * Safe in the loader's process. */
+struct Thumb *view_own_read(const char *path, UWORD gw, UWORD gh, BOOL tall, BOOL truecol, LONG maxcol,
+                            struct PicInfo *pi);
+extern BOOL view_jpeg_card;     /* the ZZ9000's datatype reads JPEG (on the card): it, not jdec */
+extern BOOL view_own_off;       /* ENV:Ambiance/ViewOwn 0: the datatypes for all (to compare) */
+extern BOOL view_last_own;      /* the picture last shown was read by Ambiance's own reader */
 BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInfo *pi,
                char *scale, LONG scalemax, APTR pre, BOOL pre_remapped,
                struct Thumb *pre_thumb, const struct PicInfo *pre_info);
@@ -988,6 +1007,9 @@ struct LJob {
     ULONG ms_decode, ms_thumb;  /* how long each took */
     ULONG ms_parts[4];          /* ...the thumbnail's: reading, counting, choosing, mapping */
     UBYTE own;                  /* read by ilbm.c, not a datatype */
+    UBYTE vw, vw_true;          /* the viewer's (read ahead): its own readers first
+                                 * (view_own_read), for a vw_w x vw_h screen, true colour */
+    UWORD vw_w, vw_h;
     UBYTE urgent;               /* the UI waits for it: run above the read-ahead */
     ULONG t_sent, t_begun;      /* when it was sent, when the loader began it */
     BOOL remapped;

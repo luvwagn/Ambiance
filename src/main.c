@@ -10167,6 +10167,12 @@ static void vw_start(const char *path, BOOL first)
     vw_job->scr = g.truecolor ? g.scr : NULL;
     vw_job->remap = g.truecolor;
     vw_job->want_pic = TRUE;
+    vw_job->vw = TRUE;                      /* (its own readers first: view_own_read) */
+    vw_job->vw_true = g.truecolor;
+    vw_job->vw_w = g.w;
+    vw_job->vw_h = g.h;
+    vw_job->tall = gfx_mode_tall(g.mode);
+    vw_job->maxcol = view_pic_colours(&g);
     if (!g.truecolor) {
         /* one with more colours than the screen: made ready for it */
         vw_job->tw = g.w;
@@ -10414,10 +10420,12 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
             view_transition = vt;
             {
                 char m[300];
-                sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s, %s.datatype", l->items[want].label,
+                sprintf(m, "%.80s, %lu x %lu, depth %lu: %lu ms%s, %s%s", l->items[want].label,
                         (unsigned long)pi.w, (unsigned long)pi.h, (unsigned long)pi.depth,
                         (unsigned long)(time_ms() - t0),
-                        pre || pre_t ? " (read ahead)" : "", pi.cls[0] ? pi.cls : "?");
+                        pre || pre_t ? " (read ahead)" : "",
+                        view_last_own ? (pi.cls[0] ? pi.cls : "ilbm.c") : pi.cls[0] ? pi.cls : "?",
+                        view_last_own ? " (own reader)" : ".datatype");
                 amb_log("viewer", m);
             }
             shown = want;
@@ -16789,6 +16797,14 @@ static int app_main(void)
     plex_load(caps.cpu);            /* after: it needs the CPU */
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
+    view_jpeg_card = plex.jpeg_card;        /* ...the viewer's too, not jdec */
+    {
+        char v[4];
+        view_own_off = GetVar((CONST_STRPTR)"Ambiance/ViewOwn", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
+                       v[0] == '0';
+        if (view_own_off)
+            amb_log("viewer", "ViewOwn 0: every picture by the datatypes");
+    }
     if (caps.zz9000) {
         char m[160];
         sprintf(m, "ZZ9000 on Zorro %s; mpega.library %s; JPEG %s, PNG %s",
