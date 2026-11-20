@@ -2117,6 +2117,7 @@ static BOOL fs_assign_used(int k)
 #define MODS_SID   "ST-00:C64Music"
 #define PICS_ROOT  "Media:Images"
 #define VIDS_ROOT  "Media:Animations"
+#define VIDS_ROOT2 "Media:Videos"     /* (AGS's too, where videos are kept) */
 
 /* Settings > Sound: what streams play through (AHI, where installed). */
 #define SOUND_VAR "Ambiance/SoundOutput"
@@ -3053,7 +3054,7 @@ static int fs_places(int k)
     else if (k == FS_PICS)
         n += place_there(PICS_ROOT);
     else if (k == FS_VIDEOS)
-        n += place_there(VIDS_ROOT);
+        n += place_there(VIDS_ROOT) + place_there(VIDS_ROOT2);
     return n;
 }
 
@@ -3733,7 +3734,7 @@ static LONG vids_dvd_rows(struct ItemList *l)
     return n;
 }
 
-/* Videos' first page, as Pictures': AGS's Media:Animations, the VIDEOS:
+/* Videos' first page, as Pictures': AGS's Media:Animations and Media:Videos, the VIDEOS:
  * assign and the folders of Settings > Folders > Videos; a DVD in a drive
  * first. */
 static LONG vids_root_fill(struct Page *p, const char **src)
@@ -3743,6 +3744,8 @@ static LONG vids_root_fill(struct Page *p, const char **src)
     LONG r;
     if (place_there(VIDS_ROOT))
         at[n++] = VIDS_ROOT;
+    if (place_there(VIDS_ROOT2))
+        at[n++] = VIDS_ROOT2;
     if (fs_assign_used(FS_VIDEOS))
         at[n++] = "VIDEOS:";
     for (i = 0; i < fs[FS_VIDEOS].n; i++)
@@ -3761,7 +3764,10 @@ static LONG vids_root_fill(struct Page *p, const char **src)
     for (i = 0; i < n; i++) {
         char label[180];
         const char *f = (const char *)FilePart((STRPTR)at[i]);
-        sprintf(label, _("Videos: %.100s"), f[0] ? f : at[i]);
+        if (!strcmp(at[i], VIDS_ROOT) || !strcmp(at[i], VIDS_ROOT2))
+            sprintf(label, "%.100s", f);    /* (AGS's: Animations, Videos) */
+        else
+            sprintf(label, _("Videos: %.100s"), f[0] ? f : at[i]);
         list_add(&p->list, label, at[i], "", IT_DIR);
     }
     vids_dvd_rows(&p->list);
@@ -3865,9 +3871,9 @@ static void build_root_pages_now(int mod)
                         sprintf(t, n < 0 ? _("No animations found: Ambiance looks for them in %s.")
                                          : _("%s has no animations in it."), src);
                     else
-                        sprintf(t, _("No animations found. Ambiance plays IFF ANIMs from VIDEOS:, "
-                                     "the folders of Settings > Folders > Videos, and on AGS %s."),
-                                VIDS_ROOT);
+                        sprintf(t, _("No videos found. Ambiance looks in VIDEOS:, "
+                                     "the folders of Settings > Folders > Videos, and on AGS %s and %s."),
+                                VIDS_ROOT, VIDS_ROOT2);
                     text_para(p, t);
                 }
             }
