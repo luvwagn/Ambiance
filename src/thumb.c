@@ -430,6 +430,70 @@ out:
     return t;
 }
 
+/* A palette for many pictures (a video's, from pictures sampled through
+ * it): their 15-bit histogram (hist, 32768 cells, counted by the caller)
+ * cut to at most maxcol colours (median cut, as a thumbnail's), pal their
+ * colours (0xRRGGBB), lut (32768) each cell's colour number: the cells
+ * not counted too, each given its nearest counted cell's (a flood out
+ * from them through the cube, a step at a time), so any colour has one.
+ * Returns the colours made, 0 if none (nothing counted, no memory). */
+LONG thumb_cut(const ULONG *hist, LONG maxcol, ULONG *pal, UBYTE *lut)
+{
+    UWORD *occ, *tmp, *q, nocc = 0;
+    struct Box *box;
+    UBYTE *done;
+    ULONG i, qh, qt;
+    LONG nb = 0, k;
+    occ = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
+    tmp = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
+    q = AllocVec(32768 * sizeof(UWORD), MEMF_ANY);
+    box = AllocVec(256 * sizeof(struct Box), MEMF_ANY);
+    done = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
+    if (!occ || !tmp || !q || !box || !done || maxcol < 1)
+        goto out;
+    if (maxcol > 256)
+        maxcol = 256;
+    for (i = 0; i < 32768; i++)
+        if (hist[i])
+            occ[nocc++] = (UWORD)i;
+    if (!nocc || (nb = median_cut(hist, occ, tmp, nocc, box, maxcol)) <= 0) {
+        nb = 0;
+        goto out;
+    }
+    for (k = 0; k < nb; k++)
+        pal[k] = box_colour(hist, occ, &box[k], lut, k);
+    /* the cells not counted: a breadth-first flood from those that were */
+    qh = qt = 0;
+    for (i = 0; i < nocc; i++) {
+        done[occ[i]] = 1;
+        q[qt++] = occ[i];
+    }
+    while (qh < qt) {
+        UWORD c = q[qh++], n[6];
+        int j, nn = 0;
+        UBYTE r = c >> 10, g = (c >> 5) & 31, b = c & 31;
+        if (r > 0) n[nn++] = c - 1024;
+        if (r < 31) n[nn++] = c + 1024;
+        if (g > 0) n[nn++] = c - 32;
+        if (g < 31) n[nn++] = c + 32;
+        if (b > 0) n[nn++] = c - 1;
+        if (b < 31) n[nn++] = c + 1;
+        for (j = 0; j < nn; j++)
+            if (!done[n[j]]) {
+                done[n[j]] = 1;
+                lut[n[j]] = lut[c];
+                q[qt++] = n[j];
+            }
+    }
+out:
+    FreeVec(occ);
+    FreeVec(tmp);
+    FreeVec(q);
+    FreeVec(box);
+    FreeVec(done);
+    return nb;
+}
+
 /* A thumbnail with more colours in use than maxcol: given maxcol of its
  * own. FALSE: no memory. */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol)

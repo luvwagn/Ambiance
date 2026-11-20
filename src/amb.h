@@ -316,6 +316,9 @@ struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap
 void thumb_free(struct Thumb *t);
 struct Thumb *thumb_new(ULONG w, ULONG h);  /* cleared, no colours yet */
 BOOL thumb_reduce(struct Thumb *t, LONG maxcol);    /* colours in use cut to maxcol */
+/* A palette for many pictures from their 15-bit histogram (32768 cells): pal its
+ * colours, lut every cell's colour number (thumb.c). Returns how many. */
+LONG thumb_cut(const ULONG *hist, LONG maxcol, ULONG *pal, UBYTE *lut);
 void thumb_times(ULONG *read, ULONG *cells, ULONG *cut, ULONG *map);  /* the last one made */
 /* An IFF ILBM read by Ambiance itself (ilbm.c), straight into a thumbnail
  * for a w x h box (pic_fit): no datatype. NULL: not an ILBM it reads (HAM,
@@ -435,7 +438,9 @@ BOOL gfx_fs_on(void);
 struct Screen *gfx_own_screen(const struct Gfx *g);  /* its own screen, NULL a window on WB */
 extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, copy up */         /* the screen can show them (gfx_thumb) */
 LONG gfx_thumb_colours(struct Gfx *g);
-void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);  /* colours a thumbnail made now may have */
+void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);
+/* 32 chunky pixels (8 longs) to a long of each of 8 planes (out[k]: plane k) */
+void gfx_c2p32(const ULONG *c, ULONG *out);  /* colours a thumbnail made now may have */
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h);
 /* The full-screen picture viewer, on Ambiance's own screen (view.c). On

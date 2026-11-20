@@ -3428,6 +3428,11 @@ static void c2p32(const ULONG *c, ULONG *out)
 }
 #undef MERGE
 
+void gfx_c2p32(const ULONG *c, ULONG *out)
+{
+    c2p32(c, out);
+}
+
 /* Chunky pixels (mod bytes a row, a multiple of 16) into bm. A planar
  * bitmap is written here, 32 pixels at a time (c2p32): graphics.library's
  * WriteChunkyPixels took ~300 ms for a 273 x 218 preview on a 68030. */

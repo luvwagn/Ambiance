@@ -216,6 +216,8 @@ static struct Window *pip_open(struct Screen *scr, BOOL pub, const struct VProbe
 
 /* Settings > Video: MPEG video on the ZZ9000 off (ENV:Ambiance/VideoDecoder
  * "cpu"): decoded by the CPU even where there is a card. */
+BOOL video_cpu_only;                /* (anim.c: an AGA screen's video, the CPU's) */
+
 static BOOL video_cpu_chosen(void)
 {
     char ev[16];
@@ -300,7 +302,9 @@ const char *video_check(const char *path, struct VProbe *v)
          * MPEG-1 and MPEG-2 (mpegv.library 2) */
         BOOL cpu = video_cpu_chosen();
         w = NULL;
-        if (cpu)
+        if (video_cpu_only)
+            w = "an AGA screen: the card's overlay is not on it";
+        else if (cpu)
             w = "Settings > Video: MPEG video on the ZZ9000 off";
         else if (!zz_open())
             w = "no zz9k.library";

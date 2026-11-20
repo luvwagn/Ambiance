@@ -51,6 +51,7 @@
 #include "copper.h"
 #include <libraries/dvdnav.h>
 #include <libraries/mpegv.h>
+#include <proto/mpegv.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -3548,6 +3549,482 @@ static void vi_draw(struct Gfx *g, UWORD sw)
 static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                      LONG errmax);
 
+/* ---- MPEG video on an AGA screen (decoded by the CPU, mpegv.library)
+ *
+ * A screen of its own, 8-bit, the video's size (1:1), in 252 colours of
+ * its own: pictures sampled through the file before it plays (their I
+ * pictures, at points spread through it) counted on a 15-bit histogram,
+ * cut to a palette (thumb_cut: median cut), and every Y Cb Cr made a
+ * colour number by one table (Y 6 bits, Cb and Cr 5: 64 K entries). An
+ * ordered dither (4 x 4) on Y, Cb and Cr before the table keeps
+ * gradients from banding. Each picture then goes to the screen's planes
+ * a row at a time (gfx_c2p32), into the buffer not shown, which is then
+ * shown (double buffered). Pen 0 black (round it); the pointer's three
+ * registers (17-19) its own. Its controls: the animations' bar over its
+ * foot (bar_put: the copper's own colours below its top line). */
+#define VA_COLS     252                     /* 256 less pen 0 and the pointer's 17-19 */
+#define VA_SAMPLES  24                      /* pictures sampled for its colours */
+
+static UBYTE *va_lut;                       /* (Y >> 2) << 10 | (Cb >> 3) << 5 | Cr >> 3: a pen */
+static UWORD (*va_yt)[256], (*va_ut)[256], (*va_vt)[256];  /* 16 dither phases each */
+static ULONG va_pal[256];                   /* the screen's colours (pens) */
+static BPTR va_fh;
+static ULONG va_conv_ticks, va_nconv;
+
+/* Y Cb Cr (studio range, BT.601) to a 15-bit cell (r << 10 | g << 5 | b) */
+static UWORD va_cell(LONG y, LONG u, LONG v)
+{
+    LONG c = (y - 16) * 298, d = u - 128, e = v - 128;
+    LONG r = (c + 409 * e + 128) >> 8, g = (c - 100 * d - 208 * e + 128) >> 8, b = (c + 516 * d + 128) >> 8;
+    r = r < 0 ? 0 : r > 255 ? 255 : r;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    b = b < 0 ? 0 : b > 255 ? 255 : b;
+    return (UWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+}
+
+static ULONG va_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
+                     register struct MpvRead *r __asm("a1"))
+{
+    LONG n;
+    (void)h;
+    (void)mpv;
+    n = Read(va_fh, r->mr_Buffer, r->mr_Length);
+    return n > 0 ? (ULONG)n : 0;
+}
+
+/* A picture counted: every other pixel of every other row, its cell */
+static void va_count(const struct MpvPicture *p, ULONG *hist, const UWORD *cellof)
+{
+    ULONG x, y;
+    for (y = 0; y < p->mpic_Height; y += 2) {
+        const UBYTE *Y = p->mpic_Y + y * p->mpic_YModulo;
+        const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
+        const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
+        for (x = 0; x < p->mpic_Width; x += 2)
+            hist[cellof[((Y[x] >> 2) << 10) | ((U[x >> 1] >> 3) << 5) | (V[x >> 1] >> 3)]]++;
+    }
+}
+
+/* Its colours, from pictures sampled through it (a Program Stream or a
+ * bare video stream; else, and if none could be had, a colour cube):
+ * va_pal, va_lut. FALSE: no memory. */
+static BOOL va_palette(const char *path, const char *name)
+{
+    static const UBYTE bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    ULONG *hist = NULL, t0 = time_ms(), i, ncol = 0, got = 0, size = 0;
+    UWORD *cellof = NULL;
+    UBYTE *lut555 = NULL, pens[256];
+    ULONG pal[256];
+    APTR mpv = NULL;
+    struct Hook rh;
+    char m[200], ev[16];
+    LONG amp = 8, k, n;
+    BOOL ok = FALSE;
+    if (GetVar((CONST_STRPTR)"Ambiance/VideoDither", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0) {
+        for (amp = 0, k = 0; ev[k] >= '0' && ev[k] <= '9'; k++)
+            amp = amp * 10 + ev[k] - '0';
+        if (amp > 32)
+            amp = 32;
+    }
+    va_lut = AllocVec(65536, MEMF_ANY);
+    va_yt = AllocVec(3 * 16 * 256 * sizeof(UWORD), MEMF_ANY);
+    hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
+    cellof = AllocVec(65536 * sizeof(UWORD), MEMF_ANY);
+    lut555 = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
+    if (!va_lut || !va_yt || !hist || !cellof || !lut555)
+        goto out;
+    va_ut = va_yt + 16;
+    va_vt = va_yt + 32;
+    for (i = 0; i < 65536; i++)
+        cellof[i] = va_cell((LONG)((i >> 10) << 2) + 2, (LONG)(((i >> 5) & 31) << 3) + 4,
+                            (LONG)((i & 31) << 3) + 4);
+    /* sampled: its I pictures from points spread through it */
+    if ((vid.ps || !vid.ts) && (va_fh = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+        memset(&rh, 0, sizeof(rh));
+        rh.h_Entry = (HOOKFUNC)(APTR)va_read;
+        if (Seek(va_fh, 0, OFFSET_END) >= 0)
+            size = (ULONG)Seek(va_fh, 0, OFFSET_BEGINNING);
+        mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, vid.ps ? MPVS_PROGRAM : MPVS_VIDEO,
+                          MPVA_SkipB, TRUE, TAG_DONE);
+        for (k = 0; mpv && k < VA_SAMPLES; k++) {
+            LONG e = 0, tries;
+            struct MpvPicture *p = NULL;
+            if (k) {
+                ULONG at = (ULONG)((unsigned long long)size * k / VA_SAMPLES);
+                if (!size || Seek(va_fh, (LONG)at, OFFSET_BEGINNING) < 0)
+                    break;
+                MpvControl(mpv, MPVC_FLUSH, 0);
+            }
+            for (tries = 0; tries < 40; tries++) {
+                p = MpvDecode(mpv, &e);
+                if (p && (!k || p->mpic_Type == MPVT_I))
+                    break;
+                p = NULL;
+                if (e != MPVE_OK && e != MPVE_MORE)
+                    break;
+            }
+            if (!p)
+                continue;
+            va_count(p, hist, cellof);
+            got++;
+        }
+        if (mpv)
+            MpvClose(mpv);
+        Close(va_fh);
+        va_fh = 0;
+    }
+    if (got)
+        ncol = (ULONG)thumb_cut(hist, VA_COLS, pal, lut555);
+    if (!ncol) {
+        /* none had: a cube, 6 x 7 x 6 */
+        LONG r, g, b;
+        memset(hist, 0, 32768 * sizeof(ULONG));
+        for (r = 0; r < 6; r++)
+            for (g = 0; g < 7; g++)
+                for (b = 0; b < 6; b++)
+                    hist[((r * 31 / 5) << 10) | ((g * 31 / 6) << 5) | (b * 31 / 5)] = 1;
+        ncol = (ULONG)thumb_cut(hist, VA_COLS, pal, lut555);
+        if (!ncol)
+            goto out;
+    }
+    /* its colour numbers as pens: 1 on, not 17-19 (the pointer's) */
+    for (i = 0, n = 1; i < ncol; i++, n++) {
+        if (n == 17)
+            n = 20;
+        pens[i] = (UBYTE)n;
+    }
+    memset(va_pal, 0, sizeof(va_pal));
+    for (i = 0; i < ncol; i++)
+        va_pal[pens[i]] = pal[i];
+    for (i = 0; i < 65536; i++)
+        va_lut[i] = pens[lut555[cellof[i]]];
+    /* the dither: each of 16 phases its own offset, Cb and Cr's the
+     * matrix turned (not in step with Y's) */
+    for (k = 0; k < 16; k++) {
+        LONG dy = ((LONG)bayer[k >> 2][k & 3] * 2 - 15) * amp / 16;
+        LONG du = ((LONG)bayer[k & 3][k >> 2] * 2 - 15) * amp / 16;
+        LONG dv = ((LONG)bayer[(k >> 2) ^ 2][(k & 3) ^ 1] * 2 - 15) * amp / 16;
+        for (i = 0; i < 256; i++) {
+            LONG y = (LONG)i + dy, u = (LONG)i + du, v = (LONG)i + dv;
+            y = y < 0 ? 0 : y > 255 ? 255 : y;
+            u = u < 0 ? 0 : u > 255 ? 255 : u;
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            va_yt[k][i] = (UWORD)((y >> 2) << 10);
+            va_ut[k][i] = (UWORD)((u >> 3) << 5);
+            va_vt[k][i] = (UWORD)(v >> 3);
+        }
+    }
+    sprintf(m, "%s: %lu colours from %lu pictures sampled through it, in %lu ms (dither %ld)", name,
+            (unsigned long)ncol, (unsigned long)got, (unsigned long)(time_ms() - t0), (long)amp);
+    amb_log("video: AGA", m);
+    ok = TRUE;
+out:
+    FreeVec(hist);
+    FreeVec(cellof);
+    FreeVec(lut555);
+    if (!ok) {
+        FreeVec(va_lut);
+        FreeVec(va_yt);
+        va_lut = NULL;
+        va_yt = va_ut = va_vt = NULL;
+    }
+    return ok;
+}
+
+static void va_free(void)
+{
+    FreeVec(va_lut);
+    FreeVec(va_yt);
+    va_lut = NULL;
+    va_yt = va_ut = va_vt = NULL;
+}
+
+/* A picture into bm's planes at x0 (a multiple of 16), y0: each row made
+ * pens (rb: w rounded up to 32, the rest pen 0), then 32 at a time to
+ * each plane's long (on a word's boundary: a 68020's long writes need
+ * no more). */
+static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULONG bw, WORD x0, WORD y0,
+                   WORD rows)
+{
+    ULONG y, x, nl = bw >> 5, w = p->mpic_Width, bpr = bm->BytesPerRow, k, hz = 0, tk = time_ticks(&hz);
+    ULONG pl[8];
+    WORD h = p->mpic_Height < rows ? p->mpic_Height : rows;
+    for (y = 0; y < (ULONG)h; y++) {
+        const UBYTE *Y = p->mpic_Y + y * p->mpic_YModulo;
+        const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
+        const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
+        ULONG ph = (y & 3) << 2;
+        const UWORD *y0t = va_yt[ph], *y1t = va_yt[ph + 1], *y2t = va_yt[ph + 2], *y3t = va_yt[ph + 3];
+        const UWORD *u0t = va_ut[ph], *u1t = va_ut[ph + 1], *u2t = va_ut[ph + 2], *u3t = va_ut[ph + 3];
+        const UWORD *v0t = va_vt[ph], *v1t = va_vt[ph + 1], *v2t = va_vt[ph + 2], *v3t = va_vt[ph + 3];
+        const UBYTE *lut = va_lut;
+        UBYTE *d = rb;
+        UBYTE *pp[8];
+        for (x = 0; x + 4 <= w; x += 4, d += 4) {
+            UBYTE u0 = U[x >> 1], v0 = V[x >> 1], u1 = U[(x >> 1) + 1], v1 = V[(x >> 1) + 1];
+            d[0] = lut[y0t[Y[x]] | u0t[u0] | v0t[v0]];
+            d[1] = lut[y1t[Y[x + 1]] | u1t[u0] | v1t[v0]];
+            d[2] = lut[y2t[Y[x + 2]] | u2t[u1] | v2t[v1]];
+            d[3] = lut[y3t[Y[x + 3]] | u3t[u1] | v3t[v1]];
+        }
+        for (; x < w; x++, d++)
+            *d = lut[y0t[Y[x]] | u0t[U[x >> 1]] | v0t[V[x >> 1]]];
+        for (; x < bw; x++)
+            *d++ = 0;
+        for (k = 0; k < 8; k++)
+            pp[k] = (UBYTE *)bm->Planes[k] + (y0 + y) * bpr + (x0 >> 3);
+        for (x = 0; x < nl; x++) {
+            gfx_c2p32((const ULONG *)(rb + (x << 5)), pl);
+            for (k = 0; k < 8; k++) {
+                *(ULONG *)pp[k] = pl[k];
+                pp[k] += 4;
+            }
+        }
+    }
+    va_conv_ticks += time_ticks(&hz) - tk;
+    va_nconv++;
+}
+
+static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                         LONG errmax)
+{
+    struct Screen *scr = NULL;
+    struct Window *win = NULL;
+    struct ScreenBuffer *sb[2] = { NULL, NULL };
+    struct MsgPort *safe = NULL;
+    BOOL safe_wait[2] = { FALSE, FALSE };
+    ULONG id, jlast = 0, at = 0, t0 = time_ms(), tab[3 * 17 + 2], tab2[3 * 236 + 2], hz = 0;
+    UWORD w = vid.w, h = vid.h, bw, sw, sh, *blank = NULL;
+    UBYTE *rb = NULL;
+    WORD left, top, vx, vy;
+    struct Rectangle clip;
+    BOOL paused = FALSE, ended = FALSE;
+    LONG result = -1, i;
+    int shown = 0, k, r, s;
+    ULONG last_q = ~0UL, nframes = 0;
+    char m[200];
+    (void)g;
+    va_conv_ticks = va_nconv = 0;
+    bw = (w + 31) & ~31;
+    /* its screen: the video's size, at least a lowres one's (room for
+     * its controls), the video in the middle (across, on a 16-pixel step) */
+    sw = bw < 320 ? 320 : bw;
+    sh = h < 200 ? 200 : h;
+    vx = (WORD)(((sw - w) / 2) & ~15);
+    vy = (WORD)((sh - h) / 2);
+    id = pick_mode(0, FALSE, sw, sh, 8);
+    if (id == (ULONG)INVALID_ID || mode_depth(id) < 8) {
+        amb_strlcpy(err, _("MPEG video on a native screen needs AGA's 256 colours"), errmax);
+        return -1;
+    }
+    if (!va_palette(path, name)) {
+        amb_strlcpy(err, _("Not enough memory for the video's screen"), errmax);
+        return -1;
+    }
+    tab[0] = 17UL << 16;                    /* pens 0-16 (the pointer's its own) */
+    for (i = 0; i < 17; i++) {
+        tab[1 + i * 3] = ((va_pal[i] >> 16) & 255) * 0x01010101UL;
+        tab[2 + i * 3] = ((va_pal[i] >> 8) & 255) * 0x01010101UL;
+        tab[3 + i * 3] = (va_pal[i] & 255) * 0x01010101UL;
+    }
+    tab[1 + 17 * 3] = 0;
+    tab2[0] = (236UL << 16) | 20;           /* pens 20-255 */
+    for (i = 0; i < 236; i++) {
+        tab2[1 + i * 3] = ((va_pal[20 + i] >> 16) & 255) * 0x01010101UL;
+        tab2[2 + i * 3] = ((va_pal[20 + i] >> 8) & 255) * 0x01010101UL;
+        tab2[3 + i * 3] = (va_pal[20 + i] & 255) * 0x01010101UL;
+    }
+    tab2[1 + 236 * 3] = 0;
+    place(id, sw, sh, &left, &top, &clip);
+    if (!(blank = AllocMem(6 * sizeof(UWORD), MEMF_CHIP | MEMF_CLEAR)) ||
+        !(rb = AllocVec(bw + 32, MEMF_ANY | MEMF_CLEAR)))
+        goto nomem;
+    scr = OpenScreenTags(NULL, SA_DisplayID, id, SA_Width, sw, SA_Height, sh, SA_Depth, 8,
+                         SA_Left, left, SA_Top, top, SA_DClip, (ULONG)&clip,
+                         SA_Colors32, (ULONG)tab, SA_Quiet, TRUE, SA_ShowTitle, FALSE,
+                         SA_Behind, TRUE, SA_Draggable, FALSE, SA_Exclusive, TRUE,
+                         SA_Title, (ULONG)"Ambiance", TAG_DONE);
+    if (!scr || !(sb[0] = AllocScreenBuffer(scr, NULL, SB_SCREEN_BITMAP)) ||
+        !(sb[1] = AllocScreenBuffer(scr, NULL, SB_COPY_BITMAP)) || !(safe = CreateMsgPort()))
+        goto nomem;
+    sb[0]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = safe;
+    sb[1]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = safe;
+    if (!(GetBitMapAttr(sb[0]->sb_BitMap, BMA_FLAGS) & BMF_STANDARD) ||
+        !(GetBitMapAttr(sb[1]->sb_BitMap, BMA_FLAGS) & BMF_STANDARD) ||
+        GetBitMapAttr(sb[0]->sb_BitMap, BMA_DEPTH) < 8 || GetBitMapAttr(sb[1]->sb_BitMap, BMA_DEPTH) < 8) {
+        amb_strlcpy(err, _("MPEG video on a native screen needs AGA's 256 colours"), errmax);
+        goto out;
+    }
+    LoadRGB32(&scr->ViewPort, tab2);
+    for (k = 0; k < 2; k++)
+        BltBitMap(sb[k]->sb_BitMap, 0, 0, sb[k]->sb_BitMap, 0, 0, sw, sh, 0x00, 0xFF, NULL);
+    WaitBlit();
+    win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, 0, WA_Top, 0,
+                         WA_Width, sw, WA_Height, sh, WA_Backdrop, TRUE, WA_Borderless, TRUE,
+                         WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_SimpleRefresh, TRUE,
+                         WA_NoCareRefresh, TRUE, WA_ReportMouse, TRUE,
+                         WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
+    if (!win)
+        goto nomem;
+    ctl_begin(win, blank);
+    vid_sound = vid.mp2 && !vid.ac3 && vid.ps;
+    bar_setup(scr, sb[0]->sb_BitMap, sw, sh, 8, id, 0, &clip, left, top, path);
+    bar.total_ms = vid.ms;
+    bar_redraw = FALSE;
+    ScreenToFront(scr);
+    sprintf(m, "%s: on a screen of its own, %ld x %ld, mode %08lx, 8 planes; the video at %ld, %ld", name,
+            (long)sw, (long)sh, (unsigned long)id, (long)vx, (long)vy);
+    amb_log("video: AGA", m);
+    if (LowLevelBase)
+        jlast = ReadJoyPort(1);
+    amb_strlcpy(lay_path, path, sizeof(lay_path));
+    st_video_direct(FALSE);
+    st_video_show(TRUE);
+    if (!vid_start(cpu, 0, err, errmax))
+        goto out;
+    for (;;) {
+        struct StInfo in;
+        ULONG pw, ph;
+        BOOL want, drew = FALSE;
+        s = st_state();
+        if (s == ST_FAILED) {
+            if (st_error()[0])
+                amb_strlcpy(err, st_error(), errmax);
+            break;
+        }
+        st_info(&in);
+        if (!ended)
+            at = vid_base + in.played_ms;
+        if (s == ST_ENDED && !ended) {
+            if (play_loop) {
+                if (!vid_start(cpu, 0, err, errmax))
+                    break;
+                at = 0;
+            } else {
+                ended = TRUE;               /* its last picture stays, the controls up */
+                end_stop(&paused);
+                at = vid.ms ? vid.ms : at;
+            }
+        }
+        r = input(win, &jlast);
+        if (r == 1)
+            break;
+        if (r == 2) {
+            if (ended) {
+                ended = paused = FALSE;
+                if (!vid_start(cpu, 0, err, errmax))
+                    break;
+                at = 0;
+            } else {
+                paused = !paused;
+                st_pause(paused);
+            }
+            bar_redraw = TRUE;
+        } else if (r == 3) {
+            ended = paused = FALSE;
+            if (!vid_start(cpu, 0, err, errmax))
+                break;
+            at = 0;
+            bar_redraw = TRUE;
+        }
+        bar.paused = paused;
+        bar.at_ms = at;
+        /* a new picture: into the buffer not shown, then shown */
+        if (st_swv_take(&pw, &ph)) {
+            struct MpvPicture p;
+            if (st_swv_planes(&p)) {
+                k = shown ^ 1;
+                safe_done(safe, safe_wait);
+                va_put(&p, sb[k]->sb_BitMap, rb, bw, vx, vy, (WORD)h);
+                bar.saved[k] = FALSE;       /* (what it covered: this picture now) */
+                bar_put(sb[k]->sb_BitMap, k);
+                while (!ChangeScreenBuffer(scr, sb[k]))
+                    WaitTOF();
+                safe_wait[shown] = TRUE;
+                shown = k;
+                nframes++;
+                drew = TRUE;
+                last_q = at / 250;
+            }
+        }
+        /* the controls: up while the mouse moves, and while paused */
+        want = ctl_want(paused) && bar.ok;
+        if (want != bar.on) {
+            safe_done(safe, safe_wait);
+            bar.on = want;
+            if (want) {
+                bar_colours(TRUE);
+                bar_put(sb[shown]->sb_BitMap, shown);
+            } else {
+                bar_colours(FALSE);
+                bar_take(sb[shown]->sb_BitMap, shown);
+            }
+            bar_redraw = FALSE;
+            last_q = at / 250;
+        } else if (bar.on && !drew && (bar_redraw || at / 250 != last_q)) {
+            safe_done(safe, safe_wait);
+            bar_put(sb[shown]->sb_BitMap, shown);   /* (its time, a button pressed) */
+            bar_redraw = FALSE;
+            last_q = at / 250;
+        }
+        if (!drew)
+            WaitTOF();
+    }
+    result = err[0] ? -1 : 0;
+    goto out;
+nomem:
+    amb_strlcpy(err, _("Not enough memory for the video's screen"), errmax);
+out:
+    {
+        ULONG shownp = 0, dropped = 0, c;
+        st_video_counts(&shownp, &dropped);
+        st_stop();
+        st_swv_release();
+        (void)time_ticks(&hz);
+        c = va_nconv && hz ? (ULONG)((unsigned long long)va_conv_ticks * 100000ULL / hz / va_nconv) : 0;
+        sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms; a picture made pens and planes in "
+                   "%lu.%02lu ms (%lu)",
+                name, (unsigned long)shownp, (unsigned long)dropped, (unsigned long)(time_ms() - t0),
+                (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)nframes);
+        amb_log("video: AGA", m);
+    }
+    if (scr) {
+        safe_done(safe, safe_wait);
+        if (shown != 0 && sb[0]) {
+            while (!ChangeScreenBuffer(scr, sb[0]))
+                WaitTOF();
+            safe_wait[1] = TRUE;
+            safe_done(safe, safe_wait);
+        }
+        if (win)
+            CloseWindow(win);
+        if (sb[1])
+            FreeScreenBuffer(scr, sb[1]);
+        if (sb[0])
+            FreeScreenBuffer(scr, sb[0]);
+        CloseScreen(scr);
+        if (g && g->scr)
+            ScreenToFront(g->scr);
+        if (g && g->win) {
+            ActivateWindow(g->win);
+            for (i = 0; i < 25 && !(g->win->Flags & WFLG_WINDOWACTIVE); i++)
+                WaitTOF();
+        }
+    }
+    if (safe) {
+        while (GetMsg(safe))
+            ;
+        DeleteMsgPort(safe);
+    }
+    if (blank)
+        FreeMem(blank, 6 * sizeof(UWORD));
+    FreeVec(rb);
+    bar_cleanup();
+    va_free();
+    vid_sound = FALSE;
+    return result;
+}
+
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
 {
     const char *why;
@@ -3555,16 +4032,24 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     anim_g = g;
     if (!g || !g->win)
         return -1;
-    if ((why = video_check(path, &vid))) {
+    video_cpu_only = !g->truecolor;         /* (an AGA screen: the CPU's, drawn here) */
+    why = video_check(path, &vid);
+    video_cpu_only = FALSE;
+    if (why) {
         amb_strlcpy(err, why, errmax);
         st_mpv_close();
         return -1;
     }
     if (!g->truecolor) {
-        amb_strlcpy(err, vid.sw ? _("MPEG video plays on an RTG screen (AGA screens to come)")
-                                 : _("MPEG video plays on the ZZ9000's display"), errmax);
+        LONG r;
+        if (!vid.sw || !(GfxBase->ChipRevBits0 & GFXF_AA_ALICE)) {
+            amb_strlcpy(err, _("MPEG video on a native screen needs AGA's 256 colours"), errmax);
+            st_mpv_close();
+            return -1;
+        }
+        r = vid_play_aga(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
         st_mpv_close();
-        return -1;
+        return r;
     }
     {
         LONG r = vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
