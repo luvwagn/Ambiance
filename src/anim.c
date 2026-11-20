@@ -1013,7 +1013,7 @@ static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD 
     if (bar.y < 0 || bar.x1 - bar.x0 < 200 * bar.kx)
         return;
     bar.sx = glyph_sx_mode(id);             /* (tall pixels: its glyphs as wide on screen) */
-    bar.gh = (bar.bh * 2 / 3) | 1;
+    bar.gh = (bar.bh * 4 / 5) | 1;
     bar.cw = bar.gh * bar.sx + 8 * bar.kx;
     if (!(bar.save[0] = AllocBitMap(w, bar.h, depth, 0, friend)) ||
         !(bar.save[1] = AllocBitMap(w, bar.h, depth, 0, friend)))
