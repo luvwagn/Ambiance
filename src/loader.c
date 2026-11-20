@@ -110,7 +110,7 @@ static void decode(struct LJob *j, const char *src)
     if (mpeg_thumb_wants(src)) {
         BOOL mp;
         if (j->tw && !j->viewfit &&
-            (j->thumb = mpeg_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info, &mp))) {
+            (j->thumb = mpeg_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info, &mp, &j->cancel))) {
             j->ms_decode = time_ms() - t0;  /* an MPEG video: one of its I pictures (mpgthumb.c) */
             j->own = TRUE;
         }

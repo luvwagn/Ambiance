@@ -3575,6 +3575,7 @@ static UBYTE *va_lut;                       /* VA_LUT pens */
 static UWORD (*va_yt)[256];                 /* Y's part: 16 dither phases (4 x 4 a pixel) */
 static UBYTE (*va_ut)[256], (*va_vt)[256];  /* Cb's, Cr's: 4 phases (2 x 2 a block) */
 static UWORD *va_cl;                        /* a row of blocks' Cb and Cr part */
+static UBYTE *va_all;                       /* (a whole picture's pens: va_put's timed one) */
 static ULONG va_pal[256];                   /* the screen's colours (pens) */
 static BPTR va_fh;
 static ULONG va_conv_ticks, va_nconv;
@@ -3852,6 +3853,8 @@ static void va_free(void)
     FreeVec(va_lut);
     FreeVec(va_yt);
     FreeVec(va_cl);
+    FreeVec(va_all);
+    va_all = NULL;
     va_lut = NULL;
     va_yt = NULL;
     va_ut = va_vt = NULL;
@@ -3862,74 +3865,88 @@ static void va_free(void)
  * pens (rb: w rounded up to 32, the rest pen 0), then 32 at a time to
  * each plane's long (on a word's boundary: a 68020's long writes need
  * no more). */
+/* A row of pens (rb: w rounded up to 32, the rest pen 0) */
+static void va_pens_row(const struct MpvPicture *p, ULONG y, UBYTE *rb, ULONG bw)
+{
+    const UBYTE *Y = p->mpic_Y + y * p->mpic_YModulo, *lut = va_lut;
+    ULONG ph = (y & 3) << 2, x, w = p->mpic_Width, cw = (w + 1) >> 1;
+    const UWORD *y0t = va_yt[ph], *y1t = va_yt[ph + 1], *y2t = va_yt[ph + 2], *y3t = va_yt[ph + 3];
+    const UWORD *cl = va_cl;
+    UBYTE *d = rb;
+    if (!(y & 1)) {
+        /* a row of blocks: its Cb and Cr part (2 x 2 dither by block) */
+        const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
+        const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
+        ULONG cp = ((y >> 1) & 1) << 1;
+        const UBYTE *u0t = va_ut[cp], *u1t = va_ut[cp + 1], *v0t = va_vt[cp], *v1t = va_vt[cp + 1];
+        UWORD *c = va_cl;
+        for (x = 0; x + 2 <= cw; x += 2, c += 2) {
+            c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
+            c[1] = (UWORD)(u1t[U[x + 1]] | v1t[V[x + 1]]);
+        }
+        if (x < cw)
+            c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
+    }
+    for (x = 0; x + 4 <= w; x += 4, d += 4, cl += 2) {
+        ULONG c0 = cl[0], c1 = cl[1];
+        d[0] = lut[y0t[Y[x]] | c0];
+        d[1] = lut[y1t[Y[x + 1]] | c0];
+        d[2] = lut[y2t[Y[x + 2]] | c1];
+        d[3] = lut[y3t[Y[x + 3]] | c1];
+    }
+    for (; x < w; x++, d++)
+        *d = lut[y0t[Y[x]] | va_cl[x >> 1]];
+    for (; x < bw; x++)
+        *d++ = 0;
+}
+
+/* A row of pens to the planes' row at y (x0 a multiple of 16): 32 at a
+ * time to each plane's long (on a word's boundary: a 68020's long writes
+ * need no more) */
+static void va_planes_row(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0, ULONG y)
+{
+    ULONG x, k, nl = bw >> 5, bpr = bm->BytesPerRow, pl[8];
+    UBYTE *pp[8];
+    for (k = 0; k < 8; k++)
+        pp[k] = (UBYTE *)bm->Planes[k] + y * bpr + (x0 >> 3);
+    for (x = 0; x < nl; x++) {
+        gfx_c2p32((const ULONG *)(rb + (x << 5)), pl);
+        for (k = 0; k < 8; k++) {
+            *(ULONG *)pp[k] = pl[k];
+            pp[k] += 4;
+        }
+    }
+}
+
+/* A picture into bm's planes at x0, y0: a row of pens, then its planes,
+ * row by row (the row in the cache). One picture in 16 is done in two
+ * passes instead (all its pens into va_all, then all its planes), so
+ * the two are timed apart without a clock read a row. */
 static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULONG bw, WORD x0, WORD y0,
                    WORD rows)
 {
-    ULONG y, x, nl = bw >> 5, w = p->mpic_Width, bpr = bm->BytesPerRow, k, hz = 0, tk = time_ticks(&hz);
-    ULONG pl[8], cw = (w + 1) >> 1, tp = 0, tq = 0, split = (va_nconv & 15) == 0;
+    ULONG y, hz = 0, tk = time_ticks(&hz);
     WORD h = p->mpic_Height < rows ? p->mpic_Height : rows;
-    const UBYTE *lut = va_lut;
-    for (y = 0; y < (ULONG)h; y++) {
-        const UBYTE *Y = p->mpic_Y + y * p->mpic_YModulo;
-        ULONG ph = (y & 3) << 2;
-        const UWORD *y0t = va_yt[ph], *y1t = va_yt[ph + 1], *y2t = va_yt[ph + 2], *y3t = va_yt[ph + 3];
-        const UWORD *cl = va_cl;
-        UBYTE *d = rb;
-        UBYTE *pp[8];
-        ULONG t1 = 0;
-        if (!(y & 1)) {
-            /* a row of blocks: its Cb and Cr part (2 x 2 dither by block) */
-            const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
-            const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
-            ULONG cp = ((y >> 1) & 1) << 1;
-            const UBYTE *u0t = va_ut[cp], *u1t = va_ut[cp + 1], *v0t = va_vt[cp], *v1t = va_vt[cp + 1];
-            UWORD *c = va_cl;
-            for (x = 0; x + 2 <= cw; x += 2, c += 2) {
-                c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
-                c[1] = (UWORD)(u1t[U[x + 1]] | v1t[V[x + 1]]);
-            }
-            if (x < cw)
-                c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
-        }
-        for (x = 0; x + 4 <= w; x += 4, d += 4, cl += 2) {
-            ULONG c0 = cl[0], c1 = cl[1];
-            d[0] = lut[y0t[Y[x]] | c0];
-            d[1] = lut[y1t[Y[x + 1]] | c0];
-            d[2] = lut[y2t[Y[x + 2]] | c1];
-            d[3] = lut[y3t[Y[x + 3]] | c1];
-        }
-        for (; x < w; x++, d++)
-            *d = lut[y0t[Y[x]] | va_cl[x >> 1]];
-        for (; x < bw; x++)
-            *d++ = 0;
-        if (split)
-            t1 = time_ticks(&hz);
-        for (k = 0; k < 8; k++)
-            pp[k] = (UBYTE *)bm->Planes[k] + (y0 + y) * bpr + (x0 >> 3);
-        for (x = 0; x < nl; x++) {
-            gfx_c2p32((const ULONG *)(rb + (x << 5)), pl);
-            for (k = 0; k < 8; k++) {
-                *(ULONG *)pp[k] = pl[k];
-                pp[k] += 4;
-            }
-        }
-        if (split) {
-            ULONG t2 = time_ticks(&hz);
-            tp += t1 - tk;
-            tq += t2 - t1;
-            tk = t2;
-        }
-    }
-    if (split) {
-        va_pen_ticks += tp;
-        va_plane_ticks += tq;
+    if (!(va_nconv & 15) && (va_all || (va_all = AllocVec(bw * p->mpic_Height + 32, MEMF_ANY)))) {
+        ULONG t1, t2;
+        for (y = 0; y < (ULONG)h; y++)
+            va_pens_row(p, y, va_all + y * bw, bw);
+        t1 = time_ticks(&hz);
+        for (y = 0; y < (ULONG)h; y++)
+            va_planes_row(va_all + y * bw, bw, bm, x0, y0 + y);
+        t2 = time_ticks(&hz);
+        va_pen_ticks += t1 - tk;
+        va_plane_ticks += t2 - t1;
         va_nsplit++;
-    } else {
-        va_conv_ticks += time_ticks(&hz) - tk;
+        va_conv_ticks += t2 - tk;
         va_nconv++;
         return;
     }
-    va_conv_ticks += tp + tq;
+    for (y = 0; y < (ULONG)h; y++) {
+        va_pens_row(p, y, rb, bw);
+        va_planes_row(rb, bw, bm, x0, y0 + y);
+    }
+    va_conv_ticks += time_ticks(&hz) - tk;
     va_nconv++;
 }
 

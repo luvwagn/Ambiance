@@ -316,7 +316,7 @@ void jpeg_thumb_init(void);
  * mpegv decodes (NULL back: it could not be decoded). */
 BOOL mpeg_thumb_wants(const char *path);
 struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
-                         struct PicInfo *pi, BOOL *is_mpeg);
+                         struct PicInfo *pi, BOOL *is_mpeg, volatile UBYTE *cancel);
 void mpeg_thumb_forget(void);       /* (quitting: after the loader's processes) */
 struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap *friend,
                            ULONG *sw, ULONG *sh, struct PicInfo *pi);  /* the viewer's, no datatype */
