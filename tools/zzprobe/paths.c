@@ -2,7 +2,7 @@
  * zzprobe - picture paths, end to end (included by zzprobe.c)
  * Copyright (c) 2026 Brian King, MIT
  *
- *   zzprobe PATHS [DT] [PICS file file ...]   (DT: the datatypes' columns too)
+ *   zzprobe PATHS [NODT] [NOZZ] [PICS file file ...]
  *
  * Each JPEG decoded every way Ambiance could, from the file to its pixels
  * at the size shown (fitted in the box, its shape kept), timed the same way
@@ -24,6 +24,16 @@
  *   API card   the same into a surface on the card alone: nothing read
  *              back (what drawing straight into the screen would cost,
  *              less the blit itself)
+ *   API tiles  an image session in tile mode: the picture decoded on the
+ *              card (whole: it does not scale in tile mode), its BGRA tiles
+ *              copied out of a small shared buffer as each comes, then
+ *              averaged down on the 68k. No surface: what Zorro II and the
+ *              card's own datatype can use.
+ *
+ * Amiberry's emulated card (zz9k.library 2.33) offers no surfaces (caps:
+ * max_surfaces 0, host-window heap 0: every ZZ9KAllocSurface "unsupported",
+ * as the surface probe lists), so its API back and API card columns stay
+ * empty there; a real card has its own numbers.
  *
  * The pixels are checked: the API's and the datatype's against own's (the
  * mean difference of each colour, 0-255), so a wrong channel order or a
@@ -32,16 +42,15 @@
  * averaging) are still the emulated 68k's.
  */
 #include "proto/zz9k.h"
+#include "zz9k/surface.h"
 
 struct Library *ZZ9KBase;
-static BOOL pb_zzdt;                    /* DT: the datatypes' columns too. Off by default: an object made
-                                         * from its class directly and read back here never answered on
-                                         * Amiberry (jfif's and the card's alike), and held the datatypes'
-                                         * lock until a reset. Not yet understood. */
+static BOOL pb_zzdt = TRUE;             /* the datatypes' columns (NODT: left out) */
+static BOOL pb_nozz;                    /* NOZZ: zz9k.library left alone (no API columns) */
 
-#define PB_N 5
-enum { PB_OWN, PB_ZZDT, PB_JFIF, PB_APIBACK, PB_APICARD };
-static const char *const pb_name[PB_N] = { "own", "zz9k dt", "jfif dt", "API back", "API card" };
+#define PB_N 6
+enum { PB_OWN, PB_ZZDT, PB_JFIF, PB_APIBACK, PB_APICARD, PB_APITILE };
+static const char *const pb_name[PB_N] = { "own", "zz9k dt", "jfif dt", "API back", "API card", "API tiles" };
 
 struct Box {
     const char *name;
@@ -211,7 +220,14 @@ static LONG pb_dt_once(void *p)
     struct pdtBlitPixelArray pa;
     ULONG *big;
     Object *o;
-    BPTR fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE);
+    /* DTA_Handle for DTST_FILE is a lock (datatypesclass Examine()s it and
+     * opens the file from it), as NewDTObject passes, and the object's
+     * from then on. A file handle here (as cls_once had it) was Examine()d
+     * as a lock: DOS sent its packet to a nonsense port, PutMsg "called"
+     * the port (PA 3) into the illegal-instruction vector, and SmartCrash's
+     * trap handler, run in user mode, faulted (Exception 8, privilege
+     * violation): every "hang" was SmartCrash's requester waiting */
+    BPTR fh = Lock((CONST_STRPTR)c->path, SHARED_LOCK);
     if (!fh)
         return IoErr() ? IoErr() : -1;
     o = NewObject(c->cl, NULL, DTA_SourceType, DTST_FILE, DTA_Handle, (ULONG)fh,
@@ -221,10 +237,11 @@ static LONG pb_dt_once(void *p)
         LONG e = IoErr();
         return e ? e : -1;
     }
-    /* laid out first, as zzprobe's own bench does (cls_once): an object
-     * made from its class directly, read without it, never answered */
-    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, (ULONG)TRUE);
+    /* no layout: a deep picture's pixels are read from the object as RGB,
+     * as Ambiance's thumbnails do (gfx.c pic_decode_fit); laid out, PMODE_V43,
+     * READPIXELARRAY failed */
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+
     if (!bmh || !bmh->bmh_Width || !bmh->bmh_Height) {
         DisposeObject(o);
         return -1;
@@ -238,7 +255,7 @@ static LONG pb_dt_once(void *p)
     }
     {
         /* as Ambiance's thumb.c reads them: RGB, a band of rows at a time
-         * (laid out above; read whole in ARGB was the suspect first) */
+         * (as thumb.c's read_rows) */
         ULONG top, n, x, band = 32;
         UBYTE *rgb = AllocVec(c->iw * 3 * band, MEMF_ANY);
         if (!rgb) {
@@ -288,6 +305,8 @@ struct PbApi {
     BOOL back;                  /* read back into fast RAM */
     ULONG *out;
     int status;
+    const char *stage;          /* the call that failed */
+    ULONG fmt;                  /* the surface's format: ARGB8888, else BGRA8888 (the card's own) */
 };
 
 static LONG pb_api_once(void *p)
@@ -303,8 +322,11 @@ static LONG pb_api_once(void *p)
         return -1;
     memset(&src, 0, sizeof(src));
     memset(&surf, 0, sizeof(surf));
+    c->stage = "ZZ9KAllocShared";
     if ((c->status = ZZ9KAllocShared((ULONG)len, 16, ZZ9K_ALLOC_HOST_WINDOW, &src)) != ZZ9K_STATUS_OK)
         return -1;
+    if (!c->fmt)
+        c->fmt = ZZ9K_SURFACE_FORMAT_ARGB8888;
     if (!(fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE)) || Read(fh, (APTR)src.data, len) != len) {
         if (fh)
             Close(fh);
@@ -312,7 +334,8 @@ static LONG pb_api_once(void *p)
         return -1;
     }
     Close(fh);
-    if ((c->status = ZZ9KAllocSurface(c->dw, c->dh, ZZ9K_SURFACE_FORMAT_ARGB8888,
+    c->stage = "ZZ9KAllocSurface";
+    if ((c->status = ZZ9KAllocSurface(c->dw, c->dh, c->fmt,
                                       c->back ? ZZ9K_SURFACE_FLAG_CPU_VISIBLE : ZZ9K_SURFACE_FLAG_ARM_LOCAL,
                                       &surf)) != ZZ9K_STATUS_OK) {
         ZZ9KFreeShared(src.handle);
@@ -326,16 +349,26 @@ static LONG pb_api_once(void *p)
     d.dst_surface = surf.handle;
     d.dst_width = c->dw;
     d.dst_height = c->dh;
-    d.output_format = ZZ9K_SURFACE_FORMAT_ARGB8888;
+    d.output_format = c->fmt;
     d.flags = ZZ9K_IMAGE_DECODE_FLAG_FIT | ZZ9K_IMAGE_DECODE_FLAG_PRESERVE_ASPECT;
+    c->stage = "ZZ9KDecodeJpeg";
     if ((c->status = ZZ9KDecodeJpeg(&d, &res)) == ZZ9K_STATUS_OK) {
         ok = 0;
+        c->stage = NULL;
         if (c->back) {
             ULONG y, row = c->dw * 4;
             FreeVec(c->out);
             if (surf.data && (c->out = AllocVec(c->dw * c->dh * 4, MEMF_ANY))) {
                 for (y = 0; y < c->dh; y++)
                     CopyMem((APTR)((volatile UBYTE *)surf.data + y * surf.pitch), c->out + y * c->dw, row);
+                if (c->fmt == ZZ9K_SURFACE_FORMAT_BGRA8888) {
+                    ULONG i, n = c->dw * c->dh;     /* B G R A bytes: to 0xAARRGGBB */
+                    for (i = 0; i < n; i++) {
+                        ULONG v = c->out[i];
+                        c->out[i] = ((v & 0xFF) << 24) | ((v >> 8) & 0xFF) << 16 | ((v >> 16) & 0xFF) << 8 |
+                                    (v >> 24);
+                    }
+                }
             } else {
                 ok = -1;
             }
@@ -379,6 +412,192 @@ static const char *zz_status_name(int s)
                                      "no memory", "timeout", "cancelled", "I/O error", "not found",
                                      "module missing", "module mismatch" };
     return s >= 0 && s < (int)(sizeof(n) / sizeof(n[0])) ? n[s] : "error";
+}
+
+/* ---- zz9k.library: an image session, its output in tiles (BGRA) into a
+ * shared buffer, copied out as each comes (no surface: what the card's
+ * datatype and Zorro II can use). The size shown asked for (dst): if the
+ * card scales (RESULT_SCALED) the tiles are that size, else the whole
+ * picture's, averaged down on the 68k */
+#define PB_TSTRIDE (4 * 4096)
+#define PB_TROWS 4
+struct PbTile {
+    const char *path;
+    ULONG dw, dh;
+    ULONG *out;
+    ULONG iw, ih, ow, oh, ntiles, flags;
+    int status;
+    const char *stage;
+    BOOL said;
+};
+
+static LONG pb_tile_once(void *p)
+{
+    struct PbTile *c = p;
+    ZZ9KSharedBuffer src, tb;
+    ZZ9KImageSessionBeginDesc bd;
+    ZZ9KImageSessionFeedDesc fd;
+    ZZ9KImageSessionResult r;
+    ULONG *canvas = NULL, cw = 0, ch = 0, off = 0, guard = 0;
+    LONG len = file_size(c->path), ok = -1;
+    BOOL eof = FALSE, open = FALSE;
+    BPTR fh;
+    if (len <= 0)
+        return -1;
+    memset(&src, 0, sizeof(src));
+    memset(&tb, 0, sizeof(tb));
+    c->stage = "ZZ9KAllocShared (file)";
+    if ((c->status = ZZ9KAllocShared((ULONG)len, 16, ZZ9K_ALLOC_HOST_WINDOW, &src)) != ZZ9K_STATUS_OK)
+        return -1;
+    if (!(fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE)) || Read(fh, (APTR)src.data, len) != len) {
+        if (fh)
+            Close(fh);
+        goto out;
+    }
+    Close(fh);
+    c->stage = "ZZ9KAllocShared (tiles)";
+    if ((c->status = ZZ9KAllocShared(PB_TSTRIDE * PB_TROWS, 16, ZZ9K_ALLOC_HOST_WINDOW, &tb)) != ZZ9K_STATUS_OK)
+        goto out;
+    memset(&bd, 0, sizeof(bd));
+    bd.codec = ZZ9K_IMAGE_CODEC_JPEG;
+    bd.output_mode = ZZ9K_IMAGE_OUTPUT_TILE_BUFFER;
+    bd.output_format = ZZ9K_SURFACE_FORMAT_BGRA8888;
+    bd.tile_handle = tb.handle;
+    bd.tile_stride = PB_TSTRIDE;
+    bd.tile_rows = PB_TROWS;
+    bd.dst_width = c->dw;                   /* (the size shown: scaled to it, if the card does) */
+    bd.dst_height = c->dh;
+    memset(&r, 0, sizeof(r));
+    c->stage = "ZZ9KImageSessionBegin";
+    if ((c->status = ZZ9KImageSessionBegin(&bd, &r)) != ZZ9K_STATUS_OK)
+        goto out;
+    open = TRUE;
+    c->ntiles = 0;
+    c->flags = 0;
+    while (guard++ < 100000) {
+        memset(&fd, 0, sizeof(fd));
+        fd.session = r.session;
+        fd.src_handle = src.handle;
+        fd.src_offset = off;
+        fd.src_length = (ULONG)len - off;
+        fd.flags = off >= (ULONG)len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+        if (fd.flags)
+            eof = TRUE;
+        c->stage = "ZZ9KImageSessionFeed";
+        if ((c->status = ZZ9KImageSessionFeed(&fd, &r)) != ZZ9K_STATUS_OK)
+            goto out;
+        off += r.bytes_consumed;
+        c->flags |= r.flags;
+        if (r.image_width && !c->iw) {
+            c->iw = r.image_width;
+            c->ih = r.image_height;
+        }
+        if (r.state == ZZ9K_IMAGE_SESSION_STATE_TILE_READY && r.tile_width && r.tile_height) {
+            ULONG y, x;
+            if (!canvas) {
+                /* the output's size: the size asked for if scaled, else the picture's */
+                cw = (r.flags & ZZ9K_IMAGE_SESSION_RESULT_SCALED) ? c->dw : c->iw;
+                ch = (r.flags & ZZ9K_IMAGE_SESSION_RESULT_SCALED) ? c->dh : c->ih;
+                if (!cw || !ch || !(canvas = AllocVec(cw * ch * 4, MEMF_ANY | MEMF_CLEAR))) {
+                    c->stage = "the canvas";
+                    goto out;
+                }
+            }
+            c->ntiles++;
+            for (y = 0; y < r.tile_height && r.tile_y + y < ch; y++) {
+                const ULONG *s = (const ULONG *)((volatile UBYTE *)tb.data + y * PB_TSTRIDE);
+                ULONG *d = canvas + (r.tile_y + y) * cw + r.tile_x;
+                for (x = 0; x < r.tile_width && r.tile_x + x < cw; x++) {
+                    ULONG v = s[x];             /* B G R A bytes: to 0x00RRGGBB */
+                    d[x] = ((v >> 8) & 0xFF) << 16 | ((v >> 16) & 0xFF) << 8 | (v >> 24);
+                }
+            }
+        } else if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE) {
+            ok = 0;
+            break;
+        } else if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR) {
+            c->stage = "the session (state ERROR)";
+            goto out;
+        } else if (r.state == ZZ9K_IMAGE_SESSION_STATE_NEED_INPUT && eof) {
+            c->stage = "the session (wants input after EOF)";
+            goto out;
+        }
+    }
+    if (ok == 0 && canvas) {
+        c->ow = cw;
+        c->oh = ch;
+        FreeVec(c->out);
+        if ((c->out = AllocVec(c->dw * c->dh * 4, MEMF_ANY))) {
+            if (cw == c->dw && ch == c->dh)
+                CopyMem(canvas, c->out, cw * ch * 4);
+            else
+                pb_shrink(canvas, cw, ch, c->out, c->dw, c->dh);
+        } else {
+            ok = -1;
+        }
+    } else if (ok == 0) {
+        c->stage = "the session (no tiles)";
+        ok = -1;
+    }
+    if (!ok)
+        c->stage = NULL;
+out:
+    if (open)
+        ZZ9KImageSessionClose(r.session, 0);
+    FreeVec(canvas);
+    if (tb.handle)
+        ZZ9KFreeShared(tb.handle);
+    ZZ9KFreeShared(src.handle);
+    return ok;
+}
+
+/* what the card says about surfaces, and which allocations it takes */
+static void pb_surface_probe(void)
+{
+    static const ULONG fmts[] = { ZZ9K_SURFACE_FORMAT_ARGB8888, ZZ9K_SURFACE_FORMAT_BGRA8888,
+                                  ZZ9K_SURFACE_FORMAT_RGB565 };
+    static const char *const fname[] = { "ARGB8888", "BGRA8888", "RGB565" };
+    static const ULONG flags[] = { 0, ZZ9K_SURFACE_FLAG_CPU_VISIBLE, ZZ9K_SURFACE_FLAG_ARM_LOCAL,
+                                   ZZ9K_SURFACE_FLAG_CPU_VISIBLE | ZZ9K_SURFACE_FLAG_SHARED_BUFFER };
+    static const char *const flname[] = { "none", "cpu-visible", "arm-local", "cpu-visible+shared" };
+    ZZ9KCaps caps;
+    ZZ9KServiceInfo sv;
+    char l[200];
+    int f, g, st;
+    memset(&caps, 0, sizeof(caps));
+    st = ZZ9KQueryCaps(&caps);
+    snprintf(l, sizeof(l), "  caps (%s): bits $%08lx, surfaces %s, max %lu, image decode %s, scale %s; "
+             "host-window heap %lu",
+             zz_status_name(st), (unsigned long)caps.capability_bits,
+             (caps.capability_bits & ZZ9K_CAP_SURFACES) ? "yes" : "no", (unsigned long)caps.max_surfaces,
+             (caps.capability_bits & ZZ9K_CAP_IMAGE_DECODE) ? "yes" : "no",
+             (caps.capability_bits & ZZ9K_CAP_IMAGE_SCALE) ? "yes" : "no",
+             (unsigned long)caps.host_window_heap_size);
+    pb_say(l);
+    memset(&sv, 0, sizeof(sv));
+    st = ZZ9KQueryService(ZZ9K_SERVICE_SURFACE, &sv);
+    snprintf(l, sizeof(l), "  surface service (%s): version %lu, flags $%08lx, %.20s", zz_status_name(st),
+             (unsigned long)sv.version, (unsigned long)sv.flags, sv.name);
+    pb_say(l);
+    for (f = 0; f < 3; f++)
+        for (g = 0; g < 4; g++) {
+            ZZ9KSurface su;
+            int a, b2;
+            ULONG pitch = 0, len = 0;
+            memset(&su, 0, sizeof(su));
+            a = ZZ9KAllocSurface(160, 120, fmts[f], flags[g], &su);
+            if (a == ZZ9K_STATUS_OK)
+                ZZ9KFreeSurface(su.handle);
+            zz9k_surface_layout(160, 120, fmts[f], (uint32_t *)&pitch, (uint32_t *)&len);
+            memset(&su, 0, sizeof(su));
+            b2 = ZZ9KAllocSurfaceEx(160, 120, fmts[f], flags[g], pitch, &su);
+            snprintf(l, sizeof(l), "  surface 160x120 %-8s %-18s: AllocSurface %s, Ex(pitch %lu) %s%s",
+                     fname[f], flname[g], zz_status_name(a), (unsigned long)pitch, zz_status_name(b2),
+                     b2 == ZZ9K_STATUS_OK && su.data ? " (68k can read it)" : "");
+            if (b2 == ZZ9K_STATUS_OK)
+                ZZ9KFreeSurface(su.handle);
+            pb_say(l);
+        }
 }
 
 /* the mean difference of each colour, 0-255 x 10 */
@@ -431,12 +650,12 @@ static void bench_paths(const char *const *files, int nfiles)
     Class *zzcl, *jfifcl;
     ZZ9KServiceInfo svc;
     BOOL api = FALSE;
-    char line[220], c[PB_N][24];
+    char line[240], c[PB_N][24];
     int fi;
     ULONG b;
 
     heading("Bench: picture paths, file to pixels at the size shown (ms, best of up to 10, mean)");
-    if ((zzlib = OpenLibrary((CONST_STRPTR)"zz9k.library", 2))) {
+    if (!pb_nozz && (zzlib = OpenLibrary((CONST_STRPTR)"zz9k.library", 2))) {
         ZZ9KBase = zzlib;
         memset(&svc, 0, sizeof(svc));
         if (zzlib->lib_Version > 2 || zzlib->lib_Revision >= ZZ9K_LIBRARY_MIN_REVISION_TYPED_IMAGE_DECODE) {
@@ -455,15 +674,20 @@ static void bench_paths(const char *const *files, int nfiles)
                      (long)zzlib->lib_Revision);
         }
         pb_say(line);
+        if (api)
+            pb_surface_probe();
     } else {
         pb_say("  zz9k.library 2 not there: the API's columns are left out");
     }
-    zzdtl = pb_class("zz9k-picture.datatype", &zzcl);
+    zzdtl = NULL;
+    zzcl = NULL;
+    if (pb_zzdt)
+        zzdtl = pb_class("zz9k-picture.datatype", &zzcl);
     jfifl = pb_class("jfif.datatype", &jfifcl);
     if (!zzdtl && pb_zzdt)
         pb_say("  zz9k-picture.datatype not there: its column is left out");
     if (!pb_zzdt)
-        pb_say("  The datatypes' columns: only with DT (they hung on Amiberry: see paths.c)");
+        pb_say("  The datatypes' columns left out (NODT)");
 
     for (fi = 0; fi < nfiles; fi++) {
         const char *path = files[fi];
@@ -482,8 +706,9 @@ static void bench_paths(const char *const *files, int nfiles)
             struct PbOwn own;
             struct PbDt zd, jd;
             struct PbApi ab, ac;
+            struct PbTile at;
             ULONG best[PB_N], mean[PB_N];
-            char chk[3][48];
+            char chk[4][48];
             int k;
             memset(best, 0, sizeof(best));
             memset(mean, 0, sizeof(mean));
@@ -507,36 +732,59 @@ static void bench_paths(const char *const *files, int nfiles)
                 best[PB_JFIF] = 0;
             memset(&ab, 0, sizeof(ab));
             memset(&ac, 0, sizeof(ac));
+            memset(&at, 0, sizeof(at));
             if (api && own.dw) {
                 ab.path = ac.path = path;
                 ab.dw = ac.dw = own.dw;
                 ab.dh = ac.dh = own.dh;
                 ab.back = TRUE;
                 pb_step(path, pb_box[b].name, "API back");
-                if (timed(pb_api_once, &ab, NULL, &best[PB_APIBACK], &mean[PB_APIBACK]))
-                    best[PB_APIBACK] = 0;
+                if (timed(pb_api_once, &ab, NULL, &best[PB_APIBACK], &mean[PB_APIBACK])) {
+                    char w[120];
+                    snprintf(w, sizeof(w), "      API in ARGB8888: %s said %s; again in BGRA8888",
+                             ab.stage ? ab.stage : "read back", zz_status_name(ab.status));
+                    pb_say(w);
+                    ab.fmt = ac.fmt = ZZ9K_SURFACE_FORMAT_BGRA8888;
+                    FreeVec(ab.out);
+                    ab.out = NULL;
+                    if (timed(pb_api_once, &ab, NULL, &best[PB_APIBACK], &mean[PB_APIBACK]))
+                        best[PB_APIBACK] = 0;
+                }
                 pb_step(path, pb_box[b].name, "API card");
                 if (timed(pb_api_once, &ac, NULL, &best[PB_APICARD], &mean[PB_APICARD]))
                     best[PB_APICARD] = 0;
+                memset(&at, 0, sizeof(at));
+                at.path = path;
+                at.dw = own.dw;
+                at.dh = own.dh;
+                pb_step(path, pb_box[b].name, "API tiles");
+                if (timed(pb_tile_once, &at, NULL, &best[PB_APITILE], &mean[PB_APITILE]))
+                    best[PB_APITILE] = 0;
+                snprintf(line, sizeof(line), "      API tiles: %s%s%s; picture %ldx%ld, made %ldx%ld on the card (%s), "
+                         "%ld tiles", at.stage ? at.stage : "ok", at.stage ? " said " : "",
+                         at.stage ? zz_status_name(at.status) : "", (long)at.iw, (long)at.ih, (long)at.ow,
+                         (long)at.oh, (at.flags & ZZ9K_IMAGE_SESSION_RESULT_SCALED) ? "scaled" : "whole",
+                         (long)at.ntiles);
+                pb_say(line);
             }
-            pb_step(path, pb_box[b].name, "zz9k dt");     /* (last: it hung on Amiberry) */
+            pb_step(path, pb_box[b].name, "zz9k dt");
             if (zzcl && pb_zzdt && (zd.err = timed(pb_dt_once, &zd, NULL, &best[PB_ZZDT], &mean[PB_ZZDT])))
                 best[PB_ZZDT] = 0;
             if (b == 0) {
                 snprintf(line, sizeof(line), "  %.50s, %ld x %ld", FilePart((STRPTR)path),
                          (long)(own.iw ? own.iw : zd.iw), (long)(own.ih ? own.ih : zd.ih));
                 pb_say(line);
-                snprintf(line, sizeof(line), "    %-16s %-13s %-13s %-13s %-13s %-13s", "shown at", pb_name[0],
-                         pb_name[1], pb_name[2], pb_name[3], pb_name[4]);
+                snprintf(line, sizeof(line), "    %-16s %-12s %-12s %-12s %-12s %-12s %-12s", "shown at",
+                         pb_name[0], pb_name[1], pb_name[2], pb_name[3], pb_name[4], pb_name[5]);
                 pb_say(line);
             }
             for (k = 0; k < PB_N; k++)
                 cell(c[k], best[k], mean[k]);
             {
-                char at[24];
-                snprintf(at, sizeof(at), "%s %ldx%ld", pb_box[b].name, (long)own.dw, (long)own.dh);
-                snprintf(line, sizeof(line), "    %-16s %-13s %-13s %-13s %-13s %-13s", at, c[0], c[1], c[2], c[3],
-                         c[4]);
+                char atx[24];
+                snprintf(atx, sizeof(atx), "%s %ldx%ld", pb_box[b].name, (long)own.dw, (long)own.dh);
+                snprintf(line, sizeof(line), "    %-16s %-12s %-12s %-12s %-12s %-12s %-12s", atx, c[0], c[1], c[2],
+                         c[3], c[4], c[5]);
                 pb_say(line);
             }
             if (!best[PB_OWN] && own.err) {
@@ -544,7 +792,8 @@ static void bench_paths(const char *const *files, int nfiles)
                 pb_say(line);
             }
             if (api && !best[PB_APIBACK]) {
-                snprintf(line, sizeof(line), "      API: %s", zz_status_name(ab.status));
+                snprintf(line, sizeof(line), "      API: %s said %s", ab.stage ? ab.stage : "read back",
+                         zz_status_name(ab.status));
                 pb_say(line);
             }
             if (zzcl && pb_zzdt && !best[PB_ZZDT]) {
@@ -558,12 +807,15 @@ static void bench_paths(const char *const *files, int nfiles)
             pb_check(chk[1], sizeof(chk[1]), "jfif dt",
                      jd.dw == own.dw && jd.dh == own.dh ? jd.out : NULL, own.out, own.dw * own.dh);
             pb_check(chk[2], sizeof(chk[2]), "API", ab.out, own.out, own.dw * own.dh);
-            snprintf(line, sizeof(line), "      differs from own's, R/G/B 0-255: %s; %s; %s", chk[0], chk[1], chk[2]);
+            pb_check(chk[3], sizeof(chk[3]), "tiles", at.out, own.out, own.dw * own.dh);
+            snprintf(line, sizeof(line), "      differs from own's, R/G/B 0-255: %s; %s; %s; %s", chk[0], chk[1], chk[2],
+                     chk[3]);
             pb_say(line);
             FreeVec(own.out);
             FreeVec(zd.out);
             FreeVec(jd.out);
             FreeVec(ab.out);
+            FreeVec(at.out);
         }
         if (dtn)
             ReleaseDataType(dtn);

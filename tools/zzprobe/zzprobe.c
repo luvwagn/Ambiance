@@ -4,7 +4,7 @@
  *
  *   zzprobe [JPEG file] [PNG file] [WEBP file] [MP3 file] [QUICK] [NOBENCH]
  *
- *   zzprobe PATHS [DT] [PICS file file ...]   (the picture paths alone: paths.c)
+ *   zzprobe PATHS [NODT] [NOZZ] [PICS file file ...]   (the picture paths alone: paths.c)
  *
  * Probes (the ZZ9000 SDK's headers, MIT, only for the picture paths'
  * calls to zz9k.library):
@@ -704,10 +704,11 @@ static LONG cls_once(void *p)
     struct BitMapHeader *bmh = NULL;
     ULONG t0 = now_us(), t1, t2, t3, t4;
     Object *o;
-    /* the file opened here and given to the object, as NewDTObject does
-     * (DTA_Handle: a file handle, for DTST_FILE); the object closes it when
-     * it is disposed of, so it is not closed here, even when OM_NEW fails */
-    BPTR fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE);
+    /* the file locked here and the lock given to the object, as
+     * NewDTObject does (DTA_Handle for DTST_FILE is a lock: datatypesclass
+     * Examine()s it and opens the file from it; a file handle crashed, see
+     * paths.c); the object's from then on, so it is not unlocked here */
+    BPTR fh = Lock((CONST_STRPTR)c->path, SHARED_LOCK);
     if (!fh)
         return IoErr() ? IoErr() : -1;
     t1 = now_us();
@@ -1268,8 +1269,8 @@ static void summary(void)
 /* ------------------------------------------------------------ main */
 static ULONG run(void *unused)
 {
-    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S,PATHS/S,PICS/M,DT/S";
-    LONG args[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S,PATHS/S,PICS/M,NODT/S,NOZZ/S";
+    LONG args[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     struct RDArgs *ra = ReadArgs((CONST_STRPTR)tmpl, args, NULL);
     const char *jpeg = "PROGDIR:Bench/test.jpg", *png = "PROGDIR:Bench/test.png",
                *webp = "PROGDIR:Bench/test.webp", *mp3 = "PROGDIR:Bench/test.mp3";
@@ -1330,7 +1331,8 @@ static ULONG run(void *unused)
             if (pics)
                 while (pics[n])
                     n++;
-            pb_zzdt = args[8] != 0;
+            pb_zzdt = args[8] == 0;
+            pb_nozz = args[9] != 0;
             if (n)
                 bench_paths(pics, n);
             else
