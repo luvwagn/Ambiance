@@ -149,6 +149,38 @@ static const char *why_not(int r)
     }
 }
 
+/* jd_decode at *scale into s->rgb (made here, s->w x s->h). A progressive
+ * picture too big to keep at that scale (JD_ENOMEM: jdec keeps its
+ * coefficients, JD_PROG_MAX at most) is opened again and decoded a scale
+ * smaller: a 12-megapixel photo for a 1280 x 1024 slideshow then comes
+ * 768 x 1020 for a 771 x 1024 place, the rest made up by the scaling
+ * after, rather than going to a datatype that takes seconds or fails. */
+static int j_decode(JDec **pd, struct JSrc *s, const JDecIO *io, JDecInfo *info, int *scale)
+{
+    for (;;) {
+        int32_t ow, oh;
+        int r;
+        jd_out_size(info, *scale, &ow, &oh);
+        s->w = (ULONG)ow;
+        s->h = (ULONG)oh;
+        FreeVec(s->rgb);
+        if (!(s->rgb = AllocVec(s->w * s->h * 3, MEMF_ANY | MEMF_CLEAR)))
+            return JD_ENOMEM;
+        r = jd_decode(*pd, *scale);
+        if (r != JD_ENOMEM || !info->progressive || *scale >= 3)
+            return r;
+        jd_close(*pd);
+        *pd = NULL;
+        if (s->mem)
+            s->pos = 0;
+        else
+            Seek(s->fh, 0, OFFSET_BEGINNING);
+        if ((r = jd_open(pd, io, info)))
+            return r;
+        (*scale)++;
+    }
+}
+
 /* view: the viewer's (w x h the screen, view_fit), else a thumbnail's
  * (w x h its box, pic_fit) */
 static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
@@ -162,7 +194,6 @@ static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL
     JDec *d = NULL;
     ULONG dw, dh;
     LONG len;
-    int32_t ow, oh;
     int r, scale;
     const char *why;
 
@@ -205,12 +236,7 @@ static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL
     else
         pic_fit((ULONG)info.width, (ULONG)info.height, tall, w, h, whole, &dw, &dh);
     scale = jd_scale_for(&info, (int32_t)dw, (int32_t)dh);
-    jd_out_size(&info, scale, &ow, &oh);
-    s.w = (ULONG)ow;
-    s.h = (ULONG)oh;
-    if (!(s.rgb = AllocVec(s.w * s.h * 3, MEMF_ANY | MEMF_CLEAR)))
-        goto out;
-    if ((r = jd_decode(d, scale))) {
+    if ((r = j_decode(&d, &s, &io, &info, &scale))) {
         if ((why = why_not(r)))
             note(kind ? kind : "picture", why, path);
         goto out;
@@ -266,7 +292,6 @@ struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap
     JDecInfo info;
     JDec *d = NULL;
     LONG len;
-    int32_t ow, oh;
     int r, scale;
     const char *why;
 
@@ -298,12 +323,7 @@ struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap
         goto out;
     }
     scale = jd_scale_for(&info, maxw, maxh);
-    jd_out_size(&info, scale, &ow, &oh);
-    s.w = (ULONG)ow;
-    s.h = (ULONG)oh;
-    if (!(s.rgb = AllocVec(s.w * s.h * 3, MEMF_ANY | MEMF_CLEAR)))
-        goto out;
-    if ((r = jd_decode(d, scale))) {
+    if ((r = j_decode(&d, &s, &io, &info, &scale))) {
         if ((why = why_not(r)))
             note("picture (viewer)", why, path);
         goto out;

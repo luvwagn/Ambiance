@@ -15,6 +15,9 @@
 
 #define JD_INBUF 4096
 #define JD_EOI 1                /* (read_markers between progressive scans: the end) */
+#ifndef JD_PROG_LOW
+#define JD_PROG_LOW 0           /* (1: the tests' build, prog_low always) */
+#endif
 #ifndef JD_PROG_MAX
 #define JD_PROG_MAX (24L << 20) /* a progressive picture's coefficients kept: at most */
 #endif
@@ -50,12 +53,17 @@ typedef struct {
     int16_t q[64];              /* its dequantising table at this scale (natural order) */
     const int16_t *sc;          /* each coefficient's scale after q, Q(14-PS): aan[] or flat */
     int dc;                     /* DC prediction */
-    /* progressive: every block's coefficients (zigzag order), kn of each
-     * (1: the DC alone, where the scale reads no more; else 64), for
-     * sbw x sbh blocks (the MCUs' grid) */
+    /* progressive: every block's coefficients, for sbw x sbh blocks (the
+     * MCUs' grid): kn of each, those this scale's IDCT reads (zigzag
+     * position k in coef slot[k]; 255: not kept). Of those not kept only
+     * whether each is nonzero (nzm: 64 bits a block), which the AC
+     * refinement scans need to be read right. kn 1: the DC alone, the AC
+     * scans passed over. */
     int16_t *coef;
+    uint32_t *nzm;
     int32_t sbw, sbh;
     int kn;
+    uint8_t slot[64];
 } JComp;
 
 /* A Cr or Cb value's colour terms; 8 bytes, for the 68020's index * 8 */
@@ -79,6 +87,7 @@ struct JDec {
     int adobe, adobe_transform, jfif;
     int restart;
     int progressive;            /* SOF2: its scans read into each component's coef first */
+    int prog_low;               /* too big kept whole: chroma a step smaller, made bigger */
     int ss, se, ah, al;         /* the progressive scan's spectral selection, approximation */
     int32_t eobrun;             /* blocks left in an end-of-band run */
     int pending;                /* a marker the last scan's data ran into, read next */
@@ -908,11 +917,12 @@ static int setup(JDec *d, int scale)
         c->dnx = bs * rx >= c->bs ? 1 : (int)(c->bs / (bs * rx));
         c->upy = bs * ry >= c->bs ? (int)(bs * ry / c->bs) : 1;
         c->dny = bs * ry >= c->bs ? 1 : (int)(c->bs / (bs * ry));
-        if (d->progressive && bs == 1 && c->bs > 1) {
+        if (d->progressive && (bs == 1 || d->prog_low) && c->bs > bs) {
             /* a progressive picture at 1/8: chroma's DC too, made bigger,
              * so no component keeps more than its DC (and the scans of
-             * the rest are passed over) */
-            c->bs = 1;
+             * the rest are passed over); at the other scales the same
+             * where the picture would not fit in JD_PROG_MAX otherwise */
+            c->bs = (int)bs;
             c->upx = rx;
             c->upy = ry;
             c->dnx = c->dny = 1;
@@ -1275,8 +1285,14 @@ static void prog_dc(JDec *d, JComp *c, int16_t *b)
     }
 }
 
+/* Coefficient k (zigzag) of a block: kept (b[slot]), or only whether it is
+ * nonzero (m's bit k) */
+#define PC_NZ(k) (c->slot[k] != 255 ? b[c->slot[k]] != 0 : (m[(k) >> 5] >> ((k) & 31)) & 1)
+#define PC_SET(k, v) do { if (c->slot[k] != 255) b[c->slot[k]] = (int16_t)(v); \
+                          else m[(k) >> 5] |= 1UL << ((k) & 31); } while (0)
+
 /* An AC scan's band of one block, its first pass (Ah 0) */
-static void prog_ac_first(JDec *d, JComp *c, int16_t *b)
+static void prog_ac_first(JDec *d, JComp *c, int16_t *b, uint32_t *m)
 {
     int k = d->ss;
     if (d->eobrun > 0) {
@@ -1286,12 +1302,15 @@ static void prog_ac_first(JDec *d, JComp *c, int16_t *b)
     while (k <= d->se) {
         int rs = decode_huff(d, &d->ha[c->ta]), r = rs >> 4, s = rs & 15;
         if (s) {
+            int32_t v;
             k += r;
             if (k > d->se) {
                 d->damaged = 1;
                 return;
             }
-            b[k++] = sat16((int32_t)extend(getbits(d, s), s) * (1L << d->al));
+            v = (int32_t)extend(getbits(d, s), s) * (1L << d->al);
+            PC_SET(k, sat16(v));
+            k++;
         } else if (r == 15) {
             k += 16;                    /* sixteen zeros */
         } else {
@@ -1303,16 +1322,26 @@ static void prog_ac_first(JDec *d, JComp *c, int16_t *b)
     }
 }
 
+/* A nonzero coefficient's correction bit: added where it is kept */
+static void prog_correct(JDec *d, JComp *c, int16_t *b, int k, int p1)
+{
+    if (getbits(d, 1) && c->slot[k] != 255) {
+        int16_t *x = &b[c->slot[k]];
+        if (!(*x & p1))
+            *x = (int16_t)(*x >= 0 ? *x + p1 : *x - p1);
+    }
+}
+
 /* Its refinements (Ah > 0): a bit more of each coefficient already there,
  * and new ones of +-1 << Al in the zeros (T.81 G.1.2.3) */
-static void prog_ac_refine(JDec *d, JComp *c, int16_t *b)
+static void prog_ac_refine(JDec *d, JComp *c, int16_t *b, uint32_t *m)
 {
     int k = d->ss, p1 = 1 << d->al;
     if (d->eobrun > 0) {
         d->eobrun--;
         for (; k <= d->se; k++)
-            if (b[k] && getbits(d, 1) && !(b[k] & p1))
-                b[k] = (int16_t)(b[k] >= 0 ? b[k] + p1 : b[k] - p1);
+            if (PC_NZ(k))
+                prog_correct(d, c, b, k, p1);
         return;
     }
     while (k <= d->se) {
@@ -1328,14 +1357,13 @@ static void prog_ac_refine(JDec *d, JComp *c, int16_t *b)
             r = 64;                     /* (to the band's end: corrections only) */
         }                               /* (ZRL: 16 zeros passed, the 16th given 0) */
         while (k <= d->se) {
-            int16_t *x = &b[k++];
-            if (*x) {
-                if (getbits(d, 1) && !(*x & p1))
-                    *x = (int16_t)(*x >= 0 ? *x + p1 : *x - p1);
+            int kk = k++;
+            if (PC_NZ(kk)) {
+                prog_correct(d, c, b, kk, p1);
             } else {
                 if (r == 0) {
                     if (v)
-                        *x = (int16_t)v;
+                        PC_SET(kk, v);
                     break;
                 }
                 r--;
@@ -1372,15 +1400,17 @@ static void prog_scan(JDec *d)
             bh = c->sbh;
         for (by = 0; by < bh; by++)
             for (bx = 0; bx < bw; bx++, n++) {
-                int16_t *b = c->coef + (by * c->sbw + bx) * c->kn;
+                int32_t bi = by * c->sbw + bx;
+                int16_t *b = c->coef + bi * c->kn;
+                uint32_t *m = c->nzm ? c->nzm + bi * 2 : NULL;     /* (NULL: all kept) */
                 if (d->restart && n && n % d->restart == 0)
                     prog_restart(d);
                 if (d->ss == 0)
                     prog_dc(d, c, b);
                 else if (d->ah == 0)
-                    prog_ac_first(d, c, b);
+                    prog_ac_first(d, c, b, m);
                 else
-                    prog_ac_refine(d, c, b);
+                    prog_ac_refine(d, c, b, m);
             }
     } else {                            /* DC, interleaved: in MCUs */
         int32_t mx, my;
@@ -1424,12 +1454,12 @@ static int prog_block(JDec *d, const JComp *c, const int16_t *b)
     if (c->kn == 1)
         return 1;
     for (k = 1; k < 64; k++) {
-        int z;
-        if (!b[k])
+        int z, v;
+        if (c->slot[k] == 255 || !(v = b[c->slot[k]]))
             continue;
         z = zigzag[k];
         if (q[z]) {
-            int16_t t = (int16_t)(b[k] * q[z]);
+            int16_t t = (int16_t)(v * q[z]);
             blk[z] = (int16_t)(((int32_t)t * sc[z] + (1L << (13 - PS))) >> (14 - PS));
             *nz++ = (uint8_t)z;
         }
@@ -1471,7 +1501,7 @@ static void prog_band(JDec *d, int which, int32_t my)
 
 static int prog_decode(JDec *d, int scale)
 {
-    int32_t total = 0, b;
+    int32_t b;
     int i, r, cur = 0;
     if (d->ncomp == 1) {                /* (one component: blocks of their own, as baseline) */
         d->c[0].h = d->c[0].v = 1;
@@ -1485,19 +1515,55 @@ static int prog_decode(JDec *d, int scale)
     for (i = 0; i < d->ncomp; i++)
         if (!d->qtok[d->c[i].tq])
             return JD_EFORMAT;
+    /* what it keeps: past JD_PROG_MAX, chroma a step smaller (prog_low) */
+    for (d->prog_low = JD_PROG_LOW; d->prog_low < 2; d->prog_low++) {
+        int32_t need = 0, bs = 8 >> scale, mcux, mcuy;
+        int over = 0;
+        mcux = (d->info.width + 8 * d->hmax - 1) / (8 * d->hmax);
+        mcuy = (d->info.height + 8 * d->vmax - 1) / (8 * d->vmax);
+        for (i = 0; i < d->ncomp && !over; i++) {
+            JComp *c = &d->c[i];
+            int rx = d->hmax / c->h, ry = d->vmax / c->v, cbs = (int)bs * (rx > ry ? rx : ry);
+            int32_t blocks = mcux * c->h * mcuy * c->v, per;
+            if (cbs > 8)
+                cbs = 8;
+            if ((bs == 1 || d->prog_low) && cbs > bs)
+                cbs = (int)bs;
+            per = cbs == 8 ? 128 : cbs == 4 ? 49 * 2 + 8 : cbs == 2 ? 25 * 2 + 8 : 2;
+            if (blocks > (JD_PROG_MAX - need) / per)
+                over = 1;
+            else
+                need += blocks * per;
+        }
+        if (!over)
+            break;
+    }
+    if (d->prog_low == 2)
+        return JD_ENOMEM;               /* (more than is sensible to keep) */
     if ((r = setup(d, scale)))
         return r;
     for (i = 0; i < d->ncomp; i++) {
         JComp *c = &d->c[i];
-        c->kn = c->bs == 1 ? 1 : 64;
+        int k;
+        uint32_t nb;
+        c->kn = 0;
+        for (k = 0; k < 64; k++)        /* (q 0: a coefficient this scale does not read) */
+            c->slot[k] = (uint8_t)(k == 0 || c->q[zigzag[k]] ? c->kn++ : 255);
+        if (c->bs == 1) {
+            c->kn = 1;
+            memset(c->slot + 1, 255, 63);
+        }
         c->sbw = d->mcux * c->h;
         c->sbh = d->mcuy * c->v;
-        if (c->sbw * c->sbh > (JD_PROG_MAX - total) / (2 * c->kn))
-            return JD_ENOMEM;           /* (more than is sensible to keep) */
-        total += c->sbw * c->sbh * 2 * c->kn;
-        if (!(c->coef = d->io.alloc(d->io.ctx, (uint32_t)(c->sbw * c->sbh * 2 * c->kn))))
+        nb = (uint32_t)(c->sbw * c->sbh);
+        if (!(c->coef = d->io.alloc(d->io.ctx, nb * 2 * c->kn)))
             return JD_ENOMEM;
-        memset(c->coef, 0, (size_t)(c->sbw * c->sbh * 2 * c->kn));
+        memset(c->coef, 0, (size_t)nb * 2 * c->kn);
+        if (c->kn > 1 && c->kn < 64) {
+            if (!(c->nzm = d->io.alloc(d->io.ctx, nb * 8)))
+                return JD_ENOMEM;
+            memset(c->nzm, 0, (size_t)nb * 8);
+        }
     }
     for (;;) {                          /* the scans */
         if ((r = read_sos_prog(d))) {
@@ -1628,6 +1694,8 @@ void jd_close(JDec *d)
             d->io.free(d->io.ctx, c->tmp);
         if (c->coef)
             d->io.free(d->io.ctx, c->coef);
+        if (c->nzm)
+            d->io.free(d->io.ctx, c->nzm);
     }
     if (d->rgb)
         d->io.free(d->io.ctx, d->rgb);

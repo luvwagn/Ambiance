@@ -16,7 +16,9 @@ licence.
 - **Progressive JPEGs too:** their scans are kept as coefficients, then
   decoded as a baseline picture is. A thumbnail at 1/8 keeps only each
   block's DC (2 bytes a block) and passes over the AC scans unread; the
-  other scales keep 128 bytes a block, up to 24 MB.
+  other scales keep only the coefficients they read (58 bytes a block at
+  1/4, 106 at 1/2, 128 at 1/1), up to 24 MB, chroma a step smaller where
+  a picture would not fit otherwise. A 12-megapixel photo fits at 1/4.
 
 What it does not decode goes to the system's JPEG datatype (WarpJPEG,
 jfif.datatype or whichever is installed) through datatypes.library:
@@ -30,7 +32,9 @@ jfif.datatype or whichever is installed) through datatypes.library:
 `jdec.c`/`jdec.h` are the decoder. The tests are in `test/`:
 
 - `jtest.c`: jdec on the host, a JPEG to a PPM.
-- `compare.py`: compares against libjpeg at every scale.
+- `compare.py`: compares against libjpeg at every scale (`--prog-low`
+  for a jtest built with `-DJD_PROG_LOW=1`: every progressive picture's
+  chroma kept a step smaller).
 - `fuzz.py`: fuzzing with sanitizers.
 - `cyc/`: 68020 cycle counts and profiles under Musashi.
 

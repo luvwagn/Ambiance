@@ -20,8 +20,12 @@
  * decoded as a baseline picture's are. At 1/8 every component keeps its
  * DC alone (2 bytes a block; chroma made bigger after, so a little softer
  * at colour edges than libjpeg's) and the AC scans are passed over
- * unread; at the other scales 128 bytes a block, at most JD_PROG_MAX
- * (24 MB: JD_ENOMEM past it). A cut-off or damaged progressive file shows
+ * unread. At the other scales only the coefficients the scale's IDCT
+ * reads are kept, with a bit for each other one that is nonzero (the
+ * refinement scans need it): 1/4 58 bytes a block, 1/2 106, 1/1 128.
+ * Where that is over JD_PROG_MAX (24 MB), chroma is kept a step smaller
+ * and made bigger, as at 1/8; still over: JD_ENOMEM (jpgthumb.c then
+ * tries a scale smaller). A cut-off or damaged progressive file shows
  * what its scans gave.
  *
  * Not (yet): CMYK and YCCK (JD_ECMYK), 12-bit, arithmetic coding,

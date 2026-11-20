@@ -2,7 +2,12 @@
 """Decode the corpus with jtest and compare with libjpeg (Pillow).
 Ambiance, MIT.
 
-    python3 compare.py <corpus dir> <jtest> [runner...]
+    python3 compare.py [--prog-low] <corpus dir> <jtest> [runner...]
+
+--prog-low: jtest was built with -DJD_PROG_LOW=1 (progressive pictures'
+chroma a step smaller at every scale, as jdec does for those too big to
+keep): progressive files with subsampled chroma then have their own limits
+at 1/2 and 1/4 too (PROG_SUB_PSNR, PROG_SUB_SMALL).
 
 runner: a prefix for jtest, e.g. "qemu-m68k -cpu m68020" for the 68020
 build. Each file that should decode is decoded at 1/1, 1/2, 1/4 and 1/8:
@@ -31,6 +36,7 @@ PROG_EIGHTH_PSNR = 30.0                 # progressive at 1/8 with chroma subsamp
                                         # keeps every component's DC alone (chroma then made
                                         # bigger, softer at colour edges), so the AC scans
                                         # are passed over and memory is 2 bytes a block
+PROG_SUB_SMALL = 18.0                   # (--prog-low: the same for small pictures)
 
 
 def psnr(a, b):
@@ -56,8 +62,12 @@ def read_ppm(path):
 
 
 def main():
-    corpus, jtest = sys.argv[1], sys.argv[2]
-    runner = sys.argv[3:]
+    args = sys.argv[1:]
+    low = "--prog-low" in args
+    if low:
+        args.remove("--prog-low")
+    corpus, jtest = args[0], args[1]
+    runner = args[2:]
     fails = 0
     worst = {}
     with open(os.path.join(corpus, "expect.txt")) as f:
@@ -101,8 +111,12 @@ def main():
                     ref_s = np.asarray(Image.fromarray(ref).reduce(k))
                     small = min(w, h) < 8 * k * 4
                     limit, tag = (SMALL_PSNR, "1/%d small" % k) if small else (SCALED_PSNR, "1/%d" % k)
-                    if k == 8 and not small and prog_sub(path):
-                        limit, tag = PROG_EIGHTH_PSNR, "1/8 progressive, chroma subsampled"
+                    if (k == 8 or low) and prog_sub(path):
+                        limit, tag = ((PROG_SUB_SMALL, "1/%d small progressive, chroma subsampled" % k)
+                                      if small else
+                                      (PROG_EIGHTH_PSNR, "1/%d progressive, chroma subsampled" % k))
+                        if k == 8 and small:
+                            limit, tag = SMALL_PSNR, "1/8 small"
                     p = psnr(got, ref_s)
                     md = int(np.abs(got.astype(int) - ref_s.astype(int)).max())
                     if p < limit:       # or libjpeg's own scaled decode, where Pillow gives it
