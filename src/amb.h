@@ -855,6 +855,14 @@ void st_swv_release(void);
  * process (no copy: TRUE while it shows), and once again on a new one */
 void st_video_direct(BOOL on);
 void st_video_redraw(void);
+/* Half size decoding (mpegv.library 2.6) for the next video by the CPU:
+ * never (the default: a picture shown on an overlay or drawn scaled),
+ * when behind with every B picture passed over (back again once on time),
+ * or always. The AGA screen's alone, which shows it at its whole size. */
+#define ST_HALF_NEVER  0
+#define ST_HALF_AUTO   1
+#define ST_HALF_ALWAYS 2
+void st_video_half(int mode);
 /* AC3 the card will not decode (Amiberry's emulated card): decoded by the
  * CPU from now on (ac3.library), the card given the video without sound;
  * NULL if the CPU can here, else why not. */

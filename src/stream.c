@@ -2952,6 +2952,8 @@ static struct {
     ULONG size;
     volatile UBYTE state;
     UBYTE direct;                           /* to go straight onto the overlay when due */
+    UBYTE half;                             /* a half size picture (MPVPF_HALF): its planes'
+                                             * top half, their rows' left halves */
     ULONG seq;
     ZzU64 pts;
 } swv[SWV_SLOTS];
@@ -2968,6 +2970,11 @@ static BOOL sw_ac3;                         /* AC3 (a DVD's, a transport stream'
  * decoder's own planes, when they are due (no copy of each: a DVD
  * picture's 0.6 MB), else into a slot for the UI as before. */
 static volatile BOOL sw_direct;             /* set by the UI (st_video_direct) */
+/* Half size (mpegv.library 2.6's MPVC_HALF, for the UI's AGA screen, which
+ * shows it at the whole size): the UI's choice (st_video_half), and the
+ * pictures decoded so and the switches, for the log */
+static volatile UBYTE sw_half_mode;         /* ST_HALF_ */
+static ULONG sw_nhalf, sw_half_turns;
 static volatile BOOL sw_redraw;             /* the UI's new overlay wants the picture again */
 static struct MpvPicture *sw_f;             /* the decoder's newest picture... */
 static BOOL sw_f_ok;                        /* ...still valid (no MpvDecode since) */
@@ -3006,6 +3013,13 @@ static ULONG sw_ncomposed;
 void st_video_direct(BOOL on)
 {
     sw_direct = on;
+}
+
+/* Half size decoding (ST_HALF_NEVER, _AUTO, _ALWAYS): from the UI, for
+ * the next video (an AGA screen's: none else shows a half size picture) */
+void st_video_half(int mode)
+{
+    sw_half_mode = (UBYTE)mode;
 }
 
 /* The overlay was opened again (a new one is blank): the picture again. */
@@ -3091,6 +3105,12 @@ static BOOL swv_pic(struct MpvPicture *p)
     p->mpic_YModulo = (UWORD)swv_yw;
     p->mpic_CModulo = (UWORD)(swv_yw / 2);
     p->mpic_YRows = (UWORD)swv_yh;
+    if (swv[s].half) {
+        p->mpic_Width = (UWORD)((swv_w + 1) / 2);
+        p->mpic_Height = (UWORD)((swv_h + 1) / 2);
+        p->mpic_YRows = (UWORD)(swv_yh / 2);
+        p->mpic_Flags = MPVPF_HALF;
+    }
     return TRUE;
 }
 
@@ -3433,6 +3453,12 @@ static void sw_slot_pic(int s, struct MpvPicture *p)
     p->mpic_YModulo = (UWORD)swv_yw;
     p->mpic_CModulo = (UWORD)(swv_yw / 2);
     p->mpic_YRows = (UWORD)swv_yh;
+    if (swv[s].half) {
+        p->mpic_Width = (UWORD)((swv_w + 1) / 2);
+        p->mpic_Height = (UWORD)((swv_h + 1) / 2);
+        p->mpic_YRows = (UWORD)(swv_yh / 2);
+        p->mpic_Flags = MPVPF_HALF;
+    }
 }
 
 /* The subpicture to show over a picture at pts now (NULL none), and the
@@ -3628,6 +3654,13 @@ static void swv_run(void)
     ULONG b_ontime = 0, b_need = 30, b_turns = 0, b_late = 0, b_okrun = 0;
     ULONG b_lvl = 0, b_dec = 0, b_skp0 = 0, b_max = 0;
     static const UBYTE b_num[5] = { 0, 1, 1, 2, 1 }, b_den[5] = { 1, 3, 2, 3, 1 };
+    /* still behind with every B picture passed over: decoded at half size
+     * (mpegv 2.6, an AGA screen's: from the next I picture), back to the
+     * whole size once the B pictures are all decoded again and enough are
+     * on time (h_need, twice as many each time it went to half size again
+     * just after: not to swing). Always half with Ambiance/VideoHalf=1. */
+    BOOL h_ok = FALSE, h_auto = FALSE, h_on = FALSE, h_down = FALSE;
+    ULONG h_late = 0, h_ontime = 0, h_need = 150;
     /* a seek: nothing shown until an I picture (those before it are built
      * on pictures from before the seek, never decoded: blocks of others) */
     BOOL want_i = st.range_from != 0;
@@ -3648,6 +3681,7 @@ static void swv_run(void)
     ULONG n_dec = 0, n_conv = 0, n_aud = 0, hz = 0, tk;
     st.v_shown = st.v_dropped = 0;
     st.v_ms = 0;
+    sw_nhalf = sw_half_turns = 0;
     sw_aq_in = sw_aq_out = 0;
     sw_apts = -1;
     sw_sound = st.v_mp2 && !st.v_es && !st.v_ac3;
@@ -3705,9 +3739,16 @@ static void swv_run(void)
             swv[i].size = need;
         }
         swv[i].state = SW_FREE;
+        swv[i].half = 0;
     }
     /* a DVD's menus: its subpictures, and the last picture as it was */
     sw_nav = st.v_dvd && dvdplay_is_nav(st.v_dvd);
+    /* half size: the UI's (an AGA screen), an mpegv that has it (2.6), not
+     * a DVD's menus (their subpictures are the whole picture's) */
+    h_ok = sw_half_mode != ST_HALF_NEVER && !sw_nav && MpegvBase &&
+           (MpegvBase->lib_Version > 2 || MpegvBase->lib_Revision >= 6);
+    h_auto = h_ok && sw_half_mode == ST_HALF_AUTO;
+    h_on = h_ok && sw_half_mode == ST_HALF_ALWAYS;
     sw_spu = NULL;
     sw_clean_ok = sw_band_ok = sw_last_ok = FALSE;
     sw_spu_drawn = NULL;
@@ -3738,9 +3779,14 @@ static void swv_run(void)
     }
     if (!(sw_mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rhook, MPVA_PacketHook, (ULONG)&phook,
                                MPVA_Stream, st.v_es ? MPVS_VIDEO : MPVS_PROGRAM,
-                               MPVA_ReadSize, SW_IN, TAG_DONE))) {
+                               MPVA_ReadSize, SW_IN, MPVA_Half, h_on, TAG_DONE))) {
         fail(_("Not enough memory"));
         goto out;
+    }
+    if (h_ok) {
+        sprintf(m, "half size: %s", h_on ? "always (Ambiance/VideoHalf=1)"
+                                         : "when behind with every B picture passed over");
+        amb_log("video: by the CPU", m);
     }
     if (sw_sound) {
         /* its sound by mpega.library, as an MP3 file's (mpega_run): what
@@ -4113,12 +4159,18 @@ static void swv_run(void)
                     } else {
                         tk = time_ticks(&hz);
                         ULONG ny = swv_yw * swv_yh;
-                        if (f->mpic_YModulo != swv_yw || f->mpic_YRows != swv_yh) {
+                        /* (half size: the planes' top halves, in the same places) */
+                        BOOL hf = (f->mpic_Flags & MPVPF_HALF) != 0;
+                        ULONG nc = hf ? ny / 2 : ny;
+                        swv[s].half = (UBYTE)hf;
+                        if (f->mpic_YModulo != swv_yw || f->mpic_YRows != (hf ? swv_yh / 2 : swv_yh)) {
                             swv[s].pts |= 1ULL << 62;   /* (not the size it said: not shown) */
                         } else {
-                            memcpy(swv[s].buf, f->mpic_Y, ny);
-                            memcpy(swv[s].buf + ny, f->mpic_Cb, ny / 4);
-                            memcpy(swv[s].buf + ny + ny / 4, f->mpic_Cr, ny / 4);
+                            memcpy(swv[s].buf, f->mpic_Y, nc);
+                            memcpy(swv[s].buf + ny, f->mpic_Cb, nc / 4);
+                            memcpy(swv[s].buf + ny + ny / 4, f->mpic_Cr, nc / 4);
+                            if (hf)
+                                sw_nhalf++;
                         }
                         t_conv += time_ticks(&hz) - tk;
                         n_conv++;
@@ -4197,7 +4249,20 @@ static void swv_run(void)
                                 b_lvl == 1 ? "1 in 3" : b_lvl == 2 ? "1 in 2" : b_lvl == 3 ? "2 in 3" : "all");
                         amb_log("video: by the CPU", m);
                     }
+                } else if (b_lvl >= 4 && h_auto && !h_on && ++h_late >= 3 && time_ms() - t0 > 1000) {
+                    /* every B picture passed over and still behind: half size */
+                    h_on = TRUE;
+                    MpvControl(sw_mpv, MPVC_HALF, TRUE);
+                    if (h_down)             /* (half again just after going back) */
+                        h_need = h_need < 4800 ? h_need * 2 : h_need;
+                    h_down = FALSE;
+                    h_late = h_ontime = 0;
+                    sw_half_turns++;
+                    sprintf(m, "behind at %lu ms with every B picture passed over: half size from the "
+                               "next I picture", (unsigned long)(pts / 90));
+                    amb_log("video: by the CPU", m);
                 }
+                h_ontime = 0;
             } else {
                 BOOL direct = swv[held].direct;
                 struct SpuHl hl;
@@ -4245,7 +4310,18 @@ static void swv_run(void)
                 shown_t = time_ms();
                 run = 0;
                 if (++b_okrun >= 30)
-                    b_late = 0;
+                    b_late = h_late = 0;
+                if (h_on && h_auto && !b_lvl && drift >= 0 && ++h_ontime >= h_need) {
+                    /* on time, every B picture decoded: the whole size again */
+                    h_on = FALSE;
+                    MpvControl(sw_mpv, MPVC_HALF, FALSE);
+                    h_down = TRUE;
+                    h_ontime = h_late = 0;
+                    sw_half_turns++;
+                    sprintf(m, "on time at %lu ms (%lu pictures, every B decoded): the whole size again from "
+                               "the next I picture", (unsigned long)(pts / 90), (unsigned long)h_need);
+                    amb_log("video: by the CPU", m);
+                }
                 if (b_lvl && drift >= 0 && ++b_ontime >= b_need) {
                     b_lvl--;                /* caught up: a step down, more B pictures tried */
                     skip_b = b_lvl > 0;
@@ -4348,6 +4424,11 @@ static void swv_run(void)
             b_max == 0 ? "none" : b_max == 1 ? "1 in 3" : b_max == 2 ? "1 in 2" : b_max == 3 ? "2 in 3" : "all",
             (unsigned long)st.underruns);
     amb_log("video", m);
+    if (h_ok) {
+        sprintf(m, "%lu pictures decoded at half size; %lu switches", (unsigned long)sw_nhalf,
+                (unsigned long)sw_half_turns);
+        amb_log("video: by the CPU", m);
+    }
     m[0] = 0;
     sw_stat(m, "a picture decoded", t_dec, n_dec, hz);
     sw_stat(m, "copied", t_conv, n_conv, hz);

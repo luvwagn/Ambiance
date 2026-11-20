@@ -9,7 +9,10 @@
  *   - palette bands: from a line down, some registers other colours (a
  *     picture viewer's controls under a picture with every register of its
  *     own; a layout's rows, each with a palette of its own);
- *   - colours changed line by line (a layout's background gradient).
+ *   - colours changed line by line (a layout's background gradient);
+ *   - any other register from line y (cop_reg: a half size video's rows
+ *     shown twice by BPL1MOD and BPL2MOD, one list with the controls'
+ *     colours).
  *
  * The system's copper list loads the ColorMap's colours at the top of each
  * frame, so what is written here holds from its line to the bottom of the
@@ -47,6 +50,9 @@ struct CopWrite {
     LONG y;
     UBYTE pen;
     ULONG rgb;
+    UWORD reg;                  /* 0: colour register pen; else this register (an offset from
+                                 * 0xDFF000) is val */
+    UWORD val;
 };
 
 struct CopPlan {
@@ -80,6 +86,37 @@ static BOOL cop_bplcon3(UWORD *base)
     return FALSE;
 }
 
+/* A register as the system's copper list sets it for the screen's
+ * ViewPort (its own part of the list, MrgCop's: from its CopLStart; else
+ * its intermediate instructions) */
+BOOL cop_sysreg(struct Screen *scr, UWORD reg, UWORD *val)
+{
+    struct CopList *cl;
+    LONG i;
+    if (!scr || !(cl = scr->ViewPort.DspIns))
+        return FALSE;
+    if (cl->CopLStart) {
+        UWORD *c = cl->CopLStart;
+        for (i = 0; i < 400; i++, c += 2) {
+            if (c[0] == 0xFFFF && c[1] == 0xFFFE)
+                break;
+            if (!(c[0] & 1) && (c[0] & 0x1FE) == reg) {
+                *val = c[1];
+                return TRUE;
+            }
+        }
+    }
+    for (; cl; cl = cl->Next) {
+        struct CopIns *ci = cl->CopIns;
+        for (i = 0; ci && i < cl->Count; i++, ci++)
+            if ((ci->OpCode & 3) == COPPER_MOVE && (ci->DESTADDR & 0x1FE) == reg) {
+                *val = (UWORD)ci->DESTDATA;
+                return TRUE;
+            }
+    }
+    return FALSE;
+}
+
 BOOL cop_ok(struct Screen *scr)
 {
     UWORD base;
@@ -108,6 +145,19 @@ void cop_color(struct CopPlan *p, LONG y, UBYTE pen, ULONG rgb)
     p->w[p->n].y = y;
     p->w[p->n].pen = pen;
     p->w[p->n].rgb = rgb & 0xFFFFFF;
+    p->w[p->n].reg = 0;
+    p->n++;
+}
+
+void cop_reg(struct CopPlan *p, LONG y, UWORD reg, UWORD val)
+{
+    if (!p || p->n >= p->max || y < 0 || !reg)
+        return;
+    p->w[p->n].y = y;
+    p->w[p->n].pen = 0;
+    p->w[p->n].rgb = 0;
+    p->w[p->n].reg = reg;
+    p->w[p->n].val = val;
     p->n++;
 }
 
@@ -153,10 +203,16 @@ static void cop_emit(struct UCopList *ucl, LONG y, const struct CopWrite *w, LON
     CBump(ucl);
     while (i < n) {
         UWORD bank = (UWORD)((w[i].pen >> 5) << 13);
+        if (w[i].reg) {                     /* (another register: as it is) */
+            CMove(ucl, CP_CUSTOM(w[i].reg), w[i].val);
+            CBump(ucl);
+            i++;
+            continue;
+        }
         /* (the line's first write a run of its own, its low nibbles done
          * before any other's high: a background changed on a line whose
          * pixels it fills, not half made at its left end) */
-        for (j = i + 1; i > 0 && j < n && (UWORD)((w[j].pen >> 5) << 13) == bank; j++)
+        for (j = i + 1; i > 0 && j < n && !w[j].reg && (UWORD)((w[j].pen >> 5) << 13) == bank; j++)
             ;
         CMove(ucl, CP_CUSTOM(CP_BPLCON3), base | bank);
         CBump(ucl);
@@ -213,11 +269,13 @@ BOOL cop_commit(struct CopPlan *p)
         return FALSE;
     }
     for (i = 0; i < p->n; i = j) {
+        BOOL early = p->early;
         for (j = i; j < p->n && p->w[j].y == p->w[i].y; j++)
-            ;
-        cop_emit(ucl, p->w[i].y, p->w + i, j - i, base, p->early ? (lace ? 2 : 1) : 0);
+            if (p->w[j].reg)
+                early = FALSE;              /* (a register's at its line, not the one before) */
+        cop_emit(ucl, p->w[i].y, p->w + i, j - i, base, early ? (lace ? 2 : 1) : 0);
         if (lace)                           /* (the other field's line too) */
-            cop_emit(ucl, p->w[i].y + 1, p->w + i, j - i, base, p->early ? 2 : 0);
+            cop_emit(ucl, p->w[i].y + 1, p->w + i, j - i, base, early ? 2 : 0);
     }
     CMove(ucl, CP_CUSTOM(CP_BPLCON3), base);    /* (the system's again) */
     CBump(ucl);
