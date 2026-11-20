@@ -9,8 +9,10 @@
  * the file in one read, its rows unpacked in turn (ByteRun1 or plain), and
  * only the rows and pixels the thumbnail needs taken from the bitplanes.
  *
- * Colour-table pictures of up to 8 planes, extra halfbrite too. HAM, deep
- * (24-bit) and PBM pictures are left to the datatype (NULL).
+ * Colour-table pictures of up to 8 planes, extra halfbrite too, and PBMs
+ * (Deluxe Paint's on the PC: the same, its rows 8-bit pixels, not
+ * bitplanes; Mark Ferrari's slides). Deep (24-bit) pictures are left to the
+ * datatype (NULL).
  *
  * An IFF ANIM (Videos) is its first frame, an ILBM, read alone (Tron2 is
  * 28 MB): HAM ones too, made into colours here, as the datatype would read
@@ -266,7 +268,8 @@ static UBYTE *read_file(const char *path, ULONG *len, BOOL *anim, struct PicInfo
         return buf;
     }
     if (amb_be32(head) == ID('F', 'O', 'R', 'M') &&
-        amb_be32(head + 8) == ID('I', 'L', 'B', 'M') && Seek(fh, 0, OFFSET_END) >= 0 &&
+        (amb_be32(head + 8) == ID('I', 'L', 'B', 'M') || amb_be32(head + 8) == ID('P', 'B', 'M', ' ')) &&
+        Seek(fh, 0, OFFSET_END) >= 0 &&
         (size = Seek(fh, 0, OFFSET_BEGINNING)) > 12 && (ULONG)size <= ILBM_MAX &&
         (buf = AllocVec(size, MEMF_ANY))) {
         if (Read(fh, buf, size) != size) {
@@ -672,8 +675,8 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     UWORD *xoff = NULL;
     ULONG *chunky = NULL;
     struct Thumb *t = NULL;
-    BOOL anim, ham;
-    ULONG base[64];
+    BOOL anim, ham, pbm;
+    ULONG base[64], prb;
     BPTR afh = 0;
     UBYTE *img = NULL;
     UBYTE *cm = NULL;               /* an ANIM's colours as of its frame shown: its own, as
@@ -682,6 +685,7 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
 
     if (!(file = read_file(path, &len, &anim, pi, &afh)))
         return NULL;
+    pbm = !anim && amb_be32(file + 8) == ID('P', 'B', 'M', ' ');
     /* the chunks */
     e = file + (amb_be32(file + 4) + 8 < len ? amb_be32(file + 4) + 8 : len);
     for (p = file + 12; p + 8 <= e;) {
@@ -712,8 +716,11 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     comp = bmhd[10];
     ham = (camg & CAMG_HAM) && (planes == 6 || planes == 8);
     if (!sw || !sh || !planes || planes > 8 || comp > 1 || ((camg & CAMG_HAM) && !(anim && ham)) ||
-        cmaplen < 6)
+        cmaplen < 6 || (pbm && (planes != 8 || masking == 1)))
         goto out;
+    if (pbm)
+        ham = FALSE;
+    prb = (sw + 1) & ~1UL;                  /* a PBM's row: a byte a pixel, to an even count */
     if (afh) {                              /* an ANIM: the frame worth showing, and the count */
         ULONG frames = 1, jif = 0;
         if (!(cm = AllocVec(768, MEMF_ANY)))
@@ -818,9 +825,10 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
             ULONG *tr = tmp + sy * dw;
             if (img)
                 CopyMem(img + sy * rb * planes, row, rb * planes);
-            else if (!unpack(&p, e, row, rb * np, comp == 1))
+            else if (!unpack(&p, e, pbm ? (UBYTE *)chunky : row, pbm ? prb : rb * np, comp == 1))
                 break;                      /* cut short: the rest stays black */
-            row_chunky(row, rb, planes, chunky);
+            if (!pbm)
+                row_chunky(row, rb, planes, chunky);
             for (x = 0; x < sw; x++) {
                 if (ham) {
                     ULONG v = cc[x] & lo, ctl = cc[x] >> bits;
@@ -903,11 +911,12 @@ struct Thumb *ilbm_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     for (sy = 0, y = 0; sy < sh && y < dh; sy++) {
         if (img)                            /* an ANIM's frame, decoded already */
             CopyMem(img + sy * rb * planes, row, rb * planes);
-        else if (!unpack(&p, e, row, rb * np, comp == 1))
+        else if (!unpack(&p, e, pbm ? (UBYTE *)chunky : row, pbm ? prb : rb * np, comp == 1))
             break;                          /* cut short: the rest stays colour 0 */
         if (y < dh && (y * sh + sh / 2) / dh == sy) {
             const UBYTE *c = (const UBYTE *)chunky;
-            row_chunky(row, rb, planes, chunky);
+            if (!pbm)
+                row_chunky(row, rb, planes, chunky);
             if (ham) {                      /* each pixel's colour, left to right */
                 UBYTE *cc = (UBYTE *)chunky;
                 ULONG rgb = base[0], bits = planes == 8 ? 6 : 4, lo = (1UL << bits) - 1;
@@ -946,7 +955,7 @@ told:
     pi->h = sh;
     pi->depth = planes;
     pi->mode = camg;
-    strcpy(pi->fmt, anim ? "ANIM" : "ILBM");
+    strcpy(pi->fmt, anim ? "ANIM" : pbm ? "PBM" : "ILBM");
     pi->cls[0] = 0;
 out:
     if (afh)
