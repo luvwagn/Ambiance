@@ -531,7 +531,8 @@ build/tspack/tspack_host: tests/tspack_host.c src/tspack.c src/tspack.h tests/ho
 	@mkdir -p build/tspack
 	@$(HOSTCC) -O2 -Wall -Itests/host -Isrc -o $@ tests/tspack_host.c src/tspack.c
 test-tspack: build/tspack/tspack_host
-	@sh tests/tspack_test.sh build/tspack $(abspath build/tspack/tspack_host) $(abspath extras/mpegv/build/host/mpv_test) \
+	@if ! command -v ffmpeg >/dev/null 2>&1; then echo "  SKIP transport streams (no ffmpeg here)"; exit 0; fi; \
+	sh tests/tspack_test.sh build/tspack $(abspath build/tspack/tspack_host) $(abspath extras/mpegv/build/host/mpv_test) \
 		> build/test-tspack.txt 2>&1 \
 		&& grep -q "tspack tests passed" build/test-tspack.txt \
 		&& echo "  CHECK transport streams packed as Program Streams, two at once (host, against ffmpeg) ok" \
