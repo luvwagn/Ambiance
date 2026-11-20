@@ -3734,22 +3734,52 @@ static LONG vids_dvd_rows(struct ItemList *l)
     return n;
 }
 
+/* Two names for one folder (VIDEOS: assigned to Media:Videos, say) */
+static BOOL same_place(const char *a, const char *b)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR la, lb;
+    BOOL same = FALSE;
+    me->pr_WindowPtr = (APTR)-1;
+    la = Lock((CONST_STRPTR)a, SHARED_LOCK);
+    lb = la ? Lock((CONST_STRPTR)b, SHARED_LOCK) : 0;
+    me->pr_WindowPtr = old;
+    if (la && lb)
+        same = SameLock(la, lb) == LOCK_SAME;
+    if (lb)
+        UnLock(lb);
+    if (la)
+        UnLock(la);
+    return same;
+}
+
+/* A place added to Videos' list, unless it is one there already */
+static void vids_place_add(const char **at, int *n, const char *path)
+{
+    int i;
+    for (i = 0; i < *n; i++)
+        if (same_place(at[i], path))
+            return;
+    at[(*n)++] = path;
+}
+
 /* Videos' first page, as Pictures': AGS's Media:Animations and Media:Videos, the VIDEOS:
  * assign and the folders of Settings > Folders > Videos; a DVD in a drive
  * first. */
 static LONG vids_root_fill(struct Page *p, const char **src)
 {
-    const char *at[FS_DIRS + 2];
+    const char *at[FS_DIRS + 3];
     int n = 0, i;
     LONG r;
     if (place_there(VIDS_ROOT))
         at[n++] = VIDS_ROOT;
     if (place_there(VIDS_ROOT2))
-        at[n++] = VIDS_ROOT2;
+        vids_place_add(at, &n, VIDS_ROOT2);
     if (fs_assign_used(FS_VIDEOS))
-        at[n++] = "VIDEOS:";
+        vids_place_add(at, &n, "VIDEOS:");
     for (i = 0; i < fs[FS_VIDEOS].n; i++)
-        at[n++] = fs[FS_VIDEOS].dir[i];
+        vids_place_add(at, &n, fs[FS_VIDEOS].dir[i]);
     *src = n == 1 ? at[0] : NULL;
     if (n == 0)
         return vids_dvd_rows(&p->list) ? p->list.count : -1;
@@ -18317,8 +18347,20 @@ static const struct LItem *lp_item(LONG i)
 {
     static struct LItem all;
     static char lab[48], sub[24];
-    if (i >= 0 && i < lp_n && lp_map[i] >= 0)
-        return lv_home_item(lp_map[i]);
+    if (i >= 0 && i < lp_n && lp_map[i] >= 0) {
+        const struct LItem *it = lv_home_item(lp_map[i]);
+        static struct LItem rec;
+        static char rsub[64];
+        if (!it || !lp_file(&pages[0].list.items[lp_map[i]]))
+            return it;
+        rec = *it;                          /* (one opened lately: said so under it) */
+        if (it->sub && it->sub[0])
+            sprintf(rsub, "%.20s \267 %.36s", _("recent"), it->sub);
+        else
+            sprintf(rsub, "%.20s", _("recent"));
+        rec.sub = rsub;
+        return &rec;
+    }
     memset(&all, 0, sizeof(all));
     sprintf(lab, "%.20s %.24s", _("All"), nmenu ? _(mod_names[menu[menu_sel]]) : "");
     sprintf(sub, "%ld", (long)lp_files);
