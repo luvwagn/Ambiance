@@ -1,10 +1,16 @@
 name: Ambiance CI
 
+# Run by hand (Actions > Ambiance CI > Run workflow) and on pull requests:
+# not on every push (each build is built and tested before it is pushed,
+# and the Actions minutes ran out). Releases build in release.yml (tags).
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:
   pull_request:
     branches: [ "main" ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
