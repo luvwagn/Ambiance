@@ -3420,7 +3420,9 @@ static void sw_draw(struct Gfx *g, WORD h, BOOL redraw, BOOL ovl)
         return;
     }
     if (!sw_rgb_ok) {
-        if (!sw_rgb && !(sw_rgb = AllocVec(sw_w * sw_h * 3, MEMF_ANY)))
+        /* (room for the whole size: a half size picture may come first) */
+        if (!sw_rgb && !(sw_rgb = AllocVec((vid.w > sw_w ? vid.w : sw_w) * (vid.h > sw_h ? vid.h : sw_h) * 3,
+                                           MEMF_ANY)))
             return;
         sw_rgb_ok = st_swv_rgb(sw_rgb, sw_w * 3);
         if (!sw_rgb_ok)
@@ -4824,6 +4826,10 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         if (!vid.sw || !vo_failed_here())
             vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
     }
+    /* decoded by the CPU and drawn by it (no overlay: a Picasso IV, say):
+     * half size when it falls behind, as on AGA (shown at the whole size,
+     * MpvToRGBScaled or ScalePixelArray making it so) */
+    st_video_half(vid.sw && !vo_shown() ? va_half_mode() : ST_HALF_NEVER);
     if (!vid_start(cpu, 0, err, errmax))
         goto out;
     for (;;) {
@@ -5126,6 +5132,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     }
     result = err[0] ? -1 : 0;
 out:
+    st_video_half(ST_HALF_NEVER);
     {
         ULONG shown = 0, dropped = 0;
         st_video_counts(&shown, &dropped);

@@ -3084,6 +3084,10 @@ BOOL st_swv_take(ULONG *w, ULONG *h)
     Permit();
     *w = swv_w;
     *h = swv_h;
+    if (best >= 0 && swv[best].half) {     /* (a half size picture: its own size) */
+        *w = (swv_w + 1) / 2;
+        *h = (swv_h + 1) / 2;
+    }
     return best >= 0;
 }
 
@@ -3743,7 +3747,8 @@ static void swv_run(void)
     }
     /* a DVD's menus: its subpictures, and the last picture as it was */
     sw_nav = st.v_dvd && dvdplay_is_nav(st.v_dvd);
-    /* half size: the UI's (an AGA screen), an mpegv that has it (2.6), not
+    /* half size: the UI's (an AGA screen; an RTG screen drawn by the CPU,
+     * no overlay), an mpegv that has it (2.6), not
      * a DVD's menus (their subpictures are the whole picture's) */
     h_ok = sw_half_mode != ST_HALF_NEVER && !sw_nav && MpegvBase &&
            (MpegvBase->lib_Version > 2 || MpegvBase->lib_Revision >= 6);
