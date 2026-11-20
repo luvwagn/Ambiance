@@ -3,9 +3,9 @@
 **A fast, full-screen media centre for the Amiga.** Games and demos from
 [Amiga Game Selector (AGS)](https://github.com/MrV2K/Amiga-Game-Selector)
 or [iGame](https://github.com/walkero-gr/iGame),
-tracker music, internet radio, your Plex music and photo libraries and your pictures,
+tracker music, internet radio, your Plex® music and photo libraries and your pictures,
 all in one place, driven by keyboard, mouse or joystick, in the spirit of
-Kodi® and Windows Media Center.
+Kodi® and Windows® Media Center.
 
 Copy its drawer anywhere and double-click it. On an AGS 3 installation it
 is a drop-in companion: AGS's games, demos, modules and pictures are found
@@ -337,8 +337,8 @@ twice its English's bytes and 16 more, so the Greek is written to fit.
 | A-Z | Jump to a letter; CD32 shoulder buttons step letters |
 | Now Playing | Left/Right choose a button, Fire presses it; Space play/pause; S stop; N/P next/previous; `,` and `.` back/forward; Up/Down volume |
 
-A Now playing row at the top of the lists (Games, Demos, Mods, Music,
-Pictures, Videos, Radio and Plex's) takes you back to what is playing.
+While something plays, Now playing is the menu's first entry: it takes you
+back to what is playing.
 What was playing when Ambiance quit comes back at its next start, loaded
 and stopped, with its playlist and the row: Play goes on from where it
 was (a station from now). It is kept in `ENVARC:Ambiance/Resume`.
@@ -495,7 +495,7 @@ be distributed. See `third_party/zz9k-sdk.txt` and the SDK's own
 `LICENSING.md`.
 
 Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark
-of the XBMC Foundation; Windows Media Center is a trademark of Microsoft
-Corporation. Plex and Plex Media Server are trademarks of Plex and used
-under a license. AGS, WHDLoad and other names belong to their owners.
+of the XBMC Foundation. Windows and Windows Media Center are trademarks
+of the Microsoft group of companies. Plex and Plex Media Server are
+trademarks of Plex and used under a license. AGS, WHDLoad and other names belong to their owners.
 Ambiance is not affiliated with or endorsed by any of them.

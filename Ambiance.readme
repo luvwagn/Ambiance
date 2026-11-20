@@ -7,11 +7,11 @@ Requires:     68020+, Kickstart 3.1+; flacdec.library for FLAC
 Architecture: m68k-amigaos >= 3.1.0
 Distribution: Aminet
 
-Ambiance is a fast, full-screen media centre for the Amiga, in the spirit
-of Kodi® and Windows Media Center: games and demos from Amiga Game Selector
-(AGS) or iGame, tracker music, internet radio, the music and photos on
-your Plex server and your pictures, all in one place, driven by keyboard,
-mouse or joystick.
+Ambiance is a fast, full-screen media centre for the Amiga, in the spirit of
+Kodi® and Windows® Media Center: games and demos from Amiga Game Selector
+(AGS) or iGame, tracker music, internet radio, the music and photos on your
+Plex® server and your pictures, all in one place, driven by keyboard, mouse or
+joystick.
 
 Copy the Ambiance drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
@@ -75,10 +75,10 @@ Music (Plex)
   on a 68020/030, 24 kHz stereo on a 68040/060, at a higher bitrate on a
   fast one. On a fast Amiga with flacdec.library, MP3 and FLAC tracks
   play as stored. Plain HTTP on your own network: no AmiSSL needed.
-- Servers are found on the network by Plex's own discovery (GDM). With
-  AmiSSL 5 or 6, sign in at plex.tv by a code entered at plex.tv/link on a
-  phone or computer: no token to copy, and your account's servers are
-  listed too.
+- Servers are found on the network by the Plex platform's own discovery (GDM).
+  With AmiSSL 5 or 6, sign in at plex.tv by a code entered at plex.tv/link on
+  a phone or computer: no token to copy, and your account's servers are listed
+  too.
 
 Music (files)
 - MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
@@ -106,8 +106,9 @@ Now Playing
   modules by their samples), a position bar you can click to seek, and
   buttons for previous, back, play/pause, stop, forward, next, loop
   (again at its end, until turned off) and volume.
-- The music plays on while you browse; the lists you came from mark what
-  is playing, and a Now playing row at their top brings you back to it.
+- The music plays on while you browse; the lists you came from mark what is
+  playing, and Now playing, the menu's first entry while something plays,
+  brings you back to it.
 - Stop gives Paula and its timer back to the system, so other programs
   can play sound.
 
@@ -543,8 +544,8 @@ Project Authors, all under the SIL Open Font Licence 1.1; the full texts
 are in the Licences drawer. Radio's station lists come from
 radio-browser.info.
 
-Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark
-of the XBMC Foundation; Windows Media Center is a trademark of Microsoft
-Corporation. Plex and Plex Media Server are trademarks of Plex and used
-under a license. AGS, WHDLoad and other names belong to their owners.
-Ambiance is not affiliated with or endorsed by any of them.
+Amiga is a trademark of Amiga Corporation. Kodi is a registered trademark of
+the XBMC Foundation. Windows and Windows Media Center are trademarks of the
+Microsoft group of companies. Plex and Plex Media Server are trademarks of
+Plex and used under a license. AGS, WHDLoad and other names belong to their
+owners. Ambiance is not affiliated with or endorsed by any of them.
