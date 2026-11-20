@@ -107,6 +107,15 @@ static void decode(struct LJob *j, const char *src)
         j->own = TRUE;
         return;
     }
+    if (mpeg_thumb_wants(src)) {
+        BOOL mp;
+        if (j->tw && !j->viewfit &&
+            (j->thumb = mpeg_thumb(src, j->tw, j->th, j->tall, TRUE, j->maxcol, &j->info, &mp))) {
+            j->ms_decode = time_ms() - t0;  /* an MPEG video: one of its I pictures (mpgthumb.c) */
+            j->own = TRUE;
+        }
+        return;                         /* (never a datatype's: none reads a video) */
+    }
     if (ilbm_is_anim(src))
         return;                         /* not to a datatype: it would read every frame */
     /* a thumbnail through the system's datatype: a deep one is read as RGB,

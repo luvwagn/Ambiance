@@ -70,9 +70,9 @@ int det_kind(struct Page *p, LONG idx, char *path, LONG max, UBYTE *shot)
     if (p->pics) {
         amb_strlcpy(path, it->path, max);
         if (it->kind == IT_PIC || it->kind == IT_ANIM) {
-            if (!(it->kind == IT_ANIM && it->sortkey &&
-                  (!strcmp(it->sortkey, "MPEG") || !strcmp(it->sortkey, "DVD"))))
-                *shot = SHOT_FILE;          /* an animation: its first frame (MPEG, DVD: none) */
+            if (!(it->kind == IT_ANIM && it->sortkey && !strcmp(it->sortkey, "DVD")))
+                *shot = SHOT_FILE;          /* an animation: a frame; an MPEG video: an I picture
+                                             * through it (mpgthumb.c); a DVD: none */
             return LJ_PICTURE;
         }
         if (it->kind == IT_DIR) {

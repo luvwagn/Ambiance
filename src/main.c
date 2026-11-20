@@ -17164,6 +17164,7 @@ out:
     pics_forget();
     ldr_stop();
     anim_fact_forget();             /* (after the loader's processes: they read it) */
+    mpeg_thumb_forget();
     pages_clear();
     amb_log("pages freed", "");
     plex_art_forget();              /* (RAM:'s covers and photos: memory, not kept) */
@@ -17638,12 +17639,11 @@ static const char *lv_plex_field(const struct Item *it, int n, char *out, LONG m
     out[k] = 0;
     return out;
 }
-/* An IFF ANIM, whose first frame is its picture (an MPEG file or a DVD
- * has none: the classic pane's rule) */
+/* An IFF ANIM (a frame that is not blank) or an MPEG file (an I picture
+ * through it, mpgthumb.c) has a picture; a DVD has none */
 static BOOL lv_anim_shot(const struct Item *it)
 {
-    return it->kind == IT_ANIM && !(it->sortkey && (!strcmp(it->sortkey, "MPEG") ||
-                                                    !strcmp(it->sortkey, "DVD")));
+    return it->kind == IT_ANIM && !(it->sortkey && !strcmp(it->sortkey, "DVD"));
 }
 
 static const char *lv_art_of(const struct Page *p, const struct Item *it, char *buf, LONG max)

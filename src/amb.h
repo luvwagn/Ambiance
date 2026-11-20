@@ -311,6 +311,13 @@ struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULO
 struct Thumb *jpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi, const char *kind);
 void jpeg_thumb_init(void);
+/* mpgthumb.c: an MPEG video's picture (an I picture through it, not blank:
+ * decoded once, then kept in PROGDIR:Cache). *is_mpeg: the file is one
+ * mpegv decodes (NULL back: it could not be decoded). */
+BOOL mpeg_thumb_wants(const char *path);
+struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
+                         struct PicInfo *pi, BOOL *is_mpeg);
+void mpeg_thumb_forget(void);       /* (quitting: after the loader's processes) */
 struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap *friend,
                            ULONG *sw, ULONG *sh, struct PicInfo *pi);  /* the viewer's, no datatype */
 void thumb_free(struct Thumb *t);

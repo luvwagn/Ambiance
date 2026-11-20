@@ -44,7 +44,7 @@ LIBS    = -lamiga -lm
 # (tools/check_libs.py checks every library built).
 libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 
-SRCS = src/main.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
+SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
