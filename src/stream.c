@@ -3617,10 +3617,17 @@ static void swv_run(void)
     ULONG shown_t = 0, n_stall = 0;         /* (the last picture shown: when) */
     int held = -1, i;
     BOOL on = FALSE, done = FALSE, out_paused = FALSE, a_done = FALSE;
-    /* behind: B pictures passed over (mpegv.library), until enough are on time
-     * again to try them (twice as many each time it fell behind again) */
-    BOOL skip_b = FALSE;
+    /* behind: B pictures passed over (mpegv.library), as few as will do: a
+     * level, 1 of 3, 1 of 2, 2 of 3, then all (b_lvl 1-4), a step up each
+     * time it falls behind again (three late without thirty on time), a
+     * step down once enough are on time (twice as many each time it went
+     * up again just after a step down: not to swing). Those passed over are
+     * spread evenly: before each picture decoded, mpegv told to pass over
+     * the next B picture if fewer than the level's share have been. */
+    BOOL skip_b = FALSE, sk_on = FALSE, b_down = FALSE;
     ULONG b_ontime = 0, b_need = 30, b_turns = 0, b_late = 0, b_okrun = 0;
+    ULONG b_lvl = 0, b_dec = 0, b_skp0 = 0, b_max = 0;
+    static const UBYTE b_num[5] = { 0, 1, 1, 2, 1 }, b_den[5] = { 1, 3, 2, 3, 1 };
     /* a seek: nothing shown until an I picture (those before it are built
      * on pictures from before the seek, never decoded: blocks of others) */
     BOOL want_i = st.range_from != 0;
@@ -3851,10 +3858,11 @@ static void swv_run(void)
         sw_apts = -1;                                                                \
         spu_reset(sw_spu);                                                           \
         sw_spu_drawn = NULL;                                                         \
-        if (skip_b) {                                                                \
-            skip_b = FALSE;                                                          \
+        if (skip_b || sk_on) {                                                       \
+            skip_b = sk_on = FALSE;                                                  \
             MpvControl(sw_mpv, MPVC_SKIPB, FALSE);                                   \
         }                                                                            \
+        b_lvl = 0;                                                                   \
         run = b_late = b_okrun = b_ontime = 0;                                       \
         seg_t0 = time_ms();                                                          \
         shown_t = seg_t0;                                                            \
@@ -4039,7 +4047,19 @@ static void swv_run(void)
             }
             tk = time_ticks(&hz);
             sw_f_ok = FALSE;                /* (the last one's planes: the decoder's again) */
+            if (b_lvl) {
+                /* the next B picture passed over if fewer than the level's
+                 * share have been since it was set (all, at the top one) */
+                ULONG skp = (ULONG)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0) - b_skp0;
+                BOOL want = b_lvl >= 4 || (skp + 1) * b_den[b_lvl] <= b_num[b_lvl] * (skp + b_dec + 1);
+                if (want != sk_on) {
+                    sk_on = want;
+                    MpvControl(sw_mpv, MPVC_SKIPB, want);
+                }
+            }
             f = MpvDecode(sw_mpv, &e);
+            if (f && f->mpic_Type == MPVT_B)
+                b_dec++;
             if (sw_last_ok && (f || (e == MPVE_MORE && sw_last_b))) {
                 /* the decoder's last picture not as it was: another given
                  * (its struct the same), or one begun in a B picture's
@@ -4160,14 +4180,21 @@ static void swv_run(void)
                 b_okrun = 0;
                 /* behind, not a start's stumble: three late without thirty
                  * on time between, after its first second */
-                if (!skip_b && ++b_late >= 3 && time_ms() - t0 > 1000) {
-                    /* behind: its B pictures not decoded at all */
-                    skip_b = TRUE;
-                    MpvControl(sw_mpv, MPVC_SKIPB, TRUE);
-                    if (b_turns++)
+                if (b_lvl < 4 && ++b_late >= 3 && time_ms() - t0 > 1000) {
+                    /* behind: a step up, more of its B pictures not decoded */
+                    b_lvl++;
+                    skip_b = b_lvl > 0;
+                    b_dec = 0;
+                    b_skp0 = (ULONG)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0);
+                    b_late = 0;
+                    if (b_down)             /* (up again just after a step down) */
                         b_need = b_need < 960 ? b_need * 2 : b_need;
-                    if (b_turns <= 3) {
-                        sprintf(m, "behind at %lu ms: B pictures passed over", (unsigned long)(pts / 90));
+                    b_down = FALSE;
+                    if (b_lvl > b_max)
+                        b_max = b_lvl;
+                    if (b_turns++ < 6) {
+                        sprintf(m, "behind at %lu ms: B pictures passed over, %s", (unsigned long)(pts / 90),
+                                b_lvl == 1 ? "1 in 3" : b_lvl == 2 ? "1 in 2" : b_lvl == 3 ? "2 in 3" : "all");
                         amb_log("video: by the CPU", m);
                     }
                 }
@@ -4217,11 +4244,18 @@ static void swv_run(void)
                 st.v_shown++;
                 shown_t = time_ms();
                 run = 0;
-                if (!skip_b && ++b_okrun >= 30)
+                if (++b_okrun >= 30)
                     b_late = 0;
-                if (skip_b && drift >= 0 && ++b_ontime >= b_need) {
-                    skip_b = FALSE;         /* caught up: its B pictures tried again */
-                    MpvControl(sw_mpv, MPVC_SKIPB, FALSE);
+                if (b_lvl && drift >= 0 && ++b_ontime >= b_need) {
+                    b_lvl--;                /* caught up: a step down, more B pictures tried */
+                    skip_b = b_lvl > 0;
+                    b_dec = 0;
+                    b_skp0 = (ULONG)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0);
+                    if (!b_lvl && sk_on) {
+                        sk_on = FALSE;
+                        MpvControl(sw_mpv, MPVC_SKIPB, FALSE);
+                    }
+                    b_down = TRUE;
                     b_ontime = 0;
                     b_late = b_okrun = 0;
                 }
@@ -4308,9 +4342,10 @@ static void swv_run(void)
         out_take();
     }
     sprintf(m, "%s: %lu pictures shown, %lu let go (late), %lu B pictures passed over (behind %lu "
-               "time%s); %lu dropouts",
+               "time%s, at the most %s); %lu dropouts",
             log_name(), (unsigned long)st.v_shown, (unsigned long)st.v_dropped,
             (unsigned long)MpvControl(sw_mpv, MPVC_SKIPPEDB, 0), (unsigned long)b_turns, b_turns == 1 ? "" : "s",
+            b_max == 0 ? "none" : b_max == 1 ? "1 in 3" : b_max == 2 ? "1 in 2" : b_max == 3 ? "2 in 3" : "all",
             (unsigned long)st.underruns);
     amb_log("video", m);
     m[0] = 0;
