@@ -219,20 +219,8 @@ static void page_pop(void)
         return;
     if (pages[depth - 1].style_pv)
         style_preview_free();
-    if (pages[depth - 1].pic_bm && pages[depth - 1].pic_y >= 0) {
-        struct Page *p = &pages[depth - 1];
-        WaitBlit();                             /* the logo gone while its pens are its own: */
-        gfx_clear_beam(&g, p->pic_x, p->pic_y, p->pic_x + p->pic_w - 1,
-                       p->pic_y + p->pic_h - 1);    /* left, it would show in the next
-                                                     * page's; all its planes together,
-                                                     * behind the beam, not garbled */
-        p->pic_y = -1;
-    }
-    /* the preview's picture stays for the page under, which may show it
-     * again (its folder's); draw_pane or the preview clears it if not */
-    if (!(depth >= 2 && g.pic_w && !pages[depth - 1].pic_bm && has_aside(&pages[depth - 2]) &&
-          g.pic_x >= aside_x()))
-        gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
+    ui->page_leave(&pages[depth - 1], depth >= 2 ? &pages[depth - 2] : NULL);
+    pages[depth - 1].pic_y = -1;
     tb_close(&pages[depth - 1].tb);
     if (pages[depth - 1].pic_bm) {
         WaitBlit();
@@ -289,13 +277,16 @@ struct Chunks {
 
 void set_msg(const char *m);
 
-/* ---- the view driven: the classic one or a layout (lv.on), one at a time,
- * through ui (struct UiView). The program does what it keeps (where a list
- * is scrolled to, a text box's lines, what the preview asks the loader for,
- * the big letter's state), then calls the view: the classic draws, a
- * layout is told (lv_note) or has nothing to do. gfx_off stays as a safety
- * net: a classic drawing call that still comes under a layout is not done,
- * and is counted and logged ("unseen"). */
+/* ---- the view driven: Classic (src/classic/) or a layout (lv.on), one at
+ * a time, through ui (struct UiView, chosen by view_use). The program does
+ * what it keeps (where a list is scrolled to, a text box's lines, what the
+ * preview asks the loader for, the big letter's state), then calls the
+ * view: Classic draws, a layout is told (lv_note) or has nothing to do.
+ * main.c draws nothing of Classic's itself. gfx_off (set by view_use)
+ * stays as a safety net: a classic drawing call that still comes under a
+ * layout is not done, and is counted and logged ("unseen"). The text
+ * boxes' glide (tb_step) is the one expected there. (The mini player and
+ * Flow on the whole screen are modes of their own, with no layout up.) */
 static BOOL lv_chosen(void);                /* a layout is chosen (on or not) */
 /* Settings > Display > "Layouts on native screens (experimental)": a
  * layout on an 8-bit screen too (AGA, or a card's 8-bit mode), dithered
@@ -337,8 +328,6 @@ void spin_free(void)
         spin_bm = NULL;
     }
 }
-
-
 
 
 BOOL radio_waiting(void)
@@ -3442,8 +3431,8 @@ static void build_credits(struct Page *p)
 
 static void build_mods_root(void);
 static void np_mark_lists(BOOL redraw);
-static BOOL np_local_art;           /* the music file playing has a picture */
-static BOOL np_art_want;            /* the Plex track playing has a cover */
+BOOL np_local_art;                  /* the music file playing has a picture */
+BOOL np_art_want;                   /* the Plex track playing has a cover */
 /* A track playing from a file on this Amiga (Music folders), not a server. */
 BOOL np_local(void)
 {
@@ -4189,7 +4178,6 @@ BOOL hdr_np_on;
 BOOL lv_playing_hit;
 
 
-
 void draw_clock(void)
 {
     ui->clock();
@@ -4478,7 +4466,6 @@ static void set_debug(BOOL on)
 }
 
 
-
 ULONG menu_draw_ms = 1000;           /* the last whole menu's drawing (menu_slide) */
 
 
@@ -4578,9 +4565,7 @@ void set_msg(const char *m)
 }
 
 
-
 void draw_title(struct Page *p);
-
 
 
 /* The breadcrumb: each level's title, the earlier ones links back to
@@ -4882,8 +4867,6 @@ static ULONG dc_time(void);
 BOOL hold_active(void);
 
 
-
-
 /* Every job back and freed: before the screen closes or a game runs. */
 static void pv_flush(void)
 {
@@ -4917,8 +4900,6 @@ BOOL pv_pictures(void)
  * Right do there (the picture's size once it is drawn). */
 
 
-
-
 static BOOL pv_spinning(void)
 {
     return det.shown && det.has_box && !det.pic_shown && (det.sj || det.tj);
@@ -4931,31 +4912,11 @@ static BOOL pv_spinning(void)
  * it on screen: not cleared, read or drawn again. */
 struct OnScreen pv_onscr;
 
-/* The picture on screen is file's: moved into the box x, y, w x h (centred
- * across, at its top), as it would be drawn there, and counted as there.
- * A cover going from an album's pane to Now playing and back: copied
- * across, not asked for, decoded and remapped again. */
-BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
-{
-    if (!file[0] || !g.pic_w || strcmp(file, pv_onscr.key) || g.pic_w > w || g.pic_h > h)
-        return FALSE;
-    if (!gfx_picture_move(&g, x + (w - g.pic_w) / 2, y))
-        return FALSE;
-    if (pv_onscr.x != x || pv_onscr.y != y)
-        amb_log("preview", "the cover on screen moved across, not read again");
-    pv_onscr.x = x;
-    pv_onscr.y = y;
-    pv_onscr.w = w;
-    pv_onscr.h = h;
-    return TRUE;
-}
 
 
 char np_art_file[120];       /* the cover Now playing shows (or will) */
 static char np_art_key[170];        /* ...a Plex track's: its thumb as a layout's picture key
                                      * ("\x04" thumb), fetched at the size the layout shows it */
-
-
 
 
 /* ---- Classic's pane as the details' view (details.h): what each step
@@ -5064,7 +5025,6 @@ static void style_preview_free(void)
 }
 
 
-
 static BOOL plex_art_kept(struct Page *p, LONG idx);
 
 static void ov_free(void)
@@ -5114,7 +5074,6 @@ void draw_list_rows(struct Page *p);
 
 WORD mark_column(const struct Page *p);
 void draw_list_row(struct Page *p, LONG idx, WORD col);
-
 
 
 static void ov_show(struct Page *p)
@@ -5219,7 +5178,6 @@ BOOL np_row(const struct Item *it)
 {
     return it->kind == IT_ACTION && it->action == ACT_NOWPLAYING;
 }
-
 
 
 /* The bar's place and its thumb's. */
@@ -5409,8 +5367,6 @@ const char *row_tag(const struct Page *p, const struct Item *it)
 }
 
 
-
-
 /* After the selection moved from old_sel (list top was old_top): repaint
  * just the old and new rows when the list did not scroll; when it scrolled
  * by less than a screenful, move the rows already on screen and paint only
@@ -5422,7 +5378,6 @@ const char *row_tag(const struct Page *p, const struct Item *it)
  * old selection moves into is painted plain, and the bar's own row is
  * repainted in place (in the same colour, so a highlight pinned at the
  * edge of the list never moves at all). */
-
 
 
 /* (Re)build the page's text box below y0, keeping its scroll position. */
@@ -5513,8 +5468,6 @@ void open_textbox(struct Page *p, WORD y0)
 }
 
 
-
-
 static struct TextBox *cur_tb(void)
 {
     struct Page *p = pane_pending ? NULL : cur();   /* a stale section is not shown */
@@ -5554,7 +5507,6 @@ BOOL play_loop;
 struct NowPlaying np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, .hov = -1, .s_hov = -1,
          .rep = -1, .s_rep = -1 };
 
-#define NB_CYCLE   (NB_COUNT + 1)   /* np.hov: the visualization's cycle gadget */
 #define FLASH_MS   80               /* how long a pressed button stays lit */
 #define REP_DELAY  400              /* a button held: it repeats after this, */
 #define REP_EVERY  100              /* then this often */
@@ -5575,12 +5527,6 @@ static BOOL np_repeats(int b)
     return b == NB_VDOWN || b == NB_VUP;
 }
 
-/* A rounded frame t thick just inside x,y w x h (or, solid, the corners
- * the rounding takes off the button). */
-void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen)
-{
-    gfx_rrect(&g, x, y, w, h, rx, ry, pen);
-}
 
 /* Flow on the whole window or screen (F on Now playing): the page
  * behind it drawn again when it goes (a key, a click, the fire button);
@@ -5629,15 +5575,12 @@ int np_state(void)
 }
 
 
-
 /* The volume slider: -----*----- between - and +. */
 WORD np_knob_w(void)
 {
     WORD k = U(3) > 2 ? U(3) : 2;
     return gfx_mode_tall(g.mode) ? k * 2 : k;
 }
-
-
 
 
 /* The volume for a point on the slider. */
@@ -5654,7 +5597,7 @@ static int np_slider_vol(WORD x)
 /* The meters' rows the page is laid out for: a stream's two always (a
  * mono one's single meter in the first, the second left empty), so it
  * does not change size when the sound turns out mono or stereo. */
-static int np_meter_rows(void)
+int np_meter_rows(void)
 {
     if (!mp_loaded())
         return 4;
@@ -5663,167 +5606,6 @@ static int np_meter_rows(void)
     return mp_is_stream() ? 2 : mp_meter_count();
 }
 
-void np_layout(void)
-{
-    WORD row = g.font_h + U(3), gap = U(3), vt, i, avail;
-    np.x0 = g.pane_x;
-    np.w = g.pane_w - U(2);
-    np.title_y = g.list_top + U(2);
-    np.info_y = np.title_y + row + U(1);
-    /* the meters, then the bar with the time right of it, directly above
-     * the buttons (back and forward next to where they move to), then
-     * the position line */
-    np.meter_y = np.info_y + row + U(6);
-    np.meter_h = g.font_h + U(2);
-    np.name_w = np.w * 2 / 5;
-    np.rows = np_meter_rows();
-    np.time_y = np.meter_y + np.rows * (np.meter_h + U(2)) + U(4);
-    np.prog_h = U(4) > 2 ? U(4) : 2;
-    np.prog_y = np.time_y + (g.font_h - np.prog_h) / 2;
-    np.bar_w = np.w - gfx_textlen(&g, "88:88 / 88:88", TS_BODY) - U(10);
-    np.by = np.time_y + row + U(4);
-    np.bh = g.font_h + U(8);
-    vt = gfx_textlen(&g, _("Volume 100%"), TS_SMALL | TS_TABULAR) + U(6);
-    avail = np.w - vt;                      /* buttons, gaps, and two more before volume */
-    np.bw = (avail - (NB_COUNT + 1) * gap) / NB_COUNT;
-    np.vol_x = 0;
-    if (np.bw < U(14)) {                    /* narrow: the buttons take the row */
-        np.bw = (np.w - (NB_COUNT + 1) * gap) / NB_COUNT;
-        np.vol_x = -1;
-    }
-    if (np.bw > U(26))
-        np.bw = U(26);
-    /* no taller than wide (lowres's narrow buttons; hires's pixels are
-     * twice as tall: half the rows), but the icon's room */
-    if (!gfx_mode_tall(g.mode) && np.bh > np.bw)
-        np.bh = np.bw > g.font_h + U(3) ? np.bw : g.font_h + U(3);
-    else if (gfx_mode_tall(g.mode) && np.bh * 2 > np.bw)
-        np.bh = np.bw / 2 > g.font_h + U(2) ? np.bw / 2 : g.font_h + U(2);
-    for (i = 0; i <= NB_VDOWN; i++)
-        np.bx[i] = np.x0 + i * (np.bw + gap) + (i >= NB_MUTE ? gap * 2 : 0);
-    {
-        /* room enough: a slider between - and + */
-        WORD at = np.bx[NB_VDOWN] + np.bw + gap;
-        WORD room = np.x0 + np.w - at - np.bw - (np.vol_x >= 0 ? vt : 0) - gap;
-        np.sl_on = room >= U(40);
-        if (np.sl_on) {
-            if (room > U(120))
-                room = U(120);
-            np.sl_x0 = at + U(2);
-            np.sl_x1 = at + room - 1 - U(2);
-            np.bx[NB_VUP] = at + room + gap;
-        } else {
-            np.bx[NB_VUP] = at;
-        }
-        np.sl_drag = FALSE;
-    }
-    if (np.vol_x >= 0)
-        np.vol_x = np.bx[NB_VUP] + np.bw + U(6);
-    np.pos_y = np.by + np.bh + U(5);
-    np.samples_y = np.pos_y + row + U(2);
-    np.art_s = np.art_h = 0;
-    if (mp_is_track() && (np_local() ? np_local_art : np_art_want) && pv_pictures()) {
-        /* the cover, a square to the eye at the right: below the controls,
-         * beside the track's lines; or, where the controls leave more room
-         * at their right, from their row down. Its width s, its rows s
-         * (half on hires, whose pixels are twice as tall) */
-        WORD per = gfx_mode_tall(g.mode) ? 2 : 1;
-        WORD cap = plex_tier() == 0 ? 160 : plex_tier() == 1 ? 224 : 400;
-        /* (as if the tips bar showed: a window's hides and comes back,
-         * and the cover would grow and shrink, and move, with it) */
-        WORD fy = foot_hidden ? g.h - U(12) : g.footer_y;
-        WORD sa = (fy - 2 - np.samples_y - U(2)) * per, sb, right, y = np.samples_y;
-        if (sa > np.w * 2 / 5)
-            sa = np.w * 2 / 5;
-        right = (np.vol_x >= 0 ? np.vol_x + vt : np.bx[NB_VUP] + np.bw) + U(10);
-        sb = np.x0 + np.w - right;
-        if (sb > (fy - 2 - np.by - U(2)) * per)
-            sb = (fy - 2 - np.by - U(2)) * per;
-        if (sb > sa) {
-            sa = sb;
-            y = np.by;
-        }
-        if (sa > cap)
-            sa = cap;                       /* less to decode on a slower Amiga */
-        if (sa >= U(40)) {
-            np.art_s = sa;
-            np.art_h = sa / per;
-            np.art_x = np.x0 + np.w - sa;
-            np.art_y = y;
-        }
-    }
-}
-
-/* The time, the bar and the position: only what changed. Several times a
- * second for a module (its row): on a native screen planes 0-3 only, its
- * pens being below 16 (the bar's orange is 8) and these lines never
- * reaching the cover, half an AGA screen's work. */
-
-
-
-
-void np_draw_cycle(void)
-{
-    WORD x0 = np.cyc_x0, x1 = np.cyc_x1, y0 = np.cyc_y0, y1 = np.cyc_y1, box = g.font_h;
-    WORD ry = gfx_mode_tall(g.mode) ? 1 : 2;
-    UBYTE fg, bg;
-    BOOL hov;
-    if (x1 - x0 < box)
-        return;
-    /* greyed where this music allows one only (the spectrum under MHI):
-     * its name then the one drawn */
-    np.cyc_off = !vis_available(VIS_SPECTRUM);
-    hov = mouse_mode && np.hov == NB_CYCLE && !np.cyc_off;
-    fg = np.cyc_off ? PEN_RULE : hov ? PEN_WHITE : PEN_TEXT;
-    bg = hov ? PEN_SELDIM : PEN_BAR;        /* the mouse over it, as over a button */
-    /* a button's face (np_button): rounded, the bar's colour, its glyph
-     * and words in the buttons' */
-    gfx_fill(&g, x0, y0, x1, y1, PEN_BG);
-    np_rrect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, 2, ry, bg);
-    gfx_cycle_glyph(&g, x0 + U(3), y0 + (y1 - y0 + 1 - box) / 2, box, fg);
-    if (np.cyc_label) {
-        WORD sx = x0 + U(3) + box + U(3);
-        gfx_fill(&g, sx, y0 + U(2), sx, y1 - U(2), PEN_RULE);
-        gfx_text(&g, sx + 1 + U(4), np.info_y,
-                 _(vis_name(np.cyc_off ? vis_active() : vis_selected())), fg, bg,
-                 x1 - U(3) - (sx + 1 + U(4)), TS_SMALL);
-    }
-}
-
-
-
-
-
-
-
-
-
-/* Brought up to date (the timer tick): drawn into the hidden buffer and
- * copied up, no flip. */
-void np_update(void)
-{
-    BOOL was;
-    if (gfx_off) {
-        lv_playing_hit = TRUE;              /* (a layout's own Now playing: its time alone) */
-        return;
-    }
-    if (np.w && mp_loaded() && (np_meter_rows() != np.rows ||
-                                (np.cyc_x1 > np.cyc_x0 && np.cyc_off == vis_available(VIS_SPECTRUM)))) {
-        /* the sound has more or fewer channels than the page was laid out
-         * for (a station found to be mono): laid out again, as tall as needed */
-        np_draw(TRUE);
-        return;
-    }
-    was = gfx_quiet_begin();
-    np_draw(FALSE);
-    if (np.art_s && np.art_y <= np.pos_y + g.font_h) {
-        /* the cover beside the controls: what is above it, then left of it */
-        gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.art_y - 1);
-        gfx_quiet_end(&g, was, g.pane_x - U(2), np.art_y, np.art_x - 1, np.pos_y + g.font_h);
-    } else {
-        gfx_quiet_end(&g, was, g.pane_x - U(2), np.meter_y, g.w - 1, np.pos_y + g.font_h);
-    }
-}
 
 BOOL np_row(const struct Item *it);
 
@@ -6809,16 +6591,14 @@ static void np_tick(void)
     np_repeat();
     if (!np_full)
         np_eq_tick();                       /* (Flow on the whole screen: no marker under it) */
-    if (mp_is_track() && mp_running() && np_on() && np.w && !gfx_off) {
+    if (mp_is_track() && mp_running() && np_on() && np.w) {
         /* the average bitrate settling: its line again when it moves (a
-         * layout shows no such line: under one, nothing to draw) */
+         * layout shows no such line) */
         static ULONG shown;
         ULONG k = st_avg_kbps();
         if (k != shown && (k > shown + 1 || k + 1 < shown || !shown || !k)) {
-            BOOL was = gfx_quiet_begin();
             shown = k;
-            ui->np_station();
-            gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+            ui->np_rate();
         }
     }
     if (mp_is_track() && mp_running() && mp_ended()) {
@@ -6948,12 +6728,8 @@ static void np_hover(WORD x, WORD y)
     if (h != np.hov) {
         BOOL cyc = h == NB_CYCLE || np.hov == NB_CYCLE;
         np.hov = h;
-        if (cyc) {
-            /* the gadget is above the part np_update draws: on its own */
-            BOOL was = gfx_quiet_begin();
-            np_draw_cycle();
-            gfx_quiet_end(&g, was, np.cyc_x0, np.cyc_y0, np.cyc_x1, np.cyc_y1);
-        }
+        if (cyc)
+            ui->np_cycle();
         np_update();
     }
 }
@@ -7383,71 +7159,6 @@ static void menu_select(int i)
     menu_select_now(i, FALSE);
 }
 
-/* The menu column sliding between its two widths, where drawing it is
- * quick (a whole menu in MENU_SLIDE_MAX ms or less: a fast Amiga, or a
- * modest screen): MENU_SLIDE ms, easing out, a frame at a time. The
- * content beside it moves with it (ScrollRaster: the card's blitter on
- * RTG), so opening pushes the page right and closing pulls it back; then
- * the caller lays everything out at the new width as before. Double
- * buffered, each frame is shown with a flip; else at the vertical blank.
- * On a native (planar) screen moving the page is too much for the blitter
- * (320 x 256 in 256 colours: 80 ms a frame), so there the column slides
- * over the page, or back off it, which then moves once at the end.
- * A frame that takes over MENU_SLIDE_SLOW ms ends the slide there. */
-#define MENU_SLIDE      160
-#define MENU_SLIDE_MAX   16
-#define MENU_SLIDE_SLOW  40
-static void menu_slide(UWORD from, UWORD to)
-{
-    if (gfx_off)
-        return;
-    ULONG t0 = time_ms(), t, tf;
-    UWORD keep = g.menu_w, prev = from;
-    WORD y0 = U(25), y1 = g.footer_y - 2;
-    int frames = 0;
-    if (!t0 || menu_draw_ms > MENU_SLIDE_MAX || from == to)
-        return;
-    SetBPen(g.rp, GPEN(PEN_BG));
-    for (;;) {
-        LONG f;
-        UWORD w;
-        t = time_ms() - t0;
-        if (t >= MENU_SLIDE)
-            break;
-        f = 1024 - (LONG)(t * 1024 / MENU_SLIDE);
-        f = 1024 - f * f / 1024;            /* ease out: fast first, settling */
-        w = (UWORD)((LONG)from + ((LONG)to - (LONG)from) * f / 1024);
-        if (w == prev) {
-            WaitTOF();
-            continue;
-        }
-        tf = time_ms();
-        SetBPen(g.rp, GPEN(PEN_BG));
-        if (g.planar) {
-            if (w < prev)                   /* the column's old edge, now page margin */
-                gfx_fill(&g, w + U(3), y0, prev + U(3), y1, PEN_BG);
-        } else if (w > prev)                /* opening: the page pushed right */
-            ScrollRaster(g.rp, -(WORD)(w - prev), 0, prev + U(3), y0, g.w - 1, y1);
-        else                                /* closing: pulled back left */
-            ScrollRaster(g.rp, (WORD)(prev - w), 0, w + U(3), y0, g.w - 1, y1);
-        g.menu_w = w;                       /* the column alone: the layout keeps its own */
-        draw_menu();
-        gfx_dirty();
-        prev = w;
-        frames++;
-        if (!gfx_present(&g))
-            WaitTOF();
-        if (time_ms() - tf > MENU_SLIDE_SLOW)
-            break;                          /* too slow here: straight to the end */
-    }
-    g.menu_w = keep;
-    {
-        char m[80];
-        sprintf(m, "%s in %ld frames, %ld ms (menu drawn in %ld ms)", to > from ? "opened" : "closed",
-                (long)frames, (long)(time_ms() - t0), (long)menu_draw_ms);
-        amb_log("menu slide", m);
-    }
-}
 
 /* The menu column is its icons alone while the content has the focus, on
  * every screen: lists, Now playing and the rest get its room. The labels
@@ -7473,7 +7184,7 @@ static BOOL menu_layout(void)
     narrow = focus != FOCUS_MENU && !menu_pinned && depth > 0;
     if (!g.win || narrow == gfx_menu_is_narrow())
         return FALSE;
-    menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
+    ui->menu_slide(g.menu_w, gfx_menu_width(&g, narrow));
     if (!gfx_menu_narrow(&g, narrow))
         return FALSE;
     draw_all();
@@ -11516,8 +11227,8 @@ static WORD np_art_size(void)
 /* The cover's file to the loader, made for the square. */
 void np_art_load(const char *file)
 {
-    if (gfx_off)
-        return;     /* a layout draws: the classic page's cover (read into its pens) is
+    if (view_own_pictures())
+        return;     /* a layout: the classic page's cover (read into its pens) is
                      * for nothing; the page reads it when it is drawn again (np_draw) */
     struct LJob *j;
     np_art_free();
@@ -11567,13 +11278,9 @@ static void np_art_start(const struct Item *it)
     }
     np_art_want = thumb[0] != 0;            /* a cover to show: its square kept */
     np_layout();                            /* the square's size */
-    if (!thumb[0] && np_on() && np.art_s && g.pic_w)   /* none: the last one goes */
-        gfx_picture_clear(&g, np.art_x, np.art_y, np.art_x + np.art_s - 1,
-                          np.art_y + np.art_h - 1);
+    ui->np_art_room(!thumb[0]);             /* (none: the last one goes) */
     if (!np.art_s)
         return;
-    if (np_on())                            /* the gap before it: lines drawn wider before */
-        gfx_fill(&g, np.art_x - U(8), np.art_y, np.art_x - 1, np.art_y + np.art_h - 1, PEN_BG);
     /* the pane's size where it fits: the same file, and the same picture,
      * which can then go across as it is (pic_take) */
     s = np_art_size();
@@ -11591,40 +11298,6 @@ static void np_art_start(const struct Item *it)
     }
 }
 
-/* ---- the details pane of a Plex list (artists, albums): the picture
- * above (the server's, made for the place), the details below */
-void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen)
-{
-    char line[160];
-    WORD lh = g.font_h + U(1);
-    while (*s && *y + g.font_h - 1 <= max_y) {
-        LONG n = 0, fit = 0;
-        while (s[n] && n < (LONG)sizeof(line) - 1) {
-            LONG e = n;
-            while (s[e] && s[e] != ' ' && e < (LONG)sizeof(line) - 1)
-                e++;
-            memcpy(line, s, e);
-            line[e] = 0;
-            if (gfx_textlen(&g, line, TS_SMALL) > w && fit)
-                break;
-            fit = e;
-            n = e;
-            if (s[n] == ' ')
-                n++;
-            if (gfx_textlen(&g, line, TS_SMALL) > w)
-                break;                      /* one word longer than the line: cut */
-        }
-        if (!fit)
-            fit = n ? n : 1;
-        memcpy(line, s, fit);
-        line[fit] = 0;
-        gfx_text(&g, x, *y, line, pen, PEN_BG, w, TS_SMALL);
-        *y += lh;
-        s += fit;
-        while (*s == ' ')
-            s++;
-    }
-}
 
 /* What a Plex page's details pane shows for entry idx: the entry (an
  * artist, an album) or, on an album's own page, the album. */
@@ -11676,7 +11349,6 @@ BOOL sum_key(const struct Item *it, char *out, LONG max)
 }
 
 
-
 /* Its answer: kept, and written in the pane if it still shows that one. */
 static void plex_sum_came(struct NetJob *j)
 {
@@ -11697,12 +11369,8 @@ static void plex_sum_came(struct NetJob *j)
         pane_pending || !plex_pv_src(p, p->sel, &src) || !sum_key(&src, k, sizeof(k)) ||
         strcmp(k, sum_want))
         return;
-    {
-        WORD y = sum_y + U(3), w = aside_width() - U(4);
-        pv_wrap(aside_x(), &y, w, g.footer_y - 2, text, PEN_DIM);
-    }
+    ui->pane_summary(text);
 }
-
 
 
 /* The picture on screen (anywhere: Now playing's square) is the one entry
@@ -11720,8 +11388,6 @@ BOOL plex_movable(struct Page *p, LONG idx)
     plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
     return !strcmp(file, pv_onscr.key) && g.pic_w <= aside_width() - U(4) && g.pic_h <= s;
 }
-
-
 
 
 /* Entry idx's picture, at the preview's size, kept in RAM already. */
@@ -11756,7 +11422,7 @@ static void plex_ahead(struct Page *p)
     if (!det.shown || det.page != p || det.sel != p->sel || art_nj[ART_PV] || art_nj[ART_AHEAD] ||
         plex_sj)
         return;                             /* not at rest, or the server busy for it */
-    if (gfx_off)
+    if (view_own_pictures())
         return;                             /* (a layout: it asks for its own, at its sizes) */
     if (AvailMem(MEMF_ANY) < 2UL << 20)
         return;                             /* not ahead with under 2 MB free (RAM:'s
@@ -11803,7 +11469,7 @@ static void art_ready(int kind, const char *file)
             np_art_load(file);
         return;
     }
-    if (gfx_off)
+    if (view_own_pictures())
         return;                             /* (the classic pane's picture: a layout draws) */
     if (p && p->plex && p == det.page && p->sel == det.sel && det.shown && !det.sj && det.has_box &&
         !pane_pending) {
@@ -14178,7 +13844,7 @@ static int app_main(void)
     ULONG next_sec = 0, tick_us = 40000;
     int rc = 0;
 
-    det_view(&classic_view);        /* the entry details' view (a layout's, once one is on) */
+    view_use(&classic_ui);          /* Classic draws (a layout, once one is on) */
     {
         /* the language first: everything said from here on is in it */
         char buf[32];
@@ -16435,9 +16101,7 @@ static void lv_off(BOOL redraw)
     lv_sp_up = FALSE;
     lv_pics_free();
     lv.on = FALSE;
-    det_view(&classic_view);                /* (the entry details: Classic's pane's again) */
-    ui = &classic_ui;                       /* (and everything else) */
-    gfx_off = FALSE;
+    view_use(&classic_ui);                  /* (Classic draws again: its details pane too) */
     lv.drawn = -1;
     lv_give_back_font();            /* (the font lent it: the classic's Pixel style again) */
     settings_rebuild();         /* Display's Colours row: the scheme's again */
@@ -16561,11 +16225,9 @@ static void lv_activate(void)
     lv.w = g.w;
     lv.h = g.h;
     lv.on = TRUE;
-    det_view(&layout_view);                 /* (the entry details: told to the layout) */
-    ui = &layout_ui;                        /* (and everything else: noted for its frame) */
+    view_use(&layout_ui);                   /* (the layout draws: everything noted for its frame) */
     lv.full = TRUE;
     lv.drawn = -1;
-    gfx_off = TRUE;
     gfx_off_hits = 0;
     settings_rebuild();         /* Display's Colours row: greyed, the layout's */
     sprintf(m, "%s on a %ld-bit %ld x %ld screen%s", e->name, (long)(g.truecolor ? lv.out.bits : g.depth), (long)g.w,
@@ -17253,13 +16915,57 @@ static void ly_np_visual(void)
 static void ly_np_art(void)
 {
 }
+static void ly_page_leave(struct Page *gone, struct Page *under)
+{
+    (void)gone;
+    (void)under;
+}
+static void ly_np_update(void)
+{
+    lv_playing_hit = TRUE;                  /* (the layout's own Now playing: its time alone) */
+}
+static void ly_none(void)
+{
+}
+static void ly_np_art_room(BOOL none)
+{
+    (void)none;
+}
+static void ly_menu_slide(UWORD from, UWORD to)
+{
+    (void)from;
+    (void)to;
+}
+static void ly_pane_summary(const char *text)
+{
+    (void)text;                             /* (the layout's details: from the items) */
+}
+
 const struct UiView layout_ui = {
     ly_draw_header, ly_draw_menu, ly_draw_menu_row, ly_draw_footer, ly_draw_title, ly_draw_title_count,
     ly_draw_list_row, ly_draw_gutter_planes, ly_draw_list_rows, ly_draw_list_move, ly_draw_text_picture,
     ly_draw_pane, ly_np_draw, ly_draw_all, ly_pane_preview,
     ly_tick, ly_busy, ly_header_np, ly_clock, ly_status, ly_letter_show, ly_letter_relabel,
-    ly_letter_hide, ly_np_station, ly_eq_tick, ly_np_visual, ly_np_art
+    ly_letter_hide, ly_np_station, ly_eq_tick, ly_np_visual, ly_np_art,
+    ly_page_leave, ly_np_update, ly_none, ly_none, ly_np_art_room, ly_menu_slide, ly_pane_summary,
+    "layout", &layout_view
 };
+
+/* The view that drives the screen: Classic's or the layout's. Each has
+ * its entry details' view; gfx.c's classic drawing calls are done only
+ * while Classic drives (under a layout one that still comes is counted,
+ * gfx_off_hits, and logged as "unseen": a call not yet routed). */
+void view_use(const struct UiView *v)
+{
+    ui = v;
+    det_view(v->details);
+    gfx_off = v != &classic_ui;
+}
+
+void np_update(void)
+{
+    ui->np_update();
+}
 
 /* ---- the program's side of each: its state, then the view driven */
 void draw_header(void)

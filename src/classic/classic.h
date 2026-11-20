@@ -105,6 +105,20 @@ struct UiView {
     void (*eq_tick)(void);
     void (*np_visual)(void);
     void (*np_art)(void);
+    /* step 3c: the rest of program logic's drawing (a page left, Now
+     * playing's time and bitrate, the cycle gadget's hover, the room for
+     * its cover, the menu's slide, a Plex summary come) */
+    void (*page_leave)(struct Page *gone, struct Page *under);
+    void (*np_update)(void);
+    void (*np_rate)(void);
+    void (*np_cycle)(void);
+    void (*np_art_room)(BOOL none);
+    void (*menu_slide)(UWORD from, UWORD to);
+    void (*pane_summary)(const char *text);
+    /* the engine: its name (the log), and its entry details' view, whose
+     * shots NULL means it asks for its own pictures, at its own sizes */
+    const char *name;
+    const struct DetView *details;
 };
 
 /* Design units (a 256-line layout) to pixels on this screen. */
@@ -154,6 +168,7 @@ enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB
        NB_COUNT };
 
 #define NB_SLIDER  NB_COUNT         /* np.hov: the slider */
+#define NB_CYCLE   (NB_COUNT + 1)   /* np.hov: the visualization's cycle gadget */
 
 /* ---- an artist's biography, an album's review: left out of a library's
  * long lists (excludeFields), so asked for alone when the pane shows one,
@@ -274,6 +289,8 @@ extern ULONG menu_draw_ms;
 extern const char *mod_names[MOD_COUNT];
 extern const char *const mon_abbr[];
 extern BOOL mouse_mode;
+extern BOOL np_local_art, np_art_want;
+int np_meter_rows(void);
 extern char msg[160];
 extern struct LJob *np_aj;
 extern BOOL np_art_drawn;
@@ -281,7 +298,6 @@ extern char np_art_file[120];
 void np_art_load(const char *file);
 BOOL np_away(void);
 void np_draw(BOOL full);
-void np_draw_cycle(void);
 BOOL np_focus_shown(void);
 WORD np_knob_w(void);
 void np_layout(void);
@@ -290,7 +306,6 @@ BOOL np_local(void);
 BOOL np_muted(void);
 BOOL np_on(void);
 BOOL np_row(const struct Item *it);
-void np_rrect(WORD x, WORD y, WORD w, WORD h, WORD rx, WORD ry, UBYTE pen);
 extern int np_src;
 extern char np_src_list[64];
 extern WORD np_src_x0, np_src_x1;
@@ -319,7 +334,6 @@ extern int pv_colour_cap;
 extern struct ItemList pv_list;
 BOOL pv_pictures(void);
 extern struct TextBox pv_tb;
-void pv_wrap(WORD x, WORD *y, WORD w, WORD max_y, const char *s, UBYTE pen);
 void radio_done(struct NetJob *j);
 BOOL radio_waiting(void);
 const char *row_tag(const struct Page *p, const struct Item *it);
@@ -356,5 +370,9 @@ void pane_preview(BOOL first);
 /* ---- the classic's, as the program drives it (classic.c) */
 extern const struct UiView classic_ui, layout_ui;
 extern const struct DetView classic_view;
+/* The view drives the screen: Classic (classic_ui) or the library layout
+ * shown (layout_ui). ui is set only by view_use. */
+void view_use(const struct UiView *v);
+#define view_own_pictures() (!ui->details->shots)
 
 #endif
