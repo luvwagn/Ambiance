@@ -365,6 +365,23 @@ Not there yet
 
 History
 -------
+0.9.2  AmigaMCE is now Ambiance. Layouts: the whole interface drawn
+       another way, chosen in Settings > Display > Layout - Showcase
+       (panels, a menu down the left) and Horizon (a deep blue strip
+       with glowing choices and covers on their reflections) - with
+       Home's launchpad (what plays and plays next, each section's
+       rows), walls of covers that glide, artist and album screens,
+       the mouse, and the viewer's and players' controls in the
+       layout's style; on graphics cards, and on AGA too (Settings >
+       Display > Layouts on native screens, experimental). Classic
+       stays built in. Games without AGS: iGame's list, and WHDLoad
+       installed from Games. Kodi's album.nfo and artist.nfo in the
+       details. MPEG video on AGA screens without a ZZ9000 (a screen
+       of its own in 252 colours, half size on slower Amigas), and
+       transport streams (.ts, .m2ts). The viewer reads IFF, PBM and
+       JPEG (progressive too) itself, fast. Screen modes up to 1920 x
+       1200 on graphics cards. Only one Ambiance runs at a time. Every
+       string translated in all 13 languages.
 0.9.1.1 On AGA and other native screens, the UI draws only on the
        bitplanes its colours need (lists scrolling, the scroll bar, the
        footer, Now Playing's time and position, the dancing bars): less
