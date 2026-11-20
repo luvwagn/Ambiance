@@ -13,9 +13,12 @@ ANIM-%ld 압축은 지원하지 않습니다
 MSG_5799A183
 DVD의 그 위치를 읽을 수 없습니다
 ; The DVD could not be read there
-MSG_48EC1181
-MPEG 비디오는 RTG 화면에서 재생됩니다 (AGA는 추후 지원)
-; MPEG video plays on an RTG screen (AGA screens to come)
+MSG_37FD8CF2
+네이티브 화면의 MPEG 비디오에는 AGA의 256색이 필요합니다
+; MPEG video on a native screen needs AGA's 256 colours
+MSG_58B9C070
+비디오 화면을 위한 메모리가 부족합니다
+; Not enough memory for the video's screen
 MSG_21CB4B97
 MPEG 비디오는 ZZ9000 화면에서 재생됩니다
 ; MPEG video plays on the ZZ9000's display
@@ -196,6 +199,9 @@ MSG_4B058728
 MSG_58E096DE
 정보
 ; About
+MSG_6AA26665
+지금 재생 중
+; Now playing
 MSG_17B11033
 불러오는 중...
 ; Loading...
@@ -997,9 +1003,9 @@ MSG_299412DB
 MSG_6A5613A3
 %s에 애니메이션이 없습니다.
 ; %s has no animations in it.
-MSG_18130437
-애니메이션 없음. Ambiance는 VIDEOS:, 설정 > 폴더 > 비디오의 폴더, AGS에서는 %s의 IFF ANIM을 재생합니다.
-; No animations found. Ambiance plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_4ED4752C
+비디오 없음. Ambiance는 VIDEOS:, 설정 > 폴더 > 비디오의 폴더, AGS에서는 %s와 %s에서 찾습니다.
+; No videos found. Ambiance looks in VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s and %s.
 MSG_481007A3
 사진 없음: Ambiance는 %s에서 찾습니다.
 ; No pictures found: Ambiance looks for them in %s.
@@ -1351,9 +1357,6 @@ MSG_0144F316
 MSG_230A5085
 소리 켜짐
 ; Sound on
-MSG_6AA26665
-지금 재생 중
-; Now playing
 MSG_7DDFAD41
 이 Amiga는 FLAC을 부드럽게 디코딩하기에는 너무 느립니다
 ; This Amiga is too slow to decode FLAC smoothly
@@ -1882,6 +1885,18 @@ MSG_418D3F0F
 MSG_15974E49
 해체
 ; Disbanded
+MSG_0A1997CB
+일시정지
+; paused
+MSG_6EE2F34E
+정지됨
+; stopped
+MSG_0AD50EDE
+최근
+; recent
+MSG_75AFE364
+모든
+; All
 MSG_14BD5320
 레이아웃을 열 수 없어 클래식을 사용합니다
 ; The layout could not be opened: the classic one is used
@@ -2203,6 +2218,9 @@ MSG_1AE736A8
 MSG_7DFAF53D
 CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다 (Ambiance의 Libs)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
+MSG_4E597D1C
+%s 비디오: AGA 화면에서 Ambiance는 MPEG-1과 MPEG-2를 재생합니다
+; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
 MSG_5EF81658
 MPEG 비디오에는 Picasso96(Picasso96API.library)이 필요합니다
 ; MPEG video needs Picasso96 (Picasso96API.library)

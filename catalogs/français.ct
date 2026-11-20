@@ -13,9 +13,12 @@ La compression ANIM-%ld n'est pas prise en charge
 MSG_5799A183
 Le DVD n'a pas pu être lu à cet endroit
 ; The DVD could not be read there
-MSG_48EC1181
-La vidéo MPEG se lit sur un écran RTG (AGA à venir)
-; MPEG video plays on an RTG screen (AGA screens to come)
+MSG_37FD8CF2
+La vidéo MPEG sur un écran natif demande les 256 couleurs de l'AGA
+; MPEG video on a native screen needs AGA's 256 colours
+MSG_58B9C070
+Mémoire insuffisante pour l'écran de la vidéo
+; Not enough memory for the video's screen
 MSG_21CB4B97
 La vidéo MPEG se lit sur l'affichage de la ZZ9000
 ; MPEG video plays on the ZZ9000's display
@@ -196,6 +199,9 @@ Réglages
 MSG_58E096DE
 À propos
 ; About
+MSG_6AA26665
+En lecture
+; Now playing
 MSG_17B11033
 Chargement...
 ; Loading...
@@ -997,9 +1003,9 @@ Aucune animation trouvée : Ambiance les cherche dans %s.
 MSG_6A5613A3
 %s ne contient aucune animation.
 ; %s has no animations in it.
-MSG_18130437
-Aucune animation trouvée. Ambiance lit les IFF ANIM de VIDEOS:, des dossiers de Réglages > Dossiers > Vidéos et, avec AGS, de %s.
-; No animations found. Ambiance plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_4ED4752C
+Aucune vidéo trouvée. Ambiance cherche dans VIDEOS:, dans les dossiers de Réglages > Dossiers > Vidéos et, avec AGS, dans %s et %s.
+; No videos found. Ambiance looks in VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s and %s.
 MSG_481007A3
 Aucune image trouvée : Ambiance les cherche dans %s.
 ; No pictures found: Ambiance looks for them in %s.
@@ -1351,9 +1357,6 @@ Boucle désactivée : la lecture s'arrête à la fin
 MSG_230A5085
 Son rétabli
 ; Sound on
-MSG_6AA26665
-En lecture
-; Now playing
 MSG_7DDFAD41
 Cet Amiga est trop lent pour décoder le FLAC
 ; This Amiga is too slow to decode FLAC smoothly
@@ -1882,6 +1885,18 @@ Mort
 MSG_15974E49
 Séparé
 ; Disbanded
+MSG_0A1997CB
+en pause
+; paused
+MSG_6EE2F34E
+arrêté
+; stopped
+MSG_0AD50EDE
+récent
+; recent
+MSG_75AFE364
+Tout :
+; All
 MSG_14BD5320
 La disposition n'a pas pu s'ouvrir : la classique est utilisée
 ; The layout could not be opened: the classic one is used
@@ -2203,6 +2218,9 @@ Rien ici ne décompresse les archives : installez xadmaster.library (Aminet util
 MSG_7DFAF53D
 La vidéo MPEG par le CPU nécessite mpegv.library (Libs d'Ambiance)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
+MSG_4E597D1C
+Vidéo %s : sur un écran AGA, Ambiance lit le MPEG-1 et le MPEG-2
+; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
 MSG_5EF81658
 La vidéo MPEG nécessite Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
