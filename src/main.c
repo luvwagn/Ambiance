@@ -95,6 +95,22 @@ struct UiView {
     void (*np)(BOOL full);
     void (*all)(void);
     void (*pane_preview)(BOOL first);
+    /* program logic's calls into the view (step 3a): each turn of the main
+     * loop (the spinners), a busy wait's spinner, the header's readouts,
+     * the big letter, Now playing's parts. The classic draws them; a
+     * layout is told (a note) or has nothing to do. */
+    void (*tick)(void);
+    void (*busy)(ULONG now);
+    void (*header_np)(BOOL quiet, BOOL on);
+    void (*clock)(void);
+    void (*status)(const char *show);       /* NULL: the Debug line off */
+    void (*letter_show)(struct Page *p);
+    void (*letter_relabel)(char c);
+    void (*letter_hide)(struct Page *p);
+    void (*np_station)(void);
+    void (*eq_tick)(void);
+    void (*np_visual)(void);
+    void (*np_art)(void);
 };
 static const struct UiView classic_ui, layout_ui;
 static const struct UiView *ui = &classic_ui;
@@ -344,14 +360,13 @@ struct Chunks {
 
 static void set_msg(const char *m);
 
-/* ---- the view driven: the classic one (the draw_* functions here) or a
- * layout (lv.on). One at a time: under a layout, each classic drawing
- * function does only what the program keeps (where a list is scrolled to,
- * a text box's lines, what the preview asks the loader for), notes that
- * the layout is to draw again (lv_note), and returns; none of the
- * classic's drawing is done. gfx_off stays as a safety net: a drawing call
- * that still comes is not done, and is counted and logged ("unseen"). */
-static BOOL lv_drives(void);
+/* ---- the view driven: the classic one or a layout (lv.on), one at a time,
+ * through ui (struct UiView). The program does what it keeps (where a list
+ * is scrolled to, a text box's lines, what the preview asks the loader for,
+ * the big letter's state), then calls the view: the classic draws, a
+ * layout is told (lv_note) or has nothing to do. gfx_off stays as a safety
+ * net: a classic drawing call that still comes under a layout is not done,
+ * and is counted and logged ("unseen"). */
 static BOOL lv_chosen(void);                /* a layout is chosen (on or not) */
 /* Settings > Display > "Layouts on native screens (experimental)": a
  * layout on an 8-bit screen too (AGA, or a card's 8-bit mode), dithered
@@ -426,8 +441,6 @@ static UWORD spin_phase(ULONG since)
  * caller has cleared the area). */
 static void spin_draw(WORD cx, WORD cy, UWORD phase, BOOL first)
 {
-    if (lv_drives())
-        return;                             /* (a layout: its own spinner, LC_WAIT) */
     static const UBYTE pens[8] = { PEN_WHITE, PEN_TEXT, PEN_DIM, PEN_DIM,
                                    PEN_RULE, PEN_RULE, PEN_RULE, PEN_RULE };
     /* the dots' places on a circle of radius 12 design pixels */
@@ -525,24 +538,30 @@ static void busy_begin(void)
 static BOOL lv_busy;                /* a layout is drawing a busy wait's spinner */
 static void lv_busy_frame(void);
 
+/* a layout draws: its own small spinner, where the list goes */
+static void ly_busy(ULONG now)
+{
+    if (!busy.on) {
+        if ((LONG)(now - busy.since) < SPIN_AFTER)
+            return;
+        busy.on = TRUE;
+        lv_busy = TRUE;
+    }
+    lv_busy_frame();
+}
+
+static void cl_busy(ULONG now);
 static void busy_tick(void)
 {
-    struct Page *p = cur();
-    ULONG now = time_ms();
     if (!busy.depth || !g.win)
         return;
-    if (lv_on()) {
-        /* a layout draws: its own small spinner, where the list goes (the
-         * classic one would be drawn under the layout, unseen) */
-        if (!busy.on) {
-            if ((LONG)(now - busy.since) < SPIN_AFTER)
-                return;
-            busy.on = TRUE;
-            lv_busy = TRUE;
-        }
-        lv_busy_frame();
-        return;
-    }
+    ui->busy(time_ms());
+}
+
+/* the classic's: in the middle of the list's half */
+static void cl_busy(ULONG now)
+{
+    struct Page *p = cur();
     if (!busy.on) {
         WORD ring, ringy, r, ry, x1;
         if ((LONG)(now - busy.since) < SPIN_AFTER)
@@ -2397,7 +2416,7 @@ static void next_visual(void)
                  : vis_selected() == VIS_FLOW ? "flow" : "meters");
     set_msg(vis_selected() == VIS_FLOW ? _("Flow: F shows it on the whole screen")
             : _(vis_name(vis_selected())));
-    np_visual_changed();
+    ui->np_visual();
 }
 
 static void load_jump(void)
@@ -4382,15 +4401,17 @@ static BOOL lv_playing_hit;
 
 static void hdr_np_draw(BOOL quiet)
 {
-    WORD n = g.mark_px, x = clock_left() - n - U(2), y = (U(24) - n) / 2;
-    BOOL on = mp_loaded(), was = FALSE;
+    BOOL on = mp_loaded();
     if (!on && !hdr_np_on)
         return;
-    if (lv_drives()) {                      /* (playing or not: the layout's, from its model) */
-        hdr_np_on = on;
-        lv_note();
-        return;
-    }
+    ui->header_np(quiet, on);               /* (a layout: from its model, told) */
+    hdr_np_on = on;
+}
+
+static void cl_header_np(BOOL quiet, BOOL on)
+{
+    WORD n = g.mark_px, x = clock_left() - n - U(2), y = (U(24) - n) / 2;
+    BOOL was = FALSE;
     if (quiet)
         was = gfx_quiet_begin();
     if (on)
@@ -4399,10 +4420,14 @@ static void hdr_np_draw(BOOL quiet)
         gfx_fill(&g, x, y, x + n - 1, y + n - 1, PEN_BAR);
     if (quiet)
         gfx_quiet_end(&g, was, x, y, x + n - 1, y + n - 1);
-    hdr_np_on = on;
 }
 
 static void draw_clock(void)
+{
+    ui->clock();
+}
+
+static void cl_clock(void)
 {
     char buf[40];
     WORD tw;
@@ -4650,10 +4675,8 @@ static void draw_status(void)
     if (x1 <= x0)
         return;
     if (!debug_on) {
-        if (status_shown[0])
-            gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
-        status_shown[0] = 0;
         lv_debug[0] = 0;
+        ui->status(NULL);
         return;
     }
     used = dbg_mem_used(&chip);
@@ -4684,10 +4707,23 @@ static void draw_status(void)
             show = forms[i];
             break;
         }
+    ui->status(show);                       /* (a layout: its own line, from lv_debug) */
+}
+
+static void cl_status(const char *show)
+{
+    WORD x0 = U(6) + g.logo_w + U(10);
+    WORD x1 = clock_left() - g.mark_px - U(8);
+    if (!show) {
+        if (status_shown[0])
+            gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
+        status_shown[0] = 0;
+        return;
+    }
     if (status_shown[0] && strcmp(show, status_shown) == 0)
         return;                             /* unchanged: leave it be */
     if (gfx_off) {
-        lv_playing_hit = TRUE;              /* (a layout's own line) */
+        lv_playing_hit = TRUE;
         return;
     }
     gfx_fill(&g, x0, 0, x1, U(24) - 1, PEN_BAR);
@@ -4898,8 +4934,6 @@ static void draw_title(struct Page *p);
  * ends either side are filled. */
 static void title_band_rest(WORD x0, WORD x1, WORD right_from)
 {
-    if (lv_drives())
-        return;
     WORD ty0 = U(28), ty1 = U(28) + g.font_h - 1, l = g.pane_x - U(2);
     if (ty0 > U(26))
         gfx_fill(&g, l, U(26), g.w - 1, ty0 - 1, PEN_BG);
@@ -5671,8 +5705,6 @@ static void pv_pics_lines(struct Item *it, struct LJob *j, BOOL drawn, WORD w)
 /* The spinner in the picture's place (its place cleared the first time). */
 static void pv_spinner(BOOL first)
 {
-    if (lv_drives())
-        return;                             /* (a layout: no picture place of the classic's) */
     WORD x0 = aside_x(), w = aside_width() - U(4);
     if (first)
         gfx_fill_bg(&g, x0, pv_box_y, g.w - 1, pv_box_y + pv_box_h - 1);
@@ -5710,10 +5742,6 @@ static BOOL pv_spinning(void)
 static void pv_draw_text(struct Page *p)
 {
     WORD x0, w, max_y;
-    if (lv_drives()) {                      /* the details came: the layout's (lv_model's) */
-        lv_note_what(LC_DETAILS);
-        return;
-    }
     x0 = aside_x();
     w = aside_width() - U(4);
     max_y = g.footer_y - 2;
@@ -5843,10 +5871,6 @@ static void pv_draw_picture(void)
     WORD x0, w, dh = 0;
     struct LJob *j = det.sj;
     BOOL taken = FALSE, ok = FALSE;
-    if (lv_drives()) {
-        lv_note_what(LC_DETAILS);
-        return;
-    }
     x0 = aside_x();
     w = aside_width() - U(4);
     if (j && j->thumb) {
@@ -6016,8 +6040,17 @@ static void lvd_text(struct Page *p)
     (void)p;
     lv_note_what(LC_DETAILS);
 }
+/* a Plex list's details: the layout's from the items (lv_model); only
+ * what the details service keeps */
+static void lvd_plex(struct Page *p, BOOL was_shown)
+{
+    (void)p;
+    (void)was_shown;
+    det.has_box = FALSE;
+    det.text_shown = TRUE;
+}
 static const struct DetView layout_view = {
-    cv_has_pane, NULL, NULL, cv_job, NULL, NULL, NULL, NULL, NULL, plex_pv_draw, NULL, NULL, lvd_text, NULL,
+    cv_has_pane, NULL, NULL, cv_job, NULL, NULL, NULL, NULL, NULL, lvd_plex, NULL, NULL, lvd_text, NULL,
     NULL
 };
 
@@ -6040,7 +6073,7 @@ static void preview_arrived(void)
             ch_arrived(&pages[d], &pages[d] == p);
     }
     if (np_aj && np_aj->done && !np_art_drawn)
-        np_art_draw();                      /* Now playing's cover is made */
+        ui->np_art();                       /* Now playing's cover is made */
     det_arrived(p);                         /* the entry's details: to the view */
 }
 
@@ -6103,8 +6136,6 @@ static void style_preview(struct Page *p)
     det.sel = p->sel;
     det.shown = TRUE;
     det.pending = FALSE;
-    if (lv_drives())
-        return;                             /* (a layout: no classic menu shown in the font) */
     gfx_fill_bg(&g, x0, y0, x1, y1);
     if (p->sel < 0 || p->sel >= LFONT_COUNT)
         return;
@@ -6205,8 +6236,8 @@ static UBYTE list_planes(const struct Page *p);
 static void ov_stamp(void)
 {
     UBYTE was;
-    if (!ov.bl || lv_drives())
-        return;                             /* (a layout: its own letter, from ov.letter) */
+    if (!ov.bl)
+        return;
     was = g.rp->Mask;
     if (g.planar)
         SetWriteMask(g.rp, list_planes(ov.page));
@@ -6262,19 +6293,42 @@ static void ov_show(struct Page *p)
         return;
     ov.on = TRUE;
     ov.linger = 0;
+    if (has_aside(p))
+        det.shown = FALSE;                  /* (the letter in the details' place) */
+    ui->letter_show(p);
+}
+
+static void cl_letter_show(struct Page *p)
+{
     if (has_aside(p)) {
-        if (!lv_drives())
-            gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
+        gfx_picture_clear(&g, 0, g.list_top, g.w - 1, g.footer_y - 2);  /* the letter now */
         tb_close(&pv_tb);
-        det.shown = FALSE;
+        gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
     }
-    if (lv_drives()) {
-        lv_note_what(LC_SELECT);            /* (the layout's letter) */
+    ov_stamp();                             /* (over the rows: they are as they were) */
+}
+
+/* a layout: its own letter (LPage.letter), told */
+static void ly_letter_show(struct Page *p)
+{
+    (void)p;
+    lv_note_what(LC_SELECT);
+}
+
+static void ly_letter_relabel(char c)
+{
+    if (!ov_build(c)) {
+        if (!has_aside(ov.page))
+            ov.bl = NULL;
         return;
     }
-    if (has_aside(p))
-        gfx_fill_bg(&g, ov.strip_x, g.list_top, g.w - 1, g.footer_y - 2);  /* its column */
-    ov_stamp();                             /* (over the rows: they are as they were) */
+    lv_note_what(LC_SELECT);
+}
+
+static void ly_letter_hide(struct Page *p)
+{
+    (void)p;
+    lv_note_what(LC_SELECT);
 }
 
 /* Changing letters off screen: the old letter's box and the new one's,
@@ -6310,10 +6364,15 @@ static void ov_relabel(char c)
 
 static void ov_relabel_(char c)
 {
-    const struct BigLetter *old = ov.bl;
-    WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
     if (!ov.on || !c || c == ov.letter)
         return;
+    ui->letter_relabel(c);
+}
+
+static void cl_letter_relabel(char c)
+{
+    const struct BigLetter *old = ov.bl;
+    WORD ox = ov.x, oy = ov.y, x0, y0, x1, y1, w, h;
     if (!has_aside(ov.page)) {
         /* over the rows: those under the old letter and the new painted
          * again, the new one stamped over them */
@@ -6334,10 +6393,6 @@ static void ov_relabel_(char c)
     if (!ov_build(c)) {
         if (old)
             gfx_fill(&g, ox, oy, ox + old->w - 1, oy + old->h - 1, PEN_BG);
-        return;
-    }
-    if (lv_drives()) {                      /* (the letter's: the layout's own, ov.letter) */
-        lv_note_what(LC_SELECT);
         return;
     }
     x0 = ov.x;
@@ -6382,11 +6437,18 @@ static void ov_hide(void)
     ov.on = FALSE;
     if (!was || !p || p != cur() || p->type != PT_LIST || !g.win)
         return;
+    ui->letter_hide(p);
+    if (has_aside(p)) {
+        det_touch(p);           /* and the preview comes back */
+        det.due = time_ms();
+    }
+}
+
+static void cl_letter_hide(struct Page *p)
+{
     if (has_aside(p)) {
         if (ov.bl)                  /* the column is the letter's alone: clear it */
             gfx_fill(&g, ov.x, ov.y, ov.x + ov.bl->w - 1, ov.y + ov.bl->h - 1, PEN_BG);
-        det_touch(p);           /* and the preview comes back */
-        det.due = time_ms();
     } else if (ov.bl) {
         ov_rows_under(p);           /* the rows it lay over, without it */
     }
@@ -7672,8 +7734,6 @@ static void np_draw_meters(BOOL full, const struct MpStatus *st)
  * line filled): drawn again unchanged, nothing on screen changes. */
 static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 {
-    if (lv_drives())
-        return;                             /* (a layout: its Now playing, from lv_now_sig) */
     WORD x1 = np.x0 + np.w, w = gfx_textlen(&g, s, ts);
     if (y == np.info_y && np.cyc_x0 > np.x0)
         x1 = np.cyc_x0 - U(6);              /* the cycle gadget at its end */
@@ -7687,8 +7747,6 @@ static void np_line(WORD y, const char *s, UBYTE fg, int ts)
 /* label, then value at the column after the longest label (Playback). */
 static void np_pair(WORD y, const char *label, const char *value)
 {
-    if (lv_drives())
-        return;
     WORD col = gfx_textlen(&g, _("Playback"), TS_SMALL) + U(8), w;
     WORD tw = np.art_s ? np.w - np.art_s - U(8) : np.w, x1 = np.x0 + tw;
     gfx_text(&g, np.x0, y, label, PEN_DIM, PEN_BG, col, TS_SMALL | TS_OPAQUE);
@@ -7773,8 +7831,6 @@ static void np_playback_line(WORD y, const struct StInfo *in)
  * song), so it is drawn line by line over itself, never cleared first. */
 static void np_draw_station(void)
 {
-    if (lv_drives())
-        return;
     struct StInfo in;
     char info[320], part[160];
     const char *now = st_title();
@@ -8326,7 +8382,7 @@ static BOOL np_skip(int d)
 static void np_soft_redraw(void)
 {
     BOOL was = gfx_quiet_begin();
-    np_draw_station();
+    ui->np_station();
     gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
     np.s_state = -99;                       /* the buttons: all looked at again */
     np_update();
@@ -8969,20 +9025,27 @@ static void np_eq_redraw(void)
 /* The bars' dance: a frame every 120 ms while the music plays. */
 static void np_eq_tick(void)
 {
+    ui->eq_tick();
+}
+
+/* a layout: its own marks move (from the spectrum); the classic's dancing
+ * marks are neither stepped nor drawn. Started, stopped or paused: the
+ * layout's told (what plays changed) */
+static void ly_eq_tick(void)
+{
+    BOOL still = !mp_playing();
+    if (still != gfx_eq_still || mp_loaded() != hdr_np_on) {
+        gfx_eq_still = still;
+        hdr_np_on = mp_loaded();
+        lv_note();
+    }
+}
+
+static void cl_eq_tick(void)
+{
     static ULONG last;
     BOOL still = !mp_playing();
     ULONG now = time_ms();
-    if (lv_drives()) {
-        /* a layout: its own marks move (from the spectrum); the classic's
-         * dancing marks are neither stepped nor drawn. Started, stopped or
-         * paused: the layout's told (what plays changed) */
-        if (still != gfx_eq_still || mp_loaded() != hdr_np_on) {
-            gfx_eq_still = still;
-            hdr_np_on = mp_loaded();
-            lv_note();
-        }
-        return;
-    }
     if (still != gfx_eq_still) {
         gfx_eq_still = still;
         np_eq_redraw();
@@ -9150,7 +9213,7 @@ static void np_tick(void)
                 /* what plays, or its state, changed: its lines over themselves,
                  * and the controls (a full redraw flashed the page each time) */
                 BOOL was = gfx_quiet_begin();
-                np_draw_station();
+                ui->np_station();
                 gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
                 np_update();
                 if (!msg[0] && hint_shown && hint_text() != hint_shown)
@@ -13186,7 +13249,7 @@ static void radio_done(struct NetJob *j)
             if (j->body && (plex_orig.rate = plex_stream_rate(j->body, j->len)) && np_on() &&
                 mp_is_track()) {
                 BOOL was = gfx_quiet_begin();
-                np_draw_station();
+                ui->np_station();
                 gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
             }
         }
@@ -14243,9 +14306,6 @@ static void plex_pv_draw(struct Page *p, BOOL was_shown)
     file[0] = 0;
     det.has_box = FALSE;
     det.text_shown = TRUE;
-    if (lv_drives())
-        return;                             /* (a layout: its details from the items; nothing
-                                             * here for it) */
     if (!plex_pv_src(p, p->sel, &src)) {
         gfx_picture_clear(&g, x0, g.list_top, g.w - 1, max_y);
         gfx_fill_bg(&g, x0, g.list_top, g.w - 1, max_y);
@@ -17065,10 +17125,10 @@ static int app_main(void)
                     dvd_watch();            /* Videos: a DVD put in or taken out */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */
-                pv_spin_tick();             /* the preview's spinner, if it is waiting */
+                ui->tick();                 /* the view's spinners: the preview's, a Radio
+                                             * list's, if they are waiting */
                 if (!rq_more && cur() && cur()->plex && cur()->plex_letters && !pane_pending)
                     plex_more_ask(cur());   /* a long list's part now shown, if not read */
-                radio_spin();               /* a Radio list's, likewise */
                 np_tick();                  /* the music: its page, the next module */
                 if (g.win && ptr_hidden != g.win && !gut.drag &&
                     (LONG)(time_ms() - mouse_last) >= BAR_HIDE)
@@ -17319,10 +17379,6 @@ static void lv_native_changed(void)
 static BOOL lv_dirty;
 static ULONG lv_what;                       /* what was noted (LC_*; LV_WHOLE: anything) */
 #define LV_WHOLE 0x80000000UL
-static BOOL lv_drives(void)
-{
-    return lv.on;
-}
 static void lv_note_what(ULONG what)
 {
     lv_dirty = TRUE;
@@ -19777,15 +19833,54 @@ static void ly_pane_preview(BOOL first)
     lv_note_what(LC_SELECT);                /* (Home shows the section moved to) */
 }
 
+/* the classic's turn of the loop: the preview's spinner, a Radio list's */
+static void cl_tick(void)
+{
+    pv_spin_tick();
+    radio_spin();
+}
 static const struct UiView classic_ui = {
     cl_draw_header, cl_draw_menu, cl_draw_menu_row, cl_draw_footer, cl_draw_title, cl_draw_title_count,
     cl_draw_list_row, cl_draw_gutter_planes, cl_draw_list_rows, cl_draw_list_move, cl_draw_text_picture,
-    cl_draw_pane, cl_np_draw, cl_draw_all, cl_pane_preview
+    cl_draw_pane, cl_np_draw, cl_draw_all, cl_pane_preview,
+    cl_tick, cl_busy, cl_header_np, cl_clock, cl_status, cl_letter_show, cl_letter_relabel,
+    cl_letter_hide, np_draw_station, cl_eq_tick, np_visual_changed, np_art_draw
 };
+static void ly_tick(void)
+{
+}
+static void ly_header_np(BOOL quiet, BOOL on)
+{
+    (void)quiet;
+    (void)on;
+    lv_note();                              /* (playing or not: the layout's, from its model) */
+}
+static void ly_clock(void)
+{
+    lv_playing_hit = TRUE;                  /* (the layout's own clock) */
+}
+static void ly_status(const char *show)
+{
+    if (show)
+        lv_playing_hit = TRUE;              /* (a layout's own line, lv_debug) */
+}
+static void ly_np_station(void)
+{
+}
+static void ly_np_visual(void)
+{
+    if (np_on())
+        lv_playing_hit = TRUE;
+}
+static void ly_np_art(void)
+{
+}
 static const struct UiView layout_ui = {
     ly_draw_header, ly_draw_menu, ly_draw_menu_row, ly_draw_footer, ly_draw_title, ly_draw_title_count,
     ly_draw_list_row, ly_draw_gutter_planes, ly_draw_list_rows, ly_draw_list_move, ly_draw_text_picture,
-    ly_draw_pane, ly_np_draw, ly_draw_all, ly_pane_preview
+    ly_draw_pane, ly_np_draw, ly_draw_all, ly_pane_preview,
+    ly_tick, ly_busy, ly_header_np, ly_clock, ly_status, ly_letter_show, ly_letter_relabel,
+    ly_letter_hide, ly_np_station, ly_eq_tick, ly_np_visual, ly_np_art
 };
 
 /* ---- the program's side of each: its state, then the view driven */
