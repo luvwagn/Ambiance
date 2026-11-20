@@ -2,7 +2,10 @@
  * zzprobe - picture paths, end to end (included by zzprobe.c)
  * Copyright (c) 2026 Brian King, MIT
  *
- *   zzprobe PATHS [NODT] [NOZZ] [PICS file file ...]
+ *   zzprobe PATHS [SLIDE] [NODT] [NOZZ] [PICS file file ...]
+ *
+ * SLIDE: full-screen slideshow sizes (800x600, 1024x768, 1280x1024) in
+ * place of a tile, about a screen and HD.
  *
  * Each JPEG decoded every way Ambiance could, from the file to its pixels
  * at the size shown (fitted in the box, its shape kept), timed the same way
@@ -63,8 +66,12 @@ struct Box {
     const char *name;
     UWORD w, h;
 };
-static const struct Box pb_box[] = { { "tile", 160, 160 }, { "screen", 640, 512 }, { "HD", 1280, 720 } };
-#define PB_BOXES (sizeof(pb_box) / sizeof(pb_box[0]))
+static const struct Box pb_box_std[] = { { "tile", 160, 160 }, { "screen", 640, 512 }, { "HD", 1280, 720 } };
+/* SLIDE: full-screen slideshow sizes (an AGA or RTG 800x600, 1024x768 and 1280x1024 screen) */
+static const struct Box pb_box_slide[] = { { "800x600", 800, 600 }, { "1024x768", 1024, 768 },
+                                           { "1280x1024", 1280, 1024 } };
+static const struct Box *pb_box = pb_box_std;
+#define PB_BOXES 3
 
 /* the picture fitted in w x h, its shape kept, never made larger */
 static void pb_fit(ULONG sw, ULONG sh, ULONG w, ULONG h, ULONG *dw, ULONG *dh)
@@ -325,6 +332,63 @@ struct PbApi {
     const char *stage;          /* the call that failed */
 };
 
+/* ---- the file to the card a chunk at a time, through one shared buffer
+ * (PB_CHUNK): what Ambiance would do with a camera's 5-10 MB JPEG (one
+ * shared buffer holds at most about 4 MB on Amiberry, and a Zorro II card's
+ * window far less). Each feed offers what is left of the chunk loaded; once
+ * it is used up, the next is read in; the last carries EOF. */
+#define PB_CHUNK (256 * 1024)
+struct PbFeed {
+    BPTR fh;
+    LONG len;                   /* the file's */
+    ZZ9KSharedBuffer buf;
+    ULONG size;                 /* the buffer's */
+    ULONG cstart, clen, pos;    /* the chunk loaded; how far the card has read */
+};
+
+static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
+{
+    int st;
+    memset(f, 0, sizeof(*f));
+    if ((f->len = file_size(path)) <= 0 || !(f->fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
+        return ZZ9K_STATUS_IO_ERROR;
+    f->size = (ULONG)f->len < size ? (ULONG)f->len : size;
+    if ((st = ZZ9KAllocShared(f->size, 16, ZZ9K_ALLOC_HOST_WINDOW, &f->buf)) != ZZ9K_STATUS_OK) {
+        Close(f->fh);
+        f->fh = 0;
+        f->buf.handle = 0;
+    }
+    return st;
+}
+
+/* the next feed's source; FALSE: the file could not be read */
+static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG session)
+{
+    if (f->pos >= f->cstart + f->clen && f->pos < (ULONG)f->len) {
+        f->cstart = f->pos;
+        f->clen = (ULONG)f->len - f->pos < f->size ? (ULONG)f->len - f->pos : f->size;
+        if (Seek(f->fh, (LONG)f->cstart, OFFSET_BEGINNING) < 0 ||
+            Read(f->fh, (APTR)f->buf.data, (LONG)f->clen) != (LONG)f->clen)
+            return FALSE;
+    }
+    memset(fd, 0, sizeof(*fd));
+    fd->session = session;
+    fd->src_handle = f->buf.handle;
+    fd->src_offset = f->pos - f->cstart;
+    fd->src_length = f->cstart + f->clen - f->pos;
+    fd->flags = f->cstart + f->clen >= (ULONG)f->len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+    return TRUE;
+}
+
+static void pb_feed_close(struct PbFeed *f)
+{
+    if (f->buf.handle)
+        ZZ9KFreeShared(f->buf.handle);
+    if (f->fh)
+        Close(f->fh);
+    memset(f, 0, sizeof(*f));
+}
+
 /* rows of BGRA8888 at src (pitch bytes apart) to 0x00RRGGBB */
 static void pb_bgra_rows(volatile const UBYTE *src, ULONG pitch, ULONG w, ULONG h, ULONG *dst)
 {
@@ -341,30 +405,26 @@ static void pb_bgra_rows(volatile const UBYTE *src, ULONG pitch, ULONG w, ULONG 
 static LONG pb_api_once(void *p)
 {
     struct PbApi *c = p;
-    ZZ9KSharedBuffer src;
     ZZ9KSurface surf;
+    struct PbFeed f;
     ULONG sw = c->mode == PBA_FULL ? c->iw : c->dw, sh = c->mode == PBA_FULL ? c->ih : c->dh;
-    LONG len = file_size(c->path), ok = -1;
-    BPTR fh;
-    if (len <= 0 || !sw || !sh)
+    LONG ok = -1;
+    if (!sw || !sh)
         return -1;
-    memset(&src, 0, sizeof(src));
     memset(&surf, 0, sizeof(surf));
     c->stage = "ZZ9KAllocShared";
-    if ((c->status = ZZ9KAllocShared((ULONG)len, 16, ZZ9K_ALLOC_HOST_WINDOW, &src)) != ZZ9K_STATUS_OK)
-        return -1;
-    if (!(fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE)) || Read(fh, (APTR)src.data, len) != len) {
-        if (fh)
-            Close(fh);
-        ZZ9KFreeShared(src.handle);
+    /* the one-shot call takes the whole file in one buffer; a session, chunks */
+    if ((c->status = pb_feed_open(&f, c->path, c->mode == PBA_FULL ? 0x7fffffffUL : PB_CHUNK)) !=
+        ZZ9K_STATUS_OK) {
+        if (c->mode == PBA_FULL)
+            c->stage = "ZZ9KAllocShared (the whole file, for the one-shot call)";
         return -1;
     }
-    Close(fh);
     c->stage = "ZZ9KAllocSurface";
     if ((c->status = ZZ9KAllocSurface(sw, sh, ZZ9K_SURFACE_FORMAT_BGRA8888,
                                       c->mode == PBA_CARD ? ZZ9K_SURFACE_FLAG_ARM_LOCAL : 0, &surf)) !=
         ZZ9K_STATUS_OK) {
-        ZZ9KFreeShared(src.handle);
+        pb_feed_close(&f);
         return -1;
     }
     if (c->mode != PBA_CARD && !surf.data) {
@@ -375,10 +435,15 @@ static LONG pb_api_once(void *p)
     if (c->mode == PBA_FULL) {
         ZZ9KImageDecodeDesc d;
         ZZ9KImageDecodeResult res;
+        if (Read(f.fh, (APTR)f.buf.data, f.len) != f.len) {
+            c->stage = "reading the file";
+            c->status = ZZ9K_STATUS_IO_ERROR;
+            goto out;
+        }
         memset(&d, 0, sizeof(d));
         memset(&res, 0, sizeof(res));
-        d.src_handle = src.handle;
-        d.src_length = (ULONG)len;
+        d.src_handle = f.buf.handle;
+        d.src_length = (ULONG)f.len;
         d.dst_surface = surf.handle;
         d.dst_width = sw;
         d.dst_height = sh;
@@ -392,7 +457,7 @@ static LONG pb_api_once(void *p)
         ZZ9KImageSessionBeginDesc bd;
         ZZ9KImageSessionFeedDesc fd;
         ZZ9KImageSessionResult r;
-        ULONG off = 0, guard = 0;
+        ULONG guard = 0, sess;
         memset(&bd, 0, sizeof(bd));
         memset(&r, 0, sizeof(r));
         bd.codec = ZZ9K_IMAGE_CODEC_JPEG;
@@ -405,42 +470,43 @@ static LONG pb_api_once(void *p)
         c->stage = "ZZ9KImageSessionBegin";
         if ((c->status = ZZ9KImageSessionBegin(&bd, &r)) != ZZ9K_STATUS_OK)
             goto out;
+        sess = r.session;                   /* (a failed feed's result is not to be trusted for it) */
         for (;;) {
-            memset(&fd, 0, sizeof(fd));
-            fd.session = r.session;
-            fd.src_handle = src.handle;
-            fd.src_offset = off;
-            fd.src_length = (ULONG)len - off;
-            fd.flags = ZZ9K_IMAGE_SESSION_FEED_EOF;     /* (the whole file is there) */
+            if (!pb_feed_next(&f, &fd, sess)) {
+                c->stage = "reading the file";
+                c->status = ZZ9K_STATUS_IO_ERROR;
+                break;
+            }
             c->stage = "ZZ9KImageSessionFeed";
             if ((c->status = ZZ9KImageSessionFeed(&fd, &r)) != ZZ9K_STATUS_OK)
                 break;
-            off += r.bytes_consumed;
+            f.pos += r.bytes_consumed;
             if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE) {
                 c->ow = r.tile_width ? r.tile_width : sw;
                 c->oh = r.tile_height ? r.tile_height : sh;
                 c->stage = NULL;
                 break;
             }
-            if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR || ++guard > 10000) {
+            if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR || ++guard > 100000) {
                 c->stage = "the session (state ERROR)";
                 c->status = ZZ9K_STATUS_IO_ERROR;
                 break;
             }
         }
-        ZZ9KImageSessionClose(r.session, 0);
+        ZZ9KImageSessionClose(sess, 0);
         if (c->stage)
             goto out;
     }
     c->stage = NULL;
     ok = 0;
     if (c->mode != PBA_CARD) {
-        ULONG ow = c->ow > sw ? sw : c->ow, oh = c->oh > sh ? sh : c->oh, *tmp;
+        ULONG ow = c->ow > sw ? sw : c->ow, oh = c->oh > sh ? sh : c->oh, *tmp = NULL;
         FreeVec(c->out);
         c->out = NULL;
         if (!ow || !oh || !(c->out = AllocVec(c->dw * c->dh * 4, MEMF_ANY)) ||
             !(tmp = AllocVec(ow * oh * 4, MEMF_ANY))) {
             c->stage = "memory for the read-back";
+            c->status = ZZ9K_STATUS_NO_MEMORY;
             ok = -1;
         } else {
             pb_bgra_rows((volatile const UBYTE *)surf.data, surf.pitch, ow, oh, tmp);
@@ -448,12 +514,12 @@ static LONG pb_api_once(void *p)
                 CopyMem(tmp, c->out, ow * oh * 4);
             else
                 pb_shrink(tmp, ow, oh, c->out, c->dw, c->dh);
-            FreeVec(tmp);
         }
+        FreeVec(tmp);
     }
 out:
     ZZ9KFreeSurface(surf.handle);
-    ZZ9KFreeShared(src.handle);
+    pb_feed_close(&f);
     return ok;
 }
 
@@ -497,7 +563,7 @@ static const char *zz_status_name(int s)
  * datatype and Zorro II can use). The size shown asked for (dst): if the
  * card scales (RESULT_SCALED) the tiles are that size, else the whole
  * picture's, averaged down on the 68k */
-#define PB_TSTRIDE (4 * 4096)
+#define PB_TSTRIDE (4 * 8192)                /* (a row of up to 8192 pixels: a 24 MP photo's 6000) */
 #define PB_TROWS 4
 struct PbTile {
     const char *path;
@@ -512,27 +578,18 @@ struct PbTile {
 static LONG pb_tile_once(void *p)
 {
     struct PbTile *c = p;
-    ZZ9KSharedBuffer src, tb;
+    ZZ9KSharedBuffer tb;
+    struct PbFeed f;
     ZZ9KImageSessionBeginDesc bd;
     ZZ9KImageSessionFeedDesc fd;
     ZZ9KImageSessionResult r;
-    ULONG *canvas = NULL, cw = 0, ch = 0, off = 0, guard = 0;
-    LONG len = file_size(c->path), ok = -1;
+    ULONG *canvas = NULL, cw = 0, ch = 0, guard = 0, sess = 0;
+    LONG ok = -1;
     BOOL eof = FALSE, open = FALSE;
-    BPTR fh;
-    if (len <= 0)
-        return -1;
-    memset(&src, 0, sizeof(src));
     memset(&tb, 0, sizeof(tb));
     c->stage = "ZZ9KAllocShared (file)";
-    if ((c->status = ZZ9KAllocShared((ULONG)len, 16, ZZ9K_ALLOC_HOST_WINDOW, &src)) != ZZ9K_STATUS_OK)
+    if ((c->status = pb_feed_open(&f, c->path, PB_CHUNK)) != ZZ9K_STATUS_OK)
         return -1;
-    if (!(fh = Open((CONST_STRPTR)c->path, MODE_OLDFILE)) || Read(fh, (APTR)src.data, len) != len) {
-        if (fh)
-            Close(fh);
-        goto out;
-    }
-    Close(fh);
     c->stage = "ZZ9KAllocShared (tiles)";
     if ((c->status = ZZ9KAllocShared(PB_TSTRIDE * PB_TROWS, 16, ZZ9K_ALLOC_HOST_WINDOW, &tb)) != ZZ9K_STATUS_OK)
         goto out;
@@ -550,21 +607,20 @@ static LONG pb_tile_once(void *p)
     if ((c->status = ZZ9KImageSessionBegin(&bd, &r)) != ZZ9K_STATUS_OK)
         goto out;
     open = TRUE;
+    sess = r.session;                       /* (a failed feed's result is not to be trusted for it) */
     c->ntiles = 0;
     c->flags = 0;
-    while (guard++ < 100000) {
-        memset(&fd, 0, sizeof(fd));
-        fd.session = r.session;
-        fd.src_handle = src.handle;
-        fd.src_offset = off;
-        fd.src_length = (ULONG)len - off;
-        fd.flags = off >= (ULONG)len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+    while (guard++ < 1000000) {
+        if (!pb_feed_next(&f, &fd, sess)) {
+            c->stage = "reading the file";
+            goto out;
+        }
         if (fd.flags)
             eof = TRUE;
         c->stage = "ZZ9KImageSessionFeed";
         if ((c->status = ZZ9KImageSessionFeed(&fd, &r)) != ZZ9K_STATUS_OK)
             goto out;
-        off += r.bytes_consumed;
+        f.pos += r.bytes_consumed;
         c->flags |= r.flags;
         if (r.image_width && !c->iw) {
             c->iw = r.image_width;
@@ -621,11 +677,11 @@ static LONG pb_tile_once(void *p)
         c->stage = NULL;
 out:
     if (open)
-        ZZ9KImageSessionClose(r.session, 0);
+        ZZ9KImageSessionClose(sess, 0);
     FreeVec(canvas);
     if (tb.handle)
         ZZ9KFreeShared(tb.handle);
-    ZZ9KFreeShared(src.handle);
+    pb_feed_close(&f);
     return ok;
 }
 

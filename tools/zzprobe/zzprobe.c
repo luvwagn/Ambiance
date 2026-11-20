@@ -4,7 +4,7 @@
  *
  *   zzprobe [JPEG file] [PNG file] [WEBP file] [MP3 file] [QUICK] [NOBENCH]
  *
- *   zzprobe PATHS [NODT] [NOZZ] [PICS file file ...]   (the picture paths alone: paths.c)
+ *   zzprobe PATHS [SLIDE] [NODT] [NOZZ] [PICS file file ...]   (the picture paths alone: paths.c)
  *
  * Probes (the ZZ9000 SDK's headers, MIT, only for the picture paths'
  * calls to zz9k.library):
@@ -1269,8 +1269,8 @@ static void summary(void)
 /* ------------------------------------------------------------ main */
 static ULONG run(void *unused)
 {
-    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S,PATHS/S,PICS/M,NODT/S,NOZZ/S";
-    LONG args[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const char tmpl[] = "JPEG/K,PNG/K,WEBP/K,MP3/K,QUICK/S,NOBENCH/S,PATHS/S,PICS/M,NODT/S,NOZZ/S,SLIDE/S";
+    LONG args[11] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     struct RDArgs *ra = ReadArgs((CONST_STRPTR)tmpl, args, NULL);
     const char *jpeg = "PROGDIR:Bench/test.jpg", *png = "PROGDIR:Bench/test.png",
                *webp = "PROGDIR:Bench/test.webp", *mp3 = "PROGDIR:Bench/test.mp3";
@@ -1333,6 +1333,8 @@ static ULONG run(void *unused)
                     n++;
             pb_zzdt = args[8] == 0;
             pb_nozz = args[9] != 0;
+            if (args[10])
+                pb_box = pb_box_slide;  /* SLIDE: full-screen slideshow sizes */
             if (n)
                 bench_paths(pics, n);
             else
