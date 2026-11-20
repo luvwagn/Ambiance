@@ -15,9 +15,17 @@
  * a damaged or cut-off file decodes to grey where its data ends, as
  * libjpeg does, and never reads or writes outside its buffers.
  *
- * Not (yet): progressive (SOF2: JD_EPROGRESSIVE, before any rows), CMYK
- * and YCCK (JD_ECMYK), 12-bit, arithmetic coding, multi-scan sequential
- * (JD_EUNSUPPORTED).
+ * Progressive (SOF2), 8-bit, Huffman coded: its scans are read into
+ * each component's coefficients first (no rows until the last scan), then
+ * decoded as a baseline picture's are. At 1/8 every component keeps its
+ * DC alone (2 bytes a block; chroma made bigger after, so a little softer
+ * at colour edges than libjpeg's) and the AC scans are passed over
+ * unread; at the other scales 128 bytes a block, at most JD_PROG_MAX
+ * (24 MB: JD_ENOMEM past it). A cut-off or damaged progressive file shows
+ * what its scans gave.
+ *
+ * Not (yet): CMYK and YCCK (JD_ECMYK), 12-bit, arithmetic coding,
+ * multi-scan sequential (JD_EUNSUPPORTED).
  */
 #ifndef JDEC_H
 #define JDEC_H
@@ -30,7 +38,7 @@ enum {
     JD_EREAD = -2,           /* read() failed */
     JD_EFORMAT = -3,         /* not a JPEG, or its headers are damaged */
     JD_EUNSUPPORTED = -4,    /* a kind of JPEG not decoded (see above) */
-    JD_EPROGRESSIVE = -5,    /* progressive JPEG */
+    JD_EPROGRESSIVE = -5,    /* (progressive JPEG: no longer returned) */
     JD_ECMYK = -6,           /* four components: CMYK or YCCK */
     JD_EABORT = -7,          /* rows() asked to stop */
     JD_ETOOBIG = -8          /* wider or taller than 32767 */

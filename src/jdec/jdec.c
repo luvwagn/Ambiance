@@ -14,6 +14,10 @@
 #include "jdec.h"
 
 #define JD_INBUF 4096
+#define JD_EOI 1                /* (read_markers between progressive scans: the end) */
+#ifndef JD_PROG_MAX
+#define JD_PROG_MAX (24L << 20) /* a progressive picture's coefficients kept: at most */
+#endif
 #define PS 2                    /* extra fraction bits through the 8x8 IDCT */
 
 #ifndef FB
@@ -46,6 +50,12 @@ typedef struct {
     int16_t q[64];              /* its dequantising table at this scale (natural order) */
     const int16_t *sc;          /* each coefficient's scale after q, Q(14-PS): aan[] or flat */
     int dc;                     /* DC prediction */
+    /* progressive: every block's coefficients (zigzag order), kn of each
+     * (1: the DC alone, where the scale reads no more; else 64), for
+     * sbw x sbh blocks (the MCUs' grid) */
+    int16_t *coef;
+    int32_t sbw, sbh;
+    int kn;
 } JComp;
 
 /* A Cr or Cb value's colour terms; 8 bytes, for the 68020's index * 8 */
@@ -68,6 +78,10 @@ struct JDec {
     int ncomp, hmax, vmax;
     int adobe, adobe_transform, jfif;
     int restart;
+    int progressive;            /* SOF2: its scans read into each component's coef first */
+    int ss, se, ah, al;         /* the progressive scan's spectral selection, approximation */
+    int32_t eobrun;             /* blocks left in an end-of-band run */
+    int pending;                /* a marker the last scan's data ran into, read next */
     int ns;                     /* components in the scan, their indexes */
     int scomp[4];
     int scale, bsize;           /* 1/2^scale; luma block size out */
@@ -360,9 +374,8 @@ static int read_sof(JDec *d, int kind)
                     : !d->jfif && d->c[0].id == 'R' && d->c[1].id == 'G' && d->c[2].id == 'B';
     if (n == 4)
         return JD_ECMYK;
-    if (kind == 2)
-        return JD_EPROGRESSIVE;
-    if (kind != 0 || p != 8)
+    d->progressive = kind == 2;
+    if ((kind != 0 && kind != 2) || p != 8)
         return JD_EUNSUPPORTED;
     if (w == 0 || h == 0)
         return JD_EFORMAT;      /* height 0 (DNL) is not decoded */
@@ -400,12 +413,18 @@ static int read_app(JDec *d, int m)
     return skip(d, len - n) ? JD_EFORMAT : JD_OK;
 }
 
-/* Markers up to the frame (until_sos 0) or the scan (1). */
+/* Markers up to the frame (until_sos 0) or the scan (1); 2: between a
+ * progressive picture's scans, the end (EOI, or the file's) JD_EOI. */
 static int read_markers(JDec *d, int until_sos)
 {
     for (;;) {
-        int m = next_marker(d), r = JD_OK;
+        int m = d->pending ? d->pending : next_marker(d), r = JD_OK;
         int32_t len;
+        d->pending = 0;
+        if (m < 0 && until_sos == 2) {
+            d->damaged = 1;             /* (cut off: what came is shown) */
+            return d->readerr ? JD_EREAD : JD_EOI;
+        }
         if (m < 0)
             return d->readerr ? JD_EREAD : JD_EFORMAT;
         switch (m) {
@@ -434,8 +453,12 @@ static int read_markers(JDec *d, int until_sos)
             if (!until_sos)
                 return JD_EFORMAT;
             return JD_OK;
-        case 0xD8: case 0xD9:
+        case 0xD9:
+            return until_sos == 2 ? JD_EOI : JD_EFORMAT;
+        case 0xD8:
             return JD_EFORMAT;
+        case 0x00:
+            break;              /* a stuffed FF of data passed over (a scan left unread) */
         default:
             if (m >= 0xE0 && m <= 0xEF) {
                 r = read_app(d, m);
@@ -885,6 +908,15 @@ static int setup(JDec *d, int scale)
         c->dnx = bs * rx >= c->bs ? 1 : (int)(c->bs / (bs * rx));
         c->upy = bs * ry >= c->bs ? (int)(bs * ry / c->bs) : 1;
         c->dny = bs * ry >= c->bs ? 1 : (int)(c->bs / (bs * ry));
+        if (d->progressive && bs == 1 && c->bs > 1) {
+            /* a progressive picture at 1/8: chroma's DC too, made bigger,
+             * so no component keeps more than its DC (and the scans of
+             * the rest are passed over) */
+            c->bs = 1;
+            c->upx = rx;
+            c->upy = ry;
+            c->dnx = c->dny = 1;
+        }
         c->rowlen = d->mcux * c->h * c->bs;
         c->rows = c->v * c->bs;
         c->vw = (d->outw * c->dnx + c->upx - 1) / c->upx;
@@ -1182,6 +1214,323 @@ static int emit_band(JDec *d, int32_t b, int cur, int nxt)
     return JD_OK;
 }
 
+
+/* ------------------------------------------------------------------ progressive */
+
+/* A progressive scan's header: its components, Ss, Se, Ah, Al (T.81 G.1). */
+static int read_sos_prog(JDec *d)
+{
+    int32_t len = get16(d);
+    int n = getbyte(d), i, j, k, a;
+    if (len < 6 || n < 1 || n > d->ncomp || len != 6 + 2 * n)
+        return JD_EFORMAT;
+    d->ns = n;
+    for (i = 0; i < n; i++) {
+        int id = getbyte(d), t = getbyte(d);
+        if (id < 0 || t < 0)
+            return JD_EFORMAT;
+        for (j = 0; j < d->ncomp && d->c[j].id != id; j++)
+            ;
+        if (j == d->ncomp)
+            return JD_EFORMAT;
+        for (k = 0; k < i; k++)
+            if (d->scomp[k] == j)
+                return JD_EFORMAT;
+        d->scomp[i] = j;
+        d->c[j].td = t >> 4;
+        d->c[j].ta = t & 15;
+        if (d->c[j].td > 3 || d->c[j].ta > 3)
+            return JD_EFORMAT;
+    }
+    d->ss = getbyte(d);
+    d->se = getbyte(d);
+    a = getbyte(d);
+    if (d->ss < 0 || d->se < 0 || a < 0)
+        return JD_EFORMAT;
+    d->ah = a >> 4;
+    d->al = a & 15;
+    if (d->ss > d->se || d->se > 63 || d->al > 13 || d->ah > 13 ||
+        (d->ss == 0 && d->se != 0) || (d->ss > 0 && n != 1))
+        return JD_EFORMAT;
+    for (i = 0; i < n; i++) {           /* the tables this scan reads */
+        JComp *c = &d->c[d->scomp[i]];
+        if ((d->ss == 0 && d->ah == 0 && !d->hd[c->td].ok) || (d->ss > 0 && !d->ha[c->ta].ok))
+            return JD_EFORMAT;
+    }
+    return JD_OK;
+}
+
+static void prog_dc(JDec *d, JComp *c, int16_t *b)
+{
+    if (d->ah == 0) {
+        int s = decode_huff(d, &d->hd[c->td]);
+        if (s) {
+            if (s > 15)
+                s = 15;
+            c->dc += extend(getbits(d, s), s);
+        }
+        b[0] = sat16((int32_t)sat16(c->dc) * (1L << d->al));
+    } else if (getbits(d, 1)) {
+        b[0] = (int16_t)(b[0] | (1 << d->al));
+    }
+}
+
+/* An AC scan's band of one block, its first pass (Ah 0) */
+static void prog_ac_first(JDec *d, JComp *c, int16_t *b)
+{
+    int k = d->ss;
+    if (d->eobrun > 0) {
+        d->eobrun--;
+        return;
+    }
+    while (k <= d->se) {
+        int rs = decode_huff(d, &d->ha[c->ta]), r = rs >> 4, s = rs & 15;
+        if (s) {
+            k += r;
+            if (k > d->se) {
+                d->damaged = 1;
+                return;
+            }
+            b[k++] = sat16((int32_t)extend(getbits(d, s), s) * (1L << d->al));
+        } else if (r == 15) {
+            k += 16;                    /* sixteen zeros */
+        } else {
+            d->eobrun = (1L << r) - 1;  /* this block and eobrun more end here */
+            if (r)
+                d->eobrun += getbits(d, r);
+            return;
+        }
+    }
+}
+
+/* Its refinements (Ah > 0): a bit more of each coefficient already there,
+ * and new ones of +-1 << Al in the zeros (T.81 G.1.2.3) */
+static void prog_ac_refine(JDec *d, JComp *c, int16_t *b)
+{
+    int k = d->ss, p1 = 1 << d->al;
+    if (d->eobrun > 0) {
+        d->eobrun--;
+        for (; k <= d->se; k++)
+            if (b[k] && getbits(d, 1) && !(b[k] & p1))
+                b[k] = (int16_t)(b[k] >= 0 ? b[k] + p1 : b[k] - p1);
+        return;
+    }
+    while (k <= d->se) {
+        int rs = decode_huff(d, &d->ha[c->ta]), r = rs >> 4, s = rs & 15, v = 0;
+        if (s) {
+            if (s != 1)
+                d->damaged = 1;
+            v = getbits(d, 1) ? p1 : -p1;
+        } else if (r != 15) {
+            d->eobrun = (1L << r) - 1;  /* this block's rest, and eobrun blocks more */
+            if (r)
+                d->eobrun += getbits(d, r);
+            r = 64;                     /* (to the band's end: corrections only) */
+        }                               /* (ZRL: 16 zeros passed, the 16th given 0) */
+        while (k <= d->se) {
+            int16_t *x = &b[k++];
+            if (*x) {
+                if (getbits(d, 1) && !(*x & p1))
+                    *x = (int16_t)(*x >= 0 ? *x + p1 : *x - p1);
+            } else {
+                if (r == 0) {
+                    if (v)
+                        *x = (int16_t)v;
+                    break;
+                }
+                r--;
+            }
+        }
+    }
+}
+
+static void prog_restart(JDec *d)
+{
+    restart_marker(d);
+    d->eobrun = 0;
+}
+
+/* One scan into the components' coefficients. An AC scan of a component
+ * kept as its DC alone is passed over unread (read_markers finds the next
+ * marker). */
+static void prog_scan(JDec *d)
+{
+    int32_t n = 0;
+    int i;
+    for (i = 0; i < d->ncomp; i++)
+        d->c[i].dc = 0;
+    d->eobrun = 0;
+    if (d->ns == 1) {                   /* one component: its own blocks, in rows */
+        JComp *c = &d->c[d->scomp[0]];
+        int32_t bw = ((d->info.width * c->h + d->hmax - 1) / d->hmax + 7) / 8;
+        int32_t bh = ((d->info.height * c->v + d->vmax - 1) / d->vmax + 7) / 8, bx, by;
+        if (d->ss > 0 && c->kn == 1)
+            return;
+        if (bw > c->sbw)
+            bw = c->sbw;
+        if (bh > c->sbh)
+            bh = c->sbh;
+        for (by = 0; by < bh; by++)
+            for (bx = 0; bx < bw; bx++, n++) {
+                int16_t *b = c->coef + (by * c->sbw + bx) * c->kn;
+                if (d->restart && n && n % d->restart == 0)
+                    prog_restart(d);
+                if (d->ss == 0)
+                    prog_dc(d, c, b);
+                else if (d->ah == 0)
+                    prog_ac_first(d, c, b);
+                else
+                    prog_ac_refine(d, c, b);
+            }
+    } else {                            /* DC, interleaved: in MCUs */
+        int32_t mx, my;
+        for (my = 0; my < d->mcuy; my++)
+            for (mx = 0; mx < d->mcux; mx++, n++) {
+                if (d->restart && n && n % d->restart == 0)
+                    prog_restart(d);
+                for (i = 0; i < d->ns; i++) {
+                    JComp *c = &d->c[d->scomp[i]];
+                    int bx, by;
+                    for (by = 0; by < c->v; by++)
+                        for (bx = 0; bx < c->h; bx++)
+                            prog_dc(d, c, c->coef + ((my * c->v + by) * c->sbw + mx * c->h + bx) * c->kn);
+                }
+            }
+    }
+}
+
+/* After a scan: the bit reader emptied, and a marker its data ran into
+ * kept for read_markers */
+static void prog_scan_end(JDec *d)
+{
+    check_pad(d);
+    if (d->marker)
+        d->pending = d->marker;
+    d->marker = 0;
+    d->bits = 0;
+    d->nbits = 0;
+}
+
+/* A kept block into d->blk as decode_block leaves it: how many */
+static int prog_block(JDec *d, const JComp *c, const int16_t *b)
+{
+    int16_t *blk = d->blk;
+    uint8_t *nz = d->nz + 1;
+    const int16_t *q = c->q, *sc = c->sc;
+    int k;
+    blk[0] = sat16((int32_t)b[0] * q[0]);
+    blk[0] = sat16(((int32_t)blk[0] * sc[0] + (1L << (13 - PS))) >> (14 - PS));
+    d->nz[0] = 0;
+    if (c->kn == 1)
+        return 1;
+    for (k = 1; k < 64; k++) {
+        int z;
+        if (!b[k])
+            continue;
+        z = zigzag[k];
+        if (q[z]) {
+            int16_t t = (int16_t)(b[k] * q[z]);
+            blk[z] = (int16_t)(((int32_t)t * sc[z] + (1L << (13 - PS))) >> (14 - PS));
+            *nz++ = (uint8_t)z;
+        }
+    }
+    return (int)(nz - d->nz);
+}
+
+/* A band's MCU row from the kept coefficients, as decode_band */
+static void prog_band(JDec *d, int which, int32_t my)
+{
+    int32_t mx;
+    uint8_t *mp[4];
+    int i;
+    for (i = 0; i < d->ns; i++)
+        mp[i] = d->c[d->scomp[i]].buf[which];
+    for (mx = 0; mx < d->mcux; mx++)
+        for (i = 0; i < d->ns; i++) {
+            JComp *c = &d->c[d->scomp[i]];
+            int bx, by, bs = c->bs;
+            int32_t rl = c->rowlen;
+            uint8_t *row = mp[i];
+            for (by = 0; by < c->v; by++, row += bs * rl) {
+                uint8_t *o = row;
+                const int16_t *b = c->coef + ((my * c->v + by) * c->sbw + mx * c->h) * c->kn;
+                for (bx = 0; bx < c->h; bx++, o += bs, b += c->kn) {
+                    int n = prog_block(d, c, b), ac = n > 1;
+                    switch (bs) {
+                    case 8: idct8(d, o, rl, ac); break;
+                    case 4: idct4(d, o, rl, ac); break;
+                    case 2: idct2(d, o, rl, ac); break;
+                    default: idct1(d, o, rl, ac); break;
+                    }
+                    clear_block(d, n);
+                }
+            }
+            mp[i] += c->h * bs;
+        }
+}
+
+static int prog_decode(JDec *d, int scale)
+{
+    int32_t total = 0, b;
+    int i, r, cur = 0;
+    if (d->ncomp == 1) {                /* (one component: blocks of their own, as baseline) */
+        d->c[0].h = d->c[0].v = 1;
+        d->hmax = d->vmax = 1;
+    }
+    d->ns = d->ncomp;
+    for (i = 0; i < d->ncomp; i++)
+        d->scomp[i] = i;
+    if ((r = read_markers(d, 1)))
+        return r;
+    for (i = 0; i < d->ncomp; i++)
+        if (!d->qtok[d->c[i].tq])
+            return JD_EFORMAT;
+    if ((r = setup(d, scale)))
+        return r;
+    for (i = 0; i < d->ncomp; i++) {
+        JComp *c = &d->c[i];
+        c->kn = c->bs == 1 ? 1 : 64;
+        c->sbw = d->mcux * c->h;
+        c->sbh = d->mcuy * c->v;
+        if (c->sbw * c->sbh > (JD_PROG_MAX - total) / (2 * c->kn))
+            return JD_ENOMEM;           /* (more than is sensible to keep) */
+        total += c->sbw * c->sbh * 2 * c->kn;
+        if (!(c->coef = d->io.alloc(d->io.ctx, (uint32_t)(c->sbw * c->sbh * 2 * c->kn))))
+            return JD_ENOMEM;
+        memset(c->coef, 0, (size_t)(c->sbw * c->sbh * 2 * c->kn));
+    }
+    for (;;) {                          /* the scans */
+        if ((r = read_sos_prog(d))) {
+            d->damaged = 1;
+            break;
+        }
+        prog_scan(d);
+        prog_scan_end(d);
+        r = read_markers(d, 2);
+        if (r == JD_EOI)
+            break;
+        if (r == JD_EREAD)
+            return r;
+        if (r) {
+            d->damaged = 1;             /* (what came is shown) */
+            break;
+        }
+    }
+    d->ns = d->ncomp;
+    for (i = 0; i < d->ncomp; i++)
+        d->scomp[i] = i;
+    prog_band(d, cur, 0);
+    for (b = 0; b < d->mcuy; b++) {
+        int nxt = cur ^ 1, has = b + 1 < d->mcuy;
+        if (has)
+            prog_band(d, nxt, b + 1);
+        if ((r = emit_band(d, b, cur, has ? nxt : -1)))
+            return r;
+        cur = nxt;
+    }
+    return d->readerr ? JD_EREAD : JD_OK;
+}
+
 /* ------------------------------------------------------------------ API */
 
 int jd_open(JDec **pd, const JDecIO *io, JDecInfo *info)
@@ -1238,6 +1587,8 @@ int jd_decode(JDec *d, int scale)
     if (scale < 0 || scale > 3 || d->rgb)
         return JD_EFORMAT;
     tables(d);
+    if (d->progressive)
+        return prog_decode(d, scale);
     if ((r = read_markers(d, 1)) || (r = read_sos(d)) || (r = setup(d, scale)))
         return r;
     decode_band(d, cur, &mcu);
@@ -1275,6 +1626,8 @@ void jd_close(JDec *d)
             d->io.free(d->io.ctx, c->up);
         if (c->tmp)
             d->io.free(d->io.ctx, c->tmp);
+        if (c->coef)
+            d->io.free(d->io.ctx, c->coef);
     }
     if (d->rgb)
         d->io.free(d->io.ctx, d->rgb);

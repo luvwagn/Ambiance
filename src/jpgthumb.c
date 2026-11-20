@@ -10,11 +10,12 @@
  * does for ILBMs: the caller tries this first and falls back to the
  * datatypes when it returns NULL.
  *
- * What jdec does not decode (progressive, CMYK, 12-bit, arithmetic
- * coding) goes to the datatypes as before, and is noted once per file in
- * Ambiance-jpeg.txt beside the program (or in RAM: on a read-only drive):
- * where it came from (a game, a picture, a music cover, a streamed one),
- * why, and its path, so we know which of them need progressive support.
+ * What jdec does not decode (CMYK, 12-bit, arithmetic coding; a
+ * progressive picture too big to keep at the scale asked) goes to the
+ * datatypes as before, and is noted once per file in Ambiance-jpeg.txt
+ * beside the program (or in RAM: on a read-only drive): where it came
+ * from (a game, a picture, a music cover, a streamed one), why, and its
+ * path.
  */
 #include "amb.h"
 #include "jdec/jdec.h"

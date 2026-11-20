@@ -13,12 +13,17 @@ licence.
 - **Safe on damaged files:** a damaged or cut-off file decodes to grey
   where its data ends.
 
+- **Progressive JPEGs too:** their scans are kept as coefficients, then
+  decoded as a baseline picture is. A thumbnail at 1/8 keeps only each
+  block's DC (2 bytes a block) and passes over the AC scans unread; the
+  other scales keep 128 bytes a block, up to 24 MB.
+
 What it does not decode goes to the system's JPEG datatype (WarpJPEG,
 jfif.datatype or whichever is installed) through datatypes.library:
 
-- progressive JPEGs
 - CMYK/YCCK JPEGs
 - 12-bit and arithmetic-coded JPEGs
+- a progressive JPEG too big to keep at the scale asked
 
 ## Source
 

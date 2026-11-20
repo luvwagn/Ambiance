@@ -27,11 +27,23 @@ FULL_PSNR, FULL_MAXDIFF = 38.0, 24     # jdec's 16-bit AAN IDCT against libjpeg'
 SCALED_PSNR = 36.0                      # against libjpeg's full decode averaged down,
                                         # or its own scaled decode
 SMALL_PSNR = 22.0                       # pictures under 4 blocks of the scale across
+PROG_EIGHTH_PSNR = 30.0                 # progressive at 1/8 with chroma subsampled: jdec
+                                        # keeps every component's DC alone (chroma then made
+                                        # bigger, softer at colour edges), so the AC scans
+                                        # are passed over and memory is 2 bytes a block
 
 
 def psnr(a, b):
     mse = np.mean((a.astype(np.float64) - b.astype(np.float64)) ** 2)
     return 99.0 if mse == 0 else 10 * math.log10(255 * 255 / mse)
+
+
+def prog_sub(path):
+    """A progressive JPEG whose chroma is subsampled"""
+    im = Image.open(path)
+    if not (im.info.get("progressive") or im.info.get("progression")) or len(im.layer) != 3:
+        return False
+    return any(h != im.layer[0][1] or v != im.layer[0][2] for _, h, v, _ in im.layer[1:])
 
 
 def read_ppm(path):
@@ -89,6 +101,8 @@ def main():
                     ref_s = np.asarray(Image.fromarray(ref).reduce(k))
                     small = min(w, h) < 8 * k * 4
                     limit, tag = (SMALL_PSNR, "1/%d small" % k) if small else (SCALED_PSNR, "1/%d" % k)
+                    if k == 8 and not small and prog_sub(path):
+                        limit, tag = PROG_EIGHTH_PSNR, "1/8 progressive, chroma subsampled"
                     p = psnr(got, ref_s)
                     md = int(np.abs(got.astype(int) - ref_s.astype(int)).max())
                     if p < limit:       # or libjpeg's own scaled decode, where Pillow gives it

@@ -70,8 +70,22 @@ def main():
     save("opt_420.jpg", big, quality=92, subsampling=2, optimize=True)
     # RGB stored as RGB (Adobe transform 0)
     save("rgb_adobe.jpg", scene(200, 150, 7), quality=90, subsampling=0, keep_rgb=True)
-    # refused: progressive, CMYK
-    save("prog_420.jpg", big, "-5", quality=85, progressive=True)
+    # progressive (libjpeg's script: DC first and refined, AC bands first
+    # and refined, with successive approximation)
+    for w, h in ((1, 1), (7, 5), (17, 13), (33, 47), (160, 160), (257, 129), (640, 480),
+                 (1023, 767)):
+        img = scene(w, h, seed)
+        seed += 1
+        for sub, sname in ((0, "444"), (1, "422"), (2, "420")):
+            for q in (50, 90):
+                save("p%dx%d_%s_q%d.jpg" % (w, h, sname, q), img, quality=q, subsampling=sub,
+                     progressive=True)
+        save("pg%dx%d_q85.jpg" % (w, h), img.convert("L"), quality=85, progressive=True)
+    save("prog_420.jpg", big, quality=85, progressive=True)
+    save("prog_rst.jpg", big, quality=80, subsampling=2, progressive=True, restart_marker_blocks=5)
+    save("prog_opt.jpg", big, quality=92, subsampling=2, progressive=True, optimize=True)
+    save("prog_q100.jpg", scene(300, 300, 5), quality=100, subsampling=0, progressive=True)
+    # refused: CMYK
     save("cmyk.jpg", scene(64, 64, 3).convert("CMYK"), "-6", quality=85)
     # 4:4:0 and 4:1:1 by ffmpeg's encoder
     src = os.path.join(out, "_src.png")
