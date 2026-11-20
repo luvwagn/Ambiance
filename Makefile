@@ -125,10 +125,11 @@ test-pens: build/pens_test
 build/c2p_test: tests/c2p_test.c build/c2p68k.o
 	@$(CC) -O2 $(CPU) -noixemul -Wall -o $@ tests/c2p_test.c build/c2p68k.o
 
-# the assembler chunky to planar (AGA video) against a plain one, on a 68020
+# the assembler chunky to planar (AGA video) against a plain one, on a 68020;
+# and its each-pen-twice one (half size video)
 test-c2p: build/c2p_test
-	@cd build && vamos -C 68020 -m 8192 c2p_test > test-c2p.txt && grep -q " 0 failed" test-c2p.txt \
-		&& echo "  CHECK chunky to planar (68020 assembler) ok" || (cat test-c2p.txt; exit 1)
+	@cd build && vamos -C 68020 -m 8192 c2p_test > test-c2p.txt && test "$$(grep -c ' 0 failed' test-c2p.txt)" = 2 \
+		&& echo "  CHECK chunky to planar, and each pen twice across (68020 assembler) ok" || (cat test-c2p.txt; exit 1)
 
 build/animdraw68k.o: src/animdraw68k.s
 	@mkdir -p build

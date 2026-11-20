@@ -108,6 +108,109 @@ for _ in range(20000):
     assert got == ref(c), (c, got, ref(c))
 body = asm(ops, loc)
 n = sum(1 for l in body if l.startswith('\t'))
+
+# ---- each pen twice across (half size video, va_c2p2x68k): 16 pens in,
+# 32 pixels out. As addresses: a pen's bit is (long n: j3 j2 | byte j1 j0 |
+# bit c), and the 32 doubled pixels' (j3 j2 j1 j0 e), e the copy. Copies
+# of the 4 longs would be a long index bit e, alike in every pair it
+# divides, so the rounds of the 32-pixel network that do not move it are
+# made on the 4 longs alone (two merges a round, not four): n's bits
+# swapped with the byte's and the bits' (16, 8, 4, 2). The last round
+# (e with the lowest bit, 1) on a long and its copy is a split: its odd
+# bits doubled (e = 0), its even bits doubled (e = 1). Planes: long n's
+# two halves are planes 7 - 2n (odd bits) and 6 - 2n (even).
+MERGES2 = [(0, 2, 16), (1, 3, 16), (0, 1, 8), (2, 3, 8), (0, 2, 4), (1, 3, 4), (0, 1, 2), (2, 3, 2)]
+
+
+def ref2(pens):
+    """the plain c2p of the 16 pens, each twice: 8 plane longs"""
+    dbl = []
+    for p in pens:
+        dbl += [p, p]
+    c = [int.from_bytes(bytes(dbl[4 * i:4 * i + 4]), 'big') for i in range(8)]
+    return ref(c)
+
+
+def gen2():
+    ops = []
+    for lo, hi, s in MERGES2:
+        A, B = 'd%d' % lo, 'd%d' % hi
+        if s == 16:
+            ops += [('swap', B), ('eorw', B, A), ('eorw', A, B), ('eorw', B, A), ('swap', B)]
+        else:
+            ops += [('movel', B, 'd4'), ('lsr', s, 'd4'), ('eorl', A, 'd4'), ('andl', MASK[s], 'd4'),
+                    ('eorl', 'd4', A), ('lsl', s, 'd4'), ('eorl', 'd4', B)]
+    for n in range(4):
+        y = 'd%d' % n
+        ops += [('movel', y, 'd4'), ('andl', 0xAAAAAAAA, 'd4'), ('movel', 'd4', 'd5'), ('lsr', 1, 'd5'),
+                ('orl', 'd5', 'd4'),                                        # odd bits doubled
+                ('andl', 0x55555555, y), ('movel', y, 'd5'), ('addl', 'd5', 'd5'), ('orl', 'd5', y),
+                ('store', n)]                                               # (d4: 7 - 2n, y: 6 - 2n)
+    return ops
+
+
+def sim2(ops, x):
+    r = {('d%d' % i): 0 for i in range(8)}
+    for i in range(4):
+        r['d%d' % i] = x[i]
+    M = 0xFFFFFFFF
+    out = {}
+    for op in ops:
+        o = op[0]
+        if o == 'swap':
+            v = r[op[1]]; r[op[1]] = ((v << 16) | (v >> 16)) & M
+        elif o == 'eorw':
+            r[op[2]] = (r[op[2]] & 0xFFFF0000) | ((r[op[2]] ^ r[op[1]]) & 0xFFFF)
+        elif o == 'movel':
+            r[op[2]] = r[op[1]]
+        elif o == 'lsr':
+            r[op[2]] = r[op[2]] >> op[1]
+        elif o == 'lsl':
+            r[op[2]] = (r[op[2]] << op[1]) & M
+        elif o == 'eorl':
+            r[op[2]] ^= r[op[1]]
+        elif o == 'andl':
+            r[op[2]] &= op[1]
+        elif o == 'orl':
+            r[op[2]] |= r[op[1]]
+        elif o == 'addl':
+            r[op[2]] = (r[op[2]] + r[op[1]]) & M
+        elif o == 'store':
+            n = op[1]
+            out[7 - 2 * n] = r['d4']
+            out[6 - 2 * n] = r['d%d' % n]
+    return [out[k] for k in range(8)]
+
+
+def asm2(ops):
+    L = []
+    for op in ops:
+        o = op[0]
+        if o == 'swap':   L.append('\tswap\t%s' % op[1])
+        elif o == 'eorw': L.append('\teor.w\t%s,%s' % (op[1], op[2]))
+        elif o == 'movel': L.append('\tmove.l\t%s,%s' % (op[1], op[2]))
+        elif o == 'lsr': L.append('\tlsr.l\t#%d,%s' % (op[1], op[2]))
+        elif o == 'lsl': L.append('\tlsl.l\t#%d,%s' % (op[1], op[2]))
+        elif o == 'eorl': L.append('\teor.l\t%s,%s' % (op[1], op[2]))
+        elif o == 'andl': L.append('\tand.l\t#$%08X,%s' % (op[1], op[2]))
+        elif o == 'orl': L.append('\tor.l\t%s,%s' % (op[1], op[2]))
+        elif o == 'addl': L.append('\tadd.l\t%s,%s' % (op[1], op[2]))
+        elif o == 'store':
+            n = op[1]
+            # planes 6 - 2n and 7 - 2n: consecutive pointers
+            L.append('\tmovem.l\t%d(a1),a3-a4' % ((6 - 2 * n) * 4))
+            L.append('\tmove.l\td%d,(0,a3,a6.l)' % n)
+            L.append('\tmove.l\td4,(0,a4,a6.l)')
+    return L
+
+
+ops2 = gen2()
+for _ in range(20000):
+    pens = [random.getrandbits(8) for _ in range(16)]
+    x = [int.from_bytes(bytes(pens[4 * i:4 * i + 4]), 'big') for i in range(4)]
+    assert sim2(ops2, x) == ref2(pens), (pens, sim2(ops2, x), ref2(pens))
+body2 = asm2(ops2)
+n2 = sum(1 for l in body2 if l.startswith('\t'))
 out = sys.argv[1]
 with open(out, 'w') as f:
     f.write("""; Ambiance - 8-plane chunky to planar, 32 pixels a step, in registers
@@ -156,5 +259,41 @@ _va_c2p68k:
 .done:
 	movem.l	(sp)+,d2-d7/a2-a6
 	rts
+
+; void va_c2p2x68k(const UBYTE *src, ULONG groups, UBYTE **planes)
+;   src:    the row's pens, groups * 16 bytes (long-aligned)
+;   planes: as va_c2p68k's: groups longs each written
+;
+; Each pen twice across (a half size video shown at its whole size): 16
+; pens a step, 32 pixels. The 4 longs' merges as the 32-pixel network's
+; that do not involve the copies (two a round, not four: 16, 8, 4, 2),
+; then each long split in two, its odd bits doubled and its even bits
+; doubled (the last round, on a long and its copy). Checked as above,
+; against va_c2p68k's network on the pens doubled.
+; %d instructions a step (32 pixels).
+
+	xdef	_va_c2p2x68k
+
+_va_c2p2x68k:
+	movem.l	d2-d7/a2-a6,-(sp)
+	move.l	ARGS+0(sp),a0
+	move.l	ARGS+4(sp),d0
+	move.l	ARGS+8(sp),a1
+	tst.l	d0
+	beq	.done2
+	move.l	d0,-(sp)			; groups left
+	sub.l	a6,a6				; the row's offset
+.group2:
+	movem.l	(a0)+,d0-d3
+""" % (n2 + 5))
+    f.write("\n".join(body2) + "\n")
+    f.write("""	addq.l	#4,a6
+	subq.l	#1,(sp)
+	bne	.group2
+	addq.l	#4,sp
+.done2:
+	movem.l	(sp)+,d2-d7/a2-a6
+	rts
 """)
-print("c2pgen: %d instructions a step, checked on 20000 random steps" % n)
+print("c2pgen: %d instructions a step, checked on 20000 random steps; each pen twice: %d (32 pixels)"
+      % (n, n2))

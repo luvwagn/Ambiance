@@ -1054,11 +1054,90 @@ static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD 
     bar.ok = TRUE;
 }
 
+/* A half size video on the AGA screen (mpegv 2.6's MPVPF_HALF): each
+ * picture row y written at the video's row 2y, each pen twice across
+ * (va_c2p2x68k), and shown twice by the copper: on the first of its two
+ * lines BPL1MOD and BPL2MOD are the screen's less a row (the row fetched
+ * again), on the second the screen's and a row (the unused one passed
+ * over), then the screen's again under the video (or under the controls'
+ * top, while they are up: the lines below are theirs). One user copper
+ * list a screen: made with the controls' colours (bar_colours) when they
+ * are up. Where there is no copper list to add to (or a laced screen, or
+ * Ambiance/VideoHalfCopper=0) each row is written twice instead. */
+static struct Screen *va_scr;               /* the video's screen, while it plays */
+static WORD va_vy, va_vh;                   /* its top line, its lines */
+static UWORD va_bpr, va_mod[2];             /* the screen's bytes a row; its BPL1MOD, BPL2MOD */
+static BOOL va_cop2;                        /* rows shown twice by the copper (else written twice) */
+static BOOL va_half_shown;                  /* the pictures in its buffers half size */
+static WORD va_dbl = -1;                    /* the copper list as made: lines shown twice */
+static BOOL va_dbl_bar;                     /* ...and with the controls' colours */
+
+/* The screen's copper list as it should be now (made again only if not) */
+static void va_copper_make(void)
+{
+    struct CopPlan *cp;
+    WORD lines = 0, y;
+    BOOL col = bar.cop && bar.cop_on;
+    char m[100];
+    if (!va_scr)
+        return;
+    if (va_cop2 && va_half_shown) {
+        lines = va_vh;
+        if (bar.on && bar.ok && bar.y - va_vy < lines)
+            lines = bar.y - va_vy > 0 ? bar.y - va_vy : 0;
+        lines &= ~1;
+    }
+    if (lines == va_dbl && col == va_dbl_bar)
+        return;
+    va_dbl = lines;
+    va_dbl_bar = col;
+    if (!lines && !col) {
+        cop_off(va_scr);
+        return;
+    }
+    if (!(cp = cop_plan(va_scr, BAR_REGS + 2 * lines + 4))) {
+        va_cop2 = FALSE;                    /* (no memory: rows written twice from now) */
+        amb_log("video: AGA", "half size: no copper list to be had, each row written twice");
+        return;
+    }
+    if (col) {
+        int r;
+        for (r = 0; r < BAR_REGS; r++)
+            cop_color(cp, bar.y, (UBYTE)(1 + r), bar_rgb[r]);
+    }
+    for (y = 0; y < lines; y += 2) {
+        cop_reg(cp, va_vy + y, 0x108, (UWORD)(va_mod[0] - va_bpr));        /* (this row again) */
+        cop_reg(cp, va_vy + y, 0x10A, (UWORD)(va_mod[1] - va_bpr));
+        cop_reg(cp, va_vy + y + 1, 0x108, (UWORD)(va_mod[0] + va_bpr));    /* (the next but one) */
+        cop_reg(cp, va_vy + y + 1, 0x10A, (UWORD)(va_mod[1] + va_bpr));
+    }
+    if (lines) {
+        cop_reg(cp, va_vy + lines, 0x108, va_mod[0]);
+        cop_reg(cp, va_vy + lines, 0x10A, va_mod[1]);
+    }
+    if (!cop_commit(cp) && lines) {
+        va_cop2 = FALSE;
+        amb_log("video: AGA", "half size: the copper list not made, each row written twice");
+    } else if (lines) {
+        sprintf(m, "half size: lines %ld-%ld each row twice by the copper", (long)va_vy,
+                (long)(va_vy + lines - 1));
+        amb_log("video: AGA", m);
+    }
+    cop_plan_free(cp);
+}
+
 /* Its colours made (shown: the copper's list with them, from the next
  * frame), or gone again; then the next frame begun, the controls to be
  * drawn or taken at its top (done before the beam is down to them). */
 static void bar_colours(BOOL on)
 {
+    if (va_scr && bar.scr == va_scr && va_cop2) {
+        /* (the AGA video's screen: one list, its half size rows' with them) */
+        bar.cop_on = on && bar.cop;
+        va_copper_make();
+        WaitTOF();
+        return;
+    }
     if (!bar.cop || on == bar.cop_on)
         return;
     if (on)
@@ -3341,7 +3420,9 @@ static void sw_draw(struct Gfx *g, WORD h, BOOL redraw, BOOL ovl)
         return;
     }
     if (!sw_rgb_ok) {
-        if (!sw_rgb && !(sw_rgb = AllocVec(sw_w * sw_h * 3, MEMF_ANY)))
+        /* (room for the whole size: a half size picture may come first) */
+        if (!sw_rgb && !(sw_rgb = AllocVec((vid.w > sw_w ? vid.w : sw_w) * (vid.h > sw_h ? vid.h : sw_h) * 3,
+                                           MEMF_ANY)))
             return;
         sw_rgb_ok = st_swv_rgb(sw_rgb, sw_w * 3);
         if (!sw_rgb_ok)
@@ -3576,6 +3657,7 @@ static UBYTE *va_lut;                       /* VA_LUT pens */
 static UWORD (*va_yt)[256];                 /* Y's part: 16 dither phases (4 x 4 a pixel) */
 static UBYTE (*va_ut)[256], (*va_vt)[256];  /* Cb's, Cr's: 4 phases (2 x 2 a block) */
 void va_c2p68k(const UBYTE *src, ULONG groups, UBYTE **planes);     /* c2p68k.s */
+void va_c2p2x68k(const UBYTE *src, ULONG groups, UBYTE **planes);   /* (each pen twice: half size) */
 void va_pens68k(const UBYTE *y, const UWORD *cl, UBYTE *dst, ULONG quads, const UWORD *yt4,
                 const UBYTE *lut);          /* pens68k.s */
 static BYTE va_asm = -1;                    /* the assemblers' (1), or the C (0: Ambiance/VideoC2P=C) */
@@ -4005,22 +4087,80 @@ static void va_planes_row(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0,
     }
 }
 
+/* A row of a half size picture's pens (bw of them) to the planes' row
+ * at y (and y + 1 too with twice: without the copper's lines twice), each
+ * pen twice across: 16 pens to each plane's long */
+static void va_planes_row2x(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0, ULONG y, BOOL twice)
+{
+    ULONG x, k, j, ng = bw >> 4, bpr = bm->BytesPerRow, pl[8];
+    UBYTE *pp[8];
+    ULONG dbl[8];
+    for (k = 0; k < 8; k++)
+        pp[k] = (UBYTE *)bm->Planes[k] + y * bpr + (x0 >> 3);
+    if (va_asm) {
+        va_c2p2x68k(rb, ng, pp);            /* (16 pens a step, in registers) */
+        if (twice) {
+            for (k = 0; k < 8; k++)
+                pp[k] += bpr;
+            va_c2p2x68k(rb, ng, pp);
+        }
+        return;
+    }
+    for (x = 0; x < ng; x++) {
+        UBYTE *d = (UBYTE *)dbl;
+        for (j = 0; j < 16; j++, d += 2)
+            d[0] = d[1] = rb[(x << 4) + j];
+        gfx_c2p32(dbl, pl);
+        for (k = 0; k < 8; k++) {
+            *(ULONG *)pp[k] = pl[k];
+            if (twice)
+                *(ULONG *)(pp[k] + bpr) = pl[k];
+            pp[k] += 4;
+        }
+    }
+}
+
+/* A picture's rows to make for lines of the screen (half size: every
+ * other line its) */
+static ULONG va_rows(const struct MpvPicture *p, WORD lines)
+{
+    ULONG n = (p->mpic_Flags & MPVPF_HALF) ? (ULONG)(lines + 1) / 2 : (ULONG)lines;
+    return n < p->mpic_Height ? n : p->mpic_Height;
+}
+
+/* Its row y made pens (rb), and they made the planes' (half size: at
+ * twice y, each pen twice across) */
+static void va_row_pens(const struct MpvPicture *p, ULONG y, UBYTE *rb, ULONG bw)
+{
+    va_pens_row(p, y, rb, (p->mpic_Flags & MPVPF_HALF) ? bw >> 1 : bw);
+}
+
+static void va_row_planes(const struct MpvPicture *p, const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0,
+                          WORD y0, ULONG y, WORD lines)
+{
+    if (p->mpic_Flags & MPVPF_HALF)         /* (the line after within lines) */
+        va_planes_row2x(rb, bw >> 1, bm, x0, y0 + 2 * y, !va_cop2 && (LONG)(2 * y + 1) < lines);
+    else
+        va_planes_row(rb, bw, bm, x0, y0 + y);
+}
+
 /* A picture into bm's planes at x0, y0: a row of pens, then its planes,
  * row by row (the row in the cache). One picture in 16 is done in two
  * passes instead (all its pens into va_all, then all its planes), so
- * the two are timed apart without a clock read a row. */
+ * the two are timed apart without a clock read a row. rows: the screen's
+ * lines it may cover (half size: twice its rows). */
 static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULONG bw, WORD x0, WORD y0,
                    WORD rows)
 {
     ULONG y, hz = 0, tk = time_ticks(&hz);
-    WORD h = p->mpic_Height < rows ? p->mpic_Height : rows;
+    ULONG h = va_rows(p, rows);
     if (!(va_nconv & 15) && (va_all || (va_all = AllocVec(bw * p->mpic_Height + 32, MEMF_ANY)))) {
         ULONG t1, t2;
-        for (y = 0; y < (ULONG)h; y++)
-            va_pens_row(p, y, va_all + y * bw, bw);
+        for (y = 0; y < h; y++)
+            va_row_pens(p, y, va_all + y * bw, bw);
         t1 = time_ticks(&hz);
-        for (y = 0; y < (ULONG)h; y++)
-            va_planes_row(va_all + y * bw, bw, bm, x0, y0 + y);
+        for (y = 0; y < h; y++)
+            va_row_planes(p, va_all + y * bw, bw, bm, x0, y0, y, rows);
         t2 = time_ticks(&hz);
         va_pen_ticks += t1 - tk;
         va_plane_ticks += t2 - t1;
@@ -4029,12 +4169,81 @@ static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULO
         va_nconv++;
         return;
     }
-    for (y = 0; y < (ULONG)h; y++) {
-        va_pens_row(p, y, rb, bw);
-        va_planes_row(rb, bw, bm, x0, y0 + y);
+    for (y = 0; y < h; y++) {
+        va_row_pens(p, y, rb, bw);
+        va_row_planes(p, rb, bw, bm, x0, y0, y, rows);
     }
     va_conv_ticks += time_ticks(&hz) - tk;
     va_nconv++;
+}
+
+/* ENV:Ambiance/VideoHalf: 1 every picture decoded at half size (mpegv
+ * 2.6), 0 never; else when behind with every B picture passed over (and
+ * the whole size again once on time). ST_HALF_. */
+static int va_half_mode(void)
+{
+    char ev[8];
+    if (GetVar((CONST_STRPTR)"Ambiance/VideoHalf", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0) {
+        if (ev[0] == '1')
+            return ST_HALF_ALWAYS;
+        if (ev[0] == '0')
+            return ST_HALF_NEVER;
+    }
+    return ST_HALF_AUTO;
+}
+
+/* The video's screen: its half size pictures' rows twice by the copper
+ * if it can be (va_cop2) */
+static void va_half_setup(struct Screen *scr, struct BitMap *bm, WORD vy, WORD h)
+{
+    char ev[8], m[160];
+    UWORD m1 = 0, m2 = 0;
+    BOOL off = GetVar((CONST_STRPTR)"Ambiance/VideoHalfCopper", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+               ev[0] == '0';
+    va_scr = scr;
+    va_vy = vy;
+    va_vh = h;
+    va_bpr = (UWORD)bm->BytesPerRow;
+    va_half_shown = FALSE;
+    va_dbl = -1;
+    va_dbl_bar = FALSE;
+    va_cop2 = !off && cop_ok(scr) && !(scr->ViewPort.Modes & LACE) && cop_sysreg(scr, 0x108, &m1) &&
+              cop_sysreg(scr, 0x10A, &m2) && (WORD)m1 > -(WORD)va_bpr && (WORD)m1 < (WORD)va_bpr &&
+              (WORD)m2 > -(WORD)va_bpr && (WORD)m2 < (WORD)va_bpr;
+    va_mod[0] = m1;
+    va_mod[1] = m2;
+    if (va_cop2)
+        sprintf(m, "half size pictures: each row twice by the copper (BPL1MOD %ld, BPL2MOD %ld, %lu bytes a row)",
+                (long)(WORD)m1, (long)(WORD)m2, (unsigned long)va_bpr);
+    else
+        sprintf(m, "half size pictures: each row written twice (%s)",
+                off ? "Ambiance/VideoHalfCopper=0" : (scr->ViewPort.Modes & LACE) ? "a laced screen"
+                                                                                   : "no copper list to add to");
+    amb_log("video: AGA", m);
+}
+
+/* A picture to be shown: the copper's list as its size wants (logged as
+ * it changes) */
+static void va_half_show(const struct MpvPicture *p)
+{
+    BOOL half = (p->mpic_Flags & MPVPF_HALF) != 0;
+    char m[120];
+    if (half == va_half_shown)
+        return;
+    va_half_shown = half;
+    va_copper_make();
+    sprintf(m, "%s size from here (%lu x %lu decoded)", half ? "half" : "whole", (unsigned long)p->mpic_Width,
+            (unsigned long)p->mpic_Height);
+    amb_log("video: AGA", m);
+}
+
+static void va_half_end(void)
+{
+    if (va_scr && va_dbl > 0)
+        cop_off(va_scr);
+    va_scr = NULL;
+    va_half_shown = FALSE;
+    va_dbl = -1;
 }
 
 /* Its first picture's pens and planes timed apart, alone (Forbid: the
@@ -4044,19 +4253,20 @@ static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULO
 static void va_bench(const struct MpvPicture *p, struct BitMap *bm, ULONG bw, WORD x0, WORD y0, WORD h)
 {
     ULONG y, n, hz = 0, tp = 0, tq = 0, t0, t1, t2, cp, cq;
+    WORD lines;
     char m[160];
     if (!va_all && !(va_all = AllocVec(bw * p->mpic_Height + 32, MEMF_ANY)))
         return;
-    if (h > (WORD)p->mpic_Height)
-        h = (WORD)p->mpic_Height;
+    lines = h;
+    h = (WORD)va_rows(p, h);
     Forbid();
     for (n = 0; n < 3; n++) {
         t0 = time_ticks(&hz);
         for (y = 0; y < (ULONG)h; y++)
-            va_pens_row(p, y, va_all + y * bw, bw);
+            va_row_pens(p, y, va_all + y * bw, bw);
         t1 = time_ticks(&hz);
         for (y = 0; y < (ULONG)h; y++)
-            va_planes_row(va_all + y * bw, bw, bm, x0, y0 + y);
+            va_row_planes(p, va_all + y * bw, bw, bm, x0, y0, y, lines);
         t2 = time_ticks(&hz);
         tp += t1 - t0;
         tq += t2 - t1;
@@ -4064,9 +4274,10 @@ static void va_bench(const struct MpvPicture *p, struct BitMap *bm, ULONG bw, WO
     Permit();
     cp = hz ? (ULONG)((unsigned long long)tp * 100000ULL / hz / 3) : 0;
     cq = hz ? (ULONG)((unsigned long long)tq * 100000ULL / hz / 3) : 0;
-    sprintf(m, "a picture's pens %lu.%02lu ms, its planes %lu.%02lu ms (alone, 3 passes of %ld rows)",
+    sprintf(m, "a picture's pens %lu.%02lu ms, its planes %lu.%02lu ms (alone, 3 passes of %ld rows%s)",
             (unsigned long)(cp / 100), (unsigned long)(cp % 100), (unsigned long)(cq / 100),
-            (unsigned long)(cq % 100), (long)h);
+            (unsigned long)(cq % 100), (long)h,
+            (p->mpic_Flags & MPVPF_HALF) ? va_cop2 ? ", half size" : ", half size, each written twice" : "");
     amb_log("video: AGA", m);
 }
 
@@ -4086,18 +4297,20 @@ static int va_bench_mode(void)
     return 0;
 }
 
+static BOOL va_bench_half;                  /* (VideoBench at half size: VideoHalf=1) */
+
 static void va_bench_log(const char *name, ULONG n, const ULONG *types, ULONG ms, ULONG td, ULONG tp, ULONG tq,
                          ULONG tf, ULONG hz, BOOL end)
 {
-    char m[320];
+    char m[360];
     ULONG d = n && hz ? (ULONG)((unsigned long long)td * 100000ULL / hz / n) : 0,
           p = n && hz ? (ULONG)((unsigned long long)tp * 100000ULL / hz / n) : 0,
           q = n && hz ? (ULONG)((unsigned long long)tq * 100000ULL / hz / n) : 0,
           f = n && hz ? (ULONG)((unsigned long long)tf * 100000ULL / hz / n) : 0,
           fps = ms ? (ULONG)((unsigned long long)n * 100000ULL / ms) : 0;
-    sprintf(m, "%s%s: %lu pictures (I %lu, P %lu, B %lu) in %lu ms: %lu.%02lu a second; a picture: "
+    sprintf(m, "%s%s%s: %lu pictures (I %lu, P %lu, B %lu) in %lu ms: %lu.%02lu a second; a picture: "
                "decoded %lu.%02lu ms, pens %lu.%02lu, planes %lu.%02lu, shown %lu.%02lu",
-            end ? "" : "so far, ", name, (unsigned long)n, (unsigned long)types[1], (unsigned long)types[2],
+            end ? "" : "so far, ", name, va_bench_half ? " (half size, VideoHalf=1)" : "", (unsigned long)n, (unsigned long)types[1], (unsigned long)types[2],
             (unsigned long)types[3], (unsigned long)ms, (unsigned long)(fps / 100), (unsigned long)(fps % 100),
             (unsigned long)(d / 100), (unsigned long)(d % 100), (unsigned long)(p / 100),
             (unsigned long)(p % 100), (unsigned long)(q / 100), (unsigned long)(q % 100),
@@ -4120,14 +4333,17 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
         return;
     memset(&rh, 0, sizeof(rh));
     rh.h_Entry = (HOOKFUNC)(APTR)va_read;
+    va_bench_half = va_half_mode() == ST_HALF_ALWAYS && MpegvBase &&
+                    (MpegvBase->lib_Version > 2 || MpegvBase->lib_Revision >= 6);
     if ((kind = va_stream()) == ~0UL ||
         !(mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, kind, MPVA_ReadSize, VA_READ,
-                            MPVA_SkipB, mode == 2, TAG_DONE))) {
+                            MPVA_SkipB, mode == 2, MPVA_Half, va_bench_half, TAG_DONE))) {
         va_stream_close();
         return;
     }
-    sprintf(m, "%s: decoded and shown as fast as it goes (%s), no sound, no clock: Esc stops it", name,
-            mode == 2 ? "B pictures passed over" : "every picture");
+    sprintf(m, "%s: decoded and shown as fast as it goes (%s%s), no sound, no clock: Esc stops it", name,
+            mode == 2 ? "B pictures passed over" : "every picture",
+            va_bench_half ? ", half size: Ambiance/VideoHalf=1" : "");
     amb_log("video: bench", m);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
@@ -4150,13 +4366,14 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
         }
         k = *shown ^ 1;
         safe_done(safe, safe_wait);
-        rows = p->mpic_Height < (UWORD)h ? p->mpic_Height : h;
+        rows = (LONG)va_rows(p, h);
         b = time_ticks(&hz);
         for (y = 0; y < (ULONG)rows; y++)
-            va_pens_row(p, y, va_all + y * bw, bw);
+            va_row_pens(p, y, va_all + y * bw, bw);
         c = time_ticks(&hz);
         for (y = 0; y < (ULONG)rows; y++)
-            va_planes_row(va_all + y * bw, bw, sb[k]->sb_BitMap, vx, vy + y);
+            va_row_planes(p, va_all + y * bw, bw, sb[k]->sb_BitMap, vx, vy, y, h);
+        va_half_show(p);                    /* (the copper's list for its size) */
         d = time_ticks(&hz);
         if (ChangeScreenBuffer(scr, sb[k])) {
             safe_wait[*shown] = TRUE;
@@ -4266,6 +4483,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     sprintf(m, "%s: on a screen of its own, %ld x %ld, mode %08lx, 8 planes; the video at %ld, %ld", name,
             (long)sw, (long)sh, (unsigned long)id, (long)vx, (long)vy);
     amb_log("video: AGA", m);
+    va_half_setup(scr, sb[0]->sb_BitMap, vy, (WORD)h);
     if (LowLevelBase)
         jlast = ReadJoyPort(1);
     {
@@ -4279,6 +4497,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     amb_strlcpy(lay_path, path, sizeof(lay_path));
     st_video_direct(FALSE);
     st_video_show(TRUE);
+    st_video_half(va_half_mode());          /* (this screen's alone: half size shown at the whole) */
     if (!vid_start(cpu, 0, err, errmax))
         goto out;
     for (;;) {
@@ -4341,6 +4560,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 va_put(&p, sb[k]->sb_BitMap, rb, bw, vx, vy,
                        (WORD)(bar.on && bar.ok && bar.y - vy < (WORD)h ? (bar.y - vy > 0 ? bar.y - vy : 0)
                                                                          : (WORD)h));
+                va_half_show(&p);           /* (the copper's list for its size) */
                 bar.saved[k] = FALSE;       /* (what it covered: this picture now) */
                 bar_put(sb[k]->sb_BitMap, k);
                 while (!ChangeScreenBuffer(scr, sb[k]))
@@ -4391,6 +4611,8 @@ out:
         ULONG shownp = 0, dropped = 0, c;
         st_video_counts(&shownp, &dropped);
         st_stop();
+        st_video_half(ST_HALF_NEVER);
+        va_half_end();                      /* (its copper list gone, the screen still up) */
         st_swv_release();
         (void)time_ticks(&hz);
         c = va_nconv && hz ? (ULONG)((unsigned long long)va_conv_ticks * 100000ULL / hz / va_nconv) : 0;
@@ -4604,6 +4826,10 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         if (!vid.sw || !vo_failed_here())
             vo_show(g, &vid, lay.vx, lay.vy, lay.dw, h);
     }
+    /* decoded by the CPU and drawn by it (no overlay: a Picasso IV, say):
+     * half size when it falls behind, as on AGA (shown at the whole size,
+     * MpvToRGBScaled or ScalePixelArray making it so) */
+    st_video_half(vid.sw && !vo_shown() ? va_half_mode() : ST_HALF_NEVER);
     if (!vid_start(cpu, 0, err, errmax))
         goto out;
     for (;;) {
@@ -4906,6 +5132,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
     }
     result = err[0] ? -1 : 0;
 out:
+    st_video_half(ST_HALF_NEVER);
     {
         ULONG shown = 0, dropped = 0;
         st_video_counts(&shown, &dropped);
