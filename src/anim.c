@@ -3903,12 +3903,26 @@ static void va_pens_row(const struct MpvPicture *p, ULONG y, UBYTE *rb, ULONG bw
 /* A row of pens to the planes' row at y (x0 a multiple of 16): 32 at a
  * time to each plane's long (on a word's boundary: a 68020's long writes
  * need no more) */
+void va_c2p68k(const UBYTE *src, ULONG groups, UBYTE **planes);     /* c2p68k.s */
+static BYTE va_asm = -1;                    /* the assembler's (1), or the C (0: Ambiance/VideoC2P=C) */
+
 static void va_planes_row(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0, ULONG y)
 {
     ULONG x, k, nl = bw >> 5, bpr = bm->BytesPerRow, pl[8];
     UBYTE *pp[8];
     for (k = 0; k < 8; k++)
         pp[k] = (UBYTE *)bm->Planes[k] + y * bpr + (x0 >> 3);
+    if (va_asm < 0) {
+        char ev[4];
+        va_asm = !(GetVar((CONST_STRPTR)"Ambiance/VideoC2P", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
+                   (ev[0] == 'C' || ev[0] == 'c'));
+        amb_log("video: AGA", va_asm ? "planes by the assembler's chunky to planar (c2p68k.s)"
+                                     : "planes by the C chunky to planar (Ambiance/VideoC2P=C)");
+    }
+    if (va_asm) {
+        va_c2p68k(rb, nl, pp);              /* (32 pixels a step, in registers) */
+        return;
+    }
     for (x = 0; x < nl; x++) {
         gfx_c2p32((const ULONG *)(rb + (x << 5)), pl);
         for (k = 0; k < 8; k++) {
@@ -4108,6 +4122,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     char m[200];
     (void)g;
     va_conv_ticks = va_nconv = va_pen_ticks = va_plane_ticks = va_nsplit = 0;
+    va_asm = -1;                            /* (Ambiance/VideoC2P read again) */
     bw = (w + 31) & ~31;
     /* its screen: the video's size, at least a lowres one's (room for
      * its controls), the video in the middle (across, on a 16-pixel step) */

@@ -1,0 +1,49 @@
+/* va_c2p68k (src/c2p68k.s, written by tools/c2pgen/c2pgen.py) against a
+ * plain bit-by-bit chunky-to-planar, on random rows: run on a 68020 by
+ * vamos (make test-c2p). */
+#include <stdio.h>
+#include <string.h>
+
+typedef unsigned char UBYTE;
+typedef unsigned long ULONG;
+
+void va_c2p68k(const UBYTE *src, ULONG groups, UBYTE **planes);
+
+static ULONG seed = 12345;
+static ULONG rnd(void)
+{
+    seed = seed * 1103515245UL + 12345UL;
+    return seed >> 8;
+}
+
+int main(void)
+{
+    static ULONG srcl[64 * 8 + 1];
+    static ULONG out[8][66], want[8][66];
+    UBYTE *src = (UBYTE *)srcl;
+    UBYTE *planes[8];
+    ULONG t, g, k, x, bad = 0, n = 0;
+    for (t = 0; t < 400; t++) {
+        ULONG groups = 1 + rnd() % 64;
+        for (x = 0; x < groups * 32; x++)
+            src[x] = (UBYTE)rnd();
+        memset(out, 0xA5, sizeof(out));
+        memset(want, 0, sizeof(want));
+        for (x = 0; x < groups * 32; x++)
+            for (k = 0; k < 8; k++)
+                if (src[x] & (1 << k))
+                    want[k][x >> 5] |= 0x80000000UL >> (x & 31);
+        for (k = 0; k < 8; k++)
+            planes[k] = (UBYTE *)&out[k][1];
+        va_c2p68k(src, groups, planes);
+        for (k = 0; k < 8; k++) {
+            if (out[k][0] != 0xA5A5A5A5UL || out[k][groups + 1] != 0xA5A5A5A5UL)
+                bad++;                      /* (written outside its row) */
+            for (g = 0; g < groups; g++, n++)
+                if (out[k][g + 1] != want[k][g])
+                    bad++;
+        }
+    }
+    printf("c2p68k: %lu longs checked, %lu failed\n", n, bad);
+    return bad ? 20 : 0;
+}
