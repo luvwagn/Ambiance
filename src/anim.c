@@ -48,6 +48,7 @@
 #include "video.h"
 #include "glyph.h"
 #include "dvdplay.h"
+#include "copper.h"
 #include <libraries/dvdnav.h>
 #include <libraries/mpegv.h>
 
@@ -65,13 +66,14 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
+#include <proto/diskfont.h>
 #include <proto/intuition.h>
 #include <proto/lowlevel.h>
 #include <proto/cybergraphics.h>
 #include <cybergraphx/cybergraphics.h>
 
 extern struct GfxBase *GfxBase;
-extern struct Library *LowLevelBase, *CyberGfxBase;
+extern struct Library *LowLevelBase, *CyberGfxBase, *DiskfontBase;
 
 #define ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (d))
 
@@ -784,13 +786,24 @@ static struct {
     BOOL saved[2];              /* buffer k has it drawn, what it covers in save[k] */
     struct BitMap *save[2];
     struct RastPort rp;
-    struct TextFont *font;
+    struct TextFont *font;      /* Pixelify Sans 12 (topaz 8 without it) */
+    struct BitMap *tx[2];       /* text drawn at the font's size, then made kx by ky */
+    struct RastPort txrp;
+    WORD txw;                   /* tx[0]'s width */
+    WORD kx, ky;                /* screen pixels across and down for one of the font's */
     WORD x0, x1, y, h, cw, sx;  /* its place; a button's width; pixels across for one down */
+    WORD rim, ty, by, bh, gh;   /* the top edge's lines; the title's row; the buttons' row,
+                                 * its height, their glyphs' rows */
     WORD px0, px1;              /* the progress line */
     WORD bx[BT_N];              /* each button's left */
-    UBYTE bg, fg, dim;
+    UBYTE rim_pen, bg, fg, sub, dim, yel, acc;
+    BOOL ham8;                  /* (HAM8: a base colour's pixel is its register times 4) */
+    struct CopPlan *cop;        /* its own colours below its top, by the copper (AGA) */
+    BOOL cop_on;                /*   the screen's copper list made with them */
+    struct Screen *scr;
     ULONG total_ms, at_ms;
     BOOL paused;
+    char title[80];
 } bar;
 
 /* ---- the controls' comings and goings, the same on either screen. The
@@ -859,72 +872,265 @@ static BOOL ctl_want(BOOL paused)
     return want;
 }
 
-/* Its pens: the darkest and the lightest of the colours it may use (HAM:
- * the base ones; extra halfbrite: the first 32), one between for lines. */
+/* Its colours: Ambiance's (Horizon's), the same whatever the animation's.
+ * On AGA the copper makes them, in registers 1-7, from its top line down
+ * (the picture keeps its own above it); the top edge's register first, in
+ * the line's blanking, the rest while that line (the edge alone) shows. */
+#define BAR_REGS 7
+static const ULONG bar_rgb[BAR_REGS] = {
+    0x2A5A99UL,         /* the top edge */
+    0x061A3CUL,         /* its ground */
+    0xEEF5FFUL,         /* text, the buttons */
+    0xA8C4EAUL,         /* the time, the volume */
+    0x34558AUL,         /* the progress line ahead */
+    0xFFD24AUL,         /* a button pressed, or in focus: yellow */
+    0x63C9FFUL,         /* the progress line so far */
+};
+
+/* Without the copper (not AGA, or too few colours): the animation's own
+ * colours nearest to these (HAM: its base ones; extra halfbrite: the
+ * first 32); the ground the darkest and the text the lightest if those
+ * are too near each other. */
 static void bar_pens(const ULONG *tab, ULONG ncol, ULONG camg, UBYTE depth)
 {
-    ULONG i, n = ncol, lo = 0xFFFFFFFF, hi = 0, best = 0xFFFFFFFF, l[256];
+    ULONG i, n = ncol, lo = 0xFFFFFFFF, hi = 0, l, dark = 0, light = 0;
+    UBYTE *pen[BAR_REGS];
+    int r;
+    if (bar.cop)
+        return;                             /* (its own colours) */
+    pen[0] = &bar.rim_pen; pen[1] = &bar.bg; pen[2] = &bar.fg; pen[3] = &bar.sub;
+    pen[4] = &bar.dim; pen[5] = &bar.yel; pen[6] = &bar.acc;
     if (camg & HAM_KEY)
         n = depth == 8 ? 64 : 16;
     if (n > 256)
         n = 256;
-    for (i = 0; i < n; i++) {
-        ULONG r = tab[1 + i * 3] >> 24, g = tab[2 + i * 3] >> 24, b = tab[3 + i * 3] >> 24;
-        l[i] = r * 3 + g * 6 + b;
-        if (l[i] < lo) {
-            lo = l[i];
-            bar.bg = (UBYTE)i;
-        }
-        if (l[i] >= hi) {
-            hi = l[i];
-            bar.fg = (UBYTE)i;
+    for (r = 0; r < BAR_REGS; r++) {
+        ULONG best = 0xFFFFFFFF;
+        LONG wr = (bar_rgb[r] >> 16) & 255, wg = (bar_rgb[r] >> 8) & 255, wb = bar_rgb[r] & 255;
+        for (i = 0; i < n; i++) {
+            LONG dr = (LONG)(tab[1 + i * 3] >> 24) - wr, dg = (LONG)(tab[2 + i * 3] >> 24) - wg,
+                 db = (LONG)(tab[3 + i * 3] >> 24) - wb;
+            ULONG d = (ULONG)(dr * dr * 3 + dg * dg * 6 + db * db);
+            if (d < best) {
+                best = d;
+                *pen[r] = (UBYTE)i;
+            }
         }
     }
-    bar.dim = bar.fg;
     for (i = 0; i < n; i++) {
-        ULONG d = l[i] > (lo + hi) / 2 ? l[i] - (lo + hi) / 2 : (lo + hi) / 2 - l[i];
-        if (i != bar.bg && d < best) {
-            best = d;
-            bar.dim = (UBYTE)i;
+        l = (tab[1 + i * 3] >> 24) * 3 + (tab[2 + i * 3] >> 24) * 6 + (tab[3 + i * 3] >> 24);
+        if (l < lo) {
+            lo = l;
+            dark = i;
         }
+        if (l >= hi) {
+            hi = l;
+            light = i;
+        }
+    }
+    {
+        ULONG lb = (tab[1 + bar.bg * 3] >> 24) * 3 + (tab[2 + bar.bg * 3] >> 24) * 6 +
+                   (tab[3 + bar.bg * 3] >> 24),
+              lf = (tab[1 + bar.fg * 3] >> 24) * 3 + (tab[2 + bar.fg * 3] >> 24) * 6 +
+                   (tab[3 + bar.fg * 3] >> 24);
+        if (lf < lb + 800) {                /* (too near: dark and light, whatever their hue) */
+            bar.bg = (UBYTE)dark;
+            bar.fg = bar.sub = bar.yel = bar.acc = (UBYTE)light;
+        }
+    }
+    if (bar.yel == bar.bg)
+        bar.yel = bar.fg;
+    if (bar.acc == bar.bg)
+        bar.acc = bar.fg;
+    if (bar.sub == bar.bg)
+        bar.sub = bar.fg;
+    if (bar.ham8) {                         /* (registers to pixels) */
+        for (r = 0; r < BAR_REGS; r++)
+            *pen[r] = (UBYTE)(*pen[r] << 2);
     }
 }
 
-static void bar_setup(struct BitMap *friend, UWORD w, UWORD h, UBYTE depth, ULONG id,
-                      const struct Rectangle *clip, WORD left, WORD top)
+/* Screen pixels across and down for one of the font's, so its text is
+ * as tall on any screen and its pixels square: down, one a 256 lines;
+ * across, as the mode's pixels are shaped. */
+static void bar_scale(ULONG id, WORD lines)
+{
+    struct DisplayInfo di;
+    WORD ky = (lines + 128) / 256, kx;
+    if (ky < 1)
+        ky = 1;
+    if (ky > 3)
+        ky = 3;
+    kx = ky;
+    if (id != (ULONG)INVALID_ID && GetDisplayInfoData(NULL, (UBYTE *)&di, sizeof(di), DTAG_DISP, id) &&
+        di.Resolution.x && di.Resolution.y)
+        kx = (WORD)(((LONG)ky * di.Resolution.y + di.Resolution.x / 2) / di.Resolution.x);
+    bar.kx = kx < 1 ? 1 : kx > 4 ? 4 : kx;
+    bar.ky = ky;
+}
+
+static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD h, UBYTE depth, ULONG id,
+                      ULONG camg, const struct Rectangle *clip, WORD left, WORD top, const char *path)
 {
     static struct TextAttr topaz8 = { (STRPTR)"topaz.font", 8, 0, 0 };
-    WORD vis_bottom = clip->MaxY - top + 1;
+    struct TextAttr ta;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR oldwin = me->pr_WindowPtr;
+    WORD vis_bottom = clip->MaxY - top + 1, fh, pad, i;
+    char *dot;
     memset(&bar, 0, sizeof(bar));
-    if (!(bar.font = OpenFont(&topaz8)))
+    bar.scr = scr;
+    /* its title: the file's name, without its extension */
+    amb_strlcpy(bar.title, (const char *)FilePart((STRPTR)path), sizeof(bar.title));
+    if ((dot = strrchr(bar.title, '.')) && dot > bar.title && strlen(dot) <= 5)
+        *dot = 0;
+    for (i = 0; bar.title[i]; i++)
+        if (bar.title[i] == '_')
+            bar.title[i] = ' ';
+    ta.ta_Name = (STRPTR)"PROGDIR:Fonts/amb-pixel.font";
+    ta.ta_YSize = 12;
+    ta.ta_Style = FS_NORMAL;
+    ta.ta_Flags = FPF_DESIGNED;
+    me->pr_WindowPtr = (APTR)-1;
+    bar.font = DiskfontBase ? OpenDiskFont(&ta) : NULL;
+    me->pr_WindowPtr = oldwin;
+    if (!bar.font && !(bar.font = OpenFont(&topaz8)))
         return;
-    bar.h = (id & LACE) ? 24 : 14;
+    fh = bar.font->tf_YSize;
+    bar_scale(id, (WORD)(clip->MaxY - clip->MinY + 1));
+    bar.ham8 = (camg & HAM_KEY) && depth == 8;
+    /* top to bottom: its edge, a gap, the title and the time, a gap, the
+     * buttons and the progress line, a gap */
+    bar.rim = (id & LACE) && bar.ky < 2 ? 2 : bar.ky;
+    pad = 2 * bar.ky;
+    bar.bh = (fh - 1) * bar.ky;
+    bar.ty = bar.rim + pad;
+    bar.by = bar.ty + fh * bar.ky + bar.ky;
+    bar.h = bar.by + bar.bh + pad;
     bar.x0 = clip->MinX - left > 0 ? clip->MinX - left : 0;
     bar.x1 = clip->MaxX - left < (WORD)w - 1 ? clip->MaxX - left : (WORD)w - 1;
     bar.y = (vis_bottom < (WORD)h ? vis_bottom : (WORD)h) - bar.h;
-    if (bar.y < 0 || bar.x1 - bar.x0 < 160)
+    if (bar.y < 0 || bar.x1 - bar.x0 < 200 * bar.kx)
         return;
     bar.sx = glyph_sx_mode(id);             /* (tall pixels: its glyphs as wide on screen) */
-    bar.cw = (bar.h - 4) * bar.sx + 8;
+    bar.gh = (bar.bh * 2 / 3) | 1;
+    bar.cw = bar.gh * bar.sx + 8 * bar.kx;
     if (!(bar.save[0] = AllocBitMap(w, bar.h, depth, 0, friend)) ||
         !(bar.save[1] = AllocBitMap(w, bar.h, depth, 0, friend)))
         return;
+    bar.txw = (bar.x1 - bar.x0 + 1) / bar.kx + 16;
+    if (bar.kx > 1 || bar.ky > 1) {         /* (its text drawn small, then made bigger) */
+        if (!(bar.tx[0] = AllocBitMap(bar.txw, fh, 1, BMF_CLEAR, NULL)) ||
+            !(bar.tx[1] = AllocBitMap(bar.txw * bar.kx, fh * bar.ky, 1, BMF_CLEAR, NULL)))
+            return;
+        InitRastPort(&bar.txrp);
+        bar.txrp.BitMap = bar.tx[0];
+        SetFont(&bar.txrp, bar.font);
+        SetDrMd(&bar.txrp, JAM1);
+    }
     InitRastPort(&bar.rp);
     SetFont(&bar.rp, bar.font);
     SetDrMd(&bar.rp, JAM1);
+    /* its colours: the copper's, where there are pens enough for them */
+    if (depth >= 3 && cop_ok(scr) && (bar.cop = cop_plan(scr, BAR_REGS))) {
+        int r;
+        for (r = 0; r < BAR_REGS; r++)
+            cop_color(bar.cop, bar.y, (UBYTE)(1 + r), bar_rgb[r]);
+        bar.rim_pen = 1; bar.bg = 2; bar.fg = 3; bar.sub = 4; bar.dim = 5; bar.yel = 6; bar.acc = 7;
+        if (bar.ham8) {
+            bar.rim_pen <<= 2; bar.bg <<= 2; bar.fg <<= 2; bar.sub <<= 2;
+            bar.dim <<= 2; bar.yel <<= 2; bar.acc <<= 2;
+        }
+    }
+    {
+        char m[120];
+        sprintf(m, "controls: %ld lines at %ld, font %s %ldx%ld, colours %s", (long)bar.h, (long)bar.y,
+                bar.font->tf_YSize == 12 ? "Pixelify Sans 12" : "topaz 8", (long)bar.kx, (long)bar.ky,
+                bar.cop ? "by the copper" : "the animation's nearest");
+        amb_log("anim", m);
+    }
     bar.ok = TRUE;
+}
+
+/* Its colours made (shown: the copper's list with them, from the next
+ * frame), or gone again; then the next frame begun, the controls to be
+ * drawn or taken at its top (done before the beam is down to them). */
+static void bar_colours(BOOL on)
+{
+    if (!bar.cop || on == bar.cop_on)
+        return;
+    if (on)
+        cop_commit(bar.cop);
+    else
+        cop_off(bar.scr);
+    bar.cop_on = on;
+    WaitTOF();
 }
 
 static void bar_cleanup(void)
 {
     int k;
     WaitBlit();
-    for (k = 0; k < 2; k++)
+    for (k = 0; k < 2; k++) {
         if (bar.save[k])
             FreeBitMap(bar.save[k]);
+        if (bar.tx[k])
+            FreeBitMap(bar.tx[k]);
+    }
     if (bar.font)
         CloseFont(bar.font);
+    cop_plan_free(bar.cop);                 /* (its copper list the screen's: gone with it) */
     memset(&bar, 0, sizeof(bar));
+}
+
+/* Text's width on screen, and the text drawn, its cell's top at top: at
+ * the font's size, or drawn small and made kx by ky (as one pen). */
+static WORD bar_tlen(const char *t, LONG n)
+{
+    return (WORD)(TextLength(&bar.rp, (STRPTR)t, n) * bar.kx);
+}
+
+static LONG bar_tfit(const char *t, LONG n, WORD room)
+{
+    struct TextExtent te;
+    if (room <= 0)
+        return 0;
+    return (LONG)TextFit(&bar.rp, (STRPTR)t, n, &te, NULL, 1, room / bar.kx, 32767);
+}
+
+static void bar_text(struct RastPort *rp, WORD x, WORD top, const char *t, LONG n, UBYTE pen)
+{
+    WORD w, fh = bar.font->tf_YSize;
+    struct BitScaleArgs bsa;
+    if (n <= 0)
+        return;
+    SetAPen(rp, pen);
+    SetDrMd(rp, JAM1);
+    if (!bar.tx[0]) {
+        Move(rp, x, top + bar.font->tf_Baseline);
+        Text(rp, (STRPTR)t, n);
+        return;
+    }
+    n = bar_tfit(t, n, (WORD)((bar.txw - 16) * bar.kx));
+    if ((w = (WORD)TextLength(&bar.txrp, (STRPTR)t, n)) <= 0)
+        return;
+    SetAPen(&bar.txrp, 0);
+    RectFill(&bar.txrp, 0, 0, w + 7, fh - 1);
+    SetAPen(&bar.txrp, 1);
+    Move(&bar.txrp, 0, bar.font->tf_Baseline);
+    Text(&bar.txrp, (STRPTR)t, n);
+    memset(&bsa, 0, sizeof(bsa));
+    bsa.bsa_SrcWidth = w;
+    bsa.bsa_SrcHeight = fh;
+    bsa.bsa_XSrcFactor = 1;
+    bsa.bsa_YSrcFactor = 1;
+    bsa.bsa_XDestFactor = bar.kx;
+    bsa.bsa_YDestFactor = bar.ky;
+    bsa.bsa_SrcBitMap = bar.tx[0];
+    bsa.bsa_DestBitMap = bar.tx[1];
+    BitMapScale(&bsa);
+    WaitBlit();
+    BltTemplate(bar.tx[1]->Planes[0], 0, bar.tx[1]->BytesPerRow, rp, x, top, w * bar.kx, fh * bar.ky);
 }
 
 /* Button b's glyph (glyph.c, as Now playing's), gh rows centred on cx,
@@ -970,12 +1176,13 @@ static void ctl_glyph(struct RastPort *rp, int b, WORD cx, WORD cy, WORD gh, WOR
         glyph_draw(rp, k, cx, cy, gh, sx, fg, dim, b == BT_LOOP && play_loop ? GLF_ON : 0);
 }
 
-/* Drawn into buffer k (what it covers kept first). */
+/* Drawn into buffer k (what it covers kept first): its top edge, the
+ * title and the time, then the buttons and the progress line. */
 static void bar_put(struct BitMap *bm, int k)
 {
     struct RastPort *rp = &bar.rp;
     char t[48], a[12], b[12];
-    WORD x, s = bar.h - 4, ty;
+    WORD x, ty = bar.y + bar.ty, by = bar.y + bar.by, cy = by + bar.bh / 2, tw, fh;
     int i;
     if (!bar.on || !bar.ok)
         return;
@@ -984,69 +1191,69 @@ static void bar_put(struct BitMap *bm, int k)
         bar.saved[k] = TRUE;
     }
     rp->BitMap = bm;
+    fh = bar.font->tf_YSize * bar.ky;
+    SetAPen(rp, bar.rim_pen);
+    RectFill(rp, bar.x0, bar.y, bar.x1, bar.y + bar.rim - 1);
     SetAPen(rp, bar.bg);
-    RectFill(rp, bar.x0, bar.y, bar.x1, bar.y + bar.h - 1);
-    SetAPen(rp, bar.dim);
-    RectFill(rp, bar.x0, bar.y, bar.x1, bar.y);
-    ty = bar.y + (bar.h - bar.font->tf_YSize) / 2 + bar.font->tf_Baseline;
-    for (i = 0, x = bar.x0 + 4; i < BT_FULL; i++, x += bar.cw) {
-        WORD ix;
-        if (btn_hidden(i)) {
-            bar.bx[i] = -32000;
-            x -= bar.cw;
-            continue;
-        }
-        if (i == BT_VUP) {                  /* the volume between - and + */
-            WORD vw = TextLength(rp, (STRPTR)"100%", 4) + 4;
-            sprintf(t, "%ld%%", (long)(mp_volume() * 100 / 64));
-            SetAPen(rp, bar.fg);
-            Move(rp, x + (vw - TextLength(rp, (STRPTR)t, strlen(t))) / 2, ty);
-            Text(rp, (STRPTR)t, strlen(t));
-            x += vw;
-        }
-        bar.bx[i] = x;
-        ix = x + (bar.cw - s * bar.sx) / 2 - 2;
-        if (press_shows(i)) {               /* pressed: the cell filled, its glyph dark */
-            SetAPen(rp, bar.fg);
-            RectFill(rp, ix - 2, bar.y + 1, ix + s * bar.sx + 1, bar.y + bar.h - 1);
-            ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
-                      TRUE, bar.bg, bar.bg);
-        } else
-            ctl_glyph(rp, i, ix + s * bar.sx / 2, bar.y + 2 + s / 2, glyph_rows(bar.h), bar.sx, bar.paused,
-                      TRUE, bar.fg, bar.dim);
-        if (i == ctl.focus && ctl_ring()) {     /* the focus: a ring, its corners off */
-            WORD x0 = ix - 2, y0 = bar.y + 1, x1 = ix + s * bar.sx + 1, y1 = bar.y + bar.h - 1;
-            SetAPen(rp, bar.fg);
-            RectFill(rp, x0 + 1, y0, x1 - 1, y0);
-            RectFill(rp, x0 + 1, y1, x1 - 1, y1);
-            RectFill(rp, x0, y0 + 1, x0, y1 - 1);
-            RectFill(rp, x1, y0 + 1, x1, y1 - 1);
-        }
-    }
+    RectFill(rp, bar.x0, bar.y + bar.rim, bar.x1, bar.y + bar.h - 1);
+    /* the time at the right, the title before it */
     amb_time_text(a, bar.at_ms);
     if (bar.total_ms) {
         amb_time_text(b, bar.total_ms);
         sprintf(t, "%s / %s", a, b);
     } else
         strcpy(t, a);
-    x += 6;
-    SetAPen(rp, bar.fg);
-    Move(rp, x, ty);
-    Text(rp, (STRPTR)t, strlen(t));
-    x += TextLength(rp, (STRPTR)t, strlen(t)) + 8;
-    bar.px0 = x;
-    bar.px1 = bar.x1 - 6;
-    if (bar.px1 - bar.px0 > 16) {           /* how far: a line, filled so far */
-        WORD my = bar.y + bar.h / 2, fill = bar.px0;
+    tw = bar_tlen(t, strlen(t));
+    bar_text(rp, bar.x1 - 6 * bar.kx - tw, ty, t, strlen(t), bar.sub);
+    bar_text(rp, bar.x0 + 6 * bar.kx, ty, bar.title,
+             bar_tfit(bar.title, strlen(bar.title), bar.x1 - bar.x0 - tw - 20 * bar.kx), bar.fg);
+    for (i = 0, x = bar.x0 + 4 * bar.kx; i < BT_FULL; i++, x += bar.cw) {
+        WORD ix, gw = bar.gh * bar.sx;
+        if (btn_hidden(i)) {
+            bar.bx[i] = -32000;
+            x -= bar.cw;
+            continue;
+        }
+        if (i == BT_VUP) {                  /* the volume between - and + */
+            WORD vw = bar_tlen("100%", 4) + 4 * bar.kx;
+            sprintf(t, "%ld%%", (long)(mp_volume() * 100 / 64));
+            bar_text(rp, x + (vw - bar_tlen(t, strlen(t))) / 2, cy - fh / 2, t, strlen(t), bar.sub);
+            x += vw;
+        }
+        bar.bx[i] = x;
+        ix = x + (bar.cw - gw) / 2;
+        {
+            WORD x0 = ix - 3 * bar.kx, y0 = by, x1 = ix + gw - 1 + 3 * bar.kx, y1 = by + bar.bh - 1;
+            if (press_shows(i)) {           /* pressed: the cell yellow, its glyph dark */
+                SetAPen(rp, bar.yel);
+                RectFill(rp, x0, y0, x1, y1);
+                ctl_glyph(rp, i, ix + gw / 2, cy, bar.gh, bar.sx, bar.paused, TRUE, bar.bg, bar.bg);
+            } else
+                ctl_glyph(rp, i, ix + gw / 2, cy, bar.gh, bar.sx, bar.paused, TRUE, bar.fg, bar.dim);
+            if (i == ctl.focus && ctl_ring()) {     /* the focus: a yellow ring, its corners off */
+                WORD lx = bar.kx, ly = bar.ky;
+                SetAPen(rp, bar.yel);
+                RectFill(rp, x0 + lx, y0, x1 - lx, y0 + ly - 1);
+                RectFill(rp, x0 + lx, y1 - ly + 1, x1 - lx, y1);
+                RectFill(rp, x0, y0 + ly, x0 + lx - 1, y1 - ly);
+                RectFill(rp, x1 - lx + 1, y0 + ly, x1, y1 - ly);
+            }
+        }
+    }
+    bar.px0 = x + 8 * bar.kx;
+    bar.px1 = bar.x1 - 8 * bar.kx;
+    if (bar.px1 - bar.px0 > 16 * bar.kx) {  /* how far: a line, filled so far, and its knob */
+        WORD t0 = cy - bar.ky, t1 = cy + bar.ky - 1, fill = bar.px0, kw = 2 * bar.kx;
         if (bar.total_ms)
             fill = bar.px0 + (WORD)((bar.at_ms > bar.total_ms ? bar.total_ms : bar.at_ms) *
                                     (ULONG)(bar.px1 - bar.px0) / bar.total_ms);
         SetAPen(rp, bar.dim);
-        RectFill(rp, bar.px0, my - 1, bar.px1, my);
-        SetAPen(rp, bar.fg);
+        RectFill(rp, bar.px0, t0, bar.px1, t1);
+        SetAPen(rp, bar.acc);
         if (fill > bar.px0)
-            RectFill(rp, bar.px0, my - 1, fill, my);
-        RectFill(rp, fill - 1, my - 3, fill + 1, my + 2);
+            RectFill(rp, bar.px0, t0, fill, t1);
+        SetAPen(rp, bar.fg);
+        RectFill(rp, fill - kw / 2, cy - 3 * bar.ky, fill - kw / 2 + kw - 1, cy + 3 * bar.ky - 1);
     }
 }
 
@@ -3952,7 +4159,7 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
     ctl_begin(win, blank);
     planes_of(sb[0]->sb_BitMap, w, h, depth, &pl[0]);
     planes_of(sb[1]->sb_BitMap, w, h, depth, &pl[1]);
-    bar_setup(sb[0]->sb_BitMap, w, h, depth, id, &clip, left, top);
+    bar_setup(scr, sb[0]->sb_BitMap, w, h, depth, id, camg, &clip, left, top, path);
     bar_pens(tab, ncol, camg, depth);
     bar.total_ms = anim_length(fh, path, 0);
     bar_redraw = FALSE;
@@ -4038,11 +4245,15 @@ restart:
         bar.paused = paused;
         want = ctl_want(paused) && bar.ok;
         if (want != bar.on) {
+            safe_done(safe, safe_wait);     /* (no change of buffer in flight) */
             bar.on = want;
-            if (want)
-                bar_put(sb[shown]->sb_BitMap, shown);
-            else
+            if (want) {
+                bar_colours(TRUE);          /* its colours from the next frame, */
+                bar_put(sb[shown]->sb_BitMap, shown);   /* ...it drawn at its top */
+            } else {
+                bar_colours(FALSE);
                 bar_take(sb[shown]->sb_BitMap, shown);
+            }
             bar_redraw = FALSE;
         } else if (bar_redraw && bar.on) {
             bar_put(sb[shown]->sb_BitMap, shown);

@@ -158,7 +158,7 @@ build/%.o: src/%.c src/amb.h $(VERSION_STAMP)
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
 build/lkit.o: src/lkit.h src/lkcore.h
-build/view.o build/copper.o: src/copper.h
+build/view.o build/copper.o build/anim.o: src/copper.h
 # (LAYOUT_ABI is the checksum of these: the objects that check or use it)
 build/lhost.o build/main.o: src/layout.h src/lkcore.h
 build/main.o build/details.o build/lvhost.o: src/app.h src/details.h src/lvhost.h src/layout.h src/lkcore.h
