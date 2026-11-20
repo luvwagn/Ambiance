@@ -91,7 +91,7 @@ BOOL mouse_mode;             /* the mouse was used last */
  * the selection stays where it is until a click). Kept as a place on
  * screen, so a list scrolling under a still pointer stays right. */
 WORD hover_row = -1;         /* content list: screen row, -1 none */
-static BOOL hover_strip;            /* the pointer in the menu's column (menu_layout) */
+BOOL hover_strip;            /* the pointer in the menu's column (menu_layout) */
 WORD hover_menu = -1;        /* main menu: entry, -1 none */
 /* The keyboard or joystick moving: the pointer hides (an empty sprite)
  * and so does its highlight, until the mouse moves. */
@@ -101,7 +101,7 @@ static UWORD *ptr_blank;            /* the empty pointer (chip RAM) */
 
 /* Big-letter overlay on long content lists while they glide (see below). */
 struct Overlay ov;
-static BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
+BOOL debug_on;               /* Settings > Debug: header CPU/memory readout and log */
 
 /* IT_ACTION codes (struct Item.action) */
 enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
@@ -128,7 +128,7 @@ typedef char act_mode0_clear[ACT_COUNT <= ACT_MODE0 && ACT_MODE0 + SM_COUNT <= 2
 /* ------------------------------------------------------------ pages */
 struct Page *cur(void) { return depth ? &pages[depth - 1] : NULL; }
 
-static void nav_moved(void);
+void nav_moved(void);
 
 static struct Page *page_push(UBYTE type, const char *title)
 {
@@ -203,7 +203,7 @@ static void radio_stop(void);
 
 static void plex_pos_save(const struct Page *p);
 
-static void page_pop(void)
+void page_pop(void)
 {
     if (depth) {
         radio_page_gone(&pages[depth - 1]);     /* its request, if out, given up */
@@ -933,7 +933,7 @@ static void ch_wait_until(struct Page *p, LONG count, BOOL shown)
 }
 
 /* Entry idx held (its letter read again if it was let go). */
-static void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
+void ch_wait_item(struct Page *p, LONG idx, BOOL shown)
 {
     LONG k;
     if (!p->ch || idx >= p->list.count || !(p->list.items[idx].flags & ITEM_GONE))
@@ -2182,7 +2182,7 @@ void np_draw(BOOL full);
 BOOL np_on(void);
 
 
-static void next_visual(void)
+void next_visual(void)
 {
     if (mp_loaded() && !vis_available(VIS_SPECTRUM)) {
         /* this music allows the meters only: the gadget is greyed */
@@ -2281,7 +2281,7 @@ static void heading_item(struct Page *p, const char *label)
         it->flags |= ITEM_HEAD;
 }
 
-static BOOL is_heading(struct Page *p, LONG i)
+BOOL is_heading(struct Page *p, LONG i)
 {
     return i >= 0 && i < p->list.count && (p->list.items[i].flags & ITEM_HEAD);
 }
@@ -3816,7 +3816,7 @@ static void nav_back_begin(int f)
     trail_now(&nav_snap.t);
 }
 
-static void nav_moved(void)
+void nav_moved(void)
 {
     nav_snap.on = FALSE;
 }
@@ -4580,7 +4580,7 @@ static char np_trail[MAXDEPTH][64];
 static int np_trail_n;
 char np_src_list[64];
 WORD np_src_x0 = -1, np_src_x1 = -1;
-static void np_goto_source(void);
+void np_goto_source(void);
 
 BOOL np_away(void)
 {
@@ -4589,42 +4589,9 @@ BOOL np_away(void)
 }
 
 
-/* The breadcrumb level at (x, y), -1 if none (the current level is not a link). */
-static int crumb_at(WORD x, WORD y)
-{
-    int i;
-    if (y < U(26) || y >= U(41))
-        return -1;
-    if (np_src_x0 >= 0 && x >= np_src_x0 - U(2) && x <= np_src_x1 + U(2))
-        return CRUMB_SRC;
-    for (i = crumb_first; i < depth - 1; i++)
-        if (crumb[i].x0 >= 0 && x >= crumb[i].x0 - U(2) && x <= crumb[i].x1 + U(2))
-            return i;
-    return -1;
-}
 
 void pane_settle(void);
 
-/* Back to level i of the breadcrumb (0: the section's top). */
-static void crumb_go(int level)
-{
-    if (level == CRUMB_SRC) {
-        crumb_hover = -1;
-        np_goto_source();                   /* Now playing's: where it is from */
-        return;
-    }
-    if (level < 0 || level >= depth - 1)
-        return;
-    pane_settle();
-    while (depth > level + 1)
-        page_pop();
-    crumb_hover = -1;
-    if (focus != FOCUS_CONTENT)
-        focus = FOCUS_CONTENT;
-    draw_menu();
-    draw_pane(TRUE);
-    draw_footer();
-}
 
 /* Row markers are icons (gfx_mark) in a column on the left before each
  * label. The column is the same width whatever the markers' state, so
@@ -4720,7 +4687,7 @@ static char ov_letter_bare(const char *s)
 static const struct Item *ovs_items;
 static LONG ovs_count = -1;
 static BOOL ovs_bare;
-static char ov_letter_in(const struct Item *it, LONG n, LONG i)
+char ov_letter_in(const struct Item *it, LONG n, LONG i)
 {
     char raw, bare;
     if (i < 0 || i >= n || !it[i].label)
@@ -4835,35 +4802,18 @@ WORD aside_x(void)
 
 struct Gutter gut;
 BOOL bar_up;                 /* the mouse in use lately: the thumb bright */
-static ULONG mouse_last;            /* when the mouse last moved or clicked */
+ULONG mouse_last;            /* when the mouse last moved or clicked */
 #define BAR_HIDE 1500               /* ms the mouse rests before the bar and the
                                      * pointer go */
 
 WORD list_visible(void);
 
-BOOL list_overflows(struct Page *p)
-{
-    return p && p->type == PT_LIST && p->list.count > list_visible();
-}
 
-/* The right edge of a list's area, its column included. */
-WORD list_edge(struct Page *p)
-{
-    return has_aside(p) ? aside_x() - U(6) - 1 : g.w - 1;
-}
 
-/* Last x a list row may paint. */
-WORD list_xr(struct Page *p)
-{
-    WORD e = list_edge(p);
-    if (list_overflows(p))
-        e -= GUT_W;                         /* the column */
-    return e;
-}
 
 /* ---- the preview of the selected game, drawn once the selection settles:
  * Classic's pane, the view of the entry details service (details.c) */
-static ULONG dc_time(void);
+ULONG dc_time(void);
 BOOL hold_active(void);
 
 
@@ -5133,7 +5083,7 @@ void ov_bm_free(void)
  * stamped. Only the strip changes; the rows are not touched. */
 static ULONG ov_ms, ov_n;           /* time in ov_relabel during a glide (log) */
 static void ov_relabel_(char c);
-static void ov_relabel(char c)
+void ov_relabel(char c)
 {
     ULONG t0 = time_ms();
     char was = ov.letter;
@@ -5180,20 +5130,6 @@ BOOL np_row(const struct Item *it)
 }
 
 
-/* The bar's place and its thumb's. */
-void gut_geom(struct Page *p, WORD *bx0, WORD *bx1, WORD *ty, WORD *th)
-{
-    LONG vis = list_visible(), n = p->list.count, h = g.footer_y - 2 - g.list_top + 1, t;
-    *bx0 = list_edge(p) - GUT_W + 1 + GUT_GAP;
-    *bx1 = *bx0 + GUT_BAR - 1;
-    t = h * vis / n;
-    if (t < U(10))
-        t = U(10);
-    if (t > h)
-        t = h;
-    *th = (WORD)t;
-    *ty = g.list_top + (WORD)(n > vis ? (h - t) * p->top / (n - vis) : 0);
-}
 
 
 /* The bar again as it moves (each step that scrolls the list, the mouse
@@ -5207,85 +5143,9 @@ void draw_list_row(struct Page *p, LONG idx, WORD col);
 void draw_menu_row(int i);
 WORD mark_column(const struct Page *p);
 
-static BOOL menu_layout(void);
+BOOL menu_layout(void);
 
-/* Move the soft highlight: to screen row `row` of the list, or to main
- * menu entry `menu_i` (-1: neither). */
-static void hover_set(WORD row, WORD menu_i)
-{
-    struct Page *p = cur();
-    WORD old_row = hover_row, old_menu = hover_menu;
-    if (row == hover_row && menu_i == hover_menu)
-        return;
-    hover_row = row;
-    hover_menu = menu_i;
-    if (pane_pending || menu_layout())
-        return;
-    /* drawn and shown as a small update, no flip: a flip waits for the
-     * vertical blank, and the mouse's moves came quicker than that (the
-     * highlight followed it in jerks, Ambiance busy at 40%) */
-    if (p && p->type == PT_LIST) {
-        WORD col = mark_column(p), x0 = g.pane_x - U(4), x1 = list_xr(p) + U(2);
-        WORD r[2];
-        int i;
-        r[0] = old_row;
-        r[1] = row;
-        if (x0 < 0)
-            x0 = 0;
-        if (x1 > g.w - 1)
-            x1 = g.w - 1;
-        for (i = 0; i < 2; i++)
-            if (r[i] >= 0 && p->top + r[i] < p->list.count) {
-                WORD y0 = g.list_top + r[i] * g.list_row_h;
-                BOOL was = gfx_quiet_begin();
-                draw_list_row(p, p->top + r[i], col);
-                gfx_quiet_end(&g, was, x0, y0, x1, y0 + g.list_row_h - 1);
-            }
-    }
-    {
-        WORD m[2];
-        int i;
-        m[0] = old_menu;
-        m[1] = menu_i;
-        for (i = 0; i < 2; i++)
-            if (m[i] >= 0 && m[i] < nmenu) {
-                WORD y0 = g.top + m[i] * g.row_h;
-                BOOL was = gfx_quiet_begin();
-                draw_menu_row(m[i]);
-                gfx_quiet_end(&g, was, 0, y0, g.menu_w + U(3), y0 + g.row_h - 1);
-            }
-    }
-}
 
-/* The pointer at (x, y): which row, if any, is under it. */
-static void hover_at(WORD x, WORD y)
-{
-    struct Page *p = cur();
-    WORD row = -1, mi = -1;
-    int c = p && !pane_pending ? crumb_at(x, y) : -1;
-    if (c != crumb_hover) {
-        crumb_hover = c;
-        if (p && !pane_pending)
-            draw_title(p);                  /* the link under the pointer, lit */
-    }
-    if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h)
-        mi = (y - g.top) / g.row_h;
-    else if (p && p->type == PT_LIST && x >= g.pane_x - U(2) && x <= list_xr(p) &&
-             y >= g.list_top && y < g.list_top + list_visible() * g.list_row_h) {
-        row = (y - g.list_top) / g.list_row_h;
-        if (p->top + row >= p->list.count)
-            row = -1;
-    }
-    if ((x < g.menu_w + U(3) && y >= U(25) && y < g.footer_y) != hover_strip) {
-        hover_strip = !hover_strip;         /* the column stays open under the pointer */
-        if (row == hover_row && mi == hover_menu) {
-            if (!pane_pending)
-                menu_layout();
-            return;
-        }
-    }
-    hover_set(row, mi);
-}
 
 /* The pointer gone (hidden, or the joystick used): the menu column may fold. */
 static void hover_none(void)
@@ -5314,7 +5174,7 @@ static void pointer_hide(void)
     }
 }
 
-static void pointer_show(void)
+void pointer_show(void)
 {
     if (g.win && ptr_hidden == g.win)
         ClearPointer(g.win);
@@ -5326,7 +5186,7 @@ void np_update(void);
 
 static void foot_show(BOOL on);
 
-static void set_mouse_mode(BOOL on)
+void set_mouse_mode(BOOL on)
 {
     struct Page *p = cur();
     if (on == mouse_mode)
@@ -5468,14 +5328,14 @@ void open_textbox(struct Page *p, WORD y0)
 }
 
 
-static struct TextBox *cur_tb(void)
+struct TextBox *cur_tb(void)
 {
     struct Page *p = pane_pending ? NULL : cur();   /* a stale section is not shown */
     return (p && p->type != PT_LIST && p->tb.open) ? &p->tb : NULL;
 }
 
 
-static void set_focus(int f);
+void set_focus(int f);
 
 /* ------------------------------------------------------------ music
  * Mods: the folders of modules (mods.c) and the Now Playing page
@@ -5510,7 +5370,6 @@ struct NowPlaying np = { .idx = -1, .btn = NB_PLAY, .flash = -1, .s_flash = -1, 
 #define FLASH_MS   80               /* how long a pressed button stays lit */
 #define REP_DELAY  400              /* a button held: it repeats after this, */
 #define REP_EVERY  100              /* then this often */
-enum { REP_MOUSE, REP_JOY };
 
 /* The button Fire presses (chosen with Left/Right) has a yellow rounded
  * frame; with the mouse there is none: what it is over lights up instead. */
@@ -5575,24 +5434,8 @@ int np_state(void)
 }
 
 
-/* The volume slider: -----*----- between - and +. */
-WORD np_knob_w(void)
-{
-    WORD k = U(3) > 2 ? U(3) : 2;
-    return gfx_mode_tall(g.mode) ? k * 2 : k;
-}
 
 
-/* The volume for a point on the slider. */
-static int np_slider_vol(WORD x)
-{
-    WORD span = np.sl_x1 - np.sl_x0 + 1 - np_knob_w();
-    LONG v;
-    if (span < 1)
-        return mp_volume();
-    v = ((LONG)(x - np.sl_x0 - np_knob_w() / 2) * 64 + span / 2) / span;
-    return v < 0 ? 0 : v > 64 ? 64 : (int)v;
-}
 
 /* The meters' rows the page is laid out for: a stream's two always (a
  * mono one's single meter in the first, the second left empty), so it
@@ -6019,7 +5862,7 @@ static BOOL sound_restart(void)
 }
 
 /* To volume v (the slider's): unmuted, if it was. */
-static void np_set_volume(int v)
+void np_set_volume(int v)
 {
     vol_unmuted = -1;
     mp_set_volume(v);
@@ -6250,7 +6093,7 @@ static BOOL resume_play(void)
     return TRUE;
 }
 
-static void np_press(int b)
+void np_press(int b)
 {
     char err[100];
     np.flash = b;                           /* lit for a moment, however pressed */
@@ -6441,9 +6284,9 @@ static void mods_play_item(struct Page *p)
  * the way stops at its section), the playing entry selected. */
 static void open_dir_now(struct Item *it);
 void draw_all(void);
-static void menu_select_now(int i, BOOL now);
+void menu_select_now(int i, BOOL now);
 
-static void np_goto_source(void)
+void np_goto_source(void)
 {
     int i, k;
     if (np_src < 0)
@@ -6513,21 +6356,8 @@ static void ly_eq_tick(void)
 }
 
 
-/* The timer tick: the next module at a song's end, the page kept up. */
-static int np_button_at(WORD x, WORD y)
-{
-    int i;
-    if (y < np.by || y >= np.by + np.bh)
-        return -1;
-    for (i = 0; i < NB_COUNT; i++)
-        if (x >= np.bx[i] && x < np.bx[i] + np.bw)
-            return i;
-    if (np.sl_on && x >= np.sl_x0 - U(2) && x <= np.sl_x1 + U(2))
-        return NB_SLIDER;
-    return -1;
-}
 
-static void np_rep_start(int b, int src)
+void np_rep_start(int b, int src)
 {
     if (!np_repeats(b))
         return;
@@ -6536,7 +6366,7 @@ static void np_rep_start(int b, int src)
     np.rep_next = time_ms() + REP_DELAY;
 }
 
-static void np_rep_stop(void)
+void np_rep_stop(void)
 {
     if (np.rep < 0)
         return;
@@ -6708,47 +6538,11 @@ static BOOL np_lr(int d)
     return TRUE;
 }
 
-/* The mouse over a button or the slider: it lights up (dragging the
- * slider: the volume follows). */
-static void np_hover(WORD x, WORD y)
-{
-    int h;
-    if (!np_on() || !mp_loaded())
-        return;
-    if (np.sl_drag) {
-        int v = np_slider_vol(x);
-        if (v != mp_volume() || np_muted())
-            np_set_volume(v);
-        return;
-    }
-    h = np_button_at(x, y);
-    if (np.cyc_x1 > np.cyc_x0 && x >= np.cyc_x0 && x <= np.cyc_x1 && y >= np.cyc_y0 &&
-        y <= np.cyc_y1)
-        h = NB_CYCLE;
-    if (h != np.hov) {
-        BOOL cyc = h == NB_CYCLE || np.hov == NB_CYCLE;
-        np.hov = h;
-        if (cyc)
-            ui->np_cycle();
-        np_update();
-    }
-}
 
-/* The mouse button let go: no more repeating or dragging. */
-static void np_mouse_up(void)
-{
-    if (np.rep >= 0 && np.rep_src == REP_MOUSE)
-        np_rep_stop();
-    if (np.sl_drag) {
-        np.sl_drag = FALSE;
-        if (np_on())
-            np_update();
-    }
-}
 
 /* To part n of d of the song (a bar clicked: Now playing's, the mini
  * player's). */
-static void np_seek_part(ULONG n, ULONG d)
+void np_seek_part(ULONG n, ULONG d)
 {
     struct MpStatus st;
     ULONG want;
@@ -6776,36 +6570,6 @@ static void np_seek_part(ULONG n, ULONG d)
         np_update();
 }
 
-static BOOL np_click(WORD x, WORD y)
-{
-    int i;
-    if (!np_on() || !mp_loaded())
-        return FALSE;
-    if (x >= np.cyc_x0 && x <= np.cyc_x1 && y >= np.cyc_y0 && y <= np.cyc_y1 && np.cyc_x1 > np.cyc_x0) {
-        next_visual();                      /* the cycle gadget */
-        return TRUE;
-    }
-    i = np_button_at(x, y);
-    if (i == NB_SLIDER) {                   /* to that volume, and drag from there */
-        np.sl_drag = TRUE;
-        np.hov = NB_SLIDER;
-        np_set_volume(np_slider_vol(x));
-        return TRUE;
-    }
-    if (i >= 0) {
-        np.btn = i;                         /* the keys carry on from here */
-        np_press(i);
-        np_rep_start(i, REP_MOUSE);
-        return TRUE;
-    }
-    /* the bar (and the line under it): to that part of the song */
-    if (y >= np.time_y - U(2) && y < np.time_y + g.font_h + U(2) && x >= np.x0 &&
-        x < np.x0 + np.bar_w) {
-        np_seek_part((ULONG)(x - np.x0), (ULONG)np.bar_w);
-        return TRUE;
-    }
-    return FALSE;
-}
 
 /* Now playing rows at the top of lists: none now (Now playing is the
  * menu's first entry while something plays); 1 brings them back. */
@@ -7134,7 +6898,7 @@ static void pane_tick(void)
 
 
 /* now: build the section straight away (a click), not once it settles */
-static void menu_select_now(int i, BOOL now)
+void menu_select_now(int i, BOOL now)
 {
     int old = menu_sel;
     nav_moved();
@@ -7171,12 +6935,12 @@ static void menu_select(int i)
  * was drawn again). */
 static BOOL menu_pinned;            /* opened by the pointer: open till the content is used */
 
-static void menu_unpin(void)
+void menu_unpin(void)
 {
     menu_pinned = FALSE;
 }
 
-static BOOL menu_layout(void)
+BOOL menu_layout(void)
 {
     BOOL narrow;
     if (hover_menu >= 0 || hover_strip)
@@ -7191,7 +6955,7 @@ static BOOL menu_layout(void)
     return TRUE;
 }
 
-static void set_focus(int f)
+void set_focus(int f)
 {
     pane_settle();
     if (f == FOCUS_CONTENT && !section_inert())
@@ -7214,7 +6978,7 @@ static void set_focus(int f)
 static void open_dir_now(struct Item *it);
 
 /* Open a folder: the spinner if it keeps you waiting. */
-static void open_dir(struct Item *it)
+void open_dir(struct Item *it)
 {
     busy_begin();
     open_dir_now(it);
@@ -8299,7 +8063,7 @@ static void folder_slideshow(struct Item *it)
     list_free(&l);
 }
 
-static void act_move(LONG d)
+void act_move(LONG d)
 {
     struct Page *p = cur();
     nav_moved();
@@ -12354,7 +12118,7 @@ static void hold_release(void)
 /* Something pressed during a coast: it stops where it is. TRUE if one was
  * going (a Return, Fire or click then only stops it). Its speed is kept a
  * moment for Up/Down the same way to go on at (hold_start). */
-static BOOL coast_interrupt(void)
+BOOL coast_interrupt(void)
 {
     if (!hold.coast)
         return FALSE;
@@ -12551,7 +12315,7 @@ static void hold_tick(void)
     }
 }
 
-static void act_open(BOOL play)
+void act_open(BOOL play)
 {
     struct Page *p;
     (void)play;                     /* Return and Fire both play a game now */
@@ -12654,7 +12418,7 @@ static void act_right(void)
     act_open(FALSE);
 }
 
-static void act_back(void)
+void act_back(void)
 {
     if (lp_back())
         return;                     /* (the section's whole list: back to Home's row) */
@@ -12831,7 +12595,7 @@ static void act_letter_step(LONG dir)
     }
 }
 
-static void disarm(void)
+void disarm(void)
 {
     if (quit_armed || msg[0]) {
         quit_armed = FALSE;
@@ -12840,14 +12604,12 @@ static void disarm(void)
 }
 
 /* ------------------------------------------------------------ input */
-static ULONG last_secs, last_mics;
-static ULONG last_ms;                       /* our own clock at the last click */
 
 /* A double-click: Intuition's test on the events' times, or (should those
  * times be off: after a slideshow they were) our own clock's, within the
  * same time Intuition allows (its Preferences, read once). */
 /* Preferences' double-click time, in ms. */
-static ULONG dc_time(void)
+ULONG dc_time(void)
 {
     static ULONG dc_ms;
     if (!dc_ms) {
@@ -12861,275 +12623,9 @@ static ULONG dc_time(void)
     return dc_ms;
 }
 
-static BOOL dbl_click(const struct IntuiMessage *im)
-{
-    if (DoubleClick(last_secs, last_mics, im->Seconds, im->Micros))
-        return TRUE;
-    return last_ms && time_ms() - last_ms <= dc_time();
-}
-static BOOL click_opened;           /* the last click opened something (one click) */
-static LONG last_click = -1;
-static WORD last_x = -100, last_y = -100;   /* where the last click was */
 
-/* Dragging a list's thumb: the list follows, the selection kept in view. */
-static void gut_drag_to(WORD my)
-{
-    struct Page *p = cur();
-    WORD bx0, bx1, ty, th;
-    LONG vis = list_visible(), span, pos, top;
-    if (!list_overflows(p)) {
-        gut.drag = FALSE;
-        return;
-    }
-    gut_geom(p, &bx0, &bx1, &ty, &th);
-    span = (g.footer_y - 2 - g.list_top + 1) - th;
-    if (span <= 0)
-        return;
-    pos = my - gut.off - g.list_top;
-    if (pos < 0)
-        pos = 0;
-    if (pos > span)
-        pos = span;
-    top = pos * (p->list.count - vis) / span;
-    if (top == p->top)
-        return;
-    p->top = top;
-    if (p->sel < top)
-        p->sel = top;
-    if (p->sel > top + vis - 1)
-        p->sel = top + vis - 1;
-    if (ov.on && ov.page == p)
-        ov_relabel(ov_letter_in(p->list.items, p->list.count, p->sel));
-    draw_title_count(p);
-    draw_list_rows(p);
-}
 
-/* A click in a long list's column: on the thumb, drag it; above or below
- * it, a page up or down. FALSE if the click was not there. */
-static BOOL gut_click(WORD x, WORD y)
-{
-    struct Page *p = cur();
-    WORD bx0, bx1, ty, th;
-    LONG vis = list_visible();
-    if (!list_overflows(p) || y < g.list_top || y > g.footer_y - 2 ||
-        x <= list_edge(p) - GUT_W || x > list_edge(p))
-        return FALSE;
-    gut_geom(p, &bx0, &bx1, &ty, &th);
-    if (focus != FOCUS_CONTENT)
-        set_focus(FOCUS_CONTENT);
-    if (y >= ty && y < ty + th) {
-        gut.drag = TRUE;
-        gut.off = y - ty;
-        draw_gutter(p);
-    } else {
-        act_move(y < ty ? -(vis - 1) : vis - 1);
-    }
-    return TRUE;
-}
 
-static void handle_mouse(struct IntuiMessage *im)
-{
-    /* inside the window's borders (none on our own screen) */
-    WORD x = im->MouseX - g.win->BorderLeft, y = im->MouseY - g.win->BorderTop;
-    BOOL dbl;
-    LONG idx = -1;
-    struct TextBox *tb;
-    if (im->Class == IDCMP_MOUSEBUTTONS && (im->Code == SELECTDOWN || im->Code == MENUDOWN) &&
-        coast_interrupt()) {
-        if (debug_on)
-            amb_log("click", "it stopped a coast, and did nothing else");
-        return;                             /* a click during a coast only stops it */
-    }
-    if (im->Class == IDCMP_MOUSEBUTTONS && !(x < g.menu_w && y >= g.top)) {
-        pane_settle();              /* a click outside the menu acts on the section */
-        if (im->Code == SELECTDOWN && x >= g.menu_w && y >= g.top && y < g.footer_y)
-            menu_unpin();           /* the content clicked: the menu to its icons */
-    }
-    tb = cur_tb();
-    if (!tb && pv_tb.open)
-        tb = &pv_tb;                /* the preview pane's fact sheet */
-    set_mouse_mode(TRUE);                   /* the mouse is in use: scroll bars */
-    pointer_show();
-    mouse_last = time_ms();
-    if (!bar_up) {
-        bar_up = TRUE;
-        if (cur() && cur()->type == PT_LIST && !pane_pending)
-            draw_gutter(cur());
-    }
-    if (im->Class == IDCMP_MOUSEMOVE) {
-        if (gut.drag)
-            gut_drag_to(y);
-        else if (tb && tb->dragging)
-            tb_mouse_move(tb, y);
-        else {
-            hover_at(x, y);
-            np_hover(x, y);
-        }
-        return;
-    }
-    if (im->Code == SELECTUP) {
-        np_mouse_up();
-        if (gut.drag) {
-            gut.drag = FALSE;
-            if (cur())
-                draw_gutter(cur());
-        }
-        if (tb && tb->dragging) {
-            tb_mouse_up(tb);
-            tb_refresh_bar(&g, tb);
-        }
-        return;
-    }
-    if (im->Code == MENUDOWN) {
-        disarm();
-        act_back();
-        return;
-    }
-    if (im->Code != SELECTDOWN)
-        return;
-    if (debug_on) {
-        char m[320];
-        struct Page *dp = cur();
-        sprintf(m, "at %ld,%ld; page %.30s, type %ld, %ld rows from y %ld, %ld high, list to x %ld; "
-                   "focus %ld; opened %ld; last %ld; time %lu.%06lu (last %lu.%06lu, %lu ms ago)",
-                (long)x, (long)y, dp ? dp->title : "-", dp ? (long)dp->type : -1L,
-                dp ? (long)dp->list.count : 0L, (long)g.list_top, (long)g.list_row_h,
-                dp && dp->type == PT_LIST ? (long)list_xr(dp) : -1L, (long)focus,
-                (long)click_opened, (long)last_click, (unsigned long)im->Seconds,
-                (unsigned long)im->Micros, (unsigned long)last_secs, (unsigned long)last_mics,
-                (unsigned long)(time_ms() - last_ms));
-        amb_log("click", m);
-    }
-    nav_moved();
-    disarm();
-    if (click_opened) {
-        /* a single click opened something: the second click of a habitual
-         * double-click is not a click on what opened */
-        click_opened = FALSE;
-        if (dbl_click(im) &&
-            x - last_x <= U(6) && last_x - x <= U(6) && y - last_y <= U(6) &&
-            last_y - y <= U(6)) {           /* on the same spot: the habit's second half */
-            last_secs = im->Seconds;
-    last_ms = time_ms();
-            last_mics = im->Micros;
-            last_click = -1;
-            return;
-        }
-    }
-    if (gut_click(x, y))
-        return;
-    {
-        int c = crumb_at(x, y);
-        if (c >= 0) {
-            crumb_go(c);                    /* a breadcrumb link: back to that level */
-            click_opened = TRUE;
-            return;
-        }
-    }
-    if (tb && tb_mouse_down(tb, x, y)) {
-        set_focus(tb == &pv_tb ? FOCUS_PREVIEW : FOCUS_CONTENT);
-        if (tb->dragging)
-            tb_refresh_bar(&g, tb);
-        return;
-    }
-    if (x < g.menu_w && y >= g.top && y < g.top + nmenu * g.row_h) {
-        idx = (y - g.top) / g.row_h;
-        dbl = idx + 1000 == last_click && dbl_click(im);
-        last_click = idx + 1000;
-        if (focus != FOCUS_MENU)
-            set_focus(FOCUS_MENU);
-        menu_select_now(idx, TRUE);
-        (void)dbl;
-        if (focus == FOCUS_MENU && cur() && (cur()->type != PT_LIST || cur()->list.count)) {
-            act_open(FALSE);                /* a section is not played: one click goes in */
-            click_opened = TRUE;
-        }
-    } else if (x >= g.pane_x - U(2) && y >= g.list_top && y < g.footer_y - 1) {
-        struct Page *p = cur();
-        if (!p)
-            return;
-        if (p->type == PT_LIST) {
-            if (x > list_xr(p)) {           /* the details pane */
-                BOOL on_bar = pv_tb.open && pv_tb.bar_w && x >= pv_tb.bar_x - 2;
-                if (pv_tb.open && pv_tb.bar_w && x >= aside_x())
-                    set_focus(FOCUS_PREVIEW);
-                /* a double-click on the pane plays (opens) what it shows:
-                 * the entry selected, as a double-click on its row would */
-                dbl = !on_bar && p->sel + 100000 == last_click &&
-                      dbl_click(im);
-                last_click = p->sel + 100000;
-                last_secs = im->Seconds;
-    last_ms = time_ms();
-                last_mics = im->Micros;
-                last_x = x;
-                last_y = y;
-                if (dbl && p->list.count && p->sel >= 0 && p->sel < p->list.count &&
-                    has_aside(p)) {
-                    struct Item *it = &p->list.items[p->sel];
-                    if (it->kind == IT_SONG || it->kind == IT_MOD || it->kind == IT_PIC ||
-                        it->kind == IT_ANIM || it->kind == IT_RUN || it->kind == IT_PLEXTRACK || it->kind == IT_PLEXPHOTO) {
-                        if (debug_on)
-                            amb_log("click: double on the pane", it->label);
-                        set_focus(FOCUS_CONTENT);
-                        act_open(FALSE);
-                    }
-                }
-                return;
-            }
-            idx = p->top + (y - g.list_top) / g.list_row_h;
-            if (idx >= p->list.count)
-                return;
-            dbl = idx == last_click && dbl_click(im);
-            last_click = idx;
-            if (is_heading(p, idx))
-                return;                     /* a heading: nothing to choose */
-            if (focus != FOCUS_CONTENT)
-                set_focus(FOCUS_CONTENT);
-            if (p->sel != idx) {
-                p->sel = idx;
-                det.clicked = TRUE;          /* its preview waits for a second click */
-                draw_title_count(p);
-                draw_list_rows(p);
-                det.clicked = FALSE;
-            }
-            {
-                /* one click opens what cannot be played (a folder, a
-                 * setting); what can (a game, a picture, a folder that
-                 * plays as a slideshow) is selected, and a double-click
-                 * plays it (a folder: goes inside) */
-                struct Item *it = &p->list.items[idx];
-                BOOL playable = it->kind == IT_RUN || it->kind == IT_PIC || it->kind == IT_ANIM ||
-                                it->kind == IT_MOD ||
-                                it->kind == IT_SONG || it->kind == IT_PLEXPHOTO ||
-                                (it->kind == IT_DIR && it->mark == MARK_PLAY);
-                if (debug_on) {
-                    char m[160];
-                    sprintf(m, "row %ld: %.80s (kind %ld), %s, %s", (long)idx, it->label,
-                            (long)it->kind, playable ? "playable" : "opens", dbl ? "double" : "single");
-                    amb_log("click", m);
-                }
-                if (dbl || !playable) {
-                    ch_wait_item(p, idx, TRUE);
-                    it = &p->list.items[idx];
-                    if (!playable)
-                        click_opened = TRUE;
-                    if (it->kind == IT_DIR)
-                        open_dir(it);
-                    else
-                        act_open(FALSE);
-                }
-            }
-        } else {
-            set_focus(FOCUS_CONTENT);
-            np_click(x, y);                 /* the player's buttons and bar */
-        }
-    }
-    last_secs = im->Seconds;
-    last_ms = time_ms();
-    last_mics = im->Micros;
-    last_x = x;
-    last_y = y;
-}
 
 /* ------------------------------------------------------------ AmigaAMP's plug-ins */
 /* Each tick: the attached plug-in fed; one Ambiance started puts
@@ -14235,8 +13731,7 @@ static int app_main(void)
                 } else if (copy.Class == IDCMP_INACTIVEWINDOW)
                     hold_stop();    /* the key-up will not come to us */
                 else if (copy.Class == IDCMP_MOUSEBUTTONS || copy.Class == IDCMP_MOUSEMOVE) {
-                    if (!lv_mouse(&copy))
-                        handle_mouse(&copy);
+                    ui->mouse(&copy);       /* (the view's hit tests: Classic's, input.c) */
                 }
                 else if (copy.Class == IDCMP_RAWKEY || copy.Class == IDCMP_VANILLAKEY)
                     handle_key(&copy);
@@ -16936,6 +16431,10 @@ static void ly_menu_slide(UWORD from, UWORD to)
     (void)from;
     (void)to;
 }
+static void ly_mouse(struct IntuiMessage *im)
+{
+    lv_mouse(im);                           /* (the layout's hit tests; the right button: back) */
+}
 static void ly_pane_summary(const char *text)
 {
     (void)text;                             /* (the layout's details: from the items) */
@@ -16948,6 +16447,7 @@ const struct UiView layout_ui = {
     ly_tick, ly_busy, ly_header_np, ly_clock, ly_status, ly_letter_show, ly_letter_relabel,
     ly_letter_hide, ly_np_station, ly_eq_tick, ly_np_visual, ly_np_art,
     ly_page_leave, ly_np_update, ly_none, ly_none, ly_np_art_room, ly_menu_slide, ly_pane_summary,
+    ly_mouse,
     "layout", &layout_view
 };
 

@@ -2987,5 +2987,6 @@ const struct UiView classic_ui = {
     cl_tick, cl_busy, cl_header_np, cl_clock, cl_status, cl_letter_show, cl_letter_relabel,
     cl_letter_hide, np_draw_station, cl_eq_tick, np_visual_changed, np_art_draw,
     cl_page_leave, cl_np_update, cl_np_rate, cl_np_cycle, cl_np_art_room, cl_menu_slide, cl_pane_summary,
+    cl_mouse,
     "classic", &classic_view
 };

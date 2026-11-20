@@ -115,6 +115,9 @@ struct UiView {
     void (*np_art_room)(BOOL none);
     void (*menu_slide)(UWORD from, UWORD to);
     void (*pane_summary)(const char *text);
+    /* step 4: a mouse event on the screen (Classic's hit tests: input.c;
+     * a layout's: lv_mouse) */
+    void (*mouse)(struct IntuiMessage *im);
     /* the engine: its name (the log), and its entry details' view, whose
      * shots NULL means it asks for its own pictures, at its own sizes */
     const char *name;
@@ -168,6 +171,7 @@ enum { NB_PREV, NB_BACK, NB_PLAY, NB_STOP, NB_FWD, NB_NEXT, NB_LOOP, NB_MUTE, NB
        NB_COUNT };
 
 #define NB_SLIDER  NB_COUNT         /* np.hov: the slider */
+enum { REP_MOUSE, REP_JOY };       /* who holds a Now playing button (np.rep_src) */
 #define NB_CYCLE   (NB_COUNT + 1)   /* np.hov: the visualization's cycle gadget */
 
 /* ---- an artist's biography, an album's review: left out of a library's
@@ -373,6 +377,40 @@ extern const struct DetView classic_view;
 /* The view drives the screen: Classic (classic_ui) or the library layout
  * shown (layout_ui). ui is set only by view_use. */
 void view_use(const struct UiView *v);
+void cl_mouse(struct IntuiMessage *im);        /* (input.c) */
+/* (step 4: what Classic's input reads and calls of the program's) */
+void act_back(void);
+void act_move(LONG d);
+void act_open(BOOL play);
+void ch_wait_item(struct Page *p, LONG idx, BOOL shown);
+BOOL coast_interrupt(void);
+struct TextBox *cur_tb(void);
+ULONG dc_time(void);
+void disarm(void);
+BOOL is_heading(struct Page *p, LONG i);
+BOOL menu_layout(void);
+void menu_select_now(int i, BOOL now);
+void menu_unpin(void);
+void nav_moved(void);
+void next_visual(void);
+void np_goto_source(void);
+void np_press(int b);
+void np_rep_start(int b, int src);
+void np_rep_stop(void);
+void np_seek_part(ULONG n, ULONG d);
+void np_set_volume(int v);
+void open_dir(struct Item *it);
+char ov_letter_in(const struct Item *it, LONG n, LONG i);
+void ov_relabel(char c);
+void page_pop(void);
+void pointer_show(void);
+void set_focus(int f);
+void set_mouse_mode(BOOL on);
+extern BOOL debug_on;
+extern BOOL hover_strip;
+extern ULONG mouse_last;
+void hover_set(WORD row, WORD mi);
+int np_button_at(WORD x, WORD y);
 #define view_own_pictures() (!ui->details->shots)
 
 #endif
