@@ -4473,7 +4473,7 @@ BOOL has_aside(struct Page *p);
 
 /* A section that is only a note (none now: Videos plays animations):
  * nothing in it to go to, so the menu keeps the focus. */
-static BOOL section_inert(void)
+BOOL section_inert(void)
 {
     return FALSE;
 }
@@ -4985,7 +4985,8 @@ static void ov_free(void)
 }
 
 /* Build the big letter for c, its ink about 40% of the list's height
- * (gfx_bigletter: the font's glyph in whole pixels, or smooth). */
+ * (gfx_bigletter: the font's glyph in whole pixels, or smooth). A layout
+ * draws the same glyph (lvh_letter_up); Classic places it (letter_place). */
 BOOL ov_build(char ch)
 {
     WORD rows_h = list_visible() * g.list_row_h;
@@ -4994,18 +4995,7 @@ BOOL ov_build(char ch)
         return FALSE;
     ov.bl = bl;
     ov.letter = ch;
-    ov.y = g.list_top + (rows_h - bl->h) / 2;
-    if (has_aside(ov.page)) {
-        /* centred in the letter column */
-        ov.strip_x = aside_x();
-        ov.x = ov.strip_x + (aside_width() - bl->w) / 2;
-        return TRUE;
-    }
-    ov.x = g.pane_x + g.pane_w * 9 / 10 - bl->w;
-    /* the strip fits the widest letter, so it does not move as letters change */
-    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - bl->cell_w - U(6);
-    if (ov.strip_x < g.pane_x + g.pane_w / 2)
-        ov.strip_x = g.pane_x + g.pane_w / 2;
+    ui->letter_place();                     /* (where Classic stamps it) */
     return TRUE;
 }
 
@@ -5723,9 +5713,7 @@ static BOOL np_skip(int d)
  * the next one is made (or goes, if it has none). */
 static void np_soft_redraw(void)
 {
-    BOOL was = gfx_quiet_begin();
-    ui->np_station();
-    gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+    ui->np_rate();
     np.s_state = -99;                       /* the buttons: all looked at again */
     np_update();
     if (!msg[0] && hint_shown && hint_text() != hint_shown)
@@ -6488,9 +6476,7 @@ static void np_tick(void)
             } else if (np_on()) {
                 /* what plays, or its state, changed: its lines over themselves,
                  * and the controls (a full redraw flashed the page each time) */
-                BOOL was = gfx_quiet_begin();
-                ui->np_station();
-                gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
+                ui->np_rate();
                 np_update();
                 if (!msg[0] && hint_shown && hint_text() != hint_shown)
                     draw_footer();
@@ -8119,30 +8105,6 @@ void act_move(LONG d)
     }
 }
 
-/* One wheel notch scrolls whatever is under the pointer, as on other
- * desktops: one entry in the menu and in lists, three lines of text.
- * Scrolling the content pane also gives it the keyboard focus. Over the
- * header or footer the notch goes to whatever has the focus. */
-static void act_wheel(LONG d, WORD x, WORD y)
-{
-    set_mouse_mode(TRUE);
-    mouse_last = time_ms();
-    bar_up = TRUE;                  /* the wheel shows the bar too (drawn with the move) */
-    struct Page *p = cur();
-    BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
-    BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
-    if (over_pane && pv_tb.open && p && has_aside(p) && x >= aside_x()) {
-        tb_scroll_by(&pv_tb, d * 3 * pv_tb.line_h);     /* the preview's fact sheet */
-        return;
-    }
-    if (over_menu && focus != FOCUS_MENU)
-        set_focus(FOCUS_MENU);
-    else if (over_pane && section_inert())
-        return;                     /* nothing there to scroll */
-    else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
-        set_focus(FOCUS_CONTENT);
-    act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST && p->type != PT_PLAYER) ? d * 3 : d);
-}
 
 static void open_screenmodes(void)
 {
@@ -10353,11 +10315,8 @@ void radio_done(struct NetJob *j)
         if (j == plex_dj) {
             plex_dj = NULL;
             if (j->body && (plex_orig.rate = plex_stream_rate(j->body, j->len)) && np_on() &&
-                mp_is_track()) {
-                BOOL was = gfx_quiet_begin();
-                ui->np_station();
-                gfx_quiet_end(&g, was, np.x0, np.title_y, np.x0 + np.w - 1, g.footer_y - 2);
-            }
+                mp_is_track())
+                ui->np_rate();
         }
         if (j->body)
             FreeVec(j->body);
@@ -13092,9 +13051,9 @@ static void handle_key(struct IntuiMessage *im)
         }
         case 0x4E: disarm(); if (!np_lr(1)) act_right(); break;      /* cursor right */
         case 0x4F: disarm(); if (focus != FOCUS_MENU && !np_lr(-1)) act_back(); break; /* left */
-        case 0x7A: disarm(); act_wheel(-1, im->MouseX - g.win->BorderLeft,
+        case 0x7A: disarm(); ui->wheel(-1, im->MouseX - g.win->BorderLeft,
                                        im->MouseY - g.win->BorderTop); break; /* NM_WHEEL_UP */
-        case 0x7B: disarm(); act_wheel(1, im->MouseX - g.win->BorderLeft,
+        case 0x7B: disarm(); ui->wheel(1, im->MouseX - g.win->BorderLeft,
                                        im->MouseY - g.win->BorderTop); break; /* NM_WHEEL_DOWN */
         }
         return;
@@ -13656,19 +13615,15 @@ static int app_main(void)
                                                                               : now_ms + 1000;
                     struct DateStamp ds;
                     DateStamp(&ds);
-                    /* the header, shown without a flip (gfx_quiet_*) */
-                    BOOL was = gfx_quiet_begin();
-                    if (ds.ds_Minute != last_minute)
-                        draw_clock();
                     if (debug_on) {
                         fps_shown = gfx_flips - fps_flips0;
                         fps_flips0 = gfx_flips;
                         cpu_load = dbg_cpu_sample();
                         app_load = dbg_app_sample();
-                        draw_status();
-                        dbg_load_log();
                     }
-                    gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
+                    ui->readouts(ds.ds_Minute != last_minute, debug_on);   /* the header's */
+                    if (debug_on)
+                        dbg_load_log();
                     nav_tick_1s();          /* the trail kept, once it rests */
                     scr_watch();            /* a screen gone blank: why (log) */
                     mp_tempo_check();
@@ -16435,6 +16390,19 @@ static void ly_mouse(struct IntuiMessage *im)
 {
     lv_mouse(im);                           /* (the layout's hit tests; the right button: back) */
 }
+static void ly_readouts(BOOL clock, BOOL status)
+{
+    if (clock)
+        draw_clock();                       /* (ly_clock, ly_status: lv_playing_hit) */
+    if (status)
+        draw_status();
+}
+static void ly_wheel(LONG d, WORD x, WORD y)
+{
+    (void)d;                                /* (lv_key takes the wheel first) */
+    (void)x;
+    (void)y;
+}
 static void ly_pane_summary(const char *text)
 {
     (void)text;                             /* (the layout's details: from the items) */
@@ -16447,7 +16415,7 @@ const struct UiView layout_ui = {
     ly_tick, ly_busy, ly_header_np, ly_clock, ly_status, ly_letter_show, ly_letter_relabel,
     ly_letter_hide, ly_np_station, ly_eq_tick, ly_np_visual, ly_np_art,
     ly_page_leave, ly_np_update, ly_none, ly_none, ly_np_art_room, ly_menu_slide, ly_pane_summary,
-    ly_mouse,
+    ly_mouse, ly_wheel, ly_none, ly_readouts,
     "layout", &layout_view
 };
 
@@ -16460,6 +16428,8 @@ void view_use(const struct UiView *v)
     ui = v;
     det_view(v->details);
     gfx_off = v != &classic_ui;
+    if (ov.bl)
+        v->letter_place();                  /* (a letter up: where this view stamps it) */
 }
 
 void np_update(void)

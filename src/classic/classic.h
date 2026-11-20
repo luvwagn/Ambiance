@@ -110,7 +110,7 @@ struct UiView {
      * its cover, the menu's slide, a Plex summary come) */
     void (*page_leave)(struct Page *gone, struct Page *under);
     void (*np_update)(void);
-    void (*np_rate)(void);
+    void (*np_rate)(void);                  /* the station's lines again, over themselves */
     void (*np_cycle)(void);
     void (*np_art_room)(BOOL none);
     void (*menu_slide)(UWORD from, UWORD to);
@@ -118,6 +118,9 @@ struct UiView {
     /* step 4: a mouse event on the screen (Classic's hit tests: input.c;
      * a layout's: lv_mouse) */
     void (*mouse)(struct IntuiMessage *im);
+    void (*wheel)(LONG d, WORD x, WORD y);  /* a wheel notch under the pointer (a layout: lv_key's) */
+    void (*letter_place)(void);             /* the big letter (ov.bl) placed on the view's screen */
+    void (*readouts)(BOOL clock, BOOL status);  /* once a second: the header's clock, Debug line */
     /* the engine: its name (the log), and its entry details' view, whose
      * shots NULL means it asks for its own pictures, at its own sizes */
     const char *name;
@@ -378,6 +381,8 @@ extern const struct DetView classic_view;
  * shown (layout_ui). ui is set only by view_use. */
 void view_use(const struct UiView *v);
 void cl_mouse(struct IntuiMessage *im);        /* (input.c) */
+void cl_wheel(LONG d, WORD x, WORD y);         /* (input.c) */
+BOOL section_inert(void);
 /* (step 4: what Classic's input reads and calls of the program's) */
 void act_back(void);
 void act_move(LONG d);

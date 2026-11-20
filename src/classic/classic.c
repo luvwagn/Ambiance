@@ -2928,6 +2928,42 @@ BOOL pic_take(const char *file, WORD x, WORD y, WORD w, WORD h)
     return TRUE;
 }
 
+/* ---- step 4: Classic's geometry */
+
+/* The big letter's place (ov_build made it): centred in the letter
+ * column beside a list with details, else at the list's right, its strip
+ * as wide as the widest letter, so it does not move as letters change. */
+static void cl_letter_place(void)
+{
+    const struct BigLetter *bl = ov.bl;
+    WORD rows_h = list_visible() * g.list_row_h;
+    if (!bl)
+        return;
+    ov.y = g.list_top + (rows_h - bl->h) / 2;
+    if (has_aside(ov.page)) {
+        ov.strip_x = aside_x();
+        ov.x = ov.strip_x + (aside_width() - bl->w) / 2;
+        return;
+    }
+    ov.x = g.pane_x + g.pane_w * 9 / 10 - bl->w;
+    ov.strip_x = g.pane_x + g.pane_w * 9 / 10 - bl->cell_w - U(6);
+    if (ov.strip_x < g.pane_x + g.pane_w / 2)
+        ov.strip_x = g.pane_x + g.pane_w / 2;
+}
+
+/* The header's readouts once a second (the clock at a new minute, the
+ * Debug line), shown without a flip: drawn into the hidden buffer and
+ * copied up (gfx_quiet_*). */
+static void cl_readouts(BOOL clock, BOOL status)
+{
+    BOOL was = gfx_quiet_begin();
+    if (clock)
+        draw_clock();
+    if (status)
+        draw_status();
+    gfx_quiet_end(&g, was, 0, 0, g.w - 1, U(24) - 1);
+}
+
 /* ---- step 3c: what program logic drew itself until now */
 
 /* A page left: a picture page's picture taken off behind the beam (the
@@ -2944,7 +2980,8 @@ static void cl_page_leave(struct Page *p, struct Page *under)
         gfx_picture_clear(&g, 0, 0, g.w - 1, g.h - 1);
 }
 
-/* The average bitrate moved: the station's lines again. */
+/* Now playing's lines again, over themselves, from the hidden buffer
+ * (what plays changed, a station's title, a track's rate or bitrate). */
 static void cl_np_rate(void)
 {
     BOOL was = gfx_quiet_begin();
@@ -2987,6 +3024,6 @@ const struct UiView classic_ui = {
     cl_tick, cl_busy, cl_header_np, cl_clock, cl_status, cl_letter_show, cl_letter_relabel,
     cl_letter_hide, np_draw_station, cl_eq_tick, np_visual_changed, np_art_draw,
     cl_page_leave, cl_np_update, cl_np_rate, cl_np_cycle, cl_np_art_room, cl_menu_slide, cl_pane_summary,
-    cl_mouse,
+    cl_mouse, cl_wheel, cl_letter_place, cl_readouts,
     "classic", &classic_view
 };

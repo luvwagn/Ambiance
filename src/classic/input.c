@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Brian King
  *
  * Moved out of main.c (step 4 of claude/classic-as-layout.md): the mouse
- * on Classic's screen, read against Classic's geometry, as a library
+ * and its wheel on Classic's screen, read against Classic's geometry, as a library
  * layout reads its own (its pointer()). The menu's and the list's rows,
  * the breadcrumb's links, the list's column (its thumb dragged), the
  * details pane, the text boxes' bars, and Now playing's buttons, slider
@@ -548,4 +548,29 @@ void cl_mouse(struct IntuiMessage *im)
     last_mics = im->Micros;
     last_x = x;
     last_y = y;
+}
+
+/* One wheel notch scrolls whatever is under the pointer, as on other
+ * desktops: one entry in the menu and in lists, three lines of text.
+ * Scrolling the content pane also gives it the keyboard focus. Over the
+ * header or footer the notch goes to whatever has the focus. */
+void cl_wheel(LONG d, WORD x, WORD y)
+{
+    set_mouse_mode(TRUE);
+    mouse_last = time_ms();
+    bar_up = TRUE;                  /* the wheel shows the bar too (drawn with the move) */
+    struct Page *p = cur();
+    BOOL over_menu = x < g.menu_w && y >= g.top && y < g.footer_y - 1;
+    BOOL over_pane = x >= g.pane_x - U(2) && y >= g.top && y < g.footer_y - 1;
+    if (over_pane && pv_tb.open && p && has_aside(p) && x >= aside_x()) {
+        tb_scroll_by(&pv_tb, d * 3 * pv_tb.line_h);     /* the preview's fact sheet */
+        return;
+    }
+    if (over_menu && focus != FOCUS_MENU)
+        set_focus(FOCUS_MENU);
+    else if (over_pane && section_inert())
+        return;                     /* nothing there to scroll */
+    else if (over_pane && p && (p->type != PT_LIST || p->list.count) && focus != FOCUS_CONTENT)
+        set_focus(FOCUS_CONTENT);
+    act_move((focus == FOCUS_CONTENT && p && p->type != PT_LIST && p->type != PT_PLAYER) ? d * 3 : d);
 }
