@@ -3555,21 +3555,30 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
  * its own: pictures sampled through the file before it plays (their I
  * pictures, at points spread through it) counted on a 15-bit histogram,
  * cut to a palette (thumb_cut: median cut), and every Y Cb Cr made a
- * colour number by one table (Y 6 bits, Cb and Cr 5: 64 K entries). An
- * ordered dither (4 x 4) on Y, Cb and Cr before the table keeps
- * gradients from banding. Each picture then goes to the screen's planes
+ * colour number by one table (Y 5 bits, Cb and Cr 4: 8 K entries, the
+ * size of a 68060's data cache: a 64 K one missed it nearly every look).
+ * An ordered dither keeps gradients from banding: Y's 4 x 4 a pixel,
+ * Cb's and Cr's 2 x 2 a block of 2 x 2 pixels (one Cb and Cr each in
+ * MPEG's 4:2:0: their part of the colour number made once a block, a
+ * row of blocks for two rows of pixels). Its colours kept in
+ * PROGDIR:Cache/<hash>.vpal: played again, nothing sampled. Each picture then goes to the screen's planes
  * a row at a time (gfx_c2p32), into the buffer not shown, which is then
  * shown (double buffered). Pen 0 black (round it); the pointer's three
  * registers (17-19) its own. Its controls: the animations' bar over its
  * foot (bar_put: the copper's own colours below its top line). */
 #define VA_COLS     252                     /* 256 less pen 0 and the pointer's 17-19 */
-#define VA_SAMPLES  24                      /* pictures sampled for its colours */
+#define VA_SAMPLES  12                      /* pictures sampled for its colours */
+#define VA_LUT      8192                    /* (Y >> 3) << 8 | (Cb >> 4) << 4 | Cr >> 4: a pen */
+#define VA_MAGIC    0x414D5650UL            /* "AMVP": its colours kept */
 
-static UBYTE *va_lut;                       /* (Y >> 2) << 10 | (Cb >> 3) << 5 | Cr >> 3: a pen */
-static UWORD (*va_yt)[256], (*va_ut)[256], (*va_vt)[256];  /* 16 dither phases each */
+static UBYTE *va_lut;                       /* VA_LUT pens */
+static UWORD (*va_yt)[256];                 /* Y's part: 16 dither phases (4 x 4 a pixel) */
+static UBYTE (*va_ut)[256], (*va_vt)[256];  /* Cb's, Cr's: 4 phases (2 x 2 a block) */
+static UWORD *va_cl;                        /* a row of blocks' Cb and Cr part */
 static ULONG va_pal[256];                   /* the screen's colours (pens) */
 static BPTR va_fh;
 static ULONG va_conv_ticks, va_nconv;
+static ULONG va_pen_ticks, va_plane_ticks, va_nsplit;   /* (one picture in 16: its two parts timed) */
 
 /* Y Cb Cr (studio range, BT.601) to a 15-bit cell (r << 10 | g << 5 | b) */
 static UWORD va_cell(LONG y, LONG u, LONG v)
@@ -3605,6 +3614,94 @@ static void va_count(const struct MpvPicture *p, ULONG *hist, const UWORD *cello
     }
 }
 
+static void va_free(void);
+
+/* ---- its colours kept (PROGDIR:Cache/<hash>.vpal): by the file's path,
+ * date and size; the table and the palette as made, so played again it
+ * starts at once */
+struct VaKeep {
+    ULONG magic, hash, days, minute, tick, size, lut;
+};
+
+static BOOL va_key(const char *path, struct VaKeep *k)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BPTR l;
+    BOOL ok = FALSE;
+    const char *s;
+    APTR q;
+    memset(k, 0, sizeof(*k));
+    if (!fib)
+        return FALSE;
+    q = ((struct Process *)FindTask(NULL))->pr_WindowPtr;
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = (APTR)-1;
+    if ((l = Lock((CONST_STRPTR)path, SHARED_LOCK))) {
+        ok = Examine(l, fib);
+        UnLock(l);
+    }
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = q;
+    if (ok) {
+        k->magic = VA_MAGIC;
+        k->hash = 2166136261UL;
+        for (s = path; *s; s++)
+            k->hash = (k->hash ^ (UBYTE)*s) * 16777619UL;
+        k->days = fib->fib_Date.ds_Days;
+        k->minute = fib->fib_Date.ds_Minute;
+        k->tick = fib->fib_Date.ds_Tick;
+        k->size = fib->fib_Size;
+        k->lut = VA_LUT;
+    }
+    FreeDosObject(DOS_FIB, fib);
+    return ok;
+}
+
+static BOOL va_cache_load(const char *path)
+{
+    struct VaKeep k, h;
+    char name[48];
+    BPTR in;
+    BOOL ok = FALSE;
+    APTR q;
+    if (!va_key(path, &k))
+        return FALSE;
+    sprintf(name, "PROGDIR:Cache/%08lx.vpal", (unsigned long)k.hash);
+    q = ((struct Process *)FindTask(NULL))->pr_WindowPtr;
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = (APTR)-1;
+    in = Open((CONST_STRPTR)name, MODE_OLDFILE);
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = q;
+    if (!in)
+        return FALSE;
+    ok = Read(in, &h, sizeof(h)) == sizeof(h) && !memcmp(&h, &k, sizeof(h)) &&
+         Read(in, va_pal, sizeof(va_pal)) == sizeof(va_pal) && Read(in, va_lut, VA_LUT) == VA_LUT;
+    Close(in);
+    return ok;
+}
+
+static void va_cache_save(const char *path)
+{
+    struct VaKeep k;
+    char name[48];
+    BPTR out, l;
+    APTR q;
+    if (!va_key(path, &k))
+        return;
+    sprintf(name, "PROGDIR:Cache/%08lx.vpal", (unsigned long)k.hash);
+    q = ((struct Process *)FindTask(NULL))->pr_WindowPtr;
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = (APTR)-1;
+    if (!(l = Lock((CONST_STRPTR)"PROGDIR:Cache", SHARED_LOCK)))
+        l = CreateDir((CONST_STRPTR)"PROGDIR:Cache");
+    if (l)
+        UnLock(l);
+    if ((out = Open((CONST_STRPTR)name, MODE_NEWFILE))) {
+        BOOL ok = Write(out, &k, sizeof(k)) == sizeof(k) &&
+                  Write(out, va_pal, sizeof(va_pal)) == sizeof(va_pal) && Write(out, va_lut, VA_LUT) == VA_LUT;
+        Close(out);
+        if (!ok)
+            DeleteFile((CONST_STRPTR)name);
+    }
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = q;
+}
+
 /* Its colours, from pictures sampled through it (a Program Stream or a
  * bare video stream; else, and if none could be had, a colour cube):
  * va_pal, va_lut. FALSE: no memory. */
@@ -3619,22 +3716,31 @@ static BOOL va_palette(const char *path, const char *name)
     struct Hook rh;
     char m[200], ev[16];
     LONG amp = 8, k, n;
-    BOOL ok = FALSE;
+    BOOL ok = FALSE, kept = FALSE;
     if (GetVar((CONST_STRPTR)"Ambiance/VideoDither", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0) {
         for (amp = 0, k = 0; ev[k] >= '0' && ev[k] <= '9'; k++)
             amp = amp * 10 + ev[k] - '0';
         if (amp > 32)
             amp = 32;
     }
-    va_lut = AllocVec(65536, MEMF_ANY);
-    va_yt = AllocVec(3 * 16 * 256 * sizeof(UWORD), MEMF_ANY);
+    va_lut = AllocVec(VA_LUT, MEMF_ANY);
+    va_yt = AllocVec(16 * 256 * sizeof(UWORD) + 2 * 4 * 256, MEMF_ANY);
+    va_cl = AllocVec(((vid.w + 33) / 2) * sizeof(UWORD), MEMF_ANY | MEMF_CLEAR);
+    if (!va_lut || !va_yt || !va_cl)
+        goto out;
+    va_ut = (UBYTE (*)[256])(va_yt + 16);
+    va_vt = va_ut + 4;
+    if (va_cache_load(path)) {
+        got = VA_SAMPLES;
+        ncol = 0;
+        kept = TRUE;
+        goto dither;                        /* (played before: its colours as they were) */
+    }
     hist = AllocVec(32768 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR);
     cellof = AllocVec(65536 * sizeof(UWORD), MEMF_ANY);
     lut555 = AllocVec(32768, MEMF_ANY | MEMF_CLEAR);
-    if (!va_lut || !va_yt || !hist || !cellof || !lut555)
+    if (!hist || !cellof || !lut555)
         goto out;
-    va_ut = va_yt + 16;
-    va_vt = va_yt + 32;
     for (i = 0; i < 65536; i++)
         cellof[i] = va_cell((LONG)((i >> 10) << 2) + 2, (LONG)(((i >> 5) & 31) << 3) + 4,
                             (LONG)((i & 31) << 3) + 4);
@@ -3696,38 +3802,48 @@ static BOOL va_palette(const char *path, const char *name)
     memset(va_pal, 0, sizeof(va_pal));
     for (i = 0; i < ncol; i++)
         va_pal[pens[i]] = pal[i];
-    for (i = 0; i < 65536; i++)
-        va_lut[i] = pens[lut555[cellof[i]]];
-    /* the dither: each of 16 phases its own offset, Cb and Cr's the
-     * matrix turned (not in step with Y's) */
+    for (i = 0; i < VA_LUT; i++)           /* (each cell's middle) */
+        va_lut[i] = pens[lut555[va_cell((LONG)((i >> 8) << 3) + 4, (LONG)(((i >> 4) & 15) << 4) + 8,
+                                        (LONG)((i & 15) << 4) + 8)]];
+    va_cache_save(path);
+dither:
+    /* the dither: Y's 16 phases (4 x 4 a pixel, a step of 8 across them
+     * at amp 8), Cb's and Cr's 4 (2 x 2 a block, -6 -2 2 6 of a step of
+     * 16 at amp 8), Cr's
+     * matrix turned against Cb's */
     for (k = 0; k < 16; k++) {
         LONG dy = ((LONG)bayer[k >> 2][k & 3] * 2 - 15) * amp / 16;
-        LONG du = ((LONG)bayer[k & 3][k >> 2] * 2 - 15) * amp / 16;
-        LONG dv = ((LONG)bayer[(k >> 2) ^ 2][(k & 3) ^ 1] * 2 - 15) * amp / 16;
         for (i = 0; i < 256; i++) {
-            LONG y = (LONG)i + dy, u = (LONG)i + du, v = (LONG)i + dv;
+            LONG y = (LONG)i + dy;
             y = y < 0 ? 0 : y > 255 ? 255 : y;
-            u = u < 0 ? 0 : u > 255 ? 255 : u;
-            v = v < 0 ? 0 : v > 255 ? 255 : v;
-            va_yt[k][i] = (UWORD)((y >> 2) << 10);
-            va_ut[k][i] = (UWORD)((u >> 3) << 5);
-            va_vt[k][i] = (UWORD)(v >> 3);
+            va_yt[k][i] = (UWORD)((y >> 3) << 8);
         }
     }
-    sprintf(m, "%s: %lu colours from %lu pictures sampled through it, in %lu ms (dither %ld)", name,
-            (unsigned long)ncol, (unsigned long)got, (unsigned long)(time_ms() - t0), (long)amp);
+    for (k = 0; k < 4; k++) {
+        static const UBYTE b2[4] = { 0, 2, 3, 1 };
+        LONG du = ((LONG)b2[k] * 2 - 3) * amp / 4, dv = ((LONG)b2[k ^ 3] * 2 - 3) * amp / 4;
+        for (i = 0; i < 256; i++) {
+            LONG u = (LONG)i + du, v = (LONG)i + dv;
+            u = u < 0 ? 0 : u > 255 ? 255 : u;
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            va_ut[k][i] = (UBYTE)((u >> 4) << 4);
+            va_vt[k][i] = (UBYTE)(v >> 4);
+        }
+    }
+    if (kept)
+        sprintf(m, "%s: its colours as kept from before, in %lu ms (dither %ld)", name,
+                (unsigned long)(time_ms() - t0), (long)amp);
+    else
+        sprintf(m, "%s: %lu colours from %lu pictures sampled through it, in %lu ms (dither %ld)", name,
+                (unsigned long)ncol, (unsigned long)got, (unsigned long)(time_ms() - t0), (long)amp);
     amb_log("video: AGA", m);
     ok = TRUE;
 out:
     FreeVec(hist);
     FreeVec(cellof);
     FreeVec(lut555);
-    if (!ok) {
-        FreeVec(va_lut);
-        FreeVec(va_yt);
-        va_lut = NULL;
-        va_yt = va_ut = va_vt = NULL;
-    }
+    if (!ok)
+        va_free();
     return ok;
 }
 
@@ -3735,8 +3851,11 @@ static void va_free(void)
 {
     FreeVec(va_lut);
     FreeVec(va_yt);
+    FreeVec(va_cl);
     va_lut = NULL;
-    va_yt = va_ut = va_vt = NULL;
+    va_yt = NULL;
+    va_ut = va_vt = NULL;
+    va_cl = NULL;
 }
 
 /* A picture into bm's planes at x0 (a multiple of 16), y0: each row made
@@ -3747,30 +3866,44 @@ static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULO
                    WORD rows)
 {
     ULONG y, x, nl = bw >> 5, w = p->mpic_Width, bpr = bm->BytesPerRow, k, hz = 0, tk = time_ticks(&hz);
-    ULONG pl[8];
+    ULONG pl[8], cw = (w + 1) >> 1, tp = 0, tq = 0, split = (va_nconv & 15) == 0;
     WORD h = p->mpic_Height < rows ? p->mpic_Height : rows;
+    const UBYTE *lut = va_lut;
     for (y = 0; y < (ULONG)h; y++) {
         const UBYTE *Y = p->mpic_Y + y * p->mpic_YModulo;
-        const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
-        const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
         ULONG ph = (y & 3) << 2;
         const UWORD *y0t = va_yt[ph], *y1t = va_yt[ph + 1], *y2t = va_yt[ph + 2], *y3t = va_yt[ph + 3];
-        const UWORD *u0t = va_ut[ph], *u1t = va_ut[ph + 1], *u2t = va_ut[ph + 2], *u3t = va_ut[ph + 3];
-        const UWORD *v0t = va_vt[ph], *v1t = va_vt[ph + 1], *v2t = va_vt[ph + 2], *v3t = va_vt[ph + 3];
-        const UBYTE *lut = va_lut;
+        const UWORD *cl = va_cl;
         UBYTE *d = rb;
         UBYTE *pp[8];
-        for (x = 0; x + 4 <= w; x += 4, d += 4) {
-            UBYTE u0 = U[x >> 1], v0 = V[x >> 1], u1 = U[(x >> 1) + 1], v1 = V[(x >> 1) + 1];
-            d[0] = lut[y0t[Y[x]] | u0t[u0] | v0t[v0]];
-            d[1] = lut[y1t[Y[x + 1]] | u1t[u0] | v1t[v0]];
-            d[2] = lut[y2t[Y[x + 2]] | u2t[u1] | v2t[v1]];
-            d[3] = lut[y3t[Y[x + 3]] | u3t[u1] | v3t[v1]];
+        ULONG t1 = 0;
+        if (!(y & 1)) {
+            /* a row of blocks: its Cb and Cr part (2 x 2 dither by block) */
+            const UBYTE *U = p->mpic_Cb + (y >> 1) * p->mpic_CModulo;
+            const UBYTE *V = p->mpic_Cr + (y >> 1) * p->mpic_CModulo;
+            ULONG cp = ((y >> 1) & 1) << 1;
+            const UBYTE *u0t = va_ut[cp], *u1t = va_ut[cp + 1], *v0t = va_vt[cp], *v1t = va_vt[cp + 1];
+            UWORD *c = va_cl;
+            for (x = 0; x + 2 <= cw; x += 2, c += 2) {
+                c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
+                c[1] = (UWORD)(u1t[U[x + 1]] | v1t[V[x + 1]]);
+            }
+            if (x < cw)
+                c[0] = (UWORD)(u0t[U[x]] | v0t[V[x]]);
+        }
+        for (x = 0; x + 4 <= w; x += 4, d += 4, cl += 2) {
+            ULONG c0 = cl[0], c1 = cl[1];
+            d[0] = lut[y0t[Y[x]] | c0];
+            d[1] = lut[y1t[Y[x + 1]] | c0];
+            d[2] = lut[y2t[Y[x + 2]] | c1];
+            d[3] = lut[y3t[Y[x + 3]] | c1];
         }
         for (; x < w; x++, d++)
-            *d = lut[y0t[Y[x]] | u0t[U[x >> 1]] | v0t[V[x >> 1]]];
+            *d = lut[y0t[Y[x]] | va_cl[x >> 1]];
         for (; x < bw; x++)
             *d++ = 0;
+        if (split)
+            t1 = time_ticks(&hz);
         for (k = 0; k < 8; k++)
             pp[k] = (UBYTE *)bm->Planes[k] + (y0 + y) * bpr + (x0 >> 3);
         for (x = 0; x < nl; x++) {
@@ -3780,8 +3913,23 @@ static void va_put(const struct MpvPicture *p, struct BitMap *bm, UBYTE *rb, ULO
                 pp[k] += 4;
             }
         }
+        if (split) {
+            ULONG t2 = time_ticks(&hz);
+            tp += t1 - tk;
+            tq += t2 - t1;
+            tk = t2;
+        }
     }
-    va_conv_ticks += time_ticks(&hz) - tk;
+    if (split) {
+        va_pen_ticks += tp;
+        va_plane_ticks += tq;
+        va_nsplit++;
+    } else {
+        va_conv_ticks += time_ticks(&hz) - tk;
+        va_nconv++;
+        return;
+    }
+    va_conv_ticks += tp + tq;
     va_nconv++;
 }
 
@@ -3804,7 +3952,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     ULONG last_q = ~0UL, nframes = 0;
     char m[200];
     (void)g;
-    va_conv_ticks = va_nconv = 0;
+    va_conv_ticks = va_nconv = va_pen_ticks = va_plane_ticks = va_nsplit = 0;
     bw = (w + 31) & ~31;
     /* its screen: the video's size, at least a lowres one's (room for
      * its controls), the video in the middle (across, on a 16-pixel step) */
@@ -3935,7 +4083,11 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
             if (st_swv_planes(&p)) {
                 k = shown ^ 1;
                 safe_done(safe, safe_wait);
-                va_put(&p, sb[k]->sb_BitMap, rb, bw, vx, vy, (WORD)h);
+                /* (the rows under its controls, while they are up, not made:
+                 * what they cover is put back from this picture's next) */
+                va_put(&p, sb[k]->sb_BitMap, rb, bw, vx, vy,
+                       (WORD)(bar.on && bar.ok && bar.y - vy < (WORD)h ? (bar.y - vy > 0 ? bar.y - vy : 0)
+                                                                         : (WORD)h));
                 bar.saved[k] = FALSE;       /* (what it covered: this picture now) */
                 bar_put(sb[k]->sb_BitMap, k);
                 while (!ChangeScreenBuffer(scr, sb[k]))
@@ -3956,8 +4108,15 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 bar_colours(TRUE);
                 bar_put(sb[shown]->sb_BitMap, shown);
             } else {
+                struct MpvPicture lp;
                 bar_colours(FALSE);
-                bar_take(sb[shown]->sb_BitMap, shown);
+                if (st_swv_planes(&lp)) {
+                    /* (the rows under it were not made while it was up: the
+                     * picture shown made again, all of it) */
+                    va_put(&lp, sb[shown]->sb_BitMap, rb, bw, vx, vy, (WORD)h);
+                    bar.saved[shown] = FALSE;
+                } else
+                    bar_take(sb[shown]->sb_BitMap, shown);
             }
             bar_redraw = FALSE;
             last_q = at / 250;
@@ -3982,10 +4141,16 @@ out:
         st_swv_release();
         (void)time_ticks(&hz);
         c = va_nconv && hz ? (ULONG)((unsigned long long)va_conv_ticks * 100000ULL / hz / va_nconv) : 0;
-        sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms; a picture made pens and planes in "
-                   "%lu.%02lu ms (%lu)",
-                name, (unsigned long)shownp, (unsigned long)dropped, (unsigned long)(time_ms() - t0),
-                (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)nframes);
+        {
+            ULONG cp = va_nsplit && hz ? (ULONG)((unsigned long long)va_pen_ticks * 100000ULL / hz / va_nsplit) : 0,
+                  cq = va_nsplit && hz ? (ULONG)((unsigned long long)va_plane_ticks * 100000ULL / hz / va_nsplit) : 0;
+            sprintf(m, "%s: %lu pictures shown, %lu let go, in %lu ms; a picture made pens and planes in "
+                       "%lu.%02lu ms (%lu): pens %lu.%02lu, planes %lu.%02lu (%lu timed apart)",
+                    name, (unsigned long)shownp, (unsigned long)dropped, (unsigned long)(time_ms() - t0),
+                    (unsigned long)(c / 100), (unsigned long)(c % 100), (unsigned long)nframes,
+                    (unsigned long)(cp / 100), (unsigned long)(cp % 100), (unsigned long)(cq / 100),
+                    (unsigned long)(cq % 100), (unsigned long)va_nsplit);
+        }
         amb_log("video: AGA", m);
     }
     if (scr) {
