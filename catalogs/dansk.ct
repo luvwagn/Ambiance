@@ -13,9 +13,12 @@ ANIM-%ld-komprimering understøttes ikke
 MSG_5799A183
 Dvd'en kunne ikke læses der
 ; The DVD could not be read there
-MSG_48EC1181
-MPEG-video afspilles på en RTG-skærm (AGA kommer)
-; MPEG video plays on an RTG screen (AGA screens to come)
+MSG_37FD8CF2
+MPEG-video på en native skærm kræver AGA's 256 farver
+; MPEG video on a native screen needs AGA's 256 colours
+MSG_58B9C070
+Ikke nok hukommelse til videoens skærm
+; Not enough memory for the video's screen
 MSG_21CB4B97
 MPEG-video afspilles på ZZ9000's skærm
 ; MPEG video plays on the ZZ9000's display
@@ -196,6 +199,9 @@ Indstillinger
 MSG_58E096DE
 Om
 ; About
+MSG_6AA26665
+Spiller nu
+; Now playing
 MSG_17B11033
 Indlæser...
 ; Loading...
@@ -997,9 +1003,9 @@ Ingen animationer fundet: Ambiance leder efter dem i %s.
 MSG_6A5613A3
 %s indeholder ingen animationer.
 ; %s has no animations in it.
-MSG_18130437
-Ingen animationer fundet. Ambiance afspiller IFF ANIM fra VIDEOS:, mapperne under Indstillinger > Mapper > Video og, med AGS, %s.
-; No animations found. Ambiance plays IFF ANIMs from VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s.
+MSG_4ED4752C
+Ingen video fundet. Ambiance leder i VIDEOS:, i mapperne under Indstillinger > Mapper > Video og, med AGS, i %s og %s.
+; No videos found. Ambiance looks in VIDEOS:, the folders of Settings > Folders > Videos, and on AGS %s and %s.
 MSG_481007A3
 Ingen billeder fundet: Ambiance leder efter dem i %s.
 ; No pictures found: Ambiance looks for them in %s.
@@ -1351,9 +1357,6 @@ Gentag fra: den stopper, når den slutter
 MSG_230A5085
 Lyd slået til
 ; Sound on
-MSG_6AA26665
-Spiller nu
-; Now playing
 MSG_7DDFAD41
 Denne Amiga er for langsom til FLAC
 ; This Amiga is too slow to decode FLAC smoothly
@@ -1882,6 +1885,18 @@ Død
 MSG_15974E49
 Opløst
 ; Disbanded
+MSG_0A1997CB
+på pause
+; paused
+MSG_6EE2F34E
+stoppet
+; stopped
+MSG_0AD50EDE
+for nylig
+; recent
+MSG_75AFE364
+Alt:
+; All
 MSG_14BD5320
 Layoutet kunne ikke åbnes: det klassiske bruges
 ; The layout could not be opened: the classic one is used
@@ -2203,6 +2218,9 @@ Intet her pakker arkiver ud: installer xadmaster.library (Aminet util/arc/xadmas
 MSG_7DFAF53D
 MPEG-video med CPU'en kræver mpegv.library (Ambiance's Libs)
 ; MPEG video by the CPU needs mpegv.library (Ambiance's Libs)
+MSG_4E597D1C
+%s-video: på en AGA-skærm afspiller Ambiance MPEG-1 og MPEG-2
+; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
 MSG_5EF81658
 MPEG-video kræver Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
