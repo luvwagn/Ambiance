@@ -121,21 +121,20 @@ HTTPS (secure radio stations, signing in at plex.tv) is by AmiSSL 5
 installed. It is not part of Ambiance or its archive: get it from Aminet
 (util/libs/AmiSSL-5.x-OS3) or https://github.com/jens-maus/amissl.
 
-Packed modules are unpacked with xfdmaster.library, MP3 is decoded by
-mpega.library and XM, S3M and IT are mixed by modplug.library, where they
-are installed. They are not part of Ambiance. Its archive's Extras drawer
+Packed modules are unpacked with xfdmaster.library, and XM, S3M and IT
+are mixed by modplug.library, where they are installed. They are not part
+of Ambiance. Its archive's Extras drawer
 holds their Aminet archives whole and unchanged, which the installer
 offers to install where they are missing or older (never on AGS):
   modplug-68k: modplug.library 1.0 by Thomas Wenzel, a port of
     libmodplug 0.8.9, which is in the public domain.
-  mpega_library: mpega.library 2.4, (c) 1997-99 Stephane Tavenard,
-    giftware: "may be distributed freely under the condition that no
-    profit is gained from its distribution, nor from any other program
-    distributed in the same package", all files together and unchanged.
   xfdmaster: xfdmaster 1.38 (library 39.15), (c) Georg Hoermann and Dirk
     Stoecker: "freely distributable for noncommercial use. If you
     redistribute XFD, you have to keep all files together."
-So Ambiance's archive, with these in it, is not to be sold.
+So Ambiance's archive, with xfdmaster in it, is not to be sold.
+An mpega.library already in LIBS: (Stephane Tavenard's 2.4, giftware, or
+the ZZ9000's) can be chosen in Settings > Sound instead of Ambiance's own
+ambmpega.library; neither the archive nor the installer brings one.
 
 Libs/ambsql.library, which reads beets music libraries, is Ambiance's own
 small wrapper (src/sqlib, MIT) around SQLite 3.34.0, linked from the

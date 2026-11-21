@@ -227,8 +227,8 @@ Installation
 Double-click Install-Ambiance: it asks where Ambiance should go and which
 languages to install, your Workbench's ticked, and keeps the settings of
 an earlier installation. Not on AGS (which has them), it then offers
-modplug.library, mpega.library and xfdmaster.library from Aminet, ticked
-where LIBS: has none or an older one; a newer one is never replaced. Or
+modplug.library and xfdmaster.library from Aminet, ticked where LIBS: has
+none or an older one; a newer one is never replaced. Or
 copy the Ambiance drawer to your hard drive yourself (all its languages
 come along), keeping its Fonts drawer next to the program.
 
@@ -367,153 +367,7 @@ Not there yet
 
 History
 -------
-0.9.2  AmigaMCE is now Ambiance. Layouts: the whole interface drawn
-       another way, chosen in Settings > Display > Layout - Showcase
-       (panels, a menu down the left) and Horizon (a deep blue strip
-       with glowing choices and covers on their reflections) - with
-       Home's launchpad (what plays and plays next, each section's
-       rows), walls of covers that glide, artist and album screens,
-       the mouse, and the viewer's and players' controls in the
-       layout's style; on graphics cards, and on AGA too (Settings >
-       Display > Layouts on native screens, experimental). Classic
-       stays built in. Games without AGS: iGame's list, and WHDLoad
-       installed from Games. Kodi's album.nfo and artist.nfo in the
-       details. MPEG video on AGA screens without a ZZ9000 (a screen
-       of its own in 252 colours, half size on slower Amigas), and
-       transport streams (.ts, .m2ts). The viewer reads IFF, PBM and
-       JPEG (progressive too) itself, fast. Screen modes up to 1920 x
-       1200 on graphics cards. Only one Ambiance runs at a time. Every
-       string translated in all 13 languages.
-0.9.1.1 On AGA and other native screens, the UI draws only on the
-       bitplanes its colours need (lists scrolling, the scroll bar, the
-       footer, Now Playing's time and position, the dancing bars): less
-       blitter time on every frame. Rows saying Plex is off or has no
-       server open Settings > Networking > Plex.
-0.9.1  Flow, Now Playing's visualisation for graphics cards: the picture
-       carried on and on, zoomed, turned and rippled, the sound's wave
-       drawn in, at half the screen's resolution on fast Amigas (a
-       quarter on others, coarser where frames come slowly); F shows it
-       on a screen of its own, with a video's controls while the mouse
-       moves. AmigaAMP's visual plug-ins run from Ambiance (F, Settings
-       > Display > Full screen visual). Text blended in 16 steps on fast
-       Amigas with a graphics card; Extra large text in a window;
-       numbers that change (times, the Debug readout) no longer shift
-       what follows them. Colours: five schemes (Settings > Display):
-       Midnight, Graphite, WB1.3, Emerald and Amethyst. HTTPS by AmiSSL
-       6 (OpenSSL 4.1) where it is installed, else AmiSSL 5. A module
-       back at the next start plays from its beginning (a track still
-       from where it was). Modules the mixer plays follow Settings >
-       Sound: AHI, or Paula at 14 bits, changed as they play, and mixed
-       6 dB louder than before; a video or anim with sound stops them
-       meanwhile and they go on after.
-0.9.0  MPEG-2, transport streams and DVDs decoded by the CPU too on RTG
-       screens (Libs/mpegv.library 2: libmpeg2), drawn up to twice as
-       fast where there is no overlay; B pictures passed over while it
-       is behind. DVD menus, decoded by the CPU (their buttons drawn over
-       the picture, forced subtitles too, a menu button in the
-       controls), and DVD images (.iso) in Videos' folders. AC-3 the card
-       will not decode (Amiberry's emulated card) decoded by a 68040 or
-       68060 instead (Libs/ac3.library, ac3fpu.library: liba52). MP3 and
-       MPEG audio by Ambiance's own Libs/ambmpega.library (libmad: about
-       83 dB from a perfect decoder, where mpega 2.4 gives 34), or
-       mpega.library or MHI as before (Settings > Sound); its quality
-       chosen by how fast this Amiga is, measured at the first MP3 each
-       run, not by the name of its CPU (or high or medium, in Settings).
-       Paula at 14 bits: all four channels, quieter passages cleaner.
-0.8.9  Videos plays MPEG: on a ZZ9000 (MPEG-1 and MPEG-2, program and
-       transport streams, with their sound), and MPEG-1 by the CPU on
-       RTG screens without one. DVDs in a drive: their film, or their
-       programmes one after another, chapters by N and P and the
-       controls, the sound track the card plays best
-       (Libs/dvdnav.library: libdvdread and libdvdnav). The CPU's
-       pictures go on the graphics card's YUV overlay where there is one
-       (Settings > Display: Use overlay when available). One set of
-       control glyphs for Now playing, the mini player, ANIMs, videos
-       and DVDs, square on lowres, hires and laced screens alike.
-0.8.8  MP3 seeks land on a real frame (no error after a sound output
-       change). The volume kept between runs. MHI at the level of mpega
-       through Paula or AHI. On Workbench, the smooth style leaves pens
-       free for other programs. A MED song EaglePlayer's MED players turn
-       down goes to the mixer without every other player asked first.
-       The mini player's meters across.
-0.8.5  Iconify: the window's gadget on OS 3.2, Project > Iconify or
-       Amiga-I (full screen too) leave an AppIcon with a musical note on
-       Workbench, the music playing on; double-clicked, Ambiance is back
-       where it was. Workbench's Tools menu quits it meanwhile. A mini
-       player on the window's zoom gadget. Mute on Now playing (M). Sound
-       output changed in Settings applies to what plays at once. JPEGs
-       no datatype takes (a camera's, from Plex) read by Ambiance.
-0.8.1  Now playing at the top of every section's lists, its label in
-       orange; what was playing at quit back at the next start, stopped,
-       Play going on from where it was. MED songs (MED_note): their
-       length and seeking, real levels on the meters, the right tempo
-       where the player gives none, four tracks on Paula's four. AHI:
-       its default mode (the Music unit's); mpega at its best quality on
-       a fast Amiga. Viewer: Previous's arrow, no transition when stepped
-       by hand, the bar kept clear of one. The window: Amiga-F and a
-       double-click on its title bar for full screen; Display's two-way
-       choices as checkboxes. Plex tokens kept out of the log.
-0.8.0  Slideshow transitions (Settings > Display): Off, Fade, Cross-fade,
-       Tiles or Wipe; on a screen with a colour table, a fade. Korean.
-       The window follows Workbench's screen mode changing, back into a
-       window when it can. Videos resized as they play. Note players
-       (MED_note) mixed on a 68020 or better: samples of any length, its
-       periods read right, 5-8 channels. Icons highlighted with images
-       of their own; the drawer's a GlowIcon.
-0.7.2  A window on Workbench (15-bit or deeper, on a graphics card):
-       Settings > Display > Workbench window, the icon's WINDOWED tooltype or
-       WINDOWED from a Shell; text Small, Medium or Large; resized by its
-       grip, the layout and text pages following; its Project menu; the
-       tips bar going once seen with the mouse; its place and size kept.
-       Pictures and videos full screen from it on a screen in
-       Workbench's own mode (no mode switch). The viewer: the pointer and
-       previous, play/pause, next and full-screen buttons with the mouse.
-       Videos: made to fit a window, larger or smaller, at any depth; at
-       their end back to the first frame, stopped; a click on their
-       progress line seeks. Loop, on Now Playing and video's controls.
-       EaglePlayer: a module's kind from what it holds, note players
-       (MED_note) heard, and a player whose check hangs left out.
-0.7.1  Music: beets libraries in MUSIC: browsed by artist and album;
-       music folders with the spinner while read. HTTPS by AmiSSL 5
-       (Settings > Networking): secure radio stations play, and Plex
-       signs in at plex.tv by a code (plex.tv/link), the account's
-       servers listed with their own tokens. Radio: titles in time with
-       the music, smoother over MHI, Now playing in its lists. 6- and
-       8-channel MODs on Ambiance's own replayer, mixed onto Paula (after
-       ProTracker 4.1's mixer). ZZ9000: found, and MP3 decoded on the
-       card. JPEG thumbnails decoded by Ambiance itself (jdec), faster
-       than a datatype. Greek. Lists: the scroll bar always, the letter
-       over the rows, tags kept while scrolling; the menu stays open until
-       a list is gone into; a joystick for Games.
-0.7.0  Videos: IFF ANIMs (ANIM-5, 7 and 8) from Media:Animations, VIDEOS:
-       and Videos folders, played on a screen in their own mode (HAM,
-       extra halfbrite, interlace, overscan) a frame at a time from the
-       file, their sound in step (AHI or Paula) while what played waits,
-       with controls over the picture when the mouse moves; a frame of
-       each beside the list. The menu folds to its icons on every screen,
-       sliding where drawing is quick, and stays open while the pointer is
-       in it. Settings > Screen is now Display, with Jump scrolling.
-       ambsql.library for reading beets libraries later. Faster Plex
-       slideshows; smoother hover highlights; coasting kept short.
-0.6.0  Plex photo libraries in Pictures: browsing, viewing, slideshows.
-       AHI output and MHI MP3 decoding for radio, Plex and music files.
-       Music files: MP3, FLAC, WAV, AIFF and 8SVX from the MUSIC:
-       assign and Music folders, with tags and covers; FLAC from Plex
-       as stored (flacdec.library); 68020+. Japanese, Chinese and
-       Korean names in their own characters. In eleven languages besides
-       English (Japanese among them), with an installer.
-       HippoPlayer's spectrum analyser on Now
-       Playing (V, or Settings > Screen > Visualisation). Settings >
-       Folders: the music, modules and pictures of an Amiga without AGS
-       (MUSIC:, MODS:, PICTURES: and up to eight folders each). Screen
-       mode Automatic follows a Workbench on a graphics card; RTG
-       screens choose their pixel font. Long lists brake for their end
-       and coast on when let go at speed.
-0.5.0  Music from a Plex Media Server; Settings in pages (General,
-       Screen, Sound, Networking); radio bitrate limit, list server and
-       stream buffer settings; network interface choice; Countries A to Z
-       with your own first; Now Playing seeking, covers and new buttons.
-
+0.9.2  First public release.
 
 Credits and licences
 --------------------
@@ -528,13 +382,12 @@ HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
 mixer does it (MIT, (c) 2026 Akustikrausch (Andreas Wendorf), used by his
 leave; ProTracker 4.1: https://github.com/akustikrausch/protracker4).
 
-The Extras drawer holds three Aminet archives, whole and unchanged, for
+The Extras drawer holds two Aminet archives, whole and unchanged, for
 the installer: modplug-68k (modplug.library 1.0, Thomas Wenzel's port of
-libmodplug, which is in the public domain), mpega_library (mpega.library
-2.4 (c) 1997-99 Stephane Tavenard, giftware) and xfdmaster (xfdmaster
-1.38, library 39.15, (c) Georg Hoermann and Dirk Stoecker). mpega and xfd
-are free to pass on but not for profit, their files together and
-unchanged: Ambiance with them may not be sold.
+libmodplug, which is in the public domain) and xfdmaster (xfdmaster 1.38,
+library 39.15, (c) Georg Hoermann and Dirk Stoecker). xfd is free to pass
+on but not for profit, its files together and unchanged: Ambiance with it
+may not be sold.
 
 FLAC is decoded by flacdec.library (c) 2026 Renaud Schweingruber, with
 dr_flac by David Reid (public domain or MIT-0), where it is installed. It

@@ -741,7 +741,7 @@ build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@echo "  CC    $<"
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
 
-EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/mpega_library.lha extras/aminet/xfdmaster.lha
+EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) Ambiance.readme $(ICONS) docs/install.info docs/Install-Ambiance $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPEGVLIB) \
      assets/certs/cacert.pem

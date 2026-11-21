@@ -173,7 +173,7 @@ of the Amiga to how fast it really is.
   and AAC are not the card's: the preview says so (AAC: played without
   its sound).
 - Without a ZZ9000 (or with Settings > Display > MPEG video on the ZZ9000
-  off), MPEG-1 is decoded by the CPU, its sound by mpega.library. Its
+  off), MPEG-1 is decoded by the CPU, its sound as MP3 is (below). Its
   pictures go to the graphics card's YUV overlay where the screen has one
   (Picasso96's PIP), which scales them; otherwise (or with Settings >
   Display > Use overlay when available off) they are made RGB and drawn,
@@ -269,12 +269,12 @@ of the Amiga to how fast it really is.
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
 | **For Games and Demos** | Amiga Game Selector 3 (Ambiance finds it through the `AGS:` assign), or iGame's list (its `gameslist.csv`) with WHDLoad; to install WHDLoad from Games, xadmaster.library or LhA in C: |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
-| **For MP3 and FLAC** | mpega.library for MP3 (the installer offers it); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
+| **For MP3 and FLAC** | Nothing more for MP3 (Ambiance's own `ambmpega.library` is in its `Libs`); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv) |
 
 Radio, Plex and music files can play through AHI (16-bit, at AHI's own
 mode and rate) instead of Paula, and their MP3 can be decoded and played by
-an MHI driver instead of mpega.library: Settings > Sound. Modules play on
+an MHI driver: Settings > Sound. Modules play on
 Paula.
 
 ## Installing
@@ -364,7 +364,7 @@ was (a station from now). It is kept in `ENVARC:Ambiance/Resume`.
 |---|---|
 | General | Language, Debug |
 | Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on Ambiance's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
-| Sound | Paula or AHI for radio, Plex and music files; MP3 by mpega.library or an MHI driver |
+| Sound | Paula or AHI for radio, Plex and music files; MP3 by Ambiance's own ambmpega.library, an mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves); iGame (its drawer, found by itself at first, or None); WHDLoad (installed, or installing it from whdload.de) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |
 
@@ -483,12 +483,13 @@ GPL-3.0-or-later, its source there, not in the archive), built by its
 own Makefile (`make ac3lib`, tested by `make test`), and opened at run
 time through an interface of their own (`extras/ac3/include`, MIT).
 
-MP3 (and MP2) is decoded by `mpega.library` from `LIBS:` (Stéphane
-Tavenard's, a clone, or the ZZ9000's, which decodes on the card) or, as
-Settings > Sound chooses, by **`ambmpega.library`**: libmad behind
-mpega's functions under a name of its own, so it never clashes with the
-one in `LIBS:`, with one more of its own that writes each frame straight
-into Ambiance's FIFO. It is its own project (`extras/mpga`, a git
+MP3 (and MP2) is decoded by **`ambmpega.library`**, in Ambiance's `Libs`:
+libmad behind mpega's functions under a name of its own, so it never
+clashes with an `mpega.library` in `LIBS:`, with one more of its own that
+writes each frame straight into Ambiance's FIFO. Settings > Sound can
+choose an `mpega.library` from `LIBS:` instead (Stéphane Tavenard's, a
+clone, or the ZZ9000's, which decodes on the card and is chosen by
+itself); neither the archive nor the installer brings one. It is its own project (`extras/mpga`, a git
 submodule: [luvwagn/mpga.library](https://github.com/luvwagn/mpga.library),
 GPL-3.0-or-later), built by its own Makefile (`make mpgalib`, tested by
 `make test`). Unless Settings > Sound says otherwise, MP3 is decoded by
