@@ -503,11 +503,20 @@ clashes with an `mpega.library` in `LIBS:`, with one more of its own that
 writes each frame straight into Ambiance's FIFO. Settings > Sound can
 choose an `mpega.library` from `LIBS:` instead (Stéphane Tavenard's, a
 clone, or the ZZ9000's, which decodes on the card and is chosen by
-itself); neither the archive nor the installer brings one. It is its own project (`extras/mpga`, a git
-submodule: [luvwagn/mpga.library](https://github.com/luvwagn/mpga.library),
+itself); neither the archive nor the installer brings one. It is its own
+project (`extras/mpga`, a git submodule:
+[luvwagn/mpga.library](https://github.com/luvwagn/mpga.library),
 GPL-3.0-or-later), built by its own Makefile (`make mpgalib`, tested by
 `make test`). Unless Settings > Sound says otherwise, MP3 is decoded by
 it, except where `LIBS:mpega.library` is the ZZ9000's.
+
+It is chosen for accuracy, not speed: about 83 dB from a floating-point
+decoder (70 dB at medium quality) where Tavenard's mpega.library 2.4 is
+34 dB, though mpega 2.4 needs about a sixth fewer cycles at full rate and
+more at 22 kHz or in mono. Its name of its own also keeps it safe from
+installers that replace `LIBS:mpega.library`, as the ZZ9000's does. Its
+README has the measurements, the other mpega clones beside it, and what
+they mean on a 68020/030 or 68060.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (BlitterStudio's zz9000-firmware, fetched by the Makefile at a
