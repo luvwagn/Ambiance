@@ -437,9 +437,17 @@ attached. Publishing that release uploads it to Aminet.
     catalogs/       the translations (Ambiance.cd and a .ct per language)
     notes/          measurements kept for later work
 
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Licence and credits
 
 Ambiance © 2026 Brian King, under the [MIT licence](LICENSE).
+
+The licence covers the code, not the name: "Ambiance" and its logo identify
+this project's own releases. A modified version released by someone else
+must use another name and logo.
 
 The fonts (Pixelify Sans, Galmuri, Ark Pixel Font, Rubik and Geologica, and the Amiga fonts made from
 them) are under the SIL Open Font Licence 1.1 and are not covered by the MIT

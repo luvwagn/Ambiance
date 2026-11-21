@@ -518,6 +518,10 @@ History
 Credits and licences
 --------------------
 Ambiance (c) 2026 Brian King, under the MIT licence (Licences/LICENSE).
+The licence covers the code, not the name: "Ambiance" and its logo identify
+this project's own releases, and a modified version released by someone
+else must use another name and logo. Source, issues and contributions:
+https://github.com/luvwagn/Ambiance
 Its EaglePlayer host follows HippoPlayer's, and its spectrum analyser is
 HippoPlayer's (MIT, (c) 2017 Kari-Pekka Koljonen; see Licences/CREDITS.txt).
 6- and 8-channel modules are mixed the way ProTracker 4.1's 8-channel
