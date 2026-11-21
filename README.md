@@ -269,7 +269,7 @@ of the Amiga to how fast it really is.
 | **Needed** | Kickstart 3.1 or later and a 68020 or better, on OCS, ECS, AGA or RTG |
 | **For Games and Demos** | Amiga Game Selector 3 (Ambiance finds it through the `AGS:` assign), or iGame's list (its `gameslist.csv`) with WHDLoad; to install WHDLoad from Games, xadmaster.library or LhA in C: |
 | **For Radio and Plex** | A running TCP/IP stack (bsdsocket.library: Roadshow, for example, or an emulator's) |
-| **For MP3 and FLAC** | Nothing more for MP3 (Ambiance's own `ambmpega.library` is in its `Libs`); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
+| **For MP3 and FLAC** | Nothing more for MP3 (Ambiance's own `ambmpega.library` is in its `Libs`, with `ambmpega060.library` for a 68060); [flacdec.library](https://aminet.net/package/util/libs/flacdec) for FLAC (its 68060 build on a 68060). Whether this Amiga is fast enough for FLAC is measured at each start and shown in About > System information |
 | **Optional** | EaglePlayer/DeliTracker players, modplug.library and xfdmaster.library for more module formats; picture datatypes for the formats you have; AHI for a sound card; AmiSSL 5 for HTTPS (secure radio stations, signing in at plex.tv) |
 
 Radio, Plex and music files can play through AHI (16-bit, at AHI's own
@@ -517,6 +517,14 @@ more at 22 kHz or in mono. Its name of its own also keeps it safe from
 installers that replace `LIBS:mpega.library`, as the ZZ9000's does. Its
 README has the measurements, the other mpega clones beside it, and what
 they mean on a 68020/030 or 68060.
+
+A 68060 has no 64-bit `MULS.L`, which `ambmpega.library` uses for every
+product (68060.library emulates each), so the archive also carries
+`ambmpega060.library`: the same samples from 32-bit multiplies. On a
+68060 Ambiance times both once a run and uses the faster (an emulator set
+to a 68060 may do the 64-bit multiply itself); on any other CPU it never
+opens the 68060's. Nothing is saved, so the same card or disk image works
+in an 030 one day and an 060 the next.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
 headers (BlitterStudio's zz9000-firmware, fetched by the Makefile at a

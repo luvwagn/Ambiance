@@ -170,6 +170,7 @@ typedef char ctrl_size_check[sizeof(MPEGA_CTRL) == 46 ? 1 : -1];
  * peaks and clipped samples with it. Settings > Sound chooses it or
  * LIBS:mpega.library (st_use_own_mpega). */
 #define AMBMPEGANAME   "ambmpega.library"
+#define AMBMPEGA060NAME "ambmpega060.library"   /* its 68060 build: no 64-bit multiplies */
 #define MPGA_FMT_S16    0
 struct MpgaOut {
     ULONG mo_Format;
@@ -183,16 +184,23 @@ typedef char mpgaout_size_check[sizeof(struct MpgaOut) == 36 ? 1 : -1];
     LP2(72, LONG, MPGA_decode_to, MPEGA_STREAM *, s, a0, struct MpgaOut *, o, a1, , MPEGABase)
 static BOOL own_mpega;              /* Settings > Sound: MP3 by ambmpega.library */
 static BOOL mpega_is_own;           /* MPEGABase is it, this stream */
+static const char *mpga_name;       /* which build of ours (NULL: not chosen yet this run) */
+static const char *mpga_pick(void);
 
-/* the MP3 decoder chosen: ambmpega.library from Ambiance's Libs, or
- * LIBS:mpega.library (and that, if ours will not open) */
+/* the MP3 decoder chosen: ambmpega.library (or its 68060 build) from
+ * Ambiance's Libs, or LIBS:mpega.library (and that, if ours will not open) */
 static struct Library *mpega_open(void)
 {
     struct Library *l = NULL;
     mpega_is_own = FALSE;
-    if (own_mpega && (l = amb_open_own_lib(AMBMPEGANAME, 1)))
-        mpega_is_own = TRUE;
-    else
+    if (own_mpega) {
+        if (!mpga_name)
+            mpga_name = mpga_pick();
+        if ((l = amb_open_own_lib(mpga_name, 1)) ||
+            (amb_stricmp(mpga_name, AMBMPEGANAME) && (l = amb_open_own_lib(AMBMPEGANAME, 1))))
+            mpega_is_own = TRUE;
+    }
+    if (!l)
         l = OpenLibrary((CONST_STRPTR)"mpega.library", 2);
     return l;
 }
@@ -316,6 +324,41 @@ static ULONG mpa_measure(const struct MpaStep *s)
     }
     MPEGA_close(ms);
     return n && hz ? (ULONG)(t * 1000000ULL / hz / n) : ~0UL;
+}
+
+/* Which build of ours, chosen once a run, never saved (the same card may
+ * be in an 030 tomorrow): ambmpega.library, except on a 68060, which has no
+ * MULS.L 32 x 32 -> 64 (68060.library emulates each): there both builds
+ * decode the probe at high quality and the faster is kept, as an emulator
+ * may do the 64-bit multiply itself. Their samples are the same. */
+static ULONG mpga_time(const char *name)
+{
+    static const struct MpaStep high = { 2, 1, 0 };
+    struct Library *was = MPEGABase;
+    ULONG us = ~0UL;
+    if ((MPEGABase = amb_open_own_lib(name, 1))) {
+        us = mpa_measure(&high);
+        amb_close_own_lib(&MPEGABase);
+    }
+    MPEGABase = was;
+    return us;
+}
+
+static const char *mpga_pick(void)
+{
+    ULONG a, b;
+    const char *pick;
+    char m[160];
+    if (!(SysBase->AttnFlags & AFF_68060) || !amb_exists("PROGDIR:Libs/" AMBMPEGA060NAME))
+        return AMBMPEGANAME;
+    b = mpga_time(AMBMPEGA060NAME);
+    a = mpga_time(AMBMPEGANAME);
+    pick = b != ~0UL && (a == ~0UL || b <= a) ? AMBMPEGA060NAME : AMBMPEGANAME;
+    sprintf(m, "MP3, a frame at high quality: %s %lu.%02lu ms, %s %lu.%02lu ms: %s used", AMBMPEGA060NAME,
+            (unsigned long)(b / 1000), (unsigned long)(b % 1000 / 10), AMBMPEGANAME,
+            (unsigned long)(a / 1000), (unsigned long)(a % 1000 / 10), pick);
+    amb_log("sound", m);
+    return pick;
 }
 
 /* The share of real time (percent) step i takes for a stream at f Hz

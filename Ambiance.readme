@@ -211,8 +211,9 @@ Requirements
   iGame's list with WHDLoad. To install WHDLoad from Games:
   xadmaster.library or LhA in C:.
 - For Radio and Plex: a running TCP/IP stack (bsdsocket.library).
-- For MP3: nothing more (Libs/ambmpega.library is in the archive);
-  mpega.library or an MHI driver may be chosen instead. For FLAC:
+- For MP3: nothing more (Libs/ambmpega.library is in the archive, and
+  ambmpega060.library, its 68060 build, used on a 68060 where it is the
+  faster); mpega.library or an MHI driver may be chosen instead. For FLAC:
   flacdec.library (Aminet: util/libs/flacdec; on a 68060 its 68060 build).
 - Optional: EaglePlayer's players (Aminet: mus/play/Eagleplayer, with its
   own installer, which assigns Eagleplayer2:; AGS has them) or

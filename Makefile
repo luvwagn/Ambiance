@@ -313,12 +313,13 @@ ASM_DIR = build/asm
 # version, LibVersion.LibRevision and $VER agree, and Ambiance asks for no
 # newer (tools/check_libs.py)
 hdrver = $(shell sed -n 's/^\#define $(2) *\([0-9]*\).*/\1/p' $(1))
-check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(SQLIB) $(MPEGVLIB) $(LAYOUTS)
+check-libs: $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPGALIB060) $(SQLIB) $(MPEGVLIB) $(LAYOUTS)
 	@$(PYTHON) tools/check_libs.py \
 		$(DVDLIB)=extras/dvdnav/src/dvdnavlib.c=$(call hdrver,extras/dvdnav/include/libraries/dvdnav.h,DVDNAVLIB_VERSION) \
 		$(AC3LIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(AC3FPULIB)=extras/ac3/src/ac3lib.c=$(call hdrver,extras/ac3/include/libraries/ac3.h,AC3VERSION) \
 		$(MPGALIB)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMBMPEGAVERSION) \
+		$(MPGALIB060)=extras/mpga/src/mpga.c=$(call hdrver,extras/mpga/include/libraries/mpega.h,AMBMPEGAVERSION) \
 		$(SQLIB)=src/sqlib/ambsql.c=1 \
 		$(MPEGVLIB)=extras/mpegv/src/mpegv.c=$(call hdrver,extras/mpegv/include/libraries/mpegv.h,MPEGVVERSION) \
 		$(foreach l,$(LAYOUT_NAMES),build/layouts/$(l).layout=src/layouts/$(l).c)
@@ -615,14 +616,17 @@ test-ac3: $(AC3LIB) $(AC3FPULIB)
 # Sound chooses. Its own project (extras/mpga, a git submodule:
 # github.com/luvwagn/mpga.library, GPL-3: its source there, not in the
 # archive); built by its own Makefile, its test part of make test.
+# ambmpega060.library is its 68060 build (no 64-bit multiplies, the same
+# samples); both go in the archive, and Ambiance times them on a 68060.
 MPGALIB   = extras/mpga/build/ambmpega.library
+MPGALIB060 = extras/mpga/build/ambmpega060.library
 MPGA_DEPS = $(wildcard extras/mpga/src/*.c extras/mpga/src/*.h extras/mpga/src/*.s \
               extras/mpga/src/port/*.h extras/mpga/include/*/*.h \
               extras/mpga/third_party/libmad/*.[ch]) extras/mpga/Makefile
-$(MPGALIB): $(MPGA_DEPS)
-	@$(MAKE) --no-print-directory -C extras/mpga build/ambmpega.library
-mpgalib: $(MPGALIB)
-test-mpga: $(MPGALIB)
+$(MPGALIB) $(MPGALIB060) &: $(MPGA_DEPS)
+	@$(MAKE) --no-print-directory -C extras/mpga build/ambmpega.library build/ambmpega060.library
+mpgalib: $(MPGALIB) $(MPGALIB060)
+test-mpga: $(MPGALIB) $(MPGALIB060)
 	@$(MAKE) --no-print-directory -C extras/mpga test
 
 # a beets library (beets.c) read on a 68020 through ambsql.library, from
@@ -763,7 +767,7 @@ aminet-check: Ambiance.readme tools/aminet_readme.py tools/aminet_check.py $(AMI
 
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) Ambiance.readme $(ICONS) docs/install.info docs/Install-Ambiance $(FONT_FILES) \
-     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPEGVLIB) \
+     $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPGALIB060) $(MPEGVLIB) \
      assets/certs/cacert.pem
 	@echo "  LHA   $(LHA_NAME)"
 	@rm -rf build/lha
@@ -797,9 +801,10 @@ lha: $(TARGET) Ambiance.readme $(ICONS) docs/install.info docs/Install-Ambiance 
 	@# AC3 where the ZZ9000 will not decode it
 	@cp $(AC3LIB) $(AC3FPULIB) $(LHA_DIR)/Libs/
 	@cp extras/ac3/LICENSE $(LHA_DIR)/Licences/ac3.library.txt
-	@# ambmpega.library (MP3 and MP2 by the CPU: libmad, GPL-3; its source
-	@# at github.com/luvwagn/mpga.library), extras/mpga
-	@cp $(MPGALIB) $(LHA_DIR)/Libs/
+	@# ambmpega.library and ambmpega060.library (MP3 and MP2 by the CPU:
+	@# libmad, GPL-3; their source at github.com/luvwagn/mpga.library),
+	@# extras/mpga
+	@cp $(MPGALIB) $(MPGALIB060) $(LHA_DIR)/Libs/
 	@cp extras/mpga/LICENSE $(LHA_DIR)/Licences/ambmpega.library.txt
 	@# mpegv.library (MPEG-1 and MPEG-2 by the CPU: libmpeg2, GPL-3; its source
 	@# at github.com/luvwagn/mpegv.library), extras/mpegv
