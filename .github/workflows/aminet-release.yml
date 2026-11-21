@@ -1,16 +1,30 @@
 name: Publish Aminet release
 
+# On a published release (not a pre-release) whose tag is v and a version;
+# or by hand (Actions > Publish Aminet release > Run workflow) with a tag
+# already released, to try the upload again. The tag's code is built; the
+# readme is this workflow's commit's (the tag's on a release, main's by
+# hand: so the readme can be put right without a new tag), made plain
+# ASCII for Aminet (the archive's readme.txt stays Latin-1, for the Amiga).
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The released tag to upload (e.g. v0.9.2)"
+        required: true
 
 permissions:
   contents: read
 
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
 jobs:
   build:
     name: Build Aminet upload
-    if: ${{ !github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v')) }}
     runs-on: ubuntu-latest
     container: stefanreinauer/amiga-gcc:16.2-rc23
 
@@ -18,7 +32,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.TAG }}
           fetch-depth: 0
           submodules: recursive
 
@@ -42,18 +56,33 @@ jobs:
 
       - name: Prepare Aminet upload files
         shell: bash
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+            echo "::error::The tag must be v and the version, e.g. v0.9.2 (not $TAG)"
+            exit 1
+          fi
           mkdir -p dist
           mapfile -t lha_files < <(find . -maxdepth 1 -type f -name 'ambiance-*.lha' -printf '%f\n' | sort)
           if [ "${#lha_files[@]}" -ne 1 ]; then
             echo "::error::Expected one ambiance-*.lha archive, found ${#lha_files[@]}"
             exit 1
           fi
+          if [ "${lha_files[0]}" != "ambiance-${TAG#v}.lha" ]; then
+            echo "::error::${lha_files[0]} is not ${TAG#v}'s (is the tag on this commit?)"
+            exit 1
+          fi
           # (Aminet's own Ambiance.lha is a module in mods/atmos: ours is
           # AmbianceMC, the readme's base name the archive's)
           cp "${lha_files[0]}" dist/AmbianceMC.lha
-          cp Ambiance.readme dist/AmbianceMC.readme
+          # the readme: Latin-1 in the repository, plain ASCII for Aminet
+          # (tools/aminet_readme.py, as make aminet-check makes it)
+          git show "$WORKFLOW_SHA:Ambiance.readme" > /tmp/readme.latin1
+          git show "$WORKFLOW_SHA:tools/aminet_readme.py" > /tmp/aminet_readme.py
+          python3 /tmp/aminet_readme.py "$TAG" /tmp/readme.latin1 dist/AmbianceMC.readme
+          head -8 dist/AmbianceMC.readme
 
       - name: Upload Aminet artifact
         uses: actions/upload-artifact@v4
@@ -101,7 +130,6 @@ jobs:
           filename: dist/AmbianceMC.lha
           readme: dist/AmbianceMC.readme
           category: mus/play
-          inject-version: true
           validate-only: true
 
       - name: Upload to Aminet
@@ -111,4 +139,9 @@ jobs:
           readme: dist/AmbianceMC.readme
           category: mus/play
           uploader-email: ${{ secrets.AMINET_EMAIL }}
-          inject-version: true
+
+      - name: The archive on the release too
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/AmbianceMC.lha --clobber --repo "$GITHUB_REPOSITORY"

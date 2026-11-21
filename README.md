@@ -437,6 +437,20 @@ attached. Publishing that release uploads it to Aminet.
     catalogs/       the translations (Ambiance.cd and a .ct per language)
     notes/          measurements kept for later work
 
+## Releasing
+
+1. `make aminet-check` (with `FULL_VERSION=x.y.z`): Aminet's readme,
+   `build/aminet/AmbianceMC.readme` (plain ASCII, from `Ambiance.readme`),
+   checked by the Aminet upload's own validator.
+2. Actions > **Ambiance Draft Release** > Run workflow, with the tag
+   (`v` and the version): `main` built and tested as that version, the
+   Aminet readme checked again, and a draft release made with the archive.
+3. Releases: publish the draft (not as a pre-release). That makes the tag
+   and starts **Publish Aminet release**, which uploads `AmbianceMC.lha`
+   and its readme to Aminet (`mus/play`; the uploader's address from the
+   secret `AMINET_EMAIL`) and attaches the archive to the release. If the
+   upload fails, run that workflow by hand with the tag to try again.
+
 ## Contributing
 
 Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

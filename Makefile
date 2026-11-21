@@ -741,6 +741,26 @@ build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@echo "  CC    $<"
 	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
 
+# ---- Aminet: the upload's readme (build/aminet/AmbianceMC.readme: plain
+# ASCII, its version, 78 characters a line; tools/aminet_readme.py) checked
+# as the upload checks it, by sidick/aminet-release-action's own validator
+# at the version the release workflow uploads with (fetched once into
+# build/). The release workflows make and check it the same way.
+AMINET_NAME       = AmbianceMC
+AMINET_TYPE       = mus/play
+AMINET_ACTION_REF = v1
+AMINET_ACTION     = build/aminet-release-action
+$(AMINET_ACTION)/action/readme_validator.py:
+	@rm -rf $(AMINET_ACTION)
+	@git -c advice.detachedHead=false clone -q --depth 1 --branch $(AMINET_ACTION_REF) https://github.com/sidick/aminet-release-action \
+	  $(AMINET_ACTION)
+aminet-check: Ambiance.readme tools/aminet_readme.py tools/aminet_check.py $(AMINET_ACTION)/action/readme_validator.py
+	@mkdir -p build/aminet
+	@$(PYTHON) tools/aminet_readme.py $(FULL_VERSION) Ambiance.readme build/aminet/$(AMINET_NAME).readme
+	@$(PYTHON) tools/aminet_check.py $(AMINET_ACTION) build/aminet/$(AMINET_NAME).readme $(AMINET_TYPE) \
+	  $(AMINET_NAME).lha
+.PHONY: aminet-check
+
 EXTRAS = extras/aminet/modplug-68k.lha extras/aminet/xfdmaster.lha
 lha: $(TARGET) Ambiance.readme $(ICONS) docs/install.info docs/Install-Ambiance $(FONT_FILES) \
      $(SMOOTH_FILES) $(CJK_FILES) $(LICENCES) build/catalogs/.built $(EXTRAS) $(SQLIB) $(DVDLIB) $(AC3LIB) $(AC3FPULIB) $(MPGALIB) $(MPEGVLIB) \
