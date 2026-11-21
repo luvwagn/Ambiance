@@ -330,7 +330,8 @@ static ULONG mpa_measure(const struct MpaStep *s)
  * be in an 030 tomorrow): ambmpega.library, except on a 68060, which has no
  * MULS.L 32 x 32 -> 64 (68060.library emulates each): there both builds
  * decode the probe at high quality and the faster is kept, as an emulator
- * may do the 64-bit multiply itself. Their samples are the same. */
+ * may do the 64-bit multiply itself (Amiberry does). Their samples are
+ * within a step of each other. */
 static ULONG mpga_time(const char *name)
 {
     static const struct MpaStep high = { 2, 1, 0 };

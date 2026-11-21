@@ -520,10 +520,11 @@ they mean on a 68020/030 or 68060.
 
 A 68060 has no 64-bit `MULS.L`, which `ambmpega.library` uses for every
 product (68060.library emulates each), so the archive also carries
-`ambmpega060.library`: the same samples from 32-bit multiplies. On a
-68060 Ambiance times both once a run and uses the faster (an emulator set
-to a 68060 may do the 64-bit multiply itself); on any other CPU it never
-opens the 68060's. Nothing is saved, so the same card or disk image works
+`ambmpega060.library`, which makes them from 32-bit multiplies: the same
+accuracy, its samples within a step of the other's. On a 68060 Ambiance
+times both once a run and uses the faster (an emulator set to a 68060 may
+do the 64-bit multiply itself, as Amiberry does); on any other CPU it
+never opens the 68060's. Nothing is saved, so the same card or disk image works
 in an 030 one day and an 060 the next.
 
 The ZZ9000 video player (`src/zz9k.c`) is built with the ZZ9000 SDK's
