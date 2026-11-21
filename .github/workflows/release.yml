@@ -1,10 +1,17 @@
 name: Ambiance Draft Release
 
+# Run by hand (Actions > Ambiance Draft Release > Run workflow), with the
+# release's tag, e.g. v0.9.2: main is built and tested as that version and
+# a draft release made with its archive. Publishing the draft (Releases)
+# makes the tag on that commit, and publishing starts the Aminet upload
+# (aminet-release.yml). (Not on tag pushes: publishing a release made in
+# the web page pushes its tag, and this would run again over it.)
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release's tag (v and the version, e.g. v0.9.2)"
+        required: true
 
 permissions:
   contents: write  # needed for creating GitHub releases
@@ -37,8 +44,24 @@ jobs:
           echo /opt/gcc-rc24/bin >> "$GITHUB_PATH"
           /opt/gcc-rc24/bin/m68k-amigaos-gcc --version | head -1
 
+      - name: The tag
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+            echo "::error::The tag must be v and the version, e.g. v0.9.2 (not $TAG)"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG exists already"
+            exit 1
+          fi
+          echo "FULL_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
       - name: Build all artifacts
-        run: make all && make test
+        run: make all FULL_VERSION="$FULL_VERSION" && make test FULL_VERSION="$FULL_VERSION"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -64,5 +87,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          tag_name: ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Ambiance ${{ inputs.tag }}
           files: |
             artifacts/ambiance-*.lha
