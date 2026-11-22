@@ -69,9 +69,24 @@
 
 struct PlexConf plex;
 static char photo_libs[400];
-static ULONG sessions;          /* conversions asked for: each its own session */
 static char last_session[64];   /* the conversion asked for last: stopped before the next */
-static char last_item[160];     /* its track: asked for again (a seek), the same session */
+
+/* A track's conversion session: the same each time that track is
+ * converted, in this run or the next (a hash of its key, with this
+ * Amiga's client id). Plex refuses another session for a track it is
+ * still converting (400), and a conversion goes on a while after the
+ * client goes: Ambiance quit while a track played, then started again and
+ * asked for that track (a resume), was refused, and the next track played
+ * instead. Under its own session it is that conversion again, as a seek
+ * is. */
+static void track_session(const char *key, char *out)
+{
+    ULONG h = 2166136261UL;                 /* FNV-1a */
+    const UBYTE *c;
+    for (c = (const UBYTE *)key; *c; c++)
+        h = (h ^ *c) * 16777619UL;
+    sprintf(out, "amb%08lx-%.30s", (unsigned long)h, plex.cid + 9);
+}
 
 static void get_var(const char *name, char *out, LONG max)
 {
@@ -349,15 +364,11 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
                     plex.token[0] ? "&X-Plex-Token=" : "", plex.token);
             st_set_stop_url(stop);
         }
-        if (last_session[0] && !strcmp(last_item, key)) {
-            /* the same track again (a seek): its session again, as Plex's
-             * own players do; another session for it is refused (400) */
-            sprintf(n, "&session=%s", last_session);
-        } else {
-            sprintf(n, "&session=amb%lu-%.30s", (unsigned long)++sessions, plex.cid + 9);
-            amb_strlcpy(last_session, n + 9, sizeof(last_session));
-        }
-        amb_strlcpy(last_item, key, sizeof(last_item));
+        /* the same track again (a seek, or a run before's): its session
+         * again, as Plex's own players do */
+        strcpy(n, "&session=");
+        track_session(key, n + 9);
+        amb_strlcpy(last_session, n + 9, sizeof(last_session));
         amb_strlcat(out, n, max);
         amb_strlcat(out, "&X-Plex-Session-Identifier=", max);
         amb_strlcat(out, n + 9, max);
