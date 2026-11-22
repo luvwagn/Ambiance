@@ -53,6 +53,16 @@ struct ZzAudio {
 BOOL zz_open(void);             /* zz9k.library (counted: each open closed) */
 struct Caps;
 void zz_probe(struct Caps *c);  /* at start-up: one-shot JPEG, CPU-visible surfaces (caps) */
+/* The viewer's JPEG fitted to gw x gh on the card and read back (made to
+ * fit: true colour when maxcol is THUMB_DEEP, else cut to maxcol colours);
+ * NULL: not on (zz_view_on), not a JPEG, small enough for jdec, or the
+ * card said no (logged once per kind): jdec then */
+extern BOOL zz_view_on;
+void zz_view_hold(BOOL on);     /* the library open for it (at start; off for a game, at quit) */
+struct Thumb;
+struct PicInfo;
+struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
+                           struct PicInfo *pi);
 void zz_close(void);
 const char *zz_name(int status);
 /* MPEG Program Stream video on the card's overlay: NULL if it can, else

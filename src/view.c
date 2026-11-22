@@ -29,6 +29,7 @@
  * big for that is shrunk to fit.
  */
 #include "amb.h"
+#include "zz9k.h"
 #include "lhost.h"
 #include "copper.h"
 
@@ -1005,8 +1006,10 @@ struct Thumb *view_own_read(const char *path, UWORD gw, UWORD gh, BOOL tall, BOO
         t->raw = 1;                         /* its own size and colours: shown as they fit */
         return t;
     }
-    if (view_jpeg_card)
-        return NULL;                        /* (the card's: quicker than the 68k) */
+    if ((t = zz_view_jpeg(path, gw, gh, tall, truecol ? THUMB_DEEP : maxcol, pi)))
+        return t;                           /* decoded on the card, at the size shown */
+    if (view_jpeg_card && !zz_view_on)
+        return NULL;                        /* (the card's datatype: quicker than the 68k) */
     return jpeg_view_read(path, gw, gh, tall, truecol ? THUMB_DEEP : maxcol, pi);
 }
 

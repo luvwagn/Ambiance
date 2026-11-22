@@ -165,6 +165,242 @@ void zz_probe(struct Caps *c)
     zz_close();
 }
 
+/* ---- the viewer's JPEG decoded on the card (v0.9.5): an image session
+ * fits it to the size shown (FIT | PRESERVE_ASPECT) into a BGRA8888
+ * surface the 68k can read (no ARM_LOCAL), fed from the file 256 KB at a
+ * time through one shared buffer; its rows are read back into a Thumb:
+ * true colour (argb) for a deep screen, else cut to maxcol colours as
+ * jdec's are (thumb_from_rgb). One screen's pixels cross the bus, not the
+ * whole photo (the datatypes' 36-96 MB). Only where caps.zz_cpusurf (and
+ * Ambiance/ViewCard not "0"); anything other than OK goes back to jdec,
+ * said once per kind. */
+BOOL zz_view_on;
+static BOOL view_held;          /* zz9k.library opened for it (zz_view_hold) */
+
+/* The library held open for the viewer's JPEGs while Ambiance runs, let go
+ * before a game (and at quit: its last close reclaims anything left on the
+ * card, from revision 38), opened again after */
+void zz_view_hold(BOOL on)
+{
+    if (on && zz_view_on && !view_held)
+        view_held = zz_open();
+    else if (!on && view_held) {
+        zz_close();
+        view_held = FALSE;
+    }
+}
+
+/* A JPEG's size from its frame header (SOFn), the APPn before it skipped;
+ * *prog: progressive or lossless (SOF2.., which the card may not take) */
+static BOOL jpeg_dims(BPTR fh, ULONG *w, ULONG *h, BOOL *prog)
+{
+    UBYTE b[10];
+    LONG pos = 2;
+    if (Read(fh, b, 2) != 2 || b[0] != 0xFF || b[1] != 0xD8)
+        return FALSE;
+    for (;;) {
+        ULONG len;
+        if (Seek(fh, pos, OFFSET_BEGINNING) < 0 || Read(fh, b, 4) != 4 || b[0] != 0xFF)
+            return FALSE;
+        while (b[1] == 0xFF) {              /* fill bytes */
+            b[1] = b[2];
+            b[2] = b[3];
+            pos++;
+            if (Read(fh, b + 3, 1) != 1)
+                return FALSE;
+        }
+        len = ((ULONG)b[2] << 8) | b[3];
+        if (b[1] >= 0xC0 && b[1] <= 0xCF && b[1] != 0xC4 && b[1] != 0xC8 && b[1] != 0xCC) {
+            *prog = b[1] != 0xC0 && b[1] != 0xC1;   /* (not baseline or extended) */
+            if (Read(fh, b, 5) != 5)
+                return FALSE;
+            *h = ((ULONG)b[1] << 8) | b[2];
+            *w = ((ULONG)b[3] << 8) | b[4];
+            return *w && *h;
+        }
+        if (b[1] == 0xD9 || b[1] == 0xDA || len < 2)
+            return FALSE;
+        pos += 2 + (LONG)len;
+    }
+}
+
+static void view_say(const char *what, int st)
+{
+    static char said[16];
+    char m[160];
+    int k = st >= 0 && st < 15 ? st : 15;
+    if (said[k])
+        return;
+    said[k] = 1;
+    sprintf(m, "a JPEG on the card: %s (%s): jdec instead, from now on said once", what,
+            st >= 0 ? zz_name(st) : "no");
+    amb_log("viewer", m);
+}
+
+struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
+                           struct PicInfo *pi)
+{
+    ZZ9KSharedBuffer buf;
+    ZZ9KSurface sf;
+    ZZ9KImageSessionBeginDesc bd;
+    ZZ9KImageSessionFeedDesc fd;
+    ZZ9KImageSessionResult r;
+    struct PicInfo p;
+    struct Thumb *t = NULL;
+    BPTR fh;
+    LONG flen;
+    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, guard = 0, sess = 0,
+          t0 = time_ms(), t1, x, y;
+    BOOL prog = FALSE, began = FALSE;
+    int st = ZZ9K_STATUS_OK;
+    const char *stage = NULL;
+    if (!zz_view_on || !view_held || !ZZ9KBase || !(fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
+        return NULL;
+    if (!jpeg_dims(fh, &w, &h, &prog) || Seek(fh, 0, OFFSET_END) < 0 ||
+        (flen = Seek(fh, 0, OFFSET_BEGINNING)) <= 0) {
+        Close(fh);
+        return NULL;
+    }
+    memset(&p, 0, sizeof(p));
+    p.w = (UWORD)w;
+    p.h = (UWORD)h;
+    p.depth = 24;
+    strcpy(p.fmt, "JPEG");
+    strcpy(p.cls, "zz9k");
+    view_fit(gw, gh, tall, &p, &dw, &dh, NULL, 0);
+    if (dw >= w || dh >= h) {               /* (made larger: jdec's, quick at its size) */
+        Close(fh);
+        return NULL;
+    }
+    memset(&buf, 0, sizeof(buf));
+    memset(&sf, 0, sizeof(sf));
+    size = (ULONG)flen < 256 * 1024 ? (ULONG)flen : 256 * 1024;
+    amb_card_lock();
+    if ((st = ZZ9KAllocShared(size, 16, ZZ9K_ALLOC_HOST_WINDOW, &buf)) != ZZ9K_STATUS_OK)
+        stage = "a shared buffer";
+    else if ((st = ZZ9KAllocSurfaceEx(dw, dh, ZZ9K_SURFACE_FORMAT_BGRA8888, 0, 0, &sf)) != ZZ9K_STATUS_OK)
+        stage = "its surface";
+    else if (!sf.data)
+        stage = "its surface (no 68k address)", st = -1;
+    amb_card_unlock();
+    if (!stage) {
+        memset(&bd, 0, sizeof(bd));
+        memset(&r, 0, sizeof(r));
+        bd.codec = ZZ9K_IMAGE_CODEC_JPEG;
+        bd.output_mode = ZZ9K_IMAGE_OUTPUT_SURFACE;
+        bd.dst_surface = sf.handle;
+        bd.dst_width = dw;
+        bd.dst_height = dh;
+        bd.output_format = ZZ9K_SURFACE_FORMAT_BGRA8888;
+        bd.flags = ZZ9K_IMAGE_DECODE_FLAG_FIT | ZZ9K_IMAGE_DECODE_FLAG_PRESERVE_ASPECT;
+        amb_card_lock();
+        st = ZZ9KImageSessionBegin(&bd, &r);
+        amb_card_unlock();
+        if (st != ZZ9K_STATUS_OK)
+            stage = "beginning its session";
+        else {
+            began = TRUE;
+            sess = r.session;
+        }
+    }
+    while (!stage) {
+        if (fpos >= cstart + clen && fpos < (ULONG)flen) {   /* the next chunk */
+            cstart = fpos;
+            clen = (ULONG)flen - fpos < size ? (ULONG)flen - fpos : size;
+            if (Seek(fh, (LONG)cstart, OFFSET_BEGINNING) < 0 ||
+                Read(fh, (APTR)buf.data, (LONG)clen) != (LONG)clen) {
+                stage = "reading the file", st = -1;
+                break;
+            }
+        }
+        memset(&fd, 0, sizeof(fd));
+        fd.session = sess;
+        fd.src_handle = buf.handle;
+        fd.src_offset = fpos - cstart;
+        fd.src_length = cstart + clen - fpos;
+        fd.flags = cstart + clen >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+        amb_card_lock();
+        st = ZZ9KImageSessionFeed(&fd, &r);
+        amb_card_unlock();
+        if (st != ZZ9K_STATUS_OK) {
+            stage = "feeding its session";
+            break;
+        }
+        fpos += r.bytes_consumed;
+        if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE)
+            break;
+        if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR || ++guard > 20000)
+            stage = "its session (an error)", st = -1;
+    }
+    if (began) {
+        amb_card_lock();
+        ZZ9KImageSessionClose(sess, 0);
+        amb_card_unlock();
+    }
+    Close(fh);
+    t1 = time_ms();
+    if (!stage) {
+        ow = r.tile_width && r.tile_width <= dw ? r.tile_width : dw;
+        oh = r.tile_height && r.tile_height <= dh ? r.tile_height : dh;
+        if (maxcol <= THUMB_DEEP) {
+            if ((t = AllocVec(sizeof(struct Thumb) + ow * oh * 4, MEMF_ANY | MEMF_CLEAR))) {
+                ULONG *d;
+                t->w = (UWORD)ow;
+                t->h = (UWORD)oh;
+                t->mod = (UWORD)ow;
+                t->argb = d = (ULONG *)(t + 1);
+                for (y = 0; y < oh; y++) {
+                    volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
+                                                                         y * sf.pitch);
+                    for (x = 0; x < ow; x++) {
+                        ULONG v = row[x];   /* bytes B, G, R, A */
+                        *d++ = ((v >> 8) & 0xFF) << 16 | ((v >> 16) & 0xFF) << 8 | (v >> 24);
+                    }
+                }
+            }
+        } else {
+            UBYTE *rgb = AllocVec(ow * oh * 3, MEMF_ANY), *d = rgb;
+            if (rgb) {
+                for (y = 0; y < oh; y++) {
+                    volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
+                                                                         y * sf.pitch);
+                    for (x = 0; x < ow; x++) {
+                        ULONG v = row[x];
+                        *d++ = (UBYTE)(v >> 8);
+                        *d++ = (UBYTE)(v >> 16);
+                        *d++ = (UBYTE)(v >> 24);
+                    }
+                }
+                t = thumb_from_rgb(rgb, ow, oh, ow, oh, maxcol);
+                FreeVec(rgb);
+            }
+        }
+        if (!t)
+            stage = "memory for its pixels", st = ZZ9K_STATUS_NO_MEMORY;
+    }
+    amb_card_lock();
+    if (sf.handle)
+        ZZ9KFreeSurface(sf.handle);
+    if (buf.handle)
+        ZZ9KFreeShared(buf.handle);
+    amb_card_unlock();
+    if (stage) {
+        view_say(stage, st);
+        return NULL;
+    }
+    {
+        char m[300];
+        sprintf(m, "%.60s, %lu x %lu%s: decoded on the card to %lu x %lu in %lu ms, read back in %lu ms%s",
+                FilePart((STRPTR)path), (unsigned long)w, (unsigned long)h,
+                prog ? " (progressive)" : "", (unsigned long)ow,
+                (unsigned long)oh, (unsigned long)(t1 - t0), (unsigned long)(time_ms() - t1),
+                maxcol <= THUMB_DEEP ? "" : " (and its colours cut)");
+        amb_log("viewer", m);
+    }
+    *pi = p;
+    return t;                               /* (made to fit: not raw) */
+}
+
 const char *zz_name(int s)
 {
     static const char *const names[] = { "OK", "queued", "busy", "unsupported", "bad request",

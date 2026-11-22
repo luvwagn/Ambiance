@@ -2,6 +2,7 @@
  * Ambiance - main program: Home Screen, navigation, input and launching
  * Copyright (c) 2026 Brian King
  */
+#include "zz9k.h"
 #include "amb.h"
 #include "radiocsv.h"
 #include "plexxml.h"
@@ -7177,10 +7178,12 @@ static void open_extra_libs(void)
         DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
     if (!LowLevelBase)
         LowLevelBase = OpenLibrary((CONST_STRPTR)"lowlevel.library", 40);
+    zz_view_hold(TRUE);             /* (zz9k.library, where the viewer's JPEGs go to the card) */
 }
 
 static void close_extra_libs(void)
 {
+    zz_view_hold(FALSE);            /* (zz9k.library: the viewer's, after the loader stopped) */
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
     if (DataTypesBase)
@@ -13484,6 +13487,20 @@ static int app_main(void)
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
     view_jpeg_card = plex.jpeg_card;        /* ...the viewer's too, not jdec */
     {
+        /* the viewer's JPEGs decoded on the card at the size shown, where it
+         * hands back pixels the 68k can read (zz9k.c); Ambiance/ViewCard 0:
+         * not (to compare) */
+        char v[4];
+        zz_view_on = caps.zz_cpusurf &&
+                     !(GetVar((CONST_STRPTR)"Ambiance/ViewCard", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
+                       v[0] == '0');
+        zz_view_hold(TRUE);
+        if (caps.zz9000)
+            amb_log("viewer", zz_view_on ? "JPEGs decoded on the ZZ9000, at the size shown"
+                              : caps.zz_cpusurf ? "ViewCard 0: JPEGs not decoded on the ZZ9000"
+                              : "JPEGs not decoded on the ZZ9000: it hands back no pixels the 68k can read");
+    }
+    {
         char v[4];
         view_own_off = GetVar((CONST_STRPTR)"Ambiance/ViewOwn", (STRPTR)v, sizeof(v), GVF_GLOBAL_ONLY) > 0 &&
                        v[0] == '0';
@@ -13893,6 +13910,7 @@ out:
         FreeMem(ptr_blank, 6 * sizeof(UWORD));
     ags_free(&ags);
     ig_free(&igcat);
+    zz_view_hold(FALSE);            /* (after the loader stopped: it may have been decoding) */
     if (LowLevelBase)
         CloseLibrary(LowLevelBase);
     if (DataTypesBase)
