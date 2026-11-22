@@ -55,7 +55,7 @@ places. Click a picture for its full size.
 
 Taken in Amiberry (68060, a ZZ9000 for RTG) with Ambiance 0.9.3.
 
-### Credits
+### Content Credits
 
 Music and photos from the author's own library and Plex server; games,
 pictures and animations from AGS. The album is *The Razors Edge* by AC/DC,
@@ -63,6 +63,10 @@ the art Roger Dean's, the game Core Design's *Banshee*.
 
 Credit to Paul Vince and Amiga Game Selector (AGS) for some content shown.
 Ambiance includes no AGS content in its distribution.
+
+Credits for the code, fonts and libraries Ambiance uses are under
+[Licence and credits](#licence-and-credits), with the details in
+[CREDITS.txt](CREDITS.txt).
 
 ## What it does
 
