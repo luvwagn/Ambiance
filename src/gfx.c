@@ -1902,9 +1902,28 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
                                 g->truecolor ? SA_ColorMapEntries : TAG_IGNORE, 256,
                                 TAG_END);
         /* Some RTG drivers want depth 24 for their 32-bit modes. */
-        if (g->scr || g->depth != 32)
+        if (g->scr)
             break;
-        g->depth = 24;
+        if (g->depth == 32) {
+            g->depth = 24;
+            continue;
+        }
+        if (g->depth == 24 && modes[smode].kind == K_RTG && caps_rtg_bits >= 24) {
+            /* 32-bit asked for, and it would not open (card memory): the
+             * size's 16-bit mode instead, this time */
+            UWORD keep = caps_rtg_bits, d = 0;
+            ULONG id16;
+            caps_rtg_bits = 16;
+            id16 = caps_find_rtg_mode(g->w, g->h, &d);
+            caps_rtg_bits = keep;
+            if (id16 == (ULONG)INVALID_ID || d >= 24)
+                break;
+            amb_log("screen", "32-bit would not open: its 16-bit mode instead");
+            mode = id16;
+            g->depth = d;
+            continue;
+        }
+        break;
     }
     if (!g->scr) {
         amb_log("OpenScreen failed", modes[smode].label);

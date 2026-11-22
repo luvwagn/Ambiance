@@ -118,7 +118,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_COLOUR_END = ACT_COLOUR0 + UI_SCHEMES - 1, ACT_GOPLEX,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8, ACT_LVNATIVE,    /* Classic + LV_MAX */
-       ACT_FULLVISHELP,
+       ACT_FULLVISHELP, ACT_DEPTHS, ACT_DEPTH16, ACT_DEPTH32,
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added) */
@@ -1503,6 +1503,7 @@ static void build_sysinfo(struct Page *p)
 /* ------------------------------------------------------------ settings */
 #define MODE_VAR "Ambiance/ScreenMode"
 #define WINDOW_VAR "Ambiance/Windowed"  /* "1" a window on Workbench, "0" full screen */
+#define DEPTH_VAR "Ambiance/ColourDepth"   /* "32": RTG screens 32 (or 24) bits deep where offered */
 #define TSIZE_VAR "Ambiance/TextSize"   /* the window's: small, medium, large */
 #define COLOURS_VAR "Ambiance/Colours"  /* the colour scheme: midnight, graphite, wb13, emerald, amethyst */
 #define WINBOX_VAR "Ambiance/WindowBox"  /* left top width height scale: where it was left */
@@ -1589,6 +1590,8 @@ static void load_screen_mode(void)
 {
     char buf[32];
     int m;
+    if (GetVar((CONST_STRPTR)DEPTH_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0)
+        caps_rtg_bits = buf[0] == '3' ? 32 : 16;
     if (GetVar((CONST_STRPTR)MODE_VAR, (STRPTR)buf, sizeof(buf), GVF_GLOBAL_ONLY) > 0 &&
         (m = gfx_mode_from_key(buf)) >= 0)
         screen_mode = m;
@@ -2479,6 +2482,7 @@ static void build_font_settings(struct Page *p)
     }
 }
 
+static BOOL depth_offered(void);
 static void build_screen_settings(struct Page *p)
 {
     char tag[64];
@@ -2492,6 +2496,10 @@ static void build_screen_settings(struct Page *p)
         action_item(p, _("Screen mode"), tag, ACT_SCREENMODES, MARK_ARROW);
     }
     action_item(p, _("Fonts"), fonts_tag(), ACT_FONTS, MARK_ARROW);
+    if (depth_offered()) {
+        sprintf(tag, _("%ld-bit"), (long)g.depth);
+        action_item(p, _("Colour depth"), tag, ACT_DEPTHS, MARK_ARROW);
+    }
     if (!g.planar && !g.wb)             /* native screens draw straight on, a window
                                          * always through its buffer: not offered */
         action_item(p, _("Double buffering"), "", ACT_DBUF,
@@ -3335,6 +3343,22 @@ static void build_screenmodes(struct Page *p)
         if (m == screen_mode)
             p->sel = p->list.count - 1;
     }
+}
+
+/* Settings > Display > Colour depth: a full RTG screen whose size has a
+ * 24 or 32-bit mode as well (a window is as deep as Workbench) */
+static BOOL depth_offered(void)
+{
+    return !g.wb && gfx_mode_is_rtg(g.mode) && caps_rtg_deepest(g.w, g.h) >= 24;
+}
+
+static void build_depths(struct Page *p)
+{
+    action_item(p, _("16-bit: quicker"), "", ACT_DEPTH16,
+                caps_rtg_bits < 24 ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    action_item(p, _("32-bit: finest pictures and video"), "", ACT_DEPTH32,
+                caps_rtg_bits >= 24 ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    p->sel = caps_rtg_bits >= 24 ? 1 : 0;
 }
 
 /* Settings > Display > Text size (a window, smooth): those with room on
@@ -8279,6 +8303,7 @@ static void wb_note_fallback(void);
  * again as now wanted, every page rebuilt, and back on Settings > Display
  * at that row (in the list sub, if one). */
 static BOOL display_colours_row;     /* display_again: back at Colours' row */
+static int display_sel_act;          /* display_again: back at the row of this action (0: none) */
 
 static void display_again(BOOL size_row, const char *sub_title, void (*sub)(struct Page *))
 {
@@ -8309,10 +8334,10 @@ static void display_again(BOOL size_row, const char *sub_title, void (*sub)(stru
     if ((p = page_push(PT_LIST, _("Display")))) {
         build_screen_settings(p);
         p->sel = size_row ? screen_row_fonts() : screen_row_window();
-        if (display_colours_row) {
+        if (display_colours_row || display_sel_act) {
             LONG i;
             for (i = 0; i < p->list.count; i++)
-                if (p->list.items[i].action == ACT_COLOURS)
+                if (p->list.items[i].action == (display_sel_act ? display_sel_act : ACT_COLOURS))
                     p->sel = i;
         }
         if (p->sel < 0)
@@ -9441,6 +9466,24 @@ static void window_menu(UWORD code)
             draw_all();
         }
     }
+}
+
+/* Settings > Display > Colour depth: saved, and the screen opened again
+ * at it (gfx_open: 16-bit after all if a 32-bit one will not open) */
+static void apply_depth(UWORD bits)
+{
+    char m[60];
+    if (bits == caps_rtg_bits)
+        return;
+    caps_rtg_bits = bits;
+    save_setting(DEPTH_VAR, bits >= 24 ? "32" : "16");
+    display_sel_act = ACT_DEPTHS;
+    display_again(FALSE, _("Colour depth"), build_depths);
+    display_sel_act = 0;
+    sprintf(m, "%ld-bit asked for, %ld-bit open", (long)bits, (long)g.depth);
+    amb_log("colour depth", m);
+    if (bits >= 24 && g.depth < 24)
+        set_msg(_("32 bits would not open here: 16-bit instead"));
 }
 
 static void apply_tsize(int i)
@@ -11606,6 +11649,10 @@ static void act_action(struct Item *it)
                         ? "english" : amb_lang_name(it->action - ACT_LANG0));
     else if (it->action == ACT_DBUF)
         toggle_dbuf();
+    else if (it->action == ACT_DEPTHS)
+        open_settings_page(_("Colour depth"), build_depths);
+    else if (it->action == ACT_DEPTH16 || it->action == ACT_DEPTH32)
+        apply_depth(it->action == ACT_DEPTH32 ? 32 : 16);
     else if (it->action == ACT_LVNATIVE)
         toggle_lv_native();
     else if (it->action == ACT_HTTPS)

@@ -1,5 +1,5 @@
 /*
- * Ambiance - an ANIM's frames drawn as 15 or 16-bit pixels
+ * Ambiance - an ANIM's frames drawn as 15, 16 or 32-bit pixels
  * Copyright (c) 2026 Brian King
  *
  * Plain C with no Amiga headers, so the tests build it on the host too.
@@ -19,9 +19,19 @@ void ad_p2c_row(const unsigned char *row, unsigned long rb, unsigned char depth,
 void ad_lut(const unsigned char *cmap, unsigned long len, unsigned long camg, unsigned char depth,
             unsigned long *lut);
 
-/* The screen's pixel format (CyberGraphX's PIXFMT_*): 1 if 15 or 16-bit
- * and so drawn here (its tables made), 0 if not. */
+/* The screen's pixel format (CyberGraphX's PIXFMT_*): its bytes a pixel
+ * if drawn here (its tables made): 2 (15 or 16-bit), 4 (ARGB32, BGRA32,
+ * RGBA32); 0 if not (24-bit, 8-bit). */
 int ad_pix_tables(unsigned long fmt);
+
+/* 32 bits: a colour as a pixel, the colour table as pixels, HAM's steps,
+ * and a row written (as ad_row_put, four bytes a pixel) */
+unsigned int ad_rgb32(unsigned long rgb);
+void ad_lut32(const unsigned long *lut, unsigned int *l4);
+void ad_ham32(const unsigned int *l4, unsigned char depth);
+void ad_row_put32(const unsigned char *row, unsigned long rb, unsigned char depth, unsigned long w,
+                  unsigned long x0, unsigned long x1, unsigned short fx, const unsigned short *xo,
+                  int ham, const unsigned int *l4, unsigned char *out);
 
 /* A colour (0xRRGGBB) as a pixel of that format. */
 unsigned short ad_rgb16(unsigned long rgb);

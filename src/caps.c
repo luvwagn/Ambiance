@@ -133,11 +133,36 @@ BOOL caps_mode_is_rtg(ULONG id)
 /* Which of a size's RTG modes: 16-bit first (pictures in their own colours,
  * no colour reduction: covers 3.5x and full-screen pictures 2.5x faster
  * than at 8 bits, the interface no slower: rtgbench, 2026-11-07), 15-bit,
- * then 8-bit where the size has nothing deeper. 24 and 32-bit are not used:
- * twice 16-bit's bytes for nothing this interface shows. */
+ * then 8-bit where the size has nothing deeper. Settings > Display >
+ * Colour depth 32-bit (caps_rtg_bits 32): 32, then 24-bit first, for
+ * pictures, covers and video without 16-bit's steps (5 bits of red and
+ * blue), at twice the bytes to draw and to keep; 16-bit where the size
+ * has neither. */
+UWORD caps_rtg_bits = 16;
+
 static UWORD depth_rank(UWORD d)
 {
+    if (caps_rtg_bits >= 24 && (d == 32 || d == 24))
+        return d == 32 ? 5 : 4;
     return d == 16 ? 3 : d == 15 ? 2 : d == 8 ? 1 : 0;
+}
+
+/* The deepest RTG mode this size has (0: none) */
+UWORD caps_rtg_deepest(UWORD w, UWORD h)
+{
+    ULONG id = INVALID_ID;
+    UWORD best = 0;
+    while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID) {
+        struct DimensionInfo dim;
+        if (!caps_mode_is_rtg(id) || ModeNotAvailable(id))
+            continue;
+        if (GetDisplayInfoData(NULL, (UBYTE *)&dim, sizeof(dim), DTAG_DIMS, id) <= 0)
+            continue;
+        if (dim.Nominal.MaxX - dim.Nominal.MinX + 1 == w && dim.Nominal.MaxY - dim.Nominal.MinY + 1 == h &&
+            dim.MaxDepth > best)
+            best = dim.MaxDepth;
+    }
+    return best;
 }
 
 /* The best available RTG mode with exactly this nominal size (depth_rank),

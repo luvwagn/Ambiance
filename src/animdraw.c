@@ -1,5 +1,5 @@
 /*
- * Ambiance - an ANIM's frames drawn as 15 or 16-bit pixels (animdraw.h)
+ * Ambiance - an ANIM's frames drawn as 15, 16 or 32-bit pixels (animdraw.h)
  * Copyright (c) 2026 Brian King
  *
  * Bitplanes as pixels in a graphics card's format, a row at a time: the
@@ -12,7 +12,8 @@
 
 /* CyberGraphX's pixel formats (cybergraphics.h) */
 enum { PIXFMT_LUT8, PIXFMT_RGB15, PIXFMT_BGR15, PIXFMT_RGB15PC, PIXFMT_BGR15PC, PIXFMT_RGB16,
-       PIXFMT_BGR16, PIXFMT_RGB16PC, PIXFMT_BGR16PC };
+       PIXFMT_BGR16, PIXFMT_RGB16PC, PIXFMT_BGR16PC, PIXFMT_RGB24, PIXFMT_BGR24, PIXFMT_ARGB32,
+       PIXFMT_BGRA32, PIXFMT_RGBA32 };
 
 /* A plane's byte as 8 pixels' bits, that plane's bit of each (4 + 4):
  * a table a plane, so a row's 8 pixels are its planes' entries or'd, no
@@ -107,17 +108,24 @@ void ad_lut(const unsigned char *c, unsigned long len, unsigned long camg, unsig
             lut[i] = (lut[i - 32] >> 1) & 0x7F7F7F;
 }
 
-/* The screen's own pixels: a 15 or 16-bit format (else 0, not written
- * straight), and its red, green and blue as parts of a pixel, already in
- * its byte order, so a pixel is rt[r] | gt[g] | bt[b]. */
+/* The screen's own pixels: a 15 or 16-bit format (2 back) or a 32-bit
+ * one (4 back; else 0, not written straight), and its red, green and
+ * blue as parts of a pixel, already in its byte order, so a pixel is
+ * rt[r] | gt[g] | bt[b] (32 bits: rt4..., alpha opaque in rt4's). */
 static unsigned short rt[256], gt[256], bt[256];
+static unsigned int rt4[256], gt4[256], bt4[256];
 
 int ad_pix_tables(unsigned long fmt)
 {
     unsigned long v, i;
     int rs, gs, bs, rbits = 5, gbits;
     int pc = 0;
+    unsigned int alpha = 0;
     switch (fmt) {
+    /* 32 bits, as a big-endian long (the 68k's): ARGB is 0xAARRGGBB */
+    case PIXFMT_ARGB32: rs = 16; gs = 8; bs = 0; alpha = 0xFF000000U; goto deep;
+    case PIXFMT_BGRA32: rs = 8; gs = 16; bs = 24; alpha = 0xFFU; goto deep;
+    case PIXFMT_RGBA32: rs = 24; gs = 16; bs = 8; alpha = 0xFFU; goto deep;
     case PIXFMT_RGB16PC: pc = 1; /* fall through */
     case PIXFMT_RGB16: rs = 11; gs = 5; bs = 0; gbits = 6; break;
     case PIXFMT_BGR16PC: pc = 1; /* fall through */
@@ -136,7 +144,26 @@ int ad_pix_tables(unsigned long fmt)
         v = (i >> (8 - rbits)) << bs;
         bt[i] = pc ? (unsigned short)(((v & 0xFF) << 8) | (v >> 8)) : (unsigned short)v;
     }
-    return 1;
+    return 2;
+deep:
+    for (i = 0; i < 256; i++) {
+        rt4[i] = ((unsigned int)i << rs) | alpha;
+        gt4[i] = (unsigned int)i << gs;
+        bt4[i] = (unsigned int)i << bs;
+    }
+    return 4;
+}
+
+unsigned int ad_rgb32(unsigned long rgb)
+{
+    return rt4[(rgb >> 16) & 255] | gt4[(rgb >> 8) & 255] | bt4[rgb & 255];
+}
+
+void ad_lut32(const unsigned long *lut, unsigned int *l4)
+{
+    int i;
+    for (i = 0; i < 256; i++)
+        l4[i] = rt4[(lut[i] >> 16) & 255] | gt4[(lut[i] >> 8) & 255] | bt4[lut[i] & 255];
 }
 
 /* A colour (0xRRGGBB) as a pixel of the screen's format. */
@@ -188,6 +215,37 @@ void ad_ham(const unsigned short *l16, unsigned char depth)
     for (c = 0; c < 256; c++) {
         hk32[c] = ((unsigned int)hk[c] << 16) | hk[c];
         hs32[c] = ((unsigned int)hs[c] << 16) | hs[c];
+    }
+}
+
+/* HAM's steps at 32 bits, as ad_ham's: a modify keeps the other two and
+ * the alpha (rt4[0] is the alpha alone) */
+static unsigned int hk4[256], hs4[256];
+
+void ad_ham32(const unsigned int *l4, unsigned char depth)
+{
+    unsigned long c, bits = depth == 8 ? 6 : 4, lo = (1UL << bits) - 1;
+    for (c = 0; c < 256; c++) {
+        unsigned long v = c & lo, ctl = (c >> bits) & 3;
+        v = bits == 4 ? v * 17 : (v << 2) | (v >> 4);
+        switch (ctl) {
+        case 0:
+            hk4[c] = 0;
+            hs4[c] = l4[c & lo];
+            break;
+        case 1:                             /* blue */
+            hk4[c] = ~bt4[255];
+            hs4[c] = bt4[v];
+            break;
+        case 2:                             /* red */
+            hk4[c] = ~(rt4[255] & ~rt4[0]);
+            hs4[c] = rt4[v] & ~rt4[0];
+            break;
+        default:                            /* green */
+            hk4[c] = ~gt4[255];
+            hs4[c] = gt4[v];
+            break;
+        }
     }
 }
 
@@ -325,6 +383,74 @@ void ad_row_put(const unsigned char *row, unsigned long rb, unsigned char depth,
                     v = (unsigned short)pix;
                 } else
                     v = l16[t[i]];
+                while (q < e)
+                    *q++ = v;
+            }
+        }
+    }
+}
+
+/* ad_row_put at 32 bits a pixel (l4: ad_lut32's), in C: the same rows,
+ * columns and scales, four bytes a pixel */
+void ad_row_put32(const unsigned char *row, unsigned long rb, unsigned char depth, unsigned long w,
+                  unsigned long x0, unsigned long x1, unsigned short fx, const unsigned short *xo,
+                  int ham, const unsigned int *l4, unsigned char *out)
+{
+    const unsigned char *pp[8];
+    unsigned long x, i;
+    unsigned int pix = 0;
+    unsigned int *o4 = (unsigned int *)out;
+    unsigned long wx = x0;                  /* HAM: written from here */
+    for (i = 0; i < depth && i < 8; i++)
+        pp[i] = row + i * rb;
+    if (ham) {
+        x0 = 0;
+        x1 = rb;
+        pix = l4[0];                        /* each row starts from colour 0 */
+    }
+    for (x = x0; x < x1; x++) {
+        unsigned int h, l;
+        long n = (long)w - (long)(x * 8);
+        const unsigned short *xp = xo + x * 8;
+        if (n <= 0)
+            break;
+        GATHER(pp, x, depth, h, l);
+        if (n >= 8) {
+            if (ham) {
+                if (x < wx)
+                    EIGHT(pix = (pix & hk4[c]) | hs4[c]; (void)k;);
+                else if (fx == 2) {
+                    unsigned int *o2 = o4 + xp[0];
+                    EIGHT(pix = (pix & hk4[c]) | hs4[c]; o2[2 * k] = o2[2 * k + 1] = pix;);
+                } else if (fx == 1) {
+                    unsigned int *o1 = o4 + xp[0];
+                    EIGHT(pix = (pix & hk4[c]) | hs4[c]; o1[k] = pix;);
+                } else
+                    EIGHT(unsigned int *q = o4 + xp[k], *e = o4 + xp[k + 1];
+                          pix = (pix & hk4[c]) | hs4[c];
+                          while (q < e) *q++ = pix;);
+            } else if (fx == 2) {
+                unsigned int *o2 = o4 + xp[0];
+                EIGHT(unsigned int v = l4[c]; o2[2 * k] = o2[2 * k + 1] = v;);
+            } else if (fx == 1) {
+                unsigned int *o1 = o4 + xp[0];
+                EIGHT(o1[k] = l4[c];);
+            } else
+                EIGHT(unsigned int v = l4[c], *q = o4 + xp[k], *e = o4 + xp[k + 1];
+                      while (q < e) *q++ = v;);
+        } else {
+            unsigned char t[8];
+            t[0] = h >> 24; t[1] = h >> 16; t[2] = h >> 8; t[3] = h;
+            t[4] = l >> 24; t[5] = l >> 16; t[6] = l >> 8; t[7] = l;
+            for (i = 0; i < (unsigned long)n; i++) {
+                unsigned int v, *q = o4 + xp[i], *e = o4 + xp[i + 1];
+                if (ham) {
+                    pix = (pix & hk4[t[i]]) | hs4[t[i]];
+                    if (x < wx)
+                        continue;
+                    v = pix;
+                } else
+                    v = l4[t[i]];
                 while (q < e)
                     *q++ = v;
             }

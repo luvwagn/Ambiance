@@ -1730,7 +1730,7 @@ BOOL anim_has_sound(const char *path)
  * high-res, non-laced twice as tall as laced); the controls beneath it,
  * Ambiance's own. No mode switch, and no colours shared with anything.
  *
- * Where the screen's memory can be had (LockBitMapTags, a 15 or 16-bit
+ * Where the screen's memory can be had (LockBitMapTags, a 15, 16 or 32-bit
  * format), the pixels are written straight into it, and only where the
  * frame differs from the one shown: a row at a time, from its first
  * changed byte column to its last (HAM's whole row, each pixel hanging on
@@ -2500,6 +2500,21 @@ static BOOL lay_out(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay, BOOL full
  * and depth (the monitor does not change mode), with Workbench's colours
  * (the pens Ambiance has there draw the same), in place of the window for
  * as long as it is chosen. The picture's bitmap is made again for it. */
+/* The colour table as the screen's pixels (pxb bytes each: 2 or 4), and
+ * HAM's steps from them */
+static void pix_colours(const ULONG *lut, UWORD *l16, int pxb, BOOL ham, UBYTE depth)
+{
+    if (pxb == 4) {
+        ad_lut32((const unsigned long *)lut, (unsigned int *)l16);
+        if (ham)
+            ad_ham32((const unsigned int *)l16, depth);
+    } else {
+        ad_lut16((const unsigned long *)lut, l16);
+        if (ham)
+            ad_ham(l16, depth);
+    }
+}
+
 static BOOL pb_direct;          /* written straight (into lay.pbm), not made chunky */
 
 static BOOL fs_pbm(struct Gfx *g, UWORD w, UWORD h, WORD ax, WORD ay)
@@ -2558,7 +2573,8 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     BOOL whole_only = TRUE;         /* every frame so far a whole one (a BODY, op 0) */
     UBYTE *planar = NULL, *chunky = NULL, *line = NULL, *last = NULL;
     ULONG chunky_sz = 0;            /* (made, and made again, as its size on screen needs) */
-    UWORD *l16 = NULL;
+    UWORD *l16 = NULL;          /* the colours as the screen's pixels (2 or 4 bytes each: pxb) */
+    int pxb = 2;
     BOOL ham = (camg & HAM_KEY) && (depth == 6 || depth == 8), paused = FALSE, loop = FALSE;
     BOOL direct = FALSE, fresh = TRUE, skip = FALSE, relaid = FALSE, whole = TRUE;
     WORD ax, ay, fx, fy, dw, dh, vx, vy, ox = 0, oy = 0;
@@ -2600,7 +2616,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
                                  (ULONG)&bpr, LBMI_PIXFMT, (ULONG)&fmt, TAG_DONE);
         if (lk) {
             UnLockBitMap(lk);
-            direct = base && bpr && ad_pix_tables(fmt);
+            direct = base && bpr && (pxb = ad_pix_tables(fmt)) != 0;
         }
     }
     if (g->rp->Layer) {
@@ -2653,7 +2669,7 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
     vy = lay.vy;
     if (!(planar = AllocVec(fsz * 2, MEMF_ANY | MEMF_CLEAR)) ||
         !(last = AllocVec(fsz, MEMF_ANY | MEMF_CLEAR)) ||
-        !(l16 = AllocVec(256 * sizeof(UWORD), MEMF_ANY | MEMF_CLEAR)) ||
+        !(l16 = AllocVec(256 * sizeof(ULONG), MEMF_ANY | MEMF_CLEAR)) ||
         (!direct && !(chunky = AllocVec(chunky_sz = (ULONG)dw * dh * (ham ? 3 : 1), MEMF_ANY))) ||
         !(line = AllocVec(rb * 8 + 8, MEMF_ANY)) || !(lut = AllocVec(512 * sizeof(ULONG), MEMF_ANY))) {
         FreeVec(planar);
@@ -2707,7 +2723,8 @@ static LONG play_on_screen(struct Gfx *g, BPTR fh, struct Frame *f, const char *
             (long)dw, (long)dh, lay.full ? " (full screen)" : "",
             cd.mode == CARD_PLANES ? "its planes blitted by the card" :
             cd.mode == CARD_STRETCH ? "its planes stretched, then blitted by the card" :
-            lay.pbm ? "written apart, then blitted" : direct ? "written straight" : "by WritePixelArray");
+            lay.pbm ? (pxb == 4 ? "written apart (32-bit), then blitted" : "written apart, then blitted")
+            : direct ? "written straight" : "by WritePixelArray");
     amb_log("anim", m);
     if (LowLevelBase)
         jlast = (anim_g ? gfx_joy(anim_g) : ReadJoyPort(1));
@@ -2723,11 +2740,8 @@ restart:
     CopyMem(planar, planar + fsz, fsz);
     if (runs && f->cmap)
         ad_lut(f->cmap, f->cmaplen, camg, depth, lut);
-    if (direct) {
-        ad_lut16(lut, l16);
-        if (ham)
-            ad_ham(l16, depth);
-    }
+    if (direct)
+        pix_colours(lut, l16, pxb, ham, depth);
     if (cd.ncol)
         card_colours(lut);
     fresh = TRUE;
@@ -2787,7 +2801,7 @@ restart:
             APTR lk = LockBitMapTags(lay.pbm ? lay.pbm : g->rp->BitMap, LBMI_BASEADDRESS, (ULONG)&base,
                                      LBMI_BYTESPERROW, (ULONG)&bpr, TAG_DONE);
             if (lk && base) {
-                UBYTE *o0 = lay.pbm ? base : base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * 2;
+                UBYTE *o0 = lay.pbm ? base : base + (ULONG)(oy + vy) * bpr + (ULONG)(ox + vx) * pxb;
                 for (y = 0; y < h; y++) {
                     const UBYTE *a = src + y * rowl;
                     UBYTE *b = last + y * rowl, *o = o0 + (ULONG)lay.yo[y] * bpr;
@@ -2799,12 +2813,15 @@ restart:
                         continue;
                     if (ham)
                         x1 = rb;                /* what follows a change changes with it */
-                    ad_row_put(a, rb, depth, w, x0, x1, fx, lay.xo, ham, lut, l16, o);
+                    if (pxb == 4)
+                        ad_row_put32(a, rb, depth, w, x0, x1, fx, lay.xo, ham, (const unsigned int *)l16, o);
+                    else
+                        ad_row_put(a, rb, depth, w, x0, x1, fx, lay.xo, ham, lut, l16, o);
                     px0 = lay.xo[x0 * 8];
                     px1 = lay.xo[x1 * 8 > w ? w : x1 * 8];
-                    span = (px1 - px0) * 2;
+                    span = (px1 - px0) * pxb;
                     for (j = 1; j < (ULONG)(lay.yo[y + 1] - lay.yo[y]); j++)
-                        CopyMem(o + px0 * 2, o + j * bpr + px0 * 2, span);
+                        CopyMem(o + px0 * pxb, o + j * bpr + px0 * pxb, span);
                     CopyMem((APTR)a, b, rowl);
                     nrows++;
                     if (y < ry0)
@@ -3026,11 +3043,8 @@ restart:
                     shown = sk;
                     dec++;
                 }
-                if (direct) {
-                    ad_lut16(lut, l16);
-                    if (ham)
-                        ad_ham(l16, depth);
-                }
+                if (direct)
+                    pix_colours(lut, l16, pxb, ham, depth);
                 if (cd.ncol)
                     card_colours(lut);
                 t0 = time_ms() - due;       /* the clock from there */
@@ -3195,11 +3209,8 @@ restart:
             ad_lut(f->cmap, f->cmaplen, camg, depth, lut + 256);
             if (memcmp(lut, lut + 256, 256 * sizeof(ULONG))) {
                 CopyMem(lut + 256, lut, 256 * sizeof(ULONG));
-                if (direct) {
-                    ad_lut16(lut, l16);
-                    if (ham)
-                        ad_ham(l16, depth);
-                }
+                if (direct)
+                    pix_colours(lut, l16, pxb, ham, depth);
                 if (cd.ncol)
                     card_colours(lut);
                 fresh = TRUE;

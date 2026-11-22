@@ -38,7 +38,9 @@ struct Caps {
 };
 void caps_detect(struct Caps *c);
 BOOL caps_mode_is_rtg(ULONG id);
-ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth);   /* deepest first */
+ULONG caps_find_rtg_mode(UWORD w, UWORD h, UWORD *depth);   /* by depth_rank (caps_rtg_bits) */
+extern UWORD caps_rtg_bits;     /* 16 (the default) or 32: Settings > Display > Colour depth */
+UWORD caps_rtg_deepest(UWORD w, UWORD h);   /* the deepest RTG mode of that size, 0 none */
 const char *caps_release_name(UWORD version);
 
 /* ---------------------------------------------------------------- pens */
