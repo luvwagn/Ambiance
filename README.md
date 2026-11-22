@@ -53,14 +53,15 @@ places. Click a picture for its full size.
 <tr><td align="center" valign="top"><a href="docs/screenshots/action-rtg-picture.png"><img src="docs/screenshots/action-rtg-picture.png" width="270" alt="A picture in the viewer"></a><br><sub>A picture in the viewer</sub></td><td align="center" valign="top"><a href="docs/screenshots/action-rtg-video.png"><img src="docs/screenshots/action-rtg-video.png" width="270" alt="A video, decoded by the ZZ9000"></a><br><sub>A video, decoded by the ZZ9000</sub></td><td align="center" valign="top"><a href="docs/screenshots/action-game.png"><img src="docs/screenshots/action-game.png" width="270" alt="A game started from Games (AGA)"></a><br><sub>A game started from Games (AGA)</sub></td></tr>
 </table>
 
-Taken in Amiberry (68060, a ZZ9000 for RTG) with Ambiance 0.9.3. Music
-and photos from the author's own library and Plex server; games, pictures
-and animations from AGS. The album is *The Razors Edge* by AC/DC, the art
-Roger Dean's, the game Core Design's *Banshee*.
+Taken in Amiberry (68060, a ZZ9000 for RTG) with Ambiance 0.9.3.
 
 ### Credits
 
-Credit to Paul Vince and Amiga Game Selector (AGS) for game content shown.
+Music and photos from the author's own library and Plex server; games,
+pictures and animations from AGS. The album is *The Razors Edge* by AC/DC,
+the art Roger Dean's, the game Core Design's *Banshee*.
+
+Credit to Paul Vince and Amiga Game Selector (AGS) for some content shown.
 Ambiance includes no AGS content in its distribution.
 
 ## What it does
