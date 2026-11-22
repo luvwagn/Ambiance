@@ -512,7 +512,7 @@ it, except where `LIBS:mpega.library` is the ZZ9000's.
 
 It is chosen for accuracy, not speed: about 83 dB from a floating-point
 decoder (70 dB at medium quality) where Tavenard's mpega.library 2.4 is
-34 dB, though mpega 2.4 needs about a sixth fewer cycles at full rate and
+34 dB, though mpega 2.4 needs about a ninth fewer cycles at full rate and
 more at 22 kHz or in mono. Its name of its own also keeps it safe from
 installers that replace `LIBS:mpega.library`, as the ZZ9000's does. Its
 README has the measurements, the other mpega clones beside it, and what
