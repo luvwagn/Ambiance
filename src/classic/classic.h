@@ -220,6 +220,7 @@ struct NowPlaying {
     LONG seek_to;                           /* a track's seek waiting (ms, -1 none) */
     BOOL seeked;                            /* the track started again part way (a seek) */
     ULONG seek_due;
+    ULONG fail_due;                         /* a track that failed: the next from then (time_ms), 0 none */
     /* what is drawn there now: only changes are drawn again */
     LONG s_ms, s_total, s_order, s_row, s_fill;
     int s_state, s_vol, s_btn, s_flash, s_steps, s_loop;

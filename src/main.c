@@ -5670,6 +5670,7 @@ static BOOL np_start_now(LONG idx)
     np.idx = idx;
     np.ended_seen = FALSE;
     np.seek_due = 0;
+    np.fail_due = 0;
     if (np_no_play) {
         np_mark_lists(FALSE);               /* (loaded, stopped: Now playing's row shows it) */
         return TRUE;
@@ -6161,6 +6162,7 @@ void np_press(int b)
         break;
     case NB_STOP:
         mp_stop();
+        np.fail_due = 0;                    /* a failed track's next not started either */
         break;
     case NB_LOOP:
         if (mp_is_stream()) {
@@ -6406,6 +6408,20 @@ static void np_tick(void)
 {
     if (np.seek_due && (LONG)(time_ms() - np.seek_due) >= 0)
         np_seek_track((ULONG)np.seek_to, 0);    /* Back/Forward rested: from there */
+    if (np.fail_due && (LONG)(time_ms() - np.fail_due) >= 0) {
+        /* a track that failed, its message read: the next in its list,
+         * unless something else plays by now (a station, a video, ...) */
+        np.fail_due = 0;
+        if (mp_running())
+            ;
+        else if (!np_skip(1)) {
+            np_mark_lists(TRUE);
+            if (np_on())
+                np_redraw_all();
+        }
+        np.s_rstate = -2;
+        return;
+    }
     np_repeat();
     if (!np_full)
         np_eq_tick();                       /* (Flow on the whole screen: no marker under it) */
@@ -6425,8 +6441,19 @@ static void np_tick(void)
         char why[100];
         amb_strlcpy(why, st_error(), sizeof(why));
         if (failed) {
+            /* said which, and why: the track's title before the reason */
+            char m[200];
+            const char *t = np.list.pool && np.idx >= 0 && np.idx < np.list.count
+                                ? np.list.items[np.idx].label : "";
             amb_log("plex", why[0] ? why : "the track failed");
-            set_msg(why[0] ? why : _("That track could not be played"));
+            if (!why[0])
+                amb_strlcpy(why, _("That track could not be played"), sizeof(why));
+            if (t[0])
+                sprintf(m, "%.80s: %.100s", t, why);
+            else
+                amb_strlcpy(m, why, sizeof(m));
+            amb_strlcpy(why, m, sizeof(why));
+            set_msg(m);
         }
         if (failed && np.seeked) {
             /* a seek the server would not do: the track stays, stopped,
@@ -6437,6 +6464,19 @@ static void np_tick(void)
             set_msg(why[0] ? why : _("The track could not be started there"));
             if (np_on())
                 np_redraw_all();
+            np.s_rstate = -2;
+            return;
+        }
+        if (failed) {
+            /* a few seconds to read why before the next one starts (Stop,
+             * or anything chosen meanwhile, and it does not) */
+            mp_stop();
+            np_mark_lists(TRUE);
+            if (np_on())
+                np_redraw_all();
+            np.fail_due = time_ms() + 3000;
+            if (!np.fail_due)
+                np.fail_due = 1;
             np.s_rstate = -2;
             return;
         }
