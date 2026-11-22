@@ -18,6 +18,46 @@ It runs on Kickstart 3.1 and up with a 68020 or better, from a plain A1200
 to an accelerated or RTG machine, on OCS, ECS or AGA, and scales what it asks
 of the Amiga to how fast it really is.
 
+## Screenshots
+
+Three layouts, chosen in Settings > Display > Layout: **Classic**, built in,
+on every screen; **Horizon** and **Showcase**, layout libraries for a
+graphics card's (RTG) screens, and on AGA too as an experiment (Settings >
+Display > Layouts on native screens). Each layout below shows the same six
+places. Click a picture for its full size.
+
+### Classic, AGA 640×512
+
+<table>
+<tr><td align="center" valign="top"><a href="docs/screenshots/classic-aga-home.png"><img src="docs/screenshots/classic-aga-home.png" width="270" alt="Home"></a><br><sub>Home</sub></td><td align="center" valign="top"><a href="docs/screenshots/classic-aga-games.png"><img src="docs/screenshots/classic-aga-games.png" width="270" alt="Games: AGS’s AGA list"></a><br><sub>Games: AGS’s AGA list</sub></td><td align="center" valign="top"><a href="docs/screenshots/classic-aga-albums.png"><img src="docs/screenshots/classic-aga-albums.png" width="270" alt="Music: albums"></a><br><sub>Music: albums</sub></td></tr>
+<tr><td align="center" valign="top"><a href="docs/screenshots/classic-aga-nowplaying.png"><img src="docs/screenshots/classic-aga-nowplaying.png" width="270" alt="Now playing an album"></a><br><sub>Now playing an album</sub></td><td align="center" valign="top"><a href="docs/screenshots/classic-aga-pictures.png"><img src="docs/screenshots/classic-aga-pictures.png" width="270" alt="Pictures"></a><br><sub>Pictures</sub></td><td align="center" valign="top"><a href="docs/screenshots/classic-aga-videos.png"><img src="docs/screenshots/classic-aga-videos.png" width="270" alt="Videos: animations"></a><br><sub>Videos: animations</sub></td></tr>
+</table>
+
+### Horizon, RTG 1024×768
+
+<table>
+<tr><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-home.png"><img src="docs/screenshots/horizon-rtg-home.png" width="270" alt="Home"></a><br><sub>Home</sub></td><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-games.png"><img src="docs/screenshots/horizon-rtg-games.png" width="270" alt="Games: AGS’s AGA list"></a><br><sub>Games: AGS’s AGA list</sub></td><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-albums.png"><img src="docs/screenshots/horizon-rtg-albums.png" width="270" alt="Music: albums"></a><br><sub>Music: albums</sub></td></tr>
+<tr><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-nowplaying.png"><img src="docs/screenshots/horizon-rtg-nowplaying.png" width="270" alt="Now playing an album"></a><br><sub>Now playing an album</sub></td><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-pictures.png"><img src="docs/screenshots/horizon-rtg-pictures.png" width="270" alt="Pictures"></a><br><sub>Pictures</sub></td><td align="center" valign="top"><a href="docs/screenshots/horizon-rtg-videos.png"><img src="docs/screenshots/horizon-rtg-videos.png" width="270" alt="Videos: animations"></a><br><sub>Videos: animations</sub></td></tr>
+</table>
+
+### Showcase, RTG 1024×768
+
+<table>
+<tr><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-home.png"><img src="docs/screenshots/showcase-rtg-home.png" width="270" alt="Home"></a><br><sub>Home</sub></td><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-games.png"><img src="docs/screenshots/showcase-rtg-games.png" width="270" alt="Games: AGS’s AGA list"></a><br><sub>Games: AGS’s AGA list</sub></td><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-albums.png"><img src="docs/screenshots/showcase-rtg-albums.png" width="270" alt="Music: albums"></a><br><sub>Music: albums</sub></td></tr>
+<tr><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-nowplaying.png"><img src="docs/screenshots/showcase-rtg-nowplaying.png" width="270" alt="Now playing an album"></a><br><sub>Now playing an album</sub></td><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-pictures.png"><img src="docs/screenshots/showcase-rtg-pictures.png" width="270" alt="Pictures"></a><br><sub>Pictures</sub></td><td align="center" valign="top"><a href="docs/screenshots/showcase-rtg-videos.png"><img src="docs/screenshots/showcase-rtg-videos.png" width="270" alt="Videos: animations"></a><br><sub>Videos: animations</sub></td></tr>
+</table>
+
+### Full screen
+
+<table>
+<tr><td align="center" valign="top"><a href="docs/screenshots/action-rtg-picture.png"><img src="docs/screenshots/action-rtg-picture.png" width="270" alt="A picture in the viewer"></a><br><sub>A picture in the viewer</sub></td><td align="center" valign="top"><a href="docs/screenshots/action-rtg-video.png"><img src="docs/screenshots/action-rtg-video.png" width="270" alt="A video, decoded by the ZZ9000"></a><br><sub>A video, decoded by the ZZ9000</sub></td><td align="center" valign="top"><a href="docs/screenshots/action-game.png"><img src="docs/screenshots/action-game.png" width="270" alt="A game started from Games (AGA)"></a><br><sub>A game started from Games (AGA)</sub></td></tr>
+</table>
+
+Taken in Amiberry (68060, a ZZ9000 for RTG) with Ambiance 0.9.3. Music
+and photos from the author's own library and Plex server; games, pictures
+and animations from AGS. The album is *The Razors Edge* by AC/DC, the art
+Roger Dean's, the game Core Design's *Banshee*.
+
 ## What it does
 
 ### Games and demos (AGS, iGame)
@@ -222,6 +262,9 @@ of the Amiga to how fast it really is.
 - Native screens: 320x200/256 lowres in 32 colours on OCS and ECS; on AGA,
   256 colours and also 640x200/256 hires and 640x400/512 laced. RTG:
   640x480, 800x600 and 1024x768.
+- Layouts (Settings > Display > Layout): Classic, built in, and the
+  libraries in `Layouts`, Horizon and Showcase, on RTG screens (and on AGA,
+  experimentally). See [Screenshots](#screenshots).
 - Laced screens choose from several pixel fonts; big RTG screens scale the
   whole layout up, in a pixel look or a smooth, anti-aliased one.
 - Or a window on Workbench, when Workbench is on a graphics card at 15 bits
