@@ -7668,7 +7668,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                         (unsigned long)(time_ms() - t0),
                         pre || pre_t ? " (read ahead)" : "",
                         view_last_own ? (pi.cls[0] ? pi.cls : "ilbm.c") : pi.cls[0] ? pi.cls : "?",
-                        view_last_own ? " (own reader)" : ".datatype");
+                        view_last_own ? " (own reader)" : !strcmp(pi.cls, "zz9k") ? " (the ZZ9000's session)" : ".datatype");
                 amb_log("viewer", m);
             }
             shown = want;

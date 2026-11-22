@@ -52,6 +52,86 @@
  */
 #include "proto/zz9k.h"
 #include "zz9k/surface.h"
+#include "zz9k/request.h"
+#include "zz9k/reply.h"
+
+/* A request and its reply, waited for by polling: zz9k.library before 2.34
+ * counts its own call's timeout in a few hundred tight polls (milliseconds),
+ * not ticks, so on Amiberry 8.6.0 (whose card works alongside the 68k) a
+ * photo's feed came back as a timeout. Sent asynchronously here and polled:
+ * tightly, then a tick at a time, 10 s at most (as Ambiance's zz9k.c). */
+static int pb_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
+{
+    ZZ9KAsyncRequest a;
+    ULONG n, done;
+    int s;
+    if (ZZ9KBase->lib_Version > 2 || ZZ9KBase->lib_Revision >= 34)
+        return ZZ9KCall(rq, reply, 500);
+    memset(&a, 0, sizeof(a));
+    if ((s = ZZ9KCallAsync(&a, rq, NULL, NULL)) != ZZ9K_STATUS_QUEUED)
+        return s;
+    for (n = 0;; n++) {
+        done = 0;
+        s = ZZ9KPoll(8, &done);
+        if (a.completed) {
+            *reply = a.reply;
+            s = a.status;
+            break;
+        }
+        if (s != ZZ9K_STATUS_OK)
+            break;
+        if (n >= 400 + 500) {
+            s = ZZ9K_STATUS_TIMEOUT;
+            break;
+        }
+        if (n >= 400)
+            Delay(1);
+    }
+    if (a.queued && !a.completed)
+        ZZ9KCancelAsync(&a);
+    return s;
+}
+
+static int pb_sess_begin(const ZZ9KImageSessionBeginDesc *d, ZZ9KImageSessionResult *r)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry rp;
+    int s;
+    memset(&rp, 0, sizeof(rp));
+    if ((s = zz9k_request_image_session_begin(&rq, d)) != ZZ9K_STATUS_OK || (s = pb_call(&rq, &rp)) != ZZ9K_STATUS_OK)
+        return s;
+    return zz9k_reply_image_session_result(&rp, ZZ9K_OP_IMAGE_SESSION_BEGIN, r);
+}
+
+static int pb_sess_feed(const ZZ9KImageSessionFeedDesc *d, ZZ9KImageSessionResult *r)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry rp;
+    int s;
+    memset(&rp, 0, sizeof(rp));
+    if ((s = zz9k_request_image_session_feed(&rq, d)) != ZZ9K_STATUS_OK || (s = pb_call(&rq, &rp)) != ZZ9K_STATUS_OK)
+        return s;
+    return zz9k_reply_image_session_result(&rp, ZZ9K_OP_IMAGE_SESSION_FEED, r);
+}
+
+static void pb_sess_close(ULONG sess)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry rp;
+    if (zz9k_request_image_session_close(&rq, sess, 0) == ZZ9K_STATUS_OK)
+        pb_call(&rq, &rp);
+}
+
+static int pb_decode_jpeg(const ZZ9KImageDecodeDesc *d, ZZ9KImageDecodeResult *r)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry rp;
+    int s;
+    memset(&rp, 0, sizeof(rp));
+    if ((s = zz9k_request_decode_jpeg(&rq, d)) != ZZ9K_STATUS_OK || (s = pb_call(&rq, &rp)) != ZZ9K_STATUS_OK)
+        return s;
+    return zz9k_reply_image_decode_result(&rp, ZZ9K_OP_DECODE_JPEG, r);
+}
 
 struct Library *ZZ9KBase;
 static BOOL pb_zzdt = TRUE;             /* the datatypes' columns (NODT: left out) */
@@ -449,7 +529,7 @@ static LONG pb_api_once(void *p)
         d.dst_height = sh;
         d.output_format = ZZ9K_SURFACE_FORMAT_BGRA8888;
         c->stage = "ZZ9KDecodeJpeg";
-        if ((c->status = ZZ9KDecodeJpeg(&d, &res)) != ZZ9K_STATUS_OK)
+        if ((c->status = pb_decode_jpeg(&d, &res)) != ZZ9K_STATUS_OK)
             goto out;
         c->ow = res.width;
         c->oh = res.height;
@@ -468,7 +548,7 @@ static LONG pb_api_once(void *p)
         bd.output_format = ZZ9K_SURFACE_FORMAT_BGRA8888;
         bd.flags = ZZ9K_IMAGE_DECODE_FLAG_FIT | ZZ9K_IMAGE_DECODE_FLAG_PRESERVE_ASPECT;
         c->stage = "ZZ9KImageSessionBegin";
-        if ((c->status = ZZ9KImageSessionBegin(&bd, &r)) != ZZ9K_STATUS_OK)
+        if ((c->status = pb_sess_begin(&bd, &r)) != ZZ9K_STATUS_OK)
             goto out;
         sess = r.session;                   /* (a failed feed's result is not to be trusted for it) */
         for (;;) {
@@ -478,7 +558,7 @@ static LONG pb_api_once(void *p)
                 break;
             }
             c->stage = "ZZ9KImageSessionFeed";
-            if ((c->status = ZZ9KImageSessionFeed(&fd, &r)) != ZZ9K_STATUS_OK)
+            if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
                 break;
             f.pos += r.bytes_consumed;
             if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE) {
@@ -493,7 +573,7 @@ static LONG pb_api_once(void *p)
                 break;
             }
         }
-        ZZ9KImageSessionClose(sess, 0);
+        pb_sess_close(sess);
         if (c->stage)
             goto out;
     }
@@ -604,7 +684,7 @@ static LONG pb_tile_once(void *p)
     bd.dst_height = c->dh;
     memset(&r, 0, sizeof(r));
     c->stage = "ZZ9KImageSessionBegin";
-    if ((c->status = ZZ9KImageSessionBegin(&bd, &r)) != ZZ9K_STATUS_OK)
+    if ((c->status = pb_sess_begin(&bd, &r)) != ZZ9K_STATUS_OK)
         goto out;
     open = TRUE;
     sess = r.session;                       /* (a failed feed's result is not to be trusted for it) */
@@ -618,7 +698,7 @@ static LONG pb_tile_once(void *p)
         if (fd.flags)
             eof = TRUE;
         c->stage = "ZZ9KImageSessionFeed";
-        if ((c->status = ZZ9KImageSessionFeed(&fd, &r)) != ZZ9K_STATUS_OK)
+        if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
             goto out;
         f.pos += r.bytes_consumed;
         c->flags |= r.flags;
@@ -677,7 +757,7 @@ static LONG pb_tile_once(void *p)
         c->stage = NULL;
 out:
     if (open)
-        ZZ9KImageSessionClose(sess, 0);
+        pb_sess_close(sess);
     FreeVec(canvas);
     if (tb.handle)
         ZZ9KFreeShared(tb.handle);

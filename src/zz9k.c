@@ -53,21 +53,25 @@ void zz_close(void)
  * as a success has been seen (picture-paths-eval.md, gap 4). So it is
  * tried: a 16 x 16 BGRA8888 surface filled with one colour, a square of
  * it with another, its pixels read back from the 68k's side and every
- * one checked (the byte order they come back in noted), and freed. */
-#define PROBE_C1 0x12345678UL
-#define PROBE_C2 0x9ABCDEF0UL
-static ULONG bswap32(ULONG v)
+ * one's red, green and blue checked, and freed. (Fill takes its colour
+ * as 0xAARRGGBB and writes it in the surface's format, alpha opaque:
+ * bytes B, G, R, FF, as Amiberry 8.6.0 showed.) */
+#define PROBE_C1 0x00345678UL   /* (R 34, G 56, B 78) */
+#define PROBE_C2 0x00BCDEF0UL
+
+/* a BGRA8888 pixel (bytes B, G, R, A) as 0x00RRGGBB */
+static ULONG bgra_rgb(ULONG v)
 {
-    return (v >> 24) | ((v >> 8) & 0xFF00UL) | ((v << 8) & 0xFF0000UL) | (v << 24);
+    return ((v >> 8) & 0xFF) << 16 | ((v >> 16) & 0xFF) << 8 | (v >> 24);
 }
 
-static const char *probe_surface(UBYTE *swap)
+static const char *probe_surface(void)
 {
     static char why[80];
     ZZ9KSurface sf;
     ZZ9KSurfaceFillDesc fd;
     int s;
-    ULONG x, y, bad = 0, nat = 0, swp = 0;
+    ULONG x, y;
     memset(&sf, 0, sizeof(sf));
     amb_card_lock();
     s = ZZ9KAllocSurfaceEx(16, 16, ZZ9K_SURFACE_FORMAT_BGRA8888, 0, 0, &sf);
@@ -76,17 +80,18 @@ static const char *probe_surface(UBYTE *swap)
         sprintf(why, "allocating it: %s", zz_name(s));
         return why;
     }
+    *why = 0;
     memset(&fd, 0, sizeof(fd));
     fd.surface = sf.handle;
     fd.width = 16;
     fd.height = 16;
-    fd.color = PROBE_C1;
+    fd.color = 0xFF000000UL | PROBE_C1;
     amb_card_lock();
     s = ZZ9KFillSurface(&fd);
     if (s == ZZ9K_STATUS_OK) {
         fd.x = fd.y = 4;
         fd.width = fd.height = 8;
-        fd.color = PROBE_C2;
+        fd.color = 0xFF000000UL | PROBE_C2;
         s = ZZ9KFillSurface(&fd);
     }
     amb_card_unlock();
@@ -95,30 +100,22 @@ static const char *probe_surface(UBYTE *swap)
     else if (!sf.data || sf.pitch < 16 * 4)
         sprintf(why, "no 68k address (%08lx, pitch %lu)", (unsigned long)sf.data,
                 (unsigned long)sf.pitch);
-    else {
-        for (y = 0; y < 16; y++) {
+    else
+        for (y = 0; y < 16 && !*why; y++) {
             volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
                                                                  y * sf.pitch);
             for (x = 0; x < 16; x++) {
                 ULONG want = x >= 4 && x < 12 && y >= 4 && y < 12 ? PROBE_C2 : PROBE_C1, got = row[x];
-                if (got == want)
-                    nat++;
-                else if (got == bswap32(want))
-                    swp++;
-                else if (!bad++)
-                    sprintf(why, "pixel %lu,%lu read %08lx, not %08lx", (unsigned long)x,
+                if (bgra_rgb(got) != want) {
+                    sprintf(why, "pixel %lu,%lu read %08lx, not %06lx", (unsigned long)x,
                             (unsigned long)y, (unsigned long)got, (unsigned long)want);
+                    break;
+                }
             }
         }
-        if (!bad && nat && swp)
-            strcpy(why, "its pixels in two byte orders");
-        else if (!bad)
-            *why = 0;
-    }
     amb_card_lock();
     ZZ9KFreeSurface(sf.handle);
     amb_card_unlock();
-    *swap = swp != 0;
     return *why ? why : NULL;
 }
 
@@ -151,15 +148,14 @@ void zz_probe(struct Caps *c)
     if (!(zc.capability_bits & ZZ9K_CAP_SURFACE_OPS))
         why = "the card has no surface operations";
     else if (c->zz_rev >= ZZ9K_LIBRARY_MIN_REVISION_SURFACE_OPS)
-        why = probe_surface(&c->zz_fill_swap);
+        why = probe_surface();
     c->zz_cpusurf = why == NULL;
     sprintf(m, "zz9k.library 2.%lu, ABI %lu.%lu, firmware %08lx, caps %08lx; one-shot JPEG %s; "
                "CPU-visible surfaces %s%s (%lu ms)",
             (unsigned long)c->zz_rev, (unsigned long)zc.abi_major, (unsigned long)zc.abi_minor,
             (unsigned long)zc.firmware_version, (unsigned long)zc.capability_bits,
             c->zz_jpeg1 ? "yes" : "no",
-            c->zz_cpusurf ? (c->zz_fill_swap ? "yes (read back byte-swapped)" : "yes (read back as filled)")
-                          : "no: ",
+            c->zz_cpusurf ? "yes" : "no: ",
             c->zz_cpusurf ? "" : why, (unsigned long)(time_ms() - t0));
     amb_log("zz9k", m);
     zz_close();
@@ -175,7 +171,23 @@ void zz_probe(struct Caps *c)
  * Ambiance/ViewCard not "0"); anything other than OK goes back to jdec,
  * said once per kind. */
 BOOL zz_view_on;
-static BOOL view_held;          /* zz9k.library opened for it (zz_view_hold) */
+static BOOL view_held;
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks);
+#define ZZ_IMG_TICKS 500        /* a feed's budget: 10 s (a 24 MP photo on the real card) */
+
+/* An image session's request, sent through zz_call_ticks (the library's
+ * own wait before 2.34 is a few milliseconds of polls: Amiberry 8.6.0,
+ * whose card works alongside the 68k, timed most photos out), and its
+ * result read back */
+static int img_call(ZZ9KRequest *rq, UWORD op, ZZ9KImageSessionResult *r)
+{
+    ZZ9KMailboxEntry reply;
+    int st;
+    memset(&reply, 0, sizeof(reply));
+    if ((st = zz_call_ticks(rq, &reply, ZZ_IMG_TICKS)) != ZZ9K_STATUS_OK)
+        return st;
+    return r ? zz9k_reply_image_session_result(&reply, op, r) : (int)reply.status;
+}          /* zz9k.library opened for it (zz_view_hold) */
 
 /* The library held open for the viewer's JPEGs while Ambiance runs, let go
  * before a game (and at quit: its last close reclaims anything left on the
@@ -224,16 +236,14 @@ static BOOL jpeg_dims(BPTR fh, ULONG *w, ULONG *h, BOOL *prog)
     }
 }
 
-static void view_say(const char *what, int st)
+static void view_say(const char *path, const char *what, int st, ULONG ms)
 {
-    static char said[16];
-    char m[160];
-    int k = st >= 0 && st < 15 ? st : 15;
-    if (said[k])
+    static UWORD said;
+    char m[200];
+    if (said >= 8)
         return;
-    said[k] = 1;
-    sprintf(m, "a JPEG on the card: %s (%s): jdec instead, from now on said once", what,
-            st >= 0 ? zz_name(st) : "no");
+    sprintf(m, "%.50s: on the card, %s (%s) after %lu ms: jdec instead%s", FilePart((STRPTR)path), what,
+            st >= 0 ? zz_name(st) : "no", (unsigned long)ms, ++said == 8 ? " (no more of these said)" : "");
     amb_log("viewer", m);
 }
 
@@ -250,7 +260,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     BPTR fh;
     LONG flen;
     ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, guard = 0, sess = 0,
-          t0 = time_ms(), t1, x, y;
+          t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0;
     BOOL prog = FALSE, began = FALSE;
     int st = ZZ9K_STATUS_OK;
     const char *stage = NULL;
@@ -293,9 +303,11 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
         bd.dst_height = dh;
         bd.output_format = ZZ9K_SURFACE_FORMAT_BGRA8888;
         bd.flags = ZZ9K_IMAGE_DECODE_FLAG_FIT | ZZ9K_IMAGE_DECODE_FLAG_PRESERVE_ASPECT;
-        amb_card_lock();
-        st = ZZ9KImageSessionBegin(&bd, &r);
-        amb_card_unlock();
+        {
+            ZZ9KRequest rq;
+            if ((st = zz9k_request_image_session_begin(&rq, &bd)) == ZZ9K_STATUS_OK)
+                st = img_call(&rq, ZZ9K_OP_IMAGE_SESSION_BEGIN, &r);
+        }
         if (st != ZZ9K_STATUS_OK)
             stage = "beginning its session";
         else {
@@ -319,9 +331,15 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
         fd.src_offset = fpos - cstart;
         fd.src_length = cstart + clen - fpos;
         fd.flags = cstart + clen >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
-        amb_card_lock();
-        st = ZZ9KImageSessionFeed(&fd, &r);
-        amb_card_unlock();
+        {
+            ZZ9KRequest rq;
+            ULONG tf = time_ms();
+            if ((st = zz9k_request_image_session_feed(&rq, &fd)) == ZZ9K_STATUS_OK)
+                st = img_call(&rq, ZZ9K_OP_IMAGE_SESSION_FEED, &r);
+            if (time_ms() - tf > feed_max)
+                feed_max = time_ms() - tf;
+            feeds++;
+        }
         if (st != ZZ9K_STATUS_OK) {
             stage = "feeding its session";
             break;
@@ -333,9 +351,9 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             stage = "its session (an error)", st = -1;
     }
     if (began) {
-        amb_card_lock();
-        ZZ9KImageSessionClose(sess, 0);
-        amb_card_unlock();
+        ZZ9KRequest rq;
+        if (zz9k_request_image_session_close(&rq, sess, 0) == ZZ9K_STATUS_OK)
+            img_call(&rq, ZZ9K_OP_IMAGE_SESSION_CLOSE, NULL);
     }
     Close(fh);
     t1 = time_ms();
@@ -353,8 +371,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
                     volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
                                                                          y * sf.pitch);
                     for (x = 0; x < ow; x++) {
-                        ULONG v = row[x];   /* bytes B, G, R, A */
-                        *d++ = ((v >> 8) & 0xFF) << 16 | ((v >> 16) & 0xFF) << 8 | (v >> 24);
+                        *d++ = bgra_rgb(row[x]);    /* bytes B, G, R, A */
                     }
                 }
             }
@@ -385,15 +402,17 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
         ZZ9KFreeShared(buf.handle);
     amb_card_unlock();
     if (stage) {
-        view_say(stage, st);
+        view_say(path, stage, st, time_ms() - t0);
         return NULL;
     }
     {
         char m[300];
-        sprintf(m, "%.60s, %lu x %lu%s: decoded on the card to %lu x %lu in %lu ms, read back in %lu ms%s",
+        sprintf(m, "%.60s, %lu x %lu%s: decoded on the card to %lu x %lu in %lu ms (%lu feeds, the longest "
+                   "%lu ms), read back in %lu ms%s",
                 FilePart((STRPTR)path), (unsigned long)w, (unsigned long)h,
                 prog ? " (progressive)" : "", (unsigned long)ow,
-                (unsigned long)oh, (unsigned long)(t1 - t0), (unsigned long)(time_ms() - t1),
+                (unsigned long)oh, (unsigned long)(t1 - t0), (unsigned long)feeds, (unsigned long)feed_max,
+                (unsigned long)(time_ms() - t1),
                 maxcol <= THUMB_DEEP ? "" : " (and its colours cut)");
         amb_log("viewer", m);
     }
@@ -520,14 +539,20 @@ static void main_out(const ZZ9KMediaSessionMainResult *a, struct ZzMain *r)
  * library's list if it never comes, as it lives on this stack). */
 #define ZZ_SPIN_POLLS 400
 #define ZZ_WAIT_TICKS 150                   /* (three seconds) */
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks);
 static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
+{
+    return zz_call_ticks(rq, reply, ZZ_WAIT_TICKS);
+}
+
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks)
 {
     ZZ9KAsyncRequest a;
     ULONG n, done;
     int s;
     if (ZZ9KBase->lib_Version > 2 || ZZ9KBase->lib_Revision >= 34 || ZZ9KBase->lib_Revision < 2) {
         amb_card_lock();                   /* (2.34 on: its timeout is ticks; before 2.2 no cancel) */
-        s = ZZ9KCall(rq, reply, ZZ9K_DEFAULT_TIMEOUT_TICKS);
+        s = ZZ9KCall(rq, reply, ticks);
         amb_card_unlock();
         return s;
     }
@@ -548,7 +573,7 @@ static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
         }
         if (s != ZZ9K_STATUS_OK)
             break;
-        if (n >= ZZ_SPIN_POLLS + ZZ_WAIT_TICKS) {
+        if (n >= ZZ_SPIN_POLLS + ticks) {
             s = ZZ9K_STATUS_TIMEOUT;
             break;
         }
