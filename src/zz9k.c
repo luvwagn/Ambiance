@@ -137,8 +137,8 @@ void zz_probe(struct Caps *c)
     amb_card_unlock();
     c->zz_rev = ZZ9KBase->lib_Revision;
     if (s != ZZ9K_STATUS_OK) {
-        sprintf(m, "zz9k.library 2.%u: the card's capabilities could not be read (%s)",
-                (unsigned)c->zz_rev, zz_name(s));
+        sprintf(m, "zz9k.library 2.%lu: the card's capabilities could not be read (%s)",
+                (unsigned long)c->zz_rev, zz_name(s));
         amb_log("zz9k", m);
         zz_close();
         return;
@@ -153,9 +153,9 @@ void zz_probe(struct Caps *c)
     else if (c->zz_rev >= ZZ9K_LIBRARY_MIN_REVISION_SURFACE_OPS)
         why = probe_surface(&c->zz_fill_swap);
     c->zz_cpusurf = why == NULL;
-    sprintf(m, "zz9k.library 2.%u, ABI %u.%u, firmware %08lx, caps %08lx; one-shot JPEG %s; "
+    sprintf(m, "zz9k.library 2.%lu, ABI %lu.%lu, firmware %08lx, caps %08lx; one-shot JPEG %s; "
                "CPU-visible surfaces %s%s (%lu ms)",
-            (unsigned)c->zz_rev, (unsigned)zc.abi_major, (unsigned)zc.abi_minor,
+            (unsigned long)c->zz_rev, (unsigned long)zc.abi_major, (unsigned long)zc.abi_minor,
             (unsigned long)zc.firmware_version, (unsigned long)zc.capability_bits,
             c->zz_jpeg1 ? "yes" : "no",
             c->zz_cpusurf ? (c->zz_fill_swap ? "yes (read back byte-swapped)" : "yes (read back as filled)")
