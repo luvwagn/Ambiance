@@ -295,6 +295,9 @@ descodificado na placa
 MSG_7AFA07FD
 descodificado aqui
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG de uma vez %s, imagens lidas de volta %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Memória livre: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast

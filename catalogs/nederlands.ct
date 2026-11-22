@@ -295,6 +295,9 @@ gedecodeerd op de kaart
 MSG_7AFA07FD
 hier gedecodeerd
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG in één aanroep %s, beelden teruggelezen %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Vrij geheugen: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast

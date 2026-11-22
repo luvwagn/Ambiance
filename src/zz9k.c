@@ -45,6 +45,126 @@ void zz_close(void)
     ZZ9KBase = NULL;
 }
 
+/* What the card offers beyond video, once at start-up (caps.c): the
+ * library's revision and capabilities; one-shot JPEG (ZZ9KDecodeJpeg,
+ * revision 15, ZZ9K_CAP_IMAGE_DECODE); and whether a surface allocated
+ * without ARM_LOCAL is one the 68k can read. No flag says that: an
+ * Amiberry before #2733 answered UNSUPPORTED, and a wrong answer given
+ * as a success has been seen (picture-paths-eval.md, gap 4). So it is
+ * tried: a 16 x 16 BGRA8888 surface filled with one colour, a square of
+ * it with another, its pixels read back from the 68k's side and every
+ * one checked (the byte order they come back in noted), and freed. */
+#define PROBE_C1 0x12345678UL
+#define PROBE_C2 0x9ABCDEF0UL
+static ULONG bswap32(ULONG v)
+{
+    return (v >> 24) | ((v >> 8) & 0xFF00UL) | ((v << 8) & 0xFF0000UL) | (v << 24);
+}
+
+static const char *probe_surface(UBYTE *swap)
+{
+    static char why[80];
+    ZZ9KSurface sf;
+    ZZ9KSurfaceFillDesc fd;
+    int s;
+    ULONG x, y, bad = 0, nat = 0, swp = 0;
+    memset(&sf, 0, sizeof(sf));
+    amb_card_lock();
+    s = ZZ9KAllocSurfaceEx(16, 16, ZZ9K_SURFACE_FORMAT_BGRA8888, 0, 0, &sf);
+    amb_card_unlock();
+    if (s != ZZ9K_STATUS_OK) {
+        sprintf(why, "allocating it: %s", zz_name(s));
+        return why;
+    }
+    memset(&fd, 0, sizeof(fd));
+    fd.surface = sf.handle;
+    fd.width = 16;
+    fd.height = 16;
+    fd.color = PROBE_C1;
+    amb_card_lock();
+    s = ZZ9KFillSurface(&fd);
+    if (s == ZZ9K_STATUS_OK) {
+        fd.x = fd.y = 4;
+        fd.width = fd.height = 8;
+        fd.color = PROBE_C2;
+        s = ZZ9KFillSurface(&fd);
+    }
+    amb_card_unlock();
+    if (s != ZZ9K_STATUS_OK)
+        sprintf(why, "filling it: %s", zz_name(s));
+    else if (!sf.data || sf.pitch < 16 * 4)
+        sprintf(why, "no 68k address (%08lx, pitch %lu)", (unsigned long)sf.data,
+                (unsigned long)sf.pitch);
+    else {
+        for (y = 0; y < 16; y++) {
+            volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
+                                                                 y * sf.pitch);
+            for (x = 0; x < 16; x++) {
+                ULONG want = x >= 4 && x < 12 && y >= 4 && y < 12 ? PROBE_C2 : PROBE_C1, got = row[x];
+                if (got == want)
+                    nat++;
+                else if (got == bswap32(want))
+                    swp++;
+                else if (!bad++)
+                    sprintf(why, "pixel %lu,%lu read %08lx, not %08lx", (unsigned long)x,
+                            (unsigned long)y, (unsigned long)got, (unsigned long)want);
+            }
+        }
+        if (!bad && nat && swp)
+            strcpy(why, "its pixels in two byte orders");
+        else if (!bad)
+            *why = 0;
+    }
+    amb_card_lock();
+    ZZ9KFreeSurface(sf.handle);
+    amb_card_unlock();
+    *swap = swp != 0;
+    return *why ? why : NULL;
+}
+
+void zz_probe(struct Caps *c)
+{
+    ZZ9KCaps zc;
+    char m[240];
+    const char *why = "the library is older than revision 11";
+    ULONG t0;
+    int s;
+    if (!c->zz9000 || !zz_open())
+        return;
+    memset(&zc, 0, sizeof(zc));
+    amb_card_lock();
+    s = ZZ9KQueryCaps(&zc);
+    amb_card_unlock();
+    c->zz_rev = ZZ9KBase->lib_Revision;
+    if (s != ZZ9K_STATUS_OK) {
+        sprintf(m, "zz9k.library 2.%u: the card's capabilities could not be read (%s)",
+                (unsigned)c->zz_rev, zz_name(s));
+        amb_log("zz9k", m);
+        zz_close();
+        return;
+    }
+    c->zz_capbits = zc.capability_bits;
+    c->zz_fw = zc.firmware_version;
+    c->zz_jpeg1 = c->zz_rev >= ZZ9K_LIBRARY_MIN_REVISION_TYPED_IMAGE_DECODE &&
+                  (zc.capability_bits & ZZ9K_CAP_IMAGE_DECODE);
+    t0 = time_ms();
+    if (!(zc.capability_bits & ZZ9K_CAP_SURFACE_OPS))
+        why = "the card has no surface operations";
+    else if (c->zz_rev >= ZZ9K_LIBRARY_MIN_REVISION_SURFACE_OPS)
+        why = probe_surface(&c->zz_fill_swap);
+    c->zz_cpusurf = why == NULL;
+    sprintf(m, "zz9k.library 2.%u, ABI %u.%u, firmware %08lx, caps %08lx; one-shot JPEG %s; "
+               "CPU-visible surfaces %s%s (%lu ms)",
+            (unsigned)c->zz_rev, (unsigned)zc.abi_major, (unsigned)zc.abi_minor,
+            (unsigned long)zc.firmware_version, (unsigned long)zc.capability_bits,
+            c->zz_jpeg1 ? "yes" : "no",
+            c->zz_cpusurf ? (c->zz_fill_swap ? "yes (read back byte-swapped)" : "yes (read back as filled)")
+                          : "no: ",
+            c->zz_cpusurf ? "" : why, (unsigned long)(time_ms() - t0));
+    amb_log("zz9k", m);
+    zz_close();
+}
+
 const char *zz_name(int s)
 {
     static const char *const names[] = { "OK", "queued", "busy", "unsupported", "bad request",

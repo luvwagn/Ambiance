@@ -1440,6 +1440,12 @@ static void build_sysinfo(struct Page *p)
                 plex.jpeg_card ? _("decoded on the card") : _("decoded here"),
                 pic_on_card("PNG") ? _("decoded on the card") : _("decoded here"));
         text_line(p, line);
+        if (caps.zz_rev) {
+            sprintf(line, _("  zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s"),
+                    (unsigned long)caps.zz_rev, caps.zz_jpeg1 ? _("yes") : _("no"),
+                    caps.zz_cpusurf ? _("yes") : _("no"));
+            text_line(p, line);
+        }
     }
     sprintf(line, _("Free memory: %luKB chip, %luKB fast"),
             (unsigned long)(caps.chipfree >> 10), (unsigned long)(caps.fastfree >> 10));

@@ -295,6 +295,9 @@ décodé sur la carte
 MSG_7AFA07FD
 décodé ici
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu : JPEG en un appel %s, images relues %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Mémoire libre : %luKo chip, %luKo fast
 ; Free memory: %luKB chip, %luKB fast

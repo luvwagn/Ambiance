@@ -51,6 +51,8 @@ struct ZzAudio {
 };
 
 BOOL zz_open(void);             /* zz9k.library (counted: each open closed) */
+struct Caps;
+void zz_probe(struct Caps *c);  /* at start-up: one-shot JPEG, CPU-visible surfaces (caps) */
 void zz_close(void);
 const char *zz_name(int status);
 /* MPEG Program Stream video on the card's overlay: NULL if it can, else

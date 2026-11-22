@@ -295,6 +295,9 @@ MSG_714F0E2D
 MSG_7AFA07FD
 εδώ
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG με μία κλήση %s, εικόνες που διαβάζονται πίσω %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Μνήμη: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast

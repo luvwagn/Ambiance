@@ -295,6 +295,9 @@ MSG_714F0E2D
 MSG_7AFA07FD
 여기서 디코딩
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: 한 번에 JPEG %s, 그림 다시 읽기 %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 남은 메모리: 칩 %luKB, 패스트 %luKB
 ; Free memory: %luKB chip, %luKB fast

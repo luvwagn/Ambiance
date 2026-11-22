@@ -295,6 +295,9 @@ MSG_714F0E2D
 MSG_7AFA07FD
 ここでデコード
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: 一括JPEG %s、画像の読み戻し %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 空きメモリ: チップ%luKB、ファスト%luKB
 ; Free memory: %luKB chip, %luKB fast

@@ -3,6 +3,7 @@
  * Copyright (c) 2026 Brian King
  */
 #include "amb.h"
+#include "zz9k.h"
 
 #include <exec/execbase.h>
 #include <graphics/gfxbase.h>
@@ -229,6 +230,7 @@ void caps_detect(struct Caps *c)
      * not ask it for less than a fast Amiga would (stream.c, plex.c). */
     c->zz9000 = zz9000_detect();
     c->mpega_zz = c->mp3_mpega && lib_id_has("mpega.library", "ZZ9000");
+    zz_probe(c);                /* one-shot JPEG, CPU-visible surfaces (zz9k.c) */
     /* Ambiance's own MP3 decoder (extras/mpga): mpega's functions under
      * another name, so it never stands in for LIBS:mpega.library */
     c->mpega_own = path_present("PROGDIR:Libs/ambmpega.library");

@@ -295,6 +295,9 @@ dekodes på kortet
 MSG_7AFA07FD
 dekodes her
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG i ett kall %s, bilder lest tilbake %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Ledig minne: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast

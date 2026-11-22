@@ -30,6 +30,12 @@ struct Caps {
     BOOL  aga, ecs, pal, ehb, rtg, net, mp3_mhi, mp3_mpega, amissl, ahi, flacdec;
     UBYTE zz9000;       /* the ZZ9000 card: 0 none, 2 on Zorro II, 3 on Zorro III */
     BOOL  mpega_zz;     /* mpega.library is the ZZ9000 SDK's: MP3 decoded on the card */
+    UWORD zz_rev;       /* zz9k.library 2's revision, 0 not opened (zz_probe) */
+    ULONG zz_capbits;   /* ZZ9KQueryCaps' capability_bits */
+    ULONG zz_fw;        /* ...its firmware_version, raw */
+    BOOL  zz_jpeg1;     /* one-shot JPEG decode (ZZ9KDecodeJpeg: rev 15, CAP_IMAGE_DECODE) */
+    BOOL  zz_cpusurf;   /* a surface without ARM_LOCAL is the 68k's to read (probed) */
+    UBYTE zz_fill_swap; /* ...its 32-bit pixels read byte-swapped from how Fill was given them */
     BOOL  mpega_own;    /* Ambiance's own ambmpega.library is in its Libs */
     BOOL  emulator;     /* UAE family: Amiberry, WinUAE, FS-UAE */
     BOOL  wb_rtg;       /* the Workbench screen is on the graphics card */

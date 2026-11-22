@@ -295,6 +295,9 @@ auf der Karte dekodiert
 MSG_7AFA07FD
 hier dekodiert
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG in einem Aufruf %s, Bilder zurückgelesen %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Freier Speicher: %luKB Chip, %luKB Fast
 ; Free memory: %luKB chip, %luKB fast

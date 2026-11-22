@@ -295,6 +295,9 @@ puretaan kortilla
 MSG_7AFA07FD
 puretaan täällä
 ; decoded here
+MSG_027A6FD9
+  zz9k.library 2.%lu: JPEG yhdellä kutsulla %s, kuvat luettu takaisin %s
+;   zz9k.library 2.%lu: one-shot JPEG %s, pictures read back %s
 MSG_25AF384C
 Vapaa muisti: %luKB chip, %luKB fast
 ; Free memory: %luKB chip, %luKB fast
