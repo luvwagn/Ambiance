@@ -368,6 +368,11 @@ Not there yet
 
 History
 -------
+0.9.3  MP3 on a 68060: Libs/ambmpega060.library, used where it is the
+       faster. On a 68060 at 50 MHz a frame of 128 kbit/s MP3 now takes
+       15.7 ms where 0.9.2 took 336 ms, so full-rate stereo plays in real
+       time with 40% of the CPU to spare. MP3 decoding about a tenth
+       faster on a 68020 or 68030 too.
 0.9.2  First public release.
 
 Credits and licences
