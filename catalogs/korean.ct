@@ -202,9 +202,6 @@ MSG_58E096DE
 MSG_6AA26665
 지금 재생 중
 ; Now playing
-MSG_17B11033
-불러오는 중...
-; Loading...
 MSG_542CAAAC
 메모리 부족: 목록은 %ld개에서 멈춥니다
 ; Low on memory: list stops at %ld entries
@@ -619,6 +616,12 @@ MSG_5467EC76
 MSG_1624E3CC
 화면 모드
 ; Screen mode
+MSG_12F3CD32
+%ld비트
+; %ld-bit
+MSG_21AE5640
+색 깊이
+; Colour depth
 MSG_63678BEE
 더블 버퍼링
 ; Double buffering
@@ -946,6 +949,12 @@ RTG 전용
 MSG_4D914B4E
 자동: 
 ; Automatic: 
+MSG_4E33514A
+16비트: 더 빠름
+; 16-bit: quicker
+MSG_7E3D4370
+32비트: 가장 선명한 사진과 동영상
+; 32-bit: finest pictures and video
 MSG_0F9ADE75
 제작진
 ; Credits
@@ -1153,189 +1162,6 @@ MSG_2B8E61B8
 MSG_642000D2
 위/아래 스크롤  Esc 뒤로
 ; Up/Down scroll  Esc back
-MSG_2FCA6510
-DVD-Video 디스크 이미지
-; A DVD-Video disc image
-MSG_7838F274
-디스크 이미지 (UDF)
-; A disc image (UDF)
-MSG_608D9413
-DVD-Video 디스크 이미지가 아닙니다
-; Not a DVD-Video disc image
-MSG_754C4DD5
-이미지를 읽을 수 없습니다 (이유는 로그에 있습니다)
-; This image could not be read (the log says why)
-MSG_77C67E04
-버튼: ZZ9000에서 영화 또는 프로그램을 차례로 재생
-; Fire plays its film, or its programmes one after another, on the ZZ9000
-MSG_5AEFD354
-N과 P: 다음/이전 챕터 또는 프로그램
-; N and P: the next and previous chapter or programme
-MSG_351C83CC
-CPU 디코딩: 디스크 메뉴, M으로 다시 표시
-; Decoded by the CPU: its menus, M to bring them back
-MSG_7FF7C0A9
-DVD-Video 디스크
-; A DVD-Video disc
-MSG_6B41435A
-소리 있음
-; With sound
-MSG_6524B26D
-소리 없음
-; No sound
-MSG_3D33D3EB
-트랜스포트 스트림
-; A transport stream
-MSG_7EB7DE9D
-비디오 전용 스트림
-; A bare video stream
-MSG_5E08A9DF
-%s 비디오: ZZ9000은 MPEG-1과 MPEG-2를 재생합니다
-; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Ambiance가 읽을 수 있는 MPEG 비디오가 아닙니다
-; Not an MPEG video Ambiance can read
-MSG_1403F9F1
-%ld프레임, %ld.%ld초
-; %ld frames, %ld.%ld s
-MSG_79CC558D
-%s 변경됨
-; Changed %s
-MSG_412F4EA4
-폴더 %ld개
-; %ld folder
-MSG_74791C75
-폴더 %ld개
-; %ld folders
-MSG_406E0E4E
-애니메이션 %ld개
-; %ld animation
-MSG_2A406A07
-애니메이션 %ld개
-; %ld animations
-MSG_15840E5E
-버튼 또는 오른쪽: 열기
-; Fire or Right: open
-MSG_79550836
-이 폴더에는 사진이 없습니다.
-; No pictures in this folder.
-MSG_1D0B9D42
-사진 %ld장
-; %ld picture
-MSG_6A487423
-사진 %ld장
-; %ld pictures
-MSG_52C18255
-버튼: 슬라이드쇼
-; Fire: slideshow
-MSG_178CD224
-오른쪽: 폴더 열기
-; Right: open the folder
-MSG_6E4CA1B5
-Fonts 서랍에 없음
-; Not in the Fonts drawer
-MSG_42B0DEF7
-(비어 있음)
-; (empty)
-MSG_070B058B
-지원:
-; Works with:
-MSG_0ECC2045
-스크린샷 불러오는 중...
-; Loading screenshot...
-MSG_551A6630
-음소거
-; Muted
-MSG_65C00D26
-음량 %ld%%
-; Volume %ld%%
-MSG_17251C33
-음량 100%
-; Volume 100%
-MSG_3827BF33
-위치 %ld/%ld   패턴 %ld   행 %ld
-; Position %ld of %ld   Pattern %ld   Row %ld
-MSG_7930ACB5
-위치 %ld/%ld
-; Position %ld of %ld
-MSG_5F643207
-위치 %ld   패턴 %ld   행 %ld
-; Position %ld   Pattern %ld   Row %ld
-MSG_46703B99
-버퍼 %ld.%ld초
-; Buffered %ld.%lds
-MSG_49BCEF94
-   끊김 %ld
-;    dropouts %ld
-MSG_44D22F83
-연결 중...
-; Connecting...
-MSG_6038FAB1
-버퍼링 중...
-; Buffering...
-MSG_4D72110C
-재생
-; Playback
-MSG_6E6C1A7A
-MHI (MHI가 디코딩하고 재생)
-; MHI (decoded and played by it)
-MSG_7A38DB91
-(제목 없음)
-; (no title)
-MSG_3CB15829
-   트랙 %ld/%ld
-;    Track %ld of %ld
-MSG_2B183663
-파일
-; File
-MSG_7FB0FF72
-형식
-; Format
-MSG_063F19EE
-정지됨
-; Stopped
-MSG_170FF847
-읽는 중...
-; Reading...
-MSG_22FE7692
-원본
-; Original
-MSG_504BD8C0
-저장된 그대로 파일을 보냅니다
-; sends the file as stored
-MSG_4A129B78
-라디오   %s
-; Radio   %s
-MSG_01440831
-   %ld/%ld, 
-;    %ld of %ld in 
-MSG_0A088884
-방송 중
-; On air
-MSG_44471F44
-(방송국이 알려주지 않음)
-; (the station does not say)
-MSG_0769BADE
-MP3 %ldkbps, %s %s
-; MP3 %ldkbps, %s %s
-MSG_4670620E
-, %s %s로 재생
-; \x3B played at %s %s
-MSG_5CD70C3C
-, MHI로
-; , by MHI
-MSG_716687B8
-재생 중인 것 없음
-; Nothing playing
-MSG_085A357E
-   %s
-;    by %s
-MSG_47760A7D
-   서브송 %ld/%ld
-;    subsong %ld of %ld
-MSG_0F4A385C
-샘플
-; Samples
 MSG_61B4DC81
 마지막 트랙이었습니다
 ; That was the last track
@@ -1354,6 +1180,9 @@ MSG_0B3E0086
 MSG_0144F316
 반복 꺼짐: 끝나면 멈춥니다
 ; Loop off: it stops at its end
+MSG_551A6630
+음소거
+; Muted
 MSG_230A5085
 소리 켜짐
 ; Sound on
@@ -1399,6 +1228,9 @@ MSG_0B5B4D9C
 MSG_1361020B
 그 폴더에는 사진이 없습니다
 ; No pictures in that folder
+MSG_17B11033
+불러오는 중...
+; Loading...
 MSG_46C7288D
 열린 단계가 너무 많습니다
 ; Too many levels open
@@ -1483,6 +1315,27 @@ MSG_336326B3
 MSG_41D16C8A
 %ld/%ld
 ; %ld of %ld
+MSG_716687B8
+재생 중인 것 없음
+; Nothing playing
+MSG_7A38DB91
+(제목 없음)
+; (no title)
+MSG_063F19EE
+정지됨
+; Stopped
+MSG_44D22F83
+연결 중...
+; Connecting...
+MSG_6038FAB1
+버퍼링 중...
+; Buffering...
+MSG_085A357E
+   %s
+;    by %s
+MSG_64B20C7B
+여기서는 32비트를 열 수 없음: 대신 16비트
+; 32 bits would not open here: 16-bit instead
 MSG_4C560A92
 연결: 스택이 고르는 인터페이스
 ; Connections: the stack's choice of interface
@@ -2221,6 +2074,12 @@ CPU로 MPEG 비디오를 재생하려면 mpegv.library가 필요합니다 (Ambia
 MSG_4E597D1C
 %s 비디오: AGA 화면에서 Ambiance는 MPEG-1과 MPEG-2를 재생합니다
 ; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
+MSG_5E08A9DF
+%s 비디오: ZZ9000은 MPEG-1과 MPEG-2를 재생합니다
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
+MSG_20C6E823
+Ambiance가 읽을 수 있는 MPEG 비디오가 아닙니다
+; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEG 비디오에는 Picasso96(Picasso96API.library)이 필요합니다
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2263,6 +2122,162 @@ WHDLoad와 프로그램 %ld개를 C:에 넣었습니다
 MSG_04F3511D
  (이미 있던 %ld개는 유지)
 ;  (%ld already there kept)
+MSG_2FCA6510
+DVD-Video 디스크 이미지
+; A DVD-Video disc image
+MSG_7838F274
+디스크 이미지 (UDF)
+; A disc image (UDF)
+MSG_608D9413
+DVD-Video 디스크 이미지가 아닙니다
+; Not a DVD-Video disc image
+MSG_754C4DD5
+이미지를 읽을 수 없습니다 (이유는 로그에 있습니다)
+; This image could not be read (the log says why)
+MSG_77C67E04
+버튼: ZZ9000에서 영화 또는 프로그램을 차례로 재생
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N과 P: 다음/이전 챕터 또는 프로그램
+; N and P: the next and previous chapter or programme
+MSG_351C83CC
+CPU 디코딩: 디스크 메뉴, M으로 다시 표시
+; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+DVD-Video 디스크
+; A DVD-Video disc
+MSG_6B41435A
+소리 있음
+; With sound
+MSG_6524B26D
+소리 없음
+; No sound
+MSG_3D33D3EB
+트랜스포트 스트림
+; A transport stream
+MSG_7EB7DE9D
+비디오 전용 스트림
+; A bare video stream
+MSG_1403F9F1
+%ld프레임, %ld.%ld초
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+%s 변경됨
+; Changed %s
+MSG_412F4EA4
+폴더 %ld개
+; %ld folder
+MSG_74791C75
+폴더 %ld개
+; %ld folders
+MSG_406E0E4E
+애니메이션 %ld개
+; %ld animation
+MSG_2A406A07
+애니메이션 %ld개
+; %ld animations
+MSG_15840E5E
+버튼 또는 오른쪽: 열기
+; Fire or Right: open
+MSG_79550836
+이 폴더에는 사진이 없습니다.
+; No pictures in this folder.
+MSG_1D0B9D42
+사진 %ld장
+; %ld picture
+MSG_6A487423
+사진 %ld장
+; %ld pictures
+MSG_52C18255
+버튼: 슬라이드쇼
+; Fire: slideshow
+MSG_178CD224
+오른쪽: 폴더 열기
+; Right: open the folder
+MSG_6E4CA1B5
+Fonts 서랍에 없음
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(비어 있음)
+; (empty)
+MSG_070B058B
+지원:
+; Works with:
+MSG_0ECC2045
+스크린샷 불러오는 중...
+; Loading screenshot...
+MSG_65C00D26
+음량 %ld%%
+; Volume %ld%%
+MSG_3827BF33
+위치 %ld/%ld   패턴 %ld   행 %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+위치 %ld/%ld
+; Position %ld of %ld
+MSG_5F643207
+위치 %ld   패턴 %ld   행 %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+버퍼 %ld.%ld초
+; Buffered %ld.%lds
+MSG_49BCEF94
+   끊김 %ld
+;    dropouts %ld
+MSG_4D72110C
+재생
+; Playback
+MSG_6E6C1A7A
+MHI (MHI가 디코딩하고 재생)
+; MHI (decoded and played by it)
+MSG_3CB15829
+   트랙 %ld/%ld
+;    Track %ld of %ld
+MSG_2B183663
+파일
+; File
+MSG_7FB0FF72
+형식
+; Format
+MSG_170FF847
+읽는 중...
+; Reading...
+MSG_22FE7692
+원본
+; Original
+MSG_504BD8C0
+저장된 그대로 파일을 보냅니다
+; sends the file as stored
+MSG_4A129B78
+라디오   %s
+; Radio   %s
+MSG_01440831
+   %ld/%ld, 
+;    %ld of %ld in 
+MSG_0A088884
+방송 중
+; On air
+MSG_44471F44
+(방송국이 알려주지 않음)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+, %s %s로 재생
+; \x3B played at %s %s
+MSG_5CD70C3C
+, MHI로
+; , by MHI
+MSG_47760A7D
+   서브송 %ld/%ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+샘플
+; Samples
+MSG_17251C33
+음량 100%
+; Volume 100%
 MSG_5E281FEB
 일시정지
 ; Paused

@@ -202,9 +202,6 @@ Over
 MSG_6AA26665
 Speelt nu
 ; Now playing
-MSG_17B11033
-Laden...
-; Loading...
 MSG_542CAAAC
 Weinig geheugen: lijst stopt bij %ld items
 ; Low on memory: list stops at %ld entries
@@ -619,6 +616,12 @@ Stijl
 MSG_1624E3CC
 Schermmodus
 ; Screen mode
+MSG_12F3CD32
+%ld-bits
+; %ld-bit
+MSG_21AE5640
+Kleurdiepte
+; Colour depth
 MSG_63678BEE
 Dubbele buffer
 ; Double buffering
@@ -946,6 +949,12 @@ alleen RTG
 MSG_4D914B4E
 Automatisch:
 ; Automatic: 
+MSG_4E33514A
+16-bits: sneller
+; 16-bit: quicker
+MSG_7E3D4370
+32-bits: de mooiste beelden en video
+; 32-bit: finest pictures and video
 MSG_0F9ADE75
 Met dank aan
 ; Credits
@@ -1153,189 +1162,6 @@ Op/Neer  scrollen      Links/Esc  terug
 MSG_642000D2
 Op/Neer scrollen  Esc terug
 ; Up/Down scroll  Esc back
-MSG_2FCA6510
-Een dvd-videoschijfkopie
-; A DVD-Video disc image
-MSG_7838F274
-Een schijfkopie (UDF)
-; A disc image (UDF)
-MSG_608D9413
-Geen dvd-videoschijfkopie
-; Not a DVD-Video disc image
-MSG_754C4DD5
-De schijfkopie kon niet worden gelezen (het logboek zegt waarom)
-; This image could not be read (the log says why)
-MSG_77C67E04
-Vuur speelt de film af, of de programma's na elkaar, op de ZZ9000
-; Fire plays its film, or its programmes one after another, on the ZZ9000
-MSG_5AEFD354
-N en P: volgend en vorig hoofdstuk of programma
-; N and P: the next and previous chapter or programme
-MSG_351C83CC
-Gedecodeerd door de CPU: de menu's, M haalt ze terug
-; Decoded by the CPU: its menus, M to bring them back
-MSG_7FF7C0A9
-Een dvd-videoschijf
-; A DVD-Video disc
-MSG_6B41435A
-Met geluid
-; With sound
-MSG_6524B26D
-Zonder geluid
-; No sound
-MSG_3D33D3EB
-Een transportstream
-; A transport stream
-MSG_7EB7DE9D
-Een losse videostream
-; A bare video stream
-MSG_5E08A9DF
-%s-video: de ZZ9000 speelt MPEG-1 en MPEG-2
-; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Geen MPEG-video die Ambiance kan lezen
-; Not an MPEG video Ambiance can read
-MSG_1403F9F1
-%ld beelden, %ld,%ld s
-; %ld frames, %ld.%ld s
-MSG_79CC558D
-Gewijzigd %s
-; Changed %s
-MSG_412F4EA4
-%ld map
-; %ld folder
-MSG_74791C75
-%ld mappen
-; %ld folders
-MSG_406E0E4E
-%ld animatie
-; %ld animation
-MSG_2A406A07
-%ld animaties
-; %ld animations
-MSG_15840E5E
-Vuur of Rechts: openen
-; Fire or Right: open
-MSG_79550836
-Geen afbeeldingen in deze map.
-; No pictures in this folder.
-MSG_1D0B9D42
-%ld afbeelding
-; %ld picture
-MSG_6A487423
-%ld afbeeldingen
-; %ld pictures
-MSG_52C18255
-Vuur: diavoorstelling
-; Fire: slideshow
-MSG_178CD224
-Rechts: de map openen
-; Right: open the folder
-MSG_6E4CA1B5
-Niet in de lade Fonts
-; Not in the Fonts drawer
-MSG_42B0DEF7
-(leeg)
-; (empty)
-MSG_070B058B
-Werkt met:
-; Works with:
-MSG_0ECC2045
-Schermafdruk laden...
-; Loading screenshot...
-MSG_551A6630
-Gedempt
-; Muted
-MSG_65C00D26
-Volume %ld%%
-; Volume %ld%%
-MSG_17251C33
-Volume 100%
-; Volume 100%
-MSG_3827BF33
-Positie %ld van %ld   Patroon %ld   Rij %ld
-; Position %ld of %ld   Pattern %ld   Row %ld
-MSG_7930ACB5
-Positie %ld van %ld
-; Position %ld of %ld
-MSG_5F643207
-Positie %ld   Patroon %ld   Rij %ld
-; Position %ld   Pattern %ld   Row %ld
-MSG_46703B99
-Gebufferd %ld.%lds
-; Buffered %ld.%lds
-MSG_49BCEF94
-   haperingen %ld
-;    dropouts %ld
-MSG_44D22F83
-Verbinden...
-; Connecting...
-MSG_6038FAB1
-Bufferen...
-; Buffering...
-MSG_4D72110C
-Weergave
-; Playback
-MSG_6E6C1A7A
-MHI (gedecodeerd en gespeeld door MHI)
-; MHI (decoded and played by it)
-MSG_7A38DB91
-(zonder titel)
-; (no title)
-MSG_3CB15829
-   Nummer %ld van %ld
-;    Track %ld of %ld
-MSG_2B183663
-Bestand
-; File
-MSG_7FB0FF72
-Formaat
-; Format
-MSG_063F19EE
-Gestopt
-; Stopped
-MSG_170FF847
-Lezen...
-; Reading...
-MSG_22FE7692
-Origineel
-; Original
-MSG_504BD8C0
-stuurt het bestand zoals het is
-; sends the file as stored
-MSG_4A129B78
-Radio   %s
-; Radio   %s
-MSG_01440831
-   %ld van %ld in
-;    %ld of %ld in 
-MSG_0A088884
-In de lucht
-; On air
-MSG_44471F44
-(de zender zegt het niet)
-; (the station does not say)
-MSG_0769BADE
-MP3 %ldkbps, %s %s
-; MP3 %ldkbps, %s %s
-MSG_4670620E
-\x3B gespeeld op %s %s
-; \x3B played at %s %s
-MSG_5CD70C3C
-, door MHI
-; , by MHI
-MSG_716687B8
-Er speelt niets
-; Nothing playing
-MSG_085A357E
-   door %s
-;    by %s
-MSG_47760A7D
-   subnummer %ld van %ld
-;    subsong %ld of %ld
-MSG_0F4A385C
-Samples
-; Samples
 MSG_61B4DC81
 Dat was het laatste nummer
 ; That was the last track
@@ -1354,6 +1180,9 @@ Herhalen aan: het speelt opnieuw aan het eind
 MSG_0144F316
 Herhalen uit: het stopt aan het eind
 ; Loop off: it stops at its end
+MSG_551A6630
+Gedempt
+; Muted
 MSG_230A5085
 Geluid aan
 ; Sound on
@@ -1399,6 +1228,9 @@ Meer formaten: EaglePlayer, van Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 Geen afbeeldingen in die map
 ; No pictures in that folder
+MSG_17B11033
+Laden...
+; Loading...
 MSG_46C7288D
 Te veel niveaus open
 ; Too many levels open
@@ -1483,6 +1315,27 @@ Nummer %ld van %ld
 MSG_41D16C8A
 %ld van %ld
 ; %ld of %ld
+MSG_716687B8
+Er speelt niets
+; Nothing playing
+MSG_7A38DB91
+(zonder titel)
+; (no title)
+MSG_063F19EE
+Gestopt
+; Stopped
+MSG_44D22F83
+Verbinden...
+; Connecting...
+MSG_6038FAB1
+Bufferen...
+; Buffering...
+MSG_085A357E
+   door %s
+;    by %s
+MSG_64B20C7B
+32 bits kan hier niet openen: 16-bits in plaats daarvan
+; 32 bits would not open here: 16-bit instead
 MSG_4C560A92
 Verbindingen: de interface die de stack kiest
 ; Connections: the stack's choice of interface
@@ -2221,6 +2074,12 @@ MPEG-video via de CPU heeft mpegv.library nodig (Libs van Ambiance)
 MSG_4E597D1C
 %s-video: op een AGA-scherm speelt Ambiance MPEG-1 en MPEG-2
 ; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
+MSG_5E08A9DF
+%s-video: de ZZ9000 speelt MPEG-1 en MPEG-2
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
+MSG_20C6E823
+Geen MPEG-video die Ambiance kan lezen
+; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEG-video vereist Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2263,6 +2122,162 @@ WHDLoad en %ld andere programma's in C: gezet
 MSG_04F3511D
  (%ld al aanwezige behouden)
 ;  (%ld already there kept)
+MSG_2FCA6510
+Een dvd-videoschijfkopie
+; A DVD-Video disc image
+MSG_7838F274
+Een schijfkopie (UDF)
+; A disc image (UDF)
+MSG_608D9413
+Geen dvd-videoschijfkopie
+; Not a DVD-Video disc image
+MSG_754C4DD5
+De schijfkopie kon niet worden gelezen (het logboek zegt waarom)
+; This image could not be read (the log says why)
+MSG_77C67E04
+Vuur speelt de film af, of de programma's na elkaar, op de ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N en P: volgend en vorig hoofdstuk of programma
+; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Gedecodeerd door de CPU: de menu's, M haalt ze terug
+; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+Een dvd-videoschijf
+; A DVD-Video disc
+MSG_6B41435A
+Met geluid
+; With sound
+MSG_6524B26D
+Zonder geluid
+; No sound
+MSG_3D33D3EB
+Een transportstream
+; A transport stream
+MSG_7EB7DE9D
+Een losse videostream
+; A bare video stream
+MSG_1403F9F1
+%ld beelden, %ld,%ld s
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+Gewijzigd %s
+; Changed %s
+MSG_412F4EA4
+%ld map
+; %ld folder
+MSG_74791C75
+%ld mappen
+; %ld folders
+MSG_406E0E4E
+%ld animatie
+; %ld animation
+MSG_2A406A07
+%ld animaties
+; %ld animations
+MSG_15840E5E
+Vuur of Rechts: openen
+; Fire or Right: open
+MSG_79550836
+Geen afbeeldingen in deze map.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld afbeelding
+; %ld picture
+MSG_6A487423
+%ld afbeeldingen
+; %ld pictures
+MSG_52C18255
+Vuur: diavoorstelling
+; Fire: slideshow
+MSG_178CD224
+Rechts: de map openen
+; Right: open the folder
+MSG_6E4CA1B5
+Niet in de lade Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(leeg)
+; (empty)
+MSG_070B058B
+Werkt met:
+; Works with:
+MSG_0ECC2045
+Schermafdruk laden...
+; Loading screenshot...
+MSG_65C00D26
+Volume %ld%%
+; Volume %ld%%
+MSG_3827BF33
+Positie %ld van %ld   Patroon %ld   Rij %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Positie %ld van %ld
+; Position %ld of %ld
+MSG_5F643207
+Positie %ld   Patroon %ld   Rij %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Gebufferd %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   haperingen %ld
+;    dropouts %ld
+MSG_4D72110C
+Weergave
+; Playback
+MSG_6E6C1A7A
+MHI (gedecodeerd en gespeeld door MHI)
+; MHI (decoded and played by it)
+MSG_3CB15829
+   Nummer %ld van %ld
+;    Track %ld of %ld
+MSG_2B183663
+Bestand
+; File
+MSG_7FB0FF72
+Formaat
+; Format
+MSG_170FF847
+Lezen...
+; Reading...
+MSG_22FE7692
+Origineel
+; Original
+MSG_504BD8C0
+stuurt het bestand zoals het is
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld van %ld in
+;    %ld of %ld in 
+MSG_0A088884
+In de lucht
+; On air
+MSG_44471F44
+(de zender zegt het niet)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B gespeeld op %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, door MHI
+; , by MHI
+MSG_47760A7D
+   subnummer %ld van %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Samples
+; Samples
+MSG_17251C33
+Volume 100%
+; Volume 100%
 MSG_5E281FEB
 Gepauzeerd
 ; Paused

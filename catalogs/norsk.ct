@@ -202,9 +202,6 @@ Om
 MSG_6AA26665
 Spilles nå
 ; Now playing
-MSG_17B11033
-Laster...
-; Loading...
 MSG_542CAAAC
 Lite minne: listen stopper ved %ld oppføringer
 ; Low on memory: list stops at %ld entries
@@ -619,6 +616,12 @@ Stil
 MSG_1624E3CC
 Skjermmodus
 ; Screen mode
+MSG_12F3CD32
+%ld-bit
+; %ld-bit
+MSG_21AE5640
+Fargedybde
+; Colour depth
 MSG_63678BEE
 Dobbelbuffer
 ; Double buffering
@@ -946,6 +949,12 @@ bare RTG
 MSG_4D914B4E
 Automatisk:
 ; Automatic: 
+MSG_4E33514A
+16-bit: raskere
+; 16-bit: quicker
+MSG_7E3D4370
+32-bit: de fineste bildene og videoene
+; 32-bit: finest pictures and video
 MSG_0F9ADE75
 Takk til
 ; Credits
@@ -1153,189 +1162,6 @@ Opp/Ned  rull      Venstre/Esc  tilbake
 MSG_642000D2
 Opp/Ned rull  Esc tilbake
 ; Up/Down scroll  Esc back
-MSG_2FCA6510
-Et DVD-Video-plateavtrykk
-; A DVD-Video disc image
-MSG_7838F274
-Et plateavtrykk (UDF)
-; A disc image (UDF)
-MSG_608D9413
-Ikke et DVD-Video-plateavtrykk
-; Not a DVD-Video disc image
-MSG_754C4DD5
-Avtrykket kunne ikke leses (loggen sier hvorfor)
-; This image could not be read (the log says why)
-MSG_77C67E04
-Skyt spiller av filmen, eller programmene etter hverandre, på ZZ9000
-; Fire plays its film, or its programmes one after another, on the ZZ9000
-MSG_5AEFD354
-N og P: neste og forrige kapittel eller program
-; N and P: the next and previous chapter or programme
-MSG_351C83CC
-Dekodet av CPU-en: menyene, M henter dem fram igjen
-; Decoded by the CPU: its menus, M to bring them back
-MSG_7FF7C0A9
-En DVD-Video-plate
-; A DVD-Video disc
-MSG_6B41435A
-Med lyd
-; With sound
-MSG_6524B26D
-Uten lyd
-; No sound
-MSG_3D33D3EB
-En transportstrøm
-; A transport stream
-MSG_7EB7DE9D
-En ren videostrøm
-; A bare video stream
-MSG_5E08A9DF
-%s-video: ZZ9000 spiller MPEG-1 og MPEG-2
-; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Ikke en MPEG-video Ambiance kan lese
-; Not an MPEG video Ambiance can read
-MSG_1403F9F1
-%ld bilder, %ld,%ld s
-; %ld frames, %ld.%ld s
-MSG_79CC558D
-Endret %s
-; Changed %s
-MSG_412F4EA4
-%ld mappe
-; %ld folder
-MSG_74791C75
-%ld mapper
-; %ld folders
-MSG_406E0E4E
-%ld animasjon
-; %ld animation
-MSG_2A406A07
-%ld animasjoner
-; %ld animations
-MSG_15840E5E
-Skyt eller Høyre: åpne
-; Fire or Right: open
-MSG_79550836
-Ingen bilder i denne mappen.
-; No pictures in this folder.
-MSG_1D0B9D42
-%ld bilde
-; %ld picture
-MSG_6A487423
-%ld bilder
-; %ld pictures
-MSG_52C18255
-Skyt: lysbildefremvisning
-; Fire: slideshow
-MSG_178CD224
-Høyre: åpne mappen
-; Right: open the folder
-MSG_6E4CA1B5
-Ikke i skuffen Fonts
-; Not in the Fonts drawer
-MSG_42B0DEF7
-(tom)
-; (empty)
-MSG_070B058B
-Fungerer med:
-; Works with:
-MSG_0ECC2045
-Laster skjermbilde...
-; Loading screenshot...
-MSG_551A6630
-Lyd av
-; Muted
-MSG_65C00D26
-Volum %ld%%
-; Volume %ld%%
-MSG_17251C33
-Volum 100%
-; Volume 100%
-MSG_3827BF33
-Posisjon %ld av %ld   Mønster %ld   Rad %ld
-; Position %ld of %ld   Pattern %ld   Row %ld
-MSG_7930ACB5
-Posisjon %ld av %ld
-; Position %ld of %ld
-MSG_5F643207
-Posisjon %ld   Mønster %ld   Rad %ld
-; Position %ld   Pattern %ld   Row %ld
-MSG_46703B99
-Bufret %ld.%lds
-; Buffered %ld.%lds
-MSG_49BCEF94
-   utfall %ld
-;    dropouts %ld
-MSG_44D22F83
-Kobler til...
-; Connecting...
-MSG_6038FAB1
-Bufrer...
-; Buffering...
-MSG_4D72110C
-Avspilling
-; Playback
-MSG_6E6C1A7A
-MHI (dekodet og spilt av den)
-; MHI (decoded and played by it)
-MSG_7A38DB91
-(uten tittel)
-; (no title)
-MSG_3CB15829
-   Spor %ld av %ld
-;    Track %ld of %ld
-MSG_2B183663
-Fil
-; File
-MSG_7FB0FF72
-Format
-; Format
-MSG_063F19EE
-Stoppet
-; Stopped
-MSG_170FF847
-Leser...
-; Reading...
-MSG_22FE7692
-Original
-; Original
-MSG_504BD8C0
-sender filen som den er
-; sends the file as stored
-MSG_4A129B78
-Radio   %s
-; Radio   %s
-MSG_01440831
-   %ld av %ld i
-;    %ld of %ld in 
-MSG_0A088884
-På lufta
-; On air
-MSG_44471F44
-(stasjonen sier det ikke)
-; (the station does not say)
-MSG_0769BADE
-MP3 %ldkbps, %s %s
-; MP3 %ldkbps, %s %s
-MSG_4670620E
-\x3B spilt med %s %s
-; \x3B played at %s %s
-MSG_5CD70C3C
-, av MHI
-; , by MHI
-MSG_716687B8
-Ingenting spilles
-; Nothing playing
-MSG_085A357E
-   av %s
-;    by %s
-MSG_47760A7D
-   underlåt %ld av %ld
-;    subsong %ld of %ld
-MSG_0F4A385C
-Samplinger
-; Samples
 MSG_61B4DC81
 Det var det siste sporet
 ; That was the last track
@@ -1354,6 +1180,9 @@ Gjenta på: den spilles igjen når den er ferdig
 MSG_0144F316
 Gjenta av: den stopper når den er ferdig
 ; Loop off: it stops at its end
+MSG_551A6630
+Lyd av
+; Muted
 MSG_230A5085
 Lyd på
 ; Sound on
@@ -1399,6 +1228,9 @@ Flere formater: EaglePlayer, fra Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 Ingen bilder i den mappen
 ; No pictures in that folder
+MSG_17B11033
+Laster...
+; Loading...
 MSG_46C7288D
 For mange nivåer åpne
 ; Too many levels open
@@ -1483,6 +1315,27 @@ Spor %ld av %ld
 MSG_41D16C8A
 %ld av %ld
 ; %ld of %ld
+MSG_716687B8
+Ingenting spilles
+; Nothing playing
+MSG_7A38DB91
+(uten tittel)
+; (no title)
+MSG_063F19EE
+Stoppet
+; Stopped
+MSG_44D22F83
+Kobler til...
+; Connecting...
+MSG_6038FAB1
+Bufrer...
+; Buffering...
+MSG_085A357E
+   av %s
+;    by %s
+MSG_64B20C7B
+32 bit kan ikke åpnes her: 16-bit i stedet
+; 32 bits would not open here: 16-bit instead
 MSG_4C560A92
 Tilkoblinger: grensesnittet stakken velger
 ; Connections: the stack's choice of interface
@@ -2221,6 +2074,12 @@ MPEG-video med CPU-en krever mpegv.library (Ambiances Libs)
 MSG_4E597D1C
 %s-video: på en AGA-skjerm spiller Ambiance MPEG-1 og MPEG-2
 ; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
+MSG_5E08A9DF
+%s-video: ZZ9000 spiller MPEG-1 og MPEG-2
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
+MSG_20C6E823
+Ikke en MPEG-video Ambiance kan lese
+; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEG-video krever Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2263,6 +2122,162 @@ WHDLoad og %ld andre programmer lagt i C:
 MSG_04F3511D
  (%ld som allerede fantes, beholdt)
 ;  (%ld already there kept)
+MSG_2FCA6510
+Et DVD-Video-plateavtrykk
+; A DVD-Video disc image
+MSG_7838F274
+Et plateavtrykk (UDF)
+; A disc image (UDF)
+MSG_608D9413
+Ikke et DVD-Video-plateavtrykk
+; Not a DVD-Video disc image
+MSG_754C4DD5
+Avtrykket kunne ikke leses (loggen sier hvorfor)
+; This image could not be read (the log says why)
+MSG_77C67E04
+Skyt spiller av filmen, eller programmene etter hverandre, på ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N og P: neste og forrige kapittel eller program
+; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Dekodet av CPU-en: menyene, M henter dem fram igjen
+; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+En DVD-Video-plate
+; A DVD-Video disc
+MSG_6B41435A
+Med lyd
+; With sound
+MSG_6524B26D
+Uten lyd
+; No sound
+MSG_3D33D3EB
+En transportstrøm
+; A transport stream
+MSG_7EB7DE9D
+En ren videostrøm
+; A bare video stream
+MSG_1403F9F1
+%ld bilder, %ld,%ld s
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+Endret %s
+; Changed %s
+MSG_412F4EA4
+%ld mappe
+; %ld folder
+MSG_74791C75
+%ld mapper
+; %ld folders
+MSG_406E0E4E
+%ld animasjon
+; %ld animation
+MSG_2A406A07
+%ld animasjoner
+; %ld animations
+MSG_15840E5E
+Skyt eller Høyre: åpne
+; Fire or Right: open
+MSG_79550836
+Ingen bilder i denne mappen.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld bilde
+; %ld picture
+MSG_6A487423
+%ld bilder
+; %ld pictures
+MSG_52C18255
+Skyt: lysbildefremvisning
+; Fire: slideshow
+MSG_178CD224
+Høyre: åpne mappen
+; Right: open the folder
+MSG_6E4CA1B5
+Ikke i skuffen Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(tom)
+; (empty)
+MSG_070B058B
+Fungerer med:
+; Works with:
+MSG_0ECC2045
+Laster skjermbilde...
+; Loading screenshot...
+MSG_65C00D26
+Volum %ld%%
+; Volume %ld%%
+MSG_3827BF33
+Posisjon %ld av %ld   Mønster %ld   Rad %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Posisjon %ld av %ld
+; Position %ld of %ld
+MSG_5F643207
+Posisjon %ld   Mønster %ld   Rad %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Bufret %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   utfall %ld
+;    dropouts %ld
+MSG_4D72110C
+Avspilling
+; Playback
+MSG_6E6C1A7A
+MHI (dekodet og spilt av den)
+; MHI (decoded and played by it)
+MSG_3CB15829
+   Spor %ld av %ld
+;    Track %ld of %ld
+MSG_2B183663
+Fil
+; File
+MSG_7FB0FF72
+Format
+; Format
+MSG_170FF847
+Leser...
+; Reading...
+MSG_22FE7692
+Original
+; Original
+MSG_504BD8C0
+sender filen som den er
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld av %ld i
+;    %ld of %ld in 
+MSG_0A088884
+På lufta
+; On air
+MSG_44471F44
+(stasjonen sier det ikke)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B spilt med %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, av MHI
+; , by MHI
+MSG_47760A7D
+   underlåt %ld av %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Samplinger
+; Samples
+MSG_17251C33
+Volum 100%
+; Volume 100%
 MSG_5E281FEB
 På pause
 ; Paused

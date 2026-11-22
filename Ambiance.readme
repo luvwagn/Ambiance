@@ -299,9 +299,10 @@ Settings
   Display      Window (full screen or a Workbench window, where Workbench
                can take one), Screen mode (full screen) or Text size (a
                window), Style (a laced or RTG screen: the font, those
-               whose layout fits; RTG: or Smooth), Double buffering
-               (RTG), Colours (Midnight's navy, Graphite, WB1.3's blue,
-               Emerald or Amethyst), Visualisation
+               whose layout fits; RTG: or Smooth), Colour depth (RTG:
+               16 or 32-bit), Double buffering (RTG), Colours
+               (Midnight's navy, Graphite, WB1.3's blue, Emerald or
+               Amethyst), Visualisation
                (Now Playing's level meters, HippoPlayer's spectrum
                analyser, or Flow on graphics cards; under MHI the
                meters), Full screen visual (F on Now Playing: Flow, or
@@ -368,6 +369,19 @@ Not there yet
 
 History
 -------
+0.9.4  Settings > Display > Colour depth: 32-bit for full RTG screens whose
+       size has a 32 (or 24) bit mode, for pictures, covers and video
+       without 16-bit's steps. 16-bit stays the default, being quicker;
+       a 32-bit screen that will not open (card memory) opens at 16 bits.
+       HAM animations are drawn straight at 32 bits too.
+       Classic's previews, covers and Now Playing art, and the mini
+       player's cover, keep their own colours on 15 to 32-bit screens:
+       they had been cut to 256 colours (Plex art on slower Amigas to 48
+       or 64). 8-bit and AGA screens are as before.
+       Plex: a track started again after quitting Ambiance while it
+       played no longer skips to the next one.
+       A track that fails now shows its name and why, stops, and the
+       next one starts 3 s later.
 0.9.3  MP3 on a 68060: Libs/ambmpega060.library, used where it is the
        faster. On a 68060 at 50 MHz a frame of 128 kbit/s MP3 now takes
        15.7 ms where 0.9.2 took 336 ms, so full-rate stereo plays in real

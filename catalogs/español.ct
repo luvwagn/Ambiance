@@ -202,9 +202,6 @@ Acerca de
 MSG_6AA26665
 Reproduciendo
 ; Now playing
-MSG_17B11033
-Cargando...
-; Loading...
 MSG_542CAAAC
 Poca memoria: la lista se detiene en %ld entradas
 ; Low on memory: list stops at %ld entries
@@ -619,6 +616,12 @@ Estilo
 MSG_1624E3CC
 Modo de pantalla
 ; Screen mode
+MSG_12F3CD32
+%ld bits
+; %ld-bit
+MSG_21AE5640
+Profundidad de color
+; Colour depth
 MSG_63678BEE
 Doble búfer
 ; Double buffering
@@ -946,6 +949,12 @@ solo RTG
 MSG_4D914B4E
 Automático:
 ; Automatic: 
+MSG_4E33514A
+16 bits: más rápido
+; 16-bit: quicker
+MSG_7E3D4370
+32 bits: las mejores imágenes y vídeos
+; 32-bit: finest pictures and video
 MSG_0F9ADE75
 Créditos
 ; Credits
@@ -1153,189 +1162,6 @@ Arriba/Abajo  desplazar      Izquierda/Esc  atrás
 MSG_642000D2
 Arriba/Abajo desplazar  Esc atrás
 ; Up/Down scroll  Esc back
-MSG_2FCA6510
-Una imagen de disco DVD-Video
-; A DVD-Video disc image
-MSG_7838F274
-Una imagen de disco (UDF)
-; A disc image (UDF)
-MSG_608D9413
-No es una imagen de disco DVD-Video
-; Not a DVD-Video disc image
-MSG_754C4DD5
-No se pudo leer la imagen (el registro dice por qué)
-; This image could not be read (the log says why)
-MSG_77C67E04
-Disparo reproduce su película o sus programas uno tras otro en la ZZ9000
-; Fire plays its film, or its programmes one after another, on the ZZ9000
-MSG_5AEFD354
-N y P: capítulo o programa siguiente y anterior
-; N and P: the next and previous chapter or programme
-MSG_351C83CC
-Decodificado por la CPU: sus menús, M para volver a ellos
-; Decoded by the CPU: its menus, M to bring them back
-MSG_7FF7C0A9
-Un disco DVD-Video
-; A DVD-Video disc
-MSG_6B41435A
-Con sonido
-; With sound
-MSG_6524B26D
-Sin sonido
-; No sound
-MSG_3D33D3EB
-Un flujo de transporte
-; A transport stream
-MSG_7EB7DE9D
-Un flujo de vídeo puro
-; A bare video stream
-MSG_5E08A9DF
-Vídeo %s: la ZZ9000 reproduce MPEG-1 y MPEG-2
-; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-No es un vídeo MPEG que Ambiance pueda leer
-; Not an MPEG video Ambiance can read
-MSG_1403F9F1
-%ld fotogramas, %ld,%ld s
-; %ld frames, %ld.%ld s
-MSG_79CC558D
-Modificado %s
-; Changed %s
-MSG_412F4EA4
-%ld carpeta
-; %ld folder
-MSG_74791C75
-%ld carpetas
-; %ld folders
-MSG_406E0E4E
-%ld animación
-; %ld animation
-MSG_2A406A07
-%ld animaciones
-; %ld animations
-MSG_15840E5E
-Disparo o Derecha: abrir
-; Fire or Right: open
-MSG_79550836
-No hay imágenes en esta carpeta.
-; No pictures in this folder.
-MSG_1D0B9D42
-%ld imagen
-; %ld picture
-MSG_6A487423
-%ld imágenes
-; %ld pictures
-MSG_52C18255
-Disparo: pase de imágenes
-; Fire: slideshow
-MSG_178CD224
-Derecha: abrir la carpeta
-; Right: open the folder
-MSG_6E4CA1B5
-No está en el cajón Fonts
-; Not in the Fonts drawer
-MSG_42B0DEF7
-(vacío)
-; (empty)
-MSG_070B058B
-Funciona con:
-; Works with:
-MSG_0ECC2045
-Cargando captura...
-; Loading screenshot...
-MSG_551A6630
-Silenciado
-; Muted
-MSG_65C00D26
-Volumen %ld%%
-; Volume %ld%%
-MSG_17251C33
-Volumen 100%
-; Volume 100%
-MSG_3827BF33
-Posición %ld de %ld   Patrón %ld   Fila %ld
-; Position %ld of %ld   Pattern %ld   Row %ld
-MSG_7930ACB5
-Posición %ld de %ld
-; Position %ld of %ld
-MSG_5F643207
-Posición %ld   Patrón %ld   Fila %ld
-; Position %ld   Pattern %ld   Row %ld
-MSG_46703B99
-En búfer %ld.%lds
-; Buffered %ld.%lds
-MSG_49BCEF94
-   cortes %ld
-;    dropouts %ld
-MSG_44D22F83
-Conectando...
-; Connecting...
-MSG_6038FAB1
-Cargando búfer...
-; Buffering...
-MSG_4D72110C
-Reproducción
-; Playback
-MSG_6E6C1A7A
-MHI (lo decodifica y reproduce)
-; MHI (decoded and played by it)
-MSG_7A38DB91
-(sin título)
-; (no title)
-MSG_3CB15829
-   Pista %ld de %ld
-;    Track %ld of %ld
-MSG_2B183663
-Archivo
-; File
-MSG_7FB0FF72
-Formato
-; Format
-MSG_063F19EE
-Detenido
-; Stopped
-MSG_170FF847
-Leyendo...
-; Reading...
-MSG_22FE7692
-Original
-; Original
-MSG_504BD8C0
-envía el archivo tal cual
-; sends the file as stored
-MSG_4A129B78
-Radio   %s
-; Radio   %s
-MSG_01440831
-   %ld de %ld en
-;    %ld of %ld in 
-MSG_0A088884
-En antena
-; On air
-MSG_44471F44
-(la emisora no lo dice)
-; (the station does not say)
-MSG_0769BADE
-MP3 %ldkbps, %s %s
-; MP3 %ldkbps, %s %s
-MSG_4670620E
-\x3B reproducido a %s %s
-; \x3B played at %s %s
-MSG_5CD70C3C
-, por MHI
-; , by MHI
-MSG_716687B8
-No se reproduce nada
-; Nothing playing
-MSG_085A357E
-   de %s
-;    by %s
-MSG_47760A7D
-   subcanción %ld de %ld
-;    subsong %ld of %ld
-MSG_0F4A385C
-Muestras
-; Samples
 MSG_61B4DC81
 Esa era la última pista
 ; That was the last track
@@ -1354,6 +1180,9 @@ Repetir activado: vuelve a sonar al terminar
 MSG_0144F316
 Repetir desactivado: se detiene al terminar
 ; Loop off: it stops at its end
+MSG_551A6630
+Silenciado
+; Muted
 MSG_230A5085
 Sonido activado
 ; Sound on
@@ -1399,6 +1228,9 @@ Más formatos: EaglePlayer, en Aminet (mus/play/Eagleplayer)
 MSG_1361020B
 No hay imágenes en esa carpeta
 ; No pictures in that folder
+MSG_17B11033
+Cargando...
+; Loading...
 MSG_46C7288D
 Demasiados niveles abiertos
 ; Too many levels open
@@ -1483,6 +1315,27 @@ Pista %ld de %ld
 MSG_41D16C8A
 %ld de %ld
 ; %ld of %ld
+MSG_716687B8
+No se reproduce nada
+; Nothing playing
+MSG_7A38DB91
+(sin título)
+; (no title)
+MSG_063F19EE
+Detenido
+; Stopped
+MSG_44D22F83
+Conectando...
+; Connecting...
+MSG_6038FAB1
+Cargando búfer...
+; Buffering...
+MSG_085A357E
+   de %s
+;    by %s
+MSG_64B20C7B
+Aquí no se pueden abrir 32 bits: se usan 16 bits
+; 32 bits would not open here: 16-bit instead
 MSG_4C560A92
 Conexiones: la interfaz que elija la pila
 ; Connections: the stack's choice of interface
@@ -2221,6 +2074,12 @@ El vídeo MPEG por la CPU necesita mpegv.library (Libs de Ambiance)
 MSG_4E597D1C
 Vídeo %s: en una pantalla AGA, Ambiance reproduce MPEG-1 y MPEG-2
 ; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
+MSG_5E08A9DF
+Vídeo %s: la ZZ9000 reproduce MPEG-1 y MPEG-2
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
+MSG_20C6E823
+No es un vídeo MPEG que Ambiance pueda leer
+; Not an MPEG video Ambiance can read
 MSG_5EF81658
 El vídeo MPEG necesita Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2263,6 +2122,162 @@ WHDLoad y %ld programas más puestos en C:
 MSG_04F3511D
  (%ld ya presentes conservados)
 ;  (%ld already there kept)
+MSG_2FCA6510
+Una imagen de disco DVD-Video
+; A DVD-Video disc image
+MSG_7838F274
+Una imagen de disco (UDF)
+; A disc image (UDF)
+MSG_608D9413
+No es una imagen de disco DVD-Video
+; Not a DVD-Video disc image
+MSG_754C4DD5
+No se pudo leer la imagen (el registro dice por qué)
+; This image could not be read (the log says why)
+MSG_77C67E04
+Disparo reproduce su película o sus programas uno tras otro en la ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N y P: capítulo o programa siguiente y anterior
+; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Decodificado por la CPU: sus menús, M para volver a ellos
+; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+Un disco DVD-Video
+; A DVD-Video disc
+MSG_6B41435A
+Con sonido
+; With sound
+MSG_6524B26D
+Sin sonido
+; No sound
+MSG_3D33D3EB
+Un flujo de transporte
+; A transport stream
+MSG_7EB7DE9D
+Un flujo de vídeo puro
+; A bare video stream
+MSG_1403F9F1
+%ld fotogramas, %ld,%ld s
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+Modificado %s
+; Changed %s
+MSG_412F4EA4
+%ld carpeta
+; %ld folder
+MSG_74791C75
+%ld carpetas
+; %ld folders
+MSG_406E0E4E
+%ld animación
+; %ld animation
+MSG_2A406A07
+%ld animaciones
+; %ld animations
+MSG_15840E5E
+Disparo o Derecha: abrir
+; Fire or Right: open
+MSG_79550836
+No hay imágenes en esta carpeta.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld imagen
+; %ld picture
+MSG_6A487423
+%ld imágenes
+; %ld pictures
+MSG_52C18255
+Disparo: pase de imágenes
+; Fire: slideshow
+MSG_178CD224
+Derecha: abrir la carpeta
+; Right: open the folder
+MSG_6E4CA1B5
+No está en el cajón Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(vacío)
+; (empty)
+MSG_070B058B
+Funciona con:
+; Works with:
+MSG_0ECC2045
+Cargando captura...
+; Loading screenshot...
+MSG_65C00D26
+Volumen %ld%%
+; Volume %ld%%
+MSG_3827BF33
+Posición %ld de %ld   Patrón %ld   Fila %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Posición %ld de %ld
+; Position %ld of %ld
+MSG_5F643207
+Posición %ld   Patrón %ld   Fila %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+En búfer %ld.%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   cortes %ld
+;    dropouts %ld
+MSG_4D72110C
+Reproducción
+; Playback
+MSG_6E6C1A7A
+MHI (lo decodifica y reproduce)
+; MHI (decoded and played by it)
+MSG_3CB15829
+   Pista %ld de %ld
+;    Track %ld of %ld
+MSG_2B183663
+Archivo
+; File
+MSG_7FB0FF72
+Formato
+; Format
+MSG_170FF847
+Leyendo...
+; Reading...
+MSG_22FE7692
+Original
+; Original
+MSG_504BD8C0
+envía el archivo tal cual
+; sends the file as stored
+MSG_4A129B78
+Radio   %s
+; Radio   %s
+MSG_01440831
+   %ld de %ld en
+;    %ld of %ld in 
+MSG_0A088884
+En antena
+; On air
+MSG_44471F44
+(la emisora no lo dice)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B reproducido a %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, por MHI
+; , by MHI
+MSG_47760A7D
+   subcanción %ld de %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Muestras
+; Samples
+MSG_17251C33
+Volumen 100%
+; Volume 100%
 MSG_5E281FEB
 En pausa
 ; Paused

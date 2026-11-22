@@ -270,7 +270,10 @@ Credits for the code, fonts and libraries Ambiance uses are under
 
 - Native screens: 320x200/256 lowres in 32 colours on OCS and ECS; on AGA,
   256 colours and also 640x200/256 hires and 640x400/512 laced. RTG:
-  640x480, 800x600 and 1024x768.
+  640x480, 800x600 and 1024x768, and 1280x720, 1280x1024, 1920x1080 and
+  1920x1200 where the card has them; 16-bit by default, or 32-bit
+  (Settings > Display > Colour depth) for pictures and video without
+  16-bit's colour steps.
 - Layouts (Settings > Display > Layout): Classic, built in, and the
   libraries in `Layouts`, Horizon and Showcase, on RTG screens (and on AGA,
   experimentally). See [Screenshots](#screenshots).
@@ -415,7 +418,7 @@ was (a station from now). It is kept in `ENVARC:Ambiance/Resume`.
 | Page | What it holds |
 |---|---|
 | General | Language, Debug |
-| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on Ambiance's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
+| Display | Workbench window (on: a window on Workbench, where it can take one; off: full screen), Screen mode (full screen) or Text size (a window), Style (fonts and looks), Colour depth (full RTG screens with a 32-bit mode: 16-bit, quicker, or 32-bit), Double buffering (RTG screens), Visualisation, Jump scrolling (very long lists step a letter at a time), Slideshow transition (Off, Fade, Cross-fade, Tiles or Wipe; a screen with a colour table fades), Videos on a screen of their own (off: on Ambiance's screen or window, where it is 16-bit RTG), MPEG video on the ZZ9000 (where there is one; off: MPEG-1 decoded by the CPU), Use overlay when available (RTG; MPEG decoded by the CPU shown on the graphics card's YUV overlay, which scales it; off: drawn; greyed without a graphics card) |
 | Sound | Paula or AHI for radio, Plex and music files; MP3 by Ambiance's own ambmpega.library, an mpega.library or an MHI driver |
 | Folders | Where Music, Mods, Pictures and Videos find their files: the `MUSIC:`, `MODS:`, `PICTURES:` and `VIDEOS:` assigns on or off, and up to eight folders each to add or take out (AGS's own drawers are found by themselves); iGame (its drawer, found by itself at first, or None); WHDLoad (installed, or installing it from whdload.de) |
 | Networking | HTTPS (with AmiSSL 5: secure radio stations, signing in at plex.tv), Radio (the highest bitrate listed, which radio-browser.info server to use), Plex (on/off, server, signing in at plex.tv, lower quality audio), Stream buffer, Network interface |

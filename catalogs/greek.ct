@@ -202,9 +202,6 @@ MSG_58E096DE
 MSG_6AA26665
 Παίζει τώρα
 ; Now playing
-MSG_17B11033
-Φόρτωση...
-; Loading...
 MSG_542CAAAC
 Λίγη μνήμη: η λίστα σταματά στα %ld
 ; Low on memory: list stops at %ld entries
@@ -619,6 +616,12 @@ MSG_5467EC76
 MSG_1624E3CC
 Λειτουργία οθόνης
 ; Screen mode
+MSG_12F3CD32
+%ld-bit
+; %ld-bit
+MSG_21AE5640
+Βάθος χρώματος
+; Colour depth
 MSG_63678BEE
 Διπλό buffer
 ; Double buffering
@@ -946,6 +949,12 @@ MSG_50BCAC0E
 MSG_4D914B4E
 Αυτόματα: 
 ; Automatic: 
+MSG_4E33514A
+16-bit: πιο γρήγορο
+; 16-bit: quicker
+MSG_7E3D4370
+32-bit: οι καλύτερες εικόνες και βίντεο
+; 32-bit: finest pictures and video
 MSG_0F9ADE75
 Ευχαριστίες
 ; Credits
@@ -1153,189 +1162,6 @@ MSG_2B8E61B8
 MSG_642000D2
 Π/Κ κύλιση  Esc πίσω
 ; Up/Down scroll  Esc back
-MSG_2FCA6510
-Είδωλο δίσκου DVD-Video
-; A DVD-Video disc image
-MSG_7838F274
-Είδωλο δίσκου (UDF)
-; A disc image (UDF)
-MSG_608D9413
-Δεν είναι είδωλο δίσκου DVD-Video
-; Not a DVD-Video disc image
-MSG_754C4DD5
-Το είδωλο δεν διαβάστηκε (το αρχείο καταγραφής λέει γιατί)
-; This image could not be read (the log says why)
-MSG_77C67E04
-Το Fire παίζει την ταινία του ή τα προγράμματά του το ένα μετά το άλλο, στο ZZ9000
-; Fire plays its film, or its programmes one after another, on the ZZ9000
-MSG_5AEFD354
-N και P: επόμενο και προηγούμενο κεφάλαιο ή πρόγραμμα
-; N and P: the next and previous chapter or programme
-MSG_351C83CC
-Αποκωδικοποίηση από τη CPU: τα μενού του, M για επιστροφή σε αυτά
-; Decoded by the CPU: its menus, M to bring them back
-MSG_7FF7C0A9
-Ένας δίσκος DVD-Video
-; A DVD-Video disc
-MSG_6B41435A
-Με ήχο
-; With sound
-MSG_6524B26D
-Χωρίς ήχο
-; No sound
-MSG_3D33D3EB
-Ροή μεταφοράς
-; A transport stream
-MSG_7EB7DE9D
-Σκέτη ροή βίντεο
-; A bare video stream
-MSG_5E08A9DF
-Βίντεο %s: η ZZ9000 παίζει MPEG-1 και MPEG-2
-; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Δεν είναι βίντεο MPEG που διαβάζει το Ambiance
-; Not an MPEG video Ambiance can read
-MSG_1403F9F1
-%ld καρέ, %ld,%ld s
-; %ld frames, %ld.%ld s
-MSG_79CC558D
-Αλλαγή %s
-; Changed %s
-MSG_412F4EA4
-%ld φάκελος
-; %ld folder
-MSG_74791C75
-%ld φάκελοι
-; %ld folders
-MSG_406E0E4E
-%ld animation
-; %ld animation
-MSG_2A406A07
-%ld animations
-; %ld animations
-MSG_15840E5E
-Fire ή Δεξιά: άνοιγμα
-; Fire or Right: open
-MSG_79550836
-Καμία εικόνα εδώ.
-; No pictures in this folder.
-MSG_1D0B9D42
-%ld εικόνα
-; %ld picture
-MSG_6A487423
-%ld εικόνες
-; %ld pictures
-MSG_52C18255
-Fire: προβολή
-; Fire: slideshow
-MSG_178CD224
-Δεξιά: άνοιγμα φακέλου
-; Right: open the folder
-MSG_6E4CA1B5
-Όχι στο συρτάρι Fonts
-; Not in the Fonts drawer
-MSG_42B0DEF7
-(άδειο)
-; (empty)
-MSG_070B058B
-Λειτουργεί με:
-; Works with:
-MSG_0ECC2045
-Φόρτωση εικόνας...
-; Loading screenshot...
-MSG_551A6630
-Σίγαση
-; Muted
-MSG_65C00D26
-Ένταση %ld%%
-; Volume %ld%%
-MSG_17251C33
-Ένταση 100%
-; Volume 100%
-MSG_3827BF33
-Θέση %ld/%ld   Pattern %ld   Γρ. %ld
-; Position %ld of %ld   Pattern %ld   Row %ld
-MSG_7930ACB5
-Θέση %ld από %ld
-; Position %ld of %ld
-MSG_5F643207
-Θέση %ld   Pattern %ld   Γρ. %ld
-; Position %ld   Pattern %ld   Row %ld
-MSG_46703B99
-Buffer %ld,%lds
-; Buffered %ld.%lds
-MSG_49BCEF94
-   διακοπές %ld
-;    dropouts %ld
-MSG_44D22F83
-Σύνδεση...
-; Connecting...
-MSG_6038FAB1
-Buffering...
-; Buffering...
-MSG_4D72110C
-Αναπαραγωγή
-; Playback
-MSG_6E6C1A7A
-MHI (αποκωδ. και παίζει)
-; MHI (decoded and played by it)
-MSG_7A38DB91
-(χωρίς τίτλο)
-; (no title)
-MSG_3CB15829
-   Κομμάτι %ld από %ld
-;    Track %ld of %ld
-MSG_2B183663
-Αρχείο
-; File
-MSG_7FB0FF72
-Μορφή
-; Format
-MSG_063F19EE
-Σταμάτησε
-; Stopped
-MSG_170FF847
-Ανάγνωση...
-; Reading...
-MSG_22FE7692
-Πρωτότυπο
-; Original
-MSG_504BD8C0
-στέλνει το αρχείο ως έχει
-; sends the file as stored
-MSG_4A129B78
-Ραδιόφωνο   %s
-; Radio   %s
-MSG_01440831
-   %ld από %ld σε 
-;    %ld of %ld in 
-MSG_0A088884
-Στον αέρα
-; On air
-MSG_44471F44
-(ο σταθμός δεν λέει)
-; (the station does not say)
-MSG_0769BADE
-MP3 %ldkbps, %s %s
-; MP3 %ldkbps, %s %s
-MSG_4670620E
-\x3B παίζει σε %s %s
-; \x3B played at %s %s
-MSG_5CD70C3C
-, από MHI
-; , by MHI
-MSG_716687B8
-Δεν παίζει τίποτα
-; Nothing playing
-MSG_085A357E
-   από %s
-;    by %s
-MSG_47760A7D
-   subsong %ld από %ld
-;    subsong %ld of %ld
-MSG_0F4A385C
-Samples
-; Samples
 MSG_61B4DC81
 Αυτό ήταν το τελευταίο κομμάτι
 ; That was the last track
@@ -1354,6 +1180,9 @@ MSG_0B3E0086
 MSG_0144F316
 Επανάληψη ανενεργή: σταματά στο τέλος
 ; Loop off: it stops at its end
+MSG_551A6630
+Σίγαση
+; Muted
 MSG_230A5085
 Ήχος ενεργός
 ; Sound on
@@ -1399,6 +1228,9 @@ MSG_0B5B4D9C
 MSG_1361020B
 Καμία εικόνα σε αυτόν τον φάκελο
 ; No pictures in that folder
+MSG_17B11033
+Φόρτωση...
+; Loading...
 MSG_46C7288D
 Πάρα πολλά επίπεδα ανοιχτά
 ; Too many levels open
@@ -1483,6 +1315,27 @@ MSG_336326B3
 MSG_41D16C8A
 %ld από %ld
 ; %ld of %ld
+MSG_716687B8
+Δεν παίζει τίποτα
+; Nothing playing
+MSG_7A38DB91
+(χωρίς τίτλο)
+; (no title)
+MSG_063F19EE
+Σταμάτησε
+; Stopped
+MSG_44D22F83
+Σύνδεση...
+; Connecting...
+MSG_6038FAB1
+Buffering...
+; Buffering...
+MSG_085A357E
+   από %s
+;    by %s
+MSG_64B20C7B
+Τα 32 bit δεν ανοίγουν εδώ: 16-bit αντί γι' αυτό
+; 32 bits would not open here: 16-bit instead
 MSG_4C560A92
 Συνδέσεις: η διεπαφή του stack
 ; Connections: the stack's choice of interface
@@ -2221,6 +2074,12 @@ MSG_7DFAF53D
 MSG_4E597D1C
 Βίντεο %s: σε οθόνη AGA το Ambiance παίζει MPEG-1 και MPEG-2
 ; %s video: on an AGA screen Ambiance plays MPEG-1 and MPEG-2
+MSG_5E08A9DF
+Βίντεο %s: η ZZ9000 παίζει MPEG-1 και MPEG-2
+; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
+MSG_20C6E823
+Δεν είναι βίντεο MPEG που διαβάζει το Ambiance
+; Not an MPEG video Ambiance can read
 MSG_5EF81658
 Το βίντεο MPEG θέλει Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2263,6 +2122,162 @@ MSG_3160C36F
 MSG_04F3511D
  (%ld που υπήρχαν ήδη κρατήθηκαν)
 ;  (%ld already there kept)
+MSG_2FCA6510
+Είδωλο δίσκου DVD-Video
+; A DVD-Video disc image
+MSG_7838F274
+Είδωλο δίσκου (UDF)
+; A disc image (UDF)
+MSG_608D9413
+Δεν είναι είδωλο δίσκου DVD-Video
+; Not a DVD-Video disc image
+MSG_754C4DD5
+Το είδωλο δεν διαβάστηκε (το αρχείο καταγραφής λέει γιατί)
+; This image could not be read (the log says why)
+MSG_77C67E04
+Το Fire παίζει την ταινία του ή τα προγράμματά του το ένα μετά το άλλο, στο ZZ9000
+; Fire plays its film, or its programmes one after another, on the ZZ9000
+MSG_5AEFD354
+N και P: επόμενο και προηγούμενο κεφάλαιο ή πρόγραμμα
+; N and P: the next and previous chapter or programme
+MSG_351C83CC
+Αποκωδικοποίηση από τη CPU: τα μενού του, M για επιστροφή σε αυτά
+; Decoded by the CPU: its menus, M to bring them back
+MSG_7FF7C0A9
+Ένας δίσκος DVD-Video
+; A DVD-Video disc
+MSG_6B41435A
+Με ήχο
+; With sound
+MSG_6524B26D
+Χωρίς ήχο
+; No sound
+MSG_3D33D3EB
+Ροή μεταφοράς
+; A transport stream
+MSG_7EB7DE9D
+Σκέτη ροή βίντεο
+; A bare video stream
+MSG_1403F9F1
+%ld καρέ, %ld,%ld s
+; %ld frames, %ld.%ld s
+MSG_79CC558D
+Αλλαγή %s
+; Changed %s
+MSG_412F4EA4
+%ld φάκελος
+; %ld folder
+MSG_74791C75
+%ld φάκελοι
+; %ld folders
+MSG_406E0E4E
+%ld animation
+; %ld animation
+MSG_2A406A07
+%ld animations
+; %ld animations
+MSG_15840E5E
+Fire ή Δεξιά: άνοιγμα
+; Fire or Right: open
+MSG_79550836
+Καμία εικόνα εδώ.
+; No pictures in this folder.
+MSG_1D0B9D42
+%ld εικόνα
+; %ld picture
+MSG_6A487423
+%ld εικόνες
+; %ld pictures
+MSG_52C18255
+Fire: προβολή
+; Fire: slideshow
+MSG_178CD224
+Δεξιά: άνοιγμα φακέλου
+; Right: open the folder
+MSG_6E4CA1B5
+Όχι στο συρτάρι Fonts
+; Not in the Fonts drawer
+MSG_42B0DEF7
+(άδειο)
+; (empty)
+MSG_070B058B
+Λειτουργεί με:
+; Works with:
+MSG_0ECC2045
+Φόρτωση εικόνας...
+; Loading screenshot...
+MSG_65C00D26
+Ένταση %ld%%
+; Volume %ld%%
+MSG_3827BF33
+Θέση %ld/%ld   Pattern %ld   Γρ. %ld
+; Position %ld of %ld   Pattern %ld   Row %ld
+MSG_7930ACB5
+Θέση %ld από %ld
+; Position %ld of %ld
+MSG_5F643207
+Θέση %ld   Pattern %ld   Γρ. %ld
+; Position %ld   Pattern %ld   Row %ld
+MSG_46703B99
+Buffer %ld,%lds
+; Buffered %ld.%lds
+MSG_49BCEF94
+   διακοπές %ld
+;    dropouts %ld
+MSG_4D72110C
+Αναπαραγωγή
+; Playback
+MSG_6E6C1A7A
+MHI (αποκωδ. και παίζει)
+; MHI (decoded and played by it)
+MSG_3CB15829
+   Κομμάτι %ld από %ld
+;    Track %ld of %ld
+MSG_2B183663
+Αρχείο
+; File
+MSG_7FB0FF72
+Μορφή
+; Format
+MSG_170FF847
+Ανάγνωση...
+; Reading...
+MSG_22FE7692
+Πρωτότυπο
+; Original
+MSG_504BD8C0
+στέλνει το αρχείο ως έχει
+; sends the file as stored
+MSG_4A129B78
+Ραδιόφωνο   %s
+; Radio   %s
+MSG_01440831
+   %ld από %ld σε 
+;    %ld of %ld in 
+MSG_0A088884
+Στον αέρα
+; On air
+MSG_44471F44
+(ο σταθμός δεν λέει)
+; (the station does not say)
+MSG_0769BADE
+MP3 %ldkbps, %s %s
+; MP3 %ldkbps, %s %s
+MSG_4670620E
+\x3B παίζει σε %s %s
+; \x3B played at %s %s
+MSG_5CD70C3C
+, από MHI
+; , by MHI
+MSG_47760A7D
+   subsong %ld από %ld
+;    subsong %ld of %ld
+MSG_0F4A385C
+Samples
+; Samples
+MSG_17251C33
+Ένταση 100%
+; Volume 100%
 MSG_5E281FEB
 Σε παύση
 ; Paused

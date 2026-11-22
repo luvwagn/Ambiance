@@ -94,9 +94,10 @@ def scan_src(srcdir):
     """{id: (english, [where])}, in order of first use."""
     found = {}
     files = sorted(fn for fn in os.listdir(srcdir) if fn.endswith(".c"))
-    lay = os.path.join(srcdir, "layouts")         # the layouts' host->tr("...") strings too
-    if os.path.isdir(lay):
-        files += sorted(os.path.join("layouts", fn) for fn in os.listdir(lay) if fn.endswith(".c"))
+    for sub in ("classic", "layouts"):          # Classic's, and the layouts' host->tr("...") strings
+        d = os.path.join(srcdir, sub)
+        if os.path.isdir(d):
+            files += sorted(os.path.join(sub, fn) for fn in os.listdir(d) if fn.endswith(".c"))
     for fn in files:
         text = open(os.path.join(srcdir, fn), encoding="latin-1").read()
         # comments out (their newlines kept, for the line numbers)
