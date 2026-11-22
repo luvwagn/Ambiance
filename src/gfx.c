@@ -357,6 +357,17 @@ static BOOL rtg_kind(const struct Gfx *g)
     return g->mode >= 0 && g->mode < SM_COUNT && modes[g->mode].kind == K_RTG;
 }
 
+/* The screen's bits a pixel as shown to the user: a 32-bit mode that its
+ * driver calls depth 24 (the ZZ9000's BGRA, 4 bytes a pixel) says 32 */
+UWORD gfx_bits(const struct Gfx *g)
+{
+    struct BitMap *bm = g->wb ? (g->rp ? g->rp->BitMap : NULL) : g->scr ? g->scr->RastPort.BitMap : NULL;
+    if (g->truecolor && g->depth == 24 && CyberGfxBase && bm &&
+        GetCyberMapAttr(bm, CYBRMATTR_ISCYBERGFX) && GetCyberMapAttr(bm, CYBRMATTR_BPPIX) == 4)
+        return 32;
+    return g->depth;
+}
+
 BOOL gfx_laced(int sm)
 {
     return sm >= 0 && sm < SM_COUNT && laced_kind(sm);
@@ -1933,8 +1944,12 @@ BOOL gfx_open(struct Gfx *g, const struct Caps *c, int smode, int style)
     }
     g->planar = (GetBitMapAttr(g->scr->RastPort.BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
     {
-        char m[80];
-        sprintf(m, "%s, %ld-bit", modes[smode].label, (long)g->depth);
+        char m[120];
+        sprintf(m, "%s, %ld-bit", modes[smode].label, (long)gfx_bits(g));
+        if (g->truecolor && CyberGfxBase && GetCyberMapAttr(g->scr->RastPort.BitMap, CYBRMATTR_ISCYBERGFX))
+            sprintf(m + strlen(m), " (pixel format %lu, %lu bytes a pixel)",
+                    (unsigned long)GetCyberMapAttr(g->scr->RastPort.BitMap, CYBRMATTR_PIXFMT),
+                    (unsigned long)GetCyberMapAttr(g->scr->RastPort.BitMap, CYBRMATTR_BPPIX));
         amb_log("screen open", m);
     }
     amb_log("style", g->style == STYLE_SMOOTH ? "smooth" : "pixel");

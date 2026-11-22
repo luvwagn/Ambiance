@@ -943,7 +943,7 @@ static void pv_draw_picture(void)
     if (j && j->thumb) {
         char m[400];
         ULONG t0 = time_ms(), now;
-        char by[64];
+        char by[64], cols[24];
         ok = gfx_thumb(&g, j->thumb, &j->info, x0, pv_box_y, w, pv_box_h, &dh);
         now = time_ms();
         /* who read it: Ambiance's own readers (ILBM, JPEG by jdec), or a
@@ -958,15 +958,19 @@ static void pv_draw_picture(void)
             strcpy(by, "decoded by a datatype");
         /* where the time went: waiting for the loader, reading, making,
          * drawing; and in all since the selection came to rest */
+        if (j->thumb->argb)
+            strcpy(cols, "true colour");
+        else
+            sprintf(cols, "%lu colours", (unsigned long)j->thumb->ncol);
         sprintf(m, "%.60s, %lu x %lu, depth %lu: %s%lu ms to start, %s in %lu ms, "
-                   "made %lu x %lu, %lu colours, in %lu ms, drawn in %lu ms "
+                   "made %lu x %lu, %s, in %lu ms, drawn in %lu ms "
                    "(colours %lu, pixels %lu, copy up %lu); "
                    "shown %lu ms after the move%s%s%s",
                 FilePart((STRPTR)j->path), (unsigned long)j->info.w, (unsigned long)j->info.h,
                 (unsigned long)j->info.depth, j->urgent ? "" : "read ahead, ",
                 (unsigned long)(j->t_begun - j->t_sent), by,
                 (unsigned long)j->ms_decode, (unsigned long)j->thumb->w,
-                (unsigned long)j->thumb->h, (unsigned long)j->thumb->ncol,
+                (unsigned long)j->thumb->h, cols,
                 (unsigned long)j->ms_thumb, (unsigned long)(now - t0),
                 (unsigned long)gfx_draw_ms[0], (unsigned long)gfx_draw_ms[1],
                 (unsigned long)gfx_draw_ms[2],

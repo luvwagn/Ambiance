@@ -165,6 +165,7 @@ UWORD gfx_mode_depth(int sm);                            /* RTG: bits per pixel 
 int  gfx_mode_auto(const struct Caps *c);
 BOOL gfx_open(struct Gfx *g, const struct Caps *c, int sm, int style);
 BOOL gfx_laced(int smode);
+UWORD gfx_bits(const struct Gfx *g);    /* bits a pixel, as told (a 4-byte "depth 24" says 32) */
 BOOL gfx_style_possible(const struct Caps *c, int sm, int style);
 void gfx_menu_labels(const char *const *labels, int n); /* before gfx_open */
 void gfx_menu_refit(struct Gfx *g);

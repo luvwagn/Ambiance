@@ -2497,7 +2497,7 @@ static void build_screen_settings(struct Page *p)
     }
     action_item(p, _("Fonts"), fonts_tag(), ACT_FONTS, MARK_ARROW);
     if (depth_offered()) {
-        sprintf(tag, _("%ld-bit"), (long)g.depth);
+        sprintf(tag, _("%ld-bit"), (long)gfx_bits(&g));
         action_item(p, _("Colour depth"), tag, ACT_DEPTHS, MARK_ARROW);
     }
     if (!g.planar && !g.wb)             /* native screens draw straight on, a window
@@ -7449,12 +7449,17 @@ static APTR vw_take(const char *path, BOOL *remapped, struct Thumb **t, struct P
             vw_job->obj = NULL;
             vw_job->thumb = NULL;
             if (*t) {
+                char cols[24];
+                if ((*t)->argb)
+                    strcpy(cols, "true colour");
+                else
+                    sprintf(cols, "%lu colours", (unsigned long)(*t)->ncol);
                 sprintf(m, "%.80s, %lu x %lu, depth %lu: decoded in %lu ms, made %lu x %lu, "
-                           "%lu colours, in %lu ms",
+                           "%s, in %lu ms",
                         FilePart((STRPTR)path), (unsigned long)info->w, (unsigned long)info->h,
                         (unsigned long)info->depth, (unsigned long)vw_job->ms_decode,
                         (unsigned long)(*t)->w, (unsigned long)(*t)->h,
-                        (unsigned long)(*t)->ncol, (unsigned long)vw_job->ms_thumb);
+                        cols, (unsigned long)vw_job->ms_thumb);
                 amb_log("viewer, read ahead", m);
             }
         }
@@ -9480,7 +9485,7 @@ static void apply_depth(UWORD bits)
     display_sel_act = ACT_DEPTHS;
     display_again(FALSE, _("Colour depth"), build_depths);
     display_sel_act = 0;
-    sprintf(m, "%ld-bit asked for, %ld-bit open", (long)bits, (long)g.depth);
+    sprintf(m, "%ld-bit asked for, %ld-bit open", (long)bits, (long)gfx_bits(&g));
     amb_log("colour depth", m);
     if (bits >= 24 && g.depth < 24)
         set_msg(_("32 bits would not open here: 16-bit instead"));
