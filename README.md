@@ -58,6 +58,11 @@ and photos from the author's own library and Plex server; games, pictures
 and animations from AGS. The album is *The Razors Edge* by AC/DC, the art
 Roger Dean's, the game Core Design's *Banshee*.
 
+### Credits
+
+Credit to Paul Vince and Amiga Game Selector (AGS) for game content shown.
+Ambiance includes no AGS content in its distribution.
+
 ## What it does
 
 ### Games and demos (AGS, iGame)
