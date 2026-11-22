@@ -304,7 +304,7 @@ struct Thumb {
     UBYTE raw;                  /* the viewer's (view_own_read): the picture at its own
                                  * size (or jdec's nearest), not yet made to fit */
 };
-#define THUMB_DEEP 0            /* maxcol: no colours of its own, true colour (the layouts') */
+#define THUMB_DEEP 0            /* maxcol: no colours of its own, true colour (any true-colour screen) */
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
 /* t (colour numbers) at dw x dh, pixel for pixel; its colour table kept */

@@ -9052,14 +9052,17 @@ static void mini_art(BOOL full)
             UnLock(l);
         mini_art_free();
         amb_strlcpy(mn.art_file, f, sizeof(mn.art_file));
-        if (f[0] && gfx_thumbs(&g) && (mn.aj = AllocVec(sizeof(*mn.aj), MEMF_ANY | MEMF_CLEAR))) {
+        /* in the Workbench's own terms: its own colours, uncut, on a
+         * true-colour one (a window needs one: 15 bits or more) */
+        if (f[0] && mg.truecolor && gfx_thumbs(&g) &&
+            (mn.aj = AllocVec(sizeof(*mn.aj), MEMF_ANY | MEMF_CLEAR))) {
             struct LJob *j = mn.aj;
             j->type = LJ_SHOT;
             j->mode = SHOT_FILE;
             amb_strlcpy(j->path, f, sizeof(j->path));
             j->scr = g.scr;
             j->tw = j->th = mn.art_s;
-            j->maxcol = 256;
+            j->maxcol = THUMB_DEEP;
             ldr_submit_first(j);
         }
         full = TRUE;

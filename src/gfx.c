@@ -1760,6 +1760,19 @@ void gfx_mini_close(struct Gfx *g, struct Gfx *mg)
     mini_free(mg);
 }
 
+/* A thumbnail's pixels into rp at x, y (a true-colour bitmap): its own
+ * colours (THUMB_DEEP) as they are, or its colour numbers through their
+ * table. The driver makes either the bitmap's pixels. */
+static void thumb_write(const struct Thumb *t, struct RastPort *rp, WORD x, WORD y)
+{
+    if (t->argb)
+        WritePixelArray((APTR)t->argb, 0, 0, (UWORD)(t->mod * 4), rp, (UWORD)x, (UWORD)y, t->w, t->h,
+                        RECTFMT_ARGB);
+    else
+        WriteLUTPixelArray(t->px, 0, 0, t->mod, rp, (APTR)t->pal, (UWORD)x, (UWORD)y, t->w, t->h,
+                           CTABFMT_XRGB8);
+}
+
 /* A thumbnail drawn as it is at x, y (a true-colour Workbench). */
 void gfx_mini_thumb(struct Gfx *mg, const struct Thumb *t, WORD x, WORD y)
 {
@@ -1771,7 +1784,7 @@ void gfx_mini_thumb(struct Gfx *mg, const struct Thumb *t, WORD x, WORD y)
         return;
     InitRastPort(&trp);
     trp.BitMap = tmp;
-    WriteLUTPixelArray(t->px, 0, 0, t->mod, &trp, (APTR)t->pal, 0, 0, t->w, t->h, CTABFMT_XRGB8);
+    thumb_write(t, &trp, 0, 0);
     BltBitMapRastPort(tmp, 0, 0, mg->rp, x, y, t->w, t->h, 0xC0);
     WaitBlit();
     FreeBitMap(tmp);
@@ -3713,7 +3726,7 @@ LONG gfx_thumb_colours(struct Gfx *g)
     LONG all = g->depth >= 8 ? 256 : 1L << g->depth;
     LONG n = ((pe ? (LONG)pe->pe_NFree : all / 2) + pic_npens) / 2;
     if (g->truecolor)
-        return 256;                         /* any colours: no pens */
+        return THUMB_DEEP;                  /* its own colours, uncut: no pens to share */
     if (blk_n)
         return blk_n;                       /* a block's worth */
     if (n > all)
@@ -3761,7 +3774,8 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
     if (!t || !gfx_thumbs(g))
         return FALSE;
     if (g->truecolor) {
-        /* its colour numbers and their colours, written as they are: off
+        /* its own colours (THUMB_DEEP), or its colour numbers and their
+         * colours, written as they are: off
          * screen, then up in one blit (written straight to the screen it
          * was seen going down, line by line) */
         struct Beam b;
@@ -3772,8 +3786,7 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
             struct RastPort trp;
             InitRastPort(&trp);
             trp.BitMap = tmp;
-            WriteLUTPixelArray(t->px, 0, 0, t->mod, &trp, (APTR)t->pal, 0, 0, t->w, t->h,
-                               CTABFMT_XRGB8);
+            thumb_write(t, &trp, 0, 0);
             if (keep) {
                 *keep = tmp;                /* the caller's to copy from */
                 gfx_picture_free(g);
@@ -3787,8 +3800,7 @@ static BOOL thumb_draw(struct Gfx *g, const struct Thumb *t, const struct PicInf
         } else if (keep) {
             return FALSE;
         } else {
-            WriteLUTPixelArray(t->px, 0, 0, t->mod, g->rp, (APTR)t->pal, nx, y, t->w, t->h,
-                               CTABFMT_XRGB8);
+            thumb_write(t, g->rp, nx, y);
         }
         gfx_draw_ms[0] = 0;
         gfx_draw_ms[2] = time_ms() - t0;
