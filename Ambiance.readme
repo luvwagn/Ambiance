@@ -118,7 +118,8 @@ Pictures
   or folder selected,
   shows pictures full screen on Ambiance's own screen (no mode switch) and
   plays folders as slideshows, in the pictures' own colours where the
-  screen allows. Pictures are decoded by the installed datatypes.
+  screen allows. JPEGs are decoded by Ambiance itself, on a ZZ9000 by
+  the card; other pictures by the installed datatypes.
   Moving the mouse shows the pointer and buttons for the previous
   picture, the slideshow (play or pause) and the next.
 - Plex photos: the photo libraries of your Plex server at the top of
@@ -369,6 +370,23 @@ Not there yet
 
 History
 -------
+0.9.5  ZZ9000: JPEGs in the viewer and slideshows are decoded on the
+       card at the size shown and read back. On an A3000 with a 68060
+       a 1080p photo now shows in 1 to 2 s and a 12-megapixel one in 3
+       to 4.5 s, where the 68060 alone took 5 to 11 s and 14 to 25 s.
+       Needs zz9k.library 2.33 or newer; About > System information
+       says whether the card is used. On 16-bit screens the picture
+       comes back in 16 bits (half the bytes); AGA screens get it too.
+       Without a ZZ9000, JPEGs are a quarter quicker on a 68060 (1080p)
+       and need far less memory: the whole decoded photo is no longer
+       held (9 MB for a 12-megapixel one at half size).
+       Low memory: files are read through a buffer sized to the memory
+       free, and a photo too big for it is decoded a size smaller
+       rather than not shown.
+       Slideshow fades blend from copies in fast RAM, not by reading
+       the screen back (Zorro III), when 4 MB is free.
+       ZZ9000 video and pictures work where the card's memory is
+       mapped CopyBack (the 68060's cache is flushed around the card).
 0.9.4  Settings > Display > Colour depth: 32-bit for full RTG screens whose
        size has a 32 (or 24) bit mode, for pictures, covers and video
        without 16-bit's steps. 16-bit stays the default, being quicker;
