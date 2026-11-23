@@ -68,9 +68,11 @@
 #define PB_SPIN_US 50000UL
 static ULONG pb_ncalls, pb_call_us, pb_call_max, pb_nslept;
 
+static ULONG pb_t_file, pb_t_copy;      /* the run's file read and copies to the card, us */
 static void pb_calls_reset(void)
 {
     pb_ncalls = pb_call_us = pb_call_max = pb_nslept = 0;
+    pb_t_file = pb_t_copy = 0;
 }
 
 static int pb_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
@@ -199,46 +201,56 @@ static void pb_fit(ULONG sw, ULONG sh, ULONG w, ULONG h, ULONG *dw, ULONG *dh)
 
 /* src (sw x sh, 0xAARRGGBB) averaged down into dst (dw x dh): each small
  * pixel the mean of the big ones under it (a box), as thumb.c does */
-/* Box averaging, src sw x sh to dst dw x dh. 1.21: the spans worked out
- * once, and a multiply by 65536/n in place of three divides a pixel (as
- * Ambiance's AGA path did already): on a real 68060 the divides were about
- * 4.5 us an output pixel, a third of "own" at 1280 wide */
+/* Box averaging, src sw x sh to dst dw x dh, as Ambiance's deep_thumb
+ * (thumb.c) does it: each output row's source rows summed into one row of
+ * sums, then a multiply by 65536/n a pixel, not three divides (1.21: the
+ * divides were about 4.5 us an output pixel on a real 68060). 1.22: summed
+ * a source row at a time, as deep_thumb, not a box at a time */
 static void pb_shrink(const ULONG *src, ULONG sw, ULONG sh, ULONG *dst, ULONG dw, ULONG dh)
 {
-    ULONG x, y, i, j, *xb = AllocVec((dw + 1) * sizeof(ULONG), MEMF_ANY), last_n = 0, rec = 0;
-    if (!xb)
+    ULONG x, y, *xb = AllocVec((dw + 1) * sizeof(ULONG), MEMF_ANY), *sum = AllocVec(dw * 4 * sizeof(ULONG), MEMF_ANY),
+                last_n = 0, rec = 0;
+    if (!xb || !sum) {
+        FreeVec(xb);
+        FreeVec(sum);
         return;
+    }
     for (x = 0; x <= dw; x++)
         xb[x] = x * sw / dw;
     for (y = 0; y < dh; y++) {
-        ULONG y0 = y * sh / dh, y1 = (y + 1) * sh / dh;
+        ULONG y0 = y * sh / dh, y1 = (y + 1) * sh / dh, j, *d = dst + y * dw;
         if (y1 <= y0)
             y1 = y0 + 1;
-        for (x = 0; x < dw; x++) {
-            ULONG x0 = xb[x], x1 = xb[x + 1], r = 0, g = 0, b = 0, n, v;
-            if (x1 <= x0)
-                x1 = x0 + 1;
-            for (j = y0; j < y1; j++) {
-                const ULONG *p = src + j * sw;
-                for (i = x0; i < x1; i++) {
-                    ULONG c = p[i];
-                    r += (c >> 16) & 255;
-                    g += (c >> 8) & 255;
-                    b += c & 255;
+        memset(sum, 0, dw * 4 * sizeof(ULONG));
+        for (j = y0; j < y1; j++) {
+            const ULONG *p = src + j * sw;
+            for (x = 0; x < dw; x++) {
+                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
+                if (e <= k)
+                    e = k + 1;
+                s[3] += e - k;
+                for (; k < e; k++) {
+                    ULONG c = p[k];
+                    s[0] += (c >> 16) & 255;
+                    s[1] += (c >> 8) & 255;
+                    s[2] += c & 255;
                 }
             }
-            n = (x1 - x0) * (y1 - y0);
+        }
+        for (x = 0; x < dw; x++) {
+            ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1, h = n >> 1, r, g, b;
             if (n != last_n) {
                 last_n = n;
                 rec = 65536UL / n + 1;
             }
-            r = (r * rec) >> 16;
-            g = (g * rec) >> 16;
-            v = (b * rec) >> 16;
-            dst[y * dw + x] = (r > 255 ? 255 : r) << 16 | (g > 255 ? 255 : g) << 8 | (v > 255 ? 255 : v);
+            r = ((s[0] + h) * rec) >> 16;
+            g = ((s[1] + h) * rec) >> 16;
+            b = ((s[2] + h) * rec) >> 16;
+            d[x] = (r > 255 ? 255 : r) << 16 | (g > 255 ? 255 : g) << 8 | (b > 255 ? 255 : b);
         }
     }
     FreeVec(xb);
+    FreeVec(sum);
 }
 
 /* ---- own: jdec */
@@ -461,6 +473,7 @@ struct PbApi {
     const char *stage;          /* the call that failed */
     char note[120];             /* what a stuck session said */
     ULONG ncalls, call_us, call_max, nslept, feeds;  /* the last run's calls to the card */
+    ULONG all_us, file_us, copy_us, back_us, avg_us;   /* and its parts */
 };
 
 /* ---- the file to the card a chunk at a time, through one shared buffer
@@ -514,15 +527,18 @@ static void pb_card_wrote(volatile const void *p, ULONG len)
  * to 1.19: 256 KB chunks fed at an offset; on a real A3000 the sessions
  * took none of it.) */
 #define PB_STAGE (32 * 1024)
+/* 1.22: the file read into fast RAM in one go and each feed's 32 KB copied
+ * from there (1.21 read it 32 KB at a time, a disk's latency each) */
 struct PbFeed {
     BPTR fh;
     LONG len;                   /* the file's */
     ZZ9KSharedBuffer buf;
     ULONG size;                 /* the buffer's */
-    ULONG foff, buffered;       /* the file read so far; held in the buffer */
+    UBYTE *file;                /* sessions: the whole file, fast RAM */
+    ULONG cpos;                 /* how much of it the card has taken */
+    ULONG spos, staged;         /* what is in the buffer: from spos, staged bytes */
+    BOOL ready;
     ULONG feeds;
-    UBYTE *mirror;              /* the buffer's bytes in fast RAM (1.21): moved here, not on the card */
-    BOOL moved;                 /* the front moved: all of it to the card again */
 };
 
 static void pb_feed_close(struct PbFeed *f);
@@ -538,51 +554,49 @@ static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
         Close(f->fh);
         f->fh = 0;
         f->buf.handle = 0;
-    } else if (size <= PB_STAGE && !(f->mirror = AllocVec(f->size, MEMF_ANY))) {
-        pb_feed_close(f);
-        st = ZZ9K_STATUS_NO_MEMORY;
+    } else if (size <= PB_STAGE) {
+        ULONG t0 = now_us();
+        if (!(f->file = AllocVec((ULONG)f->len, MEMF_ANY))) {
+            pb_feed_close(f);
+            return ZZ9K_STATUS_NO_MEMORY;
+        }
+        if (Read(f->fh, f->file, f->len) != f->len) {
+            pb_feed_close(f);
+            return ZZ9K_STATUS_IO_ERROR;
+        }
+        pb_t_file += now_us() - t0;
     }
     return st;
 }
 
-/* the buffer topped up and the next feed described; FALSE: the file could not be read */
+/* the next feed: the buffer holds the file from where the card got to */
 static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG session)
 {
-    ULONG space = f->size - f->buffered, rest = (ULONG)f->len - f->foff, n = rest < space ? rest : space;
-    if (n && Read(f->fh, f->mirror + f->buffered, (LONG)n) != (LONG)n)
-        return FALSE;
-    if (f->moved) {                         /* what the card left, now at the front, and the new */
-        CopyMem(f->mirror, (APTR)f->buf.data, f->buffered + n);
-        CacheClearE((APTR)f->buf.data, f->buffered + n, CACRF_ClearD);
-        f->moved = FALSE;
-    } else if (n) {
-        CopyMem(f->mirror + f->buffered, (APTR)((volatile UBYTE *)f->buf.data + f->buffered), n);
-        CacheClearE((APTR)((volatile UBYTE *)f->buf.data + f->buffered), n, CACRF_ClearD);
+    ULONG rest = (ULONG)f->len - f->cpos, n = rest < f->size ? rest : f->size;
+    if (!f->ready || f->spos != f->cpos || f->staged != n) {
+        ULONG t0 = now_us();
+        if (n) {
+            CopyMem(f->file + f->cpos, (APTR)f->buf.data, n);
+            CacheClearE((APTR)f->buf.data, n, CACRF_ClearD);
+        }
+        f->spos = f->cpos;
+        f->staged = n;
+        f->ready = TRUE;
+        pb_t_copy += now_us() - t0;
     }
-    f->foff += n;
-    f->buffered += n;
     memset(fd, 0, sizeof(*fd));
     fd->session = session;
     fd->src_handle = f->buf.handle;
     fd->src_offset = 0;
-    fd->src_length = f->buffered;
-    fd->flags = f->foff >= (ULONG)f->len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+    fd->src_length = n;
+    fd->flags = f->cpos + n >= (ULONG)f->len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
     f->feeds++;
     return TRUE;
 }
 
-/* what the card took: the rest moved to the front */
 static void pb_feed_took(struct PbFeed *f, ULONG took)
 {
-    if (took >= f->buffered) {
-        f->buffered = 0;
-        return;
-    }
-    if (took) {
-        f->buffered -= took;
-        memmove(f->mirror, f->mirror + took, f->buffered);
-        f->moved = TRUE;
-    }
+    f->cpos += took < f->staged ? took : f->staged;
 }
 
 /* the card made no progress with a full buffer or the whole file: it never will */
@@ -591,17 +605,17 @@ static BOOL pb_feed_stuck(const struct PbFeed *f, const ZZ9KImageSessionResult *
     if (r->bytes_consumed || r->bytes_written || r->state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE ||
         r->state == ZZ9K_IMAGE_SESSION_STATE_TILE_READY)
         return FALSE;
-    if (f->foff < (ULONG)f->len && f->buffered < f->size)
+    if (f->cpos + f->staged < (ULONG)f->len && f->staged < f->size)
         return FALSE;
-    snprintf(note, len, "the session took nothing (state %lu, flags %lu, %lu bytes offered, file %lu of %lu "
-             "read, feed %lu)", (unsigned long)r->state, (unsigned long)r->flags, (unsigned long)f->buffered,
-             (unsigned long)f->foff, (unsigned long)f->len, (unsigned long)f->feeds);
+    snprintf(note, len, "the session took nothing (state %lu, flags %lu, %lu bytes offered at %lu of %lu, "
+             "feed %lu)", (unsigned long)r->state, (unsigned long)r->flags, (unsigned long)f->staged,
+             (unsigned long)f->cpos, (unsigned long)f->len, (unsigned long)f->feeds);
     return TRUE;
 }
 
 static void pb_feed_close(struct PbFeed *f)
 {
-    FreeVec(f->mirror);
+    FreeVec(f->file);
     if (f->buf.handle)
         ZZ9KFreeShared(f->buf.handle);
     if (f->fh)
@@ -629,6 +643,7 @@ static LONG pb_api_once(void *p)
     struct PbFeed f;
     ULONG sw = c->mode == PBA_FULL ? c->iw : c->dw, sh = c->mode == PBA_FULL ? c->ih : c->dh;
     LONG ok = -1;
+    ULONG t_all = now_us(), t_back = 0, t_avg = 0, t;
     if (!sw || !sh)
         return -1;
     pb_calls_reset();
@@ -742,12 +757,16 @@ static LONG pb_api_once(void *p)
             c->status = ZZ9K_STATUS_NO_MEMORY;
             ok = -1;
         } else {
+            t = now_us();
             pb_card_wrote(surf.data, surf.pitch * oh);
             pb_bgra_rows((volatile const UBYTE *)surf.data, surf.pitch, ow, oh, tmp);
+            t_back = now_us() - t;
+            t = now_us();
             if (ow == c->dw && oh == c->dh)
                 CopyMem(tmp, c->out, ow * oh * 4);
             else
                 pb_shrink(tmp, ow, oh, c->out, c->dw, c->dh);
+            t_avg = now_us() - t;
         }
         FreeVec(tmp);
     }
@@ -759,6 +778,11 @@ out:
     c->nslept = pb_nslept;
     c->feeds = f.feeds;
     pb_feed_close(&f);
+    c->all_us = now_us() - t_all;
+    c->file_us = pb_t_file;
+    c->copy_us = pb_t_copy;
+    c->back_us = t_back;
+    c->avg_us = t_avg;
     return ok;
 }
 
@@ -1360,6 +1384,19 @@ static void bench_paths(const char *const *files, int nfiles)
                                  (unsigned long)(cm[i] / 1000), (unsigned long)ns[i]);
                         pb_say(line);
                     }
+                for (i = 0; i < 2; i++) {
+                    const struct PbApi *a = i ? &ac : &ab;
+                    ULONG rest;
+                    if (!a->ncalls)
+                        continue;
+                    rest = a->all_us - a->file_us - a->copy_us - a->call_us - a->back_us - a->avg_us;
+                    snprintf(line, sizeof(line), "      %s's parts: the file %lu ms, to the card %lu ms, the calls "
+                             "%lu ms, read back %lu ms, averaging %lu ms, the rest %lu ms", nm[i],
+                             (unsigned long)(a->file_us / 1000), (unsigned long)(a->copy_us / 1000),
+                             (unsigned long)(a->call_us / 1000), (unsigned long)(a->back_us / 1000),
+                             (unsigned long)(a->avg_us / 1000), (unsigned long)(rest / 1000));
+                    pb_say(line);
+                }
             }
             FreeVec(own.out);
             FreeVec(zd.out);

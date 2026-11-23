@@ -318,17 +318,19 @@ static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from
  * the card's memory after the card has changed it; the ZZ9000 docs ask for
  * the card's memory to be mapped Writethrough or NoCache, which Ambiance
  * cannot count on. And a disk's DMA may not reach Zorro III memory (the
- * A3000's SCSI). On a real A3000/060 a session fed straight from Read()
- * took none of the file: 100,000 feeds, 78 s, then nothing. So the file
- * goes through fast RAM (bounce), the 68k copies it to the card and pushes
- * its cache out (zz_view_jpeg's feed loop, zz_read); before the 68k reads what the card made, its own lines
- * are dropped (zz_card_wrote). */
+ * A3000's SCSI). So a file goes through fast RAM, the 68k copies it to the
+ * card and pushes its cache out (zz_view_jpeg's feed loop, zz_read); before
+ * the 68k reads what the card made, its own lines are dropped
+ * (zz_card_wrote). (On the A3000 the cause of the sessions' trouble proved
+ * to be the feeding, below; these stay for CopyBack setups.) */
 #define ZZ_BOUNCE (32 * 1024)
 /* A session's file goes through one 32 KB buffer on the card, every feed
- * from its start: what the card leaves is moved to the front (in fast RAM,
- * bounce) and the rest topped up, as the card's own zz9k-jpeg feeds it. On
- * a real A3000 256 KB chunks fed at an offset got nothing taken at all;
- * this way (zzprobe 1.20) every photo decoded. */
+ * from its start, holding the file from where the card got to, as the
+ * card's own zz9k-jpeg feeds it. On a real A3000 256 KB chunks fed at an
+ * offset got nothing taken at all; this way (zzprobe 1.20) every photo
+ * decoded. The file is read into fast RAM in one go first (as jdec's is):
+ * 32 KB reads cost a disk's latency each, some 3 s for a 12 MP photo
+ * (zzprobe 1.21) */
 #define ZZ_STAGE ZZ_BOUNCE
 #define ZZ_STALL_MS 3000        /* a session taking none of the file this long is stuck */
 
@@ -349,10 +351,10 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     struct Thumb *t = NULL;
     BPTR fh;
     LONG flen;
-    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, foff = 0, buffered = 0, sess = 0,
+    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cpos = 0, spos = 0, staged = 0, sess = 0,
           t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0, quiet;
-    BOOL moved = FALSE;
-    UBYTE *bounce = NULL;
+    BOOL ready = FALSE;
+    UBYTE *file = NULL;
     BOOL prog = FALSE, began = FALSE, w16 = s16 && zz_565 && !no565 && maxcol <= THUMB_DEEP;
     ZZ9KSurface s16f;           /* w16: the card's scaler copies the picture into it as RGB565 */
     int st = ZZ9K_STATUS_OK;
@@ -379,7 +381,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     memset(&sf, 0, sizeof(sf));
     memset(&s16f, 0, sizeof(s16f));
     size = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE;
-    if (!(bounce = AllocVec(ZZ_BOUNCE, MEMF_ANY))) {
+    if (!(file = AllocVec((ULONG)flen, MEMF_ANY)) || Read(fh, file, flen) != flen) {
+        FreeVec(file);
         Close(fh);
         return NULL;
     }
@@ -420,28 +423,20 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     }
     quiet = time_ms();
     while (!stage) {
-        ULONG n = (ULONG)flen - foff < size - buffered ? (ULONG)flen - foff : size - buffered, took;
-        volatile UBYTE *cb = (volatile UBYTE *)buf.data;
-        if (n && Read(fh, bounce + buffered, (LONG)n) != (LONG)n) {
-            stage = "reading the file", st = -1;
-            break;
+        ULONG n = (ULONG)flen - cpos < size ? (ULONG)flen - cpos : size, took;
+        if (!ready || spos != cpos || staged != n) {   /* the file from where the card got to */
+            CopyMem(file + cpos, (APTR)buf.data, n);
+            CacheClearE((APTR)buf.data, n, CACRF_ClearD);
+            spos = cpos;
+            staged = n;
+            ready = TRUE;
         }
-        if (moved) {                        /* what the card left, now at the front, and the new */
-            CopyMem(bounce, (APTR)cb, buffered + n);
-            CacheClearE((APTR)cb, buffered + n, CACRF_ClearD);
-            moved = FALSE;
-        } else if (n) {
-            CopyMem(bounce + buffered, (APTR)(cb + buffered), n);
-            CacheClearE((APTR)(cb + buffered), n, CACRF_ClearD);
-        }
-        foff += n;
-        buffered += n;
         memset(&fd, 0, sizeof(fd));
         fd.session = sess;
         fd.src_handle = buf.handle;
         fd.src_offset = 0;
-        fd.src_length = buffered;
-        fd.flags = foff >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+        fd.src_length = n;
+        fd.flags = cpos + n >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
         {
             ZZ9KRequest rq;
             ULONG tf = time_ms();
@@ -455,14 +450,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             stage = "feeding its session";
             break;
         }
-        took = r.bytes_consumed < buffered ? r.bytes_consumed : buffered;
-        if (took < buffered && took) {
-            buffered -= took;
-            memmove(bounce, bounce + took, buffered);
-            moved = TRUE;
-        } else if (took) {
-            buffered = 0;
-        }
+        took = r.bytes_consumed < staged ? r.bytes_consumed : staged;
+        cpos += took;
         if (took || r.bytes_written)
             quiet = time_ms();
         if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE)
@@ -470,7 +459,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
         if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR)
             stage = "its session (an error)", st = -1;
         else if (!took && !r.bytes_written && r.state != ZZ9K_IMAGE_SESSION_STATE_TILE_READY &&
-                 (foff >= (ULONG)flen || buffered >= size))
+                 (cpos + staged >= (ULONG)flen || staged >= size))
             stage = "its session (the card took no more of the file)", st = -1;
         else if (time_ms() - quiet > ZZ_STALL_MS) {
             /* stuck: not to cost 3 s a picture from now on */
@@ -479,8 +468,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             zz_view_on = FALSE;
         }
     }
-    FreeVec(bounce);
-    bounce = NULL;
+    FreeVec(file);
+    file = NULL;
     if (began) {
         ZZ9KRequest rq;
         if (zz9k_request_image_session_close(&rq, sess, 0) == ZZ9K_STATUS_OK)
