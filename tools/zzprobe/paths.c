@@ -410,6 +410,7 @@ struct PbApi {
     ULONG ow, oh;               /* what the card made */
     int status;
     const char *stage;          /* the call that failed */
+    char note[120];             /* what a stuck session said */
 };
 
 /* ---- the file to the card a chunk at a time, through one shared buffer
@@ -457,12 +458,19 @@ static void pb_card_wrote(volatile const void *p, ULONG len)
  * is stuck (on a real A3000 with the cache in the way: 100,000 feeds, 78 s) */
 #define PB_STALL_US 3000000UL
 
+/* The file through one staging buffer, as the card's own zz9k-jpeg feeds
+ * it (zzprobe 1.20): 32 KB, every feed from its start; what the card has
+ * not taken moved to the front and the rest topped up from the file. (Up
+ * to 1.19: 256 KB chunks fed at an offset; on a real A3000 the sessions
+ * took none of it.) */
+#define PB_STAGE (32 * 1024)
 struct PbFeed {
     BPTR fh;
     LONG len;                   /* the file's */
     ZZ9KSharedBuffer buf;
     ULONG size;                 /* the buffer's */
-    ULONG cstart, clen, pos;    /* the chunk loaded; how far the card has read */
+    ULONG foff, buffered;       /* the file read so far; held in the buffer */
+    ULONG feeds;
 };
 
 static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
@@ -480,22 +488,51 @@ static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
     return st;
 }
 
-/* the next feed's source; FALSE: the file could not be read */
+/* the buffer topped up and the next feed described; FALSE: the file could not be read */
 static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG session)
 {
-    if (f->pos >= f->cstart + f->clen && f->pos < (ULONG)f->len) {
-        f->cstart = f->pos;
-        f->clen = (ULONG)f->len - f->pos < f->size ? (ULONG)f->len - f->pos : f->size;
-        if (Seek(f->fh, (LONG)f->cstart, OFFSET_BEGINNING) < 0 ||
-            !pb_read_card(f->fh, (volatile UBYTE *)f->buf.data, f->clen))
+    ULONG space = f->size - f->buffered, rest = (ULONG)f->len - f->foff, n = rest < space ? rest : space;
+    if (n) {
+        if (!pb_read_card(f->fh, (volatile UBYTE *)f->buf.data + f->buffered, n))
             return FALSE;
+        f->foff += n;
+        f->buffered += n;
     }
     memset(fd, 0, sizeof(*fd));
     fd->session = session;
     fd->src_handle = f->buf.handle;
-    fd->src_offset = f->pos - f->cstart;
-    fd->src_length = f->cstart + f->clen - f->pos;
-    fd->flags = f->cstart + f->clen >= (ULONG)f->len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+    fd->src_offset = 0;
+    fd->src_length = f->buffered;
+    fd->flags = f->foff >= (ULONG)f->len ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+    f->feeds++;
+    return TRUE;
+}
+
+/* what the card took: the rest moved to the front */
+static void pb_feed_took(struct PbFeed *f, ULONG took)
+{
+    if (took >= f->buffered) {
+        f->buffered = 0;
+        return;
+    }
+    if (took) {
+        f->buffered -= took;
+        memmove((void *)f->buf.data, (const void *)((volatile UBYTE *)f->buf.data + took), f->buffered);
+        CacheClearE((APTR)f->buf.data, f->buffered, CACRF_ClearD);
+    }
+}
+
+/* the card made no progress with a full buffer or the whole file: it never will */
+static BOOL pb_feed_stuck(const struct PbFeed *f, const ZZ9KImageSessionResult *r, char *note, ULONG len)
+{
+    if (r->bytes_consumed || r->bytes_written || r->state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE ||
+        r->state == ZZ9K_IMAGE_SESSION_STATE_TILE_READY)
+        return FALSE;
+    if (f->foff < (ULONG)f->len && f->buffered < f->size)
+        return FALSE;
+    snprintf(note, len, "the session took nothing (state %lu, flags %lu, %lu bytes offered, file %lu of %lu "
+             "read, feed %lu)", (unsigned long)r->state, (unsigned long)r->flags, (unsigned long)f->buffered,
+             (unsigned long)f->foff, (unsigned long)f->len, (unsigned long)f->feeds);
     return TRUE;
 }
 
@@ -533,7 +570,7 @@ static LONG pb_api_once(void *p)
     memset(&surf, 0, sizeof(surf));
     c->stage = "ZZ9KAllocShared";
     /* the one-shot call takes the whole file in one buffer; a session, chunks */
-    if ((c->status = pb_feed_open(&f, c->path, c->mode == PBA_FULL ? 0x7fffffffUL : PB_CHUNK)) !=
+    if ((c->status = pb_feed_open(&f, c->path, c->mode == PBA_FULL ? 0x7fffffffUL : PB_STAGE)) !=
         ZZ9K_STATUS_OK) {
         if (c->mode == PBA_FULL)
             c->stage = "ZZ9KAllocShared (the whole file, for the one-shot call)";
@@ -599,7 +636,12 @@ static LONG pb_api_once(void *p)
             c->stage = "ZZ9KImageSessionFeed";
             if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
                 break;
-            f.pos += r.bytes_consumed;
+            if (pb_feed_stuck(&f, &r, c->note, sizeof(c->note))) {
+                c->stage = c->note;
+                c->status = ZZ9K_STATUS_TIMEOUT;
+                break;
+            }
+            pb_feed_took(&f, r.bytes_consumed);
             if (r.bytes_consumed)
                 quiet = now_us();
             if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE) {
@@ -704,6 +746,7 @@ struct PbTile {
     int status;
     const char *stage;
     BOOL said;
+    char note[120];
 };
 
 static LONG pb_tile_once(void *p)
@@ -719,7 +762,7 @@ static LONG pb_tile_once(void *p)
     BOOL eof = FALSE, open = FALSE;
     memset(&tb, 0, sizeof(tb));
     c->stage = "ZZ9KAllocShared (file)";
-    if ((c->status = pb_feed_open(&f, c->path, PB_CHUNK)) != ZZ9K_STATUS_OK)
+    if ((c->status = pb_feed_open(&f, c->path, PB_STAGE)) != ZZ9K_STATUS_OK)
         return -1;
     c->stage = "ZZ9KAllocShared (tiles)";
     if ((c->status = ZZ9KAllocShared(PB_TSTRIDE * PB_TROWS, 16, ZZ9K_ALLOC_HOST_WINDOW, &tb)) != ZZ9K_STATUS_OK)
@@ -751,7 +794,12 @@ static LONG pb_tile_once(void *p)
         c->stage = "ZZ9KImageSessionFeed";
         if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
             goto out;
-        f.pos += r.bytes_consumed;
+        if (pb_feed_stuck(&f, &r, c->note, sizeof(c->note))) {
+            c->stage = c->note;
+            c->status = ZZ9K_STATUS_TIMEOUT;
+            goto out;
+        }
+        pb_feed_took(&f, r.bytes_consumed);
         if (r.bytes_consumed || r.state == ZZ9K_IMAGE_SESSION_STATE_TILE_READY)
             quiet = now_us();
         else if (now_us() - quiet > PB_STALL_US) {
@@ -840,12 +888,13 @@ static void pb_surface_probe(void)
     memset(&caps, 0, sizeof(caps));
     st = ZZ9KQueryCaps(&caps);
     snprintf(l, sizeof(l), "  caps (%s): bits $%08lx, surfaces %s, max %lu, image decode %s, scale %s; "
-             "host-window heap %lu",
+             "host-window heap %lu; firmware $%08lx, ABI %lu.%lu",
              zz_status_name(st), (unsigned long)caps.capability_bits,
              (caps.capability_bits & ZZ9K_CAP_SURFACES) ? "yes" : "no", (unsigned long)caps.max_surfaces,
              (caps.capability_bits & ZZ9K_CAP_IMAGE_DECODE) ? "yes" : "no",
              (caps.capability_bits & ZZ9K_CAP_IMAGE_SCALE) ? "yes" : "no",
-             (unsigned long)caps.host_window_heap_size);
+             (unsigned long)caps.host_window_heap_size, (unsigned long)caps.firmware_version,
+             (unsigned long)caps.abi_major, (unsigned long)caps.abi_minor);
     pb_say(l);
     memset(&sv, 0, sizeof(sv));
     st = ZZ9KQueryService(ZZ9K_SERVICE_SURFACE, &sv);
@@ -1228,7 +1277,8 @@ static void bench_paths(const char *const *files, int nfiles)
     pb_say("  screen's cost, less the blit). API full: ZZ9KDecodeJpeg whole (it never scales), read");
     pb_say("  back whole, averaged on the 68k. API tiles: a session's tiles through a shared buffer.");
     pb_say("  Every column includes reading the file. On Amiberry the card's own work runs on the PC.");
-    pb_say("  The API's columns read the file into fast RAM, copy it to the card and flush the cache.");
+    pb_say("  The API's columns read the file into fast RAM, copy it to the card and flush the cache;");
+    pb_say("  sessions are fed as the card's own zz9k-jpeg feeds them: 32 KB, each feed from its start.");
     FreeVec(pb_bounce);
     pb_bounce = NULL;
     if (zzdtl)
