@@ -370,6 +370,20 @@ Not there yet
 
 History
 -------
+0.9.6  Quicker on a 68060, with the same pictures and sound, and still
+       for any 68020 to 68060:
+       JPEGs the 68060 decodes itself (without a ZZ9000) about a fifth
+       quicker, and made small for the screen about a third quicker.
+       MP3 on a 68060 2 to 6% quicker (Libs/ambmpega060.library).
+       AGA screens: pictures and the layouts' screens go to the planes
+       by assembler, about a fifth quicker on any CPU; on a 68040 or
+       68060 the planes are written while the next pixels are worked
+       out, about a quarter quicker. MPEG video on AGA gets the same on
+       a 68040 or 68060 (about 14%), and at half size without the
+       copper each row is made once for both lines.
+       (The 68060 figures come from a model of it that matches a real
+       68060's MP3 times to within a few percent; not yet all timed on
+       the real machine.)
 0.9.5  ZZ9000: JPEGs in the viewer and slideshows are decoded on the
        card at the size shown and read back. On an A3000 with a 68060
        a 1080p photo now shows in 1 to 2 s and a 12-megapixel one in 3

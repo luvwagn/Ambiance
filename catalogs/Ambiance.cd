@@ -6,37 +6,37 @@ AmigaAMP is running: its plug-ins are its own
 ; amphost.c:371 amphost.c:379
 MSG_603B8EB4 (1614515892//)
 The plug-in could not be started
-; anim.c:3203 anim.c:5430
+; anim.c:3203 anim.c:5437
 MSG_2F1926C3 (790177475//)
 ANIM-%ld compression is not supported
-; anim.c:3298 anim.c:4927 anim.c:5085
+; anim.c:3298 anim.c:4934 anim.c:5092
 MSG_5799A183 (1469686147//)
 The DVD could not be read there
-; anim.c:4436 anim.c:4474 anim.c:4697
+; anim.c:4443 anim.c:4481 anim.c:4704
 MSG_37FD8CF2 (939363570//)
 MPEG video on a native screen needs AGA's 256 colours
-; anim.c:4440 anim.c:4619
+; anim.c:4447 anim.c:4626
 MSG_58B9C070 (1488568432//)
 Not enough memory for the video's screen
-; anim.c:4722
+; anim.c:4729
 MSG_21CB4B97 (566971287//)
 MPEG video plays on the ZZ9000's display
-; anim.c:4971
+; anim.c:4978
 MSG_612F22BA (1630479034//)
 The ZZ9000's overlay could not be opened on this screen
-; anim.c:5224
+; anim.c:5231
 MSG_282FBBDC (674216924//)
 The animation could not be opened
-; anim.c:5231 anim.c:5243
+; anim.c:5238 anim.c:5250
 MSG_3A04E1BB (973398459//)
 Not an IFF ANIM this can play
-; anim.c:5261
+; anim.c:5268
 MSG_26BEC995 (650037653//)
 This Amiga has no screen mode for it (%ld colours, %s)
-; anim.c:5290
+; anim.c:5297
 MSG_638EABE4 (1670294500//)
 Animations play on the Amiga's own screens, and none was found
-; anim.c:5487
+; anim.c:5494
 MSG_2EE1D46F (786551919//)
 Not enough memory for the animation's screen
 ; beets.c:536 beets.c:557 plex.c:707
