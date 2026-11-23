@@ -336,6 +336,8 @@ static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from
  * even that, the picture is jdec's (or says it hasn't the memory) */
 #define ZZ_WIN_BIG (512 * 1024)
 #define ZZ_WIN_MID (128 * 1024)
+#define ZZ_WIN_ALIGN 4096       /* the window's reads: at and in multiples of this */
+#define ZZ_WIN_MIN (ZZ_STAGE + ZZ_WIN_ALIGN)   /* a feed's 32 KB, from anywhere in a 4 KB step */
 #define ZZ_STAGE ZZ_BOUNCE
 #define ZZ_STALL_MS 3000        /* a session taking none of the file this long is stuck */
 
@@ -389,14 +391,14 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     size = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE;
     {
         ULONG big = AvailMem(MEMF_ANY | MEMF_LARGEST);
-        wsize = big > 4UL << 20 ? ZZ_WIN_BIG : big > 1UL << 20 ? ZZ_WIN_MID : ZZ_STAGE;
+        wsize = big > 4UL << 20 ? ZZ_WIN_BIG : big > 1UL << 20 ? ZZ_WIN_MID : ZZ_WIN_MIN;
         if (wsize > (ULONG)flen)
             wsize = (ULONG)flen;
-        if (!(win = AllocVec(wsize, MEMF_ANY)) && wsize > ZZ_STAGE &&
-            (wsize = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE))
+        if (!(win = AllocVec(wsize, MEMF_ANY)) && wsize > ZZ_WIN_MIN &&
+            (wsize = (ULONG)flen < ZZ_WIN_MIN ? (ULONG)flen : ZZ_WIN_MIN))
             win = AllocVec(wsize, MEMF_ANY);
         if (!win) {
-            view_say(path, "memory for reading it (32 KB)", ZZ9K_STATUS_NO_MEMORY, time_ms() - t0);
+            view_say(path, "memory for reading it (36 KB)", ZZ9K_STATUS_NO_MEMORY, time_ms() - t0);
             Close(fh);
             return NULL;
         }
@@ -440,19 +442,23 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     while (!stage) {
         ULONG n = (ULONG)flen - cpos < size ? (ULONG)flen - cpos : size, took;
         if (!ready || spos != cpos || staged != n) {   /* the file from where the card got to */
-            if (cpos + n > wstart + wlen) {   /* the window moved on: what is left kept, the next read */
-                /* straight on from the last read, no Seek: on the A3000 a
-                 * read from where the card had got to (an odd place) went at
-                 * 0.6 MB/s, straight on 1.9 MB/s (zzprobe 1.24) */
-                ULONG keep = wstart + wlen - cpos, end = wstart + wlen;
-                ULONG want = (ULONG)flen - end < wsize - keep ? (ULONG)flen - end : wsize - keep;
+            if (cpos + n > wstart + wlen) {   /* the window moved on */
+                /* Every read 4 KB aligned in the file and in the window, as
+                 * one read of the whole file is: on the A3000 that went at
+                 * 1.9 MB/s, and reads at odd places or into odd addresses
+                 * (zzprobe 1.24, 1.26) at 0.6 MB/s, the filesystem copying
+                 * through its own buffers. The window starts at the 4 KB
+                 * boundary below cpos; what it already has from there is
+                 * moved down, the rest read straight on (no Seek). */
+                ULONG base = cpos & ~(ZZ_WIN_ALIGN - 1), end = wstart + wlen, keep = end > base ? end - base : 0;
+                ULONG want = (ULONG)flen - end < wsize - keep ? (ULONG)flen - end : (wsize - keep) & ~(ZZ_WIN_ALIGN - 1);
                 if (keep)
-                    memmove(win, win + (cpos - wstart), keep);
+                    memmove(win, win + (base - wstart), keep);
                 if (want && Read(fh, win + keep, (LONG)want) != (LONG)want) {
                     stage = "reading the file", st = -1;
                     break;
                 }
-                wstart = cpos;
+                wstart = base;
                 wlen = keep + want;
             }
             CopyMem(win + (cpos - wstart), (APTR)buf.data, n);

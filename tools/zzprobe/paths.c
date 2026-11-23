@@ -589,7 +589,7 @@ static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
         f->buf.handle = 0;
     } else if (size <= PB_STAGE) {
         ULONG big = AvailMem(MEMF_ANY | MEMF_LARGEST);
-        f->wsize = big > 4UL << 20 ? PB_WIN_BIG : big > 1UL << 20 ? PB_WIN_MID : PB_STAGE;
+        f->wsize = big > 4UL << 20 ? PB_WIN_BIG : big > 1UL << 20 ? PB_WIN_MID : PB_STAGE + 4096;
         if (f->wsize > (ULONG)f->len)
             f->wsize = (ULONG)f->len;
         if (!(f->file = AllocVec(f->wsize, MEMF_ANY))) {
@@ -607,16 +607,17 @@ static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG s
     if (!f->ready || f->spos != f->cpos || f->staged != n) {
         ULONG t0 = now_us();
         if (f->cpos + n > f->wstart + f->wlen) {
-            /* 1.26: what is left kept, the next read straight on from the
-             * last, no Seek (1.24's read from where the card got to went at
-             * 0.6 MB/s on the A3000, against 1.9 straight on) */
-            ULONG keep = f->wstart + f->wlen - f->cpos, end = f->wstart + f->wlen;
-            ULONG want = (ULONG)f->len - end < f->wsize - keep ? (ULONG)f->len - end : f->wsize - keep;
+            /* 1.27: every read 4 KB aligned in the file and the window, as
+             * one read of the whole file is (1.24 and 1.26's reads at odd
+             * places or into odd addresses went at 0.6 MB/s on the A3000,
+             * the whole file at 1.9); straight on, no Seek */
+            ULONG base = f->cpos & ~4095UL, end = f->wstart + f->wlen, keep = end > base ? end - base : 0;
+            ULONG want = (ULONG)f->len - end < f->wsize - keep ? (ULONG)f->len - end : (f->wsize - keep) & ~4095UL;
             if (keep)
-                memmove(f->file, f->file + (f->cpos - f->wstart), keep);
+                memmove(f->file, f->file + (base - f->wstart), keep);
             if (want && Read(f->fh, f->file + keep, (LONG)want) != (LONG)want)
                 return FALSE;
-            f->wstart = f->cpos;
+            f->wstart = base;
             f->wlen = keep + want;
             pb_t_file += now_us() - t0;
             t0 = now_us();
