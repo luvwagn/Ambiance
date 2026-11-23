@@ -52,6 +52,7 @@
  */
 #include "proto/zz9k.h"
 #include "zz9k/surface.h"
+#include "../../src/shrink.c"   /* Ambiance's: jdec's rows made small as they come */
 #include "zz9k/request.h"
 #include "zz9k/reply.h"
 
@@ -265,6 +266,7 @@ struct PbOwn {
     ULONG dw, dh, iw, ih;       /* made; the picture's own size */
     ULONG *big;                 /* decoded, at its scale */
     ULONG bw, bh;
+    struct Shrink *sk;          /* 1.25: made small as the rows come (Ambiance's shrink.c) */
     int err;
     int scale;                  /* jdec's: 1/(1 << scale), the last run's */
     ULONG read_us, dec_us, avg_us;  /* the last run's parts */
@@ -286,6 +288,12 @@ static int pb_rows(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t 
     struct PbOwn *c = ((struct PbOwnIo *)ctx)->c;
     int32_t i;
     ULONG x;
+    if (c->sk) {
+        ULONG t0 = now_us();
+        shrink_rows(c->sk, rgb, y, n, stride);
+        c->avg_us += now_us() - t0;
+        return 0;
+    }
     for (i = 0; i < n && (ULONG)(y + i) < c->bh; i++) {
         const uint8_t *s = rgb + i * stride;
         ULONG *d = c->big + (ULONG)(y + i) * c->bw;
@@ -336,7 +344,11 @@ static LONG pb_own_once(void *p)
     jd_out_size(&info, s, &ow, &oh);
     c->bw = (ULONG)ow;
     c->bh = (ULONG)oh;
-    if (!(c->big = AllocVec(c->bw * c->bh * 4, MEMF_ANY))) {
+    c->avg_us = 0;
+    /* made smaller: as the rows come, as Ambiance's jpgthumb.c */
+    if (c->dw <= c->bw && c->dh <= c->bh && (c->sk = shrink_new(c->bw, c->bh, c->dw, c->dh)))
+        ;
+    else if (!(c->big = AllocVec(c->bw * c->bh * 4, MEMF_ANY))) {
         jd_close(d);
         FreeVec(file);
         return -1;
@@ -345,18 +357,31 @@ static LONG pb_own_once(void *p)
     jd_close(d);
     FreeVec(file);
     c->scale = s;
-    c->dec_us = now_us() - t1;
+    c->dec_us = now_us() - t1 - c->avg_us;   /* (the averaging done as rows came, apart) */
     if (r) {
         c->err = r;
+        shrink_free(c->sk);
+        c->sk = NULL;
         FreeVec(c->big);
         c->big = NULL;
         return -1;
     }
     FreeVec(c->out);
     t1 = now_us();
-    if ((c->out = AllocVec(c->dw * c->dh * 4, MEMF_ANY)))
-        pb_shrink(c->big, c->bw, c->bh, c->out, c->dw, c->dh);
-    c->avg_us = now_us() - t1;
+    if (c->sk) {
+        UBYTE *small = shrink_done(c->sk);
+        ULONG i, n = c->dw * c->dh;
+        c->sk = NULL;
+        if (small && (c->out = AllocVec(n * 4, MEMF_ANY)))
+            for (i = 0; i < n; i++)
+                c->out[i] = ((ULONG)small[i * 3] << 16) | ((ULONG)small[i * 3 + 1] << 8) | small[i * 3 + 2];
+        FreeVec(small);
+        c->avg_us += now_us() - t1;
+    } else {
+        if ((c->out = AllocVec(c->dw * c->dh * 4, MEMF_ANY)))
+            pb_shrink(c->big, c->bw, c->bh, c->out, c->dw, c->dh);
+        c->avg_us = now_us() - t1;
+    }
     FreeVec(c->big);
     c->big = NULL;
     return c->out ? 0 : -1;

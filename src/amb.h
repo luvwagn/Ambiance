@@ -315,6 +315,7 @@ struct Thumb {
 #define THUMB_DEEP 0            /* maxcol: no colours of its own, true colour (any true-colour screen) */
 struct Thumb *thumb_make(APTR obj, ULONG dw, ULONG dh, LONG maxcol);  /* NULL: could not */
 struct Thumb *thumb_from_rgb(const UBYTE *rgb, ULONG sw, ULONG sh, ULONG dw, ULONG dh, LONG maxcol);
+#include "shrink.h"            /* rows made small as they come */
 /* t (colour numbers) at dw x dh, pixel for pixel; its colour table kept */
 struct Thumb *thumb_pick(const struct Thumb *t, ULONG dw, ULONG dh);
 /* jpgthumb.c: a JPEG's thumbnail by jdec, built in (NULL: not a JPEG it

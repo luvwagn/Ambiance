@@ -47,7 +47,7 @@ libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
        src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
-       src/jpgthumb.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
+       src/jpgthumb.c src/shrink.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c src/classic/classic.c \
        src/classic/input.c
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o
@@ -380,14 +380,14 @@ rtgbench: build/rtgbench
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast Ambiance's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
-build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h \
+build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h src/shrink.c src/shrink.h \
                $(ZZ9K_SDK_STAMP)
 	@mkdir -p build
 	@echo "  CC    $<"
 	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -478,6 +478,14 @@ build/animdraw_68k: tests/animdraw_host.c src/animdraw.c src/animdraw.h build/an
 	@$(CC) -O2 $(CPU) -noixemul -Wall -DAD_ASM -o $@ tests/animdraw_host.c src/animdraw.c build/animdraw68k.o
 
 # the drawing checked on the host (C), and on a 68020 with its assembler
+# shrink.c (jdec's rows made small as they come) against deep_thumb's arithmetic
+build/shrink_host: tests/shrink_host.c src/shrink.c src/shrink.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -DSHRINK_HOST -o $@ tests/shrink_host.c src/shrink.c
+
+test-shrink: build/shrink_host
+	@build/shrink_host > build/test-shrink.txt && echo "  CHECK pictures made small as they come ok" || (cat build/test-shrink.txt; exit 1)
+
 test-animdraw: build/animdraw_host build/animdraw_68k
 	@build/animdraw_host > build/test-animdraw.txt && echo "  CHECK animation drawing ok" || (cat build/test-animdraw.txt; exit 1)
 	@cd build && vamos -C 68020 -m 8192 -s 256 animdraw_68k > test-animdraw68k.txt && grep -q " 0 failed" test-animdraw68k.txt \

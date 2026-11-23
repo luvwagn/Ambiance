@@ -113,8 +113,10 @@ struct JSrc {
     UBYTE *buf;                 /* streamed: the window (STREAM_BUF), bpos of blen read */
     ULONG bpos, blen;
     BOOL nobuf;                 /* (no memory even for that: jdec's own 4 KB reads) */
-    UBYTE *rgb;                 /* the picture decoded, w * 3 a row */
+    UBYTE *rgb;                 /* the picture decoded, w * 3 a row, or */
+    struct Shrink *sk;          /* its rows made small as they come (to dw x dh) */
     ULONG w, h;
+    ULONG dw, dh;               /* made smaller to this (0: kept whole: jpeg_bitmap's) */
 };
 
 static int32_t j_read(void *ctx, uint8_t *buf, int32_t n)
@@ -162,6 +164,10 @@ static int j_rows(void *ctx, const uint8_t *rgb, int32_t y, int32_t n, int32_t s
 {
     struct JSrc *s = ctx;
     int32_t i;
+    if (s->sk) {
+        shrink_rows(s->sk, rgb, y, n, stride);
+        return 0;
+    }
     for (i = 0; i < n && (ULONG)(y + i) < s->h; i++)
         CopyMem((APTR)(rgb + i * stride), s->rgb + (ULONG)(y + i) * s->w * 3, s->w * 3);
     return 0;
@@ -207,7 +213,13 @@ static int j_decode(JDec **pd, struct JSrc *s, const JDecIO *io, JDecInfo *info,
         s->w = (ULONG)ow;
         s->h = (ULONG)oh;
         FreeVec(s->rgb);
-        if (!(s->rgb = AllocVec(s->w * s->h * 3, MEMF_ANY | MEMF_CLEAR))) {
+        s->rgb = NULL;
+        shrink_free(s->sk);
+        s->sk = NULL;
+        /* made smaller: as the rows come, the whole picture never held */
+        if (s->dw && s->dw <= s->w && s->dh <= s->h)
+            s->sk = shrink_new(s->w, s->h, s->dw, s->dh);
+        if (!s->sk && !(s->rgb = AllocVec(s->w * s->h * 3, MEMF_ANY | MEMF_CLEAR))) {
             /* short of memory: a scale smaller (a quarter of the bytes), the
              * rest made up by the scaling after, rather than no picture */
             if (*scale >= 3)
@@ -288,12 +300,22 @@ static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL
     else
         pic_fit((ULONG)info.width, (ULONG)info.height, tall, w, h, whole, &dw, &dh);
     scale = jd_scale_for(&info, (int32_t)dw, (int32_t)dh);
+    s.dw = dw;
+    s.dh = dh;
     if ((r = j_decode(&d, &s, &io, &info, &scale))) {
         if ((why = why_not(r)))
             note(kind ? kind : "picture", why, path);
         goto out;
     }
-    if (view && maxcol <= THUMB_DEEP && (dw > s.w || dh > s.h)) {
+    if (s.sk) {
+        /* made small as it came: dw x dh, the rest as before at 1:1 */
+        UBYTE *small = shrink_done(s.sk);
+        s.sk = NULL;
+        if (small) {
+            t = thumb_from_rgb(small, dw, dh, dw, dh, maxcol);
+            FreeVec(small);
+        }
+    } else if (view && maxcol <= THUMB_DEEP && (dw > s.w || dh > s.h)) {
         /* true colour, to be made larger: as decoded, the screen's scaler
          * then (averaging makes nothing larger) */
         ULONG i, n = s.w * s.h;
@@ -313,6 +335,7 @@ out:
     if (d)
         jd_close(d);
     FreeVec(s.rgb);
+    shrink_free(s.sk);
     FreeVec(s.buf);
     FreeVec(file);
     Close(s.fh);
