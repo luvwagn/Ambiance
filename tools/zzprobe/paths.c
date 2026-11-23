@@ -903,7 +903,7 @@ static void bench_paths(const char *const *files, int nfiles)
     if (!pb_zzdt)
         pb_say("  The datatypes' columns left out (NODT)");
 
-    for (fi = 0; fi < nfiles; fi++) {
+    for (fi = 0; fi < nfiles && !brk_check(); fi++) {
         const char *path = files[fi];
         struct DataType *dtn = NULL;
         BPTR lock;
@@ -916,7 +916,7 @@ static void bench_paths(const char *const *files, int nfiles)
             dtn = ObtainDataTypeA(DTST_FILE, (APTR)lock, NULL);
             UnLock(lock);
         }
-        for (b = 0; b < PB_BOXES; b++) {
+        for (b = 0; b < PB_BOXES && !brk_check(); b++) {
             struct PbOwn own;
             struct PbDt zd, jd;
             struct PbApi ab, ac, af;

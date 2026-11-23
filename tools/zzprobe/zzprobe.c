@@ -61,7 +61,7 @@
 #include "stackcall.h"
 
 /* used: nothing reads it, but Version finds it in the file (unused, it was dropped) */
-static const char __attribute__((used)) version[] = "$VER: zzprobe 1.16 (19.11.2026)";
+static const char __attribute__((used)) version[] = "$VER: zzprobe 1.17 (22.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -592,10 +592,25 @@ static void why(LONG err, char *out, LONG max)
 typedef LONG (*Once)(void *ctx);        /* one decode: 0, or why not */
 
 /* first (if wanted), then up to 10 runs within run_ms */
+/* Ctrl-C in its Shell: everything still to time is skipped (once seen,
+ * it stays seen), and the rest of the run ends quickly */
+static BOOL brk;
+
+static BOOL brk_check(void)
+{
+    if (!brk && (SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)) {
+        brk = TRUE;
+        sayf("*** Break (Ctrl-C): zzprobe stops after this step");
+    }
+    return brk;
+}
+
 static LONG timed(Once f, void *ctx, ULONG *first, ULONG *best, ULONG *mean)
 {
     ULONG start, runs = 0, sum = 0, b = 0xFFFFFFFFUL, t0, dt;
     LONG err;
+    if (brk_check())
+        return -2;
     if (first) {
         t0 = now_us();
         if ((err = f(ctx)))
@@ -614,7 +629,7 @@ static LONG timed(Once f, void *ctx, ULONG *first, ULONG *best, ULONG *mean)
             b = dt;
         sum += dt;
         runs++;
-    } while (runs < 10 && now_us() - start < run_ms * 1000);
+    } while (runs < 10 && now_us() - start < run_ms * 1000 && !brk_check());
     *best = b ? b : 1;
     *mean = sum / runs ? sum / runs : 1;
     return 0;
@@ -1321,7 +1336,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.16, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.17, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();
