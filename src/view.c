@@ -89,6 +89,15 @@ static UBYTE pen_bg, pen_fg, pen_dim, pen_border;
 static BOOL has_pic;            /* a picture is up */
 static WORD pic_x, pic_y, pic_w, pic_h;     /* where (true colour: what a transition leaves) */
 static BOOL kept;               /* the last one left up, for the transition to the next */
+BOOL view_screen16;             /* the viewer's screen is 15 or 16-bit (view_begin): the card's
+                                 * pictures read back as RGB565, half the bytes */
+/* The pictures' own RGB in fast RAM (true colour, a reader's picture made
+ * to fit): the cross-fade blends from these, not from what it would read
+ * back off the card (two Zorro III reads of the area before each fade) */
+static UBYTE *last_rgb;         /* the one up now: pic_w x pic_h, 3 bytes a pixel */
+static UWORD last_w, last_h;
+static UBYTE *new_rgb;          /* the one coming (view_show) */
+static UWORD new_w, new_h;
 static struct BitMap *bar_bm;   /* what the bar covers */
 static WORD bar_y, bar_h;
 static WORD spin_x = -1;            /* the bar's spinner: its centre (-1: none) */
@@ -231,6 +240,7 @@ BOOL view_begin(struct Gfx *g)
 {
     struct ColorMap *cm = g->scr->ViewPort.ColorMap;
     clut = !g->truecolor;
+    view_screen16 = g->truecolor && g->depth <= 16;
     ncolors = clut ? 1 << (g->depth > 8 ? 8 : g->depth) : 0;
     bar_nprev = 0;
     bar_keep = FALSE;
@@ -1006,7 +1016,7 @@ struct Thumb *view_own_read(const char *path, UWORD gw, UWORD gh, BOOL tall, BOO
         t->raw = 1;                         /* its own size and colours: shown as they fit */
         return t;
     }
-    if ((t = zz_view_jpeg(path, gw, gh, tall, truecol ? THUMB_DEEP : maxcol, pi)))
+    if ((t = zz_view_jpeg(path, gw, gh, tall, truecol ? THUMB_DEEP : maxcol, pi, view_screen16)))
         return t;                           /* decoded on the card, at the size shown */
     if (view_jpeg_card && !zz_view_on)
         return NULL;                        /* (the card's datatype: quicker than the 68k) */
@@ -1015,6 +1025,7 @@ struct Thumb *view_own_read(const char *path, UWORD gw, UWORD gh, BOOL tall, BOO
 
 /* ---- showing a picture */
 static void fill_pic(struct Gfx *g, UBYTE pen);
+static void rgb_forget(void);
 static void drop_picture(struct Gfx *g)
 {
     if (!bar_keep)
@@ -1026,6 +1037,7 @@ static void drop_picture(struct Gfx *g)
         obj = NULL;
     }
     has_pic = FALSE;
+    rgb_forget();
     if (clut) {
         all_black(g);
         fill_pic(g, 0);
@@ -1177,23 +1189,94 @@ static void tr_tiles(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw
     FreeVec(order);
 }
 
-/* FALSE: no memory (or no cybergraphics), nothing done. */
+static void rgb_forget(void)
+{
+    FreeVec(last_rgb);
+    FreeVec(new_rgb);
+    last_rgb = new_rgb = NULL;
+}
+
+/* A thumb's pixels as RGB, 3 bytes each (NULL: no memory) */
+static UBYTE *thumb_rgb(const struct Thumb *t)
+{
+    UBYTE *b = AllocVec((ULONG)t->w * t->h * 3, MEMF_ANY), *d = b;
+    ULONG x, y, v;
+    if (!b)
+        return NULL;
+    for (y = 0; y < t->h; y++)
+        for (x = 0; x < t->w; x++) {
+            v = t->argb ? t->argb[y * t->mod + x] : t->pal[t->px[y * t->mod + x]];
+            *d++ = (UBYTE)(v >> 16);
+            *d++ = (UBYTE)(v >> 8);
+            *d++ = (UBYTE)v;
+        }
+    return b;
+}
+
+/* An area (uw x uh RGB at buf) as the screen has it: the background, and
+ * rgb (w x h) at x, y in it */
+static void rgb_area(UBYTE *buf, WORD uw, WORD uh, ULONG bg, const UBYTE *rgb, WORD x, WORD y, WORD w,
+                     WORD h)
+{
+    ULONG i, n = (ULONG)uw * uh;
+    WORD r;
+    UBYTE br = (UBYTE)(bg >> 16), bgg = (UBYTE)(bg >> 8), bb = (UBYTE)bg;
+    if (!br && !bgg && !bb)
+        memset(buf, 0, n * 3);
+    else
+        for (i = 0; i < n; i++) {
+            buf[i * 3] = br;
+            buf[i * 3 + 1] = bgg;
+            buf[i * 3 + 2] = bb;
+        }
+    if (rgb)
+        for (r = 0; r < h; r++)
+            CopyMem((APTR)(rgb + (ULONG)r * w * 3), buf + ((ULONG)(y + r) * uw + x) * 3, (ULONG)w * 3);
+}
+
+/* the colour the viewer clears to (fill()'s pen), as 0xRRGGBB */
+static ULONG bg_rgb(struct Gfx *g)
+{
+    ULONG c[3];
+    if (black_pen >= 0)
+        return 0;
+    GetRGB32(g->scr->ViewPort.ColorMap, GPEN(PEN_BG), 1, c);
+    return (c[0] >> 24) << 16 | (c[1] >> 24) << 8 | (c[2] >> 24);
+}
+
+/* FALSE: no memory (or no cybergraphics), nothing done. The new picture
+ * is at nx, ny (dw x dh) in nb. */
 static BOOL tr_fade(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw, WORD uh,
-                    BOOL through)
+                    BOOL through, WORD nx, WORD ny, WORD dw, WORD dh)
 {
     ULONG n = (ULONG)uw * uh * 3, t0, i;
     UBYTE *o, *nw, *out, ta[256], tb[256];
     struct RastPort nrp;
-    char m[100];
-    int steps = 0;
+    char m[160];
+    int steps = 0, kept_old = 0, kept_new = 0;
+    ULONG tr;
     if (!CyberGfxBase || !(o = AllocVec(n * 3, MEMF_ANY)))
         return FALSE;
     nw = o + n;
     out = nw + n;
     InitRastPort(&nrp);
     nrp.BitMap = nb;
-    ReadPixelArray(o, 0, 0, uw * 3, g->rp, ux, uy, uw, uh, RECTFMT_RGB);
-    ReadPixelArray(nw, 0, 0, uw * 3, &nrp, 0, 0, uw, uh, RECTFMT_RGB);
+    tr = time_ms();
+    /* the old: as it is on screen (the background, and the last picture
+     * where it is, from fast RAM); else read back off the screen */
+    if (!kept || (last_rgb && last_w == pic_w && last_h == pic_h && pic_x >= ux && pic_y >= uy &&
+                  pic_x + pic_w <= ux + uw && pic_y + pic_h <= uy + uh)) {
+        rgb_area(o, uw, uh, bg_rgb(g), kept ? last_rgb : NULL, pic_x - ux, pic_y - uy, pic_w, pic_h);
+        kept_old = 1;
+    } else
+        ReadPixelArray(o, 0, 0, uw * 3, g->rp, ux, uy, uw, uh, RECTFMT_RGB);
+    /* the new: black, and it at nx, ny (nb was cleared, then it drawn in) */
+    if (new_rgb && new_w == dw && new_h == dh) {
+        rgb_area(nw, uw, uh, 0, new_rgb, nx, ny, dw, dh);
+        kept_new = 1;
+    } else
+        ReadPixelArray(nw, 0, 0, uw * 3, &nrp, 0, 0, uw, uh, RECTFMT_RGB);
+    tr = time_ms() - tr;
     t0 = time_ms();
     for (;;) {
         ULONG el = time_ms() - t0, k, ts = time_ms();
@@ -1231,8 +1314,10 @@ static BOOL tr_fade(struct Gfx *g, struct BitMap *nb, WORD ux, WORD uy, WORD uw,
     FreeVec(o);
     BltBitMapRastPort(nb, 0, 0, g->rp, ux, uy, uw, uh, 0xC0);   /* the last step: the new one */
     tr_show(g, ux, uy, uw, uh);
-    sprintf(m, "%s: %ld steps in %lu ms (%ld x %ld)", through ? "fade" : "cross-fade",
-            (long)steps, (unsigned long)(time_ms() - t0), (long)uw, (long)uh);
+    sprintf(m, "%s: %ld steps in %lu ms (%ld x %ld); the two pictures %s in %lu ms",
+            through ? "fade" : "cross-fade", (long)steps, (unsigned long)(time_ms() - t0), (long)uw,
+            (long)uh, kept_old && kept_new ? "from fast RAM" : kept_old || kept_new ? "one read back"
+            : "read back", (unsigned long)tr);
     amb_log("viewer", m);
     return TRUE;
 }
@@ -1265,7 +1350,7 @@ static BOOL transition(struct Gfx *g, struct BitMap *tmp, WORD dw, WORD dh)
     BltBitMap(tmp, 0, 0, nb, nx - ux, ny - uy, dw, dh, 0xC0, 0xFF, NULL);
     WaitBlit();
     if (view_transition == VT_TILES || view_transition == VT_WIPE ||
-        !tr_fade(g, nb, ux, uy, uw, uh, view_transition == VT_FADE))
+        !tr_fade(g, nb, ux, uy, uw, uh, view_transition == VT_FADE, nx - ux, ny - uy, dw, dh))
         tr_tiles(g, nb, ux, uy, uw, uh, view_transition == VT_WIPE, TR_TILES_MS);
     WaitBlit();
     FreeBitMap(nb);
@@ -1298,6 +1383,8 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
         gfx_present(g);
     }
     spin_forget();
+    FreeVec(new_rgb);                       /* (one left by a picture that failed) */
+    new_rgb = NULL;
     /* AGA: a layout's controls up stay up through the change (their colours
      * the copper's: neither the fade nor the new colours reach them) */
     bar_keep = clut && bar_cop && bar_lv && bar_bm;
@@ -1410,6 +1497,13 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
                     made = TRUE;            /* made to fit already (averaged, by jdec's reader) */
                     dw = t->w;
                     dh = t->h;
+                    if (view_transition == VT_XFADE || view_transition == VT_FADE) {
+                        FreeVec(new_rgb);   /* its RGB kept for the fades */
+                        if ((new_rgb = thumb_rgb(t))) {
+                            new_w = t->w;
+                            new_h = t->h;
+                        }
+                    }
                 }
             }
         }
@@ -1665,6 +1759,13 @@ BOOL view_show(struct Gfx *g, const char *path, const char *label, struct PicInf
     pic_y = (WORD)((g->h - bsa.bsa_DestHeight) / 2);
     pic_w = (WORD)bsa.bsa_DestWidth;
     pic_h = (WORD)bsa.bsa_DestHeight;
+    FreeVec(last_rgb);                      /* what is up now, in fast RAM, if it is */
+    last_rgb = new_rgb && new_w == pic_w && new_h == pic_h ? new_rgb : NULL;
+    if (!last_rgb)
+        FreeVec(new_rgb);
+    last_w = new_w;
+    last_h = new_h;
+    new_rgb = NULL;
     WaitBlit();
     FreeBitMap(tmp);
     if (own_src)
@@ -1698,6 +1799,7 @@ void view_end(struct Gfx *g)
         obj = NULL;
     }
     has_pic = FALSE;
+    rgb_forget();
     if (clut) {
         all_black(g);
         if (pen0_held)

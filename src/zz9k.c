@@ -119,6 +119,58 @@ static const char *probe_surface(void)
     return *why ? why : NULL;
 }
 
+/* An RGB565 surface the 68k can read, and its byte order: filled with
+ * yellow (0xFFE0) and a square of blue (0x001F), read back as words.
+ * 1: big-endian (the 68k's: as the ZZ9000's 16-bit screens), 2:
+ * byte-swapped, 0: not offered or wrong. The viewer then reads back half
+ * as many bytes as BGRA8888 on a 16-bit screen. */
+static UBYTE zz_565;
+
+static UBYTE probe_565(void)
+{
+    ZZ9KSurface sf;
+    ZZ9KSurfaceFillDesc fd;
+    ULONG x, y, be = 0, le = 0, bad = 0;
+    int s;
+    memset(&sf, 0, sizeof(sf));
+    amb_card_lock();
+    s = ZZ9KAllocSurfaceEx(16, 16, ZZ9K_SURFACE_FORMAT_RGB565, 0, 0, &sf);
+    amb_card_unlock();
+    if (s != ZZ9K_STATUS_OK)
+        return 0;
+    memset(&fd, 0, sizeof(fd));
+    fd.surface = sf.handle;
+    fd.width = fd.height = 16;
+    fd.color = 0xFFF8FC00UL;                /* yellow: 0xFFE0 */
+    amb_card_lock();
+    s = ZZ9KFillSurface(&fd);
+    if (s == ZZ9K_STATUS_OK) {
+        fd.x = fd.y = 4;
+        fd.width = fd.height = 8;
+        fd.color = 0xFF0000F8UL;            /* blue: 0x001F */
+        s = ZZ9KFillSurface(&fd);
+    }
+    amb_card_unlock();
+    if (s == ZZ9K_STATUS_OK && sf.data && sf.pitch >= 32)
+        for (y = 0; y < 16; y++) {
+            volatile const UWORD *row = (volatile const UWORD *)((volatile const UBYTE *)sf.data +
+                                                                 y * sf.pitch);
+            for (x = 0; x < 16; x++) {
+                UWORD want = x >= 4 && x < 12 && y >= 4 && y < 12 ? 0x001F : 0xFFE0, got = row[x];
+                if (got == want)
+                    be++;
+                else if (got == (UWORD)((want >> 8) | (want << 8)))
+                    le++;
+                else
+                    bad++;
+            }
+        }
+    amb_card_lock();
+    ZZ9KFreeSurface(sf.handle);
+    amb_card_unlock();
+    return s != ZZ9K_STATUS_OK || bad || (be && le) || (!be && !le) ? 0 : be ? 1 : 2;
+}
+
 void zz_probe(struct Caps *c)
 {
     ZZ9KCaps zc;
@@ -150,13 +202,17 @@ void zz_probe(struct Caps *c)
     else if (c->zz_rev >= ZZ9K_LIBRARY_MIN_REVISION_SURFACE_OPS)
         why = probe_surface();
     c->zz_cpusurf = why == NULL;
+    if (c->zz_cpusurf)
+        zz_565 = probe_565();
     sprintf(m, "zz9k.library 2.%lu, ABI %lu.%lu, firmware %08lx, caps %08lx; one-shot JPEG %s; "
-               "CPU-visible surfaces %s%s (%lu ms)",
+               "CPU-visible surfaces %s%s%s (%lu ms)",
             (unsigned long)c->zz_rev, (unsigned long)zc.abi_major, (unsigned long)zc.abi_minor,
             (unsigned long)zc.firmware_version, (unsigned long)zc.capability_bits,
             c->zz_jpeg1 ? "yes" : "no",
-            c->zz_cpusurf ? "yes" : "no: ",
-            c->zz_cpusurf ? "" : why, (unsigned long)(time_ms() - t0));
+            c->zz_cpusurf ? "yes" : "no: ", c->zz_cpusurf ? "" : why,
+            !c->zz_cpusurf ? "" : zz_565 == 1 ? ", RGB565 too" : zz_565 == 2 ? ", RGB565 too (byte-swapped)"
+                                                : ", not RGB565",
+            (unsigned long)(time_ms() - t0));
     amb_log("zz9k", m);
     zz_close();
 }
@@ -247,8 +303,10 @@ static void view_say(const char *path, const char *what, int st, ULONG ms)
     amb_log("viewer", m);
 }
 
+static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from then on */
+
 struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
-                           struct PicInfo *pi)
+                           struct PicInfo *pi, BOOL s16)
 {
     ZZ9KSharedBuffer buf;
     ZZ9KSurface sf;
@@ -261,7 +319,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     LONG flen;
     ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, guard = 0, sess = 0,
           t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0;
-    BOOL prog = FALSE, began = FALSE;
+    BOOL prog = FALSE, began = FALSE, w16 = s16 && zz_565 && !no565 && maxcol <= THUMB_DEEP;
+    ZZ9KSurface s16f;           /* w16: the card's scaler copies the picture into it as RGB565 */
     int st = ZZ9K_STATUS_OK;
     const char *stage = NULL;
     if (!zz_view_on || !view_held || !ZZ9KBase || !(fh = Open((CONST_STRPTR)path, MODE_OLDFILE)))
@@ -284,14 +343,20 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     }
     memset(&buf, 0, sizeof(buf));
     memset(&sf, 0, sizeof(sf));
+    memset(&s16f, 0, sizeof(s16f));
     size = (ULONG)flen < 256 * 1024 ? (ULONG)flen : 256 * 1024;
     amb_card_lock();
     if ((st = ZZ9KAllocShared(size, 16, ZZ9K_ALLOC_HOST_WINDOW, &buf)) != ZZ9K_STATUS_OK)
         stage = "a shared buffer";
-    else if ((st = ZZ9KAllocSurfaceEx(dw, dh, ZZ9K_SURFACE_FORMAT_BGRA8888, 0, 0, &sf)) != ZZ9K_STATUS_OK)
+    else if ((st = ZZ9KAllocSurfaceEx(dw, dh, ZZ9K_SURFACE_FORMAT_BGRA8888,
+                                      w16 ? ZZ9K_SURFACE_FLAG_ARM_LOCAL : 0, 0, &sf)) != ZZ9K_STATUS_OK)
         stage = "its surface";
-    else if (!sf.data)
+    else if (!w16 && !sf.data)
         stage = "its surface (no 68k address)", st = -1;
+    else if (w16 && (st = ZZ9KAllocSurfaceEx(dw, dh, ZZ9K_SURFACE_FORMAT_RGB565, 0, 0, &s16f)) != ZZ9K_STATUS_OK)
+        stage = "its RGB565 surface";
+    else if (w16 && !s16f.data)
+        stage = "its RGB565 surface (no 68k address)", st = -1;
     amb_card_unlock();
     if (!stage) {
         memset(&bd, 0, sizeof(bd));
@@ -356,10 +421,40 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             img_call(&rq, ZZ9K_OP_IMAGE_SESSION_CLOSE, NULL);
     }
     Close(fh);
-    t1 = time_ms();
     if (!stage) {
         ow = r.tile_width && r.tile_width <= dw ? r.tile_width : dw;
         oh = r.tile_height && r.tile_height <= dh ? r.tile_height : dh;
+    }
+    if (!stage && w16) {
+        /* the card's scaler, 1:1, BGRA8888 to RGB565: half the bytes to read */
+        ZZ9KScaleImageDesc sd;
+        ZZ9KRequest rq;
+        ZZ9KMailboxEntry rp;
+        memset(&sd, 0, sizeof(sd));
+        memset(&rp, 0, sizeof(rp));
+        sd.src_surface = sf.handle;
+        sd.dst_surface = s16f.handle;
+        sd.src_w = sd.dst_w = ow;
+        sd.src_h = sd.dst_h = oh;
+        sd.filter = ZZ9K_SCALE_NEAREST;
+        if ((st = zz9k_request_scale_image(&rq, &sd)) == ZZ9K_STATUS_OK &&
+            (st = zz_call_ticks(&rq, &rp, ZZ_IMG_TICKS)) == ZZ9K_STATUS_OK)
+            st = (int)rp.status;
+        if (st != ZZ9K_STATUS_OK) {
+            char m[120];
+            no565 = TRUE;               /* BGRA8888 read back from now on */
+            sprintf(m, "the card would not convert to RGB565 (%s): BGRA8888 from now on", zz_name(st));
+            amb_log("viewer", m);
+            amb_card_lock();
+            ZZ9KFreeSurface(s16f.handle);
+            ZZ9KFreeSurface(sf.handle);
+            ZZ9KFreeShared(buf.handle);
+            amb_card_unlock();
+            return zz_view_jpeg(path, gw, gh, tall, maxcol, pi, FALSE);
+        }
+    }
+    t1 = time_ms();
+    if (!stage) {
         if (maxcol <= THUMB_DEEP) {
             if ((t = AllocVec(sizeof(struct Thumb) + ow * oh * 4, MEMF_ANY | MEMF_CLEAR))) {
                 ULONG *d;
@@ -367,12 +462,25 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
                 t->h = (UWORD)oh;
                 t->mod = (UWORD)ow;
                 t->argb = d = (ULONG *)(t + 1);
-                for (y = 0; y < oh; y++) {
+                for (y = 0; y < oh && w16; y++) {
+                    /* R5G6B5 words: half the bytes over the bus */
+                    volatile const UWORD *row = (volatile const UWORD *)((volatile const UBYTE *)s16f.data +
+                                                                         y * s16f.pitch);
+                    for (x = 0; x < ow; x++) {
+                        ULONG v = row[x], r, gg, b;
+                        if (zz_565 == 2)
+                            v = ((v >> 8) | (v << 8)) & 0xFFFF;
+                        r = (v >> 11) & 31;
+                        gg = (v >> 5) & 63;
+                        b = v & 31;
+                        *d++ = ((r << 3) | (r >> 2)) << 16 | ((gg << 2) | (gg >> 4)) << 8 | (b << 3) | (b >> 2);
+                    }
+                }
+                for (y = 0; y < oh && !w16; y++) {
                     volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
                                                                          y * sf.pitch);
-                    for (x = 0; x < ow; x++) {
+                    for (x = 0; x < ow; x++)
                         *d++ = bgra_rgb(row[x]);    /* bytes B, G, R, A */
-                    }
                 }
             }
         } else {
@@ -396,6 +504,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             stage = "memory for its pixels", st = ZZ9K_STATUS_NO_MEMORY;
     }
     amb_card_lock();
+    if (s16f.handle)
+        ZZ9KFreeSurface(s16f.handle);
     if (sf.handle)
         ZZ9KFreeSurface(sf.handle);
     if (buf.handle)
@@ -413,7 +523,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
                 prog ? " (progressive)" : "", (unsigned long)ow,
                 (unsigned long)oh, (unsigned long)(t1 - t0), (unsigned long)feeds, (unsigned long)feed_max,
                 (unsigned long)(time_ms() - t1),
-                maxcol <= THUMB_DEEP ? "" : " (and its colours cut)");
+                maxcol > THUMB_DEEP ? " (and its colours cut)" : w16 ? " (RGB565)" : "");
         amb_log("viewer", m);
     }
     *pi = p;

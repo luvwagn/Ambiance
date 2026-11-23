@@ -62,7 +62,7 @@ void zz_view_hold(BOOL on);     /* the library open for it (at start; off for a 
 struct Thumb;
 struct PicInfo;
 struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
-                           struct PicInfo *pi);
+                           struct PicInfo *pi, BOOL s16);  /* s16: a 15/16-bit screen: RGB565 read back */
 void zz_close(void);
 const char *zz_name(int status);
 /* MPEG Program Stream video on the card's overlay: NULL if it can, else
