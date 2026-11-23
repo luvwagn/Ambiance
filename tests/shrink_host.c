@@ -64,8 +64,14 @@ static void ref(const unsigned char *src, unsigned long sw, unsigned long sh, un
 int main(void)
 {
     int t, failed = 0, runs = 0;
-    for (t = 0; t < 3000; t++) {
-        unsigned long sw = 1 + rnd(t < 2000 ? 64 : 700), sh = 1 + rnd(t < 2000 ? 64 : 500);
+#if defined(__m68k__) || defined(__mc68000__)
+    /* (run by vamos: the 68k build, shrink68k.s's; fewer, smaller) */
+    const int runs_n = 600, small_n = 500, big = 200;
+#else
+    const int runs_n = 3000, small_n = 2000, big = 700;
+#endif
+    for (t = 0; t < runs_n; t++) {
+        unsigned long sw = 1 + rnd(t < small_n ? 64 : big), sh = 1 + rnd(t < small_n ? 64 : big * 5 / 7);
         unsigned long dw = 1 + rnd(sw), dh = 1 + rnd(sh), i, y, worst = 0;
         unsigned char *src = malloc(sw * sh * 3), *want = malloc(dw * dh * 3), *got;
         struct Shrink *k;

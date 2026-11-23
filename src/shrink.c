@@ -36,7 +36,8 @@ struct Shrink {
     UBYTE *carry[2];            /* rows kept from one band for the next (rmax each), */
     ULONG cy, cn;               /* the first of them and how many (in carry[0]) */
     const UBYTE **row;          /* rmax row pointers: the output row's source rows */
-    ULONG last_n, rec;
+    ULONG *rec;                 /* 65536 / n + 1 for every n a box can have (1 .. nmax) */
+    ULONG nmax;
 };
 
 /* 1.27 of zzprobe / this file's second form: each output pixel averaged
@@ -55,6 +56,7 @@ void shrink_free(struct Shrink *k)
     FreeVec(k->carry[0]);
     FreeVec(k->carry[1]);
     FreeVec((APTR)k->row);
+    FreeVec(k->rec);
     FreeVec(k);
 }
 
@@ -80,12 +82,40 @@ struct Shrink *shrink_new(ULONG sw, ULONG sh, ULONG dw, ULONG dh)
     }
     for (x = 0; x <= dw; x++)
         k->xb[x] = x * sw / dw;
+    {
+        /* the reciprocals, every n a box can have (its width, at least 1,
+         * times its rows): worked out once, not a divide whenever n changed
+         * (at 1.5:1 the widths go 1, 2, 1, 2: a divide a pixel) */
+        ULONG maxw = 1, n;
+        for (x = 0; x < dw; x++)
+            if (k->xb[x + 1] > k->xb[x] && k->xb[x + 1] - k->xb[x] > maxw)
+                maxw = k->xb[x + 1] - k->xb[x];
+        k->nmax = maxw * k->rmax;
+        if (!(k->rec = AllocVec((k->nmax + 1) * sizeof(ULONG), MEMF_ANY))) {
+            shrink_free(k);
+            return NULL;
+        }
+        k->rec[0] = 65537;
+        for (n = 1; n <= k->nmax; n++)
+            k->rec[n] = 65536UL / n + 1;
+    }
     return k;
 }
+
+/* On the 68k, by hand (shrink68k.s): the C's loads and adds went through
+ * one register, nothing paired on a 68060 (m68kprof). -DSHRINK_C: the C. */
+#if (defined(__m68k__) || defined(__mc68000__)) && !defined(SHRINK_C)
+#define SHRINK_ASM 1
+void shrink_out68k(UBYTE *d, const ULONG *xb, ULONG dw, const UBYTE **row, ULONG nr, const ULONG *rec);
+#endif
 
 /* output row oy from its source rows (k->row[0 .. nr-1]) */
 static void shrink_out(struct Shrink *k, ULONG oy, ULONG nr)
 {
+#ifdef SHRINK_ASM
+    shrink_out68k(k->out + oy * k->dw * 3, k->xb, k->dw, k->row, nr, k->rec);
+    return;
+#endif
     UBYTE *d = k->out + oy * k->dw * 3;
     const ULONG *xb = k->xb;
     ULONG x;
@@ -103,14 +133,10 @@ static void shrink_out(struct Shrink *k, ULONG oy, ULONG nr)
             }
         }
         n = (c1 - c0) * nr;
-        if (n != k->last_n) {
-            k->last_n = n;
-            k->rec = 65536UL / n + 1;
-        }
         h = n >> 1;
-        a = ((a + h) * k->rec) >> 16;
-        g = ((g + h) * k->rec) >> 16;
-        b = ((b + h) * k->rec) >> 16;
+        a = ((a + h) * k->rec[n]) >> 16;
+        g = ((g + h) * k->rec[n]) >> 16;
+        b = ((b + h) * k->rec[n]) >> 16;
         *d++ = (UBYTE)(a > 255 ? 255 : a);
         *d++ = (UBYTE)(g > 255 ? 255 : g);
         *d++ = (UBYTE)(b > 255 ? 255 : b);

@@ -61,7 +61,7 @@
 #include "stackcall.h"
 
 /* used: nothing reads it, but Version finds it in the file (unused, it was dropped) */
-static const char __attribute__((used)) version[] = "$VER: zzprobe 1.27 (22.11.2026)";
+static const char __attribute__((used)) version[] = "$VER: zzprobe 1.28 (22.11.2026)";
 
 extern struct ExecBase *SysBase;
 extern struct GfxBase *GfxBase;
@@ -1336,7 +1336,7 @@ static ULONG run(void *unused)
         dt.dat_StrTime = (STRPTR)clock;
         date[0] = clock[0] = 0;
         DateToStr(&dt);
-        sprintf(line, "======== zzprobe 1.27, %s %s ========", date, clock);
+        sprintf(line, "======== zzprobe 1.28, %s %s ========", date, clock);
         sayf(line);
         machine();
         board();

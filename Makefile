@@ -50,7 +50,7 @@ SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c
        src/jpgthumb.c src/shrink.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c src/classic/classic.c \
        src/classic/input.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o build/shrink68k.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
 # AmiSSL 6 where it is installed, else 5 (nothing of AmiSSL linked in)
@@ -131,6 +131,11 @@ build/c2p_test: tests/c2p_test.c build/c2p68k.o
 test-c2p: build/c2p_test
 	@cd build && vamos -C 68020 -m 8192 c2p_test > test-c2p.txt && test "$$(grep -c ' 0 failed' test-c2p.txt)" = 2 \
 		&& echo "  CHECK chunky to planar, and each pen twice across (68020 assembler) ok" || (cat test-c2p.txt; exit 1)
+
+build/shrink68k.o: src/shrink68k.s
+	@mkdir -p build
+	@echo "  ASM   $@"
+	@$(VASM) -Fhunk -m68020 -quiet -o $@ $<
 
 build/animdraw68k.o: src/animdraw68k.s
 	@mkdir -p build
@@ -380,11 +385,11 @@ rtgbench: build/rtgbench
 # zzprobe: what a ZZ9000 offers this Amiga (board, libraries, datatypes,
 # the card's own report) and how fast Ambiance's uses of it are
 # (with jdec built in, to time the JPEG decoder alone)
-build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h src/shrink.c src/shrink.h \
+build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stackcall.h src/jdec/jdec.c src/jdec/jdec.h src/shrink.c src/shrink.h build/shrink68k.o \
                $(ZZ9K_SDK_STAMP)
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 -m68020-60 -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c -lamiga
+	@$(CC) -O2 -m68020-60 -mno-bitfield -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c build/shrink68k.o -lamiga
 zzprobe: build/zzprobe
 
 test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
@@ -483,8 +488,13 @@ build/shrink_host: tests/shrink_host.c src/shrink.c src/shrink.h
 	@mkdir -p build
 	@$(HOSTCC) -O2 -Wall -DSHRINK_HOST -o $@ tests/shrink_host.c src/shrink.c
 
-test-shrink: build/shrink_host
+build/shrink_68k: tests/shrink_host.c src/shrink.c src/shrink.h build/shrink68k.o
+	@$(CC) -O2 $(CPU) -noixemul -Wall -DSHRINK_HOST -o $@ tests/shrink_host.c src/shrink.c build/shrink68k.o
+
+test-shrink: build/shrink_host build/shrink_68k
 	@build/shrink_host > build/test-shrink.txt && echo "  CHECK pictures made small as they come ok" || (cat build/test-shrink.txt; exit 1)
+	@cd build && vamos -C 68020 -m 8192 -s 256 shrink_68k > test-shrink68k.txt && grep -q " 0 failed" test-shrink68k.txt \
+		&& echo "  CHECK pictures made small as they come (68020 assembler) ok" || (cat test-shrink68k.txt; exit 1)
 
 test-animdraw: build/animdraw_host build/animdraw_68k
 	@build/animdraw_host > build/test-animdraw.txt && echo "  CHECK animation drawing ok" || (cat build/test-animdraw.txt; exit 1)
@@ -748,10 +758,13 @@ $(SQLIB): build/sqlib/libinit.o src/sqlib/ambsql.c extras/sqlite/libsqlite3.a ex
 
 # jdec, Ambiance's JPEG decoder (src/jdec), built in for JPEG thumbnails
 # (src/jpgthumb.c); -O2: it is the hot path
+# -mno-bitfield: GCC's bfextu for (x >> n) & mask is several cycles and
+# unpaired on a 68060, where a shift and an and pair (m68kprof: the IDCT
+# 19% quicker, the upsampling 16%); no slower on a 68020/030
 build/jdec.o: src/jdec/jdec.c src/jdec/jdec.h
 	@mkdir -p build
 	@echo "  CC    $<"
-	@$(CC) -O2 $(CPU) -noixemul -Wall -Wextra -c -o $@ $<
+	@$(CC) -O2 $(CPU) -mno-bitfield -noixemul -Wall -Wextra -c -o $@ $<
 
 # ---- Aminet: the upload's readme (build/aminet/AmbianceMC.readme: plain
 # ASCII, its version, 78 characters a line; tools/aminet_readme.py) checked

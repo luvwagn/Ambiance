@@ -140,8 +140,22 @@ static const int16_t aan[64] = {       /* s(u)s(v) in Q14, s(0)=1, s(k)=sqrt2 co
      4520,  6270,  5906,  5315,  4520,  3552,  2446,  1247
 };
 
-/* x (16 bits) times a constant below 0.5 in Q16: one muls.w, the high word */
+/* x (16 bits) times a constant below 0.5 in Q16: one muls.w, the high word.
+ * On the 68k the muls.w is forced: GCC (16.2, even with -m68060) turns a
+ * multiply by a constant into 10 to 15 shifts and adds, a 68020's trade
+ * (muls.w 28 cycles there, about the same as the chain) but a 68060's
+ * loss (muls.w 2 cycles): the IDCTs took about 1,400 instructions a block
+ * where 500 do (tools/m68kprof). The same arithmetic: the same pixels. */
+#if defined(__m68k__) || defined(__mc68000__)
+static inline int32_t mulf_(int32_t x, int16_t c)
+{
+    __asm__("muls.w %1,%0" : "+d"(x) : "dmi"(c));
+    return x >> 16;
+}
+#define MULF(x, c) mulf_((int32_t)(x), (int16_t)(c))
+#else
 #define MULF(x, c) ((int32_t)(int16_t)(x) * (int16_t)(c) >> 16)
+#endif
 #define F0414 27146             /* sqrt2 - 1 */
 #define F0152 9977              /* 2 - 2cos(pi/8): 1.847759065 = 2 - this */
 #define F0082 5400              /* 1.082392200 - 1 */
