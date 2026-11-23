@@ -328,9 +328,14 @@ static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from
  * from its start, holding the file from where the card got to, as the
  * card's own zz9k-jpeg feeds it. On a real A3000 256 KB chunks fed at an
  * offset got nothing taken at all; this way (zzprobe 1.20) every photo
- * decoded. The file is read into fast RAM in one go first (as jdec's is):
+ * decoded. The file comes from a window in fast RAM read in big pieces:
  * 32 KB reads cost a disk's latency each, some 3 s for a 12 MP photo
- * (zzprobe 1.21) */
+ * (zzprobe 1.21). The window is sized to the memory free: 512 KB (a
+ * 1080p photo whole, a 12 MP one in five reads) with more than 4 MB in
+ * one piece, 128 KB with more than 1 MB, else the 32 KB itself; with not
+ * even that, the picture is jdec's (or says it hasn't the memory) */
+#define ZZ_WIN_BIG (512 * 1024)
+#define ZZ_WIN_MID (128 * 1024)
 #define ZZ_STAGE ZZ_BOUNCE
 #define ZZ_STALL_MS 3000        /* a session taking none of the file this long is stuck */
 
@@ -354,7 +359,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cpos = 0, spos = 0, staged = 0, sess = 0,
           t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0, quiet;
     BOOL ready = FALSE;
-    UBYTE *file = NULL;
+    UBYTE *win = NULL;          /* the file from wstart, wlen bytes (wsize at most) */
+    ULONG wsize, wstart = 0, wlen = 0;
     BOOL prog = FALSE, began = FALSE, w16 = s16 && zz_565 && !no565 && maxcol <= THUMB_DEEP;
     ZZ9KSurface s16f;           /* w16: the card's scaler copies the picture into it as RGB565 */
     int st = ZZ9K_STATUS_OK;
@@ -381,10 +387,19 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     memset(&sf, 0, sizeof(sf));
     memset(&s16f, 0, sizeof(s16f));
     size = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE;
-    if (!(file = AllocVec((ULONG)flen, MEMF_ANY)) || Read(fh, file, flen) != flen) {
-        FreeVec(file);
-        Close(fh);
-        return NULL;
+    {
+        ULONG big = AvailMem(MEMF_ANY | MEMF_LARGEST);
+        wsize = big > 4UL << 20 ? ZZ_WIN_BIG : big > 1UL << 20 ? ZZ_WIN_MID : ZZ_STAGE;
+        if (wsize > (ULONG)flen)
+            wsize = (ULONG)flen;
+        if (!(win = AllocVec(wsize, MEMF_ANY)) && wsize > ZZ_STAGE &&
+            (wsize = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE))
+            win = AllocVec(wsize, MEMF_ANY);
+        if (!win) {
+            view_say(path, "memory for reading it (32 KB)", ZZ9K_STATUS_NO_MEMORY, time_ms() - t0);
+            Close(fh);
+            return NULL;
+        }
     }
     amb_card_lock();
     if ((st = ZZ9KAllocShared(size, 16, ZZ9K_ALLOC_HOST_WINDOW, &buf)) != ZZ9K_STATUS_OK)
@@ -425,7 +440,16 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     while (!stage) {
         ULONG n = (ULONG)flen - cpos < size ? (ULONG)flen - cpos : size, took;
         if (!ready || spos != cpos || staged != n) {   /* the file from where the card got to */
-            CopyMem(file + cpos, (APTR)buf.data, n);
+            if (cpos < wstart || cpos + n > wstart + wlen) {   /* the window moved on, a big read */
+                ULONG want = (ULONG)flen - cpos < wsize ? (ULONG)flen - cpos : wsize;
+                wstart = cpos;
+                if (Seek(fh, (LONG)cpos, OFFSET_BEGINNING) < 0 || Read(fh, win, (LONG)want) != (LONG)want) {
+                    stage = "reading the file", st = -1;
+                    break;
+                }
+                wlen = want;
+            }
+            CopyMem(win + (cpos - wstart), (APTR)buf.data, n);
             CacheClearE((APTR)buf.data, n, CACRF_ClearD);
             spos = cpos;
             staged = n;
@@ -468,8 +492,8 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             zz_view_on = FALSE;
         }
     }
-    FreeVec(file);
-    file = NULL;
+    FreeVec(win);
+    win = NULL;
     if (began) {
         ZZ9KRequest rq;
         if (zz9k_request_image_session_close(&rq, sess, 0) == ZZ9K_STATUS_OK)

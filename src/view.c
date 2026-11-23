@@ -1197,10 +1197,13 @@ static void rgb_forget(void)
 }
 
 /* A thumb's pixels as RGB, 3 bytes each (NULL: no memory) */
+/* Kept only with room to spare (4 MB in one piece besides): a fade does
+ * without (it reads the screen back, as before), a decode does not */
+#define RGB_SPARE (4UL << 20)
 static UBYTE *thumb_rgb(const struct Thumb *t)
 {
-    UBYTE *b = AllocVec((ULONG)t->w * t->h * 3, MEMF_ANY), *d = b;
-    ULONG x, y, v;
+    ULONG n = (ULONG)t->w * t->h * 3, x, y, v;
+    UBYTE *b = AvailMem(MEMF_ANY | MEMF_LARGEST) >= n + RGB_SPARE ? AllocVec(n, MEMF_ANY) : NULL, *d = b;
     if (!b)
         return NULL;
     for (y = 0; y < t->h; y++)

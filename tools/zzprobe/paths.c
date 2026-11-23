@@ -527,14 +527,18 @@ static void pb_card_wrote(volatile const void *p, ULONG len)
  * to 1.19: 256 KB chunks fed at an offset; on a real A3000 the sessions
  * took none of it.) */
 #define PB_STAGE (32 * 1024)
-/* 1.22: the file read into fast RAM in one go and each feed's 32 KB copied
- * from there (1.21 read it 32 KB at a time, a disk's latency each) */
+/* 1.22: each feed's 32 KB copied from fast RAM, not read 32 KB at a time
+ * (a disk's latency each); 1.23: from a window of the file as Ambiance's
+ * (512 KB, 128 KB or 32 KB by the memory free), not the whole file */
+#define PB_WIN_BIG (512 * 1024)
+#define PB_WIN_MID (128 * 1024)
 struct PbFeed {
     BPTR fh;
     LONG len;                   /* the file's */
     ZZ9KSharedBuffer buf;
     ULONG size;                 /* the buffer's */
-    UBYTE *file;                /* sessions: the whole file, fast RAM */
+    UBYTE *file;                /* sessions: the window, fast RAM: the file from wstart, wlen bytes */
+    ULONG wsize, wstart, wlen;
     ULONG cpos;                 /* how much of it the card has taken */
     ULONG spos, staged;         /* what is in the buffer: from spos, staged bytes */
     BOOL ready;
@@ -555,16 +559,14 @@ static int pb_feed_open(struct PbFeed *f, const char *path, ULONG size)
         f->fh = 0;
         f->buf.handle = 0;
     } else if (size <= PB_STAGE) {
-        ULONG t0 = now_us();
-        if (!(f->file = AllocVec((ULONG)f->len, MEMF_ANY))) {
+        ULONG big = AvailMem(MEMF_ANY | MEMF_LARGEST);
+        f->wsize = big > 4UL << 20 ? PB_WIN_BIG : big > 1UL << 20 ? PB_WIN_MID : PB_STAGE;
+        if (f->wsize > (ULONG)f->len)
+            f->wsize = (ULONG)f->len;
+        if (!(f->file = AllocVec(f->wsize, MEMF_ANY))) {
             pb_feed_close(f);
             return ZZ9K_STATUS_NO_MEMORY;
         }
-        if (Read(f->fh, f->file, f->len) != f->len) {
-            pb_feed_close(f);
-            return ZZ9K_STATUS_IO_ERROR;
-        }
-        pb_t_file += now_us() - t0;
     }
     return st;
 }
@@ -575,8 +577,17 @@ static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG s
     ULONG rest = (ULONG)f->len - f->cpos, n = rest < f->size ? rest : f->size;
     if (!f->ready || f->spos != f->cpos || f->staged != n) {
         ULONG t0 = now_us();
+        if (f->cpos < f->wstart || f->cpos + n > f->wstart + f->wlen) {
+            ULONG want = (ULONG)f->len - f->cpos < f->wsize ? (ULONG)f->len - f->cpos : f->wsize;
+            f->wstart = f->cpos;
+            if (Seek(f->fh, (LONG)f->cpos, OFFSET_BEGINNING) < 0 || Read(f->fh, f->file, (LONG)want) != (LONG)want)
+                return FALSE;
+            f->wlen = want;
+            pb_t_file += now_us() - t0;
+            t0 = now_us();
+        }
         if (n) {
-            CopyMem(f->file + f->cpos, (APTR)f->buf.data, n);
+            CopyMem(f->file + (f->cpos - f->wstart), (APTR)f->buf.data, n);
             CacheClearE((APTR)f->buf.data, n, CACRF_ClearD);
         }
         f->spos = f->cpos;

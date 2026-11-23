@@ -33,6 +33,17 @@
 #include <cybergraphx/cybergraphics.h>
 
 #define WHOLE_MAX (4L << 20)    /* a file up to this read whole; bigger, streamed */
+/* Read whole only with this much left over in one piece besides (the
+ * decoded picture comes next: 9 MB for a 12 MP photo at half size); else
+ * streamed through a 64 KB window, a few big reads rather than jdec's 4 KB
+ * ones (each a disk's latency: an A3000's SCSI read 1.9 MB/s at best) */
+#define WHOLE_SPARE (4L << 20)
+#define STREAM_BUF (64L * 1024)
+
+static BOOL whole_ok(LONG len)
+{
+    return len > 0 && len <= WHOLE_MAX && AvailMem(MEMF_ANY | MEMF_LARGEST) >= (ULONG)len + WHOLE_SPARE;
+}
 
 /* ---- the files jdec turned down, once each */
 static struct SignalSemaphore note_lock;
@@ -99,6 +110,9 @@ struct JSrc {
     BPTR fh;                    /* streamed, or */
     const UBYTE *mem;           /* the file read whole */
     ULONG len, pos;
+    UBYTE *buf;                 /* streamed: the window (STREAM_BUF), bpos of blen read */
+    ULONG bpos, blen;
+    BOOL nobuf;                 /* (no memory even for that: jdec's own 4 KB reads) */
     UBYTE *rgb;                 /* the picture decoded, w * 3 a row */
     ULONG w, h;
 };
@@ -111,6 +125,22 @@ static int32_t j_read(void *ctx, uint8_t *buf, int32_t n)
             n = (int32_t)(s->len - s->pos);
         CopyMem((APTR)(s->mem + s->pos), buf, (ULONG)n);
         s->pos += (ULONG)n;
+        return n;
+    }
+    if (!s->buf && !s->nobuf && !(s->buf = AllocVec(STREAM_BUF, MEMF_ANY)))
+        s->nobuf = TRUE;
+    if (s->buf) {
+        if (s->bpos >= s->blen) {
+            LONG r = Read(s->fh, s->buf, STREAM_BUF);
+            if (r <= 0)
+                return (int32_t)r;
+            s->blen = (ULONG)r;
+            s->bpos = 0;
+        }
+        if ((ULONG)n > s->blen - s->bpos)
+            n = (int32_t)(s->blen - s->bpos);
+        CopyMem(s->buf + s->bpos, buf, (ULONG)n);
+        s->bpos += (ULONG)n;
         return n;
     }
     return (int32_t)Read(s->fh, buf, n);
@@ -155,6 +185,19 @@ static const char *why_not(int r)
  * smaller: a 12-megapixel photo for a 1280 x 1024 slideshow then comes
  * 768 x 1020 for a 771 x 1024 place, the rest made up by the scaling
  * after, rather than going to a datatype that takes seconds or fails. */
+/* said once a run: a picture decoded smaller for the memory */
+static void mem_short(ULONG w, ULONG h)
+{
+    static BOOL said;
+    char m[120];
+    if (said)
+        return;
+    said = TRUE;
+    sprintf(m, "not enough memory in one piece for %lu x %lu: decoded a scale smaller (said once)",
+            (unsigned long)w, (unsigned long)h);
+    amb_log("jpeg", m);
+}
+
 static int j_decode(JDec **pd, struct JSrc *s, const JDecIO *io, JDecInfo *info, int *scale)
 {
     for (;;) {
@@ -164,8 +207,15 @@ static int j_decode(JDec **pd, struct JSrc *s, const JDecIO *io, JDecInfo *info,
         s->w = (ULONG)ow;
         s->h = (ULONG)oh;
         FreeVec(s->rgb);
-        if (!(s->rgb = AllocVec(s->w * s->h * 3, MEMF_ANY | MEMF_CLEAR)))
-            return JD_ENOMEM;
+        if (!(s->rgb = AllocVec(s->w * s->h * 3, MEMF_ANY | MEMF_CLEAR))) {
+            /* short of memory: a scale smaller (a quarter of the bytes), the
+             * rest made up by the scaling after, rather than no picture */
+            if (*scale >= 3)
+                return JD_ENOMEM;
+            (*scale)++;
+            mem_short(s->w, s->h);
+            continue;
+        }
         r = jd_decode(*pd, *scale);
         if (r != JD_ENOMEM || !info->progressive || *scale >= 3)
             return r;
@@ -173,8 +223,10 @@ static int j_decode(JDec **pd, struct JSrc *s, const JDecIO *io, JDecInfo *info,
         *pd = NULL;
         if (s->mem)
             s->pos = 0;
-        else
+        else {
             Seek(s->fh, 0, OFFSET_BEGINNING);
+            s->bpos = s->blen = 0;
+        }
         if ((r = jd_open(pd, io, info)))
             return r;
         (*scale)++;
@@ -204,7 +256,7 @@ static struct Thumb *jpeg_read(const char *path, WORD w, WORD h, BOOL tall, BOOL
         goto out;                           /* not a JPEG: someone else's */
     Seek(s.fh, 0, OFFSET_END);
     len = Seek(s.fh, 0, OFFSET_BEGINNING);
-    if (len > 0 && len <= WHOLE_MAX && (file = AllocVec((ULONG)len, MEMF_ANY))) {
+    if (whole_ok(len) && (file = AllocVec((ULONG)len, MEMF_ANY))) {
         if (Read(s.fh, file, len) == len) {
             s.mem = file;
             s.len = (ULONG)len;
@@ -261,6 +313,7 @@ out:
     if (d)
         jd_close(d);
     FreeVec(s.rgb);
+    FreeVec(s.buf);
     FreeVec(file);
     Close(s.fh);
     return t;
@@ -304,7 +357,7 @@ struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap
         goto out;                           /* not a JPEG */
     Seek(s.fh, 0, OFFSET_END);
     len = Seek(s.fh, 0, OFFSET_BEGINNING);
-    if (len > 0 && len <= WHOLE_MAX && (file = AllocVec((ULONG)len, MEMF_ANY))) {
+    if (whole_ok(len) && (file = AllocVec((ULONG)len, MEMF_ANY))) {
         if (Read(s.fh, file, len) == len) {
             s.mem = file;
             s.len = (ULONG)len;
@@ -354,6 +407,7 @@ out:
     if (d)
         jd_close(d);
     FreeVec(s.rgb);
+    FreeVec(s.buf);
     FreeVec(file);
     Close(s.fh);
     return bm;
