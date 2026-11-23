@@ -392,6 +392,16 @@ build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stack
 	@$(CC) -O2 -m68020-60 -mno-bitfield -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c build/shrink68k.o -lamiga
 zzprobe: build/zzprobe
 
+# ambbench: real-machine times of Ambiance's 68k code (chip and fast RAM,
+# the c2p routines, ambmpega's MP3 and mpegv's video), for tools/m68kprof's
+# estimates; build/ambbench-dist the drawer to copy over (Libs and Bench)
+build/ambbench: tools/ambbench/ambbench.c tools/zzprobe/stackcall.h build/c2p68k.o
+	@mkdir -p build
+	@echo "  CC    $<"
+	@$(CC) -O2 -m68020-60 -mno-bitfield -noixemul -Wall -Wno-pointer-sign -Iextras/mpga/include \
+		-Iextras/mpegv/include -s -o $@ $< build/c2p68k.o -lamiga
+ambbench: build/ambbench
+
 test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
