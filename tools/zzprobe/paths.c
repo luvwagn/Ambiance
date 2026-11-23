@@ -616,6 +616,10 @@ static void pb_step(const char *file, const char *box, const char *path)
              path);
     Write(fh, l, strlen(l));
     Close(fh);
+    /* in the Shell too (not in zzprobe.txt): a row only shows once all of
+     * its columns are done, minutes apart on a real 68060 */
+    snprintf(l, sizeof(l), "    ...%.40s at %s: %s\n", FilePart((STRPTR)file), box, path);
+    PutStr((CONST_STRPTR)l);
 }
 
 static void pb_say(const char *s)
