@@ -440,14 +440,20 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     while (!stage) {
         ULONG n = (ULONG)flen - cpos < size ? (ULONG)flen - cpos : size, took;
         if (!ready || spos != cpos || staged != n) {   /* the file from where the card got to */
-            if (cpos < wstart || cpos + n > wstart + wlen) {   /* the window moved on, a big read */
-                ULONG want = (ULONG)flen - cpos < wsize ? (ULONG)flen - cpos : wsize;
-                wstart = cpos;
-                if (Seek(fh, (LONG)cpos, OFFSET_BEGINNING) < 0 || Read(fh, win, (LONG)want) != (LONG)want) {
+            if (cpos + n > wstart + wlen) {   /* the window moved on: what is left kept, the next read */
+                /* straight on from the last read, no Seek: on the A3000 a
+                 * read from where the card had got to (an odd place) went at
+                 * 0.6 MB/s, straight on 1.9 MB/s (zzprobe 1.24) */
+                ULONG keep = wstart + wlen - cpos, end = wstart + wlen;
+                ULONG want = (ULONG)flen - end < wsize - keep ? (ULONG)flen - end : wsize - keep;
+                if (keep)
+                    memmove(win, win + (cpos - wstart), keep);
+                if (want && Read(fh, win + keep, (LONG)want) != (LONG)want) {
                     stage = "reading the file", st = -1;
                     break;
                 }
-                wlen = want;
+                wstart = cpos;
+                wlen = keep + want;
             }
             CopyMem(win + (cpos - wstart), (APTR)buf.data, n);
             CacheClearE((APTR)buf.data, n, CACRF_ClearD);

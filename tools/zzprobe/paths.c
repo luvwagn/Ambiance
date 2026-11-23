@@ -606,12 +606,18 @@ static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG s
     ULONG rest = (ULONG)f->len - f->cpos, n = rest < f->size ? rest : f->size;
     if (!f->ready || f->spos != f->cpos || f->staged != n) {
         ULONG t0 = now_us();
-        if (f->cpos < f->wstart || f->cpos + n > f->wstart + f->wlen) {
-            ULONG want = (ULONG)f->len - f->cpos < f->wsize ? (ULONG)f->len - f->cpos : f->wsize;
-            f->wstart = f->cpos;
-            if (Seek(f->fh, (LONG)f->cpos, OFFSET_BEGINNING) < 0 || Read(f->fh, f->file, (LONG)want) != (LONG)want)
+        if (f->cpos + n > f->wstart + f->wlen) {
+            /* 1.26: what is left kept, the next read straight on from the
+             * last, no Seek (1.24's read from where the card got to went at
+             * 0.6 MB/s on the A3000, against 1.9 straight on) */
+            ULONG keep = f->wstart + f->wlen - f->cpos, end = f->wstart + f->wlen;
+            ULONG want = (ULONG)f->len - end < f->wsize - keep ? (ULONG)f->len - end : f->wsize - keep;
+            if (keep)
+                memmove(f->file, f->file + (f->cpos - f->wstart), keep);
+            if (want && Read(f->fh, f->file + keep, (LONG)want) != (LONG)want)
                 return FALSE;
-            f->wlen = want;
+            f->wstart = f->cpos;
+            f->wlen = keep + want;
             pb_t_file += now_us() - t0;
             t0 = now_us();
         }
