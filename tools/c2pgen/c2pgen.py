@@ -99,6 +99,39 @@ def asm(ops, loc):
         L.append('\tmove.l\t%s,(0,a4,a6.l)' % loc[OUT[k + 1]])
     return L
 
+def asm_sb(ops, loc, spread=8):
+    """va_c2p68k_sb's step, for a CPU with a store buffer (68040, 68060):
+    the previous step's 8 longs (left in 32 bytes at (sp)) written to chip
+    RAM one at a time between this step's merges, so the chip bus is kept
+    busy while the step computes, not given 8 writes at its end. Returns
+    (the merges alone, the merges with the writes, the step's end: its
+    longs kept at (sp), the writes alone)."""
+    plain = asm(ops, loc)[:-12]                 # (no stores)
+    regs = sorted(set(loc.values()), key=lambda r: (r[0] == 'a', int(r[1])))
+    off = {r: 4 * i for i, r in enumerate(regs)}
+    def write(k, ar):
+        return ['\tmove.l\t%d(a1),%s' % (k * 4, ar),
+                '\tmove.l\t%d(sp),(-4,%s,a6.l)' % (off[loc[OUT[k]]], ar)]
+    # each write's two halves a few merges apart (the pointer loaded before
+    # it is used), a3/a4/a5 in turn
+    n = len(plain)
+    at = {}
+    for k in range(8):
+        i = 2 + (k * (n - 8)) // 8
+        ar = ('a3', 'a4', 'a5')[k % 3]
+        w = write(k, ar)
+        at.setdefault(i, []).append(w[0])
+        at.setdefault(i + 4, []).append(w[1])
+    mixed = []
+    for i, l in enumerate(plain):
+        mixed += at.get(i, [])
+        mixed.append(l)
+    keep = ['\tmovem.l\t%s,(sp)' % '/'.join(regs)]
+    flush = []
+    for k in range(8):
+        flush += write(k, ('a3', 'a4', 'a5')[k % 3])
+    return plain, mixed, keep, flush
+
 ops, loc = gen()
 random.seed(1)
 for _ in range(20000):
@@ -108,6 +141,8 @@ for _ in range(20000):
     assert got == ref(c), (c, got, ref(c))
 body = asm(ops, loc)
 n = sum(1 for l in body if l.startswith('\t'))
+sb_plain, sb_mixed, sb_keep, sb_flush = asm_sb(ops, loc)
+nsb = sum(1 for l in sb_mixed + sb_keep if l.startswith('\t'))
 
 # ---- each pen twice across (half size video, va_c2p2x68k): 16 pens in,
 # 32 pixels out. As addresses: a pen's bit is (long n: j3 j2 | byte j1 j0 |
@@ -182,7 +217,7 @@ def sim2(ops, x):
     return [out[k] for k in range(8)]
 
 
-def asm2(ops):
+def asm2(ops, twice=False):
     L = []
     for op in ops:
         o = op[0]
@@ -201,6 +236,9 @@ def asm2(ops):
             L.append('\tmovem.l\t%d(a1),a3-a4' % ((6 - 2 * n) * 4))
             L.append('\tmove.l\td%d,(0,a3,a6.l)' % n)
             L.append('\tmove.l\td4,(0,a4,a6.l)')
+            if twice:                   # (and the row below: d7 the offset there)
+                L.append('\tmove.l\td%d,(0,a3,d7.l)' % n)
+                L.append('\tmove.l\td4,(0,a4,d7.l)')
     return L
 
 
@@ -211,6 +249,8 @@ for _ in range(20000):
     assert sim2(ops2, x) == ref2(pens), (pens, sim2(ops2, x), ref2(pens))
 body2 = asm2(ops2)
 n2 = sum(1 for l in body2 if l.startswith('\t'))
+body2t = asm2(ops2, twice=True)
+n2t = sum(1 for l in body2t if l.startswith('\t'))
 out = sys.argv[1]
 with open(out, 'w') as f:
     f.write("""; Ambiance - 8-plane chunky to planar, 32 pixels a step, in registers
@@ -294,6 +334,82 @@ _va_c2p2x68k:
 .done2:
 	movem.l	(sp)+,d2-d7/a2-a6
 	rts
+
+; void va_c2p2x68k_twice(const UBYTE *src, ULONG groups, UBYTE **planes,
+;                        ULONG bpr)
+;   as va_c2p2x68k, each long written to the row below too (bpr bytes on):
+;   a half size picture's rows twice without the copper, its merges made
+;   once for both (not va_c2p2x68k twice over).
+; %d instructions a step (32 pixels, two rows).
+
+	xdef	_va_c2p2x68k_twice
+
+_va_c2p2x68k_twice:
+	movem.l	d2-d7/a2-a6,-(sp)
+	move.l	ARGS+0(sp),a0
+	move.l	ARGS+4(sp),d0
+	move.l	ARGS+8(sp),a1
+	move.l	ARGS+12(sp),d7			; the row below's offset
+	tst.l	d0
+	beq	.done4
+	move.l	d0,-(sp)			; groups left
+	sub.l	a6,a6				; the row's offset
+.group4:
+	movem.l	(a0)+,d0-d3
+""" % (n2t + 6))
+    f.write("\n".join(body2t) + "\n")
+    f.write("""	addq.l	#4,a6
+	addq.l	#4,d7
+	subq.l	#1,(sp)
+	bne	.group4
+	addq.l	#4,sp
+.done4:
+	movem.l	(sp)+,d2-d7/a2-a6
+	rts
+
+; void va_c2p68k_sb(const UBYTE *src, ULONG groups, UBYTE **planes)
+;   as va_c2p68k, for a 68040 or 68060 (it runs on a 68020 too, a little
+;   slower than va_c2p68k): their store buffer takes a few writes and lets
+;   the CPU go on, so a step's 8 longs written together at its end (as
+;   va_c2p68k does) keep it waiting for chip RAM while the next step could
+;   compute. Here each step's longs are kept in 32 bytes on the stack
+;   (one movem, in the cache) and written during the next step, one
+;   between each few merges; the last step's after the loop. The same
+;   merges, the same planes.
+; %d instructions a step.
+
+	xdef	_va_c2p68k_sb
+
+_va_c2p68k_sb:
+	movem.l	d2-d7/a2-a6,-(sp)
+	move.l	ARGS+0(sp),a0
+	move.l	ARGS+4(sp),d0
+	move.l	ARGS+8(sp),a1
+	tst.l	d0
+	beq	.done3
+	move.l	d0,-(sp)			; groups left (32(sp))
+	lea	-32(sp),sp			; the last step's longs
+	sub.l	a6,a6				; the row's offset
+	movem.l	(a0)+,d0-d6/a2
+""" % nsb)
+    f.write("\n".join(sb_plain + sb_keep) + "\n")
+    f.write("""	addq.l	#4,a6
+	subq.l	#1,32(sp)
+	beq	.flush3
+.group3:
+	movem.l	(a0)+,d0-d6/a2
 """)
-print("c2pgen: %d instructions a step, checked on 20000 random steps; each pen twice: %d (32 pixels)"
-      % (n, n2))
+    f.write("\n".join(sb_mixed + sb_keep) + "\n")
+    f.write("""	addq.l	#4,a6
+	subq.l	#1,32(sp)
+	bne	.group3
+.flush3:
+""")
+    f.write("\n".join(sb_flush) + "\n")
+    f.write("""	lea	36(sp),sp
+.done3:
+	movem.l	(sp)+,d2-d7/a2-a6
+	rts
+""")
+print("c2pgen: %d instructions a step, checked on 20000 random steps; each pen twice: %d (32 pixels);"
+      " store buffer's: %d; two rows: %d" % (n, n2, nsb, n2t))

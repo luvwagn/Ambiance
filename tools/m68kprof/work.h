@@ -9,6 +9,7 @@ struct Work {
     uint32_t dw, dh, bw, bh;    /* out: the size made, jdec's size */
     int32_t scale;              /* out: jdec's 1/(1 << scale) */
     uint8_t *out;               /* out: dw x dh RGB */
+    uint32_t out_len;           /* out: its length, when not dw x dh x 3 */
 };
 enum { WORK_OPEN = 1, WORK_DECODE, WORK_DONE };
 int work_run(struct Work *w);

@@ -3669,9 +3669,13 @@ static UWORD (*va_yt)[256];                 /* Y's part: 16 dither phases (4 x 4
 static UBYTE (*va_ut)[256], (*va_vt)[256];  /* Cb's, Cr's: 4 phases (2 x 2 a block) */
 void va_c2p68k(const UBYTE *src, ULONG groups, UBYTE **planes);     /* c2p68k.s */
 void va_c2p2x68k(const UBYTE *src, ULONG groups, UBYTE **planes);   /* (each pen twice: half size) */
+void va_c2p68k_sb(const UBYTE *src, ULONG groups, UBYTE **planes);  /* (a 68040's or 68060's: their
+                                             * store buffer kept busy, the writes spread) */
+void va_c2p2x68k_twice(const UBYTE *src, ULONG groups, UBYTE **planes, ULONG bpr); /* (two rows) */
 void va_pens68k(const UBYTE *y, const UWORD *cl, UBYTE *dst, ULONG quads, const UWORD *yt4,
                 const UBYTE *lut);          /* pens68k.s */
 static BYTE va_asm = -1;                    /* the assemblers' (1), or the C (0: Ambiance/VideoC2P=C) */
+static BOOL va_sb;                          /* a 68040 or 68060: va_c2p68k_sb */
 static UWORD *va_yt4;                       /* Y's part again, a row's 4 phases side by side:
                                              * [y & 3][Y * 4 + x & 3] (pens68k.s) */
 static UWORD *va_cl;                        /* a row of blocks' Cb and Cr part */
@@ -4075,8 +4079,10 @@ static void va_asm_pick(void)
     char ev[4];
     va_asm = !(GetVar((CONST_STRPTR)"Ambiance/VideoC2P", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0 &&
                (ev[0] == 'C' || ev[0] == 'c'));
-    amb_log("video: AGA", va_asm ? "pens and planes by the assembler (pens68k.s, c2p68k.s)"
-                                 : "pens and planes by the C (Ambiance/VideoC2P=C)");
+    va_sb = (SysBase->AttnFlags & (AFF_68040 | AFF_68060)) != 0;
+    amb_log("video: AGA", !va_asm ? "pens and planes by the C (Ambiance/VideoC2P=C)"
+                          : va_sb ? "pens and planes by the assembler (pens68k.s, c2p68k.s: the store buffer's)"
+                                  : "pens and planes by the assembler (pens68k.s, c2p68k.s)");
 }
 
 static void va_planes_row(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0, ULONG y)
@@ -4086,7 +4092,10 @@ static void va_planes_row(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x0,
     for (k = 0; k < 8; k++)
         pp[k] = (UBYTE *)bm->Planes[k] + y * bpr + (x0 >> 3);
     if (va_asm) {
-        va_c2p68k(rb, nl, pp);              /* (32 pixels a step, in registers) */
+        if (va_sb)
+            va_c2p68k_sb(rb, nl, pp);       /* (the last step's writes during the next) */
+        else
+            va_c2p68k(rb, nl, pp);          /* (32 pixels a step, in registers) */
         return;
     }
     for (x = 0; x < nl; x++) {
@@ -4109,12 +4118,10 @@ static void va_planes_row2x(const UBYTE *rb, ULONG bw, struct BitMap *bm, WORD x
     for (k = 0; k < 8; k++)
         pp[k] = (UBYTE *)bm->Planes[k] + y * bpr + (x0 >> 3);
     if (va_asm) {
-        va_c2p2x68k(rb, ng, pp);            /* (16 pens a step, in registers) */
-        if (twice) {
-            for (k = 0; k < 8; k++)
-                pp[k] += bpr;
-            va_c2p2x68k(rb, ng, pp);
-        }
+        if (twice)
+            va_c2p2x68k_twice(rb, ng, pp, bpr);     /* (both rows from one pass) */
+        else
+            va_c2p2x68k(rb, ng, pp);        /* (16 pens a step, in registers) */
         return;
     }
     for (x = 0; x < ng; x++) {

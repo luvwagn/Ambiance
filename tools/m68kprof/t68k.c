@@ -8,7 +8,7 @@
 #include "work.h"
 
 #define BOX ((volatile uint32_t *)0x400)
-enum { B_IN, B_INLEN, B_BOXW, B_BOXH, B_DW, B_DH, B_BW, B_BH, B_SCALE, B_OUT, B_R, B_HEAP, B_HEAPEND };
+enum { B_IN, B_INLEN, B_BOXW, B_BOXH, B_DW, B_DH, B_BW, B_BH, B_SCALE, B_OUT, B_R, B_HEAP, B_HEAPEND, B_OUTLEN };
 #define MARK (*(volatile uint32_t *)0x500)
 #define END (*(volatile uint32_t *)0x504)
 
@@ -106,5 +106,12 @@ void t_main(void)
     BOX[B_BH] = w.bh;
     BOX[B_SCALE] = (uint32_t)w.scale;
     BOX[B_OUT] = (uint32_t)w.out;
+    BOX[B_OUTLEN] = w.out_len;
     END = 1;
+}
+
+/* GCC's memmove for AmigaOS (bcopy's order: from, to, length) */
+void __bcopz(const void *s, void *d, size_t n)
+{
+    memmove(d, s, n);
 }

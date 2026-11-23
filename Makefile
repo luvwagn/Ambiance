@@ -129,8 +129,8 @@ build/c2p_test: tests/c2p_test.c build/c2p68k.o
 # the assembler chunky to planar (AGA video) against a plain one, on a 68020;
 # and its each-pen-twice one (half size video)
 test-c2p: build/c2p_test
-	@cd build && vamos -C 68020 -m 8192 c2p_test > test-c2p.txt && test "$$(grep -c ' 0 failed' test-c2p.txt)" = 2 \
-		&& echo "  CHECK chunky to planar, and each pen twice across (68020 assembler) ok" || (cat test-c2p.txt; exit 1)
+	@cd build && vamos -C 68020 -m 8192 c2p_test > test-c2p.txt && test "$$(grep -c ' 0 failed' test-c2p.txt)" = 3 \
+		&& echo "  CHECK chunky to planar (and the store buffer's), each pen twice across (and two rows at once) (68020 assembler) ok" || (cat test-c2p.txt; exit 1)
 
 build/shrink68k.o: src/shrink68k.s
 	@mkdir -p build
@@ -392,7 +392,7 @@ build/zzprobe: tools/zzprobe/zzprobe.c tools/zzprobe/paths.c tools/zzprobe/stack
 	@$(CC) -O2 -m68020-60 -mno-bitfield -noixemul -Wall -Wno-pointer-sign $(ZZ9K_CFLAGS) -s -o $@ $< src/jdec/jdec.c build/shrink68k.o -lamiga
 zzprobe: build/zzprobe
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt

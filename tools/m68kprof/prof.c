@@ -26,6 +26,16 @@
 static uint8_t *mem;
 static int done;
 
+/* the penalties (cycles), and a running clock for the chip bus's store
+ * buffer: chip RAM (PROF_CHIP=lo:hi, hex) is not cached; a write there waits
+ * only when the buffer (PROF_SB entries) is full, each drains in PROF_CHIPW
+ * cycles; a read waits for the buffer to empty and PROF_CHIPR more */
+static double mp_pen = 7, miss_pen = 20, wb_pen = 10, clk;
+static uint32_t chip_lo, chip_hi;
+static double chip_w = 27, chip_r = 30, sbq[16];
+static int sb_n = 4, sb_len;
+static uint64_t chip_stall, chip_writes, chip_reads;
+
 /* ---------------------------------------------------------------- symbols */
 struct Sym {
     uint32_t addr;
@@ -404,8 +414,10 @@ void prof_hook(unsigned int pc)
         struct Ins *p = &ins[(prev_pc - code_lo) >> 1];
         if (p->kind == K_BRANCH) {
             int taken = pc != prev_pc + p->len, guess = p->pred >= 2;
-            if (taken != guess)
+            if (taken != guess) {
                 pcc[(prev_pc - code_lo) >> 1].mp++;
+                clk += mp_pen;
+            }
             if (taken && p->pred < 3)
                 p->pred++;
             else if (!taken && p->pred > 0)
@@ -427,11 +439,16 @@ void prof_hook(unsigned int pc)
         prev_paired = 0;
     }
     c->cyc += cost;
+    clk += cost;
     /* the instruction cache: its first line (and a second if it spans one) */
-    if (cache_touch(&ic, pc, 0, NULL))
+    if (cache_touch(&ic, pc, 0, NULL)) {
         c->imiss++;
-    if (((pc + in->len - 1) >> 4) != (pc >> 4) && cache_touch(&ic, pc + in->len - 1, 0, NULL))
+        clk += miss_pen;
+    }
+    if (((pc + in->len - 1) >> 4) != (pc >> 4) && cache_touch(&ic, pc + in->len - 1, 0, NULL)) {
         c->imiss++;
+        clk += miss_pen;
+    }
     prev_pc = pc;
     prev_valid = 1;
 }
@@ -444,10 +461,44 @@ static void data_access(uint32_t a, int write)
         return;
     c = &pcc[(cur_pc - code_lo) >> 1];
     c->dacc++;
-    if (cache_touch(&dc, a, write, &wb))
+    if (a >= chip_lo && a < chip_hi) {
+        double st = 0;
+        int k, j;
+        /* drop the writes done by now */
+        for (k = j = 0; k < sb_len; k++)
+            if (sbq[k] > clk)
+                sbq[j++] = sbq[k];
+        sb_len = j;
+        if (write) {
+            chip_writes++;
+            if (sb_len >= sb_n) {
+                st = sbq[0] - clk;
+                memmove(sbq, sbq + 1, sizeof(double) * (size_t)(sb_len - 1));
+                sb_len--;
+            }
+            clk += st;
+            sbq[sb_len] = (sb_len ? sbq[sb_len - 1] : clk) + chip_w;
+            if (sbq[sb_len] < clk + chip_w)
+                sbq[sb_len] = clk + chip_w;
+            sb_len++;
+        } else {
+            chip_reads++;
+            st = (sb_len ? sbq[sb_len - 1] - clk : 0) + chip_r;
+            sb_len = 0;
+            clk += st;
+        }
+        c->cyc += (uint64_t)(st + 0.5);
+        chip_stall += (uint64_t)(st + 0.5);
+        return;
+    }
+    if (cache_touch(&dc, a, write, &wb)) {
         c->dmiss++;
-    if (wb)
+        clk += miss_pen;
+    }
+    if (wb) {
         c->dwb++;
+        clk += wb_pen;
+    }
 }
 
 /* ---------------------------------------------------------------- Musashi's memory */
@@ -585,7 +636,6 @@ int main(int argc, char **argv)
     uint32_t top, in_at, heap, i, nfn = 0;
     struct Fn *fn;
     uint64_t all[7];
-    double mp_pen = 7, miss_pen = 20, wb_pen = 10;
     if (argc < 5) {
         fprintf(stderr, "m68kprof t68k photo.jpg box_w box_h [out.rgb]\n");
         return 1;
@@ -595,6 +645,16 @@ int main(int argc, char **argv)
     if (getenv("PROF_MP"))
         mp_pen = atof(getenv("PROF_MP"));
     wb_pen = miss_pen / 2;
+    if (getenv("PROF_CHIP"))
+        sscanf(getenv("PROF_CHIP"), "%x:%x", &chip_lo, &chip_hi);
+    if (getenv("PROF_CHIPW"))
+        chip_w = atof(getenv("PROF_CHIPW"));
+    if (getenv("PROF_CHIPR"))
+        chip_r = atof(getenv("PROF_CHIPR"));
+    if (getenv("PROF_SB"))
+        sb_n = atoi(getenv("PROF_SB"));
+    if (sb_n < 1 || sb_n > 16)
+        sb_n = 4;
     mem = calloc(1, MEM_SIZE);
     top = load_hunks(argv[1]);
     if (getenv("PROF_SYMS")) {
@@ -642,8 +702,14 @@ int main(int argc, char **argv)
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68040);
     m68k_pulse_reset();
-    while (!done)
-        m68k_execute(1000000);
+    {
+        /* Musashi's own cycle count (its 68020-class timings): a 68020's
+         * view beside the 68060 model's */
+        uint64_t mus = 0;
+        while (!done)
+            mus += (uint64_t)m68k_execute(1000000);
+        printf("musashi cycles (68020-class) %llu\n", (unsigned long long)mus);
+    }
     totals(all);
     printf("result %d: %ux%u box %ux%u, jdec 1/%d to %ux%u, made %ux%u\n", (int)r32(BOX + 40), r32(BOX + 8),
            r32(BOX + 12), r32(BOX + 8), r32(BOX + 12), 1 << r32(BOX + 32), r32(BOX + 24), r32(BOX + 28), r32(BOX + 16),
@@ -653,6 +719,9 @@ int main(int argc, char **argv)
            (unsigned long long)all[0], (unsigned long long)all[1], (unsigned long long)all[2],
            (unsigned long long)all[3], (unsigned long long)all[4], (unsigned long long)all[6],
            (unsigned long long)all[5]);
+    if (chip_hi)
+        printf("chip: %llu writes, %llu reads, %llu cycles waited (in issue cycles); running clock %.0f\n",
+               (unsigned long long)chip_writes, (unsigned long long)chip_reads, (unsigned long long)chip_stall, clk);
     printf("est. cycles (mispredict %.0f, miss %.0f, writeback %.0f): %.0f\n", mp_pen, miss_pen, wb_pen,
            all[1] + all[2] * mp_pen + (all[3] + all[5]) * miss_pen + all[4] * wb_pen);
     {
@@ -700,6 +769,26 @@ int main(int argc, char **argv)
                (unsigned long long)fn[i].t[1], (unsigned long long)fn[i].t[2], (unsigned long long)fn[i].t[3],
                (unsigned long long)fn[i].t[4], (unsigned long long)fn[i].t[5], est);
     }
+    if (getenv("PROF_MPHOT")) {
+        /* the branches mispredicted most */
+        uint32_t want = (uint32_t)atoi(getenv("PROF_MPHOT")), k;
+        for (k = 0; k < want; k++) {
+            uint64_t best = 0;
+            uint32_t bi = 0;
+            char buf[256];
+            for (i = 0; i < (code_hi - code_lo) / 2; i++)
+                if (pcc[i].mp > best) {
+                    best = pcc[i].mp;
+                    bi = i;
+                }
+            if (!best)
+                break;
+            m68k_disassemble(buf, code_lo + bi * 2, M68K_CPU_TYPE_68040);
+            printf("  mp %08x %-14.14s %9llu of %10llu  %s\n", code_lo + bi * 2, syms[sym_of(code_lo + bi * 2)].name,
+                   (unsigned long long)best, (unsigned long long)pcc[bi].n, buf);
+            pcc[bi].mp = 0;
+        }
+    }
     if (getenv("PROF_HOT")) {
         /* the hottest instructions, disassembled */
         uint32_t want = (uint32_t)atoi(getenv("PROF_HOT")), k;
@@ -719,7 +808,7 @@ int main(int argc, char **argv)
         }
     }
     if (argc > 5) {
-        uint32_t o = r32(BOX + 36), sz = r32(BOX + 16) * r32(BOX + 20) * 3;
+        uint32_t o = r32(BOX + 36), sz = r32(BOX + 52) ? r32(BOX + 52) : r32(BOX + 16) * r32(BOX + 20) * 3;
         FILE *g = fopen(argv[5], "wb");
         if (g && o) {
             fwrite(mem + o, 1, sz, g);
