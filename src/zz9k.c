@@ -13,6 +13,7 @@
  * serialises the mailbox.
  */
 #include <exec/types.h>
+#include <exec/execbase.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <stdio.h>
@@ -22,6 +23,8 @@
 #include "zz9k/reply.h"
 #include "amb.h"
 #include "zz9k.h"
+
+static void zz_card_wrote(volatile const void *p, ULONG len);
 
 struct Library *ZZ9KBase;
 static int zz_opens;
@@ -101,7 +104,7 @@ static const char *probe_surface(void)
         sprintf(why, "no 68k address (%08lx, pitch %lu)", (unsigned long)sf.data,
                 (unsigned long)sf.pitch);
     else
-        for (y = 0; y < 16 && !*why; y++) {
+        for (zz_card_wrote(sf.data, sf.pitch * 16), y = 0; y < 16 && !*why; y++) {
             volatile const ULONG *row = (volatile const ULONG *)((volatile const UBYTE *)sf.data +
                                                                  y * sf.pitch);
             for (x = 0; x < 16; x++) {
@@ -152,7 +155,7 @@ static UBYTE probe_565(void)
     }
     amb_card_unlock();
     if (s == ZZ9K_STATUS_OK && sf.data && sf.pitch >= 32)
-        for (y = 0; y < 16; y++) {
+        for (zz_card_wrote(sf.data, sf.pitch * 16), y = 0; y < 16; y++) {
             volatile const UWORD *row = (volatile const UWORD *)((volatile const UBYTE *)sf.data +
                                                                  y * sf.pitch);
             for (x = 0; x < 16; x++) {
@@ -295,7 +298,7 @@ static BOOL jpeg_dims(BPTR fh, ULONG *w, ULONG *h, BOOL *prog)
 static void view_say(const char *path, const char *what, int st, ULONG ms)
 {
     static UWORD said;
-    char m[200];
+    char m[320];
     if (said >= 8)
         return;
     sprintf(m, "%.50s: on the card, %s (%s) after %lu ms: jdec instead%s", FilePart((STRPTR)path), what,
@@ -304,6 +307,40 @@ static void view_say(const char *path, const char *what, int st, ULONG ms)
 }
 
 static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from then on */
+
+/* The 68k's data cache and the card. A 68040/060's copyback cache keeps the
+ * last lines the 68k wrote until they are pushed out, and what it read of
+ * the card's memory after the card has changed it; the ZZ9000 docs ask for
+ * the card's memory to be mapped Writethrough or NoCache, which Ambiance
+ * cannot count on. And a disk's DMA may not reach Zorro III memory (the
+ * A3000's SCSI). On a real A3000/060 a session fed straight from Read()
+ * took none of the file: 100,000 feeds, 78 s, then nothing. So the file
+ * goes through fast RAM (bounce), the 68k copies it to the card and pushes
+ * its cache out; before the 68k reads what the card made, its own lines
+ * are dropped (zz_card_wrote). */
+#define ZZ_BOUNCE (32 * 1024)
+#define ZZ_STALL_MS 3000        /* a session taking none of the file this long is stuck */
+
+static BOOL zz_read_card(BPTR fh, volatile UBYTE *dst, ULONG len, UBYTE *bounce)
+{
+    volatile UBYTE *d = dst;
+    ULONG left = len;
+    while (left) {
+        ULONG n = left < ZZ_BOUNCE ? left : ZZ_BOUNCE;
+        if (Read(fh, bounce, (LONG)n) != (LONG)n)
+            return FALSE;
+        CopyMem(bounce, (APTR)d, n);
+        d += n;
+        left -= n;
+    }
+    CacheClearE((APTR)dst, len, CACRF_ClearD);
+    return TRUE;
+}
+
+static void zz_card_wrote(volatile const void *p, ULONG len)
+{
+    CacheClearE((APTR)p, len, CACRF_ClearD);
+}
 
 struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG maxcol,
                            struct PicInfo *pi, BOOL s16)
@@ -317,8 +354,9 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     struct Thumb *t = NULL;
     BPTR fh;
     LONG flen;
-    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, guard = 0, sess = 0,
-          t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0;
+    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, sess = 0,
+          t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0, quiet;
+    UBYTE *bounce = NULL;
     BOOL prog = FALSE, began = FALSE, w16 = s16 && zz_565 && !no565 && maxcol <= THUMB_DEEP;
     ZZ9KSurface s16f;           /* w16: the card's scaler copies the picture into it as RGB565 */
     int st = ZZ9K_STATUS_OK;
@@ -345,6 +383,10 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     memset(&sf, 0, sizeof(sf));
     memset(&s16f, 0, sizeof(s16f));
     size = (ULONG)flen < 256 * 1024 ? (ULONG)flen : 256 * 1024;
+    if (!(bounce = AllocVec(ZZ_BOUNCE, MEMF_ANY))) {
+        Close(fh);
+        return NULL;
+    }
     amb_card_lock();
     if ((st = ZZ9KAllocShared(size, 16, ZZ9K_ALLOC_HOST_WINDOW, &buf)) != ZZ9K_STATUS_OK)
         stage = "a shared buffer";
@@ -380,12 +422,13 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             sess = r.session;
         }
     }
+    quiet = time_ms();
     while (!stage) {
         if (fpos >= cstart + clen && fpos < (ULONG)flen) {   /* the next chunk */
             cstart = fpos;
             clen = (ULONG)flen - fpos < size ? (ULONG)flen - fpos : size;
             if (Seek(fh, (LONG)cstart, OFFSET_BEGINNING) < 0 ||
-                Read(fh, (APTR)buf.data, (LONG)clen) != (LONG)clen) {
+                !zz_read_card(fh, (volatile UBYTE *)buf.data, clen, bounce)) {
                 stage = "reading the file", st = -1;
                 break;
             }
@@ -410,11 +453,21 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             break;
         }
         fpos += r.bytes_consumed;
+        if (r.bytes_consumed)
+            quiet = time_ms();
         if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE)
             break;
-        if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR || ++guard > 20000)
+        if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR)
             stage = "its session (an error)", st = -1;
+        else if (time_ms() - quiet > ZZ_STALL_MS) {
+            /* stuck: not to cost 3 s a picture from now on */
+            stage = "its session (stuck: the card took none of the file for 3 s; the card's route is off "
+                    "until Ambiance starts again)", st = -1;
+            zz_view_on = FALSE;
+        }
     }
+    FreeVec(bounce);
+    bounce = NULL;
     if (began) {
         ZZ9KRequest rq;
         if (zz9k_request_image_session_close(&rq, sess, 0) == ZZ9K_STATUS_OK)
@@ -455,6 +508,10 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     }
     t1 = time_ms();
     if (!stage) {
+        if (w16)
+            zz_card_wrote(s16f.data, s16f.pitch * oh);
+        else
+            zz_card_wrote(sf.data, sf.pitch * oh);
         if (maxcol <= THUMB_DEEP) {
             if ((t = AllocVec(sizeof(struct Thumb) + ow * oh * 4, MEMF_ANY | MEMF_CLEAR))) {
                 ULONG *d;
@@ -614,8 +671,41 @@ int zz_alloc(ULONG length, struct ZzBuf *b)
     return s;
 }
 
+/* Up to len bytes of fh into b, through fast RAM (a disk's DMA may not
+ * reach the card's memory), the 68k's cache pushed out after; the bytes
+ * read, or -1 */
+LONG zz_read(BPTR fh, struct ZzBuf *b, ULONG len)
+{
+    ULONG got = 0;
+    if (len > b->length)
+        len = b->length;
+    if (!b->bounce && !(b->bounce = AllocVec(ZZ_BOUNCE, MEMF_ANY)))
+        return -1;
+    while (got < len) {
+        ULONG n = len - got < ZZ_BOUNCE ? len - got : ZZ_BOUNCE;
+        LONG r = Read(fh, b->bounce, (LONG)n);
+        if (r < 0)
+            return got ? (LONG)got : -1;
+        if (r)
+            CopyMem(b->bounce, (APTR)(b->data + got), (ULONG)r);
+        got += (ULONG)r;
+        if ((ULONG)r < n)
+            break;
+    }
+    if (got)
+        CacheClearE((APTR)b->data, got, CACRF_ClearD);
+    return (LONG)got;
+}
+
+void zz_fresh(const struct ZzBuf *b)
+{
+    if (b->data)
+        CacheClearE((APTR)b->data, b->length, CACRF_ClearD);
+}
+
 void zz_free(struct ZzBuf *b)
 {
+    FreeVec(b->bounce);
     if (b->handle) {
         amb_card_lock();
         ZZ9KFreeShared(b->handle);
@@ -744,6 +834,8 @@ int zz_write(ULONG session, const struct ZzBuf *in, ULONG off, ULONG len, BOOL e
     ZZ9KMediaSessionWriteDesc d;
     ZZ9KRequest rq;
     int s;
+    if (len)                            /* what the 68k wrote, out of its cache */
+        CacheClearE((APTR)(in->data + off), len, CACRF_ClearD);
     memset(&d, 0, sizeof(d));
     d.session = session;
     d.src_handle = in->handle;

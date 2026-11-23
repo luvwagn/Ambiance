@@ -10,6 +10,7 @@
 #define AMB_ZZ9K_H
 
 #include <exec/types.h>
+#include <dos/dos.h>
 
 typedef unsigned long long ZzU64;
 
@@ -36,6 +37,7 @@ struct ZzBuf {
     ULONG handle;
     volatile UBYTE *data;       /* the 68k's view of it */
     ULONG length;
+    UBYTE *bounce;              /* zz_read's, in fast RAM */
 };
 
 struct ZzMain {
@@ -70,6 +72,8 @@ const char *zz_name(int status);
 const char *zz_video_check(BOOL mpeg2, BOOL mp2);
 int zz_alloc(ULONG length, struct ZzBuf *b);    /* host-visible, shared */
 void zz_free(struct ZzBuf *b);
+LONG zz_read(BPTR fh, struct ZzBuf *b, ULONG len);  /* a file into it, through fast RAM */
+void zz_fresh(const struct ZzBuf *b);   /* before the 68k reads what the card wrote into it */
 enum { ZZ_AUDIO_NONE = 0, ZZ_AUDIO_MP2 = 1, ZZ_AUDIO_AC3 = 3 };   /* (the SDK's numbers) */
 int zz_begin(ULONG w, ULONG h, BOOL mpeg2, int audio, const struct ZzBuf *pcm,
              struct ZzMain *r);

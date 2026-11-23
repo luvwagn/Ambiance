@@ -418,6 +418,45 @@ struct PbApi {
  * window far less). Each feed offers what is left of the chunk loaded; once
  * it is used up, the next is read in; the last carries EOF. */
 #define PB_CHUNK (256 * 1024)
+
+/* ---- the 68k's data cache and the card. A 68040/060's copyback cache
+ * keeps the last lines the 68k wrote until they are pushed out, and keeps
+ * what it read of the card's memory after the card changes it; the ZZ9000
+ * docs ask for its memory to be mapped Writethrough or NoCache (MMULib), but
+ * a program cannot count on that. And a disk's DMA may not reach Zorro III
+ * memory at all (the A3000's SCSI). So: a file goes through fast RAM, the
+ * 68k copies it to the card and pushes its cache out; before the 68k reads
+ * what the card wrote, its own lines are dropped. */
+#define PB_BOUNCE (32 * 1024)
+static UBYTE *pb_bounce;
+
+static BOOL pb_read_card(BPTR fh, volatile UBYTE *dst, ULONG len)
+{
+    volatile UBYTE *d = dst;
+    ULONG left = len;
+    if (!pb_bounce && !(pb_bounce = AllocVec(PB_BOUNCE, MEMF_ANY)))
+        return FALSE;
+    while (left) {
+        ULONG n = left < PB_BOUNCE ? left : PB_BOUNCE;
+        if (Read(fh, pb_bounce, (LONG)n) != (LONG)n)
+            return FALSE;
+        CopyMem(pb_bounce, (APTR)d, n);
+        d += n;
+        left -= n;
+    }
+    CacheClearE((APTR)dst, len, CACRF_ClearD);
+    return TRUE;
+}
+
+static void pb_card_wrote(volatile const void *p, ULONG len)
+{
+    CacheClearE((APTR)p, len, CACRF_ClearD);
+}
+
+/* a session that takes none of the file and makes nothing for this long
+ * is stuck (on a real A3000 with the cache in the way: 100,000 feeds, 78 s) */
+#define PB_STALL_US 3000000UL
+
 struct PbFeed {
     BPTR fh;
     LONG len;                   /* the file's */
@@ -448,7 +487,7 @@ static BOOL pb_feed_next(struct PbFeed *f, ZZ9KImageSessionFeedDesc *fd, ULONG s
         f->cstart = f->pos;
         f->clen = (ULONG)f->len - f->pos < f->size ? (ULONG)f->len - f->pos : f->size;
         if (Seek(f->fh, (LONG)f->cstart, OFFSET_BEGINNING) < 0 ||
-            Read(f->fh, (APTR)f->buf.data, (LONG)f->clen) != (LONG)f->clen)
+            !pb_read_card(f->fh, (volatile UBYTE *)f->buf.data, f->clen))
             return FALSE;
     }
     memset(fd, 0, sizeof(*fd));
@@ -515,7 +554,7 @@ static LONG pb_api_once(void *p)
     if (c->mode == PBA_FULL) {
         ZZ9KImageDecodeDesc d;
         ZZ9KImageDecodeResult res;
-        if (Read(f.fh, (APTR)f.buf.data, f.len) != f.len) {
+        if (!pb_read_card(f.fh, (volatile UBYTE *)f.buf.data, (ULONG)f.len)) {
             c->stage = "reading the file";
             c->status = ZZ9K_STATUS_IO_ERROR;
             goto out;
@@ -537,7 +576,7 @@ static LONG pb_api_once(void *p)
         ZZ9KImageSessionBeginDesc bd;
         ZZ9KImageSessionFeedDesc fd;
         ZZ9KImageSessionResult r;
-        ULONG guard = 0, sess;
+        ULONG sess, quiet = now_us();
         memset(&bd, 0, sizeof(bd));
         memset(&r, 0, sizeof(r));
         bd.codec = ZZ9K_IMAGE_CODEC_JPEG;
@@ -561,15 +600,22 @@ static LONG pb_api_once(void *p)
             if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
                 break;
             f.pos += r.bytes_consumed;
+            if (r.bytes_consumed)
+                quiet = now_us();
             if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE) {
                 c->ow = r.tile_width ? r.tile_width : sw;
                 c->oh = r.tile_height ? r.tile_height : sh;
                 c->stage = NULL;
                 break;
             }
-            if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR || ++guard > 100000) {
+            if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR) {
                 c->stage = "the session (state ERROR)";
                 c->status = ZZ9K_STATUS_IO_ERROR;
+                break;
+            }
+            if (now_us() - quiet > PB_STALL_US) {
+                c->stage = "the session (stuck: none of the file taken for 3 s)";
+                c->status = ZZ9K_STATUS_TIMEOUT;
                 break;
             }
         }
@@ -589,6 +635,7 @@ static LONG pb_api_once(void *p)
             c->status = ZZ9K_STATUS_NO_MEMORY;
             ok = -1;
         } else {
+            pb_card_wrote(surf.data, surf.pitch * oh);
             pb_bgra_rows((volatile const UBYTE *)surf.data, surf.pitch, ow, oh, tmp);
             if (ow == c->dw && oh == c->dh)
                 CopyMem(tmp, c->out, ow * oh * 4);
@@ -667,7 +714,7 @@ static LONG pb_tile_once(void *p)
     ZZ9KImageSessionBeginDesc bd;
     ZZ9KImageSessionFeedDesc fd;
     ZZ9KImageSessionResult r;
-    ULONG *canvas = NULL, cw = 0, ch = 0, guard = 0, sess = 0;
+    ULONG *canvas = NULL, cw = 0, ch = 0, guard = 0, sess = 0, quiet = now_us();
     LONG ok = -1;
     BOOL eof = FALSE, open = FALSE;
     memset(&tb, 0, sizeof(tb));
@@ -705,6 +752,13 @@ static LONG pb_tile_once(void *p)
         if ((c->status = pb_sess_feed(&fd, &r)) != ZZ9K_STATUS_OK)
             goto out;
         f.pos += r.bytes_consumed;
+        if (r.bytes_consumed || r.state == ZZ9K_IMAGE_SESSION_STATE_TILE_READY)
+            quiet = now_us();
+        else if (now_us() - quiet > PB_STALL_US) {
+            c->stage = "the session (stuck: none of the file taken, no tile, for 3 s)";
+            c->status = ZZ9K_STATUS_TIMEOUT;
+            goto out;
+        }
         c->flags |= r.flags;
         if (r.image_width && !c->iw) {
             c->iw = r.image_width;
@@ -722,6 +776,7 @@ static LONG pb_tile_once(void *p)
                 }
             }
             c->ntiles++;
+            pb_card_wrote(tb.data, PB_TSTRIDE * r.tile_height);
             for (y = 0; y < r.tile_height && r.tile_y + y < ch; y++) {
                 const ULONG *s = (const ULONG *)((volatile UBYTE *)tb.data + y * PB_TSTRIDE);
                 ULONG *d = canvas + (r.tile_y + y) * cw + r.tile_x;
@@ -862,6 +917,127 @@ static void pb_check(char *out, LONG max, const char *what, const ULONG *a, cons
              (long)(g % 10), (long)(b / 10), (long)(b % 10));
 }
 
+/* ---- does what the 68k writes reach the card, and what the card writes
+ * the 68k? 64 KB through two shared buffers, the card copying or filling
+ * (MEM_COPY, MEM_FILL); and a file read straight into the card's memory, as
+ * zzprobe 1.17 and Ambiance 0.9.4's first card route did (a disk's DMA may
+ * not reach Zorro III memory) */
+#define PB_CO_LEN (64 * 1024)
+
+static int pb_mem_op(int copy, ULONG dst, ULONG src, ULONG len, UBYTE v)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry rp;
+    int st;
+    memset(&rp, 0, sizeof(rp));
+    st = copy ? zz9k_request_mem_copy(&rq, dst, 0, src, 0, len) : zz9k_request_mem_fill(&rq, dst, 0, len, v);
+    if (st == ZZ9K_STATUS_OK && (st = pb_call(&rq, &rp)) == ZZ9K_STATUS_OK)
+        st = (int)rp.status;
+    return st;
+}
+
+static ULONG pb_co_diff(volatile const UBYTE *a, const UBYTE *ref, UBYTE want, ULONG n)
+{
+    ULONG i, d = 0;
+    for (i = 0; i < n; i++)
+        if (a[i] != (ref ? ref[i] : want))
+            d++;
+    return d;
+}
+
+static void pb_co_line(const char *what, int st, ULONG bad, const char *ok, const char *why)
+{
+    char l[200];
+    if (st != ZZ9K_STATUS_OK)
+        snprintf(l, sizeof(l), "    %-34s the card said %s", what, zz_status_name(st));
+    else if (!bad)
+        snprintf(l, sizeof(l), "    %-34s %s", what, ok);
+    else
+        snprintf(l, sizeof(l), "    %-34s %lu bytes of %lu wrong (%s)", what, (unsigned long)bad,
+                 (unsigned long)PB_CO_LEN, why);
+    pb_say(l);
+}
+
+static void pb_cache_check(const char *file)
+{
+    ZZ9KSharedBuffer a, b;
+    UBYTE *ref = NULL;
+    ULONG i, cacr, sum = 0;
+    int st;
+    char l[200];
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    cacr = CacheControl(0, 0);
+    snprintf(l, sizeof(l), "  Cache check, 64 KB through the card (68k data cache %s, copyback %s):",
+             (cacr & CACRF_EnableD) ? "on" : "off", (cacr & CACRF_CopyBack) ? "on" : "off");
+    pb_say(l);
+    if (ZZ9KAllocShared(PB_CO_LEN, 16, ZZ9K_ALLOC_HOST_WINDOW, &a) != ZZ9K_STATUS_OK ||
+        ZZ9KAllocShared(PB_CO_LEN, 16, ZZ9K_ALLOC_HOST_WINDOW, &b) != ZZ9K_STATUS_OK || !a.data || !b.data ||
+        !(ref = AllocVec(PB_CO_LEN, MEMF_ANY))) {
+        pb_say("    two 64 KB shared buffers could not be had: left out");
+        goto out;
+    }
+    /* 1: the 68k writes, no flush; the card copies a to b */
+    for (i = 0; i < PB_CO_LEN; i++)
+        ref[i] = (UBYTE)(i * 7 + 0x35) ^ (UBYTE)(i >> 9);
+    pb_mem_op(0, a.handle, 0, PB_CO_LEN, 0);
+    pb_mem_op(0, b.handle, 0, PB_CO_LEN, 0);
+    CacheClearE((APTR)a.data, PB_CO_LEN, CACRF_ClearD);
+    CacheClearE((APTR)b.data, PB_CO_LEN, CACRF_ClearD);
+    CopyMem(ref, (APTR)a.data, PB_CO_LEN);
+    st = pb_mem_op(1, b.handle, a.handle, PB_CO_LEN, 0);
+    CacheClearE((APTR)b.data, PB_CO_LEN, CACRF_ClearD);
+    pb_co_line("68k writes, no cache flush:", st, pb_co_diff(b.data, ref, 0, PB_CO_LEN),
+               "all reach the card", "held in the 68k's copyback cache: map the ZZ9000 Writethrough or NoCache");
+    /* 2: the same, flushed */
+    for (i = 0; i < PB_CO_LEN; i++)
+        ref[i] ^= 0xFF;
+    CopyMem(ref, (APTR)a.data, PB_CO_LEN);
+    CacheClearE((APTR)a.data, PB_CO_LEN, CACRF_ClearD);
+    st = pb_mem_op(1, b.handle, a.handle, PB_CO_LEN, 0);
+    CacheClearE((APTR)b.data, PB_CO_LEN, CACRF_ClearD);
+    pb_co_line("68k writes, cache flushed:", st, pb_co_diff(b.data, ref, 0, PB_CO_LEN),
+               "all reach the card", "not the cache: the card or the bus");
+    /* 3: the 68k reads b (into its cache), the card fills it, the 68k reads it again unflushed */
+    for (i = 0; i < PB_CO_LEN; i += 4)
+        sum += *(volatile const ULONG *)((volatile const UBYTE *)b.data + i);
+    st = pb_mem_op(0, b.handle, 0, PB_CO_LEN, 0xA5);
+    pb_co_line("card writes, 68k reads unflushed:", st, pb_co_diff(b.data, NULL, 0xA5, PB_CO_LEN),
+               "the 68k sees them", "the 68k read its own cache");
+    CacheClearE((APTR)b.data, PB_CO_LEN, CACRF_ClearD);
+    pb_co_line("card writes, 68k reads flushed:", st, pb_co_diff(b.data, NULL, 0xA5, PB_CO_LEN),
+               "the 68k sees them", "not the cache: the card or the bus");
+    /* 4: the file read straight into card memory (the disk's own way: DMA, perhaps) */
+    if (file) {
+        BPTR fh = Open((CONST_STRPTR)file, MODE_OLDFILE);
+        LONG n = 0, m = 0;
+        if (fh) {
+            pb_mem_op(0, a.handle, 0, PB_CO_LEN, 0);
+            CacheClearE((APTR)a.data, PB_CO_LEN, CACRF_ClearD);
+            n = Read(fh, (APTR)a.data, PB_CO_LEN);
+            CacheClearE((APTR)a.data, PB_CO_LEN, CACRF_ClearD);
+            Seek(fh, 0, OFFSET_BEGINNING);
+            m = Read(fh, ref, PB_CO_LEN);
+            Close(fh);
+        }
+        if (n == PB_CO_LEN && m == PB_CO_LEN) {
+            st = pb_mem_op(1, b.handle, a.handle, PB_CO_LEN, 0);
+            CacheClearE((APTR)b.data, PB_CO_LEN, CACRF_ClearD);
+            pb_co_line("a file read straight onto the card:", st, pb_co_diff(b.data, ref, 0, PB_CO_LEN),
+                       "the card has it", "the disk's DMA does not reach the card's memory");
+        } else {
+            pb_say("    a file read straight onto the card:  the file could not be read (64 KB)");
+        }
+    }
+    (void)sum;
+out:
+    FreeVec(ref);
+    if (a.handle)
+        ZZ9KFreeShared(a.handle);
+    if (b.handle)
+        ZZ9KFreeShared(b.handle);
+}
+
 static void bench_paths(const char *const *files, int nfiles)
 {
     struct Library *zzlib = NULL, *zzdtl, *jfifl;
@@ -892,8 +1068,10 @@ static void bench_paths(const char *const *files, int nfiles)
                      (long)zzlib->lib_Revision);
         }
         pb_say(line);
-        if (api)
+        if (api) {
             pb_surface_probe();
+            pb_cache_check(nfiles ? files[0] : NULL);
+        }
     } else {
         pb_say("  zz9k.library 2 not there: the API's columns are left out");
     }
@@ -1050,6 +1228,9 @@ static void bench_paths(const char *const *files, int nfiles)
     pb_say("  screen's cost, less the blit). API full: ZZ9KDecodeJpeg whole (it never scales), read");
     pb_say("  back whole, averaged on the 68k. API tiles: a session's tiles through a shared buffer.");
     pb_say("  Every column includes reading the file. On Amiberry the card's own work runs on the PC.");
+    pb_say("  The API's columns read the file into fast RAM, copy it to the card and flush the cache.");
+    FreeVec(pb_bounce);
+    pb_bounce = NULL;
     if (zzdtl)
         CloseLibrary(zzdtl);
     if (jfifl)

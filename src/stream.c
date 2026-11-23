@@ -4666,7 +4666,7 @@ static void video_run(void)
                     LONG n = st.v_dvd  ? dvdplay_read(st.v_dvd, in.data, (LONG)in.length)
                              : st.v_ts ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
                              : st.v_es ? (LONG)es_pack(in.data, in.length)
-                                     : Read(st.fh, (APTR)in.data, in.length);
+                                     : zz_read(st.fh, &in, in.length);
                     if (st.v_es && st.state == ST_FAILED)
                         goto out;
                     if (n < 0) {
@@ -4759,6 +4759,7 @@ static void video_run(void)
                         want = room * div;
                     if (want) {
                         ULONG o = st.f_in, at = (ULONG)(ack % cap);
+                        zz_fresh(&pcm);             /* (not the 68k's cached copy of the ring) */
                         LONG al = 0, ar = 0;
                         for (i = 0; i < want; i++) {
                             /* (S16BE: the 68k's own order, a word a read across the bus) */
