@@ -603,7 +603,7 @@ static struct Thumb *deep_thumb(Object *o, const UBYTE *mem, ULONG sw, ULONG sh,
     struct Thumb *t;
     UBYTE *rows = NULL;
     UWORD *xb = NULL;
-    ULONG *sum = NULL, x, y, rmax = (sh + dh - 1) / dh + 1, t0 = time_ms();
+    ULONG *sum = NULL, x, y, rmax = (sh + dh - 1) / dh + 1, t0 = time_ms(), last_n = 0, rec = 0;
     if (!dw || !dh || !(t = AllocVec(sizeof(struct Thumb) + dw * dh * 4, MEMF_ANY | MEMF_CLEAR)))
         return NULL;
     t->w = dw;
@@ -650,8 +650,17 @@ static struct Thumb *deep_thumb(Object *o, const UBYTE *mem, ULONG sw, ULONG sh,
             }
         }
         for (x = 0; x < dw; x++) {
-            ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1;
-            d[x] = ((s[0] + n / 2) / n << 16) | ((s[1] + n / 2) / n << 8) | (s[2] + n / 2) / n;
+            /* a multiply by 65536/n, not three divides: on a real 68060 the
+             * divides were about a third of a photo's time at 1280 wide */
+            ULONG *s = sum + x * 4, n = s[3] ? s[3] : 1, h = n >> 1, r, g, b;
+            if (n != last_n) {
+                last_n = n;
+                rec = 65536UL / n + 1;
+            }
+            r = ((s[0] + h) * rec) >> 16;
+            g = ((s[1] + h) * rec) >> 16;
+            b = ((s[2] + h) * rec) >> 16;
+            d[x] = (r > 255 ? 255 : r) << 16 | (g > 255 ? 255 : g) << 8 | (b > 255 ? 255 : b);
         }
     }
     tm_cells = time_ms() - t0;

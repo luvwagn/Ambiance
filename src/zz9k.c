@@ -231,8 +231,13 @@ void zz_probe(struct Caps *c)
  * said once per kind. */
 BOOL zz_view_on;
 static BOOL view_held;
-static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks);
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks, ULONG spin_ms);
 #define ZZ_IMG_TICKS 500        /* a feed's budget: 10 s (a 24 MP photo on the real card) */
+/* Polled this long before a tick at a time: on the real card a session's
+ * call is answered from its second core a few ms later, and 400 polls (3 ms
+ * on a 68060) then Delay(1) made each 20-40 ms; a 12 MP photo is some 250
+ * calls (zzprobe 1.21) */
+#define ZZ_IMG_SPIN_MS 50
 
 /* An image session's request, sent through zz_call_ticks (the library's
  * own wait before 2.34 is a few milliseconds of polls: Amiberry 8.6.0,
@@ -243,7 +248,7 @@ static int img_call(ZZ9KRequest *rq, UWORD op, ZZ9KImageSessionResult *r)
     ZZ9KMailboxEntry reply;
     int st;
     memset(&reply, 0, sizeof(reply));
-    if ((st = zz_call_ticks(rq, &reply, ZZ_IMG_TICKS)) != ZZ9K_STATUS_OK)
+    if ((st = zz_call_ticks(rq, &reply, ZZ_IMG_TICKS, ZZ_IMG_SPIN_MS)) != ZZ9K_STATUS_OK)
         return st;
     return r ? zz9k_reply_image_session_result(&reply, op, r) : (int)reply.status;
 }          /* zz9k.library opened for it (zz_view_hold) */
@@ -316,26 +321,16 @@ static BOOL no565;              /* an RGB565 session refused once: BGRA8888 from
  * A3000's SCSI). On a real A3000/060 a session fed straight from Read()
  * took none of the file: 100,000 feeds, 78 s, then nothing. So the file
  * goes through fast RAM (bounce), the 68k copies it to the card and pushes
- * its cache out; before the 68k reads what the card made, its own lines
+ * its cache out (zz_view_jpeg's feed loop, zz_read); before the 68k reads what the card made, its own lines
  * are dropped (zz_card_wrote). */
 #define ZZ_BOUNCE (32 * 1024)
+/* A session's file goes through one 32 KB buffer on the card, every feed
+ * from its start: what the card leaves is moved to the front (in fast RAM,
+ * bounce) and the rest topped up, as the card's own zz9k-jpeg feeds it. On
+ * a real A3000 256 KB chunks fed at an offset got nothing taken at all;
+ * this way (zzprobe 1.20) every photo decoded. */
+#define ZZ_STAGE ZZ_BOUNCE
 #define ZZ_STALL_MS 3000        /* a session taking none of the file this long is stuck */
-
-static BOOL zz_read_card(BPTR fh, volatile UBYTE *dst, ULONG len, UBYTE *bounce)
-{
-    volatile UBYTE *d = dst;
-    ULONG left = len;
-    while (left) {
-        ULONG n = left < ZZ_BOUNCE ? left : ZZ_BOUNCE;
-        if (Read(fh, bounce, (LONG)n) != (LONG)n)
-            return FALSE;
-        CopyMem(bounce, (APTR)d, n);
-        d += n;
-        left -= n;
-    }
-    CacheClearE((APTR)dst, len, CACRF_ClearD);
-    return TRUE;
-}
 
 static void zz_card_wrote(volatile const void *p, ULONG len)
 {
@@ -354,8 +349,9 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     struct Thumb *t = NULL;
     BPTR fh;
     LONG flen;
-    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, cstart = 0, clen = 0, fpos = 0, sess = 0,
+    ULONG w = 0, h = 0, dw, dh, ow = 0, oh = 0, size, foff = 0, buffered = 0, sess = 0,
           t0 = time_ms(), t1, x, y, feeds = 0, feed_max = 0, quiet;
+    BOOL moved = FALSE;
     UBYTE *bounce = NULL;
     BOOL prog = FALSE, began = FALSE, w16 = s16 && zz_565 && !no565 && maxcol <= THUMB_DEEP;
     ZZ9KSurface s16f;           /* w16: the card's scaler copies the picture into it as RGB565 */
@@ -382,7 +378,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     memset(&buf, 0, sizeof(buf));
     memset(&sf, 0, sizeof(sf));
     memset(&s16f, 0, sizeof(s16f));
-    size = (ULONG)flen < 256 * 1024 ? (ULONG)flen : 256 * 1024;
+    size = (ULONG)flen < ZZ_STAGE ? (ULONG)flen : ZZ_STAGE;
     if (!(bounce = AllocVec(ZZ_BOUNCE, MEMF_ANY))) {
         Close(fh);
         return NULL;
@@ -424,21 +420,28 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
     }
     quiet = time_ms();
     while (!stage) {
-        if (fpos >= cstart + clen && fpos < (ULONG)flen) {   /* the next chunk */
-            cstart = fpos;
-            clen = (ULONG)flen - fpos < size ? (ULONG)flen - fpos : size;
-            if (Seek(fh, (LONG)cstart, OFFSET_BEGINNING) < 0 ||
-                !zz_read_card(fh, (volatile UBYTE *)buf.data, clen, bounce)) {
-                stage = "reading the file", st = -1;
-                break;
-            }
+        ULONG n = (ULONG)flen - foff < size - buffered ? (ULONG)flen - foff : size - buffered, took;
+        volatile UBYTE *cb = (volatile UBYTE *)buf.data;
+        if (n && Read(fh, bounce + buffered, (LONG)n) != (LONG)n) {
+            stage = "reading the file", st = -1;
+            break;
         }
+        if (moved) {                        /* what the card left, now at the front, and the new */
+            CopyMem(bounce, (APTR)cb, buffered + n);
+            CacheClearE((APTR)cb, buffered + n, CACRF_ClearD);
+            moved = FALSE;
+        } else if (n) {
+            CopyMem(bounce + buffered, (APTR)(cb + buffered), n);
+            CacheClearE((APTR)(cb + buffered), n, CACRF_ClearD);
+        }
+        foff += n;
+        buffered += n;
         memset(&fd, 0, sizeof(fd));
         fd.session = sess;
         fd.src_handle = buf.handle;
-        fd.src_offset = fpos - cstart;
-        fd.src_length = cstart + clen - fpos;
-        fd.flags = cstart + clen >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
+        fd.src_offset = 0;
+        fd.src_length = buffered;
+        fd.flags = foff >= (ULONG)flen ? ZZ9K_IMAGE_SESSION_FEED_EOF : 0;
         {
             ZZ9KRequest rq;
             ULONG tf = time_ms();
@@ -452,13 +455,23 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
             stage = "feeding its session";
             break;
         }
-        fpos += r.bytes_consumed;
-        if (r.bytes_consumed)
+        took = r.bytes_consumed < buffered ? r.bytes_consumed : buffered;
+        if (took < buffered && took) {
+            buffered -= took;
+            memmove(bounce, bounce + took, buffered);
+            moved = TRUE;
+        } else if (took) {
+            buffered = 0;
+        }
+        if (took || r.bytes_written)
             quiet = time_ms();
         if (r.state == ZZ9K_IMAGE_SESSION_STATE_COMPLETE)
             break;
         if (r.state == ZZ9K_IMAGE_SESSION_STATE_ERROR)
             stage = "its session (an error)", st = -1;
+        else if (!took && !r.bytes_written && r.state != ZZ9K_IMAGE_SESSION_STATE_TILE_READY &&
+                 (foff >= (ULONG)flen || buffered >= size))
+            stage = "its session (the card took no more of the file)", st = -1;
         else if (time_ms() - quiet > ZZ_STALL_MS) {
             /* stuck: not to cost 3 s a picture from now on */
             stage = "its session (stuck: the card took none of the file for 3 s; the card's route is off "
@@ -491,7 +504,7 @@ struct Thumb *zz_view_jpeg(const char *path, UWORD gw, UWORD gh, BOOL tall, LONG
         sd.src_h = sd.dst_h = oh;
         sd.filter = ZZ9K_SCALE_NEAREST;
         if ((st = zz9k_request_scale_image(&rq, &sd)) == ZZ9K_STATUS_OK &&
-            (st = zz_call_ticks(&rq, &rp, ZZ_IMG_TICKS)) == ZZ9K_STATUS_OK)
+            (st = zz_call_ticks(&rq, &rp, ZZ_IMG_TICKS, ZZ_IMG_SPIN_MS)) == ZZ9K_STATUS_OK)
             st = (int)rp.status;
         if (st != ZZ9K_STATUS_OK) {
             char m[120];
@@ -739,16 +752,19 @@ static void main_out(const ZZ9KMediaSessionMainResult *a, struct ZzMain *r)
  * library's list if it never comes, as it lives on this stack). */
 #define ZZ_SPIN_POLLS 400
 #define ZZ_WAIT_TICKS 150                   /* (three seconds) */
-static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks);
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks, ULONG spin_ms);
 static int zz_call(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply)
 {
-    return zz_call_ticks(rq, reply, ZZ_WAIT_TICKS);
+    return zz_call_ticks(rq, reply, ZZ_WAIT_TICKS, 0);
 }
 
-static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks)
+/* spin_ms: polled for that long (and ZZ_SPIN_POLLS at least) before a tick
+ * at a time; 0: ZZ_SPIN_POLLS (video's, as it was) */
+#define ZZ_SPIN_MAX 200000UL                /* (polls: a bound if the clock stands still) */
+static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks, ULONG spin_ms)
 {
     ZZ9KAsyncRequest a;
-    ULONG n, done;
+    ULONG n, done, slept = 0, t0 = spin_ms ? time_ms() : 0;
     int s;
     if (ZZ9KBase->lib_Version > 2 || ZZ9KBase->lib_Revision >= 34 || ZZ9KBase->lib_Revision < 2) {
         amb_card_lock();                   /* (2.34 on: its timeout is ticks; before 2.2 no cancel) */
@@ -773,12 +789,13 @@ static int zz_call_ticks(ZZ9KRequest *rq, ZZ9KMailboxEntry *reply, ULONG ticks)
         }
         if (s != ZZ9K_STATUS_OK)
             break;
-        if (n >= ZZ_SPIN_POLLS + ticks) {
+        if (n < ZZ_SPIN_POLLS || (spin_ms && n < ZZ_SPIN_MAX && time_ms() - t0 < spin_ms))
+            continue;
+        if (++slept > ticks) {
             s = ZZ9K_STATUS_TIMEOUT;
             break;
         }
-        if (n >= ZZ_SPIN_POLLS)
-            Delay(1);
+        Delay(1);
     }
     if (a.queued && !a.completed)
         ZZ9KCancelAsync(&a);
