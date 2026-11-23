@@ -466,7 +466,9 @@ extern ULONG gfx_draw_ms[3];    /* the last gfx_thumb's time: colours, pixels, c
 LONG gfx_thumb_colours(struct Gfx *g);
 void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h, ULONG mod);
 /* 32 chunky pixels (8 longs) to a long of each of 8 planes (out[k]: plane k) */
-void gfx_c2p32(const ULONG *c, ULONG *out);  /* colours a thumbnail made now may have */
+void gfx_c2p32(const ULONG *c, ULONG *out);
+void gfx_c2p_row(const UBYTE *src, ULONG groups, UBYTE **planes);  /* c2p68k.s's: 32 pens a group
+                                             * to 8 planes' longs (the store buffer's on a 68040/060) */  /* colours a thumbnail made now may have */
 BOOL gfx_thumb(struct Gfx *g, const struct Thumb *t, const struct PicInfo *pi, WORD x, WORD y,
                WORD w, WORD h, WORD *drawn_h);
 /* The full-screen picture viewer, on Ambiance's own screen (view.c). On

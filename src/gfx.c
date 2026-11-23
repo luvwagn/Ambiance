@@ -3480,6 +3480,27 @@ void gfx_c2p32(const ULONG *c, ULONG *out)
     c2p32(c, out);
 }
 
+/* A row's groups of 32 pens (long-aligned) to 8 planes' longs (each
+ * pointer that plane's first long of them): c2p68k.s, about a fifth
+ * quicker than c2p32 a group on a 68020; on a 68040 or 68060 its store
+ * buffer's (va_c2p68k_sb: a group's longs written while the next is
+ * computed, not all together at its end), a quarter quicker into chip RAM
+ * (tools/m68kprof's model). The same planes either way. */
+void va_c2p68k(const UBYTE *src, ULONG groups, UBYTE **planes);
+void va_c2p68k_sb(const UBYTE *src, ULONG groups, UBYTE **planes);
+void gfx_c2p_row(const UBYTE *src, ULONG groups, UBYTE **planes)
+{
+    static BYTE sb = -1;
+    if (sb < 0)
+        sb = (SysBase->AttnFlags & (AFF_68040 | AFF_68060)) != 0;
+    if (!groups)
+        return;
+    if (sb)
+        va_c2p68k_sb(src, groups, planes);
+    else
+        va_c2p68k(src, groups, planes);
+}
+
 /* Chunky pixels (mod bytes a row, a multiple of 16) into bm. A planar
  * bitmap is written here, 32 pixels at a time (c2p32): graphics.library's
  * WriteChunkyPixels took ~300 ms for a 273 x 218 preview on a 68030. */
@@ -3513,7 +3534,20 @@ void gfx_chunky(struct Gfx *g, struct BitMap *bm, UBYTE *buf, ULONG w, ULONG h,
             const ULONG *c = (const ULONG *)(buf + y * mod);
             for (k = 0; k < d; k++)
                 dst[k] = (UWORD *)((UBYTE *)bm->Planes[k] + y * bpr);
-            for (x = 0; x < nl; x++, c += 8) {
+            if (d == 8) {
+                /* 8 planes: the row's whole groups by the assembler, the
+                 * last half one here */
+                ULONG full = half ? nl - 1 : nl;
+                gfx_c2p_row((const UBYTE *)c, full, (UBYTE **)dst);
+                if (!half)
+                    continue;
+                c += full * 8;
+                for (k = 0; k < 8; k++)
+                    dst[k] += full * 2;
+                x = full;
+            } else
+                x = 0;
+            for (; x < nl; x++, c += 8) {
                 c2p32(c, pl);
                 if (half && x == nl - 1) {
                     for (k = 0; k < d; k++)

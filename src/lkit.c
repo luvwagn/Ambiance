@@ -1430,30 +1430,9 @@ BOOL lk_open_strip(struct Gfx *g, struct LkOut *o, struct BitMap *bm, WORD y0, W
 /* ---- showing an 8-bit canvas on an AGA screen: chunky to planar here,
  * straight into the screen's planes (WriteChunkyPixels converts a pixel
  * at a time: the Home row's and the wall's glides moved some 150,000
- * pixels a step). 32 pixels at a time: eight longwords of pens made the
- * eight planes' longwords by five rounds of swapping bits between pairs
- * (each swaps one bit of which longword with one bit of where in it). */
-#define CK_MERGE(x, y, s, m) { ULONG t_ = (((x) >> (s)) ^ (y)) & (m); (y) ^= t_; (x) ^= t_ << (s); }
-static void ck_c2p32(const UBYTE *px, ULONG *out)
-{
-    ULONG a0, a1, a2, a3, a4, a5, a6, a7;
-    const ULONG *q = (const ULONG *)px;     /* (big-endian: the first pixel the top byte) */
-    a0 = q[7]; a1 = q[6]; a2 = q[5]; a3 = q[4];
-    a4 = q[3]; a5 = q[2]; a6 = q[1]; a7 = q[0];
-    CK_MERGE(a0, a4, 16, 0x0000FFFFUL); CK_MERGE(a1, a5, 16, 0x0000FFFFUL);
-    CK_MERGE(a2, a6, 16, 0x0000FFFFUL); CK_MERGE(a3, a7, 16, 0x0000FFFFUL);
-    CK_MERGE(a0, a2, 8, 0x00FF00FFUL); CK_MERGE(a1, a3, 8, 0x00FF00FFUL);
-    CK_MERGE(a4, a6, 8, 0x00FF00FFUL); CK_MERGE(a5, a7, 8, 0x00FF00FFUL);
-    CK_MERGE(a0, a1, 4, 0x0F0F0F0FUL); CK_MERGE(a2, a3, 4, 0x0F0F0F0FUL);
-    CK_MERGE(a4, a5, 4, 0x0F0F0F0FUL); CK_MERGE(a6, a7, 4, 0x0F0F0F0FUL);
-    CK_MERGE(a0, a4, 2, 0x33333333UL); CK_MERGE(a1, a5, 2, 0x33333333UL);
-    CK_MERGE(a2, a6, 2, 0x33333333UL); CK_MERGE(a3, a7, 2, 0x33333333UL);
-    CK_MERGE(a0, a2, 1, 0x55555555UL); CK_MERGE(a1, a3, 1, 0x55555555UL);
-    CK_MERGE(a4, a6, 1, 0x55555555UL); CK_MERGE(a5, a7, 1, 0x55555555UL);
-    /* longword (j2 j1 j0) holds plane j0 j2 j1 */
-    out[0] = a0; out[2] = a4; out[4] = a1; out[6] = a5;
-    out[1] = a2; out[3] = a6; out[5] = a3; out[7] = a7;
-}
+ * pixels a step). 32 pixels at a time, by c2p68k.s (gfx_c2p_row): eight
+ * longwords of pens made the eight planes' longwords by five rounds of
+ * swapping bits between pairs, a run of groups a call. */
 
 /* Whether the canvas can go straight into the screen's planes: 8 planes
  * of a standard bitmap, longword-aligned, the window's layer not covered
@@ -1508,8 +1487,8 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
 {
     struct BitMap *bm;
     struct Layer *ly;
-    long ox, oy, x, y, p;
-    ULONG out[8];
+    long ox, oy, x, y, p, run;
+    UBYTE *pp[8];
     if (!ck_direct(t, &bm, &ly, &ox, &oy))
         return FALSE;
     if (t->blitting) {
@@ -1536,8 +1515,19 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
             t->rx0[y] = 0x7FFF;
             t->rx1[y] = -1;
         }
+        /* the groups not the same as shown, a run of them at a time to
+         * the assembler (gfx_c2p_row) */
+#define CK_RUN_END(xe) do {                                             \
+            if (run >= 0) {                                             \
+                ULONG at_ = row + (ULONG)(run + ox) / 8;                \
+                for (p = 0; p < 8; p++)                                 \
+                    pp[p] = (UBYTE *)bm->Planes[p] + at_;               \
+                gfx_c2p_row(s + run, (ULONG)((xe) - run) >> 5, pp);     \
+                run = -1;                                               \
+            }                                                           \
+        } while (0)
+        run = -1;
         for (x = xa; x + 31 <= xb; x += 32) {
-            ULONG at = row + (ULONG)(x + ox) / 8;
             if (sl) {
                 /* the same 32 the planes show already: left (most of a
                  * list's rows is its background, the same pen) */
@@ -1546,15 +1536,17 @@ static BOOL ck_c2p_(struct LkTarget *t, long x0, long y0, long x1, long y1)
                 if (!t->sh_all && c[0] == m[0] && c[1] == m[1] && c[2] == m[2] && c[3] == m[3] &&
                     c[4] == m[4] && c[5] == m[5] && c[6] == m[6] && c[7] == m[7]) {
                     lkt_same++;
+                    CK_RUN_END(x);
                     continue;
                 }
                 m[0] = c[0]; m[1] = c[1]; m[2] = c[2]; m[3] = c[3];
                 m[4] = c[4]; m[5] = c[5]; m[6] = c[6]; m[7] = c[7];
             }
-            ck_c2p32(s + x, out);
-            for (p = 0; p < 8; p++)
-                *(ULONG *)(bm->Planes[p] + at) = out[p];
+            if (run < 0)
+                run = x;
         }
+        CK_RUN_END(x);
+#undef CK_RUN_END
     }
     if (x0 == 0 && y0 == 0 && x1 >= t->cw - 1 && y1 >= t->chh - 1)
         t->sh_all = FALSE;              /* (all of it as the canvas now: groups compared after) */
