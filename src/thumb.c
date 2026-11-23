@@ -637,16 +637,22 @@ static struct Thumb *deep_thumb(Object *o, const UBYTE *mem, ULONG sw, ULONG sh,
         for (r = 0; r < sy1 - sy0; r++) {
             const UBYTE *p = rows + r * sw * 3;
             for (x = 0; x < dw; x++) {
-                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
+                /* a span summed in registers, then added: one load and
+                 * store of the sums a span, not three a pixel (on a real
+                 * 68060 the per-pixel version was 1-4.7 s of a photo) */
+                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4, a = 0, g = 0, b = 0;
                 const UBYTE *q = p + k * 3;
                 if (e <= k)
                     e = k + 1;
                 s[3] += e - k;
                 for (; k < e; k++, q += 3) {
-                    s[0] += q[0];
-                    s[1] += q[1];
-                    s[2] += q[2];
+                    a += q[0];
+                    g += q[1];
+                    b += q[2];
                 }
+                s[0] += a;
+                s[1] += g;
+                s[2] += b;
             }
         }
         for (x = 0; x < dw; x++) {

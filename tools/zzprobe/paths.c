@@ -225,16 +225,20 @@ static void pb_shrink(const ULONG *src, ULONG sw, ULONG sh, ULONG *dst, ULONG dw
         for (j = y0; j < y1; j++) {
             const ULONG *p = src + j * sw;
             for (x = 0; x < dw; x++) {
-                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4;
+                /* 1.24: a span summed in registers, then added (as deep_thumb now) */
+                ULONG k = xb[x], e = xb[x + 1], *s = sum + x * 4, a = 0, g = 0, b = 0;
                 if (e <= k)
                     e = k + 1;
                 s[3] += e - k;
                 for (; k < e; k++) {
                     ULONG c = p[k];
-                    s[0] += (c >> 16) & 255;
-                    s[1] += (c >> 8) & 255;
-                    s[2] += c & 255;
+                    a += (c >> 16) & 255;
+                    g += (c >> 8) & 255;
+                    b += c & 255;
                 }
+                s[0] += a;
+                s[1] += g;
+                s[2] += b;
             }
         }
         for (x = 0; x < dw; x++) {
