@@ -572,7 +572,8 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
     sprintf(req,
             "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: Ambiance/" AMB_VERSION
             "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
-            j->post ? "POST" : "GET", path, secure ? "1" : "0", host, clen, j->extra);
+            j->post == 2 ? "DELETE" : j->post ? "POST" : "GET", path, secure ? "1" : "0", host, clen,
+            j->extra);
     if (!send_all(j, s, c, req, strlen(req)) ||
         (j->post && j->send && !send_all(j, s, c, j->send, strlen(j->send)))) {
         tls_free(&tls, c);

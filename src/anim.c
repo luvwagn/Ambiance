@@ -3320,6 +3320,22 @@ static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
 static char vid_snd_title[16][48];      /* (their names, the server's) */
+static char vid_session[48];            /* the play session asked for last ("" none) */
+static void (*vid_stop_fn)(const char *session);
+
+/* Who stops a server's conversion when the player is done with it (a
+ * seek, another sound, the end): Jellyfin's DELETE /Videos/ActiveEncodings. */
+void anim_net_on_stop(void (*stop)(const char *session))
+{
+    vid_stop_fn = stop;
+}
+
+static void vid_session_end(void)
+{
+    if (vid_session[0] && vid_stop_fn)
+        vid_stop_fn(vid_session);
+    vid_session[0] = 0;
+}
 static int vid_snd[16], vid_snd_cur;   /* a server's stream's sound streams (its own
                                          * indices: audioStreamIndex=), the one played */
 static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
@@ -3362,6 +3378,20 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
                 char a[32];
                 sprintf(a, "&audioStreamIndex=%ld", (long)vid_snd[vid_snd_cur]);
                 amb_strlcat(url, a, sizeof(url));
+            }
+            {
+                /* the last session's conversion stopped (st_stop above has
+                 * closed its connection), this one's noted */
+                const char *p = strstr(url, "playSessionId=");
+                LONG n = 0;
+                vid_session_end();
+                if (p) {
+                    p += 14;
+                    while (p[n] && p[n] != '&' && n < (LONG)sizeof(vid_session) - 1)
+                        n++;
+                    memcpy(vid_session, p, n);
+                }
+                vid_session[n] = 0;
             }
         } else if (ms && vid_seek_param[0]) {
             char t[96];
@@ -4854,7 +4884,10 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     video_cpu_only = FALSE;
     vid_net = TRUE;
     amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
+    vid_session[0] = 0;
     r = play_checked(g, url, name, cpu, err, errmax, why);
+    st_stop();                              /* (its connection closed first) */
+    vid_session_end();
     vid_net = FALSE;
     vid_nsnd = 0;
     vid_note_until = 0;                     /* (a note of A's: not into the next video) */

@@ -717,6 +717,17 @@ void jf_sound_keep(const char *key, int index)
     set_var(SOUNDS_VAR, n);
 }
 
+/* The server's conversion for a play session stopped (DELETE): the
+ * request into out. A seek or another sound starts a new one; the old
+ * would otherwise run on a while, and two at once are too much for a NAS. */
+void jf_stop_request(const char *session, char *out, LONG max)
+{
+    char n[160];
+    sprintf(out, "/Videos/ActiveEncodings?deviceId=%s&playSessionId=%.40s", jf.dev, session);
+    sprintf(n, "&ApiKey=%s", jf.token);
+    amb_strlcat(out, n, max);
+}
+
 /* A film's start and seeks, for the player to add to jf_video_url's URL
  * (anim.c: each '*' the time in ms): a session of their own each (see
  * jf_new_session), and the time in 100 ns units. */

@@ -10192,6 +10192,26 @@ static void jf_film_probe(void)
         radio_done(j);
 }
 
+/* A play session's conversion stopped on the server (the player's, done
+ * with it): a DELETE, its answer not waited for. */
+static void jf_stop_session(const char *session)
+{
+    struct NetJob *j;
+    char m[80];
+    if (!jf.token[0] || !net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    jf_stop_request(session, j->path, sizeof(j->path));
+    j->post = 2;
+    j->wait_s = 10;
+    j->orphan = TRUE;                       /* (freed when it comes back) */
+    j->seq = 0;
+    sprintf(m, "conversion %.40s stopped", session);
+    amb_log("jellyfin", m);
+    net_submit(j);
+}
+
 /* Its start here: probed, then played as a stream from the server. */
 static void jf_film_came(struct NetJob *j)
 {
@@ -10228,6 +10248,7 @@ static void jf_film_came(struct NetJob *j)
         it.sortkey = (char *)"MPEG";
         anim_net_probe = &v;
         anim_net_seek = jf_fj_seek;
+        anim_net_on_stop(jf_stop_session);
         {
             const char *t[16];
             int i;
@@ -10238,6 +10259,7 @@ static void jf_film_came(struct NetJob *j)
         anim_from_item(&it);
         anim_net_probe = NULL;
         anim_net_seek = NULL;
+        anim_net_on_stop(NULL);
         if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur)
             jf_sound_keep(jf_fj_key, jf_fj_snd[anim_net_sound()]);  /* (chosen with A: kept) */
     }
