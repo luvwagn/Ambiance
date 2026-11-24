@@ -250,7 +250,7 @@ void jf_request(const char *key, LONG start, char *out, LONG max)
         sprintf(q, "/Items?userId=%s&parentId=%.40s&sortBy=IsFolder,SortName"
                    "&sortOrder=Descending,Ascending&fields=ChildCount%s", jf.uid, key + 3,
                 key[2] == 'p' ? ",Width,Height&excludeItemTypes=Video,Movie,Episode,Audio"
-                              : "&excludeItemTypes=Photo,Audio");
+                              : ",Overview,OfficialRating&excludeItemTypes=Photo,Audio");
         amb_strlcpy(out, q, max);
         break;
     default:
@@ -550,8 +550,12 @@ void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max)
         /* the CPU's: MPEG-1, a quarter of VGA (a 16:9 film 320 x 180) */
         sprintf(n, "&videoCodec=mpeg1video&maxWidth=320&maxHeight=240&videoBitRate=1000000");
     amb_strlcat(out, n, max);
-    sprintf(n, "&audioCodec=mp2&audioBitRate=128000&audioChannels=2&deviceId=%s&ApiKey=%s",
-            jf.dev, jf.token);
+    /* MP2 at 48 kHz (decoded here at half that, 24 kHz: Paula's), 96 or 128
+     * kbit/s. (Jellyfin 12.x sends mp2 at 128k a channel whatever is asked:
+     * its GetAudioBitrateParam's default ignores audioBitRate; a fix is
+     * offered upstream.) */
+    sprintf(n, "&audioCodec=mp2&audioBitRate=%s&audioSampleRate=48000&audioChannels=2"
+               "&deviceId=%s&ApiKey=%s", big ? "128000" : "96000", jf.dev, jf.token);
     amb_strlcat(out, n, max);
     if (from_ms) {
         sprintf(n, "&startTimeTicks=%lu0000", (unsigned long)from_ms);

@@ -4835,8 +4835,9 @@ BOOL has_aside(struct Page *p)
             return TRUE;                    /* an album's tracks: the album beside them */
         for (i = 0; i < p->list.count; i++)
             if ((p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t')) ||
-                p->list.items[i].kind == IT_PLEXPHOTO)
-                return TRUE;
+                p->list.items[i].kind == IT_PLEXPHOTO ||
+                (p->list.items[i].kind == IT_ANIM && jf_key(p->list.items[i].path)))
+                return TRUE;                /* (a Jellyfin film: its poster) */
         return FALSE;
     }
     if (!p->aside) {
@@ -10072,7 +10073,7 @@ static void jf_sign_out(void)
  * for first (a job of their own, JFJ_VIDEO: its size, kind and sound
  * probed from them), then it plays from the server as it comes; a seek
  * asks the server again from that time (startTimeTicks). */
-#define JF_PROBE (96UL * 1024)          /* its start, probed: a sequence header, a sound frame */
+#define JF_PROBE (32UL * 1024)          /* its start, probed: a sequence header, a sound frame */
 static struct NetJob *jf_fj;            /* the start asked for */
 static char jf_fj_title[120], jf_fj_url[600];
 static ULONG jf_fj_ms;
@@ -15091,8 +15092,8 @@ static const char *lv_art_of(const struct Page *p, const struct Item *it, char *
     } else if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
         item_path(it, buf, max);            /* (an animation: its first frame) */
         return buf[0] ? buf : NULL;
-    } else if (p->plex && it->kind == IT_PLEXDIR) {
-        buf[0] = LV_ART_PLEX;
+    } else if (p->plex && (it->kind == IT_PLEXDIR || (it->kind == IT_ANIM && jf_key(it->path)))) {
+        buf[0] = LV_ART_PLEX;               /* (a Jellyfin film's: its poster) */
         lv_plex_field(it, 2, buf + 1, max - 1);
         return buf[1] ? buf : NULL;
     } else {
@@ -15184,6 +15185,11 @@ static BOOL lv_pic_file(struct Page *p, LONG idx, char *file, LONG max)
         char base[300];
         return ags_screenshot_path(item_path(it, base, sizeof(base)), file, max);
     }
+    if (p->plex && it->kind == IT_ANIM && jf_key(it->path)) {
+        file[0] = LV_ART_PLEX;              /* a Jellyfin film: its poster, from the server */
+        lv_plex_field(it, 2, file + 1, max - 1);
+        return file[1] != 0;
+    }
     return FALSE;
 }
 
@@ -15193,16 +15199,19 @@ static UWORD lv_pof_w, lv_pof_h;            /* the size the layout asked it at (
 static const char *lv_picture_of(struct Page *p)
 {
     static const struct Page *for_p;
+    static const struct Item *for_items;    /* (its list: another page in the same place
+                                             * has another, though its row and count agree) */
     static LONG for_sel = -1, for_count = -1;
     static BOOL have;
     if (!p || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
         return NULL;
-    if (p == for_p && p->sel == for_sel && p->list.count == for_count)
+    if (p == for_p && p->sel == for_sel && p->list.count == for_count && p->list.items == for_items)
         return have ? lv_pof_file : NULL;
     have = lv_pic_file(p, p->sel, lv_pof_file, sizeof(lv_pof_file));
     if (have || !(p->list.items[p->sel].flags & ITEM_GONE)) {
         for_p = p;                          /* (kept: an entry not held yet - its letter
                                              * being read - asked again until it is) */
+        for_items = p->list.items;
         for_sel = p->sel;
         for_count = p->list.count;
     }
@@ -15271,6 +15280,32 @@ static void lv_page(struct Page *p, struct LPage *m)
         for (i = 0; i < det.tj->nlines && i < LJ_FACTS; i++)
             lv_lines[i] = det.tj->lines[i];
         m->ndetails = (WORD)i;
+        m->details = lv_lines;
+    }
+    if (!m->ndetails && p->plex && p->sel >= 0 && p->sel < p->list.count &&
+        p->list.items[p->sel].kind == IT_ANIM && jf_key(p->list.items[p->sel].path)) {
+        /* a Jellyfin film: its year, length and rating, then what it is
+         * about (two sets, a row's each in turn: the column's key changes) */
+        static char fl[2][3][320];
+        static UWORD fs;
+        const struct Item *it = &p->list.items[p->sel];
+        char (*l)[320] = fl[fs++ & 1], v[24];
+        int n = 0;
+        amb_strlcpy(l[0], it->label, sizeof(l[0]));
+        lv_plex_field(it, 3, l[1], sizeof(l[1]));
+        lv_plex_field(it, 5, v, sizeof(v));
+        if (v[0]) {
+            if (l[1][0])
+                amb_strlcat(l[1], " \xB7 ", sizeof(l[1]));
+            amb_strlcat(l[1], v, sizeof(l[1]));
+        }
+        lv_lines[n++] = l[0];
+        if (l[1][0])
+            lv_lines[n++] = l[1];
+        lv_plex_field(it, 6, l[2], sizeof(l[2]));
+        if (l[2][0])
+            lv_lines[n++] = l[2];
+        m->ndetails = (WORD)n;
         m->details = lv_lines;
     }
     /* while it glides, or a letter is up, no pictures asked for: the
