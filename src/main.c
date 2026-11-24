@@ -10083,6 +10083,7 @@ static char jf_fj_key[48];
 static BOOL jf_fj_zz;
 
 static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
+static char jf_fj_sndt[16][48];                  /* ...their names */
 static void jf_film_probe(void);
 
 static void jf_film(const struct Item *it)
@@ -10137,7 +10138,7 @@ static void jf_film_streams(struct NetJob *j)
     jf_fj_nsnd = 0;
     jf_fj_cur = -1;
     if (j->body && j->status == 200 && j->len)
-        jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, &jf_fj_nsnd);
+        jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, jf_fj_sndt, &jf_fj_nsnd);
     else
         sprintf(why, "its streams not listed (%ld %.60s): the server's choice", (long)j->status, j->err);
     if (jf_fj_nsnd > 1 && (kept = jf_sound_kept(jf_fj_key, jf_fj_snd, jf_fj_nsnd)) >= 0) {
@@ -10227,7 +10228,13 @@ static void jf_film_came(struct NetJob *j)
         it.sortkey = (char *)"MPEG";
         anim_net_probe = &v;
         anim_net_seek = jf_fj_seek;
-        anim_net_sounds(jf_fj_snd, jf_fj_nsnd, jf_fj_cur);
+        {
+            const char *t[16];
+            int i;
+            for (i = 0; i < 16; i++)
+                t[i] = jf_fj_sndt[i];
+            anim_net_sounds(jf_fj_snd, t, jf_fj_nsnd, jf_fj_cur);
+        }
         anim_from_item(&it);
         anim_net_probe = NULL;
         anim_net_seek = NULL;

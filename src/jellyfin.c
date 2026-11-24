@@ -606,7 +606,7 @@ void jf_streams_request(const char *key, char *out, LONG max)
  * Jellyfin user's preferred language), else -1 (left to the server). What
  * was chosen and why into why. Jellyfin's languages are ISO 639-2, as
  * the file tags them: both the B and T forms are looked for. */
-int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, int *nlist)
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *nlist)
 {
     static const struct { const char *iso1, *a, *b; } map[] = {
         { "en", "eng", "" }, { "de", "ger", "deu" }, { "fr", "fre", "fra" }, { "it", "ita", "" },
@@ -621,8 +621,10 @@ int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, int *nl
     why[0] = 0;
     *nlist = 0;
     n = jf_audio((char *)body, len, a, 16, &def);
-    for (i = 0; i < n; i++)
+    for (i = 0; i < n; i++) {
         list[i] = a[i].index;
+        amb_strlcpy(titles[i], a[i].title[0] ? a[i].title : a[i].lang, 48);
+    }
     *nlist = n > 0 ? n : 0;
     if (n <= 0) {
         amb_strlcpy(why, n < 0 ? "no answer to read: the server's choice" :

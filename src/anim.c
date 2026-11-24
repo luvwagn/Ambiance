@@ -1528,6 +1528,9 @@ static BOOL vid_nav_menu;                   /* (in one of its menus, its buttons
 
 static BOOL vid_net;            /* (below: a server's stream) */
 static int vid_nsnd;            /* (below: its sound streams to choose from) */
+static char vid_note[96];       /* shown for the title a while (A: the sound chosen) */
+static ULONG vid_note_until;
+static BOOL vid_note_was;
 static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax);
 
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
@@ -2111,6 +2114,15 @@ static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             sf.step_at = now;
         }
     }
+    BOOL note = vid_note_until && now < vid_note_until;
+    if (note != vid_note_was) {
+        vid_note_was = note;
+        sf.drawn = FALSE;                   /* (the title: the note, or back) */
+        if (st_lv)
+            vc_q = ~0UL;
+    }
+    if (note)
+        name = vid_note;
     if (lv > 0 || target > 0) {
         if (!sf.drawn || (!st_lv && at / 1000 != st.sec) || paused != st.paused || mp_volume() != st.vol ||
             ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
@@ -3307,6 +3319,7 @@ static struct VProbe vid;
 static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
+static char vid_snd_title[16][48];      /* (their names, the server's) */
 static int vid_snd[16], vid_snd_cur;   /* a server's stream's sound streams (its own
                                          * indices: audioStreamIndex=), the one played */
 static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
@@ -4466,6 +4479,8 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
     va_stream_close();
 }
 
+static char aga_title[80];      /* the title while a note shows instead */
+
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                          LONG errmax)
 {
@@ -4622,6 +4637,9 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
             ended = paused = FALSE;
             if (!vid_next_sound(cpu, at, err, errmax))
                 break;
+            if (!aga_title[0])
+                amb_strlcpy(aga_title, bar.title, sizeof(aga_title));
+            amb_strlcpy(bar.title, vid_note, sizeof(bar.title));
             bar_redraw = TRUE;
         } else if (r == 5 && vid.ms) {
             /* seek: started again from about there, as on a card's screen */
@@ -4641,6 +4659,11 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                     break;
             }
             at = target;
+            bar_redraw = TRUE;
+        }
+        if (aga_title[0] && time_ms() >= vid_note_until) {
+            amb_strlcpy(bar.title, aga_title, sizeof(bar.title));   /* (the note's time over) */
+            aga_title[0] = 0;
             bar_redraw = TRUE;
         }
         bar.paused = paused;
@@ -4783,12 +4806,14 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
  * up to 16; cur the one to start with): A goes to the next, the stream
  * asked for again from where it is. anim_net_sound(): the one played
  * last. */
-void anim_net_sounds(const int *idx, int n, int cur)
+void anim_net_sounds(const int *idx, const char *const *titles, int n, int cur)
 {
     int i;
     vid_nsnd = n > 16 ? 16 : n < 0 ? 0 : n;
-    for (i = 0; i < vid_nsnd; i++)
+    for (i = 0; i < vid_nsnd; i++) {
         vid_snd[i] = idx[i];
+        amb_strlcpy(vid_snd_title[i], titles && titles[i] ? titles[i] : "", sizeof(vid_snd_title[i]));
+    }
     vid_snd_cur = cur >= 0 && cur < vid_nsnd ? cur : 0;
 }
 
@@ -4805,6 +4830,12 @@ static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax)
     sprintf(m, "its sound: stream %ld (%ld of %ld), from %lu ms", (long)vid_snd[vid_snd_cur],
             (long)vid_snd_cur + 1, (long)vid_nsnd, (unsigned long)at);
     amb_log("video", m);
+    /* shown as the title for 4 s: "(2/5) Dolby Digital - 5.1" (no words of
+     * Ambiance's own: the server's name for it) */
+    sprintf(vid_note, "(%ld/%ld) %s", (long)vid_snd_cur + 1, (long)vid_nsnd,
+            vid_snd_title[vid_snd_cur][0] ? vid_snd_title[vid_snd_cur] : "");
+    vid_note_until = (time_ms() + 4000) | 1;
+    ctl.key = time_ms() ? time_ms() : 1;    /* (the controls up, to show it) */
     return vid_start(cpu, at, err, errmax);
 }
 
@@ -4826,6 +4857,9 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     r = play_checked(g, url, name, cpu, err, errmax, why);
     vid_net = FALSE;
     vid_nsnd = 0;
+    vid_note_until = 0;                     /* (a note of A's: not into the next video) */
+    vid_note_was = FALSE;
+    aga_title[0] = 0;
     return r;
 }
 
