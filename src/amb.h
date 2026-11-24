@@ -1208,7 +1208,10 @@ struct NetJob {
     UBYTE busy, done, quit, orphan;
     UBYTE gdm;                  /* not a request: Plex servers looked for on the network */
     UBYTE tls;                  /* HTTPS (port 0: 443), AmiSSL's certificate check */
-    UBYTE post;                 /* POST, with no body, rather than GET */
+    UBYTE post;                 /* POST, with no body (or send's), rather than GET */
+    const char *send;           /* a POST's body (JSON), the caller's while the job is out */
+    UBYTE jf;                   /* a Jellyfin job of the UI's own (JFJ_*): not a list */
+    UBYTE jfdisc;               /* not a request: Jellyfin servers looked for on the network */
     UBYTE wait_s;               /* seconds without a byte before giving up (0: 20) */
     ULONG t_sub, t_start;       /* time_ms when sent, and when the process began it (log) */
     char extra[320];            /* more request headers ("Name: value\r\n" each) */
@@ -1286,6 +1289,49 @@ struct PlexConf {
     UWORD libraries;            /*   of how many on the server */
 };
 extern struct PlexConf plex;
+
+/* jellyfin.c: a Jellyfin server (its keys begin with '~': plex.c hands
+ * them there; the rows are Plex's kinds, with Plex's fields) */
+struct JfConf {
+    BOOL on;                    /* Settings > Networking > Jellyfin */
+    char host[64];              /* "" none chosen */
+    UWORD port;
+    char name[64], sid[40];     /* the server's name and id */
+    char user[64], uid[40];     /* signed in as ("" not) */
+    char token[80], dev[40];    /* the sign-in's token; this Amiga's device id */
+    UBYTE vsize;                /* films: 0 by the decoder, 1 small (CPU), 2 large (ZZ9000) */
+};
+enum { JFJ_SIGNIN = 1, JFJ_SIGNOUT, JFJ_FIND, JFJ_INFO, JFJ_VIDEO };
+extern struct JfConf jf;
+void jf_load(void);
+void jf_set_on(BOOL on);
+void jf_set_server(const char *address, const char *name, const char *sid);
+void jf_signed_in(const char *user, const char *uid, const char *token);
+void jf_set_vsize(int v);
+BOOL jf_ready(void);            /* on, a server, signed in */
+static inline BOOL jf_key(const char *k) { return k && k[0] == '~'; }
+void jf_headers(char *out, LONG max);
+const char *jf_cpu_name(void);
+void jf_request(const char *key, LONG start, char *out, LONG max);
+void jf_job(struct NetJob *j, const char *key, LONG start);
+void jf_menu(const char *key, struct ItemList *l);
+BOOL jf_is_menu(const char *key);
+LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
+void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
+void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max);
+void jf_art_request(const char *thumb, WORD w, WORD h, char *req, LONG max);
+void jf_signin_job(struct NetJob *j, const char *user, const char *password, char *body, LONG max);
+BOOL jf_signin_came(struct NetJob *j, const char *user, char *why, LONG max);
+void jf_signout_job(struct NetJob *j);
+/* plex.c, for either server: a list job for key (host, port, path,
+ * headers), and whether key's server is known */
+/* askline.c: a line typed into a small window over scr (a password as
+ * dots); TRUE if kept (Return), buf changed only then */
+BOOL ask_line(struct Screen *scr, const char *title, const char *prompt, char *buf, LONG max,
+              BOOL secret);
+void plex_job(struct NetJob *j, const char *key, LONG start);
+BOOL plex_server_for(const char *key);
+const char *plex_server_name(const char *key);
 void plex_load(UWORD cpu);
 void plex_set_server(const char *host, UWORD port, const char *name);
 void plex_request(const char *key, char *out, LONG max);

@@ -40,6 +40,8 @@ Les animations passent sur les écrans propres de l'Amiga, et aucun n'a été tr
 MSG_2EE1D46F
 Mémoire insuffisante pour l'écran de l'animation
 ; Not enough memory for the animation's screen
+MSG_2EDB4C7E
+; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (sans nom)
 ; (no name)
@@ -172,6 +174,27 @@ Son fichier n'est pas là (relancez l'analyse dans iGame)
 MSG_7EBB5FFE
 Impossible d'écrire T:Ambiance-run
 ; Could not write T:Ambiance-run
+MSG_4C50B8D0
+%lu piste
+; %lu track
+MSG_4612A899
+%lu pistes
+; %lu tracks
+MSG_7C81E0F2
+%lu élément
+; %lu item
+MSG_01746B13
+%lu éléments
+; %lu items
+MSG_439822A9
+; The server did not accept that name and password
+MSG_5A8631EB
+; The server said %ld
+MSG_7E52AA7E
+; Could not reach the server
+MSG_229E5121
+Le serveur a répondu quelque chose d'inattendu
+; The server answered with something unexpected
 MSG_73F99D3C
 Jeux
 ; Games
@@ -679,6 +702,8 @@ stations jusqu'à %s
 MSG_424097EC
 Activé, aucun serveur choisi
 ; On, no server chosen
+MSG_207A7281
+; Not signed in
 MSG_33774386
 Automatique : %.40s
 ; Automatic: %.40s
@@ -1345,6 +1370,76 @@ Connexions : l'interface choisie par la pile
 MSG_247B55C3
 Les connexions sortent par cette interface
 ; Connections go out from this interface
+MSG_3A5C57BD
+; a media server (jellyfin.org)
+MSG_6D7302F2
+; Server
+MSG_7774E024
+; Look for servers on this network
+MSG_56E190E8
+; looking...
+MSG_21F2CA37
+; Type a server's address
+MSG_60A63E12
+; User
+MSG_0B4F3C70
+; Sign out
+MSG_744BE623
+; Sign in
+MSG_01C0A2B0
+; choose a server first
+MSG_2DC2A95F
+; signing in...
+MSG_7730BC18
+; Films
+MSG_5B59648A
+; Picture size
+MSG_19596FB6
+; small: 320 wide, MPEG-1 (the CPU decodes)
+MSG_6C2F61C3
+; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
+MSG_568457D9
+; automatic: by what decodes it
+MSG_59529DB2
+; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
+MSG_51FCE0BE
+; Jellyfin photos on %.80s
+MSG_53D9B262
+; Jellyfin: %.80s
+MSG_1CA86BFC
+; Looking for Jellyfin servers...
+MSG_529C37FD
+; The server's address (name or numbers, and :port if not 8096)
+MSG_1289C444
+; That is not an address
+MSG_5A6DB215
+; User name
+MSG_2CC30838
+; Password
+MSG_12C8DC90
+; Signing in to %.60s...
+MSG_3F376507
+; Fetching %.50s: %lu KB (Fire on it again to stop)
+MSG_2CF03B1C
+; %.50s would need about %lu MB in T: (%lu MB free)
+MSG_6EB56B80
+; Asking %.40s for %.50s...
+MSG_4445C7A1
+; %.50s could not be fetched: %.100s
+MSG_474FAF4B
+; the server said %ld
+MSG_1422F4A4
+; No Jellyfin server answered on this network
+MSG_02EBAE2D
+; Jellyfin server: %.60s
+MSG_63D7C7C0
+; %ld Jellyfin server found
+MSG_0D5ECA51
+; %ld Jellyfin servers found
+MSG_127811B5
+; Signed in to %.60s as %.40s
+MSG_4287518C
+; No Jellyfin server answered at %.60s
 MSG_61C33E78
 Les fichiers du style lisse n'ont pas pu être chargés
 ; The smooth style's files could not be loaded
@@ -1441,15 +1536,14 @@ Déconnecté de plex.tv
 MSG_6358253C
 Cette bibliothèque n'est plus sur le serveur : Musique les liste à nouveau
 ; That library is gone from the server: Music lists them again
-MSG_229E5121
-Le serveur a répondu quelque chose d'inattendu
-; The server answered with something unexpected
 MSG_49CF76D8
 Aucune bibliothèque musicale ici
 ; No music libraries there
 MSG_3EEA8333
 Aucune bibliothèque de photos ici
 ; No photo libraries there
+MSG_7E13ADDC
+; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 Le serveur demande une connexion : Réglages > Réseau > Plex
 ; The server wants you signed in: Settings > Networking > Plex
@@ -1912,18 +2006,6 @@ MSG_201D2C97
 MSG_71EDAAEC
 %lu photos
 ; %lu photos
-MSG_7C81E0F2
-%lu élément
-; %lu item
-MSG_01746B13
-%lu éléments
-; %lu items
-MSG_4C50B8D0
-%lu piste
-; %lu track
-MSG_4612A899
-%lu pistes
-; %lu tracks
 MSG_4E1664E0
 %lu album
 ; %lu album

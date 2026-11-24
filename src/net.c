@@ -28,6 +28,8 @@
  * gives way to the next.
  */
 #include "amb.h"
+#include "jfjson.h"
+#include "radiocsv.h"
 #include "plexxml.h"
 
 #include <string.h>
@@ -547,7 +549,7 @@ static BOOL split_url(const char *url, char *host, LONG hmax, UWORD *port_no, ch
 static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
                   const char *path, BOOL secure)
 {
-    char req[900];
+    char req[900], clen[80];
     LONG s;
     APTR c = NULL;
     BOOL ok;
@@ -559,12 +561,18 @@ static BOOL fetch(struct NetJob *j, ULONG addr, const char *host, UWORD port_no,
     }
     /* HTTP/1.1 over HTTPS: plex.tv refuses 1.0 ("426 Upgrade Required");
      * Connection: close all the same, chunked answers put together */
+    /* a POST's body: JSON (a Jellyfin sign-in), else none */
+    if (j->post && j->send)
+        sprintf(clen, "Content-Type: application/json\r\nContent-Length: %lu\r\n",
+                (unsigned long)strlen(j->send));
+    else
+        strcpy(clen, j->post ? "Content-Length: 0\r\n" : "");
     sprintf(req,
             "%s %s HTTP/1.%s\r\nHost: %s\r\nUser-Agent: Ambiance/" AMB_VERSION
             "\r\nAccept: */*\r\n%s%sConnection: close\r\n\r\n",
-            j->post ? "POST" : "GET", path, secure ? "1" : "0", host,
-            j->post ? "Content-Length: 0\r\n" : "", j->extra);
-    if (!send_all(j, s, c, req, strlen(req))) {
+            j->post ? "POST" : "GET", path, secure ? "1" : "0", host, clen, j->extra);
+    if (!send_all(j, s, c, req, strlen(req)) ||
+        (j->post && j->send && !send_all(j, s, c, j->send, strlen(j->send)))) {
         tls_free(&tls, c);
         CloseSocket(s);
         set_err(j, j->cancel ? "Cancelled" : "The request could not be sent");
@@ -594,6 +602,80 @@ static BOOL resolve(const char *host, ULONG *addr)
 /* GDM: Plex servers on this network, as "address\tport\tname" lines. */
 #define GDM_PORT 32414
 #define GDM_MS   2500           /* how long answers are waited for */
+/* Jellyfin's discovery: "who is JellyfinServer?" broadcast to UDP 7359;
+ * each server answers with JSON (Address, Id, Name), as "address\tid\t
+ * name" lines (jfjson.c reads them). */
+#define JF_DISC_PORT 7359
+#define JF_DISC_MS   2000
+static void jf_discover(struct NetJob *j)
+{
+    static const char q[] = "who is JellyfinServer?";
+    struct sockaddr_in sa;
+    LONG s, one = 1;
+    ULONG deadline;
+    UBYTE *out;
+    ULONG len = 0, cap = 2048;
+    char buf[1025];
+    if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        set_err(j, _("No socket (is the TCP/IP stack running?)"));
+        return;
+    }
+    if (!(out = AllocVec(cap + 1, MEMF_ANY | MEMF_CLEAR))) {
+        CloseSocket(s);
+        set_err(j, _("Not enough memory"));
+        return;
+    }
+    setsockopt(s, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
+    IoctlSocket(s, FIONBIO, (char *)&one);
+    bind_out(s);
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_len = sizeof(sa);
+    sa.sin_family = AF_INET;
+    sa.sin_port = JF_DISC_PORT;             /* big-endian already */
+    sa.sin_addr.s_addr = 0xFFFFFFFFUL;
+    sendto(s, (APTR)q, sizeof(q) - 1, 0, (struct sockaddr *)&sa, sizeof(sa));
+    deadline = time_ms() + JF_DISC_MS;
+    while ((LONG)(time_ms() - deadline) < 0) {
+        struct sockaddr_in from;
+        LONG fl = sizeof(from), r;
+        int w = wait_sock(j, s, FALSE, 1);
+        char addr[80], id[40], name[64], line[200];
+        if (w < 0)
+            break;
+        if (w == 0)
+            continue;
+        r = recvfrom(s, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &fl);
+        if (r <= 0)
+            continue;
+        buf[r] = 0;
+        if (!jf_discovered(buf, (unsigned long)r, addr, sizeof(addr), id, sizeof(id), name,
+                           sizeof(name)))
+            continue;
+        utf8_to_latin1(name);
+        sprintf(line, "%s\t%s\t%s\n", addr, id, name);
+        if (strstr((char *)out, line))
+            continue;                       /* (answered twice) */
+        if (len + strlen(line) < cap) {
+            strcpy((char *)out + len, line);
+            len += strlen(line);
+        }
+    }
+    CloseSocket(s);
+    if (j->cancel) {
+        FreeVec(out);
+        set_err(j, _("Cancelled"));
+        return;
+    }
+    if (!len) {
+        FreeVec(out);
+        set_err(j, _("No Jellyfin server answered on this network"));
+        return;
+    }
+    j->body = out;
+    j->len = len;
+    j->status = 200;
+}
+
 static void gdm(struct NetJob *j)
 {
     static const char q[] = "M-SEARCH * HTTP/1.0";
@@ -778,6 +860,11 @@ static void run(struct NetJob *j)
     j->len = 0;
     if (!SocketBase) {
         set_err(j, "No TCP/IP stack is running (bsdsocket.library)");
+        return;
+    }
+    if (j->jfdisc) {
+        jf_discover(j);
+        j->ms = time_ms() - t0;
         return;
     }
     if (j->gdm) {
