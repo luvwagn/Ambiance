@@ -1623,6 +1623,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 7;
             else if (vi_keys && (code == 'i' || code == 'I') && !r)
                 r = 9;
+            else if (vid_net && vid_nsnd > 1 && (code == 'a' || code == 'A') && !r)
+                r = 18;                     /* A: its next sound */
             else if (vid_dvd && (code == 'p' || code == 'P') && !r)
                 r = 8;
             else if (vid_dvd && dvdplay_is_nav(vid_dvd) && (code == 'm' || code == 'M') && !r)
