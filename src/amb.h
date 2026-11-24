@@ -363,6 +363,13 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
 /* An MPEG video played by the ZZ9000 the same way, its overlay the picture
  * (Ambiance's RTG screen or window on the card) */
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
+struct VProbe;
+/* An MPEG stream from a server (url), probed from its first bytes (v; its
+ * length in v->ms if known), played as it comes: a seek asks the server
+ * again from that time (seek_param and the time in 100 ns units appended,
+ * "&startTimeTicks=", Jellyfin's) */
+LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
+                         const char *seek_param, UWORD cpu, char *err, LONG errmax);
 /* A DVD's film: the disc in volume vol, or (image) in the image file vol */
 LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
@@ -1216,6 +1223,8 @@ struct NetJob {
     UBYTE jf;                   /* a Jellyfin job of the UI's own (JFJ_*): not a list */
     UBYTE jfdisc;               /* not a request: Jellyfin servers looked for on the network */
     UBYTE wait_s;               /* seconds without a byte before giving up (0: 20) */
+    ULONG upto;                 /* not 0: read only so many bytes (headers and all) and
+                                 * stop there, a success (a stream's start, probed) */
     ULONG t_sub, t_start;       /* time_ms when sent, and when the process began it (log) */
     char extra[320];            /* more request headers ("Name: value\r\n" each) */
     UWORD port;                 /* 0: 80 */

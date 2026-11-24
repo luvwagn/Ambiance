@@ -422,6 +422,8 @@ static BOOL read_all(struct NetJob *j, LONG s, APTR c)
         if (r <= 0)
             break;                          /* closed: all there */
         len += r;
+        if (j->upto && len >= j->upto)
+            break;                          /* all that was wanted (a stream's start) */
         if (j->file[0] && !headed) {
             /* a download: to the file once the headers are in */
             char *e;

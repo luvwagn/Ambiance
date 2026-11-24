@@ -361,6 +361,19 @@ BOOL vprobe(const char *path, struct VProbe *v, ULONG span)
     return v->w && v->h;
 }
 
+BOOL vprobe_mem(const UBYTE *buf, LONG n, struct VProbe *v)
+{
+    unsigned long long lo0 = 0, hi0 = 0;
+    BOOL have0 = FALSE;
+    memset(v, 0, sizeof(*v));
+    v->ts_apid = v->ts_vpid = v->ts_ppid = 0x1FFF;
+    if (n > 0)
+        scan(buf, n, v, TRUE, &lo0, &hi0, &have0);
+    if (v->w && v->h)
+        v->h264 = FALSE;
+    return v->w && v->h;
+}
+
 const char *vprobe_kind(const struct VProbe *v)
 {
     if (v->h264)

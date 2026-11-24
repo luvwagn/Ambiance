@@ -3518,7 +3518,6 @@ static void music_root_again(void);
 static void pictures_root_again(void);
 static BOOL jf_section_row(struct Page *p, char kind, BOOL first);
 static void goto_jf_settings(void);
-static void jf_film_tick(void);
 
 /* A Jellyfin server chosen, Jellyfin on, the network up: its rows shown. */
 static BOOL jf_shown(void)
@@ -7940,6 +7939,7 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
  * own in front of Ambiance's (anim.c), which comes back as it was. */
 static void anim_from_item(const struct Item *it);
 static void jf_film(const struct Item *it);
+static const struct VProbe *anim_net_probe;    /* anim_from_item's item: a stream, probed so */
 
 static void anim_from_page(struct Page *p)
 {
@@ -8001,7 +8001,11 @@ static void anim_from_item(const struct Item *it)
             if (anim_play_dvd(&g, vol, FALSE, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
-            if (anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
+            if ((anim_net_probe ? anim_play_video_net(&g, it->path, it->label, anim_net_probe,
+                                                      "&startTimeTicks=", plex_decoder_cpu(), err,
+                                                      sizeof(err))
+                                : anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err))) < 0 &&
+                err[0])
                 set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amb_log("anim", err);
@@ -10063,100 +10067,50 @@ static void jf_sign_out(void)
 }
 
 /* ---- A Jellyfin film (a Videos row "~Y<id>"): the server makes it
- * MPEG (jf_video_url: MPEG-1 for the CPU, MPEG-2 for the ZZ9000), and it
- * is fetched whole into T: first, then played as a file there (and let
- * go after); streaming it as it comes is to follow. Fire on it again
- * while it comes gives it up. */
-#define JF_FILM_FILE "T:Ambiance-jellyfin.mpg"
-static struct NetJob *jf_fj;            /* the film coming */
-static char jf_fj_title[120];
-static ULONG jf_fj_shown;
-
-/* Room in T: (its disk's, or for RAM: the memory free), bytes. */
-static ULONG t_room(void)
-{
-    struct InfoData *id;
-    BPTR l;
-    ULONG room = 0, mem = AvailMem(MEMF_ANY);
-    if ((id = AllocVec(sizeof(*id), MEMF_ANY | MEMF_CLEAR)) && (l = Lock((CONST_STRPTR)"T:", ACCESS_READ))) {
-        if (Info(l, id) && id->id_NumBlocks > id->id_NumBlocksUsed)
-            room = (ULONG)(id->id_NumBlocks - id->id_NumBlocksUsed) * (ULONG)id->id_BytesPerBlock;
-        UnLock(l);
-    }
-    if (id)
-        FreeVec(id);
-    /* RAM: says full: what memory there is, less 2 MB to go on with */
-    if (!room)
-        room = mem > 2000000UL ? mem - 2000000UL : 0;
-    return room;
-}
-
-static void jf_film_tick(void)
-{
-    char m[120];
-    if (!jf_fj || jf_fj->got == jf_fj_shown)
-        return;
-    jf_fj_shown = jf_fj->got;
-    sprintf(m, _("Fetching %.50s: %lu KB (Fire on it again to stop)"), jf_fj_title,
-            (unsigned long)(jf_fj_shown >> 10));
-    set_msg(m);
-}
+ * MPEG as it plays (jf_video_url: MPEG-1 for the CPU, MPEG-2 for the
+ * ZZ9000), streamed: nothing kept on this Amiga. Its first bytes are asked
+ * for first (a job of their own, JFJ_VIDEO: its size, kind and sound
+ * probed from them), then it plays from the server as it comes; a seek
+ * asks the server again from that time (startTimeTicks). */
+#define JF_PROBE (96UL * 1024)          /* its start, probed: a sequence header, a sound frame */
+static struct NetJob *jf_fj;            /* the start asked for */
+static char jf_fj_title[120], jf_fj_url[600];
+static ULONG jf_fj_ms;
 
 static void jf_film(const struct Item *it)
 {
-    char url[600], f[48], m[200];
+    char f[48], m[200];
     const char *path;
     struct NetJob *j;
     BOOL zz = caps.zz9000 && !video_cpu, big = jf.vsize == 2 || (jf.vsize == 0 && zz);
-    ULONG ms, need, room;
     if (jf_fj) {
-        /* coming already: Fire again gives it up */
-        BOOL same = !strcmp(jf_fj_title, it->label);
-        net_cancel(jf_fj);
+        net_cancel(jf_fj);                  /* (another asked for meanwhile: that one) */
         jf_fj->orphan = TRUE;
         jf_fj->seq = 0;
         jf_fj = NULL;
-        DeleteFile((CONST_STRPTR)JF_FILM_FILE);
-        amb_log("jellyfin: film", "given up");
-        set_msg(_("Stopped"));
-        if (same)
-            return;
     }
     if (!jf.token[0]) {
         goto_jf_settings();
-        return;
-    }
-    radio_field(it, 4, f, sizeof(f));
-    ms = strtoul_(f);
-    /* its size, about: its length at the rate asked for (and MP2's 128k) */
-    need = (ms / 1000) * ((big ? 4128000UL : 1128000UL) / 8);
-    room = t_room();
-    if (ms && need > room) {
-        sprintf(m, _("%.50s would need about %lu MB in T: (%lu MB free)"), it->label,
-                (unsigned long)(need >> 20), (unsigned long)(room >> 20));
-        set_msg(m);
-        amb_log("jellyfin: film too big for T:", m);
         return;
     }
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
         set_msg(_("Not enough memory"));
         return;
     }
+    radio_field(it, 4, f, sizeof(f));
+    jf_fj_ms = strtoul_(f);
     radio_field(it, 0, f, sizeof(f));       /* (its key alone) */
-    jf_video_url(f, zz, 0, url, sizeof(url));
-    path = strchr(url + 7, '/');
+    jf_video_url(f, zz, 0, jf_fj_url, sizeof(jf_fj_url));
+    path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
     j->port = jf.port;
     amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
-    jf_headers(j->extra, sizeof(j->extra));
-    amb_strlcpy(j->file, JF_FILM_FILE, sizeof(j->file));
+    j->upto = JF_PROBE;
     j->wait_s = 60;                         /* (the server starts converting first) */
     amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
-    jf_fj_shown = ~0UL;
     jf_fj = j;
-    sprintf(m, "%.60s: %s, about %lu KB, %lu KB free in T:", it->label,
-            big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s", (unsigned long)(need >> 10),
-            (unsigned long)(room >> 10));
+    sprintf(m, "%.60s: %s, %lu ms long", it->label,
+            big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s", (unsigned long)jf_fj_ms);
     amb_log("jellyfin: film asked for", m);
     sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, it->label);
     set_msg(m);
@@ -10168,35 +10122,43 @@ static void jf_film(const struct Item *it)
         radio_done(j);
 }
 
-/* The film here: played from T:, then let go. */
+/* Its start here: probed, then played as a stream from the server. */
 static void jf_film_came(struct NetJob *j)
 {
     char m[200];
+    struct VProbe v;
     jf_fj = NULL;
-    if (!j->body || j->err[0] || j->status != 200 || !j->got) {
+    if (!j->body || j->status != 200 || !j->len) {
         sprintf(m, _("%.50s could not be fetched: %.100s"), jf_fj_title,
                 j->err[0] ? j->err : j->status ? "" : _("no answer"));
         if (!j->err[0] && j->status)
             sprintf(m + strlen(m), _("the server said %ld"), (long)j->status);
         amb_log("jellyfin: film", m);
         set_msg(m);
-        DeleteFile((CONST_STRPTR)JF_FILM_FILE);
         draw_footer();
         return;
     }
+    sprintf(m, "its first %lu KB in %lu ms", (unsigned long)(j->len >> 10), (unsigned long)j->ms);
+    amb_log("jellyfin: film", m);
+    if (!vprobe_mem(j->body, (LONG)j->len, &v)) {
+        amb_log("jellyfin: film", "no MPEG sequence header in its start");
+        set_msg(_("Not an MPEG video Ambiance can read"));
+        draw_footer();
+        return;
+    }
+    v.ps = TRUE;                            /* (a Program Stream: stream.mpg) */
+    v.ms = jf_fj_ms;
     {
         struct Item it;
-        sprintf(m, "%lu KB in %lu ms (%lu KB/s)", (unsigned long)(j->got >> 10), (unsigned long)j->ms,
-                (unsigned long)(j->ms ? (j->got / j->ms) : 0));
-        amb_log("jellyfin: film fetched", m);
         msg[0] = 0;
         memset(&it, 0, sizeof(it));
         it.kind = IT_ANIM;
         it.label = jf_fj_title;
-        it.path = (char *)JF_FILM_FILE;
+        it.path = jf_fj_url;
         it.sortkey = (char *)"MPEG";
+        anim_net_probe = &v;
         anim_from_item(&it);
-        DeleteFile((CONST_STRPTR)JF_FILM_FILE);
+        anim_net_probe = NULL;
     }
 }
 
@@ -12113,8 +12075,8 @@ static void jf_help(void)
                    "this Amiga can play, as for Plex. Its photos are made the size of the screen "
                    "by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide "
                    "for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes "
-                   "(Settings > Networking > Jellyfin > Picture size). A film is fetched into T: "
-                   "first, then played."));
+                   "(Settings > Networking > Jellyfin > Picture size). Films stream from the "
+                   "server as they play: nothing is kept on this Amiga."));
     text_line(p, "");
     text_para(p, _("Finding a server: Settings > Networking > Jellyfin > Look for servers on "
                    "this network, or Type a server's address (as 192.168.1.10:8096)."));
@@ -14503,7 +14465,6 @@ static int app_main(void)
                     flac_slow_check();      /* a FLAC track running dry: said once */
                     plink_tick();           /* signing in at plex.tv: asked after */
                     whd_tick();             /* WHDLoad coming: how much */
-                    jf_film_tick();         /* a Jellyfin film coming: how much */
                     dvd_watch();            /* Videos: a DVD put in or taken out */
                 }
                 mp_paula_check();           /* every tick: a moment's change seen too */

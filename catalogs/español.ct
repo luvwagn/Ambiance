@@ -1450,12 +1450,6 @@ Contraseña
 MSG_5A6DB215
 Nombre de usuario
 ; User name
-MSG_3F376507
-Obteniendo %.50s: %lu KB (Disparo sobre él otra vez para parar)
-; Fetching %.50s: %lu KB (Fire on it again to stop)
-MSG_2CF03B1C
-%.50s necesitaría unos %lu MB en T: (%lu MB libres)
-; %.50s would need about %lu MB in T: (%lu MB free)
 MSG_6EB56B80
 Pidiendo a %.40s %.50s...
 ; Asking %.40s for %.50s...
@@ -1465,6 +1459,9 @@ No se pudo obtener %.50s: %.100s
 MSG_474FAF4B
 el servidor respondió %ld
 ; the server said %ld
+MSG_20C6E823
+No es un vídeo MPEG que Ambiance pueda leer
+; Not an MPEG video Ambiance can read
 MSG_1422F4A4
 Ningún servidor Jellyfin respondió en esta red
 ; No Jellyfin server answered on this network
@@ -1687,9 +1684,9 @@ Sonido: Paula, 14 bits
 MSG_0F2AADBB
 Sonido: Paula, 8 bits
 ; Sound: Paula, 8-bit
-MSG_0BDC3408
-Ambiance reproduce música, muestra fotos y reproduce películas de un servidor Jellyfin de su red (jellyfin.org: software libre). Sus bibliotecas de música aparecen por artista y álbum con sus portadas, y el servidor convierte cada pista en un MP3 que este Amiga puede reproducir, como con Plex. El servidor ajusta sus fotos al tamaño de la pantalla. Convierte sus películas en MPEG para este Amiga: MPEG-1 de 320 píxeles de ancho para que lo decodifique la CPU, o MPEG-2 de hasta 720 x 576 cuando decodifica la ZZ9000 (Ajustes > Red > Jellyfin > Tamaño de imagen). Una película se obtiene primero en T: y luego se reproduce.
-; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). A film is fetched into T: first, then played.
+MSG_1CED39E2
+Ambiance reproduce música, muestra fotos y reproduce películas de un servidor Jellyfin de su red (jellyfin.org: software libre). Sus bibliotecas de música aparecen por artista y álbum con sus portadas, y el servidor convierte cada pista en un MP3 que este Amiga puede reproducir, como con Plex. El servidor ajusta sus fotos al tamaño de la pantalla. Convierte sus películas en MPEG para este Amiga: MPEG-1 de 320 píxeles de ancho para que lo decodifique la CPU, o MPEG-2 de hasta 720 x 576 cuando decodifica la ZZ9000 (Ajustes > Red > Jellyfin > Tamaño de imagen). Las películas llegan del servidor en streaming mientras se reproducen: no se guarda nada en este Amiga.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
 MSG_2C5335A3
 Encontrar un servidor: Ajustes > Red > Jellyfin > Buscar servidores en esta red, o Escribir la dirección de un servidor (como 192.168.1.10:8096).
 ; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
@@ -2218,9 +2215,6 @@ Vídeo %s: en una pantalla AGA, Ambiance reproduce MPEG-1 y MPEG-2
 MSG_5E08A9DF
 Vídeo %s: la ZZ9000 reproduce MPEG-1 y MPEG-2
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-No es un vídeo MPEG que Ambiance pueda leer
-; Not an MPEG video Ambiance can read
 MSG_5EF81658
 El vídeo MPEG necesita Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)

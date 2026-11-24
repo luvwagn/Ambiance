@@ -13,6 +13,7 @@ struct VProbe;
 /* Whether path plays here (v: what its headers say): NULL if it can, else
  * why not (for the footer). */
 const char *video_check(const char *path, struct VProbe *v);
+const char *video_checked(const char *name, struct VProbe *v);  /* v probed already */
 extern BOOL video_cpu_only;         /* video_check: the CPU decodes it, whatever the card (an AGA screen) */
 const char *video_check_dvd(struct VProbe *v);   /* a DVD's film (dvdplay.c's v): sets v->sw */
 ULONG video_shown_w(const struct VProbe *v);    /* its width for its height, as meant to be seen */

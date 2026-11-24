@@ -3283,8 +3283,10 @@ restart:
  * pack after it); at the end it loops, or stops there with its controls up
  * (Play from the start, Esc back). */
 static struct VProbe vid;
-static char lay_path[300];      /* its file */
+static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
+static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
+static char vid_seek_param[32]; /* ...appended with the time, in 100 ns units */
 
 static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 {
@@ -3301,6 +3303,19 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
         vid_dvd_fresh = FALSE;
         vid_base = at;
         return st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax);
+    }
+    if (vid_net) {
+        /* a server's stream: asked for again from that time (its own
+         * conversion starts there: a byte offset means nothing to it) */
+        static char url[700];
+        amb_strlcpy(url, lay_path, sizeof(url));
+        if (ms && vid_seek_param[0]) {
+            char t[48];
+            sprintf(t, "%s%lu0000", vid_seek_param, (unsigned long)ms);
+            amb_strlcat(url, t, sizeof(url));
+        }
+        vid_base = ms;
+        return st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
     }
     vid_base = at ? ms : 0;
     return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
@@ -4683,6 +4698,9 @@ out:
     return result;
 }
 
+static LONG play_checked(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                         LONG errmax, const char *why);
+
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
 {
     const char *why;
@@ -4693,6 +4711,32 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     video_cpu_only = !g->truecolor;         /* (an AGA screen: the CPU's, drawn here) */
     why = video_check(path, &vid);
     video_cpu_only = FALSE;
+    return play_checked(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax, why);
+}
+
+LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
+                         const char *seek_param, UWORD cpu, char *err, LONG errmax)
+{
+    const char *why;
+    LONG r;
+    err[0] = 0;
+    anim_g = g;
+    if (!g || !g->win)
+        return -1;
+    vid = *v;
+    video_cpu_only = !g->truecolor;
+    why = video_checked(name, &vid);
+    video_cpu_only = FALSE;
+    vid_net = TRUE;
+    amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
+    r = play_checked(g, url, name, cpu, err, errmax, why);
+    vid_net = FALSE;
+    return r;
+}
+
+static LONG play_checked(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                         LONG errmax, const char *why)
+{
     if (why) {
         amb_strlcpy(err, why, errmax);
         st_mpv_close();
@@ -4705,12 +4749,12 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
             st_mpv_close();
             return -1;
         }
-        r = vid_play_aga(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+        r = vid_play_aga(g, path, name, cpu, err, errmax);
         st_mpv_close();
         return r;
     }
     {
-        LONG r = vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+        LONG r = vid_play(g, path, name, cpu, err, errmax);
         st_mpv_close();                     /* (mpegv.library let go after each video) */
         return r;
     }

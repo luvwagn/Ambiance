@@ -1450,12 +1450,6 @@ MSG_2CC30838
 MSG_5A6DB215
 Όνομα χρήστη
 ; User name
-MSG_3F376507
-Λήψη %.50s: %lu KB (Fire ξανά πάνω του για διακοπή)
-; Fetching %.50s: %lu KB (Fire on it again to stop)
-MSG_2CF03B1C
-Το %.50s θα χρειαζόταν περίπου %lu MB στο T: (%lu MB ελεύθερα)
-; %.50s would need about %lu MB in T: (%lu MB free)
 MSG_6EB56B80
 Αίτημα στο %.40s για %.50s...
 ; Asking %.40s for %.50s...
@@ -1465,6 +1459,9 @@ MSG_4445C7A1
 MSG_474FAF4B
 ο server απάντησε %ld
 ; the server said %ld
+MSG_20C6E823
+Δεν είναι βίντεο MPEG που διαβάζει το Ambiance
+; Not an MPEG video Ambiance can read
 MSG_1422F4A4
 Κανένας server Jellyfin δεν απάντησε σε αυτό το δίκτυο
 ; No Jellyfin server answered on this network
@@ -1687,9 +1684,9 @@ MSG_2350DA18
 MSG_0F2AADBB
 Ήχος: Paula, 8-bit
 ; Sound: Paula, 8-bit
-MSG_0BDC3408
-Το Ambiance παίζει μουσική, δείχνει φωτογραφίες και παίζει ταινίες από έναν server Jellyfin στο δίκτυό σας (jellyfin.org: ελεύθερο λογισμικό). Οι μουσικές του βιβλιοθήκες εμφανίζονται ανά καλλιτέχνη και άλμπουμ με τα εξώφυλλά τους, και ο server κάνει κάθε κομμάτι MP3 που μπορεί να παίξει αυτό το Amiga, όπως με το Plex. Ο server φέρνει τις φωτογραφίες στο μέγεθος της οθόνης. Τις ταινίες τις κάνει MPEG για αυτό το Amiga: MPEG-1 πλάτους 320 pixel για αποκωδικοποίηση από την CPU, ή MPEG-2 έως 720 x 576 όταν αποκωδικοποιεί η ZZ9000 (Ρυθμίσεις > Δίκτυο > Jellyfin > Μέγεθος εικόνας). Μια ταινία λαμβάνεται πρώτα στο T: και μετά παίζεται.
-; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). A film is fetched into T: first, then played.
+MSG_1CED39E2
+Το Ambiance παίζει μουσική, δείχνει φωτογραφίες και παίζει ταινίες από έναν server Jellyfin στο δίκτυό σας (jellyfin.org: ελεύθερο λογισμικό). Οι μουσικές του βιβλιοθήκες εμφανίζονται ανά καλλιτέχνη και άλμπουμ με τα εξώφυλλά τους, και ο server κάνει κάθε κομμάτι MP3 που μπορεί να παίξει αυτό το Amiga, όπως με το Plex. Ο server φέρνει τις φωτογραφίες στο μέγεθος της οθόνης. Τις ταινίες τις κάνει MPEG για αυτό το Amiga: MPEG-1 πλάτους 320 pixel για αποκωδικοποίηση από την CPU, ή MPEG-2 έως 720 x 576 όταν αποκωδικοποιεί η ZZ9000 (Ρυθμίσεις > Δίκτυο > Jellyfin > Μέγεθος εικόνας). Οι ταινίες έρχονται ως ροή από τον server όσο παίζουν: τίποτα δεν φυλάσσεται σε αυτό το Amiga.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
 MSG_2C5335A3
 Εύρεση server: Ρυθμίσεις > Δίκτυο > Jellyfin > Αναζήτηση server σε αυτό το δίκτυο, ή Πληκτρολόγηση διεύθυνσης server (π.χ. 192.168.1.10:8096).
 ; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
@@ -2218,9 +2215,6 @@ MSG_4E597D1C
 MSG_5E08A9DF
 Βίντεο %s: η ZZ9000 παίζει MPEG-1 και MPEG-2
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Δεν είναι βίντεο MPEG που διαβάζει το Ambiance
-; Not an MPEG video Ambiance can read
 MSG_5EF81658
 Το βίντεο MPEG θέλει Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)

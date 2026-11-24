@@ -38,5 +38,8 @@ struct VProbe {
  * bytes read at its start and again at its end (0: 192 KB). */
 BOOL vprobe(const char *path, struct VProbe *v, ULONG span);
 const char *vprobe_kind(const struct VProbe *v);
+/* The same from a stream's first n bytes (a Program Stream's; its length
+ * and size not known: 0) */
+BOOL vprobe_mem(const UBYTE *buf, LONG n, struct VProbe *v);
 
 #endif
