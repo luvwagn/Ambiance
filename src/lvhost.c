@@ -156,6 +156,62 @@ static const char *h_tr(const char *s) { return amb_tr(s); }
 /* Plex's logo (art.c's, in its pens) for a layout: k times larger, about
  * two lines tall, in its colours over bg */
 static ULONG *lv_plex_px, lv_plex_bg;
+UBYTE lv_mark_kind;                     /* 1 Plex's, 2 Jellyfin's (main, with LPage.plexmark) */
+static UBYTE lv_plex_kind;
+
+/* "Jellyfin" (art.c's jf_hi, Rubik Bold: not Jellyfin's logo, which third
+ * parties do not use) two lines tall, in Jellyfin's gradient left to
+ * right (#AA5CC3 to #00A4DC, free to use), over bg */
+static const struct LImage *h_jfmark(ULONG bg)
+{
+    UWORD h = (UWORD)(lvh.g->sm ? sm_cell_h(lvh.g->sm) * 2 : jf_hi_h / 2), w;
+    LONG x, y;
+    if (h < 8)
+        h = 8;
+    if (h > jf_hi_h)
+        h = jf_hi_h;
+    w = (UWORD)(((LONG)jf_hi_w * h + jf_hi_h / 2) / jf_hi_h);
+    if (lv_plex_px && lv_plex_bg == bg && lv_plex_im.w == w && lv_plex_kind == 2)
+        return &lv_plex_im;
+    if (lv_plex_px) {
+        FreeVec(lv_plex_px);
+        lv_plex_px = NULL;
+    }
+    if (!(lv_plex_px = AllocVec((ULONG)w * h * 4, MEMF_ANY)))
+        return NULL;
+    for (y = 0; y < h; y++) {
+        LONG y0 = y * jf_hi_h / h, y1 = (y + 1) * jf_hi_h / h;
+        if (y1 <= y0)
+            y1 = y0 + 1;
+        for (x = 0; x < w; x++) {
+            LONG x0 = x * jf_hi_w / w, x1 = (x + 1) * jf_hi_w / w, i, j, ink = 0, n, sh;
+            ULONG c = 0, ink_c = 0;
+            if (x1 <= x0)
+                x1 = x0 + 1;
+            for (j = y0; j < y1; j++)
+                for (i = x0; i < x1; i++)
+                    ink += jf_hi[j * jf_hi_w + i];
+            n = (y1 - y0) * (x1 - x0) * 255;
+            for (sh = 0; sh <= 16; sh += 8) {
+                /* the gradient's colour here, then over bg by coverage */
+                LONG a = (LONG)((0xAA5CC3UL >> sh) & 255), b = (LONG)((0x00A4DCUL >> sh) & 255);
+                LONG v = a + (b - a) * x / (w > 1 ? w - 1 : 1), bv = (LONG)((bg >> sh) & 255);
+                ink_c |= (ULONG)v << sh;
+                c |= (ULONG)((bv * (n - ink) + v * ink) / n) << sh;
+            }
+            (void)ink_c;
+            lv_plex_px[(ULONG)y * w + x] = c;
+        }
+    }
+    lv_plex_bg = bg;
+    lv_plex_kind = 2;
+    lv_plex_im.w = w;
+    lv_plex_im.h = h;
+    lv_plex_im.mod = w;
+    lv_plex_im.px = lv_plex_px;
+    return &lv_plex_im;
+}
+
 static const struct LImage *h_plexmark(ULONG bg)
 {
     /* the wordmark's coverage (art.c's plex_hi, 64 high) averaged down to
@@ -167,10 +223,12 @@ static const struct LImage *h_plexmark(ULONG bg)
         h = 8;
     if (h > plex_hi_h)
         h = plex_hi_h;
+    if (lv_mark_kind == 2)
+        return h_jfmark(bg);
     w = (UWORD)(((LONG)plex_hi_w * h + plex_hi_h / 2) / plex_hi_h);
-    if (lv_plex_px && lv_plex_bg == bg && lv_plex_im.w == w)
+    if (lv_plex_px && lv_plex_bg == bg && lv_plex_im.w == w && lv_plex_kind == 1)
         return &lv_plex_im;
-    if (lv_plex_px && lv_plex_im.w != w) {
+    if (lv_plex_px && (lv_plex_im.w != w || lv_plex_kind != 1)) {
         FreeVec(lv_plex_px);
         lv_plex_px = NULL;
     }
@@ -208,6 +266,7 @@ static const struct LImage *h_plexmark(ULONG bg)
         }
     }
     lv_plex_bg = bg;
+    lv_plex_kind = 1;
     lv_plex_im.w = w;
     lv_plex_im.h = h;
     lv_plex_im.mod = w;

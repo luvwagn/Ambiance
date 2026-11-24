@@ -41,6 +41,7 @@ MSG_2EE1D46F
 No hay memoria suficiente para la pantalla de la animación
 ; Not enough memory for the animation's screen
 MSG_2EDB4C7E
+Return: Aceptar   Esc: cancelar
 ; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (sin nombre)
@@ -187,10 +188,13 @@ MSG_01746B13
 %lu elementos
 ; %lu items
 MSG_439822A9
+El servidor no aceptó ese nombre y contraseña
 ; The server did not accept that name and password
 MSG_5A8631EB
+El servidor respondió %ld
 ; The server said %ld
 MSG_7E52AA7E
+No se pudo contactar con el servidor
 ; Could not reach the server
 MSG_229E5121
 El servidor respondió algo inesperado
@@ -703,6 +707,7 @@ MSG_424097EC
 Encendido, sin servidor elegido
 ; On, no server chosen
 MSG_207A7281
+Sin sesión iniciada
 ; Not signed in
 MSG_33774386
 Automático: %.40s
@@ -992,6 +997,9 @@ Información del sistema
 MSG_692FB19D
 Plex en Ambiance
 ; Plex in Ambiance
+MSG_5DB50655
+Jellyfin en Ambiance
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, bajo la licencia MIT
 ; (c) 2026 Brian King, under the MIT licence
@@ -1371,74 +1379,109 @@ MSG_247B55C3
 Las conexiones salen por esta interfaz
 ; Connections go out from this interface
 MSG_3A5C57BD
+un servidor multimedia (jellyfin.org)
 ; a media server (jellyfin.org)
 MSG_6D7302F2
+Servidor
 ; Server
 MSG_7774E024
+Buscar servidores en esta red
 ; Look for servers on this network
 MSG_56E190E8
+buscando...
 ; looking...
 MSG_21F2CA37
+Escribir la dirección de un servidor
 ; Type a server's address
 MSG_60A63E12
+Usuario
 ; User
 MSG_0B4F3C70
+Cerrar sesión
 ; Sign out
 MSG_744BE623
+Iniciar sesión
 ; Sign in
 MSG_01C0A2B0
+elija antes un servidor
 ; choose a server first
 MSG_2DC2A95F
+iniciando sesión...
 ; signing in...
 MSG_7730BC18
+Películas
 ; Films
 MSG_5B59648A
+Tamaño de imagen
 ; Picture size
 MSG_19596FB6
+pequeño: 320 de ancho, MPEG-1 (decodifica la CPU)
 ; small: 320 wide, MPEG-1 (the CPU decodes)
 MSG_6C2F61C3
+grande: hasta 720 x 576, MPEG-2 (decodifica la ZZ9000)
 ; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
 MSG_568457D9
+automático: según lo que decodifique
 ; automatic: by what decodes it
 MSG_59529DB2
+Jellyfin: inicie sesión en %.60s (Ajustes > Red > Jellyfin)
 ; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
 MSG_51FCE0BE
+Fotos de Jellyfin en %.80s
 ; Jellyfin photos on %.80s
 MSG_53D9B262
+Jellyfin: %.80s
 ; Jellyfin: %.80s
 MSG_1CA86BFC
+Buscando servidores Jellyfin...
 ; Looking for Jellyfin servers...
 MSG_529C37FD
+La dirección del servidor (nombre o números, y :puerto si no es 8096)
 ; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
+Eso no es una dirección
 ; That is not an address
 MSG_5A6DB215
+Nombre de usuario
 ; User name
 MSG_2CC30838
+Contraseña
 ; Password
 MSG_12C8DC90
+Iniciando sesión en %.60s...
 ; Signing in to %.60s...
 MSG_3F376507
+Obteniendo %.50s: %lu KB (Disparo sobre él otra vez para parar)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)
 MSG_2CF03B1C
+%.50s necesitaría unos %lu MB en T: (%lu MB libres)
 ; %.50s would need about %lu MB in T: (%lu MB free)
 MSG_6EB56B80
+Pidiendo a %.40s %.50s...
 ; Asking %.40s for %.50s...
 MSG_4445C7A1
+No se pudo obtener %.50s: %.100s
 ; %.50s could not be fetched: %.100s
 MSG_474FAF4B
+el servidor respondió %ld
 ; the server said %ld
 MSG_1422F4A4
+Ningún servidor Jellyfin respondió en esta red
 ; No Jellyfin server answered on this network
 MSG_02EBAE2D
+Servidor Jellyfin: %.60s
 ; Jellyfin server: %.60s
 MSG_63D7C7C0
+%ld servidor Jellyfin encontrado
 ; %ld Jellyfin server found
 MSG_0D5ECA51
+%ld servidores Jellyfin encontrados
 ; %ld Jellyfin servers found
 MSG_127811B5
+Sesión iniciada en %.60s como %.40s
 ; Signed in to %.60s as %.40s
 MSG_4287518C
+Ningún servidor Jellyfin respondió en %.60s
 ; No Jellyfin server answered at %.60s
 MSG_61C33E78
 No se pudieron cargar los archivos del estilo suave
@@ -1543,6 +1586,7 @@ MSG_3EEA8333
 No hay bibliotecas de fotos ahí
 ; No photo libraries there
 MSG_7E13ADDC
+El servidor quiere que inicie sesión: Ajustes > Red > Jellyfin
 ; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 El servidor quiere que inicie sesión: Ajustes > Red > Plex
@@ -1643,6 +1687,18 @@ Sonido: Paula, 14 bits
 MSG_0F2AADBB
 Sonido: Paula, 8 bits
 ; Sound: Paula, 8-bit
+MSG_0BDC3408
+Ambiance reproduce música, muestra fotos y reproduce películas de un servidor Jellyfin de su red (jellyfin.org: software libre). Sus bibliotecas de música aparecen por artista y álbum con sus portadas, y el servidor convierte cada pista en un MP3 que este Amiga puede reproducir, como con Plex. El servidor ajusta sus fotos al tamaño de la pantalla. Convierte sus películas en MPEG para este Amiga: MPEG-1 de 320 píxeles de ancho para que lo decodifique la CPU, o MPEG-2 de hasta 720 x 576 cuando decodifica la ZZ9000 (Ajustes > Red > Jellyfin > Tamaño de imagen). Una película se obtiene primero en T: y luego se reproduce.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). A film is fetched into T: first, then played.
+MSG_2C5335A3
+Encontrar un servidor: Ajustes > Red > Jellyfin > Buscar servidores en esta red, o Escribir la dirección de un servidor (como 192.168.1.10:8096).
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+Iniciar sesión: Ajustes > Red > Jellyfin > Iniciar sesión pide el nombre y la contraseña de un usuario de Jellyfin. La contraseña se envía una vez y no se guarda; el token del servidor para este Amiga se guarda hasta Cerrar sesión. Un usuario propio para el Amiga, en Dashboard > Users del servidor, es buena idea.
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+Sesión iniciada como %s
+; Signed in as %s
 MSG_5353700C
 Formato:  %s
 ; Format:   %s
@@ -2288,6 +2344,9 @@ MSG_42B0DEF7
 MSG_070B058B
 Funciona con:
 ; Works with:
+MSG_5B96DB4D
+Ambiance no es un cliente oficial de Jellyfin: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 Cargando captura...
 ; Loading screenshot...

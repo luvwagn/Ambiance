@@ -41,6 +41,7 @@ MSG_2EE1D46F
 Ikke nok hukommelse til animationens skærm
 ; Not enough memory for the animation's screen
 MSG_2EDB4C7E
+Return: OK   Esc: annuller
 ; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (uden navn)
@@ -187,10 +188,13 @@ MSG_01746B13
 %lu emner
 ; %lu items
 MSG_439822A9
+Serveren godtog ikke det navn og den adgangskode
 ; The server did not accept that name and password
 MSG_5A8631EB
+Serveren svarede %ld
 ; The server said %ld
 MSG_7E52AA7E
+Serveren kunne ikke nås
 ; Could not reach the server
 MSG_229E5121
 Serveren svarede noget uventet
@@ -703,6 +707,7 @@ MSG_424097EC
 Til, ingen server valgt
 ; On, no server chosen
 MSG_207A7281
+Ikke logget ind
 ; Not signed in
 MSG_33774386
 Automatisk: %.40s
@@ -992,6 +997,9 @@ Systeminformation
 MSG_692FB19D
 Plex i Ambiance
 ; Plex in Ambiance
+MSG_5DB50655
+Jellyfin i Ambiance
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, under MIT-licensen
 ; (c) 2026 Brian King, under the MIT licence
@@ -1371,74 +1379,109 @@ MSG_247B55C3
 Forbindelser går ud gennem dette interface
 ; Connections go out from this interface
 MSG_3A5C57BD
+en medieserver (jellyfin.org)
 ; a media server (jellyfin.org)
 MSG_6D7302F2
+Server
 ; Server
 MSG_7774E024
+Søg efter servere på dette netværk
 ; Look for servers on this network
 MSG_56E190E8
+søger...
 ; looking...
 MSG_21F2CA37
+Skriv en servers adresse
 ; Type a server's address
 MSG_60A63E12
+Bruger
 ; User
 MSG_0B4F3C70
+Log ud
 ; Sign out
 MSG_744BE623
+Log ind
 ; Sign in
 MSG_01C0A2B0
+vælg først en server
 ; choose a server first
 MSG_2DC2A95F
+logger ind...
 ; signing in...
 MSG_7730BC18
+Film
 ; Films
 MSG_5B59648A
+Billedstørrelse
 ; Picture size
 MSG_19596FB6
+lille: 320 bred, MPEG-1 (CPU'en afkoder)
 ; small: 320 wide, MPEG-1 (the CPU decodes)
 MSG_6C2F61C3
+stor: op til 720 x 576, MPEG-2 (ZZ9000 afkoder)
 ; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
 MSG_568457D9
+automatisk: efter hvad der afkoder
 ; automatic: by what decodes it
 MSG_59529DB2
+Jellyfin: log ind på %.60s (Indstillinger > Netværk > Jellyfin)
 ; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
 MSG_51FCE0BE
+Jellyfin-fotos på %.80s
 ; Jellyfin photos on %.80s
 MSG_53D9B262
+Jellyfin: %.80s
 ; Jellyfin: %.80s
 MSG_1CA86BFC
+Søger efter Jellyfin-servere...
 ; Looking for Jellyfin servers...
 MSG_529C37FD
+Serverens adresse (navn eller tal, og :port hvis ikke 8096)
 ; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
+Det er ikke en adresse
 ; That is not an address
 MSG_5A6DB215
+Brugernavn
 ; User name
 MSG_2CC30838
+Adgangskode
 ; Password
 MSG_12C8DC90
+Logger ind på %.60s...
 ; Signing in to %.60s...
 MSG_3F376507
+Henter %.50s: %lu KB (Skyd på den igen for at stoppe)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)
 MSG_2CF03B1C
+%.50s ville kræve omkring %lu MB i T: (%lu MB fri)
 ; %.50s would need about %lu MB in T: (%lu MB free)
 MSG_6EB56B80
+Beder %.40s om %.50s...
 ; Asking %.40s for %.50s...
 MSG_4445C7A1
+%.50s kunne ikke hentes: %.100s
 ; %.50s could not be fetched: %.100s
 MSG_474FAF4B
+serveren svarede %ld
 ; the server said %ld
 MSG_1422F4A4
+Ingen Jellyfin-server svarede på dette netværk
 ; No Jellyfin server answered on this network
 MSG_02EBAE2D
+Jellyfin-server: %.60s
 ; Jellyfin server: %.60s
 MSG_63D7C7C0
+%ld Jellyfin-server fundet
 ; %ld Jellyfin server found
 MSG_0D5ECA51
+%ld Jellyfin-servere fundet
 ; %ld Jellyfin servers found
 MSG_127811B5
+Logget ind på %.60s som %.40s
 ; Signed in to %.60s as %.40s
 MSG_4287518C
+Ingen Jellyfin-server svarede på %.60s
 ; No Jellyfin server answered at %.60s
 MSG_61C33E78
 Den bløde stils filer kunne ikke indlæses
@@ -1543,6 +1586,7 @@ MSG_3EEA8333
 Ingen fotobiblioteker der
 ; No photo libraries there
 MSG_7E13ADDC
+Serveren vil have dig logget ind: Indstillinger > Netværk > Jellyfin
 ; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 Serveren vil have dig logget ind: Indstillinger > Netværk > Plex
@@ -1643,6 +1687,18 @@ Lyd: Paula, 14 bit
 MSG_0F2AADBB
 Lyd: Paula, 8 bit
 ; Sound: Paula, 8-bit
+MSG_0BDC3408
+Ambiance afspiller musik, viser fotos og afspiller film fra en Jellyfin-server på dit netværk (jellyfin.org: fri software). Dens musikbiblioteker vises efter kunstner og album med omslag, og serveren gør hvert nummer til en MP3, som denne Amiga kan afspille, som for Plex. Serveren gør dens fotos lige så store som skærmen. Dens film gør den til MPEG for denne Amiga: MPEG-1 320 pixels bred, som CPU'en afkoder, eller MPEG-2 op til 720 x 576, når ZZ9000 afkoder (Indstillinger > Netværk > Jellyfin > Billedstørrelse). En film hentes først til T: og afspilles så.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). A film is fetched into T: first, then played.
+MSG_2C5335A3
+Find en server: Indstillinger > Netværk > Jellyfin > Søg efter servere på dette netværk, eller Skriv en servers adresse (som 192.168.1.10:8096).
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+Log ind: Indstillinger > Netværk > Jellyfin > Log ind beder om navn og adgangskode for en Jellyfin-bruger. Adgangskoden sendes én gang og gemmes ikke; serverens token til denne Amiga gemmes indtil Log ud. En særlig bruger til Amigaen, i serverens Dashboard > Users, er en god idé.
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+Logget ind som %s
+; Signed in as %s
 MSG_5353700C
 Format:   %s
 ; Format:   %s
@@ -2288,6 +2344,9 @@ MSG_42B0DEF7
 MSG_070B058B
 Virker med:
 ; Works with:
+MSG_5B96DB4D
+Ambiance er ikke en officiel Jellyfin-klient: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 Indlæser skærmbillede...
 ; Loading screenshot...

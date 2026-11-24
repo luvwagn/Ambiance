@@ -122,7 +122,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8, ACT_LVNATIVE,    /* Classic + LV_MAX */
        ACT_FULLVISHELP, ACT_DEPTHS, ACT_DEPTH16, ACT_DEPTH32,
        ACT_JFSET, ACT_JFON, ACT_JFFIND, ACT_JFADDR, ACT_JFSIGNIN, ACT_JFOUT, ACT_GOJF,
-       ACT_JFVSIZE, ACT_JFSRV0, ACT_JFSRV_END = ACT_JFSRV0 + 7,      /* Jellyfin (jellyfin.c) */
+       ACT_JFVSIZE, ACT_JFSRV0, ACT_JFSRV_END = ACT_JFSRV0 + 7, ACT_JFHELP,  /* Jellyfin (jellyfin.c) */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added; moved
@@ -3410,8 +3410,10 @@ static void build_about_menu(struct Page *p)
 {
     action_item(p, _("Credits"), "Ambiance " AMB_VERSION, ACT_CREDITS, MARK_ARROW);
     action_item(p, _("System information"), "", ACT_SYSINFO, MARK_ARROW);
-    if (caps.net)
+    if (caps.net) {
         action_item(p, _("Plex in Ambiance"), "", ACT_PLEXHELP, MARK_ARROW);
+        action_item(p, _("Jellyfin in Ambiance"), "", ACT_JFHELP, MARK_ARROW);
+    }
 }
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
@@ -11976,6 +11978,43 @@ static void plex_help(void)
     draw_footer();
 }
 
+/* About > Jellyfin in Ambiance: what it plays, and how to connect. */
+static void jf_help(void)
+{
+    struct Page *p = page_push(PT_TEXT, _("Jellyfin in Ambiance"));
+    char line[200];
+    if (!p)
+        return;
+    p->plexmark = 2;                        /* "Works with" Jellyfin, at the bottom */
+    text_para(p, _("Ambiance plays music, shows photos and plays films from a Jellyfin server "
+                   "on your network (jellyfin.org: free software). Its music libraries are listed "
+                   "by artist and album with their covers, and the server makes each track an MP3 "
+                   "this Amiga can play, as for Plex. Its photos are made the size of the screen "
+                   "by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide "
+                   "for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes "
+                   "(Settings > Networking > Jellyfin > Picture size). A film is fetched into T: "
+                   "first, then played."));
+    text_line(p, "");
+    text_para(p, _("Finding a server: Settings > Networking > Jellyfin > Look for servers on "
+                   "this network, or Type a server's address (as 192.168.1.10:8096)."));
+    text_line(p, "");
+    text_para(p, _("Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin "
+                   "user's name and password. The password is sent once and not kept; the "
+                   "server's token for this Amiga is kept, until Sign out. A user of its own for "
+                   "the Amiga, in the server's Dashboard > Users, is a good idea."));
+    text_line(p, "");
+    sprintf(line, _("Server: %s"), jf.host[0] ? (jf.name[0] ? jf.name : jf.host) : _("none chosen"));
+    text_line(p, line);
+    if (jf.token[0]) {
+        sprintf(line, _("Signed in as %s"), jf.user[0] ? jf.user : "?");
+        text_line(p, line);
+    } else {
+        text_line(p, _("Not signed in"));
+    }
+    draw_pane(TRUE);
+    draw_footer();
+}
+
 /* A station's page: what radio-browser.info says of it. */
 static void radio_station(struct Item *it)
 {
@@ -12472,6 +12511,8 @@ static void act_action(struct Item *it)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)
         plex_help();
+    else if (it->action == ACT_JFHELP)
+        jf_help();
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -15131,6 +15172,7 @@ static void lv_page(struct Page *p, struct LPage *m)
             m->picture = p->pic[0] ? p->pic : NULL;
             m->note = p->note;
             m->plexmark = p->plexmark;
+            lv_mark_kind = p->plexmark;     /* (which mark host->plexmark gives) */
         }
         return;
     }

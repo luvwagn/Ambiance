@@ -41,6 +41,7 @@ MSG_2EE1D46F
 Δεν φτάνει η μνήμη για την οθόνη του animation
 ; Not enough memory for the animation's screen
 MSG_2EDB4C7E
+Return: OK   Esc: ακύρωση
 ; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (χωρίς όνομα)
@@ -187,10 +188,13 @@ MSG_01746B13
 %lu στοιχεία
 ; %lu items
 MSG_439822A9
+Ο server δεν δέχτηκε αυτό το όνομα και τον κωδικό
 ; The server did not accept that name and password
 MSG_5A8631EB
+Ο server απάντησε %ld
 ; The server said %ld
 MSG_7E52AA7E
+Ο server δεν ήταν προσβάσιμος
 ; Could not reach the server
 MSG_229E5121
 Ο server απάντησε κάτι απρόσμενο
@@ -703,6 +707,7 @@ MSG_424097EC
 Ενεργό, χωρίς server
 ; On, no server chosen
 MSG_207A7281
+Χωρίς σύνδεση
 ; Not signed in
 MSG_33774386
 Αυτόματα: %.40s
@@ -992,6 +997,9 @@ MSG_589D7E42
 MSG_692FB19D
 Plex στο Ambiance
 ; Plex in Ambiance
+MSG_5DB50655
+Το Jellyfin στο Ambiance
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, με άδεια MIT
 ; (c) 2026 Brian King, under the MIT licence
@@ -1371,74 +1379,109 @@ MSG_247B55C3
 Οι συνδέσεις βγαίνουν από αυτή τη διεπαφή
 ; Connections go out from this interface
 MSG_3A5C57BD
+ένας server πολυμέσων (jellyfin.org)
 ; a media server (jellyfin.org)
 MSG_6D7302F2
+Server
 ; Server
 MSG_7774E024
+Αναζήτηση server σε αυτό το δίκτυο
 ; Look for servers on this network
 MSG_56E190E8
+αναζήτηση...
 ; looking...
 MSG_21F2CA37
+Πληκτρολόγηση διεύθυνσης server
 ; Type a server's address
 MSG_60A63E12
+Χρήστης
 ; User
 MSG_0B4F3C70
+Αποσύνδεση
 ; Sign out
 MSG_744BE623
+Σύνδεση
 ; Sign in
 MSG_01C0A2B0
+επιλέξτε πρώτα server
 ; choose a server first
 MSG_2DC2A95F
+σύνδεση...
 ; signing in...
 MSG_7730BC18
+Ταινίες
 ; Films
 MSG_5B59648A
+Μέγεθος εικόνας
 ; Picture size
 MSG_19596FB6
+μικρό: πλάτος 320, MPEG-1 (αποκωδικοποιεί η CPU)
 ; small: 320 wide, MPEG-1 (the CPU decodes)
 MSG_6C2F61C3
+μεγάλο: έως 720 x 576, MPEG-2 (αποκωδικοποιεί η ZZ9000)
 ; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
 MSG_568457D9
+αυτόματο: κατά αποκωδικοποίηση
 ; automatic: by what decodes it
 MSG_59529DB2
+Jellyfin: σύνδεση στο %.60s (Ρυθμίσεις > Δίκτυο > Jellyfin)
 ; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
 MSG_51FCE0BE
+Φωτογραφίες Jellyfin στο %.80s
 ; Jellyfin photos on %.80s
 MSG_53D9B262
+Jellyfin: %.80s
 ; Jellyfin: %.80s
 MSG_1CA86BFC
+Αναζήτηση server Jellyfin...
 ; Looking for Jellyfin servers...
 MSG_529C37FD
+Η διεύθυνση του server (όνομα ή αριθμοί, και :θύρα αν όχι 8096)
 ; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
+Αυτό δεν είναι διεύθυνση
 ; That is not an address
 MSG_5A6DB215
+Όνομα χρήστη
 ; User name
 MSG_2CC30838
+Κωδικός
 ; Password
 MSG_12C8DC90
+Σύνδεση στο %.60s...
 ; Signing in to %.60s...
 MSG_3F376507
+Λήψη %.50s: %lu KB (Fire ξανά πάνω του για διακοπή)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)
 MSG_2CF03B1C
+Το %.50s θα χρειαζόταν περίπου %lu MB στο T: (%lu MB ελεύθερα)
 ; %.50s would need about %lu MB in T: (%lu MB free)
 MSG_6EB56B80
+Αίτημα στο %.40s για %.50s...
 ; Asking %.40s for %.50s...
 MSG_4445C7A1
+Το %.50s δεν μπόρεσε να ληφθεί: %.100s
 ; %.50s could not be fetched: %.100s
 MSG_474FAF4B
+ο server απάντησε %ld
 ; the server said %ld
 MSG_1422F4A4
+Κανένας server Jellyfin δεν απάντησε σε αυτό το δίκτυο
 ; No Jellyfin server answered on this network
 MSG_02EBAE2D
+Server Jellyfin: %.60s
 ; Jellyfin server: %.60s
 MSG_63D7C7C0
+Βρέθηκε %ld server Jellyfin
 ; %ld Jellyfin server found
 MSG_0D5ECA51
+Βρέθηκαν %ld server Jellyfin
 ; %ld Jellyfin servers found
 MSG_127811B5
+Σύνδεση στο %.60s ως %.40s
 ; Signed in to %.60s as %.40s
 MSG_4287518C
+Κανένας server Jellyfin δεν απάντησε στο %.60s
 ; No Jellyfin server answered at %.60s
 MSG_61C33E78
 Τα αρχεία του στυλ smooth δεν φορτώθηκαν
@@ -1543,6 +1586,7 @@ MSG_3EEA8333
 Δεν έχει φωτογραφίες
 ; No photo libraries there
 MSG_7E13ADDC
+Ο server θέλει σύνδεση: Ρυθμίσεις > Δίκτυο > Jellyfin
 ; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 Ο server θέλει σύνδεση: Ρυθμίσεις > Δίκτυο > Plex
@@ -1643,6 +1687,18 @@ MSG_2350DA18
 MSG_0F2AADBB
 Ήχος: Paula, 8-bit
 ; Sound: Paula, 8-bit
+MSG_0BDC3408
+Το Ambiance παίζει μουσική, δείχνει φωτογραφίες και παίζει ταινίες από έναν server Jellyfin στο δίκτυό σας (jellyfin.org: ελεύθερο λογισμικό). Οι μουσικές του βιβλιοθήκες εμφανίζονται ανά καλλιτέχνη και άλμπουμ με τα εξώφυλλά τους, και ο server κάνει κάθε κομμάτι MP3 που μπορεί να παίξει αυτό το Amiga, όπως με το Plex. Ο server φέρνει τις φωτογραφίες στο μέγεθος της οθόνης. Τις ταινίες τις κάνει MPEG για αυτό το Amiga: MPEG-1 πλάτους 320 pixel για αποκωδικοποίηση από την CPU, ή MPEG-2 έως 720 x 576 όταν αποκωδικοποιεί η ZZ9000 (Ρυθμίσεις > Δίκτυο > Jellyfin > Μέγεθος εικόνας). Μια ταινία λαμβάνεται πρώτα στο T: και μετά παίζεται.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). A film is fetched into T: first, then played.
+MSG_2C5335A3
+Εύρεση server: Ρυθμίσεις > Δίκτυο > Jellyfin > Αναζήτηση server σε αυτό το δίκτυο, ή Πληκτρολόγηση διεύθυνσης server (π.χ. 192.168.1.10:8096).
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+Σύνδεση: Ρυθμίσεις > Δίκτυο > Jellyfin > Σύνδεση ζητά όνομα και κωδικό ενός χρήστη Jellyfin. Ο κωδικός στέλνεται μία φορά και δεν φυλάσσεται· το token του server για αυτό το Amiga φυλάσσεται ως την Αποσύνδεση. Ένας δικός του χρήστης για το Amiga, στο Dashboard > Users του server, είναι καλή ιδέα.
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+Σύνδεση ως %s
+; Signed in as %s
 MSG_5353700C
 Μορφή:    %s
 ; Format:   %s
@@ -2288,6 +2344,9 @@ MSG_42B0DEF7
 MSG_070B058B
 Λειτουργεί με:
 ; Works with:
+MSG_5B96DB4D
+Το Ambiance δεν είναι επίσημο πρόγραμμα του Jellyfin: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 Φόρτωση εικόνας...
 ; Loading screenshot...

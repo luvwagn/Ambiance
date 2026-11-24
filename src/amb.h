@@ -1095,6 +1095,9 @@ extern const UBYTE plex_lo[];          /* Plex's logo in pens (255: none), for C
 extern const UWORD plex_lo_w, plex_lo_h;
 extern const UBYTE plex_hi[];          /* ...as coverage (ink << 4 | yellow), for the layouts */
 extern const UWORD plex_hi_w, plex_hi_h;
+extern const UBYTE jf_hi[];            /* "Jellyfin" (not its logo) as coverage 0-255 */
+extern const UWORD jf_hi_w, jf_hi_h;
+extern UBYTE lv_mark_kind;             /* the text page's mark: 1 Plex's, 2 Jellyfin's */
 extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
 extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */

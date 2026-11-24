@@ -105,7 +105,8 @@ struct LPage {
                                  * it turns) */
     /* text: under the text, a note (a paragraph, NULL none) over picture
      * (above: the page's own, as Credits' AGS logo), and at the bottom
-     * Plex's "Works with" mark (host->plexmark) */
+     * Plex's "Works with" mark (host->plexmark), 1; Jellyfin's
+     * ("Jellyfin" in its gradient: host->plexmark gives that then), 2 */
     const char *note;
     UBYTE plexmark;
     UBYTE frames;               /* a wall (LS_ALBUMS) of pictures and videos: its tiles
