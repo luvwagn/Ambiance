@@ -40,9 +40,6 @@ MSG_638EABE4
 MSG_2EE1D46F
 Δεν φτάνει η μνήμη για την οθόνη του animation
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: OK   Esc: ακύρωση
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (χωρίς όνομα)
 ; (no name)
@@ -1432,24 +1429,27 @@ MSG_51FCE0BE
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: ακύρωση
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 Αναζήτηση server Jellyfin...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-Η διεύθυνση του server (όνομα ή αριθμοί, και :θύρα αν όχι 8096)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 Αυτό δεν είναι διεύθυνση
 ; That is not an address
-MSG_5A6DB215
-Όνομα χρήστη
-; User name
-MSG_2CC30838
-Κωδικός
-; Password
+MSG_529C37FD
+Η διεύθυνση του server (όνομα ή αριθμοί, και :θύρα αν όχι 8096)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 Σύνδεση στο %.60s...
 ; Signing in to %.60s...
+MSG_2CC30838
+Κωδικός
+; Password
+MSG_5A6DB215
+Όνομα χρήστη
+; User name
 MSG_3F376507
 Λήψη %.50s: %lu KB (Fire ξανά πάνω του για διακοπή)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)

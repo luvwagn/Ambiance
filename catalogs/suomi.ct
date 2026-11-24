@@ -40,9 +40,6 @@ Animaatiot toistetaan Amigan omilla näytöillä, eikä sellaista löytynyt
 MSG_2EE1D46F
 Muisti ei riitä animaation näytölle
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: OK   Esc: peru
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (nimetön)
 ; (no name)
@@ -1432,24 +1429,27 @@ Jellyfin-kuvat palvelimella %.80s
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: peru
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 Etsitään Jellyfin-palvelimia...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-Palvelimen osoite (nimi tai numerot, ja :portti jos ei 8096)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 Se ei ole osoite
 ; That is not an address
-MSG_5A6DB215
-Käyttäjänimi
-; User name
-MSG_2CC30838
-Salasana
-; Password
+MSG_529C37FD
+Palvelimen osoite (nimi tai numerot, ja :portti jos ei 8096)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 Kirjaudutaan palvelimelle %.60s...
 ; Signing in to %.60s...
+MSG_2CC30838
+Salasana
+; Password
+MSG_5A6DB215
+Käyttäjänimi
+; User name
 MSG_3F376507
 Haetaan %.50s: %lu kt (Tuli sen päällä uudelleen pysäyttää)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)

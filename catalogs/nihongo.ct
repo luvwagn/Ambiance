@@ -40,9 +40,6 @@ MSG_638EABE4
 MSG_2EE1D46F
 アニメーションの画面のためのメモリが足りません
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: OK   Esc: キャンセル
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (名前なし)
 ; (no name)
@@ -1432,24 +1429,27 @@ MSG_51FCE0BE
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: キャンセル
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 Jellyfinサーバーを探しています...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-サーバーのアドレス (名前か数字、8096以外なら:ポート)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 アドレスではありません
 ; That is not an address
-MSG_5A6DB215
-ユーザー名
-; User name
-MSG_2CC30838
-パスワード
-; Password
+MSG_529C37FD
+サーバーのアドレス (名前か数字、8096以外なら:ポート)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 %.60sにサインイン中...
 ; Signing in to %.60s...
+MSG_2CC30838
+パスワード
+; Password
+MSG_5A6DB215
+ユーザー名
+; User name
 MSG_3F376507
 %.50sを取得中: %lu KB (もう一度ボタンで中止)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)

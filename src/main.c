@@ -122,7 +122,7 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8, ACT_LVNATIVE,    /* Classic + LV_MAX */
        ACT_FULLVISHELP, ACT_DEPTHS, ACT_DEPTH16, ACT_DEPTH32,
        ACT_JFSET, ACT_JFON, ACT_JFFIND, ACT_JFADDR, ACT_JFSIGNIN, ACT_JFOUT, ACT_GOJF,
-       ACT_JFVSIZE, ACT_JFSRV0, ACT_JFSRV_END = ACT_JFSRV0 + 7, ACT_JFHELP,  /* Jellyfin (jellyfin.c) */
+       ACT_JFVSIZE, ACT_JFSRV0, ACT_JFSRV_END = ACT_JFSRV0 + 7, ACT_JFHELP, ACT_ENTRY,  /* Jellyfin (jellyfin.c) */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
         * Now playing, HTTPS and the Plex rows, as actions were added; moved
@@ -9850,18 +9850,119 @@ static BOOL jf_submit(struct NetJob *j, UBYTE what)
     return TRUE;
 }
 
-/* A line typed (the screen's double buffering stopped meanwhile, as for
- * ASL's requesters). */
-static BOOL jf_ask(const char *prompt, char *buf, LONG max, BOOL secret)
+/* ---- A line typed on a page of its own (an address, a user name, a
+ * password), drawn by the view as any list is: its first row the text
+ * (a password as stars), Return or Fire keeps it, Esc or Left gives it
+ * up. Letters come to entry_key from handle_key while it is the page. */
+static struct {
+    struct Page *p;                     /* the page, while it is open */
+    char buf[128];
+    LONG max;
+    BOOL secret;
+    void (*done)(const char *text);     /* kept: what it was for (not on Esc) */
+} entry;
+
+static void entry_rows(void)
 {
-    BOOL db = gfx_dbuf_active(), ok;
-    if (db)
-        gfx_dbuf_stop(&g);
-    ok = ask_line(g.scr, "Jellyfin", prompt, buf, max, secret);
-    if (db)
-        gfx_dbuf_start(&g);
+    struct Page *p = entry.p;
+    char shown[140];
+    LONG i, n = (LONG)strlen(entry.buf);
+    struct Item *it;
+    if (!p)
+        return;
+    for (i = 0; i < n && i < (LONG)sizeof(shown) - 2; i++)
+        shown[i] = entry.secret ? '*' : entry.buf[i];
+    shown[i++] = '_';                   /* where the next letter goes */
+    shown[i] = 0;
+    list_free(&p->list);
+    list_init(&p->list);
+    if ((it = list_add(&p->list, shown, "", "", IT_ACTION))) {
+        it->action = ACT_ENTRY;
+        it->mark = MARK_NONE;
+    }
+    text_line(p, "");
+    text_line(p, _("Return: OK   Esc: cancel"));
+    p->sel = 0;
+    p->top = 0;
+}
+
+static void entry_open(const char *title, const char *now, LONG max, BOOL secret,
+                       void (*done)(const char *text))
+{
+    struct Page *p;
+    if (!(p = page_push(PT_LIST, title))) {
+        set_msg(_("Too many levels open"));
+        return;
+    }
+    memset(entry.buf, 0, sizeof(entry.buf));
+    amb_strlcpy(entry.buf, now ? now : "", sizeof(entry.buf));
+    entry.max = max < (LONG)sizeof(entry.buf) ? max : (LONG)sizeof(entry.buf);
+    entry.secret = secret;
+    entry.done = done;
+    entry.p = p;
+    entry_rows();
+    focus = FOCUS_CONTENT;
     draw_all();
-    return ok;
+}
+
+/* The page let go (kept: done with its text; else given up), the text
+ * wiped either way (a password not left in memory). */
+static void entry_close(BOOL keep)
+{
+    char text[128];
+    void (*done)(const char *) = entry.done;
+    if (!entry.p)
+        return;
+    amb_strlcpy(text, entry.buf, sizeof(text));
+    memset(entry.buf, 0, sizeof(entry.buf));
+    if (cur() == entry.p) {
+        entry.p = NULL;
+        page_pop();
+    }
+    entry.p = NULL;
+    entry.done = NULL;
+    draw_all();
+    if (keep && done)
+        done(text);
+    memset(text, 0, sizeof(text));
+}
+
+static BOOL entry_on(void)
+{
+    if (entry.p && cur() != entry.p) {
+        entry.p = NULL;                 /* (left some other way: given up) */
+        memset(entry.buf, 0, sizeof(entry.buf));
+    }
+    return entry.p != NULL;
+}
+
+/* A typed key on the entry page: TRUE taken. */
+static BOOL entry_key(UWORD code)
+{
+    LONG n = (LONG)strlen(entry.buf);
+    if (code == 13) {
+        entry_close(TRUE);
+        return TRUE;
+    }
+    if (code == 27) {
+        entry_close(FALSE);
+        return TRUE;
+    }
+    if (code == 8 || code == 127) {
+        if (n > 0)
+            entry.buf[n - 1] = 0;
+    } else if (code == 24) {
+        entry.buf[0] = 0;               /* Ctrl-X: all of it */
+    } else if (code >= 32 && code != 127 && !(code >= 128 && code < 160) && n < entry.max - 1) {
+        entry.buf[n] = (char)code;
+        entry.buf[n + 1] = 0;
+    } else {
+        return TRUE;
+    }
+    entry_rows();
+    draw_pane(TRUE);
+    draw_footer();
+    return TRUE;
 }
 
 static void jf_find(void)
@@ -9890,15 +9991,9 @@ static void jf_ask_info(void)
     jf_submit(j, JFJ_INFO);
 }
 
-static void jf_type_address(void)
+static void jf_address_typed(const char *a)
 {
-    char a[96];
-    if (jf.host[0])
-        sprintf(a, "%.60s:%lu", jf.host, (unsigned long)jf.port);
-    else
-        strcpy(a, "");
-    if (!jf_ask(_("The server's address (name or numbers, and :port if not 8096)"), a, sizeof(a),
-                FALSE) || !a[0])
+    if (!a[0])
         return;
     jf_set_server(a, "", "");
     if (!jf.host[0]) {
@@ -9911,32 +10006,47 @@ static void jf_type_address(void)
     jf_roots_again();
 }
 
-static void jf_sign_in(void)
+static void jf_type_address(void)
 {
-    char pw[128];
+    char a[96];
+    if (jf.host[0])
+        sprintf(a, "%.60s:%lu", jf.host, (unsigned long)jf.port);
+    else
+        strcpy(a, "");
+    set_msg(_("The server's address (name or numbers, and :port if not 8096)"));
+    entry_open(_("Type a server's address"), a, 90, FALSE, jf_address_typed);
+}
+
+static void jf_password_typed(const char *pw)
+{
     struct NetJob *j;
-    if (!jf.host[0])
-        return;
-    amb_strlcpy(jf_user_asked, jf.user, sizeof(jf_user_asked));
-    if (!jf_ask(_("User name"), jf_user_asked, sizeof(jf_user_asked), FALSE) || !jf_user_asked[0])
-        return;
-    pw[0] = 0;
-    if (!jf_ask(_("Password"), pw, sizeof(pw), TRUE))
+    char m[120];
+    if (!jf.host[0] || !jf_user_asked[0])
         return;
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
-        memset(pw, 0, sizeof(pw));
         set_msg(_("Not enough memory"));
         return;
     }
     jf_signin_job(j, jf_user_asked, pw, jf_body, sizeof(jf_body));
-    memset(pw, 0, sizeof(pw));
     jf_submit(j, JFJ_SIGNIN);
-    {
-        char m[120];
-        sprintf(m, _("Signing in to %.60s..."), jf.name[0] ? jf.name : jf.host);
-        set_msg(m);
-    }
+    sprintf(m, _("Signing in to %.60s..."), jf.name[0] ? jf.name : jf.host);
+    set_msg(m);
     jf_settings_again();
+}
+
+static void jf_user_typed(const char *user)
+{
+    if (!user[0])
+        return;
+    amb_strlcpy(jf_user_asked, user, sizeof(jf_user_asked));
+    entry_open(_("Password"), "", 120, TRUE, jf_password_typed);
+}
+
+static void jf_sign_in(void)
+{
+    if (!jf.host[0])
+        return;
+    entry_open(_("User name"), jf.user, 60, FALSE, jf_user_typed);
 }
 
 static void jf_sign_out(void)
@@ -10886,7 +10996,8 @@ static struct NetJob *whd_job;
 
 void radio_done(struct NetJob *j)
 {
-    struct Page *p = NULL;
+    struct Page *p = NULL, *again_p = NULL;
+    char again[160];
     int d;
     if (j == whd_job) {
         whd_done(j);                        /* WHDLoad's package */
@@ -11175,6 +11286,14 @@ void radio_done(struct NetJob *j)
             }
         }
         amb_log("plex", m);
+        if (jf_key(p->base) && p->base[1] == 'V' && p->base[2] != 'm' && p->list.count == 1 &&
+            p->list.items[0].kind == IT_PLEXDIR) {
+            /* Jellyfin's one photo or video library: opened at once (as
+             * one music library opens on its menu) */
+            radio_field(&p->list.items[0], 0, again, sizeof(again));
+            amb_log("jellyfin: its one library, opened", p->list.items[0].label);
+            again_p = p;                    /* (asked for once this job is let go) */
+        }
         np_mark_lists(FALSE);               /* what plays, marked in the new list too */
         plex_shortcut_fix(p);               /* a library's list: Now playing first */
         plex_pos_restore(p);                /* back where it was left */
@@ -11215,6 +11334,8 @@ void radio_done(struct NetJob *j)
     if (j->body)
         FreeVec(j->body);
     FreeVec(j);
+    if (again_p)
+        plex_refetch(again_p, again);
 }
 
 static void radio_collect(void)
@@ -12513,6 +12634,8 @@ static void act_action(struct Item *it)
         plex_help();
     else if (it->action == ACT_JFHELP)
         jf_help();
+    else if (it->action == ACT_ENTRY)
+        entry_close(TRUE);                  /* Fire on the line: kept */
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -13739,6 +13862,8 @@ static void handle_key(struct IntuiMessage *im)
         gfx_iconify_asked = TRUE;
         return;
     }
+    if (im->Class == IDCMP_VANILLAKEY && entry_on() && entry_key(code))
+        return;                             /* a line being typed: its letters */
     if (im->Class == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && code != 0x7A && code != 0x7B &&
         (code < 0x60 || code > 0x67) && lv_on()) {
         pointer_hide();                     /* the keyboard in use, for a layout's keys too

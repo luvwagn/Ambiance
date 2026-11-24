@@ -40,9 +40,6 @@ Animationer spelas på Amigans egna skärmar, och ingen hittades
 MSG_2EE1D46F
 Inte tillräckligt med minne för animationens skärm
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: OK   Esc: avbryt
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (utan namn)
 ; (no name)
@@ -1432,24 +1429,27 @@ Jellyfin-foton på %.80s
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: avbryt
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 Söker efter Jellyfin-servrar...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-Serverns adress (namn eller siffror, och :port om inte 8096)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 Det är ingen adress
 ; That is not an address
-MSG_5A6DB215
-Användarnamn
-; User name
-MSG_2CC30838
-Lösenord
-; Password
+MSG_529C37FD
+Serverns adress (namn eller siffror, och :port om inte 8096)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 Loggar in på %.60s...
 ; Signing in to %.60s...
+MSG_2CC30838
+Lösenord
+; Password
+MSG_5A6DB215
+Användarnamn
+; User name
 MSG_3F376507
 Hämtar %.50s: %lu KB (Avfyra på den igen för att stoppa)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)

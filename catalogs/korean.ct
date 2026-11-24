@@ -40,9 +40,6 @@ MSG_638EABE4
 MSG_2EE1D46F
 애니메이션 화면을 위한 메모리가 부족합니다
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: 확인   Esc: 취소
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (이름 없음)
 ; (no name)
@@ -1432,24 +1429,27 @@ MSG_51FCE0BE
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: 확인   Esc: 취소
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 Jellyfin 서버를 찾는 중...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-서버 주소 (이름 또는 숫자, 8096이 아니면 :포트)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 주소가 아닙니다
 ; That is not an address
-MSG_5A6DB215
-사용자 이름
-; User name
-MSG_2CC30838
-비밀번호
-; Password
+MSG_529C37FD
+서버 주소 (이름 또는 숫자, 8096이 아니면 :포트)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 %.60s에 로그인 중...
 ; Signing in to %.60s...
+MSG_2CC30838
+비밀번호
+; Password
+MSG_5A6DB215
+사용자 이름
+; User name
 MSG_3F376507
 %.50s 가져오는 중: %lu KB (다시 버튼을 누르면 중지)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)

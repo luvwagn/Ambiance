@@ -1328,10 +1328,6 @@ BOOL jf_signin_came(struct NetJob *j, const char *user, char *why, LONG max);
 void jf_signout_job(struct NetJob *j);
 /* plex.c, for either server: a list job for key (host, port, path,
  * headers), and whether key's server is known */
-/* askline.c: a line typed into a small window over scr (a password as
- * dots); TRUE if kept (Return), buf changed only then */
-BOOL ask_line(struct Screen *scr, const char *title, const char *prompt, char *buf, LONG max,
-              BOOL secret);
 void plex_job(struct NetJob *j, const char *key, LONG start);
 BOOL plex_server_for(const char *key);
 const char *plex_server_name(const char *key);

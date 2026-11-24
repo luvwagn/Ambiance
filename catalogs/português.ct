@@ -40,9 +40,6 @@ As animações passam nos ecrãs próprios do Amiga, e nenhum foi encontrado
 MSG_2EE1D46F
 Memória insuficiente para o ecrã da animação
 ; Not enough memory for the animation's screen
-MSG_2EDB4C7E
-Return: OK   Esc: cancelar
-; Return: OK   Esc: cancel
 MSG_0D3B3C12
 (sem nome)
 ; (no name)
@@ -1432,24 +1429,27 @@ Fotos Jellyfin em %.80s
 MSG_53D9B262
 Jellyfin: %.80s
 ; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: cancelar
+; Return: OK   Esc: cancel
 MSG_1CA86BFC
 A procurar servidores Jellyfin...
 ; Looking for Jellyfin servers...
-MSG_529C37FD
-O endereço do servidor (nome ou números, e :porta se não for 8096)
-; The server's address (name or numbers, and :port if not 8096)
 MSG_1289C444
 Isso não é um endereço
 ; That is not an address
-MSG_5A6DB215
-Nome de utilizador
-; User name
-MSG_2CC30838
-Palavra-passe
-; Password
+MSG_529C37FD
+O endereço do servidor (nome ou números, e :porta se não for 8096)
+; The server's address (name or numbers, and :port if not 8096)
 MSG_12C8DC90
 A iniciar sessão em %.60s...
 ; Signing in to %.60s...
+MSG_2CC30838
+Palavra-passe
+; Password
+MSG_5A6DB215
+Nome de utilizador
+; User name
 MSG_3F376507
 A obter %.50s: %lu KB (Disparo nele outra vez para parar)
 ; Fetching %.50s: %lu KB (Fire on it again to stop)
