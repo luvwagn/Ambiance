@@ -8,6 +8,9 @@
  *          va_c2p68k_sb (the store buffer's, 68040/060); half size's
  *          va_c2p2x68k twice against va_c2p2x68k_twice. The planes are
  *          checked to be the same from each.
+ *   PENS   AGA video's pictures made bytes for the planes, a 320 x 256
+ *          4:2:0 frame: as pens of a palette (va_pens68k, pens68k.s) and
+ *          as HAM8 (ham8.c and ham8_68k.s: once and twice across)
  *   MP3    Ambiance's own decoders, PROGDIR:Libs/ambmpega.library and
  *          ambmpega060.library (68060), through MPGA_decode_to as
  *          Ambiance calls them: high, medium, 22 kHz mono
@@ -15,7 +18,7 @@
  *          ms a picture; again with B pictures passed over; and at half
  *          size
  *
- *   ambbench [ONLY=MEM|C2P|MP3|VIDEO] [MP3=<file>] [VIDEO=<file>...] [QUICK]
+ *   ambbench [ONLY=MEM|C2P|PENS|MP3|VIDEO] [MP3=<file>] [VIDEO=<file>...] [QUICK]
  *
  * Default files: PROGDIR:Bench/g128.mp3, PROGDIR:Bench/pal.m2v and
  * PROGDIR:Bench/ps.mpg. CTRL-C stops it between tests. The report goes to
@@ -38,6 +41,7 @@
 #include <libraries/mpegv.h>
 #include <proto/mpegv.h>
 #include <libraries/mpega.h>
+#include "../../src/ham8.h"
 #include <string.h>
 #include <stdio.h>
 #include "../zzprobe/stackcall.h"
@@ -406,6 +410,81 @@ static void bench_c2p(void)
     FreeVec(pens);
 }
 
+/* ------------------------------------------------------------ PENS */
+void va_pens68k(const UBYTE *y, const UWORD *cl, UBYTE *dst, ULONG quads, const UWORD *yt4,
+                const UBYTE *lut);          /* pens68k.s */
+
+static void bench_pens(void)
+{
+    static const char *const name[] = { "pens (va_pens68k, a palette)", "HAM8 once across (lowres)",
+                                        "HAM8 twice across (hires)" };
+    ULONG fsz = FW * FH * 3 / 2, i, seed = 777, frames = quick ? 10 : 30, x, y;
+    UBYTE *yuv = AllocVec(fsz, MEMF_ANY), *row = AllocVec(FW * 2 + 64, MEMF_ANY);
+    UBYTE *lut = AllocVec(8192, MEMF_ANY);
+    UWORD *yt4 = AllocVec(4096 * 2, MEMF_ANY), *cl = AllocVec(FW * 2, MEMF_ANY);
+    struct Ham8 *h = AllocVec(sizeof(*h), MEMF_ANY);
+    char line[200], t[24];
+    int how;
+    heading("PENS: AGA video, a 320 x 256 picture made bytes for its planes (the best of several)");
+    if (!yuv || !row || !lut || !yt4 || !cl || !h)
+        goto out;
+    /* a picture like a film's: smooth areas, edges and noise */
+    for (y = 0; y < FH; y++)
+        for (x = 0; x < FW; x++) {
+            seed = seed * 1103515245UL + 12345UL;
+            yuv[y * FW + x] = (UBYTE)(40 + (x + y) % 150 + ((x / 40) & 1) * 40 + ((seed >> 16) & 7));
+        }
+    for (i = 0; i < FW * FH / 2; i++) {
+        seed = seed * 1103515245UL + 12345UL;
+        yuv[FW * FH + i] = (UBYTE)(100 + (i % 160) / 4 + ((seed >> 16) & 3));
+    }
+    for (i = 0; i < 4096; i++)
+        yt4[i] = (UWORD)(((i >> 2) >> 3) << 8);
+    for (i = 0; i < 8192; i++)
+        lut[i] = (UBYTE)(i * 37);
+    {
+        ULONG t0 = now_us();
+        ham8_init(h);
+        fmt_ms(t, now_us() - t0);
+        sprintf(line, "    HAM8's tables made in %s (once a video)", t);
+        sayf(line);
+    }
+    for (how = 0; how < 3 && !stop(); how++) {
+        ULONG f, best = ~0UL, total = 0, t0, us;
+        for (f = 0; f < frames && !stop(); f++) {
+            t0 = now_us();
+            for (y = 0; y < FH; y++) {
+                const UBYTE *Y = yuv + y * FW, *U = yuv + FW * FH + (y >> 1) * (FW / 2),
+                            *V = yuv + FW * FH + FW * FH / 4 + (y >> 1) * (FW / 2);
+                if (how == 0) {
+                    if (!(y & 1))
+                        for (x = 0; x < FW / 2; x++)
+                            cl[x] = (UWORD)(((U[x] >> 4) << 4) | (V[x] >> 4));
+                    va_pens68k(Y, cl, row, FW / 4, yt4 + ((y & 3) << 10), lut);
+                } else
+                    ham8_row(h, Y, U, V, FW, row, how == 2);
+            }
+            us = now_us() - t0;
+            total += us;
+            if (us < best)
+                best = us;
+        }
+        if (brk)
+            break;
+        fmt_ms(t, best);
+        sprintf(line, "    %-32s %s a frame (mean %ld.%02ld ms)", name[how], t, (long)(total / frames / 1000),
+                (long)(total / frames % 1000 / 10));
+        sayf(line);
+    }
+out:
+    FreeVec(yuv);
+    FreeVec(row);
+    FreeVec(lut);
+    FreeVec(yt4);
+    FreeVec(cl);
+    FreeVec(h);
+}
+
 /* ------------------------------------------------------------ MP3 */
 #define MPGA_decode_to(s, o) \
     LP2(72, LONG, MPGA_decode_to, MPEGA_STREAM *, s, a0, struct MpgaOut *, o, a1, , MPEGABase)
@@ -643,7 +722,7 @@ static ULONG run(void *unused)
     BPTR fh;
     (void)unused;
     if (!ra) {
-        PutStr((CONST_STRPTR)"ambbench [ONLY=MEM|C2P|MP3|VIDEO] [MP3=<file>] [VIDEO=<file>...] [QUICK]\n");
+        PutStr((CONST_STRPTR)"ambbench [ONLY=MEM|C2P|PENS|MP3|VIDEO] [MP3=<file>] [VIDEO=<file>...] [QUICK]\n");
         return 20;
     }
     only = (const char *)args[0];
@@ -671,13 +750,15 @@ static ULONG run(void *unused)
     dt.dat_StrTime = (STRPTR)clock;
     date[0] = clock[0] = 0;
     DateToStr(&dt);
-    sprintf(line, "======== ambbench 1.0, %s %s%s ========", date, clock, quick ? " (QUICK)" : "");
+    sprintf(line, "======== ambbench 1.1, %s %s%s ========", date, clock, quick ? " (QUICK)" : "");
     sayf(line);
     machine();
     if (!only || same(only, "MEM"))
         bench_mem();
     if (!brk && (!only || same(only, "C2P")))
         bench_c2p();
+    if (!brk && (!only || same(only, "PENS")))
+        bench_pens();
     if (!brk && (!only || same(only, "MP3")))
         bench_mp3(mp3);
     if (!brk && (!only || same(only, "VIDEO")))

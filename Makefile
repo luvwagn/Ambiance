@@ -45,12 +45,12 @@ LIBS    = -lamiga -lm
 libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 
 SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/jellyfin.c src/jfjson.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/jellyfin.c src/jfjson.c src/ham8.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/shrink.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c src/classic/classic.c \
        src/classic/input.c
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/jdec.o build/shrink68k.o
+OBJS = $(patsubst src/%.c,build/%.o,$(SRCS)) build/eaglehost.o build/hfft.o build/animdraw68k.o build/c2p68k.o build/pens68k.o build/ham8_68k.o build/jdec.o build/shrink68k.o
 # AmiSSL 6 as well as 5: src/tls.c compiled again against AmiSSL 6.1's SDK
 # headers (extras/amissl6, Apache 2.0), its functions tls6_; tls.o opens
 # AmiSSL 6 where it is installed, else 5 (nothing of AmiSSL linked in)
@@ -114,6 +114,26 @@ build/pens68k.o: src/pens68k.s
 	@mkdir -p build
 	@echo "  ASM   $@"
 	@$(VASM) -Fhunk -m68020 -quiet -o $@ $<
+
+build/ham8_68k.o: src/ham8_68k.s
+	@mkdir -p build
+	@echo "  ASM   $@"
+	@$(VASM) -Fhunk -m68020 -quiet -o $@ $<
+
+build/ham8_test: tests/ham8_test.c src/ham8.c build/ham8_68k.o
+	@$(CC) -O2 $(CPU) -noixemul -Wall -DAMB_HOST -o $@ tests/ham8_test.c src/ham8.c build/ham8_68k.o
+
+# AGA video as HAM8: the assembler's bytes against the C's, on a 68020; and
+# the C's picture against the source (PSNR), on the host
+test-ham8: build/ham8_test build/ham8_host
+	@cd build && vamos -C 68020 -m 8192 ham8_test > test-ham8.txt && grep -q " 0 failed" test-ham8.txt \
+		&& echo "  CHECK video as HAM8 (68020 assembler) ok" || (cat test-ham8.txt; exit 1)
+	@build/ham8_host > build/test-ham8-host.txt && echo "  CHECK video as HAM8 (its picture) ok" \
+		|| (cat build/test-ham8-host.txt; exit 1)
+
+build/ham8_host: tests/ham8_host.c src/ham8.c src/ham8.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -DAMB_HOST -o $@ tests/ham8_host.c src/ham8.c -lm
 
 build/pens_test: tests/pens_test.c build/pens68k.o
 	@$(CC) -O2 $(CPU) -noixemul -Wall -o $@ tests/pens_test.c build/pens68k.o
@@ -395,14 +415,15 @@ zzprobe: build/zzprobe
 # ambbench: real-machine times of Ambiance's 68k code (chip and fast RAM,
 # the c2p routines, ambmpega's MP3 and mpegv's video), for tools/m68kprof's
 # estimates; build/ambbench-dist the drawer to copy over (Libs and Bench)
-build/ambbench: tools/ambbench/ambbench.c tools/zzprobe/stackcall.h build/c2p68k.o
+build/ambbench: tools/ambbench/ambbench.c tools/zzprobe/stackcall.h build/c2p68k.o build/pens68k.o \
+		src/ham8.c src/ham8.h build/ham8_68k.o
 	@mkdir -p build
 	@echo "  CC    $<"
 	@$(CC) -O2 -m68020-60 -mno-bitfield -noixemul -Wall -Wno-pointer-sign -Iextras/mpga/include \
-		-Iextras/mpegv/include -s -o $@ $< build/c2p68k.o -lamiga
+		-Iextras/mpegv/include -s -o $@ $< src/ham8.c build/c2p68k.o build/pens68k.o build/ham8_68k.o -lamiga
 ambbench: build/ambbench
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-jf test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu test-ham8 build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-jf test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
