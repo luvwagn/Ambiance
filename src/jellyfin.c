@@ -247,6 +247,13 @@ void jf_request(const char *key, LONG start, char *out, LONG max)
                 jf.uid, id);
         break;
     case 'F':
+        if (key[2] == 'w') {
+            /* a home videos library in Videos: its videos, all, by name */
+            sprintf(q, "/Items?userId=%s&parentId=%.40s&recursive=true&includeItemTypes=Video,Movie"
+                       "&sortBy=SortName&fields=Overview,OfficialRating", jf.uid, key + 3);
+            amb_strlcpy(out, q, max);
+            break;
+        }
         /* a folder: folders first, then by name; Pictures without its
          * videos, Videos without its photos */
         sprintf(q, "/Items?userId=%s&parentId=%.40s&sortBy=IsFolder,SortName"
@@ -382,6 +389,11 @@ static int item(void *ctx, const struct JfItem *it)
             x->music_libs++;
             amb_strlcpy(x->one_lib, it->id, sizeof(x->one_lib));
             sprintf(path, "~M%.40s", it->id);
+        } else if (x->view == 'v' && is(c, "homevideos")) {
+            /* "Home Videos and Photos" in Videos: its videos alone, all in
+             * one list ("~Fw"), not its folders, which are mostly photos';
+             * nor its picture, made of them */
+            sprintf(path, "~Fw%.40s\t\t\t\t\t\t\t", it->id);
         } else {
             sprintf(path, "~F%s%.40s\t%s\t%s\t\t\t\t\t", x->view == 'p' ? "p" : "v", it->id,
                     x->view == 'p' ? "photo" : "", thumb);
