@@ -10082,7 +10082,8 @@ static ULONG jf_fj_ms;
 static char jf_fj_key[48];
 static BOOL jf_fj_zz;
 
-static void jf_film_probe(int audio);
+static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
+static void jf_film_probe(void);
 
 static void jf_film(const struct Item *it)
 {
@@ -10131,17 +10132,23 @@ static void jf_film(const struct Item *it)
 static void jf_film_streams(struct NetJob *j)
 {
     char why[160];
-    int audio = -1;
+    int kept;
     jf_fj = NULL;
+    jf_fj_nsnd = 0;
+    jf_fj_cur = -1;
     if (j->body && j->status == 200 && j->len)
-        audio = jf_pick_audio((char *)j->body, j->len, why, sizeof(why));
+        jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, &jf_fj_nsnd);
     else
         sprintf(why, "its streams not listed (%ld %.60s): the server's choice", (long)j->status, j->err);
+    if (jf_fj_nsnd > 1 && (kept = jf_sound_kept(jf_fj_key, jf_fj_snd, jf_fj_nsnd)) >= 0) {
+        jf_fj_cur = kept;
+        sprintf(why, "stream %ld, chosen with A before", (long)jf_fj_snd[kept]);
+    }
     amb_log("jellyfin: film's sound", why);
-    jf_film_probe(audio);
+    jf_film_probe();
 }
 
-static void jf_film_probe(int audio)
+static void jf_film_probe(void)
 {
     char m[200];
     const char *path;
@@ -10151,7 +10158,8 @@ static void jf_film_probe(int audio)
         set_msg(_("Not enough memory"));
         return;
     }
-    jf_video_url(jf_fj_key, jf_fj_zz, audio, 0, jf_fj_url, sizeof(jf_fj_url));
+    /* (its sound stream not in the URL: the player adds it, as A changes it) */
+    jf_video_url(jf_fj_key, jf_fj_zz, -1, 0, jf_fj_url, sizeof(jf_fj_url));
     jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
     path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10163,6 +10171,11 @@ static void jf_film_probe(int audio)
         for (c = jf_fj_seek; *c && o < e; c++)
             *o++ = *c == '*' ? '0' : *c;
         *o = 0;
+        if (jf_fj_nsnd > 1 && jf_fj_cur >= 0) {
+            char a[32];
+            sprintf(a, "&audioStreamIndex=%ld", (long)jf_fj_snd[jf_fj_cur]);
+            amb_strlcat(j->path, a, sizeof(j->path));
+        }
     }
     j->upto = JF_PROBE;
     j->wait_s = 60;                         /* (the server starts converting first) */
@@ -10214,9 +10227,12 @@ static void jf_film_came(struct NetJob *j)
         it.sortkey = (char *)"MPEG";
         anim_net_probe = &v;
         anim_net_seek = jf_fj_seek;
+        anim_net_sounds(jf_fj_snd, jf_fj_nsnd, jf_fj_cur);
         anim_from_item(&it);
         anim_net_probe = NULL;
         anim_net_seek = NULL;
+        if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur)
+            jf_sound_keep(jf_fj_key, jf_fj_snd[anim_net_sound()]);  /* (chosen with A: kept) */
     }
 }
 

@@ -368,6 +368,8 @@ struct VProbe;
  * length in v->ms if known), played as it comes: a seek asks the server
  * again from that time (seek_param and the time in 100 ns units appended,
  * "&startTimeTicks=", Jellyfin's) */
+void anim_net_sounds(const int *idx, int n, int cur);
+int anim_net_sound(void);
 LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
                          const char *seek_param, UWORD cpu, char *err, LONG errmax);
 /* A DVD's film: the disc in volume vol, or (image) in the image file vol */
@@ -1332,7 +1334,9 @@ LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *
 void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
 void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
 void jf_streams_request(const char *key, char *out, LONG max);
-int jf_pick_audio(char *body, ULONG len, char *why, LONG max);
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, int *n);
+int jf_sound_kept(const char *key, const int *list, int n);
+void jf_sound_keep(const char *key, int index);
 void jf_video_seek(char *out, LONG max);
 void jf_art_request(const char *thumb, WORD w, WORD h, char *req, LONG max);
 void jf_signin_job(struct NetJob *j, const char *user, const char *password, char *body, LONG max);

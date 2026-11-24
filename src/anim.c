@@ -1526,6 +1526,10 @@ static BOOL vi_keys;                /* a video: "i" means it */
 static BOOL vid_menu_keys;
 static BOOL vid_nav_menu;                   /* (in one of its menus, its buttons or not yet) */
 
+static BOOL vid_net;            /* (below: a server's stream) */
+static int vid_nsnd;            /* (below: its sound streams to choose from) */
+static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax);
+
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
@@ -1588,6 +1592,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 7;
             else if (vi_keys && code == 0x17 && !r) /* I: a video's information */
                 r = 9;
+            else if (vid_net && vid_nsnd > 1 && code == 0x20 && !r)   /* A: its next sound */
+                r = 18;
             else if (vid_dvd && code == 0x19 && !r)
                 r = 8;
             else if (vid_dvd && dvdplay_is_nav(vid_dvd) && code == 0x37 && !r)    /* M: its menu */
@@ -3299,6 +3305,8 @@ static struct VProbe vid;
 static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
+static int vid_snd[16], vid_snd_cur;   /* a server's stream's sound streams (its own
+                                         * indices: audioStreamIndex=), the one played */
 static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
                                  * '*'s, appended always, each '*' the time in ms */
 
@@ -3335,6 +3343,11 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
                 else
                     *o++ = *c;
             *o = 0;
+            if (vid_nsnd > 1) {
+                char a[32];
+                sprintf(a, "&audioStreamIndex=%ld", (long)vid_snd[vid_snd_cur]);
+                amb_strlcat(url, a, sizeof(url));
+            }
         } else if (ms && vid_seek_param[0]) {
             char t[96];
             sprintf(t, "%s%lu0000", vid_seek_param, (unsigned long)ms);
@@ -4603,6 +4616,11 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 break;
             at = 0;
             bar_redraw = TRUE;
+        } else if (r == 18) {
+            ended = paused = FALSE;
+            if (!vid_next_sound(cpu, at, err, errmax))
+                break;
+            bar_redraw = TRUE;
         } else if (r == 5 && vid.ms) {
             /* seek: started again from about there, as on a card's screen */
             char sm[80];
@@ -4759,6 +4777,35 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     return play_checked(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax, why);
 }
 
+/* A server's stream's sound streams for the next anim_play_video_net (n
+ * up to 16; cur the one to start with): A goes to the next, the stream
+ * asked for again from where it is. anim_net_sound(): the one played
+ * last. */
+void anim_net_sounds(const int *idx, int n, int cur)
+{
+    int i;
+    vid_nsnd = n > 16 ? 16 : n < 0 ? 0 : n;
+    for (i = 0; i < vid_nsnd; i++)
+        vid_snd[i] = idx[i];
+    vid_snd_cur = cur >= 0 && cur < vid_nsnd ? cur : 0;
+}
+
+int anim_net_sound(void)
+{
+    return vid_snd_cur;
+}
+
+/* A: the next sound stream, from where it is (at ms). */
+static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax)
+{
+    char m[80];
+    vid_snd_cur = (vid_snd_cur + 1) % vid_nsnd;
+    sprintf(m, "its sound: stream %ld (%ld of %ld), from %lu ms", (long)vid_snd[vid_snd_cur],
+            (long)vid_snd_cur + 1, (long)vid_nsnd, (unsigned long)at);
+    amb_log("video", m);
+    return vid_start(cpu, at, err, errmax);
+}
+
 LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
                          const char *seek_param, UWORD cpu, char *err, LONG errmax)
 {
@@ -4776,6 +4823,7 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
     r = play_checked(g, url, name, cpu, err, errmax, why);
     vid_net = FALSE;
+    vid_nsnd = 0;
     return r;
 }
 
@@ -5153,6 +5201,10 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 sprintf(m, "%s: %s chapter", name, r == 7 ? "next" : "previous");
                 amb_log("dvd", m);
             }
+        } else if (r == 18) {
+            ended = paused = FALSE;
+            if (!vid_next_sound(cpu, at, err, errmax))
+                break;
         } else if (r == 5 && vid.ms) {
             /* seek: the card started again from about there (playing) */
             LONG x0 = st.px0, x1 = st.px1;

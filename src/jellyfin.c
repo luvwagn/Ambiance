@@ -606,7 +606,7 @@ void jf_streams_request(const char *key, char *out, LONG max)
  * Jellyfin user's preferred language), else -1 (left to the server). What
  * was chosen and why into why. Jellyfin's languages are ISO 639-2, as
  * the file tags them: both the B and T forms are looked for. */
-int jf_pick_audio(char *body, ULONG len, char *why, LONG max)
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, int *nlist)
 {
     static const struct { const char *iso1, *a, *b; } map[] = {
         { "en", "eng", "" }, { "de", "ger", "deu" }, { "fr", "fre", "fra" }, { "it", "ita", "" },
@@ -619,7 +619,11 @@ int jf_pick_audio(char *body, ULONG len, char *why, LONG max)
     int n, i, def = -1, pick = -1;
     char m[120];
     why[0] = 0;
+    *nlist = 0;
     n = jf_audio((char *)body, len, a, 16, &def);
+    for (i = 0; i < n; i++)
+        list[i] = a[i].index;
+    *nlist = n > 0 ? n : 0;
     if (n <= 0) {
         amb_strlcpy(why, n < 0 ? "no answer to read: the server's choice" :
                          "no sound streams listed: the server's choice", max);
@@ -653,7 +657,50 @@ int jf_pick_audio(char *body, ULONG len, char *why, LONG max)
     amb_strlcpy(why, m, max);
     sprintf(m, " of %ld", (long)n);
     amb_strlcat(why, m, max);
-    return a[pick].index;
+    return pick;
+}
+
+/* The sound stream chosen with A for a film before (key "~Y<id>"), kept in
+ * ENV as "<id>=<index>," (the last few): its place in list, or -1. */
+#define SOUNDS_VAR "Ambiance/JellyfinSounds"
+int jf_sound_kept(const char *key, const int *list, int n)
+{
+    char v[600], *p;
+    int i, idx;
+    if (strlen(key) < 3)
+        return -1;
+    get_var(SOUNDS_VAR, v, sizeof(v));
+    for (p = v; (p = strstr(p, key + 2)); p++)
+        if ((p == v || p[-1] == ',') && p[strlen(key + 2)] == '=') {
+            const char *d = p + strlen(key + 2) + 1;
+            for (idx = 0; *d >= '0' && *d <= '9'; d++)
+                idx = idx * 10 + (*d - '0');
+            for (i = 0; i < n; i++)
+                if (list[i] == idx)
+                    return i;
+            return -1;
+        }
+    return -1;
+}
+
+void jf_sound_keep(const char *key, int index)
+{
+    char v[600], n[600], e[64], *p, *q;
+    if (strlen(key) < 3 || strlen(key + 2) > 40)
+        return;
+    get_var(SOUNDS_VAR, v, sizeof(v));
+    sprintf(e, "%s=%ld,", key + 2, (long)index);
+    amb_strlcpy(n, e, sizeof(n));
+    for (p = v; *p; p = q + 1) {            /* the others after it, this film's dropped */
+        if (!(q = strchr(p, ',')))
+            break;
+        if (strncmp(p, key + 2, strlen(key + 2)) && strlen(n) + (q - p + 1) < 9 * 48) {
+            LONG l = (LONG)strlen(n);
+            memcpy(n + l, p, q - p + 1);
+            n[l + (q - p + 1)] = 0;
+        }
+    }
+    set_var(SOUNDS_VAR, n);
 }
 
 /* A film's start and seeks, for the player to add to jf_video_url's URL
