@@ -41,6 +41,18 @@ long jf_items(char *buf, unsigned long len, int (*item)(void *ctx, const struct 
  * ("User.Id": dotted), as text into out (max bytes). 1 found, 0 not. */
 int jf_value(const char *buf, unsigned long len, const char *name, char *out, long max);
 
+/* A film's sound streams, from a PlaybackInfo answer (or an item's own
+ * MediaStreams): the first source's audio streams, up to max, into a;
+ * *def: the source's DefaultAudioStreamIndex (-1 not sent). Returns how
+ * many, -1 if not JSON. */
+struct JfAudio {
+    int index;                  /* the server's stream Index (audioStreamIndex=) */
+    char lang[8];               /* ISO 639-2 as the file says ("eng", "spa"; "" none) */
+    char title[64];             /* DisplayTitle ("Spanish - AC3 - 5.1 - Default") */
+    int def;                    /* IsDefault */
+};
+int jf_audio(char *buf, unsigned long len, struct JfAudio *a, int max, int *def);
+
 /* Discovery's answer (a UDP packet, buf len bytes, changed): its
  * "Address" (http://host:port), "Id" and "Name" into the three outs.
  * 1 if it had an address. */

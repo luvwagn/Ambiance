@@ -10079,12 +10079,15 @@ static struct NetJob *jf_fj;            /* the start asked for */
 static char jf_fj_title[120], jf_fj_url[600], jf_fj_seek[64];
 static ULONG jf_fj_ms;
 
+static char jf_fj_key[48];
+static BOOL jf_fj_zz;
+
+static void jf_film_probe(int audio);
+
 static void jf_film(const struct Item *it)
 {
-    char f[48], m[200];
-    const char *path;
+    char f[48];
     struct NetJob *j;
-    BOOL zz = caps.zz9000 && !video_cpu, big = jf.vsize == 2 || (jf.vsize == 0 && zz);
     if (jf_fj) {
         net_cancel(jf_fj);                  /* (another asked for meanwhile: that one) */
         jf_fj->orphan = TRUE;
@@ -10101,8 +10104,54 @@ static void jf_film(const struct Item *it)
     }
     radio_field(it, 4, f, sizeof(f));
     jf_fj_ms = strtoul_(f);
-    radio_field(it, 0, f, sizeof(f));       /* (its key alone) */
-    jf_video_url(f, zz, 0, jf_fj_url, sizeof(jf_fj_url));
+    radio_field(it, 0, jf_fj_key, sizeof(jf_fj_key));    /* (its key alone) */
+    amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
+    jf_fj_zz = caps.zz9000 && !video_cpu;
+    /* first its sound streams, to choose one (a film may have several
+     * languages; the server's own choice is the file's default) */
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    jf_streams_request(jf_fj_key, j->path, sizeof(j->path));
+    j->wait_s = 30;
+    jf_fj = j;
+    {
+        char m[200];
+        sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, it->label);
+        set_msg(m);
+    }
+    draw_footer();
+    j->jf = JFJ_STREAMS;
+    j->seq = 0;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+}
+
+/* Its sound streams came: one chosen, then its start asked for. */
+static void jf_film_streams(struct NetJob *j)
+{
+    char why[160];
+    int audio = -1;
+    jf_fj = NULL;
+    if (j->body && j->status == 200 && j->len)
+        audio = jf_pick_audio((char *)j->body, j->len, why, sizeof(why));
+    else
+        sprintf(why, "its streams not listed (%ld %.60s): the server's choice", (long)j->status, j->err);
+    amb_log("jellyfin: film's sound", why);
+    jf_film_probe(audio);
+}
+
+static void jf_film_probe(int audio)
+{
+    char m[200];
+    const char *path;
+    struct NetJob *j;
+    BOOL big = jf.vsize == 2 || (jf.vsize == 0 && jf_fj_zz);
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    jf_video_url(jf_fj_key, jf_fj_zz, audio, 0, jf_fj_url, sizeof(jf_fj_url));
     jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
     path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10117,14 +10166,11 @@ static void jf_film(const struct Item *it)
     }
     j->upto = JF_PROBE;
     j->wait_s = 60;                         /* (the server starts converting first) */
-    amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
     jf_fj = j;
-    sprintf(m, "%.60s: %s, %lu ms long", it->label,
-            big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s", (unsigned long)jf_fj_ms);
+    sprintf(m, "%.60s: %s, %lu ms long", jf_fj_title,
+            jf.vsize == 3 ? "MPEG-1 160x120 0.3 Mbit/s" : big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s",
+            (unsigned long)jf_fj_ms);
     amb_log("jellyfin: film asked for", m);
-    sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, it->label);
-    set_msg(m);
-    draw_footer();
     j->jf = JFJ_VIDEO;                      /* (beside the settings' own: not jf_submit's) */
     j->seq = 0;
     net_submit(j);
@@ -10181,7 +10227,9 @@ static void jf_job_came(struct NetJob *j)
     BOOL mine = j == jf_nj;
     if (mine)
         jf_nj = NULL;
-    if (j->jf == JFJ_VIDEO && j == jf_fj) {
+    if (j->jf == JFJ_STREAMS && j == jf_fj) {
+        jf_film_streams(j);
+    } else if (j->jf == JFJ_VIDEO && j == jf_fj) {
         jf_film_came(j);
     } else if (mine && j->jf == JFJ_FIND) {
         char *s = (char *)j->body, *e;

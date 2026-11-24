@@ -52,7 +52,9 @@
 #define UID_VAR    "Ambiance/JellyfinUserId"
 #define TOKEN_VAR  "Ambiance/JellyfinToken"
 #define DEV_VAR    "Ambiance/JellyfinDevice"    /* this Amiga's device id, made once */
-#define VSIZE_VAR  "Ambiance/JellyfinVideo"     /* films: "auto", "small", "large" */
+#define VSIZE_VAR  "Ambiance/JellyfinVideo"     /* films: "auto", "small", "large"; "tiny"
+                                                 * (160 x 120: ENV only, a first step of a
+                                                 * size ladder, not in Settings yet) */
 
 #define PART 1000                   /* entries asked for at once (plex.c's PLEX_PART) */
 
@@ -123,7 +125,7 @@ void jf_load(void)
     get_var(UID_VAR, jf.uid, sizeof(jf.uid));
     get_var(TOKEN_VAR, jf.token, sizeof(jf.token));
     get_var(VSIZE_VAR, v, sizeof(v));
-    jf.vsize = !amb_stricmp(v, "small") ? 1 : !amb_stricmp(v, "large") ? 2 : 0;
+    jf.vsize = !amb_stricmp(v, "small") ? 1 : !amb_stricmp(v, "large") ? 2 : !amb_stricmp(v, "tiny") ? 3 : 0;
     get_var(DEV_VAR, jf.dev, sizeof(jf.dev));
     if (!jf.dev[0]) {
         /* who this Ambiance is, to the server: made up once, then kept (the
@@ -555,13 +557,16 @@ void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, 
  * ZZ9000 (zz: it decodes): its picture size and rate by Settings >
  * Networking > Jellyfin > Films (auto: by the decoder). from_ms: later in
  * it (a new conversion from there: a live one cannot be sought in). */
-void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max)
+void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out, LONG max)
 {
     char n[300];
     int big = jf.vsize == 2 || (jf.vsize == 0 && zz);
     sprintf(out, "http://%s:%lu/Videos/%.36s/stream.mpg?static=false", jf.host,
             (unsigned long)jf.port, key + 2);
-    if (big)
+    if (jf.vsize == 3)
+        /* the smallest: 160 x 120 (a 68030's, or a test of the smallest) */
+        sprintf(n, "&videoCodec=mpeg1video&maxWidth=160&maxHeight=120&videoBitRate=300000");
+    else if (big)
         /* the card's decoder: MPEG-2 at DVD's size, its own rate */
         sprintf(n, "&videoCodec=mpeg2video&maxWidth=720&maxHeight=576&videoBitRate=4000000");
     else
@@ -575,10 +580,75 @@ void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max)
     sprintf(n, "&audioCodec=mp2&audioBitRate=%s&audioSampleRate=48000&audioChannels=2"
                "&deviceId=%s&ApiKey=%s", big ? "128000" : "96000", jf.dev, jf.token);
     amb_strlcat(out, n, max);
+    if (audio >= 0) {
+        sprintf(n, "&audioStreamIndex=%ld", (long)audio);
+        amb_strlcat(out, n, max);
+    }
     if (from_ms) {
         sprintf(n, "&startTimeTicks=%lu0000", (unsigned long)from_ms);
         amb_strlcat(out, n, max);
     }
+}
+
+/* A film's sound streams asked for (PlaybackInfo: the server's choice
+ * among them follows the user's settings there): the request into out. */
+void jf_streams_request(const char *key, char *out, LONG max)
+{
+    char n[200];
+    sprintf(out, "/Items/%.36s/PlaybackInfo?userId=%s", key + 2, jf.uid);
+    sprintf(n, "&ApiKey=%s", jf.token);
+    amb_strlcat(out, n, max);
+}
+
+/* The sound to play from a PlaybackInfo answer (body, len: changed): the
+ * first stream in the language Ambiance is shown in, else the server's
+ * choice (its DefaultAudioStreamIndex: the file's default, or the
+ * Jellyfin user's preferred language), else -1 (left to the server). What
+ * was chosen and why into why. Jellyfin's languages are ISO 639-2, as
+ * the file tags them: both the B and T forms are looked for. */
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max)
+{
+    static const struct { const char *iso1, *a, *b; } map[] = {
+        { "en", "eng", "" }, { "de", "ger", "deu" }, { "fr", "fre", "fra" }, { "it", "ita", "" },
+        { "es", "spa", "" }, { "sv", "swe", "" }, { "fi", "fin", "" }, { "da", "dan", "" },
+        { "nb", "nor", "nob" }, { "nl", "dut", "nld" }, { "pt", "por", "" }, { "pl", "pol", "" },
+        { "ja", "jpn", "" }, { "el", "gre", "ell" }, { "ko", "kor", "" },
+    };
+    struct JfAudio a[16];
+    const char *iso = amb_lang_iso(), *l1 = "eng", *l2 = "";
+    int n, i, def = -1, pick = -1;
+    char m[120];
+    why[0] = 0;
+    n = jf_audio((char *)body, len, a, 16, &def);
+    if (n <= 0) {
+        amb_strlcpy(why, n < 0 ? "no answer to read: the server's choice" :
+                         "no sound streams listed: the server's choice", max);
+        return -1;
+    }
+    for (i = 0; i < (int)(sizeof(map) / sizeof(map[0])); i++)
+        if (!strcmp(iso, map[i].iso1)) {
+            l1 = map[i].a;
+            l2 = map[i].b;
+        }
+    for (i = 0; i < n && pick < 0; i++)
+        if (a[i].lang[0] && (!amb_stricmp(a[i].lang, l1) || (l2[0] && !amb_stricmp(a[i].lang, l2))))
+            pick = i;
+    if (pick >= 0)
+        sprintf(m, "%.60s (stream %ld, Ambiance's language)", a[pick].title[0] ? a[pick].title : a[pick].lang,
+                (long)a[pick].index);
+    else {
+        for (i = 0; i < n && pick < 0; i++)
+            if (a[i].index == def)
+                pick = i;
+        if (pick < 0)
+            pick = 0;
+        sprintf(m, "%.60s (stream %ld, the server's choice: none in %s)",
+                a[pick].title[0] ? a[pick].title : a[pick].lang, (long)a[pick].index, l1);
+    }
+    amb_strlcpy(why, m, max);
+    sprintf(m, " of %ld", (long)n);
+    amb_strlcat(why, m, max);
+    return a[pick].index;
 }
 
 /* A film's start and seeks, for the player to add to jf_video_url's URL

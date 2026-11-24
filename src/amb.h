@@ -1313,7 +1313,7 @@ struct JfConf {
     char token[80], dev[40];    /* the sign-in's token; this Amiga's device id */
     UBYTE vsize;                /* films: 0 by the decoder, 1 small (CPU), 2 large (ZZ9000) */
 };
-enum { JFJ_SIGNIN = 1, JFJ_SIGNOUT, JFJ_FIND, JFJ_INFO, JFJ_VIDEO };
+enum { JFJ_SIGNIN = 1, JFJ_SIGNOUT, JFJ_FIND, JFJ_INFO, JFJ_VIDEO, JFJ_STREAMS };
 extern struct JfConf jf;
 void jf_load(void);
 void jf_set_on(BOOL on);
@@ -1330,7 +1330,9 @@ void jf_menu(const char *key, struct ItemList *l);
 BOOL jf_is_menu(const char *key);
 LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
-void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max);
+void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
+void jf_streams_request(const char *key, char *out, LONG max);
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max);
 void jf_video_seek(char *out, LONG max);
 void jf_art_request(const char *thumb, WORD w, WORD h, char *req, LONG max);
 void jf_signin_job(struct NetJob *j, const char *user, const char *password, char *body, LONG max);

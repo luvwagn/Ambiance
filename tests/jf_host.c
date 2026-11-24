@@ -213,6 +213,26 @@ int main(int argc, char **argv)
         CHECK(jf_items(b, strlen(b), got1, &keep, NULL) == 1 && strlen(keep.name) == 158,
               "cut at a character");
     }
+    /* a film's sounds (PlaybackInfo): the first source's audio streams */
+    {
+        char b[] = "{\"MediaSources\":[{\"Id\":\"x\",\"MediaStreams\":["
+                   "{\"Codec\":\"h264\",\"Type\":\"Video\",\"Index\":0,\"Language\":\"eng\"},"
+                   "{\"Codec\":\"ac3\",\"Language\":\"spa\",\"DisplayTitle\":\"Spanish - AC3 - 5.1 - Default\","
+                   "\"IsDefault\":true,\"Type\":\"Audio\",\"Index\":1,\"Tags\":{\"a\":[1,2]}},"
+                   "{\"Codec\":\"ac3\",\"Language\":\"eng\",\"DisplayTitle\":\"English - AC3 - 5.1\","
+                   "\"IsDefault\":false,\"Type\":\"Audio\",\"Index\":2},"
+                   "{\"Codec\":\"subrip\",\"Language\":\"eng\",\"Type\":\"Subtitle\",\"Index\":3}],"
+                   "\"DefaultAudioStreamIndex\":1},"
+                   "{\"Id\":\"y\",\"MediaStreams\":[{\"Type\":\"Audio\",\"Index\":7}],"
+                   "\"DefaultAudioStreamIndex\":7}],\"PlaySessionId\":\"p\"}";
+        struct JfAudio a[4];
+        int def = 0, n = jf_audio(b, strlen(b), a, 4, &def);
+        CHECK(n == 2 && def == 1, "audio streams: two, default 1");
+        CHECK(n == 2 && a[0].index == 1 && !strcmp(a[0].lang, "spa") && a[0].def &&
+                  a[1].index == 2 && !strcmp(a[1].lang, "eng") && !a[1].def &&
+                  !strcmp(a[1].title, "English - AC3 - 5.1"),
+              "audio streams' fields");
+    }
     printf(fails ? "jf_host: %d failed\n" : "jf_host: all passed\n", fails);
     free(exp);
     free(got);

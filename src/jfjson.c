@@ -486,3 +486,79 @@ int jf_discovered(char *buf, unsigned long len, char *address, long amax, char *
     jf_value(buf, len, "Name", name, nmax);
     return jf_value(buf, len, "Address", address, amax) && address[0];
 }
+
+/* ------------------------------------------------------- a film's sounds */
+
+static int num(const char *t)
+{
+    int v = 0;
+    for (; *t >= '0' && *t <= '9'; t++)
+        v = v * 10 + (*t - '0');
+    return v;
+}
+
+struct audio {
+    struct JfAudio *a, cur;
+    int max, n, ms_depth, done, in_src, def;
+    char type[12];
+};
+
+static int audio_val(void *ctx, int depth, const char *name, int kind, const char *text)
+{
+    struct audio *x = ctx;
+    if (!x->ms_depth) {
+        if (name && kind == JF_ARR && !strcmp(name, "MediaStreams") && !x->done) {
+            x->ms_depth = depth;        /* (the first source's: the one played) */
+            return 1;
+        }
+        if (name && kind == JF_NUM && !strcmp(name, "DefaultAudioStreamIndex") && x->def < 0)
+            x->def = num(text);
+        return 1;
+    }
+    if (depth == x->ms_depth + 1 && kind == JF_OBJ) {
+        memset(&x->cur, 0, sizeof(x->cur));
+        x->cur.index = -1;
+        x->type[0] = 0;
+    } else if (depth == x->ms_depth + 2 && name) {
+        if (!strcmp(name, "Type") && kind == JF_STR)
+            PUT(x->type, text);
+        else if (!strcmp(name, "Index") && kind == JF_NUM)
+            x->cur.index = num(text);
+        else if (!strcmp(name, "Language") && kind == JF_STR)
+            PUT(x->cur.lang, text);
+        else if (!strcmp(name, "DisplayTitle") && kind == JF_STR)
+            PUT(x->cur.title, text);
+        else if (!strcmp(name, "IsDefault"))
+            x->cur.def = kind == JF_TRUE;
+    }
+    return 1;
+}
+
+static int audio_end(void *ctx, int depth, int kind)
+{
+    struct audio *x = ctx;
+    if (!x->ms_depth || x->done)
+        return 1;
+    if (depth == x->ms_depth + 1 && kind == JF_OBJ) {
+        if (!strcmp(x->type, "Audio") && x->cur.index >= 0 && x->n < x->max)
+            x->a[x->n++] = x->cur;
+    } else if (depth == x->ms_depth && kind == JF_ARR) {
+        x->done = 1;                    /* (its DefaultAudioStreamIndex may follow: walked on) */
+        x->ms_depth = 0;
+    }
+    return 1;
+}
+
+int jf_audio(char *buf, unsigned long len, struct JfAudio *a, int max, int *def)
+{
+    struct audio x;
+    memset(&x, 0, sizeof(x));
+    x.a = a;
+    x.max = max;
+    x.def = -1;
+    if (jf_walk(buf, len, audio_val, audio_end, &x) < 0)
+        return -1;
+    if (def)
+        *def = x.def;
+    return x.n;
+}
