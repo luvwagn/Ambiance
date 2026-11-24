@@ -506,6 +506,18 @@ LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *
 
 /* ---------------------------------------------------------------- playing */
 
+/* A new play session's name: 8 hex digits. Jellyfin names a conversion's
+ * file from the media, the client's device id and its play session only
+ * (StreamingHelpers.GetOutputFilePath), not from where it starts: asked
+ * again from another time under the same name, it hands over the
+ * conversion already running, from its start. So each start and each seek
+ * is a session of its own. */
+static void jf_new_session(char *s)
+{
+    static ULONG n;
+    sprintf(s, "%08lx", (unsigned long)(time_ms() ^ (++n * 2654435761UL) ^ (ULONG)FindTask(NULL)));
+}
+
 /* A track (its fields, plex.c's) as a URL to play: MP3 from the server,
  * made for this Amiga as Plex's are (plex_tier), or (an MP3, played as
  * stored where the Amiga is fast enough) the file itself. */
@@ -522,6 +534,12 @@ void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, 
                 (long)(tier == 0 ? 64000 : tier == 1 ? 112000 : tier == 2 ? 160000 : 256000),
                 (long)(mono ? 22050 : tier >= 3 ? 48000 : 24000), mono ? 1 : 2, mono ? 1 : 2);
         amb_strlcat(out, n, max);
+        {
+            char ses[12];
+            jf_new_session(ses);
+            sprintf(n, "&playSessionId=%s", ses);
+            amb_strlcat(out, n, max);
+        }
         if (from_ms) {
             sprintf(n, "&startTimeTicks=%lu0000", (unsigned long)from_ms);
             amb_strlcat(out, n, max);
@@ -561,6 +579,17 @@ void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max)
         sprintf(n, "&startTimeTicks=%lu0000", (unsigned long)from_ms);
         amb_strlcat(out, n, max);
     }
+}
+
+/* A film's start and seeks, for the player to add to jf_video_url's URL
+ * (anim.c: each '*' the time in ms): a session of their own each (see
+ * jf_new_session), and the time in 100 ns units. */
+void jf_video_seek(char *out, LONG max)
+{
+    char ses[12], n[80];
+    jf_new_session(ses);
+    sprintf(n, "&playSessionId=%s-*&startTimeTicks=*0000", ses);
+    amb_strlcpy(out, n, max);
 }
 
 /* A picture ("~I<id>/<tag>") made w x h by the server: the request into

@@ -3286,7 +3286,8 @@ static struct VProbe vid;
 static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
-static char vid_seek_param[32]; /* ...appended with the time, in 100 ns units */
+static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
+                                 * '*'s, appended always, each '*' the time in ms */
 
 static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 {
@@ -3309,8 +3310,20 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
          * conversion starts there: a byte offset means nothing to it) */
         static char url[700];
         amb_strlcpy(url, lay_path, sizeof(url));
-        if (ms && vid_seek_param[0]) {
-            char t[48];
+        if (strchr(vid_seek_param, '*')) {
+            /* (Jellyfin: a play session of its own for each time) */
+            char t[16], *o = url + strlen(url), *e = url + sizeof(url) - 1;
+            const char *c, *d;
+            sprintf(t, "%lu", (unsigned long)ms);
+            for (c = vid_seek_param; *c && o < e; c++)
+                if (*c == '*')
+                    for (d = t; *d && o < e; d++)
+                        *o++ = *d;
+                else
+                    *o++ = *c;
+            *o = 0;
+        } else if (ms && vid_seek_param[0]) {
+            char t[96];
             sprintf(t, "%s%lu0000", vid_seek_param, (unsigned long)ms);
             amb_strlcat(url, t, sizeof(url));
         }

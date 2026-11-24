@@ -7941,6 +7941,7 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 static void anim_from_item(const struct Item *it);
 static void jf_film(const struct Item *it);
 static const struct VProbe *anim_net_probe;    /* anim_from_item's item: a stream, probed so */
+static const char *anim_net_seek;               /* ...its start's and seeks' (anim.c: '*' the ms) */
 
 static void anim_from_page(struct Page *p)
 {
@@ -8003,7 +8004,7 @@ static void anim_from_item(const struct Item *it)
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
             if ((anim_net_probe ? anim_play_video_net(&g, it->path, it->label, anim_net_probe,
-                                                      "&startTimeTicks=", plex_decoder_cpu(), err,
+                                                      anim_net_seek, plex_decoder_cpu(), err,
                                                       sizeof(err))
                                 : anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err))) < 0 &&
                 err[0])
@@ -10075,7 +10076,7 @@ static void jf_sign_out(void)
  * asks the server again from that time (startTimeTicks). */
 #define JF_PROBE (32UL * 1024)          /* its start, probed: a sequence header, a sound frame */
 static struct NetJob *jf_fj;            /* the start asked for */
-static char jf_fj_title[120], jf_fj_url[600];
+static char jf_fj_title[120], jf_fj_url[600], jf_fj_seek[64];
 static ULONG jf_fj_ms;
 
 static void jf_film(const struct Item *it)
@@ -10102,10 +10103,18 @@ static void jf_film(const struct Item *it)
     jf_fj_ms = strtoul_(f);
     radio_field(it, 0, f, sizeof(f));       /* (its key alone) */
     jf_video_url(f, zz, 0, jf_fj_url, sizeof(jf_fj_url));
+    jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
     path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
     j->port = jf.port;
     amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
+    {
+        /* the probe: the start's own session (the player's from 0 ms) */
+        char *c, *o = j->path + strlen(j->path), *e = j->path + sizeof(j->path) - 1;
+        for (c = jf_fj_seek; *c && o < e; c++)
+            *o++ = *c == '*' ? '0' : *c;
+        *o = 0;
+    }
     j->upto = JF_PROBE;
     j->wait_s = 60;                         /* (the server starts converting first) */
     amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
@@ -10158,8 +10167,10 @@ static void jf_film_came(struct NetJob *j)
         it.path = jf_fj_url;
         it.sortkey = (char *)"MPEG";
         anim_net_probe = &v;
+        anim_net_seek = jf_fj_seek;
         anim_from_item(&it);
         anim_net_probe = NULL;
+        anim_net_seek = NULL;
     }
 }
 

@@ -1331,6 +1331,7 @@ BOOL jf_is_menu(const char *key);
 LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
 void jf_video_url(const char *key, BOOL zz, ULONG from_ms, char *out, LONG max);
+void jf_video_seek(char *out, LONG max);
 void jf_art_request(const char *thumb, WORD w, WORD h, char *req, LONG max);
 void jf_signin_job(struct NetJob *j, const char *user, const char *password, char *body, LONG max);
 BOOL jf_signin_came(struct NetJob *j, const char *user, char *why, LONG max);
