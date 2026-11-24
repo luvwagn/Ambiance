@@ -625,6 +625,11 @@ int jf_pick_audio(char *body, ULONG len, char *why, LONG max)
                          "no sound streams listed: the server's choice", max);
         return -1;
     }
+    for (i = 0; i < n; i++) {
+        sprintf(m, "stream %ld: \"%.60s\", language \"%s\"%s", (long)a[i].index, a[i].title, a[i].lang,
+                a[i].def ? ", the file's default" : a[i].index == def ? ", the server's" : "");
+        amb_log("jellyfin: film's sounds", m);
+    }
     for (i = 0; i < (int)(sizeof(map) / sizeof(map[0])); i++)
         if (!strcmp(iso, map[i].iso1)) {
             l1 = map[i].a;

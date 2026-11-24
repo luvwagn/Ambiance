@@ -1701,6 +1701,19 @@ static int input(struct Window *win, ULONG *jlast)
     return input_with(win, jlast, classic_hit);
 }
 
+/* An MPEG's controls on an AGA screen of its own: as classic_hit, and its
+ * progress line, to seek. */
+static WORD seek_x;             /* (strip_hit's too: below) */
+static int aga_hit(WORD x, WORD y)
+{
+    int b = classic_hit(x, y);
+    if (b == -2 && bar.px1 > bar.px0 + 16 && x >= bar.px0 - 4 && x <= bar.px1 + 4) {
+        seek_x = x;
+        return -3;
+    }
+    return b;
+}
+
 /* 8SVX samples in it: the FORM after its header one (they come first). */
 BOOL anim_has_sound(const char *path)
 {
@@ -4570,7 +4583,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 at = vid.ms ? vid.ms : at;
             }
         }
-        r = input(win, &jlast);
+        r = input_with(win, &jlast, aga_hit);
         if (r == 1)
             break;
         if (r == 2) {
@@ -4589,6 +4602,25 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
             if (!vid_start(cpu, 0, err, errmax))
                 break;
             at = 0;
+            bar_redraw = TRUE;
+        } else if (r == 5 && vid.ms) {
+            /* seek: started again from about there, as on a card's screen */
+            char sm[80];
+            LONG x0 = bar.px0, x1 = bar.px1;
+            ULONG target = (ULONG)((seek_x < x0 ? 0 : seek_x > x1 ? x1 - x0 : seek_x - x0) *
+                                   (ULONG)vid.ms / (ULONG)(x1 - x0 ? x1 - x0 : 1));
+            ended = paused = FALSE;
+            sprintf(sm, "seek to %lu ms", (unsigned long)target);
+            amb_log("video", sm);
+            if (!vid_start(cpu, target, err, errmax)) {
+                sprintf(sm, "the seek failed: on from %lu ms", (unsigned long)at);
+                amb_log("video", sm);
+                err[0] = 0;
+                target = at;
+                if (!vid_start(cpu, target, err, errmax))
+                    break;
+            }
+            at = target;
             bar_redraw = TRUE;
         }
         bar.paused = paused;
