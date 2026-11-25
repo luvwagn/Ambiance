@@ -10153,6 +10153,26 @@ static void jf_film_streams(struct NetJob *j)
     jf_fj = NULL;
     jf_fj_nsnd = 0;
     jf_fj_cur = -1;
+    if (j->body && j->status == 200 && j->len) {
+        /* where the server has it, for the log (a DVD's folder, a .wtv
+         * recording and a .mkv start and seek very differently) */
+        const char *pa = strstr((const char *)j->body, "\"Path\":\""), *co;
+        char pt[200];
+        if (pa) {
+            LONG k = 0;
+            pa += 8;
+            while (pa[k] && pa[k] != '"' && k < (LONG)sizeof(pt) - 1) {
+                pt[k] = pa[k];
+                k++;
+            }
+            pt[k] = 0;
+            co = strstr((const char *)j->body, "\"Container\":\"");
+            sprintf(why, "%.130s (%.12s)", pt, co ? co + 13 : "?");
+            if ((co = strchr(why, '"')))
+                strcpy((char *)co, ")");
+            amb_log("jellyfin: film's file", why);
+        }
+    }
     if (j->body && j->status == 200 && j->len)
         jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, jf_fj_sndt, &jf_fj_nsnd);
     else
@@ -10377,7 +10397,8 @@ static void jf_film_came(struct NetJob *j)
         int k, want = jf_fj_bottom;
         jf_fj_tried = TRUE;
         us = mpeg_trial_us(j->body, j->len, &n, &pw, &ph);
-        if (us && n) {
+        if (us && n >= 4) {                 /* (one I picture alone says little: a phone's
+                                             * video gave 1, at 14.8 ms, and 240 x 180 chosen) */
             ULONG area = (ULONG)pw * ph, f = g.truecolor ? 4 : 8;
             for (k = jf_fj_top; k <= jf_fj_bottom; k++)
                 if ((unsigned long long)us * jf_level_area(k) / (area ? area : 1) * f <= 25000ULL) {
@@ -10393,8 +10414,10 @@ static void jf_film_came(struct NetJob *j)
                 jf_film_probe();            /* (at that size: then played) */
                 return;
             }
-        } else
-            amb_log("jellyfin: film's trial", "no picture decoded from its start: as it was");
+        } else {
+            sprintf(m, "%lu pictures decoded from its start: too few to judge, as it was", (unsigned long)n);
+            amb_log("jellyfin: film's trial", m);
+        }
     }
     {
         struct Item it;
