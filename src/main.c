@@ -10312,6 +10312,14 @@ static BOOL jf_relevel_now(int dir, ULONG at, char *url, LONG umax, char *seek, 
             v->ms = jf_fj_ms;
             sprintf(m, "its first %lu KB in %lu ms", (unsigned long)(j->len >> 10), (unsigned long)j->ms);
             amb_log("jellyfin: film", m);
+            if (j->ms > 5000 && jf_fj_top < jf_fj_level) {
+                /* slow to start from a time (a DVD's folder: the server's
+                 * ffmpeg decodes from the start of a VOB to get there, 10
+                 * to 20 s on Brian's NAS): no larger size for this film,
+                 * only a smaller one when it must */
+                jf_fj_top = jf_fj_level;
+                amb_log("jellyfin: film", "slow to start mid-film: no larger size for it from here");
+            }
             anim_net_adapt(at, (jf_fj_level < jf_fj_bottom ? 1 : 0) | (jf_fj_level > jf_fj_top ? 2 : 0));
             jf_film_sides();
             ok = TRUE;

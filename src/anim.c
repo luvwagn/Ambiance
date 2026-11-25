@@ -3316,6 +3316,7 @@ static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
 static char vid_snd_title[16][48];      /* (their names, the server's) */
 static char vid_session[48];            /* the play session asked for last ("" none) */
+static char vid_session_old[48];        /* the one before, stopped once the next is asked for */
 static void (*vid_stop_fn)(const char *session);
 
 /* Who stops a server's conversion when the player is done with it (a
@@ -3388,9 +3389,8 @@ static BOOL vid_relevel_here(ULONG at)
     int i = vid_relevel > 0 ? 1 : 0;
     if (!vid_relevel_fn)
         return FALSE;
-    st_stop();                              /* (its connection closed, its conversion stopped:
-                                             * the server's time for the new one) */
-    vid_session_end();
+    st_stop();                              /* (its connection closed; its conversion stopped
+                                             * once the new size is asked for: vid_start) */
     (void)i;
     vid_new_ok = vid_relevel_fn(vid_relevel, at, vid_new_url, sizeof(vid_new_url), vid_new_seek,
                                 sizeof(vid_new_seek), &vid_new_v);
@@ -3464,9 +3464,9 @@ static int ad_tick(BOOL paused)
     ad_shown = v.shown;
     ad_bskip = v.bskipped;
     ad_und = v.underruns;
-    if (shown + late < 10) {                /* (hardly anything came: the network's) */
+    if (shown + late < 10) {                /* (hardly a picture: the CPU or the network) */
         ad_clean = 0;
-        if ((vid_can & 1) && und) {
+        if (vid_can & 1) {
             sprintf(m, "3 s: %lu pictures, sound ran dry %lu times: a smaller size", (unsigned long)shown,
                     (unsigned long)und);
             amb_log("video", m);
@@ -3534,11 +3534,12 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
                 amb_strlcat(url, a, sizeof(url));
             }
             {
-                /* the last session's conversion stopped (st_stop above has
-                 * closed its connection), this one's noted */
+                /* this one's noted; the last session's conversion stopped
+                 * once this one has been asked for (below: a DELETE just
+                 * before the new request held the server up 10 s and more) */
                 const char *p = strstr(url, "playSessionId=");
                 LONG n = 0;
-                vid_session_end();
+                amb_strlcpy(vid_session_old, vid_session, sizeof(vid_session_old));
                 if (p) {
                     p += 14;
                     while (p[n] && p[n] != '&' && n < (LONG)sizeof(vid_session) - 1)
@@ -3554,7 +3555,13 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
         }
         vid_base = ms;
         ad_reset();
-        return st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
+        {
+            BOOL ok = st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
+            if (vid_session_old[0] && vid_stop_fn)
+                vid_stop_fn(vid_session_old);   /* (the old conversion: the new one asked for) */
+            vid_session_old[0] = 0;
+            return ok;
+        }
     }
     vid_base = at ? ms : 0;
     return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
@@ -5105,6 +5112,7 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     vid_net = TRUE;
     amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
     vid_session[0] = 0;
+    vid_session_old[0] = 0;
     vid_relevel = 0;
     vid_new_ok = FALSE;
     for (;;) {

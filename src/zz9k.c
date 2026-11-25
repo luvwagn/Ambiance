@@ -948,3 +948,26 @@ int zz_audio_origin(ULONG session, ZzU64 *pts)
     *pts = res.value[3];
     return ZZ9K_STATUS_OK;
 }
+
+/* A media session's status page (ZZ9K_MEDIA_STATUS_*): its first four
+ * values, for the log. */
+int zz_status_page(ULONG session, ULONG page, ZzU64 *v)
+{
+    ZZ9KRequest rq;
+    ZZ9KMailboxEntry reply;
+    ZZ9KMediaSessionStatusResult res;
+    int s, i;
+    for (i = 0; i < 4; i++)
+        v[i] = 0;
+    if ((s = zz9k_request_media_session_status(&rq, session, page, 0)) != ZZ9K_STATUS_OK)
+        return s;
+    memset(&reply, 0, sizeof(reply));
+    s = zz_call(&rq, &reply);
+    if (s != ZZ9K_STATUS_OK)
+        return s;
+    if ((s = zz9k_reply_media_session_status(&reply, &res)) != ZZ9K_STATUS_OK)
+        return s;
+    for (i = 0; i < 4; i++)
+        v[i] = res.value[i];
+    return ZZ9K_STATUS_OK;
+}
