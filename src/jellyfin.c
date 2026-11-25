@@ -565,52 +565,124 @@ void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, 
     amb_strlcat(out, n, max);
 }
 
-/* The size a film starts at (1 small, 2 large, 3 tiny): Settings >
- * Networking > Jellyfin > Picture size, or automatic, by what decodes it
- * and how fast, whatever the screen: large (MPEG-2 720 x 576) when the
- * ZZ9000 decodes it (zz: a screen with its overlay); small (MPEG-1 320
- * wide) when the CPU is far past a 68060 (tier 3: an emulator's JIT,
- * Emu68 on a PiStorm, an 080); else tiny (160 x 120): a real 68060 at
- * 50 MHz decodes, converts and plays 320 wide too slowly for full rate,
- * the more so on AGA (a 320 x 256 HAM8 frame alone takes it 73 ms:
- * ambbench 1.1, Brian's A3000). A starting point: the player does not
- * yet step up or down as it goes. */
-int jf_film_size(BOOL zz, int tier)
+/* ---- a film's size: a ladder, from the largest. The ZZ9000 decodes
+ * MPEG-2 at any of them (its Program Stream sessions go to 1920 x 1088;
+ * PIP frames over 1280 x 720 are packed at half size, so 720p is the top
+ * worth asking for); the CPU decodes MPEG-1 (mpegv.library). The sound
+ * steps down with the picture: fewer bits, then mono, then 32 kHz
+ * (decoded here at half: 16 kHz). The server keeps the film's shape
+ * within maxWidth x maxHeight. */
+static const struct JfLevel {
+    UWORD w, h, vkbps, akbps;
+    UBYTE chans;
+    UWORD hz;
+} ladder[] = {
+    { 1280, 720, 6000, 128, 2, 48000 },     /* 0: the card's top */
+    { 720, 576, 4000, 128, 2, 48000 },      /* 1: DVD's, the card's start */
+    { 640, 480, 2500, 128, 2, 48000 },      /* 2: a JIT's top */
+    { 480, 360, 1500, 96, 2, 48000 },
+    { 320, 240, 1000, 96, 2, 48000 },       /* 4: a JIT's start (Emu68, an 080) */
+    { 240, 180, 600, 64, 1, 48000 },
+    { 160, 120, 300, 64, 1, 32000 },        /* 6: a real CPU's start, the bottom */
+};
+#define LEVELS ((int)(sizeof(ladder) / sizeof(ladder[0])))
+#define LEVEL_VAR "Ambiance/JellyfinLevel"  /* each kind's last size: card, JIT, real CPU */
+
+/* Which kind decodes it: 0 the ZZ9000 (zz: a screen with its overlay), 1
+ * a CPU far past a 68060 (tier 3: an emulator's JIT, Emu68, an 080), 2 a
+ * real CPU (a 68060 at 50 MHz decodes, converts and plays 320 wide too
+ * slowly for full rate, the more so on AGA: a 320 x 256 HAM8 frame alone
+ * takes it 73 ms: ambbench 1.1, Brian's A3000). */
+static int kind_of(BOOL zz, int tier)
 {
-    if (jf.vsize)
-        return jf.vsize;
-    if (zz)
-        return 2;
-    return tier >= 3 ? 1 : 3;
+    return zz ? 0 : tier >= 3 ? 1 : 2;
 }
 
-/* A film as a URL, size as jf_film_size: MPEG-1 for this Amiga's CPU
- * (QVGA, or 160 x 120), or MPEG-2 for the ZZ9000. from_ms: later in it
- * (a new conversion from there: a live one cannot be sought in). */
-void jf_video_url(const char *key, int size, int audio, ULONG from_ms, char *out, LONG max)
+/* Where a film starts on the ladder, and how far it may go (*top the
+ * largest, *bottom the smallest): Settings > Networking > Jellyfin >
+ * Picture size, fixed (small 320, large 720 x 576, tiny 160 x 120:
+ * *top = *bottom), or automatic: the size this kind of decoder last
+ * played at (kept in ENV), else its start, and from its top to the
+ * bottom as it plays. */
+int jf_film_plan(BOOL zz, int tier, int *top, int *bottom)
+{
+    static const UBYTE start[3] = { 1, 4, 6 }, tops[3] = { 0, 2, 4 };
+    char v[16];
+    int k = kind_of(zz, tier), l;
+    if (jf.vsize) {
+        l = jf.vsize == 1 ? 4 : jf.vsize == 2 ? (zz ? 1 : 4) : 6;
+        *top = *bottom = l;
+        return l;
+    }
+    *top = tops[k];
+    *bottom = LEVELS - 1;
+    get_var(LEVEL_VAR, v, sizeof(v));
+    l = strlen(v) == 3 && v[k] >= '0' && v[k] < '0' + LEVELS ? v[k] - '0' : start[k];
+    return l < *top ? *top : l;
+}
+
+/* The size a film of this kind played well at, for its next start. */
+void jf_film_keep(BOOL zz, int tier, int level)
+{
+    char v[16];
+    int k = kind_of(zz, tier);
+    get_var(LEVEL_VAR, v, sizeof(v));
+    if (strlen(v) != 3)
+        strcpy(v, "146");
+    v[k] = (char)('0' + level);
+    set_var(LEVEL_VAR, v);
+}
+
+/* A level's sound as asked for (its rate and channels), for a probe that
+ * found no sound in the stream's first bytes (a recording whose sound
+ * starts later than its picture): MP2 is always asked for. */
+void jf_level_sound(int level, ULONG *hz, UBYTE *chans)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    *hz = l->hz;
+    *chans = l->chans;
+}
+
+/* A level's largest width and height. */
+void jf_level_dims(int level, UWORD *w, UWORD *h)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    *w = l->w;
+    *h = l->h;
+}
+
+/* A level's picture area (its width x height at the most). */
+ULONG jf_level_area(int level)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    return (ULONG)l->w * l->h;
+}
+
+/* A level as words, for the log: "320 x 240, 1000 kbit/s, sound 96 kbit/s stereo". */
+void jf_level_text(int level, BOOL zz, char *out)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    sprintf(out, "MPEG-%s up to %ld x %ld, %ld kbit/s; sound %ld kbit/s %s, %ld Hz", zz ? "2" : "1",
+            (long)l->w, (long)l->h, (long)l->vkbps, (long)l->akbps, l->chans == 1 ? "mono" : "stereo",
+            (long)l->hz);
+}
+
+/* A film as a URL at a level of the ladder (zz: MPEG-2 for the card, else
+ * MPEG-1 for the CPU). from_ms: later in it (a new conversion from there:
+ * a live one cannot be sought in). (Jellyfin 12.x sends mp2 at 128k a
+ * channel whatever is asked: its GetAudioBitrateParam's default ignores
+ * audioBitRate; a fix is drafted for upstream.) */
+void jf_video_url(const char *key, int level, BOOL zz, int audio, ULONG from_ms, char *out, LONG max)
 {
     char n[300];
-    int big = size == 2;
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
     sprintf(out, "http://%s:%lu/Videos/%.36s/stream.mpg?static=false", jf.host,
             (unsigned long)jf.port, key + 2);
-    if (size == 3)
-        /* the smallest: 160 x 120 (AGA without a fast CPU) */
-        sprintf(n, "&videoCodec=mpeg1video&maxWidth=160&maxHeight=120&videoBitRate=300000");
-    else if (big)
-        /* the card's decoder: MPEG-2 at DVD's size, its own rate */
-        sprintf(n, "&videoCodec=mpeg2video&maxWidth=720&maxHeight=576&videoBitRate=4000000");
-    else
-        /* the CPU's: MPEG-1, a quarter of VGA (a 16:9 film 320 x 180) */
-        sprintf(n, "&videoCodec=mpeg1video&maxWidth=320&maxHeight=240&videoBitRate=1000000");
+    sprintf(n, "&videoCodec=%s&maxWidth=%ld&maxHeight=%ld&videoBitRate=%ld000",
+            zz ? "mpeg2video" : "mpeg1video", (long)l->w, (long)l->h, (long)l->vkbps);
     amb_strlcat(out, n, max);
-    /* MP2 at 48 kHz (decoded here at half that, 24 kHz: Paula's), 96 or 128
-     * kbit/s stereo; with the tiny size mono at 64 (half the decoding).
-     * (Jellyfin 12.x sends mp2 at 128k a channel whatever is asked: its
-     * GetAudioBitrateParam's default ignores audioBitRate; a fix is drafted
-     * for upstream.) */
-    sprintf(n, "&audioCodec=mp2&audioBitRate=%s&audioSampleRate=48000&audioChannels=%s"
-               "&deviceId=%s&ApiKey=%s", big ? "128000" : size == 3 ? "64000" : "96000",
-            size == 3 ? "1" : "2", jf.dev, jf.token);
+    sprintf(n, "&audioCodec=mp2&audioBitRate=%ld000&audioSampleRate=%ld&audioChannels=%ld"
+               "&deviceId=%s&ApiKey=%s", (long)l->akbps, (long)l->hz, (long)l->chans, jf.dev, jf.token);
     amb_strlcat(out, n, max);
     if (audio >= 0) {
         sprintf(n, "&audioStreamIndex=%ld", (long)audio);

@@ -3316,6 +3316,7 @@ static ULONG vid_base;          /* where the card was started from (ms) */
 static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
 static char vid_snd_title[16][48];      /* (their names, the server's) */
 static char vid_session[48];            /* the play session asked for last ("" none) */
+static char vid_session_old[48];        /* the one before, stopped once the next is asked for */
 static void (*vid_stop_fn)(const char *session);
 
 /* Who stops a server's conversion when the player is done with it (a
@@ -3335,6 +3336,171 @@ static int vid_snd[16], vid_snd_cur;   /* a server's stream's sound streams (its
                                          * indices: audioStreamIndex=), the one played */
 static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
                                  * '*'s, appended always, each '*' the time in ms */
+
+/* ---- a server's stream, its size adapting as it plays. The player
+ * watches each 3 s (after the first 3 of a start, seek or sound change):
+ * pictures let go late or B pictures passed over (the decoding or drawing
+ * not keeping up), or its sound running dry (the network or the server
+ * not keeping up), ask for a smaller picture; 30 s with none of these, a
+ * larger one if there is one. The player then ends (anim_net_relevel says
+ * so, and from where), and the caller asks for the stream again at the
+ * new size from there. */
+static ULONG vid_first_ms;      /* where a server's stream starts (a new size's: where it was) */
+static UBYTE vid_can;           /* 1: a smaller size there is; 2: a larger */
+static BYTE vid_relevel;        /* the size asked for: -1 smaller, 1 larger, 0 neither */
+static ULONG vid_relevel_ms;
+static ULONG ad_t0, ad_late, ad_shown, ad_bskip, ad_und;
+#define AD_WINDOW_MS 3000       /* (Brian: 3 s) */
+#define AD_CLEAN_UP 10          /* windows with nothing wrong before a larger size: 30 s */
+static UBYTE ad_clean;          /* windows in a row with nothing wrong */
+static BOOL ad_started;         /* its first window begun (one window after a start) */
+
+static BOOL (*vid_relevel_fn)(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax,
+                              struct VProbe *v);
+static UWORD vid_next_w[2], vid_next_h[2];  /* the size below and above (for the note) */
+static char vid_new_url[700], vid_new_seek[64];
+static struct VProbe vid_new_v;
+static BOOL vid_new_ok;                     /* the player to start again with them */
+
+/* Who asks the server for another size, the player staying up: it fills
+ * in the stream's new URL, its seek template and its probe (FALSE: none,
+ * the player ends and anim_net_relevel says why). */
+void anim_net_on_relevel(BOOL (*fn)(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax,
+                                    struct VProbe *v))
+{
+    vid_relevel_fn = fn;
+}
+
+/* The sizes below and above where it plays, shown as the note while it
+ * changes ("640 x 480..."). */
+void anim_net_next_sizes(UWORD dw, UWORD dh, UWORD uw, UWORD uh)
+{
+    vid_next_w[0] = dw;
+    vid_next_h[0] = dh;
+    vid_next_w[1] = uw;
+    vid_next_h[1] = uh;
+}
+
+/* Another size from where it is (at), the player up: the stream stopped,
+ * the note set, the server asked (its probe waited for); TRUE: the loop
+ * ends and the player starts again with vid_new_*. */
+static BOOL vid_relevel_here(ULONG at)
+{
+    int i = vid_relevel > 0 ? 1 : 0;
+    if (!vid_relevel_fn)
+        return FALSE;
+    st_stop();                              /* (its connection closed) */
+    vid_session_end();                      /* its conversion stopped now: the server keeps a
+                                             * closed one going 10 s at full speed (Jellyfin's
+                                             * progressive kill timer), slowing the new one's
+                                             * start */
+    (void)i;
+    vid_new_ok = vid_relevel_fn(vid_relevel, at, vid_new_url, sizeof(vid_new_url), vid_new_seek,
+                                sizeof(vid_new_seek), &vid_new_v);
+    vid_relevel_ms = at;                    /* (anim_net_adapt, called by it, set it back to 0) */
+    vid_first_ms = at;
+    return vid_new_ok;
+}
+
+static void vid_relevel_note(void)
+{
+    int i = vid_relevel > 0 ? 1 : 0;
+    if (vid_next_w[i])
+        sprintf(vid_note, "%ld x %ld...", (long)vid_next_w[i], (long)vid_next_h[i]);
+    else
+        strcpy(vid_note, "...");
+    vid_note_until = (time_ms() + 60000) | 1;   /* (until the new size plays) */
+    ctl.key = time_ms() ? time_ms() : 1;    /* (the controls up, to show it) */
+}
+
+void anim_net_adapt(ULONG from_ms, int can)
+{
+    vid_first_ms = from_ms;
+    vid_can = (UBYTE)can;
+    vid_relevel = 0;
+    vid_relevel_ms = 0;
+}
+
+int anim_net_relevel(ULONG *ms)
+{
+    *ms = vid_relevel_ms;
+    return vid_relevel;
+}
+
+static void ad_reset(void)
+{
+    ad_t0 = time_ms();
+    ad_started = FALSE;
+    ad_clean = 0;
+}
+
+/* Every time round a stream's player loop: -1 smaller, 1 larger, 0 on. */
+static int ad_tick(BOOL paused)
+{
+    struct StVStats v;
+    ULONG now = time_ms(), late, shown, bskip, und;
+    char m[120];
+    if (!vid_net || !vid_can)
+        return 0;
+    if (paused) {
+        ad_reset();                         /* (a pause: nothing to judge by) */
+        return 0;
+    }
+    if (now - ad_t0 < AD_WINDOW_MS)
+        return 0;
+    st_video_stats(&v);
+    if (!ad_started && !v.shown) {
+        ad_t0 = now;                        /* (not begun yet: its first picture still to come) */
+        return 0;
+    }
+    if (!ad_started) {                      /* the first window from here */
+        ad_started = TRUE;
+        ad_t0 = now;
+        ad_late = v.dropped;
+        ad_shown = v.shown;
+        ad_bskip = v.bskipped;
+        ad_und = v.underruns;
+        return 0;
+    }
+    late = v.dropped - ad_late;
+    shown = v.shown - ad_shown;
+    bskip = v.bskipped - ad_bskip;
+    und = v.underruns - ad_und;
+    ad_t0 = now;
+    ad_late = v.dropped;
+    ad_shown = v.shown;
+    ad_bskip = v.bskipped;
+    ad_und = v.underruns;
+    if (shown + late < 10) {                /* (hardly a picture: the CPU or the network) */
+        ad_clean = 0;
+        if (vid_can & 1) {
+            sprintf(m, "3 s: %lu pictures, sound ran dry %lu times: a smaller size", (unsigned long)shown,
+                    (unsigned long)und);
+            amb_log("video", m);
+            return -1;
+        }
+        return 0;
+    }
+    /* (the sound running dry counts only with pictures missing too, under
+     * about 80% of 25 a second: on Amiberry's ZZ9000 its sound has gaps
+     * with every picture in time, which a smaller size would not mend) */
+    if ((late + bskip) * 100 > (shown + late) * 15 || (und >= 2 && shown + late < AD_WINDOW_MS / 50)) {
+        ad_clean = 0;
+        sprintf(m, "3 s: %lu shown, %lu late, %lu B passed over, sound dry %lu times%s", (unsigned long)shown,
+                (unsigned long)late, (unsigned long)bskip, (unsigned long)und,
+                vid_can & 1 ? ": a smaller size" : " (the smallest already)");
+        amb_log("video", m);
+        return vid_can & 1 ? -1 : 0;
+    }
+    if (late * 100 <= (shown + late) && !bskip && shown + late >= AD_WINDOW_MS / 50) {
+        if (++ad_clean >= AD_CLEAN_UP && (vid_can & 2)) {
+            amb_log("video", "30 s with every picture in time and the sound never dry: a larger size");
+            return 1;
+        }
+    } else
+        ad_clean = 0;
+    return 0;
+}
 
 static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 {
@@ -3375,11 +3541,12 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
                 amb_strlcat(url, a, sizeof(url));
             }
             {
-                /* the last session's conversion stopped (st_stop above has
-                 * closed its connection), this one's noted */
+                /* this one's noted; the last session's conversion stopped
+                 * once this one has been asked for (below: a DELETE just
+                 * before the new request held the server up 10 s and more) */
                 const char *p = strstr(url, "playSessionId=");
                 LONG n = 0;
-                vid_session_end();
+                amb_strlcpy(vid_session_old, vid_session, sizeof(vid_session_old));
                 if (p) {
                     p += 14;
                     while (p[n] && p[n] != '&' && n < (LONG)sizeof(vid_session) - 1)
@@ -3394,7 +3561,14 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
             amb_strlcat(url, t, sizeof(url));
         }
         vid_base = ms;
-        return st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
+        ad_reset();
+        {
+            BOOL ok = st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
+            if (vid_session_old[0] && vid_stop_fn)
+                vid_stop_fn(vid_session_old);   /* (the old conversion: the new one asked for) */
+            vid_session_old[0] = 0;
+            return ok;
+        }
     }
     vid_base = at ? ms : 0;
     return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
@@ -4664,7 +4838,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     st_video_direct(FALSE);
     st_video_show(TRUE);
     st_video_half(va_half_mode());          /* (this screen's alone: half size shown at the whole) */
-    if (!vid_start(cpu, 0, err, errmax))
+    if (!vid_start(cpu, vid_net ? vid_first_ms : 0, err, errmax))
         goto out;
     for (;;) {
         struct StInfo in;
@@ -4693,6 +4867,19 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
         r = input_with(win, &jlast, aga_hit);
         if (r == 1)
             break;
+        if (!r && !ended && (vid_relevel = (BYTE)ad_tick(paused)) != 0) {
+            vid_relevel_ms = at;            /* (a size for how it goes: asked for again) */
+            vid_relevel_note();
+            if (bar.on) {                   /* the note in the bar's title while the server starts */
+                if (!aga_title[0])
+                    amb_strlcpy(aga_title, bar.title, sizeof(aga_title));
+                amb_strlcpy(bar.title, vid_note, sizeof(bar.title));
+                safe_done(safe, safe_wait);
+                bar_put(sb[shown]->sb_BitMap, shown);
+            }
+            vid_relevel_here(at);
+            break;
+        }
         if (r == 2) {
             if (ended) {
                 ended = paused = FALSE;
@@ -4932,7 +5119,31 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     vid_net = TRUE;
     amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
     vid_session[0] = 0;
-    r = play_checked(g, url, name, cpu, err, errmax, why);
+    vid_session_old[0] = 0;
+    vid_relevel = 0;
+    vid_new_ok = FALSE;
+    for (;;) {
+        static char url_now[700];
+        r = play_checked(g, url, name, cpu, err, errmax, why);
+        if (!vid_new_ok || err[0])
+            break;
+        /* another size, asked for while it played: started again with it,
+         * from where it was (the controls' note until it plays) */
+        vid_new_ok = FALSE;
+        vid_relevel = 0;
+        amb_strlcpy(url_now, vid_new_url, sizeof(url_now));
+        url = url_now;
+        vid = vid_new_v;
+        video_cpu_only = !g->truecolor;
+        why = video_checked(name, &vid);
+        video_cpu_only = FALSE;
+        amb_strlcpy(vid_seek_param, vid_new_seek, sizeof(vid_seek_param));
+        vid_note_until = (time_ms() + 1500) | 1;    /* (the note a moment more, then the title) */
+        if (aga_title[0])
+            aga_title[0] = 0;
+    }
+    vid_can = 0;
+    vid_first_ms = 0;
     st_stop();                              /* (its connection closed first) */
     vid_session_end();
     vid_net = FALSE;
@@ -5101,7 +5312,7 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
      * half size when it falls behind, as on AGA (shown at the whole size,
      * MpvToRGBScaled or ScalePixelArray making it so) */
     st_video_half(vid.sw && !vo_shown() ? va_half_mode() : ST_HALF_NEVER);
-    if (!vid_start(cpu, 0, err, errmax))
+    if (!vid_start(cpu, vid_net ? vid_first_ms : 0, err, errmax))
         goto out;
     for (;;) {
         struct StInfo in;
@@ -5241,6 +5452,54 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
             whole = FALSE;
         }
         r = input_with(g->win, &jlast, strip_hit);
+        if (!r && !ended && (vid_relevel = (BYTE)ad_tick(paused)) != 0) {
+            int k;
+            vid_relevel_ms = at;            /* (a size for how it goes: asked for again) */
+            vid_relevel_note();
+            for (k = 0; k <= FADE_N; k++) { /* the note on the controls while the server starts */
+                if (strip_tick(g, paused, at, vid.ms, name))
+                    win_show(g, FALSE, TRUE, 0, 0, 0, 0);
+                Delay(1);
+            }
+            if (vid_relevel_here(at)) {
+                /* the new size here, the player up: its overlay placed
+                 * again for it (before the stream starts, as at the
+                 * start), then the stream from where it was */
+                const char *why2;
+                WORD oh;
+                vid_new_ok = FALSE;
+                vid = vid_new_v;
+                video_cpu_only = !g->truecolor;
+                why2 = video_checked(name, &vid);
+                video_cpu_only = FALSE;
+                if (why2) {
+                    amb_strlcpy(err, why2, errmax);
+                    break;
+                }
+                amb_strlcpy(lay_path, vid_new_url, sizeof(lay_path));
+                amb_strlcpy(vid_seek_param, vid_new_seek, sizeof(vid_seek_param));
+                sw = (UWORD)video_shown_w(&vid);
+                if (!sw)
+                    sw = vid.w;
+                vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && vid.ps : (vid.mp2 || vid.ac3) && vid.ps;
+                vo_hide();
+                vid_lay(g, sw, lay.full);
+                oh = lay.dh;
+                if (lay.full && sf.lv > 0 && lay.vy + oh > st.y)
+                    oh = st.y - lay.vy;
+                if (!vid.sw || !vo_failed_here())
+                    vo_show(g, &vid, lay.vx, lay.vy, lay.dw, oh);
+                st_video_half(vid.sw && !vo_shown() ? va_half_mode() : ST_HALF_NEVER);
+                vid_relevel = 0;
+                vid_note_until = (time_ms() + 1500) | 1;
+                if (!vid_start(cpu, vid_relevel_ms, err, errmax))
+                    break;
+                at = vid_relevel_ms;
+                whole = TRUE;
+                continue;
+            }
+            break;
+        }
         a = vo_poll(g);                     /* the overlay clicked: as the picture */
         if (a != VO_NONE)
             ctl.moved = time_ms() ? time_ms() : 1;

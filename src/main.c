@@ -10080,7 +10080,11 @@ static char jf_fj_title[120], jf_fj_url[600], jf_fj_seek[64];
 static ULONG jf_fj_ms;
 
 static char jf_fj_key[48];
-static int jf_fj_size;                 /* (jf_film_size's) */
+static BOOL jf_fj_zz;                   /* the ZZ9000 decodes it (MPEG-2) */
+static int jf_fj_tier;                  /* how fast the CPU is (plex_tier) */
+static int jf_fj_level, jf_fj_top, jf_fj_bottom;   /* its size on the ladder, how far it may go */
+static ULONG jf_fj_from;                /* where it starts (a new size's: where it was) */
+static BOOL jf_fj_tried;                /* its decoding timed before it played (once a film) */
 
 static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
 static char jf_fj_sndt[16][48];                  /* ...their names */
@@ -10108,9 +10112,19 @@ static void jf_film(const struct Item *it)
     jf_fj_ms = strtoul_(f);
     radio_field(it, 0, jf_fj_key, sizeof(jf_fj_key));    /* (its key alone) */
     amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
-    /* its size: the card's only on a screen with its overlay (RTG; not
-     * AGA), else by how fast the CPU is (plex_tier: a JIT or Emu68 is 3) */
-    jf_fj_size = jf_film_size(caps.zz9000 && !video_cpu && g.truecolor, plex_tier());
+    /* its size: the card decodes only on a screen with its overlay (RTG,
+     * not AGA); else by how fast the CPU is (plex_tier: a JIT or Emu68 is
+     * 3). Where on the ladder it starts and how far it may go: as last
+     * time for this kind of decoder (jf_film_plan) */
+    jf_fj_zz = caps.zz9000 && !video_cpu && g.truecolor;
+    jf_fj_tier = plex_tier();
+    jf_fj_level = jf_film_plan(jf_fj_zz, jf_fj_tier, &jf_fj_top, &jf_fj_bottom);
+    if (!g.truecolor && jf_fj_top < 4 && jf_fj_bottom >= 4)
+        jf_fj_top = 4;                      /* (AGA: 320 wide is all a HAM8 screen shows) */
+    if (jf_fj_level < jf_fj_top)
+        jf_fj_level = jf_fj_top;
+    jf_fj_from = 0;
+    jf_fj_tried = FALSE;
     /* first its sound streams, to choose one (a film may have several
      * languages; the server's own choice is the file's default) */
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10139,6 +10153,26 @@ static void jf_film_streams(struct NetJob *j)
     jf_fj = NULL;
     jf_fj_nsnd = 0;
     jf_fj_cur = -1;
+    if (j->body && j->status == 200 && j->len) {
+        /* where the server has it, for the log (a DVD's folder, a .wtv
+         * recording and a .mkv start and seek very differently) */
+        const char *pa = strstr((const char *)j->body, "\"Path\":\""), *co;
+        char pt[200];
+        if (pa) {
+            LONG k = 0;
+            pa += 8;
+            while (pa[k] && pa[k] != '"' && k < (LONG)sizeof(pt) - 1) {
+                pt[k] = pa[k];
+                k++;
+            }
+            pt[k] = 0;
+            co = strstr((const char *)j->body, "\"Container\":\"");
+            sprintf(why, "%.130s (%.12s)", pt, co ? co + 13 : "?");
+            if ((co = strchr(why, '"')))
+                strcpy((char *)co, ")");
+            amb_log("jellyfin: film's file", why);
+        }
+    }
     if (j->body && j->status == 200 && j->len)
         jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, jf_fj_sndt, &jf_fj_nsnd);
     else
@@ -10153,26 +10187,32 @@ static void jf_film_streams(struct NetJob *j)
 
 static void jf_film_probe(void)
 {
-    char m[200];
+    char m[320];
     const char *path;
     struct NetJob *j;
-    int size = jf_fj_size;
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
         set_msg(_("Not enough memory"));
         return;
     }
     /* (its sound stream not in the URL: the player adds it, as A changes it) */
-    jf_video_url(jf_fj_key, size, -1, 0, jf_fj_url, sizeof(jf_fj_url));
+    jf_video_url(jf_fj_key, jf_fj_level, jf_fj_zz, -1, 0, jf_fj_url, sizeof(jf_fj_url));
     jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
     path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
     j->port = jf.port;
     amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
     {
-        /* the probe: the start's own session (the player's from 0 ms) */
-        char *c, *o = j->path + strlen(j->path), *e = j->path + sizeof(j->path) - 1;
+        /* the probe: the start's own session (the player's first, from
+         * where it starts) */
+        char *c, *o = j->path + strlen(j->path), *e = j->path + sizeof(j->path) - 1, t[16];
+        const char *d;
+        sprintf(t, "%lu", (unsigned long)jf_fj_from);
         for (c = jf_fj_seek; *c && o < e; c++)
-            *o++ = *c == '*' ? '0' : *c;
+            if (*c == '*')
+                for (d = t; *d && o < e; d++)
+                    *o++ = *d;
+            else
+                *o++ = *c;
         *o = 0;
         if (jf_fj_nsnd > 1 && jf_fj_cur >= 0) {
             char a[32];
@@ -10183,11 +10223,14 @@ static void jf_film_probe(void)
     j->upto = JF_PROBE;
     j->wait_s = 60;                         /* (the server starts converting first) */
     jf_fj = j;
-    sprintf(m, "%.60s: %s, %lu ms long", jf_fj_title,
-            size == 3 ? "MPEG-1 160x120 0.3 Mbit/s, mono sound" : size == 2 ? "MPEG-2 720x576 4 Mbit/s"
-            : "MPEG-1 320 wide 1 Mbit/s",
-            (unsigned long)jf_fj_ms);
-    amb_log("jellyfin: film asked for", m);
+    {
+        char lv[120];
+        jf_level_text(jf_fj_level, jf_fj_zz, lv);
+        sprintf(m, "%.40s: %.90s (step %ld of %ld to %ld), from %lu of %lu ms", jf_fj_title, lv,
+                (long)jf_fj_level, (long)jf_fj_top, (long)jf_fj_bottom, (unsigned long)jf_fj_from,
+                (unsigned long)jf_fj_ms);
+        amb_log("jellyfin: film asked for", m);
+    }
     j->jf = JFJ_VIDEO;                      /* (beside the settings' own: not jf_submit's) */
     j->seq = 0;
     net_submit(j);
@@ -10213,6 +10256,103 @@ static void jf_stop_session(const char *session)
     sprintf(m, "conversion %.40s stopped", session);
     amb_log("jellyfin", m);
     net_submit(j);
+}
+
+/* The size it goes to from jf_fj_level (dir -1 smaller, 1 larger): a
+ * size it went down from is not gone back to (its new top); kept as this
+ * kind of decoder's start. */
+static void jf_film_step(int dir, ULONG at)
+{
+    if (dir < 0)
+        jf_fj_top = jf_fj_level + 1 <= jf_fj_bottom ? jf_fj_level + 1 : jf_fj_bottom;
+    jf_fj_level += dir < 0 ? 1 : -1;
+    if (jf_fj_level < jf_fj_top)
+        jf_fj_level = jf_fj_top;
+    if (jf_fj_level > jf_fj_bottom)
+        jf_fj_level = jf_fj_bottom;
+    jf_film_keep(jf_fj_zz, jf_fj_tier, jf_fj_level);
+    jf_fj_from = at;
+}
+
+/* The sizes either side of where it plays, for the player's note. */
+static void jf_film_sides(void)
+{
+    UWORD dw = 0, dh = 0, uw = 0, uh = 0;
+    if (jf_fj_level < jf_fj_bottom)
+        jf_level_dims(jf_fj_level + 1, &dw, &dh);
+    if (jf_fj_level > jf_fj_top)
+        jf_level_dims(jf_fj_level - 1, &uw, &uh);
+    anim_net_next_sizes(dw, dh, uw, uh);
+}
+
+/* Another size asked for while it plays, the player up (anim.c): the
+ * server asked for the stream there and its start probed here and now
+ * (net_wait); the player starts again with them. */
+static BOOL jf_relevel_now(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax, struct VProbe *v)
+{
+    struct NetJob *j;
+    const char *path;
+    char m[320], lv[120], t[16], *o, *e;
+    const char *c, *d;
+    BOOL ok = FALSE;
+    jf_film_step(dir, at);
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    jf_video_url(jf_fj_key, jf_fj_level, jf_fj_zz, -1, 0, url, umax);
+    jf_video_seek(seek, smax);
+    path = strchr(url + 7, '/');
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
+    sprintf(t, "%lu", (unsigned long)at);
+    for (o = j->path + strlen(j->path), e = j->path + sizeof(j->path) - 1, c = seek; *c && o < e; c++)
+        if (*c == '*')
+            for (d = t; *d && o < e; d++)
+                *o++ = *d;
+        else
+            *o++ = *c;
+    *o = 0;
+    if (jf_fj_nsnd > 1 && jf_fj_cur >= 0) {
+        sprintf(t, "%ld", (long)jf_fj_snd[anim_net_sound()]);
+        amb_strlcat(j->path, "&audioStreamIndex=", sizeof(j->path));
+        amb_strlcat(j->path, t, sizeof(j->path));
+    }
+    j->upto = JF_PROBE;
+    j->wait_s = 60;
+    j->jf = JFJ_VIDEO;
+    j->seq = 0;
+    jf_level_text(jf_fj_level, jf_fj_zz, lv);
+    sprintf(m, "%.40s: %.90s (step %ld of %ld to %ld), from %lu ms, the player up", jf_fj_title, lv,
+            (long)jf_fj_level, (long)jf_fj_top, (long)jf_fj_bottom, (unsigned long)at);
+    amb_log("jellyfin: film asked for", m);
+    net_submit(j);
+    if (net_wait(j, 65000)) {
+        if (j->body && j->status == 200 && j->len && vprobe_mem(j->body, (LONG)j->len, v)) {
+            v->ps = TRUE;
+            v->ms = jf_fj_ms;
+            sprintf(m, "its first %lu KB in %lu ms", (unsigned long)(j->len >> 10), (unsigned long)j->ms);
+            amb_log("jellyfin: film", m);
+            if (j->ms > 5000 && jf_fj_top < jf_fj_level) {
+                /* slow to start from a time (a DVD's folder: the server's
+                 * ffmpeg decodes from the start of a VOB to get there, 10
+                 * to 20 s on Brian's NAS): no larger size for this film,
+                 * only a smaller one when it must */
+                jf_fj_top = jf_fj_level;
+                amb_log("jellyfin: film", "slow to start mid-film: no larger size for it from here");
+            }
+            anim_net_adapt(at, (jf_fj_level < jf_fj_bottom ? 1 : 0) | (jf_fj_level > jf_fj_top ? 2 : 0));
+            jf_film_sides();
+            ok = TRUE;
+        } else
+            amb_log("jellyfin: film", "the new size's start could not be read");
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+    } else {
+        amb_log("jellyfin: film", "no answer for the new size within 65 s");
+        j->orphan = TRUE;                   /* (freed when it comes back) */
+    }
+    return ok;
 }
 
 /* Its start here: probed, then played as a stream from the server. */
@@ -10241,6 +10381,44 @@ static void jf_film_came(struct NetJob *j)
     }
     v.ps = TRUE;                            /* (a Program Stream: stream.mpg) */
     v.ms = jf_fj_ms;
+    if (!jf_fj_tried && !jf_fj_zz && jf_fj_top < jf_fj_bottom) {
+        /* before it plays, the CPU's decoding of the probe's pictures timed:
+         * the largest size whose pictures it can decode and show in time,
+         * the lot within three quarters of a picture's 33 ms. The trial
+         * (alone, the pictures of a still start) ran about 6 times quicker
+         * than the same pictures playing in Amiberry (1.71 ms against 0.29
+         * at 320 x 212, with the sound, the reading and the overlay beside
+         * it), so a picture is counted as 4 times its trial on a graphics
+         * card's screen and 8 on AGA's (HAM8 and planes cost more than the
+         * decoding: ambbench 1.1 on Brian's A3000). Another size: asked for
+         * again before playing; then it adapts as it plays. */
+        ULONG n = 0, us;
+        UWORD pw, ph;
+        int k, want = jf_fj_bottom;
+        jf_fj_tried = TRUE;
+        us = mpeg_trial_us(j->body, j->len, &n, &pw, &ph);
+        if (us && n >= 4) {                 /* (one I picture alone says little: a phone's
+                                             * video gave 1, at 14.8 ms, and 240 x 180 chosen) */
+            ULONG area = (ULONG)pw * ph, f = g.truecolor ? 4 : 8;
+            for (k = jf_fj_top; k <= jf_fj_bottom; k++)
+                if ((unsigned long long)us * jf_level_area(k) / (area ? area : 1) * f <= 25000ULL) {
+                    want = k;
+                    break;
+                }
+            sprintf(m, "%lu pictures %lu x %lu decoded in %lu us each: step %ld (was %ld)", (unsigned long)n,
+                    (unsigned long)pw, (unsigned long)ph, (unsigned long)us, (long)want, (long)jf_fj_level);
+            amb_log("jellyfin: film's trial", m);
+            if (want != jf_fj_level) {
+                jf_fj_level = want;
+                jf_film_keep(jf_fj_zz, jf_fj_tier, jf_fj_level);
+                jf_film_probe();            /* (at that size: then played) */
+                return;
+            }
+        } else {
+            sprintf(m, "%lu pictures decoded from its start: too few to judge, as it was", (unsigned long)n);
+            amb_log("jellyfin: film's trial", m);
+        }
+    }
     {
         struct Item it;
         msg[0] = 0;
@@ -10249,9 +10427,14 @@ static void jf_film_came(struct NetJob *j)
         it.label = jf_fj_title;
         it.path = jf_fj_url;
         it.sortkey = (char *)"MPEG";
+        ULONG at;
+        int rl;
         anim_net_probe = &v;
         anim_net_seek = jf_fj_seek;
         anim_net_on_stop(jf_stop_session);
+        anim_net_adapt(jf_fj_from, (jf_fj_level < jf_fj_bottom ? 1 : 0) | (jf_fj_level > jf_fj_top ? 2 : 0));
+        jf_film_sides();
+        anim_net_on_relevel(jf_relevel_now);
         {
             const char *t[16];
             int i;
@@ -10263,8 +10446,21 @@ static void jf_film_came(struct NetJob *j)
         anim_net_probe = NULL;
         anim_net_seek = NULL;
         anim_net_on_stop(NULL);
-        if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur)
-            jf_sound_keep(jf_fj_key, jf_fj_snd[anim_net_sound()]);  /* (chosen with A: kept) */
+        anim_net_on_relevel(NULL);
+        if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur) {
+            jf_fj_cur = anim_net_sound();
+            jf_sound_keep(jf_fj_key, jf_fj_snd[jf_fj_cur]);  /* (chosen with A: kept) */
+        }
+        if ((rl = anim_net_relevel(&at)) != 0) {
+            /* it asked for a smaller or larger picture: the film again at
+             * that size from where it was; the size kept for the next
+             * film; a size it went down from not gone back to */
+            jf_film_step(rl, at);           /* (the player could not: started again here) */
+            sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, jf_fj_title);
+            set_msg(m);
+            draw_footer();
+            jf_film_probe();
+        }
     }
 }
 

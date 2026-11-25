@@ -89,10 +89,15 @@ Jellyfin (music, photos and films)
   makes each track an MP3 this Amiga can play, as for Plex. Photos are
   made the size of the screen by the server.
 - Films are made MPEG by the server and streamed as they play: nothing is
-  kept on the Amiga. MPEG-2 up to 720 x 576 when the ZZ9000 decodes,
-  MPEG-1 320 wide on a fast CPU (an emulator's JIT, a PiStorm), 160 x 120
-  on a real 68060 or slower. A click on the progress line asks the server
-  again from there; A chooses the film's sound track, kept for the film.
+  kept on the Amiga. MPEG-2 up to 1280 x 720 when the ZZ9000 decodes,
+  MPEG-1 from 640 x 480 down to 160 x 120 when the CPU does. The size,
+  bit rate and sound suit the machine: the CPU's decoding is timed before
+  a film starts, and every 3 s as it plays a smaller size is asked for
+  when pictures come late or the sound runs dry, a larger one after 30 s
+  without either. The player stays up while it changes (about a second
+  for a single file; a DVD's folder can take the server 10 to 20 s).
+  A click on the progress line asks the server again from there; A
+  chooses the film's sound track (its name shown), kept for the film.
 - Ambiance is not an official Jellyfin client, and is developed mainly
   with AI (About > Jellyfin in Ambiance).
 
@@ -385,8 +390,8 @@ Setting up Jellyfin
 2. Sign in with a Jellyfin user's name and password. Only the server's
    token for this Amiga is kept, until Sign out.
 3. Its libraries appear under Music, Pictures and Videos. Picture size
-   chooses the films' size: automatic, small (MPEG-1, the CPU) or large
-   (MPEG-2, the ZZ9000).
+   chooses the films' size: automatic (adapting as they play), or fixed:
+   small (MPEG-1 320 wide), large (MPEG-2 720 x 576).
 
 
 Not there yet
@@ -402,16 +407,16 @@ History
 0.9.7  Jellyfin: music, photos and films from a Jellyfin server on your
        network, beside Plex. Films are made MPEG by the server and
        streamed as they play, nothing kept on the Amiga: MPEG-2 up to
-       720 x 576 when the ZZ9000 decodes, MPEG-1 320 wide on a fast CPU
-       (JIT, PiStorm), 160 x 120 in mono on a real CPU. Seeking
-       asks the server again from that time; A chooses the sound track
-       (a film's choice is kept). Not an official Jellyfin client;
-       developed mainly with AI.
+       1280 x 720 when the ZZ9000 decodes, MPEG-1 640 x 480 to 160 x 120
+       on the CPU. The size, bit rate and sound adapt as it plays (the
+       CPU's decoding timed before it starts, then every 3 s), the
+       player staying up. Seeking asks the server again from that time;
+       A chooses the sound track (a film's choice is kept). Not an
+       official Jellyfin client; developed mainly with AI.
        AGA screens: MPEG video as HAM8, so a stream is no longer shown
        in a fixed palette (on by default for streams). Files keep a
        palette of their own colours: on a 68060 at 50 MHz HAM8 takes
        73 ms to make a 320 x 256 frame, the palette 28 ms.
-       Not yet: the film's size stepping up or down as it plays.
        Video on an AGA screen can be sought from its progress line.
 0.9.6  Quicker on a 68060, with the same pictures and sound, and still
        for any 68020 to 68060:

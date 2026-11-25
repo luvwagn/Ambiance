@@ -4605,6 +4605,7 @@ static void video_run(void)
     ULONG f0 = st.f_out, t0 = 0, held_at = 0, run = 0, skip = 0, period = 3600, hold, drop, starved_at = 0;
     ULONG pcm_peak = 0, pcm_frames = 0;    /* (the log: what its sound held) */
     ZzU64 ack = 0, origin = ZZ_NO_PTS, pts0 = 0;
+    ULONG busy_run = 0;
     BOOL held_now = FALSE, in_eof = FALSE, eof_sent = FALSE, done = FALSE, on = FALSE;
     BOOL out_paused = FALSE, sound = st.v_mp2, said_audio = FALSE, sys_seen = FALSE;
     BOOL csound = FALSE;                    /* its AC3 decoded by the CPU (the card given none) */
@@ -4968,9 +4969,22 @@ static void video_run(void)
             }
             s = zz_cmd(op, session, 0, &r);
             if (s == ZZ_BUSY) {
+                /* (the card not ready to show it: its overlay not there
+                 * yet, say. A second of it said once, with the card's
+                 * presentation page, to see why) */
+                if (++busy_run == 500) {
+                    ZzU64 pv[4];
+                    int ps = zz_status_page(session, 4, pv);
+                    sprintf(m, "the card has been busy showing a picture for a second: presentation %s, "
+                               "%08lx %08lx%08lx %08lx%08lx", zz_name(ps), (unsigned long)pv[0],
+                            (unsigned long)(pv[1] >> 32), (unsigned long)pv[1], (unsigned long)(pv[2] >> 32),
+                            (unsigned long)pv[2]);
+                    amb_log("video", m);
+                }
                 v_wait(2000);
                 continue;
             }
+            busy_run = 0;
             if (s != ZZ_OK) {
                 sprintf(m, "The ZZ9000 could not show it (%s)", zz_name(s));
                 fail(m);

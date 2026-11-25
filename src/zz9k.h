@@ -81,6 +81,7 @@ int zz_write(ULONG session, const struct ZzBuf *in, ULONG off, ULONG len, BOOL e
              struct ZzMain *r);
 int zz_cmd(int op, ULONG session, ULONG flags, struct ZzMain *r);
 int zz_audio_read(ULONG session, ZzU64 acknowledged, struct ZzAudio *r);
-int zz_audio_origin(ULONG session, ZzU64 *pts);     /* the audio's first PTS */
+int zz_audio_origin(ULONG session, ZzU64 *pts);
+int zz_status_page(ULONG session, ULONG page, ZzU64 *v);     /* the audio's first PTS */
 
 #endif
