@@ -633,6 +633,13 @@ void jf_film_keep(BOOL zz, int tier, int level)
     set_var(LEVEL_VAR, v);
 }
 
+/* A level's picture area (its width x height at the most). */
+ULONG jf_level_area(int level)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    return (ULONG)l->w * l->h;
+}
+
 /* A level as words, for the log: "320 x 240, 1000 kbit/s, sound 96 kbit/s stereo". */
 void jf_level_text(int level, BOOL zz, char *out)
 {

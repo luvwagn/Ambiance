@@ -10084,6 +10084,7 @@ static BOOL jf_fj_zz;                   /* the ZZ9000 decodes it (MPEG-2) */
 static int jf_fj_tier;                  /* how fast the CPU is (plex_tier) */
 static int jf_fj_level, jf_fj_top, jf_fj_bottom;   /* its size on the ladder, how far it may go */
 static ULONG jf_fj_from;                /* where it starts (a new size's: where it was) */
+static BOOL jf_fj_tried;                /* its decoding timed before it played (once a film) */
 
 static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
 static char jf_fj_sndt[16][48];                  /* ...their names */
@@ -10123,6 +10124,7 @@ static void jf_film(const struct Item *it)
     if (jf_fj_level < jf_fj_top)
         jf_fj_level = jf_fj_top;
     jf_fj_from = 0;
+    jf_fj_tried = FALSE;
     /* first its sound streams, to choose one (a film may have several
      * languages; the server's own choice is the file's default) */
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10262,6 +10264,41 @@ static void jf_film_came(struct NetJob *j)
     }
     v.ps = TRUE;                            /* (a Program Stream: stream.mpg) */
     v.ms = jf_fj_ms;
+    if (!jf_fj_tried && !jf_fj_zz && jf_fj_top < jf_fj_bottom) {
+        /* before it plays, the CPU's decoding of the probe's pictures timed:
+         * the largest size whose pictures it can decode and show in time,
+         * the lot within three quarters of a picture's 33 ms. The trial
+         * (alone, the pictures of a still start) ran about 6 times quicker
+         * than the same pictures playing in Amiberry (1.71 ms against 0.29
+         * at 320 x 212, with the sound, the reading and the overlay beside
+         * it), so a picture is counted as 4 times its trial on a graphics
+         * card's screen and 8 on AGA's (HAM8 and planes cost more than the
+         * decoding: ambbench 1.1 on Brian's A3000). Another size: asked for
+         * again before playing; then it adapts as it plays. */
+        ULONG n = 0, us;
+        UWORD pw, ph;
+        int k, want = jf_fj_bottom;
+        jf_fj_tried = TRUE;
+        us = mpeg_trial_us(j->body, j->len, &n, &pw, &ph);
+        if (us && n) {
+            ULONG area = (ULONG)pw * ph, f = g.truecolor ? 4 : 8;
+            for (k = jf_fj_top; k <= jf_fj_bottom; k++)
+                if ((unsigned long long)us * jf_level_area(k) / (area ? area : 1) * f <= 25000ULL) {
+                    want = k;
+                    break;
+                }
+            sprintf(m, "%lu pictures %lu x %lu decoded in %lu us each: step %ld (was %ld)", (unsigned long)n,
+                    (unsigned long)pw, (unsigned long)ph, (unsigned long)us, (long)want, (long)jf_fj_level);
+            amb_log("jellyfin: film's trial", m);
+            if (want != jf_fj_level) {
+                jf_fj_level = want;
+                jf_film_keep(jf_fj_zz, jf_fj_tier, jf_fj_level);
+                jf_film_probe();            /* (at that size: then played) */
+                return;
+            }
+        } else
+            amb_log("jellyfin: film's trial", "no picture decoded from its start: as it was");
+    }
     {
         struct Item it;
         msg[0] = 0;

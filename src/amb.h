@@ -336,6 +336,7 @@ BOOL mpeg_thumb_wants(const char *path);
 struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole, LONG maxcol,
                          struct PicInfo *pi, BOOL *is_mpeg, volatile UBYTE *cancel);
 void mpeg_thumb_forget(void);       /* (quitting: after the loader's processes) */
+ULONG mpeg_trial_us(const UBYTE *buf, ULONG len, ULONG *n, UWORD *w, UWORD *h);
 struct BitMap *jpeg_bitmap(const char *path, WORD maxw, WORD maxh, struct BitMap *friend,
                            ULONG *sw, ULONG *sh, struct PicInfo *pi);  /* the viewer's, no datatype */
 void thumb_free(struct Thumb *t);
@@ -1338,6 +1339,7 @@ void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, 
 int jf_film_plan(BOOL zz, int tier, int *top, int *bottom);
 void jf_film_keep(BOOL zz, int tier, int level);
 void jf_level_text(int level, BOOL zz, char *out);
+ULONG jf_level_area(int level);
 void jf_video_url(const char *key, int level, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
 void jf_streams_request(const char *key, char *out, LONG max);
 int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *n);

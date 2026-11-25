@@ -487,3 +487,66 @@ struct Thumb *mpeg_thumb(const char *path, WORD w, WORD h, BOOL tall, BOOL whole
     }
     return t;
 }
+
+/* ---- a trial: how long this Amiga's CPU takes to decode a stream's
+ * pictures, before it is played (Jellyfin: the size to ask for). buf, len:
+ * the start of an MPEG Program Stream (a probe's bytes), decoded through
+ * here in full, B pictures too. The mean time a picture in microseconds
+ * (0: none decoded or no mpegv.library); *n the pictures, *w x *h their
+ * size. */
+struct MtMem {
+    const UBYTE *b;
+    ULONG len, pos;
+};
+
+static ULONG mt_mem_read(register struct Hook *h __asm("a0"), register APTR mpv __asm("a2"),
+                         register struct MpvRead *r __asm("a1"))
+{
+    struct MtMem *m = (struct MtMem *)h->h_Data;
+    ULONG n = m->len - m->pos;
+    (void)mpv;
+    if (n > (ULONG)r->mr_Length)
+        n = (ULONG)r->mr_Length;
+    CopyMem((APTR)(m->b + m->pos), r->mr_Buffer, n);
+    m->pos += n;
+    return n;
+}
+
+ULONG mpeg_trial_us(const UBYTE *buf, ULONG len, ULONG *n, UWORD *w, UWORD *h)
+{
+    struct Hook rh;
+    struct MtMem src;
+    APTR mpv;
+    ULONG hz = 0, t0, ticks = 0, k = 0, tries;
+    *n = 0;
+    *w = *h = 0;
+    if (!mt_open())
+        return 0;
+    memset(&rh, 0, sizeof(rh));
+    src.b = buf;
+    src.len = len;
+    src.pos = 0;
+    rh.h_Entry = (HOOKFUNC)(APTR)mt_mem_read;
+    rh.h_Data = (APTR)&src;
+    ObtainSemaphore(&mt_sem);
+    if ((mpv = MpvOpenTags(MPVA_ReadHook, (ULONG)&rh, MPVA_Stream, MPVS_PROGRAM, MPVA_ReadSize, 4096,
+                           TAG_DONE))) {
+        for (tries = 0; tries < 400; tries++) {
+            LONG e = 0;
+            struct MpvPicture *p;
+            t0 = time_ticks(&hz);
+            p = MpvDecode(mpv, &e);
+            ticks += time_ticks(&hz) - t0;
+            if (p) {
+                k++;
+                *w = (UWORD)p->mpic_Width;
+                *h = (UWORD)p->mpic_Height;
+            } else if (e != MPVE_MORE || src.pos >= src.len)
+                break;
+        }
+        MpvClose(mpv);
+    }
+    ReleaseSemaphore(&mt_sem);
+    *n = k;
+    return k && hz ? (ULONG)((unsigned long long)ticks * 1000000ULL / hz / k) : 0;
+}
