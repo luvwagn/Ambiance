@@ -3337,7 +3337,7 @@ static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; o
                                  * '*'s, appended always, each '*' the time in ms */
 
 /* ---- a server's stream, its size adapting as it plays. The player
- * watches each 5 s (after the first 5 of a start, seek or sound change):
+ * watches each 3 s (after the first 3 of a start, seek or sound change):
  * pictures let go late or B pictures passed over (the decoding or drawing
  * not keeping up), or its sound running dry (the network or the server
  * not keeping up), ask for a smaller picture; 30 s with none of these, a
@@ -3349,8 +3349,10 @@ static UBYTE vid_can;           /* 1: a smaller size there is; 2: a larger */
 static BYTE vid_relevel;        /* the size asked for: -1 smaller, 1 larger, 0 neither */
 static ULONG vid_relevel_ms;
 static ULONG ad_t0, ad_late, ad_shown, ad_bskip, ad_und;
-static UBYTE ad_clean;          /* 5 s windows in a row with nothing wrong */
-static BOOL ad_started;         /* its first window begun (5 s after a start) */
+#define AD_WINDOW_MS 3000       /* (Brian: 3 s) */
+#define AD_CLEAN_UP 10          /* windows with nothing wrong before a larger size: 30 s */
+static UBYTE ad_clean;          /* windows in a row with nothing wrong */
+static BOOL ad_started;         /* its first window begun (one window after a start) */
 
 void anim_net_adapt(ULONG from_ms, int can)
 {
@@ -3385,7 +3387,7 @@ static int ad_tick(BOOL paused)
         ad_reset();                         /* (a pause: nothing to judge by) */
         return 0;
     }
-    if (now - ad_t0 < 5000)
+    if (now - ad_t0 < AD_WINDOW_MS)
         return 0;
     st_video_stats(&v);
     if (!ad_started) {                      /* the first window from here */
@@ -3409,7 +3411,7 @@ static int ad_tick(BOOL paused)
     if (shown + late < 10) {                /* (hardly anything came: the network's) */
         ad_clean = 0;
         if ((vid_can & 1) && und) {
-            sprintf(m, "5 s: %lu pictures, sound ran dry %lu times: a smaller size", (unsigned long)shown,
+            sprintf(m, "3 s: %lu pictures, sound ran dry %lu times: a smaller size", (unsigned long)shown,
                     (unsigned long)und);
             amb_log("video", m);
             return -1;
@@ -3418,14 +3420,14 @@ static int ad_tick(BOOL paused)
     }
     if ((late + bskip) * 100 > (shown + late) * 15 || und >= 2) {
         ad_clean = 0;
-        sprintf(m, "5 s: %lu shown, %lu late, %lu B passed over, sound dry %lu times%s", (unsigned long)shown,
+        sprintf(m, "3 s: %lu shown, %lu late, %lu B passed over, sound dry %lu times%s", (unsigned long)shown,
                 (unsigned long)late, (unsigned long)bskip, (unsigned long)und,
                 vid_can & 1 ? ": a smaller size" : " (the smallest already)");
         amb_log("video", m);
         return vid_can & 1 ? -1 : 0;
     }
     if (late * 100 <= (shown + late) && !bskip && !und) {
-        if (++ad_clean >= 6 && (vid_can & 2)) {
+        if (++ad_clean >= AD_CLEAN_UP && (vid_can & 2)) {
             amb_log("video", "30 s with every picture in time and the sound never dry: a larger size");
             return 1;
         }
