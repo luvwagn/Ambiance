@@ -1345,6 +1345,7 @@ void jf_film_keep(BOOL zz, int tier, int level);
 void jf_level_text(int level, BOOL zz, char *out);
 ULONG jf_level_area(int level);
 void jf_level_dims(int level, UWORD *w, UWORD *h);
+void jf_level_sound(int level, ULONG *hz, UBYTE *chans);
 void jf_video_url(const char *key, int level, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
 void jf_streams_request(const char *key, char *out, LONG max);
 int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *n);

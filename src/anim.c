@@ -3389,8 +3389,11 @@ static BOOL vid_relevel_here(ULONG at)
     int i = vid_relevel > 0 ? 1 : 0;
     if (!vid_relevel_fn)
         return FALSE;
-    st_stop();                              /* (its connection closed; its conversion stopped
-                                             * once the new size is asked for: vid_start) */
+    st_stop();                              /* (its connection closed) */
+    vid_session_end();                      /* its conversion stopped now: the server keeps a
+                                             * closed one going 10 s at full speed (Jellyfin's
+                                             * progressive kill timer), slowing the new one's
+                                             * start */
     (void)i;
     vid_new_ok = vid_relevel_fn(vid_relevel, at, vid_new_url, sizeof(vid_new_url), vid_new_seek,
                                 sizeof(vid_new_seek), &vid_new_v);
@@ -3446,6 +3449,10 @@ static int ad_tick(BOOL paused)
     if (now - ad_t0 < AD_WINDOW_MS)
         return 0;
     st_video_stats(&v);
+    if (!ad_started && !v.shown) {
+        ad_t0 = now;                        /* (not begun yet: its first picture still to come) */
+        return 0;
+    }
     if (!ad_started) {                      /* the first window from here */
         ad_started = TRUE;
         ad_t0 = now;

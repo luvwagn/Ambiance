@@ -633,6 +633,16 @@ void jf_film_keep(BOOL zz, int tier, int level)
     set_var(LEVEL_VAR, v);
 }
 
+/* A level's sound as asked for (its rate and channels), for a probe that
+ * found no sound in the stream's first bytes (a recording whose sound
+ * starts later than its picture): MP2 is always asked for. */
+void jf_level_sound(int level, ULONG *hz, UBYTE *chans)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    *hz = l->hz;
+    *chans = l->chans;
+}
+
 /* A level's largest width and height. */
 void jf_level_dims(int level, UWORD *w, UWORD *h)
 {
