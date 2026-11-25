@@ -10,8 +10,9 @@ Distribution: Aminet
 Ambiance is a fast, full-screen media centre for the Amiga, in the spirit
 of Kodi® and Windows® Media Center: games and demos from Amiga Game
 Selector (AGS) or iGame, tracker music, internet radio, the music and
-photos on your Plex® server and your pictures, all in one place, driven by
-keyboard, mouse or joystick.
+photos on your Plex® server, music, photos and films streamed from a
+Jellyfin server, and your pictures, all in one place, driven by keyboard,
+mouse or joystick.
 
 Copy the Ambiance drawer anywhere and double-click it. On an Amiga Game
 Selector 3 installation it is a drop-in companion: AGS's games and demos,
@@ -79,6 +80,20 @@ Music (Plex)
   With AmiSSL 5 or 6, sign in at plex.tv by a code entered at plex.tv/link on
   a phone or computer: no token to copy, and your account's servers are listed
   too.
+
+Jellyfin (music, photos and films)
+- A Jellyfin server on your network (jellyfin.org: free software), beside
+  Plex in Music, Pictures and Videos: found on the network, signed in
+  once (the password is not kept). Plain HTTP: no AmiSSL needed.
+- Music by artist, album or recently added, with covers; the server
+  makes each track an MP3 this Amiga can play, as for Plex. Photos are
+  made the size of the screen by the server.
+- Films are made MPEG by the server and streamed as they play: nothing is
+  kept on the Amiga. MPEG-1 320 wide for the CPU, MPEG-2 up to 720 x 576
+  when the ZZ9000 decodes. A click on the progress line asks the server
+  again from there; A chooses the film's sound track, kept for the film.
+- Ambiance is not an official Jellyfin client, and is developed mainly
+  with AI (About > Jellyfin in Ambiance).
 
 Music (files)
 - MP3, FLAC, WAV, AIFF and 8SVX files on this Amiga, under Music beside
@@ -150,8 +165,10 @@ Videos
 - MPEG video on a ZZ9000: .mpg, .mpeg, .vob and transport streams
   (.ts, .m2ts), MPEG-1 or MPEG-2, decoded by the card and shown on its
   overlay, its sound (MPEG audio or AC-3) played as music is. Without
-  one, MPEG-1 is decoded by the CPU on RTG screens (Libs/mpegv.library,
-  also on Aminet for other programs).
+  one, MPEG-1 and MPEG-2 are decoded by the CPU (Libs/mpegv.library,
+  also on Aminet for other programs). On an AGA screen a file is shown
+  in a palette of its own colours and a stream in HAM8
+  (ENV:Ambiance/VideoAGA: ham8, ham8hi or pens).
 - DVDs: while a DVD-Video disc is in a drive, its volume is at the top
   of Videos with a disc beside it. Fire plays its film, or its
   programmes one after another (a disc of episodes); N and P, or the
@@ -359,17 +376,40 @@ Setting up Plex
    of Pictures.
 
 
+Setting up Jellyfin
+-------------------
+1. Settings > Networking > Jellyfin: turn Jellyfin on, then Look for
+   servers on this network, or Type a server's address (as
+   192.168.1.10:8096).
+2. Sign in with a Jellyfin user's name and password. Only the server's
+   token for this Amiga is kept, until Sign out.
+3. Its libraries appear under Music, Pictures and Videos. Picture size
+   chooses the films' size: automatic, small (MPEG-1, the CPU) or large
+   (MPEG-2, the ZZ9000).
+
+
 Not there yet
 -------------
 - DVD subtitles (other than a menu's forced ones); encrypted (CSS)
   discs.
-- MPEG video on AGA screens without a ZZ9000.
 - Modules played by the Protracker replayer or EaglePlayer's play on
   Paula only (those the mixer plays follow Settings > Sound).
 
 
 History
 -------
+0.9.7  Jellyfin: music, photos and films from a Jellyfin server on your
+       network, beside Plex. Films are made MPEG by the server and
+       streamed as they play, nothing kept on the Amiga: MPEG-1 for
+       the CPU, MPEG-2 up to 720 x 576 when the ZZ9000 decodes. Seeking
+       asks the server again from that time; A chooses the sound track
+       (a film's choice is kept). Not an official Jellyfin client;
+       developed mainly with AI.
+       AGA screens: MPEG video as HAM8, so a stream is no longer shown
+       in a fixed palette (on by default for streams). Files keep a
+       palette of their own colours: on a 68060 at 50 MHz HAM8 takes
+       73 ms to make a 320 x 256 frame, the palette 28 ms.
+       Video on an AGA screen can be sought from its progress line.
 0.9.6  Quicker on a 68060, with the same pictures and sound, and still
        for any 68020 to 68060:
        JPEGs the 68060 decodes itself (without a ZZ9000) about a fifth
