@@ -369,6 +369,8 @@ struct VProbe;
  * again from that time (seek_param and the time in 100 ns units appended,
  * "&startTimeTicks=", Jellyfin's) */
 void anim_net_on_stop(void (*stop)(const char *session));
+void anim_net_adapt(ULONG from_ms, int can);
+int anim_net_relevel(ULONG *ms);
 void anim_net_sounds(const int *idx, const char *const *titles, int n, int cur);
 int anim_net_sound(void);
 LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
@@ -1333,8 +1335,10 @@ void jf_menu(const char *key, struct ItemList *l);
 BOOL jf_is_menu(const char *key);
 LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
 void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
-int jf_film_size(BOOL zz, int tier);
-void jf_video_url(const char *key, int size, int audio, ULONG from_ms, char *out, LONG max);
+int jf_film_plan(BOOL zz, int tier, int *top, int *bottom);
+void jf_film_keep(BOOL zz, int tier, int level);
+void jf_level_text(int level, BOOL zz, char *out);
+void jf_video_url(const char *key, int level, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
 void jf_streams_request(const char *key, char *out, LONG max);
 int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *n);
 int jf_sound_kept(const char *key, const int *list, int n);
