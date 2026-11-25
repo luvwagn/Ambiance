@@ -50,6 +50,7 @@
 #include "dvdplay.h"
 #include "copper.h"
 #include "tspack.h"
+#include "ham8.h"
 #include <libraries/dvdnav.h>
 #include <libraries/mpegv.h>
 #include <proto/mpegv.h>
@@ -799,7 +800,6 @@ static struct {
     WORD px0, px1;              /* the progress line */
     WORD bx[BT_N];              /* each button's left */
     UBYTE rim_pen, bg, fg, sub, dim, yel, acc;
-    BOOL ham8;                  /* (HAM8: a base colour's pixel is its register times 4) */
     struct CopPlan *cop;        /* its own colours below its top, by the copper (AGA) */
     BOOL cop_on;                /*   the screen's copper list made with them */
     struct Screen *scr;
@@ -946,10 +946,9 @@ static void bar_pens(const ULONG *tab, ULONG ncol, ULONG camg, UBYTE depth)
         bar.acc = bar.fg;
     if (bar.sub == bar.bg)
         bar.sub = bar.fg;
-    if (bar.ham8) {                         /* (registers to pixels) */
-        for (r = 0; r < BAR_REGS; r++)
-            *pen[r] = (UBYTE)(*pen[r] << 2);
-    }
+    /* (HAM8: a base colour's pixel is its register as it is: the control
+     * bits are the top two planes on an Intuition HAM8 screen, though
+     * AGA's own document has them the lowest two) */
 }
 
 /* Screen pixels across and down for one of the font's, so its text is
@@ -980,6 +979,7 @@ static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD 
     APTR oldwin = me->pr_WindowPtr;
     WORD vis_bottom = clip->MaxY - top + 1, fh, pad, i;
     char *dot;
+    (void)camg;                             /* (HAM's base colours: pens as they are) */
     memset(&bar, 0, sizeof(bar));
     bar.scr = scr;
     /* its title: the file's name, without its extension */
@@ -1000,7 +1000,6 @@ static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD 
         return;
     fh = bar.font->tf_YSize;
     bar_scale(id, (WORD)(clip->MaxY - clip->MinY + 1));
-    bar.ham8 = (camg & HAM_KEY) && depth == 8;
     /* top to bottom: its edge, a gap, the title and the time, a gap, the
      * buttons and the progress line, a gap */
     bar.rim = (id & LACE) && bar.ky < 2 ? 2 : bar.ky;
@@ -1039,10 +1038,6 @@ static void bar_setup(struct Screen *scr, struct BitMap *friend, UWORD w, UWORD 
         for (r = 0; r < BAR_REGS; r++)
             cop_color(bar.cop, bar.y, (UBYTE)(1 + r), bar_rgb[r]);
         bar.rim_pen = 1; bar.bg = 2; bar.fg = 3; bar.sub = 4; bar.dim = 5; bar.yel = 6; bar.acc = 7;
-        if (bar.ham8) {
-            bar.rim_pen <<= 2; bar.bg <<= 2; bar.fg <<= 2; bar.sub <<= 2;
-            bar.dim <<= 2; bar.yel <<= 2; bar.acc <<= 2;
-        }
     }
     {
         char m[120];
@@ -3774,6 +3769,10 @@ void va_c2p2x68k_twice(const UBYTE *src, ULONG groups, UBYTE **planes, ULONG bpr
 void va_pens68k(const UBYTE *y, const UWORD *cl, UBYTE *dst, ULONG quads, const UWORD *yt4,
                 const UBYTE *lut);          /* pens68k.s */
 static BYTE va_asm = -1;                    /* the assemblers' (1), or the C (0: Ambiance/VideoC2P=C) */
+/* HAM8 (ham8.c): 0 not (pens from a palette of the video's own), 1 a
+ * byte a pixel (lowres), 2 two (hires: half the fringes); its tables */
+static UBYTE va_ham;
+static struct Ham8 *va_h;
 static BOOL va_sb;                          /* a 68040 or 68060: va_c2p68k_sb */
 static UWORD *va_yt4;                       /* Y's part again, a row's 4 phases side by side:
                                              * [y & 3][Y * 4 + x & 3] (pens68k.s) */
@@ -4109,6 +4108,8 @@ out:
 
 static void va_free(void)
 {
+    FreeVec(va_h);
+    va_h = NULL;
     FreeVec(va_lut);
     FreeVec(va_yt);
     FreeVec(va_cl);
@@ -4249,6 +4250,15 @@ static ULONG va_rows(const struct MpvPicture *p, WORD lines)
  * twice y, each pen twice across) */
 static void va_row_pens(const struct MpvPicture *p, ULONG y, UBYTE *rb, ULONG bw)
 {
+    if (va_ham) {
+        /* HAM8: a byte or two a pixel; the rest of the row register 0 */
+        ULONG w = p->mpic_Width & ~1UL, n = w * va_ham, all = (p->mpic_Flags & MPVPF_HALF) ? bw >> 1 : bw;
+        ham8_row(va_h, p->mpic_Y + y * p->mpic_YModulo, p->mpic_Cb + (y >> 1) * p->mpic_CModulo,
+                 p->mpic_Cr + (y >> 1) * p->mpic_CModulo, w, rb, va_ham == 2);
+        if (n < all)
+            memset(rb + n, 0, all - n);
+        return;
+    }
     va_pens_row(p, y, rb, (p->mpic_Flags & MPVPF_HALF) ? bw >> 1 : bw);
 }
 
@@ -4511,6 +4521,19 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
 
 static char aga_title[80];      /* the title while a note shows instead */
 
+/* HAM8 or pens, each video: Ambiance/VideoAGA "ham8" (lowres, a byte a
+ * pixel), "ham8hi" (hires, two), "pens" (a palette of the video's own
+ * colours, sampled through its file); not set: HAM8 for a stream (it has
+ * no file to sample), pens for a file */
+static void va_ham_pick(void)
+{
+    char ev[12];
+    if (GetVar((CONST_STRPTR)"Ambiance/VideoAGA", (STRPTR)ev, sizeof(ev), GVF_GLOBAL_ONLY) > 0)
+        va_ham = !amb_stricmp(ev, "ham8hi") ? 2 : !amb_stricmp(ev, "ham8") ? 1 : 0;
+    else
+        va_ham = vid_net ? 1 : 0;
+}
+
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                          LONG errmax)
 {
@@ -4532,19 +4555,41 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
     (void)g;
     va_conv_ticks = va_nconv = va_pen_ticks = va_plane_ticks = va_nsplit = 0;
     va_asm_pick();                          /* (Ambiance/VideoC2P read again) */
-    bw = (w + 31) & ~31;
+    va_ham_pick();
+    if (va_ham && !(va_h = AllocVec(sizeof(*va_h), MEMF_ANY))) {
+        amb_log("video: AGA", "no memory for HAM8's tables: pens of its own colours");
+        va_ham = 0;
+    }
+    if (va_ham)
+        ham8_init(va_h);
+    bw = (w * (va_ham == 2 ? 2 : 1) + 31) & ~31;
     /* its screen: the video's size, at least a lowres one's (room for
-     * its controls), the video in the middle (across, on a 16-pixel step) */
-    sw = bw < 320 ? 320 : bw;
+     * its controls), the video in the middle (across, on a 16-pixel
+     * step); HAM8 twice across: a hires screen, as wide again */
+    sw = bw < 320 * (va_ham == 2 ? 2 : 1) ? 320 * (va_ham == 2 ? 2 : 1) : bw;
     sh = h < 200 ? 200 : h;
-    vx = (WORD)(((sw - w) / 2) & ~15);
+    vx = (WORD)(((sw - w * (va_ham == 2 ? 2 : 1)) / 2) & ~15);
     vy = (WORD)((sh - h) / 2);
-    id = pick_mode(0, FALSE, sw, sh, 8);
+    id = va_ham ? pick_mode(HAM_KEY | (va_ham == 2 ? HIRES_KEY : 0) | (sh > 300 ? LACE : 0), TRUE, sw, sh, 8)
+                : pick_mode(0, FALSE, sw, sh, 8);
     if (id == (ULONG)INVALID_ID || mode_depth(id) < 8) {
         amb_strlcpy(err, _("MPEG video on a native screen needs AGA's 256 colours"), errmax);
+        va_free();
         return -1;
     }
-    if (!va_palette(path, name)) {
+    if (va_ham) {
+        /* HAM8: its base colours alone (no palette from the video) */
+        ULONG rr, gg, bb2;
+        for (i = 0; i < 256; i++)
+            va_pal[i] = 0;
+        for (i = 0; i < HAM8_BASES; i++) {
+            ham8_rgb(va_h, (int)i, &rr, &gg, &bb2);
+            va_pal[i] = ((rr & 255) << 16) | ((gg & 255) << 8) | (bb2 & 255);
+        }
+        sprintf(m, "%s: HAM8%s, %lu x %lu on the screen (no palette of its own colours)", name,
+                va_ham == 2 ? " twice across, hires" : "", (unsigned long)(w * va_ham), (unsigned long)h);
+        amb_log("video: AGA", m);
+    } else if (!va_palette(path, name)) {
         amb_strlcpy(err, _("Not enough memory for the video's screen"), errmax);
         return -1;
     }
@@ -4595,7 +4640,9 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
         goto nomem;
     ctl_begin(win, blank);
     vid_sound = vid.mp2 && !vid.ac3 && (vid.ps || (vid.ts && vid.ts_apid != 0x1FFF));
-    bar_setup(scr, sb[0]->sb_BitMap, sw, sh, 8, id, 0, &clip, left, top, path);
+    /* (HAM8's base registers are pixels as they are: its control bits the
+     * top two planes, 0, as the controls draw) */
+    bar_setup(scr, sb[0]->sb_BitMap, sw, sh, 8, id, 0, &clip, left, top, vid_net ? name : path);
     bar.total_ms = vid.ms;
     bar_redraw = FALSE;
     ScreenToFront(scr);
