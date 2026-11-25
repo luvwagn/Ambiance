@@ -172,6 +172,30 @@ Het bestand is er niet (opnieuw scannen in iGame)
 MSG_7EBB5FFE
 T:Ambiance-run kon niet geschreven worden
 ; Could not write T:Ambiance-run
+MSG_4C50B8D0
+%lu nummer
+; %lu track
+MSG_4612A899
+%lu nummers
+; %lu tracks
+MSG_7C81E0F2
+%lu item
+; %lu item
+MSG_01746B13
+%lu items
+; %lu items
+MSG_439822A9
+De server accepteerde deze naam en dit wachtwoord niet
+; The server did not accept that name and password
+MSG_5A8631EB
+De server antwoordde %ld
+; The server said %ld
+MSG_7E52AA7E
+De server was niet bereikbaar
+; Could not reach the server
+MSG_229E5121
+De server antwoordde iets onverwachts
+; The server answered with something unexpected
 MSG_73F99D3C
 Spellen
 ; Games
@@ -679,6 +703,9 @@ zenders tot %s
 MSG_424097EC
 Aan, geen server gekozen
 ; On, no server chosen
+MSG_207A7281
+Niet aangemeld
+; Not signed in
 MSG_33774386
 Automatisch: %.40s
 ; Automatic: %.40s
@@ -967,6 +994,9 @@ Systeeminformatie
 MSG_692FB19D
 Plex in Ambiance
 ; Plex in Ambiance
+MSG_5DB50655
+Jellyfin in Ambiance
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, onder de MIT-licentie
 ; (c) 2026 Brian King, under the MIT licence
@@ -1345,6 +1375,111 @@ Verbindingen: de interface die de stack kiest
 MSG_247B55C3
 Verbindingen gaan via deze interface
 ; Connections go out from this interface
+MSG_3A5C57BD
+een mediaserver (jellyfin.org)
+; a media server (jellyfin.org)
+MSG_6D7302F2
+Server
+; Server
+MSG_7774E024
+Servers op dit netwerk zoeken
+; Look for servers on this network
+MSG_56E190E8
+zoeken...
+; looking...
+MSG_21F2CA37
+Het adres van een server typen
+; Type a server's address
+MSG_60A63E12
+Gebruiker
+; User
+MSG_0B4F3C70
+Afmelden
+; Sign out
+MSG_744BE623
+Aanmelden
+; Sign in
+MSG_01C0A2B0
+kies eerst een server
+; choose a server first
+MSG_2DC2A95F
+aanmelden...
+; signing in...
+MSG_7730BC18
+Films
+; Films
+MSG_5B59648A
+Beeldgrootte
+; Picture size
+MSG_19596FB6
+klein: 320 breed, MPEG-1 (de CPU decodeert)
+; small: 320 wide, MPEG-1 (the CPU decodes)
+MSG_6C2F61C3
+groot: tot 720 x 576, MPEG-2 (de ZZ9000 decodeert)
+; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
+MSG_568457D9
+automatisch: naar wat decodeert
+; automatic: by what decodes it
+MSG_59529DB2
+Jellyfin: meld aan bij %.60s (Instellingen > Netwerk > Jellyfin)
+; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
+MSG_51FCE0BE
+Jellyfin-foto's op %.80s
+; Jellyfin photos on %.80s
+MSG_53D9B262
+Jellyfin: %.80s
+; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: annuleren
+; Return: OK   Esc: cancel
+MSG_1CA86BFC
+Jellyfin-servers zoeken...
+; Looking for Jellyfin servers...
+MSG_1289C444
+Dat is geen adres
+; That is not an address
+MSG_529C37FD
+Het adres van de server (naam of cijfers, en :poort als het niet 8096 is)
+; The server's address (name or numbers, and :port if not 8096)
+MSG_12C8DC90
+Aanmelden bij %.60s...
+; Signing in to %.60s...
+MSG_2CC30838
+Wachtwoord
+; Password
+MSG_5A6DB215
+Gebruikersnaam
+; User name
+MSG_6EB56B80
+%.40s vragen om %.50s...
+; Asking %.40s for %.50s...
+MSG_4445C7A1
+%.50s kon niet worden opgehaald: %.100s
+; %.50s could not be fetched: %.100s
+MSG_474FAF4B
+de server antwoordde %ld
+; the server said %ld
+MSG_20C6E823
+Geen MPEG-video die Ambiance kan lezen
+; Not an MPEG video Ambiance can read
+MSG_1422F4A4
+Geen Jellyfin-server op dit netwerk antwoordde
+; No Jellyfin server answered on this network
+MSG_02EBAE2D
+Jellyfin-server: %.60s
+; Jellyfin server: %.60s
+MSG_63D7C7C0
+%ld Jellyfin-server gevonden
+; %ld Jellyfin server found
+MSG_0D5ECA51
+%ld Jellyfin-servers gevonden
+; %ld Jellyfin servers found
+MSG_127811B5
+Aangemeld bij %.60s als %.40s
+; Signed in to %.60s as %.40s
+MSG_4287518C
+Geen Jellyfin-server antwoordde op %.60s
+; No Jellyfin server answered at %.60s
 MSG_61C33E78
 De bestanden van de zachte stijl konden niet geladen worden
 ; The smooth style's files could not be loaded
@@ -1441,15 +1576,15 @@ Afgemeld bij plex.tv
 MSG_6358253C
 Die bibliotheek staat niet meer op de server: Muziek toont ze opnieuw
 ; That library is gone from the server: Music lists them again
-MSG_229E5121
-De server antwoordde iets onverwachts
-; The server answered with something unexpected
 MSG_49CF76D8
 Daar zijn geen muziekbibliotheken
 ; No music libraries there
 MSG_3EEA8333
 Daar zijn geen fotobibliotheken
 ; No photo libraries there
+MSG_7E13ADDC
+De server wil dat u aanmeldt: Instellingen > Netwerk > Jellyfin
+; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 De server wil dat u aanmeldt: Instellingen > Netwerk > Plex
 ; The server wants you signed in: Settings > Networking > Plex
@@ -1549,6 +1684,21 @@ Geluid: Paula, 14 bits
 MSG_0F2AADBB
 Geluid: Paula, 8 bits
 ; Sound: Paula, 8-bit
+MSG_1CED39E2
+Ambiance speelt muziek, toont foto's en speelt films van een Jellyfin-server op uw netwerk (jellyfin.org: vrije software). De muziekbibliotheken staan per artiest en album met hun hoezen, en de server maakt van elk nummer een MP3 die deze Amiga kan afspelen, zoals bij Plex. De server maakt de foto's zo groot als het scherm. Films maakt hij MPEG voor deze Amiga: MPEG-1 van 320 pixels breed voor de CPU, of MPEG-2 tot 720 x 576 als de ZZ9000 decodeert (Instellingen > Netwerk > Jellyfin > Beeldgrootte). Films worden tijdens het afspelen van de server gestreamd: er wordt niets op deze Amiga bewaard.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
+MSG_35680109
+Ambiance wordt grotendeels met AI ontwikkeld (Claude, van Anthropic), gestuurd en getest door de auteur. Het is geen officiële Jellyfin-client.
+; Ambiance is developed mainly with AI (Claude, by Anthropic), guided and tested by its author. It is not an official Jellyfin client.
+MSG_2C5335A3
+Een server vinden: Instellingen > Netwerk > Jellyfin > Servers op dit netwerk zoeken, of Het adres van een server typen (zoals 192.168.1.10:8096).
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+Aanmelden: Instellingen > Netwerk > Jellyfin > Aanmelden vraagt naam en wachtwoord van een Jellyfin-gebruiker. Het wachtwoord wordt één keer verstuurd en niet bewaard; het token van de server voor deze Amiga wordt bewaard tot Afmelden. Een eigen gebruiker voor de Amiga, in Dashboard > Users van de server, is een goed idee.
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+Aangemeld als %s
+; Signed in as %s
 MSG_5353700C
 Formaat:  %s
 ; Format:   %s
@@ -1912,18 +2062,6 @@ MSG_201D2C97
 MSG_71EDAAEC
 %lu foto's
 ; %lu photos
-MSG_7C81E0F2
-%lu item
-; %lu item
-MSG_01746B13
-%lu items
-; %lu items
-MSG_4C50B8D0
-%lu nummer
-; %lu track
-MSG_4612A899
-%lu nummers
-; %lu tracks
 MSG_4E1664E0
 %lu album
 ; %lu album
@@ -2080,9 +2218,6 @@ MSG_4E597D1C
 MSG_5E08A9DF
 %s-video: de ZZ9000 speelt MPEG-1 en MPEG-2
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Geen MPEG-video die Ambiance kan lezen
-; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEG-video vereist Picasso96 (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2206,6 +2341,9 @@ MSG_42B0DEF7
 MSG_070B058B
 Werkt met:
 ; Works with:
+MSG_5B96DB4D
+Ambiance is geen officiële Jellyfin-client: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 Schermafdruk laden...
 ; Loading screenshot...

@@ -19,11 +19,11 @@
 #include "lshare.h"
 
 const char LibName[] = "showcase.layout";
-const char LibIdString[] = "showcase.layout 1.11 (18.11.2026) Showcase, for Ambiance";
+const char LibIdString[] = "showcase.layout 1.12 (24.11.2026) Showcase, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: showcase.layout 1.11 (18.11.2026) Showcase, for Ambiance";
+    "$VER: showcase.layout 1.12 (24.11.2026) Showcase, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 11;
+const UWORD LibRevision = 12;
 
 /* the colours (the mockups') */
 #define C_TOP    0x0F1D2CUL     /* the gradient */
@@ -579,9 +579,14 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
             text(mx, my + (pm->h - FH) / 2, with, LF_REGULAR, C_SUB, flat(C_PANEL), w / 2);
             mx += tlen(with, LF_REGULAR) + X(10);
             H->image(pm, (WORD)mx, (WORD)my);
-            text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, flat(C_PANEL), 0);
-            text(x + X(18), under - fine, "* used under license from Plex", LF_TINY, C_DIM, flat(C_PANEL),
-                 w - X(36));
+            if (m->plexmark == 2) {     /* Jellyfin: its name, and that this is no official client */
+                text(x + X(18), under - fine, H->tr("Ambiance is not an official Jellyfin client: jellyfin.org"),
+                     LF_TINY, C_DIM, flat(C_PANEL), w - X(36));
+            } else {
+                text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, flat(C_PANEL), 0);
+                text(x + X(18), under - fine, "* used under license from Plex", LF_TINY, C_DIM, flat(C_PANEL),
+                     w - X(36));
+            }
             under = my - Y(12);
         }
         if (m->picture || m->note) {

@@ -6,6 +6,7 @@
 #include "amb.h"
 #include "radiocsv.h"
 #include "plexxml.h"
+#include "jfjson.h"
 #include "iconify.h"
 #include "vprobe.h"
 #include "video.h"
@@ -120,10 +121,13 @@ enum { ACT_SCREENMODES = 1, ACT_SYSINFO, ACT_CREDITS, ACT_DEBUG, ACT_STYLES,
        ACT_IGSET, ACT_IGFIND, ACT_IGCHOOSE, ACT_IGNONE, ACT_WHDPAGE, ACT_WHDGO, ACT_WHDNO,
        ACT_LAYOUTS, ACT_LAYOUT0, ACT_LAYOUT_END = ACT_LAYOUT0 + 8, ACT_LVNATIVE,    /* Classic + LV_MAX */
        ACT_FULLVISHELP, ACT_DEPTHS, ACT_DEPTH16, ACT_DEPTH32,
+       ACT_JFSET, ACT_JFON, ACT_JFFIND, ACT_JFADDR, ACT_JFSIGNIN, ACT_JFOUT, ACT_GOJF,
+       ACT_JFVSIZE, ACT_JFSRV0, ACT_JFSRV_END = ACT_JFSRV0 + 7, ACT_JFHELP, ACT_ENTRY,  /* Jellyfin (jellyfin.c) */
        ACT_COUNT,
        /* + SM_*: well past the rest (at 16 it had come to share numbers with
-        * Now playing, HTTPS and the Plex rows, as actions were added) */
-       ACT_MODE0 = 160 };
+        * Now playing, HTTPS and the Plex rows, as actions were added; moved
+        * from 160 to 220 for Jellyfin's rows) */
+       ACT_MODE0 = 220 };
 typedef char act_mode0_clear[ACT_COUNT <= ACT_MODE0 && ACT_MODE0 + SM_COUNT <= 255 ? 1 : -1];
 
 /* ------------------------------------------------------------ pages */
@@ -2312,14 +2316,14 @@ static void sel_off_heading(struct Page *p, LONG d)
 
 enum { SETP_ROOT = 1, SETP_GENERAL, SETP_SCREEN, SETP_SOUND, SETP_NET, SETP_PLEX, SETP_NIC,
        SETP_RADIO, SETP_RKBPS, SETP_BUF, SETP_RSRV, SETP_FOLDSET, SETP_LANG, SETP_FOLDERS,
-       SETP_VIDEO, SETP_IGAME, SETP_WHD, SETP_FONTS, SETP_FULLVIS };
+       SETP_VIDEO, SETP_IGAME, SETP_WHD, SETP_FONTS, SETP_FULLVIS, SETP_JF };
 /* Each Settings page's title, by SETP_* (made again in another language) */
 static const char *const setp_titles[] = { NULL, N_("Settings"), N_("General"), N_("Display"),
     N_("Sound"), N_("Networking"), N_("Plex"), N_("Network interface"), N_("Radio"),
     N_("Highest station bitrate"), N_("Stream buffer"), N_("Station list server"),
     N_("Folders"), N_("Language"), N_("Folders"),      /* SETP_FOLDSET: titled by its kind */
     N_("Video"), N_("iGame"), N_("WHDLoad"), N_("Fonts"),
-    N_("Full screen visual") };
+    N_("Full screen visual"), "Jellyfin" };
 static void build_lang_settings(struct Page *p);
 static void build_radio_settings(struct Page *p);
 static void build_rkbps_settings(struct Page *p);
@@ -2328,6 +2332,7 @@ static void build_rsrv_settings(struct Page *p);
 static void build_general_settings(struct Page *p);
 static void build_net_settings(struct Page *p);
 static void build_nic_settings(struct Page *p);
+static void build_jf_settings(struct Page *p);
 
 /* ---- the language: the Workbench's (Locale prefs), English, or one
  * whose catalog is in PROGDIR:Catalogs (lang.c) */
@@ -2619,6 +2624,10 @@ static void build_net_settings(struct Page *p)
     action_item(p, "Plex", !plex.on ? _("Off") : plex.name[0] ? plex.name
                            : plex.host[0] ? plex.host : _("On, no server chosen"),
                 ACT_PLEXSET, MARK_ARROW);
+    action_item(p, "Jellyfin", !jf.on ? _("Off") : !jf.host[0] ? _("On, no server chosen")
+                               : !jf.token[0] ? _("Not signed in")
+                               : jf.name[0] ? jf.name : jf.host,
+                ACT_JFSET, MARK_ARROW);
     action_item(p, _("Stream buffer"), _(buf_names[buf_sel]), ACT_BUFSET, MARK_ARROW);
     nic_in_use_text(use);
     if (net_if[0])
@@ -3201,6 +3210,7 @@ static void settings_rebuild(void)
         list_init(&q->list);
         switch (q->setp) {
         case SETP_PLEX: build_plex_settings(q); break;
+        case SETP_JF: build_jf_settings(q); break;
         case SETP_SOUND: build_sound_settings(q); break;
         case SETP_NET: build_net_settings(q); break;
         case SETP_GENERAL: build_general_settings(q); break;
@@ -3400,8 +3410,10 @@ static void build_about_menu(struct Page *p)
 {
     action_item(p, _("Credits"), "Ambiance " AMB_VERSION, ACT_CREDITS, MARK_ARROW);
     action_item(p, _("System information"), "", ACT_SYSINFO, MARK_ARROW);
-    if (caps.net)
+    if (caps.net) {
         action_item(p, _("Plex in Ambiance"), "", ACT_PLEXHELP, MARK_ARROW);
+        action_item(p, _("Jellyfin in Ambiance"), "", ACT_JFHELP, MARK_ARROW);
+    }
 }
 
 /* AGS's splash screen, shown under the Credits: read from the AGS install
@@ -3504,6 +3516,20 @@ static void np_soft_redraw(void);
 static void np_seek_track(ULONG ms, ULONG delay);
 static void music_root_again(void);
 static void pictures_root_again(void);
+static BOOL jf_section_row(struct Page *p, char kind, BOOL first);
+static void goto_jf_settings(void);
+
+/* A Jellyfin server chosen, Jellyfin on, the network up: its rows shown. */
+static BOOL jf_shown(void)
+{
+    return caps.net && jf.on && jf.host[0];
+}
+
+/* A Jellyfin key of Pictures' (its photos' folders): ~Vp, ~Fp... */
+static BOOL jf_photo_key(const char *k)
+{
+    return (k[1] == 'V' || k[1] == 'F') && k[2] == 'p';
+}
 static int pictures_plex_rows(struct Page *p);
 static void radio_collect(void);
 static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow);
@@ -3721,6 +3747,8 @@ static void build_root_pages_now(int mod)
             const char *src;
             p->pics = 2;                    /* Videos: its folders' .iff files looked inside */
             n = vids_root_fill(p, &src);
+            if (n != -2 && jf_section_row(p, 'v', TRUE) && n <= 0)
+                n = 1;                      /* Jellyfin's films: the list kept */
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
                 page_push(PT_TEXT, _("Videos"));
@@ -3749,7 +3777,7 @@ static void build_root_pages_now(int mod)
             if (n == -2) {
                 page_pop();                 /* given up for input: built when it settles */
                 page_push(PT_TEXT, _("Pictures"));
-            } else if (n <= 0 && !(caps.net && plex.on && plex.host[0])) {
+            } else if (n <= 0 && !(caps.net && plex.on && plex.host[0]) && !jf_shown()) {
                 page_pop();
                 if ((p = page_push(PT_TEXT, _("Pictures")))) {
                     char t[240];
@@ -3764,6 +3792,7 @@ static void build_root_pages_now(int mod)
                 }
             } else {
                 pics_root_empty(p, n, src);
+                jf_section_row(p, 'p', TRUE);
                 pictures_plex_rows(p);      /* the server's photo libraries first */
             }
         }
@@ -4806,8 +4835,9 @@ BOOL has_aside(struct Page *p)
             return TRUE;                    /* an album's tracks: the album beside them */
         for (i = 0; i < p->list.count; i++)
             if ((p->list.items[i].kind == IT_PLEXDIR && strchr(p->list.items[i].path, '\t')) ||
-                p->list.items[i].kind == IT_PLEXPHOTO)
-                return TRUE;
+                p->list.items[i].kind == IT_PLEXPHOTO ||
+                (p->list.items[i].kind == IT_ANIM && jf_key(p->list.items[i].path)))
+                return TRUE;                /* (a Jellyfin film: its poster) */
         return FALSE;
     }
     if (!p->aside) {
@@ -5605,11 +5635,13 @@ static BOOL np_start_now(LONG idx)
         plex_track_url(it, caps.cpu, 0, url, sizeof(url));
         radio_field(it, 0, plex_now, sizeof(plex_now));
         {
-            char rk[16];
+            char rk[48];
             int k;
             for (k = 0; k < 2; k++) {
                 radio_field(it, 11 + k, rk, sizeof(rk));
-                if (rk[0])
+                if (jf_key(rk))
+                    amb_strlcpy(plex_now_in[k], rk, sizeof(plex_now_in[k]));  /* (its row's key) */
+                else if (rk[0])
                     sprintf(plex_now_in[k], "/library/metadata/%s/children", rk);
                 else
                     plex_now_in[k][0] = 0;
@@ -5626,8 +5658,8 @@ static BOOL np_start_now(LONG idx)
             plex_orig.rate = f[0] ? strtoul_(f) : 0;
             plex_orig.conv = plex_converts(it);
             radio_field(it, 5, key, sizeof(key));
-            if (!plex_orig.rate && key[0])
-                plex_ask_rate(key);
+            if (!plex_orig.rate && key[0] && !jf_key(key))
+                plex_ask_rate(key);         /* (Plex's: Jellyfin's lists say no rates) */
         }
         radio_field(it, 2, ms, sizeof(ms));
         radio_field(it, 3, by, sizeof(by));
@@ -7607,7 +7639,7 @@ static LONG viewer_run(const struct ItemList *l, LONG idx, BOOL slideshow)
                 asked = -1;
                 loading_bar = FALSE;
                 view_spin_hide(&g);
-                sprintf(d, _("not sent by %.50s"), plex.name[0] ? plex.name : plex.host);
+                sprintf(d, _("not sent by %.50s"), plex_server_name(cur() ? cur()->base : ""));
                 view_bar(&g, l->items[want].label, d, _("Esc  back"));
                 bar_until = time_ms() + BAR_MS;
                 if (++fails >= 3 || nx < 0 || nx == want || (shown < 0 && nx == idx)) {
@@ -7906,10 +7938,23 @@ static void window_relaid(WORD ow, WORD oh, ULONG t0);
 
 /* An animation of a Videos (or Pictures) list, played on a screen of its
  * own in front of Ambiance's (anim.c), which comes back as it was. */
+static void anim_from_item(const struct Item *it);
+static void jf_film(const struct Item *it);
+static const struct VProbe *anim_net_probe;    /* anim_from_item's item: a stream, probed so */
+static const char *anim_net_seek;               /* ...its start's and seeks' (anim.c: '*' the ms) */
+
 static void anim_from_page(struct Page *p)
 {
-    char err[160], title[120], by[200];
     const struct Item *it = &p->list.items[p->sel];
+    if (jf_key(it->path))
+        jf_film(it);                        /* a Jellyfin film: fetched first */
+    else
+        anim_from_item(it);
+}
+
+static void anim_from_item(const struct Item *it)
+{
+    char err[160], title[120], by[200];
     BOOL dvd = is_dvd_row(it);
     BOOL mpeg = dvd || (it->sortkey && !strcmp(it->sortkey, "MPEG"));
     /* (an MPEG plays through the stream process: what streams stops, sound or not) */
@@ -7958,7 +8003,11 @@ static void anim_from_page(struct Page *p)
             if (anim_play_dvd(&g, vol, FALSE, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
                 set_msg(err);               /* (a DVD's film: dvdplay.c, then as an MPEG) */
         } else if (mpeg) {
-            if (anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err)) < 0 && err[0])
+            if ((anim_net_probe ? anim_play_video_net(&g, it->path, it->label, anim_net_probe,
+                                                      anim_net_seek, plex_decoder_cpu(), err,
+                                                      sizeof(err))
+                                : anim_play_video(&g, it->path, plex_decoder_cpu(), err, sizeof(err))) < 0 &&
+                err[0])
                 set_msg(err);               /* (MPEG: the ZZ9000's, anim.c and video.c) */
         } else if (anim_play(&g, it->path, sound_ahi, anim_classic, err, sizeof(err)) < 0 || err[0]) {
             amb_log("anim", err);
@@ -8052,7 +8101,7 @@ static void plex_photo_view(struct Page *p, LONG idx, BOOL slideshow)
     LONG i, first = -1, last, k, vis = list_visible();
     ULONG t0 = time_ms();
     WORD w, h;
-    if (!plex.host[0] || !list_init(&l))
+    if (!list_init(&l))
         return;
     vw_photo_size(&w, &h);
     busy_begin();                           /* thousands of photos: the spinner meanwhile */
@@ -9653,6 +9702,662 @@ static void goto_plex_settings(void)
     draw_all();
 }
 
+/* ---- Settings > Networking > Jellyfin (jellyfin.c): the server, found
+ * on the network (its UDP discovery) or typed; signing in (a user name
+ * and password typed, sent once: the token kept, never the password);
+ * signing out; the films' size. Its jobs (a search, a sign-in, a
+ * sign-out, a server's own name asked) come back to jf_job_came. */
+static struct NetJob *jf_nj;            /* the one out */
+static char jf_found[8][3][80];         /* found: address, id, name */
+static int jf_nfound = -1;              /* -1 not looked yet */
+static char jf_body[448];          /* (two 199-byte JSON strings at most) */               /* a sign-in's body, while it is out */
+static char jf_user_asked[64];
+
+static void build_jf_settings(struct Page *p)
+{
+    struct Item *it;
+    char tag[96];
+    int i;
+    BOOL listed = FALSE;
+    p->setp = SETP_JF;
+    action_item(p, "Jellyfin", _("a media server (jellyfin.org)"), ACT_JFON,
+                jf.on ? MARK_CHECK_ON : MARK_CHECK_OFF);
+    if (!jf.on)
+        return;
+    heading_item(p, _("Server"));
+    for (i = 0; i < jf_nfound && i < 8; i++) {
+        char a[80];
+        BOOL here;
+        amb_strlcpy(a, jf_found[i][0], sizeof(a));
+        here = jf.host[0] && strstr(a, jf.host) != NULL;
+        listed |= here;
+        action_item(p, jf_found[i][2][0] ? jf_found[i][2] : a, a, ACT_JFSRV0 + i,
+                    here ? MARK_RADIO_ON : MARK_RADIO_OFF);
+    }
+    if (jf.host[0] && !listed) {
+        sprintf(tag, "%.60s:%lu", jf.host, (unsigned long)jf.port);
+        if ((it = action_item(p, jf.name[0] ? jf.name : jf.host, tag, ACT_JFADDR, MARK_RADIO_ON)))
+            (void)it;
+    }
+    action_item(p, _("Look for servers on this network"),
+                jf_nj && jf_nj->jfdisc ? _("looking...") : jf_nfound == 0 ? _("none answered") : "",
+                ACT_JFFIND, MARK_NONE);
+    action_item(p, _("Type a server's address"), jf.host[0] ? "" : "http://host:8096", ACT_JFADDR,
+                MARK_NONE);
+    heading_item(p, _("User"));
+    if (jf.token[0]) {
+        sprintf(tag, "%.60s", jf.user[0] ? jf.user : _("signed in"));
+        action_item(p, _("Sign out"), tag, ACT_JFOUT, MARK_NONE);
+    } else if ((it = action_item(p, _("Sign in"), !jf.host[0] ? _("choose a server first")
+                                                  : jf_nj && jf_nj->jf == JFJ_SIGNIN
+                                                  ? _("signing in...") : "",
+                                 ACT_JFSIGNIN, MARK_ARROW)) && !jf.host[0]) {
+        it->flags |= ITEM_DISABLED;
+    }
+    heading_item(p, _("Films"));
+    action_item(p, _("Picture size"),
+                jf.vsize == 1 ? _("small: 320 wide, MPEG-1 (the CPU decodes)")
+                : jf.vsize == 2 ? _("large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)")
+                                : _("automatic: by what decodes it"),
+                ACT_JFVSIZE, MARK_CYCLE);
+}
+
+static void goto_jf_settings(void)
+{
+    struct Page *p;
+    LONG i;
+    int m;
+    for (m = 0; m < nmenu && menu[m] != MOD_SETTINGS; m++)
+        ;
+    if (m >= nmenu)
+        return;
+    menu_sel = m;
+    build_root(MOD_SETTINGS);
+    while (depth > 1)
+        page_pop();
+    if (!(p = cur()))
+        return;
+    for (i = 0; i < p->list.count; i++)
+        if (p->list.items[i].kind == IT_ACTION && p->list.items[i].action == ACT_NETSET)
+            p->sel = i;
+    if ((p = page_push(PT_LIST, _("Networking")))) {
+        build_net_settings(p);
+        for (i = 0; i < p->list.count; i++)
+            if (p->list.items[i].kind == IT_ACTION && p->list.items[i].action == ACT_JFSET)
+                p->sel = i;
+        if ((p = page_push(PT_LIST, "Jellyfin"))) {
+            build_jf_settings(p);
+            sel_off_heading(p, 1);
+        }
+    }
+    focus = FOCUS_CONTENT;
+    amb_log("navigation", "to Settings > Networking > Jellyfin (from a row about Jellyfin)");
+    draw_all();
+}
+
+/* Music's, Pictures' and Videos' Jellyfin row (kind 'm', 'p', 'v'), at
+ * the end of p's rows, or (first) at their top: none unless a server is
+ * chosen (Jellyfin is no clutter where it is not used). */
+static BOOL jf_section_row(struct Page *p, char kind, BOOL first)
+{
+    char label[128], key[8];
+    struct Item *it;
+    if (!jf_shown())
+        return FALSE;
+    if (!jf.token[0]) {
+        sprintf(label, _("Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)"),
+                jf.name[0] ? jf.name : jf.host);
+        it = first ? list_add_first(&p->list, label, "", "", IT_ACTION)
+                   : list_add(&p->list, label, "", "", IT_ACTION);
+        if (it) {
+            it->action = ACT_GOJF;
+            it->mark = MARK_ARROW;
+        }
+        return it != NULL;
+    }
+    sprintf(label, kind == 'p' ? _("Jellyfin photos on %.80s") : _("Jellyfin: %.80s"),
+            jf.name[0] ? jf.name : jf.host);
+    key[0] = '~';
+    key[1] = 'V';
+    key[2] = kind;
+    key[3] = 0;
+    it = first ? list_add_first(&p->list, label, key, "", IT_PLEXDIR)
+               : list_add(&p->list, label, key, "", IT_PLEXDIR);
+    if (it)
+        it->mark = MARK_ARROW;
+    return it != NULL;
+}
+
+static void jf_roots_again(void)
+{
+    music_root_again();
+    pictures_root_again();
+}
+
+static void jf_settings_again(void)
+{
+    plex_settings_again(FALSE);             /* (every Settings page open, made again) */
+}
+
+/* A job of Jellyfin's own out, at most one: the last given up. */
+static BOOL jf_submit(struct NetJob *j, UBYTE what)
+{
+    if (jf_nj) {
+        net_cancel(jf_nj);
+        jf_nj->orphan = TRUE;
+        jf_nj = NULL;
+    }
+    j->jf = what;
+    j->seq = 0;
+    jf_nj = j;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+    return TRUE;
+}
+
+/* ---- A line typed on a page of its own (an address, a user name, a
+ * password), drawn by the view as any list is: its first row the text
+ * (a password as stars), Return or Fire keeps it, Esc or Left gives it
+ * up. Letters come to entry_key from handle_key while it is the page. */
+static struct {
+    struct Page *p;                     /* the page, while it is open */
+    char buf[128];
+    LONG max;
+    BOOL secret;
+    void (*done)(const char *text);     /* kept: what it was for (not on Esc) */
+} entry;
+
+static void entry_rows(void)
+{
+    struct Page *p = entry.p;
+    char shown[140];
+    LONG i, n = (LONG)strlen(entry.buf);
+    struct Item *it;
+    if (!p)
+        return;
+    for (i = 0; i < n && i < (LONG)sizeof(shown) - 2; i++)
+        shown[i] = entry.secret ? '*' : entry.buf[i];
+    shown[i++] = '_';                   /* where the next letter goes */
+    shown[i] = 0;
+    list_free(&p->list);
+    list_init(&p->list);
+    if ((it = list_add(&p->list, shown, "", "", IT_ACTION))) {
+        it->action = ACT_ENTRY;
+        it->mark = MARK_NONE;
+    }
+    text_line(p, "");
+    text_line(p, _("Return: OK   Esc: cancel"));
+    p->sel = 0;
+    p->top = 0;
+}
+
+static void entry_open(const char *title, const char *now, LONG max, BOOL secret,
+                       void (*done)(const char *text))
+{
+    struct Page *p;
+    if (!(p = page_push(PT_LIST, title))) {
+        set_msg(_("Too many levels open"));
+        return;
+    }
+    memset(entry.buf, 0, sizeof(entry.buf));
+    amb_strlcpy(entry.buf, now ? now : "", sizeof(entry.buf));
+    entry.max = max < (LONG)sizeof(entry.buf) ? max : (LONG)sizeof(entry.buf);
+    entry.secret = secret;
+    entry.done = done;
+    entry.p = p;
+    entry_rows();
+    focus = FOCUS_CONTENT;
+    draw_all();
+}
+
+/* The page let go (kept: done with its text; else given up), the text
+ * wiped either way (a password not left in memory). */
+static void entry_close(BOOL keep)
+{
+    char text[128];
+    void (*done)(const char *) = entry.done;
+    if (!entry.p)
+        return;
+    amb_strlcpy(text, entry.buf, sizeof(text));
+    memset(entry.buf, 0, sizeof(entry.buf));
+    if (cur() == entry.p) {
+        entry.p = NULL;
+        page_pop();
+    }
+    entry.p = NULL;
+    entry.done = NULL;
+    draw_all();
+    if (keep && done)
+        done(text);
+    memset(text, 0, sizeof(text));
+}
+
+static BOOL entry_on(void)
+{
+    if (entry.p && cur() != entry.p) {
+        entry.p = NULL;                 /* (left some other way: given up) */
+        memset(entry.buf, 0, sizeof(entry.buf));
+    }
+    return entry.p != NULL;
+}
+
+/* A typed key on the entry page: TRUE taken. */
+static BOOL entry_key(UWORD code)
+{
+    LONG n = (LONG)strlen(entry.buf);
+    if (code == 13) {
+        entry_close(TRUE);
+        return TRUE;
+    }
+    if (code == 27) {
+        entry_close(FALSE);
+        return TRUE;
+    }
+    if (code == 8 || code == 127) {
+        if (n > 0)
+            entry.buf[n - 1] = 0;
+    } else if (code == 24) {
+        entry.buf[0] = 0;               /* Ctrl-X: all of it */
+    } else if (code >= 32 && code != 127 && !(code >= 128 && code < 160) && n < entry.max - 1) {
+        entry.buf[n] = (char)code;
+        entry.buf[n + 1] = 0;
+    } else {
+        return TRUE;
+    }
+    entry_rows();
+    draw_pane(TRUE);
+    draw_footer();
+    return TRUE;
+}
+
+static void jf_find(void)
+{
+    struct NetJob *j;
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    j->jfdisc = 1;
+    jf_submit(j, JFJ_FIND);
+    set_msg(_("Looking for Jellyfin servers..."));
+    jf_settings_again();
+}
+
+/* The server's own name and id, asked of it (/System/Info/Public: no
+ * sign-in needed): a typed address checked, and named. */
+static void jf_ask_info(void)
+{
+    struct NetJob *j;
+    if (!jf.host[0] || !net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    strcpy(j->path, "/System/Info/Public");
+    jf_submit(j, JFJ_INFO);
+}
+
+static void jf_address_typed(const char *a)
+{
+    if (!a[0])
+        return;
+    jf_set_server(a, "", "");
+    if (!jf.host[0]) {
+        set_msg(_("That is not an address"));
+        return;
+    }
+    amb_log("jellyfin: server typed", jf.host);
+    jf_ask_info();
+    jf_settings_again();
+    jf_roots_again();
+}
+
+static void jf_type_address(void)
+{
+    char a[96];
+    if (jf.host[0])
+        sprintf(a, "%.60s:%lu", jf.host, (unsigned long)jf.port);
+    else
+        strcpy(a, "");
+    set_msg(_("The server's address (name or numbers, and :port if not 8096)"));
+    entry_open(_("Type a server's address"), a, 90, FALSE, jf_address_typed);
+}
+
+static void jf_password_typed(const char *pw)
+{
+    struct NetJob *j;
+    char m[120];
+    if (!jf.host[0] || !jf_user_asked[0])
+        return;
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    jf_signin_job(j, jf_user_asked, pw, jf_body, sizeof(jf_body));
+    jf_submit(j, JFJ_SIGNIN);
+    sprintf(m, _("Signing in to %.60s..."), jf.name[0] ? jf.name : jf.host);
+    set_msg(m);
+    jf_settings_again();
+}
+
+static void jf_user_typed(const char *user)
+{
+    if (!user[0])
+        return;
+    amb_strlcpy(jf_user_asked, user, sizeof(jf_user_asked));
+    entry_open(_("Password"), "", 120, TRUE, jf_password_typed);
+}
+
+static void jf_sign_in(void)
+{
+    if (!jf.host[0])
+        return;
+    entry_open(_("User name"), jf.user, 60, FALSE, jf_user_typed);
+}
+
+static void jf_sign_out(void)
+{
+    struct NetJob *j;
+    if (jf.token[0] && net_start() && (j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        jf_signout_job(j);                  /* (its header has the token: made first) */
+        jf_submit(j, JFJ_SIGNOUT);
+    }
+    jf_signed_in("", "", "");
+    amb_log("jellyfin", "signed out");
+    jf_settings_again();
+    jf_roots_again();
+}
+
+/* ---- A Jellyfin film (a Videos row "~Y<id>"): the server makes it
+ * MPEG as it plays (jf_video_url: MPEG-1 for the CPU, MPEG-2 for the
+ * ZZ9000), streamed: nothing kept on this Amiga. Its first bytes are asked
+ * for first (a job of their own, JFJ_VIDEO: its size, kind and sound
+ * probed from them), then it plays from the server as it comes; a seek
+ * asks the server again from that time (startTimeTicks). */
+#define JF_PROBE (32UL * 1024)          /* its start, probed: a sequence header, a sound frame */
+static struct NetJob *jf_fj;            /* the start asked for */
+static char jf_fj_title[120], jf_fj_url[600], jf_fj_seek[64];
+static ULONG jf_fj_ms;
+
+static char jf_fj_key[48];
+static BOOL jf_fj_zz;
+
+static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
+static char jf_fj_sndt[16][48];                  /* ...their names */
+static void jf_film_probe(void);
+
+static void jf_film(const struct Item *it)
+{
+    char f[48];
+    struct NetJob *j;
+    if (jf_fj) {
+        net_cancel(jf_fj);                  /* (another asked for meanwhile: that one) */
+        jf_fj->orphan = TRUE;
+        jf_fj->seq = 0;
+        jf_fj = NULL;
+    }
+    if (!jf.token[0]) {
+        goto_jf_settings();
+        return;
+    }
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    radio_field(it, 4, f, sizeof(f));
+    jf_fj_ms = strtoul_(f);
+    radio_field(it, 0, jf_fj_key, sizeof(jf_fj_key));    /* (its key alone) */
+    amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
+    jf_fj_zz = caps.zz9000 && !video_cpu;
+    /* first its sound streams, to choose one (a film may have several
+     * languages; the server's own choice is the file's default) */
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    jf_streams_request(jf_fj_key, j->path, sizeof(j->path));
+    j->wait_s = 30;
+    jf_fj = j;
+    {
+        char m[200];
+        sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, it->label);
+        set_msg(m);
+    }
+    draw_footer();
+    j->jf = JFJ_STREAMS;
+    j->seq = 0;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+}
+
+/* Its sound streams came: one chosen, then its start asked for. */
+static void jf_film_streams(struct NetJob *j)
+{
+    char why[160];
+    int kept;
+    jf_fj = NULL;
+    jf_fj_nsnd = 0;
+    jf_fj_cur = -1;
+    if (j->body && j->status == 200 && j->len)
+        jf_fj_cur = jf_pick_audio((char *)j->body, j->len, why, sizeof(why), jf_fj_snd, jf_fj_sndt, &jf_fj_nsnd);
+    else
+        sprintf(why, "its streams not listed (%ld %.60s): the server's choice", (long)j->status, j->err);
+    if (jf_fj_nsnd > 1 && (kept = jf_sound_kept(jf_fj_key, jf_fj_snd, jf_fj_nsnd)) >= 0) {
+        jf_fj_cur = kept;
+        sprintf(why, "stream %ld, chosen with A before", (long)jf_fj_snd[kept]);
+    }
+    amb_log("jellyfin: film's sound", why);
+    jf_film_probe();
+}
+
+static void jf_film_probe(void)
+{
+    char m[200];
+    const char *path;
+    struct NetJob *j;
+    BOOL big = jf.vsize == 2 || (jf.vsize == 0 && jf_fj_zz);
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
+        set_msg(_("Not enough memory"));
+        return;
+    }
+    /* (its sound stream not in the URL: the player adds it, as A changes it) */
+    jf_video_url(jf_fj_key, jf_fj_zz, -1, 0, jf_fj_url, sizeof(jf_fj_url));
+    jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
+    path = strchr(jf_fj_url + 7, '/');
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
+    {
+        /* the probe: the start's own session (the player's from 0 ms) */
+        char *c, *o = j->path + strlen(j->path), *e = j->path + sizeof(j->path) - 1;
+        for (c = jf_fj_seek; *c && o < e; c++)
+            *o++ = *c == '*' ? '0' : *c;
+        *o = 0;
+        if (jf_fj_nsnd > 1 && jf_fj_cur >= 0) {
+            char a[32];
+            sprintf(a, "&audioStreamIndex=%ld", (long)jf_fj_snd[jf_fj_cur]);
+            amb_strlcat(j->path, a, sizeof(j->path));
+        }
+    }
+    j->upto = JF_PROBE;
+    j->wait_s = 60;                         /* (the server starts converting first) */
+    jf_fj = j;
+    sprintf(m, "%.60s: %s, %lu ms long", jf_fj_title,
+            jf.vsize == 3 ? "MPEG-1 160x120 0.3 Mbit/s" : big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s",
+            (unsigned long)jf_fj_ms);
+    amb_log("jellyfin: film asked for", m);
+    j->jf = JFJ_VIDEO;                      /* (beside the settings' own: not jf_submit's) */
+    j->seq = 0;
+    net_submit(j);
+    if (j->done && !j->busy)
+        radio_done(j);
+}
+
+/* A play session's conversion stopped on the server (the player's, done
+ * with it): a DELETE, its answer not waited for. */
+static void jf_stop_session(const char *session)
+{
+    struct NetJob *j;
+    char m[80];
+    if (!jf.token[0] || !net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return;
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    jf_stop_request(session, j->path, sizeof(j->path));
+    j->post = 2;
+    j->wait_s = 10;
+    j->orphan = TRUE;                       /* (freed when it comes back) */
+    j->seq = 0;
+    sprintf(m, "conversion %.40s stopped", session);
+    amb_log("jellyfin", m);
+    net_submit(j);
+}
+
+/* Its start here: probed, then played as a stream from the server. */
+static void jf_film_came(struct NetJob *j)
+{
+    char m[200];
+    struct VProbe v;
+    jf_fj = NULL;
+    if (!j->body || j->status != 200 || !j->len) {
+        sprintf(m, _("%.50s could not be fetched: %.100s"), jf_fj_title,
+                j->err[0] ? j->err : j->status ? "" : _("no answer"));
+        if (!j->err[0] && j->status)
+            sprintf(m + strlen(m), _("the server said %ld"), (long)j->status);
+        amb_log("jellyfin: film", m);
+        set_msg(m);
+        draw_footer();
+        return;
+    }
+    sprintf(m, "its first %lu KB in %lu ms", (unsigned long)(j->len >> 10), (unsigned long)j->ms);
+    amb_log("jellyfin: film", m);
+    if (!vprobe_mem(j->body, (LONG)j->len, &v)) {
+        amb_log("jellyfin: film", "no MPEG sequence header in its start");
+        set_msg(_("Not an MPEG video Ambiance can read"));
+        draw_footer();
+        return;
+    }
+    v.ps = TRUE;                            /* (a Program Stream: stream.mpg) */
+    v.ms = jf_fj_ms;
+    {
+        struct Item it;
+        msg[0] = 0;
+        memset(&it, 0, sizeof(it));
+        it.kind = IT_ANIM;
+        it.label = jf_fj_title;
+        it.path = jf_fj_url;
+        it.sortkey = (char *)"MPEG";
+        anim_net_probe = &v;
+        anim_net_seek = jf_fj_seek;
+        anim_net_on_stop(jf_stop_session);
+        {
+            const char *t[16];
+            int i;
+            for (i = 0; i < 16; i++)
+                t[i] = jf_fj_sndt[i];
+            anim_net_sounds(jf_fj_snd, t, jf_fj_nsnd, jf_fj_cur);
+        }
+        anim_from_item(&it);
+        anim_net_probe = NULL;
+        anim_net_seek = NULL;
+        anim_net_on_stop(NULL);
+        if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur)
+            jf_sound_keep(jf_fj_key, jf_fj_snd[anim_net_sound()]);  /* (chosen with A: kept) */
+    }
+}
+
+/* A Jellyfin job of the UI's own, back. */
+static void jf_job_came(struct NetJob *j)
+{
+    char m[200];
+    BOOL mine = j == jf_nj;
+    if (mine)
+        jf_nj = NULL;
+    if (j->jf == JFJ_STREAMS && j == jf_fj) {
+        jf_film_streams(j);
+    } else if (j->jf == JFJ_VIDEO && j == jf_fj) {
+        jf_film_came(j);
+    } else if (mine && j->jf == JFJ_FIND) {
+        char *s = (char *)j->body, *e;
+        jf_nfound = 0;
+        while (s && *s && jf_nfound < 8) {
+            char *t1, *t2;
+            if ((e = strchr(s, '\n')))
+                *e = 0;
+            if ((t1 = strchr(s, '\t')) && (t2 = strchr(t1 + 1, '\t'))) {
+                *t1 = *t2 = 0;
+                amb_strlcpy(jf_found[jf_nfound][0], s, 80);
+                amb_strlcpy(jf_found[jf_nfound][1], t1 + 1, 80);
+                amb_strlcpy(jf_found[jf_nfound][2], t2 + 1, 80);
+                sprintf(m, "%s (%s)", jf_found[jf_nfound][2], jf_found[jf_nfound][0]);
+                amb_log("jellyfin: found", m);
+                jf_nfound++;
+            }
+            s = e ? e + 1 : NULL;
+        }
+        if (!j->body) {
+            amb_log("jellyfin: none found", j->err);
+            set_msg(j->err[0] ? j->err : _("No Jellyfin server answered on this network"));
+        } else if (jf_nfound == 1 && !jf.host[0]) {
+            /* the one: chosen */
+            jf_set_server(jf_found[0][0], jf_found[0][2], jf_found[0][1]);
+            sprintf(m, _("Jellyfin server: %.60s"), jf.name);
+            set_msg(m);
+            jf_roots_again();
+        } else {
+            sprintf(m, jf_nfound == 1 ? _("%ld Jellyfin server found") : _("%ld Jellyfin servers found"),
+                    (long)jf_nfound);
+            set_msg(m);
+        }
+        jf_settings_again();
+    } else if (mine && j->jf == JFJ_SIGNIN) {
+        char why[120];
+        memset(jf_body, 0, sizeof(jf_body));    /* (the password in it) */
+        if (jf_signin_came(j, jf_user_asked, why, sizeof(why))) {
+            sprintf(m, _("Signed in to %.60s as %.40s"), jf.name[0] ? jf.name : jf.host, jf.user);
+            amb_log("jellyfin", m);         /* (never the token) */
+            set_msg(m);
+            jf_roots_again();
+        } else {
+            sprintf(m, "sign-in refused or failed (%ld): %.100s", (long)j->status, why);
+            amb_log("jellyfin", m);
+            set_msg(why);
+        }
+        jf_settings_again();
+    } else if (mine && j->jf == JFJ_INFO) {
+        /* the server's own name and id (a typed address) */
+        if (j->body && j->status == 200) {
+            char name[64], id[40];
+            if (jf_value((const char *)j->body, j->len, "ServerName", name, sizeof(name)) && name[0]) {
+                utf8_to_latin1(name);
+                jf_value((const char *)j->body, j->len, "Id", id, sizeof(id));
+                sprintf(m, "%.60s:%lu", jf.host, (unsigned long)jf.port);
+                {
+                    /* (the token kept: the same server, now named) */
+                    char tok[80], uid[40], user[64];
+                    amb_strlcpy(tok, jf.token, sizeof(tok));
+                    amb_strlcpy(uid, jf.uid, sizeof(uid));
+                    amb_strlcpy(user, jf.user, sizeof(user));
+                    jf_set_server(m, name, id);
+                    if (tok[0] && !jf.token[0])
+                        jf_signed_in(user, uid, tok);
+                }
+                sprintf(m, _("Jellyfin server: %.60s"), name);
+                set_msg(m);
+                amb_log("jellyfin: server named", name);
+                jf_settings_again();
+                jf_roots_again();
+            }
+        } else {
+            sprintf(m, _("No Jellyfin server answered at %.60s"), jf.host);
+            set_msg(m);
+            amb_log("jellyfin: not answering", j->err);
+        }
+    }
+    if (j->body)
+        FreeVec(j->body);
+    FreeVec(j);
+}
+
 static void toggle_https(void)
 {
     struct Page *p = cur();
@@ -9878,6 +10583,7 @@ static void build_music_root(struct Page *p)
     if (!plex.on) {
         /* (chosen: there, Settings > Networking > Plex) */
         action_item(p, _("Plex is turned off (Settings > Networking > Plex)"), "", ACT_GOPLEX, MARK_ARROW);
+        jf_section_row(p, 'm', FALSE);
         music_file_rows(p);
         return;
     }
@@ -9897,6 +10603,7 @@ static void build_music_root(struct Page *p)
         /* the server is chosen in Settings (About > Plex in Ambiance says more) */
         action_item(p, _("No Plex server chosen: Settings > Networking > Plex"), "", ACT_GOPLEX, MARK_ARROW);
     }
+    jf_section_row(p, 'm', FALSE);
     music_file_rows(p);
 }
 
@@ -9986,6 +10693,8 @@ static void plex_more_ask(struct Page *p)
      * second or more, the network's one at a time) waits while any are
      * being fetched or still wanted (the first page's covers came one a
      * part, Albums' 8450 in 9 parts) - the tick asks again */
+    if (!p->plex_letters && jf_key(p->base))
+        p->plex_letters = TRUE;             /* Jellyfin: no letters to ask, its parts at once */
     if (p->plex_letters) {
         int d;
         for (d = 0; d < ART_KINDS; d++)
@@ -10009,7 +10718,7 @@ static void plex_more_ask(struct Page *p)
         j->start = -1;
         p->plex_letters = TRUE;
     } else {
-        plex_request_from(p->base, k * PLEX_PART, j->path, sizeof(j->path));
+        plex_job(j, p->base, k * PLEX_PART);
         j->parse = 1;
         j->wait_s = PLEX_WAIT_S;          /* a NAS's server may think for a while */
         j->start = k * PLEX_PART + 1;       /* +1: never 0, which is a first part */
@@ -10354,10 +11063,15 @@ static struct NetJob *whd_job;
 
 void radio_done(struct NetJob *j)
 {
-    struct Page *p = NULL;
+    struct Page *p = NULL, *again_p = NULL;
+    char again[160];
     int d;
     if (j == whd_job) {
         whd_done(j);                        /* WHDLoad's package */
+        return;
+    }
+    if (j->jf) {
+        jf_job_came(j);                     /* Jellyfin's settings' own */
         return;
     }
     for (d = 0; d < ART_KINDS; d++)
@@ -10578,7 +11292,11 @@ void radio_done(struct NetJob *j)
                               : !strcmp(p->base, "/library/sections") ? _("No music libraries there")
                               : plex_photo_sections(p->base) ? _("No photo libraries there")
                                                              : _("Nothing here");
-            if (!gone && !j->body && strstr(j->err, " 401")) {
+            if (!gone && !j->body && strstr(j->err, " 401") && jf_key(p->base)) {
+                /* Jellyfin's sign-in gone (signed out elsewhere): again there */
+                why = _("The server wants you signed in: Settings > Networking > Jellyfin");
+                action_item(p, why, "", ACT_GOJF, MARK_ARROW);
+            } else if (!gone && !j->body && strstr(j->err, " 401")) {
                 /* signing in is what it wants: the row goes where that is
                  * done (Settings > Networking > Plex: Sign in at plex.tv) */
                 why = _("The server wants you signed in: Settings > Networking > Plex");
@@ -10635,6 +11353,14 @@ void radio_done(struct NetJob *j)
             }
         }
         amb_log("plex", m);
+        if (jf_key(p->base) && p->base[1] == 'V' && p->base[2] != 'm' && p->list.count == 1 &&
+            p->list.items[0].kind == IT_PLEXDIR) {
+            /* Jellyfin's one photo or video library: opened at once (as
+             * one music library opens on its menu) */
+            radio_field(&p->list.items[0], 0, again, sizeof(again));
+            amb_log("jellyfin: its one library, opened", p->list.items[0].label);
+            again_p = p;                    /* (asked for once this job is let go) */
+        }
         np_mark_lists(FALSE);               /* what plays, marked in the new list too */
         plex_shortcut_fix(p);               /* a library's list: Now playing first */
         plex_pos_restore(p);                /* back where it was left */
@@ -10675,6 +11401,8 @@ void radio_done(struct NetJob *j)
     if (j->body)
         FreeVec(j->body);
     FreeVec(j);
+    if (again_p)
+        plex_refetch(again_p, again);
 }
 
 static void radio_collect(void)
@@ -10768,11 +11496,31 @@ static void radio_open(struct Item *it)
         draw_footer();
         return;
     }
-    if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex.host[0]) {
-        goto_plex_settings();               /* (no server: where one is chosen) */
+    if (it->kind == IT_PLEXDIR && jf_key(it->path) && jf_is_menu(it->path)) {
+        /* a Jellyfin music library: its own menu, made here */
+        if (!(p = page_push(PT_LIST, it->label))) {
+            set_msg(_("Too many levels open"));
+            return;
+        }
+        p->plex = 1;
+        p->radio = 1;
+        radio_field(it, 0, p->base, sizeof(p->base));
+        jf_menu(p->base, &p->list);
+        draw_pane(TRUE);
+        draw_footer();
         return;
     }
-    photos = cur() && (cur()->photos || cur()->pics);  /* Pictures' Plex pages */
+    if (it->kind == IT_PLEXDIR && it->path[0] != '#' && !plex_server_for(it->path)) {
+        if (jf_key(it->path))
+            goto_jf_settings();
+        else
+            goto_plex_settings();           /* (no server: where one is chosen) */
+        return;
+    }
+    if (it->kind == IT_PLEXDIR && jf_key(it->path))
+        photos = jf_photo_key(it->path);    /* (the key says: Videos' folders are not photos') */
+    else
+        photos = cur() && (cur()->photos || cur()->pics);  /* Pictures' Plex pages */
     if (rq) {                               /* one out at a time: the last given up */
         net_cancel(rq);
         rq->orphan = TRUE;
@@ -10806,13 +11554,11 @@ static void radio_open(struct Item *it)
             }
             amb_strlcpy(msg, _("Looking for Plex servers...  Esc to give up"), sizeof(msg));
         } else {
-            amb_strlcpy(j->host, plex.host, sizeof(j->host));
-            j->port = plex.port;
-            plex_request(p->base, j->path, sizeof(j->path));
+            plex_job(j, p->base, 0);
             j->parse = 1;                   /* read in the network process */
             j->wait_s = PLEX_WAIT_S;        /* a NAS's server may think for a while */
             amb_strlcpy(j->pkey, p->base, sizeof(j->pkey));
-            sprintf(msg, _("Asking %.40s...  Esc to give up"), plex.name[0] ? plex.name : plex.host);
+            sprintf(msg, _("Asking %.40s...  Esc to give up"), plex_server_name(p->base));
         }
     } else {
         radio_set_max_kbps(rkbps_now());
@@ -10918,6 +11664,7 @@ static void pictures_root_again(void)
         if (n != -2)
             pics_root_empty(r, n, src);
     }
+    jf_section_row(r, 'p', TRUE);
     pictures_plex_rows(r);
     r->sel = sel < r->list.count ? sel : 0;
     r->top = 0;
@@ -10930,9 +11677,7 @@ static void plex_refetch(struct Page *p, const char *key)
     if (!(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return;
     amb_strlcpy(p->base, key, sizeof(p->base));
-    amb_strlcpy(j->host, plex.host, sizeof(j->host));
-    j->port = plex.port;
-    plex_request(key, j->path, sizeof(j->path));
+    plex_job(j, key, 0);
     j->parse = 1;
     j->wait_s = PLEX_WAIT_S;
     amb_strlcpy(j->pkey, key, sizeof(j->pkey));
@@ -10985,7 +11730,7 @@ BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
         art_nj[kind] = NULL;
     }
     file[0] = 0;
-    if (!thumb[0] || !plex.host[0] || w < 8 || h < 8)
+    if (!thumb[0] || !plex_server_for(thumb) || w < 8 || h < 8)
         return FALSE;
     if (plex_art(thumb, w, h, req, sizeof(req), file, 120))
         return TRUE;
@@ -11006,8 +11751,13 @@ BOOL art_fetch(int kind, const char *thumb, WORD w, WORD h, char *file)
     }
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
         return FALSE;
-    amb_strlcpy(j->host, plex.host, sizeof(j->host));
-    j->port = plex.port;
+    if (jf_key(thumb)) {
+        amb_strlcpy(j->host, jf.host, sizeof(j->host));
+        j->port = jf.port;                  /* (its picture's URL has its key) */
+    } else {
+        amb_strlcpy(j->host, plex.host, sizeof(j->host));
+        j->port = plex.port;
+    }
     amb_strlcpy(j->path, req, sizeof(j->path));
     j->seq = 0;
     amb_strlcpy(art_want[kind], file, sizeof(art_want[kind]));
@@ -11222,7 +11972,7 @@ static BOOL plex_art_kept(struct Page *p, LONG idx)
     if (idx < 0 || idx >= p->list.count || !pv_pictures() || !plex_pv_src(p, idx, &src))
         return FALSE;
     radio_field(&src, 2, thumb, sizeof(thumb));
-    return thumb[0] && plex.host[0] && plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
+    return thumb[0] && plex_server_for(thumb) && plex_art(thumb, s, s, req, sizeof(req), file, sizeof(file));
 }
 
 /* While the selection rests, its shown and nothing else asked of the
@@ -11411,6 +12161,46 @@ static void plex_help(void)
                      : _("FLAC: played as stored, by flacdec.library"));
         text_line(p, sound_ahi ? _("Sound: AHI, 16-bit") : sound_p14 ? _("Sound: Paula, 14-bit")
                                                           : _("Sound: Paula, 8-bit"));
+    }
+    draw_pane(TRUE);
+    draw_footer();
+}
+
+/* About > Jellyfin in Ambiance: what it plays, and how to connect. */
+static void jf_help(void)
+{
+    struct Page *p = page_push(PT_TEXT, _("Jellyfin in Ambiance"));
+    char line[200];
+    if (!p)
+        return;
+    p->plexmark = 2;                        /* "Works with" Jellyfin, at the bottom */
+    text_para(p, _("Ambiance plays music, shows photos and plays films from a Jellyfin server "
+                   "on your network (jellyfin.org: free software). Its music libraries are listed "
+                   "by artist and album with their covers, and the server makes each track an MP3 "
+                   "this Amiga can play, as for Plex. Its photos are made the size of the screen "
+                   "by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide "
+                   "for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes "
+                   "(Settings > Networking > Jellyfin > Picture size). Films stream from the "
+                   "server as they play: nothing is kept on this Amiga."));
+    text_line(p, "");
+    text_para(p, _("Ambiance is developed mainly with AI (Claude, by Anthropic), guided and "
+                   "tested by its author. It is not an official Jellyfin client."));
+    text_line(p, "");
+    text_para(p, _("Finding a server: Settings > Networking > Jellyfin > Look for servers on "
+                   "this network, or Type a server's address (as 192.168.1.10:8096)."));
+    text_line(p, "");
+    text_para(p, _("Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin "
+                   "user's name and password. The password is sent once and not kept; the "
+                   "server's token for this Amiga is kept, until Sign out. A user of its own for "
+                   "the Amiga, in the server's Dashboard > Users, is a good idea."));
+    text_line(p, "");
+    sprintf(line, _("Server: %s"), jf.host[0] ? (jf.name[0] ? jf.name : jf.host) : _("none chosen"));
+    text_line(p, line);
+    if (jf.token[0]) {
+        sprintf(line, _("Signed in as %s"), jf.user[0] ? jf.user : "?");
+        text_line(p, line);
+    } else {
+        text_line(p, _("Not signed in"));
     }
     draw_pane(TRUE);
     draw_footer();
@@ -11683,6 +12473,34 @@ static void act_action(struct Item *it)
         open_plex_settings();
     else if (it->action == ACT_GOPLEX)
         goto_plex_settings();
+    else if (it->action == ACT_JFSET)
+        open_settings_page("Jellyfin", build_jf_settings);
+    else if (it->action == ACT_JFON) {
+        jf_set_on(!jf.on);
+        amb_log("jellyfin", jf.on ? "on" : "off");
+        jf_settings_again();
+        jf_roots_again();
+    } else if (it->action == ACT_JFFIND)
+        jf_find();
+    else if (it->action == ACT_JFADDR)
+        jf_type_address();
+    else if (it->action == ACT_JFSIGNIN)
+        jf_sign_in();
+    else if (it->action == ACT_JFOUT)
+        jf_sign_out();
+    else if (it->action == ACT_GOJF)
+        goto_jf_settings();
+    else if (it->action == ACT_JFVSIZE) {
+        jf_set_vsize((jf.vsize + 1) % 3);
+        jf_settings_again();
+    } else if (it->action >= ACT_JFSRV0 && it->action <= ACT_JFSRV_END &&
+               it->action - ACT_JFSRV0 < jf_nfound) {
+        int i = it->action - ACT_JFSRV0;
+        jf_set_server(jf_found[i][0], jf_found[i][2], jf_found[i][1]);
+        amb_log("jellyfin: server chosen", jf.name);
+        jf_settings_again();
+        jf_roots_again();
+    }
     else if (it->action == ACT_SOUNDSET)
         open_sound_settings();
     else if (it->action == ACT_GENSET)
@@ -11884,6 +12702,10 @@ static void act_action(struct Item *it)
         np_open_page();
     else if (it->action == ACT_PLEXHELP)
         plex_help();
+    else if (it->action == ACT_JFHELP)
+        jf_help();
+    else if (it->action == ACT_ENTRY)
+        entry_close(TRUE);                  /* Fire on the line: kept */
     else if (it->action == ACT_STYLE_PIXEL)
         apply_style(STYLE_PIXEL);
     else if (it->action == ACT_STYLE_SMOOTH)
@@ -13110,6 +13932,8 @@ static void handle_key(struct IntuiMessage *im)
         gfx_iconify_asked = TRUE;
         return;
     }
+    if (im->Class == IDCMP_VANILLAKEY && entry_on() && entry_key(code))
+        return;                             /* a line being typed: its letters */
     if (im->Class == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && code != 0x7A && code != 0x7B &&
         (code < 0x60 || code > 0x67) && lv_on()) {
         pointer_hide();                     /* the keyboard in use, for a layout's keys too
@@ -13483,6 +14307,7 @@ static int app_main(void)
         me->pr_WindowPtr = oldwin;
     }
     plex_load(caps.cpu);            /* after: it needs the CPU */
+    jf_load();
     plex.flac = caps.flacdec;
     plex.jpeg_card = pic_on_card("JPEG");   /* the ZZ9000's datatype reads JPEG */
     view_jpeg_card = plex.jpeg_card;        /* ...the viewer's too, not jdec */
@@ -14374,8 +15199,8 @@ static const char *lv_art_of(const struct Page *p, const struct Item *it, char *
     } else if ((it->kind == IT_PIC || lv_anim_shot(it)) && !p->plex) {
         item_path(it, buf, max);            /* (an animation: its first frame) */
         return buf[0] ? buf : NULL;
-    } else if (p->plex && it->kind == IT_PLEXDIR) {
-        buf[0] = LV_ART_PLEX;
+    } else if (p->plex && (it->kind == IT_PLEXDIR || (it->kind == IT_ANIM && jf_key(it->path)))) {
+        buf[0] = LV_ART_PLEX;               /* (a Jellyfin film's: its poster) */
         lv_plex_field(it, 2, buf + 1, max - 1);
         return buf[1] ? buf : NULL;
     } else {
@@ -14467,6 +15292,11 @@ static BOOL lv_pic_file(struct Page *p, LONG idx, char *file, LONG max)
         char base[300];
         return ags_screenshot_path(item_path(it, base, sizeof(base)), file, max);
     }
+    if (p->plex && it->kind == IT_ANIM && jf_key(it->path)) {
+        file[0] = LV_ART_PLEX;              /* a Jellyfin film: its poster, from the server */
+        lv_plex_field(it, 2, file + 1, max - 1);
+        return file[1] != 0;
+    }
     return FALSE;
 }
 
@@ -14476,16 +15306,19 @@ static UWORD lv_pof_w, lv_pof_h;            /* the size the layout asked it at (
 static const char *lv_picture_of(struct Page *p)
 {
     static const struct Page *for_p;
+    static const struct Item *for_items;    /* (its list: another page in the same place
+                                             * has another, though its row and count agree) */
     static LONG for_sel = -1, for_count = -1;
     static BOOL have;
     if (!p || p->type != PT_LIST || p->sel < 0 || p->sel >= p->list.count)
         return NULL;
-    if (p == for_p && p->sel == for_sel && p->list.count == for_count)
+    if (p == for_p && p->sel == for_sel && p->list.count == for_count && p->list.items == for_items)
         return have ? lv_pof_file : NULL;
     have = lv_pic_file(p, p->sel, lv_pof_file, sizeof(lv_pof_file));
     if (have || !(p->list.items[p->sel].flags & ITEM_GONE)) {
         for_p = p;                          /* (kept: an entry not held yet - its letter
                                              * being read - asked again until it is) */
+        for_items = p->list.items;
         for_sel = p->sel;
         for_count = p->list.count;
     }
@@ -14541,6 +15374,7 @@ static void lv_page(struct Page *p, struct LPage *m)
             m->picture = p->pic[0] ? p->pic : NULL;
             m->note = p->note;
             m->plexmark = p->plexmark;
+            lv_mark_kind = p->plexmark;     /* (which mark host->plexmark gives) */
         }
         return;
     }
@@ -14553,6 +15387,32 @@ static void lv_page(struct Page *p, struct LPage *m)
         for (i = 0; i < det.tj->nlines && i < LJ_FACTS; i++)
             lv_lines[i] = det.tj->lines[i];
         m->ndetails = (WORD)i;
+        m->details = lv_lines;
+    }
+    if (!m->ndetails && p->plex && p->sel >= 0 && p->sel < p->list.count &&
+        p->list.items[p->sel].kind == IT_ANIM && jf_key(p->list.items[p->sel].path)) {
+        /* a Jellyfin film: its year, length and rating, then what it is
+         * about (two sets, a row's each in turn: the column's key changes) */
+        static char fl[2][3][320];
+        static UWORD fs;
+        const struct Item *it = &p->list.items[p->sel];
+        char (*l)[320] = fl[fs++ & 1], v[24];
+        int n = 0;
+        amb_strlcpy(l[0], it->label, sizeof(l[0]));
+        lv_plex_field(it, 3, l[1], sizeof(l[1]));
+        lv_plex_field(it, 5, v, sizeof(v));
+        if (v[0]) {
+            if (l[1][0])
+                amb_strlcat(l[1], " \xB7 ", sizeof(l[1]));
+            amb_strlcat(l[1], v, sizeof(l[1]));
+        }
+        lv_lines[n++] = l[0];
+        if (l[1][0])
+            lv_lines[n++] = l[1];
+        lv_plex_field(it, 6, l[2], sizeof(l[2]));
+        if (l[2][0])
+            lv_lines[n++] = l[2];
+        m->ndetails = (WORD)n;
         m->details = lv_lines;
     }
     /* while it glides, or a letter is up, no pictures asked for: the

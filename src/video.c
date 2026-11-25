@@ -255,7 +255,6 @@ static const char *video_by_cpu(struct VProbe *v, const char *why)
 const char *video_check(const char *path, struct VProbe *v)
 {
     static char why[120];
-    const char *w;
     char m[200];
     if (!vprobe(path, v, 0)) {
         if (v->h264) {
@@ -270,8 +269,17 @@ const char *video_check(const char *path, struct VProbe *v)
         }
         return _("Not an MPEG video Ambiance can read");
     }
+    return video_checked((const char *)FilePart((STRPTR)path), v);
+}
+
+/* What plays v (probed: a file's, or a stream's start): the card, or the
+ * CPU (v->sw); NULL if it plays, else why not. */
+const char *video_checked(const char *name, struct VProbe *v)
+{
+    const char *w;
+    char m[200];
     sprintf(m, "%s: %s %ld x %ld, aspect %ld, %ld.%03ld fps, %s, %lu ms, %lu bytes%s",
-            (const char *)FilePart((STRPTR)path), vprobe_kind(v), (long)v->w, (long)v->h,
+            name, vprobe_kind(v), (long)v->w, (long)v->h,
             (long)v->aspect, (long)(v->fps_milli / 1000), (long)(v->fps_milli % 1000),
             v->ac3 ? "AC3 sound" : v->mp2 ? "MPEG audio" : "no sound", (unsigned long)v->ms,
             (unsigned long)v->bytes,

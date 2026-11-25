@@ -1238,6 +1238,44 @@ static BOOL net_more(void)
     }
 }
 
+/* A video's next bytes (up to n): its file's, or a server's stream's (what
+ * the network buffer has, else what comes next: as it comes, not waiting
+ * for all n). 0 at its end, -1 failed. */
+static LONG v_read(UBYTE *b, LONG n)
+{
+    LONG k;
+    if (st.fh)
+        return Read(st.fh, b, n);
+    if (st.nb_pos >= st.nb_len && !net_more())
+        return st.eof ? 0 : st.state == ST_FAILED ? -1 : 0;
+    k = (LONG)(st.nb_len - st.nb_pos);
+    if (k > n)
+        k = n;
+    CopyMem(st.nb + st.nb_pos, b, (ULONG)k);
+    st.nb_pos += (ULONG)k;
+    return k;
+}
+
+/* ...into the card's buffer (a stream's: what has come, through fast RAM). */
+static LONG v_card_read(struct ZzBuf *in, ULONG len)
+{
+    static UBYTE bounce[NETBUF];
+    ULONG got = 0;
+    LONG r;
+    if (len > in->length)
+        len = in->length;
+    do {
+        ULONG want = len - got < sizeof(bounce) ? len - got : sizeof(bounce);
+        if ((r = v_read(bounce, (LONG)want)) <= 0)
+            break;
+        CopyMem(bounce, (APTR)(in->data + got), (ULONG)r);
+        got += (ULONG)r;
+    } while (got < len && st.nb_pos < st.nb_len);   /* (what is here already, no waiting) */
+    if (got)
+        CacheClearE((APTR)in->data, got, CACRF_ClearD);
+    return got ? (LONG)got : r;
+}
+
 /* The response's status and headers (into hdr): the status, 0 on failure. */
 static LONG read_headers(char *hdr, LONG max)
 {
@@ -2453,7 +2491,7 @@ static ULONG es_pack(volatile UBYTE *out, ULONG max)
     static UBYTE b[ES_CHUNK + 64];
     ULONG o = 0;
     while (!es_ended && o + sizeof(b) <= max) {
-        LONG n = Read(st.fh, b + 64, ES_CHUNK), k = 0, i;
+        LONG n = v_read(b + 64, ES_CHUNK), k = 0, i;
         ULONG scr = (ULONG)((unsigned long long)es_bytes * 90000ULL / 187500ULL), mr = 3750;
         UBYTE h[64];
         if (n < 0) {
@@ -2513,7 +2551,7 @@ static ULONG es_pack(volatile UBYTE *out, ULONG max)
 static LONG ts_read(void *ctx, UBYTE *b, LONG n)
 {
     (void)ctx;
-    return Read(st.fh, b, n);
+    return v_read(b, n);
 }
 
 /* A seek's start, close before its place: the file's offset of the pack
@@ -3414,7 +3452,7 @@ static ULONG sw_read(register struct Hook *h __asm("a0"), register APTR mpv __as
     else if (st.v_ts)
         n = tsp_pack(ts_read, NULL, r->mr_Buffer, (ULONG)r->mr_Length);  /* (packed as read) */
     else
-        n = Read(st.fh, r->mr_Buffer, r->mr_Length);
+        n = v_read(r->mr_Buffer, r->mr_Length);
     sw_tread += time_ticks(&hz) - tk;
     sw_nread++;
     if (n > 0)
@@ -4666,7 +4704,8 @@ static void video_run(void)
                     LONG n = st.v_dvd  ? dvdplay_read(st.v_dvd, in.data, (LONG)in.length)
                              : st.v_ts ? tsp_pack(ts_read, NULL, (UBYTE *)in.data, in.length)
                              : st.v_es ? (LONG)es_pack(in.data, in.length)
-                                     : zz_read(st.fh, &in, in.length);
+                             : st.fh ? zz_read(st.fh, &in, in.length)
+                                     : v_card_read(&in, in.length);
                     if (st.v_es && st.state == ST_FAILED)
                         goto out;
                     if (n < 0) {

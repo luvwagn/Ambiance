@@ -18,11 +18,11 @@
 #include "lshare.h"
 
 const char LibName[] = "horizon.layout";
-const char LibIdString[] = "horizon.layout 1.0 (18.11.2026) Horizon, for Ambiance";
+const char LibIdString[] = "horizon.layout 1.1 (24.11.2026) Horizon, for Ambiance";
 static const char __attribute__((used)) LibVerTag[] =
-    "$VER: horizon.layout 1.0 (18.11.2026) Horizon, for Ambiance";
+    "$VER: horizon.layout 1.1 (24.11.2026) Horizon, for Ambiance";
 const UWORD LibVersion = 1;
-const UWORD LibRevision = 0;
+const UWORD LibRevision = 1;
 
 /* the colours */
 #define C_TOP    0x0B3270UL     /* the gradient: a deep blue */
@@ -1048,8 +1048,13 @@ static void draw_text_body_as(const struct LPage *m, BOOL full)
             text(mx, my + (pm->h - FH) / 2, with, LF_REGULAR, C_SUB, &bg_grad, w / 2);
             mx += tlen(with, LF_REGULAR) + X(10);
             H->image(pm, (WORD)mx, (WORD)my);
-            text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, &bg_grad, 0);
-            text(x, under - fine, "* used under license from Plex", LF_TINY, C_DIM, &bg_grad, w);
+            if (m->plexmark == 2) {     /* Jellyfin: its name, and that this is no official client */
+                text(x, under - fine, H->tr("Ambiance is not an official Jellyfin client: jellyfin.org"),
+                     LF_TINY, C_DIM, &bg_grad, w);
+            } else {
+                text(mx + pm->w + X(2), my, "*", LF_SMALL, C_SUB, &bg_grad, 0);
+                text(x, under - fine, "* used under license from Plex", LF_TINY, C_DIM, &bg_grad, w);
+            }
             under = my - Y(12);
         }
         if (m->picture || m->note) {

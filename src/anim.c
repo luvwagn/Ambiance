@@ -1526,6 +1526,13 @@ static BOOL vi_keys;                /* a video: "i" means it */
 static BOOL vid_menu_keys;
 static BOOL vid_nav_menu;                   /* (in one of its menus, its buttons or not yet) */
 
+static BOOL vid_net;            /* (below: a server's stream) */
+static int vid_nsnd;            /* (below: its sound streams to choose from) */
+static char vid_note[96];       /* shown for the title a while (A: the sound chosen) */
+static ULONG vid_note_until;
+static BOOL vid_note_was;
+static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax);
+
 static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
 {
     static ULONG held_since, held_step;
@@ -1588,6 +1595,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 7;
             else if (vi_keys && code == 0x17 && !r) /* I: a video's information */
                 r = 9;
+            else if (vid_net && vid_nsnd > 1 && code == 0x20 && !r)   /* A: its next sound */
+                r = 18;
             else if (vid_dvd && code == 0x19 && !r)
                 r = 8;
             else if (vid_dvd && dvdplay_is_nav(vid_dvd) && code == 0x37 && !r)    /* M: its menu */
@@ -1617,6 +1626,8 @@ static int input_with(struct Window *win, ULONG *jlast, int (*hit)(WORD, WORD))
                 r = 7;
             else if (vi_keys && (code == 'i' || code == 'I') && !r)
                 r = 9;
+            else if (vid_net && vid_nsnd > 1 && (code == 'a' || code == 'A') && !r)
+                r = 18;                     /* A: its next sound */
             else if (vid_dvd && (code == 'p' || code == 'P') && !r)
                 r = 8;
             else if (vid_dvd && dvdplay_is_nav(vid_dvd) && (code == 'm' || code == 'M') && !r)
@@ -1699,6 +1710,19 @@ static int classic_hit(WORD x, WORD y)
 static int input(struct Window *win, ULONG *jlast)
 {
     return input_with(win, jlast, classic_hit);
+}
+
+/* An MPEG's controls on an AGA screen of its own: as classic_hit, and its
+ * progress line, to seek. */
+static WORD seek_x;             /* (strip_hit's too: below) */
+static int aga_hit(WORD x, WORD y)
+{
+    int b = classic_hit(x, y);
+    if (b == -2 && bar.px1 > bar.px0 + 16 && x >= bar.px0 - 4 && x <= bar.px1 + 4) {
+        seek_x = x;
+        return -3;
+    }
+    return b;
 }
 
 /* 8SVX samples in it: the FORM after its header one (they come first). */
@@ -2090,6 +2114,15 @@ static BOOL strip_tick(struct Gfx *g, BOOL paused, ULONG at, ULONG total, const 
             sf.step_at = now;
         }
     }
+    BOOL note = vid_note_until && now < vid_note_until;
+    if (note != vid_note_was) {
+        vid_note_was = note;
+        sf.drawn = FALSE;                   /* (the title: the note, or back) */
+        if (st_lv)
+            vc_q = ~0UL;
+    }
+    if (note)
+        name = vid_note;
     if (lv > 0 || target > 0) {
         if (!sf.drawn || (!st_lv && at / 1000 != st.sec) || paused != st.paused || mp_volume() != st.vol ||
             ctl_ring() != st.ring || ctl.focus != st.focus || lay.full != st.full ||
@@ -3283,8 +3316,30 @@ restart:
  * pack after it); at the end it loops, or stops there with its controls up
  * (Play from the start, Esc back). */
 static struct VProbe vid;
-static char lay_path[300];      /* its file */
+static char lay_path[600];      /* its file (or a server's URL: vid_net) */
 static ULONG vid_base;          /* where the card was started from (ms) */
+static BOOL vid_net;            /* a server's stream: a seek asks it again from a time */
+static char vid_snd_title[16][48];      /* (their names, the server's) */
+static char vid_session[48];            /* the play session asked for last ("" none) */
+static void (*vid_stop_fn)(const char *session);
+
+/* Who stops a server's conversion when the player is done with it (a
+ * seek, another sound, the end): Jellyfin's DELETE /Videos/ActiveEncodings. */
+void anim_net_on_stop(void (*stop)(const char *session))
+{
+    vid_stop_fn = stop;
+}
+
+static void vid_session_end(void)
+{
+    if (vid_session[0] && vid_stop_fn)
+        vid_stop_fn(vid_session);
+    vid_session[0] = 0;
+}
+static int vid_snd[16], vid_snd_cur;   /* a server's stream's sound streams (its own
+                                         * indices: audioStreamIndex=), the one played */
+static char vid_seek_param[64]; /* ...appended with the time, in 100 ns units; or, with
+                                 * '*'s, appended always, each '*' the time in ms */
 
 static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
 {
@@ -3301,6 +3356,50 @@ static BOOL vid_start(UWORD cpu, ULONG ms, char *err, LONG errmax)
         vid_dvd_fresh = FALSE;
         vid_base = at;
         return st_start_dvd(vid_dvd, (UWORD)mp_volume(), cpu, &vid, err, errmax);
+    }
+    if (vid_net) {
+        /* a server's stream: asked for again from that time (its own
+         * conversion starts there: a byte offset means nothing to it) */
+        static char url[700];
+        amb_strlcpy(url, lay_path, sizeof(url));
+        if (strchr(vid_seek_param, '*')) {
+            /* (Jellyfin: a play session of its own for each time) */
+            char t[16], *o = url + strlen(url), *e = url + sizeof(url) - 1;
+            const char *c, *d;
+            sprintf(t, "%lu", (unsigned long)ms);
+            for (c = vid_seek_param; *c && o < e; c++)
+                if (*c == '*')
+                    for (d = t; *d && o < e; d++)
+                        *o++ = *d;
+                else
+                    *o++ = *c;
+            *o = 0;
+            if (vid_nsnd > 1) {
+                char a[32];
+                sprintf(a, "&audioStreamIndex=%ld", (long)vid_snd[vid_snd_cur]);
+                amb_strlcat(url, a, sizeof(url));
+            }
+            {
+                /* the last session's conversion stopped (st_stop above has
+                 * closed its connection), this one's noted */
+                const char *p = strstr(url, "playSessionId=");
+                LONG n = 0;
+                vid_session_end();
+                if (p) {
+                    p += 14;
+                    while (p[n] && p[n] != '&' && n < (LONG)sizeof(vid_session) - 1)
+                        n++;
+                    memcpy(vid_session, p, n);
+                }
+                vid_session[n] = 0;
+            }
+        } else if (ms && vid_seek_param[0]) {
+            char t[96];
+            sprintf(t, "%s%lu0000", vid_seek_param, (unsigned long)ms);
+            amb_strlcat(url, t, sizeof(url));
+        }
+        vid_base = ms;
+        return st_start_video(url, (UWORD)mp_volume(), cpu, &vid, 0, err, errmax);
     }
     vid_base = at ? ms : 0;
     return st_start_video(lay_path, (UWORD)mp_volume(), cpu, &vid, at, err, errmax);
@@ -4410,6 +4509,8 @@ static void va_bench_run(int mode, const char *path, const char *name, struct Sc
     va_stream_close();
 }
 
+static char aga_title[80];      /* the title while a note shows instead */
+
 static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
                          LONG errmax)
 {
@@ -4542,7 +4643,7 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
                 at = vid.ms ? vid.ms : at;
             }
         }
-        r = input(win, &jlast);
+        r = input_with(win, &jlast, aga_hit);
         if (r == 1)
             break;
         if (r == 2) {
@@ -4561,6 +4662,38 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
             if (!vid_start(cpu, 0, err, errmax))
                 break;
             at = 0;
+            bar_redraw = TRUE;
+        } else if (r == 18) {
+            ended = paused = FALSE;
+            if (!vid_next_sound(cpu, at, err, errmax))
+                break;
+            if (!aga_title[0])
+                amb_strlcpy(aga_title, bar.title, sizeof(aga_title));
+            amb_strlcpy(bar.title, vid_note, sizeof(bar.title));
+            bar_redraw = TRUE;
+        } else if (r == 5 && vid.ms) {
+            /* seek: started again from about there, as on a card's screen */
+            char sm[80];
+            LONG x0 = bar.px0, x1 = bar.px1;
+            ULONG target = (ULONG)((seek_x < x0 ? 0 : seek_x > x1 ? x1 - x0 : seek_x - x0) *
+                                   (ULONG)vid.ms / (ULONG)(x1 - x0 ? x1 - x0 : 1));
+            ended = paused = FALSE;
+            sprintf(sm, "seek to %lu ms", (unsigned long)target);
+            amb_log("video", sm);
+            if (!vid_start(cpu, target, err, errmax)) {
+                sprintf(sm, "the seek failed: on from %lu ms", (unsigned long)at);
+                amb_log("video", sm);
+                err[0] = 0;
+                target = at;
+                if (!vid_start(cpu, target, err, errmax))
+                    break;
+            }
+            at = target;
+            bar_redraw = TRUE;
+        }
+        if (aga_title[0] && time_ms() >= vid_note_until) {
+            amb_strlcpy(bar.title, aga_title, sizeof(bar.title));   /* (the note's time over) */
+            aga_title[0] = 0;
             bar_redraw = TRUE;
         }
         bar.paused = paused;
@@ -4683,6 +4816,9 @@ out:
     return result;
 }
 
+static LONG play_checked(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                         LONG errmax, const char *why);
+
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax)
 {
     const char *why;
@@ -4693,6 +4829,76 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
     video_cpu_only = !g->truecolor;         /* (an AGA screen: the CPU's, drawn here) */
     why = video_check(path, &vid);
     video_cpu_only = FALSE;
+    return play_checked(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax, why);
+}
+
+/* A server's stream's sound streams for the next anim_play_video_net (n
+ * up to 16; cur the one to start with): A goes to the next, the stream
+ * asked for again from where it is. anim_net_sound(): the one played
+ * last. */
+void anim_net_sounds(const int *idx, const char *const *titles, int n, int cur)
+{
+    int i;
+    vid_nsnd = n > 16 ? 16 : n < 0 ? 0 : n;
+    for (i = 0; i < vid_nsnd; i++) {
+        vid_snd[i] = idx[i];
+        amb_strlcpy(vid_snd_title[i], titles && titles[i] ? titles[i] : "", sizeof(vid_snd_title[i]));
+    }
+    vid_snd_cur = cur >= 0 && cur < vid_nsnd ? cur : 0;
+}
+
+int anim_net_sound(void)
+{
+    return vid_snd_cur;
+}
+
+/* A: the next sound stream, from where it is (at ms). */
+static BOOL vid_next_sound(UWORD cpu, ULONG at, char *err, LONG errmax)
+{
+    char m[80];
+    vid_snd_cur = (vid_snd_cur + 1) % vid_nsnd;
+    sprintf(m, "its sound: stream %ld (%ld of %ld), from %lu ms", (long)vid_snd[vid_snd_cur],
+            (long)vid_snd_cur + 1, (long)vid_nsnd, (unsigned long)at);
+    amb_log("video", m);
+    /* shown as the title for 4 s: "(2/5) Dolby Digital - 5.1" (no words of
+     * Ambiance's own: the server's name for it) */
+    sprintf(vid_note, "(%ld/%ld) %s", (long)vid_snd_cur + 1, (long)vid_nsnd,
+            vid_snd_title[vid_snd_cur][0] ? vid_snd_title[vid_snd_cur] : "");
+    vid_note_until = (time_ms() + 4000) | 1;
+    ctl.key = time_ms() ? time_ms() : 1;    /* (the controls up, to show it) */
+    return vid_start(cpu, at, err, errmax);
+}
+
+LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
+                         const char *seek_param, UWORD cpu, char *err, LONG errmax)
+{
+    const char *why;
+    LONG r;
+    err[0] = 0;
+    anim_g = g;
+    if (!g || !g->win)
+        return -1;
+    vid = *v;
+    video_cpu_only = !g->truecolor;
+    why = video_checked(name, &vid);
+    video_cpu_only = FALSE;
+    vid_net = TRUE;
+    amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
+    vid_session[0] = 0;
+    r = play_checked(g, url, name, cpu, err, errmax, why);
+    st_stop();                              /* (its connection closed first) */
+    vid_session_end();
+    vid_net = FALSE;
+    vid_nsnd = 0;
+    vid_note_until = 0;                     /* (a note of A's: not into the next video) */
+    vid_note_was = FALSE;
+    aga_title[0] = 0;
+    return r;
+}
+
+static LONG play_checked(struct Gfx *g, const char *path, const char *name, UWORD cpu, char *err,
+                         LONG errmax, const char *why)
+{
     if (why) {
         amb_strlcpy(err, why, errmax);
         st_mpv_close();
@@ -4705,12 +4911,12 @@ LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG
             st_mpv_close();
             return -1;
         }
-        r = vid_play_aga(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+        r = vid_play_aga(g, path, name, cpu, err, errmax);
         st_mpv_close();
         return r;
     }
     {
-        LONG r = vid_play(g, path, (const char *)FilePart((STRPTR)path), cpu, err, errmax);
+        LONG r = vid_play(g, path, name, cpu, err, errmax);
         st_mpv_close();                     /* (mpegv.library let go after each video) */
         return r;
     }
@@ -5064,6 +5270,10 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
                 sprintf(m, "%s: %s chapter", name, r == 7 ? "next" : "previous");
                 amb_log("dvd", m);
             }
+        } else if (r == 18) {
+            ended = paused = FALSE;
+            if (!vid_next_sound(cpu, at, err, errmax))
+                break;
         } else if (r == 5 && vid.ms) {
             /* seek: the card started again from about there (playing) */
             LONG x0 = st.px0, x1 = st.px1;

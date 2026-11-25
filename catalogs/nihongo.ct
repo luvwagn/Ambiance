@@ -172,6 +172,30 @@ MSG_6C384865
 MSG_7EBB5FFE
 T:Ambiance-runを書けませんでした
 ; Could not write T:Ambiance-run
+MSG_4C50B8D0
+%luトラック
+; %lu track
+MSG_4612A899
+%luトラック
+; %lu tracks
+MSG_7C81E0F2
+%lu項目
+; %lu item
+MSG_01746B13
+%lu項目
+; %lu items
+MSG_439822A9
+サーバーはその名前とパスワードを受け付けませんでした
+; The server did not accept that name and password
+MSG_5A8631EB
+サーバーの応答: %ld
+; The server said %ld
+MSG_7E52AA7E
+サーバーに接続できませんでした
+; Could not reach the server
+MSG_229E5121
+サーバーから予期しない応答がありました
+; The server answered with something unexpected
 MSG_73F99D3C
 ゲーム
 ; Games
@@ -679,6 +703,9 @@ MSG_4C151C1E
 MSG_424097EC
 オン、サーバー未選択
 ; On, no server chosen
+MSG_207A7281
+サインインしていません
+; Not signed in
 MSG_33774386
 自動: %.40s
 ; Automatic: %.40s
@@ -967,6 +994,9 @@ MSG_589D7E42
 MSG_692FB19D
 AmbianceでのPlex
 ; Plex in Ambiance
+MSG_5DB50655
+AmbianceのJellyfin
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King、MITライセンス
 ; (c) 2026 Brian King, under the MIT licence
@@ -1345,6 +1375,111 @@ MSG_4C560A92
 MSG_247B55C3
 接続はこのインターフェースから出ます
 ; Connections go out from this interface
+MSG_3A5C57BD
+メディアサーバー (jellyfin.org)
+; a media server (jellyfin.org)
+MSG_6D7302F2
+サーバー
+; Server
+MSG_7774E024
+このネットワークでサーバーを探す
+; Look for servers on this network
+MSG_56E190E8
+検索中...
+; looking...
+MSG_21F2CA37
+サーバーのアドレスを入力
+; Type a server's address
+MSG_60A63E12
+ユーザー
+; User
+MSG_0B4F3C70
+サインアウト
+; Sign out
+MSG_744BE623
+サインイン
+; Sign in
+MSG_01C0A2B0
+先にサーバーを選んでください
+; choose a server first
+MSG_2DC2A95F
+サインイン中...
+; signing in...
+MSG_7730BC18
+映画
+; Films
+MSG_5B59648A
+画像サイズ
+; Picture size
+MSG_19596FB6
+小: 幅320、MPEG-1 (CPUがデコード)
+; small: 320 wide, MPEG-1 (the CPU decodes)
+MSG_6C2F61C3
+大: 最大720 x 576、MPEG-2 (ZZ9000がデコード)
+; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
+MSG_568457D9
+自動: デコードするものに合わせる
+; automatic: by what decodes it
+MSG_59529DB2
+Jellyfin: %.60sにサインイン (設定 > ネットワーク > Jellyfin)
+; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
+MSG_51FCE0BE
+%.80sのJellyfinの写真
+; Jellyfin photos on %.80s
+MSG_53D9B262
+Jellyfin: %.80s
+; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: キャンセル
+; Return: OK   Esc: cancel
+MSG_1CA86BFC
+Jellyfinサーバーを探しています...
+; Looking for Jellyfin servers...
+MSG_1289C444
+アドレスではありません
+; That is not an address
+MSG_529C37FD
+サーバーのアドレス (名前か数字、8096以外なら:ポート)
+; The server's address (name or numbers, and :port if not 8096)
+MSG_12C8DC90
+%.60sにサインイン中...
+; Signing in to %.60s...
+MSG_2CC30838
+パスワード
+; Password
+MSG_5A6DB215
+ユーザー名
+; User name
+MSG_6EB56B80
+%.40sに%.50sを要求中...
+; Asking %.40s for %.50s...
+MSG_4445C7A1
+%.50sを取得できませんでした: %.100s
+; %.50s could not be fetched: %.100s
+MSG_474FAF4B
+サーバーの応答 %ld
+; the server said %ld
+MSG_20C6E823
+Ambianceが読めるMPEGビデオではありません
+; Not an MPEG video Ambiance can read
+MSG_1422F4A4
+このネットワークで応答したJellyfinサーバーはありません
+; No Jellyfin server answered on this network
+MSG_02EBAE2D
+Jellyfinサーバー: %.60s
+; Jellyfin server: %.60s
+MSG_63D7C7C0
+Jellyfinサーバーが%ld台見つかりました
+; %ld Jellyfin server found
+MSG_0D5ECA51
+Jellyfinサーバーが%ld台見つかりました
+; %ld Jellyfin servers found
+MSG_127811B5
+%.60sに%.40sとしてサインインしました
+; Signed in to %.60s as %.40s
+MSG_4287518C
+%.60sで応答したJellyfinサーバーはありません
+; No Jellyfin server answered at %.60s
 MSG_61C33E78
 スムーズスタイルのファイルを読み込めませんでした
 ; The smooth style's files could not be loaded
@@ -1441,15 +1576,15 @@ plex.tvからサインアウトしました
 MSG_6358253C
 そのライブラリはサーバーにありません: 音楽で一覧を出し直します
 ; That library is gone from the server: Music lists them again
-MSG_229E5121
-サーバーから予期しない応答がありました
-; The server answered with something unexpected
 MSG_49CF76D8
 そこに音楽ライブラリーはありません
 ; No music libraries there
 MSG_3EEA8333
 そこに写真ライブラリーはありません
 ; No photo libraries there
+MSG_7E13ADDC
+サーバーはサインインを求めています: 設定 > ネットワーク > Jellyfin
+; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 サーバーはサインインを求めています: 設定 > ネットワーク > Plex
 ; The server wants you signed in: Settings > Networking > Plex
@@ -1549,6 +1684,21 @@ MSG_2350DA18
 MSG_0F2AADBB
 サウンド: Paula、8ビット
 ; Sound: Paula, 8-bit
+MSG_1CED39E2
+Ambianceはネットワーク上のJellyfinサーバー (jellyfin.org: フリーソフトウェア) から音楽を再生し、写真を表示し、映画を再生します。音楽ライブラリはアーティストとアルバムごとにジャケット付きで一覧表示され、Plexと同じくサーバーが各トラックをこのAmigaで再生できるMP3にします。写真はサーバーが画面の大きさにします。映画はこのAmiga用にMPEGにします: CPUがデコードする幅320ピクセルのMPEG-1、またはZZ9000がデコードするときは最大720 x 576のMPEG-2 (設定 > ネットワーク > Jellyfin > 画像サイズ)。映画は再生しながらサーバーからストリーミングされ、このAmigaには何も保存されません。
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
+MSG_35680109
+Ambianceは主にAI(AnthropicのClaude)で開発され、作者が方向づけとテストを行っています。公式のJellyfinクライアントではありません。
+; Ambiance is developed mainly with AI (Claude, by Anthropic), guided and tested by its author. It is not an official Jellyfin client.
+MSG_2C5335A3
+サーバーを見つける: 設定 > ネットワーク > Jellyfin > このネットワークでサーバーを探す、またはサーバーのアドレスを入力 (例: 192.168.1.10:8096)。
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+サインイン: 設定 > ネットワーク > Jellyfin > サインインでJellyfinユーザーの名前とパスワードを尋ねます。パスワードは一度送るだけで保存しません。このAmiga用のサーバーのトークンはサインアウトまで保存します。サーバーのDashboard > UsersでAmiga専用のユーザーを作るのがおすすめです。
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+%sとしてサインイン中
+; Signed in as %s
 MSG_5353700C
 形式:     %s
 ; Format:   %s
@@ -1912,18 +2062,6 @@ MSG_201D2C97
 MSG_71EDAAEC
 %lu枚の写真
 ; %lu photos
-MSG_7C81E0F2
-%lu項目
-; %lu item
-MSG_01746B13
-%lu項目
-; %lu items
-MSG_4C50B8D0
-%luトラック
-; %lu track
-MSG_4612A899
-%luトラック
-; %lu tracks
 MSG_4E1664E0
 %luアルバム
 ; %lu album
@@ -2080,9 +2218,6 @@ MSG_4E597D1C
 MSG_5E08A9DF
 %sビデオ: ZZ9000はMPEG-1とMPEG-2を再生します
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Ambianceが読めるMPEGビデオではありません
-; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEGビデオにはPicasso96（Picasso96API.library）が必要です
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2206,6 +2341,9 @@ MSG_42B0DEF7
 MSG_070B058B
 対応:
 ; Works with:
+MSG_5B96DB4D
+AmbianceはJellyfinの公式クライアントではありません: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 スクリーンショットを読み込み中...
 ; Loading screenshot...

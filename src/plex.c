@@ -209,6 +209,10 @@ void plex_request(const char *key, char *out, LONG max)
 void plex_request_from(const char *key, LONG start, char *out, LONG max)
 {
     char n[64];
+    if (jf_key(key)) {
+        jf_request(key, start, out, max);   /* (Jellyfin's) */
+        return;
+    }
     amb_strlcpy(out, key, max);
     amb_strlcat(out, strchr(key, '?') ? "&" : "?", max);
     amb_strlcat(out, "X-Plex-Product=Ambiance&X-Plex-Version=" AMB_VERSION
@@ -229,6 +233,33 @@ void plex_request_from(const char *key, LONG start, char *out, LONG max)
          * reviews (over 1.5 MB for 900 artists, seconds to read on a
          * 68030); the one shown is asked for its own (plex_summary) */
         amb_strlcat(out, "&excludeFields=summary", max);
+}
+
+/* A list job for key, on its server (Plex's, or Jellyfin's: '~'): who to
+ * ask, what, from entry start on, and who is asking. */
+void plex_job(struct NetJob *j, const char *key, LONG start)
+{
+    if (jf_key(key)) {
+        jf_job(j, key, start);
+        return;
+    }
+    amb_strlcpy(j->host, plex.host, sizeof(j->host));
+    j->port = plex.port;
+    plex_request_from(key, start, j->path, sizeof(j->path));
+}
+
+/* key's server (a list's, a picture's) is chosen. */
+BOOL plex_server_for(const char *key)
+{
+    return jf_key(key) ? jf.host[0] != 0 : plex.host[0] != 0;
+}
+
+/* ...and its name, as Ambiance shows it. */
+const char *plex_server_name(const char *key)
+{
+    if (jf_key(key))
+        return jf.name[0] ? jf.name : jf.host;
+    return plex.name[0] ? plex.name : plex.host;
 }
 
 /* The music library Music opens on (key; count: the server's music
@@ -337,6 +368,10 @@ void plex_track_url(const struct Item *it, UWORD cpu, ULONG from_ms, char *out, 
     int tier = plex.mhi || plex.mp3_card ? 3 : plex_tier();  /* MHI, the ZZ9000: what they play */
     BOOL mono = tier == 0;
     (void)cpu;
+    if (it->path && jf_key(it->path)) {
+        jf_track_url(it, plex_converts(it), tier, from_ms, out, max);    /* (Jellyfin's) */
+        return;
+    }
     sprintf(port, ":%lu", (unsigned long)plex.port);
     amb_strlcpy(out, "http://", max);
     amb_strlcat(out, plex.host, max);
@@ -721,6 +756,8 @@ static int element(void *ctx, const char *name, char **a, int n, int depth)
 LONG plex_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total)
 {
     static struct fill x;               /* static: too big for the stack */
+    if (jf_key(key))
+        return jf_fill(key, body, len, l, total);  /* (Jellyfin's JSON) */
     memset(&x, 0, sizeof(x));
     x.l = l;
     x.base = key;
@@ -876,6 +913,14 @@ BOOL plex_art(const char *thumb, WORD w, WORD h, char *req, LONG rmax, char *fil
     jpg = TRUE;
     plex_art_file(thumb, w, h, file);
     (void)fmax;
+    if (jf_key(thumb)) {
+        jf_art_request(thumb, w, h, req, rmax);     /* (Jellyfin's: scaled by the server) */
+        if ((l = Lock((CONST_STRPTR)file, SHARED_LOCK))) {
+            UnLock(l);
+            return TRUE;
+        }
+        return FALSE;
+    }
     url_encode(thumb, enc, sizeof(enc));
     /* minSize=0: within w x h, so never bigger than it is shown (a tall
      * cover came 160 x 279, read and averaged down to 91 x 160) */

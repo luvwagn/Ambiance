@@ -443,6 +443,23 @@ def c_bytes(name, data, per=24):
     return f"const UBYTE {name}[] = {{\n" + "\n".join(lines) + "\n};\n"
 
 
+# ------------------------------------------------------------ Jellyfin
+# Not Jellyfin's logo (third parties keep to their own): its name in
+# Ambiance's Rubik Bold, as coverage; drawn in Jellyfin's gradient
+# (#AA5CC3 to #00A4DC, free to use) by the host, for "Works with Jellyfin".
+def jf_word_smooth(ttf, height=48):
+    from PIL import ImageFont
+    big = height * 8
+    font = ImageFont.truetype(ttf, big)
+    box = font.getbbox("Jellyfin")
+    im = Image.new("L", (box[2] - box[0] + 8, box[3] - box[1] + 8), 0)
+    ImageDraw.Draw(im).text((4 - box[0], 4 - box[1]), "Jellyfin", font=font, fill=255)
+    im = im.crop(im.getbbox())
+    w = round(im.width * height / im.height)
+    f = im.resize((w, height), Image.BOX).load()
+    return w, height, [f[x, y] for y in range(height) for x in range(w)]
+
+
 def main():
     ttf, out = sys.argv[1], sys.argv[2]
     lw, lh, lo = pixel_logo()
@@ -465,6 +482,11 @@ def main():
                  " * coverage 0-15 (high nibble), the yellow chevron's (low) */\n")
         fh.write(f"const UWORD plex_hi_w = {sw}, plex_hi_h = {sh};\n\n")
         fh.write(c_bytes("plex_hi", sl))
+        jw, jh, jl = jf_word_smooth(ttf)
+        fh.write("\n/* \"Jellyfin\" in Rubik Bold as coverage (0-255), for the layouts'\n"
+                 " * \"Works with Jellyfin\" (in Jellyfin's gradient; not its logo) */\n")
+        fh.write(f"const UWORD jf_hi_w = {jw}, jf_hi_h = {jh};\n\n")
+        fh.write(c_bytes("jf_hi", jl))
         fh.write("\nconst UWORD icons16[][16] = {\n")
         for rows in icons:
             fh.write("    { " + ", ".join(f"0x{v:04X}" for v in rows) + " },\n")

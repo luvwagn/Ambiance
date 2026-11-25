@@ -1593,6 +1593,16 @@ static void draw_plexmark(void)
     const char *with = _("Works with:");
     gfx_text(&g, x, y + (plex_lo_h * g.kint - g.font_h) / 2, with, PEN_DIM, PEN_BG, textbox_w(), TS_BODY);
     x += gfx_textlen(&g, with, TS_BODY) + U(6);
+    if (cur() && cur()->plexmark == 2) {
+        /* Jellyfin: its name (third parties keep to their own logos), and
+         * that this is no official client */
+        gfx_text(&g, x, y + (plex_lo_h * g.kint - g.font_h) / 2, "Jellyfin", PEN_TEXT, PEN_BG,
+                 textbox_w(), TS_BOLD);
+        gfx_text(&g, g.pane_x, y + plex_lo_h * g.kint + U(3),
+                 _("Ambiance is not an official Jellyfin client: jellyfin.org"), PEN_FAINT, PEN_BG,
+                 textbox_w(), g.sm ? SM_TINY : TS_BODY);
+        return;
+    }
     draw_plex_logo(x, y);
     w = plex_lo_w * g.kint;
     gfx_text(&g, x + w + U(1), y, "*", PEN_DIM, PEN_BG, U(10), TS_BODY);

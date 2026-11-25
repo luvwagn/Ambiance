@@ -172,6 +172,30 @@ Tiedostoa ei ole (skannaa uudelleen iGamessa)
 MSG_7EBB5FFE
 T:Ambiance-run-tiedostoa ei voitu kirjoittaa
 ; Could not write T:Ambiance-run
+MSG_4C50B8D0
+%lu kappale
+; %lu track
+MSG_4612A899
+%lu kappaletta
+; %lu tracks
+MSG_7C81E0F2
+%lu kohde
+; %lu item
+MSG_01746B13
+%lu kohdetta
+; %lu items
+MSG_439822A9
+Palvelin ei hyväksynyt nimeä ja salasanaa
+; The server did not accept that name and password
+MSG_5A8631EB
+Palvelin vastasi %ld
+; The server said %ld
+MSG_7E52AA7E
+Palvelimeen ei saatu yhteyttä
+; Could not reach the server
+MSG_229E5121
+Palvelin vastasi jotain odottamatonta
+; The server answered with something unexpected
 MSG_73F99D3C
 Pelit
 ; Games
@@ -679,6 +703,9 @@ asemat %s asti
 MSG_424097EC
 Päällä, palvelinta ei valittu
 ; On, no server chosen
+MSG_207A7281
+Ei kirjautunut
+; Not signed in
 MSG_33774386
 Automaattinen: %.40s
 ; Automatic: %.40s
@@ -967,6 +994,9 @@ Järjestelmätiedot
 MSG_692FB19D
 Plex Ambiance:ssä
 ; Plex in Ambiance
+MSG_5DB50655
+Jellyfin Ambiancessa
+; Jellyfin in Ambiance
 MSG_718F9B3E
 (c) 2026 Brian King, MIT-lisenssillä
 ; (c) 2026 Brian King, under the MIT licence
@@ -1345,6 +1375,111 @@ Yhteydet: pinon valitsema liitäntä
 MSG_247B55C3
 Yhteydet lähtevät tästä liitännästä
 ; Connections go out from this interface
+MSG_3A5C57BD
+mediapalvelin (jellyfin.org)
+; a media server (jellyfin.org)
+MSG_6D7302F2
+Palvelin
+; Server
+MSG_7774E024
+Etsi palvelimia tästä verkosta
+; Look for servers on this network
+MSG_56E190E8
+etsitään...
+; looking...
+MSG_21F2CA37
+Kirjoita palvelimen osoite
+; Type a server's address
+MSG_60A63E12
+Käyttäjä
+; User
+MSG_0B4F3C70
+Kirjaudu ulos
+; Sign out
+MSG_744BE623
+Kirjaudu sisään
+; Sign in
+MSG_01C0A2B0
+valitse ensin palvelin
+; choose a server first
+MSG_2DC2A95F
+kirjaudutaan...
+; signing in...
+MSG_7730BC18
+Elokuvat
+; Films
+MSG_5B59648A
+Kuvan koko
+; Picture size
+MSG_19596FB6
+pieni: 320 leveä, MPEG-1 (suoritin purkaa)
+; small: 320 wide, MPEG-1 (the CPU decodes)
+MSG_6C2F61C3
+suuri: enintään 720 x 576, MPEG-2 (ZZ9000 purkaa)
+; large: up to 720 x 576, MPEG-2 (the ZZ9000 decodes)
+MSG_568457D9
+automaattinen: purkajan mukaan
+; automatic: by what decodes it
+MSG_59529DB2
+Jellyfin: kirjaudu palvelimelle %.60s (Asetukset > Verkko > Jellyfin)
+; Jellyfin: sign in to %.60s (Settings > Networking > Jellyfin)
+MSG_51FCE0BE
+Jellyfin-kuvat palvelimella %.80s
+; Jellyfin photos on %.80s
+MSG_53D9B262
+Jellyfin: %.80s
+; Jellyfin: %.80s
+MSG_2EDB4C7E
+Return: OK   Esc: peru
+; Return: OK   Esc: cancel
+MSG_1CA86BFC
+Etsitään Jellyfin-palvelimia...
+; Looking for Jellyfin servers...
+MSG_1289C444
+Se ei ole osoite
+; That is not an address
+MSG_529C37FD
+Palvelimen osoite (nimi tai numerot, ja :portti jos ei 8096)
+; The server's address (name or numbers, and :port if not 8096)
+MSG_12C8DC90
+Kirjaudutaan palvelimelle %.60s...
+; Signing in to %.60s...
+MSG_2CC30838
+Salasana
+; Password
+MSG_5A6DB215
+Käyttäjänimi
+; User name
+MSG_6EB56B80
+Pyydetään palvelimelta %.40s: %.50s...
+; Asking %.40s for %.50s...
+MSG_4445C7A1
+%.50s ei saatu haettua: %.100s
+; %.50s could not be fetched: %.100s
+MSG_474FAF4B
+palvelin vastasi %ld
+; the server said %ld
+MSG_20C6E823
+Ei MPEG-videota, jota Ambiance osaa lukea
+; Not an MPEG video Ambiance can read
+MSG_1422F4A4
+Mikään Jellyfin-palvelin ei vastannut tässä verkossa
+; No Jellyfin server answered on this network
+MSG_02EBAE2D
+Jellyfin-palvelin: %.60s
+; Jellyfin server: %.60s
+MSG_63D7C7C0
+%ld Jellyfin-palvelin löytyi
+; %ld Jellyfin server found
+MSG_0D5ECA51
+%ld Jellyfin-palvelinta löytyi
+; %ld Jellyfin servers found
+MSG_127811B5
+Kirjauduttu palvelimelle %.60s nimellä %.40s
+; Signed in to %.60s as %.40s
+MSG_4287518C
+Mikään Jellyfin-palvelin ei vastannut osoitteessa %.60s
+; No Jellyfin server answered at %.60s
 MSG_61C33E78
 Pehmeän tyylin tiedostoja ei voitu ladata
 ; The smooth style's files could not be loaded
@@ -1441,15 +1576,15 @@ Kirjauduttu ulos plex.tv:stä
 MSG_6358253C
 Kirjastoa ei enää ole palvelimella: Musiikki luettelee ne uudelleen
 ; That library is gone from the server: Music lists them again
-MSG_229E5121
-Palvelin vastasi jotain odottamatonta
-; The server answered with something unexpected
 MSG_49CF76D8
 Siellä ei ole musiikkikirjastoja
 ; No music libraries there
 MSG_3EEA8333
 Siellä ei ole kuvakirjastoja
 ; No photo libraries there
+MSG_7E13ADDC
+Palvelin haluaa kirjautumisen: Asetukset > Verkko > Jellyfin
+; The server wants you signed in: Settings > Networking > Jellyfin
 MSG_73606314
 Palvelin haluaa kirjautumisen: Asetukset > Verkko > Plex
 ; The server wants you signed in: Settings > Networking > Plex
@@ -1549,6 +1684,21 @@ MSG_2350DA18
 MSG_0F2AADBB
 Ääni: Paula, 8 bittiä
 ; Sound: Paula, 8-bit
+MSG_1CED39E2
+Ambiance soittaa musiikkia, näyttää kuvia ja toistaa elokuvia verkkosi Jellyfin-palvelimelta (jellyfin.org: vapaa ohjelmisto). Sen musiikkikirjastot näkyvät esittäjittäin ja albumeittain kansikuvineen, ja palvelin tekee jokaisesta kappaleesta MP3:n, jota tämä Amiga voi soittaa, kuten Plexissä. Palvelin tekee kuvista näytön kokoisia. Elokuvista se tekee tälle Amigalle MPEG:tä: 320 pikseliä leveää MPEG-1:tä suorittimen purettavaksi, tai enintään 720 x 576 MPEG-2:ta, kun ZZ9000 purkaa (Asetukset > Verkko > Jellyfin > Kuvan koko). Elokuvat suoratoistetaan palvelimelta toiston aikana: tälle Amigalle ei tallenneta mitään.
+; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
+MSG_35680109
+Ambiance kehitetään pääosin tekoälyllä (Claude, Anthropicilta), tekijänsä ohjaamana ja testaamana. Se ei ole virallinen Jellyfin-asiakasohjelma.
+; Ambiance is developed mainly with AI (Claude, by Anthropic), guided and tested by its author. It is not an official Jellyfin client.
+MSG_2C5335A3
+Palvelimen löytäminen: Asetukset > Verkko > Jellyfin > Etsi palvelimia tästä verkosta, tai Kirjoita palvelimen osoite (kuten 192.168.1.10:8096).
+; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
+MSG_1AAD218A
+Kirjautuminen: Asetukset > Verkko > Jellyfin > Kirjaudu sisään kysyy Jellyfin-käyttäjän nimeä ja salasanaa. Salasana lähetetään kerran eikä sitä tallenneta; palvelimen tunniste tälle Amigalle tallennetaan, kunnes kirjaudut ulos. Amigalle oma käyttäjä palvelimen kohdassa Dashboard > Users on hyvä ajatus.
+; Signing in: Settings > Networking > Jellyfin > Sign in asks for a Jellyfin user's name and password. The password is sent once and not kept; the server's token for this Amiga is kept, until Sign out. A user of its own for the Amiga, in the server's Dashboard > Users, is a good idea.
+MSG_2CC929F0
+Kirjauduttu nimellä %s
+; Signed in as %s
 MSG_5353700C
 Muoto:    %s
 ; Format:   %s
@@ -1912,18 +2062,6 @@ MSG_201D2C97
 MSG_71EDAAEC
 %lu kuvaa
 ; %lu photos
-MSG_7C81E0F2
-%lu kohde
-; %lu item
-MSG_01746B13
-%lu kohdetta
-; %lu items
-MSG_4C50B8D0
-%lu kappale
-; %lu track
-MSG_4612A899
-%lu kappaletta
-; %lu tracks
 MSG_4E1664E0
 %lu albumi
 ; %lu album
@@ -2080,9 +2218,6 @@ MSG_4E597D1C
 MSG_5E08A9DF
 %s-video: ZZ9000 toistaa MPEG-1:tä ja MPEG-2:ta
 ; %s video: the ZZ9000 plays MPEG-1 and MPEG-2
-MSG_20C6E823
-Ei MPEG-videota, jota Ambiance osaa lukea
-; Not an MPEG video Ambiance can read
 MSG_5EF81658
 MPEG-video vaatii Picasso96:n (Picasso96API.library)
 ; MPEG video needs Picasso96 (Picasso96API.library)
@@ -2206,6 +2341,9 @@ MSG_42B0DEF7
 MSG_070B058B
 Yhteensopiva:
 ; Works with:
+MSG_5B96DB4D
+Ambiance ei ole virallinen Jellyfin-sovellus: jellyfin.org
+; Ambiance is not an official Jellyfin client: jellyfin.org
 MSG_0ECC2045
 Ladataan kuvakaappausta...
 ; Loading screenshot...

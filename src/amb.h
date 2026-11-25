@@ -363,6 +363,16 @@ LONG anim_play(struct Gfx *g, const char *path, BOOL ahi, BOOL classic, char *er
 /* An MPEG video played by the ZZ9000 the same way, its overlay the picture
  * (Ambiance's RTG screen or window on the card) */
 LONG anim_play_video(struct Gfx *g, const char *path, UWORD cpu, char *err, LONG errmax);
+struct VProbe;
+/* An MPEG stream from a server (url), probed from its first bytes (v; its
+ * length in v->ms if known), played as it comes: a seek asks the server
+ * again from that time (seek_param and the time in 100 ns units appended,
+ * "&startTimeTicks=", Jellyfin's) */
+void anim_net_on_stop(void (*stop)(const char *session));
+void anim_net_sounds(const int *idx, const char *const *titles, int n, int cur);
+int anim_net_sound(void);
+LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const struct VProbe *v,
+                         const char *seek_param, UWORD cpu, char *err, LONG errmax);
 /* A DVD's film: the disc in volume vol, or (image) in the image file vol */
 LONG anim_play_dvd(struct Gfx *g, const char *vol, BOOL image, UWORD cpu, char *err, LONG errmax);
 BOOL anim_has_sound(const char *path);  /* 8SVX samples in it */
@@ -1095,6 +1105,9 @@ extern const UBYTE plex_lo[];          /* Plex's logo in pens (255: none), for C
 extern const UWORD plex_lo_w, plex_lo_h;
 extern const UBYTE plex_hi[];          /* ...as coverage (ink << 4 | yellow), for the layouts */
 extern const UWORD plex_hi_w, plex_hi_h;
+extern const UBYTE jf_hi[];            /* "Jellyfin" (not its logo) as coverage 0-255 */
+extern const UWORD jf_hi_w, jf_hi_h;
+extern UBYTE lv_mark_kind;             /* the text page's mark: 1 Plex's, 2 Jellyfin's */
 extern const UWORD icons16[][16];   /* menu icons, hand-drawn */
 extern const UWORD marks16[][11];   /* list row markers (MARK_ARROW..) */
 #define MARK_SIZE 11                /* marker icons are 11 x 11 design pixels */
@@ -1208,8 +1221,13 @@ struct NetJob {
     UBYTE busy, done, quit, orphan;
     UBYTE gdm;                  /* not a request: Plex servers looked for on the network */
     UBYTE tls;                  /* HTTPS (port 0: 443), AmiSSL's certificate check */
-    UBYTE post;                 /* POST, with no body, rather than GET */
+    UBYTE post;                 /* POST, with no body (or send's), rather than GET; 2 DELETE */
+    const char *send;           /* a POST's body (JSON), the caller's while the job is out */
+    UBYTE jf;                   /* a Jellyfin job of the UI's own (JFJ_*): not a list */
+    UBYTE jfdisc;               /* not a request: Jellyfin servers looked for on the network */
     UBYTE wait_s;               /* seconds without a byte before giving up (0: 20) */
+    ULONG upto;                 /* not 0: read only so many bytes (headers and all) and
+                                 * stop there, a success (a stream's start, probed) */
     ULONG t_sub, t_start;       /* time_ms when sent, and when the process began it (log) */
     char extra[320];            /* more request headers ("Name: value\r\n" each) */
     UWORD port;                 /* 0: 80 */
@@ -1286,6 +1304,51 @@ struct PlexConf {
     UWORD libraries;            /*   of how many on the server */
 };
 extern struct PlexConf plex;
+
+/* jellyfin.c: a Jellyfin server (its keys begin with '~': plex.c hands
+ * them there; the rows are Plex's kinds, with Plex's fields) */
+struct JfConf {
+    BOOL on;                    /* Settings > Networking > Jellyfin */
+    char host[64];              /* "" none chosen */
+    UWORD port;
+    char name[64], sid[40];     /* the server's name and id */
+    char user[64], uid[40];     /* signed in as ("" not) */
+    char token[80], dev[40];    /* the sign-in's token; this Amiga's device id */
+    UBYTE vsize;                /* films: 0 by the decoder, 1 small (CPU), 2 large (ZZ9000) */
+};
+enum { JFJ_SIGNIN = 1, JFJ_SIGNOUT, JFJ_FIND, JFJ_INFO, JFJ_VIDEO, JFJ_STREAMS };
+extern struct JfConf jf;
+void jf_load(void);
+void jf_set_on(BOOL on);
+void jf_set_server(const char *address, const char *name, const char *sid);
+void jf_signed_in(const char *user, const char *uid, const char *token);
+void jf_set_vsize(int v);
+BOOL jf_ready(void);            /* on, a server, signed in */
+static inline BOOL jf_key(const char *k) { return k && k[0] == '~'; }
+void jf_headers(char *out, LONG max);
+const char *jf_cpu_name(void);
+void jf_request(const char *key, LONG start, char *out, LONG max);
+void jf_job(struct NetJob *j, const char *key, LONG start);
+void jf_menu(const char *key, struct ItemList *l);
+BOOL jf_is_menu(const char *key);
+LONG jf_fill(const char *key, UBYTE *body, ULONG len, struct ItemList *l, LONG *total);
+void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, char *out, LONG max);
+void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
+void jf_streams_request(const char *key, char *out, LONG max);
+int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *n);
+int jf_sound_kept(const char *key, const int *list, int n);
+void jf_sound_keep(const char *key, int index);
+void jf_video_seek(char *out, LONG max);
+void jf_stop_request(const char *session, char *out, LONG max);
+void jf_art_request(const char *thumb, WORD w, WORD h, char *req, LONG max);
+void jf_signin_job(struct NetJob *j, const char *user, const char *password, char *body, LONG max);
+BOOL jf_signin_came(struct NetJob *j, const char *user, char *why, LONG max);
+void jf_signout_job(struct NetJob *j);
+/* plex.c, for either server: a list job for key (host, port, path,
+ * headers), and whether key's server is known */
+void plex_job(struct NetJob *j, const char *key, LONG start);
+BOOL plex_server_for(const char *key);
+const char *plex_server_name(const char *key);
 void plex_load(UWORD cpu);
 void plex_set_server(const char *host, UWORD port, const char *name);
 void plex_request(const char *key, char *out, LONG max);

@@ -45,7 +45,7 @@ LIBS    = -lamiga -lm
 libver = $(shell sed -n 's/^const UWORD LibVersion = \([0-9]*\);.*/\1/p' $(1))
 
 SRCS = src/main.c src/mpgthumb.c src/details.c src/lvhost.c src/gfx.c src/view.c src/thumb.c src/ilbm.c src/pics.c src/loader.c src/dirscan.c src/index.c src/smooth.c src/textbox.c src/mods.c src/modplay.c src/ptcore.c src/ptmix.c src/medtime.c src/tls.c src/unpack.c src/eagle.c src/mixplay.c src/ags.c src/caps.c src/art.c src/util.c \
-       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
+       src/log.c src/debug.c src/net.c src/radio.c src/radiocsv.c src/stream.c src/plex.c src/plexxml.c src/jellyfin.c src/jfjson.c src/songinfo.c src/nfo.c src/cjk.c src/lang.c \
        src/vis.c src/visflow.c src/amphost.c src/vistab.c src/cpucheck.c src/anim.c src/animdec.c src/animdraw.c src/beets.c \
        src/jpgthumb.c src/shrink.c src/iconify.c src/zz9k.c src/vprobe.c src/video.c src/tspack.c \
        src/dvdplay.c src/dvddisc.c src/dvdiso.c src/glyph.c src/ownlib.c src/spu.c src/igame.c src/igamecsv.c src/unarc.c src/whdinst.c src/lkcore.c src/lkit.c src/lhost.c src/copper.c src/classic/classic.c \
@@ -402,7 +402,7 @@ build/ambbench: tools/ambbench/ambbench.c tools/zzprobe/stackcall.h build/c2p68k
 		-Iextras/mpegv/include -s -o $@ $< build/c2p68k.o -lamiga
 ambbench: build/ambbench
 
-test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
+test: check-formats check-syscalls check-libs test-spu build/test_ags build/test_igame build/test_whdinst build/test_songs build/test_fft test-replayer test-radio test-igame test-plex test-jf test-lkit test-showcase test-horizon test-layout test-animdraw test-c2p test-shrink test-beets test-dvd-host test-dvdiso test-tspack test-dvd test-ac3 test-mpga test-mpegv
 	@# git keeps no empty folders: the fixtures' own (empty AGS menus) made again
 	@while IFS= read -r d; do mkdir -p "$$d"; done < tests/fixtures/empty-dirs.txt
 	@rm -rf build/vt && mkdir -p build/vt
@@ -680,6 +680,15 @@ build/plex_host: tests/plex_host.c src/plexxml.c src/plexxml.h
 
 test-plex: build/plex_host
 	@build/plex_host > build/test-plex.txt && echo "  CHECK plex XML ok" || (cat build/test-plex.txt; exit 1)
+
+# a Jellyfin server's JSON (jfjson.c): Brian's server's saved answers,
+# against Python's reading of them (tests/fixtures/jellyfin/expected.py)
+build/jf_host: tests/jf_host.c src/jfjson.c src/jfjson.h
+	@mkdir -p build
+	@$(HOSTCC) -O2 -Wall -o $@ tests/jf_host.c src/jfjson.c
+
+test-jf: build/jf_host
+	@build/jf_host > build/test-jf.txt && echo "  CHECK Jellyfin JSON ok" || (cat build/test-jf.txt; exit 1)
 
 test-radio: build/radio_host
 	@build/radio_host > build/test-radio.txt && echo "  CHECK radio CSV ok" || (cat build/test-radio.txt; exit 1)
