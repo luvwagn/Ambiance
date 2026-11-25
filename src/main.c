@@ -12183,6 +12183,9 @@ static void jf_help(void)
                    "(Settings > Networking > Jellyfin > Picture size). Films stream from the "
                    "server as they play: nothing is kept on this Amiga."));
     text_line(p, "");
+    text_para(p, _("Ambiance is developed mainly with AI (Claude, by Anthropic), guided and "
+                   "tested by its author. It is not an official Jellyfin client."));
+    text_line(p, "");
     text_para(p, _("Finding a server: Settings > Networking > Jellyfin > Look for servers on "
                    "this network, or Type a server's address (as 192.168.1.10:8096)."));
     text_line(p, "");

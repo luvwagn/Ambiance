@@ -1687,6 +1687,9 @@ MSG_0F2AADBB
 MSG_1CED39E2
 Το Ambiance παίζει μουσική, δείχνει φωτογραφίες και παίζει ταινίες από έναν server Jellyfin στο δίκτυό σας (jellyfin.org: ελεύθερο λογισμικό). Οι μουσικές του βιβλιοθήκες εμφανίζονται ανά καλλιτέχνη και άλμπουμ με τα εξώφυλλά τους, και ο server κάνει κάθε κομμάτι MP3 που μπορεί να παίξει αυτό το Amiga, όπως με το Plex. Ο server φέρνει τις φωτογραφίες στο μέγεθος της οθόνης. Τις ταινίες τις κάνει MPEG για αυτό το Amiga: MPEG-1 πλάτους 320 pixel για αποκωδικοποίηση από την CPU, ή MPEG-2 έως 720 x 576 όταν αποκωδικοποιεί η ZZ9000 (Ρυθμίσεις > Δίκτυο > Jellyfin > Μέγεθος εικόνας). Οι ταινίες έρχονται ως ροή από τον server όσο παίζουν: τίποτα δεν φυλάσσεται σε αυτό το Amiga.
 ; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
+MSG_35680109
+Το Ambiance αναπτύσσεται κυρίως με τεχνητή νοημοσύνη (Claude, της Anthropic), με καθοδήγηση και δοκιμές από τον δημιουργό του. Δεν είναι επίσημος client του Jellyfin.
+; Ambiance is developed mainly with AI (Claude, by Anthropic), guided and tested by its author. It is not an official Jellyfin client.
 MSG_2C5335A3
 Εύρεση server: Ρυθμίσεις > Δίκτυο > Jellyfin > Αναζήτηση server σε αυτό το δίκτυο, ή Πληκτρολόγηση διεύθυνσης server (π.χ. 192.168.1.10:8096).
 ; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).

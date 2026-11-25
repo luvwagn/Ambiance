@@ -1687,6 +1687,9 @@ Ton: Paula, 8 Bit
 MSG_1CED39E2
 Ambiance spielt Musik, zeigt Fotos und spielt Filme von einem Jellyfin-Server in Ihrem Netzwerk (jellyfin.org: freie Software). Seine Musikbibliotheken erscheinen nach Interpret und Album mit ihren Covern, und der Server macht jeden Titel zu einem MP3, das dieser Amiga abspielen kann, wie bei Plex. Seine Fotos bringt der Server auf die Größe des Bildschirms. Seine Filme macht er für diesen Amiga zu MPEG: MPEG-1 mit 320 Pixeln Breite, das die CPU dekodiert, oder MPEG-2 bis 720 x 576, wenn die ZZ9000 dekodiert (Einstellungen > Netzwerk > Jellyfin > Bildgröße). Filme kommen als Stream vom Server, während sie laufen: auf diesem Amiga wird nichts gespeichert.
 ; Ambiance plays music, shows photos and plays films from a Jellyfin server on your network (jellyfin.org: free software). Its music libraries are listed by artist and album with their covers, and the server makes each track an MP3 this Amiga can play, as for Plex. Its photos are made the size of the screen by the server. Its films are made MPEG for this Amiga: MPEG-1 320 pixels wide for the CPU to decode, or MPEG-2 up to 720 x 576 when the ZZ9000 decodes (Settings > Networking > Jellyfin > Picture size). Films stream from the server as they play: nothing is kept on this Amiga.
+MSG_35680109
+Ambiance wird hauptsächlich mit KI entwickelt (Claude, von Anthropic), gelenkt und getestet von seinem Autor. Es ist kein offizieller Jellyfin-Client.
+; Ambiance is developed mainly with AI (Claude, by Anthropic), guided and tested by its author. It is not an official Jellyfin client.
 MSG_2C5335A3
 Einen Server finden: Einstellungen > Netzwerk > Jellyfin > Server in diesem Netzwerk suchen, oder Adresse eines Servers eingeben (etwa 192.168.1.10:8096).
 ; Finding a server: Settings > Networking > Jellyfin > Look for servers on this network, or Type a server's address (as 192.168.1.10:8096).
