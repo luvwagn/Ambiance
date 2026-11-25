@@ -370,6 +370,9 @@ struct VProbe;
  * again from that time (seek_param and the time in 100 ns units appended,
  * "&startTimeTicks=", Jellyfin's) */
 void anim_net_on_stop(void (*stop)(const char *session));
+void anim_net_on_relevel(BOOL (*fn)(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax,
+                                     struct VProbe *v));
+void anim_net_next_sizes(UWORD dw, UWORD dh, UWORD uw, UWORD uh);
 void anim_net_adapt(ULONG from_ms, int can);
 int anim_net_relevel(ULONG *ms);
 void anim_net_sounds(const int *idx, const char *const *titles, int n, int cur);
@@ -1260,6 +1263,7 @@ BOOL net_start(void);
 void net_stop(void);            /* waits for jobs out (cancel them first) */
 void net_submit(struct NetJob *j);
 struct NetJob *net_collect(void);
+BOOL net_wait(struct NetJob *j, ULONG timeout_ms);
 void net_cancel(struct NetJob *j);
 /* The network interfaces (Settings > Networking): the stack's own list
  * (Roadshow's interface API, else SIOCGIFCONF), without loopback. */
@@ -1340,6 +1344,7 @@ int jf_film_plan(BOOL zz, int tier, int *top, int *bottom);
 void jf_film_keep(BOOL zz, int tier, int level);
 void jf_level_text(int level, BOOL zz, char *out);
 ULONG jf_level_area(int level);
+void jf_level_dims(int level, UWORD *w, UWORD *h);
 void jf_video_url(const char *key, int level, BOOL zz, int audio, ULONG from_ms, char *out, LONG max);
 void jf_streams_request(const char *key, char *out, LONG max);
 int jf_pick_audio(char *body, ULONG len, char *why, LONG max, int *list, char (*titles)[48], int *n);

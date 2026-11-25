@@ -633,6 +633,14 @@ void jf_film_keep(BOOL zz, int tier, int level)
     set_var(LEVEL_VAR, v);
 }
 
+/* A level's largest width and height. */
+void jf_level_dims(int level, UWORD *w, UWORD *h)
+{
+    const struct JfLevel *l = &ladder[level < 0 ? 0 : level >= LEVELS ? LEVELS - 1 : level];
+    *w = l->w;
+    *h = l->h;
+}
+
 /* A level's picture area (its width x height at the most). */
 ULONG jf_level_area(int level)
 {

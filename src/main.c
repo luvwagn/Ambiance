@@ -10238,6 +10238,95 @@ static void jf_stop_session(const char *session)
     net_submit(j);
 }
 
+/* The size it goes to from jf_fj_level (dir -1 smaller, 1 larger): a
+ * size it went down from is not gone back to (its new top); kept as this
+ * kind of decoder's start. */
+static void jf_film_step(int dir, ULONG at)
+{
+    if (dir < 0)
+        jf_fj_top = jf_fj_level + 1 <= jf_fj_bottom ? jf_fj_level + 1 : jf_fj_bottom;
+    jf_fj_level += dir < 0 ? 1 : -1;
+    if (jf_fj_level < jf_fj_top)
+        jf_fj_level = jf_fj_top;
+    if (jf_fj_level > jf_fj_bottom)
+        jf_fj_level = jf_fj_bottom;
+    jf_film_keep(jf_fj_zz, jf_fj_tier, jf_fj_level);
+    jf_fj_from = at;
+}
+
+/* The sizes either side of where it plays, for the player's note. */
+static void jf_film_sides(void)
+{
+    UWORD dw = 0, dh = 0, uw = 0, uh = 0;
+    if (jf_fj_level < jf_fj_bottom)
+        jf_level_dims(jf_fj_level + 1, &dw, &dh);
+    if (jf_fj_level > jf_fj_top)
+        jf_level_dims(jf_fj_level - 1, &uw, &uh);
+    anim_net_next_sizes(dw, dh, uw, uh);
+}
+
+/* Another size asked for while it plays, the player up (anim.c): the
+ * server asked for the stream there and its start probed here and now
+ * (net_wait); the player starts again with them. */
+static BOOL jf_relevel_now(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax, struct VProbe *v)
+{
+    struct NetJob *j;
+    const char *path;
+    char m[320], lv[120], t[16], *o, *e;
+    const char *c, *d;
+    BOOL ok = FALSE;
+    jf_film_step(dir, at);
+    if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR)))
+        return FALSE;
+    jf_video_url(jf_fj_key, jf_fj_level, jf_fj_zz, -1, 0, url, umax);
+    jf_video_seek(seek, smax);
+    path = strchr(url + 7, '/');
+    amb_strlcpy(j->host, jf.host, sizeof(j->host));
+    j->port = jf.port;
+    amb_strlcpy(j->path, path ? path : "/", sizeof(j->path));
+    sprintf(t, "%lu", (unsigned long)at);
+    for (o = j->path + strlen(j->path), e = j->path + sizeof(j->path) - 1, c = seek; *c && o < e; c++)
+        if (*c == '*')
+            for (d = t; *d && o < e; d++)
+                *o++ = *d;
+        else
+            *o++ = *c;
+    *o = 0;
+    if (jf_fj_nsnd > 1 && jf_fj_cur >= 0) {
+        sprintf(t, "%ld", (long)jf_fj_snd[anim_net_sound()]);
+        amb_strlcat(j->path, "&audioStreamIndex=", sizeof(j->path));
+        amb_strlcat(j->path, t, sizeof(j->path));
+    }
+    j->upto = JF_PROBE;
+    j->wait_s = 60;
+    j->jf = JFJ_VIDEO;
+    j->seq = 0;
+    jf_level_text(jf_fj_level, jf_fj_zz, lv);
+    sprintf(m, "%.40s: %.90s (step %ld of %ld to %ld), from %lu ms, the player up", jf_fj_title, lv,
+            (long)jf_fj_level, (long)jf_fj_top, (long)jf_fj_bottom, (unsigned long)at);
+    amb_log("jellyfin: film asked for", m);
+    net_submit(j);
+    if (net_wait(j, 65000)) {
+        if (j->body && j->status == 200 && j->len && vprobe_mem(j->body, (LONG)j->len, v)) {
+            v->ps = TRUE;
+            v->ms = jf_fj_ms;
+            sprintf(m, "its first %lu KB in %lu ms", (unsigned long)(j->len >> 10), (unsigned long)j->ms);
+            amb_log("jellyfin: film", m);
+            anim_net_adapt(at, (jf_fj_level < jf_fj_bottom ? 1 : 0) | (jf_fj_level > jf_fj_top ? 2 : 0));
+            jf_film_sides();
+            ok = TRUE;
+        } else
+            amb_log("jellyfin: film", "the new size's start could not be read");
+        if (j->body)
+            FreeVec(j->body);
+        FreeVec(j);
+    } else {
+        amb_log("jellyfin: film", "no answer for the new size within 65 s");
+        j->orphan = TRUE;                   /* (freed when it comes back) */
+    }
+    return ok;
+}
+
 /* Its start here: probed, then played as a stream from the server. */
 static void jf_film_came(struct NetJob *j)
 {
@@ -10313,6 +10402,8 @@ static void jf_film_came(struct NetJob *j)
         anim_net_seek = jf_fj_seek;
         anim_net_on_stop(jf_stop_session);
         anim_net_adapt(jf_fj_from, (jf_fj_level < jf_fj_bottom ? 1 : 0) | (jf_fj_level > jf_fj_top ? 2 : 0));
+        jf_film_sides();
+        anim_net_on_relevel(jf_relevel_now);
         {
             const char *t[16];
             int i;
@@ -10324,6 +10415,7 @@ static void jf_film_came(struct NetJob *j)
         anim_net_probe = NULL;
         anim_net_seek = NULL;
         anim_net_on_stop(NULL);
+        anim_net_on_relevel(NULL);
         if (jf_fj_nsnd > 1 && anim_net_sound() != jf_fj_cur) {
             jf_fj_cur = anim_net_sound();
             jf_sound_keep(jf_fj_key, jf_fj_snd[jf_fj_cur]);  /* (chosen with A: kept) */
@@ -10332,15 +10424,7 @@ static void jf_film_came(struct NetJob *j)
             /* it asked for a smaller or larger picture: the film again at
              * that size from where it was; the size kept for the next
              * film; a size it went down from not gone back to */
-            if (rl < 0)
-                jf_fj_top = jf_fj_level + 1 <= jf_fj_bottom ? jf_fj_level + 1 : jf_fj_bottom;
-            jf_fj_level += rl < 0 ? 1 : -1;
-            if (jf_fj_level < jf_fj_top)
-                jf_fj_level = jf_fj_top;
-            if (jf_fj_level > jf_fj_bottom)
-                jf_fj_level = jf_fj_bottom;
-            jf_film_keep(jf_fj_zz, jf_fj_tier, jf_fj_level);
-            jf_fj_from = at;
+            jf_film_step(rl, at);           /* (the player could not: started again here) */
             sprintf(m, _("Asking %.40s for %.50s..."), jf.name[0] ? jf.name : jf.host, jf_fj_title);
             set_msg(m);
             draw_footer();

@@ -1050,6 +1050,42 @@ struct NetJob *net_collect(void)
     return j;
 }
 
+/* One job waited for, here and now (up to timeout_ms): TRUE when it is
+ * back, collected as net_collect would; any other job back meanwhile is
+ * put back on the reply port for the UI's own collecting. */
+BOOL net_wait(struct NetJob *j, ULONG timeout_ms)
+{
+    struct MinList held;
+    struct Message *m;
+    ULONG t0 = time_ms();
+    BOOL got = FALSE;
+    if (!reply_port || !j)
+        return FALSE;
+    if (j->done && !j->busy)
+        return TRUE;                        /* (never sent: failed at once) */
+    held.mlh_Head = (struct MinNode *)&held.mlh_Tail;   /* (by hand: NewMinList is OS 3.2's) */
+    held.mlh_Tail = NULL;
+    held.mlh_TailPred = (struct MinNode *)&held.mlh_Head;
+    while (!got && time_ms() - t0 < timeout_ms) {
+        while ((m = GetMsg(reply_port))) {
+            if (m == &j->msg) {
+                out--;
+                j->busy = FALSE;
+                j->done = TRUE;
+                got = TRUE;
+            } else
+                AddTail((struct List *)&held, (struct Node *)m);
+        }
+        if (!got)
+            Delay(2);
+    }
+    while ((m = (struct Message *)RemHead((struct List *)&held)))
+        PutMsg(reply_port, m);              /* (the UI's, as they came) */
+    if (!got)
+        j->cancel = TRUE;                   /* (given up: it comes back to the UI, orphaned) */
+    return got;
+}
+
 void net_stop(void)
 {
     struct NetJob q;

@@ -3354,6 +3354,62 @@ static ULONG ad_t0, ad_late, ad_shown, ad_bskip, ad_und;
 static UBYTE ad_clean;          /* windows in a row with nothing wrong */
 static BOOL ad_started;         /* its first window begun (one window after a start) */
 
+static BOOL (*vid_relevel_fn)(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax,
+                              struct VProbe *v);
+static UWORD vid_next_w[2], vid_next_h[2];  /* the size below and above (for the note) */
+static char vid_new_url[700], vid_new_seek[64];
+static struct VProbe vid_new_v;
+static BOOL vid_new_ok;                     /* the player to start again with them */
+
+/* Who asks the server for another size, the player staying up: it fills
+ * in the stream's new URL, its seek template and its probe (FALSE: none,
+ * the player ends and anim_net_relevel says why). */
+void anim_net_on_relevel(BOOL (*fn)(int dir, ULONG at, char *url, LONG umax, char *seek, LONG smax,
+                                    struct VProbe *v))
+{
+    vid_relevel_fn = fn;
+}
+
+/* The sizes below and above where it plays, shown as the note while it
+ * changes ("640 x 480..."). */
+void anim_net_next_sizes(UWORD dw, UWORD dh, UWORD uw, UWORD uh)
+{
+    vid_next_w[0] = dw;
+    vid_next_h[0] = dh;
+    vid_next_w[1] = uw;
+    vid_next_h[1] = uh;
+}
+
+/* Another size from where it is (at), the player up: the stream stopped,
+ * the note set, the server asked (its probe waited for); TRUE: the loop
+ * ends and the player starts again with vid_new_*. */
+static BOOL vid_relevel_here(ULONG at)
+{
+    int i = vid_relevel > 0 ? 1 : 0;
+    if (!vid_relevel_fn)
+        return FALSE;
+    st_stop();                              /* (its connection closed, its conversion stopped:
+                                             * the server's time for the new one) */
+    vid_session_end();
+    (void)i;
+    vid_new_ok = vid_relevel_fn(vid_relevel, at, vid_new_url, sizeof(vid_new_url), vid_new_seek,
+                                sizeof(vid_new_seek), &vid_new_v);
+    vid_relevel_ms = at;                    /* (anim_net_adapt, called by it, set it back to 0) */
+    vid_first_ms = at;
+    return vid_new_ok;
+}
+
+static void vid_relevel_note(void)
+{
+    int i = vid_relevel > 0 ? 1 : 0;
+    if (vid_next_w[i])
+        sprintf(vid_note, "%ld x %ld...", (long)vid_next_w[i], (long)vid_next_h[i]);
+    else
+        strcpy(vid_note, "...");
+    vid_note_until = (time_ms() + 60000) | 1;   /* (until the new size plays) */
+    ctl.key = time_ms() ? time_ms() : 1;    /* (the controls up, to show it) */
+}
+
 void anim_net_adapt(ULONG from_ms, int can)
 {
     vid_first_ms = from_ms;
@@ -3418,7 +3474,10 @@ static int ad_tick(BOOL paused)
         }
         return 0;
     }
-    if ((late + bskip) * 100 > (shown + late) * 15 || und >= 2) {
+    /* (the sound running dry counts only with pictures missing too, under
+     * about 80% of 25 a second: on Amiberry's ZZ9000 its sound has gaps
+     * with every picture in time, which a smaller size would not mend) */
+    if ((late + bskip) * 100 > (shown + late) * 15 || (und >= 2 && shown + late < AD_WINDOW_MS / 50)) {
         ad_clean = 0;
         sprintf(m, "3 s: %lu shown, %lu late, %lu B passed over, sound dry %lu times%s", (unsigned long)shown,
                 (unsigned long)late, (unsigned long)bskip, (unsigned long)und,
@@ -3426,7 +3485,7 @@ static int ad_tick(BOOL paused)
         amb_log("video", m);
         return vid_can & 1 ? -1 : 0;
     }
-    if (late * 100 <= (shown + late) && !bskip && !und) {
+    if (late * 100 <= (shown + late) && !bskip && shown + late >= AD_WINDOW_MS / 50) {
         if (++ad_clean >= AD_CLEAN_UP && (vid_can & 2)) {
             amb_log("video", "30 s with every picture in time and the sound never dry: a larger size");
             return 1;
@@ -4796,6 +4855,15 @@ static LONG vid_play_aga(struct Gfx *g, const char *path, const char *name, UWOR
             break;
         if (!r && !ended && (vid_relevel = (BYTE)ad_tick(paused)) != 0) {
             vid_relevel_ms = at;            /* (a size for how it goes: asked for again) */
+            vid_relevel_note();
+            if (bar.on) {                   /* the note in the bar's title while the server starts */
+                if (!aga_title[0])
+                    amb_strlcpy(aga_title, bar.title, sizeof(aga_title));
+                amb_strlcpy(bar.title, vid_note, sizeof(bar.title));
+                safe_done(safe, safe_wait);
+                bar_put(sb[shown]->sb_BitMap, shown);
+            }
+            vid_relevel_here(at);
             break;
         }
         if (r == 2) {
@@ -5038,7 +5106,27 @@ LONG anim_play_video_net(struct Gfx *g, const char *url, const char *name, const
     amb_strlcpy(vid_seek_param, seek_param ? seek_param : "", sizeof(vid_seek_param));
     vid_session[0] = 0;
     vid_relevel = 0;
-    r = play_checked(g, url, name, cpu, err, errmax, why);
+    vid_new_ok = FALSE;
+    for (;;) {
+        static char url_now[700];
+        r = play_checked(g, url, name, cpu, err, errmax, why);
+        if (!vid_new_ok || err[0])
+            break;
+        /* another size, asked for while it played: started again with it,
+         * from where it was (the controls' note until it plays) */
+        vid_new_ok = FALSE;
+        vid_relevel = 0;
+        amb_strlcpy(url_now, vid_new_url, sizeof(url_now));
+        url = url_now;
+        vid = vid_new_v;
+        video_cpu_only = !g->truecolor;
+        why = video_checked(name, &vid);
+        video_cpu_only = FALSE;
+        amb_strlcpy(vid_seek_param, vid_new_seek, sizeof(vid_seek_param));
+        vid_note_until = (time_ms() + 1500) | 1;    /* (the note a moment more, then the title) */
+        if (aga_title[0])
+            aga_title[0] = 0;
+    }
     vid_can = 0;
     vid_first_ms = 0;
     st_stop();                              /* (its connection closed first) */
@@ -5350,7 +5438,51 @@ static LONG vid_play(struct Gfx *g, const char *path, const char *name, UWORD cp
         }
         r = input_with(g->win, &jlast, strip_hit);
         if (!r && !ended && (vid_relevel = (BYTE)ad_tick(paused)) != 0) {
+            int k;
             vid_relevel_ms = at;            /* (a size for how it goes: asked for again) */
+            vid_relevel_note();
+            for (k = 0; k <= FADE_N; k++) { /* the note on the controls while the server starts */
+                if (strip_tick(g, paused, at, vid.ms, name))
+                    win_show(g, FALSE, TRUE, 0, 0, 0, 0);
+                Delay(1);
+            }
+            if (vid_relevel_here(at)) {
+                /* the new size here, the player up: its overlay placed
+                 * again for it (before the stream starts, as at the
+                 * start), then the stream from where it was */
+                const char *why2;
+                WORD oh;
+                vid_new_ok = FALSE;
+                vid = vid_new_v;
+                video_cpu_only = !g->truecolor;
+                why2 = video_checked(name, &vid);
+                video_cpu_only = FALSE;
+                if (why2) {
+                    amb_strlcpy(err, why2, errmax);
+                    break;
+                }
+                amb_strlcpy(lay_path, vid_new_url, sizeof(lay_path));
+                amb_strlcpy(vid_seek_param, vid_new_seek, sizeof(vid_seek_param));
+                sw = (UWORD)video_shown_w(&vid);
+                if (!sw)
+                    sw = vid.w;
+                vid_sound = vid.sw ? vid.mp2 && !vid.ac3 && vid.ps : (vid.mp2 || vid.ac3) && vid.ps;
+                vo_hide();
+                vid_lay(g, sw, lay.full);
+                oh = lay.dh;
+                if (lay.full && sf.lv > 0 && lay.vy + oh > st.y)
+                    oh = st.y - lay.vy;
+                if (!vid.sw || !vo_failed_here())
+                    vo_show(g, &vid, lay.vx, lay.vy, lay.dw, oh);
+                st_video_half(vid.sw && !vo_shown() ? va_half_mode() : ST_HALF_NEVER);
+                vid_relevel = 0;
+                vid_note_until = (time_ms() + 1500) | 1;
+                if (!vid_start(cpu, vid_relevel_ms, err, errmax))
+                    break;
+                at = vid_relevel_ms;
+                whole = TRUE;
+                continue;
+            }
             break;
         }
         a = vo_poll(g);                     /* the overlay clicked: as the picture */
