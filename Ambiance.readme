@@ -89,8 +89,9 @@ Jellyfin (music, photos and films)
   makes each track an MP3 this Amiga can play, as for Plex. Photos are
   made the size of the screen by the server.
 - Films are made MPEG by the server and streamed as they play: nothing is
-  kept on the Amiga. MPEG-1 320 wide for the CPU, MPEG-2 up to 720 x 576
-  when the ZZ9000 decodes. A click on the progress line asks the server
+  kept on the Amiga. MPEG-2 up to 720 x 576 when the ZZ9000 decodes,
+  MPEG-1 320 wide on a fast CPU (an emulator's JIT, a PiStorm), 160 x 120
+  on a real 68060 or slower. A click on the progress line asks the server
   again from there; A chooses the film's sound track, kept for the film.
 - Ambiance is not an official Jellyfin client, and is developed mainly
   with AI (About > Jellyfin in Ambiance).
@@ -400,8 +401,9 @@ History
 -------
 0.9.7  Jellyfin: music, photos and films from a Jellyfin server on your
        network, beside Plex. Films are made MPEG by the server and
-       streamed as they play, nothing kept on the Amiga: MPEG-1 for
-       the CPU, MPEG-2 up to 720 x 576 when the ZZ9000 decodes. Seeking
+       streamed as they play, nothing kept on the Amiga: MPEG-2 up to
+       720 x 576 when the ZZ9000 decodes, MPEG-1 320 wide on a fast CPU
+       (JIT, PiStorm), 160 x 120 in mono on a real CPU. Seeking
        asks the server again from that time; A chooses the sound track
        (a film's choice is kept). Not an official Jellyfin client;
        developed mainly with AI.
@@ -409,6 +411,7 @@ History
        in a fixed palette (on by default for streams). Files keep a
        palette of their own colours: on a 68060 at 50 MHz HAM8 takes
        73 ms to make a 320 x 256 frame, the palette 28 ms.
+       Not yet: the film's size stepping up or down as it plays.
        Video on an AGA screen can be sought from its progress line.
 0.9.6  Quicker on a 68060, with the same pictures and sound, and still
        for any 68020 to 68060:

@@ -10080,7 +10080,7 @@ static char jf_fj_title[120], jf_fj_url[600], jf_fj_seek[64];
 static ULONG jf_fj_ms;
 
 static char jf_fj_key[48];
-static BOOL jf_fj_zz;
+static int jf_fj_size;                 /* (jf_film_size's) */
 
 static int jf_fj_snd[16], jf_fj_nsnd, jf_fj_cur;  /* its sound streams, the one asked for */
 static char jf_fj_sndt[16][48];                  /* ...their names */
@@ -10108,7 +10108,9 @@ static void jf_film(const struct Item *it)
     jf_fj_ms = strtoul_(f);
     radio_field(it, 0, jf_fj_key, sizeof(jf_fj_key));    /* (its key alone) */
     amb_strlcpy(jf_fj_title, it->label, sizeof(jf_fj_title));
-    jf_fj_zz = caps.zz9000 && !video_cpu;
+    /* its size: the card's only on a screen with its overlay (RTG; not
+     * AGA), else by how fast the CPU is (plex_tier: a JIT or Emu68 is 3) */
+    jf_fj_size = jf_film_size(caps.zz9000 && !video_cpu && g.truecolor, plex_tier());
     /* first its sound streams, to choose one (a film may have several
      * languages; the server's own choice is the file's default) */
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10154,13 +10156,13 @@ static void jf_film_probe(void)
     char m[200];
     const char *path;
     struct NetJob *j;
-    BOOL big = jf.vsize == 2 || (jf.vsize == 0 && jf_fj_zz);
+    int size = jf_fj_size;
     if (!net_start() || !(j = AllocVec(sizeof(*j), MEMF_ANY | MEMF_CLEAR))) {
         set_msg(_("Not enough memory"));
         return;
     }
     /* (its sound stream not in the URL: the player adds it, as A changes it) */
-    jf_video_url(jf_fj_key, jf_fj_zz, -1, 0, jf_fj_url, sizeof(jf_fj_url));
+    jf_video_url(jf_fj_key, size, -1, 0, jf_fj_url, sizeof(jf_fj_url));
     jf_video_seek(jf_fj_seek, sizeof(jf_fj_seek));
     path = strchr(jf_fj_url + 7, '/');
     amb_strlcpy(j->host, jf.host, sizeof(j->host));
@@ -10182,7 +10184,8 @@ static void jf_film_probe(void)
     j->wait_s = 60;                         /* (the server starts converting first) */
     jf_fj = j;
     sprintf(m, "%.60s: %s, %lu ms long", jf_fj_title,
-            jf.vsize == 3 ? "MPEG-1 160x120 0.3 Mbit/s" : big ? "MPEG-2 720x576 4 Mbit/s" : "MPEG-1 320 wide 1 Mbit/s",
+            size == 3 ? "MPEG-1 160x120 0.3 Mbit/s, mono sound" : size == 2 ? "MPEG-2 720x576 4 Mbit/s"
+            : "MPEG-1 320 wide 1 Mbit/s",
             (unsigned long)jf_fj_ms);
     amb_log("jellyfin: film asked for", m);
     j->jf = JFJ_VIDEO;                      /* (beside the settings' own: not jf_submit's) */

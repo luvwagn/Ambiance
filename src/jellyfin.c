@@ -565,18 +565,36 @@ void jf_track_url(const struct Item *it, BOOL convert, int tier, ULONG from_ms, 
     amb_strlcat(out, n, max);
 }
 
-/* A film as a URL: MPEG-1 for this Amiga's CPU (QVGA), or MPEG-2 for the
- * ZZ9000 (zz: it decodes): its picture size and rate by Settings >
- * Networking > Jellyfin > Films (auto: by the decoder). from_ms: later in
- * it (a new conversion from there: a live one cannot be sought in). */
-void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out, LONG max)
+/* The size a film starts at (1 small, 2 large, 3 tiny): Settings >
+ * Networking > Jellyfin > Picture size, or automatic, by what decodes it
+ * and how fast, whatever the screen: large (MPEG-2 720 x 576) when the
+ * ZZ9000 decodes it (zz: a screen with its overlay); small (MPEG-1 320
+ * wide) when the CPU is far past a 68060 (tier 3: an emulator's JIT,
+ * Emu68 on a PiStorm, an 080); else tiny (160 x 120): a real 68060 at
+ * 50 MHz decodes, converts and plays 320 wide too slowly for full rate,
+ * the more so on AGA (a 320 x 256 HAM8 frame alone takes it 73 ms:
+ * ambbench 1.1, Brian's A3000). A starting point: the player does not
+ * yet step up or down as it goes. */
+int jf_film_size(BOOL zz, int tier)
+{
+    if (jf.vsize)
+        return jf.vsize;
+    if (zz)
+        return 2;
+    return tier >= 3 ? 1 : 3;
+}
+
+/* A film as a URL, size as jf_film_size: MPEG-1 for this Amiga's CPU
+ * (QVGA, or 160 x 120), or MPEG-2 for the ZZ9000. from_ms: later in it
+ * (a new conversion from there: a live one cannot be sought in). */
+void jf_video_url(const char *key, int size, int audio, ULONG from_ms, char *out, LONG max)
 {
     char n[300];
-    int big = jf.vsize == 2 || (jf.vsize == 0 && zz);
+    int big = size == 2;
     sprintf(out, "http://%s:%lu/Videos/%.36s/stream.mpg?static=false", jf.host,
             (unsigned long)jf.port, key + 2);
-    if (jf.vsize == 3)
-        /* the smallest: 160 x 120 (a 68030's, or a test of the smallest) */
+    if (size == 3)
+        /* the smallest: 160 x 120 (AGA without a fast CPU) */
         sprintf(n, "&videoCodec=mpeg1video&maxWidth=160&maxHeight=120&videoBitRate=300000");
     else if (big)
         /* the card's decoder: MPEG-2 at DVD's size, its own rate */
@@ -586,11 +604,13 @@ void jf_video_url(const char *key, BOOL zz, int audio, ULONG from_ms, char *out,
         sprintf(n, "&videoCodec=mpeg1video&maxWidth=320&maxHeight=240&videoBitRate=1000000");
     amb_strlcat(out, n, max);
     /* MP2 at 48 kHz (decoded here at half that, 24 kHz: Paula's), 96 or 128
-     * kbit/s. (Jellyfin 12.x sends mp2 at 128k a channel whatever is asked:
-     * its GetAudioBitrateParam's default ignores audioBitRate; a fix is
-     * offered upstream.) */
-    sprintf(n, "&audioCodec=mp2&audioBitRate=%s&audioSampleRate=48000&audioChannels=2"
-               "&deviceId=%s&ApiKey=%s", big ? "128000" : "96000", jf.dev, jf.token);
+     * kbit/s stereo; with the tiny size mono at 64 (half the decoding).
+     * (Jellyfin 12.x sends mp2 at 128k a channel whatever is asked: its
+     * GetAudioBitrateParam's default ignores audioBitRate; a fix is drafted
+     * for upstream.) */
+    sprintf(n, "&audioCodec=mp2&audioBitRate=%s&audioSampleRate=48000&audioChannels=%s"
+               "&deviceId=%s&ApiKey=%s", big ? "128000" : size == 3 ? "64000" : "96000",
+            size == 3 ? "1" : "2", jf.dev, jf.token);
     amb_strlcat(out, n, max);
     if (audio >= 0) {
         sprintf(n, "&audioStreamIndex=%ld", (long)audio);
